@@ -89,6 +89,10 @@ local function EnsureDB()
     if g.nameClassColor == nil then
         g.nameClassColor = true
     end
+    if g.fontColor == nil then
+    g.fontColor = "white"
+    end
+
 
     local function fill(key, defaults)
         MSUF_DB[key] = MSUF_DB[key] or {}
@@ -547,31 +551,19 @@ local function UpdateSimpleUnitFrame(self)
     end
 
     --------------------------------------------------
-    -- NAME + NAME CLASS COLOR
+      --------------------------------------------------
+    -- NAME (nur Text, Farbe kommt global)
     --------------------------------------------------
-local name = UnitName(unit)
-if self.showName ~= false and name then
-    if MSUF_DB.shortenNames then
-        self.nameText:SetText(MSUF_ShortenName(name, 12))
-    else
+    local name = UnitName(unit)
+    if self.showName ~= false and name then
         self.nameText:SetText(name)
+    else
+        self.nameText:SetText("")
     end
-else
-    self.nameText:SetText("")
-end
+    -- WICHTIG: keine Farbe hier setzen!
+    -- Die Namensfarbe kommt zentral aus UpdateAllFonts()
 
 
-    local r, g, b = 1, 1, 1
-    local useNameClassColor = MSUF_DB.general.nameClassColor
-
-    if useNameClassColor and UnitIsPlayer(unit) then
-        local _, class = UnitClass(unit)
-        local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
-        if color then
-            r, g, b = color.r, color.g, color.b
-        end
-    end
-    self.nameText:SetTextColor(r, g, b, 1)
 
     --------------------------------------------------
     -- HP TEXT (abgekürzt)
@@ -653,25 +645,49 @@ local function UpdateAllFonts()
     local flags = MSUF_GetFontFlags()
 
     EnsureDB()
-    -- Key aus der SavedVariable holen, zur Sicherheit klein schreiben
-    local key = (MSUF_DB.general.fontColor or "white"):lower()
-    local color = MSUF_FONT_COLORS[key] or MSUF_FONT_COLORS.white
-    local r, g, b = color[1], color[2], color[3]
+    local g = MSUF_DB.general
 
-    local function ApplyFontAndColor(fontString)
-        if fontString then
-            fontString:SetFont(path, 14, flags)
-            fontString:SetTextColor(r, g, b)
-        end
-    end
+    -- globale Font-Farbe aus dem Dropdown
+    local key   = (g.fontColor or "white"):lower()
+    local color = MSUF_FONT_COLORS[key] or MSUF_FONT_COLORS.white
+    local fr, fg, fb = color[1], color[2], color[3]
 
     for _, f in pairs(UnitFrames) do
-        ApplyFontAndColor(f.nameText)
-        ApplyFontAndColor(f.hpText)
-        ApplyFontAndColor(f.powerText)
+        --------------------------------------------------
+        -- NAME: Font immer, Farbe je nach Option
+        --------------------------------------------------
+        if f.nameText then
+            f.nameText:SetFont(path, 14, flags)
+
+            local nr, ng, nb = fr, fg, fb
+            if g.nameClassColor and f.unit and UnitIsPlayer(f.unit) then
+                -- Klassenfarbe für Spieler-Namen
+                local _, class = UnitClass(f.unit)
+                local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+                if c then
+                    nr, ng, nb = c.r, c.g, c.b
+                end
+            end
+            f.nameText:SetTextColor(nr, ng, nb, 1)
+        end
+
+        --------------------------------------------------
+        -- HP-TEXT: immer FontColor
+        --------------------------------------------------
+        if f.hpText then
+            f.hpText:SetFont(path, 14, flags)
+            f.hpText:SetTextColor(fr, fg, fb, 1)
+        end
+
+        --------------------------------------------------
+        -- RESOURCE-TEXT: immer FontColor
+        --------------------------------------------------
+        if f.powerText then
+            f.powerText:SetFont(path, 14, flags)
+            f.powerText:SetTextColor(fr, fg, fb, 1)
+        end
     end
 end
-
 
 ------------------------------------------------------
 -- CREATE UNITFRAME
@@ -1161,54 +1177,73 @@ anchorEdit:EnableMouse(false)
     fontLabel:SetPoint("TOPLEFT", fontTitle, "BOTTOMLEFT", 0, -20)
     fontLabel:SetText("Font")
 
+        --------------------------------------------------
+    -- FONT DROPDOWN
+    --------------------------------------------------
     local fontDrop = CreateFrame("Frame", "MSUF_FontDropdown", fontGroup, "UIDropDownMenuTemplate")
     fontDrop:SetPoint("TOPLEFT", fontLabel, "BOTTOMLEFT", -16, -4)
 
-    local function BuildFontChoices()
-        local list = {}
+    -- Liste der verfügbaren Fonts (interne + LSM)
+    local fontChoices = {}
 
+    local function MSUF_RebuildFontChoices()
+        fontChoices = {}
+
+        -- 1) interne Fallback-Fonts aus FONT_LIST
         for _, info in ipairs(FONT_LIST) do
-            table.insert(list, {
-                key   = info.key,
-                label = info.name,
+            table.insert(fontChoices, {
+                key   = info.key,   -- z.B. "EXPRESSWAY"
+                label = info.name,  -- z.B. "Expressway (addon)"
             })
         end
 
+        -- 2) LibSharedMedia-Fonts anhängen, falls vorhanden
         if LSM then
             local names = LSM:List("font")
             table.sort(names)
+
             local used = {}
-            for _, e in ipairs(list) do
-                used[e.label] = true
+            for _, e in ipairs(fontChoices) do
+                used[e.key] = true   -- nach KEY deduplizieren
             end
+
             for _, name in ipairs(names) do
                 if not used[name] then
-                    table.insert(list, {
-                        key   = name,
-                        label = name,
+                    table.insert(fontChoices, {
+                        key   = name,  -- Key, den LSM:Fetch erwartet
+                        label = name,  -- so steht es im Dropdown
                     })
                     used[name] = true
                 end
             end
         end
-
-        return list
     end
 
-    local fontChoices = BuildFontChoices()
+    -- einmal initial aufbauen
+    MSUF_RebuildFontChoices()
 
     local function FontDropdown_Initialize(self, level)
-        local info = UIDropDownMenu_CreateInfo()
+        EnsureDB()
+
+        -- falls LSM Fonts nachträglich registriert wurden
+        if not fontChoices or #fontChoices == 0 then
+            MSUF_RebuildFontChoices()
+        end
+
+        local info       = UIDropDownMenu_CreateInfo()
+        local currentKey = MSUF_DB.general.fontKey
+
         for _, data in ipairs(fontChoices) do
-            info.text = data.label
-            info.arg1 = data.key
-            info.func = function(_, key)
+            info.text  = data.label
+            info.arg1  = data.key
+            info.value = data.key          -- wichtig für SetSelectedValue
+            info.func  = function(_, key)
                 EnsureDB()
                 MSUF_DB.general.fontKey = key
                 UIDropDownMenu_SetSelectedValue(fontDrop, key)
                 UpdateAllFonts()
             end
-            info.checked = (MSUF_DB.general.fontKey == data.key)
+            info.checked = (currentKey == data.key)
             UIDropDownMenu_AddButton(info, level)
         end
     end
@@ -1309,6 +1344,7 @@ end)
         anchorCheck:SetChecked(MSUF_DB.general.anchorToCooldown and true or false)
 
         UIDropDownMenu_SetSelectedValue(fontDrop, MSUF_DB.general.fontKey or FONT_LIST[1].key)
+        UIDropDownMenu_SetSelectedValue(fontColorDrop, MSUF_DB.general.fontColor or "white")
         darkCheck:SetChecked(MSUF_DB.general.darkMode and true or false)
         classColorCheck:SetChecked(MSUF_DB.general.useClassColors and true or false)
         boldCheck:SetChecked(MSUF_DB.general.boldText and true or false)
@@ -1486,10 +1522,13 @@ end)
     end)
 
     nameClassColorCheck:SetScript("OnClick", function(self)
-        EnsureDB()
-        MSUF_DB.general.nameClassColor = self:GetChecked() and true or false
-        ApplyAllSettings()
+    EnsureDB()
+    MSUF_DB.general.nameClassColor = self:GetChecked() and true or false
+
+    -- Farben sofort neu anwenden:
+    UpdateAllFonts()
     end)
+
 
     --------------------------------------------------
     -- INIT
