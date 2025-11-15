@@ -1,0 +1,9 @@
+## Interface: 120000
+## Title: Midnight Simple UnitFrames
+## Notes: Schwarze Balken mit Name + Power (Player & Target)
+## Author: Mapkó
+## Version: 0.4
+## SavedVariables: MSUF_Config
+## SavedVariables: MSUF_DB
+
+MidnightSimpleUnitFrames.lua
