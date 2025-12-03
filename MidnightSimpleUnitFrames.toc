@@ -1,9 +1,10 @@
 ## Interface: 120000
 ## Title: Midnight Simple UnitFrames
-## Notes: Schwarze Balken mit Name + Power (Player & Target)
+## Notes: Hotfix ToT, Leader Icon, 
 ## Author: Mapkó
-## Version: 0.5
+## Version: 1.0r2
 ## SavedVariables: MSUF_Config
-## SavedVariables: MSUF_DB
+## SavedVariables: MSUF_DB, MSUF_GlobalDB
+## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 
 MidnightSimpleUnitFrames.lua
