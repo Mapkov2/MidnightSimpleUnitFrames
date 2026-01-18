@@ -1406,7 +1406,7 @@ local function LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
         return 0
     end
 
-    -- Phase 3 perf: avoid a full reflow (ClearAllPoints/SetPoint/SetSize) when layout inputs are unchanged.
+    -- avoid a full reflow (ClearAllPoints/SetPoint/SetSize) when layout inputs are unchanged.
     -- In addition, if ONLY the icon count changed, we do a delta-layout:
     --  • count increased: anchor only the newly-used indices
     --  • count decreased: just hide extras (existing points remain valid)
@@ -2962,11 +2962,196 @@ end
     return true
 end
 
--- Phase 4: Budgeted rendering (split large aura updates across ticks to avoid spikes)
--- This is intentionally conservative and only kicks in during very large / bursty aura sets.
+-- Goal:
+--  * Avoid rebuilding/merging large aura lists on UNIT_AURA bursts when nothing about the unit's
+--    auraInstanceID sets changed.
+--  * Keep this secret-safe: we only hash auraInstanceIDs and config values; no expiration arithmetic.
+--
+-- If signatures match, we run a *visual-only* refresh over already-assigned icons.
+-- ------------------------------------------------------------
+
+local function MSUF_A2__HashStep(h, v)
+    if v == nil then v = 0 end
+    if type(v) == 'boolean' then v = v and 1 or 0 end
+    if type(v) == 'string' then
+        v = MSUF_A2_HashAsciiLower and (MSUF_A2_HashAsciiLower(v) or 0) or 0
+    end
+    if type(v) ~= 'number' then v = 0 end
+    -- 31-bit modular hash (stable, cheap)
+    local m = 2147483647
+    h = (h * 33 + (v % m)) % m
+    return h
+end
+
+local function MSUF_A2_ComputeRawAuraSig(unit)
+    if not unit or not C_UnitAuras or type(C_UnitAuras.GetAuraInstanceIDs) ~= 'function' then
+        return nil
+    end
+
+    local okH, helpful = pcall(C_UnitAuras.GetAuraInstanceIDs, unit, 'HELPFUL')
+    local okD, harmful = pcall(C_UnitAuras.GetAuraInstanceIDs, unit, 'HARMFUL')
+    if not okH or type(helpful) ~= 'table' then helpful = nil end
+    if not okD or type(harmful) ~= 'table' then harmful = nil end
+
+    local h = 5381
+    local hc = 0
+    local dc = 0
+
+    if helpful then
+        hc = #helpful
+        for i = 1, hc do
+            h = MSUF_A2__HashStep(h, helpful[i])
+        end
+    end
+
+    -- delimiter so helpful+harmful order can't collide
+    h = MSUF_A2__HashStep(h, 777)
+
+    if harmful then
+        dc = #harmful
+        for i = 1, dc do
+            h = MSUF_A2__HashStep(h, harmful[i])
+        end
+    end
+
+    h = MSUF_A2__HashStep(h, hc)
+    h = MSUF_A2__HashStep(h, dc)
+    return h
+end
+
+local function MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebuffAnchor, splitSpacing,
+    iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, stackCountAnchor,
+    tf, masterOn, onlyBossAuras, showExtraStealable, showExtraDispellable, finalShowBuffs, finalShowDebuffs)
+
+    local h = 146959
+
+    h = MSUF_A2__HashStep(h, unit)
+    h = MSUF_A2__HashStep(h, layoutMode)
+    h = MSUF_A2__HashStep(h, buffDebuffAnchor)
+    h = MSUF_A2__HashStep(h, growth)
+    h = MSUF_A2__HashStep(h, rowWrap)
+    h = MSUF_A2__HashStep(h, stackCountAnchor)
+
+    h = MSUF_A2__HashStep(h, iconSize)
+    h = MSUF_A2__HashStep(h, spacing)
+    h = MSUF_A2__HashStep(h, perRow)
+
+    h = MSUF_A2__HashStep(h, splitSpacing)
+    h = MSUF_A2__HashStep(h, maxBuffs)
+    h = MSUF_A2__HashStep(h, maxDebuffs)
+
+    h = MSUF_A2__HashStep(h, finalShowBuffs)
+    h = MSUF_A2__HashStep(h, finalShowDebuffs)
+
+    -- master filters + important filter toggles
+    h = MSUF_A2__HashStep(h, masterOn)
+    h = MSUF_A2__HashStep(h, onlyBossAuras)
+    h = MSUF_A2__HashStep(h, showExtraStealable)
+    h = MSUF_A2__HashStep(h, showExtraDispellable)
+
+    if tf and type(tf) == 'table' then
+        h = MSUF_A2__HashStep(h, tf.enabled)
+        h = MSUF_A2__HashStep(h, tf.hidePermanent)
+        h = MSUF_A2__HashStep(h, tf.onlyBossAuras)
+
+        local b = tf.buffs
+        local d = tf.debuffs
+        if type(b) == 'table' then
+            h = MSUF_A2__HashStep(h, b.onlyMine)
+            h = MSUF_A2__HashStep(h, b.includeBoss)
+            h = MSUF_A2__HashStep(h, b.includeStealable)
+        end
+        if type(d) == 'table' then
+            h = MSUF_A2__HashStep(h, d.onlyMine)
+            h = MSUF_A2__HashStep(h, d.includeBoss)
+            h = MSUF_A2__HashStep(h, d.includeDispellable)
+            h = MSUF_A2__HashStep(h, d.dispelMagic)
+            h = MSUF_A2__HashStep(h, d.dispelCurse)
+            h = MSUF_A2__HashStep(h, d.dispelDisease)
+            h = MSUF_A2__HashStep(h, d.dispelPoison)
+            h = MSUF_A2__HashStep(h, d.dispelEnrage)
+        end
+    end
+
+    -- Visual toggles that affect per-icon work
+    if shared and type(shared) == 'table' then
+        h = MSUF_A2__HashStep(h, shared.showCooldownSwipe)
+        h = MSUF_A2__HashStep(h, shared.showTooltip)
+        h = MSUF_A2__HashStep(h, shared.highlightOwnBuffs)
+        h = MSUF_A2__HashStep(h, shared.highlightOwnDebuffs)
+        h = MSUF_A2__HashStep(h, shared.highlightStealableBuffs)
+        h = MSUF_A2__HashStep(h, shared.highlightDispellableDebuffs)
+        h = MSUF_A2__HashStep(h, shared.hidePermanent)
+        h = MSUF_A2__HashStep(h, shared.onlyMyBuffs)
+        h = MSUF_A2__HashStep(h, shared.onlyMyDebuffs)
+    end
+
+    return h
+end
+
+local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, GetEffFn, masterOn, stackCountAnchor)
+    if not entry or not unit or not shared then return end
+    if not C_UnitAuras or type(C_UnitAuras.GetAuraDataByAuraInstanceID) ~= 'function' then return end
+
+    local wantOwnBuff = (shared.highlightOwnBuffs == true)
+    local wantOwnDebuff = (shared.highlightOwnDebuffs == true)
+    local ownBuffSet, ownDebuffSet
+
+    local function IsOwn(isHelpful, auraInstanceID)
+        if not auraInstanceID then return false end
+        local okK, k = pcall(tostring, auraInstanceID)
+        if not okK or not k then return false end
+
+        if isHelpful then
+            if not wantOwnBuff then return false end
+            if not ownBuffSet then ownBuffSet = MSUF_A2_GetPlayerAuraIdSet(unit, 'HELPFUL') end
+            return ownBuffSet and ownBuffSet[k] and true or false
+        else
+            if not wantOwnDebuff then return false end
+            if not ownDebuffSet then ownDebuffSet = MSUF_A2_GetPlayerAuraIdSet(unit, 'HARMFUL') end
+            return ownDebuffSet and ownDebuffSet[k] and true or false
+        end
+    end
+
+    local useSingleRow = (entry._msufA2_lastUseSingleRow == true)
+    local buffCount = entry._msufA2_lastBuffCount or 0
+    local debuffCount = entry._msufA2_lastDebuffCount or 0
+    local mixedCount = entry._msufA2_lastMixedCount or 0
+
+    local function RefreshContainer(container, count)
+        if not container or not container._msufIcons or count <= 0 then return end
+        local icons = container._msufIcons
+        for i = 1, count do
+            local ic = icons[i]
+            if ic and ic.IsShown and ic:IsShown() then
+                local aid = ic._msufAuraInstanceID
+                if aid then
+                    local okA, aura = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, aid)
+                    if okA and type(aura) == 'table' then
+                        -- Preserve the filter category this icon was assigned under.
+                        local isHelpful = (ic._msufFilter == 'HELPFUL')
+                        local eff = GetEffFn and GetEffFn(isHelpful) or nil
+                        local hidePerm = (eff and eff.hidePermanent) and true or false
+                        local isOwn = IsOwn(isHelpful, aid)
+                        ApplyAuraToIcon(ic, unit, aura, shared, isHelpful, hidePerm, masterOn, isOwn, stackCountAnchor)
+                    end
+                end
+            end
+        end
+    end
+
+    if useSingleRow then
+        RefreshContainer(entry.mixed, mixedCount)
+    else
+        RefreshContainer(entry.debuffs, debuffCount)
+        RefreshContainer(entry.buffs, buffCount)
+    end
+end
+
 local MSUF_A2_RENDER_BUDGET = 18
 
 local function RenderUnit(entry)
+    local rawSig, layoutSig
     local a2, shared = GetAuras2DB()
     if not a2 or not shared or not entry then return end
 
@@ -2988,7 +3173,6 @@ local function RenderUnit(entry)
         return
     end
 
-    -- Phase 2 hard gate: never do work / never re-show anchors when the unitframe is not visible.
     local frame = entry.frame or FindUnitFrame(unit)
     if (not showTest) and (not frame or not frame:IsShown()) then
         if entry.anchor then entry.anchor:Hide() end
@@ -3150,7 +3334,6 @@ end
 
     if unitExists and not showTest then
         -- Real auras are skipped while Preview-in-Edit-Mode is active so preview always wins.
-        -- Phase 4: Budgeted render state (only for real auras, never preview).
         local budget = MSUF_A2_RENDER_BUDGET
         local st = entry._msufA2_budgetState
         local resumeBudget = (entry._msufA2_budgetResume == true) and st and (st.pending == true) and (st.unit == unit)
@@ -3244,6 +3427,26 @@ end
 
         finalShowDebuffs = (wantDebuffs == true)
         finalShowBuffs = (wantBuffs == true)
+
+
+        -- If raw auraInstanceID sets + layout/filter signature are unchanged, avoid expensive list building.
+        if not resumeBudget then
+            rawSig = MSUF_A2_ComputeRawAuraSig(unit)
+            layoutSig = MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebuffAnchor, splitSpacing,
+                iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, stackCountAnchor,
+                tf, masterOn, onlyBossAuras, showExtraStealable, showExtraDispellable, finalShowBuffs, finalShowDebuffs)
+
+            if rawSig and layoutSig
+               and entry._msufA2_lastRawSig == rawSig
+               and entry._msufA2_lastLayoutSig == layoutSig
+               and entry._msufA2_lastQuickOK == true
+               and type(entry._msufA2_lastBuffCount) == 'number'
+               and type(entry._msufA2_lastDebuffCount) == 'number'
+            then
+                MSUF_A2_RefreshAssignedIcons(entry, unit, shared, GetEff, masterOn, stackCountAnchor)
+                return
+            end
+        end
 
         -- Own-aura highlight uses API-only player-only instance ID sets so it works in combat too.
         -- (No reliance on aura-table fields that may be missing/secret.)
@@ -3424,8 +3627,6 @@ end
             end
         end
 
-
-        -- Phase 4: If we finished a full render (no continuation pending), clear budget state lists.
         if st and not budgetExhausted and st.pending ~= true then
             st.debuffs = nil
             st.buffs = nil
@@ -3656,32 +3857,31 @@ end
             HideUnused(entry.mixed, 1)
         end
     end
+
+    -- Commit render signatures + counts for the fast-path.
+    -- Only commit for real units (never preview).
+    if (not showTest) and unitExists then
+        if rawSig and layoutSig then
+            entry._msufA2_lastRawSig = rawSig
+            entry._msufA2_lastLayoutSig = layoutSig
+        end
+        entry._msufA2_lastUseSingleRow = (useSingleRow and true) or false
+        entry._msufA2_lastBuffCount = buffCount or 0
+        entry._msufA2_lastDebuffCount = debuffCount or 0
+        entry._msufA2_lastMixedCount = mixedCount or 0
+        local st2 = entry._msufA2_budgetState
+        entry._msufA2_lastQuickOK = (not (st2 and st2.pending == true)) and true or false
+    end
 end
 
-
--- ------------------------------------------------------------
--- Auras 2.0 Perf / Spike instrumentation (debug-only)
---
--- Phase 1: We want visibility into *how many* auras flushes happen
--- during bursty scenarios (target switching) and *how expensive* each
--- coalesced flush is.
---
--- IMPORTANT: keep overhead effectively zero when perf is disabled.
--- We only re-check the enable condition ~1/sec.
---
--- Enabled when:
---  • MSUF profiler is enabled (ns.MSUF_ProfileEnabled()), OR
---  • MSUF_DB.general.debugAuras2Perf == true
---
--- Data is exposed at _G.MSUF_Auras2_Perf
--- ------------------------------------------------------------
+-- Performance tracking for Auras2 rendering
 local _A2_PERF = nil
 local _A2_PERF_ENABLED = false
 local _A2_PERF_NEXTCHECK = 0
 local _A2_GetTime = _G and _G.GetTime
 local _A2_debugprofilestop = _G and _G.debugprofilestop
 
--- Phase 8: Minimum time between full renders per unit (helps target-swap bursts).
+-- Minimum time between full renders per unit (helps target-swap bursts).
 -- Keep small enough to feel instant, but large enough to collapse multi-event storms into one render.
 -- NOTE: Budget continuation renders (render budget resume) bypass this gate by design.
 local MSUF_A2_MIN_RENDER_INTERVAL = 0.05
@@ -3755,7 +3955,7 @@ local function Flush()
     local toUpdate = Dirty
     Dirty = AcquireDirtyTable()
 
-    -- Phase 2 perf/peaks: hard-gate work when not relevant.
+    -- perf/peaks: hard-gate work when not relevant.
     -- Never render when the unitframe isn't visible (unless Edit Mode preview is active).
     local a2, shared = GetAuras2DB()
     local showTest = (shared and shared.showInEditMode and IsEditModeActive and IsEditModeActive()) and true or false
@@ -3793,7 +3993,7 @@ local function Flush()
                     if not unitExists then
                         if entry and entry.anchor then entry.anchor:Hide() end
                         if entry and entry.editMover then entry.editMover:Hide() end
-                    else                        -- Phase 8: collapse multi-event storms by limiting full render frequency per unit.
+                    else                        -- collapse multi-event storms by limiting full render frequency per unit.
                         -- Keep prior visuals; defer only the expensive RenderUnit call.
                         local doRender = true
                         if MSUF_A2_MIN_RENDER_INTERVAL and MSUF_A2_MIN_RENDER_INTERVAL > 0 then
@@ -4050,20 +4250,82 @@ end
 -- Events
 -- ------------------------------------------------------------
 
-local EventFrame = CreateFrame("Frame")
-EventFrame:RegisterEvent("PLAYER_LOGIN")
-EventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-EventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
-EventFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
-EventFrame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+-- oUF-style discipline: centralize event registration and track ownership.
+-- This prevents "unknown event" unregister spam, and makes future per-feature event toggles safe.
+local function MSUF_A2_ApplyOwnedEvents(frame, desiredOwners)
+    if not frame or type(desiredOwners) ~= "table" then return end
 
-do
-    local units = { "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
-    local unpackUnits = (unpack or table.unpack)
+    local reg = frame._msufA2_events
+    if type(reg) ~= "table" then
+        reg = {}
+        frame._msufA2_events = reg
+    end
+
+    local isReg = frame.IsEventRegistered
+
+    -- Unregister events no longer desired.
+    for ev, _ in pairs(reg) do
+        if not desiredOwners[ev] then
+            if isReg and frame:IsEventRegistered(ev) then
+                pcall(frame.UnregisterEvent, frame, ev)
+            end
+            reg[ev] = nil
+        end
+    end
+
+    -- Register desired events and enforce deterministic owner.
+    for ev, ownerKey in pairs(desiredOwners) do
+        local have = reg[ev]
+        if have ~= ownerKey then
+            -- If already registered with a different owner, rebind deterministically.
+            if have and isReg and frame:IsEventRegistered(ev) then
+                pcall(frame.UnregisterEvent, frame, ev)
+            end
+            if (not isReg) or (not frame:IsEventRegistered(ev)) then
+                pcall(frame.RegisterEvent, frame, ev)
+            end
+            reg[ev] = ownerKey
+        else
+            -- Ensure it is actually registered (external code may have unregistered it).
+            if isReg and (not frame:IsEventRegistered(ev)) then
+                pcall(frame.RegisterEvent, frame, ev)
+            end
+        end
+    end
+end
+
+local function MSUF_A2_EnsureUnitAuraBinding(frame)
+    if not frame or frame._msufA2_unitAuraBound == true then return end
+
     -- IMPORTANT: RegisterUnitEvent does NOT reliably "add" units across multiple calls on all clients.
     -- Register once with all units so Focus/Boss updates never get dropped.
-    SafeCall(EventFrame.RegisterUnitEvent, EventFrame, "UNIT_AURA", unpackUnits(units))
+    local regUnit = frame.RegisterUnitEvent
+    if type(regUnit) ~= "function" then return end
+
+    local units = { "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+    local unpackUnits = (unpack or table.unpack)
+    SafeCall(regUnit, frame, "UNIT_AURA", unpackUnits(units))
+    frame._msufA2_unitAuraBound = true
 end
+
+local EventFrame = CreateFrame("Frame")
+
+local function MSUF_A2_ApplyEventRegistration()
+    MSUF_A2_EnsureUnitAuraBinding(EventFrame)
+    MSUF_A2_ApplyOwnedEvents(EventFrame, {
+        PLAYER_LOGIN = "Core",
+        PLAYER_ENTERING_WORLD = "Core",
+        PLAYER_TARGET_CHANGED = "Core",
+        PLAYER_FOCUS_CHANGED = "Core",
+        INSTANCE_ENCOUNTER_ENGAGE_UNIT = "Core",
+    })
+end
+
+-- Export for debugging / external triggers (safe no-op if called early).
+_G.MSUF_Auras2_ApplyEventRegistration = MSUF_A2_ApplyEventRegistration
+
+-- Apply once at load.
+MSUF_A2_ApplyEventRegistration()
 
 
 -- Step 9: Event coalescing + unit gating.
