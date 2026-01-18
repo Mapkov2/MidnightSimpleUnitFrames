@@ -709,6 +709,25 @@ local function ResetClassBarBgColor()
 end
 
 ------------------------------------------------------
+-- Helpers: Bar background tint can optionally match the current HP bar color
+-- Stored under MSUF_DB.general.barBgMatchHPColor.
+------------------------------------------------------
+local function GetBarBgMatchHP()
+    if not EnsureDB or not MSUF_DB then return false end
+    EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    return MSUF_DB.general.barBgMatchHPColor and true or false
+end
+
+local function SetBarBgMatchHP(v)
+    if not EnsureDB or not MSUF_DB then return end
+    EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    MSUF_DB.general.barBgMatchHPColor = v and true or false
+    PushVisualUpdates()
+end
+
+------------------------------------------------------
 -- Helpers: NPC reaction colors
 ------------------------------------------------------
 local function GetNPCDefaultColor(kind)
@@ -870,9 +889,6 @@ local function SetHealAbsorbOverlayColor(r, g, b)
 
     PushVisualUpdates()
 end
-
-
-
 
 ------------------------------------------------------
 -- Helpers: Power bar background color (background texture tint for power bar only)
@@ -1051,6 +1067,7 @@ function ns.MSUF_RegisterColorsOptions_Full(parentCategory)
 
     local fontSwatchTex
     local classBgSwatchTex
+    local classBgMatchCheck
     local npcFriendlyTex
     local npcNeutralTex
     local npcEnemyTex
@@ -1311,6 +1328,38 @@ end
         local r, g, b = GetClassBarBgColor()
         classBgSwatchTex:SetColorTexture(r, g, b)
     end)
+
+    -- Optional toggle: match background tint to the current HP bar color
+    -- (so users don't need to pick a separate tint color)
+    local classBgMatchCheck = CreateFrame("CheckButton", "MSUF_Colors_BarBgMatchHP", content, "UICheckButtonTemplate")
+    classBgMatchCheck:SetPoint("LEFT", classBgSwatch, "RIGHT", 14, 0)
+    if not classBgMatchCheck.text then
+        classBgMatchCheck.text = classBgMatchCheck:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        classBgMatchCheck.text:SetPoint("LEFT", classBgMatchCheck, "RIGHT", 2, 0)
+    end
+    classBgMatchCheck.text:SetText("Match HP")
+
+    local function UpdateClassBgMatchState()
+        local match = GetBarBgMatchHP()
+        classBgMatchCheck:SetChecked(match)
+        if classBgSwatch and classBgSwatch.EnableMouse then
+            classBgSwatch:EnableMouse(not match)
+        end
+        if classBgSwatch and classBgSwatch.SetAlpha then
+            classBgSwatch:SetAlpha(match and 0.5 or 1)
+        end
+        if classBgResetBtn and classBgResetBtn.SetEnabled then
+            classBgResetBtn:SetEnabled(not match)
+        end
+    end
+
+    classBgMatchCheck:SetScript("OnClick", function(btn)
+        SetBarBgMatchHP(btn:GetChecked())
+        UpdateClassBgMatchState()
+    end)
+
+    -- Initial state
+    UpdateClassBgMatchState()
 
 
     --------------------------------------------------
@@ -3525,6 +3574,19 @@ lastControl = auraStealSwatch
         if classBgSwatchTex then
             local br, bg, bb = GetClassBarBgColor()
             classBgSwatchTex:SetColorTexture(br, bg, bb)
+        end
+
+        -- Bar background tint: optional Match-HP behavior (makes swatch read-only)
+        if classBgMatchCheck then
+            local match = GetBarBgMatchHP()
+            classBgMatchCheck:SetChecked(match)
+            if _G.MSUF_Colors_ClassBarBgSwatch and _G.MSUF_Colors_ClassBarBgSwatch.EnableMouse then
+                _G.MSUF_Colors_ClassBarBgSwatch:EnableMouse(not match)
+                _G.MSUF_Colors_ClassBarBgSwatch:SetAlpha(match and 0.5 or 1)
+            end
+            if classBgResetBtn and classBgResetBtn.SetEnabled then
+                classBgResetBtn:SetEnabled(not match)
+            end
         end
 
 

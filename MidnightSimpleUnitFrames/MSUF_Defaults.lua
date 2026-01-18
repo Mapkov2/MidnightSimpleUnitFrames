@@ -209,6 +209,12 @@ end
         g.classBarBgB = 0.0
     end
 
+    -- If enabled, bar background tint color follows the current HP bar color (class/reaction/unified),
+    -- instead of using the custom tint swatch.
+    if g.barBgMatchHPColor == nil then
+        g.barBgMatchHPColor = false
+    end
+
     if g.enableGradient == nil then
         g.enableGradient = true
     end
@@ -877,6 +883,11 @@ if MSUF_DB.bars.barOutlineThickness == nil then
         local map = { THIN = 2, THICK = 3, SHADOW = 4, GLOW = 4 }
         MSUF_DB.bars.barOutlineThickness = map[style] or 2
     end
+end
+
+-- Bar background alpha (0..100). Independent from unit alpha in/out of combat.
+if MSUF_DB.bars.barBackgroundAlpha == nil then
+    MSUF_DB.bars.barBackgroundAlpha = 90
 end
 
 

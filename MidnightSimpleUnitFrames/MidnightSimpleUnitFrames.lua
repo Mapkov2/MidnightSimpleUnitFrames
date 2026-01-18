@@ -1097,13 +1097,7 @@ function MSUF_GetBarBackgroundTintRGBA()
     local r = MSUF_Clamp01(g.classBarBgR)
     local gg = MSUF_Clamp01(g.classBarBgG)
     local b = MSUF_Clamp01(g.classBarBgB)
-
-    -- Base background alpha (0..100), stored in Bars menu.
-    local bars = (MSUF_DB and MSUF_DB.bars) or {}
-    local ap = tonumber(bars.barBackgroundAlpha)
-    if type(ap) ~= "number" then ap = 90 end
-    if ap < 0 then ap = 0 elseif ap > 100 then ap = 100 end
-    local a = ap / 100
+    local a = 0.9
     if g.darkMode then
         local br = MSUF_Clamp01(g.darkBgBrightness)
         r, gg, b = r * br, gg * br, b * br
@@ -1125,11 +1119,7 @@ function MSUF_GetPowerBarBackgroundTintRGBA()
     local r = MSUF_Clamp01(ar)
     local gg = MSUF_Clamp01(ag)
     local b = MSUF_Clamp01(ab)
-    local bars = (MSUF_DB and MSUF_DB.bars) or {}
-    local ap = tonumber(bars.barBackgroundAlpha)
-    if type(ap) ~= "number" then ap = 90 end
-    if ap < 0 then ap = 0 elseif ap > 100 then ap = 100 end
-    local a = ap / 100
+    local a = 0.9
     if g.darkMode then
         local br = MSUF_Clamp01(g.darkBgBrightness)
         r, gg, b = r * br, gg * br, b * br
@@ -1140,6 +1130,33 @@ function MSUF_ApplyBarBackgroundVisual(frame)
     if not frame then return end
     local tex = MSUF_GetBarBackgroundTexture()
     local r, gg, b, a = MSUF_GetBarBackgroundTintRGBA()
+
+    -- Optional: match the HP background tint hue to the current HEALTH bar color.
+    -- Lets users keep the background automatically in sync with whatever health color mode is active
+    -- (class/reaction/unified), without having to pick a separate tint color.
+    local gen = MSUF_DB and MSUF_DB.general
+    if gen and gen.barBgMatchHPColor and frame.hpBar and frame.hpBar.GetStatusBarColor then
+        local fr, fg, fb = frame.hpBar:GetStatusBarColor()
+        if type(fr) == "number" and type(fg) == "number" and type(fb) == "number" then
+            if gen.darkMode then
+                local br = gen.darkBgBrightness
+                if type(br) == "number" then
+                    if br < 0 then br = 0 elseif br > 1 then br = 1 end
+                    fr, fg, fb = fr * br, fg * br, fb * br
+                end
+            end
+            r, gg, b = MSUF_Clamp01(fr), MSUF_Clamp01(fg), MSUF_Clamp01(fb)
+        end
+    end
+    -- User-controlled base alpha for bar background textures (0..100).
+    -- Independent from unit alpha in/out of combat.
+    local alphaPct = 90
+    if MSUF_DB and MSUF_DB.bars and type(MSUF_DB.bars.barBackgroundAlpha) == 'number' then
+        alphaPct = MSUF_DB.bars.barBackgroundAlpha
+    end
+    if alphaPct < 0 then alphaPct = 0 elseif alphaPct > 100 then alphaPct = 100 end
+    local alphaMul = alphaPct / 100
+    if type(a) == 'number' then a = a * alphaMul end
     local function ApplyToTexture(t, cachePrefix, cr, cg, cb, ca)
         if not t then return end
         local kTex = "_msuf" .. cachePrefix .. "BgTex"
@@ -1159,9 +1176,10 @@ function MSUF_ApplyBarBackgroundVisual(frame)
     ApplyToTexture(frame.hpBarBG, "HP", r, gg, b, a)
     local pr, pg, pb, pa = MSUF_GetPowerBarBackgroundTintRGBA()
 
+    if type(pa) == 'number' then pa = pa * alphaMul end
+
     -- Optional: match the power bar background hue to the current HEALTH bar color.
     -- (Primarily useful when the power bar is embedded into the health bar.)
-    local gen = MSUF_DB and MSUF_DB.general
     local bars = MSUF_DB and MSUF_DB.bars
     local matchHP = (gen and gen.powerBarBgMatchHPColor) or (bars and bars.powerBarBgMatchBarColor)
     if matchHP and frame.hpBar and frame.hpBar.GetStatusBarColor then
@@ -6609,7 +6627,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.65r1|r  |cff565f89•|r  |cffc0caf5 !!!Only works in Beta/PTR!!! -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.66b1|r  |cff565f89•|r  |cffc0caf5 !!!Only works in Beta/PTR!!! -|r  |cfff7768eReport bugs in the Discord.|r")
 
 end, nil, true)
 
