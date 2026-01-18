@@ -5704,6 +5704,13 @@ gradientCheck = CreateLabeledCheckButton(
         16, -260
     )
 
+    powerGradientCheck = CreateLabeledCheckButton(
+        "MSUF_PowerGradientEnableCheck",
+        "Enable power bar gradient",
+        barGroup,
+        16, -282
+    )
+
     -- D-pad style direction selector (replaces the old strength bar in the UI)
     gradientDirPad = MSUF_CreateGradientDirectionPad(barGroup)
 
@@ -6869,7 +6876,16 @@ do
     local gradAnchor = barBackgroundAlphaSlider or barBgTextureDrop or barTextureDrop or absorbDisplayDrop
     if gradHeader and gradAnchor then
         gradHeader:ClearAllPoints()
-        gradHeader:SetPoint("TOPLEFT", gradAnchor, "BOTTOMLEFT", 16, -18)
+        -- Align this section title like the other left-panel section headers.
+        -- Dropdown rows are anchored 16px left of the section title, but the Background Alpha
+        -- slider is already aligned with the title. So we adjust the X-offset depending on
+        -- which widget we're anchoring below.
+        local xOff = 16
+        if barBackgroundAlphaSlider and gradAnchor == barBackgroundAlphaSlider then
+            xOff = 0
+        end
+        -- Extra breathing room below the Background Alpha slider so the section title never clips.
+        gradHeader:SetPoint("TOPLEFT", gradAnchor, "BOTTOMLEFT", xOff, -32)
         gradHeader:Show()
     end
 
@@ -6895,10 +6911,17 @@ do
     if gradientCheck and gradHeader then
         gradientCheck:ClearAllPoints()
         if gradLine and gradLine:IsShown() then
-            gradientCheck:SetPoint("TOPLEFT", gradLine, "BOTTOMLEFT", 16, -14)
+            gradientCheck:SetPoint("TOPLEFT", gradLine, "BOTTOMLEFT", 16, -18)
         else
             gradientCheck:SetPoint("TOPLEFT", gradHeader, "BOTTOMLEFT", 0, -18)
         end
+    end
+
+
+
+    if powerGradientCheck and gradientCheck then
+        powerGradientCheck:ClearAllPoints()
+        powerGradientCheck:SetPoint("TOPLEFT", gradientCheck, "BOTTOMLEFT", 0, -8)
     end
 
 if gradientDirPad and gradientCheck then
@@ -6966,9 +6989,9 @@ if outlineHeader and outlineAnchor then
     outlineHeader:ClearAllPoints()
     if gradientDirPad and gradientCheck then
         -- Align section to the left edge, but place it BELOW the pad (pad is taller than the checkbox row).
-        outlineHeader:SetPoint("TOPLEFT", gradientDirPad, "BOTTOMLEFT", -196, -18)
+        outlineHeader:SetPoint("TOPLEFT", gradientDirPad, "BOTTOMLEFT", -196, -24)
     else
-        outlineHeader:SetPoint("TOPLEFT", outlineAnchor, "BOTTOMLEFT", 0, -18)
+        outlineHeader:SetPoint("TOPLEFT", outlineAnchor, "BOTTOMLEFT", 0, -24)
     end
     outlineHeader:Show()
 end
@@ -7093,10 +7116,17 @@ local function MSUF_SyncBarsTabToggles()
         end
     end
 
-    local gradEnabled = (g.enableGradient == true)
+    local hpGradEnabled = (g.enableGradient == true)
+    local powerGradEnabled = (g.enablePowerGradient == true)
+    local gradEnabled = (hpGradEnabled or powerGradEnabled)
     if gradientCheck then
-        gradientCheck:SetChecked(gradEnabled)
+        gradientCheck:SetChecked(hpGradEnabled)
         SafeToggleUpdate(gradientCheck)
+
+    if powerGradientCheck then
+        powerGradientCheck:SetChecked(powerGradEnabled)
+        SafeToggleUpdate(powerGradientCheck)
+    end
     end
 
     if gradientDirPad then
@@ -7242,6 +7272,16 @@ gradientCheck:SetScript("OnClick", function(self)
     if MSUF_SyncBarsTabToggles then MSUF_SyncBarsTabToggles() end
 end)
 
+powerGradientCheck:SetScript("OnClick", function(self)
+    EnsureDB()
+    MSUF_DB.general.enablePowerGradient = self:GetChecked() and true or false
+    if gradientDirPad and gradientDirPad.SyncFromDB then
+        gradientDirPad:SyncFromDB()
+    end
+    ApplyAllSettings()
+    if MSUF_SyncBarsTabToggles then MSUF_SyncBarsTabToggles() end
+end)
+
 gradientSlider.onValueChanged = function(self, value)
     if self and self.MSUF_SkipCallback then return end
     EnsureDB()
@@ -7353,6 +7393,7 @@ end
  panel.castbarShakeIntensitySlider   = castbarShakeIntensitySlider
 
     panel.gradientCheck              = gradientCheck
+    panel.powerGradientCheck         = powerGradientCheck
     panel.gradientSlider             = gradientSlider
     panel.gradientDirPad             = gradientDirPad or _G["MSUF_GradientDirectionPad"]
 
@@ -7408,6 +7449,7 @@ panel.infoTooltipDisableCheck = infoTooltipDisableCheck
         castbarShakeIntensitySlider = self.castbarShakeIntensitySlider
 
         gradientCheck = self.gradientCheck
+        powerGradientCheck = self.powerGradientCheck
         gradientSlider = self.gradientSlider
         gradientDirPad = self.gradientDirPad
 

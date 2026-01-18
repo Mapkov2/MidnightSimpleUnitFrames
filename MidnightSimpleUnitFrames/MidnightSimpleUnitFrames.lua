@@ -2673,6 +2673,147 @@ local function MSUF_ApplyHPGradient(frameOrTex)
 
     MSUF_HideGradSet(grads, 5)
 end
+
+
+local function MSUF_ApplyPowerGradient(frameOrTex)
+    if not frameOrTex then return end
+    EnsureDB()
+    local g = MSUF_DB.general or {}
+    local strength = g.gradientStrength or 0.45
+    if g.enablePowerGradient == false then
+        strength = 0
+    end
+
+    -- Allow calling with a single texture (legacy-style) just like HP.
+    if frameOrTex.SetGradientAlpha and (not frameOrTex.powerGradients) then
+        local tex = frameOrTex
+        local dir = g.gradientDirection
+        if type(dir) ~= "string" or dir == "" then
+            dir = "RIGHT"
+            g.gradientDirection = dir
+        end
+        local orientation = "HORIZONTAL"
+        local a1, a2 = 0, strength
+        if dir == "LEFT" then
+            orientation = "HORIZONTAL"; a1, a2 = strength, 0
+        elseif dir == "RIGHT" then
+            orientation = "HORIZONTAL"; a1, a2 = 0, strength
+        elseif dir == "UP" then
+            orientation = "VERTICAL"; a1, a2 = strength, 0
+        elseif dir == "DOWN" then
+            orientation = "VERTICAL"; a1, a2 = 0, strength
+        else
+            orientation = "HORIZONTAL"; a1, a2 = 0, strength
+            g.gradientDirection = "RIGHT"
+        end
+        MSUF_SetGrad(tex, orientation, a1, a2, strength)
+        return
+    end
+
+    local frame = frameOrTex
+    local pbBar = frame.targetPowerBar or frame.powerBar
+    local grads = frame.powerGradients
+    if not pbBar or not grads then return end
+
+    local hasNew = (g.gradientDirLeft ~= nil) or (g.gradientDirRight ~= nil) or (g.gradientDirUp ~= nil) or (g.gradientDirDown ~= nil)
+    if not hasNew then
+        local dir = g.gradientDirection
+        if type(dir) ~= "string" or dir == "" then
+            dir = "RIGHT"
+        else
+            dir = string.upper(dir)
+        end
+        if dir == "LEFT" then
+            g.gradientDirLeft = true
+        elseif dir == "UP" then
+            g.gradientDirUp = true
+        elseif dir == "DOWN" then
+            g.gradientDirDown = true
+        else
+            g.gradientDirRight = true
+        end
+    end
+
+    local left  = (g.gradientDirLeft == true)
+    local right = (g.gradientDirRight == true)
+    local up    = (g.gradientDirUp == true)
+    local down  = (g.gradientDirDown == true)
+    if (not left) and (not right) and (not up) and (not down) then
+        right = true
+        g.gradientDirRight = true
+    end
+
+    if strength <= 0 then
+        MSUF_HideGradSet(grads)
+        return
+    end
+
+    if left and right then
+        if grads.left then
+            grads.left:ClearAllPoints()
+            grads.left:SetPoint("TOPLEFT", pbBar, "TOPLEFT", 0, 0)
+            grads.left:SetPoint("BOTTOMRIGHT", pbBar, "BOTTOM", 0, 0)
+            MSUF_SetGrad(grads.left, "HORIZONTAL", strength, 0, strength)
+        end
+        if grads.right then
+            grads.right:ClearAllPoints()
+            grads.right:SetPoint("TOPLEFT", pbBar, "TOP", 0, 0)
+            grads.right:SetPoint("BOTTOMRIGHT", pbBar, "BOTTOMRIGHT", 0, 0)
+            MSUF_SetGrad(grads.right, "HORIZONTAL", 0, strength, strength)
+        end
+    elseif left then
+        if grads.left then
+            grads.left:ClearAllPoints()
+            grads.left:SetAllPoints(pbBar)
+            MSUF_SetGrad(grads.left, "HORIZONTAL", strength, 0, strength)
+        end
+        MSUF_HideTex(grads.right)
+    elseif right then
+        if grads.right then
+            grads.right:ClearAllPoints()
+            grads.right:SetAllPoints(pbBar)
+            MSUF_SetGrad(grads.right, "HORIZONTAL", 0, strength, strength)
+        end
+        MSUF_HideTex(grads.left)
+    else
+        MSUF_HideTex(grads.left)
+        MSUF_HideTex(grads.right)
+    end
+
+    if up and down then
+        if grads.up then
+            grads.up:ClearAllPoints()
+            grads.up:SetPoint("TOPLEFT", pbBar, "TOPLEFT", 0, 0)
+            grads.up:SetPoint("BOTTOMRIGHT", pbBar, "RIGHT", 0, 0)
+            MSUF_SetGrad(grads.up, "VERTICAL", strength, 0, strength)
+        end
+        if grads.down then
+            grads.down:ClearAllPoints()
+            grads.down:SetPoint("TOPLEFT", pbBar, "LEFT", 0, 0)
+            grads.down:SetPoint("BOTTOMRIGHT", pbBar, "BOTTOMRIGHT", 0, 0)
+            MSUF_SetGrad(grads.down, "VERTICAL", 0, strength, strength)
+        end
+    elseif up then
+        if grads.up then
+            grads.up:ClearAllPoints()
+            grads.up:SetAllPoints(pbBar)
+            MSUF_SetGrad(grads.up, "VERTICAL", strength, 0, strength)
+        end
+        MSUF_HideTex(grads.down)
+    elseif down then
+        if grads.down then
+            grads.down:ClearAllPoints()
+            grads.down:SetAllPoints(pbBar)
+            MSUF_SetGrad(grads.down, "VERTICAL", 0, strength, strength)
+        end
+        MSUF_HideTex(grads.up)
+    else
+        MSUF_HideTex(grads.up)
+        MSUF_HideTex(grads.down)
+    end
+
+    MSUF_HideGradSet(grads, 5)
+end
 local function MSUF_PreCreateHPGradients(hpBar)
     if not hpBar or not hpBar.CreateTexture then return nil end
     local function MakeTex()
@@ -4162,6 +4303,11 @@ function _G.MSUF_UFCore_UpdatePowerBarFast(self)
             pr, pg, pb = col.r, col.g, col.b
         end
         bar:SetStatusBarColor(pr, pg, pb)
+        if self.powerGradients then
+            MSUF_ApplyPowerGradient(self)
+        elseif self.powerGradient then
+            MSUF_ApplyPowerGradient(self.powerGradient)
+        end
         bar:SetMinMaxValues(0, max)
         bar:SetScript("OnUpdate", nil)
         MSUF_SetBarValue(bar, cur)
@@ -4235,6 +4381,16 @@ local function MSUF_SyncTargetPowerBar(self, unit, barsConf, isPlayer, isTarget,
         pr, pg, pb = colPB.r, colPB.g, colPB.b
     end
     pbBar:SetStatusBarColor(pr, pg, pb)
+    if self.powerGradients then
+        MSUF_ApplyPowerGradient(self)
+    elseif self.powerGradient then
+        MSUF_ApplyPowerGradient(self.powerGradient)
+    end
+    if self.powerGradients then
+        MSUF_ApplyPowerGradient(self)
+    elseif self.powerGradient then
+        MSUF_ApplyPowerGradient(self.powerGradient)
+    end
     MSUF_SetBarMinMax(pbBar, 0, 100)
     pbBar:SetScript("OnUpdate", nil)
     MSUF_SetBarValue(pbBar, pctPB, true)
@@ -4623,6 +4779,16 @@ end
                     local pr, pg, pb = MSUF_GetPowerBarColor(nil, tok)
                     if not pr then pr, pg, pb = 0.6, 0.2, 1.0 end
                     self.targetPowerBar:SetStatusBarColor(pr, pg, pb)
+                    if self.powerGradients then
+                        MSUF_ApplyPowerGradient(self)
+                    elseif self.powerGradient then
+                        MSUF_ApplyPowerGradient(self.powerGradient)
+                    end
+                    if self.powerGradients then
+                        MSUF_ApplyPowerGradient(self)
+                    elseif self.powerGradient then
+                        MSUF_ApplyPowerGradient(self.powerGradient)
+                    end
                 end
                 self.targetPowerBar:Show()
             end
@@ -6113,6 +6279,14 @@ local function CreateSimpleUnitFrame(unit)
             pbg:SetAllPoints(pBar)
             f.powerBarBG = pbg
             MSUF_ApplyBarBackgroundVisual(f)
+
+            local pgrads = f.powerGradients
+            if not pgrads then
+                pgrads = MSUF_PreCreateHPGradients(pBar)
+                f.powerGradients = pgrads
+                f.powerGradient = pgrads and pgrads.right or nil
+            end
+            MSUF_ApplyPowerGradient(f)
         end
         pBar:Hide()
     end

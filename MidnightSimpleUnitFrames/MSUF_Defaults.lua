@@ -218,6 +218,9 @@ end
     if g.enableGradient == nil then
         g.enableGradient = true
     end
+    if g.enablePowerGradient == nil then
+        g.enablePowerGradient = false
+    end
     if g.gradientStrength == nil then
         g.gradientStrength = 0.45
     end
