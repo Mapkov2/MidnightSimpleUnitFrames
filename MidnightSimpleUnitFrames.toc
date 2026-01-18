@@ -1,10 +1,38 @@
-## Interface: 120000
+## Interface: 120001, 120000
 ## Title: Midnight Simple UnitFrames
-## Notes: Hotfix ToT, Leader Icon, 
+## Notes: Unitframe Addon by Mapko 
 ## Author: Mapkó
-## Version: 1.0r2
+## Version: 1.65b2
+## Category: Combat
 ## SavedVariables: MSUF_Config
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
+## X-Wago-ID: XKq9aoKy
 
+MSUF_UpdateManager.lua
+MSUF_EventBus.lua
+MSUF_Libs.lua
+MSUF_Defaults.lua
+MSUF_Profiles.lua
+MSUF_Util.lua
+MSUF_Style.lua
+MSUF_Castbars_LoDStub.lua
+Options\MSUF_Options_Core.lua
+Options\MSUF_Options_Player.lua
+Core\MSUF_ProfileIO.lua
+Core\MSUF_StatusIndicators.lua
+Core\MSUF_SetupWizard.lua
+Core\MSUF_ChatAndTooltips.lua
+Core\MSUF_UnitframeCore.lua
 MidnightSimpleUnitFrames.lua
+MSUF_Presets.lua
+MidnightSimpleUnitFrames_SlashMenu.lua
+MidnightSimpleUnitFrames_MinimapButton.lua
+MSUF_EditMode.lua
+MidnightSimpleUnitFrames_Colors.lua
+MidnightSimpleUnitFrames_Auras.lua
+MidnightSimpleUnitFrames_Gameplay.lua
+Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua
+Modules\MSUF_CooldownManagerIcons.lua
+Modules\MSUF_RoundedUnitframes.lua
+

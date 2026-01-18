@@ -1,0 +1,7988 @@
+local addonName, ns = ...
+ns = ns or {}
+_G.MSUF_NS = _G.MSUF_NS or ns
+
+-- Forward declarations (needed by early popup helpers)
+local MSUF_EDITMODE_UNIT_KEYS, MSUF_EDITMODE_UNIT_FIELDS, MSUF_EDITMODE_GENERAL_FIELDS
+
+
+-- ------------------------------------------------------------
+-- This needs to be refactored - Way to much spagetti code here. 
+-- ------------------------------------------------------------
+local function MSUF_UFDirty(frame, reason, urgent)
+    if not frame then return end
+    local md = _G.MSUF_UFCore_MarkDirty
+    if type(md) == "function" then
+        md(frame, nil, urgent, reason)
+        return
+    end
+    -- Fallback for older builds (should be unused once UFCore is present)
+    local upd = _G.UpdateSimpleUnitFrame
+    if type(upd) == "function" then
+        upd(frame)
+    end
+end
+
+-- Load-order safety: EnsureDB may not be available at the moment Edit Mode code runs (prepatch/load timing).
+-- Always guard DB initialization so missing globals don't break Edit Mode entry points.
+local function MSUF_EM_EnsureDB()
+    if _G.MSUF_DB then
+        return true
+    end
+    local fn = _G.EnsureDB
+    if type(fn) == "function" then
+        fn()
+        return (_G.MSUF_DB ~= nil)
+    end
+    if ns and type(ns.EnsureDB) == "function" then
+        ns.EnsureDB()
+        return (_G.MSUF_DB ~= nil)
+    end
+    return false
+end
+
+-- -------------------------------------------
+-- Edit Mode namespace (Phase 1 refactor scaffold)
+-- -------------------------------------------
+_G.MSUF_Edit = _G.MSUF_Edit or {}
+local Edit = _G.MSUF_Edit
+Edit.VERSION = Edit.VERSION or "v10_refactor_phase1"
+Edit.Modules = Edit.Modules or {}
+
+-- R1: Internal sub-modules (single-file, no behavior change)
+Edit.Util   = Edit.Util   or {}
+Edit.Bind   = Edit.Bind   or {}
+Edit.Preview= Edit.Preview or {}
+Edit.Flow   = Edit.Flow   or {}
+
+-- R2: Additional internal modules for maintainability (single-file)
+Edit.UI      = Edit.UI      or {}
+Edit.Snap    = Edit.Snap    or {}
+Edit.Dock    = Edit.Dock    or {}
+Edit.Targets = Edit.Targets or {}
+
+-- Local aliases (avoid repeated global table lookups)
+local EM_UI      = Edit.UI
+local EM_Snap    = Edit.Snap
+local EM_Dock    = Edit.Dock
+local EM_Targets = Edit.Targets
+
+-- -------------------------------------------
+-- Safeguard helpers (fail-open, taint-safe-ish)
+-- -------------------------------------------
+local MSUF__SafeCallErrorOnce = {}
+local MSUF__SafeCallErrorCountByTag = {}
+local MSUF__SafeFeatureErrorCount = {}
+local MSUF__SafeFeatureDisabled = {}
+local MSUF__SafeFeatureDisableOnce = {}
+
+
+local MSUF__EditModeFatalDisabled = false
+local MSUF__EditModeFatalTag = nil
+local MSUF__EditModeFatalReason = nil
+local MSUF__EditModeFatalPrinted = false
+local MSUF_EditMode_FatalDisable -- forward decl
+local MSUF_EM_CombatSafeHideBossPreviewNow -- forward decl
+local MSUF_SafeCall -- forward decl (used widely; must be local to avoid global drift)
+local MSUF_SafeAfter -- forward decl (used by various helpers; keep local to avoid global drift)
+-- -------------------------------------------
+-- -------------------------------------------
+local function MSUF_EM_GetState()
+    -- Single source of truth: Edit.State (mirrored to _G.MSUF_EditState for backward compatibility)
+    local st = Edit.State or _G.MSUF_EditState
+    if not st then
+        st = {
+            active = false,
+            unitKey = nil,
+            popupOpen = false,
+            arrowBindingsActive = false,
+            pendingSecureCleanup = false,
+            fatalDisabled = false,
+            fatalTag = nil,
+            fatalReason = nil,
+        }
+        Edit.State = st
+        _G.MSUF_EditState = st
+    else
+        -- Ensure both references stay aligned
+        Edit.State = st
+        _G.MSUF_EditState = st
+    end
+    return st
+end
+
+local function MSUF_EM_SyncLegacyFromState()
+    local st = MSUF_EM_GetState()
+    MSUF_UnitEditModeActive = st.active and true or false
+    MSUF_CurrentEditUnitKey = st.unitKey
+end
+
+-- -------------------------------------------
+-- Any-EditMode listeners (enter/exit notifications)
+-- Modules can subscribe to avoid their own polling (e.g. Auras edit-mode previews).
+-- -------------------------------------------
+if not _G.MSUF_AnyEditModeListeners then
+    _G.MSUF_AnyEditModeListeners = {}
+end
+
+if not _G.MSUF_RegisterAnyEditModeListener then
+    function _G.MSUF_RegisterAnyEditModeListener(fn)
+        if type(fn) ~= "function" then return end
+        local t = _G.MSUF_AnyEditModeListeners
+        t[#t + 1] = fn
+    end
+end
+
+-- Any-EditMode state = (MSUF Edit Mode) OR (Blizzard Edit Mode)
+-- This is used by modules (Auras2 previews, etc.) to reliably start/stop preview visuals
+-- even when MSUF Edit Mode is running unlinked from Blizzard Edit Mode.
+local function MSUF_EM_IsBlizzardEditModeActive()
+    local em = rawget(_G, "EditModeManagerFrame")
+    if not em then
+        return false
+    end
+
+    if type(em.IsEditModeActive) == "function" then
+        local ok, v = pcall(em.IsEditModeActive, em)
+        if ok then
+            return (v and true) or false
+        end
+    end
+
+    if em.editModeActive ~= nil then
+        return (em.editModeActive and true) or false
+    end
+
+    if type(em.IsShown) == "function" then
+        return (em:IsShown() and true) or false
+    end
+
+    return false
+end
+
+local function MSUF_EM_GetAnyEditModeActive()
+    local st = MSUF_EM_GetState()
+    if type(st) == "table" and st.active == true then
+        return true
+    end
+    return MSUF_EM_IsBlizzardEditModeActive()
+end
+
+-- Seed baseline so listeners only fire on transitions.
+local MSUF_EM_LastAnyEditMode = MSUF_EM_GetAnyEditModeActive()
+
+local function MSUF_EM_NotifyAnyEditMode(active)
+    if active == nil then
+        active = MSUF_EM_GetAnyEditModeActive()
+    end
+
+    active = active and true or false
+    if MSUF_EM_LastAnyEditMode == active then
+        return
+    end
+    MSUF_EM_LastAnyEditMode = active
+
+    local t = _G.MSUF_AnyEditModeListeners
+    if not t then return end
+
+    -- Avoid hard dependency on MSUF_FastCall during very early load edge cases
+    local call = (type(MSUF_FastCall) == "function") and MSUF_FastCall or function(f, ...) return f(...) end
+
+    for i = 1, #t do
+        local fn = t[i]
+        if type(fn) == "function" then
+            call(fn, active)
+        end
+    end
+end
+
+
+local function MSUF_EM_ClearKeyboardFocus()
+
+    if ChatEdit_DeactivateChat then
+        if ChatEdit_GetActiveWindow then
+            local eb = ChatEdit_GetActiveWindow()
+            if eb then
+                MSUF_FastCall(ChatEdit_DeactivateChat, eb)
+            end
+        end
+    end
+    -- Clear any active editbox focus
+    if GetCurrentKeyBoardFocus then
+        local f = GetCurrentKeyBoardFocus()
+        if f and f.ClearFocus then
+            MSUF_FastCall(f.ClearFocus, f)
+        end
+    end
+end
+
+local MSUF_EM_EnableUpdateSimpleUnitFrameHook 
+
+local function MSUF_EM_SetActive(active, unitKey)
+    local st = MSUF_EM_GetState()
+    local prevActive = st.active and true or false
+    st.active = active and true or false
+    if st.active then
+        if unitKey ~= nil then
+            st.unitKey = unitKey
+        end
+    else
+        st.unitKey = nil
+    end
+    MSUF_EM_SyncLegacyFromState()
+    if st.active ~= prevActive then
+        MSUF_EM_NotifyAnyEditMode()
+    end
+
+
+    if (not st.active) and prevActive then
+        -- Fail-closed: never allow the preview/test mode to persist.
+        MSUF_BossTestMode = false
+
+        -- Prefer the shared sync helper (handles secure drivers + per-boss hide rules).
+        if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
+            MSUF_FastCall(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit)
+        else
+            -- Legacy fallback: best-effort hide (OOC only). In combat, rely on soft-hide gate.
+            if InCombatLockdown and InCombatLockdown() then
+                if MSUF_EM_CombatSafeHideBossPreviewNow then
+                    MSUF_FastCall(MSUF_EM_CombatSafeHideBossPreviewNow)
+                end
+            else
+                local max = _G.MSUF_MAX_BOSS_FRAMES or 5
+                for i = 1, max do
+                    local unit = "boss" .. i
+                    local f = _G["MSUF_" .. unit] or _G["MSUF_boss" .. i] or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit])
+                    if f and f.Hide then
+                        MSUF_FastCall(f.Hide, f)
+                    end
+                end
+            end
+        end
+
+        -- Also guarantee boss castbar preview is torn down on deactivation (keeps systems consistent).
+        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            MSUF_FastCall(_G.MSUF_UpdateBossCastbarPreview)
+        end
+    end
+
+    if st.active and not prevActive then
+        if type(MSUF_EM_EnableUpdateSimpleUnitFrameHook) == "function" then
+            MSUF_EM_EnableUpdateSimpleUnitFrameHook(true)
+        end
+    elseif (not st.active) and prevActive then
+        if type(MSUF_EM_EnableUpdateSimpleUnitFrameHook) == "function" then
+            MSUF_EM_EnableUpdateSimpleUnitFrameHook(false)
+        end
+    end
+    if st.active and not prevActive then
+        MSUF_FastCall(MSUF_EM_ClearKeyboardFocus)
+    end
+    if not st.active and MSUF_EM_CombatSafeHideBossPreviewNow then
+        MSUF_FastCall(MSUF_EM_CombatSafeHideBossPreviewNow)
+    end
+end
+
+local function MSUF_EM_SetPopupOpen(open)
+    local st = MSUF_EM_GetState()
+    st.popupOpen = open and true or false
+end
+
+local function MSUF_EM_SetArrowBindingsActive(active)
+    local st = MSUF_EM_GetState()
+    st.arrowBindingsActive = active and true or false
+end
+
+local function MSUF_EM_SetPendingSecureCleanup(pending)
+    local st = MSUF_EM_GetState()
+    st.pendingSecureCleanup = pending and true or false
+end
+
+local function MSUF_EM_SetFatalDisabled(tag, reason)
+    local st = MSUF_EM_GetState()
+    st.fatalDisabled = true
+    st.fatalTag = tostring(tag or "?")
+    st.fatalReason = tostring(reason or "unknown")
+end
+
+local function MSUF_EM_ForceWhiteButtonText(btn)
+    if not btn then return end
+
+    -- Prefer white font objects for normal/highlight states.
+    if btn.SetNormalFontObject then
+        btn:SetNormalFontObject("GameFontHighlight")
+    end
+    if btn.SetHighlightFontObject then
+        btn:SetHighlightFontObject("GameFontHighlight")
+    end
+    if btn.SetDisabledFontObject then
+        btn:SetDisabledFontObject("GameFontDisable")
+    end
+
+    local fs = btn.GetFontString and btn:GetFontString()
+    if fs and fs.SetTextColor then
+        fs:SetTextColor(1, 1, 1, 1)
+    end
+end
+
+do
+    local UIH = (ns and ns.MSUF_EM_UIH) or {}
+    if ns then ns.MSUF_EM_UIH = UIH end
+
+    local CreateFrame = CreateFrame
+
+    function UIH.Button(parent, name, w, h, text, template)
+        local b = CreateFrame("Button", name, parent, template or "UIPanelButtonTemplate")
+        if w and h then b:SetSize(w, h) end
+        if text ~= nil and b.SetText then b:SetText(text) end
+        if type(MSUF_EM_ForceWhiteButtonText) == "function" then
+            MSUF_EM_ForceWhiteButtonText(b)
+        end
+        return b
+    end
+
+    function UIH.ButtonAt(parent, name, w, h, point, rel, relPoint, x, y, text, template)
+        local b = UIH.Button(parent, name, w, h, text, template)
+        if point and rel then b:SetPoint(point, rel, relPoint or point, x or 0, y or 0)
+        elseif point then b:SetPoint(point, x or 0, y or 0) end
+        return b
+    end
+
+    -- Creates the same checkbox label style we used previously (GameFontHighlightSmall + manual anchor).
+    function UIH.TextCheck(parent, name, point, rel, relPoint, x, y, text, onClick, opts)
+        local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
+        if opts and opts.w and opts.h then cb:SetSize(opts.w, opts.h) end
+
+        if point and rel then cb:SetPoint(point, rel, relPoint or point, x or 0, y or 0)
+        elseif point then cb:SetPoint(point, x or 0, y or 0) end
+
+        local font = (opts and opts.font) or "GameFontHighlightSmall"
+        local dx   = (opts and opts.dx) or 4
+        local dy   = (opts and opts.dy) or 0
+        local label = cb:CreateFontString(nil, "ARTWORK", font)
+        label:SetPoint("LEFT", cb, "RIGHT", dx, dy)
+        label:SetText(text or "")
+        cb.text = label
+
+        if onClick then cb:SetScript("OnClick", onClick) end
+        return cb
+    end
+end
+
+function MSUF_EM_DropdownPreset(drop, width, placeholder)
+    if not drop then return end
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(drop, width or 150) end
+    if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(drop, "LEFT") end
+    if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, placeholder or "") end
+end
+
+function MSUF_EM_BuildCopyItems(list, srcValue, labelFn)
+    if not list then return nil end
+    local out = {}
+    for i = 1, #list do
+        local v = list[i]
+        if v ~= srcValue then
+            out[#out + 1] = { value = v, text = labelFn and labelFn(v) or tostring(v) }
+        end
+    end
+    return out
+end
+
+function MSUF_EM_InitCopyDropdown(drop, placeholder, itemsProvider, onPick)
+    if not drop or not UIDropDownMenu_Initialize or not UIDropDownMenu_CreateInfo or not UIDropDownMenu_AddButton then return end
+    MSUF_EM_DropdownPreset(drop, 150, placeholder)
+
+    UIDropDownMenu_Initialize(drop, function(self, level)
+        local info = UIDropDownMenu_CreateInfo()
+        info.notCheckable = true
+
+        local items = itemsProvider and itemsProvider()
+        if not items then return end
+
+        for i = 1, #items do
+            local item = items[i]
+            local value = item and item.value
+            local label = (item and item.text) or (value ~= nil and tostring(value)) or ""
+
+            info.text = label
+            info.func = function()
+                if onPick then onPick(value, item) end
+                if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, label) end
+                if CloseDropDownMenus then CloseDropDownMenus() end
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+end
+
+function MSUF_EM_GetCastbarCopyUnits(srcUnit)
+    return (srcUnit == "boss") and { "player", "target", "focus" } or { "player", "target", "focus", "boss" }
+end
+
+local function MSUF_EM_CopyCastbarSizeSettings(srcUnit, dstUnit)
+    if not srcUnit or not dstUnit or srcUnit == dstUnit then return end
+    if type(MSUF_EM_EnsureDB) == "function" then MSUF_EM_EnsureDB() end
+    MSUF_DB = MSUF_DB or {}
+    MSUF_DB.general = MSUF_DB.general or {}
+    local g = MSUF_DB.general
+
+    local function read(u)
+        if u == "boss" then
+            return tonumber(g.bossCastbarWidth), tonumber(g.bossCastbarHeight)
+        end
+        local p = type(MSUF_GetCastbarPrefix) == "function" and MSUF_GetCastbarPrefix(u) or nil
+        if not p then return nil end
+        return tonumber(g[p .. "BarWidth"]), tonumber(g[p .. "BarHeight"])
+    end
+
+    local function write(u, w, h)
+        if w == nil and h == nil then return end
+        if u == "boss" then
+            if w ~= nil then g.bossCastbarWidth = w end
+            if h ~= nil then g.bossCastbarHeight = h end
+            return
+        end
+        local p = type(MSUF_GetCastbarPrefix) == "function" and MSUF_GetCastbarPrefix(u) or nil
+        if not p then return end
+        if w ~= nil then g[p .. "BarWidth"] = w end
+        if h ~= nil then g[p .. "BarHeight"] = h end
+    end
+
+    local w, h = read(srcUnit)
+    if w == nil and h == nil then return end
+    write(dstUnit, w, h)
+
+    if type(MSUF_ApplyCastbarUnitAndSync) == "function" then
+        if type(MSUF_SafeCall) == "function" then
+            MSUF_SafeCall("CopyCastbarSize:Apply", MSUF_ApplyCastbarUnitAndSync, dstUnit)
+        else
+            MSUF_ApplyCastbarUnitAndSync(dstUnit)
+        end
+    end
+end
+
+local function MSUF_EM_CopyCastbarTextSettings(srcUnit, dstUnit)
+    if not srcUnit or not dstUnit or srcUnit == dstUnit then return end
+    if type(MSUF_EM_EnsureDB) == "function" then MSUF_EM_EnsureDB() end
+    MSUF_DB = MSUF_DB or {}
+    MSUF_DB.general = MSUF_DB.general or {}
+    local g = MSUF_DB.general
+
+    local function read(u)
+        if u == "boss" then
+            return {
+                textX    = g.bossCastTextOffsetX,
+                textY    = g.bossCastTextOffsetY,
+                showName = g.showBossCastName,
+                nameSize = g.bossCastSpellNameFontSize,
+
+                iconX    = g.bossCastIconOffsetX,
+                iconY    = g.bossCastIconOffsetY,
+                showIcon = g.showBossCastIcon,
+                iconSize = g.bossCastIconSize,
+
+                timeX    = g.bossCastTimeOffsetX,
+                timeY    = g.bossCastTimeOffsetY,
+                showTime = g.showBossCastTime,
+                timeSize = g.bossCastTimeFontSize,
+            }
+        end
+
+        local p = type(MSUF_GetCastbarPrefix) == "function" and MSUF_GetCastbarPrefix(u) or nil
+        if not p then return nil end
+        local showKey = type(MSUF_GetCastbarShowTimeKey) == "function" and MSUF_GetCastbarShowTimeKey(u) or nil
+
+        return {
+            textX    = g[p .. "TextOffsetX"],
+            textY    = g[p .. "TextOffsetY"],
+            showName = g[p .. "ShowSpellName"],
+            nameSize = g[p .. "SpellNameFontSize"],
+
+            iconX    = g[p .. "IconOffsetX"],
+            iconY    = g[p .. "IconOffsetY"],
+            showIcon = g[p .. "ShowIcon"],
+            iconSize = g[p .. "IconSize"],
+
+            timeX    = g[p .. "TimeOffsetX"],
+            timeY    = g[p .. "TimeOffsetY"],
+            showTime = showKey and g[showKey] or nil,
+            timeSize = g[p .. "TimeFontSize"],
+        }
+    end
+
+    local function write(u, t)
+        if not t then return end
+        if u == "boss" then
+            g.bossCastTextOffsetX = t.textX
+            g.bossCastTextOffsetY = t.textY
+            g.showBossCastName = t.showName
+            g.bossCastSpellNameFontSize = t.nameSize
+
+            g.bossCastIconOffsetX = t.iconX
+            g.bossCastIconOffsetY = t.iconY
+            g.showBossCastIcon = t.showIcon
+            g.bossCastIconSize = t.iconSize
+
+            g.bossCastTimeOffsetX = t.timeX
+            g.bossCastTimeOffsetY = t.timeY
+            g.showBossCastTime = t.showTime
+            g.bossCastTimeFontSize = t.timeSize
+            return
+        end
+
+        local p = type(MSUF_GetCastbarPrefix) == "function" and MSUF_GetCastbarPrefix(u) or nil
+        if not p then return end
+
+        g[p .. "TextOffsetX"]       = t.textX
+        g[p .. "TextOffsetY"]       = t.textY
+        g[p .. "ShowSpellName"]     = t.showName
+        g[p .. "SpellNameFontSize"] = t.nameSize
+
+        g[p .. "IconOffsetX"] = t.iconX
+        g[p .. "IconOffsetY"] = t.iconY
+        g[p .. "ShowIcon"]    = t.showIcon
+        g[p .. "IconSize"]    = t.iconSize
+
+        g[p .. "TimeOffsetX"]  = t.timeX
+        g[p .. "TimeOffsetY"]  = t.timeY
+        g[p .. "TimeFontSize"] = t.timeSize
+
+        local showKey = type(MSUF_GetCastbarShowTimeKey) == "function" and MSUF_GetCastbarShowTimeKey(u) or nil
+        if showKey then
+            g[showKey] = t.showTime
+        end
+    end
+
+    local src = read(srcUnit)
+    if not src then return end
+    write(dstUnit, src)
+
+    if type(MSUF_ApplyCastbarUnitAndSync) == "function" then
+        if type(MSUF_SafeCall) == "function" then
+            MSUF_SafeCall("CopyCastbarText:Apply", MSUF_ApplyCastbarUnitAndSync, dstUnit)
+        else
+            MSUF_ApplyCastbarUnitAndSync(dstUnit)
+        end
+    end
+end
+
+local function MSUF_EM_RefreshCastbarCopyDropdown(pf, drop, label, placeholder, mode)
+    if not UIDropDownMenu_Initialize or not UIDropDownMenu_SetText then return end
+    if not pf or not drop or not label then return end
+
+    local srcUnit = pf.unit
+    label:Show()
+    drop:Show()
+
+    local labelFn = (type(MSUF_GetCastbarLabel) == "function") and MSUF_GetCastbarLabel or function(u) return tostring(u) end
+    local onPick = function(dstUnit)
+        if mode == "size" then
+            MSUF_EM_CopyCastbarSizeSettings(srcUnit, dstUnit)
+        else
+            MSUF_EM_CopyCastbarTextSettings(srcUnit, dstUnit)
+        end
+    end
+
+    MSUF_EM_InitCopyDropdown(drop, placeholder,
+        function()
+            return MSUF_EM_BuildCopyItems(MSUF_EM_GetCastbarCopyUnits(srcUnit), srcUnit, labelFn)
+        end,
+        function(dstUnit) onPick(dstUnit) end
+    )
+end
+
+
+
+local MSUF_EM_UNIT_COPY_ALLOWED = { player=true, target=true, targettarget=true, focus=true, boss=true }
+
+local function MSUF_EM_CopyUnitSettings(srcKey, dstKey, mode)
+    if not srcKey or not dstKey or srcKey == dstKey then return end
+    MSUF_EM_EnsureDB()
+    if not MSUF_DB then return end
+    MSUF_DB[srcKey] = MSUF_DB[srcKey] or {}
+    MSUF_DB[dstKey] = MSUF_DB[dstKey] or {}
+
+    local src, dst = MSUF_DB[srcKey], MSUF_DB[dstKey]
+
+    local function ForceApplyDestination(changedFonts)
+        local st = (type(MSUF_EM_GetState) == "function") and MSUF_EM_GetState() or nil
+        local wasOpen = st and st.popupOpen
+        if st then st.popupOpen = false end
+
+        if type(MSUF_ApplyUnitFrameKey_Immediate) == "function" then
+            MSUF_ApplyUnitFrameKey_Immediate(dstKey)
+
+            if changedFonts then
+                if _G.MSUF_UpdateAllFonts then
+                    _G.MSUF_UpdateAllFonts()
+                elseif ns and ns.MSUF_UpdateAllFonts then
+                    ns.MSUF_UpdateAllFonts()
+                end
+            end
+
+            if MSUF_UpdateEditModeInfo then
+                MSUF_UpdateEditModeInfo()
+            end
+        elseif type(MSUF_ApplyUnitframeKeyAndSync) == "function" then
+            MSUF_ApplyUnitframeKeyAndSync(dstKey, changedFonts and true or false)
+        elseif type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then
+            -- Worst-case fallback: user action, so a heavier refresh is acceptable.
+            _G.MSUF_ApplyAllSettings_Immediate()
+        end
+
+        if st then st.popupOpen = wasOpen end
+    end
+
+    if mode == "size" then
+        dst.width, dst.height = src.width, src.height
+        ForceApplyDestination(false)
+        return
+    end
+
+    dst.showName, dst.showHP, dst.showPower = src.showName, src.showHP, src.showPower
+    dst.nameOffsetX, dst.nameOffsetY = src.nameOffsetX, src.nameOffsetY
+    dst.hpOffsetX, dst.hpOffsetY = src.hpOffsetX, src.hpOffsetY
+    dst.powerOffsetX, dst.powerOffsetY = src.powerOffsetX, src.powerOffsetY
+    dst.nameFontSize, dst.hpFontSize, dst.powerFontSize = src.nameFontSize, src.hpFontSize, src.powerFontSize
+
+    ForceApplyDestination(true)
+end
+
+local function MSUF_EM_GetUnitPopupSrcKey(pf)
+    pf = pf or MSUF_PositionPopup
+    local unit = pf and pf.unit
+    return (unit and type(GetConfigKeyForUnit) == "function" and GetConfigKeyForUnit(unit)) or MSUF_CurrentEditUnitKey
+end
+
+local function MSUF_EM_RefreshUnitCopyDropdown(pf, drop, label, placeholder, mode)
+    if not UIDropDownMenu_Initialize or not UIDropDownMenu_SetText then return end
+    if not pf or not drop or not label then return end
+
+    local srcKey = MSUF_EM_GetUnitPopupSrcKey(pf)
+    if not srcKey or not MSUF_EM_UNIT_COPY_ALLOWED[srcKey] then
+        label:Hide(); drop:Hide()
+        return
+    end
+
+    label:Show(); drop:Show()
+
+    local labelFn = (type(MSUF_GetUnitLabelForKey) == "function") and MSUF_GetUnitLabelForKey or function(k) return tostring(k) end
+    MSUF_EM_InitCopyDropdown(drop, placeholder,
+        function()
+            return MSUF_EM_BuildCopyItems(MSUF_EDITMODE_UNIT_KEYS, srcKey, labelFn)
+        end,
+        function(dstKey) MSUF_EM_CopyUnitSettings(srcKey, dstKey, mode) end
+    )
+end
+
+
+function MSUF_EM_AddPopupTitleAndClose(pf, titleText)
+    if not pf then return end
+
+    local title = pf:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOP", 0, -12)
+    title:SetText(titleText or "MSUF Edit")
+    pf.title = title
+
+    local closeBtn = (ns and ns.MSUF_EM_UIH and ns.MSUF_EM_UIH.ButtonAt) and ns.MSUF_EM_UIH.ButtonAt(
+        pf, "$parentClose", nil, nil, "TOPRIGHT", pf, "TOPRIGHT", -6, -6, nil, "UIPanelCloseButton"
+    ) or nil
+
+    if closeBtn then
+        closeBtn:SetScript("OnClick", function()
+            if pf.cancelBtn and pf.cancelBtn.Click then
+                pf.cancelBtn:Click()
+            else
+                pf:Hide()
+            end
+        end)
+        pf.closeBtn = closeBtn
+    end
+end
+
+function MSUF_EM_AddSectionHeader(pf, key, text, point, rel, relPoint, x, y)
+    if not pf then return nil end
+    local fs = pf:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    fs:SetPoint(point or "TOPLEFT", rel or pf, relPoint or (point or "TOPLEFT"), x or 0, y or 0)
+    fs:SetText(text or "")
+    fs:SetTextColor(1, 0.82, 0, 1)
+    if key then pf[key] = fs end
+    return fs
+end
+
+function MSUF_EM_AddDivider(pf, key, width, point, rel, relPoint, x, y)
+    if not pf then return nil end
+    local tex = pf:CreateTexture(nil, "ARTWORK")
+    tex:SetColorTexture(1, 1, 1, 0.12)
+    tex:SetHeight(1)
+    tex:SetWidth(width or 230)
+    tex:SetPoint(point or "TOPLEFT", rel or pf, relPoint or (point or "TOPLEFT"), x or 0, y or 0)
+    if key then pf[key] = tex end
+    return tex
+end
+
+
+
+local function MSUF_EM_GetGeneralDB()
+    MSUF_EM_EnsureDB()
+
+    if not MSUF_DB then
+        Edit.Util._fallbackGeneralDB = Edit.Util._fallbackGeneralDB or {}
+        return Edit.Util._fallbackGeneralDB
+    end
+
+    MSUF_DB.general = MSUF_DB.general or {}
+    return MSUF_DB.general
+end
+
+local function MSUF_EM_EnsureSnapSchema(g)
+    g = g or MSUF_EM_GetGeneralDB()
+
+    -- Master enable
+    if g.editModeSnapEnabled == nil then
+        if g.editModeSnapToGrid == nil then
+            g.editModeSnapEnabled = true
+        else
+            g.editModeSnapEnabled = (g.editModeSnapToGrid ~= false)
+        end
+    end
+
+    -- Mode string
+    if g.editModeSnapMode ~= "grid" and g.editModeSnapMode ~= "frames" then
+        if g.editModeSnapModeGrid ~= nil and (g.editModeSnapModeGrid ~= false) then
+            g.editModeSnapMode = "grid"
+        elseif g.editModeSnapModeFrames ~= nil and (g.editModeSnapModeFrames ~= false) then
+            g.editModeSnapMode = "frames"
+        else
+            g.editModeSnapMode = "grid"
+        end
+    end
+
+    if g.editModeSnapMode ~= "grid" and g.editModeSnapMode ~= "frames" then
+        g.editModeSnapMode = "grid"
+    end
+
+    return g
+end
+
+local function MSUF_EM_SyncLegacySnapKeys(g)
+    g = MSUF_EM_EnsureSnapSchema(g)
+
+    local enabled = (g.editModeSnapEnabled ~= false)
+    local mode = g.editModeSnapMode
+    if mode ~= "grid" and mode ~= "frames" then
+        mode = "grid"
+        g.editModeSnapMode = mode
+    end
+
+    -- Legacy mirrors (some older codepaths may still read these)
+    g.editModeSnapModeGrid = (mode == "grid") and true or false
+    g.editModeSnapModeFrames = (mode == "frames") and true or false
+    g.editModeSnapToGrid = (enabled and mode == "grid") and true or false
+
+    return g, enabled, mode
+end
+
+-- Unified getter used by UI + runtime snapping.
+local function MSUF_EM_GetSnapConfig()
+    local g = MSUF_EM_GetGeneralDB()
+    local enabled, mode
+    g, enabled, mode = MSUF_EM_SyncLegacySnapKeys(g)
+    local gridOn = enabled and (mode == "grid")
+    local framesOn = enabled and (mode == "frames")
+    return g, enabled, mode, gridOn, framesOn
+end
+
+local function MSUF_EM_SetSnapEnabled(enabled)
+    local g = MSUF_EM_GetGeneralDB()
+    g.editModeSnapEnabled = enabled and true or false
+    MSUF_EM_SyncLegacySnapKeys(g)
+end
+
+local function MSUF_EM_SetSnapMode(mode)
+    local g = MSUF_EM_GetGeneralDB()
+    if mode ~= "frames" then
+        mode = "grid"
+    end
+    g.editModeSnapMode = mode
+    MSUF_EM_SyncLegacySnapKeys(g)
+end
+
+-- Expose for internal maintainability (no external dependency required)
+Edit.Util.GetSnapConfig  = MSUF_EM_GetSnapConfig
+Edit.Util.SetSnapEnabled = MSUF_EM_SetSnapEnabled
+Edit.Util.SetSnapMode    = MSUF_EM_SetSnapMode
+
+local function MSUF_EM_SuppressNextBlizzardExit()
+    local st = MSUF_EM_GetState()
+    st.suppressNextBlizzardExit = true
+
+    local function Clear()
+        local s = MSUF_EM_GetState()
+        s.suppressNextBlizzardExit = false
+    end
+
+    if type(MSUF_SafeAfter) == "function" then
+        MSUF_SafeAfter(0.6, "MSUF_EM_ClearSuppressBlizzExit", Clear)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0.6, Clear)
+    end
+end
+
+
+Edit.Popups = Edit.Popups or {}
+
+
+local function _MSUF_Resolve_impl(v, ctx)
+    if type(v) == "function" then
+        return v(ctx)
+    end
+    return v
+end
+
+if type(_G) == "table" and type(_G._MSUF_Resolve) ~= "function" then
+    _G._MSUF_Resolve = _MSUF_Resolve_impl
+end
+
+local _MSUF_Resolve = _MSUF_Resolve_impl
+
+do
+    local P = Edit.Popups
+    P._frames = P._frames or setmetatable({}, { __mode = "k" })
+
+    local function AnyOpen()
+        for f in pairs(P._frames) do
+            if f and f.IsShown and f:IsShown() then
+                return true
+            end
+        end
+        return false
+    end
+    P.AnyOpen = AnyOpen
+
+    function P.Register(frame)
+        if not frame then return end
+        P._frames[frame] = true
+
+        if frame.HookScript and not frame.__msufPopupReg then
+            frame.__msufPopupReg = true
+            frame:HookScript("OnShow", function()
+                MSUF_EM_SetPopupOpen(true)
+            end)
+            frame:HookScript("OnHide", function()
+                if not AnyOpen() then
+                    MSUF_EM_SetPopupOpen(false)
+                end
+            end)
+        end
+    end
+
+    function P.CloseAll()
+        for f in pairs(P._frames) do
+            if f and f.Hide then
+                MSUF_FastCall(f.Hide, f)
+            end
+        end
+        if GameTooltip and GameTooltip.Hide then
+            MSUF_FastCall(GameTooltip.Hide, GameTooltip)
+        end
+        MSUF_EM_SetPopupOpen(false)
+    end
+end
+
+
+Edit.Popups.UI = Edit.Popups.UI or {}
+do
+    local UI = Edit.Popups.UI
+
+    function UI.SetLabelEnabled(fs, enabled)
+        if not fs or not fs.SetTextColor then return end
+        if enabled then
+            fs:SetTextColor(1, 1, 1, 0.95)
+        else
+            fs:SetTextColor(0.55, 0.55, 0.55, 0.9)
+        end
+    end
+
+    function UI.SetControlEnabled(w, enabled)
+        if not w then return end
+
+        -- Buttons / CheckButtons
+        if w.SetEnabled then
+            w:SetEnabled(enabled and true or false)
+        elseif enabled and w.Enable then
+            w:Enable()
+        elseif (not enabled) and w.Disable then
+            w:Disable()
+        end
+
+        -- EditBoxes
+        if w.ClearFocus and (not enabled) then
+            MSUF_FastCall(w.ClearFocus, w)
+        end
+        if w.EnableMouse then
+            w:EnableMouse(enabled and true or false)
+        end
+
+        -- Visual cue
+        if w.SetAlpha then
+            w:SetAlpha(enabled and 1 or 0.35)
+        end
+        if w.SetTextColor then
+            if enabled then
+                w:SetTextColor(1, 1, 1, 1)
+            else
+                w:SetTextColor(0.65, 0.65, 0.65, 1)
+            end
+        end
+    end
+
+    function UI.EnableStepper(btnMinus, btnPlus, enabled)
+        UI.SetControlEnabled(btnMinus, enabled)
+        UI.SetControlEnabled(btnPlus, enabled)
+    end
+
+    function UI.SetSizeControlsEnabled(box, minusBtn, plusBtn, enabled)
+        UI.SetControlEnabled(box, enabled)
+        UI.EnableStepper(minusBtn, plusBtn, enabled)
+    end
+end
+
+Edit.Popups.Util = Edit.Popups.Util or {}
+do
+    local U = Edit.Popups.Util
+
+    local function ClampNumber(v, minV, maxV)
+        v = tonumber(v)
+        if not v then return nil end
+        v = math.floor(v + 0.5)
+        if minV and v < minV then v = minV end
+        if maxV and v > maxV then v = maxV end
+        return v
+    end
+
+    function U.ReadOverrideChecked(cb, fallback)
+        if cb and cb.GetChecked then
+            local ok, val = pcall(cb.GetChecked, cb)
+            if ok then
+                return (val and true or false)
+            end
+        end
+        return (fallback and true or false)
+    end
+
+    function U.ApplyOptionalOverrideNumber(conf, fieldKey, box, overrideCB, enableFn, minusBtn, plusBtn, enabledGate, baseValue, minV, maxV)
+        if type(conf) ~= "table" then return false end
+
+        local old = conf[fieldKey]
+        local want = (old ~= nil)
+        want = U.ReadOverrideChecked(overrideCB, want)
+
+        if enableFn then
+            enableFn(box, minusBtn, plusBtn, (want and (enabledGate ~= false)))
+        end
+
+        if want then
+            local raw = (box and box.GetText and box:GetText()) or nil
+            local v = tonumber(raw or "") or tonumber(old) or tonumber(baseValue)
+            v = ClampNumber(v, minV, maxV) or ClampNumber(baseValue, minV, maxV) or old
+            conf[fieldKey] = v
+        else
+            conf[fieldKey] = nil
+        end
+
+        local display = want and (conf[fieldKey] or baseValue) or baseValue
+        if box and box.SetText and (not box.HasFocus or not box:HasFocus()) then
+            box:SetText(tostring(display or ""))
+        end
+
+        return (old ~= conf[fieldKey])
+    end
+
+    function U.SyncOptionalOverrideNumber(conf, fieldKey, box, overrideCB, enableFn, minusBtn, plusBtn, enabledGate, baseValue)
+        if type(conf) ~= "table" then return end
+
+        local want = (conf[fieldKey] ~= nil)
+
+        if overrideCB and overrideCB.SetChecked then
+            overrideCB:SetChecked(want and true or false)
+        end
+
+        local display = want and (tonumber(conf[fieldKey]) or baseValue) or baseValue
+        if box and box.SetText and (not box.HasFocus or not box:HasFocus()) then
+            box:SetText(tostring(display or ""))
+        end
+
+        if enableFn then
+            enableFn(box, minusBtn, plusBtn, (want and (enabledGate ~= false)))
+        end
+    end
+end
+local function MSUF_GetFeatureForTag(tag)
+    tag = tostring(tag or "")
+    -- Arrow-key nudging
+    if tag:find("^ArrowKey:") then
+        return "arrowKeys"
+    end
+    -- Boss preview sync/update (non-critical to keep the rest of Edit Mode usable)
+    if tag == "Flush:BossCastbarPreview" or tag == "Flush:BossCastbarPopupSync" then
+        return "bossPreview"
+    end
+    -- Popup helper features
+    if tag == "Stepper:onStep" then
+        return "popupSteppers"
+    end
+    if tag == "CopyCastbarSize:Apply" then
+        return "popupCopyCastbarSize"
+    end
+    return nil
+end
+
+local function MSUF_DisableFeature(feature)
+    if not feature or MSUF__SafeFeatureDisabled[feature] then
+        return
+    end
+    MSUF__SafeFeatureDisabled[feature] = true
+
+    if not MSUF__SafeFeatureDisableOnce[feature] then
+        MSUF__SafeFeatureDisableOnce[feature] = true
+        if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
+            _G.DEFAULT_CHAT_FRAME:AddMessage("|cffff4444MSUF EditMode disabled feature due to repeated errors:|r " .. tostring(feature))
+        end
+    end
+
+    if feature == "arrowKeys" then
+        if _G.MSUF_EnableArrowKeyNudge then
+            MSUF_FastCall(_G.MSUF_EnableArrowKeyNudge, false)
+        end
+    end
+end
+
+MSUF_SafeCall = function(tag, fn, ...)
+    if type(fn) ~= "function" then return nil end
+
+    local feature = MSUF_GetFeatureForTag(tag)
+    if feature and MSUF__SafeFeatureDisabled[feature] then
+        return nil
+    end
+
+    local t = tostring(tag or "")
+    if MSUF__EditModeFatalDisabled then
+        if t == "MSUF_SetMSUFEditModeDirect" or t == "MSUF_SetMSUFEditModeFromBlizzard" or t:find("^Popup:") or t:find("^Hook:") or t:find("^Flush:UnitApply:") or t:find("^Flush:CastbarApply:") or t == "Flush:CastbarVisuals" then
+            return nil
+        end
+    end
+
+    local args = { ... }
+    local ok, r1, r2, r3, r4, r5 = xpcall(function()
+        return fn(unpack(args))
+    end, geterrorhandler())
+
+    if not ok then
+
+        if feature ~= "arrowKeys" then
+            if t == "MSUF_SetMSUFEditModeDirect" or t == "MSUF_SetMSUFEditModeFromBlizzard" or t:find("^Popup:") or t:find("^Hook:") or t:find("^Flush:UnitApply:") or t:find("^Flush:CastbarApply:") or t == "Flush:CastbarVisuals" then
+                if MSUF_EditMode_FatalDisable then
+                    MSUF_EditMode_FatalDisable(t, r1)
+                end
+            end
+        end
+
+        MSUF__SafeCallErrorCountByTag[tag] = (MSUF__SafeCallErrorCountByTag[tag] or 0) + 1
+
+        if feature then
+            MSUF__SafeFeatureErrorCount[feature] = (MSUF__SafeFeatureErrorCount[feature] or 0) + 1
+            if MSUF__SafeFeatureErrorCount[feature] >= 3 then
+                MSUF_DisableFeature(feature)
+            end
+        end
+
+        if not MSUF__SafeCallErrorOnce[tag] then
+            MSUF__SafeCallErrorOnce[tag] = true
+            -- Keep it quiet; one-liner so it doesn't spam
+            if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
+                _G.DEFAULT_CHAT_FRAME:AddMessage("|cffff4444MSUF EditMode error (suppressed):|r " .. tostring(tag))
+            end
+        end
+        return nil
+    end
+
+    return r1, r2, r3, r4, r5
+end
+
+local function MSUF_EditMode_ShowStepModifierTipOnce(anchorFrame)
+    -- Dezent + nur einmal pro Session. Wird nur von Popup +/- aufgerufen.
+    if _G.MSUF__PopupStepperTipShown then
+        return
+    end
+    _G.MSUF__PopupStepperTipShown = true
+
+    local f = anchorFrame
+    if not f or type(f.CreateFontString) ~= "function" then
+        return
+    end
+
+    local tip = f.__msufStepperTipText
+    if not tip then
+        tip = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        tip:SetPoint("BOTTOM", f, "BOTTOM", 0, 10)
+        tip:SetJustifyH("CENTER")
+        tip:SetJustifyV("MIDDLE")
+        tip:SetText("")
+        tip:SetAlpha(0.75)
+        f.__msufStepperTipText = tip
+    end
+
+    -- Kurzer, unaufdringlicher Hinweis (wie früher).
+    tip:SetText("")
+    tip:Show()
+
+    -- Auto-hide
+    if C_Timer and C_Timer.After then
+        local token = (tip.__msufHideToken or 0) + 1
+        tip.__msufHideToken = token
+        C_Timer.After(3.0, function()
+            if tip and tip.__msufHideToken == token and tip.Hide then
+                tip:Hide()
+            end
+        end)
+    end
+end
+
+local MSUF__EM_AfterSeq = 0
+
+MSUF_SafeAfter = function(seconds, tag, fn, requireActive)
+    if type(fn) ~= "function" then return end
+    local mySeq = MSUF__EM_AfterSeq
+
+    local function _shouldRun()
+        if mySeq ~= MSUF__EM_AfterSeq then
+            return false
+        end
+        if requireActive then
+            local st = Edit and (Edit.State or _G.MSUF_EditState)
+            if not (st and st.active) then
+                return false
+            end
+        end
+        return true
+    end
+
+    if not (C_Timer and C_Timer.After) then
+        if not _shouldRun() then return end
+        return MSUF_SafeCall("After:" .. tostring(tag), fn)
+    end
+
+    C_Timer.After(tonumber(seconds) or 0, function()
+        if not _shouldRun() then return end
+        MSUF_SafeCall("After:" .. tostring(tag), fn)
+    end)
+end
+
+
+local function MSUF_SanitizePopupOffset(v, default)
+    default = tonumber(default) or 0
+    v = tonumber(v)
+    if not v then return default end
+    -- NaN / inf guards
+    if v ~= v or v == math.huge or v == -math.huge then
+        return default
+    end
+    -- Hard clamp (offsets should never be in the billions)
+    if math.abs(v) > 10000 then
+        return default
+    end
+    return math.floor(v + 0.5)
+end
+
+
+local MSUF_EDITMODE_APPLY_DEBOUNCE = 0.03
+
+local MSUF__EditModePendingApplies = {
+    unit = {},       -- [unitKey]=true
+    castbar = {},    -- [unit]=true
+    bossCastbar = false,
+}
+
+local MSUF__EditModeFlushSeq = 0
+
+
+local MSUF__EditModePendingVisibilityDrivers = nil
+
+
+local MSUF__UnitPopupApplying = false
+local MSUF__UnitPopupSyncing = false
+local MSUF__CastbarPopupApplying = false
+local MSUF__CastbarPopupSyncing = false
+local MSUF__EditModeCombatFrame
+local MSUF__EditModeCombatNoticeShown = false
+local MSUF__EditModeCombatWarnFrame
+local MSUF__EditModeCombatWarnShownThisCombat = false
+
+local function MSUF_EditMode_ShowCombatWarning()
+    if not MSUF_UnitEditModeActive then return end
+    if not (InCombatLockdown and InCombatLockdown()) then return end
+    if MSUF__EditModeCombatWarnShownThisCombat then return end
+    MSUF__EditModeCombatWarnShownThisCombat = true
+
+    local msg = "|cffffd700MSUF Edit Mode:|r You are in combat - changes/movement will be applied after combat ends."
+    if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
+        _G.DEFAULT_CHAT_FRAME:AddMessage(msg)
+    else
+        print(msg)
+    end
+end
+
+local function MSUF_EditMode_StartCombatWarningListener()
+    if MSUF__EditModeCombatWarnFrame then return end
+    MSUF__EditModeCombatWarnFrame = CreateFrame("Frame")
+    MSUF__EditModeCombatWarnFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    MSUF__EditModeCombatWarnFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    MSUF__EditModeCombatWarnFrame:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            if MSUF_UnitEditModeActive then
+                MSUF_EditMode_ShowCombatWarning()
+            end
+        else -- PLAYER_REGEN_ENABLED
+            MSUF__EditModeCombatWarnShownThisCombat = false
+        end
+    end)
+
+    -- If we enter Edit Mode while already in combat, warn immediately (Das klappt nicht so richtig)
+    if InCombatLockdown and InCombatLockdown() and MSUF_UnitEditModeActive then
+        MSUF_EditMode_ShowCombatWarning()
+    end
+end
+
+local function MSUF_EditMode_StopCombatWarningListener()
+    if not MSUF__EditModeCombatWarnFrame then return end
+    if MSUF__EditModeCombatWarnFrame.UnregisterAllEvents then
+        MSUF__EditModeCombatWarnFrame:UnregisterAllEvents()
+    else
+        MSUF__EditModeCombatWarnFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
+        MSUF__EditModeCombatWarnFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    end
+    MSUF__EditModeCombatWarnFrame:SetScript("OnEvent", nil)
+    MSUF__EditModeCombatWarnFrame:Hide()
+    MSUF__EditModeCombatWarnFrame = nil
+    MSUF__EditModeCombatWarnShownThisCombat = false
+end
+
+
+local function MSUF_EditMode_HardTeardown()
+
+    MSUF__EditModeFlushSeq = (MSUF__EditModeFlushSeq or 0) + 1
+
+    MSUF__EM_AfterSeq = (MSUF__EM_AfterSeq or 0) + 1
+
+
+    if MSUF__EditModePendingApplies then
+        if MSUF__EditModePendingApplies.unit then
+            for k in pairs(MSUF__EditModePendingApplies.unit) do
+                MSUF__EditModePendingApplies.unit[k] = nil
+            end
+        end
+        if MSUF__EditModePendingApplies.castbar then
+            for u in pairs(MSUF__EditModePendingApplies.castbar) do
+                MSUF__EditModePendingApplies.castbar[u] = nil
+            end
+        end
+        MSUF__EditModePendingApplies.bossCastbar = false
+    end
+    -- Kill combat listener (but KEEP it if we have deferred SecureStateDriver work pending)
+    local __keepCombatListener = (MSUF__EditModePendingVisibilityDrivers ~= nil) or ((Edit and Edit.State and Edit.State.pendingSecureCleanup) and true or false)
+    if type(MSUF_EM_EnableUpdateSimpleUnitFrameHook) == "function" then
+        MSUF_EM_EnableUpdateSimpleUnitFrameHook(false)
+    end
+    if MSUF__EditModeCombatFrame and not __keepCombatListener then
+        if MSUF__EditModeCombatFrame.UnregisterAllEvents then
+            MSUF__EditModeCombatFrame:UnregisterAllEvents()
+        else
+            MSUF__EditModeCombatFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        end
+        MSUF__EditModeCombatFrame:SetScript("OnEvent", nil)
+        MSUF__EditModeCombatFrame:Hide()
+        MSUF__EditModeCombatFrame = nil
+    end
+
+    -- Kill combat warning listener
+    MSUF_EditMode_StopCombatWarningListener()
+
+    local nudge = _G and _G.MSUF_ArrowKeyNudgeFrame
+    if nudge then
+        -- Mark as hard-killed so any remaining OnUpdate gate never re-enables keyboard.
+        nudge.__msufHardKill = true
+        if nudge.EnableKeyboard then
+            MSUF_FastCall(nudge.EnableKeyboard, nudge, false)
+        end
+        nudge.__msufKeyboardOn = false
+        if nudge.Hide then
+            MSUF_FastCall(nudge.Hide, nudge)
+        end
+    end
+
+    -- Cleanup Snap OnUpdate wrappers / drag flags (prevents stale wrappers after exit)
+    if _G and type(_G.MSUF_EM_CleanupSnapWrappers) == "function" then
+        MSUF_SafeCall("EditMode:CleanupSnapWrappers", _G.MSUF_EM_CleanupSnapWrappers)
+    end
+
+    -- Allow the combat-queue notice again next time Edit Mode is used
+    MSUF__EditModeCombatNoticeShown = false
+end
+
+MSUF_EditMode_FatalDisable = function(tag, err)
+    if MSUF__EditModeFatalDisabled then return end
+    MSUF__EditModeFatalDisabled = true
+    MSUF__EditModeFatalTag = tostring(tag or "?")
+    MSUF__EditModeFatalReason = tostring(err or "unknown")
+
+
+    MSUF_FastCall(function()
+        MSUF_EM_SetFatalDisabled(MSUF__EditModeFatalTag, MSUF__EditModeFatalReason)
+        MSUF_EM_SetActive(false, nil)
+
+    -- Hard guarantee: boss unitframe preview must not persist past Edit Mode.
+    MSUF_BossTestMode = false
+        MSUF_EditModeSizing = false
+    end)
+
+    -- 2) Close popups & disable arrow nudge.
+    if type(MSUF_CloseAllPositionPopups) == "function" then
+        MSUF_FastCall(MSUF_CloseAllPositionPopups)
+    end
+    if _G and _G.MSUF_EnableArrowKeyNudge then
+        MSUF_FastCall(_G.MSUF_EnableArrowKeyNudge, false)
+    end
+
+    -- 3) Hard-release keyboard catcher immediately (even if other teardown steps fail).
+    local nudge = _G and _G.MSUF_ArrowKeyNudgeFrame
+    if nudge then
+        nudge.__msufHardKill = true
+        if nudge.EnableKeyboard then MSUF_FastCall(nudge.EnableKeyboard, nudge, false) end
+        if nudge.SetScript then MSUF_FastCall(nudge.SetScript, nudge, "OnKeyDown", nil) end
+        if nudge.Hide then MSUF_FastCall(nudge.Hide, nudge) end
+        nudge.__msufKeyboardOn = false
+    end
+
+    -- 4) Hide grid if present.
+    if MSUF_GridFrame and MSUF_GridFrame.Hide then
+        MSUF_FastCall(MSUF_GridFrame.Hide, MSUF_GridFrame)
+    end
+
+    -- 5) Stop timers/listeners/queues.
+    MSUF_FastCall(MSUF_EditMode_HardTeardown)
+
+    if not MSUF__EditModeFatalPrinted then
+        MSUF__EditModeFatalPrinted = true
+        local msg = "|cffffd700MSUF:|r Edit Mode disabled due to an error (" .. MSUF__EditModeFatalTag .. "). /reload recommended."
+        if _G and _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
+            _G.DEFAULT_CHAT_FRAME:AddMessage(msg)
+        else
+            print(msg)
+        end
+    end
+end
+
+local function MSUF_EditMode_EnsureCombatListener()
+    if MSUF__EditModeCombatFrame then return end
+    MSUF__EditModeCombatFrame = CreateFrame("Frame")
+    MSUF__EditModeCombatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    MSUF__EditModeCombatFrame:SetScript("OnEvent", function()
+        -- Unregister immediately; this is a one-shot flush.
+        if MSUF__EditModeCombatFrame then
+            MSUF__EditModeCombatFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            MSUF__EditModeCombatFrame:SetScript("OnEvent", nil)
+            MSUF__EditModeCombatFrame = nil
+        end
+
+        -- Flush queued applies first (may teardown if Edit Mode already ended).
+        if type(MSUF_EditMode_FlushPendingApplies) == "function" then
+            MSUF_SafeCall("CombatFlush:PendingApplies", MSUF_EditMode_FlushPendingApplies)
+        end
+
+        -- Then flush any deferred "secure" work (visibility drivers etc.). Must be out of combat.
+if Edit and Edit.Secure and Edit.Secure.Flush then
+    Edit.Secure.Flush()
+end
+
+        if MSUF__EditModePendingBossPreviewResync and type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
+            MSUF__EditModePendingBossPreviewResync = nil
+            MSUF_SafeCall("CombatFlush:BossPreviewResync", _G.MSUF_SyncBossUnitframePreviewWithUnitEdit)
+        end
+
+-- Clear any legacy pending visibility driver flag (legacy fallback path).
+MSUF__EditModePendingVisibilityDrivers = nil
+
+if not MSUF_UnitEditModeActive then
+    MSUF_EditMode_HardTeardown()
+end
+
+    end)
+end
+
+Edit.Secure = Edit.Secure or {}
+do
+    local S = Edit.Secure
+    S._pending = S._pending or {} -- tag -> closure
+
+    local function InCombat()
+        return InCombatLockdown and InCombatLockdown()
+    end
+
+    local function HasPending()
+        for _ in pairs(S._pending) do
+            return true
+        end
+        return false
+    end
+
+    function S.RunOrDefer(tag, fn, ...)
+        if type(fn) ~= "function" then
+            return false
+        end
+        tag = tostring(tag or "Secure")
+
+        if InCombat() then
+            local args = { ... }
+            S._pending[tag] = function()
+                return fn(unpack(args))
+            end
+
+            if type(MSUF_EM_SetPendingSecureCleanup) == "function" then
+                MSUF_EM_SetPendingSecureCleanup(true)
+            end
+            if type(MSUF_EditMode_EnsureCombatListener) == "function" then
+                MSUF_EditMode_EnsureCombatListener()
+            end
+            return false
+        end
+
+        -- OOC: run immediately
+        MSUF_SafeCall("Secure:" .. tag, fn, ...)
+        if type(MSUF_EM_SetPendingSecureCleanup) == "function" then
+            MSUF_EM_SetPendingSecureCleanup(HasPending())
+        end
+        return true
+    end
+
+    -- Flush any deferred secure tasks (must be OOC).
+    function S.Flush()
+        if InCombat() then
+            return
+        end
+
+        local had = HasPending()
+        if not had then
+            if type(MSUF_EM_SetPendingSecureCleanup) == "function" then
+                MSUF_EM_SetPendingSecureCleanup(false)
+            end
+            return
+        end
+
+        local pending = S._pending
+        S._pending = {}
+
+        for tag, thunk in pairs(pending) do
+            if type(thunk) == "function" then
+                MSUF_SafeCall("SecureFlush:" .. tostring(tag), thunk)
+            end
+        end
+
+        if type(MSUF_EM_SetPendingSecureCleanup) == "function" then
+            MSUF_EM_SetPendingSecureCleanup(false)
+        end
+    end
+
+
+    local P = Edit.Popups
+    Edit.Popups.Specs = Edit.Popups.Specs or {}
+    local function _MSUF_BoxNumber(box)
+        if not box or not box.GetText then return nil end
+        local t = box:GetText()
+        if not t or t == "" then return nil end
+        return tonumber(t)
+    end
+
+    local function _MSUF_SetBoxNumber(box, v)
+        if not box or not box.SetText or v == nil then return end
+        box:SetText(tostring(v))
+    end
+
+    function P.ReadFields(pf, ctx, spec)
+        if not pf or not spec or not spec.fields then
+            return {}
+        end
+        ctx = ctx or {}
+        local out = {}
+
+        for _, f in ipairs(spec.fields) do
+            local box = f.box and pf[f.box] or nil
+
+            local key = f.key
+            if type(key) == "function" then
+                key = key(ctx)
+            end
+
+            local conf = ctx.conf
+            local cur = (conf and key) and conf[key] or nil
+            local def = _MSUF_Resolve(f.default, ctx)
+
+            local v = _MSUF_BoxNumber(box)
+            if v == nil then
+                if type(f.fallback) == "function" then
+                    v = f.fallback(ctx, cur, def)
+                else
+                    v = cur
+                end
+            end
+            if v == nil then
+                v = def
+            end
+
+            if f.sanitize == "offset" then
+                v = MSUF_SanitizePopupOffset(v, (def ~= nil) and def or ((cur ~= nil) and cur or 0))
+            elseif f.sanitize == "round" then
+                v = tonumber(v) or ((def ~= nil) and def or 0)
+                if v ~= v or v == math.huge or v == -math.huge then
+                    v = (def ~= nil) and def or 0
+                end
+                v = math.floor(v + 0.5)
+            else
+                v = tonumber(v) or ((def ~= nil) and def or 0)
+                if v ~= v or v == math.huge or v == -math.huge then
+                    v = (def ~= nil) and def or 0
+                end
+            end
+
+            if f.min ~= nil and v < f.min then v = f.min end
+            if f.max ~= nil and v > f.max then v = f.max end
+
+            local name = f.name or key or f.box
+            if name then
+                out[name] = v
+            end
+
+            if f.store and conf and key then
+                conf[key] = v
+            end
+
+            if f.writeback ~= false then
+                _MSUF_SetBoxNumber(box, v)
+            end
+        end
+
+        return out
+    end
+
+    Edit.Popups.Specs.UnitFramePosition = Edit.Popups.Specs.UnitFramePosition or {
+        fields = {
+            { name="xVal", box="xBox", key="offsetX", sanitize="offset", default=0 , store=true},            { name="yVal", box="yBox", key="offsetY", sanitize="offset", default=0 , store=true},            { name="wVal", box="wBox", key="width",  sanitize="round",  default=function(ctx) return ctx.currentW end, min=80, max=600 , store=true},            { name="hVal", box="hBox", key="height", sanitize="round",  default=function(ctx) return ctx.currentH end, min=20, max=600 , store=true},
+            { name="nameXVal",  box="nameXBox",  key="nameOffsetX",  sanitize="round", default=4 , store=true},            { name="nameYVal",  box="nameYBox",  key="nameOffsetY",  sanitize="round", default=-4 , store=true},
+            { name="hpXVal",    box="hpXBox",    key="hpOffsetX",    sanitize="round", default=-4 , store=true},            { name="hpYVal",    box="hpYBox",    key="hpOffsetY",    sanitize="round", default=-4 , store=true},
+            { name="powerXVal", box="powerXBox", key="powerOffsetX", sanitize="round", default=-4 , store=true},            { name="powerYVal", box="powerYBox", key="powerOffsetY", sanitize="round", default=-4 , store=true},        }
+    }
+
+    -- Castbar Position Popup (Frame offsets + size)
+    Edit.Popups.Specs.CastbarFramePosition = Edit.Popups.Specs.CastbarFramePosition or {
+        fields = {
+            { name="xVal", box="xBox", key=function(ctx) return (ctx.prefix or "") .. "OffsetX" end, sanitize="offset", default=function(ctx) return ctx.defaultX end, store=true },
+            { name="yVal", box="yBox", key=function(ctx) return (ctx.prefix or "") .. "OffsetY" end, sanitize="offset", default=function(ctx) return ctx.defaultY end, store=true },
+            { name="wVal", box="wBox", key=function(ctx) return (ctx.prefix or "") .. "BarWidth" end, sanitize="round", default=function(ctx) return ctx.currentW end, min=50, max=600, store=true },
+            { name="hVal", box="hBox", key=function(ctx) return (ctx.prefix or "") .. "BarHeight" end, sanitize="round", default=function(ctx) return ctx.currentH end, min=8, max=100, store=true },
+        }
+    }
+
+    -- Castbar Name Text offsets
+    Edit.Popups.Specs.CastbarNameOffsets = Edit.Popups.Specs.CastbarNameOffsets or {
+        fields = {
+            { box="castNameXBox", key=function(ctx) return (ctx.prefix or "") .. "TextOffsetX" end, sanitize="round", default=0, store=true },
+            { box="castNameYBox", key=function(ctx) return (ctx.prefix or "") .. "TextOffsetY" end, sanitize="round", default=0, store=true },
+        }
+    }
+
+    -- Castbar Time Text offsets
+    Edit.Popups.Specs.CastbarTimeOffsets = Edit.Popups.Specs.CastbarTimeOffsets or {
+    fields = {
+        { box="timeXBox", key=function(ctx) return (ctx.prefix or "") .. "TimeOffsetX" end, sanitize="round",
+          default=function(ctx) return ctx.defaultTimeX end, store=true },
+        { box="timeYBox", key=function(ctx) return (ctx.prefix or "") .. "TimeOffsetY" end, sanitize="round",
+          default=function(ctx) return ctx.defaultTimeY end, store=true },
+    }
+}
+-- Castbar Icon offsets
+    Edit.Popups.Specs.CastbarIconOffsets = Edit.Popups.Specs.CastbarIconOffsets or {
+        fields = {
+            { box="iconXBox", key=function(ctx) return (ctx.prefix or "") .. "IconOffsetX" end, sanitize="round", default=0, store=true },
+            { box="iconYBox", key=function(ctx) return (ctx.prefix or "") .. "IconOffsetY" end, sanitize="round", default=0, store=true },
+        }
+    }
+
+    -- Convenience: visibility driver refresh (calls into SecureStateDriver territory).
+    function S.RequestVisibilityDrivers(active)
+        local want = active and true or false
+        if type(MSUF_RefreshAllUnitVisibilityDrivers) ~= "function" then
+            return
+        end
+        S.RunOrDefer("VisibilityDrivers", MSUF_RefreshAllUnitVisibilityDrivers, want)
+    end
+end
+
+
+function Edit.Popups.SyncFields(pf, ctx, spec)
+    if not pf or not spec or not spec.fields then
+        return
+    end
+    ctx = ctx or {}
+    local conf = ctx.conf
+
+    for _, f in ipairs(spec.fields) do
+        local box = f.box and pf[f.box] or nil
+        if box and box.SetText then
+
+            local hasFocus = (not (ctx and ctx.force)) and (box.HasFocus and box:HasFocus()) and true or false
+            if not hasFocus then
+                local key = f.key
+                if type(key) == "function" then
+                    key = key(ctx)
+                end
+
+                local cur = (conf and key) and conf[key] or nil
+                local def = _MSUF_Resolve(f.default, ctx)
+
+                local v = cur
+                if v == nil and type(f.fallback) == "function" then
+                    v = f.fallback(ctx, cur, def)
+                end
+                if v == nil then
+                    v = def
+                end
+
+                if f.sanitize == "offset" then
+                    v = MSUF_SanitizePopupOffset(v, (def ~= nil) and def or ((cur ~= nil) and cur or 0))
+                elseif f.sanitize == "round" then
+                    v = tonumber(v) or ((def ~= nil) and def or 0)
+                    if v ~= v or v == math.huge or v == -math.huge then
+                        v = (def ~= nil) and def or 0
+                    end
+                    v = math.floor(v + 0.5)
+                else
+                    v = tonumber(v) or ((def ~= nil) and def or 0)
+                    if v ~= v or v == math.huge or v == -math.huge then
+                        v = (def ~= nil) and def or 0
+                    end
+                end
+
+                if f.min ~= nil and v < f.min then v = f.min end
+                if f.max ~= nil and v > f.max then v = f.max end
+
+                box:SetText(tostring(v))
+            end
+        end
+    end
+end
+
+local function MSUF_EditMode_RequestVisibilityDrivers(active)
+    if Edit and Edit.Secure and Edit.Secure.RequestVisibilityDrivers then
+        Edit.Secure.RequestVisibilityDrivers(active)
+        return
+    end
+
+
+    local want = active and true or false
+    if InCombatLockdown and InCombatLockdown() then
+        MSUF__EditModePendingVisibilityDrivers = want
+        if type(MSUF_EM_SetPendingSecureCleanup) == "function" then
+            MSUF_EM_SetPendingSecureCleanup(true)
+        end
+        if type(MSUF_EditMode_EnsureCombatListener) == "function" then
+            MSUF_EditMode_EnsureCombatListener()
+        end
+        return
+    end
+    if type(MSUF_RefreshAllUnitVisibilityDrivers) == "function" then
+        MSUF_SafeCall("EditMode:VisibilityDrivers", MSUF_RefreshAllUnitVisibilityDrivers, want)
+    end
+    if type(MSUF_EM_SetPendingSecureCleanup) == "function" then
+        MSUF_EM_SetPendingSecureCleanup(false)
+    end
+end
+
+function MSUF_EditMode_FlushPendingApplies()
+    if InCombatLockdown and InCombatLockdown() then
+        MSUF_EditMode_EnsureCombatListener()
+        return
+    end
+
+    -- If Edit Mode is no longer active, ensure nothing lingers.
+    if not MSUF_UnitEditModeActive then
+        MSUF_EditMode_HardTeardown()
+        return
+    end
+
+    -- Unitframes
+    if MSUF__EditModePendingApplies.unit then
+        for key in pairs(MSUF__EditModePendingApplies.unit) do
+            MSUF__EditModePendingApplies.unit[key] = nil
+            if type(_G.MSUF_ApplyUnitframeKeyAndSync) == "function" then
+                MSUF_SafeCall("Flush:UnitApply:" .. tostring(key), _G.MSUF_ApplyUnitframeKeyAndSync, key)
+            end
+        end
+    end
+
+    -- Castbars (player/target/focus)
+    if MSUF__EditModePendingApplies.castbar then
+        for unit in pairs(MSUF__EditModePendingApplies.castbar) do
+            MSUF__EditModePendingApplies.castbar[unit] = nil
+            if type(MSUF_ApplyCastbarUnitAndSync) == "function" then
+                MSUF_SafeCall("Flush:CastbarApply:" .. tostring(unit), MSUF_ApplyCastbarUnitAndSync, unit)
+            elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+                MSUF_SafeCall("Flush:CastbarVisuals", _G.MSUF_UpdateCastbarVisuals)
+            end
+        end
+    end
+
+    -- Boss castbar preview/real
+    if MSUF__EditModePendingApplies.bossCastbar then
+        MSUF__EditModePendingApplies.bossCastbar = false
+        if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+            MSUF_SafeCall("Flush:BossCastbarPos", _G.MSUF_ApplyBossCastbarPositionSetting)
+        end
+        if type(_G.MSUF_ApplyBossCastbarTimeSetting) == "function" then
+            MSUF_SafeCall("Flush:BossCastbarTime", _G.MSUF_ApplyBossCastbarTimeSetting)
+        end
+        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            MSUF_SafeCall("Flush:BossCastbarPreview", _G.MSUF_UpdateBossCastbarPreview)
+        end
+        if type(MSUF_SyncCastbarPositionPopup) == "function" then
+            MSUF_SafeCall("Flush:BossCastbarPopupSync", MSUF_SyncCastbarPositionPopup, "boss")
+        end
+    end
+end
+
+local function MSUF_EditMode_RequestFlushDebounced()
+    MSUF__EditModeFlushSeq = (MSUF__EditModeFlushSeq or 0) + 1
+    local mySeq = MSUF__EditModeFlushSeq
+
+    MSUF_SafeAfter(MSUF_EDITMODE_APPLY_DEBOUNCE, "Debounce:EditModeFlush", function()
+        if mySeq ~= MSUF__EditModeFlushSeq then return end
+        MSUF_EditMode_FlushPendingApplies()
+    end)
+end
+
+local function MSUF_EditMode_QueueNoticeOnce()
+    if MSUF__EditModeCombatNoticeShown then return end
+    MSUF__EditModeCombatNoticeShown = true
+    print("|cffffd700MSUF:|r Änderungen werden im Kampf gepuffert und nach Kampfende angewendet.")
+end
+
+local function MSUF_EM_CombatGuardFlush()
+    if InCombatLockdown and InCombatLockdown() then
+        MSUF_EditMode_EnsureCombatListener()
+        MSUF_EditMode_QueueNoticeOnce()
+        return true
+    end
+    MSUF_EditMode_RequestFlushDebounced()
+    return false
+end
+
+
+local function MSUF_EditMode_RequestUnitApply(key)
+    if not key then return end
+    MSUF__EditModePendingApplies.unit[key] = true
+    if MSUF_EM_CombatGuardFlush() then return end
+end
+
+local function MSUF_EditMode_RequestCastbarApply(unit)
+    if not unit then return end
+    MSUF__EditModePendingApplies.castbar[unit] = true
+    if MSUF_EM_CombatGuardFlush() then return end
+end
+
+local function MSUF_EditMode_RequestBossCastbarApply()
+    MSUF__EditModePendingApplies.bossCastbar = true
+    if MSUF_EM_CombatGuardFlush() then return end
+end
+
+
+local floor = math.floor
+local max = math.max
+local min = math.min
+local abs = math.abs
+local format = string.format
+local gsub = string.gsub
+
+-- Shared textures/backdrops (copied from main file scope)
+local MSUF_TEX_WHITE8 = "Interface\\BUTTONS\\WHITE8X8"
+local MSUF_BORDER_DEFAULT = "Gray"
+local MSUF_BORDER_BACKDROPS = {
+    ["None"] = { edgeFile = nil, edgeSize = 0, insets = { left = 0, right = 0, top = 0, bottom = 0 } },
+    ["Gray"] = { edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } },
+    ["Gold"] = { edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize = 32, insets = { left = 11, right = 12, top = 12, bottom = 11 } },
+}
+
+
+Edit.Popups.Specs = Edit.Popups.Specs or {}
+
+Edit.Popups.Specs.BossCastbarFramePosition = Edit.Popups.Specs.BossCastbarFramePosition or {
+    fields = {
+        { box="xBox", key="bossCastbarOffsetX", sanitize="offset", default=0, store=true },
+        { box="yBox", key="bossCastbarOffsetY", sanitize="offset", default=0, store=true },
+        { box="wBox", key="bossCastbarWidth",   sanitize="round",  default=function(ctx) return ctx.currentW end, min=50, max=999, store=true },
+        { box="hBox", key="bossCastbarHeight",  sanitize="round",  default=function(ctx) return ctx.currentH end, min=8,  max=999, store=true },
+    }
+}
+
+Edit.Popups.Specs.BossCastbarNameOffsets = Edit.Popups.Specs.BossCastbarNameOffsets or {
+    fields = {
+        { box="castNameXBox", key="bossCastTextOffsetX", sanitize="round", default=0, store=true },
+        { box="castNameYBox", key="bossCastTextOffsetY", sanitize="round", default=0, store=true },
+    }
+}
+
+Edit.Popups.Specs.BossCastbarTimeOffsets = Edit.Popups.Specs.BossCastbarTimeOffsets or {
+    fields = {
+        { box="timeXBox", key="bossCastTimeOffsetX", sanitize="round", default=0, store=true },
+        { box="timeYBox", key="bossCastTimeOffsetY", sanitize="round", default=0, store=true },
+    }
+}
+
+Edit.Popups.Specs.BossCastbarIconOffsets = Edit.Popups.Specs.BossCastbarIconOffsets or {
+    fields = {
+        { box="iconXBox", key="bossCastIconOffsetX", sanitize="round", default=0, store=true,
+          fallback=function(ctx) return (ctx.conf and tonumber(ctx.conf.castbarIconOffsetX)) or 0 end },
+        { box="iconYBox", key="bossCastIconOffsetY", sanitize="round", default=0, store=true,
+          fallback=function(ctx) return (ctx.conf and tonumber(ctx.conf.castbarIconOffsetY)) or 0 end },
+    }
+}
+
+-- Used by edit-visual refresh loops
+local MSUF_MAX_BOSS_FRAMES = 5
+
+-- Unit frame registry is exported by the main file
+local UnitFrames = _G.MSUF_UnitFrames or {}
+
+-- ------------------------------------------------------------
+-- Edit Mode: White Arrow (nudge buttons) visibility toggle
+-- ------------------------------------------------------------
+local function MSUF_EM_GetHideWhiteArrows()
+    return (MSUF_DB and MSUF_DB.general and MSUF_DB.general.editModeHideWhiteArrows) and true or false
+end
+
+local function MSUF_EM_SetHideWhiteArrows(hide)
+    if not MSUF_DB then return end
+    MSUF_DB.general = MSUF_DB.general or {}
+    MSUF_DB.general.editModeHideWhiteArrows = hide and true or false
+end
+
+local function MSUF_EM_HideArrowButtonsOnFrame(fr)
+    if not fr then return end
+    if fr.MSUF_ArrowLeft  and fr.MSUF_ArrowLeft.Hide  then fr.MSUF_ArrowLeft:Hide()  end
+    if fr.MSUF_ArrowRight and fr.MSUF_ArrowRight.Hide then fr.MSUF_ArrowRight:Hide() end
+    if fr.MSUF_ArrowUp    and fr.MSUF_ArrowUp.Hide    then fr.MSUF_ArrowUp:Hide()    end
+    if fr.MSUF_ArrowDown  and fr.MSUF_ArrowDown.Hide  then fr.MSUF_ArrowDown:Hide()  end
+end
+
+-- Wrap UpdateEditArrows once so any future calls also respect the hide toggle.
+local function MSUF_EM_WrapUpdateEditArrows(fr)
+    if not fr or type(fr) ~= "table" then return end
+    if fr.__MSUF_EM_OrigUpdateEditArrows then return end
+    if type(fr.UpdateEditArrows) ~= "function" then
+        -- No method yet; just apply hiding if needed.
+        if MSUF_EM_GetHideWhiteArrows() then
+            MSUF_EM_HideArrowButtonsOnFrame(fr)
+        end
+        return
+    end
+
+    fr.__MSUF_EM_OrigUpdateEditArrows = fr.UpdateEditArrows
+    fr.UpdateEditArrows = function(self, ...)
+        -- Call original first (it handles combat + edit mode active state).
+        local origFn = rawget(self, "__MSUF_EM_OrigUpdateEditArrows")
+        if type(origFn) == "function" then
+            origFn(self, ...)
+        end
+
+        -- Force-hide if the user toggled arrows off.
+        if MSUF_EM_GetHideWhiteArrows() then
+            MSUF_EM_HideArrowButtonsOnFrame(self)
+        end
+    end
+end
+
+local function MSUF_EM_RefreshWhiteArrows()
+    -- Unitframes
+    if type(UnitFrames) == "table" then
+        for _, fr in pairs(UnitFrames) do
+            if fr then
+                MSUF_EM_WrapUpdateEditArrows(fr)
+                if fr.UpdateEditArrows then fr:UpdateEditArrows() end
+            end
+        end
+    end
+
+    -- Castbar previews (if they use arrows too)
+    local p = _G.MSUF_PlayerCastbarPreview
+    if p then MSUF_EM_WrapUpdateEditArrows(p); if p.UpdateEditArrows then p:UpdateEditArrows() end end
+    local t = _G.MSUF_TargetCastbarPreview
+    if t then MSUF_EM_WrapUpdateEditArrows(t); if t.UpdateEditArrows then t:UpdateEditArrows() end end
+    local f = _G.MSUF_FocusCastbarPreview
+    if f then MSUF_EM_WrapUpdateEditArrows(f); if f.UpdateEditArrows then f:UpdateEditArrows() end end
+    local b = _G.MSUF_BossCastbarPreview
+    if b then MSUF_EM_WrapUpdateEditArrows(b); if b.UpdateEditArrows then b:UpdateEditArrows() end end
+end
+
+-- fallback for MSUF_GetUnitLabelForKey (exported by main in normal builds)
+if not _G.MSUF_GetUnitLabelForKey then
+    _G.MSUF_GetUnitLabelForKey = function(key)
+        if key == "player" then
+            return "Player"
+        elseif key == "target" then
+            return "Target"
+        elseif key == "targettarget" then
+            return "Target of Target"
+        elseif key == "focus" then
+            return "Focus"
+        elseif key == "pet" then
+            return "Pet"
+        elseif key == "boss" then
+            return "Boss"
+        else
+            return key or "Unknown"
+        end
+    end
+end
+
+local function GetConfigKeyForUnit(unit)
+    if unit == "player"
+        or unit == "target"
+        or unit == "focus"
+        or unit == "targettarget"
+        or unit == "pet"
+    then
+        return unit
+    elseif unit and unit:match("^boss%d+$") then
+        return "boss"
+    end
+    return nil
+end
+
+
+MSUF_EDITMODE_UNIT_KEYS = { "player", "target", "focus", "targettarget", "pet", "boss" }
+MSUF_EDITMODE_UNIT_FIELDS = { "width", "height", "offsetX", "offsetY" }
+MSUF_EDITMODE_GENERAL_FIELDS = {
+    "castbarPlayerOffsetX", "castbarPlayerOffsetY", "castbarPlayerBarWidth", "castbarPlayerBarHeight",
+    "castbarTargetOffsetX", "castbarTargetOffsetY", "castbarTargetBarWidth", "castbarTargetBarHeight",
+    "castbarFocusOffsetX",  "castbarFocusOffsetY",  "castbarFocusBarWidth",  "castbarFocusBarHeight",
+    "bossCastbarOffsetX",   "bossCastbarOffsetY",   "bossCastbarWidth",      "bossCastbarHeight",
+    "editModeGridStep", "editModeBgAlpha",
+}
+
+local function MSUF_CaptureEditModeSnapshot()
+    MSUF_EM_EnsureDB()
+    local snap = {
+        general = MSUF_CaptureKeys(MSUF_DB.general or {}, MSUF_EDITMODE_GENERAL_FIELDS),
+        units = {},
+    }
+
+    for i = 1, #MSUF_EDITMODE_UNIT_KEYS do
+        local k = MSUF_EDITMODE_UNIT_KEYS[i]
+        snap.units[k] = MSUF_CaptureKeys(MSUF_DB[k] or {}, MSUF_EDITMODE_UNIT_FIELDS)
+    end
+    return snap
+end
+
+local function MSUF_RestoreEditModeSnapshot(snap)
+    if type(snap) ~= "table" then
+        return
+    end
+    MSUF_EM_EnsureDB()
+
+    MSUF_DB.general = MSUF_DB.general or {}
+    if type(snap.general) == "table" then
+        MSUF_RestoreKeys(MSUF_DB.general, snap.general)
+    end
+
+    if type(snap.units) == "table" then
+        for i = 1, #MSUF_EDITMODE_UNIT_KEYS do
+            local k = MSUF_EDITMODE_UNIT_KEYS[i]
+            MSUF_DB[k] = MSUF_DB[k] or {}
+            local usnap = snap.units[k]
+            if type(usnap) == "table" then
+                MSUF_RestoreKeys(MSUF_DB[k], usnap)
+            end
+        end
+    end
+end
+
+function MSUF_BeginEditModeTransaction()
+    if MSUF_HasTransaction and MSUF_HasTransaction("EDITMODE") then
+        return
+    end
+    local snap = MSUF_CaptureEditModeSnapshot()
+    MSUF_BeginTransaction("EDITMODE", snap, MSUF_RestoreEditModeSnapshot)
+end
+
+ns.MSUF_BeginEditModeTransaction = MSUF_BeginEditModeTransaction
+ns.MSUF_CaptureEditModeSnapshot = MSUF_CaptureEditModeSnapshot
+ns.MSUF_RestoreEditModeSnapshot = MSUF_RestoreEditModeSnapshot
+
+local function MSUF_GetAnchorFrame()
+    MSUF_EM_EnsureDB()
+    local g = MSUF_DB.general or {}
+
+    if g.anchorToCooldown then
+        local ecv = _G["EssentialCooldownViewer"]
+        if ecv then
+            return ecv
+        end
+        return UIParent
+    end
+
+    local anchorName = g.anchorName
+    if anchorName and anchorName ~= "" and anchorName ~= "EssentialCooldownViewer" then
+        local f = _G[anchorName]
+        if f then
+            return f
+        end
+    end
+
+    return UIParent
+end
+
+local function MSUF_IsInEditMode()
+    return EditModeManagerFrame and EditModeManagerFrame:IsShown()
+end
+local function MSUF_MakeBlizzardOptionsMovable()
+    -- IMPORTANT:
+    -- Do NOT SetScript() on Blizzard-managed UIPanels (SettingsPanel / InterfaceOptionsFrame).
+    -- That can taint UIParentPanelManager and cause ADDON_ACTION_BLOCKED during panel show/hide.
+    -- Instead, we create a small drag-handle overlay that drives :StartMoving() on the panel.
+
+    if InCombatLockdown and InCombatLockdown() then return end
+
+    local frame = _G.SettingsPanel
+    if not frame then
+        frame = _G.InterfaceOptionsFrame or _G.VideoOptionsFrame or _G.AudioOptionsFrame
+    end
+    if not frame then return end
+
+    if frame.MSUF_Movable then
+        return
+    end
+    frame.MSUF_Movable = true
+
+    -- Make the panel movable, but avoid touching its scripts or mouse state.
+    if frame.SetMovable then frame:SetMovable(true) end
+    if frame.SetClampedToScreen then frame:SetClampedToScreen(true) end
+
+    -- Create a minimal drag overlay in the title/header area.
+    -- Keep it narrow enough to not block close buttons/search widgets.
+    local dragName = "MSUF_SettingsPanelDragHandle"
+    local drag = _G[dragName]
+    if not drag and CreateFrame then
+        drag = CreateFrame("Frame", dragName, frame)
+    end
+    if not drag then return end
+
+    drag:ClearAllPoints()
+    drag:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -4)
+    drag:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -60, -4)
+    drag:SetHeight(22)
+
+    if drag.EnableMouse then drag:EnableMouse(true) end
+    if drag.SetClampedToScreen then drag:SetClampedToScreen(false) end
+    if drag.RegisterForDrag then drag:RegisterForDrag("LeftButton") end
+
+    -- Avoid reattaching scripts if the panel is reloaded/recreated.
+    if not drag.__msufDragInit then
+        drag.__msufDragInit = true
+
+        drag:SetScript("OnDragStart", function(self)
+            if InCombatLockdown and InCombatLockdown() then return end
+            local panel = self and self.GetParent and self:GetParent()
+            if panel and panel.StartMoving then
+                panel:StartMoving()
+            end
+        end)
+
+        drag:SetScript("OnDragStop", function(self)
+            local panel = self and self.GetParent and self:GetParent()
+            if panel and panel.StopMovingOrSizing then
+                panel:StopMovingOrSizing()
+            end
+        end)
+    end
+end
+local function MSUF_ResetCurrentEditUnit()
+    if not MSUF_CurrentEditUnitKey then
+        return
+    end
+
+    if not EnsureDB or not MSUF_DB then
+        return
+    end
+
+    MSUF_EM_EnsureDB()
+
+    local key  = MSUF_CurrentEditUnitKey
+    local conf = MSUF_DB[key]
+    if not conf then
+        return
+    end
+
+    conf.width   = nil
+    conf.height  = nil
+    conf.offsetX = nil
+    conf.offsetY = nil
+
+    MSUF_EnsureDB_Heavy()
+
+    if ApplySettingsForKey then
+        ApplySettingsForKey(key)
+    elseif ApplyAllSettings then
+        ApplyAllSettings()
+        if f._msufUpdateCurrentAnchorDisplay then f._msufUpdateCurrentAnchorDisplay() end
+    end
+
+        if changedFonts and _G.MSUF_UpdateAllFonts then
+            _G.MSUF_UpdateAllFonts()
+        end
+    if MSUF_UpdateEditModeInfo then
+        MSUF_UpdateEditModeInfo()
+    end
+end
+local function MSUF_CreateGridFrame()
+    if MSUF_GridFrame then
+        return
+    end
+
+    if EnsureDB then
+        MSUF_EM_EnsureDB()
+    end
+
+    local parent = UIParent
+    local f = CreateFrame("Frame", "MSUF_EditGrid", parent)
+    f:SetAllPoints(parent)
+    f:SetFrameStrata("BACKGROUND")
+    f:SetFrameLevel(1)
+    local infoText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    infoText:SetPoint("TOP", UIParent, "TOP", 0, -40)
+    infoText:SetJustifyH("CENTER")
+    infoText:SetText("")
+    f.infoText = infoText
+
+    local alpha = 0.5
+    if MSUF_DB and MSUF_DB.general and type(MSUF_DB.general.editModeBgAlpha) == "number" then
+        alpha = MSUF_DB.general.editModeBgAlpha
+    end
+
+    local step = 20
+    if MSUF_DB and MSUF_DB.general and type(MSUF_DB.general.editModeGridStep) == "number" then
+        step = MSUF_DB.general.editModeGridStep
+    end
+
+    local bg = f:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0, 0, 0, alpha)
+    f.bg = bg
+
+    local grid = CreateFrame("Frame", nil, f)
+    grid:SetAllPoints()
+    f.grid = grid
+    local centerVert = f:CreateTexture(nil, "ARTWORK")
+    centerVert:SetColorTexture(1, 1, 0, 0.6)  -- gelblich, gut sichtbar
+    centerVert:SetPoint("TOP", f, "TOP", 0, 0)
+    centerVert:SetPoint("BOTTOM", f, "BOTTOM", 0, 0)
+    centerVert:SetWidth(2)
+    f.centerVertical = centerVert
+
+    local centerHoriz = f:CreateTexture(nil, "ARTWORK")
+    centerHoriz:SetColorTexture(1, 1, 0, 0.6)
+    centerHoriz:SetPoint("LEFT", f, "LEFT", 0, 0)
+    centerHoriz:SetPoint("RIGHT", f, "RIGHT", 0, 0)
+    centerHoriz:SetHeight(2)
+    f.centerHorizontal = centerHoriz
+
+    local function RebuildGrid(newStep)
+        local s = math.floor(newStep or step or 20)
+        if s < 8 then s = 8 end
+        if s > 64 then s = 64 end
+
+        step = s
+        if MSUF_DB and MSUF_DB.general then
+            MSUF_DB.general.editModeGridStep = s
+        end
+
+        local w = parent:GetWidth() or 0
+        local h = parent:GetHeight() or 0
+
+        f.gridLines = f.gridLines or {}
+        local lines = f.gridLines
+
+        for i = 1, #lines do
+            lines[i]:Hide()
+        end
+
+        local idx = 1
+
+        for x = 0, w, s do
+            local tex = lines[idx]
+            if not tex then
+                tex = grid:CreateTexture(nil, "BACKGROUND")
+                lines[idx] = tex
+            end
+            tex:ClearAllPoints()
+            tex:SetColorTexture(1, 1, 1, 0.25)
+            tex:SetPoint("TOPLEFT", grid, "TOPLEFT", x, 0)
+            tex:SetPoint("BOTTOMLEFT", grid, "BOTTOMLEFT", x, 0)
+            tex:SetWidth(1)
+            tex:Show()
+            idx = idx + 1
+        end
+
+        for y = 0, h, s do
+            local tex = lines[idx]
+            if not tex then
+                tex = grid:CreateTexture(nil, "BACKGROUND")
+                lines[idx] = tex
+            end
+            tex:ClearAllPoints()
+            tex:SetColorTexture(1, 1, 1, 0.25)
+            tex:SetPoint("TOPLEFT", grid, "TOPLEFT", 0, -y)
+            tex:SetPoint("TOPRIGHT", grid, "TOPRIGHT", 0, -y)
+            tex:SetHeight(1)
+            tex:Show()
+            idx = idx + 1
+        end
+
+        for i = idx, #lines do
+            lines[i]:Hide()
+        end
+    end
+
+    RebuildGrid(step)
+
+    local alphaSlider = CreateFrame("Slider", "MSUF_EditModeAlphaSlider", f, "OptionsSliderTemplate")
+    alphaSlider:SetOrientation("HORIZONTAL")
+    alphaSlider:SetSize(200, 16)
+    alphaSlider:SetPoint("TOP", UIParent, "TOP", 0, -80)
+    alphaSlider:SetMinMaxValues(0.1, 0.8)
+    alphaSlider:SetValueStep(0.05)
+    alphaSlider:SetObeyStepOnDrag(true)
+    alphaSlider:SetValue(alpha)
+
+    local aName = alphaSlider:GetName()
+    _G[aName .. "Low"]:SetText("10%")
+    _G[aName .. "High"]:SetText("80%")
+    _G[aName .. "Text"]:SetText("Edit Mode Background")
+
+    alphaSlider:SetScript("OnValueChanged", function(self, value)
+        if value < 0.1 then
+            value = 0.1
+        elseif value > 0.8 then
+            value = 0.8
+        end
+
+        if MSUF_DB and MSUF_DB.general then
+            MSUF_DB.general.editModeBgAlpha = value
+        end
+        if f.bg then
+            f.bg:SetColorTexture(0, 0, 0, value)
+        end
+    end)
+
+    f.alphaSlider = alphaSlider
+
+    local gridSlider = CreateFrame("Slider", "MSUF_EditModeGridSlider", f, "OptionsSliderTemplate")
+    gridSlider:SetOrientation("HORIZONTAL")
+    gridSlider:SetSize(200, 16)
+    gridSlider:SetPoint("TOP", UIParent, "TOP", 0, -110) -- etwas unter dem Alpha-Slider
+    gridSlider:SetMinMaxValues(8, 64)
+    gridSlider:SetValueStep(2)
+    gridSlider:SetObeyStepOnDrag(true)
+    gridSlider:SetValue(step)
+
+    local gName = gridSlider:GetName()
+    _G[gName .. "Low"]:SetText("8")
+    _G[gName .. "High"]:SetText("64")
+    _G[gName .. "Text"]:SetText("Grid Size (px)")
+
+    gridSlider:SetScript("OnValueChanged", function(self, value)
+        RebuildGrid(value)
+    end)
+
+     f.gridSlider = gridSlider
+
+    local snapBtn = ns.MSUF_EM_UIH.ButtonAt(f, "MSUF_EditModeSnapOverlay", 110, 22, "TOP", gridSlider, "BOTTOM", 0, -8, nil, "UIPanelButtonTemplate")
+    -- Snap modes: exclusive selection (either Grid OR Frames). The main Snap ON/OFF acts as a master enable
+    -- and greys out the mode toggles when disabled.
+    local snapGridBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeSnapModeGrid", 85, 20, "Grid", "UIPanelButtonTemplate")
+    local snapFramesBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeSnapModeFrames", 95, 20, "Frames", "UIPanelButtonTemplate")
+    -- White arrows toggle (hides nudge arrows around frames)
+    local arrowsBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeWhiteArrowsToggle", 110, 20, "Arrows: ON", "UIPanelButtonTemplate")
+    -- Snap UI (clean schema): master enable + exclusive mode (grid/frames)
+    -- Visual helper: keep buttons green/white when enabled and grey when disabled.
+    local function MSUF_EM_SetModeButtonVisual(btn, isActive, masterEnabled)
+        if not btn then return end
+
+        if masterEnabled then
+            if btn.Enable then btn:Enable() end
+            if btn.SetAlpha then btn:SetAlpha(isActive and 1.0 or 0.80) end
+
+            local fs = btn.GetFontString and btn:GetFontString()
+            if fs and fs.SetTextColor then
+                if isActive then
+                    fs:SetTextColor(0.20, 1.00, 0.20, 1) -- subtle green
+                else
+                    fs:SetTextColor(1.00, 1.00, 1.00, 1)
+                end
+            end
+        else
+            if btn.Disable then btn:Disable() end
+            if btn.SetAlpha then btn:SetAlpha(0.35) end
+
+            local fs = btn.GetFontString and btn:GetFontString()
+            if fs and fs.SetTextColor then
+                fs:SetTextColor(0.70, 0.70, 0.70, 1) -- grey (no red)
+            end
+        end
+    end
+
+    local function UpdateSnapUI()
+        local g, enabled, mode = MSUF_EM_GetSnapConfig()
+
+        if enabled then
+            snapBtn:SetText("Snap: ON")
+            local fs = snapBtn:GetFontString()
+            if fs and fs.SetTextColor then
+                fs:SetTextColor(0.2, 1.0, 0.2, 1)
+            end
+        else
+            snapBtn:SetText("Snap: OFF")
+            local fs = snapBtn:GetFontString()
+            if fs and fs.SetTextColor then
+                fs:SetTextColor(0.7, 0.7, 0.7, 1)
+            end
+        end
+
+        -- White arrows toggle is independent from Snap master.
+        local hideArrows = MSUF_EM_GetHideWhiteArrows()
+        if arrowsBtn then
+            arrowsBtn:SetText(hideArrows and "Arrows: OFF" or "Arrows: ON")
+            MSUF_EM_SetModeButtonVisual(arrowsBtn, not hideArrows, true)
+        end
+
+        MSUF_EM_SetModeButtonVisual(snapGridBtn,   mode == "grid",   enabled)
+        MSUF_EM_SetModeButtonVisual(snapFramesBtn, mode == "frames", enabled)
+    end
+
+    -- Keep label colors stable even when the buttons enter/leave highlight state.
+    if snapBtn.HookScript then
+        snapBtn:HookScript("OnEnter", UpdateSnapUI)
+        snapBtn:HookScript("OnLeave", UpdateSnapUI)
+    end
+    if snapGridBtn.HookScript then
+        snapGridBtn:HookScript("OnEnter", UpdateSnapUI)
+        snapGridBtn:HookScript("OnLeave", UpdateSnapUI)
+    end
+    if snapFramesBtn.HookScript then
+        snapFramesBtn:HookScript("OnEnter", UpdateSnapUI)
+        snapFramesBtn:HookScript("OnLeave", UpdateSnapUI)
+    end
+    if arrowsBtn and arrowsBtn.HookScript then
+        arrowsBtn:HookScript("OnEnter", UpdateSnapUI)
+        arrowsBtn:HookScript("OnLeave", UpdateSnapUI)
+    end
+
+    snapBtn:SetScript("OnClick", function()
+        local _, enabled = MSUF_EM_GetSnapConfig()
+        MSUF_EM_SetSnapEnabled(not enabled)
+        UpdateSnapUI()
+    end)
+
+    snapGridBtn:SetScript("OnClick", function()
+        local _, enabled = MSUF_EM_GetSnapConfig()
+        if not enabled then
+            UpdateSnapUI()
+            return
+        end
+        MSUF_EM_SetSnapMode("grid")
+        UpdateSnapUI()
+    end)
+
+    snapFramesBtn:SetScript("OnClick", function()
+        local _, enabled = MSUF_EM_GetSnapConfig()
+        if not enabled then
+            UpdateSnapUI()
+            return
+        end
+        MSUF_EM_SetSnapMode("frames")
+        UpdateSnapUI()
+    end)
+
+    arrowsBtn:SetScript("OnClick", function()
+        MSUF_EM_SetHideWhiteArrows(not MSUF_EM_GetHideWhiteArrows())
+        UpdateSnapUI()
+        -- Apply immediately (unitframes + castbar previews)
+        MSUF_EM_RefreshWhiteArrows()
+    end)
+
+    -- Initial paint
+    UpdateSnapUI()
+
+    local modeBtn = ns.MSUF_EM_UIH.ButtonAt(f, "MSUF_EditModeModeButton", 210, 30, "TOP", snapBtn, "BOTTOM", 0, -12, nil, "UIPanelButtonTemplate")
+    local modeFS = modeBtn:GetFontString()
+    if modeFS then
+        local font, _, flags = modeFS:GetFont()
+        modeFS:SetFont(font, 14, flags or "")
+    end
+
+    local function UpdateModeButtonVisual()
+        if MSUF_EditModeSizing then
+            modeBtn:SetText("MODE: SIZE")
+        else
+            modeBtn:SetText("MODE: POSITION")
+        end
+    end
+
+    modeBtn:SetScript("OnClick", function(self)
+        MSUF_EditModeSizing = not MSUF_EditModeSizing
+        UpdateModeButtonVisual()
+        if MSUF_UpdateEditModeInfo then
+            MSUF_UpdateEditModeInfo()
+        end
+    end)
+
+    UpdateModeButtonVisual()
+
+    local anchorCheck = ns.MSUF_EM_UIH.TextCheck(f, "MSUF_EditModeAnchorToCooldownCheck", "TOP", modeBtn, "BOTTOM", 0, -8, "Anchor Cooldownmanager")
+    MSUF_EM_EnsureDB()
+    anchorCheck:SetChecked(MSUF_DB and MSUF_DB.general and MSUF_DB.general.anchorToCooldown)
+
+    anchorCheck:SetScript("OnClick", function(self)
+        MSUF_EM_EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        local enabled = self:GetChecked() and true or false
+        MSUF_DB.general.anchorToCooldown = enabled
+
+        -- IMPORTANT: This toggle must be *positioning only*.
+        -- Do NOT LoadAddOn() or show/hide any cooldown manager/viewer here.
+        -- (Avoids side effects like enabling/disabling other modules or taint during /reload in combat.)
+        ApplyAllSettings()
+
+        if f._msufUpdateCurrentAnchorDisplay then
+            f._msufUpdateCurrentAnchorDisplay()
+        end
+    end)
+
+    local anchorNameLabel = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    anchorNameLabel:SetPoint("TOP", anchorCheck, "BOTTOM", 0, -6)
+    anchorNameLabel:SetText("Custom anchor frame name (/fstack)")
+
+    local anchorNameInput = CreateFrame("EditBox", "MSUF_EditModeAnchorNameInput", f, "InputBoxTemplate")
+    anchorNameInput:SetSize(210, 20)
+    anchorNameInput:SetPoint("TOP", anchorNameLabel, "BOTTOM", 0, -4)
+    anchorNameInput:SetAutoFocus(false)
+    anchorNameInput:SetMaxLetters(64)
+
+    MSUF_EM_EnsureDB()
+    local initialAnchorName = MSUF_DB and MSUF_DB.general and MSUF_DB.general.anchorName or ""
+    if initialAnchorName == nil then
+        initialAnchorName = ""
+    end
+    anchorNameInput:SetText(initialAnchorName)
+
+    -- Read-only helper: show which anchor is currently active (Cooldown / Custom / UIParent)
+    local currentAnchorFS = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    currentAnchorFS:SetPoint("TOP", anchorNameInput, "BOTTOM", 0, -6)
+    currentAnchorFS:SetJustifyH("CENTER")
+    currentAnchorFS:SetText("")
+    f._msufCurrentAnchorFS = currentAnchorFS
+
+    local function UpdateCurrentAnchorDisplay()
+        MSUF_EM_EnsureDB()
+        local g = (MSUF_DB and MSUF_DB.general) or {}
+        local v = "UIParent"
+        if g.anchorToCooldown then
+            v = "Cooldown Manager"
+        end
+        local an = g.anchorName
+        if type(an) == "string" and an ~= "" then
+            v = an
+        end
+        currentAnchorFS:SetText("Current: " .. tostring(v))
+    end
+
+    f._msufUpdateCurrentAnchorDisplay = UpdateCurrentAnchorDisplay
+    UpdateCurrentAnchorDisplay()
+
+    local function MSUF_ApplyCustomAnchorNameFromEditBox()
+        MSUF_EM_EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        local txt = anchorNameInput:GetText() or ""
+        txt = txt:gsub("^%s+", ""):gsub("%s+$", "")
+        if txt == "" then
+            MSUF_DB.general.anchorName = nil
+        else
+            MSUF_DB.general.anchorName = txt
+            MSUF_DB.general.anchorToCooldown = false
+            if anchorCheck and anchorCheck.SetChecked then
+                anchorCheck:SetChecked(false)
+            end
+        end
+        ApplyAllSettings()
+        if f._msufUpdateCurrentAnchorDisplay then f._msufUpdateCurrentAnchorDisplay() end
+    end
+
+    anchorNameInput:SetScript("OnEnterPressed", function(self)
+        MSUF_ApplyCustomAnchorNameFromEditBox()
+        self:ClearFocus()
+    end)
+
+    anchorNameInput:SetScript("OnEditFocusLost", function(self)
+        MSUF_ApplyCustomAnchorNameFromEditBox()
+    end)
+
+    anchorNameInput:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+        MSUF_EM_EnsureDB()
+        local current = MSUF_DB and MSUF_DB.general and MSUF_DB.general.anchorName or ""
+        if current == nil then
+            current = ""
+        end
+        anchorNameInput:SetText(current)
+    end)
+
+    local bossPreviewCheck = ns.MSUF_EM_UIH.TextCheck(f, "MSUF_EditModeBossPreviewCheck", "TOP", currentAnchorFS, "BOTTOM", 0, -12, "Preview boss frames")
+    bossPreviewCheck:SetChecked(MSUF_BossTestMode and true or false)
+
+    bossPreviewCheck:SetScript("OnClick", function(self)
+        MSUF_BossTestMode = self:GetChecked() and true or false
+
+        MSUF_EditMode_RequestVisibilityDrivers(MSUF_UnitEditModeActive and true or false)
+        for i = 1, MSUF_MAX_BOSS_FRAMES do
+            local f = _G["MSUF_boss" .. i]
+            if f then
+                if MSUF_BossTestMode and not InCombatLockdown() then
+                    f:Show()
+                    f:SetAlpha(1)
+                end
+                MSUF_UFDirty(f, "EDITMODE", true)
+            end
+        end
+    end)
+
+    -- Aura preview toggle (Auras 2.0)
+    -- Mirrors the Auras menu setting: MSUF_DB.auras2.shared.showInEditMode
+    local auraPreviewCheck = ns.MSUF_EM_UIH.TextCheck(f, "MSUF_EditModeAuraPreviewCheck", "BOTTOMLEFT", bossPreviewCheck, "TOPLEFT", 0, 2, "Preview aura frames")
+    local function MSUF_EM_GetAuraPreviewEnabled()
+        MSUF_EM_EnsureDB()
+        local s = MSUF_DB and MSUF_DB.auras2 and MSUF_DB.auras2.shared
+        if s and s.showInEditMode == false then
+            return false
+        end
+        return true
+    end
+
+    auraPreviewCheck:SetChecked(MSUF_EM_GetAuraPreviewEnabled())
+
+    auraPreviewCheck:SetScript("OnShow", function(self)
+        if self and self.SetChecked then
+            self:SetChecked(MSUF_EM_GetAuraPreviewEnabled())
+        end
+    end)
+
+    auraPreviewCheck:SetScript("OnClick", function(self)
+        MSUF_EM_EnsureDB()
+        if not MSUF_DB then return end
+        MSUF_DB.auras2 = (type(MSUF_DB.auras2) == "table") and MSUF_DB.auras2 or {}
+        MSUF_DB.auras2.shared = (type(MSUF_DB.auras2.shared) == "table") and MSUF_DB.auras2.shared or {}
+        MSUF_DB.auras2.shared.showInEditMode = (self:GetChecked() and true) or false
+
+        if type(_G.MSUF_Auras2_UpdateEditModePoll) == "function" then
+            _G.MSUF_Auras2_UpdateEditModePoll()
+        end
+
+        -- Notify Auras 2.0 about the effective edit-mode state so previews/movers update immediately.
+        local isActive = false
+        if type(_G.IsEditModeActive) == "function" then
+            local ok, v = pcall(_G.IsEditModeActive)
+            isActive = ok and (v and true or false) or false
+        else
+            isActive = (MSUF_UnitEditModeActive and true) or false
+        end
+
+        if type(_G.MSUF_Auras2_OnAnyEditModeChanged) == "function" then
+            _G.MSUF_Auras2_OnAnyEditModeChanged(isActive)
+        end
+
+        if type(_G.MSUF_Auras2_RefreshAll) == "function" then
+            _G.MSUF_Auras2_RefreshAll()
+        end
+    end)
+
+    -- ------------------------------------------------------------
+    -- ------------------------------------------------------------
+-- ------------------------------------------------------------
+-- Edit Mode: unit selector row (Prev/Next + ON/OFF toggle)
+-- Replaces the old per-unit ON/OFF button strip (cleaner + no clutter)
+-- ------------------------------------------------------------
+if not f._msufEditUnitSelectorBuilt then
+    f._msufEditUnitSelectorBuilt = true
+
+    local units = {
+        { key="player",       label="Player" },
+        { key="target",       label="Target" },
+        { key="targettarget", label="ToT" },
+        { key="focus",        label="Focus" },
+        { key="pet",          label="Pet" },
+        { key="boss",         label="Boss" },
+    }
+
+    local function GetUnitIndex(unitKey)
+        for i, u in ipairs(units) do
+            if u.key == unitKey then
+                return i
+            end
+        end
+        return 1
+    end
+
+    local function GetUnitKeyAt(i)
+        local u = units[i]
+        return (u and u.key) or "player"
+    end
+
+    local function GetUnitLabel(unitKey)
+        for _, u in ipairs(units) do
+            if u.key == unitKey then
+                return u.label
+            end
+        end
+        return tostring(unitKey or "Player")
+    end
+
+    local function IsEnabled(unitKey)
+        MSUF_EM_EnsureDB()
+        if type(MSUF_DB) ~= "table" then return true end
+        MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
+        local v = MSUF_DB[unitKey].enabled
+        if v == nil then return true end
+        return v and true or false
+    end
+
+    local function ApplyEnabled(unitKey, enabled)
+        if InCombatLockdown and InCombatLockdown() then
+            return
+        end
+        MSUF_EM_EnsureDB()
+        if type(MSUF_DB) ~= "table" then return end
+        MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
+        MSUF_DB[unitKey].enabled = enabled and true or false
+
+        if type(MSUF_RefreshAllUnitVisibilityDrivers) == "function" then
+            MSUF_EditMode_RequestVisibilityDrivers(MSUF_UnitEditModeActive and true or false)
+        end
+
+        -- Live refresh (keep known-good Player restore pipeline)
+        if unitKey == "boss" then
+            for i = 1, MSUF_MAX_BOSS_FRAMES do
+                local bf = _G["MSUF_boss" .. i]
+                if bf then
+                    MSUF_UFDirty(bf, "EDITMODE", true)
+                end
+            end
+            if type(MSUF_UpdateBossCastbarPreview) == "function" then
+                MSUF_UpdateBossCastbarPreview()
+            end
+        else
+            if unitKey == "player" and type(_G.MSUF_ApplyUnitframeKeyAndSync) == "function" then
+                _G.MSUF_ApplyUnitframeKeyAndSync(unitKey, false)
+            else
+                local uf = _G["MSUF_" .. unitKey]
+                if uf then
+                    MSUF_UFDirty(uf, "EDITMODE", true)
+                end
+            end
+        end
+    end
+
+    local row = CreateFrame("Frame", nil, f)
+    f._msufFrameEnableBtnRow = row
+
+    local label = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    label:SetPoint("LEFT", row, "LEFT", 0, 1)
+    label:SetText("Edit Unit:")
+    f._msufEditUnitLabel = label
+
+    local prevBtn = ns.MSUF_EM_UIH.Button(row, nil, 24, 22, "<", "UIPanelButtonTemplate")
+    if prevBtn.GetFontString and prevBtn:GetFontString() then
+        prevBtn:GetFontString():SetFontObject("GameFontNormalLarge")
+    end
+    MSUF_EM_ForceWhiteButtonText(prevBtn)
+    prevBtn:SetPoint("LEFT", label, "RIGHT", 8, -1)
+    f._msufEditUnitPrevBtn = prevBtn
+
+    local toggleBtn = ns.MSUF_EM_UIH.ButtonAt(row, nil, 240, 22, "LEFT", prevBtn, "RIGHT", 8, 0, nil, "UIPanelButtonTemplate")
+    f._msufEditUnitToggleBtn = toggleBtn
+
+    local nextBtn = ns.MSUF_EM_UIH.Button(row, nil, 24, 22, ">", "UIPanelButtonTemplate")
+    if nextBtn.GetFontString and nextBtn:GetFontString() then
+        nextBtn:GetFontString():SetFontObject("GameFontNormalLarge")
+    end
+    MSUF_EM_ForceWhiteButtonText(nextBtn)
+    nextBtn:SetPoint("LEFT", toggleBtn, "RIGHT", 8, 0)
+    f._msufEditUnitNextBtn = nextBtn
+
+    local function Refresh()
+        local unitKey = MSUF_CurrentEditUnitKey or f._msufEditUnitKey or "player"
+        f._msufEditUnitKey = unitKey
+
+        local on = IsEnabled(unitKey)
+        toggleBtn:SetText(GetUnitLabel(unitKey) .. ": " .. (on and "ON" or "OFF"))
+
+        local fs = toggleBtn.GetFontString and toggleBtn:GetFontString() or nil
+        if fs then
+            if on then
+                fs:SetTextColor(0.2, 1.0, 0.2)
+            else
+                fs:SetTextColor(1.0, 0.2, 0.2)
+            end
+        end
+    end
+
+    -- Backwards-compatible name some older code paths may call
+    f._msufSyncFrameEnableButtons = Refresh
+    f._msufSyncEditUnitSelector = Refresh
+
+    local function SelectUnit(unitKey)
+        if not unitKey then return end
+        f._msufEditUnitKey = unitKey
+        if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
+            _G.MSUF_SetMSUFEditModeDirect(true, unitKey)
+        else
+            MSUF_CurrentEditUnitKey = unitKey
+            if type(MSUF_UpdateEditModeVisuals) == "function" then
+                MSUF_UpdateEditModeVisuals()
+            end
+        end
+        Refresh()
+    end
+
+    prevBtn:SetScript("OnClick", function()
+        local cur = MSUF_CurrentEditUnitKey or f._msufEditUnitKey or "player"
+        local idx = GetUnitIndex(cur) - 1
+        if idx < 1 then idx = #units end
+        SelectUnit(GetUnitKeyAt(idx))
+    end)
+
+    nextBtn:SetScript("OnClick", function()
+        local cur = MSUF_CurrentEditUnitKey or f._msufEditUnitKey or "player"
+        local idx = GetUnitIndex(cur) + 1
+        if idx > #units then idx = 1 end
+        SelectUnit(GetUnitKeyAt(idx))
+    end)
+
+    toggleBtn:SetScript("OnClick", function()
+        local unitKey = MSUF_CurrentEditUnitKey or f._msufEditUnitKey or "player"
+        ApplyEnabled(unitKey, not IsEnabled(unitKey))
+        Refresh()
+    end)
+
+    Refresh()
+else
+    if f._msufSyncEditUnitSelector then
+        f._msufSyncEditUnitSelector()
+    elseif f._msufSyncFrameEnableButtons then
+        f._msufSyncFrameEnableButtons()
+    end
+end
+
+local exitBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeExitButton", 180, 24, nil, "UIPanelButtonTemplate")
+    local _msufExitAnchor = (f._msufFrameEnableBtnRow or bossPreviewCheck)
+    local _msufExitYOffset = (f._msufFrameEnableBtnRow and -18 or -62)
+    local _msufActionRowYOffset = _msufExitYOffset
+    local _msufActionRowXShift = 0
+    exitBtn:ClearAllPoints()
+    exitBtn:SetPoint("TOPRIGHT", _msufExitAnchor, "BOTTOMRIGHT", -6 + _msufActionRowXShift, _msufActionRowYOffset)
+    exitBtn:SetText("Exit MSUF Edit Mode")
+
+    MSUF_EM_ForceWhiteButtonText(exitBtn)
+if not StaticPopupDialogs then StaticPopupDialogs = {} end
+if not StaticPopupDialogs["MSUF_CONFIRM_CANCEL_EDITMODE"] then
+    StaticPopupDialogs["MSUF_CONFIRM_CANCEL_EDITMODE"] = {
+        text = "Cancel all changes made in Edit Mode?\n\nThis will restore the settings from when Edit Mode was entered.",
+        button1 = YES,
+        button2 = NO,
+        OnAccept = function(self, data)
+            if data and type(data.doCancel) == "function" then
+                data.doCancel()
+            end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+end
+
+local cancelBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeCancelButton", 140, 22, nil, "UIPanelButtonTemplate")
+cancelBtn:ClearAllPoints()
+cancelBtn:SetPoint("TOP", _msufExitAnchor, "BOTTOM", 0 + _msufActionRowXShift, _msufActionRowYOffset)
+cancelBtn:SetText("Cancel Changes")
+
+MSUF_EM_ForceWhiteButtonText(cancelBtn)
+cancelBtn:SetScript("OnClick", function()
+    if not MSUF_UnitEditModeActive then
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        return
+    end
+    MSUF_EM_SetPopupOpen(true)
+
+    local function DoCancel()
+            if type(MSUF_RollbackTransaction) == "function" and type(MSUF_HasTransaction) == "function" and MSUF_HasTransaction("EDITMODE") then
+                MSUF_RollbackTransaction("EDITMODE")
+                if type(ApplyAllSettings) == "function" then
+                    ApplyAllSettings()
+                end
+
+                if type(MSUF_UpdateBossCastbarPreview) == "function" then
+                    MSUF_UpdateBossCastbarPreview()
+                end
+                if type(MSUF_PositionPlayerCastbarPreview) == "function" then
+                    MSUF_PositionPlayerCastbarPreview()
+                end
+                if type(MSUF_PositionTargetCastbarPreview) == "function" then
+                    MSUF_PositionTargetCastbarPreview()
+                end
+                if type(MSUF_PositionFocusCastbarPreview) == "function" then
+                    MSUF_PositionFocusCastbarPreview()
+                end
+                if type(MSUF_SyncCastbarPositionPopup) == "function" then
+                    MSUF_SyncCastbarPositionPopup()
+                end
+                if type(MSUF_SyncUnitPositionPopup) == "function" then
+                    MSUF_SyncUnitPositionPopup()
+                end
+
+                if type(MSUF_CommitTransaction) == "function" then
+                    MSUF_CommitTransaction("EDITMODE")
+                end
+            end
+
+            MSUF_CurrentEditUnitKey = nil
+
+            if type(MSUF_BeginEditModeTransaction) == "function" then
+                MSUF_BeginEditModeTransaction()
+            end
+
+            if type(MSUF_SyncCastbarEditModeWithUnitEdit) == "function" then
+                MSUF_SyncCastbarEditModeWithUnitEdit()
+            end
+            if type(MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
+                MSUF_SyncBossUnitframePreviewWithUnitEdit()
+            end
+            if type(MSUF_UpdateEditModeVisuals) == "function" then
+                MSUF_UpdateEditModeVisuals()
+            end
+
+            if type(MSUF_SyncCastbarPositionPopup) == "function" then
+                MSUF_SyncCastbarPositionPopup()
+            end
+            if type(MSUF_SyncUnitPositionPopup) == "function" then
+                MSUF_SyncUnitPositionPopup()
+            end
+
+            print("|cffffd700MSUF:|r Changes |cff00ff00restored|r to Edit Mode start.")
+    end
+
+-- NOTE: StaticPopup is not part of our popup registry, so we must not leave popupOpen stuck TRUE.
+    -- We attach a one-time OnHide hook to the shown dialog frame to reliably clear the "popupOpen" latch.
+    local dlg
+    if type(StaticPopup_Show) == "function" then
+        dlg = StaticPopup_Show("MSUF_CONFIRM_CANCEL_EDITMODE", nil, nil, { doCancel = DoCancel })
+        if dlg and dlg.HookScript and not dlg.__msufPopupOpenHooks then
+            dlg.__msufPopupOpenHooks = true
+            dlg:HookScript("OnShow", function() MSUF_EM_SetPopupOpen(true) end)
+            dlg:HookScript("OnHide", function() MSUF_EM_SetPopupOpen(false) end)
+        end
+        -- If StaticPopup_Show fails for any reason, fail-open: do not block dragging.
+        if not dlg then
+            MSUF_EM_SetPopupOpen(false)
+        end
+    else
+        DoCancel()
+        MSUF_EM_SetPopupOpen(false)
+    end
+end)
+exitBtn:SetScript("OnClick", function()
+        if not MSUF_UnitEditModeActive then
+            return
+        end
+
+        -- Always go through the deterministic Flow exit so popups/bindings/previews/secure drivers are cleaned up
+        -- even when MSUF Edit Mode is running unlinked from Blizzard Edit Mode.
+        if Edit and Edit.Flow and type(Edit.Flow.Exit) == "function" then
+            Edit.Flow.Exit("button", { flushPending = true })
+        else
+            -- Fallback: attempt deterministic exit directly (should not happen).
+            if type(MSUF_EditMode_ExitDeterministic) == "function" then
+                MSUF_SafeCall("Exit:ButtonFallback", MSUF_EditMode_ExitDeterministic, "button", { flushPending = true })
+            else
+                if type(MSUF_CloseAllPositionPopups) == "function" then
+                    MSUF_FastCall(MSUF_CloseAllPositionPopups)
+                end
+                MSUF_EM_SetActive(false, nil)
+                if _G and _G.MSUF_EnableArrowKeyNudge then
+                    MSUF_FastCall(_G.MSUF_EnableArrowKeyNudge, false)
+                end
+                MSUF_EditMode_HardTeardown()
+            end
+        end
+
+        print("|cffffd700MSUF:|r Edit Mode |cffff0000OFF|r.")
+    end)
+
+local resetBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeResetButton", 140, 22, nil, "UIPanelButtonTemplate")
+    resetBtn:ClearAllPoints()
+    resetBtn:SetPoint("TOPRIGHT", _msufExitAnchor, "BOTTOMRIGHT", -6 + _msufActionRowXShift, _msufActionRowYOffset)
+    resetBtn:SetText("Reset Frame")
+
+    -- Exit goes to the right of Reset (Reset takes the old Exit spot)
+    exitBtn:ClearAllPoints()
+    exitBtn:SetPoint("TOPLEFT", resetBtn, "TOPRIGHT", 12, 0)
+
+MSUF_EM_ForceWhiteButtonText(resetBtn)
+
+    resetBtn:SetScript("OnClick", function()
+        if not MSUF_UnitEditModeActive then
+            return
+        end
+
+        if not MSUF_CurrentEditUnitKey then
+            if MSUF_GridFrame and MSUF_GridFrame.infoText then
+                MSUF_GridFrame.infoText:SetText("Reset: Kein Frame ausgewählt – klicke zuerst ein Frame.")
+            end
+            return
+        end
+
+        if MSUF_ResetCurrentEditUnit then
+            MSUF_ResetCurrentEditUnit()
+        end
+    end)
+
+    f.resetButton = resetBtn
+
+    -- ------------------------------------------------------------
+    -- Edit Mode UI layout refresh (visual only)
+    -- Goal: clearer sections + boss preview toggle near Boss ON + bottom action bar.
+    -- ------------------------------------------------------------
+    local function MSUF_EM_ApplyEditModeLayout()
+        -- Create headers once
+        if not f._msufLayoutHeaders then
+            f._msufLayoutHeaders = {}
+            local function MakeHeader(txt)
+                local fs = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                fs:SetText(txt)
+                fs:SetJustifyH("CENTER")
+                return fs
+            end
+            f._msufLayoutHeaders.positioning = MakeHeader("Positioning")
+            f._msufLayoutHeaders.overlay     = MakeHeader("Overlay")
+            f._msufLayoutHeaders.frames      = MakeHeader("Frames")
+        end
+
+        local posHeader     = f._msufLayoutHeaders.positioning
+        local overlayHeader = f._msufLayoutHeaders.overlay
+        local framesHeader  = f._msufLayoutHeaders.frames
+
+        local _msufCenterShiftX = 0 -- small visual nudge for symmetry (Frames block)
+        -- Action row container (create once)
+        if not f._msufActionRow then
+            f._msufActionRow = CreateFrame("Frame", nil, f)
+        end
+        local actionRow = f._msufActionRow
+
+        -- Defensive: some vars are local in this function, but keep a fallback path
+        local _info = infoText or (f and f.infoText)
+        if not (_info and _info.ClearAllPoints) then
+            return
+        end
+
+        -- Mode button is the first main control under the header
+        if modeBtn then
+            modeBtn:ClearAllPoints()
+            modeBtn:SetPoint("TOP", _info, "BOTTOM", 0, -14)
+        end
+
+        -- Positioning section
+        posHeader:ClearAllPoints()
+        posHeader:SetPoint("TOP", modeBtn or _info, "BOTTOM", 0, -10)
+
+        -- Custom anchor input first; cooldown anchor toggle sits next to the input
+anchorNameLabel:ClearAllPoints()
+anchorNameLabel:SetPoint("TOP", posHeader, "BOTTOM", 0, -6)
+
+anchorNameInput:ClearAllPoints()
+anchorNameInput:SetPoint("TOP", anchorNameLabel, "BOTTOM", 0, -4)
+
+anchorCheck:ClearAllPoints()
+anchorCheck:SetPoint("LEFT", anchorNameInput, "RIGHT", 10, -1)
+
+        if currentAnchorFS then
+            currentAnchorFS:ClearAllPoints()
+            currentAnchorFS:SetPoint("TOP", anchorNameInput, "BOTTOM", 0, -6)
+        end
+
+        -- Overlay section
+        overlayHeader:ClearAllPoints()
+        overlayHeader:SetPoint("TOP", (currentAnchorFS or anchorNameInput), "BOTTOM", 0, -14)
+
+        alphaSlider:ClearAllPoints()
+        alphaSlider:SetPoint("TOP", overlayHeader, "BOTTOM", 0, -26)
+
+        gridSlider:ClearAllPoints()
+        gridSlider:SetPoint("TOP", alphaSlider, "BOTTOM", 0, -26)
+
+        snapBtn:ClearAllPoints()
+        snapBtn:SetPoint("TOP", gridSlider, "BOTTOM", 0, -10)
+
+        -- Snap mode buttons under master Snap toggle
+        if snapGridBtn and snapFramesBtn then
+            snapGridBtn:ClearAllPoints()
+            snapFramesBtn:ClearAllPoints()
+            if arrowsBtn then arrowsBtn:ClearAllPoints() end
+
+            -- Center the 3-mode row under the Snap master button.
+            snapGridBtn:SetPoint("TOP", snapBtn, "BOTTOM", -110 + _msufCenterShiftX, -6)
+            snapFramesBtn:SetPoint("LEFT", snapGridBtn, "RIGHT", 8, 0)
+            if arrowsBtn then
+                arrowsBtn:SetPoint("LEFT", snapFramesBtn, "RIGHT", 8, 0)
+            end
+        end
+
+        -- Frames section
+        framesHeader:ClearAllPoints()
+        framesHeader:SetPoint("TOP", snapBtn, "BOTTOM", _msufCenterShiftX, (snapGridBtn and -40 or -14))
+
+        local row = f._msufFrameEnableBtnRow
+        if row then
+	        -- IMPORTANT: this row anchors child widgets to row:LEFT.
+	        -- If the row has no explicit size and is anchored by "TOP",
+	        -- row:LEFT effectively collapses onto its center, which can push
+	        -- the entire selector row off-screen depending on resolution/UI scale.
+	        -- Give it a deterministic size so centering stays stable.
+	        row:SetSize(420, 24)
+	        row:ClearAllPoints()
+	        row:SetPoint("TOP", framesHeader, "BOTTOM", _msufCenterShiftX, -10)
+	        row:Show()
+        end
+
+        -- Boss preview toggle next to the unit toggle button
+        bossPreviewCheck:ClearAllPoints()
+        bossPreviewCheck:SetScale(0.9)
+        if bossPreviewCheck.text and bossPreviewCheck.text.SetText then
+            bossPreviewCheck.text:SetText("Boss Preview")
+        end
+
+        local unitToggle = f._msufEditUnitToggleBtn
+        local nextBtn = f._msufEditUnitNextBtn
+        -- Anchor AFTER the right-arrow so the checkbox can never sit behind it.
+        if nextBtn then
+            bossPreviewCheck:SetPoint("LEFT", nextBtn, "RIGHT", 10, 0)
+        elseif unitToggle then
+            bossPreviewCheck:SetPoint("LEFT", unitToggle, "RIGHT", 24, 0)
+        elseif row then
+            bossPreviewCheck:SetPoint("TOP", row, "BOTTOM", 0, -6)
+        else
+            bossPreviewCheck:SetPoint("TOP", framesHeader, "BOTTOM", 0, -10)
+        end
+	    bossPreviewCheck:Show()
+
+        -- Aura preview toggle above Boss Preview (Auras 2.0)
+        if auraPreviewCheck then
+            auraPreviewCheck:ClearAllPoints()
+            auraPreviewCheck:SetScale(0.9)
+            if auraPreviewCheck.text and auraPreviewCheck.text.SetText then
+                auraPreviewCheck.text:SetText("Aura Preview")
+            end
+            auraPreviewCheck:SetPoint("BOTTOMLEFT", bossPreviewCheck, "TOPLEFT", 0, 2)
+	        auraPreviewCheck:Show()
+        end
+
+        -- Actions: Cancel | Reset | Exit as one row
+        local gap = 10
+        local cW, rW, eW, h = 160, 150, 190, 24
+
+        cancelBtn:SetSize(cW, h)
+        resetBtn:SetSize(rW, h)
+        exitBtn:SetSize(eW, h)
+
+        actionRow:SetSize(cW + rW + eW + (gap * 2), h)
+        actionRow:ClearAllPoints()
+        actionRow:SetPoint("TOP", (row or framesHeader), "BOTTOM", _msufCenterShiftX, -18)
+	    actionRow:Show()
+
+        cancelBtn:ClearAllPoints()
+        resetBtn:ClearAllPoints()
+        exitBtn:ClearAllPoints()
+
+        cancelBtn:SetPoint("LEFT", actionRow, "LEFT", 0, 0)
+        resetBtn:SetPoint("LEFT", cancelBtn, "RIGHT", gap, 0)
+        exitBtn:SetPoint("LEFT", resetBtn, "RIGHT", gap, 0)
+	    cancelBtn:Show(); resetBtn:Show(); exitBtn:Show()
+    end
+
+    MSUF_EM_ApplyEditModeLayout()
+    f._msufApplyEditModeLayout = MSUF_EM_ApplyEditModeLayout
+
+    UpdateSnapUI()
+
+    f.snapButton = snapBtn
+    f.exitButton = exitBtn
+
+    f:Hide()
+    MSUF_GridFrame = f
+end
+local function MSUF_UpdateEditModeInfo()
+    if not MSUF_GridFrame or not MSUF_GridFrame.infoText then
+        return
+    end
+
+    local textWidget = MSUF_GridFrame.infoText
+
+    if not MSUF_UnitEditModeActive then
+        textWidget:SetText("")
+        if MSUF_GridFrame.modeHint then
+            MSUF_GridFrame.modeHint:Hide()
+        end
+        return
+    end
+
+    -- Keep the top "Edit Unit" selector row (Prev/Next + ON/OFF) in sync with the active edit unit.
+    if MSUF_GridFrame._msufSyncEditUnitSelector then
+        MSUF_GridFrame._msufSyncEditUnitSelector()
+    elseif MSUF_GridFrame._msufSyncFrameEnableButtons then
+        MSUF_GridFrame._msufSyncFrameEnableButtons()
+    end
+
+
+    MSUF_EM_EnsureDB()
+
+    local key = MSUF_CurrentEditUnitKey
+    if not key or not MSUF_DB[key] then
+        if MSUF_EditModeSizing then
+            textWidget:SetText("MSUF Edit Mode – MODE: SIZE")
+        else
+            textWidget:SetText("MSUF Edit Mode – MODE: POSITION")
+        end
+
+        if MSUF_GridFrame.modeHint then
+            if MSUF_EditModeSizing then
+                MSUF_GridFrame.modeHint:SetText("|cff00ff00MODE: SIZE – drag & arrows change frame SIZE.|r\n|cffaaaaaaHold SHIFT (5) / CTRL (10) / ALT (grid) for bigger steps.|r")
+            else
+                MSUF_GridFrame.modeHint:SetText("|cffffff00MODE: POSITION – drag & arrows move frames. Click MODE for SIZE.|r\n|cffaaaaaaHold SHIFT (5) / CTRL (10) / ALT (grid) for bigger steps.|r")
+            end
+            MSUF_GridFrame.modeHint:Show()
+        end
+        return
+    end
+
+    local conf  = MSUF_DB[key]
+    local label = MSUF_GetUnitLabelForKey(key)
+
+    if MSUF_EditModeSizing then
+        local w = conf.width or 0
+        local h = conf.height or 0
+        textWidget:SetText(string.format("Sizing: %s (W: %d, H: %d)", label, w, h))
+    else
+
+    local x = MSUF_SanitizePopupOffset(conf.offsetX, 0)
+    local y = MSUF_SanitizePopupOffset(conf.offsetY, 0)
+    -- Auto-repair corrupted offsets so the UI and DB stay sane.
+    if conf.offsetX ~= x then conf.offsetX = x end
+    if conf.offsetY ~= y then conf.offsetY = y end
+        textWidget:SetText(string.format("Editing: %s (X: %d, Y: %d)", label, x, y))
+    end
+
+    if MSUF_GridFrame.modeHint then
+        if MSUF_EditModeSizing then
+            MSUF_GridFrame.modeHint:SetText("|cff00ff00MODE: SIZE – drag & arrows change frame SIZE.|r\n|cffaaaaaaHold SHIFT (5) / CTRL (10) / ALT (grid) for bigger steps.|r")
+        else
+            MSUF_GridFrame.modeHint:SetText("|cffffff00MODE: POSITION – drag & arrows move frames. Click MODE for SIZE.|r\n|cffaaaaaaHold SHIFT (5) / CTRL (10) / ALT (grid) for bigger steps.|r")
+        end
+        MSUF_GridFrame.modeHint:Show()
+    end
+end
+local function MSUF_AttachStepperButtons(parent, editBox, onStep)
+    if not parent or not editBox then return end
+
+    -- Step logic matches Arrow-Key nudging:
+    -- Default: 1px
+    -- Shift:   5px
+    -- Ctrl:    10px
+    -- Alt:     Grid step (editModeGridStep) or 20px fallback
+    local function GetStep()
+        local step = 1
+        if IsAltKeyDown and IsAltKeyDown() then
+            if MSUF_GetCurrentGridStep then
+                step = MSUF_GetCurrentGridStep()
+            else
+                step = 20
+            end
+        elseif IsControlKeyDown and IsControlKeyDown() then
+            step = 10
+        elseif IsShiftKeyDown and IsShiftKeyDown() then
+            step = 5
+        end
+        step = tonumber(step) or 1
+        if step < 1 then step = 1 end
+        return step
+    end
+
+    local function Step(sign)
+        -- One-time per session: show step-modifier hint when user first changes a popup value.
+        MSUF_FastCall(MSUF_EditMode_ShowStepModifierTipOnce, parent)
+        local txt = editBox:GetText() or ""
+        local val = tonumber(txt) or 0
+        local s = GetStep()
+        val = val + ((sign or 0) * s)
+        editBox:SetText(tostring(val))
+        if editBox.SetCursorPosition and editBox.GetNumLetters then
+            editBox:SetCursorPosition(editBox:GetNumLetters())
+        end
+
+        if type(onStep) == "function" then
+            MSUF_SafeCall("Stepper:onStep", onStep)
+        end
+    end
+
+    local minus = ns.MSUF_EM_UIH.ButtonAt(parent, nil, 16, 16, "LEFT", editBox, "RIGHT", 2, 0, "-", "UIPanelButtonTemplate")
+    minus:SetScript("OnClick", function() Step(-1) end)
+
+    local plus = ns.MSUF_EM_UIH.ButtonAt(parent, nil, 16, 16, "LEFT", minus, "RIGHT", 2, 0, "+", "UIPanelButtonTemplate")
+    plus:SetScript("OnClick", function() Step(1) end)
+
+    return minus, plus
+end
+
+-- Shared popup alignment helpers (Unitframe + Castbar popups)
+-- Fixed label column width + input box size for consistent alignment.
+local MSUF_POPUP_LABEL_W = 88
+local MSUF_POPUP_BOX_W   = 92
+local MSUF_POPUP_BOX_H   = 20
+
+-- Returns true only for *complete* numeric strings (prevents live-apply jitter while typing '-' etc.)
+local function MSUF_EM_IsCompleteNumberString(s)
+    if s == nil then return false end
+    s = tostring(s or '')
+    -- trim whitespace
+    s = s:gsub("%s+", "")
+    if s == '' or s == '-' or s == '+' then
+        return false
+    end
+    -- allow integers; allow decimals just in case (even though offsets are effectively ints)
+    if s:match('^[-+]?%d+$') then
+        return true
+    end
+    if s:match('^[-+]?%d+%.%d+$') then
+        return true
+    end
+    return false
+end
+
+local function MSUF_PopupStyleLabel(fs)
+    if not fs then return end
+    fs:SetWidth(MSUF_POPUP_LABEL_W)
+    fs:SetJustifyH("LEFT")
+end
+local function MSUF_PopupStyleBox(box)
+    if not box then return end
+    box:SetSize(MSUF_POPUP_BOX_W, MSUF_POPUP_BOX_H)
+end
+
+-- Compact helper: attach standard live-apply OnTextChanged handler (used by multiple popups).
+local function MSUF_EM_AttachLiveApply(pf, editBox, applyFn, queueKey, requireCompleteNumber)
+    if not pf or not editBox or not applyFn or not editBox.SetScript then return end
+    queueKey = queueKey or "MSUF:LiveApply"
+    editBox:SetScript("OnTextChanged", function(self, userInput)
+        if not userInput or not self:HasFocus() then return end
+        if requireCompleteNumber then
+            local t = self:GetText()
+            if not MSUF_EM_IsCompleteNumberString(t) then return end
+        end
+        if pf._msufLiveApplyQueued then return end
+        pf._msufLiveApplyQueued = true
+        if type(MSUF_SafeAfter) == "function" then
+            MSUF_SafeAfter(0, queueKey, function()
+                pf._msufLiveApplyQueued = nil
+                if pf:IsShown() and self:HasFocus() then
+                    applyFn()
+                end
+            end, true)
+        else
+            pf._msufLiveApplyQueued = nil
+            applyFn()
+        end
+    end)
+end
+
+-- Compact helper: bind Enter/Escape handlers to multiple edit boxes (used by multiple popups).
+local function MSUF_EM_BindKeyScripts(onEnter, onEscape, ...)
+    for i = 1, select('#', ...) do
+        local w = select(i, ...)
+        if w and w.SetScript then
+            if onEnter then w:SetScript('OnEnterPressed', onEnter) end
+            if onEscape then w:SetScript('OnEscapePressed', onEscape) end
+        end
+    end
+end
+
+-- Compact helper: fast-apply wrapper used by multiple popups.
+local function MSUF_EM_FastApplyOrPrint(applyFn, label)
+    if type(MSUF_FastCall) == "function" then
+        local ok, err = MSUF_FastCall(applyFn)
+        if not ok then
+            print("|cffffd700MSUF:|r " .. tostring(label or "Popup apply failed") .. ": " .. tostring(err))
+        end
+    else
+        local ok, err = pcall(applyFn)
+        if not ok then
+            print("|cffffd700MSUF:|r " .. tostring(label or "Popup apply failed") .. ": " .. tostring(err))
+        end
+    end
+end
+
+-- Compact helper: binds OK button + Enter/Escape handlers for a popup.
+-- OK applies and closes, Enter applies without closing, Escape clicks cancel.
+local function MSUF_EM_BindOkEnterHandlers(popupFrame, okBtn, cancelBtn, applyFn, label)
+    if okBtn and okBtn.SetScript then
+        okBtn:SetScript("OnClick", function()
+            MSUF_EM_FastApplyOrPrint(applyFn, label)
+            if popupFrame and popupFrame.Hide then popupFrame:Hide() end
+        end)
+    end
+
+    local function OnEnterPressed(self)
+        MSUF_EM_FastApplyOrPrint(applyFn, label)
+    end
+    local function OnEscapePressed(self)
+        if cancelBtn and cancelBtn.Click then
+            cancelBtn:Click()
+        elseif popupFrame and popupFrame.Hide then
+            popupFrame:Hide()
+        end
+    end
+
+    return OnEnterPressed, OnEscapePressed
+end
+
+
+-- Compact helper: restore many fields from a prev snapshot into a config table.
+local function MSUF_EM_RestoreFields(dst, src, ...)
+    if not dst or not src then return end
+    for i = 1, select("#", ...) do
+        local k = select(i, ...)
+        dst[k] = src[k]
+    end
+end
+
+local MSUF_EM_CASTBAR_PREFIX_RESTORE_SUFFIXES = {
+    "OffsetX", "OffsetY", "BarWidth", "BarHeight",
+    "TextOffsetX", "TextOffsetY", "ShowSpellName", "SpellNameFontSize",
+    "IconOffsetX", "IconOffsetY", "ShowIcon",
+    "TimeOffsetX", "TimeOffsetY", "TimeFontSize",
+    "Detached",
+}
+
+local function MSUF_EM_RestorePrefixFields(dst, src, prefix, suffixes)
+    if not dst or not src or not prefix or not suffixes then return end
+    for i = 1, #suffixes do
+        local k = prefix .. suffixes[i]
+        dst[k] = src[k]
+    end
+end
+
+local function MSUF_EM_CreateNumericRow(pf, labelText, boxName, anchorTo, relPoint, x, y, onStep, labelTemplate)
+    if not pf then return end
+    local label = pf:CreateFontString(nil, 'OVERLAY', labelTemplate or 'GameFontHighlightSmall')
+    label:SetText(labelText or '')
+    label:SetPoint('TOPLEFT', anchorTo or pf, relPoint or 'TOPLEFT', x or 0, y or 0)
+    if MSUF_PopupStyleLabel then MSUF_PopupStyleLabel(label) end
+    local box = CreateFrame('EditBox', boxName, pf, 'InputBoxTemplate')
+    if MSUF_PopupStyleBox then MSUF_PopupStyleBox(box) end
+    box:SetPoint('LEFT', label, 'RIGHT', 8, 0)
+    box:SetAutoFocus(false)
+    local minus, plus
+    if type(MSUF_AttachStepperButtons) == 'function' and type(onStep) == 'function' then
+        minus, plus = MSUF_AttachStepperButtons(pf, box, onStep)
+    end
+    return label, box, minus, plus
+end
+
+local function MSUF_EM_CreateNumericRowStored(pf, key, labelText, boxName, anchorTo, relPoint, x, y, onStep, opts)
+    local label, box, minus, plus = MSUF_EM_CreateNumericRow(pf, labelText, boxName, anchorTo, relPoint, x, y, onStep, opts and opts.labelTemplate)
+    if key then
+        pf[key .. "Label"], pf[key .. "Box"], pf[key .. "Minus"], pf[key .. "Plus"] = label, box, minus, plus
+        if opts and opts.liveApply and type(MSUF_EM_AttachLiveApply) == "function" then
+            MSUF_EM_AttachLiveApply(pf, box, onStep, opts.liveTag or "Popup:LiveApply", (opts.requireCompleteNumber ~= false))
+        end
+    end
+    return label, box, minus, plus
+end
+
+local function MSUF_EM_BuildNumericRows(pf, rows, anchorTo, relPoint, x, onStep, liveTag)
+    local prev = anchorTo
+    if not (pf and rows and prev) then return prev end
+    for i = 1, #rows do
+        local r = rows[i]
+        if r then
+            local opts = (r.live or r.labelTemplate) and { liveApply = r.live, liveTag = liveTag, labelTemplate = r.labelTemplate, requireCompleteNumber = r.requireCompleteNumber } or nil
+            prev = (MSUF_EM_CreateNumericRowStored(pf, r.key, r.label, r.box, prev, relPoint, x or 0, r.dy or -8, onStep, opts)) or prev
+        end
+    end
+    return prev
+end
+
+-- Popup tooltip helper (anchors outside the popup so it never sits behind it)
+local function MSUF_EM_PopupShowTooltip(popupFrame, title, warningLine)
+    if not GameTooltip or not popupFrame or not UIParent then return end
+
+    GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+    GameTooltip:ClearAllPoints()
+
+    local uiW = UIParent.GetWidth and UIParent:GetWidth() or 0
+    local pr  = popupFrame.GetRight and popupFrame:GetRight() or nil
+    local pl  = popupFrame.GetLeft and popupFrame:GetLeft() or nil
+
+    local needLeft = false
+    if uiW > 0 and pr then
+        needLeft = ((uiW - pr) < 260)
+    end
+
+    if needLeft then
+        GameTooltip:SetPoint("TOPRIGHT", popupFrame, "TOPLEFT", -10, 0)
+    else
+        GameTooltip:SetPoint("TOPLEFT", popupFrame, "TOPRIGHT", 10, 0)
+    end
+
+    GameTooltip:SetFrameStrata("TOOLTIP")
+    if popupFrame.GetFrameLevel and GameTooltip.SetFrameLevel then
+        GameTooltip:SetFrameLevel((popupFrame:GetFrameLevel() or 0) + 50)
+    end
+
+    GameTooltip:SetText(title or "", 1, 0.82, 0, 1, true)
+    if warningLine and warningLine ~= "" then
+        GameTooltip:AddLine(warningLine, 1, 0.4, 0.2, true)
+    end
+    GameTooltip:Show()
+end
+
+-- Small helper to attach a checkbox to the right of a numeric row (Show / Override)
+local function MSUF_EM_CreateRightCheckbox(pf, name, anchorFrame, textLabel, onClick, opts)
+    local cb = CreateFrame("CheckButton", name, pf, "UICheckButtonTemplate")
+    cb:SetSize(20, 20)
+    cb:SetPoint("LEFT", anchorFrame, "RIGHT", (opts and opts.dx) or 6, (opts and opts.dy) or 0)
+
+    local t = cb.Text or (cb.GetName and _G[cb:GetName() .. "Text"])
+    if t and textLabel then t:SetText(textLabel) end
+
+    if opts and (opts.tooltipTitle or opts.tooltipLine) then
+        cb:SetScript("OnEnter", function() MSUF_EM_PopupShowTooltip(pf, opts.tooltipTitle, opts.tooltipLine) end)
+        cb:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    end
+
+    if onClick then
+        cb:SetScript("OnClick", function(self)
+            if opts and opts.beforeClick then
+                opts.beforeClick(self)
+            end
+            if opts and opts.deferApply and C_Timer and C_Timer.After then
+                MSUF_SafeAfter(0, opts.deferTag or "Popup:DeferredApply", function() onClick(self) end)
+            else
+                onClick(self)
+            end
+        end)
+    end
+    return cb
+end
+
+
+local function MSUF_EM_UI_BuildTextBlock(pf, spec, anchorFrame, applyFn)
+    -- X row
+    if spec.x then
+        MSUF_EM_BuildNumericRows(pf, {
+            { key = spec.x.key, label = spec.x.label, box = spec.x.box, dy = spec.x.dy },
+        }, anchorFrame, spec.x.point or "BOTTOMLEFT", spec.x.dx or 0, applyFn)
+
+        if spec.show then
+            local xKey = spec.x.key
+            local anchor = pf[(xKey .. "Plus")] or pf[(xKey .. "Box")]
+            pf[spec.show.field] = MSUF_EM_CreateRightCheckbox(
+                pf, spec.show.name, anchor, spec.show.text or "Show", applyFn, spec.show.opts
+            )
+        end
+
+        if spec.rows and #spec.rows > 0 then
+            local xLabel = pf[(spec.x.key .. "Label")]
+            local rows = {}
+            for i = 1, #spec.rows do
+                local r = spec.rows[i]
+                rows[i] = { key = r.key, label = r.label, box = r.box, dy = r.dy }
+            end
+            MSUF_EM_BuildNumericRows(pf, rows, xLabel, "BOTTOMLEFT", 0, applyFn)
+        end
+    end
+
+    -- Override checkbox (optional)
+    if spec.override then
+        local o = spec.override
+        local anchor = nil
+        if o.anchorPlusKey and pf[o.anchorPlusKey] then anchor = pf[o.anchorPlusKey]
+        elseif o.anchorBoxKey and pf[o.anchorBoxKey] then anchor = pf[o.anchorBoxKey] end
+        if not anchor and o.anchorFallbackKey and pf[o.anchorFallbackKey] then anchor = pf[o.anchorFallbackKey] end
+
+        local onClick = applyFn
+        if o.wrapApply then
+            onClick = function() applyFn() end
+        elseif type(o.onClick) == "function" then
+            onClick = o.onClick
+        end
+
+        pf[o.field] = MSUF_EM_CreateRightCheckbox(
+            pf, o.name, anchor, o.text or "Override", onClick, o.opts
+        )
+    end
+end
+
+-- Unit Popup: Name block (already migrated in Patch 1; kept as a small helper)
+local function MSUF_EM_UI_BuildUnitPopup_Text_Name(pf, textHeader, applyFn)
+    MSUF_EM_UI_BuildTextBlock(pf, {
+        x = { key = "nameX", label = "Name X:", box = "$parentNameXBox", dy = -8 },
+        show = { field = "nameShowCB", name = "$parentShowName", text = "Show" },
+        rows = {
+            { key = "nameY", label = "Name Y:", box = "$parentNameYBox", dy = -8 },
+            { key = "nameSize", label = "Name Size:", box = "$parentNameSizeBox", dy = -8 },
+        },
+    }, textHeader, applyFn)
+end
+
+local UNIT_POPUP_TEXT_EXTRA_SPEC = {
+    -- Name size override (checkbox only; rows built above)
+    {
+        override = {
+            field = "nameOverrideCB",
+            name = "$parentNameOverride",
+            anchorPlusKey = "nameSizePlus",
+            anchorBoxKey  = "nameSizeBox",
+            wrapApply = true,
+            opts = {
+                tooltipTitle = "Override Name Size",
+                tooltipText  = "This will allow changing the font size of Name text on this unitframe only.\n\nWarning: This may look bad with other unitframes.",
+            },
+        },
+    },
+
+    -- HP
+    {
+        x = { key = "hpX", label = "HP X:", box = "$parentHPXBox", dy = -12 },
+        show = { field = "hpShowCB", name = "$parentShowHP", text = "Show" },
+        rows = {
+            { key = "hpY",    label = "HP Y:",    box = "$parentHPYBox",    dy = -8 },
+            { key = "hpSize", label = "HP Size:", box = "$parentHPSizeBox", dy = -8 },
+        },
+        override = {
+            field = "hpOverrideCB",
+            name  = "$parentHPOverride",
+            anchorPlusKey = "hpSizePlus",
+            anchorBoxKey  = "hpSizeBox",
+            wrapApply = true,
+            opts = {
+                tooltipTitle = "Override HP Size",
+                tooltipText  = "This will allow changing the font size of HP text on this unitframe only.\n\nWarning: This may look bad with other unitframes.",
+            },
+        },
+    },
+
+    -- Power
+    {
+        x = { key = "powerX", label = "Power X:", box = "$parentPowerXBox", dy = -12 },
+        show = { field = "powerShowCB", name = "$parentShowPower", text = "Show" },
+        rows = {
+            { key = "powerY",    label = "Power Y:",    box = "$parentPowerYBox",    dy = -8 },
+            { key = "powerSize", label = "Power Size:", box = "$parentPowerSizeBox", dy = -8 },
+        },
+        override = {
+            field = "powerOverrideCB",
+            name  = "$parentPowerOverride",
+            anchorPlusKey = "powerSizePlus",
+            anchorBoxKey  = "powerSizeBox",
+            wrapApply = true,
+            opts = {
+                tooltipTitle = "Override Power Size",
+                tooltipText  = "This will allow changing the font size of Power text on this unitframe only.\n\nWarning: This may look bad with other unitframes.",
+            },
+        },
+    },
+}
+
+local function MSUF_EM_UI_BuildUnitPopup_Text_Extras(pf, applyFn)
+    -- Keep exact anchoring order: NameOverride, then HP anchored to NameSizeLabel, then Power anchored to HPSizeLabel.
+    -- Name override
+    MSUF_EM_UI_BuildTextBlock(pf, UNIT_POPUP_TEXT_EXTRA_SPEC[1], nil, applyFn)
+
+    -- HP
+    MSUF_EM_UI_BuildTextBlock(pf, UNIT_POPUP_TEXT_EXTRA_SPEC[2], pf.nameSizeLabel, applyFn)
+
+    -- Power
+    MSUF_EM_UI_BuildTextBlock(pf, UNIT_POPUP_TEXT_EXTRA_SPEC[3], pf.hpSizeLabel, applyFn)
+end
+
+-- Castbar Popup: spec-driven Text blocks (CastName / Icon / Time)
+local CASTBAR_POPUP_TEXT_SPEC = {
+    -- CastName
+    {
+        x = { key = "castNameX", label = "Spell X:", box = "$parentCastNameXBox", dy = -8 },
+        show = { field = "castNameShowCB", name = "$parentShowCastName", text = "Show" },
+        rows = {
+            { key = "castNameY",    label = "Spell Y:",    box = "$parentCastNameYBox",    dy = -8 },
+            { key = "castNameSize", label = "Spell Size:", box = "$parentCastNameSizeBox", dy = -8 },
+        },
+        override = {
+            field = "castNameOverrideCB",
+            name  = "$parentCastNameOverride",
+            anchorPlusKey = "castNameSizePlus",
+            anchorBoxKey  = "castNameSizeBox",
+            onClick = ApplyCastbarPopupValues, -- keep identical (no wrapper)
+            opts = {
+                tooltipTitle = "Override Spell Name Size",
+                tooltipText  = "This will allow changing the font size of Spell Name text on this castbar only.",
+                deferApply   = true,
+                beforeClick  = function(cb, checked)
+                    local pf2 = cb and cb:GetParent()
+                    if pf2 and pf2.SetCastbarSizeControlsEnabled then
+                        pf2.SetCastbarSizeControlsEnabled(pf2.castNameSizeBox, checked)
+                    end
+                end,
+            },
+        },
+    },
+
+    -- Icon
+    {
+        x = { key = "iconX", label = "Icon X:", box = "$parentIconXBox", dy = -12 },
+        show = { field = "iconShowCB", name = "$parentShowIcon", text = "Show" },
+        rows = {
+            { key = "iconY",    label = "Icon Y:",    box = "$parentIconYBox",    dy = -8 },
+            { key = "iconSize", label = "Icon Size:", box = "$parentIconSizeBox", dy = -8 },
+        },
+        override = {
+            field = "iconSizeOverrideCB",
+            name  = "$parentIconSizeOverride",
+            anchorPlusKey = "iconSizePlus",
+            anchorBoxKey  = "iconSizeBox",
+            onClick = ApplyCastbarPopupValues, -- keep identical
+            opts = {
+                tooltipTitle = "Override Icon Size",
+                tooltipText  = "This will allow changing the icon size on this castbar only.",
+                deferApply   = true,
+                beforeClick  = function(cb, checked)
+                    local pf2 = cb and cb:GetParent()
+                    if pf2 and pf2.SetCastbarSizeControlsEnabled then
+                        pf2.SetCastbarSizeControlsEnabled(pf2.iconSizeBox, checked)
+                    end
+                end,
+            },
+        },
+    },
+
+    -- Time
+    {
+        x = { key = "timeX", label = "Time X:", box = "$parentTimeXBox", dy = -12 },
+        show = { field = "timeShowCB", name = "$parentShowTime", text = "Show" },
+        rows = {
+            { key = "timeY",    label = "Time Y:",    box = "$parentTimeYBox",    dy = -8 },
+            { key = "timeSize", label = "Time Size:", box = "$parentTimeSizeBox", dy = -8 },
+        },
+        override = {
+            field = "timeOverrideCB",
+            name  = "$parentTimeOverride",
+            anchorPlusKey = "timeSizePlus",
+            anchorBoxKey  = "timeSizeBox",
+            onClick = ApplyCastbarPopupValues, -- keep identical
+            opts = {
+                tooltipTitle = "Override Time Size",
+                tooltipText  = "This will allow changing the font size of Time text on this castbar only.",
+            },
+        },
+    },
+}
+
+local function MSUF_EM_UI_BuildCastbarPopup_TextBlocks(pf, textHeader)
+    -- Ensure size-control toggler exists before creating override checkboxes (beforeClick uses it).
+    pf.SetCastbarSizeControlsEnabled = Edit and Edit.Popups and Edit.Popups.UI and Edit.Popups.UI.SetSizeControlsEnabled
+
+    MSUF_EM_UI_BuildTextBlock(pf, CASTBAR_POPUP_TEXT_SPEC[1], textHeader, ApplyCastbarPopupValues)
+    MSUF_EM_UI_BuildTextBlock(pf, CASTBAR_POPUP_TEXT_SPEC[2], pf.castNameSizeLabel, ApplyCastbarPopupValues)
+    MSUF_EM_UI_BuildTextBlock(pf, CASTBAR_POPUP_TEXT_SPEC[3], pf.iconSizeLabel, ApplyCastbarPopupValues)
+end
+local function MSUF_InitEditPopupFrame
+(pf, opts)
+    if not pf or not opts then return end
+
+    local w = opts.w or 320
+    local h = opts.h or 430
+    pf:SetSize(w, h)
+
+    pf:SetFrameStrata(opts.strata or "FULLSCREEN_DIALOG")
+    pf:SetFrameLevel(opts.level or 500)
+    pf:SetClampedToScreen(true)
+
+    pf:SetMovable(true)
+    pf:EnableMouse(true)
+    pf:RegisterForDrag("LeftButton")
+
+    pf:SetScript("OnDragStart", function(self)
+        if self:IsMovable() then
+            self:StartMoving()
+        end
+    end)
+    pf:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+    end)
+
+    if opts.backdrop then
+        pf:SetBackdrop(opts.backdrop)
+    end
+    if opts.backdropColor then
+        local r, g, b, a = opts.backdropColor[1], opts.backdropColor[2], opts.backdropColor[3], opts.backdropColor[4]
+        pf:SetBackdropColor(r or 0, g or 0, b or 0, a or 1)
+    end
+end
+local function MSUF_PositionPopupSmart(pf, parent, offset)
+    if not pf or not parent then return end
+    offset = offset or 200
+
+    local ui = UIParent
+    if not ui or not ui.GetWidth then return end
+
+    local sw = ui:GetWidth() or 0
+    local sh = ui:GetHeight() or 0
+    if sw <= 0 or sh <= 0 then return end
+
+    local l = parent:GetLeft()
+    local r = parent:GetRight()
+    local t = parent:GetTop()
+    local b = parent:GetBottom()
+    if not (l and r and t and b) then
+        return
+    end
+
+    local pw = pf:GetWidth() or 260
+    local ph = pf:GetHeight() or 190
+    if pw <= 1 then pw = 260 end
+    if ph <= 1 then ph = 190 end
+
+    local leftSpace   = l
+    local rightSpace  = sw - r
+    local bottomSpace = b
+    local topSpace    = sh - t
+
+    -- Pick the direction with the most room.
+    local best = "RIGHT"
+    local bestVal = rightSpace
+
+    if leftSpace > bestVal then best, bestVal = "LEFT", leftSpace end
+    if topSpace > bestVal then best, bestVal = "TOP", topSpace end
+    if bottomSpace > bestVal then best, bestVal = "BOTTOM", bottomSpace end
+
+    local x, y
+
+    if best == "RIGHT" then
+        x = r + offset
+        y = t - ph
+    elseif best == "LEFT" then
+        x = l - offset - pw
+        y = t - ph
+    elseif best == "TOP" then
+        x = l
+        y = t + offset
+    else -- BOTTOM
+        x = l
+        y = b - offset - ph
+    end
+
+    x = MSUF_Clamp(x, 0, math.max(0, sw - pw))
+    y = MSUF_Clamp(y, 0, math.max(0, sh - ph))
+
+    pf:ClearAllPoints()
+    pf:SetPoint("BOTTOMLEFT", ui, "BOTTOMLEFT", x, y)
+    pf:SetClampedToScreen(true)
+end
+local function MSUF_OpenPositionPopup(unit, parent)
+    if not MSUF_UnitEditModeActive then
+        return
+    end
+
+    if not MSUF_EM_EnsureDB() then
+        return
+    end
+
+    -- Ensure the header "Edit Unit" selector reflects the unit we are opening a popup for.
+    do
+        local key = nil
+        if type(GetConfigKeyForUnit) == "function" then
+            key = GetConfigKeyForUnit(unit)
+        end
+        if not key and type(unit) == "string" then
+            if unit:match("^boss%d+$") then
+                key = "boss"
+            elseif unit == "targettarget" or unit == "tot" or unit == "targetoftarget" then
+                key = "targettarget"
+            else
+                key = unit
+            end
+        end
+        if key and type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
+            _G.MSUF_SetMSUFEditModeDirect(true, key)
+        elseif key then
+            MSUF_CurrentEditUnitKey = key
+            if MSUF_GridFrame and MSUF_GridFrame._msufSyncEditUnitSelector then
+                MSUF_GridFrame._msufSyncEditUnitSelector()
+            end
+        end
+    end
+
+    local function ApplyUnitPopupValues()
+        if MSUF__UnitPopupSyncing or MSUF__UnitPopupApplying then
+            return
+        end
+
+        MSUF__UnitPopupApplying = true
+        local ok, err = MSUF_FastCall(function()
+            if InCombatLockdown and InCombatLockdown() then
+                print("|cffffd700MSUF:|r Position/Größe kann im Kampf nicht geändert werden.")
+                return
+            end
+
+            MSUF_EM_EnsureDB()
+            local pf = MSUF_PositionPopup
+            if not pf or not pf.unit or not pf.parent then
+                return
+            end
+
+            local key = GetConfigKeyForUnit(pf.unit)
+            local conf = key and MSUF_DB[key]
+            if not conf then
+                return
+            end
+
+            local currentW = conf.width  or (pf.parent:GetWidth()  or 250)
+            local currentH = conf.height or (pf.parent:GetHeight() or 40)
+
+            local vals = Edit.Popups.ReadFields(pf, { conf = conf, currentW = currentW, currentH = currentH }, Edit.Popups.Specs.UnitFramePosition)
+            local xVal = vals.xVal
+            local yVal = vals.yVal
+            local wVal = vals.wVal
+            local hVal = vals.hVal
+            local nameXVal  = vals.nameXVal
+            local nameYVal  = vals.nameYVal
+            local hpXVal    = vals.hpXVal
+            local hpYVal    = vals.hpYVal
+            local powerXVal = vals.powerXVal
+            local powerYVal = vals.powerYVal
+            local showNameVal = (conf.showName ~= false)
+            if pf.nameShowCB and pf.nameShowCB.GetChecked then
+                showNameVal = (pf.nameShowCB:GetChecked() and true or false)
+            end
+            local showHPVal = (conf.showHP ~= false)
+            if pf.hpShowCB and pf.hpShowCB.GetChecked then
+                showHPVal = (pf.hpShowCB:GetChecked() and true or false)
+            end
+            local showPowerVal = (conf.showPower ~= false)
+            if pf.powerShowCB and pf.powerShowCB.GetChecked then
+                showPowerVal = (pf.powerShowCB:GetChecked() and true or false)
+            end
+            conf.offsetX = xVal
+            conf.offsetY = yVal
+            conf.width   = wVal
+            conf.height  = hVal
+
+            conf.nameOffsetX = nameXVal
+            conf.nameOffsetY = nameYVal
+
+            conf.hpOffsetX = hpXVal
+            conf.hpOffsetY = hpYVal
+
+            conf.powerOffsetX = powerXVal
+            conf.powerOffsetY = powerYVal
+
+            conf.showName = showNameVal
+            conf.showHP   = showHPVal
+            conf.showPower = showPowerVal
+
+            if pf.UpdateEnabledStates then pf.UpdateEnabledStates() end
+            -- Text size overrides (Name / HP / Power)
+            local g = (MSUF_DB and MSUF_DB.general) or {}
+            local baseSize       = g.fontSize or 14
+            local globalNameSize = g.nameFontSize  or baseSize
+            local globalHPSize   = g.hpFontSize    or baseSize
+            local globalPowSize  = g.powerFontSize or baseSize
+
+            local changedFonts = false
+            local U = Edit and Edit.Popups and Edit.Popups.Util
+            if U and U.ApplyOptionalOverrideNumber then
+                changedFonts = U.ApplyOptionalOverrideNumber(conf, "nameFontSize",  pf.nameSizeBox,  pf.nameOverrideCB,  pf.SetTextSizeControlsEnabled, pf.nameSizeMinus,  pf.nameSizePlus,  showNameVal,  globalNameSize, 6, 48) or changedFonts
+                changedFonts = U.ApplyOptionalOverrideNumber(conf, "hpFontSize",    pf.hpSizeBox,    pf.hpOverrideCB,    pf.SetTextSizeControlsEnabled, pf.hpSizeMinus,    pf.hpSizePlus,    showHPVal,    globalHPSize,   6, 48) or changedFonts
+                changedFonts = U.ApplyOptionalOverrideNumber(conf, "powerFontSize", pf.powerSizeBox, pf.powerOverrideCB, pf.SetTextSizeControlsEnabled, pf.powerSizeMinus, pf.powerSizePlus, showPowerVal, globalPowSize,  6, 48) or changedFonts
+            end
+
+            if changedFonts then
+                if _G.MSUF_UpdateAllFonts then
+                    _G.MSUF_UpdateAllFonts()
+                elseif ns and ns.MSUF_UpdateAllFonts then
+                    ns.MSUF_UpdateAllFonts()
+                end
+            end
+            if ApplySettingsForKey then
+                ApplySettingsForKey(key)
+            elseif ApplyAllSettings then
+                ApplyAllSettings()
+            end
+
+            if MSUF_CurrentOptionsKey == key then
+                local xSlider = _G["MSUF_OffsetXSlider"]
+                local ySlider = _G["MSUF_OffsetYSlider"]
+                local wSlider = _G["MSUF_WidthSlider"]
+                local hSlider = _G["MSUF_HeightSlider"]
+                local nameXSlider = _G["MSUF_NameOffsetXSlider"]
+                local nameYSlider = _G["MSUF_NameOffsetYSlider"]
+
+                if xSlider and xSlider.SetValue then xSlider:SetValue(conf.offsetX or 0) end
+                if ySlider and ySlider.SetValue then ySlider:SetValue(conf.offsetY or 0) end
+                if wSlider and wSlider.SetValue then wSlider:SetValue(conf.width   or wVal) end
+                if hSlider and hSlider.SetValue then hSlider:SetValue(conf.height  or hVal) end
+                if nameXSlider and nameXSlider.SetValue then nameXSlider:SetValue(conf.nameOffsetX or nameXVal or 0) end
+                if nameYSlider and nameYSlider.SetValue then nameYSlider:SetValue(conf.nameOffsetY or nameYVal or 0) end
+                local powerXSlider = _G["MSUF_PowerOffsetXSlider"]
+                local powerYSlider = _G["MSUF_PowerOffsetYSlider"]
+                local showPowerCB  = _G["MSUF_ShowPowerCheck"]
+                if powerXSlider and powerXSlider.SetValue then powerXSlider:SetValue(conf.powerOffsetX or powerXVal or 0) end
+                if powerYSlider and powerYSlider.SetValue then powerYSlider:SetValue(conf.powerOffsetY or powerYVal or 0) end
+                if showPowerCB and showPowerCB.SetChecked then showPowerCB:SetChecked(conf.showPower ~= false) end
+            end
+
+            if MSUF_UpdateEditModeInfo then
+                MSUF_UpdateEditModeInfo()
+            end
+        end)
+        MSUF__UnitPopupApplying = false
+        if not ok then
+            error(err)
+        end
+    end
+
+    if InCombatLockdown and InCombatLockdown() then
+        print("|cffffd700MSUF:|r Position/Größe kann im Kampf nicht geändert werden.")
+        return
+    end
+    if not unit or not parent then
+        return
+    end
+
+    MSUF_EM_EnsureDB()
+    local key = GetConfigKeyForUnit(unit)
+    if not key then
+        return
+    end
+
+    local conf = MSUF_DB[key]
+    if not conf then
+        return
+    end
+
+    MSUF_CurrentEditUnitKey = key
+    if MSUF_UpdateEditModeInfo then
+        MSUF_UpdateEditModeInfo()
+    end
+
+    if not MSUF_PositionPopup then
+        local pf = CreateFrame("Frame", "MSUF_EditPositionPopup", UIParent, "BackdropTemplate")
+        MSUF_PositionPopup = pf
+        if Edit and Edit.Popups and Edit.Popups.Register then Edit.Popups.Register(pf) end
+
+        MSUF_InitEditPopupFrame(pf, {
+            w = 320,
+            h = 430,
+            backdrop = {
+                bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+                edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+                tile = true, tileSize = 32, edgeSize = 16,
+                insets = { left = 4, right = 4, top = 4, bottom = 4 },
+            },
+            backdropColor = { 0, 0, 0, 0.9 },
+        })
+        MSUF_EM_AddPopupTitleAndClose(pf, "MSUF Edit")
+        local frameHeader = MSUF_EM_AddSectionHeader(pf, "frameHeader", "Frame", "TOPLEFT", pf, "TOPLEFT", 16, -36)
+
+
+local frameRows = {
+    { key = "x", label = "Offset X:", box = "$parentXBox", dy = -6, live = true },
+    { key = "y", label = "Offset Y:", box = "$parentYBox", dy = -8, live = true },
+    { key = "w", label = "Width:",    box = "$parentWBox", dy = -12 },
+    { key = "h", label = "Height:",   box = "$parentHBox", dy = -8 },
+}
+MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitPopupValues, "UnitPopup:LiveApply")
+        local textDivider = MSUF_EM_AddDivider(pf, "textDivider", 290, "TOPLEFT", pf.hLabel, "BOTTOMLEFT", 0, -8)
+        local textHeader  = MSUF_EM_AddSectionHeader(pf, "textHeader", "Text", "TOPLEFT", textDivider, "BOTTOMLEFT", 0, -8)
+
+
+        
+        -- Text offsets + per-unit font overrides (Phase 9 shrink)
+
+                -- Name (spec-driven)
+        MSUF_EM_UI_BuildUnitPopup_Text_Name(pf, textHeader, ApplyUnitPopupValues)
+
+        pf.SetTextSizeControlsEnabled = Edit.Popups.UI.SetSizeControlsEnabled
+
+        -- Enable/disable controls based on Show + Override states
+        pf.UpdateEnabledStates = function()
+            local pf = MSUF_PositionPopup
+            if not pf then return end
+
+            local showName = (pf.nameShowCB and pf.nameShowCB.GetChecked and pf.nameShowCB:GetChecked()) and true or false
+            local showHP   = (pf.hpShowCB   and pf.hpShowCB.GetChecked   and pf.hpShowCB:GetChecked())   and true or false
+            local showPow  = (pf.powerShowCB and pf.powerShowCB.GetChecked and pf.powerShowCB:GetChecked()) and true or false
+
+            Edit.Popups.UI.EnableStepper(pf.nameXBox, pf.nameXMinus, pf.nameXPlus, showName)
+            Edit.Popups.UI.EnableStepper(pf.nameYBox, pf.nameYMinus, pf.nameYPlus, showName)
+            Edit.Popups.UI.EnableStepper(pf.hpXBox, pf.hpXMinus, pf.hpXPlus, showHP)
+            Edit.Popups.UI.EnableStepper(pf.hpYBox, pf.hpYMinus, pf.hpYPlus, showHP)
+            Edit.Popups.UI.EnableStepper(pf.powerXBox, pf.powerXMinus, pf.powerXPlus, showPow)
+            Edit.Popups.UI.EnableStepper(pf.powerYBox, pf.powerYMinus, pf.powerYPlus, showPow)
+
+            Edit.Popups.UI.SetLabelEnabled(pf.nameXLabel, showName)
+            Edit.Popups.UI.SetLabelEnabled(pf.nameYLabel, showName)
+            Edit.Popups.UI.SetLabelEnabled(pf.hpXLabel, showHP)
+            Edit.Popups.UI.SetLabelEnabled(pf.hpYLabel, showHP)
+            Edit.Popups.UI.SetLabelEnabled(pf.powerXLabel, showPow)
+            Edit.Popups.UI.SetLabelEnabled(pf.powerYLabel, showPow)
+
+            Edit.Popups.UI.SetControlEnabled(pf.nameShowCB, true)
+            Edit.Popups.UI.SetControlEnabled(pf.hpShowCB, true)
+            Edit.Popups.UI.SetControlEnabled(pf.powerShowCB, true)
+
+            Edit.Popups.UI.SetControlEnabled(pf.nameOverrideCB, showName)
+            Edit.Popups.UI.SetControlEnabled(pf.hpOverrideCB, showHP)
+            Edit.Popups.UI.SetControlEnabled(pf.powerOverrideCB, showPow)
+
+            local nameOverride = (pf.nameOverrideCB and pf.nameOverrideCB.GetChecked and pf.nameOverrideCB:GetChecked()) and true or false
+            local hpOverride   = (pf.hpOverrideCB and pf.hpOverrideCB.GetChecked and pf.hpOverrideCB:GetChecked()) and true or false
+            local powOverride  = (pf.powerOverrideCB and pf.powerOverrideCB.GetChecked and pf.powerOverrideCB:GetChecked()) and true or false
+
+            if pf.SetTextSizeControlsEnabled then
+                pf.SetTextSizeControlsEnabled(pf.nameSizeBox, pf.nameSizeMinus, pf.nameSizePlus, showName and nameOverride)
+                pf.SetTextSizeControlsEnabled(pf.hpSizeBox, pf.hpSizeMinus, pf.hpSizePlus, showHP and hpOverride)
+                pf.SetTextSizeControlsEnabled(pf.powerSizeBox, pf.powerSizeMinus, pf.powerSizePlus, showPow and powOverride)
+            end
+        end
+
+                -- Text blocks after Name (spec-driven; no behavior change)
+        MSUF_EM_UI_BuildUnitPopup_Text_Extras(pf, ApplyUnitPopupValues)
+
+-- Copy Size Settings Dropdown (bottom, above Copy Text)
+        local copySizeLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        copySizeLabel:SetPoint("BOTTOMLEFT", 15, 66)
+        copySizeLabel:SetText("Copy size settings to:")
+        pf.copySizeLabel = copySizeLabel
+
+        local copySizeDrop = CreateFrame("Frame", "$parentCopySizeDrop", pf, "UIDropDownMenuTemplate")
+        copySizeDrop:SetPoint("LEFT", copySizeLabel, "RIGHT", -2, -2)
+        pf.copySizeDrop = copySizeDrop
+
+                pf.RefreshCopySizeDropdown = function()
+            local p = MSUF_PositionPopup or pf
+            MSUF_EM_RefreshUnitCopyDropdown(p, p.copySizeDrop, p.copySizeLabel, "Copy size settings to...", "size")
+        end
+
+        -- Copy Text Settings Dropdown (bottom)
+        local copyLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        -- Place this option near the bottom so it never overlaps the text rows above.
+        copyLabel:SetPoint("BOTTOMLEFT", 15, 46)
+        copyLabel:SetText("Copy text settings to:")
+        pf.copyTextLabel = copyLabel
+
+        local copyDrop = CreateFrame("Frame", "$parentCopyTextDrop", pf, "UIDropDownMenuTemplate")
+        copyDrop:SetPoint("LEFT", copyLabel, "RIGHT", -2, -2)
+        pf.copyTextDrop = copyDrop
+
+                pf.RefreshCopyTextDropdown = function()
+            local p = MSUF_PositionPopup or pf
+            MSUF_EM_RefreshUnitCopyDropdown(p, p.copyTextDrop, p.copyTextLabel, "Copy text settings to...", "text")
+        end
+
+local okBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentOK", 70, 22, "BOTTOMRIGHT", pf, "BOTTOMRIGHT", -10, 10, OKAY, "UIPanelButtonTemplate")
+        pf.okBtn = okBtn
+
+        local cancelBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentCancel", 70, 22, "RIGHT", okBtn, "LEFT", -6, 0, CANCEL, "UIPanelButtonTemplate")
+        pf.cancelBtn = cancelBtn
+local menuBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentMenu", 86, 22, "BOTTOMLEFT", pf, "BOTTOMLEFT", 10, 10, "Menu", "UIPanelButtonTemplate")
+menuBtn:SetScript("OnClick", function()
+    if type(MSUF_EM_SuppressNextBlizzardExit) == "function" then MSUF_EM_SuppressNextBlizzardExit() end
+    local p = MSUF_PositionPopup
+    local key = p and p.MSUF_prev and p.MSUF_prev.key
+    if key and type(_G.MSUF_OpenOptionsToUnitMenu) == "function" then
+        _G.MSUF_OpenOptionsToUnitMenu(key)
+    end
+    pf:Hide()
+end)
+pf.menuBtn = menuBtn
+
+        -- Step hint (applies to steppers and arrow keys)
+        local stepHint = pf:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        stepHint:SetPoint("BOTTOM", pf, "BOTTOM", 0, 40)
+        stepHint:SetText("Hold Shift")
+        pf.stepHint = stepHint
+    -- Ensure bottom buttons stay clickable above edit boxes/dropdowns
+    local __baseLevel = (pf.GetFrameLevel and pf:GetFrameLevel()) or 0
+    if okBtn and okBtn.SetFrameLevel then okBtn:SetFrameLevel(__baseLevel + 20) end
+    if cancelBtn and cancelBtn.SetFrameLevel then cancelBtn:SetFrameLevel(__baseLevel + 20) end
+    if menuBtn and menuBtn.SetFrameLevel then menuBtn:SetFrameLevel(__baseLevel + 20) end
+    if pf.closeBtn and pf.closeBtn.SetFrameLevel then pf.closeBtn:SetFrameLevel(__baseLevel + 25) end
+
+        cancelBtn:SetScript("OnClick", function()
+            if InCombatLockdown and InCombatLockdown() then
+                if MSUF_PositionPopup and MSUF_PositionPopup.Hide then MSUF_PositionPopup:Hide() end
+                return
+            end
+            MSUF_EM_EnsureDB()
+            local pf = MSUF_PositionPopup
+            if pf and pf.MSUF_prev and pf.MSUF_prev.key then
+                local key = pf.MSUF_prev.key
+                MSUF_DB[key] = MSUF_DB[key] or {}
+                local conf = MSUF_DB[key]
+                MSUF_EM_RestoreFields(conf, pf.MSUF_prev,
+                    "offsetX","offsetY","width","height",
+                    "nameOffsetX","nameOffsetY","hpOffsetX","hpOffsetY","powerOffsetX","powerOffsetY",
+                    "showName","showHP","showPower",
+                    "nameFontSize","hpFontSize","powerFontSize"
+                )
+                if ApplySettingsForKey then
+                    ApplySettingsForKey(key)
+                elseif ApplyAllSettings then
+                    ApplyAllSettings()
+                end
+                if _G.MSUF_UpdateAllFonts then _G.MSUF_UpdateAllFonts() end
+            end
+            MSUF_PositionPopup:Hide()
+        end)
+
+        local OnEnterPressed, OnEscapePressed = MSUF_EM_BindOkEnterHandlers(pf, okBtn, cancelBtn, ApplyUnitPopupValues, "Popup apply failed")
+
+        MSUF_EM_BindKeyScripts(OnEnterPressed, OnEscapePressed,
+            pf.xBox, pf.yBox, pf.wBox, pf.hBox, pf.spacingBox,
+            pf.nameXBox, pf.nameYBox, pf.nameSizeBox,
+            pf.hpXBox, pf.hpYBox, pf.hpSizeBox,
+            pf.powerXBox, pf.powerYBox, pf.powerSizeBox
+        )
+    end
+
+    local pf = MSUF_PositionPopup
+    local pf = MSUF_PositionPopup
+    local wasShown = (pf and pf.IsShown and pf:IsShown()) and true or false
+    local oldUnit  = pf and pf.unit
+    local oldParent = pf and pf.parent
+    local needReposition = (not wasShown) or (oldUnit ~= unit) or (oldParent ~= parent)
+    pf.unit   = unit
+    pf.parent = parent
+
+    local label = MSUF_GetUnitLabelForKey and MSUF_GetUnitLabelForKey(key) or unit
+    pf.title:SetText(string.format("MSUF Edit – %s", label))
+
+    local x = MSUF_SanitizePopupOffset(conf.offsetX, 0)
+    local y = MSUF_SanitizePopupOffset(conf.offsetY, 0)
+    -- Auto-repair corrupted offsets so the UI and DB stay sane.
+    if conf.offsetX ~= x then conf.offsetX = x end
+    if conf.offsetY ~= y then conf.offsetY = y end
+    local w = conf.width   or (parent and parent:GetWidth()  or 250)
+    local h = conf.height  or (parent and parent:GetHeight() or 40)
+
+    pf.xBox:SetText(tostring(x))
+    pf.yBox:SetText(tostring(y))
+    pf.wBox:SetText(tostring(math.floor(w + 0.5)))
+    pf.hBox:SetText(tostring(math.floor(h + 0.5)))
+    if pf.nameXBox then pf.nameXBox:SetText(tostring(conf.nameOffsetX or 4)) end
+    if pf.nameYBox then pf.nameYBox:SetText(tostring(conf.nameOffsetY or -4)) end
+    if pf.nameShowCB and pf.nameShowCB.SetChecked then
+        pf.nameShowCB:SetChecked(conf.showName ~= false)
+    end
+
+    -- Text size boxes + override toggles (use global sizes when no override is set)
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    local baseSize       = g.fontSize or 14
+    local globalNameSize = g.nameFontSize  or baseSize
+    local globalHPSize   = g.hpFontSize    or baseSize
+    local globalPowSize  = g.powerFontSize or baseSize
+
+    if pf.nameSizeBox then
+        pf.nameSizeBox:SetText(tostring((conf.nameFontSize) or globalNameSize))
+    end
+    if pf.nameOverrideCB and pf.nameOverrideCB.SetChecked then
+        pf.nameOverrideCB:SetChecked(conf.nameFontSize ~= nil)
+    end
+    if pf.SetTextSizeControlsEnabled then
+        pf.SetTextSizeControlsEnabled(pf.nameSizeBox, pf.nameSizeMinus, pf.nameSizePlus, (conf.nameFontSize ~= nil) and (conf.showName ~= false))
+    end
+
+    if pf.hpSizeBox then
+        pf.hpSizeBox:SetText(tostring((conf.hpFontSize) or globalHPSize))
+    end
+    if pf.hpOverrideCB and pf.hpOverrideCB.SetChecked then
+        pf.hpOverrideCB:SetChecked(conf.hpFontSize ~= nil)
+    end
+    if pf.SetTextSizeControlsEnabled then
+        pf.SetTextSizeControlsEnabled(pf.hpSizeBox, pf.hpSizeMinus, pf.hpSizePlus, (conf.hpFontSize ~= nil) and (conf.showHP ~= false))
+    end
+
+    if pf.powerSizeBox then
+        pf.powerSizeBox:SetText(tostring((conf.powerFontSize) or globalPowSize))
+    end
+    if pf.powerOverrideCB and pf.powerOverrideCB.SetChecked then
+        pf.powerOverrideCB:SetChecked(conf.powerFontSize ~= nil)
+    end
+    if pf.SetTextSizeControlsEnabled then
+        pf.SetTextSizeControlsEnabled(pf.powerSizeBox, pf.powerSizeMinus, pf.powerSizePlus, (conf.powerFontSize ~= nil) and (conf.showPower ~= false))
+    end
+
+    if pf.RefreshCopyTextDropdown then
+        pf.RefreshCopyTextDropdown()
+    end
+    if pf.RefreshCopySizeDropdown then
+        pf.RefreshCopySizeDropdown()
+    end
+
+    if pf.hpXBox then pf.hpXBox:SetText(tostring(conf.hpOffsetX or -4)) end
+    if pf.hpYBox then pf.hpYBox:SetText(tostring(conf.hpOffsetY or -4)) end
+    if pf.hpShowCB and pf.hpShowCB.SetChecked then
+        pf.hpShowCB:SetChecked(conf.showHP ~= false)
+    end
+    if pf.powerXBox then pf.powerXBox:SetText(tostring(conf.powerOffsetX or -4)) end
+    if pf.powerYBox then pf.powerYBox:SetText(tostring(conf.powerOffsetY or -4)) end
+    if pf.powerShowCB and pf.powerShowCB.SetChecked then
+        pf.powerShowCB:SetChecked(conf.showPower ~= false)
+    end
+    -- Smart open: only position when the popup is opened for a new frame.
+    -- If it is already open for this unit, do NOT snap it back (user may have moved it).
+    if needReposition then
+        MSUF_PositionPopupSmart(pf, parent, 200)
+    end
+    if pf.UpdateEnabledStates then pf.UpdateEnabledStates() end
+pf.MSUF_prev = pf.MSUF_prev or {}
+pf.MSUF_prev.key = key
+pf.MSUF_prev.offsetX = conf.offsetX
+pf.MSUF_prev.offsetY = conf.offsetY
+pf.MSUF_prev.width   = conf.width
+pf.MSUF_prev.height  = conf.height
+pf.MSUF_prev.nameOffsetX = conf.nameOffsetX
+pf.MSUF_prev.nameOffsetY = conf.nameOffsetY
+pf.MSUF_prev.showName = conf.showName
+
+pf.MSUF_prev.hpOffsetX = conf.hpOffsetX
+pf.MSUF_prev.hpOffsetY = conf.hpOffsetY
+pf.MSUF_prev.showHP    = conf.showHP
+pf.MSUF_prev.powerOffsetX = conf.powerOffsetX
+pf.MSUF_prev.powerOffsetY = conf.powerOffsetY
+pf.MSUF_prev.showPower    = conf.showPower
+pf.MSUF_prev.nameFontSize  = conf.nameFontSize
+pf.MSUF_prev.hpFontSize    = conf.hpFontSize
+pf.MSUF_prev.powerFontSize = conf.powerFontSize
+    pf:Show()
+end
+local function MSUF_UpdateCastbarEditInfo(unit)
+    if not MSUF_GridFrame or not MSUF_GridFrame.infoText then
+        return
+    end
+    if not MSUF_UnitEditModeActive then
+        return
+    end
+
+    MSUF_EM_EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    local g = MSUF_DB.general
+    local prefix = MSUF_GetCastbarPrefix(unit)
+    local label  = MSUF_GetCastbarLabel(unit)
+    if not prefix then
+        return
+    end
+
+    local textWidget = MSUF_GridFrame.infoText
+
+    if MSUF_EditModeSizing then
+        local w = g[prefix .. "BarWidth"]  or g.castbarGlobalWidth  or 0
+        local h = g[prefix .. "BarHeight"] or g.castbarGlobalHeight or 0
+        textWidget:SetText(string.format("Sizing: %s (W: %d, H: %d)", label, w, h))
+    else
+        local defaultX, defaultY
+        if unit == "player" then
+            defaultX, defaultY = 0, 5
+        else
+            defaultX, defaultY = 65, -15
+        end
+
+        local x = g[prefix .. "OffsetX"] or defaultX
+        local y = g[prefix .. "OffsetY"] or defaultY
+        textWidget:SetText(string.format("Editing: %s (X: %d, Y: %d)", label, x, y))
+    end
+end
+local function MSUF_UpdateGridOverlay()
+    if not MSUF_UnitEditModeActive then
+        if MSUF_GridFrame then
+            MSUF_GridFrame:Hide()
+            if MSUF_GridFrame.modeHint then
+                MSUF_GridFrame.modeHint:Hide()
+            end
+        end
+        return
+    end
+
+    if InCombatLockdown and InCombatLockdown() then
+        if MSUF_GridFrame then
+            MSUF_GridFrame:Hide()
+            if MSUF_GridFrame.modeHint then
+                MSUF_GridFrame.modeHint:Hide()
+            end
+        end
+        return
+    end
+
+    if not MSUF_GridFrame then
+        MSUF_CreateGridFrame()
+    end
+
+    MSUF_GridFrame:Show()
+
+    if MSUF_GridFrame and MSUF_GridFrame._msufSyncFrameEnableButtons then
+        MSUF_GridFrame._msufSyncFrameEnableButtons()
+    end
+
+    if MSUF_GridFrame.modeHint then
+        MSUF_GridFrame.modeHint:Show()
+    end
+
+    if MSUF_UpdateEditModeInfo then
+        MSUF_UpdateEditModeInfo()
+    end
+end
+function MSUF_OpenCastbarPositionPopup(unit, parent)
+    if not MSUF_UnitEditModeActive then
+        return
+    end
+
+    if not MSUF_EM_EnsureDB() then
+        return
+    end
+    if not unit or not parent then
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        print("|cffffd700MSUF:|r Position/Größe der Castbar kann im Kampf nicht geändert werden.")
+        return
+    end
+
+    -- Ensure the header "Edit Unit" selector reflects the castbar unit we are editing.
+    if unit and type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
+        _G.MSUF_SetMSUFEditModeDirect(true, unit)
+    elseif unit then
+        MSUF_CurrentEditUnitKey = unit
+        if MSUF_GridFrame and MSUF_GridFrame._msufSyncEditUnitSelector then
+            MSUF_GridFrame._msufSyncEditUnitSelector()
+        end
+    end
+
+
+    local function ApplyCastbarPopupValues()
+        if InCombatLockdown and InCombatLockdown() then
+            if _G.MSUF_CastbarPositionPopup and _G.MSUF_CastbarPositionPopup.Hide then
+                _G.MSUF_CastbarPositionPopup:Hide()
+            end
+            return
+        end
+        if MSUF__CastbarPopupSyncing or MSUF__CastbarPopupApplying then
+            return
+        end
+
+        MSUF__CastbarPopupApplying = true
+        local ok, err = MSUF_FastCall(function()
+            MSUF_EM_EnsureDB()
+            MSUF_DB.general = MSUF_DB.general or {}
+            local g = MSUF_DB.general
+
+            local pf = _G.MSUF_CastbarPositionPopup
+            if not pf or not pf.unit or not pf.parent then
+                return
+            end
+
+            local P = Edit and Edit.Popups
+            local specs = P and P.Specs
+            local U = P and P.Util
+            if not (P and specs and U and P.ReadFields) then
+                return
+            end
+
+            -- Always read the active popup context from the panel (prevents stale/old-unit writes).
+            local unit = pf._msufUnitKey or pf.unit
+            local parent = pf.parent
+
+            local function GlobalCastFont()
+                local baseSize = tonumber(g.fontSize) or 14
+                local globalOverride = tonumber(g.castbarSpellNameFontSize) or 0
+                return (globalOverride and globalOverride > 0) and globalOverride or baseSize
+            end
+
+            -- ---------------------------------------
+            -- Boss Castbar (stored on g via bossCast*)
+            -- ---------------------------------------
+            if unit == "boss" then
+                local currentW = tonumber(g.bossCastbarWidth)  or (parent and parent.GetWidth and parent:GetWidth())  or 240
+                local currentH = tonumber(g.bossCastbarHeight) or (parent and parent.GetHeight and parent:GetHeight()) or 18
+
+                -- Apply numeric fields via specs (store=true does the DB writeback)
+                P.ReadFields(pf, { conf = g, currentW = currentW, currentH = currentH }, specs.BossCastbarFramePosition)
+                P.ReadFields(pf, { conf = g }, specs.BossCastbarNameOffsets)
+                P.ReadFields(pf, { conf = g }, specs.BossCastbarIconOffsets)
+                P.ReadFields(pf, { conf = g }, specs.BossCastbarTimeOffsets)
+
+                -- show toggles
+                if pf.castNameShowCB and pf.castNameShowCB.GetChecked then
+                    g.showBossCastName = pf.castNameShowCB:GetChecked() and true or false
+                end
+                if pf.iconShowCB and pf.iconShowCB.GetChecked then
+                    g.showBossCastIcon = pf.iconShowCB:GetChecked() and true or false
+                end
+                if pf.timeShowCB and pf.timeShowCB.GetChecked then
+                    g.showBossCastTime = pf.timeShowCB:GetChecked() and true or false
+                end
+
+                -- overrides
+                local globalSize = GlobalCastFont()
+                U.ApplyOptionalOverrideNumber(g, "bossCastSpellNameFontSize", pf.castNameSizeBox, pf.castNameOverrideCB,
+                    pf.SetCastbarSizeControlsEnabled, pf.castNameSizeMinus, pf.castNameSizePlus, true, globalSize, 6, 72)
+
+                U.ApplyOptionalOverrideNumber(g, "bossCastTimeFontSize", pf.timeSizeBox, pf.timeOverrideCB,
+                    pf.SetCastbarSizeControlsEnabled, pf.timeSizeMinus, pf.timeSizePlus, true, globalSize, 6, 72)
+
+                local baseIcon = tonumber(g.bossCastbarHeight) or currentH or 18
+                U.ApplyOptionalOverrideNumber(g, "bossCastIconSize", pf.iconSizeBox, pf.iconSizeOverrideCB,
+                    pf.SetCastbarSizeControlsEnabled, pf.iconSizeMinus, pf.iconSizePlus, true, baseIcon, 6, 128)
+
+                -- apply + resync
+                if type(_G.MSUF_EditMode_RequestBossCastbarApply) == "function" then
+                    _G.MSUF_EditMode_RequestBossCastbarApply()
+                end
+
+                -- Boss castbar preview is detached (UIParent anchor). Ensure it refreshes live on every popup change.
+                if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+                    MSUF_FastCall(_G.MSUF_UpdateBossCastbarPreview)
+                end
+                if type(_G.MSUF_SyncBossCastbarSliders) == "function" then
+                    _G.MSUF_SyncBossCastbarSliders()
+                end
+                if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
+                    _G.MSUF_SyncCastbarPositionPopup("boss")
+                end
+                return
+            end
+
+            -- ---------------------------------------
+            -- Player / Target / Focus Castbars (prefix keys)
+            -- ---------------------------------------
+            local prefix = pf._msufDbPrefix or ((type(_G.MSUF_GetCastbarPrefix) == "function") and _G.MSUF_GetCastbarPrefix(unit) or nil)
+            if not prefix then
+                return
+            end
+
+            local defaultX, defaultY = 0, 0
+            if type(_G.MSUF_GetCastbarDefaultOffsets) == "function" then
+                defaultX, defaultY = _G.MSUF_GetCastbarDefaultOffsets(unit)
+            end
+
+            local currentW = tonumber(g[prefix .. "BarWidth"])  or tonumber(g.castbarGlobalWidth)  or (parent and parent.GetWidth and parent:GetWidth())  or 200
+            local currentH = tonumber(g[prefix .. "BarHeight"]) or tonumber(g.castbarGlobalHeight) or (parent and parent.GetHeight and parent:GetHeight()) or 16
+
+            -- Apply numeric fields via specs
+            P.ReadFields(pf, { conf = g, prefix = prefix, defaultX = defaultX, defaultY = defaultY, currentW = currentW, currentH = currentH }, specs.CastbarFramePosition)
+            P.ReadFields(pf, { conf = g, prefix = prefix }, specs.CastbarNameOffsets)
+            P.ReadFields(pf, { conf = g, prefix = prefix }, specs.CastbarIconOffsets)
+            P.ReadFields(pf, { conf = g, prefix = prefix, defaultTimeX = -2, defaultTimeY = 0 }, specs.CastbarTimeOffsets)
+
+            -- show toggles
+            if pf.castNameShowCB and pf.castNameShowCB.GetChecked then
+                g[prefix .. "ShowSpellName"] = pf.castNameShowCB:GetChecked() and true or false
+            end
+            if pf.iconShowCB and pf.iconShowCB.GetChecked then
+                g[prefix .. "ShowIcon"] = pf.iconShowCB:GetChecked() and true or false
+            end
+
+            local showKey = (type(_G.MSUF_GetCastbarShowTimeKey) == "function") and _G.MSUF_GetCastbarShowTimeKey(unit) or nil
+            if showKey and pf.timeShowCB and pf.timeShowCB.GetChecked then
+                g[showKey] = pf.timeShowCB:GetChecked() and true or false
+            end
+
+            -- overrides
+            local globalSize = GlobalCastFont()
+
+            U.ApplyOptionalOverrideNumber(g, prefix .. "SpellNameFontSize", pf.castNameSizeBox, pf.castNameOverrideCB,
+                pf.SetCastbarSizeControlsEnabled, pf.castNameSizeMinus, pf.castNameSizePlus, true, globalSize, 6, 48)
+
+            U.ApplyOptionalOverrideNumber(g, prefix .. "TimeFontSize", pf.timeSizeBox, pf.timeOverrideCB,
+                pf.SetCastbarSizeControlsEnabled, pf.timeSizeMinus, pf.timeSizePlus, true, globalSize, 6, 48)
+
+            local baseIcon = tonumber(g[prefix .. "BarHeight"]) or tonumber(g.castbarGlobalHeight) or currentH or 16
+            U.ApplyOptionalOverrideNumber(g, prefix .. "IconSize", pf.iconSizeBox, pf.iconSizeOverrideCB,
+                pf.SetCastbarSizeControlsEnabled, pf.iconSizeMinus, pf.iconSizePlus, true, baseIcon, 6, 128)
+
+            -- reanchor + visuals
+            local reanchorName = (unit == "player" and "MSUF_ReanchorPlayerCastBar") or
+                                 (unit == "target" and "MSUF_ReanchorTargetCastBar") or
+                                 (unit == "focus"  and "MSUF_ReanchorFocusCastBar")
+            local reanchorFn = reanchorName and _G[reanchorName]
+            if type(reanchorFn) == "function" then
+                reanchorFn()
+            end
+
+            if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+                _G.MSUF_UpdateCastbarVisuals()
+            end
+            if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then
+                _G.MSUF_UpdateCastbarEditInfo(unit)
+            end
+            if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
+                _G.MSUF_SyncCastbarPositionPopup(unit)
+            end
+
+            -- test mode toggles (unchanged behavior)
+            if type(_G.MSUF_SetPlayerCastbarTestMode) == "function" then
+                local popup = _G.MSUF_CastbarPositionPopup
+                local want = (unit == "player") and popup and popup.IsShown and popup:IsShown() and popup.unit == "player"
+                _G.MSUF_SetPlayerCastbarTestMode(want, true)
+            end
+            if type(_G.MSUF_SetTargetCastbarTestMode) == "function" then
+                local popup = _G.MSUF_CastbarPositionPopup
+                local want = (unit == "target") and popup and popup.IsShown and popup:IsShown() and popup.unit == "target"
+                _G.MSUF_SetTargetCastbarTestMode(want, true)
+            end
+            if type(_G.MSUF_SetFocusCastbarTestMode) == "function" then
+                local popup = _G.MSUF_CastbarPositionPopup
+                local want = (unit == "focus") and popup and popup.IsShown and popup:IsShown() and popup.unit == "focus"
+                _G.MSUF_SetFocusCastbarTestMode(want, true)
+            end
+            if type(_G.MSUF_SetBossCastbarTestMode) == "function" then
+                local popup = _G.MSUF_CastbarPositionPopup
+                local want = (unit == "boss") and popup and popup.IsShown and popup:IsShown() and popup.unit == "boss"
+                _G.MSUF_SetBossCastbarTestMode(want, true)
+            end
+        end)
+
+        MSUF__CastbarPopupApplying = false
+        if not ok then
+            error(err)
+        end
+    end
+
+    MSUF_EM_EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    local g = MSUF_DB.general
+
+local prefix
+local defaultX, defaultY
+local curX, curY, curW, curH
+
+local function SanitizeOffset(v, default)
+    v = tonumber(v) or default or 0
+    if v > 2000 then
+        v = default or 0
+    elseif v < -2000 then
+        v = default or 0
+    end
+    return math.floor(v + 0.5)
+end
+
+if unit == "boss" then
+    defaultX, defaultY = 0, 0
+
+    curX = SanitizeOffset(g.bossCastbarOffsetX, defaultX)
+    curY = SanitizeOffset(g.bossCastbarOffsetY, defaultY)
+    curW = tonumber(g.bossCastbarWidth)  or (parent:GetWidth()  or 240)
+    curH = tonumber(g.bossCastbarHeight) or (parent:GetHeight() or 18)
+
+    g.bossCastbarOffsetX = curX
+    g.bossCastbarOffsetY = curY
+else
+    prefix = MSUF_GetCastbarPrefix(unit)
+    defaultX, defaultY = MSUF_GetCastbarDefaultOffsets(unit)
+    if not prefix then
+        return
+    end
+
+    curX = SanitizeOffset(g[prefix .. "OffsetX"], defaultX)
+    curY = SanitizeOffset(g[prefix .. "OffsetY"], defaultY)
+    curW = g[prefix .. "BarWidth"]  or g.castbarGlobalWidth  or (parent:GetWidth()  or 200)
+    curH = g[prefix .. "BarHeight"] or g.castbarGlobalHeight or (parent:GetHeight() or 16)
+
+    g[prefix .. "OffsetX"] = curX
+    g[prefix .. "OffsetY"] = curY
+end
+
+    if not MSUF_CastbarPositionPopup then
+        local pf = CreateFrame("Frame", "MSUF_CastbarPositionPopup", UIParent, "BackdropTemplate")
+        MSUF_CastbarPositionPopup = pf
+        if Edit and Edit.Popups and Edit.Popups.Register then Edit.Popups.Register(pf) end
+        local uw, uh = 320, 430
+        MSUF_InitEditPopupFrame(pf, {
+            w = uw,
+            h = uh,
+            backdrop = {
+                bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+                edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+                tile     = true,
+                tileSize = 32,
+                edgeSize = 16,
+                insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+            },
+            backdropColor = { 0, 0, 0, 0.9 },
+        })
+        MSUF_EM_AddPopupTitleAndClose(pf, "MSUF Edit – Castbar")
+        local frameHeader = MSUF_EM_AddSectionHeader(pf, "frameHeader", "Frame", "TOPLEFT", pf, "TOPLEFT", 16, -36)
+
+
+
+local frameRows = {
+    { key = "x", label = "Offset X:", box = "$parentXBox", dy = -6 },
+    { key = "y", label = "Offset Y:", box = "$parentYBox", dy = -8 },
+    { key = "w", label = "Width:",    box = "$parentWBox", dy = -12 },
+    { key = "h", label = "Height:",   box = "$parentHBox", dy = -8 },
+}
+MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyCastbarPopupValues)
+
+        -- Text section (CastName position + per-castbar font override)
+        local textDivider = MSUF_EM_AddDivider(pf, "textDivider", 230, "TOPLEFT", pf.hLabel, "BOTTOMLEFT", 0, -8)
+        local textHeader  = MSUF_EM_AddSectionHeader(pf, "textHeader", "Text", "TOPLEFT", textDivider, "BOTTOMLEFT", 0, -8)
+
+
+
+                -- Castbar Text blocks (spec-driven; no behavior change)
+        MSUF_EM_UI_BuildCastbarPopup_TextBlocks(pf, textHeader)
+
+local function _MSUF_EM_GetFrameCenterOffsets(frame, anchorFrame)
+            if not frame or not anchorFrame then return 0, 0 end
+            local fx, fy = frame:GetCenter()
+            local ax, ay = anchorFrame:GetCenter()
+            if not fx or not fy or not ax or not ay then return 0, 0 end
+            return (fx - ax), (fy - ay)
+        end
+
+        local function _MSUF_EM_GetBottomLeft(frame)
+            if not frame then return nil end
+            return frame:GetLeft(), frame:GetBottom()
+        end
+
+        local function _MSUF_EM_GetBottomCenter(frame)
+            if not frame then return nil end
+            local l, r, b = frame:GetLeft(), frame:GetRight(), frame:GetBottom()
+            if not l or not r or not b then return nil end
+            return (l + r) * 0.5, b
+        end
+
+        local function _MSUF_EM_GetTopLeft(frame)
+            if not frame then return nil end
+            return frame:GetLeft(), frame:GetTop()
+        end
+
+        local function _MSUF_EM_GetTopCenter(frame)
+            if not frame then return nil end
+            local l, r, t = frame:GetLeft(), frame:GetRight(), frame:GetTop()
+            if not l or not r or not t then return nil end
+            return (l + r) * 0.5, t
+        end        local function _MSUF_EM_GetRealCastbarForUnit(unit)
+            if unit == "player" then return _G.MSUF_PlayerCastbar end
+            if unit == "target" then return _G.MSUF_TargetCastbar end
+            if unit == "focus" then return _G.MSUF_FocusCastbar end
+            if unit == "boss" then
+                -- There are multiple boss castbars; for offset conversions we use boss preview #1 when available.
+                return _G.MSUF_BossCastbarPreview or _G["MSUF_BossCastbarPreview1"] or nil
+            end
+            return nil
+        end        local function _MSUF_EM_ReanchorCastbarForUnit(unit)
+
+            if unit == "boss" then
+                if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+                    pcall(_G.MSUF_ApplyBossCastbarPositionSetting)
+                end
+                if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+                    pcall(_G.MSUF_UpdateBossCastbarPreview)
+                end
+                return
+            end
+
+            if unit == "player" then
+                if type(_G.MSUF_ReanchorPlayerCastBar) == "function" then
+                    pcall(_G.MSUF_ReanchorPlayerCastBar)
+                end
+                return
+            end
+
+            if unit == "target" then
+                if type(_G.MSUF_ReanchorTargetCastBar) == "function" then
+                    pcall(_G.MSUF_ReanchorTargetCastBar)
+                end
+                return
+            end
+
+            if unit == "focus" then
+                if type(_G.MSUF_ReanchorFocusCastBar) == "function" then
+                    pcall(_G.MSUF_ReanchorFocusCastBar)
+                end
+                return
+            end
+
+            -- Fallback: try using prefix-based reanchor name (legacy support)
+            local prefix = (type(_G.MSUF_GetCastbarPrefix) == "function") and _G.MSUF_GetCastbarPrefix(unit) or nil
+            if prefix and type(prefix) == "string" then
+                local pretty = prefix:gsub("^castbar", "")
+                if pretty and pretty ~= "" then
+                    local fn = _G["MSUF_Reanchor" .. pretty .. "CastBar"]
+                    if type(fn) == "function" then
+                        pcall(fn)
+                    end
+                end
+            end
+        end
+
+        local function _MSUF_EM_SetCastbarAnchoredToUnit(unit, anchored)
+            if not unit then return end
+
+            local g = MSUF_DB and MSUF_DB.general
+            if not g then return end
+
+            -- Keys for offset + detached state
+            local detachedKey, oxKey, oyKey
+            local anchorMode = "unit" -- or "player" (special) / "boss"
+
+            if unit == "boss" then
+                detachedKey = "bossCastbarDetached"
+                oxKey = "bossCastbarOffsetX"
+                oyKey = "bossCastbarOffsetY"
+                anchorMode = "boss"
+            else
+                local prefix = _G.MSUF_GetCastbarPrefix and _G.MSUF_GetCastbarPrefix(unit)
+                if not prefix then return end
+                detachedKey = prefix .. "Detached"
+                oxKey = prefix .. "OffsetX"
+                oyKey = prefix .. "OffsetY"
+                if unit == "player" then
+                    anchorMode = "player"
+                end
+            end
+
+            local castbar = _MSUF_EM_GetRealCastbarForUnit(unit)
+            if not castbar then
+                -- Best-effort fallback to previews in Edit Mode
+                if unit == "player" then castbar = _G.MSUF_PlayerCastbarPreview
+                elseif unit == "target" then castbar = _G.MSUF_TargetCastbarPreview
+                elseif unit == "focus" then castbar = _G.MSUF_FocusCastbarPreview
+                elseif unit == "boss" then castbar = _G.MSUF_BossCastbarPreview or _G["MSUF_BossCastbarPreview1"] end
+            end
+            if not castbar then return end
+
+            local wantDetached = (anchored == false)
+            local wasDetached = (g[detachedKey] == true)
+            if wantDetached == wasDetached then
+                return
+            end
+
+            -- Always detach to UIParent (per your request)
+            local anchorFrame = UIParent
+
+            if wantDetached then
+                -- Convert current position to CENTER offsets relative to UIParent
+                local dx, dy = _MSUF_EM_GetFrameCenterOffsets(castbar, anchorFrame)
+                g[oxKey] = dx
+                g[oyKey] = dy
+                g[detachedKey] = true
+            else
+                -- Convert current position back to offsets relative to the owning unitframe
+                local unitframe
+                if anchorMode == "boss" then
+                    unitframe = _G.MSUF_boss1 or (UnitFrames and UnitFrames["boss1"]) or (UnitFrames and UnitFrames["boss"]) or nil
+                else
+                    unitframe = UnitFrames and UnitFrames[unit]
+                end
+                if not unitframe or not unitframe.GetCenter then
+                    return
+                end
+
+                if anchorMode == "player" then
+                    local ax, ay = _MSUF_EM_GetTopCenter(unitframe)
+                    local bx, by = _MSUF_EM_GetBottomCenter(castbar)
+                    if ax and ay and bx and by then
+                        g[oxKey] = bx - ax
+                        g[oyKey] = by - ay
+                    end
+                else
+                    local tlx, tly = unitframe:GetLeft(), unitframe:GetTop()
+                    local blx, bly = castbar:GetLeft(), castbar:GetBottom()
+                    if tlx and tly and blx and bly then
+                        g[oxKey] = blx - tlx
+                        local baseY = (anchorMode == "boss") and 2 or 0
+                        g[oyKey] = (bly - tly) - baseY
+                    end
+                end
+
+                g[detachedKey] = nil
+            end
+
+            _MSUF_EM_ReanchorCastbarForUnit(unit)
+        end
+
+        -- Anchor-to-Unitframe toggle (per-castbar). Default ON = anchored, OFF = detached (free move).
+        -- (Restored for spec-driven popup builder; some refactor paths omitted this control.)
+        if not pf.anchorToUnitCB then
+            pf.anchorToUnitCB = CreateFrame("CheckButton", nil, pf, "UICheckButtonTemplate")
+            pf.anchorToUnitCB:SetPoint("BOTTOMLEFT", 14, 78)
+            if pf.anchorToUnitCB.Text then
+                pf.anchorToUnitCB.Text:SetText("Anchor to unitframe")
+            end
+            pf.anchorToUnitCB:SetChecked(true)
+        end
+        if pf.anchorToUnitCB then
+            pf.anchorToUnitCB:SetScript("OnClick", function(self)
+                local p = MSUF_CastbarPositionPopup
+                local unit = p and p.unit
+                if not unit then
+                    return
+                end
+                local anchored = self:GetChecked() and true or false
+                _MSUF_EM_SetCastbarAnchoredToUnit(unit, anchored)
+            end)
+        end
+        -- testModeCB is optional/legacy (some builds create it in other modules). Never assume it exists.
+        if pf.testModeCB then
+            pf.testModeCB:Hide()
+        end
+
+        -- Copy Size Settings Dropdown (bottom)
+        local copySizeLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        copySizeLabel:SetPoint("BOTTOMLEFT", 15, 66)
+        copySizeLabel:SetText("Copy size settings to:")
+        pf.copySizeLabel = copySizeLabel
+
+        local copySizeDrop = CreateFrame("Frame", "$parentCopySizeDrop", pf, "UIDropDownMenuTemplate")
+        copySizeDrop:SetPoint("LEFT", copySizeLabel, "RIGHT", -2, -2)
+        pf.copySizeDrop = copySizeDrop
+
+-- Copy Text Settings Dropdown (bottom)
+        local copyLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        -- Place this option near the bottom so it never overlaps the text rows above.
+        copyLabel:SetPoint("BOTTOMLEFT", 15, 46)
+        copyLabel:SetText("Copy text settings to:")
+        pf.copyTextLabel = copyLabel
+
+        local copyDrop = CreateFrame("Frame", "$parentCopyTextDrop", pf, "UIDropDownMenuTemplate")
+        copyDrop:SetPoint("LEFT", copyLabel, "RIGHT", -2, -2)
+        pf.copyTextDrop = copyDrop
+
+        -- Step 7: Copy dropdowns (castbar) now use the shared helper to reduce duplication.
+        -- This keeps the exact same behavior as before (boss uses boss keys; others use castbar prefix).
+        pf.RefreshCopySizeDropdown = function()
+            MSUF_EM_RefreshCastbarCopyDropdown(pf, pf.copySizeDrop, pf.copySizeLabel, "Copy size settings to...", "size")
+        end
+
+        pf.RefreshCopyTextDropdown = function()
+            MSUF_EM_RefreshCastbarCopyDropdown(pf, pf.copyTextDrop, pf.copyTextLabel, "Copy text settings to...", "text")
+        end
+
+        local okBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentOK", 70, 22, "BOTTOMRIGHT", pf, "BOTTOMRIGHT", -10, 10, OKAY, "UIPanelButtonTemplate")
+        pf.okBtn = okBtn
+
+        local cancelBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentCancel", 70, 22, "RIGHT", okBtn, "LEFT", -6, 0, CANCEL, "UIPanelButtonTemplate")
+        pf.cancelBtn = cancelBtn
+
+local menuBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentMenu", 86, 22, "BOTTOMLEFT", pf, "BOTTOMLEFT", 10, 10, "Menu", "UIPanelButtonTemplate")
+menuBtn:SetScript("OnClick", function()
+    if type(MSUF_EM_SuppressNextBlizzardExit) == "function" then MSUF_EM_SuppressNextBlizzardExit() end
+    local p = MSUF_CastbarPositionPopup
+    local unit = p and p.unit
+    if unit and type(_G.MSUF_OpenOptionsToCastbarMenu) == "function" then
+        _G.MSUF_OpenOptionsToCastbarMenu(unit)
+    end
+    pf:Hide()
+end)
+pf.menuBtn = menuBtn
+    -- Ensure bottom buttons stay clickable above edit boxes/dropdowns
+    local __baseLevel = (pf.GetFrameLevel and pf:GetFrameLevel()) or 0
+    if okBtn and okBtn.SetFrameLevel then okBtn:SetFrameLevel(__baseLevel + 20) end
+    if cancelBtn and cancelBtn.SetFrameLevel then cancelBtn:SetFrameLevel(__baseLevel + 20) end
+    if menuBtn and menuBtn.SetFrameLevel then menuBtn:SetFrameLevel(__baseLevel + 20) end
+    if pf.closeBtn and pf.closeBtn.SetFrameLevel then pf.closeBtn:SetFrameLevel(__baseLevel + 25) end
+
+        cancelBtn:SetScript("OnClick", function()
+            if InCombatLockdown and InCombatLockdown() then
+                if MSUF_CastbarPositionPopup and MSUF_CastbarPositionPopup.Hide then MSUF_CastbarPositionPopup:Hide() end
+                return
+            end
+            MSUF_EM_EnsureDB()
+            MSUF_DB.general = MSUF_DB.general or {}
+            local g = MSUF_DB.general
+            local pf = MSUF_CastbarPositionPopup
+            if pf and pf.MSUF_prev then
+                local unit = pf.MSUF_prev.unit
+                if unit == "boss" then
+                    MSUF_EM_RestoreFields(g, pf.MSUF_prev,
+                        "bossCastbarOffsetX","bossCastbarOffsetY","bossCastbarWidth","bossCastbarHeight",
+                        "bossCastTextOffsetX","bossCastTextOffsetY","showBossCastName","bossCastSpellNameFontSize",
+                        "bossCastIconOffsetX","bossCastIconOffsetY","showBossCastIcon",
+                        "bossCastTimeOffsetX","bossCastTimeOffsetY","showBossCastTime","bossCastTimeFontSize"
+                    )
+                    MSUF_EditMode_RequestBossCastbarApply()
+
+                    if type(MSUF_SyncBossCastbarSliders) == "function" then
+                        MSUF_SyncBossCastbarSliders()
+                    end
+                    if MSUF_SyncCastbarPositionPopup then
+                        MSUF_SyncCastbarPositionPopup("boss")
+                    end
+                else
+                    local prefix = pf.MSUF_prev.prefix
+                    if prefix then
+                        MSUF_EM_RestorePrefixFields(g, pf.MSUF_prev, prefix, MSUF_EM_CASTBAR_PREFIX_RESTORE_SUFFIXES)
+
+                        if unit == "player" then
+                            g.showPlayerCastTime = pf.MSUF_prev.showPlayerCastTime
+                        elseif unit == "target" then
+                            g.showTargetCastTime = pf.MSUF_prev.showTargetCastTime
+                        elseif unit == "focus" then
+                            g.showFocusCastTime = pf.MSUF_prev.showFocusCastTime
+                        end
+
+                    end
+
+                    local reanchorName = (unit == "player" and "MSUF_ReanchorPlayerCastBar") or (unit == "target" and "MSUF_ReanchorTargetCastBar") or (unit == "focus" and "MSUF_ReanchorFocusCastBar")
+                    local reanchorFn = reanchorName and _G[reanchorName]
+                    if type(reanchorFn) == "function" then reanchorFn() end
+
+                    if MSUF_UpdateCastbarVisuals then
+                        MSUF_UpdateCastbarVisuals()
+                    end
+                    if MSUF_UpdateCastbarEditInfo and unit ~= "boss" then
+                        MSUF_UpdateCastbarEditInfo(unit)
+                    end
+                    if MSUF_SyncCastbarPositionPopup then
+                        MSUF_SyncCastbarPositionPopup(unit)
+                    end
+                end
+            end
+            pf:Hide()
+        end)
+
+        local OnEnterPressed, OnEscapePressed = MSUF_EM_BindOkEnterHandlers(pf, okBtn, cancelBtn, ApplyCastbarPopupValues, "Castbar popup apply failed")
+
+        MSUF_EM_BindKeyScripts(OnEnterPressed, OnEscapePressed,
+            pf.xBox, pf.yBox, pf.wBox, pf.hBox, pf.spacingBox,
+            pf.castNameXBox, pf.castNameYBox, pf.castNameSizeBox,
+            pf.iconXBox, pf.iconYBox, pf.iconSizeBox,
+            pf.timeXBox, pf.timeYBox, pf.timeSizeBox
+        )
+
+    end
+
+    local pf = MSUF_CastbarPositionPopup
+    local wasShown = (pf and pf.IsShown and pf:IsShown()) and true or false
+    local oldUnit  = pf and pf.unit
+    local oldParent = pf and pf.parent
+    local needReposition = (not wasShown) or (oldUnit ~= unit) or (oldParent ~= parent)
+
+    -- Popup active context (single source of truth): always overwrite on open/switch.
+    -- This prevents any "context leak" when reusing the same popup across different castbars.
+    pf._msufUnitKey = unit
+    pf._msufDbPrefix = (unit ~= "boss") and prefix or nil
+    pf._msufContextToken = (pf._msufContextToken or 0) + 1
+
+    -- If we are switching between castbars while the popup stays open, an edit box can retain keyboard
+    -- focus which would block SyncFields() from overwriting it (intentional behavior for same-context edits).
+    -- That would leave stale values from the previous castbar in the boxes and can overwrite the new
+    -- castbar's DB keys on the next live apply. Clear focus and force a full Sync on context changes.
+    local forceSync = (not wasShown) or (oldUnit ~= unit) or (oldParent ~= parent)
+    if forceSync then
+        if pf.ClearFocus then
+            pf:ClearFocus()
+        end
+        -- Clear focus on all relevant edit boxes.
+        local focusBoxes = { pf.xBox, pf.yBox, pf.wBox, pf.hBox, pf.spacingBox,
+                             pf.castNameXBox, pf.castNameYBox, pf.castNameSizeBox,
+                             pf.iconXBox, pf.iconYBox, pf.iconSizeBox,
+                             pf.timeXBox, pf.timeYBox, pf.timeSizeBox }
+        for i = 1, #focusBoxes do
+            local b = focusBoxes[i]
+            if b and b.ClearFocus then
+                b:ClearFocus()
+            end
+        end
+    end
+    pf.unit   = unit
+    pf.parent = parent
+
+    local label
+    if unit == "boss" then
+        label = "Boss"
+    else
+        label = MSUF_GetUnitLabelForKey(GetConfigKeyForUnit(unit)) or unit
+    end
+    pf.title:SetText(string.format("MSUF Edit – %s Castbar", label))
+    if pf.menuBtn then
+        pf.menuBtn:Show()
+    end
+
+        -- Popup fields are synced by MSUF_SyncCastbarPositionPopup() (spec engine).
+    -- To avoid massive copy-paste, we only ensure that all standard widgets are visible here;
+    -- values/toggles are populated by the Sync call further below.
+    if not pf.__msufCastbarShowKeys then
+        pf.__msufCastbarShowKeys = {
+            -- Frame section
+            "xLabel","yLabel","wLabel","hLabel","xBox","yBox","wBox","hBox",
+            "xMinus","xPlus","yMinus","yPlus","wMinus","wPlus","hMinus","hPlus",
+
+            -- Text section
+            "textDivider","textHeader",
+            "castNameXLabel","castNameYLabel","castNameSizeLabel",
+            "castNameShowCB","castNameOverrideCB",
+            "castNameXBox","castNameYBox","castNameSizeBox",
+            "castNameXMinus","castNameXPlus","castNameYMinus","castNameYPlus","castNameSizeMinus","castNameSizePlus",
+
+            -- Icon section
+            "iconXLabel","iconYLabel","iconSizeLabel",
+            "iconShowCB","iconSizeOverrideCB",
+            "iconXBox","iconYBox","iconSizeBox",
+            "iconXMinus","iconXPlus","iconYMinus","iconYPlus","iconSizeMinus","iconSizePlus",
+
+            -- Time section
+            "timeXLabel","timeYLabel","timeSizeLabel",
+            "timeShowCB","timeOverrideCB",
+            "timeXBox","timeYBox","timeSizeBox",
+            "timeXMinus","timeXPlus","timeYMinus","timeYPlus","timeSizeMinus","timeSizePlus",
+
+            -- Copy helpers
+            "copyTextLabel","copyTextDrop","copySizeLabel","copySizeDrop",
+        }
+    end
+
+    for i = 1, #pf.__msufCastbarShowKeys do
+        local w = pf[pf.__msufCastbarShowKeys[i]]
+        if w and w.Show then w:Show() end
+    end
+    if pf.testModeCB then pf.testModeCB:Hide() end
+
+pf.MSUF_prev = pf.MSUF_prev or {}
+pf.MSUF_prev.unit = unit
+if unit == "boss" then
+    pf.MSUF_prev.bossCastbarOffsetX = g.bossCastbarOffsetX
+    pf.MSUF_prev.bossCastbarOffsetY = g.bossCastbarOffsetY
+    pf.MSUF_prev.bossCastbarWidth   = g.bossCastbarWidth
+    pf.MSUF_prev.bossCastbarHeight  = g.bossCastbarHeight
+
+    -- Step 1 (Boss) text controls
+    pf.MSUF_prev.bossCastTextOffsetX = g.bossCastTextOffsetX
+    pf.MSUF_prev.bossCastTextOffsetY = g.bossCastTextOffsetY
+    pf.MSUF_prev.showBossCastName = g.showBossCastName
+    pf.MSUF_prev.bossCastSpellNameFontSize = g.bossCastSpellNameFontSize
+
+    -- Step 2 (Boss) icon controls
+    pf.MSUF_prev.bossCastIconOffsetX = g.bossCastIconOffsetX
+    pf.MSUF_prev.bossCastIconOffsetY = g.bossCastIconOffsetY
+    pf.MSUF_prev.showBossCastIcon = g.showBossCastIcon
+    pf.MSUF_prev.bossCastIconSize = g.bossCastIconSize
+
+    -- Step 3 (Boss) cast time controls
+    pf.MSUF_prev.bossCastTimeOffsetX = g.bossCastTimeOffsetX
+    pf.MSUF_prev.bossCastTimeOffsetY = g.bossCastTimeOffsetY
+    pf.MSUF_prev.showBossCastTime = g.showBossCastTime
+    pf.MSUF_prev.bossCastTimeFontSize = g.bossCastTimeFontSize
+else
+    pf.MSUF_prev.prefix = prefix
+    if prefix then
+        pf.MSUF_prev[prefix .. "OffsetX"]   = g[prefix .. "OffsetX"]
+        pf.MSUF_prev[prefix .. "OffsetY"]   = g[prefix .. "OffsetY"]
+        pf.MSUF_prev[prefix .. "BarWidth"]  = g[prefix .. "BarWidth"]
+        pf.MSUF_prev[prefix .. "BarHeight"] = g[prefix .. "BarHeight"]
+        pf.MSUF_prev[prefix .. "Detached"] = g[prefix .. "Detached"]
+        pf.MSUF_prev[prefix .. "TextOffsetX"] = g[prefix .. "TextOffsetX"]
+        pf.MSUF_prev[prefix .. "TextOffsetY"] = g[prefix .. "TextOffsetY"]
+        pf.MSUF_prev[prefix .. "ShowSpellName"] = g[prefix .. "ShowSpellName"]
+        pf.MSUF_prev[prefix .. "SpellNameFontSize"] = g[prefix .. "SpellNameFontSize"]
+
+        pf.MSUF_prev[prefix .. "IconOffsetX"] = g[prefix .. "IconOffsetX"]
+        pf.MSUF_prev[prefix .. "IconOffsetY"] = g[prefix .. "IconOffsetY"]
+        pf.MSUF_prev[prefix .. "ShowIcon"] = g[prefix .. "ShowIcon"]
+        pf.MSUF_prev[prefix .. "IconSize"] = g[prefix .. "IconSize"]
+
+        pf.MSUF_prev[prefix .. "TimeOffsetX"] = g[prefix .. "TimeOffsetX"]
+        pf.MSUF_prev[prefix .. "TimeOffsetY"] = g[prefix .. "TimeOffsetY"]
+        pf.MSUF_prev[prefix .. "TimeFontSize"] = g[prefix .. "TimeFontSize"]
+
+        if unit == "player" then
+            pf.MSUF_prev.showPlayerCastTime = g.showPlayerCastTime
+        elseif unit == "target" then
+            pf.MSUF_prev.showTargetCastTime = g.showTargetCastTime
+        elseif unit == "focus" then
+            pf.MSUF_prev.showFocusCastTime = g.showFocusCastTime
+        end
+
+    end
+end
+
+    -- Player castbar: run a looping dummy cast on the preview while this popup is open.
+    if pf.testModeCB then
+        pf.testModeCB:Hide()
+    end
+    if type(_G.MSUF_SetPlayerCastbarTestMode) == "function" then
+            local popup = _G.MSUF_CastbarPositionPopup
+            local want = (unit == "player") and popup and popup.IsShown and popup:IsShown() and popup.unit == "player"
+            _G.MSUF_SetPlayerCastbarTestMode(want, true)
+        end
+    if type(_G.MSUF_SetTargetCastbarTestMode) == "function" then
+            local popup = _G.MSUF_CastbarPositionPopup
+            local want = (unit == "target") and popup and popup.IsShown and popup:IsShown() and popup.unit == "target"
+            _G.MSUF_SetTargetCastbarTestMode(want, true)
+        end
+    if type(_G.MSUF_SetFocusCastbarTestMode) == "function" then
+            local popup = _G.MSUF_CastbarPositionPopup
+            local want = (unit == "focus") and popup and popup.IsShown and popup:IsShown() and popup.unit == "focus"
+            _G.MSUF_SetFocusCastbarTestMode(want, true)
+        end
+        if type(_G.MSUF_SetBossCastbarTestMode) == "function" then
+            local popup = _G.MSUF_CastbarPositionPopup
+            local want = (unit == "boss") and popup and popup.IsShown and popup:IsShown() and popup.unit == "boss"
+            _G.MSUF_SetBossCastbarTestMode(want, true)
+        end
+
+    -- Keep popup fields in sync with DB on open (and ensure player-only controls like test mode are visible immediately).
+    if type(MSUF_SyncCastbarPositionPopup) == "function" then
+        MSUF_SyncCastbarPositionPopup(unit, forceSync)
+    end
+
+    -- Smart open: place near the castbar frame, on the side with the most free screen space
+    -- (same logic as unitframe popup). Fallback to screen center if we can't get bounds.
+    -- Only position when the popup is opened for a NEW castbar frame. If already open for this unit,
+    -- do NOT snap it back on click (user may have moved it).
+    if needReposition then
+        do
+            local did = false
+            if parent and parent.GetLeft then
+                local l, r, t, b = parent:GetLeft(), parent:GetRight(), parent:GetTop(), parent:GetBottom()
+                if l and r and t and b and type(MSUF_PositionPopupSmart) == "function" then
+                    MSUF_PositionPopupSmart(pf, parent, 200)
+                    did = true
+                end
+            end
+            if not did then
+                pf:ClearAllPoints()
+                pf:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+                pf:SetClampedToScreen(true)
+            end
+        end
+        end
+
+    pf:Show()
+    pf:Raise()
+end
+local function MSUF_UpdateEditModeVisuals()
+    if not UnitFrames then return end
+
+    local pf = UnitFrames["player"]
+    if pf and pf.UpdateEditArrows then
+        pf:UpdateEditArrows()
+    end
+
+    local tf = UnitFrames["target"]
+    if tf and tf.UpdateEditArrows then
+        tf:UpdateEditArrows()
+    end
+
+    local ff = UnitFrames["focus"]
+    if ff and ff.UpdateEditArrows then
+        ff:UpdateEditArrows()
+    end
+
+    local pet = UnitFrames["pet"]
+    if pet and pet.UpdateEditArrows then
+        pet:UpdateEditArrows()
+    end
+
+    local tot = UnitFrames["targettarget"]
+    if tot and tot.UpdateEditArrows then
+        tot:UpdateEditArrows()
+    end
+
+    for i = 1, MSUF_MAX_BOSS_FRAMES do
+        local bf = UnitFrames["boss" .. i]
+        if bf and bf.UpdateEditArrows then
+            bf:UpdateEditArrows()
+        end
+    end
+
+    MSUF_UpdateGridOverlay()
+end
+function MSUF_SyncCastbarPositionPopup(unit, force)
+    if MSUF__CastbarPopupApplying or MSUF__CastbarPopupSyncing then
+        return
+    end
+
+    MSUF__CastbarPopupSyncing = true
+    local ok = MSUF_FastCall(function()
+        local pf = MSUF_CastbarPositionPopup
+        if not pf or not pf:IsShown() then
+            return
+        end
+        if pf.unit ~= unit then
+            return
+        end
+
+        MSUF_EM_EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        local g = MSUF_DB.general
+
+
+
+        -- Anchor-to-Unitframe toggle (player/target/focus/boss)
+        if pf.anchorToUnitCB then
+            if unit == "boss" then
+                local detached = g.bossCastbarDetached and true or false
+                pf.anchorToUnitCB:SetChecked(not detached)
+                if pf.anchorToUnitCB.Text then
+                    pf.anchorToUnitCB.Text:SetText("Anchor to Boss unitframe")
+                end
+                pf.anchorToUnitCB:Show()
+            else
+                local prefix = (type(_G.MSUF_GetCastbarPrefix) == "function") and _G.MSUF_GetCastbarPrefix(unit)
+                if prefix then
+                    local detached = g[prefix .. "Detached"] and true or false
+                    pf.anchorToUnitCB:SetChecked(not detached)
+                    if pf.anchorToUnitCB.Text then
+                        local label = (unit == "player" and "Player") or (unit == "target" and "Target") or (unit == "focus" and "Focus") or unit
+                        pf.anchorToUnitCB.Text:SetText("Anchor to " .. label .. " unitframe")
+                    end
+                    pf.anchorToUnitCB:Show()
+                else
+                    pf.anchorToUnitCB:Hide()
+                end
+            end
+        end
+        local P = Edit and Edit.Popups
+        local U = P and P.Util
+
+        local function GetGlobalCastbarFontSize()
+            local baseSize = g.fontSize or 14
+            local globalOverride = tonumber(g.castbarSpellNameFontSize) or 0
+            return (globalOverride and globalOverride > 0) and globalOverride or baseSize
+        end
+
+        -- Boss castbar is stored on MSUF_DB.general using "bossCast*" keys.
+        if unit == "boss" then
+            local parent = pf.parent or UIParent
+            local currentW = tonumber(g.bossCastbarWidth)  or (parent.GetWidth and parent:GetWidth())  or 240
+            local currentH = tonumber(g.bossCastbarHeight) or (parent.GetHeight and parent:GetHeight()) or 18
+            if P and P.SyncFields then
+                local specs = (Edit and Edit.Popups and Edit.Popups.Specs) or nil
+                if specs then
+                    local ctxForce = force and true or false
+                    P.SyncFields(pf, { conf = g, currentW = currentW, currentH = currentH, force = ctxForce }, specs.BossCastbarFramePosition)
+                    P.SyncFields(pf, { conf = g, force = ctxForce }, specs.BossCastbarNameOffsets)
+                    P.SyncFields(pf, { conf = g, force = ctxForce }, specs.BossCastbarIconOffsets)
+                    P.SyncFields(pf, { conf = g, force = ctxForce }, specs.BossCastbarTimeOffsets)
+                end
+            end
+
+            if pf.castNameShowCB and pf.castNameShowCB.SetChecked then
+                pf.castNameShowCB:SetChecked((g.showBossCastName ~= false) and true or false)
+            end
+
+            local showBossIcon = (g.showBossCastIcon == nil) and (g.castbarShowIcon ~= false) or (g.showBossCastIcon ~= false)
+            if pf.iconShowCB and pf.iconShowCB.SetChecked then
+                pf.iconShowCB:SetChecked(showBossIcon and true or false)
+            end
+
+            if pf.timeShowCB and pf.timeShowCB.SetChecked then
+                pf.timeShowCB:SetChecked((g.showBossCastTime ~= false) and true or false)
+            end
+
+            if U and U.SyncOptionalOverrideNumber then
+                local globalSize = GetGlobalCastbarFontSize()
+                U.SyncOptionalOverrideNumber(g, "bossCastSpellNameFontSize", pf.castNameSizeBox, pf.castNameOverrideCB, pf.SetCastbarSizeControlsEnabled,
+                    pf.castNameSizeMinus, pf.castNameSizePlus, true, globalSize)
+
+                local baseIcon = tonumber(g.bossCastbarHeight) or currentH or 18
+                U.SyncOptionalOverrideNumber(g, "bossCastIconSize", pf.iconSizeBox, pf.iconSizeOverrideCB, pf.SetCastbarSizeControlsEnabled,
+                    pf.iconSizeMinus, pf.iconSizePlus, true, baseIcon)
+
+                U.SyncOptionalOverrideNumber(g, "bossCastTimeFontSize", pf.timeSizeBox, pf.timeOverrideCB, pf.SetCastbarSizeControlsEnabled,
+                    pf.timeSizeMinus, pf.timeSizePlus, true, globalSize)
+            end
+
+            if pf.RefreshCopyTextDropdown then pf.RefreshCopyTextDropdown() end
+            if pf.RefreshCopySizeDropdown then pf.RefreshCopySizeDropdown() end
+            return
+        end
+
+        -- Player / Target / Focus (prefix keys, e.g. "playerCastbarOffsetX")
+            local prefix = pf._msufDbPrefix or MSUF_GetCastbarPrefix(unit)
+        local defaultX, defaultY = MSUF_GetCastbarDefaultOffsets(unit)
+        if not prefix then
+            return
+        end
+
+        local parent = pf.parent or UIParent
+        local currentW = g[prefix .. "BarWidth"]  or g.castbarGlobalWidth  or (parent.GetWidth and parent:GetWidth())  or 200
+        local currentH = g[prefix .. "BarHeight"] or g.castbarGlobalHeight or (parent.GetHeight and parent:GetHeight()) or 16
+
+        if P and P.SyncFields then
+            local ctxForce = force and true or false
+            P.SyncFields(pf, { conf = g, prefix = prefix, defaultX = defaultX, defaultY = defaultY, currentW = currentW, currentH = currentH, force = ctxForce }, Edit.Popups.Specs.CastbarFramePosition)
+            P.SyncFields(pf, { conf = g, prefix = prefix, force = ctxForce }, Edit.Popups.Specs.CastbarNameOffsets)
+            P.SyncFields(pf, { conf = g, prefix = prefix, force = ctxForce }, Edit.Popups.Specs.CastbarIconOffsets)
+
+            local defTX, defTY = -2, 0
+            if unit ~= "player" then
+                defTX = tonumber(g.castbarPlayerTimeOffsetX) or defTX
+                defTY = tonumber(g.castbarPlayerTimeOffsetY) or defTY
+            end
+            P.SyncFields(pf, { conf = g, prefix = prefix, defaultTimeX = defTX, defaultTimeY = defTY, force = ctxForce }, Edit.Popups.Specs.CastbarTimeOffsets)
+        end
+
+        -- show toggles
+        local storedShow = g[prefix .. "ShowSpellName"]
+        local showSpell = (storedShow == nil) and (g.castbarShowSpellName ~= false) or (storedShow ~= false)
+        if pf.castNameShowCB and pf.castNameShowCB.SetChecked then
+            pf.castNameShowCB:SetChecked(showSpell and true or false)
+        end
+
+        local storedIcon = g[prefix .. "ShowIcon"]
+        local showIconLocal = (storedIcon == nil) and (g.castbarShowIcon ~= false) or (storedIcon ~= false)
+        if pf.iconShowCB and pf.iconShowCB.SetChecked then
+            pf.iconShowCB:SetChecked(showIconLocal and true or false)
+        end
+
+        local showTime = true
+        if unit == "player" then
+            showTime = (g.showPlayerCastTime ~= false)
+        elseif unit == "target" then
+            showTime = (g.showTargetCastTime ~= false)
+        elseif unit == "focus" then
+            showTime = (g.showFocusCastTime ~= false)
+        end
+        if pf.timeShowCB and pf.timeShowCB.SetChecked then
+            pf.timeShowCB:SetChecked(showTime and true or false)
+        end
+
+        if U and U.SyncOptionalOverrideNumber then
+            local globalSize = GetGlobalCastbarFontSize()
+
+            U.SyncOptionalOverrideNumber(g, prefix .. "SpellNameFontSize", pf.castNameSizeBox, pf.castNameOverrideCB, pf.SetCastbarSizeControlsEnabled,
+                pf.castNameSizeMinus, pf.castNameSizePlus, true, globalSize)
+
+            local baseIcon = tonumber(g[prefix .. "BarHeight"]) or tonumber(g.castbarGlobalHeight) or currentH or 16
+            U.SyncOptionalOverrideNumber(g, prefix .. "IconSize", pf.iconSizeBox, pf.iconSizeOverrideCB, pf.SetCastbarSizeControlsEnabled,
+                pf.iconSizeMinus, pf.iconSizePlus, true, baseIcon)
+
+            U.SyncOptionalOverrideNumber(g, prefix .. "TimeFontSize", pf.timeSizeBox, pf.timeOverrideCB, pf.SetCastbarSizeControlsEnabled,
+                pf.timeSizeMinus, pf.timeSizePlus, true, globalSize)
+        end
+
+        if pf.RefreshCopyTextDropdown then pf.RefreshCopyTextDropdown() end
+        if pf.testModeCB then pf.testModeCB:Hide() end
+        if pf.RefreshCopySizeDropdown then pf.RefreshCopySizeDropdown() end
+    end)
+
+    MSUF__CastbarPopupSyncing = false
+    if not ok then
+        return
+    end
+end
+
+local function MSUF_SyncUnitPositionPopup(unit, conf)
+    local pf = MSUF_PositionPopup
+    if not pf or not pf:IsShown() then
+        return
+    end
+
+    -- Support legacy calls with no args (e.g. Cancel/refresh).
+    local popupUnit = pf.unit
+    local popupKey = popupUnit and GetConfigKeyForUnit and GetConfigKeyForUnit(popupUnit) or popupUnit
+
+    local key = unit or popupKey
+    if not key then
+        return
+    end
+
+    if unit and popupUnit and unit ~= popupUnit and popupKey and unit ~= popupKey then
+        return
+    end
+
+    if not conf then
+        MSUF_EM_EnsureDB()
+        if not MSUF_DB then return end
+        conf = MSUF_DB[key]
+    end
+    if type(conf) ~= "table" then
+        return
+    end
+
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    local baseSize       = g.fontSize or 14
+    local globalNameSize = g.nameFontSize  or baseSize
+    local globalHPSize   = g.hpFontSize    or baseSize
+    local globalPowSize  = g.powerFontSize or baseSize
+
+    local currentW = conf.width
+    local currentH = conf.height
+    if (not currentW or not currentH) and pf.parent then
+        currentW = currentW or pf.parent:GetWidth()
+        currentH = currentH or pf.parent:GetHeight()
+    end
+
+    local P = Edit and Edit.Popups
+    local U = P and P.Util
+
+    if P and P.SyncFields then
+        P.SyncFields(pf, { conf = conf, currentW = currentW, currentH = currentH }, Edit.Popups.Specs.UnitFramePosition)
+    end
+
+    local showNameVal  = (conf.showName  ~= false)
+    local showHPVal    = (conf.showHP    ~= false)
+    local showPowerVal = (conf.showPower ~= false)
+
+    if pf.nameShowCB and pf.nameShowCB.SetChecked then
+        pf.nameShowCB:SetChecked(showNameVal and true or false)
+    end
+    if pf.hpShowCB and pf.hpShowCB.SetChecked then
+        pf.hpShowCB:SetChecked(showHPVal and true or false)
+    end
+    if pf.powerShowCB and pf.powerShowCB.SetChecked then
+        pf.powerShowCB:SetChecked(showPowerVal and true or false)
+    end
+
+    if U and U.SyncOptionalOverrideNumber then
+        U.SyncOptionalOverrideNumber(conf, "nameFontSize",  pf.nameSizeBox,  pf.nameOverrideCB,  pf.SetTextSizeControlsEnabled, pf.nameSizeMinus,  pf.nameSizePlus,  showNameVal,  globalNameSize)
+        U.SyncOptionalOverrideNumber(conf, "hpFontSize",    pf.hpSizeBox,    pf.hpOverrideCB,    pf.SetTextSizeControlsEnabled, pf.hpSizeMinus,    pf.hpSizePlus,    showHPVal,    globalHPSize)
+        U.SyncOptionalOverrideNumber(conf, "powerFontSize", pf.powerSizeBox, pf.powerOverrideCB, pf.SetTextSizeControlsEnabled, pf.powerSizeMinus, pf.powerSizePlus, showPowerVal, globalPowSize)
+    end
+end
+
+
+-- ---------------------------------------------------------
+
+-- Auras 2.0 Position Popup (Target)  [helper-ready for Focus/Boss later]
+-- Requirements:
+--  - Drag & drop via Aura Edit Mover (in Auras 2.0 module)
+--  - Popup (left/right click) for Offset X/Y + Size + Spacing
+-- ---------------------------------------------------------
+
+local function MSUF_A2_GetAuraPopupTitleSuffix(unitKey)
+    if unitKey == 'target' then return 'Target Aura' end
+    if unitKey == 'focus' then return 'Focus Aura' end
+    -- Boss previews will be 'Boss 1 Aura', 'Boss 2 Aura', ...
+    if type(unitKey) == 'string' and unitKey:match('^boss%d+$') then
+        local n = unitKey:match('^boss(%d+)$')
+        if n then return ('Boss %s Aura'):format(n) end
+        return 'Boss Aura'
+    end
+    return 'Aura'
+end
+
+-- Helper: creates the popup once, and can be reused for focus/boss later.
+function _G.MSUF_A2_EnsureAuraPositionPopup()
+    local pf = _G.MSUF_Auras2PositionPopup
+    if pf then
+        return pf
+    end
+
+    pf = CreateFrame('Frame', 'MSUF_EditAuras2PositionPopup', UIParent, 'BackdropTemplate')
+    _G.MSUF_Auras2PositionPopup = pf
+    if Edit and Edit.Popups and Edit.Popups.Register then Edit.Popups.Register(pf) end
+
+    MSUF_InitEditPopupFrame(pf, {
+        w = 320,
+        h = 340,
+        backdrop = {
+            bgFile   = 'Interface\\DialogFrame\\UI-DialogBox-Background-Dark',
+            edgeFile = 'Interface\\DialogFrame\\UI-DialogBox-Border',
+            tile = true, tileSize = 32, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        },
+        backdropColor = { 0, 0, 0, 0.9 },
+    })
+
+    local title = pf:CreateFontString(nil, 'OVERLAY', 'GameFontNormalLarge')
+    title:SetPoint('TOP', 0, -12)
+    title:SetText('MSUF Edit – Target Aura')
+    pf.title = title
+
+    -- Top-right close (acts like Cancel)
+    local closeBtn = CreateFrame('Button', '$parentClose', pf, 'UIPanelCloseButton')
+    closeBtn:SetPoint('TOPRIGHT', pf, 'TOPRIGHT', -6, -6)
+    closeBtn:SetScript('OnClick', function()
+        if pf.cancelBtn and pf.cancelBtn.Click then
+            pf.cancelBtn:Click()
+        else
+            pf:Hide()
+        end
+    end)
+    pf.closeBtn = closeBtn
+
+    local frameHeader = pf:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+    frameHeader:SetPoint('TOPLEFT', pf, 'TOPLEFT', 16, -36)
+    frameHeader:SetText('Frame')
+    frameHeader:SetTextColor(1, 0.82, 0, 1)
+    pf.frameHeader = frameHeader
+
+    local function Apply()
+        if (pf and (pf._msufAuras2PopupApplying or pf._msufAuras2PopupSyncing)) or _G.MSUF__Auras2PopupApplying then return end
+        if pf then pf._msufAuras2PopupApplying = true end
+        _G.MSUF__Auras2PopupApplying = true
+
+        local ok = pcall(function()
+            MSUF_EM_EnsureDB()
+            if not MSUF_DB or not MSUF_DB.auras2 then return end
+
+            local unitKey = pf.unit or 'target'
+local a2db = MSUF_DB.auras2
+            a2db.shared = a2db.shared or {}
+a2db.perUnit = a2db.perUnit or {}
+
+local isBoss = (type(unitKey) == 'string') and unitKey:match('^boss%d+$')
+if a2db.shared.bossEditTogether == nil then
+    a2db.shared.bossEditTogether = true
+end
+if isBoss and pf.bossTogetherCheck and pf.bossTogetherCheck.GetChecked then
+    a2db.shared.bossEditTogether = (pf.bossTogetherCheck:GetChecked() and true) or false
+end
+
+local applyKeys
+if isBoss and a2db.shared.bossEditTogether ~= false then
+    applyKeys = { 'boss1','boss2','boss3','boss4','boss5' }
+else
+    applyKeys = { unitKey }
+end
+
+local unitKeyEff = unitKey
+if isBoss and a2db.shared.bossEditTogether ~= false then
+    unitKeyEff = 'boss1'
+end
+
+a2db.perUnit[unitKeyEff] = a2db.perUnit[unitKeyEff] or {}
+local uconf = a2db.perUnit[unitKeyEff]
+uconf.layout = uconf.layout or {}
+
+            local function readNum(box, fallback)
+                if not box or not box.GetText then return fallback end
+                local t = box:GetText()
+                local n = tonumber(t)
+                if n == nil then return fallback end
+                return n
+            end
+
+            local curX = uconf.layout.offsetX or a2db.shared.offsetX or 0
+            local curY = uconf.layout.offsetY or a2db.shared.offsetY or 0
+            local curSize = uconf.layout.iconSize or a2db.shared.iconSize or 26
+            local curSpacing = uconf.layout.spacing or a2db.shared.spacing or 2
+
+            local curStackTextSize = uconf.layout.stackTextSize or a2db.shared.stackTextSize or 14
+            local curCooldownTextSize = uconf.layout.cooldownTextSize or a2db.shared.cooldownTextSize or 14
+
+            local x = readNum(pf.xBox, curX)
+            local y = readNum(pf.yBox, curY)
+            local size = readNum(pf.sizeBox, curSize)
+            local spacing = readNum(pf.spacingBox, curSpacing)
+
+            local stackTextSize = readNum(pf.stackTextSizeBox, curStackTextSize)
+            local cooldownTextSize = readNum(pf.cooldownTextSizeBox, curCooldownTextSize)
+
+            x = MSUF_SanitizePopupOffset(x, 0)
+            y = MSUF_SanitizePopupOffset(y, 0)
+
+            -- sane clamps
+            size = math.max(10, math.min(80, tonumber(size) or curSize))
+            spacing = math.max(0, math.min(30, tonumber(spacing) or curSpacing))
+
+            stackTextSize = math.max(6, math.min(40, tonumber(stackTextSize) or curStackTextSize))
+            cooldownTextSize = math.max(6, math.min(40, tonumber(cooldownTextSize) or curCooldownTextSize))
+
+local function ApplyLayoutToUnit(k)
+    a2db.perUnit[k] = a2db.perUnit[k] or {}
+    local uc = a2db.perUnit[k]
+    uc.layout = uc.layout or {}
+    uc.overrideLayout = true
+    uc.layout.offsetX   = math.floor(x + 0.5)
+    uc.layout.offsetY   = math.floor(y + 0.5)
+    uc.layout.iconSize  = math.floor(size + 0.5)
+    uc.layout.spacing   = math.floor(spacing + 0.5)
+    uc.layout.stackTextSize = math.floor(stackTextSize + 0.5)
+    uc.layout.cooldownTextSize = math.floor(cooldownTextSize + 0.5)
+    -- Keep the edit mover box derived from iconSize/spacing/perRow (no manual box overrides).
+    uc.layout.width = nil
+    uc.layout.height = nil
+end
+
+if applyKeys then
+    for _, k in ipairs(applyKeys) do
+        ApplyLayoutToUnit(k)
+    end
+else
+    ApplyLayoutToUnit(unitKey)
+end
+
+            if type(_G.MSUF_Auras2_RefreshUnit) == 'function' then
+                for _, k in ipairs(applyKeys or {unitKey}) do _G.MSUF_Auras2_RefreshUnit(k) end
+            elseif type(_G.MSUF_Auras2_RefreshAll) == 'function' then
+                _G.MSUF_Auras2_RefreshAll()
+            end
+
+            if type(_G.MSUF_SyncAuras2PositionPopup) == 'function' then
+                _G.MSUF_SyncAuras2PositionPopup(unitKey)
+            end
+        end)
+        _G.MSUF__Auras2PopupApplying = false
+        if pf then pf._msufAuras2PopupApplying = false end
+        if not ok then
+            -- fail-open
+        end
+    end
+
+    -- Phase 10 CLEAN: Build Auras2 numeric rows via rowspec (UI-only)
+    local rows = {
+        { key = "x", label = "Offset X:", box = "$parentXBox", dy = -6, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+        { key = "y", label = "Offset Y:", box = "$parentYBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+        { key = "size", label = "Icon size:", box = "$parentSizeBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+        { key = "spacing", label = "Spacing:", box = "$parentSpacingBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+    }
+
+    -- Build the first four rows under the header
+    MSUF_EM_BuildNumericRows(pf, rows, frameHeader, "BOTTOMLEFT", 0, Apply, "Auras2Popup:LiveApply")
+
+    -- Backwards-compatible alias used by older code in this popup (not used elsewhere)
+    pf.sMinus, pf.sPlus = pf.spacingMinus, pf.spacingPlus
+
+    -- Boss-only option: edit Boss 1-5 together (default ON)
+    local bossTogether = CreateFrame('CheckButton', '$parentBossTogetherCheck', pf, 'UICheckButtonTemplate')
+    bossTogether:SetPoint('TOPLEFT', pf.spacingLabel, 'BOTTOMLEFT', 0, -6)
+    if bossTogether.text then
+        bossTogether.text:SetText('Boss 1-5 edit together')
+    elseif bossTogether.Text then
+        bossTogether.Text:SetText('Boss 1-5 edit together')
+    end
+    bossTogether:Hide()
+    pf.bossTogetherCheck = bossTogether
+
+    -- Remaining rows: stacks + cooldown text sizes
+    local rows2 = {
+        { key = "stackTextSize", label = "Text size (Stacks):", box = "$parentStackTextSizeBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+        { key = "cooldownTextSize", label = "Text size (Cooldown):", box = "$parentCooldownTextSizeBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+    }
+
+    -- Initially anchor stacks below spacing; sync code may re-anchor below bossTogetherCheck when visible
+    MSUF_EM_BuildNumericRows(pf, rows2, pf.spacingLabel, "BOTTOMLEFT", 0, Apply, "Auras2Popup:LiveApply")
+
+
+local function OnEnterPressed(self)
+        self:ClearFocus()
+        Apply()
+    end
+    MSUF_EM_BindKeyScripts(OnEnterPressed, nil,
+        pf.xBox, pf.yBox, pf.sizeBox, pf.spacingBox,
+        pf.stackTextSizeBox, pf.cooldownTextSizeBox
+    )
+
+-- Copy Settings Dropdown (bottom, like Unitframe/Castbar popups)
+local copyAuraLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+copyAuraLabel:SetPoint("BOTTOMLEFT", 15, 64)
+copyAuraLabel:SetText("Copy settings to:")
+if MSUF_PopupStyleLabel then MSUF_PopupStyleLabel(copyAuraLabel) end
+pf.copyAuraLabel = copyAuraLabel
+
+-- Ensure dropdown frames are created early so Midnight style can skin them even if this is the first popup opened
+if UIDropDownMenu_CreateFrames then
+    -- Create 1 level of dropdown frames (cheap)
+    pcall(UIDropDownMenu_CreateFrames, 1, 0)
+end
+
+local copyAuraDrop = CreateFrame("Frame", "$parentCopyAuraDrop", pf, "UIDropDownMenuTemplate")
+copyAuraDrop:SetPoint("LEFT", copyAuraLabel, "RIGHT", -2, -2)
+pf.copyAuraDrop = copyAuraDrop
+
+local function MSUF_A2_GetAuraCopyLabel(key)
+    if key == "target" then return "Target" end
+    if key == "focus" then return "Focus" end
+    if type(key) == "string" then
+        local n = key:match("^boss(%d+)$")
+        if n then return ("Boss %s"):format(n) end
+    end
+    return tostring(key or "")
+end
+
+local function MSUF_A2_IsBossAuraKey(key)
+    return (type(key) == "string") and key:match("^boss%d+$")
+end
+
+local function MSUF_A2_CopyAuraLayout(srcKey, dstKey)
+    if not srcKey or not dstKey or srcKey == dstKey then return end
+    MSUF_EM_EnsureDB()
+    if not MSUF_DB or not MSUF_DB.auras2 then return end
+
+    local a2db = MSUF_DB.auras2
+    a2db.shared = a2db.shared or {}
+    a2db.perUnit = a2db.perUnit or {}
+
+    if a2db.shared.bossEditTogether == nil then
+        a2db.shared.bossEditTogether = true
+    end
+
+    -- Use current popup checkbox if present (so user can toggle and immediately copy)
+    local bossTogether = (a2db.shared.bossEditTogether ~= false)
+    if pf.bossTogetherCheck and pf.bossTogetherCheck.IsShown and pf.bossTogetherCheck:IsShown() and pf.bossTogetherCheck.GetChecked then
+        bossTogether = (pf.bossTogetherCheck:GetChecked() and true) or false
+    end
+
+    local srcEff = srcKey
+    if MSUF_A2_IsBossAuraKey(srcKey) and bossTogether then
+        srcEff = "boss1"
+    end
+
+    a2db.perUnit[srcEff] = a2db.perUnit[srcEff] or {}
+    local srcConf = a2db.perUnit[srcEff]
+    srcConf.layout = srcConf.layout or {}
+    local srcLay = srcConf.layout
+
+    -- compute effective source values (falls back to shared)
+    local function eff(v, fallback)
+        if v ~= nil then return v end
+        return fallback
+    end
+
+    local sOffX = eff(srcLay.offsetX, a2db.shared.offsetX or 0)
+    local sOffY = eff(srcLay.offsetY, a2db.shared.offsetY or 0)
+    local sSize = eff(srcLay.iconSize, a2db.shared.iconSize or 26)
+    local sSpac = eff(srcLay.spacing,  a2db.shared.spacing or 2)
+    local sPerR = eff(srcLay.perRow,   a2db.shared.perRow or 12)
+    local sBuffY= eff(srcLay.buffOffsetY, a2db.shared.buffOffsetY or 30)
+    local sStSz = eff(srcLay.stackTextSize, a2db.shared.stackTextSize or 14)
+    local sCdSz = eff(srcLay.cooldownTextSize, a2db.shared.cooldownTextSize or 14)
+
+    local dstKeys
+    if MSUF_A2_IsBossAuraKey(dstKey) and bossTogether then
+        dstKeys = { "boss1","boss2","boss3","boss4","boss5" }
+    else
+        dstKeys = { dstKey }
+    end
+
+    for _, k in ipairs(dstKeys) do
+        a2db.perUnit[k] = a2db.perUnit[k] or {}
+        local dc = a2db.perUnit[k]
+        dc.layout = dc.layout or {}
+        dc.overrideLayout = true
+        -- Note: Copy size settings should not copy position offsets (Offset X/Y)
+        dc.layout.iconSize = sSize
+        dc.layout.spacing = sSpac
+        dc.layout.perRow = sPerR
+        dc.layout.buffOffsetY = sBuffY
+        dc.layout.stackTextSize = sStSz
+        dc.layout.cooldownTextSize = sCdSz
+
+        -- keep width/height unused in Auras2 (derived)
+        dc.layout.width = nil
+        dc.layout.height = nil
+
+        if type(_G.MSUF_Auras2_RefreshUnit) == "function" then
+            _G.MSUF_Auras2_RefreshUnit(k)
+        end
+    end
+end
+
+local function MSUF_A2_RefreshCopyAuraDropdown()
+    if not UIDropDownMenu_Initialize or not UIDropDownMenu_SetText then return end
+    if not pf or not pf.copyAuraDrop or not pf.copyAuraLabel then return end
+
+    local srcKey = pf.unit or "target"
+
+    local a2sharedTogether = true
+    if MSUF_DB and MSUF_DB.auras2 and MSUF_DB.auras2.shared then
+        if MSUF_DB.auras2.shared.bossEditTogether == nil then
+            MSUF_DB.auras2.shared.bossEditTogether = true
+        end
+        a2sharedTogether = (MSUF_DB.auras2.shared.bossEditTogether ~= false)
+    end
+    if pf.bossTogetherCheck and pf.bossTogetherCheck.IsShown and pf.bossTogetherCheck:IsShown() and pf.bossTogetherCheck.GetChecked then
+        a2sharedTogether = (pf.bossTogetherCheck:GetChecked() and true) or false
+    end
+
+    pf.copyAuraLabel:Show()
+    pf.copyAuraDrop:Show()
+
+    local placeholder = "Copy settings to..."
+    UIDropDownMenu_SetWidth(pf.copyAuraDrop, 170)
+    UIDropDownMenu_JustifyText(pf.copyAuraDrop, "LEFT")
+    UIDropDownMenu_SetText(pf.copyAuraDrop, placeholder)
+
+    local allKeys = { "target","focus","boss1","boss2","boss3","boss4","boss5" }
+
+    UIDropDownMenu_Initialize(pf.copyAuraDrop, function(self, level)
+        local info = UIDropDownMenu_CreateInfo()
+        info.notCheckable = true
+
+        for _, dstKey in ipairs(allKeys) do
+            local skip = (dstKey == srcKey)
+            -- If source is boss and we edit together, skipping all bosses avoids confusion.
+            if not skip and MSUF_A2_IsBossAuraKey(srcKey) and a2sharedTogether then
+                if MSUF_A2_IsBossAuraKey(dstKey) then
+                    skip = true
+                end
+            end
+            if not skip then
+                info.text = MSUF_A2_GetAuraCopyLabel(dstKey)
+                info.func = function()
+                    -- Commit current popup values first so we copy the latest numbers.
+                    if pf._msufAuras2Apply then
+                        pf._msufAuras2Apply()
+                    end
+                    MSUF_A2_CopyAuraLayout(srcKey, dstKey)
+                    UIDropDownMenu_SetText(pf.copyAuraDrop, placeholder)
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end
+    end)
+end
+
+pf.RefreshCopyAuraDropdown = MSUF_A2_RefreshCopyAuraDropdown
+
+    -- Bottom buttons
+    local cancelBtn = CreateFrame('Button', '$parentCancel', pf, 'UIPanelButtonTemplate')
+    cancelBtn:SetSize(120, 22)
+    cancelBtn:SetPoint('BOTTOMLEFT', pf, 'BOTTOMLEFT', 16, 16)
+    cancelBtn:SetText('Cancel')
+    if MSUF_EM_ForceWhiteButtonText then MSUF_EM_ForceWhiteButtonText(cancelBtn) end
+    cancelBtn:SetScript('OnClick', function()
+        if GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.xBox then pf.xBox:ClearFocus() end
+        if GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.yBox then pf.yBox:ClearFocus() end
+        if GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.sizeBox then pf.sizeBox:ClearFocus() end
+        if pf.spacingBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.spacingBox then pf.spacingBox:ClearFocus() end
+        if pf.stackTextSizeBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.stackTextSizeBox then pf.stackTextSizeBox:ClearFocus() end
+        if pf.cooldownTextSizeBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.cooldownTextSizeBox then pf.cooldownTextSizeBox:ClearFocus() end
+        pf:Hide()
+    end)
+    pf.cancelBtn = cancelBtn
+
+    local okayBtn = CreateFrame('Button', '$parentOkay', pf, 'UIPanelButtonTemplate')
+    okayBtn:SetSize(120, 22)
+    okayBtn:SetPoint('BOTTOMRIGHT', pf, 'BOTTOMRIGHT', -16, 16)
+    okayBtn:SetText('Okay')
+    if MSUF_EM_ForceWhiteButtonText then MSUF_EM_ForceWhiteButtonText(okayBtn) end
+    okayBtn:SetScript('OnClick', function()
+        Apply()
+        pf:Hide()
+    end)
+    pf.okayBtn = okayBtn
+
+    pf._msufAuras2Apply = Apply
+    -- Ensure Midnight EditMode styling is applied immediately (fixes: first-open shows default UI style)
+    if pf.HookScript and not pf.__msufAuraPopupStyleHooked then
+        pf.__msufAuraPopupStyleHooked = true
+        pf:HookScript("OnShow", function(self)
+            local Style = _G.MSUF_NS and _G.MSUF_NS.Style
+            if Style and Style.SkinEditModePopupFrame then
+                pcall(Style.SkinEditModePopupFrame, self)
+            elseif Style and Style.ScanAndSkinEditMode then
+                pcall(Style.ScanAndSkinEditMode)
+            end
+        end)
+    end
+
+    return pf
+end
+
+function _G.MSUF_SyncAuras2PositionPopup(unit)
+    local pf = _G.MSUF_Auras2PositionPopup
+    if not pf or not pf.IsShown or not pf:IsShown() then
+        return
+    end
+
+    local popupUnit = pf.unit or unit
+    if not popupUnit then
+        return
+    end
+    if unit and pf.unit and unit ~= pf.unit then
+        return
+    end
+
+    MSUF_EM_EnsureDB()
+    if not MSUF_DB or not MSUF_DB.auras2 then
+        return
+    end
+
+    if pf._msufAuras2PopupApplying or _G.MSUF__Auras2PopupApplying then
+        return
+    end
+    pf._msufAuras2PopupSyncing = true
+
+    local a2 = MSUF_DB.auras2
+    local shared = a2.shared or {}
+
+local isBoss = (type(popupUnit) == 'string') and popupUnit:match('^boss%d+$')
+    local popupUnitEff = popupUnit
+    if isBoss and shared.bossEditTogether ~= false then
+        popupUnitEff = 'boss1'
+    end
+
+if shared.bossEditTogether == nil then
+    shared.bossEditTogether = true
+end
+
+if pf.bossTogetherCheck then
+    if isBoss then
+        pf.bossTogetherCheck:Show()
+        if pf.bossTogetherCheck.SetChecked then
+            pf.bossTogetherCheck:SetChecked(shared.bossEditTogether ~= false)
+        end
+    else
+        pf.bossTogetherCheck:Hide()
+    end
+end
+
+-- Re-anchor the Stack Text Size row depending on boss toggle visibility
+if pf.stackTextSizeLabel and pf.spacingLabel and pf.bossTogetherCheck then
+    pf.stackTextSizeLabel:ClearAllPoints()
+    if isBoss and pf.bossTogetherCheck.IsShown and pf.bossTogetherCheck:IsShown() then
+        pf.stackTextSizeLabel:SetPoint('TOPLEFT', pf.bossTogetherCheck, 'BOTTOMLEFT', 0, -8)
+    else
+        pf.stackTextSizeLabel:SetPoint('TOPLEFT', pf.spacingLabel, 'BOTTOMLEFT', 0, -8)
+    end
+end
+
+    local uconf = (a2.perUnit and a2.perUnit[popupUnitEff]) or {}
+    local lay = uconf.layout or {}
+
+    local x = (uconf.overrideLayout and lay.offsetX ~= nil) and lay.offsetX or (shared.offsetX or 0)
+    local y = (uconf.overrideLayout and lay.offsetY ~= nil) and lay.offsetY or (shared.offsetY or 0)
+
+    local iconSize = (uconf.overrideLayout and lay.iconSize ~= nil) and lay.iconSize or (shared.iconSize or 26)
+    local spacing  = (uconf.overrideLayout and lay.spacing  ~= nil) and lay.spacing  or (shared.spacing  or 2)
+
+    local stackTextSize = (uconf.overrideLayout and lay.stackTextSize ~= nil) and lay.stackTextSize or (shared.stackTextSize or 14)
+    local cooldownTextSize = (uconf.overrideLayout and lay.cooldownTextSize ~= nil) and lay.cooldownTextSize or (shared.cooldownTextSize or 14)
+    iconSize = tonumber(iconSize) or 26
+    spacing  = tonumber(spacing)  or 2
+    stackTextSize = tonumber(stackTextSize) or 14
+    cooldownTextSize = tonumber(cooldownTextSize) or 14
+
+    x = MSUF_SanitizePopupOffset(x, 0)
+    y = MSUF_SanitizePopupOffset(y, 0)
+
+    if pf.xBox and not pf.xBox:HasFocus() then
+        pf.xBox:SetText(tostring(math.floor(x + 0.5)))
+    end
+    if pf.yBox and not pf.yBox:HasFocus() then
+        pf.yBox:SetText(tostring(math.floor(y + 0.5)))
+    end
+    if pf.sizeBox and not pf.sizeBox:HasFocus() then
+        pf.sizeBox:SetText(tostring(math.floor(iconSize + 0.5)))
+    end
+    if pf.spacingBox and not pf.spacingBox:HasFocus() then
+        pf.spacingBox:SetText(tostring(math.floor(spacing + 0.5)))
+    end
+    if pf.stackTextSizeBox and not pf.stackTextSizeBox:HasFocus() then
+        pf.stackTextSizeBox:SetText(tostring(math.floor(stackTextSize + 0.5)))
+    end
+    if pf.cooldownTextSizeBox and not pf.cooldownTextSizeBox:HasFocus() then
+        pf.cooldownTextSizeBox:SetText(tostring(math.floor(cooldownTextSize + 0.5)))
+    end
+
+    if pf.RefreshCopyAuraDropdown then
+        pf.RefreshCopyAuraDropdown()
+    end
+    pf._msufAuras2PopupSyncing = false
+end
+
+function _G.MSUF_OpenAuras2PositionPopup(unit, parent)
+    -- Wired up by Auras 2.0: Target, Focus, Boss1-5 (helper is unit-agnostic).
+    if not unit then
+        return
+    end
+    if unit ~= 'target' and unit ~= 'focus' and not (type(unit) == 'string' and unit:match('^boss%d+$')) then
+        return
+    end
+    if not _G.MSUF_UnitEditModeActive then
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        print('|cffffd700MSUF:|r Position/Größe kann im Kampf nicht geändert werden.')
+        return
+    end
+
+    if not MSUF_EM_EnsureDB() then
+        return
+    end
+    if not MSUF_DB then
+        return
+    end
+
+    MSUF_DB.auras2 = MSUF_DB.auras2 or {}
+    local a2 = MSUF_DB.auras2
+    a2.shared = a2.shared or {}
+    a2.perUnit = a2.perUnit or {}
+    a2.perUnit[unit] = a2.perUnit[unit] or {}
+    a2.perUnit[unit].layout = a2.perUnit[unit].layout or {}
+
+    local pf = _G.MSUF_A2_EnsureAuraPositionPopup()
+
+    local desiredParent = parent or UIParent
+    local needReposition = true
+    if pf.IsShown and pf:IsShown() then
+        if pf._msufLastA2Unit == unit and pf._msufLastA2Parent == desiredParent then
+            needReposition = false
+        end
+    end
+
+    pf.unit = unit
+    pf.parent = parent
+    pf._msufLastA2Unit = unit
+    pf._msufLastA2Parent = desiredParent
+
+    if pf.title and pf.title.SetText then
+        local suffix = MSUF_A2_GetAuraPopupTitleSuffix(unit)
+        pf.title:SetText('MSUF Edit – ' .. (suffix or 'Aura'))
+    end
+
+    if needReposition and type(MSUF_PositionPopupSmart) == 'function' then
+        MSUF_PositionPopupSmart(pf, desiredParent, 200)
+    end
+
+pf:Show()
+
+    -- Force correct popup skin even if this is the first popup opened this session.
+    local Style = _G.MSUF_NS and _G.MSUF_NS.Style
+    if Style and Style.SkinEditModePopupFrame then
+        pcall(Style.SkinEditModePopupFrame, pf)
+    elseif Style and Style.ScanAndSkinEditMode then
+        pcall(Style.ScanAndSkinEditMode)
+    end
+
+    if pf.RefreshCopyAuraDropdown then
+        pf.RefreshCopyAuraDropdown()
+    end
+
+    if type(_G.MSUF_SyncAuras2PositionPopup) == 'function' then
+        _G.MSUF_SyncAuras2PositionPopup(unit)
+    end
+end
+
+-- ---------------------------------------------------------
+-- Arrow-key nudging (Edit Mode only)
+-- ---------------------------------------------------------
+-- P0 goals:
+--  1) Never call SetPropagateKeyboardInput() (can be protected / causes ADDON_ACTION_BLOCKED)
+--  2) Never capture WASD or "all keyboard" (user must be able to move in Edit Mode)
+--  3) Only bind Arrow keys while MSUF Edit Mode is active, and always release on Exit/Cancel
+--
+-- Implementation: override bindings for UP/DOWN/LEFT/RIGHT -> a lightweight button click.
+-- This avoids a fullscreen keyboard-catcher frame entirely and keeps movement keys working.
+--
+-- Note: Uses globals deliberately to avoid hitting the "200 locals" limit in large files.
+
+-- ---------------------------------------------------------
+-- Arrow-key nudging (Edit Mode only)
+-- ---------------------------------------------------------
+-- P0 goals:
+--  1) Never call SetPropagateKeyboardInput() (can be protected / causes ADDON_ACTION_BLOCKED)
+--  2) Never capture WASD or "all keyboard" (user must be able to move in Edit Mode)
+--  3) Only bind Arrow keys while MSUF Edit Mode is active, and always release on Exit/Cancel
+--
+-- Implementation: Override bindings for UP/DOWN/LEFT/RIGHT -> click hidden direction buttons.
+-- IMPORTANT: SetOverrideBindingClick's "clickButton" parameter MUST be a real mouse button name
+-- ("LeftButton", "RightButton", ...). Using "UP"/"DOWN" there breaks the click entirely.
+--
+-- Note: Uses globals deliberately to avoid hitting the "200 locals" limit in large files.
+local MSUF_EM_GetCastbarOffsetKeys -- castbar offset key helper (used by snap + arrow-key nudging)
+
+if not _G.MSUF_EnableArrowKeyNudge then
+function _G.MSUF_EnableArrowKeyNudge(enable)
+        -- If a previous build created a fullscreen keyboard-catcher frame, hard-disable it.
+        if _G.MSUF_ArrowKeyNudgeFrame then
+            local old = _G.MSUF_ArrowKeyNudgeFrame
+            if old.EnableKeyboard then MSUF_FastCall(old.EnableKeyboard, old, false) end
+            if old.Hide then MSUF_FastCall(old.Hide, old) end
+            old.__msufHardKill = true
+        end
+
+        -- If a previous build created the single "direction token" button, hide it (we use 4 real click buttons now).
+        if _G.MSUF_ArrowKeyNudgeButton and _G.MSUF_ArrowKeyNudgeButton.Hide then
+            MSUF_FastCall(_G.MSUF_ArrowKeyNudgeButton.Hide, _G.MSUF_ArrowKeyNudgeButton)
+        end
+
+        if not _G.MSUF_ArrowKeyBindOwner then
+            local owner = CreateFrame("Frame", "MSUF_ArrowKeyBindOwner", UIParent)
+            _G.MSUF_ArrowKeyBindOwner = owner
+            owner:Hide()
+            owner.__msufPendingClear = false
+            owner:SetScript("OnEvent", function(self, event)
+                if event == "PLAYER_REGEN_ENABLED" then
+                    if self.__msufPendingClear then
+                        self.__msufPendingClear = false
+                        if ClearOverrideBindings then
+                            MSUF_FastCall(ClearOverrideBindings, self)
+                        end
+                    end
+                    if self.UnregisterEvent then
+                        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+                    end
+                end
+            end)
+        end
+
+        local function GetStep()
+            local step = 1
+            if IsAltKeyDown and IsAltKeyDown() then
+                if MSUF_GetCurrentGridStep then
+                    step = MSUF_GetCurrentGridStep()
+                else
+                    step = 20
+                end
+            elseif IsControlKeyDown and IsControlKeyDown() then
+                step = 10
+            elseif IsShiftKeyDown and IsShiftKeyDown() then
+                step = 5
+            end
+            step = tonumber(step) or 1
+            if step < 1 then step = 1 end
+            return step
+        end
+
+        local function NudgeTarget(dx, dy)
+            if not MSUF_UnitEditModeActive then return end
+            if InCombatLockdown and InCombatLockdown() then return end
+            if IsTyping and IsTyping() then return end
+            if not MSUF_EM_EnsureDB() then return end
+
+            if not MSUF_DB then return end
+
+            -- Prefer the currently open popup (castbar > unit), otherwise current edit unit key
+            local castPF = MSUF_CastbarPositionPopup
+            if castPF and castPF.IsShown and castPF:IsShown() and castPF.unit then
+                MSUF_DB.general = MSUF_DB.general or {}
+                local g = MSUF_DB.general
+
+                local unit = tostring(castPF.unit)
+                local s = GetStep()
+                local ndx, ndy = dx * s, dy * s
+
+                local xKey, yKey
+                if MSUF_EM_GetCastbarOffsetKeys then
+                    xKey, yKey = MSUF_EM_GetCastbarOffsetKeys(unit)
+                end
+                if not xKey or not yKey then
+                    return
+                end
+
+                g[xKey] = math.floor(((tonumber(g[xKey]) or 0) + ndx) + 0.5)
+                g[yKey] = math.floor(((tonumber(g[yKey]) or 0) + ndy) + 0.5)
+
+                MSUF_EditMode_RequestCastbarApply(unit)
+
+                if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
+                    _G.MSUF_SyncCastbarPositionPopup(unit)
+                end
+
+                if MSUF_UpdateCastbarEditInfo then
+                    MSUF_UpdateCastbarEditInfo()
+                end
+                return
+            end
+
+            local unitPF = MSUF_PositionPopup
+            local key = MSUF_CurrentEditUnitKey
+            if unitPF and unitPF.IsShown and unitPF:IsShown() and unitPF.unit and GetConfigKeyForUnit then
+                key = GetConfigKeyForUnit(unitPF.unit) or key
+            end
+            if not key then return end
+
+            local conf = MSUF_DB[key]
+            if not conf then return end
+
+            local s = GetStep()
+            local ndx, ndy = dx * s, dy * s
+
+            conf.offsetX = math.floor(((tonumber(conf.offsetX) or 0) + ndx) + 0.5)
+            conf.offsetY = math.floor(((tonumber(conf.offsetY) or 0) + ndy) + 0.5)
+
+            -- Important: use the known-good apply path so Player can't get stuck hidden after toggles
+            MSUF_EditMode_RequestUnitApply(key)
+
+            -- Keep popup fields in sync (prevents snap-back when Apply runs later)
+            if type(_G.MSUF_SyncUnitPositionPopup) == "function" then
+                _G.MSUF_SyncUnitPositionPopup(key, conf)
+            end
+
+            if MSUF_UpdateEditModeInfo then
+                MSUF_UpdateEditModeInfo()
+            end
+        end
+
+        local function EnsureButtons()
+            if _G.MSUF_ArrowKeyNudgeButtons then
+                return _G.MSUF_ArrowKeyNudgeButtons
+            end
+
+            local t = {}
+            _G.MSUF_ArrowKeyNudgeButtons = t
+
+            local function Make(dir, dx, dy)
+                local name = "MSUF_ArrowKeyNudgeButton_" .. dir
+                local b = CreateFrame("Button", name, UIParent)
+                t[dir] = b
+                b:Hide()
+                if b.RegisterForClicks then
+                    b:RegisterForClicks("AnyUp")
+                end
+                b:SetScript("OnClick", function()
+                    MSUF_SafeCall("ArrowKey:" .. dir, function()
+                        NudgeTarget(dx, dy)
+                    end)
+                end)
+            end
+
+            Make("UP", 0, 1)
+            Make("DOWN", 0, -1)
+            Make("LEFT", -1, 0)
+            Make("RIGHT", 1, 0)
+
+            return t
+        end
+
+        if enable then
+            -- Feature disabled due to repeated errors
+            if MSUF__SafeFeatureDisabled and MSUF__SafeFeatureDisabled["arrowKeys"] then
+                return
+            end
+
+            local owner = _G.MSUF_ArrowKeyBindOwner
+            if not owner then return end
+            owner:Show()
+
+            -- Ensure no stuck editbox focus blocks movement keys when entering Edit Mode
+            MSUF_FastCall(MSUF_EM_ClearKeyboardFocus)
+
+            -- Apply override bindings only out of combat. In combat we keep them as-is and nudging does nothing anyway.
+            if InCombatLockdown and InCombatLockdown() then
+                return
+            end
+
+            if ClearOverrideBindings then
+                MSUF_FastCall(ClearOverrideBindings, owner)
+            end
+
+            local btns = EnsureButtons()
+            if SetOverrideBindingClick and btns then
+                -- clickButton MUST be a real mouse button ("LeftButton"). Direction is encoded by using 4 distinct buttons.
+                MSUF_FastCall(SetOverrideBindingClick, owner, false, "UP", btns.UP:GetName(), "LeftButton")
+                MSUF_FastCall(SetOverrideBindingClick, owner, false, "DOWN", btns.DOWN:GetName(), "LeftButton")
+                MSUF_FastCall(SetOverrideBindingClick, owner, false, "LEFT", btns.LEFT:GetName(), "LeftButton")
+                MSUF_FastCall(SetOverrideBindingClick, owner, false, "RIGHT", btns.RIGHT:GetName(), "LeftButton")
+            end
+
+            MSUF_EM_SetArrowBindingsActive(true)
+
+            -- One-time per-session tip (if available)
+            if _G.MSUF_EditMode_ShowArrowKeyTip then
+                MSUF_FastCall(_G.MSUF_EditMode_ShowArrowKeyTip)
+            end
+        else
+            local owner = _G.MSUF_ArrowKeyBindOwner
+            if owner then
+                -- Always release bindings. If in combat, defer the clear.
+                if InCombatLockdown and InCombatLockdown() then
+                    owner.__msufPendingClear = true
+                    if owner.RegisterEvent then
+                        owner:RegisterEvent("PLAYER_REGEN_ENABLED")
+                    end
+                else
+                    if ClearOverrideBindings then
+                        MSUF_FastCall(ClearOverrideBindings, owner)
+                    end
+                end
+                owner:Hide()
+            end
+
+            MSUF_EM_SetArrowBindingsActive(false)
+        end
+    end
+end
+
+local MSUF_BlizzardEditHooked = false
+
+local MSUF_BlizzardEditHooked = false
+
+-- ---------------------------------------------------------
+-- Popup helpers (keep open during edits, but close on Edit Mode exit)
+-- ---------------------------------------------------------
+local function MSUF_CloseAllPositionPopups()
+    -- Phase 3A: if popup registry exists, prefer it (covers any future popups too).
+    if Edit and Edit.Popups and type(Edit.Popups.CloseAll) == "function" then
+        Edit.Popups.CloseAll()
+        return
+    end
+
+    -- Fallback: legacy known popups.
+    if MSUF_PositionPopup and MSUF_PositionPopup.Hide then
+        MSUF_PositionPopup:Hide()
+    end
+    if MSUF_CastbarPositionPopup and MSUF_CastbarPositionPopup.Hide then
+        MSUF_CastbarPositionPopup:Hide()
+    end
+    if GameTooltip and GameTooltip.Hide then
+        GameTooltip:Hide()
+    end
+    MSUF_EM_SetPopupOpen(false)
+end
+
+-- ---------------------------------------------------------
+-- Phase 2 refactor: deterministic Exit/Cancel cleanup order
+-- ---------------------------------------------------------
+-- Single exit path for MSUF Edit Mode to avoid state drift / stuck popups / stuck bindings.
+-- This MUST be safe in combat: secure visibility drivers are deferred by MSUF_EditMode_RequestVisibilityDrivers().
+local function MSUF_EditMode_ExitDeterministic(source, opts)
+    source = tostring(source or "exit")
+    opts = opts or {}
+    local inCombat = (InCombatLockdown and InCombatLockdown()) and true or false
+
+    -- Optional: apply pending changes once before exiting (ooc only by default).
+    if opts.flushPending and type(MSUF_EditMode_FlushPendingApplies) == "function" then
+        if (not inCombat) or opts.flushInCombat then
+            MSUF_SafeCall("Exit:FlushPending:" .. source, MSUF_EditMode_FlushPendingApplies)
+        end
+    end
+
+    -- Flip state first; this triggers combat-safe boss preview soft-hide via MSUF_EM_SetActive().
+    MSUF_EM_SetActive(false, nil)
+
+    -- Ensure boss castbar preview is hidden immediately (safe even in combat).
+    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+        MSUF_SafeCall("Exit:BossCastbarPreview:" .. source, _G.MSUF_UpdateBossCastbarPreview)
+    end
+
+    -- Always release arrow key override bindings on exit (deferred if in combat by the binding owner).
+    if _G and _G.MSUF_EnableArrowKeyNudge then
+        MSUF_SafeCall("Exit:ArrowKeysOff:" .. source, _G.MSUF_EnableArrowKeyNudge, false)
+    end
+
+    -- Clear selection + sizing flags.
+    MSUF_CurrentEditUnitKey = nil
+    MSUF_EditModeSizing = false
+
+    -- Close any open popups (safe to hide frames; non-protected).
+    MSUF_SafeCall("Exit:ClosePopups:" .. source, MSUF_CloseAllPositionPopups)
+
+    -- Visibility drivers (secure): always go through combat gate.
+    if type(MSUF_EditMode_RequestVisibilityDrivers) == "function" then
+        MSUF_EditMode_RequestVisibilityDrivers(false)
+    end
+
+    -- Best-effort: sync other edit-mode visuals.
+    if type(MSUF_SyncCastbarEditModeWithUnitEdit) == "function" then
+        MSUF_SafeCall("Exit:SyncCastbarEdit:" .. source, MSUF_SyncCastbarEditModeWithUnitEdit)
+    end
+    if type(MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
+        MSUF_SafeCall("Exit:SyncBossPreview:" .. source, MSUF_SyncBossUnitframePreviewWithUnitEdit)
+    end
+
+    if MSUF_GridFrame and MSUF_GridFrame.Hide then
+        MSUF_FastCall(MSUF_GridFrame.Hide, MSUF_GridFrame)
+    end
+
+    if MSUF_UpdateEditModeVisuals then
+        MSUF_SafeCall("Exit:Visuals:" .. source, MSUF_UpdateEditModeVisuals)
+    end
+    if MSUF_UpdateEditModeInfo then
+        MSUF_SafeCall("Exit:Info:" .. source, MSUF_UpdateEditModeInfo)
+    end
+
+    -- Hard teardown last (kill timers/listeners) so Edit Mode costs ~0 after exit.
+    MSUF_EditMode_HardTeardown()
+end
+
+function MSUF_SetMSUFEditModeFromBlizzard(active)
+    if _G and _G.MSUF_SuppressBlizzEditToMSUF then
+        return
+    end
+    MSUF_EM_EnsureDB()
+    if MSUF_DB and MSUF_DB.general and MSUF_DB.general.linkEditModes == false then
+        if not active then
+            -- Always close MSUF popups when Blizzard Edit Mode exits, even if modes are unlinked.
+            if type(MSUF_SafeAfter) == "function" then
+            MSUF_SafeAfter(0, "BlizzExit:ClosePopups", MSUF_CloseAllPositionPopups)
+        elseif C_Timer and C_Timer.After then
+            C_Timer.After(0, function() MSUF_FastCall(MSUF_CloseAllPositionPopups) end)
+        else
+            MSUF_CloseAllPositionPopups()
+        end
+        end
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        -- Allow a COMBAT-SAFE exit path (no SecureStateDriver calls).
+        -- Entering Edit Mode in combat stays blocked.
+        if active then
+            return
+        end
+        -- active == false: continue into exit flow; visibility drivers are deferred automatically.
+    end
+
+    if active then
+        if MSUF_UnitEditModeActive then
+            return
+        end
+
+        MSUF_EM_SetActive(true, "player")
+        if type(_G.MSUF_EM_EnsureSnapHooks) == "function" then
+            _G.MSUF_EM_EnsureSnapHooks()
+        end
+        MSUF_EditMode_StartCombatWarningListener()
+        if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(true) end
+        if type(MSUF_RefreshAllUnitVisibilityDrivers)=="function" then MSUF_EditMode_RequestVisibilityDrivers(true) end
+        if not MSUF_CurrentEditUnitKey then
+            MSUF_CurrentEditUnitKey = "player"
+        end
+        MSUF_FastCall(function() MSUF_EM_GetState().unitKey = MSUF_CurrentEditUnitKey end)
+
+        if type(MSUF_BeginEditModeTransaction) == "function" then
+            MSUF_BeginEditModeTransaction()
+        end
+
+        if type(MSUF_SyncCastbarEditModeWithUnitEdit) == "function" then
+            MSUF_SyncCastbarEditModeWithUnitEdit()
+        end
+        if type(MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
+            MSUF_SyncBossUnitframePreviewWithUnitEdit()
+        end
+
+        if MSUF_UpdateEditModeVisuals then
+            MSUF_UpdateEditModeVisuals()
+        end
+        if MSUF_UpdateEditModeInfo then
+            MSUF_UpdateEditModeInfo()
+        end
+
+    else
+        if not MSUF_UnitEditModeActive then
+            return
+        end
+        local function _doExit()
+            Edit.Flow.Exit("blizzard", { flushPending = true })
+        end
+
+        -- Taint/secure-stack guard: defer MSUF exit slightly so it runs after UIPanelManager finishes closing Blizzard Edit Mode.
+        -- Use MSUF_SafeAfter so the callback can be invalidated by HardTeardown if needed.
+        local delay = 0
+        if _G.EditModeManagerFrame and _G.EditModeManagerFrame.IsShown and _G.EditModeManagerFrame:IsShown() then
+            delay = 0.05
+        end
+        if type(MSUF_SafeAfter) == "function" then
+            MSUF_SafeAfter(delay, "BlizzExit:MSUFExit", _doExit)
+        elseif C_Timer and C_Timer.After then
+            C_Timer.After(delay, _doExit)
+        else
+            _doExit()
+        end
+    end
+end
+
+
+local function MSUF_EM_GetGridStepSafe(g)
+    local s = tonumber(g and g.editModeGridStep) or 16
+    if s < 1 then s = 1 end
+    return s
+end
+
+local function MSUF_EM_RoundToStep(v, step)
+    v = tonumber(v) or 0
+    step = tonumber(step) or 1
+    if step <= 1 then
+        return math.floor(v + 0.5)
+    end
+    return math.floor((v / step) + 0.5) * step
+end
+
+local function MSUF_EM_GetRect(f)
+    if not f or not f.IsShown or not f:IsShown() then
+        return
+    end
+    local l = f:GetLeft()
+    if not l then return end
+    local r = f:GetRight()
+    local b = f:GetBottom()
+    local t = f:GetTop()
+    if not r or not b or not t then return end
+    local cx = (l + r) * 0.5
+    local cy = (b + t) * 0.5
+    return l, r, b, t, cx, cy
+end
+
+-- ------------------------------------------------------------
+-- Snap visual feedback: guideline overlays
+-- ------------------------------------------------------------
+
+local MSUF_EM_SnapVLine
+local MSUF_EM_SnapHLine
+
+local function MSUF_EM_EnsureSnapGuides()
+    if MSUF_EM_SnapVLine and MSUF_EM_SnapHLine then return end
+
+    local parent = UIParent
+
+    MSUF_EM_SnapVLine = CreateFrame("Frame", nil, parent)
+    MSUF_EM_SnapVLine:SetFrameStrata("TOOLTIP")
+    MSUF_EM_SnapVLine:SetFrameLevel(9999)
+    MSUF_EM_SnapVLine:SetWidth(2)
+    MSUF_EM_SnapVLine:SetHeight(parent:GetHeight())
+    local vTex = MSUF_EM_SnapVLine:CreateTexture(nil, "OVERLAY")
+    vTex:SetAllPoints()
+    vTex:SetColorTexture(1, 1, 0, 0.55)
+    MSUF_EM_SnapVLine:Hide()
+
+    MSUF_EM_SnapHLine = CreateFrame("Frame", nil, parent)
+    MSUF_EM_SnapHLine:SetFrameStrata("TOOLTIP")
+    MSUF_EM_SnapHLine:SetFrameLevel(9999)
+    MSUF_EM_SnapHLine:SetHeight(2)
+    MSUF_EM_SnapHLine:SetWidth(parent:GetWidth())
+    local hTex = MSUF_EM_SnapHLine:CreateTexture(nil, "OVERLAY")
+    hTex:SetAllPoints()
+    hTex:SetColorTexture(1, 1, 0, 0.55)
+    MSUF_EM_SnapHLine:Hide()
+end
+
+local function MSUF_EM_ShowSnapGuides(x, y)
+    MSUF_EM_EnsureSnapGuides()
+    if x then
+        MSUF_EM_SnapVLine:ClearAllPoints()
+        MSUF_EM_SnapVLine:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x - 1, 0)
+        MSUF_EM_SnapVLine:SetHeight(UIParent:GetHeight())
+        MSUF_EM_SnapVLine:Show()
+    else
+        if MSUF_EM_SnapVLine then MSUF_EM_SnapVLine:Hide() end
+    end
+
+    if y then
+        MSUF_EM_SnapHLine:ClearAllPoints()
+        MSUF_EM_SnapHLine:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, y - 1)
+        MSUF_EM_SnapHLine:SetWidth(UIParent:GetWidth())
+        MSUF_EM_SnapHLine:Show()
+    else
+        if MSUF_EM_SnapHLine then MSUF_EM_SnapHLine:Hide() end
+    end
+end
+
+local function MSUF_EM_HideSnapGuides()
+    if MSUF_EM_SnapVLine then MSUF_EM_SnapVLine:Hide() end
+    if MSUF_EM_SnapHLine then MSUF_EM_SnapHLine:Hide() end
+end
+
+-- Module block: Edit.UI (snap guides)
+EM_UI.EnsureSnapGuides = EM_UI.EnsureSnapGuides or MSUF_EM_EnsureSnapGuides
+EM_UI.ShowSnapGuides   = EM_UI.ShowSnapGuides   or MSUF_EM_ShowSnapGuides
+EM_UI.HideSnapGuides   = EM_UI.HideSnapGuides   or MSUF_EM_HideSnapGuides
+
+-- ------------------------------------------------------------
+-- Target enumeration
+-- ------------------------------------------------------------
+
+local MSUF_EM_CastbarPreviewTargets = {
+    { "MSUF_PlayerCastbarPreview", "player" },
+    { "MSUF_TargetCastbarPreview", "target" },
+    { "MSUF_FocusCastbarPreview",  "focus"  },
+    { "MSUF_BossCastbarPreview",   "boss"   },
+}
+
+local function MSUF_EM_ForEachSnapTarget(includeCastbars, fn)
+    if type(fn) ~= "function" then return end
+
+    -- Unitframes
+    local frames = _G.MSUF_UnitFrames
+    if type(frames) == "table" then
+        for _, f in pairs(frames) do
+            if f and f.IsShown and f:IsShown() then
+                fn(f)
+            end
+        end
+    end
+
+    if not includeCastbars then return end
+
+    -- Castbar preview frames (only if present)
+    for i = 1, #MSUF_EM_CastbarPreviewTargets do
+        local gName = MSUF_EM_CastbarPreviewTargets[i][1]
+        local fr = _G[gName]
+        if fr and fr.IsShown and fr:IsShown() then
+            fn(fr)
+        end
+    end
+end
+
+-- Module block: Edit.Targets (enumeration)
+EM_Targets.ForEachSnapTarget = EM_Targets.ForEachSnapTarget or MSUF_EM_ForEachSnapTarget
+
+-- ------------------------------------------------------------
+-- Docking / snapping math
+-- ------------------------------------------------------------
+
+local function MSUF_EM_FindBestSnapDelta(movingFrame, threshold, gap, includeCastbars)
+    threshold = tonumber(threshold) or 10
+    gap = tonumber(gap) or 0
+
+    local ml, mr, mb, mt, mcx, mcy = MSUF_EM_GetRect(movingFrame)
+    if not ml then return 0, 0 end
+
+    local bestDx, bestDy = 0, 0
+    local bestScore = nil
+    local guideX, guideY = nil, nil
+
+    local function consider(dx, dy, gx, gy)
+        dx = tonumber(dx) or 0
+        dy = tonumber(dy) or 0
+        if dx == 0 and dy == 0 then return end
+        local score = math.abs(dx) + math.abs(dy)
+        if (bestScore == nil) or (score < bestScore) then
+            bestScore = score
+            bestDx, bestDy = dx, dy
+            guideX, guideY = gx, gy
+        end
+    end
+
+    MSUF_EM_ForEachSnapTarget(includeCastbars, function(t)
+        if t == movingFrame then return end
+
+        local tl, tr, tb, tt, tcx, tcy = MSUF_EM_GetRect(t)
+        if not tl then return end
+
+        -- Overlap check (with tiny tolerance)
+        local overlapX = (ml < tr - 1) and (mr > tl + 1)
+        local overlapY = (mb < tt - 1) and (mt > tb + 1)
+
+        -- If overlapping: propose a "push out" dock move (prevents stacking)
+        if overlapX and overlapY then
+            local dLeft   = (tl - gap) - mr
+            local dRight  = (tr + gap) - ml
+            local dBottom = (tb - gap) - mt
+            local dTop    = (tt + gap) - mb
+
+            local best = dLeft
+            local bestAxis = "x"
+            if math.abs(dRight) < math.abs(best) then best, bestAxis = dRight, "x" end
+            if math.abs(dBottom) < math.abs(best) then best, bestAxis = dBottom, "y" end
+            if math.abs(dTop) < math.abs(best) then best, bestAxis = dTop, "y" end
+
+            if bestAxis == "x" then
+                consider(best, 0, (best < 0) and tl or tr, nil)
+            else
+                consider(0, best, nil, (best < 0) and tb or tt)
+            end
+        end
+
+        -- Edge + center alignment when close (magnet)
+        local candidates = {
+            { tl - gap, ml, "x" },
+            { tr + gap, mr, "x" },
+            { tl - gap, mr, "x" },
+            { tr + gap, ml, "x" },
+            { tcx, mcx, "x" },
+
+            { tb - gap, mb, "y" },
+            { tt + gap, mt, "y" },
+            { tb - gap, mt, "y" },
+            { tt + gap, mb, "y" },
+            { tcy, mcy, "y" },
+        }
+
+        for _, c in ipairs(candidates) do
+            local targetPos, myPos, axis = c[1], c[2], c[3]
+            local d = targetPos - myPos
+            if math.abs(d) <= threshold then
+                if axis == "x" then
+                    consider(d, 0, targetPos, nil)
+                else
+                    consider(0, d, nil, targetPos)
+                end
+            end
+        end
+    end)
+
+    if bestScore == nil then
+        return 0, 0
+    end
+
+    return bestDx, bestDy, guideX, guideY
+end
+
+-- Preferential snap against a single target (supports 2-axis docking combos)
+local function MSUF_EM_FindBestSnapDeltaAgainst(movingFrame, targetFrame, threshold, gap, preferVerticalOverlap)
+    threshold = tonumber(threshold) or 10
+    gap = tonumber(gap) or 0
+
+    local ml, mr, mb, mt, mcx, mcy = MSUF_EM_GetRect(movingFrame)
+    if not ml then return 0, 0 end
+
+    local tl, tr, tb, tt, tcx, tcy = MSUF_EM_GetRect(targetFrame)
+    if not tl then return 0, 0 end
+
+    local bestDx, bestDy = 0, 0
+    local bestScore = nil
+    local guideX, guideY = nil, nil
+
+    local function consider(dx, dy, gx, gy)
+        dx = tonumber(dx) or 0
+        dy = tonumber(dy) or 0
+        if dx == 0 and dy == 0 then return end
+        local score = math.abs(dx) + math.abs(dy)
+        if (bestScore == nil) or (score < bestScore) then
+            bestScore = score
+            bestDx, bestDy = dx, dy
+            guideX, guideY = gx, gy
+        end
+    end
+
+    -- Overlap check (with tiny tolerance)
+    local overlapX = (ml < tr - 1) and (mr > tl + 1)
+    local overlapY = (mb < tt - 1) and (mt > tb + 1)
+
+    if overlapX and overlapY then
+        local dLeft   = (tl - gap) - mr
+        local dRight  = (tr + gap) - ml
+        local dBottom = (tb - gap) - mt
+        local dTop    = (tt + gap) - mb
+
+        if preferVerticalOverlap then
+            -- For "owner" docking, prefer pushing above/below rather than sideways.
+            local best = dBottom
+            local gy = tb
+            if math.abs(dTop) < math.abs(best) then
+                best = dTop
+                gy = tt
+            end
+            consider(0, best, nil, gy)
+        else
+            local best = dLeft
+            local bestAxis = "x"
+            if math.abs(dRight) < math.abs(best) then best, bestAxis = dRight, "x" end
+            if math.abs(dBottom) < math.abs(best) then best, bestAxis = dBottom, "y" end
+            if math.abs(dTop) < math.abs(best) then best, bestAxis = dTop, "y" end
+
+            if bestAxis == "x" then
+                consider(best, 0, (best < 0) and tl or tr, nil)
+            else
+                consider(0, best, nil, (best < 0) and tb or tt)
+            end
+        end
+    end
+
+    -- Build candidate deltas (x/y) that are within threshold.
+    local xCands = {}
+    local yCands = {}
+
+    local function addX(targetPos, myPos)
+        local d = targetPos - myPos
+        if math.abs(d) <= threshold then
+            xCands[#xCands+1] = { d, targetPos }
+            consider(d, 0, targetPos, nil)
+        end
+    end
+
+    local function addY(targetPos, myPos)
+        local d = targetPos - myPos
+        if math.abs(d) <= threshold then
+            yCands[#yCands+1] = { d, targetPos }
+            consider(0, d, nil, targetPos)
+        end
+    end
+
+    -- X aligns
+    addX(tl - gap, ml)
+    addX(tr + gap, mr)
+    addX(tl - gap, mr)
+    addX(tr + gap, ml)
+    addX(tcx, mcx)
+
+    -- Y aligns
+    addY(tb - gap, mb)
+    addY(tt + gap, mt)
+    addY(tb - gap, mt)
+    addY(tt + gap, mb)
+    addY(tcy, mcy)
+
+    -- 2-axis combo docking (only if both axes are close)
+    for i = 1, #xCands do
+        local dx, gx = xCands[i][1], xCands[i][2]
+        for j = 1, #yCands do
+            local dy, gy = yCands[j][1], yCands[j][2]
+            consider(dx, dy, gx, gy)
+        end
+    end
+
+    if bestScore == nil then
+        return 0, 0
+    end
+
+    return bestDx, bestDy, guideX, guideY
+end
+
+local function MSUF_EM_ShiftFrameBy(frame, dx, dy)
+    if not frame or not frame.GetPoint then return end
+    local p, rel, rp, x, y = frame:GetPoint(1)
+    if not p then return end
+    frame:ClearAllPoints()
+    frame:SetPoint(p, rel, rp, (x or 0) + dx, (y or 0) + dy)
+end
+
+local function MSUF_EM_GetKeyForUnit(unit)
+    if not unit or type(unit) ~= "string" then return nil end
+    if unit:match("^boss%d+$") then return "boss" end
+    return unit
+end
+
+-- Module block: Edit.Dock (geometry + docking math)
+EM_Dock.GetRect                 = EM_Dock.GetRect                 or MSUF_EM_GetRect
+EM_Dock.ShiftFrameBy            = EM_Dock.ShiftFrameBy            or MSUF_EM_ShiftFrameBy
+EM_Dock.GetKeyForUnit           = EM_Dock.GetKeyForUnit           or MSUF_EM_GetKeyForUnit
+EM_Dock.ForEachSnapTarget       = EM_Dock.ForEachSnapTarget       or MSUF_EM_ForEachSnapTarget
+EM_Dock.FindBestSnapDelta       = EM_Dock.FindBestSnapDelta       or MSUF_EM_FindBestSnapDelta
+EM_Dock.FindBestSnapDeltaAgainst= EM_Dock.FindBestSnapDeltaAgainst or MSUF_EM_FindBestSnapDeltaAgainst
+
+-- ------------------------------------------------------------
+-- Apply snap (unitframes + castbar previews)
+-- ------------------------------------------------------------
+
+local function MSUF_EM_BeginSnap(self, isCastbar)
+    if not MSUF_UnitEditModeActive or not self or not self.isDragging then
+        MSUF_EM_HideSnapGuides()
+        return nil
+    end
+    if MSUF_EditModeSizing then
+        MSUF_EM_HideSnapGuides()
+        return nil
+    end
+    if isCastbar and self.dragMode and self.dragMode ~= "MOVE" then
+        -- Don't snap during sizing
+        MSUF_EM_HideSnapGuides()
+        return nil
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        MSUF_EM_HideSnapGuides()
+        return nil
+    end
+
+    local g, master, _, gridOn, framesOn = MSUF_EM_GetSnapConfig()
+    if not master then
+        MSUF_EM_HideSnapGuides()
+        return nil
+    end
+    return g, gridOn, framesOn
+end
+
+local function MSUF_EM_ApplyDragDelta(self, dx, dy)
+    if dx == 0 and dy == 0 then return end
+    self.dragStartOffsetX = (tonumber(self.dragStartOffsetX) or 0) + dx
+    self.dragStartOffsetY = (tonumber(self.dragStartOffsetY) or 0) + dy
+end
+
+local function MSUF_EM_SnapToGrid(curX, curY, step)
+    local sx = MSUF_EM_RoundToStep(curX, step)
+    local sy = MSUF_EM_RoundToStep(curY, step)
+    return sx, sy, (sx - curX), (sy - curY)
+end
+
+local function MSUF_EM_ApplyUnitframeSnap(self)
+    local g, gridOn, framesOn = MSUF_EM_BeginSnap(self, false)
+    if not g then return end
+
+    local key = MSUF_EM_GetKeyForUnit(self.unit) or "player"
+    local conf = MSUF_DB and MSUF_DB[key]
+    if not conf then
+        MSUF_EM_HideSnapGuides()
+        return
+    end
+
+    local totalDx, totalDy = 0, 0
+    local guideX, guideY
+
+    if gridOn then
+        local step = MSUF_EM_GetGridStepSafe(g)
+        local curX = tonumber(conf.offsetX) or 0
+        local curY = tonumber(conf.offsetY) or 0
+        local sx, sy, dx, dy = MSUF_EM_SnapToGrid(curX, curY, step)
+        if dx ~= 0 or dy ~= 0 then
+            conf.offsetX, conf.offsetY = sx, sy
+            MSUF_EM_ApplyDragDelta(self, dx, dy)
+            totalDx, totalDy = totalDx + dx, totalDy + dy
+        end
+    end
+
+    if framesOn then
+        local threshold = tonumber(g.editModeSnapFrameThreshold) or 10
+        local gap = tonumber(g.editModeSnapDockGap) or 0
+        local dx, dy, gx, gy = MSUF_EM_FindBestSnapDelta(self, threshold, gap, true)
+        if dx ~= 0 or dy ~= 0 then
+            conf.offsetX = (tonumber(conf.offsetX) or 0) + dx
+            conf.offsetY = (tonumber(conf.offsetY) or 0) + dy
+            MSUF_EM_ApplyDragDelta(self, dx, dy)
+            totalDx, totalDy = totalDx + dx, totalDy + dy
+            guideX, guideY = gx, gy
+        end
+    end
+
+    if totalDx ~= 0 or totalDy ~= 0 then
+        if key == "boss" and type(_G.MSUF_UnitFrames) == "table" then
+            for i = 1, 8 do
+                local bf = _G.MSUF_UnitFrames["boss" .. i]
+                if bf and bf.IsShown and bf:IsShown() then
+                    MSUF_EM_ShiftFrameBy(bf, totalDx, totalDy)
+                    MSUF_EM_ApplyDragDelta(bf, totalDx, totalDy)
+                end
+            end
+        else
+            MSUF_EM_ShiftFrameBy(self, totalDx, totalDy)
+        end
+
+        if type(_G.MSUF_SyncUnitPositionPopup) == "function" then
+            _G.MSUF_SyncUnitPositionPopup(key, conf)
+        end
+    end
+
+    if framesOn and (guideX or guideY) then
+        MSUF_EM_ShowSnapGuides(guideX, guideY)
+    else
+        MSUF_EM_HideSnapGuides()
+    end
+end
+
+MSUF_EM_GetCastbarOffsetKeys = function(kind)
+    if kind == "player" then
+        return "castbarPlayerOffsetX", "castbarPlayerOffsetY"
+    elseif kind == "target" then
+        return "castbarTargetOffsetX", "castbarTargetOffsetY"
+    elseif kind == "focus" then
+        return "castbarFocusOffsetX", "castbarFocusOffsetY"
+    elseif kind == "boss" then
+        return "bossCastbarOffsetX", "bossCastbarOffsetY"
+    end
+end
+
+local function MSUF_EM_ApplyCastbarSnap(self, kind)
+    local g, gridOn, framesOn = MSUF_EM_BeginSnap(self, true)
+    if not g then return end
+
+    local gen = MSUF_DB and MSUF_DB.general
+    if not gen then
+        MSUF_EM_HideSnapGuides()
+        return
+    end
+
+    local offsetXKey, offsetYKey = MSUF_EM_GetCastbarOffsetKeys(kind)
+    if not offsetXKey then
+        MSUF_EM_HideSnapGuides()
+        return
+    end
+
+    local totalDx, totalDy = 0, 0
+    local guideX, guideY
+
+    if gridOn then
+        local step = MSUF_EM_GetGridStepSafe(g)
+        local curX = tonumber(gen[offsetXKey]) or 0
+        local curY = tonumber(gen[offsetYKey]) or 0
+        local sx, sy, dx, dy = MSUF_EM_SnapToGrid(curX, curY, step)
+        if dx ~= 0 or dy ~= 0 then
+            gen[offsetXKey], gen[offsetYKey] = sx, sy
+            MSUF_EM_ApplyDragDelta(self, dx, dy)
+            totalDx, totalDy = totalDx + dx, totalDy + dy
+        end
+    end
+
+    if framesOn then
+        local threshold = tonumber(g.editModeSnapFrameThreshold) or 10
+        local gap = tonumber(g.editModeSnapDockGap) or 0
+
+        local preferred
+        local ufs = _G.MSUF_UnitFrames
+        if type(ufs) == "table" then
+            if kind == "boss" then
+                preferred = ufs.boss1 or ufs.boss
+            else
+                preferred = ufs[kind]
+            end
+        end
+
+        local dx, dy, gx, gy = 0, 0, nil, nil
+        if preferred and preferred.IsShown and preferred:IsShown() then
+            dx, dy, gx, gy = MSUF_EM_FindBestSnapDeltaAgainst(self, preferred, threshold, gap, true)
+        end
+        if dx == 0 and dy == 0 then
+            dx, dy, gx, gy = MSUF_EM_FindBestSnapDelta(self, threshold, gap, true)
+        end
+
+        if dx ~= 0 or dy ~= 0 then
+            gen[offsetXKey] = (tonumber(gen[offsetXKey]) or 0) + dx
+            gen[offsetYKey] = (tonumber(gen[offsetYKey]) or 0) + dy
+            MSUF_EM_ApplyDragDelta(self, dx, dy)
+            totalDx, totalDy = totalDx + dx, totalDy + dy
+            guideX, guideY = gx, gy
+        end
+    end
+
+    if totalDx ~= 0 or totalDy ~= 0 then
+        -- IMPORTANT: do not reanchor again here (avoids flicker). The original drag handler already
+        -- reanchored once per tick; we just shift the preview so the snap is visible immediately.
+        MSUF_EM_ShiftFrameBy(self, totalDx, totalDy)
+
+        if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
+            _G.MSUF_SyncCastbarPositionPopup(kind)
+        end
+    end
+
+    if framesOn and (guideX or guideY) then
+        MSUF_EM_ShowSnapGuides(guideX, guideY)
+    else
+        MSUF_EM_HideSnapGuides()
+    end
+end
+
+-- ------------------------------------------------------------
+-- Drag-start wrapper (OnUpdate swaps during drag)
+-- ------------------------------------------------------------
+
+local function MSUF_EM_WrapOnUpdateForSnap(frame, kind, isUnitframe)
+    if not frame or not frame.GetScript or not frame.SetScript then return end
+
+    local cur = frame:GetScript("OnUpdate")
+    if type(cur) ~= "function" then return end
+
+    -- Avoid stacking wrappers
+    if frame._msufSnapWrappedOrig == cur then return end
+    if frame._msufSnapWrappedFunc == cur then return end
+
+    frame._msufSnapWrappedOrig = cur
+
+    local function wrapper(self, elapsed)
+        -- Call the original drag handler first.
+        if frame._msufSnapWrappedOrig then
+            frame._msufSnapWrappedOrig(self, elapsed)
+        end
+
+        -- Then apply snap post-processing.
+        if isUnitframe then
+            MSUF_EM_ApplyUnitframeSnap(self)
+        else
+            MSUF_EM_ApplyCastbarSnap(self, kind)
+        end
+    end
+
+    frame._msufSnapWrappedFunc = wrapper
+    frame:SetScript("OnUpdate", wrapper)
+end
+
+local function MSUF_EM_HookDragStart(frame, kind, isUnitframe)
+    if not frame or not frame.HookScript then return end
+    if frame._msufSnapDragHooked then return end
+    frame._msufSnapDragHooked = true
+
+    frame:HookScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
+        if not MSUF_UnitEditModeActive then return end
+        if InCombatLockdown and InCombatLockdown() then return end
+
+        -- Keep the top "Edit Unit" selector in sync when selecting by clicking/dragging frames.
+        if isUnitframe then
+            local u = self and (self.unit or (self.GetAttribute and self:GetAttribute("unit")))
+            local key = nil
+            if u and type(u) == "string" then
+                if type(GetConfigKeyForUnit) == "function" then
+                    key = GetConfigKeyForUnit(u)
+                end
+                if not key then
+                    if u:match("^boss%d+$") then
+                        key = "boss"
+                    elseif u == "targettarget" or u == "tot" then
+                        key = "targettarget"
+                    else
+                        key = u
+                    end
+                end
+            else
+                local n = self and self.GetName and self:GetName()
+                if n and type(n) == "string" then
+                    local raw = n:match("^MSUF_(.+)$")
+                    if raw then
+                        if raw:match("^boss%d+$") then
+                            key = "boss"
+                        else
+                            raw = string.lower(raw)
+                            if raw == "targetoftarget" or raw == "tot" then
+                                key = "targettarget"
+                            else
+                                key = raw
+                            end
+                        end
+                    end
+                end
+            end
+
+            if key and key ~= MSUF_CurrentEditUnitKey then
+                MSUF_CurrentEditUnitKey = key
+                if type(MSUF_FastCall) == "function" then
+                    MSUF_FastCall(function()
+                        MSUF_EM_GetState().unitKey = MSUF_CurrentEditUnitKey
+                    end)
+                else
+                    MSUF_EM_GetState().unitKey = MSUF_CurrentEditUnitKey
+                end
+                if MSUF_GridFrame and MSUF_GridFrame._msufSyncEditUnitSelector then
+                    MSUF_GridFrame._msufSyncEditUnitSelector()
+                end
+            end
+        end
+
+        -- Castbar previews: selecting/dragging a castbar preview should also switch the active Edit Unit.
+        if (not isUnitframe) and kind and type(kind) == "string" then
+            local key = kind
+            if key and key ~= MSUF_CurrentEditUnitKey then
+                MSUF_CurrentEditUnitKey = key
+                if type(MSUF_FastCall) == "function" then
+                    MSUF_FastCall(function()
+                        MSUF_EM_GetState().unitKey = MSUF_CurrentEditUnitKey
+                    end)
+                else
+                    MSUF_EM_GetState().unitKey = MSUF_CurrentEditUnitKey
+                end
+                if MSUF_GridFrame and MSUF_GridFrame._msufSyncEditUnitSelector then
+                    MSUF_GridFrame._msufSyncEditUnitSelector()
+                end
+                if type(MSUF_UpdateEditModeVisuals) == "function" then
+                    MSUF_UpdateEditModeVisuals()
+                end
+                if type(MSUF_UpdateEditModeInfo) == "function" then
+                    MSUF_UpdateEditModeInfo()
+                end
+            end
+        end
+
+        -- Track dragging explicitly (castbar previews use isDragging, unitframes too, but this helps cleanup).
+        self._msufEMSnapMouseDown = true
+
+        -- Delay one tick so the drag code can install its OnUpdate.
+        if type(MSUF_SafeAfter) == "function" then
+            MSUF_SafeAfter(0, "Snap:WrapOnUpdate", function()
+                if not self._msufEMSnapMouseDown then return end
+                if not MSUF_UnitEditModeActive then return end
+                MSUF_EM_WrapOnUpdateForSnap(self, kind, isUnitframe)
+            end, true)
+        elseif C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if not self._msufEMSnapMouseDown then return end
+                if not MSUF_UnitEditModeActive then return end
+                MSUF_EM_WrapOnUpdateForSnap(self, kind, isUnitframe)
+            end)
+        else
+            MSUF_EM_WrapOnUpdateForSnap(self, kind, isUnitframe)
+        end
+    end)
+
+    frame:HookScript("OnMouseUp", function(self, button)
+        if button ~= "LeftButton" then return end
+        self._msufEMSnapMouseDown = false
+        MSUF_EM_HideSnapGuides()
+    end)
+
+    frame:HookScript("OnHide", function(self)
+        self._msufEMSnapMouseDown = false
+        MSUF_EM_HideSnapGuides()
+    end)
+end
+
+-- Entry-point (called when EditMode activates + on ADDON_LOADED)
+local function MSUF_EM_EnsureSnapHooks()
+    if not MSUF_UnitEditModeActive then
+        MSUF_EM_HideSnapGuides()
+        return
+    end
+
+    -- Unitframes
+    local frames = _G.MSUF_UnitFrames
+    if type(frames) == "table" then
+        for _, f in pairs(frames) do
+            if f then
+                MSUF_EM_HookDragStart(f, nil, true)
+            end
+        end
+    end
+
+    -- Castbar previews
+    for i = 1, #MSUF_EM_CastbarPreviewTargets do
+        local gName = MSUF_EM_CastbarPreviewTargets[i][1]
+        local kind  = MSUF_EM_CastbarPreviewTargets[i][2]
+        local fr = _G[gName]
+        if fr then
+            MSUF_EM_HookDragStart(fr, kind, false)
+        end
+    end
+end
+
+-- Module block: Edit.Snap (runtime snapping + docking)
+EM_Snap.ApplyUnitframeSnap  = EM_Snap.ApplyUnitframeSnap  or MSUF_EM_ApplyUnitframeSnap
+EM_Snap.ApplyCastbarSnap    = EM_Snap.ApplyCastbarSnap    or MSUF_EM_ApplyCastbarSnap
+EM_Snap.WrapOnUpdateForSnap = EM_Snap.WrapOnUpdateForSnap or MSUF_EM_WrapOnUpdateForSnap
+EM_Snap.HookDragStart       = EM_Snap.HookDragStart       or MSUF_EM_HookDragStart
+EM_Snap.EnsureSnapHooks     = EM_Snap.EnsureSnapHooks     or MSUF_EM_EnsureSnapHooks
+
+_G.MSUF_EM_EnsureSnapHooks = MSUF_EM_EnsureSnapHooks
+
+_G.MSUF_EM_HookDragStart = MSUF_EM_HookDragStart
+
+local function MSUF_EM_CleanupSnapWrappers()
+    -- Hide any guides just in case
+    if type(MSUF_EM_HideSnapGuides) == "function" then
+        MSUF_EM_HideSnapGuides()
+    end
+
+    local function CleanupFrame(fr)
+        if not fr then return end
+        fr._msufEMSnapMouseDown = nil
+
+        if fr._msufSnapWrappedFunc then
+            local cur = (fr.GetScript and fr:GetScript("OnUpdate")) or nil
+            if cur == fr._msufSnapWrappedFunc and fr.SetScript then
+                fr:SetScript("OnUpdate", fr._msufSnapWrappedOrig)
+            end
+            fr._msufSnapWrappedOrig = nil
+            fr._msufSnapWrappedFunc = nil
+        end
+    end
+
+    -- Unitframes
+    if _G and type(_G.MSUF_UnitFrames) == "table" then
+        for _, f in pairs(_G.MSUF_UnitFrames) do
+            CleanupFrame(f)
+        end
+    end
+
+    -- Castbar previews
+    for i = 1, #MSUF_EM_CastbarPreviewTargets do
+        local gName = MSUF_EM_CastbarPreviewTargets[i][1]
+        CleanupFrame(_G and _G[gName])
+    end
+end
+
+_G.MSUF_EM_CleanupSnapWrappers = MSUF_EM_CleanupSnapWrappers
+
+-- Re-run snap-hook installation when other modules load.
+
+local function MSUF_EM_TryInstallCastbarPreviewBridge()
+    if _G.MSUF_EM_CastbarPreviewBridgeInstalled then return end
+
+    -- When the Castbars LoD module is loaded, it registers the preview edit handler builder.
+    -- The preview frames can be created *after* MSUF Edit Mode is already active (e.g. toggling
+    -- preview checkboxes while in Edit Mode). In that case our snap hooks would miss them.
+    --
+    -- Bridge: wrap the setup function so every time a preview gets its edit handlers,
+    -- we immediately attach snap hooks (and ensure snap targets include it).
+    local fn = _G.MSUF_SetupCastbarPreviewEditHandlers
+    if type(fn) ~= "function" then return end
+    if _G.MSUF_SetupCastbarPreviewEditHandlers_Impl then
+        _G.MSUF_EM_CastbarPreviewBridgeInstalled = true
+        return
+    end
+
+    _G.MSUF_SetupCastbarPreviewEditHandlers_Impl = fn
+    _G.MSUF_SetupCastbarPreviewEditHandlers = function(frame, kind, ...)
+        local r1, r2, r3, r4 = _G.MSUF_SetupCastbarPreviewEditHandlers_Impl(frame, kind, ...)
+
+        -- If Edit Mode is active, ensure this preview is snap-hooked immediately.
+        if MSUF_UnitEditModeActive then
+            if type(_G.MSUF_EM_HookDragStart) == "function" then
+                _G.MSUF_EM_HookDragStart(frame, kind, false)
+            end
+            if type(_G.MSUF_EM_EnsureSnapHooks) == "function" then
+                _G.MSUF_EM_EnsureSnapHooks()
+            end
+        end
+
+        return r1, r2, r3, r4
+    end
+
+    _G.MSUF_EM_CastbarPreviewBridgeInstalled = true
+end
+
+-- Try once at load (works if Castbars is already loaded), otherwise ADDON_LOADED will retry.
+MSUF_EM_TryInstallCastbarPreviewBridge()
+
+if not _G.MSUF_EM_SnapHooksEventFrame then
+    local ef = CreateFrame("Frame")
+    _G.MSUF_EM_SnapHooksEventFrame = ef
+    ef:RegisterEvent("ADDON_LOADED")
+    ef:SetScript("OnEvent", function()
+        if type(MSUF_EM_TryInstallCastbarPreviewBridge) == "function" then
+            MSUF_EM_TryInstallCastbarPreviewBridge()
+        end
+        if MSUF_UnitEditModeActive then
+            MSUF_EM_EnsureSnapHooks()
+        end
+    end)
+end
+
+if type(_G.MSUF_SyncCastbarEditModeWithUnitEdit) ~= "function" then
+    function _G.MSUF_SyncCastbarEditModeWithUnitEdit()
+        if type(MSUF_EM_EnsureDB) == "function" then
+            MSUF_EM_EnsureDB()
+        end
+        if not MSUF_DB or not MSUF_DB.general then
+            return
+        end
+
+        local g = MSUF_DB.general
+        g.castbarPlayerPreviewEnabled = MSUF_UnitEditModeActive and true or false
+
+        if g.castbarPlayerPreviewEnabled and type(_G.MSUF_EnsureCastbarsLoaded) == "function" then
+            _G.MSUF_EnsureCastbarsLoaded("msuf_edit_mode")
+        end
+
+        if type(_G.MSUF_UpdatePlayerCastbarPreview) == "function" then
+            _G.MSUF_UpdatePlayerCastbarPreview()
+        end
+        if type(_G.MSUF_UpdateTargetCastbarPreview) == "function" then
+            _G.MSUF_UpdateTargetCastbarPreview()
+        end
+        if type(_G.MSUF_UpdateFocusCastbarPreview) == "function" then
+            _G.MSUF_UpdateFocusCastbarPreview()
+        end
+        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            _G.MSUF_UpdateBossCastbarPreview()
+        end
+    end
+end
+
+if not _G.MSUF_SetMSUFEditModeDirect then
+    function _G.MSUF_SetMSUFEditModeDirect(active, unitKey)
+        if InCombatLockdown and InCombatLockdown() then
+            -- Entering in combat is blocked; EXIT is allowed (combat-safe), with deferred visibility driver cleanup.
+            if active then
+                return
+            end
+        end
+
+        MSUF_EM_EnsureDB()
+
+        if active then
+            -- already active: just update selected unit if provided
+            if MSUF_UnitEditModeActive then
+                if unitKey then
+                    MSUF_CurrentEditUnitKey = unitKey
+                end
+                if MSUF_UpdateEditModeVisuals then
+                    MSUF_UpdateEditModeVisuals()
+                end
+                if MSUF_UpdateEditModeInfo then
+                    MSUF_UpdateEditModeInfo()
+                end
+                return
+            end
+
+            MSUF_EM_SetActive(true, unitKey)
+            if type(_G.MSUF_Auras2_RefreshAll) == "function" then
+                _G.MSUF_Auras2_RefreshAll()
+            end
+            if type(_G.MSUF_EM_EnsureSnapHooks) == "function" then
+                _G.MSUF_EM_EnsureSnapHooks()
+            end
+            MSUF_EditMode_StartCombatWarningListener()
+            if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(true) end
+            if unitKey then
+                MSUF_CurrentEditUnitKey = unitKey
+            elseif not MSUF_CurrentEditUnitKey then
+                MSUF_CurrentEditUnitKey = "player"
+            end
+            MSUF_FastCall(function() MSUF_EM_GetState().unitKey = MSUF_CurrentEditUnitKey end)
+
+            if type(MSUF_RefreshAllUnitVisibilityDrivers) == "function" then
+                if type(MSUF_RefreshAllUnitVisibilityDrivers)=="function" then MSUF_EditMode_RequestVisibilityDrivers(true) end
+            end
+
+            if type(MSUF_BeginEditModeTransaction) == "function" then
+                MSUF_BeginEditModeTransaction()
+            end
+
+            if type(MSUF_SyncCastbarEditModeWithUnitEdit) == "function" then
+                MSUF_SyncCastbarEditModeWithUnitEdit()
+            end
+            if type(MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
+                MSUF_SyncBossUnitframePreviewWithUnitEdit()
+            end
+
+            if MSUF_UpdateEditModeVisuals then
+                MSUF_UpdateEditModeVisuals()
+            end
+            -- Respect "hide white arrows" toggle immediately on enter.
+            MSUF_EM_RefreshWhiteArrows()
+            if MSUF_UpdateEditModeInfo then
+                MSUF_UpdateEditModeInfo()
+            end
+
+        else
+            if not MSUF_UnitEditModeActive then
+                return
+            end
+            Edit.Flow.Exit("direct", { flushPending = true })
+            if type(_G.MSUF_Auras2_RefreshAll) == "function" then
+                _G.MSUF_Auras2_RefreshAll()
+            end
+        end
+    end
+end
+
+if not MSUF_HookBlizzardEditMode then
+MSUF_HookBlizzardEditMode = function()
+    if MSUF_BlizzardEditHooked then
+        return
+    end
+
+    if type(hooksecurefunc) ~= "function" then
+        return
+    end
+
+    local em = _G.EditModeManagerFrame
+    if not em then
+        return
+    end
+
+local function MSUF_EM_GetBlizzEditModeActive()
+    if not em then
+        return false
+    end
+    if type(em.IsEditModeActive) == "function" then
+        local ok, v = pcall(em.IsEditModeActive, em)
+        if ok then
+            return v and true or false
+        end
+    end
+    if em.editModeActive ~= nil then
+        return em.editModeActive and true or false
+    end
+    if type(em.IsShown) == "function" then
+        return em:IsShown() and true or false
+    end
+    return false
+end
+
+local function MSUF_EM_SyncFromBlizzardSignal(tag)
+    local active = MSUF_EM_GetBlizzEditModeActive()
+    if em._msufLastBlizzActive ~= nil and em._msufLastBlizzActive == active then
+        return
+    end
+    em._msufLastBlizzActive = active
+
+    local _fn = (Edit and Edit.Flow and Edit.Flow.SetFromBlizzard) or MSUF_SetMSUFEditModeFromBlizzard
+    local callTag = "Hook:BlizzSignal:" .. tostring(tag or "unknown")
+
+    if type(MSUF_SafeAfter) == "function" then
+        MSUF_SafeAfter(0, callTag, function()
+            MSUF_SafeCall(callTag, _fn, active)
+            -- Ensure modules (Auras2 preview, etc.) see Blizzard Edit Mode transitions even when unlinked.
+            MSUF_EM_NotifyAnyEditMode()
+        end)
+    else
+        MSUF_SafeCall(callTag, _fn, active)
+        MSUF_EM_NotifyAnyEditMode()
+    end
+end
+
+if not em._msufHookedShowHide and type(em.HookScript) == "function" then
+    em._msufHookedShowHide = true
+    em:HookScript("OnShow", function()
+        MSUF_EM_SyncFromBlizzardSignal("OnShow")
+    end)
+    em:HookScript("OnHide", function()
+        MSUF_EM_SyncFromBlizzardSignal("OnHide")
+    end)
+end
+
+-- One initial sync to ensure we're aligned even if the Enter/Exit hooks change in a prepatch.
+MSUF_EM_SyncFromBlizzardSignal("Initial")
+
+    if type(em.EnterEditMode) == "function" then
+        hooksecurefunc(em, "EnterEditMode", function()
+            MSUF_EM_SyncFromBlizzardSignal("EnterEditMode")
+        end)
+    end
+
+    if type(em.ExitEditMode) == "function" then
+        hooksecurefunc(em, "ExitEditMode", function()
+            -- Taint/secure-stack guard: defer sync slightly so it runs after UIPanelManager finishes closing Blizzard Edit Mode.
+            if type(MSUF_SafeAfter) == "function" then
+                MSUF_SafeAfter(0.05, "Hook:ExitEditMode", function()
+                    MSUF_EM_SyncFromBlizzardSignal("ExitEditMode")
+                end)
+            elseif C_Timer and C_Timer.After then
+                C_Timer.After(0.05, function()
+                    MSUF_EM_SyncFromBlizzardSignal("ExitEditMode")
+                end)
+            else
+                MSUF_EM_SyncFromBlizzardSignal("ExitEditMode")
+            end
+        end)
+    elseif type(em.OnSystemClose) == "function" then
+        hooksecurefunc(em, "OnSystemClose", function()
+            if type(MSUF_SafeAfter) == "function" then
+                MSUF_SafeAfter(0.05, "Hook:ExitEditMode", function()
+                    MSUF_EM_SyncFromBlizzardSignal("ExitEditMode")
+                end)
+            elseif C_Timer and C_Timer.After then
+                C_Timer.After(0.05, function()
+                    MSUF_EM_SyncFromBlizzardSignal("ExitEditMode")
+                end)
+            else
+                MSUF_EM_SyncFromBlizzardSignal("ExitEditMode")
+            end
+        end)
+    end
+
+    MSUF_BlizzardEditHooked = true
+end
+end
+
+if type(MSUF_EventBus_Register) == "function" then
+MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_BLIZZ_EDITMODE_HOOK", function(event)
+    -- delayed hook; fail-open if anything is missing
+    MSUF_SafeAfter(0.8, "MSUF_HookBlizzardEditMode", MSUF_HookBlizzardEditMode)
+    MSUF_SafeAfter(2.0, "MSUF_HookBlizzardEditMode", MSUF_HookBlizzardEditMode)
+end, nil, true)
+else
+    -- Fallback: no EventBus available (load-order / standalone testing)
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_LOGIN")
+    f:SetScript("OnEvent", function()
+        MSUF_SafeAfter(0.8, "MSUF_HookBlizzardEditMode", MSUF_HookBlizzardEditMode)
+        MSUF_SafeAfter(2.0, "MSUF_HookBlizzardEditMode", MSUF_HookBlizzardEditMode)
+    end)
+end
+
+
+_G.MSUF_GetAnchorFrame = MSUF_GetAnchorFrame
+_G.MSUF_IsInEditMode = MSUF_IsInEditMode
+_G.MSUF_MakeBlizzardOptionsMovable = MSUF_MakeBlizzardOptionsMovable
+_G.MSUF_GetCurrentGridStep = MSUF_GetCurrentGridStep
+_G.MSUF_ResetCurrentEditUnit = MSUF_ResetCurrentEditUnit
+_G.MSUF_CreateGridFrame = MSUF_CreateGridFrame
+_G.MSUF_UpdateEditModeInfo = MSUF_UpdateEditModeInfo
+_G.MSUF_OpenPositionPopup = MSUF_OpenPositionPopup
+_G.MSUF_UpdateCastbarEditInfo = MSUF_UpdateCastbarEditInfo
+_G.MSUF_UpdateGridOverlay = MSUF_UpdateGridOverlay
+_G.MSUF_UpdateEditModeVisuals = MSUF_UpdateEditModeVisuals
+_G.MSUF_SyncUnitPositionPopup = MSUF_SyncUnitPositionPopup
+
+
+MSUF_EM_CombatSafeHideBossPreviewNow = function()
+    if not (InCombatLockdown and InCombatLockdown()) then
+        return
+    end
+
+    local bossEnabled = true
+    if MSUF_DB and MSUF_DB.boss and MSUF_DB.boss.enabled == false then
+        bossEnabled = false
+    end
+
+    local wantPreview = bossEnabled and (MSUF_UnitEditModeActive and true or false) and (MSUF_BossTestMode and true or false)
+    if wantPreview then
+        return
+    end
+
+    local max = _G.MSUF_MAX_BOSS_FRAMES or 5
+    for i = 1, max do
+        local unit = "boss" .. i
+        -- Never interfere with real boss units.
+        if not (UnitExists and UnitExists(unit)) then
+            local f = _G["MSUF_boss" .. i] or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit])
+            if f then
+                f.__msufSoftHidden = true
+                -- Soft-hide is safe in combat even for protected frames (no secure calls).
+                if f.EnableMouse then MSUF_FastCall(f.EnableMouse, f, false) end
+                if f.SetAlpha then MSUF_FastCall(f.SetAlpha, f, 0) end
+                if f.SetScale then MSUF_FastCall(f.SetScale, f, 0.001) end
+            end
+        end
+    end
+
+    MSUF__EditModePendingBossPreviewResync = true
+    -- Ensure we flush the hard-hide once combat ends.
+    if type(MSUF_EditMode_EnsureCombatListener) == "function" then
+        MSUF_EditMode_EnsureCombatListener()
+    end
+end
+
+-- ---------------------------------------------------------
+-- P0: Enforce boss preview soft-hide even if other updates change alpha/scale in combat
+-- ---------------------------------------------------------
+-- Some update paths may call UpdateSimpleUnitFrame() while in combat and overwrite alpha/scale.
+-- If a boss preview frame was soft-hidden, re-apply the soft hide after any UpdateSimpleUnitFrame() call.
+
+-- ---------------------------------------------------------
+-- P1: Boss unitframe preview fake portrait (when portraitMode is enabled)
+-- ---------------------------------------------------------
+-- The main unitframe update intentionally hides boss portraits when UnitExists("bossX") is false.
+-- In BossTestMode (preview), UpdateSimpleUnitFrame returns early with fake hp/name, but it doesn't
+-- populate a portrait. We provide a lightweight, edit-mode-only placeholder portrait here.
+local function MSUF_EM_ApplyFakeBossPortrait(frame)
+    if not frame or not frame.isBoss or not frame.portrait then
+        return
+    end
+    if not (MSUF_BossTestMode and MSUF_UnitEditModeActive) then
+        return
+    end
+
+    local unit = frame.unit
+    if unit and UnitExists and UnitExists(unit) then
+        -- Never override a real boss unit.
+        return
+    end
+
+    local conf = (MSUF_DB and MSUF_DB.boss) or nil
+    if not conf then
+        return
+    end
+
+    local mode = conf.portraitMode or "OFF"
+    if mode == "OFF" then
+        -- If the user turned portrait off, ensure it stays hidden in preview too.
+        if frame.portrait.Hide then MSUF_FastCall(frame.portrait.Hide, frame.portrait) end
+        frame.__msufFakePortraitMode = nil
+        return
+    end
+
+    -- Layout (LEFT/RIGHT) matches normal behavior.
+    if type(MSUF_UpdateBossPortraitLayout) == "function" then
+        MSUF_FastCall(MSUF_UpdateBossPortraitLayout, frame, conf)
+    end
+
+    -- Only touch the texture when needed to reduce flicker / redundant work.
+    if frame.__msufFakePortraitMode ~= mode then
+        frame.__msufFakePortraitMode = mode
+
+        if SetPortraitTexture and UnitExists and UnitExists("player") then
+            -- Simple: use player portrait as a stable placeholder.
+            MSUF_FastCall(SetPortraitTexture, frame.portrait, "player")
+        elseif SetPortraitToTexture then
+            MSUF_FastCall(SetPortraitToTexture, frame.portrait, "Interface\\ICONS\\INV_Misc_QuestionMark")
+        elseif frame.portrait.SetTexture then
+            MSUF_FastCall(frame.portrait.SetTexture, frame.portrait, "Interface\\ICONS\\INV_Misc_QuestionMark")
+        end
+    end
+
+    if frame.portrait.Show then
+        MSUF_FastCall(frame.portrait.Show, frame.portrait)
+    end
+end
+
+
+MSUF_EM_EnableUpdateSimpleUnitFrameHook = function(enable)
+    enable = enable and true or false
+
+    -- Enable hook
+    if enable then
+        if _G.MSUF_UpdateSimpleUnitFrame_MSUFHooked then
+            return
+        end
+        if type(_G.UpdateSimpleUnitFrame) ~= "function" then
+            return
+        end
+
+        _G.MSUF_UpdateSimpleUnitFrame_MSUFHooked = true
+        _G.MSUF_UpdateSimpleUnitFrame_Impl = _G.UpdateSimpleUnitFrame
+
+        _G.MSUF_UpdateSimpleUnitFrame_Wrapper = function(frame, ...)
+            local ok, r1, r2, r3, r4 = MSUF_FastCall(_G.MSUF_UpdateSimpleUnitFrame_Impl, frame, ...)
+
+            -- Only do any extra work while Edit Mode is active.
+            if MSUF_UnitEditModeActive then
+                -- Combat soft-hide enforcement (best-effort, skipped for protected frames).
+                if frame and frame.__msufSoftHidden and (InCombatLockdown and InCombatLockdown()) then
+                    local protected = (frame.IsProtected and frame:IsProtected()) and true or false
+                    if not protected then
+                        if frame.EnableMouse then MSUF_FastCall(frame.EnableMouse, frame, false) end
+                        if frame.SetAlpha then MSUF_FastCall(frame.SetAlpha, frame, 0) end
+                        if frame.SetScale then MSUF_FastCall(frame.SetScale, frame, 0.001) end
+                    end
+                end
+
+                -- Boss preview placeholder portrait (edit-mode only)
+                if ok then
+                    MSUF_EM_ApplyFakeBossPortrait(frame)
+                end
+            end
+
+            if ok then
+                return r1, r2, r3, r4
+            end
+            return nil
+        end
+
+        _G.UpdateSimpleUnitFrame = _G.MSUF_UpdateSimpleUnitFrame_Wrapper
+        return
+    end
+
+    -- Disable hook (restore original)
+    if not _G.MSUF_UpdateSimpleUnitFrame_MSUFHooked then
+        return
+    end
+
+    if _G.UpdateSimpleUnitFrame == _G.MSUF_UpdateSimpleUnitFrame_Wrapper and type(_G.MSUF_UpdateSimpleUnitFrame_Impl) == "function" then
+        _G.UpdateSimpleUnitFrame = _G.MSUF_UpdateSimpleUnitFrame_Impl
+    end
+
+    _G.MSUF_UpdateSimpleUnitFrame_MSUFHooked = nil
+    _G.MSUF_UpdateSimpleUnitFrame_Wrapper = nil
+    _G.MSUF_UpdateSimpleUnitFrame_Impl = nil
+end
+
+-- P0: Combat-safe boss unitframe preview hide
+-- ---------------------------------------------------------
+-- The boss unitframe preview ("Test Boss") is driven by MSUF_BossTestMode and uses secure visibility drivers.
+-- In combat, the default implementation returns early to avoid taint, which can leave the preview visible
+-- after exiting Edit Mode while still in combat.
+--
+-- Fix: When in combat AND the preview should be OFF, we do a "soft hide" (alpha/scale + mouse disable)
+-- for boss frames that do NOT represent a real boss unit. After combat ends, we resync once to hard-hide.
+if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" and not _G.MSUF_SyncBossUnitframePreviewWithUnitEdit_CombatSafe then
+    _G.MSUF_SyncBossUnitframePreviewWithUnitEdit_CombatSafe = true
+    _G.MSUF_SyncBossUnitframePreviewWithUnitEdit_Impl = _G.MSUF_SyncBossUnitframePreviewWithUnitEdit
+
+    _G.MSUF_SyncBossUnitframePreviewWithUnitEdit = function(...)
+        local ok, err = MSUF_FastCall(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit_Impl, ...)
+        if not ok then
+            if type(MSUF_EditMode_FatalDisable) == "function" then
+                MSUF_EditMode_FatalDisable("BossPreviewSync", err)
+            end
+            return
+        end
+
+        local inCombat = (InCombatLockdown and InCombatLockdown()) and true or false
+        local max = _G.MSUF_MAX_BOSS_FRAMES or 5
+
+        if inCombat then
+            -- In combat, the underlying implementation may return early to avoid taint.
+            -- If the preview SHOULD be hidden (Edit Mode is off OR boss frames disabled OR test mode off),
+            -- we "soft-hide" the preview frames immediately (alpha/scale/mouse) without touching secure drivers.
+            local bossEnabled = true
+            if MSUF_DB and MSUF_DB.boss and MSUF_DB.boss.enabled == false then
+                bossEnabled = false
+            end
+
+            local wantPreview = bossEnabled and (MSUF_UnitEditModeActive and true or false) and (MSUF_BossTestMode and true or false)
+            if not wantPreview then
+                for i = 1, max do
+                    local unit = "boss" .. i
+                    -- Never interfere with real boss units.
+                    if not (UnitExists and UnitExists(unit)) then
+                        local f = _G["MSUF_boss" .. i] or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit])
+                        if f then
+                            f.__msufSoftHidden = true
+                local protected = (f.IsProtected and f:IsProtected()) and true or false
+                if not protected then
+                    if f.EnableMouse then MSUF_FastCall(f.EnableMouse, f, false) end
+                    if f.SetAlpha then MSUF_FastCall(f.SetAlpha, f, 0) end
+                    if f.SetScale then MSUF_FastCall(f.SetScale, f, 0.001) end
+                end
+                        end
+                    end
+                end
+
+                -- Ask for one post-combat resync to hard-hide.
+                MSUF__EditModePendingBossPreviewResync = true
+            end
+        else
+            -- Restore scale for any frame we soft-hid in combat.
+            for i = 1, max do
+                local unit = "boss" .. i
+                local f = _G["MSUF_boss" .. i] or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit])
+                if f and f.__msufSoftHidden then
+                    f.__msufSoftHidden = nil
+                    if f.EnableMouse then MSUF_FastCall(f.EnableMouse, f, true) end
+                    if f.SetAlpha then MSUF_FastCall(f.SetAlpha, f, 1) end
+                    if f.SetScale then MSUF_FastCall(f.SetScale, f, 1) end
+                end
+            end
+        end
+
+if MSUF_BossTestMode and MSUF_UnitEditModeActive then
+    for i = 1, max do
+        local unit = "boss" .. i
+        if not (UnitExists and UnitExists(unit)) then
+            local f = _G["MSUF_boss" .. i] or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit])
+            if f then
+                MSUF_EM_ApplyFakeBossPortrait(f)
+            end
+        end
+    end
+end
+
+    end
+end
+
+-- -------------------------------------------
+-- Entry-point wrappers (fail-open)
+-- -------------------------------------------
+if type(MSUF_SetMSUFEditModeFromBlizzard) == "function" and not _G.MSUF_SetMSUFEditModeFromBlizzard_Impl then
+    _G.MSUF_SetMSUFEditModeFromBlizzard_Impl = MSUF_SetMSUFEditModeFromBlizzard
+    MSUF_SetMSUFEditModeFromBlizzard = function(active)
+        return MSUF_SafeCall("MSUF_SetMSUFEditModeFromBlizzard", _G.MSUF_SetMSUFEditModeFromBlizzard_Impl, active)
+    end
+end
+
+if type(_G.MSUF_SetMSUFEditModeDirect) == "function" and not _G.MSUF_SetMSUFEditModeDirect_Impl then
+    _G.MSUF_SetMSUFEditModeDirect_Impl = _G.MSUF_SetMSUFEditModeDirect
+    _G.MSUF_SetMSUFEditModeDirect = function(active, unitKey)
+        return MSUF_SafeCall("MSUF_SetMSUFEditModeDirect", _G.MSUF_SetMSUFEditModeDirect_Impl, active, unitKey)
+    end
+end
+-- -------------------------------------------
+-- Additional fail-open wrappers (popups)
+-- -------------------------------------------
+if type(_G.MSUF_OpenPositionPopup) == "function" and not _G.MSUF_OpenPositionPopup_Impl then
+    _G.MSUF_OpenPositionPopup_Impl = _G.MSUF_OpenPositionPopup
+    _G.MSUF_OpenPositionPopup = function(...)
+        return MSUF_SafeCall("Popup:OpenUnit", _G.MSUF_OpenPositionPopup_Impl, ...)
+    end
+end
+
+if type(MSUF_OpenCastbarPositionPopup) == "function" and not _G.MSUF_OpenCastbarPositionPopup_Impl then
+    _G.MSUF_OpenCastbarPositionPopup_Impl = MSUF_OpenCastbarPositionPopup
+    MSUF_OpenCastbarPositionPopup = function(...)
+        return MSUF_SafeCall("Popup:OpenCastbar", _G.MSUF_OpenCastbarPositionPopup_Impl, ...)
+    end
+end
+
+-- -------------------------------------------
+-- Phase 1 exports (non-breaking): expose key entry points under _G.MSUF_Edit
+-- -------------------------------------------
+do
+    -- Keep the existing, backward-compatible state plumbing.
+    Edit.State = MSUF_EM_GetState()
+    Edit.SyncLegacyFromState = MSUF_EM_SyncLegacyFromState
+    Edit.SetActive = MSUF_EM_SetActive
+    Edit.SetPopupOpen = MSUF_EM_SetPopupOpen
+
+    Edit.Transitions = Edit.Transitions or {}
+    Edit.Transitions.SetMSUFEditModeDirect = _G.MSUF_SetMSUFEditModeDirect
+
+    Edit.Arrow = Edit.Arrow or {}
+    Edit.Arrow.Enable = _G.MSUF_EnableArrowKeyNudge
+
+    Edit.Popups = Edit.Popups or {}
+    Edit.Popups.OpenPositionPopup = MSUF_OpenPositionPopup
+    -- Note: other popup helpers remain internal; this is just a stable entry point.
+
+    Edit.Secure = Edit.Secure or {}
+    Edit.Secure.MakeBlizzardOptionsMovable = MSUF_MakeBlizzardOptionsMovable
+
+    -- R1: Consolidated, stable "single-file modules" API surface
+    -- (Wrappers only; existing globals remain unchanged.)
+    Edit.Util = Edit.Util or {}
+    Edit.Util.SafeCall = Edit.Util.SafeCall or MSUF_SafeCall
+    Edit.Util.SafeAfter = Edit.Util.SafeAfter or MSUF_SafeAfter
+    Edit.Util.ClearKeyboardFocus = Edit.Util.ClearKeyboardFocus or MSUF_EM_ClearKeyboardFocus
+
+    Edit.Bind = Edit.Bind or {}
+    Edit.Bind.EnableArrowKeyNudge = Edit.Bind.EnableArrowKeyNudge or _G.MSUF_EnableArrowKeyNudge
+
+    Edit.Preview = Edit.Preview or {}
+    Edit.Preview.HideBossSoft = Edit.Preview.HideBossSoft or MSUF_EM_CombatSafeHideBossPreviewNow
+    Edit.Preview.UpdateBossCastbarPreview = Edit.Preview.UpdateBossCastbarPreview or _G.MSUF_UpdateBossCastbarPreview
+
+    -- R3: Snap/Dock/UI module handles (single-file; for maintenance & debugging)
+    Edit.UI = Edit.UI or EM_UI
+    Edit.Dock = Edit.Dock or EM_Dock
+    Edit.Snap = Edit.Snap or EM_Snap
+    Edit.Targets = Edit.Targets or EM_Targets
+
+    -- ---------------------------------------------------------
+    -- R2: Bundle ALL external edit-mode entry points behind Edit.Flow.
+    --     Globals remain as wrappers to preserve compatibility.
+    -- ---------------------------------------------------------
+    Edit.Flow = Edit.Flow or {}
+
+    -- Capture the *real* implementations (pre-wrapper) so Flow never recurses.
+    local implFromBlizzard = _G.MSUF_SetMSUFEditModeFromBlizzard_Impl or MSUF_SetMSUFEditModeFromBlizzard
+    local implDirect = _G.MSUF_SetMSUFEditModeDirect_Impl or _G.MSUF_SetMSUFEditModeDirect
+
+    -- Primary routed entry points (use the canonical SafeCall tags so fail-open works as intended).
+    Edit.Flow.SetFromBlizzard = function(active)
+        if not active then
+            local st = MSUF_EM_GetState()
+            if st and st.suppressNextBlizzardExit then
+                st.suppressNextBlizzardExit = false
+                return
+            end
+        end
+        return MSUF_SafeCall("MSUF_SetMSUFEditModeFromBlizzard", implFromBlizzard, active)
+    end
+
+    Edit.Flow.SetDirect = function(active, unitKey)
+        return MSUF_SafeCall("MSUF_SetMSUFEditModeDirect", implDirect, active, unitKey)
+    end
+
+    -- Convenience helpers (used by Options/commands; keeps behavior identical).
+    Edit.Flow.Enter = function(unitKey)
+        if Edit.Util and Edit.Util.ClearKeyboardFocus then
+            Edit.Util.ClearKeyboardFocus()
+        end
+        return Edit.Flow.SetDirect(true, unitKey or "player")
+    end
+
+    Edit.Flow.Exit = function(source, opts)
+        -- Deterministic, non-recursive exit path. Safe in and out of combat (secure work deferred).
+        if not opts then opts = { flushPending = true } end
+        if not MSUF_UnitEditModeActive and type(MSUF_CloseAllPositionPopups) == "function" then
+            -- Failsafe: even if state drifted, ensure popups are closed.
+            MSUF_CloseAllPositionPopups()
+        end
+        return MSUF_SafeCall("MSUF_EditMode_ExitDeterministic", MSUF_EditMode_ExitDeterministic, source or "flow", opts)
+    end
+
+    Edit.Flow.Toggle = function(unitKey)
+        if MSUF_UnitEditModeActive then
+            return Edit.Flow.Exit("toggle", { flushPending = true })
+        end
+        return Edit.Flow.Enter(unitKey)
+    end
+
+    -- Keep these direct references for internal reuse.
+    Edit.Flow.ExitDeterministic = Edit.Flow.ExitDeterministic or MSUF_EditMode_ExitDeterministic
+    Edit.Flow.RequestVisibilityDrivers = Edit.Flow.RequestVisibilityDrivers or MSUF_EditMode_RequestVisibilityDrivers
+
+    -- Route the global entry points through Flow (non-breaking).
+    if not _G.MSUF_EditMode_R2FlowRouted then
+        _G.MSUF_EditMode_R2FlowRouted = true
+
+        -- These wrappers ensure any external caller always hits the Flow gate.
+        MSUF_SetMSUFEditModeFromBlizzard = function(active)
+            return Edit.Flow.SetFromBlizzard(active)
+        end
+
+        _G.MSUF_SetMSUFEditModeDirect = function(active, unitKey)
+            return Edit.Flow.SetDirect(active, unitKey)
+        end
+
+        -- Keep Transition handle aligned with the routed wrapper.
+        Edit.Transitions.SetMSUFEditModeDirect = _G.MSUF_SetMSUFEditModeDirect
+    end
+end
