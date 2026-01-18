@@ -1097,7 +1097,13 @@ function MSUF_GetBarBackgroundTintRGBA()
     local r = MSUF_Clamp01(g.classBarBgR)
     local gg = MSUF_Clamp01(g.classBarBgG)
     local b = MSUF_Clamp01(g.classBarBgB)
-    local a = 0.9
+
+    -- Base background alpha (0..100), stored in Bars menu.
+    local bars = (MSUF_DB and MSUF_DB.bars) or {}
+    local ap = tonumber(bars.barBackgroundAlpha)
+    if type(ap) ~= "number" then ap = 90 end
+    if ap < 0 then ap = 0 elseif ap > 100 then ap = 100 end
+    local a = ap / 100
     if g.darkMode then
         local br = MSUF_Clamp01(g.darkBgBrightness)
         r, gg, b = r * br, gg * br, b * br
@@ -1119,7 +1125,11 @@ function MSUF_GetPowerBarBackgroundTintRGBA()
     local r = MSUF_Clamp01(ar)
     local gg = MSUF_Clamp01(ag)
     local b = MSUF_Clamp01(ab)
-    local a = 0.9
+    local bars = (MSUF_DB and MSUF_DB.bars) or {}
+    local ap = tonumber(bars.barBackgroundAlpha)
+    if type(ap) ~= "number" then ap = 90 end
+    if ap < 0 then ap = 0 elseif ap > 100 then ap = 100 end
+    local a = ap / 100
     if g.darkMode then
         local br = MSUF_Clamp01(g.darkBgBrightness)
         r, gg, b = r * br, gg * br, b * br
