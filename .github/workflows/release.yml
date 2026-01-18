@@ -1,0 +1,28 @@
+name: MSUF
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build AddOns zip
+        run: |
+          mkdir -p dist/AddOns
+          cp -R MidnightSimpleUnitFrames dist/AddOns/
+          cp -R MidnightSimpleUnitFrames_Castbars dist/AddOns/
+          cd dist
+          zip -r MSUF-${GITHUB_REF_NAME}.zip AddOns
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
