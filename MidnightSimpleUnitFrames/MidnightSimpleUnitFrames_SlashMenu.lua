@@ -2334,7 +2334,7 @@ local function MSUF_SelectCastbarSubPage(unitKey)
 end
 
 local MIRROR_PAGES = {
-    home     = { title = "Midnight Simple Unitframes (Beta Version 1.65b2)", nav = "Dashboard", build = nil },
+    home     = { title = "Midnight Simple Unitframes (Beta Version 1.65r1)", nav = "Dashboard", build = nil },
     main     = { title = "MSUF Options",  nav = "Options",  build = MSUF_EnsureMainOptionsPanelBuilt,
         select = function(subkey)
             if not subkey then return end
@@ -2515,62 +2515,156 @@ MSUF_MirrorSetHeaderHidden = function(panel, hidden)
         if panel.__MSUF_MirrorHiddenHeader then return end
         panel.__MSUF_MirrorHiddenHeader = {}
 
-	        -- NOTE: This can run on large Settings panels. Avoid allocations (no {GetChildren()} / {GetRegions()})
-	        -- and avoid deep recursion which can trigger "script ran too long".
-	        local stack = { panel }
-	        local sp = 1
-	        local maxNodes = 1200 -- safety cap; we only need to find a few header FontStrings
-	        local nodes = 0
+        -- NOTE: This can run on large Settings panels.
+        -- It needs to be efficient and avoid "script ran too long" errors.
+        -- Fast path: if we already discovered header targets for this panel once, just hide them.
+        local targets = panel.__MSUF_MirrorHeaderTargets
+        if type(targets) == "table" and #targets > 0 then
+            for i = 1, #targets do
+                local r = targets[i]
+                if r then
+                    panel.__MSUF_MirrorHiddenHeader[r] = (r.IsShown and r:IsShown()) and 1 or 0
+                    if r.Hide then r:Hide() end
+                end
+            end
+            return
+        end
 
-	        while sp > 0 do
-	            local frame = stack[sp]
-	            stack[sp] = nil
-	            sp = sp - 1
-	            if frame then
-	                nodes = nodes + 1
-	                if nodes > maxNodes then
-	                    break
-	                end
+        -- Lazy-init target cache.
+        if type(targets) ~= "table" then
+            targets = {}
+            panel.__MSUF_MirrorHeaderTargets = targets
+        end
 
-	                -- Regions (FontStrings)
-	                if frame.GetNumRegions and frame.GetRegions then
-	                    local nR = frame:GetNumRegions()
-	                    for i = 1, nR do
-	                        local r = select(i, frame:GetRegions())
-	                        if r and r.GetObjectType and r:GetObjectType() == "FontString" and r.GetText then
-	                            local t = r:GetText()
-	                            if type(t) == "string" and t ~= "" then
-	                                local tl = string.lower(t)
-	                                if string.find(tl, "midnight simple unit frames", 1, true)
-	                                    or string.find(tl, "beta version", 1, true)
-	                                    or string.find(tl, "early version", 1, true)
-	                                    or string.find(tl, "thank you for using", 1, true) then
-	                                    panel.__MSUF_MirrorHiddenHeader[r] = (r.IsShown and r:IsShown()) and 1 or 0
-	                                    if r.Hide then r:Hide() end
-	                                end
-	                            end
-	                        end
-	                    end
-	                end
+        -- Cancel any prior scan (defensive).
+        if panel.__MSUF_MirrorHeaderScanToken then
+            panel.__MSUF_MirrorHeaderScanToken = nil
+            panel.__MSUF_MirrorHeaderScanState = nil
+        end
 
-	                -- Children
-	                if frame.GetNumChildren and frame.GetChildren then
-	                    local nC = frame:GetNumChildren()
-	                    if nC and nC > 0 then
-	                        for i = 1, nC do
-	                            local c = select(i, frame:GetChildren())
-	                            if c then
-	                                sp = sp + 1
-	                                stack[sp] = c
-	                            end
-	                        end
-	                    end
-	                end
-	            end
-	        end
+        local function IsHeaderText(t)
+            if type(t) ~= "string" or t == "" then return false end
+            local tl = string.lower(t)
+            return string.find(tl, "midnight simple unit frames", 1, true)
+                or string.find(tl, "beta version", 1, true)
+                or string.find(tl, "early version", 1, true)
+                or string.find(tl, "thank you for using", 1, true)
+        end
+
+        local function ScanChunk()
+            -- Abort if we got unhidden/detached mid-scan.
+            if not panel.__MSUF_MirrorHiddenHeader then
+                panel.__MSUF_MirrorHeaderScanToken = nil
+                panel.__MSUF_MirrorHeaderScanState = nil
+                return
+            end
+
+            local token = panel.__MSUF_MirrorHeaderScanToken
+            if not token then
+                return
+            end
+
+            local st = panel.__MSUF_MirrorHeaderScanState
+            if type(st) ~= "table" then
+                st = {
+                    stack = { panel },
+                    sp = 1,
+                    nodes = 0,
+                    maxNodes = 450, -- hard safety cap; we only need a few header FontStrings
+                }
+                panel.__MSUF_MirrorHeaderScanState = st
+            end
+
+            local debugprofilestop = debugprofilestop
+            local t0 = debugprofilestop and debugprofilestop() or nil
+            local budgetMs = 1.0 -- tiny time slice to avoid "script ran too long"
+
+            local stack = st.stack
+            local sp = st.sp or 0
+            local nodes = st.nodes or 0
+            local maxNodes = st.maxNodes or 450
+
+            while sp > 0 do
+                if t0 and (debugprofilestop() - t0) >= budgetMs then
+                    break
+                end
+
+                local frame = stack[sp]
+                stack[sp] = nil
+                sp = sp - 1
+                if frame then
+                    nodes = nodes + 1
+                    if nodes > maxNodes then
+                        break
+                    end
+
+                    -- Regions (FontStrings)
+                    if frame.GetRegions then
+                        local regions = { frame:GetRegions() }
+                        for i = 1, #regions do
+                            local r = regions[i]
+                            if r and r.GetObjectType and r:GetObjectType() == "FontString" and r.GetText then
+                                local t = r:GetText()
+                                if IsHeaderText(t) then
+                                    panel.__MSUF_MirrorHiddenHeader[r] = (r.IsShown and r:IsShown()) and 1 or 0
+                                    if r.Hide then r:Hide() end
+                                    targets[#targets + 1] = r
+                                    -- We typically only have a handful; no need to keep scanning forever.
+                                    if #targets >= 6 then
+                                        nodes = maxNodes + 1
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    -- Children
+                    if frame.GetChildren then
+                        local children = { frame:GetChildren() }
+                        for i = 1, #children do
+                            local c = children[i]
+                            if c then
+                                sp = sp + 1
+                                stack[sp] = c
+                            end
+                        end
+                    end
+                end
+            end
+
+            st.sp = sp
+            st.nodes = nodes
+
+            -- If there's more to scan, yield and continue next frame.
+            if sp > 0 and nodes <= maxNodes and panel.__MSUF_MirrorHiddenHeader and panel.__MSUF_MirrorHeaderScanToken == token then
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(0, ScanChunk)
+                end
+                return
+            end
+
+            -- Done (or capped). Cleanup scan state.
+            panel.__MSUF_MirrorHeaderScanToken = nil
+            panel.__MSUF_MirrorHeaderScanState = nil
+        end
+
+        -- Kick off the time-sliced scan.
+        panel.__MSUF_MirrorHeaderScanToken = tostring(GetTime and GetTime() or math.random())
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, ScanChunk)
+        else
+            -- No timer API; do a minimal one-shot scan to avoid infinite work.
+            ScanChunk()
+        end
     else
         local st = panel.__MSUF_MirrorHiddenHeader
         if not st then return end
+
+        -- If a scan is still pending, kill it.
+        panel.__MSUF_MirrorHeaderScanToken = nil
+        panel.__MSUF_MirrorHeaderScanState = nil
+
         panel.__MSUF_MirrorHiddenHeader = nil
         for r, wasShown in pairs(st) do
             if r and wasShown == 1 then

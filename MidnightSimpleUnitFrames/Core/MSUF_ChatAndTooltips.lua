@@ -141,7 +141,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
         MSUF_PrintHelp()
         return
     end
-
+-- Should clean this up since we have now a button for full reset. 
     if cmd == "fullreset" then
         if not MSUF_FullResetPending then
             MSUF_FullResetPending = true

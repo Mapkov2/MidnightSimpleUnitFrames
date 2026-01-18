@@ -4,6 +4,7 @@
 --  - Per-class bar colors
 --  - Class Color bar background
 --  - NPC reaction colors
+--  - New colors for global settings added 
 
 local addonName, ns = ...
 ns = ns or {}
