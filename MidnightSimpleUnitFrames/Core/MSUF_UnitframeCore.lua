@@ -1929,8 +1929,6 @@ function _G.MSUF_UFCore_RefreshAllUnitEvents(force)
     Core.RefreshAllUnitEvents(force)
 end
 
-_G.MSUF_UFCore_HasToTInlineDriver = true
-
 function _G.MSUF_UFCore_NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
 end
