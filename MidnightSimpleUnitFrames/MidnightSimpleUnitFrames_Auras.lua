@@ -2825,13 +2825,12 @@ local function ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanen
             if disp ~= nil then
                 stackShown = true
 
-                if wantStack then
-                    -- Hide countdown numbers when we are certain this aura is stacked (only when it changes to avoid churn).
+                -- Keep Blizzard cooldown numbers visible even when stacks are shown (stacks are anchored top-right).
+                -- Stack availability can fluctuate in combat; hiding countdown numbers would make the timer appear to "drop out".
+                if icon._msufA2_hideCDNumbers ~= false then
+                    icon._msufA2_hideCDNumbers = false
                     if icon.cooldown and icon.cooldown.SetHideCountdownNumbers then
-                        if icon._msufA2_hideCDNumbers ~= true then
-                            icon._msufA2_hideCDNumbers = true
-                            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, true) -- replace center timer with stacks
-                        end
+                        SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
                     end
                 end
 
@@ -2925,12 +2924,9 @@ local function ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanen
     if icon.cooldown then
         SafeCall(icon.cooldown.Show, icon.cooldown)
 
-        -- IMPORTANT: Do not override the stack overlay decision.
-        -- If stacks are shown we must keep countdown numbers hidden, otherwise stacks get "killed"
-        -- whenever a Duration Object timer is applied.
+        -- Always show Blizzard cooldown countdown numbers (stacks are drawn separately).
         if icon.cooldown.SetHideCountdownNumbers then
-            local hideNums = (icon._msufA2_hideCDNumbers == true)
-            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, hideNums)
+            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
         end
 
         if icon._msufA2_lastSwipeWanted ~= swipeWanted then
@@ -2941,15 +2937,36 @@ local function ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanen
         -- Accuracy fix (secret-safe): always re-apply the Duration Object when we render.
         -- AuraInstanceIDs can stay stable across refreshes, but the expiration changes. Gating on auraInstanceID
         -- can therefore leave the Cooldown timer stale (stuck/incorrect). We do no time arithmetic or compares.
+        local prevAuraID = icon._msufA2_lastCooldownAuraInstanceID
+        local prevHadTimer = (icon._msufA2_lastHadTimer == true)
+
         icon._msufA2_lastCooldownAuraInstanceID = icon._msufAuraInstanceID
         hadTimer = MSUF_A2_TrySetCooldownFromAura(icon, unit, aura)
         icon._msufA2_lastHadTimer = hadTimer
+
         if not hadTimer then
-            pcall(icon.cooldown.Clear, icon.cooldown)
-            pcall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
-                                icon._msufA2_previewCooldownStart = nil
-                        icon._msufA2_previewCooldownDur = nil
-end
+            -- If we fail to fetch/apply a Duration Object for a timed aura, do NOT clear the cooldown immediately.
+            -- This avoids the visible countdown text "dropping out" for a few frames when aura data is restricted/late.
+            -- We only hard-clear when the aura is known to be non-expiring, or when this icon was recycled to a new aura
+            -- and we never successfully applied a timer for it (to prevent stale timers from previous icons).
+            local hasExpiration = MSUF_A2_AuraHasExpiration(unit, aura)
+            local sameAura = (prevAuraID ~= nil and prevAuraID == icon._msufAuraInstanceID)
+
+            local shouldClear = false
+            if hasExpiration == false then
+                shouldClear = true
+            elseif (not prevHadTimer) and (not sameAura) then
+                -- Freshly recycled icon with no successfully applied timer yet
+                shouldClear = true
+            end
+
+            if shouldClear then
+                pcall(icon.cooldown.Clear, icon.cooldown)
+                pcall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
+                icon._msufA2_previewCooldownStart = nil
+                icon._msufA2_previewCooldownDur = nil
+            end
+        end
     end
 
     -- Dispel border (secret-safe): just apply once.

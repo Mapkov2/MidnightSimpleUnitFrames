@@ -2,79 +2,275 @@
 -- Extracted from MidnightSimpleUnitFrames.lua (profiles + active profile state)
 
 local addonName, ns = ...
--- Compact codec (MSUF2: base64(deflate(cbor(table))))
+-- Compact codec (backward compatible)
+--
+-- New export format (preferred):
+--   MSUF3: base64(CBOR(table)) using Blizzard C_EncodingUtil
+--
+-- Legacy import formats supported:
+--   MSUF2: LibDeflate 'print-safe' encoding of deflate-compressed payload (common Wago/WA style)
+--   MSUF2: base64(deflate(CBOR(table))) from earlier internal experiments
+--
+-- Design goals:
+--   * Export always uses Blizzard (MSUF3) when available.
+--   * Import accepts MSUF3 + legacy MSUF2 variants automatically.
+--   * For MSUF2 print-safe, we decode the print alphabet ourselves and then use Blizzard
+--     DecompressString when available (no bundled LibDeflate needed).
+--   * Never fall back to legacy loadstring() for MSUF2/MSUF3 prefixes.
+
 do
-    local function MSUF_GetEncodingUtil()
+    local function GetEncodingUtil()
         local E = _G.C_EncodingUtil
         if type(E) ~= "table" then return nil end
         if type(E.SerializeCBOR) ~= "function" then return nil end
         if type(E.DeserializeCBOR) ~= "function" then return nil end
-        if type(E.CompressString) ~= "function" then return nil end
-        if type(E.DecompressString) ~= "function" then return nil end
         if type(E.EncodeBase64) ~= "function" then return nil end
         if type(E.DecodeBase64) ~= "function" then return nil end
+        -- Compress/Decompress are optional depending on branch/client.
         return E
     end
 
-    local function MSUF_EncodeCompactTable(tbl)
-        local E = MSUF_GetEncodingUtil()
+    local function GetDeflateEnum()
+        local Enum = _G.Enum
+        if Enum and Enum.CompressionMethod and Enum.CompressionMethod.Deflate then
+            return Enum.CompressionMethod.Deflate
+        end
+        return nil
+    end
+
+    local function StripWS(s)
+        return (s:gsub("%s+", ""))
+    end
+
+    -- LibDeflate's print-safe alphabet is 64 chars:
+    -- 0-9, A-Z, a-z, (, )
+    local _PRINT_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()"
+    local _PRINT_MAP
+
+    local function EnsurePrintMap()
+        if _PRINT_MAP then return _PRINT_MAP end
+        local t = {}
+        for i = 1, #_PRINT_ALPHABET do
+            t[_PRINT_ALPHABET:sub(i, i)] = i - 1
+        end
+        _PRINT_MAP = t
+        return t
+    end
+
+
+    -- Decode LibDeflate:EncodeForPrint output into raw bytes.
+    -- LibDeflate's print codec has existed in multiple implementations; to be robust,
+    -- we try BOTH bit-order variants (LSB-first and MSB-first) and accept whichever
+    -- yields a payload that successfully decompresses/deserializes.
+    local function DecodeForPrint_Variants(data)
+        if type(data) ~= "string" or data == "" then return nil, nil end
+        data = StripWS(data)
+        local map = EnsurePrintMap()
+
+        -- Variant A: LSB-first packing
+        local function decode_lsb()
+            local out, outLen = {}, 0
+            local acc, bits = 0, 0
+            for i = 1, #data do
+                local v = map[data:sub(i,i)]
+                if v == nil then return nil end
+                acc = acc + v * (2 ^ bits)
+                bits = bits + 6
+                while bits >= 8 do
+                    local b = acc % 256
+                    acc = (acc - b) / 256
+                    bits = bits - 8
+                    outLen = outLen + 1
+                    out[outLen] = string.char(b)
+                end
+            end
+            return table.concat(out)
+        end
+
+        -- Variant B: MSB-first packing
+        local function decode_msb()
+            local out, outLen = {}, 0
+            local acc, bits = 0, 0
+            for i = 1, #data do
+                local v = map[data:sub(i,i)]
+                if v == nil then return nil end
+                acc = acc * 64 + v
+                bits = bits + 6
+                while bits >= 8 do
+                    local shift = bits - 8
+                    local b = math.floor(acc / (2 ^ shift)) % 256
+                    -- keep only the remaining low bits
+                    acc = acc % (2 ^ shift)
+                    bits = shift
+                    outLen = outLen + 1
+                    out[outLen] = string.char(b)
+                end
+            end
+            return table.concat(out)
+        end
+
+        return decode_lsb(), decode_msb()
+    end
+
+    local function TryBlizzardDecompress(E, compressed)
+        if not E or type(compressed) ~= "string" then return nil end
+        if type(E.DecompressString) ~= "function" then return nil end
+
+        local method = GetDeflateEnum()
+        local ok, res
+        if method ~= nil then
+            ok, res = pcall(E.DecompressString, compressed, method)
+            if ok and type(res) == "string" then return res end
+        end
+        ok, res = pcall(E.DecompressString, compressed)
+        if ok and type(res) == "string" then return res end
+        return nil
+    end
+
+    local function TryBlizzardCompress(E, plain)
+        if not E or type(plain) ~= "string" then return nil end
+        if type(E.CompressString) ~= "function" then
+            return nil
+        end
+        local method = GetDeflateEnum()
+
+        local ok, res
+        if method ~= nil then
+            ok, res = pcall(E.CompressString, plain, method, 9)
+            if ok and type(res) == "string" then return res end
+            ok, res = pcall(E.CompressString, plain, method)
+            if ok and type(res) == "string" then return res end
+        end
+        ok, res = pcall(E.CompressString, plain)
+        if ok and type(res) == "string" then return res end
+        return nil
+    end
+
+    local function TryDeserialize(E, payload)
+        if not E or type(payload) ~= "string" then return nil end
+        -- 1) CBOR via Blizzard
+        local ok, tbl = pcall(E.DeserializeCBOR, payload)
+        if ok and type(tbl) == "table" then
+            return tbl
+        end
+
+        -- 2) AceSerializer (optional, if present)
+        if _G.LibStub and type(_G.LibStub.GetLibrary) == "function" then
+            local Ace = _G.LibStub:GetLibrary("AceSerializer-3.0", true)
+            if Ace and type(Ace.Deserialize) == "function" then
+                local ok2, success, t = pcall(Ace.Deserialize, payload)
+                if ok2 and success and type(t) == "table" then
+                    return t
+                end
+            end
+        end
+
+        -- 3) Very old MSUF legacy may have stored a Lua table literal.
+        --    Only attempt if it looks like a table (avoid executing arbitrary code).
+        local trimmed = payload:match("^%s*(.-)%s*$")
+        if trimmed and trimmed:sub(1,1) == "{" and trimmed:sub(-1) == "}" then
+            local fn = loadstring and loadstring("return " .. trimmed)
+            if fn then
+                local ok3, t = pcall(fn)
+                if ok3 and type(t) == "table" then
+                    return t
+                end
+            end
+        end
+
+        return nil
+    end
+
+    local function EncodeCompactTable(tbl)
+        local E = GetEncodingUtil()
         if not E then return nil end
 
         local ok1, bin = pcall(E.SerializeCBOR, tbl)
         if not ok1 or type(bin) ~= "string" then return nil end
 
-        local method = (_G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate) or nil
+        -- Prefer smaller strings when compression exists.
+        local payload = TryBlizzardCompress(E, bin) or bin
 
-        local ok2, comp
-        if method ~= nil then
-            ok2, comp = pcall(E.CompressString, bin, method, 9)
-            if not ok2 or type(comp) ~= "string" then
-                ok2, comp = pcall(E.CompressString, bin, method)
-            end
-        end
-        if not ok2 or type(comp) ~= "string" then
-            ok2, comp = pcall(E.CompressString, bin)
-        end
-        if not ok2 or type(comp) ~= "string" then return nil end
+        local ok2, b64 = pcall(E.EncodeBase64, payload)
+        if not ok2 or type(b64) ~= "string" then return nil end
 
-        local ok3, b64 = pcall(E.EncodeBase64, comp)
-        if not ok3 or type(b64) ~= "string" then return nil end
-
-        return "MSUF2:" .. b64
+        return "MSUF3:" .. b64
     end
 
-    local function MSUF_TryDecodeCompactString(str)
+    local function TryDecodeCompactString(str)
         if type(str) ~= "string" then return nil end
-        local b64 = str:match("^%s*MSUF2:%s*(.-)%s*$")
-        if not b64 then return nil end
-
-        local E = MSUF_GetEncodingUtil()
+        local E = GetEncodingUtil()
         if not E then return nil end
 
-        b64 = b64:gsub("%s+", "") -- allow pasted newlines
+        local s = str:match("^%s*(.-)%s*$")
+        if not s then return nil end
 
-        local ok1, comp = pcall(E.DecodeBase64, b64)
-        if not ok1 or type(comp) ~= "string" then return nil end
-
-        local method = (_G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate) or nil
-
-        local ok2, bin
-        if method ~= nil then
-            ok2, bin = pcall(E.DecompressString, comp, method)
+        -- MSUF3: base64(CBOR) [optionally compressed]
+        do
+            local b64 = s:match("^MSUF3:%s*(.+)$")
+            if b64 then
+                b64 = StripWS(b64)
+                local ok1, blob = pcall(E.DecodeBase64, b64)
+                if ok1 and type(blob) == "string" then
+                    local plain = TryBlizzardDecompress(E, blob) or blob
+                    local t = TryDeserialize(E, plain)
+                    if t then return t end
+                end
+                return nil
+            end
         end
-        if not ok2 or type(bin) ~= "string" then
-            ok2, bin = pcall(E.DecompressString, comp)
+
+        -- MSUF2: legacy variants
+        do
+            local payload = s:match("^MSUF2:%s*(.+)$")
+            if not payload then return nil end
+            payload = payload:gsub("^%s+", ""):gsub("%s+$", "")
+
+            -- 1) Try Blizzard base64 first (older internal MSUF2 variant)
+            local b64 = StripWS(payload)
+            local ok1, blob = pcall(E.DecodeBase64, b64)
+            if ok1 and type(blob) == "string" then
+                local plain = TryBlizzardDecompress(E, blob) or blob
+                local t = TryDeserialize(E, plain)
+                if t then return t end
+            end
+
+            -- 2) Try LibDeflate print-safe (Wago/WA style)
+            local raw_lsb, raw_msb = DecodeForPrint_Variants(payload)
+            if raw_lsb then
+                local plain = TryBlizzardDecompress(E, raw_lsb) or raw_lsb
+                local t = TryDeserialize(E, plain)
+                if t then return t end
+            end
+            if raw_msb then
+                local plain = TryBlizzardDecompress(E, raw_msb) or raw_msb
+                local t = TryDeserialize(E, plain)
+                if t then return t end
+            end
+
+
+            -- 3) Hard fallback: if LibDeflate is available (from another addon), try it.
+            local ld = _G.LibDeflate
+            if ld and type(ld.DecodeForPrint) == "function" and type(ld.DecompressDeflate) == "function" then
+                local okDec, raw = pcall(ld.DecodeForPrint, ld, payload)
+                if okDec and type(raw) == "string" then
+                    local okDecomp, plain = pcall(ld.DecompressDeflate, ld, raw)
+                    if okDecomp and type(plain) == "string" then
+                        local t = TryDeserialize(E, plain)
+                        if t then return t end
+                    else
+                        local t = TryDeserialize(E, raw)
+                        if t then return t end
+                    end
+                end
+            end
+
+            return nil
         end
-        if not ok2 or type(bin) ~= "string" then return nil end
-
-        local ok3, tbl = pcall(E.DeserializeCBOR, bin)
-        if not ok3 or type(tbl) ~= "table" then return nil end
-
-        return tbl
     end
 
-    _G.MSUF_EncodeCompactTable = _G.MSUF_EncodeCompactTable or MSUF_EncodeCompactTable
-    _G.MSUF_TryDecodeCompactString = _G.MSUF_TryDecodeCompactString or MSUF_TryDecodeCompactString
+    _G.MSUF_EncodeCompactTable = _G.MSUF_EncodeCompactTable or EncodeCompactTable
+    _G.MSUF_TryDecodeCompactString = _G.MSUF_TryDecodeCompactString or TryDecodeCompactString
 end
 
 function MSUF_GetCharKey()
@@ -886,7 +1082,16 @@ function MSUF_ImportFromString(str)
         end
     end
 
+
+    -- If this looks like a compact MSUF2/MSUF3 string, NEVER attempt loadstring.
+    local prefix = str:match("^%s*(MSUF%d+):")
+    if prefix == "MSUF2" or prefix == "MSUF3" then
+        print("|cffff0000MSUF:|r Import failed: could not decode compact profile string (" .. prefix .. ").")
+        return
+    end
+
     -- OLD PATH (Lua table string)
+
     local func, err = loadstring(str)
     if not func then
         func, err = loadstring("return " .. str)
@@ -940,6 +1145,13 @@ function MSUF_ImportLegacyFromString(str)
         end
     end
 
+    -- If this looks like a compact MSUF2/MSUF3 string, NEVER attempt loadstring.
+    local prefix = str:match("^%s*(MSUF%d+):")
+    if prefix == "MSUF2" or prefix == "MSUF3" then
+        print("|cffff0000MSUF:|r Legacy import failed: could not decode compact profile string (" .. prefix .. ").")
+        return
+    end
+
     local func, err = loadstring(str)
     if not func then
         func, err = loadstring("return " .. str)
@@ -963,6 +1175,12 @@ end
 _G.MSUF_ExportSelectionToString = _G.MSUF_ExportSelectionToString or MSUF_ExportSelectionToString
 _G.MSUF_ImportFromString        = _G.MSUF_ImportFromString        or MSUF_ImportFromString
 _G.MSUF_ImportLegacyFromString  = _G.MSUF_ImportLegacyFromString  or MSUF_ImportLegacyFromString
+
+-- Always expose the real implementations under stable, explicit names.
+-- This lets other modules (or load-order proxies) call the correct logic even if _G.MSUF_ImportFromString was set earlier.
+_G.MSUF_Profiles_ExportSelectionToString = MSUF_ExportSelectionToString
+_G.MSUF_Profiles_ImportFromString        = MSUF_ImportFromString
+_G.MSUF_Profiles_ImportLegacyFromString  = MSUF_ImportLegacyFromString
 
 if type(ns) == "table" then
     ns.MSUF_ExportSelectionToString = ns.MSUF_ExportSelectionToString or MSUF_ExportSelectionToString

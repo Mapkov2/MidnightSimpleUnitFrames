@@ -130,6 +130,10 @@ local MASK_UNIT_SWAP = bor(MASK_UNIT_EVENT_FALLBACK, DIRTY_VISUAL)
 
 local FramesByUnit = {}
 
+-- Forward decl (used by helpers above the definition). Without this,
+-- Lua resolves UFCore_EnsureDBOnce as a *global* inside GetConfForUnit.
+local UFCore_EnsureDBOnce
+
 local function InitUnitFlags(f)
     if not f or f._msufUnitFlagsInited then return end
     local u = f.unit
@@ -163,7 +167,7 @@ end
 -- DB bootstrap (keep EnsureDB/Migration out of hot paths)
 -- ------------------------------------------------------------
 
-local function UFCore_EnsureDBOnce()
+UFCore_EnsureDBOnce = function()
     local db = _G.MSUF_DB
     if db then
         Core._dbEnsured = true
