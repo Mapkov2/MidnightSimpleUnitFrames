@@ -974,6 +974,61 @@ MSUF_SkinButton = function(btn)
         fs:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA)
         if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 0.6) end
         if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
+    -- Keep label reliably visible (prevents 'hidden until hover' on some templates)
+        if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", 7) end
+        if fs.SetAlpha then fs:SetAlpha(1) end
+        if fs.Show then pcall(fs.Show, fs) end
+        if fs.GetText and fs.SetText then
+            local ok, t = pcall(fs.GetText, fs)
+            if ok then pcall(fs.SetText, fs, t or "") end
+        end
+    end
+
+    -- Never let the button get stuck invisible due to inherited alpha
+    if btn.SetAlpha then btn:SetAlpha(1) end
+
+    -- Self-heal on show (covers create-while-hidden + template alpha edge cases)
+    if btn.HookScript and not btn.__msufBtnShowFix then
+        btn.__msufBtnShowFix = true
+        btn:HookScript("OnShow", function(self)
+            if self.SetAlpha then self:SetAlpha(1) end
+            local f = self.GetFontString and self:GetFontString()
+            if f then
+                if f.Show then pcall(f.Show, f) end
+                if f.SetDrawLayer then f:SetDrawLayer("OVERLAY", 7) end
+                if f.SetAlpha then f:SetAlpha(1) end
+                if f.GetText and f.SetText then
+                    local ok, t = pcall(f.GetText, f)
+                    if ok then pcall(f.SetText, f, t or "") end
+                end
+            end
+            -- Re-apply base BG tint (in case alpha drifted)
+            if self._msufBtnBG and self._msufBtnBG_base then
+                local col = self._msufBtnBG_base
+                if self._msufBtnBG.SetVertexColor then
+                    self._msufBtnBG:SetVertexColor(col[1], col[2], col[3], col[4])
+                end
+            end
+        end)
+    end
+
+    -- Self-heal on hide too (OnLeave may not fire if the parent panel hides while hovered)
+    if btn.HookScript and not btn.__msufBtnHideFix then
+        btn.__msufBtnHideFix = true
+        btn:HookScript("OnHide", function(self)
+            if self.UnlockHighlight then pcall(self.UnlockHighlight, self) end
+            if self.SetButtonState then pcall(self.SetButtonState, self, "NORMAL") end
+            if self._msufBtnBG and self._msufBtnBG_base and self._msufBtnBG.SetVertexColor then
+                local col = self._msufBtnBG_base
+                self._msufBtnBG:SetVertexColor(col[1], col[2], col[3], col[4])
+            end
+            if self.SetAlpha then self:SetAlpha(1) end
+            local f = self.GetFontString and self:GetFontString()
+            if f then
+                if f.SetDrawLayer then f:SetDrawLayer("OVERLAY", 7) end
+                if f.SetAlpha then f:SetAlpha(1) end
+            end
+        end)
     end
 
     -- Preserve existing scripts

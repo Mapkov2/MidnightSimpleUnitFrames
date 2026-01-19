@@ -5468,11 +5468,6 @@ end
 
 -- Unit toggles: MSUF-style on/off buttons (avoid checkbox ticks for the compact Units row)
 local function CreateBoolToggleButtonPath(parent, label, x, y, width, height, getTbl, k1, k2, tooltip, postSet)
-    -- Clean, self-contained ON/OFF button used by the Auras menu.
-    -- Key design: do NOT rely on UIPanelButtonTemplate's internal FontString, because
-    -- late skin/style passes can restyle/hide it when switching categories/pages.
-    -- Instead we render our own label FontString and keep it stable.
-
     local function getter()
         local t = getTbl and getTbl()
         if not t then return nil end
@@ -5496,56 +5491,72 @@ local function CreateBoolToggleButtonPath(parent, label, x, y, width, height, ge
         if postSet then postSet(b) end
     end
 
-    local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    -- Rebuilt from scratch (no UIPanelButtonTemplate / no shared skinning).
+    -- This avoids rare Settings/CvarLayout repaint issues where template FontStrings
+    -- can appear invisible until the first hover.
+    local btn = CreateFrame("Button", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
     btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     btn:SetSize(width or 110, height or 22)
+    btn:EnableMouse(true)
 
-    -- Hide template label, we draw our own.
-    btn:SetText("")
-    local tplFS = (btn.GetFontString and btn:GetFontString()) or nil
-    if tplFS then
-        tplFS:SetText("")
-        tplFS:Hide()
-        tplFS:SetAlpha(0)
-    end
+    -- Background
+    local bg = btn:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.06, 0.06, 0.06, 0.85)
+    btn._msufBg = bg
 
-    -- Stable label.
-    local labelFS = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    labelFS:SetPoint("CENTER", btn, "CENTER", 0, 0)
-    labelFS:SetJustifyH("CENTER")
-    labelFS:SetJustifyV("MIDDLE")
-    labelFS:SetText(label)
-    if labelFS.SetDrawLayer then labelFS:SetDrawLayer("OVERLAY", 7) end
-    labelFS:Show()
-    labelFS:SetAlpha(1)
-    btn._msufA2_labelFS = labelFS
+    -- Border (match our simple 1px style)
+    local border = CreateFrame("Frame", nil, btn, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    border:SetAllPoints()
+    border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    border:SetBackdropBorderColor(0, 0, 0, 1)
+    btn._msufBorder = border
 
-    if type(_G.MSUF_SkinButton) == "function" then
-        -- Keep using the MSUF style (down-overlay, hover, etc.) if available.
-        pcall(_G.MSUF_SkinButton, btn)
-    end
+    -- Highlight overlay
+    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 1, 1, 0.06)
+    btn._msufHL = hl
+
+    -- Label (we own the FontString entirely)
+    local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    fs:SetJustifyH("CENTER")
+    fs:SetJustifyV("MIDDLE")
+    fs:SetText(label or "")
+    fs:SetAlpha(1)
+    btn._msufLabel = fs
+    btn._msufLabelText = label or ""
 
     local function ApplyVisual()
         local on = getter() and true or false
         btn.__msufOn = on
 
-        -- Represent ON state via the skinned "down" overlay.
-        if btn._msufBtnDown then
-            if on then btn._msufBtnDown:Show() else btn._msufBtnDown:Hide() end
-        end
-
-        local fs = btn._msufA2_labelFS
-        if fs and fs.SetTextColor then
-            fs:Show()
-            fs:SetAlpha(1)
-            if on then
-                fs:SetTextColor(0.2, 1, 0.2) -- ON = green
-            else
-                fs:SetTextColor(1, 0.2, 0.2) -- OFF = red
+        -- Ensure label always repaints (some settings layouts don't redraw until hover).
+        if btn._msufLabel then
+            btn._msufLabel:Show()
+            btn._msufLabel:SetAlpha(1)
+            btn._msufLabel:SetText(btn._msufLabelText or "")
+            if btn._msufLabel.SetDrawLayer then
+                btn._msufLabel:SetDrawLayer("OVERLAY", 7)
+            end
+            if btn._msufLabel.SetTextColor then
+                if on then
+                    btn._msufLabel:SetTextColor(0.2, 1, 0.2)
+                else
+                    btn._msufLabel:SetTextColor(1, 0.2, 0.2)
+                end
             end
         end
 
-        -- Avoid any accidental fading from external skin passes.
+        if btn._msufBg and btn._msufBg.SetColorTexture then
+            if on then
+                btn._msufBg:SetColorTexture(0.10, 0.10, 0.10, 0.92)
+            else
+                btn._msufBg:SetColorTexture(0.06, 0.06, 0.06, 0.85)
+            end
+        end
+
         btn:SetAlpha(1)
     end
 
@@ -5557,15 +5568,40 @@ local function CreateBoolToggleButtonPath(parent, label, x, y, width, height, ge
         ApplyVisual()
     end)
 
-    btn:SetScript("OnShow", ApplyVisual)
+    btn:SetScript("OnMouseDown", function(self)
+        if self._msufBg and self._msufBg.SetColorTexture then
+            self._msufBg:SetColorTexture(1, 1, 1, 0.08)
+        end
+    end)
 
-    -- Re-assert visuals on common interaction hooks (no timers, no OnUpdate).
-    btn:HookScript("OnMouseDown", ApplyVisual)
-    btn:HookScript("OnMouseUp", ApplyVisual)
+    btn:SetScript("OnMouseUp", function()
+        ApplyVisual()
+    end)
+
+    btn:SetScript("OnShow", function()
+        -- Defer one tick to survive Settings layout reflows.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, ApplyVisual)
+        else
+            ApplyVisual()
+        end
+    end)
+
+    btn:SetScript("OnHide", function(self)
+        -- Reset hover/press visuals so we never get "stuck" when switching menus.
+        self:SetButtonState("NORMAL")
+        if self._msufBg and self._msufBg.SetColorTexture then
+            self._msufBg:SetColorTexture(0.06, 0.06, 0.06, 0.85)
+        end
+        if self._msufLabel then
+            self._msufLabel:Show()
+            self._msufLabel:SetAlpha(1)
+            self._msufLabel:SetText(self._msufLabelText or "")
+        end
+    end)
 
     if tooltip then
         btn:SetScript("OnEnter", function(self)
-            ApplyVisual()
             if not GameTooltip then return end
             local owner = self
             local ok = pcall(GameTooltip.SetOwner, GameTooltip, owner, "ANCHOR_NONE")
@@ -5577,15 +5613,10 @@ local function CreateBoolToggleButtonPath(parent, label, x, y, width, height, ge
             GameTooltip:Show()
         end)
         btn:SetScript("OnLeave", function()
-            ApplyVisual()
             if GameTooltip then GameTooltip:Hide() end
         end)
-    else
-        btn:HookScript("OnEnter", ApplyVisual)
-        btn:HookScript("OnLeave", ApplyVisual)
     end
 
-    ApplyVisual()
     return btn
 end
 
