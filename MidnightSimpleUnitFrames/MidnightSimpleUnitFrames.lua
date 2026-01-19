@@ -485,6 +485,42 @@ local FONT_LIST = {
         path = "Fonts\\SKURRI.TTF",
     },
 }
+
+-- Bundled MSUF fonts (Media/Fonts) must be selectable even when LibSharedMedia
+-- is not installed. These entries use direct file paths and therefore do not
+-- depend on LSM.
+do
+    local base = "Interface\\AddOns\\" .. tostring(addonName) .. "\\Media\\Fonts\\"
+    local bundled = {
+        { key = "EXPRESSWAY",                 name = "Expressway Regular (MSUF)",          file = "Expressway Regular.ttf" },
+        { key = "EXPRESSWAY_BOLD",            name = "Expressway Bold (MSUF)",             file = "Expressway Bold.ttf" },
+        { key = "EXPRESSWAY_SEMIBOLD",        name = "Expressway SemiBold (MSUF)",         file = "Expressway SemiBold.ttf" },
+        { key = "EXPRESSWAY_EXTRABOLD",       name = "Expressway ExtraBold (MSUF)",        file = "Expressway ExtraBold.ttf" },
+        { key = "EXPRESSWAY_CONDENSED_LIGHT", name = "Expressway Condensed Light (MSUF)",  file = "Expressway Condensed Light.otf" },
+    }
+
+    local function HasFontKey(list, key)
+        if type(key) ~= "string" or key == "" then return false end
+        if type(list) ~= "table" then return false end
+        for i = 1, #list do
+            local t = list[i]
+            if t and t.key == key then
+                return true
+            end
+        end
+        return false
+    end
+
+    for _, info in ipairs(bundled) do
+        if not HasFontKey(FONT_LIST, info.key) then
+            table.insert(FONT_LIST, {
+                key  = info.key,
+                name = info.name,
+                path = base .. info.file,
+            })
+        end
+    end
+end
 _G.MSUF_FONT_LIST = _G.MSUF_FONT_LIST or FONT_LIST
 local MSUF_FONT_COLORS = {
     white     = {1.0, 1.0, 1.0},
@@ -2816,8 +2852,9 @@ local function MSUF_ApplyPowerGradient(frameOrTex)
 end
 
 
--- Power bar border (simple, secret-safe, layout-driven)
--- Toggle + thickness live in MSUF_DB.bars.
+-- Power bar separator line (uses the existing "power bar border" toggle + thickness).
+-- Instead of drawing a full frame border around the powerbar, we draw a clean overlay line
+-- between HP and Power by anchoring to the TOP edge of the powerbar.
 function _G.MSUF_ApplyPowerBarBorder(bar)
     if not bar then return end
     local bdb = (MSUF_DB and MSUF_DB.bars) or nil
@@ -2828,27 +2865,39 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
 
     local border = bar._msufPowerBorder
     if not border then
-        -- BackdropTemplate is required on modern clients for SetBackdrop.
-        border = CreateFrame('Frame', nil, bar, 'BackdropTemplate')
+        -- Keep using the historical storage key to avoid any external assumptions.
+        border = CreateFrame('Frame', nil, bar)
         border:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 2)
         border:EnableMouse(false)
         bar._msufPowerBorder = border
     end
 
-    if (not enabled) or (not border.SetBackdrop) then
+    if not enabled then
         if border.Hide then border:Hide() end
         return
     end
 
-    border:ClearAllPoints()
-    border:SetPoint('TOPLEFT', bar, 'TOPLEFT', -size, size)
-    border:SetPoint('BOTTOMRIGHT', bar, 'BOTTOMRIGHT', size, -size)
+    -- If an older build used Backdrop borders, clear them so only the separator line remains.
+    if border.SetBackdrop then
+        border:SetBackdrop(nil)
+    end
 
-    border:SetBackdrop({
-        edgeFile = 'Interface\\Buttons\\WHITE8x8',
-        edgeSize = size,
-    })
-    border:SetBackdropBorderColor(0, 0, 0, 1)
+    border:ClearAllPoints()
+    border:SetPoint('TOPLEFT', bar, 'TOPLEFT', 0, 0)
+    border:SetPoint('TOPRIGHT', bar, 'TOPRIGHT', 0, 0)
+    border:SetHeight(size)
+
+    local line = border._msufSeparatorLine
+    if not line and border.CreateTexture then
+        line = border:CreateTexture(nil, 'OVERLAY')
+        line:SetTexture('Interface\\Buttons\\WHITE8x8')
+        line:SetVertexColor(0, 0, 0, 1)
+        line:SetAllPoints(border)
+        border._msufSeparatorLine = line
+    elseif line and line.SetAllPoints then
+        line:SetAllPoints(border)
+    end
+
     border:Show()
 end
 

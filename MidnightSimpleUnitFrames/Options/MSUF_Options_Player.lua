@@ -329,7 +329,6 @@ local function MSUF_ApplyPortraitChoice(conf, choice)
     conf.portraitMode = "OFF"
 end
 
-
 local function MSUF_BindPortraitDropdown(panel, fieldName, IsFramesTabFn, EnsureKeyDBFn, ApplyFn)
     local dd = panel and panel[fieldName]
     if not dd or not UIDropDownMenu_Initialize then return end
@@ -340,6 +339,7 @@ local function MSUF_BindPortraitDropdown(panel, fieldName, IsFramesTabFn, Ensure
         if not conf then return end
 
         local choice = (btn and btn.value) or arg1 or "OFF"
+
         MSUF_ApplyPortraitChoice(conf, choice)
 
         -- Sync dropdown UI based on current frame config (not global state)
@@ -352,6 +352,16 @@ local function MSUF_BindPortraitDropdown(panel, fieldName, IsFramesTabFn, Ensure
         end
 
         if ApplyFn then ApplyFn() end
+
+        -- Hard-sync portrait visuals immediately. Some core paths skip portrait updates
+        -- when portraitMode is OFF, so we must explicitly hide the 3D model if it was
+        -- previously visible.
+        local getKey = panel and panel._msufGetCurrentKey
+        local key = (type(getKey) == "function") and getKey() or nil
+        local sync = _G and _G.MSUF_3DPortraits_SyncUnit
+        if key and type(sync) == "function" then
+            pcall(sync, key)
+        end
     end
 
     UIDropDownMenu_Initialize(dd, function(self, level)

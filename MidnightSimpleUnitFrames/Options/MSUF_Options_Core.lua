@@ -1702,7 +1702,10 @@ local function MSUF_CreateGradientDirectionPad(parent)
             end
         end
 
-        local enabled = (g.enableGradient ~= false)
+        -- Enable the D-pad when *either* gradient is enabled.
+        -- Bugfix: previously this was gated only by HP gradient (enableGradient), which made
+        -- the power-gradient controller unusable when HP gradient was turned off.
+        local enabled = ((g.enableGradient == true) or (g.enablePowerGradient == true))
         self:SetEnabledVisual(enabled)
     end
 
@@ -2945,10 +2948,8 @@ end
     UIDropDownMenu_Initialize(fontDrop, FontDropdown_Initialize)
     UIDropDownMenu_SetWidth(fontDrop, 180)
 
-		-- If LibSharedMedia is unavailable, keep this dropdown non-interactive to avoid invalid DB selections.
-		if not MSUF_GetLSM() then
-			UIDropDownMenu_DisableDropDown(fontDrop)
-		end
+			-- IMPORTANT: Do NOT disable this dropdown when LibSharedMedia is missing.
+			-- Users must still be able to pick Blizzard/bundled fonts from MSUF_FONT_LIST.
 
     fontDrop._msufButtonWidth = 180
     MSUF_MakeDropdownScrollable(fontDrop, 12)
@@ -6478,10 +6479,7 @@ local barTextureDrop
             MSUF_ExpandDropdownClickArea(barTextureDrop)
             barTextureDrop:SetPoint("TOPLEFT", barTextureLabel, "BOTTOMLEFT", -16, -4)
             UIDropDownMenu_SetWidth(barTextureDrop, BAR_DROPDOWN_WIDTH)
-			-- If LibSharedMedia is unavailable, keep this dropdown non-interactive to avoid invalid DB selections.
-			if not MSUF_GetLSM() then
-				UIDropDownMenu_DisableDropDown(barTextureDrop)
-			end
+			-- If LibSharedMedia is unavailable, we still allow choosing built-in Blizzard textures.
 
             barTextureDrop._msufButtonWidth = BAR_DROPDOWN_WIDTH
             barTextureDrop._msufTweakBarTexturePreview = true
@@ -6501,7 +6499,7 @@ local barTextureDrop
             MSUF_KillMenuPreviewBar(barTexturePreview)
             barTextureInfo = barGroup:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
             barTextureInfo:SetPoint("TOPLEFT", barTexturePreview, "BOTTOMLEFT", 0, -6)
-            barTextureInfo:SetText('Install "SharedMedia" (LibSharedMedia-3.0) to unlock more bar textures. Without it, the default Blizzard texture is used.')
+            barTextureInfo:SetText('Install "SharedMedia" (LibSharedMedia-3.0) to unlock more bar textures. Without it, you can still pick Blizzard built-in textures.')
 
             local function BarTexturePreview_Update(texName)
                 -- Prefer the global resolver (covers both built-ins and SharedMedia keys).
@@ -6623,10 +6621,7 @@ local barTextureDrop
             MSUF_ExpandDropdownClickArea(barBgTextureDrop)
             barBgTextureDrop:SetPoint("TOPLEFT", barBgTextureLabel, "BOTTOMLEFT", -16, -4)
             UIDropDownMenu_SetWidth(barBgTextureDrop, BAR_DROPDOWN_WIDTH)
-			-- If LibSharedMedia is unavailable, keep this dropdown non-interactive to avoid invalid DB selections.
-			if not MSUF_GetLSM() then
-				UIDropDownMenu_DisableDropDown(barBgTextureDrop)
-			end
+			-- If LibSharedMedia is unavailable, we still allow choosing built-in Blizzard textures.
 
             barBgTextureDrop._msufButtonWidth = BAR_DROPDOWN_WIDTH
             barBgTextureDrop._msufTweakBarTexturePreview = true
@@ -6739,15 +6734,9 @@ local barTextureDrop
             EnsureDB()
 
 
-			-- Keep dropdown interactivity in sync with LibSharedMedia availability.
-			local _lsm = MSUF_GetLSM()
-			if _lsm and type(_G.UIDropDownMenu_EnableDropDown) == "function" then
-				UIDropDownMenu_EnableDropDown(barTextureDrop)
-				UIDropDownMenu_EnableDropDown(barBgTextureDrop)
-			elseif not _lsm and type(_G.UIDropDownMenu_DisableDropDown) == "function" then
-				UIDropDownMenu_DisableDropDown(barTextureDrop)
-				UIDropDownMenu_DisableDropDown(barBgTextureDrop)
-			end
+			-- Always keep these dropdowns interactive.
+			-- If LibSharedMedia is present, users can pick from SharedMedia.
+			-- If not, they can still pick from the built-in Blizzard texture list.
 
             if type(UIDropDownMenu_SetWidth) == "function" then
                 UIDropDownMenu_SetWidth(barTextureDrop, 260)
