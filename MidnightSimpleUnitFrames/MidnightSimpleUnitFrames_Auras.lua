@@ -5468,6 +5468,11 @@ end
 
 -- Unit toggles: MSUF-style on/off buttons (avoid checkbox ticks for the compact Units row)
 local function CreateBoolToggleButtonPath(parent, label, x, y, width, height, getTbl, k1, k2, tooltip, postSet)
+    -- Clean, self-contained ON/OFF button used by the Auras menu.
+    -- Key design: do NOT rely on UIPanelButtonTemplate's internal FontString, because
+    -- late skin/style passes can restyle/hide it when switching categories/pages.
+    -- Instead we render our own label FontString and keep it stable.
+
     local function getter()
         local t = getTbl and getTbl()
         if not t then return nil end
@@ -5494,9 +5499,29 @@ local function CreateBoolToggleButtonPath(parent, label, x, y, width, height, ge
     local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     btn:SetSize(width or 110, height or 22)
-    btn:SetText(label)
+
+    -- Hide template label, we draw our own.
+    btn:SetText("")
+    local tplFS = (btn.GetFontString and btn:GetFontString()) or nil
+    if tplFS then
+        tplFS:SetText("")
+        tplFS:Hide()
+        tplFS:SetAlpha(0)
+    end
+
+    -- Stable label.
+    local labelFS = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    labelFS:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    labelFS:SetJustifyH("CENTER")
+    labelFS:SetJustifyV("MIDDLE")
+    labelFS:SetText(label)
+    if labelFS.SetDrawLayer then labelFS:SetDrawLayer("OVERLAY", 7) end
+    labelFS:Show()
+    labelFS:SetAlpha(1)
+    btn._msufA2_labelFS = labelFS
 
     if type(_G.MSUF_SkinButton) == "function" then
+        -- Keep using the MSUF style (down-overlay, hover, etc.) if available.
         pcall(_G.MSUF_SkinButton, btn)
     end
 
@@ -5504,22 +5529,24 @@ local function CreateBoolToggleButtonPath(parent, label, x, y, width, height, ge
         local on = getter() and true or false
         btn.__msufOn = on
 
-        -- Represent ON state via the skinned "down" overlay (no red checkmarks).
+        -- Represent ON state via the skinned "down" overlay.
         if btn._msufBtnDown then
             if on then btn._msufBtnDown:Show() else btn._msufBtnDown:Hide() end
         end
 
-        local fs = (btn.GetFontString and btn:GetFontString()) or btn.Text
+        local fs = btn._msufA2_labelFS
         if fs and fs.SetTextColor then
+            fs:Show()
+            fs:SetAlpha(1)
             if on then
-                -- ON = green, OFF = red (requested)
-                fs:SetTextColor(0.2, 1, 0.2)
+                fs:SetTextColor(0.2, 1, 0.2) -- ON = green
             else
-                fs:SetTextColor(1, 0.2, 0.2)
+                fs:SetTextColor(1, 0.2, 0.2) -- OFF = red
             end
         end
 
-        btn:SetAlpha(on and 1 or 0.95)
+        -- Avoid any accidental fading from external skin passes.
+        btn:SetAlpha(1)
     end
 
     btn:SetScript("OnClick", function()
@@ -5530,12 +5557,15 @@ local function CreateBoolToggleButtonPath(parent, label, x, y, width, height, ge
         ApplyVisual()
     end)
 
-    btn:SetScript("OnShow", function()
-        ApplyVisual()
-    end)
+    btn:SetScript("OnShow", ApplyVisual)
+
+    -- Re-assert visuals on common interaction hooks (no timers, no OnUpdate).
+    btn:HookScript("OnMouseDown", ApplyVisual)
+    btn:HookScript("OnMouseUp", ApplyVisual)
 
     if tooltip then
         btn:SetScript("OnEnter", function(self)
+            ApplyVisual()
             if not GameTooltip then return end
             local owner = self
             local ok = pcall(GameTooltip.SetOwner, GameTooltip, owner, "ANCHOR_NONE")
@@ -5547,10 +5577,15 @@ local function CreateBoolToggleButtonPath(parent, label, x, y, width, height, ge
             GameTooltip:Show()
         end)
         btn:SetScript("OnLeave", function()
+            ApplyVisual()
             if GameTooltip then GameTooltip:Hide() end
         end)
+    else
+        btn:HookScript("OnEnter", ApplyVisual)
+        btn:HookScript("OnLeave", ApplyVisual)
     end
 
+    ApplyVisual()
     return btn
 end
 
