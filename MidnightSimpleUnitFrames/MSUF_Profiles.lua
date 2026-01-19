@@ -149,6 +149,16 @@ function MSUF_SwitchProfile(name)
     MSUF_ActiveProfile = name
     MSUF_DB = MSUF_GlobalDB.profiles[name]
 
+
+    -- Invalidate cached config references (UFCore caches per-frame config table refs).
+    do
+        local ns = _G.MSUF_NS
+        local core = (type(ns) == "table" and ns.MSUF_UnitframeCore) or nil
+        if core and type(core.InvalidateAllFrameConfigs) == "function" then
+            core.InvalidateAllFrameConfigs()
+        end
+    end
+
     if EnsureDB then
         EnsureDB()
     end
@@ -236,6 +246,185 @@ function MSUF_GetAllProfiles()
         table.sort(list)
     end
     return list
+end
+
+
+
+---------------------------------------------------------------------
+-- Spec-based profile auto-switch (per-character)
+--
+-- Stored in:
+--   MSUF_GlobalDB.char[charKey].specAutoSwitch  (boolean)
+--   MSUF_GlobalDB.char[charKey].specProfileMap  (table: specID -> profileName)
+--
+-- Design goals:
+--   - Very small, fully optional (off by default).
+--   - Combat-safe: if spec changes in combat, we defer the switch.
+--   - Works with existing global profiles (no DB migration needed).
+---------------------------------------------------------------------
+
+local function MSUF_GetCharMeta()
+    _G.MSUF_GlobalDB = _G.MSUF_GlobalDB or {}
+    local gdb = _G.MSUF_GlobalDB
+    gdb.char = gdb.char or {}
+
+    local charKey = (type(_G.MSUF_GetCharKey) == "function") and _G.MSUF_GetCharKey() or (UnitName("player") .. "-" .. GetRealmName())
+    local char = gdb.char[charKey]
+    if type(char) ~= "table" then
+        char = {}
+        gdb.char[charKey] = char
+    end
+
+    if char.specAutoSwitch == nil then
+        char.specAutoSwitch = false
+    end
+    if type(char.specProfileMap) ~= "table" then
+        char.specProfileMap = {}
+    end
+
+    return char
+end
+
+function MSUF_IsSpecAutoSwitchEnabled()
+    local char = MSUF_GetCharMeta()
+    return (char.specAutoSwitch == true)
+end
+
+function MSUF_SetSpecAutoSwitchEnabled(enabled)
+    local char = MSUF_GetCharMeta()
+    char.specAutoSwitch = (enabled == true)
+    if char.specAutoSwitch then
+        if type(_G.MSUF_ApplySpecProfileIfEnabled) == "function" then
+            _G.MSUF_ApplySpecProfileIfEnabled("TOGGLE_ON")
+        end
+    end
+end
+
+function MSUF_GetSpecProfile(specID)
+    local char = MSUF_GetCharMeta()
+    if type(specID) ~= "number" then return nil end
+    local v = char.specProfileMap[specID]
+    if type(v) ~= "string" or v == "" then
+        return nil
+    end
+    return v
+end
+
+function MSUF_SetSpecProfile(specID, profileName)
+    local char = MSUF_GetCharMeta()
+    if type(specID) ~= "number" then return end
+
+    if type(profileName) ~= "string" or profileName == "" or profileName == "None" then
+        char.specProfileMap[specID] = nil
+    else
+        char.specProfileMap[specID] = profileName
+    end
+
+    if char.specAutoSwitch == true then
+        local cur = _G.MSUF_GetPlayerSpecID and _G.MSUF_GetPlayerSpecID() or nil
+        if cur == specID then
+            if type(_G.MSUF_ApplySpecProfileIfEnabled) == "function" then
+                _G.MSUF_ApplySpecProfileIfEnabled("MAP_CHANGED")
+            end
+        end
+    end
+end
+
+function MSUF_GetPlayerSpecID()
+    if type(_G.GetSpecialization) ~= "function" or type(_G.GetSpecializationInfo) ~= "function" then
+        return nil
+    end
+    local idx = _G.GetSpecialization()
+    if not idx then return nil end
+    local specID = _G.GetSpecializationInfo(idx)
+    if type(specID) ~= "number" then
+        return nil
+    end
+    return specID
+end
+
+-- Combat-safe deferrer (shared)
+local function MSUF_RunAfterCombat_SpecProfile(fn)
+    if type(fn) ~= "function" then return end
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        _G.MSUF_PendingSpecProfileSwitch = fn
+
+        local f = _G.MSUF_SpecProfileDeferFrame
+        if not f and type(_G.CreateFrame) == "function" then
+            f = _G.CreateFrame("Frame")
+            _G.MSUF_SpecProfileDeferFrame = f
+            f:RegisterEvent("PLAYER_REGEN_ENABLED")
+            f:SetScript("OnEvent", function()
+                local pending = _G.MSUF_PendingSpecProfileSwitch
+                if pending then
+                    _G.MSUF_PendingSpecProfileSwitch = nil
+                    pending()
+                end
+            end)
+        end
+        return
+    end
+    fn()
+end
+
+function MSUF_ApplySpecProfileIfEnabled(reason)
+    local char = MSUF_GetCharMeta()
+    if char.specAutoSwitch ~= true then return end
+
+    local specID = MSUF_GetPlayerSpecID()
+    if type(specID) ~= "number" then return end
+
+    local profileName = char.specProfileMap[specID]
+    if type(profileName) ~= "string" or profileName == "" then return end
+
+    -- Only switch to existing profiles.
+    if not (_G.MSUF_GlobalDB and _G.MSUF_GlobalDB.profiles and _G.MSUF_GlobalDB.profiles[profileName]) then
+        return
+    end
+
+    if _G.MSUF_ActiveProfile == profileName then
+        return
+    end
+
+    MSUF_RunAfterCombat_SpecProfile(function()
+        -- Re-check after combat (spec could have changed again).
+        if not MSUF_IsSpecAutoSwitchEnabled() then return end
+        local cur = MSUF_GetPlayerSpecID()
+        if cur ~= specID then return end
+        local mapped = MSUF_GetSpecProfile(specID)
+        if mapped ~= profileName then return end
+        if _G.MSUF_ActiveProfile == profileName then return end
+
+        if type(_G.MSUF_SwitchProfile) == "function" then
+            _G.MSUF_SwitchProfile(profileName)
+        end
+    end)
+end
+
+-- Event driver (very small; only does work when enabled)
+do
+    local f
+    local function EnsureFrame()
+        if f then return end
+        if type(_G.CreateFrame) ~= "function" then return end
+        f = _G.CreateFrame("Frame")
+        _G.MSUF_SpecProfileEventFrame = f
+        f:RegisterEvent("PLAYER_ENTERING_WORLD")
+        f:RegisterEvent("PLAYER_LOGIN")
+        f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+        f:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+        f:SetScript("OnEvent", function(_, event, arg1)
+            if event == "PLAYER_SPECIALIZATION_CHANGED" and arg1 and arg1 ~= "player" then
+                return
+            end
+            if not MSUF_IsSpecAutoSwitchEnabled() then
+                return
+            end
+            MSUF_ApplySpecProfileIfEnabled(event)
+        end)
+    end
+
+    EnsureFrame()
 end
 
 ---------------------------------------------------------------------
