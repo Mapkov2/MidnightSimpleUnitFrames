@@ -485,6 +485,42 @@ local FONT_LIST = {
         path = "Fonts\\SKURRI.TTF",
     },
 }
+
+-- Bundled MSUF fonts (Media/Fonts) must be selectable even when LibSharedMedia
+-- is not installed. These entries use direct file paths and therefore do not
+-- depend on LSM.
+do
+    local base = "Interface\\AddOns\\" .. tostring(addonName) .. "\\Media\\Fonts\\"
+    local bundled = {
+        { key = "EXPRESSWAY",                 name = "Expressway Regular (MSUF)",          file = "Expressway Regular.ttf" },
+        { key = "EXPRESSWAY_BOLD",            name = "Expressway Bold (MSUF)",             file = "Expressway Bold.ttf" },
+        { key = "EXPRESSWAY_SEMIBOLD",        name = "Expressway SemiBold (MSUF)",         file = "Expressway SemiBold.ttf" },
+        { key = "EXPRESSWAY_EXTRABOLD",       name = "Expressway ExtraBold (MSUF)",        file = "Expressway ExtraBold.ttf" },
+        { key = "EXPRESSWAY_CONDENSED_LIGHT", name = "Expressway Condensed Light (MSUF)",  file = "Expressway Condensed Light.otf" },
+    }
+
+    local function HasFontKey(list, key)
+        if type(key) ~= "string" or key == "" then return false end
+        if type(list) ~= "table" then return false end
+        for i = 1, #list do
+            local t = list[i]
+            if t and t.key == key then
+                return true
+            end
+        end
+        return false
+    end
+
+    for _, info in ipairs(bundled) do
+        if not HasFontKey(FONT_LIST, info.key) then
+            table.insert(FONT_LIST, {
+                key  = info.key,
+                name = info.name,
+                path = base .. info.file,
+            })
+        end
+    end
+end
 _G.MSUF_FONT_LIST = _G.MSUF_FONT_LIST or FONT_LIST
 local MSUF_FONT_COLORS = {
     white     = {1.0, 1.0, 1.0},
@@ -2814,6 +2850,67 @@ local function MSUF_ApplyPowerGradient(frameOrTex)
 
     MSUF_HideGradSet(grads, 5)
 end
+
+
+-- Power bar separator line (uses the existing "power bar border" toggle + thickness).
+-- Instead of drawing a full frame border around the powerbar, we draw a clean overlay line
+-- between HP and Power by anchoring to the TOP edge of the powerbar.
+function _G.MSUF_ApplyPowerBarBorder(bar)
+    if not bar then return end
+    local bdb = (MSUF_DB and MSUF_DB.bars) or nil
+    local enabled = bdb and (bdb.powerBarBorderEnabled == true) or false
+    local size = bdb and tonumber(bdb.powerBarBorderSize) or 1
+    if type(size) ~= 'number' then size = 1 end
+    if size < 1 then size = 1 elseif size > 10 then size = 10 end
+
+    local border = bar._msufPowerBorder
+    if not border then
+        -- Keep using the historical storage key to avoid any external assumptions.
+        border = CreateFrame('Frame', nil, bar)
+        border:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 2)
+        border:EnableMouse(false)
+        bar._msufPowerBorder = border
+    end
+
+    if not enabled then
+        if border.Hide then border:Hide() end
+        return
+    end
+
+    -- If an older build used Backdrop borders, clear them so only the separator line remains.
+    if border.SetBackdrop then
+        border:SetBackdrop(nil)
+    end
+
+    border:ClearAllPoints()
+    border:SetPoint('TOPLEFT', bar, 'TOPLEFT', 0, 0)
+    border:SetPoint('TOPRIGHT', bar, 'TOPRIGHT', 0, 0)
+    border:SetHeight(size)
+
+    local line = border._msufSeparatorLine
+    if not line and border.CreateTexture then
+        line = border:CreateTexture(nil, 'OVERLAY')
+        line:SetTexture('Interface\\Buttons\\WHITE8x8')
+        line:SetVertexColor(0, 0, 0, 1)
+        line:SetAllPoints(border)
+        border._msufSeparatorLine = line
+    elseif line and line.SetAllPoints then
+        line:SetAllPoints(border)
+    end
+
+    border:Show()
+end
+
+function _G.MSUF_ApplyPowerBarBorder_All()
+    local frames = _G.MSUF_UnitFrames
+    if type(frames) ~= 'table' then return end
+    for _, f in pairs(frames) do
+        local bar = f and (f.targetPowerBar or f.powerBar)
+        if bar then
+            _G.MSUF_ApplyPowerBarBorder(bar)
+        end
+    end
+end
 local function MSUF_PreCreateHPGradients(hpBar)
     if not hpBar or not hpBar.CreateTexture then return nil end
     local function MakeTex()
@@ -4489,7 +4586,7 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key)
                 if UnitIsDeadOrGhost(unit) then
                     barR, barG, barB = MSUF_GetNPCReactionColor("dead")
                 else
-                    local reaction = UnitReaction(unit, "player")
+                    local reaction = UnitReaction("player", unit)
                     if reaction and reaction >= 5 then
                         barR, barG, barB = MSUF_GetNPCReactionColor("friendly")
                     elseif reaction == 4 then
@@ -6288,6 +6385,12 @@ local function CreateSimpleUnitFrame(unit)
             end
             MSUF_ApplyPowerGradient(f)
         end
+
+        -- Power bar border (applies immediately; bar hide will hide border too).
+        if type(_G.MSUF_ApplyPowerBarBorder) == "function" then
+            _G.MSUF_ApplyPowerBarBorder(pBar)
+        end
+
         pBar:Hide()
     end
 
@@ -6801,7 +6904,11 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
+<<<<<<< HEAD
     print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.66b2|r  |cff565f89•|r  |cffc0caf5 !!!Only works in Beta/PTR!!! -|r  |cfff7768eReport bugs in the Discord.|r")
+=======
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.65b2|r  |cff565f89•|r  |cffc0caf5 !!!Only works in Beta/PTR!!! -|r  |cfff7768eReport bugs in the Discord.|r")
+>>>>>>> beta
 
 end, nil, true)
 
