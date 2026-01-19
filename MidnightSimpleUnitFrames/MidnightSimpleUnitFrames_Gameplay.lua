@@ -458,6 +458,10 @@ local function MSUF_GetCombatStateColors(g)
 end
 
 local function MSUF_ApplyCombatStateDynamicColor()
+    if not combatStateText and EnsureCombatStateText then
+        EnsureCombatStateText()
+    end
+
     if not combatStateText then
         return
     end
@@ -671,6 +675,8 @@ local function ApplyFontToCounter()
 
 end
 
+local EnsureCombatStateText
+
 ------------------------------------------------------
 -- "The First Dance" helper
 ------------------------------------------------------
@@ -678,7 +684,7 @@ local function StartFirstDanceWindow()
     local g = GetGameplayDBFast()
 
     -- Feature off = make sure state is hard-reset and updater is off
-    if not g.enableCombatStateText or not g.enableFirstDanceTimer then
+    if not g.enableFirstDanceTimer then
         firstDanceActive = false
         firstDanceEndTime = 0
         firstDanceLastText = nil
@@ -688,6 +694,10 @@ local function StartFirstDanceWindow()
         end
         MSUF_CombatState_SetClickThrough(false)
         return
+    end
+
+    if not combatStateText and EnsureCombatStateText then
+        EnsureCombatStateText()
     end
 
     if not combatStateText then
@@ -720,6 +730,11 @@ local function StartFirstDanceWindow()
 
     combatStateText:Show()
 
+    -- Ensure the First Dance tick task exists even if this triggers before a full Apply() pass.
+    if EnsureFirstDanceTaskRegistered then
+        EnsureFirstDanceTaskRegistered()
+    end
+
     local umFD = MSUF_GetUpdateManager()
     if umFD and umFD.SetEnabled then
         umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", true)
@@ -729,7 +744,7 @@ end
 ------------------------------------------------------
 -- Combat state text (enter/leave combat)
 ------------------------------------------------------
-local function EnsureCombatStateText()
+EnsureCombatStateText = function()
     if combatStateText then
         return
     end
@@ -791,7 +806,7 @@ local function EnsureCombatStateText()
         combatEventFrame:UnregisterAllEvents()
 local function MSUF_CombatState_OnEvent(_, event)
     local g = GetGameplayDBFast()
-    if not g or not g.enableCombatStateText then
+    if not g or (not g.enableCombatStateText and not g.enableFirstDanceTimer) then
         if combatStateText then
             combatStateText:SetText("")
             combatStateText:Hide()
@@ -805,6 +820,9 @@ local function MSUF_CombatState_OnEvent(_, event)
         return
     end
 
+    local wantState = (g.enableCombatStateText == true)
+    local wantDance = (g.enableFirstDanceTimer == true)
+
     local duration = g.combatStateDuration or 1.5
     if duration < 0.1 then
         duration = 0.1
@@ -815,6 +833,15 @@ local function MSUF_CombatState_OnEvent(_, event)
         firstDanceActive = false
         firstDanceEndTime = 0
         firstDanceLastText = nil
+
+        if not wantState then
+            if combatStateText then
+                combatStateText:SetText("")
+                combatStateText:Hide()
+            end
+            MSUF_CombatState_SetClickThrough(false)
+            return
+        end
 
         local enterText = g.combatStateEnterText
         if type(enterText) ~= "string" or enterText == "" then
@@ -847,6 +874,15 @@ local function MSUF_CombatState_OnEvent(_, event)
 
         if g.enableFirstDanceTimer then
             StartFirstDanceWindow()
+            return
+        end
+
+        if not wantState then
+            if combatStateText then
+                combatStateText:SetText("")
+                combatStateText:Hide()
+            end
+            MSUF_CombatState_SetClickThrough(false)
             return
         end
 
@@ -888,7 +924,7 @@ local function _TickFirstDance()
     end
 
     local gFD = GetGameplayDBFast()
-    if not gFD.enableCombatStateText or not gFD.enableFirstDanceTimer then
+    if not gFD.enableFirstDanceTimer then
         firstDanceActive = false
         firstDanceEndTime = 0
         firstDanceLastText = nil
@@ -902,6 +938,10 @@ local function _TickFirstDance()
             umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
         end
         return
+    end
+
+    if not combatStateText and EnsureCombatStateText then
+        EnsureCombatStateText()
     end
 
     if not combatStateText then
@@ -1815,43 +1855,74 @@ end
 -- They make it safe to split this file later without changing behavior.
 ------------------------------------------------------
 local function MSUF_Gameplay_ApplyCombatStateText(g)
-    if g.enableCombatStateText then
+    local wantState = (g.enableCombatStateText == true)
+    local wantDance = (g.enableFirstDanceTimer == true)
+
+    if wantState or wantDance then
         EnsureCombatStateText()
+
+        -- "First Dance" uses a background tick (UpdateManager task) to count down the 6s window.
+        -- Register the task once whenever either Combat State Text OR First Dance is enabled.
+        if EnsureFirstDanceTaskRegistered then
+            EnsureFirstDanceTaskRegistered()
+        end
+
+        -- If First Dance is OFF, make sure any leftover state/task is hard-stopped.
+        if not wantDance then
+            firstDanceActive = false
+            firstDanceEndTime = 0
+            firstDanceLastText = nil
+            local umFD = MSUF_GetUpdateManager()
+            if umFD and umFD.SetEnabled then
+                umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
+            end
+        end
+
         -- Ensure the frame is draggable again when configuring / previewing
         MSUF_CombatState_SetClickThrough(false)
 
-        -- Make sure combat events are only hooked while the feature is enabled
+        -- We need combat regen events for BOTH: enter/leave text + first dance window start.
         if combatEventFrame then
             combatEventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
             combatEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
         end
 
-        -- Preview while unlocked: show "+Combat" so the user can position the text
+        -- Preview while unlocked: show something so the user can position the text
         if not g.lockCombatState and combatStateText then
-            local enterText = g.combatStateEnterText
-            if type(enterText) ~= "string" or enterText == "" then
-                enterText = "+Combat"
+            if wantState then
+                local enterText = g.combatStateEnterText
+                if type(enterText) ~= "string" or enterText == "" then
+                    enterText = "+Combat"
+                end
+                local er, eg, eb = MSUF_GetCombatStateColors(g)
+                combatStateText._msufLastState = "enter"
+                combatStateText:SetTextColor(er, eg, eb, 1)
+                combatStateText:SetText(enterText)
+                combatStateText:Show()
+            elseif wantDance then
+                local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
+                combatStateText._msufLastState = "dance"
+                combatStateText:SetTextColor(lr, lg, lb, 1)
+                combatStateText:SetText("First Dance: 6.0")
+                combatStateText:Show()
             end
-            local er, eg, eb = MSUF_GetCombatStateColors(g)
-        combatStateText._msufLastState = "enter"
-        combatStateText:SetTextColor(er, eg, eb, 1)
-            combatStateText:SetText(enterText)
-            combatStateText:Show()
         elseif combatStateText then
             -- Locked and not in an event: keep the frame hidden until real combat events fire
             combatStateText:SetText("")
             combatStateText:Hide()
         end
-    elseif combatStateText then
-        -- Feature disabled: hide text and unhook combat events for zero runtime cost
-        combatStateText:SetText("")
-        combatStateText:Hide()
+
+    else
+        -- Both features disabled: hide text, unhook combat events, and hard-stop first dance
+        if combatStateText then
+            combatStateText:SetText("")
+            combatStateText:Hide()
+        end
         if combatEventFrame then
             combatEventFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
             combatEventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
         end
 
-        -- also hard-reset any running First Dance state
         firstDanceActive = false
         firstDanceEndTime = 0
         firstDanceLastText = nil
@@ -1863,6 +1934,7 @@ local function MSUF_Gameplay_ApplyCombatStateText(g)
 end
 
 local function MSUF_Gameplay_ApplyCombatCrosshair(g)
+
     if g.enableCombatCrosshair then
         local frame = EnsureCombatCrosshair()
         -- Keep cached crosshair state in sync for fast-path ticks / conditional event registration.
@@ -3005,8 +3077,13 @@ end)
         _MSUF_SetCheckEnabled(self.lockCombatStateCheck, stateOn)
         _MSUF_SetButtonEnabled(self.combatStateDurationResetButton, stateOn)
 
-        -- Rogue: First Dance depends on combat state text system
-        _MSUF_SetCheckEnabled(self.firstDanceCheck, stateOn)
+        -- Rogue: First Dance is a Rogue-only helper (independent of the Enter/Leave text toggle).
+        local isRogue = false
+        if UnitClass then
+            local _, class = UnitClass("player")
+            isRogue = (class == "ROGUE")
+        end
+        _MSUF_SetCheckEnabled(self.firstDanceCheck, isRogue)
 
         -- Crosshair dependents
         local crosshairOn = g.enableCombatCrosshair and true or false
