@@ -4537,7 +4537,7 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key)
                 if UnitIsDeadOrGhost(unit) then
                     barR, barG, barB = MSUF_GetNPCReactionColor("dead")
                 else
-                    local reaction = UnitReaction(unit, "player")
+                    local reaction = UnitReaction("player", unit)
                     if reaction and reaction >= 5 then
                         barR, barG, barB = MSUF_GetNPCReactionColor("friendly")
                     elseif reaction == 4 then
@@ -6855,7 +6855,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.66b2|r  |cff565f89•|r  |cffc0caf5 !!!Only works in Beta/PTR!!! -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.65r1|r  |cff565f89•|r  |cffc0caf5 !!!Only works in Beta/PTR!!! -|r  |cfff7768eReport bugs in the Discord.|r")
 
 end, nil, true)
 
