@@ -3165,6 +3165,71 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, GetEffFn, maste
     end
 end
 
+
+-- ------------------------------------------------------------
+-- Auras 2.0 Preview safety: ensure preview icons never block real auras
+-- ------------------------------------------------------------
+local function MSUF_A2_ClearPreviewIconsInContainer(container)
+    if not container or not container._msufIcons then return end
+    local icons = container._msufIcons
+    for i = 1, #icons do
+        local icon = icons[i]
+        if icon and icon._msufA2_isPreview == true then
+            -- Unregister from cooldown text manager (prevents orphan updates)
+            if icon._msufA2_cdMgrRegistered == true and type(MSUF_A2_CooldownTextMgr_UnregisterIcon) == "function" then
+                MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
+            end
+
+            -- Clear any preview timing state
+            icon._msufA2_previewCooldownStart = nil
+            icon._msufA2_previewCooldownDur = nil
+            icon._msufA2_previewStackCur = nil
+            icon._msufA2_previewStackMax = nil
+
+            -- Clear cooldown widget state (best-effort)
+            if icon.cooldown then
+                icon.cooldown._msufA2_durationObj = nil
+                pcall(icon.cooldown.Clear, icon.cooldown)
+                pcall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
+            end
+
+            -- Clear visual + identity state
+            icon._msufA2_isPreview = nil
+            icon._msufA2_previewKind = nil
+            icon._msufAuraInstanceID = nil
+            icon._msufSpellId = nil
+            icon._msufA2_lastVisualAuraInstanceID = nil
+
+            if icon.count then
+                icon.count:SetText("")
+                icon.count:Hide()
+            end
+            if icon._msufOwnGlow then icon._msufOwnGlow:Hide() end
+
+            icon:Hide()
+        end
+    end
+end
+
+local function MSUF_A2_ClearPreviewsForEntry(entry)
+    if not entry then return end
+    MSUF_A2_ClearPreviewIconsInContainer(entry.debuffs)
+    MSUF_A2_ClearPreviewIconsInContainer(entry.buffs)
+    MSUF_A2_ClearPreviewIconsInContainer(entry.mixed)
+    entry._msufA2_previewActive = nil
+end
+
+local function MSUF_A2_ClearAllPreviews()
+    for _, entry in pairs(AurasByUnit) do
+        if entry and entry._msufA2_previewActive == true then
+            MSUF_A2_ClearPreviewsForEntry(entry)
+        end
+    end
+end
+
+-- Export (used by options / edit-mode transitions)
+_G.MSUF_Auras2_ClearAllPreviews = MSUF_A2_ClearAllPreviews
+
 local MSUF_A2_RENDER_BUDGET = 18
 
 local function RenderUnit(entry)
@@ -3173,24 +3238,30 @@ local function RenderUnit(entry)
     if not a2 or not shared or not entry then return end
 
     local unit = entry.unit
-    local showTest = shared.showInEditMode and IsEditModeActive()
+    local wantPreview = (shared.showInEditMode == true) and IsEditModeActive()
+
+    local unitEnabled = UnitEnabled(unit)
+    local unitExists = UnitExists and UnitExists(unit)
+    local frame = entry.frame or FindUnitFrame(unit)
+
+    -- Preview is ONLY allowed when there is no live unit (or the unit is disabled/hidden).
+    -- This prevents preview icons from blocking real auras.
+    local showTest = (wantPreview == true) and ((not unitExists) or (not unitEnabled) or (not frame) or (not frame:IsShown()))
 
     -- In Edit Mode preview, still allow positioning even if this unit's auras are disabled.
-    -- Outside Edit Mode (or when preview is off), respect the unit enable toggle.
-    if (not UnitEnabled(unit)) and (not showTest) then
+    -- Outside preview, respect the unit enable toggle.
+    if (not unitEnabled) and (not showTest) then
         if entry.anchor then entry.anchor:Hide() end
         if entry.editMover then entry.editMover:Hide() end
         return
     end
 
-    local unitExists = UnitExists and UnitExists(unit)
     if not unitExists and not showTest then
         if entry.anchor then entry.anchor:Hide() end
         if entry.editMover then entry.editMover:Hide() end
         return
     end
 
-    local frame = entry.frame or FindUnitFrame(unit)
     if (not showTest) and (not frame or not frame:IsShown()) then
         if entry.anchor then entry.anchor:Hide() end
         if entry.editMover then entry.editMover:Hide() end
@@ -3199,6 +3270,11 @@ local function RenderUnit(entry)
 
     entry = EnsureAttached(unit)
     if not entry or not entry.anchor then return end
+
+    if (not showTest) and entry._msufA2_previewActive == true then
+        -- We are about to render real auras; ensure old preview icons are fully cleared first.
+        MSUF_A2_ClearPreviewsForEntry(entry)
+    end
 
 
     -- Keep anchors updated (unitframe may have moved). Also drive Edit Mode mover for Target.
@@ -3834,6 +3910,14 @@ end
             if not useSingleRow then HideUnused(entry.buffs, buffCount + 1) end
         end
     end
+
+    -- Track whether preview icons are currently active for this unit (used to hard-clear on transition)
+    if showTest then
+        entry._msufA2_previewActive = true
+    else
+        entry._msufA2_previewActive = nil
+    end
+
     -- Layout
     if useSingleRow and entry.mixed then
         local total = 0
@@ -4421,15 +4505,18 @@ do
         local _, shared = GetAuras2DB()
         local wantPreview = shared and (shared.showInEditMode == true) or false
 
-        -- Only refresh if preview is enabled OR we are leaving edit mode (to hide previews).
-        if wantPreview or (not active) then
-            MarkDirty("target")
-            MarkDirty("focus")
-            for i = 1, 5 do
-                MarkDirty("boss" .. i)
-            end
-            MSUF_A2_UpdatePreviewStackTicker()
+        -- Always refresh on Edit Mode transitions (and on the Preview toggle), so previews
+        -- can never linger and block real auras.
+        if wantPreview ~= true then
+            MSUF_A2_ClearAllPreviews()
         end
+
+        MarkDirty("target")
+        MarkDirty("focus")
+        for i = 1, 5 do
+            MarkDirty("boss" .. i)
+        end
+        MSUF_A2_UpdatePreviewStackTicker()
     end
 
     -- Export for debugging / external triggers
