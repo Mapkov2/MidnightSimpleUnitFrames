@@ -2311,8 +2311,134 @@ end
     helpText:SetJustifyH("LEFT")
     helpText:SetText("Profiles are global. Each character selects one active profile. Create a new profile on the left or select an existing one on the right.")
 
+    -----------------------------------------------------------------
+    -- Spec-based profile switching (optional)
+    -----------------------------------------------------------------
+    local specAutoCB = CreateFrame("CheckButton", "MSUF_ProfileSpecAutoSwitchCB", profileGroup, "ChatConfigCheckButtonTemplate")
+    specAutoCB:SetPoint("TOPLEFT", helpText, "BOTTOMLEFT", 0, -12)
+    do
+        local t = specAutoCB.Text or _G[specAutoCB:GetName() .. "Text"]
+        if t then
+            t:SetText("Auto-switch profile by specialization")
+        end
+    end
+
+    local function MSUF_ProfilesUI_GetSpecMeta()
+        local n = (type(_G.GetNumSpecializations) == "function") and _G.GetNumSpecializations() or 0
+        local out = {}
+        for i=1, n do
+            if type(_G.GetSpecializationInfo) == "function" then
+                local specID, specName, _, specIcon = _G.GetSpecializationInfo(i)
+                if type(specID) == "number" and type(specName) == "string" then
+                    out[#out+1] = { id = specID, name = specName, icon = specIcon }
+                end
+            end
+        end
+        return out
+    end
+
+    local specRows = {}
+    local function MSUF_ProfilesUI_EnsureSpecRows()
+        if #specRows > 0 then return end
+        local meta = MSUF_ProfilesUI_GetSpecMeta()
+        local anchor = specAutoCB
+        for i, s in ipairs(meta) do
+            local row = {}
+
+            row.label = profileGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+            row.label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
+            row.label:SetText(s.name)
+
+            row.drop = CreateFrame("Frame", "MSUF_ProfileSpecDrop"..i, profileGroup, "UIDropDownMenuTemplate")
+            MSUF_ExpandDropdownClickArea(row.drop)
+            row.drop:SetPoint("LEFT", row.label, "LEFT", 210, -2)
+            UIDropDownMenu_SetWidth(row.drop, 180)
+
+            row.drop._msufSpecID = s.id
+
+            UIDropDownMenu_Initialize(row.drop, function(self, level)
+                if not level then return end
+
+                local function Add(text, value)
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = text
+                    info.value = value
+                    info.func = function(btn)
+                        UIDropDownMenu_SetSelectedValue(self, btn.value)
+                        UIDropDownMenu_SetText(self, btn.value)
+                        if type(_G.MSUF_SetSpecProfile) == "function" then
+                            _G.MSUF_SetSpecProfile(self._msufSpecID, (btn.value ~= "None") and btn.value or nil)
+                        end
+                        CloseDropDownMenus()
+                    end
+                    local cur = (type(_G.MSUF_GetSpecProfile) == "function") and _G.MSUF_GetSpecProfile(self._msufSpecID) or nil
+                    info.checked = (cur == value) or (cur == nil and value == "None")
+                    UIDropDownMenu_AddButton(info, level)
+                end
+
+                Add("None", "None")
+                local profiles = (type(_G.MSUF_GetAllProfiles) == "function") and _G.MSUF_GetAllProfiles() or {}
+                for _, name in ipairs(profiles) do
+                    Add(name, name)
+                end
+            end)
+
+            specRows[#specRows+1] = row
+            anchor = row.label
+        end
+
+        -- Re-anchor the section below to the last spec row (or checkbox if no specs).
+        profileGroup._msufProfilesAfterSpecAnchor = anchor
+    end
+
+    local function MSUF_ProfilesUI_UpdateSpecUI()
+        if type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" then
+            specAutoCB:SetChecked(_G.MSUF_IsSpecAutoSwitchEnabled() and true or false)
+        else
+            specAutoCB:SetChecked(false)
+        end
+
+        MSUF_ProfilesUI_EnsureSpecRows()
+
+        for _, row in ipairs(specRows) do
+            local specID = row.drop and row.drop._msufSpecID
+            local cur = (type(_G.MSUF_GetSpecProfile) == "function") and _G.MSUF_GetSpecProfile(specID) or nil
+
+            -- If the mapped profile no longer exists, clear it (prevents confusing UI).
+            if cur and (_G.MSUF_GlobalDB and _G.MSUF_GlobalDB.profiles) and (not _G.MSUF_GlobalDB.profiles[cur]) then
+                if type(_G.MSUF_SetSpecProfile) == "function" then
+                    _G.MSUF_SetSpecProfile(specID, nil)
+                end
+                cur = nil
+            end
+
+            if cur then
+                UIDropDownMenu_SetSelectedValue(row.drop, cur)
+                UIDropDownMenu_SetText(row.drop, cur)
+            else
+                UIDropDownMenu_SetSelectedValue(row.drop, "None")
+                UIDropDownMenu_SetText(row.drop, "None")
+            end
+        end
+    end
+
+    specAutoCB:SetScript("OnClick", function(self)
+        local enabled = self:GetChecked() and true or false
+        if type(_G.MSUF_SetSpecAutoSwitchEnabled) == "function" then
+            _G.MSUF_SetSpecAutoSwitchEnabled(enabled)
+        end
+        MSUF_ProfilesUI_UpdateSpecUI()
+    end)
+
+    -- Expose so LoadFromDB / profile CRUD can refresh these rows.
+    panel._msufUpdateSpecProfileUI = MSUF_ProfilesUI_UpdateSpecUI
+
+    -- Initial paint
+    MSUF_ProfilesUI_UpdateSpecUI()
+
+
     newLabel = profileGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    newLabel:SetPoint("TOPLEFT", helpText, "BOTTOMLEFT", 0, -14)
+    newLabel:SetPoint("TOPLEFT", (profileGroup._msufProfilesAfterSpecAnchor or specAutoCB), "BOTTOMLEFT", 0, -14)
     newLabel:SetText("New")
 
     existingLabel = profileGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -2355,6 +2481,9 @@ end
         currentProfileLabel:SetText("Current profile: " .. name)
         UIDropDownMenu_SetSelectedValue(profileDrop, name)
         UIDropDownMenu_SetText(profileDrop, name)
+        if self._msufUpdateSpecProfileUI then
+            self._msufUpdateSpecProfileUI()
+        end
     end
 
     newEditBox:SetScript("OnEnterPressed", function(self)
