@@ -2814,6 +2814,54 @@ local function MSUF_ApplyPowerGradient(frameOrTex)
 
     MSUF_HideGradSet(grads, 5)
 end
+
+
+-- Power bar border (simple, secret-safe, layout-driven)
+-- Toggle + thickness live in MSUF_DB.bars.
+function _G.MSUF_ApplyPowerBarBorder(bar)
+    if not bar then return end
+    local bdb = (MSUF_DB and MSUF_DB.bars) or nil
+    local enabled = bdb and (bdb.powerBarBorderEnabled == true) or false
+    local size = bdb and tonumber(bdb.powerBarBorderSize) or 1
+    if type(size) ~= 'number' then size = 1 end
+    if size < 1 then size = 1 elseif size > 10 then size = 10 end
+
+    local border = bar._msufPowerBorder
+    if not border then
+        -- BackdropTemplate is required on modern clients for SetBackdrop.
+        border = CreateFrame('Frame', nil, bar, 'BackdropTemplate')
+        border:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 2)
+        border:EnableMouse(false)
+        bar._msufPowerBorder = border
+    end
+
+    if (not enabled) or (not border.SetBackdrop) then
+        if border.Hide then border:Hide() end
+        return
+    end
+
+    border:ClearAllPoints()
+    border:SetPoint('TOPLEFT', bar, 'TOPLEFT', -size, size)
+    border:SetPoint('BOTTOMRIGHT', bar, 'BOTTOMRIGHT', size, -size)
+
+    border:SetBackdrop({
+        edgeFile = 'Interface\\Buttons\\WHITE8x8',
+        edgeSize = size,
+    })
+    border:SetBackdropBorderColor(0, 0, 0, 1)
+    border:Show()
+end
+
+function _G.MSUF_ApplyPowerBarBorder_All()
+    local frames = _G.MSUF_UnitFrames
+    if type(frames) ~= 'table' then return end
+    for _, f in pairs(frames) do
+        local bar = f and (f.targetPowerBar or f.powerBar)
+        if bar then
+            _G.MSUF_ApplyPowerBarBorder(bar)
+        end
+    end
+end
 local function MSUF_PreCreateHPGradients(hpBar)
     if not hpBar or not hpBar.CreateTexture then return nil end
     local function MakeTex()
@@ -6288,6 +6336,12 @@ local function CreateSimpleUnitFrame(unit)
             end
             MSUF_ApplyPowerGradient(f)
         end
+
+        -- Power bar border (applies immediately; bar hide will hide border too).
+        if type(_G.MSUF_ApplyPowerBarBorder) == "function" then
+            _G.MSUF_ApplyPowerBarBorder(pBar)
+        end
+
         pBar:Hide()
     end
 
@@ -6801,7 +6855,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.66b1|r  |cff565f89•|r  |cffc0caf5 !!!Only works in Beta/PTR!!! -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.65r1|r  |cff565f89•|r  |cffc0caf5 !!!Only works in Beta/PTR!!! -|r  |cfff7768eReport bugs in the Discord.|r")
 
 end, nil, true)
 

@@ -677,6 +677,24 @@ local function MSUF_UpdatePowerBarHeightFromEdit(editBox)
     ApplyAllSettings()
 end
 
+local function MSUF_UpdatePowerBarBorderSizeFromEdit(editBox)
+    if not editBox or not editBox.GetText then return end
+
+    local text = editBox:GetText()
+    local v = MSUF_GetNumber(text, 1, 1, 10)
+    editBox:SetText(tostring(v))
+
+    EnsureDB()
+    MSUF_DB.bars = MSUF_DB.bars or {}
+    MSUF_DB.bars.powerBarBorderSize = v
+
+    if type(_G.MSUF_ApplyPowerBarBorder_All) == 'function' then
+        _G.MSUF_ApplyPowerBarBorder_All()
+    else
+        ApplyAllSettings()
+    end
+end
+
 panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     _G.MSUF_OptionsPanel = panel
     panel.name = "Midnight Simple Unit Frames"
@@ -2311,134 +2329,8 @@ end
     helpText:SetJustifyH("LEFT")
     helpText:SetText("Profiles are global. Each character selects one active profile. Create a new profile on the left or select an existing one on the right.")
 
-    -----------------------------------------------------------------
-    -- Spec-based profile switching (optional)
-    -----------------------------------------------------------------
-    local specAutoCB = CreateFrame("CheckButton", "MSUF_ProfileSpecAutoSwitchCB", profileGroup, "ChatConfigCheckButtonTemplate")
-    specAutoCB:SetPoint("TOPLEFT", helpText, "BOTTOMLEFT", 0, -12)
-    do
-        local t = specAutoCB.Text or _G[specAutoCB:GetName() .. "Text"]
-        if t then
-            t:SetText("Auto-switch profile by specialization")
-        end
-    end
-
-    local function MSUF_ProfilesUI_GetSpecMeta()
-        local n = (type(_G.GetNumSpecializations) == "function") and _G.GetNumSpecializations() or 0
-        local out = {}
-        for i=1, n do
-            if type(_G.GetSpecializationInfo) == "function" then
-                local specID, specName, _, specIcon = _G.GetSpecializationInfo(i)
-                if type(specID) == "number" and type(specName) == "string" then
-                    out[#out+1] = { id = specID, name = specName, icon = specIcon }
-                end
-            end
-        end
-        return out
-    end
-
-    local specRows = {}
-    local function MSUF_ProfilesUI_EnsureSpecRows()
-        if #specRows > 0 then return end
-        local meta = MSUF_ProfilesUI_GetSpecMeta()
-        local anchor = specAutoCB
-        for i, s in ipairs(meta) do
-            local row = {}
-
-            row.label = profileGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-            row.label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
-            row.label:SetText(s.name)
-
-            row.drop = CreateFrame("Frame", "MSUF_ProfileSpecDrop"..i, profileGroup, "UIDropDownMenuTemplate")
-            MSUF_ExpandDropdownClickArea(row.drop)
-            row.drop:SetPoint("LEFT", row.label, "LEFT", 210, -2)
-            UIDropDownMenu_SetWidth(row.drop, 180)
-
-            row.drop._msufSpecID = s.id
-
-            UIDropDownMenu_Initialize(row.drop, function(self, level)
-                if not level then return end
-
-                local function Add(text, value)
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text = text
-                    info.value = value
-                    info.func = function(btn)
-                        UIDropDownMenu_SetSelectedValue(self, btn.value)
-                        UIDropDownMenu_SetText(self, btn.value)
-                        if type(_G.MSUF_SetSpecProfile) == "function" then
-                            _G.MSUF_SetSpecProfile(self._msufSpecID, (btn.value ~= "None") and btn.value or nil)
-                        end
-                        CloseDropDownMenus()
-                    end
-                    local cur = (type(_G.MSUF_GetSpecProfile) == "function") and _G.MSUF_GetSpecProfile(self._msufSpecID) or nil
-                    info.checked = (cur == value) or (cur == nil and value == "None")
-                    UIDropDownMenu_AddButton(info, level)
-                end
-
-                Add("None", "None")
-                local profiles = (type(_G.MSUF_GetAllProfiles) == "function") and _G.MSUF_GetAllProfiles() or {}
-                for _, name in ipairs(profiles) do
-                    Add(name, name)
-                end
-            end)
-
-            specRows[#specRows+1] = row
-            anchor = row.label
-        end
-
-        -- Re-anchor the section below to the last spec row (or checkbox if no specs).
-        profileGroup._msufProfilesAfterSpecAnchor = anchor
-    end
-
-    local function MSUF_ProfilesUI_UpdateSpecUI()
-        if type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" then
-            specAutoCB:SetChecked(_G.MSUF_IsSpecAutoSwitchEnabled() and true or false)
-        else
-            specAutoCB:SetChecked(false)
-        end
-
-        MSUF_ProfilesUI_EnsureSpecRows()
-
-        for _, row in ipairs(specRows) do
-            local specID = row.drop and row.drop._msufSpecID
-            local cur = (type(_G.MSUF_GetSpecProfile) == "function") and _G.MSUF_GetSpecProfile(specID) or nil
-
-            -- If the mapped profile no longer exists, clear it (prevents confusing UI).
-            if cur and (_G.MSUF_GlobalDB and _G.MSUF_GlobalDB.profiles) and (not _G.MSUF_GlobalDB.profiles[cur]) then
-                if type(_G.MSUF_SetSpecProfile) == "function" then
-                    _G.MSUF_SetSpecProfile(specID, nil)
-                end
-                cur = nil
-            end
-
-            if cur then
-                UIDropDownMenu_SetSelectedValue(row.drop, cur)
-                UIDropDownMenu_SetText(row.drop, cur)
-            else
-                UIDropDownMenu_SetSelectedValue(row.drop, "None")
-                UIDropDownMenu_SetText(row.drop, "None")
-            end
-        end
-    end
-
-    specAutoCB:SetScript("OnClick", function(self)
-        local enabled = self:GetChecked() and true or false
-        if type(_G.MSUF_SetSpecAutoSwitchEnabled) == "function" then
-            _G.MSUF_SetSpecAutoSwitchEnabled(enabled)
-        end
-        MSUF_ProfilesUI_UpdateSpecUI()
-    end)
-
-    -- Expose so LoadFromDB / profile CRUD can refresh these rows.
-    panel._msufUpdateSpecProfileUI = MSUF_ProfilesUI_UpdateSpecUI
-
-    -- Initial paint
-    MSUF_ProfilesUI_UpdateSpecUI()
-
-
     newLabel = profileGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    newLabel:SetPoint("TOPLEFT", (profileGroup._msufProfilesAfterSpecAnchor or specAutoCB), "BOTTOMLEFT", 0, -14)
+    newLabel:SetPoint("TOPLEFT", helpText, "BOTTOMLEFT", 0, -14)
     newLabel:SetText("New")
 
     existingLabel = profileGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -2481,9 +2373,6 @@ end
         currentProfileLabel:SetText("Current profile: " .. name)
         UIDropDownMenu_SetSelectedValue(profileDrop, name)
         UIDropDownMenu_SetText(profileDrop, name)
-        if self._msufUpdateSpecProfileUI then
-            self._msufUpdateSpecProfileUI()
-        end
     end
 
     newEditBox:SetScript("OnEnterPressed", function(self)
@@ -5902,8 +5791,25 @@ gradientCheck = CreateLabeledCheckButton(
         260, -380
     )
 
+    powerBarBorderCheck = CreateLabeledCheckButton(
+        "MSUF_PowerBarBorderCheck",
+        "Show power bar border",
+        barGroup,
+        260, -410
+    )
+
+    powerBarBorderSizeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    powerBarBorderSizeLabel:SetPoint("TOPLEFT", powerBarBorderCheck, "BOTTOMLEFT", 0, -6)
+    powerBarBorderSizeLabel:SetText("Border thickness")
+
+    powerBarBorderSizeEdit = CreateFrame("EditBox", "MSUF_PowerBarBorderSizeEdit", barGroup, "InputBoxTemplate")
+    powerBarBorderSizeEdit:SetSize(40, 20)
+    powerBarBorderSizeEdit:SetAutoFocus(false)
+    powerBarBorderSizeEdit:SetPoint("LEFT", powerBarBorderSizeLabel, "RIGHT", 10, 0)
+    powerBarBorderSizeEdit:SetTextInsets(4, 4, 2, 2)
+
     hpModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    hpModeLabel:SetPoint("TOPLEFT", powerBarEmbedCheck or powerBarHeightLabel, "BOTTOMLEFT", 0, -16)
+    hpModeLabel:SetPoint("TOPLEFT", powerBarBorderSizeLabel or powerBarBorderCheck or powerBarEmbedCheck or powerBarHeightLabel, "BOTTOMLEFT", 0, -16)
     hpModeLabel:SetText("Textmode HP / Power")
     -- Make this header white (requested UX): the dropdown items remain normal.
     hpModeLabel:SetTextColor(1, 1, 1, 1)
@@ -7100,6 +7006,19 @@ if gradientDirPad and gradientCheck then
         powerBarEmbedCheck:ClearAllPoints()
         powerBarEmbedCheck:SetPoint("TOPLEFT", powerBarHeightLabel, "BOTTOMLEFT", 0, -10)
     end
+
+    if powerBarBorderCheck and powerBarEmbedCheck then
+        powerBarBorderCheck:ClearAllPoints()
+        powerBarBorderCheck:SetPoint("TOPLEFT", powerBarEmbedCheck, "BOTTOMLEFT", 0, -10)
+    end
+    if powerBarBorderSizeLabel and powerBarBorderCheck then
+        powerBarBorderSizeLabel:ClearAllPoints()
+        powerBarBorderSizeLabel:SetPoint("TOPLEFT", powerBarBorderCheck, "BOTTOMLEFT", 0, -10)
+    end
+    if powerBarBorderSizeEdit and powerBarBorderSizeLabel then
+        powerBarBorderSizeEdit:ClearAllPoints()
+        powerBarBorderSizeEdit:SetPoint("LEFT", powerBarBorderSizeLabel, "RIGHT", 10, 0)
+    end
 -- Bar outline thickness: render as a section TITLE (like "Gradient Options")
 -- and place the slider under a divider line (hide the slider's own title text).
 if _G.MSUF_BarsMenuBorderHeader then
@@ -7164,7 +7083,11 @@ end
 
     if hpModeLabel then
         hpModeLabel:ClearAllPoints()
-        if powerBarEmbedCheck then
+        if powerBarBorderSizeLabel then
+            hpModeLabel:SetPoint("TOPLEFT", powerBarBorderSizeLabel, "BOTTOMLEFT", 0, -28)
+        elseif powerBarBorderCheck then
+            hpModeLabel:SetPoint("TOPLEFT", powerBarBorderCheck, "BOTTOMLEFT", 0, -28)
+        elseif powerBarEmbedCheck then
             hpModeLabel:SetPoint("TOPLEFT", powerBarEmbedCheck, "BOTTOMLEFT", 0, -28)
         elseif powerBarHeightLabel then
             hpModeLabel:SetPoint("TOPLEFT", powerBarHeightLabel, "BOTTOMLEFT", 0, -28)
@@ -7332,6 +7255,20 @@ local function MSUF_SyncBarsTabToggles()
         SafeToggleUpdate(powerBarEmbedCheck)
     end
 
+    if powerBarBorderCheck then
+        powerBarBorderCheck:SetChecked(b.powerBarBorderEnabled and true or false)
+        SafeToggleUpdate(powerBarBorderCheck)
+    end
+
+    if powerBarBorderSizeEdit then
+        local v = tonumber(b.powerBarBorderSize)
+        if type(v) ~= 'number' then v = 1 end
+        if v < 1 then v = 1 elseif v > 10 then v = 10 end
+        if (not powerBarBorderSizeEdit.HasFocus) or (not powerBarBorderSizeEdit:HasFocus()) then
+            powerBarBorderSizeEdit:SetText(tostring(v))
+        end
+    end
+
     -- Power bar height: show the current value + disable if NO powerbars are enabled anywhere.
     if powerBarHeightEdit then
         local v = tonumber(b.powerBarHeight)
@@ -7383,6 +7320,48 @@ local function MSUF_SyncBarsTabToggles()
             if powerBarEmbedCheck.SetEnabled then powerBarEmbedCheck:SetEnabled(false) end
             if powerBarEmbedCheck.EnableMouse then powerBarEmbedCheck:EnableMouse(false) end
             powerBarEmbedCheck:SetAlpha(0.55)
+        end
+    end
+
+    -- Power bar border controls: disabled if NO powerbars are enabled.
+    local borderEnabled = (b.powerBarBorderEnabled == true)
+
+    if powerBarBorderCheck then
+        if anyPBEnabled then
+            if powerBarBorderCheck.Enable then powerBarBorderCheck:Enable() end
+            if powerBarBorderCheck.SetEnabled then powerBarBorderCheck:SetEnabled(true) end
+            if powerBarBorderCheck.EnableMouse then powerBarBorderCheck:EnableMouse(true) end
+            powerBarBorderCheck:SetAlpha(1)
+        else
+            if powerBarBorderCheck.Disable then powerBarBorderCheck:Disable() end
+            if powerBarBorderCheck.SetEnabled then powerBarBorderCheck:SetEnabled(false) end
+            if powerBarBorderCheck.EnableMouse then powerBarBorderCheck:EnableMouse(false) end
+            powerBarBorderCheck:SetAlpha(0.55)
+        end
+    end
+
+    if powerBarBorderSizeLabel and powerBarBorderSizeLabel.SetTextColor then
+        if anyPBEnabled and borderEnabled then
+            powerBarBorderSizeLabel:SetTextColor(1, 1, 1, 1)
+        else
+            powerBarBorderSizeLabel:SetTextColor(0.35, 0.35, 0.35, 1)
+        end
+    end
+
+    if powerBarBorderSizeEdit then
+        if anyPBEnabled and borderEnabled then
+            if powerBarBorderSizeEdit.Enable then powerBarBorderSizeEdit:Enable() end
+            if powerBarBorderSizeEdit.SetEnabled then powerBarBorderSizeEdit:SetEnabled(true) end
+            if powerBarBorderSizeEdit.EnableMouse then powerBarBorderSizeEdit:EnableMouse(true) end
+            if powerBarBorderSizeEdit.SetTextColor then powerBarBorderSizeEdit:SetTextColor(1, 1, 1) end
+            powerBarBorderSizeEdit:SetAlpha(1)
+        else
+            if powerBarBorderSizeEdit.Disable then powerBarBorderSizeEdit:Disable() end
+            if powerBarBorderSizeEdit.SetEnabled then powerBarBorderSizeEdit:SetEnabled(false) end
+            if powerBarBorderSizeEdit.EnableMouse then powerBarBorderSizeEdit:EnableMouse(false) end
+            if powerBarBorderSizeEdit.ClearFocus then powerBarBorderSizeEdit:ClearFocus() end
+            if powerBarBorderSizeEdit.SetTextColor then powerBarBorderSizeEdit:SetTextColor(0.55, 0.55, 0.55) end
+            powerBarBorderSizeEdit:SetAlpha(0.55)
         end
     end
 end
@@ -7485,6 +7464,33 @@ end
         end)
     end
 
+    if powerBarBorderCheck then
+        powerBarBorderCheck:SetScript("OnClick", function(self)
+            EnsureDB()
+            MSUF_DB.bars = MSUF_DB.bars or {}
+            MSUF_DB.bars.powerBarBorderEnabled = self:GetChecked() and true or false
+            if type(_G.MSUF_ApplyPowerBarBorder_All) == 'function' then
+                _G.MSUF_ApplyPowerBarBorder_All()
+            else
+                ApplyAllSettings()
+            end
+            if MSUF_SyncBarsTabToggles then MSUF_SyncBarsTabToggles() end
+        end)
+    end
+
+    if powerBarBorderSizeEdit then
+        powerBarBorderSizeEdit:SetScript("OnEnterPressed", function(self)
+            MSUF_UpdatePowerBarBorderSizeFromEdit(self)
+            self:ClearFocus()
+        end)
+        powerBarBorderSizeEdit:SetScript("OnEscapePressed", function(self)
+            self:ClearFocus()
+        end)
+        powerBarBorderSizeEdit:SetScript("OnEditFocusLost", function(self)
+            MSUF_UpdatePowerBarBorderSizeFromEdit(self)
+        end)
+    end
+
     if powerBarHeightEdit then
         powerBarHeightEdit:SetScript("OnEnterPressed", function(self)
             MSUF_UpdatePowerBarHeightFromEdit(self)
@@ -7532,6 +7538,8 @@ end
     panel.focusPowerBarCheck         = focusPowerBarCheck
     panel.powerBarHeightEdit         = powerBarHeightEdit
     panel.powerBarEmbedCheck         = powerBarEmbedCheck
+    panel.powerBarBorderCheck       = powerBarBorderCheck
+    panel.powerBarBorderSizeEdit     = powerBarBorderSizeEdit
 
     panel.hpModeDrop                 = hpModeDrop
 panel.barTextureDrop             = barTextureDrop
