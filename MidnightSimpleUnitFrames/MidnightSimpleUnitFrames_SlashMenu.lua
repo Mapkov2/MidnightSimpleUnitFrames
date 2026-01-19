@@ -2389,7 +2389,7 @@ local function MSUF_SelectCastbarSubPage(unitKey)
 end
 
 local MIRROR_PAGES = {
-    home     = { title = "Midnight Simple Unitframes (Beta Version 1.66b2)", nav = "Dashboard", build = nil },
+    home     = { title = "Midnight Simple Unitframes (Release 1.66r1)", nav = "Dashboard", build = nil },
     main     = { title = "MSUF Options",  nav = "Options",  build = MSUF_EnsureMainOptionsPanelBuilt,
         select = function(subkey)
             if not subkey then return end
