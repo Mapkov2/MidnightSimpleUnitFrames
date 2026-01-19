@@ -228,9 +228,11 @@ end
 -- ============================================================
 
 local MSUF_PORTRAIT_OPTIONS = {
-    { value = "OFF",   text = "Portrait Off"  },
-    { value = "LEFT",  text = "Portrait Left" },
-    { value = "RIGHT", text = "Portrait Right"},
+    { value = "OFF",      text = "Portrait Off" },
+    { value = "2D_LEFT",  text = "2D Portrait Left" },
+    { value = "2D_RIGHT", text = "2D Portrait Right" },
+    { value = "3D_LEFT",  text = "3D Portrait Left" },
+    { value = "3D_RIGHT", text = "3D Portrait Right" },
 }
 
 -- Target-of-Target inline-in-Target separator dropdown (token stored in MSUF_DB.targettarget.totInlineSeparator).
@@ -270,9 +272,104 @@ local function MSUF_ToTInlineSepTokenText(v)
 end
 
 local function MSUF_PortraitModeText(mode)
-    if mode == "LEFT" then return "Portrait Left" end
-    if mode == "RIGHT" then return "Portrait Right" end
+    if mode == "2D_LEFT" then return "2D Portrait Left" end
+    if mode == "2D_RIGHT" then return "2D Portrait Right" end
+    if mode == "3D_LEFT" then return "3D Portrait Left" end
+    if mode == "3D_RIGHT" then return "3D Portrait Right" end
     return "Portrait Off"
+end
+
+local function MSUF_GetPortraitDropdownValue(conf)
+    if not conf then return "OFF" end
+    local pm = conf.portraitMode or "OFF"
+    if pm ~= "LEFT" and pm ~= "RIGHT" then
+        return "OFF"
+    end
+
+    local render = conf.portraitRender
+    if render == "3D" then
+        return (pm == "LEFT") and "3D_LEFT" or "3D_RIGHT"
+    end
+
+    -- Default to 2D for legacy profiles (portraitRender nil/unknown)
+    return (pm == "LEFT") and "2D_LEFT" or "2D_RIGHT"
+end
+
+local function MSUF_ApplyPortraitChoice(conf, choice)
+    if not conf then return end
+
+    if choice == "OFF" then
+        conf.portraitMode = "OFF"
+        return
+    end
+
+    if choice == "2D_LEFT" then
+        conf.portraitMode = "LEFT"
+        conf.portraitRender = "2D"
+        return
+    end
+    if choice == "2D_RIGHT" then
+        conf.portraitMode = "RIGHT"
+        conf.portraitRender = "2D"
+        return
+    end
+
+    if choice == "3D_LEFT" then
+        conf.portraitMode = "LEFT"
+        conf.portraitRender = "3D"
+        return
+    end
+    if choice == "3D_RIGHT" then
+        conf.portraitMode = "RIGHT"
+        conf.portraitRender = "3D"
+        return
+    end
+
+    -- Fallback
+    conf.portraitMode = "OFF"
+end
+
+
+local function MSUF_BindPortraitDropdown(panel, fieldName, IsFramesTabFn, EnsureKeyDBFn, ApplyFn)
+    local dd = panel and panel[fieldName]
+    if not dd or not UIDropDownMenu_Initialize then return end
+
+    local function OnClick(btn, arg1)
+        if IsFramesTabFn and not IsFramesTabFn() then return end
+        local conf = EnsureKeyDBFn and EnsureKeyDBFn()
+        if not conf then return end
+
+        local choice = (btn and btn.value) or arg1 or "OFF"
+        MSUF_ApplyPortraitChoice(conf, choice)
+
+        -- Sync dropdown UI based on current frame config (not global state)
+        local cur = MSUF_GetPortraitDropdownValue(conf)
+        if UIDropDownMenu_SetSelectedValue then
+            UIDropDownMenu_SetSelectedValue(dd, cur)
+        end
+        if UIDropDownMenu_SetText then
+            UIDropDownMenu_SetText(dd, MSUF_PortraitModeText(cur))
+        end
+
+        if ApplyFn then ApplyFn() end
+    end
+
+    UIDropDownMenu_Initialize(dd, function(self, level)
+        if not level or level ~= 1 then return end
+        for _, opt in ipairs(MSUF_PORTRAIT_OPTIONS or {}) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text  = opt.text
+            info.value = opt.value
+            info.func  = OnClick
+            info.arg1  = opt.value
+            info.checked = function()
+                local conf = EnsureKeyDBFn and EnsureKeyDBFn()
+                local cur = MSUF_GetPortraitDropdownValue(conf)
+                return (cur == opt.value)
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
 end
 
 local function MSUF_BindDropdown(panel, fieldName, confKey, options, textFn, IsFramesTabFn, EnsureKeyDBFn, ApplyFn)
@@ -416,6 +513,7 @@ local MSUF_COPY_BASIC_FIELDS = {
     "showHP",
     "showPower",
     "portraitMode",
+    "portraitRender",
     "alphaInCombat",
     "alphaOutOfCombat",
     "alphaSync",
@@ -2111,7 +2209,7 @@ end
     if panel.playerPortraitDropDown and UIDropDownMenu_SetSelectedValue and UIDropDownMenu_SetText then
         panel.playerPortraitDropDown:Show()
 
-        local mode = conf.portraitMode or "OFF"
+        local mode = MSUF_GetPortraitDropdownValue(conf)
         UIDropDownMenu_SetSelectedValue(panel.playerPortraitDropDown, mode)
         UIDropDownMenu_SetText(panel.playerPortraitDropDown, MSUF_PortraitModeText(mode))
     end
@@ -2875,7 +2973,7 @@ end
 
 
     -- Portrait dropdown (all unitframes) [spec-driven]
-    MSUF_BindDropdown(panel, "playerPortraitDropDown", "portraitMode", MSUF_PORTRAIT_OPTIONS, MSUF_PortraitModeText, IsFramesTab, EnsureKeyDB, ApplyCurrent)
+    MSUF_BindPortraitDropdown(panel, "playerPortraitDropDown", IsFramesTab, EnsureKeyDB, ApplyCurrent)
 
 
 
