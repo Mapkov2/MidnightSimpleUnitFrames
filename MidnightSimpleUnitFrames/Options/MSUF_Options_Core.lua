@@ -6799,6 +6799,10 @@ end
 -- Bars menu style: boxed layout like the new Castbar/Focus Kick menus
 -- (Two framed columns: Bar appearance / Power Bar Settings)
 do
+    -- Panel height must include the HP Spacer controls at the bottom of the right column.
+    -- Keep this as a single constant so creation + live re-layout always match (no drift/regressions).
+    local BARS_PANEL_H = 700
+
     -- Create panels once
     if not _G["MSUF_BarsMenuPanelLeft"] then
         local function SetupPanel(panel)
@@ -6813,12 +6817,12 @@ do
         end
 
         local leftPanel = CreateFrame("Frame", "MSUF_BarsMenuPanelLeft", barGroup, "BackdropTemplate")
-        leftPanel:SetSize(330, 610)
+        leftPanel:SetSize(330, BARS_PANEL_H)
         leftPanel:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, -110)
         SetupPanel(leftPanel)
 
         local rightPanel = CreateFrame("Frame", "MSUF_BarsMenuPanelRight", barGroup, "BackdropTemplate")
-        rightPanel:SetSize(320, 610)
+        rightPanel:SetSize(320, BARS_PANEL_H)
         rightPanel:SetPoint("TOPLEFT", leftPanel, "TOPRIGHT", 0, 0)
         SetupPanel(rightPanel)
 
@@ -6907,12 +6911,12 @@ do
     -- Enforce layout (so tweaks apply even if panels already exist)
     if leftPanel then
         leftPanel:ClearAllPoints()
-        leftPanel:SetSize(330, 610)
+        leftPanel:SetSize(330, BARS_PANEL_H)
         leftPanel:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, -110)
     end
     if rightPanel and leftPanel then
         rightPanel:ClearAllPoints()
-        rightPanel:SetSize(320, 610)
+        rightPanel:SetSize(320, BARS_PANEL_H)
         rightPanel:SetPoint("TOPLEFT", leftPanel, "TOPRIGHT", 0, 0)
     end
 
