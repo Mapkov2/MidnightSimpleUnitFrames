@@ -6417,6 +6417,169 @@ local function MSUF_EditMode_ExitDeterministic(source, opts)
     MSUF_EditMode_HardTeardown()
 end
 
+
+-- ------------------------------------------------------------
+-- BCDM Cooldown Manager handoff notice (Edit Mode)
+-- Shows a prominent one-time-per-session warning when:
+--   1) BetterCooldownManager is loaded
+--   2) BCDM CooldownManager skinning is enabled (CooldownManager.Enable == true)
+--   3) MSUF is anchored to the Blizzard Cooldown Manager (MSUF_DB.general.anchorToCooldown == true)
+-- This intentionally does NOT try to move the Blizzard CDM (BCDM owns it when skinning is enabled).
+-- ------------------------------------------------------------
+
+local MSUF_EM_BCDMNotice_ShownThisSession = false
+local MSUF_EM_BCDMNotice_PendingCombat = false
+local MSUF_EM_BCDMNotice_EventFrame
+
+local function MSUF_EM_IsBCDMAddonLoaded()
+    if C_AddOns and type(C_AddOns.IsAddOnLoaded) == "function" then
+        return C_AddOns.IsAddOnLoaded("BetterCooldownManager") and true or false
+    end
+    if type(IsAddOnLoaded) == "function" then
+        return IsAddOnLoaded("BetterCooldownManager") and true or false
+    end
+    return false
+end
+
+local function MSUF_EM_GetBCDMActiveProfileTable()
+    local sv = _G.BCDMDB
+    if type(sv) ~= "table" then
+        return nil
+    end
+
+    local profileName
+
+    -- Respect BCDM global profile mode if present
+    if sv.global and sv.global.UseGlobalProfile and sv.global.GlobalProfile then
+        profileName = sv.global.GlobalProfile
+    end
+
+    if not profileName and type(sv.profileKeys) == "table" then
+        local name = UnitName and UnitName("player")
+        local realm = GetRealmName and GetRealmName()
+        if name and realm then
+            local key = name .. " - " .. realm
+            profileName = sv.profileKeys[key]
+        end
+    end
+
+    if not profileName then
+        profileName = "Default"
+    end
+
+    if type(sv.profiles) ~= "table" then
+        return nil
+    end
+
+    return sv.profiles[profileName]
+end
+
+local function MSUF_EM_IsBCDMCooldownManagerSkinningEnabled()
+    if not MSUF_EM_IsBCDMAddonLoaded() then
+        return false
+    end
+    local prof = MSUF_EM_GetBCDMActiveProfileTable()
+    if type(prof) ~= "table" then
+        return false
+    end
+    local cm = prof.CooldownManager
+    if type(cm) ~= "table" then
+        return false
+    end
+    -- BCDM uses CooldownManager.Enable as its master toggle for its CDM skinning/features
+    return (cm.Enable == true)
+end
+
+local function MSUF_EM_ShouldShowBCDMHandoffNotice()
+    if MSUF_EM_BCDMNotice_ShownThisSession then
+        return false
+    end
+
+    -- Show whenever BetterCooldownManager is loaded.
+    -- Reason: BCDM can take ownership of the Blizzard Cooldown Manager positioning (even if Edit Mode shows it as movable),
+    -- which can make anchored frames appear to "snap back" or not persist their position via the Blizzard manager.
+    return MSUF_EM_IsBCDMAddonLoaded()
+end
+
+local function MSUF_EM_EnsureBCDMNoticePopupDialog()
+    if not StaticPopupDialogs then
+        return
+    end
+    if StaticPopupDialogs["MSUF_BCDM_CDM_HANDOFF_NOTICE"] then
+        return
+    end
+
+    StaticPopupDialogs["MSUF_BCDM_CDM_HANDOFF_NOTICE"] = {
+        text = [[|cffff4444BCDM detected: BetterCooldownManager controls Blizzard Cooldown Manager positioning.|r
+
+BCDM can override Edit Mode movement / saved position for the Blizzard Cooldown Manager, so frames anchored to it may appear to "snap back".
+
+To move the Cooldown Manager, use: |cff00ff00/bcdm|r -> Cooldown Manager -> Layout.
+(Edit Mode may still let you drag it, but BCDM will apply its own X/Y.)
+
+MSUF will keep anchoring to the Cooldown Manager.]],
+        button1 = OKAY,
+        timeout = 0,
+        whileDead = 1,
+        hideOnEscape = 1,
+        preferredIndex = 3,
+    }
+end
+
+local function MSUF_EM_ShowBCDMHandoffNotice_Now()
+    if MSUF_EM_BCDMNotice_ShownThisSession then
+        return
+    end
+    if not MSUF_EM_ShouldShowBCDMHandoffNotice() then
+        return
+    end
+
+    -- Avoid showing UI popups in combat; defer until combat ends.
+    if InCombatLockdown and InCombatLockdown() then
+        MSUF_EM_BCDMNotice_PendingCombat = true
+        if not MSUF_EM_BCDMNotice_EventFrame then
+            local f = CreateFrame("Frame")
+            MSUF_EM_BCDMNotice_EventFrame = f
+            f:RegisterEvent("PLAYER_REGEN_ENABLED")
+            f:SetScript("OnEvent", function()
+                if not MSUF_EM_BCDMNotice_PendingCombat then
+                    return
+                end
+                MSUF_EM_BCDMNotice_PendingCombat = false
+                -- Only show if Edit Mode is still active
+                if MSUF_UnitEditModeActive then
+                    if type(MSUF_SafeAfter) == "function" then
+                        MSUF_SafeAfter(0, "Popup:BCDMHandoff", MSUF_EM_ShowBCDMHandoffNotice_Now)
+                    else
+                        C_Timer.After(0, MSUF_EM_ShowBCDMHandoffNotice_Now)
+                    end
+                end
+            end)
+        end
+        return
+    end
+
+    MSUF_EM_EnsureBCDMNoticePopupDialog()
+    if StaticPopup_Show then
+        MSUF_EM_BCDMNotice_ShownThisSession = true
+        StaticPopup_Show("MSUF_BCDM_CDM_HANDOFF_NOTICE")
+    end
+end
+
+local function MSUF_EM_ShowBCDMHandoffNoticeIfNeeded()
+    if not MSUF_EM_ShouldShowBCDMHandoffNotice() then
+        return
+    end
+    -- Defer to next tick to avoid any secure-stack weirdness during Edit Mode transitions.
+    if type(MSUF_SafeAfter) == "function" then
+        MSUF_SafeAfter(0, "Popup:BCDMHandoff", MSUF_EM_ShowBCDMHandoffNotice_Now)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, MSUF_EM_ShowBCDMHandoffNotice_Now)
+    else
+        MSUF_EM_ShowBCDMHandoffNotice_Now()
+    end
+end
+
 function MSUF_SetMSUFEditModeFromBlizzard(active)
     if _G and _G.MSUF_SuppressBlizzEditToMSUF then
         return
@@ -6479,10 +6642,17 @@ function MSUF_SetMSUFEditModeFromBlizzard(active)
             MSUF_UpdateEditModeInfo()
         end
 
+        -- If BetterCooldownManager is loaded, warn the user that it controls Blizzard Cooldown Manager positioning.
+        MSUF_EM_ShowBCDMHandoffNoticeIfNeeded()
+
     else
         if not MSUF_UnitEditModeActive then
             return
         end
+            -- Reset BCDM handoff notice so it shows again next time Edit Mode is entered.
+            MSUF_EM_BCDMNotice_ShownThisSession = false
+            MSUF_EM_BCDMNotice_PendingCombat = false
+
         local function _doExit()
             Edit.Flow.Exit("blizzard", { flushPending = true })
         end
@@ -7438,6 +7608,9 @@ if not _G.MSUF_SetMSUFEditModeDirect then
             if MSUF_UpdateEditModeInfo then
                 MSUF_UpdateEditModeInfo()
             end
+
+            -- If BetterCooldownManager is loaded, warn the user that it controls Blizzard Cooldown Manager positioning.
+            MSUF_EM_ShowBCDMHandoffNoticeIfNeeded()
 
         else
             if not MSUF_UnitEditModeActive then
