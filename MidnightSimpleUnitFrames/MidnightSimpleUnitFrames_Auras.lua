@@ -1640,8 +1640,18 @@ local function EnsureAttached(unit)
     -- Create anchor (parented to UIParent but anchored to the unitframe so it follows MSUF edit moves)
     local anchor = CreateFrame("Frame", nil, UIParent)
     anchor:SetSize(1, 1)
-    anchor:SetFrameStrata("MEDIUM")
-    anchor:SetFrameLevel(50)
+    -- IMPORTANT (showstopper fix): ensure the aura anchor renders ABOVE the unitframe.
+    -- Some boss frames (boss3+) can end up with higher frame levels than earlier bosses, which would
+    -- cause the UIParent-parented aura anchor to sit *behind* the later boss frames (looks like "no auras").
+    -- We therefore match the unitframe's strata and set a safe level offset above it.
+    do
+        local p = (frame and frame.textFrame) or frame
+        local strata = (p and p.GetFrameStrata and p:GetFrameStrata()) or "MEDIUM"
+        local lvl = (p and p.GetFrameLevel and p:GetFrameLevel()) or 0
+        lvl = tonumber(lvl) or 0
+        anchor:SetFrameStrata(strata)
+        anchor:SetFrameLevel(lvl + 50)
+    end
 
     local debuffs = CreateFrame("Frame", nil, anchor)
     debuffs:SetSize(1, 1)
@@ -1650,12 +1660,43 @@ local function EnsureAttached(unit)
     local buffs = CreateFrame("Frame", nil, anchor)
     buffs:SetSize(1, 1)
     buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 30)
-local mixed = CreateFrame("Frame", nil, anchor)
-mixed:SetSize(1, 1)
-mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
+    local mixed = CreateFrame("Frame", nil, anchor)
+    mixed:SetSize(1, 1)
+    mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
+
+    -- Keep child containers at/above the anchor level so icons are never hidden behind later boss frames.
+    do
+        local strata = (anchor and anchor.GetFrameStrata and anchor:GetFrameStrata()) or "MEDIUM"
+        local base = (anchor and anchor.GetFrameLevel and anchor:GetFrameLevel()) or 0
+        base = tonumber(base) or 0
+        if debuffs and debuffs.SetFrameStrata then debuffs:SetFrameStrata(strata) end
+        if buffs and buffs.SetFrameStrata then buffs:SetFrameStrata(strata) end
+        if mixed and mixed.SetFrameStrata then mixed:SetFrameStrata(strata) end
+        if debuffs and debuffs.SetFrameLevel then debuffs:SetFrameLevel(base + 1) end
+        if buffs and buffs.SetFrameLevel then buffs:SetFrameLevel(base + 1) end
+        if mixed and mixed.SetFrameLevel then mixed:SetFrameLevel(base + 1) end
+    end
 
     -- Sync show/hide with the unitframe
     SafeCall(frame.HookScript, frame, "OnShow", function()
+        -- Re-sync strata/levels in case the unitframe was rebuilt or its level changed (can happen for bosses).
+        if anchor then
+            local p = (frame and frame.textFrame) or frame
+            local strata = (p and p.GetFrameStrata and p:GetFrameStrata()) or "MEDIUM"
+            local lvl = (p and p.GetFrameLevel and p:GetFrameLevel()) or 0
+            lvl = tonumber(lvl) or 0
+            if anchor.SetFrameStrata then anchor:SetFrameStrata(strata) end
+            if anchor.SetFrameLevel then anchor:SetFrameLevel(lvl + 50) end
+            local base = (anchor.GetFrameLevel and anchor:GetFrameLevel()) or (lvl + 50)
+            base = tonumber(base) or 0
+            if debuffs and debuffs.SetFrameStrata then debuffs:SetFrameStrata(strata) end
+            if buffs and buffs.SetFrameStrata then buffs:SetFrameStrata(strata) end
+            if mixed and mixed.SetFrameStrata then mixed:SetFrameStrata(strata) end
+            if debuffs and debuffs.SetFrameLevel then debuffs:SetFrameLevel(base + 1) end
+            if buffs and buffs.SetFrameLevel then buffs:SetFrameLevel(base + 1) end
+            if mixed and mixed.SetFrameLevel then mixed:SetFrameLevel(base + 1) end
+        end
+
         if anchor then anchor:Show() end
         -- Don't rely on child OnShow scripts (they may already be "shown" while parent is hidden).
         -- Just request a real refresh through the normal coalesced pipeline.
@@ -4395,9 +4436,8 @@ local function MSUF_A2_ApplyOwnedEvents(frame, desiredOwners)
     end
 end
 
-local function MSUF_A2_EnsureUnitAuraBinding(frame, force)
-    if not frame then return end
-    if (not force) and frame._msufA2_unitAuraBound == true then return end
+local function MSUF_A2_EnsureUnitAuraBinding(frame)
+    if not frame or frame._msufA2_unitAuraBound == true then return end
 
     -- IMPORTANT: RegisterUnitEvent does NOT reliably "add" units across multiple calls on all clients.
     -- Register once with all units so Focus/Boss updates never get dropped.
@@ -4473,8 +4513,6 @@ EventFrame:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-        -- Self-heal UNIT_AURA unit binding: other code may have overwritten the unit-list.
-        MSUF_A2_EnsureUnitAuraBinding(EventFrame, true)
         for i = 1, 5 do
             local u = "boss" .. i
             if MSUF_A2_ShouldProcessUnitEvent(u) then
@@ -4485,8 +4523,6 @@ EventFrame:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
-        -- Self-heal UNIT_AURA unit binding: other code may have overwritten the unit-list.
-        MSUF_A2_EnsureUnitAuraBinding(EventFrame, true)
         -- Prime Auras2 DB once (keeps UNIT_AURA hot-path free of migrations/default work).
         EnsureDB() -- prime Auras2 DB
         -- Attach everything that already exists, then do a first render (coalesced).
