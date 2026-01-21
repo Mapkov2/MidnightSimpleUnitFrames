@@ -504,8 +504,22 @@ local function MSUF_ResolveCrosshairRangeSpellIDFromGameplay(g)
         spellID = tonumber(g.meleeRangeSpellID) or 0
     end
     if spellID <= 0 then
+        -- New: optional per-class storage for the shared melee-range spell.
+        -- If enabled and a class entry exists, prefer that.
+        if g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
+            local _, class = UnitClass("player")
+            if class then
+                local perClass = tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0
+                if perClass > 0 then
+                    spellID = perClass
+                end
+            end
+        end
+
         -- Older/shared selector builds stored this under nameplateMeleeSpellID
-        spellID = tonumber(g.nameplateMeleeSpellID) or 0
+        if spellID <= 0 then
+            spellID = tonumber(g.nameplateMeleeSpellID) or 0
+        end
     end
     if spellID <= 0 and MSUF_DB and type(MSUF_DB.general) == "table" then
         -- Extra legacy fallback (very old builds)
@@ -2239,6 +2253,19 @@ panel.meleeSpellInput = meleeInput
 local MSUF_SuppressMeleeInputChange = false
 local MSUF_SkipMeleeFocusLostResolve = false
 
+-- Optional per-class storage for the shared melee range spell.
+-- This allows users to keep one profile across multiple characters and still
+-- use a valid class spell for range checking.
+local perClassCB = CreateFrame("CheckButton", "MSUF_Gameplay_MeleeSpellPerClassCheck", content, "InterfaceOptionsCheckButtonTemplate")
+perClassCB:SetPoint("TOPLEFT", meleeInput, "BOTTOMLEFT", 4, -6)
+perClassCB.Text:SetText("Store per class")
+panel.meleeSpellPerClassCheck = perClassCB
+
+local perClassHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+perClassHint:SetPoint("TOPLEFT", perClassCB, "BOTTOMLEFT", 20, -2)
+perClassHint:SetText("Keeps one profile across alts (Monk/Pala/etc) without changing the spell each time.")
+panel.meleeSpellPerClassHint = perClassHint
+
 local meleeSelected = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 meleeSelected:SetPoint("LEFT", meleeInput, "RIGHT", 12, 0)
 meleeSelected:SetText("Selected: (none)")
@@ -2274,6 +2301,9 @@ suggestionFrame:SetFrameLevel((content and content.GetFrameLevel and (content:Ge
 suggestionFrame:Hide()
 panel.meleeSuggestionFrame = suggestionFrame
 
+-- Forward declare so suggestion button OnClick closures can call it safely.
+local MSUF_SelectMeleeSpell
+
 local suggestionButtons = {}
 for i = 1, 8 do
     local b = CreateFrame("Button", nil, suggestionFrame)
@@ -2289,19 +2319,11 @@ for i = 1, 8 do
     b:SetScript("OnClick", function(selfBtn)
         local data = selfBtn.data
         if not data then return end
-        local g = EnsureGameplayDefaults()
-        g.nameplateMeleeSpellID = data.id
-        MSUF_SuppressMeleeInputChange = true
-        meleeInput:SetText(data.name or tostring(data.id))
-        MSUF_SuppressMeleeInputChange = false
+        -- Route through the shared selection helper so per-class storage stays in sync.
+        MSUF_SelectMeleeSpell(data.id, data.name, true)
         MSUF_SkipMeleeFocusLostResolve = true
         meleeInput:ClearFocus()
-        meleeSelected:SetText(string_format("Selected: %s (%d)", data.name, data.id))
-        if g.enableCombatCrosshair and g.enableCombatCrosshairMeleeRangeColor then
-            MSUF_SetEnabledMeleeRangeCheck(data.id)
-        end
         suggestionFrame:Hide()
-        ns.MSUF_RequestGameplayApply()
     end)
 
     suggestionButtons[i] = b
@@ -2309,7 +2331,16 @@ end
 
 local function UpdateSelectedTextFromDB()
     local g = EnsureGameplayDefaults()
-    local id = tonumber(g.nameplateMeleeSpellID) or 0
+    local id = 0
+    if g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
+        local _, class = UnitClass("player")
+        if class then
+            id = tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0
+        end
+    end
+    if id <= 0 then
+        id = tonumber(g.nameplateMeleeSpellID) or 0
+    end
     -- Shared spell warnings (only relevant if crosshair range-color mode is enabled)
     local rangeActive = (g.enableCombatCrosshair and g.enableCombatCrosshairMeleeRangeColor) and true or false
     if panel and panel.meleeSpellWarningText then
@@ -2370,11 +2401,23 @@ local function QuerySuggestions(query)
 end
 
 
-local function MSUF_SelectMeleeSpell(spellID, spellName, preferNameInBox)
+MSUF_SelectMeleeSpell = function(spellID, spellName, preferNameInBox)
     local g = EnsureGameplayDefaults()
     spellID = tonumber(spellID) or 0
     if spellID <= 0 then return end
 
+    -- Persist selection (global + optional per-class)
+    if g.meleeSpellPerClass then
+        if type(g.nameplateMeleeSpellIDByClass) ~= "table" then
+            g.nameplateMeleeSpellIDByClass = {}
+        end
+        if UnitClass then
+            local _, class = UnitClass("player")
+            if class then
+                g.nameplateMeleeSpellIDByClass[class] = spellID
+            end
+        end
+    end
     g.nameplateMeleeSpellID = spellID
 
     if preferNameInBox and spellName and spellName ~= "" then
@@ -2448,6 +2491,17 @@ meleeInput:SetScript("OnTextChanged", function(self)
 
     local asNum = tonumber(txt)
     if asNum and asNum > 0 then
+        if g.meleeSpellPerClass then
+            if type(g.nameplateMeleeSpellIDByClass) ~= "table" then
+                g.nameplateMeleeSpellIDByClass = {}
+            end
+            if UnitClass then
+                local _, class = UnitClass("player")
+                if class then
+                    g.nameplateMeleeSpellIDByClass[class] = asNum
+                end
+            end
+        end
         g.nameplateMeleeSpellID = asNum
         UpdateSelectedTextFromDB()
         if g.enableCombatCrosshair and g.enableCombatCrosshairMeleeRangeColor then
@@ -2478,6 +2532,33 @@ meleeInput:SetScript("OnTextChanged", function(self)
         end
     end
     suggestionFrame:Show()
+end)
+
+-- Per-class checkbox behavior.
+perClassCB:SetScript("OnClick", function(self)
+    local g = EnsureGameplayDefaults()
+    local want = self:GetChecked() and true or false
+    g.meleeSpellPerClass = want
+    if want then
+        if type(g.nameplateMeleeSpellIDByClass) ~= "table" then
+            g.nameplateMeleeSpellIDByClass = {}
+        end
+        if UnitClass then
+            local _, class = UnitClass("player")
+            if class then
+                -- Seed class entry from current global spell if missing.
+                if not g.nameplateMeleeSpellIDByClass[class] or tonumber(g.nameplateMeleeSpellIDByClass[class]) <= 0 then
+                    g.nameplateMeleeSpellIDByClass[class] = tonumber(g.nameplateMeleeSpellID) or 0
+                end
+            end
+        end
+    end
+
+    -- Refresh UI + apply immediately.
+    if panel and panel.refresh then
+        panel:refresh()
+    end
+    ns.MSUF_RequestGameplayApply()
 end)
 
 meleeInput:SetScript("OnEscapePressed", function(self)
@@ -3098,6 +3179,8 @@ end)
         _MSUF_SetFontStringEnabled(self.meleeSpellSelectedText, rangeOn, true)
         _MSUF_SetFontStringEnabled(self.meleeSpellUsedByText, rangeOn, true)
         _MSUF_SetEditBoxEnabled(self.meleeSpellInput, rangeOn)
+        _MSUF_SetCheckEnabled(self.meleeSpellPerClassCheck, rangeOn)
+        _MSUF_SetFontStringEnabled(self.meleeSpellPerClassHint, rangeOn, true)
 
         if self.meleeSuggestionFrame and not rangeOn then
             self.meleeSuggestionFrame:Hide()
@@ -3125,6 +3208,8 @@ end)
     -- which repopulates defaults in one place (single source of truth).
     local _MSUF_GAMEPLAY_DEFAULT_KEYS = {
         "nameplateMeleeSpellID",
+        "meleeSpellPerClass",
+        "nameplateMeleeSpellIDByClass",
 
         "combatOffsetX",
         "combatOffsetY",
@@ -3173,8 +3258,21 @@ end)
         -- Melee spell selection (shared)
         local meleeInput = self.meleeSpellInput
         if meleeInput then
-            local id = tonumber(g.nameplateMeleeSpellID) or 0
+            local id = 0
+            if g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
+                local _, class = UnitClass("player")
+                if class then
+                    id = tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0
+                end
+            end
+            if id <= 0 then
+                id = tonumber(g.nameplateMeleeSpellID) or 0
+            end
             meleeInput:SetText((id > 0) and tostring(id) or "")
+        end
+
+        if self.meleeSpellPerClassCheck then
+            self.meleeSpellPerClassCheck:SetChecked(g.meleeSpellPerClass and true or false)
         end
         if UpdateSelectedTextFromDB then
             UpdateSelectedTextFromDB()

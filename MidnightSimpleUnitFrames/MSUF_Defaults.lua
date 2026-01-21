@@ -969,6 +969,12 @@ end
     if gp.cooldownIcons == nil then gp.cooldownIcons = false end
     if gp.enableFirstDanceTimer == nil then gp.enableFirstDanceTimer = false end
     if gp.nameplateMeleeSpellID == nil then gp.nameplateMeleeSpellID = 0 end
+
+    -- Gameplay: Crosshair melee range spell can optionally be stored per class.
+    -- This lets users run a single profile across multiple characters without
+    -- having to swap the spell whenever they change class.
+    if gp.meleeSpellPerClass == nil then gp.meleeSpellPerClass = false end
+    if gp.nameplateMeleeSpellIDByClass == nil then gp.nameplateMeleeSpellIDByClass = {} end
     -- Auras: legacy auras DB removed in Patch 6D Step 2 (Auras 2.0 uses MSUF_DB.auras2)
     if MSUF_DB.auras ~= nil then MSUF_DB.auras = nil end
 
