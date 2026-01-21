@@ -3761,15 +3761,18 @@ end
 
     --------------------------------------------------
     -- Register as sub-category under the main MSUF panel
+    -- NOTE: Slash-menu-only mode must NOT register any Blizzard settings / interface options categories.
     --------------------------------------------------
-    if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
-        local subcategory = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
-        Settings.RegisterAddOnCategory(subcategory)
-        panel.__MSUF_SettingsRegistered = true
-        ns.MSUF_ColorsCategory = subcategory
-    elseif InterfaceOptions_AddCategory then
-        panel.parent = "Midnight Simple Unit Frames"
-        InterfaceOptions_AddCategory(panel)
+    if not (_G and _G.MSUF_SLASHMENU_ONLY) then
+        if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
+            local subcategory = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
+            Settings.RegisterAddOnCategory(subcategory)
+            panel.__MSUF_SettingsRegistered = true
+            ns.MSUF_ColorsCategory = subcategory
+        elseif InterfaceOptions_AddCategory then
+            panel.parent = "Midnight Simple Unit Frames"
+            InterfaceOptions_AddCategory(panel)
+        end
     end
 
     panel:SetScript("OnShow", function()
@@ -3791,6 +3794,11 @@ end
 
 -- Lightweight wrapper: register the category at login, but build the heavy UI only when opened.
 function ns.MSUF_RegisterColorsOptions(parentCategory)
+    if _G and _G.MSUF_SLASHMENU_ONLY then
+        -- Slash-menu-only: never register Colors as a Blizzard Settings/Interface Options category.
+        -- The Slash Menu is the only configuration UI.
+        return
+    end
     if not Settings or not Settings.RegisterCanvasLayoutSubcategory or not parentCategory then
         return ns.MSUF_RegisterColorsOptions_Full(parentCategory)
     end

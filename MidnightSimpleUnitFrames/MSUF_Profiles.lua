@@ -1171,6 +1171,165 @@ function MSUF_ImportLegacyFromString(str)
 end
 
 
+---------------------------------------------------------------------
+-- External Wago UI Packs API (stateless by profileKey)
+--
+-- Goals:
+--  - Allow tools to export/import a SPECIFIC profile by key without switching MSUF_ActiveProfile.
+--  - Keep DB table references stable (important for runtime caches) when overwriting the ACTIVE profile.
+--  - Zero regression: existing import/export code paths remain unchanged.
+--
+-- API:
+--   ok, strOrErr = MSUF_ExportExternal(profileKey)
+--   ok, errOrNil = MSUF_ImportExternal(profileString, profileKey)
+---------------------------------------------------------------------
+
+local function MSUF_ProfileIO_EnsureProfilesTable()
+    if not MSUF_GlobalDB or type(MSUF_GlobalDB) ~= "table" then
+        MSUF_GlobalDB = {}
+    end
+    if type(MSUF_GlobalDB.profiles) ~= "table" then
+        MSUF_GlobalDB.profiles = {}
+    end
+end
+
+local function MSUF_ProfileIO_GetProfileTable(profileKey)
+    if type(profileKey) ~= "string" or profileKey == "" then
+        return nil
+    end
+    -- Ensure profile system is initialized (safe, used elsewhere via EnsureDB()).
+    if type(EnsureDB) == "function" then
+        EnsureDB()
+    elseif type(MSUF_InitProfiles) == "function" then
+        MSUF_InitProfiles()
+    end
+
+    MSUF_ProfileIO_EnsureProfilesTable()
+    return MSUF_GlobalDB.profiles[profileKey]
+end
+
+local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
+    if type(profileKey) ~= "string" or profileKey == "" then
+        return false, "invalid profileKey"
+    end
+    if type(newTable) ~= "table" then
+        return false, "not a table"
+    end
+
+    MSUF_ProfileIO_EnsureProfilesTable()
+
+    local existing = MSUF_GlobalDB.profiles[profileKey]
+    local isActive = (profileKey == MSUF_ActiveProfile)
+
+    -- Keep references stable for ACTIVE profile (and if someone holds a ref to the existing table).
+    if isActive and type(MSUF_DB) == "table" then
+        -- Prefer wiping the active table ref (MSUF_DB) to avoid cache/reference drift.
+        local target = MSUF_DB
+        MSUF_WipeTable(target)
+        for k, v in pairs(newTable) do
+            target[k] = MSUF_DeepCopy(v)
+        end
+        MSUF_GlobalDB.profiles[profileKey] = target
+        return true
+    end
+
+    if type(existing) == "table" then
+        -- For non-active profiles we can still preserve reference stability if something else points at it.
+        MSUF_WipeTable(existing)
+        for k, v in pairs(newTable) do
+            existing[k] = MSUF_DeepCopy(v)
+        end
+        MSUF_GlobalDB.profiles[profileKey] = existing
+        return true
+    end
+
+    MSUF_GlobalDB.profiles[profileKey] = MSUF_DeepCopy(newTable)
+    return true
+end
+
+function MSUF_ExportExternal(profileKey)
+    local profileTbl = MSUF_ProfileIO_GetProfileTable(profileKey)
+    if type(profileTbl) ~= "table" then
+        return false, "unknown profileKey"
+    end
+
+    local snap = {
+        addon   = "MSUF",
+        fmt     = 2,
+        schema  = 1,
+        kind    = "all",
+        profile = profileKey,
+        payload = MSUF_DeepCopy(profileTbl),
+    }
+
+    local enc = _G.MSUF_EncodeCompactTable
+    if type(enc) == "function" then
+        local compact = enc(snap)
+        if type(compact) == "string" and compact:match("%S") then
+            return true, compact
+        end
+    end
+
+    -- 0-regression fallback (rare): return Lua snapshot.
+    return true, MSUF_SerializeLuaTable(snap)
+end
+
+function MSUF_ImportExternal(profileString, profileKey)
+    if type(profileString) ~= "string" or not profileString:match("%S") then
+        return false, "empty profileString"
+    end
+    if type(profileKey) ~= "string" or profileKey == "" then
+        return false, "invalid profileKey"
+    end
+
+    -- Prefer compact decode (no loadstring).
+    local tryDec = _G.MSUF_TryDecodeCompactString
+    if type(tryDec) == "function" then
+        local decoded = tryDec(profileString)
+        if type(decoded) == "table" then
+            local tbl = decoded
+
+            -- Snapshot format? (fmt=2)
+            if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
+                -- For external import we treat snapshot.payload as the full profile table when kind == "all".
+                if tbl.kind == "all" then
+                    return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl.payload)
+                end
+                -- If some tool ever passes a partial snapshot, store the whole decoded table as-is (safer than half-applying).
+                return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
+            end
+
+            -- Otherwise treat decoded table as a full profile dump.
+            return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
+        end
+    end
+
+    -- If it looks like a compact MSUF2/MSUF3 string, but decode failed, do NOT loadstring it.
+    local prefix = profileString:match("^%s*(MSUF%d+):")
+    if prefix == "MSUF2" or prefix == "MSUF3" then
+        return false, "could not decode compact profile string (" .. tostring(prefix) .. ")"
+    end
+
+    -- Optional legacy table-string support (last resort).
+    local func = loadstring(profileString)
+    if not func then
+        func = loadstring("return " .. profileString)
+    end
+    if not func then
+        return false, "invalid lua table string"
+    end
+
+    local ok, tbl = pcall(func)
+    if not ok or type(tbl) ~= "table" then
+        return false, "lua decode failed"
+    end
+    return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
+end
+
+-- Expose real implementations under stable, explicit names for load-order proxies.
+_G.MSUF_Profiles_ExportExternal = MSUF_ExportExternal
+_G.MSUF_Profiles_ImportExternal = MSUF_ImportExternal
+
 -- Globals for the Options module.
 _G.MSUF_ExportSelectionToString = _G.MSUF_ExportSelectionToString or MSUF_ExportSelectionToString
 _G.MSUF_ImportFromString        = _G.MSUF_ImportFromString        or MSUF_ImportFromString

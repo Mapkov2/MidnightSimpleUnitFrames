@@ -2,7 +2,7 @@
 ## Title: Midnight Simple UnitFrames
 ## Notes: Unitframe Addon by Mapko 
 ## Author: Mapkó
-## Version: 1.66r1
+## Version: 1.67r1
 ## Category: Combat
 ## SavedVariables: MSUF_Config
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
@@ -19,6 +19,8 @@ MSUF_Style.lua
 MSUF_Castbars_LoDStub.lua
 Options\MSUF_Options_Core.lua
 Options\MSUF_Options_Player.lua
+Options\MSUF_Options_Misc.lua
+Options\MSUF_Options_Fonts.lua
 Core\MSUF_ProfileIO.lua
 Core\MSUF_StatusIndicators.lua
 Core\MSUF_SetupWizard.lua

@@ -3329,15 +3329,18 @@ end)
         UpdateContentHeight()
     end)
 
--- Settings registration
-    if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
-        local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
-        Settings.RegisterAddOnCategory(subcategory)
-        panel.__MSUF_SettingsRegistered = true
-        ns.MSUF_GameplayCategory = subcategory
-    elseif InterfaceOptions_AddCategory then
-        panel.parent = "Midnight Simple Unit Frames"
-        InterfaceOptions_AddCategory(panel)
+    -- Settings / Interface Options registration
+    -- NOTE: Slash-menu-only mode must NOT register any Blizzard settings / interface options categories.
+    if not (_G and _G.MSUF_SLASHMENU_ONLY) then
+        if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
+            local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
+            Settings.RegisterAddOnCategory(subcategory)
+            panel.__MSUF_SettingsRegistered = true
+            ns.MSUF_GameplayCategory = subcategory
+        elseif InterfaceOptions_AddCategory then
+            panel.parent = "Midnight Simple Unit Frames"
+            InterfaceOptions_AddCategory(panel)
+        end
     end
 
     -- Beim Öffnen des Panels SavedVariables → UI syncen
@@ -3356,6 +3359,13 @@ end
 
 -- Lightweight wrapper: register the category at login, but build the heavy UI only when opened.
 function ns.MSUF_RegisterGameplayOptions(parentCategory)
+    if _G and _G.MSUF_SLASHMENU_ONLY then
+        -- Slash-menu-only: build the panel for mirroring, but do NOT register it in Blizzard Settings.
+        if type(ns.MSUF_RegisterGameplayOptions_Full) == "function" then
+            return ns.MSUF_RegisterGameplayOptions_Full(nil)
+        end
+        return
+    end
     if not Settings or not Settings.RegisterCanvasLayoutSubcategory or not parentCategory then
         -- Fallback: if Settings API isn't available, just build immediately.
         return ns.MSUF_RegisterGameplayOptions_Full(parentCategory)

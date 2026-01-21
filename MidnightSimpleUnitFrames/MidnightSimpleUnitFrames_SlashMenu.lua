@@ -750,6 +750,98 @@ local function MSUF_ShowReloadConfirm(label, fn)
   StaticPopup_Show("MSUF_RELOAD_UI_CONFIRM", MSUF_PENDING_RELOAD_LABEL)
 end
 
+
+-- Copy/link popup (used by Dashboard support icons)
+-- NOTE: StaticPopup editboxes can be flaky in some UI contexts (empty editbox).
+-- We use a tiny MSUF-owned modal frame so the URL is ALWAYS pasted into the box.
+local MSUF_CopyLinkPopup = nil
+
+local function MSUF_EnsureCopyLinkPopup()
+    if MSUF_CopyLinkPopup then return MSUF_CopyLinkPopup end
+
+    local f = CreateFrame("Frame", "MSUF_CopyLinkPopup", UIParent, "BackdropTemplate")
+    f:SetSize(420, 150)
+    f:SetFrameStrata("DIALOG")
+    f:SetClampedToScreen(true)
+    f:EnableMouse(true)
+    f:SetMovable(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+
+    f:SetBackdrop({
+        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    f:SetBackdropColor(0, 0, 0, 0.90)
+    f:SetBackdropBorderColor(0.10, 0.10, 0.10, 0.90)
+
+    local titleFS = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    titleFS:SetPoint("TOP", f, "TOP", 0, -14)
+    titleFS:SetText("Link")
+    f._msufTitleFS = titleFS
+
+    local hintFS = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    hintFS:SetPoint("TOP", titleFS, "BOTTOM", 0, -6)
+    hintFS:SetText("Press Ctrl+C to copy:")
+    hintFS:SetTextColor(0.90, 0.90, 0.90, 1)
+
+    local eb = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    eb:SetAutoFocus(false)
+    eb:SetSize(360, 32)
+    eb:SetPoint("TOP", hintFS, "BOTTOM", 0, -10)
+    if eb.SetTextInsets then eb:SetTextInsets(8, 8, 0, 0) end
+    eb:SetScript("OnEscapePressed", function() f:Hide() end)
+    eb:SetScript("OnEnterPressed", function() f:Hide() end)
+    f._msufEditBox = eb
+
+    local ok = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    ok:SetSize(120, 24)
+    ok:SetPoint("BOTTOM", f, "BOTTOM", 0, 12)
+    ok:SetText(OKAY)
+    ok:SetScript("OnClick", function() f:Hide() end)
+    if type(MSUF_SkinButton) == "function" then
+        MSUF_SkinButton(ok)
+    end
+
+    f:SetScript("OnShow", function(self)
+        if self._msufTitleFS then
+            self._msufTitleFS:SetText(self._msufTitle or "Link")
+        end
+        if self._msufEditBox then
+            self._msufEditBox:SetText(self._msufUrl or "")
+            self._msufEditBox:HighlightText()
+            self._msufEditBox:SetFocus()
+        end
+    end)
+
+    f:SetScript("OnHide", function(self)
+        if self._msufEditBox then
+            self._msufEditBox:SetText("")
+            self._msufEditBox:ClearFocus()
+        end
+        self._msufTitle = nil
+        self._msufUrl = nil
+    end)
+
+    f:Hide()
+    MSUF_CopyLinkPopup = f
+    return f
+end
+
+local function MSUF_ShowCopyLink(title, url)
+    local f = MSUF_EnsureCopyLinkPopup()
+    f._msufTitle = tostring(title or "Link")
+    f._msufUrl = tostring(url or "")
+    f:ClearAllPoints()
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    f:Show()
+    if f.Raise then f:Raise() end
+end
 -- Scale used for mirrored (real) option panels inside the standalone window.
 local MIRROR_PANEL_SCALE = 1.00
 -- Readability helpers:
@@ -1638,12 +1730,25 @@ local function MSUF_SetSavedMsufScale(v)
     g.msufUiScale = clamp(v, 0.6, 1.4)
 end
 
+-- Master kill-switch for any MSUF scaling (global UI scale + MSUF-only scale).
+-- When enabled, MSUF will not apply/enforce scaling on login, resize, or deferred combat-exit applies.
+local function MSUF_IsScalingDisabled()
+    local g = MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+    return (g and g.disableScaling) and true or false
+end
+
 local _MSUF_pendingMsufScale
 local _MSUF_pendingGlobalScale
+local _MSUF_pendingDisableScaling
+local _MSUF_pendingReloadOnScalingOff
 local _MSUF_scaleApplyWatcher
 local MSUF_EnsureScaleApplyAfterCombat -- forward
 
-local function MSUF_ApplyMsufScale(scale)
+local function MSUF_ApplyMsufScale(scale, opts)
+    if MSUF_IsScalingDisabled() and not (opts and opts.ignoreDisable) then
+        return
+    end
+
     scale = tonumber(scale)
     if not scale then return end
     scale = clamp(scale, 0.6, 1.4)
@@ -1732,6 +1837,7 @@ local function MSUF_EnforceUIParentScale(scale)
 end
 
 local function MSUF_ScheduleUIParentNudges(scale)
+    if MSUF_IsScalingDisabled() then return end
     -- Short, finite "watch" that re-applies UIParent scale a few times after we set CVars.
     -- This beats late login-time overrides without running a permanent ticker.
     if not (C_Timer and C_Timer.After) then return end
@@ -1758,6 +1864,9 @@ end
 
 local function MSUF_SetGlobalUiScale(scale, silent, opts)
     opts = opts or {}
+    if MSUF_IsScalingDisabled() and not opts.ignoreDisable then
+        return
+    end
     local applyCVars = (opts.applyCVars ~= false) and true or false
 
     scale = tonumber(scale)
@@ -1809,20 +1918,44 @@ MSUF_EnsureScaleApplyAfterCombat = function()
     f:SetScript("OnEvent", function()
         if InCombatLockdown and InCombatLockdown() then return end
 
-        local s = _MSUF_pendingMsufScale
-        local g = _MSUF_pendingGlobalScale
-        _MSUF_pendingMsufScale = nil
-        _MSUF_pendingGlobalScale = nil
+        -- If the user pressed the scaling "OFF" kill-switch in combat, apply the hard reset now.
+        if _MSUF_pendingDisableScaling then
+            _MSUF_pendingDisableScaling = nil
+            _MSUF_pendingMsufScale = nil
+            _MSUF_pendingGlobalScale = nil
+            MSUF_ResetGlobalUiScale(true)
+            MSUF_ApplyMsufScale(1.0, { ignoreDisable = true })
 
-        if s then
-            MSUF_ApplyMsufScale(s)
+        -- If scaling is disabled, never apply any deferred scale changes.
+        elseif MSUF_IsScalingDisabled() then
+            _MSUF_pendingMsufScale = nil
+            _MSUF_pendingGlobalScale = nil
+
+        else
+            local s = _MSUF_pendingMsufScale
+            local g = _MSUF_pendingGlobalScale
+            _MSUF_pendingMsufScale = nil
+            _MSUF_pendingGlobalScale = nil
+
+            if s then
+                MSUF_ApplyMsufScale(s)
+            end
+            if g then
+                MSUF_SetGlobalUiScale(g, true)
+            end
         end
-        if g then
-            MSUF_SetGlobalUiScale(g, true)
+
+        -- If the user requested a forced reload after disabling scaling, do it once we're safe.
+        if _MSUF_pendingReloadOnScalingOff then
+            _MSUF_pendingReloadOnScalingOff = nil
+            if type(ReloadUI) == "function" then
+                ReloadUI()
+                return
+            end
         end
 
         -- If nothing remains pending, remove the watcher to keep things idle-clean.
-        if not _MSUF_pendingMsufScale and not _MSUF_pendingGlobalScale then
+        if (not _MSUF_pendingDisableScaling) and (not _MSUF_pendingMsufScale) and (not _MSUF_pendingGlobalScale) then
             f:UnregisterEvent("PLAYER_REGEN_ENABLED")
             f:SetScript("OnEvent", nil)
             _MSUF_scaleApplyWatcher = nil
@@ -1855,6 +1988,58 @@ local function MSUF_ResetGlobalUiScale(silent)
     end
 end
 
+-- Public helper: disables/enables ALL MSUF scaling.
+-- disable=true will:
+--   - stop enforcing MSUF global UI scale (set preset to Auto)
+--   - reset Blizzard CVars/UIParent scale to defaults (best-effort)
+--   - reset MSUF-only scale to 1.0
+-- Works in combat (defers protected changes until combat ends).
+local function MSUF_SetScalingDisabled(disable, silent)
+    local g = MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+    if not g then return end
+
+    disable = disable and true or false
+    g.disableScaling = disable
+
+    if not disable then
+        _MSUF_pendingDisableScaling = nil
+        return
+    end
+
+    -- Stop enforcing global presets.
+    g.globalUiScalePreset = "auto"
+    g.globalUiScaleValue = nil
+
+    -- Reset MSUF-only scale to 1.0 and persist it.
+    MSUF_SetSavedMsufScale(1.0)
+
+    -- Protected operations: defer until out of combat.
+    if InCombatLockdown and InCombatLockdown() then
+        _MSUF_pendingDisableScaling = true
+        if MSUF_EnsureScaleApplyAfterCombat then
+            MSUF_EnsureScaleApplyAfterCombat()
+        end
+        if not silent then
+            MSUF_Print("MSUF scaling disabled. Will fully reset after combat.")
+        end
+        return
+    end
+
+    MSUF_ResetGlobalUiScale(true)
+    MSUF_ApplyMsufScale(1.0, { ignoreDisable = true })
+
+    _MSUF_pendingDisableScaling = nil
+    _MSUF_pendingMsufScale = nil
+    _MSUF_pendingGlobalScale = nil
+
+    if not silent then
+        MSUF_Print("MSUF scaling disabled (Blizzard handles scaling now).")
+    end
+end
+
+-- Optional global access for other modules/UI
+_G.MSUF_SetScalingDisabled = MSUF_SetScalingDisabled
+
 local function MSUF_SaveGlobalPreset(preset, scale)
     local g = MSUF_EnsureGeneral()
     if not g then return end
@@ -1865,6 +2050,10 @@ end
 local function MSUF_GetDesiredGlobalScaleFromDB()
     local g = MSUF_EnsureGeneral()
     if not g then
+        return nil
+    end
+
+    if g.disableScaling then
         return nil
     end
 
@@ -1887,6 +2076,7 @@ end
 local MSUF_SCALE_GUARD = { suppressUntil = 0 }
 
 local function MSUF_EnsureGlobalUiScaleApplied(silent)
+    if MSUF_IsScalingDisabled() then return end
     local now = (GetTime and GetTime()) or 0
     if now < (MSUF_SCALE_GUARD.suppressUntil or 0) then return end
 
@@ -1997,6 +2187,8 @@ MSUF_BuildTools = function(parent, opts)
 
 local btn1080 = UI_Button(parent, "1080", segW, segH, "TOPLEFT", globalCur, "BOTTOMLEFT", 0, -8, function()
     MSUF_ShowReloadConfirm("Global UI Scale: 1080p", function()
+        -- If the user previously disabled scaling entirely, re-enable it on intent.
+        if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false, true) end
         MSUF_SaveGlobalPreset("1080p", UI_SCALE_1080)
         MSUF_SetGlobalUiScale(UI_SCALE_1080, true)
         ReloadUI()
@@ -2008,6 +2200,7 @@ end)
 
 local btn1440 = UI_Button(parent, "1440", segW, segH, "LEFT", btn1080, "RIGHT", segGap, 0, function()
     MSUF_ShowReloadConfirm("Global UI Scale: 1440p", function()
+        if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false, true) end
         MSUF_SaveGlobalPreset("1440p", UI_SCALE_1440)
         MSUF_SetGlobalUiScale(UI_SCALE_1440, true)
         ReloadUI()
@@ -2018,6 +2211,7 @@ end)
 
 local btnAuto = UI_Button(parent, "Auto", segW, segH, "LEFT", btn1440, "RIGHT", segGap, 0, function()
     MSUF_ShowReloadConfirm("Global UI Scale: Auto", function()
+        if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false, true) end
         MSUF_SaveGlobalPreset("auto", nil)
         MSUF_ResetGlobalUiScale(true)
         ReloadUI()
@@ -2063,37 +2257,130 @@ end)
     if opts and opts.showValue then msufValue:Show() end
     MSUF_SkinText(msufValue)
 
-local resetW = (isWide and (isXL and 92 or 80)) or (isXL and 78 or 62)
-local msufReset = UI_Button(parent, "Reset", resetW, 18, "TOPLEFT", msufSlider, "BOTTOMLEFT", 0, -6, function()
-    local v = 1.0
-    MSUF_SetSavedMsufScale(v)
-    MSUF_ApplyMsufScale(v)
-    msufSlider._msufIgnore = true
-    msufSlider:SetValue(v)
-    msufSlider._msufIgnore = false
-    if msufValue and msufValue.SetText then msufValue:SetText("") end
-end)
+    local resetW = (isWide and (isXL and 92 or 80)) or (isXL and 78 or 62)
+
+    -- Tiny local helpers (keep the scaling UI actions readable)
+    local function MSUF_EnableScalingSilently()
+        if _G and _G.MSUF_SetScalingDisabled then
+            _G.MSUF_SetScalingDisabled(false, true)
+        end
+    end
+
+    local function MSUF_SetSliderValueSilent(v)
+        if not msufSlider then return end
+        msufSlider._msufIgnore = true
+        msufSlider:SetValue(v)
+        msufSlider._msufIgnore = false
+    end
+
+    local function MSUF_RequestReloadSafe()
+        -- If clicked in combat, defer the reload until combat ends so the scale reset can apply first.
+        if InCombatLockdown and InCombatLockdown() then
+            _MSUF_pendingReloadOnScalingOff = true
+            if MSUF_EnsureScaleApplyAfterCombat then
+                MSUF_EnsureScaleApplyAfterCombat()
+            end
+            return
+        end
+        if type(ReloadUI) == "function" then
+            ReloadUI()
+        end
+    end
+
+    local function MSUF_SetScalingToggleVisual(disabled)
+        if not msufOff or not msufOff.GetFontString then return end
+        local fs = msufOff:GetFontString()
+        if not fs then return end
+        if disabled then
+            if msufOff.SetText then msufOff:SetText("Scaling OFF") end
+            if fs.SetTextColor then fs:SetTextColor(1.0, 0.2, 0.2, 1.0) end -- red
+        else
+            if msufOff.SetText then msufOff:SetText("Scaling ON") end
+            if fs.SetTextColor then fs:SetTextColor(0.2, 1.0, 0.2, 1.0) end -- green
+        end
+    end
+    local msufReset = UI_Button(parent, "Reset", resetW, 18, "TOPLEFT", msufSlider, "BOTTOMLEFT", 0, -6, function()
+        MSUF_EnableScalingSilently()
+
+        local v = 1.0
+        MSUF_SetSavedMsufScale(v)
+        MSUF_ApplyMsufScale(v)
+        MSUF_SetSliderValueSilent(v)
+
+        if msufValue and msufValue.SetText then
+            msufValue:SetText("")
+        end
+        if api and api.Refresh then api.Refresh() end
+    end)
+
+    local offW = (isWide and (isXL and 164 or 140)) or (isXL and 150 or 120)
+    local msufOff = UI_Button(parent, "Scaling OFF", offW, 18, "LEFT", msufReset, "RIGHT", 8, 0, function()
+        local g = MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+        local isDisabled = g and g.disableScaling
+
+        if isDisabled then
+            -- Turn scaling back ON (no forced reload; picking a preset still reloads as before)
+            if _G and _G.MSUF_SetScalingDisabled then
+                _G.MSUF_SetScalingDisabled(false, true)
+            else
+                if g then g.disableScaling = false end
+            end
+            if api and api.Refresh then api.Refresh() end
+            return
+        end
+
+        -- Turn scaling fully OFF (Global + MSUF-only), then reload (combat-safe)
+        if _G and _G.MSUF_SetScalingDisabled then
+            _G.MSUF_SetScalingDisabled(true, false)
+        else
+            -- Fallback (shouldn't happen): hard reset best-effort
+            MSUF_ResetGlobalUiScale(true)
+            MSUF_SetSavedMsufScale(1.0)
+            MSUF_ApplyMsufScale(1.0)
+            if g then
+                g.disableScaling = true
+                g.globalUiScalePreset = "auto"
+                g.globalUiScaleValue = nil
+            end
+        end
+
+        -- Keep UI controls in sync immediately.
+        MSUF_SetSliderValueSilent(1.0)
+        if api and api.Refresh then api.Refresh() end
+
+        MSUF_RequestReloadSafe()
+    end)
 
     MSUF_SkinDashboardButton(msufReset)
+    MSUF_SkinDashboardButton(msufOff)
+
     if MSUF_AddTooltip then
         MSUF_AddTooltip(msufReset, "Reset MSUF UI Scale", "Resets MSUF-only scale back to 1.0.")
+        MSUF_AddTooltip(msufOff, "Disable ALL MSUF scaling", "Turns off all scaling MSUF applies (global UI scale + MSUF-only scale), then reloads your UI. Blizzard handles scaling.")
     end
 
     msufSlider:SetScript("OnValueChanged", function(self, value)
         if self._msufIgnore then return end
+
+        MSUF_EnableScalingSilently()
+
         local v = tonumber(value) or 1.0
         MSUF_SetSavedMsufScale(v)
         MSUF_ApplyMsufScale(v)
-        if msufValue and msufValue.SetText then msufValue:SetText("") end
+
+        if msufValue and msufValue.SetText then
+            msufValue:SetText("")
+        end
+        if api and api.Refresh then api.Refresh() end
     end)
 
-        function api.Refresh()
+    function api.Refresh()
         -- MSUF scale
         local v = MSUF_GetSavedMsufScale()
-        msufSlider._msufIgnore = true
-        msufSlider:SetValue(v)
-        msufSlider._msufIgnore = false
-        if msufValue and msufValue.SetText then msufValue:SetText("") end
+        MSUF_SetSliderValueSilent(v)
+        if msufValue and msufValue.SetText then
+            msufValue:SetText("")
+        end
 
         -- Global scale (UIParent scale)
         local cur = MSUF_GetCurrentGlobalUiScale()
@@ -2103,12 +2390,30 @@ end)
             globalCur:SetText("Current: ?")
         end
 
-        -- Highlight the active global preset button (matches the left-nav selection style)
+        
+-- Highlight the active global preset button (matches the left-nav selection style)
         local g = MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
         local preset = g and g.globalUiScalePreset
-        if btn1080 and btn1080._msufSetSelected then btn1080:_msufSetSelected(preset == "1080p") end
-        if btn1440 and btn1440._msufSetSelected then btn1440:_msufSetSelected(preset == "1440p") end
-        if btnAuto and btnAuto._msufSetSelected then btnAuto:_msufSetSelected((preset == "auto") or (preset == nil)) end
+        local disabled = g and g.disableScaling
+
+        if disabled then
+            -- When Scaling OFF is active, do NOT highlight Auto (or any preset).
+            if btn1080 and btn1080._msufSetSelected then btn1080:_msufSetSelected(false) end
+            if btn1440 and btn1440._msufSetSelected then btn1440:_msufSetSelected(false) end
+            if btnAuto and btnAuto._msufSetSelected then btnAuto:_msufSetSelected(false) end
+        else
+            if btn1080 and btn1080._msufSetSelected then btn1080:_msufSetSelected(preset == "1080p") end
+            if btn1440 and btn1440._msufSetSelected then btn1440:_msufSetSelected(preset == "1440p") end
+            if btnAuto and btnAuto._msufSetSelected then btnAuto:_msufSetSelected((preset == "auto") or (preset == nil)) end
+        end
+
+        -- Scaling toggle visuals (green = ON, red = OFF)
+        MSUF_SetScalingToggleVisual(disabled and true or false)
+
+        -- Optional selection glow only when OFF (acts as the "active" state)
+        if msufOff and msufOff._msufSetSelected then
+            msufOff:_msufSetSelected(disabled and true or false)
+        end
     end
 
 
@@ -2137,6 +2442,15 @@ end)
                 local sliderW = avail - valueW - 8
                 if sliderW < 1 then sliderW = 1 end
                 msufSlider:SetWidth(sliderW)
+            end
+
+            -- Keep the big "Scaling OFF" button inside the box on narrow widths.
+            if msufOff and msufOff.SetWidth and msufReset and msufReset.GetWidth then
+                local rw = msufReset:GetWidth() or resetW
+                local ow = avail - rw - 8
+                if ow < 90 then ow = 90 end
+                if ow > 260 then ow = 260 end
+                msufOff:SetWidth(ow)
             end
         end
 
@@ -2389,7 +2703,7 @@ local function MSUF_SelectCastbarSubPage(unitKey)
 end
 
 local MIRROR_PAGES = {
-    home     = { title = "Midnight Simple Unitframes (Release 1.66r1)", nav = "Dashboard", build = nil },
+    home     = { title = "Midnight Simple Unitframes (Release 1.66b2)", nav = "Dashboard", build = nil },
     main     = { title = "MSUF Options",  nav = "Options",  build = MSUF_EnsureMainOptionsPanelBuilt,
         select = function(subkey)
             if not subkey then return end
@@ -4226,6 +4540,91 @@ presetHint:SetText("Overwrites your current active profile settings.")
 MSUF_SkinMuted(presetHint)
 
 
+-- Support links (bottom-right, under Presets)
+do
+    local KO_FI_URL = "https://ko-fi.com/midnightsimpleunitframes#linkModal"
+    local PAYPAL_URL = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ"
+    local GITHUB_URL = "https://github.com/Mapkov2/MidnightSimpleUnitFrames"
+    local ICON_DIR = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
+
+    -- Left-side label (requested): keep it simple, unobtrusive, and anchored to the Presets card.
+    local supportLabel = presetsCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    supportLabel:SetPoint("BOTTOMLEFT", presetsCard, "BOTTOMLEFT", 12, 14)
+    supportLabel:SetText("Support the MSUF Development:")
+    supportLabel:SetTextColor(0.90, 0.90, 0.90)
+    supportLabel:SetJustifyH("LEFT")
+    supportLabel:SetJustifyV("MIDDLE")
+    if MSUF_SkinMuted then
+        -- Slightly muted like other helper text, but still readable.
+        pcall(MSUF_SkinMuted, supportLabel)
+    end
+
+    local row = CreateFrame("Frame", nil, presetsCard)
+    row:SetHeight(24)
+    row:SetWidth(120)
+    row:SetPoint("BOTTOMRIGHT", presetsCard, "BOTTOMRIGHT", -12, 12)
+
+    local function CreateIcon(texFile, size, tooltipTitle, tooltipText, onClick)
+        local b = CreateFrame("Button", nil, row)
+        b:SetSize(size, size)
+
+        local t = b:CreateTexture(nil, "ARTWORK")
+        t:SetAllPoints()
+        t:SetTexture(ICON_DIR .. texFile)
+
+        local hl = b:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.10)
+
+        b:SetScript("OnClick", onClick)
+
+        if MSUF_AddTooltip then
+            MSUF_AddTooltip(b, tooltipTitle, tooltipText)
+        else
+            b:SetScript("OnEnter", function(self)
+                if not GameTooltip then return end
+                GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
+                GameTooltip:AddLine(tooltipTitle or "", 1, 1, 1)
+                if tooltipText and tooltipText ~= "" then
+                    GameTooltip:AddLine(tooltipText, 0.85, 0.85, 0.85, true)
+                end
+                GameTooltip:Show()
+            end)
+            b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        end
+
+        return b
+    end
+
+    local sz = 22
+    local gap = 7
+
+    local bPayPal = CreateIcon("PayPal.png", sz,
+        "PayPal",
+        "Click to copy the PayPal support link.",
+        function()
+            MSUF_ShowCopyLink("PayPal", PAYPAL_URL)
+        end)
+    bPayPal:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+
+    local bKoFi = CreateIcon("Ko-Fi.png", sz,
+        "Ko-fi",
+        "Click to copy the Ko-fi link.",
+        function()
+            MSUF_ShowCopyLink("Ko-fi", KO_FI_URL)
+        end)
+    bKoFi:SetPoint("RIGHT", bPayPal, "LEFT", -gap, 0)
+
+    local bGitHub = CreateIcon("GitHub.png", sz,
+        "GitHub",
+        "Click to copy the GitHub repository link.",
+        function()
+            MSUF_ShowCopyLink("GitHub", GITHUB_URL)
+        end)
+    bGitHub:SetPoint("RIGHT", bKoFi, "LEFT", -gap, 0)
+end
+
+
     -- Responsive dashboard layout: prevent overlaps on smaller window sizes / lower UI scale.
     local function MSUF_DashboardLayout()
         local wL = (colL and colL.GetWidth and colL:GetWidth()) or 0
@@ -4365,7 +4764,7 @@ end
 -- Phase 1: Public navigation API (single entry-point)
 -- ------------------------------------------------------------
 -- We expose a stable, global router so *all* MSUF UI can be opened the same way
--- (Flash/Standalone window preferred, Blizzard Settings as fallback).
+-- (Flash/Standalone window is the only settings UI.)
 
 local function MSUF_ShowOptionsWindow(key, subkey)
     local w = MSUF_CreateOptionsWindow()
@@ -4394,49 +4793,6 @@ local function MSUF_HideOptionsWindow()
     end
 end
 
-local function MSUF_OpenSettingsFallback(key)
-    -- Minimal, safe fallback: open Blizzard Settings to the best matching category.
-    local ok, err
-
-    if _G and type(_G.MSUF_RegisterOptionsCategoryLazy) == "function" then
-        pcall(_G.MSUF_RegisterOptionsCategoryLazy)
-    end
-
-    local function openCat(cat)
-        if not cat then return end
-        if Settings and Settings.OpenToCategory and cat.GetID then
-            Settings.OpenToCategory(cat:GetID())
-        elseif InterfaceOptionsFrame_OpenToCategory and _G and _G.MSUF_OptionsPanel then
-            InterfaceOptionsFrame_OpenToCategory(_G.MSUF_OptionsPanel)
-            InterfaceOptionsFrame_OpenToCategory(_G.MSUF_OptionsPanel)
-        end
-    end
-
-    -- Try subcategories if available
-    if key == "colors" then
-        if ns and type(ns.MSUF_RegisterColorsOptions_Full) == "function" then
-            local parent = (_G and _G.MSUF_SettingsCategory) or (ns and ns.MSUF_MainCategory)
-            if parent then pcall(ns.MSUF_RegisterColorsOptions_Full, parent) end
-        elseif ns and type(ns.MSUF_RegisterColorsOptions) == "function" then
-            local parent = (_G and _G.MSUF_SettingsCategory) or (ns and ns.MSUF_MainCategory)
-            if parent then pcall(ns.MSUF_RegisterColorsOptions, parent) end
-        end
-        openCat((ns and ns.MSUF_ColorsCategory) or (_G and _G.MSUF_ColorsCategory))
-        return
-    elseif key == "gameplay" then
-        if ns and type(ns.MSUF_RegisterGameplayOptions_Full) == "function" then
-            local parent = (_G and _G.MSUF_SettingsCategory) or (ns and ns.MSUF_MainCategory)
-            if parent then pcall(ns.MSUF_RegisterGameplayOptions_Full, parent) end
-        elseif ns and type(ns.MSUF_RegisterGameplayOptions) == "function" then
-            local parent = (_G and _G.MSUF_SettingsCategory) or (ns and ns.MSUF_MainCategory)
-            if parent then pcall(ns.MSUF_RegisterGameplayOptions, parent) end
-        end
-        openCat((ns and ns.MSUF_GameplayCategory) or (_G and _G.MSUF_GameplayCategory))
-        return
-    end
-
-    openCat((_G and _G.MSUF_SettingsCategory) or (ns and ns.MSUF_MainCategory))
-end
 
 -- Public: open the standalone "Flash" window to a page.
 -- (Back-compat aliases keep older calls working.)
@@ -4501,7 +4857,7 @@ _G.MSUF_OpenPage = function(key, subkey)
 
         -- If we failed to build the panel, fall back to Blizzard Settings instead of doing nothing.
         if (key ~= "home") and (type(info.build) == "function") and (not panel) then
-            MSUF_OpenSettingsFallback("main")
+            MSUF_ShowOptionsWindow("home")
             return false
         end
 
@@ -4509,8 +4865,8 @@ _G.MSUF_OpenPage = function(key, subkey)
         return true
     end
 
-    -- Unknown key: fall back to Blizzard Settings main category.
-    MSUF_OpenSettingsFallback("main")
+    -- Unknown key: fall back to Home.
+    MSUF_ShowOptionsWindow("home")
     return false
 end
 
@@ -4699,6 +5055,10 @@ scaleEvent:RegisterEvent("PLAYER_ENTERING_WORLD")
 scaleEvent:RegisterEvent("DISPLAY_SIZE_CHANGED")
 
 scaleEvent:SetScript("OnEvent", function(_, event, arg1)
+    -- Respect the global scaling kill-switch.
+    if MSUF_IsScalingDisabled and MSUF_IsScalingDisabled() then
+        return
+    end
     -- Always apply MSUF-only scale
     MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale())
 
@@ -4720,6 +5080,9 @@ end)
 -- Initial kick (covers rare load orders where events fired before our handler existed)
 if C_Timer and C_Timer.After then
     C_Timer.After(0, function()
+        if MSUF_IsScalingDisabled and MSUF_IsScalingDisabled() then
+            return
+        end
         MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale())
         local want = MSUF_GetDesiredGlobalScaleFromDB()
         if want then

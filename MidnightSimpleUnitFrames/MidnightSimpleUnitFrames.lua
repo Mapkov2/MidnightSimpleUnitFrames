@@ -1120,6 +1120,27 @@ function MSUF_GetBarBackgroundTexture()
     end
     return MSUF_ResolveStatusbarTextureKey(key)
 end
+
+function MSUF_GetAbsorbBarTexture()
+    EnsureDB()
+    local g = (MSUF_DB and MSUF_DB.general) or nil
+    local key = g and g.absorbBarTexture
+    if key == nil or key == "" then
+        key = g and g.barTexture
+    end
+    return MSUF_ResolveStatusbarTextureKey(key)
+end
+
+function MSUF_GetHealAbsorbBarTexture()
+    EnsureDB()
+    local g = (MSUF_DB and MSUF_DB.general) or nil
+    local key = g and g.healAbsorbBarTexture
+    if key == nil or key == "" then
+        key = g and g.barTexture
+    end
+    return MSUF_ResolveStatusbarTextureKey(key)
+end
+
 local function MSUF_Clamp01(v)
     v = tonumber(v)
     if not v then return 0 end
@@ -2121,6 +2142,15 @@ local MSUF_POPUP_BOX_H   = 20
 local MSUF_PositionPopup
 local MSUF_CastbarPositionPopup
 local function MSUF_OpenOptionsToKey(tabKey)
+-- Slash-menu-only routing (primary UI). Keep legacy Settings open code as a fallback
+-- for edge cases where the Slash Menu file failed to load.
+if _G and type(_G.MSUF_OpenPage) == "function" then
+    local k = (type(tabKey) == "string") and tabKey:lower() or "home"
+    if k == "castbar" then k = "opt_castbar" end
+    _G.MSUF_OpenPage(k)
+    return
+end
+
     local panel = _G and _G.MSUF_OptionsPanel
     MSUF_SuppressGameMenuAfterOptionsClose = true
     if not MSUF_HookedSuppressGameMenu then
@@ -2936,6 +2966,16 @@ local function MSUF_UpdateAbsorbBar(self, unit, maxHP)
     end
     EnsureDB()
     MSUF_ApplyAbsorbOverlayColor(self.absorbBar)
+    -- Options preview: force-show fake absorb overlay so users can preview absorb textures.
+    if _G.MSUF_AbsorbTextureTestMode then
+        local max = maxHP or (unit and UnitHealthMax(unit)) or 1
+        if not max or max < 1 then max = 1 end
+        self.absorbBar:SetMinMaxValues(0, max)
+        MSUF_SetBarValue(self.absorbBar, max * 0.25)
+        self.absorbBar:Show()
+        return
+    end
+
     local g = MSUF_DB.general or {}
     if g.enableAbsorbBar == false then
         MSUF_ResetBarZero(self.absorbBar, true)
@@ -2959,6 +2999,16 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)
         _G.MSUF_ApplyAbsorbAnchorMode(self)
     end
     MSUF_ApplyHealAbsorbOverlayColor(self.healAbsorbBar)
+    -- Options preview: force-show fake heal-absorb overlay so users can preview heal-absorb textures.
+    if _G.MSUF_AbsorbTextureTestMode then
+        local max = maxHP or (unit and UnitHealthMax(unit)) or 1
+        if not max or max < 1 then max = 1 end
+        self.healAbsorbBar:SetMinMaxValues(0, max)
+        MSUF_SetBarValue(self.healAbsorbBar, max * 0.15)
+        self.healAbsorbBar:Show()
+        return
+    end
+
     local totalHealAbs = UnitGetTotalHealAbsorbs(unit)
     if not totalHealAbs then
         MSUF_ResetBarZero(self.healAbsorbBar, true)
@@ -5632,11 +5682,17 @@ if type(_G.MSUF_UpdateAllFonts) == "function" and not _G.MSUF_UpdateAllFonts_Imm
 end
 
 local function UpdateAllBarTextures()
-    local tex = MSUF_GetBarTexture()
-    if not tex then return end
+    local texHP = MSUF_GetBarTexture()
+    if not texHP then return end
 
-    local function ApplyTex(sb)
-        if not sb then return end
+    local texAbs  = MSUF_GetAbsorbBarTexture()
+    local texHeal = MSUF_GetHealAbsorbBarTexture()
+    -- Safety: if per-absorb keys resolve to nil, fall back to the main foreground texture.
+    texAbs  = texAbs  or texHP
+    texHeal = texHeal or texHP
+
+    local function ApplyTex(sb, tex)
+        if not sb or not tex then return end
         if sb.MSUF_cachedStatusbarTexture ~= tex then
             sb:SetStatusBarTexture(tex)
             sb.MSUF_cachedStatusbarTexture = tex
@@ -5648,13 +5704,13 @@ local function UpdateAllBarTextures()
         for i = 1, #list do
             local f = list[i]
             if f then
-                ApplyTex(f.hpBar)
-                ApplyTex(f.absorbBar)
-                ApplyTex(f.healAbsorbBar)
+                ApplyTex(f.hpBar, texHP)
+                ApplyTex(f.absorbBar, texAbs)
+                ApplyTex(f.healAbsorbBar, texHeal)
                 if MSUF_ApplyBarBackgroundVisual then
                     MSUF_ApplyBarBackgroundVisual(f)
                 end
-                ApplyTex(f.targetPowerBar)
+                ApplyTex(f.targetPowerBar, texHP)
             end
         end
         return
@@ -5662,15 +5718,56 @@ local function UpdateAllBarTextures()
 
     if not UnitFrames then return end
     for _, f in pairs(UnitFrames) do
-        ApplyTex(f.hpBar)
-        ApplyTex(f.absorbBar)
-        ApplyTex(f.healAbsorbBar)
+        ApplyTex(f.hpBar, texHP)
+        ApplyTex(f.absorbBar, texAbs)
+        ApplyTex(f.healAbsorbBar, texHeal)
         if MSUF_ApplyBarBackgroundVisual then
             MSUF_ApplyBarBackgroundVisual(f)
         end
-        ApplyTex(f.targetPowerBar)
+        ApplyTex(f.targetPowerBar, texHP)
     end
 end
+
+local function UpdateAbsorbBarTextures()
+    local texAbs  = MSUF_GetAbsorbBarTexture()
+    local texHeal = MSUF_GetHealAbsorbBarTexture()
+    if not texAbs or not texHeal then
+        -- Fallback to foreground texture if something fails to resolve (e.g., missing media).
+        local texHP = MSUF_GetBarTexture()
+        texAbs  = texAbs  or texHP
+        texHeal = texHeal or texHP
+        if not texAbs or not texHeal then return end
+    end
+
+    local function ApplyTex(sb, tex)
+        if not sb or not tex then return end
+        if sb.MSUF_cachedStatusbarTexture ~= tex then
+            sb:SetStatusBarTexture(tex)
+            sb.MSUF_cachedStatusbarTexture = tex
+        end
+    end
+
+    local list = UnitFramesList
+    if list and #list > 0 then
+        for i = 1, #list do
+            local f = list[i]
+            if f then
+                ApplyTex(f.absorbBar, texAbs)
+                ApplyTex(f.healAbsorbBar, texHeal)
+            end
+        end
+        return
+    end
+
+    if not UnitFrames then return end
+    for _, f in pairs(UnitFrames) do
+        ApplyTex(f.absorbBar, texAbs)
+        ApplyTex(f.healAbsorbBar, texHeal)
+    end
+end
+_G.MSUF_UpdateAbsorbBarTextures = UpdateAbsorbBarTextures
+if ns then ns.MSUF_UpdateAbsorbBarTextures = UpdateAbsorbBarTextures end
+
 _G.UpdateAllBarTextures = UpdateAllBarTextures
 _G.MSUF_UpdateAllBarTextures = UpdateAllBarTextures
 
@@ -6359,6 +6456,22 @@ local function CreateSimpleUnitFrame(unit)
 
     f.absorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 2, MSUF_GetAbsorbOverlayColor(), true)
     f.healAbsorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 3, MSUF_GetHealAbsorbOverlayColor(), false)
+
+    -- Apply per-overlay textures (optional overrides; default follows foreground texture)
+    if f.absorbBar and f.absorbBar.SetStatusBarTexture then
+        local atex = MSUF_GetAbsorbBarTexture()
+        if atex then
+            f.absorbBar:SetStatusBarTexture(atex)
+            f.absorbBar.MSUF_cachedStatusbarTexture = atex
+        end
+    end
+    if f.healAbsorbBar and f.healAbsorbBar.SetStatusBarTexture then
+        local htex = MSUF_GetHealAbsorbBarTexture()
+        if htex then
+            f.healAbsorbBar:SetStatusBarTexture(htex)
+            f.healAbsorbBar.MSUF_cachedStatusbarTexture = htex
+        end
+    end
 
     if unit == "player" or unit == "focus" or unit == "target" or isBossUnit then
         local pBar = CreateFrame("StatusBar", nil, f)

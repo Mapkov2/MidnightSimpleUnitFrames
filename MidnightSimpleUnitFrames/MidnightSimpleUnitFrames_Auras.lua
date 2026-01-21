@@ -6716,12 +6716,15 @@ end
     rInfo:SetWidth(690)
     rInfo:SetJustifyH("LEFT")
     rInfo:SetText(TIP_ADV_INFO)
-    -- Register in Settings
-    if parentCategory and Settings and Settings.RegisterCanvasLayoutSubcategory then
-        local sub = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
-        if sub then
-            ns.MSUF_AurasCategory = sub
-            _G.MSUF_AurasCategory = sub
+    -- Register in Settings / Interface Options.
+    -- NOTE: Slash-menu-only mode must NOT register any Blizzard settings / interface options categories.
+    if not (_G and _G.MSUF_SLASHMENU_ONLY) then
+        if parentCategory and Settings and Settings.RegisterCanvasLayoutSubcategory then
+            local sub = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
+            if sub then
+                ns.MSUF_AurasCategory = sub
+                _G.MSUF_AurasCategory = sub
+            end
         end
     end
 
@@ -6729,6 +6732,13 @@ end
 end
 
 function ns.MSUF_RegisterAurasOptions(parentCategory)
+    if _G and _G.MSUF_SLASHMENU_ONLY then
+        -- Slash-menu-only: build the panel for mirroring, but do NOT register it in Blizzard Settings.
+        if type(ns.MSUF_RegisterAurasOptions_Full) == "function" then
+            return ns.MSUF_RegisterAurasOptions_Full(nil)
+        end
+        return
+    end
     -- Lazy wrapper (mirrors Colors/GamePlay pattern)
     if ns.__MSUF_AurasBuilt then
         return ns.MSUF_AurasCategory

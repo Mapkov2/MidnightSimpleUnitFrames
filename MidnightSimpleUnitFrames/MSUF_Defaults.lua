@@ -668,6 +668,55 @@ end
     if g.barBackgroundTexture == nil then
         g.barBackgroundTexture = "Solid"
     end
+
+    -- Absorb bar texture overrides (optional; nil/"" = follow foreground texture)
+    if g.absorbBarTexture ~= nil and type(g.absorbBarTexture) ~= "string" then
+        g.absorbBarTexture = nil
+    end
+    if g.healAbsorbBarTexture ~= nil and type(g.healAbsorbBarTexture) ~= "string" then
+        g.healAbsorbBarTexture = nil
+    end
+    if g.absorbBarTexture == "" then
+        g.absorbBarTexture = nil
+    end
+    if g.healAbsorbBarTexture == "" then
+        g.healAbsorbBarTexture = nil
+    end
+
+    -- Best-effort validation: if we can confidently resolve a statusbar key and it fails,
+    -- fall back to nil ("follow foreground") so users don't get broken textures after removing SharedMedia packs.
+    local function _MSUF_IsValidStatusbarKey(key)
+        if type(key) ~= "string" or key == "" then return false end
+
+        if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
+            local ok, tex = pcall(_G.MSUF_ResolveStatusbarTextureKey, key)
+            if ok and type(tex) == "string" and tex ~= "" then
+                return true
+            end
+            return false
+        end
+
+        local LSM = (ns and ns.LSM) or _G.MSUF_LSM
+        if LSM and type(LSM.Fetch) == "function" then
+            local ok, tex = pcall(LSM.Fetch, LSM, "statusbar", key, true)
+            if ok and type(tex) == "string" and tex ~= "" then
+                return true
+            end
+            return false
+        end
+
+        -- Can't validate in this session (no resolver/LSM yet): keep the value to avoid unintended resets.
+        return true
+    end
+
+    if g.absorbBarTexture ~= nil and not _MSUF_IsValidStatusbarKey(g.absorbBarTexture) then
+        g.absorbBarTexture = nil
+    end
+    if g.healAbsorbBarTexture ~= nil and not _MSUF_IsValidStatusbarKey(g.healAbsorbBarTexture) then
+        g.healAbsorbBarTexture = nil
+    end
+
+
     if g.hpTextMode == nil then
         g.hpTextMode = "FULL_PLUS_PERCENT"
     end
