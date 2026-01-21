@@ -6972,27 +6972,40 @@ if type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then
 else
     ApplyAllSettings()
 end
-    MSUF_ReanchorTargetCastBar()
-    MSUF_ReanchorFocusCastBar()
+
+    if type(_G.MSUF_ReanchorTargetCastBar) == "function" then
+        _G.MSUF_ReanchorTargetCastBar()
+    end
+    if type(_G.MSUF_ReanchorFocusCastBar) == "function" then
+        _G.MSUF_ReanchorFocusCastBar()
+    end
     if MSUF_InitFocusKickIcon then
         MSUF_InitFocusKickIcon()
     end
     if TargetFrameSpellBar and not TargetFrameSpellBar.MSUF_Hooked then
         TargetFrameSpellBar.MSUF_Hooked = true
         TargetFrameSpellBar:HookScript("OnShow", function()
-            MSUF_ReanchorTargetCastBar()
+            if type(_G.MSUF_ReanchorTargetCastBar) == "function" then
+                _G.MSUF_ReanchorTargetCastBar()
+            end
         end)
         TargetFrameSpellBar:HookScript("OnEvent", function()
-            MSUF_ReanchorTargetCastBar()
+            if type(_G.MSUF_ReanchorTargetCastBar) == "function" then
+                _G.MSUF_ReanchorTargetCastBar()
+            end
         end)
     end
     if FocusFrameSpellBar and not FocusFrameSpellBar.MSUF_Hooked then
         FocusFrameSpellBar.MSUF_Hooked = true
         FocusFrameSpellBar:HookScript("OnShow", function()
-            MSUF_ReanchorFocusCastBar()
+            if type(_G.MSUF_ReanchorFocusCastBar) == "function" then
+                _G.MSUF_ReanchorFocusCastBar()
+            end
         end)
         FocusFrameSpellBar:HookScript("OnEvent", function()
-            MSUF_ReanchorFocusCastBar()
+            if type(_G.MSUF_ReanchorFocusCastBar) == "function" then
+                _G.MSUF_ReanchorFocusCastBar()
+            end
         end)
     end
 if PetCastingBarFrame then
