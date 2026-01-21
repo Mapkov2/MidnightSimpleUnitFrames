@@ -61,6 +61,54 @@ if type(_G.MSUF_GetBlizzardCastbarOwner) ~= "function" then
     end
 end
 
+-- As long as MSUF is running, never allow the Blizzard *player* castbar(s) to show.
+--
+-- IMPORTANT:
+-- - This is intentionally NOT tied to MSUF_DB.general.enablePlayerCastbar.
+--   If the user disables the MSUF player castbar, we do NOT want to silently fall back to
+--   Blizzard (which can cause edge-case "0 interaction" popups).
+-- - We cover both PlayerCastingBarFrame and CastingBarFrame variants.
+-- - The real Castbars LoD addon also suppresses these frames; this stub makes the behaviour
+--   reliable even when the LoD addon is not loaded.
+if type(_G.MSUF_SuppressBlizzardPlayerCastbars) ~= "function" then
+    function _G.MSUF_SuppressBlizzardPlayerCastbars()
+        local frames = {}
+        if _G.PlayerCastingBarFrame then
+            frames[#frames + 1] = _G.PlayerCastingBarFrame
+        end
+        if _G.CastingBarFrame and _G.CastingBarFrame ~= _G.PlayerCastingBarFrame then
+            frames[#frames + 1] = _G.CastingBarFrame
+        end
+        if #frames == 0 then
+            return
+        end
+
+        for _, frame in ipairs(frames) do
+            if frame and not frame.MSUF_HideHooked then
+                frame.MSUF_HideHooked = true
+                hooksecurefunc(frame, "Show", function(self)
+                    self:Hide()
+                end)
+            end
+            if frame then
+                frame:Hide()
+            end
+        end
+
+        if type(_G.MSUF_ClaimBlizzardCastbarOwnership) == "function" then
+            _G.MSUF_ClaimBlizzardCastbarOwnership("MSUF")
+        end
+    end
+
+    -- Call ...
+    local _msufCbSuppressEvt = CreateFrame("Frame")
+    _msufCbSuppressEvt:RegisterEvent("PLAYER_LOGIN")
+    _msufCbSuppressEvt:RegisterEvent("PLAYER_ENTERING_WORLD")
+    _msufCbSuppressEvt:SetScript("OnEvent", function()
+        pcall(_G.MSUF_SuppressBlizzardPlayerCastbars)
+    end)
+end
+
 -- Public helper (idempotent): used by other files to force-load castbars.
 _G.MSUF_EnsureCastbarsLoaded = _G.MSUF_EnsureCastbarsLoaded or function(_reason)
     if _IsLoaded(CASTBARS_ADDON) then

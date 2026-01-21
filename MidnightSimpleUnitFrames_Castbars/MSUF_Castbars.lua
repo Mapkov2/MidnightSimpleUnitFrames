@@ -2103,7 +2103,6 @@ end
 
 local function MSUF_HideBlizzardPlayerCastbar()
     EnsureDB()
-    local g = MSUF_DB and MSUF_DB.general or {}
     local frames = {}
 
     if PlayerCastingBarFrame then
@@ -2123,19 +2122,16 @@ local function MSUF_HideBlizzardPlayerCastbar()
             frame.MSUF_HideHooked = true
 
             hooksecurefunc(frame, "Show", function(self)
-                EnsureDB()
-                local db = MSUF_DB and MSUF_DB.general or {}
-                if db and db.enablePlayerCastbar ~= false then
-                    self:Hide()
-                end
+                -- As long as MSUF is running, never allow the Blizzard player castbar(s) to show.
+                -- This is intentionally NOT tied to MSUF_DB.general.enablePlayerCastbar.
+                -- If the user disables the MSUF player castbar, they should not silently fall back
+                -- to Blizzard (which can cause edge-case "0 interaction" popups).
+                self:Hide()
             end)
         end
 
-        if g and g.enablePlayerCastbar ~= false then
-            frame:Hide()
-        else
-            frame:Show()
-        end
+        -- Always hide while MSUF is loaded.
+        frame:Hide()
     end
 end
 
