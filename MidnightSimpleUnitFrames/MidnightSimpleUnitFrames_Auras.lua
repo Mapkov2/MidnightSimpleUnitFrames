@@ -4449,6 +4449,50 @@ local function MSUF_A2_ShouldProcessUnitEvent(unit)
     return false
 end
 
+
+-- Boss frames can race: ENGAGE_UNIT fires before MSUF boss unitframes are created/shown.
+-- If we MarkDirty while the frame doesn't exist, RenderUnit bails and you may not get another refresh until
+-- a later UNIT_AURA happens (often "feels like" you must be in melee/applying something).
+-- Fix: short-lived retry ticker after ENGAGE_UNIT that stops quickly once frames are attachable.
+local MSUF_A2_BossAttachRetryTicker = nil
+
+local function MSUF_A2_StartBossAttachRetry()
+    if MSUF_A2_BossAttachRetryTicker then
+        MSUF_A2_BossAttachRetryTicker:Cancel()
+        MSUF_A2_BossAttachRetryTicker = nil
+    end
+
+    if not C_Timer or not C_Timer.NewTicker then
+        return
+    end
+
+    local tries = 0
+    MSUF_A2_BossAttachRetryTicker = C_Timer.NewTicker(0.15, function()
+        tries = tries + 1
+
+        local anyPending = false
+        for i = 1, 5 do
+            local u = "boss" .. i
+            if MSUF_A2_ShouldProcessUnitEvent(u) then
+                local f = FindUnitFrame(u)
+                if f and f.IsShown and f:IsShown() and UnitExists(u) then
+                    MarkDirty(u)
+                else
+                    anyPending = true
+                end
+            end
+        end
+
+        -- Stop quickly: either everything is attachable now, or we give up after ~1.5s.
+        if (not anyPending) or tries >= 10 then
+            if MSUF_A2_BossAttachRetryTicker then
+                MSUF_A2_BossAttachRetryTicker:Cancel()
+                MSUF_A2_BossAttachRetryTicker = nil
+            end
+        end
+    end)
+end
+
 EventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "UNIT_AURA" then
         if arg1 and MSUF_A2_ShouldProcessUnitEvent(arg1) then
