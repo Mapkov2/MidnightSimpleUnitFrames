@@ -4395,8 +4395,9 @@ local function MSUF_A2_ApplyOwnedEvents(frame, desiredOwners)
     end
 end
 
-local function MSUF_A2_EnsureUnitAuraBinding(frame)
-    if not frame or frame._msufA2_unitAuraBound == true then return end
+local function MSUF_A2_EnsureUnitAuraBinding(frame, force)
+    if not frame then return end
+    if (not force) and frame._msufA2_unitAuraBound == true then return end
 
     -- IMPORTANT: RegisterUnitEvent does NOT reliably "add" units across multiple calls on all clients.
     -- Register once with all units so Focus/Boss updates never get dropped.
@@ -4472,6 +4473,8 @@ EventFrame:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
+        -- Self-heal UNIT_AURA unit binding: other code may have overwritten the unit-list.
+        MSUF_A2_EnsureUnitAuraBinding(EventFrame, true)
         for i = 1, 5 do
             local u = "boss" .. i
             if MSUF_A2_ShouldProcessUnitEvent(u) then
@@ -4482,6 +4485,8 @@ EventFrame:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+        -- Self-heal UNIT_AURA unit binding: other code may have overwritten the unit-list.
+        MSUF_A2_EnsureUnitAuraBinding(EventFrame, true)
         -- Prime Auras2 DB once (keeps UNIT_AURA hot-path free of migrations/default work).
         EnsureDB() -- prime Auras2 DB
         -- Attach everything that already exists, then do a first render (coalesced).
