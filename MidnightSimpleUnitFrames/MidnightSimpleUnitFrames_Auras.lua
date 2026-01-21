@@ -1640,18 +1640,8 @@ local function EnsureAttached(unit)
     -- Create anchor (parented to UIParent but anchored to the unitframe so it follows MSUF edit moves)
     local anchor = CreateFrame("Frame", nil, UIParent)
     anchor:SetSize(1, 1)
-    -- IMPORTANT (showstopper fix): ensure the aura anchor renders ABOVE the unitframe.
-    -- Some boss frames (boss3+) can end up with higher frame levels than earlier bosses, which would
-    -- cause the UIParent-parented aura anchor to sit *behind* the later boss frames (looks like "no auras").
-    -- We therefore match the unitframe's strata and set a safe level offset above it.
-    do
-        local p = (frame and frame.textFrame) or frame
-        local strata = (p and p.GetFrameStrata and p:GetFrameStrata()) or "MEDIUM"
-        local lvl = (p and p.GetFrameLevel and p:GetFrameLevel()) or 0
-        lvl = tonumber(lvl) or 0
-        anchor:SetFrameStrata(strata)
-        anchor:SetFrameLevel(lvl + 50)
-    end
+    anchor:SetFrameStrata("MEDIUM")
+    anchor:SetFrameLevel(50)
 
     local debuffs = CreateFrame("Frame", nil, anchor)
     debuffs:SetSize(1, 1)
@@ -1660,43 +1650,12 @@ local function EnsureAttached(unit)
     local buffs = CreateFrame("Frame", nil, anchor)
     buffs:SetSize(1, 1)
     buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 30)
-    local mixed = CreateFrame("Frame", nil, anchor)
-    mixed:SetSize(1, 1)
-    mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
-
-    -- Keep child containers at/above the anchor level so icons are never hidden behind later boss frames.
-    do
-        local strata = (anchor and anchor.GetFrameStrata and anchor:GetFrameStrata()) or "MEDIUM"
-        local base = (anchor and anchor.GetFrameLevel and anchor:GetFrameLevel()) or 0
-        base = tonumber(base) or 0
-        if debuffs and debuffs.SetFrameStrata then debuffs:SetFrameStrata(strata) end
-        if buffs and buffs.SetFrameStrata then buffs:SetFrameStrata(strata) end
-        if mixed and mixed.SetFrameStrata then mixed:SetFrameStrata(strata) end
-        if debuffs and debuffs.SetFrameLevel then debuffs:SetFrameLevel(base + 1) end
-        if buffs and buffs.SetFrameLevel then buffs:SetFrameLevel(base + 1) end
-        if mixed and mixed.SetFrameLevel then mixed:SetFrameLevel(base + 1) end
-    end
+local mixed = CreateFrame("Frame", nil, anchor)
+mixed:SetSize(1, 1)
+mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
 
     -- Sync show/hide with the unitframe
     SafeCall(frame.HookScript, frame, "OnShow", function()
-        -- Re-sync strata/levels in case the unitframe was rebuilt or its level changed (can happen for bosses).
-        if anchor then
-            local p = (frame and frame.textFrame) or frame
-            local strata = (p and p.GetFrameStrata and p:GetFrameStrata()) or "MEDIUM"
-            local lvl = (p and p.GetFrameLevel and p:GetFrameLevel()) or 0
-            lvl = tonumber(lvl) or 0
-            if anchor.SetFrameStrata then anchor:SetFrameStrata(strata) end
-            if anchor.SetFrameLevel then anchor:SetFrameLevel(lvl + 50) end
-            local base = (anchor.GetFrameLevel and anchor:GetFrameLevel()) or (lvl + 50)
-            base = tonumber(base) or 0
-            if debuffs and debuffs.SetFrameStrata then debuffs:SetFrameStrata(strata) end
-            if buffs and buffs.SetFrameStrata then buffs:SetFrameStrata(strata) end
-            if mixed and mixed.SetFrameStrata then mixed:SetFrameStrata(strata) end
-            if debuffs and debuffs.SetFrameLevel then debuffs:SetFrameLevel(base + 1) end
-            if buffs and buffs.SetFrameLevel then buffs:SetFrameLevel(base + 1) end
-            if mixed and mixed.SetFrameLevel then mixed:SetFrameLevel(base + 1) end
-        end
-
         if anchor then anchor:Show() end
         -- Don't rely on child OnShow scripts (they may already be "shown" while parent is hidden).
         -- Just request a real refresh through the normal coalesced pipeline.
@@ -4519,6 +4478,9 @@ EventFrame:SetScript("OnEvent", function(_, event, arg1)
                 MarkDirty(u)
             end
         end
+        -- Boss frames may become visible shortly after ENGAGE_UNIT; retry briefly so auras don't
+        -- depend on a later aura-change event (common when you're not actively interacting with that boss).
+        MSUF_A2_StartBossAttachRetry()
         return
     end
 
