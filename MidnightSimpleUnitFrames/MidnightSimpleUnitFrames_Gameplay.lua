@@ -217,9 +217,9 @@ end
     end
     -- Cooldown manager icon mode (for MSUF_CooldownIcons module)
     -- Default OFF to avoid idle CPU when the external viewer/module is present.
-    if g.cooldownIcons == nil then
-        g.cooldownIcons = false
-    end
+    -- TEMPORARILY DISABLED: CooldownManager "bars as icons" mode will be reworked.
+    -- Keep the key for backward compatibility, but hard-force OFF for now.
+    g.cooldownIcons = false
 
     -- One-time tip popup flag
     if g.shownGameplayColorsTip == nil then
@@ -2929,17 +2929,13 @@ end)
     -- Cooldown manager header + separator
     local cooldownSeparator = _MSUF_Sep(crosshairSizeSlider, -30)
     local cooldownHeader = _MSUF_Header(cooldownSeparator, "Cooldown Manager")
-
-    local cooldownIconsCheck = _MSUF_Check("MSUF_Gameplay_CooldownIconsCheck", "TOPLEFT", cooldownHeader, "BOTTOMLEFT", 0, -8, "Show cooldown manager bars as icons (requires CooldownManagerIcons)", "cooldownIconsCheck", "cooldownIcons",
-        function()
-            if ns and ns.MSUF_RequestCooldownIconsSync then
-                ns.MSUF_RequestCooldownIconsSync()
-            elseif MSUF_ApplyCooldownIconMode then
-                MSUF_ApplyCooldownIconMode()
-            end
-        end
+    -- NOTE: Temporarily disabled until CooldownManager integration is reworked.
+    local cooldownIconsCheck = _MSUF_Check("MSUF_Gameplay_CooldownIconsCheck", "TOPLEFT", cooldownHeader, "BOTTOMLEFT", 0, -8,
+        "Show cooldown manager bars as icons (temporarily disabled)", "cooldownIconsCheck", nil
     )
-    ------------------------------------------------------
+    cooldownIconsCheck:SetChecked(false)
+    if cooldownIconsCheck.Disable then cooldownIconsCheck:Disable() end
+------------------------------------------------------
     -- Disabled/greyed state styling (match Main menu behavior)
     ------------------------------------------------------
     local function _MSUF_RememberTextColor(fs)
@@ -3059,7 +3055,7 @@ end)
         _MSUF_SetCheckStyle(self.combatTimerCheck, true)
         _MSUF_SetCheckStyle(self.combatStateCheck, true)
         _MSUF_SetCheckStyle(self.combatCrosshairCheck, true)
-        _MSUF_SetCheckStyle(self.cooldownIconsCheck, true)
+        _MSUF_SetCheckStyle(self.cooldownIconsCheck, false)
 
         -- Combat Timer dependents
         local timerOn = g.enableCombatTimer and true or false
@@ -3329,18 +3325,15 @@ end)
         UpdateContentHeight()
     end)
 
-    -- Settings / Interface Options registration
-    -- NOTE: Slash-menu-only mode must NOT register any Blizzard settings / interface options categories.
-    if not (_G and _G.MSUF_SLASHMENU_ONLY) then
-        if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
-            local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
-            Settings.RegisterAddOnCategory(subcategory)
-            panel.__MSUF_SettingsRegistered = true
-            ns.MSUF_GameplayCategory = subcategory
-        elseif InterfaceOptions_AddCategory then
-            panel.parent = "Midnight Simple Unit Frames"
-            InterfaceOptions_AddCategory(panel)
-        end
+-- Settings registration
+    if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
+        local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
+        Settings.RegisterAddOnCategory(subcategory)
+        panel.__MSUF_SettingsRegistered = true
+        ns.MSUF_GameplayCategory = subcategory
+    elseif InterfaceOptions_AddCategory then
+        panel.parent = "Midnight Simple Unit Frames"
+        InterfaceOptions_AddCategory(panel)
     end
 
     -- Beim Öffnen des Panels SavedVariables → UI syncen
@@ -3359,13 +3352,6 @@ end
 
 -- Lightweight wrapper: register the category at login, but build the heavy UI only when opened.
 function ns.MSUF_RegisterGameplayOptions(parentCategory)
-    if _G and _G.MSUF_SLASHMENU_ONLY then
-        -- Slash-menu-only: build the panel for mirroring, but do NOT register it in Blizzard Settings.
-        if type(ns.MSUF_RegisterGameplayOptions_Full) == "function" then
-            return ns.MSUF_RegisterGameplayOptions_Full(nil)
-        end
-        return
-    end
     if not Settings or not Settings.RegisterCanvasLayoutSubcategory or not parentCategory then
         -- Fallback: if Settings API isn't available, just build immediately.
         return ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
