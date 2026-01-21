@@ -6,8 +6,9 @@
 --  - Shift + Right-click: open MSUF Edit Mode
 --
 -- Notes:
---  - Requires LibDataBroker-1.1 and LibDBIcon-1.0.
---  - If the libs are missing, this file becomes a safe no-op (no errors, no frames).
+--  - Preferred: LibDataBroker-1.1 + LibDBIcon-1.0 (BugSack-style).
+--  - Fallback: if those libs are missing, MSUF creates its own lightweight minimap
+--    button so the icon still exists when ONLY MSUF is loaded.
 
 local addonName = ...
 
@@ -72,24 +73,18 @@ function _G.MSUF_ToggleMinimapIcon()
     _G.MSUF_SetMinimapIconEnabled(not _G.MSUF_GetMinimapIconEnabled())
 end
 
-local libStub = _G.LibStub
-if not libStub then
-    return
-end
-
-local ldb = libStub:GetLibrary("LibDataBroker-1.1", true)
-if not ldb then
-    return
-end
-
--- Use our bundled icon in Media (no extension needed in WoW).
+-- Use our bundled icon in Media.
 local ICON_PATH = "Interface\\AddOns\\" .. tostring(addonName) .. "\\Media\\MSUF_MinimapIcon.tga"
 
-local plugin = ldb:NewDataObject(addonName, {
-    type = "data source",
-    text = "MSUF",
-    icon = ICON_PATH,
-})
+-- Libs are optional; we support a fallback minimap button when they aren't present.
+local libStub = _G.LibStub
+local ldb = (libStub and libStub.GetLibrary and libStub:GetLibrary("LibDataBroker-1.1", true)) or nil
+
+local function GetLibDBIcon()
+    return (libStub and libStub("LibDBIcon-1.0", true)) or nil
+end
+
+local plugin -- created only when LDB exists
 
 local function ChatMsg(msg)
     if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
@@ -147,7 +142,7 @@ local function OpenMSUFEditMode()
     end
 end
 
-function plugin.OnClick(_, button)
+local function Plugin_OnClick(_, button)
     -- Keep LeftButton free for LibDBIcon's drag behavior.
     if button == "RightButton" then
         if IsShiftKeyDown and IsShiftKeyDown() then
@@ -158,7 +153,7 @@ function plugin.OnClick(_, button)
     end
 end
 
-function plugin.OnTooltipShow(tt)
+local function Plugin_OnTooltipShow(tt)
     if not tt then return end
     tt:AddLine("Midnight Simple Unit Frames")
     tt:AddLine("Right-click: open /msuf", 0.2, 1, 0.2)
@@ -166,36 +161,168 @@ function plugin.OnTooltipShow(tt)
     tt:AddLine("Left-drag: move icon", 0.2, 1, 0.2)
 end
 
-local function GetLibDBIcon()
-    return libStub("LibDBIcon-1.0", true)
+-- If we have LDB, create the broker data object so LibDBIcon (if present) can render it.
+if ldb then
+    plugin = ldb:NewDataObject(addonName, {
+        type = "data source",
+        text = "MSUF",
+        icon = ICON_PATH,
+    })
+    plugin.OnClick = Plugin_OnClick
+    plugin.OnTooltipShow = Plugin_OnTooltipShow
+end
+
+-- ----------------------------------------------------------------------------
+-- Fallback minimap button (no external libs)
+-- ----------------------------------------------------------------------------
+
+local fallbackButton
+local fallbackDragTicker
+
+local function Fallback_UpdatePosition()
+    if not fallbackButton or not Minimap then return end
+    local _, db = EnsureMinimapDB()
+
+    local angle = tonumber(db.minimapPos) or 220
+    local radius = tonumber(db.radius) or 80
+    local rad = math.rad(angle)
+    local x = math.cos(rad) * radius
+    local y = math.sin(rad) * radius
+
+    fallbackButton:ClearAllPoints()
+    fallbackButton:SetPoint("CENTER", Minimap, "CENTER", x, y)
+end
+
+local function Fallback_StopDrag()
+    if fallbackDragTicker then
+        fallbackDragTicker:Cancel()
+        fallbackDragTicker = nil
+    end
+    if fallbackButton then
+        fallbackButton:SetScript("OnUpdate", nil)
+    end
+end
+
+local function Fallback_StartDrag()
+    if not fallbackButton or not Minimap then return end
+
+    -- Update at a modest rate while dragging; no permanent OnUpdate.
+    Fallback_StopDrag()
+    fallbackDragTicker = (C_Timer and C_Timer.NewTicker) and C_Timer.NewTicker(0.02, function()
+        if not fallbackButton or not fallbackButton._msufDragging then
+            Fallback_StopDrag()
+            return
+        end
+
+        local mx, my = Minimap:GetCenter()
+        if not mx or not my then return end
+
+        local cx, cy = GetCursorPosition()
+        local scale = (Minimap.GetEffectiveScale and Minimap:GetEffectiveScale()) or 1
+        cx, cy = cx / scale, cy / scale
+
+        local dx, dy = (cx - mx), (cy - my)
+        local angle = math.deg(math.atan2(dy, dx))
+        -- Convert to 0..360 and rotate so 0 is "east" like LibDBIcon.
+        angle = (angle + 360) % 360
+
+        local _, db = EnsureMinimapDB()
+        db.minimapPos = angle
+        Fallback_UpdatePosition()
+    end) or nil
+end
+
+local function EnsureFallbackButton()
+    if fallbackButton or not Minimap or type(CreateFrame) ~= "function" then
+        return fallbackButton
+    end
+
+    local b = CreateFrame("Button", "MSUF_MinimapButton", Minimap)
+    fallbackButton = b
+    b:SetFrameStrata("MEDIUM")
+    b:SetSize(32, 32)
+    b:RegisterForClicks("RightButtonUp", "LeftButtonUp")
+    b:RegisterForDrag("LeftButton")
+    b:SetClampedToScreen(true)
+
+    local tex = b:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints()
+    tex:SetTexture(ICON_PATH)
+    b._msufTex = tex
+
+    -- Tooltip
+    b:SetScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+            Plugin_OnTooltipShow(GameTooltip)
+            GameTooltip:Show()
+        end
+    end)
+    b:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+
+    b:SetScript("OnClick", function(_, button)
+        -- Keep behavior identical to the broker plugin.
+        if button == "RightButton" then
+            Plugin_OnClick(nil, "RightButton")
+        end
+    end)
+
+    b:SetScript("OnDragStart", function(self)
+        if not _G.MSUF_GetMinimapIconEnabled() then return end
+        self._msufDragging = true
+        Fallback_StartDrag()
+    end)
+    b:SetScript("OnDragStop", function(self)
+        self._msufDragging = false
+        Fallback_StopDrag()
+    end)
+
+    Fallback_UpdatePosition()
+    return b
 end
 
 -- Now that LibDBIcon exists, wire the visibility applier used by the public API.
 ApplyMinimapIconVisibility = function()
+    local _, db = EnsureMinimapDB()
+
+    -- Prefer LibDBIcon if available and registered, otherwise fallback button.
     local icon = GetLibDBIcon()
-    if not icon then
+    if icon and plugin then
+        if db.hide then
+            icon:Hide(addonName)
+        else
+            icon:Show(addonName)
+        end
+        -- If we are using LibDBIcon, make sure fallback is hidden.
+        if fallbackButton then fallbackButton:Hide() end
         return
     end
 
-    local _, db = EnsureMinimapDB()
+    -- No LibDBIcon: use fallback button.
+    local b = EnsureFallbackButton()
+    if not b then return end
     if db.hide then
-        icon:Hide(addonName)
+        b:Hide()
     else
-        icon:Show(addonName)
+        b:Show()
+        Fallback_UpdatePosition()
     end
 end
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_LOGIN")
 f:SetScript("OnEvent", function()
+    local _, db = EnsureMinimapDB()
+
     local icon = GetLibDBIcon()
-    if not icon then
-        return
+    if icon and plugin then
+        icon:Register(addonName, plugin, db)
+    else
+        EnsureFallbackButton()
     end
 
-    local _, db = EnsureMinimapDB()
-    icon:Register(addonName, plugin, db)
-
-    -- Ensure current DB visibility state is applied after registration.
+    -- Ensure current DB visibility state is applied after registration / creation.
     ApplyMinimapIconVisibility()
 end)
