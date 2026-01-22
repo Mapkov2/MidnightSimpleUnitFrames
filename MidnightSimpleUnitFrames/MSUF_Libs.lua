@@ -87,11 +87,75 @@ local function RegisterBundledFonts()
         end
     end
 
-    -- Bundled statusbar textures (Media/Statusbar).
-    -- (Registered here to be load-order-safe; MSUF_Media.lua is not in the toc.)
-    local baseMedia = "Interface\\AddOns\\" .. tostring(addonName) .. "\\Media\\"
-    pcall(LSM.Register, LSM, "statusbar", "MSUF Flat", baseMedia .. "Statusbar\\Flat.tga")
-    pcall(LSM.Register, LSM, "statusbar", "MSUF Smooth", baseMedia .. "Statusbar\\Smooth.tga")
+    -- Bundled bar/castbar textures (Media/Bars).
+    -- Registered here to be load-order-safe.
+    local baseBars = "Interface/AddOns/" .. tostring(addonName) .. "/Media/Bars/"
+    local function Reg(name, file)
+        pcall(LSM.Register, LSM, "statusbar", name, baseBars .. file)
+    end
+
+    Reg("MSUF Charcoal",   "Charcoal.tga")
+    Reg("MSUF Minimalist", "Minimalist.tga")
+    Reg("MSUF Slickrock",  "Slickrock.tga")
+    Reg("MSUF Smooth",     "MSUF_Smooth.tga")
+    Reg("MSUF Smooth v2",  "Smoothv2.tga")
+    Reg("MSUF Smoother",   "smoother.tga")
+
+    -- DB migration: eliminate broken legacy selections ("MSUF Flat"/"MSUF Smooth")
+    local function MigrateLegacyBarKeys()
+        local db = _G.MSUF_DB
+        if type(db) ~= "table" or type(db.general) ~= "table" then return end
+        local g = db.general
+        local changed = false
+
+        -- Migrate old Midnight texture names to new MSUF names (renaming only)
+        local map = {
+            ["Midnight Charcoal"] = "MSUF Charcoal",
+            ["Midnight Minimalist"] = "MSUF Minimalist",
+            ["Midnight Slickrock"] = "MSUF Slickrock",
+            ["Midnight Smooth"] = "MSUF Smooth",
+            ["Midnight Smooth v2"] = "MSUF Smooth v2",
+            ["Midnight Smoother"] = "MSUF Smoother",
+        }
+        if type(g.barTexture) == "string" and map[g.barTexture] then
+            g.barTexture = map[g.barTexture]
+            changed = true
+        end
+        if type(g.castbarTexture) == "string" and map[g.castbarTexture] then
+            g.castbarTexture = map[g.castbarTexture]
+            changed = true
+        end
+        if g.barTexture == "MSUF Flat" then
+            g.barTexture = "Solid"
+            changed = true
+        elseif g.barTexture == "MSUF Smooth" then
+            g.barTexture = "MSUF Smooth"
+            changed = true
+        end
+
+        if g.castbarTexture == "MSUF Flat" then
+            g.castbarTexture = "Solid"
+            changed = true
+        elseif g.castbarTexture == "MSUF Smooth" then
+            g.castbarTexture = "MSUF Smooth"
+            changed = true
+        end
+
+        if changed then
+            if type(_G.MSUF_UpdateAllBarTextures) == "function" then
+                pcall(_G.MSUF_UpdateAllBarTextures)
+            end
+            if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+                pcall(_G.MSUF_UpdateCastbarVisuals)
+            end
+        end
+    end
+
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, MigrateLegacyBarKeys)
+    else
+        MigrateLegacyBarKeys()
+    end
 
     _G.MSUF_BUNDLED_FONTS_REGISTERED = true
 end

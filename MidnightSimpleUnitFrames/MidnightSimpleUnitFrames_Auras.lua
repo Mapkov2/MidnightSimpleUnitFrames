@@ -111,6 +111,7 @@ local function EnsureDB()
     if s.hidePermanent == nil then s.hidePermanent = false end
     if s.showTooltip == nil then s.showTooltip = true end
     if s.showCooldownSwipe == nil then s.showCooldownSwipe = true end
+    if s.cooldownSwipeDarkenOnLoss == nil then s.cooldownSwipeDarkenOnLoss = false end
     if s.showInEditMode == nil then s.showInEditMode = true end
     if s.showStackCount == nil then s.showStackCount = true end
     if s.stackCountAnchor == nil then s.stackCountAnchor = "TOPRIGHT" end
@@ -2934,6 +2935,17 @@ local function ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanen
             SafeCall(icon.cooldown.SetDrawSwipe, icon.cooldown, swipeWanted)
         end
 
+        -- Optional style: make the swipe represent *elapsed* time (darkens as time is lost).
+        -- This matches the "buff/debuff = becomes darker as time runs out" style some UIs prefer.
+        -- Secret-safe: no time arithmetic; we only flip the cooldown widget's reverse flag.
+        local reverseWanted = (shared and shared.cooldownSwipeDarkenOnLoss == true) or false
+        if icon._msufA2_lastReverseWanted ~= reverseWanted then
+            icon._msufA2_lastReverseWanted = reverseWanted
+            if icon.cooldown.SetReverse then
+                SafeCall(icon.cooldown.SetReverse, icon.cooldown, reverseWanted)
+            end
+        end
+
         -- Accuracy fix (secret-safe): always re-apply the Duration Object when we render.
         -- AuraInstanceIDs can stay stable across refreshes, but the expiration changes. Gating on auraInstanceID
         -- can therefore leave the Cooldown timer stale (stuck/incorrect). We do no time arithmetic or compares.
@@ -3093,6 +3105,7 @@ local function MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebu
     -- Visual toggles that affect per-icon work
     if shared and type(shared) == 'table' then
         h = MSUF_A2__HashStep(h, shared.showCooldownSwipe)
+        h = MSUF_A2__HashStep(h, shared.cooldownSwipeDarkenOnLoss)
         h = MSUF_A2__HashStep(h, shared.showTooltip)
         h = MSUF_A2__HashStep(h, shared.highlightOwnBuffs)
         h = MSUF_A2__HashStep(h, shared.highlightOwnDebuffs)
@@ -6273,19 +6286,46 @@ end
     local TIP_ADV_INFO = 'Use "Enable filters" in the Auras 2.0 box as the master switch.\n\nInclude toggles are additive (they never hide your normal auras).\nHighlight toggles only change border colors.\n\nDebuff types: if you select ANY type, debuffs are limited to the selected types.'
 
 
-    BuildBoolPathCheckboxes(leftTop, {
-        { "Show Buffs", 12, -180, A2_Settings, "showBuffs" },
-        { "Show Debuffs", 200, -180, A2_Settings, "showDebuffs" },
+    do
+        local displayCB = {}
+        local TIP_SWIPE_STYLE = "When enabled, the cooldown swipe represents elapsed time (darkens as time is lost).\n\nTurn this OFF to keep the default cooldown-style swipe."
+        BuildBoolPathCheckboxes(leftTop, {
+            { "Show Buffs", 12, -180, A2_Settings, "showBuffs" },
+            { "Show Debuffs", 200, -180, A2_Settings, "showDebuffs" },
 
-        { "Highlight own buffs", 12, -228, A2_Settings, "highlightOwnBuffs", nil,
-            "Highlights your own buffs with a border color (visual only; does not filter)." },
-        { "Highlight own debuffs", 200, -228, A2_Settings, "highlightOwnDebuffs", nil,
-            "Highlights your own debuffs with a border color (visual only; does not filter)." },
+            { "Highlight own buffs", 12, -228, A2_Settings, "highlightOwnBuffs", nil,
+                "Highlights your own buffs with a border color (visual only; does not filter)." },
+            { "Highlight own debuffs", 200, -228, A2_Settings, "highlightOwnDebuffs", nil,
+                "Highlights your own debuffs with a border color (visual only; does not filter)." },
 
-        { "Show cooldown swipe", 12, -252, A2_Settings, "showCooldownSwipe" },
-        { "Show stack count", 200, -276, A2_Settings, "showStackCount", nil, TIP_SHOW_STACK },
-        { "Show tooltip", 12, -276, A2_Settings, "showTooltip" },
-    })
+            { "Show cooldown swipe", 12, -252, A2_Settings, "showCooldownSwipe", nil, nil, "cbShowSwipe" },
+            { "Swipe darkens on loss", 12, -300, A2_Settings, "cooldownSwipeDarkenOnLoss", nil, TIP_SWIPE_STYLE, "cbSwipeStyle" },
+
+            { "Show stack count", 200, -276, A2_Settings, "showStackCount", nil, TIP_SHOW_STACK },
+            { "Show tooltip", 12, -276, A2_Settings, "showTooltip" },
+        }, displayCB)
+
+        local function UpdateSwipeStyleEnabled()
+            local _, s = GetAuras2DB()
+            local on = (s and s.showCooldownSwipe == true)
+            SetCheckboxEnabled(displayCB.cbSwipeStyle, on)
+        end
+        UpdateSwipeStyleEnabled()
+
+        if displayCB.cbShowSwipe then
+            local _oldClick = displayCB.cbShowSwipe:GetScript("OnClick")
+            displayCB.cbShowSwipe:SetScript("OnClick", function(self)
+                if _oldClick then _oldClick(self) end
+                UpdateSwipeStyleEnabled()
+            end)
+
+            local _oldShow = displayCB.cbShowSwipe:GetScript("OnShow")
+            displayCB.cbShowSwipe:SetScript("OnShow", function(self)
+                if _oldShow then _oldShow(self) end
+                UpdateSwipeStyleEnabled()
+            end)
+        end
+    end
 
     -- Only-mine + permanent filters are stored per-unit (Target first), but we also sync shared fields for now.
     BuildBoolPathCheckboxes(leftTop, {

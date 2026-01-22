@@ -2279,34 +2279,129 @@ end)
     end
 
 
-    -- MSUF-only scale
+    -- UI scale slider (GLOBAL: scales the whole WoW UI via UIParent)
+    -- Requested: 100% -> 10% range, and apply to everything (not only MSUF frames).
     local msufLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     msufLabel:SetPoint("TOPLEFT", btn1080, "BOTTOMLEFT", 0, -12)
-    msufLabel:SetText("MSUF UI Scale")
+    msufLabel:SetText("UI Scale (10–100%)")
     MSUF_SkinText(msufLabel)
 
-    local sliderName = "MSUF_MiniMenuMsufScaleSlider"
+    local sliderName = "MSUF_MiniMenuGlobalUiScalePctSlider"
     local msufSlider = CreateFrame("Slider", sliderName, parent, "OptionsSliderTemplate")
-    msufSlider:SetPoint("TOPLEFT", msufLabel, "BOTTOMLEFT", 0, -6)
-    msufSlider:SetWidth(220) -- resized dynamically below
-    msufSlider:SetMinMaxValues(0.6, 1.4)
-    msufSlider:SetValueStep(0.01)
+    -- NOTE: The +/- buttons sit left/right of the slider. If the slider starts at x=0,
+    -- the minus button can extend beyond the box padding and get clipped by the panel mask.
+    -- Offset the slider to the right by (button width + gap) so the minus button stays fully visible.
+    msufSlider:SetPoint("TOPLEFT", msufLabel, "BOTTOMLEFT", 30, -6)
+    msufSlider:SetWidth(190) -- keep compact so +/- stay inside; avoids layout pushing right
+    msufSlider:SetMinMaxValues(10, 100)
+    msufSlider:SetValueStep(1)
     if msufSlider.SetObeyStepOnDrag then
         msufSlider:SetObeyStepOnDrag(true)
     end
 
+
+    -- Step helper used by both buttons and click-overlay
+    local function MSUF_ScaleSlider_GetStepMult()
+        if IsControlKeyDown and IsControlKeyDown() then return 10 end
+        if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
+        return 1
+    end
+
+    local function MSUF_ScaleSlider_Bump(delta)
+        if not msufSlider or not msufSlider.GetValue then return end
+        local v = tonumber(msufSlider:GetValue()) or 100
+        v = math.floor(v + 0.5)
+        local step = (msufSlider.GetValueStep and tonumber(msufSlider:GetValueStep())) or 1
+        local mult = MSUF_ScaleSlider_GetStepMult()
+        local nv = v + (delta * step * mult)
+        nv = clamp(nv, 10, 100)
+        msufSlider:SetValue(nv)
+    end
+
+    -- IMPORTANT UX:
+    -- Global UI scale changes immediately alter effective frame scales/positions.
+    -- Dragging a slider thumb while the world is rescaling causes the cursor math
+    -- to "fight" the new scale and the value appears to jump around.
+    -- Request: make the slider edge-clickable (no thumb drag).
+    do
+        -- Disable direct mouse interaction on the Slider (prevents thumb dragging).
+        if msufSlider.EnableMouse then msufSlider:EnableMouse(false) end
+
+        -- Hide the thumb to make it obvious this is not a drag-control.
+        local sn = msufSlider.GetName and msufSlider:GetName() or nil
+        local thumb = sn and _G[sn .. "Thumb"] or nil
+        if thumb then
+            if thumb.Hide then thumb:Hide() end
+            if thumb.EnableMouse then thumb:EnableMouse(false) end
+        end
+
+        -- Transparent click overlay: click LEFT edge to -1, RIGHT edge to +1.
+        local click = CreateFrame("Button", nil, msufSlider)
+        click:SetAllPoints(msufSlider)
+        click:EnableMouse(true)
+        click:SetFrameLevel((msufSlider.GetFrameLevel and msufSlider:GetFrameLevel() or 1) + 10)
+
+        -- Use shared bump helper (buttons + click-overlay)
+        click:SetScript("OnMouseDown", function(self, btn)
+            if btn ~= "LeftButton" then return end
+            local w = (self.GetWidth and self:GetWidth()) or 0
+            if w <= 0 then return end
+
+            local x = select(1, GetCursorPosition())
+            local s = (self.GetEffectiveScale and self:GetEffectiveScale()) or 1
+            if s == 0 then s = 1 end
+            x = x / s
+
+            local left = select(1, self:GetLeft()) or 0
+            local relX = x - left
+
+            -- Only the outer edges are clickable (prevents accidental changes).
+            local edge = 26
+            if relX <= edge then
+                MSUF_ScaleSlider_Bump(-1)
+            elseif relX >= (w - edge) then
+                MSUF_ScaleSlider_Bump(1)
+            end
+        end)
+
+        -- Optional: mouse wheel adjusts too (up = +, down = -).
+        click:EnableMouseWheel(true)
+        click:SetScript("OnMouseWheel", function(self, delta)
+            if delta and delta > 0 then
+                MSUF_ScaleSlider_Bump(1)
+            elseif delta and delta < 0 then
+                MSUF_ScaleSlider_Bump(-1)
+            end
+        end)
+    end
+
     local n = msufSlider:GetName()
     if n and _G[n .. "Text"] then _G[n .. "Text"]:SetText("") end
-    if n and _G[n .. "Low"] then _G[n .. "Low"]:SetText("Low") end
-    if n and _G[n .. "High"] then _G[n .. "High"]:SetText("High") end
+    if n and _G[n .. "Low"] then _G[n .. "Low"]:SetText("10%") end
+    if n and _G[n .. "High"] then _G[n .. "High"]:SetText("100%") end
     if n and _G[n .. "Low"] and _G[n .. "Low"].SetTextColor then _G[n .. "Low"]:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA) end
     if n and _G[n .. "High"] and _G[n .. "High"].SetTextColor then _G[n .. "High"]:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA) end
 
+    -- +/- buttons (requested: buttons to press instead of dragging/clicking slider)
+    local msufMinus = UI_Button(parent, "–", 24, 18, "RIGHT", msufSlider, "LEFT", -6, 0, function()
+        MSUF_ScaleSlider_Bump(-1)
+    end)
+    local msufPlus = UI_Button(parent, "+", 24, 18, "LEFT", msufSlider, "RIGHT", 6, 0, function()
+        MSUF_ScaleSlider_Bump(1)
+    end)
+    MSUF_SkinDashboardButton(msufMinus)
+    MSUF_SkinDashboardButton(msufPlus)
+
+    if MSUF_AddTooltip then
+        MSUF_AddTooltip(msufMinus, "UI Scale -", "Decrease global UI scale. Shift=5%, Ctrl=10%.")
+        MSUF_AddTooltip(msufPlus, "UI Scale +", "Increase global UI scale. Shift=5%, Ctrl=10%.")
+    end
+
     local msufValue = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    msufValue:SetPoint("LEFT", msufSlider, "RIGHT", 8, 0)
-    msufValue:SetText("")
-    msufValue:Hide()
-    if opts and opts.showValue then msufValue:Show() end
+    -- Always show the current percent (requested)
+    msufValue:SetPoint("BOTTOM", msufSlider, "TOP", 0, 2)
+    msufValue:SetText("100%")
+    msufValue:Show()
     MSUF_SkinText(msufValue)
 
     local resetW = (isWide and (isXL and 92 or 80)) or (isXL and 78 or 62)
@@ -2339,6 +2434,8 @@ end)
         end
     end
 
+    local msufOff -- forward (used by MSUF_SetScalingToggleVisual)
+
     local function MSUF_SetScalingToggleVisual(disabled)
         if not msufOff or not msufOff.GetFontString then return end
         local fs = msufOff:GetFontString()
@@ -2351,22 +2448,25 @@ end)
             if fs.SetTextColor then fs:SetTextColor(0.2, 1.0, 0.2, 1.0) end -- green
         end
     end
+
     local msufReset = UI_Button(parent, "Reset", resetW, 18, "TOPLEFT", msufSlider, "BOTTOMLEFT", 0, -6, function()
         MSUF_EnableScalingSilently()
 
-        local v = 1.0
-        MSUF_SetSavedMsufScale(v)
-        MSUF_ApplyMsufScale(v)
-        MSUF_SetSliderValueSilent(v)
+        -- Reset GLOBAL UI scale to 100% (custom)
+        local scale = 1.0
+        MSUF_SaveGlobalPreset("custom", scale)
+        MSUF_SetGlobalUiScale(scale, true)
+
+        MSUF_SetSliderValueSilent(100)
 
         if msufValue and msufValue.SetText then
-            msufValue:SetText("")
+            msufValue:SetText("100%")
         end
         if api and api.Refresh then api.Refresh() end
     end)
 
     local offW = (isWide and (isXL and 164 or 140)) or (isXL and 150 or 120)
-    local msufOff = UI_Button(parent, "Scaling OFF", offW, 18, "LEFT", msufReset, "RIGHT", 8, 0, function()
+    msufOff = UI_Button(parent, "Scaling OFF", offW, 18, "LEFT", msufReset, "RIGHT", 8, 0, function()
         local g = MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
         local isDisabled = g and g.disableScaling
 
@@ -2397,7 +2497,7 @@ end)
         end
 
         -- Keep UI controls in sync immediately.
-        MSUF_SetSliderValueSilent(1.0)
+        MSUF_SetSliderValueSilent(100)
         if api and api.Refresh then api.Refresh() end
 
         MSUF_RequestReloadSafe()
@@ -2407,8 +2507,9 @@ end)
     MSUF_SkinDashboardButton(msufOff)
 
     if MSUF_AddTooltip then
-        MSUF_AddTooltip(msufReset, "Reset MSUF UI Scale", "Resets MSUF-only scale back to 1.0.")
+        MSUF_AddTooltip(msufReset, "Reset UI Scale", "Resets global UI scale back to 100% (custom).")
         MSUF_AddTooltip(msufOff, "Disable ALL MSUF scaling", "Turns off all scaling MSUF applies (global UI scale + MSUF-only scale), then reloads your UI. Blizzard handles scaling.")
+        MSUF_AddTooltip(msufSlider, "UI Scale (Global)", "Scales the entire WoW UI (UIParent). 100% = 1.0, 10% = 0.10. This sets the preset to Custom.")
     end
 
     msufSlider:SetScript("OnValueChanged", function(self, value)
@@ -2416,23 +2517,47 @@ end)
 
         MSUF_EnableScalingSilently()
 
-        local v = tonumber(value) or 1.0
-        MSUF_SetSavedMsufScale(v)
-        MSUF_ApplyMsufScale(v)
+        local pct = tonumber(value) or 100
+        pct = math.floor(pct + 0.5)
+        pct = clamp(pct, 10, 100)
+
+        local scale = pct / 100
+        MSUF_SaveGlobalPreset("custom", scale)
+        MSUF_SetGlobalUiScale(scale, true)
 
         if msufValue and msufValue.SetText then
-            msufValue:SetText("")
+            msufValue:SetText(string.format("%d%%", pct))
         end
         if api and api.Refresh then api.Refresh() end
     end)
-
     function api.Refresh()
-        -- MSUF scale
-        local v = MSUF_GetSavedMsufScale()
-        MSUF_SetSliderValueSilent(v)
-        if msufValue and msufValue.SetText then
-            msufValue:SetText("")
+        -- UI Scale slider (global)
+        local g = MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+        local preset = g and g.globalUiScalePreset
+        local disabled = g and g.disableScaling
+
+        local desired
+        if disabled then
+            desired = MSUF_GetCurrentGlobalUiScale() or 1.0
+        else
+            if preset == "1080p" then
+                desired = UI_SCALE_1080
+            elseif preset == "1440p" then
+                desired = UI_SCALE_1440
+            elseif preset == "custom" and g and g.globalUiScaleValue then
+                desired = tonumber(g.globalUiScaleValue)
+            else
+                desired = MSUF_GetCurrentGlobalUiScale() or 1.0
+            end
         end
+
+        local pct = clamp(math.floor((tonumber(desired) or 1.0) * 100 + 0.5), 10, 100)
+        MSUF_SetSliderValueSilent(pct)
+        if msufValue and msufValue.SetText then
+            msufValue:SetText(string.format("%d%%", pct))
+        end
+
+
 
         -- Global scale (UIParent scale)
         local cur = MSUF_GetCurrentGlobalUiScale()

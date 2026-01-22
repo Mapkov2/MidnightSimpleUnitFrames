@@ -4,6 +4,10 @@ _G.MSUF_NS = _G.MSUF_NS or ns
 
 -- Forward declarations (needed by early popup helpers)
 local MSUF_EDITMODE_UNIT_KEYS, MSUF_EDITMODE_UNIT_FIELDS, MSUF_EDITMODE_GENERAL_FIELDS
+-- Forward declare: needed so Castbar popup spec tables and builders capture the correct function.
+-- Fixes dead Show/Override checkboxes (OnClick=nil) and makes overrides apply instantly.
+local ApplyCastbarPopupValues
+
 
 
 -- ------------------------------------------------------------
@@ -3662,8 +3666,13 @@ local CASTBAR_POPUP_TEXT_SPEC = {
                 deferApply   = true,
                 beforeClick  = function(cb, checked)
                     local pf2 = cb and cb:GetParent()
-                    if pf2 and pf2.SetCastbarSizeControlsEnabled then
-                        pf2.SetCastbarSizeControlsEnabled(pf2.castNameSizeBox, checked)
+                                        if pf2 and pf2.SetCastbarSizeControlsEnabled then
+                        pf2.SetCastbarSizeControlsEnabled(
+                            pf2.castNameSizeBox,
+                            pf2.castNameSizeMinus,
+                            pf2.castNameSizePlus,
+                            checked and true or false
+                        )
                     end
                 end,
             },
@@ -3690,8 +3699,13 @@ local CASTBAR_POPUP_TEXT_SPEC = {
                 deferApply   = true,
                 beforeClick  = function(cb, checked)
                     local pf2 = cb and cb:GetParent()
-                    if pf2 and pf2.SetCastbarSizeControlsEnabled then
-                        pf2.SetCastbarSizeControlsEnabled(pf2.iconSizeBox, checked)
+                                        if pf2 and pf2.SetCastbarSizeControlsEnabled then
+                        pf2.SetCastbarSizeControlsEnabled(
+                            pf2.iconSizeBox,
+                            pf2.iconSizeMinus,
+                            pf2.iconSizePlus,
+                            checked and true or false
+                        )
                     end
                 end,
             },
@@ -3721,6 +3735,52 @@ local CASTBAR_POPUP_TEXT_SPEC = {
 }
 
 local function MSUF_EM_UI_BuildCastbarPopup_TextBlocks(pf, textHeader)
+
+        -- Enable/disable castbar popup controls based on Show + Override states (match Unitframe popup UX)
+        pf.UpdateEnabledStates = function()
+            local pf = MSUF_CastbarPositionPopup or pf
+            local UI = Edit and Edit.Popups and Edit.Popups.UI
+            if not (pf and UI) then return end
+
+            local showSpell = (pf.castNameShowCB and pf.castNameShowCB.GetChecked and pf.castNameShowCB:GetChecked()) and true or false
+            local showIcon  = (pf.iconShowCB and pf.iconShowCB.GetChecked and pf.iconShowCB:GetChecked()) and true or false
+            local showTime  = (pf.timeShowCB and pf.timeShowCB.GetChecked and pf.timeShowCB:GetChecked()) and true or false
+
+            -- X/Y rows
+            UI.EnableStepper(pf.castNameXBox, pf.castNameXMinus, pf.castNameXPlus, showSpell)
+            UI.EnableStepper(pf.castNameYBox, pf.castNameYMinus, pf.castNameYPlus, showSpell)
+            UI.EnableStepper(pf.iconXBox,     pf.iconXMinus,     pf.iconXPlus,     showIcon)
+            UI.EnableStepper(pf.iconYBox,     pf.iconYMinus,     pf.iconYPlus,     showIcon)
+            UI.EnableStepper(pf.timeXBox,     pf.timeXMinus,     pf.timeXPlus,     showTime)
+            UI.EnableStepper(pf.timeYBox,     pf.timeYMinus,     pf.timeYPlus,     showTime)
+
+            UI.SetLabelEnabled(pf.castNameXLabel, showSpell)
+            UI.SetLabelEnabled(pf.castNameYLabel, showSpell)
+            UI.SetLabelEnabled(pf.iconXLabel,     showIcon)
+            UI.SetLabelEnabled(pf.iconYLabel,     showIcon)
+            UI.SetLabelEnabled(pf.timeXLabel,     showTime)
+            UI.SetLabelEnabled(pf.timeYLabel,     showTime)
+
+            -- Checkboxes
+            UI.SetControlEnabled(pf.castNameShowCB, true)
+            UI.SetControlEnabled(pf.iconShowCB, true)
+            UI.SetControlEnabled(pf.timeShowCB, true)
+
+            UI.SetControlEnabled(pf.castNameOverrideCB, showSpell)
+            UI.SetControlEnabled(pf.iconSizeOverrideCB, showIcon)
+            UI.SetControlEnabled(pf.timeOverrideCB, showTime)
+
+            local spellOverride = (pf.castNameOverrideCB and pf.castNameOverrideCB.GetChecked and pf.castNameOverrideCB:GetChecked()) and true or false
+            local iconOverride  = (pf.iconSizeOverrideCB and pf.iconSizeOverrideCB.GetChecked and pf.iconSizeOverrideCB:GetChecked()) and true or false
+            local timeOverride  = (pf.timeOverrideCB and pf.timeOverrideCB.GetChecked and pf.timeOverrideCB:GetChecked()) and true or false
+
+            if pf.SetCastbarSizeControlsEnabled then
+                pf.SetCastbarSizeControlsEnabled(pf.castNameSizeBox, pf.castNameSizeMinus, pf.castNameSizePlus, showSpell and spellOverride)
+                pf.SetCastbarSizeControlsEnabled(pf.iconSizeBox,     pf.iconSizeMinus,     pf.iconSizePlus,     showIcon  and iconOverride)
+                pf.SetCastbarSizeControlsEnabled(pf.timeSizeBox,     pf.timeSizeMinus,     pf.timeSizePlus,     showTime  and timeOverride)
+            end
+        end
+
     -- Ensure size-control toggler exists before creating override checkboxes (beforeClick uses it).
     pf.SetCastbarSizeControlsEnabled = Edit and Edit.Popups and Edit.Popups.UI and Edit.Popups.UI.SetSizeControlsEnabled
 
@@ -4402,7 +4462,7 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
     end
 
 
-    local function ApplyCastbarPopupValues()
+    ApplyCastbarPopupValues = function()
         if InCombatLockdown and InCombatLockdown() then
             if _G.MSUF_CastbarPositionPopup and _G.MSUF_CastbarPositionPopup.Hide then
                 _G.MSUF_CastbarPositionPopup:Hide()
@@ -4468,14 +4528,14 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
                 -- overrides
                 local globalSize = GlobalCastFont()
                 U.ApplyOptionalOverrideNumber(g, "bossCastSpellNameFontSize", pf.castNameSizeBox, pf.castNameOverrideCB,
-                    pf.SetCastbarSizeControlsEnabled, pf.castNameSizeMinus, pf.castNameSizePlus, true, globalSize, 6, 72)
+                    pf.SetCastbarSizeControlsEnabled, pf.castNameSizeMinus, pf.castNameSizePlus, (g.showBossCastName ~= false), globalSize, 6, 72)
 
                 U.ApplyOptionalOverrideNumber(g, "bossCastTimeFontSize", pf.timeSizeBox, pf.timeOverrideCB,
-                    pf.SetCastbarSizeControlsEnabled, pf.timeSizeMinus, pf.timeSizePlus, true, globalSize, 6, 72)
+                    pf.SetCastbarSizeControlsEnabled, pf.timeSizeMinus, pf.timeSizePlus, (g.showBossCastTime ~= false), globalSize, 6, 72)
 
                 local baseIcon = tonumber(g.bossCastbarHeight) or currentH or 18
                 U.ApplyOptionalOverrideNumber(g, "bossCastIconSize", pf.iconSizeBox, pf.iconSizeOverrideCB,
-                    pf.SetCastbarSizeControlsEnabled, pf.iconSizeMinus, pf.iconSizePlus, true, baseIcon, 6, 128)
+                    pf.SetCastbarSizeControlsEnabled, pf.iconSizeMinus, pf.iconSizePlus, (g.showBossCastIcon ~= false), baseIcon, 6, 128)
 
                 -- apply + resync
                 if type(_G.MSUF_EditMode_RequestBossCastbarApply) == "function" then
@@ -4534,14 +4594,14 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
             local globalSize = GlobalCastFont()
 
             U.ApplyOptionalOverrideNumber(g, prefix .. "SpellNameFontSize", pf.castNameSizeBox, pf.castNameOverrideCB,
-                pf.SetCastbarSizeControlsEnabled, pf.castNameSizeMinus, pf.castNameSizePlus, true, globalSize, 6, 48)
+                pf.SetCastbarSizeControlsEnabled, pf.castNameSizeMinus, pf.castNameSizePlus, (g[prefix .. "ShowSpellName"] ~= false), globalSize, 6, 48)
 
             U.ApplyOptionalOverrideNumber(g, prefix .. "TimeFontSize", pf.timeSizeBox, pf.timeOverrideCB,
-                pf.SetCastbarSizeControlsEnabled, pf.timeSizeMinus, pf.timeSizePlus, true, globalSize, 6, 48)
+                pf.SetCastbarSizeControlsEnabled, pf.timeSizeMinus, pf.timeSizePlus, ((showKey and g[showKey] ~= false) or true), globalSize, 6, 48)
 
             local baseIcon = tonumber(g[prefix .. "BarHeight"]) or tonumber(g.castbarGlobalHeight) or currentH or 16
             U.ApplyOptionalOverrideNumber(g, prefix .. "IconSize", pf.iconSizeBox, pf.iconSizeOverrideCB,
-                pf.SetCastbarSizeControlsEnabled, pf.iconSizeMinus, pf.iconSizePlus, true, baseIcon, 6, 128)
+                pf.SetCastbarSizeControlsEnabled, pf.iconSizeMinus, pf.iconSizePlus, (g[prefix .. "ShowIcon"] ~= false), baseIcon, 6, 128)
 
             -- reanchor + visuals
             local reanchorName = (unit == "player" and "MSUF_ReanchorPlayerCastBar") or
@@ -4561,6 +4621,7 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
             if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
                 _G.MSUF_SyncCastbarPositionPopup(unit)
             end
+            if pf and pf.UpdateEnabledStates then pf.UpdateEnabledStates() end
 
             -- test mode toggles (unchanged behavior)
             if type(_G.MSUF_SetPlayerCastbarTestMode) == "function" then
@@ -5319,18 +5380,19 @@ function MSUF_SyncCastbarPositionPopup(unit, force)
             if U and U.SyncOptionalOverrideNumber then
                 local globalSize = GetGlobalCastbarFontSize()
                 U.SyncOptionalOverrideNumber(g, "bossCastSpellNameFontSize", pf.castNameSizeBox, pf.castNameOverrideCB, pf.SetCastbarSizeControlsEnabled,
-                    pf.castNameSizeMinus, pf.castNameSizePlus, true, globalSize)
+                    pf.castNameSizeMinus, pf.castNameSizePlus, (g.showBossCastName ~= false), globalSize)
 
                 local baseIcon = tonumber(g.bossCastbarHeight) or currentH or 18
                 U.SyncOptionalOverrideNumber(g, "bossCastIconSize", pf.iconSizeBox, pf.iconSizeOverrideCB, pf.SetCastbarSizeControlsEnabled,
-                    pf.iconSizeMinus, pf.iconSizePlus, true, baseIcon)
+                    pf.iconSizeMinus, pf.iconSizePlus, (showBossIcon ~= false), baseIcon)
 
                 U.SyncOptionalOverrideNumber(g, "bossCastTimeFontSize", pf.timeSizeBox, pf.timeOverrideCB, pf.SetCastbarSizeControlsEnabled,
-                    pf.timeSizeMinus, pf.timeSizePlus, true, globalSize)
+                    pf.timeSizeMinus, pf.timeSizePlus, (g.showBossCastTime ~= false), globalSize)
             end
 
             if pf.RefreshCopyTextDropdown then pf.RefreshCopyTextDropdown() end
             if pf.RefreshCopySizeDropdown then pf.RefreshCopySizeDropdown() end
+            if pf.UpdateEnabledStates then pf.UpdateEnabledStates() end
             return
         end
 
@@ -5388,19 +5450,20 @@ function MSUF_SyncCastbarPositionPopup(unit, force)
             local globalSize = GetGlobalCastbarFontSize()
 
             U.SyncOptionalOverrideNumber(g, prefix .. "SpellNameFontSize", pf.castNameSizeBox, pf.castNameOverrideCB, pf.SetCastbarSizeControlsEnabled,
-                pf.castNameSizeMinus, pf.castNameSizePlus, true, globalSize)
+                pf.castNameSizeMinus, pf.castNameSizePlus, showSpell, globalSize)
 
             local baseIcon = tonumber(g[prefix .. "BarHeight"]) or tonumber(g.castbarGlobalHeight) or currentH or 16
             U.SyncOptionalOverrideNumber(g, prefix .. "IconSize", pf.iconSizeBox, pf.iconSizeOverrideCB, pf.SetCastbarSizeControlsEnabled,
-                pf.iconSizeMinus, pf.iconSizePlus, true, baseIcon)
+                pf.iconSizeMinus, pf.iconSizePlus, showIconLocal, baseIcon)
 
             U.SyncOptionalOverrideNumber(g, prefix .. "TimeFontSize", pf.timeSizeBox, pf.timeOverrideCB, pf.SetCastbarSizeControlsEnabled,
-                pf.timeSizeMinus, pf.timeSizePlus, true, globalSize)
+                pf.timeSizeMinus, pf.timeSizePlus, showTime, globalSize)
         end
 
         if pf.RefreshCopyTextDropdown then pf.RefreshCopyTextDropdown() end
         if pf.testModeCB then pf.testModeCB:Hide() end
         if pf.RefreshCopySizeDropdown then pf.RefreshCopySizeDropdown() end
+        if pf.UpdateEnabledStates then pf.UpdateEnabledStates() end
     end)
 
     MSUF__CastbarPopupSyncing = false
@@ -6490,8 +6553,20 @@ local function MSUF_EM_IsBCDMCooldownManagerSkinningEnabled()
     return (cm.Enable == true)
 end
 
+local function MSUF_EM_IsBCDMHandoffNoticeSuppressed()
+    -- Persisted "never show again" toggle (stored in MSUF_DB.general).
+    MSUF_EM_EnsureDB()
+    local g = MSUF_DB and MSUF_DB.general
+    return (type(g) == "table" and g.suppressBCDMHandoffNotice == true) and true or false
+end
+
 local function MSUF_EM_ShouldShowBCDMHandoffNotice()
     if MSUF_EM_BCDMNotice_ShownThisSession then
+        return false
+    end
+
+    -- User requested: "never show again"
+    if MSUF_EM_IsBCDMHandoffNoticeSuppressed() then
         return false
     end
 
@@ -6519,6 +6594,17 @@ To move the Cooldown Manager, use: |cff00ff00/bcdm|r -> Cooldown Manager -> Layo
 
 MSUF will keep anchoring to the Cooldown Manager.]],
         button1 = OKAY,
+        button2 = "Never show again",
+        OnCancel = function(self, data, reason)
+            -- Only treat an explicit click on the 'Never show again' button as opt-out.
+            -- (ESC/close should NOT permanently disable the notice.)
+            if reason ~= "clicked" then
+                return
+            end
+            MSUF_EM_EnsureDB()
+            MSUF_DB.general = MSUF_DB.general or {}
+            MSUF_DB.general.suppressBCDMHandoffNotice = true
+        end,
         timeout = 0,
         whileDead = 1,
         hideOnEscape = 1,
