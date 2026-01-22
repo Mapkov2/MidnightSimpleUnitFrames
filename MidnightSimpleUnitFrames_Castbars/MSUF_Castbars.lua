@@ -1253,10 +1253,8 @@ function _G.MSUF_UpdateCastbarChannelTicks()
 end
 
 
-
-
 -- ============================================================
--- Player Castbar: Vehicle-aware cast unit selection (player vs vehicle)
+-- Player Castbar: Vehicle-aware cast unit selection logic
 -- ============================================================
 local function MSUF_PlayerCastbar_SanitizeUnitToken(u)
     if type(u) ~= "string" or u == "" then
