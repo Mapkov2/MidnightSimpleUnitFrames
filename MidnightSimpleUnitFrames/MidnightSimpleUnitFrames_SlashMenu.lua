@@ -593,6 +593,9 @@ local function MSUF_CopyValue(v)
   return MSUF_DeepCopy(v)
 end
 
+-- Forward-declare (defined further down): reload recommendation popup.
+local MSUF_ShowReloadRecommendedPopup
+
 local function MSUF_ApplyPreset(presetName)
   local preset = MSUF_PRESETS and MSUF_PRESETS[presetName]
   if type(preset) ~= "table" then
@@ -610,18 +613,21 @@ local function MSUF_ApplyPreset(presetName)
   end
 
 
-  -- Special-case: compact MSUF2 preset strings (exported via ProfileIO).
+  -- Special-case: compact MSUF2/MSUF3 preset strings (exported via ProfileIO).
   -- Keeps this feature optional and 0-regression for normal table-based presets.
   local importStr = preset._msufImportString or preset._msufImport
   if type(importStr) == "string" then
-    local ok, m = pcall(string.match, importStr, "^%s*MSUF2:")
-    if ok and m then
+    local okPrefix, prefix = pcall(string.match, importStr, "^%s*(MSUF%d+):")
+    if okPrefix and (prefix == "MSUF2" or prefix == "MSUF3") then
       local imp = _G and _G.MSUF_ImportFromString
       if type(imp) == "function" then
         pcall(imp, importStr)
         if type(ApplyAllSettings) == "function" then pcall(ApplyAllSettings) end
         if type(UpdateAllFonts) == "function" then pcall(UpdateAllFonts) end
         print("|cff00ff00MSUF:|r Loaded preset: " .. tostring(presetName))
+        if type(MSUF_ShowReloadRecommendedPopup) == "function" then
+          MSUF_ShowReloadRecommendedPopup("Preset: " .. tostring(presetName))
+        end
         return
       else
         print("|cffff3333MSUF:|r Cannot load this preset (MSUF_ImportFromString missing).")
@@ -650,6 +656,9 @@ local function MSUF_ApplyPreset(presetName)
   end
 
   print("|cff00ff00MSUF:|r Loaded preset: " .. tostring(presetName))
+  if type(MSUF_ShowReloadRecommendedPopup) == "function" then
+    MSUF_ShowReloadRecommendedPopup("Preset: " .. tostring(presetName))
+  end
 end
 
 local function MSUF_GetPresetNames()
@@ -708,6 +717,49 @@ local function MSUF_ShowPresetConfirm(presetName)
   end
 
   StaticPopup_Show("MSUF_LOAD_PRESET_CONFIRM", presetName)
+end
+
+-- Recommend (optional) ReloadUI after large state changes (presets/imports).
+-- Can always be declined; no DB persistence (0-regression).
+local MSUF_PENDING_RELOAD_RECOMMEND_LABEL = nil
+
+MSUF_ShowReloadRecommendedPopup = function(label)
+  if InCombatLockdown and InCombatLockdown() then
+    if type(MSUF_Print) == "function" then
+      MSUF_Print("Reload recommended (cannot show popup in combat).")
+    else
+      print("|cffffaa00MSUF:|r Reload recommended (cannot show popup in combat).")
+    end
+    return
+  end
+
+  MSUF_PENDING_RELOAD_RECOMMEND_LABEL = tostring(label or "")
+  if MSUF_PENDING_RELOAD_RECOMMEND_LABEL == "" then
+    MSUF_PENDING_RELOAD_RECOMMEND_LABEL = "these changes"
+  end
+
+  if not StaticPopupDialogs["MSUF_RELOAD_RECOMMENDED"] then
+    StaticPopupDialogs["MSUF_RELOAD_RECOMMENDED"] = {
+      text = "MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?",
+      button1 = "Reload",
+      button2 = "Not now",
+      timeout = 0,
+      whileDead = 1,
+      hideOnEscape = 1,
+      preferredIndex = 3,
+      OnAccept = function()
+        MSUF_PENDING_RELOAD_RECOMMEND_LABEL = nil
+        if type(ReloadUI) == "function" then
+          ReloadUI()
+        end
+      end,
+      OnCancel = function()
+        MSUF_PENDING_RELOAD_RECOMMEND_LABEL = nil
+      end,
+    }
+  end
+
+  StaticPopup_Show("MSUF_RELOAD_RECOMMENDED", MSUF_PENDING_RELOAD_RECOMMEND_LABEL)
 end
 
 -- Reload confirmation (used by UI-scale preset buttons)
@@ -2703,7 +2755,7 @@ local function MSUF_SelectCastbarSubPage(unitKey)
 end
 
 local MIRROR_PAGES = {
-    home     = { title = "Midnight Simple Unitframes (Release 1.68)", nav = "Dashboard", build = nil },
+    home     = { title = "Midnight Simple Unitframes (Release 1.67r3)", nav = "Dashboard", build = nil },
     main     = { title = "MSUF Options",  nav = "Options",  build = MSUF_EnsureMainOptionsPanelBuilt,
         select = function(subkey)
             if not subkey then return end
