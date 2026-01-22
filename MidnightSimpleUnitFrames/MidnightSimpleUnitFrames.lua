@@ -813,22 +813,32 @@ function MSUF_ApplyCastbarUnitAndSync(unitKey)
     end
 end
 local function MSUF_GetFontPath()
-    EnsureDB()
+    -- Safety: EnsureDB() should initialize MSUF_DB.general, but we guard here
+    -- to avoid nil-index crashes if DB init order changes.
+    if type(EnsureDB) == "function" then EnsureDB() end
+    MSUF_DB = MSUF_DB or {}
+    MSUF_DB.general = MSUF_DB.general or {}
+
     local key = MSUF_DB.general.fontKey
     if LSM and key and key ~= "" then
-        local path = LSM:Fetch("font", key, true)
-        if path then
-            return path
+        local p = LSM:Fetch("font", key, true)
+        if p then
+            return p
         end
     end
-    internalPath = GetInternalFontPathByKey(key)
+
+    local internalPath = GetInternalFontPathByKey(key)
     if internalPath then
         return internalPath
     end
     return FONT_LIST[1].path
 end
+
 local function MSUF_GetFontFlags()
-    EnsureDB()
+    if type(EnsureDB) == "function" then EnsureDB() end
+    MSUF_DB = MSUF_DB or {}
+    MSUF_DB.general = MSUF_DB.general or {}
+
     local g = MSUF_DB.general
     if g.noOutline then
         return ""              -- kein OUTLINE / THICKOUTLINE
