@@ -369,3 +369,41 @@ do
         end
     end)
 end
+
+
+
+-- Auto-load Gameplay LoD addon on login when any gameplay feature is enabled.
+-- (Prevents "feature looks enabled but does nothing until you toggle twice" after /reload or relog.)
+do
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_LOGIN")
+    f:SetScript("OnEvent", function()
+        if type(_G.EnsureDB) == "function" then
+            _G.EnsureDB()
+        end
+
+        local g = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil
+        if not g then
+            return
+        end
+
+        local need = false
+        if g.enableCombatTimer == true then need = true end
+        if g.enableCombatStateText == true then need = true end
+        if g.enableFirstDanceTimer == true then need = true end
+        if g.enableCombatCrosshair == true then need = true end
+        if g.enableCombatCrosshairMeleeRangeColor == true then need = true end
+
+        if need then
+            _G.MSUF_EnsureAddonLoaded("MidnightSimpleUnitFrames_Gameplay")
+
+            -- Apply immediately so event wiring is active without opening the Gameplay menu.
+            local ns2 = _G.MSUF_NS
+            if ns2 and type(ns2.MSUF_RequestGameplayApply) == "function" then
+                ns2.MSUF_RequestGameplayApply()
+            elseif type(_G.MSUF_RequestGameplayApply) == "function" then
+                _G.MSUF_RequestGameplayApply()
+            end
+        end
+    end)
+end

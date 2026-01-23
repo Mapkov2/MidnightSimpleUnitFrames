@@ -2263,7 +2263,7 @@ panel.meleeSpellPerClassCheck = perClassCB
 
 local perClassHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
 perClassHint:SetPoint("TOPLEFT", perClassCB, "BOTTOMLEFT", 20, -2)
-perClassHint:SetText("Keeps one profile across alts (Monk/Pala/etc) without changing the spell each time.")
+perClassHint:SetText("Keeps per character settings.")
 panel.meleeSpellPerClassHint = perClassHint
 
 local meleeSelected = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -3517,3 +3517,50 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
     return panel
 
     end
+
+
+------------------------------------------------------
+-- Auto-apply Gameplay features on load
+-- Fixes: after /reload or relog, Combat Enter/Leave text (and other Gameplay
+-- features) could be "enabled" in the UI but not actually active until the
+-- checkbox was toggled in the Gameplay menu.
+------------------------------------------------------
+do
+    local didApply = false
+
+    local function AutoApplyOnce()
+        if didApply then return end
+        didApply = true
+
+
+        -- Export a global helper so core can force-apply after autoloading this LoD addon.
+        if type(ns.MSUF_RequestGameplayApply) == "function" then
+            _G.MSUF_RequestGameplayApply = ns.MSUF_RequestGameplayApply
+        end
+        if type(EnsureGameplayDefaults) == "function" then
+            EnsureGameplayDefaults()
+        end
+
+        if ns and ns.MSUF_RequestGameplayApply then
+            ns.MSUF_RequestGameplayApply()
+        end
+    end
+
+    -- Run next tick so SavedVariables + UpdateManager are ready,
+    -- even when this LoD file is loaded mid-session.
+    if _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(0, AutoApplyOnce)
+    else
+        AutoApplyOnce()
+    end
+
+    -- Also hook common init events in case of unusual load order.
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_LOGIN")
+    f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    f:SetScript("OnEvent", function()
+        AutoApplyOnce()
+        f:UnregisterAllEvents()
+        f:SetScript("OnEvent", nil)
+    end)
+end
