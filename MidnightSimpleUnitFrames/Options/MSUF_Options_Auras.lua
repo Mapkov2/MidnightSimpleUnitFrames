@@ -2037,6 +2037,7 @@ end
             if g.aurasCooldownTextWarningSeconds > v then g.aurasCooldownTextWarningSeconds = v end
             if g.aurasCooldownTextUrgentSeconds > g.aurasCooldownTextWarningSeconds then g.aurasCooldownTextUrgentSeconds = g.aurasCooldownTextWarningSeconds end
 			A2_RequestCooldownTextRecolor()
+			A2_RequestApply()
         end
 
         local function SetWarn(v)
@@ -2048,6 +2049,7 @@ end
             if type(g.aurasCooldownTextUrgentSeconds) ~= 'number' then g.aurasCooldownTextUrgentSeconds = 5 end
             if g.aurasCooldownTextUrgentSeconds > v then g.aurasCooldownTextUrgentSeconds = v end
 			A2_RequestCooldownTextRecolor()
+			A2_RequestApply()
         end
 
         local function SetUrg(v)
@@ -2057,6 +2059,7 @@ end
             if v > 15 then v = 15 end
             g.aurasCooldownTextUrgentSeconds = v
 			A2_RequestCooldownTextRecolor()
+			A2_RequestApply()
         end
 
         local safeSlider = CreateAuras2CompactSlider(timerBox, 'Safe (seconds)', 0, 600, 1, 12, -72, 220, GetSafe, SetSafe)

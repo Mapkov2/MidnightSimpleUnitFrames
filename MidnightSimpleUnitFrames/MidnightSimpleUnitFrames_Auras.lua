@@ -820,17 +820,52 @@ local function MSUF_A2_EnsureCooldownColorCurve()
     local cNormal  = CreateColor(safeR, safeG, safeB, 1) -- Safe (or Global font)
 
     -- Step curves return the *previous* point's color between points.
-    -- To get intuitive buckets in seconds:
-    --   Expire:  <= 0
-    --   Urgent:  0 < rem <= 5
-    --   Warning: 5 < rem <= 15
-    --   Safe:    rem > 15
-    -- we use small epsilons so the boundaries land in the intended bucket.
-    curve:AddPoint(0.00,  cExpire)
-    curve:AddPoint(0.01,  cSeconds) -- Urgent
-    curve:AddPoint(5.01,  cShort)   -- Warning
-    curve:AddPoint(15.01, cNormal)  -- Safe
-    curve:AddPoint(59.00, cNormal)  -- clamp / long durations
+    -- We drive the bucket boundaries from DB (non-secret): Urgent/Warning/Safe seconds.
+    -- This keeps the Timer sliders fully live for the secret-safe DurationObject path.
+    local safeSec = (g and type(g.aurasCooldownTextSafeSeconds) == "number") and g.aurasCooldownTextSafeSeconds or 60
+    local warnSec = (g and type(g.aurasCooldownTextWarningSeconds) == "number") and g.aurasCooldownTextWarningSeconds or 15
+    local urgSec  = (g and type(g.aurasCooldownTextUrgentSeconds)  == "number") and g.aurasCooldownTextUrgentSeconds  or 5
+
+    if safeSec < 0 then safeSec = 0 end
+    if warnSec < 0 then warnSec = 0 end
+    if urgSec  < 0 then urgSec  = 0 end
+    if urgSec > warnSec then urgSec = warnSec end
+    if warnSec > safeSec then
+        warnSec = safeSec
+        if urgSec > warnSec then urgSec = warnSec end
+    end
+
+    local EPS = 0.01
+    local function NextX(prev, want)
+        if type(want) ~= "number" then want = prev + EPS end
+        local x = want
+        if x <= prev + EPS then x = prev + EPS end
+        return x
+    end
+
+    local cExpire  = CreateColor(1.00, 0.10, 0.10, 1)
+    local cUrgent  = CreateColor(urgR,  urgG,  urgB,  1) -- Urgent
+    local cWarning = CreateColor(warnR, warnG, warnB, 1) -- Warning
+    local cSafe    = CreateColor(safeR, safeG, safeB, 1) -- Safe
+    local cNormal  = CreateColor(normalR, normalG, normalB, 1) -- Normal (long durations)
+
+    local x0 = 0.00
+    curve:AddPoint(x0, cExpire)
+
+    local x1 = NextX(x0, 0.01)
+    curve:AddPoint(x1, cUrgent)
+
+    local x2 = NextX(x1, urgSec + EPS)
+    curve:AddPoint(x2, cWarning)
+
+    local x3 = NextX(x2, warnSec + EPS)
+    curve:AddPoint(x3, cSafe)
+
+    local x4 = NextX(x3, safeSec + EPS)
+    curve:AddPoint(x4, cNormal)
+
+    -- Clamp long durations to Normal to keep long buffs clean / less noisy.
+    curve:AddPoint(x4 + 600.0, cNormal)
     MSUF_A2_CooldownColorCurve = curve
     return curve
 end
