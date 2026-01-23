@@ -3717,6 +3717,18 @@ end
 local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     if not f or not f.portrait or not conf then return end
     local mode = conf.portraitMode or "OFF"
+
+    -- Fix: ensure portraits recover without requiring the user to "re-pick" the dropdown.
+    -- We only run SetPortraitTexture when frame._msufPortraitDirty is set; however, when a portrait
+    -- is enabled via saved variables (or toggled back on), we might never receive a portrait event.
+    -- Track mode transitions and force a one-shot dirty mark when portrait becomes active.
+    if f._msufPortraitModeStamp ~= mode then
+        f._msufPortraitModeStamp = mode
+        if mode ~= "OFF" then
+            f._msufPortraitDirty = true
+            f._msufPortraitNextAt = 0
+        end
+    end
     if mode == "OFF" or not existsForPortrait then
         f.portrait:Hide()
         return
@@ -3728,6 +3740,7 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
         if (now >= nextAt) and (not MSUF_PORTRAIT_BUDGET_USED) then
             if SetPortraitTexture then
                 SetPortraitTexture(f.portrait, unit)
+                f._msufPortraitEverApplied = true
             end
             f._msufPortraitDirty = nil
             f._msufPortraitNextAt = now + MSUF_PORTRAIT_MIN_INTERVAL
