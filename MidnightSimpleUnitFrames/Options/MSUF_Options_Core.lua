@@ -5263,24 +5263,6 @@ do
     MSUF_SetLabeledSliderValue(barOutlineThicknessSlider, t)
 end
 
--- Background bar alpha (independent from in/out-of-combat unit alpha).
--- 0..100 where 100 = fully opaque background texture.
-barBackgroundAlphaSlider = CreateLabeledSlider(
-    "MSUF_BarBackgroundAlphaSlider",
-    "Background alpha",
-    barGroup,
-    0, 100, 1,
-    16, -390
-)
-do
-    EnsureDB()
-    local bars = (MSUF_DB and MSUF_DB.bars) or {}
-    local a = tonumber(bars.barBackgroundAlpha)
-    if type(a) ~= "number" then a = 90 end
-    a = math.floor(a + 0.5)
-    if a < 0 then a = 0 elseif a > 100 then a = 100 end
-    MSUF_SetLabeledSliderValue(barBackgroundAlphaSlider, a)
-end
 
 -- Bars menu style: boxed layout like the new Castbar/Focus Kick menus
 -- (Two framed columns: Bar appearance / Power Bar Settings)
@@ -5548,24 +5530,9 @@ end
     if barTextureInfo then
         barTextureInfo:Hide()
     end
-
-    -- Background alpha slider (stays independent from unit alpha in/out of combat).
-    if barBackgroundAlphaSlider and barBgTextureDrop then
-        barBackgroundAlphaSlider:ClearAllPoints()
-        barBackgroundAlphaSlider:SetPoint("TOPLEFT", barBgTextureDrop, "BOTTOMLEFT", 16, -18)
-        barBackgroundAlphaSlider:SetWidth(280)
-        barBackgroundAlphaSlider:Show()
-        -- Ensure the slider title is visible (we want it inline in the texture section).
-        local sName = barBackgroundAlphaSlider.GetName and barBackgroundAlphaSlider:GetName()
-        if sName and _G then
-            local t = _G[sName .. "Text"]
-            if t then t:Show() end
-        end
-    end
-
     -- Gradient section
     local gradHeader = _G.MSUF_BarsMenuGradientHeader
-    local gradAnchor = barBackgroundAlphaSlider or barBgTextureDrop or barTextureDrop or absorbDisplayDrop
+    local gradAnchor = barBgTextureDrop or barTextureDrop or absorbDisplayDrop
     if gradHeader and gradAnchor then
         gradHeader:ClearAllPoints()
         -- Align this section title like the other left-panel section headers.
@@ -5573,9 +5540,6 @@ end
         -- slider is already aligned with the title. So we adjust the X-offset depending on
         -- which widget we're anchoring below.
         local xOff = 16
-        if barBackgroundAlphaSlider and gradAnchor == barBackgroundAlphaSlider then
-            xOff = 0
-        end
         -- Extra breathing room below the Background Alpha slider so the section title never clips.
         gradHeader:SetPoint("TOPLEFT", gradAnchor, "BOTTOMLEFT", xOff, -32)
         gradHeader:Show()
@@ -5860,36 +5824,6 @@ local function MSUF_SyncBarsTabToggles()
         MSUF_SetLabeledSliderValue(barOutlineThicknessSlider, t)
         MSUF_SetLabeledSliderEnabled(barOutlineThicknessSlider, true)
     end
-
-    -- Background alpha for bar backgrounds (0..100).
-    if barBackgroundAlphaSlider then
-        local a = tonumber(b.barBackgroundAlpha)
-        if type(a) ~= 'number' then a = 90 end
-        a = math.floor(a + 0.5)
-        if a < 0 then a = 0 elseif a > 100 then a = 100 end
-        MSUF_SetLabeledSliderValue(barBackgroundAlphaSlider, a)
-        MSUF_SetLabeledSliderEnabled(barBackgroundAlphaSlider, true)
-    end
-
-    if barBackgroundAlphaSlider then
-        barBackgroundAlphaSlider.onValueChanged = function(self, value)
-            if self and self.MSUF_SkipCallback then return end
-            EnsureDB()
-            MSUF_DB.bars = MSUF_DB.bars or {}
-            local v = tonumber(value) or 0
-            v = math.floor(v + 0.5)
-            if v < 0 then v = 0 end
-            if v > 100 then v = 100 end
-            MSUF_DB.bars.barBackgroundAlpha = v
-            -- Only affects bar background visual alpha; no need to rebuild layouts.
-            if _G and type(_G.MSUF_UpdateAllBarTextures) == 'function' then
-                _G.MSUF_UpdateAllBarTextures()
-            else
-                ApplyAllSettings()
-            end
-        end
-    end
-
     if targetPowerBarCheck then
         targetPowerBarCheck:SetChecked(b.showTargetPowerBar and true or false)
         SafeToggleUpdate(targetPowerBarCheck)
@@ -6196,8 +6130,6 @@ end
     panel.hpModeDrop                 = hpModeDrop
 panel.barTextureDrop             = barTextureDrop
     panel.barOutlineThicknessSlider = barOutlineThicknessSlider
-    panel.barBackgroundAlphaSlider   = barBackgroundAlphaSlider
-
 panel.frameWidthSlider   = frameWidthSlider
 panel.frameHeightSlider  = frameHeightSlider
 panel.frameScaleSlider   = frameScaleSlider
@@ -6250,7 +6182,6 @@ panel.infoTooltipDisableCheck = infoTooltipDisableCheck
 
         hpModeDrop = self.hpModeDrop
         barOutlineThicknessSlider = self.barOutlineThicknessSlider
-        barBackgroundAlphaSlider  = self.barBackgroundAlphaSlider
         bossSpacingSlider = self.bossSpacingSlider
         if anchorEdit then
             anchorEdit:SetText(g.anchorName or "UIParent")

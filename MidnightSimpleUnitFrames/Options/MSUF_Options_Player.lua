@@ -1296,14 +1296,69 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         end
     end
 
+local function FinalizeDashboardAlphaSlider(slider, width)
+    if not slider then return end
+
+    -- Make it easier to grab.
+    slider:SetWidth(width or (leftW - 24))
+
+    if MSUF_EnhanceSliderTrack then
+        MSUF_EnhanceSliderTrack(slider)
+    end
+
+    -- Stepper row (editbox +/-) like the Dashboard sliders.
+    local eb = slider.editBox
+    local minus = slider.minusButton
+    local plus  = slider.plusButton
+
+    if eb then
+        eb:Show()
+        eb:ClearAllPoints()
+        eb:SetPoint("TOP", slider, "BOTTOM", 0, -12)
+        eb:SetWidth(40)
+    end
+    if minus then
+        minus:Show()
+        minus:ClearAllPoints()
+        minus:SetPoint("RIGHT", (eb or slider), "LEFT", -4, 0)
+    end
+    if plus then
+        plus:Show()
+        plus:ClearAllPoints()
+        plus:SetPoint("LEFT", (eb or slider), "RIGHT", 4, 0)
+    end
+
+    local name = slider.GetName and slider:GetName()
+    local low  = name and _G[name .. "Low"]
+    local high = name and _G[name .. "High"]
+    if low then
+        low:ClearAllPoints()
+        low:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", 0, -2)
+    end
+    if high then
+        high:ClearAllPoints()
+        high:SetPoint("TOPRIGHT", slider, "BOTTOMRIGHT", 0, -2)
+    end
+    if slider.SetHitRectInsets then
+        slider:SetHitRectInsets(-6, -6, -14, -14)
+    end
+
+    -- Ensure the thumb is visible immediately.
+    local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
+    if thumb then
+        if thumb.SetAlpha then thumb:SetAlpha(1) end
+        if thumb.Show then thumb:Show() end
+    end
+end
+
     -- Push sliders down a bit so the dropdown never overlaps/clips them
     local ALPHA_SPECS = {
         { field = "playerAlphaInCombatSlider",  name = "MSUF_UF_AlphaInCombatSlider",  label = "Alpha in combat",      y = -118 },
-        { field = "playerAlphaOutCombatSlider", name = "MSUF_UF_AlphaOutCombatSlider", label = "Alpha out of combat", y = -168 },
+        { field = "playerAlphaOutCombatSlider", name = "MSUF_UF_AlphaOutCombatSlider", label = "Alpha out of combat", y = -178 },
     }
     for _, s in ipairs(ALPHA_SPECS) do
         panel[s.field] = CreateLabeledSlider(s.name, s.label, sizeBox, 0.00, 1.00, 0.05, 12, s.y)
-        FinalizeCompactSlider(panel[s.field], (leftW - 24), { animatedFill = true })
+        FinalizeDashboardAlphaSlider(panel[s.field], (leftW - 24))
     end
 
 
@@ -3104,6 +3159,7 @@ local function MSUF_AlphaUI_SetSlider(slider, v)
         slider.MSUF_SkipCallback = true
         slider:SetValue(v)
         slider.MSUF_SkipCallback = false
+        if slider.editBox then ForceSliderEditBox(slider) end
     end
 end
 
