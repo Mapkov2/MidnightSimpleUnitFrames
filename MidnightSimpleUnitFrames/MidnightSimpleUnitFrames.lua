@@ -1319,8 +1319,33 @@ function _G.MSUF_GetDesiredUnitAlpha(key)
     if not conf then
         return 1
     end
-    local aIn  = tonumber(conf.alphaInCombat) or 1
-    local aOut = tonumber(conf.alphaOutOfCombat) or 1
+
+    local aInLegacy  = tonumber(conf.alphaInCombat) or 1
+    local aOutLegacy = tonumber(conf.alphaOutOfCombat) or 1
+
+    -- Layered alpha uses separate values per layer mode, so switching the dropdown doesn't
+    -- suddenly reuse the same slider values for the other layer.
+    local aIn, aOut = aInLegacy, aOutLegacy
+    if conf.alphaExcludeTextPortrait == true then
+        local mode = conf.alphaLayerMode
+        -- Accept compact numeric/bool encoding (survives aggressive DB sanitizers).
+        --   background: true / 1 / "background"
+        --   foreground: false / 0 / "foreground" (default)
+        if mode == true or mode == 1 or mode == "background" then
+            mode = "background"
+        else
+            mode = "foreground"
+        end
+
+        if mode == "background" then
+            aIn  = tonumber(conf.alphaBGInCombat) or aInLegacy
+            aOut = tonumber(conf.alphaBGOutOfCombat) or aOutLegacy
+        else
+            aIn  = tonumber(conf.alphaFGInCombat) or aInLegacy
+            aOut = tonumber(conf.alphaFGOutOfCombat) or aOutLegacy
+        end
+    end
+
     local sync = conf.alphaSyncBoth
     if sync == nil then
         sync = conf.alphaSync
@@ -1328,11 +1353,13 @@ function _G.MSUF_GetDesiredUnitAlpha(key)
     if sync then
         aOut = aIn
     end
+
     local inCombat = _G.MSUF_InCombat
-if inCombat == nil then
-    inCombat = (InCombatLockdown and InCombatLockdown()) or false
-end
-local a = inCombat and aIn or aOut
+    if inCombat == nil then
+        inCombat = (InCombatLockdown and InCombatLockdown()) or false
+    end
+
+    local a = inCombat and aIn or aOut
     if a < 0 then
         a = 0
     elseif a > 1 then
@@ -1340,36 +1367,193 @@ local a = inCombat and aIn or aOut
     end
     return a
 end
+
+
+-- Unit Alpha: optional layered mode (keep text/portrait visible; apply alpha only to background or foreground).
+local function MSUF_Alpha_SetTextureAlpha(tex, a)
+    if tex and tex.SetAlpha and type(a) == "number" then
+        if a < 0 then a = 0 elseif a > 1 then a = 1 end
+        tex:SetAlpha(a)
+    end
+end
+
+local function MSUF_Alpha_SetStatusTextureAlpha(sb, a)
+    if not sb or not sb.GetStatusBarTexture then return end
+    local t = sb:GetStatusBarTexture()
+    MSUF_Alpha_SetTextureAlpha(t, a)
+end
+
+local function MSUF_Alpha_SetGradientAlphaArray(grads, a)
+    if not grads or type(grads) ~= "table" then return end
+    for i = 1, #grads do
+        MSUF_Alpha_SetTextureAlpha(grads[i], a)
+    end
+end
+
+local function MSUF_Alpha_SetTextAlpha(fs, a)
+    if fs and fs.SetAlpha then
+        MSUF_Alpha_SetTextureAlpha(fs, a)
+    end
+end
+
+local function MSUF_Alpha_ResetLayered(frame)
+    if not frame or not frame._msufAlphaLayeredMode then
+        return
+    end
+
+    -- Restore normal unit alpha and clear any per-layer overrides
+    local unitAlpha = frame._msufAlphaUnitAlpha or 1
+    frame._msufAlphaLayeredMode = nil
+    frame._msufAlphaLayerMode = nil
+    frame._msufAlphaUnitAlpha = nil
+
+    if frame.SetAlpha then
+        frame:SetAlpha(unitAlpha)
+    end
+
+    -- Reset: show everything at full opacity (relative to frame alpha)
+    local one = 1
+
+    MSUF_Alpha_SetStatusTextureAlpha(frame.hpBar, one)
+    MSUF_Alpha_SetStatusTextureAlpha(frame.targetPowerBar or frame.powerBar, one)
+    MSUF_Alpha_SetStatusTextureAlpha(frame.absorbBar, one)
+    MSUF_Alpha_SetStatusTextureAlpha(frame.healAbsorbBar, one)
+
+    MSUF_Alpha_SetTextureAlpha(frame.hpBarBG, one)
+    MSUF_Alpha_SetTextureAlpha(frame.powerBarBG, one)
+    MSUF_Alpha_SetTextureAlpha(frame.bg, one)
+
+    MSUF_Alpha_SetGradientAlphaArray(frame.hpGradients, one)
+    MSUF_Alpha_SetGradientAlphaArray(frame.powerGradients, one)
+
+    MSUF_Alpha_SetTextureAlpha(frame.portrait, one)
+    MSUF_Alpha_SetTextAlpha(frame.nameText, one)
+    MSUF_Alpha_SetTextAlpha(frame.hpText, one)
+    MSUF_Alpha_SetTextAlpha(frame.powerText, one)
+end
+
+local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
+    if not frame then return end
+    -- Accept compact numeric/bool encoding (survives aggressive DB sanitizers).
+    --   background: true / 1 / "background"
+    --   foreground: false / 0 / "foreground" (default)
+    if mode == true or mode == 1 or mode == "background" then
+        mode = "background"
+    else
+        mode = "foreground"
+    end
+
+    -- Keep overall frame alpha at 1, then drive background/foreground via their own alphas.
+    frame._msufAlphaLayeredMode = true
+    frame._msufAlphaLayerMode = mode
+    frame._msufAlphaUnitAlphaFG = alphaFG
+    frame._msufAlphaUnitAlphaBG = alphaBG
+
+    if frame.SetAlpha then
+        frame:SetAlpha(1)
+    end
+
+    local fg = type(alphaFG) == "number" and alphaFG or 1
+    local bg = type(alphaBG) == "number" and alphaBG or 1
+    if fg < 0 then fg = 0 elseif fg > 1 then fg = 1 end
+    if bg < 0 then bg = 0 elseif bg > 1 then bg = 1 end
+
+    -- Background elements
+    MSUF_Alpha_SetTextureAlpha(frame.hpBarBG, bg)
+    MSUF_Alpha_SetTextureAlpha(frame.powerBarBG, bg)
+    MSUF_Alpha_SetTextureAlpha(frame.bg, bg)
+
+    -- Foreground elements (bar fills + gradients)
+    MSUF_Alpha_SetStatusTextureAlpha(frame.hpBar, fg)
+    MSUF_Alpha_SetStatusTextureAlpha(frame.targetPowerBar or frame.powerBar, fg)
+    MSUF_Alpha_SetStatusTextureAlpha(frame.absorbBar, fg)
+    MSUF_Alpha_SetStatusTextureAlpha(frame.healAbsorbBar, fg)
+
+    MSUF_Alpha_SetGradientAlphaArray(frame.hpGradients, fg)
+    MSUF_Alpha_SetGradientAlphaArray(frame.powerGradients, fg)
+
+    -- Keep text/portrait fully visible
+    local one = 1
+    MSUF_Alpha_SetTextureAlpha(frame.portrait, one)
+    MSUF_Alpha_SetTextAlpha(frame.nameText, one)
+    MSUF_Alpha_SetTextAlpha(frame.hpText, one)
+    MSUF_Alpha_SetTextAlpha(frame.powerText, one)
+end
+
 function _G.MSUF_ApplyUnitAlpha(frame, key)
     if not frame or not frame.SetAlpha then
         return
     end
+
+    EnsureDB()
+
     local unit = frame.unit or key
-    if unit and UnitExists and UnitIsConnected and UnitExists(unit) and (UnitIsConnected(unit) == false) then
-        local a = 0.5
-        if frame.GetAlpha then
-            local cur = frame:GetAlpha() or 1
-            if math.abs(cur - a) > 0.001 then
+
+    -- Offline / Dead: keep legacy "dim whole frame" behavior, and reset layered state so it can't stick.
+    if unit and UnitExists and UnitExists(unit) then
+        if UnitIsConnected and (UnitIsConnected(unit) == false) then
+            MSUF_Alpha_ResetLayered(frame)
+            local a = 0.5
+            if frame.GetAlpha then
+                local cur = frame:GetAlpha() or 1
+                if math.abs(cur - a) > 0.001 then frame:SetAlpha(a) end
+            else
                 frame:SetAlpha(a)
             end
-        else
-            frame:SetAlpha(a)
+            return
         end
-    if unit and UnitExists and UnitIsDead and UnitExists(unit) and UnitIsDead(unit) and (not (UnitIsGhost and UnitIsGhost(unit))) then
-        local a = 0.5
-        if frame.GetAlpha then
-            local cur = frame:GetAlpha() or 1
-            if math.abs(cur - a) > 0.001 then
+        if UnitIsDead and UnitIsDead(unit) and (not (UnitIsGhost and UnitIsGhost(unit))) then
+            MSUF_Alpha_ResetLayered(frame)
+            local a = 0.5
+            if frame.GetAlpha then
+                local cur = frame:GetAlpha() or 1
+                if math.abs(cur - a) > 0.001 then frame:SetAlpha(a) end
+            else
                 frame:SetAlpha(a)
             end
-        else
-            frame:SetAlpha(a)
+            return
         end
-        return
     end
-        return
+
+    local conf = (key and MSUF_DB and MSUF_DB[key]) or nil
+local layered = (conf and conf.alphaExcludeTextPortrait == true) or false
+local layerMode = conf and conf.alphaLayerMode or nil
+
+if layered and conf then
+    local inCombat = _G.MSUF_InCombat
+    if inCombat == nil then
+        inCombat = (InCombatLockdown and InCombatLockdown()) or false
     end
-    local a = _G.MSUF_GetDesiredUnitAlpha and _G.MSUF_GetDesiredUnitAlpha(key) or 1
+
+    local aInLegacy  = tonumber(conf.alphaInCombat) or 1
+    local aOutLegacy = tonumber(conf.alphaOutOfCombat) or 1
+
+    local fgIn  = tonumber(conf.alphaFGInCombat) or aInLegacy
+    local fgOut = tonumber(conf.alphaFGOutOfCombat) or aOutLegacy
+    local bgIn  = tonumber(conf.alphaBGInCombat) or aInLegacy
+    local bgOut = tonumber(conf.alphaBGOutOfCombat) or aOutLegacy
+
+    -- Sync in/out per layer if enabled
+    if conf.alphaSync == true then
+        fgOut = fgIn
+        bgOut = bgIn
+    end
+
+    local alphaFG = inCombat and fgIn or fgOut
+    local alphaBG = inCombat and bgIn or bgOut
+
+    MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, layerMode)
+    return
+end
+
+local a = _G.MSUF_GetDesiredUnitAlpha and _G.MSUF_GetDesiredUnitAlpha(key) or 1
+if type(a) ~= "number" then a = 1 end
+if a < 0 then a = 0 elseif a > 1 then a = 1 end
+
+    -- Legacy: alpha applies to whole unitframe (all children)
+    if frame._msufAlphaLayeredMode then
+        MSUF_Alpha_ResetLayered(frame)
+    end
     if frame.GetAlpha then
         local cur = frame:GetAlpha() or 1
         if math.abs(cur - a) > 0.001 then
@@ -1379,6 +1563,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         frame:SetAlpha(a)
     end
 end
+
 function _G.MSUF_RefreshAllUnitAlphas()
     EnsureDB()
     local list = UnitFramesList
@@ -5050,6 +5235,12 @@ end
     MSUF_UFStep_Border(self)
     MSUF_UFStep_NameLevelLeaderRaid(self, unit, conf, g)
     MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
+
+    -- IMPORTANT: layered alpha uses per-texture alpha, which visual steps reset.
+    -- Re-apply AFTER the full visual pipeline so alpha persists across any live updates.
+    if conf and conf.alphaExcludeTextPortrait == true then
+        _G.MSUF_ApplyUnitAlpha(self, key)
+    end
 end
 
 local MSUF_ApplyRareVisuals
@@ -7040,7 +7231,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.69c|r  |cff565f89•|r  |cffc0caf5 Thank you gamer -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.69|r  |cff565f89•|r  |cffc0caf5 Thank you gamer -|r  |cfff7768eReport bugs in the Discord.|r")
 
 end, nil, true)
 

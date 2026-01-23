@@ -1658,30 +1658,86 @@ local function MSUF_IsYellowish(r, g, b)
 end
 
 local function MSUF_ApplyWhiteTextToFrame(root)
-    if not root or not root.GetRegions then return end
+    if not root then return end
 
-    local function applyOnFrame(frame)
-        -- Regions (FontStrings)
-        local regions = { frame:GetRegions() }
-        for i = 1, #regions do
-            local reg = regions[i]
-            if reg and reg.GetObjectType and reg:GetObjectType() == "FontString" and reg.GetTextColor and reg.SetTextColor then
-                local r, g, b = reg:GetTextColor()
-                if MSUF_IsYellowish(r, g, b) then
-                    reg:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA)
+    -- This function can be called very early after /reload while Settings is still building.
+    -- A deep recursive walk can easily trigger "script ran too long", and some frames can appear
+    -- multiple times in GetChildren chains. We therefore:
+    -- 1) walk iteratively (no recursion),
+    -- 2) de-dupe nodes via a seen table,
+    -- 3) time-slice the scan over multiple frames when possible.
+    local token = (root.__MSUF_WhiteTextToken or 0) + 1
+    root.__MSUF_WhiteTextToken = token
+
+    local useTimer = (C_Timer and C_Timer.After) and true or false
+    local maxNodes = useTimer and 4500 or 800
+    local budgetMs = useTimer and 1.0 or nil
+    local debugprofilestop = debugprofilestop
+
+    local stack, sp = { root }, 1
+    local seen = {}
+    local nodes = 0
+
+    local function ProcessChunk()
+        if not root or root.__MSUF_WhiteTextToken ~= token then return end
+
+        local t0 = (budgetMs and debugprofilestop) and debugprofilestop() or nil
+
+        while sp > 0 do
+            if t0 and (debugprofilestop() - t0) >= budgetMs then
+                break
+            end
+
+            local frame = stack[sp]
+            stack[sp] = nil
+            sp = sp - 1
+
+            if frame and not seen[frame] then
+                seen[frame] = true
+                nodes = nodes + 1
+                if nodes > maxNodes then
+                    break
+                end
+
+                -- Regions (FontStrings)
+                if frame.GetRegions then
+                    local regions = { frame:GetRegions() }
+                    for i = 1, #regions do
+                        local reg = regions[i]
+                        if reg and reg.GetObjectType and reg:GetObjectType() == "FontString" and reg.GetTextColor and reg.SetTextColor then
+                            local r, g, b = reg:GetTextColor()
+                            if MSUF_IsYellowish(r, g, b) then
+                                reg:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA)
+                            end
+                        end
+                    end
+                end
+
+                -- Children
+                if frame.GetChildren then
+                    local children = { frame:GetChildren() }
+                    for i = 1, #children do
+                        local c = children[i]
+                        if c and not seen[c] then
+                            sp = sp + 1
+                            stack[sp] = c
+                        end
+                    end
                 end
             end
         end
 
-        -- Children
-        local children = { frame:GetChildren() }
-        for i = 1, #children do
-            applyOnFrame(children[i])
+        -- More to process? yield to avoid "script ran too long".
+        if sp > 0 and nodes <= maxNodes and root and root.__MSUF_WhiteTextToken == token then
+            if useTimer then
+                C_Timer.After(0, ProcessChunk)
+            end
         end
     end
 
-    applyOnFrame(root)
+    ProcessChunk()
 end
+
 
 -- ------------------------------------------------------------
 -- Font size bump (readability)
@@ -2880,7 +2936,7 @@ local function MSUF_SelectCastbarSubPage(unitKey)
 end
 
 local MIRROR_PAGES = {
-    home     = { title = "Midnight Simple Unitframes (Release 1.69c)", nav = "Dashboard", build = nil },
+    home     = { title = "Midnight Simple Unitframes (Release 1.69)", nav = "Dashboard", build = nil },
     main     = { title = "MSUF Options",  nav = "Options",  build = MSUF_EnsureMainOptionsPanelBuilt,
         select = function(subkey)
             if not subkey then return end

@@ -424,11 +424,9 @@ local function MSUF_BindDropdown(panel, fieldName, confKey, options, textFn, IsF
 end
 
 local MSUF_ALPHA_SLIDER_SPECS = {
-    { field = "playerAlphaInCombatSlider",  key = "alphaInCombat",     otherField = "playerAlphaOutCombatSlider", otherKey = "alphaOutOfCombat" },
-    { field = "playerAlphaOutCombatSlider", key = "alphaOutOfCombat",  otherField = "playerAlphaInCombatSlider",  otherKey = "alphaInCombat" },
+    { field = "playerAlphaInCombatSlider",  isInCombat = true,  otherField = "playerAlphaOutCombatSlider" },
+    { field = "playerAlphaOutCombatSlider", isInCombat = false, otherField = "playerAlphaInCombatSlider" },
 }
-
-
 local function MSUF_ApplyCheck(panel, widgetKey, show, checked)
     if not panel or not widgetKey then return end
     local w = panel[widgetKey]
@@ -527,6 +525,14 @@ local MSUF_COPY_BASIC_FIELDS = {
     "alphaInCombat",
     "alphaOutOfCombat",
     "alphaSync",
+
+    -- Layered alpha (keep text+portrait visible)
+    "alphaExcludeTextPortrait",
+    "alphaLayerMode", -- stored as 0/1 or "foreground"/"background"
+    "alphaFGInCombat",
+    "alphaFGOutOfCombat",
+    "alphaBGInCombat",
+    "alphaBGOutOfCombat",
 }
 
 local MSUF_COPY_INDICATOR_FIELDS = {
@@ -1193,7 +1199,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     end
 
     local basicsH = 178
-    local sizeH = 170
+    -- Slightly taller so the new Alpha dropdown + sliders never clip
+    local sizeH = 245
     local bossExtraH = 60
     local sizeBossH = sizeH + bossExtraH
 
@@ -1216,7 +1223,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     -- Portrait dropdown under display toggles.
 
     local dd = CreateFrame("Frame", "MSUF_UF_PortraitDropDown", basicsBox, "UIDropDownMenuTemplate")
-    dd:SetPoint("TOPLEFT", basicsBox, "TOPLEFT", -6, -130)
+    dd:SetPoint("TOPLEFT", basicsBox, "TOPLEFT", -6, -142)
     dd:Show() -- portrait dropdown (all unitframes)
     panel.playerPortraitDropDown = dd
 
@@ -1250,6 +1257,31 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     end
     panel.playerAlphaSyncCB = alphaSyncCB
 
+
+    -- New: Exclude Text/Portrait from Unit Alpha + choose alpha target layer (background/foreground)
+    local alphaExcludeCB = CreateFrame("CheckButton", "MSUF_UF_AlphaExcludeTextPortraitCB", sizeBox, "UICheckButtonTemplate")
+    alphaExcludeCB:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", 12, -25)
+    if alphaExcludeCB.Text then
+        alphaExcludeCB.Text:SetText("Keep text + portrait visible")
+    end
+    panel.playerAlphaExcludeTextPortraitCB = alphaExcludeCB
+
+    local alphaLayerLabel = sizeBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    alphaLayerLabel:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", 12, -58)
+    alphaLayerLabel:SetText("Alpha sliders affect")
+
+    local alphaLayerDD = CreateFrame("Frame", "MSUF_UF_AlphaLayerDropDown", sizeBox, "UIDropDownMenuTemplate")
+    alphaLayerDD:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", -6, -70)
+    alphaLayerDD:Show()
+    panel.playerAlphaLayerDropDown = alphaLayerDD
+    if UIDropDownMenu_SetWidth then
+        UIDropDownMenu_SetWidth(alphaLayerDD, 170)
+    end
+    alphaLayerDD._msufDropWidth = 170
+    if MSUF_ExpandDropdownClickArea then
+        MSUF_ExpandDropdownClickArea(alphaLayerDD)
+    end
+
     local function FinalizeCompactSlider(slider, width, opts)
         if not slider then return end
         slider:SetWidth(width or (leftW - 24))
@@ -1264,12 +1296,13 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         end
     end
 
+    -- Push sliders down a bit so the dropdown never overlaps/clips them
     local ALPHA_SPECS = {
-        { field = "playerAlphaInCombatSlider",  name = "MSUF_UF_AlphaInCombatSlider",  label = "Alpha in combat",      y = -56 },
-        { field = "playerAlphaOutCombatSlider", name = "MSUF_UF_AlphaOutCombatSlider", label = "Alpha out of combat", y = -106 },
+        { field = "playerAlphaInCombatSlider",  name = "MSUF_UF_AlphaInCombatSlider",  label = "Alpha in combat",      y = -118 },
+        { field = "playerAlphaOutCombatSlider", name = "MSUF_UF_AlphaOutCombatSlider", label = "Alpha out of combat", y = -168 },
     }
     for _, s in ipairs(ALPHA_SPECS) do
-        panel[s.field] = CreateLabeledSlider(s.name, s.label, sizeBox, 0.10, 1.00, 0.05, 12, s.y)
+        panel[s.field] = CreateLabeledSlider(s.name, s.label, sizeBox, 0.00, 1.00, 0.05, 12, s.y)
         FinalizeCompactSlider(panel[s.field], (leftW - 24), { animatedFill = true })
     end
 
@@ -2227,33 +2260,47 @@ end
 
 
     -- Unit Alpha (in/out of combat) [spec-driven]
-    local aIn  = tonumber(conf.alphaInCombat) or 1
-    local aOut = tonumber(conf.alphaOutOfCombat) or 1
-    local sync = (conf.alphaSync == true)
-    if sync then
-        aOut = aIn
+    local excludeTP = (conf.alphaExcludeTextPortrait == true)
+    if panel.playerAlphaExcludeTextPortraitCB then
+        panel.playerAlphaExcludeTextPortraitCB:SetChecked(excludeTP and true or false)
     end
 
-    if panel.playerAlphaSyncCB then
-        panel.playerAlphaSyncCB:SetChecked(sync and true or false)
-    end
+    local layerMode = MSUF_Alpha_NormalizeMode(conf.alphaLayerMode)
 
-    local alphaValues = {
-        playerAlphaInCombatSlider = aIn,
-        playerAlphaOutCombatSlider = aOut,
-    }
+    if panel.playerAlphaLayerDropDown and UIDropDownMenu_SetSelectedValue and UIDropDownMenu_SetText then
+        panel.playerAlphaLayerDropDown:Show()
+        UIDropDownMenu_SetSelectedValue(panel.playerAlphaLayerDropDown, layerMode)
+        UIDropDownMenu_SetText(panel.playerAlphaLayerDropDown, (layerMode == "background") and "Background" or "Foreground")
 
-    for _, spec in ipairs(MSUF_ALPHA_SLIDER_SPECS) do
-        local s = panel[spec.field]
-        if s and s.SetValue then
-            s.MSUF_SkipCallback = true
-            s:SetValue(alphaValues[spec.field] or 1)
-            s.MSUF_SkipCallback = false
+        -- Hard fallback: some dropdown skins won"t display the label unless we also set the FontString.
+        local _ddText = (_G and _G["MSUF_UF_AlphaLayerDropDownText"]) or (panel.playerAlphaLayerDropDown and panel.playerAlphaLayerDropDown.Text)
+        if _ddText and _ddText.SetText then
+            _ddText:SetText((layerMode == "background") and "Background" or "Foreground")
+        end
+
+        -- Disable dropdown unless layered alpha is enabled, so users don't pick a mode that does nothing.
+        local btn = (_G and _G["MSUF_UF_AlphaLayerDropDownButton"]) or (panel.playerAlphaLayerDropDown and panel.playerAlphaLayerDropDown.Button)
+        if btn and btn.Enable and btn.Disable then
+            if excludeTP then btn:Enable() else btn:Disable() end
+        end
+        if panel.playerAlphaLayerDropDown.Text and panel.playerAlphaLayerDropDown.Text.SetTextColor then
+            if excludeTP then
+                panel.playerAlphaLayerDropDown.Text:SetTextColor(1, 1, 1)
+            else
+                panel.playerAlphaLayerDropDown.Text:SetTextColor(0.5, 0.5, 0.5)
+            end
         end
     end
 
+    if panel.playerAlphaSyncCB then
+        panel.playerAlphaSyncCB:SetChecked((conf.alphaSync == true) and true or false)
+    end
 
-    -- Boss-only extension: grow the right-side box for boss-only controls (Boss spacing lives under Indicator now).
+    local aIn, aOut = MSUF_Alpha_ReadPair(conf, layerMode)
+    MSUF_AlphaUI_SetSlider(panel.playerAlphaInCombatSlider, aIn)
+    MSUF_AlphaUI_SetSlider(panel.playerAlphaOutCombatSlider, aOut)
+
+-- Boss-only extension: grow the right-side box for boss-only controls (Boss spacing lives under Indicator now).
     local isBoss = (currentKey == "boss")
     if panel.playerSizeBox and panel._msufSizeBaseH then
         panel.playerSizeBox:SetHeight(panel._msufSizeBaseH)
@@ -2988,6 +3035,87 @@ end
 
 
 -- Unit Alpha + Boss spacing sliders [spec-driven]
+
+-- Alpha slider target routing:
+-- Legacy keys: alphaInCombat / alphaOutOfCombat
+-- Layered keys (when alphaExcludeTextPortrait == true):
+--   Foreground: alphaFGInCombat / alphaFGOutOfCombat
+--   Background: alphaBGInCombat / alphaBGOutOfCombat
+local function MSUF_Alpha_NormalizeMode(mode)
+    -- IMPORTANT: Some DB sanitizers keep only numbers/bools.
+    -- Accept both the legacy string modes and a compact numeric/bool encoding.
+    --   background: true / 1 / "background"
+    --   foreground: false / 0 / "foreground" (default)
+    if mode == true or mode == 1 or mode == "background" then
+        return "background"
+    end
+    if mode == false or mode == 0 or mode == "foreground" then
+        return "foreground"
+    end
+    return "foreground"
+end
+
+local function MSUF_Alpha_GetKeysForMode(conf, mode)
+    mode = MSUF_Alpha_NormalizeMode(mode)
+    local layered = (conf and conf.alphaExcludeTextPortrait == true)
+    if layered then
+        if mode == "background" then
+            return "alphaBGInCombat", "alphaBGOutOfCombat"
+        end
+        return "alphaFGInCombat", "alphaFGOutOfCombat"
+    end
+    return "alphaInCombat", "alphaOutOfCombat"
+end
+
+local function MSUF_Alpha_ReadPair(conf, mode)
+    if not conf then return 1, 1 end
+    mode = MSUF_Alpha_NormalizeMode(mode)
+
+    local aInLegacy  = tonumber(conf.alphaInCombat) or 1
+    local aOutLegacy = tonumber(conf.alphaOutOfCombat) or 1
+
+    local aIn, aOut = aInLegacy, aOutLegacy
+    if conf.alphaExcludeTextPortrait == true then
+        if mode == "background" then
+            aIn  = tonumber(conf.alphaBGInCombat) or aInLegacy
+            aOut = tonumber(conf.alphaBGOutOfCombat) or aOutLegacy
+        else
+            aIn  = tonumber(conf.alphaFGInCombat) or aInLegacy
+            aOut = tonumber(conf.alphaFGOutOfCombat) or aOutLegacy
+        end
+    end
+
+    if conf.alphaSync == true then
+        aOut = aIn
+    end
+    return aIn, aOut
+end
+
+local function MSUF_Alpha_WritePair(conf, mode, aIn, aOut)
+    if not conf then return end
+    mode = MSUF_Alpha_NormalizeMode(mode)
+    local kIn, kOut = MSUF_Alpha_GetKeysForMode(conf, mode)
+    conf[kIn] = aIn
+    conf[kOut] = aOut
+end
+
+local function MSUF_AlphaUI_SetSlider(slider, v)
+    if slider and slider.SetValue then
+        slider.MSUF_SkipCallback = true
+        slider:SetValue(v)
+        slider.MSUF_SkipCallback = false
+    end
+end
+
+local function MSUF_AlphaUI_RefreshSliders()
+    if not IsFramesTab() then return end
+    local conf = EnsureKeyDB()
+    local mode = MSUF_Alpha_NormalizeMode(conf.alphaLayerMode)
+    local aIn, aOut = MSUF_Alpha_ReadPair(conf, mode)
+    MSUF_AlphaUI_SetSlider(panel.playerAlphaInCombatSlider, aIn)
+    MSUF_AlphaUI_SetSlider(panel.playerAlphaOutCombatSlider, aOut)
+end
+
 local function ApplyAlphaOnly()
     local fn = (_G and _G.MSUF_RefreshAllUnitAlphas) or MSUF_RefreshAllUnitAlphas
     if type(fn) == "function" then pcall(fn) end
@@ -2999,17 +3127,94 @@ if panel.playerAlphaSyncCB then
         if not IsFramesTab() then return end
         local conf = EnsureKeyDB()
         conf.alphaSync = self:GetChecked() and true or false
-        if conf.alphaSync then
-            local aIn = panel.playerAlphaInCombatSlider
-            local v = tonumber(conf.alphaInCombat) or (aIn and aIn.GetValue and aIn:GetValue()) or 1
-            v = tonumber(v) or 1
-            conf.alphaInCombat, conf.alphaOutOfCombat = v, v
-            local aOut = panel.playerAlphaOutCombatSlider
-            if aIn then aIn.MSUF_SkipCallback = true; aIn:SetValue(v); aIn.MSUF_SkipCallback = false end
-            if aOut then aOut.MSUF_SkipCallback = true; aOut:SetValue(v); aOut.MSUF_SkipCallback = false end
+
+        local mode = MSUF_Alpha_NormalizeMode(conf.alphaLayerMode)
+        local aIn, aOut = MSUF_Alpha_ReadPair(conf, mode)
+
+        if conf.alphaSync == true then
+            aOut = aIn
+            MSUF_Alpha_WritePair(conf, mode, aIn, aOut)
         end
+
+        MSUF_AlphaUI_RefreshSliders()
         ApplyAlphaOnly()
-        if not (InCombatLockdown and InCombatLockdown()) then ApplyCurrent() end
+    end)
+end
+
+-- Alpha: keep text/portrait visible (layered alpha enable)
+if panel.playerAlphaExcludeTextPortraitCB then
+    panel.playerAlphaExcludeTextPortraitCB:SetScript("OnClick", function(self)
+        if not IsFramesTab() then return end
+        local conf = EnsureKeyDB()
+        local on = self:GetChecked() and true or false
+        conf.alphaExcludeTextPortrait = on
+        -- Default to foreground in layered mode.
+        if on and (conf.alphaLayerMode == nil) then
+            -- Store as number to survive DB sanitizers.
+            conf.alphaLayerMode = 0
+        end
+
+        -- Toggle dropdown enabled state immediately
+        local dd = panel.playerAlphaLayerDropDown
+        if dd then
+            local btn = (_G and _G["MSUF_UF_AlphaLayerDropDownButton"]) or (dd and dd.Button)
+            if btn and btn.Enable and btn.Disable then
+                if on then btn:Enable() else btn:Disable() end
+            end
+            if dd.Text and dd.Text.SetTextColor then
+                if on then dd.Text:SetTextColor(1, 1, 1) else dd.Text:SetTextColor(0.5, 0.5, 0.5) end
+            end
+        end
+
+        MSUF_AlphaUI_RefreshSliders()
+        ApplyAlphaOnly()
+    end)
+end
+
+-- Alpha layer dropdown
+if panel.playerAlphaLayerDropDown and UIDropDownMenu_Initialize then
+    UIDropDownMenu_Initialize(panel.playerAlphaLayerDropDown, function(self, level)
+        if not IsFramesTab() then return end
+        local conf = EnsureKeyDB()
+        local excludeOn = (conf.alphaExcludeTextPortrait == true)
+
+        -- Ensure the dropdown shows the current DB value immediately (even after /reload).
+        local _curMode = MSUF_Alpha_NormalizeMode(conf.alphaLayerMode)
+        if UIDropDownMenu_SetSelectedValue then
+            UIDropDownMenu_SetSelectedValue(panel.playerAlphaLayerDropDown, _curMode)
+        end
+        if UIDropDownMenu_SetText then
+            UIDropDownMenu_SetText(panel.playerAlphaLayerDropDown, (_curMode == "background") and "Background" or "Foreground")
+        end
+        local _ddText = (_G and _G["MSUF_UF_AlphaLayerDropDownText"]) or (panel.playerAlphaLayerDropDown and panel.playerAlphaLayerDropDown.Text)
+        if _ddText and _ddText.SetText then
+            _ddText:SetText((_curMode == "background") and "Background" or "Foreground")
+        end
+
+        local function AddItem(value, text)
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = text
+            info.value = value
+            info.checked = function()
+                return MSUF_Alpha_NormalizeMode(conf.alphaLayerMode) == value
+            end
+            info.disabled = (excludeOn ~= true)
+            info.func = function()
+                if not IsFramesTab() then return end
+                local c = EnsureKeyDB()
+                -- Store as number to survive DB sanitizers.
+                c.alphaLayerMode = (value == "background") and 1 or 0
+                UIDropDownMenu_SetSelectedValue(panel.playerAlphaLayerDropDown, value)
+                UIDropDownMenu_SetText(panel.playerAlphaLayerDropDown, text)
+                CloseDropDownMenus()
+                MSUF_AlphaUI_RefreshSliders()
+                ApplyAlphaOnly()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+
+        AddItem("foreground", "Foreground")
+        AddItem("background", "Background")
     end)
 end
 
@@ -3019,15 +3224,27 @@ local function BindAlphaSlider(spec)
     s.onValueChanged = function(self, value)
         if self.MSUF_SkipCallback or not IsFramesTab() then return end
         local conf = EnsureKeyDB()
+        local mode = MSUF_Alpha_NormalizeMode(conf.alphaLayerMode)
+
         local v = tonumber(value) or 1
-        conf[spec.key] = v
-        if conf.alphaSync == true then
-            conf[spec.otherKey] = v
-            local o = panel[spec.otherField]
-            if o then o.MSUF_SkipCallback = true; o:SetValue(v); o.MSUF_SkipCallback = false end
+        if v < 0 then v = 0 elseif v > 1 then v = 1 end
+
+        local aIn, aOut = MSUF_Alpha_ReadPair(conf, mode)
+
+        if spec.isInCombat then
+            aIn = v
+        else
+            aOut = v
         end
+
+        if conf.alphaSync == true then
+            aOut = aIn
+            local other = panel[spec.otherField]
+            MSUF_AlphaUI_SetSlider(other, aOut)
+        end
+
+        MSUF_Alpha_WritePair(conf, mode, aIn, aOut)
         ApplyAlphaOnly()
-        if not (InCombatLockdown and InCombatLockdown()) then ApplyCurrent() end
     end
     if s.HookScript then s:HookScript("OnShow", function() ForceSliderEditBox(s) end) end
 end
