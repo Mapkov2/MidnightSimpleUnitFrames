@@ -3718,10 +3718,10 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     if not f or not f.portrait or not conf then return end
     local mode = conf.portraitMode or "OFF"
 
-    -- Fix: ensure portraits recover without requiring the user to "re-pick" the dropdown.
-    -- We only run SetPortraitTexture when frame._msufPortraitDirty is set; however, when a portrait
-    -- is enabled via saved variables (or toggled back on), we might never receive a portrait event.
-    -- Track mode transitions and force a one-shot dirty mark when portrait becomes active.
+    -- Fix: portraits could stay blank across /reload or relog if multiple frames become dirty in the same frame.
+    -- Our global portrait budget allows ~1 SetPortraitTexture per frame; the "losing" frame can remain dirty with
+    -- no further unit updates to trigger a retry. We stamp mode transitions and schedule a one-shot retry when
+    -- we miss the budget/interval, without adding any tickers or heavy code.
     if f._msufPortraitModeStamp ~= mode then
         f._msufPortraitModeStamp = mode
         if mode ~= "OFF" then
@@ -3729,32 +3729,56 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
             f._msufPortraitNextAt = 0
         end
     end
+
     if mode == "OFF" or not existsForPortrait then
         f.portrait:Hide()
         return
     end
+
     MSUF_ApplyPortraitLayoutIfNeeded(f, conf)
+
     if f._msufPortraitDirty then
         local now = (GetTime and GetTime()) or 0
         local nextAt = tonumber(f._msufPortraitNextAt) or 0
         if (now >= nextAt) and (not MSUF_PORTRAIT_BUDGET_USED) then
             if SetPortraitTexture then
                 SetPortraitTexture(f.portrait, unit)
-                f._msufPortraitEverApplied = true
             end
             f._msufPortraitDirty = nil
             f._msufPortraitNextAt = now + MSUF_PORTRAIT_MIN_INTERVAL
             MSUF_PORTRAIT_BUDGET_USED = true
             MSUF_ResetPortraitBudgetNextFrame()
         else
-            -- Keep dirty; we'll retry on the next flush.
+            -- Keep dirty; schedule a single retry after the interval/budget resets.
+            if not f._msufPortraitRetryScheduled and C_Timer and C_Timer.After then
+                f._msufPortraitRetryScheduled = true
+                local delay = 0
+                if now < nextAt then
+                    delay = nextAt - now
+                    if delay < 0 then delay = 0 end
+                end
+                C_Timer.After(delay, function()
+                    if not f then return end
+                    f._msufPortraitRetryScheduled = nil
+                    if not f._msufPortraitDirty then return end
+                    if type(_G.MSUF_RequestUnitframeUpdate) == "function" then
+                        _G.MSUF_RequestUnitframeUpdate(f, false, false, "PortraitRetry")
+                    else
+                        local upd = _G.UpdateSimpleUnitFrame
+                        if type(upd) == "function" then
+                            upd(f)
+                        end
+                    end
+                end)
+            end
             MSUF_ResetPortraitBudgetNextFrame()
         end
     end
+
     f.portrait:Show()
 end
 
--- then multiplies by maxChars to get a clip width. Never measures secret unit names.
+-- then multiplies by maxChars to get a clip width. Never measures secret unit names. to get a clip width. Never measures secret unit names.
 local function MSUF_GetApproxNameWidthForChars(templateFS, maxChars)
     if not templateFS or not templateFS.GetFont then return nil end
     maxChars = tonumber(maxChars) or 16
@@ -7244,7 +7268,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.70h1|r  |cff565f89•|r  |cffc0caf5 Thank you gamer -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.70h2|r  |cff565f89•|r  |cffc0caf5 Thank you gamer -|r  |cfff7768eReport bugs in the Discord.|r")
 
 end, nil, true)
 

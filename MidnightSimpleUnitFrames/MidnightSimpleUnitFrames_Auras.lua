@@ -2725,6 +2725,96 @@ local function MSUF_A2_AuraHasExpiration(unit, aura)
     return false
 end
 
+
+
+-- Cooldown clearing needs a stricter signal than MSUF_A2_AuraHasExpiration():
+-- That helper intentionally treats "unknown" as non-expiring for the Hide-Permanent filter.
+-- For cooldown timers, "unknown" must NOT clear, or debuff countdowns can "drop out" on boss/focus.
+-- This returns TRUE only when the API explicitly reports a ZERO duration / no-expiration state.
+local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
+    if not aura then return false end
+
+    local auraInstanceID = aura._msufAuraInstanceID or aura.auraInstanceID
+    if not auraInstanceID then
+        return false
+    end
+
+    -- 1) Explicit API helper (if it reliably reports "no expiration").
+    if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
+        local ok, v = pcall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
+        if ok then
+            local okS, s = pcall(tostring, v)
+            if okS and type(s) == "string" then
+                if MSUF_A2_StringIsTrue(s) then
+                    return false
+                end
+                local okB1, b1 = pcall(string.byte, s, 1)
+                if okB1 and b1 then
+                    -- "0"
+                    if b1 == 48 then
+                        return true
+                    end
+                    -- "f" / "F" (false)
+                    if b1 == 102 or b1 == 70 then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    -- 2) Zero-duration signals via base duration / duration.
+    local function TryGetSpellID()
+        local raw = nil
+        local okRaw = pcall(function()
+            raw = aura.spellId or aura.spellID or aura.spellid
+        end)
+        if not okRaw or raw == nil then
+            if C_UnitAuras and type(C_UnitAuras.GetAuraDataByAuraInstanceID) == "function" then
+                local okData, data = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, auraInstanceID)
+                if okData and type(data) == "table" then
+                    pcall(function()
+                        raw = data.spellId or data.spellID or data.spellid
+                    end)
+                end
+            end
+        end
+        if raw == nil then return nil end
+        local okS, s = pcall(tostring, raw)
+        if not okS or type(s) ~= "string" then return nil end
+        local okN, n = pcall(tonumber, s)
+        if not okN then return nil end
+        return n
+    end
+
+    if C_UnitAuras and type(C_UnitAuras.GetAuraBaseDuration) == "function" then
+        local spellID = TryGetSpellID()
+        if spellID then
+            local okBD, bd = pcall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
+            if okBD and bd ~= nil then
+                local okS, s = pcall(tostring, bd)
+                if okS and MSUF_A2_StringIsZeroNumber(s) then
+                    return true
+                end
+                return false
+            end
+        end
+    end
+
+    if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
+        local okD, d = pcall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
+        if okD and d ~= nil then
+            local okS, s = pcall(tostring, d)
+            if okS and MSUF_A2_StringIsZeroNumber(s) then
+                return true
+            end
+            return false
+        end
+    end
+
+    return false
+end
+
 -- Cooldown helper (secret-safe): use Duration Objects only (no legacy Remaining* APIs).
 local function MSUF_A2_TrySetCooldownFromAura(icon, unit, aura)
     if not icon or not icon.cooldown or not aura then return false end
@@ -3019,11 +3109,11 @@ local function ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanen
             -- This avoids the visible countdown text "dropping out" for a few frames when aura data is restricted/late.
             -- We only hard-clear when the aura is known to be non-expiring, or when this icon was recycled to a new aura
             -- and we never successfully applied a timer for it (to prevent stale timers from previous icons).
-            local hasExpiration = MSUF_A2_AuraHasExpiration(unit, aura)
+            local isKnownPermanent = MSUF_A2_AuraIsKnownPermanent(unit, aura)
             local sameAura = (prevAuraID ~= nil and prevAuraID == icon._msufAuraInstanceID)
 
             local shouldClear = false
-            if hasExpiration == false then
+            if isKnownPermanent then
                 shouldClear = true
             elseif (not prevHadTimer) and (not sameAura) then
                 -- Freshly recycled icon with no successfully applied timer yet
