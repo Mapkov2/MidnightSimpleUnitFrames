@@ -141,28 +141,12 @@ end
 -- This is used by modules (Auras2 previews, etc.) to reliably start/stop preview visuals
 -- even when MSUF Edit Mode is running unlinked from Blizzard Edit Mode.
 local function MSUF_EM_IsBlizzardEditModeActive()
-    local em = rawget(_G, "EditModeManagerFrame")
-    if not em then
-        return false
-    end
-
-    if type(em.IsEditModeActive) == "function" then
-        local ok, v = pcall(em.IsEditModeActive, em)
-        if ok then
-            return (v and true) or false
-        end
-    end
-
-    if em.editModeActive ~= nil then
-        return (em.editModeActive and true) or false
-    end
-
-    if type(em.IsShown) == "function" then
-        return (em:IsShown() and true) or false
-    end
-
+    -- Blizzard Edit Mode integration disabled (TEMP/Hotfix):
+    -- Blizzard started transiently showing EditModeManagerFrame during reload/zone transitions,
+    -- which can incorrectly force MSUF Edit Mode to open. We now treat Blizzard Edit Mode as unrelated.
     return false
 end
+
 
 local function MSUF_EM_GetAnyEditModeActive()
     local st = MSUF_EM_GetState()
@@ -2054,7 +2038,15 @@ local function MSUF_GetAnchorFrame()
 end
 
 local function MSUF_IsInEditMode()
-    return EditModeManagerFrame and EditModeManagerFrame:IsShown()
+    -- MSUF-only Edit Mode (Blizzard Edit Mode is intentionally ignored).
+    local st = (type(MSUF_EM_GetState) == "function") and MSUF_EM_GetState() or nil
+    if type(st) == "table" and st.active == true then
+        return true
+    end
+    if rawget(_G, "MSUF_UnitEditModeActive") == true then
+        return true
+    end
+    return false
 end
 local function MSUF_MakeBlizzardOptionsMovable()
     -- IMPORTANT:
@@ -6667,6 +6659,8 @@ local function MSUF_EM_ShowBCDMHandoffNoticeIfNeeded()
 end
 
 function MSUF_SetMSUFEditModeFromBlizzard(active)
+    -- Blizzard -> MSUF Edit Mode sync disabled (TEMP): MSUF runs its own standalone Edit Mode.
+    do return end
     if _G and _G.MSUF_SuppressBlizzEditToMSUF then
         return
     end
@@ -7712,6 +7706,8 @@ end
 
 if not MSUF_HookBlizzardEditMode then
 MSUF_HookBlizzardEditMode = function()
+    -- Disabled: Blizzard Edit Mode hooks removed (Blizzard lifecycle currently unstable).
+    do return end
     if MSUF_BlizzardEditHooked then
         return
     end
@@ -7823,16 +7819,16 @@ end
 if type(MSUF_EventBus_Register) == "function" then
 MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_BLIZZ_EDITMODE_HOOK", function(event)
     -- delayed hook; fail-open if anything is missing
-    MSUF_SafeAfter(0.8, "MSUF_HookBlizzardEditMode", MSUF_HookBlizzardEditMode)
-    MSUF_SafeAfter(2.0, "MSUF_HookBlizzardEditMode", MSUF_HookBlizzardEditMode)
+    -- Blizzard Edit Mode hook disabled (no scheduling).
+    -- Blizzard Edit Mode hook disabled (no scheduling).
 end, nil, true)
 else
     -- Fallback: no EventBus available (load-order / standalone testing)
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")
     f:SetScript("OnEvent", function()
-        MSUF_SafeAfter(0.8, "MSUF_HookBlizzardEditMode", MSUF_HookBlizzardEditMode)
-        MSUF_SafeAfter(2.0, "MSUF_HookBlizzardEditMode", MSUF_HookBlizzardEditMode)
+    -- Blizzard Edit Mode hook disabled (no scheduling).
+    -- Blizzard Edit Mode hook disabled (no scheduling).
     end)
 end
 

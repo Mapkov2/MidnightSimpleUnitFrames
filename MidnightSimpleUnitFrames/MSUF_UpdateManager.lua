@@ -21,12 +21,14 @@ end
 -- Global helper: "any edit mode" (MSUF Edit Mode OR Blizzard Edit Mode)
 -- =============================================================
 if not _G.MSUF_IsInAnyEditMode then
+    -- MSUF-only Edit Mode:
+    -- Blizzard Edit Mode integration is intentionally disabled (Blizzard lifecycle currently unreliable).
     function _G.MSUF_IsInAnyEditMode()
-        if _G.MSUF_UnitEditModeActive then
+        local st = rawget(_G, "MSUF_EditState")
+        if type(st) == "table" and st.active == true then
             return true
         end
-        local f = _G.EditModeManagerFrame
-        if f and f.IsShown and f:IsShown() then
+        if rawget(_G, "MSUF_UnitEditModeActive") == true then
             return true
         end
         return false

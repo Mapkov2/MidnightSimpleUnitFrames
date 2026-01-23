@@ -1631,25 +1631,20 @@ local Dirty = AcquireDirtyTable()
 local FlushScheduled = false
 
 local function IsEditModeActive()
-    -- We need to treat BOTH Blizzard Edit Mode and MSUF Edit Mode as "edit mode" for previews.
-    -- Blizzard Edit Mode:
-    if _G.EditModeManagerFrame and _G.EditModeManagerFrame.IsEditModeActive and _G.EditModeManagerFrame:IsEditModeActive() then
-        return true
-    end
-
-    -- MSUF Edit Mode (preferred / stable signals):
-    -- 1) New state object (MSUF_EditState) introduced by MSUF_EditMode.lua
+    -- MSUF-only Edit Mode:
+    -- Blizzard Edit Mode is intentionally ignored (Blizzard lifecycle currently unreliable on reload/zone transitions).
+    -- 1) Preferred state object (MSUF_EditState) introduced by MSUF_EditMode.lua
     local st = rawget(_G, "MSUF_EditState")
     if type(st) == "table" and st.active == true then
         return true
     end
 
-    -- 2) Legacy global booleans used by older patches
+    -- 2) Legacy global boolean used by older patches
     if rawget(_G, "MSUF_UnitEditModeActive") == true then
         return true
     end
 
-    -- 3) Exported helper from MSUF_EditMode.lua (exists in current project files)
+    -- 3) Exported helper from MSUF_EditMode.lua (now MSUF-only)
     local f = rawget(_G, "MSUF_IsInEditMode")
     if type(f) == "function" then
         local ok, v = pcall(f)
@@ -4266,14 +4261,9 @@ local function MSUF_A2_IsEditModeActive_Safe()
     if type(IsEditModeActive) == "function" then
         return IsEditModeActive()
     end
-    if C_EditMode and C_EditMode.IsEditModeActive then
-        return C_EditMode.IsEditModeActive()
-    end
-    if EditModeManagerFrame and EditModeManagerFrame.IsEditModeActive then
-        return EditModeManagerFrame:IsEditModeActive()
-    end
     return false
 end
+
 
 local function MSUF_A2_ShouldRunPreviewStackTicker()
     local a2, shared = GetAuras2DB()

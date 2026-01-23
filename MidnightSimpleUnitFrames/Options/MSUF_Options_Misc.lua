@@ -39,20 +39,36 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     linkEditModesCheck = CreateFrame("CheckButton", "MSUF_LinkEditModesCheck", miscGroup, "InterfaceOptionsCheckButtonTemplate")
     linkEditModesCheck:SetPoint("TOPLEFT", miscLeftLine, "BOTTOMLEFT", 16, -18)
     _G[linkEditModesCheck:GetName() .. "Text"]:SetText("Link Edit Mode Button")
-    linkEditModesCheck.tooltipText = "When enabled (default), MSUF Edit Mode is linked with Blizzard Edit Mode. Disable if you want them separate or if Blizzard Edit Mode causes UI errors."
+
+    -- Temporarily disabled: Blizzard Edit Mode currently misbehaves on /reload/zone transitions and can force MSUF Edit Mode open.
+    -- MSUF now runs its own standalone Edit Mode.
+    linkEditModesCheck.tooltipText = "Temporarily disabled: Blizzard Edit Mode currently misbehaves on /reload and zone transitions and can force MSUF Edit Mode to open.\n\nMSUF now runs its own standalone Edit Mode. We'll re-enable linking once Blizzard stabilizes Edit Mode again."
+    linkEditModesCheck:Disable()
+    linkEditModesCheck:SetAlpha(0.55)
+
+    -- Force DB off to avoid old saved settings keeping it enabled.
     linkEditModesCheck:SetScript("OnShow", function(self)
         if type(EnsureDB) == "function" then EnsureDB() end
-        local enabled = true
-        if MSUF_DB and MSUF_DB.general and MSUF_DB.general.linkEditModes == false then
-            enabled = false
+        if MSUF_DB and MSUF_DB.general then
+            MSUF_DB.general.linkEditModes = false
         end
-        self:SetChecked(enabled)
+        self:SetChecked(false)
+
+        local t = _G[self:GetName() .. "Text"]
+        if t then t:SetAlpha(0.75) end
     end)
-    linkEditModesCheck:SetScript("OnClick", function(self)
-        if type(EnsureDB) == "function" then EnsureDB() end
-        if not MSUF_DB then MSUF_DB = {} end
-        if not MSUF_DB.general then MSUF_DB.general = {} end
-        MSUF_DB.general.linkEditModes = self:GetChecked() and true or false
+
+    -- Keep hover tooltip even while disabled
+    linkEditModesCheck:SetScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Link Edit Mode Button", 1, 1, 1, true)
+            GameTooltip:AddLine(self.tooltipText or "", nil, nil, nil, true)
+            GameTooltip:Show()
+        end
+    end)
+    linkEditModesCheck:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
     end)
 
     updateThrottleLabel = miscGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
