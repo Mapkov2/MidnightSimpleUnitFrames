@@ -1354,6 +1354,8 @@ end
             MSUF_PlayerCastbar_UpdateLatencyZone(self, false, durSec)
         end
 
+                self._msufChanNilSince = nil
+
         self:SetScript("OnUpdate", function()
             -- Hard stop: if no longer casting, kill the bar immediately (fixes lingering channels like Mind Flay).
             local u = self._msufActiveCastUnit or unit or self.unit or "player"
@@ -1406,6 +1408,7 @@ end
         -- Clear any short interrupt-feedback window when a new channel starts and track unit source.
         self.interruptFeedbackEndTime = nil
         self._msufActiveCastUnit = unit
+        self._msufChanNilSince = nil
 
         self.MSUF_channelDuration = channelDuration
         self.MSUF_castDuration = nil
@@ -1479,10 +1482,30 @@ end
         end
 
         self:SetScript("OnUpdate", function()
-            -- Hard stop: if no longer channeling, kill the bar immediately (fixes lingering channels like Mind Flay).
+            -- Hard stop (graceful): UnitChannelInfo can briefly return nil during back-to-back channel refresh/queue windows.
+            -- Keep a tiny persistence window to avoid "blink / micro re-channel" while still killing truly-ended lingering channels.
+            local now = (type(GetTime) == "function") and GetTime() or 0
             local u = self._msufActiveCastUnit or unit or self.unit or "player"
             local _chanName, _, _, _, _, _, _ni = UnitChannelInfo(u)
+
             if not _chanName then
+                local since = self._msufChanNilSince
+                if not since then
+                    self._msufChanNilSince = now
+                    return
+                end
+
+                -- 0.20s default: long enough to bridge a refresh gap, short enough to not feel "sticky".
+                local grace = self._msufChanNilGrace
+                if type(grace) ~= "number" then grace = 0.20 end
+                if grace < 0.05 then grace = 0.05 end
+                if grace > 0.50 then grace = 0.50 end
+
+                if (now - since) < grace then
+                    return
+                end
+
+                self._msufChanNilSince = nil
                 self:SetScript("OnUpdate", nil)
                 self._msufActiveCastUnit = nil
                 MSUF_PlayerChannelHasteMarkers_Hide(self)
@@ -1492,15 +1515,18 @@ end
                 self:Hide()
                 return
             end
+
+            -- Channel is active again; clear any pending nil-grace tracking.
+            self._msufChanNilSince = nil
+
             -- Update haste markers during the channel (throttled). Visible from start; repositions if haste changes.
-            local now = (type(GetTime) == "function") and GetTime() or 0
             if (now - (self._msufPlayerChannelHasteMarkersLastT or 0)) > 0.15 then
                 self._msufPlayerChannelHasteMarkersLastT = now
                 MSUF_PlayerChannelHasteMarkers_Update(self, false)
             end
 
-	            local _newNI = false
-	            if _ni then _newNI = true end
+            local _newNI = false
+            if _ni then _newNI = true end
             if _newNI ~= self.isNotInterruptible then
                 self.isNotInterruptible = _newNI
                 MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
@@ -1541,6 +1567,7 @@ end
 
     if CAST_STOP[event] then
         self:SetScript("OnUpdate", nil)
+        self._msufChanNilSince = nil
         MSUF_PlayerChannelHasteMarkers_Hide(self)
         if self.latencyBar then self.latencyBar:Hide() end
         if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
