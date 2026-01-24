@@ -1244,6 +1244,25 @@ function _G.MSUF_UpdateCastbarChannelTicks()
 end
 
 
+
+-- Vehicle support: while in a vehicle, some casts/channels are reported on unit "vehicle" instead of "player".
+-- Keep frame.unit as "player" for options/anchoring, but query the effective unit for cast APIs.
+local function MSUF_PlayerCastbar_GetEffectiveUnit(self)
+    local u = (self and self.unit) or "player"
+    if u == "player" and type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") then
+        if type(UnitExists) == "function" and UnitExists("vehicle") then
+            -- Prefer vehicle only if it actually has an active cast/channel.
+            if (type(UnitCastingInfo) == "function" and UnitCastingInfo("vehicle"))
+            or (type(UnitChannelInfo) == "function" and UnitChannelInfo("vehicle")) then
+                return "vehicle"
+            end
+        end
+    end
+    return u
+end
+
+
+
 -- Unhalted-style non-empower player castbar (cast/channel): self-driven via OnUpdate and hard-stops when the cast/channel is gone.
 local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
     if not self or not self.unit or not self.statusBar then return end
@@ -1263,14 +1282,16 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
         UNIT_SPELLCAST_CHANNEL_START = true,
     }
 
+    local unit = MSUF_PlayerCastbar_GetEffectiveUnit(self)
+
     if CAST_START[event] then
-        local castDuration = (type(UnitCastingDuration) == "function") and UnitCastingDuration(self.unit) or nil
+        local castDuration = (type(UnitCastingDuration) == "function") and UnitCastingDuration(unit) or nil
         if not castDuration then return end
 
-        -- If a new cast starts while the short red interrupt feedback window is still active
-        -- (e.g. cancel -> immediately re-cast), clear the feedback state so player override
-        -- colors apply immediately (no "stuck" interruptible color until a successful cast ends).
+        -- Clear any short interrupt-feedback window when a new cast starts (cancel -> re-cast)
+        -- and track the unit the cast is coming from (player vs vehicle).
         self.interruptFeedbackEndTime = nil
+        self._msufActiveCastUnit = unit
 
         self.MSUF_castDuration = castDuration
         self.MSUF_channelDuration = nil
@@ -1307,7 +1328,7 @@ end
         -- Ensure fill direction updates for this cast type (cast vs channel) immediately.
         self.MSUF_isChanneled = false
         MSUF_PlayerChannelHasteMarkers_Hide(self)
-	    local castName, castText, castTex, _, _, _, _, notInterruptible = UnitCastingInfo(self.unit)
+	    local castName, castText, castTex, _, _, _, _, notInterruptible = UnitCastingInfo(unit)
 	    -- IMPORTANT (Midnight/Beta): do NOT apply boolean operators (e.g. `not not x`) to potentially-secret values.
 	    -- Derive a plain Lua boolean via a truthiness branch.
 	    local apiNI = false
@@ -1335,9 +1356,11 @@ end
 
         self:SetScript("OnUpdate", function()
             -- Hard stop: if no longer casting, kill the bar immediately (fixes lingering channels like Mind Flay).
-            local _castName, _, _, _, _, _, _, _ni = UnitCastingInfo(self.unit)
+            local u = self._msufActiveCastUnit or unit or self.unit or "player"
+            local _castName, _, _, _, _, _, _, _ni = UnitCastingInfo(u)
             if not _castName then
                 self:SetScript("OnUpdate", nil)
+                self._msufActiveCastUnit = nil
                 MSUF_PlayerChannelHasteMarkers_Hide(self)
                 if self.latencyBar then self.latencyBar:Hide() end
                 if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
@@ -1377,12 +1400,12 @@ end
     end
 
     if CHANNEL_START[event] then
-        local channelDuration = (type(UnitChannelDuration) == "function") and UnitChannelDuration(self.unit) or nil
+        local channelDuration = (type(UnitChannelDuration) == "function") and UnitChannelDuration(unit) or nil
         if not channelDuration then return end
 
-        -- Same as casts: starting a new channel should cancel any prior interrupt feedback window
-        -- so player override colors apply immediately.
+        -- Clear any short interrupt-feedback window when a new channel starts and track unit source.
         self.interruptFeedbackEndTime = nil
+        self._msufActiveCastUnit = unit
 
         self.MSUF_channelDuration = channelDuration
         self.MSUF_castDuration = nil
@@ -1420,7 +1443,7 @@ end
         self.MSUF_isChanneled = true
         self._msufStripeReverseFill = (__msuf_rf and true or false)
         MSUF_PlayerChannelHasteMarkers_Update(self, true)
-	        local chanName, chanText, chanTex, _, _, _, notInterruptible = UnitChannelInfo(self.unit)
+	        local chanName, chanText, chanTex, _, _, _, notInterruptible = UnitChannelInfo(unit)
 	        -- IMPORTANT (Midnight/Beta): do NOT apply boolean operators (e.g. `not not x`) to potentially-secret values.
 	        -- Derive a plain Lua boolean via a truthiness branch.
 	        local apiNI = false
@@ -1457,9 +1480,11 @@ end
 
         self:SetScript("OnUpdate", function()
             -- Hard stop: if no longer channeling, kill the bar immediately (fixes lingering channels like Mind Flay).
-            local _chanName, _, _, _, _, _, _ni = UnitChannelInfo(self.unit)
+            local u = self._msufActiveCastUnit or unit or self.unit or "player"
+            local _chanName, _, _, _, _, _, _ni = UnitChannelInfo(u)
             if not _chanName then
                 self:SetScript("OnUpdate", nil)
+                self._msufActiveCastUnit = nil
                 MSUF_PlayerChannelHasteMarkers_Hide(self)
                 if self.latencyBar then self.latencyBar:Hide() end
                 if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
@@ -1628,6 +1653,14 @@ local function MSUF_PlayerCastbar_OnEvent(self, event, ...)
     if event == "UNIT_SPELLCAST_FAILED" then
         local castNow = UnitCastingInfo("player")
         local chanNow = UnitChannelInfo("player")
+        if not (castNow or chanNow) and type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") and type(UnitExists) == "function" and UnitExists("vehicle") then
+            castNow = UnitCastingInfo("vehicle")
+            chanNow = UnitChannelInfo("vehicle")
+        end
+        if not (castNow or chanNow) and type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") and type(UnitExists) == "function" and UnitExists("vehicle") then
+            castNow = UnitCastingInfo("vehicle")
+            chanNow = UnitChannelInfo("vehicle")
+        end
         if castNow or chanNow then
             return
         end
@@ -1887,20 +1920,20 @@ function MSUF_InitSafePlayerCastbar()
         frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP",  "player")
         frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", "player")
 
-                frame:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
+                frame:RegisterUnitEvent("UNIT_SPELLCAST_START", "player", "vehicle")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player", "vehicle")
 
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "player")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player", "vehicle")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "player", "vehicle")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", "player", "vehicle")
 
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", "player")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", "player", "vehicle")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "vehicle")
 
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", "player")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "player")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", "player", "vehicle")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "player", "vehicle")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player", "vehicle")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player", "vehicle")
 
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
@@ -1911,6 +1944,10 @@ function MSUF_InitSafePlayerCastbar()
             if not MSUF_PlayerCastbar or not MSUF_PlayerCastbar_Cast then return end
             local castName = UnitCastingInfo("player")
             local chanName = UnitChannelInfo("player")
+            if not (castName or chanName) and type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") and type(UnitExists) == "function" and UnitExists("vehicle") then
+                castName = UnitCastingInfo("vehicle")
+                chanName = UnitChannelInfo("vehicle")
+            end
             if castName or chanName then
                 MSUF_PlayerCastbar_Cast(MSUF_PlayerCastbar)
             end
@@ -2218,6 +2255,9 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
         else
             -- Let normal castbar logic take over; hide if no real cast is active.
             local hasCast = UnitCastingInfo("player") or UnitChannelInfo("player")
+            if not hasCast and type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") and type(UnitExists) == "function" and UnitExists("vehicle") then
+                hasCast = UnitCastingInfo("vehicle") or UnitChannelInfo("vehicle")
+            end
             if not hasCast then
                 if frame.timeText then
                     MSUF_SetTextIfChanged(frame.timeText, "")
@@ -2251,6 +2291,9 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
     if usePreview and fReal and fReal ~= fPrev then
         -- Don't fight the normal castbar driver: only hide if no real cast is active.
         local hasCast = UnitCastingInfo("player") or UnitChannelInfo("player")
+        if not hasCast and type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") and type(UnitExists) == "function" and UnitExists("vehicle") then
+            hasCast = UnitCastingInfo("vehicle") or UnitChannelInfo("vehicle")
+        end
         if not hasCast then
             fReal:SetScript("OnUpdate", nil)
             if fReal.timeText then
