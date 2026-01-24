@@ -5567,7 +5567,7 @@ function _G.MSUF_A2_EnsureAuraPositionPopup()
 
     MSUF_InitEditPopupFrame(pf, {
         w = 320,
-        h = 340,
+        h = 440,
         backdrop = {
             bgFile   = 'Interface\\DialogFrame\\UI-DialogBox-Background-Dark',
             edgeFile = 'Interface\\DialogFrame\\UI-DialogBox-Border',
@@ -5654,6 +5654,18 @@ uconf.layout = uconf.layout or {}
             local curStackTextSize = uconf.layout.stackTextSize or a2db.shared.stackTextSize or 14
             local curCooldownTextSize = uconf.layout.cooldownTextSize or a2db.shared.cooldownTextSize or 14
 
+
+
+
+            local haveStackOffsets = (uconf.layout.stackTextOffsetX ~= nil) or (uconf.layout.stackTextOffsetY ~= nil)
+                or (a2db.shared.stackTextOffsetX ~= nil) or (a2db.shared.stackTextOffsetY ~= nil)
+            local curStackOffX = (uconf.layout.stackTextOffsetX ~= nil) and uconf.layout.stackTextOffsetX or (a2db.shared.stackTextOffsetX or 0)
+            local curStackOffY = (uconf.layout.stackTextOffsetY ~= nil) and uconf.layout.stackTextOffsetY or (a2db.shared.stackTextOffsetY or 0)
+
+            local haveCooldownOffsets = (uconf.layout.cooldownTextOffsetX ~= nil) or (uconf.layout.cooldownTextOffsetY ~= nil)
+                or (a2db.shared.cooldownTextOffsetX ~= nil) or (a2db.shared.cooldownTextOffsetY ~= nil)
+            local curCooldownOffX = (uconf.layout.cooldownTextOffsetX ~= nil) and uconf.layout.cooldownTextOffsetX or (a2db.shared.cooldownTextOffsetX or 0)
+            local curCooldownOffY = (uconf.layout.cooldownTextOffsetY ~= nil) and uconf.layout.cooldownTextOffsetY or (a2db.shared.cooldownTextOffsetY or 0)
             local x = readNum(pf.xBox, curX)
             local y = readNum(pf.yBox, curY)
             local size = readNum(pf.sizeBox, curSize)
@@ -5661,10 +5673,32 @@ uconf.layout = uconf.layout or {}
 
             local stackTextSize = readNum(pf.stackTextSizeBox, curStackTextSize)
             local cooldownTextSize = readNum(pf.cooldownTextSizeBox, curCooldownTextSize)
+    local stackTextOffsetX = (uconf.overrideLayout and lay.stackTextOffsetX ~= nil) and lay.stackTextOffsetX or (shared.stackTextOffsetX or 0)
+    local stackTextOffsetY = (uconf.overrideLayout and lay.stackTextOffsetY ~= nil) and lay.stackTextOffsetY or (shared.stackTextOffsetY or 0)
 
+
+            local stackTextOffsetX = readNum(pf.stackTextOffsetXBox, curStackOffX)
+            local stackTextOffsetY = readNum(pf.stackTextOffsetYBox, curStackOffY)
+
+            local cooldownTextOffsetX = readNum(pf.cooldownTextOffsetXBox, curCooldownOffX)
+            local cooldownTextOffsetY = readNum(pf.cooldownTextOffsetYBox, curCooldownOffY)
             x = MSUF_SanitizePopupOffset(x, 0)
             y = MSUF_SanitizePopupOffset(y, 0)
 
+
+            stackTextOffsetX = MSUF_SanitizePopupOffset(stackTextOffsetX, 0)
+            stackTextOffsetY = MSUF_SanitizePopupOffset(stackTextOffsetY, 0)
+
+            cooldownTextOffsetX = MSUF_SanitizePopupOffset(cooldownTextOffsetX, 0)
+            cooldownTextOffsetY = MSUF_SanitizePopupOffset(cooldownTextOffsetY, 0)
+
+            local writeStackOffsets = haveStackOffsets
+                or (math.abs(tonumber(stackTextOffsetX) or 0) > 0.0001)
+                or (math.abs(tonumber(stackTextOffsetY) or 0) > 0.0001)
+
+            local writeCooldownOffsets = haveCooldownOffsets
+                or (math.abs(tonumber(cooldownTextOffsetX) or 0) > 0.0001)
+                or (math.abs(tonumber(cooldownTextOffsetY) or 0) > 0.0001)
             -- sane clamps
             size = math.max(10, math.min(80, tonumber(size) or curSize))
             spacing = math.max(0, math.min(30, tonumber(spacing) or curSpacing))
@@ -5683,6 +5717,21 @@ local function ApplyLayoutToUnit(k)
     uc.layout.spacing   = math.floor(spacing + 0.5)
     uc.layout.stackTextSize = math.floor(stackTextSize + 0.5)
     uc.layout.cooldownTextSize = math.floor(cooldownTextSize + 0.5)
+    if writeStackOffsets then
+        uc.layout.stackTextOffsetX = math.floor(stackTextOffsetX + 0.5)
+        uc.layout.stackTextOffsetY = math.floor(stackTextOffsetY + 0.5)
+    else
+        uc.layout.stackTextOffsetX = nil
+        uc.layout.stackTextOffsetY = nil
+    end
+
+    if writeCooldownOffsets then
+        uc.layout.cooldownTextOffsetX = math.floor(cooldownTextOffsetX + 0.5)
+        uc.layout.cooldownTextOffsetY = math.floor(cooldownTextOffsetY + 0.5)
+    else
+        uc.layout.cooldownTextOffsetX = nil
+        uc.layout.cooldownTextOffsetY = nil
+    end
     -- Keep the edit mover box derived from iconSize/spacing/perRow (no manual box overrides).
     uc.layout.width = nil
     uc.layout.height = nil
@@ -5741,8 +5790,13 @@ end
     -- Remaining rows: stacks + cooldown text sizes
     local rows2 = {
         { key = "stackTextSize", label = "Text size (Stacks):", box = "$parentStackTextSizeBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+        { key = "stackTextOffsetX", label = "Stack text X:", box = "$parentStackTextOffsetXBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+        { key = "stackTextOffsetY", label = "Stack text Y:", box = "$parentStackTextOffsetYBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+
         { key = "cooldownTextSize", label = "Text size (Cooldown):", box = "$parentCooldownTextSizeBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
-    }
+        { key = "cooldownTextOffsetX", label = "Cooldown text X:", box = "$parentCooldownTextOffsetXBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+        { key = "cooldownTextOffsetY", label = "Cooldown text Y:", box = "$parentCooldownTextOffsetYBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+}
 
     -- Initially anchor stacks below spacing; sync code may re-anchor below bossTogetherCheck when visible
     MSUF_EM_BuildNumericRows(pf, rows2, pf.spacingLabel, "BOTTOMLEFT", 0, Apply, "Auras2Popup:LiveApply")
@@ -5754,7 +5808,9 @@ local function OnEnterPressed(self)
     end
     MSUF_EM_BindKeyScripts(OnEnterPressed, nil,
         pf.xBox, pf.yBox, pf.sizeBox, pf.spacingBox,
-        pf.stackTextSizeBox, pf.cooldownTextSizeBox
+        pf.stackTextSizeBox, pf.stackTextOffsetXBox, pf.stackTextOffsetYBox,
+        pf.cooldownTextSizeBox,
+        pf.cooldownTextOffsetXBox, pf.cooldownTextOffsetYBox
     )
 
 -- Copy Settings Dropdown (bottom, like Unitframe/Castbar popups)
@@ -5832,6 +5888,8 @@ local function MSUF_A2_CopyAuraLayout(srcKey, dstKey)
     local sStSz = eff(srcLay.stackTextSize, a2db.shared.stackTextSize or 14)
     local sCdSz = eff(srcLay.cooldownTextSize, a2db.shared.cooldownTextSize or 14)
 
+    local sCdOffX = (srcLay.cooldownTextOffsetX ~= nil) and srcLay.cooldownTextOffsetX or a2db.shared.cooldownTextOffsetX
+    local sCdOffY = (srcLay.cooldownTextOffsetY ~= nil) and srcLay.cooldownTextOffsetY or a2db.shared.cooldownTextOffsetY
     local dstKeys
     if MSUF_A2_IsBossAuraKey(dstKey) and bossTogether then
         dstKeys = { "boss1","boss2","boss3","boss4","boss5" }
@@ -5852,6 +5910,8 @@ local function MSUF_A2_CopyAuraLayout(srcKey, dstKey)
         dc.layout.stackTextSize = sStSz
         dc.layout.cooldownTextSize = sCdSz
 
+        if sCdOffX ~= nil then dc.layout.cooldownTextOffsetX = sCdOffX end
+        if sCdOffY ~= nil then dc.layout.cooldownTextOffsetY = sCdOffY end
         -- keep width/height unused in Auras2 (derived)
         dc.layout.width = nil
         dc.layout.height = nil
@@ -5931,7 +5991,11 @@ pf.RefreshCopyAuraDropdown = MSUF_A2_RefreshCopyAuraDropdown
         if GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.sizeBox then pf.sizeBox:ClearFocus() end
         if pf.spacingBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.spacingBox then pf.spacingBox:ClearFocus() end
         if pf.stackTextSizeBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.stackTextSizeBox then pf.stackTextSizeBox:ClearFocus() end
+        if pf.stackTextOffsetXBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.stackTextOffsetXBox then pf.stackTextOffsetXBox:ClearFocus() end
+        if pf.stackTextOffsetYBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.stackTextOffsetYBox then pf.stackTextOffsetYBox:ClearFocus() end
         if pf.cooldownTextSizeBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.cooldownTextSizeBox then pf.cooldownTextSizeBox:ClearFocus() end
+        if pf.cooldownTextOffsetXBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.cooldownTextOffsetXBox then pf.cooldownTextOffsetXBox:ClearFocus() end
+        if pf.cooldownTextOffsetYBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.cooldownTextOffsetYBox then pf.cooldownTextOffsetYBox:ClearFocus() end
         pf:Hide()
     end)
     pf.cancelBtn = cancelBtn
@@ -6033,11 +6097,18 @@ end
 
     local stackTextSize = (uconf.overrideLayout and lay.stackTextSize ~= nil) and lay.stackTextSize or (shared.stackTextSize or 14)
     local cooldownTextSize = (uconf.overrideLayout and lay.cooldownTextSize ~= nil) and lay.cooldownTextSize or (shared.cooldownTextSize or 14)
+    local cooldownTextOffsetX = (uconf.overrideLayout and lay.cooldownTextOffsetX ~= nil) and lay.cooldownTextOffsetX or (shared.cooldownTextOffsetX or 0)
+    local cooldownTextOffsetY = (uconf.overrideLayout and lay.cooldownTextOffsetY ~= nil) and lay.cooldownTextOffsetY or (shared.cooldownTextOffsetY or 0)
     iconSize = tonumber(iconSize) or 26
     spacing  = tonumber(spacing)  or 2
     stackTextSize = tonumber(stackTextSize) or 14
     cooldownTextSize = tonumber(cooldownTextSize) or 14
 
+
+    stackTextOffsetX = MSUF_SanitizePopupOffset(tonumber(stackTextOffsetX) or 0, 0)
+    stackTextOffsetY = MSUF_SanitizePopupOffset(tonumber(stackTextOffsetY) or 0, 0)
+    cooldownTextOffsetX = MSUF_SanitizePopupOffset(tonumber(cooldownTextOffsetX) or 0, 0)
+    cooldownTextOffsetY = MSUF_SanitizePopupOffset(tonumber(cooldownTextOffsetY) or 0, 0)
     x = MSUF_SanitizePopupOffset(x, 0)
     y = MSUF_SanitizePopupOffset(y, 0)
 
@@ -6056,10 +6127,22 @@ end
     if pf.stackTextSizeBox and not pf.stackTextSizeBox:HasFocus() then
         pf.stackTextSizeBox:SetText(tostring(math.floor(stackTextSize + 0.5)))
     end
+    if pf.stackTextOffsetXBox and not pf.stackTextOffsetXBox:HasFocus() then
+        pf.stackTextOffsetXBox:SetText(tostring(math.floor(stackTextOffsetX + 0.5)))
+    end
+    if pf.stackTextOffsetYBox and not pf.stackTextOffsetYBox:HasFocus() then
+        pf.stackTextOffsetYBox:SetText(tostring(math.floor(stackTextOffsetY + 0.5)))
+    end
     if pf.cooldownTextSizeBox and not pf.cooldownTextSizeBox:HasFocus() then
         pf.cooldownTextSizeBox:SetText(tostring(math.floor(cooldownTextSize + 0.5)))
     end
 
+    if pf.cooldownTextOffsetXBox and not pf.cooldownTextOffsetXBox:HasFocus() then
+        pf.cooldownTextOffsetXBox:SetText(tostring(math.floor(cooldownTextOffsetX + 0.5)))
+    end
+    if pf.cooldownTextOffsetYBox and not pf.cooldownTextOffsetYBox:HasFocus() then
+        pf.cooldownTextOffsetYBox:SetText(tostring(math.floor(cooldownTextOffsetY + 0.5)))
+    end
     if pf.RefreshCopyAuraDropdown then
         pf.RefreshCopyAuraDropdown()
     end
