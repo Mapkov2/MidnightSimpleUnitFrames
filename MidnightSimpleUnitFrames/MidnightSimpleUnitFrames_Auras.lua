@@ -4924,13 +4924,31 @@ local function MSUF_A2_EnsureUnitAuraBinding(frame)
     local regUnit = frame.RegisterUnitEvent
     if type(regUnit) ~= "function" then return end
 
-    local units = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+    local units = { "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
     local unpackUnits = (unpack or table.unpack)
     SafeCall(regUnit, frame, "UNIT_AURA", unpackUnits(units))
     frame._msufA2_unitAuraBound = true
 end
 
+local MSUF_A2_ShouldProcessUnitEvent
+
 local EventFrame = CreateFrame("Frame")
+
+-- Player UNIT_AURA is bound on a dedicated frame to avoid client-specific RegisterUnitEvent unit-count limits.
+-- (Regression note: after adding "player" first, some clients only register the first few units, dropping boss2+.)
+local PlayerAuraFrame = CreateFrame("Frame")
+PlayerAuraFrame:SetScript("OnEvent", function(_, event, unit)
+    if event == "UNIT_AURA" and unit == "player" and MSUF_A2_ShouldProcessUnitEvent("player") then
+        MarkDirty("player")
+    end
+end)
+do
+    local regUnit = PlayerAuraFrame.RegisterUnitEvent
+    if type(regUnit) == "function" then
+        SafeCall(regUnit, PlayerAuraFrame, "UNIT_AURA", "player")
+    end
+end
+
 
 -- Exposed via API (and thin global wrappers): edit-mode transition refresh
 local MSUF_A2_EditModeRefresh
@@ -4962,7 +4980,7 @@ MSUF_A2_ApplyEventRegistration()
 -- We already coalesce renders via MarkDirty + C_Timer.After(0, Flush).
 -- Additionally, avoid scheduling work for units that are disabled (outside Edit Mode preview),
 -- while still keeping options-driven RefreshAll() able to hide/show everything.
-local function MSUF_A2_ShouldProcessUnitEvent(unit)
+MSUF_A2_ShouldProcessUnitEvent = function(unit)
     if not unit then return false end
     local a2, shared = GetAuras2DB()
     if not a2 or not shared then return false end
