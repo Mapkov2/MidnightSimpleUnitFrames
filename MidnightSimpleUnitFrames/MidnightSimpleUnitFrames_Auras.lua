@@ -420,6 +420,131 @@ local function MSUF_A2_GetEffectiveTextSizes(unitKey, shared)
     return stackSize, cooldownSize
 end
 
+
+local MSUF_A2_GetCooldownFontString
+
+
+local function MSUF_A2_GetEffectiveCooldownTextOffsets(unitKey, shared)
+    local offX, offY = nil, nil
+    local enabled = false
+
+    -- shared defaults (optional)
+    if shared then
+        if shared.cooldownTextOffsetX ~= nil then offX = shared.cooldownTextOffsetX; enabled = true end
+        if shared.cooldownTextOffsetY ~= nil then offY = shared.cooldownTextOffsetY; enabled = true end
+    end
+
+    -- per-unit override (optional)
+    if MSUF_DB and MSUF_DB.auras2 and MSUF_DB.auras2.perUnit and unitKey then
+        local u = MSUF_DB.auras2.perUnit[unitKey]
+        if u and u.overrideLayout == true and type(u.layout) == "table" then
+            if u.layout.cooldownTextOffsetX ~= nil then offX = u.layout.cooldownTextOffsetX; enabled = true end
+            if u.layout.cooldownTextOffsetY ~= nil then offY = u.layout.cooldownTextOffsetY; enabled = true end
+        end
+    end
+
+    -- 0-regression: if user never set any offsets, don't touch anchors.
+    if not enabled then
+        return 0, 0, false
+    end
+
+    offX = tonumber(offX) or 0
+    offY = tonumber(offY) or 0
+    offX = math.max(-200, math.min(200, offX))
+    offY = math.max(-200, math.min(200, offY))
+    return offX, offY, true
+end
+
+local function MSUF_A2_ApplyCooldownTextOffsets(icon, unitKey, shared)
+    local fs = MSUF_A2_GetCooldownFontString and MSUF_A2_GetCooldownFontString(icon) or nil
+    if not fs then return end
+
+    local offX, offY, enabled = MSUF_A2_GetEffectiveCooldownTextOffsets(unitKey, shared)
+    if not enabled then
+        return
+    end
+
+    -- Only re-anchor when the requested offsets actually change.
+    if fs._msufA2_cdOffApplied ~= true or fs._msufA2_cdOffX ~= offX or fs._msufA2_cdOffY ~= offY then
+        fs._msufA2_cdOffApplied = true
+        fs._msufA2_cdOffX = offX
+        fs._msufA2_cdOffY = offY
+
+        if fs.ClearAllPoints then fs:ClearAllPoints() end
+        if fs.SetPoint then fs:SetPoint("CENTER", icon, "CENTER", offX, offY) end
+    end
+end
+
+
+
+
+local function MSUF_A2_GetEffectiveStackTextOffsets(unitKey, shared)
+    local offX, offY = nil, nil
+    local enabled = false
+
+    if shared then
+        if shared.stackTextOffsetX ~= nil then offX = shared.stackTextOffsetX; enabled = true end
+        if shared.stackTextOffsetY ~= nil then offY = shared.stackTextOffsetY; enabled = true end
+    end
+
+    if MSUF_DB and MSUF_DB.auras2 and MSUF_DB.auras2.perUnit and unitKey then
+        local u = MSUF_DB.auras2.perUnit[unitKey]
+        if u and u.overrideLayout == true and type(u.layout) == "table" then
+            if u.layout.stackTextOffsetX ~= nil then offX = u.layout.stackTextOffsetX; enabled = true end
+            if u.layout.stackTextOffsetY ~= nil then offY = u.layout.stackTextOffsetY; enabled = true end
+        end
+    end
+
+    -- 0-regression: if user never set any offsets, don't touch anchors.
+    if not enabled then
+        return 0, 0, false
+    end
+
+    offX = tonumber(offX) or 0
+    offY = tonumber(offY) or 0
+    offX = math.max(-200, math.min(200, offX))
+    offY = math.max(-200, math.min(200, offY))
+    return offX, offY, true
+end
+
+local function MSUF_A2_ApplyStackTextOffsets(icon, unitKey, shared, stackAnchorOverride)
+    if not icon or not icon.count then return end
+
+    local offX, offY, enabled = MSUF_A2_GetEffectiveStackTextOffsets(unitKey, shared)
+    if not enabled then
+        return
+    end
+
+    local stackAnchor = stackAnchorOverride or (shared and shared.stackCountAnchor) or "TOPRIGHT"
+
+    local point, relPoint, xBase, yBase, justify
+    if stackAnchor == "TOPLEFT" then
+        point, relPoint, xBase, yBase, justify = "TOPLEFT", "TOPLEFT", -4, 7, "LEFT"
+    elseif stackAnchor == "BOTTOMLEFT" then
+        point, relPoint, xBase, yBase, justify = "BOTTOMLEFT", "BOTTOMLEFT", -4, -7, "LEFT"
+    elseif stackAnchor == "BOTTOMRIGHT" then
+        point, relPoint, xBase, yBase, justify = "BOTTOMRIGHT", "BOTTOMRIGHT", 4, -7, "RIGHT"
+    else
+        point, relPoint, xBase, yBase, justify = "TOPRIGHT", "TOPRIGHT", 4, 7, "RIGHT"
+    end
+
+    local fs = icon.count
+    if fs._msufA2_stackOffApplied ~= true
+        or fs._msufA2_stackOffX ~= offX
+        or fs._msufA2_stackOffY ~= offY
+        or fs._msufA2_stackOffAnchor ~= stackAnchor
+    then
+        fs._msufA2_stackOffApplied = true
+        fs._msufA2_stackOffX = offX
+        fs._msufA2_stackOffY = offY
+        fs._msufA2_stackOffAnchor = stackAnchor
+
+        fs:ClearAllPoints()
+        fs:SetPoint(point, icon, relPoint, xBase + offX, yBase + offY)
+        if fs.SetJustifyH and justify then fs:SetJustifyH(justify) end
+    end
+end
+
 local function MSUF_A2_SetFontSize(fs, size)
     if not fs or not fs.SetFont then return false end
 
@@ -495,7 +620,7 @@ local function MSUF_A2_ApplyFont(fs, fontPath, size, flags, useShadow)
     return true
 end
 
-local function MSUF_A2_GetCooldownFontString(icon)
+function MSUF_A2_GetCooldownFontString(icon)
     local cd = icon and icon.cooldown
     if not cd or not cd.GetRegions then return nil end
 
@@ -870,6 +995,45 @@ local function MSUF_A2_EnsureCooldownColorCurve()
     return curve
 end
 
+local function MSUF_A2_FormatCooldownTimeText(rem)
+    rem = tonumber(rem)
+    if not rem or rem <= 0 then return '' end
+
+    -- sub-10s: show 1 decimal; 10-59s: whole seconds
+    if rem < 10 then
+        -- Avoid string.format hot path when possible
+        local v = math.floor(rem * 10 + 0.5) / 10
+        -- ensure "x.y" with one decimal
+        local s = tostring(v)
+        if not s:find('%.') then
+            s = s .. '.0'
+        end
+        return s
+    elseif rem < 60 then
+        return tostring(math.floor(rem + 0.5))
+    end
+
+    -- 1:00 - 9:59 => m:ss
+    if rem < 600 then
+        local m = math.floor(rem / 60)
+        local s = math.floor(rem - (m * 60))
+        if s < 0 then s = 0 end
+        if s < 10 then
+            return tostring(m) .. ':0' .. tostring(s)
+        end
+        return tostring(m) .. ':' .. tostring(s)
+    end
+
+    -- 10m+ => 10m, 2h, etc.
+    if rem < 3600 then
+        local m = math.floor(rem / 60 + 0.5)
+        return tostring(m) .. 'm'
+    end
+
+    local h = math.floor(rem / 3600 + 0.5)
+    return tostring(h) .. 'h'
+end
+
 local function MSUF_A2_CooldownTextMgr_StopIfIdle()
     if MSUF_A2_CooldownTextMgr.count > 0 then return end
     MSUF_A2_CooldownTextMgr.count = 0
@@ -933,6 +1097,7 @@ local function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
                 removed = removed + 1
             elseif ic._msufA2_hideCDNumbers ~= true then
                 local r, g, b, a
+                local remSeconds
 
                 if not bucketsEnabled and safeCol then
                     r, g, b, a = safeCol[1], safeCol[2], safeCol[3], safeCol[4]
@@ -945,6 +1110,7 @@ local function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
                     if unit and auraID then
                         local okRem, rem = pcall(C_UnitAuras.GetAuraDurationRemaining, unit, auraID)
                         if okRem and type(rem) == "number" then
+                            remSeconds = rem
                             local colT = MSUF_A2_GetCooldownTextColorForRemainingSeconds(rem)
                             if colT then
                                 r, g, b, a = colT[1], colT[2], colT[3], colT[4]
@@ -959,6 +1125,7 @@ local function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
                     if type(ps) == 'number' and type(pd) == 'number' and pd > 0 then
                         local rem = (ps + pd) - GetTime()
                         if type(rem) == 'number' then
+                            remSeconds = rem
                             local colT = MSUF_A2_GetCooldownTextColorForRemainingSeconds(rem)
                             if colT then
                                 r, g, b, a = colT[1], colT[2], colT[3], colT[4]
@@ -976,6 +1143,24 @@ local function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
                         local okCol, col = pcall(obj.EvaluateRemainingDuration, obj, curve)
                         if okCol and col and col.GetRGBA then
                             r, g, b, a = col:GetRGBA()
+                        end
+                    end
+                end
+
+                -- Keep cooldown number text live (OmniCC-free): use remaining-seconds API when available.
+                -- This is intentionally lightweight: only update when the string actually changes.
+                if remSeconds ~= nil then
+                    local fs = cooldown._msufCooldownFontString
+                    if fs == false then fs = nil end
+                    if not fs then fs = MSUF_A2_GetCooldownFontString(ic) end
+                    if fs then
+                        cooldown._msufCooldownFontString = fs
+                        local t = MSUF_A2_FormatCooldownTimeText(remSeconds)
+                        if fs._msufA2_lastText ~= t then
+                            fs._msufA2_lastText = t
+                            if fs.SetText then
+                                fs:SetText(t)
+                            end
                         end
                     end
                 end
@@ -998,6 +1183,26 @@ local function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
                             fs:SetTextColor(r, g, b, aa)
                         elseif fs.SetVertexColor then
                             fs:SetVertexColor(r, g, b, aa)
+                        end
+                    end
+                end
+
+                -- Live-update cooldown timer text (OmniCC-independent).
+                -- We only write when we have a numeric remaining time (API-provided / preview).
+                if remSeconds ~= nil then
+                    local fs = cooldown and cooldown._msufCooldownFontString
+                    if fs == false then fs = nil end
+                    if not fs then
+                        fs = MSUF_A2_GetCooldownFontString(ic)
+                    end
+                    if fs and cooldown then
+                        cooldown._msufCooldownFontString = fs
+                    end
+                    if fs and fs.SetText then
+                        local newText = MSUF_A2_FormatCooldownTimeText(remSeconds)
+                        if fs._msufA2_lastText ~= newText then
+                            fs._msufA2_lastText = newText
+                            fs:SetText(newText)
                         end
                     end
                 end
@@ -1394,6 +1599,7 @@ end
 -- Shared helper: apply the stack-count anchor styling to an icon's count fontstring.
 -- Safe to call repeatedly; it re-anchors only when the anchor setting changes.
 local function MSUF_A2_ApplyStackCountAnchorStyle(icon, stackAnchor)
+            MSUF_A2_ApplyStackTextOffsets(icon, unit, shared, stackAnchor)
     if not icon or not icon.count then return end
 
     stackAnchor = stackAnchor or "TOPRIGHT"
@@ -2908,11 +3114,14 @@ local function ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanen
         end
 
         local cdFS = MSUF_A2_GetCooldownFontString(icon)
-        if cdFS and icon._msufA2_lastCooldownTextSize ~= cooldownSize then
-            local ok = MSUF_A2_ApplyFont(cdFS, fontPath, cooldownSize, fontFlags, useShadow)
-            if ok then
-                icon._msufA2_lastCooldownTextSize = cooldownSize
+        if cdFS then
+            if icon._msufA2_lastCooldownTextSize ~= cooldownSize then
+                local ok = MSUF_A2_ApplyFont(cdFS, fontPath, cooldownSize, fontFlags, useShadow)
+                if ok then
+                    icon._msufA2_lastCooldownTextSize = cooldownSize
+                end
             end
+            MSUF_A2_ApplyCooldownTextOffsets(icon, unit, shared)
         end
     end
 
@@ -3970,6 +4179,9 @@ do
             icon._msufA2_lastCooldownTextSize = cooldownSize
         end
     end
+
+    -- Apply cooldown text offsets in preview too (live when user changes X/Y).
+    MSUF_A2_ApplyCooldownTextOffsets(icon, unit, shared)
 end
 
                 end
@@ -3985,6 +4197,7 @@ end
                 if showStacks and opts and opts.stackText and icon.count then
                     -- Keep preview stack anchor in sync with the live setting (shared/per-unit).
                     MSUF_A2_ApplyStackCountAnchorStyle(icon, stackCountAnchor)
+                    MSUF_A2_ApplyStackTextOffsets(icon, unit, shared, stackCountAnchor)
                     local sr, sg, sb = MSUF_A2_GetStackCountRGB()
                     icon.count:SetTextColor(sr, sg, sb, 1)
                     -- Preview stacks are demo values (not real unit data). Store numeric state so we can light-refresh without rebuild.
@@ -4306,6 +4519,10 @@ local function Flush()
         _G.MSUF_Auras2_UpdatePreviewStackTicker()
     end
 
+    if _G and _G.MSUF_Auras2_UpdatePreviewCooldownTicker then
+        _G.MSUF_Auras2_UpdatePreviewCooldownTicker()
+    end
+
     if doPerf and perf then
         local dt = (t0 and _A2_debugprofilestop and (_A2_debugprofilestop() - t0)) or 0
 
@@ -4393,6 +4610,7 @@ local function MSUF_A2_PreviewStackLightRefresh()
                         end
                         local stackAnchor = (caps and caps.stackCountAnchor ~= nil) and caps.stackCountAnchor or (shared and shared.stackCountAnchor) or "TOPRIGHT"
                         MSUF_A2_ApplyStackCountAnchorStyle(icon, stackAnchor)
+                                            MSUF_A2_ApplyStackTextOffsets(icon, unitKey, shared, stackAnchor)
                     end
 
                     local maxN = icon._msufA2_previewStackMax
@@ -4418,7 +4636,11 @@ local function MSUF_A2_PreviewStackLightRefresh()
     end
 end
 
+-- Forward declare (used by stack ticker before cooldown ticker is defined below)
+local MSUF_A2_UpdatePreviewCooldownTicker
+
 local function MSUF_A2_UpdatePreviewStackTicker()
+    MSUF_A2_UpdatePreviewCooldownTicker()
     local want = MSUF_A2_ShouldRunPreviewStackTicker()
     if want then
         if not MSUF_A2_PreviewStackTicker and C_Timer and C_Timer.NewTicker then
@@ -4436,6 +4658,89 @@ API.UpdatePreviewStackTicker = MSUF_A2_UpdatePreviewStackTicker
 if _G and type(_G.MSUF_Auras2_UpdatePreviewStackTicker) ~= "function" then
     _G.MSUF_Auras2_UpdatePreviewStackTicker = function() return API.UpdatePreviewStackTicker() end
 end
+
+-- ------------------------------------------------------------
+-- Auras 2.0 Preview: keep cooldown timers/swipe ticking (Edit Mode preview only)
+-- ------------------------------------------------------------
+local MSUF_A2_PreviewCooldownTicker
+
+local function MSUF_A2_ShouldRunPreviewCooldownTicker()
+    local a2, shared = GetAuras2DB()
+    if not a2 or not shared then return false end
+    if a2.enabled ~= true then return false end
+    if shared.showInEditMode ~= true then return false end
+    if not MSUF_A2_IsEditModeActive_Safe() then return false end
+    return true
+end
+
+local function MSUF_A2_PreviewCooldownLightRefresh()
+    if not MSUF_A2_ShouldRunPreviewCooldownTicker() then
+        if MSUF_A2_PreviewCooldownTicker then
+            MSUF_A2_PreviewCooldownTicker:Cancel()
+            MSUF_A2_PreviewCooldownTicker = nil
+        end
+        return
+    end
+
+    local a2, shared = GetAuras2DB()
+    local now = GetTime()
+
+    for unitKey, entry in pairs(AurasByUnit) do
+        if entry then
+            for _, container in ipairs({ entry.buffs, entry.debuffs, entry.mixed }) do
+                if container and container._msufIcons then
+                    for i = 1, #container._msufIcons do
+                        local icon = container._msufIcons[i]
+                        if icon and icon:IsShown() and icon._msufA2_isPreview == true and icon.cooldown then
+                            -- Only for non-permanent preview auras
+                            local ps = icon._msufA2_previewCooldownStart
+                            local pd = icon._msufA2_previewCooldownDur
+                            if type(ps) == "number" and type(pd) == "number" and pd > 0 then
+                                local rem = (ps + pd) - now
+                                if rem <= 0 then
+                                    -- Restart so preview always shows a moving timer/swipe.
+                                    local newStart = now
+                                    SafeCall(icon.cooldown.SetCooldown, icon.cooldown, newStart, pd)
+                                    icon._msufA2_previewCooldownStart = newStart
+                                end
+
+                                -- Ensure countdown numbers can appear and offsets can apply as soon as Blizzard builds the fontstring.
+                                if icon.cooldown.SetHideCountdownNumbers then
+                                    SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
+                                end
+                                MSUF_A2_ApplyCooldownTextOffsets(icon, unitKey, shared)
+
+                                -- Keep it registered so our cooldown text color system stays live in preview.
+                                MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+MSUF_A2_UpdatePreviewCooldownTicker = function()
+    local want = MSUF_A2_ShouldRunPreviewCooldownTicker()
+    if want then
+        if not MSUF_A2_PreviewCooldownTicker and C_Timer and C_Timer.NewTicker then
+            MSUF_A2_PreviewCooldownTicker = C_Timer.NewTicker(0.2, MSUF_A2_PreviewCooldownLightRefresh)
+        end
+    else
+        if MSUF_A2_PreviewCooldownTicker then
+            MSUF_A2_PreviewCooldownTicker:Cancel()
+            MSUF_A2_PreviewCooldownTicker = nil
+        end
+    end
+end
+
+API.UpdatePreviewCooldownTicker = MSUF_A2_UpdatePreviewCooldownTicker
+if _G and type(_G.MSUF_Auras2_UpdatePreviewCooldownTicker) ~= "function" then
+    _G.MSUF_Auras2_UpdatePreviewCooldownTicker = function() return API.UpdatePreviewCooldownTicker() end
+end
+
+
 
 -- Public refresh (used by options)
 local function MSUF_A2_RefreshAll()
