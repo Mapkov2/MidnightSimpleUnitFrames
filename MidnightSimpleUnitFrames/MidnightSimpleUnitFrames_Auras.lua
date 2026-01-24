@@ -4919,36 +4919,52 @@ end
 local function MSUF_A2_EnsureUnitAuraBinding(frame)
     if not frame or frame._msufA2_unitAuraBound == true then return end
 
-    -- IMPORTANT: RegisterUnitEvent does NOT reliably "add" units across multiple calls on all clients.
-    -- Register once with all units so Focus/Boss updates never get dropped.
+    -- RegisterUnitEvent historically only guarantees up to TWO unit args.
+    -- Also, some clients overwrite prior bindings when called multiple times on the SAME frame.
+    -- To reliably cover focus + boss1-5 (and player/target) without global UNIT_AURA spam,
+    -- we bind UNIT_AURA on a few tiny helper frames, each with <=2 units.
     local regUnit = frame.RegisterUnitEvent
     if type(regUnit) ~= "function" then return end
 
-    local units = { "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
-    local unpackUnits = (unpack or table.unpack)
-    SafeCall(regUnit, frame, "UNIT_AURA", unpackUnits(units))
+    local t = frame._msufA2_unitAuraFrames
+    if type(t) ~= "table" then
+        t = {}
+        frame._msufA2_unitAuraFrames = t
+    end
+
+    local function Ensure(idx, unit1, unit2)
+        local f = t[idx]
+        if not f then
+            f = CreateFrame("Frame")
+            t[idx] = f
+        end
+
+        -- Deterministic rebind (cheap) in case another addon or reload path unregistered it.
+        if f.IsEventRegistered and f:IsEventRegistered("UNIT_AURA") then
+            pcall(f.UnregisterEvent, f, "UNIT_AURA")
+        end
+
+        if unit2 then
+            SafeCall(f.RegisterUnitEvent, f, "UNIT_AURA", unit1, unit2)
+        else
+            SafeCall(f.RegisterUnitEvent, f, "UNIT_AURA", unit1)
+        end
+
+        -- Script is bound later (after MSUF_A2_ShouldProcessUnitEvent exists).
+        f._msufA2_unitAuraUnits = f._msufA2_unitAuraUnits or {}
+        f._msufA2_unitAuraUnits[1], f._msufA2_unitAuraUnits[2] = unit1, unit2
+    end
+
+    -- Keep player auras for own-aura highlighting/stack tracking, plus target/focus and all bosses.
+    Ensure(1, "player", "target")
+    Ensure(2, "focus", "boss1")
+    Ensure(3, "boss2", "boss3")
+    Ensure(4, "boss4", "boss5")
+
     frame._msufA2_unitAuraBound = true
 end
 
-local MSUF_A2_ShouldProcessUnitEvent
-
 local EventFrame = CreateFrame("Frame")
-
--- Player UNIT_AURA is bound on a dedicated frame to avoid client-specific RegisterUnitEvent unit-count limits.
--- (Regression note: after adding "player" first, some clients only register the first few units, dropping boss2+.)
-local PlayerAuraFrame = CreateFrame("Frame")
-PlayerAuraFrame:SetScript("OnEvent", function(_, event, unit)
-    if event == "UNIT_AURA" and unit == "player" and MSUF_A2_ShouldProcessUnitEvent("player") then
-        MarkDirty("player")
-    end
-end)
-do
-    local regUnit = PlayerAuraFrame.RegisterUnitEvent
-    if type(regUnit) == "function" then
-        SafeCall(regUnit, PlayerAuraFrame, "UNIT_AURA", "player")
-    end
-end
-
 
 -- Exposed via API (and thin global wrappers): edit-mode transition refresh
 local MSUF_A2_EditModeRefresh
@@ -4980,7 +4996,7 @@ MSUF_A2_ApplyEventRegistration()
 -- We already coalesce renders via MarkDirty + C_Timer.After(0, Flush).
 -- Additionally, avoid scheduling work for units that are disabled (outside Edit Mode preview),
 -- while still keeping options-driven RefreshAll() able to hide/show everything.
-MSUF_A2_ShouldProcessUnitEvent = function(unit)
+local function MSUF_A2_ShouldProcessUnitEvent(unit)
     if not unit then return false end
     local a2, shared = GetAuras2DB()
     if not a2 or not shared then return false end
@@ -4995,6 +5011,28 @@ MSUF_A2_ShouldProcessUnitEvent = function(unit)
 
     return false
 end
+
+
+-- Bind UNIT_AURA scripts for helper frames (see MSUF_A2_EnsureUnitAuraBinding).
+do
+    local function UnitAuraOnEvent(_, event, arg1)
+        if event ~= "UNIT_AURA" then return end
+        if arg1 and MSUF_A2_ShouldProcessUnitEvent(arg1) then
+            MarkDirty(arg1)
+        end
+    end
+
+    local list = EventFrame and EventFrame._msufA2_unitAuraFrames
+    if type(list) == "table" then
+        for i = 1, #list do
+            local f = list[i]
+            if f and f.SetScript then
+                f:SetScript("OnEvent", UnitAuraOnEvent)
+            end
+        end
+    end
+end
+
 
 
 -- Boss frames can race: ENGAGE_UNIT fires before MSUF boss unitframes are created/shown.
