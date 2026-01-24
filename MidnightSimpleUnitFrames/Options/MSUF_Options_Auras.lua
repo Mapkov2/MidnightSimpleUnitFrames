@@ -1746,9 +1746,11 @@ end
     h2:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 12, -92)
     h2:SetText("Units")
     -- Compact unit toggles: use MSUF on/off buttons (no checkbox tick coloring).
-    CreateBoolToggleButtonPath(leftTop, "Target", 12, -120, 110, 22, A2_DB, "showTarget")
-    CreateBoolToggleButtonPath(leftTop, "Focus", 140, -120, 110, 22, A2_DB, "showFocus")
-    CreateBoolToggleButtonPath(leftTop, "Boss 1-5", 260, -120, 110, 22, A2_DB, "showBoss")
+    -- Keep this row tight so it doesn't collide with the Display section below.
+    CreateBoolToggleButtonPath(leftTop, "Player", 12, -120, 90, 22, A2_DB, "showPlayer")
+    CreateBoolToggleButtonPath(leftTop, "Target", 108, -120, 90, 22, A2_DB, "showTarget")
+    CreateBoolToggleButtonPath(leftTop, "Focus", 204, -120, 90, 22, A2_DB, "showFocus")
+    CreateBoolToggleButtonPath(leftTop, "Boss 1-5", 300, -120, 96, 22, A2_DB, "showBoss")
 
     -- Display (two-column layout)
     local h3 = leftTop:CreateFontString(nil, "ARTWORK", "GameFontNormal")

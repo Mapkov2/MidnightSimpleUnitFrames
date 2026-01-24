@@ -5543,6 +5543,7 @@ end
 -- ---------------------------------------------------------
 
 local function MSUF_A2_GetAuraPopupTitleSuffix(unitKey)
+    if unitKey == 'player' then return 'Player Aura' end
     if unitKey == 'target' then return 'Target Aura' end
     if unitKey == 'focus' then return 'Focus Aura' end
     -- Boss previews will be 'Boss 1 Aura', 'Boss 2 Aura', ...
@@ -5673,8 +5674,6 @@ uconf.layout = uconf.layout or {}
 
             local stackTextSize = readNum(pf.stackTextSizeBox, curStackTextSize)
             local cooldownTextSize = readNum(pf.cooldownTextSizeBox, curCooldownTextSize)
-    local stackTextOffsetX = (uconf.overrideLayout and lay.stackTextOffsetX ~= nil) and lay.stackTextOffsetX or (shared.stackTextOffsetX or 0)
-    local stackTextOffsetY = (uconf.overrideLayout and lay.stackTextOffsetY ~= nil) and lay.stackTextOffsetY or (shared.stackTextOffsetY or 0)
 
 
             local stackTextOffsetX = readNum(pf.stackTextOffsetXBox, curStackOffX)
@@ -5831,6 +5830,7 @@ copyAuraDrop:SetPoint("LEFT", copyAuraLabel, "RIGHT", -2, -2)
 pf.copyAuraDrop = copyAuraDrop
 
 local function MSUF_A2_GetAuraCopyLabel(key)
+    if key == "player" then return "Player" end
     if key == "target" then return "Target" end
     if key == "focus" then return "Focus" end
     if type(key) == "string" then
@@ -5947,7 +5947,7 @@ local function MSUF_A2_RefreshCopyAuraDropdown()
     UIDropDownMenu_JustifyText(pf.copyAuraDrop, "LEFT")
     UIDropDownMenu_SetText(pf.copyAuraDrop, placeholder)
 
-    local allKeys = { "target","focus","boss1","boss2","boss3","boss4","boss5" }
+    local allKeys = { "player","target","focus","boss1","boss2","boss3","boss4","boss5" }
 
     UIDropDownMenu_Initialize(pf.copyAuraDrop, function(self, level)
         local info = UIDropDownMenu_CreateInfo()
@@ -6099,6 +6099,8 @@ end
     local cooldownTextSize = (uconf.overrideLayout and lay.cooldownTextSize ~= nil) and lay.cooldownTextSize or (shared.cooldownTextSize or 14)
     local cooldownTextOffsetX = (uconf.overrideLayout and lay.cooldownTextOffsetX ~= nil) and lay.cooldownTextOffsetX or (shared.cooldownTextOffsetX or 0)
     local cooldownTextOffsetY = (uconf.overrideLayout and lay.cooldownTextOffsetY ~= nil) and lay.cooldownTextOffsetY or (shared.cooldownTextOffsetY or 0)
+    local stackTextOffsetX = (uconf.overrideLayout and lay.stackTextOffsetX ~= nil) and lay.stackTextOffsetX or (shared.stackTextOffsetX or 0)
+    local stackTextOffsetY = (uconf.overrideLayout and lay.stackTextOffsetY ~= nil) and lay.stackTextOffsetY or (shared.stackTextOffsetY or 0)
     iconSize = tonumber(iconSize) or 26
     spacing  = tonumber(spacing)  or 2
     stackTextSize = tonumber(stackTextSize) or 14
@@ -6154,7 +6156,7 @@ function _G.MSUF_OpenAuras2PositionPopup(unit, parent)
     if not unit then
         return
     end
-    if unit ~= 'target' and unit ~= 'focus' and not (type(unit) == 'string' and unit:match('^boss%d+$')) then
+    if unit ~= 'player' and unit ~= 'target' and unit ~= 'focus' and not (type(unit) == 'string' and unit:match('^boss%d+$')) then
         return
     end
     if not _G.MSUF_UnitEditModeActive then

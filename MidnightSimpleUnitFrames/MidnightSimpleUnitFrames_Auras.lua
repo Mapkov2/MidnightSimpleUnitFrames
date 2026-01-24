@@ -114,6 +114,7 @@ local function EnsureDB()
     if a2.showTarget == nil then a2.showTarget = true end
     if a2.showFocus == nil then a2.showFocus = true end
     if a2.showBoss  == nil then a2.showBoss  = true end
+    if a2.showPlayer == nil then a2.showPlayer = false end
 
     a2.shared = (type(a2.shared) == "table") and a2.shared or {}
     local s = a2.shared
@@ -315,6 +316,48 @@ end
                 ls.buffDebuffAnchor = nil
             end
             if ls.stackCountAnchor ~= nil and (ls.stackCountAnchor ~= "TOPRIGHT" and ls.stackCountAnchor ~= "TOPLEFT" and ls.stackCountAnchor ~= "BOTTOMRIGHT" and ls.stackCountAnchor ~= "BOTTOMLEFT") then ls.stackCountAnchor = nil end
+        end
+
+        -- Player: production-ready defaults (Stage D). Applied once and only when the user hasn't configured Player yet.
+        if unitKey == "player" and u._msufA2_playerDefaults_stageD_v1 == nil then
+            u._msufA2_playerDefaults_stageD_v1 = true
+
+            -- Prefer per-unit shared-layout overrides so Player does not inherit Target/Focus/Boss layout unintentionally.
+            if u.overrideSharedLayout == false and type(u.layoutShared) == "table" then
+                local ls = u.layoutShared
+                local hasAny =
+                    (ls.maxBuffs ~= nil) or (ls.maxDebuffs ~= nil) or (ls.perRow ~= nil) or (ls.splitSpacing ~= nil)
+                    or (ls.growth ~= nil) or (ls.rowWrap ~= nil) or (ls.layoutMode ~= nil) or (ls.buffDebuffAnchor ~= nil)
+                    or (ls.stackCountAnchor ~= nil)
+                if not hasAny then
+                    u.overrideSharedLayout = true
+                end
+            end
+
+            do
+                local ls = u.layoutShared
+                if ls.perRow == nil then ls.perRow = 10 end
+                if ls.maxBuffs == nil then ls.maxBuffs = 12 end
+                if ls.maxDebuffs == nil then ls.maxDebuffs = 8 end
+                if ls.splitSpacing == nil then ls.splitSpacing = 0 end
+
+                if ls.growth == nil then ls.growth = "RIGHT" end
+                if ls.rowWrap == nil then ls.rowWrap = "UP" end
+                if ls.layoutMode == nil then ls.layoutMode = "SEPARATE" end
+                if ls.buffDebuffAnchor == nil then ls.buffDebuffAnchor = "STACKED" end
+                if ls.stackCountAnchor == nil then ls.stackCountAnchor = "BOTTOMRIGHT" end
+            end
+
+            -- Slightly lift Player auras above the frame without touching shared offsets.
+            if u.overrideLayout == false and type(u.layout) == "table" then
+                local lay = u.layout
+                local hasPos = (lay.width ~= nil) or (lay.height ~= nil) or (lay.offsetX ~= 0) or (lay.offsetY ~= 0)
+                if not hasPos then
+                    u.overrideLayout = true
+                    lay.offsetX = 0
+                    lay.offsetY = 8
+                end
+            end
         end
 
         if type(u.filters) ~= "table" then u.filters = {} end
@@ -1875,6 +1918,8 @@ local function UnitEnabled(unit)
     local a2, _ = GetAuras2DB()
     if not a2 or not a2.enabled then return false end
 
+    if unit == "player" then return a2.showPlayer end
+
     if unit == "target" then return a2.showTarget end
     if unit == "focus" then return a2.showFocus end
     if unit and unit:match("^boss%d$") then return a2.showBoss end
@@ -2368,6 +2413,11 @@ local function MSUF_A2_EnsureBossEditMover(entry)
     local n = u:match("^boss(%d+)$")
     if not n then return end
     return MSUF_A2_EnsureEditMover(entry, u, "Boss " .. n .. " Auras")
+end
+
+local function MSUF_A2_EnsurePlayerEditMover(entry)
+    if not entry or entry.unit ~= "player" then return end
+    return MSUF_A2_EnsureEditMover(entry, "player", "Player Auras")
 end
 
 -- ------------------------------------------------------------
@@ -3033,12 +3083,12 @@ local function MSUF_A2_TrySetCooldownFromAura(icon, unit, aura)
 
         -- Newer APIs
         if type(icon.cooldown.SetCooldownFromDurationObject) == "function" then
-            local ok = pcall(icon.cooldown.SetCooldownFromDurationObject, icon.cooldown, obj)
-            if ok then return true end
+            icon.cooldown:SetCooldownFromDurationObject(obj)
+            return true
         end
         if type(icon.cooldown.SetTimerDuration) == "function" then
-            local ok = pcall(icon.cooldown.SetTimerDuration, icon.cooldown, obj)
-            if ok then return true end
+            icon.cooldown:SetTimerDuration(obj)
+            return true
         end
 
         return false
@@ -3046,8 +3096,8 @@ local function MSUF_A2_TrySetCooldownFromAura(icon, unit, aura)
 
 
     if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
-        local okGet, obj = pcall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
-        if okGet and TryApplyDurationObject(obj) then
+        local obj = C_UnitAuras.GetAuraDuration(unit, auraInstanceID)
+        if TryApplyDurationObject(obj) then
             -- Cache the Duration Object for the shared manager (no remaining-time arithmetic).
             icon._msufA2_cdDurationObj = obj
             icon.cooldown._msufA2_durationObj = obj
@@ -3133,52 +3183,16 @@ local function ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanen
 			MSUF_A2_ApplyStackCountAnchorStyle(icon, stackAnchor)
 
             -- Stack count MUST be refreshed on every UNIT_AURA light update.
-            -- Root cause of "stuck stacks": relying only on a single return value wrapper (SafeCall)
-            -- for GetAuraApplicationDisplayCount can yield a non-updating/incorrect value on some clients.
-            -- Fix: capture multiple returns (pcall) + provide a deterministic numeric fallback via aura.applications.
+            -- Secret-safe + API-only: NEVER read aura.applications and NEVER compare stack counts in Lua.
+            -- We rely exclusively on C_UnitAuras.GetAuraApplicationDisplayCount (oUF-style).
             local disp = nil
-
-
-
-            -- Combat-safe stack sourcing:
-            -- 1) Use aura.applications (numeric) as the source of truth when available.
-            -- 2) Also capture the API display text (may be formatted) without numeric coercion.
-            --    Never rely on string comparisons for gating in combat.
-            local nApps = MSUF_SafeNumber(aura and aura.applications)
-            local wantStack = (nApps ~= nil and nApps >= 2) or false
-
-            local apiText = nil
             if C_UnitAuras and type(C_UnitAuras.GetAuraApplicationDisplayCount) == "function" and icon._msufAuraInstanceID then
                 -- (unit, auraInstanceID, minDisplayCount, maxDisplayCount)
-                local ok, r1, r2 = pcall(C_UnitAuras.GetAuraApplicationDisplayCount, unit, icon._msufAuraInstanceID, 2, 99)
-                if ok then
-                    if r1 ~= nil then
-                        apiText = r1
-                    elseif r2 ~= nil then
-                        apiText = r2
-                    end
-                end
+                disp = C_UnitAuras.GetAuraApplicationDisplayCount(unit, icon._msufAuraInstanceID, 2, 99)
             end
 
-            -- Decide what to display.
-            -- If we know the aura is stacked (nApps>=2), prefer the API display text if present, else use nApps.
-            -- If we don't know (nApps nil), we may still display the API text, but we do NOT toggle cooldown numbers.
-            if wantStack then
-                if apiText ~= nil then
-                    disp = tostring(apiText)
-                else
-                    if nApps and nApps > 99 then
-                        disp = "99+"
-                    else
-                        disp = tostring(nApps)
-                    end
-                end
-            else
-                if nApps == nil and apiText ~= nil then
-                    disp = tostring(apiText)
-                end
-            end
-
+            -- Apply stack text offsets (live in preview + per-unit overrides).
+            MSUF_A2_ApplyStackTextOffsets(icon, unit, shared, stackAnchor)
 
             if disp ~= nil then
                 stackShown = true
@@ -3621,6 +3635,27 @@ local function RenderUnit(entry)
     -- This prevents preview icons from blocking real auras.
     local showTest = (wantPreview == true) and ((not unitExists) or (not unitEnabled) or (not frame) or (not frame:IsShown()))
 
+    -- Additional Edit Mode quality-of-life:
+    -- If the unit exists but has *no* auras at all, allow preview icons so users can position
+    -- and see styling without needing to go fish for a buff/debuff.
+    if (not showTest) and (wantPreview == true) and unitExists and unitEnabled and frame and frame:IsShown() then
+        local hasAny = false
+        if C_UnitAuras and type(C_UnitAuras.GetAuraSlots) == "function" then
+            local slots = C_UnitAuras.GetAuraSlots(unit, "HELPFUL", 1)
+            if type(slots) == "table" and slots[1] then
+                hasAny = true
+            else
+                local slots2 = C_UnitAuras.GetAuraSlots(unit, "HARMFUL", 1)
+                if type(slots2) == "table" and slots2[1] then
+                    hasAny = true
+                end
+            end
+        end
+        if not hasAny then
+            showTest = true
+        end
+    end
+
     -- In Edit Mode preview, still allow positioning even if this unit's auras are disabled.
     -- Outside preview, respect the unit enable toggle.
     if (not unitEnabled) and (not showTest) then
@@ -3665,7 +3700,9 @@ local function RenderUnit(entry)
     end
 
     if wantPreview then
-        if unit == "target" then
+        if unit == "player" then
+            if MSUF_A2_EnsurePlayerEditMover then MSUF_A2_EnsurePlayerEditMover(entry) end
+        elseif unit == "target" then
             MSUF_A2_EnsureTargetEditMover(entry)
         elseif unit == "focus" then
             if MSUF_A2_EnsureFocusEditMover then MSUF_A2_EnsureFocusEditMover(entry) end
@@ -4413,6 +4450,7 @@ end
 
 local function _A2_UnitEnabledFast(a2, unit)
     if not a2 or a2.enabled ~= true then return false end
+    if unit == "player" then return a2.showPlayer == true end
     if unit == "target" then return a2.showTarget == true end
     if unit == "focus" then return a2.showFocus == true end
     if unit and unit:match("^boss%d$") then return a2.showBoss == true end
@@ -4744,6 +4782,7 @@ end
 
 -- Public refresh (used by options)
 local function MSUF_A2_RefreshAll()
+    MarkDirty("player")
     MarkDirty("target")
     MarkDirty("focus")
     for i = 1, 5 do
@@ -4886,7 +4925,7 @@ local function MSUF_A2_EnsureUnitAuraBinding(frame)
     local regUnit = frame.RegisterUnitEvent
     if type(regUnit) ~= "function" then return end
 
-    local units = { "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+    local units = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
     local unpackUnits = (unpack or table.unpack)
     SafeCall(regUnit, frame, "UNIT_AURA", unpackUnits(units))
     frame._msufA2_unitAuraBound = true
@@ -5023,6 +5062,7 @@ EventFrame:SetScript("OnEvent", function(_, event, arg1)
         -- Prime Auras2 DB once (keeps UNIT_AURA hot-path free of migrations/default work).
         EnsureDB() -- prime Auras2 DB
         -- Attach everything that already exists, then do a first render (coalesced).
+        if MSUF_A2_ShouldProcessUnitEvent("player") then MarkDirty("player") end
         if MSUF_A2_ShouldProcessUnitEvent("target") then MarkDirty("target") end
         if MSUF_A2_ShouldProcessUnitEvent("focus") then MarkDirty("focus") end
         for i = 1, 5 do
@@ -5049,6 +5089,7 @@ do
             MSUF_A2_ClearAllPreviews()
         end
 
+        MarkDirty("player")
         MarkDirty("target")
         MarkDirty("focus")
         for i = 1, 5 do
