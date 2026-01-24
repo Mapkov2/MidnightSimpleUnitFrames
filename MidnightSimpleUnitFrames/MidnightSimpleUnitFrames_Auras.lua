@@ -1,11 +1,10 @@
 -- MidnightSimpleUnitFrames_Auras.lua
--- Auras 2.0: standalone menu, shared config (Target/Focus/Boss1-5)
--- One file containing Options Menu of Auras and the whole logicgate for it. In the long term should be its on LoD part of MSUF (Will be a LoD)
+-- Aura logic file for MidnightSimpleUnitFrames. 
 
 local addonName, ns = ...
 ns = ns or {}
 
--- Auras 2.0 public API (reddit-clean):
+-- Auras 2.0 public API
 --  * Options/UI talks to runtime ONLY via ns.MSUF_Auras2
 --  * Globals are kept as thin wrappers for backwards compatibility (MSUF_* prefixed only)
 local API = ns.MSUF_Auras2
