@@ -397,10 +397,6 @@ local function MSUF_GetInterruptFeedbackColor()
 end
 local MSUF_PLAYER_INTERRUPT_FEEDBACK_DURATION = (_G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5)
 
--- Forward-declare so earlier helpers can call it before the implementation block below.
--- (Lua resolves names lexically; without this, early calls hit _G and may be nil.)
-local MSUF_PlayerCastbar_GetQueryUnit
-
 local function MSUF_PlayerCastbar_HideIfNoLongerCasting(timer)
     local self = timer and timer.msuCastbarFrame
     if not self or not self.unit then
@@ -411,11 +407,8 @@ local function MSUF_PlayerCastbar_HideIfNoLongerCasting(timer)
         return
     end
 
-    local qUnit = MSUF_PlayerCastbar_GetQueryUnit(self)
-
-
-    local castName = UnitCastingInfo(qUnit)
-    local chanName = UnitChannelInfo(qUnit)
+    local castName = UnitCastingInfo(self.unit)
+    local chanName = UnitChannelInfo(self.unit)
 
     if castName or chanName then
         if MSUF_PlayerCastbar_Cast then
@@ -1017,11 +1010,9 @@ local function MSUF_PlayerCastbar_EmpowerStart(self, spellID)
     self.interruptFeedbackEndTime = nil
     if self.latencyBar then self.latencyBar:Hide() end
 
-    local unit = MSUF_PlayerCastbar_GetQueryUnit(self)
-
-    local name, text, texture = UnitCastingInfo(unit)
+    local name, text, texture = UnitCastingInfo("player")
     if not name then
-        name, text, texture = UnitChannelInfo(unit)
+        name, text, texture = UnitChannelInfo("player")
     end
     if self.icon and texture then
         self.icon:SetTexture(texture)
@@ -1030,7 +1021,7 @@ local function MSUF_PlayerCastbar_EmpowerStart(self, spellID)
         MSUF_SetTextIfChanged(self.castText, name or "")
     end
 
-    local tl = MSUF_BuildEmpowerTimeline(unit)
+    local tl = MSUF_BuildEmpowerTimeline("player")
     local now = ((GetTimePreciseSec and GetTimePreciseSec()) or GetTime())
     self.empowerStartTime     = tl.castStartSec or now
     self.empowerStageEnds     = tl.stageEnds
@@ -1043,9 +1034,9 @@ local function MSUF_PlayerCastbar_EmpowerStart(self, spellID)
     if _G.MSUF_ApplyCastbarTimerDirection and type(UnitCastingDuration) == "function" then
         local okD, dObj
         if type(MSUF_FastCall) == "function" then
-            okD, dObj = MSUF_FastCall(UnitCastingDuration, unit)
+            okD, dObj = MSUF_FastCall(UnitCastingDuration, "player")
         else
-            okD, dObj = true, UnitCastingDuration(unit)
+            okD, dObj = true, UnitCastingDuration("player")
         end
         if okD and dObj then
             _G.MSUF_ApplyCastbarTimerDirection(self.statusBar, dObj, rf)
@@ -1253,69 +1244,10 @@ function _G.MSUF_UpdateCastbarChannelTicks()
 end
 
 
--- ============================================================
--- Player Castbar: Vehicle-aware cast unit selection logic
--- ============================================================
-local function MSUF_PlayerCastbar_SanitizeUnitToken(u)
-    if type(u) ~= "string" or u == "" then
-        return "player"
-    end
-    if u ~= "player" and u ~= "vehicle" then
-        return "player"
-    end
-    return u
-end
-
-local function MSUF_PlayerCastbar_IsVehicleCasting()
-    if type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") then
-        if type(UnitExists) == "function" and UnitExists("vehicle") then
-            if UnitCastingInfo("vehicle") or UnitChannelInfo("vehicle") then
-                return true
-            end
-        end
-    end
-    return false
-end
-
--- Returns the unit token to QUERY cast APIs from ("player" or "vehicle").
--- Keeps self.unit untouched ("player") to avoid DB/layout regressions.
-MSUF_PlayerCastbar_GetQueryUnit = function(self, hintUnit)
-    if not self then return "player" end
-
-    local hint = hintUnit
-    if type(hint) ~= "string" then
-        hint = nil
-    end
-
-    if hint == "player" or hint == "vehicle" then
-        self._msufCastUnit = hint
-    end
-
-    local u = self._msufCastUnit
-    if type(u) ~= "string" then
-        u = self.unit
-    end
-    u = MSUF_PlayerCastbar_SanitizeUnitToken(u)
-
-    if MSUF_PlayerCastbar_IsVehicleCasting() then
-        u = "vehicle"
-        self._msufCastUnit = "vehicle"
-    else
-        if u ~= "player" then
-            u = "player"
-            self._msufCastUnit = "player"
-        end
-    end
-
-    return u
-end
-
 -- Unhalted-style non-empower player castbar (cast/channel): self-driven via OnUpdate and hard-stops when the cast/channel is gone.
 local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
     if not self or not self.unit or not self.statusBar then return end
     if self.isEmpower then return end
-    local unit = MSUF_PlayerCastbar_GetQueryUnit(self)
-
 
     local CAST_START = {
         UNIT_SPELLCAST_START = true,
@@ -1332,15 +1264,20 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
     }
 
     if CAST_START[event] then
-        local castDuration = (type(UnitCastingDuration) == "function") and UnitCastingDuration(unit) or nil
+        local castDuration = (type(UnitCastingDuration) == "function") and UnitCastingDuration(self.unit) or nil
         if not castDuration then return end
+
+        -- If a new cast starts while the short red interrupt feedback window is still active
+        -- (e.g. cancel -> immediately re-cast), clear the feedback state so player override
+        -- colors apply immediately (no "stuck" interruptible color until a successful cast ends).
+        self.interruptFeedbackEndTime = nil
 
         self.MSUF_castDuration = castDuration
         self.MSUF_channelDuration = nil
 
         local __msuf_rf = nil
 if type(_G.MSUF_BuildCastState) == "function" then
-    local st = _G.MSUF_BuildCastState(unit, self)
+    local st = _G.MSUF_BuildCastState(self.unit, self)
     __msuf_rf = st and st.reverseFill
 end
 if __msuf_rf == nil then
@@ -1370,7 +1307,7 @@ end
         -- Ensure fill direction updates for this cast type (cast vs channel) immediately.
         self.MSUF_isChanneled = false
         MSUF_PlayerChannelHasteMarkers_Hide(self)
-	    local castName, castText, castTex, _, _, _, _, notInterruptible = UnitCastingInfo(unit)
+	    local castName, castText, castTex, _, _, _, _, notInterruptible = UnitCastingInfo(self.unit)
 	    -- IMPORTANT (Midnight/Beta): do NOT apply boolean operators (e.g. `not not x`) to potentially-secret values.
 	    -- Derive a plain Lua boolean via a truthiness branch.
 	    local apiNI = false
@@ -1398,7 +1335,7 @@ end
 
         self:SetScript("OnUpdate", function()
             -- Hard stop: if no longer casting, kill the bar immediately (fixes lingering channels like Mind Flay).
-            local _castName, _, _, _, _, _, _, _ni = UnitCastingInfo(unit)
+            local _castName, _, _, _, _, _, _, _ni = UnitCastingInfo(self.unit)
             if not _castName then
                 self:SetScript("OnUpdate", nil)
                 MSUF_PlayerChannelHasteMarkers_Hide(self)
@@ -1443,6 +1380,10 @@ end
         local channelDuration = (type(UnitChannelDuration) == "function") and UnitChannelDuration(self.unit) or nil
         if not channelDuration then return end
 
+        -- Same as casts: starting a new channel should cancel any prior interrupt feedback window
+        -- so player override colors apply immediately.
+        self.interruptFeedbackEndTime = nil
+
         self.MSUF_channelDuration = channelDuration
         self.MSUF_castDuration = nil
 
@@ -1479,7 +1420,7 @@ end
         self.MSUF_isChanneled = true
         self._msufStripeReverseFill = (__msuf_rf and true or false)
         MSUF_PlayerChannelHasteMarkers_Update(self, true)
-	        local chanName, chanText, chanTex, _, _, _, notInterruptible = UnitChannelInfo(unit)
+	        local chanName, chanText, chanTex, _, _, _, notInterruptible = UnitChannelInfo(self.unit)
 	        -- IMPORTANT (Midnight/Beta): do NOT apply boolean operators (e.g. `not not x`) to potentially-secret values.
 	        -- Derive a plain Lua boolean via a truthiness branch.
 	        local apiNI = false
@@ -1516,7 +1457,7 @@ end
 
         self:SetScript("OnUpdate", function()
             -- Hard stop: if no longer channeling, kill the bar immediately (fixes lingering channels like Mind Flay).
-            local _chanName, _, _, _, _, _, _ni = UnitChannelInfo(unit)
+            local _chanName, _, _, _, _, _, _ni = UnitChannelInfo(self.unit)
             if not _chanName then
                 self:SetScript("OnUpdate", nil)
                 MSUF_PlayerChannelHasteMarkers_Hide(self)
@@ -1586,22 +1527,19 @@ end
 
 
 local function MSUF_PlayerCastbar_Cast(self)
-    if not self or not self.statusBar then return end
+    if not self or not self.unit or not self.statusBar then return end
     if self.isEmpower then return end
     if self.MSUF_testMode then return end
 
-    local unit = MSUF_PlayerCastbar_GetQueryUnit(self)
-
     -- Re-evaluate live state and apply Unhalted-style updates.
-    if UnitCastingInfo(unit) then
+    if UnitCastingInfo(self.unit) then
         MSUF_PlayerCastbar_UnhaltedUpdate(self, "UNIT_SPELLCAST_START")
-    elseif UnitChannelInfo(unit) then
+    elseif UnitChannelInfo(self.unit) then
         MSUF_PlayerCastbar_UnhaltedUpdate(self, "UNIT_SPELLCAST_CHANNEL_START")
     else
         MSUF_PlayerCastbar_UnhaltedUpdate(self, "UNIT_SPELLCAST_STOP")
     end
 end
-
 
 function _G.MSUF_UpdateCastbarLatencyIndicator()
     local f = _G.MSUF_PlayerCastBar or _G.MSUF_PlayerCastbar
@@ -1619,7 +1557,7 @@ function _G.MSUF_UpdateCastbarLatencyIndicator()
         return
     end
 
-    local unit = MSUF_PlayerCastbar_GetQueryUnit(f)
+    local unit = f.unit or "player"
     if UnitChannelInfo(unit) then
         local durSec = f.MSUF_channelTotal
         local obj = f.MSUF_channelDuration
@@ -1668,21 +1606,11 @@ local function MSUF_PlayerCastbar_OnEvent(self, event, ...)
         return
     end
 
-if self.MSUF_testMode then
-    return
-end
+    if self.MSUF_testMode then
+        return
+    end
 
-local unitTarget = ...
-if type(unitTarget) ~= "string" then
-    unitTarget = nil
-end
-if unitTarget and unitTarget ~= "player" and unitTarget ~= "vehicle" then
-    return
-end
-
-local qUnit = MSUF_PlayerCastbar_GetQueryUnit(self, unitTarget)
-
--- Unhalted-style handling for non-empower cast/channel events (player).
+    -- Unhalted-style handling for non-empower cast/channel events (player).
     if not self.isEmpower then
         if event == "UNIT_SPELLCAST_START"
         or event == "UNIT_SPELLCAST_SENT"
@@ -1698,8 +1626,8 @@ local qUnit = MSUF_PlayerCastbar_GetQueryUnit(self, unitTarget)
 
 
     if event == "UNIT_SPELLCAST_FAILED" then
-        local castNow = UnitCastingInfo(qUnit)
-        local chanNow = UnitChannelInfo(qUnit)
+        local castNow = UnitCastingInfo("player")
+        local chanNow = UnitChannelInfo("player")
         if castNow or chanNow then
             return
         end
@@ -1712,8 +1640,8 @@ local qUnit = MSUF_PlayerCastbar_GetQueryUnit(self, unitTarget)
     end
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
-        local castNow = UnitCastingInfo(qUnit)
-        local chanNow = UnitChannelInfo(qUnit)
+        local castNow = UnitCastingInfo("player")
+        local chanNow = UnitChannelInfo("player")
         if castNow or chanNow then
             return
         end
@@ -1724,15 +1652,15 @@ local qUnit = MSUF_PlayerCastbar_GetQueryUnit(self, unitTarget)
 
     if event == "UNIT_SPELLCAST_EMPOWER_START" then
         local unitTarget, castGUID, spellID = ...
-        if unitTarget ~= qUnit then return end
+        if unitTarget ~= "player" then return end
         MSUF_PlayerCastbar_EmpowerStart(self, spellID)
         return
 
     elseif event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
         local unitTarget, castGUID, spellID = ...
-        if unitTarget ~= qUnit then return end
+        if unitTarget ~= "player" then return end
         if self.isEmpower then
-            local tl = MSUF_BuildEmpowerTimeline(qUnit)
+            local tl = MSUF_BuildEmpowerTimeline("player")
             self.empowerStageEnds      = tl.stageEnds
             self.empowerTotalBase      = tl.totalBase
             self.empowerTotalWithGrace = tl.totalWithGrace
@@ -1818,15 +1746,12 @@ self:Hide()
         or event == "UNIT_SPELLCAST_DELAYED"
         or event == "UNIT_SPELLCAST_SUCCEEDED"
         or event == "PLAYER_ENTERING_WORLD"
-        or event == "UNIT_ENTERED_VEHICLE"
-        or event == "UNIT_EXITED_VEHICLE"
     then
         C_Timer.After(0, function()
             if not self or not self.unit then return end
 
-            local unit = MSUF_PlayerCastbar_GetQueryUnit(self)
-            local castName = UnitCastingInfo(unit)
-            local chanName = UnitChannelInfo(unit)
+            local castName = UnitCastingInfo(self.unit)
+            local chanName = UnitChannelInfo(self.unit)
 
             if castName or chanName
                 or event == "UNIT_SPELLCAST_START"
@@ -1838,8 +1763,8 @@ self:Hide()
                 if event == "UNIT_SPELLCAST_CHANNEL_START" then
                     C_Timer.After(0.02, function()
                         if not self or not self.unit then return end
-                        local cn = UnitCastingInfo(MSUF_PlayerCastbar_GetQueryUnit(self))
-                        local ch = UnitChannelInfo(MSUF_PlayerCastbar_GetQueryUnit(self))
+                        local cn = UnitCastingInfo(self.unit)
+                        local ch = UnitChannelInfo(self.unit)
                         if cn or ch then
                             MSUF_PlayerCastbar_Cast(self)
                         end
@@ -1958,27 +1883,24 @@ function MSUF_InitSafePlayerCastbar()
             tick:Hide()                 -- Standard: versteckt, nur bei Empower sichtbar
         end
 
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP",  "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", "player", "vehicle")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP",  "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", "player")
 
-                frame:RegisterUnitEvent("UNIT_SPELLCAST_START", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player", "vehicle")
+                frame:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
 
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", "player", "vehicle")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", "player")
 
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "vehicle")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player", "vehicle")
-
-        frame:RegisterUnitEvent("UNIT_ENTERED_VEHICLE", "player")
-        frame:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
+        frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
 
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
@@ -1987,9 +1909,8 @@ function MSUF_InitSafePlayerCastbar()
     end
         C_Timer.After(0, function()
             if not MSUF_PlayerCastbar or not MSUF_PlayerCastbar_Cast then return end
-            local unit = MSUF_PlayerCastbar_GetQueryUnit(MSUF_PlayerCastbar)
-            local castName = UnitCastingInfo(unit)
-            local chanName = UnitChannelInfo(unit)
+            local castName = UnitCastingInfo("player")
+            local chanName = UnitChannelInfo("player")
             if castName or chanName then
                 MSUF_PlayerCastbar_Cast(MSUF_PlayerCastbar)
             end
@@ -2191,7 +2112,6 @@ end
 
 local function MSUF_HideBlizzardPlayerCastbar()
     EnsureDB()
-    local g = MSUF_DB and MSUF_DB.general or {}
     local frames = {}
 
     if PlayerCastingBarFrame then
@@ -2211,19 +2131,16 @@ local function MSUF_HideBlizzardPlayerCastbar()
             frame.MSUF_HideHooked = true
 
             hooksecurefunc(frame, "Show", function(self)
-                EnsureDB()
-                local db = MSUF_DB and MSUF_DB.general or {}
-                if db and db.enablePlayerCastbar ~= false then
-                    self:Hide()
-                end
+                -- As long as MSUF is running, never allow the Blizzard player castbar(s) to show.
+                -- This is intentionally NOT tied to MSUF_DB.general.enablePlayerCastbar.
+                -- If the user disables the MSUF player castbar, they should not silently fall back
+                -- to Blizzard (which can cause edge-case "0 interaction" popups).
+                self:Hide()
             end)
         end
 
-        if g and g.enablePlayerCastbar ~= false then
-            frame:Hide()
-        else
-            frame:Show()
-        end
+        -- Always hide while MSUF is loaded.
+        frame:Hide()
     end
 end
 
