@@ -10,11 +10,12 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     local MSUF_ExpandDropdownClickArea = (ns and ns.MSUF_ExpandDropdownClickArea) or _G.MSUF_ExpandDropdownClickArea
     -- Keep misc locals from leaking into the global environment.
     local miscTitle, miscLeftHeader, miscLeftLine, miscRightHeader, miscRightLine
-    local linkEditModesCheck
+
     local updateThrottleLabel, updateThrottleSlider
     local MSUF_CastbarUpdateLabel, MSUF_CastbarUpdateIntervalSlider
     local infoTooltipDisableCheck, infoTooltipPosLabel, infoTooltipPosDrop
     local blizzUFCheck, minimapIconCheck
+    local targetSoundsCheck
 
     miscTitle = miscGroup:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     miscTitle:SetPoint("TOPLEFT", miscGroup, "TOPLEFT", 16, -120)
@@ -36,43 +37,8 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     miscRightLine:SetSize(260, 1)
     miscRightLine:SetPoint("TOPLEFT", miscRightHeader, "BOTTOMLEFT", -16, -4)
 
-    linkEditModesCheck = CreateFrame("CheckButton", "MSUF_LinkEditModesCheck", miscGroup, "InterfaceOptionsCheckButtonTemplate")
-    linkEditModesCheck:SetPoint("TOPLEFT", miscLeftLine, "BOTTOMLEFT", 16, -18)
-    _G[linkEditModesCheck:GetName() .. "Text"]:SetText("Link Edit Mode Button")
-
-    -- Temporarily disabled: Blizzard Edit Mode currently misbehaves on /reload/zone transitions and can force MSUF Edit Mode open.
-    -- MSUF now runs its own standalone Edit Mode.
-    linkEditModesCheck.tooltipText = "Temporarily disabled: Blizzard Edit Mode currently misbehaves on /reload and zone transitions and can force MSUF Edit Mode to open.\n\nMSUF now runs its own standalone Edit Mode. We'll re-enable linking once Blizzard stabilizes Edit Mode again."
-    linkEditModesCheck:Disable()
-    linkEditModesCheck:SetAlpha(0.55)
-
-    -- Force DB off to avoid old saved settings keeping it enabled.
-    linkEditModesCheck:SetScript("OnShow", function(self)
-        if type(EnsureDB) == "function" then EnsureDB() end
-        if MSUF_DB and MSUF_DB.general then
-            MSUF_DB.general.linkEditModes = false
-        end
-        self:SetChecked(false)
-
-        local t = _G[self:GetName() .. "Text"]
-        if t then t:SetAlpha(0.75) end
-    end)
-
-    -- Keep hover tooltip even while disabled
-    linkEditModesCheck:SetScript("OnEnter", function(self)
-        if GameTooltip then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Link Edit Mode Button", 1, 1, 1, true)
-            GameTooltip:AddLine(self.tooltipText or "", nil, nil, nil, true)
-            GameTooltip:Show()
-        end
-    end)
-    linkEditModesCheck:SetScript("OnLeave", function()
-        if GameTooltip then GameTooltip:Hide() end
-    end)
-
     updateThrottleLabel = miscGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    updateThrottleLabel:SetPoint("TOPLEFT", linkEditModesCheck, "BOTTOMLEFT", 0, -18)
+    updateThrottleLabel:SetPoint("TOPLEFT", miscLeftLine, "BOTTOMLEFT", 16, -18)
     updateThrottleLabel:SetText("Unit update interval (seconds)")
 
     updateThrottleSlider = CreateFrame("Slider", "MSUF_UpdateIntervalSlider", miscGroup, "OptionsSliderTemplate")
@@ -400,6 +366,40 @@ infoTooltipDisableCheck.text:SetText("Disable MSUF unit info panel tooltips")
     end)
 
 
+    -- Target select / target lost sounds (matches default Blizzard UI behavior)
+    targetSoundsCheck = CreateFrame("CheckButton", "MSUF_TargetSoundsCheck", miscGroup, "InterfaceOptionsCheckButtonTemplate")
+    targetSoundsCheck:SetPoint("TOPLEFT", minimapIconCheck, "BOTTOMLEFT", 0, -10)
+    do
+        local t = _G[targetSoundsCheck:GetName() .. "Text"]
+        if t and t.SetText then
+            t:SetText("Play sound on Target/Target Lost")
+        end
+    end
+
+    if MSUF_StyleToggleText then MSUF_StyleToggleText(targetSoundsCheck) end
+    if MSUF_StyleCheckmark then MSUF_StyleCheckmark(targetSoundsCheck) end
+
+    targetSoundsCheck:SetScript("OnClick", function(self)
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        MSUF_DB.general.playTargetSelectLostSounds = self:GetChecked() and true or false
+
+        -- Reset cached target state so enabling/disabling doesn't instantly fire a "lost" sound.
+        if _G.MSUF_TargetSoundDriver_ResetState then
+            _G.MSUF_TargetSoundDriver_ResetState()
+        end
+        if self:GetChecked() and _G.MSUF_TargetSoundDriver_Ensure then
+            _G.MSUF_TargetSoundDriver_Ensure()
+        end
+    end)
+
+    targetSoundsCheck:SetScript("OnShow", function(self)
+        EnsureDB()
+        local g = MSUF_DB.general or {}
+        self:SetChecked(g.playTargetSelectLostSounds == true)
+    end)
+
+
 
 
     -- Misc menu style: boxed layout (to match Bars/Fonts)
@@ -602,7 +602,6 @@ local bottomPanel = CreateFrame("Frame", nil, miscGroup, "BackdropTemplate")
   centerDivider:SetPoint("BOTTOM", bottomPanel, "BOTTOMLEFT", leftW, 12)
 
             -- Grab existing widgets
-            local linkCheck = _G.MSUF_LinkEditModesCheck
             local updateSlider = _G.MSUF_UpdateIntervalSlider
             local castbarUpdateSlider = _G.MSUF_CastbarUpdateIntervalSlider
 
@@ -674,11 +673,11 @@ local bottomPanel = CreateFrame("Frame", nil, miscGroup, "BackdropTemplate")
             local infoTooltipPosDrop = _G.MSUF_InfoTooltipPosDropdown
             local blizzUFDisable = _G.MSUF_DisableBlizzUFCheck
             local minimapIconCheck = _G.MSUF_MinimapIconCheck
+            local targetSoundsCheck = _G.MSUF_TargetSoundsCheck
 
             local resCheck = _G.MSUF_IncomingResIndicatorCheck
             local resPosDrop = _G.MSUF_IncomingResIndicatorPosDrop
             -- LEFT: Updates
-            -- Link Edit Mode Button is now placed under the Blizzard frames section (right column)
 
             if updateSlider then
                 updateSlider:ClearAllPoints()
@@ -800,12 +799,12 @@ if minimapIconCheck then
     minimapIconCheck:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
     StyleCheckbox(minimapIconCheck)
 
-    -- Place Link Edit Mode Button under the minimap icon toggle (fits nicer here)
-    if linkCheck then
-        linkCheck:ClearAllPoints()
-        linkCheck:SetParent(rightPanel)
-        linkCheck:SetPoint("TOPLEFT", minimapIconCheck, "BOTTOMLEFT", 0, -12)
-        StyleCheckbox(linkCheck)
+    -- Place Target sounds toggle under the minimap icon toggle
+    if targetSoundsCheck then
+        targetSoundsCheck:ClearAllPoints()
+        targetSoundsCheck:SetParent(rightPanel)
+        targetSoundsCheck:SetPoint("TOPLEFT", minimapIconCheck, "BOTTOMLEFT", 0, -12)
+        StyleCheckbox(targetSoundsCheck)
     end
 
 

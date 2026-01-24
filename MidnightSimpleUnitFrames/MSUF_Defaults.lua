@@ -168,6 +168,18 @@ else
     if g.minimapIconDB.radius == nil then g.minimapIconDB.radius = 80 end
 end
 
+-- Target select / target lost sounds (opt-in; matches default Blizzard UI behavior)
+-- Default OFF to avoid changing behavior for existing users.
+if g.playTargetSelectLostSounds == nil then
+    g.playTargetSelectLostSounds = false
+end
+
+-- Fonts: optionally color the *power text* by the unit's current power type (mana/rage/energy/etc).
+-- Default OFF to preserve existing behavior.
+if g.colorPowerTextByType == nil then
+    g.colorPowerTextByType = false
+end
+
     if g.editModeSnapToGrid == nil then
         g.editModeSnapToGrid = false -- Default: Snap OFF
     end

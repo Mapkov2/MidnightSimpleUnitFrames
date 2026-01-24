@@ -14,7 +14,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- Predeclare the intended locals once so later assignments stay scoped.
     local fontTitle, globalFontHeader, globalFontLine, fontColorHeader, fontColorLine
     local fontDrop, fontChoices, names, used, info
-    local boldCheck, noOutlineCheck, nameClassColorCheck, npcNameRedCheck, shortenNamesCheck, textBackdropCheck
+    local boldCheck, noOutlineCheck, nameClassColorCheck, npcNameRedCheck, powerTextColorByTypeCheck, shortenNamesCheck, textBackdropCheck
     local shortenNameMaxCharsSlider, shortenNameFrontMaskSlider
     local textSizeHeader, textSizeLine
     local nameFontSizeSlider, hpFontSizeSlider, powerFontSizeSlider, castbarSpellNameFontSizeSlider
@@ -319,8 +319,13 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         npcNameRedCheck.text = _G["MSUF_NPCNameRedCheckText"]
         npcNameRedCheck.text:SetText("Color NPC/boss names using NPC colors")
 
+        powerTextColorByTypeCheck = CreateFrame("CheckButton", "MSUF_PowerTextColorByTypeCheck", fontGroup, "UICheckButtonTemplate")
+        powerTextColorByTypeCheck:SetPoint("TOPLEFT", npcNameRedCheck, "BOTTOMLEFT", 0, -4)
+        powerTextColorByTypeCheck.text = _G["MSUF_PowerTextColorByTypeCheckText"]
+        powerTextColorByTypeCheck.text:SetText("Color power text by power type")
+
         shortenNamesCheck = CreateFrame("CheckButton", "MSUF_ShortenNamesCheck", fontGroup, "UICheckButtonTemplate")
-        shortenNamesCheck:SetPoint("TOPLEFT", npcNameRedCheck, "BOTTOMLEFT", 0, -4)
+        shortenNamesCheck:SetPoint("TOPLEFT", powerTextColorByTypeCheck, "BOTTOMLEFT", 0, -4)
         shortenNamesCheck.text = _G["MSUF_ShortenNamesCheckText"]
         shortenNamesCheck.text:SetText("Shorten unit names (except Player)")
 
@@ -482,6 +487,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         noOutlineCheck:SetChecked(MSUF_DB.general.noOutline and true or false)  -- NEW
         nameClassColorCheck:SetChecked(MSUF_DB.general.nameClassColor and true or false)
         npcNameRedCheck:SetChecked(MSUF_DB.general.npcNameRed and true or false)
+        if powerTextColorByTypeCheck then
+            powerTextColorByTypeCheck:SetChecked(MSUF_DB.general.colorPowerTextByType and true or false)
+        end
 
     local g = MSUF_DB.general
     if g.shortenNameMaxChars == nil then g.shortenNameMaxChars = 6 end
@@ -534,10 +542,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             EnsureDB()
             MSUF_DB.general.nameClassColor = self:GetChecked() and true or false
 
-            MSUF_CallUpdateAllFonts()
-
-            if ns.MSUF_RefreshAllFrames then
-                ns.MSUF_RefreshAllFrames()
+            if type(_G.MSUF_RefreshAllIdentityColors) == "function" then
+                _G.MSUF_RefreshAllIdentityColors()
             end
         end)
 
@@ -545,11 +551,24 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             EnsureDB()
             MSUF_DB.general.npcNameRed = self:GetChecked() and true or false
 
-            MSUF_CallUpdateAllFonts()
-            if ns.MSUF_RefreshAllFrames then
-                ns.MSUF_RefreshAllFrames()
+            if type(_G.MSUF_RefreshAllIdentityColors) == "function" then
+                _G.MSUF_RefreshAllIdentityColors()
             end
         end)
+
+        if powerTextColorByTypeCheck then
+            powerTextColorByTypeCheck:SetScript("OnClick", function(self)
+                EnsureDB()
+                MSUF_DB.general.colorPowerTextByType = self:GetChecked() and true or false
+
+                if type(_G.MSUF_RefreshAllPowerTextColors) == "function" then
+                    _G.MSUF_RefreshAllPowerTextColors()
+                end
+                if MSUF_CallUpdateAllFonts then
+                    MSUF_CallUpdateAllFonts() -- font/shadow only; colors are handled by refresh/fast-path
+                end
+            end)
+        end
 
     shortenNamesCheck:SetScript("OnClick", function(self)
         EnsureDB()
@@ -1079,9 +1098,14 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             npcNameRedCheck:ClearAllPoints()
             npcNameRedCheck:SetPoint("TOPLEFT", nameClassColorCheck, "BOTTOMLEFT", 0, -10)
 
+            if powerTextColorByTypeCheck then
+                powerTextColorByTypeCheck:ClearAllPoints()
+                powerTextColorByTypeCheck:SetPoint("TOPLEFT", npcNameRedCheck, "BOTTOMLEFT", 0, -10)
+            end
+
             -- Right panel: Name formatting
             secNames:ClearAllPoints()
-            secNames:SetPoint("TOPLEFT", npcNameRedCheck, "BOTTOMLEFT", 2, -18)
+            secNames:SetPoint("TOPLEFT", (powerTextColorByTypeCheck or npcNameRedCheck), "BOTTOMLEFT", 2, -18)
 
             -- Divider line under "Name formatting"
             local namesLine = right.MSUF_SectionLine_Names

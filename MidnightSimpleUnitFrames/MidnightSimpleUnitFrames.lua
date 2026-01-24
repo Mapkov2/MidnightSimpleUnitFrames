@@ -615,6 +615,46 @@ local function MSUF_GetPowerBarColor(powerType, powerToken)
     return nil
 end
 _G.MSUF_GetPowerBarColor = MSUF_GetPowerBarColor
+
+-- Returns the effective power color for a given unit power type.
+-- Priority: MSUF overrides (if configured) -> Blizzard PowerBarColor -> nil.
+local function MSUF_GetResolvedPowerColor(powerType, powerToken)
+    -- 1) MSUF override table (if present)
+    if type(MSUF_GetPowerBarColor) == "function" then
+        local r, g, b = MSUF_GetPowerBarColor(powerType, powerToken)
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b
+        end
+    end
+
+    -- 2) Blizzard power colors (prefer token)
+    local pbc = _G.PowerBarColor
+    if type(powerToken) == "string" and pbc and pbc[powerToken] then
+        local c = pbc[powerToken]
+        local r = c.r or c[1]
+        local g = c.g or c[2]
+        local b = c.b or c[3]
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b
+        end
+    end
+
+    -- 3) Fallback by numeric power type index
+    if type(powerType) == "number" and pbc and pbc[powerType] then
+        local c = pbc[powerType]
+        local r = c.r or c[1]
+        local g = c.g or c[2]
+        local b = c.b or c[3]
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b
+        end
+    end
+
+    return nil
+end
+_G.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
+ns.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
+
 local function MSUF_GetConfiguredFontColor()
     EnsureDB()
     local g = MSUF_DB.general or {}
@@ -2777,6 +2817,51 @@ local function MSUF_UpdateNameColor(frame)
         frame.levelText:SetTextColor(r or 1, gCol or 1, b or 1, 1)
     end
 end
+
+
+-- Public helpers for option toggles (keep logic single-owner, avoid blink/fighting)
+_G.MSUF_RefreshAllIdentityColors = function()
+    if type(_G.MSUF_DB) ~= "table" then return end
+    local list = UnitFramesList
+    if not list or #list == 0 then return end
+    for i = 1, #list do
+        local f = list[i]
+        if f and f.nameText and f.unit and UnitExists and UnitExists(f.unit) then
+            MSUF_UpdateNameColor(f)
+        end
+    end
+end
+
+_G.MSUF_RefreshAllPowerTextColors = function()
+    if type(_G.MSUF_DB) ~= "table" then return end
+    local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    local enabled = (g and g.colorPowerTextByType == true)
+    local list = UnitFramesList
+    if not list or #list == 0 then return end
+    for i = 1, #list do
+        local f = list[i]
+        if f and f.powerText and f.unit and UnitExists and UnitExists(f.unit) then
+            if enabled and type(_G.MSUF_UFCore_UpdatePowerTextFast) == "function" then
+                -- Re-run fast-path once; it will apply the correct power color and sync the cache stamp.
+                _G.MSUF_UFCore_UpdatePowerTextFast(f)
+            else
+                -- When disabled, fall back to configured font color immediately.
+                local fr, fg, fb = 1, 1, 1
+                if type(MSUF_GetConfiguredFontColor) == "function" then
+                    fr, fg, fb = MSUF_GetConfiguredFontColor()
+                end
+                if f.powerText.SetTextColor then
+                    f.powerText:SetTextColor(fr, fg, fb, 1)
+                    f.powerText._msufColorStamp = tostring(fr) .. "|" .. tostring(fg) .. "|" .. tostring(fb)
+                end
+                f._msufPTColorByPower = nil
+                f._msufPTColorType = nil
+                f._msufPTColorTok = nil
+            end
+        end
+    end
+end
+
 local function MSUF_HideTex(t) if t then t:Hide() end end
 local _MSUF_GRAD_HIDE_KEYS = { "left", "right", "up", "down", "left2", "right2", "up2", "down2" }
 local function MSUF_HideGradSet(grads, startIdx)
@@ -4533,6 +4618,7 @@ function _G.MSUF_UFCore_UpdatePowerTextFast(self)
     end
 
     local gPower = MSUF_DB and MSUF_DB.general or {}
+    local colorPowerTextByType = (gPower.colorPowerTextByType == true)
     local pMode  = gPower.powerTextMode or "FULL_SLASH_MAX"
     local powerSep = gPower.powerTextSeparator
     if powerSep == nil then
@@ -4550,6 +4636,43 @@ function _G.MSUF_UFCore_UpdatePowerTextFast(self)
     MSUF_EnsureUnitFlags(self)
     local isPlayer = self._msufIsPlayer
     local isFocus  = self._msufIsFocus
+
+
+    -- Optional: color PowerText by current power type.
+    -- Re-apply if some other code path overwrote the color (prevents blinking/conflicts).
+    local function MSUF_ApplyPowerTextColorByType()
+        if not colorPowerTextByType then return end
+        if not (UnitPowerType and self.powerText) then return end
+
+        local okPT, pType, pTok = pcall(UnitPowerType, unit)
+        if not okPT then return end
+
+        local pr, pg, pb
+        if type(MSUF_GetResolvedPowerColor) == "function" then
+            pr, pg, pb = MSUF_GetResolvedPowerColor(pType, pTok)
+        end
+        if not pr then return end
+
+        local doApply = (self._msufPTColorByPower ~= true) or (self._msufPTColorType ~= pType) or (self._msufPTColorTok ~= pTok)
+        if not doApply and self.powerText.GetTextColor then
+            local cr, cg, cb = self.powerText:GetTextColor()
+            if type(cr) == "number" and type(cg) == "number" and type(cb) == "number" then
+                if (math.abs(cr - pr) > 0.01) or (math.abs(cg - pg) > 0.01) or (math.abs(cb - pb) > 0.01) then
+                    doApply = true
+                end
+            end
+        end
+
+        if doApply then
+            self.powerText:SetTextColor(pr, pg, pb, 1)
+            self._msufPTColorByPower = true
+            self._msufPTColorType = pType
+            self._msufPTColorTok = pTok
+            -- Keep the font-cache stamp in sync so UpdateAllFonts doesn't fight us.
+            self.powerText._msufColorStamp = tostring(pr) .. "|" .. tostring(pg) .. "|" .. tostring(pb)
+        end
+    end
+
 
     if isPlayer or isFocus or UnitIsPlayer(unit) then
         local curText, maxText
@@ -4602,6 +4725,7 @@ function _G.MSUF_UFCore_UpdatePowerTextFast(self)
                 MSUF_SetTextIfChanged(self.powerText, "")
             end
         end
+        MSUF_ApplyPowerTextColorByType()
         self.powerText:Show()
     elseif self.isBoss and C_StringUtil and C_StringUtil.TruncateWhenZero then
         local okCur, curText2 = pcall(function()
@@ -4620,6 +4744,7 @@ function _G.MSUF_UFCore_UpdatePowerTextFast(self)
         end
         if finalText then
             MSUF_SetTextIfChanged(self.powerText, finalText)
+            MSUF_ApplyPowerTextColorByType()
             self.powerText:Show()
         else
             MSUF_SetTextIfChanged(self.powerText, "")
@@ -5767,6 +5892,7 @@ local function UpdateAllFonts()
     local globalPowSize  = g.powerFontSize or baseSize
     
 local useShadow = g.textBackdrop and true or false
+local colorPowerTextByType = (g.colorPowerTextByType == true)
         local list = UnitFramesList
         local UpdateNameColor = MSUF_UpdateNameColor
 
@@ -5853,7 +5979,13 @@ local useShadow = g.textBackdrop and true or false
             end
             local powerText = f.powerText
             if powerText then
-                _MSUF_ApplyFontCached(powerText, powerSize, true, fr, fg, fb, useShadow)
+                -- When "Color power text by power type" is enabled, power text coloring is owned by the
+                -- runtime fast-path (no fighting/blinking on font refresh). UpdateAllFonts only applies font/shadow.
+                if colorPowerTextByType then
+                    _MSUF_ApplyFontCached(powerText, powerSize, false, 0, 0, 0, useShadow)
+                else
+                    _MSUF_ApplyFontCached(powerText, powerSize, true, fr, fg, fb, useShadow)
+                end
             end
         end
 
@@ -6919,9 +7051,98 @@ local function CreateSimpleUnitFrame(unit)
 end
 
 
+-- Target select / target lost sounds (opt-in).
+-- Mirrors default Blizzard TargetFrame behavior without depending on Blizzard frames.
+-- IMPORTANT (Midnight): do NOT compare UnitGUID values (they can be "secret").
+do
+    local _msufTargetSoundFrame
+    local _msufHadTarget
+
+    local function MSUF_TargetSoundDriver_ResetState()
+        _msufHadTarget = UnitExists and UnitExists("target") or false
+    end
+
+    local function MSUF_TargetSoundDriver_OnTargetChanged()
+        if type(EnsureDB) == "function" then EnsureDB() end
+        local g = (MSUF_DB and MSUF_DB.general) or {}
+
+        local hasTarget = (UnitExists and UnitExists("target")) or false
+        local hadTarget = _msufHadTarget
+        _msufHadTarget = hasTarget
+
+        -- Opt-in (but still keep our cached state correct while disabled).
+        if g.playTargetSelectLostSounds ~= true then
+            return
+        end
+
+        -- Lost target
+        if (not hasTarget) and hadTarget then
+            if type(_G.IsTargetLoose) == "function" and _G.IsTargetLoose() then
+                return
+            end
+            if _G.SOUNDKIT and _G.SOUNDKIT.INTERFACE_SOUND_LOST_TARGET_UNIT and PlaySound then
+                local forceNoDuplicates = true
+                PlaySound(_G.SOUNDKIT.INTERFACE_SOUND_LOST_TARGET_UNIT, nil, forceNoDuplicates)
+            end
+            return
+        end
+
+        -- New target selected (or switched target)
+        if hasTarget then
+            -- Match Blizzard: don't play selection sounds while the interaction manager is replacing units.
+            if _G.C_PlayerInteractionManager
+                and _G.C_PlayerInteractionManager.IsReplacingUnit
+                and _G.C_PlayerInteractionManager.IsReplacingUnit() then
+                return
+            end
+
+            local sk = _G.SOUNDKIT
+            if not (sk and PlaySound) then return end
+
+            local id
+            if UnitIsEnemy and UnitIsEnemy("player", "target") then
+                id = sk.IG_CREATURE_AGGRO_SELECT
+            elseif UnitIsFriend and UnitIsFriend("player", "target") then
+                id = sk.IG_CHARACTER_NPC_SELECT
+            else
+                id = sk.IG_CREATURE_NEUTRAL_SELECT
+            end
+
+            if id then
+                PlaySound(id)
+            end
+        end
+    end
+
+    local function MSUF_TargetSoundDriver_Ensure()
+        if _msufTargetSoundFrame then
+            return
+        end
+        _msufTargetSoundFrame = CreateFrame("Frame")
+        _msufTargetSoundFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+        _msufTargetSoundFrame:SetScript("OnEvent", MSUF_TargetSoundDriver_OnTargetChanged)
+        MSUF_TargetSoundDriver_ResetState()
+    end
+
+    _G.MSUF_TargetSoundDriver_Ensure = MSUF_TargetSoundDriver_Ensure
+    _G.MSUF_TargetSoundDriver_ResetState = MSUF_TargetSoundDriver_ResetState
+end
+
+
+
 MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_STARTUP", function(event)
     MSUF_InitProfiles()
     EnsureDB()
+
+    -- Lazy-init: only create/register the target-sound driver if the feature is enabled.
+    do
+        local g = (MSUF_DB and MSUF_DB.general) or {}
+        if g.playTargetSelectLostSounds == true and _G.MSUF_TargetSoundDriver_Ensure then
+            _G.MSUF_TargetSoundDriver_Ensure()
+        end
+    end
+
+
     HideDefaultFrames()
     CreateSimpleUnitFrame("player")
     if type(_G.MSUF_ApplyCompatAnchor_PlayerFrame) == "function" then
@@ -7268,7 +7489,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.70h2|r  |cff565f89•|r  |cffc0caf5 Thank you gamer -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6aBuild 1.71|r  |cff565f89•|r  |cffc0caf5 Thank you gamer -|r  |cfff7768eReport bugs in the Discord.|r")
 
 end, nil, true)
 
