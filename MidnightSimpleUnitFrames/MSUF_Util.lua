@@ -9,6 +9,34 @@ ns.MSUF_Util = ns.MSUF_Util or {}
 local U = ns.MSUF_Util
 _G.MSUF_Util = U
 
+-- ---------------------------------------------------------------------------
+-- Atlas helper used by status/state indicator icons.
+-- Some call-sites use a global helper name; provide it here as a safe fallback
+-- so indicator modules can remain self-contained without load-order fragility.
+-- Returns true if something was applied.
+if type(_G._MSUF_SetAtlasOrFallback) ~= "function" then
+    function _G._MSUF_SetAtlasOrFallback(tex, atlasName, fallbackTexture)
+        if not tex then
+            return false
+        end
+
+        if atlasName and tex.SetAtlas then
+            -- SetAtlas may error if atlasName is invalid in the current build.
+            local ok = pcall(tex.SetAtlas, tex, atlasName, true)
+            if ok then
+                return true
+            end
+        end
+
+        if fallbackTexture and tex.SetTexture then
+            tex:SetTexture(fallbackTexture)
+            return true
+        end
+
+        return false
+    end
+end
+
 function MSUF_DeepCopy(value, seen)
     if type(value) ~= "table" then
         return value

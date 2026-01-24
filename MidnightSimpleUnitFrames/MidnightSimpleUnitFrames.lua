@@ -6943,6 +6943,47 @@ local function CreateSimpleUnitFrame(unit)
     f.raidMarkerIcon = raidIcon
     if _G.MSUF_ApplyRaidMarkerLayout then _G.MSUF_ApplyRaidMarkerLayout(f) end
 
+    -- Status Icons (Combat / Resting / Summon / Incoming Rez)
+    -- Player + Target only (matches Status element event registrations).
+    if unit == "player" or unit == "target" then
+        local function _SetAtlasOrFallback(tex, atlas, fallbackFile, l, r, t, b)
+            if tex and tex.SetAtlas and _G.C_Texture and _G.C_Texture.GetAtlasInfo and atlas and _G.C_Texture.GetAtlasInfo(atlas) then
+                tex:SetAtlas(atlas, true)
+            else
+                tex:SetTexture(fallbackFile)
+                if l then tex:SetTexCoord(l, r, t, b) end
+            end
+        end
+
+        local iconSize = 18
+
+        local combatIcon = textFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+        combatIcon:SetSize(iconSize, iconSize)
+        _SetAtlasOrFallback(combatIcon, "UI-HUD-UnitFrame-Player-PortraitCombatIcon", "Interface\\CharacterFrame\\UI-StateIcon", 0.5, 1, 0, 0.5)
+        combatIcon:Hide()
+        f.combatStateIndicatorIcon = combatIcon
+
+        if unit == "player" then
+            local restIcon = textFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+            restIcon:SetSize(iconSize, iconSize)
+            _SetAtlasOrFallback(restIcon, "UI-HUD-UnitFrame-Player-PortraitRestingIcon", "Interface\\CharacterFrame\\UI-StateIcon", 0, 0.5, 0, 0.5)
+            restIcon:Hide()
+            f.restingIndicatorIcon = restIcon
+        end
+
+        local rezIcon = textFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+        rezIcon:SetSize(iconSize, iconSize)
+        rezIcon:SetTexture("Interface\\RaidFrame\\Raid-Icon-Rez")
+        rezIcon:Hide()
+        f.incomingResIndicatorIcon = rezIcon
+
+        local summonIcon = textFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+        summonIcon:SetSize(iconSize, iconSize)
+        _SetAtlasOrFallback(summonIcon, "Raid-Icon-SummonPending", "Interface\\RaidFrame\\Raid-Icon-Summon", nil)
+        summonIcon:Hide()
+        f.summonIndicatorIcon = summonIcon
+    end
+
     -- NOTE: Unitframe events are now registered centrally by MSUF_UnitframeCore.lua.
     -- Centralized event routing + update scheduling (MSUF_UnitframeCore.lua).
     if _G.MSUF_UFCore_AttachFrame then _G.MSUF_UFCore_AttachFrame(f) end
