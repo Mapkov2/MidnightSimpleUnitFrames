@@ -134,66 +134,6 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         self:SetChecked(g.showIncomingResIndicator ~= false)
     end)
 
-    local resIndicatorPosLabel = miscGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    resIndicatorPosLabel:SetPoint("TOPLEFT", resIndicatorCheck, "BOTTOMLEFT", 0, -14)
-    resIndicatorPosLabel:SetText("Incoming resurrection position")
-
-    local resIndicatorPosDrop = CreateFrame("Frame", "MSUF_IncomingResIndicatorPosDrop", miscGroup, "UIDropDownMenuTemplate")
-    MSUF_ExpandDropdownClickArea(resIndicatorPosDrop)
-    resIndicatorPosDrop:SetPoint("TOPLEFT", resIndicatorPosLabel, "BOTTOMLEFT", -16, -4)
-    UIDropDownMenu_SetWidth(resIndicatorPosDrop, 180)
-
-    local function ResIndicatorPos_OnClick(self)
-        EnsureDB()
-        MSUF_DB.general.incomingResIndicatorPos = self.value
-        UIDropDownMenu_SetSelectedValue(resIndicatorPosDrop, self.value)
-        UIDropDownMenu_SetText(resIndicatorPosDrop, self.text)
-
-        if _G.MSUF_UnitFrames then
-            local pf = _G.MSUF_UnitFrames.player
-            local tf = _G.MSUF_UnitFrames.target
-            if pf and UpdateSimpleUnitFrame then UpdateSimpleUnitFrame(pf) end
-            if tf and UpdateSimpleUnitFrame then UpdateSimpleUnitFrame(tf) end
-        end
-    end
-
-    UIDropDownMenu_Initialize(resIndicatorPosDrop, function(self, level)
-        if not level then return end
-        EnsureDB()
-        local g = MSUF_DB.general or {}
-        local current = g.incomingResIndicatorPos or "TOPRIGHT"
-
-        local function AddOption(text, value)
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = text
-            info.value = value
-            info.func = function(btn)
-                btn.text = text
-                btn.value = value
-                ResIndicatorPos_OnClick(btn)
-            end
-            info.checked = (current == value)
-            UIDropDownMenu_AddButton(info, level)
-        end
-
-        AddOption("Top left", "TOPLEFT")
-        AddOption("Top right", "TOPRIGHT")
-        AddOption("Bottom left", "BOTTOMLEFT")
-        AddOption("Bottom right", "BOTTOMRIGHT")
-    end)
-
-    resIndicatorPosDrop:SetScript("OnShow", function(self)
-        EnsureDB()
-        local g = MSUF_DB.general or {}
-        local current = g.incomingResIndicatorPos or "TOPRIGHT"
-        local label = "Top right"
-        if current == "TOPLEFT" then label = "Top left"
-        elseif current == "BOTTOMLEFT" then label = "Bottom left"
-        elseif current == "BOTTOMRIGHT" then label = "Bottom right" end
-        UIDropDownMenu_SetSelectedValue(self, current)
-        UIDropDownMenu_SetText(self, label)
-    end)
-
 infoTooltipDisableCheck = CreateFrame("CheckButton", "MSUF_InfoTooltipDisableCheck", miscGroup, "UICheckButtonTemplate")
 infoTooltipDisableCheck:SetPoint("TOPLEFT", miscRightLine, "BOTTOMLEFT", 16, -16)
 
@@ -676,7 +616,6 @@ local bottomPanel = CreateFrame("Frame", nil, miscGroup, "BackdropTemplate")
             local targetSoundsCheck = _G.MSUF_TargetSoundsCheck
 
             local resCheck = _G.MSUF_IncomingResIndicatorCheck
-            local resPosDrop = _G.MSUF_IncomingResIndicatorPosDrop
             -- LEFT: Updates
 
             if updateSlider then
@@ -828,19 +767,6 @@ end
                 resCheck:SetParent(bottomPanel)
                 resCheck:SetPoint("TOPLEFT", leftHeader, "BOTTOMLEFT", 0, -10)
                 StyleCheckbox(resCheck)
-            end
-
-            if resPosDrop then
-                resPosDrop:ClearAllPoints()
-                resPosDrop:SetParent(bottomPanel)
-
-                local rel = resCheck or leftHeader
-                local lbl = MakeLabel(bottomPanel, "Incoming resurrection position", "TOPLEFT", rel, 0, -18)
-                if rel ~= leftHeader then
-                    lbl:ClearAllPoints()
-                    lbl:SetPoint("TOPLEFT", rel, "BOTTOMLEFT", 0, -10)
-                end
-                resPosDrop:SetPoint("TOPLEFT", lbl, "BOTTOMLEFT", -16, -8)
             end
 
             -- Right column: Status indicators (placeholders, wiring later)

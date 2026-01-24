@@ -1362,8 +1362,14 @@ end
     end
 
 
-    -- Right: Text group
-    local textGroup = CreateGroupBox(frameGroup, "Castbar", rightX, topY, rightW, basicsH + sizeH + 12, texWhite, texWhite2)
+    -- Right: Castbar group (also hosts Indicator + Status icons for player/target).
+    -- Step 1.5: Grow this box for Player/Target so we have room for the Indicator-style Status Icons rows.
+    local _msufTextBaseH = basicsH + sizeH + 12
+    -- Extra space only used on Player/Target tabs (kept simple; will be used for Step 2/3/4).
+    local _msufTextExtra_PlayerTarget = 240
+    panel._msufTextBaseH = _msufTextBaseH
+    panel._msufTextExtra_PlayerTarget = _msufTextExtra_PlayerTarget
+    local textGroup = CreateGroupBox(frameGroup, "Castbar", rightX, topY, rightW, _msufTextBaseH + _msufTextExtra_PlayerTarget, texWhite, texWhite2)
     textGroup:Hide()
     panel.playerTextLayoutGroup = textGroup
     panel._msufTextGroup = textGroup
@@ -1462,6 +1468,25 @@ end
 		panel.playerBossSpacingSlider = panel.playerBossSpacingSlider or CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", textGroup, -200, 0, 1, 12, bossSpacingY)
 		FinalizeCompactSlider(panel.playerBossSpacingSlider, (rightW - 24))
 		panel.playerBossSpacingSlider:Hide()
+
+		-- Status icons toggles (player/target only; controlled in LayoutIndicatorTemplate)
+		panel.statusIconsHeader = panel.statusIconsHeader or textGroup:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+		panel.statusIconsHeader:SetText("Status icons")
+		panel.statusIconsHeader:Hide()
+
+		panel.statusCombatIconCB = panel.statusCombatIconCB or CreateCheck(textGroup, "MSUF_StatusCombatIconCB", "Combat", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 54)
+		panel.statusRestingIconCB = panel.statusRestingIconCB or CreateCheck(textGroup, "MSUF_StatusRestingIconCB", "Rested (player only)", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 76)
+		panel.statusIncomingResIconCB = panel.statusIncomingResIconCB or CreateCheck(textGroup, "MSUF_StatusIncomingResIconCB", "Incoming Rez", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 120)
+
+
+		panel.statusIconsTestModeCB = panel.statusIconsTestModeCB or CreateCheck(textGroup, "MSUF_StatusIconsTestModeCB", "Test mode (preview enabled icons)", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 152)
+
+		if panel.statusCombatIconCB then panel.statusCombatIconCB:Hide() end
+		if panel.statusRestingIconCB then panel.statusRestingIconCB:Hide() end
+		if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:Hide() end
+
+		if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:Hide() end
+
 		-- Safety: older refactors called this; now it's not needed (layout is already relative).
 		MSUF_PositionLeaderMiniHeaders = MSUF_PositionLeaderMiniHeaders or function() end
 
@@ -1731,7 +1756,118 @@ end
 					IND_BASE_CTRL_Y + ((idx - 1) * IND_ROW_STEP)
 				)
 			end
+-- ------------------------------------------------------------
+-- Status Icons (Step 1): Combat row controls built like Indicator
+-- (Player/Target only; Rested/Incoming Rez/TestMode stay as simple toggles for now)
+-- ------------------------------------------------------------
+_MSUF_MakeDivider("statusCombatGroupDivider")
+
+-- Reuse existing combat toggle checkbox created above
+if panel.statusCombatIconCB then
+	_MSUF_CreateResetButton("statusCombatResetBtn", panel.statusCombatIconCB)
+end
+
+if not panel.statusCombatOffsetXStepper then
+	panel.statusCombatOffsetXStepper = CreateAxisStepper("MSUF_StatusCombatOffsetX", "X", textGroup, 0, 0, -200, 200, 1)
+end
+if not panel.statusCombatOffsetYStepper then
+	panel.statusCombatOffsetYStepper = CreateAxisStepper("MSUF_StatusCombatOffsetY", "Y", textGroup, 0, 0, -200, 200, 1)
+end
+
+panel.statusCombatAnchorDrop  = panel.statusCombatAnchorDrop  or _MSUF_MakeDrop("statusCombatAnchorDrop", "MSUF_StatusCombatAnchorDropdown", 70)
+panel.statusCombatAnchorLabel = panel.statusCombatAnchorLabel or _MSUF_MakeLabel("statusCombatAnchorLabel", "Anchor")
+
+panel.statusCombatSizeEdit  = panel.statusCombatSizeEdit  or _MSUF_MakeSizeEdit("statusCombatSizeEdit", "MSUF_StatusCombatSizeEdit")
+panel.statusCombatSizeLabel = panel.statusCombatSizeLabel or _MSUF_MakeLabel("statusCombatSizeLabel", "Size")
+
+-- Relative layout: only X stepper is absolute, everything else follows.
+_MSUF_LayoutIndicatorRow(
+	panel.statusCombatIconCB,
+	panel.statusCombatOffsetXStepper,
+	panel.statusCombatOffsetYStepper,
+	panel.statusCombatAnchorDrop,
+	panel.statusCombatAnchorLabel,
+	panel.statusCombatSizeEdit,
+	panel.statusCombatSizeLabel,
+	IND_COL_X,
+	IND_BASE_CTRL_Y + (3 * IND_ROW_STEP) - 54
+)
+
+-- ------------------------------------------------------------
+-- Status Icons (Step 2): Rested row controls built like Indicator
+-- (Player only)
+-- ------------------------------------------------------------
+_MSUF_MakeDivider("statusRestingGroupDivider")
+
+-- Reuse existing rested toggle checkbox created above
+if panel.statusRestingIconCB then
+	_MSUF_CreateResetButton("statusRestingResetBtn", panel.statusRestingIconCB)
+end
+
+if not panel.statusRestingOffsetXStepper then
+	panel.statusRestingOffsetXStepper = CreateAxisStepper("MSUF_StatusRestingOffsetX", "X", textGroup, 0, 0, -200, 200, 1)
+end
+if not panel.statusRestingOffsetYStepper then
+	panel.statusRestingOffsetYStepper = CreateAxisStepper("MSUF_StatusRestingOffsetY", "Y", textGroup, 0, 0, -200, 200, 1)
+end
+
+panel.statusRestingAnchorDrop  = panel.statusRestingAnchorDrop  or _MSUF_MakeDrop("statusRestingAnchorDrop", "MSUF_StatusRestingAnchorDropdown", 70)
+panel.statusRestingAnchorLabel = panel.statusRestingAnchorLabel or _MSUF_MakeLabel("statusRestingAnchorLabel", "Anchor")
+
+panel.statusRestingSizeEdit  = panel.statusRestingSizeEdit  or _MSUF_MakeSizeEdit("statusRestingSizeEdit", "MSUF_StatusRestingSizeEdit")
+panel.statusRestingSizeLabel = panel.statusRestingSizeLabel or _MSUF_MakeLabel("statusRestingSizeLabel", "Size")
+
+-- Relative layout: only X stepper is absolute, everything else follows.
+_MSUF_LayoutIndicatorRow(
+	panel.statusRestingIconCB,
+	panel.statusRestingOffsetXStepper,
+	panel.statusRestingOffsetYStepper,
+	panel.statusRestingAnchorDrop,
+	panel.statusRestingAnchorLabel,
+	panel.statusRestingSizeEdit,
+	panel.statusRestingSizeLabel,
+	IND_COL_X,
+	IND_BASE_CTRL_Y + (3 * IND_ROW_STEP) - 76
+)
+
 		end
+-- ------------------------------------------------------------
+-- Status Icons (Step 3): Incoming Rez row controls built like Indicator
+-- (Player/Target)
+-- ------------------------------------------------------------
+_MSUF_MakeDivider("statusIncomingResGroupDivider")
+
+-- Reuse existing incoming rez toggle checkbox created above
+if panel.statusIncomingResIconCB then
+	_MSUF_CreateResetButton("statusIncomingResResetBtn", panel.statusIncomingResIconCB)
+end
+
+if not panel.statusIncomingResOffsetXStepper then
+	panel.statusIncomingResOffsetXStepper = CreateAxisStepper("MSUF_StatusIncomingResOffsetX", "X", textGroup, 0, 0, -200, 200, 1)
+end
+if not panel.statusIncomingResOffsetYStepper then
+	panel.statusIncomingResOffsetYStepper = CreateAxisStepper("MSUF_StatusIncomingResOffsetY", "Y", textGroup, 0, 0, -200, 200, 1)
+end
+
+panel.statusIncomingResAnchorDrop  = panel.statusIncomingResAnchorDrop  or _MSUF_MakeDrop("statusIncomingResAnchorDrop", "MSUF_StatusIncomingResAnchorDropdown", 70)
+panel.statusIncomingResAnchorLabel = panel.statusIncomingResAnchorLabel or _MSUF_MakeLabel("statusIncomingResAnchorLabel", "Anchor")
+
+panel.statusIncomingResSizeEdit  = panel.statusIncomingResSizeEdit  or _MSUF_MakeSizeEdit("statusIncomingResSizeEdit", "MSUF_StatusIncomingResSizeEdit")
+panel.statusIncomingResSizeLabel = panel.statusIncomingResSizeLabel or _MSUF_MakeLabel("statusIncomingResSizeLabel", "Size")
+
+-- Relative layout: only X stepper is absolute, everything else follows.
+_MSUF_LayoutIndicatorRow(
+	panel.statusIncomingResIconCB,
+	panel.statusIncomingResOffsetXStepper,
+	panel.statusIncomingResOffsetYStepper,
+	panel.statusIncomingResAnchorDrop,
+	panel.statusIncomingResAnchorLabel,
+	panel.statusIncomingResSizeEdit,
+	panel.statusIncomingResSizeLabel,
+	IND_COL_X,
+	IND_BASE_CTRL_Y + (3 * IND_ROW_STEP) - 120
+)
+
 
     local function _MSUF_BuildCopyUI(spec)
         local prefix    = spec.prefix
@@ -1989,6 +2125,29 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
             SetShownByName(spec.resetBtn, false)
         end
         if panel.playerBossSpacingSlider then panel.playerBossSpacingSlider:Hide() end
+        -- Status icons (and Step-1 Combat row controls) must also be hard-hidden outside Frames tab
+        if panel.statusIconsHeader then panel.statusIconsHeader:Hide() end
+        if panel.statusCombatIconCB then panel.statusCombatIconCB:Hide() end
+        if panel.statusRestingIconCB then panel.statusRestingIconCB:Hide() end
+        if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:Hide() end
+        if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:Hide() end
+        SetShownByName("statusCombatGroupDivider", false)
+        SetShownByName("statusCombatResetBtn", false)
+        SetShownByName("statusCombatOffsetXStepper", false)
+        SetShownByName("statusCombatOffsetYStepper", false)
+        SetShownByName("statusCombatAnchorDrop", false)
+        SetShownByName("statusCombatAnchorLabel", false)
+        SetShownByName("statusCombatSizeEdit", false)
+        SetShownByName("statusCombatSizeLabel", false)
+        -- Step 2: Rested row controls must also be hard-hidden outside Frames tab
+        SetShownByName("statusRestingGroupDivider", false)
+        SetShownByName("statusRestingResetBtn", false)
+        SetShownByName("statusRestingOffsetXStepper", false)
+        SetShownByName("statusRestingOffsetYStepper", false)
+        SetShownByName("statusRestingAnchorDrop", false)
+        SetShownByName("statusRestingAnchorLabel", false)
+        SetShownByName("statusRestingSizeEdit", false)
+        SetShownByName("statusRestingSizeLabel", false)
         return
     end
 
@@ -2069,6 +2228,109 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         panel.playerLeaderIndicatorHeader:ClearAllPoints()
         panel.playerLeaderIndicatorHeader:SetPoint("LEFT", firstDivider, "LEFT", 0, 0)
     end
+
+
+-- Status icons (Step 1): Combat row uses indicator-style controls (player/target)
+local showStatusIcons = (currentKey == "player" or currentKey == "target")
+if panel.statusIconsHeader then panel.statusIconsHeader:SetShown(showStatusIcons) end
+if panel.statusCombatIconCB then panel.statusCombatIconCB:SetShown(showStatusIcons) end
+if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:SetShown(showStatusIcons) end
+if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:SetShown(showStatusIcons) end
+
+SetShownByName("statusCombatGroupDivider", showStatusIcons)
+SetShownByName("statusCombatResetBtn", showStatusIcons)
+SetShownByName("statusCombatOffsetXStepper", showStatusIcons)
+SetShownByName("statusCombatOffsetYStepper", showStatusIcons)
+SetShownByName("statusCombatAnchorDrop", showStatusIcons)
+SetShownByName("statusCombatAnchorLabel", showStatusIcons)
+SetShownByName("statusCombatSizeEdit", showStatusIcons)
+SetShownByName("statusCombatSizeLabel", showStatusIcons)
+
+SetShownByName("statusIncomingResGroupDivider", showStatusIcons)
+SetShownByName("statusIncomingResResetBtn", showStatusIcons)
+SetShownByName("statusIncomingResOffsetXStepper", showStatusIcons)
+SetShownByName("statusIncomingResOffsetYStepper", showStatusIcons)
+SetShownByName("statusIncomingResAnchorDrop", showStatusIcons)
+SetShownByName("statusIncomingResAnchorLabel", showStatusIcons)
+SetShownByName("statusIncomingResSizeEdit", showStatusIcons)
+SetShownByName("statusIncomingResSizeLabel", showStatusIcons)
+
+local showResting = (currentKey == "player")
+if panel.statusRestingIconCB then panel.statusRestingIconCB:SetShown(showResting) end
+SetShownByName("statusRestingGroupDivider", showResting)
+SetShownByName("statusRestingResetBtn", showResting)
+SetShownByName("statusRestingOffsetXStepper", showResting)
+SetShownByName("statusRestingOffsetYStepper", showResting)
+SetShownByName("statusRestingAnchorDrop", showResting)
+SetShownByName("statusRestingAnchorLabel", showResting)
+SetShownByName("statusRestingSizeEdit", showResting)
+SetShownByName("statusRestingSizeLabel", showResting)
+
+if showStatusIcons then
+    local toggleY = baseToggleY + (row * step)
+    local ctrlY   = baseCtrlY   + (row * step)
+
+    local statusShift = -10 -- Step 3.5: move Status icons block down by 10px
+
+    -- Combat row (indicator-style)
+    local toggleYCombat = toggleY + statusShift
+    local ctrlYCombat   = ctrlY + statusShift
+
+    PlaceToggle(panel.statusCombatIconCB, toggleYCombat)
+    PlaceXStepper(panel.statusCombatOffsetXStepper, ctrlYCombat)
+    PlaceDivider(panel.statusCombatGroupDivider, toggleYCombat)
+
+    -- Rested row (indicator-style, player only)
+    local usedRows = 1
+    local toggleYLast = toggleYCombat
+    if showResting then
+        local toggleYRest = baseToggleY + ((row + 1) * step) + statusShift
+        local ctrlYRest   = baseCtrlY   + ((row + 1) * step) + statusShift
+
+        PlaceToggle(panel.statusRestingIconCB, toggleYRest)
+        PlaceXStepper(panel.statusRestingOffsetXStepper, ctrlYRest)
+        PlaceDivider(panel.statusRestingGroupDivider, toggleYRest)
+
+        usedRows = 2
+        toggleYLast = toggleYRest
+    end
+
+    if panel.statusIconsHeader and panel.statusCombatGroupDivider then
+        panel.statusIconsHeader:ClearAllPoints()
+        panel.statusIconsHeader:SetPoint("LEFT", panel.statusCombatGroupDivider, "LEFT", 0, 0)
+    elseif panel.statusIconsHeader then
+        panel.statusIconsHeader:ClearAllPoints()
+        panel.statusIconsHeader:SetPoint("TOPLEFT", container, "TOPLEFT", 12, toggleYCombat + 12)
+    end
+
+    -- Incoming Rez row (indicator-style)
+    local toggleYRez = baseToggleY + ((row + usedRows) * step) + statusShift
+    local ctrlYRez   = baseCtrlY   + ((row + usedRows) * step) + statusShift
+
+    PlaceToggle(panel.statusIncomingResIconCB, toggleYRez)
+    PlaceXStepper(panel.statusIncomingResOffsetXStepper, ctrlYRez)
+    PlaceDivider(panel.statusIncomingResGroupDivider, toggleYRez)
+
+    usedRows = usedRows + 1
+    toggleYLast = toggleYRez
+
+    -- Remaining status toggles (Step 4 will convert them too)
+    local small = -22
+    local yBase = toggleYLast - 18
+
+    local function PlaceStatusCB(w, idx, extraY)
+        if not w then return end
+        w:ClearAllPoints()
+        local extra = extraY or 0
+        w:SetPoint("TOPLEFT", container, "TOPLEFT", 12, yBase + (idx * small) - 18 + extra)
+    end
+
+    local idx = 0
+    PlaceStatusCB(panel.statusIconsTestModeCB, idx, -10) -- extra 10px down for Test mode
+
+    row = row + usedRows
+end
+
 
     -- Boss-only: spacing control lives under the indicator template on boss pages.
     local isBossKey = false
@@ -2361,8 +2623,13 @@ end
         panel.playerSizeBox:SetHeight(panel._msufSizeBaseH)
     end
     if panel.playerTextLayoutGroup and panel._msufBasicsH and panel._msufSizeBaseH and panel._msufSizeBossH then
-        local h = panel._msufBasicsH + panel._msufSizeBaseH + 12
-        panel.playerTextLayoutGroup:SetHeight(h)
+        -- Step 1.5: Player/Target need extra vertical room in the right "Castbar" box (Indicator + Status Icons live here).
+        local baseH = panel._msufTextBaseH or (panel._msufBasicsH + panel._msufSizeBaseH + 12)
+        local extraH = 0
+        if currentKey == "player" or currentKey == "target" then
+            extraH = panel._msufTextExtra_PlayerTarget or 0
+        end
+        panel.playerTextLayoutGroup:SetHeight(baseH + extraH)
     end
 
 
@@ -2736,6 +3003,330 @@ end
 for _, rowId in ipairs(MSUF_INDICATOR_ORDER) do
     MSUF_BindIndicatorRow(INDICATOR_SPECS[rowId])
 end
+
+
+-- Status icons (Step 1): Combat row uses indicator-style controls (player/target)
+_G.MSUF_RequestStatusCombatIndicatorRefresh = _G.MSUF_RequestStatusCombatIndicatorRefresh or function()
+    ApplyLayoutCurrent("STATUSICON_COMBAT")
+
+    local _, _, key = MSUF_GetIndicatorConfAndGeneral()
+    if not (key == "player" or key == "target") then return end
+
+    local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
+    local fr = (uf and key) and uf[key] or nil
+    if fr and type(_G.MSUF_RequestUnitframeUpdate) == "function" then
+        _G.MSUF_RequestUnitframeUpdate(fr, true, true, "StatusCombatIndicator")
+    elseif fr and type(_G.UpdateSimpleUnitFrame) == "function" then
+        pcall(_G.UpdateSimpleUnitFrame, fr, true)
+    end
+end
+
+local STATUSICON_COMBAT_SPEC = {
+    id = "status_combat",
+    order = 100,
+
+    allowed = function(key) return (key == "player" or key == "target") end,
+
+    showCB = "statusCombatIconCB", showField = "showCombatStateIndicator", showDefault = true,
+
+    xStepper = "statusCombatOffsetXStepper", xField = "combatStateIndicatorOffsetX", xDefault = 0,
+    yStepper = "statusCombatOffsetYStepper", yField = "combatStateIndicatorOffsetY", yDefault = 0,
+
+    anchorDrop = "statusCombatAnchorDrop", anchorLabel = "statusCombatAnchorLabel",
+    anchorField = "combatStateIndicatorAnchor", anchorDefault = "TOPLEFT",
+    anchorText = function(v) return MSUF_LeaderAnchorText(v) end,
+    anchorChoices = {
+        { MSUF_LeaderAnchorText("TOPLEFT"), "TOPLEFT" },
+        { MSUF_LeaderAnchorText("TOPRIGHT"), "TOPRIGHT" },
+        { MSUF_LeaderAnchorText("BOTTOMLEFT"), "BOTTOMLEFT" },
+        { MSUF_LeaderAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
+    },
+
+    sizeEdit = "statusCombatSizeEdit", sizeLabel = "statusCombatSizeLabel",
+    sizeField = "combatStateIndicatorSize", sizeDefault = 18,
+
+    divider = "statusCombatGroupDivider",
+    resetBtn = "statusCombatResetBtn",
+
+    refreshFnName = "MSUF_RequestStatusCombatIndicatorRefresh",
+}
+
+MSUF_BindIndicatorRow(STATUSICON_COMBAT_SPEC)
+
+-- Reset button: X/Y/Anchor/Size back to global defaults
+if panel.statusCombatResetBtn then
+    panel.statusCombatResetBtn:SetScript("OnClick", function()
+        if not IsFramesTab() then return end
+        local conf, _, key = MSUF_GetIndicatorConfAndGeneral()
+        if not (key == "player" or key == "target") then return end
+
+        conf.combatStateIndicatorOffsetX = nil
+        conf.combatStateIndicatorOffsetY = nil
+        conf.combatStateIndicatorAnchor  = nil
+        conf.combatStateIndicatorSize    = nil
+
+        MSUF_ApplyIndicatorUI(STATUSICON_COMBAT_SPEC)
+        MSUF_CallIndicatorRefresh(STATUSICON_COMBAT_SPEC)
+    end)
+end
+
+-- Status icons (Step 2): Rested row uses indicator-style controls (player only)
+_G.MSUF_RequestStatusRestingIndicatorRefresh = _G.MSUF_RequestStatusRestingIndicatorRefresh or function()
+    ApplyLayoutCurrent("STATUSICON_RESTED")
+
+    local _, _, key = MSUF_GetIndicatorConfAndGeneral()
+    if key ~= "player" then return end
+
+    local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
+    local fr = (uf and "player") and uf["player"] or nil
+    if fr and type(_G.MSUF_RequestUnitframeUpdate) == "function" then
+        _G.MSUF_RequestUnitframeUpdate(fr, true, true, "StatusRestingIndicator")
+    elseif fr and type(_G.UpdateSimpleUnitFrame) == "function" then
+        pcall(_G.UpdateSimpleUnitFrame, fr, true)
+    end
+end
+
+local STATUSICON_RESTING_SPEC = {
+    id = "status_rested",
+    order = 110,
+
+    allowed = function(key) return (key == "player") end,
+
+    showCB = "statusRestingIconCB", showField = "showRestingIndicator", showDefault = true,
+
+    xStepper = "statusRestingOffsetXStepper", xField = "restedStateIndicatorOffsetX", xDefault = 0,
+    yStepper = "statusRestingOffsetYStepper", yField = "restedStateIndicatorOffsetY", yDefault = 0,
+
+    anchorDrop = "statusRestingAnchorDrop", anchorLabel = "statusRestingAnchorLabel",
+    anchorField = "restedStateIndicatorAnchor", anchorDefault = "TOPLEFT",
+    anchorText = function(v) return MSUF_LeaderAnchorText(v) end,
+    anchorChoices = {
+        { MSUF_LeaderAnchorText("TOPLEFT"), "TOPLEFT" },
+        { MSUF_LeaderAnchorText("TOPRIGHT"), "TOPRIGHT" },
+        { MSUF_LeaderAnchorText("BOTTOMLEFT"), "BOTTOMLEFT" },
+        { MSUF_LeaderAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
+    },
+
+    sizeEdit = "statusRestingSizeEdit", sizeLabel = "statusRestingSizeLabel",
+    sizeField = "restedStateIndicatorSize", sizeDefault = 18,
+
+    divider = "statusRestingGroupDivider",
+    resetBtn = "statusRestingResetBtn",
+
+    refreshFnName = "MSUF_RequestStatusRestingIndicatorRefresh",
+}
+
+MSUF_BindIndicatorRow(STATUSICON_RESTING_SPEC)
+
+-- Reset button: X/Y/Anchor/Size back to global defaults
+if panel.statusRestingResetBtn then
+    panel.statusRestingResetBtn:SetScript("OnClick", function()
+        if not IsFramesTab() then return end
+        local conf, _, key = MSUF_GetIndicatorConfAndGeneral()
+        if key ~= "player" then return end
+
+        conf.restedStateIndicatorOffsetX = nil
+        conf.restedStateIndicatorOffsetY = nil
+        conf.restedStateIndicatorAnchor  = nil
+        conf.restedStateIndicatorSize    = nil
+
+        MSUF_ApplyIndicatorUI(STATUSICON_RESTING_SPEC)
+        MSUF_CallIndicatorRefresh(STATUSICON_RESTING_SPEC)
+    end)
+end
+
+-- Status icons (Step 3): Incoming Rez row uses indicator-style controls (player/target)
+_G.MSUF_RequestStatusIncomingResIndicatorRefresh = _G.MSUF_RequestStatusIncomingResIndicatorRefresh or function()
+    ApplyLayoutCurrent("STATUSICON_INCOMINGRES")
+
+    local _, _, key = MSUF_GetIndicatorConfAndGeneral()
+    if not (key == "player" or key == "target") then return end
+
+    local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
+    local fr = (uf and key) and uf[key] or nil
+    if fr and type(_G.MSUF_RequestUnitframeUpdate) == "function" then
+        _G.MSUF_RequestUnitframeUpdate(fr, true, true, "StatusIncomingResIndicator")
+    elseif fr and type(_G.UpdateSimpleUnitFrame) == "function" then
+        pcall(_G.UpdateSimpleUnitFrame, fr, true)
+    end
+end
+
+local STATUSICON_INCOMINGRES_SPEC = {
+    id = "status_incomingres",
+    order = 120,
+
+    allowed = function(key) return (key == "player" or key == "target") end,
+
+    showCB = "statusIncomingResIconCB", showField = "showIncomingResIndicator", showDefault = true,
+
+    xStepper = "statusIncomingResOffsetXStepper", xField = "incomingResIndicatorOffsetX", xDefault = 0,
+    yStepper = "statusIncomingResOffsetYStepper", yField = "incomingResIndicatorOffsetY", yDefault = 0,
+
+    anchorDrop = "statusIncomingResAnchorDrop", anchorLabel = "statusIncomingResAnchorLabel",
+    anchorField = "incomingResIndicatorAnchor", anchorDefault = "TOPRIGHT",
+    anchorText = function(v) return MSUF_LeaderAnchorText(v) end,
+    anchorChoices = {
+        { MSUF_LeaderAnchorText("TOPLEFT"), "TOPLEFT" },
+        { MSUF_LeaderAnchorText("TOPRIGHT"), "TOPRIGHT" },
+        { MSUF_LeaderAnchorText("BOTTOMLEFT"), "BOTTOMLEFT" },
+        { MSUF_LeaderAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
+    },
+
+    sizeEdit = "statusIncomingResSizeEdit", sizeLabel = "statusIncomingResSizeLabel",
+    sizeField = "incomingResIndicatorSize", sizeDefault = 18,
+
+    divider = "statusIncomingResGroupDivider",
+    resetBtn = "statusIncomingResResetBtn",
+
+    refreshFnName = "MSUF_RequestStatusIncomingResIndicatorRefresh",
+}
+
+MSUF_BindIndicatorRow(STATUSICON_INCOMINGRES_SPEC)
+
+-- Reset button: X/Y/Anchor/Size back to global defaults
+if panel.statusIncomingResResetBtn then
+    panel.statusIncomingResResetBtn:SetScript("OnClick", function()
+        if not IsFramesTab() then return end
+        local conf, _, key = MSUF_GetIndicatorConfAndGeneral()
+        if not (key == "player" or key == "target") then return end
+
+        conf.incomingResIndicatorOffsetX = nil
+        conf.incomingResIndicatorOffsetY = nil
+        conf.incomingResIndicatorAnchor  = nil
+        conf.incomingResIndicatorSize    = nil
+
+        MSUF_ApplyIndicatorUI(STATUSICON_INCOMINGRES_SPEC)
+        MSUF_CallIndicatorRefresh(STATUSICON_INCOMINGRES_SPEC)
+    end)
+end
+
+-- Status icons (Combat / Rested / Incoming Rez) per-unit overrides
+local function MSUF_ApplyStatusIconsUI()
+    if not IsFramesTab() then return end
+    local conf, g, key = MSUF_GetIndicatorConfAndGeneral()
+    if not (key == "player" or key == "target") then return end
+
+    -- Combat row uses indicator-style controls (Step 1)
+    if STATUSICON_COMBAT_SPEC then
+        MSUF_ApplyIndicatorUI(STATUSICON_COMBAT_SPEC)
+    elseif panel.statusCombatIconCB then
+        panel.statusCombatIconCB:SetChecked(MSUF_ReadBool(conf, g, "showCombatStateIndicator", true))
+    end
+    -- Rested row uses indicator-style controls (Step 2, player only)
+    if STATUSICON_RESTING_SPEC then
+        MSUF_ApplyIndicatorUI(STATUSICON_RESTING_SPEC)
+    elseif panel.statusRestingIconCB then
+        panel.statusRestingIconCB:SetChecked(MSUF_ReadBool(conf, g, "showRestingIndicator", true))
+    end
+
+    if STATUSICON_INCOMINGRES_SPEC then
+        MSUF_ApplyIndicatorUI(STATUSICON_INCOMINGRES_SPEC)
+    elseif panel.statusIncomingResIconCB then
+        panel.statusIncomingResIconCB:SetChecked(MSUF_ReadBool(conf, g, "showIncomingResIndicator", true))
+    end
+    if panel.statusIconsTestModeCB then
+        panel.statusIconsTestModeCB:SetChecked((type(g) == "table" and g.stateIconsTestMode == true) or false)
+    end
+end
+
+local function MSUF_RequestStatusIconRefresh(key)
+    ApplyLayoutCurrent("STATUSICON_TOGGLE")
+    local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
+    local fr = (uf and key) and uf[key] or nil
+    if fr and type(_G.MSUF_RequestUnitframeUpdate) == "function" then
+        _G.MSUF_RequestUnitframeUpdate(fr, true, true, "StatusIconToggle")
+    elseif fr and type(_G.UpdateSimpleUnitFrame) == "function" then
+        _G.UpdateSimpleUnitFrame(fr)
+    end
+end
+
+local function MSUF_BindStatusIconToggle(cb, field, allowedKey)
+    if not cb then return end
+
+    -- Store on the widget itself so we can't accidentally capture the wrong key if this gets
+    -- rebound/reused by future refactors.
+    cb._msufStatusField = field
+    cb._msufStatusAllowedKey = allowedKey
+
+    cb:SetScript("OnClick", function(self, button)
+        if not IsFramesTab() then return end
+        local conf, _, key = MSUF_GetIndicatorConfAndGeneral()
+        local fieldName = self._msufStatusField
+        local allowKey  = self._msufStatusAllowedKey
+
+        if allowKey and key ~= allowKey then
+            -- For player-only toggles (Rested), ignore clicks on other tabs.
+            MSUF_ApplyStatusIconsUI()
+            return
+        end
+
+        if type(fieldName) ~= "string" or fieldName == "" then
+            return
+        end
+
+        if button == "RightButton" then
+            conf[fieldName] = nil -- reset to global
+        else
+            conf[fieldName] = self:GetChecked() and true or false
+        end
+
+        MSUF_ApplyStatusIconsUI()
+        MSUF_RequestStatusIconRefresh(key)
+    end)
+
+    cb:HookScript("OnShow", MSUF_ApplyStatusIconsUI)
+    cb:HookScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Status icon")
+            GameTooltip:AddLine("Left-click: set this frame override", 1, 1, 1)
+            GameTooltip:AddLine("Right-click: reset to global setting", 1, 1, 1)
+            GameTooltip:Show()
+        end
+    end)
+    cb:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+end
+
+-- Combat row is bound via MSUF_BindIndicatorRow(STATUSICON_COMBAT_SPEC) (Step 1)
+-- MSUF_BindStatusIconToggle(panel.statusCombatIconCB, "showCombatStateIndicator", nil)
+-- Rested row is bound via MSUF_BindIndicatorRow(STATUSICON_RESTING_SPEC) (Step 2)
+-- MSUF_BindStatusIconToggle(panel.statusRestingIconCB, "showRestingIndicator", "player")
+-- Incoming Rez row is bound via MSUF_BindIndicatorRow(STATUSICON_INCOMINGRES_SPEC) (Step 3)
+
+-- Shared test mode toggle (sync between Player/Target pages + Edit Mode preview checkbox)
+if panel.statusIconsTestModeCB then
+    panel.statusIconsTestModeCB:SetScript("OnClick", function(self)
+        if type(_G.MSUF_SetStatusIconsTestMode) == "function" then
+            _G.MSUF_SetStatusIconsTestMode(self:GetChecked() and true or false, "OPTIONS")
+        else
+            EnsureDB()
+            MSUF_DB.general = MSUF_DB.general or {}
+            MSUF_DB.general.stateIconsTestMode = self:GetChecked() and true or false
+        end
+
+        MSUF_ApplyStatusIconsUI()
+
+        -- Force-refresh both frames so previews update immediately.
+        for _, k in ipairs({ "player", "target" }) do
+            MSUF_RequestStatusIconRefresh(k)
+        end
+    end)
+
+    panel.statusIconsTestModeCB:HookScript("OnShow", MSUF_ApplyStatusIconsUI)
+    panel.statusIconsTestModeCB:HookScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Status icons test mode")
+            GameTooltip:AddLine("Shows enabled status icons even if the real state is not active.", 1, 1, 1)
+            GameTooltip:AddLine("Useful for positioning/offset testing.", 1, 1, 1)
+            GameTooltip:Show()
+        end
+    end)
+    panel.statusIconsTestModeCB:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+end
+
+-- Allow other UI locations (Edit Mode checkbox) to request a live refresh of this section.
+_G.MSUF_RefreshStatusIconsOptionsUI = MSUF_ApplyStatusIconsUI
 
 -- ToT inline-in-Target toggle (stored under MSUF_DB.targettarget)
 if panel.totShowInTargetCB then

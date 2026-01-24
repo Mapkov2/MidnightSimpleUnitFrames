@@ -3741,7 +3741,196 @@ end
             end
         end
 
-        -- Empowered (bottom)
+                -- Spell name shortening (Style / right column)
+        do
+            local header = _G["MSUF_CastbarSpellNameShortenHeader"]
+            if rightCol and not header then
+                header = rightCol:CreateFontString("MSUF_CastbarSpellNameShortenHeader", "ARTWORK", "GameFontNormal")
+                header:SetText("Name shortening")
+            end
+
+            local drop = _G["MSUF_CastbarSpellNameShortenDropdown"]
+            if rightCol and not drop then
+                drop = CreateFrame("Frame", "MSUF_CastbarSpellNameShortenDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate")
+                MSUF_ExpandDropdownClickArea(drop)
+                UIDropDownMenu_SetWidth(drop, 120)
+                drop._msufButtonWidth = 120
+                if type(MSUF_MakeDropdownScrollable) == "function" then
+                    MSUF_MakeDropdownScrollable(drop, 8)
+                end
+            end
+
+            local maxSlider = _G["MSUF_CastbarSpellNameMaxLenSlider"]
+            if rightCol and not maxSlider then
+                maxSlider = CreateLabeledSlider(
+                    "MSUF_CastbarSpellNameMaxLenSlider",
+                    "Max name length",
+                    castbarEnemyGroup,
+                    6, 30, 1,
+                    0, 0
+                )
+            end
+
+            local resSlider = _G["MSUF_CastbarSpellNameReservedSlider"]
+            if rightCol and not resSlider then
+                resSlider = CreateLabeledSlider(
+                    "MSUF_CastbarSpellNameReservedSlider",
+                    "Reserved space",
+                    castbarEnemyGroup,
+                    0, 30, 1,
+                    0, 0
+                )
+            end
+
+            local function FixSliderLabel(slider)
+                if not slider or not slider.GetName then return end
+                local n = slider:GetName()
+                local text = n and _G and _G[n .. "Text"]
+                if text then
+                    text:ClearAllPoints()
+                    text:SetPoint("BOTTOMLEFT", slider, "TOPLEFT", 0, 10)
+                    if text.SetJustifyH then text:SetJustifyH("LEFT") end
+                end
+            end
+
+            -- Positioning under the latency toggle (fits the empty area in the Style column)
+            if header and rightCol then
+                header:ClearAllPoints()
+                if castbarLatencyCheck then
+                    header:SetPoint("TOPLEFT", castbarLatencyCheck, "BOTTOMLEFT", 0, -18)
+                elseif castbarGlowCheck then
+                    header:SetPoint("TOPLEFT", castbarGlowCheck, "BOTTOMLEFT", 0, -18)
+                else
+                    header:SetPoint("TOPLEFT", rightCol, "TOPLEFT", 0, -270)
+                end
+                header:Show()
+            end
+
+            if drop and header then
+                drop:ClearAllPoints()
+                drop:SetPoint("TOPLEFT", header, "BOTTOMLEFT", -16, -4)
+                drop:Show()
+            end
+
+            if maxSlider and drop then
+                maxSlider:ClearAllPoints()
+                maxSlider:SetPoint("TOPLEFT", drop, "BOTTOMLEFT", 16, -18)
+                maxSlider:SetWidth(240)
+                FixSliderLabel(maxSlider)
+                maxSlider:Show()
+            end
+
+            if resSlider and maxSlider then
+                resSlider:ClearAllPoints()
+                resSlider:SetPoint("TOPLEFT", maxSlider, "BOTTOMLEFT", 0, -24)
+                resSlider:SetWidth(240)
+                FixSliderLabel(resSlider)
+                resSlider:Show()
+            end
+
+            local function ApplyVisualRefresh()
+                MSUF_EnsureCastbars()
+                if type(MSUF_UpdateCastbarVisuals) == "function" then
+                    MSUF_UpdateCastbarVisuals()
+                end
+                if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+                    _G.MSUF_UpdateBossCastbarPreview()
+                end
+            end
+
+            local function SyncEnabledStates()
+                EnsureDB()
+                local g = (MSUF_DB and MSUF_DB.general) or {}
+                local cur = tonumber(g.castbarSpellNameShortening) or 0
+                local enabled = (cur > 0)
+                if maxSlider then MSUF_SetLabeledSliderEnabled(maxSlider, enabled) end
+                if resSlider then MSUF_SetLabeledSliderEnabled(resSlider, enabled) end
+            end
+
+            -- Dropdown init + live DB apply (On/Off only; always shortens at END)
+            if drop then
+                local function ShortenDrop_Init(self, level)
+                    EnsureDB()
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.func = function(btn)
+                        EnsureDB()
+                        local g = (MSUF_DB and MSUF_DB.general) or {}
+                        local v = tonumber(btn.value) or 0
+                        if v > 0 then v = 1 end
+                        g.castbarSpellNameShortening = v
+
+                        UIDropDownMenu_SetSelectedValue(drop, v)
+                        UIDropDownMenu_SetText(drop, (v == 1) and "On" or "Off")
+
+                        SyncEnabledStates()
+                        ApplyVisualRefresh()
+                        CloseDropDownMenus()
+                    end
+
+                    info.text, info.value = "Off", 0
+                    UIDropDownMenu_AddButton(info, level)
+
+                    info.text, info.value = "On", 1
+                    UIDropDownMenu_AddButton(info, level)
+                end
+
+                UIDropDownMenu_Initialize(drop, ShortenDrop_Init)
+
+                EnsureDB()
+                local g = (MSUF_DB and MSUF_DB.general) or {}
+                local cur = tonumber(g.castbarSpellNameShortening) or 0
+                -- Migrate old enum values (1/2) to simple On (1)
+                if cur > 0 then cur = 1 else cur = 0 end
+                g.castbarSpellNameShortening = cur
+
+                UIDropDownMenu_SetSelectedValue(drop, cur)
+                UIDropDownMenu_SetText(drop, (cur == 1) and "On" or "Off")
+            end
+
+            if maxSlider then
+                maxSlider.onValueChanged = function(self, value)
+                    EnsureDB()
+                    local g = (MSUF_DB and MSUF_DB.general) or {}
+                    g.castbarSpellNameMaxLen = tonumber(value) or 30
+                    ApplyVisualRefresh()
+                end
+
+                EnsureDB()
+                local g = (MSUF_DB and MSUF_DB.general) or {}
+                local v = tonumber(g.castbarSpellNameMaxLen)
+                if v == nil then v = 30 end
+                v = math.floor(v + 0.5)
+                if v < 6 then v = 6 end
+                if v > 30 then v = 30 end
+                g.castbarSpellNameMaxLen = v
+                MSUF_SetLabeledSliderValue(maxSlider, v)
+            end
+
+            if resSlider then
+                resSlider.onValueChanged = function(self, value)
+                    EnsureDB()
+                    local g = (MSUF_DB and MSUF_DB.general) or {}
+                    g.castbarSpellNameReservedSpace = tonumber(value) or 8
+                    ApplyVisualRefresh()
+                end
+
+                EnsureDB()
+                local g = (MSUF_DB and MSUF_DB.general) or {}
+                local v = tonumber(g.castbarSpellNameReservedSpace)
+                if v == nil then v = 8 end
+                v = math.floor(v + 0.5)
+                if v < 0 then v = 0 end
+                if v > 30 then v = 30 end
+                g.castbarSpellNameReservedSpace = v
+                MSUF_SetLabeledSliderValue(resSlider, v)
+            end
+
+            -- When Off: sliders must be greyed out immediately
+            SyncEnabledStates()
+        end
+
+-- Empowered (bottom)
+
         if empowerColorStagesCheck and emp then
             empowerColorStagesCheck:ClearAllPoints()
             empowerColorStagesCheck:SetPoint("TOPLEFT", emp, "TOPLEFT", 0, -22)

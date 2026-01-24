@@ -6512,6 +6512,12 @@ local function MSUF_EditMode_ExitDeterministic(source, opts)
     -- Flip state first; this triggers combat-safe boss preview soft-hide via MSUF_EM_SetActive().
     MSUF_EM_SetActive(false, nil)
 
+    -- Auto-disable Status Icons test mode when leaving Edit Mode (requested behavior).
+    -- This keeps the world-state icons "real" outside Edit Mode and prevents confusion.
+    if type(_G.MSUF_SetStatusIconsTestMode) == "function" then
+        MSUF_SafeCall("Exit:StatusIconsTestModeOff:" .. source, _G.MSUF_SetStatusIconsTestMode, false, "EditModeExit")
+    end
+
     -- Ensure boss castbar preview is hidden immediately (safe even in combat).
     if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
         MSUF_SafeCall("Exit:BossCastbarPreview:" .. source, _G.MSUF_UpdateBossCastbarPreview)

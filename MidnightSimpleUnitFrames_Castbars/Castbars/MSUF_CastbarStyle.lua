@@ -690,6 +690,7 @@ function S:ApplyCastbarSpellNameLayout(frame, unitKey)
 
     local showName, ox, oy = GetSpellNameLayoutForUnit(g, unitKey)
 
+    -- Show/hide via alpha (keep FontString alive for layout)
     frame.castText:Show()
     if type(_G.MSUF_SetAlphaIfChanged) == "function" then
         _G.MSUF_SetAlphaIfChanged(frame.castText, showName and 1 or 0)
@@ -702,22 +703,72 @@ function S:ApplyCastbarSpellNameLayout(frame, unitKey)
         else
             frame.castText:SetText("")
         end
+        return
     end
 
-    if type(_G.MSUF_SetPointIfChanged) == "function" then
-        _G.MSUF_SetPointIfChanged(frame.castText, "LEFT", frame.statusBar, "LEFT", 2 + ox, 0 + oy)
-    else
+    -- -------------------------------------------------
+    -- Secret-safe spell name shortening
+    --  * No string ops, no GetStringWidth, no pcall.
+    --  * Constrain FontString WIDTH + alignment only.
+    -- -------------------------------------------------
+    local mode = tonumber(g.castbarSpellNameShortening) or 0
+    -- On/Off only (Options maps legacy values to 1). Any non-zero enables shortening at END.
+    local shortenEnabled = (mode and mode > 0)
+
+    -- Basic truncation setup
+    if frame.castText.SetMaxLines then frame.castText:SetMaxLines(1) end
+    if frame.castText.SetWordWrap then frame.castText:SetWordWrap(false) end
+
+    -- If disabled: restore default "full" layout (no forced width clamp)
+    if not shortenEnabled then
         frame.castText:ClearAllPoints()
-        frame.castText:SetPoint("LEFT", frame.statusBar, "LEFT", 2 + ox, 0 + oy)
-    end
-    if frame.castText.SetJustifyH then
-        if type(_G.MSUF_SetJustifyHIfChanged) == "function" then
-            _G.MSUF_SetJustifyHIfChanged(frame.castText, "LEFT")
+        frame.castText:SetPoint("LEFT", frame.statusBar, "LEFT", 4 + (ox or 0), 0 + (oy or 0))
+        if frame.timeText then
+            frame.castText:SetPoint("RIGHT", frame.timeText, "LEFT", -4, 0)
         else
-            frame.castText:SetJustifyH("LEFT")
+            frame.castText:SetPoint("RIGHT", frame.statusBar, "RIGHT", -4, 0)
+        end
+        if frame.castText.SetJustifyH then frame.castText:SetJustifyH("LEFT") end
+        return
+    end
+    -- Available width (numeric only; secret-safe)
+    local barW = (frame.statusBar.GetWidth and frame.statusBar:GetWidth()) or 0
+    local timeW = 0
+    if frame.timeText and frame.timeText.GetWidth and frame.timeText.GetAlpha then
+        if (frame.timeText:GetAlpha() or 0) > 0 then
+            timeW = frame.timeText:GetWidth() or 0
         end
     end
+
+    local leftPad = 4
+    local rightPad = 4
+    local avail = 0
+    if barW and barW > 0 then
+        avail = barW - timeW - reserved - leftPad - rightPad
+        if avail < 20 then avail = 20 end
+    end
+
+    -- Approx "max name length" -> pixel width
+    local _, fontSize = (frame.castText.GetFont and frame.castText:GetFont())
+    fontSize = tonumber(fontSize) or 12
+    local est = (maxLen * (fontSize * 0.60)) + 6
+    if est < 40 then est = 40 end
+    if est > 800 then est = 800 end
+
+    local finalW = est
+    if avail and avail > 0 and avail < finalW then
+        finalW = avail
+    end
+
+    -- Stable anchors: always left-anchored box; alignment decides which side is preserved.
+    frame.castText:ClearAllPoints()
+    frame.castText:SetPoint("LEFT", frame.statusBar, "LEFT", leftPad + (ox or 0), 0 + (oy or 0))
+    frame.castText:SetWidth(finalW)
+    if frame.castText.SetJustifyH then
+        frame.castText:SetJustifyH("LEFT")
+    end
 end
+
 
 _G.MSUF_ApplyCastbarSpellNameLayout = function(frame, unitKey)
     return S:ApplyCastbarSpellNameLayout(frame, unitKey)

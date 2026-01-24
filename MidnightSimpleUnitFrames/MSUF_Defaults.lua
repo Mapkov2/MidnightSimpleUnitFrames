@@ -834,6 +834,17 @@ end
         g.combatStateIndicatorPos = 'TOPLEFT'
     end
 
+    -- Status Icons (Summon / Resting)
+    -- These are used by the Unitframe Status element (player/target) and can be overridden per-unit in the Frames menu.
+    if g.showRestingIndicator == nil then
+        g.showRestingIndicator = true
+    end
+
+
+    if g.stateIconsTestMode == nil then
+        g.stateIconsTestMode = false
+    end
+
     -- Player indicators (Frames -> Player)
     if g.showLevel == nil then
         g.showLevel = true

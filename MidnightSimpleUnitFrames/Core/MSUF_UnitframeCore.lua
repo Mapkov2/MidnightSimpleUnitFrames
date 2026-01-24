@@ -484,8 +484,16 @@ Elements.Status = {
     events = {
         "UNIT_CONNECTION",
         "UNIT_FLAGS",
+        -- Incoming resurrection (player/target).
+        "INCOMING_RESURRECT_CHANGED",
         -- Only relevant for the player frame; filtered in RefreshUnitEvents.
         "PLAYER_FLAGS_CHANGED",
+        -- Combat state (player only; global events).
+        "PLAYER_REGEN_DISABLED",
+        "PLAYER_REGEN_ENABLED",
+        -- Resting state (player only; global events).
+        "PLAYER_UPDATE_RESTING",
+        "UPDATE_EXHAUSTION",
     },
     Enable = function(f, conf) end,
     Disable = function(f) end,
@@ -902,6 +910,14 @@ end
 	-- Cache for unit-event names that are not supported on this client/branch.
 	-- (Some beta branches ship with different unit events; RegisterUnitEvent throws on unknown ones.)
 	local unsupported = Core._unsupportedUFCoreUnitEvents
+	local function _UFCore_IsGlobalEvent(ev)
+		return (ev == "PLAYER_FLAGS_CHANGED")
+			or (ev == "PLAYER_REGEN_DISABLED")
+			or (ev == "PLAYER_REGEN_ENABLED")
+			or (ev == "PLAYER_UPDATE_RESTING")
+			or (ev == "UPDATE_EXHAUSTION")
+	end
+
 
 	local function Want(ev)
 		local a = UFCORE_EVENT_ALIAS[ev]
@@ -911,6 +927,20 @@ end
 		if unsupported and unsupported[ev] then
 			return
 		end
+
+		-- Conditional globals to avoid needless event spam.
+		if ev == "PLAYER_FLAGS_CHANGED" then
+			if not f._msufIsPlayer then return end
+		elseif ev == "PLAYER_REGEN_DISABLED" or ev == "PLAYER_REGEN_ENABLED" then
+			if not f._msufIsPlayer then return end
+			if not (conf and conf.showCombatStateIndicator) then return end
+		elseif ev == "PLAYER_UPDATE_RESTING" or ev == "UPDATE_EXHAUSTION" then
+			if not f._msufIsPlayer then return end
+			if not (conf and conf.showRestedStateIndicator) then return end
+		elseif ev == "INCOMING_RESURRECT_CHANGED" then
+			if not (conf and conf.showIncomingResIndicator) then return end
+		end
+
 		desired[ev] = true
 	end
 
@@ -922,13 +952,7 @@ if mask ~= 0 then
             if evs then
                 for j = 1, #evs do
                     local ev = evs[j]
-                    if ev == "PLAYER_FLAGS_CHANGED" then
-                        if f._msufIsPlayer then
-                            Want(ev)
-                        end
-                    else
-                        Want(ev)
-                    end
+                    Want(ev)
                 end
             end
         end
@@ -949,7 +973,7 @@ end
     if mask ~= 0 then
         for ev in pairs(desired) do
             if not reg[ev] then
-                if ev == "PLAYER_FLAGS_CHANGED" then
+                if _UFCore_IsGlobalEvent(ev) then
                     f:RegisterEvent(ev)
                     reg[ev] = true
                 else
@@ -1682,6 +1706,7 @@ local UNIT_EVENT_MAP = {
     UNIT_CONNECTION                 = { mask = DIRTY_STATUS, urgent = true },
     UNIT_FLAGS                      = { mask = DIRTY_STATUS, urgent = true },
 
+    INCOMING_RESURRECT_CHANGED     = { mask = DIRTY_STATUS, urgent = true },
     -- OTHER (cheap visuals)
     UNIT_THREAT_SITUATION_UPDATE     = { mask = DIRTY_INDICATOR, urgent = false },
 }
@@ -1697,6 +1722,20 @@ local function FrameOnEvent(self, event, arg1, ...)
     if event == "PLAYER_FLAGS_CHANGED" then
         if arg1 == self.unit then
             Core.MarkDirty(self, DIRTY_STATUS, true, event)
+        end
+        return
+    end
+
+    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+        if self._msufIsPlayer then
+            Core.MarkDirty(self, DIRTY_STATUS, true, event)
+        end
+        return
+    end
+
+    if event == "PLAYER_UPDATE_RESTING" or event == "UPDATE_EXHAUSTION" then
+        if self._msufIsPlayer then
+            Core.MarkDirty(self, DIRTY_STATUS, false, event)
         end
         return
     end
