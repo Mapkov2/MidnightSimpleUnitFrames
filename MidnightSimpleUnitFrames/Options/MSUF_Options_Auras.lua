@@ -568,6 +568,7 @@ local function CreateDropdown(parent, label, x, y, getter, setter)
     local title = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("BOTTOMLEFT", dd, "TOPLEFT", 16, 4)
     title:SetText(label)
+    dd.__MSUF_titleFS = title
 
     local function OnClick(self)
         setter(self.value)
@@ -962,7 +963,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
 	editBtn:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_NONE")
         GameTooltip:ClearAllPoints()
-        GameTooltip:SetPoint("TOPLEFT", dd, "TOPRIGHT", 12, 0)
+        GameTooltip:SetPoint("TOPLEFT", self, "TOPRIGHT", 12, 0)
 		GameTooltip:SetText("MSUF Edit Mode", 1, 1, 1)
 		GameTooltip:AddLine("Toggle MSUF Edit Mode (only affects Midnight Simple Unit Frames).", 0.8, 0.8, 0.8, true)
 		GameTooltip:Show()
@@ -1278,7 +1279,190 @@ local function BuildBoolPathCheckboxes(parent, entries, out)
     end
 end
 
-local function GetOverrideForEditing()
+
+-- ------------------------------------------------------------
+-- Auras 2: Override UI safety (Auras 2 menu only)
+-- When editing a Unit and any Override is enabled, grey-out options that are still Shared (global / non-overridden scopes).
+-- Also supports "auto-override" for Filters/Caps when the user edits a Shared-scope control while a Unit is selected.
+-- ------------------------------------------------------------
+local function A2_EnsureTrackTables()
+    if not panel then return nil end
+    if not panel.__msufA2_tracked then
+        panel.__msufA2_tracked = { global = {}, filters = {}, caps = {} }
+    end
+    return panel.__msufA2_tracked
+end
+
+local function A2_Track(scope, widget)
+    if not widget then return end
+    local t = A2_EnsureTrackTables()
+    if not t then return end
+    if not t[scope] then t[scope] = {} end
+    t[scope][#t[scope] + 1] = widget
+end
+
+local function A2_SetWidgetEnabled(widget, enabled, alpha)
+    if not widget then return end
+    if alpha == nil then alpha = enabled and 1 or 0.35 end
+
+    if widget.SetAlpha then widget:SetAlpha(alpha) end
+
+    -- Dropdowns (UIDropDownMenuTemplate)
+    if widget.GetObjectType and widget:GetObjectType() == "Frame" and widget.initialize and _G.UIDropDownMenu_DisableDropDown then
+        if enabled then
+            _G.UIDropDownMenu_EnableDropDown(widget)
+        else
+            _G.UIDropDownMenu_DisableDropDown(widget)
+        end
+    end
+
+    -- Slider
+    if widget.GetObjectType and widget:GetObjectType() == "Slider" then
+        if enabled then widget:Enable() else widget:Disable() end
+    end
+
+    -- Checkbox / Button / EditBox
+    if widget.SetEnabled then
+        widget:SetEnabled(enabled)
+    elseif widget.Enable and widget.Disable then
+        if enabled then widget:Enable() else widget:Disable() end
+    end
+
+    -- ValueBox attached to sliders
+    if widget.__MSUF_valueBox then
+        local box = widget.__MSUF_valueBox
+        if box.SetAlpha then box:SetAlpha(alpha) end
+        if box.SetEnabled then box:SetEnabled(enabled) end
+        if box.Enable and box.Disable then
+            if enabled then box:Enable() else box:Disable() end
+        end
+    end
+
+    -- Optional title fontstring (dropdown helper)
+    if widget.__MSUF_titleFS and widget.__MSUF_titleFS.SetAlpha then
+        widget.__MSUF_titleFS:SetAlpha(alpha)
+    end
+end
+
+local function A2_ApplyScopeState(scope, enabled)
+    local t = A2_EnsureTrackTables()
+    if not (t and t[scope]) then return end
+    for i = 1, #t[scope] do
+        A2_SetWidgetEnabled(t[scope][i], enabled)
+    end
+end
+
+local function A2_RestoreAllScopes()
+    A2_ApplyScopeState("global", true)
+    A2_ApplyScopeState("filters", true)
+    A2_ApplyScopeState("caps", true)
+end
+
+local function A2_ShowOverrideWarn(msg, holdSeconds)
+    if not panel then return end
+    local fs = panel.__msufA2_overrideWarn
+    if not fs then return end
+    if type(msg) ~= "string" or msg == "" then
+        fs:Hide()
+        return
+    end
+    fs:SetText(msg)
+    fs:SetAlpha(1)
+    fs:Show()
+
+    holdSeconds = tonumber(holdSeconds) or 2.5
+    panel.__msufA2_warnToken = (tonumber(panel.__msufA2_warnToken) or 0) + 1
+    local token = panel.__msufA2_warnToken
+    C_Timer.After(holdSeconds, function()
+        if panel and panel.__msufA2_warnToken == token then
+            -- Only hide if we didn't change the message in the meantime
+            fs:Hide()
+        end
+    end)
+end
+
+-- Forward declarations (functions are defined later, but used above)
+local GetOverrideForEditing, SetOverrideForEditing
+local GetOverrideCapsForEditing, SetOverrideCapsForEditing
+
+local function A2_AutoOverrideFiltersIfNeeded()
+    if GetEditingKey() == "shared" then return false end
+    if GetOverrideForEditing() then return false end
+    SetOverrideForEditing(true)
+    A2_ShowOverrideWarn("Enabled Filter override for this unit (you edited a filter).")
+    return true
+end
+
+local function A2_AutoOverrideCapsIfNeeded()
+    if GetEditingKey() == "shared" then return false end
+    if GetOverrideCapsForEditing() then return false end
+    SetOverrideCapsForEditing(true)
+    A2_ShowOverrideWarn("Enabled Caps override for this unit (you edited caps/layout).")
+    return true
+end
+
+local function A2_WrapCheckboxAutoOverride(cb, scope)
+    if not cb or type(cb.GetScript) ~= "function" then return end
+    local old = cb:GetScript("OnClick")
+    cb:SetScript("OnClick", function(self, ...)
+        if scope == "filters" then
+            A2_AutoOverrideFiltersIfNeeded()
+        elseif scope == "caps" then
+            A2_AutoOverrideCapsIfNeeded()
+        end
+        if old then return old(self, ...) end
+    end)
+end
+
+local function ApplyOverrideUISafety()
+    if not panel then return end
+
+    local key = GetEditingKey()
+    if key == "shared" then
+        A2_RestoreAllScopes()
+        if panel.__msufA2_overrideWarn then panel.__msufA2_overrideWarn:Hide() end
+        return
+    end
+
+    local overrideFilters = GetOverrideForEditing() and true or false
+    local overrideCaps = GetOverrideCapsForEditing() and true or false
+    local anyOverride = overrideFilters or overrideCaps
+
+    -- Default: no override = no safety dimming
+    if not anyOverride then
+        A2_RestoreAllScopes()
+        if panel.__msufA2_overrideWarn then panel.__msufA2_overrideWarn:Hide() end
+        return
+    end
+
+    -- Restore first, then apply scope blocking
+    A2_RestoreAllScopes()
+
+    -- Always grey-out global (still Shared) when a unit override is active (prevents accidental global edits)
+    A2_ApplyScopeState("global", false)
+
+    -- Grey-out the other non-overridden scope(s)
+    if overrideFilters and not overrideCaps then
+        A2_ApplyScopeState("caps", false)
+    elseif overrideCaps and not overrideFilters then
+        A2_ApplyScopeState("filters", false)
+    end
+
+    -- Short, unobtrusive hint under the Override toggles (static; auto-hide handled by A2_ShowOverrideWarn)
+    local fs = panel.__msufA2_overrideWarn
+    if fs then
+        local msg = "Unit override active: greyed options are Shared."
+        if overrideFilters and not overrideCaps then
+            msg = "Filter override active: greyed options are Shared."
+        elseif overrideCaps and not overrideFilters then
+            msg = "Caps override active: greyed options are Shared."
+        end
+        fs:SetText(msg)
+        fs:SetAlpha(1)
+        fs:Show()
+    end
+end
+GetOverrideForEditing = function()
     local key = GetEditingKey()
     if key == "shared" then return false end
     local a2 = select(1, GetAuras2DB())
@@ -1286,7 +1470,7 @@ local function GetOverrideForEditing()
     return (a2.perUnit[key].overrideFilters == true)
 end
 
-local function SetOverrideForEditing(v)
+SetOverrideForEditing = function(v)
     local key = GetEditingKey()
     if key == "shared" then return end
 
@@ -1314,7 +1498,7 @@ local function SetOverrideForEditing(v)
     end)
 end
 
-local function GetOverrideCapsForEditing()
+GetOverrideCapsForEditing = function()
     local key = GetEditingKey()
     if key == "shared" then return false end
     local a2 = select(1, GetAuras2DB())
@@ -1377,7 +1561,7 @@ end
         else A2_RequestApply()
         end
     end
-local function SetOverrideCapsForEditing(v)
+SetOverrideCapsForEditing = function(v)
     local key = GetEditingKey()
     if key == "shared" then return end
 
@@ -1471,6 +1655,9 @@ end
     local cbEnableFilters = CreateBoolCheckboxPath(leftTop, "Enable filters", 200, -34, GetEditingFilters, "enabled", nil,
         "Master for all filtering for the selected profile (Shared or a per-unit override). When off, no filtering/highlight is applied.")
 
+    A2_Track("filters", cbEnableFilters)
+    A2_WrapCheckboxAutoOverride(cbEnableFilters, "filters")
+
     -- Masque skinning (optional)
     -- NOTE: Keep the toggle UI state synced even if Masque loads after MSUF.
     local RefreshMasqueToggleState -- forward-declared so scripts can call it
@@ -1481,6 +1668,8 @@ end
             if s then s.masqueEnabled = (v == true) end
         end,
         "Skins Auras 2.0 icons with Masque (if installed).\n\nWarning: Highlight borders (stealable/dispellable/own) may look odd with some Masque skins.")
+
+    A2_Track("global", cbMasque)
 
     local cbMasqueDefaultTip = cbMasque.tooltipText
 
@@ -1633,6 +1822,15 @@ do
     overrideInfo:SetPoint("TOPLEFT", overrideRow, "TOPLEFT", 0, -1)
     overrideInfo:SetWidth(340)
     overrideInfo:SetJustifyH("LEFT")
+
+local overrideWarn = leftTop:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+overrideWarn:SetPoint("TOPLEFT", overrideRow, "BOTTOMLEFT", 0, -2)
+overrideWarn:SetWidth(340)
+overrideWarn:SetJustifyH("LEFT")
+overrideWarn:SetText("")
+overrideWarn:Hide()
+panel.__msufA2_overrideWarn = overrideWarn
+
     local function BuildOverrideSummary(active)
         local n = #active
         if n == 0 then
@@ -1700,7 +1898,7 @@ do
         if not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_NONE")
         GameTooltip:ClearAllPoints()
-        GameTooltip:SetPoint("TOPLEFT", dd, "TOPRIGHT", 12, 0)
+        GameTooltip:SetPoint("TOPLEFT", self, "TOPRIGHT", 12, 0)
         GameTooltip:SetText("Reset overrides", 1, 1, 1)
         GameTooltip:AddLine("Turns off Override shared filters and caps for all units and reverts them to Shared.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
@@ -1766,20 +1964,25 @@ end
         local displayCB = {}
         local TIP_SWIPE_STYLE = "When enabled, the cooldown swipe represents elapsed time (darkens as time is lost).\n\nTurn this OFF to keep the default cooldown-style swipe."
         BuildBoolPathCheckboxes(leftTop, {
-            { "Show Buffs", 12, -180, A2_Settings, "showBuffs" },
-            { "Show Debuffs", 200, -180, A2_Settings, "showDebuffs" },
+            { "Show Buffs", 12, -180, A2_Settings, "showBuffs", nil, nil, "cbShowBuffs" },
+            { "Show Debuffs", 200, -180, A2_Settings, "showDebuffs", nil, nil, "cbShowDebuffs" },
 
             { "Highlight own buffs", 12, -228, A2_Settings, "highlightOwnBuffs", nil,
-                "Highlights your own buffs with a border color (visual only; does not filter)." },
+                "Highlights your own buffs with a border color (visual only; does not filter).", "cbHLOwnBuffs" },
             { "Highlight own debuffs", 200, -228, A2_Settings, "highlightOwnDebuffs", nil,
-                "Highlights your own debuffs with a border color (visual only; does not filter)." },
+                "Highlights your own debuffs with a border color (visual only; does not filter).", "cbHLOwnDebuffs" },
 
             { "Show cooldown swipe", 12, -252, A2_Settings, "showCooldownSwipe", nil, nil, "cbShowSwipe" },
             { "Swipe darkens on loss", 12, -300, A2_Settings, "cooldownSwipeDarkenOnLoss", nil, TIP_SWIPE_STYLE, "cbSwipeStyle" },
 
-            { "Show stack count", 200, -276, A2_Settings, "showStackCount", nil, TIP_SHOW_STACK },
-            { "Show tooltip", 12, -276, A2_Settings, "showTooltip" },
+            { "Show stack count", 200, -276, A2_Settings, "showStackCount", nil, TIP_SHOW_STACK, "cbShowStackCount" },
+
+            { "Show tooltip", 12, -276, A2_Settings, "showTooltip", nil, nil, "cbShowTooltip" },
         }, displayCB)
+
+        for _, cb in pairs(displayCB) do
+            A2_Track("global", cb)
+        end
 
         local function UpdateSwipeStyleEnabled()
             local _, s = GetAuras2DB()
@@ -1867,20 +2070,23 @@ end
 
     -- Caps: restore Max Buffs / Max Debuffs controls (0 = unlimited)
     -- Caps: moved slightly down so the sliders breathe under the tooltip/stack toggles.
-    local maxBuffsSlider = CreateAuras2CompactSlider(leftTop, "Max Buffs", 0, 40, 1, 12, -336, nil, GetMaxBuffs, SetMaxBuffs)
+    local maxBuffsSlider = CreateAuras2CompactSlider(leftTop, "Max Buffs", 0, 40, 1, 12, -336, nil, GetMaxBuffs, function(v) A2_AutoOverrideCapsIfNeeded(); SetMaxBuffs(v) end)
+    A2_Track("caps", maxBuffsSlider)
     -- Caps sliders manage refresh via A2_SetCapsValue (targeted/coalesced). Avoid double refresh.
     maxBuffsSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(maxBuffsSlider, { leftTitle = true })
     AttachSliderValueBox(maxBuffsSlider, 0, 40, 1, GetMaxBuffs)
 
-    local maxDebuffsSlider = CreateAuras2CompactSlider(leftTop, "Max Debuffs", 0, 40, 1, 200, -336, nil, GetMaxDebuffs, SetMaxDebuffs)
+    local maxDebuffsSlider = CreateAuras2CompactSlider(leftTop, "Max Debuffs", 0, 40, 1, 200, -336, nil, GetMaxDebuffs, function(v) A2_AutoOverrideCapsIfNeeded(); SetMaxDebuffs(v) end)
+    A2_Track("caps", maxDebuffsSlider)
     maxDebuffsSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(maxDebuffsSlider, { leftTitle = true })
     AttachSliderValueBox(maxDebuffsSlider, 0, 40, 1, GetMaxDebuffs)
 
     -- Split-anchor spacing: when buff/debuff blocks are anchored around the unitframe, this controls
     -- how far they are pushed away from the frame edges.
-    local splitSpacingSlider = CreateAuras2CompactSlider(leftTop, "Block spacing", 0, 40, 1, 200, -414, nil, GetSplitSpacing, SetSplitSpacing)
+    local splitSpacingSlider = CreateAuras2CompactSlider(leftTop, "Block spacing", 0, 40, 1, 200, -414, nil, GetSplitSpacing, function(v) A2_AutoOverrideCapsIfNeeded(); SetSplitSpacing(v) end)
+    A2_Track("caps", splitSpacingSlider)
     splitSpacingSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(splitSpacingSlider, { leftTitle = true })
     AttachSliderValueBox(splitSpacingSlider, 0, 40, 1, GetSplitSpacing)
@@ -1937,38 +2143,44 @@ end
 
 
     -- Layout row (cleaner): Icons-per-row on the left, Growth dropdown aligned on the right.
-    local perRowSlider = CreateAuras2CompactSlider(leftTop, "Icons per row", 4, 20, 1, 12, -414, nil, GetPerRow, SetPerRow)
+    local perRowSlider = CreateAuras2CompactSlider(leftTop, "Icons per row", 4, 20, 1, 12, -414, nil, GetPerRow, function(v) A2_AutoOverrideCapsIfNeeded(); SetPerRow(v) end)
+    A2_Track("caps", perRowSlider)
     perRowSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(perRowSlider, { leftTitle = true })
     AttachSliderValueBox(perRowSlider, 4, 20, 1, GetPerRow)
 
     -- Grow direction (right column)
-    CreateDropdown(leftTop, "Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 9) - 8,
+    local growthDD = CreateDropdown(leftTop, "Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 9) - 8,
         function() local key = GetEditingKey(); return A2_GetCapsValue(key, "growth", "RIGHT") end,
-        function(v) local key = GetEditingKey(); A2_SetCapsValue(key, "growth", v) end)
+        function(v) A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "growth", v) end)
+    A2_Track("caps", growthDD)
 
 	-- Layout mode / layout helpers (right column)
 
 	-- Row wrap direction for per-row limits (when icons exceed "Icons per row").
 	-- This controls whether the 2nd row spawns below (default) or above the first row.
-	CreateRowWrapDropdown(leftTop, A2_DD_X, A2_DD_Y0,
+	local rowWrapDD = CreateRowWrapDropdown(leftTop, A2_DD_X, A2_DD_Y0,
         function() local key = GetEditingKey(); return A2_GetCapsValue(key, "rowWrap", "DOWN") end,
-        function(v) local key = GetEditingKey(); A2_SetCapsValue(key, "rowWrap", v) end)
+        function(v) A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "rowWrap", v) end)
+    A2_Track("caps", rowWrapDD)
 
     local layoutDD = CreateLayoutDropdown(leftTop, A2_DD_X, A2_DD_Y0 - A2_DD_STEP,
         function() local key = GetEditingKey(); return A2_GetCapsValue(key, "layoutMode", "SEPARATE") end,
-        function(v) local key = GetEditingKey(); A2_SetCapsValue(key, "layoutMode", v) end)
+        function(v) A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "layoutMode", v) end)
+    A2_Track("caps", layoutDD)
 
 	-- Stack Anchor dropdown (right column)
-	CreateStackAnchorDropdown(leftTop, A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 3) - 8,
+	local stackAnchorDD = CreateStackAnchorDropdown(leftTop, A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 3) - 8,
         function() local key = GetEditingKey(); return A2_GetCapsValue(key, "stackCountAnchor", "TOPRIGHT") end,
-        function(v) local key = GetEditingKey(); A2_SetCapsValue(key, "stackCountAnchor", v) end)
+        function(v) A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "stackCountAnchor", v) end)
+    A2_Track("caps", stackAnchorDD)
 
     -- Buff/Debuff placement around the unitframe (Blizzard-like)
     local buffDebuffAnchorDD = CreateBuffDebuffAnchorDropdown(leftTop, A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 5) - 12,
         function() local key = GetEditingKey(); return A2_GetCapsValue(key, "buffDebuffAnchor", "STACKED") end,
-        function(v) local key = GetEditingKey(); A2_SetCapsValue(key, "buffDebuffAnchor", v) end,
+        function(v) A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "buffDebuffAnchor", v) end,
         function() local key = GetEditingKey(); return A2_GetCapsValue(key, "layoutMode", "SEPARATE") end)
+    A2_Track("caps", buffDebuffAnchorDD)
 
     -- Allow the Layout dropdown to notify dependent widgets immediately.
     leftTop._msufA2_OnLayoutModeChanged = function()
@@ -1998,7 +2210,7 @@ end
 
         
 
-        CreateBoolCheckboxPath(timerBox, 'Color aura timers by remaining time', 12, -34, GetGeneral, 'aurasCooldownTextUseBuckets', nil,
+        local cbTimerBuckets = CreateBoolCheckboxPath(timerBox, 'Color aura timers by remaining time', 12, -34, GetGeneral, 'aurasCooldownTextUseBuckets', nil,
             'When enabled, aura cooldown text uses Safe / Warning / Urgent colors based on remaining time.\nWhen disabled, aura cooldown text always uses the Safe color.',
             function()
                 if timerBox and timerBox._msufApplyTimerColorsEnabledState then
@@ -2007,6 +2219,7 @@ end
 				A2_RequestCooldownTextRecolor()
 				A2_RequestApply()
             end)
+        A2_Track("global", cbTimerBuckets)
 
 
         -- Breakpoint sliders (seconds).
@@ -2065,14 +2278,17 @@ end
         end
 
         local safeSlider = CreateAuras2CompactSlider(timerBox, 'Safe (seconds)', 0, 600, 1, 12, -72, 220, GetSafe, SetSafe)
+        A2_Track("global", safeSlider)
         MSUF_StyleAuras2CompactSlider(safeSlider, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(safeSlider, 0, 600, 1, GetSafe)
 
         local warnSlider = CreateAuras2CompactSlider(timerBox, 'Warning (<=)', 0, 30, 1, 260, -72, 200, GetWarn, SetWarn)
+        A2_Track("global", warnSlider)
         MSUF_StyleAuras2CompactSlider(warnSlider, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(warnSlider, 0, 30, 1, GetWarn)
 
         local urgSlider = CreateAuras2CompactSlider(timerBox, 'Urgent (<=)', 0, 15, 1, 486, -72, 200, GetUrg, SetUrg)
+        A2_Track("global", urgSlider)
         MSUF_StyleAuras2CompactSlider(urgSlider, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(urgSlider, 0, 15, 1, GetUrg)
 
@@ -2136,6 +2352,28 @@ end
             { "Only show boss auras", 380, -58, GetEditingFilters, "onlyBossAuras", nil,
                 "Hard filter: when enabled (and filters are enabled), only auras flagged as boss auras will be shown.", "cbOnlyBoss" },
         }, refs)
+
+
+-- Track scopes + auto-override wrappers (Auras 2 menu only)
+do
+    local filterKeys = { "cbBossBuffs", "cbBossDebuffs", "cbStealable", "cbDispellable", "cbOnlyBoss",
+        "cbMagic", "cbCurse", "cbDisease", "cbPoison", "cbEnrage" }
+    for i = 1, #filterKeys do
+        local cb = refs[filterKeys[i]]
+        if cb then
+            A2_Track("filters", cb)
+            A2_WrapCheckboxAutoOverride(cb, "filters")
+        end
+    end
+
+    local globalKeys = { "cbHLSteal", "cbHLDispel", "cbAdvanced" }
+    for i = 1, #globalKeys do
+        local cb = refs[globalKeys[i]]
+        if cb then
+            A2_Track("global", cb)
+        end
+    end
+end
 
         -- Highlight is stored in Shared settings (visual-only).
         local hlH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -2219,6 +2457,7 @@ end
         -- Now sync widgets to DB (checkboxes/sliders/dropdowns)
         MSUF_Auras2_RefreshOptionsControls()
         UpdateAdvancedEnabled()
+        ApplyOverrideUISafety()
     end
 
     -- Settings sometimes calls OnRefresh (old InterfaceOptions style) when a category is selected.
