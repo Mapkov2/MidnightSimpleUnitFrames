@@ -3658,7 +3658,8 @@ local CASTBAR_POPUP_TEXT_SPEC = {
                 deferApply   = true,
                 beforeClick  = function(cb, checked)
                     local pf2 = cb and cb:GetParent()
-                                        if pf2 and pf2.SetCastbarSizeControlsEnabled then
+                    if pf2 then pf2._msufSkipCastbarReadsN = 2 end
+                    if pf2 and pf2.SetCastbarSizeControlsEnabled then
                         pf2.SetCastbarSizeControlsEnabled(
                             pf2.castNameSizeBox,
                             pf2.castNameSizeMinus,
@@ -3677,9 +3678,7 @@ local CASTBAR_POPUP_TEXT_SPEC = {
         show = { field = "iconShowCB", name = "$parentShowIcon", text = "Show" },
         rows = {
             { key = "iconY",    label = "Icon Y:",    box = "$parentIconYBox",    dy = -8 },
-            -- Live-apply icon size while typing (Edit Mode UX: preview should resize immediately).
-            -- Scoped to Icon Size only to avoid extra apply spam during normal usage.
-            { key = "iconSize", label = "Icon Size:", box = "$parentIconSizeBox", dy = -8, live = true },
+            { key = "iconSize", label = "Icon Size:", box = "$parentIconSizeBox", dy = -8 },
         },
         override = {
             field = "iconSizeOverrideCB",
@@ -3693,7 +3692,8 @@ local CASTBAR_POPUP_TEXT_SPEC = {
                 deferApply   = true,
                 beforeClick  = function(cb, checked)
                     local pf2 = cb and cb:GetParent()
-                                        if pf2 and pf2.SetCastbarSizeControlsEnabled then
+                    if pf2 then pf2._msufSkipCastbarReadsN = 2 end
+                    if pf2 and pf2.SetCastbarSizeControlsEnabled then
                         pf2.SetCastbarSizeControlsEnabled(
                             pf2.iconSizeBox,
                             pf2.iconSizeMinus,
@@ -3723,6 +3723,18 @@ local CASTBAR_POPUP_TEXT_SPEC = {
             opts = {
                 tooltipTitle = "Override Time Size",
                 tooltipText  = "This will allow changing the font size of Time text on this castbar only.",
+                beforeClick  = function(cb, checked)
+                    local pf2 = cb and cb:GetParent()
+                    if pf2 then pf2._msufSkipCastbarReadsN = 2 end
+                    if pf2 and pf2.SetCastbarSizeControlsEnabled then
+                        pf2.SetCastbarSizeControlsEnabled(
+                            pf2.timeSizeBox,
+                            pf2.timeSizeMinus,
+                            pf2.timeSizePlus,
+                            checked and true or false
+                        )
+                    end
+                end,
             },
         },
     },
@@ -4478,6 +4490,16 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
                 return
             end
 
+            -- If a click came from an Override checkbox, only apply the override itself.
+            -- Avoid re-reading position/offset editboxes (which can be mid-edit) to prevent preview snap/jitter.
+            local skipN = tonumber(pf._msufSkipCastbarReadsN) or (pf._msufSkipCastbarReads and 1) or 0
+            local skipReads = (skipN and skipN > 0) and true or false
+            if skipReads then
+                pf._msufSkipCastbarReadsN = skipN - 1
+            else
+                pf._msufSkipCastbarReadsN = nil
+                pf._msufSkipCastbarReads = nil
+            end
             local P = Edit and Edit.Popups
             local specs = P and P.Specs
             local U = P and P.Util
@@ -4503,10 +4525,12 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
                 local currentH = tonumber(g.bossCastbarHeight) or (parent and parent.GetHeight and parent:GetHeight()) or 18
 
                 -- Apply numeric fields via specs (store=true does the DB writeback)
-                P.ReadFields(pf, { conf = g, currentW = currentW, currentH = currentH }, specs.BossCastbarFramePosition)
-                P.ReadFields(pf, { conf = g }, specs.BossCastbarNameOffsets)
-                P.ReadFields(pf, { conf = g }, specs.BossCastbarIconOffsets)
-                P.ReadFields(pf, { conf = g }, specs.BossCastbarTimeOffsets)
+                if not skipReads then
+                    P.ReadFields(pf, { conf = g, currentW = currentW, currentH = currentH }, specs.BossCastbarFramePosition)
+                    P.ReadFields(pf, { conf = g }, specs.BossCastbarNameOffsets)
+                    P.ReadFields(pf, { conf = g }, specs.BossCastbarIconOffsets)
+                    P.ReadFields(pf, { conf = g }, specs.BossCastbarTimeOffsets)
+                end
 
                 -- show toggles
                 if pf.castNameShowCB and pf.castNameShowCB.GetChecked then
@@ -4566,10 +4590,12 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
             local currentH = tonumber(g[prefix .. "BarHeight"]) or tonumber(g.castbarGlobalHeight) or (parent and parent.GetHeight and parent:GetHeight()) or 16
 
             -- Apply numeric fields via specs
-            P.ReadFields(pf, { conf = g, prefix = prefix, defaultX = defaultX, defaultY = defaultY, currentW = currentW, currentH = currentH }, specs.CastbarFramePosition)
-            P.ReadFields(pf, { conf = g, prefix = prefix }, specs.CastbarNameOffsets)
-            P.ReadFields(pf, { conf = g, prefix = prefix }, specs.CastbarIconOffsets)
-            P.ReadFields(pf, { conf = g, prefix = prefix, defaultTimeX = -2, defaultTimeY = 0 }, specs.CastbarTimeOffsets)
+            if not skipReads then
+                P.ReadFields(pf, { conf = g, prefix = prefix, defaultX = defaultX, defaultY = defaultY, currentW = currentW, currentH = currentH }, specs.CastbarFramePosition)
+                P.ReadFields(pf, { conf = g, prefix = prefix }, specs.CastbarNameOffsets)
+                P.ReadFields(pf, { conf = g, prefix = prefix }, specs.CastbarIconOffsets)
+                P.ReadFields(pf, { conf = g, prefix = prefix, defaultTimeX = -2, defaultTimeY = 0 }, specs.CastbarTimeOffsets)
+            end
 
             -- show toggles
             if pf.castNameShowCB and pf.castNameShowCB.GetChecked then
@@ -4606,6 +4632,18 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
                 reanchorFn()
             end
 
+
+            -- Ensure Edit Mode previews update live (icon size / offsets / text) after any popup apply.
+            -- Reanchor* functions update the real castbar; previews can be separate frames and need an explicit refresh.
+            if MSUF_UnitEditModeActive then
+                if unit == "player" and type(_G.MSUF_UpdatePlayerCastbarPreview) == "function" then
+                    _G.MSUF_UpdatePlayerCastbarPreview()
+                elseif unit == "target" and type(_G.MSUF_UpdateTargetCastbarPreview) == "function" then
+                    _G.MSUF_UpdateTargetCastbarPreview()
+                elseif unit == "focus" and type(_G.MSUF_UpdateFocusCastbarPreview) == "function" then
+                    _G.MSUF_UpdateFocusCastbarPreview()
+                end
+            end
             if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
                 _G.MSUF_UpdateCastbarVisuals()
             end
@@ -4663,6 +4701,43 @@ local function SanitizeOffset(v, default)
     end
     return math.floor(v + 0.5)
 end
+
+-- Keep popup values aligned with the LIVE castbar preview position.
+-- When the user drags/snaps the preview and then opens this popup, we must avoid
+-- writing stale offsets back into the DB on the first +/- press (which looks like a "jump back").
+local function MSUF_EM_CaptureCastbarOffsetsFromLive(unitKey)
+    if not MSUF_UnitEditModeActive then return end
+    if not unitKey then return end
+
+    local frame
+    if unitKey == "boss" then
+        frame = _G.MSUF_BossCastbarPreview or _G["MSUF_BossCastbarPreview1"] or _G.MSUF_BossCastbar
+    elseif unitKey == "player" then
+        frame = _G.MSUF_PlayerCastbarPreview or _G.MSUF_PlayerCastbar
+    elseif unitKey == "target" then
+        frame = _G.MSUF_TargetCastbarPreview or _G.MSUF_TargetCastbar
+    elseif unitKey == "focus" then
+        frame = _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar
+    end
+
+    if not (frame and frame.GetPoint) then return end
+    local p, rel, rp, x, y = frame:GetPoint(1)
+    if x == nil or y == nil then return end
+
+    if unitKey == "boss" then
+        g.bossCastbarOffsetX = x
+        g.bossCastbarOffsetY = y
+        return
+    end
+
+    local prefixLive = MSUF_GetCastbarPrefix and MSUF_GetCastbarPrefix(unitKey) or nil
+    if prefixLive and type(prefixLive) == "string" then
+        g[prefixLive .. "OffsetX"] = x
+        g[prefixLive .. "OffsetY"] = y
+    end
+end
+
+MSUF_EM_CaptureCastbarOffsetsFromLive(unit)
 
 if unit == "boss" then
     defaultX, defaultY = 0, 0
