@@ -101,29 +101,41 @@ local function MSUF_GetStatusIconStyleUseMidnight()
     end
     local db = _G.MSUF_DB
     local g = (type(db) == "table") and db.general or nil
-    if type(g) ~= "table" then
-        return false
-    end
-    if g.statusIconsUseMidnightStyle == nil then
-        -- Default: keep stable behavior; users can opt-in via the toggle.
-        g.statusIconsUseMidnightStyle = false
-    end
+    if type(g) ~= "table" then return false end
     return (g.statusIconsUseMidnightStyle == true)
 end
 
-local function MSUF_SetStatusIconStyleUseMidnight(v)
-    if type(_G.EnsureDB) == "function" then
-        _G.EnsureDB()
+-- Returns a texture path for a given symbol key.
+-- Symbol keys are grouped by prefix:
+--   weapon_*  -> Media/Symbols/Combat  (128_clean)
+--   rested_*  -> Media/Symbols/Rested  (64)
+local function MSUF_StatusIcon_GetSymbolTexture(symbolKey)
+    if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
+        return nil
     end
-    local db = _G.MSUF_DB
-    local g = (type(db) == "table") and db.general or nil
-    if type(g) ~= "table" then return end
-    g.statusIconsUseMidnightStyle = (v == true)
+
+    local useMidnight = MSUF_GetStatusIconStyleUseMidnight()
+
+    local folder = "Combat"
+    local suffix = useMidnight and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
+
+    -- Rested icons use a different folder + size/suffix convention.
+    if string.find(symbolKey, "^rested_") then
+        folder = "Rested"
+        suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
+    end
+
+-- Resurrection icons use a different folder + size/suffix convention.
+if string.find(symbolKey, "^resurrection_") then
+    folder = "Ress"
+    suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
 end
 
--- NOTE: These are file-base names. The style toggle (classic vs midnight) only switches suffix.
--- Folder: Interface/AddOns/MidnightSimpleUnitFrames/Media/Symbols/Combat/
--- Files:  <base>_classic_128_clean.tga  and  <base>_midnight_128_clean.tga
+
+    return "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\" .. folder .. "\\" .. symbolKey .. suffix
+end
+
+
 local _MSUF_STATUSICON_SYMBOLS = {
     { "Default",    "DEFAULT",                    nil },
 
@@ -147,28 +159,93 @@ local _MSUF_STATUSICON_SYMBOLS = {
 }
 
 
-local function MSUF_StatusIcon_SymbolText(v)
-    if v == "DEFAULT" or v == nil then
+-- Rested icon symbol set (player only)
+-- Files live in: Media/Symbols/Rested/
+-- Pattern: rested_<name>_{classic|midnight}_64.tga
+local _MSUF_STATUSICON_RESTED_SYMBOLS = {
+    { "Default",     "DEFAULT" },
+
+    { "Moon Zzz",    "rested_moonzzz"  },
+    { "Moon Zzzz",   "rested_moonzzzz" },
+    { "Compact",     "rested_zzz_compact" },
+    { "Diag",        "rested_zzz_diag" },
+    { "Stack",       "rested_zzz_stack" },
+}
+
+
+
+-- Resurrection icon symbol set (Incoming Rez)
+-- Files live in: Media/Symbols/Ress/
+-- Pattern: resurrection_<name>_{classic|midnight}_64.tga
+local _MSUF_STATUSICON_RESS_SYMBOLS = {
+    { "Default", "DEFAULT" },
+    { "Ankh",    "resurrection_ankh"  },
+    { "Cross",   "resurrection_cross" },
+    { "Soul",    "resurrection_soul"  },
+    { "Wings",   "resurrection_wings" },
+}
+
+local function _MSUF_FindStatusIconLabel(symbolKey)
+    if symbolKey == nil or symbolKey == "DEFAULT" then
         return "Default"
-    end    for i = 1, #_MSUF_STATUSICON_SYMBOLS do
+    end
+
+    for i = 1, #_MSUF_STATUSICON_SYMBOLS do
         local row = _MSUF_STATUSICON_SYMBOLS[i]
-        if row[2] == v then
+        if row and row[2] == symbolKey then
             return row[1]
         end
     end
-    return tostring(v)
+
+    for i = 1, #_MSUF_STATUSICON_RESTED_SYMBOLS do
+        local row = _MSUF_STATUSICON_RESTED_SYMBOLS[i]
+        if row and row[2] == symbolKey then
+            return row[1]
+        end
+    end
+
+
+    for i = 1, #_MSUF_STATUSICON_RESS_SYMBOLS do
+        local row = _MSUF_STATUSICON_RESS_SYMBOLS[i]
+        if row and row[2] == symbolKey then
+            return row[1]
+        end
+    end
+
+    return tostring(symbolKey)
+end
+
+local function MSUF_StatusIcon_SymbolText(v)
+    return _MSUF_FindStatusIconLabel(v)
 end
 
 local function MSUF_StatusIcon_GetSymbolChoices()
-    -- Always return a fresh table so dropdowns reflect current style toggles (icons).
-    -- Values are stable symbol keys; style only affects the displayed texture.
     local t = {}
     for i = 1, #_MSUF_STATUSICON_SYMBOLS do
         local row = _MSUF_STATUSICON_SYMBOLS[i]
-        t[#t+1] = { row[1], row[2] }
+        if row then t[#t+1] = { row[1], row[2] } end
     end
     return t
 end
+
+local function MSUF_StatusIcon_GetRestedSymbolChoices()
+    local t = {}
+    for i = 1, #_MSUF_STATUSICON_RESTED_SYMBOLS do
+        local row = _MSUF_STATUSICON_RESTED_SYMBOLS[i]
+        if row then t[#t+1] = { row[1], row[2] } end
+    end
+    return t
+end
+
+local function MSUF_StatusIcon_GetRessSymbolChoices()
+    local t = {}
+    for i = 1, #_MSUF_STATUSICON_RESS_SYMBOLS do
+        local row = _MSUF_STATUSICON_RESS_SYMBOLS[i]
+        if row then t[#t+1] = { row[1], row[2] } end
+    end
+    return t
+end
+
 
 local function MSUF_StatusIcon_GetSymbolTexture(symbolKey)
     if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
@@ -3203,8 +3280,8 @@ local function MSUF_BindIndicatorRow(spec)
                 if tex then
                     info.icon = tex
                     info.iconInfo = {
-                        tCoordLeft = 0.08, tCoordRight = 0.92,
-                        tCoordTop = 0.08, tCoordBottom = 0.92,
+                        tCoordLeft = 0, tCoordRight = 1,
+                        tCoordTop = 0, tCoordBottom = 1,
                         tSizeX = 16, tSizeY = 16,
                         tFitDropDownSizeX = true,
                     }
@@ -3377,21 +3454,21 @@ local function MSUF_BuildStatusRestedSpec()
     spec.order = 110
     spec.allowed = function(key) return (key == "player") end -- player only
 
-    spec.showCB = "statusRestedIconCB"
-    spec.showField = "showRestingStateIndicator"
-    spec.showDefault = true
+    spec.showCB = "statusRestingIconCB"
+    spec.showField = "showRestingIndicator"
+    spec.showDefault = false
 
-    spec.xStepper = "statusRestedOffsetXStepper"
-    spec.xField = "restingStateIndicatorOffsetX"
+    spec.xStepper = "statusRestingOffsetXStepper"
+    spec.xField = "restedStateIndicatorOffsetX"
     spec.xDefault = 0
 
-    spec.yStepper = "statusRestedOffsetYStepper"
-    spec.yField = "restingStateIndicatorOffsetY"
+    spec.yStepper = "statusRestingOffsetYStepper"
+    spec.yField = "restedStateIndicatorOffsetY"
     spec.yDefault = 0
 
-    spec.anchorDrop = "statusRestedAnchorDrop"
-    spec.anchorLabel = "statusRestedAnchorLabel"
-    spec.anchorField = "restingStateIndicatorAnchor"
+    spec.anchorDrop = "statusRestingAnchorDrop"
+    spec.anchorLabel = "statusRestingAnchorLabel"
+    spec.anchorField = "restedStateIndicatorAnchor"
     spec.anchorDefault = "TOPLEFT"
     spec.anchorText = function(v) return MSUF_LeaderAnchorText(v) end
     spec.anchorChoices = {
@@ -3401,20 +3478,20 @@ local function MSUF_BuildStatusRestedSpec()
         { MSUF_LeaderAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
     }
 
-    spec.sizeEdit = "statusRestedSizeEdit"
-    spec.sizeLabel = "statusRestedSizeLabel"
-    spec.sizeField = "restingStateIndicatorSize"
+    spec.sizeEdit = "statusRestingSizeEdit"
+    spec.sizeLabel = "statusRestingSizeLabel"
+    spec.sizeField = "restedStateIndicatorSize"
     spec.sizeDefault = 18
 
-    spec.iconDrop = "statusRestedSymbolDrop"
-    spec.iconLabel = "statusRestedSymbolLabel"
-    spec.iconField = "restingStateIndicatorSymbol"
+    spec.iconDrop = "statusRestingSymbolDrop"
+    spec.iconLabel = "statusRestingSymbolLabel"
+    spec.iconField = "restedStateIndicatorSymbol"
     spec.iconDefault = "DEFAULT"
     spec.iconText = MSUF_StatusIcon_SymbolText
-    spec.iconChoices = MSUF_StatusIcon_GetSymbolChoices
+    spec.iconChoices = MSUF_StatusIcon_GetRestedSymbolChoices
 
-    spec.divider = "statusRestedGroupDivider"
-    spec.resetBtn = "statusRestedResetBtn"
+    spec.divider = "statusRestingGroupDivider"
+    spec.resetBtn = "statusRestingResetBtn"
     spec.refreshFnName = "MSUF_RequestStatusRestingIndicatorRefresh"
     return spec
 end
@@ -3435,6 +3512,7 @@ if panel.statusRestingResetBtn then
         conf.restedStateIndicatorAnchor  = nil
         conf.restedStateIndicatorSize    = nil
 
+        conf.restedStateIndicatorSymbol  = nil
         MSUF_ApplyIndicatorUI(STATUSICON_RESTING_SPEC)
         MSUF_CallIndicatorRefresh(STATUSICON_RESTING_SPEC)
     end)
@@ -3496,7 +3574,7 @@ local function MSUF_BuildStatusIncomingResSpec()
     spec.iconField = "incomingResIndicatorSymbol"
     spec.iconDefault = "DEFAULT"
     spec.iconText = MSUF_StatusIcon_SymbolText
-    spec.iconChoices = MSUF_StatusIcon_GetSymbolChoices
+    spec.iconChoices = MSUF_StatusIcon_GetRessSymbolChoices
 
     spec.divider = "statusIncomingResGroupDivider"
     spec.resetBtn = "statusIncomingResResetBtn"
@@ -3653,6 +3731,36 @@ if panel.statusIconsTestModeCB then
     end)
     panel.statusIconsTestModeCB:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
 end
+
+-- Ensure setter exists (some patches call this as a global helper).
+if type(_G.MSUF_SetStatusIconStyleUseMidnight) ~= "function" then
+    function _G.MSUF_SetStatusIconStyleUseMidnight(useMidnight)
+        if type(_G.EnsureDB) == "function" then
+            _G.EnsureDB()
+        end
+        local db = _G.MSUF_DB
+        if type(db) ~= "table" then return end
+        if type(db.general) ~= "table" then db.general = {} end
+        db.general.statusIconsUseMidnightStyle = (useMidnight == true)
+
+        -- Refresh player/target so icons update immediately.
+        if type(_G.MSUF_UnitFrames) == "table" and type(_G.UpdateSimpleUnitFrame) == "function" then
+            for _, k in ipairs({ "player", "target" }) do
+                local fr = _G.MSUF_UnitFrames[k]
+                if fr then
+                    pcall(_G.UpdateSimpleUnitFrame, fr, true)
+                end
+            end
+        end
+
+        if type(_G.MSUF_RequestStatusIconsRefreshForCurrent) == "function" then
+            pcall(_G.MSUF_RequestStatusIconsRefreshForCurrent)
+        end
+    end
+end
+
+-- Local alias for convenience (older code calls without _G prefix)
+MSUF_SetStatusIconStyleUseMidnight = _G.MSUF_SetStatusIconStyleUseMidnight
 
 -- Global icon style toggle (Classic vs Midnight) affects the symbol dropdown icon previews.
 if panel.statusIconsStyleCB then
