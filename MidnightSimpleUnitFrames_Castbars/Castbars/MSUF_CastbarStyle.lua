@@ -712,6 +712,35 @@ function S:ApplyCastbarSpellNameLayout(frame, unitKey)
     --  * Constrain FontString WIDTH + alignment only.
     -- -------------------------------------------------
     local mode = tonumber(g.castbarSpellNameShortening) or 0
+
+    -- Boss castbars may have their own overrides (keep fully optional / backward compatible)
+    local isBoss = false
+    if type(unitKey) == "string" then
+        if unitKey == "boss" or string.sub(unitKey, 1, 4) == "boss" then
+            isBoss = true
+        end
+    end
+    if isBoss then
+        if g.bossCastSpellNameShortening ~= nil then
+            mode = tonumber(g.bossCastSpellNameShortening) or mode
+        end
+    end
+
+	-- These must be numeric (Options store them in MSUF_DB.general)
+	local maxLen = tonumber(g.castbarSpellNameMaxLen) or 0
+	if maxLen <= 0 then maxLen = 12 end
+	local reserved = tonumber(g.castbarSpellNameReservedSpace) or 0
+	if reserved < 0 then reserved = 0 end
+
+    -- Optional boss-specific maxLen / reservedSpace (fallback to global if unset)
+    if isBoss then
+        local bossMaxLen = g.bossCastSpellNameMaxLen or g.bossCastSpellNameMaxChars or g.bossSpellNameMaxLen
+        local bossReserved = g.bossCastSpellNameReservedSpace or g.bossCastSpellNameReserved or g.bossSpellNameReservedSpace
+        local ml = tonumber(bossMaxLen or 0) or 0
+        local rs = tonumber(bossReserved or 0) or 0
+        if ml and ml > 0 then maxLen = ml end
+        if rs and rs > 0 then reserved = rs end
+    end
     -- On/Off only (Options maps legacy values to 1). Any non-zero enables shortening at END.
     local shortenEnabled = (mode and mode > 0)
 
