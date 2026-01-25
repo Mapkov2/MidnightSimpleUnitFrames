@@ -113,10 +113,6 @@ local function _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
     if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
         return nil
     end
-    -- Custom slots are reserved for later user-provided textures.
-    if symbolKey == "CUSTOM1" or symbolKey == "CUSTOM2" then
-        return nil
-    end
 
     local suffix = (useMidnight == true) and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
     return "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\Combat\\" .. symbolKey .. suffix
@@ -124,6 +120,16 @@ end
 
 local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight)
     if not tex or not tex.SetTexture then return end
+
+    -- Capture default texture/atlas so selecting DEFAULT later restores the original icon.
+    if tex._msufDefaultTexture == nil and tex.GetTexture then
+        tex._msufDefaultTexture = tex:GetTexture()
+    end
+    if tex._msufDefaultAtlas == nil and tex.GetAtlas then
+        local a = tex:GetAtlas()
+        if a then tex._msufDefaultAtlas = a end
+    end
+
 
     -- Capture default texcoords so we can restore them when the user selects
     -- DEFAULT again. MSUF's built-in status icons may use cropped coords,
@@ -135,8 +141,14 @@ local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight)
 
     local path = _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
     if not path then
-        -- Keep whatever default texture was assigned during creation.
         tex._msufSymbolStamp = nil
+
+        -- Restore original texture/atlas when returning to DEFAULT.
+        if tex._msufDefaultAtlas and tex.SetAtlas then
+            tex:SetAtlas(tex._msufDefaultAtlas)
+        elseif tex._msufDefaultTexture then
+            tex:SetTexture(tex._msufDefaultTexture)
+        end
 
         -- Restore original texcoords when returning to DEFAULT.
         local tc = tex._msufDefaultTexCoord

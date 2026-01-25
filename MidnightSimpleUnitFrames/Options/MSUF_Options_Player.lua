@@ -150,10 +150,7 @@ local _MSUF_STATUSICON_SYMBOLS = {
 local function MSUF_StatusIcon_SymbolText(v)
     if v == "DEFAULT" or v == nil then
         return "Default"
-    end
-    if v == "CUSTOM1" then return "Custom 1" end
-    if v == "CUSTOM2" then return "Custom 2" end
-    for i = 1, #_MSUF_STATUSICON_SYMBOLS do
+    end    for i = 1, #_MSUF_STATUSICON_SYMBOLS do
         local row = _MSUF_STATUSICON_SYMBOLS[i]
         if row[2] == v then
             return row[1]
@@ -170,8 +167,6 @@ local function MSUF_StatusIcon_GetSymbolChoices()
         local row = _MSUF_STATUSICON_SYMBOLS[i]
         t[#t+1] = { row[1], row[2] }
     end
-    t[#t+1] = { "Custom 1", "CUSTOM1" }
-    t[#t+1] = { "Custom 2", "CUSTOM2" }
     return t
 end
 
