@@ -1746,9 +1746,27 @@ end
 local function MSUF_ApplyFontBumpToFrame(root, bump)
     bump = tonumber(bump or 0) or 0
     if bump == 0 or not root then return end
+
+    -- Already applied for this bump value
     if root.__MSUF_FontBumpApplied == bump then
         return
     end
+
+    -- If a run is already in progress, just remember the latest requested bump and exit.
+    -- The active run will re-run automatically if needed.
+    if root.__MSUF_FontBumpInProgress then
+        root.__MSUF_FontBumpPending = bump
+        return
+    end
+
+    -- Guard against runaway scans on huge UI trees: run in small time-sliced chunks.
+    -- This avoids the WoW watchdog ("script ran too long") while keeping behavior identical.
+    root.__MSUF_FontBumpInProgress = true
+    root.__MSUF_FontBumpPending = nil
+
+    -- Per-run queue + visited to avoid duplicates (some UI trees have shared children)
+    local queue, qIndex = { root }, 1
+    local visited = {}
 
     local function bumpFont(obj)
         if not obj or not obj.GetFont or not obj.SetFont then return end
@@ -1762,29 +1780,76 @@ local function MSUF_ApplyFontBumpToFrame(root, bump)
         pcall(obj.SetFont, obj, orig.font, (orig.size or size) + bump, orig.flags)
     end
 
-    local function applyOnFrame(frame)
-        if not frame then return end
+    local function enqueue(child)
+        if not child or visited[child] then return end
+        visited[child] = true
+        queue[#queue + 1] = child
+    end
 
-        -- Frames like EditBox also have GetFont/SetFont
-        bumpFont(frame)
+    -- Seed visited with root to avoid re-adding it through child enumeration
+    visited[root] = true
 
-        if frame.GetRegions then
-            local regions = { frame:GetRegions() }
-            for i = 1, #regions do
-                bumpFont(regions[i])
+    local function processChunk()
+        local t0 = debugprofilestop()
+        local budgetMs = 6.0 -- keep comfortably below watchdog; run multiple ticks if needed
+
+        while qIndex <= #queue do
+            local frame = queue[qIndex]
+            qIndex = qIndex + 1
+
+            if frame then
+                -- Frames like EditBox also have GetFont/SetFont
+                bumpFont(frame)
+
+                -- Regions
+                if frame.EnumerateRegions then
+                    for reg in frame:EnumerateRegions() do
+                        bumpFont(reg)
+                    end
+                elseif frame.GetRegions then
+                    local regions = { frame:GetRegions() }
+                    for i = 1, #regions do
+                        bumpFont(regions[i])
+                    end
+                end
+
+                -- Children (enqueue; do not recurse)
+                if frame.EnumerateChildren then
+                    for child in frame:EnumerateChildren() do
+                        enqueue(child)
+                    end
+                elseif frame.GetChildren then
+                    local children = { frame:GetChildren() }
+                    for i = 1, #children do
+                        enqueue(children[i])
+                    end
+                end
+            end
+
+            -- Timeslice
+            if (debugprofilestop() - t0) > budgetMs then
+                C_Timer.After(0, processChunk)
+                return
             end
         end
 
-        if frame.GetChildren then
-            local children = { frame:GetChildren() }
-            for i = 1, #children do
-                applyOnFrame(children[i])
-            end
+        -- Finished
+        root.__MSUF_FontBumpApplied = bump
+        root.__MSUF_FontBumpInProgress = nil
+
+        -- If something requested a new bump value while we were scanning, rerun once with the latest value.
+        local pending = root.__MSUF_FontBumpPending
+        root.__MSUF_FontBumpPending = nil
+        if pending and pending ~= bump then
+            C_Timer.After(0, function()
+                if root and root.IsObjectType and root:IsObjectType("Frame") then
+                    MSUF_ApplyFontBumpToFrame(root, pending)
+                end
+            end)
         end
     end
 
-    applyOnFrame(root)
-    root.__MSUF_FontBumpApplied = bump
+    C_Timer.After(0, processChunk)
 end
 
 -- ------------------------------------------------------------

@@ -1660,7 +1660,7 @@ end
 		panel.statusRestingIconCB = panel.statusRestingIconCB or CreateCheck(statusBox or textGroup, "MSUF_StatusRestingIconCB", "Rested (player only)", 12, STATUS_BASE_TOGGLE_Y + (1 * STATUS_ROW_STEP))
 		panel.statusIncomingResIconCB = panel.statusIncomingResIconCB or CreateCheck(statusBox or textGroup, "MSUF_StatusIncomingResIconCB", "Incoming Rez", 12, STATUS_BASE_TOGGLE_Y + (2 * STATUS_ROW_STEP))
 
-		panel.statusIconsTestModeCB = panel.statusIconsTestModeCB or CreateCheck(statusBox or textGroup, "MSUF_StatusIconsTestModeCB", "Test mode (preview enabled icons)", 12, STATUS_BASE_TOGGLE_Y + (3 * STATUS_ROW_STEP) + 10)
+		panel.statusIconsTestModeCB = panel.statusIconsTestModeCB or CreateCheck(statusBox or textGroup, "MSUF_StatusIconsTestModeCB", "Test mode", 12, STATUS_BASE_TOGGLE_Y + (3 * STATUS_ROW_STEP) + 10)
 
 		panel.statusIconsStyleCB = panel.statusIconsStyleCB or CreateCheck(statusBox or textGroup, "MSUF_StatusIconsStyleCB", "Use Midnight style icons", 12, STATUS_BASE_TOGGLE_Y + (3 * STATUS_ROW_STEP) - 12)
 		if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
