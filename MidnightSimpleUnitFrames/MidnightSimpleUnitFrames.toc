@@ -2,7 +2,7 @@
 ## Title: Midnight Simple UnitFrames
 ## Notes: Unitframe Addon by Mapko 
 ## Author: Mapkó
-## Version: 1.76b1
+## Version: 1.75r1
 ## Category: Combat
 ## SavedVariables: MSUF_Config
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB

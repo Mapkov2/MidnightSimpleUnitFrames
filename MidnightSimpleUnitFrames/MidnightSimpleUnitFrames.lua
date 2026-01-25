@@ -7530,7 +7530,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.76b1|r  |cff565f89•|r  |cffc0caf5 Check out new Player Auras -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.75r1|r  |cff565f89•|r  |cffc0caf5 Check out new Player Auras -|r  |cfff7768eReport bugs in the Discord.|r")
 
 end, nil, true)
 

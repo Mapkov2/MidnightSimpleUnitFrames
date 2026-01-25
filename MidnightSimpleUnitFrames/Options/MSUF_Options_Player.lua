@@ -89,6 +89,104 @@ local function MSUF_LevelAnchorText(v)
     return "Right to player name"
 end
 
+-- ---------------------------------------------------------------------------
+-- Status icon symbol textures (Classic vs Midnight)
+-- These are used by the Status icon "symbol" dropdowns (Combat/Rested/Incoming Rez).
+-- We store the chosen symbol key per-unit, but the "style" (classic vs midnight) is global.
+-- ---------------------------------------------------------------------------
+
+local function MSUF_GetStatusIconStyleUseMidnight()
+    if type(_G.EnsureDB) == "function" then
+        _G.EnsureDB()
+    end
+    local db = _G.MSUF_DB
+    local g = (type(db) == "table") and db.general or nil
+    if type(g) ~= "table" then
+        return false
+    end
+    if g.statusIconsUseMidnightStyle == nil then
+        -- Default: keep stable behavior; users can opt-in via the toggle.
+        g.statusIconsUseMidnightStyle = false
+    end
+    return (g.statusIconsUseMidnightStyle == true)
+end
+
+local function MSUF_SetStatusIconStyleUseMidnight(v)
+    if type(_G.EnsureDB) == "function" then
+        _G.EnsureDB()
+    end
+    local db = _G.MSUF_DB
+    local g = (type(db) == "table") and db.general or nil
+    if type(g) ~= "table" then return end
+    g.statusIconsUseMidnightStyle = (v == true)
+end
+
+-- NOTE: These are file-base names. The style toggle (classic vs midnight) only switches suffix.
+-- Folder: Interface/AddOns/MidnightSimpleUnitFrames/Media/Symbols/Combat/
+-- Files:  <base>_classic_128_clean.tga  and  <base>_midnight_128_clean.tga
+local _MSUF_STATUSICON_SYMBOLS = {
+    { "Default",    "DEFAULT",                    nil },
+
+    -- Weapon icons (short names, as requested)
+    { "Axes",       "weapon_axes_crossed",        "weapon_axes_crossed" },
+    { "Bows",       "weapon_bows_crossed",        "weapon_bows_crossed" },
+    { "Crossbows",  "weapon_crossbows_crossed",   "weapon_crossbows_crossed" },
+    { "Daggers",    "weapon_daggers_crossed",     "weapon_daggers_crossed" },
+    { "Fishing",    "weapon_fishing_poles_crossed","weapon_fishing_poles_crossed" },
+    { "Fist",       "weapon_fist_crossed",        "weapon_fist_crossed" },
+    { "Guns",       "weapon_guns_crossed",        "weapon_guns_crossed" },
+    { "Maces",      "weapon_maces_crossed",       "weapon_maces_crossed" },
+    { "Polearms",   "weapon_polearms_crossed",    "weapon_polearms_crossed" },
+    { "Shuriken",   "weapon_shuriken",            "weapon_shuriken" },
+    { "Staves",     "weapon_staves_crossed",      "weapon_staves_crossed" },
+    { "Swords",     "weapon_swords_crossed",      "weapon_swords_crossed" },
+    -- (User wording) "Thorn" = Thrown weapons
+    { "Thorn",      "weapon_thrown_crossed",      "weapon_thrown_crossed" },
+    { "Wands",      "weapon_wands_crossed",       "weapon_wands_crossed" },
+    { "Warglaives", "weapon_warglaives_crossed",  "weapon_warglaives_crossed" },
+}
+
+
+local function MSUF_StatusIcon_SymbolText(v)
+    if v == "DEFAULT" or v == nil then
+        return "Default"
+    end
+    if v == "CUSTOM1" then return "Custom 1" end
+    if v == "CUSTOM2" then return "Custom 2" end
+    for i = 1, #_MSUF_STATUSICON_SYMBOLS do
+        local row = _MSUF_STATUSICON_SYMBOLS[i]
+        if row[2] == v then
+            return row[1]
+        end
+    end
+    return tostring(v)
+end
+
+local function MSUF_StatusIcon_GetSymbolChoices()
+    -- Always return a fresh table so dropdowns reflect current style toggles (icons).
+    -- Values are stable symbol keys; style only affects the displayed texture.
+    local t = {}
+    for i = 1, #_MSUF_STATUSICON_SYMBOLS do
+        local row = _MSUF_STATUSICON_SYMBOLS[i]
+        t[#t+1] = { row[1], row[2] }
+    end
+    t[#t+1] = { "Custom 1", "CUSTOM1" }
+    t[#t+1] = { "Custom 2", "CUSTOM2" }
+    return t
+end
+
+local function MSUF_StatusIcon_GetSymbolTexture(symbolKey)
+    if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
+        return nil
+    end
+    local useMidnight = MSUF_GetStatusIconStyleUseMidnight()
+    local suffix = useMidnight and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
+    -- NOTE: These are addon-bundled .tga files.
+    -- Folder must match your actual media folder structure.
+    return "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\Combat\\" .. symbolKey .. suffix
+end
+
+
 -- Shared indicator specs for Options_Player (used by ApplyFromDB layout + InstallHandlers)
 local _MSUF_INDICATOR_SPECS = {
     leader = {
@@ -1481,11 +1579,16 @@ end
 
 		panel.statusIconsTestModeCB = panel.statusIconsTestModeCB or CreateCheck(textGroup, "MSUF_StatusIconsTestModeCB", "Test mode (preview enabled icons)", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 152)
 
+		panel.statusIconsStyleCB = panel.statusIconsStyleCB or CreateCheck(textGroup, "MSUF_StatusIconsStyleCB", "Use Midnight style icons", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 174)
+		if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
+
 		if panel.statusCombatIconCB then panel.statusCombatIconCB:Hide() end
 		if panel.statusRestingIconCB then panel.statusRestingIconCB:Hide() end
 		if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:Hide() end
 
 		if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:Hide() end
+        if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
+		if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
 
 		-- Safety: older refactors called this; now it's not needed (layout is already relative).
 		MSUF_PositionLeaderMiniHeaders = MSUF_PositionLeaderMiniHeaders or function() end
@@ -1598,7 +1701,7 @@ end
 			return eb
 		end
 
-		local function _MSUF_LayoutIndicatorRow(cb, stepperX, stepperY, anchorDrop, anchorLabel, sizeEdit, sizeLabel, colX, ctrlY)
+		local function _MSUF_LayoutIndicatorRow(cb, stepperX, stepperY, anchorDrop, anchorLabel, sizeEdit, sizeLabel, iconDrop, iconLabel, colX, ctrlY)
 			-- X stepper is anchored to container; everything else is relative to it
 			if stepperX then
 				stepperX:ClearAllPoints()
@@ -1649,6 +1752,18 @@ end
 				end
 				sizeEdit:Hide()
 			end
+
+			if iconDrop and sizeEdit then
+				iconDrop:ClearAllPoints()
+				iconDrop:SetPoint("LEFT", sizeEdit, "RIGHT", 1, -2)
+				if iconLabel then
+					iconLabel:ClearAllPoints()
+					iconLabel:SetPoint("BOTTOM", iconDrop, "TOP", 0, 6)
+					iconLabel:Hide()
+				end
+				iconDrop:Hide()
+			end
+
 
 			if cb then cb:Hide() end
 		end
@@ -1752,6 +1867,8 @@ end
 					panel[ui.anchorLabelField],
 					panel[ui.sizeField],
 					panel[ui.sizeLabelField],
+					nil,
+					nil,
 					IND_COL_X,
 					IND_BASE_CTRL_Y + ((idx - 1) * IND_ROW_STEP)
 				)
@@ -1779,6 +1896,8 @@ panel.statusCombatAnchorLabel = panel.statusCombatAnchorLabel or _MSUF_MakeLabel
 
 panel.statusCombatSizeEdit  = panel.statusCombatSizeEdit  or _MSUF_MakeSizeEdit("statusCombatSizeEdit", "MSUF_StatusCombatSizeEdit")
 panel.statusCombatSizeLabel = panel.statusCombatSizeLabel or _MSUF_MakeLabel("statusCombatSizeLabel", "Size")
+panel.statusCombatSymbolDrop  = panel.statusCombatSymbolDrop  or _MSUF_MakeDrop("statusCombatSymbolDrop", "MSUF_StatusCombatSymbolDropdown", 92)
+panel.statusCombatSymbolLabel = panel.statusCombatSymbolLabel or _MSUF_MakeLabel("statusCombatSymbolLabel", "Icon")
 
 -- Relative layout: only X stepper is absolute, everything else follows.
 _MSUF_LayoutIndicatorRow(
@@ -1789,6 +1908,8 @@ _MSUF_LayoutIndicatorRow(
 	panel.statusCombatAnchorLabel,
 	panel.statusCombatSizeEdit,
 	panel.statusCombatSizeLabel,
+	panel.statusCombatSymbolDrop,
+	panel.statusCombatSymbolLabel,
 	IND_COL_X,
 	IND_BASE_CTRL_Y + (3 * IND_ROW_STEP) - 54
 )
@@ -1816,6 +1937,8 @@ panel.statusRestingAnchorLabel = panel.statusRestingAnchorLabel or _MSUF_MakeLab
 
 panel.statusRestingSizeEdit  = panel.statusRestingSizeEdit  or _MSUF_MakeSizeEdit("statusRestingSizeEdit", "MSUF_StatusRestingSizeEdit")
 panel.statusRestingSizeLabel = panel.statusRestingSizeLabel or _MSUF_MakeLabel("statusRestingSizeLabel", "Size")
+panel.statusRestingSymbolDrop  = panel.statusRestingSymbolDrop  or _MSUF_MakeDrop("statusRestingSymbolDrop", "MSUF_StatusRestingSymbolDropdown", 92)
+panel.statusRestingSymbolLabel = panel.statusRestingSymbolLabel or _MSUF_MakeLabel("statusRestingSymbolLabel", "Icon")
 
 -- Relative layout: only X stepper is absolute, everything else follows.
 _MSUF_LayoutIndicatorRow(
@@ -1826,6 +1949,8 @@ _MSUF_LayoutIndicatorRow(
 	panel.statusRestingAnchorLabel,
 	panel.statusRestingSizeEdit,
 	panel.statusRestingSizeLabel,
+	panel.statusRestingSymbolDrop,
+	panel.statusRestingSymbolLabel,
 	IND_COL_X,
 	IND_BASE_CTRL_Y + (3 * IND_ROW_STEP) - 76
 )
@@ -1854,6 +1979,8 @@ panel.statusIncomingResAnchorLabel = panel.statusIncomingResAnchorLabel or _MSUF
 
 panel.statusIncomingResSizeEdit  = panel.statusIncomingResSizeEdit  or _MSUF_MakeSizeEdit("statusIncomingResSizeEdit", "MSUF_StatusIncomingResSizeEdit")
 panel.statusIncomingResSizeLabel = panel.statusIncomingResSizeLabel or _MSUF_MakeLabel("statusIncomingResSizeLabel", "Size")
+panel.statusIncomingResSymbolDrop  = panel.statusIncomingResSymbolDrop  or _MSUF_MakeDrop("statusIncomingResSymbolDrop", "MSUF_StatusIncomingResSymbolDropdown", 92)
+panel.statusIncomingResSymbolLabel = panel.statusIncomingResSymbolLabel or _MSUF_MakeLabel("statusIncomingResSymbolLabel", "Icon")
 
 -- Relative layout: only X stepper is absolute, everything else follows.
 _MSUF_LayoutIndicatorRow(
@@ -1864,6 +1991,8 @@ _MSUF_LayoutIndicatorRow(
 	panel.statusIncomingResAnchorLabel,
 	panel.statusIncomingResSizeEdit,
 	panel.statusIncomingResSizeLabel,
+	panel.statusIncomingResSymbolDrop,
+	panel.statusIncomingResSymbolLabel,
 	IND_COL_X,
 	IND_BASE_CTRL_Y + (3 * IND_ROW_STEP) - 120
 )
@@ -2131,6 +2260,7 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         if panel.statusRestingIconCB then panel.statusRestingIconCB:Hide() end
         if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:Hide() end
         if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:Hide() end
+        if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
         SetShownByName("statusCombatGroupDivider", false)
         SetShownByName("statusCombatResetBtn", false)
         SetShownByName("statusCombatOffsetXStepper", false)
@@ -2236,6 +2366,7 @@ if panel.statusIconsHeader then panel.statusIconsHeader:SetShown(showStatusIcons
 if panel.statusCombatIconCB then panel.statusCombatIconCB:SetShown(showStatusIcons) end
 if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:SetShown(showStatusIcons) end
 if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:SetShown(showStatusIcons) end
+if panel.statusIconsStyleCB then panel.statusIconsStyleCB:SetShown(showStatusIcons) end
 
 SetShownByName("statusCombatGroupDivider", showStatusIcons)
 SetShownByName("statusCombatResetBtn", showStatusIcons)
@@ -2245,6 +2376,8 @@ SetShownByName("statusCombatAnchorDrop", showStatusIcons)
 SetShownByName("statusCombatAnchorLabel", showStatusIcons)
 SetShownByName("statusCombatSizeEdit", showStatusIcons)
 SetShownByName("statusCombatSizeLabel", showStatusIcons)
+SetShownByName("statusCombatSymbolDrop", showStatusIcons)
+SetShownByName("statusCombatSymbolLabel", showStatusIcons)
 
 SetShownByName("statusIncomingResGroupDivider", showStatusIcons)
 SetShownByName("statusIncomingResResetBtn", showStatusIcons)
@@ -2254,6 +2387,8 @@ SetShownByName("statusIncomingResAnchorDrop", showStatusIcons)
 SetShownByName("statusIncomingResAnchorLabel", showStatusIcons)
 SetShownByName("statusIncomingResSizeEdit", showStatusIcons)
 SetShownByName("statusIncomingResSizeLabel", showStatusIcons)
+SetShownByName("statusIncomingResSymbolDrop", showStatusIcons)
+SetShownByName("statusIncomingResSymbolLabel", showStatusIcons)
 
 local showResting = (currentKey == "player")
 if panel.statusRestingIconCB then panel.statusRestingIconCB:SetShown(showResting) end
@@ -2265,6 +2400,8 @@ SetShownByName("statusRestingAnchorDrop", showResting)
 SetShownByName("statusRestingAnchorLabel", showResting)
 SetShownByName("statusRestingSizeEdit", showResting)
 SetShownByName("statusRestingSizeLabel", showResting)
+SetShownByName("statusRestingSymbolDrop", showResting)
+SetShownByName("statusRestingSymbolLabel", showResting)
 
 if showStatusIcons then
     local toggleY = baseToggleY + (row * step)
@@ -2296,8 +2433,9 @@ if showStatusIcons then
     end
 
     if panel.statusIconsHeader and panel.statusCombatGroupDivider then
+        -- Nudge the header slightly down to avoid clipping into the row above.
         panel.statusIconsHeader:ClearAllPoints()
-        panel.statusIconsHeader:SetPoint("LEFT", panel.statusCombatGroupDivider, "LEFT", 0, 0)
+        panel.statusIconsHeader:SetPoint("LEFT", panel.statusCombatGroupDivider, "LEFT", 0, -8)
     elseif panel.statusIconsHeader then
         panel.statusIconsHeader:ClearAllPoints()
         panel.statusIconsHeader:SetPoint("TOPLEFT", container, "TOPLEFT", 12, toggleYCombat + 12)
@@ -2327,6 +2465,61 @@ if showStatusIcons then
 
     local idx = 0
     PlaceStatusCB(panel.statusIconsTestModeCB, idx, -10) -- extra 10px down for Test mode
+    idx = idx + 1
+    PlaceStatusCB(panel.statusIconsStyleCB, idx, -10)
+
+    -- Dummy icon dropdown pickers (Step 4): custom symbol selection (layout Step 4.6).
+    -- These only store per-unit symbol choices for later custom icon rendering.
+    --
+    -- Layout: under Test mode, aligned side-by-side (columns).
+    local function HideIconPicker(label, drop)
+        if label then label:Hide() end
+        if drop  then drop:Hide() end
+    end
+
+    local function PlaceIconPickerAt(label, drop, titleText, rel, xOff)
+        if not (label and drop and rel) then return end
+        label:SetText(titleText)
+        label:ClearAllPoints()
+        -- Move icon pickers a bit further down so they don't crowd the style/test toggles.
+        label:SetPoint("TOPLEFT", rel, "BOTTOMLEFT", 8 + (xOff or 0), -18)
+        label:Show()
+
+        drop:ClearAllPoints()
+        drop:SetPoint("TOPLEFT", label, "BOTTOMLEFT", -12, -4)
+        drop:Show()
+    end
+
+    local baseRel = panel.statusIconsStyleCB or panel.statusIconsTestModeCB
+    local cols = { 0, 145, 270 }
+
+    -- Default hide; we only show/position what is applicable for the current unit
+    HideIconPicker(panel.statusCombatSymbolLabel, panel.statusCombatSymbolDrop)
+    HideIconPicker(panel.statusRestingSymbolLabel, panel.statusRestingSymbolDrop)
+    HideIconPicker(panel.statusIncomingResSymbolLabel, panel.statusIncomingResSymbolDrop)
+
+    local col = 1
+
+    -- Combat icon picker (player/target)
+    if showStatusIcons and panel.statusCombatSymbolLabel and panel.statusCombatSymbolDrop then
+        PlaceIconPickerAt(panel.statusCombatSymbolLabel, panel.statusCombatSymbolDrop, "Combat icon", baseRel, cols[col])
+        col = col + 1
+    end
+
+    -- Rested icon picker (player only)
+    if showResting and panel.statusRestingSymbolLabel and panel.statusRestingSymbolDrop then
+        PlaceIconPickerAt(panel.statusRestingSymbolLabel, panel.statusRestingSymbolDrop, "Rested icon", baseRel, cols[col])
+        col = col + 1
+    end
+
+    -- Incoming Rez icon picker (player/target)
+    if showStatusIcons and panel.statusIncomingResSymbolLabel and panel.statusIncomingResSymbolDrop then
+        -- If we ran out of columns (unlikely), clamp to last column
+        local x = cols[col] or cols[#cols]
+        PlaceIconPickerAt(panel.statusIncomingResSymbolLabel, panel.statusIncomingResSymbolDrop, "Incoming rez icon", baseRel, x)
+        col = col + 1
+    end
+
 
     row = row + usedRows
 end
@@ -2798,6 +2991,11 @@ local function MSUF_ApplyIndicatorUI(spec)
         local a = MSUF_ReadString(conf, g, spec.anchorField, spec.anchorDefault)
         MSUF_ApplyDropdown(panel[spec.anchorDrop], a, spec.anchorText)
     end
+
+    if spec.iconDrop and panel[spec.iconDrop] and spec.iconField then
+        local v = MSUF_ReadString(conf, g, spec.iconField, spec.iconDefault)
+        MSUF_ApplyDropdown(panel[spec.iconDrop], v, spec.iconText)
+    end
     if spec.sizeEdit and panel[spec.sizeEdit] and spec.sizeField then
         local v = conf and conf[spec.sizeField]
         if type(v) ~= "number" and g then v = g[spec.sizeField] end
@@ -2822,6 +3020,7 @@ local function MSUF_ResetIndicatorRow(rowId)
     if spec.xField then conf[spec.xField] = nil end
     if spec.yField then conf[spec.yField] = nil end
     if spec.anchorField then conf[spec.anchorField] = nil end
+    if spec.iconField then conf[spec.iconField] = nil end
     if spec.sizeField then conf[spec.sizeField] = nil end
 
     MSUF_ApplyIndicatorUI(spec)
@@ -2957,6 +3156,77 @@ local function MSUF_BindIndicatorRow(spec)
     end
 
 
+    -- Dropdown (icon symbol - dummy, wired for DB storage)
+    if spec.iconDrop and panel[spec.iconDrop] and spec.iconField and UIDropDownMenu_Initialize then
+        local drop2 = panel[spec.iconDrop]
+
+        UIDropDownMenu_Initialize(drop2, function(self, level)
+            if not level or level ~= 1 then return end
+            if not AllowedNow() then return end
+
+            local function GetCurrent()
+                local conf3, g3 = MSUF_GetIndicatorConfAndGeneral()
+                return MSUF_ReadString(conf3, g3, spec.iconField, spec.iconDefault)
+            end
+
+            local function IsChecked(v)
+                return (GetCurrent() == v)
+            end
+
+            local function OnSelect(btn, value, textLabel)
+                if not IsFramesTab() then return end
+
+                local conf4, _, key4 = MSUF_GetIndicatorConfAndGeneral()
+                if spec.allowed and (not spec.allowed(key4)) then return end
+
+                local v = (btn and btn.value) or value or spec.iconDefault
+                conf4[spec.iconField] = v
+
+                if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(drop2, v) end
+                if UIDropDownMenu_SetText then
+                    local label = (spec.iconText and spec.iconText(v)) or textLabel or tostring(v)
+                    UIDropDownMenu_SetText(drop2, label)
+                end
+
+                if CloseDropDownMenus then CloseDropDownMenus() end
+                Refresh()
+            end
+
+            local _choices = spec.iconChoices
+            if type(_choices) == "function" then
+                _choices = _choices()
+            end
+
+            for _, pair in ipairs(_choices or {}) do
+                local textLabel, value = pair[1], pair[2]
+                local info = UIDropDownMenu_CreateInfo()
+                info.text  = textLabel
+                info.value = value
+
+                -- Optional icon preview (used by Status icon symbols)
+                local tex = (type(MSUF_StatusIcon_GetSymbolTexture) == "function") and MSUF_StatusIcon_GetSymbolTexture(value) or nil
+                if tex then
+                    info.icon = tex
+                    info.iconInfo = {
+                        tCoordLeft = 0.08, tCoordRight = 0.92,
+                        tCoordTop = 0.08, tCoordBottom = 0.92,
+                        tSizeX = 16, tSizeY = 16,
+                        tFitDropDownSizeX = true,
+                    }
+                end
+
+                info.func  = function(btn) OnSelect(btn, value, textLabel) end
+                info.checked = function() return IsChecked(value) end
+                info.isNotRadio = false
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end)
+
+        drop2:SetScript("OnShow", function() MSUF_ApplyIndicatorUI(spec) end)
+    end
+
+
+
     -- Numeric edit box (size)
     if spec.sizeEdit and panel[spec.sizeEdit] and spec.sizeField then
         local edit = panel[spec.sizeEdit]
@@ -3021,35 +3291,55 @@ _G.MSUF_RequestStatusCombatIndicatorRefresh = _G.MSUF_RequestStatusCombatIndicat
     end
 end
 
-local STATUSICON_COMBAT_SPEC = {
-    id = "status_combat",
-    order = 100,
+local function MSUF_BuildStatusCombatSpec()
+    local spec = {}
+    spec.id = "status_combat"
+    spec.order = 100
+    spec.allowed = function(key) return (key == "player" or key == "target") end
 
-    allowed = function(key) return (key == "player" or key == "target") end,
+    spec.showCB = "statusCombatIconCB"
+    spec.showField = "showCombatStateIndicator"
+    spec.showDefault = true
 
-    showCB = "statusCombatIconCB", showField = "showCombatStateIndicator", showDefault = true,
+    spec.xStepper = "statusCombatOffsetXStepper"
+    spec.xField = "combatStateIndicatorOffsetX"
+    spec.xDefault = 0
 
-    xStepper = "statusCombatOffsetXStepper", xField = "combatStateIndicatorOffsetX", xDefault = 0,
-    yStepper = "statusCombatOffsetYStepper", yField = "combatStateIndicatorOffsetY", yDefault = 0,
+    spec.yStepper = "statusCombatOffsetYStepper"
+    spec.yField = "combatStateIndicatorOffsetY"
+    spec.yDefault = 0
 
-    anchorDrop = "statusCombatAnchorDrop", anchorLabel = "statusCombatAnchorLabel",
-    anchorField = "combatStateIndicatorAnchor", anchorDefault = "TOPLEFT",
-    anchorText = function(v) return MSUF_LeaderAnchorText(v) end,
-    anchorChoices = {
+    spec.anchorDrop = "statusCombatAnchorDrop"
+    spec.anchorLabel = "statusCombatAnchorLabel"
+    spec.anchorField = "combatStateIndicatorAnchor"
+    spec.anchorDefault = "TOPLEFT"
+    spec.anchorText = function(v) return MSUF_LeaderAnchorText(v) end
+    spec.anchorChoices = {
         { MSUF_LeaderAnchorText("TOPLEFT"), "TOPLEFT" },
         { MSUF_LeaderAnchorText("TOPRIGHT"), "TOPRIGHT" },
         { MSUF_LeaderAnchorText("BOTTOMLEFT"), "BOTTOMLEFT" },
         { MSUF_LeaderAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
-    },
+    }
 
-    sizeEdit = "statusCombatSizeEdit", sizeLabel = "statusCombatSizeLabel",
-    sizeField = "combatStateIndicatorSize", sizeDefault = 18,
+    spec.sizeEdit = "statusCombatSizeEdit"
+    spec.sizeLabel = "statusCombatSizeLabel"
+    spec.sizeField = "combatStateIndicatorSize"
+    spec.sizeDefault = 18
 
-    divider = "statusCombatGroupDivider",
-    resetBtn = "statusCombatResetBtn",
+    spec.iconDrop = "statusCombatSymbolDrop"
+    spec.iconLabel = "statusCombatSymbolLabel"
+    spec.iconField = "combatStateIndicatorSymbol"
+    spec.iconDefault = "DEFAULT"
+    spec.iconText = MSUF_StatusIcon_SymbolText
+    spec.iconChoices = MSUF_StatusIcon_GetSymbolChoices
 
-    refreshFnName = "MSUF_RequestStatusCombatIndicatorRefresh",
-}
+    spec.divider = "statusCombatGroupDivider"
+    spec.resetBtn = "statusCombatResetBtn"
+    spec.refreshFnName = "MSUF_RequestStatusCombatIndicatorRefresh"
+    return spec
+end
+
+local STATUSICON_COMBAT_SPEC = MSUF_BuildStatusCombatSpec()
 
 MSUF_BindIndicatorRow(STATUSICON_COMBAT_SPEC)
 
@@ -3086,35 +3376,55 @@ _G.MSUF_RequestStatusRestingIndicatorRefresh = _G.MSUF_RequestStatusRestingIndic
     end
 end
 
-local STATUSICON_RESTING_SPEC = {
-    id = "status_rested",
-    order = 110,
+local function MSUF_BuildStatusRestedSpec()
+    local spec = {}
+    spec.id = "status_rested"
+    spec.order = 110
+    spec.allowed = function(key) return (key == "player") end -- player only
 
-    allowed = function(key) return (key == "player") end,
+    spec.showCB = "statusRestedIconCB"
+    spec.showField = "showRestingStateIndicator"
+    spec.showDefault = true
 
-    showCB = "statusRestingIconCB", showField = "showRestingIndicator", showDefault = true,
+    spec.xStepper = "statusRestedOffsetXStepper"
+    spec.xField = "restingStateIndicatorOffsetX"
+    spec.xDefault = 0
 
-    xStepper = "statusRestingOffsetXStepper", xField = "restedStateIndicatorOffsetX", xDefault = 0,
-    yStepper = "statusRestingOffsetYStepper", yField = "restedStateIndicatorOffsetY", yDefault = 0,
+    spec.yStepper = "statusRestedOffsetYStepper"
+    spec.yField = "restingStateIndicatorOffsetY"
+    spec.yDefault = 0
 
-    anchorDrop = "statusRestingAnchorDrop", anchorLabel = "statusRestingAnchorLabel",
-    anchorField = "restedStateIndicatorAnchor", anchorDefault = "TOPLEFT",
-    anchorText = function(v) return MSUF_LeaderAnchorText(v) end,
-    anchorChoices = {
+    spec.anchorDrop = "statusRestedAnchorDrop"
+    spec.anchorLabel = "statusRestedAnchorLabel"
+    spec.anchorField = "restingStateIndicatorAnchor"
+    spec.anchorDefault = "TOPLEFT"
+    spec.anchorText = function(v) return MSUF_LeaderAnchorText(v) end
+    spec.anchorChoices = {
         { MSUF_LeaderAnchorText("TOPLEFT"), "TOPLEFT" },
         { MSUF_LeaderAnchorText("TOPRIGHT"), "TOPRIGHT" },
         { MSUF_LeaderAnchorText("BOTTOMLEFT"), "BOTTOMLEFT" },
         { MSUF_LeaderAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
-    },
+    }
 
-    sizeEdit = "statusRestingSizeEdit", sizeLabel = "statusRestingSizeLabel",
-    sizeField = "restedStateIndicatorSize", sizeDefault = 18,
+    spec.sizeEdit = "statusRestedSizeEdit"
+    spec.sizeLabel = "statusRestedSizeLabel"
+    spec.sizeField = "restingStateIndicatorSize"
+    spec.sizeDefault = 18
 
-    divider = "statusRestingGroupDivider",
-    resetBtn = "statusRestingResetBtn",
+    spec.iconDrop = "statusRestedSymbolDrop"
+    spec.iconLabel = "statusRestedSymbolLabel"
+    spec.iconField = "restingStateIndicatorSymbol"
+    spec.iconDefault = "DEFAULT"
+    spec.iconText = MSUF_StatusIcon_SymbolText
+    spec.iconChoices = MSUF_StatusIcon_GetSymbolChoices
 
-    refreshFnName = "MSUF_RequestStatusRestingIndicatorRefresh",
-}
+    spec.divider = "statusRestedGroupDivider"
+    spec.resetBtn = "statusRestedResetBtn"
+    spec.refreshFnName = "MSUF_RequestStatusRestingIndicatorRefresh"
+    return spec
+end
+
+local STATUSICON_RESTING_SPEC = MSUF_BuildStatusRestedSpec()
 
 MSUF_BindIndicatorRow(STATUSICON_RESTING_SPEC)
 
@@ -3151,35 +3461,55 @@ _G.MSUF_RequestStatusIncomingResIndicatorRefresh = _G.MSUF_RequestStatusIncoming
     end
 end
 
-local STATUSICON_INCOMINGRES_SPEC = {
-    id = "status_incomingres",
-    order = 120,
+local function MSUF_BuildStatusIncomingResSpec()
+    local spec = {}
+    spec.id = "status_incoming_res"
+    spec.order = 120
+    spec.allowed = function(key) return (key == "player" or key == "target") end
 
-    allowed = function(key) return (key == "player" or key == "target") end,
+    spec.showCB = "statusIncomingResIconCB"
+    spec.showField = "showIncomingResIndicator"
+    spec.showDefault = true
 
-    showCB = "statusIncomingResIconCB", showField = "showIncomingResIndicator", showDefault = true,
+    spec.xStepper = "statusIncomingResOffsetXStepper"
+    spec.xField = "incomingResIndicatorOffsetX"
+    spec.xDefault = 0
 
-    xStepper = "statusIncomingResOffsetXStepper", xField = "incomingResIndicatorOffsetX", xDefault = 0,
-    yStepper = "statusIncomingResOffsetYStepper", yField = "incomingResIndicatorOffsetY", yDefault = 0,
+    spec.yStepper = "statusIncomingResOffsetYStepper"
+    spec.yField = "incomingResIndicatorOffsetY"
+    spec.yDefault = 0
 
-    anchorDrop = "statusIncomingResAnchorDrop", anchorLabel = "statusIncomingResAnchorLabel",
-    anchorField = "incomingResIndicatorAnchor", anchorDefault = "TOPRIGHT",
-    anchorText = function(v) return MSUF_LeaderAnchorText(v) end,
-    anchorChoices = {
+    spec.anchorDrop = "statusIncomingResAnchorDrop"
+    spec.anchorLabel = "statusIncomingResAnchorLabel"
+    spec.anchorField = "incomingResIndicatorAnchor"
+    spec.anchorDefault = "TOPLEFT"
+    spec.anchorText = function(v) return MSUF_LeaderAnchorText(v) end
+    spec.anchorChoices = {
         { MSUF_LeaderAnchorText("TOPLEFT"), "TOPLEFT" },
         { MSUF_LeaderAnchorText("TOPRIGHT"), "TOPRIGHT" },
         { MSUF_LeaderAnchorText("BOTTOMLEFT"), "BOTTOMLEFT" },
         { MSUF_LeaderAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
-    },
+    }
 
-    sizeEdit = "statusIncomingResSizeEdit", sizeLabel = "statusIncomingResSizeLabel",
-    sizeField = "incomingResIndicatorSize", sizeDefault = 18,
+    spec.sizeEdit = "statusIncomingResSizeEdit"
+    spec.sizeLabel = "statusIncomingResSizeLabel"
+    spec.sizeField = "incomingResIndicatorSize"
+    spec.sizeDefault = 18
 
-    divider = "statusIncomingResGroupDivider",
-    resetBtn = "statusIncomingResResetBtn",
+    spec.iconDrop = "statusIncomingResSymbolDrop"
+    spec.iconLabel = "statusIncomingResSymbolLabel"
+    spec.iconField = "incomingResIndicatorSymbol"
+    spec.iconDefault = "DEFAULT"
+    spec.iconText = MSUF_StatusIcon_SymbolText
+    spec.iconChoices = MSUF_StatusIcon_GetSymbolChoices
 
-    refreshFnName = "MSUF_RequestStatusIncomingResIndicatorRefresh",
-}
+    spec.divider = "statusIncomingResGroupDivider"
+    spec.resetBtn = "statusIncomingResResetBtn"
+    spec.refreshFnName = "MSUF_RequestStatusIncomingResIndicatorRefresh"
+    return spec
+end
+
+local STATUSICON_INCOMINGRES_SPEC = MSUF_BuildStatusIncomingResSpec()
 
 MSUF_BindIndicatorRow(STATUSICON_INCOMINGRES_SPEC)
 
@@ -3226,6 +3556,10 @@ local function MSUF_ApplyStatusIconsUI()
     end
     if panel.statusIconsTestModeCB then
         panel.statusIconsTestModeCB:SetChecked((type(g) == "table" and g.stateIconsTestMode == true) or false)
+    end
+
+    if panel.statusIconsStyleCB then
+        panel.statusIconsStyleCB:SetChecked(MSUF_GetStatusIconStyleUseMidnight())
     end
 end
 
@@ -3324,6 +3658,24 @@ if panel.statusIconsTestModeCB then
     end)
     panel.statusIconsTestModeCB:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
 end
+
+-- Global icon style toggle (Classic vs Midnight) affects the symbol dropdown icon previews.
+if panel.statusIconsStyleCB then
+    panel.statusIconsStyleCB:SetScript("OnClick", function(self)
+        local useMidnight = self:GetChecked() and true or false
+        MSUF_SetStatusIconStyleUseMidnight(useMidnight)
+
+        -- Re-apply UI so dropdown texts sync (and the checkbox stays consistent on both pages).
+        MSUF_ApplyStatusIconsUI()
+
+        -- Refresh both frames so any live symbol render (when implemented) will update immediately.
+        for _, k in ipairs({ "player", "target" }) do
+            MSUF_RequestStatusIconRefresh(k)
+        end
+    end)
+end
+
+
 
 -- Allow other UI locations (Edit Mode checkbox) to request a live refresh of this section.
 _G.MSUF_RefreshStatusIconsOptionsUI = MSUF_ApplyStatusIconsUI

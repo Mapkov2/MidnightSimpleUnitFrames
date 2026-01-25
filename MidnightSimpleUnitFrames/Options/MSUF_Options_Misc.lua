@@ -110,29 +110,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     indicatorsLine:SetPoint("RIGHT", miscGroup, "RIGHT", -16, 0)
     -- Hidden: boxed misc layout already separates sections via boxed panels.
     indicatorsLine:Hide()
-
-    local resIndicatorCheck = CreateFrame("CheckButton", "MSUF_IncomingResIndicatorCheck", miscGroup, "UICheckButtonTemplate")
-    resIndicatorCheck:SetPoint("TOPLEFT", indicatorsLine, "BOTTOMLEFT", 16, -10)
-    resIndicatorCheck.text = resIndicatorCheck:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    resIndicatorCheck.text:SetPoint("LEFT", resIndicatorCheck, "RIGHT", 2, 0)
-    resIndicatorCheck.text:SetText("Incoming resurrection indicator")
-
-    resIndicatorCheck:SetScript("OnClick", function(self)
-        EnsureDB()
-        MSUF_DB.general.showIncomingResIndicator = self:GetChecked() and true or false
-        if _G.MSUF_UnitFrames then
-            local pf = _G.MSUF_UnitFrames.player
-            local tf = _G.MSUF_UnitFrames.target
-            if pf and UpdateSimpleUnitFrame then UpdateSimpleUnitFrame(pf) end
-            if tf and UpdateSimpleUnitFrame then UpdateSimpleUnitFrame(tf) end
-        end
-    end)
-
-    resIndicatorCheck:SetScript("OnShow", function(self)
-        EnsureDB()
-        local g = MSUF_DB.general or {}
-        self:SetChecked(g.showIncomingResIndicator ~= false)
-    end)
+    -- Incoming resurrection indicator toggle removed (moved to per-unit Status icons UI)
 
 infoTooltipDisableCheck = CreateFrame("CheckButton", "MSUF_InfoTooltipDisableCheck", miscGroup, "UICheckButtonTemplate")
 infoTooltipDisableCheck:SetPoint("TOPLEFT", miscRightLine, "BOTTOMLEFT", 16, -16)
@@ -358,9 +336,7 @@ infoTooltipDisableCheck.text:SetText("Disable MSUF unit info panel tooltips")
                 ["MSUF unit info panel position"] = true,
                 ["Disable MSUF unit info panel tooltips"] = true,
                 ["Disable Blizzard unitframes"] = true,
-                ["Incoming resurrection indicator ()"] = true,
-                ["Incoming resurrection position"] = true,
-            }
+                                            }
 
             for i = 1, miscGroup:GetNumRegions() do
                 local r = select(i, miscGroup:GetRegions())
@@ -614,8 +590,6 @@ local bottomPanel = CreateFrame("Frame", nil, miscGroup, "BackdropTemplate")
             local blizzUFDisable = _G.MSUF_DisableBlizzUFCheck
             local minimapIconCheck = _G.MSUF_MinimapIconCheck
             local targetSoundsCheck = _G.MSUF_TargetSoundsCheck
-
-            local resCheck = _G.MSUF_IncomingResIndicatorCheck
             -- LEFT: Updates
 
             if updateSlider then
@@ -752,27 +726,12 @@ end
             -- BOTTOM: Indicators
             local leftX = 14
             local rightX = 14
-
-            -- Left column: Incoming resurrection
-            local leftAnchor = bottomPanel
-            local leftHeader = MakeLabel(bottomPanel, "Incoming resurrection", "TOPLEFT", bottomPanel, leftX, -34)
-            local leftLine = bottomPanel:CreateTexture(nil, "ARTWORK")
-            leftLine:SetColorTexture(1, 1, 1, 0.10)
-            leftLine:SetHeight(1)
-            leftLine:SetPoint("TOPLEFT", leftHeader, "BOTTOMLEFT", 0, -8)
-            leftLine:SetPoint("TOPRIGHT", bottomPanel, "TOPLEFT", leftW - 14, -42)
-
-            if resCheck then
-                resCheck:ClearAllPoints()
-                resCheck:SetParent(bottomPanel)
-                resCheck:SetPoint("TOPLEFT", leftHeader, "BOTTOMLEFT", 0, -10)
-                StyleCheckbox(resCheck)
-            end
+            -- Left column removed: Incoming resurrection controls moved to per-unit Status icons UI
 
             -- Right column: Status indicators (placeholders, wiring later)
-            local rightHeader = MakeLabel(bottomPanel, "Status indicators", "TOPLEFT", bottomPanel, leftW + 14, -34)
+            local rightHeader = MakeLabel(bottomPanel, "Status indicators", "TOPLEFT", bottomPanel, leftX, -34)
             rightHeader:ClearAllPoints()
-            rightHeader:SetPoint("TOPLEFT", bottomPanel, "TOPLEFT", leftW + 14, -34)
+            rightHeader:SetPoint("TOPLEFT", bottomPanel, "TOPLEFT", leftX, -34)
             local rightLine = bottomPanel:CreateTexture(nil, "ARTWORK")
             rightLine:SetColorTexture(1, 1, 1, 0.10)
             rightLine:SetHeight(1)

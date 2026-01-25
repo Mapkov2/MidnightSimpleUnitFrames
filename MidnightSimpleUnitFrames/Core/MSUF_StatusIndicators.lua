@@ -95,6 +95,70 @@ local function _MSUF_ReadStr(conf, g, k, defaultVal, legacyKey)
     return v
 end
 
+-- ------------------------------------------------------------
+-- Status Icon Symbol Textures (Classic vs Midnight)
+-- ------------------------------------------------------------
+local function _MSUF_GetStatusIconsUseMidnight(conf, g)
+    -- Global by design; allow per-frame legacy if ever present.
+    if type(conf) == "table" and conf.statusIconsUseMidnightStyle ~= nil then
+        return (conf.statusIconsUseMidnightStyle == true)
+    end
+    if type(g) == "table" and g.statusIconsUseMidnightStyle ~= nil then
+        return (g.statusIconsUseMidnightStyle == true)
+    end
+    return false
+end
+
+local function _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
+    if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
+        return nil
+    end
+    -- Custom slots are reserved for later user-provided textures.
+    if symbolKey == "CUSTOM1" or symbolKey == "CUSTOM2" then
+        return nil
+    end
+
+    local suffix = (useMidnight == true) and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
+    return "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\Combat\\" .. symbolKey .. suffix
+end
+
+local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight)
+    if not tex or not tex.SetTexture then return end
+
+    -- Capture default texcoords so we can restore them when the user selects
+    -- DEFAULT again. MSUF's built-in status icons may use cropped coords,
+    -- but custom symbol TGAs should be displayed fully.
+    if tex._msufDefaultTexCoord == nil and tex.GetTexCoord then
+        local ulx, uly, llx, lly, urx, ury, lrx, lry = tex:GetTexCoord()
+        tex._msufDefaultTexCoord = { ulx, uly, llx, lly, urx, ury, lrx, lry }
+    end
+
+    local path = _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
+    if not path then
+        -- Keep whatever default texture was assigned during creation.
+        tex._msufSymbolStamp = nil
+
+        -- Restore original texcoords when returning to DEFAULT.
+        local tc = tex._msufDefaultTexCoord
+        if tc and tex.SetTexCoord then
+            tex:SetTexCoord(tc[1], tc[2], tc[3], tc[4], tc[5], tc[6], tc[7], tc[8])
+        end
+        return
+    end
+
+    local stamp = path
+    if tex._msufSymbolStamp ~= stamp then
+        tex:SetTexture(path)
+        tex._msufSymbolStamp = stamp
+
+        -- Ensure the symbol TGAs are not cropped.
+        if tex.SetTexCoord then
+            tex:SetTexCoord(0, 1, 0, 1)
+        end
+    end
+end
+
+
 local function _MSUF_AnchorCorner(tex, frame, corner, xOff, yOff)
     if not tex or not frame then return end
     corner = corner or "TOPLEFT"
@@ -158,7 +222,19 @@ local function _MSUF_UpdateStatusIcons(frame)
     local summonIcon = frame.summonIndicatorIcon
     if summonIcon and summonIcon.Hide then
         summonIcon:Hide()
-    end
+    
+-- Symbol textures (selected via Options -> Status icons)
+local useMidnight = _MSUF_GetStatusIconsUseMidnight(conf, g)
+
+local combatSymbol = _MSUF_ReadStr(conf, g, "combatStateIndicatorSymbol", "DEFAULT")
+local restSymbol   = _MSUF_ReadStr(conf, g, "restingStateIndicatorSymbol", "DEFAULT", "restedStateIndicatorSymbol")
+local rezSymbol    = _MSUF_ReadStr(conf, g, "incomingResIndicatorSymbol", "DEFAULT")
+
+_MSUF_ApplyStatusIconSymbolTexture(combatIcon, combatSymbol, useMidnight)
+_MSUF_ApplyStatusIconSymbolTexture(restIcon, restSymbol, useMidnight)
+_MSUF_ApplyStatusIconSymbolTexture(rezIcon, rezSymbol, useMidnight)
+
+end
 
     local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffectingCombat(unit)) and true or false)))
     local restOn = (showRest and (testMode or ((IsResting and IsResting()) and true or false)))
