@@ -8,6 +8,47 @@ if _G then _G.MSUF_SLASHMENU_ONLY = true end
 local panel, title, sub
 local searchBox
 local frameGroup, fontGroup, auraGroup, castbarGroup
+
+-- ============================================================
+-- Reload recommendation (shown once after user changes any slider)
+-- ============================================================
+
+-- We only want to prompt once per UI session, and we debounce slider drags to avoid spam.
+if _G and not _G.MSUF_ReloadRecommendShown then _G.MSUF_ReloadRecommendShown = false end
+
+local msufReloadRecommendTimer
+local function MSUF_ScheduleReloadRecommend()
+    if not _G or _G.MSUF_ReloadRecommendShown then return end
+
+    -- Debounce: many OnValueChanged calls happen during drag; show once after input settles.
+    if msufReloadRecommendTimer and msufReloadRecommendTimer.Cancel then
+        msufReloadRecommendTimer:Cancel()
+        msufReloadRecommendTimer = nil
+    end
+
+    msufReloadRecommendTimer = C_Timer.NewTimer(0.35, function()
+        msufReloadRecommendTimer = nil
+        if not _G or _G.MSUF_ReloadRecommendShown then return end
+
+        if not _G.StaticPopupDialogs then return end
+        if not _G.StaticPopupDialogs["MSUF_RELOAD_RECOMMENDED"] then
+            _G.StaticPopupDialogs["MSUF_RELOAD_RECOMMENDED"] = {
+                text = "Some changes may require a UI reload to apply correctly.\n\nReload now?",
+                button1 = "Reload",
+                button2 = "Later",
+                OnAccept = function() ReloadUI() end,
+                timeout = 0,
+                whileDead = 1,
+                hideOnEscape = 1,
+                preferredIndex = 3,
+            }
+        end
+
+        _G.MSUF_ReloadRecommendShown = true
+        StaticPopup_Show("MSUF_RELOAD_RECOMMENDED")
+    end)
+end
+
 local castbarEnemyGroup, castbarTargetGroup, castbarFocusGroup, castbarBossGroup, castbarPlayerGroup
 local barGroup, miscGroup, profileGroup
 
@@ -1723,6 +1764,11 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
     slider:SetValueStep(step)
     slider:SetObeyStepOnDrag(true)
 
+    -- Mark user interaction so we only recommend reload for real user changes (not DB sync).
+    slider:HookScript("OnMouseDown", function(self)
+        self._msufUserChange = true
+    end)
+
     slider.minVal = minVal
     slider.maxVal = maxVal
     slider.step   = step
@@ -1759,6 +1805,7 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
 
         if val < slider.minVal then val = slider.minVal end
         if val > slider.maxVal then val = slider.maxVal end
+        slider._msufUserChange = true
         slider:SetValue(val)
     end
 
@@ -1787,6 +1834,7 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
         local st  = slider.step or 1
         local nv  = cur - st
         if nv < slider.minVal then nv = slider.minVal end
+        slider._msufUserChange = true
         slider:SetValue(nv)
     end)
 
@@ -1801,6 +1849,7 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
         local st  = slider.step or 1
         local nv  = cur + st
         if nv > slider.maxVal then nv = slider.maxVal end
+        slider._msufUserChange = true
         slider:SetValue(nv)
     end)
 
@@ -1830,6 +1879,11 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
 
         if self.onValueChanged then
             self.onValueChanged(self, value)
+        end
+
+        if self._msufUserChange then
+            self._msufUserChange = nil
+            MSUF_ScheduleReloadRecommend()
         end
     end)
 
@@ -3749,16 +3803,29 @@ end
                 header:SetText("Name shortening")
             end
 
-            local drop = _G["MSUF_CastbarSpellNameShortenDropdown"]
-            if rightCol and not drop then
-                drop = CreateFrame("Frame", "MSUF_CastbarSpellNameShortenDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate")
-                MSUF_ExpandDropdownClickArea(drop)
-                UIDropDownMenu_SetWidth(drop, 120)
-                drop._msufButtonWidth = 120
-                if type(MSUF_MakeDropdownScrollable) == "function" then
-                    MSUF_MakeDropdownScrollable(drop, 8)
-                end
-            end
+
+	            -- NOTE: This used to be an On/Off dropdown. We intentionally use a simple
+	            -- On/Off button now (green when enabled, red when disabled).
+	            -- When toggling from ON -> OFF we force a /reload (name shortening changes can
+	            -- affect text clipping/layout and should be applied from a clean UI state).
+	            local toggleBtn = _G["MSUF_CastbarSpellNameShortenToggle"]
+	            if rightCol and not toggleBtn then
+	                toggleBtn = CreateFrame("Button", "MSUF_CastbarSpellNameShortenToggle", castbarEnemyGroup, "UIPanelButtonTemplate")
+	                toggleBtn:SetSize(120, 22)
+	                toggleBtn:SetText("Off")
+	                if MSUF_SkinMidnightActionButton then
+	                    -- Remove default blue highlights and keep our flat style.
+	                    MSUF_SkinMidnightActionButton(toggleBtn, { textR = 1, textG = 1, textB = 1 })
+	                end
+	
+	                -- If an older build already created the dropdown, keep it hidden.
+	                local oldDrop = _G["MSUF_CastbarSpellNameShortenDropdown"]
+	                if oldDrop then
+	                    oldDrop:Hide()
+	                    oldDrop:SetAlpha(0)
+	                    oldDrop:EnableMouse(false)
+	                end
+	            end
 
             local maxSlider = _G["MSUF_CastbarSpellNameMaxLenSlider"]
             if rightCol and not maxSlider then
@@ -3806,15 +3873,15 @@ end
                 header:Show()
             end
 
-            if drop and header then
-                drop:ClearAllPoints()
-                drop:SetPoint("TOPLEFT", header, "BOTTOMLEFT", -16, -4)
-                drop:Show()
-            end
+	            if toggleBtn and header then
+	                toggleBtn:ClearAllPoints()
+	                toggleBtn:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -6)
+	                toggleBtn:Show()
+	            end
 
-            if maxSlider and drop then
+	            if maxSlider and toggleBtn then
                 maxSlider:ClearAllPoints()
-                maxSlider:SetPoint("TOPLEFT", drop, "BOTTOMLEFT", 16, -30)
+	                maxSlider:SetPoint("TOPLEFT", toggleBtn, "BOTTOMLEFT", 0, -30)
                 maxSlider:SetWidth(260)
                 FixSliderLabel(maxSlider)
                 maxSlider:Show()
@@ -3847,66 +3914,71 @@ end
                 if resSlider then MSUF_SetLabeledSliderEnabled(resSlider, enabled) end
             end
 
-            -- Dropdown init + live DB apply (On/Off only; always shortens at END)
-            if drop then
-                local function ShortenDrop_Init(self, level)
-                    EnsureDB()
+	            -- Button init + DB apply (On/Off only; always shortens at END)
+	            if toggleBtn then
+	                local function SetRegionColor(self, rr, gg, bb, aa)
+	                    if not self then return end
+	                    local name = self.GetName and self:GetName()
+	                    local left  = self.Left  or (name and _G[name .. "Left"]) or nil
+	                    local mid   = self.Middle or (name and _G[name .. "Middle"]) or nil
+	                    local right = self.Right or (name and _G[name .. "Right"]) or nil
+	
+	                    if left  then left:SetTexture("Interface\\Buttons\\WHITE8x8"); left:SetVertexColor(rr, gg, bb, aa or 1) end
+	                    if mid   then mid:SetTexture("Interface\\Buttons\\WHITE8x8"); mid:SetVertexColor(rr, gg, bb, aa or 1) end
+	                    if right then right:SetTexture("Interface\\Buttons\\WHITE8x8"); right:SetVertexColor(rr, gg, bb, aa or 1) end
+	
+	                    local nt = self.GetNormalTexture and self:GetNormalTexture()
+	                    if nt then
+	                        nt:SetTexture("Interface\\Buttons\\WHITE8x8")
+	                        nt:SetVertexColor(rr, gg, bb, aa or 1)
+	                        nt:SetTexCoord(0, 1, 0, 1)
+	                    end
+	                end
 
-                    local function OnSelect(btn)
-                        EnsureDB()
-                        local g = (MSUF_DB and MSUF_DB.general) or {}
+	                local function SyncToggleVisual()
+	                    EnsureDB()
+	                    local g = (MSUF_DB and MSUF_DB.general) or {}
+	                    local cur = tonumber(g.castbarSpellNameShortening) or 0
+	                    -- Migrate old enum values (1/2) to simple On (1)
+	                    if cur > 0 then cur = 1 else cur = 0 end
+	                    g.castbarSpellNameShortening = cur
+	
+	                    if cur == 1 then
+	                        toggleBtn:SetText("On")
+	                        -- green
+	                        SetRegionColor(toggleBtn, 0.10, 0.45, 0.10, 0.95)
+	                    else
+	                        toggleBtn:SetText("Off")
+	                        -- red
+	                        SetRegionColor(toggleBtn, 0.55, 0.12, 0.12, 0.95)
+	                    end
+	
+	                    SyncEnabledStates()
+	                end
 
-                        local v = tonumber(btn.value or btn.arg1) or 0
-                        if v > 0 then v = 1 end -- only On/Off
+	                -- Initial sync
+	                SyncToggleVisual()
 
-                        g.castbarSpellNameShortening = v
+	                toggleBtn:SetScript("OnClick", function()
+	                    EnsureDB()
+	                    local g = (MSUF_DB and MSUF_DB.general) or {}
+	
+	                    local prev = tonumber(g.castbarSpellNameShortening) or 0
+	                    if prev > 0 then prev = 1 else prev = 0 end
+	
+	                    local newV = (prev == 1) and 0 or 1
+	                    g.castbarSpellNameShortening = newV
 
-                        UIDropDownMenu_SetSelectedValue(drop, v)
-                        UIDropDownMenu_SetText(drop, (v == 1) and "On" or "Off")
+	                    -- ON -> OFF requires a hard reload
+	                    if prev == 1 and newV == 0 then
+	                        if ReloadUI then ReloadUI() end
+	                        return
+	                    end
 
-                        -- Force-refresh checkmarks (fixes "both options stay checked" edge cases)
-                        if UIDropDownMenu_Refresh then
-                            UIDropDownMenu_Refresh(drop)
-                        end
-
-                        SyncEnabledStates()
-                        ApplyVisualRefresh()
-                        CloseDropDownMenus()
-                    end
-
-                    local function AddOption(label, value)
-                        local info = UIDropDownMenu_CreateInfo()
-                        info.text = label
-                        info.value = value
-                        info.arg1 = value
-                        info.func = OnSelect
-                        info.isNotRadio = false
-                        info.notCheckable = false
-                        info.keepShownOnClick = false
-                        info.checked = function()
-                            local sel = UIDropDownMenu_GetSelectedValue(drop)
-                            sel = tonumber(sel) or 0
-                            return sel == value
-                        end
-                        UIDropDownMenu_AddButton(info, level)
-                    end
-
-                    AddOption("Off", 0)
-                    AddOption("On", 1)
-                end
-
-                UIDropDownMenu_Initialize(drop, ShortenDrop_Init)
-
-                EnsureDB()
-                local g = (MSUF_DB and MSUF_DB.general) or {}
-                local cur = tonumber(g.castbarSpellNameShortening) or 0
-                -- Migrate old enum values (1/2) to simple On (1)
-                if cur > 0 then cur = 1 else cur = 0 end
-                g.castbarSpellNameShortening = cur
-
-                UIDropDownMenu_SetSelectedValue(drop, cur)
-                UIDropDownMenu_SetText(drop, (cur == 1) and "On" or "Off")
-            end
+	                    SyncToggleVisual()
+	                    ApplyVisualRefresh()
+	                end)
+	            end
 
             if maxSlider then
                 maxSlider.onValueChanged = function(self, value)
