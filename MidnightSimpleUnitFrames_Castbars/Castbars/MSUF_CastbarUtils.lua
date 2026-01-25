@@ -93,18 +93,23 @@ function _G.MSUF_Castbar_ApplyNonInterruptibleTint(frame, rawNotInterruptible,
   local tex = sb.GetStatusBarTexture and sb:GetStatusBarTexture()
   local usedC = false
 
-  if tex and tex.SetVertexColorFromBoolean and CreateColor then
-    -- Do NOT evaluate rawNotInterruptible in Lua; pass straight into the C method.
-    local nonCol = CreateColor(nonIntR, nonIntG, nonIntB, nonIntA or 1)
-    local intCol = CreateColor(intR, intG, intB, intA or 1)
-
-    -- rawNotInterruptible can be secret OR nil depending on API/source.
-    -- Do not boolean-test it in Lua. Attempt the C helper and fall back cleanly.
-    local ok = pcall(tex.SetVertexColorFromBoolean, tex, rawNotInterruptible, nonCol, intCol)
-    if ok then
-      usedC = true
-    end
-  end
+	if tex and tex.SetVertexColorFromBoolean and CreateColor then
+	  -- IMPORTANT (Midnight/Beta): `rawNotInterruptible` can be nil (e.g. not currently casting)
+	  -- and may be a value that Lua should not boolean-test. The C method can safely consume it.
+	  --
+	  -- Key point: do NOT use pcall here (it can break the secure C-side call path),
+	  -- but also never pass nil as the first arg.
+	  --
+	  -- If the API did not provide a raw flag, fall back to our plain boolean (event-driven / barType).
+	  local value = rawNotInterruptible
+	  if value == nil then
+	    value = wantNI
+	  end
+	  local nonCol = CreateColor(nonIntR, nonIntG, nonIntB, nonIntA or 1)
+	  local intCol = CreateColor(intR, intG, intB, intA or 1)
+	  tex:SetVertexColorFromBoolean(value, nonCol, intCol)
+	  usedC = true
+	end
 
   if not usedC then
     -- Pure StatusBar color fallback.

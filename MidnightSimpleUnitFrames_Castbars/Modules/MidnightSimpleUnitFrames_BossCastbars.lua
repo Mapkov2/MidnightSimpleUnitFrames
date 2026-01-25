@@ -486,7 +486,22 @@ end
 		EnsureDBSafe()
 		local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 
+		-- NOTE: For some boss casts, UNIT_SPELLCAST_(NOT_)INTERRUPTIBLE events can be inconsistent.
+		-- Keep a raw API flag around for C-side tinting. If the cached value is missing, refresh it
+		-- directly from UnitCastingInfo/UnitChannelInfo (no boolean tests on the raw flag).
 		local rawNI = self.MSUF_apiNotInterruptibleRaw
+		if rawNI == nil and self.unit then
+			local castName, _, _, _, _, _, _, _, apiNI = UnitCastingInfo(self.unit)
+			if castName then
+				rawNI = apiNI
+			else
+				local chanName, _, _, _, _, _, apiNI2 = UnitChannelInfo(self.unit)
+				if chanName then
+					rawNI = apiNI2
+				end
+			end
+			self.MSUF_apiNotInterruptibleRaw = rawNI
+		end
 		local isNI = (self.MSUF_isNotInterruptiblePlain == true)
 		self.isNotInterruptible = isNI
 
