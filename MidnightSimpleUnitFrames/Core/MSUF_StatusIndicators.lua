@@ -350,31 +350,11 @@ local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffe
                 restIcon._msufSizeStamp = restSize
             end
 
-            -- If both use same corner and combat is visible, stack resting under combat (UUF-style).
-            -- IMPORTANT: still respect user X/Y offsets while stacked.
-            if restCorner == combatCorner and combatOn and combatIcon and combatIcon.IsShown and combatIcon:IsShown() then
-                local gap = 2
-                local stackH = combatSize
-                if restSize and restSize > stackH then stackH = restSize end
-
-                -- IMPORTANT: Stack relative to the unitframe (not the combat icon).
-                -- This keeps Rested fully independent: moving Combat via X/Y will NOT drag Rested along.
-                restIcon:ClearAllPoints()
-                if restCorner == "TOPLEFT" then
-                    restIcon:SetPoint("TOPLEFT", frame, "TOPLEFT", restX, restY - (stackH + gap))
-                elseif restCorner == "TOPRIGHT" then
-                    restIcon:SetPoint("TOPRIGHT", frame, "TOPRIGHT", restX, restY - (stackH + gap))
-                elseif restCorner == "BOTTOMLEFT" then
-                    restIcon:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", restX, restY + (stackH + gap))
-                elseif restCorner == "CENTER" then
-                    restIcon:SetPoint("CENTER", frame, "CENTER", restX, restY - (stackH + gap))
-                else -- BOTTOMRIGHT
-                    restIcon:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", restX, restY + (stackH + gap))
-                end
-
-            else
-                _MSUF_AnchorCorner(restIcon, frame, restCorner, restX, restY)
-            end
+	            -- NOTE: Do NOT auto-stack Rested under Combat.
+	            -- Old profiles (pre-status-icons) don't have explicit Rested positioning keys yet;
+	            -- auto-stacking caused the Rested icon to *shift* when Combat toggled on/off.
+	            -- We always anchor Rested using its own configured corner + offsets.
+	            _MSUF_AnchorCorner(restIcon, frame, restCorner, restX, restY)
 
             restIcon:SetAlpha(iconAlpha)
             restIcon:Show()
