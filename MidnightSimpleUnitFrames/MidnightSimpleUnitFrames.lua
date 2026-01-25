@@ -5403,6 +5403,154 @@ end
     if conf and conf.alphaExcludeTextPortrait == true then
         _G.MSUF_ApplyUnitAlpha(self, key)
     end
+
+    -- Third-party anchor helpers (e.g. BetterCooldownManager): keep proxy anchors
+    -- live-synced to MSUF sub-elements after every update.
+    if _G and type(_G.MSUF_TPA_SyncAnchors) == "function" then
+        _G.MSUF_TPA_SyncAnchors(self)
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- MSUF Third-Party Anchor Proxies (BetterCooldownManager etc.)
+-- ---------------------------------------------------------------------------
+-- External addons typically anchor by global frame name (e.g. _G["PlayerFrame"]).
+-- To avoid requiring constant upstream patches, we expose a few stable, tiny,
+-- invisible helper frames that track MSUF sub-elements.
+--
+-- Global frames created (stable names):
+--   MSUF_TPA_PlayerFrame, MSUF_TPA_TargetFrame
+--   MSUF_TPA_PlayerPowerBar, MSUF_TPA_TargetPowerBar
+--   MSUF_TPA_PlayerSecondaryPower, MSUF_TPA_TargetSecondaryPower
+--
+-- Global function:
+--   _G.MSUF_TPA_SyncAnchors(unitframe)  -- called from UpdateSimpleUnitFrame
+--   _G.MSUF_UpdateThirdPartyAnchors_All()
+do
+    local function MSUF_TPA_GetOrCreate(name)
+        if not _G or not name then return nil end
+        local f = _G[name]
+        if f then return f end
+        f = CreateFrame("Frame", name, UIParent)
+        f:SetSize(1, 1)
+        if f.SetAlpha then f:SetAlpha(0) end
+        if f.Show then f:Show() end
+        _G[name] = f
+        return f
+    end
+
+    local function MSUF_TPA_Snap(anchorName, target)
+        local a = MSUF_TPA_GetOrCreate(anchorName)
+        if not a or not a.ClearAllPoints or not a.SetPoint then return end
+        a:ClearAllPoints()
+        a:SetPoint("CENTER", target or UIParent, "CENTER", 0, 0)
+    end
+
+    local function MSUF_TPA_SyncFromUnitFrame(uf)
+        if not uf or not uf.unit then return end
+        local unit = uf.unit
+        if unit ~= "player" and unit ~= "target" then return end
+
+        if unit == "player" then
+            MSUF_TPA_Snap("MSUF_TPA_PlayerFrame", uf)
+            local pb = uf.targetPowerBar or uf.powerBar or uf
+            MSUF_TPA_Snap("MSUF_TPA_PlayerPowerBar", pb)
+            local sp = pb
+            MSUF_TPA_Snap("MSUF_TPA_PlayerSecondaryPower", sp)
+        else
+            MSUF_TPA_Snap("MSUF_TPA_TargetFrame", uf)
+            local pb = uf.targetPowerBar or uf.powerBar or uf
+            MSUF_TPA_Snap("MSUF_TPA_TargetPowerBar", pb)
+            MSUF_TPA_Snap("MSUF_TPA_TargetSecondaryPower", pb)
+        end
+    end
+
+    _G.MSUF_TPA_SyncAnchors = function(uf)
+        -- Safe, low-cost call; only affects player/target.
+        MSUF_TPA_SyncFromUnitFrame(uf)
+    end
+
+    _G.MSUF_UpdateThirdPartyAnchors_All = function()
+        if not _G or not _G.MSUF_UnitFrames then return end
+        MSUF_TPA_SyncFromUnitFrame(_G.MSUF_UnitFrames.player)
+        MSUF_TPA_SyncFromUnitFrame(_G.MSUF_UnitFrames.target)
+    end
+
+
+-- Ensure all proxy anchors exist immediately (so other addons can anchor
+-- even before the first MSUF unitframe update runs).
+_G.MSUF_TPA_EnsureAllAnchors = function()
+    MSUF_TPA_GetOrCreate("MSUF_TPA_PlayerFrame")
+    MSUF_TPA_GetOrCreate("MSUF_TPA_TargetFrame")
+    MSUF_TPA_GetOrCreate("MSUF_TPA_PlayerPowerBar")
+    MSUF_TPA_GetOrCreate("MSUF_TPA_TargetPowerBar")
+    MSUF_TPA_GetOrCreate("MSUF_TPA_PlayerSecondaryPower")
+    MSUF_TPA_GetOrCreate("MSUF_TPA_TargetSecondaryPower")
+end
+end
+
+
+-- ---------------------------------------------------------------------------
+-- BetterCooldownManager Anchor Support (no BCDM changes required)
+-- ---------------------------------------------------------------------------
+-- BCDM exposes a public API: BCDMG.AddAnchors(addOnName, {types}, {key=display})
+-- We register our MSUF anchor frames for Power / Secondary Power / Cast Bar so
+-- they appear in BCDM dropdowns automatically.
+do
+    local function MSUF_TryRegisterBCDMAnchors()
+        if _G and _G.MSUF_BCDM_AnchorsRegistered then return true end
+        if not C_AddOns or not C_AddOns.IsAddOnLoaded or not C_AddOns.IsAddOnLoaded("BetterCooldownManager") then return false end
+        if not _G or not _G.BCDMG or type(_G.BCDMG.AddAnchors) ~= "function" then return false end
+
+        -- Ensure proxy frames exist so anchoring never hits nil _G[...].
+        if type(_G.MSUF_TPA_EnsureAllAnchors) == "function" then
+            _G.MSUF_TPA_EnsureAllAnchors()
+        end
+
+        local msufColor = "|cFFFFD700Midnight|rSimpleUnitFrames"
+        local anchors = {
+            -- Core MSUF frames (already global in MSUF)
+            ["MSUF_player"] = msufColor .. ": Player Frame",
+            ["MSUF_target"] = msufColor .. ": Target Frame",
+
+            -- Proxy anchors (stable globals provided by MSUF)
+            ["MSUF_TPA_PlayerFrame"]          = msufColor .. ": Player Frame (Proxy)",
+            ["MSUF_TPA_TargetFrame"]          = msufColor .. ": Target Frame (Proxy)",
+            ["MSUF_TPA_PlayerPowerBar"]       = msufColor .. ": Player Power Bar",
+            ["MSUF_TPA_TargetPowerBar"]       = msufColor .. ": Target Power Bar",
+            ["MSUF_TPA_PlayerSecondaryPower"] = msufColor .. ": Player Secondary Power",
+            ["MSUF_TPA_TargetSecondaryPower"] = msufColor .. ": Target Secondary Power",
+        }
+
+        -- Register for the module tabs the user expects.
+        _G.BCDMG.AddAnchors("MidnightSimpleUnitFrames", { "Power", "SecondaryPower", "CastBar" }, anchors)
+
+        -- Also register for the main viewer tabs for consistency (harmless if duplicates).
+        _G.BCDMG.AddAnchors("MidnightSimpleUnitFrames", { "Utility", "Buffs", "BuffBar", "Custom", "AdditionalCustom", "Item", "Trinket", "ItemSpell" }, anchors)
+
+        _G.MSUF_BCDM_AnchorsRegistered = true
+
+        -- One-shot sync so proxies sit at sensible defaults immediately.
+        if type(_G.MSUF_UpdateThirdPartyAnchors_All) == "function" then
+            _G.MSUF_UpdateThirdPartyAnchors_All()
+        end
+
+        return true
+    end
+
+    -- Try immediately (in case BCDM already loaded), otherwise wait for ADDON_LOADED.
+    if not MSUF_TryRegisterBCDMAnchors() then
+        local f = CreateFrame("Frame")
+        f:RegisterEvent("ADDON_LOADED")
+        f:SetScript("OnEvent", function(_, _, addon)
+            if addon == "BetterCooldownManager" then
+                -- Register once BCDM is live.
+                MSUF_TryRegisterBCDMAnchors()
+                if f.UnregisterEvent then f:UnregisterEvent("ADDON_LOADED") end
+                if f.SetScript then f:SetScript("OnEvent", nil) end
+            end
+        end)
+    end
 end
 
 local MSUF_ApplyRareVisuals
@@ -7530,7 +7678,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Thank you for using MSUF|r  |cff565f89•|r  |cffc0caf5 Check out new Player Auras -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.8b3|r  |cff565f89•|r  |cffc0caf5 Check out new Player Auras -|r  |cfff7768eReport bugs in the Discord.|r")
 
 end, nil, true)
 
