@@ -840,6 +840,25 @@ end
         g.showRestingIndicator = true
     end
 
+	-- Rested icon defaults ("Moon Zzzz")
+	-- Requirement: default size 30 and anchored TOPLEFT.
+	-- Only apply when the profile does not already carry explicit values (no regression for users who moved it).
+	if g.restedStateIndicatorSymbol == nil then
+		g.restedStateIndicatorSymbol = "rested_moonzzz"
+	end
+	if g.restedStateIndicatorAnchor == nil then
+		g.restedStateIndicatorAnchor = "TOPLEFT"
+	end
+	if g.restedStateIndicatorOffsetX == nil or type(g.restedStateIndicatorOffsetX) ~= "number" then
+		g.restedStateIndicatorOffsetX = 0
+	end
+	if g.restedStateIndicatorOffsetY == nil or type(g.restedStateIndicatorOffsetY) ~= "number" then
+		g.restedStateIndicatorOffsetY = 0
+	end
+	if g.restedStateIndicatorSize == nil or type(g.restedStateIndicatorSize) ~= "number" or g.restedStateIndicatorSize <= 0 then
+		g.restedStateIndicatorSize = 30
+	end
+
 
     if g.stateIconsTestMode == nil then
         g.stateIconsTestMode = false
