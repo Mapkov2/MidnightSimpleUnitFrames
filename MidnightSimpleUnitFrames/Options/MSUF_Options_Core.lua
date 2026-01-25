@@ -3788,7 +3788,7 @@ end
                 local text = n and _G and _G[n .. "Text"]
                 if text then
                     text:ClearAllPoints()
-                    text:SetPoint("BOTTOMLEFT", slider, "TOPLEFT", 0, 10)
+                    text:SetPoint("TOPLEFT", slider, "TOPLEFT", 0, 18)
                     if text.SetJustifyH then text:SetJustifyH("LEFT") end
                 end
             end
@@ -3814,16 +3814,16 @@ end
 
             if maxSlider and drop then
                 maxSlider:ClearAllPoints()
-                maxSlider:SetPoint("TOPLEFT", drop, "BOTTOMLEFT", 16, -18)
-                maxSlider:SetWidth(240)
+                maxSlider:SetPoint("TOPLEFT", drop, "BOTTOMLEFT", 16, -30)
+                maxSlider:SetWidth(260)
                 FixSliderLabel(maxSlider)
                 maxSlider:Show()
             end
 
             if resSlider and maxSlider then
                 resSlider:ClearAllPoints()
-                resSlider:SetPoint("TOPLEFT", maxSlider, "BOTTOMLEFT", 0, -24)
-                resSlider:SetWidth(240)
+                resSlider:SetPoint("TOPLEFT", maxSlider, "BOTTOMLEFT", 0, -48)
+                resSlider:SetWidth(260)
                 FixSliderLabel(resSlider)
                 resSlider:Show()
             end
@@ -3851,27 +3851,48 @@ end
             if drop then
                 local function ShortenDrop_Init(self, level)
                     EnsureDB()
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.func = function(btn)
+
+                    local function OnSelect(btn)
                         EnsureDB()
                         local g = (MSUF_DB and MSUF_DB.general) or {}
-                        local v = tonumber(btn.value) or 0
-                        if v > 0 then v = 1 end
+
+                        local v = tonumber(btn.value or btn.arg1) or 0
+                        if v > 0 then v = 1 end -- only On/Off
+
                         g.castbarSpellNameShortening = v
 
                         UIDropDownMenu_SetSelectedValue(drop, v)
                         UIDropDownMenu_SetText(drop, (v == 1) and "On" or "Off")
+
+                        -- Force-refresh checkmarks (fixes "both options stay checked" edge cases)
+                        if UIDropDownMenu_Refresh then
+                            UIDropDownMenu_Refresh(drop)
+                        end
 
                         SyncEnabledStates()
                         ApplyVisualRefresh()
                         CloseDropDownMenus()
                     end
 
-                    info.text, info.value = "Off", 0
-                    UIDropDownMenu_AddButton(info, level)
+                    local function AddOption(label, value)
+                        local info = UIDropDownMenu_CreateInfo()
+                        info.text = label
+                        info.value = value
+                        info.arg1 = value
+                        info.func = OnSelect
+                        info.isNotRadio = false
+                        info.notCheckable = false
+                        info.keepShownOnClick = false
+                        info.checked = function()
+                            local sel = UIDropDownMenu_GetSelectedValue(drop)
+                            sel = tonumber(sel) or 0
+                            return sel == value
+                        end
+                        UIDropDownMenu_AddButton(info, level)
+                    end
 
-                    info.text, info.value = "On", 1
-                    UIDropDownMenu_AddButton(info, level)
+                    AddOption("Off", 0)
+                    AddOption("On", 1)
                 end
 
                 UIDropDownMenu_Initialize(drop, ShortenDrop_Init)
