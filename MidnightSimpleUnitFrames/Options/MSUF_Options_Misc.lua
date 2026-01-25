@@ -745,9 +745,56 @@ end
                 return MSUF_DB.general.statusIndicators
             end
 
+            local function MSUF_IsBetaClient()
+                -- Use the client's build flags when available. These APIs differ across branches, so guard each call.
+                local ok, v
+                if type(_G.IsBetaBuild) == "function" then ok, v = pcall(_G.IsBetaBuild); if ok and v then return true end end
+                if type(_G.IsTestBuild) == "function" then ok, v = pcall(_G.IsTestBuild); if ok and v then return true end end
+                if type(_G.IsAlphaBuild) == "function" then ok, v = pcall(_G.IsAlphaBuild); if ok and v then return true end end
+                return false
+            end
+
+            -- Anchor for the status-indicator checkboxes (kept simple; popup warning handles Beta messaging)
+            local statusAnchor = rightHeader
+
+            local function EnsureBetaStatusPopup()
+                if not _G.StaticPopupDialogs then return end
+                if _G.StaticPopupDialogs["MSUF_BETA_STATUS_AFKDND_WARNING"] then return end
+
+                _G.StaticPopupDialogs["MSUF_BETA_STATUS_AFKDND_WARNING"] = {
+                    text = "BETA WARNING:\n\nAFK/DND status indicators are currently unreliable on the Beta client due to API changes.\nThey may not update correctly or may behave unexpectedly.\n\nEnable anyway?",
+                    button1 = "Enable",
+                    button2 = "Cancel",
+                    timeout = 0,
+                    whileDead = 1,
+                    hideOnEscape = 1,
+                    preferredIndex = 3,
+                    OnAccept = function(popup, data)
+                        local d = data or (popup and popup.data)
+                        if not d or not d.key or not d.cb or not d.getDB then return end
+                        local db = d.getDB()
+                        db[d.key] = true
+                        d.cb:SetChecked(true)
+                        if _G.MSUF_RefreshStatusIndicators then
+                            _G.MSUF_RefreshStatusIndicators()
+                        end
+                    end,
+                    OnCancel = function(popup, data)
+                        local d = data or (popup and popup.data)
+                        if not d or not d.key or not d.cb or not d.getDB then return end
+                        local db = d.getDB()
+                        db[d.key] = false
+                        d.cb:SetChecked(false)
+                        if _G.MSUF_RefreshStatusIndicators then
+                            _G.MSUF_RefreshStatusIndicators()
+                        end
+                    end,
+                }
+            end
+
             local function MakeStatusCB(key, label, yOff)
                 local cb = CreateFrame("CheckButton", nil, bottomPanel, "InterfaceOptionsCheckButtonTemplate")
-                cb:SetPoint("TOPLEFT", rightHeader, "BOTTOMLEFT", 0, yOff)
+                cb:SetPoint("TOPLEFT", statusAnchor, "BOTTOMLEFT", 0, yOff)
                 cb.Text:SetText(label)
                 StyleCheckbox(cb)
 
@@ -759,8 +806,27 @@ end
                 end)
 
                 cb:SetScript("OnClick", function(self)
+                    local want = self:GetChecked() and true or false
+
+                    -- Beta: show a confirmation popup when enabling AFK/DND (still allow usage if confirmed).
+                    if want and MSUF_IsBetaClient() and (key == "showAFK" or key == "showDND") and _G.StaticPopup_Show then
+                        EnsureBetaStatusPopup()
+                        -- Don't flip the DB until the user confirms. Revert the check until then.
+                        self:SetChecked(false)
+                        local db = GetStatusDB()
+                        db[key] = false
+
+                        local popup = _G.StaticPopup_Show("MSUF_BETA_STATUS_AFKDND_WARNING", nil, nil, { key = key, cb = self, getDB = GetStatusDB })
+                        if popup then
+                            return
+                        end
+                        -- Fallback if popup failed for any reason: proceed.
+                        want = true
+                        self:SetChecked(true)
+                    end
+
                     local db = GetStatusDB()
-                    db[key] = self:GetChecked() and true or false
+                    db[key] = want and true or false
                     if _G.MSUF_RefreshStatusIndicators then
                         _G.MSUF_RefreshStatusIndicators()
                     end
