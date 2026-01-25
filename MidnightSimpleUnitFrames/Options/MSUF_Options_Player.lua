@@ -1532,17 +1532,22 @@ end
     end
 
 
-    -- Right: Castbar group (also hosts Indicator + Status icons for player/target).
-    -- Step 1.5: Grow this box for Player/Target so we have room for the Indicator-style Status Icons rows.
-    local _msufTextBaseH = basicsH + sizeH + 12
-    -- Extra space only used on Player/Target tabs (kept simple; will be used for Step 2/3/4).
-    local _msufTextExtra_PlayerTarget = 240
+    -- Right: Castbar group (Castbar + Indicator)
+    -- Keep this compact for ALL unit pages. Status Icons get their own box (player/target only).
+    local _msufTextBaseH = 390
     panel._msufTextBaseH = _msufTextBaseH
-    panel._msufTextExtra_PlayerTarget = _msufTextExtra_PlayerTarget
-    local textGroup = CreateGroupBox(frameGroup, "Castbar", rightX, topY, rightW, _msufTextBaseH + _msufTextExtra_PlayerTarget, texWhite, texWhite2)
+    local textGroup = CreateGroupBox(frameGroup, "Castbar", rightX, topY, rightW, _msufTextBaseH, texWhite, texWhite2)
     textGroup:Hide()
     panel.playerTextLayoutGroup = textGroup
     panel._msufTextGroup = textGroup
+
+    -- Separate Status Icons box (player/target only; shown/hidden by LayoutIndicatorTemplate)
+    local _msufStatusBoxH = 300
+    panel._msufStatusBoxH = _msufStatusBoxH
+    local statusBox = CreateGroupBox(frameGroup, "Status icons", rightX, topY - _msufTextBaseH - 12, rightW, _msufStatusBoxH, texWhite, texWhite2)
+    statusBox:Hide()
+    panel._msufStatusIconsGroup = statusBox
+
 
 
 -- ToT-only utility: show Target-of-Target name inline in the Target frame name line.
@@ -1639,30 +1644,34 @@ end
 		FinalizeCompactSlider(panel.playerBossSpacingSlider, (rightW - 24))
 		panel.playerBossSpacingSlider:Hide()
 
-		-- Status icons toggles (player/target only; controlled in LayoutIndicatorTemplate)
-		panel.statusIconsHeader = panel.statusIconsHeader or textGroup:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-		panel.statusIconsHeader:SetText("Status icons")
-		panel.statusIconsHeader:Hide()
+		-- Status icons (player/target only; lives in its own box)
+		local statusBox = panel._msufStatusIconsGroup
+		local STATUS_BASE_TOGGLE_Y = -34
+		local STATUS_BASE_CTRL_Y   = -49
+		local STATUS_ROW_STEP      = -64
 
-		panel.statusCombatIconCB = panel.statusCombatIconCB or CreateCheck(textGroup, "MSUF_StatusCombatIconCB", "Combat", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 54)
-		panel.statusRestingIconCB = panel.statusRestingIconCB or CreateCheck(textGroup, "MSUF_StatusRestingIconCB", "Rested (player only)", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 76)
-		panel.statusIncomingResIconCB = panel.statusIncomingResIconCB or CreateCheck(textGroup, "MSUF_StatusIncomingResIconCB", "Incoming Rez", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 120)
+		panel.statusIconsHeader = panel.statusIconsHeader or (statusBox and statusBox:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
+		if panel.statusIconsHeader then
+			panel.statusIconsHeader:SetText("Status icons")
+			panel.statusIconsHeader:Hide()
+		end
 
+		panel.statusCombatIconCB = panel.statusCombatIconCB or CreateCheck(statusBox or textGroup, "MSUF_StatusCombatIconCB", "Combat", 12, STATUS_BASE_TOGGLE_Y + (0 * STATUS_ROW_STEP))
+		panel.statusRestingIconCB = panel.statusRestingIconCB or CreateCheck(statusBox or textGroup, "MSUF_StatusRestingIconCB", "Rested (player only)", 12, STATUS_BASE_TOGGLE_Y + (1 * STATUS_ROW_STEP))
+		panel.statusIncomingResIconCB = panel.statusIncomingResIconCB or CreateCheck(statusBox or textGroup, "MSUF_StatusIncomingResIconCB", "Incoming Rez", 12, STATUS_BASE_TOGGLE_Y + (2 * STATUS_ROW_STEP))
 
-		panel.statusIconsTestModeCB = panel.statusIconsTestModeCB or CreateCheck(textGroup, "MSUF_StatusIconsTestModeCB", "Test mode (preview enabled icons)", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 152)
+		panel.statusIconsTestModeCB = panel.statusIconsTestModeCB or CreateCheck(statusBox or textGroup, "MSUF_StatusIconsTestModeCB", "Test mode (preview enabled icons)", 12, STATUS_BASE_TOGGLE_Y + (3 * STATUS_ROW_STEP) + 10)
 
-		panel.statusIconsStyleCB = panel.statusIconsStyleCB or CreateCheck(textGroup, "MSUF_StatusIconsStyleCB", "Use Midnight style icons", 12, IND_BASE_TOGGLE_Y + (3 * IND_ROW_STEP) - 174)
+		panel.statusIconsStyleCB = panel.statusIconsStyleCB or CreateCheck(statusBox or textGroup, "MSUF_StatusIconsStyleCB", "Use Midnight style icons", 12, STATUS_BASE_TOGGLE_Y + (3 * STATUS_ROW_STEP) - 12)
 		if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
 
 		if panel.statusCombatIconCB then panel.statusCombatIconCB:Hide() end
 		if panel.statusRestingIconCB then panel.statusRestingIconCB:Hide() end
 		if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:Hide() end
-
 		if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:Hide() end
-        if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
 		if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
 
-		-- Safety: older refactors called this; now it's not needed (layout is already relative).
+-- Safety: older refactors called this; now it's not needed (layout is already relative).
 		MSUF_PositionLeaderMiniHeaders = MSUF_PositionLeaderMiniHeaders or function() end
 
 		local function _MSUF_GetCheckboxIcon(cb)
@@ -1670,12 +1679,12 @@ end
 			return cb.Check or (cb.GetName and _G[cb:GetName() .. "Check"]) or nil
 		end
 
-		local function _MSUF_CreateResetButton(field, cb)
+		local function _MSUF_CreateResetButton(field, cb, parentOverride)
 			if panel[field] then
 				panel[field]:Hide()
 				panel[field]:ClearAllPoints()
 			else
-				panel[field] = CreateFrame("Button", nil, textGroup, "UIPanelButtonTemplate")
+				panel[field] = CreateFrame("Button", nil, parentOverride or textGroup, "UIPanelButtonTemplate")
 				panel[field]:SetSize(20, 20)
 				panel[field]:SetText("R")
 
@@ -1711,12 +1720,12 @@ end
 			return panel[field]
 		end
 
-		local function _MSUF_MakeDivider(field)
+		local function _MSUF_MakeDivider(field, parentOverride)
 			if panel[field] then
 				panel[field]:Hide()
 				return panel[field]
 			end
-			local tex = textGroup:CreateTexture(nil, "ARTWORK")
+			local tex = (parentOverride or textGroup):CreateTexture(nil, "ARTWORK")
 			tex:SetHeight(1)
 			tex:SetColorTexture(1, 1, 1, 0.08)
 			tex:Hide()
@@ -1724,12 +1733,12 @@ end
 			return tex
 		end
 
-		local function _MSUF_MakeDrop(field, globalName, width)
+		local function _MSUF_MakeDrop(field, globalName, width, parentOverride)
 			if panel[field] then
 				panel[field]:Hide()
 				return panel[field]
 			end
-			local dd = CreateFrame("Frame", globalName, textGroup, "UIDropDownMenuTemplate")
+			local dd = CreateFrame("Frame", globalName, parentOverride or textGroup, "UIDropDownMenuTemplate")
 			if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(dd, width) end
 			dd._msufDropWidth = width
 			if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(dd) end
@@ -1745,19 +1754,19 @@ end
 				panel[field]:Hide()
 				return panel[field]
 			end
-			local fs = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			local fs = (parentOverride or textGroup):CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 			fs:SetText(text)
 			fs:Hide()
 			panel[field] = fs
 			return fs
 		end
 
-		local function _MSUF_MakeSizeEdit(field, globalName)
+		local function _MSUF_MakeSizeEdit(field, globalName, parentOverride)
 			if panel[field] then
 				panel[field]:Hide()
 				return panel[field]
 			end
-			local eb = CreateFrame("EditBox", globalName, textGroup, "InputBoxTemplate")
+			local eb = CreateFrame("EditBox", globalName, parentOverride or textGroup, "InputBoxTemplate")
 			eb:SetAutoFocus(false)
 			eb:SetSize(46, 18)
 			eb:SetNumeric(true)
@@ -1777,7 +1786,8 @@ end
 			-- X stepper is anchored to container; everything else is relative to it
 			if stepperX then
 				stepperX:ClearAllPoints()
-				stepperX:SetPoint("TOPLEFT", textGroup, "TOPLEFT", colX, ctrlY)
+				local anchorParent = (stepperX and stepperX.GetParent and stepperX:GetParent()) or textGroup
+					stepperX:SetPoint("TOPLEFT", anchorParent, "TOPLEFT", colX, ctrlY)
 				ResizeStepper(stepperX, 46, 1)
 				RestyleStepperButtonsNoBox(stepperX)
 				if MSUF_ApplyModifierStepper then MSUF_ApplyModifierStepper(stepperX, 1) end
@@ -1949,27 +1959,27 @@ end
 -- Status Icons (Step 1): Combat row controls built like Indicator
 -- (Player/Target only; Rested/Incoming Rez/TestMode stay as simple toggles for now)
 -- ------------------------------------------------------------
-_MSUF_MakeDivider("statusCombatGroupDivider")
+_MSUF_MakeDivider("statusCombatGroupDivider", panel._msufStatusIconsGroup)
 
 -- Reuse existing combat toggle checkbox created above
 if panel.statusCombatIconCB then
-	_MSUF_CreateResetButton("statusCombatResetBtn", panel.statusCombatIconCB)
+	_MSUF_CreateResetButton("statusCombatResetBtn", panel.statusCombatIconCB, panel._msufStatusIconsGroup)
 end
 
 if not panel.statusCombatOffsetXStepper then
-	panel.statusCombatOffsetXStepper = CreateAxisStepper("MSUF_StatusCombatOffsetX", "X", textGroup, 0, 0, -200, 200, 1)
+	panel.statusCombatOffsetXStepper = CreateAxisStepper("MSUF_StatusCombatOffsetX", "X", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
 end
 if not panel.statusCombatOffsetYStepper then
-	panel.statusCombatOffsetYStepper = CreateAxisStepper("MSUF_StatusCombatOffsetY", "Y", textGroup, 0, 0, -200, 200, 1)
+	panel.statusCombatOffsetYStepper = CreateAxisStepper("MSUF_StatusCombatOffsetY", "Y", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
 end
 
-panel.statusCombatAnchorDrop  = panel.statusCombatAnchorDrop  or _MSUF_MakeDrop("statusCombatAnchorDrop", "MSUF_StatusCombatAnchorDropdown", 70)
-panel.statusCombatAnchorLabel = panel.statusCombatAnchorLabel or _MSUF_MakeLabel("statusCombatAnchorLabel", "Anchor")
+panel.statusCombatAnchorDrop  = panel.statusCombatAnchorDrop  or _MSUF_MakeDrop("statusCombatAnchorDrop", "MSUF_StatusCombatAnchorDropdown", 70, panel._msufStatusIconsGroup)
+panel.statusCombatAnchorLabel = panel.statusCombatAnchorLabel or _MSUF_MakeLabel("statusCombatAnchorLabel", "Anchor", panel._msufStatusIconsGroup)
 
-panel.statusCombatSizeEdit  = panel.statusCombatSizeEdit  or _MSUF_MakeSizeEdit("statusCombatSizeEdit", "MSUF_StatusCombatSizeEdit")
-panel.statusCombatSizeLabel = panel.statusCombatSizeLabel or _MSUF_MakeLabel("statusCombatSizeLabel", "Size")
-panel.statusCombatSymbolDrop  = panel.statusCombatSymbolDrop  or _MSUF_MakeDrop("statusCombatSymbolDrop", "MSUF_StatusCombatSymbolDropdown", 92)
-panel.statusCombatSymbolLabel = panel.statusCombatSymbolLabel or _MSUF_MakeLabel("statusCombatSymbolLabel", "Icon")
+panel.statusCombatSizeEdit  = panel.statusCombatSizeEdit  or _MSUF_MakeSizeEdit("statusCombatSizeEdit", "MSUF_StatusCombatSizeEdit", panel._msufStatusIconsGroup)
+panel.statusCombatSizeLabel = panel.statusCombatSizeLabel or _MSUF_MakeLabel("statusCombatSizeLabel", "Size", panel._msufStatusIconsGroup)
+panel.statusCombatSymbolDrop  = panel.statusCombatSymbolDrop  or _MSUF_MakeDrop("statusCombatSymbolDrop", "MSUF_StatusCombatSymbolDropdown", 92, panel._msufStatusIconsGroup)
+panel.statusCombatSymbolLabel = panel.statusCombatSymbolLabel or _MSUF_MakeLabel("statusCombatSymbolLabel", "Icon", panel._msufStatusIconsGroup)
 
 -- Relative layout: only X stepper is absolute, everything else follows.
 _MSUF_LayoutIndicatorRow(
@@ -1983,34 +1993,34 @@ _MSUF_LayoutIndicatorRow(
 	panel.statusCombatSymbolDrop,
 	panel.statusCombatSymbolLabel,
 	IND_COL_X,
-	IND_BASE_CTRL_Y + (3 * IND_ROW_STEP) - 54
+	STATUS_BASE_CTRL_Y + (0 * STATUS_ROW_STEP)
 )
 
 -- ------------------------------------------------------------
 -- Status Icons (Step 2): Rested row controls built like Indicator
 -- (Player only)
 -- ------------------------------------------------------------
-_MSUF_MakeDivider("statusRestingGroupDivider")
+_MSUF_MakeDivider("statusRestingGroupDivider", panel._msufStatusIconsGroup)
 
 -- Reuse existing rested toggle checkbox created above
 if panel.statusRestingIconCB then
-	_MSUF_CreateResetButton("statusRestingResetBtn", panel.statusRestingIconCB)
+	_MSUF_CreateResetButton("statusRestingResetBtn", panel.statusRestingIconCB, panel._msufStatusIconsGroup)
 end
 
 if not panel.statusRestingOffsetXStepper then
-	panel.statusRestingOffsetXStepper = CreateAxisStepper("MSUF_StatusRestingOffsetX", "X", textGroup, 0, 0, -200, 200, 1)
+	panel.statusRestingOffsetXStepper = CreateAxisStepper("MSUF_StatusRestingOffsetX", "X", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
 end
 if not panel.statusRestingOffsetYStepper then
-	panel.statusRestingOffsetYStepper = CreateAxisStepper("MSUF_StatusRestingOffsetY", "Y", textGroup, 0, 0, -200, 200, 1)
+	panel.statusRestingOffsetYStepper = CreateAxisStepper("MSUF_StatusRestingOffsetY", "Y", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
 end
 
-panel.statusRestingAnchorDrop  = panel.statusRestingAnchorDrop  or _MSUF_MakeDrop("statusRestingAnchorDrop", "MSUF_StatusRestingAnchorDropdown", 70)
-panel.statusRestingAnchorLabel = panel.statusRestingAnchorLabel or _MSUF_MakeLabel("statusRestingAnchorLabel", "Anchor")
+panel.statusRestingAnchorDrop  = panel.statusRestingAnchorDrop  or _MSUF_MakeDrop("statusRestingAnchorDrop", "MSUF_StatusRestingAnchorDropdown", 70, panel._msufStatusIconsGroup)
+panel.statusRestingAnchorLabel = panel.statusRestingAnchorLabel or _MSUF_MakeLabel("statusRestingAnchorLabel", "Anchor", panel._msufStatusIconsGroup)
 
-panel.statusRestingSizeEdit  = panel.statusRestingSizeEdit  or _MSUF_MakeSizeEdit("statusRestingSizeEdit", "MSUF_StatusRestingSizeEdit")
-panel.statusRestingSizeLabel = panel.statusRestingSizeLabel or _MSUF_MakeLabel("statusRestingSizeLabel", "Size")
-panel.statusRestingSymbolDrop  = panel.statusRestingSymbolDrop  or _MSUF_MakeDrop("statusRestingSymbolDrop", "MSUF_StatusRestingSymbolDropdown", 92)
-panel.statusRestingSymbolLabel = panel.statusRestingSymbolLabel or _MSUF_MakeLabel("statusRestingSymbolLabel", "Icon")
+panel.statusRestingSizeEdit  = panel.statusRestingSizeEdit  or _MSUF_MakeSizeEdit("statusRestingSizeEdit", "MSUF_StatusRestingSizeEdit", panel._msufStatusIconsGroup)
+panel.statusRestingSizeLabel = panel.statusRestingSizeLabel or _MSUF_MakeLabel("statusRestingSizeLabel", "Size", panel._msufStatusIconsGroup)
+panel.statusRestingSymbolDrop  = panel.statusRestingSymbolDrop  or _MSUF_MakeDrop("statusRestingSymbolDrop", "MSUF_StatusRestingSymbolDropdown", 92, panel._msufStatusIconsGroup)
+panel.statusRestingSymbolLabel = panel.statusRestingSymbolLabel or _MSUF_MakeLabel("statusRestingSymbolLabel", "Icon", panel._msufStatusIconsGroup)
 
 -- Relative layout: only X stepper is absolute, everything else follows.
 _MSUF_LayoutIndicatorRow(
@@ -2024,7 +2034,7 @@ _MSUF_LayoutIndicatorRow(
 	panel.statusRestingSymbolDrop,
 	panel.statusRestingSymbolLabel,
 	IND_COL_X,
-	IND_BASE_CTRL_Y + (3 * IND_ROW_STEP) - 76
+	STATUS_BASE_CTRL_Y + (1 * STATUS_ROW_STEP)
 )
 
 		end
@@ -2032,27 +2042,27 @@ _MSUF_LayoutIndicatorRow(
 -- Status Icons (Step 3): Incoming Rez row controls built like Indicator
 -- (Player/Target)
 -- ------------------------------------------------------------
-_MSUF_MakeDivider("statusIncomingResGroupDivider")
+_MSUF_MakeDivider("statusIncomingResGroupDivider", panel._msufStatusIconsGroup)
 
 -- Reuse existing incoming rez toggle checkbox created above
 if panel.statusIncomingResIconCB then
-	_MSUF_CreateResetButton("statusIncomingResResetBtn", panel.statusIncomingResIconCB)
+	_MSUF_CreateResetButton("statusIncomingResResetBtn", panel.statusIncomingResIconCB, panel._msufStatusIconsGroup)
 end
 
 if not panel.statusIncomingResOffsetXStepper then
-	panel.statusIncomingResOffsetXStepper = CreateAxisStepper("MSUF_StatusIncomingResOffsetX", "X", textGroup, 0, 0, -200, 200, 1)
+	panel.statusIncomingResOffsetXStepper = CreateAxisStepper("MSUF_StatusIncomingResOffsetX", "X", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
 end
 if not panel.statusIncomingResOffsetYStepper then
-	panel.statusIncomingResOffsetYStepper = CreateAxisStepper("MSUF_StatusIncomingResOffsetY", "Y", textGroup, 0, 0, -200, 200, 1)
+	panel.statusIncomingResOffsetYStepper = CreateAxisStepper("MSUF_StatusIncomingResOffsetY", "Y", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
 end
 
-panel.statusIncomingResAnchorDrop  = panel.statusIncomingResAnchorDrop  or _MSUF_MakeDrop("statusIncomingResAnchorDrop", "MSUF_StatusIncomingResAnchorDropdown", 70)
-panel.statusIncomingResAnchorLabel = panel.statusIncomingResAnchorLabel or _MSUF_MakeLabel("statusIncomingResAnchorLabel", "Anchor")
+panel.statusIncomingResAnchorDrop  = panel.statusIncomingResAnchorDrop  or _MSUF_MakeDrop("statusIncomingResAnchorDrop", "MSUF_StatusIncomingResAnchorDropdown", 70, panel._msufStatusIconsGroup)
+panel.statusIncomingResAnchorLabel = panel.statusIncomingResAnchorLabel or _MSUF_MakeLabel("statusIncomingResAnchorLabel", "Anchor", panel._msufStatusIconsGroup)
 
-panel.statusIncomingResSizeEdit  = panel.statusIncomingResSizeEdit  or _MSUF_MakeSizeEdit("statusIncomingResSizeEdit", "MSUF_StatusIncomingResSizeEdit")
-panel.statusIncomingResSizeLabel = panel.statusIncomingResSizeLabel or _MSUF_MakeLabel("statusIncomingResSizeLabel", "Size")
-panel.statusIncomingResSymbolDrop  = panel.statusIncomingResSymbolDrop  or _MSUF_MakeDrop("statusIncomingResSymbolDrop", "MSUF_StatusIncomingResSymbolDropdown", 92)
-panel.statusIncomingResSymbolLabel = panel.statusIncomingResSymbolLabel or _MSUF_MakeLabel("statusIncomingResSymbolLabel", "Icon")
+panel.statusIncomingResSizeEdit  = panel.statusIncomingResSizeEdit  or _MSUF_MakeSizeEdit("statusIncomingResSizeEdit", "MSUF_StatusIncomingResSizeEdit", panel._msufStatusIconsGroup)
+panel.statusIncomingResSizeLabel = panel.statusIncomingResSizeLabel or _MSUF_MakeLabel("statusIncomingResSizeLabel", "Size", panel._msufStatusIconsGroup)
+panel.statusIncomingResSymbolDrop  = panel.statusIncomingResSymbolDrop  or _MSUF_MakeDrop("statusIncomingResSymbolDrop", "MSUF_StatusIncomingResSymbolDropdown", 92, panel._msufStatusIconsGroup)
+panel.statusIncomingResSymbolLabel = panel.statusIncomingResSymbolLabel or _MSUF_MakeLabel("statusIncomingResSymbolLabel", "Icon", panel._msufStatusIconsGroup)
 
 -- Relative layout: only X stepper is absolute, everything else follows.
 _MSUF_LayoutIndicatorRow(
@@ -2066,7 +2076,7 @@ _MSUF_LayoutIndicatorRow(
 	panel.statusIncomingResSymbolDrop,
 	panel.statusIncomingResSymbolLabel,
 	IND_COL_X,
-	IND_BASE_CTRL_Y + (3 * IND_ROW_STEP) - 120
+	STATUS_BASE_CTRL_Y + (2 * STATUS_ROW_STEP)
 )
 
 
@@ -2084,7 +2094,7 @@ _MSUF_LayoutIndicatorRow(
         local hintKey   = prefix .. "CopyToHint"
 
         if not panel[labelKey] then
-            panel[labelKey] = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            panel[labelKey] = (parentOverride or textGroup):CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             panel[labelKey]:SetText("Copy to")
             panel[labelKey]:Hide()
         end
@@ -2148,7 +2158,7 @@ _MSUF_LayoutIndicatorRow(
         end
 
         if not panel[btnKey] then
-            panel[btnKey] = CreateFrame("Button", nil, textGroup, "UIPanelButtonTemplate")
+            panel[btnKey] = CreateFrame("Button", nil, parentOverride or textGroup, "UIPanelButtonTemplate")
             panel[btnKey]:SetSize(64, 20)
             panel[btnKey]:SetText("Copy")
             panel[btnKey]:Hide()
@@ -2313,6 +2323,7 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
 
     -- If we're not on the Frames tab, hard-hide the whole indicator template to avoid stray UI.
     if not isFramesTab then
+        if panel._msufStatusIconsGroup then panel._msufStatusIconsGroup:Hide() end
         if panel.playerLeaderIndicatorHeader then panel.playerLeaderIndicatorHeader:Hide() end
         for _, spec in pairs(_MSUF_INDICATOR_SPECS) do
             SetShownByName(spec.showCB, false)
@@ -2432,173 +2443,184 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
     end
 
 
--- Status icons (Step 1): Combat row uses indicator-style controls (player/target)
-local showStatusIcons = (currentKey == "player" or currentKey == "target")
-if panel.statusIconsHeader then panel.statusIconsHeader:SetShown(showStatusIcons) end
-if panel.statusCombatIconCB then panel.statusCombatIconCB:SetShown(showStatusIcons) end
-if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:SetShown(showStatusIcons) end
-if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:SetShown(showStatusIcons) end
-if panel.statusIconsStyleCB then panel.statusIconsStyleCB:SetShown(showStatusIcons) end
 
-SetShownByName("statusCombatGroupDivider", showStatusIcons)
-SetShownByName("statusCombatResetBtn", showStatusIcons)
-SetShownByName("statusCombatOffsetXStepper", showStatusIcons)
-SetShownByName("statusCombatOffsetYStepper", showStatusIcons)
-SetShownByName("statusCombatAnchorDrop", showStatusIcons)
-SetShownByName("statusCombatAnchorLabel", showStatusIcons)
-SetShownByName("statusCombatSizeEdit", showStatusIcons)
-SetShownByName("statusCombatSizeLabel", showStatusIcons)
-SetShownByName("statusCombatSymbolDrop", showStatusIcons)
-SetShownByName("statusCombatSymbolLabel", showStatusIcons)
-
-SetShownByName("statusIncomingResGroupDivider", showStatusIcons)
-SetShownByName("statusIncomingResResetBtn", showStatusIcons)
-SetShownByName("statusIncomingResOffsetXStepper", showStatusIcons)
-SetShownByName("statusIncomingResOffsetYStepper", showStatusIcons)
-SetShownByName("statusIncomingResAnchorDrop", showStatusIcons)
-SetShownByName("statusIncomingResAnchorLabel", showStatusIcons)
-SetShownByName("statusIncomingResSizeEdit", showStatusIcons)
-SetShownByName("statusIncomingResSizeLabel", showStatusIcons)
-SetShownByName("statusIncomingResSymbolDrop", showStatusIcons)
-SetShownByName("statusIncomingResSymbolLabel", showStatusIcons)
-
-local showResting = (currentKey == "player")
-if panel.statusRestingIconCB then panel.statusRestingIconCB:SetShown(showResting) end
-SetShownByName("statusRestingGroupDivider", showResting)
-SetShownByName("statusRestingResetBtn", showResting)
-SetShownByName("statusRestingOffsetXStepper", showResting)
-SetShownByName("statusRestingOffsetYStepper", showResting)
-SetShownByName("statusRestingAnchorDrop", showResting)
-SetShownByName("statusRestingAnchorLabel", showResting)
-SetShownByName("statusRestingSizeEdit", showResting)
-SetShownByName("statusRestingSizeLabel", showResting)
-SetShownByName("statusRestingSymbolDrop", showResting)
-SetShownByName("statusRestingSymbolLabel", showResting)
-
-if showStatusIcons then
-    local toggleY = baseToggleY + (row * step)
-    local ctrlY   = baseCtrlY   + (row * step)
-
-    local statusShift = -10 -- Step 3.5: move Status icons block down by 10px
-
-    -- Combat row (indicator-style)
-    local toggleYCombat = toggleY + statusShift
-    local ctrlYCombat   = ctrlY + statusShift
-
-    PlaceToggle(panel.statusCombatIconCB, toggleYCombat)
-    PlaceXStepper(panel.statusCombatOffsetXStepper, ctrlYCombat)
-    PlaceDivider(panel.statusCombatGroupDivider, toggleYCombat)
-
-    -- Rested row (indicator-style, player only)
-    local usedRows = 1
-    local toggleYLast = toggleYCombat
-    if showResting then
-        local toggleYRest = baseToggleY + ((row + 1) * step) + statusShift
-        local ctrlYRest   = baseCtrlY   + ((row + 1) * step) + statusShift
-
-        PlaceToggle(panel.statusRestingIconCB, toggleYRest)
-        PlaceXStepper(panel.statusRestingOffsetXStepper, ctrlYRest)
-        PlaceDivider(panel.statusRestingGroupDivider, toggleYRest)
-
-        usedRows = 2
-        toggleYLast = toggleYRest
+    -- Status icons live in their own box (player/target only).
+    local statusBox = panel._msufStatusIconsGroup
+    local showStatusIcons = (currentKey == "player" or currentKey == "target") and true or false
+    if statusBox then
+        statusBox:SetShown(showStatusIcons)
     end
 
-    if panel.statusIconsHeader and panel.statusCombatGroupDivider then
-        -- Nudge the header slightly down to avoid clipping into the row above.
-        panel.statusIconsHeader:ClearAllPoints()
-        panel.statusIconsHeader:SetPoint("LEFT", panel.statusCombatGroupDivider, "LEFT", 0, -8)
-    elseif panel.statusIconsHeader then
-        panel.statusIconsHeader:ClearAllPoints()
-        panel.statusIconsHeader:SetPoint("TOPLEFT", container, "TOPLEFT", 12, toggleYCombat + 12)
+    -- Hard-hide all status icon widgets when not needed (prevents stray UI).
+    if not showStatusIcons then
+        if panel.statusIconsHeader then panel.statusIconsHeader:Hide() end
+        if panel.statusCombatIconCB then panel.statusCombatIconCB:Hide() end
+        if panel.statusRestingIconCB then panel.statusRestingIconCB:Hide() end
+        if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:Hide() end
+        if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:Hide() end
+        if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
+        SetShownByName("statusCombatGroupDivider", false)
+        SetShownByName("statusCombatResetBtn", false)
+        SetShownByName("statusCombatOffsetXStepper", false)
+        SetShownByName("statusCombatOffsetYStepper", false)
+        SetShownByName("statusCombatAnchorDrop", false)
+        SetShownByName("statusCombatAnchorLabel", false)
+        SetShownByName("statusCombatSizeEdit", false)
+        SetShownByName("statusCombatSizeLabel", false)
+        SetShownByName("statusCombatSymbolDrop", false)
+        SetShownByName("statusCombatSymbolLabel", false)
+
+        SetShownByName("statusRestingGroupDivider", false)
+        SetShownByName("statusRestingResetBtn", false)
+        SetShownByName("statusRestingOffsetXStepper", false)
+        SetShownByName("statusRestingOffsetYStepper", false)
+        SetShownByName("statusRestingAnchorDrop", false)
+        SetShownByName("statusRestingAnchorLabel", false)
+        SetShownByName("statusRestingSizeEdit", false)
+        SetShownByName("statusRestingSizeLabel", false)
+        SetShownByName("statusRestingSymbolDrop", false)
+        SetShownByName("statusRestingSymbolLabel", false)
+
+        SetShownByName("statusIncomingResGroupDivider", false)
+        SetShownByName("statusIncomingResResetBtn", false)
+        SetShownByName("statusIncomingResOffsetXStepper", false)
+        SetShownByName("statusIncomingResOffsetYStepper", false)
+        SetShownByName("statusIncomingResAnchorDrop", false)
+        SetShownByName("statusIncomingResAnchorLabel", false)
+        SetShownByName("statusIncomingResSizeEdit", false)
+        SetShownByName("statusIncomingResSizeLabel", false)
+        SetShownByName("statusIncomingResSymbolDrop", false)
+        SetShownByName("statusIncomingResSymbolLabel", false)
+    else
+        -- Within Status box: fixed layout (independent from Indicator rows)
+        local baseToggleY = -34
+        local baseCtrlY   = -49
+        local step        = -64
+        local dividerOffset = l.dividerOffset or 23
+
+        local function PlaceToggleIn(box, cb, y)
+            if not cb then return end
+            cb:ClearAllPoints()
+            cb:SetPoint("TOPLEFT", box, "TOPLEFT", 12, y)
+        end
+
+        local function PlaceXStepperIn(box, stepper, y)
+            if not stepper then return end
+            stepper:ClearAllPoints()
+            stepper:SetPoint("TOPLEFT", box, "TOPLEFT", l.colX or 175, y)
+        end
+
+        local function PlaceDividerIn(box, tex, toggleY)
+            if not tex then return end
+            tex:ClearAllPoints()
+            tex:SetPoint("TOPLEFT", box, "TOPLEFT", 15, toggleY + dividerOffset)
+            tex:SetPoint("TOPRIGHT", box, "TOPRIGHT", -15, toggleY + dividerOffset)
+        end
+
+        if panel.statusIconsHeader then
+            panel.statusIconsHeader:Hide() -- box title already says "Status icons"
+        end
+
+        -- Combat row
+        if panel.statusCombatIconCB then panel.statusCombatIconCB:Show() end
+        SetShownByName("statusCombatGroupDivider", true)
+        SetShownByName("statusCombatResetBtn", true)
+        SetShownByName("statusCombatOffsetXStepper", true)
+        SetShownByName("statusCombatOffsetYStepper", true)
+        SetShownByName("statusCombatAnchorDrop", true)
+        SetShownByName("statusCombatAnchorLabel", true)
+        SetShownByName("statusCombatSizeEdit", true)
+        SetShownByName("statusCombatSizeLabel", true)
+        SetShownByName("statusCombatSymbolDrop", true)
+        SetShownByName("statusCombatSymbolLabel", true)
+
+        PlaceToggleIn(statusBox, panel.statusCombatIconCB, baseToggleY + (0 * step))
+        PlaceXStepperIn(statusBox, panel.statusCombatOffsetXStepper, baseCtrlY + (0 * step))
+        PlaceDividerIn(statusBox, panel.statusCombatGroupDivider, baseToggleY + (0 * step))
+
+        -- Rested row (player only)
+        local showResting = (currentKey == "player") and true or false
+        if panel.statusRestingIconCB then panel.statusRestingIconCB:SetShown(showResting) end
+        SetShownByName("statusRestingGroupDivider", showResting)
+        SetShownByName("statusRestingResetBtn", showResting)
+        SetShownByName("statusRestingOffsetXStepper", showResting)
+        SetShownByName("statusRestingOffsetYStepper", showResting)
+        SetShownByName("statusRestingAnchorDrop", showResting)
+        SetShownByName("statusRestingAnchorLabel", showResting)
+        SetShownByName("statusRestingSizeEdit", showResting)
+        SetShownByName("statusRestingSizeLabel", showResting)
+        SetShownByName("statusRestingSymbolDrop", showResting)
+        SetShownByName("statusRestingSymbolLabel", showResting)
+
+        if showResting then
+            PlaceToggleIn(statusBox, panel.statusRestingIconCB, baseToggleY + (1 * step))
+            PlaceXStepperIn(statusBox, panel.statusRestingOffsetXStepper, baseCtrlY + (1 * step))
+            PlaceDividerIn(statusBox, panel.statusRestingGroupDivider, baseToggleY + (1 * step))
+        end
+
+        -- Incoming Rez row
+        if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:Show() end
+        SetShownByName("statusIncomingResGroupDivider", true)
+        SetShownByName("statusIncomingResResetBtn", true)
+        SetShownByName("statusIncomingResOffsetXStepper", true)
+        SetShownByName("statusIncomingResOffsetYStepper", true)
+        SetShownByName("statusIncomingResAnchorDrop", true)
+        SetShownByName("statusIncomingResAnchorLabel", true)
+        SetShownByName("statusIncomingResSizeEdit", true)
+        SetShownByName("statusIncomingResSizeLabel", true)
+        SetShownByName("statusIncomingResSymbolDrop", true)
+        SetShownByName("statusIncomingResSymbolLabel", true)
+
+        PlaceToggleIn(statusBox, panel.statusIncomingResIconCB, baseToggleY + (2 * step))
+        PlaceXStepperIn(statusBox, panel.statusIncomingResOffsetXStepper, baseCtrlY + (2 * step))
+        PlaceDividerIn(statusBox, panel.statusIncomingResGroupDivider, baseToggleY + (2 * step))
+
+        -- Remaining status toggles (Test mode / Style)
+        if panel.statusIconsTestModeCB then
+            panel.statusIconsTestModeCB:Show()
+            PlaceToggleIn(statusBox, panel.statusIconsTestModeCB, baseToggleY + (3 * step) + 10)
+        end
+        if panel.statusIconsStyleCB then
+            panel.statusIconsStyleCB:Show()
+            panel.statusIconsStyleCB:ClearAllPoints()
+            panel.statusIconsStyleCB:SetPoint("TOPLEFT", statusBox, "TOPLEFT", 220, baseToggleY + (3 * step) + 10)
+        end
+
+        -- Icon pickers are currently layout-only storage (Step 4.6)
+        local function HideIconPicker(label, drop)
+            if label then label:Hide() end
+            if drop  then drop:Hide() end
+        end
+
+        local function PlaceIconPickerAt(label, drop, titleText, rel, xOff)
+            if not (label and drop and rel) then return end
+            label:SetText(titleText)
+            label:ClearAllPoints()
+            label:SetPoint("TOPLEFT", rel, "BOTTOMLEFT", 2 + (xOff or 0), -8)  -- moved up ~10px and slightly left
+            label:Show()
+
+            drop:ClearAllPoints()
+            drop:SetPoint("TOPLEFT", label, "BOTTOMLEFT", -12, -4)
+            drop:Show()
+        end
+
+        local baseRel = panel.statusIconsTestModeCB
+        if baseRel then
+            PlaceIconPickerAt(panel.statusCombatSymbolLabel, panel.statusCombatSymbolDrop, "Combat", baseRel, 0)
+            PlaceIconPickerAt(panel.statusIncomingResSymbolLabel, panel.statusIncomingResSymbolDrop, "Rez", baseRel, 125)
+            if showResting then
+                PlaceIconPickerAt(panel.statusRestingSymbolLabel, panel.statusRestingSymbolDrop, "Rested", baseRel, 250)
+            else
+                HideIconPicker(panel.statusRestingSymbolLabel, panel.statusRestingSymbolDrop)
+            end
+        else
+            HideIconPicker(panel.statusCombatSymbolLabel, panel.statusCombatSymbolDrop)
+            HideIconPicker(panel.statusIncomingResSymbolLabel, panel.statusIncomingResSymbolDrop)
+            HideIconPicker(panel.statusRestingSymbolLabel, panel.statusRestingSymbolDrop)
+        end
     end
 
-    -- Incoming Rez row (indicator-style)
-    local toggleYRez = baseToggleY + ((row + usedRows) * step) + statusShift
-    local ctrlYRez   = baseCtrlY   + ((row + usedRows) * step) + statusShift
-
-    PlaceToggle(panel.statusIncomingResIconCB, toggleYRez)
-    PlaceXStepper(panel.statusIncomingResOffsetXStepper, ctrlYRez)
-    PlaceDivider(panel.statusIncomingResGroupDivider, toggleYRez)
-
-    usedRows = usedRows + 1
-    toggleYLast = toggleYRez
-
-    -- Remaining status toggles (Step 4 will convert them too)
-    local small = -22
-    local yBase = toggleYLast - 18
-
-    local function PlaceStatusCB(w, idx, extraY)
-        if not w then return end
-        w:ClearAllPoints()
-        local extra = extraY or 0
-        w:SetPoint("TOPLEFT", container, "TOPLEFT", 12, yBase + (idx * small) - 18 + extra)
-    end
-
-    local idx = 0
-    PlaceStatusCB(panel.statusIconsTestModeCB, idx, -10) -- extra 10px down for Test mode
-    idx = idx + 1
-    PlaceStatusCB(panel.statusIconsStyleCB, idx, -10)
-
-    -- Dummy icon dropdown pickers (Step 4): custom symbol selection (layout Step 4.6).
-    -- These only store per-unit symbol choices for later custom icon rendering.
-    --
-    -- Layout: under Test mode, aligned side-by-side (columns).
-    local function HideIconPicker(label, drop)
-        if label then label:Hide() end
-        if drop  then drop:Hide() end
-    end
-
-    local function PlaceIconPickerAt(label, drop, titleText, rel, xOff)
-        if not (label and drop and rel) then return end
-        label:SetText(titleText)
-        label:ClearAllPoints()
-        -- Move icon pickers a bit further down so they don't crowd the style/test toggles.
-        label:SetPoint("TOPLEFT", rel, "BOTTOMLEFT", 8 + (xOff or 0), -18)
-        label:Show()
-
-        drop:ClearAllPoints()
-        drop:SetPoint("TOPLEFT", label, "BOTTOMLEFT", -12, -4)
-        drop:Show()
-    end
-
-    local baseRel = panel.statusIconsStyleCB or panel.statusIconsTestModeCB
-    local cols = { 0, 145, 270 }
-
-    -- Default hide; we only show/position what is applicable for the current unit
-    HideIconPicker(panel.statusCombatSymbolLabel, panel.statusCombatSymbolDrop)
-    HideIconPicker(panel.statusRestingSymbolLabel, panel.statusRestingSymbolDrop)
-    HideIconPicker(panel.statusIncomingResSymbolLabel, panel.statusIncomingResSymbolDrop)
-
-    local col = 1
-
-    -- Combat icon picker (player/target)
-    if showStatusIcons and panel.statusCombatSymbolLabel and panel.statusCombatSymbolDrop then
-        PlaceIconPickerAt(panel.statusCombatSymbolLabel, panel.statusCombatSymbolDrop, "Combat icon", baseRel, cols[col])
-        col = col + 1
-    end
-
-    -- Rested icon picker (player only)
-    if showResting and panel.statusRestingSymbolLabel and panel.statusRestingSymbolDrop then
-        PlaceIconPickerAt(panel.statusRestingSymbolLabel, panel.statusRestingSymbolDrop, "Rested icon", baseRel, cols[col])
-        col = col + 1
-    end
-
-    -- Incoming Rez icon picker (player/target)
-    if showStatusIcons and panel.statusIncomingResSymbolLabel and panel.statusIncomingResSymbolDrop then
-        -- If we ran out of columns (unlikely), clamp to last column
-        local x = cols[col] or cols[#cols]
-        PlaceIconPickerAt(panel.statusIncomingResSymbolLabel, panel.statusIncomingResSymbolDrop, "Incoming rez icon", baseRel, x)
-        col = col + 1
-    end
-
-
-    row = row + usedRows
-end
-
-
-    -- Boss-only: spacing control lives under the indicator template on boss pages.
-    local isBossKey = false
+local isBossKey = false
     if type(currentKey) == "string" then
         if currentKey == "boss" or currentKey:match("^boss") then
             isBossKey = true
@@ -2887,14 +2909,14 @@ end
     if panel.playerSizeBox and panel._msufSizeBaseH then
         panel.playerSizeBox:SetHeight(panel._msufSizeBaseH)
     end
-    if panel.playerTextLayoutGroup and panel._msufBasicsH and panel._msufSizeBaseH and panel._msufSizeBossH then
-        -- Step 1.5: Player/Target need extra vertical room in the right "Castbar" box (Indicator + Status Icons live here).
-        local baseH = panel._msufTextBaseH or (panel._msufBasicsH + panel._msufSizeBaseH + 12)
-        local extraH = 0
-        if currentKey == "player" or currentKey == "target" then
-            extraH = panel._msufTextExtra_PlayerTarget or 0
-        end
-        panel.playerTextLayoutGroup:SetHeight(baseH + extraH)
+    if panel.playerTextLayoutGroup and panel._msufTextBaseH then
+        panel.playerTextLayoutGroup:SetHeight(panel._msufTextBaseH)
+    end
+
+    -- Status icons box (player/target only)
+    if panel._msufStatusIconsGroup and panel._msufStatusBoxH then
+        panel._msufStatusIconsGroup:SetHeight(panel._msufStatusBoxH)
+        panel._msufStatusIconsGroup:SetShown((currentKey == "player" or currentKey == "target") and true or false)
     end
 
 
