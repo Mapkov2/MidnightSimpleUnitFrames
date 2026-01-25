@@ -149,7 +149,12 @@ local function EnsureDB()
     if s.highlightStealableBuffs == nil then s.highlightStealableBuffs = true end
     if s.highlightDispellableDebuffs == nil then s.highlightDispellableDebuffs = true end
 
-    -- Highlight your own auras (border coloring). Independent of filters.
+        -- Debuff-type colored borders: Magic/Curse/Poison/Disease
+    if s.highlightDebuffTypeBorder == nil then s.highlightDebuffTypeBorder = false end
+    if type(s.debuffTypeBorderThickness) ~= 'number' then s.debuffTypeBorderThickness = 1 end
+    if s.debuffTypeBorderThickness < 1 then s.debuffTypeBorderThickness = 1 end
+    if s.debuffTypeBorderThickness > 8 then s.debuffTypeBorderThickness = 8 end
+-- Highlight your own auras (border coloring). Independent of filters.
     if s.highlightOwnBuffs == nil then s.highlightOwnBuffs = false end
     if s.highlightOwnDebuffs == nil then s.highlightOwnDebuffs = false end
 
@@ -1412,8 +1417,75 @@ local function CreateBorder(frame)
         edgeFile = "Interface\\Buttons\\WHITE8x8",
         edgeSize = 1,
     })
+    border._msufEdgeSize = 1
     border:SetBackdropBorderColor(0, 0, 0, 1)
     frame._msufBorder = border
+end
+
+
+-- Border thickness (primarily used for Debuff Type Border feature).
+local function MSUF_A2_ClampBorderThickness(v)
+    v = tonumber(v) or 1
+    if v < 1 then v = 1 end
+    if v > 8 then v = 8 end
+    return v
+end
+
+local function MSUF_A2_EnsureBorderThickness(icon, shared)
+    if not icon or not icon._msufBorder then return end
+    local border = icon._msufBorder
+    local thickness = 1
+    if shared and shared.debuffTypeBorderThickness ~= nil then
+        thickness = MSUF_A2_ClampBorderThickness(shared.debuffTypeBorderThickness)
+    end
+    if border._msufEdgeSize ~= thickness then
+        border._msufEdgeSize = thickness
+        border:SetBackdrop({
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = thickness,
+        })
+    end
+end
+
+-- Resolve a debuff-type color (Magic/Curse/Poison/Disease) for a specific aura.
+-- Secret-safe: no comparisons/arithmetic on secret fields; prefer API helpers.
+local function MSUF_A2_GetDebuffTypeBorderRGB(unit, aura, auraInstanceID)
+    -- Fast path: use the dispel type string (preview + normal aura tables) with DebuffTypeColor.
+    local rawType = aura and (aura.dispelName or aura.dispelType or aura.debuffType)
+    if type(rawType) == "string" and rawType ~= "" and _G and type(_G.DebuffTypeColor) == "table" then
+        local c = _G.DebuffTypeColor[rawType]
+        if type(c) == "table" then
+            local r = c.r or c[1]
+            local g = c.g or c[2]
+            local b = c.b or c[3]
+            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                return r, g, b
+            end
+        end
+    end
+
+    -- API path: ask UnitAuras for the dispel-type color of this aura (real auras).
+    if unit and auraInstanceID and C_UnitAuras and type(C_UnitAuras.GetAuraDispelTypeColor) == "function" then
+        local c1, c2, c3 = C_UnitAuras.GetAuraDispelTypeColor(unit, auraInstanceID, 0)
+        if type(c1) == "table" then
+            if type(c1.GetRGB) == "function" then
+                local r, g, b = c1:GetRGB()
+                if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                    return r, g, b
+                end
+            end
+            local r = c1.r or c1[1]
+            local g = c1.g or c1[2]
+            local b = c1.b or c1[3]
+            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                return r, g, b
+            end
+        elseif type(c1) == "number" and type(c2) == "number" and type(c3) == "number" then
+            return c1, c2, c3
+        end
+    end
+
+    return nil
 end
 
 
@@ -1490,11 +1562,11 @@ local MSUF_A2_PREVIEW_BUFF_DEFS = {
 }
 
 local MSUF_A2_PREVIEW_DEBUFF_DEFS = {
-    { tex = "Interface\\Icons\\Spell_Frost_FrostNova", spellId = 122, isHelpful = false, dispellable = true, previewKind = "Dispellable debuff (border)" },
+    { tex = "Interface\\Icons\\Spell_Frost_FrostNova", spellId = 122, isHelpful = false, dispellable = true, debuffType = "Magic", previewKind = "Debuff type (Magic) border" },
     { tex = "Interface\\Icons\\Ability_Warrior_Sunder", spellId = 7386, isHelpful = false, stackText = "12", previewKind = "Stacked debuff (shows stack count)" },
     { tex = "Interface\\Icons\\Spell_Shadow_UnholyFrenzy", spellId = 49016, isHelpful = false, isOwn = true, previewKind = "Own debuff (highlight)" },
     { tex = "Interface\\Icons\\Spell_Shadow_ShadowWordPain", spellId = 589, isHelpful = false, previewKind = "Normal debuff" },
-    { tex = "Interface\\Icons\\Spell_Shadow_Curse", spellId = 702, isHelpful = false, permanent = true, previewKind = "Permanent debuff (no duration)" },
+    { tex = "Interface\\Icons\\Spell_Shadow_Curse", spellId = 702, isHelpful = false, dispellable = true, debuffType = "Curse", permanent = true, previewKind = "Debuff type (Curse) border" },
 }
 
 local function AcquireIcon(container, index)
@@ -2755,6 +2827,9 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
 
     local masqueOn = (shared and shared.masqueEnabled == true and MSUF_MasqueAuras2) and true or false
 
+    -- Border thickness is shared-driven and should update immediately when the slider changes.
+    MSUF_A2_EnsureBorderThickness(icon, shared)
+
     local auraInstanceID = aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
 
     local function ShowBorder(r, g, b, a)
@@ -2833,6 +2908,15 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
         HideBaseBorder()
         return
     end
+
+-- Debuffs: optional debuff-type colored border (Magic/Curse/Poison/Disease).
+if shared and shared.highlightDebuffTypeBorder == true then
+    local tr, tg, tb = MSUF_A2_GetDebuffTypeBorderRGB(unit, aura, auraInstanceID)
+    if tr and tg and tb then
+        ShowBorder(tr, tg, tb, 1)
+        return
+    end
+end
 
     -- Debuffs: only highlight dispellable debuffs if the toggle is on.
     if not (shared and shared.highlightDispellableDebuffs == true) then
@@ -4299,10 +4383,21 @@ end
                     local r, g, b = MSUF_A2_GetStealableBorderRGB()
                     if icon._msufBorder then icon._msufBorder:SetBackdropBorderColor(r, g, b, 1) end
                 end
+                if opts and (not opts.isHelpful) and shared then
+                    -- Debuff-type border has priority over generic dispellable border.
+                    if shared.highlightDebuffTypeBorder == true then
+                        local tr, tg, tb = MSUF_A2_GetDebuffTypeBorderRGB(nil, opts, nil)
+                        if tr and tg and tb then
+                            MSUF_A2_EnsureBorderThickness(icon, shared)
+                            if icon._msufBorder then icon._msufBorder:SetBackdropBorderColor(tr, tg, tb, 1) end
+                        end
+                    end
 
-                if opts and (not opts.isHelpful) and opts.dispellable and shared and shared.highlightDispellableDebuffs == true then
-                    local r, g, b = MSUF_A2_GetDispelBorderRGB()
-                    if icon._msufBorder then icon._msufBorder:SetBackdropBorderColor(r, g, b, 1) end
+                    if opts.dispellable and shared.highlightDispellableDebuffs == true then
+                        local r, g, b = MSUF_A2_GetDispelBorderRGB()
+                        MSUF_A2_EnsureBorderThickness(icon, shared)
+                        if icon._msufBorder then icon._msufBorder:SetBackdropBorderColor(r, g, b, 1) end
+                    end
                 end
 
                 -- Tooltip: scripts are assigned once per icon; we only toggle mouse.
