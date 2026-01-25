@@ -3677,7 +3677,9 @@ local CASTBAR_POPUP_TEXT_SPEC = {
         show = { field = "iconShowCB", name = "$parentShowIcon", text = "Show" },
         rows = {
             { key = "iconY",    label = "Icon Y:",    box = "$parentIconYBox",    dy = -8 },
-            { key = "iconSize", label = "Icon Size:", box = "$parentIconSizeBox", dy = -8 },
+            -- Live-apply icon size while typing (Edit Mode UX: preview should resize immediately).
+            -- Scoped to Icon Size only to avoid extra apply spam during normal usage.
+            { key = "iconSize", label = "Icon Size:", box = "$parentIconSizeBox", dy = -8, live = true },
         },
         override = {
             field = "iconSizeOverrideCB",
