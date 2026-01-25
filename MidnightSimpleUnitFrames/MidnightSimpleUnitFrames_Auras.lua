@@ -124,6 +124,7 @@ local function EnsureDB()
     if s.hidePermanent == nil then s.hidePermanent = false end
     if s.showTooltip == nil then s.showTooltip = true end
     if s.showCooldownSwipe == nil then s.showCooldownSwipe = true end
+    if s.showCooldownText == nil then s.showCooldownText = true end
     if s.cooldownSwipeDarkenOnLoss == nil then s.cooldownSwipeDarkenOnLoss = false end
     if s.showInEditMode == nil then s.showInEditMode = true end
     if s.showStackCount == nil then s.showStackCount = true end
@@ -3071,7 +3072,7 @@ local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
 end
 
 -- Cooldown helper (secret-safe): use Duration Objects only (no legacy Remaining* APIs).
-local function MSUF_A2_TrySetCooldownFromAura(icon, unit, aura)
+local function MSUF_A2_TrySetCooldownFromAura(icon, unit, aura, wantCountdownText)
     if not icon or not icon.cooldown or not aura then return false end
 
     local auraInstanceID = aura._msufAuraInstanceID or aura.auraInstanceID
@@ -3102,7 +3103,12 @@ local function MSUF_A2_TrySetCooldownFromAura(icon, unit, aura)
             icon.cooldown._msufA2_durationObj = obj
 
             -- Register this icon for centralized cooldown text color updates.
-            MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
+            -- (Only when countdown numbers are enabled; otherwise skip the manager entirely.)
+            if wantCountdownText ~= false then
+                MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
+            elseif icon._msufA2_cdMgrRegistered == true then
+                MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
+            end
             return true
         end
     end
@@ -3295,9 +3301,16 @@ local function ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanen
     if icon.cooldown then
         SafeCall(icon.cooldown.Show, icon.cooldown)
 
-        -- Always show Blizzard cooldown countdown numbers (stacks are drawn separately).
+        local wantCountdownText = not (shared and shared.showCooldownText == false)
+
+        -- Blizzard cooldown countdown numbers (stacks are drawn separately).
         if icon.cooldown.SetHideCountdownNumbers then
-            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
+            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, not wantCountdownText)
+        end
+
+        -- If countdown text is disabled, ensure we don't keep this icon registered in the text manager.
+        if not wantCountdownText and icon._msufA2_cdMgrRegistered == true then
+            MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
         end
 
         if icon._msufA2_lastSwipeWanted ~= swipeWanted then
@@ -3323,7 +3336,7 @@ local function ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanen
         local prevHadTimer = (icon._msufA2_lastHadTimer == true)
 
         icon._msufA2_lastCooldownAuraInstanceID = icon._msufAuraInstanceID
-        hadTimer = MSUF_A2_TrySetCooldownFromAura(icon, unit, aura)
+        hadTimer = MSUF_A2_TrySetCooldownFromAura(icon, unit, aura, wantCountdownText)
         icon._msufA2_lastHadTimer = hadTimer
 
         if not hadTimer then
