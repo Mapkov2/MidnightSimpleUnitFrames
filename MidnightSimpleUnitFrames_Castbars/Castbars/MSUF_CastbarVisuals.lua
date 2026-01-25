@@ -305,11 +305,127 @@ local function ApplyFontsAndTextLayout(frame, unitKey, g)
             })
         end
     else
-        if type(_G.MSUF_ApplyCastbarSpellNameLayout) == "function" then
-            _G.MSUF_ApplyCastbarSpellNameLayout(frame, unitKey)
-        end
+		if type(_G.MSUF_ApplyCastbarSpellNameLayout) == "function" then
+			-- Guard against Midnight/Beta "secret value" arithmetic inside the style helper.
+			-- If it throws, fall back to a simple LEFT-anchor layout (no width math).
+			local ok = pcall(_G.MSUF_ApplyCastbarSpellNameLayout, frame, unitKey)
+			if not ok then
+				local showName = (g.castbarShowSpellName ~= false)
+				local ox, oy = 0, 0
+				if unitKey == "player" then
+					if g.castbarPlayerShowSpellName ~= nil then
+						showName = (g.castbarPlayerShowSpellName ~= false)
+					end
+					ox = tonumber(g.castbarPlayerTextOffsetX) or 0
+					oy = tonumber(g.castbarPlayerTextOffsetY) or 0
+				elseif unitKey == "target" then
+					if g.castbarTargetShowSpellName ~= nil then
+						showName = (g.castbarTargetShowSpellName ~= false)
+					end
+					ox = tonumber(g.castbarTargetTextOffsetX) or 0
+					oy = tonumber(g.castbarTargetTextOffsetY) or 0
+				elseif unitKey == "focus" then
+					if g.castbarFocusShowSpellName ~= nil then
+						showName = (g.castbarFocusShowSpellName ~= false)
+					end
+					ox = tonumber(g.castbarFocusTextOffsetX) or 0
+					oy = tonumber(g.castbarFocusTextOffsetY) or 0
+				end
+
+				if frame.castText and frame.statusBar then
+					frame.castText:Show()
+					if type(_G.MSUF_SetAlphaIfChanged) == "function" then
+						_G.MSUF_SetAlphaIfChanged(frame.castText, showName and 1 or 0)
+					else
+						frame.castText:SetAlpha(showName and 1 or 0)
+					end
+					if not showName then
+						if type(_G.MSUF_SetTextIfChanged) == "function" then
+							_G.MSUF_SetTextIfChanged(frame.castText, "")
+						else
+							frame.castText:SetText("")
+						end
+					end
+
+					if type(_G.MSUF_SetPointIfChanged) == "function" then
+						_G.MSUF_SetPointIfChanged(frame.castText, "LEFT", frame.statusBar, "LEFT", 2 + ox, 0 + oy)
+					else
+						frame.castText:ClearAllPoints()
+						frame.castText:SetPoint("LEFT", frame.statusBar, "LEFT", 2 + ox, 0 + oy)
+					end
+					if frame.castText.SetJustifyH then
+						if type(_G.MSUF_SetJustifyHIfChanged) == "function" then
+							_G.MSUF_SetJustifyHIfChanged(frame.castText, "LEFT")
+						else
+							frame.castText:SetJustifyH("LEFT")
+						end
+					end
+				end
+			end
+		end
+
         if type(_G.MSUF_ApplyCastbarTimeTextLayout) == "function" then
-            _G.MSUF_ApplyCastbarTimeTextLayout(frame, unitKey)
+            -- Guard against Midnight/Beta "secret value" arithmetic inside the style helper.
+            -- If it throws, fall back to a simple RIGHT-anchor layout (no width math).
+            local ok = pcall(_G.MSUF_ApplyCastbarTimeTextLayout, frame, unitKey)
+            if not ok then
+                local tx, ty
+                if unitKey == "target" then
+                    tx = g.castbarTargetTimeOffsetX
+                    ty = g.castbarTargetTimeOffsetY
+                elseif unitKey == "focus" then
+                    tx = g.castbarFocusTimeOffsetX
+                    ty = g.castbarFocusTimeOffsetY
+                else
+                    tx = g.castbarPlayerTimeOffsetX
+                    ty = g.castbarPlayerTimeOffsetY
+                end
+
+                if tx == nil then tx = g.castbarPlayerTimeOffsetX end
+                if ty == nil then ty = g.castbarPlayerTimeOffsetY end
+
+                tx = tonumber(tx)
+                ty = tonumber(ty)
+                if tx == nil then tx = -2 end
+                if ty == nil then ty = 0 end
+
+                if frame.timeText and frame.statusBar then
+                    frame.timeText:Show()
+
+                    -- Respect the show-cast-time toggle even in fallback mode
+                    local showTime = true
+                    if type(_G.MSUF_IsCastTimeEnabled) == "function" then
+                        showTime = _G.MSUF_IsCastTimeEnabled(frame)
+                    else
+                        if unitKey == "player" then
+                            showTime = (g.showPlayerCastTime ~= false)
+                        elseif unitKey == "target" then
+                            showTime = (g.showTargetCastTime ~= false)
+                        elseif unitKey == "focus" then
+                            showTime = (g.showFocusCastTime ~= false)
+                        end
+                    end
+
+                    if type(_G.MSUF_SetAlphaIfChanged) == "function" then
+                        _G.MSUF_SetAlphaIfChanged(frame.timeText, showTime and 1 or 0)
+                    else
+                        frame.timeText:SetAlpha(showTime and 1 or 0)
+                    end
+
+                    if type(_G.MSUF_SetPointIfChanged) == "function" then
+                        _G.MSUF_SetPointIfChanged(frame.timeText, "RIGHT", frame.statusBar, "RIGHT", tx, ty)
+                    else
+                        frame.timeText:ClearAllPoints()
+                        frame.timeText:SetPoint("RIGHT", frame.statusBar, "RIGHT", tx, ty)
+                    end
+
+                    if type(_G.MSUF_SetJustifyHIfChanged) == "function" then
+                        _G.MSUF_SetJustifyHIfChanged(frame.timeText, "RIGHT")
+                    elseif frame.timeText.SetJustifyH then
+                        frame.timeText:SetJustifyH("RIGHT")
+                    end
+                end
+            end
         end
     end
 
