@@ -109,16 +109,67 @@ local function _MSUF_GetStatusIconsUseMidnight(conf, g)
     return false
 end
 
+-- ------------------------------------------------------------
+-- Status Icon Symbol Textures (Classic vs Midnight)
+-- Supports different symbol families:
+--   weapon_*  -> Media/Symbols/Combat  (128_clean)
+--   rested_*  -> Media/Symbols/Rested  (64)
+-- ------------------------------------------------------------
+
 local function _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
     if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
         return nil
     end
 
+    local folder = "Combat"
     local suffix = (useMidnight == true) and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
-    return "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\Combat\\" .. symbolKey .. suffix
+
+    -- Rested icons use a different folder + size/suffix convention.
+    if string.find(symbolKey, "^rested_") then
+        folder = "Rested"
+        suffix = (useMidnight == true) and "_midnight_64.tga" or "_classic_64.tga"
+    end
+
+-- Resurrection icons use a different folder + size/suffix convention.
+if string.find(symbolKey, "^resurrection_") then
+    folder = "Ress"
+    suffix = (useMidnight == true) and "_midnight_64.tga" or "_classic_64.tga"
 end
 
-local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight)
+
+    return "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\" .. folder .. "\\" .. symbolKey .. suffix
+end
+
+local function _MSUF_EnsurePulseAnim(tex)
+    if not tex or not tex.CreateAnimationGroup then return nil end
+    if tex._msufPulseAnim then return tex._msufPulseAnim end
+
+    local ag = tex:CreateAnimationGroup()
+    ag:SetLooping("REPEAT")
+
+    local a1 = ag:CreateAnimation("Alpha")
+    a1:SetFromAlpha(0.45)
+    a1:SetToAlpha(1.0)
+    a1:SetDuration(0.85)
+    a1:SetOrder(1)
+
+    local a2 = ag:CreateAnimation("Alpha")
+    a2:SetFromAlpha(1.0)
+    a2:SetToAlpha(0.45)
+    a2:SetDuration(0.85)
+    a2:SetOrder(2)
+
+    tex._msufPulseAnim = ag
+    return ag
+end
+
+local function _MSUF_StopPulseAnim(tex)
+    local ag = tex and tex._msufPulseAnim
+    if ag and ag.Stop then ag:Stop() end
+    if tex and tex.SetAlpha then tex:SetAlpha(1) end
+end
+
+local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight, wantsPulse)
     if not tex or not tex.SetTexture then return end
 
     -- Capture default texture/atlas so selecting DEFAULT later restores the original icon.
@@ -130,10 +181,7 @@ local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight)
         if a then tex._msufDefaultAtlas = a end
     end
 
-
-    -- Capture default texcoords so we can restore them when the user selects
-    -- DEFAULT again. MSUF's built-in status icons may use cropped coords,
-    -- but custom symbol TGAs should be displayed fully.
+    -- Capture default texcoords so we can restore them when the user selects DEFAULT again.
     if tex._msufDefaultTexCoord == nil and tex.GetTexCoord then
         local ulx, uly, llx, lly, urx, ury, lrx, lry = tex:GetTexCoord()
         tex._msufDefaultTexCoord = { ulx, uly, llx, lly, urx, ury, lrx, lry }
@@ -155,6 +203,8 @@ local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight)
         if tc and tex.SetTexCoord then
             tex:SetTexCoord(tc[1], tc[2], tc[3], tc[4], tc[5], tc[6], tc[7], tc[8])
         end
+
+        _MSUF_StopPulseAnim(tex)
         return
     end
 
@@ -168,8 +218,16 @@ local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight)
             tex:SetTexCoord(0, 1, 0, 1)
         end
     end
-end
 
+    if wantsPulse then
+        local ag = _MSUF_EnsurePulseAnim(tex)
+        if ag and ag.Play and (not ag:IsPlaying()) then
+            ag:Play()
+        end
+    else
+        _MSUF_StopPulseAnim(tex)
+    end
+end
 
 local function _MSUF_AnchorCorner(tex, frame, corner, xOff, yOff)
     if not tex or not frame then return end
@@ -230,25 +288,25 @@ local function _MSUF_UpdateStatusIcons(frame)
     local restIcon = frame.restingIndicatorIcon
     local rezIcon = frame.incomingResIndicatorIcon
 
-    -- Safety: Summon was removed; if any leftover texture exists, hard-hide it.
+        -- Safety: Summon was removed; if any leftover texture exists, hard-hide it.
     local summonIcon = frame.summonIndicatorIcon
     if summonIcon and summonIcon.Hide then
         summonIcon:Hide()
-    
--- Symbol textures (selected via Options -> Status icons)
-local useMidnight = _MSUF_GetStatusIconsUseMidnight(conf, g)
+    end
 
-local combatSymbol = _MSUF_ReadStr(conf, g, "combatStateIndicatorSymbol", "DEFAULT")
-local restSymbol   = _MSUF_ReadStr(conf, g, "restingStateIndicatorSymbol", "DEFAULT", "restedStateIndicatorSymbol")
-local rezSymbol    = _MSUF_ReadStr(conf, g, "incomingResIndicatorSymbol", "DEFAULT")
+    -- Symbol textures (selected via Options -> Status icons)
+    local useMidnight = _MSUF_GetStatusIconsUseMidnight(conf, g)
 
-_MSUF_ApplyStatusIconSymbolTexture(combatIcon, combatSymbol, useMidnight)
-_MSUF_ApplyStatusIconSymbolTexture(restIcon, restSymbol, useMidnight)
-_MSUF_ApplyStatusIconSymbolTexture(rezIcon, rezSymbol, useMidnight)
+    local combatSymbol = _MSUF_ReadStr(conf, g, "combatStateIndicatorSymbol", "DEFAULT")
+    local restSymbol   = _MSUF_ReadStr(conf, g, "restedStateIndicatorSymbol", "DEFAULT", "restingStateIndicatorSymbol")
+    local rezSymbol    = _MSUF_ReadStr(conf, g, "incomingResIndicatorSymbol", "DEFAULT")
 
-end
+    -- Rested custom symbols get a gentle pulse to mimic Blizzard's feel.
+    _MSUF_ApplyStatusIconSymbolTexture(combatIcon, combatSymbol, useMidnight, false)
+    _MSUF_ApplyStatusIconSymbolTexture(restIcon,   restSymbol,   useMidnight, (type(restSymbol) == "string" and string.find(restSymbol, "^rested_") ~= nil))
+    _MSUF_ApplyStatusIconSymbolTexture(rezIcon,    rezSymbol,    useMidnight, false)
 
-    local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffectingCombat(unit)) and true or false)))
+local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffectingCombat(unit)) and true or false)))
     local restOn = (showRest and (testMode or ((IsResting and IsResting()) and true or false)))
     local rezOn = (showRez and (testMode or ((UnitHasIncomingResurrection and UnitHasIncomingResurrection(unit)) and true or false)))
 
@@ -287,17 +345,18 @@ end
             end
 
             -- If both use same corner and combat is visible, stack resting under combat (UUF-style).
+            -- IMPORTANT: still respect user X/Y offsets while stacked.
             if restCorner == combatCorner and combatOn and combatIcon and combatIcon.IsShown and combatIcon:IsShown() then
                 local gap = 2
                 restIcon:ClearAllPoints()
                 if restCorner == "TOPLEFT" then
-                    restIcon:SetPoint("TOPLEFT", combatIcon, "TOPLEFT", 0, -(combatSize + gap))
+                    restIcon:SetPoint("TOPLEFT", combatIcon, "TOPLEFT", restX, -(combatSize + gap) + restY)
                 elseif restCorner == "TOPRIGHT" then
-                    restIcon:SetPoint("TOPRIGHT", combatIcon, "TOPRIGHT", 0, -(combatSize + gap))
+                    restIcon:SetPoint("TOPRIGHT", combatIcon, "TOPRIGHT", restX, -(combatSize + gap) + restY)
                 elseif restCorner == "BOTTOMLEFT" then
-                    restIcon:SetPoint("BOTTOMLEFT", combatIcon, "BOTTOMLEFT", 0, (combatSize + gap))
+                    restIcon:SetPoint("BOTTOMLEFT", combatIcon, "BOTTOMLEFT", restX, (combatSize + gap) + restY)
                 else -- BOTTOMRIGHT
-                    restIcon:SetPoint("BOTTOMRIGHT", combatIcon, "BOTTOMRIGHT", 0, (combatSize + gap))
+                    restIcon:SetPoint("BOTTOMRIGHT", combatIcon, "BOTTOMRIGHT", restX, (combatSize + gap) + restY)
                 end
             else
                 _MSUF_AnchorCorner(restIcon, frame, restCorner, restX, restY)
@@ -306,6 +365,7 @@ end
             restIcon:SetAlpha(iconAlpha)
             restIcon:Show()
         else
+            _MSUF_StopPulseAnim(restIcon)
             restIcon:Hide()
         end
     end
