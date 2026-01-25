@@ -236,6 +236,11 @@ local function _MSUF_AnchorCorner(tex, frame, corner, xOff, yOff)
     yOff = yOff or 0
     tex:ClearAllPoints()
 
+    if corner == "CENTER" then
+        tex:SetPoint("CENTER", frame, "CENTER", 0 + xOff, 0 + yOff)
+        return
+    end
+
     if corner == "TOPRIGHT" then
         tex:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2 + xOff, -2 + yOff)
         return
@@ -335,9 +340,10 @@ local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffe
     if restIcon then
         if restOn then
             local restCorner = _MSUF_ReadStr(conf, g, "restedStateIndicatorAnchor", combatCorner)
-            local restX = _MSUF_ReadNumber(conf, g, "restedStateIndicatorOffsetX", combatX)
-            local restY = _MSUF_ReadNumber(conf, g, "restedStateIndicatorOffsetY", combatY)
-            local restSize = _MSUF_ReadNumber(conf, g, "restedStateIndicatorSize", combatSize)
+            -- NOTE: Rested icon offsets are intentionally independent from combat offsets (no implicit inheritance).
+            local restX = _MSUF_ReadNumber(conf, g, "restedStateIndicatorOffsetX", 0)
+            local restY = _MSUF_ReadNumber(conf, g, "restedStateIndicatorOffsetY", 0)
+            local restSize = _MSUF_ReadNumber(conf, g, "restedStateIndicatorSize", 18)
 
             if restIcon._msufSizeStamp ~= restSize then
                 restIcon:SetSize(restSize, restSize)
@@ -348,16 +354,24 @@ local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffe
             -- IMPORTANT: still respect user X/Y offsets while stacked.
             if restCorner == combatCorner and combatOn and combatIcon and combatIcon.IsShown and combatIcon:IsShown() then
                 local gap = 2
+                local stackH = combatSize
+                if restSize and restSize > stackH then stackH = restSize end
+
+                -- IMPORTANT: Stack relative to the unitframe (not the combat icon).
+                -- This keeps Rested fully independent: moving Combat via X/Y will NOT drag Rested along.
                 restIcon:ClearAllPoints()
                 if restCorner == "TOPLEFT" then
-                    restIcon:SetPoint("TOPLEFT", combatIcon, "TOPLEFT", restX, -(combatSize + gap) + restY)
+                    restIcon:SetPoint("TOPLEFT", frame, "TOPLEFT", restX, restY - (stackH + gap))
                 elseif restCorner == "TOPRIGHT" then
-                    restIcon:SetPoint("TOPRIGHT", combatIcon, "TOPRIGHT", restX, -(combatSize + gap) + restY)
+                    restIcon:SetPoint("TOPRIGHT", frame, "TOPRIGHT", restX, restY - (stackH + gap))
                 elseif restCorner == "BOTTOMLEFT" then
-                    restIcon:SetPoint("BOTTOMLEFT", combatIcon, "BOTTOMLEFT", restX, (combatSize + gap) + restY)
+                    restIcon:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", restX, restY + (stackH + gap))
+                elseif restCorner == "CENTER" then
+                    restIcon:SetPoint("CENTER", frame, "CENTER", restX, restY - (stackH + gap))
                 else -- BOTTOMRIGHT
-                    restIcon:SetPoint("BOTTOMRIGHT", combatIcon, "BOTTOMRIGHT", restX, (combatSize + gap) + restY)
+                    restIcon:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", restX, restY + (stackH + gap))
                 end
+
             else
                 _MSUF_AnchorCorner(restIcon, frame, restCorner, restX, restY)
             end

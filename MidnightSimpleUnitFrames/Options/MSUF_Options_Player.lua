@@ -2180,7 +2180,7 @@ _MSUF_LayoutIndicatorRow(
             dropName = "MSUF_PlayerCopyToDropdown",
             destVar = "_msufCopyDestKey",
             defaultDest = "target",
-            hintText = "Copies compatible settings (castbar -> Target/Focus only).",
+            hintText = "",
             items = {
                 { "Target", "target" },
                 { "Focus", "focus" },
@@ -2194,7 +2194,7 @@ _MSUF_LayoutIndicatorRow(
             dropName = "MSUF_TargetCopyToDropdown",
             destVar = "_msufCopyDestKey_target",
             defaultDest = "player",
-            hintText = "Copies compatible settings (castbar -> Player/Focus only).",
+            hintText = "",
             items = {
                 { "Player", "player" },
                 { "Focus", "focus" },
@@ -2208,7 +2208,7 @@ _MSUF_LayoutIndicatorRow(
             dropName = "MSUF_FocusCopyToDropdown",
             destVar = "_msufCopyDestKey_focus",
             defaultDest = "target",
-            hintText = "Copies compatible settings (castbar -> Player/Target only).",
+            hintText = "",
             items = {
                 { "Player", "player" },
                 { "Target", "target" },
@@ -2222,7 +2222,7 @@ _MSUF_LayoutIndicatorRow(
             dropName = "MSUF_BossCopyToDropdown",
             destVar = "_msufCopyDestKey_boss",
             defaultDest = "target",
-            hintText = "Copies compatible settings (boss castbar keys included).",
+            hintText = "",
             items = {
                 { "Player", "player" },
                 { "Target", "target" },
@@ -2236,7 +2236,7 @@ _MSUF_LayoutIndicatorRow(
             dropName = "MSUF_ToTCopyToDropdown",
             destVar = "_msufCopyDestKey_tot",
             defaultDest = "player",
-            hintText = "Copies compatible settings (castbar ignored).",
+            hintText = "",
             items = {
                 { "Player", "player" },
                 { "Target", "target" },
@@ -2250,7 +2250,7 @@ _MSUF_LayoutIndicatorRow(
             dropName = "MSUF_PetCopyToDropdown",
             destVar = "_msufCopyDestKey_pet",
             defaultDest = "target",
-            hintText = "Copies compatible settings (castbar ignored).",
+            hintText = "",
             items = {
                 { "Player", "player" },
                 { "Target", "target" },
