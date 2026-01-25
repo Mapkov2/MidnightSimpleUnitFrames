@@ -1976,6 +1976,9 @@ end
             { "Swipe darkens on loss", 12, -300, A2_Settings, "cooldownSwipeDarkenOnLoss", nil, TIP_SWIPE_STYLE, "cbSwipeStyle" },
 
             { "Show stack count", 200, -276, A2_Settings, "showStackCount", nil, TIP_SHOW_STACK, "cbShowStackCount" },
+            { "Show cooldown text", 200, -300, A2_Settings, "showCooldownText", nil,
+                "Shows the countdown numbers on aura icons. Disable to hide cooldown numbers (swipe can remain enabled).",
+                "cbShowCooldownText" },
 
             { "Show tooltip", 12, -276, A2_Settings, "showTooltip", nil, nil, "cbShowTooltip" },
         }, displayCB)
