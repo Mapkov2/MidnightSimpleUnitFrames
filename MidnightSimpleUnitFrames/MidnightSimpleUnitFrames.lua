@@ -3249,7 +3249,9 @@ local function MSUF_UpdateAbsorbBar(self, unit, maxHP)
     -- Options preview: force-show fake absorb overlay so users can preview absorb textures.
     if _G.MSUF_AbsorbTextureTestMode then
         local max = maxHP or (unit and UnitHealthMax(unit)) or 1
-        if not max or max < 1 then max = 1 end
+        -- Secret-safe: UnitHealthMax/preview max can be a secret value on Midnight/Beta.
+        -- Only do numeric comparisons/arithmetic when the value is a real number.
+        if type(max) ~= "number" or max < 1 then max = 1 end
         self.absorbBar:SetMinMaxValues(0, max)
         MSUF_SetBarValue(self.absorbBar, max * 0.25)
         self.absorbBar:Show()
@@ -3262,11 +3264,13 @@ local function MSUF_UpdateAbsorbBar(self, unit, maxHP)
         return
     end
     local totalAbs = UnitGetTotalAbsorbs(unit)
-    if not totalAbs then
+    -- Secret-safe: totalAbs/max can be secret values; never compare/arithmetic unless they're real numbers.
+    if type(totalAbs) ~= "number" then
         MSUF_ResetBarZero(self.absorbBar, true)
         return
     end
     local max = maxHP or UnitHealthMax(unit) or 1
+    if type(max) ~= "number" or max < 1 then max = 1 end
     self.absorbBar:SetMinMaxValues(0, max)
     MSUF_SetBarValue(self.absorbBar, totalAbs)
     self.absorbBar:Show()
@@ -3282,7 +3286,8 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)
     -- Options preview: force-show fake heal-absorb overlay so users can preview heal-absorb textures.
     if _G.MSUF_AbsorbTextureTestMode then
         local max = maxHP or (unit and UnitHealthMax(unit)) or 1
-        if not max or max < 1 then max = 1 end
+        -- Secret-safe: UnitHealthMax/preview max can be a secret value on Midnight/Beta.
+        if type(max) ~= "number" or max < 1 then max = 1 end
         self.healAbsorbBar:SetMinMaxValues(0, max)
         MSUF_SetBarValue(self.healAbsorbBar, max * 0.15)
         self.healAbsorbBar:Show()
@@ -3290,11 +3295,12 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)
     end
 
     local totalHealAbs = UnitGetTotalHealAbsorbs(unit)
-    if not totalHealAbs then
+    if type(totalHealAbs) ~= "number" then
         MSUF_ResetBarZero(self.healAbsorbBar, true)
         return
     end
     local max = maxHP or UnitHealthMax(unit) or 1
+    if type(max) ~= "number" or max < 1 then max = 1 end
     self.healAbsorbBar:SetMinMaxValues(0, max)
     MSUF_SetBarValue(self.healAbsorbBar, totalHealAbs)
     self.healAbsorbBar:Show()
