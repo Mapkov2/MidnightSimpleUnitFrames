@@ -2061,6 +2061,24 @@ local function MSUF_A2_PrivateAuras_Supported()
         and type(C_UnitAuras.RemovePrivateAuraAnchor) == "function") and true or false
 end
 
+-- Private aura data is intentionally not exposed to addons; Blizzard renders the icons.
+-- Some private-aura payloads appear to be delivered only for the canonical "player"
+-- unit token (not aliases like "focus" even if focus == player). To keep MSUF behavior
+-- intuitive, we map focus/target -> "player" when they point at the player.
+local function MSUF_A2_PrivateAuras_GetEffectiveUnitToken(unit)
+    if type(unit) ~= "string" then return unit end
+
+    if unit ~= "player" and type(UnitIsUnit) == "function" then
+        -- If the current unit token is the player (e.g. focus self), bind anchors to "player".
+        local ok, isPlayer = pcall(UnitIsUnit, unit, "player")
+        if ok and isPlayer then
+            return "player"
+        end
+    end
+
+    return unit
+end
+
 MSUF_A2_PrivateAuras_Clear = function(entry)
     if not entry then return end
 
@@ -2181,7 +2199,9 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
 
     local highlight = (shared.highlightPrivateAuras == true)
 
-    local sig = tostring(unit).."|"..tostring(iconSize).."|"..tostring(spacing).."|"..tostring(maxN).."|"
+    local effectiveToken = MSUF_A2_PrivateAuras_GetEffectiveUnitToken(unit)
+
+    local sig = tostring(unit).."|"..tostring(effectiveToken).."|"..tostring(iconSize).."|"..tostring(spacing).."|"..tostring(maxN).."|"
         ..(showCountdownFrame and "F1" or "F0").."|"
         ..(showCountdownNumbers and "N1" or "N0").."|"
         ..(highlight and "H1" or "H0").."|"
@@ -2229,7 +2249,7 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
         slot:Show()
 
         local args = {
-            unitToken = unit,
+            unitToken = effectiveToken,
             auraIndex = i,
             parent = slot,
             showCountdownFrame = showCountdownFrame,
