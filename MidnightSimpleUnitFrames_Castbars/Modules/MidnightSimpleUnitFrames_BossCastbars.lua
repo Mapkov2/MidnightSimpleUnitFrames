@@ -486,25 +486,27 @@ end
 		EnsureDBSafe()
 		local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 
-		-- NOTE: For some boss casts, UNIT_SPELLCAST_(NOT_)INTERRUPTIBLE events can be inconsistent.
-		-- Keep a raw API flag around for C-side tinting. If the cached value is missing, refresh it
-		-- directly from UnitCastingInfo/UnitChannelInfo (no boolean tests on the raw flag).
-		local rawNI = self.MSUF_apiNotInterruptibleRaw
-		if rawNI == nil and self.unit then
-			local castName, _, _, _, _, _, _, _, apiNI = UnitCastingInfo(self.unit)
-			if castName then
-				rawNI = apiNI
-			else
-				local chanName, _, _, _, _, _, apiNI2 = UnitChannelInfo(self.unit)
-				if chanName then
-					rawNI = apiNI2
-				end
-			end
-			self.MSUF_apiNotInterruptibleRaw = rawNI
+		-- Refresh raw notInterruptible directly from Unit*Info (same approach as EnhanceQoL/ElvUI):
+		--  - More accurate for bosses (events can be missing/delayed).
+		--  - Secret-safe: we never boolean-test the raw value; we only pass it into SetVertexColorFromBoolean.
+		local rawNI = nil
+		do
+		  local u = self.unit
+		  if u then
+		    local name, _, _, _, _, _, notInterruptible = UnitChannelInfo(u)
+		    if not name then
+		      name, _, _, _, _, _, _, notInterruptible = UnitCastingInfo(u)
+		    end
+		    if name ~= nil then
+		      rawNI = notInterruptible
+		      self.MSUF_apiNotInterruptibleRaw = notInterruptible
+		    else
+		      self.MSUF_apiNotInterruptibleRaw = nil
+		    end
+		  end
 		end
 		local isNI = (self.MSUF_isNotInterruptiblePlain == true)
 		self.isNotInterruptible = isNI
-
 		local ir, ig, ib, ia = nil, nil, nil, 1
 		if type(_G.MSUF_GetInterruptibleCastColor) == "function" then
 			ir, ig, ib, ia = _G.MSUF_GetInterruptibleCastColor()

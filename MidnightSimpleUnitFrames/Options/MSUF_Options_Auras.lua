@@ -1611,40 +1611,13 @@ end
 
 local function SetCheckboxEnabled(cb, enabled)
     if not cb then return end
-    enabled = enabled and true or false
-
-    -- Some widgets (FontString labels, textures) don't implement :SetEnabled.
-    -- We still want them to visually reflect the gated state.
-    if cb.SetEnabled then
-        cb:SetEnabled(enabled)
-    end
-    if cb.EnableMouse then
-        cb:EnableMouse(enabled)
-    end
-
-    -- Checkbox-style widgets: gray their label.
-    if cb.text and cb.text.SetTextColor then
+    cb:SetEnabled(enabled and true or false)
+    if cb.text then
         if enabled then
             cb.text:SetTextColor(1, 1, 1)
         else
             cb.text:SetTextColor(0.5, 0.5, 0.5)
         end
-        return
-    end
-
-    -- FontString labels
-    if cb.SetTextColor then
-        if enabled then
-            cb:SetTextColor(1, 1, 1)
-        else
-            cb:SetTextColor(0.5, 0.5, 0.5)
-        end
-        return
-    end
-
-    -- Generic fallback
-    if cb.SetAlpha and not cb.SetEnabled then
-        cb:SetAlpha(enabled and 1 or 0.5)
     end
 end
 
@@ -2415,47 +2388,7 @@ end
                 "Highlights stealable buffs (visual only; does not filter).", "cbHLSteal" },
             { "Highlight dispellable debuffs", 12, -222, A2_Settings, "highlightDispellableDebuffs", nil,
                 "Highlights dispellable debuffs (visual only; does not filter).", "cbHLDispel" },
-            { "Debuff type border", 12, -250, A2_Settings, "highlightDebuffTypeBorder", nil,
-                "Colors debuff borders by type (Magic/Curse/Poison/Disease).", "cbHLDebuffType" },
         }, refs)
-
-        -- Debuff type border thickness (compact slider on the right, enabled only when Debuff type border is on).
-        local btLabel = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        btLabel:SetPoint("TOPLEFT", advBox, "TOPLEFT", 220, -232)
-        btLabel:SetText("Border thickness")
-
-        local function GetDebuffTypeBorderThickness()
-            local s = A2_Settings()
-            return tonumber(s and s.debuffTypeBorderThickness) or 1
-        end
-        local function SetDebuffTypeBorderThickness(v)
-            local s = A2_Settings()
-            if not s then return end
-            v = tonumber(v) or 1
-            v = math.floor(v + 0.5)
-            if v < 1 then v = 1 end
-            if v > 8 then v = 8 end
-            s.debuffTypeBorderThickness = v
-            A2_RequestApply()
-        end
-
-        local borderThickSlider = CreateAuras2CompactSlider(advBox, "", 1, 8, 1, 220, -238, 160, GetDebuffTypeBorderThickness, SetDebuffTypeBorderThickness)
-        MSUF_StyleAuras2CompactSlider(borderThickSlider, { hideMinMax = true })
-        -- Keep this slider gated with the advanced section (and by the checkbox itself below).
-        advGate[#advGate + 1] = borderThickSlider
-        advGate[#advGate + 1] = btLabel
-
-        local function UpdateDebuffTypeBorderUI()
-            local s = A2_Settings()
-            local on = (s and s.highlightDebuffTypeBorder == true) and true or false
-            A2_SetWidgetEnabled(borderThickSlider, on)
-            A2_SetWidgetEnabled(btLabel, on, on and 1 or 0.6)
-        end
-
-        UpdateDebuffTypeBorderUI()
-        if refs.cbHLDebuffType then
-            refs.cbHLDebuffType:HookScript("OnClick", UpdateDebuffTypeBorderUI)
-        end
 
         local function Track(keys)
             for i = 1, #keys do
@@ -2464,7 +2397,7 @@ end
             end
         end
 
-        Track({ "cbBossBuffs", "cbBossDebuffs", "cbStealable", "cbDispellable", "cbOnlyBoss", "cbHLSteal", "cbHLDispel", "cbHLDebuffType" })
+        Track({ "cbBossBuffs", "cbBossDebuffs", "cbStealable", "cbDispellable", "cbOnlyBoss", "cbHLSteal", "cbHLDispel" })
 
         local dtH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         dtH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -270)
