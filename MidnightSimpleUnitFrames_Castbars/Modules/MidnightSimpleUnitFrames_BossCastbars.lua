@@ -485,26 +485,29 @@ end
 	function frame:UpdateColorForInterruptible()
 		EnsureDBSafe()
 		local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-
 		-- Refresh raw notInterruptible directly from Unit*Info (same approach as EnhanceQoL/ElvUI):
 		--  - More accurate for bosses (events can be missing/delayed).
 		--  - Secret-safe: we never boolean-test the raw value; we only pass it into SetVertexColorFromBoolean.
-		local rawNI = nil
+		--  - IMPORTANT: do NOT rely on positional underscore counting; use explicit locals so we always grab the correct return.
+		local rawNI
 		do
-		  local u = self.unit
-		  if u then
-		    local name, _, _, _, _, _, notInterruptible = UnitChannelInfo(u)
-		    if not name then
-		      name, _, _, _, _, _, _, notInterruptible = UnitCastingInfo(u)
-		    end
-		    if name ~= nil then
-		      rawNI = notInterruptible
-		      self.MSUF_apiNotInterruptibleRaw = notInterruptible
-		    else
-		      self.MSUF_apiNotInterruptibleRaw = nil
-		    end
-		  end
+			local u = self.unit
+			if u then
+				-- Channel first (UnitCastingInfo may not return during channel warm-up/steady-state).
+				local chName, chText, chTexture, chStartMS, chEndMS, chIsTrade, chNotInterruptible = UnitChannelInfo(u)
+				if chName then
+					rawNI = chNotInterruptible
+				else
+					-- Normal cast
+					local caName, caText, caTexture, caStartMS, caEndMS, caIsTrade, caCastID, caNotInterruptible = UnitCastingInfo(u)
+					if caName then
+						rawNI = caNotInterruptible
+					end
+				end
+				self.MSUF_apiNotInterruptibleRaw = rawNI
+			end
 		end
+
 		local isNI = (self.MSUF_isNotInterruptiblePlain == true)
 		self.isNotInterruptible = isNI
 		local ir, ig, ib, ia = nil, nil, nil, 1
