@@ -1352,6 +1352,9 @@ function _G.MSUF_SetHpSpacerSelectedUnitKey(unitKey, suppressUIRefresh)
     if not suppressUIRefresh and type(_G.MSUF_Options_RefreshHPSpacerControls) == "function" then
         _G.MSUF_Options_RefreshHPSpacerControls()
     end
+    if not suppressUIRefresh and type(_G.MSUF_Options_RefreshPowerSpacerControls) == "function" then
+        _G.MSUF_Options_RefreshPowerSpacerControls()
+    end
 end
 function _G.MSUF_GetDesiredUnitAlpha(key)
     EnsureDB()
@@ -3523,6 +3526,76 @@ function _G.MSUF_GetHPSpacerMaxForUnitKey(unitKey)
     return maxSpacer
 end
 
+-- Compute the maximum safe Power spacer value for a given config key.
+-- Used by the Bars menu to clamp the slider per unitframe width.
+local MSUF_POWER_SPACER_SCALE = 1.15
+local MSUF_POWER_SPACER_MAXCAP = 2000
+
+function _G.MSUF_GetPowerSpacerMaxForUnitKey(unitKey)
+    EnsureDB()
+    local k = unitKey
+    if not k or k == "" then
+        k = (MSUF_DB.general and MSUF_DB.general.hpSpacerSelectedUnitKey) or "player"
+    end
+    if k == "tot" then k = "targettarget" end
+    if type(k) == "string" and k:match("^boss%d+$") then k = "boss" end
+    if k ~= "player" and k ~= "target" and k ~= "focus" and k ~= "targettarget" and k ~= "pet" and k ~= "boss" then
+        k = "player"
+    end
+
+    local frameName
+    if k == "boss" then
+        frameName = "MSUF_boss1"
+    else
+        frameName = "MSUF_" .. k
+    end
+    local f = _G[frameName]
+    local tf = f and f.textFrame
+    local w = 0
+    if f and f.GetWidth then
+        w = f:GetWidth() or 0
+    elseif tf and tf.GetWidth then
+        w = tf:GetWidth() or 0
+    end
+    w = tonumber(w) or 0
+    if w <= 0 then
+        local confFallback = MSUF_DB[k]
+        w = tonumber(confFallback and confFallback.width) or tonumber(MSUF_DB.general and MSUF_DB.general.frameWidth) or 0
+    end
+
+    local conf = MSUF_DB[k] or {}
+    local pX = MSUF_Offset(conf.powerOffsetX, -4)
+    local leftPad = 8
+
+    local pctW = 0
+    if f and f.powerTextPct then
+        pctW = MSUF_GetApproxPercentTextWidth(f.powerTextPct)
+    elseif f and f.powerText then
+        pctW = MSUF_GetApproxPercentTextWidth(f.powerText)
+    end
+
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    local pMode = g.powerTextMode or "FULL_PLUS_PERCENT"
+    local movingW = pctW
+    if pMode == "FULL_PLUS_PERCENT" then
+        if f and f.powerText then
+            movingW = MSUF_GetApproxHpFullTextWidth(f.powerText)
+        elseif f and f.powerTextPct then
+            movingW = MSUF_GetApproxHpFullTextWidth(f.powerTextPct)
+        else
+            movingW = 0
+        end
+    end
+
+    local maxSpacer = (tonumber(w) or 0) + (tonumber(pX) or 0) - (leftPad + (tonumber(movingW) or 0))
+    maxSpacer = tonumber(maxSpacer) or 0
+    if maxSpacer < 0 then maxSpacer = 0 end
+    maxSpacer = maxSpacer * MSUF_POWER_SPACER_SCALE
+    maxSpacer = math.floor(maxSpacer + 0.5)
+    if maxSpacer > MSUF_POWER_SPACER_MAXCAP then maxSpacer = MSUF_POWER_SPACER_MAXCAP end
+    return maxSpacer
+end
+
 local function ApplyTextLayout(f, conf)
     if not f or not f.textFrame or not conf then return end
     local tf = f.textFrame
@@ -3545,6 +3618,14 @@ local function ApplyTextLayout(f, conf)
     if f.hpTextPct then
         spacerOn = (udb and udb.hpTextSpacerEnabled == true) or (not udb and g and g.hpTextSpacerEnabled == true)
         spacerX = (udb and tonumber(udb.hpTextSpacerX)) or ((g and tonumber(g.hpTextSpacerX)) or 0)
+    end
+
+    local powerMode = (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
+    local powerSpacerOn = false
+    local powerSpacerX = 0
+    if f.powerTextPct then
+        powerSpacerOn = (udb and udb.powerTextSpacerEnabled == true) or (not udb and g and g.powerTextSpacerEnabled == true)
+        powerSpacerX = (udb and tonumber(udb.powerTextSpacerX)) or ((g and tonumber(g.powerTextSpacerX)) or 0)
     end
 
     local wUsed = nil
@@ -3592,9 +3673,28 @@ local function ApplyTextLayout(f, conf)
         end
     end
 
+    local effPowerSpacerX = 0
+    if f.powerTextPct then
+        local maxP = 0
+        if type(_G.MSUF_GetPowerSpacerMaxForUnitKey) == "function" and key then
+            maxP = _G.MSUF_GetPowerSpacerMaxForUnitKey(key)
+        end
+        maxP = tonumber(maxP) or 0
+        if maxP < 0 then maxP = 0 end
+        local v = tonumber(powerSpacerX) or 0
+        if v < 0 then v = 0 end
+        if v > maxP then v = maxP end
+        if (not powerSpacerOn) then v = 0 end
+        effPowerSpacerX = v
+    end
+
     local stamp = tostring(tf).."|"..tostring(nX).."|"..tostring(nY).."|"..tostring(hX).."|"..tostring(hY).."|"..tostring(pX).."|"..tostring(pY)
         .."|pct:"..tostring(f.hpTextPct and 1 or 0).."|"..tostring(spacerOn and 1 or 0).."|"..tostring(effSpacerX).."|w:"..tostring(wUsed).."|k:"..tostring(key or "")
         .."|hpMode:"..tostring(hpMode or "")
+        .."|pPct:"..tostring(f.powerTextPct and 1 or 0)
+        .."|pS:"..tostring(powerSpacerOn and 1 or 0)
+        .."|pX:"..tostring(effPowerSpacerX)
+        .."|pMode:"..tostring(powerMode or "")
     if f._msufTextLayoutStamp == stamp then
         return
     end
@@ -3640,7 +3740,28 @@ local function ApplyTextLayout(f, conf)
         end
     end
     if f.powerText then
-        MSUF_ApplyPoint(f.powerText, "BOTTOMRIGHT", tf, "BOTTOMRIGHT", pX, pY)
+        if powerSpacerOn and effPowerSpacerX ~= 0 and f.powerTextPct and (powerMode == "FULL_PLUS_PERCENT" or powerMode == "PERCENT_PLUS_FULL") then
+            if powerMode == "FULL_PLUS_PERCENT" then
+                MSUF_ApplyPoint(f.powerText, "BOTTOMRIGHT", tf, "BOTTOMRIGHT", pX - effPowerSpacerX, pY)
+            else
+                MSUF_ApplyPoint(f.powerText, "BOTTOMRIGHT", tf, "BOTTOMRIGHT", pX, pY)
+            end
+        else
+            MSUF_ApplyPoint(f.powerText, "BOTTOMRIGHT", tf, "BOTTOMRIGHT", pX, pY)
+        end
+    end
+    if f.powerTextPct then
+        if powerSpacerOn and effPowerSpacerX ~= 0 and (powerMode == "FULL_PLUS_PERCENT" or powerMode == "PERCENT_PLUS_FULL") then
+            if powerMode == "FULL_PLUS_PERCENT" then
+                -- FULL + % -> percent on the right.
+                MSUF_ApplyPoint(f.powerTextPct, "BOTTOMRIGHT", tf, "BOTTOMRIGHT", pX, pY)
+            else
+                -- % + FULL -> percent is the left part.
+                MSUF_ApplyPoint(f.powerTextPct, "BOTTOMRIGHT", tf, "BOTTOMRIGHT", pX - effPowerSpacerX, pY)
+            end
+        else
+            MSUF_ApplyPoint(f.powerTextPct, "BOTTOMRIGHT", tf, "BOTTOMRIGHT", pX, pY)
+        end
     end
 end
 
@@ -3712,6 +3833,14 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
             if okHp then
                 f._msufLastHpValue = nil
                 _G.MSUF_UFCore_UpdateHpTextFast(f, hp)
+            end
+
+            -- ...power...
+            if conf.showPower ~= nil then
+                f.showPowerText = (conf.showPower ~= false)
+            end
+            if type(_G.MSUF_UFCore_UpdatePowerTextFast) == "function" then
+                _G.MSUF_UFCore_UpdatePowerTextFast(f, unit)
             end
         else
             -- Edit Mode previews (focus / ToT etc.) may have no real unit; refresh once so preview texts re-evaluate.
@@ -4604,6 +4733,9 @@ function _G.MSUF_ApplyBossTestHpPreviewText(self, conf)
     end
 end
 
+-- Forward declaration (Power split logic can execute before the clear helper is defined further below).
+local MSUF_ClearPowerTextPct
+
 function _G.MSUF_UFCore_UpdatePowerTextFast(self)
     if not self or not self.unit or not self.powerText then return end
     local unit = self.unit
@@ -4694,6 +4826,24 @@ function _G.MSUF_UFCore_UpdatePowerTextFast(self)
         end
         local powerPct = MSUF_GetUnitPowerPercent(unit)
         local hasPowerPct = (type(powerPct) == "number")
+
+        local split = false
+        if hasPowerPct and self.powerTextPct and (pMode == "FULL_PLUS_PERCENT" or pMode == "PERCENT_PLUS_FULL") then
+            if type(EnsureDB) == "function" then EnsureDB() end
+            local key = self.msufConfigKey
+            local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
+            local gen = (MSUF_DB and MSUF_DB.general) or nil
+            local on = (udb and udb.powerTextSpacerEnabled == true) or (not udb and gen and gen.powerTextSpacerEnabled == true)
+            local x = (udb and tonumber(udb.powerTextSpacerX)) or ((gen and tonumber(gen.powerTextSpacerX)) or 0)
+            x = tonumber(x) or 0
+            if on and x > 0 and type(_G.MSUF_GetPowerSpacerMaxForUnitKey) == "function" and key then
+                local maxP = tonumber(_G.MSUF_GetPowerSpacerMaxForUnitKey(key)) or 0
+                if x < 0 then x = 0 end
+                if x > maxP then x = maxP end
+                split = (x > 0)
+            end
+        end
+
         if pMode == "FULL_ONLY" then
             MSUF_SetTextIfChanged(self.powerText, curText or "")
         elseif pMode == "PERCENT_ONLY" then
@@ -4704,12 +4854,25 @@ function _G.MSUF_UFCore_UpdatePowerTextFast(self)
             end
         elseif pMode == "FULL_PLUS_PERCENT" then
             if hasPowerPct then
-                MSUF_SetFormattedTextIfChanged(self.powerText, "%s%s%.1f%%", curText or "", powerSep, powerPct)
+                if split then
+                    MSUF_SetTextIfChanged(self.powerText, curText or "")
+                    MSUF_SetFormattedTextIfChanged(self.powerTextPct, "%.1f%%", powerPct)
+                    self.powerTextPct:Show()
+                else
+                    MSUF_ClearPowerTextPct(self)
+                    MSUF_SetFormattedTextIfChanged(self.powerText, "%s%s%.1f%%", curText or "", powerSep, powerPct)
+                end
             else
+                MSUF_ClearPowerTextPct(self)
                 MSUF_SetTextIfChanged(self.powerText, curText or "")
             end
         elseif pMode == "PERCENT_PLUS_FULL" then
-            if hasPowerPct then
+            MSUF_ClearPowerTextPct(self)
+            if hasPowerPct and split then
+                MSUF_SetTextIfChanged(self.powerText, curText or "")
+                MSUF_SetFormattedTextIfChanged(self.powerTextPct, "%.1f%%", powerPct)
+                self.powerTextPct:Show()
+            elseif hasPowerPct then
                 MSUF_SetFormattedTextIfChanged(self.powerText, "%.1f%%%s%s", powerPct, powerSep, curText or "")
             else
                 MSUF_SetTextIfChanged(self.powerText, curText or "")
@@ -4830,6 +4993,13 @@ local function MSUF_ClearHpTextPct(self)
     end
 end
 
+function MSUF_ClearPowerTextPct(self)
+    if self.powerTextPct then
+        MSUF_SetTextIfChanged(self.powerTextPct, "")
+        self.powerTextPct:Hide()
+    end
+end
+
 local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
     MSUF_ResetBarZero(self.hpBar)
     if clearAbsorbs then
@@ -4839,7 +5009,9 @@ local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
     if self.nameText then MSUF_SetTextIfChanged(self.nameText, "") end
     MSUF_ClearText(self.levelText, true)
     if self.hpText then MSUF_SetTextIfChanged(self.hpText, "") end
+    MSUF_ClearHpTextPct(self)
     MSUF_ClearText(self.powerText, true)
+    MSUF_ClearPowerTextPct(self)
 end
 
 local function MSUF_SyncTargetPowerBar(self, unit, barsConf, isPlayer, isTarget, isFocus)
@@ -6125,6 +6297,14 @@ local colorPowerTextByType = (g.colorPowerTextByType == true)
             if hpTextPct then
                 _MSUF_ApplyFontCached(hpTextPct, hpSize, true, fr, fg, fb, useShadow)
             end
+            local powerTextPct = f.powerTextPct
+            if powerTextPct then
+                if colorPowerTextByType then
+                    _MSUF_ApplyFontCached(powerTextPct, powerSize, false, 0, 0, 0, useShadow)
+                else
+                    _MSUF_ApplyFontCached(powerTextPct, powerSize, true, fr, fg, fb, useShadow)
+                end
+            end
             local powerText = f.powerText
             if powerText then
                 -- When "Color power text by power type" is enabled, power text coloring is owned by the
@@ -7039,6 +7219,7 @@ local function CreateSimpleUnitFrame(unit)
             { "levelText",  "GameFontHighlightSmall", "LEFT",  1,   true },
             { "hpText",     "GameFontHighlightSmall", "RIGHT", 0.9 },
             { "hpTextPct",  "GameFontHighlightSmall", "RIGHT", 0.9, true },
+            { "powerTextPct",  "GameFontHighlightSmall", "RIGHT", 0.9, true },
             { "powerText",  "GameFontHighlightSmall", "RIGHT", 0.9 },
         }
         for i = 1, #defs do

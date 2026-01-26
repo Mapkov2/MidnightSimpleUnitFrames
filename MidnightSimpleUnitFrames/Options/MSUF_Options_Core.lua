@@ -5026,6 +5026,7 @@ hpSpacerInfoButton:SetScript("OnEnter", function(self)
     GameTooltip:AddLine("HP Spacer", 1, 1, 1)
     GameTooltip:AddLine("Click a MSUF unitframe (Player/Target/Focus/ToT/Pet/Boss) to choose which unit these spacer settings apply to.", 0.9, 0.9, 0.9, true)
     GameTooltip:AddLine("Works only when 'Textmode HP' is set to 'Full value + %' (or '% + Full value').", 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine("Power Spacer below behaves the same for 'Textmode Power'.", 0.9, 0.9, 0.9, true)
     GameTooltip:AddLine("Splits Full value (right) and % (left) so you can place them at opposite ends.", 0.9, 0.9, 0.9, true)
     GameTooltip:Show()
 end)
@@ -5049,6 +5050,28 @@ hpSpacerSlider:ClearAllPoints()
 hpSpacerSlider:SetPoint("TOPLEFT", hpSpacerCheck, "BOTTOMLEFT", 0, -18)
 if hpSpacerSlider.SetWidth then
     hpSpacerSlider:SetWidth(260)
+end
+
+-- Power text spacer (per-unit, like HP spacer)
+local powerSpacerHeader = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+powerSpacerHeader:SetPoint("TOPLEFT", hpSpacerSlider, "BOTTOMLEFT", 0, -18)
+powerSpacerHeader:SetText("Power Spacer")
+
+local powerSpacerCheck = CreateFrame("CheckButton", "MSUF_PowerTextSpacerCheck", barGroup, "UICheckButtonTemplate")
+powerSpacerCheck:ClearAllPoints()
+powerSpacerCheck:SetPoint("TOPLEFT", powerSpacerHeader, "BOTTOMLEFT", 0, -4)
+powerSpacerCheck.text = _G["MSUF_PowerTextSpacerCheckText"]
+if powerSpacerCheck.text then
+    powerSpacerCheck.text:SetText("Spacer on/off")
+end
+MSUF_StyleToggleText(powerSpacerCheck)
+MSUF_StyleCheckmark(powerSpacerCheck)
+
+local powerSpacerSlider = CreateLabeledSlider("MSUF_PowerTextSpacerSlider", "Power Spacer (X)", barGroup, 0, 1000, 1, 16, -200)
+powerSpacerSlider:ClearAllPoints()
+powerSpacerSlider:SetPoint("TOPLEFT", powerSpacerCheck, "BOTTOMLEFT", 0, -18)
+if powerSpacerSlider.SetWidth then
+    powerSpacerSlider:SetWidth(260)
 end
 
     local function _MSUF_HPSpacer_GetSelectedUnitKey()
@@ -5158,6 +5181,43 @@ end
                 hpSpacerSlider:SetAlpha(sliderEnabled and 1 or 0.45)
             end
         end
+
+        -- Power spacer (per-unit)
+        local powerMode = g0.powerTextMode or "FULL_PLUS_PERCENT"
+        local powerAllowsSpacer = (powerMode == "FULL_PLUS_PERCENT" or powerMode == "PERCENT_PLUS_FULL")
+
+        local pOn = (u.powerTextSpacerEnabled == true)
+        if powerSpacerCheck and powerSpacerCheck.SetChecked then
+            powerSpacerCheck:SetChecked(pOn)
+        end
+        if powerSpacerCheck and powerSpacerCheck.SetEnabled then
+            powerSpacerCheck:SetEnabled(powerAllowsSpacer)
+            powerSpacerCheck:SetAlpha(powerAllowsSpacer and 1 or 0.45)
+        end
+
+        if powerSpacerSlider and powerSpacerSlider.SetMinMaxValues then
+            local maxV = 1000
+            if _G.MSUF_GetPowerSpacerMaxForUnitKey then
+                maxV = tonumber(_G.MSUF_GetPowerSpacerMaxForUnitKey(unitKey)) or maxV
+            end
+            if maxV < 0 then maxV = 0 end
+            if maxV > 1000 then maxV = 1000 end
+            powerSpacerSlider:SetMinMaxValues(0, maxV)
+
+            local v = tonumber(u.powerTextSpacerX) or 0
+            if v < 0 then v = 0 end
+            if v > maxV then v = maxV end
+            MSUF_SetLabeledSliderValue(powerSpacerSlider, v)
+
+            local sliderEnabled = (powerAllowsSpacer and pOn)
+            if powerSpacerSlider.SetEnabled then
+                powerSpacerSlider:SetEnabled(sliderEnabled)
+            end
+            if powerSpacerSlider.SetAlpha then
+                powerSpacerSlider:SetAlpha(sliderEnabled and 1 or 0.45)
+            end
+        end
+
     end
 
     hpSpacerCheck:SetScript("OnClick", function(self)
@@ -5201,6 +5261,61 @@ end
             _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
         end
     end)
+
+
+    powerSpacerCheck:SetScript("OnClick", function(self)
+        EnsureDB()
+        local g = MSUF_DB.general or {}
+        local powerMode = g.powerTextMode or "FULL_PLUS_PERCENT"
+        if powerMode ~= "FULL_PLUS_PERCENT" and powerMode ~= "PERCENT_PLUS_FULL" then
+            RefreshHPSpacerControls()
+            return
+        end
+        local _, u = _MSUF_HPSpacer_GetUnitDB()
+        u.powerTextSpacerEnabled = self:GetChecked() and true or false
+        RefreshHPSpacerControls()
+        local unitKey = _MSUF_HPSpacer_GetSelectedUnitKey()
+        MSUF_Options_RequestLayoutForKey(unitKey, "POWER_SPACER_TOGGLE")
+        if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+            _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
+        end
+    end)
+
+    powerSpacerSlider:SetScript("OnValueChanged", function(self, value)
+        if not self or not self.GetValue then return end
+        if self._msufIgnoreChange then return end
+
+        EnsureDB()
+        local g = MSUF_DB.general or {}
+        local powerMode = g.powerTextMode or "FULL_PLUS_PERCENT"
+        if powerMode ~= "FULL_PLUS_PERCENT" and powerMode ~= "PERCENT_PLUS_FULL" then
+            RefreshHPSpacerControls()
+            return
+        end
+
+        local unitKey, u = _MSUF_HPSpacer_GetUnitDB()
+        local maxV = 1000
+        if _G.MSUF_GetPowerSpacerMaxForUnitKey then
+            maxV = tonumber(_G.MSUF_GetPowerSpacerMaxForUnitKey(unitKey)) or maxV
+        end
+        if maxV < 0 then maxV = 0 end
+        if maxV > 1000 then maxV = 1000 end
+
+        local v = tonumber(value) or 0
+        if v < 0 then v = 0 end
+        if v > maxV then v = maxV end
+        u.powerTextSpacerX = v
+
+        self._msufIgnoreChange = true
+        MSUF_SetLabeledSliderValue(self, v)
+        self._msufIgnoreChange = false
+
+        MSUF_Options_RequestLayoutForKey(unitKey, "POWER_SPACER_X")
+        if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+            _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
+        end
+    end)
+
 
     RefreshHPSpacerControls()
 
@@ -5549,9 +5664,9 @@ end
 -- Bars menu style: boxed layout like the new Castbar/Focus Kick menus
 -- (Two framed columns: Bar appearance / Power Bar Settings)
 do
-    -- Panel height must include the HP Spacer controls at the bottom of the right column.
+    -- Panel height must include the HP + Power Spacer controls at the bottom of the right column.
     -- Keep this as a single constant so creation + live re-layout always match (no drift/regressions).
-    local BARS_PANEL_H = 700
+    local BARS_PANEL_H = 780
 
     -- Create panels once
     if not _G["MSUF_BarsMenuPanelLeft"] then
