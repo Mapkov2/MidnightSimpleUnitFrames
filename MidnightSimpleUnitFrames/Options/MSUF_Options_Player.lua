@@ -345,10 +345,11 @@ local _MSUF_INDICATOR_SPECS = {
         },
 
 
-        -- (no size controls for Level)
-        sizeEdit = nil,
-        sizeLabel = nil,
-        sizeField = nil,
+        -- Level: eigene Größe (per-unit). Nil => folgt Name-Fontgröße (Fallback in Apply/Runtime).
+        sizeEdit  = "playerLevelSizeEdit",
+        sizeLabel = "playerLevelSizeLabel",
+        sizeField = "levelIndicatorSize",
+        sizeDefault = 14,
 
         divider = "playerLevelGroupDivider",
         resetBtn = "playerLevelResetBtn",
@@ -725,6 +726,36 @@ local MSUF_COPY_INDICATOR_FIELDS = {
     "levelIndicatorSize",
 }
 
+MSUF_COPY_STATUSICON_FIELDS = {
+    -- Status Indicators / Icons (per-unitframe)
+    "statusIconsTestMode",
+    "statusIconsMidnightStyle",
+    "statusIconsAlpha",
+
+    "showCombatStateIndicator",
+    "showRestingIndicator",
+    "showIncomingResIndicator",
+
+    "combatStateIndicatorOffsetX",
+    "combatStateIndicatorOffsetY",
+    "combatStateIndicatorAnchor",
+    "combatStateIndicatorSize",
+    "combatStateIndicatorSymbol",
+
+    "restedStateIndicatorOffsetX",
+    "restedStateIndicatorOffsetY",
+    "restedStateIndicatorAnchor",
+    "restedStateIndicatorSize",
+    "restedStateIndicatorSymbol",
+
+    "incomingResIndicatorOffsetX",
+    "incomingResIndicatorOffsetY",
+    "incomingResIndicatorAnchor",
+    "incomingResIndicatorSize",
+    "incomingResIndicatorSymbol",
+}
+
+
 local function MSUF_CanonUnitKey(k)
     if not k then return nil end
     if type(k) ~= "string" then return k end
@@ -823,6 +854,7 @@ local function MSUF_CopyUnitSettings(srcKey, destKey, api)
 
         MSUF_CopyFieldList(dst, src, MSUF_COPY_BASIC_FIELDS)
         MSUF_CopyFieldList(dst, src, MSUF_COPY_INDICATOR_FIELDS)
+        MSUF_CopyFieldList(dst, src, MSUF_COPY_STATUSICON_FIELDS)
 
         -- Per-unit castbar interrupt toggle
         dst.showInterrupt = src.showInterrupt
@@ -1897,8 +1929,11 @@ end
 				yName   = "MSUF_PlayerLevelOffsetY",
 				dropField = "playerLevelAnchorDrop",
 				dropName  = "MSUF_PlayerLevelAnchorDropdown",
-				dropW     = 130,
+				dropW     = 70,
 				anchorLabelField = "playerLevelAnchorLabel",
+				sizeField  = "playerLevelSizeEdit",
+				sizeName   = "MSUF_PlayerLevelSizeEdit",
+				sizeLabelField = "playerLevelSizeLabel",
 				resetField = "playerLevelResetBtn",
 				dividerField = "playerLevelGroupDivider",
 			},
@@ -3093,6 +3128,10 @@ local function MSUF_ApplyIndicatorUI(spec)
     if spec.sizeEdit and panel[spec.sizeEdit] and spec.sizeField then
         local v = conf and conf[spec.sizeField]
         if type(v) ~= "number" and g then v = g[spec.sizeField] end
+        if type(v) ~= "number" and spec.id == "level" then
+            -- Wenn kein eigener Wert gesetzt ist: zeige effektive Name-Fontgröße als Default.
+            v = MSUF_ReadNumber(conf, g, "nameFontSize", 14)
+        end
         v = tonumber(v) or spec.sizeDefault or 14
         v = math.floor(v + 0.5)
         if v < 8 then v = 8 end
@@ -3343,6 +3382,27 @@ local function MSUF_BindIndicatorRow(spec)
             conf[spec.sizeField] = v
             MSUF_SetNumericEditBoxValue(edit, v)
 
+
+            -- Level size changes need a font refresh (otherwise it looks like the size box "does nothing").
+            if spec.id == "level" then
+                if type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then
+                    _G.MSUF_UpdateAllFonts_Immediate()
+                elseif type(_G.MSUF_UpdateAllFonts) == "function" then
+                    _G.MSUF_UpdateAllFonts()
+                elseif type(_G.UpdateAllFonts) == "function" then
+                    _G.UpdateAllFonts()
+                end
+
+                -- Also poke the current unitframe to ensure immediate visual sync.
+                local _, _, _key = MSUF_GetIndicatorConfAndGeneral()
+                local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
+                local fr = (uf and _key) and uf[_key] or nil
+                if fr and type(_G.MSUF_RequestUnitframeUpdate) == "function" then
+                    _G.MSUF_RequestUnitframeUpdate(fr, true, true, "LevelIndicatorSize")
+                elseif fr and type(_G.UpdateSimpleUnitFrame) == "function" then
+                    pcall(_G.UpdateSimpleUnitFrame, fr, true)
+                end
+            end
             Refresh()
         end
 

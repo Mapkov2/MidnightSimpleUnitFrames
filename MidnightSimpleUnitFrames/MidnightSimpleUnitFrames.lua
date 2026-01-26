@@ -6272,7 +6272,9 @@ local colorPowerTextByType = (g.colorPowerTextByType == true)
             end
             local levelText = f.levelText
             if levelText then
-                _MSUF_ApplyFontCached(levelText, nameSize, false, 0,0,0, useShadow)
+                -- Level soll NICHT mehr an Name-Fontgröße gekoppelt sein (eigene Size-Option; Fallback auf Name).
+                local levelSize = (conf and conf.levelIndicatorSize) or nameSize
+                                _MSUF_ApplyFontCached(levelText, levelSize, false, 0,0,0, useShadow)
             end
 
             -- Status indicators (player/target) must follow the global font too.
