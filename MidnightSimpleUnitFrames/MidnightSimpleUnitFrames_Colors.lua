@@ -2564,6 +2564,10 @@ F.EnsureGameplayDB = function()
     if type(g.crosshairOutRangeColor) ~= "table" then
         g.crosshairOutRangeColor = { 1, 0, 0 } -- default red
     end
+    -- Player Totems (Shaman) text color (Gameplay: Totem tracker)
+    if type(g.playerTotemsTextColor) ~= "table" then
+        g.playerTotemsTextColor = { 1, 1, 1 }
+    end
     return g
 end
 
@@ -2920,19 +2924,96 @@ crosshairOutSwatch:SetScript("OnClick", function()
     end)
 end)
 
+
+
+-- Player Totems text color (Gameplay: Shaman Totem tracker)
+local totemTextLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+totemTextLabel:SetPoint("TOPLEFT", crosshairOutSwatch, "BOTTOMLEFT", 0, -18)
+totemTextLabel:SetText("Totem tracker text color")
+
+local totemTextOffText = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+totemTextOffText:SetPoint("LEFT", totemTextLabel, "RIGHT", 10, 0)
+totemTextOffText:SetText("Turned Off in Gameplay")
+totemTextOffText:Hide()
+
+local totemTextSwatch = CreateFrame("Button", "MSUF_Colors_PlayerTotemsTextColorSwatch", content)
+totemTextSwatch:SetSize(32, 16)
+totemTextSwatch:SetPoint("TOPLEFT", totemTextLabel, "BOTTOMLEFT", 0, -8)
+local totemTextTex = totemTextSwatch:CreateTexture(nil, "ARTWORK")
+totemTextTex:SetAllPoints()
+
+local totemTextResetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+totemTextResetBtn:SetSize(110, 22)
+totemTextResetBtn:SetPoint("LEFT", totemTextSwatch, "RIGHT", 12, 0)
+totemTextResetBtn:SetText("Reset")
+
+F.GetPlayerTotemsTextColor = function()
+    local g = F.EnsureGameplayDB()
+    local t = g.playerTotemsTextColor
+    return (t and t[1]) or 1, (t and t[2]) or 1, (t and t[3]) or 1
+end
+
+F.UpdateGameplayTotemColorControls = function()
+    -- Totem text color only matters when the Totem tracker is enabled AND the cooldown text is enabled.
+    local totemsOn = F.IsGameplayToggleEnabled("enablePlayerTotems") and F.IsGameplayToggleEnabled("playerTotemsShowText")
+    if totemTextOffText then totemTextOffText:SetShown(not totemsOn) end
+
+    F.SetFSAlpha(totemTextLabel, totemsOn)
+    F.SetSwatchEnabled(totemTextSwatch, totemsOn)
+    F.SetButtonEnabled(totemTextResetBtn, totemsOn)
+
+    local r, gCol, bCol = F.GetPlayerTotemsTextColor()
+    if totemTextTex then
+        totemTextTex:SetColorTexture(r, gCol, bCol)
+        totemTextTex:SetAlpha(totemsOn and 1 or 0.35)
+    end
+end
+
+F.SetPlayerTotemsTextColor = function(r, gCol, bCol)
+    local g = F.EnsureGameplayDB()
+    g.playerTotemsTextColor = { r, gCol, bCol }
+    F.UpdateGameplayTotemColorControls()
+    if PushVisualUpdates then PushVisualUpdates() end
+    if ns and ns.MSUF_RequestGameplayApply then
+        ns.MSUF_RequestGameplayApply()
+    end
+end
+
+F.ResetGameplayTotemTextColor = function()
+    local g = F.EnsureGameplayDB()
+    g.playerTotemsTextColor = { 1, 1, 1 }
+    F.UpdateGameplayTotemColorControls()
+    if PushVisualUpdates then PushVisualUpdates() end
+    if ns and ns.MSUF_RequestGameplayApply then
+        ns.MSUF_RequestGameplayApply()
+    end
+end
+
+totemTextResetBtn:SetScript("OnClick", function()
+    F.ResetGameplayTotemTextColor()
+end)
+
+totemTextSwatch:SetScript("OnClick", function()
+    local r, gCol, bCol = F.GetPlayerTotemsTextColor()
+    OpenColorPicker(r, gCol, bCol, function(nr, ng, nb)
+        F.SetPlayerTotemsTextColor(nr, ng, nb)
+    end)
+end)
+
 -- Initialize swatches + enable states
 F.UpdateGameplayCombatColorControls()
 F.UpdateGameplayCrosshairColorControls()
+F.UpdateGameplayTotemColorControls()
 
 -- Gameplay section is now the lowest control for dynamic height
-lastControl = crosshairOutSwatch
+lastControl = totemTextSwatch
 
 
 --------------------------------------------------
 -- Power colors (Unitframe power bar)
 --------------------------------------------------
 local powerHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-powerHeader:SetPoint("TOPLEFT", crosshairOutSwatch, "BOTTOMLEFT", 0, -44)
+powerHeader:SetPoint("TOPLEFT", totemTextSwatch, "BOTTOMLEFT", 0, -44)
 powerHeader:SetText("Power bar colors")
 F.CreateHeaderDividerAbove(powerHeader)
 

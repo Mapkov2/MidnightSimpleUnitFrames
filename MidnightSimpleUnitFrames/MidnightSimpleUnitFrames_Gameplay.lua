@@ -244,8 +244,14 @@ end
 
 
     -- Shaman: player totem tracker (player-only for now)
+    -- Default ON for Shamans on first run; otherwise default OFF.
     if g.enablePlayerTotems == nil then
-        g.enablePlayerTotems = false
+        local isShaman = false
+        if UnitClass then
+            local _, cls = UnitClass("player")
+            isShaman = (cls == "SHAMAN")
+        end
+        g.enablePlayerTotems = isShaman and true or false
     end
     if g.playerTotemsShowText == nil then
         g.playerTotemsShowText = true
@@ -2070,6 +2076,7 @@ do
 
     local totemEventFrame
     local lastHasAnyTotem = false
+    local _previewWanted = false
 
     local function _IsPlayerShaman()
         if UnitClass then
@@ -2155,6 +2162,44 @@ do
         return totemsFrame
     end
 
+    local function _ClearTotemsPreview()
+        if totemsFrame then
+            totemsFrame._msufPreviewActive = nil
+        end
+    end
+
+    local function _ApplyTotemsPreview(g)
+        local f = _EnsureTotemsFrame()
+        f._msufPreviewActive = true
+        f:Show()
+
+        -- Static, safe preview icons (no API reads / no secret values)
+        local icons = {
+            "Interface\\Icons\\Spell_Nature_StoneClawTotem",
+            "Interface\\Icons\\Spell_Nature_StrengthOfEarthTotem02",
+            "Interface\\Icons\\Spell_Nature_TremorTotem",
+            "Interface\\Icons\\Spell_Nature_WindfuryTotem",
+        }
+
+        for i = 1, 4 do
+            local slot = totemSlots[i]
+            if slot and slot.btn then
+                slot.icon:SetTexture(icons[i] or "Interface\\Icons\\INV_Misc_QuestionMark")
+                slot.btn:Show()
+                slot.shown = true
+
+                if g and g.playerTotemsShowText then
+                    local t = (i == 1 and "12s") or (i == 2 and "8s") or (i == 3 and "5s") or "3s"
+                    slot.text:SetText(t)
+                    slot.text:Show()
+                else
+                    slot.text:SetText("")
+                    slot.text:Hide()
+                end
+            end
+        end
+    end
+
     local function _ApplyTotemsLayout(g)
         local f = _EnsureTotemsFrame()
         local playerFrame = _G and _G.MSUF_player
@@ -2174,7 +2219,18 @@ do
         local size = _MSUF_Clamp(math.floor((tonumber(g.playerTotemsIconSize) or 24) + 0.5), 8, 64)
         local spacing = _MSUF_Clamp(math.floor((tonumber(g.playerTotemsSpacing) or 4) + 0.5), 0, 20)
 
+        -- Use MSUF's global font settings (Fonts menu) so the totem countdown matches the rest of the addon.
         local fontPath = (STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF")
+        local fontFlags = "OUTLINE"
+        if type(_G.MSUF_GetGlobalFontSettings) == "function" then
+            local p, flags = _G.MSUF_GetGlobalFontSettings()
+            if type(p) == "string" and p ~= "" then
+                fontPath = p
+            end
+            if type(flags) == "string" and flags ~= "" then
+                fontFlags = flags
+            end
+        end
         local fontSize = _MSUF_Clamp(math.floor((tonumber(g.playerTotemsFontSize) or 14) + 0.5), 8, 64)
         if g.playerTotemsScaleTextByIconSize then
             fontSize = _MSUF_Clamp(math.floor(size * 0.55 + 0.5), 8, 64)
@@ -2186,7 +2242,7 @@ do
             local slot = totemSlots[i]
             if slot and slot.btn then
                 slot.btn:SetSize(size, size)
-                slot.text:SetFont(fontPath, fontSize, "OUTLINE")
+                slot.text:SetFont(fontPath, fontSize, fontFlags)
                 slot.text:SetTextColor(tr, tg, tb, 1)
 
                 slot.btn:ClearAllPoints()
@@ -2216,86 +2272,196 @@ do
         f:SetSize((size * 4) + (spacing * 3), size)
     end
 
-    local function _UpdateTotemsNow(g)
-        if not totemsFrame then
-            return false
+local function _FormatTotemTime(left)
+    -- Midnight/Beta secret-safe:
+    -- - Never directly compare/arithmetic on values that may be "secret".
+    -- - Always have a simple fallback: 1 decimal seconds.
+    if left == nil then
+        return ""
+    end
+
+    local okSimple, simple = pcall(function()
+        return string.format("%.1fs", left)
+    end)
+    if not okSimple then
+        return ""
+    end
+
+    -- Apply nicer rules ONLY if comparisons/math are safe.
+    local okNum, n = pcall(function() return tonumber(left) end)
+    if not okNum or type(n) ~= "number" then
+        return simple
+    end
+
+    local okLT10, isLT10 = pcall(function() return n < 10 end)
+    if not okLT10 then
+        return simple
+    end
+    if isLT10 then
+        return simple
+    end
+
+    local okLT60, isLT60 = pcall(function() return n < 60 end)
+    if not okLT60 then
+        return simple
+    end
+    if isLT60 then
+        local okRound, secs = pcall(function() return math.floor(n + 0.5) end)
+        if okRound and type(secs) == "number" then
+            return string.format("%ds", secs)
         end
+        return simple
+    end
 
-        local any = false
+    local okMS, out = pcall(function()
+        local m = math.floor(n / 60)
+        local s = math.floor((n - (m * 60)) + 0.5)
+        if s >= 60 then
+            m = m + 1
+            s = 0
+        end
+        return string.format("%d:%02d", m, s)
+    end)
+    if okMS and type(out) == "string" then
+        return out
+    end
 
-        for slotIndex = 1, 4 do
-            local haveTotem, name, startTime, duration, icon = GetTotemInfo(slotIndex)
-            local slot = totemSlots[slotIndex]
+    return simple
+end
 
-            if slot and slot.btn then
-                -- Always set the texture; secret values are fine to pass through.
-                slot.icon:SetTexture(icon)
+local function _PickTotemTickInterval(minLeft)
+    -- Secret-safe tick selection: only branch on numeric thresholds when safe.
+    local okNum, n = pcall(function() return tonumber(minLeft) end)
+    if not okNum or type(n) ~= "number" then
+        return 0.50
+    end
 
-                local tex = slot.icon:GetTexture()
-                local isActive = (tex ~= nil)
+    local okLT10, isLT10 = pcall(function() return n < 10 end)
+    if okLT10 and isLT10 then
+        return 0.10
+    end
 
-                if isActive then
-                    any = true
+    local okLT60, isLT60 = pcall(function() return n < 60 end)
+    if okLT60 and isLT60 then
+        return 0.50
+    end
 
-                    -- Secret-safe: Do NOT compare or do arithmetic on start/duration/booleans (can be "secret" in combat).
-                    slot.endTime = nil
+    return 1.00
+end
 
-                    slot.btn:Show()
-                    slot.icon:Show()
-                    slot.shown = true
+local function _UpdateTotemsNow(g)
+    if not totemsFrame then
+        return false
+    end
 
-					if g.playerTotemsShowText then
-						local left = GetTotemTimeLeft(slotIndex)
-						if type(left) == "number" then
-							-- Secret-safe: do NOT compare / math / cache text. Just set it.
-							slot.text:SetText(string.format("%.1fs", left))
-							slot.text:Show()
-						else
-							slot.text:SetText("")
-							slot.text:Hide()
-						end
-					else
-						slot.text:SetText("")
-						slot.text:Hide()
-					end
+    local any = false
+    local anyFast = false
+    local anyMed = false
+
+    for slotIndex = 1, 4 do
+        local haveTotem, name, startTime, duration, icon = GetTotemInfo(slotIndex)
+        local slot = totemSlots[slotIndex]
+
+        if slot and slot.btn then
+            -- Always pass-through the texture; secret values are fine to pass through.
+            slot.icon:SetTexture(icon)
+
+            local tex = slot.icon:GetTexture()
+            local isActive = (tex ~= nil)
+
+            if isActive then
+                any = true
+
+                slot.btn:Show()
+                slot.icon:Show()
+                slot.shown = true
+
+                if g.playerTotemsShowText then
+                    local left = GetTotemTimeLeft(slotIndex)
+                    if type(left) == "number" then
+                        slot.text:SetText(_FormatTotemTime(left))
+                        slot.text:Show()
+
+                        -- Step 4 tick selection without cross-slot numeric compares.
+                        local hint = _PickTotemTickInterval(left)
+                        if hint == 0.10 then
+                            anyFast = true
+                        elseif hint == 0.50 then
+                            anyMed = true
+                        end
+                    else
+                        slot.text:SetText("")
+                        slot.text:Hide()
+                    end
                 else
-				slot.endTime = 0
-				slot.shown = false
                     slot.text:SetText("")
                     slot.text:Hide()
-                    slot.btn:Hide()
                 end
-            end
-        end
-
-        totemsFrame:SetShown(any)
-        lastHasAnyTotem = any
-        return any
-    end
-
-    local function _TickTotemText()
-        local g = GetGameplayDBFast()
-        if not g or not g.enablePlayerTotems or not g.playerTotemsShowText then
-            return
-        end
-
-        if not totemsFrame or not totemsFrame:IsShown() then
-            return
-        end
-
-        for i = 1, 4 do
-            local slot = totemSlots[i]
-            if slot and slot.shown then
-                local left = GetTotemTimeLeft(i)
-                if type(left) == "number" then
-                    -- Secret-safe: never compare 'left' or produced strings (can be secret in combat).
-                    slot.text:SetText(string.format("%.1fs", left))
-                else
-                    slot.text:SetText("")
-                end
+            else
+                slot.shown = false
+                slot.text:SetText("")
+                slot.text:Hide()
+                slot.btn:Hide()
             end
         end
     end
+
+    totemsFrame:SetShown(any)
+    lastHasAnyTotem = any
+
+    -- Step 4: dynamic tick (fast under 10s, slower otherwise) without secret compares.
+    if anyFast then
+        ns._MSUF_PlayerTotemsTickInterval = 0.10
+    elseif anyMed then
+        ns._MSUF_PlayerTotemsTickInterval = 0.50
+    else
+        ns._MSUF_PlayerTotemsTickInterval = 1.00
+    end
+
+    return any
+end
+
+
+local function _TickTotemText()
+    local g = GetGameplayDBFast()
+    if not g or not g.enablePlayerTotems or not g.playerTotemsShowText then
+        return
+    end
+
+    if not totemsFrame or not totemsFrame:IsShown() then
+        return
+    end
+
+    local anyFast = false
+    local anyMed = false
+
+    for i = 1, 4 do
+        local slot = totemSlots[i]
+        if slot and slot.shown then
+            local left = GetTotemTimeLeft(i)
+            if type(left) == "number" then
+                slot.text:SetText(_FormatTotemTime(left))
+                local hint = _PickTotemTickInterval(left)
+                if hint == 0.10 then
+                    anyFast = true
+                elseif hint == 0.50 then
+                    anyMed = true
+                end
+            else
+                slot.text:SetText("")
+            end
+        end
+    end
+
+    if anyFast then
+        ns._MSUF_PlayerTotemsTickInterval = 0.10
+    elseif anyMed then
+        ns._MSUF_PlayerTotemsTickInterval = 0.50
+    else
+        ns._MSUF_PlayerTotemsTickInterval = 1.00
+    end
+end
+
 
     local function _UpdateTotemTickEnabled(g, any)
         local um = MSUF_GetUpdateManager()
@@ -2305,7 +2471,7 @@ do
 
         if not ns._MSUF_PlayerTotemTaskRegistered then
             ns._MSUF_PlayerTotemTaskRegistered = true
-            local function _Interval() return 0.10 end -- smooth countdown
+            local function _Interval() return (ns._MSUF_PlayerTotemsTickInterval or 0.50) end -- dynamic countdown interval
             um:Register("MSUF_GAMEPLAY_PLAYERTOTEMS", _TickTotemText, _Interval, 90)
         end
 
@@ -2316,7 +2482,23 @@ do
     local function _RefreshTotems()
         local g = EnsureGameplayDefaults()
 
-        if not g.enablePlayerTotems or not _IsPlayerShaman() then
+        local isShaman = _IsPlayerShaman()
+        if not isShaman then
+            _previewWanted = false
+        end
+
+        -- Preview: Shaman-only. Works even if the feature toggle is off (positioning).
+        if isShaman and _previewWanted then
+            _EnsureTotemsFrame()
+            _ApplyTotemsLayout(g)
+            _ApplyTotemsPreview(g)
+            _UpdateTotemTickEnabled(g, false)
+            return
+        else
+            _ClearTotemsPreview()
+        end
+
+        if (not g.enablePlayerTotems) or (not isShaman) then
             _UpdateTotemTickEnabled(g, false)
             if totemsFrame then
                 totemsFrame:Hide()
@@ -2359,6 +2541,16 @@ do
 
     -- Public escape hatch: Options / other modules can force a refresh without poking locals.
     _G.MSUF_PlayerTotems_ForceRefresh = _RefreshTotems
+
+    function ns.MSUF_PlayerTotems_TogglePreview()
+        _previewWanted = not _previewWanted
+        _RefreshTotems()
+    end
+
+    function ns.MSUF_PlayerTotems_IsPreviewActive()
+        return (_previewWanted and true) or false
+    end
+
 end
 
 
@@ -3238,18 +3430,25 @@ end)
 
     -- Shaman: Player Totem tracker (player-only)
     local _isShaman = false
+    local _isRogue = false
     if UnitClass then
         local _, _cls = UnitClass("player")
         _isShaman = (_cls == "SHAMAN")
+        _isRogue = (_cls == "ROGUE")
     end
 
     local _classSpecAnchorRef = classSpecHeader
+    local _totemsLeftBottom = nil
+    local _totemsRightBottom = nil
 
     if _isShaman then
         local totemsTitle = _MSUF_Label("GameFontNormal", "TOPLEFT", classSpecHeader, "BOTTOMLEFT", 0, -10, "Shaman: Totem tracker", "playerTotemsTitle")
         panel.playerTotemsTitle = totemsTitle
 
-        local totemsCheck = _MSUF_Check("MSUF_Gameplay_PlayerTotemsCheck", "TOPLEFT", totemsTitle, "BOTTOMLEFT", 0, -6, "Enable Player Totems", "playerTotemsCheck", "enablePlayerTotems",
+        local totemsSub = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsTitle, "BOTTOMLEFT", 0, -2, "Player-only. Secret-safe in combat.", "playerTotemsSubText")
+        panel.playerTotemsSubText = totemsSub
+
+        local totemsCheck = _MSUF_Check("MSUF_Gameplay_PlayerTotemsCheck", "TOPLEFT", totemsSub, "BOTTOMLEFT", 0, -8, "Enable Totem tracker", "playerTotemsCheck", "enablePlayerTotems",
             function()
                 if ns and ns.MSUF_RequestGameplayApply then
                     ns.MSUF_RequestGameplayApply()
@@ -3259,6 +3458,13 @@ end)
                 end
             end
         )
+
+        local function _RefreshTotemsPreviewButton()
+            if panel and panel.playerTotemsPreviewButton and panel.playerTotemsPreviewButton.SetText then
+                local active = (ns and ns.MSUF_PlayerTotems_IsPreviewActive and ns.MSUF_PlayerTotems_IsPreviewActive()) and true or false
+                panel.playerTotemsPreviewButton:SetText(active and "Stop preview" or "Preview")
+            end
+        end
 
         local totemsShowText = _MSUF_Check("MSUF_Gameplay_PlayerTotemsShowTextCheck", "TOPLEFT", totemsCheck, "BOTTOMLEFT", 0, -8, "Show cooldown text", "playerTotemsShowTextCheck", "playerTotemsShowText",
             function()
@@ -3282,7 +3488,23 @@ end)
             end
         )
 
-        local totemsIconSize = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsIconSizeSlider", "TOPLEFT", totemsScaleText, "BOTTOMLEFT", 0, -18, 240, 8, 64, 1, "Small", "Big", "Icon size", "playerTotemsIconSizeSlider", "playerTotemsIconSize",
+        -- Preview button: keep it in the left column under the toggles (cleaner layout).
+        -- Preview is Shaman-only and works even when the feature toggle is off (positioning).
+        local totemsPreviewBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsPreviewButton", "TOPLEFT", totemsScaleText, "BOTTOMLEFT", 0, -12, 140, 22, "Preview", "playerTotemsPreviewButton")
+        totemsPreviewBtn:SetScript("OnClick", function()
+            if ns and ns.MSUF_PlayerTotems_TogglePreview then
+                ns.MSUF_PlayerTotems_TogglePreview()
+            end
+            _RefreshTotemsPreviewButton()
+        end)
+        _RefreshTotemsPreviewButton()
+
+        _totemsLeftBottom = totemsPreviewBtn
+
+	        -- Right column for layout/size controls (keeps the left side clean, avoids clipping)
+	        local _totemsRightX = 300
+
+	        local totemsIconSize = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsIconSizeSlider", "TOPLEFT", totemsCheck, "TOPLEFT", _totemsRightX, -2, 240, 8, 64, 1, "Small", "Big", "Icon size", "playerTotemsIconSizeSlider", "playerTotemsIconSize",
             function(v) return math.floor((v or 0) + 0.5) end,
             function()
                 if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
@@ -3314,16 +3536,8 @@ end)
             true
         )
 
-        local totemsColor = _MSUF_ColorSwatch("MSUF_Gameplay_PlayerTotemsColorSwatch", "TOPLEFT", totemsFontSize, "BOTTOMLEFT", 0, -16, "Text color", "playerTotemsColorSwatch", "playerTotemsTextColor", {1,1,1},
-            function()
-                if ns and ns.MSUF_RequestGameplayApply then
-                    ns.MSUF_RequestGameplayApply()
-                end
-            end
-        )
 
-
-        local totemsLayoutLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", totemsColor, "BOTTOMLEFT", 0, -12, "Layout", "playerTotemsLayoutLabel")
+        local totemsLayoutLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", totemsFontSize, "BOTTOMLEFT", 0, -12, "Layout", "playerTotemsLayoutLabel")
         panel.playerTotemsLayoutLabel = totemsLayoutLabel
 
         local anchorPoints = {"TOPLEFT","TOP","TOPRIGHT","LEFT","CENTER","RIGHT","BOTTOMLEFT","BOTTOM","BOTTOMRIGHT"}
@@ -3341,7 +3555,7 @@ end)
             return anchorPoints[1]
         end
 
-        local growthBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsGrowthBtn", "TOPLEFT", totemsLayoutLabel, "BOTTOMLEFT", 0, -6, 120, 20, "Growth: RIGHT", "playerTotemsGrowthButton", function()
+	        local growthBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsGrowthBtn", "TOPLEFT", totemsLayoutLabel, "BOTTOMLEFT", 0, -6, 110, 20, "Growth: RIGHT", "playerTotemsGrowthButton", function()
             local g = MSUF_DB and MSUF_DB.gameplay
             if not g then return end
             local cur = g.playerTotemsGrowthDirection
@@ -3351,7 +3565,7 @@ end)
         end)
         panel.playerTotemsGrowthButton = growthBtn
 
-        local anchorFromBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorFromBtn", "TOPLEFT", growthBtn, "TOPRIGHT", 8, 0, 140, 20, "From: TOPLEFT", "playerTotemsAnchorFromButton", function()
+	        local anchorFromBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorFromBtn", "TOPLEFT", growthBtn, "TOPRIGHT", 8, 0, 122, 20, "From: TOPLEFT", "playerTotemsAnchorFromButton", function()
             local g = MSUF_DB and MSUF_DB.gameplay
             if not g then return end
             g.playerTotemsAnchorFrom = _NextAnchor(g.playerTotemsAnchorFrom)
@@ -3360,7 +3574,7 @@ end)
         end)
         panel.playerTotemsAnchorFromButton = anchorFromBtn
 
-        local anchorToBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorToBtn", "TOPLEFT", growthBtn, "BOTTOMLEFT", 0, -6, 120, 20, "To: BOTTOMLEFT", "playerTotemsAnchorToButton", function()
+	        local anchorToBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorToBtn", "TOPLEFT", growthBtn, "BOTTOMLEFT", 0, -6, 240, 20, "To: BOTTOMLEFT", "playerTotemsAnchorToButton", function()
             local g = MSUF_DB and MSUF_DB.gameplay
             if not g then return end
             g.playerTotemsAnchorTo = _NextAnchor(g.playerTotemsAnchorTo)
@@ -3369,7 +3583,28 @@ end)
         end)
         panel.playerTotemsAnchorToButton = anchorToBtn
 
-        _classSpecAnchorRef = anchorToBtn
+	        local resetTotemsBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsResetBtn", "TOPLEFT", anchorToBtn, "BOTTOMLEFT", 0, -6, 240, 20, "Reset Totem tracker layout", "playerTotemsResetButton", function()
+            local g = MSUF_DB and MSUF_DB.gameplay
+            if not g then return end
+            g.playerTotemsShowText = true
+            g.playerTotemsScaleTextByIconSize = true
+            g.playerTotemsIconSize = 24
+            g.playerTotemsSpacing = 4
+            g.playerTotemsOffsetX = 0
+            g.playerTotemsOffsetY = -6
+            g.playerTotemsAnchorFrom = "TOPLEFT"
+            g.playerTotemsAnchorTo = "BOTTOMLEFT"
+            g.playerTotemsGrowthDirection = "RIGHT"
+            g.playerTotemsFontSize = 14
+            g.playerTotemsTextColor = { 1, 1, 1 }
+            if panel and panel.refresh then panel:refresh() end
+            if panel and panel.MSUF_UpdateGameplayDisabledStates then panel:MSUF_UpdateGameplayDisabledStates() end
+            if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
+        end)
+        panel.playerTotemsResetButton = resetTotemsBtn
+        _totemsRightBottom = resetTotemsBtn
+
+        _classSpecAnchorRef = resetTotemsBtn
     else
         local shamanHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", classSpecHeader, "BOTTOMLEFT", 0, -10, "(Totem tracker is Shaman-only)", "playerTotemsNotShamanHint")
         panel.playerTotemsNotShamanHint = shamanHint
@@ -3377,11 +3612,33 @@ end)
     end
 
 
-    -- "The First Dance" (Rogue) timer checkbox
-    local firstDanceCheck = _MSUF_Check("MSUF_Gameplay_FirstDanceCheck", "TOPLEFT", _classSpecAnchorRef, "BOTTOMLEFT", 0, -12, "Rogue: Track 'The First Dance' (6s after leaving combat)", "firstDanceCheck", "enableFirstDanceTimer")
+    -- Rogue: "The First Dance" tracker (separate class block)
+    -- Place it clearly BELOW the Shaman block (right column bottom), aligned to the left column.
+    local _rogueAnchorRef = _classSpecAnchorRef
+    local _rogueSep = nil
+
+    do
+        -- If we're Shaman, _classSpecAnchorRef points at the right-column reset button.
+        -- Add a subtle divider that spans both columns, then anchor Rogue block under it.
+        local _sepX = (_isShaman and -300) or 0
+        _rogueSep = panel:CreateTexture(nil, "ARTWORK")
+        _rogueSep:SetColorTexture(1, 1, 1, 0.06)
+        _rogueSep:SetHeight(1)
+        _rogueSep:SetPoint("TOPLEFT", _rogueAnchorRef, "BOTTOMLEFT", _sepX, -18)
+        _rogueSep:SetPoint("TOPRIGHT", _rogueAnchorRef, "BOTTOMRIGHT", 0, -18)
+    end
+
+    local rogueTitle = _MSUF_Label("GameFontNormal", "TOPLEFT", _rogueSep, "BOTTOMLEFT", 0, -12, "Rogue: First Dance tracker", "firstDanceTitle")
+    local rogueSub = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", rogueTitle, "BOTTOMLEFT", 0, -2, "Optional helper. Shows a 6s timer after leaving combat.", "firstDanceSubText")
+    local firstDanceCheck = _MSUF_Check("MSUF_Gameplay_FirstDanceCheck", "TOPLEFT", rogueSub, "BOTTOMLEFT", 0, -10, "Track 'The First Dance' (6s after leaving combat)", "firstDanceCheck", "enableFirstDanceTimer")
+    if not _isRogue then
+        firstDanceCheck:SetEnabled(false)
+    end
 
     -- Combat crosshair header + separator
-    local crosshairSeparator = _MSUF_Sep(firstDanceCheck, -20)
+
+    local _classSpecBottom = firstDanceCheck
+    local crosshairSeparator = _MSUF_Sep(_classSpecBottom, -20)
     local crosshairHeader = _MSUF_Header(crosshairSeparator, "Combat crosshair")
 
     -- Generic combat crosshair (all classes)
@@ -3767,6 +4024,8 @@ end)
         -- Enable toggle itself is only relevant for Shaman
         _MSUF_SetCheckEnabled(self.playerTotemsCheck, isShaman)
 
+        _MSUF_SetButtonEnabled(self.playerTotemsPreviewButton, isShaman)
+
         local totemsOn = (isShaman and g.enablePlayerTotems) and true or false
         _MSUF_SetCheckEnabled(self.playerTotemsShowTextCheck, totemsOn)
         _MSUF_SetCheckEnabled(self.playerTotemsScaleByIconCheck, (totemsOn and g.playerTotemsShowText) and true or false)
@@ -3792,7 +4051,12 @@ end)
             end
         end
 
-        -- Crosshair dependents
+                if self.playerTotemsPreviewButton and self.playerTotemsPreviewButton.SetText then
+            local active = (ns and ns.MSUF_PlayerTotems_IsPreviewActive and ns.MSUF_PlayerTotems_IsPreviewActive()) and true or false
+            self.playerTotemsPreviewButton:SetText(active and "Stop preview" or "Preview")
+        end
+
+-- Crosshair dependents
         local crosshairOn = g.enableCombatCrosshair and true or false
         _MSUF_SetCheckEnabled(self.crosshairRangeColorCheck, crosshairOn)
         _MSUF_SetFontStringEnabled(self.crosshairRangeHintText, crosshairOn, true)
