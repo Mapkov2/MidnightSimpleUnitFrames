@@ -2389,6 +2389,117 @@ end
             { "Highlight dispellable debuffs", 12, -222, A2_Settings, "highlightDispellableDebuffs", nil,
                 "Highlights dispellable debuffs (visual only; does not filter).", "cbHLDispel" },
         }, refs)
+        -- Private Auras (Blizzard-rendered): re-anchor private aura slots to MSUF.
+        -- No spell lists required; Blizzard draws the icons/countdowns into the anchors.
+        local paH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        paH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 380, -170)
+        paH:SetText("Private Auras (Anchors)")
+
+        BuildBoolPathCheckboxes(advBox, {
+            { "Show (Player)", 380, -194, A2_Settings, "showPrivateAurasPlayer", nil,
+                "Re-anchors Blizzard Private Auras to MSUF (no spell lists).", "cbPrivateShowP" },
+            { "Show (Target)", 380, -222, A2_Settings, "showPrivateAurasTarget", nil,
+                "Re-anchors Blizzard Private Auras to MSUF Target.", "cbPrivateShowT" },
+            { "Show (Focus)", 380, -250, A2_Settings, "showPrivateAurasFocus", nil,
+                "Re-anchors Blizzard Private Auras to MSUF Focus.", "cbPrivateShowF" },
+            { "Show (Boss)", 380, -278, A2_Settings, "showPrivateAurasBoss", nil,
+                "Re-anchors Blizzard Private Auras to MSUF Boss frames.", "cbPrivateShowB" },
+
+            { "Highlight private auras", 380, -306, A2_Settings, "highlightPrivateAuras", nil,
+                "Visual only: adds a purple border + corner marker on private aura slots.", "cbPrivateHL" },
+        }, refs)
+
+        local function SetWidgetEnabled(widget, enabled)
+            if not widget then return end
+            enabled = not not enabled
+
+            -- Sliders (OptionsSliderTemplate) use Enable/Disable, not SetEnabled.
+            if widget.Enable and widget.Disable then
+                if enabled then widget:Enable() else widget:Disable() end
+                if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.35) end
+
+                -- If we attached a numeric editbox to this slider, sync it too.
+                local vb = widget.__MSUF_valueBox
+                if vb and vb.SetEnabled then vb:SetEnabled(enabled) end
+                if vb and vb.SetAlpha then vb:SetAlpha(enabled and 1 or 0.35) end
+                return
+            end
+
+            if widget.SetEnabled then widget:SetEnabled(enabled) end
+            if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.35) end
+        end
+
+        local function GetPrivateMaxPlayer()
+            local s = A2_Settings()
+            return (s and s.privateAuraMaxPlayer) or 6
+        end
+        local function SetPrivateMaxPlayer(v)
+            local s = A2_Settings()
+            if not s then return end
+            v = tonumber(v) or 0
+            if v < 0 then v = 0 end
+            if v > 12 then v = 12 end
+            s.privateAuraMaxPlayer = v
+        end
+
+        local function GetPrivateMaxOther()
+            local s = A2_Settings()
+            return (s and s.privateAuraMaxOther) or 6
+        end
+        local function SetPrivateMaxOther(v)
+            local s = A2_Settings()
+            if not s then return end
+            v = tonumber(v) or 0
+            if v < 0 then v = 0 end
+            if v > 12 then v = 12 end
+            s.privateAuraMaxOther = v
+        end
+
+        local privateMaxPlayer = CreateAuras2CompactSlider(advBox, "Max slots (Player)", 0, 12, 1, 380, -334, 260, GetPrivateMaxPlayer, SetPrivateMaxPlayer)
+        local privateMaxOther  = CreateAuras2CompactSlider(advBox, "Max slots (Target/Focus/Boss)", 0, 12, 1, 380, -390, 260, GetPrivateMaxOther, SetPrivateMaxOther)
+
+        local function UpdatePrivateAurasEnabled()
+            local s = A2_Settings()
+            local p = (s and s.showPrivateAurasPlayer == true)
+            local o = (s and (s.showPrivateAurasTarget == true or s.showPrivateAurasFocus == true or s.showPrivateAurasBoss == true)) or false
+            local any = p or o
+
+            if refs.cbPrivateHL then
+                local cb = refs.cbPrivateHL
+                if cb.SetEnabled then cb:SetEnabled(any) end
+                cb:SetAlpha(any and 1 or 0.35)
+            end
+            if privateMaxPlayer then SetWidgetEnabled(privateMaxPlayer, p) end
+            if privateMaxOther  then SetWidgetEnabled(privateMaxOther, o) end
+        end
+
+        do
+            local keys = { "cbPrivateShowP", "cbPrivateShowT", "cbPrivateShowF", "cbPrivateShowB" }
+            for i = 1, #keys do
+                local cb = refs[keys[i]]
+                if cb then
+                    local old = cb:GetScript("OnClick")
+                    cb:SetScript("OnClick", function(self, ...)
+                        if old then pcall(old, self, ...) end
+                        UpdatePrivateAurasEnabled()
+                    end)
+                    cb:HookScript("OnShow", UpdatePrivateAurasEnabled)
+                end
+            end
+
+            if refs.cbPrivateHL then
+                refs.cbPrivateHL:HookScript("OnShow", UpdatePrivateAurasEnabled)
+            end
+            if privateMaxPlayer then
+                privateMaxPlayer:HookScript("OnShow", UpdatePrivateAurasEnabled)
+            end
+            if privateMaxOther then
+                privateMaxOther:HookScript("OnShow", UpdatePrivateAurasEnabled)
+            end
+        end
+
+        UpdatePrivateAurasEnabled()
+
 
         local function Track(keys)
             for i = 1, #keys do
@@ -2397,7 +2508,7 @@ end
             end
         end
 
-        Track({ "cbBossBuffs", "cbBossDebuffs", "cbStealable", "cbDispellable", "cbOnlyBoss", "cbHLSteal", "cbHLDispel" })
+        Track({ "cbBossBuffs", "cbBossDebuffs", "cbStealable", "cbDispellable", "cbOnlyBoss", "cbHLSteal", "cbHLDispel", "cbPrivateShowP", "cbPrivateShowT", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
 
         local dtH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         dtH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -270)

@@ -149,6 +149,29 @@ local function EnsureDB()
     if s.highlightStealableBuffs == nil then s.highlightStealableBuffs = true end
     if s.highlightDispellableDebuffs == nil then s.highlightDispellableDebuffs = true end
 
+    -- Player-only: highlight private auras (border + small lock marker).
+    if s.highlightPrivatePlayerAuras == nil then s.highlightPrivatePlayerAuras = false end
+-- Private Auras (Blizzard anchors): shared highlight flag (all units).
+if s.highlightPrivateAuras == nil then
+    -- Migration: older builds used highlightPrivatePlayerAuras.
+    s.highlightPrivateAuras = (s.highlightPrivatePlayerAuras == true)
+end
+
+-- Private Auras (Blizzard anchors): per-unit enable toggles.
+if s.showPrivateAurasPlayer == nil then s.showPrivateAurasPlayer = true end
+if s.showPrivateAurasTarget == nil then s.showPrivateAurasTarget = true end
+if s.showPrivateAurasFocus == nil then s.showPrivateAurasFocus = true end
+if s.showPrivateAurasBoss == nil then s.showPrivateAurasBoss = true end
+
+-- Private Auras (Blizzard anchors): slot caps.
+if type(s.privateAuraMaxPlayer) ~= "number" then s.privateAuraMaxPlayer = 6 end
+if s.privateAuraMaxPlayer < 0 then s.privateAuraMaxPlayer = 0 end
+if s.privateAuraMaxPlayer > 12 then s.privateAuraMaxPlayer = 12 end
+if type(s.privateAuraMaxOther) ~= "number" then s.privateAuraMaxOther = 6 end
+if s.privateAuraMaxOther < 0 then s.privateAuraMaxOther = 0 end
+if s.privateAuraMaxOther > 12 then s.privateAuraMaxOther = 12 end
+
+
     -- Highlight your own auras (border coloring). Independent of filters.
     if s.highlightOwnBuffs == nil then s.highlightOwnBuffs = false end
     if s.highlightOwnDebuffs == nil then s.highlightOwnDebuffs = false end
@@ -1623,6 +1646,16 @@ local function AcquireIcon(container, index)
     icon._msufOwnGlow:SetAlpha(0.95)
     icon._msufOwnGlow:Hide()
 
+
+-- Private aura marker (player-only): small lock in the top-left corner.
+-- We keep this lightweight and purely visual (no glow libs / no combat-unsafe calls).
+icon._msufPrivateMark = icon:CreateTexture(nil, "OVERLAY")
+icon._msufPrivateMark:SetTexture("Interface\\Buttons\\UI-GroupLoot-LockIcon")
+icon._msufPrivateMark:SetSize(12, 12)
+icon._msufPrivateMark:SetPoint("TOPLEFT", icon, "TOPLEFT", -2, 2)
+icon._msufPrivateMark:SetAlpha(0.9)
+icon._msufPrivateMark:Hide()
+
     -- Register with Masque if enabled
     MSUF_A2_MasqueAddButton(icon, select(2, GetAuras2DB()))
 
@@ -1936,6 +1969,10 @@ local function FindUnitFrame(unit)
     return nil
 end
 
+-- Forward declarations for Private Aura anchor helpers (Blizzard-rendered private aura icons)
+local MSUF_A2_PrivateAuras_Clear
+local MSUF_A2_PrivateAuras_RebuildIfNeeded
+
 local function EnsureAttached(unit)
     local entry = AurasByUnit[unit]
     local frame = FindUnitFrame(unit)
@@ -1945,7 +1982,17 @@ local function EnsureAttached(unit)
 
     if entry and entry.frame == frame and entry.anchor and entry.anchor:GetParent() then
         return entry
+    end-- If we are re-attaching (frame changed), make sure old private anchors are removed and old anchor is hidden.
+if entry then
+    if MSUF_A2_PrivateAuras_Clear then
+        MSUF_A2_PrivateAuras_Clear(entry)
     end
+    if entry.anchor then
+        entry.anchor:Hide()
+    end
+end
+
+
 
     -- Create anchor (parented to UIParent but anchored to the unitframe so it follows MSUF edit moves)
     local anchor = CreateFrame("Frame", nil, UIParent)
@@ -1963,6 +2010,11 @@ local function EnsureAttached(unit)
 local mixed = CreateFrame("Frame", nil, anchor)
 mixed:SetSize(1, 1)
 mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
+local private = CreateFrame("Frame", nil, anchor)
+private:SetSize(1, 1)
+private:SetPoint("BOTTOMLEFT", buffs, "TOPLEFT", 0, 0)
+private:Hide()
+
 
     -- Sync show/hide with the unitframe
     SafeCall(frame.HookScript, frame, "OnShow", function()
@@ -1984,15 +2036,224 @@ mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
         debuffs = debuffs,
         buffs = buffs,
         mixed = mixed,
+        private = private,
     }
     AurasByUnit[unit] = entry
     return entry
 end
 
--- Forward declarations for Auras 2.0 Edit Mode helpers
+-- Forward declarations for Auras 2\.0 Edit Mode helpers
 local MSUF_A2_GetEffectiveSizing
 local MSUF_A2_ComputeDefaultEditBoxSize
 local MSUF_A2_GetEffectiveLayout
+
+
+-- ---------------------------------------------------------
+-- Private Auras (Blizzard-rendered) via C_UnitAuras.AddPrivateAuraAnchor
+--  * No spell tracking lists required.
+--  * We only provide anchor "slots" and let Blizzard render icon + countdown.
+--  * Supports Player / Target / Focus / Boss units (boss1..bossN).
+-- ---------------------------------------------------------
+
+local function MSUF_A2_PrivateAuras_Supported()
+    return (C_UnitAuras
+        and type(C_UnitAuras.AddPrivateAuraAnchor) == "function"
+        and type(C_UnitAuras.RemovePrivateAuraAnchor) == "function") and true or false
+end
+
+MSUF_A2_PrivateAuras_Clear = function(entry)
+    if not entry then return end
+
+    local ids = entry._msufA2_privateAnchorIDs
+    if type(ids) == "table" and C_UnitAuras and type(C_UnitAuras.RemovePrivateAuraAnchor) == "function" then
+        for i = 1, #ids do
+            local id = ids[i]
+            if id then
+                pcall(C_UnitAuras.RemovePrivateAuraAnchor, id)
+            end
+        end
+    end
+    entry._msufA2_privateAnchorIDs = nil
+    entry._msufA2_privateCfgSig = nil
+
+    local slots = entry._msufA2_privateSlots
+    if type(slots) == "table" then
+        for i = 1, #slots do
+            if slots[i] then slots[i]:Hide() end
+        end
+    end
+    if entry.private then entry.private:Hide() end
+end
+
+local function MSUF_A2_PrivateAuras_EnsureSlots(entry, maxN)
+    if not entry or not entry.private or maxN <= 0 then return nil end
+
+    local slots = entry._msufA2_privateSlots
+    if type(slots) ~= "table" then
+        slots = {}
+        entry._msufA2_privateSlots = slots
+    end
+
+    for i = 1, maxN do
+        if not slots[i] then
+            local slot = CreateFrame("Frame", nil, entry.private, "BackdropTemplate")
+            slot:SetSize(1, 1)
+            slot:SetFrameStrata("MEDIUM")
+            slot:SetFrameLevel(60)
+
+            slot:SetBackdrop({
+                edgeFile = "Interface\\Buttons\\WHITE8X8",
+                edgeSize = 1,
+                insets = { left = 0, right = 0, top = 0, bottom = 0 },
+            })
+            slot:SetBackdropBorderColor(0, 0, 0, 0)
+
+            -- Corner marker (shown only when highlight is enabled).
+            local mark = slot:CreateTexture(nil, "OVERLAY")
+            mark:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+            mark:SetTexCoord(0.0, 0.25, 0.0, 0.25)
+            mark:SetPoint("TOPLEFT", slot, "TOPLEFT", -2, 2)
+            mark:SetSize(14, 14)
+            mark:SetAlpha(0.9)
+            mark:Hide()
+            slot._msufPrivateMark = mark
+
+            slots[i] = slot
+        end
+    end
+
+    for i = maxN + 1, #slots do
+        if slots[i] then slots[i]:Hide() end
+    end
+
+    return slots
+end
+
+MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing, layoutMode)
+    if not entry or not shared then return end
+
+    local unit = entry.unit
+    if type(unit) ~= "string" then
+        MSUF_A2_PrivateAuras_Clear(entry)
+        return
+    end
+
+    -- Per-unit enable toggles (shared layout feature).
+    local enabled = false
+    if unit == "player" then
+        enabled = (shared.showPrivateAurasPlayer == true)
+    elseif unit == "target" then
+        enabled = (shared.showPrivateAurasTarget == true)
+    elseif unit == "focus" then
+        enabled = (shared.showPrivateAurasFocus == true)
+    elseif unit:match("^boss%d$") then
+        enabled = (shared.showPrivateAurasBoss == true)
+    else
+        enabled = false
+    end
+
+    if not enabled then
+        MSUF_A2_PrivateAuras_Clear(entry)
+        return
+    end
+
+    if not MSUF_A2_PrivateAuras_Supported() then
+        MSUF_A2_PrivateAuras_Clear(entry)
+        return
+    end
+
+    local maxN
+    if unit == "player" then
+        maxN = shared.privateAuraMaxPlayer or 6
+    else
+        maxN = shared.privateAuraMaxOther or 6
+    end
+    if type(maxN) ~= "number" then maxN = 6 end
+    if maxN < 0 then maxN = 0 end
+    if maxN > 12 then maxN = 12 end
+    if maxN == 0 then
+        MSUF_A2_PrivateAuras_Clear(entry)
+        return
+    end
+
+    local showCountdownFrame = (shared.showCooldownSwipe == true)
+    local showCountdownNumbers = (shared.showCooldownText == true)
+
+    local highlight = (shared.highlightPrivateAuras == true)
+
+    local sig = tostring(unit).."|"..tostring(iconSize).."|"..tostring(spacing).."|"..tostring(maxN).."|"
+        ..(showCountdownFrame and "F1" or "F0").."|"
+        ..(showCountdownNumbers and "N1" or "N0").."|"
+        ..(highlight and "H1" or "H0").."|"
+        ..tostring(layoutMode or "")
+
+    if entry._msufA2_privateCfgSig == sig and type(entry._msufA2_privateAnchorIDs) == "table" then
+        if entry.private then entry.private:Show() end
+        local slots = entry._msufA2_privateSlots
+        if type(slots) == "table" then
+            for i = 1, maxN do if slots[i] then slots[i]:Show() end end
+        end
+        return
+    end
+
+    MSUF_A2_PrivateAuras_Clear(entry)
+
+    if not entry.private then return end
+    local slots = MSUF_A2_PrivateAuras_EnsureSlots(entry, maxN)
+    if not slots then return end
+
+    local step = (iconSize + spacing)
+    if type(step) ~= "number" or step <= 0 then step = 28 end
+
+    entry.private:Show()
+    entry._msufA2_privateCfgSig = sig
+    entry._msufA2_privateAnchorIDs = {}
+
+    -- Size the container so it has a meaningful clickable/drag area in Edit Mode.
+    entry.private:SetSize((maxN * step) - spacing, iconSize)
+
+    for i = 1, maxN do
+        local slot = slots[i]
+        slot:ClearAllPoints()
+        slot:SetPoint("BOTTOMLEFT", entry.private, "BOTTOMLEFT", (i - 1) * step, 0)
+        slot:SetSize(iconSize, iconSize)
+
+        if highlight then
+            slot:SetBackdropBorderColor(0.80, 0.30, 1.00, 1.0) -- purple
+            if slot._msufPrivateMark then slot._msufPrivateMark:Show() end
+        else
+            slot:SetBackdropBorderColor(0, 0, 0, 0)
+            if slot._msufPrivateMark then slot._msufPrivateMark:Hide() end
+        end
+
+        slot:Show()
+
+        local args = {
+            unitToken = unit,
+            auraIndex = i,
+            parent = slot,
+            showCountdownFrame = showCountdownFrame,
+            showCountdownNumbers = showCountdownNumbers,
+            iconInfo = {
+                iconWidth = iconSize,
+                iconHeight = iconSize,
+                iconAnchor = {
+                    point = "CENTER",
+                    relativeTo = slot,
+                    relativePoint = "CENTER",
+                    offsetX = 0,
+                    offsetY = 0,
+                },
+            },
+        }
+
+        local ok, anchorID = pcall(C_UnitAuras.AddPrivateAuraAnchor, args)
+        if ok and anchorID then
+            table.insert(entry._msufA2_privateAnchorIDs, anchorID)
+        end
+    end
+
+end
 
 local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOverride, buffDebuffAnchorOverride, splitSpacingOverride)
     local unitKey = entry and entry.unit
@@ -2029,6 +2290,11 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
 
         entry.buffs:ClearAllPoints()
         entry.buffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+
+        if entry.private then
+            entry.private:ClearAllPoints()
+            entry.private:SetPoint("BOTTOMLEFT", entry.mixed, "BOTTOMLEFT", 0, iconSize + spacing)
+        end
         return
     end
 
@@ -2125,7 +2391,14 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
 
     if entry.mixed then
         entry.mixed:ClearAllPoints()
-        entry.mixed:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+		entry.mixed:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+	end
+
+    -- Private Aura row is always positioned one row above the primary aura row.
+    if entry.private then
+        local ref = entry.buffs or entry.anchor
+        entry.private:ClearAllPoints()
+        entry.private:SetPoint("BOTTOMLEFT", ref, "BOTTOMLEFT", 0, iconSize + spacing)
     end
 
 end
@@ -2702,6 +2975,27 @@ local function MSUF_A2_IsDispellableAura(unit, aura)
     return false
 end
 
+-- Private aura detection (spellID-based, cached). Player-only feature.
+-- Note: Blizzard's private aura system intentionally hides most aura data from addons.
+-- AuraIsPrivate lets us *detect* that the spell is part of that system so we can visually mark it.
+local MSUF_A2__PrivateSpellCache = {}
+local function MSUF_A2_IsPrivateAuraSpellID(spellID)
+    if not spellID then return false end
+    if not (C_UnitAuras and type(C_UnitAuras.AuraIsPrivate) == "function") then
+        return false
+    end
+
+    local cached = MSUF_A2__PrivateSpellCache[spellID]
+    if cached ~= nil then
+        return cached == true
+    end
+
+    local ok, isPriv = pcall(C_UnitAuras.AuraIsPrivate, spellID)
+    local v = (ok and isPriv == true) or false
+    MSUF_A2__PrivateSpellCache[spellID] = v
+    return v
+end
+
 -- Merge two aura lists, keeping primary order first, and de-duping by auraInstanceID.
 local function MSUF_A2_MergeAuraLists(primary, secondary)
     if type(primary) ~= "table" then primary = {} end
@@ -2772,6 +3066,23 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
 
     -- Always reset glow each update.
     if icon._msufOwnGlow then icon._msufOwnGlow:Hide() end
+
+
+-- Always reset private marker each update.
+if icon._msufPrivateMark then icon._msufPrivateMark:Hide() end
+
+-- Private aura highlight (player-only). Independent of filtering.
+if unit == "player" and shared and shared.highlightPrivatePlayerAuras == true and aura then
+    local sidStr = MSUF_A2_AuraFieldToString(aura, "spellId") or MSUF_A2_AuraFieldToString(aura, "spellID")
+    local sid = sidStr and tonumber(sidStr) or nil
+    if sid and MSUF_A2_IsPrivateAuraSpellID(sid) then
+        -- Purple border + lock marker.
+        ShowBorder(0.8, 0.3, 1.0, 1)
+        if icon._msufPrivateMark then icon._msufPrivateMark:Show() end
+        return
+    end
+end
+
 
     -- Own-aura highlight is independent of filtering.
     if isOwn and shared then
@@ -3671,18 +3982,21 @@ local function RenderUnit(entry)
     -- In Edit Mode preview, still allow positioning even if this unit's auras are disabled.
     -- Outside preview, respect the unit enable toggle.
     if (not unitEnabled) and (not showTest) then
+        if MSUF_A2_PrivateAuras_Clear then MSUF_A2_PrivateAuras_Clear(entry) end
         if entry.anchor then entry.anchor:Hide() end
         if entry.editMover then entry.editMover:Hide() end
         return
     end
 
     if not unitExists and not showTest then
+        if MSUF_A2_PrivateAuras_Clear then MSUF_A2_PrivateAuras_Clear(entry) end
         if entry.anchor then entry.anchor:Hide() end
         if entry.editMover then entry.editMover:Hide() end
         return
     end
 
     if (not showTest) and (not frame or not frame:IsShown()) then
+        if MSUF_A2_PrivateAuras_Clear then MSUF_A2_PrivateAuras_Clear(entry) end
         if entry.anchor then entry.anchor:Hide() end
         if entry.editMover then entry.editMover:Hide() end
         return
@@ -3759,6 +4073,12 @@ local function RenderUnit(entry)
     entry.anchor:Show()
 
     local iconSize, spacing, perRow = MSUF_A2_GetEffectiveSizing(unit, shared)
+
+-- Private Auras (Blizzard-rendered) anchored to this unitframe (player-only).
+if MSUF_A2_PrivateAuras_RebuildIfNeeded then
+    MSUF_A2_PrivateAuras_RebuildIfNeeded(entry, shared, iconSize, spacing, layoutMode)
+end
+
 
     -- Separate caps (nice-to-have). Keep legacy maxIcons as fallback.
     local maxDebuffs = (caps and type(caps.maxDebuffs) == "number") and caps.maxDebuffs or shared.maxDebuffs or shared.maxIcons or 12
