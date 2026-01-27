@@ -135,11 +135,17 @@ end
 
 
 -- New install defaults (UI scale + Flash menu anchor)
-if g.globalUiScalePreset == nil then
-    g.globalUiScalePreset = "1080p"
+-- Default: scaling OFF. Blizzard handles UI scale unless the user explicitly enables MSUF scaling.
+if g.disableScaling == nil then
+    g.disableScaling = true
 end
-if g.globalUiScaleValue == nil then
-    g.globalUiScaleValue = 0.71111111111111
+if g.globalUiScalePreset == nil then
+    g.globalUiScalePreset = "auto"
+end
+-- Nil value = Auto (no enforced custom global UI scale)
+-- (Do NOT seed a default globalUiScaleValue on fresh installs.)
+if g.msufUiScale == nil then
+    g.msufUiScale = 1.0
 end
 
 if g.flashFullPoint == nil then g.flashFullPoint = "LEFT" end
