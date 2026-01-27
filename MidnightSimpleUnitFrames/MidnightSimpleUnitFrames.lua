@@ -5674,6 +5674,25 @@ do
         if not C_AddOns or not C_AddOns.IsAddOnLoaded or not C_AddOns.IsAddOnLoaded("BetterCooldownManager") then return false end
         if not _G or not _G.BCDMG or type(_G.BCDMG.AddAnchors) ~= "function" then return false end
 
+        -- Compatibility wrapper:
+        -- BCDM's API defines AddAnchors with ':' (self as first arg). If we call it via '.',
+        -- parameters shift and C_AddOns.IsAddOnLoaded() receives a table -> error.
+        local function MSUF_BCDM_AddAnchors(addOnName, addToTypes, anchorTable)
+            local api = _G and _G.BCDMG
+            if not api then return false end
+            local fn = api.AddAnchors
+            if type(fn) ~= "function" then return false end
+
+            -- Preferred: behave like api:AddAnchors(...)
+            local ok = pcall(fn, api, addOnName, addToTypes, anchorTable)
+            if ok then return true end
+
+            -- Legacy fallback: in case some version defines AddAnchors without self.
+            ok = pcall(fn, addOnName, addToTypes, anchorTable)
+            return ok and true or false
+        end
+
+
         -- Ensure proxy frames exist so anchoring never hits nil _G[...].
         if type(_G.MSUF_TPA_EnsureAllAnchors) == "function" then
             _G.MSUF_TPA_EnsureAllAnchors()
@@ -5695,10 +5714,10 @@ do
         }
 
         -- Register for the module tabs the user expects.
-        _G.BCDMG.AddAnchors("MidnightSimpleUnitFrames", { "Power", "SecondaryPower", "CastBar" }, anchors)
+        MSUF_BCDM_AddAnchors("MidnightSimpleUnitFrames", { "Power", "SecondaryPower", "CastBar" }, anchors)
 
         -- Also register for the main viewer tabs for consistency (harmless if duplicates).
-        _G.BCDMG.AddAnchors("MidnightSimpleUnitFrames", { "Utility", "Buffs", "BuffBar", "Custom", "AdditionalCustom", "Item", "Trinket", "ItemSpell" }, anchors)
+        MSUF_BCDM_AddAnchors("MidnightSimpleUnitFrames", { "Utility", "Buffs", "BuffBar", "Custom", "AdditionalCustom", "Item", "Trinket", "ItemSpell" }, anchors)
 
         _G.MSUF_BCDM_AnchorsRegistered = true
 
