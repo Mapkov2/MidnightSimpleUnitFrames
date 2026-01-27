@@ -5055,7 +5055,7 @@ end
 -- Power text spacer (per-unit, like HP spacer)
 local powerSpacerHeader = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 powerSpacerHeader:SetPoint("TOPLEFT", hpSpacerSlider, "BOTTOMLEFT", 0, -18)
-powerSpacerHeader:SetText("Power Spacer")
+powerSpacerHeader:SetText("")
 
 local powerSpacerCheck = CreateFrame("CheckButton", "MSUF_PowerTextSpacerCheck", barGroup, "UICheckButtonTemplate")
 powerSpacerCheck:ClearAllPoints()
