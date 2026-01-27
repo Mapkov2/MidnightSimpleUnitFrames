@@ -585,6 +585,112 @@ local bottomPanel = CreateFrame("Frame", nil, miscGroup, "BackdropTemplate")
                 end)
             end
 
+
+            -- Presets: Maximum performance / Balanced / Max accuracy (drives the sliders)
+            local function MSUF_Misc_SetPresetButtonActive(btn, active)
+                if not btn then return end
+                btn._msufActive = active and true or false
+
+                local fs = (btn.GetFontString and btn:GetFontString()) or btn._msufText
+                if btn._msufActive then
+                    if btn.LockHighlight then btn:LockHighlight() end
+                    if fs and fs.SetTextColor then fs:SetTextColor(1, 0.82, 0) end
+                else
+                    if btn.UnlockHighlight then btn:UnlockHighlight() end
+                    if fs and fs.SetTextColor then fs:SetTextColor(1, 1, 1) end
+                end
+            end
+
+            local function MSUF_Misc_RefreshUpdatePresetButtons()
+                if EnsureDB then EnsureDB() end
+                local g = (MSUF_DB and MSUF_DB.general) or {}
+                local preset = g.miscUpdatesPreset or "balanced"
+                if leftPanel and leftPanel._msufPresetPerf then
+                    MSUF_Misc_SetPresetButtonActive(leftPanel._msufPresetPerf, preset == "perf")
+                    MSUF_Misc_SetPresetButtonActive(leftPanel._msufPresetBal,  preset == "balanced")
+                    MSUF_Misc_SetPresetButtonActive(leftPanel._msufPresetAcc,  preset == "accurate")
+                end
+            end
+
+            local function MSUF_Misc_ApplyUpdatePreset(presetKey)
+                if EnsureDB then EnsureDB() end
+                MSUF_DB.general = MSUF_DB.general or {}
+                local g = MSUF_DB.general
+
+                local unitInterval, castInterval, budgetMs, urgentCap
+                if presetKey == "perf" then
+                    -- Maximum performance: fewer updates, smaller spikes
+                    unitInterval = 0.12
+                    castInterval = 0.06
+                    budgetMs     = 1.0
+                    urgentCap    = 6
+                elseif presetKey == "accurate" then
+                    -- Max accuracy: very frequent updates, fastest catch-up
+                    unitInterval = 0.01
+                    castInterval = 0.01
+                    budgetMs     = 5.0
+                    urgentCap    = 50
+                else
+                    -- Balanced (sane default)
+                    presetKey    = "balanced"
+                    unitInterval = 0.05
+                    castInterval = 0.02
+                    budgetMs     = 2.0
+                    urgentCap    = 10
+                end
+
+                g.miscUpdatesPreset = presetKey
+
+                -- Drive the sliders (their OnValueChanged handlers already write DB + runtime globals)
+                if updateSlider and updateSlider.SetValue then updateSlider:SetValue(unitInterval) end
+                if castbarUpdateSlider and castbarUpdateSlider.SetValue then castbarUpdateSlider:SetValue(castInterval) end
+                if ufcoreBudgetSlider and ufcoreBudgetSlider.SetValue then ufcoreBudgetSlider:SetValue(budgetMs) end
+                if ufcoreUrgentSlider and ufcoreUrgentSlider.SetValue then ufcoreUrgentSlider:SetValue(urgentCap) end
+
+                MSUF_Misc_RefreshUpdatePresetButtons()
+            end
+
+            local function MSUF_Misc_MakePresetButton(parent, w, h, label)
+                local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+                b:SetSize(w, h)
+                b:SetText(label or "")
+
+                -- Match Midnight-styled action buttons used elsewhere (if available)
+                if MSUF_SkinMidnightActionButton then
+                    MSUF_SkinMidnightActionButton(b, { textR = 1, textG = 0.85, textB = 0.1 })
+                end
+
+                return b
+            end
+
+            -- Build the preset button row once (under the "Updates" header)
+            if leftPanel and not leftPanel._msufPresetRow then
+                local row = CreateFrame("Frame", nil, leftPanel)
+                row:SetSize(270, 22)
+                row:SetPoint("TOPLEFT", leftPanel, "TOPLEFT", 14, -48)
+                leftPanel._msufPresetRow = row
+
+                local bw, bh, gap = 86, 20, 6
+                local btnPerf = MSUF_Misc_MakePresetButton(row, bw, bh, "Perf...")
+                btnPerf:SetPoint("LEFT", row, "LEFT", 0, 0)
+                btnPerf:SetScript("OnClick", function() MSUF_Misc_ApplyUpdatePreset("perf") end)
+
+                local btnBal = MSUF_Misc_MakePresetButton(row, bw, bh, "Balanced...")
+                btnBal:SetPoint("LEFT", btnPerf, "RIGHT", gap, 0)
+                btnBal:SetScript("OnClick", function() MSUF_Misc_ApplyUpdatePreset("balanced") end)
+
+                local btnAcc = MSUF_Misc_MakePresetButton(row, bw, bh, "Accurate...")
+                btnAcc:SetPoint("LEFT", btnBal, "RIGHT", gap, 0)
+                btnAcc:SetScript("OnClick", function() MSUF_Misc_ApplyUpdatePreset("accurate") end)
+
+                leftPanel._msufPresetPerf = btnPerf
+                leftPanel._msufPresetBal  = btnBal
+                leftPanel._msufPresetAcc  = btnAcc
+
+                row:SetScript("OnShow", MSUF_Misc_RefreshUpdatePresetButtons)
+                MSUF_Misc_RefreshUpdatePresetButtons()
+            end
+
             local infoTooltipDisable = _G.MSUF_InfoTooltipDisableCheck
             local infoTooltipPosDrop = _G.MSUF_InfoTooltipPosDropdown
             local blizzUFDisable = _G.MSUF_DisableBlizzUFCheck
@@ -596,7 +702,7 @@ local bottomPanel = CreateFrame("Frame", nil, miscGroup, "BackdropTemplate")
                 updateSlider:ClearAllPoints()
                 updateSlider:SetParent(leftPanel)
 
-                local lbl = MakeLabel(leftPanel, "Unit update interval (seconds)", "TOPLEFT", leftPanel, 14, -50)
+                local lbl = MakeLabel(leftPanel, "Unit update interval (seconds)", "TOPLEFT", leftPanel, 14, -78)
                 updateSlider:SetPoint("TOPLEFT", lbl, "BOTTOMLEFT", 0, -10)
                 updateSlider:SetWidth(270)
             end
@@ -606,7 +712,7 @@ local bottomPanel = CreateFrame("Frame", nil, miscGroup, "BackdropTemplate")
                 castbarUpdateSlider:SetParent(leftPanel)
 
                 local rel = updateSlider or leftPanel
-                local lbl = MakeLabel(leftPanel, "Castbar update", "TOPLEFT", rel, (rel == leftPanel and 14) or 0, (rel == leftPanel and -130) or -36)
+                local lbl = MakeLabel(leftPanel, "Castbar update", "TOPLEFT", rel, (rel == leftPanel and 14) or 0, (rel == leftPanel and -158) or -36)
                 if rel ~= leftPanel then
                     lbl:ClearAllPoints()
                     lbl:SetPoint("TOPLEFT", rel, "BOTTOMLEFT", 0, -16)
@@ -620,7 +726,7 @@ local bottomPanel = CreateFrame("Frame", nil, miscGroup, "BackdropTemplate")
                 ufcoreBudgetSlider:SetParent(leftPanel)
 
                 local rel = castbarUpdateSlider or updateSlider or leftPanel
-                local lbl = MakeLabel(leftPanel, "UFCore flush budget", "TOPLEFT", rel, (rel == leftPanel and 14) or 0, (rel == leftPanel and -130) or -36)
+                local lbl = MakeLabel(leftPanel, "UFCore flush budget", "TOPLEFT", rel, (rel == leftPanel and 14) or 0, (rel == leftPanel and -158) or -36)
                 if rel ~= leftPanel then
                     lbl:ClearAllPoints()
                     lbl:SetPoint("TOPLEFT", rel, "BOTTOMLEFT", 0, -16)
@@ -634,7 +740,7 @@ local bottomPanel = CreateFrame("Frame", nil, miscGroup, "BackdropTemplate")
                 ufcoreUrgentSlider:SetParent(leftPanel)
 
                 local rel = ufcoreBudgetSlider or castbarUpdateSlider or updateSlider or leftPanel
-                local lbl = MakeLabel(leftPanel, "UFCore urgent cap", "TOPLEFT", rel, (rel == leftPanel and 14) or 0, (rel == leftPanel and -130) or -36)
+                local lbl = MakeLabel(leftPanel, "UFCore urgent cap", "TOPLEFT", rel, (rel == leftPanel and 14) or 0, (rel == leftPanel and -158) or -36)
                 if rel ~= leftPanel then
                     lbl:ClearAllPoints()
                     lbl:SetPoint("TOPLEFT", rel, "BOTTOMLEFT", 0, -16)
