@@ -994,7 +994,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     -- and control OnShow scripts on the very first open. Users then have to click away/back.
     -- We provide a single, shared refresh path that Settings can call on selection.
 
-    -- Layout (Step 3+): wide main box, Timer Colors box, Advanced box below
+    -- Layout (Step 3+): wide main box, Timer Colors box, Private Auras box, Advanced box below
     local leftTop = MakeBox(content, 720, 460)
     leftTop:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
 
@@ -1002,8 +1002,13 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     local timerBox = MakeBox(content, 720, 200)
     timerBox:SetPoint("TOPLEFT", leftTop, "BOTTOMLEFT", 0, -14)
 
+    -- Blizzard-rendered Private Auras (anchor controls)
+    local privateBox = MakeBox(content, 720, 270)
+    privateBox:SetPoint("TOPLEFT", timerBox, "BOTTOMLEFT", 0, -14)
+
     local advBox = MakeBox(content, 720, 460)
-    advBox:SetPoint("TOPLEFT", timerBox, "BOTTOMLEFT", 0, -14)
+    advBox:SetPoint("TOPLEFT", privateBox, "BOTTOMLEFT", 0, -14)
+
     -- Movement controls are handled via MSUF Edit Mode now (no placeholder section here).
 
     -- Prevent dead scroll space: keep the scroll child height tight to the last section.
@@ -2389,25 +2394,44 @@ end
             { "Highlight dispellable debuffs", 12, -222, A2_Settings, "highlightDispellableDebuffs", nil,
                 "Highlights dispellable debuffs (visual only; does not filter).", "cbHLDispel" },
         }, refs)
-        -- Private Auras (Blizzard-rendered): re-anchor private aura slots to MSUF.
-        -- No spell lists required; Blizzard draws the icons/countdowns into the anchors.
-        local paH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        paH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 380, -170)
-        paH:SetText("Private Auras (Anchors)")
+        -- ------------------------------------------------------------
+        -- Private Auras (Blizzard-rendered): dedicated section + master toggle
+        -- NOTE: Target private auras are intentionally NOT supported (user request).
+        -- ------------------------------------------------------------
+        -- Private Auras live in their own box between "Timer colors" and "Advanced" (see layout above).
 
-        BuildBoolPathCheckboxes(advBox, {
-            { "Show (Player)", 380, -194, A2_Settings, "showPrivateAurasPlayer", nil,
+        local paH = privateBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        paH:SetPoint("TOPLEFT", privateBox, "TOPLEFT", 12, -10)
+        paH:SetText("Private Auras")
+
+        local btnPrivateEnable = CreateBoolToggleButtonPath(
+            privateBox,
+            "Enabled",
+            12, -34,
+            90, 22,
+            A2_Settings,
+            "privateAurasEnabled",
+            nil,
+            "Master switch for anchoring Blizzard Private Auras to MSUF.")
+        A2_Track("global", btnPrivateEnable)
+
+        BuildBoolPathCheckboxes(privateBox, {
+            { "Show (Player)", 12, -64, A2_Settings, "showPrivateAurasPlayer", nil,
                 "Re-anchors Blizzard Private Auras to MSUF (no spell lists).", "cbPrivateShowP" },
-            { "Show (Target)", 380, -222, A2_Settings, "showPrivateAurasTarget", nil,
-                "Re-anchors Blizzard Private Auras to MSUF Target.", "cbPrivateShowT" },
-            { "Show (Focus)", 380, -250, A2_Settings, "showPrivateAurasFocus", nil,
+            { "Show (Focus)", 12, -92, A2_Settings, "showPrivateAurasFocus", nil,
                 "Re-anchors Blizzard Private Auras to MSUF Focus.", "cbPrivateShowF" },
-            { "Show (Boss)", 380, -278, A2_Settings, "showPrivateAurasBoss", nil,
+            { "Show (Boss)", 12, -120, A2_Settings, "showPrivateAurasBoss", nil,
                 "Re-anchors Blizzard Private Auras to MSUF Boss frames.", "cbPrivateShowB" },
 
-            { "Highlight private auras", 380, -306, A2_Settings, "highlightPrivateAuras", nil,
+            { "Highlight private auras", 12, -148, A2_Settings, "highlightPrivateAuras", nil,
                 "Visual only: adds a purple border + corner marker on private aura slots.", "cbPrivateHL" },
         }, refs)
+
+        -- Track: these are Shared-scope controls (so per-unit overrides can grey them out correctly).
+        if refs.cbPrivateShowP then A2_Track("global", refs.cbPrivateShowP) end
+        if refs.cbPrivateShowF then A2_Track("global", refs.cbPrivateShowF) end
+        if refs.cbPrivateShowB then A2_Track("global", refs.cbPrivateShowB) end
+        if refs.cbPrivateHL    then A2_Track("global", refs.cbPrivateHL) end
 
         local function SetWidgetEnabled(widget, enabled)
             if not widget then return end
@@ -2455,14 +2479,23 @@ end
             s.privateAuraMaxOther = v
         end
 
-        local privateMaxPlayer = CreateAuras2CompactSlider(advBox, "Max slots (Player)", 0, 12, 1, 380, -334, 260, GetPrivateMaxPlayer, SetPrivateMaxPlayer)
-        local privateMaxOther  = CreateAuras2CompactSlider(advBox, "Max slots (Target/Focus/Boss)", 0, 12, 1, 380, -390, 260, GetPrivateMaxOther, SetPrivateMaxOther)
+        local privateMaxPlayer = CreateAuras2CompactSlider(privateBox, "Max slots (Player)", 0, 12, 1, 12, -178, 300, GetPrivateMaxPlayer, SetPrivateMaxPlayer)
+        local privateMaxOther  = CreateAuras2CompactSlider(privateBox, "Max slots (Focus/Boss)", 0, 12, 1, 12, -226, 300, GetPrivateMaxOther, SetPrivateMaxOther)
+
+        if privateMaxPlayer then A2_Track("global", privateMaxPlayer) end
+        if privateMaxOther  then A2_Track("global", privateMaxOther) end
 
         local function UpdatePrivateAurasEnabled()
             local s = A2_Settings()
-            local p = (s and s.showPrivateAurasPlayer == true)
-            local o = (s and (s.showPrivateAurasTarget == true or s.showPrivateAurasFocus == true or s.showPrivateAurasBoss == true)) or false
-            local any = p or o
+            local master = (s and s.privateAurasEnabled == true) or false
+            local p = (master and s and s.showPrivateAurasPlayer == true) or false
+            local o = (master and s and (s.showPrivateAurasFocus == true or s.showPrivateAurasBoss == true)) or false
+            local any = (master and (p or o)) or false
+
+            -- Master-gate the per-unit checkboxes.
+            if refs.cbPrivateShowP then SetWidgetEnabled(refs.cbPrivateShowP, master) end
+            if refs.cbPrivateShowF then SetWidgetEnabled(refs.cbPrivateShowF, master) end
+            if refs.cbPrivateShowB then SetWidgetEnabled(refs.cbPrivateShowB, master) end
 
             if refs.cbPrivateHL then
                 local cb = refs.cbPrivateHL
@@ -2474,7 +2507,7 @@ end
         end
 
         do
-            local keys = { "cbPrivateShowP", "cbPrivateShowT", "cbPrivateShowF", "cbPrivateShowB" }
+            local keys = { "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB" }
             for i = 1, #keys do
                 local cb = refs[keys[i]]
                 if cb then
@@ -2485,6 +2518,14 @@ end
                     end)
                     cb:HookScript("OnShow", UpdatePrivateAurasEnabled)
                 end
+            end
+
+            if btnPrivateEnable then
+                btnPrivateEnable:HookScript("OnShow", UpdatePrivateAurasEnabled)
+                btnPrivateEnable:HookScript("OnClick", function()
+                    -- CreateBoolToggleButtonPath already writes + requests apply.
+                    UpdatePrivateAurasEnabled()
+                end)
             end
 
             if refs.cbPrivateHL then
@@ -2508,8 +2549,12 @@ end
             end
         end
 
-        Track({ "cbBossBuffs", "cbBossDebuffs", "cbStealable", "cbDispellable", "cbOnlyBoss", "cbHLSteal", "cbHLDispel", "cbPrivateShowP", "cbPrivateShowT", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
+        Track({ "cbBossBuffs", "cbBossDebuffs", "cbStealable", "cbDispellable", "cbOnlyBoss", "cbHLSteal", "cbHLDispel", "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
 
+        -- Advanced gating should also affect the Private Auras master + sliders.
+        if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end
+        if privateMaxPlayer then advGate[#advGate + 1] = privateMaxPlayer end
+        if privateMaxOther  then advGate[#advGate + 1] = privateMaxOther end
         local dtH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         dtH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -270)
         dtH:SetText("Debuff types")

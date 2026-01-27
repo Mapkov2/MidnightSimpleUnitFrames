@@ -2285,6 +2285,23 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
     local y = offY
     if y == nil then y = shared.offsetY or 0 end
 
+    -- Private Auras: extra offset for the private-aura row only (independent from the main aura offset).
+    local privOffX = (shared and shared.privateOffsetX) or 0
+    local privOffY = (shared and shared.privateOffsetY) or 0
+    if MSUF_DB and MSUF_DB.auras2 and MSUF_DB.auras2.perUnit and unitKey then
+        local u = MSUF_DB.auras2.perUnit[unitKey]
+        if u and u.overrideLayout == true and type(u.layout) == "table" then
+            if type(u.layout.privateOffsetX) == "number" then privOffX = u.layout.privateOffsetX end
+            if type(u.layout.privateOffsetY) == "number" then privOffY = u.layout.privateOffsetY end
+        end
+    end
+    privOffX = tonumber(privOffX) or 0
+    privOffY = tonumber(privOffY) or 0
+    if privOffX > 200 then privOffX = 200 elseif privOffX < -200 then privOffX = -200 end
+    if privOffY > 200 then privOffY = 200 elseif privOffY < -200 then privOffY = -200 end
+    privOffX = math.floor(privOffX + 0.5)
+    privOffY = math.floor(privOffY + 0.5)
+
     entry.anchor:ClearAllPoints()
     entry.anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", x, y)
 
@@ -2313,7 +2330,7 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
 
         if entry.private then
             entry.private:ClearAllPoints()
-            entry.private:SetPoint("BOTTOMLEFT", entry.mixed, "BOTTOMLEFT", 0, iconSize + spacing)
+            entry.private:SetPoint("BOTTOMLEFT", entry.mixed, "BOTTOMLEFT", privOffX, iconSize + spacing + privOffY)
         end
         return
     end
@@ -2418,7 +2435,7 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
     if entry.private then
         local ref = entry.buffs or entry.anchor
         entry.private:ClearAllPoints()
-        entry.private:SetPoint("BOTTOMLEFT", ref, "BOTTOMLEFT", 0, iconSize + spacing)
+        entry.private:SetPoint("BOTTOMLEFT", ref, "BOTTOMLEFT", privOffX, iconSize + spacing + privOffY)
     end
 
 end
