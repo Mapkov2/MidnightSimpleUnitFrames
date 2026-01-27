@@ -2178,13 +2178,16 @@ do
             "Interface\\Icons\\Spell_Nature_StoneClawTotem",
             "Interface\\Icons\\Spell_Nature_StrengthOfEarthTotem02",
             "Interface\\Icons\\Spell_Nature_TremorTotem",
-            "Interface\\Icons\\Spell_Nature_WindfuryTotem",
+            "Interface\\Icons\\Spell_Nature_Windfury",
         }
 
         for i = 1, 4 do
             local slot = totemSlots[i]
             if slot and slot.btn then
                 slot.icon:SetTexture(icons[i] or "Interface\\Icons\\INV_Misc_QuestionMark")
+                if slot.icon.GetTexture and slot.icon:GetTexture() == nil then
+                    slot.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+                end
                 slot.btn:Show()
                 slot.shown = true
 
@@ -3300,13 +3303,15 @@ end)
         if field then panel[field] = eb end
         return eb
     end
-
-    local function _MSUF_Button(name, point, rel, relPoint, x, y, w, h, text, field)
+    local function _MSUF_Button(name, point, rel, relPoint, x, y, w, h, text, field, onClick)
         local b = CreateFrame("Button", name, content, "UIPanelButtonTemplate")
         b:SetSize(w or 60, h or 20)
         b:SetPoint(point, rel, relPoint, x or 0, y or 0)
         b:SetText(text or "")
         if field then panel[field] = b end
+        if type(onClick) == "function" then
+            b:SetScript("OnClick", onClick)
+        end
         return b
     end
 
@@ -3446,9 +3451,13 @@ end)
         panel.playerTotemsTitle = totemsTitle
 
         local totemsSub = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsTitle, "BOTTOMLEFT", 0, -2, "Player-only. Secret-safe in combat.", "playerTotemsSubText")
+
+        local totemsDismissHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsSub, "BOTTOMLEFT", 0, -2, "Note: Right-click to dismiss totems is protected by Blizzard (secure) and not supported yet.", "playerTotemsDismissHint")
+        panel.playerTotemsDismissHint = totemsDismissHint
+
         panel.playerTotemsSubText = totemsSub
 
-        local totemsCheck = _MSUF_Check("MSUF_Gameplay_PlayerTotemsCheck", "TOPLEFT", totemsSub, "BOTTOMLEFT", 0, -8, "Enable Totem tracker", "playerTotemsCheck", "enablePlayerTotems",
+        local totemsCheck = _MSUF_Check("MSUF_Gameplay_PlayerTotemsCheck", "TOPLEFT", totemsDismissHint, "BOTTOMLEFT", 0, -8, "Enable Totem tracker", "playerTotemsCheck", "enablePlayerTotems",
             function()
                 if ns and ns.MSUF_RequestGameplayApply then
                     ns.MSUF_RequestGameplayApply()
