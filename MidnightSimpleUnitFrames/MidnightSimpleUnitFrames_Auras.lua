@@ -159,7 +159,7 @@ end
 
 -- Private Auras (Blizzard anchors): per-unit enable toggles.
 if s.showPrivateAurasPlayer == nil then s.showPrivateAurasPlayer = true end
-if s.showPrivateAurasTarget == nil then s.showPrivateAurasTarget = true end
+s.showPrivateAurasTarget = false -- Target private auras removed
 if s.showPrivateAurasFocus == nil then s.showPrivateAurasFocus = true end
 if s.showPrivateAurasBoss == nil then s.showPrivateAurasBoss = true end
 
@@ -2161,7 +2161,7 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
     if unit == "player" then
         enabled = (shared.showPrivateAurasPlayer == true)
     elseif unit == "target" then
-        enabled = (shared.showPrivateAurasTarget == true)
+        enabled = false -- Target private auras removed
     elseif unit == "focus" then
         enabled = (shared.showPrivateAurasFocus == true)
     elseif unit:match("^boss%d$") then
@@ -4111,9 +4111,20 @@ local function RenderUnit(entry)
 
     local iconSize, spacing, perRow = MSUF_A2_GetEffectiveSizing(unit, shared)
 
--- Private Auras (Blizzard-rendered) anchored to this unitframe (player-only).
+-- Private Auras (Blizzard-rendered) anchored to this unitframe.
+-- Supports independent icon size via shared/privateSize + per-unit layout override (Edit Mode popup).
 if MSUF_A2_PrivateAuras_RebuildIfNeeded then
-    MSUF_A2_PrivateAuras_RebuildIfNeeded(entry, shared, iconSize, spacing, layoutMode)
+    local privIconSize = iconSize
+    if shared and type(shared.privateSize) == "number" then
+        privIconSize = shared.privateSize
+    end
+    if uconf and uconf.overrideLayout == true and type(uconf.layout) == "table" and type(uconf.layout.privateSize) == "number" then
+        privIconSize = uconf.layout.privateSize
+    end
+    if type(privIconSize) ~= "number" then privIconSize = iconSize end
+    if privIconSize < 10 then privIconSize = 10 end
+    if privIconSize > 80 then privIconSize = 80 end
+    MSUF_A2_PrivateAuras_RebuildIfNeeded(entry, shared, privIconSize, spacing, layoutMode)
 end
 
 
@@ -5633,3 +5644,17 @@ do
     API.IsMasqueReadyForToggle = API.IsMasqueReadyForToggle or MSUF_A2_IsMasqueReadyForToggle
 end
 
+
+
+-- Private Aura preview toggle helper (shared highlight flag).
+-- Used by Edit Mode popup to stay in sync with the Options menu toggle.
+if _G and type(_G.MSUF_SetPrivateAuraPreviewEnabled) ~= "function" then
+    _G.MSUF_SetPrivateAuraPreviewEnabled = function(enabled)
+        if MSUF_DB and MSUF_DB.auras2 and MSUF_DB.auras2.shared then
+            MSUF_DB.auras2.shared.highlightPrivateAuras = (enabled and true) or false
+        end
+        if _G and type(_G.MSUF_Auras2_RefreshAll) == "function" then
+            _G.MSUF_Auras2_RefreshAll()
+        end
+    end
+end

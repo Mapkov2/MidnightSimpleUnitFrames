@@ -2423,7 +2423,7 @@ end
             { "Show (Boss)", 12, -120, A2_Settings, "showPrivateAurasBoss", nil,
                 "Re-anchors Blizzard Private Auras to MSUF Boss frames.", "cbPrivateShowB" },
 
-            { "Highlight private auras", 12, -148, A2_Settings, "highlightPrivateAuras", nil,
+            { "Preview", 12, -148, A2_Settings, "highlightPrivateAuras", nil,
                 "Visual only: adds a purple border + corner marker on private aura slots.", "cbPrivateHL" },
         }, refs)
 
