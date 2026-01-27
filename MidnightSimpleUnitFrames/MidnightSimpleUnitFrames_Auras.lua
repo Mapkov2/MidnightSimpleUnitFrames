@@ -2314,6 +2314,13 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
         end
     end
 
+    -- Private Auras: position is independent from the main Buff/Debuff containers.
+    -- Apply it here so early-returns (e.g. STACKED) never skip privateOffsetX/privateOffsetY.
+    if entry.private then
+        entry.private:ClearAllPoints()
+        entry.private:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", privOffX, privOffY)
+    end
+
     local mode = layoutModeOverride or (shared.layoutMode or "SEPARATE")
 
     -- Mixed single-row layout: use one shared container (entry.mixed)
@@ -2330,7 +2337,7 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
 
         if entry.private then
             entry.private:ClearAllPoints()
-            entry.private:SetPoint("BOTTOMLEFT", entry.mixed, "BOTTOMLEFT", privOffX, iconSize + spacing + privOffY)
+            entry.private:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", privOffX, privOffY)
         end
         return
     end
@@ -2431,11 +2438,10 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
 		entry.mixed:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
 	end
 
-    -- Private Aura row is always positioned one row above the primary aura row.
+    -- Private Aura row (independent)
     if entry.private then
-        local ref = entry.buffs or entry.anchor
         entry.private:ClearAllPoints()
-        entry.private:SetPoint("BOTTOMLEFT", ref, "BOTTOMLEFT", privOffX, iconSize + spacing + privOffY)
+        entry.private:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", privOffX, privOffY)
     end
 
 end
