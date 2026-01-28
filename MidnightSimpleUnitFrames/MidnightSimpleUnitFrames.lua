@@ -129,6 +129,15 @@ end
 local function MSUF_ApplyPoint(frame, point, relFrame, relPoint, x, y)
     if not frame then return end
     frame:ClearAllPoints()
+
+    -- Pixel-perfect snap (ElvUI-style): keep anchors on the same physical-pixel grid
+    -- so 1px borders/outlines don't wobble or look uneven on non-integer UI scales.
+    local scale = _G.MSUF_Scale
+    if type(scale) == "function" then
+        if type(x) == "number" then x = scale(x) end
+        if type(y) == "number" then y = scale(y) end
+    end
+
     frame:SetPoint(point, relFrame, relPoint, x, y)
 end
 local function MSUF_SetStatusBarColor(bar, r, g, b, a)
@@ -5774,6 +5783,7 @@ MSUF_ApplyRareVisuals = function(self)
             if o.frame then o.frame:Hide() end
         end
         self._msufBarOutlineThickness = 0
+        self._msufBarOutlineEdgeSize = 0
         self._msufBarOutlineBottomIsPower = false
         return
     end
@@ -5812,23 +5822,29 @@ MSUF_ApplyRareVisuals = function(self)
     local bottomBar = pbWanted and pb or hb
     local bottomIsPower = pbWanted and true or false
 
+    -- Pixel perfect edgeSize/offsets (ElvUI-style).
+    -- thickness is in "pixels" (0-6). Convert to UI units snapped to the physical pixel grid.
+    local scale = _G.MSUF_Scale
+    local edge = (type(scale) == "function") and scale(thickness) or thickness
+
     local f = o.frame
-    if o._msufLastEdgeSize ~= thickness then
-        f:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = thickness })
+    if o._msufLastEdgeSize ~= edge then
+        f:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
         f:SetBackdropBorderColor(0, 0, 0, 1)
-        o._msufLastEdgeSize = thickness
-        self._msufBarOutlineThickness = -1
+        o._msufLastEdgeSize = edge
+        self._msufBarOutlineEdgeSize = -1
     end
 
-    if (self._msufBarOutlineThickness ~= thickness) or (self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false)) then
+    if (self._msufBarOutlineThickness ~= thickness) or (self._msufBarOutlineEdgeSize ~= edge) or (self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false)) then
         f:ClearAllPoints()
         if hb then
-            f:SetPoint("TOPLEFT", hb, "TOPLEFT", -thickness, thickness)
+            f:SetPoint("TOPLEFT", hb, "TOPLEFT", -edge, edge)
         end
         if bottomBar then
-            f:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", thickness, -thickness)
+            f:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", edge, -edge)
         end
         self._msufBarOutlineThickness = thickness
+        self._msufBarOutlineEdgeSize = edge
         self._msufBarOutlineBottomIsPower = bottomIsPower and true or false
     end
 
@@ -5837,6 +5853,43 @@ end
 
 -- Export for the unitframe core (rare visuals are still applied out-of-band).
 _G.MSUF_RefreshRareBarVisuals = MSUF_ApplyRareVisuals
+
+-- Pixel-perfect resync: if the user changes UI scale / resolution without a /reload,
+-- we still want borders/outlines to stay crisp and symmetric.
+-- These events are rare, so it's safe to do a small one-shot refresh.
+do
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("UI_SCALE_CHANGED")
+    f:RegisterEvent("DISPLAY_SIZE_CHANGED")
+    f:SetScript("OnEvent", function()
+        if type(_G.MSUF_UpdatePixelPerfect) == "function" then
+            _G.MSUF_UpdatePixelPerfect()
+        end
+
+        -- Force a fresh thickness stamp so rare-visual logic re-applies.
+        if MSUF_BarBorderCache then
+            MSUF_BarBorderCache.stamp = nil
+        end
+
+        local frames = _G.MSUF_UnitFrames or UnitFrames
+        if frames then
+            for _, uf in pairs(frames) do
+                if uf and uf.unit then
+                    uf._msufBarBorderStamp = nil
+                    uf._msufBarOutlineEdgeSize = -1
+                    if type(_G.MSUF_QueueUnitframeVisual) == "function" then
+                        _G.MSUF_QueueUnitframeVisual(uf)
+                    end
+                end
+            end
+        end
+
+        -- Castbars live in a LoD module; refresh if present.
+        if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+            _G.MSUF_UpdateCastbarVisuals()
+        end
+    end)
+end
 
 -- One-shot resync helper for PLAYER_ENTERING_WORLD (no closures; keeps load-time smooth)
 local function MSUF_PlayerEnteringWorldResync()
@@ -7880,7 +7933,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build|r  |cff565f89•|r  |cffc0caf5 Check out new Player Auras -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.8b3|r  |cff565f89•|r  |cffc0caf5 Check out new Player Auras -|r  |cfff7768eReport bugs in the Discord.|r")
 
 end, nil, true)
 
