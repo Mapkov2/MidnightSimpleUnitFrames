@@ -268,6 +268,17 @@ local _MSUF_INDICATOR_SPECS = {
 
         showCB = "playerLeaderIconCB", showField = "showLeaderIcon", showDefault = true,
 
+        ui = {
+            cbName = "MSUF_PlayerLeaderIconCB",
+            cbText = "Show leader/assist icon",
+            xName = "MSUF_PlayerLeaderIconOffsetX",
+            yName = "MSUF_PlayerLeaderIconOffsetY",
+            anchorName = "MSUF_PlayerLeaderIconAnchorDropdown",
+            anchorW = 70,
+            sizeName = "MSUF_PlayerLeaderIconSizeEdit",
+        },
+
+
         xStepper = "playerLeaderOffsetXStepper", xField = "leaderIconOffsetX", xDefault = 0,
         yStepper = "playerLeaderOffsetYStepper", yField = "leaderIconOffsetY", yDefault = 3,
 
@@ -297,6 +308,17 @@ local _MSUF_INDICATOR_SPECS = {
         allowed = function(_) return true end,
 
         showCB = "playerRaidMarkerCB", showField = "showRaidMarker", showDefault = true,
+
+        ui = {
+            cbName = "MSUF_PlayerRaidMarkerCB",
+            cbText = "Show raid marker icon",
+            xName = "MSUF_PlayerRaidMarkerOffsetX",
+            yName = "MSUF_PlayerRaidMarkerOffsetY",
+            anchorName = "MSUF_PlayerRaidMarkerAnchorDropdown",
+            anchorW = 70,
+            sizeName = "MSUF_PlayerRaidMarkerSizeEdit",
+        },
+
 
         xStepper = "playerRaidMarkerOffsetXStepper", xField = "raidMarkerOffsetX", xDefault = 16,
         yStepper = "playerRaidMarkerOffsetYStepper", yField = "raidMarkerOffsetY", yDefault = 3,
@@ -328,6 +350,17 @@ local _MSUF_INDICATOR_SPECS = {
         allowed = function(_) return true end,
 
         showCB = "playerLevelIndicatorCB", showField = "showLevelIndicator", showDefault = true,
+
+        ui = {
+            cbName = "MSUF_PlayerLevelIndicatorCB",
+            cbText = "Show level",
+            xName = "MSUF_PlayerLevelOffsetX",
+            yName = "MSUF_PlayerLevelOffsetY",
+            anchorName = "MSUF_PlayerLevelAnchorDropdown",
+            anchorW = 70,
+            sizeName = "MSUF_PlayerLevelSizeEdit",
+        },
+
 
         xStepper = "playerLevelOffsetXStepper", xField = "levelIndicatorOffsetX", xDefault = 0,
         yStepper = "playerLevelOffsetYStepper", yField = "levelIndicatorOffsetY", yDefault = 0,
@@ -1780,7 +1813,7 @@ end
 			return dd
 		end
 
-		local function _MSUF_MakeLabel(field, text)
+		local function _MSUF_MakeLabel(field, text, parentOverride)
 			if panel[field] then
 				panel[field]:SetText(text)
 				panel[field]:Hide()
@@ -1882,240 +1915,182 @@ end
 			if cb then cb:Hide() end
 		end
 
-		local _MSUF_IND_UI = {
-			leader = {
-				cbField = "playerLeaderIconCB",
-				cbName  = "MSUF_PlayerLeaderIconCB",
-				cbText  = "Show leader/assist icon",
-				xField  = "playerLeaderOffsetXStepper",
-				xName   = "MSUF_PlayerLeaderIconOffsetX",
-				yField  = "playerLeaderOffsetYStepper",
-				yName   = "MSUF_PlayerLeaderIconOffsetY",
-				dropField = "playerLeaderAnchorDrop",
-				dropName  = "MSUF_PlayerLeaderIconAnchorDropdown",
-				dropW     = 70,
-				anchorLabelField = "playerLeaderAnchorLabel",
-				sizeField  = "playerLeaderSizeEdit",
-				sizeName   = "MSUF_PlayerLeaderIconSizeEdit",
-				sizeLabelField = "playerLeaderSizeLabel",
-				resetField = "playerLeaderResetBtn",
-				dividerField = "playerLeaderGroupDivider",
+		
+		---------------------------------------------------------------------
+		-- Indicator rows (Leader / Raid Marker / Level) — spec-driven
+		---------------------------------------------------------------------
+		local function _MSUF_BuildIndicatorRow(spec, idx)
+			if not spec then return end
+			local ui = spec.ui or {}
+
+			-- Divider texture (positioned in LayoutIndicatorTemplate)
+			if spec.divider then
+				_MSUF_MakeDivider(spec.divider)
+			end
+
+			-- Toggle
+			if spec.showCB and not panel[spec.showCB] then
+				local fallbackName = "MSUF_" .. (spec.showCB:gsub("^%l", string.upper))
+				panel[spec.showCB] = CreateCheck(textGroup, ui.cbName or fallbackName, ui.cbText or "Enable", 12,
+					(IND_BASE_TOGGLE_Y + ((idx - 1) * IND_ROW_STEP)))
+			end
+			if spec.showCB and panel[spec.showCB] then
+				panel[spec.showCB]:Hide()
+			end
+
+			-- Reset button
+			if spec.resetBtn and spec.showCB then
+				_MSUF_CreateResetButton(spec.resetBtn, panel[spec.showCB])
+			end
+
+			-- X/Y steppers
+			if spec.xStepper and not panel[spec.xStepper] then
+				panel[spec.xStepper] = CreateAxisStepper(ui.xName or ("MSUF_" .. spec.xStepper), "X", textGroup,
+					spec.xDefault or 0, 0, -200, 200, 1)
+			end
+			if spec.yStepper and not panel[spec.yStepper] then
+				panel[spec.yStepper] = CreateAxisStepper(ui.yName or ("MSUF_" .. spec.yStepper), "Y", textGroup,
+					spec.yDefault or 0, 0, -200, 200, 1)
+			end
+
+			-- Anchor dropdown + label
+			if spec.anchorDrop and spec.anchorLabel then
+				panel[spec.anchorDrop]  = _MSUF_MakeDrop(spec.anchorDrop, ui.anchorName or ("MSUF_" .. spec.anchorDrop), ui.anchorW or 70)
+				panel[spec.anchorLabel] = _MSUF_MakeLabel(spec.anchorLabel, "Anchor")
+			end
+
+			-- Size edit + label
+			if spec.sizeEdit and spec.sizeLabel then
+				panel[spec.sizeEdit]  = _MSUF_MakeSizeEdit(spec.sizeEdit, ui.sizeName or ("MSUF_" .. spec.sizeEdit))
+				panel[spec.sizeLabel] = _MSUF_MakeLabel(spec.sizeLabel, "Size")
+			end
+
+			-- Relative layout: only X stepper is absolute, everything else follows.
+			_MSUF_LayoutIndicatorRow(
+				spec.showCB and panel[spec.showCB] or nil,
+				spec.xStepper and panel[spec.xStepper] or nil,
+				spec.yStepper and panel[spec.yStepper] or nil,
+				spec.anchorDrop and panel[spec.anchorDrop] or nil,
+				spec.anchorLabel and panel[spec.anchorLabel] or nil,
+				spec.sizeEdit and panel[spec.sizeEdit] or nil,
+				spec.sizeLabel and panel[spec.sizeLabel] or nil,
+				nil,
+				nil,
+				IND_COL_X,
+				IND_BASE_CTRL_Y + ((idx - 1) * IND_ROW_STEP)
+			)
+		end
+
+		for idx, id in ipairs({ "leader", "raidmarker", "level" }) do
+			_MSUF_BuildIndicatorRow(_MSUF_INDICATOR_SPECS and _MSUF_INDICATOR_SPECS[id], idx)
+		end
+
+
+		---------------------------------------------------------------------
+		-- Status Icons rows (Combat / Rested / Incoming Rez) — spec-driven
+		---------------------------------------------------------------------
+		local STATUS_ROW_SPECS = {
+			{
+				rowIndex = 0,
+				parent = panel._msufStatusIconsGroup,
+				cbField = "statusCombatIconCB",
+				cbName  = "MSUF_StatusCombatIconCB",
+				cbText  = "Combat",
+				divider = "statusCombatGroupDivider",
+				resetBtn = "statusCombatResetBtn",
+				xField = "statusCombatOffsetXStepper", xName = "MSUF_StatusCombatOffsetX",
+				yField = "statusCombatOffsetYStepper", yName = "MSUF_StatusCombatOffsetY",
+				anchorDrop = "statusCombatAnchorDrop", anchorName = "MSUF_StatusCombatAnchorDropdown", anchorLabel = "statusCombatAnchorLabel",
+				sizeEdit = "statusCombatSizeEdit", sizeName = "MSUF_StatusCombatSizeEdit", sizeLabel = "statusCombatSizeLabel",
+				iconDrop = "statusCombatSymbolDrop", iconName = "MSUF_StatusCombatSymbolDropdown", iconW = 92, iconLabel = "statusCombatSymbolLabel",
 			},
-			raidmarker = {
-				cbField = "playerRaidMarkerCB",
-				cbName  = "MSUF_PlayerRaidMarkerCB",
-				cbText  = "Show raid marker icon",
-				xField  = "playerRaidMarkerOffsetXStepper",
-				xName   = "MSUF_PlayerRaidMarkerOffsetX",
-				yField  = "playerRaidMarkerOffsetYStepper",
-				yName   = "MSUF_PlayerRaidMarkerOffsetY",
-				dropField = "playerRaidMarkerAnchorDrop",
-				dropName  = "MSUF_PlayerRaidMarkerAnchorDropdown",
-				dropW     = 70,
-				anchorLabelField = "playerRaidMarkerAnchorLabel",
-				sizeField  = "playerRaidMarkerSizeEdit",
-				sizeName   = "MSUF_PlayerRaidMarkerSizeEdit",
-				sizeLabelField = "playerRaidMarkerSizeLabel",
-				resetField = "playerRaidMarkerResetBtn",
-				dividerField = "playerRaidMarkerGroupDivider",
+			{
+				rowIndex = 1,
+				parent = panel._msufStatusIconsGroup,
+				cbField = "statusRestingIconCB",
+				cbName  = "MSUF_StatusRestingIconCB",
+				cbText  = "Rested (player only)",
+				divider = "statusRestingGroupDivider",
+				resetBtn = "statusRestingResetBtn",
+				xField = "statusRestingOffsetXStepper", xName = "MSUF_StatusRestingOffsetX",
+				yField = "statusRestingOffsetYStepper", yName = "MSUF_StatusRestingOffsetY",
+				anchorDrop = "statusRestingAnchorDrop", anchorName = "MSUF_StatusRestingAnchorDropdown", anchorLabel = "statusRestingAnchorLabel",
+				sizeEdit = "statusRestingSizeEdit", sizeName = "MSUF_StatusRestingSizeEdit", sizeLabel = "statusRestingSizeLabel",
+				iconDrop = "statusRestingSymbolDrop", iconName = "MSUF_StatusRestingSymbolDropdown", iconW = 92, iconLabel = "statusRestingSymbolLabel",
 			},
-			level = {
-				cbField = "playerLevelIndicatorCB",
-				cbName  = "MSUF_PlayerLevelIndicatorCB",
-				cbText  = "Show level",
-				xField  = "playerLevelOffsetXStepper",
-				xName   = "MSUF_PlayerLevelOffsetX",
-				yField  = "playerLevelOffsetYStepper",
-				yName   = "MSUF_PlayerLevelOffsetY",
-				dropField = "playerLevelAnchorDrop",
-				dropName  = "MSUF_PlayerLevelAnchorDropdown",
-				dropW     = 70,
-				anchorLabelField = "playerLevelAnchorLabel",
-				sizeField  = "playerLevelSizeEdit",
-				sizeName   = "MSUF_PlayerLevelSizeEdit",
-				sizeLabelField = "playerLevelSizeLabel",
-				resetField = "playerLevelResetBtn",
-				dividerField = "playerLevelGroupDivider",
+			{
+				rowIndex = 2,
+				parent = panel._msufStatusIconsGroup,
+				cbField = "statusIncomingResIconCB",
+				cbName  = "MSUF_StatusIncomingResIconCB",
+				cbText  = "Incoming Rez",
+				divider = "statusIncomingResGroupDivider",
+				resetBtn = "statusIncomingResResetBtn",
+				xField = "statusIncomingResOffsetXStepper", xName = "MSUF_StatusIncomingResOffsetX",
+				yField = "statusIncomingResOffsetYStepper", yName = "MSUF_StatusIncomingResOffsetY",
+				anchorDrop = "statusIncomingResAnchorDrop", anchorName = "MSUF_StatusIncomingResAnchorDropdown", anchorLabel = "statusIncomingResAnchorLabel",
+				sizeEdit = "statusIncomingResSizeEdit", sizeName = "MSUF_StatusIncomingResSizeEdit", sizeLabel = "statusIncomingResSizeLabel",
+				iconDrop = "statusIncomingResSymbolDrop", iconName = "MSUF_StatusIncomingResSymbolDropdown", iconW = 92, iconLabel = "statusIncomingResSymbolLabel",
 			},
 		}
 
-		for idx, id in ipairs({ "leader", "raidmarker", "level" }) do
-			local spec = _MSUF_INDICATOR_SPECS and _MSUF_INDICATOR_SPECS[id]
-			local ui = _MSUF_IND_UI[id]
-			if spec and ui then
-				-- Divider texture
-				_MSUF_MakeDivider(ui.dividerField)
+		local function _MSUF_BuildStatusRow(s)
+			local parent = s.parent or textGroup
 
-				-- Toggle
-				if not panel[ui.cbField] then
-					panel[ui.cbField] = CreateCheck(textGroup, ui.cbName, ui.cbText, 12, (IND_BASE_TOGGLE_Y + ((idx - 1) * IND_ROW_STEP)))
-				end
-				panel[ui.cbField]:Hide()
-
-				-- Reset button
-				_MSUF_CreateResetButton(ui.resetField, panel[ui.cbField])
-
-				-- X/Y steppers
-				if not panel[ui.xField] then
-					panel[ui.xField] = CreateAxisStepper(ui.xName, "X", textGroup, spec.xDefault or 0, 0, -200, 200, 1)
-				end
-				if not panel[ui.yField] then
-					panel[ui.yField] = CreateAxisStepper(ui.yName, "Y", textGroup, spec.yDefault or 0, 0, -200, 200, 1)
-				end
-
-				-- Anchor drop + label
-				if ui.dropField then
-					panel[ui.dropField] = _MSUF_MakeDrop(ui.dropField, ui.dropName, ui.dropW or 70)
-					panel[ui.anchorLabelField] = _MSUF_MakeLabel(ui.anchorLabelField, "Anchor")
-				end
-
-				-- Size edit + label (optional)
-				if ui.sizeField then
-					panel[ui.sizeField] = _MSUF_MakeSizeEdit(ui.sizeField, ui.sizeName)
-					panel[ui.sizeLabelField] = _MSUF_MakeLabel(ui.sizeLabelField, "Size")
-				end
-
-				-- Relative layout: only X stepper is absolute, everything else follows.
-				_MSUF_LayoutIndicatorRow(
-					panel[ui.cbField],
-					panel[ui.xField],
-					panel[ui.yField],
-					panel[ui.dropField],
-					panel[ui.anchorLabelField],
-					panel[ui.sizeField],
-					panel[ui.sizeLabelField],
-					nil,
-					nil,
-					IND_COL_X,
-					IND_BASE_CTRL_Y + ((idx - 1) * IND_ROW_STEP)
-				)
+			if s.divider then
+				_MSUF_MakeDivider(s.divider, parent)
 			end
--- ------------------------------------------------------------
--- Status Icons (Step 1): Combat row controls built like Indicator
--- (Player/Target only; Rested/Incoming Rez/TestMode stay as simple toggles for now)
--- ------------------------------------------------------------
-_MSUF_MakeDivider("statusCombatGroupDivider", panel._msufStatusIconsGroup)
 
--- Reuse existing combat toggle checkbox created above
-if panel.statusCombatIconCB then
-	_MSUF_CreateResetButton("statusCombatResetBtn", panel.statusCombatIconCB, panel._msufStatusIconsGroup)
-end
+			-- Toggle (usually already created above)
+			if not panel[s.cbField] then
+				panel[s.cbField] = CreateCheck(parent, s.cbName, s.cbText, 12, STATUS_BASE_TOGGLE_Y + (s.rowIndex * STATUS_ROW_STEP))
+			end
+			if panel[s.cbField] then panel[s.cbField]:Hide() end
 
-if not panel.statusCombatOffsetXStepper then
-	panel.statusCombatOffsetXStepper = CreateAxisStepper("MSUF_StatusCombatOffsetX", "X", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
-end
-if not panel.statusCombatOffsetYStepper then
-	panel.statusCombatOffsetYStepper = CreateAxisStepper("MSUF_StatusCombatOffsetY", "Y", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
-end
+			-- Reset button
+			_MSUF_CreateResetButton(s.resetBtn, panel[s.cbField], parent)
 
-panel.statusCombatAnchorDrop  = panel.statusCombatAnchorDrop  or _MSUF_MakeDrop("statusCombatAnchorDrop", "MSUF_StatusCombatAnchorDropdown", 70, panel._msufStatusIconsGroup)
-panel.statusCombatAnchorLabel = panel.statusCombatAnchorLabel or _MSUF_MakeLabel("statusCombatAnchorLabel", "Anchor", panel._msufStatusIconsGroup)
+			-- X/Y steppers
+			if not panel[s.xField] then
+				panel[s.xField] = CreateAxisStepper(s.xName, "X", parent, 0, 0, -200, 200, 1)
+			end
+			if not panel[s.yField] then
+				panel[s.yField] = CreateAxisStepper(s.yName, "Y", parent, 0, 0, -200, 200, 1)
+			end
 
-panel.statusCombatSizeEdit  = panel.statusCombatSizeEdit  or _MSUF_MakeSizeEdit("statusCombatSizeEdit", "MSUF_StatusCombatSizeEdit", panel._msufStatusIconsGroup)
-panel.statusCombatSizeLabel = panel.statusCombatSizeLabel or _MSUF_MakeLabel("statusCombatSizeLabel", "Size", panel._msufStatusIconsGroup)
-panel.statusCombatSymbolDrop  = panel.statusCombatSymbolDrop  or _MSUF_MakeDrop("statusCombatSymbolDrop", "MSUF_StatusCombatSymbolDropdown", 92, panel._msufStatusIconsGroup)
-panel.statusCombatSymbolLabel = panel.statusCombatSymbolLabel or _MSUF_MakeLabel("statusCombatSymbolLabel", "Icon", panel._msufStatusIconsGroup)
+			-- Anchor dropdown + label
+			panel[s.anchorDrop]  = panel[s.anchorDrop]  or _MSUF_MakeDrop(s.anchorDrop, s.anchorName, 70, parent)
+			panel[s.anchorLabel] = panel[s.anchorLabel] or _MSUF_MakeLabel(s.anchorLabel, "Anchor", parent)
 
--- Relative layout: only X stepper is absolute, everything else follows.
-_MSUF_LayoutIndicatorRow(
-	panel.statusCombatIconCB,
-	panel.statusCombatOffsetXStepper,
-	panel.statusCombatOffsetYStepper,
-	panel.statusCombatAnchorDrop,
-	panel.statusCombatAnchorLabel,
-	panel.statusCombatSizeEdit,
-	panel.statusCombatSizeLabel,
-	panel.statusCombatSymbolDrop,
-	panel.statusCombatSymbolLabel,
-	IND_COL_X,
-	STATUS_BASE_CTRL_Y + (0 * STATUS_ROW_STEP)
-)
+			-- Size edit + label
+			panel[s.sizeEdit]  = panel[s.sizeEdit]  or _MSUF_MakeSizeEdit(s.sizeEdit, s.sizeName, parent)
+			panel[s.sizeLabel] = panel[s.sizeLabel] or _MSUF_MakeLabel(s.sizeLabel, "Size", parent)
 
--- ------------------------------------------------------------
--- Status Icons (Step 2): Rested row controls built like Indicator
--- (Player only)
--- ------------------------------------------------------------
-_MSUF_MakeDivider("statusRestingGroupDivider", panel._msufStatusIconsGroup)
+			-- Icon dropdown + label
+			panel[s.iconDrop]  = panel[s.iconDrop]  or _MSUF_MakeDrop(s.iconDrop, s.iconName, s.iconW or 92, parent)
+			panel[s.iconLabel] = panel[s.iconLabel] or _MSUF_MakeLabel(s.iconLabel, "Icon", parent)
 
--- Reuse existing rested toggle checkbox created above
-if panel.statusRestingIconCB then
-	_MSUF_CreateResetButton("statusRestingResetBtn", panel.statusRestingIconCB, panel._msufStatusIconsGroup)
-end
-
-if not panel.statusRestingOffsetXStepper then
-	panel.statusRestingOffsetXStepper = CreateAxisStepper("MSUF_StatusRestingOffsetX", "X", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
-end
-if not panel.statusRestingOffsetYStepper then
-	panel.statusRestingOffsetYStepper = CreateAxisStepper("MSUF_StatusRestingOffsetY", "Y", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
-end
-
-panel.statusRestingAnchorDrop  = panel.statusRestingAnchorDrop  or _MSUF_MakeDrop("statusRestingAnchorDrop", "MSUF_StatusRestingAnchorDropdown", 70, panel._msufStatusIconsGroup)
-panel.statusRestingAnchorLabel = panel.statusRestingAnchorLabel or _MSUF_MakeLabel("statusRestingAnchorLabel", "Anchor", panel._msufStatusIconsGroup)
-
-panel.statusRestingSizeEdit  = panel.statusRestingSizeEdit  or _MSUF_MakeSizeEdit("statusRestingSizeEdit", "MSUF_StatusRestingSizeEdit", panel._msufStatusIconsGroup)
-panel.statusRestingSizeLabel = panel.statusRestingSizeLabel or _MSUF_MakeLabel("statusRestingSizeLabel", "Size", panel._msufStatusIconsGroup)
-panel.statusRestingSymbolDrop  = panel.statusRestingSymbolDrop  or _MSUF_MakeDrop("statusRestingSymbolDrop", "MSUF_StatusRestingSymbolDropdown", 92, panel._msufStatusIconsGroup)
-panel.statusRestingSymbolLabel = panel.statusRestingSymbolLabel or _MSUF_MakeLabel("statusRestingSymbolLabel", "Icon", panel._msufStatusIconsGroup)
-
--- Relative layout: only X stepper is absolute, everything else follows.
-_MSUF_LayoutIndicatorRow(
-	panel.statusRestingIconCB,
-	panel.statusRestingOffsetXStepper,
-	panel.statusRestingOffsetYStepper,
-	panel.statusRestingAnchorDrop,
-	panel.statusRestingAnchorLabel,
-	panel.statusRestingSizeEdit,
-	panel.statusRestingSizeLabel,
-	panel.statusRestingSymbolDrop,
-	panel.statusRestingSymbolLabel,
-	IND_COL_X,
-	STATUS_BASE_CTRL_Y + (1 * STATUS_ROW_STEP)
-)
-
+			-- Relative layout: only X stepper is absolute, everything else follows.
+			_MSUF_LayoutIndicatorRow(
+				panel[s.cbField],
+				panel[s.xField],
+				panel[s.yField],
+				panel[s.anchorDrop],
+				panel[s.anchorLabel],
+				panel[s.sizeEdit],
+				panel[s.sizeLabel],
+				panel[s.iconDrop],
+				panel[s.iconLabel],
+				IND_COL_X,
+				STATUS_BASE_CTRL_Y + (s.rowIndex * STATUS_ROW_STEP)
+			)
 		end
--- ------------------------------------------------------------
--- Status Icons (Step 3): Incoming Rez row controls built like Indicator
--- (Player/Target)
--- ------------------------------------------------------------
-_MSUF_MakeDivider("statusIncomingResGroupDivider", panel._msufStatusIconsGroup)
 
--- Reuse existing incoming rez toggle checkbox created above
-if panel.statusIncomingResIconCB then
-	_MSUF_CreateResetButton("statusIncomingResResetBtn", panel.statusIncomingResIconCB, panel._msufStatusIconsGroup)
-end
+		for i = 1, #STATUS_ROW_SPECS do
+			_MSUF_BuildStatusRow(STATUS_ROW_SPECS[i])
+		end
 
-if not panel.statusIncomingResOffsetXStepper then
-	panel.statusIncomingResOffsetXStepper = CreateAxisStepper("MSUF_StatusIncomingResOffsetX", "X", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
-end
-if not panel.statusIncomingResOffsetYStepper then
-	panel.statusIncomingResOffsetYStepper = CreateAxisStepper("MSUF_StatusIncomingResOffsetY", "Y", panel._msufStatusIconsGroup or textGroup, 0, 0, -200, 200, 1)
-end
-
-panel.statusIncomingResAnchorDrop  = panel.statusIncomingResAnchorDrop  or _MSUF_MakeDrop("statusIncomingResAnchorDrop", "MSUF_StatusIncomingResAnchorDropdown", 70, panel._msufStatusIconsGroup)
-panel.statusIncomingResAnchorLabel = panel.statusIncomingResAnchorLabel or _MSUF_MakeLabel("statusIncomingResAnchorLabel", "Anchor", panel._msufStatusIconsGroup)
-
-panel.statusIncomingResSizeEdit  = panel.statusIncomingResSizeEdit  or _MSUF_MakeSizeEdit("statusIncomingResSizeEdit", "MSUF_StatusIncomingResSizeEdit", panel._msufStatusIconsGroup)
-panel.statusIncomingResSizeLabel = panel.statusIncomingResSizeLabel or _MSUF_MakeLabel("statusIncomingResSizeLabel", "Size", panel._msufStatusIconsGroup)
-panel.statusIncomingResSymbolDrop  = panel.statusIncomingResSymbolDrop  or _MSUF_MakeDrop("statusIncomingResSymbolDrop", "MSUF_StatusIncomingResSymbolDropdown", 92, panel._msufStatusIconsGroup)
-panel.statusIncomingResSymbolLabel = panel.statusIncomingResSymbolLabel or _MSUF_MakeLabel("statusIncomingResSymbolLabel", "Icon", panel._msufStatusIconsGroup)
-
--- Relative layout: only X stepper is absolute, everything else follows.
-_MSUF_LayoutIndicatorRow(
-	panel.statusIncomingResIconCB,
-	panel.statusIncomingResOffsetXStepper,
-	panel.statusIncomingResOffsetYStepper,
-	panel.statusIncomingResAnchorDrop,
-	panel.statusIncomingResAnchorLabel,
-	panel.statusIncomingResSizeEdit,
-	panel.statusIncomingResSizeLabel,
-	panel.statusIncomingResSymbolDrop,
-	panel.statusIncomingResSymbolLabel,
-	IND_COL_X,
-	STATUS_BASE_CTRL_Y + (2 * STATUS_ROW_STEP)
-)
-
-
-    local function _MSUF_BuildCopyUI(spec)
+		local function _MSUF_BuildCopyUI(spec)
         local prefix    = spec.prefix
         local destVar   = spec.destVar
         local default   = spec.defaultDest
