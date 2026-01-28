@@ -6,17 +6,13 @@ local function MSUF_LeftJustifyButtonText(btn, leftPad)
     if not fs then return end
     if fs.SetJustifyH then fs:SetJustifyH("LEFT") end
     if fs.ClearAllPoints and fs.SetPoint then
-        fs:ClearAllPoints()
-        fs:SetPoint("LEFT", btn, "LEFT", leftPad, 0)
+        fs:ClearAllPoints(); fs:SetPoint("LEFT", btn, "LEFT", leftPad, 0)
         fs:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
     end
 end
-_G.MSUF_LeftJustifyButtonText = _G.MSUF_LeftJustifyButtonText or MSUF_LeftJustifyButtonText
-_G.LeftJustify = _G.LeftJustify or MSUF_LeftJustifyButtonText
-local MSUF_BuildTools; local MSUF_CapturePanelState; local MSUF_RestorePanelState; local MSUF_SaveWindowGeometry; local MSUF_LoadWindowGeometry
-local MSUF_AddTooltip; local MSUF_RegisterEscClose; local MSUF_PickSessionTip; local MSUF_SkinButton; local MSUF_BuildButtonRow
-local MSUF_BuildButtonRowTL
-MSUF_CapturePanelState = MSUF_CapturePanelState or function(panel)
+_G.MSUF_LeftJustifyButtonText = _G.MSUF_LeftJustifyButtonText or MSUF_LeftJustifyButtonText; _G.LeftJustify = _G.LeftJustify or MSUF_LeftJustifyButtonText
+local MSUF_BuildTools; local MSUF_CapturePanelState; local MSUF_RestorePanelState; local MSUF_SaveWindowGeometry; local MSUF_LoadWindowGeometry; local MSUF_AddTooltip; local MSUF_RegisterEscClose; local MSUF_PickSessionTip; local MSUF_SkinButton; local MSUF_BuildButtonRow
+local MSUF_BuildButtonRowTL; MSUF_CapturePanelState = MSUF_CapturePanelState or function(panel)
     local st = {}; local sf = panel and (panel.ScrollFrame or panel.scrollFrame or panel.scroll or panel.Scroll or panel.scrollChild)
     if sf and sf.GetVerticalScroll then st.vScroll = sf:GetVerticalScroll() end
     return st
@@ -44,40 +40,25 @@ local function MSUF_UpdateHomePanel(panel)
     local tip = S and S.mirror and S.mirror.tipText
     if not tip and _G and type(_G.MSUF_GetNextTip) == "function" then
         tip = _G.MSUF_GetNextTip()
-        if S and S.mirror then
-            S.mirror.tipText = tip
-        end
+        if S and S.mirror then S.mirror.tipText = tip end
     end
     if tip and panel._msufTipText and panel._msufTipText.SetText then
         panel._msufTipText:SetText(tip)
-        if type(MSUF_ForceItalicFont) == "function" then
-            MSUF_ForceItalicFont(panel._msufTipText)
-        end
-        if panel._msufTipText.SetAlpha then
-            panel._msufTipText:SetAlpha(0.82)
-        end
+        if type(MSUF_ForceItalicFont) == "function" then MSUF_ForceItalicFont(panel._msufTipText) end
+        if panel._msufTipText.SetAlpha then panel._msufTipText:SetAlpha(0.82) end
     end
-    if S and S.mirror and S.mirror.homeToolsApi and S.mirror.homeToolsApi.Refresh then
-        pcall(S.mirror.homeToolsApi.Refresh)
-    end
+    if S and S.mirror and S.mirror.homeToolsApi and S.mirror.homeToolsApi.Refresh then pcall(S.mirror.homeToolsApi.Refresh) end
     local win = _G and _G.MSUF_StandaloneOptionsWindow; local b = win and win._msufDashEditBtn
-    if b and b._msufSetSelected and type(MSUF_IsMSUFEditModeActive) == "function" then
-        b:_msufSetSelected(MSUF_IsMSUFEditModeActive())
-    end
+    if b and b._msufSetSelected and type(MSUF_IsMSUFEditModeActive) == "function" then b:_msufSetSelected(MSUF_IsMSUFEditModeActive()) end
     local prof = (_G and _G.MSUF_ActiveProfile) or "Default"
-    if panel._msufProfileValue and panel._msufProfileValue.SetText then
-        panel._msufProfileValue:SetText(prof)
-    end
+    if panel._msufProfileValue and panel._msufProfileValue.SetText then panel._msufProfileValue:SetText(prof) end
     if panel._msufStatusLine and panel._msufStatusLine.SetText then
-        local edit = (type(MSUF_IsMSUFEditModeActive) == "function" and MSUF_IsMSUFEditModeActive()) and "On" or "Off"
-        local combat = (InCombatLockdown and InCombatLockdown()) and "In combat" or "Out of combat"
+        local edit = (type(MSUF_IsMSUFEditModeActive) == "function" and MSUF_IsMSUFEditModeActive()) and "On" or "Off"; local combat = (InCombatLockdown and InCombatLockdown()) and "In combat" or "Out of combat"
         panel._msufStatusLine:SetText("Profile: " .. tostring(prof) .. "   •   Edit Mode: " .. edit .. "   •   " .. combat)
     end
 end
 local function MSUF_Print(msg)
-    if type(print) == "function" then
-        print("|cff00ff00MSUF:|r " .. tostring(msg))
-    end
+    if type(print) == "function" then print("|cff00ff00MSUF:|r " .. tostring(msg)) end
 end
 local function clamp(v, lo, hi)
     if v < lo then return lo end
@@ -90,15 +71,12 @@ local function MSUF_SafeCall(fn, ...)
     if ok then return a, b, c, d, e end
 end
 local function MSUF_RefreshApi(api)
-    if api and api.Refresh then
-        return api.Refresh()
-    end
+    if api and api.Refresh then return api.Refresh() end
 end
 local function MSUF_SetEnabled(w, enabled)
     if not w then return end
     if w.SetEnabled then
-        w:SetEnabled(enabled and true or false)
-        return
+        w:SetEnabled(enabled and true or false); return
     end
     if enabled then
         if w.Enable then w:Enable() end
@@ -113,12 +91,8 @@ local function UI_Button(parent, text, w, h, a1, rel, a2, x, y, onClick, templat
     if w and h then b:SetSize(w, h) end
     if a1 then b:SetPoint(a1, rel or parent, a2 or a1, x or 0, y or 0) end
     if text ~= nil and b.SetText then b:SetText(text) end
-    if type(MSUF_SkinButton) == "function" then
-        MSUF_SkinButton(b)
-    end
-    if onClick then
-        b:SetScript("OnClick", onClick)
-    end
+    if type(MSUF_SkinButton) == "function" then MSUF_SkinButton(b) end
+    if onClick then b:SetScript("OnClick", onClick) end
     return b
 end
 local function UI_CloseButton(parent, a1, rel, a2, x, y, onClick)
@@ -130,9 +104,7 @@ end
 local function UI_Btn(parent, text, w, h, a1, rel, a2, x, y, onClick, tipTitle, tipBody, skinFn, template)
     local b = UI_Button(parent, text, w, h, a1, rel, a2, x, y, onClick, template)
     if skinFn then skinFn(b) end
-    if MSUF_AddTooltip and tipTitle then
-        MSUF_AddTooltip(b, tipTitle, tipBody)
-    end
+    if MSUF_AddTooltip and tipTitle then MSUF_AddTooltip(b, tipTitle, tipBody) end
     return b
 end
 local function UI_Text(parent, font, a1, rel, a2, x, y, txt, skinFn)
@@ -148,9 +120,7 @@ local function UI_Check(parent, label, a1, rel, a2, x, y, onClick, tipTitle, tip
     if cb.Text and cb.Text.SetText then cb.Text:SetText(label or "") end
     if skinFn and cb.Text then skinFn(cb.Text) end
     if onClick then cb:SetScript("OnClick", onClick) end
-    if MSUF_AddTooltip and tipTitle then
-        MSUF_AddTooltip(cb, tipTitle, tipBody)
-    end
+    if MSUF_AddTooltip and tipTitle then MSUF_AddTooltip(cb, tipTitle, tipBody) end
     return cb
 end
 local function MSUF_LayoutColumn(parent, startX, startY, defaultRowH, defaultGap)
@@ -162,13 +132,11 @@ local function MSUF_LayoutColumn(parent, startX, startY, defaultRowH, defaultGap
         gap = defaultGap or 6,
     }
     function L:Row(h, gap)
-        local x, y = self.x, self.y
-        self.y = self.y - (h or self.rowH) - (gap or self.gap)
+        local x, y = self.x, self.y; self.y = self.y - (h or self.rowH) - (gap or self.gap)
         return x, y
     end
     function L:MoveY(dy)
-        self.y = self.y + (dy or 0)
-        return self
+        self.y = self.y + (dy or 0); return self
     end
     function L:At(dx, dy)
         return self.x + (dx or 0), self.y + (dy or 0)
@@ -197,11 +165,8 @@ function MSUF_BuildButtonRowTL(parent, x, y, defs, defaultGap)
         else
             b = UI_Btn(parent, d.text, d.w, d.h, "LEFT", prev, "RIGHT", gap, 0, d.onClick, d.tipTitle, d.tipBody, d.skinFn, d.template)
         end
-        out[i] = b
-        prev = b
-        if d.post then
-            pcall(d.post, b)
-        end
+        out[i] = b; prev = b
+        if d.post then pcall(d.post, b) end
     end
 function MSUF_BuildButtonRow(parent, anchorFrame, a1, a2, x, y, defs, defaultGap)
     local out, prev = {}, nil
@@ -215,8 +180,7 @@ function MSUF_BuildButtonRow(parent, anchorFrame, a1, a2, x, y, defs, defaultGap
         else
             b = UI_Btn(parent, d.text, d.w, d.h, "LEFT", prev, "RIGHT", gap, 0, d.onClick, d.tipTitle, d.tipBody, d.skinFn, d.template)
         end
-        out[i] = b
-        prev = b
+        out[i] = b; prev = b
         if d.post then pcall(d.post, b) end
     end
     return out
@@ -228,21 +192,14 @@ local function UI_BtnTo(parent, text, w, h, anchor, relPoint, x, y, onClick, tip
 end
 local function MSUF_AttachManualResizeGrip(frame)
     if not frame or frame._msufResizeGrip then return end
-    local grip = CreateFrame("Button", nil, frame)
-    grip:SetSize(16, 16)
-    grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
-    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    local grip = CreateFrame("Button", nil, frame); grip:SetSize(16, 16)
+    grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2); grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight"); grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     local function Stop()
         if not frame._msufResizing then return end
         frame._msufResizing = false
-        if grip and grip.SetScript then
-            grip:SetScript("OnUpdate", nil)
-        end
-        if MSUF_SaveWindowGeometry then
-            MSUF_SaveWindowGeometry(frame, frame._msufGeomKey or "full")
-        end
+        if grip and grip.SetScript then grip:SetScript("OnUpdate", nil) end
+        if MSUF_SaveWindowGeometry then MSUF_SaveWindowGeometry(frame, frame._msufGeomKey or "full") end
     end
     grip:SetScript("OnMouseDown", function(self, btn)
         if btn ~= "LeftButton" then return end
@@ -262,15 +219,11 @@ local function MSUF_AttachManualResizeGrip(frame)
             frame:SetSize(clamp(newW, minW, maxW), clamp(newH, minH, maxH))
         end)
     end)
-    grip:SetScript("OnMouseUp", Stop)
-    grip:SetScript("OnHide", Stop)
+    grip:SetScript("OnMouseUp", Stop); grip:SetScript("OnHide", Stop)
     do
-        local prev = frame.GetScript and frame:GetScript("OnMouseUp")
-        frame:SetScript("OnMouseUp", function(self, btn)
+        local prev = frame.GetScript and frame:GetScript("OnMouseUp"); frame:SetScript("OnMouseUp", function(self, btn)
             Stop()
-            if prev then
-                pcall(prev, self, btn)
-            end
+            if prev then pcall(prev, self, btn) end
         end)
     end
     frame._msufResizeGrip = grip
@@ -278,9 +231,7 @@ local function MSUF_AttachManualResizeGrip(frame)
 end
 local function MSUF_EnsureGeneral()
     MSUF_SafeCall(EnsureDB)
-    if type(MSUF_DB) ~= "table" then
-        return nil
-    end
+    if type(MSUF_DB) ~= "table" then return nil end
     MSUF_DB.general = MSUF_DB.general or {}
     return MSUF_DB.general
 end
@@ -293,9 +244,7 @@ MSUF_RegisterEscClose = function(frame)
     if not name or name == "" then return end
     if type(UISpecialFrames) == "table" then
         for _, v in ipairs(UISpecialFrames) do
-            if v == name then
-                return
-            end
+            if v == name then return end
         end
         table.insert(UISpecialFrames, name)
     end
@@ -348,9 +297,7 @@ MSUF_LoadWindowGeometry = function(frame, which, defaultW, defaultH, defaultPoin
     if w and h then
         w = clamp(w, minW, maxW)
         h = clamp(h, minH, maxH)
-        if frame.SetSize then
-            frame:SetSize(w, h)
-        end
+        if frame.SetSize then frame:SetSize(w, h) end
     end
     if frame.ClearAllPoints and frame.SetPoint then
         frame:ClearAllPoints()
@@ -362,12 +309,8 @@ MSUF_AddTooltip = function(widget, title, body)
     widget:SetScript("OnEnter", function(self)
         if not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        if title and title ~= "" then
-            GameTooltip:SetText(title, 1, 1, 1)
-        end
-        if body and body ~= "" then
-            GameTooltip:AddLine(body, 0.80, 0.86, 1.00, true)
-        end
+        if title and title ~= "" then GameTooltip:SetText(title, 1, 1, 1) end
+        if body and body ~= "" then GameTooltip:AddLine(body, 0.80, 0.86, 1.00, true) end
         GameTooltip:Show()
     end)
     widget:SetScript("OnLeave", function()
@@ -377,9 +320,7 @@ end
 local MSUF_GetNextTip
 MSUF_PickSessionTip = function()
     local tip = (_G.MSUF_GetNextTip and _G.MSUF_GetNextTip())
-    if tip then
-        S.mirror.tipText = tip
-    end
+    if tip then S.mirror.tipText = tip end
 end
 local MSUF_THEME = {
     bgR = 0.03, bgG = 0.05, bgB = 0.12, bgA = 0.95,
@@ -451,16 +392,11 @@ local function MSUF_EnsureSuperellipseLayers(btn, inset)
     if btn.HookScript and not btn._msufSE3Hooked then
         btn._msufSE3Hooked = true
         btn:HookScript("OnSizeChanged", function()
-            Layout(border, 1)
-            Layout(fill, math.max(2, inset))
+            Layout(border, 1); Layout(fill, math.max(2, inset))
         end)
     end
-    if border and border.SetVertexColor then
-        border:SetVertexColor(MSUF_PILL_EDGE_R, MSUF_PILL_EDGE_G, MSUF_PILL_EDGE_B, MSUF_PILL_EDGE_A)
-    end
-    if fill and fill.SetVertexColor then
-        fill:SetVertexColor(MSUF_THEME.bgR, MSUF_THEME.bgG, MSUF_THEME.bgB, 0.90)
-    end
+    if border and border.SetVertexColor then border:SetVertexColor(MSUF_PILL_EDGE_R, MSUF_PILL_EDGE_G, MSUF_PILL_EDGE_B, MSUF_PILL_EDGE_A) end
+    if fill and fill.SetVertexColor then fill:SetVertexColor(MSUF_THEME.bgR, MSUF_THEME.bgG, MSUF_THEME.bgB, 0.90) end
     return fill, border
 end
 local MSUF_TIPS = {
@@ -482,9 +418,7 @@ local MSUF_TIPS = {
 }
 MSUF_GetNextTip = function()
     local tips = MSUF_TIPS
-    if not tips or #tips == 0 then
-        return nil, 0, 0
-    end
+    if not tips or #tips == 0 then return nil, 0, 0 end
     local general = MSUF_EnsureGeneral(); local idx = 1
     if general then
         idx = (tonumber(general.tipCycleIndex) or 0) + 1
@@ -546,9 +480,7 @@ local function MSUF_DeepCopy(src, depth)
 end
 local function MSUF_CopyValue(v)
   if type(v) ~= "table" then return v end
-  if type(CopyTable) == "function" then
-    return CopyTable(v)
-  end
+  if type(CopyTable) == "function" then return CopyTable(v) end
   return MSUF_DeepCopy(v)
 end
 local MSUF_ShowReloadRecommendedPopup
@@ -558,9 +490,7 @@ local function MSUF_ApplyPreset(presetName)
     print("|cffff3333MSUF:|r Preset not found: " .. tostring(presetName))
     return
   end
-  if type(MSUF_InitProfiles) == "function" then
-    pcall(MSUF_InitProfiles)
-  end
+  if type(MSUF_InitProfiles) == "function" then pcall(MSUF_InitProfiles) end
   if type(MSUF_DB) ~= "table" then
     print("|cffff3333MSUF:|r DB not ready (MSUF_DB missing).")
     return
@@ -575,9 +505,7 @@ local function MSUF_ApplyPreset(presetName)
         if type(ApplyAllSettings) == "function" then pcall(ApplyAllSettings) end
         if type(UpdateAllFonts) == "function" then pcall(UpdateAllFonts) end
         print("|cff00ff00MSUF:|r Loaded preset: " .. tostring(presetName))
-        if type(MSUF_ShowReloadRecommendedPopup) == "function" then
-          MSUF_ShowReloadRecommendedPopup("Preset: " .. tostring(presetName))
-        end
+        if type(MSUF_ShowReloadRecommendedPopup) == "function" then MSUF_ShowReloadRecommendedPopup("Preset: " .. tostring(presetName)) end
         return
       else
         print("|cffff3333MSUF:|r Cannot load this preset (MSUF_ImportFromString missing).")
@@ -587,23 +515,13 @@ local function MSUF_ApplyPreset(presetName)
   MSUF_WipeTable(MSUF_DB)
   for _, key in ipairs(MSUF_PRESET_ALLOWED_KEYS) do
     local val = preset[key]
-    if val ~= nil then
-      MSUF_DB[key] = MSUF_CopyValue(val)
-    end
+    if val ~= nil then MSUF_DB[key] = MSUF_CopyValue(val) end
   end
-  if type(EnsureDB) == "function" then
-    pcall(EnsureDB)
-  end
-  if type(ApplyAllSettings) == "function" then
-    pcall(ApplyAllSettings)
-  end
-  if type(UpdateAllFonts) == "function" then
-    pcall(UpdateAllFonts)
-  end
+  if type(EnsureDB) == "function" then pcall(EnsureDB) end
+  if type(ApplyAllSettings) == "function" then pcall(ApplyAllSettings) end
+  if type(UpdateAllFonts) == "function" then pcall(UpdateAllFonts) end
   print("|cff00ff00MSUF:|r Loaded preset: " .. tostring(presetName))
-  if type(MSUF_ShowReloadRecommendedPopup) == "function" then
-    MSUF_ShowReloadRecommendedPopup("Preset: " .. tostring(presetName))
-  end
+  if type(MSUF_ShowReloadRecommendedPopup) == "function" then MSUF_ShowReloadRecommendedPopup("Preset: " .. tostring(presetName)) end
 end
 local function MSUF_GetPresetNames()
   local names = {}
@@ -634,9 +552,7 @@ local function MSUF_ShowPresetConfirm(presetName)
       hideOnEscape = 1,
       preferredIndex = 3,
       OnAccept = function()
-        if MSUF_PENDING_PRESET then
-          MSUF_ApplyPreset(MSUF_PENDING_PRESET)
-        end
+        if MSUF_PENDING_PRESET then MSUF_ApplyPreset(MSUF_PENDING_PRESET) end
         MSUF_PENDING_PRESET = nil
       end,
       OnCancel = function()
@@ -665,9 +581,7 @@ MSUF_ShowReloadRecommendedPopup = function(label)
     return
   end
   MSUF_PENDING_RELOAD_RECOMMEND_LABEL = tostring(label or "")
-  if MSUF_PENDING_RELOAD_RECOMMEND_LABEL == "" then
-    MSUF_PENDING_RELOAD_RECOMMEND_LABEL = "these changes"
-  end
+  if MSUF_PENDING_RELOAD_RECOMMEND_LABEL == "" then MSUF_PENDING_RELOAD_RECOMMEND_LABEL = "these changes" end
   if not StaticPopupDialogs["MSUF_RELOAD_RECOMMENDED"] then
     StaticPopupDialogs["MSUF_RELOAD_RECOMMENDED"] = {
       text = "MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?",
@@ -679,9 +593,7 @@ MSUF_ShowReloadRecommendedPopup = function(label)
       preferredIndex = 3,
       OnAccept = function()
         MSUF_PENDING_RELOAD_RECOMMEND_LABEL = nil
-        if type(ReloadUI) == "function" then
-          ReloadUI()
-        end
+        if type(ReloadUI) == "function" then ReloadUI() end
       end,
       OnCancel = function()
         MSUF_PENDING_RELOAD_RECOMMEND_LABEL = nil
@@ -708,16 +620,12 @@ local function MSUF_ShowReloadConfirm(label, fn)
       hideOnEscape = 1,
       preferredIndex = 3,
       OnAccept = function()
-        local f = MSUF_PENDING_RELOAD_FN
-        MSUF_PENDING_RELOAD_FN = nil
+        local f = MSUF_PENDING_RELOAD_FN; MSUF_PENDING_RELOAD_FN = nil
         MSUF_PENDING_RELOAD_LABEL = nil
-        if type(f) == "function" then
-          pcall(f)
-        end
+        if type(f) == "function" then pcall(f) end
       end,
       OnCancel = function()
-        MSUF_PENDING_RELOAD_FN = nil
-        MSUF_PENDING_RELOAD_LABEL = nil
+        MSUF_PENDING_RELOAD_FN = nil; MSUF_PENDING_RELOAD_LABEL = nil
       end,
     }
   end
@@ -766,26 +674,19 @@ local function MSUF_EnsureCopyLinkPopup()
     ok:SetPoint("BOTTOM", f, "BOTTOM", 0, 12)
     ok:SetText(OKAY)
     ok:SetScript("OnClick", function() f:Hide() end)
-    if type(MSUF_SkinButton) == "function" then
-        MSUF_SkinButton(ok)
-    end
+    if type(MSUF_SkinButton) == "function" then MSUF_SkinButton(ok) end
     f:SetScript("OnShow", function(self)
-        if self._msufTitleFS then
-            self._msufTitleFS:SetText(self._msufTitle or "Link")
-        end
+        if self._msufTitleFS then self._msufTitleFS:SetText(self._msufTitle or "Link") end
         if self._msufEditBox then
-            self._msufEditBox:SetText(self._msufUrl or "")
-            self._msufEditBox:HighlightText()
+            self._msufEditBox:SetText(self._msufUrl or ""); self._msufEditBox:HighlightText()
             self._msufEditBox:SetFocus()
         end
     end)
     f:SetScript("OnHide", function(self)
         if self._msufEditBox then
-            self._msufEditBox:SetText("")
-            self._msufEditBox:ClearFocus()
+            self._msufEditBox:SetText(""); self._msufEditBox:ClearFocus()
         end
-        self._msufTitle = nil
-        self._msufUrl = nil
+        self._msufTitle = nil; self._msufUrl = nil
     end)
     f:Hide()
     MSUF_CopyLinkPopup = f
@@ -813,24 +714,16 @@ local function MSUF_ApplyMidnightBackdrop(frame, alphaOverride)
     })
     local a = alphaOverride or MSUF_THEME.bgA
     frame:SetBackdropColor(MSUF_THEME.bgR, MSUF_THEME.bgG, MSUF_THEME.bgB, a)
-    if frame.SetBackdropBorderColor then
-        frame:SetBackdropBorderColor(MSUF_THEME.edgeR, MSUF_THEME.edgeG, MSUF_THEME.edgeB, MSUF_THEME.edgeA)
-    end
+    if frame.SetBackdropBorderColor then frame:SetBackdropBorderColor(MSUF_THEME.edgeR, MSUF_THEME.edgeG, MSUF_THEME.edgeB, MSUF_THEME.edgeA) end
 end
 local function MSUF_SkinTitle(fs)
-    if fs and fs.SetTextColor then
-        fs:SetTextColor(MSUF_THEME.titleR, MSUF_THEME.titleG, MSUF_THEME.titleB, MSUF_THEME.titleA)
-    end
+    if fs and fs.SetTextColor then fs:SetTextColor(MSUF_THEME.titleR, MSUF_THEME.titleG, MSUF_THEME.titleB, MSUF_THEME.titleA) end
 end
 local function MSUF_SkinText(fs)
-    if fs and fs.SetTextColor then
-        fs:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA)
-    end
+    if fs and fs.SetTextColor then fs:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA) end
 end
 local function MSUF_SkinMuted(fs)
-    if fs and fs.SetTextColor then
-        fs:SetTextColor(MSUF_THEME.textR * 0.80, MSUF_THEME.textG * 0.80, MSUF_THEME.textB * 0.80, 0.85)
-    end
+    if fs and fs.SetTextColor then fs:SetTextColor(MSUF_THEME.textR * 0.80, MSUF_THEME.textG * 0.80, MSUF_THEME.textB * 0.80, 0.85) end
 end
 local function MSUF_EnsureNavActiveOverlay(btn, fillGroup)
     if not (btn and btn.CreateTexture and fillGroup and fillGroup.L and fillGroup.M and fillGroup.R) then return nil end
@@ -928,9 +821,7 @@ MSUF_SkinButton = function(btn)
                 local ok, tex = pcall(r.GetTexture, r)
                 if ok and type(tex) == "string" then
                     local isPanelArt = false
-                    if tex:find("UI%-Panel%-Button") or tex:find("UIPanelButton") then
-                        isPanelArt = true
-                    end
+                    if tex:find("UI%-Panel%-Button") or tex:find("UIPanelButton") then isPanelArt = true end
                     if isPanelArt then
                         if r.SetAlpha then r:SetAlpha(0) end
                         if r.Hide then r:Hide() end
@@ -960,12 +851,8 @@ MSUF_SkinButton = function(btn)
         pcall(btn.SetDisabledTexture, btn, nil)
     end
     local bg, border = MSUF_EnsureSuperellipseLayers(btn, 2)
-    if border and border.SetVertexColor then
-        border:SetVertexColor(MSUF_PILL_EDGE_R, MSUF_PILL_EDGE_G, MSUF_PILL_EDGE_B, 0.90)
-    end
-    if bg and bg.SetVertexColor then
-        bg:SetVertexColor(0.09, 0.10, 0.12, 0.92)
-    end
+    if border and border.SetVertexColor then border:SetVertexColor(MSUF_PILL_EDGE_R, MSUF_PILL_EDGE_G, MSUF_PILL_EDGE_B, 0.90) end
+    if bg and bg.SetVertexColor then bg:SetVertexColor(0.09, 0.10, 0.12, 0.92) end
     btn._msufBtnBorder = border
     btn._msufBtnBG = bg
     btn._msufBtnBG_base = { 0.09, 0.10, 0.12, 0.92 }
@@ -1001,9 +888,7 @@ MSUF_SkinButton = function(btn)
             end
             if self._msufBtnBG and self._msufBtnBG_base then
                 local col = self._msufBtnBG_base
-                if self._msufBtnBG.SetVertexColor then
-                    self._msufBtnBG:SetVertexColor(col[1], col[2], col[3], col[4])
-                end
+                if self._msufBtnBG.SetVertexColor then self._msufBtnBG:SetVertexColor(col[1], col[2], col[3], col[4]) end
             end
         end)
     end
@@ -1013,8 +898,7 @@ MSUF_SkinButton = function(btn)
             if self.UnlockHighlight then pcall(self.UnlockHighlight, self) end
             if self.SetButtonState then pcall(self.SetButtonState, self, "NORMAL") end
             if self._msufBtnBG and self._msufBtnBG_base and self._msufBtnBG.SetVertexColor then
-                local col = self._msufBtnBG_base
-                self._msufBtnBG:SetVertexColor(col[1], col[2], col[3], col[4])
+                local col = self._msufBtnBG_base; self._msufBtnBG:SetVertexColor(col[1], col[2], col[3], col[4])
             end
             if self.SetAlpha then self:SetAlpha(1) end
             local f = self.GetFontString and self:GetFontString()
@@ -1029,9 +913,7 @@ MSUF_SkinButton = function(btn)
     local function ApplyBG(self, col)
     if not self or type(col) ~= "table" then return end
     local bg = self._msufBtnBG
-    if bg and bg.SetVertexColor then
-        bg:SetVertexColor(col[1], col[2], col[3], col[4])
-    end
+    if bg and bg.SetVertexColor then bg:SetVertexColor(col[1], col[2], col[3], col[4]) end
 end
 btn:SetScript("OnEnter", function(self, ...)
     ApplyBG(self, self._msufBtnBG_hover or self._msufBtnBG_base)
@@ -1064,9 +946,7 @@ btn:SetScript("OnDisable", function(self, ...)
         if self._msufBtnBG then self._msufBtnBG:SetVertexColor(0.09, 0.10, 0.12, 0.92) end
         if self._msufBtnBorder and self._msufBtnBorder.SetVertexColor then self._msufBtnBorder:SetVertexColor(MSUF_PILL_EDGE_R, MSUF_PILL_EDGE_G, MSUF_PILL_EDGE_B, 0.90) end
         local f = self.GetFontString and self:GetFontString()
-        if f and f.SetTextColor then
-            f:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA)
-        end
+        if f and f.SetTextColor then f:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA) end
         if oldEn then pcall(oldEn, self, ...) end
     end)
 end
@@ -1082,9 +962,7 @@ local function MSUF_ApplyMidnightControlsToFrame(root)
             if r and r.GetObjectType and r:GetObjectType() == "Texture" and r.GetTexture then
                 local ok, tex = pcall(r.GetTexture, r)
                 if ok and type(tex) == "string" then
-                    if tex:find("UI%-Panel%-Button") or tex:find("UIPanelButton") then
-                        return true
-                    end
+                    if tex:find("UI%-Panel%-Button") or tex:find("UIPanelButton") then return true end
                 end
             end
         end
@@ -1094,9 +972,7 @@ local function MSUF_ApplyMidnightControlsToFrame(root)
         local fs = cb and (cb.Text or cb.text or (cb.GetFontString and cb:GetFontString()))
         if not (fs and fs.GetTextColor and fs.SetTextColor) then return end
         local r, g, b = fs:GetTextColor()
-        if r and g and b and r >= 0.86 and g >= 0.66 and b <= 0.45 then
-            fs:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA)
-        end
+        if r and g and b and r >= 0.86 and g >= 0.66 and b <= 0.45 then fs:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA) end
     end
     local function Walk(f)
         if not f then return end
@@ -1104,9 +980,7 @@ local function MSUF_ApplyMidnightControlsToFrame(root)
             local ot = f:GetObjectType()
             if ot == "Button" then
                 if not (f.IsObjectType and f:IsObjectType("CheckButton")) then
-                    if LooksLikePanelButton(f) then
-                        MSUF_SkinButton(f)
-                    end
+                    if LooksLikePanelButton(f) then MSUF_SkinButton(f) end
                 end
             elseif ot == "CheckButton" then
                 MaybeFixCheckLabel(f)
@@ -1149,12 +1023,8 @@ local function MSUF_SkinNavButton(btn, isHeader, isIndented)
         pcall(btn.SetDisabledTexture, btn, nil)
     end
     local bg, border = MSUF_EnsureSuperellipseLayers(btn, 2); local active = MSUF_EnsureNavActiveOverlay(btn, bg)
-    if active and active.SetVertexColor then
-        active:SetVertexColor(0.16, 0.36, 0.80, 0.55)
-    end
-    if border and border.SetVertexColor then
-        border:SetVertexColor(MSUF_PILL_EDGE_R, MSUF_PILL_EDGE_G, MSUF_PILL_EDGE_B, 0.90)
-    end
+    if active and active.SetVertexColor then active:SetVertexColor(0.16, 0.36, 0.80, 0.55) end
+    if border and border.SetVertexColor then border:SetVertexColor(MSUF_PILL_EDGE_R, MSUF_PILL_EDGE_G, MSUF_PILL_EDGE_B, 0.90) end
     if bg and bg.SetVertexColor then
         if isIndented then
             bg:SetVertexColor(0.09, 0.10, 0.12, 0.82)
@@ -1257,14 +1127,10 @@ local function MSUF_SkinDashboardButton(btn)
             if r and r.GetObjectType and r:GetObjectType() == "Texture" then
 				local tex = r.GetTexture and r:GetTexture(); local atlas = r.GetAtlas and r:GetAtlas(); local isPanelArt = false
 				if type(atlas) == "string" then
-					if atlas:find("UI-Panel-Button", 1, true) or atlas:find("UIPanelButton", 1, true) then
-						isPanelArt = true
-					end
+					if atlas:find("UI-Panel-Button", 1, true) or atlas:find("UIPanelButton", 1, true) then isPanelArt = true end
 				end
 				if (not isPanelArt) and type(tex) == "string" then
-					if tex:find("UI-Panel-Button", 1, true) or tex:find("UIPanelButton", 1, true) or tex:find("Buttons\\UI-Panel-Button", 1, true) then
-						isPanelArt = true
-					end
+					if tex:find("UI-Panel-Button", 1, true) or tex:find("UIPanelButton", 1, true) or tex:find("Buttons\\UI-Panel-Button", 1, true) then isPanelArt = true end
 				end
 				if isPanelArt then
 					if r.SetAlpha then r:SetAlpha(0) end
@@ -1308,18 +1174,14 @@ local function MSUF_SkinDashboardButton(btn)
             insets = { left = 3, right = 3, top = 3, bottom = 3 },
         })
         bgHost:SetBackdropColor(0.08, 0.09, 0.11, 0.92)
-        if bgHost.SetBackdropBorderColor then
-            bgHost:SetBackdropBorderColor(0, 0, 0, 0.92)
-        end
+        if bgHost.SetBackdropBorderColor then bgHost:SetBackdropBorderColor(0, 0, 0, 0.92) end
     end
     btn._msufDashBGFrame = bgHost
     local bg = btn:CreateTexture(nil, "BACKGROUND")
     bg:SetTexture("Interface/Buttons/WHITE8X8")
     bg:SetAllPoints(bgHost)
     bg:SetVertexColor(0.09, 0.10, 0.12, 0.92)
-    if btn._msufDashBGFrame and btn._msufDashBGFrame.SetBackdrop then
-        bg:SetAlpha(0.01)
-    end
+    if btn._msufDashBGFrame and btn._msufDashBGFrame.SetBackdrop then bg:SetAlpha(0.01) end
     btn._msufDashBG = bg
     local hover = btn:CreateTexture(nil, "HIGHLIGHT")
     hover:SetTexture("Interface/Buttons/WHITE8X8")
@@ -1370,8 +1232,7 @@ local function MSUF_SkinDashboardButton(btn)
     end)
     btn:SetScript("OnLeave", function(self, ...)
         if self._msufDashHover then
-            self._msufDashHover._msufHovering = false
-            self._msufDashHover:Hide()
+            self._msufDashHover._msufHovering = false; self._msufDashHover:Hide()
         end
         if oldLeave then pcall(oldLeave, self, ...) end
     end)
@@ -1399,9 +1260,7 @@ local function MSUF_SkinDashboardButton(btn)
 end
 local function MSUF_IsYellowish(r, g, b)
     if not r or not g or not b then return false end
-    if r >= 0.88 and g >= 0.68 and b <= 0.35 and (g >= (b + 0.25)) then
-        return true
-    end
+    if r >= 0.88 and g >= 0.68 and b <= 0.35 and (g >= (b + 0.25)) then return true end
     return false
 end
 local function MSUF_ApplyWhiteTextToFrame(root)
@@ -1414,27 +1273,21 @@ local function MSUF_ApplyWhiteTextToFrame(root)
         if not root or root.__MSUF_WhiteTextToken ~= token then return end
         local t0 = (budgetMs and debugprofilestop) and debugprofilestop() or nil
         while sp > 0 do
-            if t0 and (debugprofilestop() - t0) >= budgetMs then
-                break
-            end
+            if t0 and (debugprofilestop() - t0) >= budgetMs then break end
             local frame = stack[sp]
             stack[sp] = nil
             sp = sp - 1
             if frame and not seen[frame] then
                 seen[frame] = true
                 nodes = nodes + 1
-                if nodes > maxNodes then
-                    break
-                end
+                if nodes > maxNodes then break end
                 if frame.GetRegions then
                     local regions = { frame:GetRegions() }
                     for i = 1, #regions do
                         local reg = regions[i]
                         if reg and reg.GetObjectType and reg:GetObjectType() == "FontString" and reg.GetTextColor and reg.SetTextColor then
                             local r, g, b = reg:GetTextColor()
-                            if MSUF_IsYellowish(r, g, b) then
-                                reg:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA)
-                            end
+                            if MSUF_IsYellowish(r, g, b) then reg:SetTextColor(MSUF_THEME.textR, MSUF_THEME.textG, MSUF_THEME.textB, MSUF_THEME.textA) end
                         end
                     end
                 end
@@ -1451,9 +1304,7 @@ local function MSUF_ApplyWhiteTextToFrame(root)
             end
         end
         if sp > 0 and nodes <= maxNodes and root and root.__MSUF_WhiteTextToken == token then
-            if useTimer then
-                C_Timer.After(0, ProcessChunk)
-            end
+            if useTimer then C_Timer.After(0, ProcessChunk) end
         end
     end
     ProcessChunk()
@@ -1461,9 +1312,7 @@ end
 local function MSUF_ApplyFontBumpToFrame(root, bump)
     bump = tonumber(bump or 0) or 0
     if bump == 0 or not root then return end
-    if root.__MSUF_FontBumpApplied == bump then
-        return
-    end
+    if root.__MSUF_FontBumpApplied == bump then return end
     if root.__MSUF_FontBumpInProgress then
         root.__MSUF_FontBumpPending = bump
         return
@@ -1475,9 +1324,7 @@ local function MSUF_ApplyFontBumpToFrame(root, bump)
         if not obj or not obj.GetFont or not obj.SetFont then return end
         local ok, font, size, flags = pcall(obj.GetFont, obj)
         if not ok or not font or not size then return end
-        if not obj.__MSUF_FontOrig then
-            obj.__MSUF_FontOrig = { font = font, size = size, flags = flags }
-        end
+        if not obj.__MSUF_FontOrig then obj.__MSUF_FontOrig = { font = font, size = size, flags = flags } end
         local orig = obj.__MSUF_FontOrig
         pcall(obj.SetFont, obj, orig.font, (orig.size or size) + bump, orig.flags)
     end
@@ -1526,9 +1373,7 @@ local function MSUF_ApplyFontBumpToFrame(root, bump)
         root.__MSUF_FontBumpPending = nil
         if pending and pending ~= bump then
             C_Timer.After(0, function()
-                if root and root.IsObjectType and root:IsObjectType("Frame") then
-                    MSUF_ApplyFontBumpToFrame(root, pending)
-                end
+                if root and root.IsObjectType and root:IsObjectType("Frame") then MSUF_ApplyFontBumpToFrame(root, pending) end
             end)
         end
     end
@@ -1579,17 +1424,13 @@ end
 local _MSUF_pendingMsufScale; local _MSUF_pendingGlobalScale; local _MSUF_pendingDisableScaling; local _MSUF_pendingReloadOnScalingOff; local _MSUF_scaleApplyWatcher
 local MSUF_EnsureScaleApplyAfterCombat
 local function MSUF_ApplyMsufScale(scale, opts)
-    if MSUF_IsScalingDisabled() and not (opts and opts.ignoreDisable) then
-        return
-    end
+    if MSUF_IsScalingDisabled() and not (opts and opts.ignoreDisable) then return end
     scale = tonumber(scale)
     if not scale then return end
     scale = clamp(scale, 0.6, 1.4)
     if InCombatLockdown and InCombatLockdown() then
         _MSUF_pendingMsufScale = scale
-        if MSUF_EnsureScaleApplyAfterCombat then
-            MSUF_EnsureScaleApplyAfterCombat()
-        end
+        if MSUF_EnsureScaleApplyAfterCombat then MSUF_EnsureScaleApplyAfterCombat() end
         return
     end
     local frames = MSUF_CollectMsufScaleFrames()
@@ -1601,9 +1442,7 @@ end
 local UI_SCALE_1080 = 768 / 1080; local UI_SCALE_1440 = 768 / 1440; local MSUF_MIN_UISCALE_CVAR = 0.64; local MSUF_MAX_UISCALE_CVAR = 1.0; local _MSUF_lastGlobalCVarScale
 local _MSUF_lastGlobalUiParentScale
 local function MSUF_GetCurrentGlobalUiScale()
-    if UIParent and UIParent.GetScale then
-        return tonumber(UIParent:GetScale())
-    end
+    if UIParent and UIParent.GetScale then return tonumber(UIParent:GetScale()) end
     return nil
 end
 local function MSUF_SetCVarIfChanged(name, value)
@@ -1611,16 +1450,12 @@ local function MSUF_SetCVarIfChanged(name, value)
     local v = tostring(value)
     if C_CVar and C_CVar.GetCVar and C_CVar.SetCVar then
         local cur = C_CVar.GetCVar(name)
-        if cur ~= v then
-            pcall(C_CVar.SetCVar, name, v)
-        end
+        if cur ~= v then pcall(C_CVar.SetCVar, name, v) end
         return
     end
     if GetCVar and SetCVar then
         local cur = GetCVar(name)
-        if cur ~= v then
-            pcall(SetCVar, name, v)
-        end
+        if cur ~= v then pcall(SetCVar, name, v) end
     end
 end
 local function MSUF_EnforceUIParentScale(scale)
@@ -1629,13 +1464,9 @@ local function MSUF_EnforceUIParentScale(scale)
     scale = clamp(scale, 0.3, 2.0)
     if not (UIParent and UIParent.SetScale) then return end
     local cur = nil
-    if UIParent.GetScale then
-        cur = tonumber(UIParent:GetScale())
-    end
+    if UIParent.GetScale then cur = tonumber(UIParent:GetScale()) end
     cur = cur or 0
-    if math.abs(cur - scale) > 0.001 then
-        pcall(UIParent.SetScale, UIParent, scale)
-    end
+    if math.abs(cur - scale) > 0.001 then pcall(UIParent.SetScale, UIParent, scale) end
     _MSUF_lastGlobalUiParentScale = scale
 end
 local function MSUF_ScheduleUIParentNudges(scale)
@@ -1647,9 +1478,7 @@ local function MSUF_ScheduleUIParentNudges(scale)
     local function nudge()
         if InCombatLockdown and InCombatLockdown() then
             _MSUF_pendingGlobalScale = want
-            if MSUF_EnsureScaleApplyAfterCombat then
-                MSUF_EnsureScaleApplyAfterCombat()
-            end
+            if MSUF_EnsureScaleApplyAfterCombat then MSUF_EnsureScaleApplyAfterCombat() end
             return
         end
         MSUF_EnforceUIParentScale(want)
@@ -1660,21 +1489,15 @@ local function MSUF_ScheduleUIParentNudges(scale)
 end
 local function MSUF_SetGlobalUiScale(scale, silent, opts)
     opts = opts or {}
-    if MSUF_IsScalingDisabled() and not opts.ignoreDisable then
-        return
-    end
+    if MSUF_IsScalingDisabled() and not opts.ignoreDisable then return end
     local applyCVars = (opts.applyCVars ~= false) and true or false
     scale = tonumber(scale)
     if not scale or scale <= 0 then return end
     scale = clamp(scale, 0.3, 2.0)
     if InCombatLockdown and InCombatLockdown() then
         _MSUF_pendingGlobalScale = scale
-        if MSUF_EnsureScaleApplyAfterCombat then
-            MSUF_EnsureScaleApplyAfterCombat()
-        end
-        if not silent then
-            MSUF_Print("Cannot change global UI scale in combat. Will apply after combat.")
-        end
+        if MSUF_EnsureScaleApplyAfterCombat then MSUF_EnsureScaleApplyAfterCombat() end
+        if not silent then MSUF_Print("Cannot change global UI scale in combat. Will apply after combat.") end
         return
     end
     if applyCVars then
@@ -1702,57 +1525,41 @@ MSUF_EnsureScaleApplyAfterCombat = function()
     f:SetScript("OnEvent", function()
         if InCombatLockdown and InCombatLockdown() then return end
         if _MSUF_pendingDisableScaling then
-            _MSUF_pendingDisableScaling = nil
-            _MSUF_pendingMsufScale = nil
-            _MSUF_pendingGlobalScale = nil
-            MSUF_ResetGlobalUiScale(true)
+            _MSUF_pendingDisableScaling = nil; _MSUF_pendingMsufScale = nil
+            _MSUF_pendingGlobalScale = nil; MSUF_ResetGlobalUiScale(true)
             MSUF_ApplyMsufScale(1.0, { ignoreDisable = true })
         elseif MSUF_IsScalingDisabled() then
-            _MSUF_pendingMsufScale = nil
-            _MSUF_pendingGlobalScale = nil
+            _MSUF_pendingMsufScale = nil; _MSUF_pendingGlobalScale = nil
         else
-            local s = _MSUF_pendingMsufScale; local g = _MSUF_pendingGlobalScale
-            _MSUF_pendingMsufScale = nil
+            local s = _MSUF_pendingMsufScale; local g = _MSUF_pendingGlobalScale; _MSUF_pendingMsufScale = nil
             _MSUF_pendingGlobalScale = nil
-            if s then
-                MSUF_ApplyMsufScale(s)
-            end
-            if g then
-                MSUF_SetGlobalUiScale(g, true)
-            end
+            if s then MSUF_ApplyMsufScale(s) end
+            if g then MSUF_SetGlobalUiScale(g, true) end
         end
         if _MSUF_pendingReloadOnScalingOff then
             _MSUF_pendingReloadOnScalingOff = nil
             if type(ReloadUI) == "function" then
-                ReloadUI()
-                return
+                ReloadUI(); return
             end
         end
         if (not _MSUF_pendingDisableScaling) and (not _MSUF_pendingMsufScale) and (not _MSUF_pendingGlobalScale) then
-            f:UnregisterEvent("PLAYER_REGEN_ENABLED")
-            f:SetScript("OnEvent", nil)
+            f:UnregisterEvent("PLAYER_REGEN_ENABLED"); f:SetScript("OnEvent", nil)
             _MSUF_scaleApplyWatcher = nil
         end
     end)
 end
 local function MSUF_ResetGlobalUiScale(silent)
     if InCombatLockdown and InCombatLockdown() then
-        if not silent then
-            MSUF_Print("Cannot reset global UI scale in combat.")
-        end
+        if not silent then MSUF_Print("Cannot reset global UI scale in combat.") end
         return
     end
     MSUF_SetCVarIfChanged("useUiScale", "0")
     MSUF_SetCVarIfChanged("uiScale", "1.0")
     MSUF_SetCVarIfChanged("uiscale", "1.0")
-    if UIParent and UIParent.SetScale then
-        pcall(UIParent.SetScale, UIParent, 1.0)
-    end
+    if UIParent and UIParent.SetScale then pcall(UIParent.SetScale, UIParent, 1.0) end
     _MSUF_lastGlobalCVarScale = nil
     _MSUF_lastGlobalUiParentScale = nil
-    if not silent then
-        MSUF_Print("Global UI scale reset (fallback).")
-    end
+    if not silent then MSUF_Print("Global UI scale reset (fallback).") end
 end
 local function MSUF_SetScalingDisabled(disable, silent)
     local g = MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
@@ -1768,12 +1575,8 @@ local function MSUF_SetScalingDisabled(disable, silent)
     MSUF_SetSavedMsufScale(1.0)
     if InCombatLockdown and InCombatLockdown() then
         _MSUF_pendingDisableScaling = true
-        if MSUF_EnsureScaleApplyAfterCombat then
-            MSUF_EnsureScaleApplyAfterCombat()
-        end
-        if not silent then
-            MSUF_Print("MSUF scaling disabled. Will fully reset after combat.")
-        end
+        if MSUF_EnsureScaleApplyAfterCombat then MSUF_EnsureScaleApplyAfterCombat() end
+        if not silent then MSUF_Print("MSUF scaling disabled. Will fully reset after combat.") end
         return
     end
     MSUF_ResetGlobalUiScale(true)
@@ -1781,9 +1584,7 @@ local function MSUF_SetScalingDisabled(disable, silent)
     _MSUF_pendingDisableScaling = nil
     _MSUF_pendingMsufScale = nil
     _MSUF_pendingGlobalScale = nil
-    if not silent then
-        MSUF_Print("MSUF scaling disabled (Blizzard handles scaling now).")
-    end
+    if not silent then MSUF_Print("MSUF scaling disabled (Blizzard handles scaling now).") end
 end
 _G.MSUF_SetScalingDisabled = MSUF_SetScalingDisabled
 local function MSUF_SaveGlobalPreset(preset, scale)
@@ -1794,12 +1595,8 @@ local function MSUF_SaveGlobalPreset(preset, scale)
 end
 local function MSUF_GetDesiredGlobalScaleFromDB()
     local g = MSUF_EnsureGeneral()
-    if not g then
-        return nil
-    end
-    if g.disableScaling then
-        return nil
-    end
+    if not g then return nil end
+    if g.disableScaling then return nil end
     local preset = g.globalUiScalePreset
     if preset == "1080p" then
         return UI_SCALE_1080
@@ -1817,9 +1614,7 @@ local function MSUF_EnsureGlobalUiScaleApplied(silent)
     if now < (MSUF_SCALE_GUARD.suppressUntil or 0) then return end
     local want = MSUF_GetDesiredGlobalScaleFromDB()
     want = tonumber(want)
-    if not want or want <= 0 then
-        return
-    end
+    if not want or want <= 0 then return end
     local have = MSUF_GetCurrentGlobalUiScale()
     have = tonumber(have) or want
     local diff = math.abs(have - want)
@@ -1827,9 +1622,7 @@ local function MSUF_EnsureGlobalUiScaleApplied(silent)
         MSUF_SCALE_GUARD.suppressUntil = now + 0.10
         if InCombatLockdown and InCombatLockdown() then
             _MSUF_pendingGlobalScale = want
-            if MSUF_EnsureScaleApplyAfterCombat then
-                MSUF_EnsureScaleApplyAfterCombat()
-            end
+            if MSUF_EnsureScaleApplyAfterCombat then MSUF_EnsureScaleApplyAfterCombat() end
             return
         end
         MSUF_EnforceUIParentScale(want)
@@ -1842,16 +1635,12 @@ local function MSUF_EnsureGlobalUiScaleApplied(silent)
 end
 local function MSUF_IsMSUFEditModeActive()
     local st = _G and _G.MSUF_EditState
-    if type(st) == "table" and st.active ~= nil then
-        return st.active and true or false
-    end
+    if type(st) == "table" and st.active ~= nil then return st.active and true or false end
     if _G and type(_G.MSUF_IsEditModeActive) == "function" then
         local ok, res = pcall(_G.MSUF_IsEditModeActive)
         if ok then return res and true or false end
     end
-    if _G and _G.MSUF_EDITMODE_ACTIVE ~= nil then
-        return _G.MSUF_EDITMODE_ACTIVE and true or false
-    end
+    if _G and _G.MSUF_EDITMODE_ACTIVE ~= nil then return _G.MSUF_EDITMODE_ACTIVE and true or false end
     return false
 end
 local function MSUF_TryHookEditModeForDashboard()
@@ -1860,18 +1649,14 @@ local function MSUF_TryHookEditModeForDashboard()
     if _G and type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
         hooksecurefunc("MSUF_SetMSUFEditModeDirect", function(active)
             local win = _G and _G.MSUF_StandaloneOptionsWindow; local b = win and win._msufDashEditBtn
-            if b and b._msufSetSelected then
-                b:_msufSetSelected(active)
-            end
+            if b and b._msufSetSelected then b:_msufSetSelected(active) end
         end)
         if _G then _G.__MSUF_DashEditHooked = true end
     end
 end
 MSUF_BuildTools = function(parent, opts)
     opts = opts or {}
-    if not parent then
-        return { Refresh = function() end }
-    end
+    if not parent then return { Refresh = function() end } end
     local api = parent.__MSUF_ToolsApi
     if api then
         api.opts = opts
@@ -1933,18 +1718,14 @@ MSUF_BuildTools = function(parent, opts)
     if msufSlider.Low then msufSlider.Low:SetText("10%") end
     if msufSlider.High then msufSlider.High:SetText("100%") end
     local msufValue
-    if opts.showValue then
-        msufValue = UI_Text(parent, "GameFontHighlightSmall", "LEFT", msufSlider, "RIGHT", 8, 0, "100%", MSUF_SkinText)
-    end
+    if opts.showValue then msufValue = UI_Text(parent, "GameFontHighlightSmall", "LEFT", msufSlider, "RIGHT", 8, 0, "100%", MSUF_SkinText) end
     local msufMinus, msufPlus; local pmDefs = {
         {
             text = "-", w = 22, h = 18, skinFn = MSUF_SkinDashboardButton,
             tipTitle = "Decrease UI Scale",
             tipBody  = "Decreases the global UI scale (UIParent).",
             onClick  = function()
-                if msufSlider and msufSlider.GetValue then
-                    msufSlider:SetValue((msufSlider:GetValue() or 100) - 1)
-                end
+                if msufSlider and msufSlider.GetValue then msufSlider:SetValue((msufSlider:GetValue() or 100) - 1) end
             end,
         },
         {
@@ -1952,9 +1733,7 @@ MSUF_BuildTools = function(parent, opts)
             tipTitle = "Increase UI Scale",
             tipBody  = "Increases the global UI scale (UIParent).",
             onClick  = function()
-                if msufSlider and msufSlider.GetValue then
-                    msufSlider:SetValue((msufSlider:GetValue() or 100) + 1)
-                end
+                if msufSlider and msufSlider.GetValue then msufSlider:SetValue((msufSlider:GetValue() or 100) + 1) end
             end,
         },
     }
@@ -2032,9 +1811,7 @@ MSUF_BuildTools = function(parent, opts)
         MSUF_SetEnabled(msufReset, not disabled)
         return disabled and true or false
     end
-    if MSUF_AddTooltip then
-        MSUF_AddTooltip(msufSlider, "UI Scale (Global)", "Scales the entire WoW UI (UIParent). 100% = 1.0, 10% = 0.10. This sets the preset to Custom.")
-    end
+    if MSUF_AddTooltip then MSUF_AddTooltip(msufSlider, "UI Scale (Global)", "Scales the entire WoW UI (UIParent). 100% = 1.0, 10% = 0.10. This sets the preset to Custom.") end
     msufSlider:SetScript("OnValueChanged", function(self, value)
         if self._msufIgnore then return end
         do
@@ -2042,15 +1819,10 @@ MSUF_BuildTools = function(parent, opts)
                     if g then g.disableScaling = false end
                     if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false, true) end
                 end
-        local pct = tonumber(value) or 100
-        pct = math.floor(pct + 0.5)
-        pct = clamp(pct, 10, 100)
-        local scale = pct / 100
-        MSUF_SaveGlobalPreset("custom", scale)
-        MSUF_SetGlobalUiScale(scale, true)
-        if msufValue and msufValue.SetText then
-            msufValue:SetText(string.format("%d%%", pct))
-        end
+        local pct = tonumber(value) or 100; pct = math.floor(pct + 0.5)
+        pct = clamp(pct, 10, 100); local scale = pct / 100
+        MSUF_SaveGlobalPreset("custom", scale); MSUF_SetGlobalUiScale(scale, true)
+        if msufValue and msufValue.SetText then msufValue:SetText(string.format("%d%%", pct)) end
         if api.Refresh then api.Refresh() end
     end)
     function api.Layout()
@@ -2101,9 +1873,7 @@ else
 end
 local pct = clamp(math.floor((tonumber(desired) or 1.0) * 100 + 0.5), 10, 100)
 MSUF_SetSliderValueSilent(msufSlider, pct)
-if msufValue and msufValue.SetText then
-    msufValue:SetText(string.format("%d%%", pct))
-end
+if msufValue and msufValue.SetText then msufValue:SetText(string.format("%d%%", pct)) end
         if disabled then
             if btn1080 and btn1080._msufSetSelected then btn1080:_msufSetSelected(false) end
             if btn1440 and btn1440._msufSetSelected then btn1440:_msufSetSelected(false) end
@@ -2114,9 +1884,7 @@ end
             if btnAuto and btnAuto._msufSetSelected then btnAuto:_msufSetSelected((preset == "auto") or (preset == nil)) end
         end
         if MSUF_SetScalingToggleVisual then MSUF_SetScalingToggleVisual(disabled and true or false) end
-        if msufOff and msufOff._msufSetSelected then
-            msufOff:_msufSetSelected(disabled and true or false)
-        end
+        if msufOff and msufOff._msufSetSelected then msufOff:_msufSetSelected(disabled and true or false) end
         api.Layout()
     end
     if not parent.__MSUF_ToolsLayoutHooked then
@@ -2193,9 +1961,7 @@ local function MSUF_EnsureSubOptionsPanelBuilt(kind)
             pcall(fn, cat)
         else
             fn = ns[def.fallback]
-            if type(fn) == "function" then
-                pcall(fn, cat)
-            end
+            if type(fn) == "function" then pcall(fn, cat) end
         end
     end
     local p = MSUF_FindFirstGlobal(def.globals)
@@ -2212,9 +1978,7 @@ local function MSUF_EnsureGameplayPanelBuilt()
     return MSUF_EnsureSubOptionsPanelBuilt("gameplay")
 end
 local function MSUF_EnsureModulesPanelBuilt()
-    if _G.MSUF_ModulesMirrorPanel and _G.MSUF_ModulesMirrorPanel.__MSUF_ModulesBuilt then
-        return _G.MSUF_ModulesMirrorPanel
-    end
+    if _G.MSUF_ModulesMirrorPanel and _G.MSUF_ModulesMirrorPanel.__MSUF_ModulesBuilt then return _G.MSUF_ModulesMirrorPanel end
     local p = CreateFrame("Frame", "MSUF_ModulesMirrorPanel", UIParent)
     _G.MSUF_ModulesMirrorPanel = p
     p.__MSUF_ModulesBuilt = true
@@ -2228,9 +1992,7 @@ local function MSUF_EnsureModulesPanelBuilt()
     local sub = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     sub:SetText("Optional MSUF modules and UI styling (MSUF only).")
-    if type(_G.MSUF_ApplyMidnightBackdrop) == "function" then
-        pcall(_G.MSUF_ApplyMidnightBackdrop, p, 0.96)
-    end
+    if type(_G.MSUF_ApplyMidnightBackdrop) == "function" then pcall(_G.MSUF_ApplyMidnightBackdrop, p, 0.96) end
     if type(_G.MSUF_SkinTitle) == "function" then pcall(_G.MSUF_SkinTitle, title) end
     if type(_G.MSUF_SkinMuted) == "function" then pcall(_G.MSUF_SkinMuted, sub) end
     local cb = CreateFrame("CheckButton", nil, p, "UICheckButtonTemplate")
@@ -2248,18 +2010,14 @@ local function MSUF_EnsureModulesPanelBuilt()
             local ok, v = pcall(_G.MSUF_StyleIsEnabled)
             if ok then return v and true or false end
         end
-        if _G.MSUF_DB and _G.MSUF_DB.general then
-            return _G.MSUF_DB.general.styleEnabled ~= false
-        end
+        if _G.MSUF_DB and _G.MSUF_DB.general then return _G.MSUF_DB.general.styleEnabled ~= false end
         return true
     end
     local function SetEnabled(v)
         if type(_G.MSUF_SetStyleEnabled) == "function" then
             pcall(_G.MSUF_SetStyleEnabled, v and true or false)
         else
-            if _G.MSUF_DB and _G.MSUF_DB.general then
-                _G.MSUF_DB.general.styleEnabled = v and true or false
-            end
+            if _G.MSUF_DB and _G.MSUF_DB.general then _G.MSUF_DB.general.styleEnabled = v and true or false end
         end
     end
     cb:SetScript("OnShow", function() cb:SetChecked(GetEnabled()) end)
@@ -2272,18 +2030,12 @@ if rb.Text then
 end
 rb.tooltipText = "Round MSUF unitframes by masking HP/Power/Absorb bars and backgrounds with the superellipse mask."
 local function GetRoundedEnabled()
-    if _G.MSUF_DB and _G.MSUF_DB.general then
-        return _G.MSUF_DB.general.roundedUnitframes == true
-    end
+    if _G.MSUF_DB and _G.MSUF_DB.general then return _G.MSUF_DB.general.roundedUnitframes == true end
     return false
 end
 local function SetRoundedEnabled(v)
-    if _G.MSUF_DB and _G.MSUF_DB.general then
-        _G.MSUF_DB.general.roundedUnitframes = v and true or false
-    end
-    if type(_G.MSUF_ApplyModules) == "function" then
-        pcall(_G.MSUF_ApplyModules)
-    end
+    if _G.MSUF_DB and _G.MSUF_DB.general then _G.MSUF_DB.general.roundedUnitframes = v and true or false end
+    if type(_G.MSUF_ApplyModules) == "function" then pcall(_G.MSUF_ApplyModules) end
 end
 rb:SetScript("OnShow", function() rb:SetChecked(GetRoundedEnabled()) end)
 rb:SetScript("OnClick", function(self) SetRoundedEnabled(self:GetChecked()) end)
@@ -2296,9 +2048,7 @@ local function MSUF_SelectMainOptionsKey(key)
     local _, setKey = MSUF_GetTabButtonHelpers(p)
     if type(setKey) == "function" then
         setKey(key)
-        if p.LoadFromDB then
-            pcall(p.LoadFromDB, p)
-        end
+        if p.LoadFromDB then pcall(p.LoadFromDB, p) end
     end
 end
 local function MSUF_SelectCastbarSubPage(unitKey)
@@ -2308,9 +2058,7 @@ local function MSUF_SelectCastbarSubPage(unitKey)
         pcall(MSUF_SetActiveCastbarSubPage, unitKey)
     end
     local p = _G and _G.MSUF_OptionsPanel
-    if p and p.LoadFromDB then
-        pcall(p.LoadFromDB, p)
-    end
+    if p and p.LoadFromDB then pcall(p.LoadFromDB, p) end
 end
 local MIRROR_PAGES = {
     home     = { title = "Midnight Simple Unitframes (Version 1.85r1)", nav = "Dashboard", build = nil },
@@ -2319,18 +2067,12 @@ local MIRROR_PAGES = {
             if not subkey then return end
             if type(subkey) == "table" then
                 local tab = subkey.tab or subkey.key or subkey.page
-                if tab then
-                    MSUF_SelectMainOptionsKey(tab)
-                end
+                if tab then MSUF_SelectMainOptionsKey(tab) end
                 local castSub = subkey.castbarSub or subkey.castbar or subkey.sub
-                if tab == "castbar" and castSub then
-                    MSUF_SelectCastbarSubPage(castSub)
-                end
+                if tab == "castbar" and castSub then MSUF_SelectCastbarSubPage(castSub) end
                 return
             end
-            if type(subkey) == "string" then
-                MSUF_SelectMainOptionsKey(subkey)
-            end
+            if type(subkey) == "string" then MSUF_SelectMainOptionsKey(subkey) end
         end
     },
 main     = { title = "MSUF Options",  nav = "Options",  build = MSUF_EnsureMainOptionsPanelBuilt,
@@ -2338,18 +2080,12 @@ main     = { title = "MSUF Options",  nav = "Options",  build = MSUF_EnsureMainO
             if not subkey then return end
             if type(subkey) == "table" then
                 local tab = subkey.tab or subkey.key or subkey.page
-                if tab then
-                    MSUF_SelectMainOptionsKey(tab)
-                end
+                if tab then MSUF_SelectMainOptionsKey(tab) end
                 local castSub = subkey.castbarSub or subkey.castbar or subkey.sub
-                if tab == "castbar" and castSub then
-                    MSUF_SelectCastbarSubPage(castSub)
-                end
+                if tab == "castbar" and castSub then MSUF_SelectCastbarSubPage(castSub) end
                 return
             end
-            if type(subkey) == "string" then
-                MSUF_SelectMainOptionsKey(subkey)
-            end
+            if type(subkey) == "string" then MSUF_SelectMainOptionsKey(subkey) end
         end
     },
     uf_player       = { title = "MSUF Player",           nav = nil, build = MSUF_EnsureMainOptionsPanelBuilt, select = function() MSUF_SelectMainOptionsKey("player") end },
@@ -2368,9 +2104,7 @@ main     = { title = "MSUF Options",  nav = "Options",  build = MSUF_EnsureMainO
     castbar  = { title = "MSUF Castbar",  nav = "nil",  build = MSUF_EnsureMainOptionsPanelBuilt,
         select = function(subkey)
             MSUF_SelectMainOptionsKey("castbar")
-            if subkey and subkey ~= "" then
-                MSUF_SelectCastbarSubPage(subkey)
-            end
+            if subkey and subkey ~= "" then MSUF_SelectCastbarSubPage(subkey) end
         end
     },
     profiles = { title = "MSUF Profiles", nav = "nil", build = MSUF_EnsureMainOptionsPanelBuilt,
@@ -2387,60 +2121,38 @@ local function MSUF_GetMirrorPageInfo(key)
 end
 local function MSUF_NormalizeMirrorKey(key, allowHome)
     key = key or (allowHome and "home" or "main")
-    if allowHome and key == "home" then
-        return "home"
-    end
+    if allowHome and key == "home" then return "home" end
     local info = MSUF_GetMirrorPageInfo(key)
-    if info and key ~= "home" then
-        return key
-    end
+    if info and key ~= "home" then return key end
     return allowHome and "home" or "main"
 end
 local function MSUF_GetPanelForKey(key)
     key = MSUF_NormalizeMirrorKey(key, false)
     local info = MSUF_GetMirrorPageInfo(key) or MSUF_GetMirrorPageInfo("main"); local builder = info and info.build
-    if type(builder) == "function" then
-        return builder()
-    end
+    if type(builder) == "function" then return builder() end
     return nil
 end
 local MSUF_MirrorSetHeaderHidden
 local function MSUF_DetachMirroredPanel(panel)
-    if not panel or not panel.__MSUF_MirrorActive then
-        return
-    end
+    if not panel or not panel.__MSUF_MirrorActive then return end
     MSUF_MirrorSetHeaderHidden(panel, false)
-    if panel.__MSUF_MirrorState then
-        MSUF_RestorePanelState(panel, panel.__MSUF_MirrorState)
-    end
+    if panel.__MSUF_MirrorState then MSUF_RestorePanelState(panel, panel.__MSUF_MirrorState) end
     local orig = panel.__MSUF_MirrorOrig
     if orig then
         if panel.Hide then pcall(panel.Hide, panel) end
-        if panel.SetScale and orig.scale then
-            pcall(panel.SetScale, panel, orig.scale)
-        end
-        if panel.SetFrameStrata and orig.strata then
-            pcall(panel.SetFrameStrata, panel, orig.strata)
-        end
+        if panel.SetScale and orig.scale then pcall(panel.SetScale, panel, orig.scale) end
+        if panel.SetFrameStrata and orig.strata then pcall(panel.SetFrameStrata, panel, orig.strata) end
         if panel.SetFrameLevel and orig.level then
             pcall(panel.SetFrameLevel, panel, orig.level) end
-        if panel.SetParent and orig.parent then
-            pcall(panel.SetParent, panel, orig.parent)
-        end
-        if panel.ClearAllPoints then
-            pcall(panel.ClearAllPoints, panel)
-        end
+        if panel.SetParent and orig.parent then pcall(panel.SetParent, panel, orig.parent) end
+        if panel.ClearAllPoints then pcall(panel.ClearAllPoints, panel) end
         if panel.SetPoint and orig.points and #orig.points > 0 then
             for i = 1, #orig.points do
                 local pt = orig.points[i]
-                if pt and pt[1] then
-                    pcall(panel.SetPoint, panel, pt[1], pt[2], pt[3], pt[4], pt[5])
-                end
+                if pt and pt[1] then pcall(panel.SetPoint, panel, pt[1], pt[2], pt[3], pt[4], pt[5]) end
             end
         end
-        if orig.shown and not panel.__MSUF_MirrorNoRestoreShow and panel.Show then
-            pcall(panel.Show, panel)
-        end
+        if orig.shown and not panel.__MSUF_MirrorNoRestoreShow and panel.Show then pcall(panel.Show, panel) end
     else
         if panel.Hide then pcall(panel.Hide, panel) end
     end
@@ -2486,9 +2198,7 @@ MSUF_MirrorSetHeaderHidden = function(panel, hidden)
                 return
             end
             local token = panel.__MSUF_MirrorHeaderScanToken
-            if not token then
-                return
-            end
+            if not token then return end
             local st = panel.__MSUF_MirrorHeaderScanState
             if type(st) ~= "table" then
                 st = {
@@ -2502,17 +2212,13 @@ MSUF_MirrorSetHeaderHidden = function(panel, hidden)
             local debugprofilestop = debugprofilestop; local t0 = debugprofilestop and debugprofilestop() or nil; local budgetMs = 1.0; local stack = st.stack; local sp = st.sp or 0
             local nodes = st.nodes or 0; local maxNodes = st.maxNodes or 450
             while sp > 0 do
-                if t0 and (debugprofilestop() - t0) >= budgetMs then
-                    break
-                end
+                if t0 and (debugprofilestop() - t0) >= budgetMs then break end
                 local frame = stack[sp]
                 stack[sp] = nil
                 sp = sp - 1
                 if frame then
                     nodes = nodes + 1
-                    if nodes > maxNodes then
-                        break
-                    end
+                    if nodes > maxNodes then break end
                     if frame.GetRegions then
                         local regions = { frame:GetRegions() }
                         for i = 1, #regions do
@@ -2546,9 +2252,7 @@ MSUF_MirrorSetHeaderHidden = function(panel, hidden)
             st.sp = sp
             st.nodes = nodes
             if sp > 0 and nodes <= maxNodes and panel.__MSUF_MirrorHiddenHeader and panel.__MSUF_MirrorHeaderScanToken == token then
-                if C_Timer and C_Timer.After then
-                    C_Timer.After(0, ScanChunk)
-                end
+                if C_Timer and C_Timer.After then C_Timer.After(0, ScanChunk) end
                 return
             end
             panel.__MSUF_MirrorHeaderScanToken = nil
@@ -2600,12 +2304,8 @@ local function MSUF_AttachMirroredPanel(panel, parent, activeKey)
         panel.__MSUF_MirrorState = MSUF_CapturePanelState(panel)
         panel.__MSUF_MirrorActive = true
     end
-    if panel.SetParent then
-        pcall(panel.SetParent, panel, parent)
-    end
-    if panel.ClearAllPoints then
-        pcall(panel.ClearAllPoints, panel)
-    end
+    if panel.SetParent then pcall(panel.SetParent, panel, parent) end
+    if panel.ClearAllPoints then pcall(panel.ClearAllPoints, panel) end
     if panel.SetPoint then
         local cropY = 0
         if panel == (_G and _G.MSUF_OptionsPanel) then
@@ -2616,20 +2316,13 @@ local function MSUF_AttachMirroredPanel(panel, parent, activeKey)
         pcall(panel.SetPoint, panel, "TOPLEFT", parent, "TOPLEFT", 0, cropY)
         pcall(panel.SetPoint, panel, "BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
     end
-    if panel.SetScale then
-        pcall(panel.SetScale, panel, MIRROR_PANEL_SCALE)
-    end
-    if panel.SetFrameStrata then
-        pcall(panel.SetFrameStrata, panel, "DIALOG")
-    end
-    if panel.Show then
-        pcall(panel.Show, panel)
-    end
+    if panel.SetScale then pcall(panel.SetScale, panel, MIRROR_PANEL_SCALE) end
+    if panel.SetFrameStrata then pcall(panel.SetFrameStrata, panel, "DIALOG") end
+    if panel.Show then pcall(panel.Show, panel) end
     if not panel.__MSUF_MirrorWhiteHooked and panel.HookScript then
         panel.__MSUF_MirrorWhiteHooked = true
         panel:HookScript("OnShow", function()
-            MSUF_ApplyWhiteTextToFrame(panel)
-            MSUF_ApplyFontBumpToFrame(panel, MIRRORED_PANEL_FONT_BUMP)
+            MSUF_ApplyWhiteTextToFrame(panel); MSUF_ApplyFontBumpToFrame(panel, MIRRORED_PANEL_FONT_BUMP)
             MSUF_ApplyMidnightControlsToFrame(panel)
         end)
     end
@@ -2664,18 +2357,12 @@ local function MSUF_Standalone_SetCastbarTopButtonsHidden(hidden)
         local st = btn.__msufStandaloneAnchorBackup
         if not st then return end
         btn.__msufStandaloneAnchorBackup = nil
-        if st.parent and btn.SetParent then
-            pcall(btn.SetParent, btn, st.parent)
-        end
-        if btn.ClearAllPoints then
-            pcall(btn.ClearAllPoints, btn)
-        end
+        if st.parent and btn.SetParent then pcall(btn.SetParent, btn, st.parent) end
+        if btn.ClearAllPoints then pcall(btn.ClearAllPoints, btn) end
         if btn.SetPoint and st.points then
             for i = 1, #st.points do
                 local pt = st.points[i]
-                if pt and pt[1] then
-                    pcall(btn.SetPoint, btn, pt[1], pt[2], pt[3], pt[4], pt[5])
-                end
+                if pt and pt[1] then pcall(btn.SetPoint, btn, pt[1], pt[2], pt[3], pt[4], pt[5]) end
             end
         end
         if st.shown then
@@ -2693,9 +2380,7 @@ local function MSUF_Standalone_SetCastbarTopButtonsHidden(hidden)
             pcall(focusBtn.ClearAllPoints, focusBtn)
             pcall(focusBtn.SetPoint, focusBtn, "TOPLEFT", panel, "TOPLEFT", 16, -150)
         end
-        if editBtn and editBtn.Hide then
-            pcall(editBtn.Hide, editBtn)
-        end
+        if editBtn and editBtn.Hide then pcall(editBtn.Hide, editBtn) end
     else
         Restore(editBtn)
         Restore(focusBtn)
@@ -2734,9 +2419,7 @@ local function MSUF_Standalone_UpdateNav(activeKey)
         if btn then
             if btn.SetEnabled then btn:SetEnabled(true) end
             btn._msufNavIsActive = (k == highlightKey)
-            if btn._msufApplyNavState then
-                btn:_msufApplyNavState(btn._msufNavIsActive, false)
-            end
+            if btn._msufApplyNavState then btn:_msufApplyNavState(btn._msufNavIsActive, false) end
         end
     end
 end
@@ -2771,8 +2454,7 @@ local function MSUF_Standalone_AttachMirrorPanel(key)
         if C_Timer and C_Timer.After then
             C_Timer.After(0, function()
                 if panel and panel.__MSUF_MirrorActive then
-                    MSUF_ApplyWhiteTextToFrame(panel)
-                    MSUF_ApplyFontBumpToFrame(panel, MIRRORED_PANEL_FONT_BUMP)
+                    MSUF_ApplyWhiteTextToFrame(panel); MSUF_ApplyFontBumpToFrame(panel, MIRRORED_PANEL_FONT_BUMP)
                 end
             end)
         end
@@ -2794,15 +2476,11 @@ local function MSUF_Standalone_AfterAttachFixups(key, isCastbarKey)
         p:HookScript("OnSizeChanged", function()
             if S and S.mirror and MSUF_IsCastbarKey(S.mirror.currentKey) then
                 local function repin()
-                    if S and S.mirror and MSUF_IsCastbarKey(S.mirror.currentKey) then
-                        MSUF_Standalone_SetCastbarTopButtonsHidden(true)
-                    end
+                    if S and S.mirror and MSUF_IsCastbarKey(S.mirror.currentKey) then MSUF_Standalone_SetCastbarTopButtonsHidden(true) end
                 end
                 if C_Timer and C_Timer.After then
-                    C_Timer.After(0, repin)
-                    C_Timer.After(0.05, repin)
-                    C_Timer.After(0.15, repin)
-                    C_Timer.After(0.30, repin)
+                    C_Timer.After(0, repin); C_Timer.After(0.05, repin)
+                    C_Timer.After(0.15, repin); C_Timer.After(0.30, repin)
                 else
                     repin()
                 end
@@ -2813,9 +2491,7 @@ end
 local function MSUF_SwitchMirrorPage(key, subkey)
     key = MSUF_NormalizeMirrorKey(key, true)
     if key == "home" then
-        if S.mirror and MSUF_IsCastbarKey(S.mirror.currentKey) and not MSUF_IsCastbarKey(key) then
-            MSUF_Standalone_SetCastbarTopButtonsHidden(false)
-        end
+        if S.mirror and MSUF_IsCastbarKey(S.mirror.currentKey) and not MSUF_IsCastbarKey(key) then MSUF_Standalone_SetCastbarTopButtonsHidden(false) end
         if S.mirror.currentPanel then
             MSUF_DetachMirroredPanel(S.mirror.currentPanel)
             S.mirror.currentPanel = nil
@@ -2829,9 +2505,7 @@ local function MSUF_SwitchMirrorPage(key, subkey)
         MSUF_Standalone_UpdateNav("home")
         return
     end
-    if S.mirror.homePanel and S.mirror.homePanel.Hide then
-        S.mirror.homePanel:Hide()
-    end
+    if S.mirror.homePanel and S.mirror.homePanel.Hide then S.mirror.homePanel:Hide() end
     local isCastbarKey = MSUF_IsCastbarKey(key)
     if S.mirror.currentKey == key and S.mirror.currentPanel and S.mirror.currentPanel.IsShown and S.mirror.currentPanel:IsShown() then
         MSUF_Standalone_ApplySelection(key, subkey, isCastbarKey)
@@ -2839,9 +2513,7 @@ local function MSUF_SwitchMirrorPage(key, subkey)
         MSUF_Standalone_UpdateNav(key)
         return
     end
-    if S.mirror and MSUF_IsCastbarKey(S.mirror.currentKey) and not isCastbarKey then
-        MSUF_Standalone_SetCastbarTopButtonsHidden(false)
-    end
+    if S.mirror and MSUF_IsCastbarKey(S.mirror.currentKey) and not isCastbarKey then MSUF_Standalone_SetCastbarTopButtonsHidden(false) end
     if S.mirror.currentPanel then
         MSUF_DetachMirroredPanel(S.mirror.currentPanel)
         S.mirror.currentPanel = nil
@@ -2950,9 +2622,7 @@ local function MSUF_BuildMirrorNavButtons(navParent, btnW, btnH)
     end
     local function Reflow()
         local yOfs = -padT
-        if hasTitle then
-            yOfs = -(padT + 26)
-        end
+        if hasTitle then yOfs = -(padT + 26) end
         local lowestBottomY = 0
         local function Place(btn, x)
             if not btn then return end
@@ -2961,9 +2631,7 @@ local function MSUF_BuildMirrorNavButtons(navParent, btnW, btnH)
                 btn:SetPoint("TOPLEFT", navParent, "TOPLEFT", padL + (x or 0), yOfs)
             end
             local bottomY = yOfs - btnH
-            if bottomY < lowestBottomY then
-                lowestBottomY = bottomY
-            end
+            if bottomY < lowestBottomY then lowestBottomY = bottomY end
             yOfs = yOfs - (btnH + gap)
         end
         for _, it in ipairs(created) do
@@ -2973,9 +2641,7 @@ local function MSUF_BuildMirrorNavButtons(navParent, btnW, btnH)
             elseif it.kind == "header" then
                 local open = headers[it.id]
                 local baseLabel = headerLabels[it.id]
-                if baseLabel and it.btn.SetText then
-                    it.btn:SetText((open and "- " or "+ ") .. baseLabel)
-                end
+                if baseLabel and it.btn.SetText then it.btn:SetText((open and "- " or "+ ") .. baseLabel) end
                 if it.btn.Show then it.btn:Show() end
                 Place(it.btn, 0)
             elseif it.kind == "child" then
@@ -3017,17 +2683,11 @@ local function MSUF_CreateOptionsWindow()
     local f = CreateFrame("Frame", "MSUF_StandaloneOptionsWindow", UIParent, "BackdropTemplate")
     f:SetSize(900, 650)
     f:SetPoint("CENTER", UIParent, "CENTER", -60, 10)
-    if f.SetClipsChildren then
-        f:SetClipsChildren(false)
-    end
+    if f.SetClipsChildren then f:SetClipsChildren(false) end
     f:SetFrameStrata("DIALOG")
     f:SetClampedToScreen(true)
-    if f.SetClampRectInsets then
-        f:SetClampRectInsets(8, 8, 8, 8)
-    end
-    if MSUF_RegisterEscClose then
-        MSUF_RegisterEscClose(f)
-    end
+    if f.SetClampRectInsets then f:SetClampRectInsets(8, 8, 8, 8) end
+    if MSUF_RegisterEscClose then MSUF_RegisterEscClose(f) end
     f:EnableMouse(true)
     f:SetMovable(true)
     f:SetResizable(true)
@@ -3041,16 +2701,12 @@ local function MSUF_CreateOptionsWindow()
         f._msufMinW, f._msufMinH, f._msufMaxW, f._msufMaxH = minW, minH, maxW, maxH
     end
     f._msufGeomKey = "full"
-    if MSUF_LoadWindowGeometry then
-        MSUF_LoadWindowGeometry(f, "full", 900, 650, "CENTER", -60, 10)
-    end
+    if MSUF_LoadWindowGeometry then MSUF_LoadWindowGeometry(f, "full", 900, 650, "CENTER", -60, 10) end
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", function(self) self:StartMoving() end)
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
-        if MSUF_SaveWindowGeometry then
-            MSUF_SaveWindowGeometry(self, self._msufGeomKey or "full")
-        end
+        if MSUF_SaveWindowGeometry then MSUF_SaveWindowGeometry(self, self._msufGeomKey or "full") end
     end)
     MSUF_AttachManualResizeGrip(f)
     MSUF_ApplyMidnightBackdrop(f, 1.0)
@@ -3087,9 +2743,7 @@ local close = UI_CloseButton(f, "TOPRIGHT", f, "TOPRIGHT", -4, -4)
     content:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -30)
     content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8, 8)
     content:SetScale(1.0)
-    if content.SetClipsChildren then
-        content:SetClipsChildren(false)
-    end
+    if content.SetClipsChildren then content:SetClipsChildren(false) end
     S.content = content
     local navRail = CreateFrame("Frame", nil, content, "BackdropTemplate")
     navRail:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
@@ -3101,16 +2755,12 @@ local close = UI_CloseButton(f, "TOPRIGHT", f, "TOPRIGHT", -4, -4)
     host:SetPoint("TOPLEFT", navRail, "TOPRIGHT", 8, 0)
     host:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", 0, 0)
     host:SetScale(1.0)
-    if host.SetClipsChildren then
-        host:SetClipsChildren(false)
-    end
+    if host.SetClipsChildren then host:SetClipsChildren(false) end
     f._msufMirrorHost = host
     local clip = CreateFrame("Frame", nil, host)
     clip:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
     clip:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-    if clip.SetClipsChildren then
-        clip:SetClipsChildren(true)
-    end
+    if clip.SetClipsChildren then clip:SetClipsChildren(true) end
     f._msufMirrorClipHost = clip
     local navStack = CreateFrame("Frame", nil, navRail)
     navStack._msufSkipNavTitle = true
@@ -3209,9 +2859,7 @@ end
 local function DashToggleEditMode()
     if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
         local st = _G.MSUF_EditState; local nextActive = true
-        if st and st.active ~= nil then
-            nextActive = not st.active
-        end
+        if st and st.active ~= nil then nextActive = not st.active end
         pcall(_G.MSUF_SetMSUFEditModeDirect, nextActive)
         return
     end
@@ -3264,15 +2912,11 @@ local function MSUF_ShowFactoryResetConfirm()
             preferredIndex = 3,
             OnAccept = function()
                 if type(_G.MSUF_DoFullReset) == "function" then
-                    pcall(_G.MSUF_DoFullReset)
-                    return
+                    pcall(_G.MSUF_DoFullReset); return
                 end
-                _G.MSUF_DB = nil
-                _G.MSUF_GlobalDB = nil
+                _G.MSUF_DB = nil; _G.MSUF_GlobalDB = nil
                 _G.MSUF_ActiveProfile = nil
-                if type(ReloadUI) == "function" then
-                    ReloadUI()
-                end
+                if type(ReloadUI) == "function" then ReloadUI() end
             end,
         }
     end
@@ -3282,12 +2926,8 @@ local quick = CreateCard(colL, "Quick Actions")
 quick:SetHeight(206)
 local bigW = 410; local bigH = 26; local LQ = MSUF_LayoutColumn(quick, 12, -34, bigH, 8); local qx1, qy1 = LQ:Row(bigH, 8); local bEdit = UI_BtnTL(quick, "Toggle Edit Mode", bigW, bigH, qx1, qy1, DashToggleEditMode, "Toggle Edit Mode", "Enter MSUF Edit Mode to drag frames and adjust positions.", MSUF_SkinDashboardButton)
 local win = _G and _G.MSUF_StandaloneOptionsWindow
-if win then
-    win._msufDashEditBtn = bEdit
-end
-if bEdit and bEdit._msufSetSelected then
-    bEdit:_msufSetSelected(MSUF_IsMSUFEditModeActive())
-end
+if win then win._msufDashEditBtn = bEdit end
+if bEdit and bEdit._msufSetSelected then bEdit:_msufSetSelected(MSUF_IsMSUFEditModeActive()) end
 MSUF_TryHookEditModeForDashboard()
 local qx2, qy2 = LQ:Row(bigH, 10); local bReset = UI_BtnTL(quick, "Reset Frame Positions", bigW, bigH, qx2, qy2, MSUF_ShowResetPositionsConfirm, "Reset Frame Positions", "Resets MSUF frame positions + visibility to defaults (active profile).", MSUF_SkinDashboardButton); local smallH = 22; local qx3, qy3 = LQ:Row(smallH, 0); local rowBtns = MSUF_BuildButtonRowTL(quick, qx3, qy3, {
     { text = "Colors",   w = 160, h = smallH, gap = 10, skinFn = MSUF_SkinDashboardButton, onClick = function() MSUF_SwitchMirrorPage("colors") end },
@@ -3310,9 +2950,7 @@ do
     local bDiscordSelect = UI_Btn(discordRow, "Select", 72, 18, "RIGHT", discordRow, "RIGHT", 0, 0, function()
         if discordRow._msufDiscordBox and discordRow._msufDiscordBox.SetFocus then
             discordRow._msufDiscordBox:SetFocus()
-            if discordRow._msufDiscordBox.HighlightText then
-                discordRow._msufDiscordBox:HighlightText()
-            end
+            if discordRow._msufDiscordBox.HighlightText then discordRow._msufDiscordBox:HighlightText() end
         end
     end, "Select", "Click to select this text.", MSUF_SkinDashboardButton)
     local discordBox = CreateFrame("EditBox", nil, discordRow, "InputBoxTemplate")
@@ -3322,9 +2960,7 @@ do
     discordBox:SetPoint("RIGHT", bDiscordSelect, "LEFT", -8, 0)
     discordBox:SetText(DISCORD_URL)
     discordBox:SetCursorPosition(0)
-    if discordBox.SetTextColor then
-        discordBox:SetTextColor(0.30, 0.60, 1.00)
-    end
+    if discordBox.SetTextColor then discordBox:SetTextColor(0.30, 0.60, 1.00) end
     if discordBox.SetScript then
         discordBox:SetScript("OnEditFocusGained", function(self)
             if self.HighlightText then self:HighlightText() end
@@ -3382,9 +3018,7 @@ do
         {
             text = "Print Help", w = 120, h = 20,
             onClick = function()
-                if _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"] then
-                    pcall(_G.SlashCmdList["MIDNIGHTSUF"], "help")
-                end
+                if _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"] then pcall(_G.SlashCmdList["MIDNIGHTSUF"], "help") end
             end,
         },
         {
@@ -3417,8 +3051,7 @@ local function AdvApplyState(open)
     end
 end
 advToggle:SetScript("OnClick", function()
-    S.mirror.dashAdvOpen = not S.mirror.dashAdvOpen
-    AdvApplyState(S.mirror.dashAdvOpen)
+    S.mirror.dashAdvOpen = not S.mirror.dashAdvOpen; AdvApplyState(S.mirror.dashAdvOpen)
 end)
 AdvApplyState(S.mirror.dashAdvOpen == true)
 local scaleCard = CreateCard(colR, nil, nil, nil, true)
@@ -3434,19 +3067,14 @@ UIDropDownMenu_SetText(presetDrop, presetsCard._msufSelectedPreset or "Select pr
 UIDropDownMenu_Initialize(presetDrop, function(self, level)
     local names = MSUF_GetPresetNames()
     if not names or #names == 0 then
-        local info = UIDropDownMenu_CreateInfo()
-        info.text = "(no presets)"
-        info.notCheckable = true
-        UIDropDownMenu_AddButton(info, level)
+        local info = UIDropDownMenu_CreateInfo(); info.text = "(no presets)"
+        info.notCheckable = true; UIDropDownMenu_AddButton(info, level)
         return
     end
     for _, name in ipairs(names) do
-        local info = UIDropDownMenu_CreateInfo()
-        info.text = name
-        info.checked = (presetsCard._msufSelectedPreset == name)
-        info.func = function()
-            presetsCard._msufSelectedPreset = name
-            UIDropDownMenu_SetText(presetDrop, name)
+        local info = UIDropDownMenu_CreateInfo(); info.text = name
+        info.checked = (presetsCard._msufSelectedPreset == name); info.func = function()
+            presetsCard._msufSelectedPreset = name; UIDropDownMenu_SetText(presetDrop, name)
         end
         UIDropDownMenu_AddButton(info, level)
     end
@@ -3461,8 +3089,7 @@ end
 local bLoadPreset = UI_Btn(presetsCard, "Load preset", 240, 24, "TOPLEFT", presetDrop, "BOTTOMLEFT", 16, -6, function()
     local sel = presetsCard._msufSelectedPreset
     if not sel then
-        MSUF_Print("Select a preset first.")
-        return
+        MSUF_Print("Select a preset first."); return
     end
     MSUF_ShowPresetConfirm(sel)
 end, "Load preset", "Applies the selected preset to your current active profile. This overwrites settings (export first if unsure).", MSUF_SkinDashboardButton)
@@ -3477,9 +3104,7 @@ do
     supportLabel:SetTextColor(0.90, 0.90, 0.90)
     supportLabel:SetJustifyH("LEFT")
     supportLabel:SetJustifyV("MIDDLE")
-    if MSUF_SkinMuted then
-        pcall(MSUF_SkinMuted, supportLabel)
-    end
+    if MSUF_SkinMuted then pcall(MSUF_SkinMuted, supportLabel) end
     local row = CreateFrame("Frame", nil, presetsCard)
     row:SetHeight(24)
     row:SetWidth(120)
@@ -3499,11 +3124,8 @@ do
         else
             b:SetScript("OnEnter", function(self)
                 if not GameTooltip then return end
-                GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
-                GameTooltip:AddLine(tooltipTitle or "", 1, 1, 1)
-                if tooltipText and tooltipText ~= "" then
-                    GameTooltip:AddLine(tooltipText, 0.85, 0.85, 0.85, true)
-                end
+                GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT"); GameTooltip:AddLine(tooltipTitle or "", 1, 1, 1)
+                if tooltipText and tooltipText ~= "" then GameTooltip:AddLine(tooltipText, 0.85, 0.85, 0.85, true) end
                 GameTooltip:Show()
             end)
             b:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
@@ -3548,9 +3170,7 @@ end
         if presetDrop and UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(presetDrop, ddW) end
         if bLoadPreset and bLoadPreset.SetWidth then bLoadPreset:SetWidth(math.max(1, math.min(innerR, ddW + 20))) end
         if presetHint and presetHint.SetWidth then presetHint:SetWidth(innerR) end
-        if S and S.mirror and S.mirror.homeToolsApi and S.mirror.homeToolsApi.Layout then
-            pcall(S.mirror.homeToolsApi.Layout)
-        end
+        if S and S.mirror and S.mirror.homeToolsApi and S.mirror.homeToolsApi.Layout then pcall(S.mirror.homeToolsApi.Layout) end
     end
     if not home.__MSUF_DashboardLayoutHooked then
         home.__MSUF_DashboardLayoutHooked = true
@@ -3574,28 +3194,20 @@ end
         do
             local nav = f._msufNavRail
             if nav and nav._msufTreeHeaders then
-                nav._msufTreeHeaders.unitframes = true
-                nav._msufTreeHeaders.options = true
+                nav._msufTreeHeaders.unitframes = true; nav._msufTreeHeaders.options = true
                 if nav._msufTreeReflow then nav._msufTreeReflow() end
             end
         end
-        if MSUF_PickSessionTip then
-            MSUF_PickSessionTip()
-        end
-        local startKey = f._msufInitialKey or "home"; local startSubKey = f._msufInitialSubKey
-        f._msufInitialKey = nil
-        f._msufInitialSubKey = nil
-        S.mirror.currentKey = startKey
+        if MSUF_PickSessionTip then MSUF_PickSessionTip() end
+        local startKey = f._msufInitialKey or "home"; local startSubKey = f._msufInitialSubKey; f._msufInitialKey = nil
+        f._msufInitialSubKey = nil; S.mirror.currentKey = startKey
         MSUF_SwitchMirrorPage(startKey, startSubKey)
     end)
     f:SetScript("OnHide", function()
         MSUF_Standalone_SetCastbarTopButtonsHidden(false)
-        if MSUF_SaveWindowGeometry then
-            MSUF_SaveWindowGeometry(f, f._msufGeomKey or "full")
-        end
+        if MSUF_SaveWindowGeometry then MSUF_SaveWindowGeometry(f, f._msufGeomKey or "full") end
         if S.mirror.currentPanel then
-            MSUF_DetachMirroredPanel(S.mirror.currentPanel)
-            S.mirror.currentPanel = nil
+            MSUF_DetachMirroredPanel(S.mirror.currentPanel); S.mirror.currentPanel = nil
         end
     end)
     f:Hide()
@@ -3638,9 +3250,7 @@ local function MSUF_ShowOptionsWindow(key, subkey)
     return w
 end
 local function MSUF_HideOptionsWindow()
-    if S and S.win and S.win.IsShown and S.win:IsShown() and S.win.Hide then
-        S.win:Hide()
-    end
+    if S and S.win and S.win.IsShown and S.win:IsShown() and S.win.Hide then S.win:Hide() end
 end
 _G.MSUF_ShowStandaloneOptionsWindow = MSUF_ShowOptionsWindow
 _G.MSUF_OpenStandaloneOptionsWindow = MSUF_ShowOptionsWindow
@@ -3675,9 +3285,7 @@ _G.MSUF_OpenPage = function(key, subkey)
     local info = (type(MSUF_GetMirrorPageInfo) == "function") and MSUF_GetMirrorPageInfo(key) or nil
     if info then
         local panel
-        if type(info.build) == "function" then
-            panel = info.build()
-        end
+        if type(info.build) == "function" then panel = info.build() end
         if (key ~= "home") and (type(info.build) == "function") and (not panel) then
             MSUF_ShowOptionsWindow("home")
             return false
@@ -3756,15 +3364,11 @@ scaleEvent:RegisterEvent("PLAYER_LOGIN")
 scaleEvent:RegisterEvent("PLAYER_ENTERING_WORLD")
 scaleEvent:RegisterEvent("DISPLAY_SIZE_CHANGED")
 scaleEvent:SetScript("OnEvent", function(_, event, arg1)
-    if MSUF_IsScalingDisabled and MSUF_IsScalingDisabled() then
-        return
-    end
-    MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale())
-    local want = MSUF_GetDesiredGlobalScaleFromDB()
+    if MSUF_IsScalingDisabled and MSUF_IsScalingDisabled() then return end
+    MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale()); local want = MSUF_GetDesiredGlobalScaleFromDB()
     if want then
         if event == "PLAYER_LOGIN" then
-            MSUF_SetGlobalUiScale(want, true)
-            MSUF_EnsureGlobalUiScaleApplied(true)
+            MSUF_SetGlobalUiScale(want, true); MSUF_EnsureGlobalUiScaleApplied(true)
         else
             MSUF_EnsureGlobalUiScaleApplied(true)
         end
@@ -3772,14 +3376,10 @@ scaleEvent:SetScript("OnEvent", function(_, event, arg1)
 end)
 if C_Timer and C_Timer.After then
     C_Timer.After(0, function()
-        if MSUF_IsScalingDisabled and MSUF_IsScalingDisabled() then
-            return
-        end
-        MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale())
-        local want = MSUF_GetDesiredGlobalScaleFromDB()
+        if MSUF_IsScalingDisabled and MSUF_IsScalingDisabled() then return end
+        MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale()); local want = MSUF_GetDesiredGlobalScaleFromDB()
         if want then
-            MSUF_SetGlobalUiScale(want, true, { applyCVars = false })
-            MSUF_EnsureGlobalUiScaleApplied(true)
+            MSUF_SetGlobalUiScale(want, true, { applyCVars = false }); MSUF_EnsureGlobalUiScaleApplied(true)
         end
     end)
 end
