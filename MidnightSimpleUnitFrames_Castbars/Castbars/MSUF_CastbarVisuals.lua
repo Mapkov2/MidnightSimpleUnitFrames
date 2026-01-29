@@ -206,17 +206,20 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
         end
     end
 
+    -- Fill the full available height so we don't accidentally render a 1px "inner" line
+    -- (which looks like an outline) when the actual outline thickness is 0.
     statusBar:ClearAllPoints()
-    if showIcon and icon and not iconDetached then
-        statusBar:SetPoint("LEFT", frame, "LEFT", iconSize + 1, 0)
-        statusBar:SetWidth(width - (iconSize + 1))
-    else
-        statusBar:SetPoint("LEFT", frame, "LEFT", 0, 0)
-        statusBar:SetWidth(width)
+    local snap = _G.MSUF_Snap
+    local leftInset = (showIcon and icon and not iconDetached) and (iconSize) or 0
+    if type(snap) == "function" then
+        leftInset = snap(frame, leftInset)
     end
-    statusBar:SetHeight(height - 2)
+    statusBar:SetPoint("LEFT", frame, "LEFT", leftInset, 0)
+    statusBar:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+    statusBar:SetPoint("TOP", frame, "TOP", 0, 0)
+    statusBar:SetPoint("BOTTOM", frame, "BOTTOM", 0, 0)
 
-    if backgroundBar and statusBar then
+    if backgroundBar then
         backgroundBar:ClearAllPoints()
         backgroundBar:SetAllPoints(statusBar)
     end

@@ -5,9 +5,24 @@
 local _G = _G
 
 function _G.MSUF_BuildCastbarFrameElements(self)
+    local snap = _G.MSUF_Snap
+
     local height = 18
+    if type(snap) == "function" then
+        height = snap(self, height)
+    end
     self:SetHeight(height)
-    if (not self:GetWidth()) or self:GetWidth() == 0 then self:SetWidth(250) end
+
+    local w = self.GetWidth and self:GetWidth() or 0
+    if (not w) or w == 0 then
+        w = 250
+    end
+    if type(snap) == "function" then
+        w = snap(self, w)
+    end
+    if self.SetWidth and w and w > 0 then
+        self:SetWidth(w)
+    end
 
     local background = self:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(self)
@@ -15,8 +30,14 @@ function _G.MSUF_BuildCastbarFrameElements(self)
     self.background = background
 
     local statusBar = CreateFrame("StatusBar", nil, self)
-    statusBar:SetSize(self:GetWidth() - height - 1, self:GetHeight() - 2)
-    statusBar:SetPoint("LEFT", self, "LEFT", height + 1, 0)
+    -- Pixel-perfect: the StatusBar must fill the full vertical height of the container.
+    -- Any internal -1/-2 height padding leaves a visible 1px line when outline thickness is 0.
+    local leftInset = height
+    if type(snap) == "function" then
+        leftInset = snap(self, leftInset)
+    end
+    statusBar:SetPoint("TOPLEFT", self, "TOPLEFT", leftInset, 0)
+    statusBar:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
 
     local texture = MSUF_GetCastbarTexture and MSUF_GetCastbarTexture() or "Interface\\TargetingFrame\\UI-StatusBar"
     statusBar:SetStatusBarTexture(texture)
@@ -94,6 +115,12 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
     f.unit = kind
     f:SetClampedToScreen(true)
     f:SetFrameStrata(opts.strata or "DIALOG")
+    local snap = _G.MSUF_Snap
+    if type(snap) == "function" then
+        w = snap(f, w)
+        h = snap(f, h)
+        sbH = snap(f, sbH)
+    end
     f:SetSize(w, h)
 
     local bg = f:CreateTexture(nil, "BACKGROUND")
@@ -102,8 +129,16 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
     f.backgroundBar = bg
 
     local statusBar = CreateFrame("StatusBar", nil, f)
-    statusBar:SetPoint("LEFT", f, "LEFT", 0, 0)
-    statusBar:SetSize(w, sbH)
+    local leftInset = 0
+    if opts.showIcon ~= false then
+        local iconSize = tonumber(opts.iconSize) or h
+        leftInset = iconSize + 1
+    end
+    if type(snap) == "function" then
+        leftInset = snap(f, leftInset)
+    end
+    statusBar:SetPoint("TOPLEFT", f, "TOPLEFT", leftInset, 0)
+    statusBar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
     local tex = (type(MSUF_GetCastbarTexture) == "function" and MSUF_GetCastbarTexture()) or "Interface\\TargetingFrame\\UI-StatusBar"
     statusBar:SetStatusBarTexture(tex)
     local sbTex = statusBar.GetStatusBarTexture and statusBar:GetStatusBarTexture()

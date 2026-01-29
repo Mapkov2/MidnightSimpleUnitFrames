@@ -49,6 +49,12 @@ if type(MSUF_SetPointIfChanged) ~= "function" then
         xOfs = xOfs or 0
         yOfs = yOfs or 0
 
+        local snap = _G.MSUF_Snap
+        if type(snap) == "function" then
+            xOfs = snap(frame, xOfs)
+            yOfs = snap(frame, yOfs)
+        end
+
         if frame._msufLastPoint == point and frame._msufLastRel == relativeTo and frame._msufLastRelPoint == relativePoint
            and frame._msufLastX == xOfs and frame._msufLastY == yOfs then
             return
@@ -1912,7 +1918,9 @@ function MSUF_InitSafePlayerCastbar()
         local statusBar = CreateFrame("StatusBar", nil, frame)
         statusBar:SetPoint("LEFT", icon, "RIGHT", 0, 0)
         statusBar:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
-        statusBar:SetHeight(height - 2)
+        -- Pixel-perfect: avoid internal -2 height padding (causes a visible 1px line when outline thickness is 0)
+    statusBar:SetPoint("TOP", frame, "TOP", 0, 0)
+    statusBar:SetPoint("BOTTOM", frame, "BOTTOM", 0, 0)
 
         local texture = MSUF_GetCastbarTexture()
         statusBar:SetStatusBarTexture(texture)
@@ -2091,6 +2099,10 @@ function MSUF_ReanchorTargetCastBar()
         width = frame.GetWidth and frame:GetWidth() or 240
     end
     if width and width > 0 then
+        local snap = _G.MSUF_Snap
+        if type(snap) == "function" then
+            width = snap(frame, width)
+        end
         local height = frame:GetHeight() or 18
         MSUF_SetWidthIfChanged(frame, width)
 
@@ -2170,6 +2182,10 @@ function MSUF_ReanchorFocusCastBar()
         width = frame.GetWidth and frame:GetWidth() or 240
     end
     if width and width > 0 then
+        local snap = _G.MSUF_Snap
+        if type(snap) == "function" then
+            width = snap(frame, width)
+        end
         local height = frame:GetHeight() or 18
         MSUF_SetWidthIfChanged(frame, width)
 
@@ -3047,6 +3063,12 @@ end
 local function MSUF_ApplyPlayerCastbarSizeAndLayout(bar, g, w, h)
     if not bar then return end
 
+    local snap = _G.MSUF_Snap
+    if type(snap) == "function" then
+        if w ~= nil then w = snap(bar, w) end
+        if h ~= nil then h = snap(bar, h) end
+    end
+
     -- Size
     if MSUF_SetWidthIfChanged then
         MSUF_SetWidthIfChanged(bar, w)
@@ -3061,7 +3083,7 @@ local function MSUF_ApplyPlayerCastbarSizeAndLayout(bar, g, w, h)
 
     -- Icon/statusbar layout (player uses a special layout helper)
     if bar.statusBar and type(_G.MSUF_ApplyPlayerCastbarIconLayout) == "function" then
-        _G.MSUF_ApplyPlayerCastbarIconLayout(bar, g, -1, 1)
+        _G.MSUF_ApplyPlayerCastbarIconLayout(bar, g, 0, 0)
     end
 
     -- Empower stage tick heights must follow bar height

@@ -53,6 +53,11 @@ function S:ApplyCastbarOutline(frame, force)
     if thickness < 0 then thickness = 0 end
     if thickness > 12 then thickness = 12 end
 
+    local snap = _G and _G.MSUF_Snap
+    local stampFn = _G and _G.MSUF_GetPixelPerfectStamp
+    local stamp = (type(stampFn) == "function") and stampFn(frame) or nil
+    local edge = (type(snap) == "function") and snap(frame, thickness) or thickness
+
     local r = tonumber(g.castbarBorderR); if r == nil then r = 0 end
     local gg = tonumber(g.castbarBorderG); if gg == nil then gg = 0 end
     local b = tonumber(g.castbarBorderB); if b == nil then b = 0 end
@@ -61,33 +66,37 @@ function S:ApplyCastbarOutline(frame, force)
     if thickness <= 0 then
         o.top:Hide(); o.bottom:Hide(); o.left:Hide(); o.right:Hide()
         frame._msufOutlineT = 0
+        frame._msufOutlineEdge = 0
+        frame._msufOutlineStamp = stamp
         return
     end
 
-    if force or frame._msufOutlineT ~= thickness then
+    if force or frame._msufOutlineT ~= thickness or frame._msufOutlineEdge ~= edge or frame._msufOutlineStamp ~= stamp then
         o.top:ClearAllPoints()
         -- OUTSIDE outline: thickness grows outward (true "outline"), not inward over the bar.
         -- Corner cleanup: top/bottom edges avoid overlapping left/right edges (no fat corners at thickness 5-6).
-        o.top:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, thickness)
-        o.top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, thickness)
-        o.top:SetHeight(thickness)
+        o.top:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, edge)
+        o.top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, edge)
+        o.top:SetHeight(edge)
 
         o.bottom:ClearAllPoints()
-        o.bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, -thickness)
-        o.bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -thickness)
-        o.bottom:SetHeight(thickness)
+        o.bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, -edge)
+        o.bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -edge)
+        o.bottom:SetHeight(edge)
 
         o.left:ClearAllPoints()
-        o.left:SetPoint("TOPLEFT", frame, "TOPLEFT", -thickness, thickness)
-        o.left:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -thickness, -thickness)
-        o.left:SetWidth(thickness)
+        o.left:SetPoint("TOPLEFT", frame, "TOPLEFT", -edge, edge)
+        o.left:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -edge, -edge)
+        o.left:SetWidth(edge)
 
         o.right:ClearAllPoints()
-        o.right:SetPoint("TOPRIGHT", frame, "TOPRIGHT", thickness, thickness)
-        o.right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", thickness, -thickness)
-        o.right:SetWidth(thickness)
+        o.right:SetPoint("TOPRIGHT", frame, "TOPRIGHT", edge, edge)
+        o.right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", edge, -edge)
+        o.right:SetWidth(edge)
 
         frame._msufOutlineT = thickness
+        frame._msufOutlineEdge = edge
+        frame._msufOutlineStamp = stamp
     end
 
     if force or frame._msufOutlineR ~= r or frame._msufOutlineG ~= gg or frame._msufOutlineB ~= b or frame._msufOutlineA ~= a then

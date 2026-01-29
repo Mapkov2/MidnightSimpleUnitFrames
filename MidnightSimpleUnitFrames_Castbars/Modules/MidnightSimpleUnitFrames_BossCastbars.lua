@@ -365,7 +365,7 @@ if self.statusBar then
     -- If the icon is enabled AND not detached, reserve space on the left (no overlap).
     -- If icon is disabled (or detached), the statusbar uses the full width (fixes the "black gap" when icon is off).
     if showIcon and self.icon and not iconDetached then
-        self.statusBar:SetPoint("LEFT", self, "LEFT", iconSize + 1, 0)
+        self.statusBar:SetPoint("LEFT", self, "LEFT", iconSize, 0)
     else
         self.statusBar:SetPoint("LEFT", self, "LEFT", 0, 0)
     end
@@ -1602,7 +1602,7 @@ local function MSUF_ApplyBossCastbarPreviewLayout(f, index)
         f.statusBar:ClearAllPoints()
 
         if showIcon and f.icon and not iconDetached then
-            f.statusBar:SetPoint("LEFT", f, "LEFT", iconSize + 1, 0)
+            f.statusBar:SetPoint("LEFT", f, "LEFT", iconSize, 0)
         else
             f.statusBar:SetPoint("LEFT", f, "LEFT", 1, 0)
         end
