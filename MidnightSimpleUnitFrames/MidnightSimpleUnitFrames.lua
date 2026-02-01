@@ -4606,6 +4606,11 @@ local function MSUF_GetUnitLevelText(unit)
     end
     return tostring(lvl)
 end
+
+-- Export for legacy paths (some earlier helpers reference this as a global).
+-- Keeping this avoids blank/missing level text when a legacy full update runs.
+_G.MSUF_GetUnitLevelText = MSUF_GetUnitLevelText
+
 local function MSUF_GetUnitHealthPercent(unit)
     if type(UnitHealthPercent) == "function" then
         local ok, pct
@@ -4908,8 +4913,9 @@ if self.leaderIcon then
     if not ns.Util.Enabled(conf, g, "showLeaderIcon", true) then
         ns.Util.SetShown(self.leaderIcon, false)
     else
-        local tex = (UnitIsGroupLeader and UnitIsGroupLeader(unit) and "Interface\GroupFrame\UI-Group-LeaderIcon")
-            or (UnitIsGroupAssistant and UnitIsGroupAssistant(unit) and "Interface\GroupFrame\UI-Group-AssistantIcon")
+        -- NOTE: use escaped backslashes in lua strings (otherwise the path becomes invalid).
+        local tex = (UnitIsGroupLeader and UnitIsGroupLeader(unit) and "Interface\\GroupFrame\\UI-Group-LeaderIcon")
+            or (UnitIsGroupAssistant and UnitIsGroupAssistant(unit) and "Interface\\GroupFrame\\UI-Group-AssistantIcon")
         if tex and self.leaderIcon.SetTexture then self.leaderIcon:SetTexture(tex); ns.Util.SetShown(self.leaderIcon, true) else ns.Util.SetShown(self.leaderIcon, false) end
     end
 end
@@ -5295,6 +5301,15 @@ local function MSUF_ApplyUnitFrameKey_Immediate(key)
     EnsureDB()
     local conf = MSUF_DB[key]
     if not conf then return end
+	    -- Ensure UnitframeCore refreshes event masks + option caches for this unit so
+	    -- changes apply immediately without requiring /reload or a unit swap.
+	    if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+	        if key == "boss" then
+	            _G.MSUF_UFCore_NotifyConfigChanged(nil, false, true, "ApplyUnitKey:boss")
+	        else
+	            _G.MSUF_UFCore_NotifyConfigChanged(key, false, true, "ApplyUnitKey:" .. tostring(key))
+	        end
+	    end
     local function hideFrame(unit)
         local f = UnitFrames[unit]
         if f then
@@ -5354,7 +5369,10 @@ f:Hide()
     end
         ApplyTextLayout(f, conf)
         MSUF_ClampNameWidth(f, conf)
-        ns.UF.RequestUpdate(f, true, true, "ApplyUnitKey")
+        -- Do NOT force a legacy full update here.
+        -- UFCore handles Identity/Indicators etc. Forcing a full update can overwrite
+        -- level + leader/assist state and makes settings appear to apply only after unit swaps.
+        ns.UF.RequestUpdate(f, false, true, "ApplyUnitKey")
     end
     if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "pet" then
         applyToFrame(key)
@@ -5478,6 +5496,12 @@ _G.MSUF_ApplySettingsForKey_Immediate = _G.MSUF_ApplySettingsForKey_Immediate or
     end
 end
 _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or function()
+    EnsureDB()
+    -- Keep UnitframeCore caches + event masks in sync so settings apply immediately
+    -- (fixes level/leader indicators and other cached-option regressions).
+    if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+        _G.MSUF_UFCore_NotifyConfigChanged(nil, false, true, "ApplyAllSettings_Immediate")
+    end
     MSUF_ApplyUnitFrameKey_Immediate("player")
     MSUF_ApplyUnitFrameKey_Immediate("target")
     MSUF_ApplyUnitFrameKey_Immediate("focus")
@@ -6728,7 +6752,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Release Build 1.9rc2  |cff565f89•|r  |cffc0caf5 Have a great week gamer <3 -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.9rc1  |cff565f89•|r  |cffc0caf5 Huge background changes -|r  |cfff7768eReport bugs in the Discord.|r")
 end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then
