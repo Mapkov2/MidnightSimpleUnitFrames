@@ -10,6 +10,7 @@ ns = ns or {}
 local CreateFrame   = CreateFrame
 local UIParent      = UIParent
 local pairs         = pairs
+local C_NamePlate   = C_NamePlate
 local C_Spell       = C_Spell
 local C_SpellBook   = C_SpellBook
 local UnitExists    = UnitExists
@@ -17,6 +18,7 @@ local UnitCanAttack = UnitCanAttack
 local GetTime             = GetTime
 local UnitAffectingCombat = UnitAffectingCombat
 local InCombatLockdown    = InCombatLockdown
+local GetNamePlates       = C_NamePlate and C_NamePlate.GetNamePlates
 local string_format       = string.format
 local GetCVar    = GetCVar
 local GetCVarBool = GetCVarBool
@@ -59,17 +61,18 @@ do
         end
         _applyPending = true
 
-        local function _Run()
+        if C_Timer_After then
+            C_Timer_After(0, function()
+                _applyPending = false
+                if ns and ns.MSUF_ApplyGameplayVisuals then
+                    ns.MSUF_ApplyGameplayVisuals()
+                end
+            end)
+        else
             _applyPending = false
             if ns and ns.MSUF_ApplyGameplayVisuals then
                 ns.MSUF_ApplyGameplayVisuals()
             end
-        end
-
-        if C_Timer_After then
-            C_Timer_After(0, _Run)
-        else
-            _Run()
         end
     end
 end
@@ -143,6 +146,11 @@ local function EnsureGameplayDefaults()
         g.lockCombatTimer = false
     end
 
+
+    -- Anchor target for the combat timer (none/player/target/focus)
+    if g.combatTimerAnchor == nil then
+        g.combatTimerAnchor = "none"
+    end
     -- Combat timer text color (configured from the Colors menu)
     if type(g.combatTimerColor) ~= "table" then
         g.combatTimerColor = { 1, 1, 1 } -- default white
@@ -848,7 +856,7 @@ EnsureCombatStateText = function()
 
         combatStateFrame:SetScript("OnDragStop", function(self)
             self:StopMovingOrSizing()
-            local x, y = self:GetCenter()
+        local x, y = self:GetCenter()
             local ux, uy = UIParent:GetCenter()
             local dx = x - ux
             local dy = y - uy
@@ -1400,6 +1408,67 @@ end
 
 
 
+-- Combat Timer anchor helpers
+local function _MSUF_ValidateCombatTimerAnchor(v)
+    if v == "player" or v == "target" or v == "focus" then
+        return v
+    end
+    return "none"
+end
+
+local function _MSUF_GetUnitFrameForAnchor(key)
+    if not key or key == "" then return nil end
+    local list = _G and _G.MSUF_UnitFrames
+    if list and list[key] then
+        return list[key]
+    end
+    local gname = "MSUF_" .. key
+    local f = _G and _G[gname]
+    if f then
+        return f
+    end
+    return nil
+end
+
+local function _MSUF_GetCombatTimerAnchorFrame(g)
+    local key = _MSUF_ValidateCombatTimerAnchor(g and g.combatTimerAnchor)
+    if key == "none" then
+        return UIParent
+    end
+    local f = _MSUF_GetUnitFrameForAnchor(key)
+    if f and f.GetCenter then
+        return f
+    end
+    return UIParent
+end
+
+local function MSUF_Gameplay_ApplyCombatTimerAnchor(g)
+    if not combatFrame then
+        return
+    end
+
+    g = g or EnsureGameplayDefaults()
+    local anchor = _MSUF_GetCombatTimerAnchorFrame(g)
+
+    combatFrame:ClearAllPoints()
+    combatFrame:SetPoint("CENTER", anchor, "CENTER", tonumber(g.combatOffsetX) or 0, tonumber(g.combatOffsetY) or 0)
+
+    -- If the user chose a unit anchor but it isn't available yet, retry once shortly after.
+    local want = _MSUF_ValidateCombatTimerAnchor(g.combatTimerAnchor)
+    if want ~= "none" and anchor == UIParent then
+        if not combatFrame._msufAnchorRetryPending and C_Timer and C_Timer.After then
+            combatFrame._msufAnchorRetryPending = true
+            C_Timer.After(0.2, function()
+                if combatFrame then
+                    combatFrame._msufAnchorRetryPending = nil
+                    MSUF_Gameplay_ApplyCombatTimerAnchor()
+                end
+            end)
+        end
+    end
+end
+
+
 -- Export so the main file can call this from UpdateAllFonts()
 function ns.MSUF_ApplyGameplayFontFromGlobal()
     ApplyFontToCounter()
@@ -1414,7 +1483,7 @@ local function CreateCombatTimerFrame()
 
     combatFrame = CreateFrame("Frame", "MSUF_CombatTimerFrame", UIParent)
     combatFrame:SetSize(220, 60)
-    combatFrame:SetPoint("CENTER", UIParent, "CENTER", g.combatOffsetX, g.combatOffsetY)
+    MSUF_Gameplay_ApplyCombatTimerAnchor(g)
     combatFrame:SetFrameStrata("DIALOG")
     combatFrame:SetClampedToScreen(true)
     combatFrame:SetMovable(true)
@@ -1431,12 +1500,25 @@ local function CreateCombatTimerFrame()
     combatFrame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         local x, y = self:GetCenter()
-        local uiX, uiY = UIParent:GetCenter()
-        local dx = x - uiX
-        local dy = y - uiY
+        if not x or not y then
+            return
+        end
+
         local db = EnsureGameplayDefaults()
-        db.combatOffsetX = dx
-        db.combatOffsetY = dy
+        local anchor = _MSUF_GetCombatTimerAnchorFrame(db)
+        local ax, ay
+        if anchor and anchor.GetCenter then
+            ax, ay = anchor:GetCenter()
+        end
+        if not ax or not ay then
+            ax, ay = UIParent:GetCenter()
+        end
+        if not ax or not ay then
+            return
+        end
+
+        db.combatOffsetX = x - ax
+        db.combatOffsetY = y - ay
     end)
 
     combatTimerText = combatFrame:CreateFontString(nil, "OVERLAY")
@@ -2755,6 +2837,7 @@ function GameplayFeatures.CombatTimer.Apply(g)
     -- Ensure lock state is applied too
     ApplyLockState()
     if combatFrame then
+        MSUF_Gameplay_ApplyCombatTimerAnchor(g)
         combatFrame:SetShown(g.enableCombatTimer)
     end
 end
@@ -2776,87 +2859,8 @@ local function Gameplay_ApplyAllFeatures(g)
     end
 end
 
-
--- Legacy cleanup: old Nameplate Counting / Melee Counter widgets should never bleed into Gameplay.
--- If an older file is still present in the folder/toc, we hard-kill its frames once.
-local function MSUF_CleanupLegacyNameplateCounting()
-    if ns and ns._MSUF_LegacyNameplateCountingPurged then
-        return
-    end
-    if ns then
-        ns._MSUF_LegacyNameplateCountingPurged = true
-    end
-
-    local function _Kill(f)
-        if not f then return end
-        if f.UnregisterAllEvents then pcall(f.UnregisterAllEvents, f) end
-        if f.SetScript then
-            pcall(f.SetScript, f, "OnUpdate", nil)
-            pcall(f.SetScript, f, "OnEvent", nil)
-        end
-        if f.Hide then pcall(f.Hide, f) end
-        if f.SetShown then pcall(f.SetShown, f, false) end
-    end
-
-    -- Known legacy frame names (safe to kill if present)
-    local names = {
-        "MSUF_NameplateCountFrame",
-        "MSUF_NameplateCounterFrame",
-        "MSUF_NameplateMeleeCounterFrame",
-        "MSUF_NameplateMeleeCountFrame",
-        "MSUF_NameplateCountText",
-        "MSUF_NameplateCounterText",
-        "MSUF_NameplateMeleeCountText",
-        "MSUF_NameplateCountEventFrame",
-        "MSUF_NameplateCounterEventFrame",
-        "MSUF_NameplateMeleeCountEventFrame",
-        "MSUF_NameplateMeleeCounterEventFrame",
-    }
-    for i = 1, #names do
-        local f = _G and _G[names[i]]
-        if f then
-            _Kill(f)
-        end
-    end
-
-    -- Broad safety net: kill any top-level MSUF frames that still include the legacy naming.
-    local function _ScanParent(parent)
-        if not parent or not parent.GetChildren then
-            return
-        end
-        local kids = { parent:GetChildren() }
-        for i = 1, #kids do
-            local k = kids[i]
-	            -- Defensive: avoid "bad self" errors if an unexpected object is returned.
-	            local n
-	            local gn = k and k.GetName
-	            if type(gn) == "function" then
-	                local ok, name = pcall(gn, k)
-	                if ok then
-	                    n = name
-	                end
-	            end
-            if type(n) == "string" then
-                if string.find(n, "MSUF_Nameplate", 1, true) or
-                   string.find(n, "MSUF_NameplateCount", 1, true) or
-                   string.find(n, "MSUF_PlateCount", 1, true) or
-                   string.find(n, "MSUF_NameplateMelee", 1, true)
-                then
-                    _Kill(k)
-                end
-            end
-        end
-    end
-
-    _ScanParent(UIParent)
-    _ScanParent(_G and _G.WorldFrame)
-end
-
-local function MSUF_GameplayApplyNow()
+function ns.MSUF_RequestGameplayApply()
     local g = EnsureGameplayDefaults()
-
-    -- Hard-kill any legacy nameplate-counting widgets that may still exist in older installs.
-    MSUF_CleanupLegacyNameplateCounting()
 
 
     Gameplay_ApplyAllFeatures(g)
@@ -2949,8 +2953,10 @@ end
 -- Backwards-compatible entrypoint used by other modules (e.g. Colors)
 -- Apply all Gameplay visuals immediately (frames + fonts + colors).
 function ns.MSUF_ApplyGameplayVisuals()
-    -- Apply immediately (called by the coalesced RequestGameplayApply + other modules like Colors).
-    MSUF_GameplayApplyNow()
+    -- This file also uses MSUF_RequestGameplayApply as the canonical apply path.
+    if ns and ns.MSUF_RequestGameplayApply then
+        ns.MSUF_RequestGameplayApply()
+    end
 end
 
 
@@ -3596,6 +3602,106 @@ end
 
     -- In-combat timer checkbox
     local combatTimerCheck = _MSUF_Check("MSUF_Gameplay_CombatTimerCheck", "TOPLEFT", combatHeader, "BOTTOMLEFT", 0, -8, "Enable in-combat timer", "combatTimerCheck", "enableCombatTimer")
+
+    -- Combat Timer anchor dropdown (None / Player / Target / Focus)
+    local combatTimerAnchorLabel = _MSUF_Label("GameFontNormal", "LEFT", combatTimerCheck, "RIGHT", 220, 0, "Anchor", "combatTimerAnchorLabel")
+    local combatTimerAnchorDD = _MSUF_Dropdown("MSUF_Gameplay_CombatTimerAnchorDropDown", "LEFT", combatTimerAnchorLabel, "RIGHT", 6, -2, 120, "combatTimerAnchorDropdown")
+
+    local function _CombatTimerAnchor_Validate(v)
+        if v ~= "none" and v ~= "player" and v ~= "target" and v ~= "focus" then
+            return "none"
+        end
+        return v
+    end
+
+    local function _CombatTimerAnchor_Text(v)
+        if v == "player" then return "Player" end
+        if v == "target" then return "Target" end
+        if v == "focus" then return "Focus" end
+        return "None"
+    end
+
+    local function _CombatTimerAnchor_Set(v)
+        local g = MSUF_DB and MSUF_DB.gameplay
+        if not g then return end
+
+        local preX, preY
+        if combatFrame and combatFrame.GetCenter then
+            preX, preY = combatFrame:GetCenter()
+        end
+
+        local val = _CombatTimerAnchor_Validate(v)
+        g.combatTimerAnchor = val
+
+        -- Keep the timer in the same on-screen position when switching anchors
+        if preX and preY then
+            local anchor = _MSUF_GetCombatTimerAnchorFrame(g)
+            local ax, ay
+            if anchor and anchor.GetCenter then
+                ax, ay = anchor:GetCenter()
+            end
+            if not ax or not ay then
+                ax, ay = UIParent:GetCenter()
+            end
+            if ax and ay then
+                g.combatOffsetX = preX - ax
+                g.combatOffsetY = preY - ay
+            end
+        end
+
+        
+        -- Apply anchor immediately (independent of lock state)
+        if combatFrame then
+            MSUF_Gameplay_ApplyCombatTimerAnchor(g)
+            -- Refresh preview text positioning right away (no 1s wait)
+            MSUF_Gameplay_TickCombatTimer()
+        end
+
+        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(combatTimerAnchorDD, val) end
+        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(combatTimerAnchorDD, _CombatTimerAnchor_Text(val)) end
+
+        if ns and ns.MSUF_RequestGameplayApply then
+            ns.MSUF_RequestGameplayApply()
+        end
+        if panel and panel.refresh then
+            panel:refresh()
+        end
+    end
+
+    if UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
+        UIDropDownMenu_Initialize(combatTimerAnchorDD, function(self, level)
+            local g = MSUF_DB and MSUF_DB.gameplay
+            local cur = _CombatTimerAnchor_Validate(g and g.combatTimerAnchor)
+
+            local items = {
+                {"none",  "None"},
+                {"player", "Player"},
+                {"target", "Target"},
+                {"focus",  "Focus"},
+            }
+
+            for i = 1, #items do
+                local value = items[i][1]
+                local text  = items[i][2]
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = text
+                info.value = value
+                info.checked = (cur == value)
+                info.func = function(btn)
+                    _CombatTimerAnchor_Set(btn and btn.value)
+                    if CloseDropDownMenus then CloseDropDownMenus() end
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end)
+    end
+
+    do
+        local g = MSUF_DB and MSUF_DB.gameplay
+        local cur = _CombatTimerAnchor_Validate(g and g.combatTimerAnchor)
+        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(combatTimerAnchorDD, cur) end
+        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(combatTimerAnchorDD, _CombatTimerAnchor_Text(cur)) end
+    end
 
     -- Combat Timer size slider
     local combatSlider = _MSUF_Slider("MSUF_Gameplay_CombatFontSizeSlider", "TOPLEFT", combatTimerCheck, "BOTTOMLEFT", 0, -24, 220, 10, 64, 1, "10 px", "64 px", "Timer size", "combatFontSizeSlider", "combatFontSize",
@@ -4351,6 +4457,8 @@ end
         local timerOn = g.enableCombatTimer and true or false
         _MSUF_SetSliderEnabled(self.combatFontSizeSlider, timerOn)
         _MSUF_SetCheckEnabled(self.lockCombatTimerCheck, timerOn)
+        _MSUF_SetFontStringEnabled(self.combatTimerAnchorLabel, timerOn, false)
+        _MSUF_SetDropdownEnabled(self.combatTimerAnchorDropdown, timerOn)
 
         -- Combat Enter/Leave dependents
         local stateOn = g.enableCombatStateText and true or false
@@ -4466,6 +4574,7 @@ end
 
         "combatOffsetX",
         "combatOffsetY",
+        "combatTimerAnchor",
         "combatFontSize",
         "enableCombatTimer",
         "lockCombatTimer",
@@ -4597,6 +4706,21 @@ end
         for i = 1, #sliders do
             local t = sliders[i]
             SetSlider(t[1], t[2], t[3])
+        end
+
+        -- Combat Timer anchor dropdown
+        if self.combatTimerAnchorDropdown then
+            local v = g.combatTimerAnchor
+            if v ~= "none" and v ~= "player" and v ~= "target" and v ~= "focus" then
+                v = "none"
+            end
+            local txt
+            if v == "player" then txt = "Player"
+            elseif v == "target" then txt = "Target"
+            elseif v == "focus" then txt = "Focus"
+            else txt = "None" end
+            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self.combatTimerAnchorDropdown, v) end
+            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(self.combatTimerAnchorDropdown, txt) end
         end
 
         -- Combat state texts
