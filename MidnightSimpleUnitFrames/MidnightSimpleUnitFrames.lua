@@ -3390,7 +3390,7 @@ MSUF_BumpCastbarStyleRevision()
     local function ApplyMSUF(frame)
         if not frame or not frame.statusBar then return end
         local statusBar = frame.statusBar
-        local icon      = frame.icon
+        local icon      = frame.icon or frame.Icon or (frame.IconFrame and (frame.IconFrame.Icon or frame.IconFrame.icon)) or frame.iconTexture or frame.IconTexture
         local width     = frame:GetWidth()  or statusBar:GetWidth()  or 250
         local height    = frame:GetHeight() or statusBar:GetHeight() or 18
         local cfg = MSUF_DB and MSUF_DB.general
@@ -5508,10 +5508,14 @@ _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or funct
     MSUF_ApplyUnitFrameKey_Immediate("targettarget")
     MSUF_ApplyUnitFrameKey_Immediate("pet")
     MSUF_ApplyUnitFrameKey_Immediate("boss")
-    MSUF_UpdateAllFonts()
-    MSUF_UpdateAllBarTextures()
-    MSUF_UpdateCastbarTextures()
-    MSUF_UpdateCastbarVisuals()
+    local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts
+    if type(fnFonts) == "function" then fnFonts() end
+    local fnBars = _G.MSUF_UpdateAllBarTextures_Immediate or _G.MSUF_UpdateAllBarTextures
+    if type(fnBars) == "function" then fnBars() end
+    local fnCBTex = _G.MSUF_UpdateCastbarTextures_Immediate or _G.MSUF_UpdateCastbarTextures
+    if type(fnCBTex) == "function" then fnCBTex() end
+    local fnCBVis = _G.MSUF_UpdateCastbarVisuals_Immediate or _G.MSUF_UpdateCastbarVisuals
+    if type(fnCBVis) == "function" then fnCBVis() end
     if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
         MSUF_FastCall(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit)
     end
@@ -5544,14 +5548,18 @@ function MSUF_CommitApplyDirty()
     end
         MSUF_ApplyDirtyUnitFrames()
     if st.fonts then
-        MSUF_UpdateAllFonts()
+        local fn = _G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts
+        if type(fn) == "function" then fn() end
     end
     if st.bars then
-    MSUF_UpdateAllBarTextures()
+        local fn = _G.MSUF_UpdateAllBarTextures_Immediate or _G.MSUF_UpdateAllBarTextures
+        if type(fn) == "function" then fn() end
     end
     if st.castbars then
-    MSUF_UpdateCastbarTextures()
-    MSUF_UpdateCastbarVisuals()
+        local fnTex = _G.MSUF_UpdateCastbarTextures_Immediate or _G.MSUF_UpdateCastbarTextures
+        if type(fnTex) == "function" then fnTex() end
+        local fnVis = _G.MSUF_UpdateCastbarVisuals_Immediate or _G.MSUF_UpdateCastbarVisuals
+        if type(fnVis) == "function" then fnVis() end
     end
     if st.bossPreview then
         if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
@@ -6752,7 +6760,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.9rc4  |cff565f89•|r  |cffc0caf5 Huge background changes -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.9rc3  |cff565f89•|r  |cffc0caf5 Huge background changes -|r  |cfff7768eReport bugs in the Discord.|r")
 end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then
