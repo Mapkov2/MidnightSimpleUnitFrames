@@ -464,6 +464,8 @@ local function MSUF_PlayerCastbar_ShowInterruptFeedback(self, label)
         _G.MSUF_ClearCastbarTimerDuration(self.statusBar)
     end
 
+    self._msufActiveCastUnit = nil
+    self._msufChanNilSince = nil
     self.interruptFeedbackEndTime = GetTime() + MSUF_PLAYER_INTERRUPT_FEEDBACK_DURATION
 
     self.statusBar:SetMinMaxValues(0, 1)
@@ -1764,6 +1766,22 @@ local function MSUF_PlayerCastbar_OnEvent(self, event, ...)
         end
     end
 
+
+    -- Interrupted (non-empower): show short red feedback window (Blizzard-style) if enabled.
+    if event == "UNIT_SPELLCAST_INTERRUPTED" then
+        local unitToken = ...
+        -- Ignore interrupts from the non-active unit (player vs vehicle) to avoid false flashes.
+        if self._msufActiveCastUnit and unitToken and unitToken ~= self._msufActiveCastUnit then
+            return
+        end
+
+        if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+            _G.MSUF_PlayerGCDBar_Stop(self, true)
+        end
+
+        MSUF_PlayerCastbar_ShowInterruptFeedback(self, INTERRUPTED)
+        return
+    end
 
     -- Unhalted-style handling for non-empower cast/channel events (player).
     if not self.isEmpower then
