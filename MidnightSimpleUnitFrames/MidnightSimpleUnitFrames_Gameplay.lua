@@ -10,7 +10,6 @@ ns = ns or {}
 local CreateFrame   = CreateFrame
 local UIParent      = UIParent
 local pairs         = pairs
-local C_NamePlate   = C_NamePlate
 local C_Spell       = C_Spell
 local C_SpellBook   = C_SpellBook
 local UnitExists    = UnitExists
@@ -18,7 +17,6 @@ local UnitCanAttack = UnitCanAttack
 local GetTime             = GetTime
 local UnitAffectingCombat = UnitAffectingCombat
 local InCombatLockdown    = InCombatLockdown
-local GetNamePlates       = C_NamePlate and C_NamePlate.GetNamePlates
 local string_format       = string.format
 local GetCVar    = GetCVar
 local GetCVarBool = GetCVarBool
@@ -61,18 +59,17 @@ do
         end
         _applyPending = true
 
-        if C_Timer_After then
-            C_Timer_After(0, function()
-                _applyPending = false
-                if ns and ns.MSUF_ApplyGameplayVisuals then
-                    ns.MSUF_ApplyGameplayVisuals()
-                end
-            end)
-        else
+        local function _Run()
             _applyPending = false
             if ns and ns.MSUF_ApplyGameplayVisuals then
                 ns.MSUF_ApplyGameplayVisuals()
             end
+        end
+
+        if C_Timer_After then
+            C_Timer_After(0, _Run)
+        else
+            _Run()
         end
     end
 end
@@ -2779,8 +2776,87 @@ local function Gameplay_ApplyAllFeatures(g)
     end
 end
 
-function ns.MSUF_RequestGameplayApply()
+
+-- Legacy cleanup: old Nameplate Counting / Melee Counter widgets should never bleed into Gameplay.
+-- If an older file is still present in the folder/toc, we hard-kill its frames once.
+local function MSUF_CleanupLegacyNameplateCounting()
+    if ns and ns._MSUF_LegacyNameplateCountingPurged then
+        return
+    end
+    if ns then
+        ns._MSUF_LegacyNameplateCountingPurged = true
+    end
+
+    local function _Kill(f)
+        if not f then return end
+        if f.UnregisterAllEvents then pcall(f.UnregisterAllEvents, f) end
+        if f.SetScript then
+            pcall(f.SetScript, f, "OnUpdate", nil)
+            pcall(f.SetScript, f, "OnEvent", nil)
+        end
+        if f.Hide then pcall(f.Hide, f) end
+        if f.SetShown then pcall(f.SetShown, f, false) end
+    end
+
+    -- Known legacy frame names (safe to kill if present)
+    local names = {
+        "MSUF_NameplateCountFrame",
+        "MSUF_NameplateCounterFrame",
+        "MSUF_NameplateMeleeCounterFrame",
+        "MSUF_NameplateMeleeCountFrame",
+        "MSUF_NameplateCountText",
+        "MSUF_NameplateCounterText",
+        "MSUF_NameplateMeleeCountText",
+        "MSUF_NameplateCountEventFrame",
+        "MSUF_NameplateCounterEventFrame",
+        "MSUF_NameplateMeleeCountEventFrame",
+        "MSUF_NameplateMeleeCounterEventFrame",
+    }
+    for i = 1, #names do
+        local f = _G and _G[names[i]]
+        if f then
+            _Kill(f)
+        end
+    end
+
+    -- Broad safety net: kill any top-level MSUF frames that still include the legacy naming.
+    local function _ScanParent(parent)
+        if not parent or not parent.GetChildren then
+            return
+        end
+        local kids = { parent:GetChildren() }
+        for i = 1, #kids do
+            local k = kids[i]
+	            -- Defensive: avoid "bad self" errors if an unexpected object is returned.
+	            local n
+	            local gn = k and k.GetName
+	            if type(gn) == "function" then
+	                local ok, name = pcall(gn, k)
+	                if ok then
+	                    n = name
+	                end
+	            end
+            if type(n) == "string" then
+                if string.find(n, "MSUF_Nameplate", 1, true) or
+                   string.find(n, "MSUF_NameplateCount", 1, true) or
+                   string.find(n, "MSUF_PlateCount", 1, true) or
+                   string.find(n, "MSUF_NameplateMelee", 1, true)
+                then
+                    _Kill(k)
+                end
+            end
+        end
+    end
+
+    _ScanParent(UIParent)
+    _ScanParent(_G and _G.WorldFrame)
+end
+
+local function MSUF_GameplayApplyNow()
     local g = EnsureGameplayDefaults()
+
+    -- Hard-kill any legacy nameplate-counting widgets that may still exist in older installs.
+    MSUF_CleanupLegacyNameplateCounting()
 
 
     Gameplay_ApplyAllFeatures(g)
@@ -2873,10 +2949,8 @@ end
 -- Backwards-compatible entrypoint used by other modules (e.g. Colors)
 -- Apply all Gameplay visuals immediately (frames + fonts + colors).
 function ns.MSUF_ApplyGameplayVisuals()
-    -- This file also uses MSUF_RequestGameplayApply as the canonical apply path.
-    if ns and ns.MSUF_RequestGameplayApply then
-        ns.MSUF_RequestGameplayApply()
-    end
+    -- Apply immediately (called by the coalesced RequestGameplayApply + other modules like Colors).
+    MSUF_GameplayApplyNow()
 end
 
 
