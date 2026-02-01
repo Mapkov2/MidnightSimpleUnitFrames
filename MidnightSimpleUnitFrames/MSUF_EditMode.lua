@@ -61,13 +61,11 @@ Edit.Flow   = Edit.Flow   or {}
 
 -- R2: Additional internal modules for maintainability (single-file)
 Edit.UI      = Edit.UI      or {}
-Edit.Snap    = Edit.Snap    or {}
 Edit.Dock    = Edit.Dock    or {}
 Edit.Targets = Edit.Targets or {}
 
 -- Local aliases (avoid repeated global table lookups)
 local EM_UI      = Edit.UI
-local EM_Snap    = Edit.Snap
 local EM_Dock    = Edit.Dock
 local EM_Targets = Edit.Targets
 
@@ -723,85 +721,26 @@ local function MSUF_EM_GetGeneralDB()
     return MSUF_DB.general
 end
 
-local function MSUF_EM_EnsureSnapSchema(g)
-    g = g or MSUF_EM_GetGeneralDB()
 
-    -- Master enable
-    if g.editModeSnapEnabled == nil then
-        if g.editModeSnapToGrid == nil then
-            g.editModeSnapEnabled = true
-        else
-            g.editModeSnapEnabled = (g.editModeSnapToGrid ~= false)
-        end
-    end
-
-    -- Mode string
-    if g.editModeSnapMode ~= "grid" and g.editModeSnapMode ~= "frames" then
-        if g.editModeSnapModeGrid ~= nil and (g.editModeSnapModeGrid ~= false) then
-            g.editModeSnapMode = "grid"
-        elseif g.editModeSnapModeFrames ~= nil and (g.editModeSnapModeFrames ~= false) then
-            g.editModeSnapMode = "frames"
-        else
-            g.editModeSnapMode = "grid"
-        end
-    end
-
-    if g.editModeSnapMode ~= "grid" and g.editModeSnapMode ~= "frames" then
-        g.editModeSnapMode = "grid"
-    end
-
-    return g
-end
-
-local function MSUF_EM_SyncLegacySnapKeys(g)
-    g = MSUF_EM_EnsureSnapSchema(g)
-
-    local enabled = (g.editModeSnapEnabled ~= false)
-    local mode = g.editModeSnapMode
-    if mode ~= "grid" and mode ~= "frames" then
-        mode = "grid"
-        g.editModeSnapMode = mode
-    end
-
-    -- Legacy mirrors (some older codepaths may still read these)
-    g.editModeSnapModeGrid = (mode == "grid") and true or false
-    g.editModeSnapModeFrames = (mode == "frames") and true or false
-    g.editModeSnapToGrid = (enabled and mode == "grid") and true or false
-
-    return g, enabled, mode
-end
-
--- Unified getter used by UI + runtime snapping.
+-- ------------------------------------------------------------
+-- Snap (removed)
+-- The snapping feature (grid/frames docking) has been fully removed.
+-- Keep no-op compatibility stubs to avoid nil errors from legacy callsites.
+-- ------------------------------------------------------------
 local function MSUF_EM_GetSnapConfig()
     local g = MSUF_EM_GetGeneralDB()
-    local enabled, mode
-    g, enabled, mode = MSUF_EM_SyncLegacySnapKeys(g)
-    local gridOn = enabled and (mode == "grid")
-    local framesOn = enabled and (mode == "frames")
-    return g, enabled, mode, gridOn, framesOn
+    return g, false, "grid", false, false
 end
 
-local function MSUF_EM_SetSnapEnabled(enabled)
-    local g = MSUF_EM_GetGeneralDB()
-    g.editModeSnapEnabled = enabled and true or false
-    MSUF_EM_SyncLegacySnapKeys(g)
-end
+local function MSUF_EM_SetSnapEnabled(_enabled) end
+local function MSUF_EM_SetSnapMode(_mode) end
 
-local function MSUF_EM_SetSnapMode(mode)
-    local g = MSUF_EM_GetGeneralDB()
-    if mode ~= "frames" then
-        mode = "grid"
-    end
-    g.editModeSnapMode = mode
-    MSUF_EM_SyncLegacySnapKeys(g)
-end
-
--- Expose for internal maintainability (no external dependency required)
 Edit.Util.GetSnapConfig  = MSUF_EM_GetSnapConfig
 Edit.Util.SetSnapEnabled = MSUF_EM_SetSnapEnabled
 Edit.Util.SetSnapMode    = MSUF_EM_SetSnapMode
 
 local function MSUF_EM_SuppressNextBlizzardExit()
+
     local st = MSUF_EM_GetState()
     st.suppressNextBlizzardExit = true
 
@@ -1308,12 +1247,6 @@ local function MSUF_EditMode_HardTeardown()
             MSUF_FastCall(nudge.Hide, nudge)
         end
     end
-
-    -- Cleanup Snap OnUpdate wrappers / drag flags (prevents stale wrappers after exit)
-    if _G and type(_G.MSUF_EM_CleanupSnapWrappers) == "function" then
-        MSUF_SafeCall("EditMode:CleanupSnapWrappers", _G.MSUF_EM_CleanupSnapWrappers)
-    end
-
     -- Allow the combat-queue notice again next time Edit Mode is used
     MSUF__EditModeCombatNoticeShown = false
 end
@@ -2309,124 +2242,38 @@ local function MSUF_CreateGridFrame()
 
      f.gridSlider = gridSlider
 
-    local snapBtn = ns.MSUF_EM_UIH.ButtonAt(f, "MSUF_EditModeSnapOverlay", 110, 22, "TOP", gridSlider, "BOTTOM", 0, -8, nil, "UIPanelButtonTemplate")
-    -- Snap modes: exclusive selection (either Grid OR Frames). The main Snap ON/OFF acts as a master enable
-    -- and greys out the mode toggles when disabled.
-    local snapGridBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeSnapModeGrid", 85, 20, "Grid", "UIPanelButtonTemplate")
-    local snapFramesBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeSnapModeFrames", 95, 20, "Frames", "UIPanelButtonTemplate")
     -- White arrows toggle (hides nudge arrows around frames)
-    local arrowsBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeWhiteArrowsToggle", 110, 20, "Arrows: ON", "UIPanelButtonTemplate")
-    -- Snap UI (clean schema): master enable + exclusive mode (grid/frames)
-    -- Visual helper: keep buttons green/white when enabled and grey when disabled.
-    local function MSUF_EM_SetModeButtonVisual(btn, isActive, masterEnabled)
-        if not btn then return end
+    local arrowsBtn = ns.MSUF_EM_UIH.ButtonAt(f, "MSUF_EditModeWhiteArrowsToggle", 110, 22, "TOP", gridSlider, "BOTTOM", 0, -8, nil, "UIPanelButtonTemplate")
 
-        if masterEnabled then
-            if btn.Enable then btn:Enable() end
-            if btn.SetAlpha then btn:SetAlpha(isActive and 1.0 or 0.80) end
-
-            local fs = btn.GetFontString and btn:GetFontString()
-            if fs and fs.SetTextColor then
-                if isActive then
-                    fs:SetTextColor(0.20, 1.00, 0.20, 1) -- subtle green
-                else
-                    fs:SetTextColor(1.00, 1.00, 1.00, 1)
-                end
-            end
-        else
-            if btn.Disable then btn:Disable() end
-            if btn.SetAlpha then btn:SetAlpha(0.35) end
-
-            local fs = btn.GetFontString and btn:GetFontString()
-            if fs and fs.SetTextColor then
-                fs:SetTextColor(0.70, 0.70, 0.70, 1) -- grey (no red)
-            end
-        end
-    end
-
-    local function UpdateSnapUI()
-        local g, enabled, mode = MSUF_EM_GetSnapConfig()
-
-        if enabled then
-            snapBtn:SetText("Snap: ON")
-            local fs = snapBtn:GetFontString()
-            if fs and fs.SetTextColor then
-                fs:SetTextColor(0.2, 1.0, 0.2, 1)
-            end
-        else
-            snapBtn:SetText("Snap: OFF")
-            local fs = snapBtn:GetFontString()
-            if fs and fs.SetTextColor then
-                fs:SetTextColor(0.7, 0.7, 0.7, 1)
-            end
-        end
-
-        -- White arrows toggle is independent from Snap master.
+    local function UpdateArrowsUI()
         local hideArrows = MSUF_EM_GetHideWhiteArrows()
-        if arrowsBtn then
-            arrowsBtn:SetText(hideArrows and "Arrows: OFF" or "Arrows: ON")
-            MSUF_EM_SetModeButtonVisual(arrowsBtn, not hideArrows, true)
+        arrowsBtn:SetText(hideArrows and "Arrows: OFF" or "Arrows: ON")
+
+        local fs = arrowsBtn:GetFontString()
+        if fs and fs.SetTextColor then
+            if hideArrows then
+                fs:SetTextColor(0.70, 0.70, 0.70, 1)
+            else
+                fs:SetTextColor(0.20, 1.00, 0.20, 1)
+            end
         end
-
-        MSUF_EM_SetModeButtonVisual(snapGridBtn,   mode == "grid",   enabled)
-        MSUF_EM_SetModeButtonVisual(snapFramesBtn, mode == "frames", enabled)
     end
 
-    -- Keep label colors stable even when the buttons enter/leave highlight state.
-    if snapBtn.HookScript then
-        snapBtn:HookScript("OnEnter", UpdateSnapUI)
-        snapBtn:HookScript("OnLeave", UpdateSnapUI)
+    if arrowsBtn.HookScript then
+        arrowsBtn:HookScript("OnEnter", UpdateArrowsUI)
+        arrowsBtn:HookScript("OnLeave", UpdateArrowsUI)
     end
-    if snapGridBtn.HookScript then
-        snapGridBtn:HookScript("OnEnter", UpdateSnapUI)
-        snapGridBtn:HookScript("OnLeave", UpdateSnapUI)
-    end
-    if snapFramesBtn.HookScript then
-        snapFramesBtn:HookScript("OnEnter", UpdateSnapUI)
-        snapFramesBtn:HookScript("OnLeave", UpdateSnapUI)
-    end
-    if arrowsBtn and arrowsBtn.HookScript then
-        arrowsBtn:HookScript("OnEnter", UpdateSnapUI)
-        arrowsBtn:HookScript("OnLeave", UpdateSnapUI)
-    end
-
-    snapBtn:SetScript("OnClick", function()
-        local _, enabled = MSUF_EM_GetSnapConfig()
-        MSUF_EM_SetSnapEnabled(not enabled)
-        UpdateSnapUI()
-    end)
-
-    snapGridBtn:SetScript("OnClick", function()
-        local _, enabled = MSUF_EM_GetSnapConfig()
-        if not enabled then
-            UpdateSnapUI()
-            return
-        end
-        MSUF_EM_SetSnapMode("grid")
-        UpdateSnapUI()
-    end)
-
-    snapFramesBtn:SetScript("OnClick", function()
-        local _, enabled = MSUF_EM_GetSnapConfig()
-        if not enabled then
-            UpdateSnapUI()
-            return
-        end
-        MSUF_EM_SetSnapMode("frames")
-        UpdateSnapUI()
-    end)
 
     arrowsBtn:SetScript("OnClick", function()
         MSUF_EM_SetHideWhiteArrows(not MSUF_EM_GetHideWhiteArrows())
-        UpdateSnapUI()
+        UpdateArrowsUI()
         -- Apply immediately (unitframes + castbar previews)
         MSUF_EM_RefreshWhiteArrows()
     end)
 
-    -- Initial paint
-    UpdateSnapUI()
+    UpdateArrowsUI()
 
-    local modeBtn = ns.MSUF_EM_UIH.ButtonAt(f, "MSUF_EditModeModeButton", 210, 30, "TOP", snapBtn, "BOTTOM", 0, -12, nil, "UIPanelButtonTemplate")
+    local modeBtn = ns.MSUF_EM_UIH.ButtonAt(f, "MSUF_EditModeModeButton", 210, 30, "TOP", arrowsBtn, "BOTTOM", 0, -12, nil, "UIPanelButtonTemplate")
     local modeFS = modeBtn:GetFontString()
     if modeFS then
         local font, _, flags = modeFS:GetFont()
@@ -3041,27 +2888,16 @@ anchorCheck:SetPoint("LEFT", anchorNameInput, "RIGHT", 10, -1)
 
         gridSlider:ClearAllPoints()
         gridSlider:SetPoint("TOP", alphaSlider, "BOTTOM", 0, -26)
-
-        snapBtn:ClearAllPoints()
-        snapBtn:SetPoint("TOP", gridSlider, "BOTTOM", 0, -10)
-
-        -- Snap mode buttons under master Snap toggle
-        if snapGridBtn and snapFramesBtn then
-            snapGridBtn:ClearAllPoints()
-            snapFramesBtn:ClearAllPoints()
-            if arrowsBtn then arrowsBtn:ClearAllPoints() end
-
-            -- Center the 3-mode row under the Snap master button.
-            snapGridBtn:SetPoint("TOP", snapBtn, "BOTTOM", -110 + _msufCenterShiftX, -6)
-            snapFramesBtn:SetPoint("LEFT", snapGridBtn, "RIGHT", 8, 0)
-            if arrowsBtn then
-                arrowsBtn:SetPoint("LEFT", snapFramesBtn, "RIGHT", 8, 0)
-            end
+        if arrowsBtn then
+            arrowsBtn:ClearAllPoints()
+            arrowsBtn:SetPoint("TOP", gridSlider, "BOTTOM", 0, -10)
         end
+
+
 
         -- Frames section
         framesHeader:ClearAllPoints()
-        framesHeader:SetPoint("TOP", snapBtn, "BOTTOM", _msufCenterShiftX, (snapGridBtn and -40 or -14))
+        framesHeader:SetPoint("TOP", arrowsBtn, "BOTTOM", _msufCenterShiftX, -14)
 
         local row = f._msufFrameEnableBtnRow
         if row then
@@ -3133,10 +2969,6 @@ anchorCheck:SetPoint("LEFT", anchorNameInput, "RIGHT", 10, -1)
 
     MSUF_EM_ApplyEditModeLayout()
     f._msufApplyEditModeLayout = MSUF_EM_ApplyEditModeLayout
-
-    UpdateSnapUI()
-
-    f.snapButton = snapBtn
     f.exitButton = exitBtn
 
     f:Hide()
@@ -3420,13 +3252,27 @@ end
 
 local function MSUF_EM_CreateNumericRowStored(pf, key, labelText, boxName, anchorTo, relPoint, x, y, onStep, opts)
     local label, box, minus, plus = MSUF_EM_CreateNumericRow(pf, labelText, boxName, anchorTo, relPoint, x, y, onStep, opts and opts.labelTemplate)
+
+    -- Create a lightweight row anchor frame that spans the full row height (label -> stepper).
+    -- This prevents overlap/clipping when rows are chained (anchor to row, not to the label line).
+    local row
+    if pf and label then
+        row = CreateFrame("Frame", nil, pf)
+        row:SetPoint("TOPLEFT", label, "TOPLEFT", 0, 0)
+        local br = plus or box or label
+        row:SetPoint("BOTTOMRIGHT", br, "BOTTOMRIGHT", 0, 0)
+    end
+
     if key then
+        pf[key .. "Row"] = row
         pf[key .. "Label"], pf[key .. "Box"], pf[key .. "Minus"], pf[key .. "Plus"] = label, box, minus, plus
         if opts and opts.liveApply and type(MSUF_EM_AttachLiveApply) == "function" then
             MSUF_EM_AttachLiveApply(pf, box, onStep, opts.liveTag or "Popup:LiveApply", (opts.requireCompleteNumber ~= false))
         end
     end
-    return label, box, minus, plus
+
+    -- Return row first so spec builders can safely chain rows without overlap.
+    return row or label, label, box, minus, plus
 end
 
 local function MSUF_EM_BuildNumericRows(pf, rows, anchorTo, relPoint, x, onStep, liveTag)
@@ -3504,6 +3350,159 @@ local function MSUF_EM_CreateRightCheckbox(pf, name, anchorFrame, textLabel, onC
     end
     return cb
 end
+
+-- ---------------------------------------------------------------------------
+-- Shared "spec-driven" builders for popup footer + copy dropdowns
+-- Consolidates repeated UI creation across Unit / Castbar / Auras2 popups.
+-- ---------------------------------------------------------------------------
+
+Edit.Popups.UISpec = Edit.Popups.UISpec or {}
+do
+    local UISpec = Edit.Popups.UISpec
+
+    UISpec.Unit = UISpec.Unit or {
+        copyDropdowns = {
+            size = { labelField="copySizeLabel", dropField="copySizeDrop", text="Copy size settings to:", point="BOTTOMLEFT", x=15, y=66, width=170 },
+            text = { labelField="copyTextLabel", dropField="copyTextDrop", text="Copy text settings to:", point="BOTTOMLEFT", x=15, y=46, width=170 },
+        },
+        footer = {
+            ok     = { field="okBtn",     name="$parentOK",     w=70,  h=22, point="BOTTOMRIGHT", rel="BOTTOMRIGHT", x=-10, y=10, text=OKAY },
+            cancel = { field="cancelBtn", name="$parentCancel", w=70,  h=22, point="RIGHT",       relField="okBtn", relPoint="LEFT", x=-6, y=0, text=CANCEL },
+            menu   = { field="menuBtn",   name="$parentMenu",   w=86,  h=22, point="BOTTOMLEFT",  rel="BOTTOMLEFT", x=10,  y=10, text="Menu" },
+            stepHint = { field="stepHint", point="BOTTOM", x=0, y=40, text="Hold Shift" },
+            levelBoost = 20,
+            closeBoost = 25,
+        },
+    }
+
+    UISpec.Castbar = UISpec.Castbar or {
+        copyDropdowns = {
+            size = { labelField="copySizeLabel", dropField="copySizeDrop", text="Copy size settings to:", point="BOTTOMLEFT", x=15, y=66, width=170 },
+            text = { labelField="copyTextLabel", dropField="copyTextDrop", text="Copy text settings to:", point="BOTTOMLEFT", x=15, y=46, width=170 },
+        },
+        footer = {
+            ok     = { field="okBtn",     name="$parentOK",     w=70,  h=22, point="BOTTOMRIGHT", rel="BOTTOMRIGHT", x=-10, y=10, text=OKAY },
+            cancel = { field="cancelBtn", name="$parentCancel", w=70,  h=22, point="RIGHT",       relField="okBtn", relPoint="LEFT", x=-6, y=0, text=CANCEL },
+            menu   = { field="menuBtn",   name="$parentMenu",   w=86,  h=22, point="BOTTOMLEFT",  rel="BOTTOMLEFT", x=10,  y=10, text="Menu" },
+            levelBoost = 20,
+            closeBoost = 25,
+        },
+    }
+
+    UISpec.Auras2 = UISpec.Auras2 or {
+        copyDropdowns = {
+            aura = { labelField="copyAuraLabel", dropField="copyAuraDrop", text="Copy settings to:", point="BOTTOMLEFT", x=15, y=64, width=170, ensureFrames=true },
+        },
+        footer = {
+            cancel = { field="cancelBtn", name="$parentCancel", w=120, h=22, point="BOTTOMLEFT",  rel="BOTTOMLEFT",  x=16,  y=16, text="Cancel" },
+            ok     = { field="okayBtn",   name="$parentOkay",   w=120, h=22, point="BOTTOMRIGHT", rel="BOTTOMRIGHT", x=-16, y=16, text="Okay" },
+            levelBoost = 20,
+            closeBoost = 25,
+        },
+    }
+end
+
+local function MSUF_EM_ClearFocusOnBoxes(...)
+    if not GetCurrentKeyBoardFocus then return end
+    local focus = GetCurrentKeyBoardFocus()
+    if not focus then return end
+    for i = 1, select("#", ...) do
+        local box = select(i, ...)
+        if box and box == focus and box.ClearFocus then
+            MSUF_FastCall(box.ClearFocus, box)
+        end
+    end
+end
+
+local function MSUF_EM_UI_BuildCopyDropdown(pf, spec)
+    if not (pf and spec) then return nil, nil end
+
+    if spec.ensureFrames and UIDropDownMenu_CreateFrames then
+        pcall(UIDropDownMenu_CreateFrames, 1, 0)
+    end
+
+    local label = pf:CreateFontString(nil, "OVERLAY", spec.labelTemplate or "GameFontHighlightSmall")
+    label:SetPoint(spec.point or "BOTTOMLEFT", pf, spec.relPoint or (spec.point or "BOTTOMLEFT"), spec.x or 0, spec.y or 0)
+    label:SetText(spec.text or "")
+    if MSUF_PopupStyleLabel then MSUF_PopupStyleLabel(label) end
+    pf[spec.labelField] = label
+
+    local dropName = spec.name or ("$parent" .. (spec.dropField or "Drop"))
+    local drop = CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate")
+    drop:SetPoint("LEFT", label, "RIGHT", -2, -2)
+    pf[spec.dropField] = drop
+
+    if spec.width and UIDropDownMenu_SetWidth then
+        UIDropDownMenu_SetWidth(drop, spec.width)
+    end
+
+    return label, drop
+end
+
+local function MSUF_EM_UI_BuildFooterButtons(pf, spec)
+    if not (pf and spec) then return end
+
+    local UIH = ns and ns.MSUF_EM_UIH
+
+    local function MakeButton(bspec)
+        if not bspec then return nil end
+
+        local name = bspec.name or ("$parent" .. (bspec.field or "Btn"))
+        local text = bspec.text
+        local w, h = bspec.w or 70, bspec.h or 22
+        local point = bspec.point or "BOTTOMRIGHT"
+
+        local relFrame = pf
+        local relPoint = bspec.relPoint or point
+
+        if bspec.relField and pf[bspec.relField] then
+            relFrame = pf[bspec.relField]
+            relPoint = bspec.relPoint or "LEFT"
+        elseif bspec.rel == "BOTTOMRIGHT" then
+            relFrame = pf
+            relPoint = "BOTTOMRIGHT"
+        elseif bspec.rel == "BOTTOMLEFT" then
+            relFrame = pf
+            relPoint = "BOTTOMLEFT"
+        end
+
+        local btn
+        if UIH and UIH.ButtonAt then
+            btn = UIH.ButtonAt(pf, name, w, h, point, relFrame, relPoint, bspec.x or 0, bspec.y or 0, text, "UIPanelButtonTemplate")
+        else
+            btn = CreateFrame("Button", name, pf, "UIPanelButtonTemplate")
+            btn:SetSize(w, h)
+            btn:SetPoint(point, relFrame, relPoint, bspec.x or 0, bspec.y or 0)
+            btn:SetText(text or "")
+        end
+
+        pf[bspec.field] = btn
+        return btn
+    end
+
+    local okBtn = MakeButton(spec.ok)
+    local cancelBtn = MakeButton(spec.cancel)
+    local menuBtn = MakeButton(spec.menu)
+
+    local stepHint
+    if spec.stepHint then
+        stepHint = pf:CreateFontString(nil, "OVERLAY", spec.stepHint.template or "GameFontDisableSmall")
+        stepHint:SetPoint(spec.stepHint.point or "BOTTOM", pf, spec.stepHint.relPoint or (spec.stepHint.point or "BOTTOM"), spec.stepHint.x or 0, spec.stepHint.y or 0)
+        stepHint:SetText(spec.stepHint.text or "")
+        pf[spec.stepHint.field or "stepHint"] = stepHint
+    end
+
+    local __baseLevel = (pf.GetFrameLevel and pf:GetFrameLevel()) or 0
+    local boost = spec.levelBoost or 20
+    if okBtn and okBtn.SetFrameLevel then okBtn:SetFrameLevel(__baseLevel + boost) end
+    if cancelBtn and cancelBtn.SetFrameLevel then cancelBtn:SetFrameLevel(__baseLevel + boost) end
+    if menuBtn and menuBtn.SetFrameLevel then menuBtn:SetFrameLevel(__baseLevel + boost) end
+    local closeBoost = spec.closeBoost or (boost + 5)
+    if pf.closeBtn and pf.closeBtn.SetFrameLevel then pf.closeBtn:SetFrameLevel(__baseLevel + closeBoost) end
+
+    return okBtn, cancelBtn, menuBtn, stepHint
+end
+
 
 
 local function MSUF_EM_UI_BuildTextBlock(pf, spec, anchorFrame, applyFn)
@@ -4144,65 +4143,38 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
                 -- Text blocks after Name (spec-driven; no behavior change)
         MSUF_EM_UI_BuildUnitPopup_Text_Extras(pf, ApplyUnitPopupValues)
 
--- Copy Size Settings Dropdown (bottom, above Copy Text)
-        local copySizeLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        copySizeLabel:SetPoint("BOTTOMLEFT", 15, 66)
-        copySizeLabel:SetText("Copy size settings to:")
-        pf.copySizeLabel = copySizeLabel
+-- Copy dropdowns + footer (spec-driven; no behavior change)
+        local UISpec = Edit and Edit.Popups and Edit.Popups.UISpec
+        local US = UISpec and UISpec.Unit
 
-        local copySizeDrop = CreateFrame("Frame", "$parentCopySizeDrop", pf, "UIDropDownMenuTemplate")
-        copySizeDrop:SetPoint("LEFT", copySizeLabel, "RIGHT", -2, -2)
-        pf.copySizeDrop = copySizeDrop
+        if US and US.copyDropdowns then
+            MSUF_EM_UI_BuildCopyDropdown(pf, US.copyDropdowns.size)
+            MSUF_EM_UI_BuildCopyDropdown(pf, US.copyDropdowns.text)
+        end
 
-                pf.RefreshCopySizeDropdown = function()
+        pf.RefreshCopySizeDropdown = function()
             local p = MSUF_PositionPopup or pf
             MSUF_EM_RefreshUnitCopyDropdown(p, p.copySizeDrop, p.copySizeLabel, "Copy size settings to...", "size")
         end
 
-        -- Copy Text Settings Dropdown (bottom)
-        local copyLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        -- Place this option near the bottom so it never overlaps the text rows above.
-        copyLabel:SetPoint("BOTTOMLEFT", 15, 46)
-        copyLabel:SetText("Copy text settings to:")
-        pf.copyTextLabel = copyLabel
-
-        local copyDrop = CreateFrame("Frame", "$parentCopyTextDrop", pf, "UIDropDownMenuTemplate")
-        copyDrop:SetPoint("LEFT", copyLabel, "RIGHT", -2, -2)
-        pf.copyTextDrop = copyDrop
-
-                pf.RefreshCopyTextDropdown = function()
+        pf.RefreshCopyTextDropdown = function()
             local p = MSUF_PositionPopup or pf
             MSUF_EM_RefreshUnitCopyDropdown(p, p.copyTextDrop, p.copyTextLabel, "Copy text settings to...", "text")
         end
 
-local okBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentOK", 70, 22, "BOTTOMRIGHT", pf, "BOTTOMRIGHT", -10, 10, OKAY, "UIPanelButtonTemplate")
-        pf.okBtn = okBtn
+        local okBtn, cancelBtn, menuBtn = MSUF_EM_UI_BuildFooterButtons(pf, (US and US.footer) or nil)
 
-        local cancelBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentCancel", 70, 22, "RIGHT", okBtn, "LEFT", -6, 0, CANCEL, "UIPanelButtonTemplate")
-        pf.cancelBtn = cancelBtn
-local menuBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentMenu", 86, 22, "BOTTOMLEFT", pf, "BOTTOMLEFT", 10, 10, "Menu", "UIPanelButtonTemplate")
-menuBtn:SetScript("OnClick", function()
-    if type(MSUF_EM_SuppressNextBlizzardExit) == "function" then MSUF_EM_SuppressNextBlizzardExit() end
-    local p = MSUF_PositionPopup
-    local key = p and p.MSUF_prev and p.MSUF_prev.key
-    if key and type(_G.MSUF_OpenOptionsToUnitMenu) == "function" then
-        _G.MSUF_OpenOptionsToUnitMenu(key)
-    end
-    pf:Hide()
-end)
-pf.menuBtn = menuBtn
-
-        -- Step hint (applies to steppers and arrow keys)
-        local stepHint = pf:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        stepHint:SetPoint("BOTTOM", pf, "BOTTOM", 0, 40)
-        stepHint:SetText("Hold Shift")
-        pf.stepHint = stepHint
-    -- Ensure bottom buttons stay clickable above edit boxes/dropdowns
-    local __baseLevel = (pf.GetFrameLevel and pf:GetFrameLevel()) or 0
-    if okBtn and okBtn.SetFrameLevel then okBtn:SetFrameLevel(__baseLevel + 20) end
-    if cancelBtn and cancelBtn.SetFrameLevel then cancelBtn:SetFrameLevel(__baseLevel + 20) end
-    if menuBtn and menuBtn.SetFrameLevel then menuBtn:SetFrameLevel(__baseLevel + 20) end
-    if pf.closeBtn and pf.closeBtn.SetFrameLevel then pf.closeBtn:SetFrameLevel(__baseLevel + 25) end
+        if menuBtn then
+            menuBtn:SetScript("OnClick", function()
+                if type(MSUF_EM_SuppressNextBlizzardExit) == "function" then MSUF_EM_SuppressNextBlizzardExit() end
+                local p = MSUF_PositionPopup
+                local key = p and p.MSUF_prev and p.MSUF_prev.key
+                if key and type(_G.MSUF_OpenOptionsToUnitMenu) == "function" then
+                    _G.MSUF_OpenOptionsToUnitMenu(key)
+                end
+                pf:Hide()
+            end)
+        end
 
         cancelBtn:SetScript("OnClick", function()
             if InCombatLockdown and InCombatLockdown() then
@@ -4736,10 +4708,6 @@ local function _MSUF_EM_GetFrameCenterOffsets(frame, anchorFrame)
             return (fx - ax), (fy - ay)
         end
 
-        local function _MSUF_EM_GetBottomLeft(frame)
-            if not frame then return nil end
-            return frame:GetLeft(), frame:GetBottom()
-        end
 
         local function _MSUF_EM_GetBottomCenter(frame)
             if not frame then return nil end
@@ -4748,10 +4716,6 @@ local function _MSUF_EM_GetFrameCenterOffsets(frame, anchorFrame)
             return (l + r) * 0.5, b
         end
 
-        local function _MSUF_EM_GetTopLeft(frame)
-            if not frame then return nil end
-            return frame:GetLeft(), frame:GetTop()
-        end
 
         local function _MSUF_EM_GetTopCenter(frame)
             if not frame then return nil end
@@ -4925,29 +4889,16 @@ local function _MSUF_EM_GetFrameCenterOffsets(frame, anchorFrame)
             pf.testModeCB:Hide()
         end
 
-        -- Copy Size Settings Dropdown (bottom)
-        local copySizeLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        copySizeLabel:SetPoint("BOTTOMLEFT", 15, 66)
-        copySizeLabel:SetText("Copy size settings to:")
-        pf.copySizeLabel = copySizeLabel
+        -- Copy dropdowns + footer (spec-driven; no behavior change)
+        local UISpec = Edit and Edit.Popups and Edit.Popups.UISpec
+        local CS = UISpec and UISpec.Castbar
 
-        local copySizeDrop = CreateFrame("Frame", "$parentCopySizeDrop", pf, "UIDropDownMenuTemplate")
-        copySizeDrop:SetPoint("LEFT", copySizeLabel, "RIGHT", -2, -2)
-        pf.copySizeDrop = copySizeDrop
+        if CS and CS.copyDropdowns then
+            MSUF_EM_UI_BuildCopyDropdown(pf, CS.copyDropdowns.size)
+            MSUF_EM_UI_BuildCopyDropdown(pf, CS.copyDropdowns.text)
+        end
 
--- Copy Text Settings Dropdown (bottom)
-        local copyLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        -- Place this option near the bottom so it never overlaps the text rows above.
-        copyLabel:SetPoint("BOTTOMLEFT", 15, 46)
-        copyLabel:SetText("Copy text settings to:")
-        pf.copyTextLabel = copyLabel
-
-        local copyDrop = CreateFrame("Frame", "$parentCopyTextDrop", pf, "UIDropDownMenuTemplate")
-        copyDrop:SetPoint("LEFT", copyLabel, "RIGHT", -2, -2)
-        pf.copyTextDrop = copyDrop
-
-        -- Step 7: Copy dropdowns (castbar) now use the shared helper to reduce duplication.
-        -- This keeps the exact same behavior as before (boss uses boss keys; others use castbar prefix).
+        -- Copy dropdowns (castbar) keep the exact same behavior as before (boss uses boss keys; others use castbar prefix).
         pf.RefreshCopySizeDropdown = function()
             MSUF_EM_RefreshCastbarCopyDropdown(pf, pf.copySizeDrop, pf.copySizeLabel, "Copy size settings to...", "size")
         end
@@ -4956,29 +4907,19 @@ local function _MSUF_EM_GetFrameCenterOffsets(frame, anchorFrame)
             MSUF_EM_RefreshCastbarCopyDropdown(pf, pf.copyTextDrop, pf.copyTextLabel, "Copy text settings to...", "text")
         end
 
-        local okBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentOK", 70, 22, "BOTTOMRIGHT", pf, "BOTTOMRIGHT", -10, 10, OKAY, "UIPanelButtonTemplate")
-        pf.okBtn = okBtn
+        local okBtn, cancelBtn, menuBtn = MSUF_EM_UI_BuildFooterButtons(pf, (CS and CS.footer) or nil)
 
-        local cancelBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentCancel", 70, 22, "RIGHT", okBtn, "LEFT", -6, 0, CANCEL, "UIPanelButtonTemplate")
-        pf.cancelBtn = cancelBtn
-
-local menuBtn = ns.MSUF_EM_UIH.ButtonAt(pf, "$parentMenu", 86, 22, "BOTTOMLEFT", pf, "BOTTOMLEFT", 10, 10, "Menu", "UIPanelButtonTemplate")
-menuBtn:SetScript("OnClick", function()
-    if type(MSUF_EM_SuppressNextBlizzardExit) == "function" then MSUF_EM_SuppressNextBlizzardExit() end
-    local p = MSUF_CastbarPositionPopup
-    local unit = p and p.unit
-    if unit and type(_G.MSUF_OpenOptionsToCastbarMenu) == "function" then
-        _G.MSUF_OpenOptionsToCastbarMenu(unit)
-    end
-    pf:Hide()
-end)
-pf.menuBtn = menuBtn
-    -- Ensure bottom buttons stay clickable above edit boxes/dropdowns
-    local __baseLevel = (pf.GetFrameLevel and pf:GetFrameLevel()) or 0
-    if okBtn and okBtn.SetFrameLevel then okBtn:SetFrameLevel(__baseLevel + 20) end
-    if cancelBtn and cancelBtn.SetFrameLevel then cancelBtn:SetFrameLevel(__baseLevel + 20) end
-    if menuBtn and menuBtn.SetFrameLevel then menuBtn:SetFrameLevel(__baseLevel + 20) end
-    if pf.closeBtn and pf.closeBtn.SetFrameLevel then pf.closeBtn:SetFrameLevel(__baseLevel + 25) end
+        if menuBtn then
+            menuBtn:SetScript("OnClick", function()
+                if type(MSUF_EM_SuppressNextBlizzardExit) == "function" then MSUF_EM_SuppressNextBlizzardExit() end
+                local p = MSUF_CastbarPositionPopup
+                local unit = p and p.unit
+                if unit and type(_G.MSUF_OpenOptionsToCastbarMenu) == "function" then
+                    _G.MSUF_OpenOptionsToCastbarMenu(unit)
+                end
+                pf:Hide()
+            end)
+        end
 
         cancelBtn:SetScript("OnClick", function()
             if InCombatLockdown and InCombatLockdown() then
@@ -5568,7 +5509,7 @@ function _G.MSUF_A2_EnsureAuraPositionPopup()
 
     MSUF_InitEditPopupFrame(pf, {
         w = 320,
-        h = 520,
+	        h = 640,
         backdrop = {
             bgFile   = 'Interface\\DialogFrame\\UI-DialogBox-Background-Dark',
             edgeFile = 'Interface\\DialogFrame\\UI-DialogBox-Border',
@@ -5577,6 +5518,33 @@ function _G.MSUF_A2_EnsureAuraPositionPopup()
         },
         backdropColor = { 0, 0, 0, 0.9 },
     })
+
+	    -- Smooth drag: clamped frames can feel "5 FPS" while moving on some clients.
+	    -- Fix: temporarily disable clamp during drag, then hard-clamp on drag stop.
+	    pf:SetScript("OnDragStart", function(self)
+	        if self:IsMovable() then
+	            self:SetClampedToScreen(false)
+	            self:StartMoving()
+	        end
+	    end)
+	    pf:SetScript("OnDragStop", function(self)
+	        self:StopMovingOrSizing()
+	        self:SetClampedToScreen(true)
+	        -- Hard clamp to screen after move (prevents ending off-screen)
+	        local ui = UIParent
+	        if ui and ui.GetWidth and ui.GetHeight and self.GetLeft and self.GetBottom then
+	            local sw, sh = ui:GetWidth() or 0, ui:GetHeight() or 0
+	            local pw, ph = self:GetWidth() or 0, self:GetHeight() or 0
+	            if sw > 0 and sh > 0 and pw > 0 and ph > 0 then
+	                local left = self:GetLeft() or 0
+	                local bottom = self:GetBottom() or 0
+	                left = math.max(0, math.min(left, sw - pw))
+	                bottom = math.max(0, math.min(bottom, sh - ph))
+	                self:ClearAllPoints()
+	                self:SetPoint("BOTTOMLEFT", ui, "BOTTOMLEFT", left, bottom)
+	            end
+	        end
+	    end)
 
     local title = pf:CreateFontString(nil, 'OVERLAY', 'GameFontNormalLarge')
     title:SetPoint('TOP', 0, -12)
@@ -5656,8 +5624,19 @@ uconf.layout = uconf.layout or {}
             local curCooldownTextSize = uconf.layout.cooldownTextSize or a2db.shared.cooldownTextSize or 14
 
 
+            -- Buffs / Debuffs (independent offsets/sizing)
+            local curBuffGroupOffX = (uconf.layout.buffGroupOffsetX ~= nil) and uconf.layout.buffGroupOffsetX or (a2db.shared.buffGroupOffsetX or 0)
+            local curBuffGroupOffY = (uconf.layout.buffGroupOffsetY ~= nil) and uconf.layout.buffGroupOffsetY or (a2db.shared.buffGroupOffsetY or 0)
+            local curBuffGroupSize = (uconf.layout.buffGroupIconSize ~= nil) and uconf.layout.buffGroupIconSize or (a2db.shared.buffGroupIconSize or curSize)
 
+            local curDebuffGroupOffX = (uconf.layout.debuffGroupOffsetX ~= nil) and uconf.layout.debuffGroupOffsetX or (a2db.shared.debuffGroupOffsetX or 0)
+            local curDebuffGroupOffY = (uconf.layout.debuffGroupOffsetY ~= nil) and uconf.layout.debuffGroupOffsetY or (a2db.shared.debuffGroupOffsetY or 0)
+            local curDebuffGroupSize = (uconf.layout.debuffGroupIconSize ~= nil) and uconf.layout.debuffGroupIconSize or (a2db.shared.debuffGroupIconSize or curSize)
 
+            -- Private Auras (Blizzard-rendered) independent offsets/sizing
+            local curPrivOffX = (uconf.layout.privateOffsetX ~= nil) and uconf.layout.privateOffsetX or (a2db.shared.privateOffsetX or 0)
+            local curPrivOffY = (uconf.layout.privateOffsetY ~= nil) and uconf.layout.privateOffsetY or (a2db.shared.privateOffsetY or 0)
+            local curPrivSize = (uconf.layout.privateSize ~= nil) and uconf.layout.privateSize or (a2db.shared.privateSize or curSize)
             local haveStackOffsets = (uconf.layout.stackTextOffsetX ~= nil) or (uconf.layout.stackTextOffsetY ~= nil)
                 or (a2db.shared.stackTextOffsetX ~= nil) or (a2db.shared.stackTextOffsetY ~= nil)
             local curStackOffX = (uconf.layout.stackTextOffsetX ~= nil) and uconf.layout.stackTextOffsetX or (a2db.shared.stackTextOffsetX or 0)
@@ -5667,34 +5646,37 @@ uconf.layout = uconf.layout or {}
                 or (a2db.shared.cooldownTextOffsetX ~= nil) or (a2db.shared.cooldownTextOffsetY ~= nil)
             local curCooldownOffX = (uconf.layout.cooldownTextOffsetX ~= nil) and uconf.layout.cooldownTextOffsetX or (a2db.shared.cooldownTextOffsetX or 0)
             local curCooldownOffY = (uconf.layout.cooldownTextOffsetY ~= nil) and uconf.layout.cooldownTextOffsetY or (a2db.shared.cooldownTextOffsetY or 0)
-
-            -- Private aura layout (offsets + size)
-            local havePrivate = (uconf.layout.privateOffsetX ~= nil) or (uconf.layout.privateOffsetY ~= nil) or (uconf.layout.privateSize ~= nil)
-                or (a2db.shared.privateOffsetX ~= nil) or (a2db.shared.privateOffsetY ~= nil) or (a2db.shared.privateSize ~= nil)
-
-            local curPrivateOffX = (uconf.layout.privateOffsetX ~= nil) and uconf.layout.privateOffsetX or (a2db.shared.privateOffsetX or 0)
-            local curPrivateOffY = (uconf.layout.privateOffsetY ~= nil) and uconf.layout.privateOffsetY or (a2db.shared.privateOffsetY or 0)
-            local curPrivateSize = (uconf.layout.privateSize ~= nil) and uconf.layout.privateSize or (a2db.shared.privateSize or curSize)
-            local x = readNum(pf.xBox, curX)
-            local y = readNum(pf.yBox, curY)
-            local size = readNum(pf.sizeBox, curSize)
+            local x = curX
+            local y = curY
+            local size = curSize
             local spacing = readNum(pf.spacingBox, curSpacing)
 
             local stackTextSize = readNum(pf.stackTextSizeBox, curStackTextSize)
             local cooldownTextSize = readNum(pf.cooldownTextSizeBox, curCooldownTextSize)
 
 
+            local buffGroupOffsetX = readNum(pf.buffGroupOffsetXBox, curBuffGroupOffX)
+            local buffGroupOffsetY = readNum(pf.buffGroupOffsetYBox, curBuffGroupOffY)
+            local buffGroupIconSize = readNum(pf.buffGroupIconSizeBox, curBuffGroupSize)
+
+            local debuffGroupOffsetX = readNum(pf.debuffGroupOffsetXBox, curDebuffGroupOffX)
+            local debuffGroupOffsetY = readNum(pf.debuffGroupOffsetYBox, curDebuffGroupOffY)
+            local debuffGroupIconSize = readNum(pf.debuffGroupIconSizeBox, curDebuffGroupSize)
+
+            local privOffX = readNum(pf.privateOffsetXBox, curPrivOffX)
+            local privOffY = readNum(pf.privateOffsetYBox, curPrivOffY)
+            local privSize = readNum(pf.privateSizeBox, curPrivSize)
+
+            -- Private Auras preview (highlight marker) is a shared flag
+            if pf.privatePreviewCheck and pf.privatePreviewCheck.GetChecked then
+                a2db.shared.highlightPrivateAuras = (pf.privatePreviewCheck:GetChecked() and true) or false
+            end
+
             local stackTextOffsetX = readNum(pf.stackTextOffsetXBox, curStackOffX)
             local stackTextOffsetY = readNum(pf.stackTextOffsetYBox, curStackOffY)
 
             local cooldownTextOffsetX = readNum(pf.cooldownTextOffsetXBox, curCooldownOffX)
             local cooldownTextOffsetY = readNum(pf.cooldownTextOffsetYBox, curCooldownOffY)
-
-            local privateOffsetX = readNum(pf.privateOffsetXBox, curPrivateOffX)
-            local privateOffsetY = readNum(pf.privateOffsetYBox, curPrivateOffY)
-            local privateSize = readNum(pf.privateSizeBox, curPrivateSize)
-            x = MSUF_SanitizePopupOffset(x, 0)
-            y = MSUF_SanitizePopupOffset(y, 0)
 
 
             stackTextOffsetX = MSUF_SanitizePopupOffset(stackTextOffsetX, 0)
@@ -5703,13 +5685,26 @@ uconf.layout = uconf.layout or {}
             cooldownTextOffsetX = MSUF_SanitizePopupOffset(cooldownTextOffsetX, 0)
             cooldownTextOffsetY = MSUF_SanitizePopupOffset(cooldownTextOffsetY, 0)
 
+            buffGroupOffsetX = MSUF_SanitizePopupOffset(buffGroupOffsetX, 0)
+            buffGroupOffsetY = MSUF_SanitizePopupOffset(buffGroupOffsetY, 0)
+            debuffGroupOffsetX = MSUF_SanitizePopupOffset(debuffGroupOffsetX, 0)
+            debuffGroupOffsetY = MSUF_SanitizePopupOffset(debuffGroupOffsetY, 0)
 
-            privateOffsetX = MSUF_SanitizePopupOffset(privateOffsetX, 0)
-            privateOffsetY = MSUF_SanitizePopupOffset(privateOffsetY, 0)
-            privateSize = tonumber(privateSize) or curPrivateSize
-            if privateSize < 10 then privateSize = 10 end
-            if privateSize > 80 then privateSize = 80 end
+            privOffX = MSUF_SanitizePopupOffset(privOffX, 0)
+            privOffY = MSUF_SanitizePopupOffset(privOffY, 0)
 
+    iconSize = math.max(10, math.min(80, tonumber(iconSize) or 26))
+    buffGroupIconSize = math.max(10, math.min(80, tonumber(buffGroupIconSize) or iconSize))
+    debuffGroupIconSize = math.max(10, math.min(80, tonumber(debuffGroupIconSize) or iconSize))
+    privSize = math.max(10, math.min(80, tonumber(privSize) or iconSize))
+    spacing = math.max(0, math.min(30, tonumber(spacing) or 2))
+    stackTextSize = math.max(6, math.min(30, tonumber(stackTextSize) or 14))
+    cooldownTextSize = math.max(6, math.min(30, tonumber(cooldownTextSize) or 14))
+
+    buffGroupOffsetX = math.max(-200, math.min(200, tonumber(buffGroupOffsetX) or 0))
+    buffGroupOffsetY = math.max(-200, math.min(200, tonumber(buffGroupOffsetY) or 0))
+    debuffGroupOffsetX = math.max(-200, math.min(200, tonumber(debuffGroupOffsetX) or 0))
+    debuffGroupOffsetY = math.max(-200, math.min(200, tonumber(debuffGroupOffsetY) or 0))
             local writeStackOffsets = haveStackOffsets
                 or (math.abs(tonumber(stackTextOffsetX) or 0) > 0.0001)
                 or (math.abs(tonumber(stackTextOffsetY) or 0) > 0.0001)
@@ -5717,17 +5712,21 @@ uconf.layout = uconf.layout or {}
             local writeCooldownOffsets = haveCooldownOffsets
                 or (math.abs(tonumber(cooldownTextOffsetX) or 0) > 0.0001)
                 or (math.abs(tonumber(cooldownTextOffsetY) or 0) > 0.0001)
-
-            local writePrivateOffsets = havePrivate
-                or (math.abs(tonumber(privateOffsetX) or 0) > 0.0001)
-                or (math.abs(tonumber(privateOffsetY) or 0) > 0.0001)
-
-            local writePrivateSize = havePrivate or (math.abs((tonumber(privateSize) or curSize) - (tonumber(curSize) or 0)) > 0.0001)
-
             -- sane clamps
             size = math.max(10, math.min(80, tonumber(size) or curSize))
             spacing = math.max(0, math.min(30, tonumber(spacing) or curSpacing))
 
+            buffGroupOffsetX = math.max(-200, math.min(200, tonumber(buffGroupOffsetX) or curBuffGroupOffX))
+            buffGroupOffsetY = math.max(-200, math.min(200, tonumber(buffGroupOffsetY) or curBuffGroupOffY))
+            buffGroupIconSize = math.max(10, math.min(80, tonumber(buffGroupIconSize) or curBuffGroupSize))
+
+            debuffGroupOffsetX = math.max(-200, math.min(200, tonumber(debuffGroupOffsetX) or curDebuffGroupOffX))
+            debuffGroupOffsetY = math.max(-200, math.min(200, tonumber(debuffGroupOffsetY) or curDebuffGroupOffY))
+            debuffGroupIconSize = math.max(10, math.min(80, tonumber(debuffGroupIconSize) or curDebuffGroupSize))
+
+            privOffX = math.max(-200, math.min(200, tonumber(privOffX) or curPrivOffX))
+            privOffY = math.max(-200, math.min(200, tonumber(privOffY) or curPrivOffY))
+            privSize = math.max(10, math.min(80, tonumber(privSize) or curPrivSize))
             stackTextSize = math.max(6, math.min(40, tonumber(stackTextSize) or curStackTextSize))
             cooldownTextSize = math.max(6, math.min(40, tonumber(cooldownTextSize) or curCooldownTextSize))
 
@@ -5740,6 +5739,15 @@ local function ApplyLayoutToUnit(k)
     uc.layout.offsetY   = math.floor(y + 0.5)
     uc.layout.iconSize  = math.floor(size + 0.5)
     uc.layout.spacing   = math.floor(spacing + 0.5)
+    uc.layout.buffGroupOffsetX  = math.floor(buffGroupOffsetX + 0.5)
+    uc.layout.buffGroupOffsetY  = math.floor(buffGroupOffsetY + 0.5)
+    uc.layout.buffGroupIconSize = math.floor(buffGroupIconSize + 0.5)
+    uc.layout.debuffGroupOffsetX  = math.floor(debuffGroupOffsetX + 0.5)
+    uc.layout.debuffGroupOffsetY  = math.floor(debuffGroupOffsetY + 0.5)
+    uc.layout.debuffGroupIconSize = math.floor(debuffGroupIconSize + 0.5)
+    uc.layout.privateOffsetX = math.floor(privOffX + 0.5)
+    uc.layout.privateOffsetY = math.floor(privOffY + 0.5)
+    uc.layout.privateSize    = math.floor(privSize + 0.5)
     uc.layout.stackTextSize = math.floor(stackTextSize + 0.5)
     uc.layout.cooldownTextSize = math.floor(cooldownTextSize + 0.5)
     if writeStackOffsets then
@@ -5757,21 +5765,6 @@ local function ApplyLayoutToUnit(k)
         uc.layout.cooldownTextOffsetX = nil
         uc.layout.cooldownTextOffsetY = nil
     end
-
-    if writePrivateOffsets then
-        uc.layout.privateOffsetX = math.floor(privateOffsetX + 0.5)
-        uc.layout.privateOffsetY = math.floor(privateOffsetY + 0.5)
-    else
-        uc.layout.privateOffsetX = nil
-        uc.layout.privateOffsetY = nil
-    end
-
-    if writePrivateSize then
-        uc.layout.privateSize = math.floor(privateSize + 0.5)
-    else
-        uc.layout.privateSize = nil
-    end
-
     -- Keep the edit mover box derived from iconSize/spacing/perRow (no manual box overrides).
     uc.layout.width = nil
     uc.layout.height = nil
@@ -5804,13 +5797,11 @@ end
 
     -- Phase 10 CLEAN: Build Auras2 numeric rows via rowspec (UI-only)
     local rows = {
-        { key = "x", label = "Offset X:", box = "$parentXBox", dy = -6, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
-        { key = "y", label = "Offset Y:", box = "$parentYBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
-        { key = "size", label = "Icon size:", box = "$parentSizeBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
-        { key = "spacing", label = "Spacing:", box = "$parentSpacingBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+                { key = "spacing", label = "Spacing:", box = "$parentSpacingBox", dy = -6, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+
     }
 
-    -- Build the first four rows under the header
+    -- Build the spacing row under the header (position/size are handled via mover + group overrides below)
     MSUF_EM_BuildNumericRows(pf, rows, frameHeader, "BOTTOMLEFT", 0, Apply, "Auras2Popup:LiveApply")
 
     -- Backwards-compatible alias used by older code in this popup (not used elsewhere)
@@ -5818,7 +5809,7 @@ end
 
     -- Boss-only option: edit Boss 1-5 together (default ON)
     local bossTogether = CreateFrame('CheckButton', '$parentBossTogetherCheck', pf, 'UICheckButtonTemplate')
-    bossTogether:SetPoint('TOPLEFT', pf.spacingLabel, 'BOTTOMLEFT', 0, -6)
+    bossTogether:SetPoint('TOPLEFT', (pf.spacingRow or pf.spacingLabel), 'BOTTOMLEFT', 0, -6)
     if bossTogether.text then
         bossTogether.text:SetText('Boss 1-5 edit together')
     elseif bossTogether.Text then
@@ -5839,162 +5830,77 @@ end
 }
 
     -- Initially anchor stacks below spacing; sync code may re-anchor below bossTogetherCheck when visible
-    MSUF_EM_BuildNumericRows(pf, rows2, pf.spacingLabel, "BOTTOMLEFT", 0, Apply, "Auras2Popup:LiveApply")
+    MSUF_EM_BuildNumericRows(pf, rows2, (pf.spacingRow or pf.spacingLabel), "BOTTOMLEFT", 0, Apply, "Auras2Popup:LiveApply")
 
+    
+    -- -------------------------------------------------------------------
+    -- Buffs / Debuffs (independent X/Y/Size)
+    -- -------------------------------------------------------------------
+    local bdHeader = pf:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    bdHeader:SetTextColor(1, 0.82, 0, 1)
+    bdHeader:SetText("Buffs / Debuffs")
+    bdHeader:SetPoint('TOPLEFT', (pf.cooldownTextOffsetYRow or pf.cooldownTextOffsetYLabel or pf.cooldownTextOffsetYBox or pf.cooldownTextSizeRow or pf.cooldownTextSizeLabel), 'BOTTOMLEFT', 0, -18)
+    pf.buffDebuffHeader = bdHeader
 
-    -- Private Auras section (offsets relative to the main aura anchor)
-    local privateHeader = pf:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    privateHeader:SetPoint("TOPLEFT", pf.cooldownTextOffsetYLabel, "BOTTOMLEFT", 0, -10)
-    privateHeader:SetText("Private Auras")
+    local rowsBD = {
+        { key = "buffGroupOffsetX",  label = "Buff offset X:",   box = "$parentBuffOffsetXBox" },
+        { key = "buffGroupOffsetY",  label = "Buff offset Y:",   box = "$parentBuffOffsetYBox" },
+        { key = "buffGroupIconSize", label = "Buff icon size:",  box = "$parentBuffIconSizeBox" },
+        { key = "debuffGroupOffsetX",  label = "Debuff offset X:",  box = "$parentDebuffOffsetXBox" },
+        { key = "debuffGroupOffsetY",  label = "Debuff offset Y:",  box = "$parentDebuffOffsetYBox" },
+        { key = "debuffGroupIconSize", label = "Debuff icon size:", box = "$parentDebuffIconSizeBox" },
+    }
+    MSUF_EM_BuildNumericRows(pf, rowsBD, bdHeader, "BOTTOMLEFT", 0, Apply, "Auras2Popup:LiveApply")
+
+-- -------------------------------------------------------------------
+    -- Private Auras (Blizzard-rendered): independent offsets + icon size
+    -- Note: This edits a2.shared.privateOffsetX/Y/privateSize (with per-unit overrides).
+    -- -------------------------------------------------------------------
+    local privateHeader = pf:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+    privateHeader:SetPoint('TOPLEFT', (pf.debuffGroupIconSizeRow or pf.buffDebuffHeader or pf.cooldownTextOffsetYRow or pf.cooldownTextOffsetYLabel or pf.cooldownTextOffsetYBox or pf.cooldownTextSizeRow or pf.cooldownTextSizeLabel), 'BOTTOMLEFT', 0, -20)
+    privateHeader:SetText('Private Auras')
     privateHeader:SetTextColor(1, 0.82, 0, 1)
     pf.privateHeader = privateHeader
+
+    local privatePreview = CreateFrame('CheckButton', '$parentPrivatePreviewCheck', pf, 'UICheckButtonTemplate')
+    privatePreview:SetPoint('TOPLEFT', privateHeader, 'BOTTOMLEFT', 0, -6)
+    if privatePreview.text then
+        privatePreview.text:SetText('Preview (highlight) private auras')
+    elseif privatePreview.Text then
+        privatePreview.Text:SetText('Preview (highlight) private auras')
+    end
+    privatePreview:SetScript('OnClick', function()
+        Apply()
+    end)
+    pf.privatePreviewCheck = privatePreview
 
     local rows3 = {
         { key = "privateOffsetX", label = "Private offset X:", box = "$parentPrivateOffsetXBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
         { key = "privateOffsetY", label = "Private offset Y:", box = "$parentPrivateOffsetYBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
-        { key = "privateSize",    label = "Private icon size:", box = "$parentPrivateSizeBox",    dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
+        { key = "privateSize",    label = "Private icon size:", box = "$parentPrivateSizeBox", dy = -8, live = true, labelTemplate = "GameFontHighlightSmall", requireCompleteNumber = false },
     }
-    MSUF_EM_BuildNumericRows(pf, rows3, privateHeader, "BOTTOMLEFT", 0, Apply, "Auras2Popup:LiveApply")
-    -- Private Auras: Edit Mode preview toggle (does NOT persist to DB; auto-restores on popup close)
-    if not pf.privatePreviewCheck then
-        local privPrev = CreateFrame('CheckButton', '$parentPrivatePreviewCheck', pf, 'UICheckButtonTemplate')
-        local anchorW = pf.privateSizeLabel or pf.privateOffsetYLabel or privateHeader
-        privPrev:SetPoint('TOPLEFT', anchorW, 'BOTTOMLEFT', 0, -6)
-        local t = privPrev.text or privPrev.Text
-        if t and t.SetText then
-            t:SetText('Preview private auras (Edit Mode)')
-        end
-        privPrev:Show()
-        pf.privatePreviewCheck = privPrev
-
-        local function UnitKeyToPrivateToggleKey(u)
-            if u == 'player' then return 'showPrivateAurasPlayer'
-            elseif u == 'target' then return 'showPrivateAurasTarget'
-            elseif u == 'focus' then return 'showPrivateAurasFocus'
-            elseif type(u) == 'string' and u:match('^boss%d+$') then return 'showPrivateAurasBoss'
-            end
-            return nil
-        end
-
-        local function SetPrivatePreviewEnabled(enabled)
-            if pf._msufPrivatePreviewApplying then return end
-            pf._msufPrivatePreviewApplying = true
-
-            MSUF_EM_EnsureDB()
-            local a2 = MSUF_DB and MSUF_DB.auras2
-            local shared = a2 and a2.shared
-            if shared then
-                local unitKey = pf.unit or 'target'
-                local isBoss = (type(unitKey) == 'string') and unitKey:match('^boss%d+$')
-                if shared.bossEditTogether == nil then shared.bossEditTogether = true end
-
-                local applyUnits
-                if isBoss and shared.bossEditTogether ~= false then
-                    applyUnits = { 'boss1','boss2','boss3','boss4','boss5' }
-                else
-                    applyUnits = { unitKey }
-                end
-
-                pf._msufPrivatePreviewSaved = pf._msufPrivatePreviewSaved or {}
-                local saved = pf._msufPrivatePreviewSaved
-
-                if enabled then
-                    if not saved._active then
-                        saved._active = true
-                        saved.highlightPrivateAuras = shared.highlightPrivateAuras
-                        saved.perUnit = saved.perUnit or {}
-                        -- Force highlight + enable for the currently edited unit(s)
-                        shared.highlightPrivateAuras = true
-                        for _,u in ipairs(applyUnits) do
-                            local k = UnitKeyToPrivateToggleKey(u)
-                            if k then
-                                if saved.perUnit[k] == nil then
-                                    saved.perUnit[k] = shared[k]
-                                end
-                                shared[k] = true
-                            end
-                        end
-                    end
-                else
-                    if saved._active then
-                        if saved.highlightPrivateAuras ~= nil then
-                            shared.highlightPrivateAuras = saved.highlightPrivateAuras
-                        else
-                            shared.highlightPrivateAuras = nil
-                        end
-                        if type(saved.perUnit) == 'table' then
-                            for k,v in pairs(saved.perUnit) do
-                                shared[k] = v
-                            end
-                        end
-                        saved._active = false
-                    end
-                end
-
-                -- Refresh so slot boxes/icons react instantly
-                if type(_G.MSUF_Auras2_RefreshAll) == 'function' then
-                    _G.MSUF_Auras2_RefreshAll()
-                elseif type(_G.MSUF_Auras2_RefreshUnit) == 'function' then
-                    for _,u in ipairs(applyUnits) do
-                        _G.MSUF_Auras2_RefreshUnit(u)
-                    end
-                end
-            end
-
-            pf._msufPrivatePreviewApplying = false
-        end
-
-        pf._msufSetPrivatePreviewEnabled = SetPrivatePreviewEnabled
-
-        privPrev:SetScript('OnClick', function(self)
-            local enabled = (self.GetChecked and self:GetChecked()) and true or false
-            SetPrivatePreviewEnabled(enabled)
-        end)
-
-        if not pf._msufPrivatePreviewHooked then
-            pf._msufPrivatePreviewHooked = true
-            pf:HookScript('OnHide', function()
-                if pf._msufSetPrivatePreviewEnabled then
-                    pf._msufSetPrivatePreviewEnabled(false)
-                end
-                if pf.privatePreviewCheck and pf.privatePreviewCheck.SetChecked then
-                    pf.privatePreviewCheck:SetChecked(false)
-                end
-            end)
-        end
-    end
-
-
-
+    MSUF_EM_BuildNumericRows(pf, rows3, privatePreview, "BOTTOMLEFT", 0, Apply, "Auras2Popup:LiveApply")
 
 local function OnEnterPressed(self)
         self:ClearFocus()
         Apply()
     end
     MSUF_EM_BindKeyScripts(OnEnterPressed, nil,
-        pf.xBox, pf.yBox, pf.sizeBox, pf.spacingBox,
+        pf.spacingBox,
         pf.stackTextSizeBox, pf.stackTextOffsetXBox, pf.stackTextOffsetYBox,
         pf.cooldownTextSizeBox,
         pf.cooldownTextOffsetXBox, pf.cooldownTextOffsetYBox,
+        pf.buffGroupOffsetXBox, pf.buffGroupOffsetYBox, pf.buffGroupIconSizeBox,
+        pf.debuffGroupOffsetXBox, pf.debuffGroupOffsetYBox, pf.debuffGroupIconSizeBox,
         pf.privateOffsetXBox, pf.privateOffsetYBox, pf.privateSizeBox
     )
 
--- Copy Settings Dropdown (bottom, like Unitframe/Castbar popups)
-local copyAuraLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-copyAuraLabel:SetPoint("BOTTOMLEFT", 15, 64)
-copyAuraLabel:SetText("Copy settings to:")
-if MSUF_PopupStyleLabel then MSUF_PopupStyleLabel(copyAuraLabel) end
-pf.copyAuraLabel = copyAuraLabel
-
--- Ensure dropdown frames are created early so Midnight style can skin them even if this is the first popup opened
-if UIDropDownMenu_CreateFrames then
-    -- Create 1 level of dropdown frames (cheap)
-    pcall(UIDropDownMenu_CreateFrames, 1, 0)
+-- Copy Settings Dropdown (spec-driven; no behavior change)
+local UISpec = Edit and Edit.Popups and Edit.Popups.UISpec
+local AS = UISpec and UISpec.Auras2
+if AS and AS.copyDropdowns and AS.copyDropdowns.aura then
+    MSUF_EM_UI_BuildCopyDropdown(pf, AS.copyDropdowns.aura)
 end
-
-local copyAuraDrop = CreateFrame("Frame", "$parentCopyAuraDrop", pf, "UIDropDownMenuTemplate")
-copyAuraDrop:SetPoint("LEFT", copyAuraLabel, "RIGHT", -2, -2)
-pf.copyAuraDrop = copyAuraDrop
 
 local function MSUF_A2_GetAuraCopyLabel(key)
     if key == "player" then return "Player" end
@@ -6057,6 +5963,17 @@ local function MSUF_A2_CopyAuraLayout(srcKey, dstKey)
 
     local sCdOffX = (srcLay.cooldownTextOffsetX ~= nil) and srcLay.cooldownTextOffsetX or a2db.shared.cooldownTextOffsetX
     local sCdOffY = (srcLay.cooldownTextOffsetY ~= nil) and srcLay.cooldownTextOffsetY or a2db.shared.cooldownTextOffsetY
+    local sPrivOffX = eff(srcLay.privateOffsetX, a2db.shared.privateOffsetX or 0)
+    local sPrivOffY = eff(srcLay.privateOffsetY, a2db.shared.privateOffsetY or 0)
+    local sPrivSize = eff(srcLay.privateSize, a2db.shared.privateSize or sSize)
+
+    local sBuffGroupOffX = eff(srcLay.buffGroupOffsetX, a2db.shared.buffGroupOffsetX or 0)
+    local sBuffGroupOffY = eff(srcLay.buffGroupOffsetY, a2db.shared.buffGroupOffsetY or 0)
+    local sBuffGroupSize = eff(srcLay.buffGroupIconSize, a2db.shared.buffGroupIconSize or sSize)
+
+    local sDebuffGroupOffX = eff(srcLay.debuffGroupOffsetX, a2db.shared.debuffGroupOffsetX or 0)
+    local sDebuffGroupOffY = eff(srcLay.debuffGroupOffsetY, a2db.shared.debuffGroupOffsetY or 0)
+    local sDebuffGroupSize = eff(srcLay.debuffGroupIconSize, a2db.shared.debuffGroupIconSize or sSize)
     local dstKeys
     if MSUF_A2_IsBossAuraKey(dstKey) and bossTogether then
         dstKeys = { "boss1","boss2","boss3","boss4","boss5" }
@@ -6077,6 +5994,17 @@ local function MSUF_A2_CopyAuraLayout(srcKey, dstKey)
         dc.layout.stackTextSize = sStSz
         dc.layout.cooldownTextSize = sCdSz
 
+        dc.layout.buffGroupOffsetX = sBuffGroupOffX
+        dc.layout.buffGroupOffsetY = sBuffGroupOffY
+        dc.layout.buffGroupIconSize = sBuffGroupSize
+        dc.layout.debuffGroupOffsetX = sDebuffGroupOffX
+        dc.layout.debuffGroupOffsetY = sDebuffGroupOffY
+        dc.layout.debuffGroupIconSize = sDebuffGroupSize
+
+
+        dc.layout.privateOffsetX = sPrivOffX
+        dc.layout.privateOffsetY = sPrivOffY
+        dc.layout.privateSize    = sPrivSize
         if sCdOffX ~= nil then dc.layout.cooldownTextOffsetX = sCdOffX end
         if sCdOffY ~= nil then dc.layout.cooldownTextOffsetY = sCdOffY end
         -- keep width/height unused in Auras2 (derived)
@@ -6145,37 +6073,35 @@ local function MSUF_A2_RefreshCopyAuraDropdown()
 end
 
 pf.RefreshCopyAuraDropdown = MSUF_A2_RefreshCopyAuraDropdown
+    -- Bottom buttons (spec-driven; behavior unchanged)
+    local UISpec = Edit and Edit.Popups and Edit.Popups.UISpec
+    local AS = UISpec and UISpec.Auras2
 
-    -- Bottom buttons
-    local cancelBtn = CreateFrame('Button', '$parentCancel', pf, 'UIPanelButtonTemplate')
-    cancelBtn:SetSize(120, 22)
-    cancelBtn:SetPoint('BOTTOMLEFT', pf, 'BOTTOMLEFT', 16, 16)
-    cancelBtn:SetText('Cancel')
-    if MSUF_EM_ForceWhiteButtonText then MSUF_EM_ForceWhiteButtonText(cancelBtn) end
-    cancelBtn:SetScript('OnClick', function()
-        if GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.xBox then pf.xBox:ClearFocus() end
-        if GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.yBox then pf.yBox:ClearFocus() end
-        if GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.sizeBox then pf.sizeBox:ClearFocus() end
-        if pf.spacingBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.spacingBox then pf.spacingBox:ClearFocus() end
-        if pf.stackTextSizeBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.stackTextSizeBox then pf.stackTextSizeBox:ClearFocus() end
-        if pf.stackTextOffsetXBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.stackTextOffsetXBox then pf.stackTextOffsetXBox:ClearFocus() end
-        if pf.stackTextOffsetYBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.stackTextOffsetYBox then pf.stackTextOffsetYBox:ClearFocus() end
-        if pf.cooldownTextSizeBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.cooldownTextSizeBox then pf.cooldownTextSizeBox:ClearFocus() end
-        if pf.cooldownTextOffsetXBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.cooldownTextOffsetXBox then pf.cooldownTextOffsetXBox:ClearFocus() end
-        if pf.cooldownTextOffsetYBox and GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() == pf.cooldownTextOffsetYBox then pf.cooldownTextOffsetYBox:ClearFocus() end
-        pf:Hide()
-    end)
+    local okayBtn, cancelBtn = MSUF_EM_UI_BuildFooterButtons(pf, (AS and AS.footer) or nil)
+    -- Builder returns (okBtn, cancelBtn, menuBtn). Auras2 has no menu.
+    if cancelBtn then
+        if MSUF_EM_ForceWhiteButtonText then MSUF_EM_ForceWhiteButtonText(cancelBtn) end
+        cancelBtn:SetScript('OnClick', function()
+            MSUF_EM_ClearFocusOnBoxes(
+                pf.spacingBox,
+                pf.stackTextSizeBox, pf.stackTextOffsetXBox, pf.stackTextOffsetYBox,
+                pf.cooldownTextSizeBox, pf.cooldownTextOffsetXBox, pf.cooldownTextOffsetYBox,
+                pf.buffGroupOffsetXBox, pf.buffGroupOffsetYBox, pf.buffGroupIconSizeBox,
+                pf.debuffGroupOffsetXBox, pf.debuffGroupOffsetYBox, pf.debuffGroupIconSizeBox,
+                pf.privateOffsetXBox, pf.privateOffsetYBox, pf.privateSizeBox
+            )
+            pf:Hide()
+        end)
+    end
+
+    if okayBtn then
+        if MSUF_EM_ForceWhiteButtonText then MSUF_EM_ForceWhiteButtonText(okayBtn) end
+        okayBtn:SetScript('OnClick', function()
+            Apply()
+            pf:Hide()
+        end)
+    end
     pf.cancelBtn = cancelBtn
-
-    local okayBtn = CreateFrame('Button', '$parentOkay', pf, 'UIPanelButtonTemplate')
-    okayBtn:SetSize(120, 22)
-    okayBtn:SetPoint('BOTTOMRIGHT', pf, 'BOTTOMRIGHT', -16, 16)
-    okayBtn:SetText('Okay')
-    if MSUF_EM_ForceWhiteButtonText then MSUF_EM_ForceWhiteButtonText(okayBtn) end
-    okayBtn:SetScript('OnClick', function()
-        Apply()
-        pf:Hide()
-    end)
     pf.okayBtn = okayBtn
 
     pf._msufAuras2Apply = Apply
@@ -6244,28 +6170,18 @@ if pf.bossTogetherCheck then
 end
 
 -- Re-anchor the Stack Text Size row depending on boss toggle visibility
-if pf.stackTextSizeLabel and pf.spacingLabel and pf.bossTogetherCheck then
+local spacingAnchor = pf.spacingRow or pf.spacingLabel
+if pf.stackTextSizeLabel and spacingAnchor and pf.bossTogetherCheck then
     pf.stackTextSizeLabel:ClearAllPoints()
     if isBoss and pf.bossTogetherCheck.IsShown and pf.bossTogetherCheck:IsShown() then
         pf.stackTextSizeLabel:SetPoint('TOPLEFT', pf.bossTogetherCheck, 'BOTTOMLEFT', 0, -8)
     else
-        pf.stackTextSizeLabel:SetPoint('TOPLEFT', pf.spacingLabel, 'BOTTOMLEFT', 0, -8)
+        pf.stackTextSizeLabel:SetPoint('TOPLEFT', spacingAnchor, 'BOTTOMLEFT', 0, -8)
     end
 end
 
-    -- Private preview toggle enable/disable (only if the client supports private aura anchors)
-    if pf.privatePreviewCheck then
-        local supported = (C_UnitAuras and type(C_UnitAuras.AddPrivateAuraAnchor) == 'function') and true or false
-        if pf.privatePreviewCheck.SetEnabled then pf.privatePreviewCheck:SetEnabled(supported) end
-        if pf.privatePreviewCheck.SetAlpha then pf.privatePreviewCheck:SetAlpha(supported and 1 or 0.5) end
-        if pf.privatePreviewCheck.Show then pf.privatePreviewCheck:Show() end
-    end
-
     local uconf = (a2.perUnit and a2.perUnit[popupUnitEff]) or {}
     local lay = uconf.layout or {}
-
-    local x = (uconf.overrideLayout and lay.offsetX ~= nil) and lay.offsetX or (shared.offsetX or 0)
-    local y = (uconf.overrideLayout and lay.offsetY ~= nil) and lay.offsetY or (shared.offsetY or 0)
 
     local iconSize = (uconf.overrideLayout and lay.iconSize ~= nil) and lay.iconSize or (shared.iconSize or 26)
     local spacing  = (uconf.overrideLayout and lay.spacing  ~= nil) and lay.spacing  or (shared.spacing  or 2)
@@ -6276,13 +6192,29 @@ end
     local cooldownTextOffsetY = (uconf.overrideLayout and lay.cooldownTextOffsetY ~= nil) and lay.cooldownTextOffsetY or (shared.cooldownTextOffsetY or 0)
     local stackTextOffsetX = (uconf.overrideLayout and lay.stackTextOffsetX ~= nil) and lay.stackTextOffsetX or (shared.stackTextOffsetX or 0)
     local stackTextOffsetY = (uconf.overrideLayout and lay.stackTextOffsetY ~= nil) and lay.stackTextOffsetY or (shared.stackTextOffsetY or 0)
-    local privateOffsetX = (uconf.overrideLayout and lay.privateOffsetX ~= nil) and lay.privateOffsetX or (shared.privateOffsetX or 0)
-    local privateOffsetY = (uconf.overrideLayout and lay.privateOffsetY ~= nil) and lay.privateOffsetY or (shared.privateOffsetY or 0)
-    local privateSize   = (uconf.overrideLayout and lay.privateSize   ~= nil) and lay.privateSize   or (shared.privateSize   or iconSize)
+    -- Private Auras (independent offsets/sizing)
+    local privOffX = (uconf.overrideLayout and lay.privateOffsetX ~= nil) and lay.privateOffsetX or (shared.privateOffsetX or 0)
+    local privOffY = (uconf.overrideLayout and lay.privateOffsetY ~= nil) and lay.privateOffsetY or (shared.privateOffsetY or 0)
+    local privSize = (uconf.overrideLayout and lay.privateSize ~= nil) and lay.privateSize or (shared.privateSize or iconSize)
+
+    -- Buffs / Debuffs (independent offsets/sizing)
+    local buffGroupOffsetX = (uconf.overrideLayout and lay.buffGroupOffsetX ~= nil) and lay.buffGroupOffsetX or (shared.buffGroupOffsetX or 0)
+    local buffGroupOffsetY = (uconf.overrideLayout and lay.buffGroupOffsetY ~= nil) and lay.buffGroupOffsetY or (shared.buffGroupOffsetY or 0)
+    local buffGroupIconSize = (uconf.overrideLayout and lay.buffGroupIconSize ~= nil) and lay.buffGroupIconSize or (shared.buffGroupIconSize or iconSize)
+
+    local debuffGroupOffsetX = (uconf.overrideLayout and lay.debuffGroupOffsetX ~= nil) and lay.debuffGroupOffsetX or (shared.debuffGroupOffsetX or 0)
+    local debuffGroupOffsetY = (uconf.overrideLayout and lay.debuffGroupOffsetY ~= nil) and lay.debuffGroupOffsetY or (shared.debuffGroupOffsetY or 0)
+    local debuffGroupIconSize = (uconf.overrideLayout and lay.debuffGroupIconSize ~= nil) and lay.debuffGroupIconSize or (shared.debuffGroupIconSize or iconSize)
+
     iconSize = tonumber(iconSize) or 26
     spacing  = tonumber(spacing)  or 2
     stackTextSize = tonumber(stackTextSize) or 14
     cooldownTextSize = tonumber(cooldownTextSize) or 14
+
+    buffGroupIconSize = tonumber(buffGroupIconSize) or iconSize
+    debuffGroupIconSize = tonumber(debuffGroupIconSize) or iconSize
+    privSize = tonumber(privSize) or iconSize
+
 
 
     stackTextOffsetX = MSUF_SanitizePopupOffset(tonumber(stackTextOffsetX) or 0, 0)
@@ -6290,23 +6222,17 @@ end
     cooldownTextOffsetX = MSUF_SanitizePopupOffset(tonumber(cooldownTextOffsetX) or 0, 0)
     cooldownTextOffsetY = MSUF_SanitizePopupOffset(tonumber(cooldownTextOffsetY) or 0, 0)
 
-    privateOffsetX = MSUF_SanitizePopupOffset(tonumber(privateOffsetX) or 0, 0)
-    privateOffsetY = MSUF_SanitizePopupOffset(tonumber(privateOffsetY) or 0, 0)
-    privateSize = tonumber(privateSize) or iconSize
-    if privateSize < 10 then privateSize = 10 end
-    if privateSize > 80 then privateSize = 80 end
+    buffGroupOffsetX = MSUF_SanitizePopupOffset(tonumber(buffGroupOffsetX) or 0, 0)
+    buffGroupOffsetY = MSUF_SanitizePopupOffset(tonumber(buffGroupOffsetY) or 0, 0)
+    debuffGroupOffsetX = MSUF_SanitizePopupOffset(tonumber(debuffGroupOffsetX) or 0, 0)
+    debuffGroupOffsetY = MSUF_SanitizePopupOffset(tonumber(debuffGroupOffsetY) or 0, 0)
+
+    privOffX = MSUF_SanitizePopupOffset(tonumber(privOffX) or 0, 0)
+    privOffY = MSUF_SanitizePopupOffset(tonumber(privOffY) or 0, 0)
+    privSize = tonumber(privSize) or iconSize
+    privSize = math.max(10, math.min(80, privSize))
     x = MSUF_SanitizePopupOffset(x, 0)
     y = MSUF_SanitizePopupOffset(y, 0)
-
-    if pf.xBox and not pf.xBox:HasFocus() then
-        pf.xBox:SetText(tostring(math.floor(x + 0.5)))
-    end
-    if pf.yBox and not pf.yBox:HasFocus() then
-        pf.yBox:SetText(tostring(math.floor(y + 0.5)))
-    end
-    if pf.sizeBox and not pf.sizeBox:HasFocus() then
-        pf.sizeBox:SetText(tostring(math.floor(iconSize + 0.5)))
-    end
     if pf.spacingBox and not pf.spacingBox:HasFocus() then
         pf.spacingBox:SetText(tostring(math.floor(spacing + 0.5)))
     end
@@ -6330,14 +6256,37 @@ end
         pf.cooldownTextOffsetYBox:SetText(tostring(math.floor(cooldownTextOffsetY + 0.5)))
     end
 
+
+    if pf.buffGroupOffsetXBox and not pf.buffGroupOffsetXBox:HasFocus() then
+        pf.buffGroupOffsetXBox:SetText(tostring(buffGroupOffsetX))
+    end
+    if pf.buffGroupOffsetYBox and not pf.buffGroupOffsetYBox:HasFocus() then
+        pf.buffGroupOffsetYBox:SetText(tostring(buffGroupOffsetY))
+    end
+    if pf.buffGroupIconSizeBox and not pf.buffGroupIconSizeBox:HasFocus() then
+        pf.buffGroupIconSizeBox:SetText(tostring(math.floor(buffGroupIconSize + 0.5)))
+    end
+
+    if pf.debuffGroupOffsetXBox and not pf.debuffGroupOffsetXBox:HasFocus() then
+        pf.debuffGroupOffsetXBox:SetText(tostring(debuffGroupOffsetX))
+    end
+    if pf.debuffGroupOffsetYBox and not pf.debuffGroupOffsetYBox:HasFocus() then
+        pf.debuffGroupOffsetYBox:SetText(tostring(debuffGroupOffsetY))
+    end
+    if pf.debuffGroupIconSizeBox and not pf.debuffGroupIconSizeBox:HasFocus() then
+        pf.debuffGroupIconSizeBox:SetText(tostring(math.floor(debuffGroupIconSize + 0.5)))
+    end
     if pf.privateOffsetXBox and not pf.privateOffsetXBox:HasFocus() then
-        pf.privateOffsetXBox:SetText(tostring(math.floor(privateOffsetX + 0.5)))
+        pf.privateOffsetXBox:SetText(tostring(math.floor(privOffX + 0.5)))
     end
     if pf.privateOffsetYBox and not pf.privateOffsetYBox:HasFocus() then
-        pf.privateOffsetYBox:SetText(tostring(math.floor(privateOffsetY + 0.5)))
+        pf.privateOffsetYBox:SetText(tostring(math.floor(privOffY + 0.5)))
     end
     if pf.privateSizeBox and not pf.privateSizeBox:HasFocus() then
-        pf.privateSizeBox:SetText(tostring(math.floor(privateSize + 0.5)))
+        pf.privateSizeBox:SetText(tostring(math.floor(privSize + 0.5)))
+    end
+    if pf.privatePreviewCheck and pf.privatePreviewCheck.SetChecked then
+        pf.privatePreviewCheck:SetChecked((shared.highlightPrivateAuras == true) and true or false)
     end
     if pf.RefreshCopyAuraDropdown then
         pf.RefreshCopyAuraDropdown()
@@ -6376,16 +6325,6 @@ function _G.MSUF_OpenAuras2PositionPopup(unit, parent)
     a2.perUnit[unit].layout = a2.perUnit[unit].layout or {}
 
     local pf = _G.MSUF_A2_EnsureAuraPositionPopup()
-    -- If switching units while the popup is already open, ensure private-preview forcing is restored.
-    if pf and pf.IsShown and pf:IsShown() and pf._msufLastA2Unit and pf._msufLastA2Unit ~= unit then
-        if pf._msufSetPrivatePreviewEnabled then
-            pf._msufSetPrivatePreviewEnabled(false)
-        end
-        if pf.privatePreviewCheck and pf.privatePreviewCheck.SetChecked then
-            pf.privatePreviewCheck:SetChecked(false)
-        end
-    end
-
 
     local desiredParent = parent or UIParent
     local needReposition = true
@@ -6818,22 +6757,6 @@ local function MSUF_EM_GetBCDMActiveProfileTable()
     return sv.profiles[profileName]
 end
 
-local function MSUF_EM_IsBCDMCooldownManagerSkinningEnabled()
-    if not MSUF_EM_IsBCDMAddonLoaded() then
-        return false
-    end
-    local prof = MSUF_EM_GetBCDMActiveProfileTable()
-    if type(prof) ~= "table" then
-        return false
-    end
-    local cm = prof.CooldownManager
-    if type(cm) ~= "table" then
-        return false
-    end
-    -- BCDM uses CooldownManager.Enable as its master toggle for its CDM skinning/features
-    return (cm.Enable == true)
-end
-
 local function MSUF_EM_IsBCDMHandoffNoticeSuppressed()
     -- Persisted "never show again" toggle (stored in MSUF_DB.general).
     MSUF_EM_EnsureDB()
@@ -6982,10 +6905,7 @@ function MSUF_SetMSUFEditModeFromBlizzard(active)
         end
 
         MSUF_EM_SetActive(true, "player")
-        if type(_G.MSUF_EM_EnsureSnapHooks) == "function" then
-            _G.MSUF_EM_EnsureSnapHooks()
-        end
-        MSUF_EditMode_StartCombatWarningListener()
+MSUF_EditMode_StartCombatWarningListener()
         if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(true) end
         if type(MSUF_RefreshAllUnitVisibilityDrivers)=="function" then MSUF_EditMode_RequestVisibilityDrivers(true) end
         if not MSUF_CurrentEditUnitKey then
@@ -7042,844 +6962,7 @@ function MSUF_SetMSUFEditModeFromBlizzard(active)
     end
 end
 
-
-local function MSUF_EM_GetGridStepSafe(g)
-    local s = tonumber(g and g.editModeGridStep) or 16
-    if s < 1 then s = 1 end
-    return s
-end
-
-local function MSUF_EM_RoundToStep(v, step)
-    v = tonumber(v) or 0
-    step = tonumber(step) or 1
-    if step <= 1 then
-        return math.floor(v + 0.5)
-    end
-    return math.floor((v / step) + 0.5) * step
-end
-
-local function MSUF_EM_GetRect(f)
-    if not f or not f.IsShown or not f:IsShown() then
-        return
-    end
-    local l = f:GetLeft()
-    if not l then return end
-    local r = f:GetRight()
-    local b = f:GetBottom()
-    local t = f:GetTop()
-    if not r or not b or not t then return end
-    local cx = (l + r) * 0.5
-    local cy = (b + t) * 0.5
-    return l, r, b, t, cx, cy
-end
-
--- ------------------------------------------------------------
--- Snap visual feedback: guideline overlays
--- ------------------------------------------------------------
-
-local MSUF_EM_SnapVLine
-local MSUF_EM_SnapHLine
-
-local function MSUF_EM_EnsureSnapGuides()
-    if MSUF_EM_SnapVLine and MSUF_EM_SnapHLine then return end
-
-    local parent = UIParent
-
-    MSUF_EM_SnapVLine = CreateFrame("Frame", nil, parent)
-    MSUF_EM_SnapVLine:SetFrameStrata("TOOLTIP")
-    MSUF_EM_SnapVLine:SetFrameLevel(9999)
-    MSUF_EM_SnapVLine:SetWidth(2)
-    MSUF_EM_SnapVLine:SetHeight(parent:GetHeight())
-    local vTex = MSUF_EM_SnapVLine:CreateTexture(nil, "OVERLAY")
-    vTex:SetAllPoints()
-    vTex:SetColorTexture(1, 1, 0, 0.55)
-    MSUF_EM_SnapVLine:Hide()
-
-    MSUF_EM_SnapHLine = CreateFrame("Frame", nil, parent)
-    MSUF_EM_SnapHLine:SetFrameStrata("TOOLTIP")
-    MSUF_EM_SnapHLine:SetFrameLevel(9999)
-    MSUF_EM_SnapHLine:SetHeight(2)
-    MSUF_EM_SnapHLine:SetWidth(parent:GetWidth())
-    local hTex = MSUF_EM_SnapHLine:CreateTexture(nil, "OVERLAY")
-    hTex:SetAllPoints()
-    hTex:SetColorTexture(1, 1, 0, 0.55)
-    MSUF_EM_SnapHLine:Hide()
-end
-
-local function MSUF_EM_ShowSnapGuides(x, y)
-    MSUF_EM_EnsureSnapGuides()
-    if x then
-        MSUF_EM_SnapVLine:ClearAllPoints()
-        MSUF_EM_SnapVLine:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x - 1, 0)
-        MSUF_EM_SnapVLine:SetHeight(UIParent:GetHeight())
-        MSUF_EM_SnapVLine:Show()
-    else
-        if MSUF_EM_SnapVLine then MSUF_EM_SnapVLine:Hide() end
-    end
-
-    if y then
-        MSUF_EM_SnapHLine:ClearAllPoints()
-        MSUF_EM_SnapHLine:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, y - 1)
-        MSUF_EM_SnapHLine:SetWidth(UIParent:GetWidth())
-        MSUF_EM_SnapHLine:Show()
-    else
-        if MSUF_EM_SnapHLine then MSUF_EM_SnapHLine:Hide() end
-    end
-end
-
-local function MSUF_EM_HideSnapGuides()
-    if MSUF_EM_SnapVLine then MSUF_EM_SnapVLine:Hide() end
-    if MSUF_EM_SnapHLine then MSUF_EM_SnapHLine:Hide() end
-end
-
--- Module block: Edit.UI (snap guides)
-EM_UI.EnsureSnapGuides = EM_UI.EnsureSnapGuides or MSUF_EM_EnsureSnapGuides
-EM_UI.ShowSnapGuides   = EM_UI.ShowSnapGuides   or MSUF_EM_ShowSnapGuides
-EM_UI.HideSnapGuides   = EM_UI.HideSnapGuides   or MSUF_EM_HideSnapGuides
-
--- ------------------------------------------------------------
--- Target enumeration
--- ------------------------------------------------------------
-
-local MSUF_EM_CastbarPreviewTargets = {
-    { "MSUF_PlayerCastbarPreview", "player" },
-    { "MSUF_TargetCastbarPreview", "target" },
-    { "MSUF_FocusCastbarPreview",  "focus"  },
-    { "MSUF_BossCastbarPreview",   "boss"   },
-}
-
-local function MSUF_EM_ForEachSnapTarget(includeCastbars, fn)
-    if type(fn) ~= "function" then return end
-
-    -- Unitframes
-    local frames = _G.MSUF_UnitFrames
-    if type(frames) == "table" then
-        for _, f in pairs(frames) do
-            if f and f.IsShown and f:IsShown() then
-                fn(f)
-            end
-        end
-    end
-
-    if not includeCastbars then return end
-
-    -- Castbar preview frames (only if present)
-    for i = 1, #MSUF_EM_CastbarPreviewTargets do
-        local gName = MSUF_EM_CastbarPreviewTargets[i][1]
-        local fr = _G[gName]
-        if fr and fr.IsShown and fr:IsShown() then
-            fn(fr)
-        end
-    end
-end
-
--- Module block: Edit.Targets (enumeration)
-EM_Targets.ForEachSnapTarget = EM_Targets.ForEachSnapTarget or MSUF_EM_ForEachSnapTarget
-
--- ------------------------------------------------------------
--- Docking / snapping math
--- ------------------------------------------------------------
-
-local function MSUF_EM_FindBestSnapDelta(movingFrame, threshold, gap, includeCastbars)
-    threshold = tonumber(threshold) or 10
-    gap = tonumber(gap) or 0
-
-    local ml, mr, mb, mt, mcx, mcy = MSUF_EM_GetRect(movingFrame)
-    if not ml then return 0, 0 end
-
-    local bestDx, bestDy = 0, 0
-    local bestScore = nil
-    local guideX, guideY = nil, nil
-
-    local function consider(dx, dy, gx, gy)
-        dx = tonumber(dx) or 0
-        dy = tonumber(dy) or 0
-        if dx == 0 and dy == 0 then return end
-        local score = math.abs(dx) + math.abs(dy)
-        if (bestScore == nil) or (score < bestScore) then
-            bestScore = score
-            bestDx, bestDy = dx, dy
-            guideX, guideY = gx, gy
-        end
-    end
-
-    MSUF_EM_ForEachSnapTarget(includeCastbars, function(t)
-        if t == movingFrame then return end
-
-        local tl, tr, tb, tt, tcx, tcy = MSUF_EM_GetRect(t)
-        if not tl then return end
-
-        -- Overlap check (with tiny tolerance)
-        local overlapX = (ml < tr - 1) and (mr > tl + 1)
-        local overlapY = (mb < tt - 1) and (mt > tb + 1)
-
-        -- If overlapping: propose a "push out" dock move (prevents stacking)
-        if overlapX and overlapY then
-            local dLeft   = (tl - gap) - mr
-            local dRight  = (tr + gap) - ml
-            local dBottom = (tb - gap) - mt
-            local dTop    = (tt + gap) - mb
-
-            local best = dLeft
-            local bestAxis = "x"
-            if math.abs(dRight) < math.abs(best) then best, bestAxis = dRight, "x" end
-            if math.abs(dBottom) < math.abs(best) then best, bestAxis = dBottom, "y" end
-            if math.abs(dTop) < math.abs(best) then best, bestAxis = dTop, "y" end
-
-            if bestAxis == "x" then
-                consider(best, 0, (best < 0) and tl or tr, nil)
-            else
-                consider(0, best, nil, (best < 0) and tb or tt)
-            end
-        end
-
-        -- Edge + center alignment when close (magnet)
-        local candidates = {
-            { tl - gap, ml, "x" },
-            { tr + gap, mr, "x" },
-            { tl - gap, mr, "x" },
-            { tr + gap, ml, "x" },
-            { tcx, mcx, "x" },
-
-            { tb - gap, mb, "y" },
-            { tt + gap, mt, "y" },
-            { tb - gap, mt, "y" },
-            { tt + gap, mb, "y" },
-            { tcy, mcy, "y" },
-        }
-
-        for _, c in ipairs(candidates) do
-            local targetPos, myPos, axis = c[1], c[2], c[3]
-            local d = targetPos - myPos
-            if math.abs(d) <= threshold then
-                if axis == "x" then
-                    consider(d, 0, targetPos, nil)
-                else
-                    consider(0, d, nil, targetPos)
-                end
-            end
-        end
-    end)
-
-    if bestScore == nil then
-        return 0, 0
-    end
-
-    return bestDx, bestDy, guideX, guideY
-end
-
--- Preferential snap against a single target (supports 2-axis docking combos)
-local function MSUF_EM_FindBestSnapDeltaAgainst(movingFrame, targetFrame, threshold, gap, preferVerticalOverlap)
-    threshold = tonumber(threshold) or 10
-    gap = tonumber(gap) or 0
-
-    local ml, mr, mb, mt, mcx, mcy = MSUF_EM_GetRect(movingFrame)
-    if not ml then return 0, 0 end
-
-    local tl, tr, tb, tt, tcx, tcy = MSUF_EM_GetRect(targetFrame)
-    if not tl then return 0, 0 end
-
-    local bestDx, bestDy = 0, 0
-    local bestScore = nil
-    local guideX, guideY = nil, nil
-
-    local function consider(dx, dy, gx, gy)
-        dx = tonumber(dx) or 0
-        dy = tonumber(dy) or 0
-        if dx == 0 and dy == 0 then return end
-        local score = math.abs(dx) + math.abs(dy)
-        if (bestScore == nil) or (score < bestScore) then
-            bestScore = score
-            bestDx, bestDy = dx, dy
-            guideX, guideY = gx, gy
-        end
-    end
-
-    -- Overlap check (with tiny tolerance)
-    local overlapX = (ml < tr - 1) and (mr > tl + 1)
-    local overlapY = (mb < tt - 1) and (mt > tb + 1)
-
-    if overlapX and overlapY then
-        local dLeft   = (tl - gap) - mr
-        local dRight  = (tr + gap) - ml
-        local dBottom = (tb - gap) - mt
-        local dTop    = (tt + gap) - mb
-
-        if preferVerticalOverlap then
-            -- For "owner" docking, prefer pushing above/below rather than sideways.
-            local best = dBottom
-            local gy = tb
-            if math.abs(dTop) < math.abs(best) then
-                best = dTop
-                gy = tt
-            end
-            consider(0, best, nil, gy)
-        else
-            local best = dLeft
-            local bestAxis = "x"
-            if math.abs(dRight) < math.abs(best) then best, bestAxis = dRight, "x" end
-            if math.abs(dBottom) < math.abs(best) then best, bestAxis = dBottom, "y" end
-            if math.abs(dTop) < math.abs(best) then best, bestAxis = dTop, "y" end
-
-            if bestAxis == "x" then
-                consider(best, 0, (best < 0) and tl or tr, nil)
-            else
-                consider(0, best, nil, (best < 0) and tb or tt)
-            end
-        end
-    end
-
-    -- Build candidate deltas (x/y) that are within threshold.
-    local xCands = {}
-    local yCands = {}
-
-    local function addX(targetPos, myPos)
-        local d = targetPos - myPos
-        if math.abs(d) <= threshold then
-            xCands[#xCands+1] = { d, targetPos }
-            consider(d, 0, targetPos, nil)
-        end
-    end
-
-    local function addY(targetPos, myPos)
-        local d = targetPos - myPos
-        if math.abs(d) <= threshold then
-            yCands[#yCands+1] = { d, targetPos }
-            consider(0, d, nil, targetPos)
-        end
-    end
-
-    -- X aligns
-    addX(tl - gap, ml)
-    addX(tr + gap, mr)
-    addX(tl - gap, mr)
-    addX(tr + gap, ml)
-    addX(tcx, mcx)
-
-    -- Y aligns
-    addY(tb - gap, mb)
-    addY(tt + gap, mt)
-    addY(tb - gap, mt)
-    addY(tt + gap, mb)
-    addY(tcy, mcy)
-
-    -- 2-axis combo docking (only if both axes are close)
-    for i = 1, #xCands do
-        local dx, gx = xCands[i][1], xCands[i][2]
-        for j = 1, #yCands do
-            local dy, gy = yCands[j][1], yCands[j][2]
-            consider(dx, dy, gx, gy)
-        end
-    end
-
-    if bestScore == nil then
-        return 0, 0
-    end
-
-    return bestDx, bestDy, guideX, guideY
-end
-
-local function MSUF_EM_ShiftFrameBy(frame, dx, dy)
-    if not frame or not frame.GetPoint then return end
-    local p, rel, rp, x, y = frame:GetPoint(1)
-    if not p then return end
-    frame:ClearAllPoints()
-    frame:SetPoint(p, rel, rp, (x or 0) + dx, (y or 0) + dy)
-end
-
-local function MSUF_EM_GetKeyForUnit(unit)
-    if not unit or type(unit) ~= "string" then return nil end
-    if unit:match("^boss%d+$") then return "boss" end
-    return unit
-end
-
--- Module block: Edit.Dock (geometry + docking math)
-EM_Dock.GetRect                 = EM_Dock.GetRect                 or MSUF_EM_GetRect
-EM_Dock.ShiftFrameBy            = EM_Dock.ShiftFrameBy            or MSUF_EM_ShiftFrameBy
-EM_Dock.GetKeyForUnit           = EM_Dock.GetKeyForUnit           or MSUF_EM_GetKeyForUnit
-EM_Dock.ForEachSnapTarget       = EM_Dock.ForEachSnapTarget       or MSUF_EM_ForEachSnapTarget
-EM_Dock.FindBestSnapDelta       = EM_Dock.FindBestSnapDelta       or MSUF_EM_FindBestSnapDelta
-EM_Dock.FindBestSnapDeltaAgainst= EM_Dock.FindBestSnapDeltaAgainst or MSUF_EM_FindBestSnapDeltaAgainst
-
--- ------------------------------------------------------------
--- Apply snap (unitframes + castbar previews)
--- ------------------------------------------------------------
-
-local function MSUF_EM_BeginSnap(self, isCastbar)
-    if not MSUF_UnitEditModeActive or not self or not self.isDragging then
-        MSUF_EM_HideSnapGuides()
-        return nil
-    end
-    if MSUF_EditModeSizing then
-        MSUF_EM_HideSnapGuides()
-        return nil
-    end
-    if isCastbar and self.dragMode and self.dragMode ~= "MOVE" then
-        -- Don't snap during sizing
-        MSUF_EM_HideSnapGuides()
-        return nil
-    end
-    if InCombatLockdown and InCombatLockdown() then
-        MSUF_EM_HideSnapGuides()
-        return nil
-    end
-
-    local g, master, _, gridOn, framesOn = MSUF_EM_GetSnapConfig()
-    if not master then
-        MSUF_EM_HideSnapGuides()
-        return nil
-    end
-    return g, gridOn, framesOn
-end
-
-local function MSUF_EM_ApplyDragDelta(self, dx, dy)
-    if dx == 0 and dy == 0 then return end
-    self.dragStartOffsetX = (tonumber(self.dragStartOffsetX) or 0) + dx
-    self.dragStartOffsetY = (tonumber(self.dragStartOffsetY) or 0) + dy
-end
-
-local function MSUF_EM_SnapToGrid(curX, curY, step)
-    local sx = MSUF_EM_RoundToStep(curX, step)
-    local sy = MSUF_EM_RoundToStep(curY, step)
-    return sx, sy, (sx - curX), (sy - curY)
-end
-
-local function MSUF_EM_ApplyUnitframeSnap(self)
-    local g, gridOn, framesOn = MSUF_EM_BeginSnap(self, false)
-    if not g then return end
-
-    local key = MSUF_EM_GetKeyForUnit(self.unit) or "player"
-    local conf = MSUF_DB and MSUF_DB[key]
-    if not conf then
-        MSUF_EM_HideSnapGuides()
-        return
-    end
-
-    local totalDx, totalDy = 0, 0
-    local guideX, guideY
-
-    if gridOn then
-        local step = MSUF_EM_GetGridStepSafe(g)
-        local curX = tonumber(conf.offsetX) or 0
-        local curY = tonumber(conf.offsetY) or 0
-        local sx, sy, dx, dy = MSUF_EM_SnapToGrid(curX, curY, step)
-        if dx ~= 0 or dy ~= 0 then
-            conf.offsetX, conf.offsetY = sx, sy
-            MSUF_EM_ApplyDragDelta(self, dx, dy)
-            totalDx, totalDy = totalDx + dx, totalDy + dy
-        end
-    end
-
-    if framesOn then
-        local threshold = tonumber(g.editModeSnapFrameThreshold) or 10
-        local gap = tonumber(g.editModeSnapDockGap) or 0
-        local dx, dy, gx, gy = MSUF_EM_FindBestSnapDelta(self, threshold, gap, true)
-        if dx ~= 0 or dy ~= 0 then
-            conf.offsetX = (tonumber(conf.offsetX) or 0) + dx
-            conf.offsetY = (tonumber(conf.offsetY) or 0) + dy
-            MSUF_EM_ApplyDragDelta(self, dx, dy)
-            totalDx, totalDy = totalDx + dx, totalDy + dy
-            guideX, guideY = gx, gy
-        end
-    end
-
-    if totalDx ~= 0 or totalDy ~= 0 then
-        if key == "boss" and type(_G.MSUF_UnitFrames) == "table" then
-            for i = 1, 8 do
-                local bf = _G.MSUF_UnitFrames["boss" .. i]
-                if bf and bf.IsShown and bf:IsShown() then
-                    MSUF_EM_ShiftFrameBy(bf, totalDx, totalDy)
-                    MSUF_EM_ApplyDragDelta(bf, totalDx, totalDy)
-                end
-            end
-        else
-            MSUF_EM_ShiftFrameBy(self, totalDx, totalDy)
-        end
-
-        if type(_G.MSUF_SyncUnitPositionPopup) == "function" then
-            _G.MSUF_SyncUnitPositionPopup(key, conf)
-        end
-    end
-
-    if framesOn and (guideX or guideY) then
-        MSUF_EM_ShowSnapGuides(guideX, guideY)
-    else
-        MSUF_EM_HideSnapGuides()
-    end
-end
-
-MSUF_EM_GetCastbarOffsetKeys = function(kind)
-    if kind == "player" then
-        return "castbarPlayerOffsetX", "castbarPlayerOffsetY"
-    elseif kind == "target" then
-        return "castbarTargetOffsetX", "castbarTargetOffsetY"
-    elseif kind == "focus" then
-        return "castbarFocusOffsetX", "castbarFocusOffsetY"
-    elseif kind == "boss" then
-        return "bossCastbarOffsetX", "bossCastbarOffsetY"
-    end
-end
-
-local function MSUF_EM_ApplyCastbarSnap(self, kind)
-    local g, gridOn, framesOn = MSUF_EM_BeginSnap(self, true)
-    if not g then return end
-
-    local gen = MSUF_DB and MSUF_DB.general
-    if not gen then
-        MSUF_EM_HideSnapGuides()
-        return
-    end
-
-    local offsetXKey, offsetYKey = MSUF_EM_GetCastbarOffsetKeys(kind)
-    if not offsetXKey then
-        MSUF_EM_HideSnapGuides()
-        return
-    end
-
-    local totalDx, totalDy = 0, 0
-    local guideX, guideY
-
-    if gridOn then
-        local step = MSUF_EM_GetGridStepSafe(g)
-        local curX = tonumber(gen[offsetXKey]) or 0
-        local curY = tonumber(gen[offsetYKey]) or 0
-        local sx, sy, dx, dy = MSUF_EM_SnapToGrid(curX, curY, step)
-        if dx ~= 0 or dy ~= 0 then
-            gen[offsetXKey], gen[offsetYKey] = sx, sy
-            MSUF_EM_ApplyDragDelta(self, dx, dy)
-            totalDx, totalDy = totalDx + dx, totalDy + dy
-        end
-    end
-
-    if framesOn then
-        local threshold = tonumber(g.editModeSnapFrameThreshold) or 10
-        local gap = tonumber(g.editModeSnapDockGap) or 0
-
-        local preferred
-        local ufs = _G.MSUF_UnitFrames
-        if type(ufs) == "table" then
-            if kind == "boss" then
-                preferred = ufs.boss1 or ufs.boss
-            else
-                preferred = ufs[kind]
-            end
-        end
-
-        local dx, dy, gx, gy = 0, 0, nil, nil
-        if preferred and preferred.IsShown and preferred:IsShown() then
-            dx, dy, gx, gy = MSUF_EM_FindBestSnapDeltaAgainst(self, preferred, threshold, gap, true)
-        end
-        if dx == 0 and dy == 0 then
-            dx, dy, gx, gy = MSUF_EM_FindBestSnapDelta(self, threshold, gap, true)
-        end
-
-        if dx ~= 0 or dy ~= 0 then
-            gen[offsetXKey] = (tonumber(gen[offsetXKey]) or 0) + dx
-            gen[offsetYKey] = (tonumber(gen[offsetYKey]) or 0) + dy
-            MSUF_EM_ApplyDragDelta(self, dx, dy)
-            totalDx, totalDy = totalDx + dx, totalDy + dy
-            guideX, guideY = gx, gy
-        end
-    end
-
-    if totalDx ~= 0 or totalDy ~= 0 then
-        -- IMPORTANT: do not reanchor again here (avoids flicker). The original drag handler already
-        -- reanchored once per tick; we just shift the preview so the snap is visible immediately.
-        MSUF_EM_ShiftFrameBy(self, totalDx, totalDy)
-
-        if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
-            _G.MSUF_SyncCastbarPositionPopup(kind)
-        end
-    end
-
-    if framesOn and (guideX or guideY) then
-        MSUF_EM_ShowSnapGuides(guideX, guideY)
-    else
-        MSUF_EM_HideSnapGuides()
-    end
-end
-
--- ------------------------------------------------------------
--- Drag-start wrapper (OnUpdate swaps during drag)
--- ------------------------------------------------------------
-
-local function MSUF_EM_WrapOnUpdateForSnap(frame, kind, isUnitframe)
-    if not frame or not frame.GetScript or not frame.SetScript then return end
-
-    local cur = frame:GetScript("OnUpdate")
-    if type(cur) ~= "function" then return end
-
-    -- Avoid stacking wrappers
-    if frame._msufSnapWrappedOrig == cur then return end
-    if frame._msufSnapWrappedFunc == cur then return end
-
-    frame._msufSnapWrappedOrig = cur
-
-    local function wrapper(self, elapsed)
-        -- Call the original drag handler first.
-        if frame._msufSnapWrappedOrig then
-            frame._msufSnapWrappedOrig(self, elapsed)
-        end
-
-        -- Then apply snap post-processing.
-        if isUnitframe then
-            MSUF_EM_ApplyUnitframeSnap(self)
-        else
-            MSUF_EM_ApplyCastbarSnap(self, kind)
-        end
-    end
-
-    frame._msufSnapWrappedFunc = wrapper
-    frame:SetScript("OnUpdate", wrapper)
-end
-
-local function MSUF_EM_HookDragStart(frame, kind, isUnitframe)
-    if not frame or not frame.HookScript then return end
-    if frame._msufSnapDragHooked then return end
-    frame._msufSnapDragHooked = true
-
-    frame:HookScript("OnMouseDown", function(self, button)
-        if button ~= "LeftButton" then return end
-        if not MSUF_UnitEditModeActive then return end
-        if InCombatLockdown and InCombatLockdown() then return end
-
-        -- Keep the top "Edit Unit" selector in sync when selecting by clicking/dragging frames.
-        if isUnitframe then
-            local u = self and (self.unit or (self.GetAttribute and self:GetAttribute("unit")))
-            local key = nil
-            if u and type(u) == "string" then
-                if type(GetConfigKeyForUnit) == "function" then
-                    key = GetConfigKeyForUnit(u)
-                end
-                if not key then
-                    if u:match("^boss%d+$") then
-                        key = "boss"
-                    elseif u == "targettarget" or u == "tot" then
-                        key = "targettarget"
-                    else
-                        key = u
-                    end
-                end
-            else
-                local n = self and self.GetName and self:GetName()
-                if n and type(n) == "string" then
-                    local raw = n:match("^MSUF_(.+)$")
-                    if raw then
-                        if raw:match("^boss%d+$") then
-                            key = "boss"
-                        else
-                            raw = string.lower(raw)
-                            if raw == "targetoftarget" or raw == "tot" then
-                                key = "targettarget"
-                            else
-                                key = raw
-                            end
-                        end
-                    end
-                end
-            end
-
-            if key and key ~= MSUF_CurrentEditUnitKey then
-                MSUF_CurrentEditUnitKey = key
-                if type(MSUF_FastCall) == "function" then
-                    MSUF_FastCall(function()
-                        MSUF_EM_GetState().unitKey = MSUF_CurrentEditUnitKey
-                    end)
-                else
-                    MSUF_EM_GetState().unitKey = MSUF_CurrentEditUnitKey
-                end
-                if MSUF_GridFrame and MSUF_GridFrame._msufSyncEditUnitSelector then
-                    MSUF_GridFrame._msufSyncEditUnitSelector()
-                end
-            end
-        end
-
-        -- Castbar previews: selecting/dragging a castbar preview should also switch the active Edit Unit.
-        if (not isUnitframe) and kind and type(kind) == "string" then
-            local key = kind
-            if key and key ~= MSUF_CurrentEditUnitKey then
-                MSUF_CurrentEditUnitKey = key
-                if type(MSUF_FastCall) == "function" then
-                    MSUF_FastCall(function()
-                        MSUF_EM_GetState().unitKey = MSUF_CurrentEditUnitKey
-                    end)
-                else
-                    MSUF_EM_GetState().unitKey = MSUF_CurrentEditUnitKey
-                end
-                if MSUF_GridFrame and MSUF_GridFrame._msufSyncEditUnitSelector then
-                    MSUF_GridFrame._msufSyncEditUnitSelector()
-                end
-                if type(MSUF_UpdateEditModeVisuals) == "function" then
-                    MSUF_UpdateEditModeVisuals()
-                end
-                if type(MSUF_UpdateEditModeInfo) == "function" then
-                    MSUF_UpdateEditModeInfo()
-                end
-            end
-        end
-
-        -- Track dragging explicitly (castbar previews use isDragging, unitframes too, but this helps cleanup).
-        self._msufEMSnapMouseDown = true
-
-        -- Delay one tick so the drag code can install its OnUpdate.
-        if type(MSUF_SafeAfter) == "function" then
-            MSUF_SafeAfter(0, "Snap:WrapOnUpdate", function()
-                if not self._msufEMSnapMouseDown then return end
-                if not MSUF_UnitEditModeActive then return end
-                MSUF_EM_WrapOnUpdateForSnap(self, kind, isUnitframe)
-            end, true)
-        elseif C_Timer and C_Timer.After then
-            C_Timer.After(0, function()
-                if not self._msufEMSnapMouseDown then return end
-                if not MSUF_UnitEditModeActive then return end
-                MSUF_EM_WrapOnUpdateForSnap(self, kind, isUnitframe)
-            end)
-        else
-            MSUF_EM_WrapOnUpdateForSnap(self, kind, isUnitframe)
-        end
-    end)
-
-    frame:HookScript("OnMouseUp", function(self, button)
-        if button ~= "LeftButton" then return end
-        self._msufEMSnapMouseDown = false
-        MSUF_EM_HideSnapGuides()
-    end)
-
-    frame:HookScript("OnHide", function(self)
-        self._msufEMSnapMouseDown = false
-        MSUF_EM_HideSnapGuides()
-    end)
-end
-
--- Entry-point (called when EditMode activates + on ADDON_LOADED)
-local function MSUF_EM_EnsureSnapHooks()
-    if not MSUF_UnitEditModeActive then
-        MSUF_EM_HideSnapGuides()
-        return
-    end
-
-    -- Unitframes
-    local frames = _G.MSUF_UnitFrames
-    if type(frames) == "table" then
-        for _, f in pairs(frames) do
-            if f then
-                MSUF_EM_HookDragStart(f, nil, true)
-            end
-        end
-    end
-
-    -- Castbar previews
-    for i = 1, #MSUF_EM_CastbarPreviewTargets do
-        local gName = MSUF_EM_CastbarPreviewTargets[i][1]
-        local kind  = MSUF_EM_CastbarPreviewTargets[i][2]
-        local fr = _G[gName]
-        if fr then
-            MSUF_EM_HookDragStart(fr, kind, false)
-        end
-    end
-end
-
--- Module block: Edit.Snap (runtime snapping + docking)
-EM_Snap.ApplyUnitframeSnap  = EM_Snap.ApplyUnitframeSnap  or MSUF_EM_ApplyUnitframeSnap
-EM_Snap.ApplyCastbarSnap    = EM_Snap.ApplyCastbarSnap    or MSUF_EM_ApplyCastbarSnap
-EM_Snap.WrapOnUpdateForSnap = EM_Snap.WrapOnUpdateForSnap or MSUF_EM_WrapOnUpdateForSnap
-EM_Snap.HookDragStart       = EM_Snap.HookDragStart       or MSUF_EM_HookDragStart
-EM_Snap.EnsureSnapHooks     = EM_Snap.EnsureSnapHooks     or MSUF_EM_EnsureSnapHooks
-
-_G.MSUF_EM_EnsureSnapHooks = MSUF_EM_EnsureSnapHooks
-
-_G.MSUF_EM_HookDragStart = MSUF_EM_HookDragStart
-
-local function MSUF_EM_CleanupSnapWrappers()
-    -- Hide any guides just in case
-    if type(MSUF_EM_HideSnapGuides) == "function" then
-        MSUF_EM_HideSnapGuides()
-    end
-
-    local function CleanupFrame(fr)
-        if not fr then return end
-        fr._msufEMSnapMouseDown = nil
-
-        if fr._msufSnapWrappedFunc then
-            local cur = (fr.GetScript and fr:GetScript("OnUpdate")) or nil
-            if cur == fr._msufSnapWrappedFunc and fr.SetScript then
-                fr:SetScript("OnUpdate", fr._msufSnapWrappedOrig)
-            end
-            fr._msufSnapWrappedOrig = nil
-            fr._msufSnapWrappedFunc = nil
-        end
-    end
-
-    -- Unitframes
-    if _G and type(_G.MSUF_UnitFrames) == "table" then
-        for _, f in pairs(_G.MSUF_UnitFrames) do
-            CleanupFrame(f)
-        end
-    end
-
-    -- Castbar previews
-    for i = 1, #MSUF_EM_CastbarPreviewTargets do
-        local gName = MSUF_EM_CastbarPreviewTargets[i][1]
-        CleanupFrame(_G and _G[gName])
-    end
-end
-
-_G.MSUF_EM_CleanupSnapWrappers = MSUF_EM_CleanupSnapWrappers
-
--- Re-run snap-hook installation when other modules load.
-
-local function MSUF_EM_TryInstallCastbarPreviewBridge()
-    if _G.MSUF_EM_CastbarPreviewBridgeInstalled then return end
-
-    -- When the Castbars LoD module is loaded, it registers the preview edit handler builder.
-    -- The preview frames can be created *after* MSUF Edit Mode is already active (e.g. toggling
-    -- preview checkboxes while in Edit Mode). In that case our snap hooks would miss them.
-    --
-    -- Bridge: wrap the setup function so every time a preview gets its edit handlers,
-    -- we immediately attach snap hooks (and ensure snap targets include it).
-    local fn = _G.MSUF_SetupCastbarPreviewEditHandlers
-    if type(fn) ~= "function" then return end
-    if _G.MSUF_SetupCastbarPreviewEditHandlers_Impl then
-        _G.MSUF_EM_CastbarPreviewBridgeInstalled = true
-        return
-    end
-
-    _G.MSUF_SetupCastbarPreviewEditHandlers_Impl = fn
-    _G.MSUF_SetupCastbarPreviewEditHandlers = function(frame, kind, ...)
-        local r1, r2, r3, r4 = _G.MSUF_SetupCastbarPreviewEditHandlers_Impl(frame, kind, ...)
-
-        -- If Edit Mode is active, ensure this preview is snap-hooked immediately.
-        if MSUF_UnitEditModeActive then
-            if type(_G.MSUF_EM_HookDragStart) == "function" then
-                _G.MSUF_EM_HookDragStart(frame, kind, false)
-            end
-            if type(_G.MSUF_EM_EnsureSnapHooks) == "function" then
-                _G.MSUF_EM_EnsureSnapHooks()
-            end
-        end
-
-        return r1, r2, r3, r4
-    end
-
-    _G.MSUF_EM_CastbarPreviewBridgeInstalled = true
-end
-
--- Try once at load (works if Castbars is already loaded), otherwise ADDON_LOADED will retry.
-MSUF_EM_TryInstallCastbarPreviewBridge()
-
-if not _G.MSUF_EM_SnapHooksEventFrame then
-    local ef = CreateFrame("Frame")
-    _G.MSUF_EM_SnapHooksEventFrame = ef
-    ef:RegisterEvent("ADDON_LOADED")
-    ef:SetScript("OnEvent", function()
-        if type(MSUF_EM_TryInstallCastbarPreviewBridge) == "function" then
-            MSUF_EM_TryInstallCastbarPreviewBridge()
-        end
-        if MSUF_UnitEditModeActive then
-            MSUF_EM_EnsureSnapHooks()
-        end
-    end)
-end
+-- (Snapping removed)
 
 if type(_G.MSUF_SyncCastbarEditModeWithUnitEdit) ~= "function" then
     function _G.MSUF_SyncCastbarEditModeWithUnitEdit()
@@ -7942,10 +7025,7 @@ if not _G.MSUF_SetMSUFEditModeDirect then
             if type(_G.MSUF_Auras2_RefreshAll) == "function" then
                 _G.MSUF_Auras2_RefreshAll()
             end
-            if type(_G.MSUF_EM_EnsureSnapHooks) == "function" then
-                _G.MSUF_EM_EnsureSnapHooks()
-            end
-            MSUF_EditMode_StartCombatWarningListener()
+MSUF_EditMode_StartCombatWarningListener()
             if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(true) end
             if unitKey then
                 MSUF_CurrentEditUnitKey = unitKey
@@ -8451,11 +7531,8 @@ do
     Edit.Preview = Edit.Preview or {}
     Edit.Preview.HideBossSoft = Edit.Preview.HideBossSoft or MSUF_EM_CombatSafeHideBossPreviewNow
     Edit.Preview.UpdateBossCastbarPreview = Edit.Preview.UpdateBossCastbarPreview or _G.MSUF_UpdateBossCastbarPreview
-
-    -- R3: Snap/Dock/UI module handles (single-file; for maintenance & debugging)
     Edit.UI = Edit.UI or EM_UI
     Edit.Dock = Edit.Dock or EM_Dock
-    Edit.Snap = Edit.Snap or EM_Snap
     Edit.Targets = Edit.Targets or EM_Targets
 
     -- ---------------------------------------------------------

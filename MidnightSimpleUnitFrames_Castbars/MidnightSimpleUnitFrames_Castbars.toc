@@ -2,7 +2,7 @@
 ## Title: Midnight Simple UnitFrames - Castbars
 ## Notes: Castbar LoD for MSUF
 ## Author: Midnight
-## Version: 1.85r2
+## Version: 1.9rc1
 ## Category: Combat
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1
@@ -21,5 +21,6 @@ Castbars\MSUF_CastbarEngine.lua
 Castbars\MSUF_CastbarDriver.lua
 Castbars\MSUF_FocusKick_StateDriver.lua
 Modules\MidnightSimpleUnitFrames_BossCastbars.lua
+Castbars\MSUF_CastbarGCD.lua
 
 MSUF_Castbars.lua

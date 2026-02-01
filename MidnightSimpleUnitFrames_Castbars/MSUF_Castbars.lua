@@ -49,6 +49,12 @@ if type(MSUF_SetPointIfChanged) ~= "function" then
         xOfs = xOfs or 0
         yOfs = yOfs or 0
 
+        local snap = _G.MSUF_Snap
+        if type(snap) == "function" then
+            xOfs = snap(frame, xOfs)
+            yOfs = snap(frame, yOfs)
+        end
+
         if frame._msufLastPoint == point and frame._msufLastRel == relativeTo and frame._msufLastRelPoint == relativePoint
            and frame._msufLastX == xOfs and frame._msufLastY == yOfs then
             return
@@ -1081,6 +1087,63 @@ local function MSUF_PlayerCastbar_EmpowerStart(self, spellID)
 end
 
 
+-- Clear empower state + visuals (called on STOP/SUCCEEDED/FAILED/INTERRUPTED).
+-- Keep it small and safe: we only hide our textures and unregister from the CastbarManager.
+local function MSUF_PlayerCastbar_ClearEmpower(self, hideNow)
+    if not self then return end
+
+    self.isEmpower = nil
+    self.empowerStartTime = nil
+    self.empowerStageEnds = nil
+    self.empowerTotalBase = nil
+    self.empowerTotalWithGrace = nil
+    self.empowerNextStage = nil
+
+    -- Cached plain numbers (avoid stale data + secret-safe).
+    self._msufEmpowerStartNum = nil
+    self._msufEmpowerTotalNum = nil
+    self._msufEmpowerBaseNum = nil
+    self._msufEmpowerStageEndsNum = nil
+
+    self.MSUF_empowerLayoutPending = false
+
+    if self.empowerTicks then
+        for i = 1, #self.empowerTicks do
+            local t = self.empowerTicks[i]
+            if t then
+                if t.Hide then t:Hide() end
+                if t.MSUF_glow and t.MSUF_glow.Hide then t.MSUF_glow:Hide() end
+                if t.MSUF_flash and t.MSUF_flash.Hide then t.MSUF_flash:Hide() end
+            end
+        end
+    end
+
+    if self.empowerSegments then
+        for i = 1, #self.empowerSegments do
+            local seg = self.empowerSegments[i]
+            if seg and seg.Hide then seg:Hide() end
+        end
+    end
+
+    if hideNow then
+        if self.SetScript then self:SetScript("OnUpdate", nil) end
+        if MSUF_UnregisterCastbar then
+            MSUF_UnregisterCastbar(self)
+        end
+        if self.timeText then
+            MSUF_SetTextIfChanged(self.timeText, "")
+        end
+        if self.latencyBar and self.latencyBar.Hide then
+            self.latencyBar:Hide()
+        end
+        if self.Hide then
+            self:Hide()
+        end
+    end
+end
+
+
+
 -------------------------------------------------------------------------------
 -- Player-only: Channeled Cast "Haste Markers" (5 white static lines)
 -- Goal: Always visible from channel START (not progress-based), positions shift with current player spell haste.
@@ -1495,11 +1558,17 @@ end
                     return
                 end
 
-                -- 0.20s default: long enough to bridge a refresh gap, short enough to not feel "sticky".
+                -- Default grace bridges refresh gaps; on some builds the gap can be as large as SpellQueueWindow.
                 local grace = self._msufChanNilGrace
-                if type(grace) ~= "number" then grace = 0.20 end
+                if type(grace) ~= "number" then
+                    local qms = 0
+                    if GetCVar then qms = tonumber(GetCVar("SpellQueueWindow") or "0") or 0 end
+                    if qms < 0 then qms = 0 end
+                    grace = (qms / 1000) + 0.12
+                    if grace < 0.20 then grace = 0.20 end
+                end
                 if grace < 0.05 then grace = 0.05 end
-                if grace > 0.50 then grace = 0.50 end
+                if grace > 0.80 then grace = 0.80 end
 
                 if (now - since) < grace then
                     return
@@ -1645,6 +1714,9 @@ end
 
 local function MSUF_PlayerCastbar_OnEvent(self, event, ...)
     if not MSUF_IsCastbarEnabledForUnit("player") then
+        if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+            _G.MSUF_PlayerGCDBar_Stop(self)
+        end
         self:SetScript("OnUpdate", nil)
         if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
         self.interruptFeedbackEndTime = nil
@@ -1662,179 +1734,53 @@ local function MSUF_PlayerCastbar_OnEvent(self, event, ...)
         return
     end
 
+
+    -- Empowered casts: must bypass the GCD bar and MUST be handled even while empower is active.
+    if event == "UNIT_SPELLCAST_EMPOWER_START" or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+        if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+            _G.MSUF_PlayerGCDBar_Stop(self, true)
+        end
+        MSUF_PlayerCastbar_EmpowerStart(self, select(3, ...))
+        return
+    elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
+        MSUF_PlayerCastbar_ClearEmpower(self, true)
+        return
+    end
+
+    -- While empowering, also react to generic stop/failed/succeeded/interrupt events.
+    if self.isEmpower then
+        if event == "UNIT_SPELLCAST_INTERRUPTED" then
+            if type(_G.MSUF_PlayerCastbar_ShowInterruptFeedback) == "function" then
+                _G.MSUF_PlayerCastbar_ShowInterruptFeedback(self, "Interrupted")
+            else
+                MSUF_PlayerCastbar_ClearEmpower(self, true)
+            end
+            return
+        elseif event == "UNIT_SPELLCAST_STOP"
+            or event == "UNIT_SPELLCAST_FAILED"
+            or event == "UNIT_SPELLCAST_SUCCEEDED" then
+            MSUF_PlayerCastbar_ClearEmpower(self, true)
+            return
+        end
+    end
+
+
     -- Unhalted-style handling for non-empower cast/channel events (player).
     if not self.isEmpower then
         if event == "UNIT_SPELLCAST_START"
         or event == "UNIT_SPELLCAST_SENT"
-        or event == "UNIT_SPELLCAST_STOP"
         or event == "UNIT_SPELLCAST_CHANNEL_START"
         or event == "UNIT_SPELLCAST_CHANNEL_STOP"
         or event == "UNIT_SPELLCAST_INTERRUPTIBLE"
         or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
+            if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+                _G.MSUF_PlayerGCDBar_Stop(self, true)
+            end
             MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
             return
         end
     end
 
-
-    if event == "UNIT_SPELLCAST_FAILED" then
-        local castNow = UnitCastingInfo("player")
-        local chanNow = UnitChannelInfo("player")
-        if not (castNow or chanNow) and type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") and type(UnitExists) == "function" and UnitExists("vehicle") then
-            castNow = UnitCastingInfo("vehicle")
-            chanNow = UnitChannelInfo("vehicle")
-        end
-        if not (castNow or chanNow) and type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") and type(UnitExists) == "function" and UnitExists("vehicle") then
-            castNow = UnitCastingInfo("vehicle")
-            chanNow = UnitChannelInfo("vehicle")
-        end
-        if castNow or chanNow then
-            return
-        end
-        if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
-
-        self:SetScript("OnUpdate", nil)
-        self.interruptFeedbackEndTime = nil
-        self:Hide()
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_INTERRUPTED" then
-        local castNow = UnitCastingInfo("player")
-        local chanNow = UnitChannelInfo("player")
-        if castNow or chanNow then
-            return
-        end
-
-        MSUF_PlayerCastbar_ShowInterruptFeedback(self, INTERRUPTED)
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_EMPOWER_START" then
-        local unitTarget, castGUID, spellID = ...
-        if unitTarget ~= "player" then return end
-        MSUF_PlayerCastbar_EmpowerStart(self, spellID)
-        return
-
-    elseif event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
-        local unitTarget, castGUID, spellID = ...
-        if unitTarget ~= "player" then return end
-        if self.isEmpower then
-            local tl = MSUF_BuildEmpowerTimeline("player")
-            self.empowerStageEnds      = tl.stageEnds
-            self.empowerTotalBase      = tl.totalBase
-            self.empowerTotalWithGrace = tl.totalWithGrace
-            self.empowerMaxHold        = tl.maxHold
-
-            if self.statusBar and self.statusBar.SetMinMaxValues then
-                MSUF_FastCall(self.statusBar.SetMinMaxValues, self.statusBar, 0, self.empowerTotalWithGrace)
-            end
-
-do
-    local now = ((GetTimePreciseSec and GetTimePreciseSec()) or GetTime())
-    local total = self.empowerTotalWithGrace or 0
-    if total <= 0 then total = 0.01 end
-    local elapsed = now - (self.empowerStartTime or now)
-    if elapsed < 0 then elapsed = 0 end
-    if elapsed > total then elapsed = total end
-    local nextIdx = 1
-    if self.empowerStageEnds then
-        for i = 1, #self.empowerStageEnds do
-            local tEnd = self.empowerStageEnds[i]
-            if type(tEnd) == "number" and elapsed >= tEnd then
-                nextIdx = i + 1
-            else
-                break
-            end
-        end
-    end
-    self.empowerNextStage = nextIdx
-end
-
-MSUF_LayoutEmpowerTicks(self)
-        end
-        return
-
-    elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
-        if self.isEmpower then
-            self.isEmpower = nil
-            self.empowerStartTime = nil
-            self.empowerStageEnds = nil
-            self.empowerTotalBase = nil
-            self.empowerTotalWithGrace = nil
-            self.empowerMaxHold = nil
-            self.MSUF_empowerLayoutPending = false
-
-            if self.empowerTicks then
-                for _, tick in ipairs(self.empowerTicks) do
-                    tick:Hide()
-                end
-            end
-            if self.empowerStageTicks then
-                for _, tick in ipairs(self.empowerStageTicks) do
-                    tick:Hide()
-                end
-            end
-
-            self:SetScript("OnUpdate", nil)
-            if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
-            if self.timeText then
-                MSUF_SetTextIfChanged(self.timeText, "")
-            end
-            if self.latencyBar then
-                self.latencyBar:Hide()
-            end
-
-self.empowerNextStage = nil
-
-if self.empowerSegments then
-    for _, seg in ipairs(self.empowerSegments) do
-        seg:Hide()
-    end
-end
-
-self:Hide()
-        end
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_START"
-        or event == "UNIT_SPELLCAST_STOP"
-        or event == "UNIT_SPELLCAST_CHANNEL_START"
-        or event == "UNIT_SPELLCAST_CHANNEL_STOP"
-        or event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
-        or event == "UNIT_SPELLCAST_DELAYED"
-        or event == "UNIT_SPELLCAST_SUCCEEDED"
-        or event == "PLAYER_ENTERING_WORLD"
-    then
-        C_Timer.After(0, function()
-            if not self or not self.unit then return end
-
-            local castName = UnitCastingInfo(self.unit)
-            local chanName = UnitChannelInfo(self.unit)
-
-            if castName or chanName
-                or event == "UNIT_SPELLCAST_START"
-                or event == "UNIT_SPELLCAST_STOP"
-                or event == "UNIT_SPELLCAST_CHANNEL_STOP"
-            then
-                MSUF_PlayerCastbar_Cast(self)
-            else
-                if event == "UNIT_SPELLCAST_CHANNEL_START" then
-                    C_Timer.After(0.02, function()
-                        if not self or not self.unit then return end
-                        local cn = UnitCastingInfo(self.unit)
-                        local ch = UnitChannelInfo(self.unit)
-                        if cn or ch then
-                            MSUF_PlayerCastbar_Cast(self)
-                        end
-                    end)
-                end
-            end
-
-        end)
-        return
-    end
 
     if event == "UNIT_SPELLCAST_INTERRUPTIBLE" then
         self.isNotInterruptible = false
@@ -1871,7 +1817,9 @@ function MSUF_InitSafePlayerCastbar()
         local statusBar = CreateFrame("StatusBar", nil, frame)
         statusBar:SetPoint("LEFT", icon, "RIGHT", 0, 0)
         statusBar:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
-        statusBar:SetHeight(height - 2)
+        -- Pixel-perfect: avoid internal -2 height padding (causes a visible 1px line when outline thickness is 0)
+    statusBar:SetPoint("TOP", frame, "TOP", 0, 0)
+    statusBar:SetPoint("BOTTOM", frame, "BOTTOM", 0, 0)
 
         local texture = MSUF_GetCastbarTexture()
         statusBar:SetStatusBarTexture(texture)
@@ -1955,8 +1903,6 @@ function MSUF_InitSafePlayerCastbar()
         frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", "player", "vehicle")
 
         frame:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "vehicle")
-
         frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", "player", "vehicle")
         frame:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "player", "vehicle")
         frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player", "vehicle")
@@ -2050,6 +1996,10 @@ function MSUF_ReanchorTargetCastBar()
         width = frame.GetWidth and frame:GetWidth() or 240
     end
     if width and width > 0 then
+        local snap = _G.MSUF_Snap
+        if type(snap) == "function" then
+            width = snap(frame, width)
+        end
         local height = frame:GetHeight() or 18
         MSUF_SetWidthIfChanged(frame, width)
 
@@ -2129,6 +2079,10 @@ function MSUF_ReanchorFocusCastBar()
         width = frame.GetWidth and frame:GetWidth() or 240
     end
     if width and width > 0 then
+        local snap = _G.MSUF_Snap
+        if type(snap) == "function" then
+            width = snap(frame, width)
+        end
         local height = frame:GetHeight() or 18
         MSUF_SetWidthIfChanged(frame, width)
 
@@ -3005,6 +2959,12 @@ end
 
 local function MSUF_ApplyPlayerCastbarSizeAndLayout(bar, g, w, h)
     if not bar then return end
+
+    local snap = _G.MSUF_Snap
+    if type(snap) == "function" then
+        if w ~= nil then w = snap(bar, w) end
+        if h ~= nil then h = snap(bar, h) end
+    end
 
     -- Size
     if MSUF_SetWidthIfChanged then
@@ -4131,7 +4091,9 @@ do
     manager:Hide()
 
     local function ManagerOnUpdate(self, elapsed)
-        local interval = 0.03 -- coarse manager tick
+        -- Default: coarse tick (most bars are animated by Duration Objects).
+        -- While a GCD bar is active we temporarily run ~60fps so the manual SetValue() path looks smooth.
+        local interval = (self._msufHasGCD and 0.016) or 0.03
         self.elapsed = (self.elapsed or 0) + (elapsed or 0)
         if self.elapsed < interval then
             return
@@ -4154,7 +4116,8 @@ do
                 local nextTick = frame._msufNextTick
                 if (not nextTick) or now >= nextTick then
                     local fi = frame._msufTickInterval or 0.10
-                    if fi < 0.03 then fi = 0.03 end
+                    local minFi = (frame.MSUF_gcdActive and 0.016) or 0.03
+                    if fi < minFi then fi = minFi end
                     if fi > 0.50 then fi = 0.50 end
                     frame._msufNextTick = now + fi
                     if _G.MSUF_UpdateCastbarFrame then
@@ -4228,6 +4191,101 @@ do
         EnsureCastbarStyleCache(frame, false)
 
         local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
+
+        -- GCD bar virtual cast (instant casts): driven by MSUF_CastbarGCD + CastbarManager tick.
+        if frame.MSUF_gcdActive then
+            if type(_G.MSUF_IsGCDBarEnabled) == "function" and not _G.MSUF_IsGCDBarEnabled() then
+                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+                    _G.MSUF_PlayerGCDBar_Stop(frame)
+                end
+                return
+            end
+
+            -- Real casts/channel/empower always win.
+            if frame.isEmpower then
+                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+                    _G.MSUF_PlayerGCDBar_Stop(frame, true)
+                end
+                return
+            end
+
+            local u = frame.MSUF_gcdUnit or frame.unit or "player"
+            if UnitCastingInfo(u) or UnitChannelInfo(u) then
+                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+                    _G.MSUF_PlayerGCDBar_Stop(frame, true)
+                end
+                return
+            end
+
+            local startT = frame.MSUF_gcdStart or 0
+            local dur = frame.MSUF_gcdDur or 0
+            if dur <= 0 then
+                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+                    _G.MSUF_PlayerGCDBar_Stop(frame)
+                end
+                return
+            end
+
+            local elapsed = now - startT
+            if elapsed < 0 then elapsed = 0 end
+            if elapsed > dur then elapsed = dur end
+
+            local rem = dur - elapsed
+            if rem <= 0.001 then
+                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+                    _G.MSUF_PlayerGCDBar_Stop(frame)
+                end
+                return
+            end
+
+            -- Live read sub-toggles so UI changes apply immediately.
+            local showTime = true
+            local showSpell = true
+            if type(_G.MSUF_GCD_GetSubOptions) == "function" then
+                showTime, showSpell = _G.MSUF_GCD_GetSubOptions()
+            end
+
+            frame.MSUF_gcdShowTime = showTime
+            frame.MSUF_gcdShowSpell = showSpell
+
+            if frame.statusBar and frame.statusBar.SetMinMaxValues then
+                frame.statusBar:SetMinMaxValues(0, dur)
+            end
+            if frame.statusBar and frame.statusBar.SetValue then
+                frame.statusBar:SetValue(elapsed)
+            end
+
+            if frame.castText then
+                if showSpell then
+                    MSUF_SetTextIfChanged(frame.castText, frame.MSUF_gcdSpellName or "")
+                else
+                    MSUF_SetTextIfChanged(frame.castText, "")
+                end
+            end
+            if frame.icon and frame.icon.SetTexture then
+                if showSpell and frame.MSUF_gcdSpellIcon then
+                    frame.icon:SetTexture(frame.MSUF_gcdSpellIcon)
+                else
+                    frame.icon:SetTexture(nil)
+                end
+            end
+
+            if frame.timeText then
+                if castTimeEnabled and showTime then
+                    MSUF_SetCastTimeText(frame, rem)
+                else
+                    MSUF_SetTextIfChanged(frame.timeText, "")
+                end
+            end
+
+            -- Optional glow fade near completion.
+            if type(_G.MSUF_ApplyCastbarGlowFade) == "function" then
+                _G.MSUF_ApplyCastbarGlowFade(frame, rem, dur)
+            end
+
+            return
+        end
+
 
         -- Empowered casts: update value + time text and stage blink.
         if frame.isEmpower and frame.empowerStartTime and frame.empowerTotalWithGrace then
@@ -4304,13 +4362,26 @@ do
                     if frame.MSUF_isChanneled then
                         if UnitChannelInfo(u) then
                             frame._msufHardStopNoChannelSince = nil
+                            frame._msufHardStopChanThresh = nil
                         else
                             local t0 = frame._msufHardStopNoChannelSince
                             if not t0 then
                                 frame._msufHardStopNoChannelSince = now
-                            elseif (now - t0) >= 0.45 then
-                                if frame.SetSucceeded then frame:SetSucceeded() else frame:Hide() end
-                                return
+                                -- Channel refresh gaps can be as large as SpellQueueWindow; keep the hard-stop threshold above that.
+                                local qms = 0
+                                if GetCVar then qms = tonumber(GetCVar("SpellQueueWindow") or "0") or 0 end
+                                if qms < 0 then qms = 0 end
+                                local thresh = 0.45
+                                local q = (qms / 1000) + 0.10
+                                if q > thresh then thresh = q end
+                                if thresh > 0.80 then thresh = 0.80 end
+                                frame._msufHardStopChanThresh = thresh
+                            else
+                                local thresh = frame._msufHardStopChanThresh or 0.45
+                                if (now - t0) >= thresh then
+                                    if frame.SetSucceeded then frame:SetSucceeded() else frame:Hide() end
+                                    return
+                                end
                             end
                         end
                     else

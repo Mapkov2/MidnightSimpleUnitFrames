@@ -3214,28 +3214,6 @@ auraResetBtn:SetPoint("LEFT", auraStacksSwatch, "RIGHT", 12, 0)
 auraResetBtn:SetText("Reset")
 
 
--- Dispellable border highlight color
-local auraDispelLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-auraDispelLabel:SetPoint("TOPLEFT", auraStacksSwatch, "BOTTOMLEFT", 0, -12)
-auraDispelLabel:SetText("Dispellable/Dispel border highlight color")
-
-local auraDispelSwatch = CreateFrame("Button", "MSUF_Colors_AuraDispelBorderSwatch", content)
-auraDispelSwatch:SetSize(32, 16)
-auraDispelSwatch:SetPoint("TOPLEFT", auraDispelLabel, "BOTTOMLEFT", 0, -8)
-local auraDispelTex = auraDispelSwatch:CreateTexture(nil, "ARTWORK")
-auraDispelTex:SetAllPoints()
-
--- Stealable/Purge border highlight color
-local auraStealLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-auraStealLabel:SetPoint("TOPLEFT", auraDispelSwatch, "BOTTOMLEFT", 0, -12)
-auraStealLabel:SetText("Stealable/Purge border highlight color")
-
-local auraStealSwatch = CreateFrame("Button", "MSUF_Colors_AuraStealableBorderSwatch", content)
-auraStealSwatch:SetSize(32, 16)
-auraStealSwatch:SetPoint("TOPLEFT", auraStealLabel, "BOTTOMLEFT", 0, -8)
-local auraStealTex = auraStealSwatch:CreateTexture(nil, "ARTWORK")
-auraStealTex:SetAllPoints()
-
 
 -- Aura cooldown text colors (DurationObject step curve)
 local auraCDSafeLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -3286,12 +3264,6 @@ F.EnsureAurasColorsDB = function()
     if type(g.aurasStackCountColor) ~= "table" then
         g.aurasStackCountColor = { 1, 1, 1 } -- white
     end
-    if type(g.aurasDispelBorderColor) ~= "table" then
-        g.aurasDispelBorderColor = { 0.2, 0.6, 1.0 } -- bright blue
-    end
-    if type(g.aurasStealableBorderColor) ~= "table" then
-        g.aurasStealableBorderColor = { 0.0, 0.75, 1.0 } -- cyan
-    end
     if type(g.aurasCooldownTextWarningColor) ~= "table" then
         g.aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 } -- warning (yellow)
     end
@@ -3319,34 +3291,6 @@ F.GetAurasStackCountColor = function()
     return t[1] or 1, t[2] or 1, t[3] or 1
 end
 
-
-F.GetAurasDispelBorderColor = function()
-    local g = F.EnsureAurasColorsDB()
-    local t = g.aurasDispelBorderColor
-    if type(t) == "table" then
-        local r = t[1] or t.r
-        local gg = t[2] or t.g
-        local b = t[3] or t.b
-        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
-            return r, gg, b
-        end
-    end
-    return 0.2, 0.6, 1.0
-end
-
-F.GetAurasStealableBorderColor = function()
-    local g = F.EnsureAurasColorsDB()
-    local t = g.aurasStealableBorderColor
-    if type(t) == "table" then
-        local r = t[1] or t.r
-        local gg = t[2] or t.g
-        local b = t[3] or t.b
-        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
-            return r, gg, b
-        end
-    end
-    return 0.0, 0.75, 1.0
-end
 
 F.GetAurasCooldownTextSafeColor = function()
     local g = F.EnsureAurasColorsDB()
@@ -3394,16 +3338,12 @@ F.UpdateAurasColorControls = function()
     local br, bg, bb = F.GetAurasOwnBuffHighlightColor()
     local dr, dg, db = F.GetAurasOwnDebuffHighlightColor()
     local sr, sg, sb = F.GetAurasStackCountColor()
-    local pr, pg, pb = F.GetAurasDispelBorderColor()
-    local tr, tg, tb = F.GetAurasStealableBorderColor()
     local cr, cg, cb = F.GetAurasCooldownTextSafeColor()
     local wr, wg, wb = F.GetAurasCooldownTextWarningColor()
     local ur, ug, ub = F.GetAurasCooldownTextUrgentColor()
     if auraBuffTex then auraBuffTex:SetColorTexture(br, bg, bb) end
     if auraDebuffTex then auraDebuffTex:SetColorTexture(dr, dg, db) end
     if auraStacksTex then auraStacksTex:SetColorTexture(sr, sg, sb) end
-    if auraDispelTex then auraDispelTex:SetColorTexture(pr, pg, pb) end
-    if auraStealTex then auraStealTex:SetColorTexture(tr, tg, tb) end
     if auraCDSafeTex then auraCDSafeTex:SetColorTexture(cr, cg, cb) end
     if auraCDWarnTex then auraCDWarnTex:SetColorTexture(wr, wg, wb) end
     if auraCDUrgentTex then auraCDUrgentTex:SetColorTexture(ur, ug, ub) end
@@ -3453,20 +3393,6 @@ F.SetAurasStackCountColor = function(r, gCol, bCol)
     F.PushAuras2ColorRefresh()
 end
 
-
-F.SetAurasDispelBorderColor = function(r, gCol, bCol)
-    local g = F.EnsureAurasColorsDB()
-    g.aurasDispelBorderColor = { r, gCol, bCol }
-    F.UpdateAurasColorControls()
-    F.PushAuras2ColorRefresh()
-end
-
-F.SetAurasStealableBorderColor = function(r, gCol, bCol)
-    local g = F.EnsureAurasColorsDB()
-    g.aurasStealableBorderColor = { r, gCol, bCol }
-    F.UpdateAurasColorControls()
-    F.PushAuras2ColorRefresh()
-end
 
 F.SetAurasCooldownTextSafeColor = function(r, gCol, bCol)
     local g = F.EnsureAurasColorsDB()
@@ -3538,28 +3464,6 @@ auraStacksSwatch:SetScript("OnMouseUp", function(self, button)
     end)
 end)
 
-auraDispelSwatch:SetScript("OnMouseUp", function(self, button)
-    if button == "RightButton" then
-        F.SetAurasDispelBorderColor(0.2, 0.6, 1.0)
-        return
-    end
-    local r, gCol, bCol = F.GetAurasDispelBorderColor()
-    OpenColorPicker(r, gCol, bCol, function(nr, ng, nb)
-        F.SetAurasDispelBorderColor(nr, ng, nb)
-    end)
-end)
-
-auraStealSwatch:SetScript("OnMouseUp", function(self, button)
-    if button == "RightButton" then
-        F.SetAurasStealableBorderColor(0.0, 0.75, 1.0)
-        return
-    end
-    local r, gCol, bCol = F.GetAurasStealableBorderColor()
-    OpenColorPicker(r, gCol, bCol, function(nr, ng, nb)
-        F.SetAurasStealableBorderColor(nr, ng, nb)
-    end)
-end)
-
 auraCDSafeSwatch:SetScript("OnMouseUp", function(self, button)
     if button == "RightButton" then
         F.SetAurasCooldownTextSafeColor(nil, nil, nil) -- reset to Global font color
@@ -3612,8 +3516,6 @@ auraResetBtn:SetScript("OnClick", function()
     MSUF_DB.general.aurasOwnBuffHighlightColor = { 1.0, 0.85, 0.2 }
     MSUF_DB.general.aurasOwnDebuffHighlightColor = { 1.0, 0.85, 0.2 }
     MSUF_DB.general.aurasStackCountColor = { 1, 1, 1 }
-    MSUF_DB.general.aurasDispelBorderColor = { 0.2, 0.6, 1.0 }
-    MSUF_DB.general.aurasStealableBorderColor = { 0.0, 0.75, 1.0 }
     MSUF_DB.general.aurasCooldownTextSafeColor = nil
     MSUF_DB.general.aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 }
     MSUF_DB.general.aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 }
@@ -3628,7 +3530,7 @@ end)
 F.UpdateAurasColorControls()
 
 -- Auras section is now the lowest control for dynamic height
-lastControl = auraStealSwatch
+lastControl = auraCDUrgentSwatch
 
     --------------------------------------------------
     -- F.Refresh function

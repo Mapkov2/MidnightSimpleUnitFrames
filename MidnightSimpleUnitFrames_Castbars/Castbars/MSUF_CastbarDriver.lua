@@ -483,48 +483,65 @@ local function CreateCastBar(name, unit)
         MSUF_Driver_CancelStopConfirm(self)
 
 	    if kind == "CHANNEL" then
-	        -- Channels can do STOP -> (tiny gap) -> START on refresh. Don't kill on the gap.
-	        self._msufStopTimer1 = C_Timer.NewTimer(0.18, function()
+	        -- Channels can do STOP -> (gap) -> START on refresh. The gap can be as large as SpellQueueWindow.
+	        -- If we kill too early, spamming/queueing can "cut" the visible channel mid-cast.
+	        local qms = 0
+	        if GetCVar then qms = tonumber(GetCVar("SpellQueueWindow") or "0") or 0 end
+	        if qms < 0 then qms = 0 end
+	        local settle = (qms / 1000) + 0.08
+	        if settle < 0.20 then settle = 0.20 end
+	        if settle > 0.70 then settle = 0.70 end
+	
+	        local fast = 0.12
+	        if fast > settle then fast = settle end
+	        local t2 = settle - fast
+	        if t2 < 0.08 then t2 = 0.08 end
+	
+	        -- Absolute failsafe: never allow a channel to keep animating forever after a STOP.
+	        local failsafe = settle + 0.55
+	        if failsafe < 0.70 then failsafe = 0.70 end
+	        if failsafe > 1.20 then failsafe = 1.20 end
+	
+	        self._msufStopTimer1 = C_Timer.NewTimer(fast, function()
 	            if not self or self.interrupted then return end
 	            if (self._msufCastToken or 0) ~= token then return end
 	
 	            -- If the unit is channeling again, treat as refresh.
 	            local st = MSUF_Driver_BuildCastStateFor(self)
 	            if st and st.active then MSUF_Driver_SetActiveIdentity(self, st); self:Cast(st); return end
-
-            -- If this STOP belongs to an older cast (spellId/sequence changed), ignore it.
-            if MSUF_Driver_IsStaleStop(self, snapSeq) then
-                MSUF_Driver_CastResync(self)
-                return
-            end
-
-            -- Require 2 consecutive nil reads to avoid killing on brief nil-blips.
-	            self._msufStopTimer2 = C_Timer.NewTimer(0.18, function()
+	
+	            -- If this STOP belongs to an older cast (spellId/sequence changed), ignore it.
+	            if MSUF_Driver_IsStaleStop(self, snapSeq) then
+	                MSUF_Driver_CastResync(self)
+	                return
+	            end
+	
+	            -- Confirm again after the settle window (covers SQW refresh gaps).
+	            self._msufStopTimer2 = C_Timer.NewTimer(t2, function()
 	                if not self or self.interrupted then return end
 	                if (self._msufCastToken or 0) ~= token then return end
 	
 	                local st2 = MSUF_Driver_BuildCastStateFor(self)
 	                if st2 and st2.active then MSUF_Driver_SetActiveIdentity(self, st2); self:Cast(st2); return end
-
-				if MSUF_Driver_IsStaleStop(self, snapSeq) then
-				    MSUF_Driver_CastResync(self)
-				    return
-				end
-				self:SetSucceeded()
+	
+	                if MSUF_Driver_IsStaleStop(self, snapSeq) then
+	                    MSUF_Driver_CastResync(self)
+	                    return
+	                end
+	                self:SetSucceeded()
 	            end)
 	        end)
 	
-	        -- Absolute failsafe: never allow a channel to keep animating forever after a STOP.
-	        self._msufStopTimer3 = C_Timer.NewTimer(0.70, function()
+	        self._msufStopTimer3 = C_Timer.NewTimer(failsafe, function()
 	            if not self or self.interrupted then return end
 	            if (self._msufCastToken or 0) ~= token then return end
 	
 	            local st = MSUF_Driver_BuildCastStateFor(self)
 	            if st and st.active then
-                MSUF_Driver_SetActiveIdentity(self, st)
-                self:Cast(st)
-                return
-            end
+	                MSUF_Driver_SetActiveIdentity(self, st)
+	                self:Cast(st)
+	                return
+	            end
 	
 	            if MSUF_Driver_IsStaleStop(self, snapSeq) then
 	                MSUF_Driver_CastResync(self)
@@ -632,10 +649,17 @@ end
 	            MSUF_Driver_QueueStopConfirm(self, "CAST")
 
         elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-            if self.unit == "player" then
-                self:SetSucceeded()
-            else
+            -- NOTE: SUCCEEDED can fire while a channel is still running when the player re-queues/spams the same spell
+            -- inside SpellQueueWindow. Never treat SUCCEEDED as terminal for the player castbar.
+            if self.unit ~= "player" then
                 MSUF_Driver_CastResync(self)
+            else
+                local st = MSUF_Driver_BuildCastStateFor(self)
+                if st and st.active then
+                    MSUF_Driver_SetActiveIdentity(self, st)
+                    self:Cast(st)
+                end
+                -- else: ignore (prevents mid-channel "cut" when spamming/queueing)
             end
 
 	        elseif event == "UNIT_SPELLCAST_INTERRUPTIBLE" then

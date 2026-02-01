@@ -77,6 +77,48 @@ local function MSUF_Defaults_DeepCopy(dst, src)
     end
 end
 
+
+-- Fresh-install overrides (applied only when the factory profile payload is seeded).
+-- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
+local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
+    if type(db) ~= "table" then return end
+
+    local function ForceUnitAlpha100(conf)
+        if type(conf) ~= "table" then return end
+        -- Main alpha (used when layered alpha is off)
+        conf.alphaInCombat = 1
+        conf.alphaOutOfCombat = 1
+
+        -- Layered alpha (used when "Keep text/portrait visible" is on)
+        conf.alphaFGInCombat = 1
+        conf.alphaFGOutOfCombat = 1
+        conf.alphaBGInCombat = 1
+        conf.alphaBGOutOfCombat = 1
+    end
+
+    ForceUnitAlpha100(db.player)
+
+    -- Fresh-install default: player name hidden
+    if type(db.player) == "table" then
+        db.player.showName = false
+    end
+    ForceUnitAlpha100(db.target)
+    ForceUnitAlpha100(db.focus)
+    ForceUnitAlpha100(db.pet)
+    ForceUnitAlpha100(db.boss)
+    ForceUnitAlpha100(db.targettarget)
+    ForceUnitAlpha100(db.tot)
+
+    -- Fresh-install defaults: status indicators (AFK/DND) off by default
+    local g = db.general
+    if type(g) == 'table' then
+        g.statusIndicators = g.statusIndicators or {}
+        local si = g.statusIndicators
+        si.showAFK = false
+        si.showDND = false
+    end
+end
+
 local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     if type(MSUF_DB) ~= "table" then return end
     local g = (type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
@@ -98,6 +140,7 @@ local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
 
     -- Replace the empty DB with the decoded payload.
     MSUF_Defaults_DeepCopy(MSUF_DB, payload)
+    MSUF_Defaults_ApplyFreshInstallOverrides(MSUF_DB)
     MSUF_DB.general = MSUF_DB.general or {}
     MSUF_DB.general._msufFactoryProfileApplied = true
 end
@@ -387,8 +430,8 @@ end
         g.statusIndicators = {}
     end
     local si = g.statusIndicators
-    if si.showAFK == nil then si.showAFK = true end
-    if si.showDND == nil then si.showDND = true end
+    if si.showAFK == nil then si.showAFK = false end
+    if si.showDND == nil then si.showDND = false end
     if si.showDead == nil then si.showDead = true end
     if si.showGhost == nil then si.showGhost = true end
 
@@ -455,6 +498,12 @@ if g.castbarUnifiedFillDirection ~= nil then
     if g.castbarShowChannelTicks == nil then
         g.castbarShowChannelTicks = false
     end
+
+
+    -- GCD/Instant-cast bar (disabled by default; options treat nil as enabled)
+    if g.showGCDBar == nil then g.showGCDBar = false end
+    if g.showGCDBarTime == nil then g.showGCDBarTime = true end
+    if g.showGCDBarSpell == nil then g.showGCDBarSpell = true end
 
     if g.empowerColorStages == nil then
         g.empowerColorStages = true
@@ -620,10 +669,7 @@ if g.castbarShowGlow == nil then
     g.castbarShowGlow = false
 end
 
--- Aura highlight/border colors (used by Auras 2.0 highlight pipeline)
-if g.aurasDispelBorderColor == nil then
-    g.aurasDispelBorderColor = { ["1"] = 0.2, ["2"] = 0.6, ["3"] = 1 }
-end
+-- Aura highlight colors (used by Auras 2.0 highlight pipeline)
 if g.aurasOwnBuffHighlightColor == nil then
     g.aurasOwnBuffHighlightColor = { ["1"] = 1, ["2"] = 0.85, ["3"] = 0.2 }
 end
@@ -632,9 +678,6 @@ if g.aurasOwnDebuffHighlightColor == nil then
 end
 if g.aurasStackCountColor == nil then
     g.aurasStackCountColor = { ["1"] = 1, ["2"] = 1, ["3"] = 1 }
-end
-if g.aurasStealableBorderColor == nil then
-    g.aurasStealableBorderColor = { ["1"] = 0, ["2"] = 0.75, ["3"] = 1 }
 end
 
 
@@ -826,6 +869,25 @@ end
 
     if g.enableAbsorbBar == nil then
         g.enableAbsorbBar = true
+    end
+
+
+    -- Absorb display dropdown stores a mode; keep runtime flags in sync on load.
+    if g.absorbTextMode ~= nil then
+        local mode = tonumber(g.absorbTextMode)
+        if mode == 1 then
+            g.enableAbsorbBar = false
+            g.showTotalAbsorbAmount = false
+        elseif mode == 2 then
+            g.enableAbsorbBar = true
+            g.showTotalAbsorbAmount = false
+        elseif mode == 3 then
+            g.enableAbsorbBar = true
+            g.showTotalAbsorbAmount = true
+        elseif mode == 4 then
+            g.enableAbsorbBar = false
+            g.showTotalAbsorbAmount = true
+        end
     end
 
     if g.absorbAnchorMode == nil then
@@ -1050,6 +1112,14 @@ end
     if gp.enableFirstDanceTimer == nil then gp.enableFirstDanceTimer = false end
     if gp.nameplateMeleeSpellID == nil then gp.nameplateMeleeSpellID = 0 end
 
+
+    -- Gameplay: Range fade for Target/Focus (default ON)
+    -- Dims Target/Focus unitframes to a fixed alpha when the unit is out of range.
+    if gp.rangeFadeEnabled == nil then gp.rangeFadeEnabled = true end
+    if gp.rangeFadeAlpha == nil then gp.rangeFadeAlpha = 0.5 end
+    if gp.rangeFadeMaxRange == nil then gp.rangeFadeMaxRange = 40 end
+    if gp.rangeFadeTick == nil then gp.rangeFadeTick = 0.25 end
+
     -- Gameplay: Crosshair melee range spell can optionally be stored per class.
     -- This lets users run a single profile across multiple characters without
     -- having to swap the spell whenever they change class.
@@ -1097,11 +1167,9 @@ end
                 onlyMyBuffs = false,
                 onlyMyDebuffs = false,
                 masqueEnabled = false,
-                highlightDispellableDebuffs = true,
-                highlightOwnBuffs = false,
+highlightOwnBuffs = false,
                 highlightOwnDebuffs = false,
-                highlightStealableBuffs = true,
-                filters = {
+filters = {
                     _msufA2_sharedFiltersMigrated_v1 = true,
                     enabled = true,
                     hidePermanent = false,
@@ -1257,7 +1325,7 @@ local function fill(key, defaults)
         offsetX   = -256,
         offsetY   = -180,
         portraitMode = "LEFT",
-        showName  = true,
+        showName  = false,
         showLevelIndicator = true,
         showHP    = true,
         showPower = true,
@@ -1362,11 +1430,21 @@ local function fill(key, defaults)
     for k, v in pairs(textDefaults) do
         if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end
     end
+
     for _, unitKey in ipairs({"player", "target", "targettarget", "focus", "pet", "boss"}) do
         MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
-        if MSUF_DB[unitKey].enabled == nil then
-            MSUF_DB[unitKey].enabled = true
+        local u = MSUF_DB[unitKey]
+        if u.enabled == nil then
+            u.enabled = true
         end
+
+        -- Default missing alpha keys to 1 (100%) without overwriting user customizations.
+        if u.alphaInCombat == nil then u.alphaInCombat = 1 end
+        if u.alphaOutOfCombat == nil then u.alphaOutOfCombat = 1 end
+        if u.alphaFGInCombat == nil then u.alphaFGInCombat = 1 end
+        if u.alphaFGOutOfCombat == nil then u.alphaFGOutOfCombat = 1 end
+        if u.alphaBGInCombat == nil then u.alphaBGInCombat = 1 end
+        if u.alphaBGOutOfCombat == nil then u.alphaBGOutOfCombat = 1 end
     end
 
     MSUF_DB_LastHeavyRun = MSUF_DB

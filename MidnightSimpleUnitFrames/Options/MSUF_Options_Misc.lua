@@ -18,6 +18,13 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         MSUF_DB.general = MSUF_DB.general or {}
         return MSUF_DB.general
     end
+    local function EnsureGameplay()
+        if EnsureDB then EnsureDB() end
+        MSUF_DB = MSUF_DB or {}
+        MSUF_DB.gameplay = MSUF_DB.gameplay or {}
+        return MSUF_DB.gameplay
+    end
+
 
     -------------------------------------------------------------------------
     -- UI helpers (kept local to this file; no feature split)
@@ -604,7 +611,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end,
     })
 
-    UI:MakeCheck({
+    local targetSoundsCheck = UI:MakeCheck({
         name = "MSUF_TargetSoundsCheck",
         parent = rightPanel,
         template = "InterfaceOptionsCheckButtonTemplate",
@@ -622,6 +629,32 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
             if v and _G.MSUF_TargetSoundDriver_Ensure then _G.MSUF_TargetSoundDriver_Ensure() end
         end,
     })
+    UI:MakeCheck({
+        name = "MSUF_SpellRangeCheck",
+        parent = rightPanel,
+        template = "InterfaceOptionsCheckButtonTemplate",
+        anchor = targetSoundsCheck,
+        x = 0, y = -12,
+        label = "Spell range check (fade out of range)",
+        get = function()
+            local gp = EnsureGameplay()
+            return (gp.rangeFadeEnabled ~= false) and true or false
+        end,
+        set = function(v)
+            local gp = EnsureGameplay()
+            gp.rangeFadeEnabled = v and true or false
+
+            local RF = _G.MSUF_RangeFade
+            if RF and RF.EnsureTicker and RF.Tick then
+                RF:EnsureTicker()
+                RF:Tick()
+            elseif _G.MSUF_RefreshAllUnitAlphas then
+                _G.MSUF_RefreshAllUnitAlphas()
+            end
+        end,
+    })
+
+
 
     -------------------------------------------------------------------------
     -- Indicators (bottom panel)

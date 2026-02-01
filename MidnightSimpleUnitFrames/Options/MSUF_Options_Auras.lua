@@ -668,16 +668,297 @@ local function CreateLayoutDropdown(parent, x, y, getter, setter)
     return dd
 end
 
-local function CreateBuffDebuffAnchorDropdown(parent, x, y, getter, setter, layoutGetter)
-    local dd = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
-    dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, y + 4)
-    MSUF_FixUIDropDown(dd, 180)
+
+-- ------------------------------------------------------------
+-- Buff/Debuff Anchor DPads (Auras 2)
+-- Two D-pads that visually set the same "buffDebuffAnchor" preset used by the dropdown,
+-- without introducing new DB keys (no runtime regression).
+-- Works only with Layout: Separate rows (Single row / Mixed disables split anchoring).
+-- ------------------------------------------------------------
+local function A2_ParseBuffDebuffAnchorPreset(preset)
+    if type(preset) ~= "string" or preset == "" or preset == "STACKED" then
+        return "TOP", "BOTTOM" -- sensible default
+    end
+
+    -- Presets: <A>_<B>_BUFFS  => Buffs=A, Debuffs=B
+    --          <A>_<B>_DEBUFFS=> Debuffs=A, Buffs=B
+    local a, b, kind = string.match(preset, "^(%u+)%_(%u+)%_(%u+)$")
+    if not (a and b and kind) then
+        return "TOP", "BOTTOM"
+    end
+
+    if kind == "BUFFS" then
+        return a, b
+    elseif kind == "DEBUFFS" then
+        return b, a
+    end
+
+    return "TOP", "BOTTOM"
+end
+
+local function A2_BuildBuffDebuffAnchorPreset(buffDir, debuffDir, changedKind)
+    -- Normalize & snap to supported preset space:
+    -- Supported pairs are: vertical+vertical (TOP/BOTTOM), vertical+horizontal, horizontal+vertical.
+    local function IsH(d) return (d == "LEFT") or (d == "RIGHT") end
+    local function IsV(d) return (d == "TOP") or (d == "BOTTOM") end
+
+    if type(buffDir) ~= "string" then buffDir = "TOP" end
+    if type(debuffDir) ~= "string" then debuffDir = "BOTTOM" end
+    buffDir = string.upper(buffDir)
+    debuffDir = string.upper(debuffDir)
+
+    -- Same direction => treat as stacked (legacy).
+    if buffDir == debuffDir then
+        return "STACKED", buffDir, debuffDir
+    end
+
+    -- Both horizontal isn't representable with the current preset set.
+    -- Snap the *other* side to TOP so we stay predictable and compatible.
+    if IsH(buffDir) and IsH(debuffDir) then
+        if changedKind == "BUFF" then
+            debuffDir = "TOP"
+        else
+            buffDir = "TOP"
+        end
+    end
+
+    -- Vertical pair: only TOP/BOTTOM is supported (as a special "TOP_BOTTOM_*" preset).
+    if IsV(buffDir) and IsV(debuffDir) then
+        if buffDir == "TOP" and debuffDir == "BOTTOM" then
+            return "TOP_BOTTOM_BUFFS", buffDir, debuffDir
+        elseif buffDir == "BOTTOM" and debuffDir == "TOP" then
+            return "TOP_BOTTOM_DEBUFFS", buffDir, debuffDir
+        end
+        return "STACKED", buffDir, debuffDir
+    end
+
+    -- Mapping table for the 8 split presets (vertical<->horizontal).
+    local map = {
+        -- Buffs vertical, Debuffs horizontal
+        TOP_RIGHT   = "TOP_RIGHT_BUFFS",
+        TOP_LEFT    = "TOP_LEFT_BUFFS",
+        BOTTOM_RIGHT= "BOTTOM_RIGHT_BUFFS",
+        BOTTOM_LEFT = "BOTTOM_LEFT_BUFFS",
+
+        -- Debuffs vertical, Buffs horizontal (note: preset name still starts with the vertical side)
+        RIGHT_TOP   = "TOP_RIGHT_DEBUFFS",
+        LEFT_TOP    = "TOP_LEFT_DEBUFFS",
+        RIGHT_BOTTOM= "BOTTOM_RIGHT_DEBUFFS",
+        LEFT_BOTTOM = "BOTTOM_LEFT_DEBUFFS",
+    }
+
+    if IsV(buffDir) and IsH(debuffDir) then
+        local key = buffDir .. "_" .. debuffDir
+        return map[key] or "TOP_BOTTOM_BUFFS", buffDir, debuffDir
+    end
+
+    if IsH(buffDir) and IsV(debuffDir) then
+        local key = buffDir .. "_" .. debuffDir
+        return map[key] or "TOP_BOTTOM_BUFFS", buffDir, debuffDir
+    end
+
+    -- Fallback
+    return "TOP_BOTTOM_BUFFS", buffDir, debuffDir
+end
+
+local function MSUF_A2_StyleDPadButton(btn, glyph)
+    if not btn or btn.__msufA2Styled then return end
+    btn.__msufA2Styled = true
+
+    local WHITE8 = _G.MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8"
+    btn:SetSize(22, 22)
+
+    local normal = btn:CreateTexture(nil, "BACKGROUND")
+    normal:SetAllPoints()
+    normal:SetTexture(WHITE8)
+    normal:SetVertexColor(0, 0, 0, 0.90)
+    btn:SetNormalTexture(normal)
+
+    local pushed = btn:CreateTexture(nil, "BACKGROUND")
+    pushed:SetAllPoints()
+    pushed:SetTexture(WHITE8)
+    pushed:SetVertexColor(0.70, 0.55, 0.15, 0.95)
+    btn:SetPushedTexture(pushed)
+
+    local highlight = btn:CreateTexture(nil, "HIGHLIGHT")
+    highlight:SetAllPoints()
+    highlight:SetTexture(WHITE8)
+    highlight:SetVertexColor(1, 0.9, 0.4, 0.25)
+    btn:SetHighlightTexture(highlight)
+
+    local border = CreateFrame("Frame", nil, btn, "BackdropTemplate")
+    border:SetAllPoints()
+    border:SetBackdrop({ edgeFile = WHITE8, edgeSize = 1 })
+    border:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
+    btn.__msufBorder = border
+
+    local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    fs:SetPoint("CENTER")
+    fs:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
+    fs:SetTextColor(0.35, 0.35, 0.35, 1)
+    fs:SetText(glyph or "?")
+    btn.text = fs
+
+    local sel = btn:CreateTexture(nil, "ARTWORK")
+    sel:SetAllPoints()
+    sel:SetTexture(WHITE8)
+    sel:SetVertexColor(1, 1, 1, 0.12)
+    sel:Hide()
+    btn.__msufSel = sel
+end
+
+local function CreateA2_AnchorDPad(parent, titleText, kind, getPreset, setPreset, isEnabledFn, onChanged)
+    local WHITE8 = _G.MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8"
+
+    local pad = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    pad:SetSize(82, 66)
+    pad.__msufKind = kind
+    pad.__msufGetPreset = getPreset
+    pad.__msufSetPreset = setPreset
+    pad.__msufIsEnabled = isEnabledFn
+    pad.__msufOnChanged = onChanged
+
+    pad:SetBackdrop({
+        bgFile = WHITE8,
+        edgeFile = WHITE8,
+        edgeSize = 1,
+    })
+    pad:SetBackdropColor(0, 0, 0, 0.25)
+    pad:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
 
     local title = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    title:SetPoint("BOTTOMLEFT", dd, "TOPLEFT", 16, 4)
-    title:SetText("Buff/Debuff Anchor")
-    dd._msufTitle = title
+    title:SetPoint("BOTTOMLEFT", pad, "TOPLEFT", 0, 4)
+    title:SetText(titleText or "Anchor")
+    pad.__MSUF_titleFS = title
 
+    pad.buttons = {}
+
+    local function ApplyPreset(newPreset, changedKind)
+        if type(pad.__msufSetPreset) == "function" then
+            pad.__msufSetPreset(newPreset)
+        end
+
+        if type(onChanged) == "function" then
+            onChanged(newPreset)
+        end
+
+        if type(A2_RequestApply) == "function" then
+            A2_RequestApply()
+        end
+
+        if pad.SyncFromDB then pad:SyncFromDB() end
+    end
+
+    local function ClickDir(dirKey)
+        local preset = (type(pad.__msufGetPreset) == "function" and pad.__msufGetPreset()) or "STACKED"
+        local buffDir, debuffDir = A2_ParseBuffDebuffAnchorPreset(preset)
+
+        if pad.__msufKind == "BUFF" then
+            buffDir = dirKey
+        else
+            debuffDir = dirKey
+        end
+
+        local newPreset
+        newPreset, buffDir, debuffDir = A2_BuildBuffDebuffAnchorPreset(buffDir, debuffDir, pad.__msufKind)
+
+        ApplyPreset(newPreset, pad.__msufKind)
+    end
+
+    local function MakeBtn(dirKey, glyph)
+        local b = CreateFrame("Button", nil, pad)
+        MSUF_A2_StyleDPadButton(b, glyph)
+        b.__msufDirKey = dirKey
+
+        b:SetScript("OnClick", function()
+            -- Disabled when Layout is SINGLE (Mixed)
+            if type(pad.__msufIsEnabled) == "function" and not pad.__msufIsEnabled() then return end
+            ClickDir(dirKey)
+        end)
+
+        pad.buttons[dirKey] = b
+        return b
+    end
+
+    local bUp    = MakeBtn("TOP",    "^")
+    local bDown  = MakeBtn("BOTTOM", "v")
+    local bLeft  = MakeBtn("LEFT",   "<")
+    local bRight = MakeBtn("RIGHT",  ">")
+
+    bUp:SetPoint("CENTER", pad, "CENTER", 0, 20)
+    bDown:SetPoint("CENTER", pad, "CENTER", 0, -20)
+    bLeft:SetPoint("CENTER", pad, "CENTER", -20, 0)
+    bRight:SetPoint("CENTER", pad, "CENTER", 20, 0)
+
+    local dot = pad:CreateTexture(nil, "ARTWORK")
+    dot:SetSize(9, 9)
+    dot:SetPoint("CENTER")
+    dot:SetTexture(WHITE8)
+    dot:SetVertexColor(0.7, 0.7, 0.7, 0.25)
+    pad.__msufDot = dot
+
+    function pad:SetEnabledVisual(enabled)
+        for _, btn in pairs(self.buttons) do
+            if enabled then
+                btn:Enable()
+                btn:SetAlpha(1)
+            else
+                btn:Disable()
+                btn:SetAlpha(0.35)
+            end
+        end
+        self:SetAlpha(enabled and 1 or 0.55)
+        if self.__MSUF_titleFS then
+            if enabled then
+                self.__MSUF_titleFS:SetTextColor(1, 1, 1)
+            else
+                self.__MSUF_titleFS:SetTextColor(0.5, 0.5, 0.5)
+            end
+        end
+    end
+
+    -- Let A2_ApplyScopeState() disable this via A2_SetWidgetEnabled().
+    function pad:SetEnabled(enabled)
+        self:SetEnabledVisual(enabled)
+    end
+
+    function pad:SyncFromDB()
+        local preset = (type(self.__msufGetPreset) == "function" and self.__msufGetPreset()) or "STACKED"
+        local buffDir, debuffDir = A2_ParseBuffDebuffAnchorPreset(preset)
+        local wantDir = (self.__msufKind == "BUFF") and buffDir or debuffDir
+
+        for dir, btn in pairs(self.buttons) do
+            local isOn = (dir == wantDir)
+            if btn.__msufSel then btn.__msufSel:SetShown(isOn) end
+            if btn.__msufBorder then
+                if isOn then
+                    btn.__msufBorder:SetBackdropBorderColor(0.70, 0.70, 0.70, 1)
+                else
+                    btn.__msufBorder:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
+                end
+            end
+            if btn.text then
+                if isOn then
+                    btn.text:SetTextColor(1, 0.9, 0.4, 1)
+                else
+                    btn.text:SetTextColor(0.35, 0.35, 0.35, 1)
+                end
+            end
+        end
+
+        local enabled = true
+        if type(self.__msufIsEnabled) == "function" then
+            enabled = self.__msufIsEnabled() and true or false
+        end
+        self:SetEnabledVisual(enabled)
+    end
+
+    pad:SyncFromDB()
+    return pad
+end
+
+
+local function CreateA2_BuffDebuffAnchorDPads(parent, x, y, getPreset, setPreset, layoutGetter)
     local function IsSeparateRows()
         if type(layoutGetter) == "function" then
             return (layoutGetter() or "SEPARATE") ~= "SINGLE"
@@ -685,117 +966,44 @@ local function CreateBuffDebuffAnchorDropdown(parent, x, y, getter, setter, layo
         return true
     end
 
-    local function ApplyEnabledState()
-        local ok = IsSeparateRows()
-        if ok then
-            if UIDropDownMenu_EnableDropDown then UIDropDownMenu_EnableDropDown(dd) end
-            if dd._msufTitle then dd._msufTitle:SetTextColor(1, 1, 1) end
+    -- Anchor frame so we can position the pair like a dropdown row.
+    local anchor = CreateFrame("Frame", nil, parent)
+    anchor:SetSize(1, 1)
+    anchor:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+
+    local header = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    header:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 4)
+    header:SetText("")
+
+    local buffPad, debuffPad
+
+    local function SyncAll()
+        local enabled = IsSeparateRows()
+        if enabled then
+            header:SetTextColor(1, 1, 1)
         else
-            if UIDropDownMenu_DisableDropDown then UIDropDownMenu_DisableDropDown(dd) end
-            if dd._msufTitle then dd._msufTitle:SetTextColor(0.5, 0.5, 0.5) end
+            header:SetTextColor(0.5, 0.5, 0.5)
         end
-    end
-    dd._msufApplyEnabledState = ApplyEnabledState
-
-    local function ShowTooltip(self)
-	-- Anchor the tooltip to the full dropdown (not the tiny arrow button),
-	-- so it appears aligned over the whole control.
-	if not GameTooltip then return end
-	local anchor = dd
-	if not anchor then return end
-	GameTooltip:SetOwner(anchor, "ANCHOR_NONE")
-	GameTooltip:ClearAllPoints()
-	GameTooltip:SetPoint("BOTTOM", anchor, "TOP", 0, 8)
-        GameTooltip:SetText("Buff/Debuff Anchor", 1, 1, 1)
-        GameTooltip:AddLine("Controls how Buffs and Debuffs are placed around the unitframe.", 0.8, 0.8, 0.8, true)
-        GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Requires Layout: Separate rows.", 1, 0.82, 0, true)
-        GameTooltip:AddLine("In 'Single row (Mixed)', buffs and debuffs share one row, so split anchoring is unavailable.", 0.8, 0.8, 0.8, true)
-        GameTooltip:Show()
+        if buffPad and buffPad.SyncFromDB then buffPad:SyncFromDB() end
+        if debuffPad and debuffPad.SyncFromDB then debuffPad:SyncFromDB() end
     end
 
-    local function HideTooltip()
-        if GameTooltip then GameTooltip:Hide() end
+    local function OnChanged()
+        -- When one pad changes the shared preset, refresh both pads.
+        SyncAll()
     end
 
-    dd:SetScript("OnEnter", ShowTooltip)
-    dd:SetScript("OnLeave", HideTooltip)
-    if dd.Button then
-        dd.Button:SetScript("OnEnter", ShowTooltip)
-        dd.Button:SetScript("OnLeave", HideTooltip)
-    end
+    buffPad = CreateA2_AnchorDPad(parent, "Buff Anchor", "BUFF", getPreset, setPreset, IsSeparateRows, OnChanged)
+    debuffPad = CreateA2_AnchorDPad(parent, "Debuff Anchor", "DEBUFF", getPreset, setPreset, IsSeparateRows, OnChanged)
 
-    local function OnClick(self)
-        if not IsSeparateRows() then return end
-        setter(self.value)
-        UIDropDownMenu_SetSelectedValue(dd, self.value)
-        CloseDropDownMenus()
-        A2_RequestApply()
-    end
+    -- Layout: side-by-side (this replaces the old dropdown + pads stack).
+    buffPad:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, 0)
+    debuffPad:SetPoint("TOPLEFT", buffPad, "TOPRIGHT", 10, 0)
 
-    UIDropDownMenu_Initialize(dd, function()
-        local function AddItem(text, value)
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = text
-            info.value = value
-            info.func = OnClick
-            info.keepShownOnClick = false
-            info.checked = function()
-                return (getter() == value)
-            end
-            UIDropDownMenu_AddButton(info)
-        end
-
-        AddItem("Stacked (Legacy)", "STACKED")
-        AddItem("Buffs Top / Debuffs Bottom", "TOP_BOTTOM_BUFFS")
-        AddItem("Debuffs Top / Buffs Bottom", "TOP_BOTTOM_DEBUFFS")
-
-        AddItem("Buffs Top / Debuffs Right", "TOP_RIGHT_BUFFS")
-        AddItem("Debuffs Top / Buffs Right", "TOP_RIGHT_DEBUFFS")
-
-        AddItem("Buffs Bottom / Debuffs Right", "BOTTOM_RIGHT_BUFFS")
-        AddItem("Debuffs Bottom / Buffs Right", "BOTTOM_RIGHT_DEBUFFS")
-
-        AddItem("Buffs Bottom / Debuffs Left", "BOTTOM_LEFT_BUFFS")
-        AddItem("Debuffs Bottom / Buffs Left", "BOTTOM_LEFT_DEBUFFS")
-
-        AddItem("Buffs Top / Debuffs Left", "TOP_LEFT_BUFFS")
-        AddItem("Debuffs Top / Buffs Left", "TOP_LEFT_DEBUFFS")
-    end)
-
-    dd:SetScript("OnShow", function()
-        local v = getter() or "STACKED"
-        UIDropDownMenu_SetSelectedValue(dd, v)
-
-        local txt = "Stacked (Legacy)"
-        if v == "TOP_BOTTOM_BUFFS" then
-            txt = "Buffs Top / Debuffs Bottom"
-        elseif v == "TOP_BOTTOM_DEBUFFS" then
-            txt = "Debuffs Top / Buffs Bottom"
-        elseif v == "TOP_RIGHT_BUFFS" then
-            txt = "Buffs Top / Debuffs Right"
-        elseif v == "TOP_RIGHT_DEBUFFS" then
-            txt = "Debuffs Top / Buffs Right"
-        elseif v == "BOTTOM_RIGHT_BUFFS" then
-            txt = "Buffs Bottom / Debuffs Right"
-        elseif v == "BOTTOM_RIGHT_DEBUFFS" then
-            txt = "Debuffs Bottom / Buffs Right"
-        elseif v == "BOTTOM_LEFT_BUFFS" then
-            txt = "Buffs Bottom / Debuffs Left"
-        elseif v == "BOTTOM_LEFT_DEBUFFS" then
-            txt = "Debuffs Bottom / Buffs Left"
-        elseif v == "TOP_LEFT_BUFFS" then
-            txt = "Buffs Top / Debuffs Left"
-        elseif v == "TOP_LEFT_DEBUFFS" then
-            txt = "Debuffs Top / Buffs Left"
-        end
-        UIDropDownMenu_SetText(dd, txt)
-
-        ApplyEnabledState()
-    end)
-
-    return dd
+    SyncAll()
+    return buffPad, debuffPad
 end
+
 
 local function CreateRowWrapDropdown(parent, x, y, getter, setter)
     local dd = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
@@ -1616,12 +1824,35 @@ end
 
 local function SetCheckboxEnabled(cb, enabled)
     if not cb then return end
-    cb:SetEnabled(enabled and true or false)
-    if cb.text then
+
+    enabled = (enabled == true)
+
+    -- Some "controls" we gate here are real CheckButtons (have :SetEnabled),
+    -- others are dropdown frames (enable their Button / UIDropDownMenu state).
+    if cb.SetEnabled then
+        cb:SetEnabled(enabled)
+    else
+        if UIDropDownMenu_EnableDropDown and UIDropDownMenu_DisableDropDown and cb.Button then
+            if enabled then
+                UIDropDownMenu_EnableDropDown(cb)
+            else
+                UIDropDownMenu_DisableDropDown(cb)
+            end
+        end
+        if cb.Button and cb.Button.SetEnabled then
+            cb.Button:SetEnabled(enabled)
+        end
+        if cb.SetAlpha then
+            cb:SetAlpha(enabled and 1 or 0.55)
+        end
+    end
+
+    local fs = cb.text or cb.Text or cb.__MSUF_titleFS
+    if fs and fs.SetTextColor then
         if enabled then
-            cb.text:SetTextColor(1, 1, 1)
+            fs:SetTextColor(1, 1, 1)
         else
-            cb.text:SetTextColor(0.5, 0.5, 0.5)
+            fs:SetTextColor(0.5, 0.5, 0.5)
         end
     end
 end
@@ -1672,7 +1903,7 @@ end
             local _, s = GetAuras2DB()
             if s then s.masqueEnabled = (v == true) end
         end,
-        "Skins Auras 2.0 icons with Masque (if installed).\n\nWarning: Highlight borders (stealable/dispellable/own) may look odd with some Masque skins.")
+        "Skins Auras 2.0 icons with Masque (if installed).\n\nWarning: Highlight borders may look odd with some Masque skins.")
 
     A2_Track("global", cbMasque)
 
@@ -2157,11 +2388,34 @@ end
     MSUF_StyleAuras2CompactSlider(perRowSlider, { leftTitle = true })
     AttachSliderValueBox(perRowSlider, 4, 20, 1, GetPerRow)
 
-    -- Grow direction (right column)
-    local growthDD = CreateDropdown(leftTop, "Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 9) - 8,
-        function() local key = GetEditingKey(); return A2_GetCapsValue(key, "growth", "RIGHT") end,
-        function(v) A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "growth", v) end)
-    A2_Track("caps", growthDD)
+    -- Grow direction (right column) — separate for Buffs and Debuffs
+    local baseGrowthY = (A2_DD_Y0 - (A2_DD_STEP * 9) - 18) -- sits right under the Buff/Debuff Anchor D-Pads
+
+    local buffGrowthDD = CreateDropdown(leftTop, "Buff growth", A2_DD_X, baseGrowthY,
+        function()
+            local key = GetEditingKey()
+            local g = A2_GetCapsValue(key, "growth", "RIGHT")
+            return A2_GetCapsValue(key, "buffGrowth", g)
+        end,
+        function(v)
+            A2_AutoOverrideCapsIfNeeded()
+            local key = GetEditingKey()
+            A2_SetCapsValue(key, "buffGrowth", v)
+        end)
+    A2_Track("caps", buffGrowthDD)
+
+    local debuffGrowthDD = CreateDropdown(leftTop, "Debuff growth", A2_DD_X, (baseGrowthY - 54),
+        function()
+            local key = GetEditingKey()
+            local g = A2_GetCapsValue(key, "growth", "RIGHT")
+            return A2_GetCapsValue(key, "debuffGrowth", g)
+        end,
+        function(v)
+            A2_AutoOverrideCapsIfNeeded()
+            local key = GetEditingKey()
+            A2_SetCapsValue(key, "debuffGrowth", v)
+        end)
+    A2_Track("caps", debuffGrowthDD)
 
 	-- Layout mode / layout helpers (right column)
 
@@ -2184,21 +2438,44 @@ end
     A2_Track("caps", stackAnchorDD)
 
     -- Buff/Debuff placement around the unitframe (Blizzard-like)
-    local buffDebuffAnchorDD = CreateBuffDebuffAnchorDropdown(leftTop, A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 5) - 12,
-        function() local key = GetEditingKey(); return A2_GetCapsValue(key, "buffDebuffAnchor", "STACKED") end,
-        function(v) A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "buffDebuffAnchor", v) end,
-        function() local key = GetEditingKey(); return A2_GetCapsValue(key, "layoutMode", "SEPARATE") end)
-    A2_Track("caps", buffDebuffAnchorDD)
+    local function GetBuffDebuffAnchorPreset()
+        local key = GetEditingKey()
+        return A2_GetCapsValue(key, "buffDebuffAnchor", "STACKED")
+    end
+
+    local function SetBuffDebuffAnchorPreset(v)
+        A2_AutoOverrideCapsIfNeeded()
+        local key = GetEditingKey()
+        A2_SetCapsValue(key, "buffDebuffAnchor", v)
+    end
+
+    local function GetLayoutModeForAnchors()
+        local key = GetEditingKey()
+        return A2_GetCapsValue(key, "layoutMode", "SEPARATE")
+    end
+
+    -- Buff/Debuff placement around the unitframe (Blizzard-like)
+    -- D-Pads are the single source of truth (no dropdown).
+    -- NOTE: keep the D-Pads fully inside the "Auras 2.0 Display" box.
+    -- The previous extra -46px offset pushed them below the box border on some layouts.
+    local buffAnchorPad, debuffAnchorPad = CreateA2_BuffDebuffAnchorDPads(leftTop, A2_DD_X, (A2_DD_Y0 - (A2_DD_STEP * 5) - 12),
+        GetBuffDebuffAnchorPreset,
+        SetBuffDebuffAnchorPreset,
+        GetLayoutModeForAnchors)
+    A2_Track("caps", buffAnchorPad)
+    A2_Track("caps", debuffAnchorPad)
+
+    -- Move Growth directly under the Buff/Debuff Anchor D-Pads (keeps it inside the Display box).
+    if growthDD and buffAnchorPad and growthDD.ClearAllPoints and growthDD.SetPoint then
+        growthDD:ClearAllPoints()
+        growthDD:SetPoint("TOPLEFT", buffAnchorPad, "BOTTOMLEFT", 0, -16)
+    end
 
     -- Allow the Layout dropdown to notify dependent widgets immediately.
     leftTop._msufA2_OnLayoutModeChanged = function()
-        if buffDebuffAnchorDD and buffDebuffAnchorDD._msufApplyEnabledState then
-            pcall(buffDebuffAnchorDD._msufApplyEnabledState)
-        end
-
-        if leftTop._msufA2_ApplySplitSpacingEnabledState then
-            pcall(leftTop._msufA2_ApplySplitSpacingEnabledState)
-        end
+        if buffAnchorPad and buffAnchorPad.SyncFromDB then buffAnchorPad:SyncFromDB() end
+        if debuffAnchorPad and debuffAnchorPad.SyncFromDB then debuffAnchorPad:SyncFromDB() end
+        if leftTop._msufA2_ApplySplitSpacingEnabledState then leftTop._msufA2_ApplySplitSpacingEnabledState() end
     end
 
 
@@ -2335,7 +2612,7 @@ end
     end
 
     -- ------------------------------------------------------------
-    -- ADVANCED (below): Include / Highlight / Dispel-type filters
+    -- ADVANCED (below): Include / Dispel-type filters
     -- ------------------------------------------------------------
     local rTitle = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     rTitle:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -10)
@@ -2351,10 +2628,7 @@ end
             { "Include boss buffs", 12, -58, A2_FilterBuffs, "includeBoss", nil, nil, "cbBossBuffs" },
             { "Include boss debuffs", 12, -86, A2_FilterDebuffs, "includeBoss", nil, nil, "cbBossDebuffs" },
 
-            { "Always include stealable buffs", 12, -114, A2_FilterBuffs, "includeStealable", nil,
-                "Additive: this will NOT hide your normal buffs.", "cbStealable" },
-
-            { "Always include dispellable debuffs", 12, -142, A2_FilterDebuffs, "includeDispellable", nil,
+            { "Always include dispellable debuffs", 12, -114, A2_FilterDebuffs, "includeDispellable", nil,
                 "Additive: this will NOT hide your normal debuffs.", "cbDispellable" },
 
             { "Only show boss auras", 380, -58, GetEditingFilters, "onlyBossAuras", nil,
@@ -2364,7 +2638,7 @@ end
 
 -- Track scopes + auto-override wrappers (Auras 2 menu only)
 do
-    local filterKeys = { "cbBossBuffs", "cbBossDebuffs", "cbStealable", "cbDispellable", "cbOnlyBoss",
+    local filterKeys = { "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss",
         "cbMagic", "cbCurse", "cbDisease", "cbPoison", "cbEnrage" }
     for i = 1, #filterKeys do
         local cb = refs[filterKeys[i]]
@@ -2374,7 +2648,7 @@ do
         end
     end
 
-    local globalKeys = { "cbHLSteal", "cbHLDispel", "cbAdvanced" }
+    local globalKeys = { "cbAdvanced" }
     for i = 1, #globalKeys do
         local cb = refs[globalKeys[i]]
         if cb then
@@ -2382,18 +2656,6 @@ do
         end
     end
 end
-
-        -- Highlight is stored in Shared settings (visual-only).
-        local hlH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        hlH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -170)
-        hlH:SetText("Highlight")
-
-        BuildBoolPathCheckboxes(advBox, {
-            { "Highlight stealable buffs", 12, -194, A2_Settings, "highlightStealableBuffs", nil,
-                "Highlights stealable buffs (visual only; does not filter).", "cbHLSteal" },
-            { "Highlight dispellable debuffs", 12, -222, A2_Settings, "highlightDispellableDebuffs", nil,
-                "Highlights dispellable debuffs (visual only; does not filter).", "cbHLDispel" },
-        }, refs)
         -- ------------------------------------------------------------
         -- Private Auras (Blizzard-rendered): dedicated section + master toggle
         -- NOTE: Target private auras are intentionally NOT supported (user request).
@@ -2414,6 +2676,118 @@ end
             nil,
             "Master switch for anchoring Blizzard Private Auras to MSUF.")
         A2_Track("global", btnPrivateEnable)
+
+        -- Private Aura Applied Sound (Player)
+        -- Option A: sound is only active when Private Auras are enabled (master toggle).
+        local privateSoundDD
+        do
+            -- Preview helper: lets the user test the selected sound immediately.
+            local function PlayPrivateAuraSoundPreview(key)
+                if key == nil then return end
+                if key == "" or key == "NONE" then return end
+
+                local kit
+                if type(key) == "number" then
+                    kit = key
+                elseif type(key) == "string" then
+                    local sk = _G and _G.SOUNDKIT
+                    kit = (sk and sk[key]) or tonumber(key)
+                end
+
+                if type(kit) ~= "number" or kit <= 0 then return end
+
+                if type(PlaySound) == "function" then
+                    -- Prefer Master so it's audible even if SFX is low.
+                    pcall(PlaySound, kit, "Master")
+                end
+            end
+
+            local function GetPrivateAuraSoundKey()
+                local s = A2_Settings()
+                local v = (s and s.privateAuraSoundKey) or ""
+                if v == "" then v = "NONE" end
+                return v
+            end
+            local function SetPrivateAuraSoundKey(v)
+                local s = A2_Settings()
+                if not s then return end
+                if v == "NONE" then v = "" end
+                s.privateAuraSoundKey = v
+            end
+
+            privateSoundDD = CreateFrame("Frame", nil, privateBox, "UIDropDownMenuTemplate")
+            -- Align with the master "Enabled" toggle row.
+            privateSoundDD:SetPoint("TOPLEFT", privateBox, "TOPLEFT", 190 - 16, -34 + 4)
+            MSUF_FixUIDropDown(privateSoundDD, 200)
+
+            local title = privateBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+            title:SetPoint("BOTTOMLEFT", privateSoundDD, "TOPLEFT", 16, 4)
+            title:SetText("Sound (Player)")
+            privateSoundDD.__MSUF_titleFS = title
+
+            -- Preview button next to the dropdown.
+            local btnPreview = CreateFrame("Button", nil, privateBox, "UIPanelButtonTemplate")
+            btnPreview:SetSize(70, 22)
+            btnPreview:SetPoint("LEFT", privateSoundDD, "RIGHT", -10, 2)
+            btnPreview:SetText("Preview")
+            btnPreview:SetScript("OnClick", function()
+                PlayPrivateAuraSoundPreview(GetPrivateAuraSoundKey())
+            end)
+            privateSoundDD.__msufPreviewBtn = btnPreview
+
+            local items = {
+                { "None", "NONE" },
+                { "Raid Warning", "RAID_WARNING" },
+                { "Boss Whisper", "RAID_BOSS_WHISPER_WARNING" },
+                { "Ready Check", "READY_CHECK" },
+            }
+
+            local function OnClick(self)
+                SetPrivateAuraSoundKey(self.value)
+                UIDropDownMenu_SetSelectedValue(privateSoundDD, self.value)
+                CloseDropDownMenus()
+                -- Immediate feedback.
+                PlayPrivateAuraSoundPreview(self.value)
+                A2_RequestApply()
+            end
+
+            UIDropDownMenu_Initialize(privateSoundDD, function()
+                local sk = _G and _G.SOUNDKIT
+                for i = 1, #items do
+                    local textLabel, key = items[i][1], items[i][2]
+                    if key == "NONE" or (sk and type(sk[key]) == "number") then
+                        local info = UIDropDownMenu_CreateInfo()
+                        info.text = textLabel
+                        info.value = key
+                        info.func = OnClick
+                        info.keepShownOnClick = false
+                        info.checked = function()
+                            return (GetPrivateAuraSoundKey() == key)
+                        end
+                        UIDropDownMenu_AddButton(info)
+                    end
+                end
+            end)
+
+            privateSoundDD:SetScript("OnShow", function()
+                local v = GetPrivateAuraSoundKey()
+                UIDropDownMenu_SetSelectedValue(privateSoundDD, v)
+                local txt = "None"
+                for i = 1, #items do
+                    if items[i][2] == v then
+                        txt = items[i][1]
+                        break
+                    end
+                end
+                UIDropDownMenu_SetText(privateSoundDD, txt)
+                if btnPreview and btnPreview.SetEnabled then
+                    btnPreview:SetEnabled(v ~= "NONE")
+                end
+            end)
+
+            A2_Track("global", privateSoundDD)
+        end
+
 
         BuildBoolPathCheckboxes(privateBox, {
             { "Show (Player)", 12, -64, A2_Settings, "showPrivateAurasPlayer", nil,
@@ -2446,6 +2820,19 @@ end
                 local vb = widget.__MSUF_valueBox
                 if vb and vb.SetEnabled then vb:SetEnabled(enabled) end
                 if vb and vb.SetAlpha then vb:SetAlpha(enabled and 1 or 0.35) end
+                return
+            end
+
+            -- Dropdowns (UIDropDownMenuTemplate)
+            if widget.initialize and _G.UIDropDownMenu_DisableDropDown and _G.UIDropDownMenu_EnableDropDown then
+                if enabled then
+                    _G.UIDropDownMenu_EnableDropDown(widget)
+                else
+                    _G.UIDropDownMenu_DisableDropDown(widget)
+                end
+                if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.35) end
+                local t = widget.__MSUF_titleFS
+                if t and t.SetAlpha then t:SetAlpha(enabled and 1 or 0.35) end
                 return
             end
 
@@ -2494,6 +2881,7 @@ end
 
             -- Master-gate the per-unit checkboxes.
             if refs.cbPrivateShowP then SetWidgetEnabled(refs.cbPrivateShowP, master) end
+            if privateSoundDD then SetWidgetEnabled(privateSoundDD, master) end
             if refs.cbPrivateShowF then SetWidgetEnabled(refs.cbPrivateShowF, master) end
             if refs.cbPrivateShowB then SetWidgetEnabled(refs.cbPrivateShowB, master) end
 
@@ -2549,10 +2937,11 @@ end
             end
         end
 
-        Track({ "cbBossBuffs", "cbBossDebuffs", "cbStealable", "cbDispellable", "cbOnlyBoss", "cbHLSteal", "cbHLDispel", "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
+        Track({ "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss", "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
 
         -- Advanced gating should also affect the Private Auras master + sliders.
         if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end
+        if privateSoundDD then advGate[#advGate + 1] = privateSoundDD end
         if privateMaxPlayer then advGate[#advGate + 1] = privateMaxPlayer end
         if privateMaxOther  then advGate[#advGate + 1] = privateMaxOther end
         local dtH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")

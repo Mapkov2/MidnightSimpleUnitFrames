@@ -2,7 +2,7 @@
 ## Title: Midnight Simple UnitFrames
 ## Notes: Unitframe Addon by Mapko 
 ## Author: Mapkó
-## Version: 1.85r2
+## Version: 1.9rc1
 ## Category: Combat
 ## SavedVariables: MSUF_Config
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
@@ -34,6 +34,16 @@ MidnightSimpleUnitFrames_SlashMenu.lua
 MidnightSimpleUnitFrames_MinimapButton.lua
 MSUF_EditMode.lua
 MidnightSimpleUnitFrames_Colors.lua
+Auras2\MSUF_A2_Public.lua
+Auras2\MSUF_A2_DB.lua
+Auras2\MSUF_A2_Units.lua
+Auras2\MSUF_A2_CooldownText.lua
+Auras2\MSUF_A2_Filters.lua
+Auras2\MSUF_A2_Colors.lua
+Auras2\MSUF_A2_Masque.lua
+Auras2\MSUF_A2_Events.lua
+Auras2\MSUF_A2_Preview.lua
+Auras2\MSUF_A2_Render.lua
 MidnightSimpleUnitFrames_Auras.lua
 MidnightSimpleUnitFrames_Gameplay.lua
 Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua

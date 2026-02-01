@@ -764,9 +764,7 @@ end
 
 -- Aura-related general keys that should travel with Auras settings (even though they are 'color keys').
 local MSUF_AURA_GENERAL_KEYS = {
-    aurasDispelBorderColor = true,
-    aurasStealableBorderColor = true,
-    aurasOwnBuffHighlightColor = true,
+aurasOwnBuffHighlightColor = true,
     aurasOwnDebuffHighlightColor = true,
     aurasStackCountColor = true,
 }

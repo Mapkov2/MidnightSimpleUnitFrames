@@ -424,3 +424,130 @@ end
 
 -- Convenience alias used by some modules (optional).
 _G.MSUF_CombatGate_CallSafe = _G.MSUF_CombatGate_Call
+
+
+do
+    local UIParent = UIParent
+    local GetPhysicalScreenSize = GetPhysicalScreenSize
+    local InCombatLockdown = InCombatLockdown
+
+    local _cachedPhysH
+    local _cachedBase768
+
+    local function EnsureBase()
+        local physH
+        if GetPhysicalScreenSize then
+            local _, h = GetPhysicalScreenSize()
+            physH = h
+        end
+
+        if physH and physH > 0 then
+            if physH ~= _cachedPhysH then
+                _cachedPhysH = physH
+                _cachedBase768 = 768 / physH
+            end
+        else
+            _cachedPhysH = nil
+            _cachedBase768 = nil
+        end
+    end
+
+    local function GetStepFor(frame)
+        EnsureBase()
+
+        local eff = 1
+        if frame and frame.GetEffectiveScale then
+            eff = frame:GetEffectiveScale() or 1
+        elseif UIParent and UIParent.GetEffectiveScale then
+            eff = UIParent:GetEffectiveScale() or 1
+        elseif UIParent and UIParent.GetScale then
+            eff = UIParent:GetScale() or 1
+        end
+        if eff == 0 then eff = 1 end
+
+        if _cachedBase768 then
+            return _cachedBase768 / eff
+        end
+        return 1 / eff
+    end
+
+    local function RoundToGrid(v, step)
+        if step == 0 or v == 0 then
+            return v
+        end
+        local q = v / step
+        if q >= 0 then
+            q = math.floor(q + 0.5)
+        else
+            q = math.ceil(q - 0.5)
+        end
+        local out = q * step
+        if out == 0 then out = 0 end
+        return out
+    end
+
+    function _G.MSUF_Snap(frame, v)
+        if type(v) ~= "number" then
+            return v
+        end
+        local step = GetStepFor(frame)
+        return RoundToGrid(v, step)
+    end
+
+    function _G.MSUF_Pixel(frame)
+        return GetStepFor(frame)
+    end
+
+    function _G.MSUF_Scale(v)
+        return _G.MSUF_Snap(UIParent, v)
+    end
+
+    function _G.MSUF_SetOutside(obj, anchor, xOffset, yOffset, anchor2)
+        if not obj then return end
+        if not anchor and obj.GetParent then
+            anchor = obj:GetParent()
+        end
+        if not anchor then return end
+
+        xOffset = xOffset or 1
+        yOffset = yOffset or 1
+
+        local snap = _G.MSUF_Snap
+        local sx = (type(snap) == "function") and snap(anchor, xOffset) or xOffset
+        local sy = (type(snap) == "function") and snap(anchor, yOffset) or yOffset
+
+        obj:ClearAllPoints()
+        obj:SetPoint("TOPLEFT", anchor, "TOPLEFT", -sx, sy)
+        obj:SetPoint("BOTTOMRIGHT", anchor2 or anchor, "BOTTOMRIGHT", sx, -sy)
+    end
+
+    function _G.MSUF_SetInside(obj, anchor, xOffset, yOffset, anchor2)
+        if not obj then return end
+        if not anchor and obj.GetParent then
+            anchor = obj:GetParent()
+        end
+        if not anchor then return end
+
+        xOffset = xOffset or 1
+        yOffset = yOffset or 1
+
+        local snap = _G.MSUF_Snap
+        local sx = (type(snap) == "function") and snap(anchor, xOffset) or xOffset
+        local sy = (type(snap) == "function") and snap(anchor, yOffset) or yOffset
+
+        obj:ClearAllPoints()
+        obj:SetPoint("TOPLEFT", anchor, "TOPLEFT", sx, -sy)
+        obj:SetPoint("BOTTOMRIGHT", anchor2 or anchor, "BOTTOMRIGHT", -sx, sy)
+    end
+
+    function _G.MSUF_UpdatePixelPerfect()
+        if InCombatLockdown and InCombatLockdown() then
+            return false
+        end
+        _cachedPhysH = nil
+        _cachedBase768 = nil
+        EnsureBase()
+        return true
+    end
+end
+

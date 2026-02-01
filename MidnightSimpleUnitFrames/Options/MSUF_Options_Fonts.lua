@@ -49,7 +49,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
 
     local function MSUF_CallUpdateAllFonts()
-        local fn = _G and (_G.MSUF_UpdateAllFonts or _G.UpdateAllFonts)
+        local fn = _G and (_G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts)
         if (not fn) and ns and ns.MSUF_UpdateAllFonts then fn = ns.MSUF_UpdateAllFonts end
         if type(fn) == "function" then fn() end
     end
