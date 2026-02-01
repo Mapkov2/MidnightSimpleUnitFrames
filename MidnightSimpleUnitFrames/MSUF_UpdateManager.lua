@@ -611,6 +611,12 @@ function UM:Kick(name)
     local now = (GetTime and GetTime()) or 0
     e.next = now
 
+    -- PERF: If we're already running in OnUpdate mode, do NOT churn timers / SetScript / Show().
+    -- The scheduler will run next frame anyway; marking e.next is sufficient.
+    if self._scheduledMode == "onupdate" then
+        return
+    end
+
     -- Cancel any cancellable timer and wake via OnUpdate.
     -- (Kick intentionally does NOT execute the task immediately.)
     self:_CancelTimer()

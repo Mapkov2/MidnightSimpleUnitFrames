@@ -10,6 +10,7 @@ addon = addon or {}
 
 local Core = {}
 
+
 -- Forward decl (used by settings cache + helpers below the definition).
 local UFCore_EnsureDBOnce
 
@@ -1215,6 +1216,7 @@ local urgentQueue = NewQueue(true)
 local normalQueue = NewQueue(true)
 local warmupQueue = NewQueue()
 local visualQueue = NewQueue()
+local swapDeferQueue = NewQueue(true)
 
 local function QueueContains(q, f)
     if not q or not f then return false end
@@ -1338,6 +1340,11 @@ end
 
 local function RequestFlushNextFrame()
     -- Always schedule a UFCore flush for the next frame when something became dirty.
+    -- PERF: dedupe wake-ups so a flood of MarkDirty calls in the same frame triggers only one Kick/Show.
+    if Core._flushWakePending then
+        return
+    end
+    Core._flushWakePending = true
     local UM = _G.MSUF_UpdateManager
     if UM and UM.Kick then
         UM:Kick("UFCoreFlush")
@@ -1442,6 +1449,7 @@ function Core.MarkDirty(f, mask, urgent, reason)
         f._msufLastDirtyMask = mask
         f._msufLastDirtyAt = debugprofilestop and debugprofilestop() or 0
     end
+
 
     -- Urgent lane policy: default urgent for target/ToT (and focus) if caller didn't specify.
     if urgent == nil then
@@ -1608,25 +1616,67 @@ end
 --  - Portrait/model updates can be expensive on PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED.
 --  - Rare bar visuals (colors/gradients/background) are queued into the Visual lane.
 local After0 = _G.C_Timer and _G.C_Timer.After
-local function DeferSwapWork(unit, why, wantPortrait)
-    if not After0 or not unit then return end
-    local f = FramesByUnit[unit]
-    if not f or f._msufSwapDeferPending then return end
-    f._msufSwapDeferPending = true
+local UFCore_SwapDeferTask -- forward-declared; assigned below PopFirst
+
+local function UFCore_SwapDeferTaskWrapper(interval)
+    if UFCore_SwapDeferTask then
+        UFCore_SwapDeferTask(interval)
+    end
+end
+
+local function ScheduleSwapDeferFallback()
+    if Core._swapDeferFallbackScheduled or not After0 then return end
+    Core._swapDeferFallbackScheduled = true
     After0(0, function()
-        if not f then return end
-        f._msufSwapDeferPending = nil
-        if f:IsVisible() or f.MSUF_AllowHiddenEvents then
-            if wantPortrait then
-                Core.MarkDirty(f, DIRTY_PORTRAIT, false, why or "SWAP_DEFER_PORTRAIT")
-            end
-            _G.MSUF_QueueUnitframeVisual(f)
-        end
+        Core._swapDeferFallbackScheduled = nil
+        UFCore_SwapDeferTaskWrapper(0)
     end)
+end
+
+local function EnsureSwapDeferEnabled()
+    local UM = _G.MSUF_UpdateManager
+    if UM and UM.Register and UM.SetEnabled then
+        if not Core._umSwapDeferRegistered then
+            Core._umSwapDeferRegistered = true
+            -- Long interval: driven via :Kick(); we disable when idle.
+            UM:Register("UFCoreSwapDefer", UFCore_SwapDeferTaskWrapper, 3600, 19)
+            UM:SetEnabled("UFCoreSwapDefer", false)
+        end
+        UM:SetEnabled("UFCoreSwapDefer", true)
+        return true
+    end
+    return false
+end
+
+local function DeferSwapWork(unit, why, wantPortrait)
+    if not unit then return end
+    local f = FramesByUnit[unit]
+    if not f then return end
+
+    -- Queue a one-frame-later "heavy refresh" (portrait + visual) without C_Timer.After churn.
+    -- Deduped by swapDeferQueue's membership set.
+    if not Enqueue(swapDeferQueue, f) then
+        return
+    end
+
+    f._msufSwapDeferWhy = why or "SWAP_DEFER"
+    f._msufSwapDeferWantPortrait = wantPortrait and true or nil
+
+    if EnsureSwapDeferEnabled() then
+        local UM = _G.MSUF_UpdateManager
+        if UM and UM.Kick then
+            UM:Kick("UFCoreSwapDefer")
+        end
+        return
+    end
+
+    -- Fallback if UpdateManager isn't available.
+    ScheduleSwapDeferFallback()
 end
 
 -- ------------------------------------------------------------
 -- Flush
+
 -- ------------------------------------------------------------
 
 local function PopFirst(q)
@@ -1657,6 +1707,32 @@ local function PopFirst(q)
         end
     end
 
+UFCore_SwapDeferTask = function(interval)
+    -- Drain queued swap-defer work (one-frame-later heavy refresh for target/focus/etc).
+    local f = PopFirst(swapDeferQueue)
+    while f do
+        local why = f._msufSwapDeferWhy
+        local wantPortrait = f._msufSwapDeferWantPortrait
+        f._msufSwapDeferWhy = nil
+        f._msufSwapDeferWantPortrait = nil
+
+        if (f.IsVisible and (f:IsVisible() or f.MSUF_AllowHiddenEvents)) then
+            if wantPortrait then
+                Core.MarkDirty(f, DIRTY_PORTRAIT, false, why or "SWAP_DEFER_PORTRAIT")
+            end
+            _G.MSUF_QueueUnitframeVisual(f)
+        end
+
+        f = PopFirst(swapDeferQueue)
+    end
+
+    -- Disable the task when idle to avoid periodic wakeups.
+    local UM = _G.MSUF_UpdateManager
+    if UM and UM.SetEnabled then
+        UM:SetEnabled("UFCoreSwapDefer", false)
+    end
+end
+
     -- Safety reset (shouldn't happen unless size desync).
     wipe(t)
     if set then wipe(set) end
@@ -1674,13 +1750,13 @@ end
 
 -- Apply dispatch (spec-driven): keeps the hotpath small and avoids repeated mask/conf boilerplate.
 local APPLY_STEPS = {
-    { mask = DIRTY_HEALTH,    fn = Elements.Health.Update },
-    { mask = DIRTY_POWER,     fn = Elements.Power.Update },
-    { mask = DIRTY_IDENTITY,  fn = Elements.Identity.Update,    needsConf = true },
-    { mask = DIRTY_INDICATOR, fn = Elements.Indicators.Update,  needsConf = true },
-    { mask = DIRTY_TOTINLINE, fn = Elements.ToTInline.Update,   needsConf = true },
-    { mask = DIRTY_STATUS,    fn = Elements.Status.Update,      needsConf = true },
-    { mask = DIRTY_PORTRAIT,  fn = Elements.Portrait.Update,    needsConf = true, legacyFallback = true },
+    { mask = DIRTY_HEALTH,    fn = Elements.Health.Update,    tag = "health" },
+    { mask = DIRTY_POWER,     fn = Elements.Power.Update,     tag = "power" },
+    { mask = DIRTY_IDENTITY,  fn = Elements.Identity.Update,   needsConf = true, tag = "identity" },
+    { mask = DIRTY_INDICATOR, fn = Elements.Indicators.Update, needsConf = true, tag = "indicator" },
+    { mask = DIRTY_TOTINLINE, fn = Elements.ToTInline.Update,  needsConf = true, tag = "totinline" },
+    { mask = DIRTY_STATUS,    fn = Elements.Status.Update,     needsConf = true, tag = "status" },
+    { mask = DIRTY_PORTRAIT,  fn = Elements.Portrait.Update,   needsConf = true, legacyFallback = true, tag = "portrait" },
 }
 
 local APPLY_MASK, APPLY_NEEDS_CONF_MASK = 0, 0
@@ -1699,6 +1775,7 @@ local function RunUpdate(f)
     f._msufQueuedUFCore = nil
     local mask = f._msufDirtyMask or 0
     f._msufDirtyMask = 0
+
 
     -- Bridge: the main unitframe renderer only touches the portrait texture when
     -- frame._msufPortraitDirty is set. Our element core uses UNIT_PORTRAIT_UPDATE /
@@ -1746,10 +1823,10 @@ local function RunUpdate(f)
         if type(fn) == "function" then
             fn(f)
         else
-            -- Fallback for older builds: keep correctness.
-            upd(f)
-            AfterLegacyFullUpdate(f)
-            return
+-- Fallback for older builds: keep correctness.
+upd(f)
+AfterLegacyFullUpdate(f)
+return
         end
         mask = band(mask, bnot(DIRTY_VISUAL))
         if mask == 0 then
@@ -1780,6 +1857,7 @@ local function RunUpdate(f)
     end
 
     -- Any other dirty bit: keep correctness by using the legacy full update.
+    local badMask = band(mask or 0, bnot(APPLY_MASK))
     if upd then
         upd(f)
     end
@@ -1815,6 +1893,8 @@ end
 local function UFCore_BudgetOk(endAt) return (not endAt) or (debugprofilestop() <= endAt) end
 
 function Core.Flush(budgetMs)
+    -- Clear per-frame wake dedupe flag. Any new dirtiness during this flush may schedule again.
+    Core._flushWakePending = nil
     local start = debugprofilestop and debugprofilestop() or nil
     local endAt = (start and budgetMs) and (start + budgetMs) or nil
 
@@ -2207,3 +2287,5 @@ end
 function _G.MSUF_UFCore_RefreshSettingsCache(reason)
     UFCore_RefreshSettingsCache(reason or "MANUAL")
 end
+
+-- ---------------------------------------------------------
