@@ -181,9 +181,8 @@ local A2_SHARED_DEFAULTS = {
     growth="RIGHT", rowWrap="DOWN",
     offsetX=0, offsetY=6, buffOffsetY=30,
     stackTextSize=14, cooldownTextSize=14, bossEditTogether=true,
-    privateAurasEnabled=true, showPrivateAurasPlayer=true, showPrivateAurasFocus=true, showPrivateAurasBoss=true,
+    showPrivateAurasPlayer=true, showPrivateAurasFocus=true, showPrivateAurasBoss=true,
     privateAuraMaxPlayer=6, privateAuraMaxOther=6,
-    privateAuraSoundKey="",
 }
 
 local function A2_NormalizeCooldownBuckets(g)
@@ -256,8 +255,6 @@ local function MSUF_A2_EnsurePerUnitConfig(pu, unitKey, sharedSettings)
     A2_OptionalNumber(ls, "maxBuffs"); A2_OptionalNumber(ls, "maxDebuffs"); A2_OptionalNumber(ls, "perRow")
     if A2_OptionalNumber(ls, "splitSpacing") ~= nil then ls.splitSpacing = A2_ClampNumber(ls.splitSpacing, 0, 0, 80, true) end
     if ls.growth ~= nil and not A2_GROWTH_OK[ls.growth] then ls.growth = nil end
-    if ls.buffGrowth ~= nil and not A2_GROWTH_OK[ls.buffGrowth] then ls.buffGrowth = nil end
-    if ls.debuffGrowth ~= nil and not A2_GROWTH_OK[ls.debuffGrowth] then ls.debuffGrowth = nil end
     if ls.rowWrap ~= nil and not A2_ROWWRAP_OK[ls.rowWrap] then ls.rowWrap = nil end
     if ls.layoutMode ~= nil and not A2_LAYOUTMODE_OK[ls.layoutMode] then ls.layoutMode = nil end
     if ls.buffDebuffAnchor ~= nil and not A2_SPLITANCHOR_OK[ls.buffDebuffAnchor] then ls.buffDebuffAnchor = nil end
@@ -270,7 +267,7 @@ local function MSUF_A2_EnsurePerUnitConfig(pu, unitKey, sharedSettings)
         if u.overrideSharedLayout == false then
             local hasAny =
                 (ls.maxBuffs ~= nil) or (ls.maxDebuffs ~= nil) or (ls.perRow ~= nil) or (ls.splitSpacing ~= nil)
-                or (ls.growth ~= nil) or (ls.buffGrowth ~= nil) or (ls.debuffGrowth ~= nil) or (ls.rowWrap ~= nil) or (ls.layoutMode ~= nil) or (ls.buffDebuffAnchor ~= nil)
+                or (ls.growth ~= nil) or (ls.rowWrap ~= nil) or (ls.layoutMode ~= nil) or (ls.buffDebuffAnchor ~= nil)
                 or (ls.stackCountAnchor ~= nil)
             if not hasAny then u.overrideSharedLayout = true end
         end
@@ -1351,174 +1348,6 @@ local function MSUF_A2_PrivateAuras_Supported()
         and type(C_UnitAuras.RemovePrivateAuraAnchor) == "function") and true or false
 end
 
--- ---------------------------------------------------------
--- Private Aura Applied Sound (Player) via C_UnitAuras.AddPrivateAuraAppliedSound
---  * Global registration: Blizzard plays the chosen sound when the *player*
---    receives a private aura.
---  * We store a SOUNDKIT key string (stable across clients) in DB:
---      shared.privateAuraSoundKey = "RAID_WARNING" (or ""/nil for none)
--- ---------------------------------------------------------
-
-local _msufA2_privateAuraSoundID
-local _msufA2_privateAuraSoundKit
-
-local function MSUF_A2_PrivateAuraSound_Supported()
-    return (C_UnitAuras
-        and type(C_UnitAuras.AddPrivateAuraAppliedSound) == "function"
-        and type(C_UnitAuras.RemovePrivateAuraAppliedSound) == "function") and true or false
-end
-
-local function MSUF_A2_PrivateAuraSound_ResolveSoundKit(shared)
-    if type(shared) ~= "table" then return nil end
-
-    local v = shared.privateAuraSoundKey
-    if v == nil then v = shared.privateAuraSound end -- legacy fallback
-
-    if type(v) == "number" then
-        return (v > 0) and v or nil
-    end
-
-    if type(v) == "string" then
-        if v == "" or v == "NONE" then return nil end
-
-        local sk = _G and _G.SOUNDKIT
-        local kit = (sk and sk[v]) or nil
-        if type(kit) == "number" and kit > 0 then
-            return kit
-        end
-
-        local n = tonumber(v)
-        return (n and n > 0) and n or nil
-    end
-
-    return nil
-end
-
-local function MSUF_A2_PrivateAuraSound_Clear()
-    if _msufA2_privateAuraSoundID and MSUF_A2_PrivateAuraSound_Supported() then
-        pcall(C_UnitAuras.RemovePrivateAuraAppliedSound, _msufA2_privateAuraSoundID)
-    end
-    _msufA2_privateAuraSoundID = nil
-    _msufA2_privateAuraSoundKit = nil
-end
-
-local function MSUF_A2_PrivateAuraSound_Apply(shared)
-    if not MSUF_A2_PrivateAuraSound_Supported() then
-        MSUF_A2_PrivateAuraSound_Clear()
-        return
-    end
-
-    local enabled = (type(shared) == "table" and shared.privateAurasEnabled == true)
-    if not enabled then
-        MSUF_A2_PrivateAuraSound_Clear()
-        return
-    end
-
-    local kit = MSUF_A2_PrivateAuraSound_ResolveSoundKit(shared)
-    if not kit then
-        MSUF_A2_PrivateAuraSound_Clear()
-        return
-    end
-
-    if _msufA2_privateAuraSoundID and _msufA2_privateAuraSoundKit == kit then
-        return
-    end
-
-    MSUF_A2_PrivateAuraSound_Clear()
-    -- Store kit regardless of whether Blizzard successfully returns an ID,
-    -- so our fallback "icon became visible" path can still play the sound.
-    _msufA2_privateAuraSoundKit = kit
-    local ok, id = pcall(C_UnitAuras.AddPrivateAuraAppliedSound, kit)
-    if ok and id then
-        _msufA2_privateAuraSoundID = id
-    end
-end
-
--- Fallback: play the configured sound when Blizzard's private-aura icon frame becomes visible.
--- This covers cases where AddPrivateAuraAppliedSound is present but does not fire as expected.
-local _msufA2_privateAuraSoundLast = 0
-
-local function MSUF_A2_PrivateAuraSound_PlayNow()
-    local kit = _msufA2_privateAuraSoundKit
-    if type(kit) ~= "number" or kit <= 0 then return end
-
-    if type(GetTime) == "function" then
-        local now = GetTime()
-        local last = _msufA2_privateAuraSoundLast or 0
-        if (now - last) < 0.25 then
-            return
-        end
-        _msufA2_privateAuraSoundLast = now
-    end
-
-    if type(PlaySound) == "function" then
-        -- Prefer Master so it's audible even if SFX is low.
-        pcall(PlaySound, kit, "Master")
-    end
-end
-
-local function MSUF_A2_PrivateAuraSound_HookIcon(icon)
-    if not icon or icon.__msufA2_paSoundHooked then return end
-    icon.__msufA2_paSoundHooked = true
-    icon.__msufA2_paSoundHookedAt = (type(GetTime) == "function") and GetTime() or 0
-
-    icon:HookScript("OnShow", function(self)
-        -- Avoid false-positives during anchor rebuilds.
-        local t = (type(GetTime) == "function") and GetTime() or 0
-        local hookedAt = self.__msufA2_paSoundHookedAt or 0
-        if (t - hookedAt) < 0.20 then return end
-
-        if self.__msufA2_paSoundPlayed then return end
-        self.__msufA2_paSoundPlayed = true
-        MSUF_A2_PrivateAuraSound_PlayNow()
-    end)
-
-    icon:HookScript("OnHide", function(self)
-        self.__msufA2_paSoundPlayed = false
-    end)
-end
-
-local function MSUF_A2_PrivateAuraSound_ScanSlot(slot, tries)
-    if not slot or not slot.GetChildren then return end
-
-    -- Already resolved once
-    local icon = slot.__msufA2_paSoundIcon
-    if icon then
-        MSUF_A2_PrivateAuraSound_HookIcon(icon)
-        return
-    end
-
-    local first
-    local candidate
-    for child in slot:GetChildren() do
-        if not first then first = child end
-        if not candidate and child and (child.Icon or child.icon) then
-            candidate = child
-        end
-    end
-
-    icon = candidate or first
-    if icon then
-        slot.__msufA2_paSoundIcon = icon
-        MSUF_A2_PrivateAuraSound_HookIcon(icon)
-        return
-    end
-
-    tries = (tries or 0) + 1
-    if tries < 6 and C_Timer and C_Timer.After then
-        C_Timer.After(0.05, function()
-            MSUF_A2_PrivateAuraSound_ScanSlot(slot, tries)
-        end)
-    end
-end
-
-local function MSUF_A2_PrivateAuraSound_AttachToSlot(slot, shared)
-    if not slot then return end
-    if not (type(shared) == "table" and shared.privateAurasEnabled == true) then return end
-    if not _msufA2_privateAuraSoundKit then return end
-    MSUF_A2_PrivateAuraSound_ScanSlot(slot, 0)
-end
-
 -- Private aura data is intentionally not exposed to addons; Blizzard renders the icons.
 -- Some private-aura payloads appear to be delivered only for the canonical "player"
 -- unit token (not aliases like "focus" even if focus == player). To keep MSUF behavior
@@ -1614,12 +1443,6 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
         return
     end
 
-    -- Master toggle (Option A): disable anchors entirely when off.
-    if shared.privateAurasEnabled ~= true then
-        MSUF_A2_PrivateAuras_Clear(entry)
-        return
-    end
-
     -- Per-unit enable toggles (shared layout feature).
     local enabled = false
     if unit == "player" then
@@ -1711,12 +1534,6 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
         end
 
         slot:Show()
-
-        -- Sound: only bind to the Player private-aura anchor slots to avoid duplicates
-        -- (focus can map to player, but we still want a single sound).
-        if unit == "player" then
-            MSUF_A2_PrivateAuraSound_AttachToSlot(slot, shared)
-        end
 
         local args = {
             unitToken = effectiveToken,
@@ -3184,7 +3001,7 @@ local function MSUF_A2_ComputeRawAuraSig(unit)
 end
 
 local function MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebuffAnchor, splitSpacing,
-    iconSize, buffIconSize, debuffIconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, rowWrap, stackCountAnchor,
+    iconSize, buffIconSize, debuffIconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, stackCountAnchor,
     tf, masterOn, onlyBossAuras, showExtraDispellable, finalShowBuffs, finalShowDebuffs)
 
     local h = 146959
@@ -3193,8 +3010,6 @@ local function MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebu
     h = MSUF_A2__HashStep(h, layoutMode)
     h = MSUF_A2__HashStep(h, buffDebuffAnchor)
     h = MSUF_A2__HashStep(h, growth)
-    h = MSUF_A2__HashStep(h, buffGrowth)
-    h = MSUF_A2__HashStep(h, debuffGrowth)
     h = MSUF_A2__HashStep(h, rowWrap)
     h = MSUF_A2__HashStep(h, stackCountAnchor)
 
@@ -3784,8 +3599,6 @@ end
 
 
     local growth = (caps and caps.growth ~= nil) and caps.growth or shared.growth or "RIGHT"
-    local buffGrowth = (caps and caps.buffGrowth ~= nil) and caps.buffGrowth or shared.buffGrowth or growth
-    local debuffGrowth = (caps and caps.debuffGrowth ~= nil) and caps.debuffGrowth or shared.debuffGrowth or growth
     local rowWrap = (caps and caps.rowWrap ~= nil) and caps.rowWrap or shared.rowWrap or "DOWN"
     local stackCountAnchor = (caps and caps.stackCountAnchor ~= nil) and caps.stackCountAnchor or shared.stackCountAnchor or "TOPRIGHT"
 
@@ -3909,7 +3722,7 @@ end
         if not resumeBudget then
             rawSig = MSUF_A2_ComputeRawAuraSig(unit)
             layoutSig = MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebuffAnchor, splitSpacing,
-                iconSize, buffIconSize, debuffIconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, rowWrap, stackCountAnchor,
+                iconSize, buffIconSize, debuffIconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, stackCountAnchor,
                 tf, masterOn, onlyBossAuras, showExtraDispellable, finalShowBuffs, finalShowDebuffs)
 
             if rawSig and layoutSig
@@ -4032,7 +3845,7 @@ end
         end
 
         if (finalShowDebuffs or finalShowBuffs) then
-            LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, buffGrowth, rowWrap)
+            LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap)
             HideUnused(entry.mixed, total + 1)
         else
             HideUnused(entry.mixed, 1)
@@ -4042,14 +3855,14 @@ end
         HideUnused(entry.buffs, 1)
     else
         if finalShowDebuffs then
-            LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, rowWrap)
+            LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, growth, rowWrap)
             HideUnused(entry.debuffs, debuffCount + 1)
         else
             HideUnused(entry.debuffs, 1)
         end
 
         if finalShowBuffs then
-            LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, rowWrap)
+            LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, growth, rowWrap)
             HideUnused(entry.buffs, buffCount + 1)
         else
             HideUnused(entry.buffs, 1)
@@ -4285,12 +4098,9 @@ end
 local function MSUF_A2_RefreshAll()
     -- Settings can change derived cache flags (enabled/showInEditMode/unit enabled).
     -- Rebuild the cache once per user-triggered refresh (NOT in UNIT_AURA hot-path).
-    local a2, shared = EnsureDB()
     if API and API.DB and API.DB.RebuildCache then
-        API.DB.RebuildCache(a2, shared)
-    end
-    if shared then
-        MSUF_A2_PrivateAuraSound_Apply(shared)
+        local a2, s = EnsureDB()
+        API.DB.RebuildCache(a2, s)
     end
     local Units = API and API.Units
     if Units and Units.ForEachAll then
@@ -4466,14 +4276,6 @@ end
 -- Phase 2: init DB cache + event driver now that core exports exist.
 if API and API.Init then
     API.Init()
-end
-
--- Apply private aura sound config once at startup
-do
-    local _, shared = EnsureDB()
-    if shared then
-        MSUF_A2_PrivateAuraSound_Apply(shared)
-    end
 end
 
 

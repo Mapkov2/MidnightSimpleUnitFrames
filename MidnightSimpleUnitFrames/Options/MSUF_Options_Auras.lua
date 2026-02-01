@@ -1824,35 +1824,12 @@ end
 
 local function SetCheckboxEnabled(cb, enabled)
     if not cb then return end
-
-    enabled = (enabled == true)
-
-    -- Some "controls" we gate here are real CheckButtons (have :SetEnabled),
-    -- others are dropdown frames (enable their Button / UIDropDownMenu state).
-    if cb.SetEnabled then
-        cb:SetEnabled(enabled)
-    else
-        if UIDropDownMenu_EnableDropDown and UIDropDownMenu_DisableDropDown and cb.Button then
-            if enabled then
-                UIDropDownMenu_EnableDropDown(cb)
-            else
-                UIDropDownMenu_DisableDropDown(cb)
-            end
-        end
-        if cb.Button and cb.Button.SetEnabled then
-            cb.Button:SetEnabled(enabled)
-        end
-        if cb.SetAlpha then
-            cb:SetAlpha(enabled and 1 or 0.55)
-        end
-    end
-
-    local fs = cb.text or cb.Text or cb.__MSUF_titleFS
-    if fs and fs.SetTextColor then
+    cb:SetEnabled(enabled and true or false)
+    if cb.text then
         if enabled then
-            fs:SetTextColor(1, 1, 1)
+            cb.text:SetTextColor(1, 1, 1)
         else
-            fs:SetTextColor(0.5, 0.5, 0.5)
+            cb.text:SetTextColor(0.5, 0.5, 0.5)
         end
     end
 end
@@ -2388,34 +2365,11 @@ end
     MSUF_StyleAuras2CompactSlider(perRowSlider, { leftTitle = true })
     AttachSliderValueBox(perRowSlider, 4, 20, 1, GetPerRow)
 
-    -- Grow direction (right column) — separate for Buffs and Debuffs
-    local baseGrowthY = (A2_DD_Y0 - (A2_DD_STEP * 9) - 18) -- sits right under the Buff/Debuff Anchor D-Pads
-
-    local buffGrowthDD = CreateDropdown(leftTop, "Buff growth", A2_DD_X, baseGrowthY,
-        function()
-            local key = GetEditingKey()
-            local g = A2_GetCapsValue(key, "growth", "RIGHT")
-            return A2_GetCapsValue(key, "buffGrowth", g)
-        end,
-        function(v)
-            A2_AutoOverrideCapsIfNeeded()
-            local key = GetEditingKey()
-            A2_SetCapsValue(key, "buffGrowth", v)
-        end)
-    A2_Track("caps", buffGrowthDD)
-
-    local debuffGrowthDD = CreateDropdown(leftTop, "Debuff growth", A2_DD_X, (baseGrowthY - 54),
-        function()
-            local key = GetEditingKey()
-            local g = A2_GetCapsValue(key, "growth", "RIGHT")
-            return A2_GetCapsValue(key, "debuffGrowth", g)
-        end,
-        function(v)
-            A2_AutoOverrideCapsIfNeeded()
-            local key = GetEditingKey()
-            A2_SetCapsValue(key, "debuffGrowth", v)
-        end)
-    A2_Track("caps", debuffGrowthDD)
+    -- Grow direction (right column)
+    local growthDD = CreateDropdown(leftTop, "Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 9) - 92,
+        function() local key = GetEditingKey(); return A2_GetCapsValue(key, "growth", "RIGHT") end,
+        function(v) A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "growth", v) end)
+    A2_Track("caps", growthDD)
 
 	-- Layout mode / layout helpers (right column)
 
@@ -2677,118 +2631,6 @@ end
             "Master switch for anchoring Blizzard Private Auras to MSUF.")
         A2_Track("global", btnPrivateEnable)
 
-        -- Private Aura Applied Sound (Player)
-        -- Option A: sound is only active when Private Auras are enabled (master toggle).
-        local privateSoundDD
-        do
-            -- Preview helper: lets the user test the selected sound immediately.
-            local function PlayPrivateAuraSoundPreview(key)
-                if key == nil then return end
-                if key == "" or key == "NONE" then return end
-
-                local kit
-                if type(key) == "number" then
-                    kit = key
-                elseif type(key) == "string" then
-                    local sk = _G and _G.SOUNDKIT
-                    kit = (sk and sk[key]) or tonumber(key)
-                end
-
-                if type(kit) ~= "number" or kit <= 0 then return end
-
-                if type(PlaySound) == "function" then
-                    -- Prefer Master so it's audible even if SFX is low.
-                    pcall(PlaySound, kit, "Master")
-                end
-            end
-
-            local function GetPrivateAuraSoundKey()
-                local s = A2_Settings()
-                local v = (s and s.privateAuraSoundKey) or ""
-                if v == "" then v = "NONE" end
-                return v
-            end
-            local function SetPrivateAuraSoundKey(v)
-                local s = A2_Settings()
-                if not s then return end
-                if v == "NONE" then v = "" end
-                s.privateAuraSoundKey = v
-            end
-
-            privateSoundDD = CreateFrame("Frame", nil, privateBox, "UIDropDownMenuTemplate")
-            -- Align with the master "Enabled" toggle row.
-            privateSoundDD:SetPoint("TOPLEFT", privateBox, "TOPLEFT", 190 - 16, -34 + 4)
-            MSUF_FixUIDropDown(privateSoundDD, 200)
-
-            local title = privateBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-            title:SetPoint("BOTTOMLEFT", privateSoundDD, "TOPLEFT", 16, 4)
-            title:SetText("Sound (Player)")
-            privateSoundDD.__MSUF_titleFS = title
-
-            -- Preview button next to the dropdown.
-            local btnPreview = CreateFrame("Button", nil, privateBox, "UIPanelButtonTemplate")
-            btnPreview:SetSize(70, 22)
-            btnPreview:SetPoint("LEFT", privateSoundDD, "RIGHT", -10, 2)
-            btnPreview:SetText("Preview")
-            btnPreview:SetScript("OnClick", function()
-                PlayPrivateAuraSoundPreview(GetPrivateAuraSoundKey())
-            end)
-            privateSoundDD.__msufPreviewBtn = btnPreview
-
-            local items = {
-                { "None", "NONE" },
-                { "Raid Warning", "RAID_WARNING" },
-                { "Boss Whisper", "RAID_BOSS_WHISPER_WARNING" },
-                { "Ready Check", "READY_CHECK" },
-            }
-
-            local function OnClick(self)
-                SetPrivateAuraSoundKey(self.value)
-                UIDropDownMenu_SetSelectedValue(privateSoundDD, self.value)
-                CloseDropDownMenus()
-                -- Immediate feedback.
-                PlayPrivateAuraSoundPreview(self.value)
-                A2_RequestApply()
-            end
-
-            UIDropDownMenu_Initialize(privateSoundDD, function()
-                local sk = _G and _G.SOUNDKIT
-                for i = 1, #items do
-                    local textLabel, key = items[i][1], items[i][2]
-                    if key == "NONE" or (sk and type(sk[key]) == "number") then
-                        local info = UIDropDownMenu_CreateInfo()
-                        info.text = textLabel
-                        info.value = key
-                        info.func = OnClick
-                        info.keepShownOnClick = false
-                        info.checked = function()
-                            return (GetPrivateAuraSoundKey() == key)
-                        end
-                        UIDropDownMenu_AddButton(info)
-                    end
-                end
-            end)
-
-            privateSoundDD:SetScript("OnShow", function()
-                local v = GetPrivateAuraSoundKey()
-                UIDropDownMenu_SetSelectedValue(privateSoundDD, v)
-                local txt = "None"
-                for i = 1, #items do
-                    if items[i][2] == v then
-                        txt = items[i][1]
-                        break
-                    end
-                end
-                UIDropDownMenu_SetText(privateSoundDD, txt)
-                if btnPreview and btnPreview.SetEnabled then
-                    btnPreview:SetEnabled(v ~= "NONE")
-                end
-            end)
-
-            A2_Track("global", privateSoundDD)
-        end
-
-
         BuildBoolPathCheckboxes(privateBox, {
             { "Show (Player)", 12, -64, A2_Settings, "showPrivateAurasPlayer", nil,
                 "Re-anchors Blizzard Private Auras to MSUF (no spell lists).", "cbPrivateShowP" },
@@ -2820,19 +2662,6 @@ end
                 local vb = widget.__MSUF_valueBox
                 if vb and vb.SetEnabled then vb:SetEnabled(enabled) end
                 if vb and vb.SetAlpha then vb:SetAlpha(enabled and 1 or 0.35) end
-                return
-            end
-
-            -- Dropdowns (UIDropDownMenuTemplate)
-            if widget.initialize and _G.UIDropDownMenu_DisableDropDown and _G.UIDropDownMenu_EnableDropDown then
-                if enabled then
-                    _G.UIDropDownMenu_EnableDropDown(widget)
-                else
-                    _G.UIDropDownMenu_DisableDropDown(widget)
-                end
-                if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.35) end
-                local t = widget.__MSUF_titleFS
-                if t and t.SetAlpha then t:SetAlpha(enabled and 1 or 0.35) end
                 return
             end
 
@@ -2881,7 +2710,6 @@ end
 
             -- Master-gate the per-unit checkboxes.
             if refs.cbPrivateShowP then SetWidgetEnabled(refs.cbPrivateShowP, master) end
-            if privateSoundDD then SetWidgetEnabled(privateSoundDD, master) end
             if refs.cbPrivateShowF then SetWidgetEnabled(refs.cbPrivateShowF, master) end
             if refs.cbPrivateShowB then SetWidgetEnabled(refs.cbPrivateShowB, master) end
 
@@ -2941,7 +2769,6 @@ end
 
         -- Advanced gating should also affect the Private Auras master + sliders.
         if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end
-        if privateSoundDD then advGate[#advGate + 1] = privateSoundDD end
         if privateMaxPlayer then advGate[#advGate + 1] = privateMaxPlayer end
         if privateMaxOther  then advGate[#advGate + 1] = privateMaxOther end
         local dtH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")

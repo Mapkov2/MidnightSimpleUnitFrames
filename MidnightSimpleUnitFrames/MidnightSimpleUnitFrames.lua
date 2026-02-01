@@ -5415,44 +5415,12 @@ local function MSUF_CommitApplyDirty_Scheduled()
     end
         MSUF_CommitApplyDirty()
 end
-
--- =============================================================
--- PERF: ApplyCommit scheduling via UpdateManager (no C_Timer.After(0) churn)
--- Falls back to C_Timer.After(0) if UpdateManager is unavailable.
--- =============================================================
-local function MSUF_EnsureApplyCommitUMTask()
-    local um = _G.MSUF_UpdateManager
-    if not (um and um.Register and um.entries) then
-        return false
-    end
-
-    local e = um.entries["MSUF_ApplyCommit"]
-    if not e then
-        -- Very long interval; we rely on :Kick() to run it next frame.
-        um:Register("MSUF_ApplyCommit", MSUF_CommitApplyDirty_Scheduled, 3600, 45)
-        e = um.entries["MSUF_ApplyCommit"]
-    else
-        -- Defensive: keep fn/interval correct if something overwrote it.
-        e.fn = MSUF_CommitApplyDirty_Scheduled
-        e.interval = 3600
-        e.enabled = true
-    end
-
-    return true
-end
 local function MSUF_ScheduleApplyCommit()
     local st = _G.MSUF_ApplyCommitState
     if not st or st.pending then
         return
     end
     st.pending = true
-
-    local um = _G.MSUF_UpdateManager
-    if um and um.Kick and MSUF_EnsureApplyCommitUMTask and MSUF_EnsureApplyCommitUMTask() then
-        um:Kick("MSUF_ApplyCommit")
-        return
-    end
-
     C_Timer.After(0, MSUF_CommitApplyDirty_Scheduled)
 end
 function MSUF_OnRegenEnabled_ApplyCommit(event)
@@ -6760,7 +6728,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.9rc1  |cff565f89•|r  |cffc0caf5 Huge background changes -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.9rc2  |cff565f89•|r  |cffc0caf5 Huge background changes -|r  |cfff7768eReport bugs in the Discord.|r")
 end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then
