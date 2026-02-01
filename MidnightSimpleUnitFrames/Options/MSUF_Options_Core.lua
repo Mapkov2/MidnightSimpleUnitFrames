@@ -4605,7 +4605,7 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         hpSepDrop.relativePoint = "BOTTOMLEFT"
     end
 
-    local hpSepOptions = {
+    local textSepOptions = {
         { key = "",  label = " ", menuText = "Space / none" }, -- empty → looks blank, just space between values
         { key = "-", label = "-" },
         { key = "/", label = "/" },
@@ -4615,7 +4615,7 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 
     MSUF_InitSimpleDropdown(
         hpSepDrop,
-        hpSepOptions,
+        textSepOptions,
         function() EnsureDB(); return (MSUF_DB.general.hpTextSeparator or "") end,
         function(v) EnsureDB(); MSUF_DB.general.hpTextSeparator = v end,
         "all"
@@ -4642,7 +4642,7 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 
     MSUF_InitSimpleDropdown(
         powerSepDrop,
-        powerSepOptions,
+        textSepOptions,
         function()
             EnsureDB()
             local g = MSUF_DB.general
