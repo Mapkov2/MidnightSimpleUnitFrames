@@ -52,12 +52,51 @@ local function EnsureDB()
 end
 
 -- Hot path: use cached unit-enabled flags (no DB work). Falls back to EnsureDB once if cache is cold.
-local function ShouldProcessUnitEvent(unit)
+local function _A2_UnitWantsPrivateAuras(shared, unit)
+    if not unit or not shared then return false end
+    if unit == "target" then return false end
+
+    -- Private Auras require modern C_UnitAuras.AddPrivateAuraAnchor support.
+    if not (C_UnitAuras and type(C_UnitAuras.AddPrivateAuraAnchor) == "function") then
+        return false
+    end
+
+    local show = false
+    local maxN = nil
+
+    if unit == "player" then
+        show = (shared.showPrivateAurasPlayer == true)
+        maxN = shared.privateAuraMaxPlayer
+    elseif unit == "focus" then
+        show = (shared.showPrivateAurasFocus == true)
+        maxN = shared.privateAuraMaxOther
+    elseif unit and unit:match("^boss%d$") then
+        show = (shared.showPrivateAurasBoss == true)
+        maxN = shared.privateAuraMaxOther
+    else
+        return false
+    end
+
+    if not show then return false end
+
+    if type(maxN) ~= "number" then maxN = 6 end
+    if maxN < 0 then maxN = 0 end
+    if maxN > 12 then maxN = 12 end
+
+    return (maxN > 0)
+end
+
+-- Hot path: use cached unit-enabled flags (no DB work). Falls back to EnsureDB once if cache is cold.
+-- forAuraEvent=true => ONLY consider standard aura rendering (avoid UNIT_AURA spam when only private auras are enabled).
+local function ShouldProcessUnitEvent(unit, forAuraEvent)
     if not unit then return false end
 
     local DB = API.DB
     if DB and DB.UnitEnabledCached and DB.cache and DB.cache.ready then
         if DB.UnitEnabledCached(unit) then return true end
+        if (not forAuraEvent) and _A2_UnitWantsPrivateAuras(DB.cache.shared, unit) then
+            return true
+        end
         if DB.cache.showInEditMode and IsEditModeActive() then
             return true
         end
@@ -73,6 +112,9 @@ local function ShouldProcessUnitEvent(unit)
 
     if DB and DB.UnitEnabledCached and DB.cache and DB.cache.ready then
         if DB.UnitEnabledCached(unit) then return true end
+        if (not forAuraEvent) and _A2_UnitWantsPrivateAuras(DB.cache.shared, unit) then
+            return true
+        end
         if DB.cache.showInEditMode and IsEditModeActive() then
             return true
         end
@@ -327,7 +369,7 @@ function Events.ApplyEventRegistration()
     if type(list) == "table" then
         local function UnitAuraOnEvent(_, event, arg1)
             if event ~= "UNIT_AURA" then return end
-            if arg1 and ShouldProcessUnitEvent(arg1) then
+            if arg1 and ShouldProcessUnitEvent(arg1, true) then
                 MarkDirty(arg1)
             end
         end

@@ -1234,15 +1234,52 @@ local function IsEditModeActive()
     return false
 end
 
+local function _A2_UnitNormalEnabledFromDB(a2, unit)
+    if not a2 or a2.enabled ~= true then return false end
+    if unit == "player" then return a2.showPlayer == true end
+    if unit == "target" then return a2.showTarget == true end
+    if unit == "focus" then return a2.showFocus == true end
+    if unit and unit:match("^boss%d$") then return a2.showBoss == true end
+    return false
+end
+
+-- Note: this is intentionally cheap and only meant for gating/render decisions.
+-- Real support checks happen inside the private-aura builder.
+local function _A2_UnitPrivateEnabledFromDB(shared, unit)
+    if not shared then return false end
+    if unit == "target" then return false end
+    if not (C_UnitAuras and type(C_UnitAuras.AddPrivateAuraAnchor) == "function") then return false end
+
+    local show = false
+    local maxN = nil
+
+    if unit == "player" then
+        show = (shared.showPrivateAurasPlayer == true)
+        maxN = shared.privateAuraMaxPlayer
+    elseif unit == "focus" then
+        show = (shared.showPrivateAurasFocus == true)
+        maxN = shared.privateAuraMaxOther
+    elseif unit and unit:match("^boss%d$") then
+        show = (shared.showPrivateAurasBoss == true)
+        maxN = shared.privateAuraMaxOther
+    else
+        return false
+    end
+
+    if not show then return false end
+
+    if type(maxN) ~= "number" then maxN = 6 end
+    if maxN < 0 then maxN = 0 end
+    if maxN > 12 then maxN = 12 end
+
+    return (maxN > 0)
+end
+
 local function UnitEnabled(unit)
-    local a2, _ = GetAuras2DB()
-    if not a2 or not a2.enabled then return false end
-
-    if unit == "player" then return a2.showPlayer end
-
-    if unit == "target" then return a2.showTarget end
-    if unit == "focus" then return a2.showFocus end
-    if unit and unit:match("^boss%d$") then return a2.showBoss end
+    local a2, shared = GetAuras2DB()
+    if not a2 or a2.enabled ~= true then return false end
+    if _A2_UnitNormalEnabledFromDB(a2, unit) then return true end
+    if _A2_UnitPrivateEnabledFromDB(shared, unit) then return true end
     return false
 end
 
@@ -3443,18 +3480,19 @@ local function RenderUnit(entry)
     local unit = entry.unit
     local wantPreview = (shared.showInEditMode == true) and IsEditModeActive()
 
-    local unitEnabled = UnitEnabled(unit)
+    local unitNormalEnabled = _A2_UnitNormalEnabledFromDB(a2, unit)
+    local unitAnyEnabled = unitNormalEnabled or _A2_UnitPrivateEnabledFromDB(shared, unit)
     local unitExists = UnitExists and UnitExists(unit)
     local frame = entry.frame or FindUnitFrame(unit)
 
     -- Preview is ONLY allowed when there is no live unit (or the unit is disabled/hidden).
     -- This prevents preview icons from blocking real auras.
-    local showTest = (wantPreview == true) and ((not unitExists) or (not unitEnabled) or (not frame) or (not frame:IsShown()))
+    local showTest = (wantPreview == true) and ((not unitExists) or (not unitNormalEnabled) or (not frame) or (not frame:IsShown()))
 
     -- Additional Edit Mode quality-of-life:
     -- If the unit exists but has *no* auras at all, allow preview icons so users can position
     -- and see styling without needing to go fish for a buff/debuff.
-    if (not showTest) and (wantPreview == true) and unitExists and unitEnabled and frame and frame:IsShown() then
+    if (not showTest) and (wantPreview == true) and unitExists and unitNormalEnabled and frame and frame:IsShown() then
         local hasAny = false
         if C_UnitAuras and type(C_UnitAuras.GetAuraSlots) == "function" then
             local slots = C_UnitAuras.GetAuraSlots(unit, "HELPFUL", 1)
@@ -3474,7 +3512,7 @@ local function RenderUnit(entry)
 
     -- In Edit Mode preview, still allow positioning even if this unit's auras are disabled.
     -- Outside preview, respect the unit enable toggle.
-    if (not unitEnabled) and (not showTest) then
+    if (not unitAnyEnabled) and (not showTest) then
         if MSUF_A2_PrivateAuras_Clear then MSUF_A2_PrivateAuras_Clear(entry) end
         if entry.anchor then entry.anchor:Hide() end
         if entry.editMover then entry.editMover:Hide() end
@@ -3587,6 +3625,22 @@ if MSUF_A2_PrivateAuras_RebuildIfNeeded then
     if privIconSize > 80 then privIconSize = 80 end
     MSUF_A2_PrivateAuras_RebuildIfNeeded(entry, shared, privIconSize, spacing, layoutMode)
 end
+
+
+    -- If standard (non-private) auras for this unit are disabled, keep private auras (if enabled)
+    -- but skip all aura scanning/rendering so the unitframe on/off does not control private auras.
+    if (not unitNormalEnabled) and (not showTest) then
+        -- Ensure standard aura icons are hidden so only private auras remain visible.
+        if entry.buffs then entry.buffs:Hide() end
+        if entry.debuffs then entry.debuffs:Hide() end
+        if entry.mixed then entry.mixed:Hide() end
+
+        -- Hide any existing icons (safe; containers may keep icon frames around).
+        if entry.buffs then HideUnused(entry.buffs, 1) end
+        if entry.debuffs then HideUnused(entry.debuffs, 1) end
+        if entry.mixed then HideUnused(entry.mixed, 1) end
+        return
+    end
 
 
     -- Separate caps (nice-to-have). Keep legacy maxIcons as fallback.
@@ -3948,12 +4002,13 @@ local function _A2_PerfEnabled()
 end
 
 
-local function _A2_UnitEnabledFast(a2, unit)
-    if not a2 or a2.enabled ~= true then return false end
-    if unit == "player" then return a2.showPlayer == true end
-    if unit == "target" then return a2.showTarget == true end
-    if unit == "focus" then return a2.showFocus == true end
-    if unit and unit:match("^boss%d$") then return a2.showBoss == true end
+local function _A2_UnitEnabledFast(a2, shared, unit)
+    if _A2_UnitNormalEnabledFromDB and _A2_UnitNormalEnabledFromDB(a2, unit) then
+        return true
+    end
+    if _A2_UnitPrivateEnabledFromDB and _A2_UnitPrivateEnabledFromDB(shared, unit) then
+        return true
+    end
     return false
 end
 
@@ -3993,7 +4048,7 @@ local function Flush()
                 end
             else
                 -- Master/unit enable gate
-                if not _A2_UnitEnabledFast(a2, unit) then
+                if not _A2_UnitEnabledFast(a2, shared, unit) then
                     if entry and entry.anchor then entry.anchor:Hide() end
                     if entry and entry.editMover then entry.editMover:Hide() end
 
