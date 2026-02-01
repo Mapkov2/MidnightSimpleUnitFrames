@@ -2219,6 +2219,97 @@ function _G.MSUF_GetDesiredUnitAlpha(key)
     end
     return a
 end
+
+-- ---------------------------------------------------------------------------
+-- Layered Alpha helpers ("Keep text + portrait visible")
+-- These are referenced by MSUF_ApplyUnitAlpha(). They may be missing after refactors.
+-- Keep them tiny + fast; only DB reads + numeric clamps.
+-- ---------------------------------------------------------------------------
+do
+    local function _Alpha_GetConf(key)
+        local db = MSUF_DB
+        if not db then
+            EnsureDB()
+            db = MSUF_DB
+        end
+        return (db and key) and db[key] or nil
+    end
+
+    local function _Clamp01(a)
+        if type(a) ~= "number" then return 1 end
+        if a < 0 then return 0 end
+        if a > 1 then return 1 end
+        return a
+    end
+
+    if not _G.MSUF_Alpha_IsLayeredModeEnabled then
+        function _G.MSUF_Alpha_IsLayeredModeEnabled(key)
+            local conf = _Alpha_GetConf(key)
+            return (conf and conf.alphaExcludeTextPortrait == true) or false
+        end
+    end
+
+    if not _G.MSUF_Alpha_GetLayerMode then
+        function _G.MSUF_Alpha_GetLayerMode(key)
+            local conf = _Alpha_GetConf(key)
+            if not conf then return "foreground" end
+            local mode = conf.alphaLayerMode
+            if mode == true or mode == 1 or mode == "background" then
+                return "background"
+            end
+            return "foreground"
+        end
+    end
+
+    if not _G.MSUF_Alpha_GetAlphaInCombat then
+        function _G.MSUF_Alpha_GetAlphaInCombat(key)
+            local conf = _Alpha_GetConf(key)
+            if not conf then return 1 end
+            local a = tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1
+            return _Clamp01(a)
+        end
+    end
+
+    if not _G.MSUF_Alpha_GetAlphaOOC then
+        function _G.MSUF_Alpha_GetAlphaOOC(key)
+            local conf = _Alpha_GetConf(key)
+            if not conf then return 1 end
+            local sync = conf.alphaSyncBoth
+            if sync == nil then sync = conf.alphaSync end
+            if sync then
+                local a = tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1
+                return _Clamp01(a)
+            end
+            local a = tonumber(conf.alphaFGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1
+            return _Clamp01(a)
+        end
+    end
+
+    if not _G.MSUF_Alpha_GetBgAlphaInCombat then
+        function _G.MSUF_Alpha_GetBgAlphaInCombat(key)
+            local conf = _Alpha_GetConf(key)
+            if not conf then return 1 end
+            local a = tonumber(conf.alphaBGInCombat) or tonumber(conf.alphaInCombat) or 1
+            return _Clamp01(a)
+        end
+    end
+
+    if not _G.MSUF_Alpha_GetBgAlphaOOC then
+        function _G.MSUF_Alpha_GetBgAlphaOOC(key)
+            local conf = _Alpha_GetConf(key)
+            if not conf then return 1 end
+            local sync = conf.alphaSyncBoth
+            if sync == nil then sync = conf.alphaSync end
+            if sync then
+                local a = tonumber(conf.alphaBGInCombat) or tonumber(conf.alphaInCombat) or 1
+                return _Clamp01(a)
+            end
+            local a = tonumber(conf.alphaBGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1
+            return _Clamp01(a)
+        end
+    end
+end
+
 local function MSUF_Alpha_SetTextureAlpha(tex, a)
     if tex and tex.SetAlpha and type(a) == "number" then
         if a < 0 then a = 0 elseif a > 1 then a = 1 end
@@ -2390,9 +2481,22 @@ function _G.MSUF_RefreshAllUnitAlphas()
     local UnitFrames = _G.MSUF_UnitFrames
     if not UnitFrames then return end
 
-    for unit, f in pairs(UnitFrames) do
-        if f and f.SetAlpha and f.conf then
-            _G.MSUF_ApplyUnitAlpha(f, f.conf)
+    local ApplyUnitAlpha = _G.MSUF_ApplyUnitAlpha
+    if type(ApplyUnitAlpha) ~= "function" then return end
+
+    for unitKey, f in pairs(UnitFrames) do
+        if f and f.SetAlpha then
+            -- Use the canonical config key (boss frames share key "boss").
+            -- Important: MSUF_ApplyUnitAlpha expects a *config key*, not a conf table.
+            local cfgKey = f.msufConfigKey
+                or (GetConfigKeyForUnit and GetConfigKeyForUnit(f.unit or unitKey))
+                or unitKey
+
+            if cfgKey then
+                -- Cache for future calls (small perf win; behavior-neutral).
+                if not f.msufConfigKey then f.msufConfigKey = cfgKey end
+                ApplyUnitAlpha(f, cfgKey)
+            end
         end
     end
 end
@@ -6355,6 +6459,9 @@ local function CreateSimpleUnitFrame(unit)
     ns.Bars.SetOverlayBarTexture(f.absorbBar, MSUF_GetAbsorbBarTexture)
     ns.Bars.SetOverlayBarTexture(f.healAbsorbBar, MSUF_GetHealAbsorbBarTexture)
 
+    -- Layered alpha requires per-texture alpha; MSUF unitframes support it.
+    f._msufAlphaSupportsLayered = true
+
     if unit == "player" or unit == "focus" or unit == "target" or isBossUnit then
         local pBar = ns.UF.MakeBar(f, "targetPowerBar", "self")
         pBar:SetStatusBarTexture(MSUF_GetBarTexture())
@@ -6760,7 +6867,7 @@ end
     if _G.MSUF_CheckAndRunFirstSetup then _G.MSUF_CheckAndRunFirstSetup() end
     if _G.MSUF_HookCooldownViewer then C_Timer.After(1, _G.MSUF_HookCooldownViewer) end
     C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.9rc5  |cff565f89•|r  |cffc0caf5 Huge background changes -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 1.9rc6  |cff565f89•|r  |cffc0caf5 Huge background changes -|r  |cfff7768eReport bugs in the Discord.|r")
 end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then
