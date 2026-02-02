@@ -1331,6 +1331,9 @@ local function fill(key, defaults)
         showPower = true,
         showInterrupt = true,
         portraitMode = "LEFT",
+        -- Per-unitframe: reverse fill direction for HP + Power bars.
+        -- (false = normal left->right fill)
+        reverseFillBars = false,
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.player[k] == nil then MSUF_DB.player[k] = v end
@@ -1360,6 +1363,8 @@ local function fill(key, defaults)
         showPower = true,
         showInterrupt = true,
         portraitMode = "RIGHT",
+        -- Per-unitframe: reverse fill direction for HP + Power bars.
+        reverseFillBars = false,
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.target[k] == nil then MSUF_DB.target[k] = v end
@@ -1377,6 +1382,8 @@ local function fill(key, defaults)
         showPower = false,
         showInterrupt = true,
         portraitMode = "OFF",
+        -- Per-unitframe: reverse fill direction for HP + Power bars.
+        reverseFillBars = false,
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.focus[k] == nil then MSUF_DB.focus[k] = v end
@@ -1390,6 +1397,8 @@ local function fill(key, defaults)
         showLevelIndicator = true,
         showHP    = true,
         showPower = false,
+        -- Per-unitframe: reverse fill direction for HP + Power bars.
+        reverseFillBars = false,
     })
     if MSUF_DB.targettarget.showToTInTargetName == nil then MSUF_DB.targettarget.showToTInTargetName = false end
     -- Target-of-Target inline-in-Target separator token (rendered with spaces around it).
@@ -1409,6 +1418,8 @@ local function fill(key, defaults)
         showLevelIndicator = true,
         showHP    = true,
         showPower = true,
+        -- Per-unitframe: reverse fill direction for HP + Power bars.
+        reverseFillBars = false,
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.pet[k] == nil then MSUF_DB.pet[k] = v end
@@ -1426,6 +1437,8 @@ local function fill(key, defaults)
         showPower    = false,
         showInterrupt = true,
         portraitMode = "OFF",
+        -- Per-unitframe: reverse fill direction for HP + Power bars.
+        reverseFillBars = false,
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end

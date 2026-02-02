@@ -3935,6 +3935,26 @@ local function MSUF_ApplyAbsorbAnchorMode(self)
     end
 end
 _G.MSUF_ApplyAbsorbAnchorMode = MSUF_ApplyAbsorbAnchorMode
+-- Per-unit reverse fill for HP/Power bars.
+-- NOTE: This does NOT touch absorb/heal-absorb overlays, which are driven by MSUF_ApplyAbsorbAnchorMode.
+local function MSUF_ApplyReverseFillBars(self, conf)
+    if not self then return end
+    local rf = (conf and conf.reverseFillBars == true) or false
+    if self._msufReverseFillBarsStamp == rf then
+        return
+    end
+    self._msufReverseFillBarsStamp = rf
+
+    if self.hpBar and self.hpBar.SetReverseFill then
+        self.hpBar:SetReverseFill(rf and true or false)
+    end
+    local p = self.targetPowerBar or self.powerBar
+    if p and p.SetReverseFill then
+        p:SetReverseFill(rf and true or false)
+    end
+end
+_G.MSUF_ApplyReverseFillBars = _G.MSUF_ApplyReverseFillBars or MSUF_ApplyReverseFillBars
+
 local function PositionUnitFrame(f, unit)
     if not f or not unit then return end
     if f._msufDragActive then return end
@@ -5087,6 +5107,7 @@ end
     end
     end
 end
+    MSUF_ApplyReverseFillBars(self, conf)
     local didPowerBarSync = false
     if self.isBoss and MSUF_BossTestMode then
         if not F.InCombatLockdown() then
@@ -6549,6 +6570,7 @@ local function CreateSimpleUnitFrame(unit)
     if f.targetPowerBar and f.hpBar then
         MSUF_ApplyPowerBarEmbedLayout(f)
     end
+    MSUF_ApplyReverseFillBars(f, conf)
     ns.UF.RequestUpdate(f, true, true, "F.CreateFrame")
     if unit == "target" then MSUF_UpdateTargetAuras(f) end
     UnitFrames[unit] = f

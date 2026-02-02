@@ -662,6 +662,7 @@ local MSUF_BASIC_CB_SPECS = {
     { w = "playerShowNameCB",    eval = function(conf) return (conf.showName ~= false) end },
     { w = "playerShowHPCB",      eval = function(conf) return (conf.showHP ~= false) end },
     { w = "playerShowPowerCB",   eval = function(conf) return (conf.showPower ~= false) end },
+    { w = "playerReverseFillBarsCB", eval = function(conf) return (conf.reverseFillBars == true) end },
 }
 
 local MSUF_CASTBAR_FRAME_TOGGLE_SPECS = {
@@ -724,6 +725,7 @@ local MSUF_COPY_BASIC_FIELDS = {
     "showName",
     "showHP",
     "showPower",
+    "reverseFillBars",
     "portraitMode",
     "portraitRender",
     "alphaInCombat",
@@ -1433,7 +1435,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         end
     end
 
-    local basicsH = 178
+    -- Slightly taller: accommodates the per-unit reverse-fill toggle above the portrait dropdown.
+    local basicsH = 202
     -- Slightly taller so the new Alpha dropdown + sliders never clip
     local sizeH = 245
     local bossExtraH = 60
@@ -1450,6 +1453,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         { field = "playerShowNameCB",    name = "MSUF_UF_ShowNameCB",   label = "Show name",         x = 12, y = -58 },
         { field = "playerShowHPCB",      name = "MSUF_UF_ShowHPCB",     label = "Show HP text",      x = 12, y = -82 },
         { field = "playerShowPowerCB",   name = "MSUF_UF_ShowPowerCB",  label = "Show power text",   x = 12, y = -106 },
+        { field = "playerReverseFillBarsCB", name = "MSUF_UF_ReverseFillBarsCB", label = "Reverse fill (HP/Power)", x = 12, y = -130 },
     }
     for _, s in ipairs(BASIC_TOGGLES) do
         panel[s.field] = CreateCheck(basicsBox, s.name, s.label, s.x, s.y)
@@ -1458,7 +1462,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     -- Portrait dropdown under display toggles.
 
     local dd = CreateFrame("Frame", "MSUF_UF_PortraitDropDown", basicsBox, "UIDropDownMenuTemplate")
-    dd:SetPoint("TOPLEFT", basicsBox, "TOPLEFT", -6, -142)
+    dd:SetPoint("TOPLEFT", basicsBox, "TOPLEFT", -6, -162)
     dd:Show() -- portrait dropdown (all unitframes)
     panel.playerPortraitDropDown = dd
 
@@ -3938,6 +3942,7 @@ end
         {"playerShowNameCB",    "showName"},
         {"playerShowHPCB",      "showHP"},
         {"playerShowPowerCB",   "showPower"},
+        {"playerReverseFillBarsCB", "reverseFillBars"},
     }
     for i = 1, #_basicChecks do
         local wKey, field = _basicChecks[i][1], _basicChecks[i][2]
