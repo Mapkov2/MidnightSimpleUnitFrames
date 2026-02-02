@@ -5773,6 +5773,13 @@ local colorPowerTextByType = (g.colorPowerTextByType == true)
                 local levelSize = (conf and conf.levelIndicatorSize) or nameSize
                                 _MSUF_ApplyFontCached(levelText, levelSize, false, 0,0,0, useShadow)
             end
+
+            -- Target classification indicator (TEXT) uses the same font pipeline.
+            local classText = f.classificationIndicatorText
+            if classText then
+                local clsSize = (conf and conf.classificationIndicatorSize) or nameSize
+                _MSUF_ApplyFontCached(classText, clsSize, true, fr, fg, fb, useShadow)
+            end
             local statusSize = nameSize + 2
             local st = f.statusIndicatorText
             if st then
@@ -6525,6 +6532,7 @@ local function CreateSimpleUnitFrame(unit)
             { "raidMarkerIcon", true, "textFrame", "OVERLAY", 7, 16, "Interface\\TargetingFrame\\UI-RaidTargetingIcons", { "LEFT", textFrame, "TOPLEFT", 16, 3 }, nil, _G.MSUF_ApplyRaidMarkerLayout },
             { "combatStateIndicatorIcon", isPT, "textFrame", "OVERLAY", 7, 18, "Interface\\CharacterFrame\\UI-StateIcon", nil, { "UI-HUD-UnitFrame-Player-PortraitCombatIcon", 0.5, 1, 0, 0.5 } },
             { "incomingResIndicatorIcon", isPT, "textFrame", "OVERLAY", 7, 18, "Interface\\RaidFrame\\Raid-Icon-Rez" },
+            { "classificationIndicatorIcon", (unit == "target"), "textFrame", "OVERLAY", 7, 18, "Interface\\TargetingFrame\\UI-TargetingFrame-Skull" },
             { "summonIndicatorIcon", isPT, "textFrame", "OVERLAY", 7, 18, "Interface\\RaidFrame\\Raid-Icon-Summon", nil, { "Raid-Icon-SummonPending" } },
             { "restingIndicatorIcon", isPlayer, "textFrame", "OVERLAY", 7, 18, "Interface\\CharacterFrame\\UI-StateIcon", nil, { "UI-HUD-UnitFrame-Player-PortraitRestingIcon", 0, 0.5, 0, 0.5 } },
         }
@@ -6544,6 +6552,48 @@ local function CreateSimpleUnitFrame(unit)
                 if apply then apply(f) end
             end
     end
+
+        -- Classification indicator text (Target only)
+        -- Rendered as TEXT at runtime (reliable even without Media assets).
+        -- IMPORTANT: don't call :SetText() here — font may not be applied yet during frame creation.
+        if unit == "target" and textFrame and textFrame.CreateFontString then
+            if not f.classificationIndicatorText then
+                -- Use a known-good template so the FontString has a font object immediately.
+                local fs = textFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+                if fs then
+                    fs:SetAlpha(1)
+                    if fs.SetJustifyH then fs:SetJustifyH("CENTER") end
+                    if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+                    -- Bind immediately to MSUF global font + color (live updates handled via UpdateAllFonts).
+                    do
+                        local db = _G.MSUF_DB
+                        local g2 = (type(db) == "table" and db.general) or {}
+                        local baseSize = (type(g2) == "table" and g2.fontSize) or 14
+                        local nameSize = (type(g2) == "table" and g2.nameFontSize) or baseSize
+                        local clsSize = (conf and conf.classificationIndicatorSize) or (conf and conf.nameFontSize) or nameSize
+                        if type(clsSize) ~= "number" then clsSize = nameSize end
+                        if clsSize < 8 then clsSize = 8 end
+                        if clsSize > 64 then clsSize = 64 end
+                        clsSize = math.floor(clsSize + 0.5)
+                        if fs.SetFont and type(fontPath) == "string" and fontPath ~= "" then
+                            fs:SetFont(fontPath, clsSize, flags)
+                        end
+                        if fs.SetTextColor then
+                            fs:SetTextColor(fr or 1, fg or 1, fb or 1, 1)
+                        end
+                        if (type(g2) == "table" and g2.textBackdrop == true) and fs.SetShadowColor and fs.SetShadowOffset then
+                            fs:SetShadowColor(0, 0, 0, 1)
+                            fs:SetShadowOffset(1, -1)
+                        elseif fs.SetShadowOffset then
+                            fs:SetShadowOffset(0, 0)
+                        end
+                    end
+
+                    fs:Hide()
+                    f.classificationIndicatorText = fs
+                end
+            end
+        end
     end
 
     -- NOTE: Unitframe events are now registered centrally by MSUF_UnitframeCore.lua.
@@ -6998,3 +7048,4 @@ do
     ns.Bars.ResetBarZero     = ns.Bars.ResetBarZero     or MSUF_ResetBarZero
     ns.Text.ClearText        = ns.Text.ClearText        or MSUF_ClearText
 end
+

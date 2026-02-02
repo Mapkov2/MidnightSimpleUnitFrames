@@ -112,8 +112,10 @@ end
 -- ------------------------------------------------------------
 -- Status Icon Symbol Textures (Classic vs Midnight)
 -- Supports different symbol families:
---   weapon_*  -> Media/Symbols/Combat  (128_clean)
---   rested_*  -> Media/Symbols/Rested  (64)
+--   weapon_*         -> Media/Symbols/Combat         (128_clean)
+--   rested_*         -> Media/Symbols/Rested         (64)
+--   resurrection_*   -> Media/Symbols/Ress           (64)
+--   classification_* -> Media/Symbols/Classification (64)
 -- ------------------------------------------------------------
 
 local function _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
@@ -128,13 +130,17 @@ local function _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
     if string.find(symbolKey, "^rested_") then
         folder = "Rested"
         suffix = (useMidnight == true) and "_midnight_64.tga" or "_classic_64.tga"
-    end
 
--- Resurrection icons use a different folder + size/suffix convention.
-if string.find(symbolKey, "^resurrection_") then
-    folder = "Ress"
-    suffix = (useMidnight == true) and "_midnight_64.tga" or "_classic_64.tga"
-end
+    -- Resurrection icons use a different folder + size/suffix convention.
+    elseif string.find(symbolKey, "^resurrection_") then
+        folder = "Ress"
+        suffix = (useMidnight == true) and "_midnight_64.tga" or "_classic_64.tga"
+
+    -- Target classification icons (Boss/Elite/Rare) use 64px symbols.
+    elseif string.find(symbolKey, "^classification_") then
+        folder = "Classification"
+        suffix = (useMidnight == true) and "_midnight_64.tga" or "_classic_64.tga"
+    end
 
 
     return "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\" .. folder .. "\\" .. symbolKey .. suffix
@@ -256,6 +262,96 @@ local function _MSUF_AnchorCorner(tex, frame, corner, xOff, yOff)
     tex:SetPoint("TOPLEFT", frame, "TOPLEFT", 2 + xOff, -2 + yOff)
 end
 
+
+-- ------------------------------------------------------------
+-- Target classification state (Boss / Elite / Rare)
+-- ------------------------------------------------------------
+
+local function _MSUF_GetClassificationState(unit)
+    if not unit or not UnitExists or not UnitExists(unit) then
+        return nil
+    end
+
+    local c = UnitClassification and UnitClassification(unit) or nil
+    if c == "worldboss" then
+        return "BOSS"
+    end
+
+    -- Boss fallback: level -1 (common for bosses / many dungeon bosses)
+    local lvl = UnitLevel and UnitLevel(unit) or nil
+    if lvl == -1 then
+        return "BOSS"
+    end
+
+    if c == "rareelite" then return "RAREELITE" end
+    if c == "rare"     then return "RARE"     end
+    if c == "elite"    then return "ELITE"    end
+
+    return nil
+end
+
+local function _MSUF_GetDefaultClassificationSymbolKey(state)
+    -- Default symbol keys for the new classification family.
+    -- Step 5 will provide the actual Media/Symbols/Classification/*.tga assets.
+    if state == "BOSS" then
+        return "classification_boss"
+    end
+    if state == "RAREELITE" then
+        return "classification_rareelite"
+    end
+    if state == "RARE" then
+        return "classification_rare"
+    end
+    if state == "ELITE" then
+        return "classification_elite"
+    end
+    return nil
+end
+
+local function _MSUF_NormalizeClassificationSymbolKey(symbolKey, state)
+    if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
+        return _MSUF_GetDefaultClassificationSymbolKey(state)
+    end
+    return symbolKey
+end
+
+local function _MSUF_GetClassificationLabel(state)
+    if state == "BOSS" then
+        return "BOSS"
+    end
+    if state == "RAREELITE" then
+        return "RARE+"
+    end
+    if state == "RARE" then
+        return "RARE"
+    end
+    if state == "ELITE" then
+        return "ELITE"
+    end
+    return ""
+end
+
+-- Ensure a FontString has a font before calling :SetText().
+-- Some FontStrings may be created without a template; in that case SetText() can throw "Font not set".
+local function _MSUF_EnsureFontStringHasFont(fs)
+    if not fs then return false end
+    if fs.GetFont then
+        local p = fs:GetFont()
+        if p then return true end
+    end
+    -- Prefer a known-good UI FontObject.
+    if fs.SetFontObject and _G.GameFontHighlightLarge then
+        fs:SetFontObject(_G.GameFontHighlightLarge)
+        return true
+    end
+    -- Fallback: raw font file (should exist everywhere).
+    if fs.SetFont and _G.STANDARD_TEXT_FONT then
+        fs:SetFont(_G.STANDARD_TEXT_FONT, 12, "")
+        return true
+    end
+    return false
+end
+
 -- ------------------------------------------------------------
 -- Status icons update (Combat / Resting / Incoming Res)
 -- Summon was removed intentionally (user request)
@@ -292,6 +388,8 @@ local function _MSUF_UpdateStatusIcons(frame)
     local combatIcon = frame.combatStateIndicatorIcon
     local restIcon = frame.restingIndicatorIcon
     local rezIcon = frame.incomingResIndicatorIcon
+    local classIcon = frame.classificationIndicatorIcon
+    local classText = frame.classificationIndicatorText
 
         -- Safety: Summon was removed; if any leftover texture exists, hard-hide it.
     local summonIcon = frame.summonIndicatorIcon
@@ -314,6 +412,17 @@ local function _MSUF_UpdateStatusIcons(frame)
 local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffectingCombat(unit)) and true or false)))
     local restOn = (showRest and (testMode or ((IsResting and IsResting()) and true or false)))
     local rezOn = (showRez and (testMode or ((UnitHasIncomingResurrection and UnitHasIncomingResurrection(unit)) and true or false)))
+
+    -- Target classification (Boss/Elite/Rare)
+    local showClass = false
+    if frame._msufIsTarget then
+        showClass = _MSUF_ReadBool(conf, g, "showClassificationIndicator", false)
+    end
+    local classState = nil
+    if showClass then
+        classState = testMode and "BOSS" or _MSUF_GetClassificationState(unit)
+    end
+    local classOn = (showClass and classState ~= nil)
 
     local iconAlpha = _MSUF_ReadNumber(conf, g, "stateIconsAlpha", 1)
 
@@ -380,6 +489,69 @@ local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffe
             rezIcon:Show()
         else
             rezIcon:Hide()
+        end
+    end
+
+    -- Classification indicator: always render as TEXT (reliable even without Media assets)
+    -- Keep the texture slot hidden for future icon assets.
+    if classIcon and classIcon.Hide then
+        classIcon:Hide()
+    end
+
+    if classText then
+        if classOn then
+            local classCorner = _MSUF_ReadStr(conf, g, "classificationIndicatorAnchor", "TOPLEFT")
+            local classX = _MSUF_ReadNumber(conf, g, "classificationIndicatorOffsetX", 0)
+            local classY = _MSUF_ReadNumber(conf, g, "classificationIndicatorOffsetY", 0)
+            local classSize = _MSUF_ReadNumber(conf, g, "classificationIndicatorSize", 18)
+            if type(classSize) ~= "number" then classSize = 18 end
+            if classSize < 8 then classSize = 8 end
+            if classSize > 64 then classSize = 64 end
+            classSize = math.floor(classSize + 0.5)
+
+            -- Size is now a FONT size; trigger the shared font pipeline when it changes.
+            if classText._msufClassSizeStamp ~= classSize then
+                classText._msufClassSizeStamp = classSize
+                if type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then
+                    _G.MSUF_UpdateAllFonts_Immediate()
+                elseif type(_G.MSUF_UpdateAllFonts) == "function" then
+                    _G.MSUF_UpdateAllFonts()
+                elseif type(_G.UpdateAllFonts) == "function" then
+                    _G.UpdateAllFonts()
+                end
+            end
+
+            _MSUF_AnchorCorner(classText, frame, classCorner, classX, classY)
+            classText:SetAlpha(iconAlpha)
+
+            -- Justification (avoids looking off on right anchors)
+            if classText.SetJustifyH then
+                local j = "LEFT"
+                if classCorner == "CENTER" then
+                    j = "CENTER"
+                elseif classCorner == "TOPRIGHT" or classCorner == "BOTTOMRIGHT" then
+                    j = "RIGHT"
+                end
+                if classText._msufJustifyStamp ~= j then
+                    classText:SetJustifyH(j)
+                    classText._msufJustifyStamp = j
+                end
+            end
+
+            local txt = _MSUF_GetClassificationLabel(classState)
+            if type(_G.MSUF_SetTextIfChanged) == "function" then
+                _G.MSUF_SetTextIfChanged(classText, txt)
+            else
+                classText:SetText(txt)
+            end
+            classText:Show()
+        else
+            if type(_G.MSUF_SetTextIfChanged) == "function" then
+                _G.MSUF_SetTextIfChanged(classText, "")
+            else
+                classText:SetText("")
+            end
+            classText:Hide()
         end
     end
 end
