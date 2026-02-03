@@ -673,7 +673,29 @@ Elements.Power = {
         local fnBar = FN_UpdatePowerBarFast
         local fnTxt = FN_UpdatePowerTextFast
         local ok = false
+
+        -- If the power bar visibility state flips, the bar-outline anchor needs a refresh.
+        -- Avoid doing this on every swap; only queue when the bottom-bar presence actually changes.
+        local beforeBottomIsPower = false
+        if f then
+            local pb = f.targetPowerBar or f.powerBar
+            beforeBottomIsPower = (f._msufPowerBarReserved == true) or (pb and pb.IsShown and pb:IsShown()) or false
+        end
+
         if fnBar then fnBar(f); ok = true end
+
+        local afterBottomIsPower = beforeBottomIsPower
+        if f then
+            local pb = f.targetPowerBar or f.powerBar
+            afterBottomIsPower = (f._msufPowerBarReserved == true) or (pb and pb.IsShown and pb:IsShown()) or false
+        end
+
+        if beforeBottomIsPower ~= afterBottomIsPower then
+            if (f and (f._msufBarOutlineThickness or 0) > 0) and type(_G.MSUF_QueueUnitframeVisual) == "function" then
+                _G.MSUF_QueueUnitframeVisual(f)
+            end
+        end
+
         if fnTxt then fnTxt(f); ok = true end
         return ok
     end,
@@ -684,7 +706,7 @@ Elements.Identity = {
     bit = EL_IDENTITY,
     dirty = DIRTY_IDENTITY,
     urgent = true,
-    eventMaskOverrides = { UNIT_FACTION = bor(DIRTY_IDENTITY, DIRTY_VISUAL) },
+    eventMaskOverrides = { UNIT_FACTION = DIRTY_IDENTITY },
     events = {
         "UNIT_NAME_UPDATE", "UNIT_LEVEL",
         "UNIT_CLASSIFICATION_CHANGED", "UNIT_FACTION",
@@ -1608,21 +1630,78 @@ end
 --  - Portrait/model updates can be expensive on PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED.
 --  - Rare bar visuals (colors/gradients/background) are queued into the Visual lane.
 local After0 = _G.C_Timer and _G.C_Timer.After
-local function DeferSwapWork(unit, why, wantPortrait)
-    if not After0 or not unit then return end
-    local f = FramesByUnit[unit]
-    if not f or f._msufSwapDeferPending then return end
-    f._msufSwapDeferPending = true
-    After0(0, function()
-        if not f then return end
-        f._msufSwapDeferPending = nil
-        if f:IsVisible() or f.MSUF_AllowHiddenEvents then
-            if wantPortrait then
-                Core.MarkDirty(f, DIRTY_PORTRAIT, false, why or "SWAP_DEFER_PORTRAIT")
+
+-- Coalesce swap defers to a single next-frame callback (avoid per-swap closures/timers).
+Core._swapDeferCoalesce = Core._swapDeferCoalesce or {
+    queued = false,
+    frames = {},
+    portrait = {},
+    visual = {},
+    why = nil,
+}
+
+local function _SwapDeferFlush()
+    local sd = Core._swapDeferCoalesce
+    if not sd then return end
+
+    sd.queued = false
+    local frames = sd.frames
+    local portrait = sd.portrait
+    local visual = sd.visual
+    local why = sd.why
+    sd.why = nil
+
+    for f in pairs(frames) do
+        frames[f] = nil
+        local wantPortrait = portrait[f]
+        local wantVisual = visual[f]
+        portrait[f] = nil
+        visual[f] = nil
+
+        if f then
+            f._msufSwapDeferPending = nil
+            if f:IsVisible() or f.MSUF_AllowHiddenEvents then
+                if wantPortrait then
+                    Core.MarkDirty(f, DIRTY_PORTRAIT, false, why or "SWAP_DEFER_PORTRAIT")
+                end
+                if wantVisual then
+                    _G.MSUF_QueueUnitframeVisual(f)
+                end
             end
-            _G.MSUF_QueueUnitframeVisual(f)
         end
-    end)
+    end
+end
+
+local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
+    if not After0 or not unit then return end
+
+    local f = FramesByUnit[unit]
+    if not f then return end
+
+    local sd = Core._swapDeferCoalesce
+    if not sd then return end
+
+    sd.frames[f] = true
+    if wantPortrait then
+        sd.portrait[f] = true
+    end
+    if wantVisual ~= false then
+        sd.visual[f] = true
+    end
+    sd.why = why or sd.why
+
+    -- Only schedule one next-frame flush.
+    if f._msufSwapDeferPending then
+        return
+    end
+    f._msufSwapDeferPending = true
+
+    if sd.queued then
+        return
+    end
+
+    sd.queued = true
+    After0(0, _SwapDeferFlush)
 end
 
 -- ------------------------------------------------------------
@@ -2134,8 +2213,8 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         QueueUnit("target", true, MASK_UNIT_SWAP, event)
         -- Urgent lane: keep ToT snappy (no perceptible delay).
         QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
-        DeferSwapWork("target", event, true)
-        DeferSwapWork("targettarget", event, false)
+        DeferSwapWork("target", event, true, false)
+        DeferSwapWork("targettarget", event, false, false)
         return
     end
 
@@ -2149,13 +2228,13 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         end
         -- If the ToT unitframe exists/attached, keep it responsive too.
         QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
-        DeferSwapWork("targettarget", event, false)
+        DeferSwapWork("targettarget", event, false, false)
         return
     end
 
     if event == "PLAYER_FOCUS_CHANGED" then
         QueueUnit("focus", true, MASK_UNIT_SWAP, event)
-        DeferSwapWork("focus", event, true)
+        DeferSwapWork("focus", event, true, false)
         return
     end
 
