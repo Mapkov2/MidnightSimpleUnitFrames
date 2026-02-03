@@ -3872,6 +3872,65 @@ local function MSUF_PositionPopupSmart(pf, parent, offset)
     pf:SetPoint("BOTTOMLEFT", ui, "BOTTOMLEFT", x, y)
     pf:SetClampedToScreen(true)
 end
+
+-- One-time cleanup: remove the big background box that can appear behind the "Copy ... settings to..." dropdowns.
+-- We keep the dropdowns themselves intact; this only hides a separate container/background frame if present.
+local function MSUF_EM_KillCopyDropdownGroupBG(pf, d1, d2)
+    if not pf or pf._msufCopyGroupBGKilled then return end
+    if not d1 or not d2 then return end
+    if not (pf.GetChildren and d1.GetLeft and d2.GetLeft) then return end
+
+    local l1, r1, t1, b1 = d1:GetLeft(), d1:GetRight(), d1:GetTop(), d1:GetBottom()
+    local l2, r2, t2, b2 = d2:GetLeft(), d2:GetRight(), d2:GetTop(), d2:GetBottom()
+    if not (l1 and r1 and t1 and b1 and l2 and r2 and t2 and b2) then return end
+
+    local L = (l1 < l2) and l1 or l2
+    local R = (r1 > r2) and r1 or r2
+    local T = (t1 > t2) and t1 or t2
+    local B = (b1 < b2) and b1 or b2
+
+    local refLevel = (d1.GetFrameLevel and d1:GetFrameLevel()) or 0
+
+    for _, child in ipairs({ pf:GetChildren() }) do
+        if child and child ~= d1 and child ~= d2 and child.IsShown and child.Hide and child.GetLeft then
+            local cl, cr, ct, cb = child:GetLeft(), child:GetRight(), child:GetTop(), child:GetBottom()
+            if cl and cr and ct and cb then
+                local covers = (cl <= (L + 2)) and (cr >= (R - 2)) and (ct >= (T - 2)) and (cb <= (B + 2))
+                if covers then
+                    local lvl = (child.GetFrameLevel and child:GetFrameLevel()) or 0
+                    if lvl < refLevel then
+                        child:Hide()
+                        if child.EnableMouse then child:EnableMouse(false) end
+                    end
+                end
+            end
+        end
+    end
+
+    pf._msufCopyGroupBGKilled = true
+end
+
+local function MSUF_EM_EnsureCopyDropdownGroupBGKilled(pf, d1, d2)
+    if not pf or pf._msufCopyGroupBGHooked then return end
+    pf._msufCopyGroupBGHooked = true
+
+    local function run()
+        if not pf or (pf.IsShown and not pf:IsShown()) then return end
+        MSUF_EM_KillCopyDropdownGroupBG(pf, d1, d2)
+    end
+
+    if pf.HookScript then
+        pf:HookScript("OnShow", function()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, run)
+            else
+                run()
+            end
+        end)
+    end
+end
+
+
 local function MSUF_OpenPositionPopup(unit, parent)
     if not MSUF_UnitEditModeActive then
         return
@@ -4066,7 +4125,7 @@ local function MSUF_OpenPositionPopup(unit, parent)
 
         MSUF_InitEditPopupFrame(pf, {
             w = 320,
-            h = 500,
+            h = 480,
             backdrop = {
                 bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
                 edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -4151,7 +4210,6 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
             MSUF_EM_UI_BuildCopyDropdown(pf, US.copyDropdowns.size)
             MSUF_EM_UI_BuildCopyDropdown(pf, US.copyDropdowns.text)
         end
-
         pf.RefreshCopySizeDropdown = function()
             local p = MSUF_PositionPopup or pf
             MSUF_EM_RefreshUnitCopyDropdown(p, p.copySizeDrop, p.copySizeLabel, "Copy size settings to...", "size")
@@ -4213,8 +4271,19 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
         )
     end
 
+    -- Ensure popup is large enough for all controls (e.g. power icon size override).
+    -- Also applies when the popup already exists (created earlier in the session).
+    do
+        local pf = MSUF_PositionPopup
+        if pf and pf.SetSize then
+            pf:SetSize(320, 470)
+
+        end
+    end
+
     local pf = MSUF_PositionPopup
-    local pf = MSUF_PositionPopup
+
+    MSUF_EM_EnsureCopyDropdownGroupBGKilled(pf, pf.copySizeDrop, pf.copyTextDrop)
     local wasShown = (pf and pf.IsShown and pf:IsShown()) and true or false
     local oldUnit  = pf and pf.unit
     local oldParent = pf and pf.parent
@@ -4664,7 +4733,7 @@ end
         local pf = CreateFrame("Frame", "MSUF_CastbarPositionPopup", UIParent, "BackdropTemplate")
         MSUF_CastbarPositionPopup = pf
         if Edit and Edit.Popups and Edit.Popups.Register then Edit.Popups.Register(pf) end
-        local uw, uh = 320, 500
+        local uw, uh = 320, 480
         MSUF_InitEditPopupFrame(pf, {
             w = uw,
             h = uh,
@@ -4991,7 +5060,19 @@ local function _MSUF_EM_GetFrameCenterOffsets(frame, anchorFrame)
 
     end
 
+    -- Ensure popup is large enough for all controls (incl. icon size overrides + copy dropdowns).
+    -- Also applies when the popup already exists (created earlier in the session).
+    do
+        local pf = MSUF_CastbarPositionPopup
+        if pf and pf.SetSize then
+            pf:SetSize(320, 470)
+
+        end
+    end
+
     local pf = MSUF_CastbarPositionPopup
+
+    MSUF_EM_EnsureCopyDropdownGroupBGKilled(pf, pf.copySizeDrop, pf.copyTextDrop)
     local wasShown = (pf and pf.IsShown and pf:IsShown()) and true or false
     local oldUnit  = pf and pf.unit
     local oldParent = pf and pf.parent
@@ -5607,7 +5688,15 @@ a2db.perUnit[unitKeyEff] = a2db.perUnit[unitKeyEff] or {}
 local uconf = a2db.perUnit[unitKeyEff]
 uconf.layout = uconf.layout or {}
 
-            local function readNum(box, fallback)
+            local function isDirty(key)
+                local d = pf and pf._msufA2Dirty
+                return d and d[key] == true
+            end
+
+            local function readNum(key, box, fallback)
+                if not isDirty(key) then
+                    return fallback
+                end
                 if not box or not box.GetText then return fallback end
                 local t = box:GetText()
                 local n = tonumber(t)
@@ -5649,34 +5738,34 @@ uconf.layout = uconf.layout or {}
             local x = curX
             local y = curY
             local size = curSize
-            local spacing = readNum(pf.spacingBox, curSpacing)
+            local spacing = readNum('spacing', pf.spacingBox, curSpacing)
 
-            local stackTextSize = readNum(pf.stackTextSizeBox, curStackTextSize)
-            local cooldownTextSize = readNum(pf.cooldownTextSizeBox, curCooldownTextSize)
+            local stackTextSize = readNum('stackTextSize', pf.stackTextSizeBox, curStackTextSize)
+            local cooldownTextSize = readNum('cooldownTextSize', pf.cooldownTextSizeBox, curCooldownTextSize)
 
 
-            local buffGroupOffsetX = readNum(pf.buffGroupOffsetXBox, curBuffGroupOffX)
-            local buffGroupOffsetY = readNum(pf.buffGroupOffsetYBox, curBuffGroupOffY)
-            local buffGroupIconSize = readNum(pf.buffGroupIconSizeBox, curBuffGroupSize)
+            local buffGroupOffsetX = readNum('buffGroupOffsetX', pf.buffGroupOffsetXBox, curBuffGroupOffX)
+            local buffGroupOffsetY = readNum('buffGroupOffsetY', pf.buffGroupOffsetYBox, curBuffGroupOffY)
+            local buffGroupIconSize = readNum('buffGroupIconSize', pf.buffGroupIconSizeBox, curBuffGroupSize)
 
-            local debuffGroupOffsetX = readNum(pf.debuffGroupOffsetXBox, curDebuffGroupOffX)
-            local debuffGroupOffsetY = readNum(pf.debuffGroupOffsetYBox, curDebuffGroupOffY)
-            local debuffGroupIconSize = readNum(pf.debuffGroupIconSizeBox, curDebuffGroupSize)
+            local debuffGroupOffsetX = readNum('debuffGroupOffsetX', pf.debuffGroupOffsetXBox, curDebuffGroupOffX)
+            local debuffGroupOffsetY = readNum('debuffGroupOffsetY', pf.debuffGroupOffsetYBox, curDebuffGroupOffY)
+            local debuffGroupIconSize = readNum('debuffGroupIconSize', pf.debuffGroupIconSizeBox, curDebuffGroupSize)
 
-            local privOffX = readNum(pf.privateOffsetXBox, curPrivOffX)
-            local privOffY = readNum(pf.privateOffsetYBox, curPrivOffY)
-            local privSize = readNum(pf.privateSizeBox, curPrivSize)
+            local privOffX = readNum('privateOffsetX', pf.privateOffsetXBox, curPrivOffX)
+            local privOffY = readNum('privateOffsetY', pf.privateOffsetYBox, curPrivOffY)
+            local privSize = readNum('privateSize', pf.privateSizeBox, curPrivSize)
 
             -- Private Auras preview (highlight marker) is a shared flag
             if pf.privatePreviewCheck and pf.privatePreviewCheck.GetChecked then
                 a2db.shared.highlightPrivateAuras = (pf.privatePreviewCheck:GetChecked() and true) or false
             end
 
-            local stackTextOffsetX = readNum(pf.stackTextOffsetXBox, curStackOffX)
-            local stackTextOffsetY = readNum(pf.stackTextOffsetYBox, curStackOffY)
+            local stackTextOffsetX = readNum('stackTextOffsetX', pf.stackTextOffsetXBox, curStackOffX)
+            local stackTextOffsetY = readNum('stackTextOffsetY', pf.stackTextOffsetYBox, curStackOffY)
 
-            local cooldownTextOffsetX = readNum(pf.cooldownTextOffsetXBox, curCooldownOffX)
-            local cooldownTextOffsetY = readNum(pf.cooldownTextOffsetYBox, curCooldownOffY)
+            local cooldownTextOffsetX = readNum('cooldownTextOffsetX', pf.cooldownTextOffsetXBox, curCooldownOffX)
+            local cooldownTextOffsetY = readNum('cooldownTextOffsetY', pf.cooldownTextOffsetYBox, curCooldownOffY)
 
 
             stackTextOffsetX = MSUF_SanitizePopupOffset(stackTextOffsetX, 0)
@@ -5693,42 +5782,37 @@ uconf.layout = uconf.layout or {}
             privOffX = MSUF_SanitizePopupOffset(privOffX, 0)
             privOffY = MSUF_SanitizePopupOffset(privOffY, 0)
 
-    iconSize = math.max(10, math.min(80, tonumber(iconSize) or 26))
-    buffGroupIconSize = math.max(10, math.min(80, tonumber(buffGroupIconSize) or iconSize))
-    debuffGroupIconSize = math.max(10, math.min(80, tonumber(debuffGroupIconSize) or iconSize))
-    privSize = math.max(10, math.min(80, tonumber(privSize) or iconSize))
-    spacing = math.max(0, math.min(30, tonumber(spacing) or 2))
-    stackTextSize = math.max(6, math.min(30, tonumber(stackTextSize) or 14))
-    cooldownTextSize = math.max(6, math.min(30, tonumber(cooldownTextSize) or 14))
+                -- Clamp & sanitize all numeric fields (avoid snap-back after mouse-drag).
+            local OFF_LIMIT = 2000
+            local function clampOff(v)
+                v = tonumber(v) or 0
+                if v > OFF_LIMIT then return OFF_LIMIT end
+                if v < -OFF_LIMIT then return -OFF_LIMIT end
+                return v
+            end
 
-    buffGroupOffsetX = math.max(-200, math.min(200, tonumber(buffGroupOffsetX) or 0))
-    buffGroupOffsetY = math.max(-200, math.min(200, tonumber(buffGroupOffsetY) or 0))
-    debuffGroupOffsetX = math.max(-200, math.min(200, tonumber(debuffGroupOffsetX) or 0))
-    debuffGroupOffsetY = math.max(-200, math.min(200, tonumber(debuffGroupOffsetY) or 0))
-            local writeStackOffsets = haveStackOffsets
-                or (math.abs(tonumber(stackTextOffsetX) or 0) > 0.0001)
-                or (math.abs(tonumber(stackTextOffsetY) or 0) > 0.0001)
+            size = math.max(10, math.min(80, tonumber(size) or tonumber(iconSize) or 26))
+            iconSize = size
+            spacing = math.max(0, math.min(30, tonumber(spacing) or 0))
 
-            local writeCooldownOffsets = haveCooldownOffsets
-                or (math.abs(tonumber(cooldownTextOffsetX) or 0) > 0.0001)
-                or (math.abs(tonumber(cooldownTextOffsetY) or 0) > 0.0001)
-            -- sane clamps
-            size = math.max(10, math.min(80, tonumber(size) or curSize))
-            spacing = math.max(0, math.min(30, tonumber(spacing) or curSpacing))
+            stackTextSize = math.max(6, math.min(40, tonumber(stackTextSize) or 12))
+            cooldownTextSize = math.max(6, math.min(40, tonumber(cooldownTextSize) or 12))
 
-            buffGroupOffsetX = math.max(-200, math.min(200, tonumber(buffGroupOffsetX) or curBuffGroupOffX))
-            buffGroupOffsetY = math.max(-200, math.min(200, tonumber(buffGroupOffsetY) or curBuffGroupOffY))
-            buffGroupIconSize = math.max(10, math.min(80, tonumber(buffGroupIconSize) or curBuffGroupSize))
+            buffGroupIconSize = math.max(10, math.min(80, tonumber(buffGroupIconSize) or 26))
+            debuffGroupIconSize = math.max(10, math.min(80, tonumber(debuffGroupIconSize) or 26))
+            privSize = math.max(10, math.min(80, tonumber(privSize) or 26))
 
-            debuffGroupOffsetX = math.max(-200, math.min(200, tonumber(debuffGroupOffsetX) or curDebuffGroupOffX))
-            debuffGroupOffsetY = math.max(-200, math.min(200, tonumber(debuffGroupOffsetY) or curDebuffGroupOffY))
-            debuffGroupIconSize = math.max(10, math.min(80, tonumber(debuffGroupIconSize) or curDebuffGroupSize))
+            buffGroupOffsetX = clampOff(MSUF_SanitizePopupOffset(buffGroupOffsetX, 0))
+            buffGroupOffsetY = clampOff(MSUF_SanitizePopupOffset(buffGroupOffsetY, 0))
+            debuffGroupOffsetX = clampOff(MSUF_SanitizePopupOffset(debuffGroupOffsetX, 0))
+            debuffGroupOffsetY = clampOff(MSUF_SanitizePopupOffset(debuffGroupOffsetY, 0))
+            privOffX = clampOff(MSUF_SanitizePopupOffset(privOffX, 0))
+            privOffY = clampOff(MSUF_SanitizePopupOffset(privOffY, 0))
 
-            privOffX = math.max(-200, math.min(200, tonumber(privOffX) or curPrivOffX))
-            privOffY = math.max(-200, math.min(200, tonumber(privOffY) or curPrivOffY))
-            privSize = math.max(10, math.min(80, tonumber(privSize) or curPrivSize))
-            stackTextSize = math.max(6, math.min(40, tonumber(stackTextSize) or curStackTextSize))
-            cooldownTextSize = math.max(6, math.min(40, tonumber(cooldownTextSize) or curCooldownTextSize))
+            stackTextOffsetX = clampOff(stackTextOffsetX)
+            stackTextOffsetY = clampOff(stackTextOffsetY)
+            cooldownTextOffsetX = clampOff(cooldownTextOffsetX)
+            cooldownTextOffsetY = clampOff(cooldownTextOffsetY)
 
 local function ApplyLayoutToUnit(k)
     a2db.perUnit[k] = a2db.perUnit[k] or {}
@@ -6105,6 +6189,75 @@ pf.RefreshCopyAuraDropdown = MSUF_A2_RefreshCopyAuraDropdown
     pf.okayBtn = okayBtn
 
     pf._msufAuras2Apply = Apply
+
+    -- Snap-safe dirty tracking: only apply fields the user actually changed.
+    -- This prevents mouse-dragged movers from being overwritten by stale popup values.
+    if not pf.__msufA2DirtyTracking then
+        pf.__msufA2DirtyTracking = true
+        pf._msufA2Dirty = pf._msufA2Dirty or {}
+
+        local DIRTY_KEYS = {
+            "spacing","stackTextSize","stackTextOffsetX","stackTextOffsetY",
+            "cooldownTextSize","cooldownTextOffsetX","cooldownTextOffsetY",
+            "buffGroupOffsetX","buffGroupOffsetY","buffGroupIconSize",
+            "debuffGroupOffsetX","debuffGroupOffsetY","debuffGroupIconSize",
+            "privateOffsetX","privateOffsetY","privateSize",
+        }
+
+        local function MarkDirty(key)
+            if not pf._msufA2Dirty then pf._msufA2Dirty = {} end
+            pf._msufA2Dirty[key] = true
+        end
+
+        for _, key in ipairs(DIRTY_KEYS) do
+            local box = pf[key.."Box"]
+            if box and box.HookScript then
+                box:HookScript("OnTextChanged", function(self, userInput)
+                    if userInput and not pf._msufAuras2PopupSyncing and not pf._msufAuras2PopupApplying then
+                        MarkDirty(key)
+                    end
+                end)
+            end
+
+            local function Wrap(btn)
+                if not btn or not btn.GetScript or not btn.SetScript or btn.__msufA2DirtyWrapped then return end
+                btn.__msufA2DirtyWrapped = true
+                local orig = btn:GetScript("OnClick")
+                btn:SetScript("OnClick", function(self, ...)
+                    if not pf._msufAuras2PopupSyncing and not pf._msufAuras2PopupApplying then
+                        MarkDirty(key)
+                    end
+                    if orig then orig(self, ...) end
+                end)
+            end
+            Wrap(pf[key.."Minus"])
+            Wrap(pf[key.."Plus"])
+        end
+
+        -- Keep popup values visually synced with mouse-drag while Edit Mode is open.
+        pf:HookScript("OnShow", function(self)
+            self._msufA2Dirty = {}
+            if self._msufA2SyncTicker then
+                self._msufA2SyncTicker:Cancel()
+                self._msufA2SyncTicker = nil
+            end
+            if C_Timer and C_Timer.NewTicker then
+                self._msufA2SyncTicker = C_Timer.NewTicker(0.15, function()
+                    if not self or not self:IsShown() then return end
+                    if type(_G.MSUF_SyncAuras2PositionPopup) == "function" then
+                        _G.MSUF_SyncAuras2PositionPopup(self.unit)
+                    end
+                end)
+            end
+        end)
+
+        pf:HookScript("OnHide", function(self)
+            if self._msufA2SyncTicker then
+                self._msufA2SyncTicker:Cancel()
+                self._msufA2SyncTicker = nil
+            end
+        end)
+    end
     -- Ensure Midnight EditMode styling is applied immediately (fixes: first-open shows default UI style)
     if pf.HookScript and not pf.__msufAuraPopupStyleHooked then
         pf.__msufAuraPopupStyleHooked = true
@@ -6231,59 +6384,89 @@ end
     privOffY = MSUF_SanitizePopupOffset(tonumber(privOffY) or 0, 0)
     privSize = tonumber(privSize) or iconSize
     privSize = math.max(10, math.min(80, privSize))
-    x = MSUF_SanitizePopupOffset(x, 0)
-    y = MSUF_SanitizePopupOffset(y, 0)
     if pf.spacingBox and not pf.spacingBox:HasFocus() then
         pf.spacingBox:SetText(tostring(math.floor(spacing + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['spacing'] = nil end
     end
     if pf.stackTextSizeBox and not pf.stackTextSizeBox:HasFocus() then
         pf.stackTextSizeBox:SetText(tostring(math.floor(stackTextSize + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['stackTextSize'] = nil end
     end
     if pf.stackTextOffsetXBox and not pf.stackTextOffsetXBox:HasFocus() then
         pf.stackTextOffsetXBox:SetText(tostring(math.floor(stackTextOffsetX + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['stackTextOffsetX'] = nil end
     end
     if pf.stackTextOffsetYBox and not pf.stackTextOffsetYBox:HasFocus() then
         pf.stackTextOffsetYBox:SetText(tostring(math.floor(stackTextOffsetY + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['stackTextOffsetY'] = nil end
     end
     if pf.cooldownTextSizeBox and not pf.cooldownTextSizeBox:HasFocus() then
         pf.cooldownTextSizeBox:SetText(tostring(math.floor(cooldownTextSize + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['cooldownTextSize'] = nil end
     end
 
     if pf.cooldownTextOffsetXBox and not pf.cooldownTextOffsetXBox:HasFocus() then
         pf.cooldownTextOffsetXBox:SetText(tostring(math.floor(cooldownTextOffsetX + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['cooldownTextOffsetX'] = nil end
     end
     if pf.cooldownTextOffsetYBox and not pf.cooldownTextOffsetYBox:HasFocus() then
         pf.cooldownTextOffsetYBox:SetText(tostring(math.floor(cooldownTextOffsetY + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['cooldownTextOffsetY'] = nil end
     end
 
 
     if pf.buffGroupOffsetXBox and not pf.buffGroupOffsetXBox:HasFocus() then
         pf.buffGroupOffsetXBox:SetText(tostring(buffGroupOffsetX))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['buffGroupOffsetX'] = nil end
     end
     if pf.buffGroupOffsetYBox and not pf.buffGroupOffsetYBox:HasFocus() then
         pf.buffGroupOffsetYBox:SetText(tostring(buffGroupOffsetY))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['buffGroupOffsetY'] = nil end
     end
     if pf.buffGroupIconSizeBox and not pf.buffGroupIconSizeBox:HasFocus() then
         pf.buffGroupIconSizeBox:SetText(tostring(math.floor(buffGroupIconSize + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['buffGroupIconSize'] = nil end
     end
 
     if pf.debuffGroupOffsetXBox and not pf.debuffGroupOffsetXBox:HasFocus() then
         pf.debuffGroupOffsetXBox:SetText(tostring(debuffGroupOffsetX))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['debuffGroupOffsetX'] = nil end
     end
     if pf.debuffGroupOffsetYBox and not pf.debuffGroupOffsetYBox:HasFocus() then
         pf.debuffGroupOffsetYBox:SetText(tostring(debuffGroupOffsetY))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['debuffGroupOffsetY'] = nil end
     end
     if pf.debuffGroupIconSizeBox and not pf.debuffGroupIconSizeBox:HasFocus() then
         pf.debuffGroupIconSizeBox:SetText(tostring(math.floor(debuffGroupIconSize + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['debuffGroupIconSize'] = nil end
     end
     if pf.privateOffsetXBox and not pf.privateOffsetXBox:HasFocus() then
         pf.privateOffsetXBox:SetText(tostring(math.floor(privOffX + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['privateOffsetX'] = nil end
     end
     if pf.privateOffsetYBox and not pf.privateOffsetYBox:HasFocus() then
         pf.privateOffsetYBox:SetText(tostring(math.floor(privOffY + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['privateOffsetY'] = nil end
     end
     if pf.privateSizeBox and not pf.privateSizeBox:HasFocus() then
         pf.privateSizeBox:SetText(tostring(math.floor(privSize + 0.5)))
+
+        if pf._msufA2Dirty then pf._msufA2Dirty['privateSize'] = nil end
     end
     if pf.privatePreviewCheck and pf.privatePreviewCheck.SetChecked then
         pf.privatePreviewCheck:SetChecked((shared.highlightPrivateAuras == true) and true or false)
