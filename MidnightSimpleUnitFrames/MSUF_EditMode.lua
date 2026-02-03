@@ -5701,10 +5701,10 @@ uconf.layout = uconf.layout or {}
     stackTextSize = math.max(6, math.min(30, tonumber(stackTextSize) or 14))
     cooldownTextSize = math.max(6, math.min(30, tonumber(cooldownTextSize) or 14))
 
-    buffGroupOffsetX = math.max(-200, math.min(200, tonumber(buffGroupOffsetX) or 0))
-    buffGroupOffsetY = math.max(-200, math.min(200, tonumber(buffGroupOffsetY) or 0))
-    debuffGroupOffsetX = math.max(-200, math.min(200, tonumber(debuffGroupOffsetX) or 0))
-    debuffGroupOffsetY = math.max(-200, math.min(200, tonumber(debuffGroupOffsetY) or 0))
+    buffGroupOffsetX = math.max(-2000, math.min(2000, tonumber(buffGroupOffsetX) or 0))
+    buffGroupOffsetY = math.max(-2000, math.min(2000, tonumber(buffGroupOffsetY) or 0))
+    debuffGroupOffsetX = math.max(-2000, math.min(2000, tonumber(debuffGroupOffsetX) or 0))
+    debuffGroupOffsetY = math.max(-2000, math.min(2000, tonumber(debuffGroupOffsetY) or 0))
             local writeStackOffsets = haveStackOffsets
                 or (math.abs(tonumber(stackTextOffsetX) or 0) > 0.0001)
                 or (math.abs(tonumber(stackTextOffsetY) or 0) > 0.0001)
@@ -5716,16 +5716,16 @@ uconf.layout = uconf.layout or {}
             size = math.max(10, math.min(80, tonumber(size) or curSize))
             spacing = math.max(0, math.min(30, tonumber(spacing) or curSpacing))
 
-            buffGroupOffsetX = math.max(-200, math.min(200, tonumber(buffGroupOffsetX) or curBuffGroupOffX))
-            buffGroupOffsetY = math.max(-200, math.min(200, tonumber(buffGroupOffsetY) or curBuffGroupOffY))
+            buffGroupOffsetX = math.max(-2000, math.min(2000, tonumber(buffGroupOffsetX) or curBuffGroupOffX))
+            buffGroupOffsetY = math.max(-2000, math.min(2000, tonumber(buffGroupOffsetY) or curBuffGroupOffY))
             buffGroupIconSize = math.max(10, math.min(80, tonumber(buffGroupIconSize) or curBuffGroupSize))
 
-            debuffGroupOffsetX = math.max(-200, math.min(200, tonumber(debuffGroupOffsetX) or curDebuffGroupOffX))
-            debuffGroupOffsetY = math.max(-200, math.min(200, tonumber(debuffGroupOffsetY) or curDebuffGroupOffY))
+            debuffGroupOffsetX = math.max(-2000, math.min(2000, tonumber(debuffGroupOffsetX) or curDebuffGroupOffX))
+            debuffGroupOffsetY = math.max(-2000, math.min(2000, tonumber(debuffGroupOffsetY) or curDebuffGroupOffY))
             debuffGroupIconSize = math.max(10, math.min(80, tonumber(debuffGroupIconSize) or curDebuffGroupSize))
 
-            privOffX = math.max(-200, math.min(200, tonumber(privOffX) or curPrivOffX))
-            privOffY = math.max(-200, math.min(200, tonumber(privOffY) or curPrivOffY))
+            privOffX = math.max(-2000, math.min(2000, tonumber(privOffX) or curPrivOffX))
+            privOffY = math.max(-2000, math.min(2000, tonumber(privOffY) or curPrivOffY))
             privSize = math.max(10, math.min(80, tonumber(privSize) or curPrivSize))
             stackTextSize = math.max(6, math.min(40, tonumber(stackTextSize) or curStackTextSize))
             cooldownTextSize = math.max(6, math.min(40, tonumber(cooldownTextSize) or curCooldownTextSize))

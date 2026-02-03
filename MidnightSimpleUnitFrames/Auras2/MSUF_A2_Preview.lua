@@ -132,6 +132,7 @@ local function ClearPreviewsForEntry(entry)
     ClearPreviewIconsInContainer(entry.buffs)
     ClearPreviewIconsInContainer(entry.debuffs)
     ClearPreviewIconsInContainer(entry.mixed)
+    ClearPreviewIconsInContainer(entry.private)
     entry._msufA2_previewActive = nil
 end
 
@@ -180,7 +181,7 @@ local function ForEachPreviewIcon(fn)
 
     for _, entry in pairs(AurasByUnit) do
         if entry and entry._msufA2_previewActive == true then
-            local containers = { entry.buffs, entry.debuffs, entry.mixed }
+            local containers = { entry.buffs, entry.debuffs, entry.mixed, entry.private }
             for _, container in ipairs(containers) do
                 if container and container._msufIcons then
                     for _, icon in ipairs(container._msufIcons) do

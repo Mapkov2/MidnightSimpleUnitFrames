@@ -243,10 +243,10 @@ local function MSUF_A2_EnsurePerUnitConfig(pu, unitKey, sharedSettings)
     if lay.width ~= nil and type(lay.width) ~= "number" then lay.width = nil end
     if lay.height ~= nil and type(lay.height) ~= "number" then lay.height = nil end
     -- Optional: independent Buff/Debuff offsets + icon size (used by Edit Mode tabs).
-    A2_OptionalNumber(lay, "buffGroupOffsetX");   if lay.buffGroupOffsetX ~= nil then lay.buffGroupOffsetX = A2_ClampNumber(lay.buffGroupOffsetX, 0, -200, 200, true) end
-    A2_OptionalNumber(lay, "buffGroupOffsetY");   if lay.buffGroupOffsetY ~= nil then lay.buffGroupOffsetY = A2_ClampNumber(lay.buffGroupOffsetY, 0, -200, 200, true) end
-    A2_OptionalNumber(lay, "debuffGroupOffsetX"); if lay.debuffGroupOffsetX ~= nil then lay.debuffGroupOffsetX = A2_ClampNumber(lay.debuffGroupOffsetX, 0, -200, 200, true) end
-    A2_OptionalNumber(lay, "debuffGroupOffsetY"); if lay.debuffGroupOffsetY ~= nil then lay.debuffGroupOffsetY = A2_ClampNumber(lay.debuffGroupOffsetY, 0, -200, 200, true) end
+    A2_OptionalNumber(lay, "buffGroupOffsetX");   if lay.buffGroupOffsetX ~= nil then lay.buffGroupOffsetX = A2_ClampNumber(lay.buffGroupOffsetX, 0, -2000, 2000, true) end
+    A2_OptionalNumber(lay, "buffGroupOffsetY");   if lay.buffGroupOffsetY ~= nil then lay.buffGroupOffsetY = A2_ClampNumber(lay.buffGroupOffsetY, 0, -2000, 2000, true) end
+    A2_OptionalNumber(lay, "debuffGroupOffsetX"); if lay.debuffGroupOffsetX ~= nil then lay.debuffGroupOffsetX = A2_ClampNumber(lay.debuffGroupOffsetX, 0, -2000, 2000, true) end
+    A2_OptionalNumber(lay, "debuffGroupOffsetY"); if lay.debuffGroupOffsetY ~= nil then lay.debuffGroupOffsetY = A2_ClampNumber(lay.debuffGroupOffsetY, 0, -2000, 2000, true) end
     A2_OptionalNumber(lay, "buffGroupIconSize");  if lay.buffGroupIconSize ~= nil then lay.buffGroupIconSize = A2_ClampNumber(lay.buffGroupIconSize, 0, 10, 80, true) end
     A2_OptionalNumber(lay, "debuffGroupIconSize");if lay.debuffGroupIconSize ~= nil then lay.debuffGroupIconSize = A2_ClampNumber(lay.debuffGroupIconSize, 0, 10, 80, true) end
 
@@ -442,8 +442,8 @@ local function MSUF_A2_GetEffectiveCooldownTextOffsets(unitKey, shared)
 
     offX = tonumber(offX) or 0
     offY = tonumber(offY) or 0
-    offX = math.max(-200, math.min(200, offX))
-    offY = math.max(-200, math.min(200, offY))
+    offX = math.max(-2000, math.min(2000, offX))
+    offY = math.max(-2000, math.min(2000, offY))
     return offX, offY, true
 end
 
@@ -494,8 +494,8 @@ local function MSUF_A2_GetEffectiveStackTextOffsets(unitKey, shared)
 
     offX = tonumber(offX) or 0
     offY = tonumber(offY) or 0
-    offX = math.max(-200, math.min(200, offX))
-    offY = math.max(-200, math.min(200, offY))
+    offX = math.max(-2000, math.min(2000, offX))
+    offY = math.max(-2000, math.min(2000, offY))
     return offX, offY, true
 end
 
@@ -757,21 +757,52 @@ local function MSUF_A2_IconOnLeave(self)
 end
 
 -- Cached preview definitions (no per-render table allocations)
+
+-- Cached preview definitions (no per-render table allocations)
 local MSUF_A2_PREVIEW_BUFF_DEFS = {
-    { tex = "Interface\\Icons\\Spell_Arcane_ArcaneTorrent", spellId = 28730, isHelpful = true, previewKind = "Normal buff" },
-    { tex = "Interface\\Icons\\Ability_Rogue_SliceDice", spellId = 5171, isHelpful = true, stackText = "2", previewKind = "Stacked buff (shows stack count)" },
-    { tex = "Interface\\Icons\\Spell_Holy_BlessingOfStrength", spellId = 6673, isHelpful = true, isOwn = true, previewKind = "Own buff (highlight)" },
-    { tex = "Interface\\Icons\\Spell_Nature_Rejuvenation", spellId = 774, isHelpful = true, previewKind = "Normal buff" },
-    { tex = "Interface\\Icons\\Spell_Holy_DevotionAura", spellId = 465, isHelpful = true, permanent = true, previewKind = "Permanent buff (no duration)" },
+    -- Recognizable buffs (variety helps spacing/rows). Some show timers, some are permanent.
+    { tex = "Interface\\Icons\\Spell_Holy_WordFortitude",        spellId = 21562, isHelpful = true,  previewKind = "Buff preview",  cdDur = 300, cdElapsed = 245 },
+    { tex = "Interface\\Icons\\Spell_Holy_ArcaneIntellect",      spellId = 1459,  isHelpful = true,  previewKind = "Buff preview",  cdDur = 120, cdElapsed = 50  },
+    { tex = "Interface\\Icons\\Spell_Nature_Rejuvenation",       spellId = 774,   isHelpful = true,  previewKind = "Buff preview",  cdDur = 18,  cdElapsed = 6   },
+    { tex = "Interface\\Icons\\Spell_Holy_MagicalSentry",        spellId = 0,     isHelpful = true,  previewKind = "Buff preview",  permanent = true            },
+    { tex = "Interface\\Icons\\Ability_Mage_TimeWarp",           spellId = 80353, isHelpful = true,  previewKind = "Buff preview",  cdDur = 40,  cdElapsed = 12  },
+    { tex = "Interface\\Icons\\Spell_Nature_LightningShield",    spellId = 324,   isHelpful = true,  previewKind = "Buff preview",  cdDur = 90,  cdElapsed = 30  },
 }
 
+
+
 local MSUF_A2_PREVIEW_DEBUFF_DEFS = {
-    { tex = "Interface\\Icons\\Spell_Frost_FrostNova", spellId = 122, isHelpful = false, dispellable = true, previewKind = "Dispellable debuff (border)" },
-    { tex = "Interface\\Icons\\Ability_Warrior_Sunder", spellId = 7386, isHelpful = false, stackText = "12", previewKind = "Stacked debuff (shows stack count)" },
-    { tex = "Interface\\Icons\\Spell_Shadow_UnholyFrenzy", spellId = 49016, isHelpful = false, isOwn = true, previewKind = "Own debuff (highlight)" },
-    { tex = "Interface\\Icons\\Spell_Shadow_ShadowWordPain", spellId = 589, isHelpful = false, previewKind = "Normal debuff" },
-    { tex = "Interface\\Icons\\Spell_Shadow_Curse", spellId = 702, isHelpful = false, permanent = true, previewKind = "Permanent debuff (no duration)" },
+    -- Recognizable debuffs (variety helps spacing/rows). Some show timers, some are permanent.
+    { tex = "Interface\\Icons\\Spell_Shadow_ShadowWordPain",       spellId = 589,   isHelpful = false, previewKind = "Debuff preview", cdDur = 20,  cdElapsed = 7   },
+    { tex = "Interface\\Icons\\Spell_Shadow_AbominationExplosion", spellId = 172,   isHelpful = false, previewKind = "Debuff preview", cdDur = 14,  cdElapsed = 2   },
+    { tex = "Interface\\Icons\\Ability_Rogue_Rupture",             spellId = 1943,  isHelpful = false, previewKind = "Debuff preview", cdDur = 24,  cdElapsed = 11  },
+    { tex = "Interface\\Icons\\Spell_Shadow_CurseOfTounges",       spellId = 1714,  isHelpful = false, previewKind = "Debuff preview", cdDur = 30,  cdElapsed = 18  },
+    { tex = "Interface\\Icons\\Spell_Nature_Slow",                 spellId = 0,     isHelpful = false, previewKind = "Debuff preview", permanent = true            },
+    { tex = "Interface\\Icons\\Spell_Shadow_VampiricAura",         spellId = 34914, isHelpful = false, previewKind = "Debuff preview", cdDur = 60,  cdElapsed = 35  },
 }
+
+-- Private Aura preview icons (Edit Mode only; does not affect Blizzard private aura anchors)
+local MSUF_A2_PREVIEW_PRIVATE_DEFS = {
+    -- Private aura preview icons (Edit Mode only; does not affect Blizzard private aura anchors)
+    { tex = "Interface\\Icons\\Ability_Creature_Cursed_03",     spellId = 0,     isHelpful = true,  previewKind = "Private preview", isPrivate = true, cdDur = 12,  cdElapsed = 3  },
+    { tex = "Interface\\Icons\\Spell_Shadow_AntiMagicShell",    spellId = 48707, isHelpful = true,  previewKind = "Private preview", isPrivate = true, cdDur = 25,  cdElapsed = 10 },
+    { tex = "Interface\\Icons\\Spell_Arcane_Arcane01",          spellId = 0,     isHelpful = true,  previewKind = "Private preview", isPrivate = true, permanent = true           },
+    { tex = "Interface\\Icons\\Spell_Fire_Fireball02",          spellId = 133,   isHelpful = true,  previewKind = "Private preview", isPrivate = true, cdDur = 45,  cdElapsed = 20 },
+    { tex = "Interface\\Icons\\INV_Misc_QuestionMark",          spellId = 0,     isHelpful = true,  previewKind = "Private preview", isPrivate = true, cdDur = 90,  cdElapsed = 60 },
+}
+
+
+
+local function MSUF_A2_PreviewUnitLabel(unit)
+    if unit == "player" then return "Player" end
+    if unit == "target" then return "Target" end
+    if unit == "focus" then return "Focus" end
+    if type(unit) == "string" then
+        local n = unit:match("^boss(%d+)$")
+        if n then return "Boss " .. n end
+    end
+    return tostring(unit or "Unit")
+end
 
 local function AcquireIcon(container, index)
     container._msufIcons = container._msufIcons or {}
@@ -784,6 +815,12 @@ local function AcquireIcon(container, index)
         else
             if Masque_RemoveButton then Masque_RemoveButton(icon) end
         end
+        -- Preview label safety: never let preview text stick on reused icons.
+        if icon._msufA2_previewLabel then
+            icon._msufA2_previewLabel:Hide()
+        end
+        icon._msufA2_previewLabelText = nil
+
         return icon
     end
 
@@ -859,6 +896,21 @@ local function AcquireIcon(container, index)
     icon.Count = icon.count
     icon.count:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 4, 7) -- slightly more right
     icon.count:SetJustifyH("RIGHT")
+
+
+-- Preview label (Edit Mode only). Created once and toggled on/off per icon render.
+icon._msufA2_previewLabel = icon._msufCountFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+-- Label should always identify the bar without obscuring icons.
+-- Anchor it slightly above the first icon, left-aligned (matches "Private" bar readability).
+icon._msufA2_previewLabel:SetPoint("BOTTOMLEFT", icon, "TOPLEFT", 2, 6)
+icon._msufA2_previewLabel:SetWordWrap(false)
+icon._msufA2_previewLabel:SetNonSpaceWrap(false)
+icon._msufA2_previewLabel:SetJustifyH("LEFT")
+icon._msufA2_previewLabel:SetJustifyV("MIDDLE")
+icon._msufA2_previewLabel:SetTextColor(1, 1, 1, 0.95)
+icon._msufA2_previewLabel:SetShadowColor(0, 0, 0, 1)
+icon._msufA2_previewLabel:SetShadowOffset(1, -1)
+icon._msufA2_previewLabel:Hide()
 
     -- Bind stack count to global font settings (face/outline/shadow). Size follows Auras layout (shared/per-unit).
     do
@@ -1234,52 +1286,15 @@ local function IsEditModeActive()
     return false
 end
 
-local function _A2_UnitNormalEnabledFromDB(a2, unit)
-    if not a2 or a2.enabled ~= true then return false end
-    if unit == "player" then return a2.showPlayer == true end
-    if unit == "target" then return a2.showTarget == true end
-    if unit == "focus" then return a2.showFocus == true end
-    if unit and unit:match("^boss%d$") then return a2.showBoss == true end
-    return false
-end
-
--- Note: this is intentionally cheap and only meant for gating/render decisions.
--- Real support checks happen inside the private-aura builder.
-local function _A2_UnitPrivateEnabledFromDB(shared, unit)
-    if not shared then return false end
-    if unit == "target" then return false end
-    if not (C_UnitAuras and type(C_UnitAuras.AddPrivateAuraAnchor) == "function") then return false end
-
-    local show = false
-    local maxN = nil
-
-    if unit == "player" then
-        show = (shared.showPrivateAurasPlayer == true)
-        maxN = shared.privateAuraMaxPlayer
-    elseif unit == "focus" then
-        show = (shared.showPrivateAurasFocus == true)
-        maxN = shared.privateAuraMaxOther
-    elseif unit and unit:match("^boss%d$") then
-        show = (shared.showPrivateAurasBoss == true)
-        maxN = shared.privateAuraMaxOther
-    else
-        return false
-    end
-
-    if not show then return false end
-
-    if type(maxN) ~= "number" then maxN = 6 end
-    if maxN < 0 then maxN = 0 end
-    if maxN > 12 then maxN = 12 end
-
-    return (maxN > 0)
-end
-
 local function UnitEnabled(unit)
-    local a2, shared = GetAuras2DB()
-    if not a2 or a2.enabled ~= true then return false end
-    if _A2_UnitNormalEnabledFromDB(a2, unit) then return true end
-    if _A2_UnitPrivateEnabledFromDB(shared, unit) then return true end
+    local a2, _ = GetAuras2DB()
+    if not a2 or not a2.enabled then return false end
+
+    if unit == "player" then return a2.showPlayer end
+
+    if unit == "target" then return a2.showTarget end
+    if unit == "focus" then return a2.showFocus end
+    if unit and unit:match("^boss%d$") then return a2.showBoss end
     return false
 end
 
@@ -1631,36 +1646,83 @@ local function A2_AnchorStacked(entry, by, buffDX, buffDY, debuffDX, debuffDY)
     end
 end
 
-local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOverride, buffDebuffAnchorOverride, splitSpacingOverride)
+local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOverride, buffDebuffAnchorOverride, splitSpacingOverride, isEditMode)
     if not entry or not entry.anchor or not entry.frame or not shared then return end
 
     local unitKey = entry.unit
-    local iconSize, _, _, buffOffsetY = MSUF_A2_GetEffectiveSizing(unitKey, shared)
+    local iconSize, spacing, perRow, buffOffsetY = MSUF_A2_GetEffectiveSizing(unitKey, shared)
 
+
+    -- If callers forget to pass isEditMode, default to the real Edit Mode state.
+    -- This prevents preview/mover anchors from oscillating between edit/non-edit paths.
+    if isEditMode == nil then
+        isEditMode = (IsEditModeActive and IsEditModeActive()) and true or false
+    end
     local x = (offX ~= nil) and offX or (shared.offsetX or 0)
     local y = (offY ~= nil) and offY or (shared.offsetY or 0)
 
     -- Independent Buff/Debuff offsets + icon size (per-unit overrides via Edit Mode popup)
     local buffIconSize = MSUF_A2_ResolveNumber(unitKey, shared, "buffGroupIconSize", iconSize, 10, 80, true)
     local debuffIconSize = MSUF_A2_ResolveNumber(unitKey, shared, "debuffGroupIconSize", iconSize, 10, 80, true)
-    local buffDX = MSUF_A2_ResolveNumber(unitKey, shared, "buffGroupOffsetX", 0, -200, 200, true)
-    local buffDY = MSUF_A2_ResolveNumber(unitKey, shared, "buffGroupOffsetY", 0, -200, 200, true)
-    local debuffDX = MSUF_A2_ResolveNumber(unitKey, shared, "debuffGroupOffsetX", 0, -200, 200, true)
-    local debuffDY = MSUF_A2_ResolveNumber(unitKey, shared, "debuffGroupOffsetY", 0, -200, 200, true)
+    local buffDX = MSUF_A2_ResolveNumber(unitKey, shared, "buffGroupOffsetX", 0, -2000, 2000, true)
+    local buffDY = MSUF_A2_ResolveNumber(unitKey, shared, "buffGroupOffsetY", 0, -2000, 2000, true)
+    local debuffDX = MSUF_A2_ResolveNumber(unitKey, shared, "debuffGroupOffsetX", 0, -2000, 2000, true)
+    local debuffDY = MSUF_A2_ResolveNumber(unitKey, shared, "debuffGroupOffsetY", 0, -2000, 2000, true)
 
+    -- Edit Mode QoL: Prevent Buff/Debuff/Private previews from stacking while positioning.
+    -- This ONLY affects Edit Mode visuals; DB values remain unchanged until the user drags a mover.
+    if isEditMode then
+        local maxSize = iconSize
+        if type(buffIconSize) == "number" and buffIconSize > maxSize then maxSize = buffIconSize end
+        if type(debuffIconSize) == "number" and debuffIconSize > maxSize then maxSize = debuffIconSize end
+        local minSep = maxSize + spacing + 8
 
-    local privOffX = MSUF_A2_ResolveNumber(unitKey, shared, "privateOffsetX", 0, -200, 200, true)
-    local privOffY = MSUF_A2_ResolveNumber(unitKey, shared, "privateOffsetY", 0, -200, 200, true)
+do
+    local fn = _G.MSUF_A2_GetMinStackedSeparationForEditMode
+    if type(fn) == "function" then
+        local ok, v = pcall(fn, unitKey)
+        if ok and type(v) == "number" and v > 0 then
+            minSep = v
+        end
+    end
+end
+        if type(buffOffsetY) ~= "number" then
+            buffOffsetY = minSep
+        elseif buffOffsetY < minSep then
+            buffOffsetY = minSep
+        end
+    end
+
 
     entry.anchor:ClearAllPoints()
     entry.anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", x, y)
 
-    if entry.editMover then
-        entry.editMover:ClearAllPoints()
-        entry.editMover:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", x, y)
-        if boxW and boxH then entry.editMover:SetSize(boxW, boxH) end
-    end
+    -- Private Auras (Blizzard anchors) are offset independently from buff/debuff containers.
+    local privOffX = MSUF_A2_ResolveNumber(unitKey, shared, "privateOffsetX", 0, -2000, 2000, true)
+    local privOffY = MSUF_A2_ResolveNumber(unitKey, shared, "privateOffsetY", 0, -2000, 2000, true)
+    -- If Private offsets were never customized, keep Private above Buffs in Edit Mode
+    -- so the three mover bars are easier to grab separately.
+    do
+        local ul_tmp = MSUF_A2_GetPerUnitLayout(unitKey)
+        local hasPriv = (ul_tmp and (ul_tmp.privateOffsetX ~= nil or ul_tmp.privateOffsetY ~= nil)) and true or false
+        if isEditMode and (not hasPriv) then
+            local maxSize = iconSize
+            if type(buffIconSize) == "number" and buffIconSize > maxSize then maxSize = buffIconSize end
+            if type(debuffIconSize) == "number" and debuffIconSize > maxSize then maxSize = debuffIconSize end
+            local minSep = maxSize + spacing + 8
 
+do
+    local fn = _G.MSUF_A2_GetMinStackedSeparationForEditMode
+    if type(fn) == "function" then
+        local ok, v = pcall(fn, unitKey)
+        if ok and type(v) == "number" and v > 0 then
+            minSep = v
+        end
+    end
+end
+            privOffY = (buffOffsetY or minSep) + minSep
+        end
+    end
     if entry.private then
         entry.private:ClearAllPoints()
         entry.private:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", privOffX, privOffY)
@@ -1668,6 +1730,11 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
 
     local mode = layoutModeOverride or (shared.layoutMode or "SEPARATE")
     if mode == "SINGLE" and entry.mixed then
+        if entry.private then
+            entry.private:ClearAllPoints()
+            entry.private:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", privOffX, privOffY)
+        end
+
         entry.mixed:ClearAllPoints()
         entry.mixed:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
 
@@ -1676,56 +1743,105 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
 
         entry.buffs:ClearAllPoints()
         entry.buffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
-        return
-    end
-
-    local splitSpacing = tonumber(splitSpacingOverride)
-    if splitSpacing == nil then
-        splitSpacing = MSUF_A2_ResolveNumber(unitKey, shared, "splitSpacing", 0, 0, 80, false)
     else
-        if splitSpacing < 0 then splitSpacing = 0 end
-        if splitSpacing > 80 then splitSpacing = 80 end
-    end
-
-    local function Place(container, pos, dx, dy, size)
-        container:ClearAllPoints()
-
-        local s = (type(size) == "number") and size or iconSize
-        local ox = (type(dx) == "number") and dx or 0
-        local oy = (type(dy) == "number") and dy or 0
-
-        if pos == "ABOVE" then
-            container:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", x + ox, y + splitSpacing + oy)
-        elseif pos == "BELOW" then
-            container:SetPoint("BOTTOMLEFT", entry.frame, "BOTTOMLEFT", x + ox, y - s - splitSpacing + oy)
-        elseif pos == "RIGHT" then
-            container:SetPoint("BOTTOMLEFT", entry.frame, "RIGHT", x + splitSpacing + ox, y - (s * 0.5) + oy)
-        elseif pos == "LEFT" then
-            container:SetPoint("BOTTOMLEFT", entry.frame, "LEFT", x - s - splitSpacing + ox, y - (s * 0.5) + oy)
+        local splitSpacing = tonumber(splitSpacingOverride)
+        if splitSpacing == nil then
+            splitSpacing = MSUF_A2_ResolveNumber(unitKey, shared, "splitSpacing", 0, 0, 80, false)
         else
-            container:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", ox, oy)
+            if splitSpacing < 0 then splitSpacing = 0 end
+            if splitSpacing > 80 then splitSpacing = 80 end
+        end
+
+        local function Place(container, pos, dx, dy, size)
+            container:ClearAllPoints()
+
+            local s = (type(size) == "number") and size or iconSize
+            local ox = (type(dx) == "number") and dx or 0
+            local oy = (type(dy) == "number") and dy or 0
+
+            if pos == "ABOVE" then
+                container:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", x + ox, y + splitSpacing + oy)
+            elseif pos == "BELOW" then
+                container:SetPoint("BOTTOMLEFT", entry.frame, "BOTTOMLEFT", x + ox, y - s - splitSpacing + oy)
+            elseif pos == "RIGHT" then
+                container:SetPoint("BOTTOMLEFT", entry.frame, "RIGHT", x + splitSpacing + ox, y - (s * 0.5) + oy)
+            elseif pos == "LEFT" then
+                container:SetPoint("BOTTOMLEFT", entry.frame, "LEFT", x - s - splitSpacing + ox, y - (s * 0.5) + oy)
+            else
+                container:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", ox, oy)
+            end
+        end
+
+        local anchorMode = buffDebuffAnchorOverride or (shared.buffDebuffAnchor or "STACKED")
+        local map = (anchorMode and A2_SPLIT_ANCHOR_MAP[anchorMode]) or nil
+        if anchorMode == "STACKED" or anchorMode == nil or not map then
+            A2_AnchorStacked(entry, buffOffsetY, buffDX, buffDY, debuffDX, debuffDY)
+        else
+            Place(entry.buffs, map.buffs, buffDX, buffDY, buffIconSize)
+            Place(entry.debuffs, map.debuffs, debuffDX, debuffDY, debuffIconSize)
+        end
+
+        if entry.mixed then
+            entry.mixed:ClearAllPoints()
+            entry.mixed:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
         end
     end
 
-    local anchorMode = buffDebuffAnchorOverride or (shared.buffDebuffAnchor or "STACKED")
-    if anchorMode == "STACKED" or anchorMode == nil then
-        A2_AnchorStacked(entry, buffOffsetY, buffDX, buffDY, debuffDX, debuffDY)
-        return
+    -- Split Edit Movers: position + size follow their respective containers (Buffs / Debuffs / Private).
+    local function SetMover(mover, rel, w, h, ox, oy)
+        if not mover then return end
+        mover:ClearAllPoints()
+        if rel then
+            mover:SetPoint("BOTTOMLEFT", rel, "BOTTOMLEFT", ox or 0, oy or 0)
+        else
+            mover:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", ox or 0, oy or 0)
+        end
+        if w and h then mover:SetSize(w, h) end
     end
 
-    local map = A2_SPLIT_ANCHOR_MAP[anchorMode]
-    if not map then
-        A2_AnchorStacked(entry, buffOffsetY, buffDX, buffDY, debuffDX, debuffDY)
-        return
-    end
+    -- Use effective per-row sizing so the click/drag area is predictable even if there are currently no auras.
+    local bw = (perRow * buffIconSize) + (math.max(0, perRow - 1) * spacing)
+    local bh = math.max(buffIconSize, 24)
+    local dw = (perRow * debuffIconSize) + (math.max(0, perRow - 1) * spacing)
+    local dh = math.max(debuffIconSize, 24)
 
-    Place(entry.buffs, map.buffs, buffDX, buffDY, buffIconSize)
-    Place(entry.debuffs, map.debuffs, debuffDX, debuffDY, debuffIconSize)
-
-    if entry.mixed then
-        entry.mixed:ClearAllPoints()
-        entry.mixed:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+    -- Private size can differ (shared/privateSize or per-unit override).
+    local privSize = iconSize
+    if shared and type(shared.privateSize) == "number" then
+        privSize = shared.privateSize
     end
+    local ul = MSUF_A2_GetPerUnitLayout(unitKey)
+    if ul and type(ul.privateSize) == "number" then
+        privSize = ul.privateSize
+    end
+    privSize = tonumber(privSize) or iconSize
+    if privSize < 10 then privSize = 10 end
+    if privSize > 80 then privSize = 80 end
+    local pw = (perRow * privSize) + (math.max(0, perRow - 1) * spacing)
+    local ph = math.max(privSize, 24)
+
+
+-- IMPORTANT: Buff/Debuff movers must NOT be anchored to their containers while dragging.
+-- Mirror the container anchor points instead (same visual position, independent mover frame).
+local function MirrorMoverToContainer(mover, container, w, h)
+    if not mover then return end
+    mover:ClearAllPoints()
+    if container and container.GetPoint then
+        local p, rel, rp, ox, oy = container:GetPoint(1)
+        if p and rel and rp then
+            mover:SetPoint(p, rel, rp, ox or 0, oy or 0)
+        else
+            mover:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+        end
+    else
+        mover:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+    end
+    if w and h then mover:SetSize(w, h) end
+end
+
+MirrorMoverToContainer(entry.editMoverBuff, entry.buffs, bw, bh)
+MirrorMoverToContainer(entry.editMoverDebuff, entry.debuffs, dw, dh)
+SetMover(entry.editMoverPrivate, nil, pw, ph, privOffX, privOffY)
 end
 
 -- ---------------------------------------------------------
@@ -1818,16 +1934,87 @@ end
 --  * RenderUnit() is the source of truth for showing/hiding the mover (Edit Mode preview only).
 --  * The mover exists only to drag the per-unit Aura anchor offsets without opening Blizzard Edit Mode.
 
-local function MSUF_A2_EnsureEditMover(entry, unitKey, labelText)
-    if not entry or not unitKey then return end
-    if entry.editMover then return end
+local function MSUF_A2_SetEditMoversVisible(entry, show)
+    if not entry then return end
+    if entry.editMoverBuff then if show then entry.editMoverBuff:Show() else entry.editMoverBuff:Hide() end end
+    if entry.editMoverDebuff then if show then entry.editMoverDebuff:Show() else entry.editMoverDebuff:Hide() end end
+    if entry.editMoverPrivate then if show then entry.editMoverPrivate:Show() else entry.editMoverPrivate:Hide() end end
+end
 
-    local moverName = "MSUF_Auras2_" .. (tostring(unitKey):gsub("%W", "")) .. "EditMover"
+local function MSUF_A2_AnyEditMover(entry)
+    return (entry and (entry.editMoverBuff or entry.editMoverDebuff or entry.editMoverPrivate)) and true or false
+end
+
+local function MSUF_A2_HideEditMovers(entry)
+    MSUF_A2_SetEditMoversVisible(entry, false)
+end
+
+local A2_MOVER_KEYS = {
+    buff   = { "buffGroupOffsetX",   "buffGroupOffsetY"   },
+    buffs  = { "buffGroupOffsetX",   "buffGroupOffsetY"   },
+    debuff = { "debuffGroupOffsetX", "debuffGroupOffsetY" },
+    debuffs= { "debuffGroupOffsetX", "debuffGroupOffsetY" },
+    private= { "privateOffsetX",     "privateOffsetY"     },
+}
+
+local function MSUF_A2_GetMoverKeyPair(kind)
+    local k = (type(kind) == "string") and kind or "private"
+    -- kind is always an internal constant ("buff"/"debuff"/"private"), but accept plural/safe fallbacks.
+    if k == "BUFF" or k == "Buff" then k = "buff" end
+    if k == "DEBUFF" or k == "Debuff" then k = "debuff" end
+    if k == "PRIVATE" or k == "Private" then k = "private" end
+    local pair = A2_MOVER_KEYS[k] or A2_MOVER_KEYS.private
+    return pair[1], pair[2]
+end
+
+local function MSUF_A2_GetMoverStartOffsets(unitKey, shared, kind)
+    local kx, ky = MSUF_A2_GetMoverKeyPair(kind)
+    return MSUF_A2_ResolveNumber(unitKey, shared, kx, 0, -2000, 2000, true),
+           MSUF_A2_ResolveNumber(unitKey, shared, ky, 0, -2000, 2000, true)
+end
+
+local function MSUF_A2_WriteMoverOffsets(a2, unitKey, kind, newX, newY)
+    if not (a2 and unitKey and kind) then return end
+    a2.perUnit = (type(a2.perUnit) == "table") and a2.perUnit or {}
+    local perUnit = a2.perUnit
+
+    local u = perUnit[unitKey]
+    if type(u) ~= "table" then
+        u = {}
+        perUnit[unitKey] = u
+    end
+
+    u.overrideLayout = true
+    u.layout = (type(u.layout) == "table") and u.layout or {}
+    local ul = u.layout
+
+    local kx, ky = MSUF_A2_GetMoverKeyPair(kind)
+    ul[kx] = newX
+    ul[ky] = newY
+end
+
+local function MSUF_A2_EnsureGroupEditMover(entry, unitKey, kind, labelText)
+    if not entry or not unitKey or not kind then return end
+
+    local field
+    if kind == "buff" then field = "editMoverBuff"
+    elseif kind == "debuff" then field = "editMoverDebuff"
+    else field = "editMoverPrivate" end
+
+    if entry[field] then return end
+
+    local moverName = "MSUF_Auras2_" .. (tostring(unitKey):gsub("%W", "")) .. "EditMover_" .. tostring(kind)
     local mover = CreateFrame("Frame", moverName, UIParent, "BackdropTemplate")
     mover:SetFrameStrata("DIALOG")
     mover:SetFrameLevel(500)
     mover:SetClampedToScreen(true)
     mover:EnableMouse(true)
+
+
+    -- QoL: make the mover easy to grab even if preview labels sit slightly above the icon row.
+    if mover.SetHitRectInsets then
+        mover:SetHitRectInsets(-2, -2, -22, -2)
+    end
 
     mover:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -1840,16 +2027,66 @@ local function MSUF_A2_EnsureEditMover(entry, unitKey, labelText)
     mover:SetBackdropColor(0.20, 0.65, 1.00, 0.12)
     mover:SetBackdropBorderColor(0.20, 0.65, 1.00, 0.55)
 
-    local label = mover:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    label:SetPoint("TOPLEFT", mover, "TOPLEFT", 6, -4)
+    -- Header bar + label (like Private Auras mover): easier to read and easier to click/drag without obscuring icons
+    local headerH = 18
+    local header = CreateFrame("Frame", nil, mover, "BackdropTemplate")
+    header:SetPoint("TOPLEFT", mover, "TOPLEFT", 2, -2)
+    header:SetPoint("TOPRIGHT", mover, "TOPRIGHT", -2, -2)
+    header:SetHeight(headerH)
+    header:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+
+    -- Subtle per-kind tint (Edit Mode only, no gameplay impact)
+    local hr, hg, hb = 0.20, 0.65, 1.00
+    if kind == "buff" then
+        hr, hg, hb = 0.18, 0.80, 0.30
+    elseif kind == "debuff" then
+        hr, hg, hb = 0.90, 0.20, 0.20
+    elseif kind == "private" then
+        hr, hg, hb = 0.20, 0.65, 1.00
+    end
+    header:SetBackdropColor(hr, hg, hb, 0.22)
+    mover._msufHeader = header
+
+    -- Drag QoL: the header bar must never block dragging; route mouse events to the mover.
+    header:EnableMouse(true)
+    header:SetScript("OnMouseDown", function(h, btn)
+        local p = h and h.GetParent and h:GetParent()
+        local fn = p and p.GetScript and p:GetScript("OnMouseDown")
+        if fn then fn(p, btn) end
+    end)
+    header:SetScript("OnMouseUp", function(h, btn)
+        local p = h and h.GetParent and h:GetParent()
+        local fn = p and p.GetScript and p:GetScript("OnMouseUp")
+        if fn then fn(p, btn) end
+    end)
+
+
+    local headerIcon = header:CreateTexture(nil, "OVERLAY")
+    headerIcon:SetSize(14, 14)
+    headerIcon:SetPoint("LEFT", header, "LEFT", 6, 0)
+    if kind == "buff" then
+        headerIcon:SetTexture("Interface\\Icons\\Spell_Holy_WordFortitude")
+    elseif kind == "debuff" then
+        headerIcon:SetTexture("Interface\\Icons\\Spell_Shadow_ShadowWordPain")
+    else
+        headerIcon:SetTexture("Interface\\Icons\\Ability_Creature_Cursed_03")
+    end
+    headerIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    mover._msufHeaderIcon = headerIcon
+
+    local label = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    label:SetPoint("LEFT", headerIcon, "RIGHT", 6, 0)
+    label:SetPoint("RIGHT", header, "RIGHT", -6, 0)
+    label:SetJustifyH("LEFT")
     label:SetText(labelText or (tostring(unitKey) .. " Auras"))
-    label:SetTextColor(0.95, 0.95, 0.95, 0.85)
+    label:SetTextColor(0.95, 0.95, 0.95, 0.92)
     mover._msufLabel = label
 
     mover:Hide()
 
     mover._msufAuraEntry = entry
     mover._msufAuraUnitKey = unitKey
+    mover._msufA2MoverKind = kind
 
     local function IsAnyPopupOpen()
         local st = rawget(_G, "MSUF_EditState")
@@ -1857,8 +2094,7 @@ local function MSUF_A2_EnsureEditMover(entry, unitKey, labelText)
             return false
         end
 
-        -- Auras2 special-case: allow dragging the Aura mover while the Auras2 Position Popup is open.
-        -- Otherwise you must close the popup to move the auras, which feels broken.
+        -- Auras2 special-case: allow dragging the Aura movers while the Auras2 Position Popup is open.
         local ap = _G.MSUF_Auras2PositionPopup
         if ap and ap.IsShown and ap:IsShown() then
             return false
@@ -1874,153 +2110,207 @@ local function MSUF_A2_EnsureEditMover(entry, unitKey, labelText)
     end
 
     local function ApplyDragDelta(self, dx, dy)
-        if InCombatLockdown and InCombatLockdown() then return end
+        if InCombatLockdown() then return end
 
-        local key = self._msufAuraUnitKey or unitKey
         EnsureDB()
+        local a2 = MSUF_DB and MSUF_DB.auras2
+        if type(a2) ~= "table" then return end
+        local shared = a2.shared
+        if type(shared) ~= "table" then return end
 
-        local a2 = (MSUF_DB and MSUF_DB.auras2) or nil
-        if not a2 then return end
-        a2.shared = (type(a2.shared) == "table") and a2.shared or {}
-        a2.perUnit = (type(a2.perUnit) == "table") and a2.perUnit or {}
+        local key = self._msufAuraUnitKey
+        local moverKind = self._msufA2MoverKind or "buff"
 
-        local shared = a2.shared or {}
-        local isBoss = (type(key) == "string" and key:match("^boss%d+$")) and true or false
-        local bossTogether = (isBoss and (shared.bossEditTogether ~= false)) and true or false
+        local startX = self._msufDragStartOffsetX or 0
+        local startY = self._msufDragStartOffsetY or 0
 
-        local startX = (type(self._msufDragStartOffsetX) == "number") and self._msufDragStartOffsetX or 0
-        local startY = (type(self._msufDragStartOffsetY) == "number") and self._msufDragStartOffsetY or 0
         local newX = math.floor(startX + dx + 0.5)
         local newY = math.floor(startY + dy + 0.5)
 
-        local function ApplyToUnit(k)
-            local u = a2.perUnit[k]
-            if type(u) ~= "table" then
-                u = {}
-                a2.perUnit[k] = u
+        -- Clamp to the same range as the popup steppers to avoid accidental far-off positions.
+        if newX < -2000 then newX = -2000 end
+        if newX >  2000 then newX =  2000 end
+        if newY < -2000 then newY = -2000 end
+        if newY >  2000 then newY =  2000 end
+
+        -- Edit Mode safety: keep Buffs and Debuffs from collapsing into the same space while dragging.
+        -- We only clamp in STACKED + SEPARATE mode; this preserves full freedom for other layouts.
+        local function _ClampStackedSep(unitK, kind, x, y)
+            if kind ~= "buff" and kind ~= "debuff" then return x, y end
+            if not shared then return x, y end
+            local mode = shared.layoutMode or "SEPARATE"
+            if mode == "SINGLE" then return x, y end
+            local anchorMode = shared.buffDebuffAnchor or "STACKED"
+            if anchorMode ~= "STACKED" then return x, y end
+
+            -- Compute the minimum separation based on the largest icon size in use.
+            local iconSize, spacing, _, buffOffsetY = MSUF_A2_GetEffectiveSizing(unitK, shared)
+            local buffIconSize = MSUF_A2_ResolveNumber(unitK, shared, "buffGroupIconSize", iconSize, 10, 80, true)
+            local debuffIconSize = MSUF_A2_ResolveNumber(unitK, shared, "debuffGroupIconSize", iconSize, 10, 80, true)
+
+            local maxSize = tonumber(iconSize) or 26
+            if type(buffIconSize) == "number" and buffIconSize > maxSize then maxSize = buffIconSize end
+            if type(debuffIconSize) == "number" and debuffIconSize > maxSize then maxSize = debuffIconSize end
+            local minSep = maxSize + (tonumber(spacing) or 2) + 8
+
+            if type(buffOffsetY) ~= "number" or buffOffsetY < minSep then
+                buffOffsetY = minSep
             end
-            if u.overrideLayout ~= true then u.overrideLayout = true end
-            if type(u.layout) ~= "table" then u.layout = {} end
-            u.layout.offsetX = newX
-            u.layout.offsetY = newY
+
+            local buffDY = MSUF_A2_ResolveNumber(unitK, shared, "buffGroupOffsetY", 0, -2000, 2000, true)
+            local debuffDY = MSUF_A2_ResolveNumber(unitK, shared, "debuffGroupOffsetY", 0, -2000, 2000, true)
+
+            if kind == "buff" then
+                -- Buffs sit above Debuffs in STACKED mode: ensure (buffOffsetY + buffDY) - debuffDY >= minSep
+                local sep = buffOffsetY + y - debuffDY
+                if sep < minSep then
+                    y = debuffDY + (minSep - buffOffsetY)
+                end
+            else
+                -- Debuffs sit below Buffs: ensure (buffOffsetY + buffDY) - debuffDY >= minSep  => debuffDY <= buffOffsetY + buffDY - minSep
+                local sep = buffOffsetY + buffDY - y
+                if sep < minSep then
+                    y = buffOffsetY + buffDY - minSep
+                end
+            end
+
+            -- Re-clamp to the supported offset range.
+            if y < -2000 then y = -2000 end
+            if y >  2000 then y =  2000 end
+            return x, y
         end
 
-        if bossTogether then
+        newX, newY = _ClampStackedSep(key, moverKind, newX, newY)
+
+
+-- Prefer the EditMode clamp (multi-row aware). Fallback: keep local clamp above.
+do
+    local fn = _G.MSUF_A2_ClampGroupOffsetsForEditMode
+    if type(fn) == "function" then
+        local ok, cx, cy = pcall(fn, key, moverKind, newX, newY)
+        if ok then
+            if type(cx) == "number" then newX = cx end
+            if type(cy) == "number" then newY = cy end
+        end
+    end
+end
+
+        local function ApplyToUnit(unitK)
+            MSUF_A2_WriteMoverOffsets(a2, unitK, moverKind, newX, newY)
+
+            local e = AurasByUnit and AurasByUnit[unitK]
+			if e and e.anchor then
+				local ox, oy, bw, bh = MSUF_A2_GetEffectiveLayout(unitK, shared)
+				-- Keep drag refresh consistent with any Edit Mode preview override (e.g. split preview when saved mode is SINGLE).
+				local lm = e._msufA2_editLayoutMode
+				local bd = e._msufA2_editBuffDebuffAnchor
+				local ss = e._msufA2_editSplitSpacing
+				UpdateAnchor(e, shared, ox, oy, bw, bh, lm, bd, ss, (IsEditModeActive and IsEditModeActive()) and true or false)
+			end
+        end
+
+        if shared.bossEditTogether == true and type(key) == "string" and key:match("^boss%d+$") then
             for i = 1, 5 do
                 ApplyToUnit("boss" .. i)
             end
-            -- Live update all boss anchors while dragging (so they move together)
-            for i = 1, 5 do
-                local k = "boss" .. i
-                local e = AurasByUnit and AurasByUnit[k]
-                if e then
-                    local x, y, boxW, boxH = MSUF_A2_GetEffectiveLayout(k, shared)
-                    UpdateAnchor(e, shared, x, y, boxW, boxH)
-                end
-            end
         else
             ApplyToUnit(key)
-            local e = self._msufAuraEntry
-            if e then
-                local x, y, boxW, boxH = MSUF_A2_GetEffectiveLayout(key, shared)
-                UpdateAnchor(e, shared, x, y, boxW, boxH)
-            end
         end
 
-        -- Live sync popup fields (throttled)
-        if _G.MSUF_SyncAuras2PositionPopup then
-            local now = GetTime and GetTime() or 0
-            if not self._msufLastPopupSync or (now - self._msufLastPopupSync) > 0.05 then
-                self._msufLastPopupSync = now
-                _G.MSUF_SyncAuras2PositionPopup(key)
-            end
+        if type(_G.MSUF_SyncAuras2PositionPopup) == "function" then
+            _G.MSUF_SyncAuras2PositionPopup(key)
         end
     end
 
     mover:SetScript("OnMouseDown", function(self, button)
-        if not IsEditModeActive() then return end
         if button ~= "LeftButton" then return end
+        if InCombatLockdown() then return end
         if IsAnyPopupOpen() then return end
-        if InCombatLockdown and InCombatLockdown() then return end
 
         EnsureDB()
-        local a2 = (MSUF_DB and MSUF_DB.auras2) or nil
-        if not a2 then return end
-        local shared = a2.shared or {}
+        local a2 = MSUF_DB and MSUF_DB.auras2
+        if type(a2) ~= "table" then return end
+        local shared = a2.shared
+        if type(shared) ~= "table" then return end
 
-        local key = self._msufAuraUnitKey or unitKey
-        local x, y = MSUF_A2_GetEffectiveLayout(key, shared)
+        local key = self._msufAuraUnitKey
+        local moverKind = self._msufA2MoverKind or "buff"
 
-        self._msufDragDown = true
+        local startX, startY = MSUF_A2_GetMoverStartOffsets(key, shared, moverKind)
+
+        self._msufDragStartOffsetX = startX
+        self._msufDragStartOffsetY = startY
+
+        local x, y = GetCursorScaled()
+        self._msufDragStartCursorX = x
+        self._msufDragStartCursorY = y
         self._msufDragMoved = false
-        self._msufDragStartX, self._msufDragStartY = GetCursorScaled()
-        self._msufDragStartOffsetX = x
-        self._msufDragStartOffsetY = y
 
-        self:SetScript("OnUpdate", function(me)
-            if not me._msufDragDown then return end
-            local cx, cy = GetCursorScaled()
-            local dx = cx - (me._msufDragStartX or cx)
-            local dy = cy - (me._msufDragStartY or cy)
-
-            if not me._msufDragMoved then
-                if (dx * dx + dy * dy) >= 9 then -- 3px threshold
-                    me._msufDragMoved = true
-                else
-                    return
+        if not self._msufMoverOnUpdate then
+            self._msufMoverOnUpdate = function(me)
+                local cx, cy = GetCursorScaled()
+                local dx = cx - (me._msufDragStartCursorX or cx)
+                local dy = cy - (me._msufDragStartCursorY or cy)
+                if not me._msufDragMoved then
+                    if (dx * dx + dy * dy) >= 9 then -- 3px threshold
+                        me._msufDragMoved = true
+                    else
+                        return
+                    end
                 end
+                ApplyDragDelta(me, dx, dy)
             end
-
-            ApplyDragDelta(me, dx, dy)
-        end)
+        end
+        self:SetScript("OnUpdate", self._msufMoverOnUpdate)
     end)
 
     mover:SetScript("OnMouseUp", function(self, button)
-        if not IsEditModeActive() then return end
-
-        local key = self._msufAuraUnitKey or unitKey
-
-        if button == "LeftButton" then
-            local moved = (self._msufDragMoved == true)
-            self._msufDragDown = false
+        if self:GetScript("OnUpdate") then
             self:SetScript("OnUpdate", nil)
-
-            if not moved and _G.MSUF_OpenAuras2PositionPopup then
-                _G.MSUF_OpenAuras2PositionPopup(key, self)
+            if self._msufDragMoved then
+                self._msufDragMoved = false
+                return
             end
-            return
         end
 
-        if button == "RightButton" and _G.MSUF_OpenAuras2PositionPopup then
+        local key = self._msufAuraUnitKey
+        if type(_G.MSUF_OpenAuras2PositionPopup) == "function" then
             _G.MSUF_OpenAuras2PositionPopup(key, self)
         end
     end)
 
-    entry.editMover = mover
+    entry[field] = mover
 end
 
 -- Convenience wrappers (kept for readability)
-local function MSUF_A2_EnsureTargetEditMover(entry)
+local function MSUF_A2_EnsureUnitEditMovers(entry, unitKey, baseLabel)
+    if not entry or not unitKey then return end
+    MSUF_A2_EnsureGroupEditMover(entry, unitKey, "buff",    (baseLabel or unitKey) .. " Buffs")
+    MSUF_A2_EnsureGroupEditMover(entry, unitKey, "debuff",  (baseLabel or unitKey) .. " Debuffs")
+    MSUF_A2_EnsureGroupEditMover(entry, unitKey, "private", (baseLabel or unitKey) .. " Private")
+end
+
+local function MSUF_A2_EnsureTargetEditMovers(entry)
     if not entry or entry.unit ~= "target" then return end
-    return MSUF_A2_EnsureEditMover(entry, "target", "Target Auras")
+    return MSUF_A2_EnsureUnitEditMovers(entry, "target", "Target")
 end
 
-local function MSUF_A2_EnsureFocusEditMover(entry)
+local function MSUF_A2_EnsureFocusEditMovers(entry)
     if not entry or entry.unit ~= "focus" then return end
-    return MSUF_A2_EnsureEditMover(entry, "focus", "Focus Auras")
+    return MSUF_A2_EnsureUnitEditMovers(entry, "focus", "Focus")
 end
 
-local function MSUF_A2_EnsureBossEditMover(entry)
+local function MSUF_A2_EnsureBossEditMovers(entry)
     if not entry or type(entry.unit) ~= "string" then return end
     local u = entry.unit
     local n = u:match("^boss(%d+)$")
     if not n then return end
-    return MSUF_A2_EnsureEditMover(entry, u, "Boss " .. n .. " Auras")
+    return MSUF_A2_EnsureUnitEditMovers(entry, u, "Boss " .. n)
 end
 
-local function MSUF_A2_EnsurePlayerEditMover(entry)
+local function MSUF_A2_EnsurePlayerEditMovers(entry)
     if not entry or entry.unit ~= "player" then return end
-    return MSUF_A2_EnsureEditMover(entry, "player", "Player Auras")
+    return MSUF_A2_EnsureUnitEditMovers(entry, "player", "Player")
 end
 
 -- ------------------------------------------------------------
@@ -2866,14 +3156,33 @@ local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
         icon._msufA2_lastHadTimer = nil
 
         local hadTimer = false
-        if previewDef.permanent then
+        local isPermanent = (previewDef.permanent == true) or (previewDef.noTimer == true)
+
+        if isPermanent then
             pcall(icon.cooldown.Clear, icon.cooldown)
             pcall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
             icon._msufA2_previewCooldownStart = nil
             icon._msufA2_previewCooldownDur = nil
         else
-            local ps = GetTime() - 10
-            local pd = 25
+            -- Allow per-preview timing variety (so previews can show both permanent + timed auras).
+            local pd = tonumber(previewDef.cdDur or previewDef.cooldownDur or previewDef.duration) or 25
+            if pd < 1 then pd = 1 end
+            if pd > 36000 then pd = 36000 end
+
+            local elapsed = nil
+            if previewDef.cdElapsed ~= nil then
+                elapsed = tonumber(previewDef.cdElapsed)
+            elseif previewDef.elapsed ~= nil then
+                elapsed = tonumber(previewDef.elapsed)
+            elseif previewDef.cdRemaining ~= nil then
+                local rem = tonumber(previewDef.cdRemaining)
+                if rem ~= nil then elapsed = pd - rem end
+            end
+            if elapsed == nil then elapsed = 10 end
+            if elapsed < 0 then elapsed = 0 end
+            if elapsed > pd then elapsed = pd * 0.5 end
+
+            local ps = GetTime() - elapsed
             SafeCall(icon.cooldown.SetCooldown, icon.cooldown, ps, pd)
             icon._msufA2_previewCooldownStart = ps
             icon._msufA2_previewCooldownDur = pd
@@ -2911,6 +3220,14 @@ end
 
 local function MSUF_A2_ApplyIconTooltip(icon, shared)
     local wantTip = (shared and shared.showTooltip == true)
+
+    -- IMPORTANT (Edit Mode QoL): Aura icons must never block dragging the split preview bars.
+    -- In Edit Mode, the movers are the interaction surface; icons should be purely visual.
+    -- (Tooltips can be re-enabled simply by leaving Edit Mode.)
+    if IsEditModeActive and IsEditModeActive() then
+        wantTip = false
+    end
+
     icon:EnableMouse((wantTip and true) or false)
 end
 
@@ -3377,7 +3694,7 @@ local function MSUF_A2_ScheduleBudgetContinuation(ctx)
     end)
 end
 
-local function MSUF_A2_ApplyPreviewIcon(icon, tex, spellId, opts, unit, shared, stackCountAnchor)
+local function MSUF_A2_ApplyPreviewIcon(icon, tex, spellId, opts, unit, shared, stackCountAnchor, previewLabelText)
     if not icon then return end
 
     icon._msufUnit = unit
@@ -3391,6 +3708,7 @@ local function MSUF_A2_ApplyPreviewIcon(icon, tex, spellId, opts, unit, shared, 
     -- Mark as preview so tooltips can describe the fake aura type
     icon._msufA2_isPreview = true
     icon._msufA2_previewKind = (opts and opts.previewKind) or nil
+    icon._msufA2_previewLabelText = previewLabelText
 
     if icon.tex then
         icon.tex:SetTexture(tex)
@@ -3427,6 +3745,22 @@ local function MSUF_A2_ApplyPreviewIcon(icon, tex, spellId, opts, unit, shared, 
     -- For preview: apply cooldown first, then stacks can optionally hide countdown numbers (stack demo).
     MSUF_A2_ApplyIconStacks(icon, unit, shared, stackCountAnchor, forcedDisp, forceHideNums)
 
+
+-- Preview label text (only in Edit Mode previews)
+if icon._msufA2_previewLabel then
+    local t = previewLabelText
+    if (not t or t == "") and opts and opts.previewLabel then
+        t = opts.previewLabel
+    end
+    if t and t ~= "" then
+        icon._msufA2_previewLabel:SetText(t)
+        icon._msufA2_previewLabel:SetWidth(icon:GetWidth() or 26)
+        icon._msufA2_previewLabel:Show()
+    else
+        icon._msufA2_previewLabel:Hide()
+    end
+end
+
     -- Highlights + borders share the live pipeline (preview injects simple override flags).
     local pa = icon._msufA2_previewAura
     if type(pa) ~= "table" then
@@ -3440,9 +3774,9 @@ local function MSUF_A2_ApplyPreviewIcon(icon, tex, spellId, opts, unit, shared, 
     pa._msufA2_previewIsPrivate = (opts and ((opts.isPrivate == true) or (opts.previewKind == "private"))) and true or false
 
     SetDispelBorder(icon, unit, pa, (icon._msufFilter == "HELPFUL"), shared, true, (opts and (opts.isOwn or opts.own)))
-
-    -- Tooltip: scripts are assigned once per icon; we only toggle mouse.
-    icon:EnableMouse((shared and shared.showTooltip and true) or false)
+    -- IMPORTANT (Edit Mode QoL): Preview icons must never block dragging the mover bars.
+    -- The mover is the interaction surface; preview icons are purely visual.
+    icon:EnableMouse(false)
 
     icon:Show()
 end
@@ -3453,23 +3787,98 @@ local function MSUF_A2_RenderPreviewIcons(entry, unit, shared, useSingleRow, buf
     local buffDefs = MSUF_A2_PREVIEW_BUFF_DEFS
     local debuffDefs = MSUF_A2_PREVIEW_DEBUFF_DEFS
 
-    local debuffCount = math.min(#debuffDefs, debuffCap or 0)
-    for i = 1, debuffCount do
-        local def = debuffDefs[i]
-        local icon = AcquireIcon(useSingleRow and entry.mixed or entry.debuffs, i)
-        MSUF_A2_ApplyPreviewIcon(icon, def.tex, def.spellId, def, unit, shared, stackCountAnchor)
-    end
-    if not useSingleRow then HideUnused(entry.debuffs, debuffCount + 1) end
+    local uLabel = MSUF_A2_PreviewUnitLabel(unit)
+    local buffLabel = uLabel .. " Buff"
+    local debuffLabel = uLabel .. " Debuff"
 
-    local buffCount = math.min(#buffDefs, buffCap or 0)
-    for i = 1, buffCount do
-        local def = buffDefs[i]
-        local icon = AcquireIcon(useSingleRow and entry.mixed or entry.buffs, (useSingleRow and (debuffCount + i) or i))
-        MSUF_A2_ApplyPreviewIcon(icon, def.tex, def.spellId, def, unit, shared, stackCountAnchor)
+    local debuffCount = tonumber(debuffCap) or 0
+    if debuffCount < 0 then debuffCount = 0 end
+    if debuffCount > 80 then debuffCount = 80 end
+
+    local buffCount = tonumber(buffCap) or 0
+    if buffCount < 0 then buffCount = 0 end
+    if buffCount > 80 then buffCount = 80 end
+
+    local nDeb = (debuffDefs and #debuffDefs) or 0
+    local nBuf = (buffDefs and #buffDefs) or 0
+    if nDeb < 1 then nDeb = 1 end
+    if nBuf < 1 then nBuf = 1 end
+
+    -- Debuffs first
+    for i = 1, debuffCount do
+        local def = debuffDefs[((i - 1) % nDeb) + 1]
+        local icon = AcquireIcon(useSingleRow and entry.mixed or entry.debuffs, i)
+        -- Only label the first icon (avoids text spam when showing many icons).
+        local label = (i == 1) and debuffLabel or nil
+        MSUF_A2_ApplyPreviewIcon(icon, def.tex, def.spellId, def, unit, shared, stackCountAnchor, label)
     end
-    if not useSingleRow then HideUnused(entry.buffs, buffCount + 1) end
+
+    -- Buffs next (append in mixed mode)
+    for i = 1, buffCount do
+        local def = buffDefs[((i - 1) % nBuf) + 1]
+        local idx = useSingleRow and (debuffCount + i) or i
+        local icon = AcquireIcon(useSingleRow and entry.mixed or entry.buffs, idx)
+        local label = (i == 1) and buffLabel or nil
+        MSUF_A2_ApplyPreviewIcon(icon, def.tex, def.spellId, def, unit, shared, stackCountAnchor, label)
+    end
+
+    if useSingleRow then
+        HideUnused(entry.mixed, (debuffCount + buffCount) + 1)
+    else
+        HideUnused(entry.debuffs, debuffCount + 1)
+        HideUnused(entry.buffs, buffCount + 1)
+    end
 
     return buffCount, debuffCount
+end
+
+
+local function MSUF_A2_RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spacing, stackCountAnchor)
+    if not entry or not entry.private then return 0 end
+    -- Target private auras are disabled in MSUF (kept for future-proofing); do not render preview there.
+    if unit == "target" then
+        HideUnused(entry.private, 1)
+        return 0
+    end
+
+    local defs = MSUF_A2_PREVIEW_PRIVATE_DEFS
+    local uLabel = MSUF_A2_PreviewUnitLabel(unit)
+
+    local maxN = 0
+    if type(shared) == "table" then
+        local cap = (unit == "player") and shared.privateAuraMaxPlayer or shared.privateAuraMaxOther
+        if type(cap) == "number" and cap >= 0 then
+            maxN = math.floor(cap)
+        end
+    end
+    if maxN < 0 then maxN = 0 end
+    if maxN > 80 then maxN = 80 end
+
+    if type(privIconSize) ~= "number" or privIconSize <= 0 then privIconSize = 26 end
+    if type(spacing) ~= "number" then spacing = 2 end
+
+    local nDefs = (defs and #defs) or 0
+    if nDefs < 1 then nDefs = 1 end
+
+    local count = maxN
+    local prev
+    for i = 1, count do
+        local def = defs[((i - 1) % nDefs) + 1]
+        local icon = AcquireIcon(entry.private, i)
+        icon:SetSize(privIconSize, privIconSize)
+        icon:ClearAllPoints()
+        if not prev then
+            icon:SetPoint("BOTTOMLEFT", entry.private, "BOTTOMLEFT", 0, 0)
+        else
+            icon:SetPoint("LEFT", prev, "RIGHT", spacing, 0)
+        end
+        prev = icon
+
+        local label = (i == 1) and (uLabel .. " Private") or nil
+        MSUF_A2_ApplyPreviewIcon(icon, def.tex, def.spellId, def, unit, shared, stackCountAnchor, label)
+    end
+    HideUnused(entry.private, count + 1)
+    return count
 end
 
 local function RenderUnit(entry)
@@ -3480,19 +3889,18 @@ local function RenderUnit(entry)
     local unit = entry.unit
     local wantPreview = (shared.showInEditMode == true) and IsEditModeActive()
 
-    local unitNormalEnabled = _A2_UnitNormalEnabledFromDB(a2, unit)
-    local unitAnyEnabled = unitNormalEnabled or _A2_UnitPrivateEnabledFromDB(shared, unit)
+    local unitEnabled = UnitEnabled(unit)
     local unitExists = UnitExists and UnitExists(unit)
     local frame = entry.frame or FindUnitFrame(unit)
 
     -- Preview is ONLY allowed when there is no live unit (or the unit is disabled/hidden).
     -- This prevents preview icons from blocking real auras.
-    local showTest = (wantPreview == true) and ((not unitExists) or (not unitNormalEnabled) or (not frame) or (not frame:IsShown()))
+    local showTest = (wantPreview == true) and ((not unitExists) or (not unitEnabled) or (not frame) or (not frame:IsShown()))
 
     -- Additional Edit Mode quality-of-life:
     -- If the unit exists but has *no* auras at all, allow preview icons so users can position
     -- and see styling without needing to go fish for a buff/debuff.
-    if (not showTest) and (wantPreview == true) and unitExists and unitNormalEnabled and frame and frame:IsShown() then
+    if (not showTest) and (wantPreview == true) and unitExists and unitEnabled and frame and frame:IsShown() then
         local hasAny = false
         if C_UnitAuras and type(C_UnitAuras.GetAuraSlots) == "function" then
             local slots = C_UnitAuras.GetAuraSlots(unit, "HELPFUL", 1)
@@ -3512,24 +3920,24 @@ local function RenderUnit(entry)
 
     -- In Edit Mode preview, still allow positioning even if this unit's auras are disabled.
     -- Outside preview, respect the unit enable toggle.
-    if (not unitAnyEnabled) and (not showTest) then
+    if (not unitEnabled) and (not showTest) then
         if MSUF_A2_PrivateAuras_Clear then MSUF_A2_PrivateAuras_Clear(entry) end
         if entry.anchor then entry.anchor:Hide() end
-        if entry.editMover then entry.editMover:Hide() end
+        MSUF_A2_HideEditMovers(entry)
         return
     end
 
     if not unitExists and not showTest then
         if MSUF_A2_PrivateAuras_Clear then MSUF_A2_PrivateAuras_Clear(entry) end
         if entry.anchor then entry.anchor:Hide() end
-        if entry.editMover then entry.editMover:Hide() end
+        MSUF_A2_HideEditMovers(entry)
         return
     end
 
     if (not showTest) and (not frame or not frame:IsShown()) then
         if MSUF_A2_PrivateAuras_Clear then MSUF_A2_PrivateAuras_Clear(entry) end
         if entry.anchor then entry.anchor:Hide() end
-        if entry.editMover then entry.editMover:Hide() end
+        MSUF_A2_HideEditMovers(entry)
         return
     end
 
@@ -3558,19 +3966,13 @@ local function RenderUnit(entry)
 
     if wantPreview then
         if unit == "player" then
-            if MSUF_A2_EnsurePlayerEditMover then MSUF_A2_EnsurePlayerEditMover(entry) end
+            if MSUF_A2_EnsurePlayerEditMovers then MSUF_A2_EnsurePlayerEditMovers(entry) end
         elseif unit == "target" then
-            MSUF_A2_EnsureTargetEditMover(entry)
+            MSUF_A2_EnsureTargetEditMovers(entry)
         elseif unit == "focus" then
-            if MSUF_A2_EnsureFocusEditMover then MSUF_A2_EnsureFocusEditMover(entry) end
+            if MSUF_A2_EnsureFocusEditMovers then MSUF_A2_EnsureFocusEditMovers(entry) end
         elseif type(unit) == "string" and unit:match("^boss%d+$") then
-            if MSUF_A2_EnsureBossEditMover then MSUF_A2_EnsureBossEditMover(entry) end
-        end
-
-        if entry.editMover then
-            local defW, defH = MSUF_A2_ComputeDefaultEditBoxSize(unit, shared)
-            if type(boxW) ~= "number" or boxW <= 0 then boxW = defW end
-            if type(boxH) ~= "number" or boxH <= 0 then boxH = defH end
+            if MSUF_A2_EnsureBossEditMovers then MSUF_A2_EnsureBossEditMovers(entry) end
         end
     end
 
@@ -3584,15 +3986,24 @@ local function RenderUnit(entry)
     local buffDebuffAnchor = (caps and caps.buffDebuffAnchor ~= nil) and caps.buffDebuffAnchor or shared.buffDebuffAnchor or "STACKED"
     local splitSpacing = (caps and type(caps.splitSpacing) == "number") and caps.splitSpacing or shared.splitSpacing or 0
 
-    UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutMode, buffDebuffAnchor, splitSpacing)
+    local isEditModeActive = IsEditModeActive()
+    -- In Edit Mode preview (showTest), force a split anchor layout so buff/debuff movers don't collapse
+    -- when the saved layout mode is SINGLE.
+    local effectiveLayoutMode = layoutMode
+    if wantPreview and showTest and layoutMode == "SINGLE" then
+        effectiveLayoutMode = "SEPARATE"
+    end
+
+    -- Cache for mover-driven refreshes (dragging needs the same override).
+    entry._msufA2_editLayoutMode = effectiveLayoutMode
+    entry._msufA2_editBuffDebuffAnchor = buffDebuffAnchor
+    entry._msufA2_editSplitSpacing = splitSpacing
+
+    UpdateAnchor(entry, shared, offX, offY, boxW, boxH, effectiveLayoutMode, buffDebuffAnchor, splitSpacing, isEditModeActive)
     -- Edit mover visibility: show when Edit Mode is active and Auras2 are enabled.
     -- We keep the mover always created but only visible in Edit Mode.
-    if entry.editMover then
-        if IsEditModeActive() then
-            entry.editMover:Show()
-        else
-            entry.editMover:Hide()
-        end
+    if MSUF_A2_AnyEditMover(entry) then
+        MSUF_A2_SetEditMoversVisible(entry, isEditModeActive)
     end
     if showTest then
         -- Preview/edit-mode safety: containers are entry.buffs/entry.debuffs/entry.mixed (not *Container)
@@ -3600,6 +4011,7 @@ local function RenderUnit(entry)
         if entry.buffs then entry.buffs:Show() end
         if entry.debuffs then entry.debuffs:Show() end
         if entry.mixed then entry.mixed:Show() end
+        if entry.private then entry.private:Show() end
     end
     entry.anchor:Show()
 
@@ -3610,37 +4022,23 @@ local function RenderUnit(entry)
     local debuffIconSize = MSUF_A2_ResolveNumber(unit, shared, "debuffGroupIconSize", iconSize, 10, 80, true)
 
 
+
 -- Private Auras (Blizzard-rendered) anchored to this unitframe.
 -- Supports independent icon size via shared/privateSize + per-unit layout override (Edit Mode popup).
-if MSUF_A2_PrivateAuras_RebuildIfNeeded then
-    local privIconSize = iconSize
-    if shared and type(shared.privateSize) == "number" then
-        privIconSize = shared.privateSize
-    end
-    if uconf and uconf.overrideLayout == true and type(uconf.layout) == "table" and type(uconf.layout.privateSize) == "number" then
-        privIconSize = uconf.layout.privateSize
-    end
-    if type(privIconSize) ~= "number" then privIconSize = iconSize end
-    if privIconSize < 10 then privIconSize = 10 end
-    if privIconSize > 80 then privIconSize = 80 end
-    MSUF_A2_PrivateAuras_RebuildIfNeeded(entry, shared, privIconSize, spacing, layoutMode)
+local privIconSize = iconSize
+if shared and type(shared.privateSize) == "number" then
+    privIconSize = shared.privateSize
 end
-
-
-    -- If standard (non-private) auras for this unit are disabled, keep private auras (if enabled)
-    -- but skip all aura scanning/rendering so the unitframe on/off does not control private auras.
-    if (not unitNormalEnabled) and (not showTest) then
-        -- Ensure standard aura icons are hidden so only private auras remain visible.
-        if entry.buffs then entry.buffs:Hide() end
-        if entry.debuffs then entry.debuffs:Hide() end
-        if entry.mixed then entry.mixed:Hide() end
-
-        -- Hide any existing icons (safe; containers may keep icon frames around).
-        if entry.buffs then HideUnused(entry.buffs, 1) end
-        if entry.debuffs then HideUnused(entry.debuffs, 1) end
-        if entry.mixed then HideUnused(entry.mixed, 1) end
-        return
-    end
+if uconf and uconf.overrideLayout == true and type(uconf.layout) == "table" and type(uconf.layout.privateSize) == "number" then
+    privIconSize = uconf.layout.privateSize
+end
+if type(privIconSize) ~= "number" then privIconSize = iconSize end
+if privIconSize < 10 then privIconSize = 10 end
+if privIconSize > 80 then privIconSize = 80 end
+if MSUF_A2_PrivateAuras_RebuildIfNeeded then
+    -- Use the effective layout mode so Edit Mode preview stays split even if the saved mode is SINGLE.
+    MSUF_A2_PrivateAuras_RebuildIfNeeded(entry, shared, privIconSize, spacing, effectiveLayoutMode or layoutMode)
+end
 
 
     -- Separate caps (nice-to-have). Keep legacy maxIcons as fallback.
@@ -3656,7 +4054,7 @@ end
     local rowWrap = (caps and caps.rowWrap ~= nil) and caps.rowWrap or shared.rowWrap or "DOWN"
     local stackCountAnchor = (caps and caps.stackCountAnchor ~= nil) and caps.stackCountAnchor or shared.stackCountAnchor or "TOPRIGHT"
 
-    local useSingleRow = (layoutMode == "SINGLE")
+    local useSingleRow = (effectiveLayoutMode == "SINGLE")
     local mixedCount = 0
 
     local debuffCount = 0
@@ -3868,6 +4266,7 @@ end
             -- No unit and preview disabled: hide everything.
             HideUnused(entry.debuffs, 1)
             HideUnused(entry.buffs, 1)
+            if entry.private then HideUnused(entry.private, 1); entry.private:Hide() end
             debuffCount = 0
             buffCount = 0
         else
@@ -3876,6 +4275,8 @@ end
             finalShowDebuffs = true
 
             buffCount, debuffCount = MSUF_A2_RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, debuffCap, stackCountAnchor)
+            if entry.private then entry.private:Show() end
+            MSUF_A2_RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spacing, stackCountAnchor)
         end
     end
 
@@ -4002,13 +4403,12 @@ local function _A2_PerfEnabled()
 end
 
 
-local function _A2_UnitEnabledFast(a2, shared, unit)
-    if _A2_UnitNormalEnabledFromDB and _A2_UnitNormalEnabledFromDB(a2, unit) then
-        return true
-    end
-    if _A2_UnitPrivateEnabledFromDB and _A2_UnitPrivateEnabledFromDB(shared, unit) then
-        return true
-    end
+local function _A2_UnitEnabledFast(a2, unit)
+    if not a2 or a2.enabled ~= true then return false end
+    if unit == "player" then return a2.showPlayer == true end
+    if unit == "target" then return a2.showTarget == true end
+    if unit == "focus" then return a2.showFocus == true end
+    if unit and unit:match("^boss%d$") then return a2.showBoss == true end
     return false
 end
 
@@ -4037,7 +4437,7 @@ local function Flush()
         if not frame then
             -- Unitframe not available: ensure anchors stay hidden.
             if entry and entry.anchor then entry.anchor:Hide() end
-            if entry and entry.editMover then entry.editMover:Hide() end
+            if entry then MSUF_A2_HideEditMovers(entry) end
         else
             if showTest then
                 -- Preview mode: allow positioning even if unit is disabled or doesn't exist.
@@ -4048,21 +4448,21 @@ local function Flush()
                 end
             else
                 -- Master/unit enable gate
-                if not _A2_UnitEnabledFast(a2, shared, unit) then
+                if not _A2_UnitEnabledFast(a2, unit) then
                     if entry and entry.anchor then entry.anchor:Hide() end
-                    if entry and entry.editMover then entry.editMover:Hide() end
+                    if entry then MSUF_A2_HideEditMovers(entry) end
 
                 -- Visibility gate: if the unitframe isn't shown, do zero work (anchor is hidden by OnHide)
                 elseif not frame:IsShown() then
                     if entry and entry.anchor then entry.anchor:Hide() end
-                    if entry and entry.editMover then entry.editMover:Hide() end
+                    if entry then MSUF_A2_HideEditMovers(entry) end
 
                 else
                     -- Unit existence gate
                     local unitExists = UnitExists and UnitExists(unit)
                     if not unitExists then
                         if entry and entry.anchor then entry.anchor:Hide() end
-                        if entry and entry.editMover then entry.editMover:Hide() end
+                        if entry then MSUF_A2_HideEditMovers(entry) end
                     else                        -- collapse multi-event storms by limiting full render frequency per unit.
                         -- Keep prior visuals; defer only the expensive RenderUnit call.
                         local doRender = true
