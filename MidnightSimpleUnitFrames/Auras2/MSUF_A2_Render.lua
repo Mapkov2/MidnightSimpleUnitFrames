@@ -1258,6 +1258,56 @@ end
 local Dirty = AcquireDirtyTable()
 local FlushScheduled = false
 
+
+-- Step 6 perf (cumulative): Flush must not "run forever" in idle.
+-- Use a single self-stopping OnUpdate driver instead of unbounded timer storms.
+local Flush -- forward declaration (assigned later)
+
+local _A2_FlushDriver = CreateFrame("Frame")
+_A2_FlushDriver:Hide()
+local _A2_FlushNextAt = nil
+
+local function _A2_StopFlushDriver()
+    _A2_FlushNextAt = nil
+    _A2_FlushDriver:SetScript("OnUpdate", nil)
+    _A2_FlushDriver:Hide()
+end
+
+local function _A2_FlushDriver_OnUpdate()
+    local at = _A2_FlushNextAt
+    if not at then
+        _A2_StopFlushDriver()
+        return
+    end
+
+    local nowT = (_A2_GetTime and _A2_GetTime()) or (GetTime and GetTime()) or 0
+    if nowT >= at then
+            _A2_FlushNextAt = nil
+            if not Flush then
+                _A2_StopFlushDriver()
+                return
+            end
+            Flush()
+        end
+end
+
+local function _A2_ScheduleFlush(delay)
+    if not delay or delay < 0 then delay = 0 end
+    local nowT = (_A2_GetTime and _A2_GetTime()) or (GetTime and GetTime()) or 0
+    local at = nowT + delay
+
+    local cur = _A2_FlushNextAt
+    if (not cur) or at < cur then
+        _A2_FlushNextAt = at
+    end
+
+    if not _A2_FlushDriver:GetScript("OnUpdate") then
+        _A2_FlushDriver:Show()
+        _A2_FlushDriver:SetScript("OnUpdate", _A2_FlushDriver_OnUpdate)
+    end
+end
+
+
 local function IsEditModeActive()
     -- MSUF-only Edit Mode:
     -- Blizzard Edit Mode is intentionally ignored (Blizzard lifecycle currently unreliable on reload/zone transitions).
@@ -4395,7 +4445,7 @@ local function _A2_UnitEnabledFast(a2, unit)
     return false
 end
 
-local function Flush()
+Flush = function()
     local doPerf = _A2_PerfEnabled()
     local perf = _A2_PERF
     local t0 = (doPerf and _A2_debugprofilestop and _A2_debugprofilestop()) or nil
@@ -4404,7 +4454,9 @@ local function Flush()
     local nextRenderDelay = nil
     local nowT = (_A2_GetTime and _A2_GetTime()) or (GetTime and GetTime()) or 0
 
-    FlushScheduled = false
+    -- Keep FlushScheduled=true while flushing to coalesce MarkDirty calls that happen during rendering.
+
+    FlushScheduled = true
     local toUpdate = Dirty
     Dirty = AcquireDirtyTable()
 
@@ -4480,12 +4532,23 @@ local function Flush()
     end
 
     ReleaseDirtyTable(toUpdate)
-
     -- Schedule a deferred flush if we intentionally deferred expensive renders due to burst gating.
-    if nextRenderDelay ~= nil and (not FlushScheduled) then
-        FlushScheduled = true
+    if nextRenderDelay ~= nil then
         if nextRenderDelay < 0 then nextRenderDelay = 0 end
-        C_Timer.After(nextRenderDelay, Flush)
+        _A2_ScheduleFlush(nextRenderDelay)
+    end
+
+    -- If new work was marked while we were flushing, schedule a follow-up flush next tick.
+    if next(Dirty) ~= nil then
+        _A2_ScheduleFlush(0)
+    end
+
+    -- Go fully idle when the queue is empty and no deferred work is pending.
+    if nextRenderDelay == nil and next(Dirty) == nil then
+        FlushScheduled = false
+        _A2_StopFlushDriver()
+    else
+        FlushScheduled = true
     end
 
     -- Preview stack-count light refresh ticker must start/stop reliably when Edit Mode preview is shown.
@@ -4527,10 +4590,20 @@ local function MarkDirty(unit)
 
     if FlushScheduled then return end
     FlushScheduled = true
-    C_Timer.After(0, Flush)
+    _A2_ScheduleFlush(0)
 end
 
 
+
+-- Public: is any render work pending? (used by Events poll gating)
+local function MSUF_A2_DirtyListNotEmpty()
+    if FlushScheduled then return true end
+    return (next(Dirty) ~= nil)
+end
+API.DirtyListNotEmpty = API.DirtyListNotEmpty or MSUF_A2_DirtyListNotEmpty
+if _G and type(_G.MSUF_A2_DirtyListNotEmpty) ~= "function" then
+    _G.MSUF_A2_DirtyListNotEmpty = function() return API.DirtyListNotEmpty() end
+end
 
 -- Public refresh (used by options)
 local function MSUF_A2_RefreshAll()

@@ -1,4 +1,4 @@
--- MSUF_A2_CooldownText.lua
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua"); -- MSUF_A2_CooldownText.lua
 -- Auras 2.0 cooldown text handling.
 -- Phase 4: extract cooldown text manager out of Render for line-reduction + clarity.
 --
@@ -12,8 +12,8 @@ local addonName, ns = ...
 
 -- MSUF: Max-perf Auras2: replace protected calls (pcall) with direct calls.
 -- NOTE: this removes error-catching; any error will propagate.
-local function MSUF_A2_FastCall(fn, ...)
-    return true, fn(...)
+local function MSUF_A2_FastCall(fn, ...) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_FastCall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:15:6");
+    return Perfy_Trace_Passthrough("Leave", "MSUF_A2_FastCall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:15:6", true, fn(...))
 end
 ns = ns or {}
 
@@ -27,26 +27,26 @@ local CT = API.CooldownText
 -- DB helpers (avoid hard dependency on Render-local EnsureDB)
 -- ------------------------------------------------------------
 
-local function EnsureDB()
+local function EnsureDB() Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:30:6");
     local db = API.DB
     if db and db.Ensure then
         db.Ensure()
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:30:6"); return
     end
     -- Fallback (should be rare): assume core MSUF_DB exists.
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:30:6"); end
 
 -- ------------------------------------------------------------
 -- Locate the Blizzard cooldown countdown FontString (lazy-built)
 -- ------------------------------------------------------------
 
-function MSUF_A2_GetCooldownFontString(icon)
+function MSUF_A2_GetCooldownFontString(icon) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_GetCooldownFontString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:43:0");
     local cd = icon and icon.cooldown
-    if not cd or not cd.GetRegions then return nil end
+    if not cd or not cd.GetRegions then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetCooldownFontString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:43:0"); return nil end
 
     local cached = cd._msufCooldownFontString
     if cached and cached ~= false then
-        return cached
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetCooldownFontString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:43:0"); return cached
     end
 
     -- If we previously failed to find the fontstring, retry occasionally because
@@ -55,7 +55,7 @@ function MSUF_A2_GetCooldownFontString(icon)
     if cached == false then
         local last = cd._msufCooldownFontStringLastTry or 0
         if (now - last) < 0.5 then
-            return nil
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetCooldownFontString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:43:0"); return nil
         end
     end
     cd._msufCooldownFontStringLastTry = now
@@ -65,12 +65,12 @@ function MSUF_A2_GetCooldownFontString(icon)
         local r = regions[i]
         if r and r.GetObjectType and r:GetObjectType() == "FontString" then
             cd._msufCooldownFontString = r
-            return r
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetCooldownFontString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:43:0"); return r
         end
     end
 
     cd._msufCooldownFontString = false
-    return nil
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetCooldownFontString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:43:0"); return nil
 end
 
 CT.GetCooldownFontString = MSUF_A2_GetCooldownFontString
@@ -90,40 +90,40 @@ local MSUF_A2_CooldownTextMgr
 -- We detect the required calling convention once per session.
 local MSUF_A2_CurveAddMode -- nil | "xy" | "point" | "none"
 
-local function MSUF_A2_CreateCurvePoint(x, value)
+local function MSUF_A2_CreateCurvePoint(x, value) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_CreateCurvePoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:93:6");
     if C_CurveUtil then
         local f = C_CurveUtil.CreateCurvePoint or C_CurveUtil.CreatePoint or C_CurveUtil.CreatePoint2D
         if type(f) == "function" then
-            return f(x, value)
+            return Perfy_Trace_Passthrough("Leave", "MSUF_A2_CreateCurvePoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:93:6", f(x, value))
         end
     end
     local g = _G and (_G.CreateCurvePoint or _G.CreatePoint) or nil
     if type(g) == "function" then
-        return g(x, value)
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_CreateCurvePoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:93:6", g(x, value))
     end
-    return nil
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CreateCurvePoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:93:6"); return nil
 end
 
-local function MSUF_A2_CurveAddPoint(curve, x, value)
-    if not curve then return false end
+local function MSUF_A2_CurveAddPoint(curve, x, value) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_CurveAddPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:107:6");
+    if not curve then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CurveAddPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:107:6"); return false end
 
     if MSUF_A2_CurveAddMode == "xy" then
         curve:AddPoint(x, value)
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CurveAddPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:107:6"); return true
     elseif MSUF_A2_CurveAddMode == "point" then
         local pt = MSUF_A2_CreateCurvePoint(x, value)
-        if not pt then return false end
+        if not pt then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CurveAddPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:107:6"); return false end
         curve:AddPoint(pt)
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CurveAddPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:107:6"); return true
     elseif MSUF_A2_CurveAddMode == "none" then
-        return false
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CurveAddPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:107:6"); return false
     end
 
     -- Detect once (pcall is fine here; curve builds only on invalidation / options changes).
     local ok = MSUF_A2_FastCall(curve.AddPoint, curve, x, value)
     if ok then
         MSUF_A2_CurveAddMode = "xy"
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CurveAddPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:107:6"); return true
     end
 
     local pt = MSUF_A2_CreateCurvePoint(x, value)
@@ -131,15 +131,15 @@ local function MSUF_A2_CurveAddPoint(curve, x, value)
         ok = MSUF_A2_FastCall(curve.AddPoint, curve, pt)
         if ok then
             MSUF_A2_CurveAddMode = "point"
-            return true
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CurveAddPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:107:6"); return true
         end
     end
 
     MSUF_A2_CurveAddMode = "none"
-    return false
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CurveAddPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:107:6"); return false
 end
 
-local function MSUF_A2_GetGlobalFontRGB_Fallback()
+local function MSUF_A2_GetGlobalFontRGB_Fallback() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_GetGlobalFontRGB_Fallback file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:142:6");
     EnsureDB()
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     if g and g.useCustomFontColor == true
@@ -147,32 +147,32 @@ local function MSUF_A2_GetGlobalFontRGB_Fallback()
        and type(g.fontColorCustomG) == "number"
        and type(g.fontColorCustomB) == "number"
     then
-        return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_GetGlobalFontRGB_Fallback file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:142:6", g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB)
     end
-    return 1, 1, 1
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetGlobalFontRGB_Fallback file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:142:6"); return 1, 1, 1
 end
 
 -- Master toggle (global): when disabled, aura cooldown text always uses the Safe color.
-local function MSUF_A2_IsCooldownTextBucketColoringEnabled()
+local function MSUF_A2_IsCooldownTextBucketColoringEnabled() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_IsCooldownTextBucketColoringEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:156:6");
     if MSUF_A2_BucketColoringEnabled ~= nil then
-        return MSUF_A2_BucketColoringEnabled
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_IsCooldownTextBucketColoringEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:156:6"); return MSUF_A2_BucketColoringEnabled
     end
     EnsureDB()
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     -- default = enabled
     MSUF_A2_BucketColoringEnabled = not (g and g.aurasCooldownTextUseBuckets == false)
-    return MSUF_A2_BucketColoringEnabled
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_IsCooldownTextBucketColoringEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:156:6"); return MSUF_A2_BucketColoringEnabled
 end
 
-local function Clamp01(v)
-    if v < 0 then return 0 end
-    if v > 1 then return 1 end
-    return v
+local function Clamp01(v) Perfy_Trace(Perfy_GetTime(), "Enter", "Clamp01 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:167:6");
+    if v < 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "Clamp01 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:167:6"); return 0 end
+    if v > 1 then Perfy_Trace(Perfy_GetTime(), "Leave", "Clamp01 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:167:6"); return 1 end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "Clamp01 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:167:6"); return v
 end
 
-local function NormalizeColorTable(t, fallbackR, fallbackG, fallbackB)
+local function NormalizeColorTable(t, fallbackR, fallbackG, fallbackB) Perfy_Trace(Perfy_GetTime(), "Enter", "NormalizeColorTable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:173:6");
     if type(t) ~= "table" then
-        return { fallbackR, fallbackG, fallbackB, 1 }
+        return Perfy_Trace_Passthrough("Leave", "NormalizeColorTable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:173:6", { fallbackR, fallbackG, fallbackB, 1 })
     end
     local r = t[1] or t.r or fallbackR
     local g = t[2] or t.g or fallbackG
@@ -182,12 +182,12 @@ local function NormalizeColorTable(t, fallbackR, fallbackG, fallbackB)
     if type(g) ~= "number" then g = fallbackG end
     if type(b) ~= "number" then b = fallbackB end
     if type(a) ~= "number" then a = 1 end
-    return { Clamp01(r), Clamp01(g), Clamp01(b), Clamp01(a) }
+    return Perfy_Trace_Passthrough("Leave", "NormalizeColorTable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:173:6", { Clamp01(r), Clamp01(g), Clamp01(b), Clamp01(a) })
 end
 
-local function MSUF_A2_EnsureCooldownTextColors()
+local function MSUF_A2_EnsureCooldownTextColors() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_EnsureCooldownTextColors file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:188:6");
     if MSUF_A2_CooldownTextColors then
-        return MSUF_A2_CooldownTextColors
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownTextColors file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:188:6"); return MSUF_A2_CooldownTextColors
     end
 
     EnsureDB()
@@ -208,12 +208,12 @@ local function MSUF_A2_EnsureCooldownTextColors()
         expire = expire,
     }
 
-    return MSUF_A2_CooldownTextColors
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownTextColors file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:188:6"); return MSUF_A2_CooldownTextColors
 end
 
-local function MSUF_A2_EnsureCooldownTextThresholds()
+local function MSUF_A2_EnsureCooldownTextThresholds() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_EnsureCooldownTextThresholds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:214:6");
     if MSUF_A2_CooldownTextThresholds then
-        return MSUF_A2_CooldownTextThresholds
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownTextThresholds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:214:6"); return MSUF_A2_CooldownTextThresholds
     end
 
     EnsureDB()
@@ -246,57 +246,57 @@ local function MSUF_A2_EnsureCooldownTextThresholds()
         safeSec   = safeSec,
     }
 
-    return MSUF_A2_CooldownTextThresholds
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownTextThresholds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:214:6"); return MSUF_A2_CooldownTextThresholds
 end
 
-local function MSUF_A2_GetCooldownTextColorForRemainingSeconds(rem)
-    if type(rem) ~= "number" then return nil end
-    if rem <= 0 then return nil end
+local function MSUF_A2_GetCooldownTextColorForRemainingSeconds(rem) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6");
+    if type(rem) ~= "number" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6"); return nil end
+    if rem <= 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6"); return nil end
 
     local secrets = C_Secrets
     if secrets and type(secrets.IsSecret) == "function" and secrets.IsSecret(rem) == true then
         -- Do not compare/threshold secret numbers; use DurationObject + curve path instead.
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6"); return nil
     end
 
     local t = MSUF_A2_EnsureCooldownTextThresholds()
-    if not t then return nil end
+    if not t then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6"); return nil end
 
     if rem <= (t.expireSec or 0.25) then
-        return (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.expire) or nil
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6", (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.expire) or nil)
     elseif rem <= (t.urgSec or 5) then
-        return (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.urgent) or nil
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6", (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.urgent) or nil)
     elseif rem <= (t.warnSec or 15) then
-        return (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.warning) or nil
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6", (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.warning) or nil)
     elseif rem <= (t.safeSec or 60) then
-        return (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.safe) or nil
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6", (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.safe) or nil)
     else
-        return (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.normal) or nil
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6", (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.normal) or nil)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_GetCooldownTextColorForRemainingSeconds file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:252:6"); end
 
-local function MSUF_A2_EnsureCooldownColorCurve()
+local function MSUF_A2_EnsureCooldownColorCurve() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_EnsureCooldownColorCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:278:6");
     -- nil = not built yet; false = unsupported (don't retry)
     if MSUF_A2_CooldownColorCurve ~= nil then
-        return (MSUF_A2_CooldownColorCurve ~= false) and MSUF_A2_CooldownColorCurve or nil
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_EnsureCooldownColorCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:278:6", (MSUF_A2_CooldownColorCurve ~= false) and MSUF_A2_CooldownColorCurve or nil)
     end
 
     local curveUtil = C_CurveUtil
     if not curveUtil then
         MSUF_A2_CooldownColorCurve = false
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownColorCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:278:6"); return nil
     end
 
     local createCurve = curveUtil.CreateColorCurve or curveUtil.CreateCurve
     if type(createCurve) ~= "function" then
         MSUF_A2_CooldownColorCurve = false
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownColorCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:278:6"); return nil
     end
 
     local curve = createCurve()
     if not curve then
         MSUF_A2_CooldownColorCurve = false
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownColorCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:278:6"); return nil
     end
 
     -- Step curve (bucket colors)
@@ -308,12 +308,12 @@ local function MSUF_A2_EnsureCooldownColorCurve()
     local t = MSUF_A2_EnsureCooldownTextThresholds()
     if (not c) or (not t) or (type(CreateColor) ~= "function") then
         MSUF_A2_CooldownColorCurve = false
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownColorCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:278:6"); return nil
     end
 
-    local function C4(tab)
-        if not tab then return nil end
-        return CreateColor(tab[1], tab[2], tab[3], tab[4] or 1)
+    local function C4(tab) Perfy_Trace(Perfy_GetTime(), "Enter", "C4 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:314:10");
+        if not tab then Perfy_Trace(Perfy_GetTime(), "Leave", "C4 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:314:10"); return nil end
+        return Perfy_Trace_Passthrough("Leave", "C4 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:314:10", CreateColor(tab[1], tab[2], tab[3], tab[4] or 1))
     end
 
     local colExpire = C4(c.expire)  or C4(c.urgent)  or C4(c.warning) or C4(c.safe) or C4(c.normal)
@@ -324,7 +324,7 @@ local function MSUF_A2_EnsureCooldownColorCurve()
 
     if (not colExpire) or (not colUrg) or (not colWarn) or (not colSafe) or (not colNorm) then
         MSUF_A2_CooldownColorCurve = false
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownColorCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:278:6"); return nil
     end
 
     local e = (t.expireSec or 0.25)
@@ -337,28 +337,28 @@ local function MSUF_A2_EnsureCooldownColorCurve()
     if w < u then w = u end
     if s < w then s = w end
 
-    local function AddColorPoint(x, color)
-        if not curve.AddPoint then return false end
+    local function AddColorPoint(x, color) Perfy_Trace(Perfy_GetTime(), "Enter", "AddColorPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:340:10");
+        if not curve.AddPoint then Perfy_Trace(Perfy_GetTime(), "Leave", "AddColorPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:340:10"); return false end
 
         -- Some builds: AddPoint(x, color)
         if MSUF_A2_FastCall(curve.AddPoint, curve, x, color) then
-            return true
+            Perfy_Trace(Perfy_GetTime(), "Leave", "AddColorPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:340:10"); return true
         end
 
         -- Some builds: AddPoint(point) where point = { x = <number>, y = <Color> }
         if MSUF_A2_FastCall(curve.AddPoint, curve, { x = x, y = color }) then
-            return true
+            Perfy_Trace(Perfy_GetTime(), "Leave", "AddColorPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:340:10"); return true
         end
 
         -- Some builds: AddPoint(x, r, g, b, a)
         if color and color.GetRGBA then
             local r, g, b, a = color:GetRGBA()
             if MSUF_A2_FastCall(curve.AddPoint, curve, x, r, g, b, a) then
-                return true
+                Perfy_Trace(Perfy_GetTime(), "Leave", "AddColorPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:340:10"); return true
             end
         end
 
-        return false
+        Perfy_Trace(Perfy_GetTime(), "Leave", "AddColorPoint file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:340:10"); return false
     end
 
     if not (AddColorPoint(0, colExpire)
@@ -367,16 +367,16 @@ local function MSUF_A2_EnsureCooldownColorCurve()
         and AddColorPoint(w, colSafe)
         and AddColorPoint(s, colNorm)) then
         MSUF_A2_CooldownColorCurve = false
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownColorCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:278:6"); return nil
     end
 
     MSUF_A2_CooldownColorCurve = curve
-    return curve
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_EnsureCooldownColorCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:278:6"); return curve
 end
 
-local function MSUF_A2_FormatCooldownTimeText(rem)
+local function MSUF_A2_FormatCooldownTimeText(rem) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_FormatCooldownTimeText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:377:6");
     rem = tonumber(rem)
-    if not rem or rem <= 0 then return "" end
+    if not rem or rem <= 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_FormatCooldownTimeText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:377:6"); return "" end
 
     if rem < 10 then
         local v = math.floor(rem * 10 + 0.5) / 10
@@ -384,9 +384,9 @@ local function MSUF_A2_FormatCooldownTimeText(rem)
         if not string.find(s, "%.", 1, true) then
             s = s .. ".0"
         end
-        return s
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_FormatCooldownTimeText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:377:6"); return s
     elseif rem < 60 then
-        return tostring(math.floor(rem + 0.5))
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_FormatCooldownTimeText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:377:6", tostring(math.floor(rem + 0.5)))
     end
 
     if rem < 600 then
@@ -394,34 +394,34 @@ local function MSUF_A2_FormatCooldownTimeText(rem)
         local s = math.floor(rem - (m * 60))
         if s < 0 then s = 0 end
         if s < 10 then
-            return tostring(m) .. ":0" .. tostring(s)
+            return Perfy_Trace_Passthrough("Leave", "MSUF_A2_FormatCooldownTimeText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:377:6", tostring(m) .. ":0" .. tostring(s))
         end
-        return tostring(m) .. ":" .. tostring(s)
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_FormatCooldownTimeText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:377:6", tostring(m) .. ":" .. tostring(s))
     end
 
     if rem < 3600 then
         local m = math.floor(rem / 60 + 0.5)
-        return tostring(m) .. "m"
+        return Perfy_Trace_Passthrough("Leave", "MSUF_A2_FormatCooldownTimeText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:377:6", tostring(m) .. "m")
     end
 
     local h = math.floor(rem / 3600 + 0.5)
-    return tostring(h) .. "h"
+    return Perfy_Trace_Passthrough("Leave", "MSUF_A2_FormatCooldownTimeText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:377:6", tostring(h) .. "h")
 end
 
 -- ------------------------------------------------------------
 -- Public controls: invalidate + recolor
 -- ------------------------------------------------------------
 
-local function MSUF_A2_InvalidateCooldownTextCurve()
+local function MSUF_A2_InvalidateCooldownTextCurve() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_InvalidateCooldownTextCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:415:6");
     MSUF_A2_CooldownColorCurve = nil
     MSUF_A2_CooldownTextColors = nil
     MSUF_A2_CooldownTextThresholds = nil
     MSUF_A2_BucketColoringEnabled = nil
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_InvalidateCooldownTextCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:415:6"); end
 
-local function MSUF_A2_ForceCooldownTextRecolor()
+local function MSUF_A2_ForceCooldownTextRecolor() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_ForceCooldownTextRecolor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:422:6");
     local mgr = MSUF_A2_CooldownTextMgr
-    if not mgr or not mgr.active then return end
+    if not mgr or not mgr.active then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_ForceCooldownTextRecolor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:422:6"); return end
 
     local bucketsEnabled = MSUF_A2_IsCooldownTextBucketColoringEnabled()
     local safeCol
@@ -491,7 +491,7 @@ local function MSUF_A2_ForceCooldownTextRecolor()
             end
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_ForceCooldownTextRecolor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:422:6"); end
 
 CT.InvalidateCurve = MSUF_A2_InvalidateCooldownTextCurve
 CT.ForceRecolor    = MSUF_A2_ForceCooldownTextRecolor
@@ -501,10 +501,10 @@ API.InvalidateCooldownTextCurve = API.InvalidateCooldownTextCurve or MSUF_A2_Inv
 API.ForceCooldownTextRecolor    = API.ForceCooldownTextRecolor    or MSUF_A2_ForceCooldownTextRecolor
 
 if _G and type(_G.MSUF_A2_InvalidateCooldownTextCurve) ~= "function" then
-    _G.MSUF_A2_InvalidateCooldownTextCurve = function() return API.InvalidateCooldownTextCurve() end
+    _G.MSUF_A2_InvalidateCooldownTextCurve = function() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_A2_InvalidateCooldownTextCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:504:45"); return Perfy_Trace_Passthrough("Leave", "_G.MSUF_A2_InvalidateCooldownTextCurve file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:504:45", API.InvalidateCooldownTextCurve()) end
 end
 if _G and type(_G.MSUF_A2_ForceCooldownTextRecolor) ~= "function" then
-    _G.MSUF_A2_ForceCooldownTextRecolor = function() return API.ForceCooldownTextRecolor() end
+    _G.MSUF_A2_ForceCooldownTextRecolor = function() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_A2_ForceCooldownTextRecolor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:507:42"); return Perfy_Trace_Passthrough("Leave", "_G.MSUF_A2_ForceCooldownTextRecolor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:507:42", API.ForceCooldownTextRecolor()) end
 end
 
 -- ------------------------------------------------------------
@@ -518,29 +518,29 @@ MSUF_A2_CooldownTextMgr = {
     acc = 0,
 }
 
-local function MSUF_A2_CooldownTextMgr_StopIfIdle()
-    if MSUF_A2_CooldownTextMgr.count > 0 then return end
+local function MSUF_A2_CooldownTextMgr_StopIfIdle() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_CooldownTextMgr_StopIfIdle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:521:6");
+    if MSUF_A2_CooldownTextMgr.count > 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_StopIfIdle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:521:6"); return end
     MSUF_A2_CooldownTextMgr.count = 0
     local f = MSUF_A2_CooldownTextMgr.frame
     if f then
         f:SetScript("OnUpdate", nil)
         f:Hide()
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_StopIfIdle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:521:6"); end
 
-local function MSUF_A2_CooldownTextMgr_EnsureFrame()
+local function MSUF_A2_CooldownTextMgr_EnsureFrame() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_CooldownTextMgr_EnsureFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:531:6");
     local f = MSUF_A2_CooldownTextMgr.frame
-    if f then return f end
+    if f then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_EnsureFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:531:6"); return f end
     f = CreateFrame("Frame")
     f:Hide()
     MSUF_A2_CooldownTextMgr.frame = f
-    return f
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_EnsureFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:531:6"); return f
 end
 
-local function MSUF_A2_CooldownTextMgr_OnUpdate(_, elapsed)
+local function MSUF_A2_CooldownTextMgr_OnUpdate(_, elapsed) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_CooldownTextMgr_OnUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:540:6");
     local mgr = MSUF_A2_CooldownTextMgr
     mgr.acc = mgr.acc + (elapsed or 0)
-    if mgr.acc < 0.10 then return end -- 10 Hz
+    if mgr.acc < 0.10 then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_OnUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:540:6"); return end -- 10 Hz
     mgr.acc = 0
 
     local bucketsEnabled = MSUF_A2_IsCooldownTextBucketColoringEnabled()
@@ -657,14 +657,14 @@ local function MSUF_A2_CooldownTextMgr_OnUpdate(_, elapsed)
         if mgr.count < 0 then mgr.count = 0 end
         MSUF_A2_CooldownTextMgr_StopIfIdle()
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_OnUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:540:6"); end
 
-local function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
+local function MSUF_A2_CooldownTextMgr_RegisterIcon(icon) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_CooldownTextMgr_RegisterIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:662:6");
     local cd = icon and icon.cooldown
-    if not cd then return end
+    if not cd then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_RegisterIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:662:6"); return end
 
     if MSUF_A2_CooldownTextMgr.active[cd] then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_RegisterIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:662:6"); return
     end
 
     MSUF_A2_CooldownTextMgr.active[cd] = icon
@@ -673,27 +673,27 @@ local function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
 
     local f = MSUF_A2_CooldownTextMgr_EnsureFrame()
     if MSUF_A2_CooldownTextMgr.count ~= 1 then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_RegisterIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:662:6"); return
     end
 
     MSUF_A2_CooldownTextMgr.acc = 0
     f:Show()
     f:SetScript("OnUpdate", MSUF_A2_CooldownTextMgr_OnUpdate)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_RegisterIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:662:6"); end
 
-local function MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
+local function MSUF_A2_CooldownTextMgr_UnregisterIcon(icon) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_A2_CooldownTextMgr_UnregisterIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:684:6");
     local cd = icon and icon.cooldown
-    if not cd then return end
+    if not cd then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_UnregisterIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:684:6"); return end
     if not MSUF_A2_CooldownTextMgr.active[cd] then
         icon._msufA2_cdMgrRegistered = false
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_UnregisterIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:684:6"); return
     end
     MSUF_A2_CooldownTextMgr.active[cd] = nil
     MSUF_A2_CooldownTextMgr.count = MSUF_A2_CooldownTextMgr.count - 1
     if MSUF_A2_CooldownTextMgr.count < 0 then MSUF_A2_CooldownTextMgr.count = 0 end
     icon._msufA2_cdMgrRegistered = false
     MSUF_A2_CooldownTextMgr_StopIfIdle()
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_A2_CooldownTextMgr_UnregisterIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua:684:6"); end
 
 CT.RegisterIcon   = MSUF_A2_CooldownTextMgr_RegisterIcon
 CT.UnregisterIcon = MSUF_A2_CooldownTextMgr_UnregisterIcon
@@ -701,3 +701,5 @@ CT.UnregisterIcon = MSUF_A2_CooldownTextMgr_UnregisterIcon
 -- Convenience aliases (Render expects these names to exist as locals after it binds them)
 API.CooldownText = CT
 
+
+Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_CooldownText.lua");

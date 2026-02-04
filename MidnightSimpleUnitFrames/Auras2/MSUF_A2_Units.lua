@@ -1,4 +1,4 @@
--- MSUF_A2_Units.lua
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua"); -- MSUF_A2_Units.lua
 -- Auras 2.0 unit model helpers.
 -- Phase 3: centralize unit lists + helpers so Render can loop without repeated string logic.
 
@@ -42,28 +42,30 @@ if type(Units.ALL) ~= "table" then
 end
 
 -- Tiny helpers.
-function Units.IsBoss(unit)
-    if type(unit) ~= "string" then return false end
-    return unit:sub(1, 4) == "boss"
+function Units.IsBoss(unit) Perfy_Trace(Perfy_GetTime(), "Enter", "Units.IsBoss file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:45:0");
+    if type(unit) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "Units.IsBoss file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:45:0"); return false end
+    return Perfy_Trace_Passthrough("Leave", "Units.IsBoss file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:45:0", unit:sub(1, 4) == "boss")
 end
 
-function Units.ForEachAll(fn)
-    if type(fn) ~= "function" then return end
+function Units.ForEachAll(fn) Perfy_Trace(Perfy_GetTime(), "Enter", "Units.ForEachAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:50:0");
+    if type(fn) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "Units.ForEachAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:50:0"); return end
     local t = Units.ALL
     for i = 1, #t do
         fn(t[i])
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "Units.ForEachAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:50:0"); end
 
-function Units.ForEachBoss(fn)
-    if type(fn) ~= "function" then return end
+function Units.ForEachBoss(fn) Perfy_Trace(Perfy_GetTime(), "Enter", "Units.ForEachBoss file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:58:0");
+    if type(fn) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "Units.ForEachBoss file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:58:0"); return end
     local t = Units.BOSS
     for i = 1, #t do
         fn(t[i])
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "Units.ForEachBoss file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:58:0"); end
 
 -- Optionally expose simple getter.
-function Units.GetAll()
-    return Units.ALL
+function Units.GetAll() Perfy_Trace(Perfy_GetTime(), "Enter", "Units.GetAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:67:0");
+    return Perfy_Trace_Passthrough("Leave", "Units.GetAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua:67:0", Units.ALL)
 end
+
+Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Units.lua");

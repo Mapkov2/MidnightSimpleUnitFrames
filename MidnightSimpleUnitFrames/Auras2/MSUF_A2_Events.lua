@@ -306,17 +306,109 @@ end
 Events.OnAnyEditModeChanged = OnAnyEditModeChanged
 API.OnAnyEditModeChanged = API.OnAnyEditModeChanged or OnAnyEditModeChanged
 
--- Fallback polling is ONLY active when needed: preview enabled OR currently in edit mode.
+
+-- Fallback polling (LAST RESORT): must never run permanently in idle.
+--
+-- NOTE: When MSUF_RegisterAnyEditModeListener() is available, we rely on that and keep this polling OFF.
+-- Polling only exists as a compatibility fallback for older builds / missed lifecycle events.
 local _pollLast = nil
 local _pollAcc = 0
 local _polling = false
+
+local function _A2_DebugPollEnabled()
+    local gdb = _G and rawget(_G, "MSUF_DB")
+    if gdb and gdb.general and gdb.general.debugAuras2Poll == true then return true end
+    if _G and rawget(_G, "MSUF_A2_DEBUG_POLL") == true then return true end
+    return false
+end
+
+local function _A2_HasEditModeListener()
+    if Events._hasEditModeListener ~= nil then
+        return (Events._hasEditModeListener == true)
+    end
+    return (_G and type(_G.MSUF_RegisterAnyEditModeListener) == "function") or false
+end
+
+local function _A2_DirtyListNotEmpty()
+    local f = API and API.DirtyListNotEmpty
+    if type(f) == "function" then
+        local ok, v = MSUF_A2_FastCall(f)
+        return ok and v == true
+    end
+    local g = _G and rawget(_G, "MSUF_A2_DirtyListNotEmpty")
+    if type(g) == "function" then
+        local ok, v = MSUF_A2_FastCall(g)
+        return ok and v == true
+    end
+    return false
+end
+
+local function _A2_TestmodeEnabled()
+    local p = API and API.Preview
+    if p and type(p.IsTestModeActive) == "function" then
+        local ok, v = MSUF_A2_FastCall(p.IsTestModeActive, p)
+        return ok and v == true
+    end
+    return false
+end
+
+local function _A2_ShouldPollNow()
+    local cur = IsEditModeActive()
+
+    if _A2_DebugPollEnabled() then
+        return true, cur
+    end
+
+    -- If we have a proper listener, polling is unnecessary and should stay off.
+    if _A2_HasEditModeListener() then
+        return false, cur
+    end
+
+    -- Minimal-safe fallback rules (only when really needed):
+    -- - dirty render work pending
+    -- - preview/testmode toggle enabled (showInEditMode)
+    -- - Edit Mode active
+    -- - explicit debug fallback (handled above)
+    if cur == true then
+        return true, cur
+    end
+
+    if _A2_DirtyListNotEmpty() then
+        return true, cur
+    end
+
+    if _A2_TestmodeEnabled() then
+        return true, cur
+    end
+
+    local _, shared = EnsureDB()
+    if shared and shared.showInEditMode == true then
+        return true, cur
+    end
+
+    return false, cur
+end
+
+local function _A2_StopPoll()
+    local ef = Events._eventFrame
+    _polling = false
+    _pollAcc = 0
+    if ef and ef.SetScript then
+        ef:SetScript("OnUpdate", nil)
+    end
+end
 
 local function PollOnUpdate(_, elapsed)
     _pollAcc = _pollAcc + (elapsed or 0)
     if _pollAcc < 0.25 then return end
     _pollAcc = 0
 
-    local cur = IsEditModeActive()
+    local wantPoll, cur = _A2_ShouldPollNow()
+    if not wantPoll then
+        _A2_StopPoll()
+        return
+    end
+
     if _pollLast == nil then
         _pollLast = cur
         return
@@ -329,13 +421,18 @@ local function PollOnUpdate(_, elapsed)
 end
 
 function Events.UpdateEditModePoll()
-    local _, shared = EnsureDB()
-    local wantPreview = (shared and shared.showInEditMode == true) or false
-    local cur = IsEditModeActive()
-    local wantPoll = (wantPreview == true) or (cur == true)
-
     local ef = Events._eventFrame
     if not ef then return end
+
+    -- If listener exists (normal case), force-disable the poll unless explicitly debugging.
+    if _A2_HasEditModeListener() and not _A2_DebugPollEnabled() then
+        if _polling then
+            _A2_StopPoll()
+        end
+        return
+    end
+
+    local wantPoll, cur = _A2_ShouldPollNow()
 
     if wantPoll and not _polling then
         _polling = true
@@ -343,10 +440,10 @@ function Events.UpdateEditModePoll()
         _pollLast = cur
         ef:SetScript("OnUpdate", PollOnUpdate)
     elseif (not wantPoll) and _polling then
-        _polling = false
-        ef:SetScript("OnUpdate", nil)
+        _A2_StopPoll()
     end
 end
+
 
 API.UpdateEditModePoll = API.UpdateEditModePoll or function()
     if Events.UpdateEditModePoll then
@@ -452,11 +549,14 @@ function Events.Init()
 
     -- Preferred path: subscribe to shared MSUF Edit Mode notifications
     if _G and type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
+        Events._hasEditModeListener = true
         _G.MSUF_RegisterAnyEditModeListener(OnAnyEditModeChanged)
     else
+        Events._hasEditModeListener = false
         -- Fallback poll
         Events.UpdateEditModePoll()
     end
+
 end
 
 -- ------------------------------------------------------------
