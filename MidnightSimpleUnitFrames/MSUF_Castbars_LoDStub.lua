@@ -71,41 +71,137 @@ end
 -- - The real Castbars LoD addon also suppresses these frames; this stub makes the behaviour
 --   reliable even when the LoD addon is not loaded.
 if type(_G.MSUF_SuppressBlizzardPlayerCastbars) ~= "function" then
-    function _G.MSUF_SuppressBlizzardPlayerCastbars()
-        local frames = {}
-        if _G.PlayerCastingBarFrame then
-            frames[#frames + 1] = _G.PlayerCastingBarFrame
+    -- Shared helpers (avoid per-call closures/allocations).
+    local function _MSUF_HideNow(self)
+        if self and self.Hide then
+            self:Hide()
         end
-        if _G.CastingBarFrame and _G.CastingBarFrame ~= _G.PlayerCastingBarFrame then
-            frames[#frames + 1] = _G.CastingBarFrame
+    end
+
+    local function _MSUF_HideIfShown(self, shown)
+        if shown then
+            _MSUF_HideNow(self)
         end
-        if #frames == 0 then
+    end
+
+    local function _MSUF_TryRegisterHideDriver(frame)
+        if not frame or frame.MSUF_StateDriven then
+            return
+        end
+        if RegisterStateDriver and (not InCombatLockdown or not InCombatLockdown()) then
+            local ok = pcall(RegisterStateDriver, frame, "visibility", "hide")
+            if ok then
+                frame.MSUF_StateDriven = true
+            end
+        end
+    end
+
+    local function _MSUF_TryStopFrameWork(frame)
+        if not frame or frame.MSUF_WorkStopped then
+            return
+        end
+        if InCombatLockdown and InCombatLockdown() then
             return
         end
 
-        for _, frame in ipairs(frames) do
-            if frame and not frame.MSUF_HideHooked then
-                frame.MSUF_HideHooked = true
-                hooksecurefunc(frame, "Show", function(self)
-                    self:Hide()
-                end)
+        frame.MSUF_WorkStopped = true
+
+        -- Best-effort: stop Blizzard casting bar from doing any work since we will never show it.
+        pcall(frame.UnregisterAllEvents, frame)
+        pcall(frame.SetScript, frame, "OnEvent", nil)
+        pcall(frame.SetScript, frame, "OnUpdate", nil)
+    end
+
+    local function _MSUF_HardenAndHide(frame)
+        if not frame then
+            return
+        end
+
+        -- Always attempt to upgrade hardening when possible (e.g. first call might be in combat).
+        _MSUF_TryRegisterHideDriver(frame)
+        _MSUF_TryStopFrameWork(frame)
+
+        if not frame.MSUF_HideHooked then
+            frame.MSUF_HideHooked = true
+
+            -- Fallback hooks (covers code that tries to show it manually).
+            hooksecurefunc(frame, "Show", _MSUF_HideNow)
+            if frame.SetShown then
+                hooksecurefunc(frame, "SetShown", _MSUF_HideIfShown)
             end
-            if frame then
-                frame:Hide()
+            if frame.HookScript then
+                pcall(frame.HookScript, frame, "OnShow", _MSUF_HideNow)
             end
         end
 
-        if type(_G.MSUF_ClaimBlizzardCastbarOwnership) == "function" then
+        _MSUF_HideNow(frame)
+    end
+
+    function _G.MSUF_SuppressBlizzardPlayerCastbars()
+        local didAny = false
+
+        local f1 = rawget(_G, "PlayerCastingBarFrame")
+        local f2 = rawget(_G, "CastingBarFrame")
+
+        if f1 then
+            didAny = true
+            _MSUF_HardenAndHide(f1)
+        end
+        if f2 and f2 ~= f1 then
+            didAny = true
+            _MSUF_HardenAndHide(f2)
+        end
+
+        if didAny and type(_G.MSUF_ClaimBlizzardCastbarOwnership) == "function" then
             _G.MSUF_ClaimBlizzardCastbarOwnership("MSUF")
         end
+
+        return didAny
+    end
+
+    -- Self-stopping, throttled fallback in case the Blizzard castingbar addon loads late.
+    local _msufCbSuppressPoller
+    local function _StartSuppressPoller()
+        if _msufCbSuppressPoller and _msufCbSuppressPoller:IsShown() then
+            return
+        end
+        _msufCbSuppressPoller = _msufCbSuppressPoller or CreateFrame("Frame")
+        _msufCbSuppressPoller.elapsed = 0
+        _msufCbSuppressPoller.tries = 0
+        _msufCbSuppressPoller:Show()
+        _msufCbSuppressPoller:SetScript("OnUpdate", function(self, elapsed)
+            self.elapsed = (self.elapsed or 0) + (elapsed or 0)
+            if self.elapsed < 0.25 then
+                return
+            end
+            self.elapsed = 0
+            self.tries = (self.tries or 0) + 1
+
+            local ok, didAny = pcall(_G.MSUF_SuppressBlizzardPlayerCastbars)
+            if (ok and didAny) or self.tries >= 40 then
+                self:SetScript("OnUpdate", nil)
+                self:Hide()
+            end
+        end)
     end
 
     -- Call ...
     local _msufCbSuppressEvt = CreateFrame("Frame")
     _msufCbSuppressEvt:RegisterEvent("PLAYER_LOGIN")
     _msufCbSuppressEvt:RegisterEvent("PLAYER_ENTERING_WORLD")
-    _msufCbSuppressEvt:SetScript("OnEvent", function()
-        pcall(_G.MSUF_SuppressBlizzardPlayerCastbars)
+    _msufCbSuppressEvt:RegisterEvent("ADDON_LOADED")
+    _msufCbSuppressEvt:SetScript("OnEvent", function(_, event, arg1)
+        -- Prefer event-driven suppression (Blizzard_CastingBarFrame typically creates PlayerCastingBarFrame).
+        if event == "ADDON_LOADED" then
+            if arg1 ~= "Blizzard_CastingBarFrame" and arg1 ~= "Blizzard_CastingBar" then
+                return
+            end
+        end
+
+        local ok, didAny = pcall(_G.MSUF_SuppressBlizzardPlayerCastbars)
+        if ok and not didAny then
+            _StartSuppressPoller()
+        end
     end)
 end
 
