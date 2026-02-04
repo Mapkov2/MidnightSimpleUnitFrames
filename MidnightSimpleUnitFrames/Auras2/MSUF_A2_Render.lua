@@ -3,6 +3,13 @@
 -- NOTE: Phase-0 split: logic moved verbatim to enable incremental modularization without regressions.
 
 local addonName, ns = ...
+
+
+-- MSUF: Max-perf Auras2: replace protected calls (pcall) with direct calls.
+-- NOTE: this removes error-catching; any error will propagate.
+local function MSUF_A2_FastCall(fn, ...)
+    return true, fn(...)
+end
 ns = ns or {}
 if ns.__MSUF_A2_CORE_LOADED then return end
 ns.__MSUF_A2_CORE_LOADED = true
@@ -78,13 +85,13 @@ end
 
 local function SafeCall(fn, ...)
     if type(fn) ~= "function" then return nil end
-    local ok, res = pcall(fn, ...)
+    local ok, res = MSUF_A2_FastCall(fn, ...)
     if ok then return res end
     return nil
 end
 
 local function MSUF_SafeNumber(v)
-    local ok, s = pcall(tostring, v)
+    local ok, s = MSUF_A2_FastCall(tostring, v)
     if not ok then return nil end
     local n = tonumber(s)
     return n
@@ -306,7 +313,7 @@ local function EnsureDB()
     end
 
     if type(_G.MSUF_DB) ~= "table" then _G.MSUF_DB = {} end
-    if type(_G.EnsureDB) == "function" then pcall(_G.EnsureDB) end
+    if type(_G.EnsureDB) == "function" then MSUF_A2_FastCall(_G.EnsureDB) end
 
     MSUF_DB = _G.MSUF_DB
     if type(MSUF_DB) ~= "table" then return nil end
@@ -560,7 +567,7 @@ local function MSUF_A2_SetFontSize(fs, size)
         return false
     end
 
-    local ok = pcall(fs.SetFont, fs, font, size, flags)
+    local ok = MSUF_A2_FastCall(fs.SetFont, fs, font, size, flags)
     return ok == true
 end
 
@@ -591,7 +598,7 @@ local function MSUF_A2_ApplyFont(fs, fontPath, size, flags, useShadow)
 
     local stamp = tostring(fontPath) .. "|" .. tostring(size) .. "|" .. tostring(flags or "")
     if fs._msufA2_fontStamp ~= stamp then
-        local ok = pcall(fs.SetFont, fs, fontPath, size, flags)
+        local ok = MSUF_A2_FastCall(fs.SetFont, fs, fontPath, size, flags)
         if ok then
             fs._msufA2_fontStamp = stamp
         end
@@ -808,18 +815,12 @@ local function AcquireIcon(container, index)
     container._msufIcons = container._msufIcons or {}
     local icon = container._msufIcons[index]
     if icon then
-        -- Sync Masque state for pooled/reused buttons (no per-icon DB fetch)
-        local st = API and API.state
-        local stamp = st and st._msufA2_masqueStamp or 0
-        if icon._msufA2_masqueStamp ~= stamp then
-            local wantMasque = st and st._msufA2_masqueWant
-            if wantMasque and Masque_AddButton then
-                local shared = st and st._msufA2_masqueShared
-                if shared then Masque_AddButton(icon, shared) end
-            elseif (not wantMasque) and Masque_RemoveButton then
-                Masque_RemoveButton(icon)
-            end
-            icon._msufA2_masqueStamp = stamp
+        -- Ensure Masque state is synced even for pooled/reused buttons
+        local _, shared = GetAuras2DB()
+        if Masque_IsEnabled and Masque_IsEnabled(shared) then
+            if Masque_AddButton then Masque_AddButton(icon, shared) end
+        else
+            if Masque_RemoveButton then Masque_RemoveButton(icon) end
         end
         -- Preview label safety: never let preview text stick on reused icons.
         if icon._msufA2_previewLabel then
@@ -845,11 +846,11 @@ local function AcquireIcon(container, index)
     icon.cooldown = CreateFrame("Cooldown", nil, icon, "CooldownFrameTemplate")
     icon.cooldown:SetAllPoints()
     icon.Cooldown = icon.cooldown
-    if icon.cooldown.SetDrawEdge then icon.cooldown:SetDrawEdge(false) end
-    if icon.cooldown.SetDrawSwipe then icon.cooldown:SetDrawSwipe(true) end
-    if icon.cooldown.SetDrawBling then icon.cooldown:SetDrawBling(false) end
-    if icon.cooldown.SetHideCountdownNumbers then icon.cooldown:SetHideCountdownNumbers(false) end
-    if icon.cooldown.SetHideCountdownNumbers then icon.cooldown:SetHideCountdownNumbers(false) end
+    SafeCall(icon.cooldown.SetDrawEdge, icon.cooldown, false)
+    SafeCall(icon.cooldown.SetDrawSwipe, icon.cooldown, true)
+    SafeCall(icon.cooldown.SetDrawBling, icon.cooldown, false)
+    SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
+    SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
 
     -- Auras2: Expiration accuracy/stuck-at-0 fix (secret-safe)
     -- Some clients do not fire UNIT_AURA exactly at natural expiration, which can leave an icon visible at 0.
@@ -866,9 +867,9 @@ local function AcquireIcon(container, index)
             if not unit or not aid then return end
 
             if C_UnitAuras and type(C_UnitAuras.GetAuraDataByAuraInstanceID) == "function" then
-                local auraData = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, aid)
+                local ok, auraData = MSUF_A2_FastCall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, aid)
                 -- Secret-safe: don't compare auraData to nil; use type() gating.
-                if type(auraData) ~= "table" then
+                if ok and type(auraData) ~= "table" then
                     -- Aura is gone: immediately hide this recycled icon and force a refresh so layout closes gaps.
                     if ic._msufA2_cdMgrRegistered == true then
                         MSUF_A2_CooldownTextMgr_UnregisterIcon(ic)
@@ -954,16 +955,12 @@ icon._msufPrivateMark:SetPoint("TOPLEFT", icon, "TOPLEFT", -2, 2)
 icon._msufPrivateMark:SetAlpha(0.9)
 icon._msufPrivateMark:Hide()
 
-    -- Register with Masque if enabled (RenderUnit caches the state)
+    -- Register with Masque if enabled
     do
-        local st = API and API.state
-        if st and st._msufA2_masqueWant and Masque_AddButton then
-            local shared = st._msufA2_masqueShared
-            if shared then
-                Masque_AddButton(icon, shared)
-            end
+        local _, shared = GetAuras2DB()
+        if Masque_IsEnabled and Masque_IsEnabled(shared) and Masque_AddButton then
+            Masque_AddButton(icon, shared)
         end
-        icon._msufA2_masqueStamp = (st and st._msufA2_masqueStamp) or 0
     end
 
     -- Step 7 perf: assign tooltip scripts once (no per-update SetScript churn)
@@ -1278,7 +1275,7 @@ local function IsEditModeActive()
     -- 3) Exported helper from MSUF_EditMode.lua (now MSUF-only)
     local f = rawget(_G, "MSUF_IsInEditMode")
     if type(f) == "function" then
-        local ok, v = pcall(f)
+        local ok, v = MSUF_A2_FastCall(f)
         if ok and v == true then
             return true
         end
@@ -1287,7 +1284,7 @@ local function IsEditModeActive()
     -- 4) Compatibility hook name from older experiments (keep as last resort)
     local g = rawget(_G, "MSUF_IsMSUFEditModeActive")
     if type(g) == "function" then
-        local ok, v = pcall(g)
+        local ok, v = MSUF_A2_FastCall(g)
         if ok and v == true then
             return true
         end
@@ -1419,14 +1416,14 @@ local function MSUF_A2_PrivateAuras_GetEffectiveUnitToken(unit)
 
     if unit ~= "player" and type(UnitIsUnit) == "function" then
         -- If the current unit token is the player (e.g. focus self), bind anchors to "player".
-        if UnitIsUnit(unit, "player") then
+        local ok, isPlayer = MSUF_A2_FastCall(UnitIsUnit, unit, "player")
+        if ok and isPlayer then
             return "player"
         end
     end
 
     return unit
 end
-
 
 MSUF_A2_PrivateAuras_Clear = function(entry)
     if not entry then return end
@@ -1436,21 +1433,12 @@ MSUF_A2_PrivateAuras_Clear = function(entry)
         for i = 1, #ids do
             local id = ids[i]
             if id then
-                C_UnitAuras.RemovePrivateAuraAnchor(id)
+                MSUF_A2_FastCall(C_UnitAuras.RemovePrivateAuraAnchor, id)
             end
         end
     end
     entry._msufA2_privateAnchorIDs = nil
     entry._msufA2_privateCfgSig = nil
-    entry._msufA2_privateCfgUnit = nil
-    entry._msufA2_privateCfgEffToken = nil
-    entry._msufA2_privateCfgIconSize = nil
-    entry._msufA2_privateCfgSpacing = nil
-    entry._msufA2_privateCfgMaxN = nil
-    entry._msufA2_privateCfgShowFrame = nil
-    entry._msufA2_privateCfgShowNums = nil
-    entry._msufA2_privateCfgHighlight = nil
-    entry._msufA2_privateCfgLayoutMode = nil
 
     local slots = entry._msufA2_privateSlots
     if type(slots) == "table" then
@@ -1559,18 +1547,13 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
 
     local effectiveToken = MSUF_A2_PrivateAuras_GetEffectiveUnitToken(unit)
 
-        local lm = layoutMode or ""
-    if entry._msufA2_privateCfgUnit == unit
-        and entry._msufA2_privateCfgEffToken == effectiveToken
-        and entry._msufA2_privateCfgIconSize == iconSize
-        and entry._msufA2_privateCfgSpacing == spacing
-        and entry._msufA2_privateCfgMaxN == maxN
-        and entry._msufA2_privateCfgShowFrame == (showCountdownFrame == true)
-        and entry._msufA2_privateCfgShowNums == (showCountdownNumbers == true)
-        and entry._msufA2_privateCfgHighlight == (highlight == true)
-        and entry._msufA2_privateCfgLayoutMode == lm
-        and type(entry._msufA2_privateAnchorIDs) == "table"
-    then
+    local sig = tostring(unit).."|"..tostring(effectiveToken).."|"..tostring(iconSize).."|"..tostring(spacing).."|"..tostring(maxN).."|"
+        ..(showCountdownFrame and "F1" or "F0").."|"
+        ..(showCountdownNumbers and "N1" or "N0").."|"
+        ..(highlight and "H1" or "H0").."|"
+        ..tostring(layoutMode or "")
+
+    if entry._msufA2_privateCfgSig == sig and type(entry._msufA2_privateAnchorIDs) == "table" then
         if entry.private then entry.private:Show() end
         local slots = entry._msufA2_privateSlots
         if type(slots) == "table" then
@@ -1589,16 +1572,7 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
     if type(step) ~= "number" or step <= 0 then step = 28 end
 
     entry.private:Show()
-    entry._msufA2_privateCfgSig = nil -- legacy field (no longer used)
-    entry._msufA2_privateCfgUnit = unit
-    entry._msufA2_privateCfgEffToken = effectiveToken
-    entry._msufA2_privateCfgIconSize = iconSize
-    entry._msufA2_privateCfgSpacing = spacing
-    entry._msufA2_privateCfgMaxN = maxN
-    entry._msufA2_privateCfgShowFrame = (showCountdownFrame == true)
-    entry._msufA2_privateCfgShowNums = (showCountdownNumbers == true)
-    entry._msufA2_privateCfgHighlight = (highlight == true)
-    entry._msufA2_privateCfgLayoutMode = lm
+    entry._msufA2_privateCfgSig = sig
     entry._msufA2_privateAnchorIDs = {}
 
     -- Size the container so it has a meaningful clickable/drag area in Edit Mode.
@@ -1639,8 +1613,8 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
             },
         }
 
-        local anchorID = C_UnitAuras.AddPrivateAuraAnchor(args)
-        if anchorID then
+        local ok, anchorID = MSUF_A2_FastCall(C_UnitAuras.AddPrivateAuraAnchor, args)
+        if ok and anchorID then
             table.insert(entry._msufA2_privateAnchorIDs, anchorID)
         end
     end
@@ -1713,7 +1687,7 @@ local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOve
 do
     local fn = _G.MSUF_A2_GetMinStackedSeparationForEditMode
     if type(fn) == "function" then
-        local ok, v = pcall(fn, unitKey)
+        local ok, v = MSUF_A2_FastCall(fn, unitKey)
         if ok and type(v) == "number" and v > 0 then
             minSep = v
         end
@@ -1747,7 +1721,7 @@ end
 do
     local fn = _G.MSUF_A2_GetMinStackedSeparationForEditMode
     if type(fn) == "function" then
-        local ok, v = pcall(fn, unitKey)
+        local ok, v = MSUF_A2_FastCall(fn, unitKey)
         if ok and type(v) == "number" and v > 0 then
             minSep = v
         end
@@ -2220,7 +2194,7 @@ local function MSUF_A2_EnsureGroupEditMover(entry, unitKey, kind, labelText)
 do
     local fn = _G.MSUF_A2_ClampGroupOffsetsForEditMode
     if type(fn) == "function" then
-        local ok, cx, cy = pcall(fn, key, moverKind, newX, newY)
+        local ok, cx, cy = MSUF_A2_FastCall(fn, key, moverKind, newX, newY)
         if ok then
             if type(cx) == "number" then newX = cx end
             if type(cy) == "number" then newY = cy end
@@ -2370,17 +2344,17 @@ local function GetAuraList(unit, filter, onlyPlayer)
     local ids
 
     if onlyPlayer then
-        local ok, res = pcall(getIDs, unit, filter .. "|PLAYER")
+        local ok, res = MSUF_A2_FastCall(getIDs, unit, filter .. "|PLAYER")
         if ok and type(res) == "table" then
             ids = res
         else
-            ok, res = pcall(getIDs, unit, filter)
+            ok, res = MSUF_A2_FastCall(getIDs, unit, filter)
             if ok and type(res) == "table" then
                 ids = res
             end
         end
     else
-        local ok, res = pcall(getIDs, unit, filter)
+        local ok, res = MSUF_A2_FastCall(getIDs, unit, filter)
         if ok and type(res) == "table" then
             ids = res
         end
@@ -2392,7 +2366,7 @@ local function GetAuraList(unit, filter, onlyPlayer)
 
     local out = {}
 
-    local okLoop = pcall(function()
+    local okLoop = MSUF_A2_FastCall(function()
         for i = 1, #ids do
             local id = ids[i]
             local data = getData(unit, id)
@@ -2425,7 +2399,7 @@ local function MSUF_A2_GetPlayerAuraIdSet(unit, filter)
 
     local set = {}
     for i = 1, #ids do
-        local okK, k = pcall(tostring, ids[i])
+        local okK, k = MSUF_A2_FastCall(tostring, ids[i])
         if okK and k then
             set[k] = true
         end
@@ -2439,21 +2413,21 @@ local function MSUF_A2_StringIsTrue(s)
     -- Secret-safe truthy check (avoid direct string comparisons).
     if s == nil then return false end
 
-    local ok1, b1 = pcall(string.byte, s, 1)
+    local ok1, b1 = MSUF_A2_FastCall(string.byte, s, 1)
     if not ok1 or b1 == nil then return false end
 
     -- "1"
     if b1 == 49 then
-        local ok5, b5 = pcall(string.byte, s, 2)
+        local ok5, b5 = MSUF_A2_FastCall(string.byte, s, 2)
         if ok5 and b5 == nil then return true end
         return true -- tolerate "1..." defensively
     end
 
     -- "true" / "True"
     if b1 ~= 116 and b1 ~= 84 then return false end
-    local ok2, b2 = pcall(string.byte, s, 2)
-    local ok3, b3 = pcall(string.byte, s, 3)
-    local ok4, b4 = pcall(string.byte, s, 4)
+    local ok2, b2 = MSUF_A2_FastCall(string.byte, s, 2)
+    local ok3, b3 = MSUF_A2_FastCall(string.byte, s, 3)
+    local ok4, b4 = MSUF_A2_FastCall(string.byte, s, 4)
     if not ok2 or not ok3 or not ok4 then return false end
     if b2 == nil or b3 == nil or b4 == nil then return false end
 
@@ -2463,7 +2437,7 @@ local function MSUF_A2_StringIsTrue(s)
     if not (is_r and is_u and is_e) then return false end
 
     -- Strict-ish: require no 5th character when possible.
-    local ok5, b5 = pcall(string.byte, s, 5)
+    local ok5, b5 = MSUF_A2_FastCall(string.byte, s, 5)
     if ok5 and b5 ~= nil then
         -- allow "true" with suffixes (defensive); but still treat as true
         return true
@@ -2479,7 +2453,7 @@ local function MSUF_A2_HashAsciiLower(s)
     local h = 5381
     -- token strings are tiny; cap loop to avoid worst-case costs on weird inputs
     for i = 1, 32 do
-        local okB, b = pcall(string.byte, s, i)
+        local okB, b = MSUF_A2_FastCall(string.byte, s, i)
         if not okB or b == nil then break end
         -- A-Z -> a-z (ASCII)
         if b >= 65 and b <= 90 then
@@ -2504,7 +2478,7 @@ local MSUF_A2_HASH_ENRAGE  = MSUF_A2_HashAsciiLower("enrage")
 -- Used for "Hide permanent buffs": we ONLY hide when an API explicitly reports a 0 duration.
 local function MSUF_A2_StringIsZeroNumber(s)
     if s == nil then return false end
-    local okTrim, t = pcall(function()
+    local okTrim, t = MSUF_A2_FastCall(function()
         -- trim spaces without pattern magic
         local x = s
         x = x:gsub("^%s+", "")
@@ -2514,22 +2488,22 @@ local function MSUF_A2_StringIsZeroNumber(s)
     if not okTrim or type(t) ~= "string" then return false end
 
     -- Match: 0, 0.0, 0.00, 00.000 etc
-    local okM, m = pcall(string.match, t, "^0+%.?0*$")
+    local okM, m = MSUF_A2_FastCall(string.match, t, "^0+%.?0*$")
     return (okM and m ~= nil) or false
 end
 
 local function MSUF_A2_AuraFieldToString(aura, field)
-    local ok, v = pcall(function()
+    local ok, v = MSUF_A2_FastCall(function()
         return aura and aura[field]
     end)
     if not ok then return nil end
     if v == nil then return nil end
 
-    local okS, s = pcall(tostring, v)
+    local okS, s = MSUF_A2_FastCall(tostring, v)
     if not okS or type(s) ~= "string" then return nil end
 
     -- Secret-safe empty-string check: string.byte(s,1) returns nil if empty.
-    local okB, b1 = pcall(string.byte, s, 1)
+    local okB, b1 = MSUF_A2_FastCall(string.byte, s, 1)
     if not okB or b1 == nil then return nil end
 
     return s
@@ -2561,12 +2535,12 @@ local function MSUF_A2_MergeBossAuras(playerList, fullList)
         local aura = playerList[i]
         out[#out+1] = aura
         local aid
-        local ok, v = pcall(function()
+        local ok, v = MSUF_A2_FastCall(function()
             return aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
         end)
         if ok then aid = v end
         if type(aid) ~= "nil" then
-            local okS, k = pcall(tostring, aid)
+            local okS, k = MSUF_A2_FastCall(tostring, aid)
             if okS and k then seen[k] = true end
         end
     end
@@ -2575,14 +2549,14 @@ local function MSUF_A2_MergeBossAuras(playerList, fullList)
         local aura = fullList[i]
         if aura and MSUF_A2_IsBossAura(aura) then
             local aid
-            local ok, v = pcall(function()
+            local ok, v = MSUF_A2_FastCall(function()
                 return aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
             end)
             if ok then aid = v end
 
             local skip = false
             if type(aid) ~= "nil" then
-                local okS, k = pcall(tostring, aid)
+                local okS, k = MSUF_A2_FastCall(tostring, aid)
                 if okS and k and seen[k] then
                     skip = true
                 elseif okS and k then
@@ -2603,8 +2577,6 @@ end
 -- Additive "extras" helpers (secret-safe; API-only for dispellable checks)
 
 local function MSUF_A2_IsDispellableAura(unit, aura)
-    -- DISABLED: dispellable-aura feature removed per user request.
-    -- Keep stub for compatibility, but never call UnitAuras dispel APIs (preview auras have no real instance).
     return false
 end
 
@@ -2624,7 +2596,7 @@ local function MSUF_A2_IsPrivateAuraSpellID(spellID)
         return cached == true
     end
 
-    local ok, isPriv = pcall(C_UnitAuras.AuraIsPrivate, spellID)
+    local ok, isPriv = MSUF_A2_FastCall(C_UnitAuras.AuraIsPrivate, spellID)
     local v = (ok and isPriv == true) or false
     MSUF_A2__PrivateSpellCache[spellID] = v
     return v
@@ -2643,14 +2615,14 @@ local function MSUF_A2_MergeAuraLists(primary, secondary)
             local aura = list[i]
             if aura then
                 local aid
-                local ok, v = pcall(function()
+                local ok, v = MSUF_A2_FastCall(function()
                     return aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
                 end)
                 if ok then aid = v end
 
                 local skip = false
                 if type(aid) ~= "nil" then
-                    local okS, k = pcall(tostring, aid)
+                    local okS, k = MSUF_A2_FastCall(tostring, aid)
                     if okS and k and seen[k] then
                         skip = true
                     elseif okS and k then
@@ -2783,17 +2755,17 @@ local function MSUF_A2_AuraHasExpiration(unit, aura)
 
     -- 1) Best signal: explicit API helper.
     if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
-        local ok, v = pcall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
+        local ok, v = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
         if ok then
             -- Never return v directly (it may be a secret boolean). Convert to a safe string first.
-            local okS, s = pcall(tostring, v)
+            local okS, s = MSUF_A2_FastCall(tostring, v)
             if okS and s then
                 if MSUF_A2_StringIsTrue(s) then
                     return true
                 end
 
                 -- Treat "0"/"false"/nil as false in a secret-safe way
-                local okB1, b1 = pcall(string.byte, s, 1)
+                local okB1, b1 = MSUF_A2_FastCall(string.byte, s, 1)
                 if okB1 and b1 then
                     -- "0"
                     if b1 == 48 then
@@ -2818,24 +2790,24 @@ local function MSUF_A2_AuraHasExpiration(unit, aura)
     -- This avoids hiding timed buffs that may report as "unknown" under secret values (especially in combat).
     local function TryGetSpellID()
         local raw = nil
-        local okRaw = pcall(function()
+        local okRaw = MSUF_A2_FastCall(function()
             raw = aura.spellId or aura.spellID or aura.spellid
         end)
         if not okRaw or raw == nil then
             -- Fallback: ask UnitAuras for full data (API-only, secret-safe access path)
             if C_UnitAuras and type(C_UnitAuras.GetAuraDataByAuraInstanceID) == "function" then
-                local okData, data = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, auraInstanceID)
+                local okData, data = MSUF_A2_FastCall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, auraInstanceID)
                 if okData and type(data) == "table" then
-                    local ok2 = pcall(function()
+                    local ok2 = MSUF_A2_FastCall(function()
                         raw = data.spellId or data.spellID or data.spellid
                     end)
                 end
             end
         end
         if raw == nil then return nil end
-        local okS, s = pcall(tostring, raw)
+        local okS, s = MSUF_A2_FastCall(tostring, raw)
         if not okS or type(s) ~= "string" then return nil end
-        local okN, n = pcall(tonumber, s)
+        local okN, n = MSUF_A2_FastCall(tonumber, s)
         if not okN then return nil end
         return n
     end
@@ -2844,9 +2816,9 @@ local function MSUF_A2_AuraHasExpiration(unit, aura)
     if C_UnitAuras and type(C_UnitAuras.GetAuraBaseDuration) == "function" then
         local spellID = TryGetSpellID()
         if spellID then
-            local okBD, bd = pcall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
+            local okBD, bd = MSUF_A2_FastCall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
             if okBD and bd ~= nil then
-                local okS, s = pcall(tostring, bd)
+                local okS, s = MSUF_A2_FastCall(tostring, bd)
                 if okS and MSUF_A2_StringIsZeroNumber(s) then
                     return false
                 end
@@ -2857,9 +2829,9 @@ local function MSUF_A2_AuraHasExpiration(unit, aura)
 
     -- Fallback: direct duration query (some builds may not support GetAuraBaseDuration).
     if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
-        local okD, d = pcall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
+        local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
         if okD and d ~= nil then
-            local okS, s = pcall(tostring, d)
+            local okS, s = MSUF_A2_FastCall(tostring, d)
             if okS and MSUF_A2_StringIsZeroNumber(s) then
                 return false
             end
@@ -2890,14 +2862,14 @@ local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
 
     -- 1) Explicit API helper (if it reliably reports "no expiration").
     if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
-        local ok, v = pcall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
+        local ok, v = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
         if ok then
-            local okS, s = pcall(tostring, v)
+            local okS, s = MSUF_A2_FastCall(tostring, v)
             if okS and type(s) == "string" then
                 if MSUF_A2_StringIsTrue(s) then
                     return false
                 end
-                local okB1, b1 = pcall(string.byte, s, 1)
+                local okB1, b1 = MSUF_A2_FastCall(string.byte, s, 1)
                 if okB1 and b1 then
                     -- "0"
                     if b1 == 48 then
@@ -2915,23 +2887,23 @@ local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
     -- 2) Zero-duration signals via base duration / duration.
     local function TryGetSpellID()
         local raw = nil
-        local okRaw = pcall(function()
+        local okRaw = MSUF_A2_FastCall(function()
             raw = aura.spellId or aura.spellID or aura.spellid
         end)
         if not okRaw or raw == nil then
             if C_UnitAuras and type(C_UnitAuras.GetAuraDataByAuraInstanceID) == "function" then
-                local okData, data = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, auraInstanceID)
+                local okData, data = MSUF_A2_FastCall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, auraInstanceID)
                 if okData and type(data) == "table" then
-                    pcall(function()
+                    MSUF_A2_FastCall(function()
                         raw = data.spellId or data.spellID or data.spellid
                     end)
                 end
             end
         end
         if raw == nil then return nil end
-        local okS, s = pcall(tostring, raw)
+        local okS, s = MSUF_A2_FastCall(tostring, raw)
         if not okS or type(s) ~= "string" then return nil end
-        local okN, n = pcall(tonumber, s)
+        local okN, n = MSUF_A2_FastCall(tonumber, s)
         if not okN then return nil end
         return n
     end
@@ -2939,9 +2911,9 @@ local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
     if C_UnitAuras and type(C_UnitAuras.GetAuraBaseDuration) == "function" then
         local spellID = TryGetSpellID()
         if spellID then
-            local okBD, bd = pcall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
+            local okBD, bd = MSUF_A2_FastCall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
             if okBD and bd ~= nil then
-                local okS, s = pcall(tostring, bd)
+                local okS, s = MSUF_A2_FastCall(tostring, bd)
                 if okS and MSUF_A2_StringIsZeroNumber(s) then
                     return true
                 end
@@ -2951,9 +2923,9 @@ local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
     end
 
     if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
-        local okD, d = pcall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
+        local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
         if okD and d ~= nil then
-            local okS, s = pcall(tostring, d)
+            local okS, s = MSUF_A2_FastCall(tostring, d)
             if okS and MSUF_A2_StringIsZeroNumber(s) then
                 return true
             end
@@ -3048,7 +3020,7 @@ end
 local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, forcedDisp, forceHideCooldownNumbers)
     if shared and shared.showStackCount == false then
         if icon.cooldown and icon.cooldown.SetHideCountdownNumbers then
-            if icon.cooldown.SetHideCountdownNumbers then icon.cooldown:SetHideCountdownNumbers(false) end
+            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
         end
         if icon.count then
             icon.count:SetText("")
@@ -3081,7 +3053,7 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
         if icon._msufA2_hideCDNumbers ~= wantHideNums then
             icon._msufA2_hideCDNumbers = wantHideNums
             if icon.cooldown and icon.cooldown.SetHideCountdownNumbers then
-                if icon.cooldown.SetHideCountdownNumbers then icon.cooldown:SetHideCountdownNumbers(wantHideNums) end
+                SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, wantHideNums)
             end
             if wantHideNums and icon._msufA2_cdMgrRegistered == true then
                 MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
@@ -3106,7 +3078,7 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
 if icon._msufA2_hideCDNumbers == true and forceHideCooldownNumbers ~= true then
     icon._msufA2_hideCDNumbers = false
     if icon.cooldown and icon.cooldown.SetHideCountdownNumbers then
-        if icon.cooldown.SetHideCountdownNumbers then icon.cooldown:SetHideCountdownNumbers(false) end
+        SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
     end
 end
 
@@ -3135,12 +3107,12 @@ end
 
 local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
     if not icon.cooldown then return false end
-    icon.cooldown:Show()
+    SafeCall(icon.cooldown.Show, icon.cooldown)
 
     local wantText = not (shared and shared.showCooldownText == false)
 
     if icon.cooldown.SetHideCountdownNumbers then
-        if icon.cooldown.SetHideCountdownNumbers then icon.cooldown:SetHideCountdownNumbers(not wantText) end
+        SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, not wantText)
     end
     if not wantText and icon._msufA2_cdMgrRegistered == true then
         MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
@@ -3149,14 +3121,14 @@ local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
     local swipeWanted = (shared and shared.showCooldownSwipe and true) or false
     if icon._msufA2_lastSwipeWanted ~= swipeWanted then
         icon._msufA2_lastSwipeWanted = swipeWanted
-        if icon.cooldown.SetDrawSwipe then icon.cooldown:SetDrawSwipe(swipeWanted) end
+        SafeCall(icon.cooldown.SetDrawSwipe, icon.cooldown, swipeWanted)
     end
 
     local reverseWanted = (shared and shared.cooldownSwipeDarkenOnLoss == true) or false
     if icon._msufA2_lastReverseWanted ~= reverseWanted then
         icon._msufA2_lastReverseWanted = reverseWanted
         if icon.cooldown.SetReverse then
-            if icon.cooldown.SetReverse then icon.cooldown:SetReverse(reverseWanted) end
+            SafeCall(icon.cooldown.SetReverse, icon.cooldown, reverseWanted)
         end
     end
 
@@ -3170,8 +3142,8 @@ local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
         local isPermanent = (previewDef.permanent == true) or (previewDef.noTimer == true)
 
         if isPermanent then
-            pcall(icon.cooldown.Clear, icon.cooldown)
-            pcall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
+            MSUF_A2_FastCall(icon.cooldown.Clear, icon.cooldown)
+            MSUF_A2_FastCall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
             icon._msufA2_previewCooldownStart = nil
             icon._msufA2_previewCooldownDur = nil
         else
@@ -3194,7 +3166,7 @@ local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
             if elapsed > pd then elapsed = pd * 0.5 end
 
             local ps = GetTime() - elapsed
-            if icon.cooldown.SetCooldown then icon.cooldown:SetCooldown(ps, pd) end
+            SafeCall(icon.cooldown.SetCooldown, icon.cooldown, ps, pd)
             icon._msufA2_previewCooldownStart = ps
             icon._msufA2_previewCooldownDur = pd
             hadTimer = true
@@ -3221,8 +3193,8 @@ local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
     if not hadTimer then
         local sameAura = (prevAuraID ~= nil and prevAuraID == icon._msufAuraInstanceID)
         if MSUF_A2_AuraIsKnownPermanent(unit, aura) or (not sameAura) or (sameAura and not prevHadTimer) then
-            pcall(icon.cooldown.Clear, icon.cooldown)
-            pcall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
+            MSUF_A2_FastCall(icon.cooldown.Clear, icon.cooldown)
+            MSUF_A2_FastCall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
         end
     end
 
@@ -3334,8 +3306,8 @@ local function MSUF_A2_ComputeRawAuraSig(unit)
         return nil
     end
 
-    local okH, helpful = pcall(C_UnitAuras.GetAuraInstanceIDs, unit, 'HELPFUL')
-    local okD, harmful = pcall(C_UnitAuras.GetAuraInstanceIDs, unit, 'HARMFUL')
+    local okH, helpful = MSUF_A2_FastCall(C_UnitAuras.GetAuraInstanceIDs, unit, 'HELPFUL')
+    local okD, harmful = MSUF_A2_FastCall(C_UnitAuras.GetAuraInstanceIDs, unit, 'HARMFUL')
     if not okH or type(helpful) ~= 'table' then helpful = nil end
     if not okD or type(harmful) ~= 'table' then harmful = nil end
 
@@ -3454,7 +3426,7 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
 
     local function IsOwn(isHelpful, aid)
         if not aid then return false end
-        local okK, k = pcall(tostring, aid)
+        local okK, k = MSUF_A2_FastCall(tostring, aid)
         if not okK or not k then return false end
         local set = isHelpful and ownBuffSet or ownDebuffSet
         return (set and set[k]) == true
@@ -3655,7 +3627,7 @@ local function MSUF_A2_RenderFromListBudgeted(ctx, list, startI, cap, isHelpful,
                 local ownSet = isHelpful and ctx.ownBuffSet or ctx.ownDebuffSet
                 if ownSet then
                     local aid = aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
-                    local okK, k = pcall(tostring, aid)
+                    local okK, k = MSUF_A2_FastCall(tostring, aid)
                     if okK and k and ownSet[k] then
                         isOwn = true
                     end
@@ -3781,7 +3753,7 @@ end
     pa._msufAuraInstanceID = nil
     pa.auraInstanceID = nil
     pa.spellId = spellId
-    pa._msufA2_previewDispellable = false -- dispellable feature removed
+    pa._msufA2_previewDispellable = (opts and opts.dispellable) and true or false
     pa._msufA2_previewIsPrivate = (opts and ((opts.isPrivate == true) or (opts.previewKind == "private"))) and true or false
 
     SetDispelBorder(icon, unit, pa, (icon._msufFilter == "HELPFUL"), shared, true, (opts and (opts.isOwn or opts.own)))
@@ -3895,21 +3867,6 @@ end
 local function RenderUnit(entry)
     local rawSig, layoutSig
     local a2, shared = GetAuras2DB()
-    -- Cache Masque state for this render pass (used by AcquireIcon without extra DB lookups)
-    do
-        local st = API and API.state
-        if st then
-            st._msufA2_masqueShared = shared
-            local wantMasque = (Masque_IsEnabled and Masque_IsEnabled(shared)) and true or false
-            if st._msufA2_masqueWant ~= wantMasque then
-                st._msufA2_masqueWant = wantMasque
-                st._msufA2_masqueStamp = (st._msufA2_masqueStamp or 0) + 1
-            elseif st._msufA2_masqueStamp == nil then
-                st._msufA2_masqueStamp = 0
-            end
-        end
-    end
-
     if not a2 or not shared or not entry then return end
 
     local unit = entry.unit

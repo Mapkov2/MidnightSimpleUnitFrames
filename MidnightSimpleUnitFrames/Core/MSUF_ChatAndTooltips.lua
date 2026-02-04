@@ -58,66 +58,68 @@ end
 -- Optional chat trigger: "!msuf help" (only from yourself)
 -- Midnight/Beta secret-safe: chat event args can become "secret" in combat.
 -- Never boolean-test/compare them directly and never call string methods via ':'.
+local NotSecretValue = _G.NotSecretValue
+
+local function MSUF__Chat_IsSafeString(v)
+    if type(v) ~= "string" then return false end
+    if NotSecretValue then
+        return NotSecretValue(v)
+    end
+    -- If NotSecretValue isn't available, avoid touching chat payloads in combat on Midnight/Beta.
+    if InCombatLockdown and InCombatLockdown() then
+        return false
+    end
+    return true
+end
+
 local function MSUF__Chat_IsFromSelf(author, ...)
     -- Prefer GUID-based self-check to avoid comparing author strings.
     local senderGUID = select(10, ...)
     local myGUID = UnitGUID and UnitGUID("player")
 
-    if type(senderGUID) == "string" and type(myGUID) == "string" then
-        local ok, same = pcall(function() return senderGUID == myGUID end)
-        if ok and same then
-            return true
-        end
+    if MSUF__Chat_IsSafeString(senderGUID) and MSUF__Chat_IsSafeString(myGUID) then
+        return senderGUID == myGUID
     end
 
-    -- Fallback: compare short author name (strip realm) via guarded string.* and guarded equality.
+    -- Fallback: compare short author name (strip realm) only if strings are safe.
     local myName = UnitName and UnitName("player")
-    if type(myName) ~= "string" or type(author) ~= "string" then
+    if not MSUF__Chat_IsSafeString(myName) or not MSUF__Chat_IsSafeString(author) then
         return false
     end
 
     local shortAuthor = author
-    do
-        local ok, m = pcall(string.match, author, "^[^-]+")
-        if ok and type(m) == "string" then
-            shortAuthor = m
-        end
+    local dash = string.find(author, "-", 1, true)
+    if dash and dash > 1 then
+        shortAuthor = string.sub(author, 1, dash - 1)
     end
 
-    local okEq, sameName = pcall(function() return shortAuthor == myName end)
-    return okEq and sameName
+    return (shortAuthor == myName)
 end
+
 
 local function MSUF__Chat_GetLowerTrimmed(text)
-    if type(text) ~= "string" then return nil end
-    local okLower, lower = pcall(string.lower, text)
-    if not okLower or type(lower) ~= "string" then return nil end
-    local okTrim, trimmed = pcall(string.gsub, lower, "^%s+", "")
-    if okTrim and type(trimmed) == "string" then
-        return trimmed
-    end
+    if not MSUF__Chat_IsSafeString(text) then return nil end
+    local lower = string.lower(text)
+    lower = string.gsub(lower, "^%s+", "")
     return lower
 end
+
 
 local function MSUF_ChatCommand_OnChatMsg(_, text, author, ...)
     local msgLower = MSUF__Chat_GetLowerTrimmed(text)
     if not msgLower then return end
 
-    -- Fast reject: only care about "!msuf help"
-    local isHelp = false
-    if msgLower == "!msuf help" then
-        isHelp = true
-    else
-        local ok, m = pcall(string.match, msgLower, "^!msuf%s+help")
-        if ok and m ~= nil then
-            isHelp = true
-        end
-    end
-    if not isHelp then return end
+    -- Fast reject: only care about "!msuf help" (allow extra whitespace)
+    if string.sub(msgLower, 1, 5) ~= "!msuf" then return end
+    local rest = string.sub(msgLower, 6)
+    rest = string.gsub(rest, "^%s+", "")
+    rest = string.gsub(rest, "%s+$", "")
+    if rest ~= "help" then return end
 
     if not MSUF__Chat_IsFromSelf(author, ...) then return end
     MSUF_PrintHelp()
 end
+
 
 if type(MSUF_EventBus_Register) == "function" then
     local evs = {
@@ -287,14 +289,17 @@ local function MSUF_UnitInfo_GetLocationText()
     local zone = GetZoneText and GetZoneText() or nil
     local subzone = GetSubZoneText and GetSubZoneText() or nil
 
-    if subzone and subzone ~= "" and zone then
-        local ok, diff = pcall(function() return subzone ~= zone end)
-        if ok and diff then
-            return subzone
+    if subzone and subzone ~= "" and zone and zone ~= "" then
+        -- Only compare strings if they're safe; otherwise just prefer subzone when present.
+        if (not NotSecretValue) or (NotSecretValue(subzone) and NotSecretValue(zone)) then
+            if subzone ~= zone then
+                return subzone
+            end
         end
     end
     return (subzone and subzone ~= "") and subzone or zone
 end
+
 
 local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
     local nameLine = UnitName(unit) or fallbackName

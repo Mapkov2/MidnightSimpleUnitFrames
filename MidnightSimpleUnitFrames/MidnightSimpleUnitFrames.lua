@@ -2574,18 +2574,31 @@ do
         local InCombatLockdown = _G.InCombatLockdown
         local NotSecretValue = _G.NotSecretValue
 
-        -- Midnight/Beta: some restricted APIs return "secret" values that cannot be
-        -- used in boolean tests / comparisons. Blizzard may provide _G.NotSecretValue;
-        -- if not present, we polyfill a cheap detector via pcall.
+        -- Midnight/Beta: prefer Blizzard's _G.NotSecretValue to detect restricted ("secret") values.
+        -- If it's not present, we MUST fall back to a protected probe; otherwise secret booleans/numbers
+        -- can explode on any comparison/boolean-test. This fallback is only used on clients missing
+        -- the native API, and it keeps range-fade functional while staying crash-free.
         if not NotSecretValue then
+            local pcall = pcall
+            local type = type
             NotSecretValue = function(v)
-                -- Any benign operation that errors indicates a secret value.
-                local ok = pcall(function() return v == v end)
-                return ok
+                local tv = type(v)
+                if tv == "nil" then
+                    return true
+                end
+                -- Range checkers only return booleans/numbers; anything else is treated as unsafe.
+                if tv ~= "boolean" and tv ~= "number" then
+                    return false
+                end
+                -- Comparing a secret value throws; pcall catches and returns false.
+                return pcall(function()
+                    return (v == v)
+                end)
             end
         end
 
-        local LibStub = _G.LibStub
+
+local LibStub = _G.LibStub
 
         local state = _G.MSUF_RangeFadeMul
         local groupMap = _G.MSUF_RangeFadeGroupUnit or { target = nil, focus = nil }

@@ -8,6 +8,13 @@
 --  * OmniCC is not assumed in Midnight.
 
 local addonName, ns = ...
+
+
+-- MSUF: Max-perf Auras2: replace protected calls (pcall) with direct calls.
+-- NOTE: this removes error-catching; any error will propagate.
+local function MSUF_A2_FastCall(fn, ...)
+    return true, fn(...)
+end
 ns = ns or {}
 
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
@@ -113,7 +120,7 @@ local function MSUF_A2_CurveAddPoint(curve, x, value)
     end
 
     -- Detect once (pcall is fine here; curve builds only on invalidation / options changes).
-    local ok = pcall(curve.AddPoint, curve, x, value)
+    local ok = MSUF_A2_FastCall(curve.AddPoint, curve, x, value)
     if ok then
         MSUF_A2_CurveAddMode = "xy"
         return true
@@ -121,7 +128,7 @@ local function MSUF_A2_CurveAddPoint(curve, x, value)
 
     local pt = MSUF_A2_CreateCurvePoint(x, value)
     if pt then
-        ok = pcall(curve.AddPoint, curve, pt)
+        ok = MSUF_A2_FastCall(curve.AddPoint, curve, pt)
         if ok then
             MSUF_A2_CurveAddMode = "point"
             return true
@@ -334,19 +341,19 @@ local function MSUF_A2_EnsureCooldownColorCurve()
         if not curve.AddPoint then return false end
 
         -- Some builds: AddPoint(x, color)
-        if pcall(curve.AddPoint, curve, x, color) then
+        if MSUF_A2_FastCall(curve.AddPoint, curve, x, color) then
             return true
         end
 
         -- Some builds: AddPoint(point) where point = { x = <number>, y = <Color> }
-        if pcall(curve.AddPoint, curve, { x = x, y = color }) then
+        if MSUF_A2_FastCall(curve.AddPoint, curve, { x = x, y = color }) then
             return true
         end
 
         -- Some builds: AddPoint(x, r, g, b, a)
         if color and color.GetRGBA then
             local r, g, b, a = color:GetRGBA()
-            if pcall(curve.AddPoint, curve, x, r, g, b, a) then
+            if MSUF_A2_FastCall(curve.AddPoint, curve, x, r, g, b, a) then
                 return true
             end
         end
@@ -371,8 +378,14 @@ local function MSUF_A2_FormatCooldownTimeText(rem)
     rem = tonumber(rem)
     if not rem or rem <= 0 then return "" end
 
-    -- No decimals: avoids flicker from "9.9" <-> "10" and forced ".0".
-    if rem < 60 then
+    if rem < 10 then
+        local v = math.floor(rem * 10 + 0.5) / 10
+        local s = tostring(v)
+        if not string.find(s, "%.", 1, true) then
+            s = s .. ".0"
+        end
+        return s
+    elseif rem < 60 then
         return tostring(math.floor(rem + 0.5))
     end
 
