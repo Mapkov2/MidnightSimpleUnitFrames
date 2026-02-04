@@ -1,9 +1,9 @@
--- Auras2: Preview + Edit Mode helper (split from MSUF_A2_Render.lua)
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua"); -- Auras2: Preview + Edit Mode helper (split from MSUF_A2_Render.lua)
 -- Goal: isolate preview/ticker/cleanup logic to reduce Render bloat, with zero feature regression.
 
 local addonName, ns = ...
 local API = ns and ns.MSUF_Auras2
-if type(API) ~= "table" then return end
+if type(API) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua"); return end
 
 API.Preview = (type(API.Preview) == "table") and API.Preview or {}
 local Preview = API.Preview
@@ -12,17 +12,17 @@ local Preview = API.Preview
 -- Helpers
 -- ------------------------------------------------------------
 
-local function IsEditModeActive()
+local function IsEditModeActive() Perfy_Trace(Perfy_GetTime(), "Enter", "IsEditModeActive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:15:6");
     -- MSUF-only Edit Mode (Blizzard Edit Mode intentionally ignored here).
     -- Keep this identical to the helper used in the render module so preview/flush transitions are reliable.
     local st = rawget(_G, "MSUF_EditState")
     if type(st) == "table" and st.active == true then
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "IsEditModeActive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:15:6"); return true
     end
 
     -- Legacy global boolean used by older patches
     if rawget(_G, "MSUF_UnitEditModeActive") == true then
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "IsEditModeActive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:15:6"); return true
     end
 
     -- Exported helper from MSUF_EditMode.lua
@@ -30,7 +30,7 @@ local function IsEditModeActive()
     if type(f) == "function" then
         local ok, v = pcall(f)
         if ok and v == true then
-            return true
+            Perfy_Trace(Perfy_GetTime(), "Leave", "IsEditModeActive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:15:6"); return true
         end
     end
 
@@ -39,34 +39,34 @@ local function IsEditModeActive()
     if type(g) == "function" then
         local ok, v = pcall(g)
         if ok and v == true then
-            return true
+            Perfy_Trace(Perfy_GetTime(), "Leave", "IsEditModeActive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:15:6"); return true
         end
     end
 
-    return false
+    Perfy_Trace(Perfy_GetTime(), "Leave", "IsEditModeActive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:15:6"); return false
 end
 
 
 API.IsEditModeActive = API.IsEditModeActive or IsEditModeActive
 
-local function EnsureDB()
+local function EnsureDB() Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:52:6");
     local Ensure = API.EnsureDB
     if type(Ensure) ~= "function" and API.DB and type(API.DB.Ensure) == "function" then
         Ensure = API.DB.Ensure
     end
     if type(Ensure) == "function" then
-        return Ensure()
+        return Perfy_Trace_Passthrough("Leave", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:52:6", Ensure())
     end
-    return nil, nil
+    Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:52:6"); return nil, nil
 end
 
-local function GetAurasByUnit()
+local function GetAurasByUnit() Perfy_Trace(Perfy_GetTime(), "Enter", "GetAurasByUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:63:6");
     local st = API.state
-    if type(st) ~= "table" then return nil end
-    return st.aurasByUnit
+    if type(st) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "GetAurasByUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:63:6"); return nil end
+    return Perfy_Trace_Passthrough("Leave", "GetAurasByUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:63:6", st.aurasByUnit)
 end
 
-local function GetCooldownTextMgr()
+local function GetCooldownTextMgr() Perfy_Trace(Perfy_GetTime(), "Enter", "GetCooldownTextMgr file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:69:6");
     -- Prefer split module API, but keep legacy global aliases.
     local CT = API.CooldownText
     local reg = CT and CT.RegisterIcon
@@ -79,19 +79,19 @@ local function GetCooldownTextMgr()
         unreg = rawget(_G, "MSUF_A2_CooldownTextMgr_UnregisterIcon")
     end
 
-    return reg, unreg
+    Perfy_Trace(Perfy_GetTime(), "Leave", "GetCooldownTextMgr file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:69:6"); return reg, unreg
 end
 
-local function GetRenderHelpers()
-    return (type(API._Render) == "table") and API._Render or nil
+local function GetRenderHelpers() Perfy_Trace(Perfy_GetTime(), "Enter", "GetRenderHelpers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:85:6");
+    return Perfy_Trace_Passthrough("Leave", "GetRenderHelpers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:85:6", (type(API._Render) == "table") and API._Render or nil)
 end
 
 -- ------------------------------------------------------------
 -- Preview cleanup (safety): ensure preview icons never block real auras
 -- ------------------------------------------------------------
 
-local function ClearPreviewIconsInContainer(container)
-    if not container or not container._msufIcons then return end
+local function ClearPreviewIconsInContainer(container) Perfy_Trace(Perfy_GetTime(), "Enter", "ClearPreviewIconsInContainer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:93:6");
+    if not container or not container._msufIcons then Perfy_Trace(Perfy_GetTime(), "Leave", "ClearPreviewIconsInContainer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:93:6"); return end
 
     local _, unreg = GetCooldownTextMgr()
 
@@ -125,27 +125,27 @@ local function ClearPreviewIconsInContainer(container)
             icon:Hide()
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "ClearPreviewIconsInContainer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:93:6"); end
 
-local function ClearPreviewsForEntry(entry)
-    if not entry then return end
+local function ClearPreviewsForEntry(entry) Perfy_Trace(Perfy_GetTime(), "Enter", "ClearPreviewsForEntry file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:130:6");
+    if not entry then Perfy_Trace(Perfy_GetTime(), "Leave", "ClearPreviewsForEntry file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:130:6"); return end
     ClearPreviewIconsInContainer(entry.buffs)
     ClearPreviewIconsInContainer(entry.debuffs)
     ClearPreviewIconsInContainer(entry.mixed)
     ClearPreviewIconsInContainer(entry.private)
     entry._msufA2_previewActive = nil
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "ClearPreviewsForEntry file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:130:6"); end
 
-local function ClearAllPreviews()
+local function ClearAllPreviews() Perfy_Trace(Perfy_GetTime(), "Enter", "ClearAllPreviews file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:139:6");
     local AurasByUnit = GetAurasByUnit()
-    if type(AurasByUnit) ~= "table" then return end
+    if type(AurasByUnit) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "ClearAllPreviews file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:139:6"); return end
 
     for _, entry in pairs(AurasByUnit) do
         if entry and entry._msufA2_previewActive == true then
             ClearPreviewsForEntry(entry)
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "ClearAllPreviews file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:139:6"); end
 
 Preview.ClearPreviewsForEntry = ClearPreviewsForEntry
 Preview.ClearAllPreviews = ClearAllPreviews
@@ -155,7 +155,7 @@ API.ClearPreviewsForEntry = API.ClearPreviewsForEntry or ClearPreviewsForEntry
 API.ClearAllPreviews = API.ClearAllPreviews or ClearAllPreviews
 
 if _G and type(_G.MSUF_Auras2_ClearAllPreviews) ~= "function" then
-    _G.MSUF_Auras2_ClearAllPreviews = function() return API.ClearAllPreviews() end
+    _G.MSUF_Auras2_ClearAllPreviews = function() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_Auras2_ClearAllPreviews file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:158:38"); return Perfy_Trace_Passthrough("Leave", "_G.MSUF_Auras2_ClearAllPreviews file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:158:38", API.ClearAllPreviews()) end
 end
 
 -- ------------------------------------------------------------
@@ -167,17 +167,17 @@ local PreviewTickers = {
     cooldown = nil,
 }
 
-local function ShouldRunPreviewTicker(kind, a2, shared)
-    if not a2 or not a2.enabled then return false end
-    if not shared or shared.showInEditMode ~= true then return false end
-    if not API.IsEditModeActive or API.IsEditModeActive() ~= true then return false end
-    if kind == "stacks" and shared.showStackCount == false then return false end
-    return true
+local function ShouldRunPreviewTicker(kind, a2, shared) Perfy_Trace(Perfy_GetTime(), "Enter", "ShouldRunPreviewTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:170:6");
+    if not a2 or not a2.enabled then Perfy_Trace(Perfy_GetTime(), "Leave", "ShouldRunPreviewTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:170:6"); return false end
+    if not shared or shared.showInEditMode ~= true then Perfy_Trace(Perfy_GetTime(), "Leave", "ShouldRunPreviewTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:170:6"); return false end
+    if not API.IsEditModeActive or API.IsEditModeActive() ~= true then Perfy_Trace(Perfy_GetTime(), "Leave", "ShouldRunPreviewTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:170:6"); return false end
+    if kind == "stacks" and shared.showStackCount == false then Perfy_Trace(Perfy_GetTime(), "Leave", "ShouldRunPreviewTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:170:6"); return false end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ShouldRunPreviewTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:170:6"); return true
 end
 
-local function ForEachPreviewIcon(fn)
+local function ForEachPreviewIcon(fn) Perfy_Trace(Perfy_GetTime(), "Enter", "ForEachPreviewIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:178:6");
     local AurasByUnit = GetAurasByUnit()
-    if type(AurasByUnit) ~= "table" then return end
+    if type(AurasByUnit) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "ForEachPreviewIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:178:6"); return end
 
     for _, entry in pairs(AurasByUnit) do
         if entry and entry._msufA2_previewActive == true then
@@ -193,11 +193,11 @@ local function ForEachPreviewIcon(fn)
             end
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "ForEachPreviewIcon file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:178:6"); end
 
-local function PreviewTickStacks()
+local function PreviewTickStacks() Perfy_Trace(Perfy_GetTime(), "Enter", "PreviewTickStacks file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:198:6");
     local a2, shared = EnsureDB()
-    if not ShouldRunPreviewTicker("stacks", a2, shared) then return end
+    if not ShouldRunPreviewTicker("stacks", a2, shared) then Perfy_Trace(Perfy_GetTime(), "Leave", "PreviewTickStacks file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:198:6"); return end
 
     local H = GetRenderHelpers()
     local applyAnchorStyle = H and H.ApplyStackCountAnchorStyle
@@ -207,8 +207,8 @@ local function PreviewTickStacks()
     local ox = shared and shared.stackTextOffsetX
     local oy = shared and shared.stackTextOffsetY
 
-    ForEachPreviewIcon(function(icon)
-        if not icon or not icon.count then return end
+    ForEachPreviewIcon(function(icon) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:210:23");
+        if not icon or not icon.count then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:210:23"); return end
 
         if type(applyAnchorStyle) == "function" then
             pcall(applyAnchorStyle, icon, stackCountAnchor)
@@ -232,12 +232,12 @@ local function PreviewTickStacks()
         else
             icon.count:Show()
         end
-    end)
-end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:210:23"); end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "PreviewTickStacks file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:198:6"); end
 
-local function PreviewTickCooldown()
+local function PreviewTickCooldown() Perfy_Trace(Perfy_GetTime(), "Enter", "PreviewTickCooldown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:238:6");
     local a2, shared = EnsureDB()
-    if not ShouldRunPreviewTicker("cooldown", a2, shared) then return end
+    if not ShouldRunPreviewTicker("cooldown", a2, shared) then Perfy_Trace(Perfy_GetTime(), "Leave", "PreviewTickCooldown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:238:6"); return end
 
     local H = GetRenderHelpers()
     local applyOffsets = H and H.ApplyCooldownTextOffsets
@@ -248,8 +248,8 @@ local function PreviewTickCooldown()
 
     local reg, unreg = GetCooldownTextMgr()
 
-    ForEachPreviewIcon(function(icon)
-        if not icon or not icon.cooldown then return end
+    ForEachPreviewIcon(function(icon) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:251:23");
+        if not icon or not icon.cooldown then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:251:23"); return end
 
         -- Ensure countdown text is visible (OmniCC removed in Midnight).
         if icon.cooldown.SetHideCountdownNumbers then
@@ -276,10 +276,10 @@ local function PreviewTickCooldown()
             -- RegisterIcon may already manage its own registry; we only unregister when ticker stops/clears.
             -- Leave unreg here unused during active ticking.
         end
-    end)
-end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:251:23"); end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "PreviewTickCooldown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:238:6"); end
 
-local function EnsureTicker(kind, need, interval, fn)
+local function EnsureTicker(kind, need, interval, fn) Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:282:6");
     local t = PreviewTickers[kind]
     if need then
         if not t then
@@ -291,9 +291,9 @@ local function EnsureTicker(kind, need, interval, fn)
             PreviewTickers[kind] = nil
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:282:6"); end
 
-local function UpdatePreviewStackTicker()
+local function UpdatePreviewStackTicker() Perfy_Trace(Perfy_GetTime(), "Enter", "UpdatePreviewStackTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:296:6");
     local a2, shared = EnsureDB()
 
     -- If the user disables Edit Mode previews, hard-clear any existing preview icons immediately.
@@ -305,10 +305,10 @@ local function UpdatePreviewStackTicker()
 
     local need = ShouldRunPreviewTicker("stacks", a2, shared)
     EnsureTicker("stacks", need, 0.50, PreviewTickStacks)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "UpdatePreviewStackTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:296:6"); end
 
 
-local function UpdatePreviewCooldownTicker()
+local function UpdatePreviewCooldownTicker() Perfy_Trace(Perfy_GetTime(), "Enter", "UpdatePreviewCooldownTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:311:6");
     local a2, shared = EnsureDB()
 
     -- If the user disables Edit Mode previews, hard-clear any existing preview icons immediately.
@@ -320,7 +320,7 @@ local function UpdatePreviewCooldownTicker()
 
     local need = ShouldRunPreviewTicker("cooldown", a2, shared)
     EnsureTicker("cooldown", need, 0.50, PreviewTickCooldown)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "UpdatePreviewCooldownTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:311:6"); end
 
 
 Preview.UpdatePreviewStackTicker = UpdatePreviewStackTicker
@@ -330,17 +330,19 @@ API.UpdatePreviewStackTicker = API.UpdatePreviewStackTicker or UpdatePreviewStac
 API.UpdatePreviewCooldownTicker = API.UpdatePreviewCooldownTicker or UpdatePreviewCooldownTicker
 
 if _G and type(_G.MSUF_Auras2_UpdatePreviewStackTicker) ~= "function" then
-    _G.MSUF_Auras2_UpdatePreviewStackTicker = function()
+    _G.MSUF_Auras2_UpdatePreviewStackTicker = function() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_Auras2_UpdatePreviewStackTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:333:46");
         if API and API.UpdatePreviewStackTicker then
-            return API.UpdatePreviewStackTicker()
+            return Perfy_Trace_Passthrough("Leave", "_G.MSUF_Auras2_UpdatePreviewStackTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:333:46", API.UpdatePreviewStackTicker())
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_Auras2_UpdatePreviewStackTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:333:46"); end
 end
 
 if _G and type(_G.MSUF_Auras2_UpdatePreviewCooldownTicker) ~= "function" then
-    _G.MSUF_Auras2_UpdatePreviewCooldownTicker = function()
+    _G.MSUF_Auras2_UpdatePreviewCooldownTicker = function() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_Auras2_UpdatePreviewCooldownTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:341:49");
         if API and API.UpdatePreviewCooldownTicker then
-            return API.UpdatePreviewCooldownTicker()
+            return Perfy_Trace_Passthrough("Leave", "_G.MSUF_Auras2_UpdatePreviewCooldownTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:341:49", API.UpdatePreviewCooldownTicker())
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_Auras2_UpdatePreviewCooldownTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua:341:49"); end
 end
+
+Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Auras2/MSUF_A2_Preview.lua");
