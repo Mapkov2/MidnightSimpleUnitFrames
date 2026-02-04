@@ -246,37 +246,25 @@ local function MSUF_A2_GetCooldownTextColorForRemainingSeconds(rem)
     if type(rem) ~= "number" then return nil end
     if rem <= 0 then return nil end
 
-    -- Secret detection: never threshold/compare secret numbers.
-    local isSecret
     local secrets = C_Secrets
-    if secrets and type(secrets.IsSecret) == "function" then
-        isSecret = secrets.IsSecret
-    elseif type(issecretvalue) == "function" then
-        isSecret = issecretvalue
-    end
-    if isSecret and isSecret(rem) == true then
+    if secrets and type(secrets.IsSecret) == "function" and secrets.IsSecret(rem) == true then
+        -- Do not compare/threshold secret numbers; use DurationObject + curve path instead.
         return nil
     end
 
-    local c = MSUF_A2_EnsureCooldownTextColors()
     local t = MSUF_A2_EnsureCooldownTextThresholds()
-    if (not c) or (not t) then return nil end
+    if not t then return nil end
 
-    local expireSec = t.expireSec or 0.25
-    local urgSec    = t.urgSec    or 5
-    local warnSec   = t.warnSec   or 15
-    local safeSec   = t.safeSec   or 60
-
-    if rem <= expireSec then
-        return c.expire
-    elseif rem <= urgSec then
-        return c.urgent
-    elseif rem <= warnSec then
-        return c.warning
-    elseif rem <= safeSec then
-        return c.safe
+    if rem <= (t.expireSec or 0.25) then
+        return (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.expire) or nil
+    elseif rem <= (t.urgSec or 5) then
+        return (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.urgent) or nil
+    elseif rem <= (t.warnSec or 15) then
+        return (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.warning) or nil
+    elseif rem <= (t.safeSec or 60) then
+        return (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.safe) or nil
     else
-        return c.normal
+        return (MSUF_A2_CooldownTextColors and MSUF_A2_CooldownTextColors.normal) or nil
     end
 end
 
@@ -379,37 +367,31 @@ local function MSUF_A2_EnsureCooldownColorCurve()
     return curve
 end
 
--- NOTE: We intentionally do NOT render decimal seconds ("9.9", "9.0", etc.).
--- Rendering tenths forces frequent text updates and can visually "flicker" around thresholds.
--- We display integer seconds (ceil) for stability.
 local function MSUF_A2_FormatCooldownTimeText(rem)
     rem = tonumber(rem)
     if not rem or rem <= 0 then return "" end
 
-    -- Use a stable, monotonic display value.
-    -- Subtract a tiny epsilon so exact integers (e.g. 15.0000) don't jump up.
-    local total = math.ceil(rem - 1e-6)
-    if total < 1 then total = 1 end
-
-    if total < 60 then
-        return tostring(total)
+    -- No decimals: avoids flicker from "9.9" <-> "10" and forced ".0".
+    if rem < 60 then
+        return tostring(math.floor(rem + 0.5))
     end
 
-    if total < 600 then
-        local m = math.floor(total / 60)
-        local s = total - (m * 60)
+    if rem < 600 then
+        local m = math.floor(rem / 60)
+        local s = math.floor(rem - (m * 60))
+        if s < 0 then s = 0 end
         if s < 10 then
             return tostring(m) .. ":0" .. tostring(s)
         end
         return tostring(m) .. ":" .. tostring(s)
     end
 
-    if total < 3600 then
-        local m = math.floor((total + 59) / 60) -- ceil minutes
+    if rem < 3600 then
+        local m = math.floor(rem / 60 + 0.5)
         return tostring(m) .. "m"
     end
 
-    local h = math.floor((total + 3599) / 3600) -- ceil hours
+    local h = math.floor(rem / 3600 + 0.5)
     return tostring(h) .. "h"
 end
 
@@ -487,14 +469,10 @@ local function MSUF_A2_ForceCooldownTextRecolor()
                 if fs then
                     local aa = a
                     if type(aa) ~= "number" then aa = 1 end
-                    local lr, lg, lb, la = fs._msufA2_lastR, fs._msufA2_lastG, fs._msufA2_lastB, fs._msufA2_lastA
-                    if lr ~= r or lg ~= g or lb ~= b or la ~= aa then
-                        fs._msufA2_lastR, fs._msufA2_lastG, fs._msufA2_lastB, fs._msufA2_lastA = r, g, b, aa
-                        if fs.SetTextColor then
-                            fs:SetTextColor(r, g, b, aa)
-                        elseif fs.SetVertexColor then
-                            fs:SetVertexColor(r, g, b, aa)
-                        end
+                    if fs.SetTextColor then
+                        fs:SetTextColor(r, g, b, aa)
+                    elseif fs.SetVertexColor then
+                        fs:SetVertexColor(r, g, b, aa)
                     end
                 end
             end
@@ -559,12 +537,8 @@ local function MSUF_A2_CooldownTextMgr_OnUpdate(_, elapsed)
 
     local curve = bucketsEnabled and MSUF_A2_EnsureCooldownColorCurve() or nil
 
-    -- Secret detection (Retail Beta / 12.0+): avoid compares/arithmetic on secret numbers.
     local secrets = C_Secrets
     local isSecret = (secrets and type(secrets.IsSecret) == "function") and secrets.IsSecret or nil
-    if (not isSecret) and type(issecretvalue) == "function" then
-        isSecret = issecretvalue
-    end
 
     local removed = 0
     for cooldown, ic in pairs(mgr.active) do
@@ -574,6 +548,7 @@ local function MSUF_A2_CooldownTextMgr_OnUpdate(_, elapsed)
         elseif ic._msufA2_hideCDNumbers ~= true then
             local r, g, b, a
             local remSeconds
+            local didCurveColor = false
 
             -- Base color: safe when disabled; normal when enabled (long durations stay default).
             if not bucketsEnabled then
@@ -582,42 +557,36 @@ local function MSUF_A2_CooldownTextMgr_OnUpdate(_, elapsed)
                 if normalCol then r, g, b, a = normalCol[1], normalCol[2], normalCol[3], normalCol[4] end
             end
 
-            -- Remaining seconds (cheap path first: cooldown widget timings; avoids aura lookups/spikes).
-            do
-                local s, d
-                if cooldown and cooldown.GetCooldownTimes then
-                    s, d = cooldown:GetCooldownTimes()
-                elseif cooldown and cooldown.GetCooldownDuration then
-                    s, d = cooldown:GetCooldownDuration()
-                end
-                if type(s) == "number" and type(d) == "number" and d > 0 then
-                    -- Avoid arithmetic on secret values.
-                    if (not isSecret) or ((not isSecret(s)) and (not isSecret(d))) then
-                        local ss, dd = s, d
-                        -- Cooldown:GetCooldownTimes() is millisecond-based on modern clients.
-                        -- Detect safely: durations > 1000 are almost certainly ms (auras are never 1000+ seconds).
-                        if type(dd) == "number" and type(ss) == "number" then
-                            -- Detect ms vs seconds robustly (ms values are ~1000x and startTime is huge).
-                            local isMs = (dd > 1000) and ((ss > 100000) or (dd > 100000))
-                            if isMs then
-                                ss = ss / 1000
-                                dd = dd / 1000
-                            end
-                        end
-                        local rem = (ss + dd) - GetTime()
-                        if type(rem) == "number" then
-                            remSeconds = rem
-                        end
+            -- Secret-safe bucket color (preferred): DurationObject + curve evaluation.
+            if bucketsEnabled and curve then
+                local obj = ic._msufA2_cdDurationObj or (cooldown and cooldown._msufA2_durationObj)
+                if obj and type(obj.EvaluateRemainingDuration) == "function" then
+                    local col = obj:EvaluateRemainingDuration(curve)
+                    if col and col.GetRGBA then
+                        r, g, b, a = col:GetRGBA()
+                        didCurveColor = true
+                    elseif col and col.GetRGB then
+                        r, g, b = col:GetRGB()
+                        a = 1
+                        didCurveColor = true
                     end
                 end
             end
 
-            -- Fallback (rare): aura remaining via C_UnitAuras (slower; avoid unless needed).
-            if (not remSeconds) and C_UnitAuras and C_UnitAuras.GetAuraDurationRemaining then
-                local auraID = ic._msufAuraInstanceID or ic._msufA2_auraInstanceId or ic._msufA2_auraInstanceID
-                local unit = ic._msufUnit or ic._msufA2_unit
-                if auraID and unit then
-                    remSeconds = C_UnitAuras.GetAuraDurationRemaining(unit, auraID)
+            -- Remaining seconds (for optional live text + non-secret bucket fallback).
+            if C_UnitAuras and type(C_UnitAuras.GetAuraDurationRemaining) == "function" then
+                local unit = ic._msufUnit
+                local auraID = ic._msufAuraInstanceID
+                if unit and auraID and type(auraID) == "number" then
+                    local rem = C_UnitAuras.GetAuraDurationRemaining(unit, auraID)
+                    if type(rem) == "number" then
+                        remSeconds = rem
+
+                        if bucketsEnabled and (not didCurveColor) and (not (isSecret and isSecret(rem))) then
+                            local colT = MSUF_A2_GetCooldownTextColorForRemainingSeconds(rem)
+                            if colT then r, g, b, a = colT[1], colT[2], colT[3], colT[4] end
+                        end
+                    end
                 end
             end
 
@@ -629,41 +598,9 @@ local function MSUF_A2_CooldownTextMgr_OnUpdate(_, elapsed)
                     local rem = (ps + pd) - GetTime()
                     if type(rem) == "number" then
                         remSeconds = rem
-                    end
-                end
-            end
-
-            -- Stabilize remaining time against tiny upward jitter (prevents threshold flicker).
-            if remSeconds ~= nil and (not (isSecret and isSecret(remSeconds))) and ic._msufA2_isPreview ~= true then
-                local prev = cooldown and cooldown._msufA2_lastRemSeconds
-                if type(prev) == "number" and remSeconds > prev and (remSeconds - prev) < 1.0 then
-                    remSeconds = prev
-                end
-                if cooldown then
-                    cooldown._msufA2_lastRemSeconds = remSeconds
-                end
-            end
-
-            -- Bucket color selection:
-            --  * If we have a non-secret plain number -> threshold buckets (stable; prevents 15s flicker).
-            --  * Otherwise (secret/unknown) -> DurationObject curve evaluation.
-            if bucketsEnabled then
-                if remSeconds ~= nil and (not (isSecret and isSecret(remSeconds))) then
-                    -- Bucket thresholds should use the same stable, integer-style value as the text.
-                    -- This prevents "threshold flicker" when remaining time jitters around e.g. 15.0s.
-                    local bucketSec = math.ceil(remSeconds - 1e-6)
-                    if bucketSec < 0 then bucketSec = 0 end
-                    local colT = MSUF_A2_GetCooldownTextColorForRemainingSeconds(bucketSec)
-                    if colT then r, g, b, a = colT[1], colT[2], colT[3], colT[4] end
-                elseif curve then
-                    local obj = ic._msufA2_cdDurationObj or (cooldown and cooldown._msufA2_durationObj)
-                    if obj and type(obj.EvaluateRemainingDuration) == "function" then
-                        local col = obj:EvaluateRemainingDuration(curve)
-                        if col and col.GetRGBA then
-                            r, g, b, a = col:GetRGBA()
-                        elseif col and col.GetRGB then
-                            r, g, b = col:GetRGB()
-                            a = 1
+                        if bucketsEnabled and (not didCurveColor) then
+                            local colT = MSUF_A2_GetCooldownTextColorForRemainingSeconds(rem)
+                            if colT then r, g, b, a = colT[1], colT[2], colT[3], colT[4] end
                         end
                     end
                 end
@@ -692,14 +629,10 @@ local function MSUF_A2_CooldownTextMgr_OnUpdate(_, elapsed)
                 if r then
                     local aa = a
                     if type(aa) ~= "number" then aa = 1 end
-                    local lr, lg, lb, la = fs._msufA2_lastR, fs._msufA2_lastG, fs._msufA2_lastB, fs._msufA2_lastA
-                    if lr ~= r or lg ~= g or lb ~= b or la ~= aa then
-                        fs._msufA2_lastR, fs._msufA2_lastG, fs._msufA2_lastB, fs._msufA2_lastA = r, g, b, aa
-                        if fs.SetTextColor then
-                            fs:SetTextColor(r, g, b, aa)
-                        elseif fs.SetVertexColor then
-                            fs:SetVertexColor(r, g, b, aa)
-                        end
+                    if fs.SetTextColor then
+                        fs:SetTextColor(r, g, b, aa)
+                    elseif fs.SetVertexColor then
+                        fs:SetVertexColor(r, g, b, aa)
                     end
                 end
             end
