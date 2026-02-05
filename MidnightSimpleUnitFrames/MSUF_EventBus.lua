@@ -1,4 +1,4 @@
---[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua"); -- MSUF_EventBus.lua
+-- MSUF_EventBus.lua
 -- Midnight Simple Unit Frames (MSUF)
 -- Step 4: Global Fanout ONLY
 --
@@ -26,20 +26,20 @@ local pcall = _G.pcall
 
 local CreateFrame = _G.CreateFrame
 
-local function IsUnitEvent(event) Perfy_Trace(Perfy_GetTime(), "Enter", "IsUnitEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:29:6");
-    return Perfy_Trace_Passthrough("Leave", "IsUnitEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:29:6", type(event) == "string" and event:sub(1, 5) == "UNIT_")
+local function IsUnitEvent(event)
+    return type(event) == "string" and event:sub(1, 5) == "UNIT_"
 end
 
 -- One-time warning per event
 local warnedUnitEvents = {}
 
-local function WarnUnitEvent(event, key) Perfy_Trace(Perfy_GetTime(), "Enter", "WarnUnitEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:36:6");
-    if warnedUnitEvents[event] then Perfy_Trace(Perfy_GetTime(), "Leave", "WarnUnitEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:36:6"); return end
+local function WarnUnitEvent(event, key)
+    if warnedUnitEvents[event] then return end
     warnedUnitEvents[event] = true
     if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
         _G.DEFAULT_CHAT_FRAME:AddMessage("|cffff5555MSUF: EventBus refused UNIT_* event|r "..tostring(event).." (key="..tostring(key).."). Register unit events directly on the frame (oUF-style).")
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "WarnUnitEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:36:6"); end
+end
 
 local bus = {
     safeCalls = false,
@@ -51,40 +51,40 @@ local bus = {
 local driver = CreateFrame("Frame")
 driver:Hide()
 
-local function EnsureEventRegistered(event) Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureEventRegistered file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:54:6");
+local function EnsureEventRegistered(event)
     -- We don't keep a refcount; we simply register on first handler and unregister when empty.
     if not driver:IsEventRegistered(event) then
         driver:RegisterEvent(event)
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureEventRegistered file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:54:6"); end
+end
 
-local function MaybeUnregisterEvent(event) Perfy_Trace(Perfy_GetTime(), "Enter", "MaybeUnregisterEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:61:6");
+local function MaybeUnregisterEvent(event)
     local t = bus.handlers[event]
     if not t then
         if driver:IsEventRegistered(event) then
             driver:UnregisterEvent(event)
         end
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MaybeUnregisterEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:61:6"); return
+        return
     end
     -- Check if empty
     for _ in pairs(t) do
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MaybeUnregisterEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:61:6"); return
+        return
     end
     bus.handlers[event] = nil
     if driver:IsEventRegistered(event) then
         driver:UnregisterEvent(event)
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "MaybeUnregisterEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:61:6"); end
+end
 
-function bus:Register(event, key, fn, unitFilter, once) Perfy_Trace(Perfy_GetTime(), "Enter", "bus:Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:79:0");
-    if type(event) ~= "string" or event == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "bus:Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:79:0"); return false end
-    if type(key) ~= "string" or key == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "bus:Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:79:0"); return false end
-    if type(fn) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "bus:Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:79:0"); return false end
+function bus:Register(event, key, fn, unitFilter, once)
+    if type(event) ~= "string" or event == "" then return false end
+    if type(key) ~= "string" or key == "" then return false end
+    if type(fn) ~= "function" then return false end
 
     -- Hard rule: no UNIT_* on the EventBus (Step 4)
     if IsUnitEvent(event) then
         WarnUnitEvent(event, key)
-        Perfy_Trace(Perfy_GetTime(), "Leave", "bus:Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:79:0"); return false
+        return false
     end
 
     local ev = bus.handlers[event]
@@ -95,18 +95,18 @@ function bus:Register(event, key, fn, unitFilter, once) Perfy_Trace(Perfy_GetTim
     end
 
     ev[key] = { fn = fn, once = once and true or false }
-    Perfy_Trace(Perfy_GetTime(), "Leave", "bus:Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:79:0"); return true
+    return true
 end
 
-function bus:Unregister(event, key) Perfy_Trace(Perfy_GetTime(), "Enter", "bus:Unregister file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:101:0");
+function bus:Unregister(event, key)
     local ev = bus.handlers[event]
-    if not ev then Perfy_Trace(Perfy_GetTime(), "Leave", "bus:Unregister file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:101:0"); return end
+    if not ev then return end
     ev[key] = nil
     MaybeUnregisterEvent(event)
-Perfy_Trace(Perfy_GetTime(), "Leave", "bus:Unregister file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:101:0"); end
+end
 
-function bus:UnregisterAll(keyPrefix) Perfy_Trace(Perfy_GetTime(), "Enter", "bus:UnregisterAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:108:0");
-    if type(keyPrefix) ~= "string" or keyPrefix == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "bus:UnregisterAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:108:0"); return end
+function bus:UnregisterAll(keyPrefix)
+    if type(keyPrefix) ~= "string" or keyPrefix == "" then return end
     for event, ev in pairs(bus.handlers) do
         local changed = false
         for key in pairs(ev) do
@@ -119,9 +119,9 @@ function bus:UnregisterAll(keyPrefix) Perfy_Trace(Perfy_GetTime(), "Enter", "bus
             MaybeUnregisterEvent(event)
         end
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "bus:UnregisterAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:108:0"); end
+end
 
-local function _PrintSafeCallErrorOnce(event, key, err) Perfy_Trace(Perfy_GetTime(), "Enter", "_PrintSafeCallErrorOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:124:6");
+local function _PrintSafeCallErrorOnce(event, key, err)
     -- Only used when bus.safeCalls == true.
     -- Avoid spamming; keep one line per (event,key) pair.
     local eo = bus._errOnce
@@ -131,7 +131,7 @@ local function _PrintSafeCallErrorOnce(event, key, err) Perfy_Trace(Perfy_GetTim
     end
     local gate = tostring(event) .. "|" .. tostring(key)
     if eo[gate] then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "_PrintSafeCallErrorOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:124:6"); return
+        return
     end
     eo[gate] = true
 
@@ -141,22 +141,22 @@ local function _PrintSafeCallErrorOnce(event, key, err) Perfy_Trace(Perfy_GetTim
     elseif _G.print then
         _G.print(msg)
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "_PrintSafeCallErrorOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:124:6"); end
+end
 
-local function CallHandler(key, fn, event, ...) Perfy_Trace(Perfy_GetTime(), "Enter", "CallHandler file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:146:6");
+local function CallHandler(key, fn, event, ...)
     if not bus.safeCalls then
         fn(event, ...)
-        Perfy_Trace(Perfy_GetTime(), "Leave", "CallHandler file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:146:6"); return
+        return
     end
     local ok, err = pcall(fn, event, ...)
     if not ok then
         _PrintSafeCallErrorOnce(event, key, err)
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "CallHandler file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:146:6"); end
+end
 
-driver:SetScript("OnEvent", function(_, event, ...) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:157:28");
+driver:SetScript("OnEvent", function(_, event, ...)
     local ev = bus.handlers[event]
-    if not ev then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:157:28"); return end
+    if not ev then return end
 
     -- Snapshot keys for :once handlers because handlers may unregister themselves.
     -- Reuse a small array to reduce table churn during event storms.
@@ -185,24 +185,24 @@ driver:SetScript("OnEvent", function(_, event, ...) Perfy_Trace(Perfy_GetTime(),
         end
         MaybeUnregisterEvent(event)
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:157:28"); end)
+end)
 
 -- Public globals (back-compat)
 _G.MSUF_EventBus = bus
 
-_G.MSUF_EventBus_Register = function(event, key, fn, unitFilter, once) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_EventBus_Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:193:28");
-    return Perfy_Trace_Passthrough("Leave", "_G.MSUF_EventBus_Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:193:28", bus:Register(event, key, fn, unitFilter, once))
+_G.MSUF_EventBus_Register = function(event, key, fn, unitFilter, once)
+    return bus:Register(event, key, fn, unitFilter, once)
 end
 
-_G.MSUF_EventBus_Unregister = function(event, key) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_EventBus_Unregister file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:197:30");
-    return Perfy_Trace_Passthrough("Leave", "_G.MSUF_EventBus_Unregister file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:197:30", bus:Unregister(event, key))
+_G.MSUF_EventBus_Unregister = function(event, key)
+    return bus:Unregister(event, key)
 end
 
-_G.MSUF_EventBus_UnregisterAll = function(keyPrefix) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_EventBus_UnregisterAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:201:33");
-    return Perfy_Trace_Passthrough("Leave", "_G.MSUF_EventBus_UnregisterAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua:201:33", bus:UnregisterAll(keyPrefix))
+_G.MSUF_EventBus_UnregisterAll = function(keyPrefix)
+    return bus:UnregisterAll(keyPrefix)
 end
 
 -- Namespaced export too (some modules use ns)
 ns.MSUF_EventBus = bus
 
-Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_EventBus.lua"); return bus
+return bus

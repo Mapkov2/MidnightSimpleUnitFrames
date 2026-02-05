@@ -5,10 +5,17 @@
 local addonName, ns = ...
 
 
--- MSUF: Max-perf Auras2: replace protected calls (pcall) with direct calls.
--- NOTE: this removes error-catching; any error will propagate.
+-- MSUF: Secret-safe helper.
+-- In Midnight/Beta, aura APIs (and even some string operations on their return values)
+-- can produce "secret values" that error on string conversion/inspection.
+--
+-- We keep a single lightweight protected-call wrapper here so all downstream helpers
+-- (StringIsTrue/False, DispelType hashing, BossAura merge, etc.) remain stable.
+--
+-- Performance note: this wrapper is hot, so we keep locals minimal.
+local _pcall = pcall
 local function MSUF_A2_FastCall(fn, ...)
-    return true, fn(...)
+    return _pcall(fn, ...)
 end
 ns = ns or {}
 if ns.__MSUF_A2_CORE_LOADED then return end

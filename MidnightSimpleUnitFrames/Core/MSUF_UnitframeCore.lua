@@ -1678,6 +1678,12 @@ local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
     local f = FramesByUnit[unit]
     if not f then return end
 
+    -- Unit swaps can change absorb/heal-absorb instantly; mark overlays dirty.
+    f._msufAbsorbDirty = true
+    f._msufHealAbsorbDirty = true
+    f._msufAbsorbInit = nil
+    f._msufHealAbsorbInit = nil
+
     local sd = Core._swapDeferCoalesce
     if not sd then return end
 
@@ -2002,6 +2008,13 @@ local function FrameOnEvent(self, event, arg1, ...)
     local info = UNIT_EVENT_MAP[event]
     if info then
         if arg1 == self.unit then
+            -- Long-term perf: absorb/heal-absorb should only update when their dedicated events fire.
+            -- Mark dirty flags here (non-secret booleans) so the mainfile can skip heavy overlay work on plain UNIT_HEALTH ticks.
+            if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
+                self._msufAbsorbDirty = true
+            elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
+                self._msufHealAbsorbDirty = true
+            end
             Core.MarkDirty(self, info.mask, info.urgent, event)
         end
         return
@@ -2049,6 +2062,13 @@ function Core.AttachFrame(f)
     if not f._msufUFCoreShowHooked and f.HookScript then
         f._msufUFCoreShowHooked = true
         f:HookScript("OnShow", function(self)
+            -- If a frame was hidden, it may have missed absorb/heal-absorb events.
+            -- Force a one-time overlay refresh on show (boolean flags only; no secret compares).
+            self._msufAbsorbDirty = true
+            self._msufHealAbsorbDirty = true
+            self._msufAbsorbInit = nil
+            self._msufHealAbsorbInit = nil
+
             Core.MarkDirty(self, MASK_SHOW_REFRESH, true, "OnShow")
             DeferSwapWork(self.unit, "OnShow", true)
         end)
@@ -2239,28 +2259,8 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-        -- Boss units can reshuffle/vanish here (e.g. boss death / encounter phase ends).
-        -- Midnight/Beta: UnitGUID values may be "secret"; never compare GUIDs.
-        -- To avoid a 5x full-update burst, only refresh slots whose existence changed.
-        Core._bossExistsCache = Core._bossExistsCache or {}
-        local cache = Core._bossExistsCache
-
         for i = 1, 5 do
-            local unit = "boss" .. i
-            local exists = (UnitExists and UnitExists(unit)) and true or false
-            local old = cache[i]
-
-            if old == nil then
-                cache[i] = exists
-                if exists then
-                    QueueUnit(unit, true, MASK_UNIT_SWAP, event)
-                    DeferSwapWork(unit, event, false, nil)
-                end
-            elseif exists ~= old then
-                cache[i] = exists
-                QueueUnit(unit, true, MASK_UNIT_SWAP, event)
-                DeferSwapWork(unit, event, false, nil)
-            end
+            QueueUnit("boss" .. i, true, DIRTY_FULL, event)
         end
         return
     end

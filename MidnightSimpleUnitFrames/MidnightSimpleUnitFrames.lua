@@ -1,28 +1,4 @@
---[[Perfy has instrumented this file]]
--- IMPORTANT PERFORMANCE NOTE:
--- The Perfy instrumentation calls Perfy_Trace/Perfy_GetTime in *every* hot-path function.
--- That is great for profiling, but it can create multi-ms spikes during event storms
--- (e.g. boss death / encounter end -> many unit updates in one frame).
---
--- Therefore, Perfy tracing is DISABLED by default unless explicitly enabled.
--- Enable temporarily with:
---   /run MSUF_PERFY_ENABLED = true
---   /reload
--- Disable again with:
---   /run MSUF_PERFY_ENABLED = nil
---   /reload
-local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough
-if not _G.MSUF_PERFY_ENABLED then
-    -- Make Perfy calls effectively free in normal gameplay.
-    Perfy_GetTime = function() return 0 end
-    Perfy_Trace = function() end
-	    -- IMPORTANT: preserve multi-return values.
-	    -- Many MSUF helpers return multiple values (e.g. r,g,b,a; fontPath,flags,r,g,b,size,...).
-	    -- A single-value passthrough collapses them and causes nils passed into SetTextColor/SetVertexColor.
-	    Perfy_Trace_Passthrough = function(_, _, ...) return ... end
-end
-Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua")
-local addonName, ns = ...
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua"); local addonName, ns = ...
 ns = ns or {}
 ns.Core   = ns.Core   or {}
 ns.UF     = ns.UF     or {}
@@ -560,12 +536,24 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp) Perfy_Trace(Perfy_GetTi
     if hp ~= nil then
         MSUF_SetBarValue(frame.hpBar, hp)
     end
-    if frame.absorbBar then
+    -- Long-term perf: Absorb/heal-absorb overlays are expensive and don't need to update on every UNIT_HEALTH tick.
+    -- Secret-safe rule: NEVER compare potentially-secret numeric returns (maxHP/absorb totals). We only update on:
+    --  * dedicated absorb events marking dirty, OR
+    --  * first draw / after being shown / unit swap hooks (which mark dirty).
+    local needAbsorb = (frame._msufAbsorbInit ~= true) or (frame._msufAbsorbDirty == true)
+    local needHealAbsorb = (frame._msufHealAbsorbInit ~= true) or (frame._msufHealAbsorbDirty == true)
+
+    if frame.absorbBar and needAbsorb then
         MSUF_UpdateAbsorbBar(frame, unit, maxHP)
+        frame._msufAbsorbDirty = nil
+        frame._msufAbsorbInit = true
     end
-    if frame.healAbsorbBar then
+    if frame.healAbsorbBar and needHealAbsorb then
         MSUF_UpdateHealAbsorbBar(frame, unit, maxHP)
+        frame._msufHealAbsorbDirty = nil
+        frame._msufHealAbsorbInit = true
     end
+
     Perfy_Trace(Perfy_GetTime(), "Leave", "Bars.ApplyHealthBars file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:525:0"); return hp, maxHP
 end
 ns.Text._msufPatchD = ns.Text._msufPatchD or { version = "D1" }
@@ -2697,9 +2685,8 @@ local LibStub = _G.LibStub
             if NotSecretValue and not NotSecretValue(v) then Perfy_Trace(Perfy_GetTime(), "Leave", "IsOutOfRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2668:14"); return nil end
             if v == true or v == 1 then Perfy_Trace(Perfy_GetTime(), "Leave", "IsOutOfRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2668:14"); return false end
             if v == false or v == 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "IsOutOfRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2668:14"); return true end
-            -- nil / any other non-true return is treated as UNKNOWN.
-            -- IMPORTANT: Do NOT fade on unknown, otherwise alpha can get stuck at rangeFadeAlpha.
-            Perfy_Trace(Perfy_GetTime(), "Leave", "IsOutOfRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2668:14"); return nil
+            -- nil / any other non-true return is treated as out-of-range for LRC max-checkers.
+            Perfy_Trace(Perfy_GetTime(), "Leave", "IsOutOfRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2668:14"); return true
         end
 
         
@@ -3915,6 +3902,7 @@ local function MSUF_PreCreateHPGradients(hpBar) Perfy_Trace(Perfy_GetTime(), "En
         down  = MakeTex(),
     })
 end
+
 local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UpdateAbsorbBars file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3893:6");
     local bar = isHeal and self and self.healAbsorbBar or self and self.absorbBar
     local api = isHeal and UnitGetTotalHealAbsorbs or UnitGetTotalAbsorbs
@@ -3929,6 +3917,8 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal) Perfy_Trace(Perf
         local g = MSUF_DB.general or {}
         if g.enableAbsorbBar == false then
             MSUF_ResetBarZero(bar, true)
+            bar._msufAbsorbLastTotal = nil
+            bar._msufAbsorbLastMax = nil
             Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdateAbsorbBars file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3893:6"); return
     end
     end
@@ -3942,12 +3932,17 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal) Perfy_Trace(Perf
     local total = api(unit)
     if not total then
         MSUF_ResetBarZero(bar, true)
+        bar._msufAbsorbLastTotal = nil
+        bar._msufAbsorbLastMax = nil
         Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdateAbsorbBars file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3893:6"); return
     end
     local max = maxHP or F.UnitHealthMax(unit) or 1
+
+    -- Secret-safe: pure API pass-through. No comparisons / caching of absorb totals or maxHP.
     bar:SetMinMaxValues(0, max)
     MSUF_SetBarValue(bar, total)
     bar:Show()
+
 Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdateAbsorbBars file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3893:6"); end
 local function MSUF_UpdateAbsorbBar(self, unit, maxHP) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UpdateAbsorbBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3927:6"); return Perfy_Trace_Passthrough("Leave", "MSUF_UpdateAbsorbBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3927:6", MSUF_UpdateAbsorbBars(self, unit, maxHP, false)) end
 local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UpdateHealAbsorbBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3928:6"); return Perfy_Trace_Passthrough("Leave", "MSUF_UpdateHealAbsorbBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3928:6", MSUF_UpdateAbsorbBars(self, unit, maxHP, true)) end
