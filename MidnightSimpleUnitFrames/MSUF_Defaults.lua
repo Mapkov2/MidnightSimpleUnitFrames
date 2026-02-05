@@ -1,4 +1,4 @@
-local addonName, ns = ...
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua"); local addonName, ns = ...
 ns = ns or {}
 
 -- MSUF Defaults / DB initialization
@@ -15,24 +15,24 @@ ns = ns or {}
 
 local MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = [[MSUF2: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]]
 
-local function MSUF_Defaults_TryDecodeCompactString(str)
-    if type(str) ~= "string" then return nil end
+local function MSUF_Defaults_TryDecodeCompactString(str) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6");
+    if type(str) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
 
     local E = _G and _G.C_EncodingUtil
-    if type(E) ~= "table" then return nil end
-    if type(E.DeserializeCBOR) ~= "function" then return nil end
-    if type(E.DecompressString) ~= "function" then return nil end
-    if type(E.DecodeBase64) ~= "function" then return nil end
+    if type(E) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
+    if type(E.DeserializeCBOR) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
+    if type(E.DecompressString) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
+    if type(E.DecodeBase64) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
 
     local ok, b64 = pcall(string.match, str, "^%s*MSUF2:%s*(.-)%s*$")
-    if not ok or type(b64) ~= "string" or b64 == "" then return nil end
+    if not ok or type(b64) ~= "string" or b64 == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
 
     local ok2, cleaned = pcall(string.gsub, b64, "%s+", "")
-    if not ok2 or type(cleaned) ~= "string" then return nil end
+    if not ok2 or type(cleaned) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
     b64 = cleaned
 
     local ok3, comp = pcall(E.DecodeBase64, b64)
-    if not ok3 or type(comp) ~= "string" then return nil end
+    if not ok3 or type(comp) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
 
     local method = (_G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate) or nil
 
@@ -43,20 +43,20 @@ local function MSUF_Defaults_TryDecodeCompactString(str)
     if not ok4 or type(bin) ~= "string" then
         ok4, bin = pcall(E.DecompressString, comp)
     end
-    if not ok4 or type(bin) ~= "string" then return nil end
+    if not ok4 or type(bin) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
 
     local ok5, tbl = pcall(E.DeserializeCBOR, bin)
-    if not ok5 or type(tbl) ~= "table" then return nil end
-    return tbl
+    if not ok5 or type(tbl) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return tbl
 end
 
-local function MSUF_Defaults_WipeInPlace(t)
-    if type(t) ~= "table" then return end
+local function MSUF_Defaults_WipeInPlace(t) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Defaults_WipeInPlace file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:53:6");
+    if type(t) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_WipeInPlace file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:53:6"); return end
     for k in pairs(t) do t[k] = nil end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_WipeInPlace file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:53:6"); end
 
-local function MSUF_Defaults_DeepCopy(dst, src)
-    if type(dst) ~= "table" or type(src) ~= "table" then return end
+local function MSUF_Defaults_DeepCopy(dst, src) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Defaults_DeepCopy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:58:6");
+    if type(dst) ~= "table" or type(src) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_DeepCopy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:58:6"); return end
     for k, v in pairs(src) do
         local tk = type(k)
         if tk == "string" or tk == "number" then
@@ -75,16 +75,16 @@ local function MSUF_Defaults_DeepCopy(dst, src)
             end
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_DeepCopy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:58:6"); end
 
 
 -- Fresh-install overrides (applied only when the factory profile payload is seeded).
 -- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
-local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
-    if type(db) ~= "table" then return end
+local function MSUF_Defaults_ApplyFreshInstallOverrides(db) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Defaults_ApplyFreshInstallOverrides file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:83:6");
+    if type(db) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_ApplyFreshInstallOverrides file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:83:6"); return end
 
-    local function ForceUnitAlpha100(conf)
-        if type(conf) ~= "table" then return end
+    local function ForceUnitAlpha100(conf) Perfy_Trace(Perfy_GetTime(), "Enter", "ForceUnitAlpha100 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:86:10");
+        if type(conf) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "ForceUnitAlpha100 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:86:10"); return end
         -- Main alpha (used when layered alpha is off)
         conf.alphaInCombat = 1
         conf.alphaOutOfCombat = 1
@@ -94,7 +94,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         conf.alphaFGOutOfCombat = 1
         conf.alphaBGInCombat = 1
         conf.alphaBGOutOfCombat = 1
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ForceUnitAlpha100 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:86:10"); end
 
     ForceUnitAlpha100(db.player)
 
@@ -117,37 +117,37 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         si.showAFK = false
         si.showDND = false
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_ApplyFreshInstallOverrides file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:83:6"); end
 
-local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
-    if type(MSUF_DB) ~= "table" then return end
+local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6");
+    if type(MSUF_DB) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); return end
     local g = (type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
     if g and g._msufFactoryProfileApplied then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); return
     end
 
     -- Only seed when the DB was just created empty.
     -- (Existing installs always already have keys before EnsureDB_Heavy runs.)
     local isEmpty = (next(MSUF_DB) == nil)
     if not isEmpty then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); return
     end
 
     local tbl = MSUF_Defaults_TryDecodeCompactString(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
-    if type(tbl) ~= "table" then return end
+    if type(tbl) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); return end
     local payload = tbl.payload
-    if type(payload) ~= "table" then return end
+    if type(payload) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); return end
 
     -- Replace the empty DB with the decoded payload.
     MSUF_Defaults_DeepCopy(MSUF_DB, payload)
     MSUF_Defaults_ApplyFreshInstallOverrides(MSUF_DB)
     MSUF_DB.general = MSUF_DB.general or {}
     MSUF_DB.general._msufFactoryProfileApplied = true
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); end
 
 local MSUF_DB_LastHeavyRun
 
-function MSUF_EnsureDB_Heavy()
+function MSUF_EnsureDB_Heavy() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_EnsureDB_Heavy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:150:0");
     if not MSUF_DB then
         MSUF_DB = {}
     end
@@ -746,28 +746,28 @@ end
 
     -- Best-effort validation: if we can confidently resolve a statusbar key and it fails,
     -- fall back to nil ("follow foreground") so users don't get broken textures after removing SharedMedia packs.
-    local function _MSUF_IsValidStatusbarKey(key)
-        if type(key) ~= "string" or key == "" then return false end
+    local function _MSUF_IsValidStatusbarKey(key) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10");
+        if type(key) ~= "string" or key == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return false end
 
         if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
             local ok, tex = pcall(_G.MSUF_ResolveStatusbarTextureKey, key)
             if ok and type(tex) == "string" and tex ~= "" then
-                return true
+                Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return true
             end
-            return false
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return false
         end
 
         local LSM = (ns and ns.LSM) or _G.MSUF_LSM
         if LSM and type(LSM.Fetch) == "function" then
             local ok, tex = pcall(LSM.Fetch, LSM, "statusbar", key, true)
             if ok and type(tex) == "string" and tex ~= "" then
-                return true
+                Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return true
             end
-            return false
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return false
         end
 
         -- Can't validate in this session (no resolver/LSM yet): keep the value to avoid unintended resets.
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return true
     end
 
     if g.absorbBarTexture ~= nil and not _MSUF_IsValidStatusbarKey(g.absorbBarTexture) then
@@ -1300,7 +1300,7 @@ filters = {
         end
     end
 
-local function fill(key, defaults)
+local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:1303:6");
         MSUF_DB[key] = MSUF_DB[key] or {}
         local t = MSUF_DB[key]
         for k, v in pairs(defaults) do
@@ -1308,7 +1308,7 @@ local function fill(key, defaults)
                 t[k] = v
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "fill file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:1303:6"); end
 
     local textDefaults = {
         nameOffsetX   = 4,
@@ -1462,16 +1462,18 @@ local function fill(key, defaults)
 
     MSUF_DB_LastHeavyRun = MSUF_DB
 
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_EnsureDB_Heavy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:150:0"); end
 
-function EnsureDB()
+function EnsureDB() Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:1467:0");
     if MSUF_DB and MSUF_DB_LastHeavyRun == MSUF_DB then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:1467:0"); return
     end
 
     MSUF_EnsureDB_Heavy()
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:1467:0"); end
 
 -- Optional exports for other modules
 ns.MSUF_EnsureDB_Heavy = MSUF_EnsureDB_Heavy
 ns.EnsureDB = EnsureDB
+
+Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua");

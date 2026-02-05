@@ -39,10 +39,42 @@ local function MarkDirty(unit)
 end
 
 local function IsEditModeActive()
+    -- Prefer exported Auras2 helper, but provide a robust local fallback so we never need polling
+    -- just to detect MSUF Edit Mode transitions.
     local f = API.IsEditModeActive
     if type(f) == "function" then
         return f() == true
     end
+
+    -- MSUF-only Edit Mode (Blizzard Edit Mode intentionally ignored here).
+    local st = rawget(_G, "MSUF_EditState")
+    if type(st) == "table" and st.active == true then
+        return true
+    end
+
+    -- Legacy global boolean used by older patches
+    if rawget(_G, "MSUF_UnitEditModeActive") == true then
+        return true
+    end
+
+    -- Exported helper from MSUF_EditMode.lua
+    local g = rawget(_G, "MSUF_IsInEditMode")
+    if type(g) == "function" then
+        local ok, v = MSUF_A2_FastCall(g)
+        if ok and v == true then
+            return true
+        end
+    end
+
+    -- Compatibility hook name from older experiments (last resort)
+    local h = rawget(_G, "MSUF_IsMSUFEditModeActive")
+    if type(h) == "function" then
+        local ok, v = MSUF_A2_FastCall(h)
+        if ok and v == true then
+            return true
+        end
+    end
+
     return false
 end
 
@@ -306,109 +338,98 @@ end
 Events.OnAnyEditModeChanged = OnAnyEditModeChanged
 API.OnAnyEditModeChanged = API.OnAnyEditModeChanged or OnAnyEditModeChanged
 
+-- Preferred: event-driven notifications from MSUF Edit Mode.
+-- Goal: 0 Poll CPU in idle (preview still snaps instantly on enter/exit).
+Events._anyEditModeHooked = Events._anyEditModeHooked or false
+Events._anyEditModeHookAttempted = Events._anyEditModeHookAttempted or false
+Events._pollFallbackAllowed = Events._pollFallbackAllowed or false
 
--- Fallback polling (LAST RESORT): must never run permanently in idle.
---
--- NOTE: When MSUF_RegisterAnyEditModeListener() is available, we rely on that and keep this polling OFF.
--- Polling only exists as a compatibility fallback for older builds / missed lifecycle events.
+local function _A2_DebugPollForced()
+    if rawget(_G, "MSUF_A2_DEBUG_POLL") == true then
+        return true
+    end
+    local db = rawget(_G, "MSUF_DB")
+    if type(db) == "table" and type(db.general) == "table" and db.general.debugAuras2Poll == true then
+        return true
+    end
+    return false
+end
+
+local function TryHookAnyEditModeListener()
+    if Events._anyEditModeHooked then return true end
+
+    local reg = rawget(_G, "MSUF_RegisterAnyEditModeListener")
+    if type(reg) ~= "function" then
+        return false
+    end
+
+    reg(OnAnyEditModeChanged)
+    Events._anyEditModeHooked = true
+
+    -- Ensure we are cold-idle immediately.
+    if Events.UpdateEditModePoll then
+        Events.UpdateEditModePoll()
+    end
+
+    return true
+end
+
+local function ScheduleAnyEditModeHookRetry()
+    if Events._anyEditModeHooked or Events._anyEditModeHookAttempted then return end
+    Events._anyEditModeHookAttempted = true
+
+    if not (C_Timer and C_Timer.After) then
+        -- No timers available: allow poll fallback so preview can still work.
+        Events._pollFallbackAllowed = true
+        if Events.UpdateEditModePoll then
+            Events.UpdateEditModePoll()
+        end
+        return
+    end
+
+    local tries = 0
+    local function step()
+        if Events._anyEditModeHooked then return end
+
+        if TryHookAnyEditModeListener() then
+            -- Sync once after hooking (covers rare "Auras2 loads before EditMode" order,
+            -- or /reload while Edit Mode is already active).
+            OnAnyEditModeChanged(IsEditModeActive())
+            return
+        end
+
+        tries = tries + 1
+        if tries == 1 then
+            C_Timer.After(0.5, step)
+        elseif tries == 2 then
+            C_Timer.After(2.0, step)
+        elseif tries == 3 then
+            C_Timer.After(5.0, step)
+        else
+            -- Give up: enable poll fallback as last resort.
+            Events._pollFallbackAllowed = true
+            if Events.UpdateEditModePoll then
+                Events.UpdateEditModePoll()
+            end
+        end
+    end
+
+    C_Timer.After(0, step)
+end
+
+-- ------------------------------------------------------------
+-- Poll fallback (last resort)
+-- ------------------------------------------------------------
 local _pollLast = nil
 local _pollAcc = 0
 local _polling = false
-
-local function _A2_DebugPollEnabled()
-    local gdb = _G and rawget(_G, "MSUF_DB")
-    if gdb and gdb.general and gdb.general.debugAuras2Poll == true then return true end
-    if _G and rawget(_G, "MSUF_A2_DEBUG_POLL") == true then return true end
-    return false
-end
-
-local function _A2_HasEditModeListener()
-    if Events._hasEditModeListener ~= nil then
-        return (Events._hasEditModeListener == true)
-    end
-    return (_G and type(_G.MSUF_RegisterAnyEditModeListener) == "function") or false
-end
-
-local function _A2_DirtyListNotEmpty()
-    local f = API and API.DirtyListNotEmpty
-    if type(f) == "function" then
-        local ok, v = MSUF_A2_FastCall(f)
-        return ok and v == true
-    end
-    local g = _G and rawget(_G, "MSUF_A2_DirtyListNotEmpty")
-    if type(g) == "function" then
-        local ok, v = MSUF_A2_FastCall(g)
-        return ok and v == true
-    end
-    return false
-end
-
-local function _A2_TestmodeEnabled()
-    local p = API and API.Preview
-    if p and type(p.IsTestModeActive) == "function" then
-        local ok, v = MSUF_A2_FastCall(p.IsTestModeActive, p)
-        return ok and v == true
-    end
-    return false
-end
-
-local function _A2_ShouldPollNow()
-    local cur = IsEditModeActive()
-
-    if _A2_DebugPollEnabled() then
-        return true, cur
-    end
-
-    -- If we have a proper listener, polling is unnecessary and should stay off.
-    if _A2_HasEditModeListener() then
-        return false, cur
-    end
-
-    -- Minimal-safe fallback rules (only when really needed):
-    -- - dirty render work pending
-    -- - preview/testmode toggle enabled (showInEditMode)
-    -- - Edit Mode active
-    -- - explicit debug fallback (handled above)
-    if cur == true then
-        return true, cur
-    end
-
-    if _A2_DirtyListNotEmpty() then
-        return true, cur
-    end
-
-    if _A2_TestmodeEnabled() then
-        return true, cur
-    end
-
-    local _, shared = EnsureDB()
-    if shared and shared.showInEditMode == true then
-        return true, cur
-    end
-
-    return false, cur
-end
-
-local function _A2_StopPoll()
-    local ef = Events._eventFrame
-    _polling = false
-    _pollAcc = 0
-    if ef and ef.SetScript then
-        ef:SetScript("OnUpdate", nil)
-    end
-end
 
 local function PollOnUpdate(_, elapsed)
     _pollAcc = _pollAcc + (elapsed or 0)
     if _pollAcc < 0.25 then return end
     _pollAcc = 0
 
-    local wantPoll, cur = _A2_ShouldPollNow()
-    if not wantPoll then
-        _A2_StopPoll()
-        return
-    end
-
+    local cur = IsEditModeActive()
     if _pollLast == nil then
         _pollLast = cur
         return
@@ -424,15 +445,32 @@ function Events.UpdateEditModePoll()
     local ef = Events._eventFrame
     if not ef then return end
 
-    -- If listener exists (normal case), force-disable the poll unless explicitly debugging.
-    if _A2_HasEditModeListener() and not _A2_DebugPollEnabled() then
+    local debugPoll = _A2_DebugPollForced()
+
+    -- Cold idle: if we are hooked into MSUF Edit Mode notifications, never poll.
+    if Events._anyEditModeHooked and (not debugPoll) then
         if _polling then
-            _A2_StopPoll()
+            _polling = false
+            ef:SetScript("OnUpdate", nil)
         end
         return
     end
 
-    local wantPoll, cur = _A2_ShouldPollNow()
+    -- If we're not hooked yet, keep cold-idle while we retry the hook.
+    if (not Events._anyEditModeHooked) and (not debugPoll) and (not Events._pollFallbackAllowed) then
+        if _polling then
+            _polling = false
+            ef:SetScript("OnUpdate", nil)
+        end
+        ScheduleAnyEditModeHookRetry()
+        return
+    end
+
+    -- Poll fallback enabled (or debug forces polling).
+    local _, shared = EnsureDB()
+    local wantPreview = (shared and shared.showInEditMode == true) or false
+    local cur = IsEditModeActive()
+    local wantPoll = debugPoll or (wantPreview == true) or (cur == true)
 
     if wantPoll and not _polling then
         _polling = true
@@ -440,17 +478,16 @@ function Events.UpdateEditModePoll()
         _pollLast = cur
         ef:SetScript("OnUpdate", PollOnUpdate)
     elseif (not wantPoll) and _polling then
-        _A2_StopPoll()
+        _polling = false
+        ef:SetScript("OnUpdate", nil)
     end
 end
-
 
 API.UpdateEditModePoll = API.UpdateEditModePoll or function()
     if Events.UpdateEditModePoll then
         return Events.UpdateEditModePoll()
     end
 end
-
 -- ------------------------------------------------------------
 -- Public API: ApplyEventRegistration + Init
 -- ------------------------------------------------------------
@@ -547,16 +584,15 @@ function Events.Init()
 
     Events.ApplyEventRegistration()
 
-    -- Preferred path: subscribe to shared MSUF Edit Mode notifications
-    if _G and type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
-        Events._hasEditModeListener = true
-        _G.MSUF_RegisterAnyEditModeListener(OnAnyEditModeChanged)
+    -- Preferred path: hook into MSUF Edit Mode enter/exit notifications (no polling).
+    if not TryHookAnyEditModeListener() then
+        -- Load-order safety: Auras2 can init before MSUF_EditMode.lua has created the broadcaster.
+        -- Retry via timers; poll fallback is only enabled if hooks are not possible.
+        ScheduleAnyEditModeHookRetry()
     else
-        Events._hasEditModeListener = false
-        -- Fallback poll
-        Events.UpdateEditModePoll()
+        -- Sync once (covers rare /reload while Edit Mode already active).
+        OnAnyEditModeChanged(IsEditModeActive())
     end
-
 end
 
 -- ------------------------------------------------------------

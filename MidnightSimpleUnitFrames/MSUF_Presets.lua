@@ -1,4 +1,4 @@
--- MSUF_Presets.lua
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Presets.lua"); -- MSUF_Presets.lua
 -- Preset snapshots used by the SlashMenu Home page (non-profile quick loads).
 -- This file is loaded via .toc before MidnightSimpleUnitFrames_SlashMenu.lua.
 
@@ -1632,3 +1632,5 @@ ns.MSUF_PRESETS = {
 
 -- Optional global export for debugging/compat
 _G.MSUF_PRESETS = ns.MSUF_PRESETS
+
+Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Presets.lua");

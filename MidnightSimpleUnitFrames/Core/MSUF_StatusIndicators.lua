@@ -1,4 +1,4 @@
--- Status Indicator + Status Icons (Combat/Resting/Incoming Res)
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua"); -- Status Indicator + Status Icons (Combat/Resting/Incoming Res)
 -- NOTE: This file exists in Core/ for newer layouts. A copy is also shipped at addon root for older .toc layouts.
 --
 -- Provides:
@@ -14,16 +14,16 @@ ns = ns or {}
 -- ------------------------------------------------------------
 
 if type(_G.MSUF_GetStatusIndicatorDB) ~= "function" then
-    local function _MSUF_DefaultStatusIndicators()
-        return {
+    local function _MSUF_DefaultStatusIndicators() Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_DefaultStatusIndicators file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:17:10");
+        return Perfy_Trace_Passthrough("Leave", "_MSUF_DefaultStatusIndicators file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:17:10", {
             showAFK = true,
             showDND = true,
             showDead = true,
             showGhost = true,
-        }
+        })
     end
 
-    function _G.MSUF_GetStatusIndicatorDB()
+    function _G.MSUF_GetStatusIndicatorDB() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_GetStatusIndicatorDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:26:4");
         if type(_G.EnsureDB) == "function" then
             _G.EnsureDB()
         end
@@ -31,7 +31,7 @@ if type(_G.MSUF_GetStatusIndicatorDB) ~= "function" then
         local db = _G.MSUF_DB
         local g = (type(db) == "table") and db.general or nil
         if type(g) ~= "table" then
-            return _MSUF_DefaultStatusIndicators()
+            return Perfy_Trace_Passthrough("Leave", "_G.MSUF_GetStatusIndicatorDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:26:4", _MSUF_DefaultStatusIndicators())
         end
         if type(g.statusIndicators) ~= "table" then
             g.statusIndicators = {}
@@ -41,7 +41,7 @@ if type(_G.MSUF_GetStatusIndicatorDB) ~= "function" then
         if si.showDND == nil then si.showDND = true end
         if si.showDead == nil then si.showDead = true end
         if si.showGhost == nil then si.showGhost = true end
-        return si
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_GetStatusIndicatorDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:26:4"); return si
     end
 end
 
@@ -52,7 +52,7 @@ MSUF_GetStatusIndicatorDB = _G.MSUF_GetStatusIndicatorDB
 -- Helpers (read config with global fallback)
 -- ------------------------------------------------------------
 
-local function _MSUF_ReadBool(conf, g, k, defaultVal, legacyKey)
+local function _MSUF_ReadBool(conf, g, k, defaultVal, legacyKey) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_ReadBool file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:55:6");
     local v
     if type(conf) == "table" then
         v = conf[k]
@@ -63,10 +63,10 @@ local function _MSUF_ReadBool(conf, g, k, defaultVal, legacyKey)
         if v == nil and legacyKey then v = g[legacyKey] end
     end
     if v == nil then v = defaultVal end
-    return (v ~= false)
+    return Perfy_Trace_Passthrough("Leave", "_MSUF_ReadBool file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:55:6", (v ~= false))
 end
 
-local function _MSUF_ReadNumber(conf, g, k, defaultVal, legacyKey)
+local function _MSUF_ReadNumber(conf, g, k, defaultVal, legacyKey) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_ReadNumber file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:69:6");
     local v
     if type(conf) == "table" then
         v = conf[k]
@@ -78,10 +78,10 @@ local function _MSUF_ReadNumber(conf, g, k, defaultVal, legacyKey)
     end
     v = tonumber(v)
     if v == nil then v = defaultVal end
-    return v
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ReadNumber file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:69:6"); return v
 end
 
-local function _MSUF_ReadStr(conf, g, k, defaultVal, legacyKey)
+local function _MSUF_ReadStr(conf, g, k, defaultVal, legacyKey) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_ReadStr file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:84:6");
     local v
     if type(conf) == "table" then
         v = conf[k]
@@ -92,21 +92,21 @@ local function _MSUF_ReadStr(conf, g, k, defaultVal, legacyKey)
         if v == nil and legacyKey then v = g[legacyKey] end
     end
     if v == nil then v = defaultVal end
-    return v
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ReadStr file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:84:6"); return v
 end
 
 -- ------------------------------------------------------------
 -- Status Icon Symbol Textures (Classic vs Midnight)
 -- ------------------------------------------------------------
-local function _MSUF_GetStatusIconsUseMidnight(conf, g)
+local function _MSUF_GetStatusIconsUseMidnight(conf, g) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_GetStatusIconsUseMidnight file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:101:6");
     -- Global by design; allow per-frame legacy if ever present.
     if type(conf) == "table" and conf.statusIconsUseMidnightStyle ~= nil then
-        return (conf.statusIconsUseMidnightStyle == true)
+        return Perfy_Trace_Passthrough("Leave", "_MSUF_GetStatusIconsUseMidnight file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:101:6", (conf.statusIconsUseMidnightStyle == true))
     end
     if type(g) == "table" and g.statusIconsUseMidnightStyle ~= nil then
-        return (g.statusIconsUseMidnightStyle == true)
+        return Perfy_Trace_Passthrough("Leave", "_MSUF_GetStatusIconsUseMidnight file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:101:6", (g.statusIconsUseMidnightStyle == true))
     end
-    return false
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetStatusIconsUseMidnight file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:101:6"); return false
 end
 
 -- ------------------------------------------------------------
@@ -118,9 +118,9 @@ end
 --   classification_* -> Media/Symbols/Classification (64)
 -- ------------------------------------------------------------
 
-local function _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
+local function _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_BuildStatusIconSymbolTexturePath file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:121:6");
     if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_BuildStatusIconSymbolTexturePath file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:121:6"); return nil
     end
 
     local folder = "Combat"
@@ -143,12 +143,12 @@ local function _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
     end
 
 
-    return "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\" .. folder .. "\\" .. symbolKey .. suffix
+    return Perfy_Trace_Passthrough("Leave", "_MSUF_BuildStatusIconSymbolTexturePath file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:121:6", "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\" .. folder .. "\\" .. symbolKey .. suffix)
 end
 
-local function _MSUF_EnsurePulseAnim(tex)
-    if not tex or not tex.CreateAnimationGroup then return nil end
-    if tex._msufPulseAnim then return tex._msufPulseAnim end
+local function _MSUF_EnsurePulseAnim(tex) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_EnsurePulseAnim file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:149:6");
+    if not tex or not tex.CreateAnimationGroup then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_EnsurePulseAnim file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:149:6"); return nil end
+    if tex._msufPulseAnim then return Perfy_Trace_Passthrough("Leave", "_MSUF_EnsurePulseAnim file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:149:6", tex._msufPulseAnim) end
 
     local ag = tex:CreateAnimationGroup()
     ag:SetLooping("REPEAT")
@@ -166,17 +166,17 @@ local function _MSUF_EnsurePulseAnim(tex)
     a2:SetOrder(2)
 
     tex._msufPulseAnim = ag
-    return ag
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_EnsurePulseAnim file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:149:6"); return ag
 end
 
-local function _MSUF_StopPulseAnim(tex)
+local function _MSUF_StopPulseAnim(tex) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_StopPulseAnim file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:172:6");
     local ag = tex and tex._msufPulseAnim
     if ag and ag.Stop then ag:Stop() end
     if tex and tex.SetAlpha then tex:SetAlpha(1) end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_StopPulseAnim file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:172:6"); end
 
-local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight, wantsPulse)
-    if not tex or not tex.SetTexture then return end
+local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight, wantsPulse) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_ApplyStatusIconSymbolTexture file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:178:6");
+    if not tex or not tex.SetTexture then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ApplyStatusIconSymbolTexture file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:178:6"); return end
 
     -- Capture default texture/atlas so selecting DEFAULT later restores the original icon.
     if tex._msufDefaultTexture == nil and tex.GetTexture then
@@ -211,7 +211,7 @@ local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight, w
         end
 
         _MSUF_StopPulseAnim(tex)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ApplyStatusIconSymbolTexture file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:178:6"); return
     end
 
     local stamp = path
@@ -233,10 +233,10 @@ local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight, w
     else
         _MSUF_StopPulseAnim(tex)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ApplyStatusIconSymbolTexture file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:178:6"); end
 
-local function _MSUF_AnchorCorner(tex, frame, corner, xOff, yOff)
-    if not tex or not frame then return end
+local function _MSUF_AnchorCorner(tex, frame, corner, xOff, yOff) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_AnchorCorner file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:238:6");
+    if not tex or not frame then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_AnchorCorner file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:238:6"); return end
     corner = corner or "TOPLEFT"
     xOff = xOff or 0
     yOff = yOff or 0
@@ -244,112 +244,112 @@ local function _MSUF_AnchorCorner(tex, frame, corner, xOff, yOff)
 
     if corner == "CENTER" then
         tex:SetPoint("CENTER", frame, "CENTER", 0 + xOff, 0 + yOff)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_AnchorCorner file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:238:6"); return
     end
 
     if corner == "TOPRIGHT" then
         tex:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2 + xOff, -2 + yOff)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_AnchorCorner file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:238:6"); return
     elseif corner == "BOTTOMLEFT" then
         tex:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 2 + xOff, 2 + yOff)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_AnchorCorner file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:238:6"); return
     elseif corner == "BOTTOMRIGHT" then
         tex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2 + xOff, 2 + yOff)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_AnchorCorner file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:238:6"); return
     end
 
     -- TOPLEFT default
     tex:SetPoint("TOPLEFT", frame, "TOPLEFT", 2 + xOff, -2 + yOff)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_AnchorCorner file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:238:6"); end
 
 
 -- ------------------------------------------------------------
 -- Target classification state (Boss / Elite / Rare)
 -- ------------------------------------------------------------
 
-local function _MSUF_GetClassificationState(unit)
+local function _MSUF_GetClassificationState(unit) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_GetClassificationState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:270:6");
     if not unit or not UnitExists or not UnitExists(unit) then
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:270:6"); return nil
     end
 
     local c = UnitClassification and UnitClassification(unit) or nil
     if c == "worldboss" then
-        return "BOSS"
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:270:6"); return "BOSS"
     end
 
     -- Boss fallback: level -1 (common for bosses / many dungeon bosses)
     local lvl = UnitLevel and UnitLevel(unit) or nil
     if lvl == -1 then
-        return "BOSS"
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:270:6"); return "BOSS"
     end
 
-    if c == "rareelite" then return "RAREELITE" end
-    if c == "rare"     then return "RARE"     end
-    if c == "elite"    then return "ELITE"    end
+    if c == "rareelite" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:270:6"); return "RAREELITE" end
+    if c == "rare"     then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:270:6"); return "RARE"     end
+    if c == "elite"    then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:270:6"); return "ELITE"    end
 
-    return nil
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:270:6"); return nil
 end
 
-local function _MSUF_GetDefaultClassificationSymbolKey(state)
+local function _MSUF_GetDefaultClassificationSymbolKey(state) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_GetDefaultClassificationSymbolKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:293:6");
     -- Default symbol keys for the new classification family.
     -- Step 5 will provide the actual Media/Symbols/Classification/*.tga assets.
     if state == "BOSS" then
-        return "classification_boss"
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetDefaultClassificationSymbolKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:293:6"); return "classification_boss"
     end
     if state == "RAREELITE" then
-        return "classification_rareelite"
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetDefaultClassificationSymbolKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:293:6"); return "classification_rareelite"
     end
     if state == "RARE" then
-        return "classification_rare"
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetDefaultClassificationSymbolKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:293:6"); return "classification_rare"
     end
     if state == "ELITE" then
-        return "classification_elite"
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetDefaultClassificationSymbolKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:293:6"); return "classification_elite"
     end
-    return nil
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetDefaultClassificationSymbolKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:293:6"); return nil
 end
 
-local function _MSUF_NormalizeClassificationSymbolKey(symbolKey, state)
+local function _MSUF_NormalizeClassificationSymbolKey(symbolKey, state) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_NormalizeClassificationSymbolKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:311:6");
     if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
-        return _MSUF_GetDefaultClassificationSymbolKey(state)
+        return Perfy_Trace_Passthrough("Leave", "_MSUF_NormalizeClassificationSymbolKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:311:6", _MSUF_GetDefaultClassificationSymbolKey(state))
     end
-    return symbolKey
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_NormalizeClassificationSymbolKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:311:6"); return symbolKey
 end
 
-local function _MSUF_GetClassificationLabel(state)
+local function _MSUF_GetClassificationLabel(state) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_GetClassificationLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:318:6");
     if state == "BOSS" then
-        return "BOSS"
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:318:6"); return "BOSS"
     end
     if state == "RAREELITE" then
-        return "RARE+"
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:318:6"); return "RARE+"
     end
     if state == "RARE" then
-        return "RARE"
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:318:6"); return "RARE"
     end
     if state == "ELITE" then
-        return "ELITE"
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:318:6"); return "ELITE"
     end
-    return ""
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetClassificationLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:318:6"); return ""
 end
 
 -- Ensure a FontString has a font before calling :SetText().
 -- Some FontStrings may be created without a template; in that case SetText() can throw "Font not set".
-local function _MSUF_EnsureFontStringHasFont(fs)
-    if not fs then return false end
+local function _MSUF_EnsureFontStringHasFont(fs) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_EnsureFontStringHasFont file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:336:6");
+    if not fs then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_EnsureFontStringHasFont file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:336:6"); return false end
     if fs.GetFont then
         local p = fs:GetFont()
-        if p then return true end
+        if p then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_EnsureFontStringHasFont file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:336:6"); return true end
     end
     -- Prefer a known-good UI FontObject.
     if fs.SetFontObject and _G.GameFontHighlightLarge then
         fs:SetFontObject(_G.GameFontHighlightLarge)
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_EnsureFontStringHasFont file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:336:6"); return true
     end
     -- Fallback: raw font file (should exist everywhere).
     if fs.SetFont and _G.STANDARD_TEXT_FONT then
         fs:SetFont(_G.STANDARD_TEXT_FONT, 12, "")
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_EnsureFontStringHasFont file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:336:6"); return true
     end
-    return false
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_EnsureFontStringHasFont file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:336:6"); return false
 end
 
 -- ------------------------------------------------------------
@@ -357,12 +357,12 @@ end
 -- Summon was removed intentionally (user request)
 -- ------------------------------------------------------------
 
-local function _MSUF_UpdateStatusIcons(frame)
-    if not frame or not frame.unit then return end
+local function _MSUF_UpdateStatusIcons(frame) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_UpdateStatusIcons file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:360:6");
+    if not frame or not frame.unit then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_UpdateStatusIcons file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:360:6"); return end
     local unit = frame.unit
 
     local db = _G.MSUF_DB
-    if type(db) ~= "table" then return end
+    if type(db) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_UpdateStatusIcons file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:360:6"); return end
     local g = db.general or {}
 
     local conf
@@ -371,9 +371,9 @@ local function _MSUF_UpdateStatusIcons(frame)
     elseif frame._msufIsTarget then
         conf = db.target
     else
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_UpdateStatusIcons file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:360:6"); return
     end
-    if type(conf) ~= "table" then return end
+    if type(conf) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_UpdateStatusIcons file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:360:6"); return end
 
     -- Test mode is global (sync across frames) but we accept per-frame legacy keys if present.
     local testMode = ((type(g) == "table" and g.stateIconsTestMode == true) or (type(conf) == "table" and conf.stateIconsTestMode == true)) and true or false
@@ -554,15 +554,15 @@ local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffe
             classText:Hide()
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_UpdateStatusIcons file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:360:6"); end
 
 -- ------------------------------------------------------------
 -- Status text update (calls status icons update at the end)
 -- ------------------------------------------------------------
 
-function MSUF_UpdateStatusIndicatorForFrame(frame)
+function MSUF_UpdateStatusIndicatorForFrame(frame) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UpdateStatusIndicatorForFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:563:0");
     if not frame or not frame.statusIndicatorText then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdateStatusIndicatorForFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:563:0"); return
     end
 
     local unit = frame.unit
@@ -639,32 +639,32 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
     end
 
     _MSUF_UpdateStatusIcons(frame)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdateStatusIndicatorForFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:563:0"); end
 
 -- Public refresh helper
-_G.MSUF_RefreshStatusIndicators = function()
+_G.MSUF_RefreshStatusIndicators = function() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_RefreshStatusIndicators file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:645:34");
     local frames = _G.MSUF_UnitFrames
     if type(frames) ~= "table" then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_RefreshStatusIndicators file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:645:34"); return
     end
     for _, f in pairs(frames) do
         MSUF_UpdateStatusIndicatorForFrame(f)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_RefreshStatusIndicators file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:645:34"); end
 
 -- Keep a compatibility stub because older code may call this helper.
 do
-    local function _MSUF_StopStatusIndicatorTicker()
+    local function _MSUF_StopStatusIndicatorTicker() Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_StopStatusIndicatorTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:657:10");
         local t = _G.MSUF_StatusIndicatorTicker
         if t and t.Cancel then
             t:Cancel()
         end
         _G.MSUF_StatusIndicatorTicker = nil
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_StopStatusIndicatorTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:657:10"); end
 
-    _G.MSUF_EnsureStatusIndicatorTicker = function()
+    _G.MSUF_EnsureStatusIndicatorTicker = function() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_EnsureStatusIndicatorTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:665:42");
         _MSUF_StopStatusIndicatorTicker()
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_EnsureStatusIndicatorTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:665:42"); end
 
     _MSUF_StopStatusIndicatorTicker()
 end
@@ -674,7 +674,7 @@ end
 -- Used by Frames menus (Player/Target) and the MSUF Edit Mode panel.
 -- ------------------------------------------------------------
 do
-    local function _MSUF_RequestUFUpdate(key, reason)
+    local function _MSUF_RequestUFUpdate(key, reason) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_RequestUFUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:677:10");
         local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
         local fr = (uf and key) and uf[key] or nil
         if fr then
@@ -684,19 +684,19 @@ do
                 _G.UpdateSimpleUnitFrame(fr)
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_RequestUFUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:677:10"); end
 
-    function _G.MSUF_GetStatusIconsTestMode()
+    function _G.MSUF_GetStatusIconsTestMode() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_GetStatusIconsTestMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:689:4");
         if type(_G.EnsureDB) == "function" then _G.EnsureDB() end
         local db = _G.MSUF_DB
         local g = (type(db) == "table") and db.general or nil
-        return (type(g) == "table" and g.stateIconsTestMode == true) or false
+        return Perfy_Trace_Passthrough("Leave", "_G.MSUF_GetStatusIconsTestMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:689:4", (type(g) == "table" and g.stateIconsTestMode == true) or false)
     end
 
-    function _G.MSUF_SetStatusIconsTestMode(enabled, reason)
+    function _G.MSUF_SetStatusIconsTestMode(enabled, reason) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_SetStatusIconsTestMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:696:4");
         if type(_G.EnsureDB) == "function" then _G.EnsureDB() end
         local db = _G.MSUF_DB
-        if type(db) ~= "table" then return end
+        if type(db) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_SetStatusIconsTestMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:696:4"); return end
         db.general = (type(db.general) == "table") and db.general or {}
         db.general.stateIconsTestMode = (enabled and true) or false
 
@@ -706,5 +706,6 @@ do
 
         _MSUF_RequestUFUpdate("player", reason or "StatusIconsTestMode")
         _MSUF_RequestUFUpdate("target", reason or "StatusIconsTestMode")
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_SetStatusIconsTestMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua:696:4"); end
 end
+Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_StatusIndicators.lua");

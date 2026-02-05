@@ -1,24 +1,24 @@
--- Options\MSUF_Options_Fonts.lua (spec-driven refactor)
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua"); -- Options\MSUF_Options_Fonts.lua (spec-driven refactor)
 -- Cumulative / no feature regression goal: same widgets, same DB keys, same behaviors.
 -- This file replaces the previous generated split and builds the boxed Fonts UI directly.
 
 local addonName, ns = ...
 ns = ns or {}
 
-function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
-    if not panel or not fontGroup then return end
+function ns.MSUF_Options_Fonts_Build(panel, fontGroup) Perfy_Trace(Perfy_GetTime(), "Enter", "ns.MSUF_Options_Fonts_Build file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:8:0");
+    if not panel or not fontGroup then Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_Options_Fonts_Build file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:8:0"); return end
 
     -- ---------------------------------------------------------------------
     -- Compat helpers (never assume globals exist when the panel is split)
     -- ---------------------------------------------------------------------
-    local function EnsureDB()
+    local function EnsureDB() Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:14:10");
         local fn = _G and _G.EnsureDB
-        if type(fn) == "function" then return fn() end
+        if type(fn) == "function" then return Perfy_Trace_Passthrough("Leave", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:14:10", fn()) end
 
         local fn2 = (ns and ns.MSUF_UnitframeCore and ns.MSUF_UnitframeCore.UFCore_EnsureDBOnce)
             or (_G and _G.UFCore_EnsureDBOnce)
         if type(fn2) == "function" then pcall(fn2) end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:14:10"); end
 
     local CreateLabeledSlider = (ns and (ns.MSUF_CreateLabeledSlider or ns.CreateLabeledSlider)) or _G.CreateLabeledSlider
     local MSUF_ExpandDropdownClickArea = (ns and ns.MSUF_ExpandDropdownClickArea) or _G.MSUF_ExpandDropdownClickArea
@@ -30,60 +30,60 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         local warn = fontGroup:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         warn:SetPoint("TOPLEFT", fontGroup, "TOPLEFT", 16, -140)
         warn:SetText("MSUF: Fonts builder missing CreateLabeledSlider (Core export).")
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_Options_Fonts_Build file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:8:0"); return
     end
-    if type(MSUF_ExpandDropdownClickArea) ~= "function" then MSUF_ExpandDropdownClickArea = function() end end
-    if type(MSUF_MakeDropdownScrollable) ~= "function" then MSUF_MakeDropdownScrollable = function() end end
+    if type(MSUF_ExpandDropdownClickArea) ~= "function" then MSUF_ExpandDropdownClickArea = function() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ExpandDropdownClickArea file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:35:92"); Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ExpandDropdownClickArea file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:35:92"); end end
+    if type(MSUF_MakeDropdownScrollable) ~= "function" then MSUF_MakeDropdownScrollable = function() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_MakeDropdownScrollable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:36:90"); Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_MakeDropdownScrollable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:36:90"); end end
 
-    local function MSUF_GetLSM_Compat()
+    local function MSUF_GetLSM_Compat() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetLSM_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:38:10");
         local fn = (ns and ns.MSUF_GetLSM) or (_G and _G.MSUF_GetLSM)
         if type(fn) == "function" then
             local ok, lib = pcall(fn)
-            if ok then return lib end
+            if ok then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetLSM_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:38:10"); return lib end
         end
         if _G and _G.LibStub then
             local ok, lib = pcall(_G.LibStub, "LibSharedMedia-3.0", true)
-            if ok then return lib end
+            if ok then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetLSM_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:38:10"); return lib end
         end
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetLSM_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:38:10"); return nil
     end
 
-    local function MSUF_CallUpdateAllFonts()
+    local function MSUF_CallUpdateAllFonts() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_CallUpdateAllFonts file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:51:10");
         local fn = _G and (_G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts)
         if (not fn) and ns and ns.MSUF_UpdateAllFonts then fn = ns.MSUF_UpdateAllFonts end
         if type(fn) == "function" then fn() end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CallUpdateAllFonts file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:51:10"); end
 
-    local function MSUF_Options_RequestLayoutAll_Compat(reason)
+    local function MSUF_Options_RequestLayoutAll_Compat(reason) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Options_RequestLayoutAll_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:57:10");
         local fn = (ns and ns.MSUF_Options_RequestLayoutAll) or (_G and _G.MSUF_Options_RequestLayoutAll)
-        if type(fn) == "function" then return fn(reason) end
+        if type(fn) == "function" then return Perfy_Trace_Passthrough("Leave", "MSUF_Options_RequestLayoutAll_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:57:10", fn(reason)) end
 
         local req = _G and _G.MSUF_UFCore_RequestLayoutForUnit
         if type(req) == "function" then
             for _, k in ipairs({ "player", "target", "focus", "targettarget", "pet", "boss" }) do
                 pcall(req, k, reason or "OPTIONS_ALL", (k == "target" or k == "focus" or k == "targettarget"))
             end
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_RequestLayoutAll_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:57:10"); return
         end
 
         if type(_G.ApplyAllSettings) == "function" then pcall(_G.ApplyAllSettings) end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_RequestLayoutAll_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:57:10"); end
 
-    local function MSUF_EnsureCastbars_Compat()
+    local function MSUF_EnsureCastbars_Compat() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_EnsureCastbars_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:72:10");
         local fn = (ns and ns.MSUF_EnsureCastbars) or (_G and _G.MSUF_EnsureCastbars)
-        if type(fn) == "function" then pcall(fn); return end
+        if type(fn) == "function" then pcall(fn); Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_EnsureCastbars_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:72:10"); return end
 
         local ensureAddon = _G and _G.MSUF_EnsureAddonLoaded
-        if type(ensureAddon) == "function" then pcall(ensureAddon, "MidnightSimpleUnitFrames_Castbars"); return end
+        if type(ensureAddon) == "function" then pcall(ensureAddon, "MidnightSimpleUnitFrames_Castbars"); Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_EnsureCastbars_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:72:10"); return end
         if _G and _G.LoadAddOn then pcall(_G.LoadAddOn, "MidnightSimpleUnitFrames_Castbars") end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_EnsureCastbars_Compat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:72:10"); end
 
     -- ---------------------------------------------------------------------
     -- Tiny UI factory (spec-driven)
     -- ---------------------------------------------------------------------
     local WHITE8 = _G.MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8"
 
-    local function EnsureBackdrop(frame)
+    local function EnsureBackdrop(frame) Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureBackdrop file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:86:10");
         if (not frame.SetBackdrop) and BackdropTemplateMixin and Mixin then
             Mixin(frame, BackdropTemplateMixin)
         end
@@ -99,9 +99,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             frame:SetBackdropColor(0, 0, 0, 0.35)
             frame:SetBackdropBorderColor(1, 1, 1, 0.25)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureBackdrop file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:86:10"); end
 
-    local function MakeBox(name, titleText)
+    local function MakeBox(name, titleText) Perfy_Trace(Perfy_GetTime(), "Enter", "MakeBox file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:104:10");
         local box = _G[name]
         if not box then
             box = CreateFrame("Frame", name, fontGroup, "BackdropTemplate")
@@ -118,10 +118,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             box.MSUF_Line:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -34)
             box.MSUF_Line:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -34)
         end
-        return box
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MakeBox file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:104:10"); return box
     end
 
-    local function MakeSectionHeader(parent, globalKey, text)
+    local function MakeSectionHeader(parent, globalKey, text) Perfy_Trace(Perfy_GetTime(), "Enter", "MakeSectionHeader file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:124:10");
         local fs = _G[globalKey]
         if not fs then
             fs = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -129,10 +129,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end
         fs:SetText(text)
         fs:SetTextColor(1, 0.82, 0, 1)
-        return fs
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MakeSectionHeader file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:124:10"); return fs
     end
 
-    local function MakeCheck(name, parent, label, tooltip)
+    local function MakeCheck(name, parent, label, tooltip) Perfy_Trace(Perfy_GetTime(), "Enter", "MakeCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:135:10");
         local cb = _G[name]
         if not cb then
             cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
@@ -140,10 +140,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             if cb.text then cb.text:SetText(label) end
             if tooltip then cb.tooltipText = tooltip end
         end
-        return cb
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MakeCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:135:10"); return cb
     end
 
-    local function MakeDropdown(name, parent, width)
+    local function MakeDropdown(name, parent, width) Perfy_Trace(Perfy_GetTime(), "Enter", "MakeDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:146:10");
         local dd = _G[name]
         if not dd then
             dd = CreateFrame("Frame", name, parent, "UIDropDownMenuTemplate")
@@ -152,10 +152,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             dd._msufButtonWidth = width or 180
             if width then dd:SetWidth(width) end
         end
-        return dd
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MakeDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:146:10"); return dd
     end
 
-    local function MakeHelp(parent, name, text, width)
+    local function MakeHelp(parent, name, text, width) Perfy_Trace(Perfy_GetTime(), "Enter", "MakeHelp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:158:10");
         local fs = parent[name]
         if not fs then
             fs = parent:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -164,11 +164,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end
         fs:SetWidth(width or 260)
         fs:SetText(text or "")
-        return fs
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MakeHelp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:158:10"); return fs
     end
 
-    local function CompactTextSizeSlider(slider, shortLabel)
-        if not slider then return end
+    local function CompactTextSizeSlider(slider, shortLabel) Perfy_Trace(Perfy_GetTime(), "Enter", "CompactTextSizeSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:170:10");
+        if not slider then Perfy_Trace(Perfy_GetTime(), "Leave", "CompactTextSizeSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:170:10"); return end
         slider:SetWidth(110)
 
         local n = slider.GetName and slider:GetName()
@@ -194,9 +194,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
         if slider.minusButton then slider.minusButton:SetSize(18, 18) end
         if slider.plusButton then slider.plusButton:SetSize(18, 18) end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "CompactTextSizeSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:170:10"); end
 
-    local function MakeOverrideInfo(parent, name)
+    local function MakeOverrideInfo(parent, name) Perfy_Trace(Perfy_GetTime(), "Enter", "MakeOverrideInfo file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:199:10");
         local fs = parent[name]
         if not fs then
             fs = parent:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -205,28 +205,28 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             fs:SetJustifyH("CENTER")
             fs:SetText("")
             fs:EnableMouse(true)
-            fs:SetScript("OnEnter", function(self)
+            fs:SetScript("OnEnter", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:208:36");
                 if self.MSUF_FullOverrideList and self.MSUF_FullOverrideList ~= "" then
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                     GameTooltip:SetText("Overrides", 1, 0.9, 0.4)
                     GameTooltip:AddLine(self.MSUF_FullOverrideList, 1, 1, 1, true)
                     GameTooltip:Show()
                 end
-            end)
-            fs:SetScript("OnLeave", function()
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:208:36"); end)
+            fs:SetScript("OnLeave", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:216:36");
                 if GameTooltip then GameTooltip:Hide() end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:216:36"); end)
         end
-        return fs
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MakeOverrideInfo file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:199:10"); return fs
     end
 
-    local function FormatOverrideSummary(list)
-        if not list or #list == 0 then return "Overrides: -", nil end
-        if #list == 1 then return "Overrides: " .. list[1], list[1] end
-        return "Overrides: " .. list[1] .. " +" .. tostring(#list - 1), table.concat(list, ", ")
+    local function FormatOverrideSummary(list) Perfy_Trace(Perfy_GetTime(), "Enter", "FormatOverrideSummary file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:223:10");
+        if not list or #list == 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "FormatOverrideSummary file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:223:10"); return "Overrides: -", nil end
+        if #list == 1 then return Perfy_Trace_Passthrough("Leave", "FormatOverrideSummary file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:223:10", "Overrides: " .. list[1], list[1]) end
+        return Perfy_Trace_Passthrough("Leave", "FormatOverrideSummary file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:223:10", "Overrides: " .. list[1] .. " +" .. tostring(#list - 1), table.concat(list, ", "))
     end
 
-    local function ListFontOverrides(confField)
+    local function ListFontOverrides(confField) Perfy_Trace(Perfy_GetTime(), "Enter", "ListFontOverrides file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:229:10");
         EnsureDB()
         local out = {}
         local keys = { "player", "target", "targettarget", "focus", "pet", "boss" }
@@ -235,7 +235,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             local c = MSUF_DB and MSUF_DB[k]
             if c and c[confField] ~= nil then out[#out + 1] = pretty[k] or k end
         end
-        return out
+        Perfy_Trace(Perfy_GetTime(), "Leave", "ListFontOverrides file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:229:10"); return out
     end
 
     -- ---------------------------------------------------------------------
@@ -280,7 +280,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- Build choices: internal list + LibSharedMedia fonts (deduped).
     local fontChoices = {}
 
-    local function RebuildFontChoices()
+    local function RebuildFontChoices() Perfy_Trace(Perfy_GetTime(), "Enter", "RebuildFontChoices file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:283:10");
         fontChoices = {}
 
         local internal = (_G.MSUF_FONT_LIST or _G.FONT_LIST or {})
@@ -322,19 +322,19 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 end
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "RebuildFontChoices file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:283:10"); end
 
-    local function SetFontDropdownText(key)
+    local function SetFontDropdownText(key) Perfy_Trace(Perfy_GetTime(), "Enter", "SetFontDropdownText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:327:10");
         local label = key
         for _, data in ipairs(fontChoices) do
             if data.key == key then label = data.label; break end
         end
         UIDropDownMenu_SetSelectedValue(fontDrop, key)
         UIDropDownMenu_SetText(fontDrop, label)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SetFontDropdownText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:327:10"); end
 
-    local function FontDropdown_Initialize(self, level)
-        if not level then return end
+    local function FontDropdown_Initialize(self, level) Perfy_Trace(Perfy_GetTime(), "Enter", "FontDropdown_Initialize file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:336:10");
+        if not level then Perfy_Trace(Perfy_GetTime(), "Leave", "FontDropdown_Initialize file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:336:10"); return end
         EnsureDB()
         if (not fontChoices) or (#fontChoices == 0) then RebuildFontChoices() end
 
@@ -353,7 +353,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 info.fontObject = GameFontHighlightSmall
             end
 
-            info.func = function()
+            info.func = function() Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:356:24");
                 EnsureDB()
                 MSUF_DB.general.fontKey = thisKey
                 SetFontDropdownText(thisKey)
@@ -361,11 +361,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 if C_Timer and C_Timer.After then
                     C_Timer.After(0, MSUF_CallUpdateAllFonts)
                 end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:356:24"); end
             info.checked = (currentKey == thisKey)
             UIDropDownMenu_AddButton(info, level)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "FontDropdown_Initialize file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:336:10"); end
 
     UIDropDownMenu_Initialize(fontDrop, FontDropdown_Initialize)
 
@@ -415,27 +415,27 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     powerOverrideInfo:SetPoint("TOP", powerFontSizeSlider.editBox, "BOTTOM", 0, -2)
 
     -- Slider handlers (global values)
-    nameFontSizeSlider.onValueChanged = function(_, value)
+    nameFontSizeSlider.onValueChanged = function(_, value) Perfy_Trace(Perfy_GetTime(), "Enter", "nameFontSizeSlider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:418:40");
         EnsureDB()
         MSUF_DB.general.nameFontSize = math.floor((tonumber(value) or 12) + 0.5)
         MSUF_CallUpdateAllFonts()
-    end
-    hpFontSizeSlider.onValueChanged = function(_, value)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "nameFontSizeSlider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:418:40"); end
+    hpFontSizeSlider.onValueChanged = function(_, value) Perfy_Trace(Perfy_GetTime(), "Enter", "hpFontSizeSlider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:423:38");
         EnsureDB()
         MSUF_DB.general.hpFontSize = math.floor((tonumber(value) or 12) + 0.5)
         MSUF_CallUpdateAllFonts()
-    end
-    powerFontSizeSlider.onValueChanged = function(_, value)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "hpFontSizeSlider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:423:38"); end
+    powerFontSizeSlider.onValueChanged = function(_, value) Perfy_Trace(Perfy_GetTime(), "Enter", "powerFontSizeSlider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:428:41");
         EnsureDB()
         MSUF_DB.general.powerFontSize = math.floor((tonumber(value) or 12) + 0.5)
         MSUF_CallUpdateAllFonts()
-    end
-    castbarSpellNameFontSizeSlider.onValueChanged = function(_, value)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "powerFontSizeSlider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:428:41"); end
+    castbarSpellNameFontSizeSlider.onValueChanged = function(_, value) Perfy_Trace(Perfy_GetTime(), "Enter", "castbarSpellNameFontSizeSlider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:433:52");
         EnsureDB()
         MSUF_DB.general.castbarSpellNameFontSize = tonumber(value) or 12
         MSUF_EnsureCastbars_Compat()
         if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "castbarSpellNameFontSizeSlider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:433:52"); end
 
     -- Reset overrides (same popup semantics)
     local resetBtn = _G["MSUF_ResetFontOverridesBtn"]
@@ -459,7 +459,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             whileDead = true,
             hideOnEscape = true,
             preferredIndex = 3,
-            OnAccept = function()
+            OnAccept = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:462:23");
                 EnsureDB()
                 local keys = { "player", "target", "targettarget", "focus", "pet", "boss" }
                 for _, k in ipairs(keys) do
@@ -489,16 +489,16 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 if ns and ns.MSUF_RefreshAllFrames then ns.MSUF_RefreshAllFrames() end
                 MSUF_EnsureCastbars_Compat()
                 if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
-            end,
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:462:23"); end,
         }
     end
 
-    resetBtn:SetScript("OnClick", function()
+    resetBtn:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:496:34");
             StaticPopup_Show("MSUF_RESET_FONT_OVERRIDES")
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:496:34"); end)
 
     -- Override info updater
-    local function UpdateOverrideInfo()
+    local function UpdateOverrideInfo() Perfy_Trace(Perfy_GetTime(), "Enter", "UpdateOverrideInfo file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:501:10");
         local list, summary, full
 
         list = ListFontOverrides("nameFontSize")
@@ -515,15 +515,15 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         summary, full = FormatOverrideSummary(list)
         powerOverrideInfo:SetText(summary)
         powerOverrideInfo.MSUF_FullOverrideList = full or ""
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "UpdateOverrideInfo file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:501:10"); end
 
     -- Hook once (safe)
     if not left._msufFontsOnShowHooked then
         left._msufFontsOnShowHooked = true
-        left:SetScript("OnShow", function()
+        left:SetScript("OnShow", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:523:33");
             EnsureDB()
             UpdateOverrideInfo()
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:523:33"); end)
     end
     UpdateOverrideInfo()
 
@@ -598,9 +598,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     shortenNameClipSideDrop:ClearAllPoints()
     shortenNameClipSideDrop:SetPoint("TOPLEFT", shortenNameClipSideLabel, "BOTTOMLEFT", -16, -2)
 
-    local function GetClipSideLabel(value)
-        if value == "RIGHT" then return "Keep start (show first letters)" end
-        return "Keep end (show last letters)"
+    local function GetClipSideLabel(value) Perfy_Trace(Perfy_GetTime(), "Enter", "GetClipSideLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:601:10");
+        if value == "RIGHT" then Perfy_Trace(Perfy_GetTime(), "Leave", "GetClipSideLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:601:10"); return "Keep start (show first letters)" end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "GetClipSideLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:601:10"); return "Keep end (show last letters)"
     end
 
     -- Sliders (use OptionsSliderTemplate for the two legacy controls)
@@ -643,10 +643,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         infoBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
         infoBtn:SetHitRectInsets(-4, -4, -4, -4)
 
-        infoBtn:SetScript("OnClick", function(self)
+        infoBtn:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:646:37");
             if GameTooltip:IsOwned(self) and GameTooltip:IsShown() then
                 GameTooltip:Hide()
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:646:37"); return
             end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText("Name Shortening")
@@ -660,7 +660,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 GameTooltip:AddLine("Reserved space protects the clipped edge (avoids overlaps).", 0.95, 0.95, 0.95, true)
             end
             GameTooltip:Show()
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:646:37"); end)
     end
     infoBtn:ClearAllPoints()
     infoBtn:SetPoint("TOPLEFT", shortenNameFrontMaskSlider, "BOTTOMLEFT", 0, -6)
@@ -668,16 +668,16 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- ---------------------------------------------------------------------
     -- DB load/apply + scripts (single place, spec-driven)
     -- ---------------------------------------------------------------------
-    local function ClampInt(v, lo, hi, fallback)
+    local function ClampInt(v, lo, hi, fallback) Perfy_Trace(Perfy_GetTime(), "Enter", "ClampInt file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:671:10");
         v = tonumber(v)
         if v == nil then v = fallback end
         v = math.floor(v + 0.5)
         if lo and v < lo then v = lo end
         if hi and v > hi then v = hi end
-        return v
+        Perfy_Trace(Perfy_GetTime(), "Leave", "ClampInt file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:671:10"); return v
     end
 
-    local function UpdateShortenMaskLabel()
+    local function UpdateShortenMaskLabel() Perfy_Trace(Perfy_GetTime(), "Enter", "UpdateShortenMaskLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:680:10");
         local g = MSUF_DB and MSUF_DB.general or {}
         local side = g.shortenNameClipSide or "LEFT"
         local shortenEnabled = (MSUF_DB and MSUF_DB.shortenNames) and true or false
@@ -700,11 +700,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 shortenNameFrontMaskSlider:Enable()
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "UpdateShortenMaskLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:680:10"); end
 
-    local function ApplyFromDB()
+    local function ApplyFromDB() Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:705:10");
         EnsureDB()
-        if not MSUF_DB or not MSUF_DB.general then return end
+        if not MSUF_DB or not MSUF_DB.general then Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:705:10"); return end
         local g = MSUF_DB.general
 
         -- defaults (keep same semantics as previous file)
@@ -741,18 +741,18 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if g.hpFontSize ~= nil and hpFontSizeSlider.SetValue then hpFontSizeSlider:SetValue(g.hpFontSize) end
         if g.powerFontSize ~= nil and powerFontSizeSlider.SetValue then powerFontSizeSlider:SetValue(g.powerFontSize) end
         if g.castbarSpellNameFontSize ~= nil and castbarSpellNameFontSizeSlider.SetValue then castbarSpellNameFontSizeSlider:SetValue(g.castbarSpellNameFontSize) end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:705:10"); end
 
     -- Dropdown: truncation style
-    UIDropDownMenu_Initialize(shortenNameClipSideDrop, function(self, level)
-        if not level then return end
+    UIDropDownMenu_Initialize(shortenNameClipSideDrop, function(self, level) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:747:55");
+        if not level then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:747:55"); return end
         EnsureDB()
         local current = (MSUF_DB.general and MSUF_DB.general.shortenNameClipSide) or "LEFT"
-        local function AddOption(text, value)
+        local function AddOption(text, value) Perfy_Trace(Perfy_GetTime(), "Enter", "AddOption file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:751:14");
             local info = UIDropDownMenu_CreateInfo()
             info.text = text
             info.value = value
-            info.func = function()
+            info.func = function() Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:755:24");
                 EnsureDB()
                 MSUF_DB.general.shortenNameClipSide = value
                 UIDropDownMenu_SetSelectedValue(shortenNameClipSideDrop, value)
@@ -762,53 +762,53 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                     MSUF_CallUpdateAllFonts()
                     if ns and ns.MSUF_RefreshAllFrames then ns.MSUF_RefreshAllFrames() end
                 end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:755:24"); end
             info.checked = (current == value)
             UIDropDownMenu_AddButton(info, level)
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "AddOption file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:751:14"); end
         AddOption("Keep end (show last letters)", "LEFT")
         AddOption("Keep start (show first letters)", "RIGHT")
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:747:55"); end)
 
     -- Scripts (checkboxes)
-    boldCheck:SetScript("OnClick", function(self)
+    boldCheck:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:774:35");
         EnsureDB()
         MSUF_DB.general.boldText = self:GetChecked() and true or false
         MSUF_CallUpdateAllFonts()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:774:35"); end)
 
-    noOutlineCheck:SetScript("OnClick", function(self)
+    noOutlineCheck:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:780:40");
         EnsureDB()
         MSUF_DB.general.noOutline = self:GetChecked() and true or false
         MSUF_CallUpdateAllFonts()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:780:40"); end)
 
-    textBackdropCheck:SetScript("OnClick", function(self)
+    textBackdropCheck:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:786:43");
         EnsureDB()
         MSUF_DB.general.textBackdrop = self:GetChecked() and true or false
         MSUF_CallUpdateAllFonts()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:786:43"); end)
 
-    nameClassColorCheck:SetScript("OnClick", function(self)
+    nameClassColorCheck:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:792:45");
         EnsureDB()
         MSUF_DB.general.nameClassColor = self:GetChecked() and true or false
         if type(_G.MSUF_RefreshAllIdentityColors) == "function" then _G.MSUF_RefreshAllIdentityColors() end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:792:45"); end)
 
-    npcNameRedCheck:SetScript("OnClick", function(self)
+    npcNameRedCheck:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:798:41");
         EnsureDB()
         MSUF_DB.general.npcNameRed = self:GetChecked() and true or false
         if type(_G.MSUF_RefreshAllIdentityColors) == "function" then _G.MSUF_RefreshAllIdentityColors() end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:798:41"); end)
 
-    powerTextColorByTypeCheck:SetScript("OnClick", function(self)
+    powerTextColorByTypeCheck:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:804:51");
         EnsureDB()
         MSUF_DB.general.colorPowerTextByType = self:GetChecked() and true or false
         if type(_G.MSUF_RefreshAllPowerTextColors) == "function" then _G.MSUF_RefreshAllPowerTextColors() end
         MSUF_CallUpdateAllFonts()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:804:51"); end)
 
-    shortenNamesCheck:SetScript("OnClick", function(self)
+    shortenNamesCheck:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:811:43");
         EnsureDB()
         MSUF_DB.shortenNames = self:GetChecked() and true or false
 
@@ -821,9 +821,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         MSUF_Options_RequestLayoutAll_Compat("SHORTEN_NAMES")
         MSUF_CallUpdateAllFonts()
         if ns and ns.MSUF_RefreshAllFrames then ns.MSUF_RefreshAllFrames() end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:811:43"); end)
 
-    shortenNameMaxCharsSlider:SetScript("OnValueChanged", function(_, value)
+    shortenNameMaxCharsSlider:SetScript("OnValueChanged", function(_, value) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:826:58");
         EnsureDB()
         value = ClampInt(value, 4, 40, 16)
         MSUF_DB.general.shortenNameMaxChars = value
@@ -831,9 +831,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             MSUF_CallUpdateAllFonts()
             if ns and ns.MSUF_RefreshAllFrames then ns.MSUF_RefreshAllFrames() end
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:826:58"); end)
 
-    shortenNameFrontMaskSlider:SetScript("OnValueChanged", function(_, value)
+    shortenNameFrontMaskSlider:SetScript("OnValueChanged", function(_, value) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:836:59");
         EnsureDB()
         value = ClampInt(value, 0, 40, 8)
         MSUF_DB.general.shortenNameFrontMaskPx = value
@@ -841,7 +841,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             MSUF_CallUpdateAllFonts()
             if ns and ns.MSUF_RefreshAllFrames then ns.MSUF_RefreshAllFrames() end
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:836:59"); end)
 
     -- ---------------------------------------------------------------------
     -- Shared color list (kept for backward compat with Core/other panels)
@@ -891,4 +891,6 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     panel.shortenNameClipSideDrop = shortenNameClipSideDrop
     panel.shortenNameMaxCharsSlider = shortenNameMaxCharsSlider
     panel.shortenNameFrontMaskSlider = shortenNameFrontMaskSlider
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_Options_Fonts_Build file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua:8:0"); end
+
+Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Fonts.lua");

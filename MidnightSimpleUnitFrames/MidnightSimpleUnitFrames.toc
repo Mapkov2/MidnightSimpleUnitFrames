@@ -8,6 +8,8 @@
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## X-Wago-ID: XKq9aoKy
+## Dependencies: !!!Perfy
+## X-Perfy-Instrumented: true
 
 MSUF_UpdateManager.lua
 MSUF_EventBus.lua

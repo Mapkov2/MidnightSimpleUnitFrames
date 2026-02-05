@@ -210,24 +210,31 @@ function ns.MSUF_FixMouseoverHighlightBindings()
 end
 
 -- Throttled scheduler so we don't repeatedly enumerate frames during rapid UI changes.
+-- P1 perf: after one successful scan, never scan again until /reload (session-only).
 do
     local scheduled = false
     function ns.MSUF_ScheduleMouseoverHighlightFix()
+        if ns and ns._msufHoverFixDone then return end
         if scheduled then return end
         scheduled = true
 
-        if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(0, function()
-                scheduled = false
-                if ns and ns.MSUF_FixMouseoverHighlightBindings then
-                    ns.MSUF_FixMouseoverHighlightBindings()
-                end
-            end)
-        else
+        local function run()
             scheduled = false
-            if ns and ns.MSUF_FixMouseoverHighlightBindings then
-                ns.MSUF_FixMouseoverHighlightBindings()
+            if not (ns and ns.MSUF_FixMouseoverHighlightBindings) then
+                return
             end
+
+            ns.MSUF_FixMouseoverHighlightBindings()
+
+            -- Mark done for this session. This scan is expensive (EnumerateFrames),
+            -- and should not run again from PushVisualUpdates.
+            ns._msufHoverFixDone = true
+        end
+
+        if _G.C_Timer and _G.C_Timer.After then
+            _G.C_Timer.After(0, run)
+        else
+            run()
         end
     end
 end

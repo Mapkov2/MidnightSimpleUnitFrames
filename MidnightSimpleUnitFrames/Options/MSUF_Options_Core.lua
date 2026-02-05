@@ -1,4 +1,4 @@
-local addonName, ns = ...
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua"); local addonName, ns = ...
 ns = ns or {}
 
 -- Slash-menu-only: the Slash Menu is the only options UI. Blizzard Settings shows only a lightweight launcher.
@@ -13,12 +13,12 @@ local frameGroup, fontGroup, auraGroup, castbarGroup
 -- Shown when user toggles Power Bar Gradient or clicks the Gradient Direction pad.
 -- Provides "Reload now" / "Later" buttons (no slider-spam).
 -- ---------------------------------------------------------------------------
-local function MSUF_Options_ShowGradientReloadPopup()
-    if not _G then return end
+local function MSUF_Options_ShowGradientReloadPopup() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Options_ShowGradientReloadPopup file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:16:6");
+    if not _G then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_ShowGradientReloadPopup file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:16:6"); return end
 
     -- Avoid stacking popups
     if _G.StaticPopup_Visible and _G.StaticPopup_Visible("MSUF_GRADIENTS_RELOAD_PROMPT") then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_ShowGradientReloadPopup file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:16:6"); return
     end
 
     -- If we are in combat, defer the popup until combat ends (no chat spam).
@@ -28,7 +28,7 @@ local function MSUF_Options_ShowGradientReloadPopup()
             local f = CreateFrame("Frame")
             _G.__MSUF_GRADIENTS_RELOAD_WATCHER = f
             f:RegisterEvent("PLAYER_REGEN_ENABLED")
-            f:SetScript("OnEvent", function()
+            f:SetScript("OnEvent", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:31:35");
                 if _G.__MSUF_GRADIENTS_RELOAD_PENDING then
                     _G.__MSUF_GRADIENTS_RELOAD_PENDING = false
                     -- Delay to next tick so UI is fully unlocked.
@@ -38,22 +38,22 @@ local function MSUF_Options_ShowGradientReloadPopup()
                         MSUF_Options_ShowGradientReloadPopup()
                     end
                 end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:31:35"); end)
         end
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_ShowGradientReloadPopup file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:16:6"); return
     end
 
     -- If popup API is missing, do nothing (user requested only a Reload Now/Later prompt).
-    if not _G.StaticPopupDialogs then return end
+    if not _G.StaticPopupDialogs then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_ShowGradientReloadPopup file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:16:6"); return end
 
     if not _G.StaticPopupDialogs["MSUF_GRADIENTS_RELOAD_PROMPT"] then
         _G.StaticPopupDialogs["MSUF_GRADIENTS_RELOAD_PROMPT"] = {
             text = "Apply gradient changes with a reload?\n\nSome gradient changes may not fully apply until you /reload.",
             button1 = "Reload now",
             button2 = "Later",
-            OnAccept = function()
+            OnAccept = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:54:23");
                 if _G.ReloadUI then _G.ReloadUI() end
-            end,
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:54:23"); end,
             timeout = 0,
             whileDead = 1,
             hideOnEscape = 1,
@@ -64,25 +64,25 @@ local function MSUF_Options_ShowGradientReloadPopup()
     if _G.StaticPopup_Show then
         _G.StaticPopup_Show("MSUF_GRADIENTS_RELOAD_PROMPT")
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_ShowGradientReloadPopup file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:16:6"); end
 
 -- Step 11 cleanup: We only prompt reload for Power Bar Gradient toggle / Gradient D-pad clicks.
 -- Keep a no-op stub to avoid nil errors if older UI handlers still call it.
-local function MSUF_ScheduleReloadRecommend() end
+local function MSUF_ScheduleReloadRecommend() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ScheduleReloadRecommend file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:71:6"); Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ScheduleReloadRecommend file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:71:6"); end
 
 local castbarEnemyGroup, castbarTargetGroup, castbarFocusGroup, castbarBossGroup, castbarPlayerGroup
 local barGroup, miscGroup, profileGroup
 
 -- SharedMedia helper (LSM is initialized in MSUF_Libs.lua)
-local function MSUF_GetLSM()
-    return (ns and ns.LSM) or _G.MSUF_LSM
+local function MSUF_GetLSM() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetLSM file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:77:6");
+    return Perfy_Trace_Passthrough("Leave", "MSUF_GetLSM file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:77:6", (ns and ns.LSM) or _G.MSUF_LSM)
 end
 
 -- Ensure the Castbars LoD addon is loaded before calling castbar functions.
-local function MSUF_EnsureCastbars()
+local function MSUF_EnsureCastbars() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_EnsureCastbars file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:82:6");
     if type(_G.MSUF_EnsureAddonLoaded) == "function" then
         _G.MSUF_EnsureAddonLoaded("MidnightSimpleUnitFrames_Castbars")
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_EnsureCastbars file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:82:6"); return
     end
     -- Fallback (older clients)
     if _G.C_AddOns and type(_G.C_AddOns.LoadAddOn) == "function" then
@@ -90,40 +90,40 @@ local function MSUF_EnsureCastbars()
     elseif type(_G.LoadAddOn) == "function" then
         pcall(_G.LoadAddOn, "MidnightSimpleUnitFrames_Castbars")
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_EnsureCastbars file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:82:6"); end
 
 -- ============================================================
 -- Options Core UI helpers (Step 1/2 infrastructure)
 -- UI-only helpers used to reduce boilerplate safely.
 -- ============================================================
 
-local function MSUF_AttachTooltip(widget, titleText, bodyText)
-    if not widget or (not titleText and not bodyText) then return end
-    widget:HookScript("OnEnter", function(self)
+local function MSUF_AttachTooltip(widget, titleText, bodyText) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_AttachTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:100:6");
+    if not widget or (not titleText and not bodyText) then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_AttachTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:100:6"); return end
+    widget:HookScript("OnEnter", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:102:33");
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             if titleText then GameTooltip:SetText(titleText, 1, 1, 1) end
             if bodyText then GameTooltip:AddLine(bodyText, 0.9, 0.9, 0.9, true) end
             GameTooltip:Show()
         end
-    end)
-    widget:HookScript("OnLeave", function()
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:102:33"); end)
+    widget:HookScript("OnLeave", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:110:33");
         if GameTooltip then GameTooltip:Hide() end
-    end)
-end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:110:33"); end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_AttachTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:100:6"); end
 
-local function UI_Text(parent, textValue, template)
+local function UI_Text(parent, textValue, template) Perfy_Trace(Perfy_GetTime(), "Enter", "UI_Text file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:115:6");
     local fs = parent:CreateFontString(nil, "ARTWORK", template or "GameFontNormal")
     fs:SetText(textValue or "")
-    return fs
+    Perfy_Trace(Perfy_GetTime(), "Leave", "UI_Text file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:115:6"); return fs
 end
 
-local function UI_Btn(parent, name, label, onClick, w, h)
+local function UI_Btn(parent, name, label, onClick, w, h) Perfy_Trace(Perfy_GetTime(), "Enter", "UI_Btn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:121:6");
     local b = CreateFrame("Button", name, parent, "UIPanelButtonTemplate")
     b:SetSize(w or 140, h or 24)
     b:SetText(label or "")
     if onClick then b:SetScript("OnClick", onClick) end
-    return b
+    Perfy_Trace(Perfy_GetTime(), "Leave", "UI_Btn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:121:6"); return b
 end
 
 -- ============================================================
@@ -137,7 +137,7 @@ end
 
 -- Builds a single horizontal row of buttons and returns (rowFrame, buttonsById).
 -- defs: { {id="reset", name="MyBtn", text="Reset", w=140, h=24, onClick=function() end }, ... }
-local function MSUF_BuildButtonRowList(parent, anchor, gap, defs)
+local function MSUF_BuildButtonRowList(parent, anchor, gap, defs) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_BuildButtonRowList file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:140:6");
     local row = CreateFrame("Frame", nil, parent)
     row:SetSize(1, 1)
 
@@ -166,11 +166,11 @@ local function MSUF_BuildButtonRowList(parent, anchor, gap, defs)
         row:SetPoint("BOTTOMRIGHT", last, "BOTTOMRIGHT", 0, 0)
     end
 
-    return row, buttons
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_BuildButtonRowList file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:140:6"); return row, buttons
 end
 
-local function MSUF_ResetDropdownListScroll(listFrame)
-    if not listFrame or not listFrame._msufScrollActive then return end
+local function MSUF_ResetDropdownListScroll(listFrame) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ResetDropdownListScroll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:172:6");
+    if not listFrame or not listFrame._msufScrollActive then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ResetDropdownListScroll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:172:6"); return end
 
     local listName = listFrame.GetName and listFrame:GetName() or nil
     if listName then
@@ -208,16 +208,16 @@ local function MSUF_ResetDropdownListScroll(listFrame)
         if sb.SetScript then sb:SetScript("OnValueChanged", nil) end
         if sb.SetValue then sb:SetValue(0) end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ResetDropdownListScroll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:172:6"); end
 
-local function MSUF_ApplyDropdownListScroll(listFrame, maxVisible)
-    if not listFrame or not listFrame.IsShown or not listFrame:IsShown() then return end
+local function MSUF_ApplyDropdownListScroll(listFrame, maxVisible) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ApplyDropdownListScroll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:213:6");
+    if not listFrame or not listFrame.IsShown or not listFrame:IsShown() then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ApplyDropdownListScroll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:213:6"); return end
 
     local numButtons = tonumber(listFrame.numButtons) or 0
     maxVisible = tonumber(maxVisible) or 12
     if numButtons <= maxVisible or maxVisible < 2 then
         MSUF_ResetDropdownListScroll(listFrame)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ApplyDropdownListScroll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:213:6"); return
     end
 
     -- Determine per-row step by measuring the first two button anchors (supports
@@ -269,25 +269,25 @@ local function MSUF_ApplyDropdownListScroll(listFrame, maxVisible)
 
         -- Mouse wheel scrolling on the dropdown list.
         listFrame:EnableMouseWheel(true)
-        listFrame:HookScript("OnMouseWheel", function(_, delta)
-            if not listFrame._msufScrollActive then return end
+        listFrame:HookScript("OnMouseWheel", function(_, delta) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:272:45");
+            if not listFrame._msufScrollActive then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:272:45"); return end
             local s = listFrame._msufScrollBar
-            if not s or not s.IsShown or not s:IsShown() then return end
+            if not s or not s.IsShown or not s:IsShown() then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:272:45"); return end
             local cur = tonumber(s:GetValue()) or 0
             local minV, maxV = s:GetMinMaxValues()
             local nextV = cur - (delta * 1) -- one row per wheel notch (no skipping)
             if nextV < minV then nextV = minV end
             if nextV > maxV then nextV = maxV end
             s:SetValue(nextV)
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:272:45"); end)
 
         -- Cleanup when the dropdown closes (important because DropDownList1 is reused).
-        listFrame:HookScript("OnHide", function()
+        listFrame:HookScript("OnHide", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:285:39");
             MSUF_ResetDropdownListScroll(listFrame)
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:285:39"); end)
     end
 
-    if not sb then return end
+    if not sb then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ApplyDropdownListScroll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:213:6"); return end
 
     local maxOffset = numButtons - maxVisible
     if maxOffset < 0 then maxOffset = 0 end
@@ -317,13 +317,13 @@ local function MSUF_ApplyDropdownListScroll(listFrame, maxVisible)
         end
     end
 
-    local function ApplyOffset(offset)
+    local function ApplyOffset(offset) Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyOffset file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:320:10");
         offset = tonumber(offset) or 0
         offset = math.floor(offset + 0.5)
         if offset < 0 then offset = 0 end
         if offset > maxOffset then offset = maxOffset end
 
-        if not listName or not topPoint then return end
+        if not listName or not topPoint then Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyOffset file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:320:10"); return end
 
         for i = 1, numButtons do
             local btn = _G[listName .. "Button" .. i]
@@ -341,34 +341,34 @@ local function MSUF_ApplyDropdownListScroll(listFrame, maxVisible)
                 end
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyOffset file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:320:10"); end
 
     if sb.SetScript then
-        sb:SetScript("OnValueChanged", function(_, value)
-            if not listFrame._msufScrollActive then return end
+        sb:SetScript("OnValueChanged", function(_, value) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:347:39");
+            if not listFrame._msufScrollActive then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:347:39"); return end
             ApplyOffset(value)
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:347:39"); end)
     end
 
     sb:SetValue(0)
     sb:Show()
 
     ApplyOffset(0)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ApplyDropdownListScroll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:213:6"); end
 
 -- Bar texture dropdown list preview: keep the right-side swatch small so it doesn't cover the dropdown area.
 -- Bar texture dropdown list preview: keep the swatch on the LEFT and only in the "middle" area,
 -- so it never covers the dropdown's right edge / scrollbar.
-local function MSUF_TweakBarTextureDropdownList(listFrame)
-    if not listFrame or not listFrame.dropdown then return end
+local function MSUF_TweakBarTextureDropdownList(listFrame) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_TweakBarTextureDropdownList file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:362:6");
+    if not listFrame or not listFrame.dropdown then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_TweakBarTextureDropdownList file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:362:6"); return end
     local dd = listFrame.dropdown
-    if not dd or not dd._msufTweakBarTexturePreview then return end
+    if not dd or not dd._msufTweakBarTexturePreview then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_TweakBarTextureDropdownList file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:362:6"); return end
 
     local listName = listFrame.GetName and listFrame:GetName() or nil
-    if not listName then return end
+    if not listName then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_TweakBarTextureDropdownList file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:362:6"); return end
 
     local numButtons = tonumber(listFrame.numButtons) or 0
-    if numButtons < 1 then return end
+    if numButtons < 1 then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_TweakBarTextureDropdownList file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:362:6"); return end
 
     local iconW, iconH = 80, 12
 
@@ -394,18 +394,18 @@ local function MSUF_TweakBarTextureDropdownList(listFrame)
             end
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_TweakBarTextureDropdownList file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:362:6"); end
 
-local function MSUF_EnsureDropdownScrollHook()
-    if ns and ns.__msufScrollDropdownHooked then return end
+local function MSUF_EnsureDropdownScrollHook() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_EnsureDropdownScrollHook file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:399:6");
+    if ns and ns.__msufScrollDropdownHooked then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_EnsureDropdownScrollHook file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:399:6"); return end
     if ns then ns.__msufScrollDropdownHooked = true end
 
-    if type(_G.hooksecurefunc) ~= "function" then return end
+    if type(_G.hooksecurefunc) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_EnsureDropdownScrollHook file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:399:6"); return end
 
-    _G.hooksecurefunc("ToggleDropDownMenu", function(level, value, dropDownFrame)
+    _G.hooksecurefunc("ToggleDropDownMenu", function(level, value, dropDownFrame) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:405:44");
         local lvl = tonumber(level) or 1
         local listFrame = _G["DropDownList" .. lvl]
-        if not listFrame then return end
+        if not listFrame then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:405:44"); return end
         -- Settings panel dropdowns: ensure the list is above our panels so it can't appear "broken" / behind frames.
         local sp = _G.SettingsPanel or _G.InterfaceOptionsFrame
         if sp and sp.IsShown and sp:IsShown() then
@@ -420,30 +420,30 @@ local function MSUF_EnsureDropdownScrollHook()
         -- If MSUF scroll was active but we're opening a different menu now, reset.
         if listFrame._msufScrollActive and (not dropDownFrame or listFrame.dropdown ~= dropDownFrame or not dropDownFrame._msufScrollMaxVisible) then MSUF_ResetDropdownListScroll(listFrame) end
 
-        if not dropDownFrame or not dropDownFrame._msufScrollMaxVisible then return end
-        if listFrame.dropdown ~= dropDownFrame then return end
+        if not dropDownFrame or not dropDownFrame._msufScrollMaxVisible then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:405:44"); return end
+        if listFrame.dropdown ~= dropDownFrame then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:405:44"); return end
 
         MSUF_ApplyDropdownListScroll(listFrame, dropDownFrame._msufScrollMaxVisible)
         MSUF_TweakBarTextureDropdownList(listFrame)
-    end)
-end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:405:44"); end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_EnsureDropdownScrollHook file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:399:6"); end
 
-local function MSUF_MakeDropdownScrollable(dropdown, maxVisible)
-    if not dropdown then return end
+local function MSUF_MakeDropdownScrollable(dropdown, maxVisible) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_MakeDropdownScrollable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:431:6");
+    if not dropdown then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_MakeDropdownScrollable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:431:6"); return end
     dropdown._msufScrollMaxVisible = tonumber(maxVisible) or 12
     MSUF_EnsureDropdownScrollHook()
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_MakeDropdownScrollable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:431:6"); end
 
 -- Expand the clickable area of a Blizzard UIDropDownMenu so the whole dropdown "box" is clickable,
 -- not just the small arrow button. We do this by expanding the Button hit-rect to the dropdown size.
-local function MSUF_ExpandDropdownClickArea(dropdown)
-    if not dropdown or dropdown.__msufExpandedClickArea then return end
+local function MSUF_ExpandDropdownClickArea(dropdown) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ExpandDropdownClickArea file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:439:6");
+    if not dropdown or dropdown.__msufExpandedClickArea then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ExpandDropdownClickArea file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:439:6"); return end
     dropdown.__msufExpandedClickArea = true
 
-    local function Apply()
+    local function Apply() Perfy_Trace(Perfy_GetTime(), "Enter", "Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:443:10");
         local name = dropdown.GetName and dropdown:GetName()
         local btn = dropdown.Button or (name and _G[name .. "Button"])
-        if not btn then return end
+        if not btn then Perfy_Trace(Perfy_GetTime(), "Leave", "Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:443:10"); return end
 
         local dw = tonumber(dropdown:GetWidth()) or 0
         local dh = tonumber(dropdown:GetHeight()) or 0
@@ -454,7 +454,7 @@ local function MSUF_ExpandDropdownClickArea(dropdown)
         if dw <= 1 or dh <= 1 or bw <= 1 or bh <= 1 then
             if _G.C_Timer and type(_G.C_Timer.After) == "function" then _G.C_Timer.After(0, Apply) end
 
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:443:10"); return
         end
 
         local extendLeft = math.max(0, dw - bw)
@@ -462,7 +462,7 @@ local function MSUF_ExpandDropdownClickArea(dropdown)
 
         -- Negative insets expand the hit rect.
         btn:SetHitRectInsets(-extendLeft - 2, -2, -extendTop - 2, -extendTop - 2)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:443:10"); end
 
     dropdown:HookScript("OnShow", Apply)
     dropdown:HookScript("OnSizeChanged", Apply)
@@ -476,7 +476,7 @@ local function MSUF_ExpandDropdownClickArea(dropdown)
     else
         Apply()
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ExpandDropdownClickArea file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:439:6"); end
 
 -- Export helpers for split-out option modules (kept no-regression for Core via local bindings).
 if ns and not ns.MSUF_ExpandDropdownClickArea then ns.MSUF_ExpandDropdownClickArea = MSUF_ExpandDropdownClickArea end
@@ -486,9 +486,9 @@ if ns and not ns.MSUF_ExpandDropdownClickArea then ns.MSUF_ExpandDropdownClickAr
 if ns and not ns.MSUF_MakeDropdownScrollable then ns.MSUF_MakeDropdownScrollable = MSUF_MakeDropdownScrollable end
 
 -- Simple "enum" dropdown helper (keeps init/selection logic consistent and compact).
-local function MSUF_InitSimpleDropdown(dropdown, options, getCurrentKey, setCurrentKey, onSelect, width)
-    if not dropdown then return end
-    UIDropDownMenu_Initialize(dropdown, function(self, level)
+local function MSUF_InitSimpleDropdown(dropdown, options, getCurrentKey, setCurrentKey, onSelect, width) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_InitSimpleDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:489:6");
+    if not dropdown then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_InitSimpleDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:489:6"); return end
+    UIDropDownMenu_Initialize(dropdown, function(self, level) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:491:40");
         local info = UIDropDownMenu_CreateInfo()
         local cur = (getCurrentKey and getCurrentKey()) or nil
 
@@ -496,17 +496,17 @@ local function MSUF_InitSimpleDropdown(dropdown, options, getCurrentKey, setCurr
             info.text = opt.menuText or opt.label
             info.value = opt.key
             info.checked = (opt.key == cur)
-            info.func = function(btn)
+            info.func = function(btn) Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:499:24");
                 if setCurrentKey then setCurrentKey(btn.value) end
                 UIDropDownMenu_SetSelectedValue(dropdown, btn.value)
                 UIDropDownMenu_SetText(dropdown, opt.label)
                 if type(onSelect) == "function" then onSelect(btn.value, opt)
 
                 elseif type(onSelect) == "string" and _G and type(_G.MSUF_Options_Apply) == "function" then _G.MSUF_Options_Apply(onSelect, btn.value, opt) end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:499:24"); end
             UIDropDownMenu_AddButton(info, level)
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:491:40"); end)
 
     if width then UIDropDownMenu_SetWidth(dropdown, width) end
 
@@ -517,11 +517,11 @@ local function MSUF_InitSimpleDropdown(dropdown, options, getCurrentKey, setCurr
     end
     UIDropDownMenu_SetSelectedValue(dropdown, cur)
     UIDropDownMenu_SetText(dropdown, labelText)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_InitSimpleDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:489:6"); end
 
 -- Keep dropdown text/selected value in sync (e.g. when reopening panels)
-local function MSUF_SyncSimpleDropdown(dropdown, options, getCurrentKey)
-    if not dropdown or not options or not getCurrentKey then return end
+local function MSUF_SyncSimpleDropdown(dropdown, options, getCurrentKey) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SyncSimpleDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:523:6");
+    if not dropdown or not options or not getCurrentKey then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SyncSimpleDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:523:6"); return end
     local cur = getCurrentKey()
     if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(dropdown, cur) end
     for _, opt in ipairs(options) do
@@ -530,7 +530,7 @@ local function MSUF_SyncSimpleDropdown(dropdown, options, getCurrentKey)
             break
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SyncSimpleDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:523:6"); end
 
 -- Options Core (extracted from MidnightSimpleUnitFrames.lua)
 -- NOTE: This file is intentionally self-contained for math/string locals to avoid relying on main-file locals.
@@ -547,45 +547,45 @@ local MSUF_MAX_BOSS_FRAMES = 5
 
 -- Hard-disable the always-visible menu preview bars (texture previews under dropdowns).
 -- We keep the dropdowns fully functional; we just never show the extra StatusBar previews.
-local function MSUF_KillMenuPreviewBar(bar)
-    if not bar then return end
+local function MSUF_KillMenuPreviewBar(bar) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_KillMenuPreviewBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:550:6");
+    if not bar then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_KillMenuPreviewBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:550:6"); return end
     bar:Hide()
     if bar.SetAlpha then bar:SetAlpha(0) end
     if bar.SetHeight then bar:SetHeight(0.1) end
     -- Prevent any later code from showing it again
-    bar.Show = function() end
-    bar.SetShown = function() end
-end
+    bar.Show = function() Perfy_Trace(Perfy_GetTime(), "Enter", "bar.Show file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:556:15"); Perfy_Trace(Perfy_GetTime(), "Leave", "bar.Show file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:556:15"); end
+    bar.SetShown = function() Perfy_Trace(Perfy_GetTime(), "Enter", "bar.SetShown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:557:19"); Perfy_Trace(Perfy_GetTime(), "Leave", "bar.SetShown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:557:19"); end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_KillMenuPreviewBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:550:6"); end
 
 -- Call into main/module font refresh (main chunk may keep this local; main exports MSUF_UpdateAllFonts)
-local function MSUF_CallUpdateAllFonts()
+local function MSUF_CallUpdateAllFonts() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_CallUpdateAllFonts file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:561:6");
     local fn
     if _G then fn = _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts end
     if (not fn) and ns and ns.MSUF_UpdateAllFonts then
         fn = ns.MSUF_UpdateAllFonts
     end
-    if type(fn) == "function" then return fn() end
-end
+    if type(fn) == "function" then return Perfy_Trace_Passthrough("Leave", "MSUF_CallUpdateAllFonts file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:561:6", fn()) end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CallUpdateAllFonts file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:561:6"); end
 
 -- Local number parser (Options chunk can’t rely on main-file locals)
-local function MSUF_GetNumber(text, default, minVal, maxVal)
+local function MSUF_GetNumber(text, default, minVal, maxVal) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetNumber file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:571:6");
     local n = tonumber(text)
     if n == nil then n = default end
     if n == nil then n = 0 end
     n = floor(n + 0.5)
     if minVal ~= nil and n < minVal then n = minVal end
     if maxVal ~= nil and n > maxVal then n = maxVal end
-    return n
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetNumber file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:571:6"); return n
 end
 
 -- Register the MSUF Settings category at login, but build the heavy UI only when the panel is first opened.
 -- This greatly reduces addon load/login CPU (no more building thousands of UI widgets during PLAYER_LOGIN).
-function MSUF_RegisterOptionsCategoryLazy()
+function MSUF_RegisterOptionsCategoryLazy() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_RegisterOptionsCategoryLazy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:583:0");
     -- Slash-menu-only build: Blizzard Settings shows a lightweight launcher panel only.
     -- The legacy multi-panel Settings UI is intentionally not registered anymore.
     if _G then _G.MSUF_SLASHMENU_ONLY = true end
 
-    if not Settings or not Settings.RegisterCanvasLayoutCategory then return end
+    if not Settings or not Settings.RegisterCanvasLayoutCategory then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RegisterOptionsCategoryLazy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:583:0"); return end
 
     -- Root (AddOns list) panel: lightweight launcher with a single button.
     local launcher = (_G and _G.MSUF_LauncherPanel) or CreateFrame("Frame")
@@ -605,7 +605,7 @@ function MSUF_RegisterOptionsCategoryLazy()
     if ns then ns.MSUF_MainCategory = rootCat end
 
     -- Combat-safe opener: avoid blocked actions/taint by deferring UI opens until after combat.
-    local function MSUF_RunAfterCombat(fn)
+    local function MSUF_RunAfterCombat(fn) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_RunAfterCombat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:608:10");
         if InCombatLockdown and InCombatLockdown() then
             if _G then _G.MSUF_PendingOpenAfterCombat = fn end
 
@@ -614,13 +614,13 @@ function MSUF_RegisterOptionsCategoryLazy()
                 f = CreateFrame("Frame")
                 if _G then _G.MSUF_CombatDeferFrame = f end
                 f:RegisterEvent("PLAYER_REGEN_ENABLED")
-                f:SetScript("OnEvent", function(self)
+                f:SetScript("OnEvent", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:617:39");
                     local pending = _G and _G.MSUF_PendingOpenAfterCombat
                     if pending then
                         _G.MSUF_PendingOpenAfterCombat = nil
                         pending()
                     end
-                end)
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:617:39"); end)
             end
 
             if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
@@ -628,14 +628,14 @@ function MSUF_RegisterOptionsCategoryLazy()
             elseif print then
                 print("MSUF: Cannot open the menu while in combat. Will open after combat.")
             end
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RunAfterCombat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:608:10"); return
         end
 
         fn()
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RunAfterCombat file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:608:10"); end
 
-    local function MSUF_BuildLauncherUI()
-        if launcher.__MSUF_LauncherBuilt then return end
+    local function MSUF_BuildLauncherUI() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_BuildLauncherUI file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:637:10");
+        if launcher.__MSUF_LauncherBuilt then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_BuildLauncherUI file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:637:10"); return end
         launcher.__MSUF_LauncherBuilt = true
 
         local title = launcher:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -662,8 +662,8 @@ function MSUF_RegisterOptionsCategoryLazy()
         btn:SetSize(260, 32)
         btn:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -14)
         btn:SetText("Open MSUF Menu")
-        btn:SetScript("OnClick", function()
-            MSUF_RunAfterCombat(function()
+        btn:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:665:33");
+            MSUF_RunAfterCombat(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:666:32");
                 if _G and type(_G.MSUF_OpenPage) == "function" then
                     _G.MSUF_OpenPage("home")
                 elseif _G and type(_G.MSUF_OpenOptionsMenu) == "function" then
@@ -671,51 +671,51 @@ function MSUF_RegisterOptionsCategoryLazy()
                 elseif _G and type(_G.MSUF_ShowStandaloneOptionsWindow) == "function" then
                     _G.MSUF_ShowStandaloneOptionsWindow("home")
                 end
-            end)
-        end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:666:32"); end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:665:33"); end)
 
         local note = launcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         note:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 2, -10)
         note:SetJustifyH("LEFT")
         note:SetText("Tip: /msuf opens the menu.")
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_BuildLauncherUI file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:637:10"); end
 
     if not launcher.__MSUF_LauncherOnShowHooked then
         launcher.__MSUF_LauncherOnShowHooked = true
-        launcher:SetScript("OnShow", function(self)
+        launcher:SetScript("OnShow", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:685:37");
             if not self.__MSUF_LauncherBuilt then MSUF_BuildLauncherUI() end
             local d = self.__MSUF_LauncherDesc
             if d and d.SetWidth then
                 local w = self.GetWidth and self:GetWidth() or 0
                 if w and w > 0 then d:SetWidth(math.max(420, w - 40)) end
             end
-        end)
-        launcher:SetScript("OnSizeChanged", function(self)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:685:37"); end)
+        launcher:SetScript("OnSizeChanged", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:693:44");
             local d = self.__MSUF_LauncherDesc
             if d and d.SetWidth then
                 local w = self.GetWidth and self:GetWidth() or 0
                 if w and w > 0 then d:SetWidth(math.max(420, w - 40)) end
             end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:693:44"); end)
     end
 
     -- Build now too (some containers show the panel without firing OnShow the first time)
     MSUF_BuildLauncherUI()
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RegisterOptionsCategoryLazy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:583:0"); end
 
 -- Forward declarations (Lua resolves unknown locals in functions as GLOBALS at compile time).
 -- CreateOptionsPanel() references these helpers later, so they must be declared first.
 local CreateLabeledSlider
 local MSUF_SetLabeledSliderValue
 
-function CreateOptionsPanel()
-    if not Settings or not Settings.RegisterCanvasLayoutCategory then return end
+function CreateOptionsPanel() Perfy_Trace(Perfy_GetTime(), "Enter", "CreateOptionsPanel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:711:0");
+    if not Settings or not Settings.RegisterCanvasLayoutCategory then Perfy_Trace(Perfy_GetTime(), "Leave", "CreateOptionsPanel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:711:0"); return end
 
     -- If the panel was already fully built, just refresh it.
     if _G and _G.MSUF_OptionsPanel and _G.MSUF_OptionsPanel.__MSUF_FullBuilt then
         local p = _G.MSUF_OptionsPanel
         if p.LoadFromDB then p:LoadFromDB() end
-        return p
+        Perfy_Trace(Perfy_GetTime(), "Leave", "CreateOptionsPanel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:711:0"); return p
     end
     EnsureDB()
 
@@ -723,52 +723,52 @@ function CreateOptionsPanel()
 
 -- One-Flush + No-Layout-In-Runtime policy:
 -- Options that affect layout should request a UFCore layout flush (DIRTY_LAYOUT) instead of forcing full updates.
-local function MSUF_Options_NormalizeUnitKey(unitKey)
-    if unitKey == "tot" then return "targettarget" end
-    if type(unitKey) == "string" and unitKey:match("^boss%d+$") then return "boss" end
-    return unitKey
+local function MSUF_Options_NormalizeUnitKey(unitKey) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Options_NormalizeUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:726:6");
+    if unitKey == "tot" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_NormalizeUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:726:6"); return "targettarget" end
+    if type(unitKey) == "string" and unitKey:match("^boss%d+$") then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_NormalizeUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:726:6"); return "boss" end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_NormalizeUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:726:6"); return unitKey
 end
 
-local function MSUF_Options_IsUrgentUnitKey(unitKey)
-    return (unitKey == "target" or unitKey == "targettarget" or unitKey == "focus")
+local function MSUF_Options_IsUrgentUnitKey(unitKey) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Options_IsUrgentUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:732:6");
+    return Perfy_Trace_Passthrough("Leave", "MSUF_Options_IsUrgentUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:732:6", (unitKey == "target" or unitKey == "targettarget" or unitKey == "focus"))
 end
 
-local function MSUF_Options_RequestLayoutForKey(unitKey, reason, urgent)
+local function MSUF_Options_RequestLayoutForKey(unitKey, reason, urgent) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Options_RequestLayoutForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:736:6");
     unitKey = MSUF_Options_NormalizeUnitKey(unitKey)
-    if type(unitKey) ~= "string" then return false end
+    if type(unitKey) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_RequestLayoutForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:736:6"); return false end
 
     local fn = _G and _G.MSUF_UFCore_RequestLayoutForUnit
     if type(fn) == "function" then
         if urgent == nil then urgent = MSUF_Options_IsUrgentUnitKey(unitKey) end
         -- Signature is flexible (extra args are ignored safely).
         pcall(fn, unitKey, reason or "OPTIONS", urgent)
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_RequestLayoutForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:736:6"); return true
     end
 
     -- Fallback path for older cores
     if type(ApplySettingsForKey) == "function" then
         pcall(ApplySettingsForKey, unitKey)
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_RequestLayoutForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:736:6"); return true
     end
     if type(ApplyAllSettings) == "function" then
         pcall(ApplyAllSettings)
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_RequestLayoutForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:736:6"); return true
     end
-    return false
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_RequestLayoutForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:736:6"); return false
 end
 
-local function MSUF_Options_RequestLayoutAll(reason)
+local function MSUF_Options_RequestLayoutAll(reason) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Options_RequestLayoutAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:760:6");
     local keys = { "player", "target", "focus", "targettarget", "pet", "boss" }
     for _, k in ipairs(keys) do
         MSUF_Options_RequestLayoutForKey(k, reason or "OPTIONS_ALL", MSUF_Options_IsUrgentUnitKey(k))
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Options_RequestLayoutAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:760:6"); end
 
 -- Export for split modules (Fonts/Misc/etc.) so they can request a layout refresh without relying on Core locals.
 if ns and not ns.MSUF_Options_RequestLayoutAll then ns.MSUF_Options_RequestLayoutAll = MSUF_Options_RequestLayoutAll end
 
-local function MSUF_UpdatePowerBarHeightFromEdit(editBox)
-    if not editBox or not editBox.GetText then return end
+local function MSUF_UpdatePowerBarHeightFromEdit(editBox) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UpdatePowerBarHeightFromEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:770:6");
+    if not editBox or not editBox.GetText then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdatePowerBarHeightFromEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:770:6"); return end
 
     local text = editBox:GetText()
     local v = MSUF_GetNumber(text, 3, 3, 50)
@@ -791,10 +791,10 @@ local function MSUF_UpdatePowerBarHeightFromEdit(editBox)
     end
 
     ApplyAllSettings()
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdatePowerBarHeightFromEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:770:6"); end
 
-local function MSUF_UpdatePowerBarBorderSizeFromEdit(editBox)
-    if not editBox or not editBox.GetText then return end
+local function MSUF_UpdatePowerBarBorderSizeFromEdit(editBox) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UpdatePowerBarBorderSizeFromEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:796:6");
+    if not editBox or not editBox.GetText then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdatePowerBarBorderSizeFromEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:796:6"); return end
 
     local text = editBox:GetText()
     local v = MSUF_GetNumber(text, 1, 1, 10)
@@ -809,7 +809,7 @@ local function MSUF_UpdatePowerBarBorderSizeFromEdit(editBox)
     else
         ApplyAllSettings()
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdatePowerBarBorderSizeFromEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:796:6"); end
 
 panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     _G.MSUF_OptionsPanel = panel
@@ -859,7 +859,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     castbarGroup = CreateFrame("Frame", nil, panel)
     castbarGroup:SetAllPoints()
 
-    local function MSUF_HideLegacyCastbarEditButton()
+    local function MSUF_HideLegacyCastbarEditButton() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_HideLegacyCastbarEditButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:862:10");
         local names = {
             'MSUF_CastbarEditModeButton',
             'MSUF_CastbarEditButton',
@@ -875,15 +875,15 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
                 if obj.SetEnabled then obj:SetEnabled(false) end
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_HideLegacyCastbarEditButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:862:10"); end
 
-    castbarGroup:HookScript('OnShow', function()
+    castbarGroup:HookScript('OnShow', function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:880:38");
         if C_Timer and C_Timer.After then
             C_Timer.After(0, MSUF_HideLegacyCastbarEditButton)
         else
             MSUF_HideLegacyCastbarEditButton()
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:880:38"); end)
 
     castbarEnemyGroup = CreateFrame("Frame", "MSUF_CastbarEnemyGroup", castbarGroup)
     castbarEnemyGroup:SetAllPoints()
@@ -920,36 +920,36 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     local editModeButton
     local __MSUF_SLASH_ONLY = (_G and _G.MSUF_SLASHMENU_ONLY) and true or false
 
-    local function GetLabelForKey(key)
+    local function GetLabelForKey(key) Perfy_Trace(Perfy_GetTime(), "Enter", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10");
         if key == "player" then
-            return "Player"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Player"
         elseif key == "target" then
-            return "Target"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Target"
         elseif key == "targettarget" then
-            return "Target of Target"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Target of Target"
          elseif key == "focus" then
-            return "Focus"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Focus"
         elseif key == "pet" then
-            return "Pet"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Pet"
         elseif key == "boss" then
-            return "Boss Frames"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Boss Frames"
         elseif key == "bars" then
-            return "Bars"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Bars"
         elseif key == "fonts" then
-            return "Fonts"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Fonts"
         elseif key == "auras" then
-            return "Auras"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Auras"
         elseif key == "castbar" then
-            return "Castbar"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Castbar"
         elseif key == "misc" then
-            return "Miscellaneous"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Miscellaneous"
         elseif key == "profiles" then
-            return "Profiles"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return "Profiles"
         end
-        return key
+        Perfy_Trace(Perfy_GetTime(), "Leave", "GetLabelForKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:923:10"); return key
     end
 
-    local function UpdateGroupVisibility()
+    local function UpdateGroupVisibility() Perfy_Trace(Perfy_GetTime(), "Enter", "UpdateGroupVisibility file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:952:10");
         if currentTabKey == "fonts" then
             frameGroup:Hide()
             fontGroup:Show()
@@ -1036,13 +1036,13 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             end
         end
 
+    Perfy_Trace(Perfy_GetTime(), "Leave", "UpdateGroupVisibility file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:952:10"); end
+
+    local function IsTabKey(k) Perfy_Trace(Perfy_GetTime(), "Enter", "IsTabKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1041:10");
+        return Perfy_Trace_Passthrough("Leave", "IsTabKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1041:10", k == "bars" or k == "fonts" or k == "auras" or k == "castbar" or k == "misc" or k == "profiles")
     end
 
-    local function IsTabKey(k)
-        return k == "bars" or k == "fonts" or k == "auras" or k == "castbar" or k == "misc" or k == "profiles"
-    end
-
-    local function SetCurrentKey(newKey)
+    local function SetCurrentKey(newKey) Perfy_Trace(Perfy_GetTime(), "Enter", "SetCurrentKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1045:10");
         if IsTabKey(newKey) then
             currentTabKey = newKey
         else
@@ -1068,11 +1068,11 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
         end
 
         UpdateGroupVisibility()
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SetCurrentKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1045:10"); end
 
-    function MSUF_GetTabButtonHelpers(requestedPanel)
-        if requestedPanel == panel then return buttons, SetCurrentKey end
-    end
+    function MSUF_GetTabButtonHelpers(requestedPanel) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetTabButtonHelpers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1073:4");
+        if requestedPanel == panel then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetTabButtonHelpers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1073:4"); return buttons, SetCurrentKey end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetTabButtonHelpers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1073:4"); end
 
     if ns and ns.MSUF_InitSearchModule then
         ns.MSUF_InitSearchModule({
@@ -1091,17 +1091,17 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             miscGroup         = miscGroup,
             profileGroup      = profileGroup,
             buttons           = buttons,
-            getCurrentKey     = function() return (currentTabKey == "frames" and currentKey) or currentTabKey end,
+            getCurrentKey     = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1094:32"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1094:32", (currentTabKey == "frames" and currentKey) or currentTabKey) end,
             setCurrentKey     = SetCurrentKey,
         })
     end
-    local function MSUF_SkinMidnightTabButton(btn)
-        if not btn then return end
+    local function MSUF_SkinMidnightTabButton(btn) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SkinMidnightTabButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1098:10");
+        if not btn then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SkinMidnightTabButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1098:10"); return end
 
         local GOLD_R, GOLD_G, GOLD_B = 1.00, 0.82, 0.00
 
-        local function EnsureActiveLine(self)
-            if self.__msufActiveLine then return end
+        local function EnsureActiveLine(self) Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureActiveLine file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1103:14");
+            if self.__msufActiveLine then Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureActiveLine file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1103:14"); return end
             local line = self:CreateTexture(nil, "OVERLAY")
             line:SetTexture("Interface/Buttons/WHITE8x8")
             line:SetVertexColor(GOLD_R, GOLD_G, GOLD_B, 0.95)
@@ -1110,9 +1110,9 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             line:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -2, 1)
             line:Hide()
             self.__msufActiveLine = line
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureActiveLine file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1103:14"); end
 
-        local function SetRegionColor(self, r, g, b, a)
+        local function SetRegionColor(self, r, g, b, a) Perfy_Trace(Perfy_GetTime(), "Enter", "SetRegionColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1115:14");
             local name = self.GetName and self:GetName()
             local left  = self.Left  or (name and _G[name .. "Left"])   or nil
             local mid   = self.Middle or (name and _G[name .. "Middle"]) or nil
@@ -1128,9 +1128,9 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
                 nt:SetVertexColor(r, g, b, a or 1)
                 nt:SetTexCoord(0, 1, 0, 1)
             end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "SetRegionColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1115:14"); end
 
-        local function ApplyState(self, selected)
+        local function ApplyState(self, selected) Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1133:14");
             -- Always keep the background neutral black; highlight selection via gold text + a thin gold underline.
             SetRegionColor(self, 0.02, 0.02, 0.02, 0.92)
             EnsureActiveLine(self)
@@ -1149,7 +1149,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             if self.__msufActiveLine then
                 if selected then self.__msufActiveLine:Show() else self.__msufActiveLine:Hide() end
             end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1133:14"); end
 
         -- Avoid SetHighlightTexture / SetPushedTexture calls (can error on some builds). Instead, neutralize existing regions.
         do
@@ -1169,24 +1169,24 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
 
         if not btn.__msufMidnightTabSkinned then
             btn.__msufMidnightTabSkinned = true
-            hooksecurefunc(btn, "Disable", function(self) ApplyState(self, true) end)
-            hooksecurefunc(btn, "Enable", function(self) ApplyState(self, false) end)
-            btn:HookScript("OnShow", function(self) ApplyState(self, self.IsEnabled and (not self:IsEnabled()) or false) end)
+            hooksecurefunc(btn, "Disable", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1172:43"); ApplyState(self, true) Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1172:43"); end)
+            hooksecurefunc(btn, "Enable", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1173:42"); ApplyState(self, false) Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1173:42"); end)
+            btn:HookScript("OnShow", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1174:37"); ApplyState(self, self.IsEnabled and (not self:IsEnabled()) or false) Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1174:37"); end)
         end
 
         ApplyState(btn, btn.IsEnabled and (not btn:IsEnabled()) or false)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SkinMidnightTabButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1098:10"); end
 
     -- Flat midnight-style button for small action buttons (Focus Kick / Castbar Edit Mode, etc.)
     -- Keeps the dark look without the sticky blue highlight.
-    local function MSUF_SkinMidnightActionButton(btn, opts)
-        if not btn or btn.__msufMidnightActionSkinned then return end
+    local function MSUF_SkinMidnightActionButton(btn, opts) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SkinMidnightActionButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1182:10");
+        if not btn or btn.__msufMidnightActionSkinned then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SkinMidnightActionButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1182:10"); return end
         btn.__msufMidnightActionSkinned = true
 
         opts = opts or {}
         local r, g, b, a = (opts.r or 0.06), (opts.g or 0.06), (opts.b or 0.06), (opts.a or 0.92)
 
-        local function SetRegionColor(self, rr, gg, bb, aa)
+        local function SetRegionColor(self, rr, gg, bb, aa) Perfy_Trace(Perfy_GetTime(), "Enter", "SetRegionColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1189:14");
             local name = self.GetName and self:GetName()
             local left  = self.Left  or (name and _G[name .. "Left"]) or nil
             local mid   = self.Middle or (name and _G[name .. "Middle"]) or nil
@@ -1202,7 +1202,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
                 nt:SetVertexColor(rr, gg, bb, aa or 1)
                 nt:SetTexCoord(0, 1, 0, 1)
             end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "SetRegionColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1189:14"); end
 
         SetRegionColor(btn, r, g, b, a)
 
@@ -1232,7 +1232,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             local tb = (opts.textB ~= nil) and opts.textB or 0.92
             fs:SetTextColor(tr, tg, tb)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SkinMidnightActionButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1182:10"); end
 
     -- Legacy top navigation strip removed.
     -- Navigation is driven exclusively by the Slash/Flash menu.
@@ -1261,37 +1261,37 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     g = MSUF_DB.general or {}
     snapCheck:SetChecked(g.editModeSnapToGrid ~= false)
 
-    snapCheck:SetScript("OnClick", function(self)
+    snapCheck:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1264:35");
         EnsureDB()
         gg = MSUF_DB.general
         gg.editModeSnapToGrid = self:GetChecked() and true or false
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1264:35"); end)
     snapCheck:Hide()
 
 emFont = editModeButton:GetFontString()
 if emFont then emFont:SetFontObject("GameFontNormalLarge") end
-    function MSUF_SyncCastbarEditModeWithUnitEdit()
-    if not MSUF_DB or not MSUF_DB.general then return end
+    function MSUF_SyncCastbarEditModeWithUnitEdit() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SyncCastbarEditModeWithUnitEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1273:4");
+    if not MSUF_DB or not MSUF_DB.general then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SyncCastbarEditModeWithUnitEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1273:4"); return end
 
     local g = MSUF_DB.general
 
     g.castbarPlayerPreviewEnabled = MSUF_UnitEditModeActive and true or false
 
-    local function RefreshAll()
+    local function RefreshAll() Perfy_Trace(Perfy_GetTime(), "Enter", "RefreshAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1280:10");
         if MSUF_UpdatePlayerCastbarPreview then MSUF_UpdatePlayerCastbarPreview() end
 
         if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then _G.MSUF_UpdateBossCastbarPreview() end
         if type(MSUF_SetupBossCastbarPreviewEditMode) == "function" then
             MSUF_SetupBossCastbarPreviewEditMode()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "RefreshAll file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1280:10"); end
 
     RefreshAll()
 
     if g.castbarPlayerPreviewEnabled and C_Timer and C_Timer.After then C_Timer.After(0, RefreshAll) end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SyncCastbarEditModeWithUnitEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1273:4"); end
 
-function MSUF_SyncBossUnitframePreviewWithUnitEdit()
+function MSUF_SyncBossUnitframePreviewWithUnitEdit() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SyncBossUnitframePreviewWithUnitEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1294:0");
     -- Boss preview/test frames:
     -- - Active only during MSUF Edit Mode
     -- - Requires Boss unitframe enabled
@@ -1325,7 +1325,7 @@ function MSUF_SyncBossUnitframePreviewWithUnitEdit()
     -- Boss Test Mode is the internal switch that force-shows boss frames for editing.
     MSUF_BossTestMode = active
 
-    if InCombatLockdown and InCombatLockdown() then return end
+    if InCombatLockdown and InCombatLockdown() then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SyncBossUnitframePreviewWithUnitEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1294:0"); return end
 
     -- Refresh secure visibility drivers so a previous "hide" state does not stick.
     if type(MSUF_RefreshAllUnitVisibilityDrivers) == "function" then MSUF_RefreshAllUnitVisibilityDrivers(editActive) end
@@ -1354,15 +1354,15 @@ function MSUF_SyncBossUnitframePreviewWithUnitEdit()
             end
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SyncBossUnitframePreviewWithUnitEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1294:0"); end
 
 -- Toggle Castbar Edit Mode from the shared bottom-left Edit Mode button (Castbar tab).
 -- NOTE: We are NOT deleting Castbar Edit Mode itself; we only remove the extra button inside the Castbar menu.
 -- The shared Edit Mode button now drives the full flow: enable MSUF Edit Mode + enable castbar previews + start test casts.
-local function MSUF_ToggleCastbarEditModeFromOptions()
+local function MSUF_ToggleCastbarEditModeFromOptions() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ToggleCastbarEditModeFromOptions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1362:6");
     if type(EnsureDB) == "function" then EnsureDB() end
     if not MSUF_DB or not MSUF_DB.general then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ToggleCastbarEditModeFromOptions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1362:6"); return
     end
 
     local wantActive = not (MSUF_UnitEditModeActive and true or false)
@@ -1404,15 +1404,15 @@ local function MSUF_ToggleCastbarEditModeFromOptions()
             if HideUIPanel then HideUIPanel(AudioOptionsFrame) else AudioOptionsFrame:Hide() end
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ToggleCastbarEditModeFromOptions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1362:6"); end
 
-editModeButton:SetScript("OnClick", function()
+editModeButton:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1409:36");
 
     -- Castbar tab uses the shared Edit Mode button to toggle Castbar Edit Mode (castbar previews),
     -- instead of having a separate Castbar Edit Mode button inside the Castbar menu.
     if currentTabKey == "castbar" then
         MSUF_ToggleCastbarEditModeFromOptions()
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1409:36"); return
     end
 
     movableKeys = {
@@ -1426,7 +1426,7 @@ editModeButton:SetScript("OnClick", function()
 
     if not movableKeys[currentKey] then
         print("|cffffd700MSUF:|r Edit Mode only works for unit tabs (Player/Target/ToT/Focus/Pet/Boss). Please select one of those tabs.")
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1409:36"); return
     end
 
     local wantActive = not (MSUF_UnitEditModeActive and true or false)
@@ -1489,10 +1489,10 @@ editModeButton:SetScript("OnClick", function()
     if MSUF_UpdateEditModeInfo then
         MSUF_UpdateEditModeInfo()
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1409:36"); end)
 
-    local function MSUF_StyleSlider(slider)
-        if not slider or slider.MSUFStyled then return end
+    local function MSUF_StyleSlider(slider) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_StyleSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1494:10");
+        if not slider or slider.MSUFStyled then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1494:10"); return end
         slider.MSUFStyled = true
 
         slider:SetHeight(14)
@@ -1509,17 +1509,17 @@ editModeButton:SetScript("OnClick", function()
             thumb:SetSize(10, 18)
         end
 
-        slider:HookScript("OnEnter", function(self)
+        slider:HookScript("OnEnter", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1512:37");
             if self.MSUFTrack then self.MSUFTrack:SetColorTexture(0.20, 0.20, 0.20, 1) end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1512:37"); end)
 
-        slider:HookScript("OnLeave", function(self)
+        slider:HookScript("OnLeave", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1516:37");
             if self.MSUFTrack then self.MSUFTrack:SetColorTexture(0.06, 0.06, 0.06, 1) end
-        end)
-    end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1516:37"); end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1494:10"); end
 
-local function MSUF_StyleSmallButton(button, isPlus)
-    if not button or button.MSUFStyled then return end
+local function MSUF_StyleSmallButton(button, isPlus) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_StyleSmallButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1521:6");
+    if not button or button.MSUFStyled then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleSmallButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1521:6"); return end
     button.MSUFStyled = true
 
     button:SetSize(20, 20)
@@ -1557,13 +1557,13 @@ border:SetBackdrop({
     fs:SetTextColor(1, 0.9, 0.4) -- Gold
     fs:SetText(isPlus and "+" or "-")
     button.text = fs
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleSmallButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1521:6"); end
 
 -- Gradient direction selector (D-pad style)
 -- Multi-direction: active arrows are gold; you can combine multiple directions.
 -- Stored in MSUF_DB.general.gradientDirLeft/Right/Up/Down (booleans).
 -- Legacy: MSUF_DB.general.gradientDirection ("RIGHT"/"LEFT"/"UP"/"DOWN") is auto-migrated.
-local function MSUF_CreateGradientDirectionPad(parent)
+local function MSUF_CreateGradientDirectionPad(parent) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_CreateGradientDirectionPad file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1566:6");
     local pad = CreateFrame("Frame", "MSUF_GradientDirectionPad", parent, "BackdropTemplate")
     pad:SetSize(82, 66)
 
@@ -1577,14 +1577,14 @@ local function MSUF_CreateGradientDirectionPad(parent)
 
     pad.buttons = {}
 
-    local function AnyDirOn(g)
-        return (g.gradientDirLeft == true) or (g.gradientDirRight == true) or (g.gradientDirUp == true) or (g.gradientDirDown == true)
+    local function AnyDirOn(g) Perfy_Trace(Perfy_GetTime(), "Enter", "AnyDirOn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1580:10");
+        return Perfy_Trace_Passthrough("Leave", "AnyDirOn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1580:10", (g.gradientDirLeft == true) or (g.gradientDirRight == true) or (g.gradientDirUp == true) or (g.gradientDirDown == true))
     end
 
-    local function MigrateLegacyIfNeeded(g)
+    local function MigrateLegacyIfNeeded(g) Perfy_Trace(Perfy_GetTime(), "Enter", "MigrateLegacyIfNeeded file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1584:10");
         -- If none of the new flags exist yet, migrate from the old single-direction key.
         local hasNew = (g.gradientDirLeft ~= nil) or (g.gradientDirRight ~= nil) or (g.gradientDirUp ~= nil) or (g.gradientDirDown ~= nil)
-        if hasNew then return end
+        if hasNew then Perfy_Trace(Perfy_GetTime(), "Leave", "MigrateLegacyIfNeeded file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1584:10"); return end
 
         local dir = g.gradientDirection
         if type(dir) ~= "string" or dir == "" then
@@ -1602,9 +1602,9 @@ local function MSUF_CreateGradientDirectionPad(parent)
         else
             g.gradientDirRight = true
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MigrateLegacyIfNeeded file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1584:10"); end
 
-    local function MakeDirButton(dirKey, glyph, dbKey)
+    local function MakeDirButton(dirKey, glyph, dbKey) Perfy_Trace(Perfy_GetTime(), "Enter", "MakeDirButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1607:10");
         local b = CreateFrame("Button", nil, pad)
         MSUF_StyleSmallButton(b, true)
 
@@ -1638,7 +1638,7 @@ local function MSUF_CreateGradientDirectionPad(parent)
         b._msufDBKey = dbKey
         b._msufDirKey = dirKey
 
-        b:SetScript("OnClick", function()
+        b:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1641:31");
             EnsureDB()
             MSUF_DB.general = MSUF_DB.general or {}
             local g = MSUF_DB.general
@@ -1673,10 +1673,10 @@ local function MSUF_CreateGradientDirectionPad(parent)
             elseif ns and ns.MSUF_RefreshAllFrames then
                 ns.MSUF_RefreshAllFrames()
             end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1641:31"); end)
 
         pad.buttons[dirKey] = b
-        return b
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MakeDirButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1607:10"); return b
     end
 
     local bUp    = MakeDirButton("UP",    "^", "gradientDirUp")
@@ -1698,7 +1698,7 @@ local function MSUF_CreateGradientDirectionPad(parent)
     dot:SetVertexColor(0.7, 0.7, 0.7, 0.25)
     pad._msufDot = dot
 
-    function pad:SetEnabledVisual(enabled)
+    function pad:SetEnabledVisual(enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "pad:SetEnabledVisual file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1701:4");
         for _, btn in pairs(self.buttons) do
             if enabled then
                 btn:Enable()
@@ -1709,9 +1709,9 @@ local function MSUF_CreateGradientDirectionPad(parent)
             end
         end
         self:SetAlpha(enabled and 1 or 0.55)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "pad:SetEnabledVisual file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1701:4"); end
 
-    function pad:SyncFromDB()
+    function pad:SyncFromDB() Perfy_Trace(Perfy_GetTime(), "Enter", "pad:SyncFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1714:4");
         EnsureDB()
         local g = (MSUF_DB and MSUF_DB.general) or {}
 
@@ -1769,13 +1769,13 @@ local function MSUF_CreateGradientDirectionPad(parent)
         -- the power-gradient controller unusable when HP gradient was turned off.
         local enabled = ((g.enableGradient ~= false) or (g.enablePowerGradient ~= false))
         self:SetEnabledVisual(enabled)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "pad:SyncFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1714:4"); end
 
     pad:SyncFromDB()
-    return pad
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CreateGradientDirectionPad file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1566:6"); return pad
 end
 
-CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
+CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y) Perfy_Trace(Perfy_GetTime(), "Enter", "CreateLabeledSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1778:22");
     local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
 
     local extraY = 0
@@ -1787,9 +1787,9 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
     slider:SetObeyStepOnDrag(true)
 
     -- Mark user interaction so we only recommend reload for real user changes (not DB sync).
-    slider:HookScript("OnMouseDown", function(self)
+    slider:HookScript("OnMouseDown", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1790:37");
         self._msufUserChange = true
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1790:37"); end)
 
     slider.minVal = minVal
     slider.maxVal = maxVal
@@ -1813,48 +1813,48 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
     eb:SetTextColor(1, 1, 1, 1)
     slider.editBox = eb
 
-    local function ApplyEditBoxValue()
+    local function ApplyEditBoxValue() Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyEditBoxValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1816:10");
         local txt = eb:GetText()
         local val = tonumber(txt)
         if not val then
             local cur = slider:GetValue() or minVal
             if slider.step and slider.step >= 1 then cur = math.floor(cur + 0.5) end
             eb:SetText(tostring(cur))
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyEditBoxValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1816:10"); return
         end
 
         if val < slider.minVal then val = slider.minVal end
         if val > slider.maxVal then val = slider.maxVal end
         slider._msufUserChange = true
         slider:SetValue(val)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyEditBoxValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1816:10"); end
 
-    eb:SetScript("OnEnterPressed", function(self)
+    eb:SetScript("OnEnterPressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1832:35");
         ApplyEditBoxValue()
         self:ClearFocus()
-    end)
-    eb:SetScript("OnEditFocusLost", function(self)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1832:35"); end)
+    eb:SetScript("OnEditFocusLost", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1836:36");
         ApplyEditBoxValue()
-    end)
-    eb:SetScript("OnEscapePressed", function(self)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1836:36"); end)
+    eb:SetScript("OnEscapePressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1839:36");
         local cur = slider:GetValue() or minVal
         if slider.step and slider.step >= 1 then cur = math.floor(cur + 0.5) end
         self:SetText(tostring(cur))
         self:ClearFocus()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1839:36"); end)
 
     local minus = CreateFrame("Button", name .. "Minus", parent)
     minus:SetPoint("RIGHT", eb, "LEFT", -2, 0)
     slider.minusButton = minus
 
-    minus:SetScript("OnClick", function()
+    minus:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1850:31");
         local cur = slider:GetValue()
         local st  = slider.step or 1
         local nv  = cur - st
         if nv < slider.minVal then nv = slider.minVal end
         slider._msufUserChange = true
         slider:SetValue(nv)
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1850:31"); end)
 
     MSUF_StyleSmallButton(minus, false) -- Midnight minus
 
@@ -1862,19 +1862,19 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
     plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
     slider.plusButton = plus
 
-    plus:SetScript("OnClick", function()
+    plus:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1865:30");
         local cur = slider:GetValue()
         local st  = slider.step or 1
         local nv  = cur + st
         if nv > slider.maxVal then nv = slider.maxVal end
         slider._msufUserChange = true
         slider:SetValue(nv)
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1865:30"); end)
 
     MSUF_StyleSmallButton(plus, true) -- Midnight plus
 
-    slider:SetScript("OnValueChanged", function(self, value)
-        if self.MSUF_SkipCallback then return end
+    slider:SetScript("OnValueChanged", function(self, value) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1876:39");
+        if self.MSUF_SkipCallback then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1876:39"); return end
         local step = self.step or 1
         local formatted
 
@@ -1899,17 +1899,17 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
             self._msufUserChange = nil
             MSUF_ScheduleReloadRecommend()
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1876:39"); end)
 
     MSUF_StyleSlider(slider)
 
-    return slider
+    Perfy_Trace(Perfy_GetTime(), "Leave", "CreateLabeledSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1778:22"); return slider
 end
 
 -- Show/Hide a labeled slider AND its attached editbox/plus/minus + template texts.
 -- Needed because our sliders' editboxes/buttons are parented to the container, not the slider itself.
-function MSUF_SetSliderVisibility(slider, show)
-    if not slider then return end
+function MSUF_SetSliderVisibility(slider, show) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SetSliderVisibility file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1911:0");
+    if not slider then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetSliderVisibility file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1911:0"); return end
 
     if show then slider:Show() else slider:Hide() end
 
@@ -1926,30 +1926,30 @@ function MSUF_SetSliderVisibility(slider, show)
         if high then high:SetShown(show) end
         if text then text:SetShown(show) end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetSliderVisibility file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1911:0"); end
 
 -- Enable/disable helper for labeled sliders (slider + editbox + +/- buttons + template label texts)
-local function MSUF_SetLabeledSliderEnabled(slider, enabled)
-    if not slider then return end
+local function MSUF_SetLabeledSliderEnabled(slider, enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SetLabeledSliderEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1932:6");
+    if not slider then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetLabeledSliderEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1932:6"); return end
 
     local name = (slider.GetName and slider:GetName())
     local label = (name and _G and _G[name .. "Text"]) or slider.label or slider.Text or slider.text
     local low  = (name and _G and _G[name .. "Low"])  or nil
     local high = (name and _G and _G[name .. "High"]) or nil
 
-    local function SetBtnEnabled(btn, en)
-        if not btn then return end
+    local function SetBtnEnabled(btn, en) Perfy_Trace(Perfy_GetTime(), "Enter", "SetBtnEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1940:10");
+        if not btn then Perfy_Trace(Perfy_GetTime(), "Leave", "SetBtnEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1940:10"); return end
         if btn.SetEnabled then btn:SetEnabled(en) end
         if en then
             if btn.Enable then btn:Enable() end
         else
             if btn.Disable then btn:Disable() end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SetBtnEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1940:10"); end
 
-    local function SetFSColor(fs, r, g, b)
+    local function SetFSColor(fs, r, g, b) Perfy_Trace(Perfy_GetTime(), "Enter", "SetFSColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1950:10");
         if fs and fs.SetTextColor then fs:SetTextColor(r, g, b) end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SetFSColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1950:10"); end
 
     if enabled then
         if slider.Enable then slider:Enable() end
@@ -1974,12 +1974,12 @@ local function MSUF_SetLabeledSliderEnabled(slider, enabled)
         if slider.editBox and slider.editBox.SetTextColor then slider.editBox:SetTextColor(0.55, 0.55, 0.55) end
         slider:SetAlpha(0.55)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetLabeledSliderEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1932:6"); end
 
 -- Set a labeled slider's value WITHOUT triggering side-effects, while still updating its numeric editbox.
 -- Needed because CreateLabeledSlider only syncs the editbox via OnValueChanged, which we often skip during panel sync.
-MSUF_SetLabeledSliderValue = function(slider, value)
-    if not slider then return end
+MSUF_SetLabeledSliderValue = function(slider, value) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SetLabeledSliderValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1981:29");
+    if not slider then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetLabeledSliderValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1981:29"); return end
     slider.MSUF_SkipCallback = true
     slider:SetValue(value)
     slider.MSUF_SkipCallback = nil
@@ -1996,18 +1996,18 @@ MSUF_SetLabeledSliderValue = function(slider, value)
         end
         slider.editBox:SetText(formatted)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetLabeledSliderValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:1981:29"); end
 
 -- Enable/disable helper for UIDropDownMenu (with separate label fontstring)
-local function MSUF_SetDropDownEnabled(dropdown, labelFS, enabled)
-    if not dropdown then return end
+local function MSUF_SetDropDownEnabled(dropdown, labelFS, enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SetDropDownEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2002:6");
+    if not dropdown then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetDropDownEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2002:6"); return end
 
     local name = (dropdown.GetName and dropdown:GetName())
     local ddText = (name and _G and _G[name .. "Text"]) or dropdown.Text
 
-    local function SetFSColor(fs, r, g, b)
+    local function SetFSColor(fs, r, g, b) Perfy_Trace(Perfy_GetTime(), "Enter", "SetFSColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2008:10");
         if fs and fs.SetTextColor then fs:SetTextColor(r, g, b) end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SetFSColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2008:10"); end
 
     if enabled then
         if UIDropDownMenu_EnableDropDown then UIDropDownMenu_EnableDropDown(dropdown) end
@@ -2020,15 +2020,15 @@ local function MSUF_SetDropDownEnabled(dropdown, labelFS, enabled)
         SetFSColor(labelFS, 0.35, 0.35, 0.35)
         SetFSColor(ddText, 0.55, 0.55, 0.55)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetDropDownEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2002:6"); end
 
 -- Enable/disable helper for CheckButtons (with optional label fontstring)
-local function MSUF_SetCheckboxEnabled(cb, enabled)
-    if not cb then return end
+local function MSUF_SetCheckboxEnabled(cb, enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SetCheckboxEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2026:6");
+    if not cb then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetCheckboxEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2026:6"); return end
     local label = cb.Text or cb.text
-    local function SetFSColor(fs, r, g, b)
+    local function SetFSColor(fs, r, g, b) Perfy_Trace(Perfy_GetTime(), "Enter", "SetFSColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2029:10");
         if fs and fs.SetTextColor then fs:SetTextColor(r, g, b) end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SetFSColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2029:10"); end
     if enabled then
         if cb.SetEnabled then cb:SetEnabled(true) end
         cb:SetAlpha(1)
@@ -2038,20 +2038,20 @@ local function MSUF_SetCheckboxEnabled(cb, enabled)
         cb:SetAlpha(0.55)
         SetFSColor(label, 0.55, 0.55, 0.55)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetCheckboxEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2026:6"); end
 
 if _G and not _G.MSUF_Options_Apply then
-    local function Call(fn, ...) if type(fn) == "function" then return fn(...) end end
-    local function CastbarVisuals() Call(_G.MSUF_EnsureCastbars); Call(_G.MSUF_UpdateCastbarVisuals) end
+    local function Call(fn, ...) Perfy_Trace(Perfy_GetTime(), "Enter", "Call file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2044:10"); if type(fn) == "function" then return Perfy_Trace_Passthrough("Leave", "Call file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2044:10", fn(...)) end Perfy_Trace(Perfy_GetTime(), "Leave", "Call file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2044:10"); end
+    local function CastbarVisuals() Perfy_Trace(Perfy_GetTime(), "Enter", "CastbarVisuals file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2045:10"); Call(_G.MSUF_EnsureCastbars); Call(_G.MSUF_UpdateCastbarVisuals) Perfy_Trace(Perfy_GetTime(), "Leave", "CastbarVisuals file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2045:10"); end
     local A = {
         castbars = CastbarVisuals, castbarVisuals = CastbarVisuals,
-        castbarFillDirection = function() Call(_G.MSUF_UpdateCastbarFillDirection) end,
-        castbarTicks = function() if type(_G.MSUF_UpdateCastbarChannelTicks) == "function" then _G.MSUF_UpdateCastbarChannelTicks() else CastbarVisuals() end end,
-        castbarGlow = function() if type(_G.MSUF_UpdateCastbarGlowEffect) == "function" then _G.MSUF_UpdateCastbarGlowEffect() else CastbarVisuals() end end,
-        castbarLatency = function() if type(_G.MSUF_UpdateCastbarLatencyIndicator) == "function" then _G.MSUF_UpdateCastbarLatencyIndicator() else CastbarVisuals() end end,
+        castbarFillDirection = function() Perfy_Trace(Perfy_GetTime(), "Enter", "A.castbarFillDirection file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2048:31"); Call(_G.MSUF_UpdateCastbarFillDirection) Perfy_Trace(Perfy_GetTime(), "Leave", "A.castbarFillDirection file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2048:31"); end,
+        castbarTicks = function() Perfy_Trace(Perfy_GetTime(), "Enter", "A.castbarTicks file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2049:23"); if type(_G.MSUF_UpdateCastbarChannelTicks) == "function" then _G.MSUF_UpdateCastbarChannelTicks() else CastbarVisuals() end Perfy_Trace(Perfy_GetTime(), "Leave", "A.castbarTicks file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2049:23"); end,
+        castbarGlow = function() Perfy_Trace(Perfy_GetTime(), "Enter", "A.castbarGlow file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2050:22"); if type(_G.MSUF_UpdateCastbarGlowEffect) == "function" then _G.MSUF_UpdateCastbarGlowEffect() else CastbarVisuals() end Perfy_Trace(Perfy_GetTime(), "Leave", "A.castbarGlow file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2050:22"); end,
+        castbarLatency = function() Perfy_Trace(Perfy_GetTime(), "Enter", "A.castbarLatency file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2051:25"); if type(_G.MSUF_UpdateCastbarLatencyIndicator) == "function" then _G.MSUF_UpdateCastbarLatencyIndicator() else CastbarVisuals() end Perfy_Trace(Perfy_GetTime(), "Leave", "A.castbarLatency file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2051:25"); end,
     }
-    A.all = function() if type(ApplyAllSettings) == "function" then ApplyAllSettings() elseif type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then _G.MSUF_ApplyAllSettings_Immediate() end end
-    function _G.MSUF_Options_Apply(kind, ...) return Call(A[kind] or A.all, ...) end
+    A.all = function() Perfy_Trace(Perfy_GetTime(), "Enter", "A.all file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2053:12"); if type(ApplyAllSettings) == "function" then ApplyAllSettings() elseif type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then _G.MSUF_ApplyAllSettings_Immediate() end Perfy_Trace(Perfy_GetTime(), "Leave", "A.all file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2053:12"); end
+    function _G.MSUF_Options_Apply(kind, ...) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_Options_Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2054:4"); return Perfy_Trace_Passthrough("Leave", "_G.MSUF_Options_Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2054:4", Call(A[kind] or A.all, ...)) end
     if ns and not ns.MSUF_Options_Apply then ns.MSUF_Options_Apply = _G.MSUF_Options_Apply end
 end
 
@@ -2059,28 +2059,28 @@ end
 -- Behavior-neutral: keeps DB keys and apply/sync callbacks identical.
 if _G and not _G.MSUF_Options_BindDBBoolCheck then
 -- Nested DB path setter (supports "a.b.c" paths). Kept local to avoid global clutter.
-local function _MSUF_DBSetPath(path, value)
-    if type(MSUF_DB) ~= "table" or type(path) ~= "string" then return end
+local function _MSUF_DBSetPath(path, value) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_DBSetPath file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2062:6");
+    if type(MSUF_DB) ~= "table" or type(path) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_DBSetPath file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2062:6"); return end
     local t = MSUF_DB
     local parts = {}
     for token in string.gmatch(path, "[^%.]+") do
         parts[#parts + 1] = token
     end
-    if #parts == 0 then return end
+    if #parts == 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_DBSetPath file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2062:6"); return end
     for i = 1, #parts - 1 do
         local k = parts[i]
         if type(t[k]) ~= "table" then t[k] = {} end
         t = t[k]
     end
     t[parts[#parts]] = value
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_DBSetPath file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2062:6"); end
 
-    function _G.MSUF_Options_BindDBBoolCheck(cb, dbPath, applyFn, syncFn, onShow)
-        if not cb or type(dbPath) ~= "string" then return end
+    function _G.MSUF_Options_BindDBBoolCheck(cb, dbPath, applyFn, syncFn, onShow) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_Options_BindDBBoolCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2078:4");
+        if not cb or type(dbPath) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_Options_BindDBBoolCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2078:4"); return end
 
-        cb:SetScript("OnClick", function(self)
+        cb:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2081:32");
             if type(EnsureDB) == "function" then EnsureDB() end
-            if type(MSUF_DB) ~= "table" then return end
+            if type(MSUF_DB) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2081:32"); return end
 
             local v = self:GetChecked() and true or false
 
@@ -2088,41 +2088,41 @@ end
             if type(applyFn) == "function" then applyFn(v, self)
             elseif type(applyFn) == "string" and _G and type(_G.MSUF_Options_Apply) == "function" then _G.MSUF_Options_Apply(applyFn, v, self) end
             if type(syncFn)  == "function" then syncFn() end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2081:32"); end)
 
         if onShow and cb.HookScript then
-            cb:HookScript("OnShow", function()
+            cb:HookScript("OnShow", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2094:36");
                 if type(syncFn) == "function" then syncFn() end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2094:36"); end)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_Options_BindDBBoolCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2078:4"); end
 end
 
 -- Step 5: backwards-compatible wrapper used by older call sites (writes to MSUF_DB.general.<dbKey>)
 if _G and not _G.MSUF_Options_BindGeneralBoolCheck then
-    function _G.MSUF_Options_BindGeneralBoolCheck(cb, dbKey, applyFn, syncFn, onShow)
-        if not cb or type(dbKey) ~= "string" then return end
+    function _G.MSUF_Options_BindGeneralBoolCheck(cb, dbKey, applyFn, syncFn, onShow) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_Options_BindGeneralBoolCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2103:4");
+        if not cb or type(dbKey) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_Options_BindGeneralBoolCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2103:4"); return end
         if _G and _G.MSUF_Options_BindDBBoolCheck then
-            return _G.MSUF_Options_BindDBBoolCheck(cb, "general." .. dbKey, applyFn, syncFn, onShow)
+            return Perfy_Trace_Passthrough("Leave", "_G.MSUF_Options_BindGeneralBoolCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2103:4", _G.MSUF_Options_BindDBBoolCheck(cb, "general." .. dbKey, applyFn, syncFn, onShow))
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_Options_BindGeneralBoolCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2103:4"); end
 end
 
 -- Step 18: unify number sliders (General DB) to reduce per-slider boilerplate.
 -- Uses CreateLabeledSlider's `slider.onValueChanged` hook (not SetScript) so it stays compatible.
 if _G and not _G.MSUF_Options_BindGeneralNumberSlider then
-    local function _MSUF_ClampNum(v, minV, maxV, asInt, def)
+    local function _MSUF_ClampNum(v, minV, maxV, asInt, def) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_ClampNum file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2114:10");
         v = tonumber(v)
         if v == nil then v = tonumber(def) end
         if v == nil then v = 0 end
         if asInt then v = math.floor(v + 0.5) end
         if minV ~= nil and v < minV then v = minV end
         if maxV ~= nil and v > maxV then v = maxV end
-        return v
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ClampNum file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2114:10"); return v
     end
 
-    function _G.MSUF_Options_BindGeneralNumberSlider(slider, dbKey, opts)
-        if not slider or type(dbKey) ~= "string" then return end
+    function _G.MSUF_Options_BindGeneralNumberSlider(slider, dbKey, opts) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_Options_BindGeneralNumberSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2124:4");
+        if not slider or type(dbKey) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_Options_BindGeneralNumberSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2124:4"); return end
         opts = opts or {}
         local def  = opts.def
         local minV = opts.min
@@ -2131,18 +2131,18 @@ if _G and not _G.MSUF_Options_BindGeneralNumberSlider then
         local applyFn = opts.apply
         local syncFn  = opts.sync
 
-        local function Apply(v, self)
+        local function Apply(v, self) Perfy_Trace(Perfy_GetTime(), "Enter", "Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2134:14");
             if type(applyFn) == "function" then
                 applyFn(v, self)
             elseif type(applyFn) == "string" and _G and type(_G.MSUF_Options_Apply) == "function" then
                 _G.MSUF_Options_Apply(applyFn, v, self)
             end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2134:14"); end
 
-        slider.onValueChanged = function(self, value)
-            if self and self.MSUF_SkipCallback then return end
+        slider.onValueChanged = function(self, value) Perfy_Trace(Perfy_GetTime(), "Enter", "slider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2142:32");
+            if self and self.MSUF_SkipCallback then Perfy_Trace(Perfy_GetTime(), "Leave", "slider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2142:32"); return end
             if type(EnsureDB) == "function" then EnsureDB() end
-            if type(MSUF_DB) ~= "table" then return end
+            if type(MSUF_DB) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "slider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2142:32"); return end
             MSUF_DB.general = MSUF_DB.general or {}
             local g = MSUF_DB.general
 
@@ -2156,11 +2156,11 @@ if _G and not _G.MSUF_Options_BindGeneralNumberSlider then
 
             Apply(v, self)
             if type(syncFn) == "function" then syncFn() end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "slider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2142:32"); end
 
         -- Initial clamp + sync to UI (no apply)
         if type(EnsureDB) == "function" then EnsureDB() end
-        if type(MSUF_DB) ~= "table" then return end
+        if type(MSUF_DB) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_Options_BindGeneralNumberSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2124:4"); return end
         MSUF_DB.general = MSUF_DB.general or {}
         local g = MSUF_DB.general
         local v0 = _MSUF_ClampNum(g[dbKey], minV, maxV, asInt, def)
@@ -2172,7 +2172,7 @@ if _G and not _G.MSUF_Options_BindGeneralNumberSlider then
             slider:SetValue(v0)
             slider.MSUF_SkipCallback = nil
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_Options_BindGeneralNumberSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2124:4"); end
 end
 
 -- Export key UI helpers for split option modules
@@ -2191,8 +2191,8 @@ end
 
     Idempotent and intentionally behavior-neutral.
 ]]
-local function MSUF_ExportSplitHelpers()
-    if not ns then return end
+local function MSUF_ExportSplitHelpers() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ExportSplitHelpers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2194:6");
+    if not ns then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ExportSplitHelpers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2194:6"); return end
 
     -- Core helpers commonly needed by split modules.
     if not ns.MSUF_GetLSM and type(MSUF_GetLSM) == "function" then ns.MSUF_GetLSM = MSUF_GetLSM end
@@ -2208,7 +2208,7 @@ local function MSUF_ExportSplitHelpers()
     -- Slider helpers
     if not ns.MSUF_CreateLabeledSlider and type(CreateLabeledSlider) == "function" then ns.MSUF_CreateLabeledSlider = CreateLabeledSlider end
     if not ns.MSUF_SetLabeledSliderValue and type(MSUF_SetLabeledSliderValue) == "function" then ns.MSUF_SetLabeledSliderValue = MSUF_SetLabeledSliderValue end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ExportSplitHelpers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2194:6"); end
 
 MSUF_ExportSplitHelpers()
 
@@ -2218,12 +2218,12 @@ MSUF_ExportSplitHelpers()
 --  - Keep names on `ns.*` and `_G.*`
 --  - Do NOT change behavior; only forward to the new implementations.
 -- ---------------------------------------------------------------------------
-local function MSUF_InstallCompatWrappers()
-    if not _G then return end
+local function MSUF_InstallCompatWrappers() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_InstallCompatWrappers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2221:6");
+    if not _G then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_InstallCompatWrappers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2221:6"); return end
 
     -- Also offer a non-prefixed alias for legacy call sites.
     if type(_G.CreateLabeledSlider) ~= "function" and type(CreateLabeledSlider) == "function" then
-        _G.CreateLabeledSlider = function(...) return CreateLabeledSlider(...) end
+        _G.CreateLabeledSlider = function(...) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.CreateLabeledSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2226:33"); return Perfy_Trace_Passthrough("Leave", "_G.CreateLabeledSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2226:33", CreateLabeledSlider(...)) end
     end
 
     -- Some older modules probe ns.CreateLabeledSlider instead of ns.MSUF_CreateLabeledSlider.
@@ -2232,10 +2232,10 @@ local function MSUF_InstallCompatWrappers()
     end
 
     -- Export helpers as globals (only if absent) to avoid collisions with other addons.
-    local function ExportFn(name, fn)
-        if type(fn) ~= "function" then return end
+    local function ExportFn(name, fn) Perfy_Trace(Perfy_GetTime(), "Enter", "ExportFn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2235:10");
+        if type(fn) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "ExportFn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2235:10"); return end
         if type(_G[name]) ~= "function" then _G[name] = fn end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ExportFn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2235:10"); end
 
     ExportFn("MSUF_GetLSM", (ns and ns.MSUF_GetLSM) or MSUF_GetLSM)
     ExportFn("MSUF_EnsureCastbars", (ns and ns.MSUF_EnsureCastbars) or MSUF_EnsureCastbars)
@@ -2249,14 +2249,14 @@ local function MSUF_InstallCompatWrappers()
 
     -- Keep the known-good bar-texture exports if present (v101 baseline).
     -- We don't overwrite them here; Step 5 and earlier already installed them.
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_InstallCompatWrappers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2221:6"); end
 
 MSUF_InstallCompatWrappers()
 
 -- Compact +/- stepper with an input box (used for text offse with an input box (used for text offsets).
 local MSUF_AxisStepperCounter = 0
 
-function CreateAxisStepper(name, shortLabel, parent, x, y, minVal, maxVal, step)
+function CreateAxisStepper(name, shortLabel, parent, x, y, minVal, maxVal, step) Perfy_Trace(Perfy_GetTime(), "Enter", "CreateAxisStepper file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2259:0");
     if not name then
         MSUF_AxisStepperCounter = (MSUF_AxisStepperCounter or 0) + 1
         name = "MSUF_AxisStepper" .. MSUF_AxisStepperCounter
@@ -2295,15 +2295,15 @@ function CreateAxisStepper(name, shortLabel, parent, x, y, minVal, maxVal, step)
     MSUF_StyleSmallButton(plus, true)
     f.plusButton = plus
 
-    local function Clamp(v)
+    local function Clamp(v) Perfy_Trace(Perfy_GetTime(), "Enter", "Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2298:10");
         v = tonumber(v) or 0
         if v < f.minVal then v = f.minVal end
         if v > f.maxVal then v = f.maxVal end
         if f.step and f.step >= 1 then v = math.floor(v + 0.5) end
-        return v
+        Perfy_Trace(Perfy_GetTime(), "Leave", "Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2298:10"); return v
     end
 
-    function f:SetValue(v, fromUser)
+    function f:SetValue(v, fromUser) Perfy_Trace(Perfy_GetTime(), "Enter", "f:SetValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2306:4");
         v = Clamp(v)
         f.value = v
 
@@ -2313,57 +2313,57 @@ function CreateAxisStepper(name, shortLabel, parent, x, y, minVal, maxVal, step)
         end
 
         if fromUser and f.onValueChanged then f.onValueChanged(f, v) end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "f:SetValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2306:4"); end
+
+    function f:GetValue() Perfy_Trace(Perfy_GetTime(), "Enter", "f:GetValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2318:4");
+        return Perfy_Trace_Passthrough("Leave", "f:GetValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2318:4", f.value or 0)
     end
 
-    function f:GetValue()
-        return f.value or 0
-    end
-
-    local function ApplyEdit()
+    local function ApplyEdit() Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2322:10");
         local v = Clamp(eb:GetText())
         f:SetValue(v, true)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyEdit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2322:10"); end
 
-    eb:SetScript("OnEnterPressed", function(self)
+    eb:SetScript("OnEnterPressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2327:35");
         ApplyEdit()
         self:ClearFocus()
-    end)
-    eb:SetScript("OnEditFocusLost", function()
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2327:35"); end)
+    eb:SetScript("OnEditFocusLost", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2331:36");
         ApplyEdit()
-    end)
-    eb:SetScript("OnEscapePressed", function(self)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2331:36"); end)
+    eb:SetScript("OnEscapePressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2334:36");
         self:SetText(tostring(f.value or 0))
         self:ClearFocus()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2334:36"); end)
 
-    minus:SetScript("OnClick", function()
+    minus:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2339:31");
         f:SetValue((f.value or 0) - (f.step or 1), true)
-    end)
-    plus:SetScript("OnClick", function()
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2339:31"); end)
+    plus:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2342:30");
         f:SetValue((f.value or 0) + (f.step or 1), true)
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2342:30"); end)
 
     -- init
     f:SetValue(0, false)
 
-    f:SetScript("OnShow", function()
+    f:SetScript("OnShow", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2349:26");
         if f.editBox and not f.editBox:HasFocus() then f.editBox:SetText(tostring(f.value or 0)) end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2349:26"); end)
 
-    return f
+    Perfy_Trace(Perfy_GetTime(), "Leave", "CreateAxisStepper file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2259:0"); return f
 end
 
-local function MSUF_StyleToggleText(cb)
-        if not cb or cb.__msufToggleTextStyled then return end
+local function MSUF_StyleToggleText(cb) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_StyleToggleText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2356:6");
+        if not cb or cb.__msufToggleTextStyled then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleToggleText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2356:6"); return end
         cb.__msufToggleTextStyled = true
 
         local fs = cb.text or cb.Text
         if (not fs) and cb.GetName and cb:GetName() and _G then fs = _G[cb:GetName() .. 'Text'] end
-        if not (fs and fs.SetTextColor) then return end
+        if not (fs and fs.SetTextColor) then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleToggleText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2356:6"); return end
 
         cb.__msufToggleFS = fs
 
-        local function Update()
+        local function Update() Perfy_Trace(Perfy_GetTime(), "Enter", "Update file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2366:14");
             if cb.IsEnabled and (not cb:IsEnabled()) then
                 fs:SetTextColor(0.35, 0.35, 0.35)
             else
@@ -2373,15 +2373,15 @@ local function MSUF_StyleToggleText(cb)
                     fs:SetTextColor(0.55, 0.55, 0.55)
                 end
             end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "Update file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2366:14"); end
 
         cb.__msufToggleUpdate = Update
         cb:HookScript('OnShow', Update)
         cb:HookScript('OnClick', Update)
-        pcall(hooksecurefunc, cb, 'SetChecked', function() Update() end)
-        pcall(hooksecurefunc, cb, 'SetEnabled', function() Update() end)
+        pcall(hooksecurefunc, cb, 'SetChecked', function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2381:48"); Update() Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2381:48"); end)
+        pcall(hooksecurefunc, cb, 'SetEnabled', function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2382:48"); Update() Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2382:48"); end)
         Update()
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleToggleText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2356:6"); end
 
     -- ---------------------------------------------------------------------
     -- Checkmark skin: replace Blizzard yellow tick with MSUF tick textures
@@ -2391,13 +2391,13 @@ local function MSUF_StyleToggleText(cb)
     local MSUF_CHECK_TEX_THIN = 'Interface/AddOns/' .. _msufAddonName .. '/Media/msuf_check_tick_thin.tga'
     local MSUF_CHECK_TEX_BOLD = 'Interface/AddOns/' .. _msufAddonName .. '/Media/msuf_check_tick_bold.tga'
 
-    local function MSUF_StyleCheckmark(cb)
-        if not cb or cb.__msufCheckmarkStyled then return end
+    local function MSUF_StyleCheckmark(cb) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_StyleCheckmark file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2394:10");
+        if not cb or cb.__msufCheckmarkStyled then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleCheckmark file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2394:10"); return end
         cb.__msufCheckmarkStyled = true
 
         local check = (cb.GetCheckedTexture and cb:GetCheckedTexture())
         if (not check) and cb.GetName and cb:GetName() and _G then check = _G[cb:GetName() .. 'Check'] end
-        if not (check and check.SetTexture) then return end
+        if not (check and check.SetTexture) then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleCheckmark file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2394:10"); return end
 
         local h = (cb.GetHeight and cb:GetHeight()) or 24
         local tex = (h >= 24) and MSUF_CHECK_TEX_BOLD or MSUF_CHECK_TEX_THIN
@@ -2420,8 +2420,8 @@ local function MSUF_StyleToggleText(cb)
         -- Some templates may call SetCheckedTexture later; lock our style.
         if cb.HookScript and not cb.__msufCheckmarkHooked then
             cb.__msufCheckmarkHooked = true
-            local function Reapply()
-                if cb.__msufCheckmarkReapplying then return end
+            local function Reapply() Perfy_Trace(Perfy_GetTime(), "Enter", "Reapply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2423:18");
+                if cb.__msufCheckmarkReapplying then Perfy_Trace(Perfy_GetTime(), "Leave", "Reapply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2423:18"); return end
                 cb.__msufCheckmarkReapplying = true
                 local c = (cb.GetCheckedTexture and cb:GetCheckedTexture()) or check
                 if c and c.SetTexture then
@@ -2440,13 +2440,13 @@ local function MSUF_StyleToggleText(cb)
                     end
                 end
                 cb.__msufCheckmarkReapplying = nil
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "Reapply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2423:18"); end
             cb:HookScript('OnShow', Reapply)
             cb:HookScript('OnSizeChanged', Reapply)
         end
-    end
-    local function MSUF_StyleAllToggles(root)
-        if not root or not root.GetChildren then return end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleCheckmark file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2394:10"); end
+    local function MSUF_StyleAllToggles(root) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_StyleAllToggles file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2448:10");
+        if not root or not root.GetChildren then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleAllToggles file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2448:10"); return end
         local children = { root:GetChildren() }
         for i = 1, #children do
             local c = children[i]
@@ -2456,9 +2456,9 @@ local function MSUF_StyleToggleText(cb)
             end
             if c and c.GetChildren then MSUF_StyleAllToggles(c) end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_StyleAllToggles file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2448:10"); end
 
-    local function CreateLabeledCheckButton(name, label, parent, x, y)
+    local function CreateLabeledCheckButton(name, label, parent, x, y) Perfy_Trace(Perfy_GetTime(), "Enter", "CreateLabeledCheckButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2461:10");
         local cb = CreateFrame('CheckButton', name, parent, 'UICheckButtonTemplate')
 
         local extraY = 0
@@ -2469,7 +2469,7 @@ local function MSUF_StyleToggleText(cb)
         if cb.text then cb.text:SetText(label) end
         MSUF_StyleToggleText(cb)
         MSUF_StyleCheckmark(cb)
-        return cb
+        Perfy_Trace(Perfy_GetTime(), "Leave", "CreateLabeledCheckButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2461:10"); return cb
     end
 
     -- Player options UI is implemented in Options\MSUF_Options_Player.lua (refactored out of Options Core).
@@ -2492,7 +2492,7 @@ local function MSUF_StyleToggleText(cb)
         text = "Reset all font size overrides?\n\nThis clears per-unit overrides for Name/Health/Power AND per-castbar overrides for Cast Name/Time so everything inherits the global defaults.",
             button1 = YES,
         button2 = NO,
-        OnAccept = function(self, data)
+        OnAccept = function(self, data) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2495:19");
             if data and data.name and data.panel then
                 MSUF_ResetProfile(data.name)
 
@@ -2501,7 +2501,7 @@ local function MSUF_StyleToggleText(cb)
                     data.panel:UpdateProfileUI(data.name)
                 end
             end
-        end,
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2495:19"); end,
         timeout = 0,
         whileDead = true,
         hideOnEscape = true,
@@ -2512,12 +2512,12 @@ local function MSUF_StyleToggleText(cb)
         text = "Are you sure you want to delete '%s'?",
         button1 = YES,
         button2 = NO,
-        OnAccept = function(self, data)
+        OnAccept = function(self, data) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2515:19");
             if data and data.name and data.panel then
                 MSUF_DeleteProfile(data.name)
                 data.panel:UpdateProfileUI(MSUF_ActiveProfile)
             end
-        end,
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2515:19"); end,
         timeout = 0,
         whileDead = true,
         hideOnEscape = true,
@@ -2538,14 +2538,14 @@ local headerRow, _btns = MSUF_BuildButtonRowList(profileGroup, profileTitle, 8, 
         w    = 140,
         h    = 24,
         y    = 10,
-        onClick = function()
+        onClick = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2541:18");
             if not MSUF_ActiveProfile then
                 print("|cffff0000MSUF:|r No active profile selected to reset.")
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2541:18"); return
             end
             local name = MSUF_ActiveProfile
             StaticPopup_Show("MSUF_CONFIRM_RESET_PROFILE", name, nil, { name = name, panel = panel })
-        end,
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2541:18"); end,
     },
     {
         id   = "delete",
@@ -2586,7 +2586,7 @@ helpText:SetText("Profiles are global. Each character selects one active profile
 
     local specRows = {}
 
-    local function MSUF_ProfilesUI_GetSpecMeta()
+    local function MSUF_ProfilesUI_GetSpecMeta() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ProfilesUI_GetSpecMeta file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2589:10");
         local n = (type(_G.GetNumSpecializations) == "function") and _G.GetNumSpecializations() or 0
         local out = {}
         for i = 1, n do
@@ -2595,20 +2595,20 @@ helpText:SetText("Profiles are global. Each character selects one active profile
                 if type(specID) == "number" and type(specName) == "string" then out[#out + 1] = { id = specID, name = specName, icon = specIcon } end
             end
         end
-        return out
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ProfilesUI_GetSpecMeta file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2589:10"); return out
     end
 
-    local function MSUF_ProfilesUI_ProfileExists(profileName)
-        if type(profileName) ~= "string" or profileName == "" then return false end
+    local function MSUF_ProfilesUI_ProfileExists(profileName) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ProfilesUI_ProfileExists file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2601:10");
+        if type(profileName) ~= "string" or profileName == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ProfilesUI_ProfileExists file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2601:10"); return false end
         local list = (type(_G.MSUF_GetAllProfiles) == "function") and _G.MSUF_GetAllProfiles() or {}
         for _, n in ipairs(list) do
-            if n == profileName then return true end
+            if n == profileName then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ProfilesUI_ProfileExists file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2601:10"); return true end
         end
-        return false
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ProfilesUI_ProfileExists file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2601:10"); return false
     end
 
-    local function MSUF_ProfilesUI_EnsureSpecRows()
-        if #specRows > 0 then return end
+    local function MSUF_ProfilesUI_EnsureSpecRows() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ProfilesUI_EnsureSpecRows file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2610:10");
+        if #specRows > 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ProfilesUI_EnsureSpecRows file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2610:10"); return end
         local meta = MSUF_ProfilesUI_GetSpecMeta()
         local anchor = specAutoCB
 
@@ -2626,24 +2626,24 @@ helpText:SetText("Profiles are global. Each character selects one active profile
 
             row.drop._msufSpecID = s.id
 
-            UIDropDownMenu_Initialize(row.drop, function(self, level)
-                if not level then return end
+            UIDropDownMenu_Initialize(row.drop, function(self, level) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2629:48");
+                if not level then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2629:48"); return end
 
-                local function Add(text, value)
+                local function Add(text, value) Perfy_Trace(Perfy_GetTime(), "Enter", "Add file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2632:22");
                     local info = UIDropDownMenu_CreateInfo()
                     info.text = text
                     info.value = value
-                    info.func = function(btn)
+                    info.func = function(btn) Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2636:32");
                         UIDropDownMenu_SetSelectedValue(self, btn.value)
                         UIDropDownMenu_SetText(self, btn.value)
                         if type(_G.MSUF_SetSpecProfile) == "function" then _G.MSUF_SetSpecProfile(self._msufSpecID, (btn.value ~= "None") and btn.value or nil) end
                         CloseDropDownMenus()
-                    end
+                    Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2636:32"); end
 
                     local cur = (type(_G.MSUF_GetSpecProfile) == "function") and _G.MSUF_GetSpecProfile(self._msufSpecID) or nil
                     info.checked = (cur == value) or (cur == nil and value == "None")
                     UIDropDownMenu_AddButton(info, level)
-                end
+                Perfy_Trace(Perfy_GetTime(), "Leave", "Add file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2632:22"); end
 
                 Add("None", "None")
 
@@ -2651,7 +2651,7 @@ helpText:SetText("Profiles are global. Each character selects one active profile
                 for _, name in ipairs(profiles) do
                     Add(name, name)
                 end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2629:48"); end)
 
             specRows[#specRows + 1] = row
             anchor = row.label
@@ -2659,9 +2659,9 @@ helpText:SetText("Profiles are global. Each character selects one active profile
 
         -- Re-anchor the section below to the last spec row (or checkbox if no specs).
         profileGroup._msufProfilesAfterSpecAnchor = anchor
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ProfilesUI_EnsureSpecRows file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2610:10"); end
 
-    local function MSUF_ProfilesUI_UpdateSpecUI()
+    local function MSUF_ProfilesUI_UpdateSpecUI() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ProfilesUI_UpdateSpecUI file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2664:10");
         if type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" then
             specAutoCB:SetChecked(_G.MSUF_IsSpecAutoSwitchEnabled() and true or false)
         else
@@ -2688,13 +2688,13 @@ helpText:SetText("Profiles are global. Each character selects one active profile
                 UIDropDownMenu_SetText(row.drop, "None")
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ProfilesUI_UpdateSpecUI file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2664:10"); end
 
-    specAutoCB:SetScript("OnClick", function(self)
+    specAutoCB:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2693:36");
         local enabled = self:GetChecked() and true or false
         if type(_G.MSUF_SetSpecAutoSwitchEnabled) == "function" then _G.MSUF_SetSpecAutoSwitchEnabled(enabled) end
         MSUF_ProfilesUI_UpdateSpecUI()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2693:36"); end)
 
     -- Expose so profile CRUD / LoadFromDB can refresh these rows.
     panel._msufUpdateSpecProfileUI = MSUF_ProfilesUI_UpdateSpecUI
@@ -2719,30 +2719,30 @@ helpText:SetText("Profiles are global. Each character selects one active profile
     MSUF_ExpandDropdownClickArea(profileDrop)
     profileDrop:SetPoint("TOPLEFT", existingLabel, "BOTTOMLEFT", -16, -4)
 
-    local function MSUF_ProfileDropdown_Initialize(self, level)
-        if not level then return end
+    local function MSUF_ProfileDropdown_Initialize(self, level) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ProfileDropdown_Initialize file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2722:10");
+        if not level then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ProfileDropdown_Initialize file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2722:10"); return end
         local profiles = MSUF_GetAllProfiles()
         for _, name in ipairs(profiles) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = name
             info.value = name
-            info.func = function(btn)
+            info.func = function(btn) Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2729:24");
                 UIDropDownMenu_SetSelectedValue(self, btn.value)
                 UIDropDownMenu_SetText(self, btn.value)
                 MSUF_SwitchProfile(btn.value)
                 currentProfileLabel:SetText("Current profile: " .. btn.value)
                 if panel and panel._msufUpdateSpecProfileUI then panel._msufUpdateSpecProfileUI() end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2729:24"); end
             info.checked = (name == MSUF_ActiveProfile)
             UIDropDownMenu_AddButton(info, level)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ProfileDropdown_Initialize file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2722:10"); end
 
     UIDropDownMenu_Initialize(profileDrop, MSUF_ProfileDropdown_Initialize)
     UIDropDownMenu_SetWidth(profileDrop, 180)
     UIDropDownMenu_SetText(profileDrop, MSUF_ActiveProfile or "Default")
 
-    function panel:UpdateProfileUI(currentName)
+    function panel:UpdateProfileUI(currentName) Perfy_Trace(Perfy_GetTime(), "Enter", "panel:UpdateProfileUI file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2745:4");
         name = currentName or MSUF_ActiveProfile or "Default"
         currentProfileLabel:SetText("Current profile: " .. name)
         UIDropDownMenu_SetSelectedValue(profileDrop, name)
@@ -2751,9 +2751,9 @@ helpText:SetText("Profiles are global. Each character selects one active profile
             self._msufUpdateSpecProfileUI()
         end
         if deleteBtn and deleteBtn.SetEnabled then deleteBtn:SetEnabled(name ~= "Default") end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "panel:UpdateProfileUI file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2745:4"); end
 
-    newEditBox:SetScript("OnEnterPressed", function(self)
+    newEditBox:SetScript("OnEnterPressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2756:43");
         self:ClearFocus()
         name = (self:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
         if name ~= "" then
@@ -2762,16 +2762,16 @@ helpText:SetText("Profiles are global. Each character selects one active profile
             self:SetText("")
             panel:UpdateProfileUI(name)
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2756:43"); end)
 
-deleteBtn:SetScript("OnClick", function()
-    if not MSUF_ActiveProfile then return end
+deleteBtn:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2767:31");
+    if not MSUF_ActiveProfile then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2767:31"); return end
 
     name = MSUF_ActiveProfile
 
     if name == "Default" then
         print("|cffff0000MSUF:|r Das 'Default'-Thanks for testing and reporting bugs no you can not delete Default'.")
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2767:31"); return
     end
 
     StaticPopup_Show(
@@ -2783,7 +2783,7 @@ deleteBtn:SetScript("OnClick", function()
             panel = panel,  -- geht an data.panel -> für UpdateProfileUI
         }
     )
-end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2767:31"); end)
 
     profileLine = profileGroup:CreateTexture(nil, "ARTWORK")
     profileLine:SetColorTexture(1, 1, 1, 0.18)
@@ -2794,7 +2794,7 @@ end)
     importTitle:SetPoint("TOPLEFT", profileLine, "BOTTOMLEFT", 0, -10)
     importTitle:SetText("Profile export / import")
 
-    local function MSUF_CreateSimpleDialog(frameName, titleText, w, h)
+    local function MSUF_CreateSimpleDialog(frameName, titleText, w, h) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_CreateSimpleDialog file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2797:10");
         local f = CreateFrame("Frame", frameName, UIParent, "BackdropTemplate")
         f:SetFrameStrata("DIALOG")
         f:SetClampedToScreen(true)
@@ -2814,15 +2814,15 @@ end)
 
         local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
         close:SetPoint("TOPRIGHT", -2, -2)
-        close:SetScript("OnClick", function() f:Hide() end)
+        close:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2817:35"); f:Hide() Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2817:35"); end)
 
         f:Hide()
-        return f, title
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CreateSimpleDialog file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2797:10"); return f, title
     end
 
     -- Ctrl+C copy popup
     local copyPopup, copyTitle, copyEdit
-    local function MSUF_ShowCopyPopup(str)
+    local function MSUF_ShowCopyPopup(str) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ShowCopyPopup file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2825:10");
         if not copyPopup then
             copyPopup, copyTitle = MSUF_CreateSimpleDialog("MSUF_ProfileCopyPopup", "Ctrl+C to copy", 560, 96)
 
@@ -2830,33 +2830,33 @@ end)
             copyEdit:SetAutoFocus(true)
             copyEdit:SetSize(500, 22)
             copyEdit:SetPoint("TOP", copyPopup, "TOP", 0, -36)
-            copyEdit:SetScript("OnEscapePressed", function(self)
+            copyEdit:SetScript("OnEscapePressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2833:50");
                 self:ClearFocus()
                 copyPopup:Hide()
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2833:50"); end)
 
             local done = CreateFrame("Button", nil, copyPopup, "UIPanelButtonTemplate")
             done:SetSize(90, 22)
             done:SetPoint("BOTTOM", 0, 10)
             done:SetText("Done")
-            done:SetScript("OnClick", function() copyPopup:Hide() end)
+            done:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2842:38"); copyPopup:Hide() Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2842:38"); end)
 
             if MSUF_SkinMidnightActionButton then MSUF_SkinMidnightActionButton(done, { textR = 1, textG = 0.85, textB = 0.1 }) end
 
-            copyPopup:SetScript("OnShow", function()
+            copyPopup:SetScript("OnShow", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2846:42");
                 if copyEdit then copyEdit:HighlightText() end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2846:42"); end)
         end
 
         copyEdit:SetText(str or "")
         copyEdit:HighlightText()
         copyPopup:Show()
         copyEdit:SetFocus()
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowCopyPopup file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2825:10"); end
 
     -- Ctrl+V paste popup (new/legacy)
     local importPopup, importTitleFS, importEdit, importDoBtn
-    local function MSUF_ShowImportPopup(mode)
+    local function MSUF_ShowImportPopup(mode) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ShowImportPopup file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2859:10");
         mode = (mode == "legacy") and "legacy" or "new"
 
         if not importPopup then
@@ -2866,10 +2866,10 @@ end)
             importEdit:SetAutoFocus(true)
             importEdit:SetSize(500, 22)
             importEdit:SetPoint("TOP", importPopup, "TOP", 0, -36)
-            importEdit:SetScript("OnEscapePressed", function(self)
+            importEdit:SetScript("OnEscapePressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2869:52");
                 self:ClearFocus()
                 importPopup:Hide()
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2869:52"); end)
 
             importDoBtn = CreateFrame("Button", nil, importPopup, "UIPanelButtonTemplate")
             importDoBtn:SetSize(110, 22)
@@ -2880,14 +2880,14 @@ end)
             cancel:SetSize(110, 22)
             cancel:SetPoint("LEFT", importDoBtn, "RIGHT", 10, 0)
             cancel:SetText("Cancel")
-            cancel:SetScript("OnClick", function() importPopup:Hide() end)
+            cancel:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2883:40"); importPopup:Hide() Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2883:40"); end)
 
             if MSUF_SkinMidnightActionButton then
                 MSUF_SkinMidnightActionButton(importDoBtn, { textR = 1, textG = 0.85, textB = 0.1 })
                 MSUF_SkinMidnightActionButton(cancel,     { textR = 1, textG = 0.85, textB = 0.1 })
             end
 
-            local function runImport()
+            local function runImport() Perfy_Trace(Perfy_GetTime(), "Enter", "runImport file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2890:18");
                 local str = (importEdit and importEdit.GetText) and (importEdit:GetText() or "") or ""
 
                 local Importer
@@ -2899,7 +2899,7 @@ end)
 
                 if type(Importer) ~= "function" then
                     print("|cffff0000MSUF:|r Import failed: importer missing.")
-                    return
+                    Perfy_Trace(Perfy_GetTime(), "Leave", "runImport file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2890:18"); return
                 end
 
                 Importer(str)
@@ -2912,10 +2912,10 @@ end)
                 end
 
                 importPopup:Hide()
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "runImport file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2890:18"); end
 
             importDoBtn:SetScript("OnClick", runImport)
-            importEdit:SetScript("OnEnterPressed", function() runImport() end)
+            importEdit:SetScript("OnEnterPressed", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2918:51"); runImport() Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2918:51"); end)
         end
 
         importPopup._msufMode = mode
@@ -2930,7 +2930,7 @@ end)
         importEdit:SetText("")
         importPopup:Show()
         importEdit:SetFocus()
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowImportPopup file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2859:10"); end
 
     -- Buttons (clean panel, no giant box)
     importBtn = CreateFrame("Button", nil, profileGroup, "UIPanelButtonTemplate")
@@ -2954,17 +2954,17 @@ end)
         MSUF_SkinMidnightActionButton(legacyImportBtn, { textR = 1, textG = 0.85, textB = 0.1 })
     end
 
-    importBtn:SetScript("OnClick", function() MSUF_ShowImportPopup("new") end)
-    legacyImportBtn:SetScript("OnClick", function() MSUF_ShowImportPopup("legacy") end)
+    importBtn:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2957:35"); MSUF_ShowImportPopup("new") Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2957:35"); end)
+    legacyImportBtn:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2958:41"); MSUF_ShowImportPopup("legacy") Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2958:41"); end)
 
     -----------------------------------------------------------------
     -- Export picker (Platynator-style)
     -----------------------------------------------------------------
     local exportPopup
-    local function MSUF_ShowExportPicker()
+    local function MSUF_ShowExportPicker() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ShowExportPicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2964:10");
         if exportPopup and exportPopup:IsShown() then
             exportPopup:Hide()
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowExportPicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2964:10"); return
         end
 
         if not exportPopup then
@@ -2987,14 +2987,14 @@ end)
 
             local close = CreateFrame("Button", nil, exportPopup, "UIPanelCloseButton")
             close:SetPoint("TOPRIGHT", -2, -2)
-            close:SetScript("OnClick", function() exportPopup:Hide() end)
+            close:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2990:39"); exportPopup:Hide() Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2990:39"); end)
 
-            local function makeBtn(text)
+            local function makeBtn(text) Perfy_Trace(Perfy_GetTime(), "Enter", "makeBtn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2992:18");
                 local b = CreateFrame("Button", nil, exportPopup, "UIPanelButtonTemplate")
                 b:SetSize(120, 22)
                 b:SetText(text)
                 if MSUF_SkinMidnightActionButton then MSUF_SkinMidnightActionButton(b, { textR = 1, textG = 0.85, textB = 0.1 }) end
-                return b
+                Perfy_Trace(Perfy_GetTime(), "Leave", "makeBtn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2992:18"); return b
             end
 
             exportPopup.btnUnit = makeBtn("Unitframes")
@@ -3009,29 +3009,29 @@ end)
             exportPopup.btnGame:SetPoint("TOPLEFT", exportPopup.btnUnit, "TOPLEFT", 0, 26)
             exportPopup.btnAll:SetPoint("LEFT", exportPopup.btnGame, "RIGHT", 8, 0)
 
-            local function doExport(kind)
+            local function doExport(kind) Perfy_Trace(Perfy_GetTime(), "Enter", "doExport file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3012:18");
                 local Exporter = _G.MSUF_ExportSelectionToString or (ns and ns.MSUF_ExportSelectionToString)
                 if type(Exporter) ~= "function" then
                     print("|cffff0000MSUF:|r Export failed: exporter missing (MSUF_ExportSelectionToString).")
                     exportPopup:Hide()
-                    return
+                    Perfy_Trace(Perfy_GetTime(), "Leave", "doExport file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3012:18"); return
                 end
 
                 local str = Exporter(kind)
                 MSUF_ShowCopyPopup(str or "")
                 exportPopup:Hide()
                 print("|cff00ff00MSUF:|r Exported " .. tostring(kind) .. " settings.")
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "doExport file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3012:18"); end
 
-            exportPopup.btnUnit:SetScript("OnClick", function() doExport("unitframe") end)
-            exportPopup.btnCast:SetScript("OnClick", function() doExport("castbar") end)
-            exportPopup.btnCol:SetScript("OnClick", function() doExport("colors") end)
-            exportPopup.btnGame:SetScript("OnClick", function() doExport("gameplay") end)
-            exportPopup.btnAll:SetScript("OnClick", function() doExport("all") end)
+            exportPopup.btnUnit:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3026:53"); doExport("unitframe") Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3026:53"); end)
+            exportPopup.btnCast:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3027:53"); doExport("castbar") Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3027:53"); end)
+            exportPopup.btnCol:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3028:52"); doExport("colors") Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3028:52"); end)
+            exportPopup.btnGame:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3029:53"); doExport("gameplay") Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3029:53"); end)
+            exportPopup.btnAll:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3030:52"); doExport("all") Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3030:52"); end)
         end
 
         exportPopup:Show()
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowExportPicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:2964:10"); end
 
     exportBtn:SetScript("OnClick", MSUF_ShowExportPicker)
     -- Fonts tab split (Options/MSUF_Options_Fonts.lua)
@@ -3071,7 +3071,7 @@ end
 local fkfs = castbarFocusButton.GetFontString and castbarFocusButton:GetFontString() or nil
 if fkfs and fkfs.SetTextColor then fkfs:SetTextColor(1, 0.82, 0) end
 
-function MSUF_SetActiveCastbarSubPage(page)
+function MSUF_SetActiveCastbarSubPage(page) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SetActiveCastbarSubPage file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3074:0");
     if castbarEnemyGroup then castbarEnemyGroup:Hide() end
     if castbarPlayerGroup then castbarPlayerGroup:Hide() end
     if castbarTargetGroup then castbarTargetGroup:Hide() end
@@ -3083,7 +3083,7 @@ function MSUF_SetActiveCastbarSubPage(page)
     else
         if castbarEnemyGroup then castbarEnemyGroup:Show() end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetActiveCastbarSubPage file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3074:0"); end
 
 _G.MSUF_SetActiveCastbarSubPage = MSUF_SetActiveCastbarSubPage
 
@@ -3091,13 +3091,13 @@ _G.MSUF_SetActiveCastbarSubPage = MSUF_SetActiveCastbarSubPage
 MSUF_SetActiveCastbarSubPage("enemy")
 
 -- Toggle focus kick options without needing a BACK button
-castbarFocusButton:SetScript("OnClick", function()
+castbarFocusButton:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3094:40");
     if castbarFocusGroup and castbarFocusGroup:IsShown() then
         MSUF_SetActiveCastbarSubPage("enemy")
     else
         MSUF_SetActiveCastbarSubPage("focus")
     end
-end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3094:40"); end)
 
     if not _G["MSUF_FocusKickHeaderRight"] then
         local fkHeader = castbarFocusGroup:CreateFontString("MSUF_FocusKickHeaderRight", "ARTWORK", "GameFontNormal")
@@ -3123,20 +3123,20 @@ end)
         16, -200
     )
 
-local function MSUF_SyncCastbarsTabToggles()
+local function MSUF_SyncCastbarsTabToggles() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SyncCastbarsTabToggles file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3126:6");
     EnsureDB(); local g = (MSUF_DB and MSUF_DB.general) or {}
-    local function CB(cb, v) if cb then cb:SetChecked(v and true or false) end end
-    local function NUM(key, def, minV, maxV, roundInt)
+    local function CB(cb, v) Perfy_Trace(Perfy_GetTime(), "Enter", "CB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3128:10"); if cb then cb:SetChecked(v and true or false) end Perfy_Trace(Perfy_GetTime(), "Leave", "CB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3128:10"); end
+    local function NUM(key, def, minV, maxV, roundInt) Perfy_Trace(Perfy_GetTime(), "Enter", "NUM file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3129:10");
         local v = tonumber(g[key]); if type(v) ~= "number" then v = def end
         if minV and v < minV then v = minV end; if maxV and v > maxV then v = maxV end
         if roundInt then v = math.floor(v + 0.5) end
-        return v
+        Perfy_Trace(Perfy_GetTime(), "Leave", "NUM file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3129:10"); return v
     end
-    local function SL(sl, key, def, minV, maxV, enabled, roundInt)
-        if not sl then return end
+    local function SL(sl, key, def, minV, maxV, enabled, roundInt) Perfy_Trace(Perfy_GetTime(), "Enter", "SL file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3135:10");
+        if not sl then Perfy_Trace(Perfy_GetTime(), "Leave", "SL file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3135:10"); return end
         MSUF_SetLabeledSliderValue(sl, NUM(key, def, minV, maxV, roundInt))
         MSUF_SetLabeledSliderEnabled(sl, enabled and true or false)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SL file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3135:10"); end
 
     local shake = (g.castbarInterruptShake == true)
     CB(castbarInterruptShakeCheck, shake)
@@ -3170,7 +3170,7 @@ local function MSUF_SyncCastbarsTabToggles()
     local blink = emp and (g.empowerStageBlink ~= false)
     if empowerStageBlinkCheck then empowerStageBlinkCheck:SetEnabled(emp and true or false); CB(empowerStageBlinkCheck, blink) end
     SL(empowerStageBlinkTimeSlider, "empowerStageBlinkTime", 0.25, 0.05, 1.00, blink, false)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SyncCastbarsTabToggles file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3126:6"); end
 
 if castbarGroup and castbarGroup.HookScript then castbarGroup:HookScript("OnShow", MSUF_SyncCastbarsTabToggles) end
 if castbarEnemyGroup and castbarEnemyGroup.HookScript then
@@ -3210,7 +3210,7 @@ if LSM then
     castbarTexturePreview:SetValue(1)
     castbarTexturePreview:Hide()
     MSUF_KillMenuPreviewBar(castbarTexturePreview)
-    local function CastbarTexturePreview_Update(texName)
+    local function CastbarTexturePreview_Update(texName) Perfy_Trace(Perfy_GetTime(), "Enter", "CastbarTexturePreview_Update file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3213:10");
         local texPath
 
         local LSM = MSUF_GetLSM()
@@ -3224,9 +3224,9 @@ if LSM then
         if not texPath then texPath = "Interface\\TARGETINGFRAME\\UI-StatusBar" end
 
         castbarTexturePreview:SetStatusBarTexture(texPath)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "CastbarTexturePreview_Update file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3213:10"); end
 
-    local function CastbarTextureDropdown_Initialize(self, level)
+    local function CastbarTextureDropdown_Initialize(self, level) Perfy_Trace(Perfy_GetTime(), "Enter", "CastbarTextureDropdown_Initialize file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3229:10");
         EnsureDB()
         local info = UIDropDownMenu_CreateInfo()
         local current = MSUF_DB.general.castbarTexture
@@ -3234,7 +3234,7 @@ if LSM then
         local LSM = MSUF_GetLSM()
         if LSM then
             local list = LSM:List("statusbar") or {}
-            table.sort(list, function(a, b) return a:lower() < b:lower() end)
+            table.sort(list, function(a, b) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3237:29"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3237:29", a:lower() < b:lower()) end)
 
                         for _, name in ipairs(list) do
                 info.text  = name
@@ -3260,7 +3260,7 @@ if LSM then
                     info.iconInfo = nil
                 end
 
-                info.func  = function(btn)
+                info.func  = function(btn) Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3263:29");
                     EnsureDB()
                     MSUF_DB.general.castbarTexture = btn.value
                     UIDropDownMenu_SetSelectedValue(castbarTextureDrop, btn.value)
@@ -3274,13 +3274,13 @@ if LSM then
                     end
 
                     if CastbarTexturePreview_Update then CastbarTexturePreview_Update(btn.value) end
-                end
+                Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3263:29"); end
 
                 info.checked = (name == current)
                 UIDropDownMenu_AddButton(info, level)
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "CastbarTextureDropdown_Initialize file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3229:10"); end
 
       UIDropDownMenu_Initialize(castbarTextureDrop, CastbarTextureDropdown_Initialize)
 
@@ -3320,13 +3320,13 @@ end
     castbarFillDirLabel:SetText("Castbar fill direction")
 
     -- Step 8: Castbar checks helper (short + no-regression)
-    local function CB(frameName, label, x, y, dbKey, applyFn, anchorFn)
+    local function CB(frameName, label, x, y, dbKey, applyFn, anchorFn) Perfy_Trace(Perfy_GetTime(), "Enter", "CB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3323:10");
         local cb = CreateLabeledCheckButton(frameName, label, castbarEnemyGroup, x or 16, y or 0)
         if anchorFn then anchorFn(cb) end
         _G.MSUF_Options_BindGeneralBoolCheck(cb, dbKey, applyFn, MSUF_SyncCastbarsTabToggles, true)
-        return cb
+        Perfy_Trace(Perfy_GetTime(), "Leave", "CB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3323:10"); return cb
     end
-    castbarUnifiedDirCheck = CB("MSUF_CastbarUnifiedDirectionCheck", "Always use fill direction for all casts", 16, 185, "castbarUnifiedDirection", "castbarFillDirection", function(cb) cb:ClearAllPoints(); cb:SetPoint("BOTTOMLEFT", castbarFillDirLabel, "TOPLEFT", 0, 4) end)
+    castbarUnifiedDirCheck = CB("MSUF_CastbarUnifiedDirectionCheck", "Always use fill direction for all casts", 16, 185, "castbarUnifiedDirection", "castbarFillDirection", function(cb) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3329:172"); cb:ClearAllPoints(); cb:SetPoint("BOTTOMLEFT", castbarFillDirLabel, "TOPLEFT", 0, 4) Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3329:172"); end)
 
     castbarFillDirDrop = CreateFrame("Frame", "MSUF_CastbarFillDirectionDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate")
     MSUF_ExpandDropdownClickArea(castbarFillDirDrop)
@@ -3336,30 +3336,30 @@ end
         { key = "LTR", label = "Left to right" },
     }
 
-    local function MSUF_GetCastbarFillDir()
+    local function MSUF_GetCastbarFillDir() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetCastbarFillDir file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3339:10");
         EnsureDB()
         local g = MSUF_DB.general or {}
-        return g.castbarFillDirection or "RTL"
+        return Perfy_Trace_Passthrough("Leave", "MSUF_GetCastbarFillDir file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3339:10", g.castbarFillDirection or "RTL")
     end
 
-    MSUF_InitSimpleDropdown(castbarFillDirDrop, castbarFillDirOptions, MSUF_GetCastbarFillDir, function(dir)
+    MSUF_InitSimpleDropdown(castbarFillDirDrop, castbarFillDirOptions, MSUF_GetCastbarFillDir, function(dir) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3345:95");
         EnsureDB()
         MSUF_DB.general = MSUF_DB.general or {}
         MSUF_DB.general.castbarFillDirection = dir
         if MSUF_UpdateCastbarFillDirection then MSUF_UpdateCastbarFillDirection() end
         if MSUF_SyncCastbarsTabToggles then MSUF_SyncCastbarsTabToggles() end
-    end, nil, 180)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3345:95"); end, nil, 180)
 
-    castbarFillDirDrop:HookScript("OnShow", function()
+    castbarFillDirDrop:HookScript("OnShow", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3353:44");
         MSUF_SyncSimpleDropdown(castbarFillDirDrop, castbarFillDirOptions, MSUF_GetCastbarFillDir)
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3353:44"); end)
 
     -- Step 16: Apply dispatch handles castbar updates (castbarVisuals/castbarTicks/castbarGlow/castbarLatency)
 -- Channeled casts: show 5 tick lines
     -- Channeled casts: show 5 tick lines
-    castbarChannelTicksCheck = CB("MSUF_CastbarChannelTicksCheck", "Show channel tick lines (5)", 16, 0, "castbarShowChannelTicks", "castbarTicks", function(cb) if castbarFillDirDrop then cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarFillDirDrop, "BOTTOMLEFT", 16, -10) end end)
+    castbarChannelTicksCheck = CB("MSUF_CastbarChannelTicksCheck", "Show channel tick lines (5)", 16, 0, "castbarShowChannelTicks", "castbarTicks", function(cb) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3360:148"); if castbarFillDirDrop then cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarFillDirDrop, "BOTTOMLEFT", 16, -10) end Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3360:148"); end)
 -- GCD bar (player): show a short bar for instant casts that trigger the global cooldown
-    local function _MSUF_ApplyGCDBarToggle(v)
+    local function _MSUF_ApplyGCDBarToggle(v) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_ApplyGCDBarToggle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3362:10");
         v = (v and true) or false
         -- Persisted already by the binding; this is just a runtime apply hook.
         -- If Castbars LoD is not loaded yet, keep it silent: the DB value will be picked up on load.
@@ -3369,7 +3369,7 @@ end
         if _G and type(_G.MSUF_SetGCDBarEnabled) == "function" then
             _G.MSUF_SetGCDBarEnabled(v)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ApplyGCDBarToggle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3362:10"); end
 
     castbarGCDBarCheck = CB(
         "MSUF_CastbarGCDBarCheck",
@@ -3377,15 +3377,15 @@ end
         16, 0,
         "showGCDBar",
         _MSUF_ApplyGCDBarToggle,
-        function(cb)
+        function(cb) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3380:8");
             cb:ClearAllPoints()
             cb:SetPoint("TOPLEFT", castbarChannelTicksCheck, "BOTTOMLEFT", 0, -8)
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3380:8"); end
     )
 
 
     -- GCD bar sub-options (visual only)
-    local function _MSUF_ApplyGCDBarVisuals()
+    local function _MSUF_ApplyGCDBarVisuals() Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_ApplyGCDBarVisuals file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3388:10");
         -- DB is already persisted; this just forces the active GCD bar (if any) to stop so new settings apply immediately.
         if _G and type(_G.MSUF_EnsureAddonLoaded) == "function" then
             _G.MSUF_EnsureAddonLoaded("MidnightSimpleUnitFrames_Castbars")
@@ -3394,7 +3394,7 @@ end
             local f = _G.MSUF_PlayerCastBar or _G.MSUF_PlayerCastbar
             if f then _G.MSUF_PlayerGCDBar_Stop(f) end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ApplyGCDBarVisuals file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3388:10"); end
 
     castbarGCDTimeCheck = CB(
         "MSUF_CastbarGCDTimeCheck",
@@ -3402,10 +3402,10 @@ end
         16, 0,
         "showGCDBarTime",
         _MSUF_ApplyGCDBarVisuals,
-        function(cb)
+        function(cb) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3405:8");
             cb:ClearAllPoints()
             cb:SetPoint("TOPLEFT", castbarGCDBarCheck, "BOTTOMLEFT", 18, -6)
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3405:8"); end
     )
 
     castbarGCDSpellCheck = CB(
@@ -3414,18 +3414,18 @@ end
         16, 0,
         "showGCDBarSpell",
         _MSUF_ApplyGCDBarVisuals,
-        function(cb)
+        function(cb) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3417:8");
             cb:ClearAllPoints()
             cb:SetPoint("TOPLEFT", castbarGCDTimeCheck, "BOTTOMLEFT", 0, -6)
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3417:8"); end
     )
 
 -- Castbar glow / spark (Blizzard-style)
     castbarGlowCheck = CB("MSUF_CastbarGlowCheck", "Show castbar glow effect", 16, 0, "castbarShowGlow", "castbarGlow")
 -- Latency indicator (end-of-cast spell queue / net latency zone)
     castbarLatencyCheck = CB("MSUF_CastbarLatencyCheck", "Show latency indicator", 16, 0, "castbarShowLatency", "castbarLatency")
-    empowerColorStagesCheck = CB("MSUF_EmpowerColorStagesCheck", "Add color to stages (Empowered casts)", 16, 130, "empowerColorStages", "castbarVisuals", function(cb) cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarUnifiedDirCheck, "TOPLEFT", 300, 0) end)
-    empowerStageBlinkCheck = CB("MSUF_EmpowerStageBlinkCheck", "Add stage blink (Empowered casts)", 16, 130, "empowerStageBlink", "castbarVisuals", function(cb) cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", empowerColorStagesCheck, "BOTTOMLEFT", 0, -10) end)
+    empowerColorStagesCheck = CB("MSUF_EmpowerColorStagesCheck", "Add color to stages (Empowered casts)", 16, 130, "empowerColorStages", "castbarVisuals", function(cb) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3427:155"); cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarUnifiedDirCheck, "TOPLEFT", 300, 0) Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3427:155"); end)
+    empowerStageBlinkCheck = CB("MSUF_EmpowerStageBlinkCheck", "Add stage blink (Empowered casts)", 16, 130, "empowerStageBlink", "castbarVisuals", function(cb) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3428:148"); cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", empowerColorStagesCheck, "BOTTOMLEFT", 0, -10) Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3428:148"); end)
 empowerStageBlinkTimeSlider = CreateLabeledSlider(
     "MSUF_EmpowerStageBlinkTimeSlider",
     "Stage blink time (sec)",
@@ -3437,9 +3437,9 @@ empowerStageBlinkTimeSlider:ClearAllPoints()
 empowerStageBlinkTimeSlider:SetPoint("TOPLEFT", empowerStageBlinkCheck, "BOTTOMLEFT", 0, -26)
 empowerStageBlinkTimeSlider:SetWidth(260)
 if _G and _G.MSUF_Options_BindGeneralNumberSlider then _G.MSUF_Options_BindGeneralNumberSlider(empowerStageBlinkTimeSlider, "empowerStageBlinkTime", { def = 0.25, min = 0.05, max = 1.0 }) end
-empowerStageBlinkTimeSlider:SetScript("OnShow", function(self)
+empowerStageBlinkTimeSlider:SetScript("OnShow", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3440:48");
     if MSUF_SyncCastbarsTabToggles then MSUF_SyncCastbarsTabToggles() end
-end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3440:48"); end)
 
     -- Castbar menu mockup layout (Behavior / Style / Empowered)
     do
@@ -3478,14 +3478,14 @@ end)
         local emp      = _G["MSUF_CastbarMenuPanelEmpowered"]
 
         -- Small UI helpers (Step 10): reduce anchor boilerplate, zero behavior change.
-        local function H(x) if x and x.Hide then x:Hide() end end
-        local function W(x, w) if x and x.SetWidth then x:SetWidth(w) end end
-        local function T(x, s) if x and x.SetText then x:SetText(s) end end
-        local function A(x, p, rel, rp, ox, oy)
-            if not (x and rel and x.ClearAllPoints and x.SetPoint) then return end
+        local function H(x) Perfy_Trace(Perfy_GetTime(), "Enter", "H file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3481:14"); if x and x.Hide then x:Hide() end Perfy_Trace(Perfy_GetTime(), "Leave", "H file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3481:14"); end
+        local function W(x, w) Perfy_Trace(Perfy_GetTime(), "Enter", "W file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3482:14"); if x and x.SetWidth then x:SetWidth(w) end Perfy_Trace(Perfy_GetTime(), "Leave", "W file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3482:14"); end
+        local function T(x, s) Perfy_Trace(Perfy_GetTime(), "Enter", "T file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3483:14"); if x and x.SetText then x:SetText(s) end Perfy_Trace(Perfy_GetTime(), "Leave", "T file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3483:14"); end
+        local function A(x, p, rel, rp, ox, oy) Perfy_Trace(Perfy_GetTime(), "Enter", "A file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3484:14");
+            if not (x and rel and x.ClearAllPoints and x.SetPoint) then Perfy_Trace(Perfy_GetTime(), "Leave", "A file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3484:14"); return end
             x:ClearAllPoints()
             x:SetPoint(p, rel, rp, ox or 0, oy or 0)
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "A file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3484:14"); end
 
         -- Hide old section titles/lines (we use the new panel headers)
         H(castbarGeneralTitle); H(castbarGeneralLine); H(castbarTexColorTitle); H(castbarTexColorLine)
@@ -3519,7 +3519,7 @@ bgDrop._msufButtonWidth = 180
 bgDrop._msufTweakBarTexturePreview = true
 if type(MSUF_MakeDropdownScrollable) == "function" then MSUF_MakeDropdownScrollable(bgDrop, 12) end
 
-local function BgPreview_Update(key)
+local function BgPreview_Update(key) Perfy_Trace(Perfy_GetTime(), "Enter", "BgPreview_Update file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3522:6");
     local texPath
     if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then texPath = _G.MSUF_ResolveStatusbarTextureKey(key) end
     if not texPath or texPath == "" then
@@ -3538,10 +3538,10 @@ local function BgPreview_Update(key)
     prev:SetStatusBarTexture(texPath)
     prev:Hide()
     MSUF_KillMenuPreviewBar(prev)
-    return prev
+    Perfy_Trace(Perfy_GetTime(), "Leave", "BgPreview_Update file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3522:6"); return prev
 end
 
-local function BgDrop_Init(self, level)
+local function BgDrop_Init(self, level) Perfy_Trace(Perfy_GetTime(), "Enter", "BgDrop_Init file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3544:6");
     EnsureDB()
     local info = UIDropDownMenu_CreateInfo()
     local g2 = (MSUF_DB and MSUF_DB.general) or {}
@@ -3552,7 +3552,7 @@ local function BgDrop_Init(self, level)
         current = "Blizzard"
     end
 
-    local function AddEntry(name, value)
+    local function AddEntry(name, value) Perfy_Trace(Perfy_GetTime(), "Enter", "AddEntry file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3555:10");
         info.text = name
         info.value = value
 
@@ -3571,7 +3571,7 @@ local function BgDrop_Init(self, level)
             info.iconInfo = nil
         end
 
-        info.func = function(btn)
+        info.func = function(btn) Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3574:20");
             EnsureDB()
             MSUF_DB.general.castbarBackgroundTexture = btn.value
             UIDropDownMenu_SetSelectedValue(bgDrop, btn.value)
@@ -3590,17 +3590,17 @@ local function BgDrop_Init(self, level)
                 prev:ClearAllPoints()
                 prev:SetPoint("TOPLEFT", bgDrop, "BOTTOMLEFT", 20, -6)
             end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3574:20"); end
 
         info.checked = (value == current)
         info.notCheckable = false
         UIDropDownMenu_AddButton(info, level)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "AddEntry file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3555:10"); end
 
     local LSM = MSUF_GetLSM()
     if LSM and type(LSM.List) == "function" then
         local list = LSM:List("statusbar") or {}
-        table.sort(list, function(a, b) return a:lower() < b:lower() end)
+        table.sort(list, function(a, b) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3603:25"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3603:25", a:lower() < b:lower()) end)
         for _, name in ipairs(list) do
             AddEntry(name, name)
         end
@@ -3622,7 +3622,7 @@ local function BgDrop_Init(self, level)
             if not seen[k] then AddEntry(k, k) end
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "BgDrop_Init file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3544:6"); end
 
 UIDropDownMenu_Initialize(bgDrop, BgDrop_Init)
 
@@ -3651,11 +3651,11 @@ end
                 0, 0
             )
             outlineSlider:SetAlpha(1)
-            local function _ApplyCastbarOutlineAndRefresh()
+            local function _ApplyCastbarOutlineAndRefresh() Perfy_Trace(Perfy_GetTime(), "Enter", "_ApplyCastbarOutlineAndRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3654:18");
                 if type(_G.MSUF_Options_Apply) == "function" then _G.MSUF_Options_Apply("castbarVisuals") end
                 if type(_G.MSUF_ApplyCastbarOutlineToAll) == "function" then _G.MSUF_ApplyCastbarOutlineToAll(true) end
                 if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then pcall(_G.MSUF_UpdateBossCastbarPreview) end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_ApplyCastbarOutlineAndRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3654:18"); end
 
             if _G and _G.MSUF_Options_BindGeneralNumberSlider then
                 _G.MSUF_Options_BindGeneralNumberSlider(outlineSlider, "castbarOutlineThickness", { def = 1, min = 0, max = 6, int = true, apply = _ApplyCastbarOutlineAndRefresh })
@@ -3744,8 +3744,8 @@ end
                 )
             end
 
-            local function FixSliderLabel(slider)
-                if not slider or not slider.GetName then return end
+            local function FixSliderLabel(slider) Perfy_Trace(Perfy_GetTime(), "Enter", "FixSliderLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3747:18");
+                if not slider or not slider.GetName then Perfy_Trace(Perfy_GetTime(), "Leave", "FixSliderLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3747:18"); return end
                 local n = slider:GetName()
                 local text = n and _G and _G[n .. "Text"]
                 if text then
@@ -3753,7 +3753,7 @@ end
                     text:SetPoint("TOPLEFT", slider, "TOPLEFT", 0, 18)
                     if text.SetJustifyH then text:SetJustifyH("LEFT") end
                 end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "FixSliderLabel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3747:18"); end
 
             -- Positioning under the latency toggle (fits the empty area in the Style column)
             if header and rightCol then
@@ -3790,27 +3790,27 @@ end
                 resSlider:Show()
             end
 
-            local function ApplyVisualRefresh()
+            local function ApplyVisualRefresh() Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyVisualRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3793:18");
                 MSUF_EnsureCastbars()
                 if type(MSUF_UpdateCastbarVisuals) == "function" then MSUF_UpdateCastbarVisuals() end
                 if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
                     _G.MSUF_UpdateBossCastbarPreview()
                 end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyVisualRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3793:18"); end
 
-            local function SyncEnabledStates()
+            local function SyncEnabledStates() Perfy_Trace(Perfy_GetTime(), "Enter", "SyncEnabledStates file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3801:18");
                 EnsureDB()
                 local g = (MSUF_DB and MSUF_DB.general) or {}
                 local cur = tonumber(g.castbarSpellNameShortening) or 0
                 local enabled = (cur > 0)
                 if maxSlider then MSUF_SetLabeledSliderEnabled(maxSlider, enabled) end
                 if resSlider then MSUF_SetLabeledSliderEnabled(resSlider, enabled) end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "SyncEnabledStates file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3801:18"); end
 
 	            -- Button init + DB apply (On/Off only; always shortens at END)
 	            if toggleBtn then
-	                local function SetRegionColor(self, rr, gg, bb, aa)
-	                    if not self then return end
+	                local function SetRegionColor(self, rr, gg, bb, aa) Perfy_Trace(Perfy_GetTime(), "Enter", "SetRegionColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3812:23");
+	                    if not self then Perfy_Trace(Perfy_GetTime(), "Leave", "SetRegionColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3812:23"); return end
 	                    local name = self.GetName and self:GetName()
 	                    local left  = self.Left  or (name and _G[name .. "Left"]) or nil
 	                    local mid   = self.Middle or (name and _G[name .. "Middle"]) or nil
@@ -3826,9 +3826,9 @@ end
 	                        nt:SetVertexColor(rr, gg, bb, aa or 1)
 	                        nt:SetTexCoord(0, 1, 0, 1)
 	                    end
-	                end
+	                Perfy_Trace(Perfy_GetTime(), "Leave", "SetRegionColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3812:23"); end
 
-	                local function SyncToggleVisual()
+	                local function SyncToggleVisual() Perfy_Trace(Perfy_GetTime(), "Enter", "SyncToggleVisual file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3831:23");
 	                    EnsureDB()
 	                    local g = (MSUF_DB and MSUF_DB.general) or {}
 	                    local cur = tonumber(g.castbarSpellNameShortening) or 0
@@ -3847,12 +3847,12 @@ end
 	                    end
 	
 	                    SyncEnabledStates()
-	                end
+	                Perfy_Trace(Perfy_GetTime(), "Leave", "SyncToggleVisual file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3831:23"); end
 
 	                -- Initial sync
 	                SyncToggleVisual()
 
-	                toggleBtn:SetScript("OnClick", function()
+	                toggleBtn:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3855:48");
 	                    EnsureDB()
 	                    local g = (MSUF_DB and MSUF_DB.general) or {}
 	
@@ -3865,12 +3865,12 @@ end
 	                    -- ON -> OFF requires a hard reload
 	                    if prev == 1 and newV == 0 then
 	                        if ReloadUI then ReloadUI() end
-	                        return
+	                        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3855:48"); return
 	                    end
 
 	                    SyncToggleVisual()
 	                    ApplyVisualRefresh()
-	                end)
+	                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3855:48"); end)
 	            end
             if _G and _G.MSUF_Options_BindGeneralNumberSlider then
                 _G.MSUF_Options_BindGeneralNumberSlider(maxSlider, "castbarSpellNameMaxLen", { def = 30, min = 6, max = 30, int = true, apply = ApplyVisualRefresh })
@@ -3901,7 +3901,7 @@ end
 -- Auras tab (legacy menu removed in Patch 6D Step 2)
 -- Keep only a shortcut button that opens the dedicated Auras 2.0 Settings category.
 do
-    local function SetupPanel(panel, titleText)
+    local function SetupPanel(panel, titleText) Perfy_Trace(Perfy_GetTime(), "Enter", "SetupPanel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3904:10");
         if (not panel.SetBackdrop) and BackdropTemplateMixin and Mixin then Mixin(panel, BackdropTemplateMixin) end
         if panel.SetBackdrop then
             panel:SetBackdrop({
@@ -3929,7 +3929,7 @@ do
 
         panel._msufHeaderTitle = title
         panel._msufHeaderLine = line
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SetupPanel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3904:10"); end
 
     local p = _G["MSUF_AurasMenuRedirectPanel"]
     if not p then
@@ -3958,7 +3958,7 @@ do
         err:SetText("")
         err:Hide()
 
-        btn:SetScript("OnClick", function()
+        btn:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3961:33");
             err:Hide()
 
             -- Ensure the Auras 2.0 Settings category is registered.
@@ -3973,18 +3973,18 @@ do
                 if id then
                     if Settings and Settings.OpenToCategory then
                         pcall(Settings.OpenToCategory, id)
-                        return
+                        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3961:33"); return
                     end
                     if C_SettingsUtil and C_SettingsUtil.OpenSettingsPanel then
                         pcall(C_SettingsUtil.OpenSettingsPanel, id, nil)
-                        return
+                        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3961:33"); return
                     end
                 end
             end
 
             err:SetText("Could not open the Auras 2.0 menu.\nPlease make sure MSUF options are registered and try again.")
             err:Show()
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:3961:33"); end)
 
         p._msufNote = note
         p._msufBtn  = btn
@@ -4020,39 +4020,39 @@ local absorbDisplayOptions = {
     { key = 4, label = "Absorb text only" },
 }
 
-local function MSUF_GetAbsorbDisplayMode()
+local function MSUF_GetAbsorbDisplayMode() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetAbsorbDisplayMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4023:6");
     EnsureDB()
     local g = MSUF_DB.general or {}
     local mode = tonumber(g.absorbTextMode)
-    if mode and mode >= 1 and mode <= 4 then return mode end
+    if mode and mode >= 1 and mode <= 4 then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetAbsorbDisplayMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4023:6"); return mode end
     local barOn  = (g.enableAbsorbBar ~= false)
     local textOn = (g.showTotalAbsorbAmount == true)
 
-    if (not barOn) and (not textOn) then return 1 end
-    if barOn and (not textOn) then return 2 end
-    if barOn and textOn then return 3 end
-    return 4
+    if (not barOn) and (not textOn) then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetAbsorbDisplayMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4023:6"); return 1 end
+    if barOn and (not textOn) then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetAbsorbDisplayMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4023:6"); return 2 end
+    if barOn and textOn then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetAbsorbDisplayMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4023:6"); return 3 end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetAbsorbDisplayMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4023:6"); return 4
 end
 
-local function MSUF_BindAbsorbDropdown(drop, options, getKey, dbField, applyFunc)
-    if not drop then return end
+local function MSUF_BindAbsorbDropdown(drop, options, getKey, dbField, applyFunc) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_BindAbsorbDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4037:6");
+    if not drop then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_BindAbsorbDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4037:6"); return end
 
-    MSUF_InitSimpleDropdown(drop, options, getKey, function(mode)
+    MSUF_InitSimpleDropdown(drop, options, getKey, function(mode) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4040:51");
         EnsureDB()
         MSUF_DB.general = MSUF_DB.general or {}
         MSUF_DB.general[dbField] = mode
 
         if type(applyFunc) == "function" then pcall(applyFunc, mode) end
         if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
-    end, nil, BAR_DROPDOWN_WIDTH)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4040:51"); end, nil, BAR_DROPDOWN_WIDTH)
 
-    drop:HookScript("OnShow", function()
+    drop:HookScript("OnShow", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4049:30");
         MSUF_SyncSimpleDropdown(drop, options, getKey)
         if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
-    end)
-end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4049:30"); end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_BindAbsorbDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4037:6"); end
 
-MSUF_BindAbsorbDropdown(absorbDisplayDrop, absorbDisplayOptions, MSUF_GetAbsorbDisplayMode, "absorbTextMode", function(mode)
+MSUF_BindAbsorbDropdown(absorbDisplayDrop, absorbDisplayOptions, MSUF_GetAbsorbDisplayMode, "absorbTextMode", function(mode) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4055:110");
     if type(_G.MSUF_UpdateAbsorbTextMode) == "function" then _G.MSUF_UpdateAbsorbTextMode(mode) end
 
     if type(_G.MSUF_UpdateAllUnitFrames) == "function" then
@@ -4062,7 +4062,7 @@ MSUF_BindAbsorbDropdown(absorbDisplayDrop, absorbDisplayOptions, MSUF_GetAbsorbD
             if frame and frame.unit then UpdateSimpleUnitFrame(frame) end
         end
     end
-end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4055:110"); end)
 
 -- Absorb anchoring (which side positive absorb / heal-absorb start on)
 absorbAnchorLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -4079,13 +4079,13 @@ local absorbAnchorOptions = {
     { key = 2, label = "Anchor to inside padding (prevents clipping)" },
 }
 
-local function MSUF_GetAbsorbAnchorMode()
+local function MSUF_GetAbsorbAnchorMode() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetAbsorbAnchorMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4082:6");
     EnsureDB()
     local g = MSUF_DB.general or {}
-    return tonumber(g.absorbAnchorMode) or 2
+    return Perfy_Trace_Passthrough("Leave", "MSUF_GetAbsorbAnchorMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4082:6", tonumber(g.absorbAnchorMode) or 2)
 end
 
-MSUF_BindAbsorbDropdown(absorbAnchorDrop, absorbAnchorOptions, MSUF_GetAbsorbAnchorMode, "absorbAnchorMode", function()
+MSUF_BindAbsorbDropdown(absorbAnchorDrop, absorbAnchorOptions, MSUF_GetAbsorbAnchorMode, "absorbAnchorMode", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4088:109");
     if _G.MSUF_UnitFrames and type(_G.MSUF_ApplyAbsorbAnchorMode) == "function" then
         for _, frame in pairs(_G.MSUF_UnitFrames) do
             if frame and frame.unit then
@@ -4094,7 +4094,7 @@ MSUF_BindAbsorbDropdown(absorbAnchorDrop, absorbAnchorOptions, MSUF_GetAbsorbAnc
             end
         end
     end
-end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4088:109"); end)
 
 -- Absorb bar textures (optional overrides; default follows foreground texture)
 absorbTextureLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -4118,7 +4118,7 @@ healAbsorbTextureDrop._msufTweakBarTexturePreview = true
 MSUF_MakeDropdownScrollable(healAbsorbTextureDrop, 12)
 
 -- Live apply (no-op until runtime supports these keys; safe to call if function exists)
-local function _MSUF_TryApplyAbsorbTexturesLive()
+local function _MSUF_TryApplyAbsorbTexturesLive() Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_TryApplyAbsorbTexturesLive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4121:6");
     local applied = false
 
     if type(_G.MSUF_UpdateAbsorbBarTextures) == "function" then
@@ -4145,10 +4145,10 @@ local function _MSUF_TryApplyAbsorbTexturesLive()
         end
     end
 
-    return applied
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_TryApplyAbsorbTexturesLive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4121:6"); return applied
 end
 
-local function _MSUF_AddStatusbarTextureSwatch(info, key, LSM)
+local function _MSUF_AddStatusbarTextureSwatch(info, key, LSM) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_AddStatusbarTextureSwatch file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4151:6");
     local swatchTex
     if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
         swatchTex = _G.MSUF_ResolveStatusbarTextureKey(key)
@@ -4170,9 +4170,9 @@ local function _MSUF_AddStatusbarTextureSwatch(info, key, LSM)
         info.icon = nil
         info.iconInfo = nil
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_AddStatusbarTextureSwatch file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4151:6"); end
 
-local function _MSUF_GetStatusbarTextureList()
+local function _MSUF_GetStatusbarTextureList() Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_GetStatusbarTextureList file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4175:6");
     local LSM = MSUF_GetLSM()
     local list
     if LSM and type(LSM.List) == "function" then
@@ -4192,46 +4192,46 @@ local function _MSUF_GetStatusbarTextureList()
     end
     if type(list) ~= "table" or #list == 0 then list = { "Blizzard" } end
 
-    table.sort(list, function(a, b)
+    table.sort(list, function(a, b) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4195:21");
         a = tostring(a or "")
         b = tostring(b or "")
-        return a:lower() < b:lower()
+        return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4195:21", a:lower() < b:lower())
     end)
 
-    return list, LSM
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetStatusbarTextureList file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4175:6"); return list, LSM
 end
 
 -- Sync helper: set dropdown display text/selected value from the stored texture.
 -- Handles optional followText entries ("Use foreground texture").
-local function _MSUF_SyncStatusbarTextureDropdown(drop)
+local function _MSUF_SyncStatusbarTextureDropdown(drop) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_SyncStatusbarTextureDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4206:6");
     local cfg = drop and drop.__MSUF_TexCfg
-    if not cfg then return end
+    if not cfg then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SyncStatusbarTextureDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4206:6"); return end
     EnsureDB()
     local cur = cfg.get and cfg.get() or nil
     if cfg.followText and ((cfg.isFollow and cfg.isFollow(cur)) or cur == nil or cur == "" or cur == cfg.followValue) then
         UIDropDownMenu_SetSelectedValue(drop, cfg.followValue or "")
         UIDropDownMenu_SetText(drop, cfg.followText)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SyncStatusbarTextureDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4206:6"); return
     end
     cur = cur or ""
     UIDropDownMenu_SetSelectedValue(drop, cur)
     UIDropDownMenu_SetText(drop, cur)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SyncStatusbarTextureDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4206:6"); end
 
 -- Generic statusbar texture dropdown builder (SharedMedia + built-in fallback)
 -- Used by multiple menus (Bars/Absorb/etc.) to avoid repeating ~100 lines of boilerplate each time.
-local function _MSUF_InitStatusbarTextureDropdown(drop, cfg)
-    if not drop or not cfg then return end
+local function _MSUF_InitStatusbarTextureDropdown(drop, cfg) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_InitStatusbarTextureDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4223:6");
+    if not drop or not cfg then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_InitStatusbarTextureDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4223:6"); return end
 
     drop.__MSUF_TexCfg = cfg
     if cfg.width then UIDropDownMenu_SetWidth(drop, cfg.width) end
 
-    UIDropDownMenu_Initialize(drop, function(self, level)
-        if not level then return end
+    UIDropDownMenu_Initialize(drop, function(self, level) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4229:36");
+        if not level then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4229:36"); return end
 
         EnsureDB()
         cfg = drop.__MSUF_TexCfg
-        if not cfg then return end
+        if not cfg then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4229:36"); return end
 
         local info = UIDropDownMenu_CreateInfo()
         local current = cfg.get and cfg.get() or nil
@@ -4240,11 +4240,11 @@ local function _MSUF_InitStatusbarTextureDropdown(drop, cfg)
         if cfg.followText then
             info.text = cfg.followText
             info.value = cfg.followValue or ""
-            info.func = function(btn)
+            info.func = function(btn) Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4243:24");
                 if cfg.setFollow then cfg.setFollow(btn.value) elseif cfg.set then cfg.set(btn.value) end
                 UIDropDownMenu_SetSelectedValue(drop, btn.value)
                 UIDropDownMenu_SetText(drop, cfg.followText)
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4243:24"); end
             info.checked = (cfg.isFollow and cfg.isFollow(current)) or (current == nil or current == cfg.followValue or current == "")
             info.notCheckable = nil
             info.icon = nil
@@ -4264,57 +4264,57 @@ local function _MSUF_InitStatusbarTextureDropdown(drop, cfg)
         for _, name in ipairs(list) do
             info.text = name
             info.value = name
-            info.func = function(btn)
+            info.func = function(btn) Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4267:24");
                 if cfg.set then cfg.set(btn.value) end
                 UIDropDownMenu_SetSelectedValue(drop, btn.value)
                 UIDropDownMenu_SetText(drop, btn.value)
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4267:24"); end
             info.checked = (name == current)
 
             _MSUF_AddStatusbarTextureSwatch(info, name, LSM)
 
             UIDropDownMenu_AddButton(info, level)
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4229:36"); end)
 
     if not drop.__MSUF_TexSyncHooked then
         drop.__MSUF_TexSyncHooked = true
         local prev = drop:GetScript("OnShow")
-        drop:SetScript("OnShow", function(self, ...)
+        drop:SetScript("OnShow", function(self, ...) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4283:33");
             if prev then prev(self, ...) end
             _MSUF_SyncStatusbarTextureDropdown(self)
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4283:33"); end)
     end
 
     _MSUF_SyncStatusbarTextureDropdown(drop)
 
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_InitStatusbarTextureDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4223:6"); end
 
-local function _MSUF_InitAbsorbTextureDropdown(drop, dbKey, followText)
-    if not drop then return end
+local function _MSUF_InitAbsorbTextureDropdown(drop, dbKey, followText) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_InitAbsorbTextureDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4293:6");
+    if not drop then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_InitAbsorbTextureDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4293:6"); return end
     followText = followText or "Use foreground texture"
 
     _MSUF_InitStatusbarTextureDropdown(drop, {
         width = 200,
         followText = followText,
         followValue = "",
-        get = function()
+        get = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4301:14");
             EnsureDB()
             local g = (MSUF_DB and MSUF_DB.general) or {}
             local cur = g[dbKey]
             if cur == "" then cur = nil end
-            return cur
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4301:14"); return cur
         end,
-        set = function(val)
+        set = function(val) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4308:14");
             EnsureDB()
             MSUF_DB.general = MSUF_DB.general or {}
             MSUF_DB.general[dbKey] = val
             _MSUF_TryApplyAbsorbTexturesLive()
             ApplyAllSettings()
-        end,
-        isFollow = function(cur) return (cur == nil or cur == "") end,
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4308:14"); end,
+        isFollow = function(cur) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4315:19"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4315:19", (cur == nil or cur == "")) end,
     })
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_InitAbsorbTextureDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4293:6"); end
 
 _MSUF_InitAbsorbTextureDropdown(absorbBarTextureDrop, "absorbBarTexture", "Use foreground texture")
 _MSUF_InitAbsorbTextureDropdown(healAbsorbTextureDrop, "healAbsorbBarTexture", "Use foreground texture")
@@ -4331,72 +4331,72 @@ if absorbTexTestCB then
     absorbTexTestCB:ClearAllPoints()
     absorbTexTestCB:SetPoint("TOPLEFT", healAbsorbTextureDrop, "BOTTOMLEFT", 16, -8)
     absorbTexTestCB.tooltip = "Temporarily shows fake absorb + heal-absorb overlays so you can preview these textures.\n\nAutomatically turns off when you leave this menu."
-    absorbTexTestCB:SetScript("OnShow", function(self)
+    absorbTexTestCB:SetScript("OnShow", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4334:40");
         self:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false)
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4334:40"); end)
 
-    local function RefreshFrames()
+    local function RefreshFrames() Perfy_Trace(Perfy_GetTime(), "Enter", "RefreshFrames file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4338:10");
         local ns = _G.MSUF_NS
         if ns and ns.MSUF_RefreshAllFrames then
             ns.MSUF_RefreshAllFrames()
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "RefreshFrames file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4338:10"); return
         end
         if _G.MSUF_UnitFrames and UpdateSimpleUnitFrame then
             for _, f in pairs(_G.MSUF_UnitFrames) do
                 if f and f.unit then UpdateSimpleUnitFrame(f) end
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "RefreshFrames file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4338:10"); end
 
-    absorbTexTestCB:SetScript("OnClick", function(self)
+    absorbTexTestCB:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4351:41");
 		local newState = self:GetChecked() and true or false
 		_G.MSUF_AbsorbTextureTestMode = newState
 		-- Hard-resync the visual state (some skinned checkbuttons may not repaint until SetChecked).
 		self:SetChecked(newState)
 		if self.__msufToggleUpdate then self.__msufToggleUpdate() end
 		RefreshFrames()
-	end)
+	Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4351:41"); end)
 
     -- Safety: leaving the Bars menu should never keep fake overlays active.
-	absorbTexTestCB:SetScript("OnHide", function(self)
+	absorbTexTestCB:SetScript("OnHide", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4361:37");
 		-- Only auto-disable when actually leaving the Bars tab / Settings panel.
 		-- Some layouts temporarily hide controls (scroll/refresh); don't undo the toggle in that case.
-		if barGroup and barGroup.IsShown and barGroup:IsShown() then return end
+		if barGroup and barGroup.IsShown and barGroup:IsShown() then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4361:37"); return end
 		if _G.MSUF_AbsorbTextureTestMode then
 			_G.MSUF_AbsorbTextureTestMode = false
 			self:SetChecked(false)
 			if self.__msufToggleUpdate then self.__msufToggleUpdate() end
 			RefreshFrames()
 		end
-	end)
+	Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4361:37"); end)
 
     -- Extra safety: never keep fake absorb overlays active outside the Bars tab.
     -- This covers tab switches and closing the Settings window (in case a control stays shown).
     if barGroup and barGroup.HookScript and not barGroup._msufAbsorbTestCleanupHooked then
         barGroup._msufAbsorbTestCleanupHooked = true
-        barGroup:HookScript("OnHide", function()
+        barGroup:HookScript("OnHide", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4377:38");
             if _G.MSUF_AbsorbTextureTestMode then
                 _G.MSUF_AbsorbTextureTestMode = false
                 if absorbTexTestCB and absorbTexTestCB.SetChecked then absorbTexTestCB:SetChecked(false) end
                 RefreshFrames()
             end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4377:38"); end)
     end
 
     if panel and panel.HookScript and not panel._msufAbsorbTestPanelCleanupHooked then
         panel._msufAbsorbTestPanelCleanupHooked = true
-        panel:HookScript("OnHide", function()
+        panel:HookScript("OnHide", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4388:35");
             if _G.MSUF_AbsorbTextureTestMode then
                 _G.MSUF_AbsorbTextureTestMode = false
                 if absorbTexTestCB and absorbTexTestCB.SetChecked then absorbTexTestCB:SetChecked(false) end
                 RefreshFrames()
             end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4388:35"); end)
     end
 
 -- Grey-out / disable absorb-only controls when the absorb BAR is off (e.g. "Absorb off" or "Absorb text only").
 -- Absorb display dropdown remains enabled so users can turn the bar back on.
-MSUF_RefreshAbsorbBarUIEnabled = function()
+MSUF_RefreshAbsorbBarUIEnabled = function() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_RefreshAbsorbBarUIEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4399:33");
     EnsureDB()
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local barEnabled = (g.enableAbsorbBar ~= false) and true or false
@@ -4430,7 +4430,7 @@ MSUF_RefreshAbsorbBarUIEnabled = function()
             end
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RefreshAbsorbBarUIEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4399:33"); end
 
 -- Initial sync once everything exists
 if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
@@ -4545,12 +4545,12 @@ gradientCheck = CreateLabeledCheckButton(
     MSUF_InitSimpleDropdown(
         hpModeDrop,
         hpModeOptions,
-        function() EnsureDB(); return (MSUF_DB.general.hpTextMode or "FULL_PLUS_PERCENT") end,
-        function(v) EnsureDB(); MSUF_DB.general.hpTextMode = v end,
-        function(v, opt)
+        function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4548:8"); EnsureDB(); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4548:8", (MSUF_DB.general.hpTextMode or "FULL_PLUS_PERCENT")) end,
+        function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4549:8"); EnsureDB(); MSUF_DB.general.hpTextMode = v Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4549:8"); end,
+        function(v, opt) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4550:8");
             ApplyAllSettings()
             if type(_G.MSUF_Options_RefreshHPSpacerControls) == "function" then _G.MSUF_Options_RefreshHPSpacerControls() end
-        end,
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4550:8"); end,
         BAR_DROPDOWN_WIDTH
     )
 powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -4572,11 +4572,11 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     MSUF_InitSimpleDropdown(
         powerModeDrop,
         powerModeOptions,
-        function() EnsureDB(); return (MSUF_DB.general.powerTextMode or "FULL_PLUS_PERCENT") end,
-        function(v) EnsureDB(); MSUF_DB.general.powerTextMode = v end,
-        function(v, opt)
+        function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4575:8"); EnsureDB(); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4575:8", (MSUF_DB.general.powerTextMode or "FULL_PLUS_PERCENT")) end,
+        function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4576:8"); EnsureDB(); MSUF_DB.general.powerTextMode = v Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4576:8"); end,
+        function(v, opt) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4577:8");
             ApplyAllSettings()
-        end,
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4577:8"); end,
         BAR_DROPDOWN_WIDTH
     )
 -- Text separators (HP + Power)
@@ -4616,8 +4616,8 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     MSUF_InitSimpleDropdown(
         hpSepDrop,
         textSepOptions,
-        function() EnsureDB(); return (MSUF_DB.general.hpTextSeparator or "") end,
-        function(v) EnsureDB(); MSUF_DB.general.hpTextSeparator = v end,
+        function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4619:8"); EnsureDB(); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4619:8", (MSUF_DB.general.hpTextSeparator or "")) end,
+        function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4620:8"); EnsureDB(); MSUF_DB.general.hpTextSeparator = v Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4620:8"); end,
         "all"
     )
 -- Power separator (separate from HP separator; falls back to HP separator if unset for backward compatibility)
@@ -4643,12 +4643,12 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     MSUF_InitSimpleDropdown(
         powerSepDrop,
         textSepOptions,
-        function()
+        function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4646:8");
             EnsureDB()
             local g = MSUF_DB.general
-            return (g.powerTextSeparator ~= nil) and g.powerTextSeparator or (g.hpTextSeparator or "")
+            return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4646:8", (g.powerTextSeparator ~= nil) and g.powerTextSeparator or (g.hpTextSeparator or ""))
         end,
-        function(v) EnsureDB(); MSUF_DB.general.powerTextSeparator = v end,
+        function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4651:8"); EnsureDB(); MSUF_DB.general.powerTextSeparator = v Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4651:8"); end,
         "all"
     )
 -- HP % Spacer (split FULL value + % into two text anchors)
@@ -4673,15 +4673,15 @@ do
     t:SetTexture("Interface\\FriendsFrame\\InformationIcon")
     hpSpacerInfoButton._msufTex = t
 end
-hpSpacerInfoButton:SetScript("OnEnter", function(self)
-    if not GameTooltip then return end
+hpSpacerInfoButton:SetScript("OnEnter", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4676:40");
+    if not GameTooltip then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4676:40"); return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:AddLine("Text Spacers", 1, 1, 1)
     GameTooltip:AddLine("Click a MSUF unitframe (Player/Target/Focus/ToT/Pet/Boss) to choose which unit these spacer settings apply to.", 0.9, 0.9, 0.9, true)
     GameTooltip:AddLine("Works only when the corresponding text mode is set to 'Full value + %' (or '% + Full value').", 0.9, 0.9, 0.9, true)
     GameTooltip:Show()
-end)
-hpSpacerInfoButton:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4676:40"); end)
+hpSpacerInfoButton:SetScript("OnLeave", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4684:40"); if GameTooltip then GameTooltip:Hide() end Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4684:40"); end)
 
 -- HP spacer controls
 hpSpacerCheck = CreateFrame("CheckButton", "MSUF_HPTextSpacerCheck", barGroup, "UICheckButtonTemplate")
@@ -4715,7 +4715,7 @@ powerSpacerSlider:ClearAllPoints()
 powerSpacerSlider:SetPoint("TOPLEFT", powerSpacerCheck, "BOTTOMLEFT", 0, -18)
 if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
 
-    local function _MSUF_HPSpacer_GetSelectedUnitKey()
+    local function _MSUF_HPSpacer_GetSelectedUnitKey() Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_HPSpacer_GetSelectedUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4718:10");
         EnsureDB()
         MSUF_DB.general = MSUF_DB.general or {}
         local g = MSUF_DB.general
@@ -4724,17 +4724,17 @@ if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
         if type(k) == "string" and k:match("^boss%d+$") then k = "boss" end
         if k ~= "player" and k ~= "target" and k ~= "focus" and k ~= "targettarget" and k ~= "pet" and k ~= "boss" then k = "player" end
         g.hpSpacerSelectedUnitKey = k
-        return k
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_HPSpacer_GetSelectedUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4718:10"); return k
     end
 
-    local function _MSUF_HPSpacer_GetUnitDB()
+    local function _MSUF_HPSpacer_GetUnitDB() Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_HPSpacer_GetUnitDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4730:10");
         local unitKey = _MSUF_HPSpacer_GetSelectedUnitKey()
         MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
-        return unitKey, MSUF_DB[unitKey]
+        return Perfy_Trace_Passthrough("Leave", "_MSUF_HPSpacer_GetUnitDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4730:10", unitKey, MSUF_DB[unitKey])
     end
 
-    local function _MSUF_TextModeAllowsSpacer(mode)
-        return (mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL")
+    local function _MSUF_TextModeAllowsSpacer(mode) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_TextModeAllowsSpacer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4736:10");
+        return Perfy_Trace_Passthrough("Leave", "_MSUF_TextModeAllowsSpacer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4736:10", (mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL"))
     end
 
     local SPACER_SPECS = {
@@ -4767,18 +4767,18 @@ if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
         },
     }
 
-    local function _MSUF_NiceUnitKey(unitKey)
-        if unitKey == "player" then return "Player"
-        elseif unitKey == "target" then return "Target"
-        elseif unitKey == "focus" then return "Focus"
-        elseif unitKey == "targettarget" then return "ToT"
-        elseif unitKey == "pet" then return "Pet"
-        elseif unitKey == "boss" then return "Boss"
+    local function _MSUF_NiceUnitKey(unitKey) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_NiceUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4770:10");
+        if unitKey == "player" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_NiceUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4770:10"); return "Player"
+        elseif unitKey == "target" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_NiceUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4770:10"); return "Target"
+        elseif unitKey == "focus" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_NiceUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4770:10"); return "Focus"
+        elseif unitKey == "targettarget" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_NiceUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4770:10"); return "ToT"
+        elseif unitKey == "pet" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_NiceUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4770:10"); return "Pet"
+        elseif unitKey == "boss" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_NiceUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4770:10"); return "Boss"
         end
-        return tostring(unitKey or "Player")
+        return Perfy_Trace_Passthrough("Leave", "_MSUF_NiceUnitKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4770:10", tostring(unitKey or "Player"))
     end
 
-    local function _MSUF_GetSpacerMax(spec, unitKey)
+    local function _MSUF_GetSpacerMax(spec, unitKey) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_GetSpacerMax file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4781:10");
         local mv = spec.maxDefault or 1000
         local fn = spec.maxFuncName and _G and _G[spec.maxFuncName]
         if type(fn) == "function" then
@@ -4788,10 +4788,10 @@ if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
         mv = math.floor((tonumber(mv) or 0) + 0.5)
         if mv < 0 then mv = 0 end
         if spec.maxCap and mv > spec.maxCap then mv = spec.maxCap end
-        return mv
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetSpacerMax file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4781:10"); return mv
     end
 
-    local function _MSUF_SyncSpacerControls()
+    local function _MSUF_SyncSpacerControls() Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_SyncSpacerControls file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4794:10");
         EnsureDB()
         local unitKey, u = _MSUF_HPSpacer_GetUnitDB()
         local g0 = MSUF_DB.general or {}
@@ -4857,17 +4857,17 @@ if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
                 end
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SyncSpacerControls file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4794:10"); end
 
-    local function _MSUF_BindSpacerToggle(spec)
-        if not spec or not spec.check then return end
-        spec.check:SetScript("OnClick", function(self)
+    local function _MSUF_BindSpacerToggle(spec) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_BindSpacerToggle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4862:10");
+        if not spec or not spec.check then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_BindSpacerToggle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4862:10"); return end
+        spec.check:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4864:40");
             EnsureDB()
             local g = MSUF_DB.general or {}
             local mode = g[spec.modeKey] or "FULL_PLUS_PERCENT"
             if not _MSUF_TextModeAllowsSpacer(mode) then
                 _MSUF_SyncSpacerControls()
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4864:40"); return
             end
 
             local unitKey, u = _MSUF_HPSpacer_GetUnitDB()
@@ -4876,18 +4876,18 @@ if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
 
             MSUF_Options_RequestLayoutForKey(unitKey, spec.reqToggle)
             if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then _G.MSUF_ForceTextLayoutForUnitKey(unitKey) end
-        end)
-    end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4864:40"); end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_BindSpacerToggle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4862:10"); end
 
-    local function _MSUF_BindSpacerSlider(spec)
-        if not spec or not spec.slider then return end
-        spec.slider.onValueChanged = function(self, value)
+    local function _MSUF_BindSpacerSlider(spec) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_BindSpacerSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4882:10");
+        if not spec or not spec.slider then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_BindSpacerSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4882:10"); return end
+        spec.slider.onValueChanged = function(self, value) Perfy_Trace(Perfy_GetTime(), "Enter", "slider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4884:37");
             EnsureDB()
             local g = MSUF_DB.general or {}
             local mode = g[spec.modeKey] or "FULL_PLUS_PERCENT"
             if not _MSUF_TextModeAllowsSpacer(mode) then
                 _MSUF_SyncSpacerControls()
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "slider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4884:37"); return
             end
 
             local unitKey, u = _MSUF_HPSpacer_GetUnitDB()
@@ -4906,8 +4906,8 @@ if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
 
             MSUF_Options_RequestLayoutForKey(unitKey, spec.reqX)
             if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then _G.MSUF_ForceTextLayoutForUnitKey(unitKey) end
-        end
-    end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "slider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4884:37"); end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_BindSpacerSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4882:10"); end
 
     for _, spec in ipairs(SPACER_SPECS) do
         _MSUF_BindSpacerToggle(spec)
@@ -4923,7 +4923,7 @@ local barTextureDrop
         local barBgTextureDrop
 
         -- Shared helper used by both bar texture dropdowns (foreground + background)
-        local function MSUF_TryApplyBarTextureLive()
+        local function MSUF_TryApplyBarTextureLive() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_TryApplyBarTextureLive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4926:14");
             if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
 
             if type(_G.MSUF_UpdateAllBarTextures_Immediate) == "function" then
@@ -4937,7 +4937,7 @@ local barTextureDrop
             elseif type(_G.MSUF_RefreshAllUnitFrames) == "function" then
                 _G.MSUF_RefreshAllUnitFrames()
             end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_TryApplyBarTextureLive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4926:14"); end
 
         _G.MSUF_TryApplyBarTextureLive = MSUF_TryApplyBarTextureLive
         do
@@ -4969,13 +4969,13 @@ local barTextureDrop
             barTextureInfo:SetPoint("TOPLEFT", barTexturePreview, "BOTTOMLEFT", 0, -6)
             barTextureInfo:SetText('Install "SharedMedia" (LibSharedMedia-3.0) to unlock more bar textures. Without it, you can still pick Blizzard built-in textures.')
 
-            local function BarTexturePreview_Update(texName)
+            local function BarTexturePreview_Update(texName) Perfy_Trace(Perfy_GetTime(), "Enter", "BarTexturePreview_Update file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4972:18");
                 -- Prefer the global resolver (covers both built-ins and SharedMedia keys).
                 if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
                     local resolved = _G.MSUF_ResolveStatusbarTextureKey(texName)
                     if resolved then
                         barTexturePreview:SetStatusBarTexture(resolved)
-                        return
+                        Perfy_Trace(Perfy_GetTime(), "Leave", "BarTexturePreview_Update file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4972:18"); return
                     end
                 end
 
@@ -4984,25 +4984,25 @@ local barTextureDrop
                     local tex = LSM:Fetch("statusbar", texName, true)
                     if tex then
                         barTexturePreview:SetStatusBarTexture(tex)
-                        return
+                        Perfy_Trace(Perfy_GetTime(), "Leave", "BarTexturePreview_Update file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4972:18"); return
                     end
                 end
 
                 -- Hard fallback
                 barTexturePreview:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "BarTexturePreview_Update file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4972:18"); end
             _MSUF_InitStatusbarTextureDropdown(barTextureDrop, {
-                get = function()
+                get = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4995:22");
                     EnsureDB()
-                    return (MSUF_DB.general and MSUF_DB.general.barTexture) or "Blizzard"
+                    return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4995:22", (MSUF_DB.general and MSUF_DB.general.barTexture) or "Blizzard")
                 end,
-                set = function(value)
+                set = function(value) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4999:22");
                     EnsureDB()
                     MSUF_DB.general = MSUF_DB.general or {}
                     MSUF_DB.general.barTexture = value
                     BarTexturePreview_Update(value)
                     MSUF_TryApplyBarTextureLive()
-                end,
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:4999:22"); end,
             })
 
             EnsureDB()
@@ -5030,26 +5030,26 @@ local barTextureDrop
             barBgTextureDrop._msufTweakBarTexturePreview = true
             MSUF_MakeDropdownScrollable(barBgTextureDrop, 12)
             _MSUF_InitStatusbarTextureDropdown(barBgTextureDrop, {
-                get = function()
+                get = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5033:22");
                     EnsureDB()
                     local g = (MSUF_DB and MSUF_DB.general) or {}
-                    return g.barBackgroundTexture
+                    return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5033:22", g.barBackgroundTexture)
                 end,
                 followText = "Use foreground texture",
                 followValue = "",
-                isFollow = function(cur) return (cur == nil or cur == "") end,
-                setFollow = function()
+                isFollow = function(cur) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5040:27"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5040:27", (cur == nil or cur == "")) end,
+                setFollow = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5041:28");
                     EnsureDB()
                     MSUF_DB.general = MSUF_DB.general or {}
                     MSUF_DB.general.barBackgroundTexture = ""
                     MSUF_TryApplyBarTextureLive()
-                end,
-                set = function(value)
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5041:28"); end,
+                set = function(value) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5047:22");
                     EnsureDB()
                     MSUF_DB.general = MSUF_DB.general or {}
                     MSUF_DB.general.barBackgroundTexture = value
                     MSUF_TryApplyBarTextureLive()
-                end,
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5047:22"); end,
             })
 
             EnsureDB()
@@ -5084,7 +5084,7 @@ do
 
     -- Create panels once
     if not _G["MSUF_BarsMenuPanelLeft"] then
-        local function SetupPanel(panel)
+        local function SetupPanel(panel) Perfy_Trace(Perfy_GetTime(), "Enter", "SetupPanel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5087:14");
             panel:SetBackdrop({
                 bgFile   = MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8",
                 edgeFile = MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8",
@@ -5093,7 +5093,7 @@ do
             })
             panel:SetBackdropColor(0, 0, 0, 0.20)
             panel:SetBackdropBorderColor(1, 1, 1, 0.15)
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "SetupPanel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5087:14"); end
 
         local leftPanel = CreateFrame("Frame", "MSUF_BarsMenuPanelLeft", barGroup, "BackdropTemplate")
         leftPanel:SetSize(330, BARS_PANEL_H)
@@ -5136,12 +5136,12 @@ do
         -- Label sits on the left; value text can be RIGHT-aligned (default)
         -- or CENTERed (used for SharedMedia texture dropdowns so the chosen
         -- texture name is more readable).
-        local function MakeInlineDropdown(drop, labelText, labelOffsetX, valueAlign)
+        local function MakeInlineDropdown(drop, labelText, labelOffsetX, valueAlign) Perfy_Trace(Perfy_GetTime(), "Enter", "MakeInlineDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5139:14");
             labelOffsetX = (labelOffsetX ~= nil) and labelOffsetX or 28
             valueAlign = valueAlign or "RIGHT"
-            if not drop or not labelText then return end
+            if not drop or not labelText then Perfy_Trace(Perfy_GetTime(), "Leave", "MakeInlineDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5139:14"); return end
             local name = drop:GetName()
-            if not name then return end
+            if not name then Perfy_Trace(Perfy_GetTime(), "Leave", "MakeInlineDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5139:14"); return end
 
             local txt = _G[name .. "Text"]
             if txt then
@@ -5177,7 +5177,7 @@ do
                 drop._msufInlineLabel = lab
             end
             drop._msufInlineLabel:SetText(labelText)
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MakeInlineDropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5139:14"); end
 
         _G.MSUF_BarsMenu_MakeInlineDropdown = MakeInlineDropdown
     end
@@ -5570,21 +5570,21 @@ end
 end
 
 -- Keep the Bars tab toggles/controls visually in sync (same behavior as Fonts/Misc toggles)
-local function MSUF_SyncBarsTabToggles()
+local function MSUF_SyncBarsTabToggles() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SyncBarsTabToggles file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5573:6");
     EnsureDB()
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local b = (MSUF_DB and MSUF_DB.bars) or {}
 
-    local function SafeToggleUpdate(cb)
+    local function SafeToggleUpdate(cb) Perfy_Trace(Perfy_GetTime(), "Enter", "SafeToggleUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5578:10");
         if cb and cb.__msufToggleUpdate then pcall(cb.__msufToggleUpdate) end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SafeToggleUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5578:10"); end
 
-    local function SyncCB(cb, val)
+    local function SyncCB(cb, val) Perfy_Trace(Perfy_GetTime(), "Enter", "SyncCB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5582:10");
         if cb then
             cb:SetChecked(val and true or false)
             SafeToggleUpdate(cb)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SyncCB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5582:10"); end
 
     local hpGradEnabled = (g.enableGradient ~= false)
     local powerGradEnabled = (g.enablePowerGradient ~= false)
@@ -5624,8 +5624,8 @@ local function MSUF_SyncBarsTabToggles()
     local anyPBEnabled = true
     if (b.showTargetPowerBar == false) and (b.showBossPowerBar == false) and (b.showPlayerPowerBar == false) and (b.showFocusPowerBar == false) then anyPBEnabled = false end
 
-    local function SetControlEnabled(ctrl, enabled, wantTextColor)
-        if not ctrl then return end
+    local function SetControlEnabled(ctrl, enabled, wantTextColor) Perfy_Trace(Perfy_GetTime(), "Enter", "SetControlEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5627:10");
+        if not ctrl then Perfy_Trace(Perfy_GetTime(), "Leave", "SetControlEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5627:10"); return end
         if enabled then
             if ctrl.Enable then ctrl:Enable() end
             if ctrl.SetEnabled then ctrl:SetEnabled(true) end
@@ -5640,7 +5640,7 @@ local function MSUF_SyncBarsTabToggles()
             if wantTextColor and ctrl.SetTextColor then ctrl:SetTextColor(0.55, 0.55, 0.55) end
             if ctrl.SetAlpha then ctrl:SetAlpha(0.55) end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "SetControlEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5627:10"); end
 
     if powerBarHeightLabel and powerBarHeightLabel.SetTextColor then
         if anyPBEnabled then
@@ -5664,11 +5664,11 @@ local function MSUF_SyncBarsTabToggles()
         end
     end
     SetControlEnabled(powerBarBorderSizeEdit, (anyPBEnabled and borderEnabled), true)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SyncBarsTabToggles file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5573:6"); end
 
 if barGroup and barGroup.HookScript then barGroup:HookScript('OnShow', MSUF_SyncBarsTabToggles) end
 
-local function MSUF_BarsApplyGradient()
+local function MSUF_BarsApplyGradient() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_BarsApplyGradient file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5671:6");
     -- Note to user: gradients may not fully apply until /reload (shown once to avoid spam).
     -- Ensure the strength isn't accidentally zeroed (old hidden slider could leave 0, making gradients look "dead").
     EnsureDB()
@@ -5694,11 +5694,11 @@ local function MSUF_BarsApplyGradient()
     -- Extra safety: force an immediate repaint of bars/gradients.
     -- Heavy-visual work is throttled; if we apply inside the throttle window and nothing else
     -- triggers a future update tick, gradients can appear to "only apply after /reload".
-    local function ForceRepaintOnce()
+    local function ForceRepaintOnce() Perfy_Trace(Perfy_GetTime(), "Enter", "ForceRepaintOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5697:10");
         local frames = _G and _G.MSUF_UnitFrames
         if type(frames) ~= "table" then
             if ns and ns.MSUF_RefreshAllFrames then ns.MSUF_RefreshAllFrames() end
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "ForceRepaintOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5697:10"); return
         end
         local upd = _G.UpdateSimpleUnitFrame
         local updPow = _G.MSUF_UFCore_UpdatePowerBarFast
@@ -5716,7 +5716,7 @@ local function MSUF_BarsApplyGradient()
                 end
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ForceRepaintOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5697:10"); end
 
     ForceRepaintOnce()
 
@@ -5724,14 +5724,14 @@ local function MSUF_BarsApplyGradient()
     if C_Timer and C_Timer.After then
         if not _G.__MSUF_BARS_GRAD_REPAINT2 then
             _G.__MSUF_BARS_GRAD_REPAINT2 = true
-            C_Timer.After(0.08, function()
+            C_Timer.After(0.08, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5727:32");
                 _G.__MSUF_BARS_GRAD_REPAINT2 = false
                 ForceRepaintOnce()
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5727:32"); end)
         end
     end
 
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_BarsApplyGradient file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5671:6"); end
 
 if _G and _G.MSUF_Options_BindDBBoolCheck then
     _G.MSUF_Options_BindDBBoolCheck(gradientCheck, "general.enableGradient", MSUF_BarsApplyGradient, MSUF_SyncBarsTabToggles)
@@ -5740,11 +5740,11 @@ end
 
 -- Prompt for reload when toggling Power Bar Gradient (user click).
 if powerGradientCheck and powerGradientCheck.HookScript then
-    powerGradientCheck:HookScript("OnClick", function()
+    powerGradientCheck:HookScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5743:45");
         if type(MSUF_Options_ShowGradientReloadPopup) == "function" then
             MSUF_Options_ShowGradientReloadPopup()
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5743:45"); end)
 end
 
 do
@@ -5752,98 +5752,98 @@ do
         {
             slider = gradientStrengthSlider,
             min = 0, max = 1,
-            setDB = function(v)
+            setDB = function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5755:20");
                 EnsureDB()
                 MSUF_DB.general = MSUF_DB.general or {}
                 MSUF_DB.general.gradientStrength = v
-            end,
-            apply = function()
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5755:20"); end,
+            apply = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5760:20");
                 if type(MSUF_BarsApplyGradient) == "function" then
                     MSUF_BarsApplyGradient()
                 else
                     ApplyAllSettings()
                 end
-            end,
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5760:20"); end,
         },
         {
             slider = barOutlineThicknessSlider,
             min = 0, max = 6, integer = true,
-            setDB = function(v)
+            setDB = function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5771:20");
                 EnsureDB()
                 MSUF_DB.bars = MSUF_DB.bars or {}
                 MSUF_DB.bars.barOutlineThickness = v
-            end,
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5771:20"); end,
             apply = ApplyAllSettings,
         },
     }
 
-    local function Clamp(v, minV, maxV, asInt)
+    local function Clamp(v, minV, maxV, asInt) Perfy_Trace(Perfy_GetTime(), "Enter", "Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5780:10");
         v = tonumber(v) or minV
         if asInt then v = math.floor(v + 0.5) end
         if v < minV then v = minV end
         if v > maxV then v = maxV end
-        return v
+        Perfy_Trace(Perfy_GetTime(), "Leave", "Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5780:10"); return v
     end
 
     for _, spec in ipairs(SIMPLE_BAR_SLIDERS) do
         if spec.slider then
-            spec.slider.onValueChanged = function(self, value)
+            spec.slider.onValueChanged = function(self, value) Perfy_Trace(Perfy_GetTime(), "Enter", "slider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5790:41");
                 local v = Clamp(value, spec.min, spec.max, spec.integer)
                 if spec.setDB then spec.setDB(v) end
                 if spec.apply then spec.apply() end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "slider.onValueChanged file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5790:41"); end
         end
     end
 end
 
     if _G and _G.MSUF_Options_BindDBBoolCheck then
-        local function Bind(cb, path, apply)
+        local function Bind(cb, path, apply) Perfy_Trace(Perfy_GetTime(), "Enter", "Bind file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5800:14");
             if cb then _G.MSUF_Options_BindDBBoolCheck(cb, path, apply or ApplyAllSettings, MSUF_SyncBarsTabToggles) end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "Bind file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5800:14"); end
 
         Bind(targetPowerBarCheck, "bars.showTargetPowerBar")
         Bind(bossPowerBarCheck,   "bars.showBossPowerBar")
         Bind(playerPowerBarCheck, "bars.showPlayerPowerBar")
         Bind(focusPowerBarCheck,  "bars.showFocusPowerBar")
 
-        Bind(powerBarEmbedCheck, "bars.embedPowerBarIntoHealth", function()
+        Bind(powerBarEmbedCheck, "bars.embedPowerBarIntoHealth", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5809:65");
             if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == 'function' then _G.MSUF_ApplyPowerBarEmbedLayout_All() end
             ApplyAllSettings()
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5809:65"); end)
 
-        Bind(powerBarBorderCheck, "bars.powerBarBorderEnabled", function()
+        Bind(powerBarBorderCheck, "bars.powerBarBorderEnabled", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5814:64");
             if type(_G.MSUF_ApplyPowerBarBorder_All) == 'function' then
                 _G.MSUF_ApplyPowerBarBorder_All()
             else
                 ApplyAllSettings()
             end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5814:64"); end)
     end
 
     if powerBarBorderSizeEdit then
-        powerBarBorderSizeEdit:SetScript("OnEnterPressed", function(self)
+        powerBarBorderSizeEdit:SetScript("OnEnterPressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5824:59");
             MSUF_UpdatePowerBarBorderSizeFromEdit(self)
             self:ClearFocus()
-        end)
-        powerBarBorderSizeEdit:SetScript("OnEscapePressed", function(self)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5824:59"); end)
+        powerBarBorderSizeEdit:SetScript("OnEscapePressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5828:60");
             self:ClearFocus()
-        end)
-        powerBarBorderSizeEdit:SetScript("OnEditFocusLost", function(self)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5828:60"); end)
+        powerBarBorderSizeEdit:SetScript("OnEditFocusLost", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5831:60");
             MSUF_UpdatePowerBarBorderSizeFromEdit(self)
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5831:60"); end)
     end
 
     if powerBarHeightEdit then
-        powerBarHeightEdit:SetScript("OnEnterPressed", function(self)
+        powerBarHeightEdit:SetScript("OnEnterPressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5837:55");
             MSUF_UpdatePowerBarHeightFromEdit(self)
             self:ClearFocus()
-        end)
-        powerBarHeightEdit:SetScript("OnEscapePressed", function(self)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5837:55"); end)
+        powerBarHeightEdit:SetScript("OnEscapePressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5841:56");
             self:ClearFocus()
-        end)
-        powerBarHeightEdit:SetScript("OnEditFocusLost", function(self)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5841:56"); end)
+        powerBarHeightEdit:SetScript("OnEditFocusLost", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5844:56");
             MSUF_UpdatePowerBarHeightFromEdit(self)
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5844:56"); end)
     end
 
     panel.anchorEdit                 = anchorEdit
@@ -5885,7 +5885,7 @@ panel.updateThrottleSlider = updateThrottleSlider
 panel.powerBarHeightSlider = powerBarHeightSlider
 panel.infoTooltipDisableCheck = infoTooltipDisableCheck
 
-    function panel:LoadFromDB()
+    function panel:LoadFromDB() Perfy_Trace(Perfy_GetTime(), "Enter", "panel:LoadFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5888:4");
         EnsureDB()
 
         g = MSUF_DB.general or {}
@@ -6000,10 +6000,10 @@ if bossSpacingSlider then
     end
 end
 
-        if currentTabKey == "fonts" or currentTabKey == "bars" or currentTabKey == "misc" or currentTabKey == "profiles" then return end
+        if currentTabKey == "fonts" or currentTabKey == "bars" or currentTabKey == "misc" or currentTabKey == "profiles" then Perfy_Trace(Perfy_GetTime(), "Leave", "panel:LoadFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5888:4"); return end
 
         conf = MSUF_DB[currentKey]
-        if not conf then return end
+        if not conf then Perfy_Trace(Perfy_GetTime(), "Leave", "panel:LoadFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5888:4"); return end
 
         if bossSpacingSlider and currentKey == "boss" then bossSpacingSlider:SetValue(conf.spacing or -36) end
 
@@ -6027,19 +6027,19 @@ if panel.bossPortraitDrop and panel.bossPortraitLabel then
         panel.bossPortraitLabel:Hide()
     end
 end
-        local function GetOffsetValue(v, default)
-            if v == nil then return default end
-            return v
+        local function GetOffsetValue(v, default) Perfy_Trace(Perfy_GetTime(), "Enter", "GetOffsetValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6030:14");
+            if v == nil then Perfy_Trace(Perfy_GetTime(), "Leave", "GetOffsetValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6030:14"); return default end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetOffsetValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6030:14"); return v
         end
 
         -- Player-only: mirror values into the compact stepper UI.
         if ns and ns.MSUF_Options_Player_ApplyFromDB then ns.MSUF_Options_Player_ApplyFromDB(self, currentKey, conf, g, GetOffsetValue) end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "panel:LoadFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:5888:4"); end
     -- Player-only compact Text layout handlers are installed by Options\MSUF_Options_Player.lua
     if ns and ns.MSUF_Options_Player_InstallHandlers then
         ns.MSUF_Options_Player_InstallHandlers(panel, {
-            getTabKey = function() return currentTabKey end,
-            getKey    = function() return currentKey end,
+            getTabKey = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6041:24"); Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6041:24"); return currentTabKey end,
+            getKey    = function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6042:24"); Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6042:24"); return currentKey end,
             EnsureDB  = EnsureDB,
             ApplySettingsForKey = ApplySettingsForKey,
             CallUpdateAllFonts  = MSUF_CallUpdateAllFonts,
@@ -6090,24 +6090,26 @@ MSUF_CallUpdateAllFonts()
     if ns and ns.MSUF_RegisterBossCastbarOptions then ns.MSUF_RegisterBossCastbarOptions(rootCat) end
 
 end
-    return panel
+    Perfy_Trace(Perfy_GetTime(), "Leave", "CreateOptionsPanel file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:711:0"); return panel
 
 end
 
 if panel and panel.LoadFromDB and not panel.__MSUF_OnShowHooked then
     panel.__MSUF_OnShowHooked = true
-    panel:SetScript("OnShow", function(self)
+    panel:SetScript("OnShow", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6099:30");
         if self.LoadFromDB then self:LoadFromDB() end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6099:30"); end)
 end
 
 if _G and not _G.__MSUF_LauncherAutoRegistered then
     _G.__MSUF_LauncherAutoRegistered = true
     if C_Timer and C_Timer.After then
-        C_Timer.After(0, function()
+        C_Timer.After(0, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6107:25");
             if type(MSUF_RegisterOptionsCategoryLazy) == "function" then MSUF_RegisterOptionsCategoryLazy() end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua:6107:25"); end)
     else
         if type(MSUF_RegisterOptionsCategoryLazy) == "function" then MSUF_RegisterOptionsCategoryLazy() end
     end
 end
+
+Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Options/MSUF_Options_Core.lua");

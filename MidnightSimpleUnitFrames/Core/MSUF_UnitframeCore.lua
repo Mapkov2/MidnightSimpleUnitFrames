@@ -2239,8 +2239,28 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
+        -- Boss units can reshuffle/vanish here (e.g. boss death / encounter phase ends).
+        -- Midnight/Beta: UnitGUID values may be "secret"; never compare GUIDs.
+        -- To avoid a 5x full-update burst, only refresh slots whose existence changed.
+        Core._bossExistsCache = Core._bossExistsCache or {}
+        local cache = Core._bossExistsCache
+
         for i = 1, 5 do
-            QueueUnit("boss" .. i, true, DIRTY_FULL, event)
+            local unit = "boss" .. i
+            local exists = (UnitExists and UnitExists(unit)) and true or false
+            local old = cache[i]
+
+            if old == nil then
+                cache[i] = exists
+                if exists then
+                    QueueUnit(unit, true, MASK_UNIT_SWAP, event)
+                    DeferSwapWork(unit, event, false, nil)
+                end
+            elseif exists ~= old then
+                cache[i] = exists
+                QueueUnit(unit, true, MASK_UNIT_SWAP, event)
+                DeferSwapWork(unit, event, false, nil)
+            end
         end
         return
     end

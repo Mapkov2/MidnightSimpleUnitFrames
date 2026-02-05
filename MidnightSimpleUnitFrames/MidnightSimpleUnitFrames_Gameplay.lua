@@ -1,4 +1,4 @@
--- MidnightSimpleUnitFrames_Gameplay.lua
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua"); -- MidnightSimpleUnitFrames_Gameplay.lua
 -- Gameplay helpers for Midnight Simple Unit Frames.
 -- Gameplay module: combat timer, combat state text, combat crosshair, and other small helpers.
 local _, ns = ...
@@ -29,18 +29,18 @@ local math_max     = math.max
 ------------------------------------------------------
 local _MSUF_Clamp = _G._MSUF_Clamp
 if not _MSUF_Clamp then
-    _MSUF_Clamp = function(v, mn, mx)
+    _MSUF_Clamp = function(v, mn, mx) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:32:18");
         v = tonumber(v)
         if not v then
-            return mn
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:32:18"); return mn
         end
         if v < mn then
-            return mn
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:32:18"); return mn
         end
         if v > mx then
-            return mx
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:32:18"); return mx
         end
-        return v
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:32:18"); return v
     end
     _G._MSUF_Clamp = _MSUF_Clamp
 end
@@ -55,26 +55,26 @@ local C_Timer_After = C_Timer and C_Timer.After
 do
     local _applyPending = false
 
-    function ns.MSUF_RequestGameplayApply()
+    function ns.MSUF_RequestGameplayApply() Perfy_Trace(Perfy_GetTime(), "Enter", "ns.MSUF_RequestGameplayApply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:58:4");
         if _applyPending then
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_RequestGameplayApply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:58:4"); return
         end
         _applyPending = true
 
         if C_Timer_After then
-            C_Timer_After(0, function()
+            C_Timer_After(0, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:65:29");
                 _applyPending = false
                 if ns and ns.MSUF_ApplyGameplayVisuals then
                     ns.MSUF_ApplyGameplayVisuals()
                 end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:65:29"); end)
         else
             _applyPending = false
             if ns and ns.MSUF_ApplyGameplayVisuals then
                 ns.MSUF_ApplyGameplayVisuals()
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_RequestGameplayApply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:58:4"); end
 end
 
 
@@ -99,8 +99,8 @@ local LSM           = LibStub and LibStub("LibSharedMedia-3.0", true)
 ------------------------------------------------------
 -- UpdateManager accessor (avoid repeating global lookups everywhere)
 ------------------------------------------------------
-local function MSUF_GetUpdateManager()
-    return _G.MSUF_UpdateManager or (ns and ns.MSUF_UpdateManager)
+local function MSUF_GetUpdateManager() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetUpdateManager file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:102:6");
+    return Perfy_Trace_Passthrough("Leave", "MSUF_GetUpdateManager file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:102:6", _G.MSUF_UpdateManager or (ns and ns.MSUF_UpdateManager))
 end
 
 ------------------------------------------------------
@@ -108,7 +108,7 @@ end
 ------------------------------------------------------
 local gameplayDBCache
 
-local function EnsureGameplayDefaults()
+local function EnsureGameplayDefaults() Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureGameplayDefaults file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:111:6");
     if type(MSUF_DB) ~= "table" then
         MSUF_DB = {}
     end
@@ -299,16 +299,16 @@ end
     end
 
     gameplayDBCache = g
-    return g
+    Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureGameplayDefaults file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:111:6"); return g
 end
 
 -- Hotpath helper: avoid calling EnsureGameplayDefaults() every tick.
 -- The gameplay DB table is stable; this cache is refreshed whenever EnsureGameplayDefaults() runs.
-local function GetGameplayDBFast()
+local function GetGameplayDBFast() Perfy_Trace(Perfy_GetTime(), "Enter", "GetGameplayDBFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:307:6");
     if type(gameplayDBCache) == "table" then
-        return gameplayDBCache
+        Perfy_Trace(Perfy_GetTime(), "Leave", "GetGameplayDBFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:307:6"); return gameplayDBCache
     end
-    return EnsureGameplayDefaults()
+    return Perfy_Trace_Passthrough("Leave", "GetGameplayDBFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:307:6", EnsureGameplayDefaults())
 end
 
 
@@ -324,7 +324,7 @@ do
     local _hooked = false
     local _pending = false
 
-    local function _Run()
+    local function _Run() Perfy_Trace(Perfy_GetTime(), "Enter", "_Run file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:327:10");
         _pending = false
         EnsureGameplayDefaults()
 
@@ -332,7 +332,7 @@ do
         if type(fn) == "function" then
             -- Optional module: keep errors visible during dev; but don't hard-break login.
             pcall(fn)
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_Run file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:327:10"); return
         end
 
         -- Fallback for older builds: just let the icon module decide whether to keep OnUpdate alive.
@@ -340,27 +340,27 @@ do
         if type(fn) == "function" then
             pcall(fn)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_Run file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:327:10"); end
 
-    local function RequestSync()
-        if _pending then return end
+    local function RequestSync() Perfy_Trace(Perfy_GetTime(), "Enter", "RequestSync file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:345:10");
+        if _pending then Perfy_Trace(Perfy_GetTime(), "Leave", "RequestSync file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:345:10"); return end
         _pending = true
         if C_Timer_After then
             C_Timer_After(0, _Run)
         else
             _Run()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "RequestSync file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:345:10"); end
 
     -- Expose for Options panel handlers (keeps all call sites consistent).
     if ns then
         ns.MSUF_RequestCooldownIconsSync = RequestSync
     end
 
-    local function TryHook()
-        if _hooked then return end
+    local function TryHook() Perfy_Trace(Perfy_GetTime(), "Enter", "TryHook file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:360:10");
+        if _hooked then Perfy_Trace(Perfy_GetTime(), "Leave", "TryHook file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:360:10"); return end
         local ecv = _G and _G["EssentialCooldownViewer"]
-        if not ecv or not ecv.HookScript then return end
+        if not ecv or not ecv.HookScript then Perfy_Trace(Perfy_GetTime(), "Leave", "TryHook file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:360:10"); return end
         _hooked = true
 
         ecv:HookScript("OnShow", RequestSync)
@@ -368,23 +368,23 @@ do
         ecv:HookScript("OnSizeChanged", RequestSync)
 
         RequestSync()
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "TryHook file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:360:10"); end
 
-    local function ScheduleHookAttempts()
+    local function ScheduleHookAttempts() Perfy_Trace(Perfy_GetTime(), "Enter", "ScheduleHookAttempts file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:373:10");
         local tries = 0
-        local function attempt()
+        local function attempt() Perfy_Trace(Perfy_GetTime(), "Enter", "attempt file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:375:14");
             tries = tries + 1
             TryHook()
             if (not _hooked) and tries < 10 and C_Timer_After then
                 C_Timer_After(1, attempt)
             end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "attempt file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:375:14"); end
         if C_Timer_After then
             C_Timer_After(1, attempt)
         else
             attempt()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ScheduleHookAttempts file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:373:10"); end
 
     RequestSync()
     ScheduleHookAttempts()
@@ -397,9 +397,9 @@ end
 do
     local POPUP_KEY = "MSUF_GAMEPLAY_COLORS_TIP"
 
-    local function EnsureDialog()
+    local function EnsureDialog() Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureDialog file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:400:10");
         if not _G.StaticPopupDialogs then
-            return false
+            Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureDialog file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:400:10"); return false
         end
         if not _G.StaticPopupDialogs[POPUP_KEY] then
             _G.StaticPopupDialogs[POPUP_KEY] = {
@@ -412,13 +412,13 @@ do
                 preferredIndex = 3,
             }
         end
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureDialog file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:400:10"); return true
     end
 
-    function ns.MSUF_MaybeShowGameplayColorsTip()
+    function ns.MSUF_MaybeShowGameplayColorsTip() Perfy_Trace(Perfy_GetTime(), "Enter", "ns.MSUF_MaybeShowGameplayColorsTip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:418:4");
         local g = EnsureGameplayDefaults()
         if g and g.shownGameplayColorsTip then
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_MaybeShowGameplayColorsTip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:418:4"); return
         end
         if EnsureDialog() and _G.StaticPopup_Show then
             -- Mark as shown before showing so we never spam, even if the dialog is dismissed instantly.
@@ -427,14 +427,14 @@ do
             end
             _G.StaticPopup_Show(POPUP_KEY)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_MaybeShowGameplayColorsTip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:418:4"); end
 end
 
 
 ------------------------------------------------------
 -- Font helper: reuse global MSUF text style
 ------------------------------------------------------
-local function GetGameplayFontSettings(kind)
+local function GetGameplayFontSettings(kind) Perfy_Trace(Perfy_GetTime(), "Enter", "GetGameplayFontSettings file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:437:6");
     local gGameplay = EnsureGameplayDefaults()
 
     local general = (MSUF_DB and MSUF_DB.general) or {}
@@ -495,7 +495,7 @@ local function GetGameplayFontSettings(kind)
 
     local useShadow = general.textBackdrop and true or false
 
-    return fontPath, flags, fr, fg, fb, effSize, useShadow
+    Perfy_Trace(Perfy_GetTime(), "Leave", "GetGameplayFontSettings file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:437:6"); return fontPath, flags, fr, fg, fb, effSize, useShadow
 end
 
 
@@ -503,7 +503,7 @@ end
 ------------------------------------------------------
 -- Combat state text colors (Enter/Leave)
 ------------------------------------------------------
-local function _MSUF_NormalizeRGB(tbl, dr, dg, db)
+local function _MSUF_NormalizeRGB(tbl, dr, dg, db) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_NormalizeRGB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:506:6");
     if type(tbl) == "table" then
         local r = tonumber(tbl[1])
         local g = tonumber(tbl[2])
@@ -512,13 +512,13 @@ local function _MSUF_NormalizeRGB(tbl, dr, dg, db)
             if r < 0 then r = 0 elseif r > 1 then r = 1 end
             if g < 0 then g = 0 elseif g > 1 then g = 1 end
             if b < 0 then b = 0 elseif b > 1 then b = 1 end
-            return r, g, b
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_NormalizeRGB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:506:6"); return r, g, b
         end
     end
-    return dr or 1, dg or 1, db or 1
+    return Perfy_Trace_Passthrough("Leave", "_MSUF_NormalizeRGB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:506:6", dr or 1, dg or 1, db or 1)
 end
 
-local function MSUF_GetCombatStateColors(g)
+local function MSUF_GetCombatStateColors(g) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetCombatStateColors file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:521:6");
     -- Defaults match the legacy hardcoded values.
     local er, eg, eb = _MSUF_NormalizeRGB(g and g.combatStateEnterColor, 1, 1, 1)
     local lr, lg, lb = _MSUF_NormalizeRGB(g and g.combatStateLeaveColor, 0.7, 0.7, 0.7)
@@ -526,16 +526,16 @@ local function MSUF_GetCombatStateColors(g)
     if g and g.combatStateColorSync then
         lr, lg, lb = er, eg, eb
     end
-    return er, eg, eb, lr, lg, lb
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetCombatStateColors file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:521:6"); return er, eg, eb, lr, lg, lb
 end
 
-local function MSUF_ApplyCombatStateDynamicColor()
+local function MSUF_ApplyCombatStateDynamicColor() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ApplyCombatStateDynamicColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:532:6");
     if not combatStateText and EnsureCombatStateText then
         EnsureCombatStateText()
     end
 
     if not combatStateText then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ApplyCombatStateDynamicColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:532:6"); return
     end
     local g = GetGameplayDBFast()
     local er, eg, eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
@@ -546,7 +546,7 @@ local function MSUF_ApplyCombatStateDynamicColor()
     else
         combatStateText:SetTextColor(er, eg, eb, 1)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ApplyCombatStateDynamicColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:532:6"); end
 
 ------------------------------------------------------
 -- Gameplay frames
@@ -567,8 +567,8 @@ local MSUF_RefreshCrosshairRangeTaskEnabled
 local MSUF_RequestCrosshairRangeRefresh
 local EnsureFirstDanceTaskRegistered
 -- Resolve the spell ID used for crosshair melee-range checks, with robust fallbacks.
-local function MSUF_ResolveCrosshairRangeSpellIDFromGameplay(g)
-    if type(g) ~= "table" then return 0 end
+local function MSUF_ResolveCrosshairRangeSpellIDFromGameplay(g) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ResolveCrosshairRangeSpellIDFromGameplay file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:570:6");
+    if type(g) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ResolveCrosshairRangeSpellIDFromGameplay file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:570:6"); return 0 end
 
     local spellID = tonumber(g.crosshairRangeSpellID) or 0
     if spellID <= 0 then
@@ -598,12 +598,12 @@ local function MSUF_ResolveCrosshairRangeSpellIDFromGameplay(g)
         spellID = tonumber(MSUF_DB.general.meleeRangeSpellID) or 0
     end
 
-    return spellID
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ResolveCrosshairRangeSpellIDFromGameplay file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:570:6"); return spellID
 end
 
 -- Cache crosshair runtime flags from gameplay DB so hotpaths don't repeatedly look up DB keys.
-local function MSUF_CrosshairSyncRangeCacheFromGameplay(g)
-    if not combatCrosshairFrame then return end
+local function MSUF_CrosshairSyncRangeCacheFromGameplay(g) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_CrosshairSyncRangeCacheFromGameplay file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:605:6");
+    if not combatCrosshairFrame then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CrosshairSyncRangeCacheFromGameplay file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:605:6"); return end
 
     combatCrosshairFrame._msufCrosshairEnabled = (g and g.enableCombatCrosshair) and true or false
 
@@ -625,7 +625,7 @@ local function MSUF_CrosshairSyncRangeCacheFromGameplay(g)
     combatCrosshairFrame._msufOutRangeB = (outT and outT[3]) or 0
     -- Dynamic interval: fast while it matters (combat + valid target); otherwise we keep the task disabled.
     combatCrosshairFrame._msufRangeTickInterval = 0.25
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CrosshairSyncRangeCacheFromGameplay file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:605:6"); end
 
 
 
@@ -635,9 +635,9 @@ local wasInCombat = false
 local lastTimerText = ""
 
 -- Shared combat timer tick (used by UpdateManager + immediate event refresh)
-local function MSUF_Gameplay_TickCombatTimer()
+local function MSUF_Gameplay_TickCombatTimer() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Gameplay_TickCombatTimer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:638:6");
     if not combatTimerText then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Gameplay_TickCombatTimer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:638:6"); return
     end
 
     local gNow = GetGameplayDBFast()
@@ -649,7 +649,7 @@ local function MSUF_Gameplay_TickCombatTimer()
         end
         wasInCombat = false
         combatStartTime = nil
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Gameplay_TickCombatTimer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:638:6"); return
     end
 
     -- UnitAffectingCombat is the most reliable signal for "combat started" timing.
@@ -691,7 +691,7 @@ local function MSUF_Gameplay_TickCombatTimer()
         wasInCombat = false
         combatStartTime = nil
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Gameplay_TickCombatTimer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:638:6"); end
 
 -- Rogue "The First Dance" 6s window (out-of-combat)
 local FIRST_DANCE_WINDOW = 6
@@ -703,15 +703,15 @@ local firstDanceLastText = nil
 -- Make the combat enter/leave text click-through while it is actively displayed
 -- so it never steals clicks / focus (e.g. targeting) while flashing on screen.
 -- When cleared, mouse is restored based on the lock setting.
-local function MSUF_CombatState_SetClickThrough(active)
+local function MSUF_CombatState_SetClickThrough(active) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_CombatState_SetClickThrough file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:706:6");
     if not combatStateFrame then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CombatState_SetClickThrough file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:706:6"); return
     end
 
     if active then
         combatStateFrame._msufClickThroughActive = true
         combatStateFrame:EnableMouse(false)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CombatState_SetClickThrough file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:706:6"); return
     end
 
     combatStateFrame._msufClickThroughActive = nil
@@ -721,13 +721,13 @@ local function MSUF_CombatState_SetClickThrough(active)
     else
         combatStateFrame:EnableMouse(true)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CombatState_SetClickThrough file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:706:6"); end
 
 
-local function ApplyFontToCounter()
+local function ApplyFontToCounter() Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyFontToCounter file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:727:6");
     -- If nothing exists yet, nothing to do
     if not combatTimerText and not combatStateText then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyFontToCounter file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:727:6"); return
     end
     -- Combat timer font (uses its own override)
     if combatTimerText then
@@ -759,14 +759,14 @@ local function ApplyFontToCounter()
         MSUF_ApplyCombatStateDynamicColor()
     end
 
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyFontToCounter file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:727:6"); end
 
 local EnsureCombatStateText
 
 ------------------------------------------------------
 -- "The First Dance" helper
 ------------------------------------------------------
-local function StartFirstDanceWindow()
+local function StartFirstDanceWindow() Perfy_Trace(Perfy_GetTime(), "Enter", "StartFirstDanceWindow file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:769:6");
     local g = GetGameplayDBFast()
 
     -- Feature off = make sure state is hard-reset and updater is off
@@ -779,7 +779,7 @@ local function StartFirstDanceWindow()
             umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
         end
         MSUF_CombatState_SetClickThrough(false)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "StartFirstDanceWindow file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:769:6"); return
     end
 
     if not combatStateText and EnsureCombatStateText then
@@ -792,7 +792,7 @@ local function StartFirstDanceWindow()
             umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
         end
         MSUF_CombatState_SetClickThrough(false)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "StartFirstDanceWindow file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:769:6"); return
     end
 
     firstDanceEndTime = GetTime() + FIRST_DANCE_WINDOW
@@ -825,14 +825,14 @@ local function StartFirstDanceWindow()
     if umFD and umFD.SetEnabled then
         umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", true)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "StartFirstDanceWindow file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:769:6"); end
 
 ------------------------------------------------------
 -- Combat state text (enter/leave combat)
 ------------------------------------------------------
-EnsureCombatStateText = function()
+EnsureCombatStateText = function() Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureCombatStateText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:833:24");
     if combatStateText then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureCombatStateText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:833:24"); return
     end
 
     local g = GetGameplayDBFast()
@@ -846,15 +846,15 @@ EnsureCombatStateText = function()
         combatStateFrame:SetMovable(true)
         combatStateFrame:RegisterForDrag("LeftButton")
 
-        combatStateFrame:SetScript("OnDragStart", function(self)
+        combatStateFrame:SetScript("OnDragStart", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:849:50");
             local gd = EnsureGameplayDefaults()
             if gd.lockCombatState then
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:849:50"); return
             end
             self:StartMoving()
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:849:50"); end)
 
-        combatStateFrame:SetScript("OnDragStop", function(self)
+        combatStateFrame:SetScript("OnDragStop", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:857:49");
             self:StopMovingOrSizing()
         local x, y = self:GetCenter()
             local ux, uy = UIParent:GetCenter()
@@ -863,7 +863,7 @@ EnsureCombatStateText = function()
             local db = EnsureGameplayDefaults()
             db.combatStateOffsetX = dx
             db.combatStateOffsetY = dy
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:857:49"); end)
     end
 
     combatStateText = combatStateFrame:CreateFontString("MSUF_CombatStateText", "OVERLAY")
@@ -890,7 +890,7 @@ EnsureCombatStateText = function()
         combatEventFrame = CreateFrame("Frame", "MSUF_CombatStateEventFrame", UIParent)
         -- Events are registered/unregistered in ns.MSUF_RequestGameplayApply() for performance.
         combatEventFrame:UnregisterAllEvents()
-local function MSUF_CombatState_OnEvent(_, event)
+local function MSUF_CombatState_OnEvent(_, event) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_CombatState_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:893:6");
     local g = GetGameplayDBFast()
     if not g or (not g.enableCombatStateText and not g.enableFirstDanceTimer) then
         if combatStateText then
@@ -903,7 +903,7 @@ local function MSUF_CombatState_OnEvent(_, event)
         firstDanceActive = false
         firstDanceEndTime = 0
         firstDanceLastText = nil
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CombatState_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:893:6"); return
     end
 
     local wantState = (g.enableCombatStateText == true)
@@ -926,7 +926,7 @@ local function MSUF_CombatState_OnEvent(_, event)
                 combatStateText:Hide()
             end
             MSUF_CombatState_SetClickThrough(false)
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CombatState_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:893:6"); return
         end
 
         local enterText = g.combatStateEnterText
@@ -942,14 +942,14 @@ local function MSUF_CombatState_OnEvent(_, event)
         combatStateText:Show()
 
         if C_Timer_After then
-            C_Timer_After(duration, function()
+            C_Timer_After(duration, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:945:36");
                 local g2 = GetGameplayDBFast()
                 if combatStateText and g2 and g2.enableCombatStateText then
                     combatStateText:SetText("")
                     combatStateText:Hide()
                     MSUF_CombatState_SetClickThrough(false)
                 end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:945:36"); end)
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -960,7 +960,7 @@ local function MSUF_CombatState_OnEvent(_, event)
 
         if g.enableFirstDanceTimer then
             StartFirstDanceWindow()
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CombatState_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:893:6"); return
         end
 
         if not wantState then
@@ -969,7 +969,7 @@ local function MSUF_CombatState_OnEvent(_, event)
                 combatStateText:Hide()
             end
             MSUF_CombatState_SetClickThrough(false)
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CombatState_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:893:6"); return
         end
 
         local leaveText = g.combatStateLeaveText
@@ -985,28 +985,28 @@ local function MSUF_CombatState_OnEvent(_, event)
         combatStateText:Show()
 
         if C_Timer_After then
-            C_Timer_After(duration, function()
+            C_Timer_After(duration, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:988:36");
                 local g2 = GetGameplayDBFast()
                 if combatStateText and g2 and g2.enableCombatStateText then
                     combatStateText:SetText("")
                     combatStateText:Hide()
                     MSUF_CombatState_SetClickThrough(false)
                 end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:988:36"); end)
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CombatState_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:893:6"); end
 combatEventFrame:SetScript("OnEvent", MSUF_CombatState_OnEvent)
     end
 
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureCombatStateText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:833:24"); end
 
 ------------------------------------------------------
 -- "First Dance" countdown tick
 ------------------------------------------------------
-local function _TickFirstDance()
+local function _TickFirstDance() Perfy_Trace(Perfy_GetTime(), "Enter", "_TickFirstDance file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1007:6");
     if not firstDanceActive then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_TickFirstDance file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1007:6"); return
     end
 
     local gFD = GetGameplayDBFast()
@@ -1023,7 +1023,7 @@ local function _TickFirstDance()
         if umFD and umFD.SetEnabled then
             umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
         end
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_TickFirstDance file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1007:6"); return
     end
 
     if not combatStateText and EnsureCombatStateText then
@@ -1032,7 +1032,7 @@ local function _TickFirstDance()
 
     if not combatStateText then
         MSUF_CombatState_SetClickThrough(false)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_TickFirstDance file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1007:6"); return
     end
 
     local now = GetTime()
@@ -1048,7 +1048,7 @@ local function _TickFirstDance()
         if umFD and umFD.SetEnabled then
             umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
         end
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_TickFirstDance file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1007:6"); return
     end
 
     local text = string_format("First Dance: %.1f", remaining)
@@ -1056,15 +1056,15 @@ local function _TickFirstDance()
         firstDanceLastText = text
         combatStateText:SetText(text)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_TickFirstDance file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1007:6"); end
 
 
-EnsureFirstDanceTaskRegistered = function()
+EnsureFirstDanceTaskRegistered = function() Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureFirstDanceTaskRegistered file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1062:33");
     if ns and ns._MSUF_FirstDanceTaskRegistered then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureFirstDanceTaskRegistered file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1062:33"); return
     end
     if not combatStateFrame then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureFirstDanceTaskRegistered file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1062:33"); return
     end
 
     local umFD = MSUF_GetUpdateManager()
@@ -1082,11 +1082,11 @@ EnsureFirstDanceTaskRegistered = function()
         if ns then
             ns._MSUF_FirstDanceTaskRegistered = true
         end
-        combatStateFrame:SetScript("OnUpdate", function(self, elapsed)
+        combatStateFrame:SetScript("OnUpdate", function(self, elapsed) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1085:47");
             _TickFirstDance()
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1085:47"); end)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureFirstDanceTaskRegistered file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1062:33"); end
 
 
 
@@ -1097,15 +1097,15 @@ end
 -- Returns true if any Blizzard "find yourself" / self highlight or
 -- personal nameplate setting is active so we let the crosshair
 -- follow the camera.
-local function MSUF_ShouldCrosshairFollowCamera()
+local function MSUF_ShouldCrosshairFollowCamera() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ShouldCrosshairFollowCamera file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1100:6");
     if not GetCVar then
-        return false
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShouldCrosshairFollowCamera file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1100:6"); return false
     end
 
     -- 1) Klassischer Self-Highlight-Modus (Circle / Outline / Icon)
     local mode = tonumber(GetCVar("findYourselfMode") or "0") or 0
     if mode > 0 then
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShouldCrosshairFollowCamera file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1100:6"); return true
     end
 
     if GetCVarBool then
@@ -1113,30 +1113,30 @@ local function MSUF_ShouldCrosshairFollowCamera()
         if GetCVarBool("findYourselfModeAll")
         or GetCVarBool("findYourselfModeAlways")
         or GetCVarBool("findYourselfModeCombat") then
-            return true
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShouldCrosshairFollowCamera file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1100:6"); return true
         end
     end
 
     -- 2) Eigene Nameplate / Personal Resource Display
     if GetCVarBool and (GetCVarBool("nameplateShowSelf") or GetCVarBool("nameplateShowAll")) then
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShouldCrosshairFollowCamera file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1100:6"); return true
     end
 
     -- 3) Failsafe: Personal Nameplate-Frame ist sichtbar
     local personal = _G.NamePlatePersonalFrame
     if personal and personal:IsShown() then
-        return true
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShouldCrosshairFollowCamera file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1100:6"); return true
     end
 
-    return false
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShouldCrosshairFollowCamera file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1100:6"); return false
 end
 
 -- Re-anchor combat crosshair. It will only follow the camera when
 -- Self Highlight / nameplates are active; otherwise we fall back to
 -- the classic screen-center position.
-local function MSUF_AnchorCombatCrosshair()
+local function MSUF_AnchorCombatCrosshair() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_AnchorCombatCrosshair file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1137:6");
     if not combatCrosshairFrame then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_AnchorCombatCrosshair file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1137:6"); return
     end
 
     -- Default: Bildschirmmitte (altes Verhalten)
@@ -1190,11 +1190,11 @@ local function MSUF_AnchorCombatCrosshair()
         combatCrosshairFrame:SetParent(parent)
         combatCrosshairFrame:SetPoint("CENTER", anchorTo, "CENTER", offsetX, offsetY)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_AnchorCombatCrosshair file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1137:6"); end
 
 -- Forward declaration so calls above resolve to local, not _G
 local MSUF_UpdateCombatCrosshairRangeColor
-local function EnsureCombatCrosshair()
+local function EnsureCombatCrosshair() Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureCombatCrosshair file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1197:6");
     local g = EnsureGameplayDefaults()
 
     if not combatCrosshairFrame then
@@ -1220,14 +1220,14 @@ local function EnsureCombatCrosshair()
             combatCrosshairEventFrame = CreateFrame("Frame", "MSUF_CombatCrosshairEventFrame", UIParent)
             combatCrosshairEventFrame:UnregisterAllEvents()
 
-            local function MSUF_CombatCrosshair_OnEvent(_, event, ...)
+            local function MSUF_CombatCrosshair_OnEvent(_, event, ...) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_CombatCrosshair_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1223:18");
                 local arg1 = ...
                 local g2 = GetGameplayDBFast()
                 if not g2.enableCombatCrosshair or not combatCrosshairFrame then
                     if combatCrosshairFrame then
                         combatCrosshairFrame:Hide()
                     end
-                    return
+                    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CombatCrosshair_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1223:18"); return
                 end
 
                 local inCombat = ((InCombatLockdown and InCombatLockdown()) or (UnitAffectingCombat and UnitAffectingCombat("player")) or false)
@@ -1258,12 +1258,12 @@ local function EnsureCombatCrosshair()
                         if combatCrosshairFrame and not combatCrosshairFrame._msufAnchorPending then
                             combatCrosshairFrame._msufAnchorPending = true
                             if C_Timer_After then
-                                C_Timer_After(0, function()
+                                C_Timer_After(0, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1261:49");
                                     if combatCrosshairFrame then
                                         combatCrosshairFrame._msufAnchorPending = nil
                                     end
                                     MSUF_AnchorCombatCrosshair()
-                                end)
+                                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1261:49"); end)
                             else
                                 combatCrosshairFrame._msufAnchorPending = nil
                                 MSUF_AnchorCombatCrosshair()
@@ -1271,7 +1271,7 @@ local function EnsureCombatCrosshair()
                         end
                     end
                 end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_CombatCrosshair_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1223:18"); end
 
             combatCrosshairEventFrame:SetScript("OnEvent", MSUF_CombatCrosshair_OnEvent)
         end
@@ -1316,9 +1316,9 @@ local umRange = MSUF_GetUpdateManager()
 if umRange and umRange.Register and umRange.SetEnabled then
     if not ns._MSUF_CrosshairRangeTaskRegistered then
         ns._MSUF_CrosshairRangeTaskRegistered = true
-        umRange:Register("MSUF_GAMEPLAY_CROSSHAIR_RANGE", function()
+        umRange:Register("MSUF_GAMEPLAY_CROSSHAIR_RANGE", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1319:58");
             if not combatCrosshairFrame or not combatCrosshairFrame:IsShown() then
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1319:58"); return
             end
 
             -- No DB reads in the hotpath: rely on cached flags/spellID from Apply.
@@ -1326,19 +1326,19 @@ if umRange and umRange.Register and umRange.SetEnabled then
                 -- Neutralize and stop ticking until config becomes valid again
                 MSUF_UpdateCombatCrosshairRangeColor()
                 umRange:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", false)
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1319:58"); return
             end
 
             if not MSUF_CrosshairHasValidTarget() then
                 -- No valid target: revert to neutral and stop the background tick until a new target appears
                 MSUF_UpdateCombatCrosshairRangeColor()
                 umRange:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", false)
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1319:58"); return
             end
 
             MSUF_UpdateCombatCrosshairRangeColor()
-        end, function()
-            return (combatCrosshairFrame and combatCrosshairFrame._msufRangeTickInterval) or 0.25
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1319:58"); end, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1340:13");
+            return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1340:13", (combatCrosshairFrame and combatCrosshairFrame._msufRangeTickInterval) or 0.25)
         end)
         umRange:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", false)
     end
@@ -1357,19 +1357,19 @@ else
         if not combatCrosshairFrame.MSUF_RangeOnUpdate then
             combatCrosshairFrame.MSUF_RangeOnUpdate = true
             combatCrosshairFrame.MSUF_RangeElapsed = 0
-            combatCrosshairFrame:SetScript("OnUpdate", function(self, elapsed)
-                if not self:IsShown() then return end
+            combatCrosshairFrame:SetScript("OnUpdate", function(self, elapsed) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1360:55");
+                if not self:IsShown() then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1360:55"); return end
                 local g3 = EnsureGameplayDefaults()
                 if not g3.enableCombatCrosshair or not g3.enableCombatCrosshairMeleeRangeColor then
                     self:SetScript("OnUpdate", nil)
                     self.MSUF_RangeOnUpdate = nil
-                    return
+                    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1360:55"); return
                 end
                 self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
-                if self.MSUF_RangeElapsed < 0.15 then return end
+                if self.MSUF_RangeElapsed < 0.15 then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1360:55"); return end
                 self.MSUF_RangeElapsed = 0
                 MSUF_UpdateCombatCrosshairRangeColor()
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1360:55"); end)
         end
     else
         if combatCrosshairFrame.MSUF_RangeOnUpdate then
@@ -1381,11 +1381,11 @@ end
 
     end
 
-    return combatCrosshairFrame
+    Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureCombatCrosshair file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1197:6"); return combatCrosshairFrame
 end
 
 -- Lock / unlock helper
-local function ApplyLockState()
+local function ApplyLockState() Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyLockState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1388:6");
     local g = EnsureGameplayDefaults()
     if combatFrame then
         if g.lockCombatTimer then
@@ -1404,47 +1404,47 @@ local function ApplyLockState()
             combatStateFrame:EnableMouse(true)
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyLockState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1388:6"); end
 
 
 
 -- Combat Timer anchor helpers
-local function _MSUF_ValidateCombatTimerAnchor(v)
+local function _MSUF_ValidateCombatTimerAnchor(v) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_ValidateCombatTimerAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1412:6");
     if v == "player" or v == "target" or v == "focus" then
-        return v
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ValidateCombatTimerAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1412:6"); return v
     end
-    return "none"
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ValidateCombatTimerAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1412:6"); return "none"
 end
 
-local function _MSUF_GetUnitFrameForAnchor(key)
-    if not key or key == "" then return nil end
+local function _MSUF_GetUnitFrameForAnchor(key) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_GetUnitFrameForAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1419:6");
+    if not key or key == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetUnitFrameForAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1419:6"); return nil end
     local list = _G and _G.MSUF_UnitFrames
     if list and list[key] then
-        return list[key]
+        return Perfy_Trace_Passthrough("Leave", "_MSUF_GetUnitFrameForAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1419:6", list[key])
     end
     local gname = "MSUF_" .. key
     local f = _G and _G[gname]
     if f then
-        return f
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetUnitFrameForAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1419:6"); return f
     end
-    return nil
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetUnitFrameForAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1419:6"); return nil
 end
 
-local function _MSUF_GetCombatTimerAnchorFrame(g)
+local function _MSUF_GetCombatTimerAnchorFrame(g) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_GetCombatTimerAnchorFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1433:6");
     local key = _MSUF_ValidateCombatTimerAnchor(g and g.combatTimerAnchor)
     if key == "none" then
-        return UIParent
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetCombatTimerAnchorFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1433:6"); return UIParent
     end
     local f = _MSUF_GetUnitFrameForAnchor(key)
     if f and f.GetCenter then
-        return f
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetCombatTimerAnchorFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1433:6"); return f
     end
-    return UIParent
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_GetCombatTimerAnchorFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1433:6"); return UIParent
 end
 
-local function MSUF_Gameplay_ApplyCombatTimerAnchor(g)
+local function MSUF_Gameplay_ApplyCombatTimerAnchor(g) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Gameplay_ApplyCombatTimerAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1445:6");
     if not combatFrame then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Gameplay_ApplyCombatTimerAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1445:6"); return
     end
 
     g = g or EnsureGameplayDefaults()
@@ -1458,25 +1458,25 @@ local function MSUF_Gameplay_ApplyCombatTimerAnchor(g)
     if want ~= "none" and anchor == UIParent then
         if not combatFrame._msufAnchorRetryPending and C_Timer and C_Timer.After then
             combatFrame._msufAnchorRetryPending = true
-            C_Timer.After(0.2, function()
+            C_Timer.After(0.2, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1461:31");
                 if combatFrame then
                     combatFrame._msufAnchorRetryPending = nil
                     MSUF_Gameplay_ApplyCombatTimerAnchor()
                 end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1461:31"); end)
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Gameplay_ApplyCombatTimerAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1445:6"); end
 
 
 -- Export so the main file can call this from UpdateAllFonts()
-function ns.MSUF_ApplyGameplayFontFromGlobal()
+function ns.MSUF_ApplyGameplayFontFromGlobal() Perfy_Trace(Perfy_GetTime(), "Enter", "ns.MSUF_ApplyGameplayFontFromGlobal file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1473:0");
     ApplyFontToCounter()
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_ApplyGameplayFontFromGlobal file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1473:0"); end
 
-local function CreateCombatTimerFrame()
+local function CreateCombatTimerFrame() Perfy_Trace(Perfy_GetTime(), "Enter", "CreateCombatTimerFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1477:6");
     if combatFrame then
-        return combatFrame
+        Perfy_Trace(Perfy_GetTime(), "Leave", "CreateCombatTimerFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1477:6"); return combatFrame
     end
 
     local g = EnsureGameplayDefaults()
@@ -1489,19 +1489,19 @@ local function CreateCombatTimerFrame()
     combatFrame:SetMovable(true)
     combatFrame:RegisterForDrag("LeftButton")
 
-    combatFrame:SetScript("OnDragStart", function(self)
+    combatFrame:SetScript("OnDragStart", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1492:41");
         local gd = EnsureGameplayDefaults()
         if gd.lockCombatTimer then
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1492:41"); return
         end
         self:StartMoving()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1492:41"); end)
 
-    combatFrame:SetScript("OnDragStop", function(self)
+    combatFrame:SetScript("OnDragStop", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1500:40");
         self:StopMovingOrSizing()
         local x, y = self:GetCenter()
         if not x or not y then
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1500:40"); return
         end
 
         local db = EnsureGameplayDefaults()
@@ -1514,12 +1514,12 @@ local function CreateCombatTimerFrame()
             ax, ay = UIParent:GetCenter()
         end
         if not ax or not ay then
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1500:40"); return
         end
 
         db.combatOffsetX = x - ax
         db.combatOffsetY = y - ay
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1500:40"); end)
 
     combatTimerText = combatFrame:CreateFontString(nil, "OVERLAY")
     combatTimerText:SetPoint("CENTER")
@@ -1531,7 +1531,7 @@ local function CreateCombatTimerFrame()
     -- Apply initial lock state
     ApplyLockState()
 
-    return combatFrame
+    Perfy_Trace(Perfy_GetTime(), "Leave", "CreateCombatTimerFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1477:6"); return combatFrame
 end
 
 
@@ -1547,12 +1547,12 @@ local MSUF_MeleeSpellCacheBuilding = false
 local MSUF_MeleeSpellCachePending = false
 local MSUF_MeleeSpellCacheEventFrame
 
-local function MSUF_BuildMeleeSpellCache()
+local function MSUF_BuildMeleeSpellCache() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_BuildMeleeSpellCache file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1550:6");
     if MSUF_MeleeSpellCacheBuilt then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_BuildMeleeSpellCache file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1550:6"); return
     end
     if MSUF_MeleeSpellCacheBuilding then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_BuildMeleeSpellCache file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1550:6"); return
     end
 
     -- Never build suggestions in combat: defer until we leave combat to avoid stutters in raids.
@@ -1560,19 +1560,19 @@ local function MSUF_BuildMeleeSpellCache()
         MSUF_MeleeSpellCachePending = true
         if not MSUF_MeleeSpellCacheEventFrame then
             MSUF_MeleeSpellCacheEventFrame = CreateFrame("Frame", "MSUF_MeleeSpellCacheEventFrame", UIParent)
-            local function MSUF_MeleeSpellCache_OnEvent()
+            local function MSUF_MeleeSpellCache_OnEvent() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_MeleeSpellCache_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1563:18");
                 if not MSUF_MeleeSpellCachePending then
-                    return
+                    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_MeleeSpellCache_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1563:18"); return
                 end
                 MSUF_MeleeSpellCachePending = false
                 MSUF_MeleeSpellCacheEventFrame:UnregisterAllEvents()
                 MSUF_BuildMeleeSpellCache()
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_MeleeSpellCache_OnEvent file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1563:18"); end
             MSUF_MeleeSpellCacheEventFrame:SetScript("OnEvent", MSUF_MeleeSpellCache_OnEvent)
 
         end
         MSUF_MeleeSpellCacheEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_BuildMeleeSpellCache file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1550:6"); return
     end
 
     MSUF_MeleeSpellCacheBuilding = true
@@ -1584,15 +1584,15 @@ local function MSUF_BuildMeleeSpellCache()
     local iter = 0
     local YIELD_EVERY = 250
 
-    local function YieldMaybe()
+    local function YieldMaybe() Perfy_Trace(Perfy_GetTime(), "Enter", "YieldMaybe file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1587:10");
         iter = iter + 1
         if (iter % YIELD_EVERY) == 0 then
             coroutine.yield()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "YieldMaybe file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1587:10"); end
 
-    local function AddSpell(spellID, name, maxRange)
-        if not spellID or not name or seen[spellID] then return end
+    local function AddSpell(spellID, name, maxRange) Perfy_Trace(Perfy_GetTime(), "Enter", "AddSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1594:10");
+        if not spellID or not name or seen[spellID] then Perfy_Trace(Perfy_GetTime(), "Leave", "AddSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1594:10"); return end
         seen[spellID] = true
 
         local mr = tonumber(maxRange) or 0
@@ -1606,9 +1606,9 @@ local function MSUF_BuildMeleeSpellCache()
                 maxRange = maxRange,
             }
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "AddSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1594:10"); end
 
-    local function BuildBody()
+    local function BuildBody() Perfy_Trace(Perfy_GetTime(), "Enter", "BuildBody file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1611:10");
         -- Preferred (Midnight/Beta+): C_SpellBook skill line scan
         if C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines and C_SpellBook.GetSpellBookSkillLineInfo and C_SpellBook.GetSpellBookItemInfo then
             local bank = (Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player) or "spell"
@@ -1718,28 +1718,28 @@ local function MSUF_BuildMeleeSpellCache()
         end
 
         if #MSUF_MeleeSpellCache > 1 then
-            table_sort(MSUF_MeleeSpellCache, function(a, b)
-                return a.lower < b.lower
+            table_sort(MSUF_MeleeSpellCache, function(a, b) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1721:45");
+                return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1721:45", a.lower < b.lower)
             end)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "BuildBody file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1611:10"); end
 
     -- Chunked build via coroutine to avoid a single-frame spellbook scan spike.
     local co = coroutine.create(BuildBody)
 
-    local function FinishBuild()
+    local function FinishBuild() Perfy_Trace(Perfy_GetTime(), "Enter", "FinishBuild file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1730:10");
         MSUF_MeleeSpellCacheBuilding = false
         MSUF_MeleeSpellCacheBuilt = true
         MSUF_MeleeSpellCachePending = false
         if MSUF_MeleeSpellCacheEventFrame then
             MSUF_MeleeSpellCacheEventFrame:UnregisterAllEvents()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "FinishBuild file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1730:10"); end
 
-    local function Step()
+    local function Step() Perfy_Trace(Perfy_GetTime(), "Enter", "Step file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1739:10");
         if not co then
             FinishBuild()
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "Step file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1739:10"); return
         end
 
         local ok = coroutine.resume(co)
@@ -1748,12 +1748,12 @@ local function MSUF_BuildMeleeSpellCache()
             -- Suggestions will simply be empty.
             MSUF_MeleeSpellCache = MSUF_MeleeSpellCache or {}
             FinishBuild()
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "Step file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1739:10"); return
         end
 
         if coroutine.status(co) == "dead" then
             FinishBuild()
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "Step file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1739:10"); return
         end
 
         if C_Timer_After then
@@ -1766,29 +1766,29 @@ local function MSUF_BuildMeleeSpellCache()
             end
             FinishBuild()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "Step file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1739:10"); end
 
     Step()
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_BuildMeleeSpellCache file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1550:6"); end
 
 -- Track which spell IDs currently have range checks enabled (base + potential override)
 local MSUF_LastEnabledMeleeRangeSpellID = 0
 local MSUF_LastEnabledMeleeRangeSpellID_Override = 0
 
-local function MSUF_GetOverrideSpellID(spellID)
+local function MSUF_GetOverrideSpellID(spellID) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetOverrideSpellID file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1778:6");
     if not (C_Spell and C_Spell.GetOverrideSpell) then
-        return 0
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetOverrideSpellID file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1778:6"); return 0
     end
     local ok, overrideID = MSUF_FastCall(C_Spell.GetOverrideSpell, spellID)
     if ok and type(overrideID) == "number" and overrideID > 0 and overrideID ~= spellID then
-        return overrideID
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetOverrideSpellID file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1778:6"); return overrideID
     end
-    return 0
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetOverrideSpellID file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1778:6"); return 0
 end
 
-local function MSUF_SetEnabledMeleeRangeCheck(spellID)
+local function MSUF_SetEnabledMeleeRangeCheck(spellID) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SetEnabledMeleeRangeCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1789:6");
     if not (C_Spell and C_Spell.EnableSpellRangeCheck) then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetEnabledMeleeRangeCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1789:6"); return
     end
 
     spellID = tonumber(spellID) or 0
@@ -1798,20 +1798,20 @@ local function MSUF_SetEnabledMeleeRangeCheck(spellID)
     end
 
     if spellID == MSUF_LastEnabledMeleeRangeSpellID and overrideID == MSUF_LastEnabledMeleeRangeSpellID_Override then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetEnabledMeleeRangeCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1789:6"); return
     end
 
-    local function Disable(id)
+    local function Disable(id) Perfy_Trace(Perfy_GetTime(), "Enter", "Disable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1804:10");
         if id and id > 0 then
             MSUF_FastCall(C_Spell.EnableSpellRangeCheck, id, false)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "Disable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1804:10"); end
 
-    local function Enable(id)
+    local function Enable(id) Perfy_Trace(Perfy_GetTime(), "Enter", "Enable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1810:10");
         if id and id > 0 then
             MSUF_FastCall(C_Spell.EnableSpellRangeCheck, id, true)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "Enable file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1810:10"); end
 
     -- Disable old checks (override first, then base)
     Disable(MSUF_LastEnabledMeleeRangeSpellID_Override)
@@ -1823,15 +1823,15 @@ local function MSUF_SetEnabledMeleeRangeCheck(spellID)
     -- Enable new checks
     Enable(spellID)
     Enable(overrideID)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetEnabledMeleeRangeCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1789:6"); end
 
-local function MSUF_IsUnitInMeleeRange(unit, spellID)
+local function MSUF_IsUnitInMeleeRange(unit, spellID) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_IsUnitInMeleeRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1828:6");
     spellID = tonumber(spellID) or 0
     if spellID <= 0 then
-        return false
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_IsUnitInMeleeRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1828:6"); return false
     end
     if not (C_Spell and C_Spell.IsSpellInRange) then
-        return false
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_IsUnitInMeleeRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1828:6"); return false
     end
 
     -- Some specs/classes (notably DH) use override spells (e.g. Chaos Strike -> Annihilation).
@@ -1840,36 +1840,36 @@ local function MSUF_IsUnitInMeleeRange(unit, spellID)
     if overrideID and overrideID > 0 then
         local okOverride = C_Spell.IsSpellInRange(overrideID, unit)
         if okOverride == true or okOverride == 1 then
-            return true
+            Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_IsUnitInMeleeRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1828:6"); return true
         end
     end
 
     local ok = C_Spell.IsSpellInRange(spellID, unit)
     -- IMPORTANT: nil = cannot be evaluated => NOT in range for the filter
-    return ok == true or ok == 1
+    return Perfy_Trace_Passthrough("Leave", "MSUF_IsUnitInMeleeRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1828:6", ok == true or ok == 1)
 end
 
 -- Crosshair range driver helpers (perf):
 -- 1) Disable background range ticks unless we're in combat AND have a valid hostile target.
 -- 2) Coalesce bursts of events (target changed / range updates) into a single refresh per frame.
-MSUF_CrosshairHasValidTarget = function()
-    return UnitExists and UnitExists("target")
+MSUF_CrosshairHasValidTarget = function() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_CrosshairHasValidTarget file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1855:31");
+    return Perfy_Trace_Passthrough("Leave", "MSUF_CrosshairHasValidTarget file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1855:31", UnitExists and UnitExists("target")
         and UnitCanAttack and UnitCanAttack("player", "target")
-        and UnitIsDeadOrGhost and (not UnitIsDeadOrGhost("target"))
+        and UnitIsDeadOrGhost and (not UnitIsDeadOrGhost("target")))
 end
 
-local function MSUF_SetCrosshairRangeTaskEnabled(enabled)
+local function MSUF_SetCrosshairRangeTaskEnabled(enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SetCrosshairRangeTaskEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1861:6");
     local um = MSUF_GetUpdateManager()
     if um and um.SetEnabled then
         um:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", enabled and true or false)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SetCrosshairRangeTaskEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1861:6"); end
 
-MSUF_RefreshCrosshairRangeTaskEnabled = function()
+MSUF_RefreshCrosshairRangeTaskEnabled = function() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_RefreshCrosshairRangeTaskEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1868:40");
     -- Hard-disable background work unless everything is in the "fast path" state.
     if not combatCrosshairFrame or not combatCrosshairFrame.IsShown or (not combatCrosshairFrame:IsShown()) then
         MSUF_SetCrosshairRangeTaskEnabled(false)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RefreshCrosshairRangeTaskEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1868:40"); return
     end
 
     -- Keep event registration minimal: only listen for range updates when range-color is active.
@@ -1884,20 +1884,20 @@ MSUF_RefreshCrosshairRangeTaskEnabled = function()
     -- Range-color mode must be active and have a valid spell to check.
     if not combatCrosshairFrame._msufUseRangeColor or (combatCrosshairFrame._msufRangeSpellID or 0) <= 0 then
         MSUF_SetCrosshairRangeTaskEnabled(false)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RefreshCrosshairRangeTaskEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1868:40"); return
     end
 
     if not MSUF_CrosshairHasValidTarget() then
         MSUF_SetCrosshairRangeTaskEnabled(false)
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RefreshCrosshairRangeTaskEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1868:40"); return
     end
 
     -- Dynamic interval: while in combat + valid target, tick fast.
     combatCrosshairFrame._msufRangeTickInterval = 0.25
     MSUF_SetCrosshairRangeTaskEnabled(true)
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RefreshCrosshairRangeTaskEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1868:40"); end
 
-local function MSUF_RunCrosshairRangeRefresh()
+local function MSUF_RunCrosshairRangeRefresh() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_RunCrosshairRangeRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1900:6");
     if ns then
         ns._MSUF_CrosshairRangeRefreshPending = nil
     end
@@ -1905,16 +1905,16 @@ local function MSUF_RunCrosshairRangeRefresh()
     -- If the crosshair isn't visible, don't burn work; just ensure the background tick is off.
     if not combatCrosshairFrame or not combatCrosshairFrame.IsShown or (not combatCrosshairFrame:IsShown()) then
         MSUF_RefreshCrosshairRangeTaskEnabled()
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RunCrosshairRangeRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1900:6"); return
     end
 
     MSUF_UpdateCombatCrosshairRangeColor()
     MSUF_RefreshCrosshairRangeTaskEnabled()
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RunCrosshairRangeRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1900:6"); end
 
-MSUF_RequestCrosshairRangeRefresh = function()
-    if not ns then return end
-    if ns._MSUF_CrosshairRangeRefreshPending then return end
+MSUF_RequestCrosshairRangeRefresh = function() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_RequestCrosshairRangeRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1915:36");
+    if not ns then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RequestCrosshairRangeRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1915:36"); return end
+    if ns._MSUF_CrosshairRangeRefreshPending then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RequestCrosshairRangeRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1915:36"); return end
     ns._MSUF_CrosshairRangeRefreshPending = true
 
     if C_Timer_After then
@@ -1922,13 +1922,13 @@ MSUF_RequestCrosshairRangeRefresh = function()
     else
         MSUF_RunCrosshairRangeRefresh()
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_RequestCrosshairRangeRefresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1915:36"); end
 
 -- Update combat crosshair color based on melee range to current target.
 -- Uses the shared melee spell ID.
-MSUF_UpdateCombatCrosshairRangeColor = function()
+MSUF_UpdateCombatCrosshairRangeColor = function() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UpdateCombatCrosshairRangeColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1929:39");
     if not combatCrosshairFrame or not combatCrosshairFrame.horiz or not combatCrosshairFrame.vert then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdateCombatCrosshairRangeColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1929:39"); return
     end
 
     -- Prefer cached flags (synced in EnsureCombatCrosshair / Apply), but remain robust if called early.
@@ -1945,7 +1945,7 @@ MSUF_UpdateCombatCrosshairRangeColor = function()
     end
 
     if not enabled then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdateCombatCrosshairRangeColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1929:39"); return
     end
 
     local desiredMode
@@ -2004,7 +2004,7 @@ MSUF_UpdateCombatCrosshairRangeColor = function()
             combatCrosshairFrame._msufLastInRange = nil
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UpdateCombatCrosshairRangeColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:1929:39"); end
 ------------------------------------------------------
 -- Public helpers for main addon
 ------------------------------------------------------
@@ -2014,7 +2014,7 @@ end
 -- These functions own event registration and background tasks for each feature.
 -- They make it safe to split this file later without changing behavior.
 ------------------------------------------------------
-local function MSUF_Gameplay_ApplyCombatStateText(g)
+local function MSUF_Gameplay_ApplyCombatStateText(g) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Gameplay_ApplyCombatStateText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2017:6");
     local wantState = (g.enableCombatStateText == true)
     local wantDance = (g.enableFirstDanceTimer == true)
 
@@ -2091,9 +2091,9 @@ local function MSUF_Gameplay_ApplyCombatStateText(g)
             umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Gameplay_ApplyCombatStateText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2017:6"); end
 
-local function MSUF_Gameplay_ApplyCombatCrosshair(g)
+local function MSUF_Gameplay_ApplyCombatCrosshair(g) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Gameplay_ApplyCombatCrosshair file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2096:6");
 
     if g.enableCombatCrosshair then
         local frame = EnsureCombatCrosshair()
@@ -2141,7 +2141,7 @@ local function MSUF_Gameplay_ApplyCombatCrosshair(g)
             combatCrosshairFrame:Hide()
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Gameplay_ApplyCombatCrosshair file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2096:6"); end
 
 
 
@@ -2158,37 +2158,37 @@ do
     local lastHasAnyTotem = false
     local _previewWanted = false
 
-    local function _IsPlayerShaman()
+    local function _IsPlayerShaman() Perfy_Trace(Perfy_GetTime(), "Enter", "_IsPlayerShaman file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2161:10");
         if UnitClass then
             local _, class = UnitClass("player")
-            return class == "SHAMAN"
+            return Perfy_Trace_Passthrough("Leave", "_IsPlayerShaman file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2161:10", class == "SHAMAN")
         end
-        return false
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_IsPlayerShaman file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2161:10"); return false
     end
 
 
-    local function _ToNumberSafe(v)
+    local function _ToNumberSafe(v) Perfy_Trace(Perfy_GetTime(), "Enter", "_ToNumberSafe file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2170:10");
         if type(v) == "number" then
-            return v
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_ToNumberSafe file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2170:10"); return v
         end
         if v == nil then
-            return nil
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_ToNumberSafe file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2170:10"); return nil
         end
         local ok, n = pcall(tonumber, v)
         if ok and type(n) == "number" then
-            return n
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_ToNumberSafe file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2170:10"); return n
         end
-        return nil
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_ToNumberSafe file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2170:10"); return nil
     end
-    local function _FormatRemaining(sec)
+    local function _FormatRemaining(sec) Perfy_Trace(Perfy_GetTime(), "Enter", "_FormatRemaining file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2183:10");
         if not sec or sec <= 0 then
-            return ""
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_FormatRemaining file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2183:10"); return ""
         end
         if sec < 10 then
-            return string_format("%.1f", sec)
+            return Perfy_Trace_Passthrough("Leave", "_FormatRemaining file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2183:10", string_format("%.1f", sec))
         end
         if sec < 60 then
-            return string_format("%d", math.floor(sec + 0.5))
+            return Perfy_Trace_Passthrough("Leave", "_FormatRemaining file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2183:10", string_format("%d", math.floor(sec + 0.5)))
         end
         local m = math.floor(sec / 60)
         local s = math.floor(sec - (m * 60) + 0.5)
@@ -2196,7 +2196,7 @@ do
             m = m + 1
             s = 0
         end
-        return string_format("%d:%02d", m, s)
+        return Perfy_Trace_Passthrough("Leave", "_FormatRemaining file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2183:10", string_format("%d:%02d", m, s))
     end
 
 ------------------------------------------------------
@@ -2210,19 +2210,19 @@ do
 -- It does NOT call the full Gameplay Apply path on every mouse move.
 ------------------------------------------------------
 
-local function _MSUF_RoundInt(v)
+local function _MSUF_RoundInt(v) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_RoundInt file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2213:6");
     if type(v) ~= "number" then
-        return 0
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_RoundInt file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2213:6"); return 0
     end
     if v >= 0 then
-        return math.floor(v + 0.5)
+        return Perfy_Trace_Passthrough("Leave", "_MSUF_RoundInt file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2213:6", math.floor(v + 0.5))
     end
-    return math.ceil(v - 0.5)
+    return Perfy_Trace_Passthrough("Leave", "_MSUF_RoundInt file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2213:6", math.ceil(v - 0.5))
 end
 
-local function _ApplyTotemsAnchorOnly(g, offX, offY)
+local function _ApplyTotemsAnchorOnly(g, offX, offY) Perfy_Trace(Perfy_GetTime(), "Enter", "_ApplyTotemsAnchorOnly file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2223:6");
     if not totemsFrame then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_ApplyTotemsAnchorOnly file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2223:6"); return
     end
 
     local playerFrame = _G and _G.MSUF_player
@@ -2240,15 +2240,15 @@ local function _ApplyTotemsAnchorOnly(g, offX, offY)
     else
         totemsFrame:SetPoint("CENTER", UIParent, "CENTER", x, y)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_ApplyTotemsAnchorOnly file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2223:6"); end
 
-local function _SetTotemsDragEnabled(on)
+local function _SetTotemsDragEnabled(on) Perfy_Trace(Perfy_GetTime(), "Enter", "_SetTotemsDragEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2245:6");
     if not totemsFrame then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_SetTotemsDragEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2245:6"); return
     end
     local ov = totemsFrame._msufDragOverlay
     if not ov then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_SetTotemsDragEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2245:6"); return
     end
 
     if on then
@@ -2260,11 +2260,11 @@ local function _SetTotemsDragEnabled(on)
         ov._msufDragging = nil
         ov:Hide()
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_SetTotemsDragEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2245:6"); end
 
-    local function _EnsureTotemsFrame()
+    local function _EnsureTotemsFrame() Perfy_Trace(Perfy_GetTime(), "Enter", "_EnsureTotemsFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2265:10");
         if totemsFrame then
-            return totemsFrame
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_EnsureTotemsFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2265:10"); return totemsFrame
         end
 
         totemsFrame = CreateFrame("Frame", "MSUF_PlayerTotemsFrame", UIParent)
@@ -2316,7 +2316,7 @@ if not totemsFrame._msufDragOverlay then
     hi:Hide()
     ov._msufHi = hi
 
-    ov:SetScript("OnEnter", function(self)
+    ov:SetScript("OnEnter", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2319:28");
         if self._msufHi then self._msufHi:Show() end
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -2325,14 +2325,14 @@ if not totemsFrame._msufDragOverlay then
             GameTooltip:AddLine("Use X/Y offsets for fine tuning.", 0.7, 0.7, 0.7)
             GameTooltip:Show()
         end
-    end)
-    ov:SetScript("OnLeave", function(self)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2319:28"); end)
+    ov:SetScript("OnLeave", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2329:28");
         if self._msufHi then self._msufHi:Hide() end
         if GameTooltip then GameTooltip:Hide() end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2329:28"); end)
 
-    ov:SetScript("OnMouseDown", function(self, btn)
-        if btn ~= "LeftButton" then return end
+    ov:SetScript("OnMouseDown", function(self, btn) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2334:32");
+        if btn ~= "LeftButton" then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2334:32"); return end
 
         local g = EnsureGameplayDefaults()
         self._msufDragG = g
@@ -2350,10 +2350,10 @@ if not totemsFrame._msufDragOverlay then
         self._msufDragLastOffY = self._msufDragStartOffY
         self._msufDragging = true
 
-        self:SetScript("OnUpdate", function(self)
-            if not self._msufDragging then return end
+        self:SetScript("OnUpdate", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2353:35");
+            if not self._msufDragging then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2353:35"); return end
             local g = self._msufDragG
-            if not g then return end
+            if not g then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2353:35"); return end
 
             local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
             local x, y = GetCursorPosition()
@@ -2379,11 +2379,11 @@ if not totemsFrame._msufDragOverlay then
                     opt:MSUF_SyncTotemOffsetSliders()
                 end
             end
-        end)
-    end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2353:35"); end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2334:32"); end)
 
-    ov:SetScript("OnMouseUp", function(self, btn)
-        if btn ~= "LeftButton" then return end
+    ov:SetScript("OnMouseUp", function(self, btn) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2385:30");
+        if btn ~= "LeftButton" then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2385:30"); return end
         self._msufDragging = nil
         self:SetScript("OnUpdate", nil)
 
@@ -2391,23 +2391,23 @@ if not totemsFrame._msufDragOverlay then
         if opt and opt.MSUF_SyncTotemOffsetSliders then
             opt:MSUF_SyncTotemOffsetSliders()
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2385:30"); end)
 
     totemsFrame._msufDragOverlay = ov
 end
 
 totemsFrame:Hide()
-        return totemsFrame
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_EnsureTotemsFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2265:10"); return totemsFrame
     end
 
-    local function _ClearTotemsPreview()
+    local function _ClearTotemsPreview() Perfy_Trace(Perfy_GetTime(), "Enter", "_ClearTotemsPreview file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2403:10");
         if totemsFrame then
             totemsFrame._msufPreviewActive = nil
         end
         _SetTotemsDragEnabled(false)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_ClearTotemsPreview file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2403:10"); end
 
-    local function _ApplyTotemsPreview(g)
+    local function _ApplyTotemsPreview(g) Perfy_Trace(Perfy_GetTime(), "Enter", "_ApplyTotemsPreview file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2410:10");
         local f = _EnsureTotemsFrame()
         f._msufPreviewActive = true
         f:Show()
@@ -2442,9 +2442,9 @@ totemsFrame:Hide()
         end
 
         _SetTotemsDragEnabled(true)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_ApplyTotemsPreview file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2410:10"); end
 
-    local function _ApplyTotemsLayout(g)
+    local function _ApplyTotemsLayout(g) Perfy_Trace(Perfy_GetTime(), "Enter", "_ApplyTotemsLayout file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2447:10");
         local f = _EnsureTotemsFrame()
         local playerFrame = _G and _G.MSUF_player
 
@@ -2535,88 +2535,88 @@ totemsFrame:Hide()
     else
         f:SetSize((size * 4) + (spacing * 3), size)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_ApplyTotemsLayout file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2447:10"); end
 
-local function _FormatTotemTime(left)
+local function _FormatTotemTime(left) Perfy_Trace(Perfy_GetTime(), "Enter", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6");
     -- Midnight/Beta secret-safe:
     -- - Never directly compare/arithmetic on values that may be "secret".
     -- - Always have a simple fallback: 1 decimal seconds.
     if left == nil then
-        return ""
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6"); return ""
     end
 
-    local okSimple, simple = pcall(function()
-        return string.format("%.1fs", left)
+    local okSimple, simple = pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2548:35");
+        return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2548:35", string.format("%.1fs", left))
     end)
     if not okSimple then
-        return ""
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6"); return ""
     end
 
     -- Apply nicer rules ONLY if comparisons/math are safe.
-    local okNum, n = pcall(function() return tonumber(left) end)
+    local okNum, n = pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2556:27"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2556:27", tonumber(left)) end)
     if not okNum or type(n) ~= "number" then
-        return simple
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6"); return simple
     end
 
-    local okLT10, isLT10 = pcall(function() return n < 10 end)
+    local okLT10, isLT10 = pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2561:33"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2561:33", n < 10) end)
     if not okLT10 then
-        return simple
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6"); return simple
     end
     if isLT10 then
-        return simple
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6"); return simple
     end
 
-    local okLT60, isLT60 = pcall(function() return n < 60 end)
+    local okLT60, isLT60 = pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2569:33"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2569:33", n < 60) end)
     if not okLT60 then
-        return simple
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6"); return simple
     end
     if isLT60 then
-        local okRound, secs = pcall(function() return math.floor(n + 0.5) end)
+        local okRound, secs = pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2574:36"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2574:36", math.floor(n + 0.5)) end)
         if okRound and type(secs) == "number" then
-            return string.format("%ds", secs)
+            return Perfy_Trace_Passthrough("Leave", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6", string.format("%ds", secs))
         end
-        return simple
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6"); return simple
     end
 
-    local okMS, out = pcall(function()
+    local okMS, out = pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2581:28");
         local m = math.floor(n / 60)
         local s = math.floor((n - (m * 60)) + 0.5)
         if s >= 60 then
             m = m + 1
             s = 0
         end
-        return string.format("%d:%02d", m, s)
+        return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2581:28", string.format("%d:%02d", m, s))
     end)
     if okMS and type(out) == "string" then
-        return out
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6"); return out
     end
 
-    return simple
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_FormatTotemTime file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2540:6"); return simple
 end
 
-local function _PickTotemTickInterval(minLeft)
+local function _PickTotemTickInterval(minLeft) Perfy_Trace(Perfy_GetTime(), "Enter", "_PickTotemTickInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2597:6");
     -- Secret-safe tick selection: only branch on numeric thresholds when safe.
-    local okNum, n = pcall(function() return tonumber(minLeft) end)
+    local okNum, n = pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2599:27"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2599:27", tonumber(minLeft)) end)
     if not okNum or type(n) ~= "number" then
-        return 0.50
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_PickTotemTickInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2597:6"); return 0.50
     end
 
-    local okLT10, isLT10 = pcall(function() return n < 10 end)
+    local okLT10, isLT10 = pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2604:33"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2604:33", n < 10) end)
     if okLT10 and isLT10 then
-        return 0.10
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_PickTotemTickInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2597:6"); return 0.10
     end
 
-    local okLT60, isLT60 = pcall(function() return n < 60 end)
+    local okLT60, isLT60 = pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2609:33"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2609:33", n < 60) end)
     if okLT60 and isLT60 then
-        return 0.50
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_PickTotemTickInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2597:6"); return 0.50
     end
 
-    return 1.00
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_PickTotemTickInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2597:6"); return 1.00
 end
 
-local function _UpdateTotemsNow(g)
+local function _UpdateTotemsNow(g) Perfy_Trace(Perfy_GetTime(), "Enter", "_UpdateTotemsNow file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2617:6");
     if not totemsFrame then
-        return false
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_UpdateTotemsNow file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2617:6"); return false
     end
 
     local any = false
@@ -2683,18 +2683,18 @@ local function _UpdateTotemsNow(g)
         ns._MSUF_PlayerTotemsTickInterval = 1.00
     end
 
-    return any
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_UpdateTotemsNow file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2617:6"); return any
 end
 
 
-local function _TickTotemText()
+local function _TickTotemText() Perfy_Trace(Perfy_GetTime(), "Enter", "_TickTotemText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2690:6");
     local g = GetGameplayDBFast()
     if not g or not g.enablePlayerTotems or not g.playerTotemsShowText then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_TickTotemText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2690:6"); return
     end
 
     if not totemsFrame or not totemsFrame:IsShown() then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_TickTotemText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2690:6"); return
     end
 
     local anyFast = false
@@ -2725,26 +2725,26 @@ local function _TickTotemText()
     else
         ns._MSUF_PlayerTotemsTickInterval = 1.00
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_TickTotemText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2690:6"); end
 
 
-    local function _UpdateTotemTickEnabled(g, any)
+    local function _UpdateTotemTickEnabled(g, any) Perfy_Trace(Perfy_GetTime(), "Enter", "_UpdateTotemTickEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2731:10");
         local um = MSUF_GetUpdateManager()
         if not um or not um.Register or not um.SetEnabled then
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_UpdateTotemTickEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2731:10"); return
         end
 
         if not ns._MSUF_PlayerTotemTaskRegistered then
             ns._MSUF_PlayerTotemTaskRegistered = true
-            local function _Interval() return (ns._MSUF_PlayerTotemsTickInterval or 0.50) end -- dynamic countdown interval
+            local function _Interval() Perfy_Trace(Perfy_GetTime(), "Enter", "_Interval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2739:18"); return Perfy_Trace_Passthrough("Leave", "_Interval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2739:18", (ns._MSUF_PlayerTotemsTickInterval or 0.50)) end -- dynamic countdown interval
             um:Register("MSUF_GAMEPLAY_PLAYERTOTEMS", _TickTotemText, _Interval, 90)
         end
 
         local enableTick = (g and g.enablePlayerTotems and g.playerTotemsShowText and any) and true or false
         um:SetEnabled("MSUF_GAMEPLAY_PLAYERTOTEMS", enableTick)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_UpdateTotemTickEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2731:10"); end
 
-    local function _RefreshTotems()
+    local function _RefreshTotems() Perfy_Trace(Perfy_GetTime(), "Enter", "_RefreshTotems file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2747:10");
         local g = EnsureGameplayDefaults()
 
         local isShaman = _IsPlayerShaman()
@@ -2758,7 +2758,7 @@ end
             _ApplyTotemsLayout(g)
             _ApplyTotemsPreview(g)
             _UpdateTotemTickEnabled(g, false)
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_RefreshTotems file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2747:10"); return
         else
             _ClearTotemsPreview()
         end
@@ -2769,27 +2769,27 @@ end
                 totemsFrame:Hide()
             end
             lastHasAnyTotem = false
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_RefreshTotems file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2747:10"); return
         end
 
         _EnsureTotemsFrame()
         _ApplyTotemsLayout(g)
         local any = _UpdateTotemsNow(g)
         _UpdateTotemTickEnabled(g, any)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_RefreshTotems file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2747:10"); end
 
-    local function _EnsureTotemEvents()
+    local function _EnsureTotemEvents() Perfy_Trace(Perfy_GetTime(), "Enter", "_EnsureTotemEvents file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2781:10");
         if totemEventFrame then
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_EnsureTotemEvents file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2781:10"); return
         end
 
         totemEventFrame = CreateFrame("Frame", "MSUF_PlayerTotemsEventFrame", UIParent)
-        totemEventFrame:SetScript("OnEvent", function()
+        totemEventFrame:SetScript("OnEvent", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2787:45");
             _RefreshTotems()
-        end)
-    end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2787:45"); end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_EnsureTotemEvents file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2781:10"); end
 
-    function GameplayFeatures_PlayerTotems_Apply(g)
+    function GameplayFeatures_PlayerTotems_Apply(g) Perfy_Trace(Perfy_GetTime(), "Enter", "GameplayFeatures_PlayerTotems_Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2792:4");
         -- small wrapper used by the GameplayFeatures table (defined later)
         _EnsureTotemEvents()
 
@@ -2802,18 +2802,18 @@ end
         end
 
         _RefreshTotems()
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "GameplayFeatures_PlayerTotems_Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2792:4"); end
 
     -- Public escape hatch: Options / other modules can force a refresh without poking locals.
     _G.MSUF_PlayerTotems_ForceRefresh = _RefreshTotems
 
-    function ns.MSUF_PlayerTotems_TogglePreview()
+    function ns.MSUF_PlayerTotems_TogglePreview() Perfy_Trace(Perfy_GetTime(), "Enter", "ns.MSUF_PlayerTotems_TogglePreview file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2810:4");
         _previewWanted = not _previewWanted
         _RefreshTotems()
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_PlayerTotems_TogglePreview file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2810:4"); end
 
-    function ns.MSUF_PlayerTotems_IsPreviewActive()
-        return (_previewWanted and true) or false
+    function ns.MSUF_PlayerTotems_IsPreviewActive() Perfy_Trace(Perfy_GetTime(), "Enter", "ns.MSUF_PlayerTotems_IsPreviewActive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2815:4");
+        return Perfy_Trace_Passthrough("Leave", "ns.MSUF_PlayerTotems_IsPreviewActive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2815:4", (_previewWanted and true) or false)
     end
 
 end
@@ -2827,7 +2827,7 @@ local GameplayFeatures = {
     PlayerTotems    = {},
 }
 
-function GameplayFeatures.CombatTimer.Apply(g)
+function GameplayFeatures.CombatTimer.Apply(g) Perfy_Trace(Perfy_GetTime(), "Enter", "CombatTimer.Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2830:0");
     if g.enableCombatTimer and not combatFrame then
         CreateCombatTimerFrame()
     end
@@ -2840,7 +2840,7 @@ function GameplayFeatures.CombatTimer.Apply(g)
         MSUF_Gameplay_ApplyCombatTimerAnchor(g)
         combatFrame:SetShown(g.enableCombatTimer)
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "CombatTimer.Apply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2830:0"); end
 
 GameplayFeatures.CombatStateText.Apply = MSUF_Gameplay_ApplyCombatStateText
 GameplayFeatures.CombatCrosshair.Apply = MSUF_Gameplay_ApplyCombatCrosshair
@@ -2849,7 +2849,7 @@ GameplayFeatures.PlayerTotems.Apply = GameplayFeatures_PlayerTotems_Apply
 
 local GameplayFeatureOrder = { "CombatTimer", "CombatStateText", "CombatCrosshair", "PlayerTotems" }
 
-local function Gameplay_ApplyAllFeatures(g)
+local function Gameplay_ApplyAllFeatures(g) Perfy_Trace(Perfy_GetTime(), "Enter", "Gameplay_ApplyAllFeatures file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2852:6");
     for i = 1, #GameplayFeatureOrder do
         local key = GameplayFeatureOrder[i]
         local f = GameplayFeatures[key]
@@ -2857,9 +2857,9 @@ local function Gameplay_ApplyAllFeatures(g)
             f.Apply(g)
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "Gameplay_ApplyAllFeatures file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2852:6"); end
 
-function ns.MSUF_RequestGameplayApply()
+function ns.MSUF_RequestGameplayApply() Perfy_Trace(Perfy_GetTime(), "Enter", "ns.MSUF_RequestGameplayApply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2862:0");
     local g = EnsureGameplayDefaults()
 
 
@@ -2871,10 +2871,10 @@ function ns.MSUF_RequestGameplayApply()
         if not ns._MSUF_GameplayTasksRegistered then
             ns._MSUF_GameplayTasksRegistered = true
 
-            local function _CombatInterval()
+            local function _CombatInterval() Perfy_Trace(Perfy_GetTime(), "Enter", "_CombatInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2874:18");
                 -- Timer is formatted as mm:ss, so it only changes once per second.
                 -- Keeping this at 1.0s reduces CPU in raids without any visible downside.
-                return 1.0
+                Perfy_Trace(Perfy_GetTime(), "Leave", "_CombatInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2874:18"); return 1.0
             end
             um:Register("MSUF_GAMEPLAY_COMBATTIMER", MSUF_Gameplay_TickCombatTimer, _CombatInterval, 90)
         end
@@ -2886,10 +2886,10 @@ function ns.MSUF_RequestGameplayApply()
         -- We also set combatStartTime from the event timestamp so the timer isn't permanently behind.
         if not combatTimerEventFrame then
             combatTimerEventFrame = CreateFrame("Frame", "MSUF_CombatTimerEventFrame", UIParent)
-            combatTimerEventFrame:SetScript("OnEvent", function(_, event)
+            combatTimerEventFrame:SetScript("OnEvent", function(_, event) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2889:55");
                 local gd = GetGameplayDBFast()
                 if not gd or not gd.enableCombatTimer then
-                    return
+                    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2889:55"); return
                 end
 
                 if event == "PLAYER_REGEN_DISABLED" then
@@ -2917,7 +2917,7 @@ function ns.MSUF_RequestGameplayApply()
                     end
                     MSUF_Gameplay_TickCombatTimer()
                 end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2889:55"); end)
         end
 
         combatTimerEventFrame:UnregisterAllEvents()
@@ -2947,28 +2947,28 @@ function ns.MSUF_RequestGameplayApply()
             updater = CreateFrame("Frame")
         end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_RequestGameplayApply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2862:0"); end
 
 
 -- Backwards-compatible entrypoint used by other modules (e.g. Colors)
 -- Apply all Gameplay visuals immediately (frames + fonts + colors).
-function ns.MSUF_ApplyGameplayVisuals()
+function ns.MSUF_ApplyGameplayVisuals() Perfy_Trace(Perfy_GetTime(), "Enter", "ns.MSUF_ApplyGameplayVisuals file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2955:0");
     -- This file also uses MSUF_RequestGameplayApply as the canonical apply path.
     if ns and ns.MSUF_RequestGameplayApply then
         ns.MSUF_RequestGameplayApply()
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_ApplyGameplayVisuals file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2955:0"); end
 
 
 ------------------------------------------------------
 -- Options panel
 ------------------------------------------------------
-function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
+function ns.MSUF_RegisterGameplayOptions_Full(parentCategory) Perfy_Trace(Perfy_GetTime(), "Enter", "ns.MSUF_RegisterGameplayOptions_Full file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2966:0");
     local panel = (_G and _G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
     panel.name = "Gameplay"
 
     if panel.__MSUF_GameplayBuilt then
-        return panel
+        Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_RegisterGameplayOptions_Full file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2966:0"); return panel
     end
 
     local scrollFrame = CreateFrame("ScrollFrame", "MSUF_GameplayScrollFrame", panel, "UIPanelScrollFrameTemplate")
@@ -2987,14 +2987,14 @@ function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
 
 
 
-    local function RequestApply()
+    local function RequestApply() Perfy_Trace(Perfy_GetTime(), "Enter", "RequestApply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2990:10");
         if ns and ns.MSUF_RequestGameplayApply then
             ns.MSUF_RequestGameplayApply()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "RequestApply file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2990:10"); end
 
-    local function BindCheck(cb, key, after)
-        cb:SetScript("OnClick", function(self)
+    local function BindCheck(cb, key, after) Perfy_Trace(Perfy_GetTime(), "Enter", "BindCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2996:10");
+        cb:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2997:32");
             local g = EnsureGameplayDefaults()
             local oldVal = g[key]
             local newVal = self:GetChecked() and true or false
@@ -3017,22 +3017,22 @@ function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
             end
 
             RequestApply()
-        end)
-    end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2997:32"); end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "BindCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2996:10"); end
 
-    local function BindSlider(sl, key, roundFunc, after, applyNow)
-        sl:SetScript("OnValueChanged", function(self, value)
+    local function BindSlider(sl, key, roundFunc, after, applyNow) Perfy_Trace(Perfy_GetTime(), "Enter", "BindSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3023:10");
+        sl:SetScript("OnValueChanged", function(self, value) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3024:39");
             -- UI sync (panel:refresh / drag-sync) should not write DB or trigger apply.
             if panel and panel._msufSuppressSliderChanges then
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3024:39"); return
             end
             local g = EnsureGameplayDefaults()
             if roundFunc then value = roundFunc(value) end
             g[key] = value
             if after then after(self, g, value) end
             if applyNow then RequestApply() end
-        end)
-    end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3024:39"); end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "BindSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3023:10"); end
 
     local title = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
@@ -3145,20 +3145,20 @@ for i = 1, 8 do
     t:SetJustifyH("LEFT")
     b.text = t
 
-    b:SetScript("OnClick", function(selfBtn)
+    b:SetScript("OnClick", function(selfBtn) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3148:27");
         local data = selfBtn.data
-        if not data then return end
+        if not data then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3148:27"); return end
         -- Route through the shared selection helper so per-class storage stays in sync.
         MSUF_SelectMeleeSpell(data.id, data.name, true)
         MSUF_SkipMeleeFocusLostResolve = true
         meleeInput:ClearFocus()
         suggestionFrame:Hide()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3148:27"); end)
 
     suggestionButtons[i] = b
 end
 
-local function UpdateSelectedTextFromDB()
+local function UpdateSelectedTextFromDB() Perfy_Trace(Perfy_GetTime(), "Enter", "UpdateSelectedTextFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3161:6");
     local g = EnsureGameplayDefaults()
     local id = 0
     if g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
@@ -3204,17 +3204,17 @@ local function UpdateSelectedTextFromDB()
     else
         meleeSelected:SetText("Selected: (none)")
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "UpdateSelectedTextFromDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3161:6"); end
 
-local function QuerySuggestions(query)
+local function QuerySuggestions(query) Perfy_Trace(Perfy_GetTime(), "Enter", "QuerySuggestions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3209:6");
     MSUF_BuildMeleeSpellCache()
     if not MSUF_MeleeSpellCache or #MSUF_MeleeSpellCache == 0 then
-        return {}
+        return Perfy_Trace_Passthrough("Leave", "QuerySuggestions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3209:6", {})
     end
 
     local q = string_lower(query or "")
     if q == "" then
-        return {}
+        return Perfy_Trace_Passthrough("Leave", "QuerySuggestions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3209:6", {})
     end
 
     local out = {}
@@ -3226,14 +3226,14 @@ local function QuerySuggestions(query)
             end
         end
     end
-    return out
+    Perfy_Trace(Perfy_GetTime(), "Leave", "QuerySuggestions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3209:6"); return out
 end
 
 
-MSUF_SelectMeleeSpell = function(spellID, spellName, preferNameInBox)
+MSUF_SelectMeleeSpell = function(spellID, spellName, preferNameInBox) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SelectMeleeSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3233:24");
     local g = EnsureGameplayDefaults()
     spellID = tonumber(spellID) or 0
-    if spellID <= 0 then return end
+    if spellID <= 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SelectMeleeSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3233:24"); return end
 
     -- Persist selection (global + optional per-class)
     if g.meleeSpellPerClass then
@@ -3260,11 +3260,11 @@ MSUF_SelectMeleeSpell = function(spellID, spellName, preferNameInBox)
         MSUF_SetEnabledMeleeRangeCheck(spellID)
     end
     ns.MSUF_RequestGameplayApply()
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SelectMeleeSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3233:24"); end
 
-local function MSUF_ResolveTypedMeleeSpell(text)
+local function MSUF_ResolveTypedMeleeSpell(text) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ResolveTypedMeleeSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3265:6");
     text = tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    if text == "" then return nil end
+    if text == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ResolveTypedMeleeSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3265:6"); return nil end
 
     local asNum = tonumber(text)
     if asNum and asNum > 0 then
@@ -3276,7 +3276,7 @@ local function MSUF_ResolveTypedMeleeSpell(text)
         if (not name) and GetSpellInfo then
             name = GetSpellInfo(asNum)
         end
-        return asNum, name
+        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ResolveTypedMeleeSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3265:6"); return asNum, name
     end
 
     local q = string_lower(text)
@@ -3284,17 +3284,17 @@ local function MSUF_ResolveTypedMeleeSpell(text)
     -- Prefer exact match (case-insensitive)
     for i = 1, #results do
         if results[i] and results[i].lower == q then
-            return results[i].id, results[i].name
+            return Perfy_Trace_Passthrough("Leave", "MSUF_ResolveTypedMeleeSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3265:6", results[i].id, results[i].name)
         end
     end
     -- Otherwise, pick first suggestion
     if results[1] then
-        return results[1].id, results[1].name
+        return Perfy_Trace_Passthrough("Leave", "MSUF_ResolveTypedMeleeSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3265:6", results[1].id, results[1].name)
     end
-    return nil
+    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ResolveTypedMeleeSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3265:6"); return nil
 end
 
-meleeInput:SetScript("OnEnterPressed", function(self)
+meleeInput:SetScript("OnEnterPressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3297:39");
     -- If dropdown is open, choose the first visible suggestion; otherwise try resolving typed text.
     local first = suggestionButtons[1] and suggestionButtons[1].data
     if suggestionFrame:IsShown() and first and first.id then
@@ -3302,7 +3302,7 @@ meleeInput:SetScript("OnEnterPressed", function(self)
         suggestionFrame:Hide()
         MSUF_SkipMeleeFocusLostResolve = true
         self:ClearFocus()
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3297:39"); return
     end
 
     local id, name = MSUF_ResolveTypedMeleeSpell(self:GetText())
@@ -3312,9 +3312,9 @@ meleeInput:SetScript("OnEnterPressed", function(self)
     suggestionFrame:Hide()
     MSUF_SkipMeleeFocusLostResolve = true
     self:ClearFocus()
-end)
-meleeInput:SetScript("OnTextChanged", function(self)
-    if MSUF_SuppressMeleeInputChange then return end
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3297:39"); end)
+meleeInput:SetScript("OnTextChanged", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3316:38");
+    if MSUF_SuppressMeleeInputChange then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3316:38"); return end
     local txt = self:GetText() or ""
     local g = EnsureGameplayDefaults()
 
@@ -3338,13 +3338,13 @@ meleeInput:SetScript("OnTextChanged", function(self)
             ns.MSUF_RequestGameplayApply()
         end
         suggestionFrame:Hide()
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3316:38"); return
     end
 
     local results = QuerySuggestions(txt)
     if #results == 0 then
         suggestionFrame:Hide()
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3316:38"); return
     end
 
     for i = 1, 8 do
@@ -3361,10 +3361,10 @@ meleeInput:SetScript("OnTextChanged", function(self)
         end
     end
     suggestionFrame:Show()
-end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3316:38"); end)
 
 -- Per-class checkbox behavior.
-perClassCB:SetScript("OnClick", function(self)
+perClassCB:SetScript("OnClick", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3367:32");
     local g = EnsureGameplayDefaults()
     local want = self:GetChecked() and true or false
     g.meleeSpellPerClass = want
@@ -3388,20 +3388,20 @@ perClassCB:SetScript("OnClick", function(self)
         panel:refresh()
     end
     ns.MSUF_RequestGameplayApply()
-end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3367:32"); end)
 
-meleeInput:SetScript("OnEscapePressed", function(self)
+meleeInput:SetScript("OnEscapePressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3393:40");
     self:ClearFocus()
     suggestionFrame:Hide()
     UpdateSelectedTextFromDB()
-end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3393:40"); end)
 
-meleeInput:SetScript("OnEditFocusLost", function(self)
+meleeInput:SetScript("OnEditFocusLost", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3399:40");
     suggestionFrame:Hide()
     if MSUF_SkipMeleeFocusLostResolve then
         MSUF_SkipMeleeFocusLostResolve = false
         UpdateSelectedTextFromDB()
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3399:40"); return
     end
     local id, name = MSUF_ResolveTypedMeleeSpell(self:GetText())
     if id then
@@ -3409,48 +3409,48 @@ meleeInput:SetScript("OnEditFocusLost", function(self)
     else
         UpdateSelectedTextFromDB()
     end
-end)
+Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3399:40"); end)
 
     ------------------------------------------------------
     -- Options UI builder helpers (single-file factory)
     -- NOTE: Keep layout pixel-identical by preserving all SetPoint offsets.
     ------------------------------------------------------
-    local function _MSUF_Sep(topRef, yOff)
+    local function _MSUF_Sep(topRef, yOff) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_Sep file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3418:10");
         local t = content:CreateTexture(nil, "ARTWORK")
         t:SetColorTexture(1, 1, 1, 0.15)
         t:SetPoint("TOP", topRef, "BOTTOM", 0, yOff or -24)
         t:SetPoint("LEFT", content, "LEFT", 20, 0)
         t:SetPoint("RIGHT", content, "RIGHT", -20, 0)
         t:SetHeight(1)
-        return t
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Sep file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3418:10"); return t
     end
 
-    local function _MSUF_Header(sep, text)
+    local function _MSUF_Header(sep, text) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_Header file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3428:10");
         local fs = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         fs:SetPoint("TOPLEFT", sep, "BOTTOMLEFT", 0, -10)
         fs:SetText(text)
-        return fs
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Header file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3428:10"); return fs
     end
 
-    local function _MSUF_Label(template, point, rel, relPoint, x, y, text, field)
+    local function _MSUF_Label(template, point, rel, relPoint, x, y, text, field) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_Label file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3435:10");
         local fs = content:CreateFontString(nil, "ARTWORK", template or "GameFontNormal")
         fs:SetPoint(point, rel, relPoint, x or 0, y or 0)
         fs:SetText(text or "")
         if field then panel[field] = fs end
-        return fs
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Label file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3435:10"); return fs
     end
 
-    local function _MSUF_Check(name, point, rel, relPoint, x, y, text, field, key, after)
+    local function _MSUF_Check(name, point, rel, relPoint, x, y, text, field, key, after) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_Check file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3443:10");
         local cb = CreateFrame("CheckButton", name, content, "InterfaceOptionsCheckButtonTemplate")
         cb:SetPoint(point, rel, relPoint, x or 0, y or 0)
         cb.Text:SetText(text or "")
         if field then panel[field] = cb end
         if key then BindCheck(cb, key, after) end
-        return cb
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Check file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3443:10"); return cb
     end
 
 
-    local function _MSUF_ColorSwatch(name, point, rel, relPoint, x, y, labelText, field, key, defaultRGB, after)
+    local function _MSUF_ColorSwatch(name, point, rel, relPoint, x, y, labelText, field, key, defaultRGB, after) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_ColorSwatch file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3453:10");
         local btn = CreateFrame("Button", name, content, "BackdropTemplate")
         btn:SetPoint(point, rel, relPoint, x or 0, y or 0)
         btn:SetSize(18, 18)
@@ -3475,21 +3475,21 @@ end)
 
         if field then panel[field] = btn end
 
-        local function GetDefault()
+        local function GetDefault() Perfy_Trace(Perfy_GetTime(), "Enter", "GetDefault file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3478:14");
             if type(defaultRGB) == "table" then
-                return defaultRGB[1] or 1, defaultRGB[2] or 1, defaultRGB[3] or 1
+                return Perfy_Trace_Passthrough("Leave", "GetDefault file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3478:14", defaultRGB[1] or 1, defaultRGB[2] or 1, defaultRGB[3] or 1)
             end
-            return 1, 1, 1
+            Perfy_Trace(Perfy_GetTime(), "Leave", "GetDefault file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3478:14"); return 1, 1, 1
         end
 
-        function btn:MSUF_Refresh()
+        function btn:MSUF_Refresh() Perfy_Trace(Perfy_GetTime(), "Enter", "btn:MSUF_Refresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3485:8");
             local g = EnsureGameplayDefaults()
             local dr, dg, db = GetDefault()
             local r, g2, b = _MSUF_NormalizeRGB(g and g[key], dr, dg, db)
             self._msufSwatch:SetColorTexture(r, g2, b, 1)
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "btn:MSUF_Refresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3485:8"); end
 
-        local function ApplyColor(r, g2, b)
+        local function ApplyColor(r, g2, b) Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3492:14");
             local g = EnsureGameplayDefaults()
             g[key] = { r, g2, b }
             btn:MSUF_Refresh()
@@ -3497,17 +3497,17 @@ end)
                 after()
             end
             ns.MSUF_RequestGameplayApply()
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3492:14"); end
 
-        btn:SetScript("OnClick", function(self, button)
+        btn:SetScript("OnClick", function(self, button) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3502:33");
             if button == "RightButton" then
                 local r, g2, b = GetDefault()
                 ApplyColor(r, g2, b)
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3502:33"); return
             end
 
             if not ColorPickerFrame then
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3502:33"); return
             end
 
             local g = EnsureGameplayDefaults()
@@ -3516,26 +3516,26 @@ end)
             ColorPickerFrame.hasOpacity = false
             ColorPickerFrame.previousValues = { r, g2, b }
 
-            ColorPickerFrame.func = function()
+            ColorPickerFrame.func = function() Perfy_Trace(Perfy_GetTime(), "Enter", "ColorPickerFrame.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3519:36");
                 local nr, ng, nb = ColorPickerFrame:GetColorRGB()
                 ApplyColor(nr, ng, nb)
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "ColorPickerFrame.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3519:36"); end
 
-            ColorPickerFrame.cancelFunc = function(prev)
+            ColorPickerFrame.cancelFunc = function(prev) Perfy_Trace(Perfy_GetTime(), "Enter", "ColorPickerFrame.cancelFunc file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3524:42");
                 if type(prev) == "table" then
                     ApplyColor(prev[1] or 1, prev[2] or 1, prev[3] or 1)
                 end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "ColorPickerFrame.cancelFunc file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3524:42"); end
 
             ColorPickerFrame:SetColorRGB(r, g2, b)
             ColorPickerFrame:Show()
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3502:33"); end)
 
         btn:MSUF_Refresh()
-        return btn, label
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_ColorSwatch file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3453:10"); return btn, label
     end
 
-    local function _MSUF_Slider(name, point, rel, relPoint, x, y, width, lo, hi, step, lowText, highText, titleText, field, key, roundFunc, after, applyNow)
+    local function _MSUF_Slider(name, point, rel, relPoint, x, y, width, lo, hi, step, lowText, highText, titleText, field, key, roundFunc, after, applyNow) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_Slider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3538:10");
         local sl = CreateFrame("Slider", name, content, "OptionsSliderTemplate")
         sl:SetWidth(width or 220)
         sl:SetPoint(point, rel, relPoint, x or 0, y or 0)
@@ -3550,27 +3550,27 @@ end)
 
         if field then panel[field] = sl end
         if key then BindSlider(sl, key, roundFunc, after, applyNow) end
-        return sl
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Slider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3538:10"); return sl
     end
 
-    local function _MSUF_SliderTextRight(name)
+    local function _MSUF_SliderTextRight(name) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_SliderTextRight file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3556:10");
         local t = _G[name .. "Text"]
         if t then
             t:ClearAllPoints()
             t:SetPoint("LEFT", _G[name], "RIGHT", 12, 0)
             t:SetJustifyH("LEFT")
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SliderTextRight file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3556:10"); end
 
-    local function _MSUF_EditBox(name, point, rel, relPoint, x, y, w, h, field)
+    local function _MSUF_EditBox(name, point, rel, relPoint, x, y, w, h, field) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_EditBox file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3565:10");
         local eb = CreateFrame("EditBox", name, content, "InputBoxTemplate")
         eb:SetSize(w or 220, h or 20)
         eb:SetAutoFocus(false)
         eb:SetPoint(point, rel, relPoint, x or 0, y or 0)
         if field then panel[field] = eb end
-        return eb
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_EditBox file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3565:10"); return eb
     end
-    local function _MSUF_Button(name, point, rel, relPoint, x, y, w, h, text, field, onClick)
+    local function _MSUF_Button(name, point, rel, relPoint, x, y, w, h, text, field, onClick) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_Button file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3573:10");
         local b = CreateFrame("Button", name, content, "UIPanelButtonTemplate")
         b:SetSize(w or 60, h or 20)
         b:SetPoint(point, rel, relPoint, x or 0, y or 0)
@@ -3579,10 +3579,10 @@ end)
         if type(onClick) == "function" then
             b:SetScript("OnClick", onClick)
         end
-        return b
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Button file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3573:10"); return b
     end
 
-local function _MSUF_Dropdown(name, point, rel, relPoint, x, y, width, field)
+local function _MSUF_Dropdown(name, point, rel, relPoint, x, y, width, field) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_Dropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3585:6");
     -- Simple UIDropDownMenu-based control (used sparingly in Gameplay to avoid heavy UI scaffolding).
     local dd = CreateFrame("Frame", name, content, "UIDropDownMenuTemplate")
     dd:SetPoint(point, rel, relPoint, x or 0, y or 0)
@@ -3592,7 +3592,7 @@ local function _MSUF_Dropdown(name, point, rel, relPoint, x, y, width, field)
     if field then
         panel[field] = dd
     end
-    return dd
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Dropdown file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3585:6"); return dd
 end
 
 
@@ -3607,23 +3607,23 @@ end
     local combatTimerAnchorLabel = _MSUF_Label("GameFontNormal", "LEFT", combatTimerCheck, "RIGHT", 220, 0, "Anchor", "combatTimerAnchorLabel")
     local combatTimerAnchorDD = _MSUF_Dropdown("MSUF_Gameplay_CombatTimerAnchorDropDown", "LEFT", combatTimerAnchorLabel, "RIGHT", 6, -2, 120, "combatTimerAnchorDropdown")
 
-    local function _CombatTimerAnchor_Validate(v)
+    local function _CombatTimerAnchor_Validate(v) Perfy_Trace(Perfy_GetTime(), "Enter", "_CombatTimerAnchor_Validate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3610:10");
         if v ~= "none" and v ~= "player" and v ~= "target" and v ~= "focus" then
-            return "none"
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_CombatTimerAnchor_Validate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3610:10"); return "none"
         end
-        return v
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_CombatTimerAnchor_Validate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3610:10"); return v
     end
 
-    local function _CombatTimerAnchor_Text(v)
-        if v == "player" then return "Player" end
-        if v == "target" then return "Target" end
-        if v == "focus" then return "Focus" end
-        return "None"
+    local function _CombatTimerAnchor_Text(v) Perfy_Trace(Perfy_GetTime(), "Enter", "_CombatTimerAnchor_Text file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3617:10");
+        if v == "player" then Perfy_Trace(Perfy_GetTime(), "Leave", "_CombatTimerAnchor_Text file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3617:10"); return "Player" end
+        if v == "target" then Perfy_Trace(Perfy_GetTime(), "Leave", "_CombatTimerAnchor_Text file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3617:10"); return "Target" end
+        if v == "focus" then Perfy_Trace(Perfy_GetTime(), "Leave", "_CombatTimerAnchor_Text file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3617:10"); return "Focus" end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_CombatTimerAnchor_Text file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3617:10"); return "None"
     end
 
-    local function _CombatTimerAnchor_Set(v)
+    local function _CombatTimerAnchor_Set(v) Perfy_Trace(Perfy_GetTime(), "Enter", "_CombatTimerAnchor_Set file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3624:10");
         local g = MSUF_DB and MSUF_DB.gameplay
-        if not g then return end
+        if not g then Perfy_Trace(Perfy_GetTime(), "Leave", "_CombatTimerAnchor_Set file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3624:10"); return end
 
         local preX, preY
         if combatFrame and combatFrame.GetCenter then
@@ -3666,10 +3666,10 @@ end
         if panel and panel.refresh then
             panel:refresh()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_CombatTimerAnchor_Set file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3624:10"); end
 
     if UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
-        UIDropDownMenu_Initialize(combatTimerAnchorDD, function(self, level)
+        UIDropDownMenu_Initialize(combatTimerAnchorDD, function(self, level) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3672:55");
             local g = MSUF_DB and MSUF_DB.gameplay
             local cur = _CombatTimerAnchor_Validate(g and g.combatTimerAnchor)
 
@@ -3687,13 +3687,13 @@ end
                 info.text = text
                 info.value = value
                 info.checked = (cur == value)
-                info.func = function(btn)
+                info.func = function(btn) Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3690:28");
                     _CombatTimerAnchor_Set(btn and btn.value)
                     if CloseDropDownMenus then CloseDropDownMenus() end
-                end
+                Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3690:28"); end
                 UIDropDownMenu_AddButton(info, level)
             end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3672:55"); end)
     end
 
     do
@@ -3705,16 +3705,16 @@ end
 
     -- Combat Timer size slider
     local combatSlider = _MSUF_Slider("MSUF_Gameplay_CombatFontSizeSlider", "TOPLEFT", combatTimerCheck, "BOTTOMLEFT", 0, -24, 220, 10, 64, 1, "10 px", "64 px", "Timer size", "combatFontSizeSlider", "combatFontSize",
-        function(v) return math.floor(v + 0.5) end,
-        function() ApplyFontToCounter() end,
+        function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3708:8"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3708:8", math.floor(v + 0.5)) end,
+        function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3709:8"); ApplyFontToCounter() Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3709:8"); end,
         false
     )
 
     -- Combat Timer lock checkbox
     local combatLock = _MSUF_Check("MSUF_Gameplay_LockCombatTimerCheck", "LEFT", combatSlider, "RIGHT", 40, 0, "Lock position", "lockCombatTimerCheck", "lockCombatTimer",
-        function()
+        function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3715:8");
             ApplyLockState()
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3715:8"); end
     )
 
     -- Combat Enter/Leave header + separator
@@ -3731,7 +3731,7 @@ end
     local combatStateLeaveLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", combatStateEnterInput, "BOTTOMLEFT", 0, -12, "Leave text", "combatStateLeaveLabel")
     local combatStateLeaveInput = _MSUF_EditBox("MSUF_Gameplay_CombatStateLeaveInput", "TOPLEFT", combatStateLeaveLabel, "BOTTOMLEFT", 0, -6, 220, 20, "combatStateLeaveInput")
 
-    local function CommitCombatStateTexts()
+    local function CommitCombatStateTexts() Perfy_Trace(Perfy_GetTime(), "Enter", "CommitCombatStateTexts file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3734:10");
         local g = EnsureGameplayDefaults()
         g.combatStateEnterText = (combatStateEnterInput:GetText() or "")
         g.combatStateLeaveText = (combatStateLeaveInput:GetText() or "")
@@ -3746,60 +3746,60 @@ end
             end
             combatStateText:SetText(enterText)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "CommitCombatStateTexts file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3734:10"); end
 
-    combatStateEnterInput:SetScript("OnEnterPressed", function(self)
+    combatStateEnterInput:SetScript("OnEnterPressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3751:54");
         self:ClearFocus()
         CommitCombatStateTexts()
-    end)
-    combatStateEnterInput:SetScript("OnEscapePressed", function(self)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3751:54"); end)
+    combatStateEnterInput:SetScript("OnEscapePressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3755:55");
         self:ClearFocus()
         if panel and panel.refresh then
             panel:refresh()
         end
-    end)
-    combatStateEnterInput:SetScript("OnEditFocusLost", function()
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3755:55"); end)
+    combatStateEnterInput:SetScript("OnEditFocusLost", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3761:55");
         CommitCombatStateTexts()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3761:55"); end)
 
-    combatStateLeaveInput:SetScript("OnEnterPressed", function(self)
+    combatStateLeaveInput:SetScript("OnEnterPressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3765:54");
         self:ClearFocus()
         CommitCombatStateTexts()
-    end)
-    combatStateLeaveInput:SetScript("OnEscapePressed", function(self)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3765:54"); end)
+    combatStateLeaveInput:SetScript("OnEscapePressed", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3769:55");
         self:ClearFocus()
         if panel and panel.refresh then
             panel:refresh()
         end
-    end)
-    combatStateLeaveInput:SetScript("OnEditFocusLost", function()
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3769:55"); end)
+    combatStateLeaveInput:SetScript("OnEditFocusLost", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3775:55");
         CommitCombatStateTexts()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3775:55"); end)
 
     -- Combat Enter/Leave text size slider (shares range with combat timer)
     local combatStateSlider = _MSUF_Slider("MSUF_Gameplay_CombatStateFontSizeSlider", "TOPLEFT", combatStateLeaveInput, "BOTTOMLEFT", 0, -24, 220, 10, 64, 1, "10 px", "64 px", "Text size", "combatStateFontSizeSlider", "combatStateFontSize",
-        function(v) return math.floor(v + 0.5) end,
-        function() ApplyFontToCounter() end,
+        function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3781:8"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3781:8", math.floor(v + 0.5)) end,
+        function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3782:8"); ApplyFontToCounter() Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3782:8"); end,
         false
     )
 
     -- Combat Enter/Leave lock checkbox (shares lock with combat timer)
     local combatStateLock = _MSUF_Check("MSUF_Gameplay_CombatStateLockCheck", "LEFT", combatStateLeaveInput, "RIGHT", 80, 0, "Lock position", "lockCombatStateCheck", "lockCombatState",
-        function()
+        function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3788:8");
             ApplyLockState()
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3788:8"); end
     )
 
     -- Duration slider for combat enter/leave text
     local combatStateDurationSlider = _MSUF_Slider("MSUF_Gameplay_CombatStateDurationSlider", "LEFT", combatStateEnterInput, "RIGHT", 80, 0, 160, 0.5, 5.0, 0.5, "Short", "Long", "Duration (s)", "combatStateDurationSlider", "combatStateDuration",
-        function(v) return math.floor(v * 10 + 0.5) / 10 end,
+        function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3795:8"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3795:8", math.floor(v * 10 + 0.5) / 10) end,
         nil,
         false
     )
 
     -- Reset button next to Duration (restore default 1.5s)
     local combatStateDurationReset = _MSUF_Button("MSUF_Gameplay_CombatStateDurationReset", "LEFT", combatStateSlider, "RIGHT", 40, 0, 60, 20, "Reset", "combatStateDurationResetButton")
-    combatStateDurationReset:SetScript("OnClick", function()
+    combatStateDurationReset:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3802:50");
         local g = EnsureGameplayDefaults()
         g.combatStateDuration = 1.5
         if panel and panel.combatStateDurationSlider then
@@ -3808,7 +3808,7 @@ end
         if ns and ns.MSUF_RequestGameplayApply then
             ns.MSUF_RequestGameplayApply()
         end
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3802:50"); end)
 
     -- Class-specific toggles header + separator
     local classSpecSeparator = _MSUF_Sep(combatStateSlider, -24)
@@ -3839,54 +3839,54 @@ end
         panel.playerTotemsSubText = totemsSub
 
         local totemsCheck = _MSUF_Check("MSUF_Gameplay_PlayerTotemsCheck", "TOPLEFT", totemsDismissHint, "BOTTOMLEFT", 0, -8, "Enable Totem tracker", "playerTotemsCheck", "enablePlayerTotems",
-            function()
+            function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3842:12");
                 if ns and ns.MSUF_RequestGameplayApply then
                     ns.MSUF_RequestGameplayApply()
                 end
                 if panel and panel.MSUF_UpdateGameplayDisabledStates then
                     panel:MSUF_UpdateGameplayDisabledStates()
                 end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3842:12"); end
         )
 
-        local function _RefreshTotemsPreviewButton()
+        local function _RefreshTotemsPreviewButton() Perfy_Trace(Perfy_GetTime(), "Enter", "_RefreshTotemsPreviewButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3852:14");
             if panel and panel.playerTotemsPreviewButton and panel.playerTotemsPreviewButton.SetText then
                 local active = (ns and ns.MSUF_PlayerTotems_IsPreviewActive and ns.MSUF_PlayerTotems_IsPreviewActive()) and true or false
                 panel.playerTotemsPreviewButton:SetText(active and "Stop preview" or "Preview")
             end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_RefreshTotemsPreviewButton file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3852:14"); end
 
         local totemsShowText = _MSUF_Check("MSUF_Gameplay_PlayerTotemsShowTextCheck", "TOPLEFT", totemsCheck, "BOTTOMLEFT", 0, -8, "Show cooldown text", "playerTotemsShowTextCheck", "playerTotemsShowText",
-            function()
+            function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3860:12");
                 if ns and ns.MSUF_RequestGameplayApply then
                     ns.MSUF_RequestGameplayApply()
                 end
                 if panel and panel.MSUF_UpdateGameplayDisabledStates then
                     panel:MSUF_UpdateGameplayDisabledStates()
                 end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3860:12"); end
         )
 
         local totemsScaleText = _MSUF_Check("MSUF_Gameplay_PlayerTotemsScaleTextCheck", "TOPLEFT", totemsShowText, "BOTTOMLEFT", 0, -8, "Scale text by icon size", "playerTotemsScaleByIconCheck", "playerTotemsScaleTextByIconSize",
-            function()
+            function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3871:12");
                 if ns and ns.MSUF_RequestGameplayApply then
                     ns.MSUF_RequestGameplayApply()
                 end
                 if panel and panel.MSUF_UpdateGameplayDisabledStates then
                     panel:MSUF_UpdateGameplayDisabledStates()
                 end
-            end
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3871:12"); end
         )
 
         -- Preview button: keep it in the left column under the toggles (cleaner layout).
         -- Preview is Shaman-only and works even when the feature toggle is off (positioning).
         local totemsPreviewBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsPreviewButton", "TOPLEFT", totemsScaleText, "BOTTOMLEFT", 0, -12, 140, 22, "Preview", "playerTotemsPreviewButton")
-        totemsPreviewBtn:SetScript("OnClick", function()
+        totemsPreviewBtn:SetScript("OnClick", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3884:46");
             if ns and ns.MSUF_PlayerTotems_TogglePreview then
                 ns.MSUF_PlayerTotems_TogglePreview()
             end
             _RefreshTotemsPreviewButton()
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3884:46"); end)
         _RefreshTotemsPreviewButton()
 
         
@@ -3900,34 +3900,34 @@ _totemsLeftBottom = totemsDragHint
 	        local _totemsRightX = 300
 
 	        local totemsIconSize = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsIconSizeSlider", "TOPLEFT", totemsCheck, "TOPLEFT", _totemsRightX, -2, 240, 8, 64, 1, "Small", "Big", "Icon size", "playerTotemsIconSizeSlider", "playerTotemsIconSize",
-            function(v) return math.floor((v or 0) + 0.5) end,
-            function()
+            function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3903:12"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3903:12", math.floor((v or 0) + 0.5)) end,
+            function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3904:12");
                 if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
-            end,
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3904:12"); end,
             true
         )
 
         local totemsSpacing = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsSpacingSlider", "TOPLEFT", totemsIconSize, "BOTTOMLEFT", 0, -18, 240, 0, 20, 1, "Tight", "Wide", "Spacing", "playerTotemsSpacingSlider", "playerTotemsSpacing",
-            function(v) return math.floor((v or 0) + 0.5) end,
-            function() if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end end,
+            function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3911:12"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3911:12", math.floor((v or 0) + 0.5)) end,
+            function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3912:12"); if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3912:12"); end,
             true
         )
 
         local totemsOffsetX = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsOffsetXSlider", "TOPLEFT", totemsSpacing, "BOTTOMLEFT", 0, -18, 240, -200, 200, 1, "Left", "Right", "X offset", "playerTotemsOffsetXSlider", "playerTotemsOffsetX",
-            function(v) return math.floor((v or 0) + 0.5) end,
-            function() if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end end,
+            function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3917:12"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3917:12", math.floor((v or 0) + 0.5)) end,
+            function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3918:12"); if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3918:12"); end,
             true
         )
 
         local totemsOffsetY = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsOffsetYSlider", "TOPLEFT", totemsOffsetX, "BOTTOMLEFT", 0, -18, 240, -200, 200, 1, "Down", "Up", "Y offset", "playerTotemsOffsetYSlider", "playerTotemsOffsetY",
-            function(v) return math.floor((v or 0) + 0.5) end,
-            function() if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end end,
+            function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3923:12"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3923:12", math.floor((v or 0) + 0.5)) end,
+            function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3924:12"); if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3924:12"); end,
             true
         )
 
         local totemsFontSize = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsFontSizeSlider", "TOPLEFT", totemsOffsetY, "BOTTOMLEFT", 0, -18, 240, 8, 64, 1, "Small", "Big", "Font size", "playerTotemsFontSizeSlider", "playerTotemsFontSize",
-            function(v) return math.floor((v or 0) + 0.5) end,
-            function() if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end end,
+            function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3929:12"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3929:12", math.floor((v or 0) + 0.5)) end,
+            function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3930:12"); if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3930:12"); end,
             true
         )
 
@@ -3936,33 +3936,33 @@ _totemsLeftBottom = totemsDragHint
         panel.playerTotemsLayoutLabel = totemsLayoutLabel
 
         local anchorPoints = {"TOPLEFT","TOP","TOPRIGHT","LEFT","CENTER","RIGHT","BOTTOMLEFT","BOTTOM","BOTTOMRIGHT"}
-        local function _NextAnchor(cur)
+        local function _NextAnchor(cur) Perfy_Trace(Perfy_GetTime(), "Enter", "_NextAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3939:14");
             if type(cur) ~= "string" then
-                return anchorPoints[1]
+                return Perfy_Trace_Passthrough("Leave", "_NextAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3939:14", anchorPoints[1])
             end
             for i=1,#anchorPoints do
                 if anchorPoints[i] == cur then
                     local j = i + 1
                     if j > #anchorPoints then j = 1 end
-                    return anchorPoints[j]
+                    return Perfy_Trace_Passthrough("Leave", "_NextAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3939:14", anchorPoints[j])
                 end
             end
-            return anchorPoints[1]
+            return Perfy_Trace_Passthrough("Leave", "_NextAnchor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3939:14", anchorPoints[1])
                 end
 
         -- Growth direction dropdown (RIGHT / LEFT / UP / DOWN)
         local growthDD = _MSUF_Dropdown("MSUF_Gameplay_PlayerTotemsGrowthDropDown", "TOPLEFT", totemsLayoutLabel, "BOTTOMLEFT", -16, -10, 110, "playerTotemsGrowthDropdown")
 
-        local function _TotemsGrowth_Validate(v)
+        local function _TotemsGrowth_Validate(v) Perfy_Trace(Perfy_GetTime(), "Enter", "_TotemsGrowth_Validate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3956:14");
             if v ~= "LEFT" and v ~= "RIGHT" and v ~= "UP" and v ~= "DOWN" then
-                return "RIGHT"
+                Perfy_Trace(Perfy_GetTime(), "Leave", "_TotemsGrowth_Validate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3956:14"); return "RIGHT"
             end
-            return v
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_TotemsGrowth_Validate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3956:14"); return v
         end
 
-        local function _TotemsGrowth_Set(v)
+        local function _TotemsGrowth_Set(v) Perfy_Trace(Perfy_GetTime(), "Enter", "_TotemsGrowth_Set file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3963:14");
             local g = MSUF_DB and MSUF_DB.gameplay
-            if not g then return end
+            if not g then Perfy_Trace(Perfy_GetTime(), "Leave", "_TotemsGrowth_Set file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3963:14"); return end
             local val = _TotemsGrowth_Validate(v)
             g.playerTotemsGrowthDirection = val
 
@@ -3971,10 +3971,10 @@ _totemsLeftBottom = totemsDragHint
 
             if panel and panel.refresh then panel:refresh() end
             if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_TotemsGrowth_Set file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3963:14"); end
 
         if UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
-            UIDropDownMenu_Initialize(growthDD, function(self, level)
+            UIDropDownMenu_Initialize(growthDD, function(self, level) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3977:48");
                 local g = MSUF_DB and MSUF_DB.gameplay
                 local cur = _TotemsGrowth_Validate(g and g.playerTotemsGrowthDirection)
 
@@ -3992,12 +3992,12 @@ _totemsLeftBottom = totemsDragHint
                     info.text = text
                     info.value = value
                     info.checked = (cur == value)
-                    info.func = function(btn)
+                    info.func = function(btn) Perfy_Trace(Perfy_GetTime(), "Enter", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3995:32");
                         _TotemsGrowth_Set(btn and btn.value)
-                    end
+                    Perfy_Trace(Perfy_GetTime(), "Leave", "info.func file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3995:32"); end
                     UIDropDownMenu_AddButton(info, level)
                 end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:3977:48"); end)
         end
 
         -- Initial label/selection (kept in sync by panel.refresh)
@@ -4009,27 +4009,27 @@ _totemsLeftBottom = totemsDragHint
         end
 
 
-	        local anchorFromBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorFromBtn", "TOPLEFT", growthDD, "TOPRIGHT", 8, -4, 122, 20, "From: TOPLEFT", "playerTotemsAnchorFromButton", function()
+	        local anchorFromBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorFromBtn", "TOPLEFT", growthDD, "TOPRIGHT", 8, -4, 122, 20, "From: TOPLEFT", "playerTotemsAnchorFromButton", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4012:185");
             local g = MSUF_DB and MSUF_DB.gameplay
-            if not g then return end
+            if not g then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4012:185"); return end
             g.playerTotemsAnchorFrom = _NextAnchor(g.playerTotemsAnchorFrom)
             if panel and panel.refresh then panel:refresh() end
             if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4012:185"); end)
         panel.playerTotemsAnchorFromButton = anchorFromBtn
 
-	        local anchorToBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorToBtn", "TOPLEFT", growthDD, "BOTTOMLEFT", 16, -6, 240, 20, "To: BOTTOMLEFT", "playerTotemsAnchorToButton", function()
+	        local anchorToBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorToBtn", "TOPLEFT", growthDD, "BOTTOMLEFT", 16, -6, 240, 20, "To: BOTTOMLEFT", "playerTotemsAnchorToButton", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4021:183");
             local g = MSUF_DB and MSUF_DB.gameplay
-            if not g then return end
+            if not g then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4021:183"); return end
             g.playerTotemsAnchorTo = _NextAnchor(g.playerTotemsAnchorTo)
             if panel and panel.refresh then panel:refresh() end
             if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4021:183"); end)
         panel.playerTotemsAnchorToButton = anchorToBtn
 
-	        local resetTotemsBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsResetBtn", "TOPLEFT", anchorToBtn, "BOTTOMLEFT", 0, -6, 240, 20, "Reset Totem tracker layout", "playerTotemsResetButton", function()
+	        local resetTotemsBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsResetBtn", "TOPLEFT", anchorToBtn, "BOTTOMLEFT", 0, -6, 240, 20, "Reset Totem tracker layout", "playerTotemsResetButton", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4030:194");
             local g = MSUF_DB and MSUF_DB.gameplay
-            if not g then return end
+            if not g then Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4030:194"); return end
             g.playerTotemsShowText = true
             g.playerTotemsScaleTextByIconSize = true
             g.playerTotemsIconSize = 24
@@ -4044,7 +4044,7 @@ _totemsLeftBottom = totemsDragHint
             if panel and panel.refresh then panel:refresh() end
             if panel and panel.MSUF_UpdateGameplayDisabledStates then panel:MSUF_UpdateGameplayDisabledStates() end
             if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4030:194"); end)
         panel.playerTotemsResetButton = resetTotemsBtn
         _totemsRightBottom = resetTotemsBtn
 
@@ -4087,12 +4087,12 @@ _totemsLeftBottom = totemsDragHint
 
     -- Generic combat crosshair (all classes)
     local combatCrosshairCheck = _MSUF_Check("MSUF_Gameplay_CombatCrosshairCheck", "TOPLEFT", crosshairHeader, "BOTTOMLEFT", 0, -8, "Show green combat crosshair under player (in combat)", "combatCrosshairCheck", "enableCombatCrosshair",
-        function() if panel and panel.MSUF_UpdateCrosshairPreview then panel.MSUF_UpdateCrosshairPreview() end end
+        function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4090:8"); if panel and panel.MSUF_UpdateCrosshairPreview then panel.MSUF_UpdateCrosshairPreview() end Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4090:8"); end
     )
 
     -- Combat crosshair: melee range coloring (uses the shared melee spell selection)
     local crosshairRangeColorCheck = _MSUF_Check("MSUF_Gameplay_CrosshairRangeColorCheck", "TOPLEFT", combatCrosshairCheck, "BOTTOMLEFT", 0, -8, "Crosshair: color by melee range to target (green=in range, red=out)", "crosshairRangeColorCheck", "enableCombatCrosshairMeleeRangeColor",
-        function() if panel and panel.MSUF_UpdateCrosshairPreview then panel.MSUF_UpdateCrosshairPreview() end end
+        function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4095:8"); if panel and panel.MSUF_UpdateCrosshairPreview then panel.MSUF_UpdateCrosshairPreview() end Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4095:8"); end
     )
 
     local crosshairRangeHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", crosshairRangeColorCheck, "BOTTOMLEFT", 24, -2, "Uses the spell selected below.", "crosshairRangeHintText")
@@ -4173,15 +4173,15 @@ _totemsLeftBottom = totemsDragHint
     crosshairPreview._phase = 0
     crosshairPreview._elapsed = 0
 
-    local function ClampInt(v, lo, hi)
+    local function ClampInt(v, lo, hi) Perfy_Trace(Perfy_GetTime(), "Enter", "ClampInt file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4176:10");
         v = tonumber(v) or lo
         v = math.floor(v + 0.5)
         if v < lo then v = lo end
         if v > hi then v = hi end
-        return v
+        Perfy_Trace(Perfy_GetTime(), "Leave", "ClampInt file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4176:10"); return v
     end
 
-    local function UpdateCrosshairPreview()
+    local function UpdateCrosshairPreview() Perfy_Trace(Perfy_GetTime(), "Enter", "UpdateCrosshairPreview file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4184:10");
         local g = EnsureGameplayDefaults()
 
         local thickness = ClampInt(g.crosshairThickness or 2, 1, 10)
@@ -4246,20 +4246,20 @@ _totemsLeftBottom = totemsDragHint
 
         -- Only animate (green <-> red) when range-color mode is enabled
         if g.enableCombatCrosshair and g.enableCombatCrosshairMeleeRangeColor then
-            crosshairPreview:SetScript("OnUpdate", function(self, elapsed)
+            crosshairPreview:SetScript("OnUpdate", function(self, elapsed) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4249:51");
                 self._elapsed = (self._elapsed or 0) + (elapsed or 0)
                 if self._elapsed >= 0.85 then
                     self._elapsed = 0
                     self._phase = (self._phase == 1) and 0 or 1
                     UpdateCrosshairPreview()
                 end
-            end)
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4249:51"); end)
         else
             crosshairPreview:SetScript("OnUpdate", nil)
             crosshairPreview._elapsed = 0
             crosshairPreview._phase = 0
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "UpdateCrosshairPreview file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4184:10"); end
 
     panel.MSUF_UpdateCrosshairPreview = UpdateCrosshairPreview
 
@@ -4267,11 +4267,11 @@ _totemsLeftBottom = totemsDragHint
     local crosshairThicknessLabel = _MSUF_Label("GameFontHighlight", "TOPLEFT", meleeSelected or (meleeSharedWarn or crosshairRangeWarn), "BOTTOMLEFT", 0, -24, "Crosshair thickness", "crosshairThicknessLabel")
 
     local crosshairThicknessSlider = _MSUF_Slider("MSUF_Gameplay_CrosshairThicknessSlider", "TOPLEFT", crosshairThicknessLabel, "BOTTOMLEFT", 0, -12, 240, 1, 10, 1, "1 px", "10 px", "2 px", "crosshairThicknessSlider", "crosshairThickness",
-        function(v) return math.floor(v + 0.5) end,
-        function(self, g, v)
+        function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4270:8"); return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4270:8", math.floor(v + 0.5)) end,
+        function(self, g, v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4271:8");
             _G[self:GetName() .. "Text"]:SetText(string.format("%d px", v))
             if panel and panel.MSUF_UpdateCrosshairPreview then panel.MSUF_UpdateCrosshairPreview() end
-        end,
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4271:8"); end,
         true
     )
     _MSUF_SliderTextRight("MSUF_Gameplay_CrosshairThicknessSlider")
@@ -4285,15 +4285,15 @@ _totemsLeftBottom = totemsDragHint
     local crosshairSizeLabel = _MSUF_Label("GameFontHighlight", "TOPLEFT", crosshairThicknessSlider, "BOTTOMLEFT", 0, -24, "Crosshair size", "crosshairSizeLabel")
 
     local crosshairSizeSlider = _MSUF_Slider("MSUF_Gameplay_CrosshairSizeSlider", "TOPLEFT", crosshairSizeLabel, "BOTTOMLEFT", 0, -14, 240, 20, 80, 2, "20 px", "80 px", "40 px", "crosshairSizeSlider", "crosshairSize",
-        function(v)
+        function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4288:8");
             v = math.floor(v + 0.5)
             if v < 20 then v = 20 elseif v > 80 then v = 80 end
-            return v
+            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4288:8"); return v
         end,
-        function(self, g, v)
+        function(self, g, v) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4293:8");
             _G[self:GetName() .. "Text"]:SetText(string.format("%d px", v))
             if panel and panel.MSUF_UpdateCrosshairPreview then panel.MSUF_UpdateCrosshairPreview() end
-        end,
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4293:8"); end,
         true
     )
     _MSUF_SliderTextRight("MSUF_Gameplay_CrosshairSizeSlider")
@@ -4314,8 +4314,8 @@ _totemsLeftBottom = totemsDragHint
 ------------------------------------------------------
     -- Disabled/greyed state styling (match Main menu behavior)
     ------------------------------------------------------
-    local function _MSUF_RememberTextColor(fs)
-        if not fs or fs.__msufOrigColor then return end
+    local function _MSUF_RememberTextColor(fs) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_RememberTextColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4317:10");
+        if not fs or fs.__msufOrigColor then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_RememberTextColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4317:10"); return end
         local r, g, b, a = fs:GetTextColor()
 
         -- Important: many Blizzard templates use a yellow default font color (GameFontNormal).
@@ -4326,10 +4326,10 @@ _totemsLeftBottom = totemsDragHint
         else
             fs.__msufOrigColor = { r or 1, g or 1, b or 1, a or 1 }
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_RememberTextColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4317:10"); end
 
-    local function _MSUF_SetFontStringEnabled(fs, enabled, dimWhenOff)
-        if not fs then return end
+    local function _MSUF_SetFontStringEnabled(fs, enabled, dimWhenOff) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_SetFontStringEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4331:10");
+        if not fs then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetFontStringEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4331:10"); return end
         _MSUF_RememberTextColor(fs)
         if enabled then
             local c = fs.__msufOrigColor
@@ -4342,21 +4342,21 @@ _totemsLeftBottom = totemsDragHint
                 fs:SetTextColor(0.45, 0.45, 0.45, 0.9)
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetFontStringEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4331:10"); end
 
-    local function _MSUF_SetCheckStyle(cb, forceEnabled)
-        if not cb then return end
+    local function _MSUF_SetCheckStyle(cb, forceEnabled) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_SetCheckStyle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4347:10");
+        if not cb then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetCheckStyle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4347:10"); return end
         if forceEnabled then
             cb:Enable()
         end
 
         local fs = cb.Text
-        if not fs then return end
+        if not fs then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetCheckStyle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4347:10"); return end
         _MSUF_RememberTextColor(fs)
 
         if not cb:IsEnabled() then
             fs:SetTextColor(0.45, 0.45, 0.45, 0.9)
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetCheckStyle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4347:10"); return
         end
 
         -- Unchecked toggles are intentionally greyed (like Main menu)
@@ -4366,20 +4366,20 @@ _totemsLeftBottom = totemsDragHint
         else
             fs:SetTextColor(0.60, 0.60, 0.60, 0.95)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetCheckStyle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4347:10"); end
 
-    local function _MSUF_SetCheckEnabled(cb, enabled)
-        if not cb then return end
+    local function _MSUF_SetCheckEnabled(cb, enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_SetCheckEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4371:10");
+        if not cb then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetCheckEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4371:10"); return end
         if enabled then
             cb:Enable()
         else
             cb:Disable()
         end
         _MSUF_SetCheckStyle(cb)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetCheckEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4371:10"); end
 
-    local function _MSUF_SetSliderEnabled(sl, enabled)
-        if not sl then return end
+    local function _MSUF_SetSliderEnabled(sl, enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_SetSliderEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4381:10");
+        if not sl then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetSliderEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4381:10"); return end
         if enabled then
             sl:Enable()
         else
@@ -4393,16 +4393,16 @@ _totemsLeftBottom = totemsDragHint
             _MSUF_SetFontStringEnabled(_G[name .. "High"], enabled, true)
             _MSUF_SetFontStringEnabled(_G[name .. "Text"], enabled, false)
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetSliderEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4381:10"); end
 
-    local function _MSUF_SetButtonEnabled(btn, enabled)
-        if not btn then return end
+    local function _MSUF_SetButtonEnabled(btn, enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_SetButtonEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4398:10");
+        if not btn then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetButtonEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4398:10"); return end
         btn:SetEnabled(enabled and true or false)
         btn:SetAlpha(enabled and 1 or 0.6)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetButtonEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4398:10"); end
 
-local function _MSUF_SetDropdownEnabled(dd, enabled)
-    if not dd then return end
+local function _MSUF_SetDropdownEnabled(dd, enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_SetDropdownEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4404:6");
+    if not dd then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetDropdownEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4404:6"); return end
     if enabled then
         if UIDropDownMenu_EnableDropDown then
             UIDropDownMenu_EnableDropDown(dd)
@@ -4418,11 +4418,11 @@ local function _MSUF_SetDropdownEnabled(dd, enabled)
         end
         if dd.SetAlpha then dd:SetAlpha(0.6) end
     end
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetDropdownEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4404:6"); end
 
 
-    local function _MSUF_SetEditBoxEnabled(eb, enabled)
-        if not eb then return end
+    local function _MSUF_SetEditBoxEnabled(eb, enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_SetEditBoxEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4424:10");
+        if not eb then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetEditBoxEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4424:10"); return end
         if not enabled and eb.ClearFocus then
             eb:ClearFocus()
         end
@@ -4442,9 +4442,9 @@ end
                 eb:SetTextColor(0.65, 0.65, 0.65, 0.95)
             end
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_SetEditBoxEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4424:10"); end
 
-    function panel:MSUF_UpdateGameplayDisabledStates()
+    function panel:MSUF_UpdateGameplayDisabledStates() Perfy_Trace(Perfy_GetTime(), "Enter", "panel:MSUF_UpdateGameplayDisabledStates file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4447:4");
         local g = EnsureGameplayDefaults()
 
         -- Top-level toggles: always enabled, but unchecked is greyed
@@ -4555,7 +4555,7 @@ end
         if self.MSUF_UpdateCrosshairPreview then
             self.MSUF_UpdateCrosshairPreview()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "panel:MSUF_UpdateGameplayDisabledStates file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4447:4"); end
 
     lastControl = cooldownIconsCheck
 
@@ -4612,22 +4612,22 @@ end
 
     }
 
-    local function _MSUF_ResetGameplayToDefaults()
+    local function _MSUF_ResetGameplayToDefaults() Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_ResetGameplayToDefaults file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4615:10");
         local g = EnsureGameplayDefaults()
         for i = 1, #_MSUF_GAMEPLAY_DEFAULT_KEYS do
             g[_MSUF_GAMEPLAY_DEFAULT_KEYS[i]] = nil
         end
-        return EnsureGameplayDefaults()
+        return Perfy_Trace_Passthrough("Leave", "_MSUF_ResetGameplayToDefaults file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4615:10", EnsureGameplayDefaults())
     end
 
-    local function _MSUF_Clamp(v, lo, hi)
-        if v == nil then return lo end
-        if v < lo then return lo end
-        if v > hi then return hi end
-        return v
+    local function _MSUF_Clamp(v, lo, hi) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4623:10");
+        if v == nil then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4623:10"); return lo end
+        if v < lo then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4623:10"); return lo end
+        if v > hi then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4623:10"); return hi end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_Clamp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4623:10"); return v
     end
 
-    panel.refresh = function(self)
+    panel.refresh = function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "panel.refresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4630:20");
         self._msufSuppressSliderChanges = true
         local g = EnsureGameplayDefaults()
 
@@ -4654,18 +4654,18 @@ end
             UpdateSelectedTextFromDB()
         end
 
-        local function SetCheck(field, key, notFalse)
+        local function SetCheck(field, key, notFalse) Perfy_Trace(Perfy_GetTime(), "Enter", "SetCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4657:14");
             local cb = self[field]
-            if not cb then return end
+            if not cb then Perfy_Trace(Perfy_GetTime(), "Leave", "SetCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4657:14"); return end
             local v = notFalse and (g[key] ~= false) or (g[key] and true or false)
             cb:SetChecked(v)
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "SetCheck file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4657:14"); end
 
-        local function SetSlider(field, key, default)
+        local function SetSlider(field, key, default) Perfy_Trace(Perfy_GetTime(), "Enter", "SetSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4664:14");
             local sl = self[field]
-            if not sl then return end
+            if not sl then Perfy_Trace(Perfy_GetTime(), "Leave", "SetSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4664:14"); return end
             sl:SetValue(tonumber(g[key]) or default or 0)
-        end
+        Perfy_Trace(Perfy_GetTime(), "Leave", "SetSlider file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4664:14"); end
 
         -- Simple checks
         local checks = {
@@ -4786,25 +4786,25 @@ end
 
         -- Done syncing; re-enable bindings.
         self._msufSuppressSliderChanges = false
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "panel.refresh file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4630:20"); end
 
 
 
 -- Live-sync: allow the Totem preview frame to drag-update X/Y without spamming Apply().
-function panel:MSUF_SyncTotemOffsetSliders()
+function panel:MSUF_SyncTotemOffsetSliders() Perfy_Trace(Perfy_GetTime(), "Enter", "panel:MSUF_SyncTotemOffsetSliders file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4794:0");
     if not self.playerTotemsOffsetXSlider or not self.playerTotemsOffsetYSlider then
-        return
+        Perfy_Trace(Perfy_GetTime(), "Leave", "panel:MSUF_SyncTotemOffsetSliders file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4794:0"); return
     end
     local g = EnsureGameplayDefaults()
     self._msufSuppressSliderChanges = true
     self.playerTotemsOffsetXSlider:SetValue(tonumber(g.playerTotemsOffsetX) or 0)
     self.playerTotemsOffsetYSlider:SetValue(tonumber(g.playerTotemsOffsetY) or -6)
     self._msufSuppressSliderChanges = false
-end
+Perfy_Trace(Perfy_GetTime(), "Leave", "panel:MSUF_SyncTotemOffsetSliders file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4794:0"); end
 
     -- Most controls apply immediately, but "Okay" is still called by the Settings/Interface panel system.
     -- We use it as a safe "finalize" hook.
-    panel.okay = function(self)
+    panel.okay = function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "panel.okay file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4807:17");
         if self.meleeSpellInput and self.meleeSpellInput.HasFocus and self.meleeSpellInput:HasFocus() then
             self.meleeSpellInput:ClearFocus()
         end
@@ -4816,9 +4816,9 @@ end
         elseif MSUF_ApplyCooldownIconMode then
             MSUF_ApplyCooldownIconMode()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "panel.okay file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4807:17"); end
 
-    panel.default = function(self)
+    panel.default = function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "panel.default file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4821:20");
         _MSUF_ResetGameplayToDefaults()
         if self.refresh then
             self:refresh()
@@ -4831,24 +4831,24 @@ end
         elseif MSUF_ApplyCooldownIconMode then
             MSUF_ApplyCooldownIconMode()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "panel.default file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4821:20"); end
 
     
     ------------------------------------------------------
     -- Dynamic content height
     ------------------------------------------------------
-    local function UpdateContentHeight()
+    local function UpdateContentHeight() Perfy_Trace(Perfy_GetTime(), "Enter", "UpdateContentHeight file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4840:10");
         local minHeight = 400
         if not lastControl then
             content:SetHeight(minHeight)
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "UpdateContentHeight file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4840:10"); return
         end
 
         local bottom = lastControl:GetBottom()
         local top    = content:GetTop()
         if not bottom or not top then
             content:SetHeight(minHeight)
-            return
+            Perfy_Trace(Perfy_GetTime(), "Leave", "UpdateContentHeight file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4840:10"); return
         end
 
         local padding = 40
@@ -4857,15 +4857,15 @@ end
             height = minHeight
         end
         content:SetHeight(height)
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "UpdateContentHeight file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4840:10"); end
 
-    panel:SetScript("OnShow", function()
+    panel:SetScript("OnShow", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4862:30");
         if _G.MSUF_StyleAllToggles then _G.MSUF_StyleAllToggles(panel) end
         if panel.refresh then
             panel:refresh()
         end
         UpdateContentHeight()
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4862:30"); end)
 
 -- Settings registration
     if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
@@ -4888,15 +4888,15 @@ end
     ns.MSUF_RequestGameplayApply()
 
     panel.__MSUF_GameplayBuilt = true
-    return panel
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_RegisterGameplayOptions_Full file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:2966:0"); return panel
 end
 
 
 -- Lightweight wrapper: register the category at login, but build the heavy UI only when opened.
-function ns.MSUF_RegisterGameplayOptions(parentCategory)
+function ns.MSUF_RegisterGameplayOptions(parentCategory) Perfy_Trace(Perfy_GetTime(), "Enter", "ns.MSUF_RegisterGameplayOptions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4896:0");
     if not Settings or not Settings.RegisterCanvasLayoutSubcategory or not parentCategory then
         -- Fallback: if Settings API isn't available, just build immediately.
-        return ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
+        return Perfy_Trace_Passthrough("Leave", "ns.MSUF_RegisterGameplayOptions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4896:0", ns.MSUF_RegisterGameplayOptions_Full(parentCategory))
     end
 
     local panel = (_G and _G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
@@ -4921,7 +4921,7 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
 
     -- Already built: nothing else to do.
     if panel.__MSUF_GameplayBuilt then
-        return panel
+        Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_RegisterGameplayOptions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4896:0"); return panel
     end
 
     -- First open builds the full panel. Build synchronously in OnShow so the panel is ready on the first click.
@@ -4932,11 +4932,11 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
 
     
 
-        panel:HookScript("OnShow", function()
+        panel:HookScript("OnShow", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4935:35");
 
             if panel.__MSUF_GameplayBuilt or panel.__MSUF_GameplayBuilding then
 
-                return
+                Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4935:35"); return
 
             end
 
@@ -4952,13 +4952,13 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
 
             panel.__MSUF_GameplayBuilding = nil
 
-        end)
+        Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4935:35"); end)
 
     end
 
     
 
-    return panel
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ns.MSUF_RegisterGameplayOptions file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4896:0"); return panel
 
     end
 
@@ -4972,8 +4972,8 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
 do
     local didApply = false
 
-    local function AutoApplyOnce()
-        if didApply then return end
+    local function AutoApplyOnce() Perfy_Trace(Perfy_GetTime(), "Enter", "AutoApplyOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4975:10");
+        if didApply then Perfy_Trace(Perfy_GetTime(), "Leave", "AutoApplyOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4975:10"); return end
         didApply = true
 
 
@@ -4988,7 +4988,7 @@ do
         if ns and ns.MSUF_RequestGameplayApply then
             ns.MSUF_RequestGameplayApply()
         end
-    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "AutoApplyOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:4975:10"); end
 
     -- Run next tick so SavedVariables + UpdateManager are ready,
     -- even when this LoD file is loaded mid-session.
@@ -5002,9 +5002,11 @@ do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    f:SetScript("OnEvent", function()
+    f:SetScript("OnEvent", function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:5005:27");
         AutoApplyOnce()
         f:UnregisterAllEvents()
         f:SetScript("OnEvent", nil)
-    end)
+    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua:5005:27"); end)
 end
+
+Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames_Gameplay.lua");
