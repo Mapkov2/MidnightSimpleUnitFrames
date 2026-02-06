@@ -2578,14 +2578,19 @@ do
         end
     end
 
-    local function getRangeFadeConfig()
+    -- NOTE: This must be callable from any scope. Some MSUF builds define RangeFade
+    -- handlers outside of this local block (e.g., after merges), which would make a
+    -- purely local helper invisible and cause "attempt to call global ... (a nil value)".
+    -- Export a stable global accessor and always call through it.
+    local function MSUF_RangeFade_GetConfig()
         local g = _G.MSUF_DB and _G.MSUF_DB.gameplay
         if not g then return false, 1 end
         return (g.rangeFadeEnabled == true), (g.rangeFadeAlpha or 1)
     end
+    _G.MSUF_RangeFade_GetConfig = MSUF_RangeFade_GetConfig
 
     local function applyRangeFadeAlpha(inRange, force)
-        local enabled, alpha = getRangeFadeConfig()
+        local enabled, alpha = _G.MSUF_RangeFade_GetConfig()
         local targetAlpha = (enabled and not inRange) and alpha or 1
 
         -- Update cached multipliers used by MSUF_GetRangeFadeMul().
@@ -2639,9 +2644,7 @@ do
         end
         return list
     end
-end
-
--- Public helpers used by other MSUF code.
+	-- Public helpers used by other MSUF code.
 function _G.MSUF_GetRangeFadeMul(unit)
     local t = _G.MSUF_RangeFadeMul
     if not t then return 1 end
@@ -2654,8 +2657,8 @@ function _G.MSUF_RangeFadeReset()
     applyRangeFadeAlpha(true, true)
 end
 
-function _G.MSUF_RangeFadeUpdateFromEvent(spellIdentifier, isInRange, checksRange)
-    local enabled = getRangeFadeConfig()
+    function _G.MSUF_RangeFadeUpdateFromEvent(spellIdentifier, isInRange, checksRange)
+        local enabled = _G.MSUF_RangeFade_GetConfig()
     if not enabled then return end
     local id = tonumber(spellIdentifier)
     if not id and GetSpellIDForSpellIdentifier then
@@ -2673,7 +2676,7 @@ end
 
 function _G.MSUF_RangeFadeUpdateSpells()
     if not EnableSpellRangeCheck then return end
-    local enabled = getRangeFadeConfig()
+        local enabled = _G.MSUF_RangeFade_GetConfig()
     if not enabled then
         for spellId in pairs(rangeFadeState.activeSpells) do
             EnableSpellRangeCheck(spellId, false)
@@ -2724,6 +2727,8 @@ end)
 -- Initialize multiplier cache.
 _G.MSUF_RangeFadeMul.target = 1
 _G.MSUF_RangeFadeMul.focus = 1
+
+end
 
 local function MSUF_InitPlayerCastbarPreviewToggle() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_InitPlayerCastbarPreviewToggle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2989:6");
     if not MSUF_DB or not MSUF_DB.general then
@@ -3086,6 +3091,13 @@ function _G.__MSUF_UFREQ_Flush() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.__MSU
 Perfy_Trace(Perfy_GetTime(), "Leave", "_G.__MSUF_UFREQ_Flush file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3320:0"); end
 
 function _G.MSUF_RequestUnitframeUpdate(frame, forceFull, wantLayout, reason, urgentNow) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_RequestUnitframeUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3349:0");
+
+    -- Accept both frame objects and unit tokens ("target", "focus", "boss1", ...).
+    -- Several callers (eg. RangeFade) operate on unit tokens; UFCore expects actual frame objects.
+    if type(frame) == "string" then
+        frame = _G["MSUF_" .. frame]
+    end
+
     if not frame then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_RequestUnitframeUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3349:0"); return end
 
         local reqLayout = _G.MSUF_UFCore_RequestLayout

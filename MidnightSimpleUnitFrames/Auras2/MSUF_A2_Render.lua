@@ -2819,7 +2819,7 @@ end
 
 -- Build a set of auraInstanceIDs for a unit that belong to the player (or player pet),
 -- using filter flags only. This is robust in combat and avoids reading aura fields.
-local function MSUF_A2_GetPlayerAuraIdSet(unit, filter)
+local function MSUF_A2_GetPlayerAuraIdSet(unit, filter, outSet)
     if not unit or not C_UnitAuras or type(C_UnitAuras.GetUnitAuraInstanceIDs) ~= "function" then
         return nil
     end
@@ -2829,13 +2829,46 @@ local function MSUF_A2_GetPlayerAuraIdSet(unit, filter)
         return nil
     end
 
-    local set = {}
+    local set = outSet
+    if type(set) ~= "table" then
+        set = {}
+    else
+        wipe(set)
+    end
+
     for i = 1, #ids do
         local id = ids[i]
         if id ~= nil then
             set[id] = true
         end
     end
+    return set
+end
+
+-- Cached variant to avoid per-render allocations. Cache is invalidated by entry._msufA2_auraStamp,
+-- which only increments once per coalesced dirty cycle (see MarkDirty()).
+local function MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, filter)
+    if type(entry) ~= "table" then
+        return MSUF_A2_GetPlayerAuraIdSet(unit, filter)
+    end
+
+    local stamp = entry._msufA2_auraStamp or 0
+    local isHelpful = (filter == "HELPFUL")
+    local setField = isHelpful and "_msufA2_ownBuffSet" or "_msufA2_ownDebuffSet"
+    local stampField = isHelpful and "_msufA2_ownBuffSetStamp" or "_msufA2_ownDebuffSetStamp"
+
+    if entry[stampField] == stamp and type(entry[setField]) == "table" then
+        return entry[setField]
+    end
+
+    local set = entry[setField]
+    if type(set) ~= "table" then
+        set = {}
+        entry[setField] = set
+    end
+
+    set = MSUF_A2_GetPlayerAuraIdSet(unit, filter, set)
+    entry[stampField] = stamp
     return set
 end
 
@@ -3693,10 +3726,10 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
     local ownBuffSet, ownDebuffSet = nil, nil
     if wantOwnHighlights and unit ~= "player" then
         if wantOwnBuff then
-            ownBuffSet = MSUF_A2_GetPlayerAuraIdSet(unit, "HELPFUL")
+            ownBuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HELPFUL")
         end
         if wantOwnDebuff then
-            ownDebuffSet = MSUF_A2_GetPlayerAuraIdSet(unit, "HARMFUL")
+            ownDebuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HARMFUL")
         end
     end
 
@@ -3831,10 +3864,37 @@ MSUF_A2_BuildMergedAuraList = function(entry, unit, filter, baseShow, onlyMine, 
 
     if type(all) == "table" then
         if extraKind == "dispellable" then
+            -- Cache dispellable checks per auraInstanceID to avoid repeated expensive checks during UNIT_AURA storms.
+            -- Cache is invalidated via entry._msufA2_auraStamp (incremented once per coalesced dirty cycle).
+            local stamp = (type(entry) == "table" and entry._msufA2_auraStamp) or 0
+            local cache = (type(entry) == "table") and entry._msufA2_dispelCache or nil
+            if type(cache) ~= "table" and type(entry) == "table" then
+                cache = {}
+                entry._msufA2_dispelCache = cache
+            end
+
             for i = 1, #all do
                 local aura = all[i]
-                if aura and MSUF_A2_IsDispellableAura(unit, aura) then
-                    scratch[#scratch + 1] = aura
+                if aura then
+                    local aid = aura.auraInstanceID or aura._msufAuraInstanceID
+                    if aid ~= nil and type(cache) == "table" then
+                        local v = cache[aid]
+                        if v == stamp then
+                            scratch[#scratch + 1] = aura
+                        elseif v == -stamp then
+                            -- cached false
+                        else
+                            local isDisp = (MSUF_A2_IsDispellableAura(unit, aura) == true)
+                            cache[aid] = isDisp and stamp or -stamp
+                            if isDisp then
+                                scratch[#scratch + 1] = aura
+                            end
+                        end
+                    else
+                        if MSUF_A2_IsDispellableAura(unit, aura) then
+                            scratch[#scratch + 1] = aura
+                        end
+                    end
                 end
             end
         end
@@ -4471,10 +4531,10 @@ end
         local ownBuffSet, ownDebuffSet
         if unitExists then
             if (shared.highlightOwnBuffs == true) and finalShowBuffs then
-                ownBuffSet = MSUF_A2_GetPlayerAuraIdSet(unit, "HELPFUL")
+                ownBuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HELPFUL")
             end
             if (shared.highlightOwnDebuffs == true) and finalShowDebuffs then
-                ownDebuffSet = MSUF_A2_GetPlayerAuraIdSet(unit, "HARMFUL")
+                ownDebuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HARMFUL")
             end
         end
         local ctx = entry._msufA2_renderCtx
@@ -4825,7 +4885,16 @@ local function MarkDirty(unit, delay)
     -- Events may spam MarkDirty many times per frame (UNIT_AURA bursts).
     -- We dedupe per unit via Dirty[unit] and schedule exactly one global flush driver wake.
     -- delay: optional seconds to coalesce multiple events (0 means next frame).
-    Dirty[unit] = true
+    if not Dirty[unit] then
+        Dirty[unit] = true
+
+        -- Allocation-free aura-change stamp (used for caching own-set / dispellable cache).
+        -- Only increment once per coalesced cycle for this unit.
+        local entry = AurasByUnit and AurasByUnit[unit]
+        if type(entry) == "table" then
+            entry._msufA2_auraStamp = (entry._msufA2_auraStamp or 0) + 1
+        end
+    end
 
     -- Perf counters (debug-only). Keep this extremely light.
     if _A2_PerfEnabled() and _A2_PERF then
