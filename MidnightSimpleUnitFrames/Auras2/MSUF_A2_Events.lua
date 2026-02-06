@@ -31,10 +31,28 @@ local function SafePCall(fn, ...)
     return ok
 end
 
-local function MarkDirty(unit)
+-- Strict coalescing for UNIT_AURA bursts:
+--  * Never render "per event".
+--  * Batch same-frame (and small multi-event bursts) into a single render.
+--
+-- Route through API.RequestUnit(delay) when available so the render module can
+-- coalesce aggressively while still allowing non-aura events (target/focus swap)
+-- to request immediate refresh.
+local function MarkDirty(unit, delay)
+    if not unit then return end
+
+    local req = API.RequestUnit
+    if type(req) == "function" then
+        -- Default delay for UNIT_AURA should be small but non-zero.
+        -- (0 would still be next-frame, but 0.01 collapses most burst patterns.)
+        if delay == nil then delay = 0.01 end
+        req(unit, delay)
+        return
+    end
+
     local f = API.MarkDirty
     if type(f) == "function" then
-        f(unit)
+        f(unit, delay)
     end
 end
 
@@ -511,6 +529,7 @@ function Events.ApplyEventRegistration()
         local function UnitAuraOnEvent(_, event, arg1)
             if event ~= "UNIT_AURA" then return end
             if arg1 and ShouldProcessUnitEvent(arg1, true) then
+                -- UNIT_AURA: coalesce aggressively (default small delay)
                 MarkDirty(arg1)
             end
         end
@@ -543,12 +562,13 @@ function Events.Init()
     -- EventFrame main handler (non-UNIT_AURA)
     ef:SetScript("OnEvent", function(_, event, arg1)
         if event == "PLAYER_TARGET_CHANGED" then
-            if ShouldProcessUnitEvent("target") then MarkDirty("target") end
+            -- Target swap should feel instant: request next-frame render (0 delay)
+            if ShouldProcessUnitEvent("target") then MarkDirty("target", 0) end
             return
         end
 
         if event == "PLAYER_FOCUS_CHANGED" then
-            if ShouldProcessUnitEvent("focus") then MarkDirty("focus") end
+            if ShouldProcessUnitEvent("focus") then MarkDirty("focus", 0) end
             return
         end
 
@@ -556,7 +576,7 @@ function Events.Init()
             for i = 1, 5 do
                 local u = "boss" .. i
                 if ShouldProcessUnitEvent(u) then
-                    MarkDirty(u)
+                    MarkDirty(u, 0)
                 end
             end
             StartBossAttachRetry()
@@ -566,8 +586,8 @@ function Events.Init()
         if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
             EnsureDB() -- prime + cache
 
-            if ShouldProcessUnitEvent("player") then MarkDirty("player") end
-            if ShouldProcessUnitEvent("target") then MarkDirty("target") end
+            if ShouldProcessUnitEvent("player") then MarkDirty("player", 0) end
+            if ShouldProcessUnitEvent("target") then MarkDirty("target", 0) end
             if ShouldProcessUnitEvent("focus") then MarkDirty("focus") end
             for i = 1, 5 do
                 local u = "boss" .. i

@@ -764,7 +764,7 @@ function MSUF_A2_CooldownTextMgr_Tick()
     local c = MSUF_A2_EnsureCooldownTextColors()
     local colSafe = (c and c.safe) or (c and c.normal) or { 1, 1, 1, 1 }
     local colNormal = (c and c.normal) or colSafe
-    local anyFast = false
+    local soonestDelta = 1.0
 
     for cooldown, icon in pairs(mgr.active) do
         if not icon or not cooldown or icon._msufA2_cdMgrRegistered ~= true or icon:IsShown() ~= true then
@@ -856,7 +856,7 @@ function MSUF_A2_CooldownTextMgr_Tick()
                         end
 
                         icon._msufA2_cdFast = (remSeconds < 10)
-                        if icon._msufA2_cdFast then anyFast = true end
+                        -- soonestDelta handled below
                     else
                         -- Secret/invalid/expired: clear our text (we still may set color via duration objects).
                         if fs._msufA2_cdMode ~= 0 then
@@ -884,13 +884,27 @@ function MSUF_A2_CooldownTextMgr_Tick()
 					end
 
                     icon._msufA2_cdNextUpdate = now + delay
+                    do
+                        local d = delay
+                        if d < 0.10 then d = 0.10 end
+                        if d < soonestDelta then soonestDelta = d end
+                    end
                 else
                     -- If we can't find the FontString yet, retry later without spinning every frame.
                     icon._msufA2_cdNextUpdate = now + 0.50
+                    do
+                        local d = 0.50
+                        if d < 0.10 then d = 0.10 end
+                        if d < soonestDelta then soonestDelta = d end
+                    end
                     icon._msufA2_cdFast = false
                 end
             else
-                if icon._msufA2_cdFast == true then anyFast = true end
+                do
+                    local d = (icon._msufA2_cdNextUpdate or 0) - now
+                    if d < 0.10 then d = 0.10 end
+                    if d < soonestDelta then soonestDelta = d end
+                end
             end
             end
         end
@@ -901,8 +915,17 @@ function MSUF_A2_CooldownTextMgr_Tick()
         return
     end
 
-    -- If any icon needs <10s updates (decimal display), go fast; otherwise stay slow.
-    local want = (anyFast and mgr.fastInterval) or mgr.slowInterval
+    -- Dynamic shared ticker (no per-icon OnUpdate):
+    -- pick the next useful tick bucket based on the earliest scheduled update across active icons.
+    local want
+    if soonestDelta <= 0.11 then
+        want = mgr.fastInterval or 0.10
+    elseif soonestDelta <= 0.35 then
+        want = mgr.slowInterval or 0.25
+    else
+        want = 1.00
+    end
+
     if mgr.tickerInterval ~= want then
         MSUF_A2_CooldownTextMgr_EnsureTicker(want)
     end

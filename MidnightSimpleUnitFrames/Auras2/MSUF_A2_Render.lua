@@ -2956,48 +2956,57 @@ local function MSUF_A2_IsBossAura(aura)
     return MSUF_A2_StringIsTrue(s)
 end
 
-local function MSUF_A2_MergeBossAuras(playerList, fullList)
+local function MSUF_A2_MergeBossAuras(playerList, fullList, out, seen)
     -- Return a list that contains all player auras, plus any boss auras from fullList.
     -- Dedupe by auraInstanceID (stringified).
-    if type(playerList) ~= "table" then playerList = {} end
-    if type(fullList) ~= "table" then fullList = {} end
+    --
+    -- Perf: caller may pass reusable scratch tables (out/seen) to avoid allocations
+    -- during UNIT_AURA storms and target swaps. We always wipe the scratch tables here.
+    if type(playerList) ~= "table" then playerList = nil end
+    if type(fullList) ~= "table" then fullList = nil end
 
-    local out = {}
-    local seen = {}
+    if type(out) ~= "table" then out = {} end
+    if type(seen) ~= "table" then seen = {} end
+    wipe(out)
+    wipe(seen)
 
-    for i = 1, #playerList do
-        local aura = playerList[i]
-        out[#out+1] = aura
-        local aid
-        local ok, v = MSUF_A2_FastCall(function()
-            return aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
-        end)
-        if ok then aid = v end
-        if aid ~= nil then
-            seen[aid] = true
-        end
-    end
-
-    for i = 1, #fullList do
-        local aura = fullList[i]
-        if aura and MSUF_A2_IsBossAura(aura) then
+    if playerList then
+        for i = 1, #playerList do
+            local aura = playerList[i]
+            out[#out+1] = aura
             local aid
             local ok, v = MSUF_A2_FastCall(function()
                 return aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
             end)
             if ok then aid = v end
-
-            local skip = false
             if aid ~= nil then
-                if seen[aid] then
-                    skip = true
-                else
-                    seen[aid] = true
-                end
+                seen[aid] = true
             end
+        end
+    end
 
-            if not skip then
-                out[#out+1] = aura
+    if fullList then
+        for i = 1, #fullList do
+            local aura = fullList[i]
+            if aura and MSUF_A2_IsBossAura(aura) then
+                local aid
+                local ok, v = MSUF_A2_FastCall(function()
+                    return aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
+                end)
+                if ok then aid = v end
+
+                local skip = false
+                if aid ~= nil then
+                    if seen[aid] then
+                        skip = true
+                    else
+                        seen[aid] = true
+                    end
+                end
+
+                if not skip then
+                    out[#out+1] = aura
+                end
             end
         end
     end
@@ -3368,14 +3377,18 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
             end
         end
 
+        -- Secret-safe: do not compare the display count (can be secret). Avoid Show/Hide churn only.
         if icon.count then
             local sr, sg, sb = MSUF_A2_GetStackCountRGB()
             icon.count:SetTextColor(sr, sg, sb, 1)
             icon.count:SetText(tostring(disp))
-            icon.count:Show()
+            if not icon.count:IsShown() then
+                icon.count:Show()
+            end
         end
 
-        icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp = true, nil
+        icon._msufA2_stackWasShown = true
+        icon._msufA2_lastStackDisp = 1 -- sentinel; do not store/compare disp (can be secret)
         return true
     end
 
@@ -3383,16 +3396,18 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
         return true
     end
 
-if icon._msufA2_hideCDNumbers == true and forceHideCooldownNumbers ~= true then
-    icon._msufA2_hideCDNumbers = false
-    if icon.cooldown and icon.cooldown.SetHideCountdownNumbers then
-        SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
+    if icon._msufA2_hideCDNumbers == true and forceHideCooldownNumbers ~= true then
+        icon._msufA2_hideCDNumbers = false
+        if icon.cooldown and icon.cooldown.SetHideCountdownNumbers then
+            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
+        end
     end
-end
 
     if icon.count then
-        icon.count:SetText("")
-        icon.count:Hide()
+        if icon._msufA2_stackWasShown == true or icon._msufA2_lastStackDisp ~= nil then
+            icon.count:SetText("")
+            icon.count:Hide()
+        end
     end
     icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp = false, nil
     return false
@@ -3749,7 +3764,8 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
     local function RefreshContainer(container, count)
         if not container or count <= 0 then return end
         for idx = 1, count do
-            local icon = container.icons and container.icons[idx]
+            -- Containers store icons in _msufIcons (legacy field 'icons' may exist in some forks).
+            local icon = (container._msufIcons and container._msufIcons[idx]) or (container.icons and container.icons[idx])
             if icon and icon._msufAuraInstanceID then
                 local aura = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, icon._msufAuraInstanceID)
                 if aura then
@@ -3840,7 +3856,13 @@ MSUF_A2_BuildMergedAuraList = function(entry, unit, filter, baseShow, onlyMine, 
         if onlyMine == true then
             if includeBoss == true then
                 local mine = GetAuraList(unit, filter, true, cap, mineBuf)
-                baseList = MSUF_A2_MergeBossAuras(mine, allList or GetAuraList(unit, filter, false, maxAll, allBuf))
+                local mergeOutKey = (filter == "HELPFUL") and "_msufA2_mergeBossOutBuffs" or "_msufA2_mergeBossOutDebuffs"
+                local mergeSeenKey = (filter == "HELPFUL") and "_msufA2_mergeBossSeenBuffs" or "_msufA2_mergeBossSeenDebuffs"
+                local mergeOut = entry[mergeOutKey]
+                if type(mergeOut) ~= "table" then mergeOut = {}; entry[mergeOutKey] = mergeOut end
+                local mergeSeen = entry[mergeSeenKey]
+                if type(mergeSeen) ~= "table" then mergeSeen = {}; entry[mergeSeenKey] = mergeSeen end
+                baseList = MSUF_A2_MergeBossAuras(mine, allList or GetAuraList(unit, filter, false, maxAll, allBuf), mergeOut, mergeSeen)
             else
                 baseList = GetAuraList(unit, filter, true, cap, mineBuf)
             end
@@ -4881,6 +4903,62 @@ Flush = function()
 end
 
 local function MarkDirty(unit, delay)
+    -- Step 5 perf (cumulative): hard gates (skip work) with 0-regression safety.
+    -- If Auras2 is effectively disabled for this unit (and we're not in Edit Mode preview),
+    -- do NOT schedule any flush work. Instead, immediately hard-hide anchors/movers.
+    --
+    -- IMPORTANT: we deliberately avoid gating on frame existence/IsShown here.
+    -- Unitframes can be created after events fire; gating on frame presence can cause
+    -- "no auras until next event" regressions. Visibility gating is handled in Flush/RenderUnit.
+
+    if unit then
+        local a2, shared = GetAuras2DB()
+        local allowPreview = (shared and shared.showInEditMode == true and IsEditModeActive and IsEditModeActive()) and true or false
+
+        if not allowPreview then
+            local entry = (AurasByUnit and AurasByUnit[unit])
+
+            -- Master/unit enable gate
+            if not _A2_UnitEnabledFast(a2, unit) then
+                if MSUF_A2_PrivateAuras_Clear and entry then MSUF_A2_PrivateAuras_Clear(entry) end
+                if entry and entry.anchor then entry.anchor:Hide() end
+                if entry then MSUF_A2_HideEditMovers(entry) end
+                return
+            end
+
+            -- "Nothing enabled" gate (buffs/debuffs/private auras all off)
+            local anyVisual = false
+            if shared and (shared.showBuffs == true or shared.showDebuffs == true) then
+                anyVisual = true
+            elseif shared and shared.privateAurasEnabled == true then
+                if unit == "player" and shared.showPrivateAurasPlayer == true then
+                    anyVisual = true
+                elseif unit == "target" and shared.showPrivateAurasTarget == true then
+                    anyVisual = true
+                elseif unit == "focus" and shared.showPrivateAurasFocus == true then
+                    anyVisual = true
+                elseif type(unit) == "string" and unit:match("^boss%d$") and shared.showPrivateAurasBoss == true then
+                    anyVisual = true
+                end
+            end
+
+            if not anyVisual then
+                if MSUF_A2_PrivateAuras_Clear and entry then MSUF_A2_PrivateAuras_Clear(entry) end
+                if entry and entry.anchor then entry.anchor:Hide() end
+                if entry then MSUF_A2_HideEditMovers(entry) end
+                return
+            end
+
+            -- Unit existence gate
+            if UnitExists and not UnitExists(unit) then
+                if MSUF_A2_PrivateAuras_Clear and entry then MSUF_A2_PrivateAuras_Clear(entry) end
+                if entry and entry.anchor then entry.anchor:Hide() end
+                if entry then MSUF_A2_HideEditMovers(entry) end
+                return
+            end
+        end
+    end
+
     -- Step 4 perf (cumulative): per-unit coalescing + "one wake".
     -- Events may spam MarkDirty many times per frame (UNIT_AURA bursts).
     -- We dedupe per unit via Dirty[unit] and schedule exactly one global flush driver wake.
