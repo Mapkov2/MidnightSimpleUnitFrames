@@ -13,10 +13,17 @@ local addonName, ns = ...
 -- (StringIsTrue/False, DispelType hashing, BossAura merge, etc.) remain stable.
 --
 -- Performance note: this wrapper is hot, so we keep locals minimal.
-local _pcall = pcall
+local pcall = pcall
 local function MSUF_A2_FastCall(fn, ...)
-    return _pcall(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local ok, a, b, c, d = pcall(fn, ...)
+    if not ok then
+        -- IMPORTANT: never tostring() the error here (can itself be a secret value).
+        return false
+    end
+    return true, a, b, c, d
 end
+
 ns = ns or {}
 if ns.__MSUF_A2_CORE_LOADED then return end
 ns.__MSUF_A2_CORE_LOADED = true
@@ -31,6 +38,36 @@ if type(API) ~= "table" then
 end
 API.state = (type(API.state) == "table") and API.state or {}
 API.perf  = (type(API.perf)  == "table") and API.perf  or {}
+
+-- ------------------------------------------------------------
+-- Secret gating (Midnight/Beta)
+-- ------------------------------------------------------------
+-- Some aura fields (and even tostring()/string.* on them) can become "secret values" that throw
+-- uncatchable errors. pcall() does NOT reliably protect against these in all environments.
+-- Strategy:
+--  * Detect secret mode cheaply (cached).
+--  * When secrets are active, avoid *all* string conversion/inspection of aura fields.
+--    Fall back to filter-flag driven logic and conservative visuals.
+local _A2_GetTime = _G and _G.GetTime or GetTime
+local _A2_secretActive = nil
+local _A2_secretCheckAt = 0
+local function _A2_SecretsActive()
+    local now = (_A2_GetTime and _A2_GetTime()) or 0
+    if _A2_secretActive ~= nil and now < _A2_secretCheckAt then
+        return _A2_secretActive
+    end
+    _A2_secretCheckAt = now + 0.50 -- 2 Hz
+    local f = C_Secrets and C_Secrets.ShouldAurasBeSecret
+    _A2_secretActive = (type(f) == "function" and f() == true) or false
+    return _A2_secretActive
+end
+
+
+-- Edit Mode state is queried extremely often (Preview OnUpdate etc).
+-- Cache it briefly to avoid thousands of global lookups per second.
+local _A2_editModeActive = false
+local _A2_editModeCheckAt = 0
+local _A2_EDITMODE_TTL = 0.10 -- seconds
 
 
 local MSUF_DB
@@ -98,11 +135,18 @@ local function SafeCall(fn, ...)
 end
 
 local function MSUF_SafeNumber(v)
-    local ok, s = MSUF_A2_FastCall(tostring, v)
-    if not ok then return nil end
-    local n = tonumber(s)
-    return n
+    -- Secret-safe: never tostring()/tonumber() unknown values that may be secret.
+    if v == nil then return nil end
+    local t = type(v)
+    if t == "number" then return v end
+    if t == "boolean" then return v and 1 or 0 end
+    -- Strings can be secret; only attempt tonumber when secrets are definitely off.
+    if t == "string" and not _A2_SecretsActive() then
+        return tonumber(v)
+    end
+    return nil
 end
+
 
 -- Patch 1 helpers (Auras2): per-unit layout + numeric resolve
 local function MSUF_A2_GetPerUnit(unitKey)
@@ -1316,38 +1360,60 @@ end
 
 
 local function IsEditModeActive()
+    local now = (_A2_GetTime and _A2_GetTime()) or 0
+    if now < _A2_editModeCheckAt then
+        return _A2_editModeActive
+    end
+    _A2_editModeCheckAt = now + _A2_EDITMODE_TTL
+
     -- MSUF-only Edit Mode:
     -- Blizzard Edit Mode is intentionally ignored (Blizzard lifecycle currently unreliable on reload/zone transitions).
+    local active = false
+
     -- 1) Preferred state object (MSUF_EditState) introduced by MSUF_EditMode.lua
     local st = rawget(_G, "MSUF_EditState")
     if type(st) == "table" and st.active == true then
-        return true
+        active = true
     end
 
     -- 2) Legacy global boolean used by older patches
-    if rawget(_G, "MSUF_UnitEditModeActive") == true then
-        return true
+    if not active and rawget(_G, "MSUF_UnitEditModeActive") == true then
+        active = true
     end
 
     -- 3) Exported helper from MSUF_EditMode.lua (now MSUF-only)
-    local f = rawget(_G, "MSUF_IsInEditMode")
-    if type(f) == "function" then
-        local ok, v = MSUF_A2_FastCall(f)
-        if ok and v == true then
-            return true
+    if not active then
+        local f = rawget(_G, "MSUF_IsInEditMode")
+        if type(f) == "function" then
+            local ok, v = MSUF_A2_FastCall(f)
+            if ok and v == true then
+                active = true
+            end
         end
     end
 
     -- 4) Compatibility hook name from older experiments (keep as last resort)
-    local g = rawget(_G, "MSUF_IsMSUFEditModeActive")
-    if type(g) == "function" then
-        local ok, v = MSUF_A2_FastCall(g)
-        if ok and v == true then
-            return true
+    if not active then
+        local g = rawget(_G, "MSUF_IsMSUFEditModeActive")
+        if type(g) == "function" then
+            local ok, v = MSUF_A2_FastCall(g)
+            if ok and v == true then
+                active = true
+            end
         end
     end
 
-    return false
+    _A2_editModeActive = (active == true)
+    return _A2_editModeActive
+end
+
+
+local function _A2_IsBossUnit(unit)
+    if type(unit) ~= "string" then return false end
+    -- Fast, allocation-free boss unit check (avoids pattern matching).
+    if unit:sub(1, 4) ~= "boss" then return false end
+    local n = tonumber(unit:sub(5))
+    return (n ~= nil)
 end
 
 local function UnitEnabled(unit)
@@ -2382,16 +2448,55 @@ end
 -- ------------------------------------------------------------
 -- ------------------------------------------------------------
 
-local function GetAuraList(unit, filter, onlyPlayer)
+local function GetAuraList(unit, filter, onlyPlayer, maxCount)
     -- filter: "HELPFUL" or "HARMFUL"
-    -- onlyPlayer: try to request player-only ids via filter flag, but fall back safely.
-    --
-    -- PERF: Avoid per-aura pcall/SafeCall in the inner loop. We guard the list fetch with pcall,
-    -- then guard the entire data-build loop with a single pcall.
+    -- onlyPlayer: request player-only auras via filter flag, but fall back safely.
+    -- maxCount: hard cap list building to the number of icons we can actually render.
     if not unit or not C_UnitAuras then
         return {}
     end
 
+    local secrets = _A2_SecretsActive()
+
+    -- Preferred fast path: slot API lets us request only the first N auras (huge perf win on large aura sets).
+    local getSlots = C_UnitAuras.GetAuraSlots
+    local getBySlot = C_UnitAuras.GetAuraDataBySlot
+    if type(maxCount) == "number" and maxCount > 0 and type(getSlots) == "function" and type(getBySlot) == "function" then
+        local f = onlyPlayer and (filter .. "|PLAYER") or filter
+
+        local ok, slots, token = MSUF_A2_FastCall(getSlots, unit, f, maxCount, nil)
+        if not ok or type(slots) ~= "table" then
+            -- Fallback: try without PLAYER if the API rejects the combined filter.
+            if onlyPlayer then
+                ok, slots, token = MSUF_A2_FastCall(getSlots, unit, filter, maxCount, nil)
+            end
+        end
+
+        if ok and type(slots) == "table" then
+            local out = {}
+            if not secrets then
+                for i = 1, #slots do
+                    local slot = slots[i]
+                    local data = getBySlot(unit, slot)
+                    if type(data) == "table" then
+                        out[#out+1] = data
+                    end
+                end
+            else
+                -- Secret mode: guard each call; never inspect returned fields here.
+                for i = 1, #slots do
+                    local slot = slots[i]
+                    local okD, data = MSUF_A2_FastCall(getBySlot, unit, slot)
+                    if okD and type(data) == "table" then
+                        out[#out+1] = data
+                    end
+                end
+            end
+            return out
+        end
+    end
+
+    -- Legacy fallback: instanceID list (may be large). We cap loop to maxCount when provided.
     local getIDs  = C_UnitAuras.GetUnitAuraInstanceIDs
     local getData = C_UnitAuras.GetAuraDataByAuraInstanceID
     if type(getIDs) ~= "function" or type(getData) ~= "function" then
@@ -2399,7 +2504,6 @@ local function GetAuraList(unit, filter, onlyPlayer)
     end
 
     local ids
-
     if onlyPlayer then
         local ok, res = MSUF_A2_FastCall(getIDs, unit, filter .. "|PLAYER")
         if ok and type(res) == "table" then
@@ -2422,23 +2526,142 @@ local function GetAuraList(unit, filter, onlyPlayer)
     end
 
     local out = {}
+    local cap = (type(maxCount) == "number" and maxCount > 0) and maxCount or #ids
 
-    local okLoop = MSUF_A2_FastCall(function()
+    if not secrets then
         for i = 1, #ids do
             local id = ids[i]
             local data = getData(unit, id)
             if type(data) == "table" then
                 data._msufAuraInstanceID = id
                 out[#out+1] = data
+                if #out >= cap then break end
             end
         end
-    end)
-
-    if not okLoop then
-        return {}
+    else
+        local okLoop = MSUF_A2_FastCall(function()
+            for i = 1, #ids do
+                local id = ids[i]
+                local data = getData(unit, id)
+                if type(data) == "table" then
+                    data._msufAuraInstanceID = id
+                    out[#out+1] = data
+                    if #out >= cap then break end
+                end
+            end
+        end)
+        if not okLoop then
+            return {}
+        end
     end
 
     return out
+end
+
+-- Forward declarations used by the Collector/Model/Apply wrappers below.
+-- (We keep implementations in-place to avoid regressions while we refactor incrementally.)
+local MSUF_A2_BuildMergedAuraList
+local ApplyAuraToIcon
+
+-- ------------------------------------------------------------
+-- Collector → Model → Apply (Phase 1)
+--
+-- Goal: keep aura fetching (Collector) separate from list shaping (Model)
+-- and separate again from UI mutation (Apply). This enables true API
+-- pass-through and makes perf work (diff-apply/layout short-circuiting)
+-- dramatically easier and safer.
+-- ------------------------------------------------------------
+
+local Collector = {}
+local Model = {}
+local Apply = {}
+
+-- Collector: thin wrapper around the existing slot-capped GetAuraList().
+-- Returns a list of aura data tables (raw API pass-through), capped.
+function Collector.Collect(unit, filter, onlyPlayer, maxCount)
+    return GetAuraList(unit, filter, onlyPlayer, maxCount)
+end
+
+-- Model: list shaping (merge/scratch/extra), no UI.
+-- We wrap existing helpers so we can incrementally move logic out of Render.
+function Model.BuildMergedAuraList(entry, unit, filter, baseShow, onlyMine, includeBoss, wantExtra, extraKind, capHint)
+    -- NOTE: implementation stays in the existing helper further below.
+    -- This wrapper exists so Render paths call Model.* only.
+    return MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMine, includeBoss, wantExtra, extraKind, capHint)
+end
+
+-- Apply: diff-based UI commit wrapper around ApplyAuraToIcon().
+-- This is intentionally conservative: we include layoutSig so any config/visual change
+-- forces a re-apply (no regressions), while stable auras skip redundant UI work.
+local function _A2_HashStep(h, v)
+    local t = type(v)
+    if t == "string" then
+        -- Never hash unknown strings in secret mode.
+        if _A2_SecretsActive() then return h end
+        -- Short token hash, bounded.
+        local hh = 0
+        for i = 1, 24 do
+            local b = string.byte(v, i)
+            if not b then break end
+            hh = (hh * 33 + b) % 2147483647
+        end
+        v = hh
+        t = "number"
+    elseif t == "boolean" then
+        v = v and 1 or 0
+        t = "number"
+    end
+    if t == "number" then
+        return (h * 16777619 + (v % 2147483647)) % 2147483647
+    end
+    return h
+end
+
+local function MSUF_A2_ComputeAuraSig(layoutSig, aura, isHelpful, hidePermanent, masterOn, isOwn)
+    -- In Midnight/Beta, aura-returned numeric fields can become secret values.
+    -- Any arithmetic (including hashing) on secret numbers can throw.
+    -- In secret mode we disable signature hashing and always apply (safe + no regression).
+    if _A2_SecretsActive() then
+        return nil
+    end
+    local h = 216613
+    h = _A2_HashStep(h, layoutSig)
+
+    local aid = aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
+    h = _A2_HashStep(h, aid)
+    h = _A2_HashStep(h, aura and aura.spellId)
+    h = _A2_HashStep(h, aura and aura.applications)
+    h = _A2_HashStep(h, aura and aura.expirationTime)
+    h = _A2_HashStep(h, aura and aura.duration)
+
+    h = _A2_HashStep(h, isHelpful)
+    h = _A2_HashStep(h, hidePermanent)
+    h = _A2_HashStep(h, masterOn)
+    h = _A2_HashStep(h, isOwn)
+    return h
+end
+
+function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, masterOn, isOwn, stackCountAnchor, layoutSig)
+    if not icon then return false end
+
+    -- Always keep the assignment stable for tooltip/refresh paths.
+    icon._msufUnit = unit
+    icon._msufFilter = isHelpful and "HELPFUL" or "HARMFUL"
+    icon._msufAuraInstanceID = aura and (aura._msufAuraInstanceID or aura.auraInstanceID) or nil
+
+    -- If we don't have an aura, nothing to apply.
+    if not aura then
+        return false
+    end
+
+    local sig = MSUF_A2_ComputeAuraSig(layoutSig or 0, aura, isHelpful, hidePermanent, masterOn, isOwn)
+    if icon._msufA2_sig ~= nil and icon._msufA2_sig == sig then
+        -- No data/config change that matters for visuals → skip expensive UI churn.
+        return true
+    end
+
+    icon._msufA2_sig = sig
+    return ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanent, masterOn, isOwn, stackCountAnchor)
 end
 
 
@@ -2456,9 +2679,9 @@ local function MSUF_A2_GetPlayerAuraIdSet(unit, filter)
 
     local set = {}
     for i = 1, #ids do
-        local okK, k = MSUF_A2_FastCall(tostring, ids[i])
-        if okK and k then
-            set[k] = true
+        local id = ids[i]
+        if id ~= nil then
+            set[id] = true
         end
     end
     return set
@@ -2467,45 +2690,22 @@ end
 -- NOTE: In Midnight/Beta, many aura fields can be "secret values".
 -- Helpers below must stay secret-safe (no boolean-tests on aura fields; convert via tostring + compare).
 local function MSUF_A2_StringIsTrue(s)
-    -- Secret-safe truthy check (avoid direct string comparisons).
+    -- Secret-safe: do NOT use tostring()/string.* on unknown values (may be secret).
     if s == nil then return false end
-
-    local ok1, b1 = MSUF_A2_FastCall(string.byte, s, 1)
-    if not ok1 or b1 == nil then return false end
-
-    -- "1"
-    if b1 == 49 then
-        local ok5, b5 = MSUF_A2_FastCall(string.byte, s, 2)
-        if ok5 and b5 == nil then return true end
-        return true -- tolerate "1..." defensively
-    end
-
-    -- "true" / "True"
-    if b1 ~= 116 and b1 ~= 84 then return false end
-    local ok2, b2 = MSUF_A2_FastCall(string.byte, s, 2)
-    local ok3, b3 = MSUF_A2_FastCall(string.byte, s, 3)
-    local ok4, b4 = MSUF_A2_FastCall(string.byte, s, 4)
-    if not ok2 or not ok3 or not ok4 then return false end
-    if b2 == nil or b3 == nil or b4 == nil then return false end
-
-    local is_r = (b2 == 114) or (b2 == 82)
-    local is_u = (b3 == 117) or (b3 == 85)
-    local is_e = (b4 == 101) or (b4 == 69)
-    if not (is_r and is_u and is_e) then return false end
-
-    -- Strict-ish: require no 5th character when possible.
-    local ok5, b5 = MSUF_A2_FastCall(string.byte, s, 5)
-    if ok5 and b5 ~= nil then
-        -- allow "true" with suffixes (defensive); but still treat as true
-        return true
-    end
-    return true
+    if s == true or s == 1 then return true end
+    if s == false or s == 0 then return false end
+    if type(s) ~= "string" then return false end
+    if _A2_SecretsActive() then return false end
+    -- Cheap literal checks only (no patterns, no byte loops).
+    return (s == "1") or (s == "true") or (s == "True") or (s == "TRUE")
 end
+
 
 
 -- Secret-safe ASCII-lower hash for short tokens (avoids string equality on potential secret values).
 -- We use this for sourceUnit and dispel type checks.
 local function MSUF_A2_HashAsciiLower(s)
+    if _A2_SecretsActive() then return 0 end
     if type(s) ~= "string" then return 0 end
     local h = 5381
     -- token strings are tiny; cap loop to avoid worst-case costs on weird inputs
@@ -2534,37 +2734,26 @@ local MSUF_A2_HASH_ENRAGE  = MSUF_A2_HashAsciiLower("enrage")
 -- Secret-safe check for numeric "0" / "0.0" / "0.00" strings.
 -- Used for "Hide permanent buffs": we ONLY hide when an API explicitly reports a 0 duration.
 local function MSUF_A2_StringIsZeroNumber(s)
+    -- Used for "Hide permanent buffs": ONLY hide when we can *safely* confirm a 0 duration.
     if s == nil then return false end
-    local okTrim, t = MSUF_A2_FastCall(function()
-        -- trim spaces without pattern magic
-        local x = s
-        x = x:gsub("^%s+", "")
-        x = x:gsub("%s+$", "")
-        return x
-    end)
-    if not okTrim or type(t) ~= "string" then return false end
-
-    -- Match: 0, 0.0, 0.00, 00.000 etc
-    local okM, m = MSUF_A2_FastCall(string.match, t, "^0+%.?0*$")
-    return (okM and m ~= nil) or false
+    if s == 0 then return true end
+    if type(s) ~= "string" then return false end
+    if _A2_SecretsActive() then return false end
+    -- Limited literal forms (avoid tonumber()/patterns on potentially unsafe strings).
+    return (s == "0") or (s == "0.0") or (s == "0.00") or (s == "0.000")
 end
+
 
 local function MSUF_A2_AuraFieldToString(aura, field)
-    local ok, v = MSUF_A2_FastCall(function()
-        return aura and aura[field]
-    end)
-    if not ok then return nil end
+    -- Secret-safe: never tostring() aura fields. Only return real strings when secrets are off.
+    if aura == nil then return nil end
+    local v = aura[field]
     if v == nil then return nil end
-
-    local okS, s = MSUF_A2_FastCall(tostring, v)
-    if not okS or type(s) ~= "string" then return nil end
-
-    -- Secret-safe empty-string check: string.byte(s,1) returns nil if empty.
-    local okB, b1 = MSUF_A2_FastCall(string.byte, s, 1)
-    if not okB or b1 == nil then return nil end
-
-    return s
+    if type(v) ~= "string" then return nil end
+    if _A2_SecretsActive() then return nil end
+    return v
 end
+
 
 local function MSUF_A2_AuraFieldIsTrue(aura, field)
     local s = MSUF_A2_AuraFieldToString(aura, field)
@@ -2596,9 +2785,8 @@ local function MSUF_A2_MergeBossAuras(playerList, fullList)
             return aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
         end)
         if ok then aid = v end
-        if type(aid) ~= "nil" then
-            local okS, k = MSUF_A2_FastCall(tostring, aid)
-            if okS and k then seen[k] = true end
+        if aid ~= nil then
+            seen[aid] = true
         end
     end
 
@@ -2612,12 +2800,11 @@ local function MSUF_A2_MergeBossAuras(playerList, fullList)
             if ok then aid = v end
 
             local skip = false
-            if type(aid) ~= "nil" then
-                local okS, k = MSUF_A2_FastCall(tostring, aid)
-                if okS and k and seen[k] then
+            if aid ~= nil then
+                if seen[aid] then
                     skip = true
-                elseif okS and k then
-                    seen[k] = true
+                else
+                    seen[aid] = true
                 end
             end
 
@@ -2678,14 +2865,13 @@ local function MSUF_A2_MergeAuraLists(primary, secondary)
                 if ok then aid = v end
 
                 local skip = false
-                if type(aid) ~= "nil" then
-                    local okS, k = MSUF_A2_FastCall(tostring, aid)
-                    if okS and k and seen[k] then
-                        skip = true
-                    elseif okS and k then
-                        seen[k] = true
-                    end
+            if aid ~= nil then
+                if seen[aid] then
+                    skip = true
+                else
+                    seen[aid] = true
                 end
+            end
 
                 if not skip then
                     out[#out+1] = aura
@@ -2794,114 +2980,57 @@ end
 
 
 local function MSUF_A2_AuraHasExpiration(unit, aura)
-    -- IMPORTANT:
-    -- Under Midnight/Beta, aura.duration / aura.expirationTime can be secret (and/or appear as 0).
-    -- We MUST avoid any boolean/arithmetic tests on those fields.
+    -- Returns true if this aura should be treated as expiring (i.e. show cooldown swipe / timer),
+    -- false if it is clearly permanent (duration == 0).
     --
-    -- Goal for "Hide permanent buffs":
-    -- Only hide when we can safely determine the aura truly has NO expiration time.
-    -- If we are unsure (API unavailable / pcall fails), we default to "has expiration" so timed buffs
-    -- are never accidentally hidden.
-    if not aura then return true end
+    -- Secret-safe rules:
+    --  * Never tostring()/string.* aura fields (can be secret).
+    --  * Only treat numeric 0 as proof of permanence.
+    --  * On uncertainty, assume expiring (safer for visuals; avoids incorrectly hiding timed auras).
+    if aura == nil then return true end
 
-    local auraInstanceID = aura._msufAuraInstanceID or aura.auraInstanceID
-    if not auraInstanceID then
-        -- No ID => cannot ask UnitAuras helpers. Assume expiring to avoid accidental hides.
+    local auraInstanceID = aura.auraInstanceID
+    if auraInstanceID == nil then
+        -- Some call sites pass raw aura data without instance ID; assume expiring.
         return true
     end
 
-    -- 1) Best signal: explicit API helper.
+    -- 1) Primary: DoesAuraHaveExpirationTime (best signal).
     if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
-        local ok, v = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
-        if ok then
-            -- Never return v directly (it may be a secret boolean). Convert to a safe string first.
-            local okS, s = MSUF_A2_FastCall(tostring, v)
-            if okS and s then
-                if MSUF_A2_StringIsTrue(s) then
-                    return true
-                end
-
-                -- Treat "0"/"false"/nil as false in a secret-safe way
-                local okB1, b1 = MSUF_A2_FastCall(string.byte, s, 1)
-                if okB1 and b1 then
-                    -- "0"
-                    if b1 == 48 then
-                        return false
-                    end
-                    -- "f" / "F" (false)
-                    if b1 == 102 or b1 == 70 then
-                        return false
-                    end
-                end
-            end
+        local ok, has = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
+        if ok and has ~= nil then
+            if has == true or has == 1 then return true end
+            if has == false or has == 0 then return false end
         end
     end
 
-    -- NOTE:
-    -- We intentionally DO NOT treat a Duration Object as proof of expiration time.
-    -- In combat (especially on focus/boss), the API can return a non-nil duration object even for
-    -- permanent buffs, which would cause "Hide permanent buffs" to fail.
-    -- We rely on DoesAuraHaveExpirationTime / explicit duration==0 signals below.
-
-    -- 2) "Hide permanent buffs" should be STRICT: only hide when an API explicitly reports duration == 0.
-    -- This avoids hiding timed buffs that may report as "unknown" under secret values (especially in combat).
-    local function TryGetSpellID()
-        local raw = nil
-        local okRaw = MSUF_A2_FastCall(function()
-            raw = aura.spellId or aura.spellID or aura.spellid
-        end)
-        if not okRaw or raw == nil then
-            -- Fallback: ask UnitAuras for full data (API-only, secret-safe access path)
-            if C_UnitAuras and type(C_UnitAuras.GetAuraDataByAuraInstanceID) == "function" then
-                local okData, data = MSUF_A2_FastCall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, auraInstanceID)
-                if okData and type(data) == "table" then
-                    local ok2 = MSUF_A2_FastCall(function()
-                        raw = data.spellId or data.spellID or data.spellid
-                    end)
-                end
-            end
-        end
-        if raw == nil then return nil end
-        local okS, s = MSUF_A2_FastCall(tostring, raw)
-        if not okS or type(s) ~= "string" then return nil end
-        local okN, n = MSUF_A2_FastCall(tonumber, s)
-        if not okN then return nil end
-        return n
+    -- 2) Strict permanence check: ONLY hide when duration is explicitly numeric 0.
+    -- Prefer base duration when available (requires spellID).
+    local spellID = aura.spellId or aura.spellID or aura.spellid
+    if type(spellID) ~= "number" then
+        spellID = nil
     end
 
-    -- Prefer base duration when possible.
-    if C_UnitAuras and type(C_UnitAuras.GetAuraBaseDuration) == "function" then
-        local spellID = TryGetSpellID()
-        if spellID then
-            local okBD, bd = MSUF_A2_FastCall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
-            if okBD and bd ~= nil then
-                local okS, s = MSUF_A2_FastCall(tostring, bd)
-                if okS and MSUF_A2_StringIsZeroNumber(s) then
-                    return false
-                end
-                return true
-            end
-        end
-    end
-
-    -- Fallback: direct duration query (some builds may not support GetAuraBaseDuration).
-    if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
-        local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
-        if okD and d ~= nil then
-            local okS, s = MSUF_A2_FastCall(tostring, d)
-            if okS and MSUF_A2_StringIsZeroNumber(s) then
-                return false
-            end
+    if spellID and C_UnitAuras and type(C_UnitAuras.GetAuraBaseDuration) == "function" then
+        local okBD, bd = MSUF_A2_FastCall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
+        if okBD and type(bd) == "number" then
+            if bd == 0 then return false end
             return true
         end
     end
 
-    -- 3) Unknown => treat as NON-expiring.
-    -- The user's expectation for "Hide permanent buffs" is that it should also hide buffs that don't provide
-    -- duration info (nil/unknown) on certain units in combat (focus/boss). Timed buffs are protected above
-    -- by the Duration Object check.
-    return false
+    if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
+        local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
+        if okD and type(d) == "number" then
+            if d == 0 then return false end
+            return true
+        end
+    end
+
+    -- 3) Duration Objects: NOT a reliable permanence signal in Midnight/Beta; treat as expiring.
+    return true
 end
+
 
 
 
@@ -2910,88 +3039,44 @@ end
 -- For cooldown timers, "unknown" must NOT clear, or debuff countdowns can "drop out" on boss/focus.
 -- This returns TRUE only when the API explicitly reports a ZERO duration / no-expiration state.
 local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
-    if not aura then return false end
+    -- For cooldown timers: return TRUE only when we can *safely* prove the aura is permanent.
+    -- Secret-safe: never tostring()/string.* aura fields.
+    if aura == nil then return false end
 
     local auraInstanceID = aura._msufAuraInstanceID or aura.auraInstanceID
-    if not auraInstanceID then
-        return false
-    end
+    if auraInstanceID == nil then return false end
 
-    -- 1) Explicit API helper (if it reliably reports "no expiration").
     if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
         local ok, v = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
-        if ok then
-            local okS, s = MSUF_A2_FastCall(tostring, v)
-            if okS and type(s) == "string" then
-                if MSUF_A2_StringIsTrue(s) then
-                    return false
-                end
-                local okB1, b1 = MSUF_A2_FastCall(string.byte, s, 1)
-                if okB1 and b1 then
-                    -- "0"
-                    if b1 == 48 then
-                        return true
-                    end
-                    -- "f" / "F" (false)
-                    if b1 == 102 or b1 == 70 then
-                        return true
-                    end
-                end
-            end
+        if ok and v ~= nil then
+            if v == false or v == 0 then return true end
+            if v == true or v == 1 then return false end
         end
     end
 
-    -- 2) Zero-duration signals via base duration / duration.
-    local function TryGetSpellID()
-        local raw = nil
-        local okRaw = MSUF_A2_FastCall(function()
-            raw = aura.spellId or aura.spellID or aura.spellid
-        end)
-        if not okRaw or raw == nil then
-            if C_UnitAuras and type(C_UnitAuras.GetAuraDataByAuraInstanceID) == "function" then
-                local okData, data = MSUF_A2_FastCall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, auraInstanceID)
-                if okData and type(data) == "table" then
-                    MSUF_A2_FastCall(function()
-                        raw = data.spellId or data.spellID or data.spellid
-                    end)
-                end
-            end
-        end
-        if raw == nil then return nil end
-        local okS, s = MSUF_A2_FastCall(tostring, raw)
-        if not okS or type(s) ~= "string" then return nil end
-        local okN, n = MSUF_A2_FastCall(tonumber, s)
-        if not okN then return nil end
-        return n
+    -- Only numeric 0 is accepted as a permanence signal.
+    local spellID = aura.spellId or aura.spellID or aura.spellid
+    if type(spellID) ~= "number" then
+        spellID = nil
     end
 
-    if C_UnitAuras and type(C_UnitAuras.GetAuraBaseDuration) == "function" then
-        local spellID = TryGetSpellID()
-        if spellID then
-            local okBD, bd = MSUF_A2_FastCall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
-            if okBD and bd ~= nil then
-                local okS, s = MSUF_A2_FastCall(tostring, bd)
-                if okS and MSUF_A2_StringIsZeroNumber(s) then
-                    return true
-                end
-                return false
-            end
+    if spellID and C_UnitAuras and type(C_UnitAuras.GetAuraBaseDuration) == "function" then
+        local okBD, bd = MSUF_A2_FastCall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
+        if okBD and type(bd) == "number" then
+            return bd == 0
         end
     end
 
     if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
         local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
-        if okD and d ~= nil then
-            local okS, s = MSUF_A2_FastCall(tostring, d)
-            if okS and MSUF_A2_StringIsZeroNumber(s) then
-                return true
-            end
-            return false
+        if okD and type(d) == "number" then
+            return d == 0
         end
     end
 
     return false
 end
+
 
 -- Cooldown helper (secret-safe): use Duration Objects only (no legacy Remaining* APIs).
 local function MSUF_A2_TrySetCooldownFromAura(icon, unit, aura, wantCountdownText)
@@ -3271,7 +3356,7 @@ local function MSUF_A2_ApplyIconTooltip(icon, shared)
     icon:EnableMouse((wantTip and true) or false)
 end
 
-local function ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanentOverride, allowHighlights, isOwn, stackAnchorOverride)
+ApplyAuraToIcon = function(icon, unit, aura, shared, isHelpful, hidePermanentOverride, allowHighlights, isOwn, stackAnchorOverride)
     if not icon or not aura then return end
 
     icon._msufUnit = unit
@@ -3482,11 +3567,9 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
     end
 
     local function IsOwn(isHelpful, aid)
-        if not aid then return false end
-        local okK, k = MSUF_A2_FastCall(tostring, aid)
-        if not okK or not k then return false end
+        if aid == nil then return false end
         local set = isHelpful and ownBuffSet or ownDebuffSet
-        return (set and set[k]) == true
+        return (set and set[aid]) == true
     end
 
     -- Re-apply visuals for currently assigned icons without rebuilding lists / changing layout.
@@ -3558,7 +3641,7 @@ local function MSUF_A2_DebuffTypeAllowed(tf, anyDispel, aura)
     return false
 end
 
-local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMine, includeBoss, wantExtra, extraKind)
+MSUF_A2_BuildMergedAuraList = function(entry, unit, filter, baseShow, onlyMine, includeBoss, wantExtra, extraKind, capHint)
     if not unit then return MSUF_A2_EMPTY end
     if not baseShow and not wantExtra then
         return MSUF_A2_EMPTY
@@ -3566,21 +3649,28 @@ local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMi
 
     local needAll = (wantExtra == true) or (baseShow == true and (onlyMine ~= true or includeBoss == true))
     local allList = nil
+
+    local cap = (type(capHint) == "number" and capHint > 0) and capHint or nil
+    local maxAll = cap
+    if maxAll then
+        maxAll = maxAll * 2
+        if maxAll > 40 then maxAll = 40 end
+    end
     if needAll then
-        allList = GetAuraList(unit, filter, false)
+        allList = GetAuraList(unit, filter, false, maxAll)
     end
 
     local baseList = MSUF_A2_EMPTY
     if baseShow == true then
         if onlyMine == true then
             if includeBoss == true then
-                local mine = GetAuraList(unit, filter, true)
-                baseList = MSUF_A2_MergeBossAuras(mine, allList or GetAuraList(unit, filter, false))
+                local mine = GetAuraList(unit, filter, true, cap)
+                baseList = MSUF_A2_MergeBossAuras(mine, allList or GetAuraList(unit, filter, false, maxAll))
             else
-                baseList = GetAuraList(unit, filter, true)
+                baseList = GetAuraList(unit, filter, true, cap)
             end
         else
-            baseList = allList or GetAuraList(unit, filter, false)
+            baseList = allList or GetAuraList(unit, filter, false, maxAll)
         end
     end
 
@@ -3588,7 +3678,7 @@ local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMi
         return baseList
     end
 
-    local all = allList or GetAuraList(unit, filter, false)
+    local all = allList or GetAuraList(unit, filter, false, maxAll)
     local scratchKey = (filter == "HELPFUL") and "_msufA2_extraScratchBuffs" or "_msufA2_extraScratchDebuffs"
     local scratch = entry[scratchKey]
     if type(scratch) ~= "table" then
@@ -3684,13 +3774,12 @@ local function MSUF_A2_RenderFromListBudgeted(ctx, list, startI, cap, isHelpful,
                 local ownSet = isHelpful and ctx.ownBuffSet or ctx.ownDebuffSet
                 if ownSet then
                     local aid = aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
-                    local okK, k = MSUF_A2_FastCall(tostring, aid)
-                    if okK and k and ownSet[k] then
+                    if aid ~= nil and ownSet[aid] then
                         isOwn = true
                     end
                 end
 
-                if ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ctx.masterOn == true, isOwn, ctx.stackCountAnchor) then
+                if Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ctx.masterOn == true, isOwn, ctx.stackCountAnchor, ctx.layoutSig) then
                     count = count + 1
                     if useSingleRow then
                         ctx.mixedCount = (ctx.mixedCount or 0) + 1
@@ -4259,6 +4348,7 @@ end
 
         ctx.entry, ctx.unit, ctx.shared, ctx.st, ctx.tf, ctx.anyDispel, ctx.useSingleRow, ctx.onlyBossAuras, ctx.masterOn, ctx.stackCountAnchor, ctx.ownBuffSet, ctx.ownDebuffSet =
             entry, unit, shared, st, tf, anyDispel, (useSingleRow == true), (onlyBossAuras == true), (masterOn == true), stackCountAnchor, ownBuffSet, ownDebuffSet
+        ctx.layoutSig = layoutSig or entry._msufA2_lastLayoutSig or 0
         ctx.budget, ctx.budgetExhausted, ctx.ScheduleBudgetContinuation, ctx.renderFunc =
             budget, false, MSUF_A2_ScheduleBudgetContinuation, RenderUnit
         ctx.mixedCount, ctx.debuffCount, ctx.buffCount = mixedCount, debuffCount, buffCount
@@ -4271,7 +4361,7 @@ end
                     list = st[b.listKey]
                     startI = (type(st[b.iKey]) == "number") and st[b.iKey] or 1
                 else
-                    list = MSUF_A2_BuildMergedAuraList(entry, unit, b.filter, b.base, b.only, b.boss, b.extra, b.kind)
+                    list = Model.BuildMergedAuraList(entry, unit, b.filter, b.base, b.only, b.boss, b.extra, b.kind, b.cap)
                     if st then st[b.listKey] = list end
                 end
 

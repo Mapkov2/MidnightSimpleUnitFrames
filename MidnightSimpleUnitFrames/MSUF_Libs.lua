@@ -1668,21 +1668,25 @@ do
         -- race/class/talents, so it's safe to initialize it here
         -- friendRC and harmRC will be properly initialized later when we have all the necessary data for them
         lib.checkerCache_Spell = lib.checkerCache_Spell or {}
-        lib.checkerCache_Item = lib.checkerCache_Item or {}
-        lib.miscRC = createCheckerList(nil, nil, DefaultInteractList)
-        lib.miscRCInCombat = {}
-        lib.friendRC = createCheckerList(nil, nil, DefaultInteractList)
-        lib.friendRCInCombat = {}
-        lib.harmRC = createCheckerList(nil, nil, DefaultInteractList)
-        lib.harmRCInCombat = {}
-        lib.resRC = createCheckerList(nil, nil, DefaultInteractList)
-        lib.resRCInCombat = {}
-        lib.petRC = createCheckerList(nil, nil, DefaultInteractList)
-        lib.petRCInCombat = {}
-        lib.friendNoItemsRC = createCheckerList(nil, nil, DefaultInteractList)
-        lib.friendNoItemsRCInCombat = {}
-        lib.harmNoItemsRC = createCheckerList(nil, nil, DefaultInteractList)
-        lib.harmNoItemsRCInCombat = {}
+lib.checkerCache_Item = lib.checkerCache_Item or {}
+
+-- MSUF PERF: Avoid expensive checker-list construction at load time.
+-- Build checker lists lazily during :init() (chunked), when the library is actually used.
+lib.miscRC = lib.miscRC or {}
+lib.miscRCInCombat = lib.miscRCInCombat or {}
+lib.friendRC = lib.friendRC or {}
+lib.friendRCInCombat = lib.friendRCInCombat or {}
+lib.harmRC = lib.harmRC or {}
+lib.harmRCInCombat = lib.harmRCInCombat or {}
+lib.resRC = lib.resRC or {}
+lib.resRCInCombat = lib.resRCInCombat or {}
+lib.petRC = lib.petRC or {}
+lib.petRCInCombat = lib.petRCInCombat or {}
+lib.friendNoItemsRC = lib.friendNoItemsRC or {}
+lib.friendNoItemsRCInCombat = lib.friendNoItemsRCInCombat or {}
+lib.harmNoItemsRC = lib.harmNoItemsRC or {}
+lib.harmNoItemsRCInCombat = lib.harmNoItemsRCInCombat or {}
+
 
         lib.failedItemRequests = {}
 
@@ -1717,101 +1721,65 @@ do
           return minRange .. " - " .. maxRange
         end
 
-        -- -------------------------------------------------------------------
-        -- Init burst mitigation (MSUF patch)
-        --
-        -- The upstream lib builds *all* checker lists in one init() call.
-        -- In MSUF this can coincide with target swaps/range ticks and produce
-        -- large single-frame CPU spikes (multi-ms). We chunk the init work
-        -- across frames while keeping behavior identical once completed.
-        -- -------------------------------------------------------------------
-
-        local function _MSUF_BuildInitQueue(self, forced)
-          -- Cache init context for this pass.
-          local _, playerClass = UnitClass("player")
-          local _, playerRace  = UnitRace("player")
-          local interactList   = InteractLists[playerRace] or DefaultInteractList
-
-          self._msufInitForced    = forced or nil
-          self._msufInitChanged   = nil
-          self._msufInitIndex     = 1
-          self._msufInitCtx       = {
-            class = playerClass,
-            interactList = interactList,
-          }
-
-          -- Keep existing lists until replaced to avoid transient nil behavior.
-          self._msufInitQueue = {
-            { a = self.friendRC,        b = self.friendRCInCombat,        spells = FriendSpells[playerClass], items = FriendItems },
-            { a = self.harmRC,          b = self.harmRCInCombat,          spells = HarmSpells[playerClass],   items = HarmItems },
-            { a = self.friendNoItemsRC, b = self.friendNoItemsRCInCombat, spells = FriendSpells[playerClass], items = nil },
-            { a = self.harmNoItemsRC,   b = self.harmNoItemsRCInCombat,   spells = HarmSpells[playerClass],   items = nil },
-            { a = self.miscRC,          b = self.miscRCInCombat,          spells = nil,                       items = nil },
-            { a = self.resRC,           b = self.resRCInCombat,           spells = ResSpells[playerClass],    items = nil },
-            { a = self.petRC,           b = self.petRCInCombat,           spells = PetSpells[playerClass],    items = nil },
-          }
-        end
-
-        local function _MSUF_ProcessInitSteps(self, maxSteps)
-          local q = self._msufInitQueue
-          if not q then
-            return true
-          end
-
-          local ctx = self._msufInitCtx
-          local interactList = ctx and ctx.interactList or DefaultInteractList
-
-          maxSteps = maxSteps or 1
-          local stepCount = 0
-          while stepCount < maxSteps do
-            local idx = self._msufInitIndex or 1
-            local job = q[idx]
-            if not job then
-              -- done
-              self._msufInitQueue = nil
-              self._msufInitCtx = nil
-              self._msufInitIndex = nil
-              self._msufInitForced = nil
-
-              -- Fire callback once per init pass if anything changed.
-              if self._msufInitChanged and self.callbacks then
-                self.callbacks:Fire(self.CHECKERS_CHANGED)
-              end
-              self._msufInitChanged = nil
-              return true
-            end
-
-            if updateCheckers(job.a, job.b, createCheckerList(job.spells, job.items, interactList)) then
-              self._msufInitChanged = true
-            end
-
-            self._msufInitIndex = idx + 1
-            stepCount = stepCount + 1
-          end
-
-          return false
-        end
-
         -- initialize RangeCheck if not yet initialized or if "forced"
         function lib:init(forced)
-          if self.initialized and not forced then
-            return
-          end
+  if self.initialized and not forced then
+    return
+  end
+  if self._msufInitPending then
+    return
+  end
 
-          -- mark initialized early to keep old behavior (GetRange works), but
-          -- spread expensive checker building across frames.
-          self.initialized = true
-          self.handSlotItem = GetInventoryItemLink("player", HandSlotId)
+  self._msufInitPending = true
 
-          if not self._msufInitQueue or forced then
-            _MSUF_BuildInitQueue(self, forced)
-          end
+  local _, playerClass = UnitClass("player")
+  local _, playerRace = UnitRace("player")
+  local interactList = InteractLists[playerRace] or DefaultInteractList
+  self.handSlotItem = GetInventoryItemLink("player", HandSlotId)
 
-          -- If init() is called directly (rare), still do at least one step.
-          _MSUF_ProcessInitSteps(self, 1)
-        end
+  local steps = {
+    { dst = self.friendRC,       dstIC = self.friendRCInCombat,       build = function() return createCheckerList(FriendSpells[playerClass], FriendItems, interactList) end },
+    { dst = self.harmRC,         dstIC = self.harmRCInCombat,         build = function() return createCheckerList(HarmSpells[playerClass],   HarmItems,   interactList) end },
+    { dst = self.friendNoItemsRC,dstIC = self.friendNoItemsRCInCombat,build = function() return createCheckerList(FriendSpells[playerClass], nil,         interactList) end },
+    { dst = self.harmNoItemsRC,  dstIC = self.harmNoItemsRCInCombat,  build = function() return createCheckerList(HarmSpells[playerClass],   nil,         interactList) end },
+    { dst = self.miscRC,         dstIC = self.miscRCInCombat,         build = function() return createCheckerList(nil,                     nil,         interactList) end },
+    { dst = self.resRC,          dstIC = self.resRCInCombat,          build = function() return createCheckerList(ResSpells[playerClass],    nil,         interactList) end },
+    { dst = self.petRC,          dstIC = self.petRCInCombat,          build = function() return createCheckerList(PetSpells[playerClass],    nil,         interactList) end },
+  }
 
-        --- Return an iterator for checkers usable on friendly units as (**range**, **checker**) pairs.
+  local idx = 1
+  local changed = false
+
+  local function runStep()
+    local st = steps[idx]
+    if not st then
+      self.initialized = true
+      self._msufInitPending = nil
+      if changed and self.callbacks then
+        self.callbacks:Fire(self.CHECKERS_CHANGED)
+      end
+      return
+    end
+
+    idx = idx + 1
+
+    local ok, checkerList = pcall(st.build)
+    if ok and checkerList then
+      if updateCheckers(st.dst, st.dstIC, checkerList) then
+        changed = true
+      end
+    end
+
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+      _G.C_Timer.After(0, runStep) -- chunk across frames to avoid spikes
+    else
+      runStep()
+    end
+  end
+
+  runStep()
+end
+
         -- @param inCombat if true, only checkers that can be used in combat ar returned
         function lib:GetFriendCheckers(inCombat)
           return rcIterator(inCombat and self.friendRCInCombat or self.friendRC)
@@ -2097,11 +2065,7 @@ do
 
         function lib:initialOnUpdate()
           self:init()
-
-          -- If we are still chunk-building checker lists, keep the driver
-          -- frame alive and finish over subsequent ticks to avoid large
-          -- single-frame CPU spikes.
-          if self._msufInitQueue then
+          if self._msufInitPending then
             return
           end
           if friendItemRequests then
@@ -2131,14 +2095,6 @@ do
         function lib:scheduleInit()
           self.initialized = nil
           lastUpdate = 0
-
-          -- Reset MSUF chunk-init state so we always rebuild cleanly.
-          self._msufInitQueue = nil
-          self._msufInitCtx = nil
-          self._msufInitIndex = nil
-          self._msufInitForced = nil
-          self._msufInitChanged = nil
-
           self.frame:Show()
         end
 
@@ -2220,7 +2176,7 @@ do
 
         --- END CallbackHandler stuff
 
-        lib:activate()
+        -- MSUF PERF: do NOT auto-activate at load time; activate lazily when MSUF actually needs range checking.
 
     end
 
@@ -2238,3 +2194,29 @@ do
         MSUF_Embed_LibRangeCheck()
     end
 end
+
+
+-- -----------------------------------------------------------------------------
+-- MSUF wrapper: activate LibRangeCheck lazily (no checker-list build until needed)
+-- -----------------------------------------------------------------------------
+function _G.MSUF_EnsureLibRangeCheck()
+    local LibStub = _G.LibStub
+    if not LibStub then
+        return nil
+    end
+
+    local rc = LibStub("LibRangeCheck-3.0", true)
+    if not rc then
+        return nil
+    end
+
+    if not rc._msufActivated then
+        rc._msufActivated = true
+        if type(rc.activate) == "function" then
+            rc:activate()
+        end
+    end
+
+    return rc
+end
+

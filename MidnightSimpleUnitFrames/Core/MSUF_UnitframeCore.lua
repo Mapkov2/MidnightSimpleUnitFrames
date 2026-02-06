@@ -623,8 +623,13 @@ Elements.Health = {
         local hp = select(1, fnH(f))
         local fnTxt = FN_UpdateHpTextFast
         if fnTxt then fnTxt(f, hp) end
-        -- Fix: ensure HP bar color updates immediately on unit swaps/show.
-        UFCore_RefreshHealthBarColorFast(f, conf)
+        -- Hard split: value updates every tick; visuals/layout only when requested.
+        -- Color refresh is only needed on explicit unit swap/show (visual queue) or
+        -- when a reaction/flag event marked it dirty.
+        if f._msufVisualQueuedUFCore or f._msufHealthColorDirty then
+            f._msufHealthColorDirty = nil
+            UFCore_RefreshHealthBarColorFast(f, conf)
+        end
         return true
     end,
 }
@@ -2008,12 +2013,15 @@ local function FrameOnEvent(self, event, arg1, ...)
     local info = UNIT_EVENT_MAP[event]
     if info then
         if arg1 == self.unit then
-            -- Long-term perf: absorb/heal-absorb should only update when their dedicated events fire.
-            -- Mark dirty flags here (non-secret booleans) so the mainfile can skip heavy overlay work on plain UNIT_HEALTH ticks.
+            -- Mark overlays dirty on absorb/heal-absorb events (no secret compares).
             if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
                 self._msufAbsorbDirty = true
             elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
                 self._msufHealAbsorbDirty = true
+            elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
+                -- Health bar color can change for NPC reaction / PvP / flags.
+                -- Keep it out of the hot value path unless explicitly needed.
+                self._msufHealthColorDirty = true
             end
             Core.MarkDirty(self, info.mask, info.urgent, event)
         end
@@ -2062,13 +2070,11 @@ function Core.AttachFrame(f)
     if not f._msufUFCoreShowHooked and f.HookScript then
         f._msufUFCoreShowHooked = true
         f:HookScript("OnShow", function(self)
-            -- If a frame was hidden, it may have missed absorb/heal-absorb events.
-            -- Force a one-time overlay refresh on show (boolean flags only; no secret compares).
+            -- If hidden, we may have missed absorb/heal-absorb events.
             self._msufAbsorbDirty = true
             self._msufHealAbsorbDirty = true
             self._msufAbsorbInit = nil
             self._msufHealAbsorbInit = nil
-
             Core.MarkDirty(self, MASK_SHOW_REFRESH, true, "OnShow")
             DeferSwapWork(self.unit, "OnShow", true)
         end)
@@ -2160,6 +2166,43 @@ end
 
 local function QueueUnit(unit, urgent, mask, reason)
     MarkUnit(unit, mask or DIRTY_FULL, urgent, reason or "GLOBAL")
+end
+
+-- Step 4: Explicit Request-Update API boundary (global).
+-- Modules should request unitframe updates through this function instead of reaching into internals.
+-- This keeps all scheduling/dirty-masking centralized and makes future perf work safer.
+--
+-- Signature:
+--   MSUF_RequestUnitUpdate(unitOrUnits, mask, urgent, reason)
+--     unitOrUnits: "player"/"target"/... OR { "player","target",... } OR nil (=> all known frames)
+--     mask: dirty mask (defaults DIRTY_FULL)
+--     urgent: boolean
+--     reason: string
+_G.MSUF_RequestUnitUpdate = _G.MSUF_RequestUnitUpdate or function(unitOrUnits, mask, urgent, reason)
+    local m = mask or DIRTY_FULL
+    local u = (urgent == true) and true or false
+    local r = reason or "REQ"
+
+    if unitOrUnits == nil then
+        for unit in pairs(FramesByUnit) do
+            QueueUnit(unit, u, m, r)
+        end
+        return
+    end
+
+    if type(unitOrUnits) == "table" then
+        for i = 1, #unitOrUnits do
+            local unit = unitOrUnits[i]
+            if type(unit) == "string" and unit ~= "" then
+                QueueUnit(unit, u, m, r)
+            end
+        end
+        return
+    end
+
+    if type(unitOrUnits) == "string" and unitOrUnits ~= "" then
+        QueueUnit(unitOrUnits, u, m, r)
+    end
 end
 
 local function MarkPlayerStatusIf(flagKey, urgent, reason)
