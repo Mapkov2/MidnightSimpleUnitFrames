@@ -2593,74 +2593,94 @@ end
 -- Apply: diff-based UI commit wrapper around ApplyAuraToIcon().
 -- This is intentionally conservative: we include layoutSig so any config/visual change
 -- forces a re-apply (no regressions), while stable auras skip redundant UI work.
-local function _A2_HashStep(h, v)
-    local t = type(v)
-    if t == "string" then
-        -- Never hash unknown strings in secret mode.
-        if _A2_SecretsActive() then return h end
-        -- Short token hash, bounded.
-        local hh = 0
-        for i = 1, 24 do
-            local b = string.byte(v, i)
-            if not b then break end
-            hh = (hh * 33 + b) % 2147483647
-        end
-        v = hh
-        t = "number"
-    elseif t == "boolean" then
-        v = v and 1 or 0
-        t = "number"
-    end
-    if t == "number" then
-        return (h * 16777619 + (v % 2147483647)) % 2147483647
-    end
-    return h
-end
-
-local function MSUF_A2_ComputeAuraSig(layoutSig, aura, isHelpful, hidePermanent, masterOn, isOwn)
-    -- In Midnight/Beta, aura-returned numeric fields can become secret values.
-    -- Any arithmetic (including hashing) on secret numbers can throw.
-    -- In secret mode we disable signature hashing and always apply (safe + no regression).
-    if _A2_SecretsActive() then
-        return nil
-    end
-    local h = 216613
-    h = _A2_HashStep(h, layoutSig)
-
-    local aid = aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
-    h = _A2_HashStep(h, aid)
-    h = _A2_HashStep(h, aura and aura.spellId)
-    h = _A2_HashStep(h, aura and aura.applications)
-    h = _A2_HashStep(h, aura and aura.expirationTime)
-    h = _A2_HashStep(h, aura and aura.duration)
-
-    h = _A2_HashStep(h, isHelpful)
-    h = _A2_HashStep(h, hidePermanent)
-    h = _A2_HashStep(h, masterOn)
-    h = _A2_HashStep(h, isOwn)
-    return h
-end
-
+-- Apply: diff-based UI commit wrapper around ApplyAuraToIcon().
+-- We intentionally avoid any hashing/arithmetic on aura-returned values, because
+-- in Midnight/Beta even numeric fields can become *secret values* and arithmetic
+-- on secret values throws. Instead we keep a tiny per-icon "last applied" cache
+-- and do field equality comparisons only (secret-safe, fast, no regressions).
 function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, masterOn, isOwn, stackCountAnchor, layoutSig)
     if not icon then return false end
 
-    -- Always keep the assignment stable for tooltip/refresh paths.
+    -- Always keep these stable for tooltip/refresh paths.
     icon._msufUnit = unit
     icon._msufFilter = isHelpful and "HELPFUL" or "HARMFUL"
-    icon._msufAuraInstanceID = aura and (aura._msufAuraInstanceID or aura.auraInstanceID) or nil
 
-    -- If we don't have an aura, nothing to apply.
     if not aura then
+        icon._msufAuraInstanceID = nil
         return false
     end
 
-    local sig = MSUF_A2_ComputeAuraSig(layoutSig or 0, aura, isHelpful, hidePermanent, masterOn, isOwn)
-    if icon._msufA2_sig ~= nil and icon._msufA2_sig == sig then
-        -- No data/config change that matters for visuals → skip expensive UI churn.
+    local aid = aura._msufAuraInstanceID or aura.auraInstanceID
+    icon._msufAuraInstanceID = aid
+
+    local last = icon._msufA2_last
+    local ls   = layoutSig or 0
+	-- IMPORTANT (Midnight/Beta secrets): even numeric aura fields can become secret values and
+	-- *any* comparison can throw. Therefore we only use auraInstanceID + layoutSig + our own
+	-- boolean flags for the conservative diff gate. We never compare aura.applications/
+	-- expirationTime/duration here.
+
+		-- Step 2 (Signature/Diff): we extend the gate with a few *config booleans* that affect
+		-- visuals/cooldown rendering. These are safe to read/compare (they come from our DB),
+		-- and ensure live-apply never regresses even when layoutSig doesn't include a specific toggle.
+		local showStacks = (shared and shared.showStackCount == true) or false
+		local showCdText = not (shared and shared.showCooldownText == false)
+		local showCdSwipe = (shared and shared.showCooldownSwipe == true) or false
+		local cdReverse = (shared and shared.cooldownSwipeDarkenOnLoss == true) or false
+		local showTip = (shared and shared.showTooltip == true) or false
+
+    -- Conservative diff: include the flags that affect visuals, and include layoutSig so
+    -- any config/layout/visual setting change forces a re-apply (no live-apply regressions).
+    if last
+        and last.layoutSig == ls
+        and last.aid == aid
+        and last.isHelpful == isHelpful
+        and last.hidePermanent == hidePermanent
+        and last.masterOn == masterOn
+        and last.isOwn == isOwn
+        and last.stackAnchor == stackCountAnchor
+	        and last.showStacks == showStacks
+	        and last.showCdText == showCdText
+	        and last.showCdSwipe == showCdSwipe
+	        and last.cdReverse == cdReverse
+	        and last.showTip == showTip
+    then
+        -- Fast-path: same aura instance + same layout/visual config.
+        -- We skip the heavy visual apply (texture/border/backdrop/layout), but we still
+        -- do a tiny refresh of *safe* dynamic parts that can change while the aura
+        -- instance stays the same (e.g. stack display count), and we keep tooltip
+        -- gating correct for Edit Mode.
+        if type(MSUF_A2_ApplyIconTextSizing) == "function" then
+            MSUF_A2_ApplyIconTextSizing(icon, unit, shared)
+        end
+        if type(MSUF_A2_ApplyIconTooltip) == "function" then
+            MSUF_A2_ApplyIconTooltip(icon, shared)
+        end
+        if type(MSUF_A2_ApplyIconStacks) == "function" then
+            -- Uses C_UnitAuras.GetAuraApplicationDisplayCount (unit, auraInstanceID) and
+            -- never reads aura.applications (which can be secret/absent).
+            MSUF_A2_ApplyIconStacks(icon, unit, shared, stackCountAnchor, nil, false)
+        end
         return true
     end
 
-    icon._msufA2_sig = sig
+    if not last then
+        last = {}
+        icon._msufA2_last = last
+    end
+    last.layoutSig = ls
+    last.aid = aid
+    last.isHelpful = isHelpful
+    last.hidePermanent = hidePermanent
+    last.masterOn = masterOn
+    last.isOwn = isOwn
+    last.stackAnchor = stackCountAnchor
+	    last.showStacks = showStacks
+	    last.showCdText = showCdText
+	    last.showCdSwipe = showCdSwipe
+	    last.cdReverse = cdReverse
+	    last.showTip = showTip
+
     return ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePermanent, masterOn, isOwn, stackCountAnchor)
 end
 
@@ -2931,17 +2951,20 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
     if icon._msufOwnGlow then icon._msufOwnGlow:Hide() end
     if icon._msufPrivateMark then icon._msufPrivateMark:Hide() end
 
-    -- Player private aura highlight
-    if unit == "player" and shared and shared.highlightPrivateAuras == true and aura then
-        local sidStr = MSUF_A2_AuraFieldToString(aura, "spellId") or MSUF_A2_AuraFieldToString(aura, "spellID")
-        local sid = sidStr and tonumber(sidStr) or nil
-        if sid and MSUF_A2_IsPrivateAuraSpellID(sid) then
-            local pr, pg, pb = MSUF_A2_GetPrivatePlayerHighlightRGB()
-            ShowBorder(pr, pg, pb, 1)
-            if icon._msufPrivateMark then icon._msufPrivateMark:Show() end
-            return
-        end
-    end
+	-- Player private aura highlight (12.0+ / Midnight safe):
+	-- Do NOT read aura.spellId (may be absent/secret). Instead, use SecretUtil to detect
+	-- secret/private auras by auraInstanceID.
+	if unit == "player" and shared and shared.highlightPrivateAuras == true and auraInstanceID then
+		if C_Secrets and type(C_Secrets.ShouldUnitAuraInstanceBeSecret) == "function" then
+			local ok, isSecret = MSUF_A2_FastCall(C_Secrets.ShouldUnitAuraInstanceBeSecret, unit, auraInstanceID)
+			if ok and (isSecret == true or isSecret == 1) then
+				local pr, pg, pb = MSUF_A2_GetPrivatePlayerHighlightRGB()
+				ShowBorder(pr, pg, pb, 1)
+				if icon._msufPrivateMark then icon._msufPrivateMark:Show() end
+				return
+			end
+		end
+	end
 
     -- Own aura highlight
     if isOwn and shared then
@@ -3004,22 +3027,10 @@ local function MSUF_A2_AuraHasExpiration(unit, aura)
         end
     end
 
-    -- 2) Strict permanence check: ONLY hide when duration is explicitly numeric 0.
-    -- Prefer base duration when available (requires spellID).
-    local spellID = aura.spellId or aura.spellID or aura.spellid
-    if type(spellID) ~= "number" then
-        spellID = nil
-    end
-
-    if spellID and C_UnitAuras and type(C_UnitAuras.GetAuraBaseDuration) == "function" then
-        local okBD, bd = MSUF_A2_FastCall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
-        if okBD and type(bd) == "number" then
-            if bd == 0 then return false end
-            return true
-        end
-    end
-
-    if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
+	-- 2) Strict permanence check: ONLY hide when duration is explicitly numeric 0.
+	-- In 12.0+ / Midnight, aura tables may not safely expose spellId; do NOT rely on it.
+	-- Use GetAuraDuration/DoesAuraHaveExpirationTime signals only.
+	if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
         local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
         if okD and type(d) == "number" then
             if d == 0 then return false end
@@ -3054,20 +3065,9 @@ local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
         end
     end
 
-    -- Only numeric 0 is accepted as a permanence signal.
-    local spellID = aura.spellId or aura.spellID or aura.spellid
-    if type(spellID) ~= "number" then
-        spellID = nil
-    end
-
-    if spellID and C_UnitAuras and type(C_UnitAuras.GetAuraBaseDuration) == "function" then
-        local okBD, bd = MSUF_A2_FastCall(C_UnitAuras.GetAuraBaseDuration, unit, auraInstanceID, spellID)
-        if okBD and type(bd) == "number" then
-            return bd == 0
-        end
-    end
-
-    if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
+	-- Only numeric 0 is accepted as a permanence signal.
+	-- Do NOT rely on aura.spellId in 12.0+/Midnight.
+	if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
         local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
         if okD and type(d) == "number" then
             return d == 0
@@ -3370,7 +3370,8 @@ ApplyAuraToIcon = function(icon, unit, aura, shared, isHelpful, hidePermanentOve
     end
 
     icon._msufAuraInstanceID = aura._msufAuraInstanceID or aura.auraInstanceID
-    icon._msufSpellId = aura.spellId
+	-- IMPORTANT (12.0+ / Midnight): do NOT read/store aura.spellId; it may be absent/secret.
+	icon._msufSpellId = nil
 
     local newFilter = isHelpful and "HELPFUL" or "HARMFUL"
     if icon._msufFilter ~= newFilter then
