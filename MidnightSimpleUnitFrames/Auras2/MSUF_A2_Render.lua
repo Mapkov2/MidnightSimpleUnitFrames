@@ -13,17 +13,28 @@ local addonName, ns = ...
 -- (StringIsTrue/False, DispelType hashing, BossAura merge, etc.) remain stable.
 --
 -- Performance note: this wrapper is hot, so we keep locals minimal.
+-- FastCall: in non-secret mode we call directly (no pcall in hot paths).
+-- In secret mode we use pcall as a last-resort guard and latch secret mode briefly on failure.
+local _A2_IsSecretMode, _A2_LatchSecretMode
 local pcall = pcall
 local function MSUF_A2_FastCall(fn, ...)
-    if type(fn) ~= "function" then return false end
+    if type(fn) ~= "function" then
+        return false
+    end
+
+    -- Avoid pcall overhead in the normal hot path.
+    if not _A2_IsSecretMode() then
+        return true, fn(...)
+    end
+
     local ok, a, b, c, d = pcall(fn, ...)
     if not ok then
-        -- IMPORTANT: never tostring() the error here (can itself be a secret value).
+        -- Never tostring() the error here (can itself be secret). Latch secret mode to avoid flapping.
+        _A2_LatchSecretMode(3.0)
         return false
     end
     return true, a, b, c, d
 end
-
 ns = ns or {}
 if ns.__MSUF_A2_CORE_LOADED then return end
 ns.__MSUF_A2_CORE_LOADED = true
@@ -51,6 +62,8 @@ API.perf  = (type(API.perf)  == "table") and API.perf  or {}
 local _A2_GetTime = _G and _G.GetTime or GetTime
 local _A2_secretActive = nil
 local _A2_secretCheckAt = 0
+local _A2_secretLatchedUntil = 0
+
 local function _A2_SecretsActive()
     local now = (_A2_GetTime and _A2_GetTime()) or 0
     if _A2_secretActive ~= nil and now < _A2_secretCheckAt then
@@ -60,6 +73,25 @@ local function _A2_SecretsActive()
     local f = C_Secrets and C_Secrets.ShouldAurasBeSecret
     _A2_secretActive = (type(f) == "function" and f() == true) or false
     return _A2_secretActive
+end
+
+-- "Real" secret-safe operating mode:
+--  - If secrets are active OR we recently observed a secret-related failure, we stay in
+--    secret mode for a short window ("latch") to avoid flapping/races.
+_A2_IsSecretMode = function()
+    local now = (_A2_GetTime and _A2_GetTime()) or 0
+    if now < (_A2_secretLatchedUntil or 0) then
+        return true
+    end
+    return _A2_SecretsActive()
+end
+
+_A2_LatchSecretMode = function(seconds)
+    local now = (_A2_GetTime and _A2_GetTime()) or 0
+    local untilT = now + (seconds or 3.0)
+    if untilT > (_A2_secretLatchedUntil or 0) then
+        _A2_secretLatchedUntil = untilT
+    end
 end
 
 
@@ -1776,6 +1808,39 @@ local function A2_AnchorStacked(entry, by, buffDX, buffDY, debuffDX, debuffDY)
     end
 end
 
+-- ------------------------------------------------------------
+-- Step 5 perf: Layout Engine "No reanchor unless changed"
+--
+-- We only hash *our own* layout inputs (DB numbers + derived offsets).
+-- Never include any aura-returned fields here.
+--
+-- We intentionally keep this tiny and allocation-free.
+local function _A2_HashLayoutStep(h, v)
+    if type(v) ~= "number" then
+        return h
+    end
+    -- Clamp/normalize to keep the hash stable even if callers pass fractional values.
+    -- (All our offsets/sizes are numeric and safe; this is not operating on secret data.)
+    local n = v
+    if n ~= n then return h end -- NaN guard
+    n = math.floor(n * 100 + 0.5) -- 2 decimal fixed-point
+    -- simple multiplicative hash (safe on non-secret numbers)
+    h = (h * 16777619 + n) % 2147483647
+    return h
+end
+
+local function _A2_HashLayoutStr(h, s)
+    if type(s) ~= "string" then
+        return h
+    end
+    -- short, stable string hashing; only for our own small enums like "SINGLE"/"SEPARATE".
+    -- Never feed aura fields into this.
+    for i = 1, #s do
+        h = (h * 16777619 + s:byte(i)) % 2147483647
+    end
+    return h
+end
+
 local function UpdateAnchor(entry, shared, offX, offY, boxW, boxH, layoutModeOverride, buffDebuffAnchorOverride, splitSpacingOverride, isEditMode)
     if not entry or not entry.anchor or not entry.frame or not shared then return end
 
@@ -1823,13 +1888,94 @@ end
         end
     end
 
+	    -- -----------------------------------------------------
+	    -- Step 5 perf: "No reanchor unless changed"
+	    --
+	    -- UpdateAnchor is called frequently (UNIT_AURA bursts, edit previews, etc.).
+	    -- It used to ClearAllPoints/SetPoint on multiple containers every time, which
+	    -- is expensive and shows up as spikes in Perfy. Here we compute a stable,
+	    -- allocation-free signature from *our own* layout inputs (DB numbers + enums).
+	    -- If nothing changed and no mover is currently being dragged, we skip all
+	    -- anchoring work entirely.
+	    local isDragging = false
+	    if entry.editMoverBuff and entry.editMoverBuff._msufDragging then isDragging = true end
+	    if entry.editMoverDebuff and entry.editMoverDebuff._msufDragging then isDragging = true end
+	    if entry.editMoverPrivate and entry.editMoverPrivate._msufDragging then isDragging = true end
 
-    entry.anchor:ClearAllPoints()
-    entry.anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", x, y)
+	    -- Compute private offsets early (also used for signature + movers).
+	    local privOffX = MSUF_A2_ResolveNumber(unitKey, shared, "privateOffsetX", 0, -2000, 2000, true)
+	    local privOffY = MSUF_A2_ResolveNumber(unitKey, shared, "privateOffsetY", 0, -2000, 2000, true)
 
-    -- Private Auras (Blizzard anchors) are offset independently from buff/debuff containers.
-    local privOffX = MSUF_A2_ResolveNumber(unitKey, shared, "privateOffsetX", 0, -2000, 2000, true)
-    local privOffY = MSUF_A2_ResolveNumber(unitKey, shared, "privateOffsetY", 0, -2000, 2000, true)
+	    -- Private size can differ (shared/privateSize or per-unit override).
+	    local privSize = iconSize
+	    if shared and type(shared.privateSize) == "number" then
+	        privSize = shared.privateSize
+	    end
+	    local ul_sig = MSUF_A2_GetPerUnitLayout(unitKey)
+	    if ul_sig and type(ul_sig.privateSize) == "number" then
+	        privSize = ul_sig.privateSize
+	    end
+	    privSize = tonumber(privSize) or iconSize
+	    if privSize < 10 then privSize = 10 end
+	    if privSize > 80 then privSize = 80 end
+
+	    -- Resolve mode/anchor options used by container placement.
+	    local mode = layoutModeOverride or (shared.layoutMode or "SEPARATE")
+	    local anchorMode = buffDebuffAnchorOverride or (shared.buffDebuffAnchor or "STACKED")
+	    local splitSpacing = tonumber(splitSpacingOverride)
+	    if splitSpacing == nil then
+	        splitSpacing = MSUF_A2_ResolveNumber(unitKey, shared, "splitSpacing", 0, 0, 80, false)
+	    else
+	        if splitSpacing < 0 then splitSpacing = 0 end
+	        if splitSpacing > 80 then splitSpacing = 80 end
+	    end
+
+	    -- Compute mover sizes (used by signature so movers stay correct without reanchoring).
+	    local bw = (perRow * buffIconSize) + (math.max(0, perRow - 1) * spacing)
+	    local bh = math.max(buffIconSize, 24)
+	    local dw = (perRow * debuffIconSize) + (math.max(0, perRow - 1) * spacing)
+	    local dh = math.max(debuffIconSize, 24)
+	    local pw = (perRow * privSize) + (math.max(0, perRow - 1) * spacing)
+	    local ph = math.max(privSize, 24)
+
+	    -- Signature: only safe numbers/enums. Never include aura fields.
+	    local sig = 2166136261
+	    sig = _A2_HashLayoutStep(sig, x)
+	    sig = _A2_HashLayoutStep(sig, y)
+	    sig = _A2_HashLayoutStep(sig, iconSize)
+	    sig = _A2_HashLayoutStep(sig, spacing)
+	    sig = _A2_HashLayoutStep(sig, perRow)
+	    sig = _A2_HashLayoutStep(sig, buffOffsetY)
+	    sig = _A2_HashLayoutStep(sig, buffIconSize)
+	    sig = _A2_HashLayoutStep(sig, debuffIconSize)
+	    sig = _A2_HashLayoutStep(sig, buffDX)
+	    sig = _A2_HashLayoutStep(sig, buffDY)
+	    sig = _A2_HashLayoutStep(sig, debuffDX)
+	    sig = _A2_HashLayoutStep(sig, debuffDY)
+	    sig = _A2_HashLayoutStep(sig, privOffX)
+	    sig = _A2_HashLayoutStep(sig, privOffY)
+	    sig = _A2_HashLayoutStep(sig, privSize)
+	    sig = _A2_HashLayoutStep(sig, splitSpacing)
+	    sig = _A2_HashLayoutStep(sig, bw)
+	    sig = _A2_HashLayoutStep(sig, bh)
+	    sig = _A2_HashLayoutStep(sig, dw)
+	    sig = _A2_HashLayoutStep(sig, dh)
+	    sig = _A2_HashLayoutStep(sig, pw)
+	    sig = _A2_HashLayoutStep(sig, ph)
+	    sig = _A2_HashLayoutStr(sig, tostring(mode))
+	    sig = _A2_HashLayoutStr(sig, tostring(anchorMode))
+	    sig = _A2_HashLayoutStep(sig, isEditMode and 1 or 0)
+
+	    if (not isDragging) and entry._msufA2_anchorSig == sig then
+	        return
+	    end
+	    entry._msufA2_anchorSig = sig
+
+
+	    entry.anchor:ClearAllPoints()
+	    entry.anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", x, y)
+
+	    -- Private Auras (Blizzard anchors) are offset independently from buff/debuff containers.
     -- If Private offsets were never customized, keep Private above Buffs in Edit Mode
     -- so the three mover bars are easier to grab separately.
     do
@@ -1858,7 +2004,7 @@ end
         entry.private:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", privOffX, privOffY)
     end
 
-    local mode = layoutModeOverride or (shared.layoutMode or "SEPARATE")
+	    -- mode already resolved above for signature.
     if mode == "SINGLE" and entry.mixed then
         if entry.private then
             entry.private:ClearAllPoints()
@@ -1874,14 +2020,7 @@ end
         entry.buffs:ClearAllPoints()
         entry.buffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
     else
-        local splitSpacing = tonumber(splitSpacingOverride)
-        if splitSpacing == nil then
-            splitSpacing = MSUF_A2_ResolveNumber(unitKey, shared, "splitSpacing", 0, 0, 80, false)
-        else
-            if splitSpacing < 0 then splitSpacing = 0 end
-            if splitSpacing > 80 then splitSpacing = 80 end
-        end
-
+	        -- splitSpacing already resolved above for signature.
         local function Place(container, pos, dx, dy, size)
             container:ClearAllPoints()
 
@@ -1902,7 +2041,7 @@ end
             end
         end
 
-        local anchorMode = buffDebuffAnchorOverride or (shared.buffDebuffAnchor or "STACKED")
+	        -- anchorMode already resolved above for signature.
         local map = (anchorMode and A2_SPLIT_ANCHOR_MAP[anchorMode]) or nil
         if anchorMode == "STACKED" or anchorMode == nil or not map then
             A2_AnchorStacked(entry, buffOffsetY, buffDX, buffDY, debuffDX, debuffDY)
@@ -1930,25 +2069,7 @@ end
     end
 
     -- Use effective per-row sizing so the click/drag area is predictable even if there are currently no auras.
-    local bw = (perRow * buffIconSize) + (math.max(0, perRow - 1) * spacing)
-    local bh = math.max(buffIconSize, 24)
-    local dw = (perRow * debuffIconSize) + (math.max(0, perRow - 1) * spacing)
-    local dh = math.max(debuffIconSize, 24)
-
-    -- Private size can differ (shared/privateSize or per-unit override).
-    local privSize = iconSize
-    if shared and type(shared.privateSize) == "number" then
-        privSize = shared.privateSize
-    end
-    local ul = MSUF_A2_GetPerUnitLayout(unitKey)
-    if ul and type(ul.privateSize) == "number" then
-        privSize = ul.privateSize
-    end
-    privSize = tonumber(privSize) or iconSize
-    if privSize < 10 then privSize = 10 end
-    if privSize > 80 then privSize = 80 end
-    local pw = (perRow * privSize) + (math.max(0, perRow - 1) * spacing)
-    local ph = math.max(privSize, 24)
+	    -- bw/bh/dw/dh/pw/ph already computed above for signature.
 
 
 -- IMPORTANT: Buff/Debuff movers must NOT be anchored to their containers while dragging.
@@ -2448,12 +2569,16 @@ end
 -- ------------------------------------------------------------
 -- ------------------------------------------------------------
 
-local function GetAuraList(unit, filter, onlyPlayer, maxCount)
+local function GetAuraList(unit, filter, onlyPlayer, maxCount, out)
     -- filter: "HELPFUL" or "HARMFUL"
     -- onlyPlayer: request player-only auras via filter flag, but fall back safely.
     -- maxCount: hard cap list building to the number of icons we can actually render.
+    -- PERF: reuse the provided output array (no table churn).
+    out = (type(out) == "table") and out or {}
+    wipe(out)
+
     if not unit or not C_UnitAuras then
-        return {}
+        return out
     end
 
     local secrets = _A2_SecretsActive()
@@ -2473,12 +2598,18 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount)
         end
 
         if ok and type(slots) == "table" then
-            local out = {}
             if not secrets then
                 for i = 1, #slots do
                     local slot = slots[i]
                     local data = getBySlot(unit, slot)
                     if type(data) == "table" then
+                        -- Prefer a stable numeric auraInstanceID for downstream logic.
+                        if data._msufAuraInstanceID == nil then
+                            local aid = data.auraInstanceID
+                            if aid ~= nil then
+                                data._msufAuraInstanceID = aid
+                            end
+                        end
                         out[#out+1] = data
                     end
                 end
@@ -2488,6 +2619,12 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount)
                     local slot = slots[i]
                     local okD, data = MSUF_A2_FastCall(getBySlot, unit, slot)
                     if okD and type(data) == "table" then
+                        if data._msufAuraInstanceID == nil then
+                            local aid = data.auraInstanceID
+                            if aid ~= nil then
+                                data._msufAuraInstanceID = aid
+                            end
+                        end
                         out[#out+1] = data
                     end
                 end
@@ -2500,7 +2637,7 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount)
     local getIDs  = C_UnitAuras.GetUnitAuraInstanceIDs
     local getData = C_UnitAuras.GetAuraDataByAuraInstanceID
     if type(getIDs) ~= "function" or type(getData) ~= "function" then
-        return {}
+        return out
     end
 
     local ids
@@ -2522,10 +2659,9 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount)
     end
 
     if type(ids) ~= "table" then
-        return {}
+        return out
     end
 
-    local out = {}
     local cap = (type(maxCount) == "number" and maxCount > 0) and maxCount or #ids
 
     if not secrets then
@@ -2539,19 +2675,15 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount)
             end
         end
     else
-        local okLoop = MSUF_A2_FastCall(function()
-            for i = 1, #ids do
-                local id = ids[i]
-                local data = getData(unit, id)
-                if type(data) == "table" then
-                    data._msufAuraInstanceID = id
-                    out[#out+1] = data
-                    if #out >= cap then break end
-                end
+        -- Secret mode: guard each getData call; do not create per-loop closures.
+        for i = 1, #ids do
+            local id = ids[i]
+            local okD, data = MSUF_A2_FastCall(getData, unit, id)
+            if okD and type(data) == "table" then
+                data._msufAuraInstanceID = id
+                out[#out+1] = data
+                if #out >= cap then break end
             end
-        end)
-        if not okLoop then
-            return {}
         end
     end
 
@@ -2578,8 +2710,8 @@ local Apply = {}
 
 -- Collector: thin wrapper around the existing slot-capped GetAuraList().
 -- Returns a list of aura data tables (raw API pass-through), capped.
-function Collector.Collect(unit, filter, onlyPlayer, maxCount)
-    return GetAuraList(unit, filter, onlyPlayer, maxCount)
+function Collector.Collect(unit, filter, onlyPlayer, maxCount, out)
+    return GetAuraList(unit, filter, onlyPlayer, maxCount, out)
 end
 
 -- Model: list shaping (merge/scratch/extra), no UI.
@@ -2725,20 +2857,23 @@ end
 -- Secret-safe ASCII-lower hash for short tokens (avoids string equality on potential secret values).
 -- We use this for sourceUnit and dispel type checks.
 local function MSUF_A2_HashAsciiLower(s)
-    if _A2_SecretsActive() then return 0 end
-    if type(s) ~= "string" then return 0 end
-    local h = 5381
-    -- token strings are tiny; cap loop to avoid worst-case costs on weird inputs
-    for i = 1, 32 do
-        local okB, b = MSUF_A2_FastCall(string.byte, s, i)
-        if not okB or b == nil then break end
-        -- A-Z -> a-z (ASCII)
-        if b >= 65 and b <= 90 then
-            b = b + 32
-        end
-        h = (h * 33 + b) % 2147483647
+if _A2_SecretsActive() then return 0 end
+if type(s) ~= "string" then return 0 end
+local h = 5381
+local byte = string.byte
+-- token strings are tiny; cap loop to avoid worst-case costs on weird inputs
+for i = 1, 32 do
+    local b = byte(s, i)
+    if b == nil then break end
+    -- A-Z -> a-z (ASCII)
+    if b >= 65 and b <= 90 then
+        b = b + 32
     end
-    return h
+    -- djb2-ish, bounded to keep values reasonable (all locals; safe)
+    h = (h * 33 + b) % 2147483647
+end
+return h
+
 end
 
 local MSUF_A2_HASH_PLAYER  = MSUF_A2_HashAsciiLower("player")
@@ -2867,31 +3002,29 @@ local function MSUF_A2_IsPrivateAuraSpellID(spellID)
 end
 
 -- Merge two aura lists, keeping primary order first, and de-duping by auraInstanceID.
-local function MSUF_A2_MergeAuraLists(primary, secondary)
-    if type(primary) ~= "table" then primary = {} end
-    if type(secondary) ~= "table" then secondary = {} end
-
-    local out = {}
-    local seen = {}
+local function MSUF_A2_MergeAuraLists(primary, secondary, out, seen)
+    -- PERF: allow callers to reuse output/scratch tables (no table churn).
+    if type(primary) ~= "table" then primary = MSUF_A2_EMPTY end
+    if type(secondary) ~= "table" then secondary = MSUF_A2_EMPTY end
+    out = (type(out) == "table") and out or {}
+    seen = (type(seen) == "table") and seen or {}
+    wipe(out)
+    wipe(seen)
 
     local function AddList(list)
         for i = 1, #list do
             local aura = list[i]
             if aura then
-                local aid
-                local ok, v = MSUF_A2_FastCall(function()
-                    return aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
-                end)
-                if ok then aid = v end
+                local aid = aura._msufAuraInstanceID or aura.auraInstanceID
 
                 local skip = false
-            if aid ~= nil then
-                if seen[aid] then
-                    skip = true
-                else
-                    seen[aid] = true
+                if aid ~= nil then
+                    if seen[aid] then
+                        skip = true
+                    else
+                        seen[aid] = true
+                    end
                 end
-            end
 
                 if not skip then
                     out[#out+1] = aura
@@ -3657,21 +3790,29 @@ MSUF_A2_BuildMergedAuraList = function(entry, unit, filter, baseShow, onlyMine, 
         maxAll = maxAll * 2
         if maxAll > 40 then maxAll = 40 end
     end
+    -- PERF: reuse aura list arrays per entry/filter (avoid per-render allocations).
+    local allKey  = (filter == "HELPFUL") and "_msufA2_allBuffs"  or "_msufA2_allDebuffs"
+    local mineKey = (filter == "HELPFUL") and "_msufA2_mineBuffs" or "_msufA2_mineDebuffs"
+    local allBuf  = entry[allKey]
+    if type(allBuf) ~= "table" then allBuf = {}; entry[allKey] = allBuf end
+    local mineBuf = entry[mineKey]
+    if type(mineBuf) ~= "table" then mineBuf = {}; entry[mineKey] = mineBuf end
+
     if needAll then
-        allList = GetAuraList(unit, filter, false, maxAll)
+        allList = GetAuraList(unit, filter, false, maxAll, allBuf)
     end
 
     local baseList = MSUF_A2_EMPTY
     if baseShow == true then
         if onlyMine == true then
             if includeBoss == true then
-                local mine = GetAuraList(unit, filter, true, cap)
-                baseList = MSUF_A2_MergeBossAuras(mine, allList or GetAuraList(unit, filter, false, maxAll))
+                local mine = GetAuraList(unit, filter, true, cap, mineBuf)
+                baseList = MSUF_A2_MergeBossAuras(mine, allList or GetAuraList(unit, filter, false, maxAll, allBuf))
             else
-                baseList = GetAuraList(unit, filter, true, cap)
+                baseList = GetAuraList(unit, filter, true, cap, mineBuf)
             end
         else
-            baseList = allList or GetAuraList(unit, filter, false, maxAll)
+            baseList = allList or GetAuraList(unit, filter, false, maxAll, allBuf)
         end
     end
 
@@ -3679,7 +3820,7 @@ MSUF_A2_BuildMergedAuraList = function(entry, unit, filter, baseShow, onlyMine, 
         return baseList
     end
 
-    local all = allList or GetAuraList(unit, filter, false, maxAll)
+    local all = allList or GetAuraList(unit, filter, false, maxAll, allBuf)
     local scratchKey = (filter == "HELPFUL") and "_msufA2_extraScratchBuffs" or "_msufA2_extraScratchDebuffs"
     local scratch = entry[scratchKey]
     if type(scratch) ~= "table" then
@@ -3699,8 +3840,14 @@ MSUF_A2_BuildMergedAuraList = function(entry, unit, filter, baseShow, onlyMine, 
         end
     end
 
-    -- Merge into a stable, dedicated list (do not return the scratch table directly).
-    return MSUF_A2_MergeAuraLists(scratch, baseList)
+    -- Merge into a stable, dedicated list.
+    local outKey  = (filter == "HELPFUL") and "_msufA2_mergeOutBuffs"  or "_msufA2_mergeOutDebuffs"
+    local seenKey = (filter == "HELPFUL") and "_msufA2_mergeSeenBuffs" or "_msufA2_mergeSeenDebuffs"
+    local outT  = entry[outKey]
+    if type(outT) ~= "table" then outT = {}; entry[outKey] = outT end
+    local seenT = entry[seenKey]
+    if type(seenT) ~= "table" then seenT = {}; entry[seenKey] = seenT end
+    return MSUF_A2_MergeAuraLists(scratch, baseList, outT, seenT)
 end
 
 local function MSUF_A2_RenderFromListBudgeted(ctx, list, startI, cap, isHelpful, hidePermanent)
@@ -4673,7 +4820,11 @@ Flush = function()
     end
 end
 
-local function MarkDirty(unit)
+local function MarkDirty(unit, delay)
+    -- Step 4 perf (cumulative): per-unit coalescing + "one wake".
+    -- Events may spam MarkDirty many times per frame (UNIT_AURA bursts).
+    -- We dedupe per unit via Dirty[unit] and schedule exactly one global flush driver wake.
+    -- delay: optional seconds to coalesce multiple events (0 means next frame).
     Dirty[unit] = true
 
     -- Perf counters (debug-only). Keep this extremely light.
@@ -4686,9 +4837,16 @@ local function MarkDirty(unit)
         end
     end
 
-    if FlushScheduled then return end
+    if not delay or delay < 0 then delay = 0 end
+
+    -- If already scheduled, still allow pulling the next flush earlier.
+    if FlushScheduled then
+        _A2_ScheduleFlush(delay)
+        return
+    end
+
     FlushScheduled = true
-    _A2_ScheduleFlush(0)
+    _A2_ScheduleFlush(delay)
 end
 
 
@@ -4792,6 +4950,17 @@ end
 API.RefreshAll = MSUF_A2_RefreshAll
 API.RefreshUnit = MSUF_A2_RefreshUnit
 API.ApplyFontsFromGlobal = MSUF_A2_ApplyFontsFromGlobal
+
+-- Step 4 perf (cumulative): public coalesced dirty request for the Events layer.
+-- Default delay (UNIT_AURA bursts) should be small but non-zero to batch same-frame events.
+-- Suggested: API.RequestUnit("target", 0.01) or API.RequestUnit(unit) for next-frame.
+local function MSUF_A2_RequestUnit(unit, delay)
+    MarkDirty(unit, delay)
+end
+API.RequestUnit = API.RequestUnit or MSUF_A2_RequestUnit
+if _G and type(_G.MSUF_A2_RequestUnit) ~= "function" then
+    _G.MSUF_A2_RequestUnit = function(unit, delay) return API.RequestUnit(unit, delay) end
+end
 
 if _G and type(_G.MSUF_Auras2_RefreshAll) ~= "function" then
     _G.MSUF_Auras2_RefreshAll = function() return API.RefreshAll() end

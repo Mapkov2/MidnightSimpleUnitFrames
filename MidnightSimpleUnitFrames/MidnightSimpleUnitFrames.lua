@@ -1,70 +1,9 @@
---[[Perfy has instrumented this file]]
--- IMPORTANT PERFORMANCE NOTE:
--- The Perfy instrumentation calls Perfy_Trace/Perfy_GetTime in *every* hot-path function.
--- That is great for profiling, but it can create multi-ms spikes during event storms
--- (e.g. boss death / encounter end -> many unit updates in one frame).
---
--- Therefore, Perfy tracing is DISABLED by default unless explicitly enabled.
--- Enable temporarily with:
---   /run MSUF_PERFY_ENABLED = true
---   /reload
--- Disable again with:
---   /run MSUF_PERFY_ENABLED = nil
---   /reload
-local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough
-if not _G.MSUF_PERFY_ENABLED then
-    -- Make Perfy calls effectively free in normal gameplay.
-    Perfy_GetTime = function() return 0 end
-    Perfy_Trace = function() end
-	    -- IMPORTANT: preserve multi-return values.
-	    -- Many MSUF helpers return multiple values (e.g. r,g,b,a; fontPath,flags,r,g,b,size,...).
-	    -- A single-value passthrough collapses them and causes nils passed into SetTextColor/SetVertexColor.
-	    Perfy_Trace_Passthrough = function(_, _, ...) return ... end
-end
-Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua")
-local addonName, ns = ...
--- Forward declarations (avoid accidental global lookups in hot paths).
--- IMPORTANT: some helpers are referenced before their definitions due to file size/merge order.
--- Using forward-declared locals keeps lookups fast and prevents "attempt to call global" nil errors.
-local MSUF_GetClassBarColor
-
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua"); local addonName, ns = ...
 ns = ns or {}
 ns.Core   = ns.Core   or {}
 ns.UF     = ns.UF     or {}
 ns.Bars   = ns.Bars   or {}
 ns.Text   = ns.Text   or {}
-local function MSUF_FormatPct1(pct)
-    -- pct may occasionally be a secret value on Midnight/Beta; avoid any comparisons.
-    if type(pct) ~= "number" then return nil end
-    local ok, out = pcall(string.format, "%.1f%%", pct)
-    if ok then return out end
-    return nil
-end
-
--- Text setter that avoids redundant SetText/Show/Hide churn.
-function ns.Text.SetStamped(fs, text, show)
-    if not fs then return end
-
-    if show == false then
-        if fs:IsShown() then fs:Hide() end
-        fs._msufStampText = nil
-        return
-    end
-
-    if text == nil then
-        if fs:IsShown() then fs:Hide() end
-        fs._msufStampText = nil
-        return
-    end
-
-    local last = fs._msufStampText
-    if last ~= text then
-        fs._msufStampText = text
-        fs:SetText(text)
-    end
-    if not fs:IsShown() then fs:Show() end
-end
-
 ns.Icons  = ns.Icons  or {}
 ns.Util   = ns.Util   or {}
 ns.Cache  = ns.Cache  or {}
@@ -200,18 +139,6 @@ function ns.UF.EnsureStatusIndicatorOverlays(f, unit, fontPath, flags, fr, fg, f
     if not f or (unit ~= "player" and unit ~= "target") then Perfy_Trace(Perfy_GetTime(), "Leave", "UF.EnsureStatusIndicatorOverlays file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:138:0"); return end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local size = ((g and (g.nameFontSize or g.fontSize)) or 14) + 2
-
-    -- Performance: stamp-cache font/color/layout inputs to avoid re-applying
-    -- SetFont/SetTextColor/SetPoint on every update storm.
-    local _stamp = _G.MSUF_StampChanged
-    if type(_stamp) == "function" then
-        local changed = _stamp(f, "StatusIndicatorOverlays", fontPath, flags, fr, fg, fb, size)
-        if not changed and f.statusIndicatorText and f.statusIndicatorOverlayText and f.statusIndicatorOverlayFrame then
-            Perfy_Trace(Perfy_GetTime(), "Leave", "UF.EnsureStatusIndicatorOverlays file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:138:0");
-            return
-        end
-    end
-
     local ov = ns.UF.MakeFrame(f, "statusIndicatorOverlayFrame", "Frame", UIParent, nil, nil, "HIGH", 999)
     if ov then ov:ClearAllPoints(); ov:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0); ov:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0); ov:Hide() end
     local defs = { { "statusIndicatorText", "textFrame", 0.95 }, { "statusIndicatorOverlayText", "statusIndicatorOverlayFrame", 1 } }
@@ -220,7 +147,7 @@ function ns.UF.EnsureStatusIndicatorOverlays(f, unit, fontPath, flags, fr, fg, f
         local fs = ns.UF.MakeFont(f, key, parentKey, "GameFontHighlightLarge", "OVERLAY")
         if fs then
             fs:SetFont(fontPath, size, flags); fs:SetJustifyH("CENTER"); if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
-            fs:SetTextColor(fr, (fg or fr), (fb or fg or fr), (a or 1)); fs:ClearAllPoints(); fs:SetPoint("CENTER", f, "CENTER", 0, 0); fs:SetText(""); fs:Hide()
+            fs:SetTextColor(fr, fg, fb, a); fs:ClearAllPoints(); fs:SetPoint("CENTER", f, "CENTER", 0, 0); fs:SetText(""); fs:Hide()
     end
     end
 Perfy_Trace(Perfy_GetTime(), "Leave", "UF.EnsureStatusIndicatorOverlays file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:138:0"); end
@@ -239,19 +166,6 @@ function ns.UF.EnsureTextObjects(f, fontPath, flags, fr, fg, fb) Perfy_Trace(Per
     local tf = f and f.textFrame
     if not tf then Perfy_Trace(Perfy_GetTime(), "Leave", "UF.EnsureTextObjects file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:165:0"); return end
     flags = flags or ""
-
-    -- Performance: stamp-cache the core font/color inputs. This function can be
-    -- hit repeatedly during EventBus flush storms; avoid redundant SetFont and
-    -- SetTextColor calls when nothing changed.
-    local _stamp = _G.MSUF_StampChanged
-    if type(_stamp) == "function" then
-        local changed = _stamp(f, "UFTextObjects", fontPath, flags, fr, fg, fb)
-        if not changed and f.nameText and f.hpText and f.powerText then
-            Perfy_Trace(Perfy_GetTime(), "Leave", "UF.EnsureTextObjects file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:165:0")
-            return
-        end
-    end
-
     for i = 1, #MSUF_UF_TEXT_CREATE_DEFS do
         local d = MSUF_UF_TEXT_CREATE_DEFS[i]
         local fs = ns.UF.MakeFont(f, d.key, "textFrame", d.template, "OVERLAY")
@@ -713,7 +627,7 @@ function ns.Text._ShouldSplitHP(self, conf, g, hpMode) Perfy_Trace(Perfy_GetTime
     x = tonumber(x) or 0
     return Perfy_Trace_Passthrough("Leave", "Text._ShouldSplitHP file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:621:0", (x > 0))
 end
-function ns.Text.RenderHpMode(self, show, hpStr, hpPctStr, hasPct, conf, g, absorbText, absorbStyle) Perfy_Trace(Perfy_GetTime(), "Enter", "Text.RenderHpMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:630:0");
+function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbText, absorbStyle) Perfy_Trace(Perfy_GetTime(), "Enter", "Text.RenderHpMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:630:0");
     if not self or not self.hpText then Perfy_Trace(Perfy_GetTime(), "Leave", "Text.RenderHpMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:630:0"); return end
     if not show then
         ns.Text.Set(self.hpText, "", false)
@@ -754,7 +668,7 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPctStr, hasPct, conf, g, abso
 
     if split then
         SetWithAbsorb("%s", "%s %s", "%s (%s)", hpStr or "")
-        ns.Text.Set(self.hpTextPct, hpPctStr or "", true)
+        ns.Text.SetFormatted(self.hpTextPct, true, "%.1f%%", hpPct)
         Perfy_Trace(Perfy_GetTime(), "Leave", "Text.RenderHpMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:630:0"); return
     end
 
@@ -767,11 +681,11 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPctStr, hasPct, conf, g, abso
     if hpMode == "FULL_ONLY" then
         SetWithAbsorb("%s", "%s %s", "%s (%s)", hpStr or "")
     elseif hpMode == "PERCENT_ONLY" then
-        SetWithAbsorb("%s", "%s %s", "%s (%s)", hpPctStr or "")
+        SetWithAbsorb("%.1f%%", "%.1f%% %s", "%.1f%% (%s)", hpPct)
     elseif hpMode == "PERCENT_PLUS_FULL" then
-        SetWithAbsorb("%s%s%s", "%s%s%s %s", "%s%s%s (%s)", hpPctStr or "", sep, hpStr or "")
+        SetWithAbsorb("%.1f%%%s%s", "%.1f%%%s%s %s", "%.1f%%%s%s (%s)", hpPct, sep, hpStr or "")
     else
-        SetWithAbsorb("%s%s%s", "%s%s%s %s", "%s%s%s (%s)", hpStr or "", sep, hpPctStr or "")
+        SetWithAbsorb("%s%s%.1f%%", "%s%s%.1f%% %s", "%s%s%.1f%% (%s)", hpStr or "", sep, hpPct)
     end
 Perfy_Trace(Perfy_GetTime(), "Leave", "Text.RenderHpMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:630:0"); end
 
@@ -832,91 +746,65 @@ function ns.Text.RenderPowerText(self) Perfy_Trace(Perfy_GetTime(), "Enter", "Te
     local isPlayer = self._msufIsPlayer
     local isFocus  = self._msufIsFocus
     if isPlayer or isFocus or F.UnitIsPlayer(unit) then
+        local curText, maxText
         local okCur, curValue = MSUF_FastCall(F.UnitPower, unit)
         local okMax, maxValue = MSUF_FastCall(F.UnitPowerMax, unit)
+        if okCur and curValue ~= nil then
+            curText = (AbbreviateLargeNumbers and AbbreviateLargeNumbers(curValue)) or tostring(curValue)
+    end
+        if okMax and maxValue ~= nil then
+            maxText = (AbbreviateLargeNumbers and AbbreviateLargeNumbers(maxValue)) or tostring(maxValue)
+    end
         local powerPct = ns.Text.GetUnitPowerPercent(unit)
         local hasPct = (type(powerPct) == "number")
         local split = ns.Text._ShouldSplitPower(self, pMode, hasPct)
-
-        -- Perf: avoid rebuilding/formatting strings when values and mode didn’t change.
-        local needBuild = self._msufPowerTextForce
-        if (not needBuild)
-            and self._msufLastPowerMode == pMode
-            and self._msufLastPowerSep == powerSep
-            and self._msufLastPowerSplit == split
-            and self._msufLastPowerCur == (okCur and curValue or nil)
-            and self._msufLastPowerMax == (okMax and maxValue or nil)
-            and self._msufLastPowerPct == (hasPct and powerPct or nil)
-        then
-            -- Still refresh color (power type can change).
-            ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-            Perfy_Trace(Perfy_GetTime(), "Leave", "Text.RenderPowerText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:731:0"); return
-        end
-        self._msufPowerTextForce = nil
-        self._msufLastPowerMode  = pMode
-        self._msufLastPowerSep   = powerSep
-        self._msufLastPowerSplit = split
-        self._msufLastPowerCur   = (okCur and curValue or nil)
-        self._msufLastPowerMax   = (okMax and maxValue or nil)
-        self._msufLastPowerPct   = (hasPct and powerPct or nil)
-
-        local curText, maxText
-        if okCur and curValue ~= nil then
-            curText = (AbbreviateLargeNumbers and AbbreviateLargeNumbers(curValue)) or tostring(curValue)
-        end
-        if okMax and maxValue ~= nil then
-            maxText = (AbbreviateLargeNumbers and AbbreviateLargeNumbers(maxValue)) or tostring(maxValue)
-        end
-
-        local pctStr = hasPct and (MSUF_FormatPct1(powerPct) or (tostring(powerPct) .. "%")) or nil
-
         if pMode == "FULL_ONLY" then
-            ns.Text.SetStamped(self.powerText, curText or "")
+            ns.Text.Set(self.powerText, curText or "", true)
             ns.Text.ClearField(self, "powerTextPct")
-
         elseif pMode == "PERCENT_ONLY" then
             ns.Text.ClearField(self, "powerTextPct")
-            ns.Text.SetStamped(self.powerText, pctStr or (curText or ""))
-
+            if hasPct then
+                ns.Text.SetFormatted(self.powerText, true, "%.1f%%", powerPct)
+            else
+                ns.Text.Set(self.powerText, curText or "", true)
+            end
         elseif pMode == "FULL_PLUS_PERCENT" then
             if hasPct then
                 if split then
-                    ns.Text.SetStamped(self.powerText, curText or "")
-                    ns.Text.SetStamped(self.powerTextPct, pctStr or "")
+                    ns.Text.Set(self.powerText, curText or "", true)
+                    ns.Text.SetFormatted(self.powerTextPct, true, "%.1f%%", powerPct)
                 else
                     ns.Text.ClearField(self, "powerTextPct")
-                    ns.Text.SetStamped(self.powerText, (curText or "") .. powerSep .. (pctStr or ""))
+                    ns.Text.SetFormatted(self.powerText, true, "%s%s%.1f%%", curText or "", powerSep, powerPct)
                 end
             else
                 ns.Text.ClearField(self, "powerTextPct")
-                ns.Text.SetStamped(self.powerText, curText or "")
+                ns.Text.Set(self.powerText, curText or "", true)
             end
-
         elseif pMode == "PERCENT_PLUS_FULL" then
             if hasPct and split then
-                ns.Text.SetStamped(self.powerText, curText or "")
-                ns.Text.SetStamped(self.powerTextPct, pctStr or "")
+                ns.Text.Set(self.powerText, curText or "", true)
+                ns.Text.SetFormatted(self.powerTextPct, true, "%.1f%%", powerPct)
             else
                 ns.Text.ClearField(self, "powerTextPct")
                 if hasPct then
-                    ns.Text.SetStamped(self.powerText, (pctStr or "") .. powerSep .. (curText or ""))
+                    ns.Text.SetFormatted(self.powerText, true, "%.1f%%%s%s", powerPct, powerSep, curText or "")
                 else
-                    ns.Text.SetStamped(self.powerText, curText or "")
+                    ns.Text.Set(self.powerText, curText or "", true)
                 end
             end
-
         else
             ns.Text.ClearField(self, "powerTextPct")
             if curText and maxText then
-                ns.Text.SetStamped(self.powerText, curText .. powerSep .. maxText)
+                ns.Text.SetFormatted(self.powerText, true, "%s%s%s", curText, powerSep, maxText)
             elseif curText then
-                ns.Text.SetStamped(self.powerText, curText)
+                ns.Text.Set(self.powerText, curText, true)
             elseif maxText then
-                ns.Text.SetStamped(self.powerText, maxText)
+                ns.Text.Set(self.powerText, maxText, true)
             else
-                ns.Text.SetStamped(self.powerText, "")
+                ns.Text.Set(self.powerText, "", true)
             end
-        end
+    end
         ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
         Perfy_Trace(Perfy_GetTime(), "Leave", "Text.RenderPowerText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:731:0"); return
     elseif self.isBoss and C_StringUtil and C_StringUtil.TruncateWhenZero then
@@ -998,8 +886,8 @@ function ns.Text.RenderToTInline(targetFrame, totConf) Perfy_Trace(Perfy_GetTime
             end
     end
     end
-    sep:SetTextColor(0.7, (0.7 or 0.7), (0.7 or 0.7 or 0.7))
-    txt:SetTextColor(r, (gCol or r), (b or gCol or r))
+    sep:SetTextColor(0.7, 0.7, 0.7)
+    txt:SetTextColor(r, gCol, b)
     local totName = F.UnitName and F.UnitName("targettarget")
     txt:SetText(totName or "")
     ns.Util.SetShown(sep, true)
@@ -1014,7 +902,7 @@ function ns.Text.ApplyPowerTextColorByType(self, unit, enabled) Perfy_Trace(Perf
     if type(MSUF_GetResolvedPowerColor) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "Text.ApplyPowerTextColorByType file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:896:0"); return end
     local pr, pg, pb = MSUF_GetResolvedPowerColor(pType, pTok)
     if not pr then Perfy_Trace(Perfy_GetTime(), "Leave", "Text.ApplyPowerTextColorByType file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:896:0"); return end
-    self.powerText:SetTextColor(pr, (pg or pr), (pb or pg or pr), (1 or 1))
+    self.powerText:SetTextColor(pr, pg, pb, 1)
     self._msufPTColorByPower = true
     self._msufPTColorType = pType
     self._msufPTColorTok = pTok
@@ -1471,7 +1359,7 @@ local function MSUF_GetNPCReactionColor(kind) Perfy_Trace(Perfy_GetTime(), "Ente
     end
     Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetNPCReactionColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1338:6"); return defaultR, defaultG, defaultB
 end
-MSUF_GetClassBarColor = function(classToken) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetClassBarColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1362:6");
+local function MSUF_GetClassBarColor(classToken) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetClassBarColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1362:6");
     local defaultR, defaultG, defaultB = 0, 1, 0
     if not classToken then
         Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetClassBarColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1362:6"); return defaultR, defaultG, defaultB
@@ -2190,22 +2078,6 @@ function MSUF_GetPowerBarBackgroundTintRGBA() Perfy_Trace(Perfy_GetTime(), "Ente
     end
     Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetPowerBarBackgroundTintRGBA file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2064:0"); return r, gg, b, a
 end
-
--- Perf: avoid per-call closures and string concatenations in bar background visual updates.
--- Uses fixed cache keys per target texture.
-local function MSUF_ApplyBgToTexture(frame, t, kTex, kR, kG, kB, kA, tex, cr, cg, cb, ca)
-    if not (frame and t) then return end
-    if frame[kTex] ~= tex then
-        frame[kTex] = tex
-        t:SetTexture(tex)
-    end
-    if frame[kR] ~= cr or frame[kG] ~= cg or frame[kB] ~= cb or frame[kA] ~= ca then
-        frame[kR], frame[kG], frame[kB], frame[kA] = cr, cg, cb, ca
-        -- Defensive: tolerate missing G/B/A components.
-        t:SetVertexColor(cr, (cg or cr), (cb or cg or cr), (ca or 1))
-    end
-end
-
 function MSUF_ApplyBarBackgroundVisual(frame) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ApplyBarBackgroundVisual file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2081:0");
     if not frame then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ApplyBarBackgroundVisual file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2081:0"); return end
     local tex = MSUF_GetBarBackgroundTexture()
@@ -2231,7 +2103,23 @@ function MSUF_ApplyBarBackgroundVisual(frame) Perfy_Trace(Perfy_GetTime(), "Ente
     if alphaPct < 0 then alphaPct = 0 elseif alphaPct > 100 then alphaPct = 100 end
     local alphaMul = alphaPct / 100
     if type(a) == 'number' then a = a * alphaMul end
-    MSUF_ApplyBgToTexture(frame, frame.hpBarBG, "_msufHPBgTex", "_msufHPBgR", "_msufHPBgG", "_msufHPBgB", "_msufHPBgA", tex, r, gg, b, a)
+    local function ApplyToTexture(t, cachePrefix, cr, cg, cb, ca) Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyToTexture file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2106:10");
+        if not t then Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyToTexture file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2106:10"); return end
+        local kTex = "_msuf" .. cachePrefix .. "BgTex"
+        local kR   = "_msuf" .. cachePrefix .. "BgR"
+        local kG   = "_msuf" .. cachePrefix .. "BgG"
+        local kB   = "_msuf" .. cachePrefix .. "BgB"
+        local kA   = "_msuf" .. cachePrefix .. "BgA"
+        if frame[kTex] ~= tex then
+            t:SetTexture(tex)
+            frame[kTex] = tex
+    end
+        if frame[kR] ~= cr or frame[kG] ~= cg or frame[kB] ~= cb or frame[kA] ~= ca then
+            t:SetVertexColor(cr, cg, cb, ca)
+            frame[kR], frame[kG], frame[kB], frame[kA] = cr, cg, cb, ca
+    end
+    Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyToTexture file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2106:10"); end
+    ApplyToTexture(frame.hpBarBG, "HP", r, gg, b, a)
     local pr, pg, pb, pa = MSUF_GetPowerBarBackgroundTintRGBA()
     if type(pa) == 'number' then pa = pa * alphaMul end
     local bars = MSUF_DB and MSUF_DB.bars
@@ -2249,9 +2137,9 @@ function MSUF_ApplyBarBackgroundVisual(frame) Perfy_Trace(Perfy_GetTime(), "Ente
             pr, pg, pb = MSUF_Clamp01(fr), MSUF_Clamp01(fg), MSUF_Clamp01(fb)
     end
     end
-    MSUF_ApplyBgToTexture(frame, frame.powerBarBG, "_msufPowerBgTex", "_msufPowerBgR", "_msufPowerBgG", "_msufPowerBgB", "_msufPowerBgA", tex, pr, pg, pb, pa)
+    ApplyToTexture(frame.powerBarBG, "Power", pr, pg, pb, pa)
     if (not frame.hpBarBG) and (not frame.powerBarBG) and frame.bg then
-        MSUF_ApplyBgToTexture(frame, frame.bg, "_msufFrameBgTex", "_msufFrameBgR", "_msufFrameBgG", "_msufFrameBgB", "_msufFrameBgA", tex, r, gg, b, a)
+        ApplyToTexture(frame.bg, "Frame", r, gg, b, a)
     end
 Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ApplyBarBackgroundVisual file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2081:0"); end
 local function GetConfigKeyForUnit(unit) Perfy_Trace(Perfy_GetTime(), "Enter", "GetConfigKeyForUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2145:6");
@@ -2642,567 +2530,200 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Range Fade (Target/Focus)
--- Uses UnitInRange for party/raid members when possible; falls back to bundled
--- LibRangeCheck-3.0 smart checkers (spell/item DB) for everything else.
--- Default ON (no config needed).
--- ---------------------------------------------------------------------------
+-- Native implementation (no LibRangeCheck).
+--
+-- This uses the spell-range-check API (C_Spell.EnableSpellRangeCheck) and
+-- SPELL_RANGE_CHECK_UPDATE to drive range fade with minimal CPU, based on
+-- R41z0r's EnhanceQoL implementation.
+
 do
     if not _G.MSUF_RangeFadeMul then
-        -- Per-unit multipliers used by MSUF_GetRangeFadeMul().
-        -- target/focus use their config key; bosses use unit ids (boss1..boss5).
         _G.MSUF_RangeFadeMul = { target = 1, focus = 1, boss1 = 1, boss2 = 1, boss3 = 1, boss4 = 1, boss5 = 1 }
     end
 
-    if type(_G.MSUF_GetRangeFadeMul) ~= "function" then
-        -- key: config key (e.g. "target", "focus", "boss")
-        -- unit/frame: optional, used to disambiguate boss unitframes (boss1..boss5 share config key "boss").
-        function _G.MSUF_GetRangeFadeMul(key, unit, frame) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_GetRangeFadeMul file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2547:8");
-            local t = _G.MSUF_RangeFadeMul
-            if type(t) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_GetRangeFadeMul file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2547:8"); return 1 end
+    local EnableSpellRangeCheck = C_Spell and C_Spell.EnableSpellRangeCheck
+    local GetSpellIDForSpellIdentifier = C_Spell and C_Spell.GetSpellIDForSpellIdentifier
+    local SpellBook = _G.C_SpellBook
+    local SpellBookItemType = Enum and Enum.SpellBookItemType
+    local SpellBookSpellBank = Enum and Enum.SpellBookSpellBank
+    local wipeTable = wipe or (table and table.wipe)
 
-            if key == "boss" then
-                local u = unit or (frame and frame.unit) or nil
-                local v = u and t[u] or nil
-                return Perfy_Trace_Passthrough("Leave", "_G.MSUF_GetRangeFadeMul file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2547:8", (type(v) == "number") and v or 1)
-            end
+    local rangeFadeState = {
+        activeSpells = {},
+        spellStates = {},
+        inRange = true,
+    }
 
-            local v = t[key]
-            return Perfy_Trace_Passthrough("Leave", "_G.MSUF_GetRangeFadeMul file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2547:8", (type(v) == "number") and v or 1)
+    -- Unlimited range spells to ignore (can be disabled via config).
+    local rangeFadeIgnoredSpells = {
+        [2096] = true, -- Mind Vision
+    }
+
+    local function isRangeFadeIgnored(spellId, actionId)
+        local g = _G.MSUF_DB and _G.MSUF_DB.gameplay
+        if g and g.rangeFadeIgnoreUnlimited == false then
+            return false
+        end
+        if spellId and rangeFadeIgnoredSpells[spellId] then return true end
+        if actionId and rangeFadeIgnoredSpells[actionId] then return true end
+        return false
+    end
+
+    local function clearTable(tbl)
+        if not tbl then return end
+        if wipeTable then
+            wipeTable(tbl)
+        else
+            for k in pairs(tbl) do tbl[k] = nil end
         end
     end
 
-    if not _G.MSUF_RangeFadeEventFrame then
-        local RF = _G.MSUF_RangeFade or {}
-        _G.MSUF_RangeFade = RF
+    local function getRangeFadeConfig()
+        local g = _G.MSUF_DB and _G.MSUF_DB.gameplay
+        if not g then return false, 1 end
+        return (g.rangeFadeEnabled == true), (g.rangeFadeAlpha or 1)
+    end
 
-        -- RangeFade Step A: zero-cost when disabled (no ticker, no work).
-        function RF:SetEnabled(active)
-            active = not not active
-            if self._msufEnabled == active then return end
-            self._msufEnabled = active
-            if not active then
-                if self.StopTicker then self:StopTicker() end
-            else
-                if self.EnsureTicker then self:EnsureTicker() end
+    local function applyRangeFadeAlpha(inRange, force)
+        local enabled, alpha = getRangeFadeConfig()
+        local targetAlpha = (enabled and not inRange) and alpha or 1
+
+        -- Update cached multipliers used by MSUF_GetRangeFadeMul().
+        _G.MSUF_RangeFadeMul.target = targetAlpha
+        _G.MSUF_RangeFadeMul.focus = targetAlpha
+
+        -- Force a quick visual refresh (alpha application is in the unitframe apply path).
+        if force or enabled then
+            if _G.MSUF_RequestUnitframeUpdate then
+                _G.MSUF_RequestUnitframeUpdate('target', false, false, 'RangeFade', true)
+                _G.MSUF_RequestUnitframeUpdate('focus', false, false, 'RangeFade', true)
             end
         end
+    end
 
-        function RF:SyncEnabledFromDB()
-            EnsureDB()
-            local gp = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil
-            local enabled = (gp and gp.rangeFadeEnabled ~= false) or (gp == nil)
-            self:SetEnabled(enabled)
-        end
-
-        function _G.MSUF_SyncRangeFadeEnabled()
-            if _G.MSUF_RangeFade and _G.MSUF_RangeFade.SyncEnabledFromDB then
-                _G.MSUF_RangeFade:SyncEnabledFromDB()
+    local function recomputeRangeFade()
+        local anyChecked = false
+        local anyInRange = false
+        for _, inRange in pairs(rangeFadeState.spellStates) do
+            anyChecked = true
+            if inRange == true then
+                anyInRange = true
+                break
             end
         end
+        rangeFadeState.inRange = (not anyChecked) or anyInRange
+        applyRangeFadeAlpha(rangeFadeState.inRange)
+    end
 
-
-        local UnitInRange = _G.UnitInRange
-        local UnitIsPlayer = _G.UnitIsPlayer
-        local UnitCanAttack = _G.UnitCanAttack
-        local UnitIsUnit = _G.UnitIsUnit
-        local UnitExists = _G.UnitExists
-        local IsInGroup = _G.IsInGroup
-        local IsInRaid = _G.IsInRaid
-        local GetNumGroupMembers = _G.GetNumGroupMembers
-        local InCombatLockdown = _G.InCombatLockdown
-        local NotSecretValue = _G.NotSecretValue
-
-        -- Midnight/Beta: prefer Blizzard's _G.NotSecretValue to detect restricted ("secret") values.
-        -- If it's not present, we MUST fall back to a protected probe; otherwise secret booleans/numbers
-        -- can explode on any comparison/boolean-test. This fallback is only used on clients missing
-        -- the native API, and it keeps range-fade functional while staying crash-free.
-        if not NotSecretValue then
-            local pcall = pcall
-            local type = type
-            NotSecretValue = function(v) Perfy_Trace(Perfy_GetTime(), "Enter", "NotSecretValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2584:29");
-                local tv = type(v)
-                if tv == "nil" then
-                    Perfy_Trace(Perfy_GetTime(), "Leave", "NotSecretValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2584:29"); return true
-                end
-                -- Range checkers only return booleans/numbers; anything else is treated as unsafe.
-                if tv ~= "boolean" and tv ~= "number" then
-                    Perfy_Trace(Perfy_GetTime(), "Leave", "NotSecretValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2584:29"); return false
-                end
-                -- Comparing a secret value throws; pcall catches and returns false.
-                return Perfy_Trace_Passthrough("Leave", "NotSecretValue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2584:29", pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2594:29");
-                    return Perfy_Trace_Passthrough("Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2594:29", (v == v))
-                end))
-            end
+    local function buildRangeFadeSpellList()
+        local list = {}
+        if not (EnableSpellRangeCheck and SpellBook and SpellBook.GetNumSpellBookSkillLines and SpellBook.GetSpellBookSkillLineInfo and SpellBook.GetSpellBookItemInfo) then
+            return list
         end
-
-
-local LibStub = _G.LibStub
-
-        local state = _G.MSUF_RangeFadeMul
-        local groupMap = _G.MSUF_RangeFadeGroupUnit or { target = nil, focus = nil }
-        _G.MSUF_RangeFadeGroupUnit = groupMap
-
-        local ticker = nil
-        local checkerIC, checkerOOC = nil, nil
-        local lastRange = nil
-
-
-
-        -- RangeFade: clamp the max-checker selection to the *player class/spec* so
-        -- short-range specs (Evoker 25y, DH Devourer 25y) don’t accidentally use
-        -- item-based 40y checkers from LibRangeCheck.
-        local function RF_PlayerKnowsSpell(spellID) Perfy_Trace(Perfy_GetTime(), "Enter", "RF_PlayerKnowsSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2616:14");
-            if not spellID then Perfy_Trace(Perfy_GetTime(), "Leave", "RF_PlayerKnowsSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2616:14"); return false end
-            if IsPlayerSpell then
-                return Perfy_Trace_Passthrough("Leave", "RF_PlayerKnowsSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2616:14", IsPlayerSpell(spellID))
-            end
-            if C_Spell and C_Spell.IsSpellKnown then
-                return Perfy_Trace_Passthrough("Leave", "RF_PlayerKnowsSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2616:14", C_Spell.IsSpellKnown(spellID))
-            end
-            Perfy_Trace(Perfy_GetTime(), "Leave", "RF_PlayerKnowsSpell file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2616:14"); return false
-        end
-
-        local function RF_GetEffectiveMaxRange() Perfy_Trace(Perfy_GetTime(), "Enter", "RF_GetEffectiveMaxRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2627:14");
-            EnsureDB()
-            local gp = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil
-            local range = gp and tonumber(gp.rangeFadeMaxRange) or 40
-            if not range or range <= 0 then range = 40 end
-
-            local class = nil
-            if UnitClass then
-                class = select(2, UnitClass("player"))
-            end
-
-            local override = nil
-            if class == "EVOKER" then
-                override = 25
-            elseif class == "DEMONHUNTER" then
-                -- Midnight/Beta: Devourer/Void DH is effectively 25y (detect via Devour spells)
-                if RF_PlayerKnowsSpell(473662) or RF_PlayerKnowsSpell(1226019) then
-                    override = 25
-                else
-                    override = 30
-                end
-            end
-
-            if override and range > override then
-                range = override
-            end
-            Perfy_Trace(Perfy_GetTime(), "Leave", "RF_GetEffectiveMaxRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2627:14"); return range
-        end
-        local function Clamp01(x) Perfy_Trace(Perfy_GetTime(), "Enter", "Clamp01 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2655:14");
-            if type(x) ~= "number" then Perfy_Trace(Perfy_GetTime(), "Leave", "Clamp01 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2655:14"); return 1 end
-            if x < 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "Clamp01 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2655:14"); return 0 end
-            if x > 1 then Perfy_Trace(Perfy_GetTime(), "Leave", "Clamp01 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2655:14"); return 1 end
-            Perfy_Trace(Perfy_GetTime(), "Leave", "Clamp01 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2655:14"); return x
-        end
-
-        local function SafeBool(v) Perfy_Trace(Perfy_GetTime(), "Enter", "SafeBool file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2662:14");
-            if NotSecretValue and not NotSecretValue(v) then Perfy_Trace(Perfy_GetTime(), "Leave", "SafeBool file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2662:14"); return nil end
-            if v == true or v == 1 then Perfy_Trace(Perfy_GetTime(), "Leave", "SafeBool file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2662:14"); return true end
-            if v == false or v == 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "SafeBool file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2662:14"); return false end
-            Perfy_Trace(Perfy_GetTime(), "Leave", "SafeBool file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2662:14"); return nil
-        end
-        local function IsOutOfRange(v) Perfy_Trace(Perfy_GetTime(), "Enter", "IsOutOfRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2668:14");
-            -- LibRangeCheck checkers often return `true` when IN range and `nil` when OUT of range.
-            -- (Some return 1/0, others true/false.)
-            -- For range-fade we want: out-of-range => true, in-range => false.
-            -- If the value is "secret" (NotSecretValue fails), treat it as unknown (nil) so we DON'T fade.
-            if NotSecretValue and not NotSecretValue(v) then Perfy_Trace(Perfy_GetTime(), "Leave", "IsOutOfRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2668:14"); return nil end
-            if v == true or v == 1 then Perfy_Trace(Perfy_GetTime(), "Leave", "IsOutOfRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2668:14"); return false end
-            if v == false or v == 0 then Perfy_Trace(Perfy_GetTime(), "Leave", "IsOutOfRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2668:14"); return true end
-            -- nil / any other non-true return is treated as UNKNOWN.
-            -- IMPORTANT: Do NOT fade on unknown, otherwise alpha can get stuck at rangeFadeAlpha.
-            Perfy_Trace(Perfy_GetTime(), "Leave", "IsOutOfRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2668:14"); return nil
-        end
-
-        
-        local function GetLib() Perfy_Trace(Perfy_GetTime(), "Enter", "GetLib file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2681:14");
-            if not LibStub then LibStub = _G.LibStub end
-            if not LibStub then Perfy_Trace(Perfy_GetTime(), "Leave", "GetLib file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2681:14"); return nil end
-            return Perfy_Trace_Passthrough("Leave", "GetLib file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2681:14", LibStub("LibRangeCheck-3.0", true))
-        end
-
-
-        local function RefreshCheckers(force) Perfy_Trace(Perfy_GetTime(), "Enter", "RefreshCheckers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2688:14");
-                    local range = RF_GetEffectiveMaxRange()
-
-                    if (not force) and (lastRange == range) and checkerOOC and checkerIC then
-                        Perfy_Trace(Perfy_GetTime(), "Leave", "RefreshCheckers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2688:14"); return
-                    end
-
-                    local rc = GetLib()
-                    if rc and rc.GetSmartMaxChecker then
-                        checkerOOC = rc:GetSmartMaxChecker(range, false)
-                        checkerIC  = rc:GetSmartMaxChecker(range, true)
-                    else
-                        checkerOOC, checkerIC = nil, nil
-                    end
-                    lastRange = range
-                Perfy_Trace(Perfy_GetTime(), "Leave", "RefreshCheckers file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2688:14"); end
-        local function ResolveGroupUnit(realUnit) Perfy_Trace(Perfy_GetTime(), "Enter", "ResolveGroupUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2704:14");
-            if not realUnit or not UnitExists or not UnitExists(realUnit) then Perfy_Trace(Perfy_GetTime(), "Leave", "ResolveGroupUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2704:14"); return nil end
-            if not UnitIsPlayer or not UnitIsPlayer(realUnit) then Perfy_Trace(Perfy_GetTime(), "Leave", "ResolveGroupUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2704:14"); return nil end
-            if not UnitCanAttack or UnitCanAttack("player", realUnit) then Perfy_Trace(Perfy_GetTime(), "Leave", "ResolveGroupUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2704:14"); return nil end
-            if not IsInGroup or not IsInGroup() then Perfy_Trace(Perfy_GetTime(), "Leave", "ResolveGroupUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2704:14"); return nil end
-
-            if UnitIsUnit and UnitIsUnit(realUnit, "player") then
-                Perfy_Trace(Perfy_GetTime(), "Leave", "ResolveGroupUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2704:14"); return "player"
-            end
-
-            local n = GetNumGroupMembers and GetNumGroupMembers() or 0
-            if IsInRaid and IsInRaid() then
-                for i = 1, n do
-                    local u = "raid" .. i
-                    if UnitIsUnit and UnitIsUnit(realUnit, u) then
-                        Perfy_Trace(Perfy_GetTime(), "Leave", "ResolveGroupUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2704:14"); return u
-                    end
-                end
-            else
-                for i = 1, 4 do
-                    local u = "party" .. i
-                    if UnitExists and UnitExists(u) and UnitIsUnit and UnitIsUnit(realUnit, u) then
-                        Perfy_Trace(Perfy_GetTime(), "Leave", "ResolveGroupUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2704:14"); return u
+        local bank = SpellBookSpellBank and SpellBookSpellBank.Player or 0
+        local spellType = (SpellBookItemType and SpellBookItemType.Spell) or 1
+        local numLines = SpellBook.GetNumSpellBookSkillLines() or 0
+        for line = 1, numLines do
+            local lineInfo = SpellBook.GetSpellBookSkillLineInfo(line)
+            local offset = lineInfo and lineInfo.itemIndexOffset or 0
+            local count = lineInfo and lineInfo.numSpellBookItems or 0
+            for slot = offset + 1, offset + count do
+                local info = SpellBook.GetSpellBookItemInfo(slot, bank)
+                if info and info.itemType == spellType and info.isPassive ~= true then
+                    if not isRangeFadeIgnored(info.spellID, info.actionID) then
+                        local spellId = info.spellID or info.actionID
+                        if spellId then list[spellId] = true end
                     end
                 end
             end
-
-            Perfy_Trace(Perfy_GetTime(), "Leave", "ResolveGroupUnit file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2704:14"); return nil
         end
-
-        local function FriendlyInRange(realUnit, groupUnit, checker) Perfy_Trace(Perfy_GetTime(), "Enter", "FriendlyInRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2734:14");
-            if not realUnit or not UnitExists or not UnitExists(realUnit) then Perfy_Trace(Perfy_GetTime(), "Leave", "FriendlyInRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2734:14"); return true end
-
-            if UnitIsPlayer and UnitIsPlayer(realUnit) then
-                if _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE and _G.UnitPhaseReason and _G.UnitPhaseReason(realUnit) then
-                    Perfy_Trace(Perfy_GetTime(), "Leave", "FriendlyInRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2734:14"); return false
-                end
-
-                if UnitInRange and groupUnit then
-                    local inRange, checked = UnitInRange(groupUnit)
-                    -- Secret-safe: never boolean-test `checked`/`inRange` directly.
-                    local c = SafeBool(checked)
-                    if c == true then
-                        local b = SafeBool(inRange)
-                        if b == false then Perfy_Trace(Perfy_GetTime(), "Leave", "FriendlyInRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2734:14"); return false end
-                        if b == true then Perfy_Trace(Perfy_GetTime(), "Leave", "FriendlyInRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2734:14"); return true end
-                    end
-                end
-            end
-
-            if checker then
-                local ok = checker(realUnit)
-                local oor = IsOutOfRange(ok)
-                if oor == true then
-                    Perfy_Trace(Perfy_GetTime(), "Leave", "FriendlyInRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2734:14"); return false
-                end
-            end
-
-            Perfy_Trace(Perfy_GetTime(), "Leave", "FriendlyInRange file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2734:14"); return true
-        end
-
-        local function UnitOutOfRangeMul(unitKey) Perfy_Trace(Perfy_GetTime(), "Enter", "UnitOutOfRangeMul file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2765:14");
-            EnsureDB()
-            local gp = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil
-            if not gp or gp.rangeFadeEnabled == false then
-                Perfy_Trace(Perfy_GetTime(), "Leave", "UnitOutOfRangeMul file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2765:14"); return 1
-            end
-
-            local alpha = gp.rangeFadeAlpha
-            if type(alpha) ~= "number" then
-                alpha = tonumber(alpha) or 0.5
-            end
-            alpha = Clamp01(alpha)
-
-            if not UnitExists or not UnitExists(unitKey) then
-                Perfy_Trace(Perfy_GetTime(), "Leave", "UnitOutOfRangeMul file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2765:14"); return 1
-            end
-
-            local range = RF_GetEffectiveMaxRange()
-            if lastRange ~= range or (checkerOOC == nil and checkerIC == nil) then
-                RefreshCheckers(true)
-            end
-
-            local inCombat = (_G.MSUF_InCombat == true)
-            if inCombat == nil then
-                inCombat = (InCombatLockdown and InCombatLockdown()) or false
-            end
-            local checker = inCombat and checkerIC or checkerOOC
-
-            local gUnit = groupMap[unitKey]
-            if not gUnit and UnitIsPlayer and UnitIsPlayer(unitKey) and UnitCanAttack and (not UnitCanAttack("player", unitKey)) then
-                gUnit = ResolveGroupUnit(unitKey)
-                groupMap[unitKey] = gUnit
-            end
-
-            local inRange = true
-            if UnitCanAttack and UnitCanAttack("player", unitKey) then
-                if checker then
-                    local ok = checker(unitKey)
-                    local oor = IsOutOfRange(ok)
-                    if oor == true then
-                        inRange = false
-                    end
-                end
-            else
-                inRange = FriendlyInRange(unitKey, gUnit, checker)
-            end
-
-            return Perfy_Trace_Passthrough("Leave", "UnitOutOfRangeMul file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2765:14", inRange and 1 or alpha)
-        end
-
-        local function ApplyKey(unitKey) Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2815:14");
-            local frames = _G.MSUF_UnitFrames
-            local f = frames and frames[unitKey] or nil
-            local ApplyUnitAlpha = _G.MSUF_ApplyUnitAlpha
-            if f and ApplyUnitAlpha then
-                -- Most frames use config key == unitKey; boss frames share config key "boss".
-                local cfgKey = f.msufConfigKey or f.conf or (GetConfigKeyForUnit and GetConfigKeyForUnit(f.unit or unitKey)) or unitKey
-                ApplyUnitAlpha(f, cfgKey)
-            end
-        Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2815:14"); end
-
-        function RF:StopTicker() Perfy_Trace(Perfy_GetTime(), "Enter", "RF:StopTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2826:8");
-            if ticker and ticker.Cancel then
-                ticker:Cancel()
-            end
-            ticker = nil
-        Perfy_Trace(Perfy_GetTime(), "Leave", "RF:StopTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2826:8"); end
-
-        function RF:EnsureTicker() Perfy_Trace(Perfy_GetTime(), "Enter", "RF:EnsureTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2833:8");
-            EnsureDB()
-            if self._msufEnabled == false then
-                if self.StopTicker then self:StopTicker() end
-                return
-            end
-
-            local gp = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil
-            local enabled = (gp and gp.rangeFadeEnabled ~= false) or (gp == nil)
-            local bossEnabled = enabled and (_G.MSUF_DB and _G.MSUF_DB.boss and _G.MSUF_DB.boss.enabled ~= false)
-            local bossNeed = false
-            if bossEnabled and UnitExists then
-                for i = 1, 5 do
-                    if UnitExists("boss" .. i) then
-                        bossNeed = true
-                        break
-                    end
-                end
-            end
-            local need = enabled and (((UnitExists and UnitExists("target")) or (UnitExists and UnitExists("focus"))) or bossNeed)
-
-            if need then
-                if not ticker and C_Timer and C_Timer.NewTicker then
-                    local tick = gp and tonumber(gp.rangeFadeTick) or 0.25
-                    if not tick or tick < 0.1 then tick = 0.25 end
-                    ticker = C_Timer.NewTicker(tick, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2853:53"); RF:Tick() Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2853:53"); end)
-                end
-            else
-                self:StopTicker()
-            end
-        Perfy_Trace(Perfy_GetTime(), "Leave", "RF:EnsureTicker file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2833:8"); end
-
-        function RF:Tick() Perfy_Trace(Perfy_GetTime(), "Enter", "RF:Tick file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2860:8");
-
-            if self._msufEnabled == false then return end
-            EnsureDB()
-            local gp = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil
-            local enabled = (gp and gp.rangeFadeEnabled ~= false) or (gp == nil)
-
-            local bossEnabled = enabled and (_G.MSUF_DB and _G.MSUF_DB.boss and _G.MSUF_DB.boss.enabled ~= false)
-            local bossNeed = false
-            if bossEnabled and UnitExists then
-                for i = 1, 5 do
-                    if UnitExists("boss" .. i) then
-                        bossNeed = true
-                        break
-                    end
-                end
-            end
-
-            if not enabled then
-                if state.target ~= 1 then state.target = 1; ApplyKey("target") end
-                if state.focus  ~= 1 then state.focus  = 1; ApplyKey("focus") end
-                for i = 1, 5 do
-                    local u = "boss" .. i
-                    if state[u] ~= 1 then
-                        state[u] = 1
-                        ApplyKey(u)
-                    end
-                end
-                self:StopTicker()
-                Perfy_Trace(Perfy_GetTime(), "Leave", "RF:Tick file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2860:8"); return
-            end
-
-            local need = ((UnitExists and UnitExists("target")) or (UnitExists and UnitExists("focus"))) or bossNeed
-            if not need then
-                if state.target ~= 1 then state.target = 1; ApplyKey("target") end
-                if state.focus  ~= 1 then state.focus  = 1; ApplyKey("focus") end
-                for i = 1, 5 do
-                    local u = "boss" .. i
-                    if state[u] ~= 1 then
-                        state[u] = 1
-                        ApplyKey(u)
-                    end
-                end
-                self:StopTicker()
-                Perfy_Trace(Perfy_GetTime(), "Leave", "RF:Tick file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2860:8"); return
-            end
-
-            -- Step C: coalesce/limit expensive checker rebuilds
-            local now = (GetTime and GetTime()) or 0
-            if (self._msufCheckerDirty or (not checkerIC and not checkerOOC)) and (not self._msufNextCheckerRefresh or now >= self._msufNextCheckerRefresh) then
-                self._msufCheckerDirty = nil
-                self._msufNextCheckerRefresh = now + 1.0
-                RefreshCheckers(true)
-            end
-
-            -- Target / Focus
-            local mt = UnitOutOfRangeMul("target")
-            if state.target ~= mt then
-                state.target = mt
-                ApplyKey("target")
-            end
-
-            local mf = UnitOutOfRangeMul("focus")
-            if state.focus ~= mf then
-                state.focus = mf
-                ApplyKey("focus")
-            end
-
-            -- Boss frames (boss1..boss5) use per-unit multipliers stored under the unit id.
-            -- Step C: spread work (RR) in steady-state; do a full scan on engage/major changes.
-            if bossEnabled then
-                if self._msufBossFullScan then
-                    self._msufBossFullScan = nil
-                    for i = 1, 5 do
-                        local u = "boss" .. i
-                        if UnitExists and UnitExists(u) then
-                            local m = UnitOutOfRangeMul(u)
-                            if state[u] ~= m then
-                                state[u] = m
-                                ApplyKey(u)
-                            end
-                        else
-                            if state[u] ~= 1 then
-                                state[u] = 1
-                                ApplyKey(u)
-                            end
-                        end
-                    end
-                else
-                    local rr = (self._msufBossRR or 0) + 1
-                    if rr > 5 then rr = 1 end
-                    self._msufBossRR = rr
-                    local u = "boss" .. rr
-                    if UnitExists and UnitExists(u) then
-                        local m = UnitOutOfRangeMul(u)
-                        if state[u] ~= m then
-                            state[u] = m
-                            ApplyKey(u)
-                        end
-                    else
-                        if state[u] ~= 1 then
-                            state[u] = 1
-                            ApplyKey(u)
-                        end
-                    end
-                end
-            else
-                for i = 1, 5 do
-                    local u = "boss" .. i
-                    if state[u] ~= 1 then
-                        state[u] = 1
-                        ApplyKey(u)
-                    end
-                end
-            end
-        Perfy_Trace(Perfy_GetTime(), "Leave", "RF:Tick file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2860:8"); end
-        function RF:UpdateGroupMap() Perfy_Trace(Perfy_GetTime(), "Enter", "RF:UpdateGroupMap file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2939:8");
-            groupMap.target = ResolveGroupUnit("target")
-            groupMap.focus  = ResolveGroupUnit("focus")
-        Perfy_Trace(Perfy_GetTime(), "Leave", "RF:UpdateGroupMap file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2939:8"); end
-
-        function RF:OnEvent(event) Perfy_Trace(Perfy_GetTime(), "Enter", "RF:OnEvent file://E:\World of Warcraft\_beta_\Interface\AddOns\MidnightSimpleUnitFrames\MidnightSimpleUnitFrames.lua:2944:8");
-            -- Step C: RF must be truly zero-cost when disabled. Also avoid expensive checker rebuilds
-            -- on every related event; instead mark dirty and refresh lazily only when RF is active.
-
-            if self._msufEnabled == false then
-                if self.StopTicker then self:StopTicker() end
-                Perfy_Trace(Perfy_GetTime(), "Leave", "RF:OnEvent file://E:\World of Warcraft\_beta_\Interface\AddOns\MidnightSimpleUnitFrames\MidnightSimpleUnitFrames.lua:2944:8"); return
-            end
-
-            EnsureDB()
-            local gp = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil
-            local enabled = (gp and gp.rangeFadeEnabled ~= false) or (gp == nil)
-
-            if not enabled then
-                -- Ensure we stop all RF work and restore alpha to 1 immediately.
-                if self.StopTicker then self:StopTicker() end
-                if state.target ~= 1 then state.target = 1; ApplyKey("target") end
-                if state.focus  ~= 1 then state.focus  = 1; ApplyKey("focus") end
-                for i = 1, 5 do
-                    local u = "boss" .. i
-                    if state[u] ~= 1 then state[u] = 1; ApplyKey(u) end
-                end
-                Perfy_Trace(Perfy_GetTime(), "Leave", "RF:OnEvent file://E:\World of Warcraft\_beta_\Interface\AddOns\MidnightSimpleUnitFrames\MidnightSimpleUnitFrames.lua:2944:8"); return
-            end
-
-            if event == "PLAYER_SPECIALIZATION_CHANGED" or event == "SPELLS_CHANGED" or event == "TRAIT_CONFIG_UPDATED" then
-                -- Mark checker selection dirty; refresh lazily in Tick (coalesced).
-                self._msufCheckerDirty = true
-                self:EnsureTicker()
-                Perfy_Trace(Perfy_GetTime(), "Leave", "RF:OnEvent file://E:\World of Warcraft\_beta_\Interface\AddOns\MidnightSimpleUnitFrames\MidnightSimpleUnitFrames.lua:2944:8"); return
-            end
-
-            if event == "PLAYER_ENTERING_WORLD" or event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_FOCUS_CHANGED" or event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-                self:UpdateGroupMap()
-                if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-                    -- Boss units may appear/disappear here; do one full boss pass next tick.
-                    self._msufBossFullScan = true
-                end
-                self:EnsureTicker()
-                -- Immediate update for responsiveness (still cheap; checkers refresh is throttled).
-                self:Tick()
-                Perfy_Trace(Perfy_GetTime(), "Leave", "RF:OnEvent file://E:\World of Warcraft\_beta_\Interface\AddOns\MidnightSimpleUnitFrames\MidnightSimpleUnitFrames.lua:2944:8"); return
-            end
-
-            if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
-                self:EnsureTicker()
-                self:Tick()
-                Perfy_Trace(Perfy_GetTime(), "Leave", "RF:OnEvent file://E:\World of Warcraft\_beta_\Interface\AddOns\MidnightSimpleUnitFrames\MidnightSimpleUnitFrames.lua:2944:8"); return
-            end
-
-        Perfy_Trace(Perfy_GetTime(), "Leave", "RF:OnEvent file://E:\World of Warcraft\_beta_\Interface\AddOns\MidnightSimpleUnitFrames\MidnightSimpleUnitFrames.lua:2944:8"); end
-
-        local f = CreateFrame("Frame")
-        _G.MSUF_RangeFadeEventFrame = f
-        f:RegisterEvent("PLAYER_ENTERING_WORLD")
-        f:RegisterEvent("PLAYER_TARGET_CHANGED")
-        f:RegisterEvent("PLAYER_FOCUS_CHANGED")
-        f:RegisterEvent("GROUP_ROSTER_UPDATE")
-        f:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
-        f:RegisterEvent("PLAYER_REGEN_DISABLED")
-        f:RegisterEvent("PLAYER_REGEN_ENABLED")
-        f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-        f:RegisterEvent("SPELLS_CHANGED")
-        f:RegisterEvent("TRAIT_CONFIG_UPDATED")
-        f:SetScript("OnEvent", function(_, event) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2972:31"); RF:OnEvent(event) Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2972:31"); end)
-
-        -- If LRC is present, refresh when it reports new checker sets.
-        local rc = GetLib()
-        if rc and rc.RegisterCallback and rc.CHECKERS_CHANGED then
-            rc.RegisterCallback(RF, rc.CHECKERS_CHANGED, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2977:57");
-                RF._msufCheckerDirty = true
-                RF:EnsureTicker()
-                RF:Tick()
-            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2977:57"); end)
-        end
-
-        -- Step C: avoid eager checker build at login; build lazily when RF is actually active
-        RF._msufCheckerDirty = true
-        RF:EnsureTicker()
+        return list
     end
 end
+
+-- Public helpers used by other MSUF code.
+function _G.MSUF_GetRangeFadeMul(unit)
+    local t = _G.MSUF_RangeFadeMul
+    if not t then return 1 end
+    return t[unit] or 1
+end
+
+function _G.MSUF_RangeFadeReset()
+    clearTable(rangeFadeState.spellStates)
+    rangeFadeState.inRange = true
+    applyRangeFadeAlpha(true, true)
+end
+
+function _G.MSUF_RangeFadeUpdateFromEvent(spellIdentifier, isInRange, checksRange)
+    local enabled = getRangeFadeConfig()
+    if not enabled then return end
+    local id = tonumber(spellIdentifier)
+    if not id and GetSpellIDForSpellIdentifier then
+        id = GetSpellIDForSpellIdentifier(spellIdentifier)
+    end
+    if isRangeFadeIgnored(id) then return end
+    if not id or not rangeFadeState.activeSpells[id] then return end
+    if checksRange then
+        rangeFadeState.spellStates[id] = (isInRange == true)
+    else
+        rangeFadeState.spellStates[id] = nil
+    end
+    recomputeRangeFade()
+end
+
+function _G.MSUF_RangeFadeUpdateSpells()
+    if not EnableSpellRangeCheck then return end
+    local enabled = getRangeFadeConfig()
+    if not enabled then
+        for spellId in pairs(rangeFadeState.activeSpells) do
+            EnableSpellRangeCheck(spellId, false)
+        end
+        clearTable(rangeFadeState.activeSpells)
+        _G.MSUF_RangeFadeReset()
+        return
+    end
+
+    local wanted = buildRangeFadeSpellList()
+
+    for spellId in pairs(rangeFadeState.activeSpells) do
+        if not wanted[spellId] then
+            EnableSpellRangeCheck(spellId, false)
+            rangeFadeState.activeSpells[spellId] = nil
+            rangeFadeState.spellStates[spellId] = nil
+        end
+    end
+
+    for spellId in pairs(wanted) do
+        if not rangeFadeState.activeSpells[spellId] then
+            EnableSpellRangeCheck(spellId, true)
+            rangeFadeState.activeSpells[spellId] = true
+        end
+    end
+
+    recomputeRangeFade()
+end
+
+-- Drive updates.
+local rfEvt = CreateFrame('Frame')
+rfEvt:RegisterEvent('PLAYER_LOGIN')
+rfEvt:RegisterEvent('SPELLS_CHANGED')
+rfEvt:RegisterEvent('TRAIT_CONFIG_UPDATED')
+rfEvt:RegisterEvent('PLAYER_SPECIALIZATION_CHANGED')
+rfEvt:RegisterEvent('SPELL_RANGE_CHECK_UPDATE')
+
+rfEvt:SetScript('OnEvent', function(_, event, ...)
+    if event == 'SPELL_RANGE_CHECK_UPDATE' then
+        local spellIdentifier, isInRange, checksRange = ...
+        _G.MSUF_RangeFadeUpdateFromEvent(spellIdentifier, isInRange, checksRange)
+        return
+    end
+    -- Rebuild spell list on load / spellbook changes.
+    _G.MSUF_RangeFadeUpdateSpells()
+end)
+
+-- Initialize multiplier cache.
+_G.MSUF_RangeFadeMul.target = 1
+_G.MSUF_RangeFadeMul.focus = 1
 
 local function MSUF_InitPlayerCastbarPreviewToggle() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_InitPlayerCastbarPreviewToggle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:2989:6");
     if not MSUF_DB or not MSUF_DB.general then
@@ -3253,16 +2774,16 @@ local function MSUF_InitPlayerCastbarPreviewToggle() Perfy_Trace(Perfy_GetTime()
         bg:SetTexture("Interface\\Buttons\\WHITE8x8")
         bg:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
         bg:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
-        bg:SetVertexColor(0.06, (0.06 or 0.06), (0.06 or 0.06 or 0.06), (0.92 or 1))
+        bg:SetVertexColor(0.06, 0.06, 0.06, 0.92)
         btn.__msufBg = bg
         local bd = btn:CreateTexture(nil, "BORDER")
         bd:SetTexture("Interface\\Buttons\\WHITE8x8")
         bd:SetAllPoints(btn)
-        bd:SetVertexColor(0, (0 or 0), (0 or 0 or 0), (0.85 or 1))
+        bd:SetVertexColor(0, 0, 0, 0.85)
         btn.__msufBorder = bd
         local fs = btn.GetFontString and btn:GetFontString()
         if fs then
-            fs:SetTextColor(1, (0.82 or 1), (0 or 0.82 or 1))
+            fs:SetTextColor(1, 0.82, 0)
             fs:SetShadowColor(0, 0, 0, 0.9)
             fs:SetShadowOffset(1, -1)
     end
@@ -3699,7 +3220,7 @@ MSUF_BumpCastbarStyleRevision()
     local effectiveSize = (fontSize > 0) and fontSize or baseSize
     local function ApplyFontColor(fs, size) Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyFontColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3482:10");
         fs:SetFont(fontPath, size, fontFlags)
-        fs:SetTextColor(fr, (fg or fr), (fb or fg or fr), (1 or 1))
+        fs:SetTextColor(fr, fg, fb, 1)
     Perfy_Trace(Perfy_GetTime(), "Leave", "ApplyFontColor file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3482:10"); end
     local function ApplyShadow(fs) Perfy_Trace(Perfy_GetTime(), "Enter", "ApplyShadow file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3486:10");
         if useShadow then
@@ -3928,11 +3449,11 @@ _G.MSUF_RefreshAllPowerTextColors = function() Perfy_Trace(Perfy_GetTime(), "Ent
                     fr, fg, fb = GetFontColor()
                 end
                 if f.powerText.SetTextColor then
-                    f.powerText:SetTextColor(fr, (fg or fr), (fb or fg or fr), (1 or 1))
+                    f.powerText:SetTextColor(fr, fg, fb, 1)
                     f.powerText._msufColorStamp = nil
                 end
                 if f.powerTextPct and f.powerTextPct.SetTextColor then
-                    f.powerTextPct:SetTextColor(fr, (fg or fr), (fb or fg or fr), (1 or 1))
+                    f.powerTextPct:SetTextColor(fr, fg, fb, 1)
                     f.powerTextPct._msufColorStamp = nil
                 end
             end
@@ -4074,7 +3595,7 @@ function _G.MSUF_ApplyPowerBarBorder(bar) Perfy_Trace(Perfy_GetTime(), "Enter", 
     if not line and border.CreateTexture then
         line = border:CreateTexture(nil, 'OVERLAY')
         line:SetTexture('Interface\\Buttons\\WHITE8x8')
-        line:SetVertexColor(0, (0 or 0), (0 or 0 or 0), (1 or 1))
+        line:SetVertexColor(0, 0, 0, 1)
         line:SetAllPoints(border)
         border._msufSeparatorLine = line
     elseif line and line.SetAllPoints then
@@ -4108,7 +3629,6 @@ local function MSUF_PreCreateHPGradients(hpBar) Perfy_Trace(Perfy_GetTime(), "En
         down  = MakeTex(),
     })
 end
-
 local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UpdateAbsorbBars file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:3893:6");
     local bar = isHeal and self and self.healAbsorbBar or self and self.absorbBar
     local api = isHeal and UnitGetTotalHealAbsorbs or UnitGetTotalAbsorbs
@@ -5050,49 +4570,21 @@ f._msufRaidMarkerLayoutStamp = 1
     local point, relPoint = ns.Icons._layout.Resolve(anchor, true)
     ns.Icons._layout.Apply(f.raidMarkerIcon, f, size, point, relPoint, ox, oy)
 Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ApplyRaidMarkerLayout file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4819:0"); end
--- Hot-path: value update only. Do NOT route through generic ApplySpec (table lookup + varargs + trace).
--- Apply/layout work is handled elsewhere via UFCore dirty masks.
 function _G.MSUF_UFCore_UpdateHealthFast(self) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_UFCore_UpdateHealthFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4834:0");
     if not self then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UFCore_UpdateHealthFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4834:0"); return nil, nil, false end
-    local fn = ns.Bars.Spec and ns.Bars.Spec.health
-    if not fn then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UFCore_UpdateHealthFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4834:0"); return nil, nil, false end
-    local hp, maxHP, ok = fn(self, self.unit)
-    Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UFCore_UpdateHealthFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4834:0");
-    return hp, maxHP, ok
+    return Perfy_Trace_Passthrough("Leave", "_G.MSUF_UFCore_UpdateHealthFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4834:0", ns.Bars.ApplySpec(self, self.unit, "health"))
 end
 function _G.MSUF_UFCore_UpdateHpTextFast(self, hp) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_UFCore_UpdateHpTextFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4838:0");
     if not self or not self.unit or not self.hpText then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UFCore_UpdateHpTextFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4838:0"); return end
     local unit = self.unit
     local conf = self.cachedConfig
-
-    -- Step B (HP Text perf): decouple formatting from ultra-hot health updates.
-    -- We do NOT compare numeric values (they may be secret). Instead, we throttle formatting and
-    -- rely on stamped SetText to avoid redundant UI work.
-    local wantShow = (self.showHPText ~= false and hp ~= nil)
-    if self._msufLastWantShowHpText ~= wantShow then
-        self._msufLastWantShowHpText = wantShow
-        self._msufHpTextForce = true
-        self._msufNextHpTextAt = nil
-    end
-    if wantShow and not self._msufHpTextForce then
-        local now = GetTime()
-        local nextAt = self._msufNextHpTextAt
-        if nextAt and now < nextAt then
-            Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UFCore_UpdateHpTextFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4838:0");
-            return
-        end
-        -- 10 Hz is plenty for readable text (bars still update at full rate).
-        self._msufNextHpTextAt = now + 0.10
-    end
-
     if self.showHPText == false or hp == nil then
         ns.Text.RenderHpMode(self, false)
         Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UFCore_UpdateHpTextFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4838:0"); return
     end
     local hpStr = MSUF_NumberToTextFast(hp)
     local hpPct = MSUF_GetUnitHealthPercent(unit)
-    local hpPctStr = MSUF_FormatPct1(hpPct)
-    local hasPct = (hpPctStr ~= nil)
+    local hasPct = (type(hpPct) == "number")
     local g = MSUF_DB.general or {}
     local absorbText, absorbStyle = nil, nil
     if g.showTotalAbsorbAmount and UnitGetTotalAbsorbs then
@@ -5125,8 +4617,7 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp) Perfy_Trace(Perfy_GetTime(), 
             end
     end
     end
-    ns.Text.RenderHpMode(self, true, hpStr, hpPctStr, hasPct, conf, g, absorbText, absorbStyle)
-    self._msufHpTextForce = nil
+    ns.Text.RenderHpMode(self, true, hpStr, hpPct, hasPct, conf, g, absorbText, absorbStyle)
 Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UFCore_UpdateHpTextFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4838:0"); end
 
 function _G.MSUF_ApplyBossTestHpPreviewText(self, conf) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_ApplyBossTestHpPreviewText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4884:0");
@@ -5135,37 +4626,16 @@ function _G.MSUF_ApplyBossTestHpPreviewText(self, conf) Perfy_Trace(Perfy_GetTim
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local hpStr = MSUF_NumberToTextFast(750000)
     local hpPct = 75.0
-    local hpPctStr = MSUF_FormatPct1(hpPct) or "75.0%"
-    ns.Text.RenderHpMode(self, show, hpStr, hpPctStr, true, conf, g)
+    ns.Text.RenderHpMode(self, show, hpStr, hpPct, true, conf, g)
 Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_ApplyBossTestHpPreviewText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4884:0"); end
 
 function _G.MSUF_UFCore_UpdatePowerTextFast(self) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_UFCore_UpdatePowerTextFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4893:0");
-    if not self then
-        return Perfy_Trace_Passthrough("Leave", "_G.MSUF_UFCore_UpdatePowerTextFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4893:0", nil)
-    end
-
-    -- Perf: power text formatting is expensive (string work). Throttle like HP text.
-    -- This is a value-path helper, so we keep it cheap and avoid rebuilding text every event.
-    local now = _G.GetTime and _G.GetTime() or 0
-    local nextAt = self._msufNextPowerTextAt
-    if nextAt and (now < nextAt) and (not self._msufPowerTextForce) then
-        return Perfy_Trace_Passthrough("Leave", "_G.MSUF_UFCore_UpdatePowerTextFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4893:0", nil)
-    end
-    self._msufNextPowerTextAt = now + 0.10
-    self._msufPowerTextForce = nil
-
-    return Perfy_Trace_Passthrough(
-        "Leave",
-        "_G.MSUF_UFCore_UpdatePowerTextFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4893:0",
-        ns.Text.RenderPowerText(self)
-    )
+    return Perfy_Trace_Passthrough("Leave", "_G.MSUF_UFCore_UpdatePowerTextFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4893:0", ns.Text.RenderPowerText(self))
 end
 
 function _G.MSUF_UFCore_UpdatePowerBarFast(self) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_UFCore_UpdatePowerBarFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4897:0");
     if not self then Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UFCore_UpdatePowerBarFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4897:0"); return end
-    -- Hot-path: value update only (avoid ApplySpec overhead).
-    local fn = ns.Bars.Spec and ns.Bars.Spec.power_abs
-    if fn then fn(self, self.unit) end
+    ns.Bars.ApplySpec(self, self.unit, "power_abs")
 Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UFCore_UpdatePowerBarFast file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4897:0"); end
 local function MSUF_ClearUnitFrameState(self, clearAbsorbs) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ClearUnitFrameState file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4901:6");
     ns.Bars.ResetHealthAndOverlays(self, clearAbsorbs)
@@ -5179,11 +4649,7 @@ Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ClearUnitFrameState file://E:\\World
 local function MSUF_SyncTargetPowerBar(self, unit, barsConf, isPlayer, isTarget, isFocus) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_SyncTargetPowerBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4910:6");
     if not self then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_SyncTargetPowerBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4910:6"); return false end
     MSUF_EnsureUnitFlags(self)
-    -- Hot-path: value update only (avoid ApplySpec overhead).
-    local fn = ns.Bars.Spec and ns.Bars.Spec.power_pct
-    local ok = false
-    if fn then ok = fn(self, unit, barsConf, self.isBoss, isPlayer, isTarget, isFocus) and true or false end
-    return Perfy_Trace_Passthrough("Leave", "MSUF_SyncTargetPowerBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4910:6", ok)
+    return Perfy_Trace_Passthrough("Leave", "MSUF_SyncTargetPowerBar file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4910:6", ns.Bars.ApplySpec(self, unit, "power_pct", barsConf, self.isBoss, isPlayer, isTarget, isFocus) and true or false)
 end
 local function MSUF_UFStep_BasicHealth(self, unit) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UFStep_BasicHealth file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:4915:6");
     local hp = ns.Bars.ApplyHealthBars(self, unit)
@@ -6017,7 +5483,7 @@ local colorPowerTextByType = (g.colorPowerTextByType == true)
             if setColor then
                 local cstamp = tostring(cr) .. "|" .. tostring(cg) .. "|" .. tostring(cb)
                 if fs._msufColorStamp ~= cstamp then
-                    fs:SetTextColor(cr, (cg or cr), (cb or cg or cr), (1 or 1))
+                    fs:SetTextColor(cr, cg, cb, 1)
                     fs._msufColorStamp = cstamp
                 end
             end
@@ -6547,7 +6013,7 @@ local function MSUF_CreateEditArrowButton(name, parent, unit, direction, point, 
     local label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     label:SetPoint("CENTER")
     label:SetText(symbols[direction] or "")
-    label:SetTextColor(0, (0 or 0), (0 or 0 or 0), (1 or 1))
+    label:SetTextColor(0, 0, 0, 1)
     btn._label = label
     btn:SetScript("OnEnter", function(self) Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:6279:29");
         if self._bg then self._bg:SetColorTexture(1, 1, 1, 1) end
@@ -6749,7 +6215,7 @@ local function CreateSimpleUnitFrame(unit) Perfy_Trace(Perfy_GetTime(), "Enter",
     local bg = ns.UF.MakeTex(f, "bg", "self", "BACKGROUND")
     bg:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -2); bg:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
     bg:SetTexture("Interface\\Buttons\\WHITE8x8")
-    bg:SetVertexColor(0.15, (0.15 or 0.15), (0.15 or 0.15 or 0.15), (0.9 or 1))
+    bg:SetVertexColor(0.15, 0.15, 0.15, 0.9)
     local hpBar = ns.UF.MakeBar(f, "hpBar", "self")
     hpBar:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -2); hpBar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
     hpBar:SetStatusBarTexture(MSUF_GetBarTexture())
