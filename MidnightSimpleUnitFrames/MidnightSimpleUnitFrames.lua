@@ -405,8 +405,17 @@ function ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok) Perfy_Trace(Perfy_
     if not bar then Perfy_Trace(Perfy_GetTime(), "Leave", "Bars.ApplyPowerBarVisual file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:404:0"); return end
     local pr, pg, pb = MSUF_GetPowerBarColor(pType, pTok)
     if not pr then
-        local colPB = PowerBarColor[pType] or { r = 0.8, g = 0.8, b = 0.8 }
-        pr, pg, pb = colPB.r, colPB.g, colPB.b
+        -- IMPORTANT: PowerBarColor is primarily keyed by powerToken ("RAGE", "ENERGY", ...).
+        -- Using the numeric powerType can yield wrong/stale colors after rapid target swaps
+        -- (observed: warrior rage showing energy/yellow from the previous target).
+        local colPB = nil
+        if type(pTok) == "string" and PowerBarColor and PowerBarColor[pTok] then
+            colPB = PowerBarColor[pTok]
+        else
+            colPB = (PowerBarColor and PowerBarColor[pType]) or nil
+        end
+        if not colPB then colPB = { r = 0.8, g = 0.8, b = 0.8 } end
+        pr, pg, pb = colPB.r or colPB[1], colPB.g or colPB[2], colPB.b or colPB[3]
     end
     bar:SetStatusBarColor(pr, pg, pb)
     ns.Bars.ApplyPowerGradientOnce(frame)
@@ -1477,22 +1486,75 @@ end
 ns.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
 _G.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
 local function MSUF_GetColorFromKey(key, fallbackColor) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetColorFromKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1479:6");
+    -- Perf: cache Color objects by key to avoid CreateColor + string.lower churn in hot paths.
+    -- Safety: colors can be updated at runtime (e.g., profile/options apply). We therefore
+    -- validate cached RGB per key and refresh the Color object if the source RGB changed.
+    local cache = _G.MSUF_ColorKeyCache
+    if not cache then
+        cache = {}
+        _G.MSUF_ColorKeyCache = cache
+    end
+    local rgbCache = cache.__rgb
+    if not rgbCache then
+        rgbCache = {}
+        cache.__rgb = rgbCache
+    end
+
     if type(key) ~= "string" then
         if fallbackColor then
             Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetColorFromKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1479:6"); return fallbackColor
+        end
+        local c = cache.__white
+        if not c then
+            c = CreateColor(1, 1, 1, 1)
+            cache.__white = c
+        end
+        return Perfy_Trace_Passthrough("Leave", "MSUF_GetColorFromKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1479:6", c)
     end
-        return Perfy_Trace_Passthrough("Leave", "MSUF_GetColorFromKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1479:6", CreateColor(1, 1, 1, 1))
-    end
-    local normalized = string.lower(key)
-    local rgb = MSUF_FONT_COLORS[normalized]
+
+    -- Fast-path: exact table hit without lower() (when key already normalized).
+    -- IMPORTANT: even if we have a cached Color, we must refresh it if the RGB changed.
+    local rgb = MSUF_FONT_COLORS and MSUF_FONT_COLORS[key]
     if rgb then
         local r, g, b = rgb[1], rgb[2], rgb[3]
-        return Perfy_Trace_Passthrough("Leave", "MSUF_GetColorFromKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1479:6", CreateColor(r or 1, g or 1, b or 1, 1))
+        local c = cache[key]
+        local rc = rgbCache[key]
+        if (not c) or (not rc) or (rc[1] ~= r) or (rc[2] ~= g) or (rc[3] ~= b) then
+            c = CreateColor(r or 1, g or 1, b or 1, 1)
+            cache[key] = c
+            rgbCache[key] = { r, g, b }
+        end
+        return Perfy_Trace_Passthrough("Leave", "MSUF_GetColorFromKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1479:6", c)
     end
+
+    -- Normalized path: check both cache and color table.
+    local normalized = string.lower(key)
+    rgb = MSUF_FONT_COLORS and MSUF_FONT_COLORS[normalized]
+    if rgb then
+        local r, g, b = rgb[1], rgb[2], rgb[3]
+        local c = cache[normalized]
+        local rc = rgbCache[normalized]
+        if (not c) or (not rc) or (rc[1] ~= r) or (rc[2] ~= g) or (rc[3] ~= b) then
+            c = CreateColor(r or 1, g or 1, b or 1, 1)
+            cache[normalized] = c
+            rgbCache[normalized] = { r, g, b }
+        end
+        cache[key] = c
+        rgbCache[key] = rgbCache[normalized]
+        return Perfy_Trace_Passthrough("Leave", "MSUF_GetColorFromKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1479:6", c)
+    end
+
     if fallbackColor then
         Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetColorFromKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1479:6"); return fallbackColor
     end
-    return Perfy_Trace_Passthrough("Leave", "MSUF_GetColorFromKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1479:6", CreateColor(1, 1, 1, 1))
+
+    -- Default: cached white (no new CreateColor allocations after first call).
+    local c = cache.__white
+    if not c then
+        c = CreateColor(1, 1, 1, 1)
+        cache.__white = c
+    end
+    return Perfy_Trace_Passthrough("Leave", "MSUF_GetColorFromKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MidnightSimpleUnitFrames.lua:1479:6", c)
 end
 ns.MSUF_GetColorFromKey = MSUF_GetColorFromKey
 _G.MSUF_GetColorFromKey = MSUF_GetColorFromKey
@@ -2552,6 +2614,13 @@ do
         activeSpells = {},
         spellStates = {},
         inRange = true,
+
+        -- Perf: avoid recomputing by iterating every spellStates entry on every event.
+        -- Maintain simple counters and coalesce updates to at most once per 0.5s.
+        checkedCount = 0,
+        inRangeCount = 0,
+        dirty = false,
+        flushPending = false,
     }
 
     -- Unlimited range spells to ignore (can be disabled via config).
@@ -2606,18 +2675,31 @@ do
         end
     end
 
-    local function recomputeRangeFade()
-        local anyChecked = false
-        local anyInRange = false
-        for _, inRange in pairs(rangeFadeState.spellStates) do
-            anyChecked = true
-            if inRange == true then
-                anyInRange = true
-                break
-            end
-        end
+    local function recomputeRangeFade(force)
+        -- Perf: O(1) based on counters, no table scan.
+        local anyChecked = (rangeFadeState.checkedCount or 0) > 0
+        local anyInRange = (rangeFadeState.inRangeCount or 0) > 0
         rangeFadeState.inRange = (not anyChecked) or anyInRange
-        applyRangeFadeAlpha(rangeFadeState.inRange)
+        applyRangeFadeAlpha(rangeFadeState.inRange, force)
+    end
+
+    local function RF_FlushCoalesced()
+        rangeFadeState.flushPending = false
+        if not rangeFadeState.dirty then return end
+        rangeFadeState.dirty = false
+        -- Coalesced apply (max 2x/sec).
+        recomputeRangeFade(false)
+    end
+
+    local function RF_ScheduleCoalescedFlush()
+        if rangeFadeState.flushPending then return end
+        rangeFadeState.flushPending = true
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.5, RF_FlushCoalesced)
+        else
+            -- Fallback: apply immediately if timers are unavailable (shouldn't happen on modern clients).
+            RF_FlushCoalesced()
+        end
     end
 
     local function buildRangeFadeSpellList()
@@ -2653,6 +2735,10 @@ end
 
 function _G.MSUF_RangeFadeReset()
     clearTable(rangeFadeState.spellStates)
+    rangeFadeState.checkedCount = 0
+    rangeFadeState.inRangeCount = 0
+    rangeFadeState.dirty = false
+    rangeFadeState.flushPending = false
     rangeFadeState.inRange = true
     applyRangeFadeAlpha(true, true)
 end
@@ -2666,12 +2752,36 @@ end
     end
     if isRangeFadeIgnored(id) then return end
     if not id or not rangeFadeState.activeSpells[id] then return end
+    local old = rangeFadeState.spellStates[id]
+    local newVal = nil
     if checksRange then
-        rangeFadeState.spellStates[id] = (isInRange == true)
+        newVal = (isInRange == true)
+        rangeFadeState.spellStates[id] = newVal
     else
         rangeFadeState.spellStates[id] = nil
     end
-    recomputeRangeFade()
+
+    -- Maintain counters (checkedCount = entries, inRangeCount = entries with true).
+    if old == nil and newVal ~= nil then
+        rangeFadeState.checkedCount = (rangeFadeState.checkedCount or 0) + 1
+        if newVal == true then
+            rangeFadeState.inRangeCount = (rangeFadeState.inRangeCount or 0) + 1
+        end
+    elseif old ~= nil and newVal == nil then
+        rangeFadeState.checkedCount = (rangeFadeState.checkedCount or 0) - 1
+        if old == true then
+            rangeFadeState.inRangeCount = (rangeFadeState.inRangeCount or 0) - 1
+        end
+    elseif old ~= nil and newVal ~= nil and old ~= newVal then
+        if old == true then
+            rangeFadeState.inRangeCount = (rangeFadeState.inRangeCount or 0) - 1
+        elseif newVal == true then
+            rangeFadeState.inRangeCount = (rangeFadeState.inRangeCount or 0) + 1
+        end
+    end
+
+    rangeFadeState.dirty = true
+    RF_ScheduleCoalescedFlush()
 end
 
 function _G.MSUF_RangeFadeUpdateSpells()
@@ -2702,8 +2812,19 @@ function _G.MSUF_RangeFadeUpdateSpells()
             rangeFadeState.activeSpells[spellId] = true
         end
     end
+    -- Recount (spell list rebuild is relatively rare, so a single scan is fine here).
+    rangeFadeState.checkedCount = 0
+    rangeFadeState.inRangeCount = 0
+    for _, v in pairs(rangeFadeState.spellStates) do
+        rangeFadeState.checkedCount = rangeFadeState.checkedCount + 1
+        if v == true then
+            rangeFadeState.inRangeCount = rangeFadeState.inRangeCount + 1
+        end
+    end
 
-    recomputeRangeFade()
+    rangeFadeState.dirty = false
+    rangeFadeState.flushPending = false
+    recomputeRangeFade(true)
 end
 
 -- Drive updates.

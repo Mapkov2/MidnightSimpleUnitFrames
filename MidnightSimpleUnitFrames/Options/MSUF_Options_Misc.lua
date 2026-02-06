@@ -645,7 +645,9 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
             gp.rangeFadeEnabled = v and true or false
 
             local RF = _G.MSUF_RangeFade
-            if RF and RF.EnsureTicker and RF.Tick then
+            if RF and RF.Enable and RF.Disable then
+                if gp.rangeFadeEnabled then RF:Enable() else RF:Disable() end
+            elseif RF and RF.EnsureTicker and RF.Tick then
                 RF:EnsureTicker()
                 RF:Tick()
             elseif _G.MSUF_RefreshAllUnitAlphas then
