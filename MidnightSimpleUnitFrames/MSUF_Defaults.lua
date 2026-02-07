@@ -1,8 +1,5 @@
---[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua"); local addonName, ns = ...
 ns = ns or {}
-
 -- MSUF Defaults / DB initialization
-
 -- ---------------------------------------------------------------------------
 -- Factory default profile (MSUF2 compact string)
 --
@@ -12,30 +9,22 @@ ns = ns or {}
 -- Existing installs are NOT overwritten. This only runs when MSUF_DB was
 -- created empty in this session.
 -- ---------------------------------------------------------------------------
-
 local MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = [[MSUF2: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]]
-
-local function MSUF_Defaults_TryDecodeCompactString(str) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6");
-    if type(str) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
-
+local function MSUF_Defaults_TryDecodeCompactString(str)
+    if type(str) ~= "string" then  return nil end
     local E = _G and _G.C_EncodingUtil
-    if type(E) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
-    if type(E.DeserializeCBOR) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
-    if type(E.DecompressString) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
-    if type(E.DecodeBase64) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
-
+    if type(E) ~= "table" then  return nil end
+    if type(E.DeserializeCBOR) ~= "function" then  return nil end
+    if type(E.DecompressString) ~= "function" then  return nil end
+    if type(E.DecodeBase64) ~= "function" then  return nil end
     local ok, b64 = pcall(string.match, str, "^%s*MSUF2:%s*(.-)%s*$")
-    if not ok or type(b64) ~= "string" or b64 == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
-
+    if not ok or type(b64) ~= "string" or b64 == "" then  return nil end
     local ok2, cleaned = pcall(string.gsub, b64, "%s+", "")
-    if not ok2 or type(cleaned) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
+    if not ok2 or type(cleaned) ~= "string" then  return nil end
     b64 = cleaned
-
     local ok3, comp = pcall(E.DecodeBase64, b64)
-    if not ok3 or type(comp) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
-
+    if not ok3 or type(comp) ~= "string" then  return nil end
     local method = (_G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate) or nil
-
     local ok4, bin
     if method ~= nil then
         ok4, bin = pcall(E.DecompressString, comp, method)
@@ -43,20 +32,17 @@ local function MSUF_Defaults_TryDecodeCompactString(str) Perfy_Trace(Perfy_GetTi
     if not ok4 or type(bin) ~= "string" then
         ok4, bin = pcall(E.DecompressString, comp)
     end
-    if not ok4 or type(bin) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
-
+    if not ok4 or type(bin) ~= "string" then  return nil end
     local ok5, tbl = pcall(E.DeserializeCBOR, bin)
-    if not ok5 or type(tbl) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return nil end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryDecodeCompactString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:18:6"); return tbl
+    if not ok5 or type(tbl) ~= "table" then  return nil end
+     return tbl
 end
-
-local function MSUF_Defaults_WipeInPlace(t) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Defaults_WipeInPlace file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:53:6");
-    if type(t) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_WipeInPlace file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:53:6"); return end
+local function MSUF_Defaults_WipeInPlace(t)
+    if type(t) ~= "table" then  return end
     for k in pairs(t) do t[k] = nil end
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_WipeInPlace file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:53:6"); end
-
-local function MSUF_Defaults_DeepCopy(dst, src) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Defaults_DeepCopy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:58:6");
-    if type(dst) ~= "table" or type(src) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_DeepCopy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:58:6"); return end
+ end
+local function MSUF_Defaults_DeepCopy(dst, src)
+    if type(dst) ~= "table" or type(src) ~= "table" then  return end
     for k, v in pairs(src) do
         local tk = type(k)
         if tk == "string" or tk == "number" then
@@ -75,29 +61,23 @@ local function MSUF_Defaults_DeepCopy(dst, src) Perfy_Trace(Perfy_GetTime(), "En
             end
         end
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_DeepCopy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:58:6"); end
-
-
+ end
 -- Fresh-install overrides (applied only when the factory profile payload is seeded).
 -- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
-local function MSUF_Defaults_ApplyFreshInstallOverrides(db) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Defaults_ApplyFreshInstallOverrides file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:83:6");
-    if type(db) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_ApplyFreshInstallOverrides file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:83:6"); return end
-
-    local function ForceUnitAlpha100(conf) Perfy_Trace(Perfy_GetTime(), "Enter", "ForceUnitAlpha100 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:86:10");
-        if type(conf) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "ForceUnitAlpha100 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:86:10"); return end
+local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
+    if type(db) ~= "table" then  return end
+    local function ForceUnitAlpha100(conf)
+        if type(conf) ~= "table" then  return end
         -- Main alpha (used when layered alpha is off)
         conf.alphaInCombat = 1
         conf.alphaOutOfCombat = 1
-
         -- Layered alpha (used when "Keep text/portrait visible" is on)
         conf.alphaFGInCombat = 1
         conf.alphaFGOutOfCombat = 1
         conf.alphaBGInCombat = 1
         conf.alphaBGOutOfCombat = 1
-    Perfy_Trace(Perfy_GetTime(), "Leave", "ForceUnitAlpha100 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:86:10"); end
-
+     end
     ForceUnitAlpha100(db.player)
-
     -- Fresh-install default: player name hidden
     if type(db.player) == "table" then
         db.player.showName = false
@@ -108,7 +88,6 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db) Perfy_Trace(Perfy_Ge
     ForceUnitAlpha100(db.boss)
     ForceUnitAlpha100(db.targettarget)
     ForceUnitAlpha100(db.tot)
-
     -- Fresh-install defaults: status indicators (AFK/DND) off by default
     local g = db.general
     if type(g) == 'table' then
@@ -117,53 +96,43 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db) Perfy_Trace(Perfy_Ge
         si.showAFK = false
         si.showDND = false
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_ApplyFreshInstallOverrides file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:83:6"); end
-
-local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6");
-    if type(MSUF_DB) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); return end
+ end
+local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
+    if type(MSUF_DB) ~= "table" then  return end
     local g = (type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
     if g and g._msufFactoryProfileApplied then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); return
+         return
     end
-
     -- Only seed when the DB was just created empty.
     -- (Existing installs always already have keys before EnsureDB_Heavy runs.)
     local isEmpty = (next(MSUF_DB) == nil)
     if not isEmpty then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); return
+         return
     end
-
     local tbl = MSUF_Defaults_TryDecodeCompactString(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
-    if type(tbl) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); return end
+    if type(tbl) ~= "table" then  return end
     local payload = tbl.payload
-    if type(payload) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); return end
-
+    if type(payload) ~= "table" then  return end
     -- Replace the empty DB with the decoded payload.
     MSUF_Defaults_DeepCopy(MSUF_DB, payload)
     MSUF_Defaults_ApplyFreshInstallOverrides(MSUF_DB)
     MSUF_DB.general = MSUF_DB.general or {}
     MSUF_DB.general._msufFactoryProfileApplied = true
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:122:6"); end
-
+ end
 local MSUF_DB_LastHeavyRun
-
-function MSUF_EnsureDB_Heavy() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_EnsureDB_Heavy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:150:0");
+function MSUF_EnsureDB_Heavy()
     if not MSUF_DB then
         MSUF_DB = {}
     end
-
     -- Seed brand-new installs / hard-resets from the factory profile payload.
     MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
-
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
     MSUF_DB.classColors = MSUF_DB.classColors or {}
     MSUF_DB.npcColors = MSUF_DB.npcColors or {}
-
     if g.fontKey == nil then
         g.fontKey = "FRIZQT"
     end
-
     if g.hardKillBlizzardPlayerFrame == nil then
         -- Default: Hard-hide Blizzard PlayerFrame (compat mode OFF).
         g.hardKillBlizzardPlayerFrame = true
@@ -171,12 +140,9 @@ function MSUF_EnsureDB_Heavy() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Ensur
 if g.anchorName == nil then
     g.anchorName = "UIParent"
 end
-
 if g.anchorToCooldown == nil then
     g.anchorToCooldown = false
 end
-
-
 -- New install defaults (UI scale + Flash menu anchor)
 -- Default: scaling OFF. Blizzard handles UI scale unless the user explicitly enables MSUF scaling.
 if g.disableScaling == nil then
@@ -190,7 +156,6 @@ end
 if g.msufUiScale == nil then
     g.msufUiScale = 1.0
 end
-
 if g.flashFullPoint == nil then g.flashFullPoint = "LEFT" end
 if g.flashFullRelPoint == nil then g.flashFullRelPoint = "LEFT" end
 if g.flashFullX == nil then g.flashFullX = -2.0000178813934 end
@@ -199,12 +164,9 @@ if g.flashFullW == nil then g.flashFullW = 880.75018310547 end
 if g.flashFullH == nil then g.flashFullH = 628.50018310547 end
 if g.flashFullXpx == nil then g.flashFullXpx = -1.4222349723183 end
 if g.flashFullYpx == nil then g.flashFullYpx = 65.244446024299 end
-
 if g.tipCycleIndex == nil then
     g.tipCycleIndex = 11
 end
-
-
 -- Minimap icon (LibDBIcon) defaults
 if g.showMinimapIcon == nil then
     g.showMinimapIcon = true
@@ -216,19 +178,16 @@ else
     if g.minimapIconDB.minimapPos == nil then g.minimapIconDB.minimapPos = 220 end
     if g.minimapIconDB.radius == nil then g.minimapIconDB.radius = 80 end
 end
-
 -- Target select / target lost sounds (opt-in; matches default Blizzard UI behavior)
 -- Default OFF to avoid changing behavior for existing users.
 if g.playTargetSelectLostSounds == nil then
     g.playTargetSelectLostSounds = false
 end
-
 -- Fonts: optionally color the *power text* by the unit's current power type (mana/rage/energy/etc).
 -- Default OFF to preserve existing behavior.
 if g.colorPowerTextByType == nil then
     g.colorPowerTextByType = false
 end
-
     if g.editModeSnapToGrid == nil then
         g.editModeSnapToGrid = false -- Default: Snap OFF
     end
@@ -250,7 +209,6 @@ end
 if g.editModeHideWhiteArrows == nil then
     g.editModeHideWhiteArrows = true
 end
-
     if g.linkEditModes == nil then
         g.linkEditModes = true
     end
@@ -263,19 +221,16 @@ end
     if g.darkBgBrightness == nil then
         g.darkBgBrightness = 0.25      -- 25% Grau als Standard
     end
-
     if g.classBarBgR == nil or g.classBarBgG == nil or g.classBarBgB == nil then
         g.classBarBgR = 0.0   -- default: black background
         g.classBarBgG = 0.0
         g.classBarBgB = 0.0
     end
-
     -- If enabled, bar background tint color follows the current HP bar color (class/reaction/unified),
     -- instead of using the custom tint swatch.
     if g.barBgMatchHPColor == nil then
         g.barBgMatchHPColor = false
     end
-
     if g.enableGradient == nil then
         g.enableGradient = true
     end
@@ -285,11 +240,8 @@ end
     if g.gradientStrength == nil then
         g.gradientStrength = 0.45
     end
-
-
 do
     local hasNew = (g.gradientDirLeft ~= nil) or (g.gradientDirRight ~= nil) or (g.gradientDirUp ~= nil) or (g.gradientDirDown ~= nil)
-
     if not hasNew then
         local dir = g.gradientDirection
         if type(dir) ~= "string" or dir == "" then
@@ -297,7 +249,6 @@ do
         else
             dir = string.upper(dir)
         end
-
         if dir == "LEFT" then
             g.gradientDirLeft = true
         elseif dir == "UP" then
@@ -308,16 +259,13 @@ do
             g.gradientDirRight = true
         end
     end
-
     if g.gradientDirLeft == nil then g.gradientDirLeft = false end
     if g.gradientDirRight == nil then g.gradientDirRight = false end
     if g.gradientDirUp == nil then g.gradientDirUp = false end
     if g.gradientDirDown == nil then g.gradientDirDown = false end
-
     if (not g.gradientDirLeft) and (not g.gradientDirRight) and (not g.gradientDirUp) and (not g.gradientDirDown) then
         g.gradientDirRight = true
     end
-
     -- Keep legacy key as a reasonable fallback for older builds/tools.
     if type(g.gradientDirection) ~= "string" or g.gradientDirection == "" then
         g.gradientDirection = "RIGHT"
@@ -363,7 +311,6 @@ end
         if type(g.unifiedBarG) ~= "number" then g.unifiedBarG = 0.60 end
         if type(g.unifiedBarB) ~= "number" then g.unifiedBarB = 0.90 end
     end
-
     if g.useBarBorder == nil then
         g.useBarBorder = true
     end
@@ -385,8 +332,6 @@ end
     if g.fontColor == nil then
         g.fontColor = "white"
     end
-
-
     if g.shortenNameMaxChars == nil then
         g.shortenNameMaxChars = 6
     end
@@ -408,7 +353,6 @@ end
         g.fontColorCustomG = nil
         g.fontColorCustomB = nil
     end
-
         if g.textBackdrop == nil then
         g.textBackdrop = true
     end
@@ -424,7 +368,6 @@ end
             g.highlightColor = "white"
         end
     end
-
     -- Status indicators (AFK/DND/Dead/Ghost toggles)
     if g.statusIndicators == nil then
         g.statusIndicators = {}
@@ -434,12 +377,10 @@ end
     if si.showDND == nil then si.showDND = false end
     if si.showDead == nil then si.showDead = true end
     if si.showGhost == nil then si.showGhost = true end
-
     if g.frameUpdateInterval == nil or type(g.frameUpdateInterval) ~= "number" then
         g.frameUpdateInterval = 0.05
     end
     MSUF_FrameUpdateInterval = g.frameUpdateInterval
-
     if g.castbarUpdateInterval == nil or type(g.castbarUpdateInterval) ~= "number" then
         g.castbarUpdateInterval = 0.02
     end
@@ -451,16 +392,12 @@ end
     if g.ufcoreUrgentMaxPerFlush == nil or type(g.ufcoreUrgentMaxPerFlush) ~= "number" then
         g.ufcoreUrgentMaxPerFlush = 10
     end
-
-
     if g.disableUnitInfoTooltips == nil then
         g.disableUnitInfoTooltips = true
     end
-
     if g.unitInfoTooltipStyle == nil then
         g.unitInfoTooltipStyle = "classic"
     end
-
     if g.castbarInterruptibleColor == nil then
         g.castbarInterruptibleColor = "turquoise"
     end
@@ -470,7 +407,6 @@ end
     if g.castbarInterruptColor == nil then
         g.castbarInterruptColor = "red"
     end
-
     if g.playerCastbarOverrideEnabled == nil then
         g.playerCastbarOverrideEnabled = true
     end
@@ -489,26 +425,20 @@ if g.castbarUnifiedFillDirection ~= nil then
         end
         g.castbarUnifiedFillDirection = nil
     end
-
     if g.castbarUnifiedDirection == nil then
         g.castbarUnifiedDirection = false
     end
-
     -- Channeled casts: show 5 tick lines (channel tick markers)
     if g.castbarShowChannelTicks == nil then
         g.castbarShowChannelTicks = false
     end
-
-
     -- GCD/Instant-cast bar (disabled by default; options treat nil as enabled)
     if g.showGCDBar == nil then g.showGCDBar = false end
     if g.showGCDBarTime == nil then g.showGCDBarTime = true end
     if g.showGCDBarSpell == nil then g.showGCDBarSpell = true end
-
     if g.empowerColorStages == nil then
         g.empowerColorStages = true
     end
-
     if g.empowerStageBlink == nil then
         g.empowerStageBlink = true
     end
@@ -524,11 +454,9 @@ if g.castbarUnifiedFillDirection ~= nil then
     if g.enablePlayerCastbar == nil then
         g.enablePlayerCastbar = true
     end
-
     if g.enableBossCastbar == nil then
         g.enableBossCastbar = true
     end
-
 if g.showPlayerCastTime == nil then
     g.showPlayerCastTime = true
 end
@@ -541,22 +469,18 @@ end
 if g.showBossCastTime == nil then
     g.showBossCastTime = true
 end
-
 if g.bossCastbarOffsetX == nil then
     g.bossCastbarOffsetX = 2
 end
 if g.bossCastbarOffsetY == nil then
     g.bossCastbarOffsetY = -46
 end
-
 if g.bossCastbarWidth == nil then
     g.bossCastbarWidth = 176
 end
 if g.bossCastbarHeight == nil then
     g.bossCastbarHeight = 12
 end
-
-
     if g.castbarShowIcon == nil then
         g.castbarShowIcon = true
     end
@@ -566,18 +490,15 @@ end
     if g.castbarShakeStrength == nil then
         g.castbarShakeStrength = 8   -- pixels; 0 = no movement
     end
-
     if g.castbarSpellNameFontSize == nil then
         g.castbarSpellNameFontSize = 0
     end
-
     if g.castbarIconOffsetX == nil then
         g.castbarIconOffsetX = 0
     end
     if g.castbarIconOffsetY == nil then
         g.castbarIconOffsetY = 0
     end
-
     if g.castbarTargetOffsetX == nil then
         g.castbarTargetOffsetX = 0
     end
@@ -590,7 +511,6 @@ end
     if g.castbarFocusOffsetY == nil then
         g.castbarFocusOffsetY = -50
     end
-
     if g.castbarPlayerOffsetX == nil then
         g.castbarPlayerOffsetX = -2
     end
@@ -609,7 +529,6 @@ end
     if g.castbarFocusTimeOffsetY == nil then
         g.castbarFocusTimeOffsetY = g.castbarPlayerTimeOffsetY or 0
     end
-
     if g.castbarTargetTimeOffsetX == nil then
         g.castbarTargetTimeOffsetX = g.castbarPlayerTimeOffsetX or -2
     end
@@ -622,8 +541,6 @@ end
     if g.castbarGlobalHeight == nil then
         g.castbarGlobalHeight = 18   -- Standardhöhe
     end
-
-
     -- Per-castbar default sizes (match Edit Mode preview defaults)
     if g.castbarPlayerBarWidth == nil then g.castbarPlayerBarWidth = 271 end
     if g.castbarPlayerBarHeight == nil then g.castbarPlayerBarHeight = 18 end
@@ -631,11 +548,9 @@ end
     if g.castbarTargetBarHeight == nil then g.castbarTargetBarHeight = 18 end
     if g.castbarFocusBarWidth == nil then g.castbarFocusBarWidth = 175 end
     if g.castbarFocusBarHeight == nil then g.castbarFocusBarHeight = 18 end
-
     if g.castbarPlayerPreviewEnabled == nil then
         g.castbarPlayerPreviewEnabled = true
     end
-
 -- Legacy Auras 1.x DB cleanup (Patch 6D Step 2)
 g.targetAuraFilter = nil
 g.targetAuraWidth = nil
@@ -645,7 +560,6 @@ g.targetAuraAlpha = nil
 g.targetAuraOffsetX = nil
 g.targetAuraOffsetY = nil
 g.targetAuraDisplay = nil
-
 if g.fontSize == nil then
         g.fontSize = 14
     end
@@ -654,8 +568,6 @@ if g.fontSize == nil then
     if g.hpFontSize == nil then g.hpFontSize = 14 end
     if g.powerFontSize == nil then g.powerFontSize = 14 end
     if g.auraFontSize == nil then g.auraFontSize = 25 end
-
-
     if g.castbarBackgroundTexture == nil then
         g.castbarBackgroundTexture = "Solid"
     end
@@ -663,12 +575,10 @@ if g.fontSize == nil then
 if g.castbarTexture == nil then
     g.castbarTexture = "Solid"
 end
-
 -- Castbar visuals
 if g.castbarShowGlow == nil then
     g.castbarShowGlow = false
 end
-
 -- Aura highlight colors (used by Auras 2.0 highlight pipeline)
 if g.aurasOwnBuffHighlightColor == nil then
     g.aurasOwnBuffHighlightColor = { ["1"] = 1, ["2"] = 0.85, ["3"] = 0.2 }
@@ -679,31 +589,25 @@ end
 if g.aurasStackCountColor == nil then
     g.aurasStackCountColor = { ["1"] = 1, ["2"] = 1, ["3"] = 1 }
 end
-
-
     -- Per-castbar toggles + offsets
     if g.castbarTargetShowIcon == nil then g.castbarTargetShowIcon = true end
     if g.castbarFocusShowIcon == nil then g.castbarFocusShowIcon = true end
     if g.castbarPlayerShowIcon == nil then g.castbarPlayerShowIcon = true end
-
     if g.castbarTargetShowSpellName == nil then g.castbarTargetShowSpellName = true end
     if g.castbarFocusShowSpellName == nil then g.castbarFocusShowSpellName = true end
     if g.castbarPlayerShowSpellName == nil then g.castbarPlayerShowSpellName = true end
-
     if g.castbarTargetTextOffsetX == nil then g.castbarTargetTextOffsetX = 0 end
     if g.castbarTargetTextOffsetY == nil then g.castbarTargetTextOffsetY = 0 end
     if g.castbarFocusTextOffsetX == nil then g.castbarFocusTextOffsetX = 0 end
     if g.castbarFocusTextOffsetY == nil then g.castbarFocusTextOffsetY = 0 end
     if g.castbarPlayerTextOffsetX == nil then g.castbarPlayerTextOffsetX = 0 end
     if g.castbarPlayerTextOffsetY == nil then g.castbarPlayerTextOffsetY = 0 end
-
     if g.castbarTargetIconOffsetX == nil then g.castbarTargetIconOffsetX = 0 end
     if g.castbarTargetIconOffsetY == nil then g.castbarTargetIconOffsetY = 0 end
     if g.castbarFocusIconOffsetX == nil then g.castbarFocusIconOffsetX = 0 end
     if g.castbarFocusIconOffsetY == nil then g.castbarFocusIconOffsetY = 0 end
     if g.castbarPlayerIconOffsetX == nil then g.castbarPlayerIconOffsetX = 0 end
     if g.castbarPlayerIconOffsetY == nil then g.castbarPlayerIconOffsetY = 0 end
-
     -- Boss castbar UI bits (BossCastbars module reads these from general)
     if g.showBossCastIcon == nil then g.showBossCastIcon = true end
     if g.showBossCastName == nil then g.showBossCastName = true end
@@ -714,22 +618,18 @@ end
     if g.bossCastTextOffsetY == nil then g.bossCastTextOffsetY = 0 end
     if g.bossCastTimeOffsetX == nil then g.bossCastTimeOffsetX = 0 end
     if g.bossCastTimeOffsetY == nil then g.bossCastTimeOffsetY = 0 end
-
     -- Focus Kick Icon defaults
     if g.enableFocusKickIcon == nil then g.enableFocusKickIcon = false end
     if g.focusKickIconWidth == nil then g.focusKickIconWidth = 40 end
     if g.focusKickIconHeight == nil then g.focusKickIconHeight = 40 end
     if g.focusKickIconOffsetX == nil then g.focusKickIconOffsetX = 300 end
     if g.focusKickIconOffsetY == nil then g.focusKickIconOffsetY = 0 end
-
     if g.barTexture == nil then
         g.barTexture = "Solid"
     end
-
     if g.barBackgroundTexture == nil then
         g.barBackgroundTexture = "Solid"
     end
-
     -- Absorb bar texture overrides (optional; nil/"" = follow foreground texture)
     if g.absorbBarTexture ~= nil and type(g.absorbBarTexture) ~= "string" then
         g.absorbBarTexture = nil
@@ -743,61 +643,49 @@ end
     if g.healAbsorbBarTexture == "" then
         g.healAbsorbBarTexture = nil
     end
-
     -- Best-effort validation: if we can confidently resolve a statusbar key and it fails,
     -- fall back to nil ("follow foreground") so users don't get broken textures after removing SharedMedia packs.
-    local function _MSUF_IsValidStatusbarKey(key) Perfy_Trace(Perfy_GetTime(), "Enter", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10");
-        if type(key) ~= "string" or key == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return false end
-
+    local function _MSUF_IsValidStatusbarKey(key)
+        if type(key) ~= "string" or key == "" then  return false end
         if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
             local ok, tex = pcall(_G.MSUF_ResolveStatusbarTextureKey, key)
             if ok and type(tex) == "string" and tex ~= "" then
-                Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return true
+                 return true
             end
-            Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return false
+             return false
         end
-
         local LSM = (ns and ns.LSM) or _G.MSUF_LSM
         if LSM and type(LSM.Fetch) == "function" then
             local ok, tex = pcall(LSM.Fetch, LSM, "statusbar", key, true)
             if ok and type(tex) == "string" and tex ~= "" then
-                Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return true
+                 return true
             end
-            Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return false
+             return false
         end
-
         -- Can't validate in this session (no resolver/LSM yet): keep the value to avoid unintended resets.
-        Perfy_Trace(Perfy_GetTime(), "Leave", "_MSUF_IsValidStatusbarKey file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:749:10"); return true
+         return true
     end
-
     if g.absorbBarTexture ~= nil and not _MSUF_IsValidStatusbarKey(g.absorbBarTexture) then
         g.absorbBarTexture = nil
     end
     if g.healAbsorbBarTexture ~= nil and not _MSUF_IsValidStatusbarKey(g.healAbsorbBarTexture) then
         g.healAbsorbBarTexture = nil
     end
-
-
     if g.hpTextMode == nil then
         g.hpTextMode = "FULL_PLUS_PERCENT"
     end
-
     if g.hpTextSeparator == nil then
         g.hpTextSeparator = "-"
     end
-
-
     if g.powerTextSeparator == nil then
         g.powerTextSeparator = g.hpTextSeparator
     end
-
     if g.hpTextSpacerEnabled == nil then
         g.hpTextSpacerEnabled = false
     end
     if g.hpTextSpacerX == nil then
         g.hpTextSpacerX = 140
     end
-
     -- Which unit's HP spacer settings are currently shown/edited in the Bars menu.
     -- This is purely a UI selection state (does not change gameplay behavior).
     if g.hpSpacerSelectedUnitKey == nil then
@@ -806,7 +694,6 @@ end
     if g.hpSpacerSelectedUnitKey == "tot" then
         g.hpSpacerSelectedUnitKey = "targettarget"
     end
-
     -- HP spacer is now per-unit (Step 4). Keep legacy general.* values as fallback,
     -- but migrate them into per-unit fields once (without overwriting per-unit edits).
     local legacyHpSpacerEnabled = g.hpTextSpacerEnabled
@@ -827,8 +714,6 @@ end
             u.hpTextSpacerX = 140
         end
     end
-
-
     -- Power text spacer (per-unit; matches HP spacer behavior)
     if g.powerTextSpacerEnabled == nil then
         g.powerTextSpacerEnabled = false
@@ -836,11 +721,9 @@ end
     if g.powerTextSpacerX == nil then
         g.powerTextSpacerX = 140
     end
-
     do
         local legacyEnabled = g.powerTextSpacerEnabled
         local legacyX = g.powerTextSpacerX
-
         for _, unitKey in ipairs({"player","target","focus","targettarget","pet","boss"}) do
             local u = MSUF_DB[unitKey]
             if type(u) == "table" then
@@ -862,16 +745,12 @@ end
     if g.powerTextMode == nil then
         g.powerTextMode = "FULL_PLUS_PERCENT"
     end
-
     if g.showTotalAbsorbAmount == nil then
         g.showTotalAbsorbAmount = false
     end
-
     if g.enableAbsorbBar == nil then
         g.enableAbsorbBar = true
     end
-
-
     -- Absorb display dropdown stores a mode; keep runtime flags in sync on load.
     if g.absorbTextMode ~= nil then
         local mode = tonumber(g.absorbTextMode)
@@ -889,24 +768,19 @@ end
             g.showTotalAbsorbAmount = true
         end
     end
-
     if g.absorbAnchorMode == nil then
         -- 1 = Left Absorb, Right Heal-Absorb; 2 = Right Absorb, Left Heal-Absorb (default)
         g.absorbAnchorMode = 2
     end
-
     if g.showLeaderIcon == nil then
         g.showLeaderIcon = true
     end
-
     if g.leaderIconOffsetX == nil then
         g.leaderIconOffsetX = 0
     end
     if g.leaderIconOffsetY == nil then
         g.leaderIconOffsetY = 3
     end
-
-
     -- Level indicator offset (global)
     if g.levelIndicatorOffsetX == nil then
         g.levelIndicatorOffsetX = 0
@@ -914,8 +788,6 @@ end
     if g.levelIndicatorOffsetY == nil then
         g.levelIndicatorOffsetY = 0
     end
-
-
     if g.levelIndicatorAnchor == nil then
         g.levelIndicatorAnchor = 'NAMERIGHT'
     end
@@ -926,20 +798,17 @@ end
     if g.incomingResIndicatorPos == nil then
         g.incomingResIndicatorPos = 'TOPRIGHT'
     end
-
     if g.showCombatStateIndicator == nil then
         g.showCombatStateIndicator = true
     end
     if g.combatStateIndicatorPos == nil then
         g.combatStateIndicatorPos = 'TOPLEFT'
     end
-
     -- Status Icons (Summon / Resting)
     -- These are used by the Unitframe Status element (player/target) and can be overridden per-unit in the Frames menu.
     if g.showRestingIndicator == nil then
         g.showRestingIndicator = true
     end
-
 	-- Rested icon defaults ("Moon Zzzz")
 	-- Requirement: default size 30 and anchored TOPLEFT.
 	-- Only apply when the profile does not already carry explicit values (no regression for users who moved it).
@@ -958,21 +827,16 @@ end
 	if g.restedStateIndicatorSize == nil or type(g.restedStateIndicatorSize) ~= "number" or g.restedStateIndicatorSize <= 0 then
 		g.restedStateIndicatorSize = 30
 	end
-
-
     if g.stateIconsTestMode == nil then
         g.stateIconsTestMode = false
     end
-
     -- Player indicators (Frames -> Player)
     if g.showLevel == nil then
         g.showLevel = true
     end
-
     if g.showRaidMarker == nil then
         g.showRaidMarker = true
     end
-
     local legacyShowRaidMarker = g.showRaidMarker
     for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
         MSUF_DB[key] = MSUF_DB[key] or {}
@@ -982,9 +846,7 @@ end
         if MSUF_DB[key].showRaidMarker == nil then
             MSUF_DB[key].showRaidMarker = true
         end
-
 end
-
 local legacyRaidMarkerOffsetX = g.raidMarkerOffsetX
 local legacyRaidMarkerOffsetY = g.raidMarkerOffsetY
 local legacyRaidMarkerAnchor  = g.raidMarkerAnchor
@@ -992,7 +854,6 @@ local legacyRaidMarkerSize    = g.raidMarkerSize
 for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
     MSUF_DB[key] = MSUF_DB[key] or {}
     local conf = MSUF_DB[key]
-
     if conf.raidMarkerOffsetX == nil and legacyRaidMarkerOffsetX ~= nil then
         conf.raidMarkerOffsetX = legacyRaidMarkerOffsetX
     end
@@ -1005,7 +866,6 @@ for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
     if conf.raidMarkerSize == nil and legacyRaidMarkerSize ~= nil then
         conf.raidMarkerSize = legacyRaidMarkerSize
     end
-
     if conf.raidMarkerOffsetX == nil then
         if key == "player" then
             conf.raidMarkerOffsetX = 21
@@ -1025,14 +885,12 @@ for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
     end
     if conf.raidMarkerSize == nil then conf.raidMarkerSize = 14 end
 end
-
 if MSUF_DB.bars == nil then
         MSUF_DB.bars = {}
     end
     if MSUF_DB.bars.showTargetPowerBar == nil then
         MSUF_DB.bars.showTargetPowerBar = true
     end
-
         if MSUF_DB.bars.showBossPowerBar == nil then
         MSUF_DB.bars.showBossPowerBar = true
     end
@@ -1045,7 +903,6 @@ if MSUF_DB.bars == nil then
     if MSUF_DB.bars.showBarBorder == nil then
         MSUF_DB.bars.showBarBorder = true
     end
-
     if MSUF_DB.bars.powerBarHeight == nil then
         MSUF_DB.bars.powerBarHeight = 3
     end
@@ -1056,8 +913,6 @@ if MSUF_DB.bars == nil then
         -- Users who want the legacy behavior can disable this in Bars.
         MSUF_DB.bars.embedPowerBarIntoHealth = true
     end
-
-
 if MSUF_DB.bars.barOutlineThickness == nil then
     -- New slider-based bar outline. Backwards compatible default:
     -- - If legacy border is off -> 0
@@ -1069,7 +924,6 @@ if MSUF_DB.bars.barOutlineThickness == nil then
     if MSUF_DB.bars.showBarBorder ~= nil then
         enabled = (MSUF_DB.bars.showBarBorder ~= false)
     end
-
     if not enabled then
         MSUF_DB.bars.barOutlineThickness = 0
     else
@@ -1078,13 +932,10 @@ if MSUF_DB.bars.barOutlineThickness == nil then
         MSUF_DB.bars.barOutlineThickness = map[style] or 2
     end
 end
-
 -- Bar background alpha (0..100). Independent from unit alpha in/out of combat.
 if MSUF_DB.bars.barBackgroundAlpha == nil then
     MSUF_DB.bars.barBackgroundAlpha = 90
 end
-
-
     -- Gameplay defaults (module-safe: some modules expect MSUF_DB.gameplay to exist)
     if MSUF_DB.gameplay == nil then
         MSUF_DB.gameplay = {}
@@ -1095,44 +946,32 @@ end
     if gp.combatFontSize == nil then gp.combatFontSize = 24 end
     if gp.combatOffsetX == nil then gp.combatOffsetX = 0 end
     if gp.combatOffsetY == nil then gp.combatOffsetY = -200 end
-
     if gp.enableCombatStateText == nil then gp.enableCombatStateText = false end
     if gp.lockCombatState == nil then gp.lockCombatState = false end
     if gp.combatStateFontSize == nil then gp.combatStateFontSize = 24 end
     if gp.combatStateOffsetX == nil then gp.combatStateOffsetX = 0 end
     if gp.combatStateOffsetY == nil then gp.combatStateOffsetY = 80 end
     if gp.combatStateDuration == nil then gp.combatStateDuration = 1.5 end
-
     if gp.enableCombatCrosshair == nil then gp.enableCombatCrosshair = false end
     if gp.enableCombatCrosshairMeleeRangeColor == nil then gp.enableCombatCrosshairMeleeRangeColor = false end
     if gp.crosshairSize == nil then gp.crosshairSize = 40 end
     if gp.crosshairThickness == nil then gp.crosshairThickness = 2 end
-
     if gp.cooldownIcons == nil then gp.cooldownIcons = false end
     if gp.enableFirstDanceTimer == nil then gp.enableFirstDanceTimer = false end
     if gp.nameplateMeleeSpellID == nil then gp.nameplateMeleeSpellID = 0 end
-
-
     -- Gameplay: Range fade for Target/Focus (default ON)
     -- Dims Target/Focus unitframes to a fixed alpha when the unit is out of range.
-    if gp.rangeFadeEnabled == nil then gp.rangeFadeEnabled = true end
-    if gp.rangeFadeAlpha == nil then gp.rangeFadeAlpha = 0.5 end
-    if gp.rangeFadeMaxRange == nil then gp.rangeFadeMaxRange = 40 end
-    if gp.rangeFadeTick == nil then gp.rangeFadeTick = 0.25 end
-
-    -- Gameplay: Crosshair melee range spell can optionally be stored per class.
+-- Gameplay: Crosshair melee range spell can optionally be stored per class.
     -- This lets users run a single profile across multiple characters without
     -- having to swap the spell whenever they change class.
     if gp.meleeSpellPerClass == nil then gp.meleeSpellPerClass = false end
     if gp.nameplateMeleeSpellIDByClass == nil then gp.nameplateMeleeSpellIDByClass = {} end
     -- Auras: legacy auras DB removed in Patch 6D Step 2 (Auras 2.0 uses MSUF_DB.auras2)
     if MSUF_DB.auras ~= nil then MSUF_DB.auras = nil end
-
 -- Root toggle: Shorten unit names (Frames -> General)
 if MSUF_DB.shortenNames == nil then
     MSUF_DB.shortenNames = false
 end
-
 -- Auras 2.0 defaults (new installs / reset profile)
     if MSUF_DB.auras2 == nil then
         MSUF_DB.auras2 = {
@@ -1260,7 +1099,6 @@ filters = {
                 },
             },
         }
-
         -- Boss per-unit defaults (1-5)
         for i = 1, 5 do
             local key = "boss" .. i
@@ -1299,8 +1137,7 @@ filters = {
             }
         end
     end
-
-local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:1303:6");
+local function fill(key, defaults)
         MSUF_DB[key] = MSUF_DB[key] or {}
         local t = MSUF_DB[key]
         for k, v in pairs(defaults) do
@@ -1308,8 +1145,7 @@ local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill f
                 t[k] = v
             end
         end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "fill file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:1303:6"); end
-
+     end
     local textDefaults = {
         nameOffsetX   = 4,
         nameOffsetY   = -4,
@@ -1318,7 +1154,6 @@ local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill f
         powerOffsetX  = -4,
         powerOffsetY  = 4,
     }
-
     fill("player", {
         width     = 275,
         height    = 40,
@@ -1338,7 +1173,6 @@ local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill f
     for k, v in pairs(textDefaults) do
         if MSUF_DB.player[k] == nil then MSUF_DB.player[k] = v end
     end
-
     -- Player castbar: custom channel tick markers (PLAYER ONLY)
     -- Stored under MSUF_DB.player.castbar.* so it does not touch general castbar settings.
     MSUF_DB.player.castbar = MSUF_DB.player.castbar or {}
@@ -1350,7 +1184,6 @@ local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill f
         if pc.channelTickPreviewLoop == nil then pc.channelTickPreviewLoop = true end
         if type(pc.channelTickPosPct) ~= "table" then pc.channelTickPosPct = {} end
     end
-
     fill("target", {
         width     = 275,
         height    = 40,
@@ -1369,7 +1202,6 @@ local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill f
     for k, v in pairs(textDefaults) do
         if MSUF_DB.target[k] == nil then MSUF_DB.target[k] = v end
     end
-
     fill("focus", {
         width     = 180,
         height    = 30,
@@ -1404,11 +1236,9 @@ local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill f
     -- Target-of-Target inline-in-Target separator token (rendered with spaces around it).
     -- Keep the default as the legacy behavior (" | ") by storing the token "|".
     if MSUF_DB.targettarget.totInlineSeparator == nil then MSUF_DB.targettarget.totInlineSeparator = "|" end
-
     for k, v in pairs(textDefaults) do
         if MSUF_DB.targettarget[k] == nil then MSUF_DB.targettarget[k] = v end
     end
-
     fill("pet", {
         width     = 220,
         height    = 30,
@@ -1424,7 +1254,6 @@ local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill f
     for k, v in pairs(textDefaults) do
         if MSUF_DB.pet[k] == nil then MSUF_DB.pet[k] = v end
     end
-
     fill("boss", {
         width        = 180,
         height       = 30,
@@ -1443,14 +1272,12 @@ local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill f
     for k, v in pairs(textDefaults) do
         if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end
     end
-
     for _, unitKey in ipairs({"player", "target", "targettarget", "focus", "pet", "boss"}) do
         MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
         local u = MSUF_DB[unitKey]
         if u.enabled == nil then
             u.enabled = true
         end
-
         -- Default missing alpha keys to 1 (100%) without overwriting user customizations.
         if u.alphaInCombat == nil then u.alphaInCombat = 1 end
         if u.alphaOutOfCombat == nil then u.alphaOutOfCombat = 1 end
@@ -1459,21 +1286,14 @@ local function fill(key, defaults) Perfy_Trace(Perfy_GetTime(), "Enter", "fill f
         if u.alphaBGInCombat == nil then u.alphaBGInCombat = 1 end
         if u.alphaBGOutOfCombat == nil then u.alphaBGOutOfCombat = 1 end
     end
-
     MSUF_DB_LastHeavyRun = MSUF_DB
-
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_EnsureDB_Heavy file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:150:0"); end
-
-function EnsureDB() Perfy_Trace(Perfy_GetTime(), "Enter", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:1467:0");
+ end
+function EnsureDB()
     if MSUF_DB and MSUF_DB_LastHeavyRun == MSUF_DB then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:1467:0"); return
+         return
     end
-
     MSUF_EnsureDB_Heavy()
-Perfy_Trace(Perfy_GetTime(), "Leave", "EnsureDB file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua:1467:0"); end
-
+ end
 -- Optional exports for other modules
 ns.MSUF_EnsureDB_Heavy = MSUF_EnsureDB_Heavy
 ns.EnsureDB = EnsureDB
-
-Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_Defaults.lua");

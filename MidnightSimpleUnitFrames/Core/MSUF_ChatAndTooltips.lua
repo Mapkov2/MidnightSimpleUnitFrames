@@ -1,9 +1,7 @@
---[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua"); -- Split out of MidnightSimpleUnitFrames.lua
 -- Chat/Slash commands (/msuf) + small tooltip helpers + Blizzard Edit Mode bridge
 -- Thinking about just scrapping this if this causes more erros
 local addonName, ns = ...
 ns = ns or {}
-
 local MSUF_RESET_DEFAULTS = {
     player = { width=275, height=40, offsetX=-260, offsetY=80, showName=true, showHP=true, showPower=true },
     target = { width=275, height=40, offsetX= 260, offsetY=80, showName=true, showHP=true, showPower=true },
@@ -11,41 +9,32 @@ local MSUF_RESET_DEFAULTS = {
     pet    = { width=220, height=30, offsetX=-260, offsetY=135, showName=true, showHP=false, showPower=false },
     targettarget = { width=220, height=30, offsetX=260, offsetY=225, showName=true, showHP=true, showPower=false },
 }
-
 local MSUF_FullResetPending = false
-
-local function MSUF_DoFullReset(opts) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_DoFullReset file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:17:6");
+local function MSUF_DoFullReset(opts)
     opts = opts or {}
     local skipReload = (opts.skipReload == true)
-
     if InCombatLockdown and InCombatLockdown() then
         print("|cffff0000MSUF:|r Cannot do FULL reset while in combat.")
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_DoFullReset file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:17:6"); return
+         return
     end
-
     MSUF_DB = nil
     MSUF_GlobalDB = nil
     MSUF_ActiveProfile = nil
-
     print("|cffff0000MSUF:|r FULL RESET executed – all MSUF profiles & settings deleted for this account.")
-
     if skipReload then
         print("|cffffff00MSUF:|r Reset staged. Please type |cff00ff00/reload|r OR use: MSUF Menu → Advanced → Factory Reset.")
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_DoFullReset file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:17:6"); return
+         return
     end
-
     print("|cffffff00MSUF:|r Reloading UI to rebuild clean defaults...")
 	if type(ReloadUI) == "function" then
 		ReloadUI()
 	elseif _G.C_UI and type(_G.C_UI.Reload) == "function" then
 		_G.C_UI.Reload()
 	end
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_DoFullReset file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:17:6"); end
-
+ end
 -- Expose for the Slash Menu (button click = hardware event, safe for ReloadUI)
 _G.MSUF_DoFullReset = MSUF_DoFullReset
-
-local function MSUF_PrintHelp() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_PrintHelp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:48:6");
+local function MSUF_PrintHelp()
     print("|cff00ff00MSUF commands:|r")
     print("  /msuf help      - Show this help.")
     print("  /msuf reset     - Reset all MSUF frame positions and visibility to defaults.")
@@ -53,74 +42,59 @@ local function MSUF_PrintHelp() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_Prin
     print("                   Confirm stages the reset; reload via /reload or MSUF Menu → Advanced → Factory Reset.")
     print("  /msuf absorb    - Toggle showing total absorb amount in HP text.")
     print("  !msuf help      - Print this help via chat (from your own character).")
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_PrintHelp file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:48:6"); end
-
+ end
 -- Optional chat trigger: "!msuf help" (only from yourself)
 -- Midnight/Beta secret-safe: chat event args can become "secret" in combat.
 -- Never boolean-test/compare them directly and never call string methods via ':'.
 local NotSecretValue = _G.NotSecretValue
-
-local function MSUF__Chat_IsSafeString(v) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF__Chat_IsSafeString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:63:6");
-    if type(v) ~= "string" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF__Chat_IsSafeString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:63:6"); return false end
+local function MSUF__Chat_IsSafeString(v)
+    if type(v) ~= "string" then  return false end
     if NotSecretValue then
-        return Perfy_Trace_Passthrough("Leave", "MSUF__Chat_IsSafeString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:63:6", NotSecretValue(v))
+        return NotSecretValue(v)
     end
     -- If NotSecretValue isn't available, avoid touching chat payloads in combat on Midnight/Beta.
     if InCombatLockdown and InCombatLockdown() then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF__Chat_IsSafeString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:63:6"); return false
+         return false
     end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF__Chat_IsSafeString file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:63:6"); return true
+     return true
 end
-
-local function MSUF__Chat_IsFromSelf(author, ...) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF__Chat_IsFromSelf file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:75:6");
+local function MSUF__Chat_IsFromSelf(author, ...)
     -- Prefer GUID-based self-check to avoid comparing author strings.
     local senderGUID = select(10, ...)
     local myGUID = UnitGUID and UnitGUID("player")
-
     if MSUF__Chat_IsSafeString(senderGUID) and MSUF__Chat_IsSafeString(myGUID) then
-        return Perfy_Trace_Passthrough("Leave", "MSUF__Chat_IsFromSelf file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:75:6", senderGUID == myGUID)
+        return senderGUID == myGUID
     end
-
     -- Fallback: compare short author name (strip realm) only if strings are safe.
     local myName = UnitName and UnitName("player")
     if not MSUF__Chat_IsSafeString(myName) or not MSUF__Chat_IsSafeString(author) then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF__Chat_IsFromSelf file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:75:6"); return false
+         return false
     end
-
     local shortAuthor = author
     local dash = string.find(author, "-", 1, true)
     if dash and dash > 1 then
         shortAuthor = string.sub(author, 1, dash - 1)
     end
-
-    return Perfy_Trace_Passthrough("Leave", "MSUF__Chat_IsFromSelf file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:75:6", (shortAuthor == myName))
+    return (shortAuthor == myName)
 end
-
-
-local function MSUF__Chat_GetLowerTrimmed(text) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF__Chat_GetLowerTrimmed file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:100:6");
-    if not MSUF__Chat_IsSafeString(text) then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF__Chat_GetLowerTrimmed file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:100:6"); return nil end
+local function MSUF__Chat_GetLowerTrimmed(text)
+    if not MSUF__Chat_IsSafeString(text) then  return nil end
     local lower = string.lower(text)
     lower = string.gsub(lower, "^%s+", "")
-    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF__Chat_GetLowerTrimmed file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:100:6"); return lower
+     return lower
 end
-
-
-local function MSUF_ChatCommand_OnChatMsg(_, text, author, ...) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ChatCommand_OnChatMsg file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:108:6");
+local function MSUF_ChatCommand_OnChatMsg(_, text, author, ...)
     local msgLower = MSUF__Chat_GetLowerTrimmed(text)
-    if not msgLower then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ChatCommand_OnChatMsg file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:108:6"); return end
-
+    if not msgLower then  return end
     -- Fast reject: only care about "!msuf help" (allow extra whitespace)
-    if string.sub(msgLower, 1, 5) ~= "!msuf" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ChatCommand_OnChatMsg file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:108:6"); return end
+    if string.sub(msgLower, 1, 5) ~= "!msuf" then  return end
     local rest = string.sub(msgLower, 6)
     rest = string.gsub(rest, "^%s+", "")
     rest = string.gsub(rest, "%s+$", "")
-    if rest ~= "help" then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ChatCommand_OnChatMsg file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:108:6"); return end
-
-    if not MSUF__Chat_IsFromSelf(author, ...) then Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ChatCommand_OnChatMsg file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:108:6"); return end
+    if rest ~= "help" then  return end
+    if not MSUF__Chat_IsFromSelf(author, ...) then  return end
     MSUF_PrintHelp()
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ChatCommand_OnChatMsg file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:108:6"); end
-
-
+ end
 if type(MSUF_EventBus_Register) == "function" then
     local evs = {
         "CHAT_MSG_SAY","CHAT_MSG_YELL","CHAT_MSG_PARTY","CHAT_MSG_PARTY_LEADER",
@@ -132,25 +106,23 @@ if type(MSUF_EventBus_Register) == "function" then
         MSUF_EventBus_Register(e, "MSUF_CHATCMD", MSUF_ChatCommand_OnChatMsg)
     end
 end
-
 SLASH_MIDNIGHTSUF1 = "/msuf"
-SlashCmdList["MIDNIGHTSUF"] = function(msg) Perfy_Trace(Perfy_GetTime(), "Enter", "SlashCmdList.MIDNIGHTSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:137:30");
+SlashCmdList["MIDNIGHTSUF"] = function(msg)
     msg = msg and msg:lower() or ""
     msg = msg:gsub("^%s+", "")
     local cmd = msg:match("^(%S+)") or ""
-
     if cmd == "" or cmd == "help" then
         MSUF_PrintHelp()
-        Perfy_Trace(Perfy_GetTime(), "Leave", "SlashCmdList.MIDNIGHTSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:137:30"); return
+         return
     end
--- Should clean this up since we have now a button for full reset. 
+-- Should clean this up since we have now a button for full reset.
     if cmd == "fullreset" then
         if not MSUF_FullResetPending then
             MSUF_FullResetPending = true
             print("|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & settings for this account.")
             print("|cffffcc00MSUF:|r Type |cffffff00/msuf fullreset confirm|r to stage the reset.")
             print("|cffffcc00MSUF:|r Then click: MSUF Menu → Advanced → Factory Reset (or type /reload).")
-            Perfy_Trace(Perfy_GetTime(), "Leave", "SlashCmdList.MIDNIGHTSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:137:30"); return
+             return
         end
         if msg ~= "fullreset confirm" then
             MSUF_FullResetPending = false
@@ -158,18 +130,16 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg) Perfy_Trace(Perfy_GetTime(), "Enter"
             print("  /msuf fullreset")
             print("  /msuf fullreset confirm")
             print("  (then /reload OR MSUF Menu → Advanced → Factory Reset)")
-            Perfy_Trace(Perfy_GetTime(), "Leave", "SlashCmdList.MIDNIGHTSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:137:30"); return
+             return
         end
         MSUF_FullResetPending = false
         MSUF_DoFullReset({ skipReload = true })
-        Perfy_Trace(Perfy_GetTime(), "Leave", "SlashCmdList.MIDNIGHTSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:137:30"); return
+         return
     end
-
-
     if cmd == "reset" then
         if InCombatLockdown and InCombatLockdown() then
             print("|cffff0000MSUF:|r Cannot reset while in combat.")
-            Perfy_Trace(Perfy_GetTime(), "Leave", "SlashCmdList.MIDNIGHTSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:137:30"); return
+             return
         end
         if type(EnsureDB) == "function" then
             EnsureDB()
@@ -193,9 +163,8 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg) Perfy_Trace(Perfy_GetTime(), "Enter"
             UpdateAllFonts()
         end
         print("|cff00ff00MSUF:|r Positions and visibility reset to defaults.")
-        Perfy_Trace(Perfy_GetTime(), "Leave", "SlashCmdList.MIDNIGHTSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:137:30"); return
+         return
     end
-
     if cmd == "absorb" then
         if type(EnsureDB) == "function" then
             EnsureDB()
@@ -203,7 +172,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg) Perfy_Trace(Perfy_GetTime(), "Enter"
         local g = (type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
         if not g then
             print("|cffff0000MSUF:|r DB not initialized.")
-            Perfy_Trace(Perfy_GetTime(), "Leave", "SlashCmdList.MIDNIGHTSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:137:30"); return
+             return
         end
         g.showTotalAbsorbAmount = not g.showTotalAbsorbAmount
         if type(ApplyAllSettings) == "function" then
@@ -214,19 +183,15 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg) Perfy_Trace(Perfy_GetTime(), "Enter"
         else
             print("|cff00ff00MSUF:|r Total absorb amount in HP text DISABLED.")
         end
-        Perfy_Trace(Perfy_GetTime(), "Leave", "SlashCmdList.MIDNIGHTSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:137:30"); return
+         return
     end
-
     -- Unknown
     MSUF_PrintHelp()
-Perfy_Trace(Perfy_GetTime(), "Leave", "SlashCmdList.MIDNIGHTSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:137:30"); end
-
-
-
+ end
 local MSUF_PlayerInfoFrame
-local function MSUF_GetPlayerInfoFrame() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_GetPlayerInfoFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:227:6");
+local function MSUF_GetPlayerInfoFrame()
     if MSUF_PlayerInfoFrame then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetPlayerInfoFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:227:6"); return MSUF_PlayerInfoFrame
+         return MSUF_PlayerInfoFrame
     end
     local f = CreateFrame("Frame", "MSUF_PlayerInfoFrame", UIParent, "BackdropTemplate")
     f:SetSize(260, 90)
@@ -268,9 +233,9 @@ local function MSUF_GetPlayerInfoFrame() Perfy_Trace(Perfy_GetTime(), "Enter", "
     f.line5 = line5FS
     f:Hide()
     MSUF_PlayerInfoFrame = f
-    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_GetPlayerInfoFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:227:6"); return f
+     return f
 end
-local function MSUF_PositionPlayerInfoFrame(frame) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_PositionPlayerInfoFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:273:6");
+local function MSUF_PositionPlayerInfoFrame(frame)
     EnsureDB()
     local g = MSUF_DB.general or {}
     local style = g.unitInfoTooltipStyle or "classic"
@@ -283,25 +248,22 @@ local function MSUF_PositionPlayerInfoFrame(frame) Perfy_Trace(Perfy_GetTime(), 
     else
         frame:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -16, 180)
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_PositionPlayerInfoFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:273:6"); end
+ end
 -- Tooltip helpers (unified; keeps behavior, reduces copy/paste)
-local function MSUF_UnitInfo_GetLocationText() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UnitInfo_GetLocationText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:288:6");
+local function MSUF_UnitInfo_GetLocationText()
     local zone = GetZoneText and GetZoneText() or nil
     local subzone = GetSubZoneText and GetSubZoneText() or nil
-
     if subzone and subzone ~= "" and zone and zone ~= "" then
         -- Only compare strings if they're safe; otherwise just prefer subzone when present.
         if (not NotSecretValue) or (NotSecretValue(subzone) and NotSecretValue(zone)) then
             if subzone ~= zone then
-                Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_GetLocationText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:288:6"); return subzone
+                 return subzone
             end
         end
     end
-    return Perfy_Trace_Passthrough("Leave", "MSUF_UnitInfo_GetLocationText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:288:6", (subzone and subzone ~= "") and subzone or zone)
+    return (subzone and subzone ~= "") and subzone or zone
 end
-
-
-local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UnitInfo_BuildNameLine file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:304:6");
+local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
     local nameLine = UnitName(unit) or fallbackName
     if isPlayer then
         if UnitIsAFK(unit) then
@@ -310,12 +272,11 @@ local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer) Perfy_T
             nameLine = nameLine .. " <DND>"
         end
     end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_BuildNameLine file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:304:6"); return nameLine
+     return nameLine
 end
-
-local function MSUF_UnitInfo_BuildLine4(faction, isPVP) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UnitInfo_BuildLine4 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:316:6");
+local function MSUF_UnitInfo_BuildLine4(faction, isPVP)
     if (not faction or faction == "") and not isPVP then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_BuildLine4 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:316:6"); return ""
+         return ""
     end
     local text = faction or ""
     if isPVP then
@@ -325,50 +286,46 @@ local function MSUF_UnitInfo_BuildLine4(faction, isPVP) Perfy_Trace(Perfy_GetTim
             text = "PvP"
         end
     end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_BuildLine4 file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:316:6"); return text
+     return text
 end
-
-local function MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UnitInfo_BuildLine2_Player file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:331:6");
+local function MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc)
     local n = tonumber(level)
     if n and n > 0 then
         if race and classLoc then
-            return Perfy_Trace_Passthrough("Leave", "MSUF_UnitInfo_BuildLine2_Player file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:331:6", string.format("Level %d %s %s", n, race, classLoc))
+            return string.format("Level %d %s %s", n, race, classLoc)
         elseif classLoc then
-            return Perfy_Trace_Passthrough("Leave", "MSUF_UnitInfo_BuildLine2_Player file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:331:6", string.format("Level %d %s", n, classLoc))
+            return string.format("Level %d %s", n, classLoc)
         else
-            return Perfy_Trace_Passthrough("Leave", "MSUF_UnitInfo_BuildLine2_Player file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:331:6", string.format("Level %d", n))
+            return string.format("Level %d", n)
         end
     end
-    return Perfy_Trace_Passthrough("Leave", "MSUF_UnitInfo_BuildLine2_Player file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:331:6", classLoc or "")
+    return classLoc or ""
 end
-
-local function MSUF_UnitInfo_ClassificationText(classification) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UnitInfo_ClassificationText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:345:6");
+local function MSUF_UnitInfo_ClassificationText(classification)
     if classification == "elite" then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_ClassificationText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:345:6"); return "Elite"
+         return "Elite"
     elseif classification == "rare" then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_ClassificationText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:345:6"); return "Rare"
+         return "Rare"
     elseif classification == "rareelite" then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_ClassificationText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:345:6"); return "Rare Elite"
+         return "Rare Elite"
     elseif classification == "worldboss" then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_ClassificationText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:345:6"); return "Boss"
+         return "Boss"
     end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_ClassificationText file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:345:6"); return nil
+     return nil
 end
-
-local function MSUF_UnitInfo_BuildLine2_NPC(level, classification) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UnitInfo_BuildLine2_NPC file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:358:6");
+local function MSUF_UnitInfo_BuildLine2_NPC(level, classification)
     local n = tonumber(level)
     if not (n and n > 0) then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_BuildLine2_NPC file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:358:6"); return ""
+         return ""
     end
     local line2 = string.format("Level %d", n)
     local clsText = MSUF_UnitInfo_ClassificationText(classification)
     if clsText then
         line2 = line2 .. string.format(" (%s)", clsText)
     end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_BuildLine2_NPC file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:358:6"); return line2
+     return line2
 end
-
-local function MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, loc) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UnitInfo_ShowFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:371:6");
+local function MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, loc)
     f.name:SetText(nameLine or "")
     f.line2:SetText(line2 or "")
     f.line3:SetText(line3 or "")
@@ -376,50 +333,41 @@ local function MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, loc) Pe
     f.line5:SetText(loc or "")
     MSUF_PositionPlayerInfoFrame(f)
     f:Show()
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_ShowFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:371:6"); end
-
-local function MSUF_UnitInfo_ShowTargetLike(unit, fallbackName) Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_UnitInfo_ShowTargetLike file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:381:6");
+ end
+local function MSUF_UnitInfo_ShowTargetLike(unit, fallbackName)
     local f = MSUF_GetPlayerInfoFrame()
     if not UnitExists(unit) then
         f:Hide()
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_ShowTargetLike file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:381:6"); return
+         return
     end
-
     local level      = UnitLevel(unit)
     local isPlayer   = UnitIsPlayer(unit)
     local race, classLoc, faction, isPVP
-
     if isPlayer then
         race     = UnitRace(unit)
         classLoc = select(1, UnitClass(unit))
         faction  = UnitFactionGroup(unit)
         isPVP    = UnitIsPVP(unit)
     end
-
     local nameLine = MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
     local line2 = isPlayer and MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc)
                     or MSUF_UnitInfo_BuildLine2_NPC(level, UnitClassification(unit))
-
     local line3 = isPlayer and (classLoc or "") or (UnitCreatureType(unit) or "")
     local line4 = isPlayer and MSUF_UnitInfo_BuildLine4(faction, isPVP) or ""
     local loc   = MSUF_UnitInfo_GetLocationText()
-
     MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, loc)
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_UnitInfo_ShowTargetLike file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:381:6"); end
-
-function MSUF_ShowPlayerInfoTooltip() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ShowPlayerInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:410:0");
+ end
+function MSUF_ShowPlayerInfoTooltip()
     local f = MSUF_GetPlayerInfoFrame()
     if not UnitExists("player") then
         f:Hide()
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowPlayerInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:410:0"); return
+         return
     end
-
     local level    = UnitLevel("player")
     local race     = UnitRace("player")
     local classLoc = select(1, UnitClass("player"))
     local faction  = UnitFactionGroup("player")
     local isPVP    = UnitIsPVP("player")
-
     local specName
     if GetSpecialization and GetSpecializationInfo then
         local specIndex = GetSpecialization()
@@ -428,83 +376,69 @@ function MSUF_ShowPlayerInfoTooltip() Perfy_Trace(Perfy_GetTime(), "Enter", "MSU
             specName = sName
         end
     end
-
     local nameLine = MSUF_UnitInfo_BuildNameLine("player", "Player", true)
     local line2    = MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc)
-
     local line3 = ""
     if specName and classLoc then
         line3 = string.format("%s %s", specName, classLoc)
     elseif specName then
         line3 = specName
     end
-
     local line4 = MSUF_UnitInfo_BuildLine4(faction, isPVP)
     local loc   = MSUF_UnitInfo_GetLocationText()
-
     MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, loc)
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowPlayerInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:410:0"); end
-
-function MSUF_ShowTargetInfoTooltip() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ShowTargetInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:448:0");
+ end
+function MSUF_ShowTargetInfoTooltip()
     MSUF_UnitInfo_ShowTargetLike("target", "Target")
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowTargetInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:448:0"); end
-
-function MSUF_ShowFocusInfoTooltip() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ShowFocusInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:452:0");
+ end
+function MSUF_ShowFocusInfoTooltip()
     MSUF_UnitInfo_ShowTargetLike("focus", "Focus")
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowFocusInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:452:0"); end
-
-function MSUF_ShowTargetTargetInfoTooltip() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ShowTargetTargetInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:456:0");
+ end
+function MSUF_ShowTargetTargetInfoTooltip()
     MSUF_UnitInfo_ShowTargetLike("targettarget", "Target of Target")
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowTargetTargetInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:456:0"); end
-
-function MSUF_ShowPetInfoTooltip() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_ShowPetInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:460:0");
+ end
+function MSUF_ShowPetInfoTooltip()
     local f = MSUF_GetPlayerInfoFrame()
     if not UnitExists("pet") then
         f:Hide()
-        Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowPetInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:460:0"); return
+         return
     end
-
     local name         = UnitName("pet") or "Pet"
     local level        = UnitLevel("pet")
     local creatureType = UnitCreatureType("pet")
     local loc          = MSUF_UnitInfo_GetLocationText()
-
     local line2 = ""
     local n = tonumber(level)
     if n and n > 0 then
         line2 = string.format("Level %d", n)
     end
-
     MSUF_UnitInfo_ShowFrame(f, name, line2, creatureType or "", "", loc)
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_ShowPetInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:460:0"); end
-
-function MSUF_HidePlayerInfoTooltip() Perfy_Trace(Perfy_GetTime(), "Enter", "MSUF_HidePlayerInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:481:0");
+ end
+function MSUF_HidePlayerInfoTooltip()
     if MSUF_PlayerInfoFrame then
         MSUF_PlayerInfoFrame:Hide()
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "MSUF_HidePlayerInfoTooltip file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:481:0"); end
-
+ end
 -- [8c6] Removed legacy Options UI relayout functions (Player/Bars).
 -- These were dead/duplicate layout builders superseded by MSUF_Options_Core.lua.
-
 if not _G.MSUF_SetBlizzardEditModeFromMSUF then
-    function _G.MSUF_SetBlizzardEditModeFromMSUF(active) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_SetBlizzardEditModeFromMSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:491:4");
+    function _G.MSUF_SetBlizzardEditModeFromMSUF(active)
         if InCombatLockdown and InCombatLockdown() then
-            Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_SetBlizzardEditModeFromMSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:491:4"); return
+             return
         end
         if type(EnsureDB) == "function" then EnsureDB() end
         if MSUF_DB and MSUF_DB.general and MSUF_DB.general.linkEditModes == false then
-            Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_SetBlizzardEditModeFromMSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:491:4"); return
+             return
         end
         local emf = _G.EditModeManagerFrame
         if not emf then
-            Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_SetBlizzardEditModeFromMSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:491:4"); return
+             return
         end
         if active then
             if not _G.MSUF_BlizzEditModeStartedByMSUF then
                 _G.MSUF_BlizzEditModeStartedByMSUF = true
             end
-            local ok = pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:507:29");
+            local ok = pcall(function()
                 if type(securecallfunction) == "function" and type(_G.ShowUIPanel) == "function" then
                     securecallfunction(_G.ShowUIPanel, emf) -- this will show the edit mode panel and enter edit mode
                 elseif emf.Show then
@@ -512,16 +446,16 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
                 elseif emf.EnterEditMode then
                     emf:EnterEditMode()
                 end
-            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:507:29"); end)
+             end)
             if not ok then
                 _G.MSUF_BlizzEditModeStartedByMSUF = nil
             end
         else
             if not _G.MSUF_BlizzEditModeStartedByMSUF then
-                Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_SetBlizzardEditModeFromMSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:491:4"); return
+                 return
             end
             _G.MSUF_BlizzEditModeStartedByMSUF = nil
-            pcall(function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:524:18");
+            pcall(function()
                 if type(securecallfunction) == "function" and type(emf.ExitEditMode) == "function" then
                     securecallfunction(emf.ExitEditMode, emf)
                 elseif emf.ExitEditMode then
@@ -532,13 +466,9 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
                 elseif emf.Hide and emf.IsShown and emf:IsShown() then
                     emf:Hide()
                 end
-            Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:524:18"); end)
+             end)
         end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_SetBlizzardEditModeFromMSUF file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua:491:4"); end
+     end
 end
-
 -- [8c6] Removed PLAYER_LOGIN Options relayout hook (Bars).
-
 ns.MSUF_UpdateAllFonts = ns.MSUF_UpdateAllFonts or UpdateAllFonts
-
-Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Core/MSUF_ChatAndTooltips.lua");

@@ -635,3 +635,9 @@ if _G and type(_G.MSUF_Auras2_UpdateEditModePoll) ~= "function" then
         return API.UpdateEditModePoll()
     end
 end
+
+-- Ensure Init() runs now that the Events module is loaded.
+-- NOTE: Render.lua may have called API.Init() before this file executed.
+if API and type(API.Init) == "function" then
+    API.Init()
+end

@@ -1,9 +1,9 @@
---[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua"); -- Registers MSUF bundled fonts/textures with LibSharedMedia-3.0 (if available).
+-- Registers MSUF bundled fonts/textures with LibSharedMedia-3.0 (if available).
 -- Keep this file lightweight and load-order safe.
 
 local LibStub = _G.LibStub
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-if not LSM or type(LSM.Register) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua"); return end
+if not LSM or type(LSM.Register) ~= "function" then return end
 
 local base = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 
@@ -27,9 +27,9 @@ pcall(LSM.Register, LSM, "font", "Inter (MSUF)",      base .. "Fonts\\Inter.ttf"
 
 local baseBars = base .. "Bars\\"
 
-local function Reg(name, file) Perfy_Trace(Perfy_GetTime(), "Enter", "Reg file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua:30:6");
+local function Reg(name, file)
     pcall(LSM.Register, LSM, "statusbar", name, baseBars .. file)
-Perfy_Trace(Perfy_GetTime(), "Leave", "Reg file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua:30:6"); end
+end
 
 Reg("MSUF Charcoal",   "Charcoal.tga")
 Reg("MSUF Minimalist", "Minimalist.tga")
@@ -41,11 +41,11 @@ Reg("MSUF Smoother",   "smoother.tga")
 -- -----------------------------------------------------------------------------
 -- DB migration: eliminate broken legacy selections
 -- -----------------------------------------------------------------------------
-local function TryMigrate() Perfy_Trace(Perfy_GetTime(), "Enter", "TryMigrate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua:44:6");
+local function TryMigrate()
     local db = _G.MSUF_DB
-    if type(db) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "TryMigrate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua:44:6"); return false end
+    if type(db) ~= "table" then return false end
     local g = db.general
-    if type(g) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "TryMigrate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua:44:6"); return false end
+    if type(g) ~= "table" then return false end
 
     local changed = false
     -- Migrate old Midnight texture names to new MSUF names (renaming only)
@@ -91,15 +91,13 @@ local function TryMigrate() Perfy_Trace(Perfy_GetTime(), "Enter", "TryMigrate fi
             pcall(_G.MSUF_UpdateCastbarTextures)
         end
     end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "TryMigrate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua:44:6"); return changed
+    return changed
 end
 
 if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-    _G.C_Timer.After(0, function() Perfy_Trace(Perfy_GetTime(), "Enter", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua:98:24");
+    _G.C_Timer.After(0, function()
         if not TryMigrate() then
             _G.C_Timer.After(2, TryMigrate)
         end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "(anonymous) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua:98:24"); end)
+    end)
 end
-
-Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\Media/MSUF_Media.lua");

@@ -1,40 +1,35 @@
---[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua"); local addonName, ns = ...
 ns = ns or {}
-
 local _G = _G
-
 -- =============================================================
 -- Fast-path replacement for protected calls.
 -- Intentionally does NOT catch errors (for maximum performance).
 -- Preserves (ok, ...) return convention and returns false if fn is not callable.
 -- =============================================================
 if not _G.MSUF_FastCall then
-    function _G.MSUF_FastCall(fn, ...) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_FastCall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:12:4");
+    function _G.MSUF_FastCall(fn, ...)
         if type(fn) ~= "function" then
-            Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_FastCall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:12:4"); return false
+             return false
         end
-        return Perfy_Trace_Passthrough("Leave", "_G.MSUF_FastCall file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:12:4", true, fn(...))
+        return true, fn(...)
     end
 end
-
 -- =============================================================
 -- Global helper: "any edit mode" (MSUF Edit Mode OR Blizzard Edit Mode)
 -- =============================================================
 if not _G.MSUF_IsInAnyEditMode then
     -- MSUF-only Edit Mode:
     -- Blizzard Edit Mode integration is intentionally disabled (Blizzard lifecycle currently unreliable).
-    function _G.MSUF_IsInAnyEditMode() Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_IsInAnyEditMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:26:4");
+    function _G.MSUF_IsInAnyEditMode()
         local st = rawget(_G, "MSUF_EditState")
         if type(st) == "table" and st.active == true then
-            Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_IsInAnyEditMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:26:4"); return true
+             return true
         end
         if rawget(_G, "MSUF_UnitEditModeActive") == true then
-            Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_IsInAnyEditMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:26:4"); return true
+             return true
         end
-        Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_IsInAnyEditMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:26:4"); return false
+         return false
     end
 end
-
 local MSUF_FastCall = _G.MSUF_FastCall
 local type = _G.type
 local tostring = _G.tostring
@@ -51,7 +46,6 @@ local profStop    = ns and ns.MSUF_ProfileStop
 local InCombatLockdown = _G.InCombatLockdown
 local table_insert = _G.table and _G.table.insert
 local table_remove = _G.table and _G.table.remove
-
 -- =============================================================
 -- MSUF_UpdateManager
 --
@@ -70,58 +64,52 @@ local table_remove = _G.table and _G.table.remove
 -- interval can be number seconds or function returning number seconds.
 -- fn receives (interval)
 -- =============================================================
-
 if not _G.MSUF_UpdateManager then
     _G.MSUF_UpdateManager = {}
 end
 local UM = _G.MSUF_UpdateManager
-
 if type(UM.entries) ~= "table" then UM.entries = {} end
 if type(UM.activeList) ~= "table" then UM.activeList = {} end
 if type(UM.activeIndex) ~= "table" then UM.activeIndex = {} end
 if type(UM._errOnce) ~= "table" then UM._errOnce = {} end
 if type(UM.activeCount) ~= "number" then UM.activeCount = 0 end
-
 -- =============================================================
 -- Static callbacks (perf): avoid allocating new closures on every wakeup.
 -- These are stored on UM so they persist across reloads.
 -- =============================================================
 if type(UM._onUpdateFn) ~= "function" then
-    UM._onUpdateFn = function() Perfy_Trace(Perfy_GetTime(), "Enter", "UM._onUpdateFn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:90:21");
+    UM._onUpdateFn = function()
         -- Signature for OnUpdate is (self, elapsed) but we don't need args.
         UM:_ScheduleNext()
-    Perfy_Trace(Perfy_GetTime(), "Leave", "UM._onUpdateFn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:90:21"); end
+     end
 end
-
 if type(UM._timerWakeFn) ~= "function" then
-    UM._timerWakeFn = function() Perfy_Trace(Perfy_GetTime(), "Enter", "UM._timerWakeFn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:97:22");
+    UM._timerWakeFn = function()
         -- Wake called by C_Timer.NewTimer or C_Timer.After.
         -- NewTimer handle is cleared here; After() has no handle so we track it separately.
         UM._timer = nil
         UM._afterPending = nil
         UM._afterDueAt = nil
         UM:_ScheduleNext()
-    Perfy_Trace(Perfy_GetTime(), "Leave", "UM._timerWakeFn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:97:22"); end
+     end
 end
-
 -- Optional: for the rare client path where we can only use After() (no cancellable handle),
 -- we may need an earlier wake than the pending After. We do that via a short-lived OnUpdate
 -- that only checks a single timestamp (no scanning) and then returns to normal scheduling.
 if type(UM._sleepOnUpdateFn) ~= "function" then
-    UM._sleepOnUpdateFn = function() Perfy_Trace(Perfy_GetTime(), "Enter", "UM._sleepOnUpdateFn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:111:26");
+    UM._sleepOnUpdateFn = function()
         local untilAt = UM._sleepUntil
         if not untilAt then
             UM:_StopOnUpdate()
-            Perfy_Trace(Perfy_GetTime(), "Leave", "UM._sleepOnUpdateFn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:111:26"); return
+             return
         end
         local now = (GetTime and GetTime()) or 0
         if now >= untilAt then
             UM._sleepUntil = nil
             UM:_ScheduleNext()
         end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "UM._sleepOnUpdateFn file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:111:26"); end
+     end
 end
-
 -- Internal scheduling state (coalescing / "schedule once")
 -- _scheduledMode: "onupdate" | "timer" | "after" | nil
 -- _scheduledDueAt: absolute time (GetTime) for the next wake in timer/after modes.
@@ -130,62 +118,52 @@ if type(UM._scheduledDueAt) ~= "number" then UM._scheduledDueAt = nil end
 if type(UM._afterPending) ~= "boolean" then UM._afterPending = nil end
 if type(UM._afterDueAt) ~= "number" then UM._afterDueAt = nil end
 if type(UM._sleepUntil) ~= "number" then UM._sleepUntil = nil end
-
 -- Default FAST (no FastCall wrapping). Can be flipped to true for debugging.
 if UM.safeCalls == nil then UM.safeCalls = false end
-
 -- If the earliest interval is <= this, we keep an OnUpdate loop (timers get spammy).
 -- Otherwise we sleep using a single C_Timer.NewTimer wakeup.
 if type(UM.minOnUpdateInterval) ~= "number" then
     UM.minOnUpdateInterval = 0.03
 end
-
 -- Cap catch-up work to prevent spiral-of-death after lag spikes.
 if type(UM.maxCatchUp) ~= "number" then
     UM.maxCatchUp = 2
 end
-
 -- Budgeted runner (ms) to smooth CPU spikes. Set to 0 to disable.
 if type(UM.timeBudgetMsCombat) ~= "number" then UM.timeBudgetMsCombat = 0.45 end
 if type(UM.timeBudgetMsOOC) ~= "number" then UM.timeBudgetMsOOC = 0.80 end
 if type(UM.budgetYieldDelay) ~= "number" then UM.budgetYieldDelay = 0.0 end
-
 -- Lower number = higher priority (runs earlier when multiple tasks are due).
 if type(UM.defaultPriority) ~= "number" then UM.defaultPriority = 50 end
-
-function UM:_EnsureFrame() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_EnsureFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:156:0");
-    if self.frame then return Perfy_Trace_Passthrough("Leave", "UM:_EnsureFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:156:0", self.frame) end
-    if not CreateFrame then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_EnsureFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:156:0"); return nil end
+function UM:_EnsureFrame()
+    if self.frame then return self.frame end
+    if not CreateFrame then  return nil end
     local f = CreateFrame("Frame", "MSUF_UpdateManagerFrame", UIParent)
-    if not f then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_EnsureFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:156:0"); return nil end
+    if not f then  return nil end
     f:Hide()
     self.frame = f
-    Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_EnsureFrame file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:156:0"); return f
+     return f
 end
-
 -- Ensure a single OnUpdate is running (no re-SetScript churn).
 -- Used for high-frequency scheduling and for the After() fallback "sleep".
-function UM:_EnsureOnUpdate(fn) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_EnsureOnUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:168:0");
+function UM:_EnsureOnUpdate(fn)
     local f = self:_EnsureFrame()
-    if not f then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_EnsureOnUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:168:0"); return nil end
+    if not f then  return nil end
     if f:GetScript("OnUpdate") ~= fn then
         f:SetScript("OnUpdate", fn)
     end
     f:Show()
     self._scheduledMode = "onupdate"
     self._scheduledDueAt = nil
-    Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_EnsureOnUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:168:0"); return f
+     return f
 end
-
-function UM:_Activate(name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_Activate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:180:0");
-    if not name then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_Activate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:180:0"); return end
-    if self.activeIndex and self.activeIndex[name] then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_Activate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:180:0"); return end
-
+function UM:_Activate(name)
+    if not name then  return end
+    if self.activeIndex and self.activeIndex[name] then  return end
     local list = self.activeList
     local entries = self.entries
     local e = entries and entries[name]
     local pr = (e and type(e.priority) == "number" and e.priority) or (self.defaultPriority or 50)
-
     -- Insert by priority (stable). Activation is rare; O(n) is fine.
     local insertAt = #list + 1
     for j = 1, #list do
@@ -197,7 +175,6 @@ function UM:_Activate(name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_Activate 
             break
         end
     end
-
     if table_insert then
         table_insert(list, insertAt, name)
     else
@@ -208,20 +185,17 @@ function UM:_Activate(name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_Activate 
         end
         list[insertAt] = name
     end
-
     -- Rebuild indices from insertion point
     for k = insertAt, #list do
         local n = list[k]
         if n then self.activeIndex[n] = k end
     end
     self.activeCount = #list
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_Activate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:180:0"); end
-
-function UM:_Deactivate(name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_Deactivate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:220:0");
-    if not name or not self.activeIndex then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_Deactivate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:220:0"); return end
+ end
+function UM:_Deactivate(name)
+    if not name or not self.activeIndex then  return end
     local idx = self.activeIndex[name]
-    if not idx then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_Deactivate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:220:0"); return end
-
+    if not idx then  return end
     local list = self.activeList
     if table_remove then
         table_remove(list, idx)
@@ -231,7 +205,6 @@ function UM:_Deactivate(name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_Deactiv
         end
         list[#list] = nil
     end
-
     self.activeIndex[name] = nil
     -- Rebuild indices from removal point
     for k = idx, #list do
@@ -239,13 +212,11 @@ function UM:_Deactivate(name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_Deactiv
         if n then self.activeIndex[n] = k end
     end
     self.activeCount = #list
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_Deactivate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:220:0"); end
-
-function UM:_HasActive() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_HasActive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:244:0");
-    return Perfy_Trace_Passthrough("Leave", "UM:_HasActive file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:244:0", (self.activeCount or 0) > 0)
+ end
+function UM:_HasActive()
+    return (self.activeCount or 0) > 0
 end
-
-function UM:_GetRunBudgetMs() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_GetRunBudgetMs file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:248:0");
+function UM:_GetRunBudgetMs()
     local b
     if InCombatLockdown and InCombatLockdown() then
         b = self.timeBudgetMsCombat
@@ -253,49 +224,43 @@ function UM:_GetRunBudgetMs() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_GetRunB
         b = self.timeBudgetMsOOC
     end
     if type(b) ~= "number" or b <= 0 then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_GetRunBudgetMs file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:248:0"); return nil
+         return nil
     end
     if not debugprofilestop then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_GetRunBudgetMs file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:248:0"); return nil
+         return nil
     end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_GetRunBudgetMs file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:248:0"); return b
+     return b
 end
-
-function UM:_PrintOnce(name, err) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_PrintOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:264:0");
+function UM:_PrintOnce(name, err)
     name = name or "unknown"
-    if self._errOnce[name] then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_PrintOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:264:0"); return end
+    if self._errOnce[name] then  return end
     self._errOnce[name] = true
     if print then
         print("|cffff5555MSUF UpdateManager error|r in '" .. tostring(name) .. "': " .. tostring(err))
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_PrintOnce file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:264:0"); end
-
-function UM:SetSafeCalls(enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:SetSafeCalls file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:273:0");
+ end
+function UM:SetSafeCalls(enabled)
     self.safeCalls = not not enabled
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:SetSafeCalls file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:273:0"); end
-
-function _G.MSUF_UpdateManager_SetSafeCalls(enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_UpdateManager_SetSafeCalls file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:277:0");
+ end
+function _G.MSUF_UpdateManager_SetSafeCalls(enabled)
     if _G.MSUF_UpdateManager and _G.MSUF_UpdateManager.SetSafeCalls then
         _G.MSUF_UpdateManager:SetSafeCalls(enabled)
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UpdateManager_SetSafeCalls file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:277:0"); end
-
-function UM:SetPerfMode(mode) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:SetPerfMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:283:0");
+ end
+function UM:SetPerfMode(mode)
     if mode == "safe" then
         self.safeCalls = true
     else
         self.safeCalls = false
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:SetPerfMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:283:0"); end
-
-function _G.MSUF_UpdateManager_SetPerfMode(mode) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_UpdateManager_SetPerfMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:291:0");
+ end
+function _G.MSUF_UpdateManager_SetPerfMode(mode)
     if _G.MSUF_UpdateManager and _G.MSUF_UpdateManager.SetPerfMode then
         _G.MSUF_UpdateManager:SetPerfMode(mode)
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UpdateManager_SetPerfMode file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:291:0"); end
-
-function UM:_ResolveInterval(e, name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_ResolveInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:297:0");
-    if not e then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ResolveInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:297:0"); return nil end
+ end
+function UM:_ResolveInterval(e, name)
+    if not e then  return nil end
     local i = e.interval
     if type(i) == "function" then
         if self.safeCalls then
@@ -312,12 +277,11 @@ function UM:_ResolveInterval(e, name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:
         end
     end
     if type(i) ~= "number" or i <= 0 then
-        Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ResolveInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:297:0"); return nil
+         return nil
     end
-    Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ResolveInterval file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:297:0"); return i
+     return i
 end
-
-function UM:_CancelTimer() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_CancelTimer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:320:0");
+function UM:_CancelTimer()
     local t = self._timer
     if t and t.Cancel then
         t:Cancel()
@@ -327,9 +291,8 @@ function UM:_CancelTimer() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_CancelTime
         self._scheduledMode = nil
         self._scheduledDueAt = nil
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_CancelTimer file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:320:0"); end
-
-function UM:_StopOnUpdate() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_StopOnUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:332:0");
+ end
+function UM:_StopOnUpdate()
     local f = self.frame
     if f then
         f:SetScript("OnUpdate", nil)
@@ -339,51 +302,40 @@ function UM:_StopOnUpdate() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_StopOnUpd
         self._scheduledMode = nil
     end
     self._sleepUntil = nil
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_StopOnUpdate file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:332:0"); end
-
-function UM:_StopIfIdle() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_StopIfIdle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:344:0");
+ end
+function UM:_StopIfIdle()
     if not self:_HasActive() then
         self:_CancelTimer()
         self:_StopOnUpdate()
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_StopIfIdle file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:344:0"); end
-
+ end
 -- =============================================================
 -- Core runner (timer or OnUpdate)
 -- =============================================================
-function UM:_RunDue(now) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_RunDue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:354:0");
+function UM:_RunDue(now)
     now = now or (GetTime and GetTime()) or 0
-
     local safeCalls = self.safeCalls
     local maxCatch = self.maxCatchUp or 2
-
     local list = self.activeList
     local entries = self.entries
-
     local nextDue = nil
     local minInterval = nil
-
     local budgetMs = self:_GetRunBudgetMs()
     local t0 = budgetMs and debugprofilestop and debugprofilestop() or nil
     local budgetStop = false
-
-    local function overBudget() Perfy_Trace(Perfy_GetTime(), "Enter", "overBudget file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:370:10");
-        if not t0 then Perfy_Trace(Perfy_GetTime(), "Leave", "overBudget file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:370:10"); return false end
-        return Perfy_Trace_Passthrough("Leave", "overBudget file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:370:10", (debugprofilestop() - t0) >= budgetMs)
+    local function overBudget()
+        if not t0 then  return false end
+        return (debugprofilestop() - t0) >= budgetMs
     end
-
     local doProf = (type(profEnabled) == "function") and profEnabled() and (type(profStart) == "function") and (type(profStop) == "function")
-
     local i = 1
     while i <= #list do
         if overBudget() then
             budgetStop = true
             break
         end
-
         local name = list[i]
         local e = name and entries[name]
-
         if not (e and e.enabled and type(e.fn) == "function") then
             self:_Deactivate(name)
         else
@@ -397,19 +349,15 @@ function UM:_RunDue(now) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_RunDue file:
                 if not minInterval or interval < minInterval then
                     minInterval = interval
                 end
-
                 -- Initialize next time
                 if type(e.next) ~= "number" then
                     e.next = now + interval
                 end
-
                 local ran = 0
                 while e.next <= now and ran < maxCatch do
                     ran = ran + 1
                     local prevNext = e.next
-
                     if doProf then profStart("UM." .. tostring(name)) end
-
                     if safeCalls then
                         -- Only used in debug mode; hot path stays pcall-free.
                         local ok, err = pcall(e.fn, interval)
@@ -428,12 +376,10 @@ function UM:_RunDue(now) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_RunDue file:
                         budgetStop = true
                         break
                     end
-
                     if not e.enabled then
                         self:_Deactivate(name)
                         break
                     end
-
                     local currNext = e.next
                     if type(currNext) ~= "number" then
                         e.next = now + interval
@@ -441,58 +387,45 @@ function UM:_RunDue(now) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_RunDue file:
                         e.next = currNext + interval
                     end
                 end
-
                 if budgetStop then
                     -- Stop processing further tasks this frame.
                     break
                 end
-
                 -- If we are still behind after maxCatch, jump forward to avoid spirals.
                 if e.enabled and e.next <= now then
                     e.next = now + interval
                 end
-
                 if e.enabled then
                     if not nextDue or e.next < nextDue then
                         nextDue = e.next
                     end
                 end
-
                 i = i + 1
             end
         end
     end
-
     if budgetStop then
         local yd = self.budgetYieldDelay or 0
         if yd < 0 then yd = 0 end
         nextDue = now + yd
     end
-
-    Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_RunDue file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:354:0"); return nextDue, minInterval
+     return nextDue, minInterval
 end
-
-function UM:_ScheduleNext() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_ScheduleNext file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:475:0");
+function UM:_ScheduleNext()
     if not self:_HasActive() then
         self:_StopIfIdle()
-        Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ScheduleNext file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:475:0"); return
+         return
     end
-
     local now = (GetTime and GetTime()) or 0
     local nextDue, minInterval = self:_RunDue(now)
-
     if not self:_HasActive() or not nextDue then
         self:_StopIfIdle()
-        Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ScheduleNext file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:475:0"); return
+         return
     end
-
     local delay = nextDue - now
     if delay < 0 then delay = 0 end
-
     local useOnUpdate = (type(minInterval) == "number" and minInterval <= (self.minOnUpdateInterval or 0))
-
     local dueAt = now + delay
-
     if useOnUpdate then
         -- High-frequency mode: keep a single OnUpdate running.
         -- Cancel any cancellable timer; After() cannot be cancelled and is ignored.
@@ -500,26 +433,23 @@ function UM:_ScheduleNext() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_ScheduleN
             self:_CancelTimer()
         end
         self:_EnsureOnUpdate(self._onUpdateFn)
-        Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ScheduleNext file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:475:0"); return
+         return
     end
-
     -- Timer-driven mode (single next-due wake).
     -- Stop any active OnUpdate scan/sleep.
     self:_StopOnUpdate()
-
     -- Prefer cancellable timers.
     if C_Timer and C_Timer.NewTimer then
         -- Schedule only once: if an existing timer wakes earlier/equal, keep it.
         if self._scheduledMode == "timer" and self._timer and type(self._scheduledDueAt) == "number" and self._scheduledDueAt <= dueAt then
-            Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ScheduleNext file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:475:0"); return
+             return
         end
         self:_CancelTimer()
         self._timer = C_Timer.NewTimer(delay, self._timerWakeFn)
         self._scheduledMode = "timer"
         self._scheduledDueAt = dueAt
-        Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ScheduleNext file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:475:0"); return
+         return
     end
-
     -- Fallback: After() is not cancellable. Track a single pending wake; if we need an earlier wake,
     -- use the lightweight sleep-OnUpdate until that earlier time.
     if C_Timer and C_Timer.After then
@@ -527,58 +457,48 @@ function UM:_ScheduleNext() Perfy_Trace(Perfy_GetTime(), "Enter", "UM:_ScheduleN
             if self._afterDueAt <= dueAt then
                 self._scheduledMode = "after"
                 self._scheduledDueAt = self._afterDueAt
-                Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ScheduleNext file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:475:0"); return
+                 return
             end
             self._sleepUntil = dueAt
             self:_EnsureOnUpdate(self._sleepOnUpdateFn)
             self._scheduledMode = "after"
             self._scheduledDueAt = self._afterDueAt
-            Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ScheduleNext file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:475:0"); return
+             return
         end
-
         self:_CancelTimer()
         self._afterPending = true
         self._afterDueAt = dueAt
         self._scheduledMode = "after"
         self._scheduledDueAt = dueAt
         C_Timer.After(delay, self._timerWakeFn)
-        Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ScheduleNext file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:475:0"); return
+         return
     end
-
     -- Ultimate fallback: no timer API.
     self:_EnsureOnUpdate(self._onUpdateFn)
-    Perfy_Trace(Perfy_GetTime(), "Leave", "UM:_ScheduleNext file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:475:0"); return
+     return
 end
-
-function UM:Register(name, fn, interval, priority) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:553:0");
-    if type(name) ~= "string" or name == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:553:0"); return end
-    if type(fn) ~= "function" then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:553:0"); return end
-
+function UM:Register(name, fn, interval, priority)
+    if type(name) ~= "string" or name == "" then  return end
+    if type(fn) ~= "function" then  return end
     local e = self.entries[name]
     if type(e) ~= "table" then
         e = {}
         self.entries[name] = e
     end
-
     e.fn = fn
     e.interval = interval
     e.enabled = true
     e.next = nil
     e.priority = (type(priority) == "number" and priority) or e.priority or (self.defaultPriority or 50)
-
     self:_Activate(name)
     self:_ScheduleNext()
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:Register file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:553:0"); end
-
-function UM:Unregister(name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:Unregister file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:573:0");
-    if type(name) ~= "string" or name == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:Unregister file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:573:0"); return end
+ end
+function UM:Unregister(name)
+    if type(name) ~= "string" or name == "" then  return end
     self:_Deactivate(name)
     self.entries[name] = nil
     self:_StopIfIdle()
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:Unregister file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:573:0"); end
-
-
-
+ end
 -- =============================================================
 -- Kick(name)
 --   Force a task to run ASAP (next frame) without waiting for its interval.
@@ -593,12 +513,11 @@ Perfy_Trace(Perfy_GetTime(), "Leave", "UM:Unregister file://E:\\World of Warcraf
 -- Note:
 --   Kick does NOT execute the task immediately; it wakes the scheduler.
 -- =============================================================
-function UM:Kick(name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:Kick file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:596:0");
-    if type(name) ~= "string" or name == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:Kick file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:596:0"); return end
+function UM:Kick(name)
+    if type(name) ~= "string" or name == "" then  return end
     local entries = self.entries
     local e = entries and entries[name]
-    if type(e) ~= "table" then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:Kick file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:596:0"); return end
-
+    if type(e) ~= "table" then  return end
     -- Ensure it is active/enabled.
     if not e.enabled then
         e.enabled = true
@@ -607,30 +526,26 @@ function UM:Kick(name) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:Kick file://E:\
     elseif self.activeIndex and not self.activeIndex[name] then
         self:_Activate(name)
     end
-
     local now = (GetTime and GetTime()) or 0
     e.next = now
-
     -- Cancel any cancellable timer and wake via OnUpdate.
     -- (Kick intentionally does NOT execute the task immediately.)
     self:_CancelTimer()
     self:_EnsureOnUpdate(self._onUpdateFn)
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:Kick file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:596:0"); end
-
-function _G.MSUF_UpdateManager_Kick(name) Perfy_Trace(Perfy_GetTime(), "Enter", "_G.MSUF_UpdateManager_Kick file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:620:0");
+ end
+function _G.MSUF_UpdateManager_Kick(name)
     local um = _G.MSUF_UpdateManager
     if um and um.Kick then
         um:Kick(name)
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "_G.MSUF_UpdateManager_Kick file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:620:0"); end
-function UM:SetEnabled(name, enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:SetEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:626:0");
-    if type(name) ~= "string" or name == "" then Perfy_Trace(Perfy_GetTime(), "Leave", "UM:SetEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:626:0"); return end
+ end
+function UM:SetEnabled(name, enabled)
+    if type(name) ~= "string" or name == "" then  return end
     local e = self.entries[name]
     if type(e) ~= "table" then
         self:_StopIfIdle()
-        Perfy_Trace(Perfy_GetTime(), "Leave", "UM:SetEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:626:0"); return
+         return
     end
-
     local on = not not enabled
     e.enabled = on
     if on then
@@ -642,8 +557,5 @@ function UM:SetEnabled(name, enabled) Perfy_Trace(Perfy_GetTime(), "Enter", "UM:
         self:_Deactivate(name)
         self:_StopIfIdle()
     end
-Perfy_Trace(Perfy_GetTime(), "Leave", "UM:SetEnabled file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua:626:0"); end
-
+ end
 ns.MSUF_UpdateManager = UM
-
-Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) file://E:\\World of Warcraft\\_beta_\\Interface\\AddOns\\MidnightSimpleUnitFrames\\MSUF_UpdateManager.lua");

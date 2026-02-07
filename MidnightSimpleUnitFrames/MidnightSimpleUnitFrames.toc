@@ -1,53 +1,47 @@
-## Interface: 120001, 120000
-## Title: Midnight Simple UnitFrames
-## Notes: Unitframe Addon by Mapko 
-## Author: Mapkó
-## Version: 1.91
-## Category: Combat
-## SavedVariables: MSUF_Config
-## SavedVariables: MSUF_DB, MSUF_GlobalDB
-## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
-## X-Wago-ID: XKq9aoKy
-## Dependencies: !!!Perfy
-## X-Perfy-Instrumented: true
+## Interface: 120000
+## Title: Midnight Simple Unit Frames
+## Notes: Lightweight unitframes with MSUF Edit Mode.
+## Author: Mapko 
+## Version: 2.0 Alpha 1
+## SavedVariables: MSUF_DB
 
-MSUF_UpdateManager.lua
-MSUF_EventBus.lua
 MSUF_Libs.lua
+MSUF_Util.lua
 MSUF_Defaults.lua
 MSUF_Profiles.lua
-MSUF_Util.lua
-MSUF_Style.lua
-MSUF_Castbars_LoDStub.lua
-Options\MSUF_Options_Core.lua
-Options\MSUF_Options_Player.lua
-Options\MSUF_Options_Misc.lua
-Options\MSUF_Options_Fonts.lua
-Options\MSUF_Options_Auras.lua
-Media\MSUF_Media.lua
-Core\MSUF_ProfileIO.lua
-Core\MSUF_StatusIndicators.lua
-Core\MSUF_SetupWizard.lua
-Core\MSUF_ChatAndTooltips.lua
-Core\MSUF_UnitframeCore.lua
-MidnightSimpleUnitFrames.lua
 MSUF_Presets.lua
-MidnightSimpleUnitFrames_SlashMenu.lua
-MidnightSimpleUnitFrames_MinimapButton.lua
+MSUF_Style.lua
+MSUF_Modules.lua
+MSUF_UpdateManager.lua
+MSUF_EventBus.lua
 MSUF_EditMode.lua
+MSUF_Castbars_LoDStub.lua
+MidnightSimpleUnitFrames_MinimapButton.lua
+
+Core\MSUF_ProfileIO.lua
+Core\MSUF_ChatAndTooltips.lua
+Core\MSUF_StatusIndicators.lua
+Core\MSUF_UnitframeCore.lua
+
 MidnightSimpleUnitFrames_Colors.lua
-Auras2\MSUF_A2_Public.lua
-Auras2\MSUF_A2_DB.lua
-Auras2\MSUF_A2_Units.lua
-Auras2\MSUF_A2_CooldownText.lua
-Auras2\MSUF_A2_Filters.lua
-Auras2\MSUF_A2_Colors.lua
-Auras2\MSUF_A2_Masque.lua
-Auras2\MSUF_A2_Events.lua
-Auras2\MSUF_A2_Preview.lua
-Auras2\MSUF_A2_Render.lua
 MidnightSimpleUnitFrames_Auras.lua
 MidnightSimpleUnitFrames_Gameplay.lua
-Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua
-Modules\MSUF_RoundedUnitframes.lua
-Modules\MSUF_3DPortraits.lua
+MidnightSimpleUnitFrames_SlashMenu.lua
+MidnightSimpleUnitFrames.lua
+
+Options\MSUF_Options_Core.lua
+Options\MSUF_Options_Player.lua
+Options\MSUF_Options_Auras.lua
+Options\MSUF_Options_Fonts.lua
+Options\MSUF_Options_Misc.lua
+
+Auras2\MSUF_A2_DB.lua
+Auras2\MSUF_A2_Colors.lua
+Auras2\MSUF_A2_Filters.lua
+Auras2\MSUF_A2_Public.lua
+Auras2\MSUF_A2_Units.lua
+Auras2\MSUF_A2_Masque.lua
+Auras2\MSUF_A2_Preview.lua
+Auras2\MSUF_A2_CooldownText.lua
+Auras2\MSUF_A2_Render.lua
+Auras2\MSUF_A2_Events.lua
