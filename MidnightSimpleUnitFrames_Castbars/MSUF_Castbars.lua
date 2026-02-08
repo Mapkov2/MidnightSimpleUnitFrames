@@ -299,37 +299,11 @@ local function MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
             end
         end
     end
-
-    local nonInterruptibleKey = g.castbarNonInterruptibleColor or "red"
-
     local isNonInterruptible = false
-
-    local unit = self.unit or "player"
-    local nameplate = C_NamePlate
-        and C_NamePlate.GetNamePlateForUnit
-        and C_NamePlate.GetNamePlateForUnit(unit, issecure())
-
-    if nameplate then
-        local bar = (nameplate.UnitFrame and nameplate.UnitFrame.castBar)
-            or nameplate.castBar
-            or nameplate.CastBar
-
-        local barType = bar and bar.barType
-        if barType == "uninterruptable"
-            or barType == "uninterruptible"
-            or barType == "uninterruptibleSpell"
-            or barType == "shield"
-        then
-            isNonInterruptible = true
-        end
-    end
 
     if self.isNotInterruptible then
         isNonInterruptible = true
     end
-
-    local r, gCol, b, a
-
     local r, gCol, b, a
 
     if isNonInterruptible then
