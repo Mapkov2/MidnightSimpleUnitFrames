@@ -368,7 +368,7 @@ end
 local function MSUF_A2_MergeBossAuras(playerList, fullList, out, seen, seenKeys, seenN)
     -- Return a list that contains all PLAYER auras, plus any boss auras from fullList.
     -- Dedupe by auraInstanceID.
-    -- Phase 7: no closures, no table.wipe; optional keylist clear for the seen map.
+    -- Phase 4: stamp-map (no per-render clears/wipes). Hard-clear only on rare growth cap.
     if type(playerList) ~= "table" then playerList = nil end
     if type(fullList) ~= "table" then fullList = nil end
 
@@ -378,25 +378,36 @@ local function MSUF_A2_MergeBossAuras(playerList, fullList, out, seen, seenKeys,
     -- Clear output array
     MSUF_A2_ClearArray(out)
 
-    local n = seenN
-    if type(n) ~= "number" then n = 0 end
-    if type(seenKeys) == "table" then
-        n = MSUF_A2_ClearMapWithKeys(seen, seenKeys, n)
-    else
-        MSUF_A2_ClearMap(seen)
+    -- Stamp map: we never wipe/clear the table every render. Instead, we bump a stamp and
+    -- treat seen[aid] == stamp as "seen this pass".
+    local stamp = (seen._msufA2_stamp or 0) + 1
+    if stamp > 0x3fffffff then stamp = 1 end
+    seen._msufA2_stamp = stamp
+
+    local size = seen._msufA2_size
+    if type(size) ~= "number" then size = 0 end
+
+    -- Guard against unbounded growth (very rare): if the map grew huge, clear once.
+    if size > 4096 then
+        for k in pairs(seen) do
+            if k ~= "_msufA2_stamp" and k ~= "_msufA2_size" then
+                seen[k] = nil
+            end
+        end
+        size = 0
     end
 
     if playerList then
         for i = 1, #playerList do
             local aura = playerList[i]
             if aura ~= nil then
-                out[#out+1] = aura
+                out[#out + 1] = aura
                 local aid = aura._msufAuraInstanceID or aura.auraInstanceID
-                if aid ~= nil and seen[aid] ~= true then
-                    seen[aid] = true
-                    if type(seenKeys) == "table" then
-                        n = n + 1
-                        seenKeys[n] = aid
+                if aid ~= nil then
+                    local v = seen[aid]
+                    if v ~= stamp then
+                        if v == nil then size = size + 1 end
+                        seen[aid] = stamp
                     end
                 end
             end
@@ -408,21 +419,22 @@ local function MSUF_A2_MergeBossAuras(playerList, fullList, out, seen, seenKeys,
             local aura = fullList[i]
             if aura and MSUF_A2_IsBossAura(aura) then
                 local aid = aura._msufAuraInstanceID or aura.auraInstanceID
-                if aid == nil or seen[aid] ~= true then
-                    out[#out+1] = aura
-                    if aid ~= nil then
-                        seen[aid] = true
-                        if type(seenKeys) == "table" then
-                            n = n + 1
-                            seenKeys[n] = aid
-                        end
+                if aid == nil then
+                    out[#out + 1] = aura
+                else
+                    local v = seen[aid]
+                    if v ~= stamp then
+                        out[#out + 1] = aura
+                        if v == nil then size = size + 1 end
+                        seen[aid] = stamp
                     end
                 end
             end
         end
     end
 
-    return out, n
+    seen._msufA2_size = size
+    return out, size
 end
 
 local MSUF_A2_EMPTY = {}
@@ -465,12 +477,8 @@ local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMi
                 if type(mergeOut) ~= "table" then mergeOut = {}; entry[mergeOutKey] = mergeOut end
                 local mergeSeen = entry[mergeSeenKey]
                 if type(mergeSeen) ~= "table" then mergeSeen = {}; entry[mergeSeenKey] = mergeSeen end
-                local mergeSeenKeys = entry._msufA2_mergeBossSeenKeys
-                if type(mergeSeenKeys) ~= "table" then mergeSeenKeys = {}; entry._msufA2_mergeBossSeenKeys = mergeSeenKeys end
-                local mergeSeenN = entry._msufA2_mergeBossSeenN
-                if type(mergeSeenN) ~= "number" then mergeSeenN = 0 end
-                baseList, mergeSeenN = MSUF_A2_MergeBossAuras(mine, allList or GetAuraList(unit, filter, false, maxAll, allBuf), mergeOut, mergeSeen, mergeSeenKeys, mergeSeenN)
-                entry._msufA2_mergeBossSeenN = mergeSeenN
+				-- Phase 4: stamp-map dedupe (no per-render keylist clears)
+				baseList = MSUF_A2_MergeBossAuras(mine, allList or GetAuraList(unit, filter, false, maxAll, allBuf), mergeOut, mergeSeen)
             else
                 baseList = GetAuraList(unit, filter, true, cap, mineBuf)
             end
