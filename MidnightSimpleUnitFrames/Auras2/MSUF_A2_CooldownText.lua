@@ -99,7 +99,15 @@ function MSUF_A2_GetCooldownFontString(icon)
     cd._msufCooldownFontStringBlizzard = blizzFS
 
     -- Create our own countdown FontString and cache it.
-    local fs = cd:CreateFontString(nil, "OVERLAY")
+    -- IMPORTANT: A Cooldown widget is a child frame and can cover parent regions due to framelevel.
+    -- To ensure the countdown text is always visible above the swipe, parent it to a higher-level
+    -- overlay frame when available (the icon's count frame is already placed above the cooldown).
+    local parent = (icon and icon._msufCountFrame)
+    if not parent or type(parent.CreateFontString) ~= "function" then
+        parent = cd
+    end
+
+    local fs = parent:CreateFontString(nil, "OVERLAY")
     if not fs then
         cd._msufCooldownFontString = false
         return nil
@@ -134,6 +142,12 @@ function MSUF_A2_GetCooldownFontString(icon)
 end
 
 CT.GetCooldownFontString = MSUF_A2_GetCooldownFontString
+
+-- Export for cross-file late-binding (Render.lua may load before this module).
+-- Keeping this as a plain global avoids needing any extra OnUpdate polling.
+if _G and type(_G.MSUF_A2_GetCooldownFontString) ~= "function" then
+    _G.MSUF_A2_GetCooldownFontString = MSUF_A2_GetCooldownFontString
+end
 
 -- ------------------------------------------------------------
 -- Bucket colors + curve
@@ -518,7 +532,9 @@ local function MSUF_A2_FormatCooldownTimeText(rem)
         return ""
     end
 
-    if rem < 10 then
+    local useTenths = ((MSUF_DB and MSUF_DB.general and MSUF_DB.general.aurasCooldownTextUseTenthsUnder10) == true) or false
+
+    if rem < 10 and useTenths then
         local tenths = math.floor(rem * 10 + 0.5)
         if tenths >= 100 then
             return MSUF_A2_FormatCooldownTimeTextFromBucket(2, 10, 0)
@@ -576,26 +592,26 @@ local function MSUF_A2_ForceCooldownTextRecolor()
             if not bucketsEnabled and safeCol then
                 r, g, b, a = safeCol[1], safeCol[2], safeCol[3], safeCol[4]
             end
-
-            if C_UnitAuras and type(C_UnitAuras.GetAuraDurationRemaining) == "function" then
-                local unit = ic._msufUnit
-                local auraID = ic._msufAuraInstanceID
-                if unit and auraID and type(auraID) == "number" then
-                    local rem = C_UnitAuras.GetAuraDurationRemaining(unit, auraID)
-                    if type(rem) == "number" then
-                        local colT = MSUF_A2_GetCooldownTextColorForRemainingSeconds(rem)
+            if cooldown and cooldown.GetCooldownTimes then
+                local startMS, durMS = cooldown:GetCooldownTimes()
+                if startMS and durMS and durMS > 0 then
+                    local rem = (startMS + durMS)/1000 - GetTime()
+                    local safeRem = MSUF_A2_NotSecretNumber(rem)
+                    if safeRem then
+                        local colT = MSUF_A2_GetCooldownTextColorForRemainingSeconds(safeRem)
                         if colT then r, g, b, a = colT[1], colT[2], colT[3], colT[4] end
                     end
                 end
             end
 
             if (not r) and ic._msufA2_isPreview == true then
-                local ps = ic._msufA2_previewCooldownStart
-                local pd = ic._msufA2_previewCooldownDur
-                if type(ps) == "number" and type(pd) == "number" and pd > 0 then
+                local ps = MSUF_A2_NotSecretNumber(ic._msufA2_previewCooldownStart)
+                local pd = MSUF_A2_NotSecretNumber(ic._msufA2_previewCooldownDur)
+                if ps and pd and pd > 0 then
                     local rem = (ps + pd) - GetTime()
-                    if type(rem) == "number" then
-                        local colT = MSUF_A2_GetCooldownTextColorForRemainingSeconds(rem)
+                    local safeRem = MSUF_A2_NotSecretNumber(rem)
+                    if safeRem then
+                        local colT = MSUF_A2_GetCooldownTextColorForRemainingSeconds(safeRem)
                         if colT then r, g, b, a = colT[1], colT[2], colT[3], colT[4] end
                     end
                 end
@@ -645,77 +661,171 @@ if _G and type(_G.MSUF_A2_ForceCooldownTextRecolor) ~= "function" then
 end
 
 -- ------------------------------------------------------------
--- Cooldown Text Manager (single OnUpdate, 10 Hz)
+-- Cooldown Text Manager (single timer; no per-icon OnUpdate)
 -- ------------------------------------------------------------
 
 MSUF_A2_CooldownTextMgr = {
-    frame = nil,
     active = {}, -- [cooldownFrame] = icon
-    count = 0,
-
-    -- ticker-based driver (no per-frame OnUpdate)
-    ticker = nil,
-    tickerInterval = 0,
+    heap   = {}, -- min-heap of { t, cd, icon, gen }
+    count  = 0,
+    timer  = nil, -- C_Timer.NewTimer handle
+    scheduledAt = nil,
     slowInterval = 0.25,
     fastInterval = 0.10,
 }
 
-local function MSUF_A2_CooldownTextMgr_StopTicker()
-    local mgr = MSUF_A2_CooldownTextMgr
-    if mgr.ticker then
-        mgr.ticker:Cancel()
-        mgr.ticker = nil
-    end
-    mgr.tickerInterval = 0
+local function MSUF_A2_CDTXT_UseTenthsUnder10()
+    local g = (MSUF_DB and MSUF_DB.general) or nil
+    return (g and g.aurasCooldownTextUseTenthsUnder10 == true) or false
 end
 
-local function MSUF_A2_CooldownTextMgr_EnsureTicker(interval)
+local function MSUF_A2_CDTXT_HeapSwap(h, i, j)
+    local a = h[i]
+    h[i] = h[j]
+    h[j] = a
+end
+
+local function MSUF_A2_CDTXT_HeapSiftUp(h, idx)
+    while idx > 1 do
+        local parent = math.floor(idx / 2)
+        if h[parent].t <= h[idx].t then
+            return
+        end
+        MSUF_A2_CDTXT_HeapSwap(h, parent, idx)
+        idx = parent
+    end
+end
+
+local function MSUF_A2_CDTXT_HeapSiftDown(h, idx)
+    local n = #h
+    while true do
+        local left = idx * 2
+        if left > n then
+            return
+        end
+        local right = left + 1
+        local smallest = left
+        if right <= n and h[right].t < h[left].t then
+            smallest = right
+        end
+        if h[idx].t <= h[smallest].t then
+            return
+        end
+        MSUF_A2_CDTXT_HeapSwap(h, idx, smallest)
+        idx = smallest
+    end
+end
+
+local function MSUF_A2_CDTXT_HeapPush(h, node)
+    h[#h + 1] = node
+    MSUF_A2_CDTXT_HeapSiftUp(h, #h)
+end
+
+local function MSUF_A2_CDTXT_HeapPop(h)
+    local n = #h
+    if n <= 0 then return nil end
+    local root = h[1]
+    if n == 1 then
+        h[1] = nil
+        return root
+    end
+    h[1] = h[n]
+    h[n] = nil
+    MSUF_A2_CDTXT_HeapSiftDown(h, 1)
+    return root
+end
+
+local function MSUF_A2_CooldownTextMgr_CancelTimer()
     local mgr = MSUF_A2_CooldownTextMgr
-    if mgr.count <= 0 then
-        MSUF_A2_CooldownTextMgr_StopTicker()
-        return
+    if mgr.timer then
+        mgr.timer:Cancel()
+        mgr.timer = nil
     end
-
-    local want = interval or mgr.slowInterval or 0.25
-    if mgr.ticker and mgr.tickerInterval == want then
-        return
-    end
-
-    MSUF_A2_CooldownTextMgr_StopTicker()
-    mgr.tickerInterval = want
-    mgr.ticker = C_Timer.NewTicker(want, MSUF_A2_CooldownTextMgr_Tick)
+    mgr.scheduledAt = nil
 end
 
 local function MSUF_A2_CooldownTextMgr_ChooseNextDelay(remSeconds)
-    -- Conservative: accurate enough for display, but cheap.
+    -- Conservative + cheap. If tenths are disabled, we can update far less frequently under 10s.
     if type(remSeconds) ~= "number" then return 0.50 end
     if remSeconds <= 0 then return 0.50 end
-    if remSeconds < 10 then return 0.10 end
+    if remSeconds < 10 then
+        return MSUF_A2_CDTXT_UseTenthsUnder10() and 0.10 or 1.00
+    end
     if remSeconds < 60 then return 0.50 end
     if remSeconds < 600 then return 1.00 end
     if remSeconds < 3600 then return 5.00 end
     return 10.00
 end
 
+local function MSUF_A2_CooldownTextMgr_PruneTop(now)
+    local mgr = MSUF_A2_CooldownTextMgr
+    local h = mgr.heap
+    while h[1] do
+        local node = h[1]
+        local ic = mgr.active[node.cd]
+        if (not ic) or ic ~= node.icon or ic._msufA2_cdGen ~= node.gen
+            or ic._msufA2_cdMgrRegistered ~= true
+            or ic._msufA2_hideCDNumbers == true then
+            MSUF_A2_CDTXT_HeapPop(h)
+        else
+            return node
+        end
+    end
+    return nil
+end
+
+local function MSUF_A2_CooldownTextMgr_RebuildHeapIfNeeded()
+    local mgr = MSUF_A2_CooldownTextMgr
+    if mgr.count <= 0 then return end
+    if mgr.heap[1] then return end
+
+    for cd, ic in pairs(mgr.active) do
+        if cd and ic and ic._msufA2_cdMgrRegistered == true and ic._msufA2_hideCDNumbers ~= true then
+            local gen = ic._msufA2_cdGen or 0
+            MSUF_A2_CDTXT_HeapPush(mgr.heap, { t = 0, cd = cd, icon = ic, gen = gen })
+        end
+    end
+end
+
+local function MSUF_A2_CooldownTextMgr_ScheduleNext()
+    local mgr = MSUF_A2_CooldownTextMgr
+    if mgr.count <= 0 then
+        MSUF_A2_CooldownTextMgr_CancelTimer()
+        return
+    end
+
+    local now = GetTime()
+    MSUF_A2_CooldownTextMgr_RebuildHeapIfNeeded()
+    local node = MSUF_A2_CooldownTextMgr_PruneTop(now)
+    if not node then
+        MSUF_A2_CooldownTextMgr_CancelTimer()
+        return
+    end
+
+    local delay = node.t - now
+    if delay < 0.05 then delay = 0.05 end
+    if delay > 10.00 then delay = 10.00 end
+
+    -- Avoid thrashing timers if the next firing time is effectively the same.
+    if mgr.scheduledAt and mgr.timer then
+        local diff = mgr.scheduledAt - (now + delay)
+        if diff < 0 then diff = -diff end
+        if diff < 0.02 then
+            return
+        end
+    end
+
+    MSUF_A2_CooldownTextMgr_CancelTimer()
+    mgr.scheduledAt = now + delay
+    mgr.timer = C_Timer.NewTimer(delay, MSUF_A2_CooldownTextMgr_Tick)
+end
 
 local function MSUF_A2_CooldownTextMgr_StopIfIdle()
     local mgr = MSUF_A2_CooldownTextMgr
     if mgr.count <= 0 then
-        MSUF_A2_CooldownTextMgr_StopTicker()
-        if mgr.frame then mgr.frame:Hide() end
+        MSUF_A2_CooldownTextMgr_CancelTimer()
     end
 end
-
-local function MSUF_A2_CooldownTextMgr_EnsureFrame()
-    local mgr = MSUF_A2_CooldownTextMgr
-    if mgr.frame then return mgr.frame end
-
-    local f = CreateFrame("Frame", nil, UIParent)
-    f:Hide()
-    mgr.frame = f
-    return f
-end
-
 local function MSUF_A2_ApplyCooldownTextColor(fs, col)
     if not fs or not col then return end
 
@@ -754,6 +864,11 @@ end
 
 function MSUF_A2_CooldownTextMgr_Tick()
     local mgr = MSUF_A2_CooldownTextMgr
+
+    -- one-shot timers complete after firing
+    mgr.timer = nil
+    mgr.scheduledAt = nil
+
     if mgr.count <= 0 then
         MSUF_A2_CooldownTextMgr_StopIfIdle()
         return
@@ -764,208 +879,195 @@ function MSUF_A2_CooldownTextMgr_Tick()
     local c = MSUF_A2_EnsureCooldownTextColors()
     local colSafe = (c and c.safe) or (c and c.normal) or { 1, 1, 1, 1 }
     local colNormal = (c and c.normal) or colSafe
-    local soonestDelta = 1.0
+    local useTenths = MSUF_A2_CDTXT_UseTenthsUnder10()
 
-    for cooldown, icon in pairs(mgr.active) do
-        if not icon or not cooldown or icon._msufA2_cdMgrRegistered ~= true or icon:IsShown() ~= true then
-            if icon then
-                icon._msufA2_cdMgrRegistered = false
-                icon._msufA2_cdNextUpdate = nil
-                icon._msufA2_cdFast = nil
-            end
-            mgr.active[cooldown] = nil
-            mgr.count = mgr.count - 1
-        else
-            -- Safety: if the icon is flagged to hide cooldown numbers, don't keep it in the manager.
-            if icon._msufA2_hideCDNumbers == true then
-                local fs = MSUF_A2_GetCooldownFontString(icon)
-                if fs then
-                    fs._msufA2_cdMode = 0
-                    fs._msufA2_cdV1 = nil
-                    fs._msufA2_cdV2 = nil
-                    fs:SetText("")
+    local h = mgr.heap
+    local processed = 0
+
+    while true do
+        local node = h[1]
+        if not node then
+            break
+        end
+        if node.t > now then
+            break
+        end
+
+        node = MSUF_A2_CDTXT_HeapPop(h)
+
+        local icon = mgr.active[node.cd]
+        if icon and icon == node.icon and icon._msufA2_cdMgrRegistered == true and icon._msufA2_cdGen == node.gen
+            and icon._msufA2_hideCDNumbers ~= true then
+
+            processed = processed + 1
+
+            local remSeconds
+            if icon._msufA2_isPreview == true then
+                local ps = MSUF_A2_NotSecretNumber(icon._msufA2_previewCooldownStart)
+                local pd = MSUF_A2_NotSecretNumber(icon._msufA2_previewCooldownDur)
+                if ps and pd and pd > 0 then
+                    remSeconds = (ps + pd) - now
+                else
+                    remSeconds = 0
                 end
-                icon._msufA2_cdMgrRegistered = false
-                icon._msufA2_cdNextUpdate = nil
-                icon._msufA2_cdFast = nil
-                mgr.active[cooldown] = nil
-                mgr.count = mgr.count - 1
             else
-                local nextAt = icon._msufA2_cdNextUpdate or 0
-            if now >= nextAt then
-                local remSeconds
-
-                if icon._msufA2_isPreview == true then
-                    -- Preview icons: compute from the cooldown widget (safe numbers).
-                    local startMS, durMS = cooldown:GetCooldownTimes()
-                    if type(startMS) == "number" and type(durMS) == "number" and durMS > 0 then
-                        local expiry = (startMS / 1000) + (durMS / 1000)
-                        remSeconds = expiry - now
+                local cd = node.cd
+                if cd and cd.GetCooldownTimes then
+                    local startMS, durMS = cd:GetCooldownTimes()
+                    if startMS and durMS and durMS > 0 then
+                        remSeconds = (startMS + durMS)/1000 - now
                     else
                         remSeconds = 0
                     end
                 else
-                    local auraInstanceID = icon._msufA2_auraInstanceID
-                    local unit = icon._msufA2_unit
-                    if unit and auraInstanceID then
-                        remSeconds = C_UnitAuras.GetAuraDurationRemaining(unit, auraInstanceID)
-                    else
-                        -- Fallback for non-aura cooldowns (if any).
-                        local startMS, durMS = cooldown:GetCooldownTimes()
-                        if type(startMS) == "number" and type(durMS) == "number" and durMS > 0 then
-                            local expiry = (startMS / 1000) + (durMS / 1000)
-                            remSeconds = expiry - now
-                        end
-                    end
+                    remSeconds = 0
+                end
+            end
+
+            local safeRem = MSUF_A2_NotSecretNumber(remSeconds)
+
+            local fs = icon._msufA2_cdFS
+            if not fs then
+                fs = MSUF_A2_GetCooldownFontString(icon)
+            end
+
+            local delay = 0.50
+
+            if safeRem and safeRem > 0 then
+                delay = MSUF_A2_CooldownTextMgr_ChooseNextDelay(safeRem) or 0.50
+
+                local mode, v1, v2
+                if safeRem < 10 and useTenths then
+                    mode = 1
+                    v1 = math.floor(safeRem * 10 + 0.5)
+                elseif safeRem < 60 then
+                    mode = 2
+                    v1 = math.floor(safeRem + 0.5)
+                elseif safeRem < 600 then
+                    mode = 3
+                    v1 = math.floor(safeRem / 60)
+                    v2 = math.floor(safeRem - v1 * 60)
+                elseif safeRem < 3600 then
+                    mode = 4
+                    v1 = math.floor(safeRem / 60 + 0.5)
+                else
+                    mode = 5
+                    v1 = math.floor(safeRem / 3600 + 0.5)
                 end
 
-                cooldown._msufLastShownNumSeconds = remSeconds
-
-                local fs = MSUF_A2_GetCooldownFontString(icon)
                 if fs then
-					local delay = MSUF_A2_CooldownTextMgr_ChooseNextDelay(remSeconds) or 0.50
-					local safeRem = MSUF_A2_NotSecretNumber(remSeconds)
+                    if fs._msufA2_cdMode ~= mode or fs._msufA2_cdV1 ~= v1 or fs._msufA2_cdV2 ~= v2 then
+                        fs._msufA2_cdMode = mode
+                        fs._msufA2_cdV1 = v1
+                        fs._msufA2_cdV2 = v2
+                        fs:SetText(MSUF_A2_FormatCooldownTimeTextFromBucket(mode, v1, v2))
+                    end
 
-					if safeRem and safeRem > 0 then
-						remSeconds = safeRem
-                        -- Only format / allocate a new string when the displayed bucket changes.
-                        local mode, v1, v2
-                        if remSeconds < 10 then
-                            mode = 1
-                            v1 = math.floor(remSeconds * 10 + 0.5) -- tenths
-                        elseif remSeconds < 60 then
-                            mode = 2
-                            v1 = math.floor(remSeconds + 0.5)
-                        elseif remSeconds < 600 then
-                            mode = 3
-                            v1 = math.floor(remSeconds / 60) -- minutes
-                            v2 = math.floor(remSeconds - v1 * 60) -- seconds
-                        elseif remSeconds < 3600 then
-                            mode = 4
-                            v1 = math.floor(remSeconds / 60 + 0.5) -- minutes (rounded)
-                        else
-                            mode = 5
-                            v1 = math.floor(remSeconds / 3600 + 0.5) -- hours (rounded)
-                        end
-
-                        if fs._msufA2_cdMode ~= mode or fs._msufA2_cdV1 ~= v1 or fs._msufA2_cdV2 ~= v2 then
-                            fs._msufA2_cdMode = mode
-                            fs._msufA2_cdV1 = v1
-                            fs._msufA2_cdV2 = v2
-                            fs:SetText(MSUF_A2_FormatCooldownTimeTextFromBucket(mode, v1, v2))
-                        end
-
-                        icon._msufA2_cdFast = (remSeconds < 10)
-                        -- soonestDelta handled below
+                    if coloringEnabled then
+                        local col = MSUF_A2_GetCooldownTextColorForRemainingSeconds(safeRem) or colNormal
+                        MSUF_A2_ApplyCooldownTextColor(fs, col)
                     else
-                        -- Secret/invalid/expired: clear our text (we still may set color via duration objects).
-                        if fs._msufA2_cdMode ~= 0 then
-                            fs._msufA2_cdMode = 0
-                            fs._msufA2_cdV1 = nil
-                            fs._msufA2_cdV2 = nil
-                            fs:SetText("")
+                        -- static coloring: only flip safe/normal when needed
+                        if icon._msufA2_cdLastSafeState ~= false then
+                            icon._msufA2_cdLastSafeState = false
+                            MSUF_A2_ApplyCooldownTextColor(fs, colNormal)
                         end
-                        icon._msufA2_cdFast = false
                     end
-
-
-					if coloringEnabled then
-						local col
-						local modeNow = fs._msufA2_cdMode or 0
-						if modeNow ~= 0 and safeRem and safeRem > 0 then
-							col = MSUF_A2_GetCooldownTextColorForRemainingSeconds(remSeconds) or colNormal
-						else
-							col = colSafe
-						end
-						MSUF_A2_ApplyCooldownTextColor(fs, col)
-					else
-						-- When bucket coloring is disabled, always use the "Safe" color.
-						MSUF_A2_ApplyCooldownTextColor(fs, colSafe)
-					end
-
-                    icon._msufA2_cdNextUpdate = now + delay
-                    do
-                        local d = delay
-                        if d < 0.10 then d = 0.10 end
-                        if d < soonestDelta then soonestDelta = d end
-                    end
-                else
-                    -- If we can't find the FontString yet, retry later without spinning every frame.
-                    icon._msufA2_cdNextUpdate = now + 0.50
-                    do
-                        local d = 0.50
-                        if d < 0.10 then d = 0.10 end
-                        if d < soonestDelta then soonestDelta = d end
-                    end
-                    icon._msufA2_cdFast = false
                 end
             else
-                do
-                    local d = (icon._msufA2_cdNextUpdate or 0) - now
-                    if d < 0.10 then d = 0.10 end
-                    if d < soonestDelta then soonestDelta = d end
+                if fs then
+                    if fs._msufA2_cdMode ~= 0 then
+                        fs._msufA2_cdMode = 0
+                        fs._msufA2_cdV1 = nil
+                        fs._msufA2_cdV2 = nil
+                        fs:SetText("")
+                    end
+                    if coloringEnabled then
+                        MSUF_A2_ApplyCooldownTextColor(fs, colSafe)
+                    else
+                        if icon._msufA2_cdLastSafeState ~= true then
+                            icon._msufA2_cdLastSafeState = true
+                            MSUF_A2_ApplyCooldownTextColor(fs, colSafe)
+                        end
+                    end
                 end
+                delay = 0.50
             end
-            end
+
+            local nextAt = now + delay
+            icon._msufA2_cdNextUpdate = nextAt
+            MSUF_A2_CDTXT_HeapPush(h, { t = nextAt, cd = node.cd, icon = icon, gen = node.gen })
+        end
+
+        if processed >= 128 then
+            break
         end
     end
 
-    if mgr.count <= 0 then
-        MSUF_A2_CooldownTextMgr_StopIfIdle()
+    MSUF_A2_CooldownTextMgr_ScheduleNext()
+end
+
+function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
+    if not icon then return end
+    local cooldown = icon.cooldown
+    if not cooldown then return end
+
+    if icon._msufA2_cdMgrRegistered == true then
         return
     end
 
-    -- Dynamic shared ticker (no per-icon OnUpdate):
-    -- pick the next useful tick bucket based on the earliest scheduled update across active icons.
-    local want
-    if soonestDelta <= 0.11 then
-        want = mgr.fastInterval or 0.10
-    elseif soonestDelta <= 0.35 then
-        want = mgr.slowInterval or 0.25
-    else
-        want = 1.00
-    end
-
-    if mgr.tickerInterval ~= want then
-        MSUF_A2_CooldownTextMgr_EnsureTicker(want)
-    end
-end
-
-local function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
-    if not icon or not icon.cooldown then return end
+    icon._msufA2_cdMgrRegistered = true
+    icon._msufA2_cdGen = (icon._msufA2_cdGen or 0) + 1
+    local gen = icon._msufA2_cdGen
 
     local mgr = MSUF_A2_CooldownTextMgr
-    local cooldown = icon.cooldown
-
-    if mgr.active[cooldown] ~= nil then return end
-
     mgr.active[cooldown] = icon
     mgr.count = mgr.count + 1
 
-    icon._msufA2_cdMgrRegistered = true
-    icon._msufA2_cdNextUpdate = 0
-    icon._msufA2_cdFast = false
+    MSUF_A2_CDTXT_HeapPush(mgr.heap, { t = 0, cd = cooldown, icon = icon, gen = gen })
 
-    MSUF_A2_CooldownTextMgr_EnsureFrame()
-    MSUF_A2_CooldownTextMgr_EnsureTicker(mgr.slowInterval)
+    MSUF_A2_CooldownTextMgr_ScheduleNext()
 end
 
-local function MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
-    if not icon or not icon.cooldown then return end
+-- Force an immediate refresh for an already-registered icon.
+-- Used when an aura is refreshed/reapplied and the cooldown duration object changes while the
+-- auraInstanceID stays the same (updatedAuraInstanceIDs).
+function MSUF_A2_CooldownTextMgr_TouchIcon(icon)
+    if not icon then return end
+    if icon._msufA2_cdMgrRegistered ~= true then return end
+    local cooldown = icon.cooldown
+    if not cooldown then return end
 
     local mgr = MSUF_A2_CooldownTextMgr
-    local cooldown = icon.cooldown
+    -- Bump generation so stale heap nodes are ignored.
+    icon._msufA2_cdGen = (icon._msufA2_cdGen or 0) + 1
+    local gen = icon._msufA2_cdGen
 
-    if mgr.active[cooldown] ~= nil then
-        mgr.active[cooldown] = nil
-        mgr.count = mgr.count - 1
+    MSUF_A2_CDTXT_HeapPush(mgr.heap, { t = 0, cd = cooldown, icon = icon, gen = gen })
+    MSUF_A2_CooldownTextMgr_ScheduleNext()
+end
+
+function MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
+    if not icon then return end
+    local cooldown = icon.cooldown
+    if not cooldown then return end
+
+    if icon._msufA2_cdMgrRegistered ~= true then
+        return
     end
 
     icon._msufA2_cdMgrRegistered = false
-    icon._msufA2_cdNextUpdate = nil
-    icon._msufA2_cdFast = nil
+    icon._msufA2_cdGen = (icon._msufA2_cdGen or 0) + 1
 
-    local fs = MSUF_A2_GetCooldownFontString(icon)
+    local mgr = MSUF_A2_CooldownTextMgr
+    if mgr.active[cooldown] == icon then
+        mgr.active[cooldown] = nil
+        if mgr.count > 0 then
+            mgr.count = mgr.count - 1
+        end
+    end
+
+    local fs = icon._msufA2_cdFS
     if fs then
         fs._msufA2_cdMode = 0
         fs._msufA2_cdV1 = nil
@@ -974,10 +1076,112 @@ local function MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
     end
 
     MSUF_A2_CooldownTextMgr_StopIfIdle()
+    MSUF_A2_CooldownTextMgr_ScheduleNext()
 end
 
-CT.RegisterIcon   = MSUF_A2_CooldownTextMgr_RegisterIcon
-CT.UnregisterIcon = MSUF_A2_CooldownTextMgr_UnregisterIcon
+function MSUF_A2_CooldownTextMgr_UnregisterAll()
+    local mgr = MSUF_A2_CooldownTextMgr
+    for cd, ic in pairs(mgr.active) do
+        if ic then
+            ic._msufA2_cdMgrRegistered = false
+            ic._msufA2_cdGen = (ic._msufA2_cdGen or 0) + 1
+            local fs = ic._msufA2_cdFS
+            if fs then
+                fs._msufA2_cdMode = 0
+                fs._msufA2_cdV1 = nil
+                fs._msufA2_cdV2 = nil
+                fs:SetText("")
+            end
+        end
+        mgr.active[cd] = nil
+    end
 
--- Convenience aliases (Render expects these names to exist as locals after it binds them)
-API.CooldownText = CT
+    mgr.count = 0
+    for i = #mgr.heap, 1, -1 do
+        mgr.heap[i] = nil
+    end
+
+    MSUF_A2_CooldownTextMgr_CancelTimer()
+end
+
+-- export to API namespace
+CT.RegisterIcon = MSUF_A2_CooldownTextMgr_RegisterIcon
+CT.UnregisterIcon = MSUF_A2_CooldownTextMgr_UnregisterIcon
+CT.UnregisterAll = MSUF_A2_CooldownTextMgr_UnregisterAll
+CT.Tick = MSUF_A2_CooldownTextMgr_Tick
+CT.TouchIcon = MSUF_A2_CooldownTextMgr_TouchIcon
+
+-- ------------------------------------------------------------
+-- Cold-start resync (load-order safe)
+-- If Render.lua applies cooldowns before this file loads, RegisterIcon calls are skipped.
+-- We fix that by (a) consuming a small pending list, and (b) scanning existing pooled icons once.
+-- This runs only at load / next tick, so it has effectively zero steady-state cost.
+-- ------------------------------------------------------------
+
+local function CT_ProcessPending()
+    local st = API and API.state
+    local pending = st and st._msufA2_cdPending
+    if type(pending) ~= "table" then
+        return
+    end
+    for i = 1, #pending do
+        local icon = pending[i]
+        if icon then
+            pending[i] = nil
+            if icon._msufA2_cdMgrRegistered ~= true and icon._msufA2_hideCDNumbers ~= true then
+                MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
+            end
+            icon._msufA2_cdPending = nil
+        end
+    end
+end
+
+local function CT_ScanAndRegisterExisting()
+    local st = API and API.state
+    local byUnit = st and st.aurasByUnit
+    if type(byUnit) ~= "table" then
+        return
+    end
+
+    for _, entry in pairs(byUnit) do
+        if type(entry) == "table" then
+            local c1 = entry.buffs
+            local c2 = entry.debuffs
+            local c3 = entry.mixed
+            local cList = { c1, c2, c3 }
+            for ci = 1, 3 do
+                local cont = cList[ci]
+                local icons = cont and cont._msufIcons
+                if type(icons) == "table" then
+                    for i = 1, #icons do
+                        local icon = icons[i]
+                        if icon
+                            and icon._msufA2_cdMgrRegistered ~= true
+                            and icon._msufA2_hideCDNumbers ~= true
+                            and icon:IsShown()
+                            and icon.cooldown
+                            and (icon._msufA2_cdDurationObj ~= nil or icon.cooldown._msufA2_durationObj ~= nil)
+                        then
+                            MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+CT.ProcessPending = CT_ProcessPending
+CT.ScanExisting   = CT_ScanAndRegisterExisting
+
+-- Run immediately (for the common case where this module loads after Render.lua).
+CT_ProcessPending()
+CT_ScanAndRegisterExisting()
+
+-- Run once on next frame (for the reverse load order: this file loads before Render.lua).
+if C_Timer and type(C_Timer.After) == "function" then
+    C_Timer.After(0, function()
+        CT_ProcessPending()
+        CT_ScanAndRegisterExisting()
+    end)
+end
