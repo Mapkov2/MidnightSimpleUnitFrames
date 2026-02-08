@@ -1,7 +1,9 @@
 -- Cumulative / no feature regression goal: same widgets, same DB keys, same behaviors.
 -- This file replaces the previous generated split and builds the boxed Fonts UI directly.
-local addonName, ns = ...
-ns = ns or {}
+local addonName, addonNS = ...
+-- Unify ns across split option modules and Options_Core (some builds use global ns).
+ns = (_G and _G.MSUF_NS) or addonNS or ns or {}
+if _G then _G.MSUF_NS = ns end
 function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     if not panel or not fontGroup then  return end
     -- ---------------------------------------------------------------------

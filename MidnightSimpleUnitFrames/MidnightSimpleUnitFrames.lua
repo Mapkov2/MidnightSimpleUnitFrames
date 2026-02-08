@@ -1,4 +1,6 @@
+local addonName, ns = ...
 ns = ns or {}
+_G.MSUF_NS = ns
 ns.Core   = ns.Core   or {}
 ns.UF     = ns.UF     or {}
 ns.Bars   = ns.Bars   or {}
@@ -2452,10 +2454,408 @@ end
 -- Range Fade / Spell range checking was removed for maximum performance.
 -- (User request: delete range check completely.)
 -- Keep a tiny compatibility stub so other code can safely call it.
-function _G.MSUF_GetRangeFadeMul(unit)
+-- Range Fade multiplier store (used by MSUF_ApplyUnitAlpha).
+-- Values are per-unitKey (e.g. "target"). Default is 1.
+_G.MSUF_RangeFadeMul = _G.MSUF_RangeFadeMul or {}
+
+-- Return a multiplier for layered/non-layered alpha paths.
+-- Signature supports legacy callers: (key, unit, frame).
+function _G.MSUF_GetRangeFadeMul(key)
+    local t = _G.MSUF_RangeFadeMul
+    if not t then return 1 end
+    local v = t[key]
+    if type(v) == "number" then
+        return v
+    end
     return 1
 end
 
+-- ============================================================================
+-- R41z0r-style RangeFade Engine (event-driven, no polling, OFF = 0 overhead)
+-- Public API:
+--   MSUF_RangeFade_Register(getConfigFn, applyAlphaFn [, opts])
+--   MSUF_RangeFade_OnEvent_SpellRangeUpdate(spellIdentifier, isInRange, checksRange)
+--   MSUF_RangeFade_RebuildSpells()
+--   MSUF_RangeFade_ApplyCurrent(force)
+--   MSUF_RangeFade_Reset()
+--   MSUF_RangeFade_Shutdown()
+-- ============================================================================
+
+do
+    -- Fast locals
+    local tonumber = tonumber
+    local pairs   = pairs
+    local wipe    = wipe
+    local type    = type
+
+    -- Feature detection (hard gate)
+    local hasCSpell = (type(C_Spell) == "table")
+    local EnableSpellRangeCheck         = hasCSpell and C_Spell.EnableSpellRangeCheck or nil
+    local SpellHasRange                 = hasCSpell and C_Spell.SpellHasRange or nil
+    local GetSpellIDForSpellIdentifier  = hasCSpell and C_Spell.GetSpellIDForSpellIdentifier or nil
+
+    local hasCSpellBook = (type(C_SpellBook) == "table")
+    local GetNumSkillLines           = hasCSpellBook and C_SpellBook.GetNumSpellBookSkillLines or nil
+    local GetSkillLineInfo           = hasCSpellBook and C_SpellBook.GetSpellBookSkillLineInfo or nil
+    local GetSpellBookItemInfo       = hasCSpellBook and C_SpellBook.GetSpellBookItemInfo or nil
+    local GetSpellBookItemSpellInfo  = hasCSpellBook and C_SpellBook.GetSpellBookItemSpellInfo or nil
+    local GetSpellBookItemType       = hasCSpellBook and C_SpellBook.GetSpellBookItemType or nil
+
+    -- SpellBook bank: prefer enum, fallback to the common string.
+    local SPELLBOOK_BOOKTYPE_SPELL =
+      (type(Enum) == "table" and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player) or "player"
+
+    local RF = {
+        getConfigFn  = nil,
+        applyAlphaFn = nil,
+
+        ignoreSpellIDs = nil,
+        maxTracked = 512,
+
+        enabled = false,
+        alpha = 0.5,
+        ignoreUnlimited = true,
+
+        activeSpells = {}, -- [spellID] = true
+        spellState   = {}, -- [spellID] = 1/0/nil
+        activeCount  = 0,
+
+        inRangeAny = true,
+        lastAppliedAlpha = -1,
+    }
+
+    local DEFAULT_IGNORES = { [2096] = true } -- Mind Vision
+
+    local function RF_ComputeDesiredAlpha()
+        if RF.inRangeAny then
+            return 1
+        end
+        return RF.alpha
+    end
+
+    local function RF_ApplyAlphaIfChanged(force)
+        local a = RF_ComputeDesiredAlpha()
+        if (not force) and (a == RF.lastAppliedAlpha) then
+            return
+        end
+        RF.lastAppliedAlpha = a
+        local fn = RF.applyAlphaFn
+        if fn then
+            fn(a, RF.enabled)
+        end
+    end
+
+    local function RF_RecomputeInRangeAny()
+        local anyKnown = false
+        local anyTrue = false
+        for _, v in pairs(RF.spellState) do
+            if v ~= nil then
+                anyKnown = true
+                if v == 1 then
+                    anyTrue = true
+                    break
+                end
+            end
+        end
+        RF.inRangeAny = (not anyKnown) or anyTrue
+    end
+
+    local function RF_ResolveSpellID(spellIdentifier)
+        local id = tonumber(spellIdentifier)
+        if id then return id end
+        if GetSpellIDForSpellIdentifier then
+            local okId = GetSpellIDForSpellIdentifier(spellIdentifier)
+            if okId then return okId end
+        end
+        return nil
+    end
+
+    local function RF_EnableSpell(spellID)
+        if RF.activeSpells[spellID] then return end
+        if RF.activeCount >= RF.maxTracked then return end
+        RF.activeSpells[spellID] = true
+        RF.activeCount = RF.activeCount + 1
+        EnableSpellRangeCheck(spellID, true)
+    end
+
+    local function RF_DisableSpell(spellID)
+        if not RF.activeSpells[spellID] then return end
+        RF.activeSpells[spellID] = nil
+        RF.activeCount = RF.activeCount - 1
+        EnableSpellRangeCheck(spellID, false)
+        RF.spellState[spellID] = nil
+    end
+
+    local function RF_DisableAllSpells()
+        for spellID in pairs(RF.activeSpells) do
+            EnableSpellRangeCheck(spellID, false)
+        end
+        wipe(RF.activeSpells)
+        wipe(RF.spellState)
+        RF.activeCount = 0
+        RF.inRangeAny = true
+    end
+
+    local function RF_ShouldTrackSpell(spellID)
+        if not spellID then return false end
+        if RF.ignoreSpellIDs and RF.ignoreSpellIDs[spellID] then return false end
+        if (RF.ignoreUnlimited == true) and SpellHasRange then
+            local hasRange = SpellHasRange(spellID)
+            if hasRange ~= true then
+                return false
+            end
+        end
+        return true
+    end
+
+    local function RF_BuildWantedSpellSet(outWanted)
+        wipe(outWanted)
+
+        if (not hasCSpellBook) or (not GetNumSkillLines) or (not GetSkillLineInfo) or (not GetSpellBookItemInfo) then
+            return outWanted
+        end
+
+        local numLines = GetNumSkillLines()
+        if (not numLines) or (numLines <= 0) then
+            return outWanted
+        end
+
+        local tracked = 0
+        for lineIndex = 1, numLines do
+            local info = GetSkillLineInfo(lineIndex)
+            if info then
+                local offset =
+                    info.itemIndexOffset or info.itemIndexOffsetFromStart or info.itemIndexOffsetFromStartIndex
+                local numItems =
+                    info.numSpellBookItems or info.numSpellBookItemSlots or info.numSpellBookItemsInLine
+
+                if offset and numItems and numItems > 0 then
+                    local first = offset + 1
+                    local last  = offset + numItems
+
+                    for slot = first, last do
+                        local itemInfo = GetSpellBookItemInfo(slot, SPELLBOOK_BOOKTYPE_SPELL)
+                        if itemInfo then
+                            local isPassive = (itemInfo.isPassive == true)
+
+                            local itemType = itemInfo.itemType
+                            if GetSpellBookItemType and (itemType == nil) then
+                                itemType = GetSpellBookItemType(slot, SPELLBOOK_BOOKTYPE_SPELL)
+                            end
+
+                            local isSpellType = true
+                            if type(itemType) == "string" then
+                                if (itemType ~= "SPELL") and (itemType ~= "Spell") then
+                                    isSpellType = false
+                                end
+                            elseif (type(itemType) == "number")
+                                and (type(Enum) == "table")
+                                and Enum.SpellBookItemType
+                                and Enum.SpellBookItemType.Spell
+                            then
+                                isSpellType = (itemType == Enum.SpellBookItemType.Spell)
+                            end
+
+                            if (isSpellType == true) and (isPassive ~= true) then
+                                local spellID = itemInfo.spellID
+
+                                if (not spellID) and GetSpellBookItemSpellInfo then
+                                    local sp = GetSpellBookItemSpellInfo(slot, SPELLBOOK_BOOKTYPE_SPELL)
+                                    if sp then
+                                        spellID = sp.spellID or sp.actionID
+                                    end
+                                end
+
+                                if not spellID then
+                                    spellID = itemInfo.actionID
+                                end
+
+                                if spellID and RF_ShouldTrackSpell(spellID) then
+                                    if not outWanted[spellID] then
+                                        outWanted[spellID] = true
+                                        tracked = tracked + 1
+                                        if tracked >= RF.maxTracked then
+                                            return outWanted
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        return outWanted
+    end
+
+    local _wanted = {}
+
+    local function RF_SyncActiveToWanted()
+        for spellID in pairs(RF.activeSpells) do
+            if not _wanted[spellID] then
+                RF_DisableSpell(spellID)
+            end
+        end
+        for spellID in pairs(_wanted) do
+            if not RF.activeSpells[spellID] then
+                RF_EnableSpell(spellID)
+            end
+        end
+        RF_RecomputeInRangeAny()
+    end
+
+    function _G.MSUF_RangeFade_RebuildSpells()
+        if not EnableSpellRangeCheck then
+            RF.enabled = false
+            RF_DisableAllSpells()
+            RF_ApplyAlphaIfChanged(true)
+            return
+        end
+        local cfgFn = RF.getConfigFn
+        if not cfgFn then
+            RF.enabled = false
+            RF_DisableAllSpells()
+            RF_ApplyAlphaIfChanged(true)
+            return
+        end
+
+        local enabled, alpha, ignoreUnlimited = cfgFn()
+        RF.enabled = (enabled == true)
+        if type(alpha) == "number" then
+            RF.alpha = alpha
+        end
+        RF.ignoreUnlimited = (ignoreUnlimited == true)
+
+        if RF.ignoreSpellIDs == nil then
+            RF.ignoreSpellIDs = DEFAULT_IGNORES
+        end
+
+        if RF.enabled ~= true then
+            RF_DisableAllSpells()
+            RF_ApplyAlphaIfChanged(true)
+            return
+        end
+
+        RF_BuildWantedSpellSet(_wanted)
+        RF_SyncActiveToWanted()
+        RF_ApplyAlphaIfChanged(true)
+    end
+
+    function _G.MSUF_RangeFade_OnEvent_SpellRangeUpdate(spellIdentifier, isInRange, checksRange)
+        if RF.enabled ~= true then return end
+
+        local spellID = RF_ResolveSpellID(spellIdentifier)
+        if not spellID then return end
+        if not RF.activeSpells[spellID] then return end
+        if RF.ignoreSpellIDs and RF.ignoreSpellIDs[spellID] then return end
+
+        if checksRange == true then
+            local v = ((isInRange == true) or (isInRange == 1)) and 1 or 0
+            RF.spellState[spellID] = v
+        else
+            RF.spellState[spellID] = nil
+        end
+
+        RF_RecomputeInRangeAny()
+        RF_ApplyAlphaIfChanged(false)
+    end
+
+    function _G.MSUF_RangeFade_ApplyCurrent(force)
+        if RF.enabled ~= true then
+            RF.lastAppliedAlpha = -1
+            RF_ApplyAlphaIfChanged(true)
+            return
+        end
+        RF_ApplyAlphaIfChanged(force == true)
+    end
+
+    function _G.MSUF_RangeFade_Reset()
+        wipe(RF.spellState)
+        RF.inRangeAny = true
+        RF.lastAppliedAlpha = -1
+        RF_ApplyAlphaIfChanged(true)
+    end
+
+    function _G.MSUF_RangeFade_Shutdown()
+        RF.enabled = false
+        RF.getConfigFn = nil
+        RF.applyAlphaFn = nil
+        RF_DisableAllSpells()
+        RF.lastAppliedAlpha = -1
+        RF_ApplyAlphaIfChanged(true)
+    end
+
+    function _G.MSUF_RangeFade_Register(getConfigFn, applyAlphaFn, opts)
+        RF.getConfigFn  = getConfigFn
+        RF.applyAlphaFn = applyAlphaFn
+
+        if type(opts) == "table" then
+            if type(opts.maxTracked) == "number" and opts.maxTracked > 0 then
+                RF.maxTracked = opts.maxTracked
+            end
+            if type(opts.ignoreSpellIDs) == "table" then
+                opts.ignoreSpellIDs[2096] = true
+                RF.ignoreSpellIDs = opts.ignoreSpellIDs
+            end
+        end
+        if RF.ignoreSpellIDs == nil then
+            RF.ignoreSpellIDs = DEFAULT_IGNORES
+        end
+    end
+
+    function _G.MSUF_RangeFade_GetState()
+        return RF.enabled, RF.inRangeAny, RF.alpha, RF.activeCount
+    end
+end
+
+
+-- ============================================================================
+-- Phase 2: Event Wiring (minimal & clean)
+-- Uses MSUF_EventBus (no extra OnUpdate / no polling). Target-only integration
+-- happens during PLAYER_LOGIN after target frame creation.
+-- ============================================================================
+
+do
+    local wired = false
+    function _G.MSUF_RangeFade_WireEvents()
+        if wired then return end
+        wired = true
+
+        local reg = _G.MSUF_EventBus_Register
+        if type(reg) ~= "function" then
+            return
+        end
+
+        -- Hot path: fires only on range state changes (Blizzard-driven).
+        reg("SPELL_RANGE_CHECK_UPDATE", "MSUF_RANGEFADE", function(event, spellIdentifier, isInRange, checksRange)
+            local fn = _G.MSUF_RangeFade_OnEvent_SpellRangeUpdate
+            if fn then
+                fn(spellIdentifier, isInRange, checksRange)
+            end
+        end)
+
+        local function Rebuild()
+            local fn = _G.MSUF_RangeFade_RebuildSpells
+            if fn then
+                fn()
+            end
+        end
+
+        -- Rare rebuild triggers (spellbook/spec/talent updates).
+        reg("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE", Rebuild)
+        reg("SPELLS_CHANGED", "MSUF_RANGEFADE", Rebuild)
+        reg("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE", Rebuild)
+        reg("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE", Rebuild)
+        reg("TRAIT_CONFIG_UPDATED", "MSUF_RANGEFADE", Rebuild)
+
+        -- Target swap: clear stale in-range state (fail-safe to in-range until updates arrive).
+        reg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
+            local reset = _G.MSUF_RangeFade_Reset
+            if reset then reset() end
+        end)
+    end
+end
 
 local function MSUF_InitPlayerCastbarPreviewToggle()
     if not MSUF_DB or not MSUF_DB.general then
@@ -6186,6 +6586,46 @@ MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_STARTUP", function(event)
     CreateSimpleUnitFrame("player")
         _G.MSUF_ApplyCompatAnchor_PlayerFrame()
     CreateSimpleUnitFrame("target")
+
+    -- === Range Fade (R41z0r-style, target-only, event-driven) ===
+    if _G.MSUF_RangeFade_Register then
+        local function _MSUF_RF_GetConfig()
+            local db = _G.MSUF_DB
+            local tdb = db and db.target
+            local enabled = (tdb and tdb.rangeFadeEnabled == true)
+            local alpha = (tdb and tdb.rangeFadeAlpha) or 0.5
+            local ignoreUnlimited = true
+            if tdb and tdb.rangeFadeIgnoreUnlimited == false then
+                ignoreUnlimited = false
+            end
+
+            -- Do not fade while in MSUF Edit Mode (previews/dragging)
+            if _G.MSUF_UnitEditModeActive == true then
+                enabled = false
+            end
+
+            return enabled, alpha, ignoreUnlimited
+        end
+
+        local function _MSUF_RF_ApplyAlpha(a, enabled)
+            -- 1:1 behavior: directly alpha the target frame.
+            local frame = _G.MSUF_target
+            if not frame and _G.UnitFrames then
+                frame = _G.UnitFrames.target or _G.UnitFrames["target"]
+            end
+            if not frame then return end
+
+            local last = frame._msufRF_lastAlpha
+            if (last == a) then
+                return
+            end
+            frame._msufRF_lastAlpha = a
+            frame:SetAlpha(a)
+        end
+
+        _G.MSUF_RangeFade_Register(_MSUF_RF_GetConfig, _MSUF_RF_ApplyAlpha)
+        _G.MSUF_RangeFade_Rebuild()
+    end
 if ns and ns.MSUF_CreateSecureTargetAuraHeaders then
     local targetFrame = UnitFrames and (UnitFrames.target or UnitFrames["target"])
     if targetFrame then
@@ -6193,6 +6633,60 @@ if ns and ns.MSUF_CreateSecureTargetAuraHeaders then
     else
         print("MSUF: Target frame not found, cannot attach secure auras.")
     end
+
+    -- RangeFade (R41z0r-style): Target-only, event-driven, zero polling.
+    if _G.MSUF_RangeFade_Register and _G.MSUF_RangeFade_RebuildSpells then
+        if _G.__MSUF_RangeFadeConsumer_Target ~= true then
+            _G.__MSUF_RangeFadeConsumer_Target = true
+
+            _G.MSUF_RangeFadeMul = _G.MSUF_RangeFadeMul or {}
+            local mulT = _G.MSUF_RangeFadeMul
+
+            local function GetConfig()
+                local db = _G.MSUF_DB
+                local t = db and db.target
+                -- Hard OFF by default unless explicitly enabled in DB.
+                if not t or t.rangeFadeEnabled ~= true then
+                    return false, 0.5, true
+                end
+                -- Disable while MSUF unit edit mode is active (previews/dragging).
+                if _G.MSUF_UnitEditModeActive == true then
+                    return false, 0.5, true
+                end
+                local a = t.rangeFadeAlpha
+                if type(a) ~= "number" then a = 0.5 end
+                if a < 0 then a = 0 elseif a > 1 then a = 1 end
+                local ignoreUnlimited = (t.rangeFadeIgnoreUnlimited ~= false)
+                return true, a, ignoreUnlimited
+            end
+
+            local function ApplyAlpha(desiredAlpha)
+                -- desiredAlpha is 1 (in range/unknown) or configured alpha (out of range)
+                local cur = mulT.target
+                if type(cur) ~= "number" then cur = 1 end
+                if type(desiredAlpha) ~= "number" then desiredAlpha = 1 end
+                if (cur == desiredAlpha) then
+                    return
+                end
+                mulT.target = desiredAlpha
+
+                -- Force-refresh only the target frame alpha (cheap, avoids global refresh).
+                local f = _G.MSUF_target
+                local apply = _G.MSUF_ApplyUnitAlpha
+                if f and type(apply) == "function" then
+                    apply(f, "target")
+                end
+            end
+
+            _G.MSUF_RangeFade_Register(GetConfig, ApplyAlpha, nil)
+        end
+
+        if _G.MSUF_RangeFade_WireEvents then
+            _G.MSUF_RangeFade_WireEvents()
+        end
+        _G.MSUF_RangeFade_RebuildSpells()
+    end
+
 end
     CreateSimpleUnitFrame("targettarget")
     CreateSimpleUnitFrame("focus")

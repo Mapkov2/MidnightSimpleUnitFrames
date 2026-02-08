@@ -18,6 +18,18 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         MSUF_DB.general = MSUF_DB.general or {}
         return MSUF_DB.general
     end
+
+local function EnsureTarget()
+    local db = _G.MSUF_DB
+    if not db then return {} end
+    local t = db.target
+    if not t then
+        t = {}
+        db.target = t
+    end
+    return t
+end
+
     local function EnsureGameplay()
         if EnsureDB then EnsureDB() end
         MSUF_DB = MSUF_DB or {}
@@ -629,6 +641,27 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
             if v and _G.MSUF_TargetSoundDriver_Ensure then _G.MSUF_TargetSoundDriver_Ensure() end
         end,
     })
+
+    local targetRangeFadeCheck = UI:MakeCheck({
+        name = "MSUF_TargetRangeFadeCheck",
+        parent = rightPanel,
+        template = "InterfaceOptionsCheckButtonTemplate",
+        anchor = targetSoundsCheck,
+        x = 0, y = -12,
+        label = "Enable Target Range Fade",
+        tooltip = "Fades the Target frame while out of range (event-driven, no polling).",
+        get = function()
+            local t = EnsureTarget()
+            return (t.rangeFadeEnabled == true)
+        end,
+        set = function(v)
+            local t = EnsureTarget()
+            t.rangeFadeEnabled = v and true or false
+            if _G.MSUF_RangeFade_Reset then _G.MSUF_RangeFade_Reset() end
+            if _G.MSUF_RangeFade_RebuildSpells then _G.MSUF_RangeFade_RebuildSpells() end
+        end,
+    })
+
 
 
 

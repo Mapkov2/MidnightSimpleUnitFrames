@@ -1,4 +1,6 @@
+local addonName, ns = ...
 ns = ns or {}
+if _G then _G.MSUF_NS = ns end
 -- Slash-menu-only: the Slash Menu is the only options UI. Blizzard Settings shows only a lightweight launcher.
 if _G then _G.MSUF_SLASHMENU_ONLY = true end
 -- File-scope locals (avoid accidental globals; safe for split modules)

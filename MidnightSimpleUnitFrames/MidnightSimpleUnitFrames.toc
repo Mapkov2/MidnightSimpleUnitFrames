@@ -22,9 +22,9 @@ Core\MSUF_ProfileIO.lua
 Core\MSUF_ChatAndTooltips.lua
 Core\MSUF_StatusIndicators.lua
 Core\MSUF_UnitframeCore.lua
+Core\MSUF_RangeFade.lua
 
 MidnightSimpleUnitFrames_Colors.lua
-MidnightSimpleUnitFrames_Auras.lua
 MidnightSimpleUnitFrames_Gameplay.lua
 MidnightSimpleUnitFrames_SlashMenu.lua
 MidnightSimpleUnitFrames.lua
@@ -43,5 +43,7 @@ Auras2\MSUF_A2_Units.lua
 Auras2\MSUF_A2_Masque.lua
 Auras2\MSUF_A2_Preview.lua
 Auras2\MSUF_A2_CooldownText.lua
+Auras2\MSUF_A2_Store.lua
+Auras2\MSUF_A2_Model.lua
 Auras2\MSUF_A2_Render.lua
 Auras2\MSUF_A2_Events.lua
