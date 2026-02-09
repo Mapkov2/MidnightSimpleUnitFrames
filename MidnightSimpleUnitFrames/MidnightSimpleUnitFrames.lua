@@ -4968,6 +4968,10 @@ function UpdateSimpleUnitFrame(self)
 	    if (not MSUF_DB) and type(EnsureDB) == "function" then
 	        EnsureDB()
 	    end
+
+	    -- Compatibility alias: some integrations call MSUF_RangeFade_Rebuild()
+	    -- (e.g. older mainfile startup hooks). Keep this as a cheap forwarder.
+	    _G.MSUF_RangeFade_Rebuild = _G.MSUF_RangeFade_RebuildSpells
 	    local db = MSUF_DB
 	    local g = (db and db.general) or {}
 	    local barsConf = (db and db.bars) or {}

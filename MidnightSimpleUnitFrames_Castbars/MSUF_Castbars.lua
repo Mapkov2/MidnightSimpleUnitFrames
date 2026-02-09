@@ -4131,7 +4131,6 @@ do
 
     function MSUF_RegisterCastbar(frame)
         if not frame then return end
-        if not MSUF_CastbarManager or not MSUF_CastbarManager.active then return end
 
         if frame._msufTickInterval == nil then
             local u = frame.unit
@@ -4146,18 +4145,50 @@ do
 
         EnsureCastTimeCache(frame, true)
 
+        -- Phase 3D rollout: if the external manager is present, route only target/focus/boss* through it.
+        -- Behavior ownership remains in MSUF_UpdateCastbarFrame (time text, glow fade, etc.).
+        do
+            local u = frame.unit
+            if u == "target" or u == "focus" or (u and string.sub(u, 1, 4) == "boss") then
+                local reg = _G.MSUF_CB_Register
+                if type(reg) == "function" then
+                    reg(frame)
+                    return
+                end
+            end
+        end
+
+        -- Phase 2 fallback: internal manager
+        if not MSUF_CastbarManager or not MSUF_CastbarManager.active then return end
+
         MSUF_CastbarManager.active[frame] = true
         MSUF_CastbarManager:Show()
     end
 
-    function MSUF_UnregisterCastbar(frame)
+function MSUF_UnregisterCastbar(frame)
         if not frame then return end
-        if not MSUF_CastbarManager or not MSUF_CastbarManager.active then return end
 
         -- Restore base color if the optional end-of-cast fade was active.
         if type(_G.MSUF_ResetCastbarGlowFade) == "function" then
             _G.MSUF_ResetCastbarGlowFade(frame)
         end
+
+        -- Phase 3D rollout: external manager for target/focus/boss* (if present).
+        do
+            local u = frame.unit
+            if u == "target" or u == "focus" or (u and string.sub(u, 1, 4) == "boss") then
+                local unreg = _G.MSUF_CB_Unregister
+                if type(unreg) == "function" then
+                    unreg(frame)
+                    frame._msufNextTick = nil
+                    frame._msufZeroCount = nil
+                    return
+                end
+            end
+        end
+
+        -- Phase 2 fallback: internal manager
+        if not MSUF_CastbarManager or not MSUF_CastbarManager.active then return end
 
         MSUF_CastbarManager.active[frame] = nil
         frame._msufNextTick = nil
@@ -4169,7 +4200,8 @@ do
     end
 
     -- Secret-safe + cached update: time text and empower stage handling. StatusBar:SetTimerDuration animates the bar.
-    function MSUF_UpdateCastbarFrame(frame, dt, now)
+
+function MSUF_UpdateCastbarFrame(frame, dt, now)
         if not frame or not frame.statusBar then
             return
         end
@@ -4543,6 +4575,26 @@ do
 					if frame.Hide then frame:Hide() end
 				end
             end
+        end
+    end
+end
+
+
+-- Phase 3C/3D: shared driver tick for external manager (no UI ownership here).
+_G.MSUF_CB_DriverTick = function(frame, now, dt)
+    if not frame or not frame.statusBar then return end
+
+    local nextTick = frame._msufNextTick
+    if (not nextTick) or now >= nextTick then
+        local fi = frame._msufTickInterval or 0.10
+        local minFi = (frame.MSUF_gcdActive and 0.016) or 0.03
+        if fi < minFi then fi = minFi end
+        if fi > 0.50 then fi = 0.50 end
+
+        frame._msufNextTick = now + fi
+
+        if type(MSUF_UpdateCastbarFrame) == "function" then
+            MSUF_UpdateCastbarFrame(frame, dt, now)
         end
     end
 end

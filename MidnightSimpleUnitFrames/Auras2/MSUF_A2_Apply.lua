@@ -102,6 +102,22 @@ do
 end
 
 
+
+-- ------------------------------------------------------------
+-- Model helpers (late-bound)
+-- ------------------------------------------------------------
+local _A2_Model = API and API.Model
+local _A2_GetPlayerAuraIdSetCached = _A2_Model and _A2_Model.GetPlayerAuraIdSetCached
+
+local function _A2_ResolveGetPlayerAuraIdSetCached()
+    local f = _A2_GetPlayerAuraIdSetCached
+    if f then return f end
+    _A2_Model = API and API.Model
+    f = _A2_Model and _A2_Model.GetPlayerAuraIdSetCached
+    _A2_GetPlayerAuraIdSetCached = f
+    return f
+end
+
 local function MSUF_A2_GetEffectiveTextSizes(unitKey, shared)
     local stackSize = (shared and shared.stackTextSize) or 14
     local cooldownSize = (shared and shared.cooldownTextSize) or 14
@@ -679,7 +695,6 @@ end
 -- Shared helper: apply the stack-count anchor styling to an icon's count fontstring.
 -- Safe to call repeatedly; it re-anchors only when the anchor setting changes.
 local function MSUF_A2_ApplyStackCountAnchorStyle(icon, stackAnchor)
-            MSUF_A2_ApplyStackTextOffsets(icon, unit, shared, stackAnchor)
     if not icon or not icon.count then return end
 
     stackAnchor = stackAnchor or "TOPRIGHT"
@@ -1010,7 +1025,7 @@ function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         if type(MSUF_A2_ApplyIconStacks) == "function" then
             -- Uses C_UnitAuras.GetAuraApplicationDisplayCount (unit, auraInstanceID) and
             -- never reads aura.applications (which can be secret/absent).
-            MSUF_A2_ApplyIconStacks(icon, unit, shared, stackCountAnchor, nil, false)
+            MSUF_A2_ApplyIconStacks(icon, unit, shared, stackCountAnchor, nil, false, false)
         end
 
         -- Aura refreshes (same auraInstanceID) can change duration/expiration without changing any of our
@@ -1375,7 +1390,7 @@ local function MSUF_A2_ApplyIconCooldownTextSizing(icon, unit, shared)
     end
 end
 
-local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, forcedDisp, forceHideCooldownNumbers)
+local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, forcedDisp, forceHideCooldownNumbers, allowQuery)
     if shared and shared.showStackCount == false then
         if icon.cooldown and icon.cooldown.SetHideCountdownNumbers then
             SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, true)
@@ -1384,7 +1399,7 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
             icon.count:SetText("")
             icon.count:Hide()
         end
-        icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp = false, nil
+        icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp, icon._msufA2_lastStackText = false, nil, nil
 
         if icon._msufA2_hideCDNumbers == true then
             icon._msufA2_hideCDNumbers = false
@@ -1400,13 +1415,44 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
     MSUF_A2_ApplyStackCountAnchorStyle(icon, stackAnchor)
 
     local disp = forcedDisp
-    if disp == nil and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount and icon._msufAuraInstanceID then
-        disp = C_UnitAuras.GetAuraApplicationDisplayCount(unit, icon._msufAuraInstanceID, 2, 99)
+    local dispText = nil
+    local keepExistingText = false
+
+    if disp ~= nil then
+        -- Preview / forced stack display path.
+        dispText = tostring(disp)
+        icon._msufA2_lastStackDisp = disp
+        icon._msufA2_lastStackText = dispText
+    else
+        if allowQuery ~= false and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount and icon._msufAuraInstanceID then
+            -- Expensive path: only run when the aura was actually applied/refreshed/updated (UNIT_AURA delta).
+            disp = C_UnitAuras.GetAuraApplicationDisplayCount(unit, icon._msufAuraInstanceID, 2, 99)
+            if disp ~= nil then
+                dispText = tostring(disp)
+                -- Cache the last display so "time-only" refresh paths can render stacks without API calls.
+                -- IMPORTANT (secret-safe): we never compare these values, we only re-display them.
+                icon._msufA2_lastStackDisp = disp
+                icon._msufA2_lastStackText = dispText
+            else
+                icon._msufA2_lastStackDisp = nil
+                icon._msufA2_lastStackText = nil
+            end
+        else
+            -- Fast-path: no API calls. Only re-display the cached value (if any).
+            dispText = icon._msufA2_lastStackText
+            -- Legacy-safety: older builds used a sentinel for _msufA2_lastStackDisp.
+            -- If we don't have a cached text yet, keep whatever is currently shown.
+            keepExistingText = (dispText == nil and icon._msufA2_stackWasShown == true) and true or false
+            disp = icon._msufA2_lastStackDisp
+            if dispText == nil then
+                disp = nil
+            end
+        end
     end
 
     MSUF_A2_ApplyStackTextOffsets(icon, unit, shared, stackAnchor)
 
-    if disp ~= nil then
+    if disp ~= nil or dispText ~= nil or keepExistingText then
         local wantHideNums = (forceHideCooldownNumbers == true)
         if icon._msufA2_hideCDNumbers ~= wantHideNums then
             icon._msufA2_hideCDNumbers = wantHideNums
@@ -1422,14 +1468,16 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
         if icon.count then
             local sr, sg, sb = MSUF_A2_GetStackCountRGB()
             icon.count:SetTextColor(sr, sg, sb, 1)
-            icon.count:SetText(tostring(disp))
+            if keepExistingText ~= true then
+                icon.count:SetText(dispText or tostring(disp))
+            end
             if not icon.count:IsShown() then
                 icon.count:Show()
             end
         end
 
         icon._msufA2_stackWasShown = true
-        icon._msufA2_lastStackDisp = 1 -- sentinel; do not store/compare disp (can be secret)
+        -- Cache already updated above (query/forced paths). In cache-only mode we keep it as-is.
         return true
     end
 
@@ -1450,7 +1498,7 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
             icon.count:Hide()
         end
     end
-    icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp = false, nil
+    icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp, icon._msufA2_lastStackText = false, nil, nil
     return false
 end
 
@@ -1674,11 +1722,14 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
 
     local ownBuffSet, ownDebuffSet = nil, nil
     if wantOwnHighlights and unit ~= "player" then
-        if wantOwnBuff then
-            ownBuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HELPFUL")
-        end
-        if wantOwnDebuff then
-            ownDebuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HARMFUL")
+        local gf = _A2_ResolveGetPlayerAuraIdSetCached()
+        if gf then
+            if wantOwnBuff then
+                ownBuffSet = gf(entry, unit, "HELPFUL")
+            end
+            if wantOwnDebuff then
+                ownDebuffSet = gf(entry, unit, "HARMFUL")
+            end
         end
     end
 
@@ -1688,8 +1739,8 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
         return (set and set[aid]) == true
     end
 
-    -- Re-apply visuals for currently assigned icons without rebuilding lists / changing layout.
-    -- This is used for fast refreshes (aura visuals only), so keep it light and avoid allocations.
+    -- Refresh currently assigned icons without rebuilding lists / changing layout.
+    -- Uses CommitIcon diff-gate so "time-only" updates do not restyle or re-query stacks.
     local useSingleRow = (entry.mixed ~= nil) and (entry.mixed:IsShown() or false)
     local mixedCount = entry._msufA2_lastMixedCount or 0
     local debuffCount = entry._msufA2_lastDebuffCount or 0
@@ -1707,7 +1758,8 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
                     local isOwn = IsOwn(isHelpful, aura and (aura._msufAuraInstanceID or aura.auraInstanceID))
                     -- "Hide permanent" is BUFF-only (HELPFUL). Debuffs must never be hidden by this toggle.
                     local hidePerm = (isHelpful and hidePermanentBuffs == true) and true or false
-                    ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePerm, masterOn, isOwn, stackCountAnchor)
+                    local ls = entry._msufA2_lastLayoutSig or 0
+                    Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePerm, masterOn, isOwn, stackCountAnchor, ls)
                 end
             end
         end
@@ -1731,11 +1783,14 @@ local function MSUF_A2_RefreshAssignedIconsDelta(entry, unit, shared, masterOn, 
 
     local ownBuffSet, ownDebuffSet = nil, nil
     if wantOwnHighlights and unit ~= "player" then
-        if wantOwnBuff then
-            ownBuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HELPFUL")
-        end
-        if wantOwnDebuff then
-            ownDebuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HARMFUL")
+        local gf = _A2_ResolveGetPlayerAuraIdSetCached()
+        if gf then
+            if wantOwnBuff then
+                ownBuffSet = gf(entry, unit, "HELPFUL")
+            end
+            if wantOwnDebuff then
+                ownDebuffSet = gf(entry, unit, "HARMFUL")
+            end
         end
     end
 
@@ -2055,6 +2110,15 @@ Apply.ApplyFont = MSUF_A2_ApplyFont
 
 Apply.ApplyFontsFromGlobal = MSUF_A2_ApplyFontsFromGlobal
 API.ApplyFontsFromGlobal = API.ApplyFontsFromGlobal or MSUF_A2_ApplyFontsFromGlobal
+
+-- Global compatibility wrapper (older core/Options may call this)
+if _G and type(_G.MSUF_Auras2_ApplyFontsFromGlobal) ~= "function" then
+    _G.MSUF_Auras2_ApplyFontsFromGlobal = function()
+        local f = API and API.ApplyFontsFromGlobal
+        if f then return f() end
+    end
+end
+
 
 Apply.ApplyStackCountAnchorStyle = MSUF_A2_ApplyStackCountAnchorStyle
 Apply.AcquireIcon = AcquireIcon

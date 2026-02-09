@@ -312,27 +312,14 @@ local function A2_NormalizeCooldownBuckets(g)
 end
 
 
+-- Phase F: filter schema + migration live in Auras2/MSUF_A2_Filters.lua.
+-- Render keeps only a thin wrapper for load-order safety.
 local function MSUF_A2_NormalizeFilters(f, sharedSettings, migrateFlagKey)
-    if type(f) ~= "table" then return end
-    A2_Default(f, "enabled", true)
-    f.buffs = (type(f.buffs) == "table") and f.buffs or {}
-    f.debuffs = (type(f.debuffs) == "table") and f.debuffs or {}
-    local b, d = f.buffs, f.debuffs
-
-    if migrateFlagKey and not f[migrateFlagKey] and type(sharedSettings) == "table" then
-        if f.hidePermanent == nil then f.hidePermanent = (sharedSettings.hidePermanent == true) end
-        if b.onlyMine == nil then b.onlyMine = (sharedSettings.onlyMyBuffs == true) end
-        if d.onlyMine == nil then d.onlyMine = (sharedSettings.onlyMyDebuffs == true) end
-        f[migrateFlagKey] = true
+    local F = API and API.Filters
+    local fn = F and F.NormalizeFilters
+    if type(fn) == "function" then
+        return fn(f, sharedSettings, migrateFlagKey)
     end
-
-    A2_Default(f, "hidePermanent", false)
-
-    A2_Default(b, "onlyMine", false); A2_Default(b, "includeBoss", false)
-
-    A2_Default(d, "onlyMine", false); A2_Default(d, "includeBoss", false)
-
-    A2_Default(f, "onlyBossAuras", false)
 end
 
 local function MSUF_A2_EnsurePerUnitConfig(pu, unitKey, sharedSettings)
@@ -450,30 +437,14 @@ local function EnsureDB()
 
     A2_Default(s, "_msufA2_migrated_v11f", true)
 
-    -- Shared filter config: migrate older storage from perUnit.target.filters if needed.
-    if type(s.filters) ~= "table" then
-        local migrated = (type(a2.perUnit) == "table" and type(a2.perUnit.target) == "table") and a2.perUnit.target.filters or nil
-        s.filters = (type(migrated) == "table") and migrated or {}
-        if migrated then s.filters._msufA2_sharedFiltersMigratedFromTarget = true end
+    -- Phase F: shared filter migration/normalization lives in Auras2/MSUF_A2_Filters.lua.
+    local Filters = API and API.Filters
+    if Filters and Filters.EnsureSharedFilters then
+        Filters.EnsureSharedFilters(a2, s)
     end
 
     a2.perUnit = (type(a2.perUnit) == "table") and a2.perUnit or {}
     local pu = a2.perUnit
-
-    local sf = s.filters
-    if type(sf) ~= "table" then sf = {}; s.filters = sf end
-    MSUF_A2_NormalizeFilters(sf, s, "_msufA2_sharedFiltersMigrated_v1")
-
-    -- Compatibility: some Options builds still toggle shared.hidePermanent directly.
-    -- Mirror that value into shared.filters.hidePermanent so the runtime filter respects the UI.
-    if s.hidePermanent ~= nil and sf.hidePermanent ~= s.hidePermanent then
-        sf.hidePermanent = (s.hidePermanent == true)
-    end
-
-    -- Keep legacy shared flags synced (derived from shared.filters)
-    s.onlyMyBuffs = (sf.buffs and sf.buffs.onlyMine == true) or false
-    s.onlyMyDebuffs = (sf.debuffs and sf.debuffs.onlyMine == true) or false
-    s.hidePermanent = (sf.hidePermanent == true)
 
     MSUF_A2_EnsurePerUnitConfig(pu, "player", s)
     MSUF_A2_EnsurePerUnitConfig(pu, "target", s)
@@ -496,64 +467,7 @@ end
 
 -- (Phase 5) Auras2 highlight/border/stack colors moved to Auras2/MSUF_A2_Colors.lua
 
-local function MSUF_A2_GetEffectiveTextSizes(unitKey, shared)
-    local stackSize = (shared and shared.stackTextSize) or 14
-    local cooldownSize = (shared and shared.cooldownTextSize) or 14
-
-    if MSUF_DB and MSUF_DB.auras2 and MSUF_DB.auras2.perUnit and unitKey then
-        local u = MSUF_DB.auras2.perUnit[unitKey]
-        if u and u.overrideLayout == true and type(u.layout) == 'table' then
-            if type(u.layout.stackTextSize) == 'number' and u.layout.stackTextSize > 0 then
-                stackSize = u.layout.stackTextSize
-            end
-            if type(u.layout.cooldownTextSize) == 'number' and u.layout.cooldownTextSize > 0 then
-                cooldownSize = u.layout.cooldownTextSize
-            end
-        end
-    end
-
-    stackSize = tonumber(stackSize) or 14
-    cooldownSize = tonumber(cooldownSize) or 14
-    stackSize = math.max(6, math.min(40, stackSize))
-    cooldownSize = math.max(6, math.min(40, cooldownSize))
-    return stackSize, cooldownSize
-end
-
-
-local MSUF_A2_GetCooldownFontString
-local MSUF_A2_GetCooldownFontString_Safe  -- forward declaration (late-bound)
-
-
-local function MSUF_A2_GetEffectiveCooldownTextOffsets(unitKey, shared)
-    local offX, offY = nil, nil
-    local enabled = false
-
-    -- shared defaults (optional)
-    if shared then
-        if shared.cooldownTextOffsetX ~= nil then offX = shared.cooldownTextOffsetX; enabled = true end
-        if shared.cooldownTextOffsetY ~= nil then offY = shared.cooldownTextOffsetY; enabled = true end
-    end
-
-    -- per-unit override (optional)
-    if MSUF_DB and MSUF_DB.auras2 and MSUF_DB.auras2.perUnit and unitKey then
-        local u = MSUF_DB.auras2.perUnit[unitKey]
-        if u and u.overrideLayout == true and type(u.layout) == "table" then
-            if u.layout.cooldownTextOffsetX ~= nil then offX = u.layout.cooldownTextOffsetX; enabled = true end
-            if u.layout.cooldownTextOffsetY ~= nil then offY = u.layout.cooldownTextOffsetY; enabled = true end
-        end
-    end
-
-    -- 0-regression: if user never set any offsets, don't touch anchors.
-    if not enabled then
-        return 0, 0, false
-    end
-
-    offX = tonumber(offX) or 0
-    offY = tonumber(offY) or 0
-    offX = math.max(-2000, math.min(2000, offX))
-    offY = math.max(-2000, math.min(2000, offY))
-    return offX, offY, true
-end
+-- (Phase 3) Icon-touching helpers moved to Apply. Render keeps only thin wrappers for Preview/EditMode and orchestration.
 
 local function MSUF_A2_ApplyCooldownTextOffsets(icon, unitKey, shared)
   local A = API and API.Apply
@@ -561,38 +475,6 @@ local function MSUF_A2_ApplyCooldownTextOffsets(icon, unitKey, shared)
   if f then
     return f(icon, unitKey, shared)
   end
-end
-
-
-
-
-local function MSUF_A2_GetEffectiveStackTextOffsets(unitKey, shared)
-    local offX, offY = nil, nil
-    local enabled = false
-
-    if shared then
-        if shared.stackTextOffsetX ~= nil then offX = shared.stackTextOffsetX; enabled = true end
-        if shared.stackTextOffsetY ~= nil then offY = shared.stackTextOffsetY; enabled = true end
-    end
-
-    if MSUF_DB and MSUF_DB.auras2 and MSUF_DB.auras2.perUnit and unitKey then
-        local u = MSUF_DB.auras2.perUnit[unitKey]
-        if u and u.overrideLayout == true and type(u.layout) == "table" then
-            if u.layout.stackTextOffsetX ~= nil then offX = u.layout.stackTextOffsetX; enabled = true end
-            if u.layout.stackTextOffsetY ~= nil then offY = u.layout.stackTextOffsetY; enabled = true end
-        end
-    end
-
-    -- 0-regression: if user never set any offsets, don't touch anchors.
-    if not enabled then
-        return 0, 0, false
-    end
-
-    offX = tonumber(offX) or 0
-    offY = tonumber(offY) or 0
-    offX = math.max(-2000, math.min(2000, offX))
-    offY = math.max(-2000, math.min(2000, offY))
-    return offX, offY, true
 end
 
 local function MSUF_A2_ApplyStackTextOffsets(icon, unitKey, shared, stackAnchorOverride)
@@ -603,129 +485,12 @@ local function MSUF_A2_ApplyStackTextOffsets(icon, unitKey, shared, stackAnchorO
   end
 end
 
-local function MSUF_A2_SetFontSize(fs, size)
-    if not fs or not fs.SetFont then return false end
-
-    size = tonumber(size)
-    if not size or size <= 0 then return false end
-
-    -- Prefer the resolved font file from GetFont(); if missing (FontObject-only),
-    -- fall back to the FontObject's GetFont().
-    local font, _, flags = nil, nil, nil
-    if fs.GetFont then
-        font, _, flags = fs:GetFont()
-    end
-    if not font and fs.GetFontObject then
-        local fo = fs:GetFontObject()
-        if fo and fo.GetFont then
-            font, _, flags = fo:GetFont()
-        end
-    end
-
-    if not font then
-        return false
-    end
-
-    local ok = MSUF_A2_FastCall(fs.SetFont, fs, font, size, flags)
-    return ok == true
-end
-
-
--- Apply the MSUF global font (face/outline/shadow) to a FontString, using the provided size.
--- NOTE: Size is still driven by Auras (shared/per-unit). This only binds font face + flags + shadow.
-local function MSUF_A2_ApplyFont(fs, fontPath, size, flags, useShadow)
-    if not fs or not fs.SetFont then return false end
-
-    size = tonumber(size)
-    if not size or size <= 0 then return false end
-
-    if not fontPath or fontPath == "" then
-        -- Fallback: keep current font file if global isn't resolved yet.
-        if fs.GetFont then
-            local curFont, _, curFlags = fs:GetFont()
-            if curFont and curFont ~= "" then
-                fontPath = curFont
-                if not flags or flags == "" then
-                    flags = curFlags
-                end
-            end
-        end
-        if not fontPath or fontPath == "" then
-            fontPath = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
-        end
-    end
-
-    local stamp = tostring(fontPath) .. "|" .. tostring(size) .. "|" .. tostring(flags or "")
-    if fs._msufA2_fontStamp ~= stamp then
-        local ok = MSUF_A2_FastCall(fs.SetFont, fs, fontPath, size, flags)
-        if ok then
-            fs._msufA2_fontStamp = stamp
-        end
-    end
-
-    local wantShadow = (useShadow == true)
-    local shadowStamp = wantShadow and 1 or 0
-    if fs._msufA2_shadowStamp ~= shadowStamp then
-        if wantShadow then
-            if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 1) end
-            if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
-        else
-            if fs.SetShadowOffset then fs:SetShadowOffset(0, 0) end
-        end
-        fs._msufA2_shadowStamp = shadowStamp
-    end
-
-    return true
-end
-
--- ------------------------------------------------------------
--- Cooldown text (fontstring scan + coloring + optional text) is handled by:
---   Auras2/MSUF_A2_CooldownText.lua
--- IMPORTANT: Render.lua can load before MSUF_A2_CooldownText.lua depending on TOC order.
--- So we late-bind these entrypoints and keep a tiny pending queue for icons created early.
--- ------------------------------------------------------------
-
-MSUF_A2_GetCooldownFontString = nil
-
-local function MSUF_A2_ResolveCooldownFontStringFn()
-    local f = MSUF_A2_GetCooldownFontString
-    if f then return f end
-    f = (_G and _G.MSUF_A2_GetCooldownFontString) or ((API and API.CooldownText) and API.CooldownText.GetCooldownFontString)
-    MSUF_A2_GetCooldownFontString = f
-    return f
-end
-
-MSUF_A2_GetCooldownFontString_Safe = function(icon)
-    local f = MSUF_A2_ResolveCooldownFontStringFn()
-    return f and f(icon) or nil
-end
-
-local function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)
-    local CT = API and API.CooldownText
-    local f = CT and CT.RegisterIcon
-    if f then
-        return f(icon)
-    end
-
-    -- CooldownText module not loaded yet: queue a one-time pending register.
-    local st = API and API.state
-    if st and icon and icon._msufA2_cdPending ~= true then
-        icon._msufA2_cdPending = true
-        local pending = st._msufA2_cdPending
-        if type(pending) ~= "table" then
-            pending = {}
-            st._msufA2_cdPending = pending
-        end
-        pending[#pending + 1] = icon
-    end
-end
-
-local function MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
-    local CT = API and API.CooldownText
-    local f = CT and CT.UnregisterIcon
-    if f then
-        return f(icon)
-    end
+local function MSUF_A2_ApplyStackCountAnchorStyle(icon, stackAnchor)
+  local A = API and API.Apply
+  local f = A and A.ApplyStackCountAnchorStyle
+  if f then
+    return f(icon, stackAnchor)
+  end
 end
 
 -- (Phase 5) Dispel border colors moved to Auras2/MSUF_A2_Colors.lua
@@ -748,17 +513,6 @@ end
 
 
 local AurasByUnit
-
--- ------------------------------------------------------------
--- Masque (optional)
--- ------------------------------------------------------------
-local Masque = API.Masque
-local Masque_IsEnabled = Masque and Masque.IsEnabled
-local Masque_AddButton = Masque and Masque.AddButton
-local Masque_RemoveButton = Masque and Masque.RemoveButton
-local Masque_RequestReskin = Masque and Masque.RequestReskin
-local Masque_SyncIconOverlayLevels = Masque and Masque.SyncIconOverlayLevels
-local Masque_PrepareButton = Masque and Masque.PrepareButton
 
 -- ------------------------------------------------------------
 -- Icon factory
@@ -2555,23 +2309,26 @@ end
 
     local finalShowDebuffs = (shared.showDebuffs == true)
     local finalShowBuffs = (shared.showBuffs == true)
-    -- Filter source of truth:
-    -- Use shared.filters by default; use per-unit filters only when overrideFilters is enabled for this unit.
-    local tf = shared and shared.filters
+    -- Phase F: filters resolved centrally in Auras2/MSUF_A2_Filters.lua
+    local tf, masterOn, onlyBossAuras
+    local buffsOnlyMine, debuffsOnlyMine
+    local buffsIncludeBoss, debuffsIncludeBoss
+    local hidePermanentBuffs
     do
-        local unitKey = unit
-        local pu = a2 and a2.perUnit
-        if pu and unitKey and pu[unitKey] and pu[unitKey].overrideFilters == true then
-            local puf = pu[unitKey].filters
-            if puf ~= nil then
-                tf = puf
-            end
+        local Filters = API and API.Filters
+        local fn = Filters and Filters.ResolveRuntimeFlags
+        if type(fn) == "function" then
+            tf, masterOn, onlyBossAuras, buffsOnlyMine, debuffsOnlyMine, buffsIncludeBoss, debuffsIncludeBoss, hidePermanentBuffs = fn(a2, shared, unit)
+        else
+            tf = shared and shared.filters
+            masterOn = (tf and tf.enabled == true) and true or false
+            onlyBossAuras = (masterOn and tf and tf.onlyBossAuras == true) and true or false
+            buffsOnlyMine = (shared and shared.onlyMyBuffs == true) or false
+            debuffsOnlyMine = (shared and shared.onlyMyDebuffs == true) or false
+            buffsIncludeBoss, debuffsIncludeBoss = false, false
+            hidePermanentBuffs = (shared and shared.hidePermanent == true) or false
         end
     end
-
-    -- Advanced filter master toggle (when off: behave like legacy toggles only)
-    local masterOn = (tf and tf.enabled == true) and true or false
-    local onlyBossAuras = (masterOn and tf and tf.onlyBossAuras == true) and true or false
 
     local baseShowDebuffs = (shared.showDebuffs == true)
     local baseShowBuffs = (shared.showBuffs == true)
@@ -2581,41 +2338,6 @@ end
 
     finalShowDebuffs = (wantDebuffs == true)
     finalShowBuffs = (wantBuffs == true)
-
-    -- Effective filter flags (prefer per-unit filter values when present; otherwise fall back to legacy shared toggles)
-    local buffsOnlyMine, debuffsOnlyMine = false, false
-    local buffsIncludeBoss, debuffsIncludeBoss = false, false
-    local hidePermanentBuffs = false
-
-    if masterOn and tf then
-        local b = tf.buffs
-        local d = tf.debuffs
-
-        if b and b.onlyMine ~= nil then
-            buffsOnlyMine = (b.onlyMine == true)
-        else
-            buffsOnlyMine = (shared.onlyMyBuffs == true)
-        end
-
-        if d and d.onlyMine ~= nil then
-            debuffsOnlyMine = (d.onlyMine == true)
-        else
-            debuffsOnlyMine = (shared.onlyMyDebuffs == true)
-        end
-
-        buffsIncludeBoss = (b and b.includeBoss == true) or false
-        debuffsIncludeBoss = (d and d.includeBoss == true) or false
-
-        if tf.hidePermanent ~= nil then
-            hidePermanentBuffs = (tf.hidePermanent == true)
-        else
-            hidePermanentBuffs = (shared.hidePermanent == true)
-        end
-    else
-        buffsOnlyMine = (shared.onlyMyBuffs == true)
-        debuffsOnlyMine = (shared.onlyMyDebuffs == true)
-        hidePermanentBuffs = (shared.hidePermanent == true)
-    end
 
     if unitExists and not showTest then
         -- Real auras are skipped while Preview-in-Edit-Mode is active so preview always wins.
@@ -3141,14 +2863,7 @@ end
 
 
 
--- Bind aura cooldown/stack texts to the global font pipeline (called from UpdateAllFonts).
-local function MSUF_A2_ApplyFontsFromGlobal()
-  local A = API and API.Apply
-  local f = A and A.ApplyFontsFromGlobal
-  if f then
-    return f()
-  end
-end
+-- ApplyFontsFromGlobal is provided by Apply (Auras2/MSUF_A2_Apply.lua).
 
 -- Public refresh (unit) (used by Edit Mode popups / targeted updates)
 local function MSUF_A2_RefreshUnit(unit)
@@ -3245,7 +2960,7 @@ end
 -- Public API (reddit-clean)
 API.RefreshAll = MSUF_A2_RefreshAll
 API.RefreshUnit = MSUF_A2_RefreshUnit
-API.ApplyFontsFromGlobal = MSUF_A2_ApplyFontsFromGlobal
+API.ApplyFontsFromGlobal = API.ApplyFontsFromGlobal or (API.Apply and API.Apply.ApplyFontsFromGlobal)
 
 -- Step 4 perf (cumulative): public coalesced dirty request for the Events layer.
 -- Default delay (UNIT_AURA bursts) should be small but non-zero to batch same-frame events.
@@ -3263,9 +2978,6 @@ if _G and type(_G.MSUF_Auras2_RefreshAll) ~= "function" then
 end
 if _G and type(_G.MSUF_Auras2_RefreshUnit) ~= "function" then
     _G.MSUF_Auras2_RefreshUnit = function(unit) return API.RefreshUnit(unit) end
-end
-if _G and type(_G.MSUF_Auras2_ApplyFontsFromGlobal) ~= "function" then
-    _G.MSUF_Auras2_ApplyFontsFromGlobal = function() return API.ApplyFontsFromGlobal() end
 end
 
 
@@ -3321,13 +3033,13 @@ do
     -- Runtime triggers (used by Options / Fonts / EditMode)
     API.RefreshAll = API.RefreshAll or MSUF_A2_RefreshAll
     API.RefreshUnit = API.RefreshUnit or MSUF_A2_RefreshUnit
-API.ApplyFontsFromGlobal = API.ApplyFontsFromGlobal or MSUF_A2_ApplyFontsFromGlobal
+    API.ApplyFontsFromGlobal = API.ApplyFontsFromGlobal or (API.Apply and API.Apply.ApplyFontsFromGlobal)
 
--- Internal render helpers for split modules (Preview tickers, etc.)
-API._Render = (type(API._Render) == "table") and API._Render or {}
-API._Render.ApplyStackCountAnchorStyle = (API.Apply and API.Apply.ApplyStackCountAnchorStyle) or MSUF_A2_ApplyStackCountAnchorStyle
-API._Render.ApplyStackTextOffsets = (API.Apply and API.Apply.ApplyStackTextOffsets) or MSUF_A2_ApplyStackTextOffsets
-API._Render.ApplyCooldownTextOffsets = (API.Apply and API.Apply.ApplyCooldownTextOffsets) or MSUF_A2_ApplyCooldownTextOffsets
+    -- Internal render helpers for split modules (Preview tickers, etc.)
+    API._Render = (type(API._Render) == "table") and API._Render or {}
+    API._Render.ApplyStackCountAnchorStyle = (API.Apply and API.Apply.ApplyStackCountAnchorStyle) or MSUF_A2_ApplyStackCountAnchorStyle
+    API._Render.ApplyStackTextOffsets = (API.Apply and API.Apply.ApplyStackTextOffsets) or MSUF_A2_ApplyStackTextOffsets
+    API._Render.ApplyCooldownTextOffsets = (API.Apply and API.Apply.ApplyCooldownTextOffsets) or MSUF_A2_ApplyCooldownTextOffsets
 
     local Ev = API.Events
     API.ApplyEventRegistration = API.ApplyEventRegistration or (Ev and Ev.ApplyEventRegistration) or API.ApplyEventRegistration

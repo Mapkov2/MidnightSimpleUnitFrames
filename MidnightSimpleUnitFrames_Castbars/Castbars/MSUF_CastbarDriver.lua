@@ -337,14 +337,7 @@ local function CreateCastBar(name, unit)
         EnsureDB()
         local g = MSUF_DB and MSUF_DB.general or {}
 
-		-- IMPORTANT (Midnight/Beta, secret-safe):
-		-- Do NOT probe nameplate castBar.barType here. It can be a *secret string* and ANY comparison
-		-- ("==", "~=") may hard-error.
-		-- We rely solely on:
-		--   1) UnitCastingInfo/UnitChannelInfo pass-through (state.apiNotInterruptibleRaw -> self._msufApiNotInterruptibleRaw)
-		--   2) UNIT_SPELLCAST_(NOT_)INTERRUPTIBLE events updating self.isNotInterruptible (plain boolean)
-		local isNonInterruptible = (self.isNotInterruptible == true)
-
+        local isNonInterruptible = (self.isNotInterruptible == true)
 	        -- Resolve BOTH colors (interruptible + non-interruptible). We then apply the tint using
 	        -- Texture:SetVertexColorFromBoolean(rawNotInterruptible, nonIntColor, intColor) when available.
 	        -- IMPORTANT: rawNotInterruptible may be a *secret value* => never boolean-test it in Lua.

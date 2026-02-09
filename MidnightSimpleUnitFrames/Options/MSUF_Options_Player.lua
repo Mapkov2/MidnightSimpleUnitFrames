@@ -1,4 +1,7 @@
-ns = ns or {}
+local addonName, addonNS = ...
+local ns = (_G and _G.MSUF_NS) or addonNS or {}
+if _G then _G.MSUF_NS = ns end
+
 -- Ensure the Castbars LoD addon is loaded before calling castbar functions.
 local function MSUF_EnsureCastbars()
     if type(_G.MSUF_EnsureAddonLoaded) == "function" then

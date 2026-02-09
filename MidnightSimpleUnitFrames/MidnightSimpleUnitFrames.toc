@@ -2,7 +2,7 @@
 ## Title: Midnight Simple Unit Frames
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko 
-## Version: 2.0 Alpha 1
+## Version: 2.0 Alpha 2
 ## SavedVariables: MSUF_DB
 
 MSUF_Libs.lua
@@ -48,4 +48,3 @@ Auras2\MSUF_A2_Model.lua
 Auras2\MSUF_A2_Apply.lua
 Auras2\MSUF_A2_Render.lua
 Auras2\MSUF_A2_Events.lua
-

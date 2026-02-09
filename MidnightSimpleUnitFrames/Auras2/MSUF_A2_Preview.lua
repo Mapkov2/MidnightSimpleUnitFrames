@@ -89,8 +89,10 @@ local function GetCooldownTextMgr()
      return reg, unreg
 end
 
-local function GetRenderHelpers() 
-    return (type(API._Render) == "table") and API._Render or nil
+-- Phase F: Preview no longer depends on Render helpers.
+-- It calls Apply directly so Render can stay orchestration-only.
+local function GetApply()
+    return (type(API.Apply) == "table") and API.Apply or nil
 end
 
 -- ------------------------------------------------------------
@@ -208,13 +210,11 @@ local function PreviewTickStacks()
     local a2, shared = EnsureDB()
     if not ShouldRunPreviewTicker("stacks", a2, shared) then  return end
 
-    local H = GetRenderHelpers()
-    local applyAnchorStyle = H and H.ApplyStackCountAnchorStyle
-    local applyOffsets = H and H.ApplyStackTextOffsets
+    local A = GetApply()
+    local applyAnchorStyle = A and A.ApplyStackCountAnchorStyle
+    local applyOffsets = A and A.ApplyStackTextOffsets
 
     local stackCountAnchor = shared and shared.stackCountAnchor
-    local ox = shared and shared.stackTextOffsetX
-    local oy = shared and shared.stackTextOffsetY
 
     ForEachPreviewIcon(function(icon) 
         if not icon or not icon.count then  return end
@@ -223,7 +223,7 @@ local function PreviewTickStacks()
             MSUF_A2_FastCall(applyAnchorStyle, icon, stackCountAnchor)
         end
         if type(applyOffsets) == "function" then
-            MSUF_A2_FastCall(applyOffsets, icon, ox, oy, stackCountAnchor)
+            MSUF_A2_FastCall(applyOffsets, icon, icon._msufUnit, shared, stackCountAnchor)
         end
 
         icon._msufA2_previewStackT = (icon._msufA2_previewStackT or 0) + 1
@@ -248,12 +248,8 @@ local function PreviewTickCooldown()
     local a2, shared = EnsureDB()
     if not ShouldRunPreviewTicker("cooldown", a2, shared) then  return end
 
-    local H = GetRenderHelpers()
-    local applyOffsets = H and H.ApplyCooldownTextOffsets
-
-    local anchor = shared and shared.cooldownTextAnchor
-    local ox = shared and shared.cooldownTextOffsetX
-    local oy = shared and shared.cooldownTextOffsetY
+    local A = GetApply()
+    local applyOffsets = A and A.ApplyCooldownTextOffsets
 
     local reg, unreg = GetCooldownTextMgr()
 
@@ -266,7 +262,7 @@ local function PreviewTickCooldown()
         end
 
         if type(applyOffsets) == "function" then
-            MSUF_A2_FastCall(applyOffsets, icon, ox, oy, anchor)
+            MSUF_A2_FastCall(applyOffsets, icon, icon._msufUnit, shared)
         end
 
         -- Update cooldown visuals (duration object preferred; fallback to SetCooldown).

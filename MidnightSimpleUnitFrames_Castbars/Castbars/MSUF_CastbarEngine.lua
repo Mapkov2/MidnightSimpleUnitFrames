@@ -113,16 +113,14 @@ local function GetFillDirectionReverseFor(castType)
 end
 
 local function DetectNonInterruptible(unit, frameHint)
-    -- IMPORTANT (Midnight/Beta, secret-safe):
-    -- Do NOT probe nameplate castBar.barType here. It can be a *secret string* and ANY comparison
-    -- ("==", "~=") may hard-error.
-    --
-    -- Instead, rely on:
-    --   1) UnitCastingInfo/UnitChannelInfo pass-through (state.apiNotInterruptibleRaw)
-    --   2) UNIT_SPELLCAST_(NOT_)INTERRUPTIBLE events (frameHint.isNotInterruptible is a plain boolean)
-    if frameHint and frameHint.isNotInterruptible ~= nil then
-        return (frameHint.isNotInterruptible == true)
-    end
+    -- Try nameplate castBar type (best-effort)
+        -- Fast path: if the castbar frame already knows its interruptible state, trust it.
+        if frameHint and frameHint.isNotInterruptible ~= nil then
+            return (frameHint.isNotInterruptible == true)
+        end
+    -- Nameplate nameplate type probing removed: it can taint/return secret strings on Beta.
+    -- Interruptible is determined via Unit APIs (notInterruptible flags / duration objects) upstream.
+
     return false
 end
 

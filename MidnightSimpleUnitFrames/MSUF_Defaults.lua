@@ -1,4 +1,7 @@
-ns = ns or {}
+local addonName, addonNS = ...
+local ns = (_G and _G.MSUF_NS) or addonNS or {}
+if _G then _G.MSUF_NS = ns end
+
 -- MSUF Defaults / DB initialization
 -- ---------------------------------------------------------------------------
 -- Factory default profile (MSUF2 compact string)
