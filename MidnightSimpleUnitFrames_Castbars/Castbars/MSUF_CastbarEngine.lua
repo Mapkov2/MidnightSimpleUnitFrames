@@ -95,6 +95,20 @@ local function EnsureDBSafe()
     end
 end
 
+-- Midnight/Beta: nameplate castBar.barType can be a secret string.
+-- Do NOT compare or table-index on it. We only use non-secret UI signals (shield visibility).
+
+local function MSUF_ToPlainString(v)
+    if v == nil or type(v) ~= "string" then return nil end
+    local tp = _G.ToPlain
+    if type(tp) ~= "function" then return nil end
+    local pv = tp(v)
+    if type(pv) == "string" then
+        return pv
+    end
+    return nil
+end
+
 local function GetFillDirectionReverseFor(castType)
     EnsureDBSafe()
     local g = (MSUF_DB and MSUF_DB.general) or {}
@@ -113,13 +127,33 @@ local function GetFillDirectionReverseFor(castType)
 end
 
 local function DetectNonInterruptible(unit, frameHint)
-    -- Try nameplate castBar type (best-effort)
-        -- Fast path: if the castbar frame already knows its interruptible state, trust it.
-        if frameHint and frameHint.isNotInterruptible ~= nil then
-            return (frameHint.isNotInterruptible == true)
+    -- Fast path: if the castbar frame already knows its interruptible state, trust it.
+    if frameHint and frameHint.isNotInterruptible ~= nil then
+        return (frameHint.isNotInterruptible == true)
+    end
+
+    -- Nameplate-only best-effort detection (avoid secret string comparisons/indexing for non-nameplate units).
+    if type(unit) == "string" and string.sub(unit, 1, 8) == "nameplate" then
+        if C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+            local sec = (type(issecure) == "function") and issecure() or false
+            local np = C_NamePlate.GetNamePlateForUnit(unit, sec)
+            local bar = np and ((np.UnitFrame and np.UnitFrame.castBar) or np.castBar or np.CastBar)
+            if bar then
+                -- Prefer shield visibility/flag (cheap + not secret).
+                if bar.showShield == true then
+                    return true
+                end
+                local shield = bar.BorderShield
+                if shield and shield.IsShown and shield:IsShown() then
+                    return true
+                end
+
+	            -- IMPORTANT (secret-safe): Do NOT read/compare/table-index bar.barType.
+	            -- In Midnight/Beta it can be a secret string and will hard error if used.
+	            -- Shield visibility is the only safe/needed signal here.
+            end
         end
-    -- Nameplate nameplate type probing removed: it can taint/return secret strings on Beta.
-    -- Interruptible is determined via Unit APIs (notInterruptible flags / duration objects) upstream.
+    end
 
     return false
 end
@@ -142,7 +176,17 @@ local function DetectEmpower(unit)
 
     -- Secret-safe: convert and compare only plain numbers.
     if ok then
-        local n = (type(_G.MSUF__ToNumber_SecretSafe) == "function") and _G.MSUF__ToNumber_SecretSafe(c) or tonumber(c)
+        local n
+        if type(_G.ToPlain) == "function" then
+            local pc = _G.ToPlain(c)
+            if type(pc) == "number" then
+                n = pc
+            elseif type(pc) == "string" then
+                n = tonumber(pc)
+            end
+        else
+            n = tonumber(c)
+        end
         if type(n) == "number" and n > 0 then
             return true
         end

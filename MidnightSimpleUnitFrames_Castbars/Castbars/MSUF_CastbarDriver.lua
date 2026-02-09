@@ -323,6 +323,75 @@ local function MSUF_ClearEmpowerState(frame)
     end
 end
 
+-- -------------------------------------------------
+-- Midnight/Beta: nameplate castBar.barType can be a secret string.
+-- Do NOT compare or table-index on it (will hard error). We only use non-secret UI signals
+-- like shield visibility when we need a nameplate fallback.
+-- -------------------------------------------------
+
+local function MSUF_ToPlainString(v)
+    if v == nil then return nil end
+    local tp = _G.ToPlain
+    if type(tp) == "function" then
+        local pv = tp(v) -- C-side de-secret; do NOT pcall in hot paths.
+        if type(pv) == "string" then
+            return pv
+        end
+    end
+    -- Never return raw strings here; they may be secret/tainted in Midnight/Beta.
+    return nil
+end
+
+-- Apply DurationObject to a StatusBar in a version-tolerant way (Elapsed/Remaining direction).
+-- Returns true if the statusbar is timer-driven (SetTimerDuration supported and succeeded).
+local function MSUF_Driver_SetTimerDuration(sb, durationObj, reverseFill)
+    if not (sb and durationObj) then return false end
+
+    -- Preferred: helper already deals with direction and reverse fill.
+    if type(_G.MSUF_ApplyCastbarTimerDirection) == "function" then
+        _G.MSUF_ApplyCastbarTimerDirection(sb, durationObj, reverseFill)
+        return true
+    end
+
+    -- Fallback helper (older builds)
+    if type(_G.MSUF_SetStatusBarTimerDuration) == "function" then
+        local ok = _G.MSUF_SetStatusBarTimerDuration(sb, durationObj, reverseFill)
+        if sb.SetReverseFill then
+            MSUF_FastCall(sb.SetReverseFill, sb, reverseFill and true or false)
+        end
+        return ok and true or false
+    end
+
+    -- Raw API
+    if sb.SetTimerDuration then
+        local mode = rawget(_G, "__MSUF_TimerDurationMode")
+        local ok
+        if mode ~= nil then
+            ok = MSUF_FastCall(sb.SetTimerDuration, sb, durationObj, mode)
+        else
+            ok = MSUF_FastCall(sb.SetTimerDuration, sb, durationObj, 0)
+            if ok then
+                _G.__MSUF_TimerDurationMode = 0
+            else
+                ok = MSUF_FastCall(sb.SetTimerDuration, sb, durationObj, true)
+                if ok then
+                    _G.__MSUF_TimerDurationMode = true
+                end
+            end
+        end
+
+        if sb.SetReverseFill then
+            MSUF_FastCall(sb.SetReverseFill, sb, reverseFill and true or false)
+        end
+        return ok and true or false
+    end
+
+    if sb.SetReverseFill then
+        MSUF_FastCall(sb.SetReverseFill, sb, reverseFill and true or false)
+    end
+    return false
+end
+
 local function CreateCastBar(name, unit)
     local frame = CreateFrame("Frame", name, UIParent)
     frame:SetClampedToScreen(true)
@@ -338,6 +407,27 @@ local function CreateCastBar(name, unit)
         local g = MSUF_DB and MSUF_DB.general or {}
 
         local isNonInterruptible = (self.isNotInterruptible == true)
+
+	        -- Nameplate-only fallback:
+	        -- In Midnight/Beta, castBar.barType can be a secret string (cannot be compared or used for table indexing).
+	        -- We only rely on non-secret UI signals (shield visibility).
+	        if not isNonInterruptible and self.unit and self.unit:sub(1, 8) == "nameplate"
+	            and C_NamePlate and C_NamePlate.GetNamePlateForUnit
+	        then
+	            local np = C_NamePlate.GetNamePlateForUnit(self.unit)
+	            local bar = np and np.UnitFrame and np.UnitFrame.castBar
+	            if bar then
+	                if bar.showShield == true then
+	                    isNonInterruptible = true
+	                else
+	                    local shield = bar.BorderShield
+	                    if shield and shield.IsShown and shield:IsShown() then
+	                        isNonInterruptible = true
+	                    end
+	                end
+	            end
+	        end
+
 	        -- Resolve BOTH colors (interruptible + non-interruptible). We then apply the tint using
 	        -- Texture:SetVertexColorFromBoolean(rawNotInterruptible, nonIntColor, intColor) when available.
 	        -- IMPORTANT: rawNotInterruptible may be a *secret value* => never boolean-test it in Lua.
@@ -608,8 +698,10 @@ end
             local tok = MSUF_Driver_BumpCastToken(self)
             self.isNotInterruptible = false
             MSUF_Driver_CastResync(self)
-            -- Retry once shortly after start to handle the tiny "info not ready yet" window on target/focus channels.
-            C_Timer.After(0.05, function()
+	            -- Step A: only retry if we actually need it (avoid forcing extra work on every cast start).
+	            local needsRetry = (self.MSUF_durationObj == nil) or (self.MSUF_isChanneled and (self.unit == "target" or self.unit == "focus"))
+	            if needsRetry then
+	                C_Timer.After(0.05, function()
                 if not self or self.interrupted then return end
                 if (self._msufCastToken or 0) ~= tok then return end
                 local st = MSUF_Driver_BuildCastStateFor(self)
@@ -617,7 +709,8 @@ end
                     MSUF_Driver_SetActiveIdentity(self, st)
                     self:Cast(st)
                 end
-            end)
+	                end)
+	            end
 
 	        elseif event == "UNIT_SPELLCAST_DELAYED" or event == "UNIT_SPELLCAST_CHANNEL_UPDATE" or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
             if event == "UNIT_SPELLCAST_CHANNEL_UPDATE" and (self._msufStopTimer1 or self._msufStopTimer2 or self._msufStopTimer3) then
@@ -770,11 +863,47 @@ function frame:Cast(preState)
                 self._msufLastDurationSeq = seq
                 self._msufLastDurationObj = durationObj
             end
-        elseif not (state and state.active) then
-	            self._msufApiNotInterruptibleRaw = nil
-            self._msufLastDurationSeq = nil
-            self._msufLastDurationObj = nil
-        end
+	        elseif not (state and state.active) then
+		            self._msufApiNotInterruptibleRaw = nil
+	            self._msufLastDurationSeq = nil
+	            self._msufLastDurationObj = nil
+	            self._msufAppliedSeq = nil
+	            self._msufAppliedCastType = nil
+	        end
+
+	        -- -------------------------------------------------
+	        -- Step A: same-cast fast-path (DELAYED/CHANNEL_UPDATE storms)
+	        -- If this is the same spellSequenceID + castType as the already-active cast,
+	        -- do NOT re-apply icon/text/stripes or reset timers. Only swap durationObj if needed.
+	        -- -------------------------------------------------
+	        if state and state.active and durationObj ~= nil then
+	            local seq = state.spellSequenceID
+	            local ctype = state.castType
+	            if type(seq) == "number" and seq == self._msufAppliedSeq and ctype == self._msufAppliedCastType and self.MSUF_durationObj ~= nil then
+	                if durationObj ~= self.MSUF_durationObj then
+	                    self.MSUF_durationObj = durationObj
+	                    local rf = (self._msufStripeReverseFill == true)
+	                    local okTimer = MSUF_Driver_SetTimerDuration(self.statusBar, durationObj, rf)
+	                    if okTimer then
+	                        self.MSUF_timerDriven = true
+	                    end
+	                end
+	
+	                if self.timeText then
+	                    _G.MSUF_UpdateCastTimeText_FromStatusBar(self)
+	                end
+	
+	                if MSUF_RegisterCastbar and not self._msufRegistered then
+	                    MSUF_RegisterCastbar(self)
+	                    self._msufRegistered = true
+	                end
+	
+	                if not self:IsShown() then
+	                    self:Show()
+	                end
+	                return
+	            end
+	        end
 -- Empower: Player-only.
 -- For target/focus/boss we intentionally do NOT attempt empower stage rendering.
 -- (Enemy empower stage APIs can yield secret values and are unreliable in Midnight/Beta.)
@@ -797,6 +926,10 @@ if spellName and durationObj then
             self.MSUF_durationObj = durationObj
             self.MSUF_isChanneled = isChanneled
 
+	            -- Step A: stable identity for same-cast fast-path (seq+castType are non-secret).
+	            self._msufAppliedSeq = state and state.spellSequenceID or nil
+	            self._msufAppliedCastType = state and state.castType or nil
+
             -- Reset hard-stop persistence timers on a successful (re)start.
             self._msufHardStopNoChannelSince = nil
             self._msufHardStopNoCastSince = nil
@@ -808,66 +941,31 @@ if spellName and durationObj then
             self._msufLastSBValue = nil
             self.MSUF_channelDirect = (isChanneled and (self.unit == "target" or self.unit == "focus")) and true or nil
 
-            local okTimer = false
-local __msuf_rf = nil
-if type(_G.MSUF_BuildCastState) == "function" then
-    local st = _G.MSUF_BuildCastState(self.unit, self)
-    __msuf_rf = st and st.reverseFill
-end
-if __msuf_rf == nil then
-    __msuf_rf = (type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" and _G.MSUF_GetCastbarReverseFillForFrame(self, isChanneled)) or false
-end
-__msuf_rf = (__msuf_rf == true)
-
--- Player-only: remember reverseFill so stripe anchoring matches bar direction.
-self._msufStripeReverseFill = __msuf_rf
-
--- Player-only: (re)compute channel haste stripes (positions depend on current haste + bar width).
-MSUF__UpdatePlayerChannelHasteStripes(self, true)
-
-
-if self.statusBar then
-    if type(_G.MSUF_ApplyCastbarTimerDirection) == "function" then
-        okTimer = _G.MSUF_ApplyCastbarTimerDirection(self.statusBar, durationObj, __msuf_rf)
-    elseif type(_G.MSUF_SetStatusBarTimerDuration) == "function" then
-        okTimer = _G.MSUF_SetStatusBarTimerDuration(self.statusBar, durationObj, __msuf_rf)
-        if self.statusBar.SetReverseFill then
-            MSUF_FastCall(self.statusBar.SetReverseFill, self.statusBar, (__msuf_rf and true or false))
-        end
-    elseif self.statusBar.SetTimerDuration then
-        -- Cache which signature works (some builds expect a numeric direction, others a boolean).
-        -- This avoids probing twice on every cast start.
-        local mode = _G.__MSUF_TimerDurationMode
-        if mode ~= nil then
-            okTimer = MSUF_FastCall(self.statusBar.SetTimerDuration, self.statusBar, durationObj, mode)
-        else
-            okTimer = MSUF_FastCall(self.statusBar.SetTimerDuration, self.statusBar, durationObj, 0)
-            if okTimer then
-                _G.__MSUF_TimerDurationMode = 0
-            else
-                okTimer = MSUF_FastCall(self.statusBar.SetTimerDuration, self.statusBar, durationObj, true)
-                if okTimer then
-                    _G.__MSUF_TimerDurationMode = true
-                end
-            end
-        end
-        if self.statusBar.SetReverseFill then
-            MSUF_FastCall(self.statusBar.SetReverseFill, self.statusBar, (__msuf_rf and true or false))
-        end
-    elseif self.statusBar.SetReverseFill then
-        MSUF_FastCall(self.statusBar.SetReverseFill, self.statusBar, (__msuf_rf and true or false))
-        okTimer = false
-    end
-end
-self.MSUF_timerDriven = okTimer and true or false
+	            local __msuf_rf
+	            if state and state.reverseFill ~= nil then
+	                __msuf_rf = (state.reverseFill == true)
+	            else
+	                __msuf_rf = (type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" and _G.MSUF_GetCastbarReverseFillForFrame(self, isChanneled)) or false
+	                __msuf_rf = (__msuf_rf == true)
+	            end
+	
+	            -- Player-only: remember reverseFill so stripe anchoring matches bar direction.
+	            self._msufStripeReverseFill = __msuf_rf
+	
+	            -- Player-only: (re)compute channel haste stripes (positions depend on current haste + bar width).
+	            MSUF__UpdatePlayerChannelHasteStripes(self, true)
+	
+	            local okTimer = MSUF_Driver_SetTimerDuration(self.statusBar, durationObj, __msuf_rf)
+	            self.MSUF_timerDriven = okTimer and true or false
 
             if self.UpdateColorForInterruptible then
                 _G.MSUF_CB_ApplyColor(self)
             end
 
-            if MSUF_RegisterCastbar then
-                MSUF_RegisterCastbar(self)
-            end
+	            if MSUF_RegisterCastbar and not self._msufRegistered then
+	                MSUF_RegisterCastbar(self)
+	                self._msufRegistered = true
+	            end
 
             if self.timeText then
                 _G.MSUF_UpdateCastTimeText_FromStatusBar(self)

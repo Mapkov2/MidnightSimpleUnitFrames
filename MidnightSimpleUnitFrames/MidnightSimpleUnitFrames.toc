@@ -2,7 +2,7 @@
 ## Title: Midnight Simple Unit Frames
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko 
-## Version: 2.0 Alpha 2
+## Version: 2.0 Alpha 3
 ## SavedVariables: MSUF_DB
 
 MSUF_Libs.lua

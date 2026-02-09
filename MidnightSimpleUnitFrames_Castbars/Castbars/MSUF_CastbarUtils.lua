@@ -171,6 +171,73 @@ local function _MSUF_GetReverseFill(frame, state, isChanneled)
     return false
 end
 
+-- -------------------------------------------------
+-- Step B: Progress ALWAYS via StatusBar:SetTimerDuration()
+-- -------------------------------------------------
+-- Centralize a secret-safe, no-pcall timer-duration apply helper.
+-- NOTE: This is called only on cast-state changes (not per-frame), but we still keep it fast.
+if type(_G.MSUF_SetStatusBarTimerDuration) ~= "function" then
+    function _G.MSUF_SetStatusBarTimerDuration(sb, durationObj, reverseFill)
+        if not (sb and durationObj) then
+            return false
+        end
+
+        local ok = false
+        if sb.SetTimerDuration then
+            local mode = _G.__MSUF_TimerDurationMode
+            if mode ~= nil then
+                if type(_G.MSUF_FastCall) == "function" then
+                    ok = (_G.MSUF_FastCall(sb.SetTimerDuration, sb, durationObj, mode) == true)
+                else
+                    ok = (sb:SetTimerDuration(durationObj, mode) == true)
+                end
+            else
+                local ok0
+                if type(_G.MSUF_FastCall) == "function" then
+                    ok0 = (_G.MSUF_FastCall(sb.SetTimerDuration, sb, durationObj, 0) == true)
+                else
+                    ok0 = (sb:SetTimerDuration(durationObj, 0) == true)
+                end
+
+                if ok0 then
+                    _G.__MSUF_TimerDurationMode = 0
+                    ok = true
+                else
+                    local okB
+                    if type(_G.MSUF_FastCall) == "function" then
+                        okB = (_G.MSUF_FastCall(sb.SetTimerDuration, sb, durationObj, true) == true)
+                    else
+                        okB = (sb:SetTimerDuration(durationObj, true) == true)
+                    end
+                    if okB then
+                        _G.__MSUF_TimerDurationMode = true
+                        ok = true
+                    end
+                end
+            end
+        end
+
+        -- Visual direction: reverse fill is safe and supported on all relevant builds.
+        if sb.SetReverseFill then
+            local rf = reverseFill and true or false
+            if type(_G.MSUF_FastCall) == "function" then
+                _G.MSUF_FastCall(sb.SetReverseFill, sb, rf)
+            else
+                sb:SetReverseFill(rf)
+            end
+        end
+
+        return ok
+    end
+end
+
+-- Optional higher-level wrapper (some modules prefer this name).
+if type(_G.MSUF_ApplyCastbarTimerDirection) ~= "function" then
+    function _G.MSUF_ApplyCastbarTimerDirection(sb, durationObj, reverseFill)
+        return (_G.MSUF_SetStatusBarTimerDuration(sb, durationObj, reverseFill) == true) and true or false
+    end
+end
+
 -- Apply a normal CAST/CHANNEL state that has a durationObj.
 -- Returns true when it applied and showed the bar; false when state is not applicable.
 function _G.MSUF_Castbar_ApplyActiveDuration(frame, state, opts)
@@ -211,41 +278,11 @@ function _G.MSUF_Castbar_ApplyActiveDuration(frame, state, opts)
 
     local rev = _MSUF_GetReverseFill(frame, state, isChanneled)
 
-    -- Apply timer duration + direction (supports new SetTimerDuration direction signatures)
-    local okTimer = false
+    -- Apply timer duration + direction (Step B: progress is timer-driven, no per-frame SetValue)
     local sb = frame.statusBar
+    local okTimer = false
     if sb then
-        if type(_G.MSUF_ApplyCastbarTimerDirection) == "function" then
-            okTimer = (_G.MSUF_ApplyCastbarTimerDirection(sb, durObj, rev) == true)
-        elseif type(_G.MSUF_SetStatusBarTimerDuration) == "function" then
-            okTimer = (_G.MSUF_SetStatusBarTimerDuration(sb, durObj, rev) == true)
-            if sb.SetReverseFill then
-                pcall(sb.SetReverseFill, sb, rev and true or false)
-            end
-        elseif sb.SetTimerDuration then
-            -- Cache which signature works (some builds expect numeric direction; others boolean).
-            local mode = _G.__MSUF_TimerDurationMode
-            if mode ~= nil then
-                okTimer = (pcall(sb.SetTimerDuration, sb, durObj, mode) == true)
-            else
-                local ok0 = pcall(sb.SetTimerDuration, sb, durObj, 0)
-                if ok0 then
-                    _G.__MSUF_TimerDurationMode = 0
-                    okTimer = true
-                else
-                    local okB = pcall(sb.SetTimerDuration, sb, durObj, true)
-                    if okB then
-                        _G.__MSUF_TimerDurationMode = true
-                        okTimer = true
-                    end
-                end
-            end
-            if sb.SetReverseFill then
-                pcall(sb.SetReverseFill, sb, rev and true or false)
-            end
-        elseif sb.SetReverseFill then
-            pcall(sb.SetReverseFill, sb, rev and true or false)
-        end
+        okTimer = (_G.MSUF_ApplyCastbarTimerDirection(sb, durObj, rev) == true)
     end
     frame.MSUF_timerDriven = okTimer and true or false
 
@@ -648,6 +685,11 @@ function _G.MSUF_CB_ResetStateOnStop(frame, reasonOrState, opts)
         if MSUF_UnregisterCastbar then
             MSUF_UnregisterCastbar(frame)
         end
+
+	-- Step A: keep registration bookkeeping in the driver.
+	frame._msufRegistered = nil
+	frame._msufAppliedSeq = nil
+	frame._msufAppliedCastType = nil
         frame.MSUF_durationObj = nil
         frame.MSUF_isChanneled = nil
         frame.MSUF_channelDirect = nil

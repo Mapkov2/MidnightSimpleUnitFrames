@@ -41,6 +41,38 @@ end
 -- Backwards alias used by older call sites
 MSUF_GetStatusIndicatorDB = _G.MSUF_GetStatusIndicatorDB
 -- ------------------------------------------------------------
+-- Midnight/Beta (12.0+): AFK/DND can return secret booleans in combat/encounters.
+-- Cache suppression state via events to avoid per-frame InCombatLockdown/IsEncounter calls.
+-- ------------------------------------------------------------
+if ns._msufAwaySuppressed == nil then
+    local function _MSUF_AwaySuppressedNow()
+        if InCombatLockdown and InCombatLockdown() then
+            return true
+        end
+        local CIE = _G.C_InstanceEncounter
+        if CIE and CIE.IsEncounterInProgress and CIE.IsEncounterInProgress() then
+            return true
+        end
+        return false
+    end
+
+    ns._msufAwaySuppressed = _MSUF_AwaySuppressedNow()
+
+    local f = CreateFrame and CreateFrame("Frame") or nil
+    if f then
+        f:RegisterEvent("PLAYER_REGEN_DISABLED")
+        f:RegisterEvent("PLAYER_REGEN_ENABLED")
+        f:RegisterEvent("ENCOUNTER_START")
+        f:RegisterEvent("ENCOUNTER_END")
+
+        local function _MSUF_AwayState_OnEvent()
+            ns._msufAwaySuppressed = _MSUF_AwaySuppressedNow()
+        end
+        f:SetScript("OnEvent", _MSUF_AwayState_OnEvent)
+    end
+end
+
+-- ------------------------------------------------------------
 -- Helpers (read config with global fallback)
 -- ------------------------------------------------------------
 local function _MSUF_ReadBool(conf, g, k, defaultVal, legacyKey)
@@ -507,13 +539,25 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
                 txt = "DEAD"
             end
         end
-        if txt == "" then
-            if showAFK and UnitIsAFK and UnitIsAFK(unit) then
-                txt = "AFK"
-            elseif showDND and UnitIsDND and UnitIsDND(unit) then
-                txt = "DND"
-            end
-        end
+	    if txt == "" and (showAFK or showDND) then
+	        -- Midnight/Beta (12.0+): UnitIsAFK/UnitIsDND can return *secret booleans*
+	        -- during combat/encounters, which hard-error on boolean tests.
+	        -- We suppress AFK/DND checks while locked down (cached via events; see file top).
+	        if ns._msufAwaySuppressed ~= true then
+	            if showAFK and UnitIsAFK then
+	                local afk = UnitIsAFK(unit)
+	                if afk then
+	                    txt = "AFK"
+	                end
+	            end
+	            if txt == "" and showDND and UnitIsDND then
+	                local dnd = UnitIsDND(unit)
+	                if dnd then
+	                    txt = "DND"
+	                end
+	            end
+	        end
+	    end
     end
     local fs = frame.statusIndicatorText
     local ovText = frame.statusIndicatorOverlayText

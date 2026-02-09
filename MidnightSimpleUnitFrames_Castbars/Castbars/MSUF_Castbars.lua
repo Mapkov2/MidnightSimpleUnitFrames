@@ -302,27 +302,32 @@ local function MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
 
     local nonInterruptibleKey = g.castbarNonInterruptibleColor or "red"
 
-    local isNonInterruptible = false
+    local isNonInterruptible = falselocal unit = self.unit or "player"
 
-    local unit = self.unit or "player"
-    local nameplate = C_NamePlate
-        and C_NamePlate.GetNamePlateForUnit
-        and C_NamePlate.GetNamePlateForUnit(unit, issecure())
+local sec = (type(issecure) == "function") and issecure() or false
+local nameplate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit(unit, sec)
 
-    if nameplate then
-        local bar = (nameplate.UnitFrame and nameplate.UnitFrame.castBar)
-            or nameplate.castBar
-            or nameplate.CastBar
+if nameplate then
+    local bar = (nameplate.UnitFrame and nameplate.UnitFrame.castBar)
+        or nameplate.castBar
+        or nameplate.CastBar
 
-        local barType = bar and bar.barType
-        if barType == "uninterruptable"
-            or barType == "uninterruptible"
-            or barType == "uninterruptibleSpell"
-            or barType == "shield"
-        then
-            isNonInterruptible = true
-        end
+    -- Secret-safe: bar.barType can be a secret string in Midnight/Beta.
+    -- Never compare it directly in Lua. Only compare a plain copy via ToPlain (if available).
+    local barType = bar and bar.barType
+    local btPlain = nil
+    if barType ~= nil and type(_G.ToPlain) == "function" then
+        btPlain = _G.ToPlain(barType)
     end
+
+    if btPlain == "uninterruptable"
+        or btPlain == "uninterruptible"
+        or btPlain == "uninterruptibleSpell"
+        or btPlain == "shield"
+    then
+        isNonInterruptible = true
+    end
+end
 
     if self.isNotInterruptible then
         isNonInterruptible = true
@@ -1419,19 +1424,48 @@ end
             MSUF_PlayerCastbar_UpdateLatencyZone(self, false, durSec)
         end
 
-        self:SetScript("OnUpdate", nil)
-        self._msufCastNilSince = nil
-        self.MSUF_durationObj = castDuration
-        self.MSUF_timerDriven = true
-        -- Duration Objects + SetTimerDuration animate the fill; the manager only ticks for time text / glow fade / hard-stop safety.
-        MSUF_EnsureCastbarManager()
-        if MSUF_RegisterCastbar then
-            MSUF_RegisterCastbar(self)
-        end
-        if _G.MSUF_UpdateCastbarFrame then
-            local _now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
-            _G.MSUF_UpdateCastbarFrame(self, 0, _now)
-        end
+                self._msufChanNilSince = nil
+
+        self:SetScript("OnUpdate", function()
+            -- Hard stop: if no longer casting, kill the bar immediately (fixes lingering channels like Mind Flay).
+            local u = self._msufActiveCastUnit or unit or self.unit or "player"
+            local _castName, _, _, _, _, _, _, _ni = UnitCastingInfo(u)
+            if not _castName then
+                self:SetScript("OnUpdate", nil)
+                self._msufActiveCastUnit = nil
+                MSUF_PlayerChannelHasteMarkers_Hide(self)
+                if self.latencyBar then self.latencyBar:Hide() end
+                if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
+                if self.statusBar and self.statusBar.SetValue then MSUF_FastCall(self.statusBar.SetValue, self.statusBar, 0) end
+                self:Hide()
+                return
+            end
+	        local _newNI = false
+	        if _ni then _newNI = true end
+            if _newNI ~= self.isNotInterruptible then
+                self.isNotInterruptible = _newNI
+                MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
+            end
+
+            local ok, remaining = MSUF_FastCall(castDuration.GetRemainingDuration, castDuration)
+
+            -- "Glow effect": fade the fill color towards white as the cast approaches completion.
+            if ok and type(_G.MSUF_ApplyCastbarGlowFade) == "function" then
+                local okT, total = MSUF_FastCall(castDuration.GetTotalDuration, castDuration)
+                if okT then
+                    _G.MSUF_ApplyCastbarGlowFade(self, remaining, total)
+                end
+            end
+
+            if self.timeText then
+                local t = ""
+                if ok then
+                    local okFmt, s = MSUF_FastCall(string.format, "%.1f", remaining)
+                    t = okFmt and s or (remaining ~= nil and tostring(remaining) or "")
+                end
+                MSUF_SetTextIfChanged(self.timeText, t)
+            end
+        end)
 
         self:Show()
         return
@@ -1517,19 +1551,91 @@ end
             MSUF_PlayerCastbar_UpdateLatencyZone(self, true, durSec)
         end
 
-        self:SetScript("OnUpdate", nil)
-        self._msufChanNilSince = nil
-        self.MSUF_durationObj = channelDuration
-        self.MSUF_timerDriven = true
-        -- Duration Objects + SetTimerDuration animate the fill; the manager only ticks for time text / glow fade / hard-stop safety.
-        MSUF_EnsureCastbarManager()
-        if MSUF_RegisterCastbar then
-            MSUF_RegisterCastbar(self)
-        end
-        if _G.MSUF_UpdateCastbarFrame then
-            local _now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
-            _G.MSUF_UpdateCastbarFrame(self, 0, _now)
-        end
+        self:SetScript("OnUpdate", function()
+            -- Hard stop (graceful): UnitChannelInfo can briefly return nil during back-to-back channel refresh/queue windows.
+            -- Keep a tiny persistence window to avoid "blink / micro re-channel" while still killing truly-ended lingering channels.
+            local now = (type(GetTime) == "function") and GetTime() or 0
+            local u = self._msufActiveCastUnit or unit or self.unit or "player"
+            local _chanName, _, _, _, _, _, _ni = UnitChannelInfo(u)
+
+            if not _chanName then
+                local since = self._msufChanNilSince
+                if not since then
+                    self._msufChanNilSince = now
+                    return
+                end
+
+                -- Default grace bridges refresh gaps; on some builds the gap can be as large as SpellQueueWindow.
+                local grace = self._msufChanNilGrace
+                if type(grace) ~= "number" then
+                    local qms = 0
+                    if GetCVar then qms = tonumber(GetCVar("SpellQueueWindow") or "0") or 0 end
+                    if qms < 0 then qms = 0 end
+                    grace = (qms / 1000) + 0.12
+                    if grace < 0.20 then grace = 0.20 end
+                end
+                if grace < 0.05 then grace = 0.05 end
+                if grace > 0.80 then grace = 0.80 end
+
+                if (now - since) < grace then
+                    return
+                end
+
+                self._msufChanNilSince = nil
+                self:SetScript("OnUpdate", nil)
+                self._msufActiveCastUnit = nil
+                MSUF_PlayerChannelHasteMarkers_Hide(self)
+                if self.latencyBar then self.latencyBar:Hide() end
+                if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
+                if self.statusBar and self.statusBar.SetValue then MSUF_FastCall(self.statusBar.SetValue, self.statusBar, 0) end
+                self:Hide()
+                return
+            end
+
+            -- Channel is active again; clear any pending nil-grace tracking.
+            self._msufChanNilSince = nil
+
+            -- Update haste markers during the channel (throttled). Visible from start; repositions if haste changes.
+            if (now - (self._msufPlayerChannelHasteMarkersLastT or 0)) > 0.15 then
+                self._msufPlayerChannelHasteMarkersLastT = now
+                MSUF_PlayerChannelHasteMarkers_Update(self, false)
+            end
+
+            local _newNI = false
+            if _ni then _newNI = true end
+            if _newNI ~= self.isNotInterruptible then
+                self.isNotInterruptible = _newNI
+                MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
+            end
+
+            local ok, remaining = MSUF_FastCall(channelDuration.GetRemainingDuration, channelDuration)
+            if ok then
+                -- "Glow effect": fade the fill color towards white as the channel approaches completion.
+                if type(_G.MSUF_ApplyCastbarGlowFade) == "function" then
+                    local total = self.MSUF_channelTotal
+                    if total == nil then
+                        local okT, t = MSUF_FastCall(channelDuration.GetTotalDuration, channelDuration)
+                        if okT then total = t end
+                    end
+                    if total ~= nil then
+                        _G.MSUF_ApplyCastbarGlowFade(self, remaining, total)
+                    end
+                end
+
+                if self.statusBar and self.statusBar.SetValue then
+                    local v = remaining
+                    if self.MSUF_channelTotal and type(self.MSUF_channelTotal) == 'number' then
+                        v = self.MSUF_channelTotal - remaining
+                        if v < 0 then v = 0 end
+                    end
+                    MSUF_FastCall(self.statusBar.SetValue, self.statusBar, v)
+                end
+                if self.timeText then
+                    local okFmt, s = MSUF_FastCall(string.format, "%.1f", remaining)
+                    MSUF_SetTextIfChanged(self.timeText, okFmt and s or (remaining ~= nil and tostring(remaining) or ""))
+                end
+            end
+        end)
 
         self:Show()
         return
@@ -1538,12 +1644,6 @@ end
     if CAST_STOP[event] then
         self:SetScript("OnUpdate", nil)
         self._msufChanNilSince = nil
-        self._msufCastNilSince = nil
-        self._msufHardStopNilSince = nil
-        self.MSUF_durationObj = nil
-        self.MSUF_timerDriven = nil
-        if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
-
         MSUF_PlayerChannelHasteMarkers_Hide(self)
         if self.latencyBar then self.latencyBar:Hide() end
         if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
@@ -4066,13 +4166,8 @@ do
 
         if frame._msufTickInterval == nil then
             local u = frame.unit
-            -- Most bars are Duration-Object driven; we only tick for time-text / glow fade / hard-stop safety.
-            -- Player needs a bit more cadence than default so the time text feels responsive without per-frame OnUpdate.
             if u == "target" or u == "focus" then
-                frame._msufTickInterval = 0.03
-            elseif u == "player" then
-                frame._msufTickInterval = 0.05
-            elseif type(u) == "string" and u:sub(1,4) == "boss" then
+                -- Make target/focus as snappy as player/boss (reduces perceived 5-6 frame tail).
                 frame._msufTickInterval = 0.03
             else
                 frame._msufTickInterval = (frame.isEmpower and 0.03) or 0.10
@@ -4330,15 +4425,6 @@ do
         end
 
         -- Duration-object path (modern API): we only maintain time text + safety stop.
-
-        -- Player channel haste markers: low-cadence refresh (no per-frame OnUpdate).
-        if frame.unit == "player" and frame.MSUF_isChanneled and frame.MSUF_channelHasteMarkers then
-            if now >= (frame._msufHasteMarkersNext or 0) then
-                frame._msufHasteMarkersNext = now + 0.15
-                MSUF_PlayerChannelHasteMarkers_Update(frame, false)
-            end
-        end
-
         local dObj = frame.MSUF_durationObj
         if dObj and (dObj.GetRemainingDuration or dObj.GetRemaining) then
             -- If the duration object changed, re-detect timer direction for the statusbar fallback.

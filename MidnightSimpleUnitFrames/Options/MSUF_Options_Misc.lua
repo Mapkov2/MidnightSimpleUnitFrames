@@ -30,6 +30,28 @@ local function EnsureTarget()
     return t
 end
 
+local function EnsureFocus()
+    local db = _G.MSUF_DB
+    if not db then return {} end
+    local t = db.focus
+    if not t then
+        t = {}
+        db.focus = t
+    end
+    return t
+end
+
+local function EnsureBoss()
+    local db = _G.MSUF_DB
+    if not db then return {} end
+    local t = db.boss
+    if not t then
+        t = {}
+        db.boss = t
+    end
+    return t
+end
+
     local function EnsureGameplay()
         if EnsureDB then EnsureDB() end
         MSUF_DB = MSUF_DB or {}
@@ -662,6 +684,49 @@ end
         end,
     })
 
+
+
+    local focusRangeFadeCheck = UI:MakeCheck({
+        name = "MSUF_FocusRangeFadeCheck",
+        parent = rightPanel,
+        template = "InterfaceOptionsCheckButtonTemplate",
+        anchor = targetRangeFadeCheck,
+        x = 0, y = -12,
+        label = "Enable Focus Range Fade",
+        tooltip = "Fades the Focus frame while out of range (event-driven, no polling).",
+        get = function()
+            local t = EnsureFocus()
+            return (t.rangeFadeEnabled == true)
+        end,
+        set = function(v)
+            local t = EnsureFocus()
+            t.rangeFadeEnabled = v and true or false
+            if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
+            if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
+            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+        end,
+    })
+
+    local bossRangeFadeCheck = UI:MakeCheck({
+        name = "MSUF_BossRangeFadeCheck",
+        parent = rightPanel,
+        template = "InterfaceOptionsCheckButtonTemplate",
+        anchor = focusRangeFadeCheck,
+        x = 0, y = -12,
+        label = "Enable Boss Range Fade",
+        tooltip = "Fades Boss frames (1-5) while out of range (event-driven, no polling).",
+        get = function()
+            local t = EnsureBoss()
+            return (t.rangeFadeEnabled == true)
+        end,
+        set = function(v)
+            local t = EnsureBoss()
+            t.rangeFadeEnabled = v and true or false
+            if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
+            if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
+            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+        end,
+    })
 
 
 
