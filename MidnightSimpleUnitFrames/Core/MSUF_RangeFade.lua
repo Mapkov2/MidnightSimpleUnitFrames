@@ -12,6 +12,7 @@ local wipe = wipe
 local hasCSpell = (type(C_Spell) == "table")
 local EnableSpellRangeCheck = hasCSpell and C_Spell.EnableSpellRangeCheck or nil
 local SpellHasRange = hasCSpell and C_Spell.SpellHasRange or nil
+local IsSpellInRange = hasCSpell and C_Spell.IsSpellInRange or nil
 local GetSpellIDForSpellIdentifier = hasCSpell and C_Spell.GetSpellIDForSpellIdentifier or nil
 
 local hasCSpellBook = (type(C_SpellBook) == "table")
@@ -44,6 +45,32 @@ local RF = {
   maxTracked = 512,
   ignoreSpellIDs = { [2096] = true }, -- Mind Vision
 }
+
+-- Forward declares (used before definition)
+local SeedTargetNow
+local ScheduleSeedKick
+
+-- SpellBook APIs may return *forbidden* tables very early on login in some 12.0/Midnight builds.
+-- If that happens, indexing them throws "attempted to index a forbidden table".
+-- We swallow that once and rescan shortly after, when caches are ready.
+local _spellbookRescanPending = false
+local _spellbookRescanTries = 0
+local function ScheduleSpellbookRescan()
+  if _spellbookRescanPending then return end
+  if not (C_Timer and C_Timer.After) then return end
+  _spellbookRescanPending = true
+  _spellbookRescanTries = _spellbookRescanTries + 1
+  if _spellbookRescanTries > 5 then
+    _spellbookRescanPending = false
+    return
+  end
+  C_Timer.After(1.0, function()
+    _spellbookRescanPending = false
+    if RF.enabled == true and type(_G.MSUF_RangeFade_RebuildSpells) == "function" then
+      _G.MSUF_RangeFade_RebuildSpells()
+    end
+  end)
+end
 
 -- ==== Helpers ====
 local function ResolveSpellID(spellIdentifier)
@@ -223,27 +250,32 @@ local function BuildWantedFromSpellBook()
     return
   end
 
-  local tracked = 0
+  -- 12.0/Midnight: some SpellBook C APIs can return forbidden tables very early in login.
+  -- If we touch them directly, we spam "attempted to index a forbidden table".
+  -- This scan is NOT hot-path, so a single pcall wrapper is acceptable.
+  local ok = pcall(function()
+    local tracked = 0
 
-  for lineIndex = 1, numLines do
-    local info = GetSkillLineInfo(lineIndex)
-    if info then
-      local offset = info.itemIndexOffset or info.itemIndexOffsetFromStart or info.itemIndexOffsetFromStartIndex
-      local numItems = info.numSpellBookItems or info.numSpellBookItemSlots or info.numSpellBookItemsInLine
-      if offset and numItems and numItems > 0 then
-        local first = offset + 1
-        local last = offset + numItems
-        for slot = first, last do
-          if IsSpellSlot(slot) and (IsPassiveSlot(slot) ~= true) then
-            local sid = GetSlotSpellID(slot)
-            if sid then
-              local spellID = tonumber(sid) or sid
-              if type(spellID) == "number" and ShouldTrackSpell(spellID) then
-                if not _wanted[spellID] then
-                  _wanted[spellID] = true
-                  tracked = tracked + 1
-                  if tracked >= RF.maxTracked then
-                    return
+    for lineIndex = 1, numLines do
+      local info = GetSkillLineInfo(lineIndex)
+      if info then
+        local offset = info.itemIndexOffset or info.itemIndexOffsetFromStart or info.itemIndexOffsetFromStartIndex
+        local numItems = info.numSpellBookItems or info.numSpellBookItemSlots or info.numSpellBookItemsInLine
+        if offset and numItems and numItems > 0 then
+          local first = offset + 1
+          local last = offset + numItems
+          for slot = first, last do
+            if IsSpellSlot(slot) and (IsPassiveSlot(slot) ~= true) then
+              local sid = GetSlotSpellID(slot)
+              if sid then
+                local spellID = tonumber(sid) or sid
+                if type(spellID) == "number" and ShouldTrackSpell(spellID) then
+                  if not _wanted[spellID] then
+                    _wanted[spellID] = true
+                    tracked = tracked + 1
+                    if tracked >= RF.maxTracked then
+                      return
+                    end
                   end
                 end
               end
@@ -252,6 +284,12 @@ local function BuildWantedFromSpellBook()
         end
       end
     end
+  end)
+
+  if ok ~= true then
+    -- Swallow the forbidden-table error and retry once caches are ready.
+    ClearWanted()
+    ScheduleSpellbookRescan()
   end
 end
 
@@ -309,6 +347,8 @@ function _G.MSUF_RangeFade_RebuildSpells()
   -- In that case: keep enabled but we won't fade (fail-safe). Expose via activeCount=0.
   RF.lastMul = -1
   ApplyOutOfRangeState(true)
+  SeedTargetNow()
+  ScheduleSeedKick()
 end
 
 function _G.MSUF_RangeFade_Reset()
@@ -316,6 +356,10 @@ function _G.MSUF_RangeFade_Reset()
   RF.inRangeAny = true
   RF.lastMul = -1
   ApplyOutOfRangeState(true)
+  if RF.enabled == true then
+    SeedTargetNow()
+    ScheduleSeedKick()
+  end
 end
 
 function _G.MSUF_RangeFade_OnEvent_SpellRangeUpdate(spellIdentifier, isInRange, checksRange)
@@ -354,6 +398,51 @@ f:RegisterEvent("PLAYER_TALENT_UPDATE")
 f:RegisterEvent("TRAIT_CONFIG_UPDATED")
 f:RegisterEvent("SPELL_RANGE_CHECK_UPDATE")
 
+
+-- Seed state immediately on target swaps/login so out-of-range shows instantly (no movement required).
+local _seedPending = false
+SeedTargetNow = function()
+  if RF.enabled ~= true then return end
+  if not IsSpellInRange then return end
+  if not UnitExists or UnitExists("target") ~= true then return end
+
+  local anyKnown = false
+  local anyTrue = false
+
+  for spellID in pairs(RF.activeSpells) do
+    local r = IsSpellInRange(spellID, "target")
+    if r ~= nil then
+      anyKnown = true
+      local inr = (r == true) or (r == 1)
+      RF.spellState[spellID] = inr and 1 or 0
+      if inr then
+        anyTrue = true
+        break
+      end
+    end
+  end
+
+  RF.inRangeAny = (not anyKnown) or anyTrue
+  ApplyOutOfRangeState(true)
+end
+
+local function SeedKick()
+  _seedPending = false
+  SeedTargetNow()
+end
+
+ScheduleSeedKick = function()
+  if _seedPending then return end
+  _seedPending = true
+  if C_Timer and C_Timer.After then
+    C_Timer.After(0, SeedKick)
+  else
+    _seedPending = false
+    SeedTargetNow()
+  end
+end
+
+
 f:SetScript("OnEvent", function(_, event, ...)
   if event == "SPELL_RANGE_CHECK_UPDATE" then
     _G.MSUF_RangeFade_OnEvent_SpellRangeUpdate(...)
@@ -361,7 +450,10 @@ f:SetScript("OnEvent", function(_, event, ...)
   end
 
   if event == "PLAYER_TARGET_CHANGED" then
+    if RF.enabled ~= true then return end
     _G.MSUF_RangeFade_Reset()
+    SeedTargetNow()
+    ScheduleSeedKick()
     return
   end
 
@@ -374,3 +466,4 @@ end)
 -- Some builds call MSUF_RangeFade_Rebuild() instead of MSUF_RangeFade_RebuildSpells().
 _G.MSUF_RangeFade_Rebuild = _G.MSUF_RangeFade_RebuildSpells
 _G.MSUF_RangeFade_OnSpellRangeUpdate = _G.MSUF_RangeFade_OnEvent_SpellRangeUpdate
+_G.MSUF_RangeFade_SeedTargetNow = SeedTargetNow
