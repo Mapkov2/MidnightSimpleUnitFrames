@@ -5083,6 +5083,9 @@ f:Hide()
         if f.targetPowerBar then
             MSUF_ApplyPowerBarEmbedLayout(f)
     end
+        -- Live-apply per-unit reverse fill (HP/Power) when applying settings from Options.
+        -- This used to require /reload because ApplyUnitKey is a layout-only path.
+        MSUF_ApplyReverseFillBars(f, conf)
         local showName  = (conf.showName  ~= false)
         local showHP    = (conf.showHP    ~= false)
         local showPower = (conf.showPower ~= false)
