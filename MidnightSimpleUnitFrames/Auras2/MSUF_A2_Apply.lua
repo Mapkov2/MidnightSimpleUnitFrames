@@ -1161,6 +1161,31 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
         Masque_SyncIconOverlayLevels(icon)
     end
 
+    -- Optional: keep Auras 2.0 icons borderless even when Masque skinning is enabled.
+    -- Some Masque skins add an outline/backdrop; this lets the user suppress those regions.
+    if masqueOn and icon.MSUF_MasqueAdded and shared and shared.masqueHideBorder == true then
+        if icon._msufA2_masqueBorderHidden ~= true then
+            icon._msufA2_masqueBorderHidden = true
+            local b = icon.Border
+            if b and b.Hide then  if b.SetAlpha then b:SetAlpha(0) end; b:Hide()  end
+            local n = icon.Normal
+            if n and n.Hide then  if n.SetAlpha then n:SetAlpha(0) end; n:Hide()  end
+            local bd = icon.Backdrop
+            if bd and bd.Hide then if bd.SetAlpha then bd:SetAlpha(0) end; bd:Hide() end
+        end
+    else
+        -- If suppression was previously active and is now disabled, restore visibility.
+        if icon._msufA2_masqueBorderHidden == true then
+            icon._msufA2_masqueBorderHidden = false
+            local b = icon.Border
+            if b and b.Show then  if b.SetAlpha then b:SetAlpha(1) end; b:Show()  end
+            local n = icon.Normal
+            if n and n.Show then  if n.SetAlpha then n:SetAlpha(1) end; n:Show()  end
+            local bd = icon.Backdrop
+            if bd and bd.Show then if bd.SetAlpha then bd:SetAlpha(1) end; bd:Show() end
+        end
+    end
+
     -- Default: hide optional visuals (no base border work).
     if icon._msufOwnGlow then icon._msufOwnGlow:Hide() end
     if icon._msufPrivateMark then icon._msufPrivateMark:Hide() end

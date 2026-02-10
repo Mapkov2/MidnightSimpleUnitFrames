@@ -302,7 +302,7 @@ local A2_SHARED_DEFAULTS = {
     showBuffs=true, showDebuffs=true, showTooltip=true,
     showCooldownSwipe=true, showCooldownText=true, cooldownSwipeDarkenOnLoss=false,
     showInEditMode=true, showStackCount=true,
-    stackCountAnchor="TOPRIGHT", masqueEnabled=false,
+    stackCountAnchor="TOPRIGHT", masqueEnabled=false, masqueHideBorder=false,
     layoutMode="SEPARATE", buffDebuffAnchor="STACKED", splitSpacing=0,
     highlightPrivatePlayerAuras=false, highlightOwnBuffs=false, highlightOwnDebuffs=false,
     iconSize=26, spacing=2, perRow=12, maxIcons=12,

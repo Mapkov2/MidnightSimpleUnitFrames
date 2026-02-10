@@ -1602,6 +1602,16 @@ local function UpdateAdvancedEnabled()
          end,
         "Skins Auras 2.0 icons with Masque (if installed).\n\nWarning: Highlight borders may look odd with some Masque skins.")
     A2_Track("global", cbMasque)
+
+    -- Optional: suppress Masque skin border/backdrop so icons stay borderless.
+    local cbMasqueHideBorder = CreateCheckbox(leftTop, "Hide Masque borders", 200, -82,
+        function()  local _, s = GetAuras2DB(); return s and s.masqueHideBorder end,
+        function(v)
+            local _, s = GetAuras2DB()
+            if s then s.masqueHideBorder = (v == true) end
+         end,
+        "Hides Masque skin border/backdrop for Auras 2.0 icons (keeps icon + cooldown styling).")
+    A2_Track("global", cbMasqueHideBorder)
     local cbMasqueDefaultTip = cbMasque.tooltipText
     local function MSUF_A2_IsMasqueReadyForToggle()
         -- If the group already exists, we're definitely good.
@@ -1621,6 +1631,14 @@ local function UpdateAdvancedEnabled()
         -- Our checkbox uses a custom tick overlay; programmatic SetChecked() does not
         -- automatically refresh that overlay, so sync it explicitly.
         if cbMasque._msufSync then cbMasque._msufSync() end
+
+        -- Hide-border toggle is only meaningful when Masque skinning is enabled and ready.
+        if cbMasqueHideBorder then
+            cbMasqueHideBorder:SetChecked((s and s.masqueHideBorder) and true or false)
+            SetCheckboxEnabled(cbMasqueHideBorder, ready and (s and s.masqueEnabled == true))
+            if cbMasqueHideBorder._msufSync then cbMasqueHideBorder._msufSync() end
+        end
+
         if not ready then
             cbMasque.tooltipText = "Masque is not loaded/ready. Enable/load the Masque addon, then /reload."
         else
@@ -1643,11 +1661,26 @@ local function UpdateAdvancedEnabled()
         shared.masqueEnabled = new
         -- Keep the custom tick overlay in sync even if other code adjusts the checked state.
         if self._msufSync then self._msufSync() end
+        -- Sync dependent Masque toggles (e.g., hide border) immediately.
+        if RefreshMasqueToggleState then RefreshMasqueToggleState() end
         A2_RequestApply()
         _G.MSUF_A2_MASQUE_RELOAD_PREV = old
         _G.MSUF_A2_MASQUE_RELOAD_CB = self
         StaticPopup_Show("MSUF_A2_RELOAD_MASQUE")
      end)
+
+    -- Border suppression can be toggled live (no reload needed).
+    cbMasqueHideBorder:SetScript("OnClick", function(self)
+        local _, shared = GetAuras2DB()
+        if not shared then return end
+        shared.masqueHideBorder = (self:GetChecked() == true)
+        if self._msufSync then self._msufSync() end
+        A2_RequestApply()
+        -- If Masque is active, force a reskin so textures are in a known state.
+        if shared.masqueEnabled == true and type(_G.MSUF_A2_RequestMasqueReskin) == "function" then
+            _G.MSUF_A2_RequestMasqueReskin()
+        end
+    end)
     cbMasque:SetScript("OnShow", function(self)
         RefreshMasqueToggleState()
      end)
