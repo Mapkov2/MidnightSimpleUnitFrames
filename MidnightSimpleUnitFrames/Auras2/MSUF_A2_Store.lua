@@ -153,6 +153,25 @@ local function _A2_StoreRemove(st, aid)
     end
 end
 
+-- ========
+-- Slot list helper (GC-safe)
+--
+-- Avoid { select(2, ...) } table packing in hot scan paths.
+local function _A2_FillVarargsInto(t, ...)
+    local n = select('#', ...)
+    local prev = t._msufA2_n
+    if type(prev) ~= 'number' then prev = 0 end
+    t._msufA2_n = n
+
+    for i = 1, n do
+        t[i] = select(i, ...)
+    end
+    for i = n + 1, prev do
+        t[i] = nil
+    end
+    return n
+end
+
 
 
 local function _A2_StoreScanUnitCapped(unit, st, capHelpful, capHarmful)
@@ -169,8 +188,9 @@ local function _A2_StoreScanUnitCapped(unit, st, capHelpful, capHarmful)
 
     if type(getSlots) == "function" and type(getBySlot) == "function" then
         if capH > 0 then
-            local slots = { select(2, getSlots(unit, 'HELPFUL', capH, nil)) }
-            local n = #slots
+            local slots = st._msufA2_slotsHelp
+            if type(slots) ~= 'table' then slots = {}; st._msufA2_slotsHelp = slots end
+            local n = _A2_FillVarargsInto(slots, select(2, getSlots(unit, 'HELPFUL', capH, nil)))
             for i = 1, n do
                 local data = getBySlot(unit, slots[i])
                 local aid = (type(data) == 'table') and data.auraInstanceID or nil
@@ -180,8 +200,9 @@ local function _A2_StoreScanUnitCapped(unit, st, capHelpful, capHarmful)
             end
         end
         if capD > 0 then
-            local slots = { select(2, getSlots(unit, 'HARMFUL', capD, nil)) }
-            local n = #slots
+            local slots = st._msufA2_slotsHarm
+            if type(slots) ~= 'table' then slots = {}; st._msufA2_slotsHarm = slots end
+            local n = _A2_FillVarargsInto(slots, select(2, getSlots(unit, 'HARMFUL', capD, nil)))
             for i = 1, n do
                 local data = getBySlot(unit, slots[i])
                 local aid = (type(data) == 'table') and data.auraInstanceID or nil

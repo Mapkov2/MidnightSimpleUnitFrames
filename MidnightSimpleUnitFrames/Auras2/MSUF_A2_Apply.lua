@@ -33,7 +33,7 @@ local max = math.max
 local MSUF_A2_FastCall = _G.MSUF_A2_FastCall
 if type(MSUF_A2_FastCall) ~= "function" then
     MSUF_A2_FastCall = function(fn, ...)
-        if type(fn) ~= "function" then return false end
+        if fn == nil then return false end
         return true, fn(...)
     end
 end
@@ -314,7 +314,7 @@ local function MSUF_A2_SetFontSize(fs, size)
         return false
     end
 
-    local ok = MSUF_A2_FastCall(fs.SetFont, fs, font, size, flags)
+    fs:SetFont(font, size, flags)
     return ok == true
 end
 
@@ -345,7 +345,7 @@ local function MSUF_A2_ApplyFont(fs, fontPath, size, flags, useShadow)
 
     local stamp = tostring(fontPath) .. "|" .. tostring(size) .. "|" .. tostring(flags or "")
     if fs._msufA2_fontStamp ~= stamp then
-        local ok = MSUF_A2_FastCall(fs.SetFont, fs, fontPath, size, flags)
+        fs:SetFont(fontPath, size, flags)
         if ok then
             fs._msufA2_fontStamp = stamp
         end
@@ -608,9 +608,9 @@ local function AcquireIcon(container, index)
             if not unit or not aid then return end
 
             if C_UnitAuras and type(C_UnitAuras.GetAuraDataByAuraInstanceID) == "function" then
-                local ok, auraData = MSUF_A2_FastCall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, aid)
+                local auraData = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, aid)
                 -- Secret-safe: don't compare auraData to nil; use type() gating.
-                if ok and type(auraData) ~= "table" then
+                if type(auraData) ~= "table" then
                     -- Aura is gone: immediately hide this recycled icon and force a refresh so layout closes gaps.
                     if ic._msufA2_cdMgrRegistered == true then
                         MSUF_A2_CooldownTextMgr_UnregisterIcon(ic)
@@ -1098,8 +1098,8 @@ function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
                 -- If the API explicitly reports no expiration, hard-clear the cooldown (prevents stale timers).
                 -- Secret-safe: never compare/boolean-test possible secret returns.
                 if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
-                    local ok, v = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, aid)
-                    if ok and not _A2_IsSecretValue(v) then
+                    local v = C_UnitAuras.DoesAuraHaveExpirationTime(unit, aid)
+                    if not _A2_IsSecretValue(v) then
                         local tv = type(v)
                         local noExp = false
 	                        if tv == "boolean" then
@@ -1110,8 +1110,8 @@ function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
 	                            noExp = (v <= 0)
                         end
                         if noExp then
-                            MSUF_A2_FastCall(cd.Clear, cd)
-                            MSUF_A2_FastCall(cd.SetCooldown, cd, 0, 0)
+                            if cd.Clear then cd:Clear() end
+                            if cd.SetCooldown then cd:SetCooldown(0, 0) end
                             icon._msufA2_cdDurationObj = nil
                             cd._msufA2_durationObj = nil
                         end
@@ -1165,7 +1165,13 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
     if icon._msufOwnGlow then icon._msufOwnGlow:Hide() end
     if icon._msufPrivateMark then icon._msufPrivateMark:Hide() end
 
-    local auraInstanceID = aura and (aura._msufAuraInstanceID or aura.auraInstanceID)
+    local auraInstanceID = nil
+
+    if aura ~= nil then
+        auraInstanceID = aura._msufAuraInstanceID or aura.auraInstanceID
+    elseif icon and icon._msufAuraInstanceID ~= nil then
+        auraInstanceID = icon._msufAuraInstanceID
+    end
 
     -- Preview-private always wins (Edit Mode preview).
     if aura and aura._msufA2_previewIsPrivate == true then
@@ -1181,8 +1187,8 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
     -- Player private aura highlight (12.0+ / Midnight safe): use Secrets by auraInstanceID.
     if unit == "player" and shared and shared.highlightPrivateAuras == true and auraInstanceID then
         if C_Secrets and type(C_Secrets.ShouldUnitAuraInstanceBeSecret) == "function" then
-            local ok, isSecret = MSUF_A2_FastCall(C_Secrets.ShouldUnitAuraInstanceBeSecret, unit, auraInstanceID)
-            if ok and not _A2_IsSecretValue(isSecret) then
+            local isSecret = C_Secrets.ShouldUnitAuraInstanceBeSecret(unit, auraInstanceID)
+            if not _A2_IsSecretValue(isSecret) then
                 local t = type(isSecret)
                 local yes = false
 	                if t == "boolean" then
@@ -1248,8 +1254,8 @@ local function MSUF_A2_AuraHasExpiration(unit, aura)
 
     -- 1) Primary: DoesAuraHaveExpirationTime (best signal).
     if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
-        local ok, has = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
-	    if ok and not _A2_IsSecretValue(has) then
+        local has = C_UnitAuras.DoesAuraHaveExpirationTime(unit, auraInstanceID)
+	if not _A2_IsSecretValue(has) then
 	        local t = type(has)
 	        if t == "boolean" then
 	            -- Safe: `has` is confirmed non-secret.
@@ -1265,8 +1271,8 @@ local function MSUF_A2_AuraHasExpiration(unit, aura)
 	-- In 12.0+ / Midnight, aura tables may not safely expose spellId; do NOT rely on it.
 	-- Use GetAuraDuration/DoesAuraHaveExpirationTime signals only.
 	if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
-        local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
-	    if okD and type(d) == "number" and not _A2_IsSecretValue(d) then
+        local d = C_UnitAuras.GetAuraDuration(unit, auraInstanceID)
+	    if type(d) == "number" and not _A2_IsSecretValue(d) then
 	        if d <= 0 then return false end
 	        return true
 	    end
@@ -1292,8 +1298,8 @@ local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
     if auraInstanceID == nil then return false end
 
 	if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
-	    local ok, v = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
-	    if ok and not _A2_IsSecretValue(v) then
+	    local v = C_UnitAuras.DoesAuraHaveExpirationTime(unit, auraInstanceID)
+	    if not _A2_IsSecretValue(v) then
 	        local tv = type(v)
 	        	if tv == "boolean" then
 	            	-- v=false => no expiration => permanent (safe: v is confirmed non-secret)
@@ -1308,8 +1314,8 @@ local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
 	-- Only numeric 0 is accepted as a permanence signal.
 	-- Do NOT rely on aura.spellId in 12.0+/Midnight.
 	if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
-	    local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
-		    if okD and type(d) == "number" and not _A2_IsSecretValue(d) then
+	    local d = C_UnitAuras.GetAuraDuration(unit, auraInstanceID)
+			if type(d) == "number" and not _A2_IsSecretValue(d) then
 		        -- Safe: d is confirmed non-secret.
 		        return (d <= 0)
 	    end
@@ -1617,8 +1623,8 @@ local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
         local isPermanent = (previewDef.permanent == true) or (previewDef.noTimer == true)
 
         if isPermanent then
-            MSUF_A2_FastCall(icon.cooldown.Clear, icon.cooldown)
-            MSUF_A2_FastCall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
+            if icon.cooldown and icon.cooldown.Clear then icon.cooldown:Clear() end
+            if icon.cooldown and icon.cooldown.SetCooldown then icon.cooldown:SetCooldown(0, 0) end
             icon._msufA2_previewCooldownStart = nil
             icon._msufA2_previewCooldownDur = nil
         else
@@ -1673,8 +1679,8 @@ local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
     if not hadTimer then
         local sameAura = (prevAuraID ~= nil and prevAuraID == icon._msufAuraInstanceID)
         if MSUF_A2_AuraIsKnownPermanent(unit, aura) or (not sameAura) or (sameAura and not prevHadTimer) then
-            MSUF_A2_FastCall(icon.cooldown.Clear, icon.cooldown)
-            MSUF_A2_FastCall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
+            if icon.cooldown and icon.cooldown.Clear then icon.cooldown:Clear() end
+            if icon.cooldown and icon.cooldown.SetCooldown then icon.cooldown:SetCooldown(0, 0) end
         end
     end
     return hadTimer
@@ -1771,54 +1777,46 @@ end
 -- ------------------------------------------------------------
 
 
+
 local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stackCountAnchor, hidePermanentBuffs)
     if not entry or not unit or not shared then return end
-    if not C_UnitAuras or type(C_UnitAuras.GetAuraDataByAuraInstanceID) ~= "function" then return end
 
-    local wantOwnHighlights = (shared.highlightOwnBuffs == true) or (shared.highlightOwnDebuffs == true)
-    local wantOwnBuff = (shared.highlightOwnBuffs == true) and (shared.showBuffs == true)
-    local wantOwnDebuff = (shared.highlightOwnDebuffs == true) and (shared.showDebuffs == true)
-
-    local ownBuffSet, ownDebuffSet = nil, nil
-    if wantOwnHighlights and unit ~= "player" then
-        local gf = _A2_ResolveGetPlayerAuraIdSetCached()
-        if gf then
-            if wantOwnBuff then
-                ownBuffSet = gf(entry, unit, "HELPFUL")
-            end
-            if wantOwnDebuff then
-                ownDebuffSet = gf(entry, unit, "HARMFUL")
-            end
-        end
-    end
-
-    local function IsOwn(isHelpful, aid)
-        if aid == nil then return false end
-        local set = isHelpful and ownBuffSet or ownDebuffSet
-        return (set and set[aid]) == true
-    end
-
-    -- Refresh currently assigned icons without rebuilding lists / changing layout.
-    -- Uses CommitIcon diff-gate so "time-only" updates do not restyle or re-query stacks.
-    local useSingleRow = (entry.mixed ~= nil) and (entry.mixed:IsShown() or false)
-    local mixedCount = entry._msufA2_lastMixedCount or 0
+    -- Visual-only refresh for already-assigned icons.
+    -- IMPORTANT: Do NOT call GetAuraDataByAuraInstanceID here (hot path).
+    local useSingleRow = (entry.mixed ~= nil) and ((entry.mixed.IsShown and entry.mixed:IsShown()) or false)
+    local mixedCount  = entry._msufA2_lastMixedCount  or 0
     local debuffCount = entry._msufA2_lastDebuffCount or 0
-    local buffCount = entry._msufA2_lastBuffCount or 0
+    local buffCount   = entry._msufA2_lastBuffCount   or 0
+
+    local applySizing = (shared.showStackCount == true) and MSUF_A2_ApplyIconTextSizing or nil
+    local applyTip    = MSUF_A2_ApplyIconTooltip
+    local applyStacks = MSUF_A2_ApplyIconStacks
+    local setBorder   = SetDispelBorder
 
     local function RefreshContainer(container, count)
         if not container or count <= 0 then return end
+        local icons = container._msufIcons or container.icons
+        if not icons then return end
+
         for idx = 1, count do
-            -- Containers store icons in _msufIcons (legacy field 'icons' may exist in some forks).
-            local icon = (container._msufIcons and container._msufIcons[idx]) or (container.icons and container.icons[idx])
-            if icon and icon._msufAuraInstanceID then
-                local aura = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, icon._msufAuraInstanceID)
-                if aura then
+            local icon = icons[idx]
+            local aid = icon and icon._msufAuraInstanceID
+            if aid ~= nil then
+                if applySizing then
+                    applySizing(icon, unit, shared)
+                end
+                if applyTip then
+                    applyTip(icon, shared)
+                end
+                if applyStacks then
+                    -- Fast-path: no API calls; only re-display cached stack text if any.
+                    applyStacks(icon, unit, shared, stackCountAnchor, nil, false, false)
+                end
+                if setBorder then
                     local isHelpful = (icon._msufFilter == "HELPFUL")
-                    local isOwn = IsOwn(isHelpful, aura and (aura._msufAuraInstanceID or aura.auraInstanceID))
-                    -- "Hide permanent" is BUFF-only (HELPFUL). Debuffs must never be hidden by this toggle.
-                    local hidePerm = (isHelpful and hidePermanentBuffs == true) and true or false
-                    local ls = entry._msufA2_lastLayoutSig or 0
-                    Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePerm, masterOn, isOwn, stackCountAnchor, ls)
+                    local last = icon._msufA2_last
+                    local isOwn = (last and last.isOwn == true) or false
+                    setBorder(icon, unit, nil, isHelpful, shared, masterOn, isOwn)
                 end
             end
         end
@@ -1832,68 +1830,128 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
     end
 end
 
-local function MSUF_A2_RefreshAssignedIconsDelta(entry, unit, shared, masterOn, stackCountAnchor, hidePermanentBuffs, upd, updN)
-    if not entry or not unit or not shared or not upd or not updN or updN <= 0 then return end
-    if not C_UnitAuras or type(C_UnitAuras.GetAuraDataByAuraInstanceID) ~= "function" then return end
 
-    local wantOwnHighlights = (shared.highlightOwnBuffs == true) or (shared.highlightOwnDebuffs == true)
-    local wantOwnBuff = (shared.highlightOwnBuffs == true) and (shared.showBuffs == true)
-    local wantOwnDebuff = (shared.highlightOwnDebuffs == true) and (shared.showDebuffs == true)
+local function MSUF_A2_RefreshIconCooldownFast(icon, unit, auraInstanceID, shared, showCdText, showCdSwipe, doTouch)
+    if not icon or not unit or not auraInstanceID or not icon.cooldown then return end
+    if not (showCdText or showCdSwipe) then return end
 
-    local ownBuffSet, ownDebuffSet = nil, nil
-    if wantOwnHighlights and unit ~= "player" then
-        local gf = _A2_ResolveGetPlayerAuraIdSetCached()
-        if gf then
-            if wantOwnBuff then
-                ownBuffSet = gf(entry, unit, "HELPFUL")
+    local cd = icon.cooldown
+    local hadTimer = false
+
+    if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
+        local obj = C_UnitAuras.GetAuraDuration(unit, auraInstanceID)
+        -- In some environments this can be numeric; only Duration Objects are supported here.
+        if obj ~= nil and type(obj) ~= "number" then
+            local applied = false
+            if type(cd.SetCooldownFromDurationObject) == "function" then
+                cd:SetCooldownFromDurationObject(obj)
+                applied = true
+            elseif type(cd.SetTimerDuration) == "function" then
+                cd:SetTimerDuration(obj)
+                applied = true
             end
-            if wantOwnDebuff then
-                ownDebuffSet = gf(entry, unit, "HARMFUL")
+            if applied then
+                hadTimer = true
+                icon._msufA2_cdDurationObj = obj
+                cd._msufA2_durationObj = obj
             end
         end
     end
 
-    local useSingleRow = (entry.mixed ~= nil) and (entry.mixed:IsShown() or false)
-    local mixedMap = entry.mixed and entry.mixed._msufA2_iconByAid
-    local debuffMap = entry.debuffs and entry.debuffs._msufA2_iconByAid
-    local buffMap = entry.buffs and entry.buffs._msufA2_iconByAid
+    -- Keep these in sync with MSUF_A2_ApplyIconCooldown() so later clears are correct.
+    icon._msufA2_lastCooldownAuraInstanceID = auraInstanceID
+    icon._msufA2_lastHadTimer = hadTimer
 
-    local getAura = C_UnitAuras.GetAuraDataByAuraInstanceID
     local CT = API and API.CooldownText
-    local layoutSig = entry._msufA2_lastLayoutSig or 0
+    local wantText = (showCdText and icon._msufA2_hideCDNumbers ~= true) and true or false
+    if CT then
+        if wantText and hadTimer then
+            if CT.RegisterIcon then CT.RegisterIcon(icon) end
+            if doTouch == true and CT.TouchIcon then CT.TouchIcon(icon) end
+        elseif icon._msufA2_cdMgrRegistered == true and CT.UnregisterIcon then
+            CT.UnregisterIcon(icon)
+        end
+    end
+
+    if wantText and hadTimer and type(MSUF_A2_ApplyIconCooldownTextSizing) == "function" then
+        MSUF_A2_ApplyIconCooldownTextSizing(icon, unit, shared)
+    end
+
+    if not hadTimer then
+        -- If the API explicitly reports no expiration, hard-clear the cooldown (prevents stale timers).
+        if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
+            local v = C_UnitAuras.DoesAuraHaveExpirationTime(unit, auraInstanceID)
+            if not _A2_IsSecretValue(v) then
+                local tv = type(v)
+                local noExp = false
+                if tv == "boolean" then
+                    noExp = (v == false)
+                elseif tv == "number" then
+                    noExp = (v <= 0)
+                end
+                if noExp then
+                    if cd.Clear then cd:Clear() end
+                    if cd.SetCooldown then cd:SetCooldown(0, 0) end
+                    icon._msufA2_cdDurationObj = nil
+                    cd._msufA2_durationObj = nil
+                end
+            end
+        end
+    end
+end
+
+
+local function MSUF_A2_RefreshAssignedIconsDelta(entry, unit, shared, masterOn, stackCountAnchor, hidePermanentBuffs, upd, updN)
+    if not entry or not unit or not shared then return end
+    if not upd or not updN or updN <= 0 then return end
+
+    -- Delta refresh: only update icons for the auraInstanceIDs that actually changed.
+    -- IMPORTANT: Do NOT call GetAuraDataByAuraInstanceID here (hot path).
+    local useSingleRow = (entry.mixed ~= nil) and ((entry.mixed.IsShown and entry.mixed:IsShown()) or false)
+
+    local mixedMap  = entry._msufA2_iconByAidMixed
+    local debuffMap = entry._msufA2_iconByAidDebuff
+    local buffMap   = entry._msufA2_iconByAidBuff
+
+    local applySizing = (shared.showStackCount == true) and MSUF_A2_ApplyIconTextSizing or nil
+    local applyTip    = MSUF_A2_ApplyIconTooltip
+    local applyStacks = MSUF_A2_ApplyIconStacks
+    local setBorder   = SetDispelBorder
+
+    local showCdText  = not (shared.showCooldownText == false)
+    local showCdSwipe = (shared.showCooldownSwipe == true) or false
 
     for i = 1, updN do
         local aid = upd[i]
-        if aid then
+        if aid ~= nil then
             local icon = nil
             if useSingleRow then
                 icon = mixedMap and mixedMap[aid]
             else
                 icon = (debuffMap and debuffMap[aid]) or (buffMap and buffMap[aid])
             end
-            if icon and icon._msufAuraInstanceID then
-                local aura = getAura(unit, aid)
-                if aura then
+
+            if icon and icon._msufAuraInstanceID ~= nil then
+                if applySizing then
+                    applySizing(icon, unit, shared)
+                end
+                if applyTip then
+                    applyTip(icon, shared)
+                end
+                if applyStacks then
+                    -- Delta path: allowQuery=true so stacks refresh correctly on UNIT_AURA.
+                    applyStacks(icon, unit, shared, stackCountAnchor, nil, false, true)
+                end
+
+                if (showCdText or showCdSwipe) and icon.cooldown then
+                    MSUF_A2_RefreshIconCooldownFast(icon, unit, aid, shared, showCdText, showCdSwipe, true)
+                end
+
+                if setBorder then
                     local isHelpful = (icon._msufFilter == "HELPFUL")
-                    local isOwn = false
-                    if isHelpful then
-                        isOwn = (ownBuffSet and ownBuffSet[aid]) == true
-                    else
-                        isOwn = (ownDebuffSet and ownDebuffSet[aid]) == true
-                    end
-                    local hidePerm = (isHelpful and hidePermanentBuffs == true) and true or false
-
-                    -- Delta updates (updatedAuraInstanceIDs) can refresh duration/stacks while the
-                    -- auraInstanceID stays the same.
-                    -- CommitIcon's diff-gate intentionally avoids comparing duration/expiration
-                    -- (secret-safe), so we MUST refresh the dynamic parts here to avoid stale timers.
-                    ApplyAuraToIcon(icon, unit, aura, shared, isHelpful, hidePerm, masterOn, isOwn, stackCountAnchor)
-
-                    -- If the icon is managed by the cooldown text manager, force an immediate
-                    -- refresh so refreshed/reapplied auras jump to the new remaining time.
-                    if CT and CT.TouchIcon and icon._msufA2_cdMgrRegistered == true then
-                        CT.TouchIcon(icon)
-                    end
+                    local last = icon._msufA2_last
+                    local isOwn = (last and last.isOwn == true) or false
+                    setBorder(icon, unit, nil, isHelpful, shared, masterOn, isOwn)
                 end
             end
         end

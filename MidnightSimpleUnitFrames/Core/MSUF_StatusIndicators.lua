@@ -6,17 +6,36 @@
 --   MSUF_GetStatusIconsTestMode()/Set...      (global)
 local addonName, ns = ...
 ns = ns or {}
+
+-- Hotpath locals (avoid _G lookups)
+local _G = _G
+local type   = _G.type
+local pairs  = _G.pairs
+local ipairs = _G.ipairs
+local next   = _G.next
+local tonumber = _G.tonumber
+local tostring = _G.tostring
+local select   = _G.select
+-- Lua 5.1 (WoW) uses global unpack; some environments expose table.unpack
+local unpack = _G.unpack
+if not unpack then
+    local tbl = _G.table
+    unpack = tbl and tbl.unpack
+end
 -- ------------------------------------------------------------
 -- Status text DB (AFK/DND/DEAD/GHOST/OFFLINE)
 -- ------------------------------------------------------------
 if type(_G.MSUF_GetStatusIndicatorDB) ~= "function" then
+    -- PERF: Avoid per-call table allocations. This can be hit during very early load
+    -- (before EnsureDB is available), and MSUF_GetStatusIndicatorDB may be called in hot paths.
+    local _MSUF_DEFAULT_STATUS_INDICATORS = {
+        showAFK = true,
+        showDND = true,
+        showDead = true,
+        showGhost = true,
+    }
     local function _MSUF_DefaultStatusIndicators()
-        return {
-            showAFK = true,
-            showDND = true,
-            showDead = true,
-            showGhost = true,
-        }
+        return _MSUF_DEFAULT_STATUS_INDICATORS
     end
     function _G.MSUF_GetStatusIndicatorDB()
         if type(_G.EnsureDB) == "function" then

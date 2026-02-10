@@ -839,16 +839,44 @@ function ns.Text.RenderToTInline(targetFrame, totConf)
     end
     else
         if F.UnitIsDeadOrGhost and F.UnitIsDeadOrGhost("targettarget") then
-            r, gCol, b = MSUF_GetNPCReactionColor("dead")
+            do
+                local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
+                if type(fastNPC) == "function" then
+                    r, gCol, b = fastNPC("dead")
+                else
+                    r, gCol, b = MSUF_GetNPCReactionColor("dead")
+                end
+            end
         else
             local reaction = F.UnitReaction and F.UnitReaction("player", "targettarget")
             if reaction then
                 if reaction >= 5 then
-                    r, gCol, b = MSUF_GetNPCReactionColor("friendly")
+                    do
+                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
+                        if type(fastNPC) == "function" then
+                            r, gCol, b = fastNPC("friendly")
+                        else
+                            r, gCol, b = MSUF_GetNPCReactionColor("friendly")
+                        end
+                    end
                 elseif reaction == 4 then
-                    r, gCol, b = MSUF_GetNPCReactionColor("neutral")
+                    do
+                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
+                        if type(fastNPC) == "function" then
+                            r, gCol, b = fastNPC("neutral")
+                        else
+                            r, gCol, b = MSUF_GetNPCReactionColor("neutral")
+                        end
+                    end
                 else
-                    r, gCol, b = MSUF_GetNPCReactionColor("enemy")
+                    do
+                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
+                        if type(fastNPC) == "function" then
+                            r, gCol, b = fastNPC("enemy")
+                        else
+                            r, gCol, b = MSUF_GetNPCReactionColor("enemy")
+                        end
+                    end
                 end
             else
                 r, gCol, b = MSUF_GetNPCReactionColor("enemy")
@@ -3104,27 +3132,82 @@ MSUF_BumpCastbarStyleRevision()
  end
 local function MSUF_UpdateNameColor(frame)
     if not frame or not frame.nameText then  return end
-    EnsureDB()
-    local g = MSUF_DB.general
+
+    local cache
+    local getCache = ns and ns.Cache and ns.Cache._UFCoreGetSettingsCache
+    if not getCache then
+        getCache = _G.MSUF_UFCore_GetSettingsCache
+        if type(getCache) == "function" and ns and ns.Cache then
+            ns.Cache._UFCoreGetSettingsCache = getCache
+        else
+            getCache = nil
+        end
+    end
+    if getCache then
+        cache = getCache()
+    end
+
+    local g = (cache and cache.generalRef) or ((MSUF_DB and MSUF_DB.general) or nil)
+    if not g then
+        if type(EnsureDB) == "function" then EnsureDB() end
+        g = (MSUF_DB and MSUF_DB.general) or nil
+    end
+
+    local nameClassColor = (cache and cache.nameClassColor) or (g and g.nameClassColor)
+    local npcNameRed = (cache and cache.npcNameRed) or (g and g.npcNameRed)
+
     local r, gCol, b
-    if g.nameClassColor and frame.unit and F.UnitIsPlayer(frame.unit) then
+    if nameClassColor and frame.unit and F.UnitIsPlayer(frame.unit) then
         local _, classToken = F.UnitClass(frame.unit)
         if classToken then
-            r, gCol, b = MSUF_GetClassBarColor(classToken)
+            local fast = _G.MSUF_UFCore_GetClassBarColorFast
+            if type(fast) == "function" then
+                r, gCol, b = fast(classToken)
+            else
+                r, gCol, b = MSUF_GetClassBarColor(classToken)
+            end
+        end
     end
-    end
-    if (not (r and gCol and b)) and g.npcNameRed and frame.unit and not F.UnitIsPlayer(frame.unit) then
+    if (not (r and gCol and b)) and npcNameRed and frame.unit and not F.UnitIsPlayer(frame.unit) then
         if F.UnitIsDeadOrGhost and F.UnitIsDeadOrGhost(frame.unit) then
-            r, gCol, b = MSUF_GetNPCReactionColor("dead")
+            do
+                local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
+                if type(fastNPC) == "function" then
+                    r, gCol, b = fastNPC("dead")
+                else
+                    r, gCol, b = MSUF_GetNPCReactionColor("dead")
+                end
+            end
         else
             local reaction = F.UnitReaction and F.UnitReaction("player", frame.unit)
             if reaction then
                 if reaction >= 5 then
-                    r, gCol, b = MSUF_GetNPCReactionColor("friendly")
+                    do
+                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
+                        if type(fastNPC) == "function" then
+                            r, gCol, b = fastNPC("friendly")
+                        else
+                            r, gCol, b = MSUF_GetNPCReactionColor("friendly")
+                        end
+                    end
                 elseif reaction == 4 then
-                    r, gCol, b = MSUF_GetNPCReactionColor("neutral")
+                    do
+                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
+                        if type(fastNPC) == "function" then
+                            r, gCol, b = fastNPC("neutral")
+                        else
+                            r, gCol, b = MSUF_GetNPCReactionColor("neutral")
+                        end
+                    end
                 else
-                    r, gCol, b = MSUF_GetNPCReactionColor("enemy")
+                    do
+                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
+                        if type(fastNPC) == "function" then
+                            r, gCol, b = fastNPC("enemy")
+                        else
+                            r, gCol, b = MSUF_GetNPCReactionColor("enemy")
+                        end
+                    end
                 end
             end
     end
@@ -4559,12 +4642,37 @@ local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     MSUF_UpdateStatusIndicatorForFrame(self)
  end
 function UpdateSimpleUnitFrame(self)
-	    if (not MSUF_DB) and type(EnsureDB) == "function" then
-	        EnsureDB()
-	    end
-	    local db = MSUF_DB
-	    local g = (db and db.general) or {}
-	    local barsConf = (db and db.bars) or {}
+        -- Hot path: prefer UFCore's settings snapshot (avoids repeated deep MSUF_DB traversals).
+        local db, g, barsConf
+
+        local getCache = ns and ns.Cache and ns.Cache._UFCoreGetSettingsCache
+        if not getCache then
+            getCache = _G.MSUF_UFCore_GetSettingsCache
+            if type(getCache) == "function" and ns and ns.Cache then
+                ns.Cache._UFCoreGetSettingsCache = getCache
+            else
+                getCache = nil
+            end
+        end
+
+        if getCache then
+            local cache = getCache()
+            if cache then
+                db = cache.dbRef or _G.MSUF_DB
+                g = cache.generalRef
+                barsConf = cache.barsRef
+            end
+        end
+
+        if not db then
+            if (not MSUF_DB) and type(EnsureDB) == "function" then
+                EnsureDB()
+            end
+            db = MSUF_DB
+        end
+
+        g = g or ((db and db.general) or {})
+        barsConf = barsConf or ((db and db.bars) or {})
     local unit   = self.unit
     MSUF_EnsureUnitFlags(self)
     local isPlayer = self._msufIsPlayer

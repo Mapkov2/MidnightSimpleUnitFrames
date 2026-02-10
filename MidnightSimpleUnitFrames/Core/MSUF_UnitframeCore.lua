@@ -8,6 +8,22 @@ local _, addon = ...
 
 addon = addon or {}
 
+-- Hotpath locals (avoid _G lookups)
+local _G = _G
+local type   = _G.type
+local pairs  = _G.pairs
+local ipairs = _G.ipairs
+local next   = _G.next
+local tonumber = _G.tonumber
+local tostring = _G.tostring
+local select   = _G.select
+-- Lua 5.1 (WoW) uses global unpack; some environments expose table.unpack
+local unpack = _G.unpack
+if not unpack then
+    local tbl = _G.table
+    unpack = tbl and tbl.unpack
+end
+
 local Core = {}
 
 -- Forward decl (used by settings cache + helpers below the definition).

@@ -762,6 +762,24 @@ end
                     end
                 end
 
+                -- No-op skip: some clients can fire UNIT_AURA with an empty updateInfo.
+                -- Avoid waking Render/Store when nothing actually changed.
+                if type(updateInfo) == "table" then
+                    local full = updateInfo.isFullUpdate
+                    if full ~= true then
+                        local a = updateInfo.addedAuras
+                        local r = updateInfo.removedAuraInstanceIDs
+                        local u = updateInfo.updatedAuraInstanceIDs
+                        local na = (type(a) == "table" and #a) or 0
+                        local nr = (type(r) == "table" and #r) or 0
+                        local nu = (type(u) == "table" and #u) or 0
+                        if na == 0 and nr == 0 and nu == 0 then
+                            return
+                        end
+                    end
+                end
+
+
                 if unit and ShouldProcessUnitEvent(unit, true) then
                     -- Feed delta info into the Aura Store (secret-safe; avoids full rescan per burst).
                     local Store = API and API.Store

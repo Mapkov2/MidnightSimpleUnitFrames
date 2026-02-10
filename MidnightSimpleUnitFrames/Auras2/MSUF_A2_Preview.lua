@@ -6,8 +6,8 @@ local addonName, ns = ...
 
 -- MSUF: Max-perf Auras2: replace protected calls (pcall) with direct calls.
 -- NOTE: this removes error-catching; any error will propagate.
-local function MSUF_A2_FastCall(fn, ...) 
-    return true, fn(...)
+local function MSUF_A2_FastCall(fn, ...)
+    return fn(...)
 end
 local API = ns and ns.MSUF_Auras2
 if type(API) ~= "table" then  return end
@@ -35,8 +35,8 @@ local function IsEditModeActive()
     -- Exported helper from MSUF_EditMode.lua
     local f = rawget(_G, "MSUF_IsInEditMode")
     if type(f) == "function" then
-        local ok, v = MSUF_A2_FastCall(f)
-        if ok and v == true then
+        local v = f()
+        if v == true then
              return true
         end
     end
@@ -44,8 +44,8 @@ local function IsEditModeActive()
     -- Compatibility hook name from older experiments (last resort)
     local g = rawget(_G, "MSUF_IsMSUFEditModeActive")
     if type(g) == "function" then
-        local ok, v = MSUF_A2_FastCall(g)
-        if ok and v == true then
+        local v = g()
+        if v == true then
              return true
         end
     end
@@ -54,7 +54,7 @@ local function IsEditModeActive()
 end
 
 
-API.IsEditModeActive = API.IsEditModeActive or IsEditModeActive
+-- API.IsEditModeActive is owned by Render (cached). Preview must not override it.
 
 local function EnsureDB() 
     local Ensure = API.EnsureDB
@@ -108,7 +108,7 @@ local function ClearPreviewIconsInContainer(container)
         if icon and icon._msufA2_isPreview == true then
             -- Ensure preview cooldown text/ticker stops tracking this icon.
             if type(unreg) == "function" then
-                MSUF_A2_FastCall(unreg, icon)
+                unreg(icon)
             end
 
             icon._msufA2_isPreview = nil
@@ -126,9 +126,9 @@ local function ClearPreviewIconsInContainer(container)
 
             if icon.cooldown then
                 -- Clear cooldown visuals so preview never leaves "dark" state.
-                if icon.cooldown.Clear then MSUF_A2_FastCall(icon.cooldown.Clear, icon.cooldown) end
-                if icon.cooldown.SetCooldown then MSUF_A2_FastCall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0) end
-                if icon.cooldown.SetCooldownDuration then MSUF_A2_FastCall(icon.cooldown.SetCooldownDuration, icon.cooldown, 0) end
+                if icon.cooldown.Clear then icon.cooldown:Clear() end
+                if icon.cooldown.SetCooldown then icon.cooldown:SetCooldown(0, 0) end
+                if icon.cooldown.SetCooldownDuration then icon.cooldown:SetCooldownDuration(0) end
             end
 
             icon:Hide()
@@ -220,10 +220,10 @@ local function PreviewTickStacks()
         if not icon or not icon.count then  return end
 
         if type(applyAnchorStyle) == "function" then
-            MSUF_A2_FastCall(applyAnchorStyle, icon, stackCountAnchor)
+            applyAnchorStyle(icon, stackCountAnchor)
         end
         if type(applyOffsets) == "function" then
-            MSUF_A2_FastCall(applyOffsets, icon, icon._msufUnit, shared, stackCountAnchor)
+            applyOffsets(icon, icon._msufUnit, shared, stackCountAnchor)
         end
 
         icon._msufA2_previewStackT = (icon._msufA2_previewStackT or 0) + 1
@@ -258,24 +258,24 @@ local function PreviewTickCooldown()
 
         -- Ensure countdown text is visible (OmniCC removed in Midnight).
         if icon.cooldown.SetHideCountdownNumbers then
-            MSUF_A2_FastCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
+            icon.cooldown:SetHideCountdownNumbers(false)
         end
 
         if type(applyOffsets) == "function" then
-            MSUF_A2_FastCall(applyOffsets, icon, icon._msufUnit, shared)
+            applyOffsets(icon, icon._msufUnit, shared)
         end
 
         -- Update cooldown visuals (duration object preferred; fallback to SetCooldown).
         if icon._msufA2_previewDurationObj and icon.cooldown.SetCooldownFromDurationObject then
-            MSUF_A2_FastCall(icon.cooldown.SetCooldownFromDurationObject, icon.cooldown, icon._msufA2_previewDurationObj)
+            icon.cooldown:SetCooldownFromDurationObject(icon._msufA2_previewDurationObj)
         elseif icon.cooldown.SetCooldown then
             local start = (icon._msufA2_previewCooldownT or 0) + (GetTime() - 10)
             local dur = 10
-            MSUF_A2_FastCall(icon.cooldown.SetCooldown, icon.cooldown, start, dur)
+            icon.cooldown:SetCooldown(start, dur)
         end
 
         if type(reg) == "function" then
-            MSUF_A2_FastCall(reg, icon)
+            reg(icon)
         end
         if type(unreg) == "function" then
             -- RegisterIcon may already manage its own registry; we only unregister when ticker stops/clears.

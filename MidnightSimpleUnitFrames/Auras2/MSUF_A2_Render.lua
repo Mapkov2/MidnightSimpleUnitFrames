@@ -16,7 +16,7 @@ local addonName, ns = ...
 -- FastCall: no pcall in hot paths. Code must be secret-safe by design.
 local _A2_IsSecretMode, _A2_LatchSecretMode
 local function MSUF_A2_FastCall(fn, ...)
-    if type(fn) ~= "function" then
+    if fn == nil then
         return false
     end
     return true, fn(...)
@@ -3151,7 +3151,7 @@ do
     -- Accessors (used by Options)
     API.GetDB = API.GetDB or GetAuras2DB
     API.EnsureDB = API.EnsureDB or EnsureDB
-    API.IsEditModeActive = API.IsEditModeActive or IsEditModeActive
+API.IsEditModeActive = IsEditModeActive -- forced so load-order cannot lock in an uncached helper
     API.MarkDirty = API.MarkDirty or MarkDirty
     API.Flush = API.Flush or Flush
     API.FindUnitFrame = API.FindUnitFrame or FindUnitFrame
