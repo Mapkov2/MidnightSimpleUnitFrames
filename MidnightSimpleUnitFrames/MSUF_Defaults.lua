@@ -98,6 +98,13 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         local si = g.statusIndicators
         si.showAFK = false
         si.showDND = false
+
+        -- Fresh-install scaling defaults:
+        -- Always start in Auto (Blizzard decides the global UI scale), and keep MSUF scaling enabled.
+        g.disableScaling = false
+        g.globalUiScalePreset = "auto"
+        g.globalUiScaleValue = nil
+        g.msufUiScale = 1.0
     end
  end
 local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
@@ -147,9 +154,9 @@ if g.anchorToCooldown == nil then
     g.anchorToCooldown = false
 end
 -- New install defaults (UI scale + Flash menu anchor)
--- Default: scaling OFF. Blizzard handles UI scale unless the user explicitly enables MSUF scaling.
+-- Default: Auto global UI scale (Blizzard handles it). MSUF scaling is enabled unless the user turns it off.
 if g.disableScaling == nil then
-    g.disableScaling = true
+    g.disableScaling = false
 end
 if g.globalUiScalePreset == nil then
     g.globalUiScalePreset = "auto"
