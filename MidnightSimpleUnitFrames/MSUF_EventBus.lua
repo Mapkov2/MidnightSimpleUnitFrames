@@ -48,6 +48,12 @@ local bus = {
     _errOnce = {},
 }
 
+-- Dispatch strategy (hot path): avoid per-handler branching and keep pcall
+-- completely off the fast path unless explicitly enabled for debugging.
+--
+-- Note: Don't inline pcall behind a flag check inside the per-handler loop.
+-- Even when safeCalls is false, that check still costs in event storms.
+
 local driver = CreateFrame("Frame")
 driver:Hide()
 
@@ -143,20 +149,27 @@ local function _PrintSafeCallErrorOnce(event, key, err)
     end
 end
 
-local function CallHandler(key, fn, event, ...)
-    if not bus.safeCalls then
-        fn(event, ...)
-        return
-    end
+local function _DispatchFast(_, fn, event, ...)
+    fn(event, ...)
+end
+
+local function _DispatchSafe(key, fn, event, ...)
     local ok, err = pcall(fn, event, ...)
     if not ok then
         _PrintSafeCallErrorOnce(event, key, err)
     end
 end
 
+function bus:SetSafeCalls(enabled)
+    enabled = enabled and true or false
+    bus.safeCalls = enabled
+end
+
 driver:SetScript("OnEvent", function(_, event, ...)
     local ev = bus.handlers[event]
     if not ev then return end
+
+    local dispatch = bus.safeCalls and _DispatchSafe or _DispatchFast
 
     -- Snapshot keys for :once handlers because handlers may unregister themselves.
     -- Reuse a small array to reduce table churn during event storms.
@@ -169,7 +182,7 @@ driver:SetScript("OnEvent", function(_, event, ...)
 
     for key, h in pairs(ev) do
         if h and h.fn then
-            CallHandler(key, h.fn, event, ...)
+            dispatch(key, h.fn, event, ...)
             if h.once then
                 removeCount = removeCount + 1
                 toRemove[removeCount] = key
@@ -189,6 +202,12 @@ end)
 
 -- Public globals (back-compat)
 _G.MSUF_EventBus = bus
+
+-- Optional debug toggle (off by default). Kept as a global helper so it can
+-- be enabled quickly via /run without touching internal module state.
+_G.MSUF_EventBus_SetSafeCalls = function(enabled)
+    return bus:SetSafeCalls(enabled)
+end
 
 _G.MSUF_EventBus_Register = function(event, key, fn, unitFilter, once)
     return bus:Register(event, key, fn, unitFilter, once)
