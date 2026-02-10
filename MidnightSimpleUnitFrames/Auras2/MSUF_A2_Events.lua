@@ -220,7 +220,7 @@ local function EnsureUnitAuraBinding(eventFrame)
     -- keep PLAYER_LOGIN/PLAYER_ENTERING_WORLD registered so we can finalize
     -- proper UNIT_AURA bindings once DB pointers are ready.
     if not (c and c.ready == true) then
-        ApplyOwnedEvents(ef, {
+        ApplyOwnedEvents(eventFrame, {
             PLAYER_LOGIN = "Core",
             PLAYER_ENTERING_WORLD = "Core",
         })
@@ -622,6 +622,45 @@ function Events.ApplyEventRegistration()
     local DB = API and API.DB
     local c = DB and DB.cache
     local ue = c and c.unitEnabled
+
+-- Cold-start bootstrap:
+-- If DB/cache is not ready yet (load-order), keep only LOGIN/ENTERING_WORLD registered.
+-- This guarantees we get a chance to re-run ApplyEventRegistration once EnsureDB becomes available,
+-- instead of unregistering everything and waiting for manual RefreshAll/EditMode.
+if not (c and c.ready == true) then
+    ApplyOwnedEvents(ef, {
+        PLAYER_LOGIN = "Core",
+        PLAYER_ENTERING_WORLD = "Core",
+    })
+
+    -- Ensure UNIT_AURA helper frames are not running while we don't know which units are enabled.
+    local list = ef._msufA2_unitAuraFrames
+    if type(list) == "table" then
+        for i = 1, #list do
+            local f = list[i]
+            if f then
+                if f.IsEventRegistered and f:IsEventRegistered("UNIT_AURA") then
+                    f:UnregisterEvent("UNIT_AURA")
+                elseif f.UnregisterEvent then
+                    f:UnregisterEvent("UNIT_AURA")
+                end
+                if f.SetScript then
+                    f:SetScript("OnEvent", nil)
+                end
+            end
+        end
+    end
+    ef._msufA2_unitAuraBound = false
+    StopBossRetry()
+
+    -- Avoid polling unless explicitly enabled elsewhere.
+    if _polling then
+        _polling = false
+        ef:SetScript("OnUpdate", nil)
+    end
+
+    return
+end
 
     local want = false
     if c and c.ready == true and c.enabled == true and ue then

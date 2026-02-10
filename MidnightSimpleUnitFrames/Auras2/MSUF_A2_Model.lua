@@ -1,3 +1,10 @@
+
+-- Load-order safety: if Render ran before Model existed, it may have bailed out once.
+-- Nudge a single next-frame refresh once Model exports are present.
+local _api = ns and ns.MSUF_Auras2
+if _api and type(_api.MarkAllDirty) == "function" then
+    _api.MarkAllDirty(0)
+end
 -- MSUF Auras2 - Model (safe split v2)
 -- Fixes: namespace wiring (ns.MSUF_Auras2) + provides original BuildMergedAuraList/MergeBossAuras logic.
 -- Goal: keep Render.lua smaller and preserve behavior (0 feature regression).
@@ -262,6 +269,16 @@ local function MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, filter)
     n = 0
 
     local ids = SafeCall(C_UnitAuras.GetUnitAuraInstanceIDs, unit, filter .. "|PLAYER")
+    if type(ids) ~= "table" then
+        -- Alternate ordering: some clients / API variants can be picky about token order.
+        ids = SafeCall(C_UnitAuras.GetUnitAuraInstanceIDs, unit, "PLAYER|" .. filter)
+    elseif #ids == 0 then
+        -- If empty, probe the alternate order once to keep "own highlight" reliable.
+        local ids2 = SafeCall(C_UnitAuras.GetUnitAuraInstanceIDs, unit, "PLAYER|" .. filter)
+        if type(ids2) == "table" and #ids2 > 0 then
+            ids = ids2
+        end
+    end
     if type(ids) ~= "table" then
         -- Do not stamp-cache a failure; retry next render tick.
         entry[keysNField] = 0

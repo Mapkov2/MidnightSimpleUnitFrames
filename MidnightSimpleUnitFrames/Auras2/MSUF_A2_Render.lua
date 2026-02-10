@@ -1850,11 +1850,38 @@ local function MSUF_A2_BindApplyIfNeeded()
         and (type(Apply) == "table")
         and (type(Apply.CommitIcon) == "function")
 end
--- Pull hot helpers into locals (fast + keeps existing call sites stable after splits)
-local GetAuraList                  = Model.GetAuraList
-local MSUF_A2_GetPlayerAuraIdSetCached = Model.GetPlayerAuraIdSetCached
-local MSUF_A2_HashAsciiLower       = Model.HashAsciiLower
-local MSUF_A2_AuraFieldIsTrue      = Model.AuraFieldIsTrue
+-- Pull hot helpers into locals (load-order safe).
+-- Render.lua may load before Model.lua depending on .toc order.
+-- Bind lazily the first time we actually render.
+local GetAuraList
+local MSUF_A2_GetPlayerAuraIdSetCached
+local MSUF_A2_HashAsciiLower
+local MSUF_A2_AuraFieldIsTrue
+
+local function MSUF_A2_BindModelIfNeeded()
+    if type(GetAuraList) == "function"
+        and type(MSUF_A2_GetPlayerAuraIdSetCached) == "function"
+        and type(MSUF_A2_HashAsciiLower) == "function"
+        and type(MSUF_A2_AuraFieldIsTrue) == "function"
+    then
+        return true
+    end
+
+    local M = API and API.Model
+    if type(M) ~= "table" then
+        return false
+    end
+
+    GetAuraList = M.GetAuraList
+    MSUF_A2_GetPlayerAuraIdSetCached = M.GetPlayerAuraIdSetCached
+    MSUF_A2_HashAsciiLower = M.HashAsciiLower
+    MSUF_A2_AuraFieldIsTrue = M.AuraFieldIsTrue
+
+    return type(GetAuraList) == "function" and type(MSUF_A2_GetPlayerAuraIdSetCached) == "function"
+end
+
+-- Best-effort early bind (in case Model loaded before Render)
+MSUF_A2_BindModelIfNeeded()
 
 -- Collector: thin wrapper around slot-capped GetAuraList().
 -- Returns a list of aura data tables (raw API pass-through), capped.
@@ -2130,6 +2157,22 @@ local function RenderUnit(entry)
                 print(msg)
             end
         end
+
+-- Ensure Model-layer helpers are bound (load-order safe).
+if not MSUF_A2_BindModelIfNeeded() then
+    local st = API and API.state
+    if type(st) == "table" and not st._msufA2_warnedModelMissing then
+        st._msufA2_warnedModelMissing = true
+        local msg = "MSUF Auras2: Model module missing/unbound. Add 'Auras2\\MSUF_A2_Model.lua' to your .toc (before MSUF_A2_Render.lua) or install the full patch ZIP."
+        if _G and _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
+            _G.DEFAULT_CHAT_FRAME:AddMessage("|cffff5555" .. msg .. "|r")
+        else
+            print(msg)
+        end
+    end
+    return
+end
+
         return
     end
 

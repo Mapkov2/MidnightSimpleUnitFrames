@@ -2451,28 +2451,6 @@ if not _G.MSUF_AlphaEventFrame then
      end)
 end
 
--- ---------------------------------------------------------------------------
--- RangeFade was extracted to Core/MSUF_RangeFade.lua for line reduction.
--- Keep tiny compatibility stubs so alpha code can always query a multiplier.
-_G.MSUF_RangeFadeMul = _G.MSUF_RangeFadeMul or {}
-if type(_G.MSUF_GetRangeFadeMul) ~= "function" then
-    function _G.MSUF_GetRangeFadeMul(key, unit, frame)
-        local t = _G.MSUF_RangeFadeMul
-        if not t then return 1 end
-        local v = t[key]
-        if type(v) == "number" then
-            return v
-        end
-        if unit then
-            v = t[unit]
-            if type(v) == "number" then
-                return v
-            end
-        end
-        return 1
-    end
-end
-
 local function MSUF_InitPlayerCastbarPreviewToggle()
     if not MSUF_DB or not MSUF_DB.general then
          return
@@ -6122,7 +6100,14 @@ local function CreateSimpleUnitFrame(unit)
     end
     MSUF_ApplyReverseFillBars(f, conf)
     ns.UF.RequestUpdate(f, true, true, "F.CreateFrame")
-    if unit == "target" then MSUF_UpdateTargetAuras(f) end
+    -- Auras2 must be primed on unitframe creation; do NOT rely on a later UNIT_AURA burst.
+    -- This prevents the "auras only start after Edit Mode / toggle" regression.
+    if type(_G.MSUF_A2_RequestUnit) == "function" then
+        _G.MSUF_A2_RequestUnit(unit)
+    elseif unit == "target" and type(_G.MSUF_UpdateTargetAuras) == "function" then
+        -- Legacy fallback (older builds): only target was supported.
+        MSUF_UpdateTargetAuras(f)
+    end
     UnitFrames[unit] = f
     if not f._msufInUnitFramesList then
         f._msufInUnitFramesList = true
@@ -6229,14 +6214,20 @@ end
     end
     end
 
+    -- Auras2 bootstrap: build cache + register events + render once.
+    -- Without this, auras can appear to be "dead" until an external trigger (Edit Mode / manual toggle / first UNIT_AURA).
+    if type(_G.MSUF_Auras2_RefreshAll) == "function" then
+        _G.MSUF_Auras2_RefreshAll()
+    end
 
 
--- RangeFade init moved to Core/MSUF_RangeFade.lua (no behavior change)
-if type(_G.MSUF_RangeFade_InitPostLogin) == "function" then
-    _G.MSUF_RangeFade_InitPostLogin()
-end
 
-    do
+
+    if type(_G.MSUF_RangeFade_InitPostLogin) == "function" then
+        _G.MSUF_RangeFade_InitPostLogin()
+    end
+
+do
         local function MSUF_MarkToTDirty()
             local tot = UnitFrames and UnitFrames["targettarget"]
             if tot then
