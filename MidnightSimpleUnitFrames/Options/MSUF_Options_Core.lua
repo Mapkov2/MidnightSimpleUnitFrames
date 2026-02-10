@@ -1,3 +1,5 @@
+local ADDON_NAME = "MidnightSimpleUnitFrames"
+local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME, true)
 local addonName, ns = ...
 ns = ns or {}
 if _G then _G.MSUF_NS = ns end
@@ -1059,7 +1061,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     editModeButton = CreateFrame("Button", "MSUF_EditModeButton", panel, "UIPanelButtonTemplate")
     editModeButton:SetSize(160, 32)  -- fairly large
     editModeButton:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 16, 16)
-    editModeButton:SetText("Edit Mode")
+    editModeButton:SetText(L["Edit Mode"])
     editHint = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     editHint:SetPoint("LEFT", editModeButton, "RIGHT", 12, 0)
     editHint:SetJustifyH("LEFT")
@@ -2592,7 +2594,7 @@ castbarFocusButton = CreateFrame("Button", "MSUF_CastbarFocusButton", castbarGro
 castbarFocusButton:SetSize(120, 22)
 castbarFocusButton:ClearAllPoints()
 castbarFocusButton:SetPoint("TOPLEFT", castbarGroup, "TOPLEFT", 16, -150)
-castbarFocusButton:SetText("Focus Kick")
+castbarFocusButton:SetText(L["Focus Kick"])
 if MSUF_SkinMidnightActionButton then
     MSUF_SkinMidnightActionButton(castbarFocusButton)
 elseif MSUF_SkinMidnightTabButton then
@@ -2627,7 +2629,7 @@ castbarFocusButton:SetScript("OnClick", function()
     if not _G["MSUF_FocusKickHeaderRight"] then
         local fkHeader = castbarFocusGroup:CreateFontString("MSUF_FocusKickHeaderRight", "ARTWORK", "GameFontNormal")
         fkHeader:SetPoint("TOPLEFT", castbarFocusGroup, "TOPLEFT", 300, -220)
-        fkHeader:SetText("Focus Kick Icon")
+        fkHeader:SetText(L["Focus Kick Icon"])
     end
     if MSUF_InitFocusKickIconOptions then MSUF_InitFocusKickIconOptions() end
     castbarGeneralTitle = castbarEnemyGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -2639,7 +2641,7 @@ castbarFocusButton:SetScript("OnClick", function()
     castbarGeneralLine:SetPoint("RIGHT", castbarEnemyGroup, "RIGHT", -16, 0)
     castbarInterruptShakeCheck = CreateLabeledCheckButton(
         "MSUF_CastbarInterruptShakeCheck",
-        "Shake on interrupt",
+        L["Shake on interrupt"],
         castbarEnemyGroup,
         16, -200
     )
@@ -2693,7 +2695,7 @@ end
     _G.MSUF_Options_BindGeneralBoolCheck(castbarInterruptShakeCheck, "castbarInterruptShake", nil, MSUF_SyncCastbarsTabToggles, nil)
     castbarShakeIntensitySlider = CreateLabeledSlider(
         "MSUF_CastbarShakeIntensitySlider",
-        "Shake intensity",
+        L["Shake intensity"],
         castbarEnemyGroup,
         0, 30, 1,         -- 0–30 strength
         175, -200          -- Next to the toggles
@@ -2804,7 +2806,7 @@ end
     castbarTexColorLine:SetPoint("RIGHT", castbarEnemyGroup, "RIGHT", -16, 0)
     castbarFillDirLabel = castbarEnemyGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     castbarFillDirLabel:SetPoint("BOTTOMLEFT", castbarEnemyGroup, "BOTTOMLEFT", 16, 160)
-    castbarFillDirLabel:SetText("Castbar fill direction")
+    castbarFillDirLabel:SetText(L["Castbar fill direction"])
     -- Step 8: Castbar checks helper (short + no-regression)
     local function CB(frameName, label, x, y, dbKey, applyFn, anchorFn)
         local cb = CreateLabeledCheckButton(frameName, label, castbarEnemyGroup, x or 16, y or 0)
@@ -2812,13 +2814,13 @@ end
         _G.MSUF_Options_BindGeneralBoolCheck(cb, dbKey, applyFn, MSUF_SyncCastbarsTabToggles, true)
          return cb
     end
-    castbarUnifiedDirCheck = CB("MSUF_CastbarUnifiedDirectionCheck", "Always use fill direction for all casts", 16, 185, "castbarUnifiedDirection", "castbarFillDirection", function(cb)  cb:ClearAllPoints(); cb:SetPoint("BOTTOMLEFT", castbarFillDirLabel, "TOPLEFT", 0, 4)  end)
+    castbarUnifiedDirCheck = CB("MSUF_CastbarUnifiedDirectionCheck", L["Always use fill direction for all casts"], 16, 185, "castbarUnifiedDirection", "castbarFillDirection", function(cb)  cb:ClearAllPoints(); cb:SetPoint("BOTTOMLEFT", castbarFillDirLabel, "TOPLEFT", 0, 4)  end)
     castbarFillDirDrop = CreateFrame("Frame", "MSUF_CastbarFillDirectionDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate")
     MSUF_ExpandDropdownClickArea(castbarFillDirDrop)
     castbarFillDirDrop:SetPoint("TOPLEFT", castbarFillDirLabel, "BOTTOMLEFT", -16, -4)
     local castbarFillDirOptions = {
-        { key = "RTL", label = "Right to left (default)" },
-        { key = "LTR", label = "Left to right" },
+        { key = "RTL", label = L["Right to left (default)"] },
+        { key = "LTR", label = L["Left to right"] },
     }
     local function MSUF_GetCastbarFillDir()
         EnsureDB()
@@ -2838,7 +2840,7 @@ end
     -- Step 16: Apply dispatch handles castbar updates (castbarVisuals/castbarTicks/castbarGlow/castbarLatency)
 -- Channeled casts: show 5 tick lines
     -- Channeled casts: show 5 tick lines
-    castbarChannelTicksCheck = CB("MSUF_CastbarChannelTicksCheck", "Show channel tick lines (5)", 16, 0, "castbarShowChannelTicks", "castbarTicks", function(cb)  if castbarFillDirDrop then cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarFillDirDrop, "BOTTOMLEFT", 16, -10) end  end)
+    castbarChannelTicksCheck = CB("MSUF_CastbarChannelTicksCheck", L["Show channel tick lines (5)"], 16, 0, "castbarShowChannelTicks", "castbarTicks", function(cb)  if castbarFillDirDrop then cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarFillDirDrop, "BOTTOMLEFT", 16, -10) end  end)
 -- GCD bar (player): show a short bar for instant casts that trigger the global cooldown
     local function _MSUF_ApplyGCDBarToggle(v)
         v = (v and true) or false
@@ -2853,7 +2855,7 @@ end
      end
     castbarGCDBarCheck = CB(
         "MSUF_CastbarGCDBarCheck",
-        "Show GCD bar for instant casts",
+        L["Show GCD bar for instant casts"],
         16, 0,
         "showGCDBar",
         _MSUF_ApplyGCDBarToggle,
@@ -2875,7 +2877,7 @@ end
      end
     castbarGCDTimeCheck = CB(
         "MSUF_CastbarGCDTimeCheck",
-        "GCD bar: show time text",
+        L["GCD bar: show time text"],
         16, 0,
         "showGCDBarTime",
         _MSUF_ApplyGCDBarVisuals,
@@ -2886,7 +2888,7 @@ end
     )
     castbarGCDSpellCheck = CB(
         "MSUF_CastbarGCDSpellCheck",
-        "GCD bar: show spell name + icon",
+        L["GCD bar: show spell name + icon"],
         16, 0,
         "showGCDBarSpell",
         _MSUF_ApplyGCDBarVisuals,
@@ -2896,14 +2898,14 @@ end
          end
     )
 -- Castbar glow / spark (Blizzard-style)
-    castbarGlowCheck = CB("MSUF_CastbarGlowCheck", "Show castbar glow effect", 16, 0, "castbarShowGlow", "castbarGlow")
+    castbarGlowCheck = CB("MSUF_CastbarGlowCheck", L["Show castbar glow effect"], 16, 0, "castbarShowGlow", "castbarGlow")
 -- Latency indicator (end-of-cast spell queue / net latency zone)
-    castbarLatencyCheck = CB("MSUF_CastbarLatencyCheck", "Show latency indicator", 16, 0, "castbarShowLatency", "castbarLatency")
-    empowerColorStagesCheck = CB("MSUF_EmpowerColorStagesCheck", "Add color to stages (Empowered casts)", 16, 130, "empowerColorStages", "castbarVisuals", function(cb)  cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarUnifiedDirCheck, "TOPLEFT", 300, 0)  end)
-    empowerStageBlinkCheck = CB("MSUF_EmpowerStageBlinkCheck", "Add stage blink (Empowered casts)", 16, 130, "empowerStageBlink", "castbarVisuals", function(cb)  cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", empowerColorStagesCheck, "BOTTOMLEFT", 0, -10)  end)
+    castbarLatencyCheck = CB("MSUF_CastbarLatencyCheck", L["Show latency indicator"], 16, 0, "castbarShowLatency", "castbarLatency")
+    empowerColorStagesCheck = CB("MSUF_EmpowerColorStagesCheck", L["Add color to stages (Empowered casts)"], 16, 130, "empowerColorStages", "castbarVisuals", function(cb)  cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarUnifiedDirCheck, "TOPLEFT", 300, 0)  end)
+    empowerStageBlinkCheck = CB("MSUF_EmpowerStageBlinkCheck", L["Add stage blink (Empowered casts)"], 16, 130, "empowerStageBlink", "castbarVisuals", function(cb)  cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", empowerColorStagesCheck, "BOTTOMLEFT", 0, -10)  end)
 empowerStageBlinkTimeSlider = CreateLabeledSlider(
     "MSUF_EmpowerStageBlinkTimeSlider",
-    "Stage blink time (sec)",
+    L["Stage blink time (sec)"],
     castbarEnemyGroup,
     0.05, 1.00, 0.01,
     16, 130
@@ -2936,9 +2938,9 @@ empowerStageBlinkTimeSlider:SetScript("OnShow", function(self)
             local emp = CreateFrame("Frame", "MSUF_CastbarMenuPanelEmpowered", panel); emp:EnableMouse(false)
             emp:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 16, 12); emp:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -16, 12); emp:SetPoint("TOP", hLine, "BOTTOM", 0, -12)
             -- Headers
-            local behaviorHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal"); behaviorHeader:SetPoint("TOP", leftCol, "TOP", 0, 8); behaviorHeader:SetText("Behavior")
-            local styleHeader    = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal"); styleHeader:SetPoint("TOP", rightCol, "TOP", 0, 8); styleHeader:SetText("Style")
-            local empHeader      = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal"); empHeader:SetPoint("TOPLEFT", emp, "TOPLEFT", 0, 0); empHeader:SetText("Empowered casts")
+            local behaviorHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal"); behaviorHeader:SetPoint("TOP", leftCol, "TOP", 0, 8); behaviorHeader:SetText(L["Behavior"])
+            local styleHeader    = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal"); styleHeader:SetPoint("TOP", rightCol, "TOP", 0, 8); styleHeader:SetText(L["Style"])
+            local empHeader      = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal"); empHeader:SetPoint("TOPLEFT", emp, "TOPLEFT", 0, 0); empHeader:SetText(L["Empowered casts"])
         end
         local leftCol  = _G["MSUF_CastbarMenuPanelLeft"]
         local rightCol = _G["MSUF_CastbarMenuPanelRight"]
@@ -2964,14 +2966,14 @@ empowerStageBlinkTimeSlider:SetScript("OnShow", function(self)
         A(castbarChannelTicksCheck, "TOPLEFT", castbarFillDirDrop, "BOTTOMLEFT", 16, -10)
         A(castbarGCDBarCheck, "TOPLEFT", castbarChannelTicksCheck, "BOTTOMLEFT", 0, -8)
         -- Style (right)
-        A(castbarTextureLabel, "TOPLEFT", rightCol, "TOPLEFT", 0, -20); T(castbarTextureLabel, "Castbar texture")
+        A(castbarTextureLabel, "TOPLEFT", rightCol, "TOPLEFT", 0, -20); T(castbarTextureLabel, L["Castbar texture"])
         A(castbarTextureDrop, "TOPLEFT", castbarTextureLabel, "BOTTOMLEFT", -16, -4)
         A(castbarTexturePreview, "TOPLEFT", castbarTextureDrop, "BOTTOMLEFT", 20, -6)
         A(castbarTextureInfo, "TOPLEFT", rightCol, "TOPLEFT", 0, -20); W(castbarTextureInfo, 320)
         -- Placeholders (disabled for now)
         if rightCol and not _G["MSUF_CastbarBackgroundTextureLabel"] then
 local bgLabel = rightCol:CreateFontString("MSUF_CastbarBackgroundTextureLabel", "ARTWORK", "GameFontNormal")
-bgLabel:SetText("Castbar background texture")
+bgLabel:SetText(L["Castbar background texture"])
 local bgDrop = CreateFrame("Frame", "MSUF_CastbarBackgroundTextureDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate")
 MSUF_ExpandDropdownClickArea(bgDrop)
 UIDropDownMenu_SetWidth(bgDrop, 180)
@@ -3089,7 +3091,7 @@ if prev then
 end
             local outlineSlider = CreateLabeledSlider(
                 "MSUF_CastbarOutlineThicknessSlider",
-                "Outline thickness",
+                L["Outline thickness"],
                 castbarEnemyGroup,
                 0, 6, 1,
                 0, 0
@@ -3137,7 +3139,7 @@ end
             local header = _G["MSUF_CastbarSpellNameShortenHeader"]
             if rightCol and not header then
                 header = rightCol:CreateFontString("MSUF_CastbarSpellNameShortenHeader", "ARTWORK", "GameFontNormal")
-                header:SetText("Name shortening")
+                header:SetText(L["Name shortening"])
             end
 	            -- NOTE: This used to be an On/Off dropdown. We intentionally use a simple
 	            -- On/Off button now (green when enabled, red when disabled).
@@ -3164,7 +3166,7 @@ end
             if rightCol and not maxSlider then
                 maxSlider = CreateLabeledSlider(
                     "MSUF_CastbarSpellNameMaxLenSlider",
-                    "Max name length",
+                    L["Max name length"],
                     castbarEnemyGroup,
                     6, 30, 1,
                     0, 0
@@ -3174,7 +3176,7 @@ end
             if rightCol and not resSlider then
                 resSlider = CreateLabeledSlider(
                     "MSUF_CastbarSpellNameReservedSlider",
-                    "Reserved space",
+                    L["Reserved space"],
                     castbarEnemyGroup,
                     0, 30, 1,
                     0, 0
@@ -3400,21 +3402,21 @@ end
 BAR_DROPDOWN_WIDTH = 260
     barsTitle = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     barsTitle:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 16, -120)
-    barsTitle:SetText("Bar appearance")
+    barsTitle:SetText(L["Bar appearance"])
 local MSUF_RefreshAbsorbBarUIEnabled
 -- Absorb display (moved from Misc -> Bar appearance; replaces Bar mode which is now in Colors)
 absorbDisplayLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 absorbDisplayLabel:SetPoint("TOPLEFT", barsTitle, "BOTTOMLEFT", 0, -8)
-absorbDisplayLabel:SetText("Absorb display")
+absorbDisplayLabel:SetText(L["Absorb display"])
 absorbDisplayDrop = CreateFrame("Frame", "MSUF_AbsorbDisplayDrop", barGroup, "UIDropDownMenuTemplate")
 MSUF_ExpandDropdownClickArea(absorbDisplayDrop)
 absorbDisplayDrop:SetPoint("TOPLEFT", absorbDisplayLabel, "BOTTOMLEFT", -16, -4)
 UIDropDownMenu_SetWidth(absorbDisplayDrop, BAR_DROPDOWN_WIDTH)
 local absorbDisplayOptions = {
-    { key = 1, label = "Absorb off" },
-    { key = 2, label = "Absorb bar" },
-    { key = 3, label = "Absorb bar + text" },
-    { key = 4, label = "Absorb text only" },
+    { key = 1, label = L["Absorb off"] },
+    { key = 2, label = L["Absorb bar"] },
+    { key = 3, label = L["Absorb bar + text"] },
+    { key = 4, label = L["Absorb text only"] },
 }
 local function MSUF_GetAbsorbDisplayMode()
     EnsureDB()
@@ -3455,14 +3457,14 @@ MSUF_BindAbsorbDropdown(absorbDisplayDrop, absorbDisplayOptions, MSUF_GetAbsorbD
 -- Absorb anchoring (which side positive absorb / heal-absorb start on)
 absorbAnchorLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 absorbAnchorLabel:SetPoint("TOPLEFT", absorbDisplayDrop, "BOTTOMLEFT", 16, -8)
-absorbAnchorLabel:SetText("Absorb bar anchoring")
+absorbAnchorLabel:SetText(L["Absorb bar anchoring"])
 absorbAnchorDrop = CreateFrame("Frame", "MSUF_AbsorbAnchorDrop", barGroup, "UIDropDownMenuTemplate")
 MSUF_ExpandDropdownClickArea(absorbAnchorDrop)
 absorbAnchorDrop:SetPoint("TOPLEFT", absorbAnchorLabel, "BOTTOMLEFT", -16, -4)
 UIDropDownMenu_SetWidth(absorbAnchorDrop, BAR_DROPDOWN_WIDTH)
 local absorbAnchorOptions = {
-    { key = 1, label = "Anchor to healthbar edge (default)" },
-    { key = 2, label = "Anchor to inside padding (prevents clipping)" },
+    { key = 1, label = L["Anchor to healthbar edge (default)"] },
+    { key = 2, label = L["Anchor to inside padding (prevents clipping)"] },
 }
 local function MSUF_GetAbsorbAnchorMode()
     EnsureDB()
@@ -3482,7 +3484,7 @@ MSUF_BindAbsorbDropdown(absorbAnchorDrop, absorbAnchorOptions, MSUF_GetAbsorbAnc
 -- Absorb bar textures (optional overrides; default follows foreground texture)
 absorbTextureLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 absorbTextureLabel:SetPoint("TOPLEFT", absorbAnchorDrop, "BOTTOMLEFT", 16, -8)
-absorbTextureLabel:SetText("Absorb bar texture (SharedMedia)")
+absorbTextureLabel:SetText(L["Absorb bar texture (SharedMedia)"])
 absorbBarTextureDrop = CreateFrame("Frame", "MSUF_AbsorbBarTextureDropdown", barGroup, "UIDropDownMenuTemplate")
 MSUF_ExpandDropdownClickArea(absorbBarTextureDrop)
 absorbBarTextureDrop:SetPoint("TOPLEFT", absorbTextureLabel, "BOTTOMLEFT", -16, -4)
@@ -3677,7 +3679,7 @@ _MSUF_InitAbsorbTextureDropdown(healAbsorbTextureDrop, "healAbsorbBarTexture", "
 -- Runtime-only (not saved). Auto-disables when leaving the Bars menu group.
 local absorbTexTestCB = CreateLabeledCheckButton(
     "MSUF_AbsorbTextureTestModeCheck",
-    "Test absorb textures",
+    L["Test absorb textures"],
     barGroup,
     16, -1 -- placeholder; we re-anchor below
 )
@@ -3780,20 +3782,20 @@ if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
 end
 gradientCheck = CreateLabeledCheckButton(
         "MSUF_GradientEnableCheck",
-        "Enable HP bar gradient",
+        L["Enable HP bar gradient"],
         barGroup,
         16, -260
     )
     powerGradientCheck = CreateLabeledCheckButton(
         "MSUF_PowerGradientEnableCheck",
-        "Enable power bar gradient",
+        L["Enable power bar gradient"],
         barGroup,
         16, -282
     )
     -- Gradient strength (shared by HP + Power gradients). Range 0..1
     gradientStrengthSlider = CreateLabeledSlider(
         "MSUF_GradientStrengthSlider",
-        "Gradient strength",
+        L["Gradient strength"],
         barGroup,
         0, 1, 0.05,
         16, -304
@@ -3803,31 +3805,31 @@ gradientCheck = CreateLabeledCheckButton(
     gradientDirPad = MSUF_CreateGradientDirectionPad(barGroup)
     targetPowerBarCheck = CreateLabeledCheckButton(
         "MSUF_TargetPowerBarCheck",
-        "Show power bar on target frame",
+        L["Show power bar on target frame"],
         barGroup,
         260, -260
     )
     bossPowerBarCheck = CreateLabeledCheckButton(
         "MSUF_BossPowerBarCheck",
-        "Show power bar on boss frames",
+        L["Show power bar on boss frames"],
         barGroup,
         260, -290
     )
     playerPowerBarCheck = CreateLabeledCheckButton(
         "MSUF_PlayerPowerBarCheck",
-        "Show power bar on player frames",
+        L["Show power bar on player frames"],
         barGroup,
         260, -320
     )
     focusPowerBarCheck = CreateLabeledCheckButton(
         "MSUF_FocusPowerBarCheck",
-        "Show power bar on focus",
+        L["Show power bar on focus"],
         barGroup,
         260, -350
     )
     powerBarHeightLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     powerBarHeightLabel:SetPoint("TOPLEFT", focusPowerBarCheck, "BOTTOMLEFT", 0, -4)
-    powerBarHeightLabel:SetText("Power bar height")
+    powerBarHeightLabel:SetText(L["Power bar height"])
     powerBarHeightEdit = CreateFrame("EditBox", "MSUF_PowerBarHeightEdit", barGroup, "InputBoxTemplate")
     powerBarHeightEdit:SetSize(40, 20)
     powerBarHeightEdit:SetAutoFocus(false)
@@ -3835,19 +3837,19 @@ gradientCheck = CreateLabeledCheckButton(
     powerBarHeightEdit:SetTextInsets(4, 4, 2, 2)
     powerBarEmbedCheck = CreateLabeledCheckButton(
         "MSUF_PowerBarEmbedCheck",
-        "Embed power bar into health bar",
+        L["Embed power bar into health bar"],
         barGroup,
         260, -380
     )
     powerBarBorderCheck = CreateLabeledCheckButton(
         "MSUF_PowerBarBorderCheck",
-        "Show power bar border",
+        L["Show power bar border"],
         barGroup,
         260, -410
     )
     powerBarBorderSizeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     powerBarBorderSizeLabel:SetPoint("TOPLEFT", powerBarBorderCheck, "BOTTOMLEFT", 0, -6)
-    powerBarBorderSizeLabel:SetText("Border thickness")
+    powerBarBorderSizeLabel:SetText(L["Border thickness"])
     powerBarBorderSizeEdit = CreateFrame("EditBox", "MSUF_PowerBarBorderSizeEdit", barGroup, "InputBoxTemplate")
     powerBarBorderSizeEdit:SetSize(40, 20)
     powerBarBorderSizeEdit:SetAutoFocus(false)
@@ -3855,7 +3857,7 @@ gradientCheck = CreateLabeledCheckButton(
     powerBarBorderSizeEdit:SetTextInsets(4, 4, 2, 2)
     hpModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     hpModeLabel:SetPoint("TOPLEFT", powerBarBorderSizeLabel or powerBarBorderCheck or powerBarEmbedCheck or powerBarHeightLabel, "BOTTOMLEFT", 0, -16)
-    hpModeLabel:SetText("Textmode HP / Power")
+    hpModeLabel:SetText(L["Textmode HP / Power"])
     -- Make this header white (requested UX): the dropdown items remain normal.
     hpModeLabel:SetTextColor(1, 1, 1, 1)
     hpModeDrop = CreateFrame("Frame", "MSUF_HPTextModeDropdown", barGroup, "UIDropDownMenuTemplate")
@@ -3904,11 +3906,11 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 -- Text separators (HP + Power)
     sepHeader = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     sepHeader:SetPoint("TOPLEFT", powerModeDrop, "BOTTOMLEFT", 16, -12)
-    sepHeader:SetText("Text Separators")
+    sepHeader:SetText(L["Text Separators"])
     hpSepLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     -- Extra spacing from the header (prevents cramped look)
     hpSepLabel:SetPoint("TOPLEFT", sepHeader, "BOTTOMLEFT", 0, -10)
-    hpSepLabel:SetText("Health (HP)")
+    hpSepLabel:SetText(L["Health (HP)"])
     hpSepDrop = CreateFrame("Frame", "MSUF_HPTextSeparatorDropdown", barGroup, "UIDropDownMenuTemplate")
     MSUF_ExpandDropdownClickArea(hpSepDrop)
     -- Both dropdowns sit slightly lower (5px) for nicer vertical balance.
@@ -3942,7 +3944,7 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 -- Power separator (separate from HP separator; falls back to HP separator if unset for backward compatibility)
     powerSepLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     powerSepLabel:SetPoint("LEFT", hpSepLabel, "RIGHT", 120, 0)
-    powerSepLabel:SetText("Power")
+    powerSepLabel:SetText(L["Power"])
     powerSepDrop = CreateFrame("Frame", "MSUF_PowerTextSeparatorDropdown", barGroup, "UIDropDownMenuTemplate")
     MSUF_ExpandDropdownClickArea(powerSepDrop)
     powerSepDrop:SetPoint("TOPLEFT", powerSepLabel, "BOTTOMLEFT", -16, -16)
@@ -3977,7 +3979,7 @@ hpSpacerSelectedLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontHighl
 hpSpacerSelectedLabel:ClearAllPoints()
 hpSpacerSelectedLabel:SetPoint("TOPLEFT", hpSepDrop, "BOTTOMLEFT", 16, -8)
 hpSpacerSelectedLabel:SetTextColor(1, 0.82, 0, 1)
-hpSpacerSelectedLabel:SetText("Selected: Player")
+hpSpacerSelectedLabel:SetText(L["Selected: Player"])
 hpSpacerInfoButton = CreateFrame("Button", "MSUF_HPSpacerInfoButton", barGroup)
 hpSpacerInfoButton:SetSize(14, 14)
 hpSpacerInfoButton:ClearAllPoints()
@@ -3991,9 +3993,9 @@ end
 hpSpacerInfoButton:SetScript("OnEnter", function(self)
     if not GameTooltip then  return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine("Text Spacers", 1, 1, 1)
-    GameTooltip:AddLine("Click a MSUF unitframe (Player/Target/Focus/ToT/Pet/Boss) to choose which unit these spacer settings apply to.", 0.9, 0.9, 0.9, true)
-    GameTooltip:AddLine("Works only when the corresponding text mode is set to 'Full value + %' (or '% + Full value').", 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine(L["Text Spacers"], 1, 1, 1)
+    GameTooltip:AddLine(L["Click a MSUF unitframe (Player/Target/Focus/ToT/Pet/Boss) to choose which unit these spacer settings apply to."], 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine(L["Works only when the corresponding text mode is set to 'Full value + %' (or '% + Full value')."], 0.9, 0.9, 0.9, true)
     GameTooltip:Show()
  end)
 hpSpacerInfoButton:SetScript("OnLeave", function()  if GameTooltip then GameTooltip:Hide() end  end)
@@ -4002,10 +4004,10 @@ hpSpacerCheck = CreateFrame("CheckButton", "MSUF_HPTextSpacerCheck", barGroup, "
 hpSpacerCheck:ClearAllPoints()
 hpSpacerCheck:SetPoint("TOPLEFT", hpSpacerSelectedLabel, "BOTTOMLEFT", 0, -4)
 hpSpacerCheck.text = _G["MSUF_HPTextSpacerCheckText"]
-if hpSpacerCheck.text then hpSpacerCheck.text:SetText("HP Spacer on/off") end
+if hpSpacerCheck.text then hpSpacerCheck.text:SetText(L["HP Spacer on/off"]) end
 MSUF_StyleToggleText(hpSpacerCheck)
 MSUF_StyleCheckmark(hpSpacerCheck)
-hpSpacerSlider = CreateLabeledSlider("MSUF_HPTextSpacerSlider", "HP Spacer (X)", barGroup, 0, 1000, 1, 16, -200)
+hpSpacerSlider = CreateLabeledSlider("MSUF_HPTextSpacerSlider", L["HP Spacer (X)"], barGroup, 0, 1000, 1, 16, -200)
 hpSpacerSlider:ClearAllPoints()
 hpSpacerSlider:SetPoint("TOPLEFT", hpSpacerCheck, "BOTTOMLEFT", 0, -18)
 if hpSpacerSlider.SetWidth then hpSpacerSlider:SetWidth(260) end
@@ -4017,10 +4019,10 @@ local powerSpacerCheck = CreateFrame("CheckButton", "MSUF_PowerTextSpacerCheck",
 powerSpacerCheck:ClearAllPoints()
 powerSpacerCheck:SetPoint("TOPLEFT", powerSpacerHeader, "BOTTOMLEFT", 0, -4)
 powerSpacerCheck.text = _G["MSUF_PowerTextSpacerCheckText"]
-if powerSpacerCheck.text then powerSpacerCheck.text:SetText("Power Spacer on/off") end
+if powerSpacerCheck.text then powerSpacerCheck.text:SetText(L["Power Spacer on/off"]) end
 MSUF_StyleToggleText(powerSpacerCheck)
 MSUF_StyleCheckmark(powerSpacerCheck)
-local powerSpacerSlider = CreateLabeledSlider("MSUF_PowerTextSpacerSlider", "Power Spacer (X)", barGroup, 0, 1000, 1, 16, -200)
+local powerSpacerSlider = CreateLabeledSlider("MSUF_PowerTextSpacerSlider", L["Power Spacer (X)"], barGroup, 0, 1000, 1, 16, -200)
 powerSpacerSlider:ClearAllPoints()
 powerSpacerSlider:SetPoint("TOPLEFT", powerSpacerCheck, "BOTTOMLEFT", 0, -18)
 if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
@@ -4218,7 +4220,7 @@ local barTextureDrop
         do
             barTextureLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             barTextureLabel:SetPoint("TOPLEFT", (absorbTexTestCB or healAbsorbTextureDrop or absorbBarTextureDrop or absorbAnchorDrop or absorbDisplayDrop), "BOTTOMLEFT", 16, -18)
-            barTextureLabel:SetText("Bar texture (SharedMedia)")
+            barTextureLabel:SetText(L["Bar texture (SharedMedia)"])
             barTextureDrop = CreateFrame("Frame", "MSUF_BarTextureDropdown", barGroup, "UIDropDownMenuTemplate")
             MSUF_ExpandDropdownClickArea(barTextureDrop)
             barTextureDrop:SetPoint("TOPLEFT", barTextureLabel, "BOTTOMLEFT", -16, -4)
@@ -4320,7 +4322,7 @@ local barTextureDrop
 -- 0 = disabled, 1..6 = thickness in pixels (expands OUTSIDE the HP bar like castbar outline)
 barOutlineThicknessSlider = CreateLabeledSlider(
     "MSUF_BarOutlineThicknessSlider",
-    "Outline thickness",
+    L["Outline thickness"],
     barGroup,
     0, 6, 1,
     16, -350
@@ -4363,24 +4365,24 @@ do
         SetupPanel(rightPanel)
         local leftHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         leftHeader:SetPoint("TOPLEFT", leftPanel, "TOPLEFT", 16, -12)
-        leftHeader:SetText("Bar appearance")
+        leftHeader:SetText(L["Bar appearance"])
         local rightHeader = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         rightHeader:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 16, -12)
-        rightHeader:SetText("Power Bar Settings")
+        rightHeader:SetText(L["Power Bar Settings"])
         -- Section labels in left panel
         local absorbHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         absorbHeader:SetPoint("TOPLEFT", leftHeader, "BOTTOMLEFT", 0, -18)
-        absorbHeader:SetText("Absorb Display")
+        absorbHeader:SetText(L["Absorb Display"])
         _G.MSUF_BarsMenuAbsorbHeader = absorbHeader
         local texHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        texHeader:SetText("Bar texture (SharedMedia)")
+        texHeader:SetText(L["Bar texture (SharedMedia)"])
         _G.MSUF_BarsMenuTexturesHeader = texHeader
         local gradHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        gradHeader:SetText("Gradient Options")
+        gradHeader:SetText(L["Gradient Options"])
         _G.MSUF_BarsMenuGradientHeader = gradHeader
         -- Section label in right panel
         local borderHeader = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        borderHeader:SetText("Border & Text Options")
+        borderHeader:SetText(L["Border & Text Options"])
         _G.MSUF_BarsMenuBorderHeader = borderHeader
         -- Inline-dropdown helper
         -- Label sits on the left; value text can be RIGHT-aligned (default)
@@ -4447,7 +4449,7 @@ do
     if absorbDisplayLabel and _G.MSUF_BarsMenuAbsorbHeader then
         absorbDisplayLabel:ClearAllPoints()
         absorbDisplayLabel:SetPoint("TOPLEFT", _G.MSUF_BarsMenuAbsorbHeader, "TOPLEFT", 0, 0)
-        absorbDisplayLabel:SetText("Absorb Display")
+        absorbDisplayLabel:SetText(L["Absorb Display"])
     end
     -- Divider line under "Absorb Display"
     local absorbLine = leftPanel and leftPanel.MSUF_SectionLine_Absorb
@@ -4480,7 +4482,7 @@ do
 if absorbTextureLabel and absorbAnchorDrop then
     absorbTextureLabel:ClearAllPoints()
     absorbTextureLabel:SetPoint("TOPLEFT", absorbAnchorDrop, "BOTTOMLEFT", 16, -12)
-    absorbTextureLabel:SetText("Absorb bar texture (SharedMedia)")
+    absorbTextureLabel:SetText(L["Absorb bar texture (SharedMedia)"])
 end
 if absorbBarTextureDrop and absorbTextureLabel then
     absorbBarTextureDrop:ClearAllPoints()
@@ -4508,7 +4510,7 @@ end
     if barTextureLabel and texHeader then
         barTextureLabel:ClearAllPoints()
         barTextureLabel:SetPoint("TOPLEFT", texHeader, "TOPLEFT", 0, 0)
-        barTextureLabel:SetText("Bar texture (SharedMedia)")
+        barTextureLabel:SetText(L["Bar texture (SharedMedia)"])
     end
     -- Divider line under "Bar texture (SharedMedia)"
     local texturesLine = leftPanel and leftPanel.MSUF_SectionLine_Textures
@@ -4663,7 +4665,7 @@ local outlineHeader = leftPanel and leftPanel.MSUF_SectionHeader_Outline
 if leftPanel and not outlineHeader then
     outlineHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     leftPanel.MSUF_SectionHeader_Outline = outlineHeader
-    outlineHeader:SetText("Outline thickness")
+    outlineHeader:SetText(L["Outline thickness"])
 end
 if outlineHeader and outlineAnchor then
     outlineHeader:ClearAllPoints()

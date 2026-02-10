@@ -1,5 +1,7 @@
 -- Cumulative / no feature regression goal: same widgets, same DB keys, same behaviors.
 -- This file replaces the previous generated split and builds the boxed Fonts UI directly.
+local ADDON_NAME = "MidnightSimpleUnitFrames"
+local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME, true)
 local addonName, addonNS = ...
 -- Unify ns across split option modules and Options_Core (some builds use global ns).
 ns = (_G and _G.MSUF_NS) or addonNS or ns or {}
@@ -213,20 +215,20 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- Build static layout (boxed)
     -- ---------------------------------------------------------------------
     EnsureDB()
-    local left = MakeBox("MSUF_FontsMenuPanelLeft", "Font Settings")
+    local left = MakeBox("MSUF_FontsMenuPanelLeft", L["Font Settings"])
     left:SetSize(320, 560)
     left:ClearAllPoints()
     left:SetPoint("TOPLEFT", fontGroup, "TOPLEFT", 0, -110)
-    local right = MakeBox("MSUF_FontsMenuPanelRight", "Font color & style")
+    local right = MakeBox("MSUF_FontsMenuPanelRight", L["Font color & style"])
     right:SetSize(320, 560)
     right:ClearAllPoints()
     right:SetPoint("TOPLEFT", left, "TOPRIGHT", 14, 0)
     -- Section headers
-    local secGlobal = MakeSectionHeader(left, "MSUF_FontsMenuSection_Global", "Global font")
-    local secSizes  = MakeSectionHeader(left, "MSUF_FontsMenuSection_Sizes", "Text sizes")
-    local secStyle  = MakeSectionHeader(right, "MSUF_FontsMenuSection_Style", "Text style")
-    local secColors = MakeSectionHeader(right, "MSUF_FontsMenuSection_Colors", "Name colors")
-    local secNames  = MakeSectionHeader(right, "MSUF_FontsMenuSection_Names", "Name display")
+    local secGlobal = MakeSectionHeader(left, "MSUF_FontsMenuSection_Global", L["Global font"])
+    local secSizes  = MakeSectionHeader(left, "MSUF_FontsMenuSection_Sizes", L["Text sizes"])
+    local secStyle  = MakeSectionHeader(right, "MSUF_FontsMenuSection_Style", L["Text style"])
+    local secColors = MakeSectionHeader(right, "MSUF_FontsMenuSection_Colors", L["Name colors"])
+    local secNames  = MakeSectionHeader(right, "MSUF_FontsMenuSection_Names", L["Name display"])
     secGlobal:ClearAllPoints(); secGlobal:SetPoint("TOPLEFT", left, "TOPLEFT", 14, -44)
     secSizes:ClearAllPoints();  -- anchored later (after dropdown)
     secStyle:ClearAllPoints();  secStyle:SetPoint("TOPLEFT", right, "TOPLEFT", 14, -44)
@@ -323,7 +325,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     SetFontDropdownText((MSUF_DB and MSUF_DB.general and MSUF_DB.general.fontKey) or (fontChoices[1] and fontChoices[1].key) or "FRIZQT")
     -- Global "Text sizes" block
     secSizes:SetPoint("TOPLEFT", fontDrop, "BOTTOMLEFT", 14, -18)
-    local textSizeHelp = MakeHelp(left, "MSUF_TextSizeHelp", "Global defaults. Frames inherit unless overridden in Unitframes > Text.", 290)
+    local textSizeHelp = MakeHelp(left, "MSUF_TextSizeHelp", L["Global defaults. Frames inherit unless overridden in Unitframes > Text."], 290)
     textSizeHelp:ClearAllPoints()
     textSizeHelp:SetPoint("TOPLEFT", secSizes, "BOTTOMLEFT", 0, -4)
     local colGap = 30
@@ -340,10 +342,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     powerFontSizeSlider:SetPoint("TOPLEFT", nameFontSizeSlider, "BOTTOMLEFT", 0, -84)
     castbarSpellNameFontSizeSlider:ClearAllPoints()
     castbarSpellNameFontSizeSlider:SetPoint("TOPLEFT", powerFontSizeSlider, "TOPRIGHT", colGap, 0)
-    CompactTextSizeSlider(nameFontSizeSlider, "Name")
-    CompactTextSizeSlider(hpFontSizeSlider, "HP")
-    CompactTextSizeSlider(powerFontSizeSlider, "Power")
-    CompactTextSizeSlider(castbarSpellNameFontSizeSlider, "Castbar")
+    CompactTextSizeSlider(nameFontSizeSlider, L["Name"])
+    CompactTextSizeSlider(hpFontSizeSlider, L["HP"])
+    CompactTextSizeSlider(powerFontSizeSlider, L["Power"])
+    CompactTextSizeSlider(castbarSpellNameFontSizeSlider, L["Castbar"])
     -- Override info lines (Name/HP/Power only)
     local nameOverrideInfo  = MakeOverrideInfo(left, "MSUF_NameFontOverrideInfo")
     local hpOverrideInfo    = MakeOverrideInfo(left, "MSUF_HpFontOverrideInfo")
@@ -382,8 +384,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         resetBtn = CreateFrame("Button", "MSUF_ResetFontOverridesBtn", left, "UIPanelButtonTemplate")
         resetBtn:SetSize(280, 20)
         resetBtn:SetPoint("BOTTOMLEFT", left, "BOTTOMLEFT", 14, 14)
-        resetBtn:SetText("Reset overrides")
-        resetBtn.tooltipText = "Clears per-unit Name/Health/Power and per-castbar Cast Name/Time font size overrides so everything inherits the global defaults again."
+        resetBtn:SetText(L["Reset overrides"])
+        resetBtn.tooltipText = L["Clears per-unit Name/Health/Power and per-castbar Cast Name/Time font size overrides so everything inherits the global defaults again."]
     else
         resetBtn:ClearAllPoints()
         resetBtn:SetPoint("BOTTOMLEFT", left, "BOTTOMLEFT", 14, 14)
@@ -459,9 +461,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- ---------------------------------------------------------------------
     -- Right column: checkboxes + name shortening
     -- ---------------------------------------------------------------------
-    local boldCheck = MakeCheck("MSUF_BoldTextCheck", right, "Use bold text (THICKOUTLINE)")
-    local noOutlineCheck = MakeCheck("MSUF_NoOutlineCheck", right, "Disable black outline around text")
-    local textBackdropCheck = MakeCheck("MSUF_TextBackdropCheck", right, "Add text shadow (backdrop)")
+    local boldCheck = MakeCheck("MSUF_BoldTextCheck", right, L["Use bold text (THICKOUTLINE)"])
+    local noOutlineCheck = MakeCheck("MSUF_NoOutlineCheck", right, L["Disable black outline around text"])
+    local textBackdropCheck = MakeCheck("MSUF_TextBackdropCheck", right, L["Add text shadow (backdrop)"])
     boldCheck:ClearAllPoints()
     boldCheck:SetPoint("TOPLEFT", secStyle, "BOTTOMLEFT", -2, -8)
     noOutlineCheck:ClearAllPoints()
@@ -480,9 +482,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     colorsLine:ClearAllPoints()
     colorsLine:SetPoint("TOPLEFT", secColors, "BOTTOMLEFT", -16, -4)
     colorsLine:SetWidth(286)
-    local nameClassColorCheck = MakeCheck("MSUF_NameClassColorCheck", right, "Color player names by class")
-    local npcNameRedCheck = MakeCheck("MSUF_NPCNameRedCheck", right, "Color NPC/boss names using NPC colors")
-    local powerTextColorByTypeCheck = MakeCheck("MSUF_PowerTextColorByTypeCheck", right, "Color power text by power type")
+    local nameClassColorCheck = MakeCheck("MSUF_NameClassColorCheck", right, L["Color player names by class"])
+    local npcNameRedCheck = MakeCheck("MSUF_NPCNameRedCheck", right, L["Color NPC/boss names using NPC colors"])
+    local powerTextColorByTypeCheck = MakeCheck("MSUF_PowerTextColorByTypeCheck", right, L["Color power text by power type"])
     nameClassColorCheck:ClearAllPoints()
     nameClassColorCheck:SetPoint("TOPLEFT", colorsLine, "BOTTOMLEFT", 14, -8)
     npcNameRedCheck:ClearAllPoints()
@@ -501,7 +503,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     namesLine:ClearAllPoints()
     namesLine:SetPoint("TOPLEFT", secNames, "BOTTOMLEFT", -16, -4)
     namesLine:SetWidth(286)
-    local shortenNamesCheck = MakeCheck("MSUF_ShortenNamesCheck", right, "Shorten unit names (except Player)")
+    local shortenNamesCheck = MakeCheck("MSUF_ShortenNamesCheck", right, L["Shorten unit names (except Player)"])
     shortenNamesCheck:ClearAllPoints()
     shortenNamesCheck:SetPoint("TOPLEFT", namesLine, "BOTTOMLEFT", 14, -8)
     -- Truncation style dropdown
@@ -509,7 +511,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     if not shortenNameClipSideLabel then
         shortenNameClipSideLabel = right:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         right.MSUF_ShortenNameClipSideLabel = shortenNameClipSideLabel
-        shortenNameClipSideLabel:SetText("Truncation style")
+        shortenNameClipSideLabel:SetText(L["Truncation style"])
     end
     shortenNameClipSideLabel:ClearAllPoints()
     shortenNameClipSideLabel:SetPoint("TOPLEFT", shortenNamesCheck, "BOTTOMLEFT", 16, -10)
@@ -517,8 +519,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     shortenNameClipSideDrop:ClearAllPoints()
     shortenNameClipSideDrop:SetPoint("TOPLEFT", shortenNameClipSideLabel, "BOTTOMLEFT", -16, -2)
     local function GetClipSideLabel(value)
-        if value == "RIGHT" then  return "Keep start (show first letters)" end
-         return "Keep end (show last letters)"
+        if value == "RIGHT" then  return L["Keep start (show first letters)"] end
+         return L["Keep end (show last letters)"]
     end
     -- Sliders (use OptionsSliderTemplate for the two legacy controls)
     local shortenNameMaxCharsSlider = _G["MSUF_ShortenNameMaxCharsSlider"]
@@ -531,7 +533,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if MSUF_StyleSlider then MSUF_StyleSlider(shortenNameMaxCharsSlider) end
         _G["MSUF_ShortenNameMaxCharsSliderLow"]:SetText("6")
         _G["MSUF_ShortenNameMaxCharsSliderHigh"]:SetText("30")
-        _G["MSUF_ShortenNameMaxCharsSliderText"]:SetText("Max name length")
+        _G["MSUF_ShortenNameMaxCharsSliderText"]:SetText(L["Max name length"])
     end
     shortenNameMaxCharsSlider:ClearAllPoints()
     shortenNameMaxCharsSlider:SetPoint("TOPLEFT", shortenNameClipSideDrop, "BOTTOMLEFT", 16, -12)
@@ -545,7 +547,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if MSUF_StyleSlider then MSUF_StyleSlider(shortenNameFrontMaskSlider) end
         _G["MSUF_ShortenNameFrontMaskSliderLow"]:SetText("0")
         _G["MSUF_ShortenNameFrontMaskSliderHigh"]:SetText("40")
-        _G["MSUF_ShortenNameFrontMaskSliderText"]:SetText("Reserved space")
+        _G["MSUF_ShortenNameFrontMaskSliderText"]:SetText(L["Reserved space"])
     end
     shortenNameFrontMaskSlider:ClearAllPoints()
     shortenNameFrontMaskSlider:SetPoint("TOPLEFT", shortenNameMaxCharsSlider, "BOTTOMLEFT", 0, -20)
@@ -596,7 +598,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         local t = _G["MSUF_ShortenNameFrontMaskSliderText"]
         if t and t.SetText then
             if (not shortenEnabled) then
-                t:SetText("Reserved space")
+                t:SetText(L["Reserved space"])
             elseif side == "RIGHT" then
                 t:SetText("Reserved space (unused)")
             else
@@ -667,8 +669,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             info.checked = (current == value)
             UIDropDownMenu_AddButton(info, level)
          end
-        AddOption("Keep end (show last letters)", "LEFT")
-        AddOption("Keep start (show first letters)", "RIGHT")
+        AddOption(L["Keep end (show last letters)"], "LEFT")
+        AddOption(L["Keep start (show first letters)"], "RIGHT")
      end)
     -- Scripts (checkboxes)
     boldCheck:SetScript("OnClick", function(self)

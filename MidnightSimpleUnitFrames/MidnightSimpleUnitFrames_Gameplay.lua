@@ -118,6 +118,20 @@ local function EnsureGameplayDefaults()
 
     local g = MSUF_DB.gameplay
 
+<<<<<<< HEAD
+    -- Crosshair range coloring: the user selects a spell manually (no auto-pick).
+    -- Keep defaults only when nil; never overwrite saved selections.
+    if g.crosshairRangeColorCheck == nil then
+        g.crosshairRangeColorCheck = false
+    end
+    if g.crosshairRangeSpellID == nil then
+        g.crosshairRangeSpellID = 0
+    end
+    if g.meleeRangeSpellID == nil then
+        g.meleeRangeSpellID = 0
+    end
+=======
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
     if g.nameplateMeleeSpellID == nil then
         g.nameplateMeleeSpellID = 0
     end
@@ -566,6 +580,13 @@ local MSUF_CrosshairHasValidTarget
 local MSUF_RefreshCrosshairRangeTaskEnabled
 local MSUF_RequestCrosshairRangeRefresh
 local EnsureFirstDanceTaskRegistered
+
+-- Spell range API (event-driven only; never poll IsSpellInRange).
+local MSUF_CrosshairApplyColorNow -- forward-declared below
+local _MSUF_HasSpellRangeAPI = (C_Spell and type(C_Spell.EnableSpellRangeCheck) == "function") or false
+local _MSUF_EnableSpellRangeCheck = _MSUF_HasSpellRangeAPI and C_Spell.EnableSpellRangeCheck or nil
+local _MSUF_GetSpellIDForSpellIdentifier = (C_Spell and type(C_Spell.GetSpellIDForSpellIdentifier) == "function") and C_Spell.GetSpellIDForSpellIdentifier or nil
+
 -- Resolve the spell ID used for crosshair melee-range checks, with robust fallbacks.
 local function MSUF_ResolveCrosshairRangeSpellIDFromGameplay(g)
     if type(g) ~= "table" then return 0 end
@@ -604,6 +625,33 @@ end
 -- Cache crosshair runtime flags from gameplay DB so hotpaths don't repeatedly look up DB keys.
 local function MSUF_CrosshairSyncRangeCacheFromGameplay(g)
     if not combatCrosshairFrame then return end
+<<<<<<< HEAD
+    if type(g) ~= "table" then
+        g = GetGameplayDBFast()
+    end
+
+    -- Event-driven only: the user provides the spell (no auto-selection, no polling).
+    local want = ((g.enableCombatCrosshairMeleeRangeColor == true) or (g.crosshairRangeColorCheck == true)) and true or false
+    local spellID = (want and MSUF_ResolveCrosshairRangeSpellIDFromGameplay(g)) or 0
+    if (not _MSUF_HasSpellRangeAPI) or spellID <= 0 then
+        want = false
+        spellID = 0
+    end
+
+    combatCrosshairFrame._msufUseRangeColor = want
+    combatCrosshairFrame._msufRangeSpellID = spellID
+
+    -- Cache colors for hotpaths (avoid table indexing in SPELL_RANGE_CHECK_UPDATE).
+    local tin = g.crosshairInRangeColor
+    combatCrosshairFrame._msufInR = (tin and tin[1]) or 0
+    combatCrosshairFrame._msufInG = (tin and tin[2]) or 1
+    combatCrosshairFrame._msufInB = (tin and tin[3]) or 0
+
+    local tout = g.crosshairOutRangeColor
+    combatCrosshairFrame._msufOutR = (tout and tout[1]) or 1
+    combatCrosshairFrame._msufOutG = (tout and tout[2]) or 0
+    combatCrosshairFrame._msufOutB = (tout and tout[3]) or 0
+=======
 
     combatCrosshairFrame._msufCrosshairEnabled = (g and g.enableCombatCrosshair) and true or false
 
@@ -625,7 +673,37 @@ local function MSUF_CrosshairSyncRangeCacheFromGameplay(g)
     combatCrosshairFrame._msufOutRangeB = (outT and outT[3]) or 0
     -- Dynamic interval: fast while it matters (combat + valid target); otherwise we keep the task disabled.
     combatCrosshairFrame._msufRangeTickInterval = 0.25
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
 end
+
+-- Apply crosshair color based on the last known range state.
+-- Unknown / no data => use the "in range" color to avoid stuck-red on target swaps.
+MSUF_CrosshairApplyColorNow = function()
+    local f = combatCrosshairFrame
+    if not f or not f.horiz or not f.vert then
+        return
+    end
+
+    local inRange = true
+    if f._msufUseRangeColor == true and f._msufLastInRange == false then
+        inRange = false
+    end
+
+    local r, g, b
+    if inRange then
+        r = f._msufInR or 0
+        g = f._msufInG or 1
+        b = f._msufInB or 0
+    else
+        r = f._msufOutR or 1
+        g = f._msufOutG or 0
+        b = f._msufOutB or 0
+    end
+
+    f.horiz:SetColorTexture(r, g, b, 0.9)
+    f.vert:SetColorTexture(r, g, b, 0.9)
+end
+
 
 
 
@@ -913,6 +991,60 @@ local function MSUF_CombatState_OnEvent(_, event)
     if duration < 0.1 then
         duration = 0.1
     end
+<<<<<<< HEAD
+                if event == "PLAYER_REGEN_DISABLED" then
+                    combatCrosshairFrame:Show()
+                    if MSUF_RequestCrosshairRangeRefresh then
+                        MSUF_RequestCrosshairRangeRefresh()
+                    end
+                elseif event == "PLAYER_REGEN_ENABLED" then
+                    combatCrosshairFrame:Hide()
+                    if MSUF_RefreshCrosshairRangeTaskEnabled then
+                        MSUF_RefreshCrosshairRangeTaskEnabled()
+                    end
+                elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_LOGIN" then
+                    local inCombat = ((InCombatLockdown and InCombatLockdown()) or (UnitAffectingCombat and UnitAffectingCombat("player")) or false)
+                    combatCrosshairFrame:SetShown(inCombat)
+                    if MSUF_RequestCrosshairRangeRefresh then
+                        MSUF_RequestCrosshairRangeRefresh()
+                    end
+                elseif event == "PLAYER_TARGET_CHANGED" then
+                    combatCrosshairFrame._msufLastInRange = nil
+                    if MSUF_RefreshCrosshairRangeTaskEnabled then
+                        MSUF_RefreshCrosshairRangeTaskEnabled()
+                    end
+                    if MSUF_CrosshairApplyColorNow then
+                        MSUF_CrosshairApplyColorNow()
+                    end
+                elseif event == "SPELL_RANGE_CHECK_UPDATE" then
+                    local spellIdentifier, isInRange, checksRange = ...
+                    if combatCrosshairFrame._msufUseRangeColor == true then
+                        local enabledID = tonumber(combatCrosshairFrame._msufRangeCheckEnabledSpellID) or 0
+                        if enabledID > 0 then
+                            local sid = tonumber(spellIdentifier)
+                            if (not sid) and _MSUF_GetSpellIDForSpellIdentifier then
+                                sid = _MSUF_GetSpellIDForSpellIdentifier(spellIdentifier)
+                            end
+                            if sid == enabledID then
+                                local checks = (checksRange == true) or (checksRange == 1)
+                                if not checks then
+                                    if combatCrosshairFrame._msufLastInRange ~= nil then
+                                        combatCrosshairFrame._msufLastInRange = nil
+                                        MSUF_CrosshairApplyColorNow()
+                                    end
+                                else
+                                    local inR = (isInRange == true) or (isInRange == 1)
+                                    if combatCrosshairFrame._msufLastInRange ~= inR then
+                                        combatCrosshairFrame._msufLastInRange = inR
+                                        MSUF_CrosshairApplyColorNow()
+                                    end
+                                end
+                            end
+                        end
+                    end
+                elseif event == "DISPLAY_SIZE_CHANGED" or event == "CVAR_UPDATE" then
+                    -- Anchor can depend on personal nameplate CVars and screen size.
+=======
 
     if event == "PLAYER_REGEN_DISABLED" then
         -- Enter combat: "+Combat"
@@ -1239,6 +1371,7 @@ local function EnsureCombatCrosshair()
                     combatCrosshairFrame:Hide()
                     MSUF_RequestCrosshairRangeRefresh()
                 elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_LOGIN" then
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
                     MSUF_AnchorCombatCrosshair()
                     combatCrosshairFrame:SetShown(inCombat)
                     MSUF_RequestCrosshairRangeRefresh()
@@ -1306,6 +1439,11 @@ local function EnsureCombatCrosshair()
             combatCrosshairFrame.vert:SetSize(thickness, size)
         end
 
+<<<<<<< HEAD
+        -- Sync cached settings/colors and apply the current (event-driven) color.
+        MSUF_CrosshairSyncRangeCacheFromGameplay(g)
+        MSUF_CrosshairApplyColorNow()
+=======
         -- Apply dynamic range color (or legacy green if disabled)
         MSUF_CrosshairSyncRangeCacheFromGameplay(g)
         MSUF_UpdateCombatCrosshairRangeColor()
@@ -1379,6 +1517,7 @@ else
     end
 end
 
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
     end
 
     return combatCrosshairFrame
@@ -1771,6 +1910,53 @@ local function MSUF_BuildMeleeSpellCache()
     Step()
 end
 
+<<<<<<< HEAD
+-- Crosshair range coloring (event-driven; no polling).
+-- The user selects the melee spell manually via the Gameplay options UI.
+MSUF_CrosshairHasValidTarget = function()
+    if not UnitExists or not UnitExists("target") then
+        return false
+    end
+    if UnitIsDeadOrGhost and UnitIsDeadOrGhost("target") then
+        return false
+    end
+    if UnitCanAttack and not UnitCanAttack("player", "target") then
+        return false
+    end
+    return true
+end
+
+local function MSUF_CrosshairSetSpellRangeEnabled(spellID)
+    if not combatCrosshairFrame or not _MSUF_EnableSpellRangeCheck then
+        return
+    end
+
+    local want = tonumber(spellID) or 0
+    local cur  = tonumber(combatCrosshairFrame._msufRangeCheckEnabledSpellID) or 0
+    if want == cur then
+        return
+    end
+
+    if cur > 0 then
+        _MSUF_EnableSpellRangeCheck(cur, false)
+    end
+    if want > 0 then
+        _MSUF_EnableSpellRangeCheck(want, true)
+    end
+
+    combatCrosshairFrame._msufRangeCheckEnabledSpellID = want
+    combatCrosshairFrame._msufLastInRange = nil
+end
+
+local function MSUF_SetCrosshairRangeTaskEnabled(enabled)
+    if not combatCrosshairEventFrame then
+        return
+    end
+    if enabled then
+        combatCrosshairEventFrame:RegisterEvent("SPELL_RANGE_CHECK_UPDATE")
+    else
+        combatCrosshairEventFrame:UnregisterEvent("SPELL_RANGE_CHECK_UPDATE")
+=======
 -- Track which spell IDs currently have range checks enabled (base + potential override)
 local MSUF_LastEnabledMeleeRangeSpellID = 0
 local MSUF_LastEnabledMeleeRangeSpellID_Override = 0
@@ -1862,16 +2048,48 @@ local function MSUF_SetCrosshairRangeTaskEnabled(enabled)
     local um = MSUF_GetUpdateManager()
     if um and um.SetEnabled then
         um:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", enabled and true or false)
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
     end
 end
 
 MSUF_RefreshCrosshairRangeTaskEnabled = function()
+<<<<<<< HEAD
+    if not combatCrosshairFrame then
+=======
     -- Hard-disable background work unless everything is in the "fast path" state.
     if not combatCrosshairFrame or not combatCrosshairFrame.IsShown or (not combatCrosshairFrame:IsShown()) then
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
         MSUF_SetCrosshairRangeTaskEnabled(false)
         return
     end
 
+<<<<<<< HEAD
+    local shown = combatCrosshairFrame:IsShown()
+    local use   = (combatCrosshairFrame._msufUseRangeColor == true)
+    local spellID = tonumber(combatCrosshairFrame._msufRangeSpellID) or 0
+
+    local want = shown and use and (spellID > 0) and MSUF_CrosshairHasValidTarget()
+    MSUF_SetCrosshairRangeTaskEnabled(want)
+
+    if want then
+        MSUF_CrosshairSetSpellRangeEnabled(spellID)
+    else
+        MSUF_CrosshairSetSpellRangeEnabled(0)
+    end
+end
+
+MSUF_RequestCrosshairRangeRefresh = function()
+    local g = GetGameplayDBFast()
+    if combatCrosshairFrame then
+        MSUF_CrosshairSyncRangeCacheFromGameplay(g)
+    end
+    if MSUF_RefreshCrosshairRangeTaskEnabled then
+        MSUF_RefreshCrosshairRangeTaskEnabled()
+    end
+    if MSUF_CrosshairApplyColorNow then
+        MSUF_CrosshairApplyColorNow()
+    end
+=======
     -- Keep event registration minimal: only listen for range updates when range-color is active.
     if combatCrosshairEventFrame then
         if combatCrosshairFrame._msufUseRangeColor then
@@ -1910,6 +2128,7 @@ local function MSUF_RunCrosshairRangeRefresh()
 
     MSUF_UpdateCombatCrosshairRangeColor()
     MSUF_RefreshCrosshairRangeTaskEnabled()
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
 end
 
 MSUF_RequestCrosshairRangeRefresh = function()
@@ -1927,6 +2146,9 @@ end
 -- Update combat crosshair color based on melee range to current target.
 -- Uses the shared melee spell ID.
 MSUF_UpdateCombatCrosshairRangeColor = function()
+<<<<<<< HEAD
+    MSUF_RequestCrosshairRangeRefresh()
+=======
     if not combatCrosshairFrame or not combatCrosshairFrame.horiz or not combatCrosshairFrame.vert then
         return
     end
@@ -2004,7 +2226,19 @@ MSUF_UpdateCombatCrosshairRangeColor = function()
             combatCrosshairFrame._msufLastInRange = nil
         end
     end
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
 end
+
+-- Compatibility shim for older menu code paths / prior builds.
+-- Does NOT modify SavedVariables; it only refreshes spell-range-check enabling.
+_G.MSUF_SetEnabledMeleeRangeCheck = function(spellID)
+    if combatCrosshairFrame then
+        combatCrosshairFrame._msufRangeSpellID = tonumber(spellID) or 0
+        combatCrosshairFrame._msufLastInRange = nil
+    end
+    MSUF_RequestCrosshairRangeRefresh()
+end
+
 ------------------------------------------------------
 -- Public helpers for main addon
 ------------------------------------------------------
@@ -2125,19 +2359,19 @@ local function MSUF_Gameplay_ApplyCombatCrosshair(g)
             combatCrosshairEventFrame:UnregisterAllEvents()
         end
 
-        -- Off means off: stop any range-color background task too
-        local umRange = MSUF_GetUpdateManager()
-        if umRange and umRange.SetEnabled then
-            umRange:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", false)
-        end
-
         if combatCrosshairFrame then
+<<<<<<< HEAD
+            -- Hard-disable any spell range check when the crosshair feature is off.
+            MSUF_CrosshairSetSpellRangeEnabled(0)
+            combatCrosshairFrame._msufLastInRange = nil
+=======
             -- Ensure we do not keep any spell-range-check enabled when the crosshair is disabled.
             local lastEnabled = combatCrosshairFrame._msufRangeCheckEnabledSpellID or 0
             if lastEnabled > 0 then
                 MSUF_SetEnabledMeleeRangeCheck(0)
                 combatCrosshairFrame._msufRangeCheckEnabledSpellID = 0
             end
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
             combatCrosshairFrame:Hide()
         end
     end

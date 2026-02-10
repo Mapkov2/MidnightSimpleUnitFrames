@@ -220,7 +220,11 @@ local function EnsureUnitAuraBinding(eventFrame)
     -- keep PLAYER_LOGIN/PLAYER_ENTERING_WORLD registered so we can finalize
     -- proper UNIT_AURA bindings once DB pointers are ready.
     if not (c and c.ready == true) then
+<<<<<<< HEAD
+        ApplyOwnedEvents(ef, {
+=======
         ApplyOwnedEvents(eventFrame, {
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
             PLAYER_LOGIN = "Core",
             PLAYER_ENTERING_WORLD = "Core",
         })

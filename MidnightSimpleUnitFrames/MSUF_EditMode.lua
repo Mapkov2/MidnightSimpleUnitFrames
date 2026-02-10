@@ -1,3 +1,5 @@
+local ADDON_NAME = "MidnightSimpleUnitFrames"
+local L = LibStub("AceLocale-3.0"):GetLocale(ADDON_NAME, true)
 local addonName, ns = ...
 ns = ns or {}
 _G.MSUF_NS = _G.MSUF_NS or ns
@@ -2204,7 +2206,7 @@ local function MSUF_CreateGridFrame()
     local aName = alphaSlider:GetName()
     _G[aName .. "Low"]:SetText("10%")
     _G[aName .. "High"]:SetText("80%")
-    _G[aName .. "Text"]:SetText("Edit Mode Background")
+    _G[aName .. "Text"]:SetText(L["Edit Mode Background"])
 
     alphaSlider:SetScript("OnValueChanged", function(self, value) 
         if value < 0.1 then
@@ -2235,7 +2237,7 @@ local function MSUF_CreateGridFrame()
     local gName = gridSlider:GetName()
     _G[gName .. "Low"]:SetText("8")
     _G[gName .. "High"]:SetText("64")
-    _G[gName .. "Text"]:SetText("Grid Size (px)")
+    _G[gName .. "Text"]:SetText(L["Grid Size (px)"])
 
     gridSlider:SetScript("OnValueChanged", function(self, value) 
         RebuildGrid(value)
@@ -2248,7 +2250,7 @@ local function MSUF_CreateGridFrame()
 
     local function UpdateArrowsUI() 
         local hideArrows = MSUF_EM_GetHideWhiteArrows()
-        arrowsBtn:SetText(hideArrows and "Arrows: OFF" or "Arrows: ON")
+        arrowsBtn:SetText(hideArrows and L["Arrows: OFF"] or L["Arrows: ON"])
 
         local fs = arrowsBtn:GetFontString()
         if fs and fs.SetTextColor then
@@ -2283,9 +2285,9 @@ local function MSUF_CreateGridFrame()
 
     local function UpdateModeButtonVisual() 
         if MSUF_EditModeSizing then
-            modeBtn:SetText("MODE: SIZE")
+            modeBtn:SetText(L["MODE: SIZE"])
         else
-            modeBtn:SetText("MODE: POSITION")
+            modeBtn:SetText(L["MODE: POSITION"])
         end
     end
 
@@ -2299,7 +2301,7 @@ local function MSUF_CreateGridFrame()
 
     UpdateModeButtonVisual()
 
-    local anchorCheck = ns.MSUF_EM_UIH.TextCheck(f, "MSUF_EditModeAnchorToCooldownCheck", "TOP", modeBtn, "BOTTOM", 0, -8, "Anchor Cooldownmanager")
+    local anchorCheck = ns.MSUF_EM_UIH.TextCheck(f, "MSUF_EditModeAnchorToCooldownCheck", "TOP", modeBtn, "BOTTOM", 0, -8, L["Anchor Cooldownmanager"])
     MSUF_EM_EnsureDB()
     anchorCheck:SetChecked(MSUF_DB and MSUF_DB.general and MSUF_DB.general.anchorToCooldown)
 
@@ -2321,7 +2323,7 @@ local function MSUF_CreateGridFrame()
 
     local anchorNameLabel = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     anchorNameLabel:SetPoint("TOP", anchorCheck, "BOTTOM", 0, -6)
-    anchorNameLabel:SetText("Custom anchor frame name (/fstack)")
+    anchorNameLabel:SetText(L["Custom anchor frame name (/fstack)"])
 
     local anchorNameInput = CreateFrame("EditBox", "MSUF_EditModeAnchorNameInput", f, "InputBoxTemplate")
     anchorNameInput:SetSize(210, 20)
@@ -2354,7 +2356,7 @@ local function MSUF_CreateGridFrame()
         if type(an) == "string" and an ~= "" then
             v = an
         end
-        currentAnchorFS:SetText("Current: " .. tostring(v))
+        currentAnchorFS:SetText(L["Current: "] .. tostring(v))
     end
 
     f._msufUpdateCurrentAnchorDisplay = UpdateCurrentAnchorDisplay
@@ -2556,7 +2558,7 @@ if not f._msufEditUnitSelectorBuilt then
 
     local label = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     label:SetPoint("LEFT", row, "LEFT", 0, 1)
-    label:SetText("Edit Unit:")
+    label:SetText(L["Edit Unit:"])
     f._msufEditUnitLabel = label
 
     local prevBtn = ns.MSUF_EM_UIH.Button(row, nil, 24, 22, "<", "UIPanelButtonTemplate")
@@ -2649,7 +2651,7 @@ local exitBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeExitButton", 180, 24, nil
     local _msufActionRowXShift = 0
     exitBtn:ClearAllPoints()
     exitBtn:SetPoint("TOPRIGHT", _msufExitAnchor, "BOTTOMRIGHT", -6 + _msufActionRowXShift, _msufActionRowYOffset)
-    exitBtn:SetText("Exit MSUF Edit Mode")
+    exitBtn:SetText(L["Exit MSUF Edit Mode"])
 
     MSUF_EM_ForceWhiteButtonText(exitBtn)
 if not StaticPopupDialogs then StaticPopupDialogs = {} end
@@ -2673,7 +2675,7 @@ end
 local cancelBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeCancelButton", 140, 22, nil, "UIPanelButtonTemplate")
 cancelBtn:ClearAllPoints()
 cancelBtn:SetPoint("TOP", _msufExitAnchor, "BOTTOM", 0 + _msufActionRowXShift, _msufActionRowYOffset)
-cancelBtn:SetText("Cancel Changes")
+cancelBtn:SetText(L["Cancel Changes"])
 
 MSUF_EM_ForceWhiteButtonText(cancelBtn)
 cancelBtn:SetScript("OnClick", function() 
@@ -2792,7 +2794,7 @@ exitBtn:SetScript("OnClick", function()
 local resetBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeResetButton", 140, 22, nil, "UIPanelButtonTemplate")
     resetBtn:ClearAllPoints()
     resetBtn:SetPoint("TOPRIGHT", _msufExitAnchor, "BOTTOMRIGHT", -6 + _msufActionRowXShift, _msufActionRowYOffset)
-    resetBtn:SetText("Reset Frame")
+    resetBtn:SetText(L["Reset Frame"])
 
     -- Exit goes to the right of Reset (Reset takes the old Exit spot)
     exitBtn:ClearAllPoints()
@@ -2833,9 +2835,9 @@ MSUF_EM_ForceWhiteButtonText(resetBtn)
                 fs:SetJustifyH("CENTER")
                 return fs
             end
-            f._msufLayoutHeaders.positioning = MakeHeader("Positioning")
-            f._msufLayoutHeaders.overlay     = MakeHeader("Overlay")
-            f._msufLayoutHeaders.frames      = MakeHeader("Frames")
+            f._msufLayoutHeaders.positioning = MakeHeader(L["Positioning"])
+            f._msufLayoutHeaders.overlay     = MakeHeader(L["Overlay"])
+            f._msufLayoutHeaders.frames      = MakeHeader(L["Frames"])
         end
 
         local posHeader     = f._msufLayoutHeaders.positioning
@@ -2917,7 +2919,7 @@ anchorCheck:SetPoint("LEFT", anchorNameInput, "RIGHT", 10, -1)
         bossPreviewCheck:ClearAllPoints()
         bossPreviewCheck:SetScale(0.9)
         if bossPreviewCheck.text and bossPreviewCheck.text.SetText then
-            bossPreviewCheck.text:SetText("Boss Preview")
+            bossPreviewCheck.text:SetText(L["Boss Preview"])
         end
 
         local unitToggle = f._msufEditUnitToggleBtn
@@ -2939,7 +2941,7 @@ anchorCheck:SetPoint("LEFT", anchorNameInput, "RIGHT", 10, -1)
             auraPreviewCheck:ClearAllPoints()
             auraPreviewCheck:SetScale(0.9)
             if auraPreviewCheck.text and auraPreviewCheck.text.SetText then
-                auraPreviewCheck.text:SetText("Aura Preview")
+                auraPreviewCheck.text:SetText(L["Aura Preview"])
             end
             auraPreviewCheck:SetPoint("BOTTOMLEFT", bossPreviewCheck, "TOPLEFT", 0, 2)
 	        auraPreviewCheck:Show()
@@ -3025,7 +3027,7 @@ local function MSUF_UpdateEditModeInfo()
     if MSUF_EditModeSizing then
         local w = conf.width or 0
         local h = conf.height or 0
-        textWidget:SetText(string.format("Sizing: %s (W: %d, H: %d)", label, w, h))
+        textWidget:SetText(string.format(L["Sizing: %s (W: %d, H: %d)"], label, w, h))
     else
 
     local x = MSUF_SanitizePopupOffset(conf.offsetX, 0)
@@ -3033,7 +3035,7 @@ local function MSUF_UpdateEditModeInfo()
     -- Auto-repair corrupted offsets so the UI and DB stay sane.
     if conf.offsetX ~= x then conf.offsetX = x end
     if conf.offsetY ~= y then conf.offsetY = y end
-        textWidget:SetText(string.format("Editing: %s (X: %d, Y: %d)", label, x, y))
+        textWidget:SetText(string.format(L["Editing: %s (X: %d, Y: %d)"], label, x, y))
     end
 
     if MSUF_GridFrame.modeHint then

@@ -2,10 +2,23 @@
 ## Title: Midnight Simple Unit Frames
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko 
+<<<<<<< HEAD
+## Version: 2.0 Alpha 3
+## SavedVariables: MSUF_DB
+=======
 ## Version: 2.0 Alpha 4
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## X-Wago-ID: XKq9aoKy
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
+
+
+
+#Locales
+Locales\enUS.lua
+Locales\zhCN.lua
+
+
 
 MSUF_Libs.lua
 MSUF_Util.lua

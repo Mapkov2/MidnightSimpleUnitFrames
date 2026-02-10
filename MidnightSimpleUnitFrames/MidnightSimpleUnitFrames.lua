@@ -2450,6 +2450,31 @@ if not _G.MSUF_AlphaEventFrame then
         MSUF_DoAlphaRefresh()
      end)
 end
+<<<<<<< HEAD
+
+-- ---------------------------------------------------------------------------
+-- RangeFade was extracted to Core/MSUF_RangeFade.lua for line reduction.
+-- Keep tiny compatibility stubs so alpha code can always query a multiplier.
+_G.MSUF_RangeFadeMul = _G.MSUF_RangeFadeMul or {}
+if type(_G.MSUF_GetRangeFadeMul) ~= "function" then
+    function _G.MSUF_GetRangeFadeMul(key, unit, frame)
+        local t = _G.MSUF_RangeFadeMul
+        if not t then return 1 end
+        local v = t[key]
+        if type(v) == "number" then
+            return v
+        end
+        if unit then
+            v = t[unit]
+            if type(v) == "number" then
+                return v
+            end
+        end
+        return 1
+    end
+end
+=======
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
 
 local function MSUF_InitPlayerCastbarPreviewToggle()
     if not MSUF_DB or not MSUF_DB.general then
@@ -6214,6 +6239,16 @@ end
     end
     end
 
+<<<<<<< HEAD
+
+
+-- RangeFade init moved to Core/MSUF_RangeFade.lua (no behavior change)
+if type(_G.MSUF_RangeFade_InitPostLogin) == "function" then
+    _G.MSUF_RangeFade_InitPostLogin()
+end
+
+    do
+=======
     -- Auras2 bootstrap: build cache + register events + render once.
     -- Without this, auras can appear to be "dead" until an external trigger (Edit Mode / manual toggle / first UNIT_AURA).
     if type(_G.MSUF_Auras2_RefreshAll) == "function" then
@@ -6228,6 +6263,7 @@ end
     end
 
 do
+>>>>>>> c664e36bd103788bd223dbc068a7efc0a9e9b788
         local function MSUF_MarkToTDirty()
             local tot = UnitFrames and UnitFrames["targettarget"]
             if tot then
