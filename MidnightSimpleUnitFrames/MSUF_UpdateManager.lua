@@ -96,6 +96,21 @@ if type(UM._timerWakeFn) ~= "function" then
         UM:_ScheduleNext()
      end
 end
+
+-- =============================================================
+-- Frame-local time cache for bursty Kick() calls.
+--
+-- Rationale (perf): If many systems call Kick() in the same frame (e.g. aura
+-- bursts, multi-unit dirty flush), repeated GetTime() C-API calls add overhead.
+-- We cache a single "now" for the current frame and clear it next frame using
+-- a static timer callback (no per-Kick closure allocation).
+-- =============================================================
+if type(UM._clearKickNowFn) ~= "function" then
+    UM._clearKickNowFn = function()
+        UM._kickNow = nil
+        UM._kickNowPending = nil
+    end
+end
 -- Optional: for the rare client path where we can only use After() (no cancellable handle),
 -- we may need an earlier wake than the pending After. We do that via a short-lived OnUpdate
 -- that only checks a single timestamp (no scanning) and then returns to normal scheduling.
@@ -529,7 +544,22 @@ function UM:Kick(name)
     elseif self.activeIndex and not self.activeIndex[name] then
         self:_Activate(name)
     end
-    local now = (GetTime and GetTime()) or 0
+    -- Perf: cache GetTime() once per frame for bursty Kick() callers.
+    local now = self._kickNow
+    if type(now) ~= "number" then
+        now = (GetTime and GetTime()) or 0
+        self._kickNow = now
+        if not self._kickNowPending then
+            self._kickNowPending = true
+            if C_Timer then
+                if C_Timer.After then
+                    C_Timer.After(0, self._clearKickNowFn)
+                elseif C_Timer.NewTimer then
+                    C_Timer.NewTimer(0, self._clearKickNowFn)
+                end
+            end
+        end
+    end
     e.next = now
     -- Cancel any cancellable timer and wake via OnUpdate.
     -- (Kick intentionally does NOT execute the task immediately.)
