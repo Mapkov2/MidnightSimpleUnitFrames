@@ -1263,6 +1263,10 @@ local function fill(key, defaults)
         height    = 30,
         offsetX   = -275,
         offsetY   = -250,
+        -- Pet-only: optional relative anchor for positioning.
+        -- "GLOBAL" keeps the classic behavior (anchored to the MSUF global anchor).
+        -- Other supported values: "player", "target".
+        anchorToUnitframe = "GLOBAL",
         showName  = true,
         showLevelIndicator = true,
         showHP    = true,

@@ -3532,6 +3532,16 @@ local function PositionUnitFrame(f, unit)
     end
     if not conf then  return end
     local anchor = MSUF_GetAnchorFrame()
+    -- Pet-only: allow anchoring the pet frame relative to Player/Target.
+    -- This is a pure anchor swap; offsets remain the same (measured from the chosen anchor).
+    if key == "pet" and conf and (conf.anchorToUnitframe == "player" or conf.anchorToUnitframe == "target") then
+        local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
+        if conf.anchorToUnitframe == "player" then
+            anchor = (uf and (uf.player or uf["player"])) or _G.MSUF_player or anchor
+        elseif conf.anchorToUnitframe == "target" then
+            anchor = (uf and (uf.target or uf["target"])) or _G.MSUF_target or anchor
+        end
+    end
     local ecv = _G["EssentialCooldownViewer"]
     if MSUF_DB and MSUF_DB.general and MSUF_DB.general.anchorToCooldown and ecv and anchor == ecv then
         local rule = MSUF_ECV_ANCHORS[key]
@@ -6563,7 +6573,7 @@ end
     if type(MSUF_InitPlayerCastbarPreviewToggle) == "function" then
         C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
     end
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 2.0 Beta 2 |cff565f89•|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 2.0 Beta 1 |cff565f89•|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
  end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then

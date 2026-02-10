@@ -1426,6 +1426,27 @@ end
 		panel.playerBossSpacingSlider = panel.playerBossSpacingSlider or CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", textGroup, -200, 0, 1, 12, bossSpacingY)
 		FinalizeCompactSlider(panel.playerBossSpacingSlider, (rightW - 24))
 		panel.playerBossSpacingSlider:Hide()
+		-- Pet-only: anchor pet frame relative to Player/Target (shown only on pet pages by LayoutIndicatorTemplate)
+		if not panel.petAnchorToLabel then
+			panel.petAnchorToLabel = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			panel.petAnchorToLabel:SetJustifyH("LEFT")
+		end
+		panel.petAnchorToLabel:SetText("Anchor pet to")
+		panel.petAnchorToLabel:Hide()
+		if not panel.petAnchorToDD then
+			local dd = CreateFrame("Frame", "MSUF_PetAnchorToDropDown", textGroup, "UIDropDownMenuTemplate")
+			panel.petAnchorToDD = dd
+			if UIDropDownMenu_SetWidth then
+				UIDropDownMenu_SetWidth(dd, 180)
+			end
+			dd._msufDropWidth = 180
+			if type(_G.MSUF_ExpandDropdownClickArea) == "function" then
+				_G.MSUF_ExpandDropdownClickArea(dd)
+			elseif type(MSUF_ExpandDropdownClickArea) == "function" then
+				MSUF_ExpandDropdownClickArea(dd)
+			end
+		end
+		panel.petAnchorToDD:Hide()
 		-- Status icons (player/target only; lives in its own box)
 		local statusBox = panel._msufStatusIconsGroup
 		local STATUS_BASE_TOGGLE_Y = -34
@@ -1978,6 +1999,9 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
     if not isFramesTab then
         if panel._msufStatusIconsGroup then panel._msufStatusIconsGroup:Hide() end
         if panel.playerLeaderIndicatorHeader then panel.playerLeaderIndicatorHeader:Hide() end
+		-- Pet-only widgets inside this template must also be hard-hidden outside the Frames tab.
+		if panel.petAnchorToLabel then panel.petAnchorToLabel:Hide() end
+		if panel.petAnchorToDD then panel.petAnchorToDD:Hide() end
         for _, spec in pairs(_MSUF_INDICATOR_SPECS) do
             SetShownByName(spec.showCB, false)
             SetShownByName(spec.xStepper, false)
@@ -2079,6 +2103,28 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         panel.playerLeaderIndicatorHeader:ClearAllPoints()
         panel.playerLeaderIndicatorHeader:SetPoint("LEFT", firstDivider, "LEFT", 0, 0)
     end
+	-- Pet-only: allow anchoring the pet frame to Player/Target (dropdown lives in the Indicator box).
+	local showPetAnchorTo = (currentKey == "pet") and true or false
+	if panel.petAnchorToLabel then panel.petAnchorToLabel:SetShown(showPetAnchorTo) end
+	if panel.petAnchorToDD then panel.petAnchorToDD:SetShown(showPetAnchorTo) end
+	if showPetAnchorTo then
+		local y = baseToggleY + (row * step) + 6
+		if panel.petAnchorToLabel then
+			panel.petAnchorToLabel:ClearAllPoints()
+			panel.petAnchorToLabel:SetPoint("TOPLEFT", container, "TOPLEFT", 12, y)
+		end
+		if panel.petAnchorToDD then
+			panel.petAnchorToDD:ClearAllPoints()
+			if panel.petAnchorToLabel then
+				panel.petAnchorToDD:SetPoint("TOPLEFT", panel.petAnchorToLabel, "BOTTOMLEFT", -18, -6)
+			else
+				panel.petAnchorToDD:SetPoint("TOPLEFT", container, "TOPLEFT", -6, y - 22)
+			end
+			if panel.petAnchorToDD.SetFrameLevel and container.GetFrameLevel then
+				panel.petAnchorToDD:SetFrameLevel((container:GetFrameLevel() or 0) + 2)
+			end
+		end
+	end
     -- Status icons live in their own box (player/target only).
     local statusBox = panel._msufStatusIconsGroup
     local showStatusIcons = (currentKey == "player" or currentKey == "target") and true or false
@@ -2341,7 +2387,22 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
                 end
             end
         end
-    -- Title: Target of Target uses "Inline Text" (it is not a castbar).
+	-- Pet-only: anchor pet frame relative to Player/Target (dropdown lives in the Indicator box).
+	if panel.petAnchorToDD then
+		local show = (isPetKey and isFramesTab) and true or false
+		panel.petAnchorToDD:SetShown(show)
+		if panel.petAnchorToLabel then panel.petAnchorToLabel:SetShown(show) end
+		if show then
+			local v = conf.anchorToUnitframe
+			if v ~= "player" and v ~= "target" then v = "GLOBAL" end
+			if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.petAnchorToDD, v) end
+			if UIDropDownMenu_SetText then
+				local txt = (v == "player" and "Player frame") or (v == "target" and "Target frame") or "Free (global anchor)"
+				UIDropDownMenu_SetText(panel.petAnchorToDD, txt)
+			end
+		end
+	end
+	-- Title: Target of Target uses "Inline Text" (it is not a castbar).
     -- Pet uses this box for indicator settings, so we hide the "Castbar" title there.
     if panel.playerTextLayoutGroup and panel.playerTextLayoutGroup._msufTitleText then
         local t = panel.playerTextLayoutGroup._msufTitleText
@@ -2870,6 +2931,70 @@ local function MSUF_BindIndicatorRow(spec)
 for _, rowId in ipairs(MSUF_INDICATOR_ORDER) do
     MSUF_BindIndicatorRow(INDICATOR_SPECS[rowId])
 end
+
+-- Pet-only: "Anchor pet to" dropdown (Indicator box)
+if panel.petAnchorToDD and UIDropDownMenu_Initialize then
+    local drop = panel.petAnchorToDD
+    local function GetEffectiveValue(conf)
+        local v = conf and conf.anchorToUnitframe
+        if v == "player" or v == "target" then
+            return v
+        end
+        -- Treat nil/"GLOBAL"/unknown as global anchor.
+        return "GLOBAL"
+    end
+    local function TextFor(v)
+        if v == "player" then return "Player frame" end
+        if v == "target" then return "Target frame" end
+        return "Free (global anchor)"
+    end
+    UIDropDownMenu_Initialize(drop, function(self, level)
+        if not level or level ~= 1 then  return end
+        if not IsFramesTab() then  return end
+        local k = (CurrentKey and CurrentKey()) or "player"
+        if k == "tot" then k = "targettarget" end
+        if k ~= "pet" then  return end
+
+        local conf = EnsureKeyDB()
+        local cur = GetEffectiveValue(conf)
+        local choices = {
+            {"Free (global anchor)", "GLOBAL"},
+            {"Player frame", "player"},
+            {"Target frame", "target"},
+        }
+        for _, pair in ipairs(choices) do
+            local textLabel, value = pair[1], pair[2]
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = textLabel
+            info.value = value
+            info.func = function()
+                if not IsFramesTab() then  return end
+                local conf2 = EnsureKeyDB()
+                conf2.anchorToUnitframe = value
+                if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(drop, value) end
+                if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, textLabel) end
+                if CloseDropDownMenus then CloseDropDownMenus() end
+                -- Apply immediately (PositionUnitFrame uses this field for pet).
+                ApplyCurrent()
+            end
+            info.checked = function()  return (GetEffectiveValue(conf) == value) end
+            info.isNotRadio = false
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    drop:HookScript("OnShow", function()
+        if not IsFramesTab() then  return end
+        local k = (CurrentKey and CurrentKey()) or "player"
+        if k == "tot" then k = "targettarget" end
+        if k ~= "pet" then  return end
+        local conf = EnsureKeyDB()
+        local v = GetEffectiveValue(conf)
+        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(drop, v) end
+        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, TextFor(v)) end
+    end)
+end
+
 -- Status icons (Step 1): Combat row uses indicator-style controls (player/target)
 _G.MSUF_RequestStatusCombatIndicatorRefresh = _G.MSUF_RequestStatusCombatIndicatorRefresh or function()
     ApplyLayoutCurrent("STATUSICON_COMBAT")
