@@ -425,10 +425,27 @@ local function MSUF_A2_AuraFieldIsTrue(aura, field)
 end
 
 local function MSUF_A2_IsBossAura(aura)
-    -- isBossAura is often a boolean, but treat it as string to stay secret-safe.
-    local s = MSUF_A2_AuraFieldToString(aura, "isBossAura")
-    if not s then return false end
-    return MSUF_A2_StringIsTrue(s)
+    -- PERF: C_UnitAuras returns isBossAura as a boolean (true/false) on modern Retail.
+    -- Secret-safe: never touch aura fields when secrets are active.
+    if aura == nil then return false end
+    if _A2_SecretsActive() then return false end
+
+    local v = aura.isBossAura
+    if v == true then
+        return true
+    end
+    if v == false or v == nil then
+        return false
+    end
+
+    -- Compatibility fallback (non-secret): some sources may provide strings/numbers.
+    local tv = type(v)
+    if tv == "string" then
+        return MSUF_A2_StringIsTrue(v)
+    elseif tv == "number" then
+        return v == 1
+    end
+    return false
 end
 
 local function MSUF_A2_MergeBossAuras(playerList, fullList, out, seen, seenKeys, seenN)

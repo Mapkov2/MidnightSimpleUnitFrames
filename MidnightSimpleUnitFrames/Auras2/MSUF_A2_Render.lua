@@ -113,6 +113,34 @@ local _A2_editModeActive = false
 local _A2_editModeCheckAt = 0
 local _A2_EDITMODE_TTL = 0.10 -- seconds
 
+-- Combat latch: Edit Mode polling MUST be completely cold in combat.
+-- We latch combat state via regen events to avoid per-aura InCombatLockdown() calls.
+local _A2_inCombat = false
+do
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_REGEN_DISABLED")
+    f:RegisterEvent("PLAYER_REGEN_ENABLED")
+    f:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            _A2_inCombat = true
+            -- Hard-disable Edit Mode state while in combat (no polling / no preview).
+            _A2_editModeActive = false
+            _A2_editModeCheckAt = 2147483647 -- large sentinel (avoid math.huge in case of weird type coercions)
+        else
+            _A2_inCombat = false
+            -- Allow refresh immediately after leaving combat.
+            _A2_editModeCheckAt = 0
+        end
+    end)
+
+    if InCombatLockdown and InCombatLockdown() then
+        _A2_inCombat = true
+        _A2_editModeActive = false
+        _A2_editModeCheckAt = 2147483647
+    end
+end
+
+
 
 local MSUF_DB
 
@@ -626,6 +654,9 @@ end
 
 
 local function IsEditModeActive()
+    if _A2_inCombat then
+        return false
+    end
     local now = _A2_Now()
     if now < _A2_editModeCheckAt then
         return _A2_editModeActive
