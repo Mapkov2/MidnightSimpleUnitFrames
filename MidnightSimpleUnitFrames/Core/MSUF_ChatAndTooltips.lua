@@ -26,10 +26,10 @@ local function MSUF_DoFullReset(opts)
          return
     end
     print("|cffffff00MSUF:|r Reloading UI to rebuild clean defaults...")
+	-- NOTE: C_UI.Reload() is protected; addons may get ADDON_ACTION_BLOCKED.
+	-- ReloadUI() is the safe public API for addons.
 	if type(ReloadUI) == "function" then
 		ReloadUI()
-	elseif _G.C_UI and type(_G.C_UI.Reload) == "function" then
-		_G.C_UI.Reload()
 	end
  end
 -- Expose for the Slash Menu (button click = hardware event, safe for ReloadUI)

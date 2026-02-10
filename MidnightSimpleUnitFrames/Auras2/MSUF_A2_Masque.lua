@@ -78,40 +78,78 @@ end
 
 local function EnsureReloadPopup() 
     if not _G.StaticPopupDialogs then  return end
-    if _G.StaticPopupDialogs["MSUF_A2_RELOAD_MASQUE"] then  return end
 
-    _G.StaticPopupDialogs["MSUF_A2_RELOAD_MASQUE"] = {
-        text = "Masque changes require a UI reload.",
-        button1 = "Reload UI",
-        button2 = "Cancel",
-        OnAccept = function() 
-            if _G.ReloadUI then _G.ReloadUI() end
-         end,
-        OnCancel = function() 
-            -- Options sets these globals before showing the popup.
-            local prev = _G.MSUF_A2_MASQUE_RELOAD_PREV
-            local cb = _G.MSUF_A2_MASQUE_RELOAD_CB
+    local function DoReload()
+        if _G.InCombatLockdown and _G.InCombatLockdown() then
+            print("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")
+            return
+        end
+        if _G.ReloadUI then _G.ReloadUI() end
+    end
 
-            if type(prev) == "boolean" and API.DB and API.DB.Ensure then
-                local _, shared = API.DB.Ensure()
-                if shared then
-                    shared.masqueEnabled = prev
+    if not _G.StaticPopupDialogs["MSUF_A2_RELOAD_MASQUE"] then
+        _G.StaticPopupDialogs["MSUF_A2_RELOAD_MASQUE"] = {
+            text = "Masque changes require a UI reload.",
+            button1 = "Reload UI",
+            button2 = "Cancel",
+            OnAccept = DoReload,
+            OnCancel = function() 
+                -- Options sets these globals before showing the popup.
+                local prev = _G.MSUF_A2_MASQUE_RELOAD_PREV
+                local cb = _G.MSUF_A2_MASQUE_RELOAD_CB
+
+                if type(prev) == "boolean" and API.DB and API.DB.Ensure then
+                    local _, shared = API.DB.Ensure()
+                    if shared then
+                        shared.masqueEnabled = prev
+                    end
                 end
-            end
 
-            if cb and cb.SetChecked and type(prev) == "boolean" then
-                cb:SetChecked(prev)
-            end
+                if cb and cb.SetChecked and type(prev) == "boolean" then
+                    cb:SetChecked(prev)
+                end
 
-            _G.MSUF_A2_MASQUE_RELOAD_CB = nil
-            _G.MSUF_A2_MASQUE_RELOAD_PREV = nil
-         end,
-        timeout = 0,
-        whileDead = 1,
-        hideOnEscape = 1,
-        preferredIndex = 3,
-    }
- end
+                _G.MSUF_A2_MASQUE_RELOAD_CB = nil
+                _G.MSUF_A2_MASQUE_RELOAD_PREV = nil
+            end,
+            timeout = 0,
+            whileDead = 1,
+            hideOnEscape = 1,
+            preferredIndex = 3,
+        }
+    end
+
+    if not _G.StaticPopupDialogs["MSUF_A2_RELOAD_MASQUE_BORDER"] then
+        _G.StaticPopupDialogs["MSUF_A2_RELOAD_MASQUE_BORDER"] = {
+            text = "Masque border changes require a UI reload.",
+            button1 = "Reload UI",
+            button2 = "Cancel",
+            OnAccept = DoReload,
+            OnCancel = function()
+                local prev = _G.MSUF_A2_MASQUE_BORDER_RELOAD_PREV
+                local cb = _G.MSUF_A2_MASQUE_BORDER_RELOAD_CB
+
+                if type(prev) == "boolean" and API.DB and API.DB.Ensure then
+                    local _, shared = API.DB.Ensure()
+                    if shared then
+                        shared.masqueHideBorder = prev
+                    end
+                end
+
+                if cb and cb.SetChecked and type(prev) == "boolean" then
+                    cb:SetChecked(prev)
+                end
+
+                _G.MSUF_A2_MASQUE_BORDER_RELOAD_CB = nil
+                _G.MSUF_A2_MASQUE_BORDER_RELOAD_PREV = nil
+            end,
+            timeout = 0,
+            whileDead = 1,
+            hideOnEscape = 1,
+            preferredIndex = 3,
+        }
+    end
+end
 
 -- Ensure dialog exists early so Options can call StaticPopup_Show("MSUF_A2_RELOAD_MASQUE") directly.
 EnsureReloadPopup()

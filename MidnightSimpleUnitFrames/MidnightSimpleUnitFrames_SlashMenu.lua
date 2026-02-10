@@ -179,6 +179,7 @@ flags=flags or""if flags:find("ITALIC")then return end
 if flags~=""then flags=flags..",ITALIC"else flags="ITALIC"end
 fs:SetFont(font,size,flags) end
 local MSUF_PRESETS=(ns and ns.MSUF_PRESETS)or _G.MSUF_PRESETS if type(MSUF_PRESETS)~="table"then MSUF_PRESETS={}end
+if ns then ns.MSUF_PRESETS=MSUF_PRESETS end if _G then _G.MSUF_PRESETS=MSUF_PRESETS end
 local MSUF_PRESET_ALLOWED_KEYS={"general","player","target","focus","pet","targettarget","boss","bars","auras","gameplay","npcColors","classColors","shortenNames",}local function MSUF_WipeTable(t) if type(t)~="table"then return end
 for k in pairs(t)do t[k]=nil end
 end
@@ -1111,7 +1112,7 @@ local function AdvApplyState(open) if open then advToggle:SetText("Hide")advHint
 end
 advToggle:SetScript("OnClick",function() S.mirror.dashAdvOpen=not S.mirror.dashAdvOpen;AdvApplyState(S.mirror.dashAdvOpen) end
 )AdvApplyState(S.mirror.dashAdvOpen==true)local scaleCard=CreateCard(colR,nil,nil,nil,true)scaleCard:SetHeight(238)S.mirror.homeToolsApi=MSUF_BuildTools(scaleCard,{compact=false,wide=true,xl=true,title="Scale & Layout",segmented=true,showValue=true})local presetsCard=CreateCard(colR,"Presets",scaleCard,-12)presetsCard:SetPoint("BOTTOMLEFT",colR,"BOTTOMLEFT",0,0)presetsCard:SetPoint("BOTTOMRIGHT",colR,"BOTTOMRIGHT",0,0)local presetsTitle=presetsCard._msufTitle;local presetDrop=CreateFrame("Frame","MSUF_PresetDropdown",presetsCard,"UIDropDownMenuTemplate")presetDrop:SetPoint("TOPLEFT",presetsTitle,"BOTTOMLEFT",-16,-4)UIDropDownMenu_SetWidth(presetDrop,220)UIDropDownMenu_SetText(presetDrop,presetsCard._msufSelectedPreset or"Select preset...")UIDropDownMenu_Initialize(presetDrop,function(self,level) local names=MSUF_GetPresetNames()if not names or#names==0 then local info=UIDropDownMenu_CreateInfo();info.text="(no presets)"info.notCheckable=true;UIDropDownMenu_AddButton(info,level) return end
-for _,name in ipairs(names)do local info=UIDropDownMenu_CreateInfo();info.text=name info.checked=(presetsCard._msufSelectedPreset==name);info.func=function() presetsCard._msufSelectedPreset=name;UIDropDownMenu_SetText(presetDrop,name) end
+for _,name in ipairs(names)do local pname=name local info=UIDropDownMenu_CreateInfo();info.text=pname info.checked=(presetsCard._msufSelectedPreset==pname);info.func=function() presetsCard._msufSelectedPreset=pname;UIDropDownMenu_SetText(presetDrop,pname) end
 UIDropDownMenu_AddButton(info,level)end
 end
 )do local names=MSUF_GetPresetNames()if(not presetsCard._msufSelectedPreset)and names and names[1]then presetsCard._msufSelectedPreset=names[1]UIDropDownMenu_SetText(presetDrop,names[1])end

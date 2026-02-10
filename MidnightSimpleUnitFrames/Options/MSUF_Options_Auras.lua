@@ -1668,18 +1668,19 @@ local function UpdateAdvancedEnabled()
         _G.MSUF_A2_MASQUE_RELOAD_CB = self
         StaticPopup_Show("MSUF_A2_RELOAD_MASQUE")
      end)
-
-    -- Border suppression can be toggled live (no reload needed).
+    -- Border suppression requires a UI reload (Masque caches regions).
     cbMasqueHideBorder:SetScript("OnClick", function(self)
         local _, shared = GetAuras2DB()
         if not shared then return end
-        shared.masqueHideBorder = (self:GetChecked() == true)
+        local old = (shared.masqueHideBorder == true) and true or false
+        local new = (self:GetChecked() == true) and true or false
+        shared.masqueHideBorder = new
         if self._msufSync then self._msufSync() end
+        if RefreshMasqueToggleState then RefreshMasqueToggleState() end
         A2_RequestApply()
-        -- If Masque is active, force a reskin so textures are in a known state.
-        if shared.masqueEnabled == true and type(_G.MSUF_A2_RequestMasqueReskin) == "function" then
-            _G.MSUF_A2_RequestMasqueReskin()
-        end
+        _G.MSUF_A2_MASQUE_BORDER_RELOAD_PREV = old
+        _G.MSUF_A2_MASQUE_BORDER_RELOAD_CB = self
+        StaticPopup_Show("MSUF_A2_RELOAD_MASQUE_BORDER")
     end)
     cbMasque:SetScript("OnShow", function(self)
         RefreshMasqueToggleState()

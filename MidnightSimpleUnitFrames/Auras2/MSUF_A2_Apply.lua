@@ -1803,7 +1803,7 @@ end
 
 
 
-local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stackCountAnchor, hidePermanentBuffs)
+local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stackCountAnchor, hidePermanentBuffs, forceQuery)
     if not entry or not unit or not shared then return end
 
     -- Visual-only refresh for already-assigned icons.
@@ -1817,6 +1817,11 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
     local applyTip    = MSUF_A2_ApplyIconTooltip
     local applyStacks = MSUF_A2_ApplyIconStacks
     local setBorder   = SetDispelBorder
+
+    local doQuery = (forceQuery == true)
+    local showCdText  = not (shared and shared.showCooldownText == false)
+    local showCdSwipe = (shared and shared.showCooldownSwipe == true) or false
+    local refreshCD   = MSUF_A2_RefreshIconCooldownFast
 
     local function RefreshContainer(container, count)
         if not container or count <= 0 then return end
@@ -1835,7 +1840,10 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
                 end
                 if applyStacks then
                     -- Fast-path: no API calls; only re-display cached stack text if any.
-                    applyStacks(icon, unit, shared, stackCountAnchor, nil, false, false)
+                    applyStacks(icon, unit, shared, stackCountAnchor, nil, false, doQuery)
+                    if doQuery and refreshCD then
+                        refreshCD(icon, unit, aid, shared, showCdText, showCdSwipe, true)
+                    end
                 end
                 if setBorder then
                     local isHelpful = (icon._msufFilter == "HELPFUL")
@@ -1934,9 +1942,17 @@ local function MSUF_A2_RefreshAssignedIconsDelta(entry, unit, shared, masterOn, 
     -- IMPORTANT: Do NOT call GetAuraDataByAuraInstanceID here (hot path).
     local useSingleRow = (entry.mixed ~= nil) and ((entry.mixed.IsShown and entry.mixed:IsShown()) or false)
 
-    local mixedMap  = entry._msufA2_iconByAidMixed
-    local debuffMap = entry._msufA2_iconByAidDebuff
-    local buffMap   = entry._msufA2_iconByAidBuff
+    -- NOTE (bugfix): The authoritative auraInstanceID → icon map lives on the
+    -- icon containers (entry.debuffs/entry.buffs/entry.mixed) as
+    -- container._msufA2_iconByAid, because CommitIcon() writes into that map.
+    --
+    -- The previous refactor accidentally looked for maps on the entry object
+    -- (entry._msufA2_iconByAid*), which are never assigned. That made the
+    -- delta refresh a no-op: stacks and refreshed durations would only update
+    -- when a new aura forced a full re-assign.
+    local mixedMap  = (entry.mixed  and entry.mixed._msufA2_iconByAid)  or entry._msufA2_iconByAidMixed
+    local debuffMap = (entry.debuffs and entry.debuffs._msufA2_iconByAid) or entry._msufA2_iconByAidDebuff
+    local buffMap   = (entry.buffs  and entry.buffs._msufA2_iconByAid)  or entry._msufA2_iconByAidBuff
 
     local applySizing = (shared.showStackCount == true) and MSUF_A2_ApplyIconTextSizing or nil
     local applyTip    = MSUF_A2_ApplyIconTooltip
@@ -1951,9 +1967,9 @@ local function MSUF_A2_RefreshAssignedIconsDelta(entry, unit, shared, masterOn, 
         if aid ~= nil then
             local icon = nil
             if useSingleRow then
-                icon = mixedMap and mixedMap[aid]
+                icon = (mixedMap and mixedMap[aid]) or (debuffMap and debuffMap[aid]) or (buffMap and buffMap[aid])
             else
-                icon = (debuffMap and debuffMap[aid]) or (buffMap and buffMap[aid])
+                icon = (debuffMap and debuffMap[aid]) or (buffMap and buffMap[aid]) or (mixedMap and mixedMap[aid])
             end
 
             if icon and icon._msufAuraInstanceID ~= nil then

@@ -797,7 +797,12 @@ function ns.Text.RenderPowerText(self)
     ns.Text.ClearField(self, "powerTextPct")
     ns.Text.Set(self.powerText, "", false)
  end
-function ns.Text.RenderToTInline(targetFrame, totConf)
+ -- Forward declarations for helper color lookups used by ToT inline.
+ -- These helpers are defined later in this file; without forward-declare, early
+ -- callers resolve the names as globals and can hit nil.
+ local MSUF_GetNPCReactionColor, MSUF_GetClassBarColor
+
+ function ns.Text.RenderToTInline(targetFrame, totConf)
     if not targetFrame or not targetFrame.nameText then  return end
     local sep = targetFrame._msufToTInlineSep
     local txt = targetFrame._msufToTInlineText
@@ -1332,7 +1337,7 @@ local MSUF_FONT_COLORS = {
 }
 ns.MSUF_FONT_COLORS = MSUF_FONT_COLORS
 _G.MSUF_FONT_COLORS = _G.MSUF_FONT_COLORS or MSUF_FONT_COLORS
-local function MSUF_GetNPCReactionColor(kind)
+MSUF_GetNPCReactionColor = function(kind)
     local defaultR, defaultG, defaultB
     if kind == "friendly" then
         defaultR, defaultG, defaultB = 0, 1, 0           -- grün
@@ -1356,7 +1361,7 @@ local function MSUF_GetNPCReactionColor(kind)
     end
      return defaultR, defaultG, defaultB
 end
-local function MSUF_GetClassBarColor(classToken)
+MSUF_GetClassBarColor = function(classToken)
     local defaultR, defaultG, defaultB = 0, 1, 0
     if not classToken then
          return defaultR, defaultG, defaultB
