@@ -25,6 +25,7 @@ Core\MSUF_ProfileIO.lua
 Core\MSUF_ChatAndTooltips.lua
 Core\MSUF_StatusIndicators.lua
 Core\MSUF_UnitframeCore.lua
+Core\MSUF_RangeFade.lua
 
 Auras2\MSUF_A2_DB.lua
 Auras2\MSUF_A2_Colors.lua
