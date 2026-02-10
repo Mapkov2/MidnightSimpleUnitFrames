@@ -976,9 +976,6 @@ local function LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
 end
 
 function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, masterOn, isOwn, stackCountAnchor, layoutSig)
-    -- A2_PERFY_INSTRUMENT_APPLY
-    local _pEv = rawget(_G, "MSUF_A2_PerfyEvent")
-    if _pEv then _pEv("A2:Apply.CommitIcon", unit) end
     if not icon then return false end
 
     -- Always keep these stable for tooltip/refresh paths.
@@ -1581,9 +1578,6 @@ local function MSUF_A2_EffectiveHidePermanent(shared, hidePermanentOverride)
 end
 
 local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
-    -- A2_PERFY_INSTRUMENT_APPLY_CD
-    local _pEv = rawget(_G, "MSUF_A2_PerfyEvent")
-    if _pEv then _pEv("A2:Apply.IconCooldown", unit) end
     if not icon.cooldown then return false end
     SafeCall(icon.cooldown.Show, icon.cooldown)
 

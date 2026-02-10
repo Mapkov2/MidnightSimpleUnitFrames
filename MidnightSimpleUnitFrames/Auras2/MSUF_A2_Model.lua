@@ -22,12 +22,23 @@ if type(API) ~= "table" then
     ns.MSUF_Auras2 = API
 end
 
+-- Shared runtime state (time cache, etc.). Render updates state.now once per Flush.
+API.state = (type(API.state) == "table") and API.state or {}
+local A2_STATE = API.state
+
 API.Model = (type(API.Model) == "table") and API.Model or {}
 local Model = API.Model
 
 -- Locals (hot)
 local type = type
 local GetTime = GetTime
+local function _A2_Now()
+    local n = A2_STATE and A2_STATE.now
+    if type(n) == "number" then
+        return n
+    end
+    return (GetTime and GetTime()) or 0
+end
 local math_floor = math.floor
 local string_byte = string.byte
 local pairs = pairs
@@ -92,7 +103,7 @@ local _A2_secretActive = nil
 local _A2_secretCheckAt = 0
 
 local function _A2_SecretsActive()
-    local now = GetTime()
+    local now = _A2_Now()
     if _A2_secretActive ~= nil and now < _A2_secretCheckAt then
         return _A2_secretActive
     end
@@ -104,6 +115,11 @@ end
 
 -- ========
 -- Aura list + caches (copied from Render baseline)
+
+local function _A2_CaptureAuraSlots(getSlotsFn, unitToken, auraFilter, maxSlots, continuationToken)
+    return { getSlotsFn(unitToken, auraFilter, maxSlots, continuationToken) }
+end
+
 -- ========
 
 local function GetAuraList(unit, filter, onlyPlayer, maxCount, out)
@@ -126,51 +142,52 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount, out)
     if type(maxCount) == "number" and maxCount > 0 and type(getSlots) == "function" and type(getBySlot) == "function" then
         local f = onlyPlayer and (filter .. "|PLAYER") or filter
 
-        local ok, slots, token = MSUF_A2_FastCall(getSlots, unit, f, maxCount, nil)
-        if not ok or type(slots) ~= "table" then
-            -- Fallback: try without PLAYER if the API rejects the combined filter.
-            if onlyPlayer then
-                ok, slots, token = MSUF_A2_FastCall(getSlots, unit, filter, maxCount, nil)
-            end
-        end
+	local ok, slots = MSUF_A2_FastCall(_A2_CaptureAuraSlots, getSlots, unit, f, maxCount, nil)
+	if not ok or type(slots) ~= "table" then
+		-- Fallback: try without PLAYER if the API rejects the combined filter.
+		if onlyPlayer then
+			ok, slots = MSUF_A2_FastCall(_A2_CaptureAuraSlots, getSlots, unit, filter, maxCount, nil)
+		end
+	end
 
-        if ok and type(slots) == "table" then
-            if not secrets then
-                for i = 1, #slots do
-                    local slot = slots[i]
-                    local data = getBySlot(unit, slot)
-                    if type(data) == "table" then
-                        -- Prefer a stable numeric auraInstanceID for downstream logic.
-                        if data._msufAuraInstanceID == nil then
-                            local aid = data.auraInstanceID
-                            if aid ~= nil then
-                                data._msufAuraInstanceID = aid
-                            end
-                        end
-                        out[#out+1] = data
-                    end
-                end
-            else
-                -- Secret mode: guard each call; never inspect returned fields here.
-                for i = 1, #slots do
-                    local slot = slots[i]
-                    local okD, data = MSUF_A2_FastCall(getBySlot, unit, slot)
-                    if okD and type(data) == "table" then
-                        if data._msufAuraInstanceID == nil then
-                            local aid = data.auraInstanceID
-                            if aid ~= nil then
-                                data._msufAuraInstanceID = aid
-                            end
-                        end
-                        out[#out+1] = data
-                    end
-                end
-            end
-            return out
-        end
-    end
+	if ok and type(slots) == "table" then
+		-- slots[1] is continuationToken; slots[2..] are aura slot indices.
+		if not secrets then
+			for i = 2, #slots do
+				local slot = slots[i]
+				local data = getBySlot(unit, slot)
+				if type(data) == "table" then
+					-- Prefer a stable numeric auraInstanceID for downstream logic.
+					if data._msufAuraInstanceID == nil then
+						local aid = data.auraInstanceID
+						if aid ~= nil then
+							data._msufAuraInstanceID = aid
+						end
+					end
+					out[#out+1] = data
+				end
+			end
+		else
+			-- Secret mode: guard each call; never inspect returned fields here.
+			for i = 2, #slots do
+				local slot = slots[i]
+				local okD, data = MSUF_A2_FastCall(getBySlot, unit, slot)
+				if okD and type(data) == "table" then
+					if data._msufAuraInstanceID == nil then
+						local aid = data.auraInstanceID
+						if aid ~= nil then
+							data._msufAuraInstanceID = aid
+						end
+					end
+					out[#out+1] = data
+				end
+			end
+		end
+		return out
+	end
+end
 
-    -- Legacy fallback: instanceID list (may be large). We cap loop to maxCount when provided.
+-- Legacy fallback: instanceID list (may be large). We cap loop to maxCount when provided.
     local getIDs  = C_UnitAuras.GetUnitAuraInstanceIDs
     local getData = C_UnitAuras.GetAuraDataByAuraInstanceID
     if type(getIDs) ~= "function" or type(getData) ~= "function" then
@@ -227,10 +244,10 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount, out)
     return out
 end
 
-local function MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, filter)
+local function MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, filter, maxCount)
     if not entry or not unit or not filter then return nil end
 
-    local now = GetTime()
+    local now = _A2_Now()
     local stamp = math_floor((now or 0) * 10 + 0.5)
 
     local isHelpful = (filter == "HELPFUL")
@@ -268,6 +285,37 @@ local function MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, filter)
     end
     n = 0
 
+    local cap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
+
+    -- Prefer slot API (capped) to avoid scanning huge aura sets.
+    local getSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
+    local getBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
+    if type(getSlots) == "function" and type(getBySlot) == "function" then
+        local ok, slots = MSUF_A2_FastCall(_A2_CaptureAuraSlots, getSlots, unit, filter .. "|PLAYER", cap, nil)
+        if not ok or type(slots) ~= "table" or #slots <= 1 then
+            ok, slots = MSUF_A2_FastCall(_A2_CaptureAuraSlots, getSlots, unit, "PLAYER|" .. filter, cap, nil)
+        end
+
+        if ok and type(slots) == "table" then
+            for i = 2, #slots do
+                local slot = slots[i]
+                local data = getBySlot(unit, slot)
+                if type(data) == "table" then
+                    local id = data.auraInstanceID
+                    if id ~= nil and set[id] ~= true then
+                        set[id] = true
+                        n = n + 1
+                        keys[n] = id
+                    end
+                end
+            end
+            entry[keysNField] = n
+            entry[stampField] = stamp
+            return set
+        end
+    end
+
+    -- Legacy fallback: instanceIDs. Still cap to keep the set bounded.
     local ids = SafeCall(C_UnitAuras.GetUnitAuraInstanceIDs, unit, filter .. "|PLAYER")
     if type(ids) ~= "table" then
         -- Alternate ordering: some clients / API variants can be picky about token order.
@@ -279,6 +327,7 @@ local function MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, filter)
             ids = ids2
         end
     end
+
     if type(ids) ~= "table" then
         -- Do not stamp-cache a failure; retry next render tick.
         entry[keysNField] = 0
@@ -291,6 +340,7 @@ local function MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, filter)
             set[id] = true
             n = n + 1
             keys[n] = id
+            if n >= cap then break end
         end
     end
 
@@ -456,16 +506,10 @@ end
 local MSUF_A2_EMPTY = {}
 
 local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMine, includeBoss, wantExtra, extraKind, capHint)
-    -- A2_PERFY_INSTRUMENT_BUILD_MERGED
-    local _pEnter = rawget(_G, "MSUF_A2_PerfyEnter")
-    local _pLeave = rawget(_G, "MSUF_A2_PerfyLeave")
-    if _pEnter then _pEnter("A2:Model.BuildMerged", filter) end
     if not unit then
-        if _pLeave then _pLeave("A2:Model.BuildMerged", filter) end
         return MSUF_A2_EMPTY
     end
     if not baseShow and not wantExtra then
-        if _pLeave then _pLeave("A2:Model.BuildMerged", filter) end
         return MSUF_A2_EMPTY
     end
 
@@ -474,10 +518,6 @@ local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMi
 
     local cap = (type(capHint) == "number" and capHint > 0) and capHint or nil
     local maxAll = cap
-    if maxAll then
-        maxAll = maxAll * 2
-        if maxAll > 40 then maxAll = 40 end
-    end
     -- PERF: reuse aura list arrays per entry/filter (avoid per-render allocations).
     local allKey  = (filter == "HELPFUL") and "_msufA2_allBuffs"  or "_msufA2_allDebuffs"
     local mineKey = (filter == "HELPFUL") and "_msufA2_mineBuffs" or "_msufA2_mineDebuffs"
@@ -510,7 +550,6 @@ local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMi
             baseList = allList or GetAuraList(unit, filter, false, maxAll, allBuf)
         end
     end
-    if _pLeave then _pLeave("A2:Model.BuildMerged", filter) end
     return baseList
 end
 

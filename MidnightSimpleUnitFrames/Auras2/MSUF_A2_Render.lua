@@ -42,6 +42,10 @@ end
 API.state = (type(API.state) == "table") and API.state or {}
 API.perf  = (type(API.perf)  == "table") and API.perf  or {}
 
+-- Hot-path state cache (time + secret/editmode cached values live here).
+-- Keep as a local upvalue to avoid repeated global/table lookups.
+local A2_STATE = API.state
+
 
 
 -- ------------------------------------------------------------
@@ -62,8 +66,18 @@ local _A2_secretActive = nil
 local _A2_secretCheckAt = 0
 local _A2_secretLatchedUntil = 0
 
+-- Hot-path time cache: during Flush/OnUpdate we set A2_STATE.now once.
+-- Any per-aura/per-filter secret checks must NOT call GetTime() repeatedly.
+local function _A2_Now()
+    local n = A2_STATE and A2_STATE.now
+    if type(n) == "number" then
+        return n
+    end
+    return (_A2_GetTime and _A2_GetTime()) or 0
+end
+
 local function _A2_SecretsActive()
-    local now = (_A2_GetTime and _A2_GetTime()) or 0
+    local now = _A2_Now()
     if _A2_secretActive ~= nil and now < _A2_secretCheckAt then
         return _A2_secretActive
     end
@@ -77,7 +91,7 @@ end
 --  - If secrets are active OR we recently observed a secret-related failure, we stay in
 --    secret mode for a short window ("latch") to avoid flapping/races.
 _A2_IsSecretMode = function()
-    local now = (_A2_GetTime and _A2_GetTime()) or 0
+    local now = _A2_Now()
     if now < (_A2_secretLatchedUntil or 0) then
         return true
     end
@@ -85,7 +99,7 @@ _A2_IsSecretMode = function()
 end
 
 _A2_LatchSecretMode = function(seconds)
-    local now = (_A2_GetTime and _A2_GetTime()) or 0
+    local now = _A2_Now()
     local untilT = now + (seconds or 3.0)
     if untilT > (_A2_secretLatchedUntil or 0) then
         _A2_secretLatchedUntil = untilT
@@ -583,6 +597,7 @@ local function _A2_FlushDriver_OnUpdate()
     end
 
     local nowT = (_A2_GetTime and _A2_GetTime()) or (GetTime and GetTime()) or 0
+    if A2_STATE then A2_STATE.now = nowT end
     if nowT >= at then
             _A2_FlushNextAt = nil
             if not Flush then
@@ -611,7 +626,7 @@ end
 
 
 local function IsEditModeActive()
-    local now = (_A2_GetTime and _A2_GetTime()) or 0
+    local now = _A2_Now()
     if now < _A2_editModeCheckAt then
         return _A2_editModeActive
     end
@@ -1112,7 +1127,6 @@ end
 	    --
 	    -- UpdateAnchor is called frequently (UNIT_AURA bursts, edit previews, etc.).
 	    -- It used to ClearAllPoints/SetPoint on multiple containers every time, which
-	    -- is expensive and shows up as spikes in Perfy. Here we compute a stable,
 	    -- allocation-free signature from *our own* layout inputs (DB numbers + enums).
 	    -- If nothing changed and no mover is currently being dragged, we skip all
 	    -- anchoring work entirely.
@@ -1919,8 +1933,52 @@ local function MSUF_A2__HashStep(h, v)
     return h
 end
 
-local function MSUF_A2_ComputeRawAuraSig(unit)
-    if not unit or not C_UnitAuras or type(C_UnitAuras.GetAuraInstanceIDs) ~= 'function' then
+local function MSUF_A2_ComputeRawAuraSig(unit, capHelpful, capHarmful)
+    if not unit or not C_UnitAuras then
+        return nil
+    end
+
+    local capH = (type(capHelpful) == 'number' and capHelpful > 0) and capHelpful or 0
+    local capD = (type(capHarmful) == 'number' and capHarmful > 0) and capHarmful or 0
+
+    local getSlots = C_UnitAuras.GetAuraSlots
+    local getBySlot = C_UnitAuras.GetAuraDataBySlot
+
+    local h = 5381
+    local hc = 0
+    local dc = 0
+
+    if type(getSlots) == 'function' and type(getBySlot) == 'function' then
+        if capH > 0 then
+            local slots = { select(2, getSlots(unit, 'HELPFUL', capH, nil)) }
+            local n = #slots
+            hc = n
+            for i = 1, n do
+                local data = getBySlot(unit, slots[i])
+                local aid = (type(data) == 'table') and data.auraInstanceID or nil
+                h = MSUF_A2__HashStep(h, aid)
+            end
+        end
+
+        h = MSUF_A2__HashStep(h, 777)
+
+        if capD > 0 then
+            local slots = { select(2, getSlots(unit, 'HARMFUL', capD, nil)) }
+            local n = #slots
+            dc = n
+            for i = 1, n do
+                local data = getBySlot(unit, slots[i])
+                local aid = (type(data) == 'table') and data.auraInstanceID or nil
+                h = MSUF_A2__HashStep(h, aid)
+            end
+        end
+
+        h = MSUF_A2__HashStep(h, hc)
+        h = MSUF_A2__HashStep(h, dc)
+        return h
+    end
+
+    if type(C_UnitAuras.GetAuraInstanceIDs) ~= 'function' then
         return nil
     end
 
@@ -1929,23 +1987,22 @@ local function MSUF_A2_ComputeRawAuraSig(unit)
     if not okH or type(helpful) ~= 'table' then helpful = nil end
     if not okD or type(harmful) ~= 'table' then harmful = nil end
 
-    local h = 5381
-    local hc = 0
-    local dc = 0
-
     if helpful then
-        hc = #helpful
-        for i = 1, hc do
+        local n = #helpful
+        if capH > 0 and n > capH then n = capH end
+        hc = n
+        for i = 1, n do
             h = MSUF_A2__HashStep(h, helpful[i])
         end
     end
 
-    -- delimiter so helpful+harmful order can't collide
     h = MSUF_A2__HashStep(h, 777)
 
     if harmful then
-        dc = #harmful
-        for i = 1, dc do
+        local n = #harmful
+        if capD > 0 and n > capD then n = capD end
+        dc = n
+        for i = 1, n do
             h = MSUF_A2__HashStep(h, harmful[i])
         end
     end
@@ -2192,13 +2249,13 @@ end
     -- and see styling without needing to go fish for a buff/debuff.
     if (not showTest) and (wantPreview == true) and unitExists and unitEnabled and frame and frame:IsShown() then
         local hasAny = false
-        if C_UnitAuras and type(C_UnitAuras.GetAuraSlots) == "function" then
-            local slots = C_UnitAuras.GetAuraSlots(unit, "HELPFUL", 1)
-            if type(slots) == "table" and slots[1] then
+        if C_UnitAuras and type(C_UnitAuras.GetAuraSlots) == 'function' then
+            local token, slot = C_UnitAuras.GetAuraSlots(unit, 'HELPFUL', 1, nil)
+            if slot ~= nil then
                 hasAny = true
             else
-                local slots2 = C_UnitAuras.GetAuraSlots(unit, "HARMFUL", 1)
-                if type(slots2) == "table" and slots2[1] then
+                token, slot = C_UnitAuras.GetAuraSlots(unit, 'HARMFUL', 1, nil)
+                if slot ~= nil then
                     hasAny = true
                 end
             end
@@ -2382,6 +2439,11 @@ end
     finalShowDebuffs = (wantDebuffs == true)
     finalShowBuffs = (wantBuffs == true)
 
+    -- Signature scan caps: keep Store/own-highlight scans bounded to the max icons we can display.
+    -- IMPORTANT: this cap is EXACTLY the menu maxBuffs/maxDebuffs (no headroom), by design.
+    local sigCapH = (finalShowBuffs and maxBuffs or 0)
+    local sigCapD = (finalShowDebuffs and maxDebuffs or 0)
+
     if unitExists and not showTest then
         -- Real auras are skipped while Preview-in-Edit-Mode is active so preview always wins.
         local budget = MSUF_A2_RENDER_BUDGET
@@ -2422,7 +2484,7 @@ end
         -- If raw auraInstanceID sets + layout/filter signature are unchanged, avoid expensive list building.
         if not resumeBudget then
             local Store = API and API.Store
-            rawSig = (Store and Store.GetRawSig and Store.GetRawSig(unit)) or MSUF_A2_ComputeRawAuraSig(unit)
+            rawSig = (Store and Store.GetRawSig and Store.GetRawSig(unit, sigCapH, sigCapD)) or MSUF_A2_ComputeRawAuraSig(unit, sigCapH, sigCapD)
             layoutSig = MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebuffAnchor, splitSpacing,
                 iconSize, buffIconSize, debuffIconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, stackCountAnchor,
                 tf, masterOn, onlyBossAuras, finalShowBuffs, finalShowDebuffs)
@@ -2452,10 +2514,10 @@ end
         local ownBuffSet, ownDebuffSet
         if unitExists then
             if (shared.highlightOwnBuffs == true) and finalShowBuffs then
-                ownBuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HELPFUL")
+                ownBuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HELPFUL", sigCapH)
             end
             if (shared.highlightOwnDebuffs == true) and finalShowDebuffs then
-                ownDebuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HARMFUL")
+                ownDebuffSet = MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, "HARMFUL", sigCapD)
             end
         end
         local ctx = entry._msufA2_renderCtx
@@ -2615,15 +2677,11 @@ local function _A2_UnitEnabledFast(a2, unit)
 end
 
 Flush = function()
-    -- A2_PERFY_INSTRUMENT_FLUSH
-    local _pEnter = rawget(_G, "MSUF_A2_PerfyEnter")
-    local _pLeave = rawget(_G, "MSUF_A2_PerfyLeave")
-    if _pEnter then _pEnter("A2:Flush") end
-
     local unitsUpdated = 0
 
     local nextRenderDelay = nil
     local nowT = (_A2_GetTime and _A2_GetTime()) or (GetTime and GetTime()) or 0
+    if A2_STATE then A2_STATE.now = nowT end
 
     -- Keep FlushScheduled=true while flushing to coalesce MarkDirty calls that happen during rendering.
 
@@ -2649,9 +2707,7 @@ Flush = function()
                 -- Preview mode: allow positioning even if unit is disabled or doesn't exist.
                 local e = EnsureAttached(unit)
                 if e then
-                    if _pEnter then _pEnter("A2:RenderUnit", unit) end
                     RenderUnit(e)
-                    if _pLeave then _pLeave("A2:RenderUnit", unit) end
                     unitsUpdated = unitsUpdated + 1
                 end
             else
@@ -2694,9 +2750,7 @@ Flush = function()
                             local e = EnsureAttached(unit)
                             if e then
                                 e._msufA2_lastRenderAt = nowT
-                                if _pEnter then _pEnter("A2:RenderUnit", unit) end
                                 RenderUnit(e)
-                                if _pLeave then _pLeave("A2:RenderUnit", unit) end
                                 unitsUpdated = unitsUpdated + 1
                             end
                         end
@@ -2732,13 +2786,9 @@ Flush = function()
     if _G and _G.MSUF_Auras2_UpdatePreviewStackTicker then
         _G.MSUF_Auras2_UpdatePreviewStackTicker()
     end
-
-    if _pLeave then _pLeave("A2:Flush", unitsUpdated) end
 end
 
 local function MarkDirty(unit, delay)
-    local _pEv = rawget(_G, "MSUF_A2_PerfyEvent")
-    if _pEv then _pEv("A2:MarkDirty", unit) end
     -- Step 5 perf (cumulative): hard gates (skip work) with 0-regression safety.
     -- If Auras2 is effectively disabled for this unit (and we're not in Edit Mode preview),
     -- do NOT schedule any flush work. Instead, immediately hard-hide anchors/movers.
@@ -3051,10 +3101,8 @@ if _G and type(_G.MSUF_A2_RequestUnit) ~= "function" then
     _G.MSUF_A2_RequestUnit = function(unit, delay) return API.RequestUnit(unit, delay) end
 end
 
-if _G and type(_G.MSUF_Auras2_RefreshAll) ~= "function" then
+if _G then
     _G.MSUF_Auras2_RefreshAll = function() return API.RefreshAll() end
-end
-if _G and type(_G.MSUF_Auras2_RefreshUnit) ~= "function" then
     _G.MSUF_Auras2_RefreshUnit = function(unit) return API.RefreshUnit(unit) end
 end
 
@@ -3162,69 +3210,3 @@ if _G and type(_G.MSUF_SetPrivateAuraPreviewEnabled) ~= "function" then
         end
     end
 end
-
--- ------------------------------------------------------------
--- A2 Perfy bridge (opt-in, zero cost when disabled)
--- Usage:
---   /run MSUF_A2_PerfyEnable()        -- coarse spans (Flush/RenderUnit/etc.)
---   /run MSUF_A2_PerfyEnable(true)    -- deep spans/events (per-icon, store deltas)
---   /run MSUF_A2_PerfyDisable()
--- ------------------------------------------------------------
-do
-    if rawget(_G, "MSUF_A2_PerfyEnable") == nil then
-        local function _clear()
-            _G.MSUF_A2_PerfyEnter = nil
-            _G.MSUF_A2_PerfyLeave = nil
-            _G.MSUF_A2_PerfyEvent = nil
-        end
-
-        local function _bind()
-            if rawget(_G, "MSUF_A2_PERFY_ENABLED") ~= true then
-                _clear()
-                return
-            end
-
-            local trace = rawget(_G, "Perfy_Trace")
-            local gett  = rawget(_G, "Perfy_GetTime") or rawget(_G, "GetTimePreciseSec")
-            if type(trace) ~= "function" or type(gett) ~= "function" then
-                _clear()
-                return
-            end
-
-            -- NOTE: Analyzer expects the standard event names "Enter"/"Leave" to reconstruct stacks.
-            _G.MSUF_A2_PerfyEnter = function(name, extra)
-                trace(gett(), "Enter", name, extra)
-            end
-            _G.MSUF_A2_PerfyLeave = function(name, extra)
-                trace(gett(), "Leave", name, extra)
-            end
-            _G.MSUF_A2_PerfyEvent = function(name, extra)
-                if rawget(_G, "MSUF_A2_PERFY_DEEP") == true then
-                    trace(gett(), "OnEvent", name, extra)
-                end
-            end
-        end
-
-        function _G.MSUF_A2_PerfyEnable(deep)
-            _G.MSUF_A2_PERFY_ENABLED = true
-            _G.MSUF_A2_PERFY_DEEP = (deep == true)
-            _bind()
-        end
-
-        function _G.MSUF_A2_PerfyDisable()
-            _G.MSUF_A2_PERFY_ENABLED = false
-            _G.MSUF_A2_PERFY_DEEP = false
-            _bind()
-        end
-
-        function _G.MSUF_A2_PerfyBind()
-            _bind()
-        end
-
-        -- Respect any pre-set global flags (e.g. user toggled via /run before reload)
-        _G.MSUF_A2_PERFY_ENABLED = (rawget(_G, "MSUF_A2_PERFY_ENABLED") == true)
-        _G.MSUF_A2_PERFY_DEEP = (rawget(_G, "MSUF_A2_PERFY_DEEP") == true)
-        _bind()
-    end
-end
-

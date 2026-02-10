@@ -64,6 +64,9 @@ local function _A2_StoreEnsure(unit)
         d1 = 0, d2 = 0, dCount = 0,
         dirty = true,
 
+        capHelpful = -1,
+        capHarmful = -1,
+
     }
     _StoreUnits[unit] = st
     return st
@@ -125,16 +128,14 @@ local function _A2_StoreRemove(st, aid)
     local stampMap = st.kindStamp
     local s = st.stamp or 1
 
-    -- If we can't prove membership, flip dirty and rescan next read.
+    -- With capped scans, removals for auras outside our tracked window are expected.
+    -- Ignoring unknown removals avoids unnecessary rescans and spikes.
     if not stampMap or stampMap[aid] ~= s then
-        st.dirty = true
-        if _pLeave then _pLeave("A2:Store.ScanUnit", unit) end
         return
     end
 
     local kind = st.kindById[aid]
     if not kind then
-        st.dirty = true
         return
     end
 
@@ -153,38 +154,83 @@ local function _A2_StoreRemove(st, aid)
 end
 
 
-local function _A2_StoreScanUnit(unit, st)
-    -- A2_PERFY_INSTRUMENT_STORE
-    local _pEnter = rawget(_G, "MSUF_A2_PerfyEnter")
-    local _pLeave = rawget(_G, "MSUF_A2_PerfyLeave")
-    if _pEnter then _pEnter("A2:Store.ScanUnit", unit) end
+
+local function _A2_StoreScanUnitCapped(unit, st, capHelpful, capHarmful)
     _A2_StoreReset(st)
 
-    local ids = C_UnitAuras and C_UnitAuras.GetAuraInstanceIDs
-    if type(ids) ~= "function" then
-        st.dirty = true
-    if _pLeave then _pLeave("A2:Store.ScanUnit", unit) end
+    local capH = (type(capHelpful) == "number") and capHelpful or 0
+    local capD = (type(capHarmful) == "number") and capHarmful or 0
+    if capH < 0 then capH = 0 end
+    if capD < 0 then capD = 0 end
+
+    local a2 = C_UnitAuras
+    local getSlots = a2 and a2.GetAuraSlots
+    local getBySlot = a2 and a2.GetAuraDataBySlot
+
+    if type(getSlots) == "function" and type(getBySlot) == "function" then
+        if capH > 0 then
+            local slots = { select(2, getSlots(unit, 'HELPFUL', capH, nil)) }
+            local n = #slots
+            for i = 1, n do
+                local data = getBySlot(unit, slots[i])
+                local aid = (type(data) == 'table') and data.auraInstanceID or nil
+                if aid then
+                    _A2_StoreAdd(st, aid, 1)
+                end
+            end
+        end
+        if capD > 0 then
+            local slots = { select(2, getSlots(unit, 'HARMFUL', capD, nil)) }
+            local n = #slots
+            for i = 1, n do
+                local data = getBySlot(unit, slots[i])
+                local aid = (type(data) == 'table') and data.auraInstanceID or nil
+                if aid then
+                    _A2_StoreAdd(st, aid, 2)
+                end
+            end
+        end
+
+        st.dirty = false
+        st.capHelpful = capH
+        st.capHarmful = capD
         return
     end
 
-    local help = ids(unit, "HELPFUL")
-    if type(help) == "table" then
-        for i = 1, #help do
-            local aid = help[i]
-            if aid then _A2_StoreAdd(st, aid, 1) end
+    -- Legacy fallback: instanceID lists (may be large). We cap the loop to requested limits.
+    local ids = a2 and a2.GetAuraInstanceIDs
+    if type(ids) ~= "function" then
+        st.dirty = true
+        return
+    end
+
+    if capH > 0 then
+        local help = ids(unit, "HELPFUL")
+        if type(help) == "table" then
+            local n = #help
+            if n > capH then n = capH end
+            for i = 1, n do
+                local aid = help[i]
+                if aid then _A2_StoreAdd(st, aid, 1) end
+            end
         end
     end
 
-    local harm = ids(unit, "HARMFUL")
-    if type(harm) == "table" then
-        for i = 1, #harm do
-            local aid = harm[i]
-            if aid then _A2_StoreAdd(st, aid, 2) end
+    if capD > 0 then
+        local harm = ids(unit, "HARMFUL")
+        if type(harm) == "table" then
+            local n = #harm
+            if n > capD then n = capD end
+            for i = 1, n do
+                local aid = harm[i]
+                if aid then _A2_StoreAdd(st, aid, 2) end
+            end
         end
     end
 
     st.dirty = false
-    if _pLeave then _pLeave("A2:Store.ScanUnit", unit) end
+    st.capHelpful = capH
+    st.capHarmful = capD
 end
 
 local function _A2_StoreComputeRawSig(st)
@@ -209,8 +255,6 @@ function Store.InvalidateUnit(unit)
 end
 
 function Store.OnUnitAura(unit, updateInfo)
-    local _pEv = rawget(_G, "MSUF_A2_PerfyEvent")
-    if _pEv then _pEv("A2:Store.OnUnitAura", unit) end
     local st = _A2_StoreEnsure(unit)
 
     -- No delta info / full update => rescan on next read
@@ -272,21 +316,22 @@ function Store.PopUpdated(unit)
     return st.updated, n
 end
 
-function Store.GetRawSig(unit)
-    local _pEnter = rawget(_G, "MSUF_A2_PerfyEnter")
-    local _pLeave = rawget(_G, "MSUF_A2_PerfyLeave")
-    if _pEnter then _pEnter("A2:Store.GetRawSig", unit) end
+
+function Store.GetRawSig(unit, capHelpful, capHarmful)
     local st = _A2_StoreEnsure(unit)
-    if st.dirty then
-        _A2_StoreScanUnit(unit, st)
+
+    local capH = (type(capHelpful) == "number") and capHelpful or 0
+    local capD = (type(capHarmful) == "number") and capHarmful or 0
+    if capH < 0 then capH = 0 end
+    if capD < 0 then capD = 0 end
+
+    if st.dirty or (st.capHelpful ~= capH) or (st.capHarmful ~= capD) then
+        _A2_StoreScanUnitCapped(unit, st, capH, capD)
     end
     if st.dirty then
-        if _pLeave then _pLeave("A2:Store.GetRawSig", unit) end
         return nil
     end
-    local sig = _A2_StoreComputeRawSig(st)
-    if _pLeave then _pLeave("A2:Store.GetRawSig", unit) end
-    return sig
+    return _A2_StoreComputeRawSig(st)
 end
 -- ------------------------------------------------------------
 
