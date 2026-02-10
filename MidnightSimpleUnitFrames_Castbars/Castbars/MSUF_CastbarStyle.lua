@@ -403,8 +403,23 @@ end
 
 -- Convenience helper: apply both timer direction + reverse fill consistently.
 function S:ApplyTimerDirection(statusBar, durationObj, reverseFill)
+    -- IMPORTANT:
+    -- On modern 12.0 StatusBars, SetTimerDuration can accept a "direction" argument that already controls
+    -- the visual fill side. In that mode, also calling SetReverseFill(true) can double-invert and break
+    -- animation (most noticeable on channeled spells where reverseFill is typically flipped).
+    --
+    -- Rule:
+    --   * If SetTimerDuration succeeded AND we're in the learned "dir" mode => keep ReverseFill OFF.
+    --   * Otherwise (no timer / legacy signature) => use ReverseFill as the fallback visual toggle.
     local okTimer = S:SetTimerDuration(statusBar, durationObj, reverseFill)
-    S:SetReverseFill(statusBar, reverseFill)
+
+    local sig = S._timerSig
+    if okTimer and sig and sig.mode == "dir" then
+        S:SetReverseFill(statusBar, false)
+    else
+        S:SetReverseFill(statusBar, reverseFill)
+    end
+
     return okTimer and true or false
 end
 

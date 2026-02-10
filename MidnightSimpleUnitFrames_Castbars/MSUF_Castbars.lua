@@ -1494,13 +1494,15 @@ end
         -- Apply current (possibly overridden) player castbar color.
         MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
 
-        -- Unhalted-style channel drive: value always increases; direction is handled via reverseFill.
-        if self.statusBar and self.statusBar.SetMinMaxValues and channelDuration.GetTotalDuration then
-            local okTotal, total = MSUF_FastCall(channelDuration.GetTotalDuration, channelDuration)
-            if okTotal then
-                MSUF_FastCall(self.statusBar.SetMinMaxValues, self.statusBar, 0, total)
-                self.MSUF_channelTotal = total
+        -- Cache total duration for latency indicator etc., but do NOT touch MinMax while timer-driven.
+        -- Setting SetMinMaxValues after SetTimerDuration can stop the internal timer animation (seen on "permanent" channels like Mind Flay).
+        do
+            local total = nil
+            if channelDuration and channelDuration.GetTotalDuration then
+                local okTotal, t = MSUF_FastCall(channelDuration.GetTotalDuration, channelDuration)
+                if okTotal then total = t end
             end
+            self.MSUF_channelTotal = total
         end
 
         -- Latency indicator (only real castbar, not previews).

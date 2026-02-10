@@ -263,31 +263,20 @@ local function ApplyFontsAndTextLayout(frame, unitKey, g)
         end
     end
 
-    -- Performance: avoid redundant SetFont/SetTextColor/ApplyShadow churn.
-    -- These are relatively expensive and can be hit repeatedly during option
-    -- sync / event storms.
-    local fontsChanged = true
-    local stampFn = _G.MSUF_StampChanged
-    if type(stampFn) == "function" then
-        fontsChanged = stampFn(frame, "CastbarFonts_" .. tostring(unitKey), fontPath, fontFlags, fr, fg, fb, spellSize, timeSize, useShadow)
+    if frame.castText and frame.castText.SetFont then
+        frame.castText:SetFont(fontPath, spellSize, fontFlags)
+        if frame.castText.SetTextColor then
+            frame.castText:SetTextColor(fr, fg, fb, 1)
+        end
+        ApplyShadow(frame.castText, useShadow)
     end
 
-    if fontsChanged then
-        if frame.castText and frame.castText.SetFont then
-            frame.castText:SetFont(fontPath, spellSize, fontFlags)
-            if frame.castText.SetTextColor then
-                frame.castText:SetTextColor(fr, fg, fb, 1)
-            end
-            ApplyShadow(frame.castText, useShadow)
+    if frame.timeText and frame.timeText.SetFont then
+        frame.timeText:SetFont(fontPath, timeSize, fontFlags)
+        if frame.timeText.SetTextColor then
+            frame.timeText:SetTextColor(fr, fg, fb, 1)
         end
-
-        if frame.timeText and frame.timeText.SetFont then
-            frame.timeText:SetFont(fontPath, timeSize, fontFlags)
-            if frame.timeText.SetTextColor then
-                frame.timeText:SetTextColor(fr, fg, fb, 1)
-            end
-            ApplyShadow(frame.timeText, useShadow)
-        end
+        ApplyShadow(frame.timeText, useShadow)
     end
 
     -- Layout offsets + per-unit show/hide are handled by shared Style helpers.

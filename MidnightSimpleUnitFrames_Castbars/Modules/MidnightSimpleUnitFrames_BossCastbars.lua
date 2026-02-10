@@ -476,8 +476,7 @@ if self.statusBar and self.statusBar.SetReverseFill then
     elseif type(_G.MSUF_GetCastbarReverseFill) == "function" then
         rf = SafeCall(_G.MSUF_GetCastbarReverseFill) or false
     end
-    self.reverseFill = (rf and true or false)
-    self.statusBar:SetReverseFill(self.reverseFill)
+    SafeCall(self.statusBar.SetReverseFill, self.statusBar, rf and true or false)
 end
 
     end
@@ -647,11 +646,6 @@ local function BossCastbar_StartWatchdog(frame)
     if not _G.C_Timer or not _G.C_Timer.NewTicker then return end
     if frame._msufBossExistTicker then return end
 
-    -- When the central CastbarManager is active, it already provides a hard-stop path; keep this ticker cold.
-    if type(_G.MSUF_RegisterCastbar) == "function" and _G.MSUF_CastbarManager and _G.MSUF_CastbarManager.active then
-        return
-    end
-
     frame._msufBossExistTicker = _G.C_Timer.NewTicker(0.25, function()
         if not frame or not frame.unit or not frame.IsShown or not frame:IsShown() then
             BossCastbar_StopWatchdog(frame)
@@ -676,6 +670,7 @@ local function BossCastbar_StartWatchdog(frame)
         end
     end)
 end
+
 BossCastbar_Stop = function(frame)
     if not frame then return end
 
@@ -799,8 +794,7 @@ local function BossCastbar_ShowInterruptFeedback(frame, label)
         if frame.statusBar.SetReverseFill and type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
             local rev = SafeCall(_G.MSUF_GetCastbarReverseFillForFrame, frame, false)
             if rev ~= nil then
-                frame.reverseFill = (rev and true or false)
-                frame.statusBar:SetReverseFill(frame.reverseFill)
+                SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev)
             end
         end
 
@@ -906,11 +900,7 @@ local function BossCastbar_OnUpdate(self, elapsed)
         end
         if self._msufCastState then self._msufCastState.durationObj = newObj end
         if self.statusBar and self.statusBar.SetTimerDuration then
-            if type(_G.MSUF_SetStatusBarTimerDuration) == "function" then
-                _G.MSUF_SetStatusBarTimerDuration(self.statusBar, newObj, self.reverseFill)
-            else
-                self.statusBar:SetTimerDuration(newObj, 0)
-            end
+            SafeCall(self.statusBar.SetTimerDuration, self.statusBar, newObj, 0)
         end
     end
 end
@@ -988,8 +978,7 @@ BossCastbar_Start = function(frame)
                 if frame.statusBar and frame.statusBar.SetReverseFill and type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
                     local rev = SafeCall(_G.MSUF_GetCastbarReverseFillForFrame, frame, true)
                     if rev ~= nil then
-                        frame.reverseFill = (rev and true or false)
-                        frame.statusBar:SetReverseFill(frame.reverseFill)
+                        SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev and true or false)
                     end
                 end
 
@@ -1092,11 +1081,7 @@ BossCastbar_Start = function(frame)
         end
 
         if frame.statusBar and frame.statusBar.SetTimerDuration then
-            if type(_G.MSUF_SetStatusBarTimerDuration) == "function" then
-                _G.MSUF_SetStatusBarTimerDuration(frame.statusBar, durObj, frame.reverseFill)
-            else
-                frame.statusBar:SetTimerDuration(durObj, 0)
-            end
+            SafeCall(frame.statusBar.SetTimerDuration, frame.statusBar, durObj, 0)
         end
 	    
 
@@ -1104,8 +1089,7 @@ BossCastbar_Start = function(frame)
         if frame.statusBar and frame.statusBar.SetReverseFill and type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
             local rev = SafeCall(_G.MSUF_GetCastbarReverseFillForFrame, frame, false)
             if rev ~= nil then
-                frame.reverseFill = (rev and true or false)
-                frame.statusBar:SetReverseFill(frame.reverseFill)
+                SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev and true or false)
             end
         end
 -- Drive timeText via the central CastbarManager when available; fallback to a local OnUpdate otherwise.
@@ -1170,11 +1154,7 @@ BossCastbar_Start = function(frame)
         end
 
         if frame.statusBar and frame.statusBar.SetTimerDuration then
-            if type(_G.MSUF_SetStatusBarTimerDuration) == "function" then
-                _G.MSUF_SetStatusBarTimerDuration(frame.statusBar, durObj, frame.reverseFill)
-            else
-                frame.statusBar:SetTimerDuration(durObj, 0)
-            end
+            SafeCall(frame.statusBar.SetTimerDuration, frame.statusBar, durObj, 0)
         end
 	    
 
@@ -1182,8 +1162,7 @@ BossCastbar_Start = function(frame)
         if frame.statusBar and frame.statusBar.SetReverseFill and type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
             local rev = SafeCall(_G.MSUF_GetCastbarReverseFillForFrame, frame, true)
             if rev ~= nil then
-                frame.reverseFill = (rev and true or false)
-                frame.statusBar:SetReverseFill(frame.reverseFill)
+                SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev and true or false)
             end
         end
 -- Drive timeText via the central CastbarManager when available; fallback to a local OnUpdate otherwise.
