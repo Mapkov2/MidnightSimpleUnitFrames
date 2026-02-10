@@ -2,8 +2,10 @@
 ## Title: Midnight Simple Unit Frames
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko 
-## Version: 2.0 Alpha 3
-## SavedVariables: MSUF_DB
+## Version: 2.0 Alpha 4
+## SavedVariables: MSUF_DB, MSUF_GlobalDB
+## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
+## X-Wago-ID: XKq9aoKy
 
 MSUF_Libs.lua
 MSUF_Util.lua
@@ -17,23 +19,12 @@ MSUF_EventBus.lua
 MSUF_EditMode.lua
 MSUF_Castbars_LoDStub.lua
 MidnightSimpleUnitFrames_MinimapButton.lua
+Media\MSUF_Media.lua
 
 Core\MSUF_ProfileIO.lua
 Core\MSUF_ChatAndTooltips.lua
 Core\MSUF_StatusIndicators.lua
 Core\MSUF_UnitframeCore.lua
-Core\MSUF_RangeFade.lua
-
-MidnightSimpleUnitFrames_Colors.lua
-MidnightSimpleUnitFrames_Gameplay.lua
-MidnightSimpleUnitFrames_SlashMenu.lua
-MidnightSimpleUnitFrames.lua
-
-Options\MSUF_Options_Core.lua
-Options\MSUF_Options_Player.lua
-Options\MSUF_Options_Auras.lua
-Options\MSUF_Options_Fonts.lua
-Options\MSUF_Options_Misc.lua
 
 Auras2\MSUF_A2_DB.lua
 Auras2\MSUF_A2_Colors.lua
@@ -48,3 +39,18 @@ Auras2\MSUF_A2_Model.lua
 Auras2\MSUF_A2_Apply.lua
 Auras2\MSUF_A2_Render.lua
 Auras2\MSUF_A2_Events.lua
+
+MidnightSimpleUnitFrames_Colors.lua
+MidnightSimpleUnitFrames_Gameplay.lua
+MidnightSimpleUnitFrames_SlashMenu.lua
+MidnightSimpleUnitFrames.lua
+
+Options\MSUF_Options_Core.lua
+Options\MSUF_Options_Player.lua
+Options\MSUF_Options_Auras.lua
+Options\MSUF_Options_Fonts.lua
+Options\MSUF_Options_Misc.lua
+
+Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua
+Modules\MSUF_RoundedUnitframes.lua
+Modules\MSUF_3DPortraits.lua
