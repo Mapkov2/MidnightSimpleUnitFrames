@@ -2,8 +2,7 @@
 -- This file is a safe refactor-only split. No behavior changes.
 
 local addonName, ns = ...
-ns = ns or {}
-
+ns = (rawget(_G, "MSUF_NS") or ns) or {}
 -- Ensure shared API table exists
 local API = ns.MSUF_Auras2
 if type(API) ~= 'table' then
@@ -54,36 +53,62 @@ local function _A2_StoreEnsure(unit)
     local st = _StoreUnits[unit]
     if st then return st end
     st = {
-        kindById = {}, -- [auraInstanceID] = 1 (helpful) | 2 (harmful)
+        -- Stamp-map membership (no per-scan wipes):
+        -- kindStamp[aid] == stamp  => aid is present in the current set.
+        kindById  = {}, -- [auraInstanceID] = 1 (helpful) | 2 (harmful) (valid only when kindStamp matches)
+        kindStamp = {}, -- [auraInstanceID] = stamp
+        stamp     = 1,
+
         updated = {}, updatedLen = 0, -- updatedAuraInstanceIDs buffer (len stored separately)
         h1 = 0, h2 = 0, hCount = 0,
         d1 = 0, d2 = 0, dCount = 0,
         dirty = true,
+
     }
     _StoreUnits[unit] = st
     return st
 end
 
 local function _A2_StoreReset(st)
-    if st.kindById then
-    for k in pairs(st.kindById) do
-        st.kindById[k] = nil
-    end
+    -- Stamp advance instead of wiping maps
+    local s = (st.stamp or 0) + 1
+
+    -- Extremely rare overflow protection: hard reset tables
+    if s > 2147480000 then
+        st.kindById  = {}
+        st.kindStamp = {}
+        s = 1
     else
-        st.kindById = {}
+        if type(st.kindById)  ~= "table" then st.kindById  = {} end
+        if type(st.kindStamp) ~= "table" then st.kindStamp = {} end
     end
+
+    st.stamp = s
+
     st.h1, st.h2, st.hCount = 0, 0, 0
     st.d1, st.d2, st.dCount = 0, 0, 0
     st.updatedLen = 0
     st.dirty = false
 end
 
+
 local function _A2_StoreAdd(st, aid, kind)
     if not aid or aid == 0 then return end
-    if st.kindById[aid] then
-        return
+
+    local stampMap = st.kindStamp
+    local s = st.stamp or 1
+
+    if stampMap and stampMap[aid] == s then
+        return -- already present in current membership
     end
+    if not stampMap then
+        stampMap = {}
+        st.kindStamp = stampMap
+    end
+
+    stampMap[aid] = s
     st.kindById[aid] = kind
+
     if kind == 1 then
         st.hCount = st.hCount + 1
         st.h1 = _A2_ModAdd(st.h1, aid)
@@ -95,13 +120,27 @@ local function _A2_StoreAdd(st, aid, kind)
     end
 end
 
+
 local function _A2_StoreRemove(st, aid)
+    local stampMap = st.kindStamp
+    local s = st.stamp or 1
+
+    -- If we can't prove membership, flip dirty and rescan next read.
+    if not stampMap or stampMap[aid] ~= s then
+        st.dirty = true
+        if _pLeave then _pLeave("A2:Store.ScanUnit", unit) end
+        return
+    end
+
     local kind = st.kindById[aid]
     if not kind then
         st.dirty = true
         return
     end
-    st.kindById[aid] = nil
+
+    -- Tombstone: avoid churn; stamp is authoritative for membership
+    stampMap[aid] = 0
+
     if kind == 1 then
         st.hCount = st.hCount - 1
         st.h1 = _A2_ModSub(st.h1, aid)
@@ -113,12 +152,18 @@ local function _A2_StoreRemove(st, aid)
     end
 end
 
+
 local function _A2_StoreScanUnit(unit, st)
+    -- A2_PERFY_INSTRUMENT_STORE
+    local _pEnter = rawget(_G, "MSUF_A2_PerfyEnter")
+    local _pLeave = rawget(_G, "MSUF_A2_PerfyLeave")
+    if _pEnter then _pEnter("A2:Store.ScanUnit", unit) end
     _A2_StoreReset(st)
 
     local ids = C_UnitAuras and C_UnitAuras.GetAuraInstanceIDs
     if type(ids) ~= "function" then
         st.dirty = true
+    if _pLeave then _pLeave("A2:Store.ScanUnit", unit) end
         return
     end
 
@@ -139,6 +184,7 @@ local function _A2_StoreScanUnit(unit, st)
     end
 
     st.dirty = false
+    if _pLeave then _pLeave("A2:Store.ScanUnit", unit) end
 end
 
 local function _A2_StoreComputeRawSig(st)
@@ -163,6 +209,8 @@ function Store.InvalidateUnit(unit)
 end
 
 function Store.OnUnitAura(unit, updateInfo)
+    local _pEv = rawget(_G, "MSUF_A2_PerfyEvent")
+    if _pEv then _pEv("A2:Store.OnUnitAura", unit) end
     local st = _A2_StoreEnsure(unit)
 
     -- No delta info / full update => rescan on next read
@@ -172,60 +220,25 @@ function Store.OnUnitAura(unit, updateInfo)
         return
     end
 
-    local hasSetDelta = false
+    -- PERF (Step N): If we got addedAuras, membership changed.
+    -- Classifying added auras by scanning HELPFUL/HARMFUL lists is O(#added * #auras) and creates
+    -- recurring spikes in combat. We don't need incremental classification here.
+    -- Mark dirty and let the next GetRawSig() do a single linear scan.
+    local added = updateInfo.addedAuras
+    if type(added) == "table" and added[1] ~= nil then
+        st.dirty = true
+        st.updatedLen = 0
+        return
+    end
 
+    -- Membership removals can be handled incrementally (O(#removed)). If we encounter an unknown
+    -- auraInstanceID, _A2_StoreRemove() flips dirty and we'll rescan next read.
     local removed = updateInfo.removedAuraInstanceIDs
     if type(removed) == "table" and removed[1] ~= nil then
-        hasSetDelta = true
         for i = 1, #removed do
             local aid = removed[i]
             if aid then _A2_StoreRemove(st, aid) end
         end
-    end
-
-    local added = updateInfo.addedAuras
-    if type(added) == "table" and added[1] ~= nil then
-        hasSetDelta = true
-
-        -- IMPORTANT (Midnight): don't branch on aura fields like isHelpful/isHarmful (can be secret).
-        -- Determine kind via filter-based lists (safe) and auraInstanceID equality only.
-        local ids = C_UnitAuras and C_UnitAuras.GetAuraInstanceIDs
-        if type(ids) ~= "function" then
-            st.dirty = true
-        else
-            local help = ids(unit, "HELPFUL")
-            local harm = ids(unit, "HARMFUL")
-
-            for i = 1, #added do
-                local a = added[i]
-                if type(a) == "table" then
-                    local aid = a.auraInstanceID
-                    if aid and not st.kindById[aid] then
-                        local kind = nil
-                        if type(help) == "table" then
-                            for j = 1, #help do
-                                if help[j] == aid then kind = 1; break end
-                            end
-                        end
-                        if kind == nil and type(harm) == "table" then
-                            for j = 1, #harm do
-                                if harm[j] == aid then kind = 2; break end
-                            end
-                        end
-                        if kind ~= nil then
-                            _A2_StoreAdd(st, aid, kind)
-                        else
-                            -- Can't safely classify; fall back to rescan next read.
-                            st.dirty = true
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- If membership changed, we don't need delta-refresh ids (full rebuild will run).
-    if hasSetDelta then
         st.updatedLen = 0
         return
     end
@@ -260,14 +273,20 @@ function Store.PopUpdated(unit)
 end
 
 function Store.GetRawSig(unit)
+    local _pEnter = rawget(_G, "MSUF_A2_PerfyEnter")
+    local _pLeave = rawget(_G, "MSUF_A2_PerfyLeave")
+    if _pEnter then _pEnter("A2:Store.GetRawSig", unit) end
     local st = _A2_StoreEnsure(unit)
     if st.dirty then
         _A2_StoreScanUnit(unit, st)
     end
     if st.dirty then
+        if _pLeave then _pLeave("A2:Store.GetRawSig", unit) end
         return nil
     end
-    return _A2_StoreComputeRawSig(st)
+    local sig = _A2_StoreComputeRawSig(st)
+    if _pLeave then _pLeave("A2:Store.GetRawSig", unit) end
+    return sig
 end
 -- ------------------------------------------------------------
 

@@ -21,7 +21,7 @@ local function MSUF_A2_FastCall(fn, ...)
     end
     return true, fn(...)
 end
-ns = ns or {}
+ns = (rawget(_G, "MSUF_NS") or ns) or {}
 if ns.__MSUF_A2_CORE_LOADED then return end
 ns.__MSUF_A2_CORE_LOADED = true
 
@@ -2572,6 +2572,11 @@ local function _A2_UnitEnabledFast(a2, unit)
 end
 
 Flush = function()
+    -- A2_PERFY_INSTRUMENT_FLUSH
+    local _pEnter = rawget(_G, "MSUF_A2_PerfyEnter")
+    local _pLeave = rawget(_G, "MSUF_A2_PerfyLeave")
+    if _pEnter then _pEnter("A2:Flush") end
+
     local unitsUpdated = 0
 
     local nextRenderDelay = nil
@@ -2601,7 +2606,9 @@ Flush = function()
                 -- Preview mode: allow positioning even if unit is disabled or doesn't exist.
                 local e = EnsureAttached(unit)
                 if e then
+                    if _pEnter then _pEnter("A2:RenderUnit", unit) end
                     RenderUnit(e)
+                    if _pLeave then _pLeave("A2:RenderUnit", unit) end
                     unitsUpdated = unitsUpdated + 1
                 end
             else
@@ -2644,7 +2651,9 @@ Flush = function()
                             local e = EnsureAttached(unit)
                             if e then
                                 e._msufA2_lastRenderAt = nowT
+                                if _pEnter then _pEnter("A2:RenderUnit", unit) end
                                 RenderUnit(e)
+                                if _pLeave then _pLeave("A2:RenderUnit", unit) end
                                 unitsUpdated = unitsUpdated + 1
                             end
                         end
@@ -2680,9 +2689,13 @@ Flush = function()
     if _G and _G.MSUF_Auras2_UpdatePreviewStackTicker then
         _G.MSUF_Auras2_UpdatePreviewStackTicker()
     end
+
+    if _pLeave then _pLeave("A2:Flush", unitsUpdated) end
 end
 
 local function MarkDirty(unit, delay)
+    local _pEv = rawget(_G, "MSUF_A2_PerfyEvent")
+    if _pEv then _pEv("A2:MarkDirty", unit) end
     -- Step 5 perf (cumulative): hard gates (skip work) with 0-regression safety.
     -- If Auras2 is effectively disabled for this unit (and we're not in Edit Mode preview),
     -- do NOT schedule any flush work. Instead, immediately hard-hide anchors/movers.
@@ -2786,37 +2799,59 @@ end
 
 -- Public: mark all known units dirty (used by options + edit mode rebuilds).
 -- This must NEVER accept updateInfo tables. Only pass nil/numeric delays into MarkDirty.
-local function MarkAllDirty()
-    -- Preferred: only touch units we actually have entries for.
+local function MarkAllDirty(delay)
+    local did = false
+
+    -- Prefer DB cache: mark all units that are enabled, even if the unit has no aura entries yet.
+    local DB = API and API.DB
+    local c  = DB and DB.cache
+    local ue = c and c.unitEnabled
+    if ue then
+        if ue.player == true then MarkDirty("player", delay); did = true end
+        if ue.target == true then MarkDirty("target", delay); did = true end
+        if ue.focus  == true then MarkDirty("focus",  delay); did = true end
+        for i = 1, 5 do
+            local u = "boss" .. i
+            if ue[u] == true then
+                MarkDirty(u, delay)
+                did = true
+            end
+        end
+    end
+
+    -- Also touch units we actually have entries for (covers edge cases and keeps behavior stable).
     if type(AurasByUnit) == "table" then
         for unit in pairs(AurasByUnit) do
-            if unit then MarkDirty(unit) end
+            if unit then
+                MarkDirty(unit, delay)
+                did = true
+            end
         end
-        return
+    elseif API and type(API.Units) == "table" then
+        for unit in pairs(API.Units) do
+            if unit then
+                MarkDirty(unit, delay)
+                did = true
+            end
+        end
     end
 
-    -- Fallback: touch units registered in the Units module.
-    if API and type(API.Units) == "table" then
-        for unit in pairs(API.Units) do
-            if unit then MarkDirty(unit) end
-        end
-        return
-    end
+    if did then return end
 
     -- Last resort fallback (should be rare): common units.
-    MarkDirty("player")
-    MarkDirty("target")
-    MarkDirty("focus")
+    MarkDirty("player", delay)
+    MarkDirty("target", delay)
+    MarkDirty("focus", delay)
     for i = 1, 5 do
-        MarkDirty("boss" .. i)
+        MarkDirty("boss" .. i, delay)
     end
 end
 
-API.MarkAllDirty = API.MarkAllDirty or MarkAllDirty
-if _G and type(_G.MSUF_A2_MarkAllDirty) ~= "function" then
+
+API.MarkAllDirty = MarkAllDirty
+if type(_G) == "table" then
     _G.MSUF_A2_MarkAllDirty = MarkAllDirty
 end
-
 -- MarkAllDirty is now safe to use (late helper defined).
 API.__markAllDirtyReady = true
 
@@ -3013,7 +3048,7 @@ end
 -- on file-scope locals defined above.
 -- ------------------------------------------------------------
 do
-    ns = ns or {}
+    ns = (rawget(_G, "MSUF_NS") or ns) or {}
     local API = ns.MSUF_Auras2
     if type(API) ~= "table" then
         API = {}
@@ -3084,3 +3119,69 @@ if _G and type(_G.MSUF_SetPrivateAuraPreviewEnabled) ~= "function" then
         end
     end
 end
+
+-- ------------------------------------------------------------
+-- A2 Perfy bridge (opt-in, zero cost when disabled)
+-- Usage:
+--   /run MSUF_A2_PerfyEnable()        -- coarse spans (Flush/RenderUnit/etc.)
+--   /run MSUF_A2_PerfyEnable(true)    -- deep spans/events (per-icon, store deltas)
+--   /run MSUF_A2_PerfyDisable()
+-- ------------------------------------------------------------
+do
+    if rawget(_G, "MSUF_A2_PerfyEnable") == nil then
+        local function _clear()
+            _G.MSUF_A2_PerfyEnter = nil
+            _G.MSUF_A2_PerfyLeave = nil
+            _G.MSUF_A2_PerfyEvent = nil
+        end
+
+        local function _bind()
+            if rawget(_G, "MSUF_A2_PERFY_ENABLED") ~= true then
+                _clear()
+                return
+            end
+
+            local trace = rawget(_G, "Perfy_Trace")
+            local gett  = rawget(_G, "Perfy_GetTime") or rawget(_G, "GetTimePreciseSec")
+            if type(trace) ~= "function" or type(gett) ~= "function" then
+                _clear()
+                return
+            end
+
+            -- NOTE: Analyzer expects the standard event names "Enter"/"Leave" to reconstruct stacks.
+            _G.MSUF_A2_PerfyEnter = function(name, extra)
+                trace(gett(), "Enter", name, extra)
+            end
+            _G.MSUF_A2_PerfyLeave = function(name, extra)
+                trace(gett(), "Leave", name, extra)
+            end
+            _G.MSUF_A2_PerfyEvent = function(name, extra)
+                if rawget(_G, "MSUF_A2_PERFY_DEEP") == true then
+                    trace(gett(), "OnEvent", name, extra)
+                end
+            end
+        end
+
+        function _G.MSUF_A2_PerfyEnable(deep)
+            _G.MSUF_A2_PERFY_ENABLED = true
+            _G.MSUF_A2_PERFY_DEEP = (deep == true)
+            _bind()
+        end
+
+        function _G.MSUF_A2_PerfyDisable()
+            _G.MSUF_A2_PERFY_ENABLED = false
+            _G.MSUF_A2_PERFY_DEEP = false
+            _bind()
+        end
+
+        function _G.MSUF_A2_PerfyBind()
+            _bind()
+        end
+
+        -- Respect any pre-set global flags (e.g. user toggled via /run before reload)
+        _G.MSUF_A2_PERFY_ENABLED = (rawget(_G, "MSUF_A2_PERFY_ENABLED") == true)
+        _G.MSUF_A2_PERFY_DEEP = (rawget(_G, "MSUF_A2_PERFY_DEEP") == true)
+        _bind()
+    end
+end
+

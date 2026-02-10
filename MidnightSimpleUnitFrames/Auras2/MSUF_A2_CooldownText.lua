@@ -15,8 +15,7 @@ local addonName, ns = ...
 local function MSUF_A2_FastCall(fn, ...)
     return true, fn(...)
 end
-ns = ns or {}
-
+ns = (rawget(_G, "MSUF_NS") or ns) or {}
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 
@@ -863,6 +862,11 @@ local function MSUF_A2_ApplyCooldownTextColor(fs, col)
 end
 
 function MSUF_A2_CooldownTextMgr_Tick()
+    -- A2_PERFY_INSTRUMENT_CDTXT
+    local _pEnter = rawget(_G, "MSUF_A2_PerfyEnter")
+    local _pLeave = rawget(_G, "MSUF_A2_PerfyLeave")
+    if _pEnter then _pEnter("A2:CooldownText.Tick") end
+
     local mgr = MSUF_A2_CooldownTextMgr
 
     -- one-shot timers complete after firing
@@ -871,6 +875,7 @@ function MSUF_A2_CooldownTextMgr_Tick()
 
     if mgr.count <= 0 then
         MSUF_A2_CooldownTextMgr_StopIfIdle()
+        if _pLeave then _pLeave("A2:CooldownText.Tick", 0) end
         return
     end
 
@@ -1005,6 +1010,7 @@ function MSUF_A2_CooldownTextMgr_Tick()
     end
 
     MSUF_A2_CooldownTextMgr_ScheduleNext()
+    if _pLeave then _pLeave("A2:CooldownText.Tick", processed) end
 end
 
 function MSUF_A2_CooldownTextMgr_RegisterIcon(icon)

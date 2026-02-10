@@ -4,7 +4,7 @@
 -- ============================================================================
 
 local addonName, ns = ...
-ns = ns or {}
+ns = (rawget(_G, "MSUF_NS") or ns) or {}
 local API = ns.MSUF_Auras2
 if type(API) ~= "table" then
     API = {}
@@ -42,6 +42,30 @@ local function SafeCall(fn, ...)
     local ok, a, b, c, d, e = MSUF_A2_FastCall(fn, ...)
     if not ok then return nil end
     return a, b, c, d, e
+end
+
+-- Secret-safe value test.
+-- In 12.0+ the supported check is the global API `issecretvalue(value)`.
+-- Some environments also expose `C_Secrets.IsSecret(value)`; we keep it as a fallback.
+-- IMPORTANT: Never boolean-test/compare a potentially-secret value directly.
+local function _A2_IsSecretValue(v)
+    local fn = _G and _G.issecretvalue
+    if type(fn) == "function" then
+        local ok, r = MSUF_A2_FastCall(fn, v)
+        if ok and r == true then
+            return true
+        end
+    end
+
+    local s = C_Secrets and C_Secrets.IsSecret
+    if type(s) == "function" then
+        local ok, r = MSUF_A2_FastCall(s, v)
+        if ok and r == true then
+            return true
+        end
+    end
+
+    return false
 end
 
 -- DB wrappers (Render binds EnsureDB into API.DB, but Apply can be loaded earlier)
@@ -952,6 +976,9 @@ local function LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
 end
 
 function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, masterOn, isOwn, stackCountAnchor, layoutSig)
+    -- A2_PERFY_INSTRUMENT_APPLY
+    local _pEv = rawget(_G, "MSUF_A2_PerfyEvent")
+    if _pEv then _pEv("A2:Apply.CommitIcon", unit) end
     if not icon then return false end
 
     -- Always keep these stable for tooltip/refresh paths.
@@ -1072,13 +1099,25 @@ function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
 
             if not hadTimer then
                 -- If the API explicitly reports no expiration, hard-clear the cooldown (prevents stale timers).
+                -- Secret-safe: never compare/boolean-test possible secret returns.
                 if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
                     local ok, v = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, aid)
-                    if ok and (v == false or v == 0) then
-                        MSUF_A2_FastCall(cd.Clear, cd)
-                        MSUF_A2_FastCall(cd.SetCooldown, cd, 0, 0)
-                        icon._msufA2_cdDurationObj = nil
-                        cd._msufA2_durationObj = nil
+                    if ok and not _A2_IsSecretValue(v) then
+                        local tv = type(v)
+                        local noExp = false
+	                        if tv == "boolean" then
+	                            -- Safe: `v` is confirmed non-secret.
+	                            noExp = (v == false)
+	                        elseif tv == "number" then
+	                            -- Safe: `v` is confirmed non-secret.
+	                            noExp = (v <= 0)
+                        end
+                        if noExp then
+                            MSUF_A2_FastCall(cd.Clear, cd)
+                            MSUF_A2_FastCall(cd.SetCooldown, cd, 0, 0)
+                            icon._msufA2_cdDurationObj = nil
+                            cd._msufA2_durationObj = nil
+                        end
                     end
                 end
             end
@@ -1146,14 +1185,25 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
     if unit == "player" and shared and shared.highlightPrivateAuras == true and auraInstanceID then
         if C_Secrets and type(C_Secrets.ShouldUnitAuraInstanceBeSecret) == "function" then
             local ok, isSecret = MSUF_A2_FastCall(C_Secrets.ShouldUnitAuraInstanceBeSecret, unit, auraInstanceID)
-            if ok and (isSecret == true or isSecret == 1) then
-                local pr, pg, pb = MSUF_A2_GetPrivatePlayerHighlightRGB()
-                if icon._msufOwnGlow then
-                    icon._msufOwnGlow:SetVertexColor(pr, pg, pb, 1)
-                    icon._msufOwnGlow:Show()
+            if ok and not _A2_IsSecretValue(isSecret) then
+                local t = type(isSecret)
+                local yes = false
+	                if t == "boolean" then
+	                    -- Safe: `isSecret` is confirmed non-secret.
+	                    yes = isSecret
+	                elseif t == "number" then
+	                    -- Safe: `isSecret` is confirmed non-secret.
+	                    yes = (isSecret > 0)
+	                end
+                if yes then
+                    local pr, pg, pb = MSUF_A2_GetPrivatePlayerHighlightRGB()
+                    if icon._msufOwnGlow then
+                        icon._msufOwnGlow:SetVertexColor(pr, pg, pb, 1)
+                        icon._msufOwnGlow:Show()
+                    end
+                    if icon._msufPrivateMark then icon._msufPrivateMark:Show() end
+                    return
                 end
-                if icon._msufPrivateMark then icon._msufPrivateMark:Show() end
-                return
             end
         end
     end
@@ -1202,10 +1252,16 @@ local function MSUF_A2_AuraHasExpiration(unit, aura)
     -- 1) Primary: DoesAuraHaveExpirationTime (best signal).
     if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
         local ok, has = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
-        if ok and has ~= nil then
-            if has == true or has == 1 then return true end
-            if has == false or has == 0 then return false end
-        end
+	    if ok and not _A2_IsSecretValue(has) then
+	        local t = type(has)
+	        if t == "boolean" then
+	            -- Safe: `has` is confirmed non-secret.
+	            return has
+	        elseif t == "number" then
+	            -- Safe: `has` is confirmed non-secret.
+	            return (has > 0)
+	        end
+	    end
     end
 
 	-- 2) Strict permanence check: ONLY hide when duration is explicitly numeric 0.
@@ -1213,10 +1269,10 @@ local function MSUF_A2_AuraHasExpiration(unit, aura)
 	-- Use GetAuraDuration/DoesAuraHaveExpirationTime signals only.
 	if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
         local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
-        if okD and type(d) == "number" then
-            if d == 0 then return false end
-            return true
-        end
+	    if okD and type(d) == "number" and not _A2_IsSecretValue(d) then
+	        if d <= 0 then return false end
+	        return true
+	    end
     end
 
     -- 3) Duration Objects: NOT a reliable permanence signal in Midnight/Beta; treat as expiring.
@@ -1238,22 +1294,29 @@ local function MSUF_A2_AuraIsKnownPermanent(unit, aura)
     local auraInstanceID = aura._msufAuraInstanceID or aura.auraInstanceID
     if auraInstanceID == nil then return false end
 
-    if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
-        local ok, v = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
-        if ok and v ~= nil then
-            if v == false or v == 0 then return true end
-            if v == true or v == 1 then return false end
-        end
-    end
+	if C_UnitAuras and type(C_UnitAuras.DoesAuraHaveExpirationTime) == "function" then
+	    local ok, v = MSUF_A2_FastCall(C_UnitAuras.DoesAuraHaveExpirationTime, unit, auraInstanceID)
+	    if ok and not _A2_IsSecretValue(v) then
+	        local tv = type(v)
+	        	if tv == "boolean" then
+	            	-- v=false => no expiration => permanent (safe: v is confirmed non-secret)
+	            	return (v == false)
+	        	elseif tv == "number" then
+	            	-- v<=0 => no expiration => permanent (safe: v is confirmed non-secret)
+	            	return (v <= 0)
+	        end
+	    end
+	end
 
 	-- Only numeric 0 is accepted as a permanence signal.
 	-- Do NOT rely on aura.spellId in 12.0+/Midnight.
 	if C_UnitAuras and type(C_UnitAuras.GetAuraDuration) == "function" then
-        local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
-        if okD and type(d) == "number" then
-            return d == 0
-        end
-    end
+	    local okD, d = MSUF_A2_FastCall(C_UnitAuras.GetAuraDuration, unit, auraInstanceID)
+		    if okD and type(d) == "number" and not _A2_IsSecretValue(d) then
+		        -- Safe: d is confirmed non-secret.
+		        return (d <= 0)
+	    end
+	end
 
     return false
 end
@@ -1518,6 +1581,9 @@ local function MSUF_A2_EffectiveHidePermanent(shared, hidePermanentOverride)
 end
 
 local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
+    -- A2_PERFY_INSTRUMENT_APPLY_CD
+    local _pEv = rawget(_G, "MSUF_A2_PerfyEvent")
+    if _pEv then _pEv("A2:Apply.IconCooldown", unit) end
     if not icon.cooldown then return false end
     SafeCall(icon.cooldown.Show, icon.cooldown)
 
@@ -1617,7 +1683,6 @@ local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
             MSUF_A2_FastCall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
         end
     end
-
     return hadTimer
 end
 

@@ -3,8 +3,7 @@
 -- Goal: keep Render orchestration-only and avoid duplicated, drift-prone filter logic.
 
 local addonName, ns = ...
-ns = ns or {}
-
+ns = (rawget(_G, "MSUF_NS") or ns) or {}
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 

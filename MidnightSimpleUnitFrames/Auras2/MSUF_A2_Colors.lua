@@ -7,7 +7,7 @@
 
 local addonName, ns = ...
 
-ns = ns or {}
+ns = (rawget(_G, "MSUF_NS") or ns) or {}
 ns.MSUF_Auras2 = ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 

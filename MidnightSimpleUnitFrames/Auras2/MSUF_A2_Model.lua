@@ -3,8 +3,7 @@
 -- Goal: keep Render.lua smaller and preserve behavior (0 feature regression).
 
 local addonName, ns = ...
-ns = ns or {}
-
+ns = (rawget(_G, "MSUF_NS") or ns) or {}
 if ns.__MSUF_A2_MODEL_LOADED then
     return
 end
@@ -440,8 +439,16 @@ end
 local MSUF_A2_EMPTY = {}
 
 local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMine, includeBoss, wantExtra, extraKind, capHint)
-    if not unit then return MSUF_A2_EMPTY end
+    -- A2_PERFY_INSTRUMENT_BUILD_MERGED
+    local _pEnter = rawget(_G, "MSUF_A2_PerfyEnter")
+    local _pLeave = rawget(_G, "MSUF_A2_PerfyLeave")
+    if _pEnter then _pEnter("A2:Model.BuildMerged", filter) end
+    if not unit then
+        if _pLeave then _pLeave("A2:Model.BuildMerged", filter) end
+        return MSUF_A2_EMPTY
+    end
     if not baseShow and not wantExtra then
+        if _pLeave then _pLeave("A2:Model.BuildMerged", filter) end
         return MSUF_A2_EMPTY
     end
 
@@ -486,6 +493,7 @@ local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMi
             baseList = allList or GetAuraList(unit, filter, false, maxAll, allBuf)
         end
     end
+    if _pLeave then _pLeave("A2:Model.BuildMerged", filter) end
     return baseList
 end
 

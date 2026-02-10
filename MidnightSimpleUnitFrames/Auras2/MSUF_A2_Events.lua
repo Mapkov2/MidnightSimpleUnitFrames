@@ -10,8 +10,7 @@ local addonName, ns = ...
 local function MSUF_A2_FastCall(fn, ...)
     return true, fn(...)
 end
-ns = ns or {}
-
+ns = (rawget(_G, "MSUF_NS") or ns) or {}
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 
@@ -216,6 +215,18 @@ local function EnsureUnitAuraBinding(eventFrame)
     local DB = API and API.DB
     local c = DB and DB.cache
     local ue = c and c.unitEnabled
+
+    -- Bootstrap: if cache isn't ready yet (load-order / cold start),
+    -- keep PLAYER_LOGIN/PLAYER_ENTERING_WORLD registered so we can finalize
+    -- proper UNIT_AURA bindings once DB pointers are ready.
+    if not (c and c.ready == true) then
+        ApplyOwnedEvents(ef, {
+            PLAYER_LOGIN = "Core",
+            PLAYER_ENTERING_WORLD = "Core",
+        })
+        return
+    end
+
     if not ue then
         return
     end
@@ -797,6 +808,13 @@ function Events.Init()
 
         if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
             EnsureDB() -- prime + cache
+
+            -- Ensure event registration is aligned now that EnsureDB is definitely bound and cache is ready.
+            -- Fixes a rare load-order case where Events.Init ran before Render bound EnsureDB, which
+            -- could leave UNIT_AURA bindings (especially for player) disabled until a manual RefreshAll.
+            if Events.ApplyEventRegistration then
+                Events.ApplyEventRegistration()
+            end
 
             local Store = API and API.Store
             if Store and Store.InvalidateUnit then
