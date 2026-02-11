@@ -590,8 +590,8 @@ local function AcquireIcon(container, index)
     SafeCall(icon.cooldown.SetDrawEdge, icon.cooldown, false)
     SafeCall(icon.cooldown.SetDrawSwipe, icon.cooldown, true)
     SafeCall(icon.cooldown.SetDrawBling, icon.cooldown, false)
-    SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, true)
-    SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, true)
+    SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
+    SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
 
     -- Auras2: Expiration accuracy/stuck-at-0 fix (secret-safe)
     -- Some clients do not fire UNIT_AURA exactly at natural expiration, which can leave an icon visible at 0.
@@ -1484,7 +1484,7 @@ end
 local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, forcedDisp, forceHideCooldownNumbers, allowQuery)
     if shared and shared.showStackCount == false then
         if icon.cooldown and icon.cooldown.SetHideCountdownNumbers then
-            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, true)
+            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
         end
         if icon.count then
             icon.count:SetText("")
@@ -1548,7 +1548,7 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
         if icon._msufA2_hideCDNumbers ~= wantHideNums then
             icon._msufA2_hideCDNumbers = wantHideNums
             if icon.cooldown and icon.cooldown.SetHideCountdownNumbers then
-                SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, true)
+                SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, wantHideNums)
             end
             if wantHideNums and icon._msufA2_cdMgrRegistered == true then
                 MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
@@ -1579,7 +1579,7 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
     if icon._msufA2_hideCDNumbers == true and forceHideCooldownNumbers ~= true then
         icon._msufA2_hideCDNumbers = false
         if icon.cooldown and icon.cooldown.SetHideCountdownNumbers then
-            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, true)
+            SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, false)
         end
     end
 
@@ -1618,7 +1618,7 @@ local function MSUF_A2_ApplyIconCooldown(icon, unit, aura, shared, previewDef)
     end
 
     if icon.cooldown.SetHideCountdownNumbers then
-        SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, true)
+        SafeCall(icon.cooldown.SetHideCountdownNumbers, icon.cooldown, not wantText)
     end
     if not wantText and icon._msufA2_cdMgrRegistered == true then
         MSUF_A2_CooldownTextMgr_UnregisterIcon(icon)
