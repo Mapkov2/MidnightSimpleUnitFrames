@@ -770,6 +770,10 @@ end
     if g.enableAbsorbBar == nil then
         g.enableAbsorbBar = true
     end
+    if g.showSelfHealPrediction == nil then
+        g.showSelfHealPrediction = false
+    end
+
     -- Absorb display dropdown stores a mode; keep runtime flags in sync on load.
     if g.absorbTextMode ~= nil then
         local mode = tonumber(g.absorbTextMode)

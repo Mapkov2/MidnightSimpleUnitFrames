@@ -489,9 +489,210 @@ ns.Bars.Spec.power_pct = ns.Bars.Spec.power_pct or function(frame, unit, barsCon
     return _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer, isTarget, isFocus, true)
 end
 ns.Bars._msufPatchC = ns.Bars._msufPatchC or { version = "C1" }
+-- Player self-heal prediction (own incoming heals only).
+-- Implemented as a behind-the-HP statusbar so the additional segment only appears past current HP.
+local _MSUF_SelfHealPredCalc -- nil = unknown, false = unavailable, table = calc
+local function _MSUF_GetSelfHealPredCalc()
+    if _MSUF_SelfHealPredCalc ~= nil then return _MSUF_SelfHealPredCalc end
+    _MSUF_SelfHealPredCalc = false
+    local fn = _G and _G.CreateUnitHealPredictionCalculator
+    if type(fn) == "function" then
+        local ok, calc
+        if _G and type(_G.MSUF_FastCall) == "function" then
+            ok, calc = _G.MSUF_FastCall(fn)
+        else
+            ok, calc = pcall(fn)
+        end
+        if ok and calc then
+            _MSUF_SelfHealPredCalc = calc
+        end
+    end
+    return _MSUF_SelfHealPredCalc
+end
+
+local function _MSUF_GetIncomingHealsFromPlayer(unit)
+    if not unit then return 0 end
+
+    -- Fast path if the classic C-API is available.
+    local fnInc = _G and _G.UnitGetIncomingHeals
+    if type(fnInc) == "function" then
+        local ok, v
+        if _G and type(_G.MSUF_FastCall) == "function" then
+            ok, v = _G.MSUF_FastCall(fnInc, unit, "player")
+        else
+            ok, v = pcall(fnInc, unit, "player")
+        end
+        if ok and type(v) == "number" then
+            return v
+        end
+    end
+
+    -- Fallback: detailed prediction calculator.
+    local calc = _MSUF_GetSelfHealPredCalc()
+    local fnDet = _G and _G.UnitGetDetailedHealPrediction
+    if calc and type(fnDet) == "function" then
+        local ok
+        if _G and type(_G.MSUF_FastCall) == "function" then
+            ok = select(1, _G.MSUF_FastCall(fnDet, unit, "player", calc))
+        else
+            ok = pcall(fnDet, unit, "player", calc)
+        end
+        if ok and calc.GetIncomingHeals then
+            local total, fromHealer = calc:GetIncomingHeals()
+            if type(fromHealer) == "number" then return fromHealer end
+            if type(total) == "number" then return total end
+        end
+    end
+
+    return 0
+end
+
+local _msufSelfHealCalc = nil
+local _msufSelfHealPredPixelCalcBar = nil
+
+local function _MSUF_EnsureSelfHealPredPixelCalcBar()
+    local bar = _msufSelfHealPredPixelCalcBar
+    if bar then
+        return bar
+    end
+
+    bar = _G.CreateFrame("StatusBar", "MSUF_SelfHealPredPixelCalcBar", _G.UIParent)
+    bar:SetSize(1, 1)
+    bar:SetPoint("TOPLEFT", _G.UIParent, "TOPLEFT", -5000, 0)
+    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    bar:SetMinMaxValues(0, 1)
+    bar:SetValue(0)
+    bar:SetAlpha(0)
+    bar:Show()
+
+    _msufSelfHealPredPixelCalcBar = bar
+    return bar
+end
+
+local function _MSUF_GetIncomingSelfHeals(unit)
+    unit = unit or "player"
+
+    local calc = _msufSelfHealCalc
+    if not calc and _G.CreateUnitHealPredictionCalculator then
+        calc = _G.CreateUnitHealPredictionCalculator()
+        _msufSelfHealCalc = calc
+    end
+
+    if calc and _G.UnitGetDetailedHealPrediction then
+        local data = _G.UnitGetDetailedHealPrediction(unit, "player", calc)
+        if data and type(data) == "table" then
+            -- Prefer the clamped amount if provided, so it never visually overflows missing health.
+            -- IMPORTANT (Midnight/Secret-safe): never use secret numbers in boolean context (no 'or' fallback).
+            local v = data.clampedIncomingHealsFromHealer
+            if type(v) ~= "number" then
+                v = data.incomingHealsFromHealer
+            end
+            if type(v) == "number" then
+                return v
+            end
+        end
+    end
+
+    if _G.UnitGetIncomingHeals then
+        local v = _G.UnitGetIncomingHeals(unit, "player")
+        if type(v) == "number" then
+            return v
+        end
+    end
+
+    return 0
+end
+
+local function _MSUF_HideSelfHealPredBar(frame)
+    if not frame or not frame.selfHealPredBar then return end
+    local bar = frame.selfHealPredBar
+    bar:Hide()
+    bar._msufSelfHealPredLastW = nil
+    bar._msufSelfHealPredAnchorTex = nil
+    bar._msufSelfHealPredAnchorRev = nil
+end
+
+
+local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
+    local g = MSUF_DB and MSUF_DB.general
+    if not g or not g.showSelfHealPrediction then
+        _MSUF_HideSelfHealPredBar(frame)
+        return
+    end
+
+    if not frame or not frame.selfHealPredBar or not frame.hpBar then return end
+    local predBar = frame.selfHealPredBar
+    local hpBar = frame.hpBar
+
+    -- Early outs
+    if frame.IsShown and not frame:IsShown() then
+        _MSUF_HideSelfHealPredBar(frame)
+        return
+    end
+    if hpBar.IsShown and not hpBar:IsShown() then
+        _MSUF_HideSelfHealPredBar(frame)
+        return
+    end
+
+    local hpTex = hpBar.GetStatusBarTexture and hpBar:GetStatusBarTexture()
+    if not hpTex then
+        _MSUF_HideSelfHealPredBar(frame)
+        return
+    end
+
+    -- NOTE (Midnight/secret-safe):
+    -- - Do NOT do ANY arithmetic or comparisons on incoming-heal numbers (can be secret-tainted).
+    -- - Do NOT read/compare HP texture width.
+    -- Instead: render a second statusbar segment anchored to the current HP texture edge.
+    -- The statusbar fill itself computes the pixel length (inc/maxHP) internally.
+    -- Overflow (inc > missing) is clipped by the dedicated clip-frame created at unitframe build.
+
+    -- Sync size to full HP bar size (frame dimensions are safe numbers).
+    if hpBar.GetWidth and hpBar.GetHeight then
+        local w = hpBar:GetWidth()
+        local h = hpBar:GetHeight()
+        if type(w) == "number" and type(h) == "number" then
+            predBar:SetSize(w, h)
+        end
+    end
+
+    -- Sync reverse fill + anchor to the HP texture edge.
+    local rev = (hpBar.GetReverseFill and hpBar:GetReverseFill()) or false
+    if predBar._msufSelfHealPredAnchorTex ~= hpTex or predBar._msufSelfHealPredAnchorRev ~= rev then
+        predBar:ClearAllPoints()
+        if rev then
+            predBar:SetPoint("TOPRIGHT", hpTex, "TOPLEFT", 0, 0)
+            predBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMLEFT", 0, 0)
+        else
+            predBar:SetPoint("TOPLEFT", hpTex, "TOPRIGHT", 0, 0)
+            predBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
+        end
+        predBar._msufSelfHealPredAnchorTex = hpTex
+        predBar._msufSelfHealPredAnchorRev = rev
+    end
+    if predBar.SetReverseFill then
+        predBar:SetReverseFill(rev and true or false)
+    end
+
+    -- Incoming heals (self only) – pass-through to StatusBar API.
+    local inc = _MSUF_GetIncomingSelfHeals(unit)
+    if type(inc) ~= "number" then
+        inc = 0
+    end
+    if type(maxHP) == "number" then
+        predBar:SetMinMaxValues(0, maxHP)
+    else
+        predBar:SetMinMaxValues(0, 1)
+    end
+    MSUF_SetBarValue(predBar, inc, false)
+    predBar:Show()
+end
 function ns.Bars.ResetHealthAndOverlays(frame, clearAbsorbs)
     if not frame then  return end
     MSUF_ResetBarZero(frame.hpBar)
+    if frame.selfHealPredBar then
+        MSUF_ResetBarZero(frame.selfHealPredBar, true)
+    end
     if clearAbsorbs then
         MSUF_ResetBarZero(frame.absorbBar, true)
         MSUF_ResetBarZero(frame.healAbsorbBar, true)
@@ -502,13 +703,13 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
     if maxHP == nil and F.UnitHealthMax then
         maxHP = F.UnitHealthMax(unit)
     end
-    if maxHP then
+    if type(maxHP) == "number" then
         frame.hpBar:SetMinMaxValues(0, maxHP)
     end
     if hp == nil and F.UnitHealth then
         hp = F.UnitHealth(unit)
     end
-    if hp ~= nil then
+    if type(hp) == "number" then
         MSUF_SetBarValue(frame.hpBar, hp)
     end
     if frame.absorbBar then
@@ -516,6 +717,9 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
     end
     if frame.healAbsorbBar then
         MSUF_UpdateHealAbsorbBar(frame, unit, maxHP)
+    end
+    if frame.selfHealPredBar then
+        _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
     end
      return hp, maxHP
 end
@@ -3506,6 +3710,9 @@ local function MSUF_ApplyReverseFillBars(self, conf)
     if self.hpBar and self.hpBar.SetReverseFill then
         self.hpBar:SetReverseFill(rf and true or false)
     end
+    if self.selfHealPredBar and self.selfHealPredBar.SetReverseFill then
+        self.selfHealPredBar:SetReverseFill(rf and true or false)
+    end
     local p = self.targetPowerBar or self.powerBar
     if p and p.SetReverseFill then
         p:SetReverseFill(rf and true or false)
@@ -4696,7 +4903,25 @@ function UpdateSimpleUnitFrame(self)
     local isPet    = self._msufIsPet
     local isToT    = self._msufIsToT
     local unitValid = (type(unit) == "string" and unit ~= "") and true or false
-    local exists = (unitValid and F.UnitExists and F.UnitExists(unit)) and true or false
+    -- Step 5: cache UnitExists per UFCore flush (same frame can be updated multiple times in one flush).
+    local UnitExists = F.UnitExists
+    local exists = false
+    if unitValid and UnitExists then
+        local s = _G.MSUF_UFCORE_FLUSH_SERIAL
+        if s and self._msufExistsSerial == s and self._msufExistsUnit == unit then
+            exists = (self._msufCachedExists == true)
+        else
+            exists = UnitExists(unit) and true or false
+            self._msufCachedExists = exists
+            self._msufExistsUnit = unit
+            self._msufExistsSerial = s
+        end
+    else
+        -- Keep cache coherent (useful for callers that read the cached fields).
+        self._msufCachedExists = false
+        self._msufExistsUnit = unit
+        self._msufExistsSerial = _G.MSUF_UFCORE_FLUSH_SERIAL
+    end
 local key, conf = ns.UF.ResolveKeyAndConf(self, unit, db)
 if ns.UF.HandleDisabledFrame(self, conf) then
      return
@@ -5160,6 +5385,7 @@ function MSUF_OnRegenEnabled_ApplyDirty(event)
 _G.MSUF_ApplyCommitState = _G.MSUF_ApplyCommitState or {
     pending = false,
     queued = false,
+    fontKey = nil,
     fonts = false,
     bars = false,
     castbars = false,
@@ -5286,10 +5512,16 @@ function MSUF_CommitApplyDirty()
     end
          return
     end
-        MSUF_ApplyDirtyUnitFrames()
-    if st.fonts then
+        MSUF_ApplyDirtyUnitFrames()    if st.fonts then
         local fn = _G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts
-        if type(fn) == "function" then fn() end
+        if type(fn) == "function" then
+            local fk = st.fontKey
+            if fk and fk ~= false then
+                fn(fk)
+            else
+                fn()
+            end
+        end
     end
     if st.bars then
         local fn = _G.MSUF_UpdateAllBarTextures_Immediate or _G.MSUF_UpdateAllBarTextures
@@ -5314,6 +5546,7 @@ function MSUF_CommitApplyDirty()
         if type(_G.MSUF_EnsureToTFallbackTicker) == "function" then _G.MSUF_EnsureToTFallbackTicker() end
     end
     st.fonts = false
+    st.fontKey = nil
     st.bars = false
     st.castbars = false
     st.tickers = false
@@ -5321,7 +5554,7 @@ function MSUF_CommitApplyDirty()
     st.queued = false
     MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT")
  end
-local function UpdateAllFonts()
+local function UpdateAllFonts(onlyKey)
     local path  = MSUF_GetFontPath()
     local flags = MSUF_GetFontFlags()
     EnsureDB()
@@ -5333,6 +5566,62 @@ local function UpdateAllFonts()
     local globalPowSize  = g.powerFontSize or baseSize
 local useShadow = g.textBackdrop and true or false
 local colorPowerTextByType = (g.colorPowerTextByType == true)
+
+    -- Font update gating:
+    -- UpdateAllFonts() is reachable from broad "ApplyAllSettings" paths.
+    -- We keep those call sites intact (no regression), but avoid doing any real work
+    -- unless a font-related setting actually changed (global or per-unit overrides).
+    if onlyKey == "tot" or onlyKey == "targetoftarget" then onlyKey = "targettarget" end
+    if type(onlyKey) == "string" and onlyKey:match("^boss%d+$") then onlyKey = "boss" end
+
+    local function _MSUF_FontKeyStamp(key)
+        local c = (MSUF_DB and MSUF_DB[key]) or nil
+        if not c then
+            return "nil|nil|nil|nil|nil"
+        end
+        return tostring(c.nameFontSize or "nil")
+            .. "|" .. tostring(c.hpFontSize or "nil")
+            .. "|" .. tostring(c.powerFontSize or "nil")
+            .. "|" .. tostring(c.levelIndicatorSize or "nil")
+            .. "|" .. tostring(c.classificationIndicatorSize or "nil")
+    end
+
+    local globalStamp = tostring(path or "")
+        .. "|" .. tostring(flags or "")
+        .. "|" .. tostring(baseSize or 14)
+        .. "|" .. tostring(globalNameSize or 14)
+        .. "|" .. tostring(globalHPSize or 14)
+        .. "|" .. tostring(globalPowSize or 14)
+        .. "|" .. tostring(useShadow and 1 or 0)
+        .. "|" .. tostring(colorPowerTextByType and 1 or 0)
+        .. "|" .. tostring(fr or 1) .. "|" .. tostring(fg or 1) .. "|" .. tostring(fb or 1)
+
+    local keyStamps = _G.MSUF_FontKeyStamps
+    if not keyStamps then
+        keyStamps = {}
+        _G.MSUF_FontKeyStamps = keyStamps
+    end
+
+    local pendingKeyStamp, pendingMasterStamp
+    if onlyKey then
+        pendingKeyStamp = globalStamp .. "|" .. _MSUF_FontKeyStamp(onlyKey)
+        if keyStamps[onlyKey] == pendingKeyStamp and _G.MSUF_FontGlobalStamp == globalStamp then
+            return
+        end
+    else
+        pendingMasterStamp = globalStamp
+            .. "|" .. _MSUF_FontKeyStamp("player")
+            .. "|" .. _MSUF_FontKeyStamp("target")
+            .. "|" .. _MSUF_FontKeyStamp("focus")
+            .. "|" .. _MSUF_FontKeyStamp("targettarget")
+            .. "|" .. _MSUF_FontKeyStamp("pet")
+            .. "|" .. _MSUF_FontKeyStamp("boss")
+        if _G.MSUF_FontMasterStamp == pendingMasterStamp then
+            return
+        end
+    end
+
+
         -- UnitFramesList iteration handled by MSUF_ForEachUnitFrame()
         local UpdateNameColor = MSUF_UpdateNameColor
         local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb, useShadow)
@@ -5363,18 +5652,19 @@ local colorPowerTextByType = (g.colorPowerTextByType == true)
      end
         local function ApplyFontsToFrame(f)
             if not f then  return end
+            local key = f.msufConfigKey
+            if (not key) and f.unit then
+                local fn = GetConfigKeyForUnit
+                if type(fn) == "function" then
+                    key = fn(f.unit)
+                end
+            end
+            if onlyKey and key ~= onlyKey then
+                return
+            end
             local conf
-            if f.unit and MSUF_DB then
-                local key = f.msufConfigKey
-                if not key then
-                    local fn = GetConfigKeyForUnit
-                    if type(fn) == "function" then
-                        key = fn(f.unit)
-                    end
-                end
-                if key then
-                    conf = MSUF_DB[key]
-                end
+            if key and MSUF_DB then
+                conf = MSUF_DB[key]
             end
             local nameSize  = (conf and conf.nameFontSize)  or globalNameSize
             local hpSize    = (conf and conf.hpFontSize)    or globalHPSize
@@ -5449,6 +5739,21 @@ local colorPowerTextByType = (g.colorPowerTextByType == true)
 if ns and ns.MSUF_ToTInline_RequestRefresh then
     ns.MSUF_ToTInline_RequestRefresh("FONTS")
 end
+    -- Update cache stamps only after a successful apply pass (avoids "cached but not applied" edge cases).
+    _G.MSUF_FontGlobalStamp = globalStamp
+    if onlyKey then
+        keyStamps[onlyKey] = pendingKeyStamp
+    else
+        _G.MSUF_FontMasterStamp = pendingMasterStamp
+        -- Also cache per-key stamps so targeted updates can early-out afterwards.
+        keyStamps["player"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("player")
+        keyStamps["target"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("target")
+        keyStamps["focus"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("focus")
+        keyStamps["targettarget"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("targettarget")
+        keyStamps["pet"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("pet")
+        keyStamps["boss"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("boss")
+    end
+
  end
 MSUF_Export2("MSUF_UpdateAllFonts", UpdateAllFonts, "UpdateAllFonts")
 if type(MSUF_UpdateCastbarVisuals) == "function" and not _G.MSUF_UpdateCastbarVisuals_Immediate then
@@ -5469,9 +5774,24 @@ if type(MSUF_UpdateCastbarTextures) == "function" and not _G.MSUF_UpdateCastbarT
 end
 if not _G.MSUF_UpdateAllFonts_Immediate then
     _G.MSUF_UpdateAllFonts_Immediate = _G.MSUF_UpdateAllFonts
-    _G.MSUF_UpdateAllFonts = function()
+    _G.MSUF_UpdateAllFonts = function(onlyKey)
         local st = _G.MSUF_ApplyCommitState
-        if st then st.fonts = true end
+        if st then
+            st.fonts = true
+            if onlyKey then
+                if st.fontKey == nil then
+                    st.fontKey = onlyKey
+                elseif st.fontKey == false then
+                    -- already a full refresh queued
+                elseif st.fontKey ~= onlyKey then
+                    -- multiple keys requested -> fall back to a full refresh (still stamp-gated)
+                    st.fontKey = false
+                end
+            else
+                -- explicit full refresh
+                st.fontKey = false
+            end
+        end
         MSUF_ScheduleApplyCommit()
      end
     _G.UpdateAllFonts = _G.MSUF_UpdateAllFonts
@@ -5495,6 +5815,7 @@ local function UpdateAllBarTextures()
         ApplyTex(f.hpBar, texHP)
         ApplyTex(f.absorbBar, texAbs)
         ApplyTex(f.healAbsorbBar, texHeal)
+        ApplyTex(f.selfHealPredBar, texHP)
         if applyBg then
             applyBg(f)
     end
@@ -6091,6 +6412,38 @@ local function CreateSimpleUnitFrame(unit)
         f.hpGradient = grads and grads.right or nil
     end
     MSUF_ApplyHPGradient(f)
+    if unit == "player" then
+        -- Own-heals-only prediction segment (your incoming heals only).
+        -- IMPORTANT (Midnight/secret-safe):
+        -- Incoming-heal numbers and HP state can be secret-tainted.
+        -- We therefore do NO arithmetic/comparisons on those values.
+        -- Rendering is done by a second StatusBar anchored to the current HP texture edge;
+        -- the StatusBar fill computes the pixel length internally, and overflow is clipped.
+        local clip = _G.CreateFrame("Frame", nil, hpBar)
+        clip:SetAllPoints(hpBar)
+        if clip.SetClipsChildren then clip:SetClipsChildren(true) end
+        -- Keep it above the HP bar but below absorb overlays.
+        clip:SetFrameLevel(hpBar:GetFrameLevel() + 1)
+        f.selfHealPredClip = clip
+
+        local bar = _G.CreateFrame("StatusBar", nil, clip)
+        bar:SetStatusBarTexture(MSUF_GetBarTexture())
+        bar:SetMinMaxValues(0, 1)
+        MSUF_SetBarValue(bar, 0, false)
+        bar.MSUF_lastValue = 0
+        bar:SetFrameLevel(clip:GetFrameLevel())
+        bar:SetStatusBarColor(0.0, 1.0, 0.4, 0.35)
+        bar:Hide()
+        f.selfHealPredBar = bar
+
+        -- Keep reverse-fill in sync for completeness (direction doesn't matter when value=1).
+        if hpBar and hpBar.GetReverseFill and bar.SetReverseFill then
+            local okRF, rf = pcall(hpBar.GetReverseFill, hpBar)
+            if okRF and rf ~= nil then
+                pcall(bar.SetReverseFill, bar, rf and true or false)
+            end
+        end
+    end
     f.absorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 2, MSUF_GetAbsorbOverlayColor(), true)
     f.healAbsorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 3, MSUF_GetHealAbsorbOverlayColor(), false)
     ns.Bars.SetOverlayBarTexture(f.absorbBar, MSUF_GetAbsorbBarTexture)
@@ -6346,6 +6699,23 @@ end
         _G.MSUF_Auras2_RefreshAll()
     end
 
+    -- Player self-heal prediction: request a Player frame update when heal prediction changes
+    -- (this can change without UNIT_HEALTH firing).
+    if type(MSUF_EventBus_Register) == "function" and not _G.MSUF_SelfHealPredEventsRegistered then
+        _G.MSUF_SelfHealPredEventsRegistered = true
+        MSUF_EventBus_Register("UNIT_HEAL_PREDICTION", "MSUF_SELFHEALPRED", function(_, unitTarget)
+            if unitTarget ~= "player" then return end
+            local g = (MSUF_DB and MSUF_DB.general) or nil
+            if not (g and g.showSelfHealPrediction) then return end
+            local f = UnitFrames and UnitFrames.player
+            if not f or (f.IsShown and not f:IsShown()) then return end
+            if ns and ns.UF and ns.UF.RequestUpdate then
+                ns.UF.RequestUpdate(f, true, false, "UNIT_HEAL_PREDICTION")
+            end
+        end)
+    end
+
+
 
 
 
@@ -6576,7 +6946,7 @@ end
     if type(MSUF_InitPlayerCastbarPreviewToggle) == "function" then
         C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
     end
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 2.0 Beta 4 |cff565f89•|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 2.0 Beta 1 |cff565f89•|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
  end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then
