@@ -123,8 +123,7 @@ do
     f:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" then
             _A2_inCombat = true
-            -- Hard-disable Edit Mode state while in combat (no polling / no preview).
-            _A2_editModeActive = false
+            -- Freeze Edit Mode polling while in combat (keep last known state; no polling).
             _A2_editModeCheckAt = 2147483647 -- large sentinel (avoid math.huge in case of weird type coercions)
         else
             _A2_inCombat = false
@@ -162,6 +161,16 @@ local function MSUF_A2_InvalidateDB()
     if API and API.Colors and API.Colors.InvalidateCache then
         API.Colors.InvalidateCache()
     end
+    -- Options toggles often call InvalidateDB() and expect live changes.
+    -- Coalesce a refresh via the apply path (safe in combat; avoids /reload).
+    if API and API.RequestApply then
+        API.RequestApply()
+    elseif API and API.RefreshAll then
+        API.RefreshAll()
+    elseif API and API.MarkAllDirty then
+        API.MarkAllDirty(0)
+    end
+
 end
 
 
@@ -583,23 +592,65 @@ local state = API.state
 state.aurasByUnit = (type(state.aurasByUnit) == "table") and state.aurasByUnit or {}
 AurasByUnit = state.aurasByUnit
 
--- Step 6 perf (cumulative): recycle Dirty tables to reduce GC churn during frequent MarkDirty() calls.
-local DirtyPool = {}
-local function AcquireDirtyTable()
-    local t = DirtyPool[#DirtyPool]
-    if t then
-        DirtyPool[#DirtyPool] = nil
-        return t
+-- Step 6 perf (cumulative): allocation-free Dirty queue (double-buffer + stamp dedupe).
+-- Avoid per-flush table allocations and avoid wiping hash keys via pairs().
+local DirtyListA, DirtyListB = {}, {}
+local DirtyList = DirtyListA
+local DirtyCount = 0
+local DirtyMark = {}    -- unit -> generation stamp
+local DirtyGen  = 1     -- current generation for dedupe
+
+-- Track whether MarkDirty happened while flushing; only then schedule a follow-up flush next tick.
+local _A2_isFlushing = false
+local _A2_dirtyWhileFlushing = false
+
+local function _A2_DirtyAdd(unit, bumpStamp)
+    if not unit then return end
+    if DirtyMark[unit] == DirtyGen then return end
+    DirtyMark[unit] = DirtyGen
+    DirtyCount = DirtyCount + 1
+    DirtyList[DirtyCount] = unit
+
+    if bumpStamp then
+        -- Allocation-free aura-change stamp (used for caching per-unit derived state).
+        -- Only increment once per coalesced cycle for this unit.
+        local entry = AurasByUnit and AurasByUnit[unit]
+        if type(entry) == "table" then
+            entry._msufA2_auraStamp = (entry._msufA2_auraStamp or 0) + 1
+        end
     end
-    return {}
-end
-local function ReleaseDirtyTable(t)
-    if not t then return end
-    for k in pairs(t) do t[k] = nil end
-    DirtyPool[#DirtyPool + 1] = t
+
+    if _A2_isFlushing then
+        _A2_dirtyWhileFlushing = true
+    end
 end
 
-local Dirty = AcquireDirtyTable()
+-- Internal re-queue used by burst-gating (min render interval).
+-- IMPORTANT: must NOT bump aura stamp and must NOT force a follow-up flush-next-tick when we only defer.
+local function _A2_DirtyRequeue(unit)
+    if not unit then return end
+    if DirtyMark[unit] == DirtyGen then return end
+    DirtyMark[unit] = DirtyGen
+    DirtyCount = DirtyCount + 1
+    DirtyList[DirtyCount] = unit
+end
+
+local function _A2_DirtySwap()
+    local toUpdateList = DirtyList
+    local toUpdateCount = DirtyCount
+
+    -- Swap buffers (no allocations)
+    if DirtyList == DirtyListA then
+        DirtyList = DirtyListB
+    else
+        DirtyList = DirtyListA
+    end
+
+    DirtyCount = 0
+    DirtyGen = DirtyGen + 1
+    return toUpdateList, toUpdateCount
+end
+
 local FlushScheduled = false
 
 
@@ -2154,7 +2205,7 @@ local function MSUF_A2_RenderFromListBudgeted(ctx, list, startI, cap, isHelpful,
         if count >= cap then break end
         local aura = list[i]
         if aura then
-            if onlyBossAuras and not MSUF_A2_AuraFieldIsTrue(aura, "isBossAura") then
+            if onlyBossAuras and not (Model and Model.IsBossAura and Model.IsBossAura(aura)) then
                 -- skip
             else
                 if budget <= 0 then
@@ -2514,28 +2565,26 @@ end
 
         -- If raw auraInstanceID sets + layout/filter signature are unchanged, avoid expensive list building.
         if not resumeBudget then
-            local Store = API and API.Store
-                        local rescanStamp
-                        if Store and Store.GetRawSig then
-                            rawSig, rescanStamp = Store.GetRawSig(unit, sigCapH, sigCapD)
-                        end
-                        if rawSig == nil then
-                            rawSig = MSUF_A2_ComputeRawAuraSig(unit, sigCapH, sigCapD)
-                            rescanStamp = nil
-                        end
-                        if rescanStamp then
-                            entry._msufA2_storeRescanStamp = rescanStamp
-                            entry._msufA2_storeRescanBudgetStamp = entry._msufA2_budgetStamp
-                            entry._msufA2_storeRescanUnit = unit
-                            entry._msufA2_storeRescanCapH = sigCapH
-                            entry._msufA2_storeRescanCapD = sigCapD
-                        else
-                            entry._msufA2_storeRescanStamp = nil
-                            entry._msufA2_storeRescanBudgetStamp = nil
-                            entry._msufA2_storeRescanUnit = nil
-                            entry._msufA2_storeRescanCapH = nil
-                            entry._msufA2_storeRescanCapD = nil
-                        end
+local Store = API and API.Store
+local rescanStamp
+if Store and Store.GetRawSig then
+    rawSig, rescanStamp = Store.GetRawSig(unit, sigCapH, sigCapD)
+end
+if not rawSig then
+    rawSig = MSUF_A2_ComputeRawAuraSig(unit, sigCapH, sigCapD)
+    rescanStamp = nil
+end
+
+-- Expose same-tick Store scan reuse to Model.GetAuraList (only when we performed a Store rescan).
+if rescanStamp ~= nil then
+    entry._msufA2_storeRescanStamp = rescanStamp
+    entry._msufA2_storeRescanBudgetStamp = entry._msufA2_budgetStamp
+    entry._msufA2_storeRescanUnit = unit
+else
+    entry._msufA2_storeRescanStamp = nil
+    entry._msufA2_storeRescanBudgetStamp = nil
+    entry._msufA2_storeRescanUnit = nil
+end
             layoutSig = MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebuffAnchor, splitSpacing,
                 iconSize, buffIconSize, debuffIconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, stackCountAnchor,
                 tf, masterOn, onlyBossAuras, finalShowBuffs, finalShowDebuffs)
@@ -2736,16 +2785,19 @@ Flush = function()
 
     -- Keep FlushScheduled=true while flushing to coalesce MarkDirty calls that happen during rendering.
 
+    _A2_isFlushing = true
+    _A2_dirtyWhileFlushing = false
+
     FlushScheduled = true
-    local toUpdate = Dirty
-    Dirty = AcquireDirtyTable()
+    local toUpdateList, toUpdateCount = _A2_DirtySwap()
 
     -- perf/peaks: hard-gate work when not relevant.
     -- Never render when the unitframe isn't visible (unless Edit Mode preview is active).
     local a2, shared = GetAuras2DB()
     local showTest = (shared and shared.showInEditMode and IsEditModeActive and IsEditModeActive()) and true or false
 
-    for unit, _ in pairs(toUpdate) do
+    for i = 1, toUpdateCount do
+        local unit = toUpdateList[i]
         local entry = AurasByUnit[unit]
         local frame = (entry and entry.frame) or FindUnitFrame(unit)
 
@@ -2787,7 +2839,7 @@ Flush = function()
                                 local dt = nowT - last
                                 if dt >= 0 and dt < MSUF_A2_MIN_RENDER_INTERVAL then
                                     local remaining = MSUF_A2_MIN_RENDER_INTERVAL - dt
-                                    Dirty[unit] = true
+                                    _A2_DirtyRequeue(unit)
                                     if remaining < 0 then remaining = 0 end
                                     if (not nextRenderDelay) or remaining < nextRenderDelay then
                                         nextRenderDelay = remaining
@@ -2811,7 +2863,7 @@ Flush = function()
         end
     end
 
-    ReleaseDirtyTable(toUpdate)
+    _A2_isFlushing = false
     -- Schedule a deferred flush if we intentionally deferred expensive renders due to burst gating.
     if nextRenderDelay ~= nil then
         if nextRenderDelay < 0 then nextRenderDelay = 0 end
@@ -2819,12 +2871,12 @@ Flush = function()
     end
 
     -- If new work was marked while we were flushing, schedule a follow-up flush next tick.
-    if next(Dirty) ~= nil then
+    if _A2_dirtyWhileFlushing then
         _A2_ScheduleFlush(0)
     end
 
     -- Go fully idle when the queue is empty and no deferred work is pending.
-    if nextRenderDelay == nil and next(Dirty) == nil then
+    if nextRenderDelay == nil and DirtyCount == 0 then
         FlushScheduled = false
         _A2_StopFlushDriver()
     else
@@ -2913,21 +2965,11 @@ local function MarkDirty(unit, delay)
             end
         end
     end
-
     -- Step 4 perf (cumulative): per-unit coalescing + "one wake".
     -- Events may spam MarkDirty many times per frame (UNIT_AURA bursts).
-    -- We dedupe per unit via Dirty[unit] and schedule exactly one global flush driver wake.
+    -- We dedupe per unit via a generation-stamped queue and schedule exactly one global flush driver wake.
     -- delay: optional seconds to coalesce multiple events (0 means next frame).
-    if not Dirty[unit] then
-        Dirty[unit] = true
-
-        -- Allocation-free aura-change stamp (used for caching per-unit derived state).
-        -- Only increment once per coalesced cycle for this unit.
-        local entry = AurasByUnit and AurasByUnit[unit]
-        if type(entry) == "table" then
-            entry._msufA2_auraStamp = (entry._msufA2_auraStamp or 0) + 1
-        end
-    end
+    _A2_DirtyAdd(unit, true)
 
     if not delay or delay < 0 then delay = 0 end
 
@@ -3005,7 +3047,7 @@ API.__markAllDirtyReady = true
 -- Public: is any render work pending? (used by Events poll gating)
 local function MSUF_A2_DirtyListNotEmpty()
     if FlushScheduled then return true end
-    return (next(Dirty) ~= nil)
+    return (DirtyCount > 0)
 end
 API.DirtyListNotEmpty = API.DirtyListNotEmpty or MSUF_A2_DirtyListNotEmpty
 if _G and type(_G.MSUF_A2_DirtyListNotEmpty) ~= "function" then
@@ -3073,12 +3115,10 @@ local function MSUF_A2_HardDisableAll()
     end
     FlushScheduled = false
 
-    -- Clear dirty table in-place
-    if Dirty then
-        for k in pairs(Dirty) do
-            Dirty[k] = nil
-        end
-    end
+    -- Clear dirty queue (allocation-free)
+    DirtyCount = 0
+    DirtyGen = DirtyGen + 1
+    _A2_dirtyWhileFlushing = false
 
     -- Cancel preview tickers (guarded)
     if API and API.UpdatePreviewStackTicker then API.UpdatePreviewStackTicker() end

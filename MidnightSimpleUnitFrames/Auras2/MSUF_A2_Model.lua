@@ -43,6 +43,30 @@ local math_floor = math.floor
 local string_byte = string.byte
 local pairs = pairs
 
+
+-- ========
+-- Filter string cache (avoids string concatenation in hot paths)
+-- ========
+
+local _A2_FILTER_HELPFUL         = "HELPFUL"
+local _A2_FILTER_HARMFUL         = "HARMFUL"
+local _A2_FILTER_HELPFUL_PLAYER  = "HELPFUL|PLAYER"
+local _A2_FILTER_HARMFUL_PLAYER  = "HARMFUL|PLAYER"
+local _A2_FILTER_PLAYER_HELPFUL  = "PLAYER|HELPFUL"
+local _A2_FILTER_PLAYER_HARMFUL  = "PLAYER|HARMFUL"
+
+local function _A2_GetPlayerSuffixFilter(filter)
+    if filter == _A2_FILTER_HELPFUL then return _A2_FILTER_HELPFUL_PLAYER end
+    if filter == _A2_FILTER_HARMFUL then return _A2_FILTER_HARMFUL_PLAYER end
+    return nil
+end
+
+local function _A2_GetPlayerPrefixFilter(filter)
+    if filter == _A2_FILTER_HELPFUL then return _A2_FILTER_PLAYER_HELPFUL end
+    if filter == _A2_FILTER_HARMFUL then return _A2_FILTER_PLAYER_HARMFUL end
+    return nil
+end
+
 -- ========
 -- FastCall / SafeCall (no pcall; secret-safe design relies on not inspecting secret values)
 -- ========
@@ -159,47 +183,34 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount, out, entry)
         return out
     end
 
--- PERF: Store already did a capped slot scan for the rawSig check (same pass, same unit/caps).
--- Reuse those aura tables for the "all auras" list to avoid a second GetAuraDataBySlot() sweep.
-if entry and onlyPlayer ~= true and type(maxCount) == "number" and maxCount > 0 then
-    local stamp = entry._msufA2_storeRescanStamp
-    local bs = entry._msufA2_storeRescanBudgetStamp
-    if stamp and bs and (bs == entry._msufA2_budgetStamp) and (entry._msufA2_storeRescanUnit == unit) then
-        local Store = API and API.Store
-        if Store and Store.GetLastScannedAuraList then
-            local reused = Store.GetLastScannedAuraList(unit, filter, maxCount, stamp, out)
-            if reused then
-                -- Ensure downstream logic has a stable id field without touching secret fields.
-                for i = 1, #reused do
-                    local data = reused[i]
-                    if type(data) == 'table' and data._msufAuraInstanceID == nil then
-                        local aid = data.auraInstanceID
-                        if aid ~= nil then
-                            data._msufAuraInstanceID = aid
-                        end
-                    end
-                end
-                return reused
-            end
-        end
-    end
-end
-
     -- Preferred fast path: slot API lets us request only the first N auras (huge perf win on large aura sets).
     local getSlots = C_UnitAuras.GetAuraSlots
     local getBySlot = C_UnitAuras.GetAuraDataBySlot
     if type(maxCount) == "number" and maxCount > 0 and type(getSlots) == "function" and type(getBySlot) == "function" then
-        local f = onlyPlayer and (filter .. "|PLAYER") or filter
+		local f = filter
+		local fSuf, fPre
+		if onlyPlayer then
+			-- IMPORTANT: token order can matter on some clients. Try both orders before falling back.
+			fSuf = _A2_GetPlayerSuffixFilter(filter) -- e.g. HELPFUL|PLAYER
+			fPre = _A2_GetPlayerPrefixFilter(filter) -- e.g. PLAYER|HELPFUL
+			if fSuf then f = fSuf end
+		end
 
         -- Reuse a scratch slot array to avoid GC churn.
         local slotScratch = out._msufA2_slotScratch
         if type(slotScratch) ~= 'table' then slotScratch = {}; out._msufA2_slotScratch = slotScratch end
 
-        local n = _A2_CaptureAuraSlotsInto(slotScratch, getSlots, unit, f, maxCount, nil)
-        if n == 0 and onlyPlayer then
-            -- Fallback: try without PLAYER if the API rejects the combined filter.
-            n = _A2_CaptureAuraSlotsInto(slotScratch, getSlots, unit, filter, maxCount, nil)
-        end
+		local n = _A2_CaptureAuraSlotsInto(slotScratch, getSlots, unit, f, maxCount, nil)
+		if n == 0 and onlyPlayer then
+			-- Some clients reject one order but accept the other.
+			if fPre and fPre ~= f then
+				n = _A2_CaptureAuraSlotsInto(slotScratch, getSlots, unit, fPre, maxCount, nil)
+			end
+			if n == 0 then
+				-- Final fallback: drop PLAYER restriction rather than returning empty.
+				n = _A2_CaptureAuraSlotsInto(slotScratch, getSlots, unit, filter, maxCount, nil)
+			end
+		end
 
         if n > 0 then
             for i = 1, n do
@@ -227,18 +238,26 @@ end
         return out
     end
 
-    local ids
-    if onlyPlayer then
-        local res = getIDs(unit, filter .. "|PLAYER")
-        if type(res) == "table" then
-            ids = res
-        else
-            res = getIDs(unit, filter)
-            if type(res) == "table" then
-                ids = res
-            end
-        end
-    else
+		local ids
+		if onlyPlayer then
+			-- Try both token orders once; if both fail, drop PLAYER restriction.
+			local fSuf = _A2_GetPlayerSuffixFilter(filter)
+			local res = (fSuf and getIDs(unit, fSuf)) or nil
+			if type(res) == "table" and #res > 0 then
+				ids = res
+			else
+				local fPre = _A2_GetPlayerPrefixFilter(filter)
+				local res2 = (fPre and getIDs(unit, fPre)) or nil
+				if type(res2) == "table" and #res2 > 0 then
+					ids = res2
+				else
+					local res3 = getIDs(unit, filter)
+					if type(res3) == "table" then
+						ids = res3
+					end
+				end
+			end
+		else
         local res = getIDs(unit, filter)
             if type(res) == "table" then
             ids = res
@@ -317,9 +336,13 @@ local function MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, filter, maxCount)
         local slotScratch = entry[scratchKey]
         if type(slotScratch) ~= 'table' then slotScratch = {}; entry[scratchKey] = slotScratch end
 
-        local nSlots = _A2_CaptureAuraSlotsInto(slotScratch, getSlots, unit, filter .. "|PLAYER", cap, nil)
+        local f = _A2_GetPlayerSuffixFilter(filter) or filter
+        local nSlots = _A2_CaptureAuraSlotsInto(slotScratch, getSlots, unit, f, cap, nil)
         if nSlots == 0 then
-            nSlots = _A2_CaptureAuraSlotsInto(slotScratch, getSlots, unit, "PLAYER|" .. filter, cap, nil)
+            local f2 = _A2_GetPlayerPrefixFilter(filter)
+            if f2 then
+                nSlots = _A2_CaptureAuraSlotsInto(slotScratch, getSlots, unit, f2, cap, nil)
+            end
         end
 
         if nSlots > 0 then
@@ -342,13 +365,18 @@ local function MSUF_A2_GetPlayerAuraIdSetCached(entry, unit, filter, maxCount)
     end
 
     -- Legacy fallback: instanceIDs. Still cap to keep the set bounded.
-    local ids = C_UnitAuras.GetUnitAuraInstanceIDs(unit, filter .. "|PLAYER")
+    local f = _A2_GetPlayerSuffixFilter(filter) or filter
+    local ids = C_UnitAuras.GetUnitAuraInstanceIDs(unit, f)
     if type(ids) ~= "table" then
         -- Alternate ordering: some clients / API variants can be picky about token order.
-        ids = C_UnitAuras.GetUnitAuraInstanceIDs(unit, "PLAYER|" .. filter)
+        local f2 = _A2_GetPlayerPrefixFilter(filter)
+        if f2 then
+            ids = C_UnitAuras.GetUnitAuraInstanceIDs(unit, f2)
+        end
     elseif #ids == 0 then
         -- If empty, probe the alternate order once to keep "own highlight" reliable.
-        local ids2 = C_UnitAuras.GetUnitAuraInstanceIDs(unit, "PLAYER|" .. filter)
+        local f2 = _A2_GetPlayerPrefixFilter(filter)
+        local ids2 = f2 and C_UnitAuras.GetUnitAuraInstanceIDs(unit, f2) or nil
         if type(ids2) == "table" and #ids2 > 0 then
             ids = ids2
         end
@@ -488,6 +516,34 @@ local function MSUF_A2_MergeBossAuras(playerList, fullList, out, seen, seenKeys,
     local prevOutN = out._msufA2_n
     if type(prevOutN) ~= "number" then prevOutN = #out end
     local outN = 0
+
+-- Same-tick Store slot-scan reuse (avoids a second GetAuraDataBySlot pass).
+-- Only valid for non-player-only lists, and only when Render performed a Store rescan this tick.
+if entry and onlyPlayer ~= true and type(maxCount) == "number" and maxCount > 0 then
+    local stamp = entry._msufA2_storeRescanStamp
+    local bs = entry._msufA2_storeRescanBudgetStamp
+    if stamp ~= nil and bs ~= nil and bs == entry._msufA2_budgetStamp and entry._msufA2_storeRescanUnit == unit then
+        local Store = API and API.Store
+        if Store and Store.GetLastScannedAuraList then
+            local reused = Store.GetLastScannedAuraList(unit, filter, maxCount, stamp, out)
+            if reused then
+                local rn = reused._msufA2_n
+                if type(rn) ~= "number" then rn = #reused end
+                -- Normalize for Apply hot-path: expose _msufAuraInstanceID without allocating.
+                for i = 1, rn do
+                    local data = reused[i]
+                    if type(data) == "table" and data._msufAuraInstanceID == nil then
+                        local aid = data.auraInstanceID
+                        if aid ~= nil then
+                            data._msufAuraInstanceID = aid
+                        end
+                    end
+                end
+                return reused
+            end
+        end
+    end
+end
 
     -- Stamp map: we never wipe/clear the table every render. Instead, we bump a stamp and
     -- treat seen[aid] == stamp as "seen this pass".

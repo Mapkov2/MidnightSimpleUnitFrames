@@ -982,6 +982,19 @@ function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     icon._msufUnit = unit
     icon._msufFilter = isHelpful and "HELPFUL" or "HARMFUL"
 
+    -- Icons are recycled between Edit Mode preview and real auras.
+    -- If this icon was used as a preview, invalidate cached visuals/diff so we force a full re-apply.
+    if icon._msufA2_isPreview == true then
+        icon._msufA2_isPreview = nil
+        icon._msufA2_previewKind = nil
+        icon._msufA2_previewLabelText = nil
+        icon._msufSpellId = nil
+        local lbl = icon._msufA2_previewLabel
+        if lbl and lbl.Hide then lbl:Hide() end
+        icon._msufA2_lastVisualAuraInstanceID = nil
+        icon._msufA2_last = nil
+    end
+
     local container = icon._msufA2_container or icon:GetParent()
     local map = container and container._msufA2_iconByAid
 
@@ -991,6 +1004,7 @@ function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
             map[prevAid] = nil
         end
         icon._msufAuraInstanceID = nil
+        icon._msufA2_lastVisualAuraInstanceID = nil
         return false
     end
 
@@ -1121,6 +1135,17 @@ function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         end
 
         return true
+    end
+
+    -- Texture changes only when a different auraInstanceID is bound to this icon.
+    -- Keep this out of the fast refresh path (cooldown/stacks), and only touch SetTexture
+    -- when we are already doing a full commit.
+    if aid ~= nil and icon._msufA2_lastVisualAuraInstanceID ~= aid then
+        icon._msufA2_lastVisualAuraInstanceID = aid
+        local newTex = aura.icon
+        if newTex ~= nil and icon.tex then
+            icon.tex:SetTexture(newTex)
+        end
     end
 
     if not last then
@@ -1490,8 +1515,7 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
             icon.count:SetText("")
             icon.count:Hide()
         end
-        icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp, icon._msufA2_lastStackText = false, nil, nil
-        icon._msufA2_lastStackStamp = nil
+        icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp, icon._msufA2_lastStackText, icon._msufA2_lastStackStoreStamp = false, nil, nil, nil
 
         if icon._msufA2_hideCDNumbers == true then
             icon._msufA2_hideCDNumbers = false
@@ -1516,38 +1540,31 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
         icon._msufA2_lastStackDisp = disp
         icon._msufA2_lastStackText = dispText
     else
-        if allowQuery ~= false and icon._msufAuraInstanceID then
-            -- Cached path: Store invalidates per-aura on UNIT_AURA deltas; avoids per-frame API calls.
+        if allowQuery ~= false and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount and icon._msufAuraInstanceID then
+            -- Expensive path: only run when the aura was actually applied/refreshed/updated (UNIT_AURA delta).
+            disp, stamp = nil, nil
             local Store = API and API.Store
-            local dispStamp
-
             if Store and Store.GetStackCount then
-                disp, dispStamp = Store.GetStackCount(unit, icon._msufAuraInstanceID)
-            elseif C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
+                disp, stamp = Store.GetStackCount(unit, icon._msufAuraInstanceID)
+            else
                 disp = C_UnitAuras.GetAuraApplicationDisplayCount(unit, icon._msufAuraInstanceID, 2, 99)
             end
 
-            if dispStamp ~= nil and icon._msufA2_lastStackStamp == dispStamp and icon._msufA2_lastStackText ~= nil then
-                -- Same stamp: reuse cached text to avoid tostring()/allocations.
-                dispText = icon._msufA2_lastStackText
-                keepExistingText = (dispText == nil and icon._msufA2_stackWasShown == true) and true or false
-                disp = icon._msufA2_lastStackDisp
-                if dispText == nil then
-                    disp = nil
+            if disp ~= nil then
+                -- Cache the last display so "time-only" refresh paths can render stacks without API calls.
+                -- IMPORTANT (secret-safe): we never compare these values, we only re-display them.
+                if stamp ~= nil and icon._msufA2_lastStackStoreStamp == stamp and icon._msufA2_lastStackText ~= nil then
+                    dispText = icon._msufA2_lastStackText
+                else
+                    dispText = tostring(disp)
+                    icon._msufA2_lastStackText = dispText
+                    icon._msufA2_lastStackDisp = disp
+                    icon._msufA2_lastStackStoreStamp = stamp
                 end
             else
-                icon._msufA2_lastStackStamp = dispStamp
-
-                if disp ~= nil then
-                    dispText = tostring(disp)
-                    -- Cache the last display so "time-only" refresh paths can render stacks without API calls.
-                    -- IMPORTANT (secret-safe): we never compare these values, we only re-display them.
-                    icon._msufA2_lastStackDisp = disp
-                    icon._msufA2_lastStackText = dispText
-                else
-                    icon._msufA2_lastStackDisp = nil
-                    icon._msufA2_lastStackText = nil
-                end
+                icon._msufA2_lastStackDisp = nil
+                icon._msufA2_lastStackText = nil
+                icon._msufA2_lastStackStoreStamp = nil
             end
         else
             -- Fast-path: no API calls. Only re-display the cached value (if any).
@@ -1611,7 +1628,6 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
         end
     end
     icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp, icon._msufA2_lastStackText = false, nil, nil
-        icon._msufA2_lastStackStamp = nil
     return false
 end
 
@@ -1750,15 +1766,6 @@ ApplyAuraToIcon = function(icon, unit, aura, shared, isHelpful, hidePermanentOve
     if not icon or not aura then return end
 
     icon._msufUnit = unit
-    -- Clear preview tooltip metadata (icons are recycled)
-    local wasPreview = (icon._msufA2_isPreview == true)
-    icon._msufA2_isPreview = nil
-    icon._msufA2_previewKind = nil
-    if wasPreview then
-        -- If preview modified this icon, force a full visual refresh even if auraInstanceID matches prior cache.
-        icon._msufA2_lastVisualAuraInstanceID = nil
-    end
-
     icon._msufAuraInstanceID = aura._msufAuraInstanceID or aura.auraInstanceID
 	-- IMPORTANT (12.0+ / Midnight): do NOT read/store aura.spellId; it may be absent/secret.
 	icon._msufSpellId = nil
@@ -1766,16 +1773,6 @@ ApplyAuraToIcon = function(icon, unit, aura, shared, isHelpful, hidePermanentOve
     local newFilter = isHelpful and "HELPFUL" or "HARMFUL"
     if icon._msufFilter ~= newFilter then
         icon._msufFilter = newFilter
-    end
-
-    -- Texture updates must be secret-safe: only touch when bound auraInstanceID changes.
-    local auraInstanceID = icon._msufAuraInstanceID
-    if auraInstanceID ~= nil and icon._msufA2_lastVisualAuraInstanceID ~= auraInstanceID then
-        icon._msufA2_lastVisualAuraInstanceID = auraInstanceID
-        local newTex = aura.icon
-        if newTex ~= nil and icon.tex then
-            icon.tex:SetTexture(newTex)
-        end
     end
 
     -- Stack count font sizing (cooldown text sizing handled in MSUF_A2_ApplyIconCooldown)
