@@ -791,8 +791,8 @@ end
             g.showTotalAbsorbAmount = true
         end
     end
-    if g.absorbAnchorMode == nil then
-        -- 1 = Left Absorb, Right Heal-Absorb; 2 = Right Absorb, Left Heal-Absorb (default)
+	    if g.absorbAnchorMode == nil then
+	        -- 1 = Left Absorb, Right Heal-Absorb; 2 = Right Absorb, Left Heal-Absorb (default); 3 = Follow current HP edge (Blizzard-style)
         g.absorbAnchorMode = 2
     end
     if g.showLeaderIcon == nil then

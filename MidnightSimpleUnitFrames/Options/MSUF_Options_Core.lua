@@ -3461,8 +3461,9 @@ MSUF_ExpandDropdownClickArea(absorbAnchorDrop)
 absorbAnchorDrop:SetPoint("TOPLEFT", absorbAnchorLabel, "BOTTOMLEFT", -16, -4)
 UIDropDownMenu_SetWidth(absorbAnchorDrop, BAR_DROPDOWN_WIDTH)
 local absorbAnchorOptions = {
-    { key = 1, label = "Anchor to healthbar edge (default)" },
-    { key = 2, label = "Anchor to inside padding (prevents clipping)" },
+    { key = 1, label = "Anchor to left side" },
+    { key = 2, label = "Anchor to right side" },
+	    { key = 3, label = "Follow HP bar" },
 }
 local function MSUF_GetAbsorbAnchorMode()
     EnsureDB()

@@ -3676,30 +3676,191 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
  end
 local function MSUF_UpdateAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAbsorbBars(self, unit, maxHP, false) end
 local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAbsorbBars(self, unit, maxHP, true) end
-ROOT_G.MSUF_UpdateAbsorbBar = ROOT_G.MSUF_UpdateAbsorbBar or MSUF_UpdateAbsorbBar
-ROOT_G.MSUF_UpdateHealAbsorbBar = ROOT_G.MSUF_UpdateHealAbsorbBar or MSUF_UpdateHealAbsorbBar
--- Secret-safe: pure layout change via StatusBar:SetReverseFill.
-local function MSUF_ApplyAbsorbAnchorMode(self)
-    if not self then  return end
-    EnsureDB()
-    local g = MSUF_DB and MSUF_DB.general or {}
-    local mode = g.absorbAnchorMode or 2
-    if self._msufAbsorbAnchorModeStamp == mode then
-         return
-    end
-    self._msufAbsorbAnchorModeStamp = mode
-    local absorbReverse = (mode ~= 1)
-    local healReverse   = not absorbReverse
-    if self.absorbBar and self.absorbBar.SetReverseFill then
-        self.absorbBar:SetReverseFill(absorbReverse and true or false)
-    end
-    if self.healAbsorbBar and self.healAbsorbBar.SetReverseFill then
-        self.healAbsorbBar:SetReverseFill(healReverse and true or false)
-    end
- end
+    ROOT_G.MSUF_UpdateAbsorbBar = ROOT_G.MSUF_UpdateAbsorbBar or MSUF_UpdateAbsorbBar
+    ROOT_G.MSUF_UpdateHealAbsorbBar = ROOT_G.MSUF_UpdateHealAbsorbBar or MSUF_UpdateHealAbsorbBar
+
+    -- Absorb / Heal-Absorb anchoring modes
+    -- 1/2: legacy (edge-anchored) with reverse-fill swap
+    -- 3: follow current HP edge (Blizzard-style) by anchoring to the moving HP StatusBarTexture edge and clipping.
+    -- NOTE: Mode 3 is secret-safe (no HP arithmetic) and reanchors only when mode/reverse-fill/width changes.
+    local function MSUF_ApplyAbsorbAnchorMode(self)
+        if not self then  return end
+
+        EnsureDB()
+        local g = MSUF_DB and MSUF_DB.general or {}
+        local mode = g.absorbAnchorMode or 2
+
+        local hpBar = self.hpBar
+
+        -- Restore legacy overlay layout (full overlay over hpBar).
+        if mode ~= 3 then
+            if self._msufAbsorbAnchorModeStamp == mode and not self._msufAbsorbFollowActive then
+                return
+            end
+
+            self._msufAbsorbAnchorModeStamp = mode
+            self._msufAbsorbFollowActive = nil
+            self._msufAbsorbFollowRF = nil
+            self._msufAbsorbFollowW = nil
+
+            if self._msufAbsorbFollowClip and self._msufAbsorbFollowClip.Hide then
+                self._msufAbsorbFollowClip:Hide()
+            end
+
+            local absorbReverse = (mode ~= 1)
+            local healReverse   = not absorbReverse
+
+            if self.absorbBar then
+                if self.absorbBar.SetReverseFill then
+                    self.absorbBar:SetReverseFill(absorbReverse and true or false)
+                end
+                if hpBar then
+                    if self.absorbBar.GetParent and self.absorbBar:GetParent() ~= self then
+                        self.absorbBar:SetParent(self)
+                    end
+                    self.absorbBar:ClearAllPoints()
+                    self.absorbBar:SetAllPoints(hpBar)
+                    if self.absorbBar.SetFrameLevel and hpBar.GetFrameLevel then
+                        self.absorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 2)
+                    end
+                end
+            end
+
+            if self.healAbsorbBar then
+                if self.healAbsorbBar.SetReverseFill then
+                    self.healAbsorbBar:SetReverseFill(healReverse and true or false)
+                end
+                if hpBar then
+                    if self.healAbsorbBar.GetParent and self.healAbsorbBar:GetParent() ~= self then
+                        self.healAbsorbBar:SetParent(self)
+                    end
+                    self.healAbsorbBar:ClearAllPoints()
+                    self.healAbsorbBar:SetAllPoints(hpBar)
+                    if self.healAbsorbBar.SetFrameLevel and hpBar.GetFrameLevel then
+                        self.healAbsorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 3)
+                    end
+                end
+            end
+
+            return
+        end
+
+        -- Mode 3: follow current HP edge.
+        if not hpBar or not hpBar.GetStatusBarTexture then
+            return
+        end
+
+        local hpTex = hpBar:GetStatusBarTexture()
+        if not hpTex then
+            return
+        end
+
+        local hpReverse = false
+        if hpBar.GetReverseFill then
+            local ok, rf = pcall(hpBar.GetReverseFill, hpBar)
+            if ok and rf then
+                hpReverse = true
+            end
+        end
+
+        local w = nil
+        if hpBar.GetWidth then
+            w = hpBar:GetWidth()
+        end
+
+        if self._msufAbsorbAnchorModeStamp == 3 and self._msufAbsorbFollowActive
+            and self._msufAbsorbFollowRF == hpReverse and self._msufAbsorbFollowW == w then
+            return
+        end
+
+        self._msufAbsorbAnchorModeStamp = 3
+        self._msufAbsorbFollowActive = true
+        self._msufAbsorbFollowRF = hpReverse
+        self._msufAbsorbFollowW = w
+
+        local clip = self._msufAbsorbFollowClip
+        if not clip and _G.CreateFrame and hpBar then
+            clip = _G.CreateFrame("Frame", nil, hpBar)
+            clip:SetAllPoints(hpBar)
+            if clip.SetClipsChildren then
+                clip:SetClipsChildren(true)
+            end
+            self._msufAbsorbFollowClip = clip
+        elseif clip then
+            clip:ClearAllPoints()
+            clip:SetAllPoints(hpBar)
+        end
+        if clip and clip.SetFrameLevel and hpBar.GetFrameLevel then
+            clip:SetFrameLevel(hpBar:GetFrameLevel() + 2)
+        end
+        if clip and clip.Show then
+            clip:Show()
+        end
+
+        -- Absorb: outward (same direction as HP). Heal-Absorb: inward (opposite direction).
+        if self.absorbBar then
+            if clip and self.absorbBar.GetParent and self.absorbBar:GetParent() ~= clip then
+                self.absorbBar:SetParent(clip)
+            end
+            self.absorbBar:ClearAllPoints()
+            if hpReverse then
+                self.absorbBar:SetPoint("TOPRIGHT", hpTex, "TOPLEFT", 0, 0)
+                self.absorbBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMLEFT", 0, 0)
+                if self.absorbBar.SetReverseFill then
+                    self.absorbBar:SetReverseFill(true)
+                end
+            else
+                self.absorbBar:SetPoint("TOPLEFT", hpTex, "TOPRIGHT", 0, 0)
+                self.absorbBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
+                if self.absorbBar.SetReverseFill then
+                    self.absorbBar:SetReverseFill(false)
+                end
+            end
+            if type(w) == "number" and w > 0 and self.absorbBar.SetWidth then
+                if self.absorbBar._msufFollowW ~= w then
+                    self.absorbBar:SetWidth(w)
+                    self.absorbBar._msufFollowW = w
+                end
+            end
+            if self.absorbBar.SetFrameLevel and hpBar.GetFrameLevel then
+                self.absorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 2)
+            end
+        end
+
+        if self.healAbsorbBar then
+            if clip and self.healAbsorbBar.GetParent and self.healAbsorbBar:GetParent() ~= clip then
+                self.healAbsorbBar:SetParent(clip)
+            end
+            self.healAbsorbBar:ClearAllPoints()
+            if hpReverse then
+                -- inward: extend right into HP
+                self.healAbsorbBar:SetPoint("TOPLEFT", hpTex, "TOPLEFT", 0, 0)
+                self.healAbsorbBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMLEFT", 0, 0)
+                if self.healAbsorbBar.SetReverseFill then
+                    self.healAbsorbBar:SetReverseFill(false)
+                end
+            else
+                -- inward: extend left into HP
+                self.healAbsorbBar:SetPoint("TOPRIGHT", hpTex, "TOPRIGHT", 0, 0)
+                self.healAbsorbBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMRIGHT", 0, 0)
+                if self.healAbsorbBar.SetReverseFill then
+                    self.healAbsorbBar:SetReverseFill(true)
+                end
+            end
+            if type(w) == "number" and w > 0 and self.healAbsorbBar.SetWidth then
+                if self.healAbsorbBar._msufFollowW ~= w then
+                    self.healAbsorbBar:SetWidth(w)
+                    self.healAbsorbBar._msufFollowW = w
+                end
+            end
+            if self.healAbsorbBar.SetFrameLevel and hpBar.GetFrameLevel then
+                self.healAbsorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 3)
+            end
+        end
+     end
 _G.MSUF_ApplyAbsorbAnchorMode = MSUF_ApplyAbsorbAnchorMode
 -- Per-unit reverse fill for HP/Power bars.
--- NOTE: This does NOT touch absorb/heal-absorb overlays, which are driven by MSUF_ApplyAbsorbAnchorMode.
+-- If Absorb Anchoring is set to "Follow current HP", this also re-syncs absorb/heal-absorb overlays.
 local function MSUF_ApplyReverseFillBars(self, conf)
     if not self then  return end
     local rf = (conf and conf.reverseFillBars == true) or false
@@ -3716,6 +3877,15 @@ local function MSUF_ApplyReverseFillBars(self, conf)
     local p = self.targetPowerBar or self.powerBar
     if p and p.SetReverseFill then
         p:SetReverseFill(rf and true or false)
+    end
+
+    -- Keep absorb/heal-absorb follow-HP anchoring in sync with reverse-fill changes.
+    local g = MSUF_DB and MSUF_DB.general
+    if g and g.absorbAnchorMode == 3 then
+        local apply = _G.MSUF_ApplyAbsorbAnchorMode
+        if apply then
+            apply(self)
+        end
     end
  end
 _G.MSUF_ApplyReverseFillBars = _G.MSUF_ApplyReverseFillBars or MSUF_ApplyReverseFillBars
