@@ -664,69 +664,9 @@ end
         end,
     })
 
-    local targetRangeFadeCheck = UI:MakeCheck({
-        name = "MSUF_TargetRangeFadeCheck",
-        parent = rightPanel,
-        template = "InterfaceOptionsCheckButtonTemplate",
-        anchor = targetSoundsCheck,
-        x = 0, y = -12,
-        label = "Enable Target Range Fade",
-        tooltip = "Fades the Target frame while out of range (event-driven, no polling).",
-        get = function()
-            local t = EnsureTarget()
-            return (t.rangeFadeEnabled == true)
-        end,
-        set = function(v)
-            local t = EnsureTarget()
-            t.rangeFadeEnabled = v and true or false
-            if _G.MSUF_RangeFade_Reset then _G.MSUF_RangeFade_Reset() end
-            if _G.MSUF_RangeFade_RebuildSpells then _G.MSUF_RangeFade_RebuildSpells() end
-        end,
-    })
 
 
 
-    local focusRangeFadeCheck = UI:MakeCheck({
-        name = "MSUF_FocusRangeFadeCheck",
-        parent = rightPanel,
-        template = "InterfaceOptionsCheckButtonTemplate",
-        anchor = targetRangeFadeCheck,
-        x = 0, y = -12,
-        label = "Enable Focus Range Fade",
-        tooltip = "Fades the Focus frame while out of range (event-driven, no polling).",
-        get = function()
-            local t = EnsureFocus()
-            return (t.rangeFadeEnabled == true)
-        end,
-        set = function(v)
-            local t = EnsureFocus()
-            t.rangeFadeEnabled = v and true or false
-            if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
-            if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
-            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
-        end,
-    })
-
-    local bossRangeFadeCheck = UI:MakeCheck({
-        name = "MSUF_BossRangeFadeCheck",
-        parent = rightPanel,
-        template = "InterfaceOptionsCheckButtonTemplate",
-        anchor = focusRangeFadeCheck,
-        x = 0, y = -12,
-        label = "Enable Boss Range Fade",
-        tooltip = "Fades Boss frames (1-5) while out of range (event-driven, no polling).",
-        get = function()
-            local t = EnsureBoss()
-            return (t.rangeFadeEnabled == true)
-        end,
-        set = function(v)
-            local t = EnsureBoss()
-            t.rangeFadeEnabled = v and true or false
-            if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
-            if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
-            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
-        end,
-    })
 
 
 
@@ -785,6 +725,74 @@ end
     statusLine:SetHeight(1)
     statusLine:SetPoint("TOPLEFT", statusHeader, "BOTTOMLEFT", 0, -8)
     statusLine:SetPoint("TOPRIGHT", bottomPanel, "TOPRIGHT", -14, -42)
+
+
+    -- Range Fade (moved here so it sits at the same height as Indicators, bottom-right column)
+    local rangeFadeHeader = UI:Label(bottomPanel, "Range fade", "TOPLEFT", bottomPanel, LEFT_W + 14, -34)
+    local rangeFadeLine = bottomPanel:CreateTexture(nil, "ARTWORK")
+    rangeFadeLine:SetColorTexture(1, 1, 1, 0.10)
+    rangeFadeLine:SetHeight(1)
+    rangeFadeLine:SetPoint("TOPLEFT", rangeFadeHeader, "BOTTOMLEFT", 0, -8)
+    rangeFadeLine:SetPoint("TOPRIGHT", bottomPanel, "TOPRIGHT", -14, -42)
+
+    local rangeFadeTargetCheck = UI:MakeCheck({
+        name = "MSUF_TargetRangeFadeCheck",
+        parent = bottomPanel,
+        template = "InterfaceOptionsCheckButtonTemplate",
+        anchor = rangeFadeHeader,
+        x = 0, y = -14,
+        label = "Enable Target Range Fade",
+        get = function()
+            local t = EnsureTarget()
+            return (t.rangeFadeEnabled == true)
+        end,
+        set = function(v)
+            local t = EnsureTarget()
+            t.rangeFadeEnabled = v and true or false
+            if _G.MSUF_RangeFade_Reset then _G.MSUF_RangeFade_Reset() end
+            if _G.MSUF_RangeFade_RebuildSpells then _G.MSUF_RangeFade_RebuildSpells() end
+        end,
+    })
+
+    local rangeFadeFocusCheck = UI:MakeCheck({
+        name = "MSUF_FocusRangeFadeCheck",
+        parent = bottomPanel,
+        template = "InterfaceOptionsCheckButtonTemplate",
+        anchor = rangeFadeTargetCheck,
+        x = 0, y = -12,
+        label = "Enable Focus Range Fade",
+        get = function()
+            local t = EnsureFocus()
+            return (t.rangeFadeEnabled == true)
+        end,
+        set = function(v)
+            local t = EnsureFocus()
+            t.rangeFadeEnabled = v and true or false
+            if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
+            if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
+            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+        end,
+    })
+
+    UI:MakeCheck({
+        name = "MSUF_BossRangeFadeCheck",
+        parent = bottomPanel,
+        template = "InterfaceOptionsCheckButtonTemplate",
+        anchor = rangeFadeFocusCheck,
+        x = 0, y = -12,
+        label = "Enable Boss Range Fade",
+        get = function()
+            local t = EnsureBoss()
+            return (t.rangeFadeEnabled == true)
+        end,
+        set = function(v)
+            local t = EnsureBoss()
+            t.rangeFadeEnabled = v and true or false
+            if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
+            if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
+            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+        end,
+    })
 
     local _, refH = GetToggleRefSizeAndFont()
     local step = (type(refH) == "number" and refH > 0) and (refH + 6) or 30
