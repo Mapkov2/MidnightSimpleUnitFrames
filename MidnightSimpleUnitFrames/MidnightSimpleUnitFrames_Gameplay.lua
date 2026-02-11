@@ -1447,6 +1447,12 @@ local function MSUF_Gameplay_ApplyCombatTimerAnchor(g)
         return
     end
 
+    -- If the user is currently dragging the timer, do NOT re-anchor it.
+    -- Re-anchoring mid-drag makes movement feel jittery (the frame fights the mouse).
+    if combatFrame._msufDragging then
+        return
+    end
+
     g = g or EnsureGameplayDefaults()
     local anchor = _MSUF_GetCombatTimerAnchorFrame(g)
 
@@ -1494,11 +1500,22 @@ local function CreateCombatTimerFrame()
         if gd.lockCombatTimer then
             return
         end
+
+        -- When the timer is anchored to a unitframe, keeping the relative anchor while dragging
+        -- can make the movement feel "sticky"/jittery (SetPoint fights the mouse). Detach it
+        -- to UIParent for the duration of the drag, then re-attach on drag stop.
+        self._msufDragging = true
+        local x, y = self:GetCenter()
+        if x and y then
+            self:ClearAllPoints()
+            self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
+        end
         self:StartMoving()
     end)
 
     combatFrame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
+        self._msufDragging = nil
         local x, y = self:GetCenter()
         if not x or not y then
             return
@@ -1519,6 +1536,9 @@ local function CreateCombatTimerFrame()
 
         db.combatOffsetX = x - ax
         db.combatOffsetY = y - ay
+
+        -- Re-attach to the configured anchor immediately so it stays stable.
+        MSUF_Gameplay_ApplyCombatTimerAnchor(db)
     end)
 
     combatTimerText = combatFrame:CreateFontString(nil, "OVERLAY")
