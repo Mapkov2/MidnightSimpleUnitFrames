@@ -14,6 +14,10 @@
 -- Notes:
 --   * unitFilter is ignored (and UNIT_* registrations are rejected) by design.
 --   * safeCalls: if true, handler invocations are protected (pcall). Defaults to false for speed.
+--
+-- Perf notes:
+--   * Hot path avoids pairs() over handler maps. Each event stores handlers in a dense numeric array.
+--   * Unregister during dispatch is supported: handlers are marked dead and compacted after dispatch.
 
 local addonName, ns = ...
 ns = ns or {}
@@ -43,7 +47,13 @@ end
 
 local bus = {
     safeCalls = false,
-    handlers = {},  -- handlers[event][key] = { fn=..., once=bool }
+    -- handlers[event] = {
+    --   list = { { key=string, fn=function, once=bool, dead=bool }, ... },
+    --   index = { [key]=pos },
+    --   dispatchDepth = number,
+    --   dirty = bool,
+    -- }
+    handlers = {},
     -- Internal: print-once error gate for safeCalls mode.
     _errOnce = {},
 }
@@ -64,22 +74,68 @@ local function EnsureEventRegistered(event)
     end
 end
 
+local function _Ev_Compact(ev)
+    if not ev or not ev.dirty then return end
+
+    local list = ev.list
+    local idx = ev.index
+
+    -- Clear index (compaction is rare; correctness > micro perf here).
+    for k in pairs(idx) do
+        idx[k] = nil
+    end
+
+    local write = 0
+    local n = #list
+    for i = 1, n do
+        local h = list[i]
+        if h and h.fn and not h.dead then
+            write = write + 1
+            if write ~= i then
+                list[write] = h
+            end
+            idx[h.key] = write
+        end
+    end
+    for i = write + 1, n do
+        list[i] = nil
+    end
+    ev.dirty = false
+end
+
 local function MaybeUnregisterEvent(event)
-    local t = bus.handlers[event]
-    if not t then
+    local ev = bus.handlers[event]
+    if not ev then
         if driver:IsEventRegistered(event) then
             driver:UnregisterEvent(event)
         end
         return
     end
-    -- Check if empty
-    for _ in pairs(t) do
+
+    -- Don't unregister mid-dispatch; defer to the dispatcher epilogue.
+    if (ev.dispatchDepth or 0) > 0 then
         return
     end
-    bus.handlers[event] = nil
-    if driver:IsEventRegistered(event) then
-        driver:UnregisterEvent(event)
+
+    if ev.dirty then
+        _Ev_Compact(ev)
     end
+    if #ev.list == 0 then
+        bus.handlers[event] = nil
+        if driver:IsEventRegistered(event) then
+            driver:UnregisterEvent(event)
+        end
+    end
+end
+
+local function _EnsureEventTable(event)
+    local ev = bus.handlers[event]
+    if not ev then
+        ev = { list = {}, index = {}, dispatchDepth = 0, dirty = false }
+        bus.handlers[event] = ev
+        EnsureEventRegistered(event)
+    end
+    return ev
 end
 
 function bus:Register(event, key, fn, unitFilter, once)
@@ -93,34 +149,111 @@ function bus:Register(event, key, fn, unitFilter, once)
         return false
     end
 
-    local ev = bus.handlers[event]
-    if not ev then
-        ev = {}
-        bus.handlers[event] = ev
-        EnsureEventRegistered(event)
+    local ev = _EnsureEventTable(event)
+    local idx = ev.index[key]
+
+    if idx then
+        local h = ev.list[idx]
+        if h then
+            h.fn = fn
+            h.once = once and true or false
+            h.dead = false
+            return true
+        end
+        -- Corrupt index (shouldn't happen), heal.
+        ev.index[key] = nil
     end
 
-    ev[key] = { fn = fn, once = once and true or false }
+    local list = ev.list
+    local n = #list + 1
+    list[n] = { key = key, fn = fn, once = once and true or false, dead = false }
+    ev.index[key] = n
     return true
 end
 
 function bus:Unregister(event, key)
     local ev = bus.handlers[event]
     if not ev then return end
-    ev[key] = nil
+
+    local idx = ev.index[key]
+    if not idx then return end
+
+    local list = ev.list
+    local h = list[idx]
+
+    -- Remove index entry first so we can suppress calls later in the same dispatch.
+    ev.index[key] = nil
+
+    if (ev.dispatchDepth or 0) > 0 then
+        -- Mark dead; will be compacted after dispatch.
+        if h then
+            h.fn = nil
+            h.once = false
+            h.dead = true
+        end
+        ev.dirty = true
+        return
+    end
+
+    -- Swap-remove to keep list dense.
+    local last = #list
+    if idx ~= last then
+        local tail = list[last]
+        list[idx] = tail
+        if tail and tail.key then
+            ev.index[tail.key] = idx
+        end
+    end
+    list[last] = nil
+
     MaybeUnregisterEvent(event)
 end
 
 function bus:UnregisterAll(keyPrefix)
     if type(keyPrefix) ~= "string" or keyPrefix == "" then return end
+    local plen = #keyPrefix
+
     for event, ev in pairs(bus.handlers) do
+        local list = ev.list
         local changed = false
-        for key in pairs(ev) do
-            if key:sub(1, #keyPrefix) == keyPrefix then
-                ev[key] = nil
-                changed = true
+
+        if (ev.dispatchDepth or 0) > 0 then
+            -- Dispatching: mark dead; compact after dispatch.
+            for i = 1, #list do
+                local h = list[i]
+                if h and h.fn and h.key and h.key:sub(1, plen) == keyPrefix then
+                    ev.index[h.key] = nil
+                    h.fn = nil
+                    h.once = false
+                    h.dead = true
+                    changed = true
+                end
+            end
+            if changed then
+                ev.dirty = true
+            end
+        else
+            -- Not dispatching: swap-remove in a reverse loop.
+            local i = #list
+            while i >= 1 do
+                local h = list[i]
+                if h and h.fn and h.key and h.key:sub(1, plen) == keyPrefix then
+                    ev.index[h.key] = nil
+                    local last = #list
+                    if i ~= last then
+                        local tail = list[last]
+                        list[i] = tail
+                        if tail and tail.key then
+                            ev.index[tail.key] = i
+                        end
+                    end
+                    list[last] = nil
+                    changed = true
+                end
+                i = i - 1
             end
         end
+
         if changed then
             MaybeUnregisterEvent(event)
         end
@@ -171,32 +304,38 @@ driver:SetScript("OnEvent", function(_, event, ...)
 
     local dispatch = bus.safeCalls and _DispatchSafe or _DispatchFast
 
-    -- Snapshot keys for :once handlers because handlers may unregister themselves.
-    -- Reuse a small array to reduce table churn during event storms.
-    local toRemove = bus._toRemove
-    if type(toRemove) ~= "table" then
-        toRemove = {}
-        bus._toRemove = toRemove
-    end
-    local removeCount = 0
+    ev.dispatchDepth = (ev.dispatchDepth or 0) + 1
 
-    for key, h in pairs(ev) do
+    -- Snapshot current list length. Handlers registered during dispatch run next event.
+    local list = ev.list
+    local n = #list
+    for i = 1, n do
+        local h = list[i]
         if h and h.fn then
-            dispatch(key, h.fn, event, ...)
+            dispatch(h.key, h.fn, event, ...)
             if h.once then
-                removeCount = removeCount + 1
-                toRemove[removeCount] = key
+                -- :once handlers are removed after they fire.
+                ev.index[h.key] = nil
+                h.fn = nil
+                h.once = false
+                h.dead = true
+                ev.dirty = true
             end
         end
     end
 
-    if removeCount > 0 then
-        for i = 1, removeCount do
-            local k = toRemove[i]
-            ev[k] = nil
-            toRemove[i] = nil
+    ev.dispatchDepth = (ev.dispatchDepth or 0) - 1
+    if ev.dispatchDepth <= 0 then
+        ev.dispatchDepth = 0
+        if ev.dirty then
+            _Ev_Compact(ev)
         end
-        MaybeUnregisterEvent(event)
+        if #ev.list == 0 then
+            bus.handlers[event] = nil
+            if driver:IsEventRegistered(event) then
+                driver:UnregisterEvent(event)
+            end
+        end
     end
 end)
 
