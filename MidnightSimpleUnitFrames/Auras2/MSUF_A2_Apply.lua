@@ -1491,6 +1491,7 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
             icon.count:Hide()
         end
         icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp, icon._msufA2_lastStackText = false, nil, nil
+        icon._msufA2_lastStackStamp = nil
 
         if icon._msufA2_hideCDNumbers == true then
             icon._msufA2_hideCDNumbers = false
@@ -1515,18 +1516,38 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
         icon._msufA2_lastStackDisp = disp
         icon._msufA2_lastStackText = dispText
     else
-        if allowQuery ~= false and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount and icon._msufAuraInstanceID then
-            -- Expensive path: only run when the aura was actually applied/refreshed/updated (UNIT_AURA delta).
-            disp = C_UnitAuras.GetAuraApplicationDisplayCount(unit, icon._msufAuraInstanceID, 2, 99)
-            if disp ~= nil then
-                dispText = tostring(disp)
-                -- Cache the last display so "time-only" refresh paths can render stacks without API calls.
-                -- IMPORTANT (secret-safe): we never compare these values, we only re-display them.
-                icon._msufA2_lastStackDisp = disp
-                icon._msufA2_lastStackText = dispText
+        if allowQuery ~= false and icon._msufAuraInstanceID then
+            -- Cached path: Store invalidates per-aura on UNIT_AURA deltas; avoids per-frame API calls.
+            local Store = API and API.Store
+            local dispStamp
+
+            if Store and Store.GetStackCount then
+                disp, dispStamp = Store.GetStackCount(unit, icon._msufAuraInstanceID)
+            elseif C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
+                disp = C_UnitAuras.GetAuraApplicationDisplayCount(unit, icon._msufAuraInstanceID, 2, 99)
+            end
+
+            if dispStamp ~= nil and icon._msufA2_lastStackStamp == dispStamp and icon._msufA2_lastStackText ~= nil then
+                -- Same stamp: reuse cached text to avoid tostring()/allocations.
+                dispText = icon._msufA2_lastStackText
+                keepExistingText = (dispText == nil and icon._msufA2_stackWasShown == true) and true or false
+                disp = icon._msufA2_lastStackDisp
+                if dispText == nil then
+                    disp = nil
+                end
             else
-                icon._msufA2_lastStackDisp = nil
-                icon._msufA2_lastStackText = nil
+                icon._msufA2_lastStackStamp = dispStamp
+
+                if disp ~= nil then
+                    dispText = tostring(disp)
+                    -- Cache the last display so "time-only" refresh paths can render stacks without API calls.
+                    -- IMPORTANT (secret-safe): we never compare these values, we only re-display them.
+                    icon._msufA2_lastStackDisp = disp
+                    icon._msufA2_lastStackText = dispText
+                else
+                    icon._msufA2_lastStackDisp = nil
+                    icon._msufA2_lastStackText = nil
+                end
             end
         else
             -- Fast-path: no API calls. Only re-display the cached value (if any).
@@ -1590,6 +1611,7 @@ local function MSUF_A2_ApplyIconStacks(icon, unit, shared, stackAnchorOverride, 
         end
     end
     icon._msufA2_stackWasShown, icon._msufA2_lastStackDisp, icon._msufA2_lastStackText = false, nil, nil
+        icon._msufA2_lastStackStamp = nil
     return false
 end
 

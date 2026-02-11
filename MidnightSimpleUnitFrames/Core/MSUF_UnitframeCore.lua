@@ -59,10 +59,6 @@ local function UFCore_RefreshSettingsCache(reason)
     local cache = Core._settingsCache or {}
     Core._settingsCache = cache
 
-    -- Revision stamp: enables hot-path early-outs (e.g. skip element enablement recomputation
-    -- on target/focus swaps when configuration did not change).
-    cache._rev = (cache._rev or 0) + 1
-
     local db = _G.MSUF_DB
     if not db and type(UFCore_EnsureDBOnce) == "function" then
         db = UFCore_EnsureDBOnce()
@@ -331,10 +327,6 @@ local EL_PORTRAIT  = 0x00000008
 local EL_STATUS    = 0x00000010
 local EL_TOTINLINE = 0x00000020
 local EL_INDICATOR = 0x00000040
-
--- Not an element by itself: used only to track event gating changes (INCOMING_RESURRECT_CHANGED)
--- even when the element mask stays otherwise identical.
-local EL_INCOMING_RES_EVENT = 0x00000080
 
 -- ------------------------------------------------------------
 -- Elements (oUF-style contracts, minimal)
@@ -1152,13 +1144,6 @@ end
         mask = bor(mask, EL_STATUS)
     end
 
-    -- Event-gating: Status element always exists on most frames, but the incoming-res event
-    -- is optional. Track this as a dedicated bit so non-force refreshes still pick up toggles
-    -- without doing full event churn on unrelated config changes.
-	if conf and conf.showIncomingResIndicator and (band(mask, EL_STATUS) ~= 0) then
-	    mask = bor(mask, EL_INCOMING_RES_EVENT)
-	end
-
     return mask, conf
 end
 
@@ -1167,21 +1152,9 @@ local function RefreshUnitEvents(f, force)
         return
     end
 
-    -- Hot path win: if configuration snapshot did not change since the last successful
-    -- refresh, unit swaps/runtime events cannot affect element enablement or event gating.
-    -- Avoid recomputing the mask on e.g. PLAYER_TARGET_CHANGED spam.
-    local cache = UFCore_GetSettingsCache()
-    local rev = (cache and cache._rev) or 0
-    if (not force) and f._msufElemMaskRev and f._msufElemMaskRev == rev then
-        return
-    end
-
     local mask, conf = ComputeElementMask(f)
     local last = f._msufElemMask or 0
     if not force and mask == last then
-        -- Configuration snapshot changed (rev bumped), but element enablement did not.
-        -- Update the revision stamp so subsequent unit swaps can early-out.
-        f._msufElemMaskRev = rev
         return
     end
 
@@ -1270,9 +1243,6 @@ end
             end
         end
     end
-
-    -- Stamp the revision we computed this against so future unit swaps can skip work.
-    f._msufElemMaskRev = rev
 end
 
 -- ------------------------------------------------------------
@@ -1354,32 +1324,44 @@ end
 
 local function MaybeCompactQueue(q)
     -- Compact occasionally to keep indices bounded (order-preserving).
+    -- PERF: avoid allocating a new table on every compaction. We swap in a reusable
+    -- scratch table per-queue and clear the old array while scanning (no extra passes).
     if q.size == 0 then
         wipe(q.t)
         q.head, q.tail = 1, 0
         if q.set then wipe(q.set) end
+        if q._scratch then wipe(q._scratch) end
         return
     end
     if q.head <= 256 then return end
     if q.head <= (q.tail * 0.5) then return end
 
     local old = q.t
-    local new = {}
-    local n = 0
+    local new = q._scratch
+    if new then
+        wipe(new)
+    else
+        new = {}
+    end
 
+    local n = 0
     local set = q.set
+
     if set then
         for i = q.head, q.tail do
             local v = old[i]
+            old[i] = nil
             if v and v ~= false and set[v] then
                 n = n + 1
                 new[n] = v
             end
         end
-        q.size = n -- keep size honest (stale entries are dropped)
+        -- Keep size honest: stale entries are dropped.
+        q.size = n
     else
         for i = q.head, q.tail do
             local v = old[i]
+            old[i] = nil
             if v and v ~= false then
                 n = n + 1
                 new[n] = v
@@ -1389,6 +1371,7 @@ local function MaybeCompactQueue(q)
     end
 
     q.t = new
+    q._scratch = old
     q.head, q.tail = 1, n
 end
 
@@ -2121,8 +2104,6 @@ function Core.AttachFrame(f)
             self._msufHealAbsorbDirty = true
             self._msufAbsorbInit = nil
             self._msufHealAbsorbInit = nil
-            -- Unit swap while hidden can also leave bar colors stale (class/reaction/unified).
-            self._msufHealthColorDirty = true
             Core.MarkDirty(self, MASK_SHOW_REFRESH, true, "OnShow")
             DeferSwapWork(self.unit, "OnShow", true)
         end)
@@ -2158,9 +2139,7 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
 
     if not unitKey then
         Core.InvalidateAllFrameConfigs()
-	    -- Soft refresh: only recompute element mask + event gating when enablement truly changes.
-	    -- This avoids heavy register/unregister churn on slider drags and other non-enablement config edits.
-	    Core.RefreshAllUnitEvents(false)
+        Core.RefreshAllUnitEvents(true)
         if alsoUpdate then
             for _, f in pairs(FramesByUnit) do
                 if f then
@@ -2174,9 +2153,8 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     local f = FramesByUnit[unitKey]
     if not f then return end
 
-	f.cachedConfig = nil
-	-- Soft refresh: RefreshUnitEvents already handles real enablement changes via mask diffs.
-	RefreshUnitEvents(f, false)
+    f.cachedConfig = nil
+    RefreshUnitEvents(f, true)
 
     if alsoUpdate then
         Core.MarkDirty(f, DIRTY_FULL, (urgent ~= false), reason)
@@ -2324,10 +2302,6 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "PLAYER_TARGET_CHANGED" then
-        -- Target swap can change class/reaction colors immediately; ensure health color refresh runs once.
-        local tf = FramesByUnit["target"]; if tf then tf._msufHealthColorDirty = true end
-        local tof = FramesByUnit["targettarget"]; if tof then tof._msufHealthColorDirty = true end
-
         QueueUnit("target", true, MASK_UNIT_SWAP, event)
         -- Urgent lane: keep ToT snappy (no perceptible delay).
         QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
@@ -2345,14 +2319,12 @@ Global:SetScript("OnEvent", function(_, event, arg1)
             end
         end
         -- If the ToT unitframe exists/attached, keep it responsive too.
-        local tof = FramesByUnit["targettarget"]; if tof then tof._msufHealthColorDirty = true end
         QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
         DeferSwapWork("targettarget", event, false, false)
         return
     end
 
     if event == "PLAYER_FOCUS_CHANGED" then
-        local ff = FramesByUnit["focus"]; if ff then ff._msufHealthColorDirty = true end
         QueueUnit("focus", true, MASK_UNIT_SWAP, event)
         DeferSwapWork("focus", event, true, false)
         return

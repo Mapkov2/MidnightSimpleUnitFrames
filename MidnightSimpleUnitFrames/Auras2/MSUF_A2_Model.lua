@@ -147,7 +147,7 @@ end
 
 -- ========
 
-local function GetAuraList(unit, filter, onlyPlayer, maxCount, out)
+local function GetAuraList(unit, filter, onlyPlayer, maxCount, out, entry)
     -- filter: "HELPFUL" or "HARMFUL"
     -- onlyPlayer: request player-only auras via filter flag, but fall back safely.
     -- maxCount: hard cap list building to the number of icons we can actually render.
@@ -158,6 +158,32 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount, out)
     if not unit or not C_UnitAuras then
         return out
     end
+
+-- PERF: Store already did a capped slot scan for the rawSig check (same pass, same unit/caps).
+-- Reuse those aura tables for the "all auras" list to avoid a second GetAuraDataBySlot() sweep.
+if entry and onlyPlayer ~= true and type(maxCount) == "number" and maxCount > 0 then
+    local stamp = entry._msufA2_storeRescanStamp
+    local bs = entry._msufA2_storeRescanBudgetStamp
+    if stamp and bs and (bs == entry._msufA2_budgetStamp) and (entry._msufA2_storeRescanUnit == unit) then
+        local Store = API and API.Store
+        if Store and Store.GetLastScannedAuraList then
+            local reused = Store.GetLastScannedAuraList(unit, filter, maxCount, stamp, out)
+            if reused then
+                -- Ensure downstream logic has a stable id field without touching secret fields.
+                for i = 1, #reused do
+                    local data = reused[i]
+                    if type(data) == 'table' and data._msufAuraInstanceID == nil then
+                        local aid = data.auraInstanceID
+                        if aid ~= nil then
+                            data._msufAuraInstanceID = aid
+                        end
+                    end
+                end
+                return reused
+            end
+        end
+    end
+end
 
     -- Preferred fast path: slot API lets us request only the first N auras (huge perf win on large aura sets).
     local getSlots = C_UnitAuras.GetAuraSlots
@@ -555,14 +581,14 @@ local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMi
     if type(mineBuf) ~= "table" then mineBuf = {}; entry[mineKey] = mineBuf end
 
     if needAll then
-        allList = GetAuraList(unit, filter, false, maxAll, allBuf)
+        allList = GetAuraList(unit, filter, false, maxAll, allBuf, entry)
     end
 
     local baseList = MSUF_A2_EMPTY
     if baseShow == true then
         if onlyMine == true then
             if includeBoss == true then
-                local mine = GetAuraList(unit, filter, true, cap, mineBuf)
+                local mine = GetAuraList(unit, filter, true, cap, mineBuf, entry)
                 local mergeOutKey = (filter == "HELPFUL") and "_msufA2_mergeBossOutBuffs" or "_msufA2_mergeBossOutDebuffs"
                 local mergeSeenKey = (filter == "HELPFUL") and "_msufA2_mergeBossSeenBuffs" or "_msufA2_mergeBossSeenDebuffs"
                 local mergeOut = entry[mergeOutKey]
@@ -570,12 +596,12 @@ local function MSUF_A2_BuildMergedAuraList(entry, unit, filter, baseShow, onlyMi
                 local mergeSeen = entry[mergeSeenKey]
                 if type(mergeSeen) ~= "table" then mergeSeen = {}; entry[mergeSeenKey] = mergeSeen end
 				-- Phase 4: stamp-map dedupe (no per-render keylist clears)
-				baseList = MSUF_A2_MergeBossAuras(mine, allList or GetAuraList(unit, filter, false, maxAll, allBuf), mergeOut, mergeSeen)
+				baseList = MSUF_A2_MergeBossAuras(mine, allList or GetAuraList(unit, filter, false, maxAll, allBuf, entry), mergeOut, mergeSeen)
             else
-                baseList = GetAuraList(unit, filter, true, cap, mineBuf)
+                baseList = GetAuraList(unit, filter, true, cap, mineBuf, entry)
             end
         else
-            baseList = allList or GetAuraList(unit, filter, false, maxAll, allBuf)
+            baseList = allList or GetAuraList(unit, filter, false, maxAll, allBuf, entry)
         end
     end
     return baseList

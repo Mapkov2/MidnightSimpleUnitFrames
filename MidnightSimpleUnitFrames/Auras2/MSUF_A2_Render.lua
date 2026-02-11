@@ -2515,7 +2515,27 @@ end
         -- If raw auraInstanceID sets + layout/filter signature are unchanged, avoid expensive list building.
         if not resumeBudget then
             local Store = API and API.Store
-            rawSig = (Store and Store.GetRawSig and Store.GetRawSig(unit, sigCapH, sigCapD)) or MSUF_A2_ComputeRawAuraSig(unit, sigCapH, sigCapD)
+                        local rescanStamp
+                        if Store and Store.GetRawSig then
+                            rawSig, rescanStamp = Store.GetRawSig(unit, sigCapH, sigCapD)
+                        end
+                        if rawSig == nil then
+                            rawSig = MSUF_A2_ComputeRawAuraSig(unit, sigCapH, sigCapD)
+                            rescanStamp = nil
+                        end
+                        if rescanStamp then
+                            entry._msufA2_storeRescanStamp = rescanStamp
+                            entry._msufA2_storeRescanBudgetStamp = entry._msufA2_budgetStamp
+                            entry._msufA2_storeRescanUnit = unit
+                            entry._msufA2_storeRescanCapH = sigCapH
+                            entry._msufA2_storeRescanCapD = sigCapD
+                        else
+                            entry._msufA2_storeRescanStamp = nil
+                            entry._msufA2_storeRescanBudgetStamp = nil
+                            entry._msufA2_storeRescanUnit = nil
+                            entry._msufA2_storeRescanCapH = nil
+                            entry._msufA2_storeRescanCapD = nil
+                        end
             layoutSig = MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebuffAnchor, splitSpacing,
                 iconSize, buffIconSize, debuffIconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, stackCountAnchor,
                 tf, masterOn, onlyBossAuras, finalShowBuffs, finalShowDebuffs)
