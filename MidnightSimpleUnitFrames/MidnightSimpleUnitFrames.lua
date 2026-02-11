@@ -233,18 +233,32 @@ function ns.UF.HideLeaderAndRaidMarker(self)
  end
 function ns.UF.HandleDisabledFrame(self, conf)
     if not ns.UF.IsDisabled(conf) then  return false end
+
+    -- In MSUF Edit Mode, keep a persistent preview for frames that are disabled,
+    -- so they can still be positioned/edited. Boss frames remain hard-hidden when disabled.
+    if MSUF_UnitEditModeActive and (not (F.InCombatLockdown and F.InCombatLockdown())) and self and not self.isBoss then
+        local fn = _G and _G.MSUF_ApplyUnitframeEditPreview
+        if type(fn) == "function" then
+            fn(self, self.msufConfigKey or self.unit, conf)
+        else
+            if self.Show then self:Show() end
+        end
+        ns.UF.HideLeaderAndRaidMarker(self)
+        return true
+    end
+
     if not F.InCombatLockdown() then
         if self and self.Hide then self:Hide() end
         if self and self.portrait and self.portrait.Hide then self.portrait:Hide() end
         if self and self.isFocus and type(MSUF_ReanchorFocusCastBar) == "function" then
             MSUF_ReanchorFocusCastBar()
-    end
+        end
     end
     if type(MSUF_ClearUnitFrameState) == "function" then
         MSUF_ClearUnitFrameState(self, true)
     end
     ns.UF.HideLeaderAndRaidMarker(self)
-     return true
+    return true
 end
 function ns.UF.ForceVisibilityHidden(frame)
     if not frame then  return end
@@ -2979,8 +2993,12 @@ else
 end
 local conf = (type(MSUF_DB) == "table" and confKey and MSUF_DB[confKey]) or nil
 if ns.UF.IsDisabled(conf) then
-    ns.UF.ForceVisibilityHidden(frame)
-     return
+    -- In MSUF Edit Mode, keep disabled frames editable by allowing forceShow previews.
+    -- Boss frames remain hard-hidden when disabled (see Boss preview invariants).
+    if not (forceShow and MSUF_UnitEditModeActive and (not (F.InCombatLockdown and F.InCombatLockdown())) and frame and not frame.isBoss) then
+        ns.UF.ForceVisibilityHidden(frame)
+        return
+    end
 end
     local drv = frame._msufVisibilityDriver
     if not drv then
@@ -4820,6 +4838,117 @@ local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
     MSUF_ClearText(self.powerText, true)
     ns.Text.ClearField(self, "powerTextPct")
  end
+
+-- Edit Mode unitframe preview:
+-- When a unitframe has no unit (or is disabled) we still want a persistent, simple preview
+-- so it can be positioned/edited. This is intentionally a "dark bar" placeholder and
+-- must never run in combat.
+local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
+    if not self or self.isBoss then  return end
+    if F.InCombatLockdown and F.InCombatLockdown() then  return end
+    if type(EnsureDB) == "function" then EnsureDB() end
+    g = g or ((MSUF_DB and MSUF_DB.general) or {})
+
+    if self.Show then self:Show() end
+    if type(_G.MSUF_ApplyUnitAlpha) == "function" then
+        _G.MSUF_ApplyUnitAlpha(self, key or self.unit)
+    end
+
+    -- Clear any sticky state from previously shown units.
+    MSUF_ClearUnitFrameState(self, true)
+
+    if self.portrait and self.portrait.Hide then self.portrait:Hide() end
+
+    local hb = self.hpBar
+    if hb then
+        MSUF_SetBarMinMax(hb, 0, 1)
+        MSUF_SetBarValue(hb, 1, false)
+
+        -- Use the configured dark tone (defaults to black) for a consistent placeholder.
+        local darkR, darkG, darkB = 0, 0, 0
+        local _gray = g.darkBarGray
+        if type(_gray) == "number" then
+            if _gray < 0 then _gray = 0 elseif _gray > 1 then _gray = 1 end
+            darkR, darkG, darkB = _gray, _gray, _gray
+        else
+            local toneKey = g.darkBarTone or "black"
+            local tone = MSUF_DARK_TONES and MSUF_DARK_TONES[toneKey]
+            if tone then
+                darkR, darkG, darkB = tone[1] or 0, tone[2] or 0, tone[3] or 0
+            end
+        end
+        if hb.SetStatusBarColor then hb:SetStatusBarColor(darkR, darkG, darkB, 1) end
+        if self.bg then
+            MSUF_ApplyBarBackgroundVisual(self)
+        end
+        if self.hpGradients then
+            MSUF_ApplyHPGradient(self)
+        elseif self.hpGradient then
+            MSUF_ApplyHPGradient(self.hpGradient)
+        end
+    end
+
+    -- Keep preview minimal: hide power bars/text (the placeholder is the health bar).
+    if self.targetPowerBar then
+        if self.targetPowerBar.Hide then self.targetPowerBar:Hide() end
+        if type(MSUF_ResetBarZero) == "function" then MSUF_ResetBarZero(self.targetPowerBar, true) end
+    end
+    if self.powerBar and self.powerBar ~= self.targetPowerBar then
+        if self.powerBar.Hide then self.powerBar:Hide() end
+        if type(MSUF_ResetBarZero) == "function" then MSUF_ResetBarZero(self.powerBar, true) end
+    end
+
+    local SetShown = (ns and ns.Util and ns.Util.SetShown) or nil
+
+    -- Placeholder label (safe constant).
+    local label = key or self.unit or "unit"
+    if label == "targettarget" then label = "ToT" end
+    if type(label) ~= "string" then label = tostring(label) end
+    local upper = (string and string.upper and string.upper(label)) or label
+
+    if self.nameText and self.nameText.SetText then
+        if type(MSUF_SetTextIfChanged) == "function" then
+            MSUF_SetTextIfChanged(self.nameText, upper)
+        else
+            self.nameText:SetText(upper)
+        end
+        if SetShown then
+            SetShown(self.nameText, (self.showName ~= false))
+        end
+    end
+
+    if self.hpText and self.hpText.SetText then
+        if (self.showHPText ~= false) then
+            if type(MSUF_SetTextIfChanged) == "function" then
+                MSUF_SetTextIfChanged(self.hpText, "100%")
+            else
+                self.hpText:SetText("100%")
+            end
+            if SetShown then SetShown(self.hpText, true) end
+        else
+            if type(MSUF_SetTextIfChanged) == "function" then
+                MSUF_SetTextIfChanged(self.hpText, "")
+            else
+                self.hpText:SetText("")
+            end
+            if SetShown then SetShown(self.hpText, false) end
+        end
+    end
+
+    if self.powerText and self.powerText.SetText then
+        if type(MSUF_SetTextIfChanged) == "function" then
+            MSUF_SetTextIfChanged(self.powerText, "")
+        else
+            self.powerText:SetText("")
+        end
+        if SetShown then SetShown(self.powerText, false) end
+    end
+
+    ns.UF.HideLeaderAndRaidMarker(self)
+    self._msufNoUnitCleared = nil
+end
+_G.MSUF_ApplyUnitframeEditPreview = MSUF_ApplyUnitframeEditPreview
+
 local function MSUF_SyncTargetPowerBar(self, unit, barsConf, isPlayer, isTarget, isFocus)
     if not self then  return false end
     MSUF_EnsureUnitFlags(self)
@@ -5191,7 +5320,18 @@ if self.isBoss then
     end
 end
 if not exists then
-    if unit ~= "player" and self._msufNoUnitCleared and (self.GetAlpha and self:GetAlpha() or 0) <= 0.01 then
+    -- In MSUF Edit Mode, keep a persistent placeholder for missing units
+    -- (so frames stay visible while editing, even when the unit doesn't exist).
+    if MSUF_UnitEditModeActive and (not (F.InCombatLockdown and F.InCombatLockdown())) and unit ~= "player" and self and not self.isBoss then
+        local fn = _G and _G.MSUF_ApplyUnitframeEditPreview
+        if type(fn) == "function" then
+            fn(self, key, conf, g)
+        else
+            if self.Show then self:Show() end
+        end
+        return
+    end
+    if unit ~= "player" and (not MSUF_UnitEditModeActive) and self._msufNoUnitCleared and (self.GetAlpha and self:GetAlpha() or 0) <= 0.01 then
          return
     end
     if unit ~= "player" then
@@ -5452,14 +5592,36 @@ f:Hide()
     end
      end
     if ns.UF.IsDisabled(conf) then
+        -- In MSUF Edit Mode, keep disabled frames visible as previews so edits remain persistent.
+        -- Boss frames must remain hard-hidden when disabled.
+        if MSUF_UnitEditModeActive and (not (F.InCombatLockdown and F.InCombatLockdown())) and key ~= "boss" then
+            local function previewFrame(unit)
+                local f = UnitFrames[unit]
+                if not f then  return end
+                f.cachedConfig = conf
+                if type(MSUF_ApplyUnitVisibilityDriver) == "function" then
+                    if f._msufVisibilityForced == "disabled" then
+                        f._msufVisibilityForced = nil
+                    end
+                    MSUF_ApplyUnitVisibilityDriver(f, true)
+                end
+                if f.Show then f:Show() end
+                ns.UF.RequestUpdate(f, true, false, "ApplyUnitKey:DisabledEditPreview")
+            end
+            if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "pet" then
+                previewFrame(key)
+            end
+            return
+        end
+
         if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "pet" then
             hideFrame(key)
         elseif key == "boss" then
             for i = 1, MSUF_MAX_BOSS_FRAMES do
                 hideFrame("boss" .. i)
             end
-    end
-         return
+        end
+        return
     end
     local function applyToFrame(unit)
         local f = UnitFrames[unit]
