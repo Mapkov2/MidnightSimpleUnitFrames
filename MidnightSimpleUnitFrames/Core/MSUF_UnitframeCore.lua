@@ -2289,6 +2289,11 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "PLAYER_TARGET_CHANGED" then
+        -- Unit swap: force HP color refresh (fix: target colors stuck on previous class color)
+        local tf = FramesByUnit["target"]
+        if tf then tf._msufHealthColorDirty = true end
+        local ttf = FramesByUnit["targettarget"]
+        if ttf then ttf._msufHealthColorDirty = true end
         QueueUnit("target", true, MASK_UNIT_SWAP, event)
         -- Urgent lane: keep ToT snappy (no perceptible delay).
         QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
@@ -2298,6 +2303,9 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "UNIT_TARGET" and arg1 == "target" then
+        -- Target-of-target unit swap: ensure HP color refresh (class/reaction mode)
+        local ttf = FramesByUnit["targettarget"]
+        if ttf then ttf._msufHealthColorDirty = true end
         -- Target-of-target changes: refresh ToT inline (independent of the ToT unitframe).
         if UFCore_IsToTInlineEnabled() then
             local tf = FramesByUnit["target"]
@@ -2312,6 +2320,9 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "PLAYER_FOCUS_CHANGED" then
+        -- Unit swap: force HP color refresh (fix: focus colors stuck on previous class color)
+        local ff = FramesByUnit["focus"]
+        if ff then ff._msufHealthColorDirty = true end
         QueueUnit("focus", true, MASK_UNIT_SWAP, event)
         DeferSwapWork("focus", event, true, false)
         return
