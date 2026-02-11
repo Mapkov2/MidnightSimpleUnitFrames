@@ -2035,9 +2035,13 @@ local function FrameOnEvent(self, event, arg1, ...)
             elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
                 self._msufHealAbsorbDirty = true
             elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
-                -- Health bar color can change for NPC reaction / PvP / flags.
-                -- Keep it out of the hot value path unless explicitly needed.
-                self._msufHealthColorDirty = true
+                -- Health bar color can change for NPC reaction / PvP / flags,
+                -- but only when the HP bar mode actually depends on reaction/class.
+                -- Avoid doing any extra work in Dark/Unified modes.
+                local cache = UFCore_GetSettingsCache()
+                if cache and cache.barMode == "class" then
+                    self._msufHealthColorDirty = true
+                end
             end
             Core.MarkDirty(self, info.mask, info.urgent, event)
         end
@@ -2289,11 +2293,14 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "PLAYER_TARGET_CHANGED" then
-        -- Unit swap: force HP color refresh (fix: target colors stuck on previous class color)
-        local tf = FramesByUnit["target"]
-        if tf then tf._msufHealthColorDirty = true end
-        local ttf = FramesByUnit["targettarget"]
-        if ttf then ttf._msufHealthColorDirty = true end
+        -- Unit swap: HP bar color may change (class/reaction mode only).
+        local cache = UFCore_GetSettingsCache()
+        if cache and cache.barMode == "class" then
+            local tf = FramesByUnit["target"]
+            if tf then tf._msufHealthColorDirty = true end
+            local ttf = FramesByUnit["targettarget"]
+            if ttf then ttf._msufHealthColorDirty = true end
+        end
         QueueUnit("target", true, MASK_UNIT_SWAP, event)
         -- Urgent lane: keep ToT snappy (no perceptible delay).
         QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
@@ -2303,9 +2310,12 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "UNIT_TARGET" and arg1 == "target" then
-        -- Target-of-target unit swap: ensure HP color refresh (class/reaction mode)
-        local ttf = FramesByUnit["targettarget"]
-        if ttf then ttf._msufHealthColorDirty = true end
+        -- Target-of-target unit swap: HP bar color may change (class/reaction mode only).
+        local cache = UFCore_GetSettingsCache()
+        if cache and cache.barMode == "class" then
+            local ttf = FramesByUnit["targettarget"]
+            if ttf then ttf._msufHealthColorDirty = true end
+        end
         -- Target-of-target changes: refresh ToT inline (independent of the ToT unitframe).
         if UFCore_IsToTInlineEnabled() then
             local tf = FramesByUnit["target"]
@@ -2320,9 +2330,12 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "PLAYER_FOCUS_CHANGED" then
-        -- Unit swap: force HP color refresh (fix: focus colors stuck on previous class color)
-        local ff = FramesByUnit["focus"]
-        if ff then ff._msufHealthColorDirty = true end
+        -- Unit swap: HP bar color may change (class/reaction mode only).
+        local cache = UFCore_GetSettingsCache()
+        if cache and cache.barMode == "class" then
+            local ff = FramesByUnit["focus"]
+            if ff then ff._msufHealthColorDirty = true end
+        end
         QueueUnit("focus", true, MASK_UNIT_SWAP, event)
         DeferSwapWork("focus", event, true, false)
         return
