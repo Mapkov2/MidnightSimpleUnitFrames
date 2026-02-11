@@ -233,32 +233,6 @@ function ns.UF.HideLeaderAndRaidMarker(self)
  end
 function ns.UF.HandleDisabledFrame(self, conf)
     if not ns.UF.IsDisabled(conf) then  return false end
-
-    -- MSUF Edit Mode: keep a persistent preview placeholder even if the frame is disabled.
-    -- This lets the user move/resize "hidden" frames without them disappearing after Apply/edits.
-    if rawget(_G, "MSUF_UnitEditModeActive") == true then
-        if self and self.Show then self:Show() end
-
-        local apply = _G and _G.MSUF_ApplyUnitAlpha
-        if self and self.SetAlpha then
-            local key = self.msufConfigKey
-                or (type(GetConfigKeyForUnit) == "function" and GetConfigKeyForUnit(self.unit))
-                or self.unit
-            if type(apply) == "function" and key then
-                apply(self, key)
-            else
-                self:SetAlpha(1)
-            end
-        end
-
-        if self and self.portrait and self.portrait.Hide then self.portrait:Hide() end
-        if type(MSUF_ClearUnitFrameState) == "function" then
-            MSUF_ClearUnitFrameState(self, true)
-        end
-        ns.UF.HideLeaderAndRaidMarker(self)
-        return true
-    end
-
     if not F.InCombatLockdown() then
         if self and self.Hide then self:Hide() end
         if self and self.portrait and self.portrait.Hide then self.portrait:Hide() end
@@ -515,9 +489,210 @@ ns.Bars.Spec.power_pct = ns.Bars.Spec.power_pct or function(frame, unit, barsCon
     return _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer, isTarget, isFocus, true)
 end
 ns.Bars._msufPatchC = ns.Bars._msufPatchC or { version = "C1" }
+-- Player self-heal prediction (own incoming heals only).
+-- Implemented as a behind-the-HP statusbar so the additional segment only appears past current HP.
+local _MSUF_SelfHealPredCalc -- nil = unknown, false = unavailable, table = calc
+local function _MSUF_GetSelfHealPredCalc()
+    if _MSUF_SelfHealPredCalc ~= nil then return _MSUF_SelfHealPredCalc end
+    _MSUF_SelfHealPredCalc = false
+    local fn = _G and _G.CreateUnitHealPredictionCalculator
+    if type(fn) == "function" then
+        local ok, calc
+        if _G and type(_G.MSUF_FastCall) == "function" then
+            ok, calc = _G.MSUF_FastCall(fn)
+        else
+            ok, calc = pcall(fn)
+        end
+        if ok and calc then
+            _MSUF_SelfHealPredCalc = calc
+        end
+    end
+    return _MSUF_SelfHealPredCalc
+end
+
+local function _MSUF_GetIncomingHealsFromPlayer(unit)
+    if not unit then return 0 end
+
+    -- Fast path if the classic C-API is available.
+    local fnInc = _G and _G.UnitGetIncomingHeals
+    if type(fnInc) == "function" then
+        local ok, v
+        if _G and type(_G.MSUF_FastCall) == "function" then
+            ok, v = _G.MSUF_FastCall(fnInc, unit, "player")
+        else
+            ok, v = pcall(fnInc, unit, "player")
+        end
+        if ok and type(v) == "number" then
+            return v
+        end
+    end
+
+    -- Fallback: detailed prediction calculator.
+    local calc = _MSUF_GetSelfHealPredCalc()
+    local fnDet = _G and _G.UnitGetDetailedHealPrediction
+    if calc and type(fnDet) == "function" then
+        local ok
+        if _G and type(_G.MSUF_FastCall) == "function" then
+            ok = select(1, _G.MSUF_FastCall(fnDet, unit, "player", calc))
+        else
+            ok = pcall(fnDet, unit, "player", calc)
+        end
+        if ok and calc.GetIncomingHeals then
+            local total, fromHealer = calc:GetIncomingHeals()
+            if type(fromHealer) == "number" then return fromHealer end
+            if type(total) == "number" then return total end
+        end
+    end
+
+    return 0
+end
+
+local _msufSelfHealCalc = nil
+local _msufSelfHealPredPixelCalcBar = nil
+
+local function _MSUF_EnsureSelfHealPredPixelCalcBar()
+    local bar = _msufSelfHealPredPixelCalcBar
+    if bar then
+        return bar
+    end
+
+    bar = _G.CreateFrame("StatusBar", "MSUF_SelfHealPredPixelCalcBar", _G.UIParent)
+    bar:SetSize(1, 1)
+    bar:SetPoint("TOPLEFT", _G.UIParent, "TOPLEFT", -5000, 0)
+    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    bar:SetMinMaxValues(0, 1)
+    bar:SetValue(0)
+    bar:SetAlpha(0)
+    bar:Show()
+
+    _msufSelfHealPredPixelCalcBar = bar
+    return bar
+end
+
+local function _MSUF_GetIncomingSelfHeals(unit)
+    unit = unit or "player"
+
+    local calc = _msufSelfHealCalc
+    if not calc and _G.CreateUnitHealPredictionCalculator then
+        calc = _G.CreateUnitHealPredictionCalculator()
+        _msufSelfHealCalc = calc
+    end
+
+    if calc and _G.UnitGetDetailedHealPrediction then
+        local data = _G.UnitGetDetailedHealPrediction(unit, "player", calc)
+        if data and type(data) == "table" then
+            -- Prefer the clamped amount if provided, so it never visually overflows missing health.
+            -- IMPORTANT (Midnight/Secret-safe): never use secret numbers in boolean context (no 'or' fallback).
+            local v = data.clampedIncomingHealsFromHealer
+            if type(v) ~= "number" then
+                v = data.incomingHealsFromHealer
+            end
+            if type(v) == "number" then
+                return v
+            end
+        end
+    end
+
+    if _G.UnitGetIncomingHeals then
+        local v = _G.UnitGetIncomingHeals(unit, "player")
+        if type(v) == "number" then
+            return v
+        end
+    end
+
+    return 0
+end
+
+local function _MSUF_HideSelfHealPredBar(frame)
+    if not frame or not frame.selfHealPredBar then return end
+    local bar = frame.selfHealPredBar
+    bar:Hide()
+    bar._msufSelfHealPredLastW = nil
+    bar._msufSelfHealPredAnchorTex = nil
+    bar._msufSelfHealPredAnchorRev = nil
+end
+
+
+local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
+    local g = MSUF_DB and MSUF_DB.general
+    if not g or not g.showSelfHealPrediction then
+        _MSUF_HideSelfHealPredBar(frame)
+        return
+    end
+
+    if not frame or not frame.selfHealPredBar or not frame.hpBar then return end
+    local predBar = frame.selfHealPredBar
+    local hpBar = frame.hpBar
+
+    -- Early outs
+    if frame.IsShown and not frame:IsShown() then
+        _MSUF_HideSelfHealPredBar(frame)
+        return
+    end
+    if hpBar.IsShown and not hpBar:IsShown() then
+        _MSUF_HideSelfHealPredBar(frame)
+        return
+    end
+
+    local hpTex = hpBar.GetStatusBarTexture and hpBar:GetStatusBarTexture()
+    if not hpTex then
+        _MSUF_HideSelfHealPredBar(frame)
+        return
+    end
+
+    -- NOTE (Midnight/secret-safe):
+    -- - Do NOT do ANY arithmetic or comparisons on incoming-heal numbers (can be secret-tainted).
+    -- - Do NOT read/compare HP texture width.
+    -- Instead: render a second statusbar segment anchored to the current HP texture edge.
+    -- The statusbar fill itself computes the pixel length (inc/maxHP) internally.
+    -- Overflow (inc > missing) is clipped by the dedicated clip-frame created at unitframe build.
+
+    -- Sync size to full HP bar size (frame dimensions are safe numbers).
+    if hpBar.GetWidth and hpBar.GetHeight then
+        local w = hpBar:GetWidth()
+        local h = hpBar:GetHeight()
+        if type(w) == "number" and type(h) == "number" then
+            predBar:SetSize(w, h)
+        end
+    end
+
+    -- Sync reverse fill + anchor to the HP texture edge.
+    local rev = (hpBar.GetReverseFill and hpBar:GetReverseFill()) or false
+    if predBar._msufSelfHealPredAnchorTex ~= hpTex or predBar._msufSelfHealPredAnchorRev ~= rev then
+        predBar:ClearAllPoints()
+        if rev then
+            predBar:SetPoint("TOPRIGHT", hpTex, "TOPLEFT", 0, 0)
+            predBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMLEFT", 0, 0)
+        else
+            predBar:SetPoint("TOPLEFT", hpTex, "TOPRIGHT", 0, 0)
+            predBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
+        end
+        predBar._msufSelfHealPredAnchorTex = hpTex
+        predBar._msufSelfHealPredAnchorRev = rev
+    end
+    if predBar.SetReverseFill then
+        predBar:SetReverseFill(rev and true or false)
+    end
+
+    -- Incoming heals (self only) – pass-through to StatusBar API.
+    local inc = _MSUF_GetIncomingSelfHeals(unit)
+    if type(inc) ~= "number" then
+        inc = 0
+    end
+    if type(maxHP) == "number" then
+        predBar:SetMinMaxValues(0, maxHP)
+    else
+        predBar:SetMinMaxValues(0, 1)
+    end
+    MSUF_SetBarValue(predBar, inc, false)
+    predBar:Show()
+end
 function ns.Bars.ResetHealthAndOverlays(frame, clearAbsorbs)
     if not frame then  return end
     MSUF_ResetBarZero(frame.hpBar)
+    if frame.selfHealPredBar then
+        MSUF_ResetBarZero(frame.selfHealPredBar, true)
+    end
     if clearAbsorbs then
         MSUF_ResetBarZero(frame.absorbBar, true)
         MSUF_ResetBarZero(frame.healAbsorbBar, true)
@@ -528,13 +703,13 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
     if maxHP == nil and F.UnitHealthMax then
         maxHP = F.UnitHealthMax(unit)
     end
-    if maxHP then
+    if type(maxHP) == "number" then
         frame.hpBar:SetMinMaxValues(0, maxHP)
     end
     if hp == nil and F.UnitHealth then
         hp = F.UnitHealth(unit)
     end
-    if hp ~= nil then
+    if type(hp) == "number" then
         MSUF_SetBarValue(frame.hpBar, hp)
     end
     if frame.absorbBar then
@@ -542,6 +717,9 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
     end
     if frame.healAbsorbBar then
         MSUF_UpdateHealAbsorbBar(frame, unit, maxHP)
+    end
+    if frame.selfHealPredBar then
+        _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
     end
      return hp, maxHP
 end
@@ -2801,12 +2979,8 @@ else
 end
 local conf = (type(MSUF_DB) == "table" and confKey and MSUF_DB[confKey]) or nil
 if ns.UF.IsDisabled(conf) then
-    -- In MSUF Edit Mode we still want disabled frames to be visible (preview placeholder),
-    -- so the user can position/resize them.
-    if not (forceShow and rawget(_G, "MSUF_UnitEditModeActive") == true) then
-        ns.UF.ForceVisibilityHidden(frame)
-        return
-    end
+    ns.UF.ForceVisibilityHidden(frame)
+     return
 end
     local drv = frame._msufVisibilityDriver
     if not drv then
@@ -3502,30 +3676,191 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
  end
 local function MSUF_UpdateAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAbsorbBars(self, unit, maxHP, false) end
 local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAbsorbBars(self, unit, maxHP, true) end
-ROOT_G.MSUF_UpdateAbsorbBar = ROOT_G.MSUF_UpdateAbsorbBar or MSUF_UpdateAbsorbBar
-ROOT_G.MSUF_UpdateHealAbsorbBar = ROOT_G.MSUF_UpdateHealAbsorbBar or MSUF_UpdateHealAbsorbBar
--- Secret-safe: pure layout change via StatusBar:SetReverseFill.
-local function MSUF_ApplyAbsorbAnchorMode(self)
-    if not self then  return end
-    EnsureDB()
-    local g = MSUF_DB and MSUF_DB.general or {}
-    local mode = g.absorbAnchorMode or 2
-    if self._msufAbsorbAnchorModeStamp == mode then
-         return
-    end
-    self._msufAbsorbAnchorModeStamp = mode
-    local absorbReverse = (mode ~= 1)
-    local healReverse   = not absorbReverse
-    if self.absorbBar and self.absorbBar.SetReverseFill then
-        self.absorbBar:SetReverseFill(absorbReverse and true or false)
-    end
-    if self.healAbsorbBar and self.healAbsorbBar.SetReverseFill then
-        self.healAbsorbBar:SetReverseFill(healReverse and true or false)
-    end
- end
+    ROOT_G.MSUF_UpdateAbsorbBar = ROOT_G.MSUF_UpdateAbsorbBar or MSUF_UpdateAbsorbBar
+    ROOT_G.MSUF_UpdateHealAbsorbBar = ROOT_G.MSUF_UpdateHealAbsorbBar or MSUF_UpdateHealAbsorbBar
+
+    -- Absorb / Heal-Absorb anchoring modes
+    -- 1/2: legacy (edge-anchored) with reverse-fill swap
+    -- 3: follow current HP edge (Blizzard-style) by anchoring to the moving HP StatusBarTexture edge and clipping.
+    -- NOTE: Mode 3 is secret-safe (no HP arithmetic) and reanchors only when mode/reverse-fill/width changes.
+    local function MSUF_ApplyAbsorbAnchorMode(self)
+        if not self then  return end
+
+        EnsureDB()
+        local g = MSUF_DB and MSUF_DB.general or {}
+        local mode = g.absorbAnchorMode or 2
+
+        local hpBar = self.hpBar
+
+        -- Restore legacy overlay layout (full overlay over hpBar).
+        if mode ~= 3 then
+            if self._msufAbsorbAnchorModeStamp == mode and not self._msufAbsorbFollowActive then
+                return
+            end
+
+            self._msufAbsorbAnchorModeStamp = mode
+            self._msufAbsorbFollowActive = nil
+            self._msufAbsorbFollowRF = nil
+            self._msufAbsorbFollowW = nil
+
+            if self._msufAbsorbFollowClip and self._msufAbsorbFollowClip.Hide then
+                self._msufAbsorbFollowClip:Hide()
+            end
+
+            local absorbReverse = (mode ~= 1)
+            local healReverse   = not absorbReverse
+
+            if self.absorbBar then
+                if self.absorbBar.SetReverseFill then
+                    self.absorbBar:SetReverseFill(absorbReverse and true or false)
+                end
+                if hpBar then
+                    if self.absorbBar.GetParent and self.absorbBar:GetParent() ~= self then
+                        self.absorbBar:SetParent(self)
+                    end
+                    self.absorbBar:ClearAllPoints()
+                    self.absorbBar:SetAllPoints(hpBar)
+                    if self.absorbBar.SetFrameLevel and hpBar.GetFrameLevel then
+                        self.absorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 2)
+                    end
+                end
+            end
+
+            if self.healAbsorbBar then
+                if self.healAbsorbBar.SetReverseFill then
+                    self.healAbsorbBar:SetReverseFill(healReverse and true or false)
+                end
+                if hpBar then
+                    if self.healAbsorbBar.GetParent and self.healAbsorbBar:GetParent() ~= self then
+                        self.healAbsorbBar:SetParent(self)
+                    end
+                    self.healAbsorbBar:ClearAllPoints()
+                    self.healAbsorbBar:SetAllPoints(hpBar)
+                    if self.healAbsorbBar.SetFrameLevel and hpBar.GetFrameLevel then
+                        self.healAbsorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 3)
+                    end
+                end
+            end
+
+            return
+        end
+
+        -- Mode 3: follow current HP edge.
+        if not hpBar or not hpBar.GetStatusBarTexture then
+            return
+        end
+
+        local hpTex = hpBar:GetStatusBarTexture()
+        if not hpTex then
+            return
+        end
+
+        local hpReverse = false
+        if hpBar.GetReverseFill then
+            local ok, rf = pcall(hpBar.GetReverseFill, hpBar)
+            if ok and rf then
+                hpReverse = true
+            end
+        end
+
+        local w = nil
+        if hpBar.GetWidth then
+            w = hpBar:GetWidth()
+        end
+
+        if self._msufAbsorbAnchorModeStamp == 3 and self._msufAbsorbFollowActive
+            and self._msufAbsorbFollowRF == hpReverse and self._msufAbsorbFollowW == w then
+            return
+        end
+
+        self._msufAbsorbAnchorModeStamp = 3
+        self._msufAbsorbFollowActive = true
+        self._msufAbsorbFollowRF = hpReverse
+        self._msufAbsorbFollowW = w
+
+        local clip = self._msufAbsorbFollowClip
+        if not clip and _G.CreateFrame and hpBar then
+            clip = _G.CreateFrame("Frame", nil, hpBar)
+            clip:SetAllPoints(hpBar)
+            if clip.SetClipsChildren then
+                clip:SetClipsChildren(true)
+            end
+            self._msufAbsorbFollowClip = clip
+        elseif clip then
+            clip:ClearAllPoints()
+            clip:SetAllPoints(hpBar)
+        end
+        if clip and clip.SetFrameLevel and hpBar.GetFrameLevel then
+            clip:SetFrameLevel(hpBar:GetFrameLevel() + 2)
+        end
+        if clip and clip.Show then
+            clip:Show()
+        end
+
+        -- Absorb: outward (same direction as HP). Heal-Absorb: inward (opposite direction).
+        if self.absorbBar then
+            if clip and self.absorbBar.GetParent and self.absorbBar:GetParent() ~= clip then
+                self.absorbBar:SetParent(clip)
+            end
+            self.absorbBar:ClearAllPoints()
+            if hpReverse then
+                self.absorbBar:SetPoint("TOPRIGHT", hpTex, "TOPLEFT", 0, 0)
+                self.absorbBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMLEFT", 0, 0)
+                if self.absorbBar.SetReverseFill then
+                    self.absorbBar:SetReverseFill(true)
+                end
+            else
+                self.absorbBar:SetPoint("TOPLEFT", hpTex, "TOPRIGHT", 0, 0)
+                self.absorbBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
+                if self.absorbBar.SetReverseFill then
+                    self.absorbBar:SetReverseFill(false)
+                end
+            end
+            if type(w) == "number" and w > 0 and self.absorbBar.SetWidth then
+                if self.absorbBar._msufFollowW ~= w then
+                    self.absorbBar:SetWidth(w)
+                    self.absorbBar._msufFollowW = w
+                end
+            end
+            if self.absorbBar.SetFrameLevel and hpBar.GetFrameLevel then
+                self.absorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 2)
+            end
+        end
+
+        if self.healAbsorbBar then
+            if clip and self.healAbsorbBar.GetParent and self.healAbsorbBar:GetParent() ~= clip then
+                self.healAbsorbBar:SetParent(clip)
+            end
+            self.healAbsorbBar:ClearAllPoints()
+            if hpReverse then
+                -- inward: extend right into HP
+                self.healAbsorbBar:SetPoint("TOPLEFT", hpTex, "TOPLEFT", 0, 0)
+                self.healAbsorbBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMLEFT", 0, 0)
+                if self.healAbsorbBar.SetReverseFill then
+                    self.healAbsorbBar:SetReverseFill(false)
+                end
+            else
+                -- inward: extend left into HP
+                self.healAbsorbBar:SetPoint("TOPRIGHT", hpTex, "TOPRIGHT", 0, 0)
+                self.healAbsorbBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMRIGHT", 0, 0)
+                if self.healAbsorbBar.SetReverseFill then
+                    self.healAbsorbBar:SetReverseFill(true)
+                end
+            end
+            if type(w) == "number" and w > 0 and self.healAbsorbBar.SetWidth then
+                if self.healAbsorbBar._msufFollowW ~= w then
+                    self.healAbsorbBar:SetWidth(w)
+                    self.healAbsorbBar._msufFollowW = w
+                end
+            end
+            if self.healAbsorbBar.SetFrameLevel and hpBar.GetFrameLevel then
+                self.healAbsorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 3)
+            end
+        end
+     end
 _G.MSUF_ApplyAbsorbAnchorMode = MSUF_ApplyAbsorbAnchorMode
 -- Per-unit reverse fill for HP/Power bars.
--- NOTE: This does NOT touch absorb/heal-absorb overlays, which are driven by MSUF_ApplyAbsorbAnchorMode.
+-- If Absorb Anchoring is set to "Follow current HP", this also re-syncs absorb/heal-absorb overlays.
 local function MSUF_ApplyReverseFillBars(self, conf)
     if not self then  return end
     local rf = (conf and conf.reverseFillBars == true) or false
@@ -3536,9 +3871,21 @@ local function MSUF_ApplyReverseFillBars(self, conf)
     if self.hpBar and self.hpBar.SetReverseFill then
         self.hpBar:SetReverseFill(rf and true or false)
     end
+    if self.selfHealPredBar and self.selfHealPredBar.SetReverseFill then
+        self.selfHealPredBar:SetReverseFill(rf and true or false)
+    end
     local p = self.targetPowerBar or self.powerBar
     if p and p.SetReverseFill then
         p:SetReverseFill(rf and true or false)
+    end
+
+    -- Keep absorb/heal-absorb follow-HP anchoring in sync with reverse-fill changes.
+    local g = MSUF_DB and MSUF_DB.general
+    if g and g.absorbAnchorMode == 3 then
+        local apply = _G.MSUF_ApplyAbsorbAnchorMode
+        if apply then
+            apply(self)
+        end
     end
  end
 _G.MSUF_ApplyReverseFillBars = _G.MSUF_ApplyReverseFillBars or MSUF_ApplyReverseFillBars
@@ -4829,21 +5176,6 @@ if self.powerText then
     end
 if self.isBoss then
     if not exists then
-        -- MSUF Edit Mode: keep boss unitframe preview visible even when the boss unit doesn't exist.
-        if rawget(_G, "MSUF_UnitEditModeActive") == true then
-            if type(_G.MSUF_ApplyUnitAlpha) == "function" then
-                _G.MSUF_ApplyUnitAlpha(self, key)
-            elseif self.SetAlpha then
-                self:SetAlpha(1)
-            end
-            MSUF_ClearUnitFrameState(self, false)
-            if self.portrait then
-                self.portrait:Hide()
-            end
-            ns.UF.HideLeaderAndRaidMarker(self)
-            self._msufNoUnitCleared = true
-            return
-        end
         if self._msufNoUnitCleared and (self.GetAlpha and self:GetAlpha() or 0) <= 0.01 then
              return
     end
@@ -4859,20 +5191,6 @@ if self.isBoss then
     end
 end
 if not exists then
-    -- MSUF Edit Mode: keep a persistent preview placeholder even if the unit doesn't exist.
-    -- Without this, Apply/edits can trigger UpdateSimpleUnitFrame() and the frame gets alpha=0 again.
-    if rawget(_G, "MSUF_UnitEditModeActive") == true then
-        if type(_G.MSUF_ApplyUnitAlpha) == "function" then
-            _G.MSUF_ApplyUnitAlpha(self, key)
-        elseif self.SetAlpha then
-            self:SetAlpha(1)
-        end
-        if self.portrait then self.portrait:Hide() end
-        MSUF_ClearUnitFrameState(self, true)
-        ns.UF.HideLeaderAndRaidMarker(self)
-        self._msufNoUnitCleared = true
-        return
-    end
     if unit ~= "player" and self._msufNoUnitCleared and (self.GetAlpha and self:GetAlpha() or 0) <= 0.01 then
          return
     end
@@ -5667,6 +5985,7 @@ local function UpdateAllBarTextures()
         ApplyTex(f.hpBar, texHP)
         ApplyTex(f.absorbBar, texAbs)
         ApplyTex(f.healAbsorbBar, texHeal)
+        ApplyTex(f.selfHealPredBar, texHP)
         if applyBg then
             applyBg(f)
     end
@@ -6263,6 +6582,38 @@ local function CreateSimpleUnitFrame(unit)
         f.hpGradient = grads and grads.right or nil
     end
     MSUF_ApplyHPGradient(f)
+    if unit == "player" then
+        -- Own-heals-only prediction segment (your incoming heals only).
+        -- IMPORTANT (Midnight/secret-safe):
+        -- Incoming-heal numbers and HP state can be secret-tainted.
+        -- We therefore do NO arithmetic/comparisons on those values.
+        -- Rendering is done by a second StatusBar anchored to the current HP texture edge;
+        -- the StatusBar fill computes the pixel length internally, and overflow is clipped.
+        local clip = _G.CreateFrame("Frame", nil, hpBar)
+        clip:SetAllPoints(hpBar)
+        if clip.SetClipsChildren then clip:SetClipsChildren(true) end
+        -- Keep it above the HP bar but below absorb overlays.
+        clip:SetFrameLevel(hpBar:GetFrameLevel() + 1)
+        f.selfHealPredClip = clip
+
+        local bar = _G.CreateFrame("StatusBar", nil, clip)
+        bar:SetStatusBarTexture(MSUF_GetBarTexture())
+        bar:SetMinMaxValues(0, 1)
+        MSUF_SetBarValue(bar, 0, false)
+        bar.MSUF_lastValue = 0
+        bar:SetFrameLevel(clip:GetFrameLevel())
+        bar:SetStatusBarColor(0.0, 1.0, 0.4, 0.35)
+        bar:Hide()
+        f.selfHealPredBar = bar
+
+        -- Keep reverse-fill in sync for completeness (direction doesn't matter when value=1).
+        if hpBar and hpBar.GetReverseFill and bar.SetReverseFill then
+            local okRF, rf = pcall(hpBar.GetReverseFill, hpBar)
+            if okRF and rf ~= nil then
+                pcall(bar.SetReverseFill, bar, rf and true or false)
+            end
+        end
+    end
     f.absorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 2, MSUF_GetAbsorbOverlayColor(), true)
     f.healAbsorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 3, MSUF_GetHealAbsorbOverlayColor(), false)
     ns.Bars.SetOverlayBarTexture(f.absorbBar, MSUF_GetAbsorbBarTexture)
@@ -6518,6 +6869,23 @@ end
         _G.MSUF_Auras2_RefreshAll()
     end
 
+    -- Player self-heal prediction: request a Player frame update when heal prediction changes
+    -- (this can change without UNIT_HEALTH firing).
+    if type(MSUF_EventBus_Register) == "function" and not _G.MSUF_SelfHealPredEventsRegistered then
+        _G.MSUF_SelfHealPredEventsRegistered = true
+        MSUF_EventBus_Register("UNIT_HEAL_PREDICTION", "MSUF_SELFHEALPRED", function(_, unitTarget)
+            if unitTarget ~= "player" then return end
+            local g = (MSUF_DB and MSUF_DB.general) or nil
+            if not (g and g.showSelfHealPrediction) then return end
+            local f = UnitFrames and UnitFrames.player
+            if not f or (f.IsShown and not f:IsShown()) then return end
+            if ns and ns.UF and ns.UF.RequestUpdate then
+                ns.UF.RequestUpdate(f, true, false, "UNIT_HEAL_PREDICTION")
+            end
+        end)
+    end
+
+
 
 
 
@@ -6748,7 +7116,7 @@ end
     if type(MSUF_InitPlayerCastbarPreviewToggle) == "function" then
         C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
     end
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 2.0 Beta 1 |cff565f89•|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 2.0 Beta 5 |cff565f89•|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
  end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then
