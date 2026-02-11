@@ -446,48 +446,6 @@ function Store.OnUnitAura(unit, updateInfo)
     end
 end
 
-    -- PERF (Step N): If we got addedAuras, membership changed.
-    -- Classifying added auras by scanning HELPFUL/HARMFUL lists is O(#added * #auras) and creates
-    -- recurring spikes in combat. We don't need incremental classification here.
-    -- Mark dirty and let the next GetRawSig() do a single linear scan.
-    local added = updateInfo.addedAuras
-    if type(added) == "table" and added[1] ~= nil then
-        st.dirty = true
-        st.updatedLen = 0
-        return
-    end
-
-    -- Membership removals can be handled incrementally (O(#removed)). If we encounter an unknown
-    -- auraInstanceID, _A2_StoreRemove() flips dirty and we'll rescan next read.
-    local removed = updateInfo.removedAuraInstanceIDs
-    if type(removed) == "table" and removed[1] ~= nil then
-        for i = 1, #removed do
-            local aid = removed[i]
-            if aid then _A2_StoreRemove(st, aid) end
-        end
-        st.updatedLen = 0
-        return
-    end
-
-    -- Pure updates (stacks/duration/etc.) -> store ids so RenderUnit can refresh only those icons
-    local upd = updateInfo.updatedAuraInstanceIDs
-    if type(upd) == "table" and upd[1] ~= nil then
-        local t = st.updated
-        if type(t) ~= "table" then
-            t = {}
-            st.updated = t
-        end
-        local n = st.updatedLen or 0
-        for i = 1, #upd do
-            local aid = upd[i]
-            if aid then
-                n = n + 1
-                t[n] = aid
-            end
-        end
-        st.updatedLen = n
-    end
-end
 
 function Store.PopUpdated(unit)
     local st = _StoreUnits[unit]
