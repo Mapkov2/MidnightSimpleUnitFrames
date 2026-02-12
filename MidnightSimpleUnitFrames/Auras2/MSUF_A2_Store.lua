@@ -196,18 +196,37 @@ local function _A2_StoreRemove(st, aid)
 end
 
 -- ========
--- Slot list helper (GC-safe)
+-- Slot list helper (GC-safe, O(n))
 --
--- Avoid { select(2, ...) } table packing in hot scan paths.
+-- Captures varargs into a reusable scratch table WITHOUT the quadratic
+-- select(i,...) loop.  Unrolled local capture for n≤16 (zero alloc);
+-- single {…} fallback for the rare n>16 case (one alloc, still O(n)).
+--
+-- Typical maxBuffs/maxDebuffs are 8-15, so the unrolled path covers
+-- virtually all real-world configs.
 local function _A2_FillVarargsInto(t, ...)
     local n = select('#', ...)
     local prev = t._msufA2_n
     if type(prev) ~= 'number' then prev = 0 end
     t._msufA2_n = n
 
-    for i = 1, n do
-        t[i] = select(i, ...)
+    if n == 0 then
+        -- nothing to capture
+    elseif n <= 16 then
+        -- Unrolled: destructure into locals then write (O(n), zero alloc).
+        -- Excess locals beyond actual n become nil — harmless writes.
+        local a,b,c,d,e,f,g,h,i,j,k,l,m,o,p,q = ...
+        t[1]=a;  t[2]=b;  t[3]=c;  t[4]=d
+        t[5]=e;  t[6]=f;  t[7]=g;  t[8]=h
+        t[9]=i;  t[10]=j; t[11]=k; t[12]=l
+        t[13]=m; t[14]=o; t[15]=p; t[16]=q
+    else
+        -- Rare (n>16): single {…} is still O(n) with one alloc — far
+        -- better than select(i,...) which was O(n²).
+        local tmp = {...}
+        for i = 1, n do t[i] = tmp[i] end
     end
+    -- Nil out stale tail entries from a previous larger capture.
     for i = n + 1, prev do
         t[i] = nil
     end

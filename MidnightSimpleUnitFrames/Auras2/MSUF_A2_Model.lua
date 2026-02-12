@@ -155,8 +155,17 @@ local function _A2_FillVarargsInto(t, ...)
     if type(prev) ~= 'number' then prev = 0 end
     t._msufA2_n = n
 
-    for i = 1, n do
-        t[i] = select(i, ...)
+    if n == 0 then
+        -- nothing to capture
+    elseif n <= 16 then
+        local a,b,c,d,e,f,g,h,i,j,k,l,m,o,p,q = ...
+        t[1]=a;  t[2]=b;  t[3]=c;  t[4]=d
+        t[5]=e;  t[6]=f;  t[7]=g;  t[8]=h
+        t[9]=i;  t[10]=j; t[11]=k; t[12]=l
+        t[13]=m; t[14]=o; t[15]=p; t[16]=q
+    else
+        local tmp = {...}
+        for i = 1, n do t[i] = tmp[i] end
     end
     for i = n + 1, prev do
         t[i] = nil
@@ -247,6 +256,7 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount, out, entry)
 		end
 
         if n > 0 then
+            local outN = 0
             for i = 1, n do
                 local slot = slotScratch[i]
                 local data = getBySlot(unit, slot)
@@ -258,7 +268,8 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount, out, entry)
                             data._msufAuraInstanceID = aid
                         end
                     end
-                    out[#out + 1] = data
+                    outN = outN + 1
+                    out[outN] = data
                 end
             end
             return out
@@ -305,13 +316,15 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount, out, entry)
     local cap = (type(maxCount) == "number" and maxCount > 0) and maxCount or #ids
 
     -- Secret-safe: we don't inspect fields other than auraInstanceID (stable), so one loop is enough.
+    local outN = 0
     for i = 1, #ids do
         local id = ids[i]
         local data = getData(unit, id)
         if type(data) == "table" then
             data._msufAuraInstanceID = id
-            out[#out+1] = data
-            if #out >= cap then break end
+            outN = outN + 1
+            out[outN] = data
+            if outN >= cap then break end
         end
     end
 
