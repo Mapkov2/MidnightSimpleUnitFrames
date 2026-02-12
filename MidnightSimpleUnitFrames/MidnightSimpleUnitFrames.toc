@@ -13,6 +13,14 @@ Locales\MSUF_Localization.lua
 Locales\enUS.lua
 Locales\zhCN.lua
 Locales\zhTW.lua
+Locales\deDE.lua
+Locales\frFR.lua
+Locales\esES.lua
+Locales\esMX.lua
+Locales\itIT.lua
+Locales\koKR.lua
+Locales\ptBR.lua
+Locales\ruRU.lua
 MSUF_Util.lua
 MSUF_Defaults.lua
 MSUF_Profiles.lua
