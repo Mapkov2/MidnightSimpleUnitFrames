@@ -686,14 +686,8 @@ icon._msufA2_previewLabel:Hide()
     icon._msufOwnGlow:Hide()
 
 
--- Private aura marker (player-only): small lock in the top-left corner.
--- We keep this lightweight and purely visual (no glow libs / no combat-unsafe calls).
-icon._msufPrivateMark = icon:CreateTexture(nil, "OVERLAY")
-icon._msufPrivateMark:SetTexture("Interface\\Buttons\\UI-GroupLoot-LockIcon")
-icon._msufPrivateMark:SetSize(12, 12)
-icon._msufPrivateMark:SetPoint("TOPLEFT", icon, "TOPLEFT", -2, 2)
-icon._msufPrivateMark:SetAlpha(0.9)
-icon._msufPrivateMark:Hide()
+-- NOTE: Private auras are rendered by Blizzard on their own anchors.
+-- MSUF does not apply any additional private-aura skinning/markers here.
 
     -- Register with Masque if enabled
     do
@@ -1213,7 +1207,7 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
 
     -- Default: hide optional visuals (no base border work).
     if icon._msufOwnGlow then icon._msufOwnGlow:Hide() end
-    if icon._msufPrivateMark then icon._msufPrivateMark:Hide() end
+    -- No private-aura marker visuals.
 
     local auraInstanceID = nil
 
@@ -1223,42 +1217,9 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
         auraInstanceID = icon._msufAuraInstanceID
     end
 
-    -- Preview-private always wins (Edit Mode preview).
+    -- Private aura styling removed: no special highlight path.
     if aura and aura._msufA2_previewIsPrivate == true then
-        local pr, pg, pb = MSUF_A2_GetPrivatePlayerHighlightRGB()
-        if icon._msufOwnGlow then
-            icon._msufOwnGlow:SetVertexColor(pr, pg, pb, 1)
-            icon._msufOwnGlow:Show()
-        end
-        if icon._msufPrivateMark then icon._msufPrivateMark:Show() end
         return
-    end
-
-    -- Player private aura highlight (12.0+ / Midnight safe): use Secrets by auraInstanceID.
-    if unit == "player" and shared and shared.highlightPrivateAuras == true and auraInstanceID then
-        if C_Secrets and type(C_Secrets.ShouldUnitAuraInstanceBeSecret) == "function" then
-            local isSecret = C_Secrets.ShouldUnitAuraInstanceBeSecret(unit, auraInstanceID)
-            if not _A2_IsSecretValue(isSecret) then
-                local t = type(isSecret)
-                local yes = false
-	                if t == "boolean" then
-	                    -- Safe: `isSecret` is confirmed non-secret.
-	                    yes = isSecret
-	                elseif t == "number" then
-	                    -- Safe: `isSecret` is confirmed non-secret.
-	                    yes = (isSecret > 0)
-	                end
-                if yes then
-                    local pr, pg, pb = MSUF_A2_GetPrivatePlayerHighlightRGB()
-                    if icon._msufOwnGlow then
-                        icon._msufOwnGlow:SetVertexColor(pr, pg, pb, 1)
-                        icon._msufOwnGlow:Show()
-                    end
-                    if icon._msufPrivateMark then icon._msufPrivateMark:Show() end
-                    return
-                end
-            end
-        end
     end
 
     if allowHighlights ~= true then

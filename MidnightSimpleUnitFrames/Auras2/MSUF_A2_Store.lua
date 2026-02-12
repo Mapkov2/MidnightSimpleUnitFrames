@@ -29,6 +29,8 @@ local _StoreUnits = Store.units
 
 local _A2_SIG_MOD = 2147483647 -- fits safely in double integers
 
+local issecretvalue = _G and _G.issecretvalue
+
 local function _A2_ModNorm(x)
     x = x % _A2_SIG_MOD
     if x < 0 then x = x + _A2_SIG_MOD end
@@ -49,10 +51,31 @@ local function _A2_ModSub(x, y)
     return x
 end
 
+local function _A2_IsSafeBoolTrue(v)
+    -- Secret-safe: never boolean-test a secret boolean.
+    if v == nil then return false end
+    if issecretvalue and issecretvalue(v) then return false end
+    return (v == true)
+end
+
+local function _A2_ClassifyAddedAuraKind(a)
+    -- Returns: 1 (helpful) | 2 (harmful) | 0 (unknown)
+    if type(a) ~= "table" then return 0 end
+    local ih = rawget(a, "isHelpful")
+    if _A2_IsSafeBoolTrue(ih) then return 1 end
+    local id = rawget(a, "isHarmful")
+    if _A2_IsSafeBoolTrue(id) then return 2 end
+    return 0
+end
+
 local function _A2_StoreEnsure(unit)
     local st = _StoreUnits[unit]
     if st then return st end
     st = {
+        -- Epoch-based signature: increments on membership changes (add/remove/full update).
+        -- Render can compare this cheaply without rescanning aura lists.
+        auraEpoch = 1,
+
         -- Stamp-map membership (no per-scan wipes):
         -- kindStamp[aid] == stamp  => aid is present in the current set.
         kindById  = {}, -- [auraInstanceID] = 1 (helpful) | 2 (harmful) (valid only when kindStamp matches)
@@ -340,6 +363,8 @@ end
 function Store.InvalidateUnit(unit)
     local st = _StoreUnits[unit]
     if st then
+        -- Force Render rebuild without scanning.
+        st.auraEpoch = (st.auraEpoch or 0) + 1
         st.dirty = true
         st.updatedLen = 0
     end
@@ -347,6 +372,9 @@ end
 
 function Store.OnUnitAura(unit, updateInfo)
     local st = _A2_StoreEnsure(unit)
+
+    -- Epoch-based signature: bump on membership changes so Render can rebuild without rescans.
+    -- (Pure updates are handled via updatedAuraInstanceIDs and do not need a rebuild.)
 
     -- Stack cache invalidation (only when stack caching is actually in use for this unit).
     local hasStackCache = (type(st.stackCacheCountById) == "table") or (type(st.stackCacheStampById) == "table") or (type(st.stackChangeStampById) == "table")
@@ -358,6 +386,7 @@ function Store.OnUnitAura(unit, updateInfo)
 
     -- No delta info / full update => rescan on next read
     if type(updateInfo) ~= "table" or updateInfo.isFullUpdate then
+        st.auraEpoch = (st.auraEpoch or 0) + 1
         if hasStackCache then
             local cc = st.stackCacheCountById
             if type(cc) == "table" then
@@ -377,31 +406,38 @@ function Store.OnUnitAura(unit, updateInfo)
         return
     end
 
-    -- PERF (Step N): If we got addedAuras, membership changed.
-    -- Classifying added auras by scanning HELPFUL/HARMFUL lists is O(#added * #auras) and creates
-    -- recurring spikes in combat. We don't need incremental classification here.
-    -- Mark dirty and let the next GetRawSig() do a single linear scan.
+    -- If we got addedAuras, membership changed.
+    -- Patch 3 (Scanless Render): classify added auras directly from updateInfo to avoid rescanning.
     local added = updateInfo.addedAuras
     if type(added) == "table" and added[1] ~= nil then
+        st.auraEpoch = (st.auraEpoch or 0) + 1
+        local ch, cc, cs
         if hasStackCache then
-            local ch = st.stackChangeStampById
+            ch = st.stackChangeStampById
             if type(ch) ~= "table" then
                 ch = {}
                 st.stackChangeStampById = ch
             end
-            local cc = st.stackCacheCountById
-            local cs = st.stackCacheStampById
-            for i = 1, #added do
-                local a = added[i]
-                local aid = (type(a) == "table") and a.auraInstanceID or nil
-                if aid ~= nil then
+            cc = st.stackCacheCountById
+            cs = st.stackCacheStampById
+        end
+
+        for i = 1, #added do
+            local a = added[i]
+            local aid = (type(a) == "table") and a.auraInstanceID or nil
+            if aid ~= nil then
+                if hasStackCache then
                     ch[aid] = epoch
                     if type(cc) == "table" then cc[aid] = nil end
                     if type(cs) == "table" then cs[aid] = nil end
                 end
+
+                local kind = _A2_ClassifyAddedAuraKind(a)
+                if kind ~= 0 then
+                    _A2_StoreAdd(st, aid, kind)
+                end
             end
         end
-        st.dirty = true
         st.updatedLen = 0
         return
     end
@@ -410,6 +446,7 @@ function Store.OnUnitAura(unit, updateInfo)
     -- auraInstanceID, _A2_StoreRemove() flips dirty and we'll rescan next read.
     local removed = updateInfo.removedAuraInstanceIDs
     if type(removed) == "table" and removed[1] ~= nil then
+        st.auraEpoch = (st.auraEpoch or 0) + 1
         for i = 1, #removed do
             local aid = removed[i]
             if aid then _A2_StoreRemove(st, aid) end
@@ -547,6 +584,25 @@ function Store.GetRawSig(unit, capHelpful, capHarmful)
     return rawSig, scanStamp
 end
 
+-- Patch 3 (Scanless Render): epoch-based signature used by Render to avoid rescanning aura sets.
+-- NOTE: This does not touch C_UnitAuras; it is purely driven by UNIT_AURA deltas.
+function Store.GetEpochSig(unit, capHelpful, capHarmful)
+    local st = _A2_StoreEnsure(unit)
+
+    local capH = (type(capHelpful) == "number") and capHelpful or 0
+    local capD = (type(capHarmful) == "number") and capHarmful or 0
+    if capH < 0 then capH = 0 end
+    if capD < 0 then capD = 0 end
+
+    local e = st.auraEpoch or 0
+    -- Mix (epoch + caps) into a stable bounded int for fast equality compare.
+    local x = 0
+    x = _A2_ModAdd(x, e * 31 + 7)
+    x = _A2_ModAdd(x, capH * 131)
+    x = _A2_ModAdd(x, capD * 257)
+    return x
+end
+
 -- ------------------------------------------------------------
 
 
@@ -599,5 +655,26 @@ function Store.GetLastScannedAuraList(unit, filter, maxCount, scanStamp, out)
     end
     out._msufA2_n = want
     return out
+end
+
+-- ------------------------------------------------------------
+-- ForceScanForReuse: trigger a full slot scan so Model.GetAuraList
+-- can reuse the captured aura data tables (st._msufA2_lastHelpData /
+-- st._msufA2_lastHarmData) via Store.GetLastScannedAuraList().
+--
+-- Called by Render when the aura signature changed and we know
+-- BuildMergedAuraList will follow. This eliminates the double
+-- GetAuraSlots + GetAuraDataBySlot pass (Store sig scan + Model list build).
+--
+-- Returns the scanStamp (used by Model as the reuse key).
+-- ------------------------------------------------------------
+function Store.ForceScanForReuse(unit, capHelpful, capHarmful)
+    local st = _A2_StoreEnsure(unit)
+    local capH = (type(capHelpful) == "number") and capHelpful or 0
+    local capD = (type(capHarmful) == "number") and capHarmful or 0
+    if capH < 0 then capH = 0 end
+    if capD < 0 then capD = 0 end
+    _A2_StoreScanUnitCapped(unit, st, capH, capD)
+    return st.scanStamp
 end
 

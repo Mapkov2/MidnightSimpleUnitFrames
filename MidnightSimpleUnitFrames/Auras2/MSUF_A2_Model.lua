@@ -183,6 +183,40 @@ local function GetAuraList(unit, filter, onlyPlayer, maxCount, out, entry)
         return out
     end
 
+    -- ----------------------------------------------------------------
+    -- Store slot-scan reuse (eliminates double GetAuraDataBySlot pass).
+    -- When Render triggered Store.ForceScanForReuse() before calling
+    -- BuildMergedAuraList, the Store has already captured aura data
+    -- tables for this unit. Reuse them here instead of scanning again.
+    -- Only valid for non-player-only lists (player-filtered lists need
+    -- a separate API call with the |PLAYER filter flag).
+    -- ----------------------------------------------------------------
+    if entry and onlyPlayer ~= true and type(maxCount) == "number" and maxCount > 0 then
+        local stamp = entry._msufA2_storeRescanStamp
+        local bs = entry._msufA2_storeRescanBudgetStamp
+        if stamp ~= nil and bs ~= nil and bs == entry._msufA2_budgetStamp and entry._msufA2_storeRescanUnit == unit then
+            local Store = API and API.Store
+            if Store and Store.GetLastScannedAuraList then
+                local reused = Store.GetLastScannedAuraList(unit, filter, maxCount, stamp, out)
+                if reused then
+                    local rn = reused._msufA2_n
+                    if type(rn) ~= "number" then rn = #reused end
+                    -- Normalize for Apply hot-path: expose _msufAuraInstanceID without allocating.
+                    for i = 1, rn do
+                        local data = reused[i]
+                        if type(data) == "table" and data._msufAuraInstanceID == nil then
+                            local aid = data.auraInstanceID
+                            if aid ~= nil then
+                                data._msufAuraInstanceID = aid
+                            end
+                        end
+                    end
+                    return reused
+                end
+            end
+        end
+    end
+
     -- Preferred fast path: slot API lets us request only the first N auras (huge perf win on large aura sets).
     local getSlots = C_UnitAuras.GetAuraSlots
     local getBySlot = C_UnitAuras.GetAuraDataBySlot
@@ -516,34 +550,6 @@ local function MSUF_A2_MergeBossAuras(playerList, fullList, out, seen, seenKeys,
     local prevOutN = out._msufA2_n
     if type(prevOutN) ~= "number" then prevOutN = #out end
     local outN = 0
-
--- Same-tick Store slot-scan reuse (avoids a second GetAuraDataBySlot pass).
--- Only valid for non-player-only lists, and only when Render performed a Store rescan this tick.
-if entry and onlyPlayer ~= true and type(maxCount) == "number" and maxCount > 0 then
-    local stamp = entry._msufA2_storeRescanStamp
-    local bs = entry._msufA2_storeRescanBudgetStamp
-    if stamp ~= nil and bs ~= nil and bs == entry._msufA2_budgetStamp and entry._msufA2_storeRescanUnit == unit then
-        local Store = API and API.Store
-        if Store and Store.GetLastScannedAuraList then
-            local reused = Store.GetLastScannedAuraList(unit, filter, maxCount, stamp, out)
-            if reused then
-                local rn = reused._msufA2_n
-                if type(rn) ~= "number" then rn = #reused end
-                -- Normalize for Apply hot-path: expose _msufAuraInstanceID without allocating.
-                for i = 1, rn do
-                    local data = reused[i]
-                    if type(data) == "table" and data._msufAuraInstanceID == nil then
-                        local aid = data.auraInstanceID
-                        if aid ~= nil then
-                            data._msufAuraInstanceID = aid
-                        end
-                    end
-                end
-                return reused
-            end
-        end
-    end
-end
 
     -- Stamp map: we never wipe/clear the table every render. Instead, we bump a stamp and
     -- treat seen[aid] == stamp as "seen this pass".

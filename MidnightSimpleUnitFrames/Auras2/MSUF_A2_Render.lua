@@ -931,27 +931,12 @@ local function MSUF_A2_PrivateAuras_EnsureSlots(entry, maxN)
 
     for i = 1, maxN do
         if not slots[i] then
-            local slot = CreateFrame("Frame", nil, entry.private, "BackdropTemplate")
+            -- IMPORTANT: do not skin/style Blizzard private aura icons.
+            -- We only provide plain slot frames for anchoring (position/size/level).
+            local slot = CreateFrame("Frame", nil, entry.private)
             slot:SetSize(1, 1)
             slot:SetFrameStrata("MEDIUM")
             slot:SetFrameLevel(60)
-
-            slot:SetBackdrop({
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
-                insets = { left = 0, right = 0, top = 0, bottom = 0 },
-            })
-            slot:SetBackdropBorderColor(0, 0, 0, 0)
-
-            -- Corner marker (shown only when highlight is enabled).
-            local mark = slot:CreateTexture(nil, "OVERLAY")
-            mark:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-            mark:SetTexCoord(0.0, 0.25, 0.0, 0.25)
-            mark:SetPoint("TOPLEFT", slot, "TOPLEFT", -2, 2)
-            mark:SetSize(14, 14)
-            mark:SetAlpha(0.9)
-            mark:Hide()
-            slot._msufPrivateMark = mark
 
             slots[i] = slot
         end
@@ -1014,14 +999,11 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
     local showCountdownFrame = (shared.showCooldownSwipe == true)
     local showCountdownNumbers = (shared.showCooldownText == true)
 
-    local highlight = (shared.highlightPrivateAuras == true)
-
     local effectiveToken = MSUF_A2_PrivateAuras_GetEffectiveUnitToken(unit)
 
     local sig = tostring(unit).."|"..tostring(effectiveToken).."|"..tostring(iconSize).."|"..tostring(spacing).."|"..tostring(maxN).."|"
         ..(showCountdownFrame and "F1" or "F0").."|"
         ..(showCountdownNumbers and "N1" or "N0").."|"
-        ..(highlight and "H1" or "H0").."|"
         ..tostring(layoutMode or "")
 
     if entry._msufA2_privateCfgSig == sig and type(entry._msufA2_privateAnchorIDs) == "table" then
@@ -1054,14 +1036,6 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
         slot:ClearAllPoints()
         slot:SetPoint("BOTTOMLEFT", entry.private, "BOTTOMLEFT", (i - 1) * step, 0)
         slot:SetSize(iconSize, iconSize)
-
-        if highlight then
-            slot:SetBackdropBorderColor(0.80, 0.30, 1.00, 1.0) -- purple
-            if slot._msufPrivateMark then slot._msufPrivateMark:Show() end
-        else
-            slot:SetBackdropBorderColor(0, 0, 0, 0)
-            if slot._msufPrivateMark then slot._msufPrivateMark:Hide() end
-        end
 
         slot:Show()
 
@@ -1890,7 +1864,7 @@ end
 local ApplyAuraToIcon
 
 -- ------------------------------------------------------------
--- Collector → Model → Apply (Phase 1)
+-- Collector â†’ Model â†’ Apply (Phase 1)
 --
 -- Goal: keep aura fetching (Collector) separate from list shaping (Model)
 -- and separate again from UI mutation (Apply). This enables true API
@@ -2015,6 +1989,26 @@ local function MSUF_A2__HashStep(h, v)
     return h
 end
 
+-- GC-safe varargs capture (avoids { select(2, ...) } table allocation).
+-- Shared pattern with Store/Model; Render needs its own local copy.
+local function _A2_FillVarargsInto(t, ...)
+    local n = select('#', ...)
+    local prev = t._msufA2_n
+    if type(prev) ~= 'number' then prev = 0 end
+    t._msufA2_n = n
+    for i = 1, n do
+        t[i] = select(i, ...)
+    end
+    for i = n + 1, prev do
+        t[i] = nil
+    end
+    return n
+end
+
+-- Scratch buffers for ComputeRawAuraSig (avoid per-call { select(2,...) } allocations).
+local _A2_rawSigScratchH = {}
+local _A2_rawSigScratchD = {}
+
 local function MSUF_A2_ComputeRawAuraSig(unit, capHelpful, capHarmful)
     if not unit or not C_UnitAuras then
         return nil
@@ -2032,11 +2026,11 @@ local function MSUF_A2_ComputeRawAuraSig(unit, capHelpful, capHarmful)
 
     if type(getSlots) == 'function' and type(getBySlot) == 'function' then
         if capH > 0 then
-            local slots = { select(2, getSlots(unit, 'HELPFUL', capH, nil)) }
-            local n = #slots
+            -- Reuse scratch buffer instead of allocating { select(2, ...) }
+            local n = _A2_FillVarargsInto(_A2_rawSigScratchH, select(2, getSlots(unit, 'HELPFUL', capH, nil)))
             hc = n
             for i = 1, n do
-                local data = getBySlot(unit, slots[i])
+                local data = getBySlot(unit, _A2_rawSigScratchH[i])
                 local aid = (type(data) == 'table') and data.auraInstanceID or nil
                 h = MSUF_A2__HashStep(h, aid)
             end
@@ -2045,11 +2039,10 @@ local function MSUF_A2_ComputeRawAuraSig(unit, capHelpful, capHarmful)
         h = MSUF_A2__HashStep(h, 777)
 
         if capD > 0 then
-            local slots = { select(2, getSlots(unit, 'HARMFUL', capD, nil)) }
-            local n = #slots
+            local n = _A2_FillVarargsInto(_A2_rawSigScratchD, select(2, getSlots(unit, 'HARMFUL', capD, nil)))
             dc = n
             for i = 1, n do
-                local data = getBySlot(unit, slots[i])
+                local data = getBySlot(unit, _A2_rawSigScratchD[i])
                 local aid = (type(data) == 'table') and data.auraInstanceID or nil
                 h = MSUF_A2__HashStep(h, aid)
             end
@@ -2565,26 +2558,24 @@ end
 
         -- If raw auraInstanceID sets + layout/filter signature are unchanged, avoid expensive list building.
         if not resumeBudget then
-local Store = API and API.Store
-local rescanStamp
-if Store and Store.GetRawSig then
-    rawSig, rescanStamp = Store.GetRawSig(unit, sigCapH, sigCapD)
-end
-if not rawSig then
-    rawSig = MSUF_A2_ComputeRawAuraSig(unit, sigCapH, sigCapD)
-    rescanStamp = nil
-end
+            local Store = API and API.Store
 
--- Expose same-tick Store scan reuse to Model.GetAuraList (only when we performed a Store rescan).
-if rescanStamp ~= nil then
-    entry._msufA2_storeRescanStamp = rescanStamp
-    entry._msufA2_storeRescanBudgetStamp = entry._msufA2_budgetStamp
-    entry._msufA2_storeRescanUnit = unit
-else
-    entry._msufA2_storeRescanStamp = nil
-    entry._msufA2_storeRescanBudgetStamp = nil
-    entry._msufA2_storeRescanUnit = nil
-end
+            -- Patch 3 (Scanless Render): use Store epoch signature so we never rescan aura sets in Render.
+            if Store and Store.GetEpochSig then
+                rawSig = Store.GetEpochSig(unit, sigCapH, sigCapD)
+            elseif Store and Store.GetRawSig then
+                rawSig = select(1, Store.GetRawSig(unit, sigCapH, sigCapD))
+            end
+            if not rawSig then
+                -- Fallback only (older builds). This path can be expensive.
+                rawSig = MSUF_A2_ComputeRawAuraSig(unit, sigCapH, sigCapD)
+            end
+
+            -- Clear reuse stamps; will be populated after the fast-path check
+            -- if the sig changed and we actually need to rebuild aura lists.
+            entry._msufA2_storeRescanStamp = nil
+            entry._msufA2_storeRescanBudgetStamp = nil
+            entry._msufA2_storeRescanUnit = nil
             layoutSig = MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebuffAnchor, splitSpacing,
                 iconSize, buffIconSize, debuffIconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, stackCountAnchor,
                 tf, masterOn, onlyBossAuras, finalShowBuffs, finalShowDebuffs)
@@ -2606,6 +2597,22 @@ end
                     MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stackCountAnchor, hidePermanentBuffs)
                 end
                 return
+            end
+
+            -- ----------------------------------------------------------------
+            -- Sig changed: we will call BuildMergedAuraList below.
+            -- Trigger a Store slot scan NOW so Model.GetAuraList can reuse the
+            -- captured aura data tables (via Store.GetLastScannedAuraList)
+            -- instead of calling GetAuraSlots + GetAuraDataBySlot a second time.
+            -- This eliminates the double-scan that was the #1 perf bottleneck.
+            -- ----------------------------------------------------------------
+            if Store and Store.ForceScanForReuse and (sigCapH > 0 or sigCapD > 0) then
+                local scanStamp = Store.ForceScanForReuse(unit, sigCapH, sigCapD)
+                if scanStamp then
+                    entry._msufA2_storeRescanStamp = scanStamp
+                    entry._msufA2_storeRescanBudgetStamp = entry._msufA2_budgetStamp
+                    entry._msufA2_storeRescanUnit = unit
+                end
             end
         end
 
