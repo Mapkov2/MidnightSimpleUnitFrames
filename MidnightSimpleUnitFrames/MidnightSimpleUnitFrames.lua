@@ -4302,6 +4302,19 @@ local function MSUF_ApplyPortraitLayoutIfNeeded(f, conf)
 local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     if not f or not f.portrait or not conf then  return end
     local mode = conf.portraitMode or "OFF"
+
+    -- Render mode: "2D" (default/legacy), "3D" (external module), "CLASS" (class icon).
+    local render = conf.portraitRender
+    if render ~= "3D" and render ~= "CLASS" then
+        render = "2D"
+    end
+    if f._msufPortraitRenderStamp ~= render then
+        f._msufPortraitRenderStamp = render
+        if mode ~= "OFF" then
+            f._msufPortraitDirty = true
+            f._msufPortraitNextAt = 0
+        end
+    end
     if f._msufPortraitModeStamp ~= mode then
         f._msufPortraitModeStamp = mode
         if mode ~= "OFF" then
@@ -4309,17 +4322,79 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
             f._msufPortraitNextAt = 0
     end
     end
-    if mode == "OFF" or not existsForPortrait then
+    if mode == "OFF" then
         f.portrait:Hide()
-         return
+        return
+    end
+    -- In Edit Mode (or Boss Test Mode), show a placeholder portrait even if the unit doesn't exist,
+    -- so users can position/size it reliably.
+    local allowPreview = false
+    if not existsForPortrait then
+        local inCombat = (F.InCombatLockdown and F.InCombatLockdown()) and true or false
+        if not inCombat and (MSUF_UnitEditModeActive or (f.isBoss and MSUF_BossTestMode)) then
+            allowPreview = true
+        end
+    end
+    if not existsForPortrait and not allowPreview then
+        f.portrait:Hide()
+        return
     end
     MSUF_ApplyPortraitLayoutIfNeeded(f, conf)
     if f._msufPortraitDirty then
         local now = (F.GetTime and F.GetTime()) or 0
         local nextAt = tonumber(f._msufPortraitNextAt) or 0
         if (now >= nextAt) and (not MSUF_PORTRAIT_BUDGET_USED) then
-            if SetPortraitTexture then
-                SetPortraitTexture(f.portrait, unit)
+            local portrait = f.portrait
+            if render == "CLASS" then
+                -- Important: only render class icon for *player* units.
+                -- Boss/NPC targets can still return a class token via UnitClass(), but should keep their 2D portrait.
+                local useClassIcon = false
+                if not existsForPortrait then
+                    -- EditMode/BossTest placeholder: show player's class icon.
+                    useClassIcon = true
+                elseif F.UnitIsPlayer and (F.UnitIsPlayer(unit) == true) then
+                    useClassIcon = true
+                end
+
+                if useClassIcon then
+                    local u = existsForPortrait and unit or "player"
+                    local class = (F.UnitClassBase and F.UnitClassBase(u)) or (F.UnitClass and select(2, F.UnitClass(u)))
+                    local coords = (class and _G.CLASS_ICON_TCOORDS and _G.CLASS_ICON_TCOORDS[class]) or nil
+                    if coords and portrait.SetTexture and portrait.SetTexCoord then
+                        portrait:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES")
+                        portrait:SetTexCoord(coords[1] or 0, coords[2] or 1, coords[3] or 0, coords[4] or 1)
+                    else
+                        -- Fallback: render a normal portrait if we can't resolve class coords.
+                        if portrait.SetTexCoord then
+                            portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+                        end
+                        if existsForPortrait and SetPortraitTexture then
+                            SetPortraitTexture(portrait, unit)
+                        elseif portrait.SetTexture then
+                            portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
+                        end
+                    end
+                else
+                    -- NPC/Boss: keep normal 2D portrait even when "Class Icon" render is selected.
+                    if portrait.SetTexCoord then
+                        portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+                    end
+                    if existsForPortrait and SetPortraitTexture then
+                        SetPortraitTexture(portrait, unit)
+                    elseif portrait.SetTexture then
+                        portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
+                    end
+                end
+            else
+                -- 2D (and legacy 3D fallback): standard portrait texture with a small crop.
+                if portrait.SetTexCoord then
+                    portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+                end
+                if existsForPortrait and SetPortraitTexture then
+                    SetPortraitTexture(portrait, unit)
+                elseif portrait.SetTexture then
+                    portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
+                end
             end
             f._msufPortraitDirty = nil
             f._msufPortraitNextAt = now + MSUF_PORTRAIT_MIN_INTERVAL
@@ -4345,6 +4420,81 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     end
     f.portrait:Show()
  end
+
+-- Export for UFCore's spec-driven Portrait element (avoids forcing full legacy updates on portrait events).
+_G.MSUF_UpdatePortraitIfNeeded = MSUF_UpdatePortraitIfNeeded
+
+-- Hot-path gate: portraits should not be touched every UF update. We only re-render when:
+--  - portrait settings (mode/render) change
+--  - portrait layout (height) changes
+--  - the unit identity changes (target/focus)
+--  - the frame is explicitly marked dirty (e.g. unit appeared/disappeared)
+local function MSUF_MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
+    if not f or not f.portrait or not conf then  return end
+
+    local mode = conf.portraitMode or "OFF"
+    local render = conf.portraitRender
+    if render ~= "3D" and render ~= "CLASS" then
+        render = "2D"
+    end
+
+    -- Fast OFF gate (still guarantees a hide if something left it shown).
+    if mode == "OFF" and f._msufPortraitModeStamp == "OFF" and (not f._msufPortraitDirty) then
+        local p = f.portrait
+        if p and p.IsShown and p:IsShown() then
+            p:Hide()
+        end
+        return
+    end
+
+    local need = false
+
+    -- Settings change
+    if f._msufPortraitModeStamp ~= mode or f._msufPortraitRenderStamp ~= render then
+        need = true
+    end
+
+    -- Layout change (height impacts portrait size/anchor)
+    local h = tonumber(conf.height) or (f.GetHeight and f:GetHeight()) or 0
+    if f._msufPortraitLayoutModeStamp ~= mode or f._msufPortraitLayoutHStamp ~= h then
+        f._msufPortraitLayoutModeStamp = mode
+        f._msufPortraitLayoutHStamp = h
+        need = true
+    end
+
+    -- Identity-based gate: only re-render once per unit swap (GUID change).
+    -- This avoids repeated portrait work during UNIT_MODEL_CHANGED / UNIT_PORTRAIT_UPDATE spam,
+    -- while still updating correctly when the underlying unit token points to a new unit.
+    local doGuidGate = false
+    if unit == "target" or unit == "focus" or unit == "targettarget" then
+        doGuidGate = true
+    elseif unit ~= "player" and type(unit) == "string" and unit:sub(1, 4) == "boss" then
+        doGuidGate = true
+    end
+
+    if existsForPortrait and doGuidGate then
+        local guid = (F.UnitGUID and F.UnitGUID(unit)) or nil
+        if guid ~= f._msufPortraitLastGuid then
+            f._msufPortraitLastGuid = guid
+            f._msufPortraitDirty = true
+            f._msufPortraitNextAt = 0
+            need = true
+        end
+    end
+
+    if f._msufPortraitDirty then
+        need = true
+    end
+
+    if not need then
+        return
+    end
+
+    MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
+end
+
+-- Export so UFCore can use the same gating (and avoid repeated work on UNIT_MODEL_CHANGED spam).
+_G.MSUF_MaybeUpdatePortrait = MSUF_MaybeUpdatePortrait
 -- then multiplies by maxChars to get a clip width. Never measures secret unit names. to get a clip width. Never measures secret unit names.
 local function MSUF_GetApproxNameWidthForChars(templateFS, maxChars)
     if not templateFS or not templateFS.GetFont then  return nil end
@@ -4859,10 +5009,15 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
 
     if self.portrait and self.portrait.Hide then self.portrait:Hide() end
 
+    -- Use stable, constant fake values so text/offsets can be edited visually.
+    -- (No secret-value interaction, no unit API reads.)
+    local fakeHp = 0.73
+    local fakePower = 0.52
+
     local hb = self.hpBar
     if hb then
         MSUF_SetBarMinMax(hb, 0, 1)
-        MSUF_SetBarValue(hb, 1, false)
+        MSUF_SetBarValue(hb, fakeHp, false)
 
         -- Use the configured dark tone (defaults to black) for a consistent placeholder.
         local darkR, darkG, darkB = 0, 0, 0
@@ -4888,14 +5043,27 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
         end
     end
 
-    -- Keep preview minimal: hide power bars/text (the placeholder is the health bar).
-    if self.targetPowerBar then
-        if self.targetPowerBar.Hide then self.targetPowerBar:Hide() end
-        if type(MSUF_ResetBarZero) == "function" then MSUF_ResetBarZero(self.targetPowerBar, true) end
+    -- Show a fake power bar + fake power text so offsets can be edited.
+    local pb = self.targetPowerBar or self.powerBar
+    if pb then
+        if pb.Show then pb:Show() end
+        MSUF_SetBarMinMax(pb, 0, 1)
+        MSUF_SetBarValue(pb, fakePower, false)
+        if pb.SetStatusBarColor then
+            -- Simple, readable "mana-like" placeholder.
+            pb:SetStatusBarColor(0.20, 0.60, 1.00, 1)
+        end
+        -- If the bar has its own background texture, keep it visible.
+        if pb.bg and pb.bg.Show then pb.bg:Show() end
     end
-    if self.powerBar and self.powerBar ~= self.targetPowerBar then
-        if self.powerBar.Hide then self.powerBar:Hide() end
-        if type(MSUF_ResetBarZero) == "function" then MSUF_ResetBarZero(self.powerBar, true) end
+
+    -- If both a "main" powerBar and a "targetPowerBar" exist, make sure only one is shown.
+    if self.targetPowerBar and self.powerBar and self.powerBar ~= self.targetPowerBar then
+        if pb == self.targetPowerBar then
+            if self.powerBar.Hide then self.powerBar:Hide() end
+        else
+            if self.targetPowerBar.Hide then self.targetPowerBar:Hide() end
+        end
     end
 
     local SetShown = (ns and ns.Util and ns.Util.SetShown) or nil
@@ -4912,36 +5080,74 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
         else
             self.nameText:SetText(upper)
         end
-        if SetShown then
-            SetShown(self.nameText, (self.showName ~= false))
-        end
+        if SetShown then SetShown(self.nameText, true) end
     end
 
     if self.hpText and self.hpText.SetText then
-        if (self.showHPText ~= false) then
-            if type(MSUF_SetTextIfChanged) == "function" then
-                MSUF_SetTextIfChanged(self.hpText, "100%")
-            else
-                self.hpText:SetText("100%")
-            end
-            if SetShown then SetShown(self.hpText, true) end
+        -- Fake HP text (constant) so users can position/size text reliably.
+        if type(MSUF_SetTextIfChanged) == "function" then
+            MSUF_SetTextIfChanged(self.hpText, "73% 123.4k")
         else
-            if type(MSUF_SetTextIfChanged) == "function" then
-                MSUF_SetTextIfChanged(self.hpText, "")
-            else
-                self.hpText:SetText("")
-            end
-            if SetShown then SetShown(self.hpText, false) end
+            self.hpText:SetText("73% 123.4k")
         end
+        if SetShown then SetShown(self.hpText, true) end
     end
 
     if self.powerText and self.powerText.SetText then
+        -- Fake power text for edit positioning.
         if type(MSUF_SetTextIfChanged) == "function" then
-            MSUF_SetTextIfChanged(self.powerText, "")
+            MSUF_SetTextIfChanged(self.powerText, "52% 65")
         else
-            self.powerText:SetText("")
+            self.powerText:SetText("52% 65")
         end
-        if SetShown then SetShown(self.powerText, false) end
+        if SetShown then SetShown(self.powerText, true) end
+    end
+
+    if self.levelText and self.levelText.SetText then
+        -- Show a stable fake level value.
+        if type(MSUF_SetTextIfChanged) == "function" then
+            MSUF_SetTextIfChanged(self.levelText, "70")
+        else
+            self.levelText:SetText("70")
+        end
+        if SetShown then SetShown(self.levelText, true) end
+    end
+
+    -- Portrait preview (2D/3D placeholder + Class Icon mode)
+    if self.portrait and conf then
+        local pm = conf.portraitMode or "OFF"
+        if pm ~= "OFF" then
+            if type(_G.MSUF_UpdateBossPortraitLayout) == "function" then
+                _G.MSUF_UpdateBossPortraitLayout(self, conf)
+            end
+
+            local pr = conf.portraitRender
+            if pr == "CLASS" then
+                local class = (F.UnitClassBase and F.UnitClassBase("player")) or (F.UnitClass and select(2, F.UnitClass("player")))
+                local coords = (class and _G.CLASS_ICON_TCOORDS and _G.CLASS_ICON_TCOORDS[class]) or nil
+                if coords and self.portrait.SetTexture and self.portrait.SetTexCoord then
+                    self.portrait:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES")
+                    self.portrait:SetTexCoord(coords[1] or 0, coords[2] or 1, coords[3] or 0, coords[4] or 1)
+                elseif self.portrait.SetTexture then
+                    self.portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
+                    if self.portrait.SetTexCoord then
+                        self.portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+                    end
+                end
+            else
+                -- Placeholder portrait (question mark) so the portrait position/size can be edited.
+                if self.portrait.SetTexture then
+                    self.portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
+                end
+                if self.portrait.SetTexCoord then
+                    self.portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+                end
+            end
+
+            if self.portrait.Show then self.portrait:Show() end
+        else
+            if self.portrait.Hide then self.portrait:Hide() end
+        end
     end
 
     ns.UF.HideLeaderAndRaidMarker(self)
@@ -5344,7 +5550,7 @@ if not exists then
 else
     _G.MSUF_ApplyUnitAlpha(self, key)
     self._msufNoUnitCleared = nil
-    MSUF_UpdatePortraitIfNeeded(self, unit, conf, exists)
+    MSUF_MaybeUpdatePortrait(self, unit, conf, exists)
 end
     local hp = MSUF_UFStep_BasicHealth(self, unit)
     if MSUF_UFStep_SyncTargetPower(self, unit, barsConf, isPlayer, isTarget, isFocus) then

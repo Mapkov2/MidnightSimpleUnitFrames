@@ -750,11 +750,31 @@ Elements.Portrait = {
     Enable = function(f, conf) end,
     Disable = function(f) end,
     Update = function(f, conf)
-        local fn = _G.MSUF_UpdatePortraitIfNeeded
+        local fn = _G.MSUF_MaybeUpdatePortrait or _G.MSUF_UpdatePortraitIfNeeded
         if type(fn) ~= "function" then return false end
         if not f or not f.portrait then return true end
         if not conf then return false end
         local unit = f.unit
+        if not unit then return true end
+
+        -- Performance: ignore UNIT_PORTRAIT_UPDATE / UNIT_MODEL_CHANGED spam for frames that should behave
+        -- as "static" or only update once per unit swap.
+        --
+        -- Player + Boss: static portraits (only touch when explicitly dirty or settings/layout changed).
+        -- Target/Focus: update portrait texture only once per swap.
+        if (unit == "player" or unit == "target" or unit == "focus" or f.isBoss) and (not f._msufPortraitDirty) then
+            local mode = conf.portraitMode or "OFF"
+            local render = conf.portraitRender
+            if render ~= "3D" and render ~= "CLASS" then
+                render = "2D"
+            end
+            local h = tonumber(conf.height) or (f.GetHeight and f:GetHeight()) or 0
+            if (f._msufPortraitModeStamp == mode) and (f._msufPortraitRenderStamp == render) and
+               (f._msufPortraitLayoutModeStamp == mode) and (f._msufPortraitLayoutHStamp == h) then
+                return true
+            end
+        end
+
         local existsForPortrait = UnitExists(unit)
         fn(f, unit, conf, existsForPortrait)
         return true

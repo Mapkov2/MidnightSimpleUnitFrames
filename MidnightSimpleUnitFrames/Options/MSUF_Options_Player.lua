@@ -355,6 +355,8 @@ local MSUF_PORTRAIT_OPTIONS = {
     { value = "2D_RIGHT", text = "2D Portrait Right" },
     { value = "3D_LEFT",  text = "3D Portrait Left" },
     { value = "3D_RIGHT", text = "3D Portrait Right" },
+    { value = "CLASS_LEFT",  text = "Class Icon Left (players)" },
+    { value = "CLASS_RIGHT", text = "Class Icon Right (players)" },
 }
 -- Target-of-Target inline-in-Target separator dropdown (token stored in MSUF_DB.targettarget.totInlineSeparator).
 -- UI shows the raw token; runtime renders it with spaces around it (legacy: " | ").
@@ -394,6 +396,8 @@ local function MSUF_PortraitModeText(mode)
     if mode == "2D_RIGHT" then  return "2D Portrait Right" end
     if mode == "3D_LEFT" then  return "3D Portrait Left" end
     if mode == "3D_RIGHT" then  return "3D Portrait Right" end
+    if mode == "CLASS_LEFT" then  return "Class Icon Left (players)" end
+    if mode == "CLASS_RIGHT" then  return "Class Icon Right (players)" end
      return "Portrait Off"
 end
 local function MSUF_GetPortraitDropdownValue(conf)
@@ -403,6 +407,9 @@ local function MSUF_GetPortraitDropdownValue(conf)
          return "OFF"
     end
     local render = conf.portraitRender
+    if render == "CLASS" then
+        return (pm == "LEFT") and "CLASS_LEFT" or "CLASS_RIGHT"
+    end
     if render == "3D" then
         return (pm == "LEFT") and "3D_LEFT" or "3D_RIGHT"
     end
@@ -434,6 +441,16 @@ local function MSUF_ApplyPortraitChoice(conf, choice)
         conf.portraitMode = "RIGHT"
         conf.portraitRender = "3D"
          return
+    end
+    if choice == "CLASS_LEFT" then
+        conf.portraitMode = "LEFT"
+        conf.portraitRender = "CLASS"
+        return
+    end
+    if choice == "CLASS_RIGHT" then
+        conf.portraitMode = "RIGHT"
+        conf.portraitRender = "CLASS"
+        return
     end
     -- Fallback
     conf.portraitMode = "OFF"
