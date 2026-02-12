@@ -5279,6 +5279,79 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key)
     end
     end
  end
+
+-- ---------------------------------------------------------------------------
+-- Swap Recolor Driver (event-only, ultra cheap)
+-- Fixes: HP bar color/gradient/background sticking after target/focus/ToT swap.
+-- This bypasses rare/heavy-visual gating by forcing the HeavyVisual step once
+-- per swap event (coalesced next frame). No layout, no full refresh.
+-- ---------------------------------------------------------------------------
+do
+    -- Force a one-shot HeavyVisual pass for the given frame/unit.
+    -- Exposed globally so other files/modules may reuse it if needed.
+    _G.MSUF_ForceReapplyHPBarColor = _G.MSUF_ForceReapplyHPBarColor or function(frame, unit)
+        if not (frame and unit and frame.hpBar) then return end
+        local key = frame.msufConfigKey
+        local flags = _G.MSUF_UnitTokenChanged
+        if not flags then
+            flags = {}
+            _G.MSUF_UnitTokenChanged = flags
+        end
+        if key then
+            flags[key] = true -- consumed inside MSUF_UFStep_HeavyVisual
+        end
+        frame._msufHeavyVisualNextAt = 0 -- allow immediate run
+        -- Call the local HeavyVisual step directly (no layout / no other steps)
+        MSUF_UFStep_HeavyVisual(frame, unit, key)
+    end
+
+    local function _MSUF_SwapRecolor_Do()
+        local f = _G.MSUF_target
+        if f and f.unit == "target" then
+            _G.MSUF_ForceReapplyHPBarColor(f, "target")
+        end
+        local tot = _G.MSUF_targettarget
+        if tot and tot.unit == "targettarget" then
+            _G.MSUF_ForceReapplyHPBarColor(tot, "targettarget")
+        end
+        local fo = _G.MSUF_focus
+        if fo and fo.unit == "focus" then
+            _G.MSUF_ForceReapplyHPBarColor(fo, "focus")
+        end
+    end
+
+    local function _MSUF_SwapRecolor_Schedule(driver)
+        if driver._msufSwapRecolorQueued then return end
+        driver._msufSwapRecolorQueued = true
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                driver._msufSwapRecolorQueued = false
+                _MSUF_SwapRecolor_Do()
+            end)
+        else
+            driver._msufSwapRecolorQueued = false
+            _MSUF_SwapRecolor_Do()
+        end
+    end
+
+    _G.MSUF_EnsureSwapRecolorDriver = _G.MSUF_EnsureSwapRecolorDriver or function()
+        if _G.MSUF_SwapRecolorDriver then return _G.MSUF_SwapRecolorDriver end
+        local d = CreateFrame("Frame", "MSUF_SwapRecolorDriver", UIParent)
+        d._msufSwapRecolorQueued = false
+        d:RegisterEvent("PLAYER_TARGET_CHANGED")
+        d:RegisterEvent("PLAYER_FOCUS_CHANGED")
+        d:RegisterEvent("UNIT_TARGET")
+        d:SetScript("OnEvent", function(self, event, arg1)
+            if event == "UNIT_TARGET" then
+                if arg1 ~= "target" then return end -- ToT updates from target only
+            end
+            _MSUF_SwapRecolor_Schedule(self)
+        end)
+        _G.MSUF_SwapRecolorDriver = d
+        return d
+    end
+end
+
 local function MSUF_UFStep_SyncTargetPower(self, unit, barsConf, isPlayer, isTarget, isFocus)
   local pb = self.targetPowerBar or self.powerBar
   if not (pb and pb.IsShown and pb:IsShown()) then  return false end
@@ -7091,6 +7164,7 @@ end
     CreateSimpleUnitFrame("targettarget")
     CreateSimpleUnitFrame("focus")
     CreateSimpleUnitFrame("pet")
+    if _G.MSUF_EnsureSwapRecolorDriver then _G.MSUF_EnsureSwapRecolorDriver() end
     for i = 1, MSUF_MAX_BOSS_FRAMES do
         CreateSimpleUnitFrame("boss" .. i)
     end
