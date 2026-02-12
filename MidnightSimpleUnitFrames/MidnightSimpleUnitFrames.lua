@@ -1488,7 +1488,7 @@ function MSUF_SetBarMinMax(bar, minValue, maxValue)
 MSUF_UnitEditModeActive = (MSUF_UnitEditModeActive == true)
 MSUF_CurrentOptionsKey = MSUF_CurrentOptionsKey
 MSUF_CurrentEditUnitKey = MSUF_CurrentEditUnitKey
-MSUF_EditModeSizing = (MSUF_EditModeSizing == true)
+MSUF_EditModeSizing = false
 if type(MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
     MSUF_SyncBossUnitframePreviewWithUnitEdit()
 end
@@ -6463,62 +6463,42 @@ local function MSUF_NudgeUnitFrameOffset(unit, parent, deltaX, deltaY)
     local key  = GetConfigKeyForUnit(unit)
     local conf = key and MSUF_DB[key]
     if not conf then  return end
+
     local STEP = 1
     deltaX = (deltaX or 0) * STEP
     deltaY = (deltaY or 0) * STEP
-    if MSUF_EditModeSizing then
-        local w = conf.width  or parent:GetWidth()  or 250
-        local h = conf.height or parent:GetHeight() or 40
-        w = w + deltaX
-        h = h + deltaY
-        if w < 80  then w = 80  end
-        if w > 600 then w = 600 end
-        if h < 20  then h = 20  end
-        if h > 220 then h = 220 end
-        conf.width  = w
-        conf.height = h
-        if key == "boss" then
-            for i = 1, MSUF_MAX_BOSS_FRAMES do
-                local bossUnit = "boss" .. i
-                local frame = UnitFrames and UnitFrames[bossUnit] or _G["MSUF_" .. bossUnit]
-                if frame then
-                    frame:SetSize(w, h)
-                    ns.UF.RequestUpdate(frame, true, true, "EditModeSizing")
-                end
+
+    -- MSUF Edit Mode: always MOVE with arrow keys (no sizing mode)
+    conf.offsetX = (conf.offsetX or 0) + deltaX
+    conf.offsetY = (conf.offsetY or 0) + deltaY
+
+    if key == "boss" then
+        for i = 1, MSUF_MAX_BOSS_FRAMES do
+            local bossUnit = "boss" .. i
+            local frame = UnitFrames and UnitFrames[bossUnit] or _G["MSUF_" .. bossUnit]
+            if frame then
+                PositionUnitFrame(frame, bossUnit)
             end
-        else
-            parent:SetSize(w, h)
-            ns.UF.RequestUpdate(parent, true, true, "EditModeSizing")
-    end
+        end
     else
-        conf.offsetX = (conf.offsetX or 0) + deltaX
-        conf.offsetY = (conf.offsetY or 0) + deltaY
-        if key == "boss" then
-            for i = 1, MSUF_MAX_BOSS_FRAMES do
-                local bossUnit = "boss" .. i
-                local frame = UnitFrames and UnitFrames[bossUnit] or _G["MSUF_" .. bossUnit]
-                if frame then
-                    PositionUnitFrame(frame, bossUnit)
-                end
-            end
-        else
-            PositionUnitFrame(parent, unit)
+        PositionUnitFrame(parent, unit)
     end
-        if MSUF_CurrentOptionsKey == key then
-            local xSlider = _G["MSUF_OffsetXSlider"]
-            local ySlider = _G["MSUF_OffsetYSlider"]
-            if xSlider and xSlider.SetValue then
-                xSlider:SetValue(conf.offsetX or 0)
-            end
-            if ySlider and ySlider.SetValue then
-                ySlider:SetValue(conf.offsetY or 0)
-            end
+
+    if MSUF_CurrentOptionsKey == key then
+        local xSlider = _G["MSUF_OffsetXSlider"]
+        local ySlider = _G["MSUF_OffsetYSlider"]
+        if xSlider and xSlider.SetValue then
+            xSlider:SetValue(conf.offsetX or 0)
+        end
+        if ySlider and ySlider.SetValue then
+            ySlider:SetValue(conf.offsetY or 0)
+        end
     end
-    end
+
     if MSUF_UpdateEditModeInfo then
         MSUF_UpdateEditModeInfo()
     end
- end
+end
 local function MSUF_EnableUnitFrameDrag(f, unit)
     if not f or not unit then  return end
     f:EnableMouse(true)
@@ -6554,51 +6534,18 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
     local function _ApplySnapAndClamp(key, conf)
         if not conf then  return end
         local g = MSUF_DB and MSUF_DB.general or nil
-        if not MSUF_EditModeSizing then
-            if g and g.editModeSnapToGrid then
-                local gridStep = g.editModeGridStep or 20
-                if gridStep < 1 then gridStep = 1 end
-                local half = gridStep / 2
-                local x = conf.offsetX or 0
-                local y = conf.offsetY or 0
-                conf.offsetX = math.floor((x + half) / gridStep) * gridStep
-                conf.offsetY = math.floor((y + half) / gridStep) * gridStep
-            end
-        else
-            local w = conf.width  or (f.GetWidth and f:GetWidth()) or 250
-            local h = conf.height or (f.GetHeight and f:GetHeight()) or 40
-            if w < 80  then w = 80  end
-            if w > 600 then w = 600 end
-            if h < 20  then h = 20  end
-            if h > 600 then h = 600 end
-            conf.width, conf.height = w, h
+        if g and g.editModeSnapToGrid then
+            local gridStep = g.editModeGridStep or 20
+            if gridStep < 1 then gridStep = 1 end
+            local half = gridStep / 2
+            local x = conf.offsetX or 0
+            local y = conf.offsetY or 0
+            conf.offsetX = math.floor((x + half) / gridStep) * gridStep
+            conf.offsetY = math.floor((y + half) / gridStep) * gridStep
+        end
     end
-     end
     local function _UpdateDBFromFrame(self, key, conf)
         if not self or not conf or not key then  return end
-        if MSUF_EditModeSizing then
-            local w, h = self:GetSize()
-            if w and h then
-                conf.width = w
-                conf.height = h
-            end
-            if MSUF_SyncUnitPositionPopup then
-                MSUF_SyncUnitPositionPopup(unit, conf)
-            end
-            if key == "boss" then
-                for i = 1, MSUF_MAX_BOSS_FRAMES do
-                    local bossUnit = "boss" .. i
-                    local frame = UnitFrames and UnitFrames[bossUnit] or _G["MSUF_" .. bossUnit]
-                    if frame then
-                        frame:SetSize(conf.width, conf.height)
-                        ns.UF.RequestUpdate(frame, true, true, "EditModeDrag")
-                    end
-                end
-            else
-                ns.UF.RequestUpdate(self, true, true, "EditModeDrag")
-            end
-             return
-    end
         local anchor = MSUF_GetAnchorFrame and MSUF_GetAnchorFrame() or UIParent
         if not anchor or not anchor.GetCenter or not self.GetCenter then  return end
         if MSUF_DB and MSUF_DB.general and MSUF_DB.general.anchorToCooldown then
@@ -6681,12 +6628,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         self._msufDragKey = key
         self._msufDragConf = conf
         _DisableClicks(self)
-        if MSUF_EditModeSizing then
-            self:SetResizable(true)
-            self:StartSizing("BOTTOMRIGHT")
-        else
-            self:StartMoving()
-    end
+        self:StartMoving()
         self._msufDragAccum = 0
             _G.MSUF_UnregisterBucketUpdate(self, "EditDrag")
         if _G.MSUF_RegisterBucketUpdate then
@@ -6740,112 +6682,12 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         if self._msufDragDidStart then
              return
     end
-        if not MSUF_EditModeSizing and MSUF_OpenPositionPopup then
+        if MSUF_OpenPositionPopup then
             MSUF_OpenPositionPopup(unit, self)
     end
      end)
  end
-local function MSUF_CreateEditArrowButton(name, parent, unit, direction, point, relTo, relPoint, ofsX, ofsY, deltaX, deltaY)
-    local btn = F.CreateFrame("Button", name, parent)
-    btn:SetSize(18, 18)
-    local bg = btn:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(1, 1, 1, 1)
-    btn._bg = bg
-    local symbols = {
-        LEFT  = "<",
-        RIGHT = ">",
-        UP    = "^",
-        DOWN  = "v",
-    }
-    local label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    label:SetPoint("CENTER")
-    label:SetText(symbols[direction] or "")
-    label:SetTextColor(0, 0, 0, 1)
-    btn._label = label
-    btn:SetScript("OnEnter", function(self)
-        if self._bg then self._bg:SetColorTexture(1, 1, 1, 1) end
-     end)
-    btn:SetScript("OnLeave", function(self)
-        if self._bg then self._bg:SetColorTexture(1, 1, 1, 1) end
-     end)
-    btn:SetScript("OnMouseDown", function(self)
-        if self._bg then self._bg:SetColorTexture(1, 1, 1, 1) end
-     end)
-    btn:SetScript("OnMouseUp", function(self)
-        if self._bg then self._bg:SetColorTexture(1, 1, 1, 1) end
-     end)
-    btn:SetPoint(point, relTo or parent, relPoint or point, ofsX, ofsY)
-    btn.deltaX = deltaX or 0
-    btn.deltaY = deltaY or 0
-    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    btn:SetScript("OnClick", function(self, button)
-        if button == "RightButton" then
-            if not MSUF_UnitEditModeActive then  return end
-            if F.InCombatLockdown and F.InCombatLockdown() then  return end
-            if MSUF_OpenPositionPopup then
-                MSUF_OpenPositionPopup(unit, parent)
-            end
-             return
-    end
-        if button ~= "LeftButton" then
-             return
-    end
-        if not MSUF_UnitEditModeActive then  return end
-        if F.InCombatLockdown and F.InCombatLockdown() then  return end
-        if MSUF_NudgeUnitFrameOffset then
-            MSUF_NudgeUnitFrameOffset(unit, parent, self.deltaX or 0, self.deltaY or 0)
-    end
-     end)
-     return btn
-end
-local function MSUF_AttachEditArrowsToFrame(f, unit, baseName)
-    local pad = 8
-    f.MSUF_ArrowLeft  = MSUF_CreateEditArrowButton(baseName .. "Left",  f, unit, "LEFT",  "RIGHT",  f, "LEFT",   -pad,  0, -1,  0)
-    f.MSUF_ArrowRight = MSUF_CreateEditArrowButton(baseName .. "Right", f, unit, "RIGHT", "LEFT",   f, "RIGHT",   pad,  0,  1,  0)
-    f.MSUF_ArrowUp    = MSUF_CreateEditArrowButton(baseName .. "Up",    f, unit, "UP",    "BOTTOM", f, "TOP",      0,  pad, 0,  1)
-    f.MSUF_ArrowDown  = MSUF_CreateEditArrowButton(baseName .. "Down",  f, unit, "DOWN",  "TOP",    f, "BOTTOM",   0, -pad, 0, -1)
-    if not f.UpdateEditArrows then
-        function f:UpdateEditArrows()
-            if not (self.MSUF_ArrowLeft and self.MSUF_ArrowRight and self.MSUF_ArrowUp and self.MSUF_ArrowDown) then
-                 return
-            end
-            local show = MSUF_UnitEditModeActive and (not F.InCombatLockdown or not F.InCombatLockdown())
-            if show then
-                self.MSUF_ArrowLeft:Show()
-                self.MSUF_ArrowRight:Show()
-                self.MSUF_ArrowUp:Show()
-                self.MSUF_ArrowDown:Show()
-            else
-                self.MSUF_ArrowLeft:Hide()
-                self.MSUF_ArrowRight:Hide()
-                self.MSUF_ArrowUp:Hide()
-                self.MSUF_ArrowDown:Hide()
-            end
-     end
-    end
-    f:UpdateEditArrows()
- end
-local MSUF_EDIT_ARROW_BASENAMES = {
-    player       = "MSUF_PlayerArrow",
-    target       = "MSUF_TargetArrow",
-    focus        = "MSUF_FocusArrow",
-    pet          = "MSUF_PetArrow",
-    targettarget = "MSUF_TargetTargetArrow",
-}
-local function MSUF_CreateEditArrowsForUnit(f, unit)
-    if not f or f.MSUF_ArrowsCreated then  return end
-    local baseName = MSUF_EDIT_ARROW_BASENAMES[unit]
-    if not baseName then
-        if type(unit) == "string" and unit:match("^boss%d+$") then
-            baseName = "MSUF_" .. unit .. "_Arrow"
-        else
-             return
-    end
-    end
-    f.MSUF_ArrowsCreated = true
-    MSUF_AttachEditArrowsToFrame(f, unit, baseName)
- end
+-- Edit-mode mouse arrows removed (hard delete; arrow-key nudging remains via MSUF_EditMode)
 local function MSUF_ConfBool(conf, field, default)
     local v = conf and conf[field]
     if v == nil then
@@ -6949,7 +6791,6 @@ local function CreateSimpleUnitFrame(unit)
     end
     PositionUnitFrame(f, unit)
     MSUF_EnableUnitFrameDrag(f, unit)
-    MSUF_CreateEditArrowsForUnit(f, unit)
     f:RegisterForClicks("AnyUp")
     f:SetAttribute("unit", unit)
     f:SetAttribute("*type1", "target")
