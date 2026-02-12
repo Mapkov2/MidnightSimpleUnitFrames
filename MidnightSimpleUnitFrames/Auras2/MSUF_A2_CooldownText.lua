@@ -5,7 +5,7 @@
 --   * 0 protected-call wrappers
 --   * No custom time formatting / no text overrides (no abbreviations)
 --   * No per-icon remaining-seconds math (secret-safe by design)
---   * Discrete scheduled tick manager (no per-frame OnUpdate)
+--   * Single OnUpdate manager (10 Hz) with numeric icon list
 --   * Cached Cooldown FontString lookup (EnumerateRegions, no table alloc)
 
 local addonName, ns = ...
@@ -25,31 +25,6 @@ local GetTime = _G.GetTime
 
 local C_CurveUtil = _G.C_CurveUtil
 local C_Timer = _G.C_Timer
-
-local C_Secrets = _G.C_Secrets
-
--- ------------------------------------------------------------
--- Secret mode detection (cached; avoids secret-value compares)
--- ------------------------------------------------------------
-
-local _secretMode = false
-local _secretNextCheck = 0
-local SECRET_CHECK_INTERVAL = 0.50
-
-local function IsSecretMode(now)
-    if not C_Secrets or type(C_Secrets.ShouldAurasBeSecret) ~= "function" then
-        return false
-    end
-    if type(now) ~= "number" then
-        now = GetTime()
-    end
-    if now >= (_secretNextCheck or 0) then
-        _secretNextCheck = now + SECRET_CHECK_INTERVAL
-        -- ShouldAurasBeSecret() is cheap and avoids per-aura IsSecret checks.
-        _secretMode = (C_Secrets.ShouldAurasBeSecret() == true)
-    end
-    return _secretMode == true
-end
 
 -- ------------------------------------------------------------
 -- DB access (cheap + load-order safe)
@@ -163,9 +138,6 @@ local settingsDirty = true
 local bucketsEnabled = true
 local safeR, safeG, safeB, safeA = 1, 1, 1, 1
 local normalR, normalG, normalB, normalA = 1, 1, 1, 1
-local warnR, warnG, warnB, warnA = 1, 0.85, 0.2, 1
-local urgR,  urgG,  urgB,  urgA  = 1, 0.45, 0.1, 1
-local expR,  expG,  expB,  expA  = 1, 0.12, 0.12, 1
 local curve = nil
 
 local function BuildCurve(g)
@@ -243,10 +215,6 @@ local function EnsureSettings()
 
     safeR, safeG, safeB, safeA = ReadColor(g and g.aurasCooldownTextSafeColor, normalR, normalG, normalB, normalA)
 
-    warnR, warnG, warnB, warnA = ReadColor(g and g.aurasCooldownTextWarningColor, 1, 0.85, 0.2, 1)
-    urgR,  urgG,  urgB,  urgA  = ReadColor(g and g.aurasCooldownTextUrgentColor, 1, 0.45, 0.1, 1)
-    expR,  expG,  expB,  expA  = ReadColor(g and g.aurasCooldownTextExpireColor, 1, 0.12, 0.12, 1)
-
     if bucketsEnabled then
         BuildCurve(g)
     else
@@ -260,12 +228,10 @@ local function MSUF_A2_InvalidateCooldownTextCurve()
 end
 
 local function MSUF_A2_ForceCooldownTextRecolor()
-    -- Force an immediate manager tick (and restart the scheduler if it was stopped).
+    -- Force an immediate manager tick.
     local mgr = CT._mgr
     if mgr and mgr.count > 0 then
-        if mgr._Schedule then
-            mgr._Schedule(0)
-        end
+        mgr.acc = 0.10
     end
 end
 
@@ -288,13 +254,7 @@ if _G and type(_G.MSUF_A2_ForceCooldownTextRecolor) ~= "function" then
 end
 
 -- ------------------------------------------------------------
--- Cooldown Text Manager (timer-scheduled; no per-frame OnUpdate)
---
--- Why:
---   Even with an accumulator, a Frame OnUpdate still runs every frame,
---   doing work (elapsed adds + branches) while the raid is idle.
---   This manager uses C_Timer to schedule discrete ticks only when needed.
---   Net result: near-zero idle CPU with many visible auras.
+-- Cooldown Text Manager (single OnUpdate, 10 Hz)
 -- ------------------------------------------------------------
 
 local function EnsureMgr()
@@ -304,34 +264,25 @@ local function EnsureMgr()
     end
 
     mgr = {
+        frame = nil,
         icons = {},
         count = 0,
-        -- Discrete tick scheduling (no per-frame OnUpdate)
-        timer = nil,
-        timerGen = 0,
-        slowInterval = 0.50, -- 2 Hz in normal mode (big idle CPU win in raids)
-        fastInterval = 0.10, -- 10 Hz when a timer is in warning/urgent/expire bucket
-        interval = 0.50,
-        fastUntil = 0,
+        acc = 0,
     }
 
     CT._mgr = mgr
 
-    local function CancelTimer()
-        local t = mgr.timer
-        if t and t.Cancel then
-            t:Cancel()
-        end
-        mgr.timer = nil
-        -- Guard for C_Timer.After fallback: invalidate any already-queued callbacks.
-        mgr.timerGen = (mgr.timerGen or 0) + 1
-    end
+    local f = CreateFrame("Frame")
+    f:Hide()
+    mgr.frame = f
 
     local function StopIfIdle()
         if mgr.count > 0 then
             return
         end
-        CancelTimer()
+        mgr.acc = 0
+        f:SetScript("OnUpdate", nil)
+        f:Hide()
     end
 
     local function RemoveAt(i)
@@ -349,12 +300,6 @@ local function EnsureMgr()
         if icon then
             icon._msufA2_cdMgrIndex = nil
             icon._msufA2_cdMgrRegistered = false
-            icon._msufA2_cdLastFS = nil
-            icon._msufA2_cdLastR = nil
-            icon._msufA2_cdLastG = nil
-            icon._msufA2_cdLastB = nil
-            icon._msufA2_cdLastA = nil
-            icon._msufA2_cdLastSecret = nil
         end
 
         if mgr.count <= 0 then
@@ -362,15 +307,16 @@ local function EnsureMgr()
         end
     end
 
-    local function Tick()
+    local function OnUpdate(_, elapsed)
+        mgr.acc = mgr.acc + (elapsed or 0)
+        if mgr.acc < 0.10 then
+            return
+        end
+        mgr.acc = 0
+
         EnsureSettings()
 
         local now = GetTime()
-
-        local secretsActive = IsSecretMode(now)
-
-        -- If we recently saw a warning/urgent/expire bucket, keep fast ticking briefly.
-        local wantFast = (not secretsActive) and (now < (mgr.fastUntil or 0))
 
         -- Iterate backwards so removals are O(1) without skipping.
         local i = mgr.count
@@ -396,7 +342,7 @@ local function EnsureMgr()
                 if fs then
                     local r, g, b, a = safeR, safeG, safeB, safeA
 
-                    if (not secretsActive) and bucketsEnabled and curve then
+                    if bucketsEnabled and curve then
                         local obj = icon._msufA2_cdDurationObj or cd._msufA2_durationObj
                         if obj and type(obj.EvaluateRemainingDuration) == "function" then
                             local col = obj:EvaluateRemainingDuration(curve)
@@ -409,126 +355,25 @@ local function EnsureMgr()
                                 end
                             end
                         end
-                        -- If we ever get secret RGBA values, treat this tick as secret-safe.
-                        if (not secretsActive) and C_Secrets and type(C_Secrets.IsSecret) == "function" then
-                            if C_Secrets.IsSecret(r) or C_Secrets.IsSecret(g) or C_Secrets.IsSecret(b) or C_Secrets.IsSecret(a) then
-                                secretsActive = true
-                                r, g, b, a = safeR, safeG, safeB, safeA
-                            end
-                        end
-
-                        -- Fast mode when any aura is in warning/urgent/expire bucket.
-                        if not secretsActive then
-                            if (r == warnR and g == warnG and b == warnB and a == warnA)
-                                or (r == urgR and g == urgG and b == urgB and a == urgA)
-                                or (r == expR and g == expG and b == expB and a == expA) then
-                                wantFast = true
-                            end
-                        end
-                    end
-                    -- Avoid redundant SetTextColor calls (these are expensive in bulk).
-                    if secretsActive then
-                        if icon._msufA2_cdLastFS ~= fs or icon._msufA2_cdLastSecret ~= true then
-                            icon._msufA2_cdLastFS = fs
-                            icon._msufA2_cdLastSecret = true
-                            icon._msufA2_cdLastR = nil
-                            icon._msufA2_cdLastG = nil
-                            icon._msufA2_cdLastB = nil
-                            icon._msufA2_cdLastA = nil
-
-                            if fs.SetTextColor then
-                                fs:SetTextColor(r, g, b, a)
-                            elseif fs.SetVertexColor then
-                                fs:SetVertexColor(r, g, b, a)
-                            end
-                        end
-                    else
-                        icon._msufA2_cdLastSecret = false
-
-                        if icon._msufA2_cdLastFS ~= fs
-                            or icon._msufA2_cdLastR ~= r
-                            or icon._msufA2_cdLastG ~= g
-                            or icon._msufA2_cdLastB ~= b
-                            or icon._msufA2_cdLastA ~= a then
-
-                            icon._msufA2_cdLastFS = fs
-                            icon._msufA2_cdLastR = r
-                            icon._msufA2_cdLastG = g
-                            icon._msufA2_cdLastB = b
-                            icon._msufA2_cdLastA = a
-
-                            if fs.SetTextColor then
-                                fs:SetTextColor(r, g, b, a)
-                            elseif fs.SetVertexColor then
-                                fs:SetVertexColor(r, g, b, a)
-                            end
-                        end
                     end
 
+                    if fs.SetTextColor then
+                        fs:SetTextColor(r, g, b, a)
+                    elseif fs.SetVertexColor then
+                        fs:SetVertexColor(r, g, b, a)
+                    end
                 end
             end
 
             i = i - 1
         end
 
-        if secretsActive then
-            wantFast = false
-        end
-
-        if wantFast then
-            mgr.fastUntil = now + 1.50
-            mgr.interval = mgr.fastInterval or 0.10
-        else
-            mgr.interval = mgr.slowInterval or 0.50
-        end
-
         StopIfIdle()
-
-        -- Reschedule next discrete tick (if still active)
-        if mgr.count > 0 and mgr._Schedule then
-            mgr._Schedule(mgr.interval)
-        end
-    end
-
-    local function Schedule(delay)
-        if mgr.count <= 0 then
-            StopIfIdle()
-            return
-        end
-
-        if type(delay) ~= "number" or delay < 0 then
-            delay = 0
-        end
-
-        -- Replace any pending timer.
-        CancelTimer()
-
-        local timerAPI = C_Timer
-        if timerAPI and type(timerAPI.NewTimer) == "function" then
-            mgr.timer = timerAPI.NewTimer(delay, function()
-                mgr.timer = nil
-                Tick()
-            end)
-            return
-        end
-
-        -- Fallback (older clients): After() has no cancel; use a generation guard.
-        if timerAPI and type(timerAPI.After) == "function" then
-            mgr.timerGen = (mgr.timerGen or 0) + 1
-            local gen = mgr.timerGen
-            timerAPI.After(delay, function()
-                if mgr.timerGen ~= gen then
-                    return
-                end
-                Tick()
-            end)
-        end
     end
 
     mgr._StopIfIdle = StopIfIdle
     mgr._RemoveAt = RemoveAt
-    mgr._Tick = Tick
-    mgr._Schedule = Schedule
+    mgr._OnUpdate = OnUpdate
 
     return mgr
 end
@@ -552,9 +397,9 @@ local function RegisterIcon(icon)
     icon._msufA2_cdMgrIndex = idx
 
     if mgr.count == 1 then
-        if mgr._Schedule then
-            mgr._Schedule(0)
-        end
+        mgr.acc = 0
+        mgr.frame:Show()
+        mgr.frame:SetScript("OnUpdate", mgr._OnUpdate)
     end
 end
 
@@ -601,20 +446,19 @@ local function UnregisterAll()
     end
 
     mgr.count = 0
-    if mgr.timer and mgr.timer.Cancel then
-        mgr.timer:Cancel()
+    mgr.acc = 0
+
+    local f = mgr.frame
+    if f then
+        f:SetScript("OnUpdate", nil)
+        f:Hide()
     end
-    mgr.timer = nil
-    mgr.timerGen = (mgr.timerGen or 0) + 1
 end
 
 local function TouchIcon(_)
     local mgr = CT._mgr
     if mgr and mgr.count > 0 then
-        -- Tick ASAP (used when Options change or duration objects are reattached).
-        if mgr._Schedule then
-            mgr._Schedule(0)
-        end
+        mgr.acc = 0.10
     end
 end
 
