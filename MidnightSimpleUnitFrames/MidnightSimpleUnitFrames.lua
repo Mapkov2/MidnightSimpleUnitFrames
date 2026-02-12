@@ -5268,7 +5268,27 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key)
                 barR, barG, barB = pr, pg, pb
             end
     end
-        self.hpBar:SetStatusBarColor(barR, barG, barB, 1)
+                local skipStaticColor = false
+        if (mode == "dark" or mode == "unified") and (not forceHeavy) then
+            if self._msufLastStaticHPMode == mode
+                and self._msufLastStaticHPR == barR
+                and self._msufLastStaticHPG == barG
+                and self._msufLastStaticHPB == barB
+            then
+                skipStaticColor = true
+            else
+                self._msufLastStaticHPMode = mode
+                self._msufLastStaticHPR = barR
+                self._msufLastStaticHPG = barG
+                self._msufLastStaticHPB = barB
+            end
+        else
+            -- Don't carry static stamps across dynamic/forced paths.
+            self._msufLastStaticHPMode = nil
+        end
+        if not skipStaticColor then
+            self.hpBar:SetStatusBarColor(barR, barG, barB, 1)
+        end
         if self.hpGradients then
             MSUF_ApplyHPGradient(self)
         elseif self.hpGradient then
@@ -5280,6 +5300,7 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key)
     end
  end
 
+ 
 -- ---------------------------------------------------------------------------
 -- Swap Recolor Driver (event-only, ultra cheap)
 -- Fixes: HP bar color/gradient/background sticking after target/focus/ToT swap.
@@ -5351,7 +5372,6 @@ do
         return d
     end
 end
-
 local function MSUF_UFStep_SyncTargetPower(self, unit, barsConf, isPlayer, isTarget, isFocus)
   local pb = self.targetPowerBar or self.powerBar
   if not (pb and pb.IsShown and pb:IsShown()) then  return false end
@@ -7136,6 +7156,61 @@ do
     _G.MSUF_TargetSoundDriver_Ensure = MSUF_TargetSoundDriver_Ensure
     _G.MSUF_TargetSoundDriver_ResetState = MSUF_TargetSoundDriver_ResetState
 end
+
+-- Swap Recolor Driver (Target/Focus/ToT): guarantees immediate HP bar color reapply on unit swaps.
+-- Ultra-low overhead: event-only + coalesced flush; forces HeavyVisual once via MSUF_UnitTokenChanged flags.
+do
+    if not _G.MSUF_EnsureSwapRecolorDriver then
+        local _pending = false
+        local _evtFrame = nil
+
+        local function _RunHeavyFor(frame, unit, key, tokenFlags)
+            if not (frame and frame.hpBar and _G.MSUF_UFStep_HeavyVisual) then return end
+            if tokenFlags and key then tokenFlags[key] = true end
+            _G.MSUF_UFStep_HeavyVisual(frame, unit, key)
+        end
+
+        local function _Flush()
+            _pending = false
+            local tokenFlags = _G.MSUF_UnitTokenChanged
+            if not tokenFlags then
+                tokenFlags = {}
+                _G.MSUF_UnitTokenChanged = tokenFlags
+            end
+            -- Force HeavyVisual for swapped units
+            if UnitFrames then
+                _RunHeavyFor(UnitFrames.target or UnitFrames["target"], "target", "target", tokenFlags)
+                _RunHeavyFor(UnitFrames.focus or UnitFrames["focus"], "focus", "focus", tokenFlags)
+                _RunHeavyFor(UnitFrames.targettarget or UnitFrames["targettarget"], "targettarget", "targettarget", tokenFlags)
+            end
+        end
+
+        local function _OnEvent(self, event, unit)
+            if event == "UNIT_TARGET" and unit and unit ~= "target" then return end
+            if _pending then return end
+            _pending = true
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, _Flush)
+            else
+                _Flush()
+            end
+        end
+
+        function _G.MSUF_EnsureSwapRecolorDriver()
+            if _evtFrame then return end
+            _evtFrame = F.CreateFrame("Frame")
+            _evtFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+            _evtFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
+            if _evtFrame.RegisterUnitEvent then
+                _evtFrame:RegisterUnitEvent("UNIT_TARGET", "target")
+            else
+                _evtFrame:RegisterEvent("UNIT_TARGET")
+            end
+            _evtFrame:SetScript("OnEvent", _OnEvent)
+        end
+    end
+end
+
 MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_STARTUP", function(event)
     MSUF_InitProfiles()
     EnsureDB()
@@ -7163,8 +7238,8 @@ if ns and ns.MSUF_CreateSecureTargetAuraHeaders then
 end
     CreateSimpleUnitFrame("targettarget")
     CreateSimpleUnitFrame("focus")
-    CreateSimpleUnitFrame("pet")
     if _G.MSUF_EnsureSwapRecolorDriver then _G.MSUF_EnsureSwapRecolorDriver() end
+    CreateSimpleUnitFrame("pet")
     for i = 1, MSUF_MAX_BOSS_FRAMES do
         CreateSimpleUnitFrame("boss" .. i)
     end
