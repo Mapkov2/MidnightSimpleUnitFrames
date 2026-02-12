@@ -818,8 +818,8 @@ local function LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
 
     -- avoid a full reflow (ClearAllPoints/SetPoint/SetSize) when layout inputs are unchanged.
     -- In addition, if ONLY the icon count changed, we do a delta-layout:
-    --  • count increased: anchor only the newly-used indices
-    --  • count decreased: just hide extras (existing points remain valid)
+    --  â€¢ count increased: anchor only the newly-used indices
+    --  â€¢ count decreased: just hide extras (existing points remain valid)
     local oldCount = container._msufA2_layoutCount or 0
 
     local sameParams = (
@@ -1044,21 +1044,11 @@ function Apply.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
 	        and last.showTip == showTip
     then
         -- Fast-path: same aura instance + same layout/visual config.
-        -- We skip the heavy visual apply (texture/border/backdrop/layout), but we still
-        -- do a tiny refresh of *safe* dynamic parts that can change while the aura
-        -- instance stays the same (e.g. stack display count), and we keep tooltip
-        -- gating correct for Edit Mode.
-        if type(MSUF_A2_ApplyIconTextSizing) == "function" then
-            MSUF_A2_ApplyIconTextSizing(icon, unit, shared)
-        end
-        if type(MSUF_A2_ApplyIconTooltip) == "function" then
-            MSUF_A2_ApplyIconTooltip(icon, shared)
-        end
-        if type(MSUF_A2_ApplyIconStacks) == "function" then
-            -- Uses C_UnitAuras.GetAuraApplicationDisplayCount (unit, auraInstanceID) and
-            -- never reads aura.applications (which can be secret/absent).
-            MSUF_A2_ApplyIconStacks(icon, unit, shared, stackCountAnchor, nil, false, false)
-        end
+        -- We skip the heavy visual apply (texture/border/backdrop/layout) AND
+        -- config-only helpers (TextSizing, Tooltip, Stacks with no query) since
+        -- the diff gate above already ensures config hasn't changed.
+        -- Only refresh the cooldown timer (duration/expiration can change on
+        -- aura refresh even with the same auraInstanceID).
 
         -- Aura refreshes (same auraInstanceID) can change duration/expiration without changing any of our
         -- conservative diff keys. If we skip a full ApplyAuraToIcon, the cooldown swipe/text would keep
@@ -1788,15 +1778,16 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
 
     -- Visual-only refresh for already-assigned icons.
     -- IMPORTANT: Do NOT call GetAuraDataByAuraInstanceID here (hot path).
+    -- NOTE (Step 5 perf): TextSizing, Tooltip, and Border are purely config-driven.
+    -- They only change on InvalidateDB/RefreshAll (which triggers a full rebuild,
+    -- not this fast-path). Removed from the per-icon loop to eliminate function
+    -- call overhead × N visible icons on every UNIT_AURA that doesn't change the set.
     local useSingleRow = (entry.mixed ~= nil) and ((entry.mixed.IsShown and entry.mixed:IsShown()) or false)
     local mixedCount  = entry._msufA2_lastMixedCount  or 0
     local debuffCount = entry._msufA2_lastDebuffCount or 0
     local buffCount   = entry._msufA2_lastBuffCount   or 0
 
-    local applySizing = (shared.showStackCount == true) and MSUF_A2_ApplyIconTextSizing or nil
-    local applyTip    = MSUF_A2_ApplyIconTooltip
     local applyStacks = MSUF_A2_ApplyIconStacks
-    local setBorder   = SetDispelBorder
 
     local doQuery = (forceQuery == true)
     local showCdText  = not (shared and shared.showCooldownText == false)
@@ -1805,6 +1796,7 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
 
     local function RefreshContainer(container, count)
         if not container or count <= 0 then return end
+        if not doQuery then return end  -- No data changed; all work is config-only.
         local icons = container._msufIcons or container.icons
         if not icons then return end
 
@@ -1812,24 +1804,11 @@ local function MSUF_A2_RefreshAssignedIcons(entry, unit, shared, masterOn, stack
             local icon = icons[idx]
             local aid = icon and icon._msufAuraInstanceID
             if aid ~= nil then
-                if applySizing then
-                    applySizing(icon, unit, shared)
-                end
-                if applyTip then
-                    applyTip(icon, shared)
-                end
                 if applyStacks then
-                    -- Fast-path: no API calls; only re-display cached stack text if any.
-                    applyStacks(icon, unit, shared, stackCountAnchor, nil, false, doQuery)
-                    if doQuery and refreshCD then
-                        refreshCD(icon, unit, aid, shared, showCdText, showCdSwipe, true)
-                    end
+                    applyStacks(icon, unit, shared, stackCountAnchor, nil, false, true)
                 end
-                if setBorder then
-                    local isHelpful = (icon._msufFilter == "HELPFUL")
-                    local last = icon._msufA2_last
-                    local isOwn = (last and last.isOwn == true) or false
-                    setBorder(icon, unit, nil, isHelpful, shared, masterOn, isOwn)
+                if refreshCD then
+                    refreshCD(icon, unit, aid, shared, showCdText, showCdSwipe, true)
                 end
             end
         end
@@ -1922,7 +1901,7 @@ local function MSUF_A2_RefreshAssignedIconsDelta(entry, unit, shared, masterOn, 
     -- IMPORTANT: Do NOT call GetAuraDataByAuraInstanceID here (hot path).
     local useSingleRow = (entry.mixed ~= nil) and ((entry.mixed.IsShown and entry.mixed:IsShown()) or false)
 
-    -- NOTE (bugfix): The authoritative auraInstanceID → icon map lives on the
+    -- NOTE (bugfix): The authoritative auraInstanceID â†’ icon map lives on the
     -- icon containers (entry.debuffs/entry.buffs/entry.mixed) as
     -- container._msufA2_iconByAid, because CommitIcon() writes into that map.
     --
@@ -1934,8 +1913,6 @@ local function MSUF_A2_RefreshAssignedIconsDelta(entry, unit, shared, masterOn, 
     local debuffMap = (entry.debuffs and entry.debuffs._msufA2_iconByAid) or entry._msufA2_iconByAidDebuff
     local buffMap   = (entry.buffs  and entry.buffs._msufA2_iconByAid)  or entry._msufA2_iconByAidBuff
 
-    local applySizing = (shared.showStackCount == true) and MSUF_A2_ApplyIconTextSizing or nil
-    local applyTip    = MSUF_A2_ApplyIconTooltip
     local applyStacks = MSUF_A2_ApplyIconStacks
     local setBorder   = SetDispelBorder
 
@@ -1953,12 +1930,9 @@ local function MSUF_A2_RefreshAssignedIconsDelta(entry, unit, shared, masterOn, 
             end
 
             if icon and icon._msufAuraInstanceID ~= nil then
-                if applySizing then
-                    applySizing(icon, unit, shared)
-                end
-                if applyTip then
-                    applyTip(icon, shared)
-                end
+                -- NOTE (Step 5 perf): TextSizing and Tooltip are config-only and
+                -- already applied during the full CommitIcon pass. Delta events only
+                -- change aura data (stacks, duration), not config.
                 if applyStacks then
                     -- Delta path: allowQuery=true so stacks refresh correctly on UNIT_AURA.
                     applyStacks(icon, unit, shared, stackCountAnchor, nil, false, true)
