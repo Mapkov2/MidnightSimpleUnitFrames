@@ -145,10 +145,14 @@ local MSUF_DB
 
 local MSUF_A2_DB_READY = false
 local MSUF_A2_DB_LAST = nil
+local _A2_layoutSigGen = 0    -- bumped by InvalidateDB; cached sigs recompute when gen mismatches
 
 local function MSUF_A2_InvalidateDB()
     MSUF_A2_DB_READY = false
     MSUF_A2_DB_LAST = nil
+
+    -- Bump layout-sig generation so cached sigs are recomputed on next render.
+    _A2_layoutSigGen = (_A2_layoutSigGen or 0) + 1
 
     -- Options often call InvalidateDB() after toggles. Ensure Edit Mode preview icons never linger.
     if API and API.ClearAllPreviews then
@@ -600,6 +604,9 @@ local DirtyCount = 0
 local DirtyMark = {}    -- unit -> generation stamp
 local DirtyGen  = 1     -- current generation for dedupe
 
+-- Step 4 perf: lookup table replaces unit:match("^boss%d$") pattern matching.
+local _A2_IS_BOSS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
+
 -- Track whether MarkDirty happened while flushing; only then schedule a follow-up flush next tick.
 local _A2_isFlushing = false
 local _A2_dirtyWhileFlushing = false
@@ -772,7 +779,7 @@ local function UnitEnabled(unit)
 
     if unit == "target" then return a2.showTarget end
     if unit == "focus" then return a2.showFocus end
-    if unit and unit:match("^boss%d$") then return a2.showBoss end
+    if unit and _A2_IS_BOSS[unit] then return a2.showBoss end
     return false
 end
 
@@ -966,7 +973,7 @@ MSUF_A2_PrivateAuras_RebuildIfNeeded = function(entry, shared, iconSize, spacing
         enabled = false -- Target private auras removed
     elseif unit == "focus" then
         enabled = (shared.showPrivateAurasFocus == true)
-    elseif unit:match("^boss%d$") then
+    elseif _A2_IS_BOSS[unit] then
         enabled = (shared.showPrivateAurasBoss == true)
     else
         enabled = false
@@ -2586,9 +2593,20 @@ end
             entry._msufA2_storeRescanStamp = nil
             entry._msufA2_storeRescanBudgetStamp = nil
             entry._msufA2_storeRescanUnit = nil
-            layoutSig = MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebuffAnchor, splitSpacing,
-                iconSize, buffIconSize, debuffIconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, stackCountAnchor,
-                tf, masterOn, onlyBossAuras, finalShowBuffs, finalShowDebuffs)
+
+            -- Layout sig caching: all inputs come from DB/options which only
+            -- change on InvalidateDB / RefreshAll (which bump _A2_layoutSigGen).
+            -- Avoids ~25 HashStep calls per unit per UNIT_AURA event.
+            local curGen = _A2_layoutSigGen
+            if entry._msufA2_layoutSigGen == curGen and entry._msufA2_cachedLayoutSig then
+                layoutSig = entry._msufA2_cachedLayoutSig
+            else
+                layoutSig = MSUF_A2_ComputeLayoutSig(unit, shared, caps, layoutMode, buffDebuffAnchor, splitSpacing,
+                    iconSize, buffIconSize, debuffIconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, stackCountAnchor,
+                    tf, masterOn, onlyBossAuras, finalShowBuffs, finalShowDebuffs)
+                entry._msufA2_cachedLayoutSig = layoutSig
+                entry._msufA2_layoutSigGen = curGen
+            end
 
             if rawSig and layoutSig
                and entry._msufA2_lastRawSig == rawSig
@@ -2789,7 +2807,7 @@ local function _A2_UnitEnabledFast(a2, unit)
     if unit == "player" then return a2.showPlayer == true end
     if unit == "target" then return a2.showTarget == true end
     if unit == "focus" then return a2.showFocus == true end
-    if unit and unit:match("^boss%d$") then return a2.showBoss == true end
+    if _A2_IS_BOSS[unit] then return a2.showBoss == true end
     return false
 end
 
@@ -2909,6 +2927,21 @@ Flush = function()
 end
 
 local function MarkDirty(unit, delay)
+    -- Step 4 perf: early dedupe BEFORE any DB lookups / pattern matching.
+    -- UNIT_AURA fires many times per frame for the same unit in raids;
+    -- skip all gate work if this unit is already in the dirty queue.
+    if unit and DirtyMark[unit] == DirtyGen then
+        -- Already queued this generation. Just ensure flush is scheduled.
+        if not delay or delay < 0 then delay = 0 end
+        if FlushScheduled then
+            _A2_ScheduleFlush(delay)
+            return
+        end
+        FlushScheduled = true
+        _A2_ScheduleFlush(delay)
+        return
+    end
+
     -- Step 5 perf (cumulative): hard gates (skip work) with 0-regression safety.
     -- If Auras2 is effectively disabled for this unit (and we're not in Edit Mode preview),
     -- do NOT schedule any flush work. Instead, immediately hard-hide anchors/movers.
@@ -2956,7 +2989,7 @@ local function MarkDirty(unit, delay)
                             if type(maxN) ~= "number" then maxN = 6 end
                             if maxN > 0 then anyVisual = true end
                         end
-                    elseif type(unit) == "string" and unit:match("^boss%d$") then
+                    elseif _A2_IS_BOSS[unit] then
                         if shared.showPrivateAurasBoss == true then
                             maxN = shared.privateAuraMaxOther
                             if type(maxN) ~= "number" then maxN = 6 end
@@ -3073,6 +3106,9 @@ end
 
 -- Public refresh (used by options)
 local function MSUF_A2_RefreshAll()
+    -- Bump layout-sig generation (DB values may have changed).
+    _A2_layoutSigGen = (_A2_layoutSigGen or 0) + 1
+
     if API and API.DB and API.DB.RebuildCache then
         local a2, s = EnsureDB()
         API.DB.RebuildCache(a2, s)
