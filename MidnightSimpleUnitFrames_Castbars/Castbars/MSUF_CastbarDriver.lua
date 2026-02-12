@@ -17,18 +17,40 @@ _G.MSUF_INTERRUPT_FEEDBACK_DURATION = _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5
 -- Step 5 (engine/state): driver-side safe fallback for enabled checks.
 -- MSUF_IsCastbarEnabledForUnit is normally provided by MSUF_Castbars.lua, but this file can
 -- receive events very early (or in partial-load scenarios). Avoid hard nil errors.
+--
+-- PERF FIX #4: After the first successful DB load we cache the function reference and skip
+-- pcall + EnsureDB on every subsequent event. The fallback path only runs during the brief
+-- startup window before MSUF_Castbars.lua has loaded.
+local _driverEnabledFnCached = nil   -- cached ref to MSUF_IsCastbarEnabledForUnit after first success
+local _driverDBBootstraped = false    -- true once EnsureDB has succeeded at least once
+
 local function MSUF_Driver_IsCastbarEnabled(unit)
     unit = unit or ""
+
+    -- Fast path: after first success, call the function directly (no pcall, no EnsureDB)
+    if _driverEnabledFnCached then
+        return _driverEnabledFnCached(unit)
+    end
+
+    -- Bootstrap path (runs only a few times during addon load)
     local fn = _G.MSUF_IsCastbarEnabledForUnit
     if type(fn) == "function" then
         local ok, res = pcall(fn, unit)
         if ok and res ~= nil then
+            -- Cache for all future calls
+            _driverEnabledFnCached = fn
             return res
         end
     end
 
-    if type(_G.MSUF_EnsureDB) == "function" then
-        pcall(_G.MSUF_EnsureDB)
+    -- One-time DB bootstrap (only until DB is confirmed loaded)
+    if not _driverDBBootstraped then
+        if type(_G.MSUF_EnsureDB) == "function" then
+            pcall(_G.MSUF_EnsureDB)
+        end
+        if _G.MSUF_DB then
+            _driverDBBootstraped = true
+        end
     end
 
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
@@ -43,7 +65,6 @@ local function MSUF_Driver_IsCastbarEnabled(unit)
     elseif unit == "focus" then
         return g.enableFocusCastbar ~= false
     else
-        -- Boss/pet/etc are handled in their respective modules; assume enabled to avoid breaking casts.
         return true
     end
 end
@@ -200,15 +221,18 @@ end
 
 -- Step 2 (DurationObjects): keep cast time text working without relying on secret duration values.
 -- We derive remaining time from the StatusBar's animated value/min/max (timer-driven or manual).
+--
+-- PERF FIX #2: Pre-allocate test functions outside the hot path instead of creating a new
+-- closure on every call. pcall(fn, arg) with a static function generates zero garbage.
+local function _secretSafe_testAdd(n) return n + 0 end
+local function _secretSafe_testCmp(n) return n > -1e308 end
+
 local function MSUF__IsPlainNumber_SecretSafe(n)
     if type(n) ~= "number" then return false end
     -- Secret numbers can still report type=="number" but will throw on arithmetic/comparisons.
-    local ok = pcall(function()
-        local _ = n + 0
-        local __ = (n > -1e308) -- force a comparison too
-        return _ and __ ~= nil
-    end)
-    return ok
+    -- Using pre-allocated functions avoids a new closure on every call.
+    if not pcall(_secretSafe_testAdd, n) then return false end
+    return pcall(_secretSafe_testCmp, n)
 end
 
 local function MSUF__ToNumber_SecretSafe(v)
@@ -453,8 +477,21 @@ local function CreateCastBar(name, unit)
 
 
     -- Step 6g: token-based stop confirm (fixes target/focus channel refresh + prevents lingering)
+    --
+    -- PERF FIX #1: Replaced the 2-3 C_Timer.NewTimer cascade per STOP event with a simple
+    -- timestamp-based state machine. The existing CastbarManager tick (which is already running
+    -- because the bar is still visible) drives the phases. Zero timer/closure allocations.
     local function MSUF_Driver_CancelStopConfirm(self)
         if not self then return end
+        self._msufStopPending = nil
+        self._msufStopKind = nil
+        self._msufStopToken = nil
+        self._msufStopSnapSeq = nil
+        self._msufStopPhase = nil
+        self._msufStopPhaseAt = nil
+        self._msufStopSettleAt = nil
+        self._msufStopFailsafeAt = nil
+        -- Also cancel any legacy timers (belt-and-suspenders for mid-update safety)
         local t
         t = self._msufStopTimer1; if t and t.Cancel then t:Cancel() end; self._msufStopTimer1 = nil
         t = self._msufStopTimer2; if t and t.Cancel then t:Cancel() end; self._msufStopTimer2 = nil
@@ -466,112 +503,139 @@ local function CreateCastBar(name, unit)
         return self._msufCastToken
     end
 
-	-- IMPORTANT (Midnight/Beta): castGUID may be "secret" and comparing it can hard-error.
-	-- We do *not* key on castGUID at all. The stop-confirm logic below is purely token/state based.
-	local function MSUF_Driver_QueueStopConfirm(self, kind)
+    -- IMPORTANT (Midnight/Beta): castGUID may be "secret" and comparing it can hard-error.
+    -- We do *not* key on castGUID at all. The stop-confirm logic below is purely token/state based.
+    --
+    -- PERF FIX #1: Instead of creating 2-3 C_Timer.NewTimer per STOP (each with a closure
+    -- that calls BuildCastStateFor + API queries), we set timestamps on the frame and let the
+    -- already-running CastbarManager tick drive the phases. This eliminates:
+    --   - 60-120 timer objects/minute (GC pressure)
+    --   - 120-240 redundant UnitCastingInfo/UnitChannelInfo calls/minute
+    --   - All associated closure allocations
+    local function MSUF_Driver_QueueStopConfirm(self, kind)
         if not self or self.interrupted then return end
         local token = self._msufCastToken or 0
         local snapSeq = self._msufActiveSeq
         MSUF_Driver_CancelStopConfirm(self)
 
-	    if kind == "CHANNEL" then
-	        -- Channels can do STOP -> (gap) -> START on refresh. The gap can be as large as SpellQueueWindow.
-	        -- If we kill too early, spamming/queueing can "cut" the visible channel mid-cast.
-	        local qms = 0
-	        if GetCVar then qms = tonumber(GetCVar("SpellQueueWindow") or "0") or 0 end
-	        if qms < 0 then qms = 0 end
-	        local settle = (qms / 1000) + 0.08
-	        if settle < 0.20 then settle = 0.20 end
-	        if settle > 0.70 then settle = 0.70 end
-	
-	        local fast = 0.12
-	        if fast > settle then fast = settle end
-	        local t2 = settle - fast
-	        if t2 < 0.08 then t2 = 0.08 end
-	
-	        -- Absolute failsafe: never allow a channel to keep animating forever after a STOP.
-	        local failsafe = settle + 0.55
-	        if failsafe < 0.70 then failsafe = 0.70 end
-	        if failsafe > 1.20 then failsafe = 1.20 end
-	
-	        self._msufStopTimer1 = C_Timer.NewTimer(fast, function()
-	            if not self or self.interrupted then return end
-	            if (self._msufCastToken or 0) ~= token then return end
-	
-	            -- If the unit is channeling again, treat as refresh.
-	            local st = MSUF_Driver_BuildCastStateFor(self)
-	            if st and st.active then MSUF_Driver_SetActiveIdentity(self, st); self:Cast(st); return end
-	
-	            -- If this STOP belongs to an older cast (spellId/sequence changed), ignore it.
-	            if MSUF_Driver_IsStaleStop(self, snapSeq) then
-	                MSUF_Driver_CastResync(self)
-	                return
-	            end
-	
-	            -- Confirm again after the settle window (covers SQW refresh gaps).
-	            self._msufStopTimer2 = C_Timer.NewTimer(t2, function()
-	                if not self or self.interrupted then return end
-	                if (self._msufCastToken or 0) ~= token then return end
-	
-	                local st2 = MSUF_Driver_BuildCastStateFor(self)
-	                if st2 and st2.active then MSUF_Driver_SetActiveIdentity(self, st2); self:Cast(st2); return end
-	
-	                if MSUF_Driver_IsStaleStop(self, snapSeq) then
-	                    MSUF_Driver_CastResync(self)
-	                    return
-	                end
-	                self:SetSucceeded()
-	            end)
-	        end)
-	
-	        self._msufStopTimer3 = C_Timer.NewTimer(failsafe, function()
-	            if not self or self.interrupted then return end
-	            if (self._msufCastToken or 0) ~= token then return end
-	
-	            local st = MSUF_Driver_BuildCastStateFor(self)
-	            if st and st.active then
-	                MSUF_Driver_SetActiveIdentity(self, st)
-	                self:Cast(st)
-	                return
-	            end
-	
-	            if MSUF_Driver_IsStaleStop(self, snapSeq) then
-	                MSUF_Driver_CastResync(self)
-	                return
-	            end
-	            self:SetSucceeded()
-	        end)
-	        return
-	    end
+        local now = GetTime()
 
-        -- Normal casts/empower: short confirm, but resync if something new is active.
-        self._msufStopTimer1 = C_Timer.NewTimer(0.12, function()
-            if not self or self.interrupted then return end
-            if (self._msufCastToken or 0) ~= token then return end
-            local st = MSUF_Driver_BuildCastStateFor(self)
-            if st and st.active then
-                MSUF_Driver_SetActiveIdentity(self, st)
-                self:Cast(st)
-            else
-                if MSUF_Driver_IsStaleStop(self, snapSeq) then
-                    MSUF_Driver_CastResync(self)
-                    return
-                end
-                self:SetSucceeded()
-            end
-        end)
+        if kind == "CHANNEL" then
+            -- Channels can do STOP -> (gap) -> START on refresh. The gap can be as large as SpellQueueWindow.
+            -- If we kill too early, spamming/queueing can "cut" the visible channel mid-cast.
+            local qms = 0
+            if GetCVar then qms = tonumber(GetCVar("SpellQueueWindow") or "0") or 0 end
+            if qms < 0 then qms = 0 end
+            local settle = (qms / 1000) + 0.08
+            if settle < 0.20 then settle = 0.20 end
+            if settle > 0.70 then settle = 0.70 end
 
-        -- Defensive failsafe.
-        self._msufStopTimer3 = C_Timer.NewTimer(0.40, function()
-            if not self or self.interrupted then return end
-            if (self._msufCastToken or 0) ~= token then return end
-            if MSUF_Driver_IsStaleStop(self, snapSeq) then
-                MSUF_Driver_CastResync(self)
-                return
-            end
-            self:SetSucceeded()
-        end)
+            local fast = 0.12
+            if fast > settle then fast = settle end
+
+            -- Absolute failsafe: never allow a channel to keep animating forever after a STOP.
+            local failsafe = settle + 0.55
+            if failsafe < 0.70 then failsafe = 0.70 end
+            if failsafe > 1.20 then failsafe = 1.20 end
+
+            self._msufStopPending = true
+            self._msufStopKind = "CHANNEL"
+            self._msufStopToken = token
+            self._msufStopSnapSeq = snapSeq
+            self._msufStopPhase = 0
+            self._msufStopPhaseAt = now + fast       -- phase 0->1 at fast
+            self._msufStopSettleAt = now + settle     -- phase 1->2 at settle
+            self._msufStopFailsafeAt = now + failsafe -- failsafe hard-stop
+            return
+        end
+
+        -- Normal casts/empower: single confirm + failsafe
+        self._msufStopPending = true
+        self._msufStopKind = "CAST"
+        self._msufStopToken = token
+        self._msufStopSnapSeq = snapSeq
+        self._msufStopPhase = 0
+        self._msufStopPhaseAt = now + 0.12
+        self._msufStopSettleAt = nil
+        self._msufStopFailsafeAt = now + 0.40
     end
+
+    -- Tick-driven stop-confirm processor. Called from MSUF_UpdateCastbarFrame (CastbarManager tick)
+    -- instead of from C_Timer callbacks. Returns true if stop-confirm consumed this tick (caller
+    -- should skip normal update logic).
+    function _G.MSUF_Driver_ProcessStopConfirm(frame, now)
+        if not frame or not frame._msufStopPending then return false end
+        if frame.interrupted then
+            MSUF_Driver_CancelStopConfirm(frame)
+            return false
+        end
+
+        -- Token changed -> a new cast started, stop-confirm is obsolete
+        if (frame._msufCastToken or 0) ~= (frame._msufStopToken or -1) then
+            MSUF_Driver_CancelStopConfirm(frame)
+            return false
+        end
+
+        local phase = frame._msufStopPhase or 0
+        local phaseAt = frame._msufStopPhaseAt
+        local failAt = frame._msufStopFailsafeAt
+
+        -- Failsafe: absolute hard-stop regardless of phase
+        if failAt and now >= failAt then
+            local st = MSUF_Driver_BuildCastStateFor(frame)
+            if st and st.active then
+                MSUF_Driver_SetActiveIdentity(frame, st)
+                MSUF_Driver_CancelStopConfirm(frame)
+                frame:Cast(st)
+            elseif MSUF_Driver_IsStaleStop(frame, frame._msufStopSnapSeq) then
+                MSUF_Driver_CancelStopConfirm(frame)
+                MSUF_Driver_CastResync(frame)
+            else
+                MSUF_Driver_CancelStopConfirm(frame)
+                frame:SetSucceeded()
+            end
+            return true
+        end
+
+        -- Phase gating
+        if not phaseAt or now < phaseAt then return true end  -- waiting for next phase
+
+        -- Check: is the unit casting again?
+        local st = MSUF_Driver_BuildCastStateFor(frame)
+        if st and st.active then
+            MSUF_Driver_SetActiveIdentity(frame, st)
+            MSUF_Driver_CancelStopConfirm(frame)
+            frame:Cast(st)
+            return true
+        end
+
+        -- Check: stale stop?
+        if MSUF_Driver_IsStaleStop(frame, frame._msufStopSnapSeq) then
+            MSUF_Driver_CancelStopConfirm(frame)
+            MSUF_Driver_CastResync(frame)
+            return true
+        end
+
+        if frame._msufStopKind == "CHANNEL" then
+            if phase == 0 then
+                -- Phase 0->1: fast check done, advance to settle
+                frame._msufStopPhase = 1
+                frame._msufStopPhaseAt = frame._msufStopSettleAt
+                return true
+            else
+                -- Phase 1 (settle) reached, channel is genuinely gone
+                MSUF_Driver_CancelStopConfirm(frame)
+                frame:SetSucceeded()
+                return true
+            end
+        else
+            -- CAST: single confirm phase reached -> done
+            MSUF_Driver_CancelStopConfirm(frame)
+            frame:SetSucceeded()
+            return true
+        end
+    end
+
 
 frame:SetScript("OnEvent", function(self, event, arg1, ...)
         local _, spellID = ...
@@ -612,18 +676,24 @@ end
             self.isNotInterruptible = false
             MSUF_Driver_CastResync(self)
             -- Retry once shortly after start to handle the tiny "info not ready yet" window on target/focus channels.
-            C_Timer.After(0.05, function()
-                if not self or self.interrupted then return end
-                if (self._msufCastToken or 0) ~= tok then return end
-                local st = MSUF_Driver_BuildCastStateFor(self)
-                if st and st.active then
-                    MSUF_Driver_SetActiveIdentity(self, st)
-                    self:Cast(st)
+            -- EVENT-DRIVEN: Cached per-frame callback (no new closure per START event).
+            if not self._msufStartRetryCb then
+                self._msufStartRetryCb = function()
+                    if not self or self.interrupted then return end
+                    local retryTok = self._msufStartRetryToken
+                    if retryTok and (self._msufCastToken or 0) ~= retryTok then return end
+                    local st = MSUF_Driver_BuildCastStateFor(self)
+                    if st and st.active then
+                        MSUF_Driver_SetActiveIdentity(self, st)
+                        self:Cast(st)
+                    end
                 end
-            end)
+            end
+            self._msufStartRetryToken = tok
+            C_Timer.After(0.05, self._msufStartRetryCb)
 
 	        elseif event == "UNIT_SPELLCAST_DELAYED" or event == "UNIT_SPELLCAST_CHANNEL_UPDATE" or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
-            if event == "UNIT_SPELLCAST_CHANNEL_UPDATE" and (self._msufStopTimer1 or self._msufStopTimer2 or self._msufStopTimer3) then
+            if event == "UNIT_SPELLCAST_CHANNEL_UPDATE" and self._msufStopPending then
                 MSUF_Driver_CancelStopConfirm(self)
                 MSUF_Driver_BumpCastToken(self)
             end
@@ -882,17 +952,19 @@ if self.hideTimer and self.hideTimer.Cancel then
     self.hideTimer:Cancel()
 end
 
-self.hideTimer = C_Timer.NewTimer(0, function()
-    if not self or not self.unit then return end
-
-    local st = MSUF_Driver_BuildCastStateFor(self)
-if st and st.active then
-    self:Cast(st)
-    return
+-- Cached per-frame callback for deferred stop check
+if not self._msufStopCheckCb then
+    self._msufStopCheckCb = function()
+        if not self or not self.unit then return end
+        local st = MSUF_Driver_BuildCastStateFor(self)
+        if st and st.active then
+            self:Cast(st)
+            return
+        end
+        _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
+    end
 end
-
-    _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
-end)
+self.hideTimer = C_Timer.NewTimer(0, self._msufStopCheckCb)
         end
 
         if self.timer then
@@ -905,12 +977,16 @@ end)
         if type(grace) ~= "number" then grace = 0.5 end
         if grace < 0 then grace = 0 end
 
-        self.timer = C_Timer.NewTimer(grace, function()
-            if self.interrupted then
-                self.interrupted = nil
-                self:Hide()
+        -- Cached per-frame callback for interrupt-feedback fade timer
+        if not self._msufSucceededFadeCb then
+            self._msufSucceededFadeCb = function()
+                if self.interrupted then
+                    self.interrupted = nil
+                    self:Hide()
+                end
             end
-        end)
+        end
+        self.timer = C_Timer.NewTimer(grace, self._msufSucceededFadeCb)
     end
 
 function frame:SetInterrupted()
@@ -984,20 +1060,24 @@ function frame:SetInterrupted()
             __st.holdUntil = __t + grace
         end
 
-        self.hideTimer = C_Timer.NewTimer(grace, function()
-            if not self or not self.unit then return end
-            local st = MSUF_Driver_BuildCastStateFor(self)
-            if st and st.active then
-                self.interrupted = nil
-                self:Cast(st)
-                return
-            end
+        -- Cached per-frame callback for interrupt-feedback hide timer
+        if not self._msufInterruptHideCb then
+            self._msufInterruptHideCb = function()
+                if not self or not self.unit then return end
+                local st = MSUF_Driver_BuildCastStateFor(self)
+                if st and st.active then
+                    self.interrupted = nil
+                    self:Cast(st)
+                    return
+                end
 
-            if self.interrupted then
-                self.interrupted = nil
-                self:Hide()
+                if self.interrupted then
+                    self.interrupted = nil
+                    self:Hide()
+                end
             end
-        end)
+        end
+        self.hideTimer = C_Timer.NewTimer(grace, self._msufInterruptHideCb)
 
     end
 

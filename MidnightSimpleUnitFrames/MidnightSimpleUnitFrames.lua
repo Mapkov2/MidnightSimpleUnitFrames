@@ -6057,6 +6057,9 @@ _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or funct
     if type(_G.MSUF_EnsureToTFallbackTicker) == "function" then
         _G.MSUF_EnsureToTFallbackTicker()
     end
+if type(_G.MSUF_RefreshSelfHealPredUnitEvent) == "function" then
+    _G.MSUF_RefreshSelfHealPredUnitEvent()
+end
     if _G.MSUF_UnitFrameApplyState and _G.MSUF_UnitFrameApplyState.dirty then
         for k in pairs(_G.MSUF_UnitFrameApplyState.dirty) do
             _G.MSUF_UnitFrameApplyState.dirty[k] = nil
@@ -6108,6 +6111,9 @@ function MSUF_CommitApplyDirty()
         if type(_G.MSUF_EnsureStatusIndicatorTicker) == "function" then _G.MSUF_EnsureStatusIndicatorTicker() end
         if type(_G.MSUF_EnsureToTFallbackTicker) == "function" then _G.MSUF_EnsureToTFallbackTicker() end
     end
+if type(_G.MSUF_RefreshSelfHealPredUnitEvent) == "function" then
+    _G.MSUF_RefreshSelfHealPredUnitEvent()
+end
     st.fonts = false
     st.fontKey = nil
     st.bars = false
@@ -7262,25 +7268,55 @@ end
         _G.MSUF_Auras2_RefreshAll()
     end
 
-    -- Player self-heal prediction: request a Player frame update when heal prediction changes
-    -- (this can change without UNIT_HEALTH firing).
-    if type(MSUF_EventBus_Register) == "function" and not _G.MSUF_SelfHealPredEventsRegistered then
-        _G.MSUF_SelfHealPredEventsRegistered = true
-        MSUF_EventBus_Register("UNIT_HEAL_PREDICTION", "MSUF_SELFHEALPRED", function(_, unitTarget)
-            if unitTarget ~= "player" then return end
-            local g = (MSUF_DB and MSUF_DB.general) or nil
-            if not (g and g.showSelfHealPrediction) then return end
-            local f = UnitFrames and UnitFrames.player
-            if not f or (f.IsShown and not f:IsShown()) then return end
-            if ns and ns.UF and ns.UF.RequestUpdate then
-                ns.UF.RequestUpdate(f, true, false, "UNIT_HEAL_PREDICTION")
+-- Player self-heal prediction: request a Player frame update when heal prediction changes
+-- (this can change without UNIT_HEALTH firing).
+-- MAX performance path: register UNIT_* directly with RegisterUnitEvent (oUF-style).
+-- Secret-safe: no comparisons/arithmetic on potential secret values.
+if type(_G.MSUF_RefreshSelfHealPredUnitEvent) ~= "function" then
+    _G.MSUF_RefreshSelfHealPredUnitEvent = function()
+        local g = (MSUF_DB and MSUF_DB.general) or nil
+        local want = (g and g.showSelfHealPrediction) and true or false
+
+        local fr = _G.MSUF_SelfHealPredUnitFrame
+        if not fr and not want then
+            return
+        end
+        if not fr then
+            fr = F.CreateFrame("Frame")
+            fr:Hide()
+            fr._msufReg = false
+            fr:SetScript("OnEvent", function(self, event, unit)
+                local isSecret = _G.issecretvalue
+                if isSecret and isSecret(unit) then return end
+                if unit ~= "player" then return end
+                local gg = (MSUF_DB and MSUF_DB.general) or nil
+                if not (gg and gg.showSelfHealPrediction) then return end
+                local uf = UnitFrames and UnitFrames.player
+                if not uf or (uf.IsShown and not uf:IsShown()) then return end
+                local req = ns and ns.UF and ns.UF.RequestUpdate
+                if req then
+                    req(uf, true, false, "UNIT_HEAL_PREDICTION")
+                end
+            end)
+            _G.MSUF_SelfHealPredUnitFrame = fr
+        end
+
+        if want then
+            if not fr._msufReg then
+                fr:RegisterUnitEvent("UNIT_HEAL_PREDICTION", "player")
+                fr._msufReg = true
             end
-        end)
+        else
+            if fr._msufReg then
+                fr:UnregisterEvent("UNIT_HEAL_PREDICTION")
+                fr._msufReg = false
+            end
+        end
     end
-
-
-
-
+end
+if type(_G.MSUF_RefreshSelfHealPredUnitEvent) == "function" then
+    _G.MSUF_RefreshSelfHealPredUnitEvent()
+end
 
     if type(_G.MSUF_RangeFade_InitPostLogin) == "function" then
         _G.MSUF_RangeFade_InitPostLogin()

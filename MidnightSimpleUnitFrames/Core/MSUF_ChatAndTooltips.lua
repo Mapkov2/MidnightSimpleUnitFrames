@@ -48,15 +48,30 @@ local function MSUF_PrintHelp()
 -- Never boolean-test/compare them directly and never call string methods via ':'.
 local NotSecretValue = _G.NotSecretValue
 local function MSUF__Chat_IsSafeString(v)
-    if type(v) ~= "string" then  return false end
+    -- Secret-safe: never call string methods on secret strings (Midnight 12.0).
+    if type(v) ~= "string" then
+        return false
+    end
+
+    local isv = _G.issecretvalue
+        or (C_Secrets and type(C_Secrets.IsSecret) == "function" and C_Secrets.IsSecret)
+        or nil
+
+    if isv and isv(v) then
+        return false
+    end
+
+    local NotSecretValue = _G.NotSecretValue
     if NotSecretValue then
         return NotSecretValue(v)
     end
-    -- If NotSecretValue isn't available, avoid touching chat payloads in combat on Midnight/Beta.
+
+    -- If we cannot detect secret values, be conservative in combat.
     if InCombatLockdown and InCombatLockdown() then
-         return false
+        return false
     end
-     return true
+
+    return true
 end
 local function MSUF__Chat_IsFromSelf(author, ...)
     -- Prefer GUID-based self-check to avoid comparing author strings.

@@ -96,8 +96,14 @@ local UnitFrames = _G.MSUF_UnitFrames
 -- We define them here only if they are not already provided by the core (safety / load-order robustness).
 
 if not _G.MSUF_IsCastbarEnabledForUnit then
+    -- PERF FIX #4: After DB is confirmed loaded (once), skip EnsureDB() on subsequent calls.
+    -- This function is called on EVERY spellcast event from the driver.
+    local _castbarEnabledDBReady = false
     function _G.MSUF_IsCastbarEnabledForUnit(unit)
-        EnsureDB()
+        if not _castbarEnabledDBReady then
+            EnsureDB()
+            if MSUF_DB then _castbarEnabledDBReady = true end
+        end
         local g = (MSUF_DB and MSUF_DB.general) or {}
 
         if unit == "player" then
@@ -113,11 +119,15 @@ if not _G.MSUF_IsCastbarEnabledForUnit then
 end
 
 if not _G.MSUF_IsCastTimeEnabled then
+    local _castTimeDBReady = false
     function _G.MSUF_IsCastTimeEnabled(frame)
         if not frame or not frame.unit then
             return true
         end
-        EnsureDB()
+        if not _castTimeDBReady then
+            EnsureDB()
+            if MSUF_DB then _castTimeDBReady = true end
+        end
         local g = MSUF_DB and MSUF_DB.general
         if not g then
             return true
@@ -139,9 +149,11 @@ end
 -- Empower stage blink helpers (used by empowered castbar stage tick flash).
 -- Important: must exist even if the CastbarManager already exists (load-order / merge safety).
 if not _G.MSUF_IsEmpowerStageBlinkEnabled then
+    local _empowerBlinkDBReady = false
     function _G.MSUF_IsEmpowerStageBlinkEnabled()
-        if type(EnsureDB) == "function" then
-            EnsureDB()
+        if not _empowerBlinkDBReady then
+            if type(EnsureDB) == "function" then EnsureDB() end
+            if MSUF_DB then _empowerBlinkDBReady = true end
         end
         local g = MSUF_DB and MSUF_DB.general
         -- default ON (unless explicitly disabled)
@@ -150,9 +162,11 @@ if not _G.MSUF_IsEmpowerStageBlinkEnabled then
 end
 
 if not _G.MSUF_GetEmpowerStageBlinkTime then
+    local _empowerBlinkTimeDBReady = false
     function _G.MSUF_GetEmpowerStageBlinkTime()
-        if type(EnsureDB) == "function" then
-            EnsureDB()
+        if not _empowerBlinkTimeDBReady then
+            if type(EnsureDB) == "function" then EnsureDB() end
+            if MSUF_DB then _empowerBlinkTimeDBReady = true end
         end
         local g = (MSUF_DB and MSUF_DB.general) or {}
         local v = tonumber(g.empowerStageBlinkTime)
@@ -1152,7 +1166,7 @@ end
 -- Secret-safe: uses only UnitSpellHaste("player") + StatusBar width. No duration math, no combat log, no secret comparisons.
 -------------------------------------------------------------------------------
 
--- Master toggle (Options → Castbars → Behavior → "Show channeled cast tick lines")
+-- Master toggle (Options â†’ Castbars â†’ Behavior â†’ "Show channeled cast tick lines")
 -- Default ON (nil treated as true). Stored in MSUF_DB.general.castbarShowChannelTicks.
 local function MSUF_IsChannelTickLinesEnabled()
     local g = (MSUF_DB and MSUF_DB.general) or nil
@@ -1808,11 +1822,11 @@ function MSUF_InitSafePlayerCastbar()
             local tick = frame.empowerStageTicks[i]
             if not tick then
                 tick = statusBar:CreateTexture(nil, "OVERLAY")
-                tick:SetColorTexture(1, 1, 1, 0.8) -- dünne helle Linie
+                tick:SetColorTexture(1, 1, 1, 0.8) -- dÃ¼nne helle Linie
                 frame.empowerStageTicks[i] = tick
             end
 
-            tick:SetSize(3, barHeight)  -- 2 px breit, volle Höhe
+            tick:SetSize(3, barHeight)  -- 2 px breit, volle HÃ¶he
             tick:Hide()                 -- Standard: versteckt, nur bei Empower sichtbar
         end
 
@@ -4122,6 +4136,14 @@ do
 
         local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
 
+        -- PERF FIX #1 integration: Process tick-driven stop-confirm (replaces C_Timer cascade).
+        -- Must run before GCD/empower/duration checks so a confirmed stop hides the bar immediately.
+        if frame._msufStopPending and type(_G.MSUF_Driver_ProcessStopConfirm) == "function" then
+            if _G.MSUF_Driver_ProcessStopConfirm(frame, now) then
+                return  -- stop-confirm consumed this tick
+            end
+        end
+
         -- GCD bar virtual cast (instant casts): driven by MSUF_CastbarGCD + CastbarManager tick.
         if frame.MSUF_gcdActive then
             if type(_G.MSUF_IsGCDBarEnabled) == "function" and not _G.MSUF_IsGCDBarEnabled() then
@@ -4282,54 +4304,13 @@ do
 
             return
         end
-        do
-            local nxt = frame._msufHardStopNext
-            if (not nxt) or (now >= nxt) then
-                frame._msufHardStopNext = now + 0.15
-
-                local u = frame.unit
-                if u and u ~= "" then
-                    if frame.MSUF_isChanneled then
-                        if UnitChannelInfo(u) then
-                            frame._msufHardStopNoChannelSince = nil
-                            frame._msufHardStopChanThresh = nil
-                        else
-                            local t0 = frame._msufHardStopNoChannelSince
-                            if not t0 then
-                                frame._msufHardStopNoChannelSince = now
-                                -- Channel refresh gaps can be as large as SpellQueueWindow; keep the hard-stop threshold above that.
-                                local qms = 0
-                                if GetCVar then qms = tonumber(GetCVar("SpellQueueWindow") or "0") or 0 end
-                                if qms < 0 then qms = 0 end
-                                local thresh = 0.45
-                                local q = (qms / 1000) + 0.10
-                                if q > thresh then thresh = q end
-                                if thresh > 0.80 then thresh = 0.80 end
-                                frame._msufHardStopChanThresh = thresh
-                            else
-                                local thresh = frame._msufHardStopChanThresh or 0.45
-                                if (now - t0) >= thresh then
-                                    if frame.SetSucceeded then frame:SetSucceeded() else frame:Hide() end
-                                    return
-                                end
-                            end
-                        end
-                    else
-                        if UnitCastingInfo(u) or UnitChannelInfo(u) then
-                            frame._msufHardStopNoCastSince = nil
-                        else
-                            local t0 = frame._msufHardStopNoCastSince
-                            if not t0 then
-                                frame._msufHardStopNoCastSince = now
-                            elseif (now - t0) >= 0.25 then
-                                if frame.SetSucceeded then frame:SetSucceeded() else frame:Hide() end
-                                return
-                            end
-                        end
-                    end
-                end
-            end
-        end
+        -- FULLY EVENT-DRIVEN: Hard-stop polling block removed.
+        -- All cast-end detection is now handled by:
+        --   Player:       Events + stop-confirm state machine + zero-count safety (below)
+        --   Target/Focus: Events + PLAYER_TARGET/FOCUS_CHANGED + stop-confirm + zero-count
+        --   Boss:         Events + UNIT_HEALTH watchdog + one-shot failsafe + zero-count
+        -- The zero-count safety (remNum <= 0.001 for 2 consecutive ticks) catches any
+        -- remaining edge case where the duration object reports completion but no event fired.
 
         -- Duration-object path (modern API): we only maintain time text + safety stop.
 

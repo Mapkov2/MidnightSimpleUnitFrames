@@ -78,9 +78,18 @@ local function Now()
     return GetTime()
 end
 
+-- PERF FIX #5: Cache spellIDs that are known to be hard-casts (castTime > 0) or have no GCD.
+-- Once a spellID is identified as non-instant or no-GCD, it will never change mid-session,
+-- so we can skip 3 API calls (GetSpellInfo + GetSpellBaseCooldown + GetHaste) entirely.
+local _gcdSkipCache = {}  -- spellID -> true for spells that will never produce a GCD bar
+
 -- Returns: durationSec, spellName, spellIcon
 function _G.MSUF_GCD_GetDurationForSpellID(spellID)
     if not spellID then return nil end
+
+    -- Fast path: cached non-GCD spell (hard-cast or no-GCD)
+    if _gcdSkipCache[spellID] then return nil end
+
     if not (C_Spell and C_Spell.GetSpellInfo) then return nil end
 
     local info = C_Spell.GetSpellInfo(spellID)
@@ -89,12 +98,14 @@ function _G.MSUF_GCD_GetDurationForSpellID(spellID)
     -- Only true instant spells.
     local castTime = info.castTime
     if castTime and castTime > 0 then
+        _gcdSkipCache[spellID] = true  -- cache: this spell is a hard-cast
         return nil
     end
 
     -- 2nd return value is base GCD (ms) for that spell. If 0/nil -> no GCD triggered.
     local _, gcdMS = GetSpellBaseCooldown(spellID)
     if not gcdMS or gcdMS <= 0 then
+        _gcdSkipCache[spellID] = true  -- cache: this spell has no GCD
         return nil
     end
 
@@ -262,6 +273,17 @@ local function OnSucceeded(_, _, unitTarget, _, spellID)
         return
     end
 
+    -- PERF FIX #5: Check the cheapest conditions first to exit early.
+    -- SpellID cache check (zero-cost table lookup) before any API calls.
+    if not spellID or (_gcdSkipCache[spellID]) then
+        return
+    end
+
+    -- Real cast/channel always wins — check BEFORE expensive enabled/DB lookups.
+    if UnitCastingInfo(unitTarget) or UnitChannelInfo(unitTarget) then
+        return
+    end
+
     if type(_G.MSUF_IsGCDBarEnabled) == "function" and not _G.MSUF_IsGCDBarEnabled() then
         return
     end
@@ -277,11 +299,6 @@ local function OnSucceeded(_, _, unitTarget, _, spellID)
     if not bar then return end
     if bar.isEmpower then return end
     if bar.MSUF_testMode then return end
-
-    -- Real cast/channel always wins.
-    if UnitCastingInfo(unitTarget) or UnitChannelInfo(unitTarget) then
-        return
-    end
 
     local dur, name, icon = _G.MSUF_GCD_GetDurationForSpellID(spellID)
     if not dur then return end

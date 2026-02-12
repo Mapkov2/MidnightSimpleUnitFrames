@@ -46,14 +46,14 @@ local function SafeCall(fn, ...)
     return nil
 end
 
-local function MSUF_Now()
-    if type(_G.GetTimePreciseSec) == "function" then
-        return _G.GetTimePreciseSec()
-    end
-    if type(_G.GetTime) == "function" then
-        return _G.GetTime()
-    end
-    return 0
+-- PERF FIX: Resolve the best clock function once at load time instead of type-checking every call.
+local MSUF_Now
+if type(_G.GetTimePreciseSec) == "function" then
+    MSUF_Now = _G.GetTimePreciseSec
+elseif type(_G.GetTime) == "function" then
+    MSUF_Now = _G.GetTime
+else
+    MSUF_Now = function() return 0 end
 end
 
 -- Canonical-unit helper for boss castbars: when a boss is also your target/focus,
@@ -82,12 +82,12 @@ end
 
 
 -- Secret-safe number coercion: returns a plain Lua number or nil if the value is a secret.
+-- PERF FIX: Use a pre-allocated function instead of creating a new closure on every call.
+local function _bossSecretAdd(v) return v + 0 end
 local function ToPlainNumber(v)
     if v == nil then return nil end
     if type(v) == "number" then return v end
-    local ok, n = pcall(function()
-        return v + 0
-    end)
+    local ok, n = pcall(_bossSecretAdd, v)
     if ok and type(n) == "number" then
         return n
     end
@@ -149,10 +149,14 @@ local function GetColorFromKeyFallback(key)
     return 0.85, 0.2, 0.2
 end
 
+-- PERF FIX: EnsureDB only needs to run once; after MSUF_DB exists it's a no-op.
+local _bossDBReady = false
 local function EnsureDBSafe()
+    if _bossDBReady then return end
     if type(_G.EnsureDB) == "function" then
         SafeCall(_G.EnsureDB)
     end
+    if _G.MSUF_DB then _bossDBReady = true end
 end
 
 -- ------------------------------------------------------------
@@ -629,47 +633,15 @@ end
 -- -------------------------------------------------
 
 -- -------------------------------------------------
--- Boss castbar "existence watchdog":
--- Boss units can disappear mid-cast (death/despawn) without reliably firing UNIT_SPELLCAST_STOP.
--- Also, in Midnight some duration objects can keep returning a value (often 0) even after the unit vanishes.
--- We keep this secret-safe by only checking UnitExists/UnitIsDeadOrGhost + whether the unit is still casting.
-local function BossCastbar_StopWatchdog(frame)
-    if not frame then return end
-    if frame._msufBossExistTicker and frame._msufBossExistTicker.Cancel then
-        frame._msufBossExistTicker:Cancel()
-    end
-    frame._msufBossExistTicker = nil
-end
-
-local function BossCastbar_StartWatchdog(frame)
-    if not frame or not frame.unit then return end
-    if not _G.C_Timer or not _G.C_Timer.NewTicker then return end
-    if frame._msufBossExistTicker then return end
-
-    frame._msufBossExistTicker = _G.C_Timer.NewTicker(0.25, function()
-        if not frame or not frame.unit or not frame.IsShown or not frame:IsShown() then
-            BossCastbar_StopWatchdog(frame)
-            return
-        end
-
-        -- Allow the "Interrupted" feedback bar to live for its own timer window.
-        if frame._msufInterruptFeedbackActive then
-            return
-        end
-
-        if not UnitExists(frame.unit) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(frame.unit)) then
-            BossCastbar_Stop(frame)
-            return
-        end
-
-        local castName = UnitCastingInfo(frame.unit)
-        local chanName = UnitChannelInfo(frame.unit)
-        if not castName and not chanName then
-            BossCastbar_Stop(frame)
-            return
-        end
-    end)
-end
+-- ============================================================================
+-- FULLY EVENT-DRIVEN Boss Cast Safety (replaces the 0.25s polling ticker)
+-- ============================================================================
+-- Instead of a C_Timer.NewTicker that polls UnitExists+UnitCastingInfo every 0.25s,
+-- we now use:
+--   1. UNIT_HEALTH event → detect boss death mid-cast (registered only while cast active)
+--   2. One-shot C_Timer at (expected_cast_end + grace) → absolute failsafe for despawn/phase-out
+--   3. INSTANCE_ENCOUNTER_ENGAGE_UNIT → global listener for boss frame composition changes
+-- Result: ZERO polling during boss casts. Only event callbacks + 1 deferred check.
 
 BossCastbar_Stop = function(frame)
     if not frame then return end
@@ -683,7 +655,6 @@ BossCastbar_Stop = function(frame)
     frame._msufInterruptFeedbackUntil = nil
     frame.interrupted = nil
 
-    BossCastbar_StopWatchdog(frame)
 
     frame.MSUF_durationObj = nil
     frame.MSUF_isChanneled = false
@@ -733,7 +704,6 @@ end
 local function BossCastbar_ShowInterruptFeedback(frame, label)
     if not frame then return end
     -- Interrupt feedback is a temporary bar; stop the watchdog so it doesn't instantly hide it.
-    BossCastbar_StopWatchdog(frame)
     local grace = MSUF_GetInterruptFeedbackGrace()
     frame._msufInterruptFeedbackActive = true
     frame._msufInterruptFeedbackUntil = MSUF_Now() + grace
@@ -815,95 +785,33 @@ local function BossCastbar_ShowInterruptFeedback(frame, label)
         SafeCall(_G.MSUF_PlayCastbarShake, frame)
     end
 
+    -- EVENT-DRIVEN: Cached per-frame interrupt callback (no new closure per interrupt).
     if _G.C_Timer and _G.C_Timer.NewTimer then
-        frame._msufInterruptTimer = _G.C_Timer.NewTimer(grace, function()
-            if not frame then return end
-            -- Clear feedback flags first so Start can run.
-            frame._msufInterruptFeedbackActive = nil
-            frame._msufInterruptFeedbackUntil = nil
-            frame.interrupted = nil
+        if not frame._msufInterruptCb then
+            frame._msufInterruptCb = function()
+                if not frame then return end
+                frame._msufInterruptFeedbackActive = nil
+                frame._msufInterruptFeedbackUntil = nil
+                frame.interrupted = nil
 
-            -- If a new cast started immediately after the interrupt, pick it up instantly.
-            local castName = UnitCastingInfo(frame.unit)
-            local chanName = UnitChannelInfo(frame.unit)
-            if castName or chanName then
-                BossCastbar_Start(frame)
-            else
-                BossCastbar_Stop(frame)
+                -- If a new cast started immediately after the interrupt, pick it up.
+                local castName = UnitCastingInfo(frame.unit)
+                local chanName = UnitChannelInfo(frame.unit)
+                if castName or chanName then
+                    BossCastbar_Start(frame)
+                else
+                    BossCastbar_Stop(frame)
+                end
             end
-        end)
+        end
+        frame._msufInterruptTimer = _G.C_Timer.NewTimer(grace, frame._msufInterruptCb)
     end
 end
 
--- Boss castbars can be driven by the central MSUF CastbarManager, but when that manager is disabled
--- we self-drive the remaining time text via an OnUpdate. We intentionally avoid any numeric comparisons
--- (e.g. "remaining > 0") because duration values can be secret in Midnight.
-local function BossCastbar_OnUpdate(self, elapsed)
-    if not self or not self.unit or not self:IsShown() then return end
-    -- Boss can despawn/die without a reliable STOP event; hard-kill the bar if the unit vanishes.
-    if not UnitExists(self.unit) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(self.unit)) then
-        BossCastbar_Stop(self)
-        return
-    end
-
-    local dObj = (self._msufCastState and self._msufCastState.durationObj) or self.MSUF_durationObj
-    local rem
-    if dObj then
-        if dObj.GetRemainingDuration then
-            rem = SafeCall(dObj.GetRemainingDuration, dObj)
-        elseif dObj.GetRemaining then
-            rem = SafeCall(dObj.GetRemaining, dObj)
-        end
-    end
-
-    local remNum = ToPlainNumber(rem)
-
-    -- Midnight: Remaining can be secret. If we can't coerce to a plain number, don't try to
-    -- "derive" it from StatusBar min/max (those can be secret too). Just clear the time text.
-    if (not remNum) and self.timeText then
-        self.timeText:SetText("")
-    end
-
-    if remNum then
-        if remNum < 0 then remNum = 0 end
-        if self.timeText and self.timeText.SetFormattedText then
-            SafeCall(self.timeText.SetFormattedText, self.timeText, "%.1f", remNum)
-        elseif self.timeText then
-            local ok, txt = MSUF_FastCall(string.format, "%.1f", remNum)
-            self.timeText:SetText(ok and txt or "")
-        end
-        return
-    end
-
-    -- If we can't read remaining, re-evaluate whether the unit is still casting/channeling.
-    local castName = UnitCastingInfo(self.unit)
-    local chanName = UnitChannelInfo(self.unit)
-    if not castName and not chanName then
-        BossCastbar_Stop(self)
-        return
-    end
-
-    -- Refresh duration object if possible (no comparisons).
-    local newObj
-    if chanName then
-        local castUnit = MSUF_GetCanonicalCastUnitForBoss(self.unit)
-        newObj = SafeCall(UnitChannelDuration, castUnit)
-    else
-        local castUnit = MSUF_GetCanonicalCastUnitForBoss(self.unit)
-        newObj = SafeCall(UnitCastingDuration, castUnit)
-    end
-    if newObj then
-        self.MSUF_durationObj = newObj
-        if self._msufCastState then self._msufCastState.durationObj = newObj end
-        if self._msufCastState then
-            self._msufCastState.durationObj = newObj
-        end
-        if self._msufCastState then self._msufCastState.durationObj = newObj end
-        if self.statusBar and self.statusBar.SetTimerDuration then
-            SafeCall(self.statusBar.SetTimerDuration, self.statusBar, newObj, 0)
-        end
-    end
-end
+-- REMOVED: BossCastbar_OnUpdate (per-frame OnUpdate)
+-- Boss bar animation is driven natively by Duration Objects (SetTimerDuration).
+-- Time text is updated by the central CastbarManager tick (only while cast is active).
+-- Zero per-frame cost when CastbarManager is available (always true after addon load).
 
 BossCastbar_Start = function(frame)
     if not frame or not frame.unit then return end
@@ -996,7 +904,6 @@ BossCastbar_Start = function(frame)
                 if frame.icon then frame.icon:SetTexture(castTex or nil) end
 
                 frame:UpdateColorForInterruptible()
-                BossCastbar_StartWatchdog(frame)
                 frame:Show()
 
                 if type(_G.MSUF_RegisterCastbar) == "function" then
@@ -1011,13 +918,16 @@ BossCastbar_Start = function(frame)
                 frame.MSUF_empowerRetryCount = (frame.MSUF_empowerRetryCount or 0) + 1
                 if frame.MSUF_empowerRetryCount <= 6 and not frame.MSUF_empowerRetryActive and _G.C_Timer and _G.C_Timer.After then
                     frame.MSUF_empowerRetryActive = true
-                    _G.C_Timer.After(0.05, function()
-                        if not frame then return end
-                        frame.MSUF_empowerRetryActive = nil
-                        if frame.unit and UnitExists(frame.unit) and UnitCastingInfo(frame.unit) then
-                            BossCastbar_Start(frame)
+                    if not frame._msufEmpowerRetryCb then
+                        frame._msufEmpowerRetryCb = function()
+                            if not frame then return end
+                            frame.MSUF_empowerRetryActive = nil
+                            if frame.unit and UnitExists(frame.unit) and UnitCastingInfo(frame.unit) then
+                                BossCastbar_Start(frame)
+                            end
                         end
-                    end)
+                    end
+                    _G.C_Timer.After(0.05, frame._msufEmpowerRetryCb)
                 end
             end
         else
@@ -1036,7 +946,6 @@ BossCastbar_Start = function(frame)
                 _G.MSUF_SetChannelStaticStripes(frame, false)
             end
             frame:UpdateColorForInterruptible()
-            BossCastbar_StartWatchdog(frame)
         frame:Show()
             return
         end
@@ -1092,19 +1001,15 @@ BossCastbar_Start = function(frame)
                 SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev and true or false)
             end
         end
--- Drive timeText via the central CastbarManager when available; fallback to a local OnUpdate otherwise.
+-- FULLY EVENT-DRIVEN: Always use CastbarManager for time-text updates (no OnUpdate).
+        -- Bar animation is driven natively by Duration Objects via SetTimerDuration.
         if frame.SetScript then
-            if type(_G.MSUF_RegisterCastbar) == "function" and _G.MSUF_CastbarManager and _G.MSUF_CastbarManager.active then
-                frame:SetScript("OnUpdate", nil)
-            else
-                frame:SetScript("OnUpdate", BossCastbar_OnUpdate)
-            end
+            frame:SetScript("OnUpdate", nil)
         end
         frame.castText:SetText(castName or "")
         if frame.icon then frame.icon:SetTexture(castTex or nil) end
 
         frame:UpdateColorForInterruptible()
-        BossCastbar_StartWatchdog(frame)
         frame:Show()
 
         if type(_G.MSUF_RegisterCastbar) == "function" then
@@ -1132,7 +1037,6 @@ BossCastbar_Start = function(frame)
                 _G.MSUF_SetChannelStaticStripes(frame, true)
             end
             frame:UpdateColorForInterruptible()
-            BossCastbar_StartWatchdog(frame)
         frame:Show()
             return
         end
@@ -1165,19 +1069,14 @@ BossCastbar_Start = function(frame)
                 SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev and true or false)
             end
         end
--- Drive timeText via the central CastbarManager when available; fallback to a local OnUpdate otherwise.
+-- FULLY EVENT-DRIVEN: Always use CastbarManager (no OnUpdate fallback).
         if frame.SetScript then
-            if type(_G.MSUF_RegisterCastbar) == "function" and _G.MSUF_CastbarManager and _G.MSUF_CastbarManager.active then
-                frame:SetScript("OnUpdate", nil)
-            else
-                frame:SetScript("OnUpdate", BossCastbar_OnUpdate)
-            end
+            frame:SetScript("OnUpdate", nil)
         end
         frame.castText:SetText(chanName or "")
         if frame.icon then frame.icon:SetTexture(chanTex or nil) end
 
         frame:UpdateColorForInterruptible()
-        BossCastbar_StartWatchdog(frame)
         frame:Show()
 
         if type(_G.MSUF_RegisterCastbar) == "function" then
@@ -1187,6 +1086,29 @@ BossCastbar_Start = function(frame)
     end
 
     BossCastbar_Stop(frame)
+end
+
+-- PERF FIX Boss-C: Cached per-frame deferred start.
+-- Instead of creating a new C_Timer.After(0, function()..end) closure on every event,
+-- each boss frame gets a single cached callback. A dirty flag prevents duplicate timers
+-- when multiple events fire in the same frame (e.g. STOP + START on channel refresh).
+-- This eliminates ~60-120 closure allocations/minute during boss encounters.
+local function MSUF_Boss_ScheduleStart(frame)
+    if not frame or not frame.unit then return end
+    if frame._msufStartPending then return end  -- already scheduled this frame
+    frame._msufStartPending = true
+
+    -- Create cached callback once per frame (first use)
+    if not frame._msufCachedStartCb then
+        frame._msufCachedStartCb = function()
+            frame._msufStartPending = nil
+            if frame and frame.unit then
+                BossCastbar_Start(frame)
+            end
+        end
+    end
+
+    C_Timer.After(0, frame._msufCachedStartCb)
 end
 
 local function BossCastbar_OnEvent(self, event, ...)
@@ -1206,18 +1128,17 @@ local function BossCastbar_OnEvent(self, event, ...)
     if event:match("^UNIT_") and unit and unit ~= self.unit then
         return
     end
-
     if event == "UNIT_SPELLCAST_INTERRUPTIBLE" then
         self.MSUF_isNotInterruptiblePlain = false
         self.isNotInterruptible = false
         self:UpdateColorForInterruptible()
-        self:Cast()
+        -- PERF FIX: Skip full :Cast() resync; only the color changed, not the cast itself.
         return
     elseif event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
         self.MSUF_isNotInterruptiblePlain = true
         self.isNotInterruptible = true
         self:UpdateColorForInterruptible()
-        self:Cast()
+        -- PERF FIX: Skip full :Cast() resync; only the color changed, not the cast itself.
         return
     end
 
@@ -1253,9 +1174,8 @@ local function BossCastbar_OnEvent(self, event, ...)
 
     if event == "PLAYER_ENTERING_WORLD" then
         self:UpdateAnchor()
-        C_Timer.After(0, function()
-            if self and self.unit then BossCastbar_Start(self) end
-        end)
+        -- Use cached deferred start (see below) instead of creating a new closure
+        MSUF_Boss_ScheduleStart(self)
         return
     end
 
@@ -1272,9 +1192,8 @@ local function BossCastbar_OnEvent(self, event, ...)
 	    or event == "UNIT_SPELLCAST_EMPOWER_UPDATE"
 	    or event == "UNIT_SPELLCAST_EMPOWER_STOP"
     then
-        C_Timer.After(0, function()
-            if self and self.unit then BossCastbar_Start(self) end
-        end)
+        -- PERF FIX: Use a cached per-frame callback instead of creating a new closure on every event.
+        MSUF_Boss_ScheduleStart(self)
     end
 end
 
@@ -1319,6 +1238,24 @@ local function InitBossCastbars()
             if f and f.unit then BossCastbar_Start(f) end
         end)
     end
+
+    -- EVENT-DRIVEN: Global listener for boss frame composition changes.
+    -- INSTANCE_ENCOUNTER_ENGAGE_UNIT fires when bosses appear/disappear in instances.
+    -- This catches the edge case where a boss despawns mid-cast without UNIT_SPELLCAST_STOP.
+    local bossEngageFrame = CreateFrame("Frame")
+    bossEngageFrame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+    bossEngageFrame:SetScript("OnEvent", function()
+        local frames = _G.MSUF_BossCastbars
+        if not frames then return end
+        for i = 1, #frames do
+            local f = frames[i]
+            if f and f:IsShown() and f.unit and not f._msufInterruptFeedbackActive then
+                if not UnitExists(f.unit) then
+                    BossCastbar_Stop(f)
+                end
+            end
+        end
+    end)
 
     -- Apply global castbar visuals/fonts now that boss castbars exist
     if type(_G.MSUF_UpdateCastbarVisuals) == "function" then

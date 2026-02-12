@@ -1,32 +1,157 @@
--- ============================================================================
--- MSUF - deDE
---
--- Translator: fill the table below and open a PR.
--- Keys are the original English UI strings.
---
--- Perf note:
--- This file is an immediate no-op unless the active locale is deDE.
--- ============================================================================
+-- Midnight Simple Unit Frames - German (deDE)
+-- Contributor note: Translate UI strings by adding entries to this file.
 local addonName, ns = ...
-
--- Fast exit for non-deDE clients (use ns.LOCALE if already initialized).
-local loc = (ns and ns.LOCALE) or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-if loc ~= "deDE" then return end
-
-ns = ns or {}
-ns.LOCALE = loc
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+if not ns then ns = {} end
+if not ns.L then ns.L = {} end
+if not GetLocale or GetLocale() ~= "deDE" then return end
 local L = ns.L
-if not getmetatable(L) then
-    setmetatable(L, { __index = function(t, k) return k end })
-end
-if _G then _G.MSUF_L = L end
 
--- Add / edit translations below.
-local T = {
-    -- ["Open MSUF Menu"] = "...",
-}
-
-for k, v in pairs(T) do
-    L[k] = v
-end
+L["Absorb bar anchoring"] = "Absorptionsbalken-Verankerung"
+L["Absorb bar texture (SharedMedia)"] = "Textur des Absorptionsbalkens (SharedMedia)"
+L["Absorb Display"] = "Absorptionsanzeige"
+L["Absorb display"] = "Absorptionsanzeige"
+L["Advanced"] = "Erweitert"
+L["Alpha sliders affect"] = "Alpha-Regler wirken auf"
+L["Anchor pet to"] = "Begleiter verankern an"
+L["Auras 2.0"] = "Auren 2.0"
+L["Auras are handled by the dedicated |cffffd200Auras 2.0|r menu.\n\nThis tab is now only a shortcut."] = "Auren werden über das spezielle |cffffd200Auras 2.0|r-Menü verwaltet.\n\nDieser Tab ist nur noch eine Verknüpfung."
+L["Auras are handled by the dedicated |cffffd200Auras 2.0|r menu.\\n\\nThis tab is now only a shortcut."] = "Auren werden über das spezielle |cffffd200Auras 2.0|r-Menü verwaltet.\\n\\nDieser Tab ist nur noch eine Verknüpfung."
+L["Auto-switch profile by specialization"] = "Profil automatisch nach Spezialisierung wechseln"
+L["Bar appearance"] = "Balken-Design"
+L["Bar background texture"] = "Hintergrundtextur des Balkens"
+L["Bar texture (SharedMedia)"] = "Balkentextur (SharedMedia)"
+L["Behavior"] = "Verhalten"
+L["Block spacing"] = "Block-Abstand"
+L["Border & Text Options"] = "Rahmen- & Textoptionen"
+L["Border thickness"] = "Rahmendicke"
+L["Cancel"] = "Abbrechen"
+L["Castbar"] = "Zauberleiste"
+L["Castbar background texture"] = "Hintergrundtextur der Zauberleiste"
+L["Castbar fill direction"] = "Füllrichtung der Zauberleiste"
+L["Castbar texture (SharedMedia)"] = "Textur der Zauberleiste (SharedMedia)"
+L["Click a MSUF unitframe (Player/Target/Focus/ToT/Pet/Boss) to choose which unit these spacer settings apply to."] = "Klicke ein MSUF-Unitframe (Player/Target/Focus/ToT/Pet/Boss), um auszuwählen, auf welche Einheit diese Abstandseinstellungen angewendet werden."
+L["Controls how far Buff and Debuff blocks are pushed away from the unitframe when using split anchors."] = "Steuert, wie weit Buff- und Debuff-Blöcke bei geteilten Ankern vom Unitframe weggeschoben werden."
+L["Copy"] = "Kopieren"
+L["Copy to"] = "Kopieren nach"
+L["Could not open the Auras 2.0 menu.\nPlease make sure MSUF options are registered and try again."] = "Konnte das Auren-2.0-Menü nicht öffnen.\nBitte stelle sicher, dass die MSUF-Optionen registriert sind, und versuche es erneut."
+L["Could not open the Auras 2.0 menu.\\nPlease make sure MSUF options are registered and try again."] = "Konnte das Auren-2.0-Menü nicht öffnen.\\nBitte stelle sicher, dass die MSUF-Optionen registriert sind, und versuche es erneut."
+L["Ctrl+V to paste"] = "Strg+V zum Einfügen"
+L["Ctrl+V to paste (Legacy Import)"] = "Strg+V zum Einfügen (Legacy-Import)"
+L["Current profile: "] = "Aktuelles Profil: "
+L["Current: ?"] = "Aktuell: ?"
+L["Debuff types"] = "Debuff-Typen"
+L["Disabling may require /reload to fully remove existing styling."] = "Das Deaktivieren kann /reload erfordern, um vorhandenes Styling vollständig zu entfernen."
+L["Discord:"] = "Discord:"
+L["Display"] = "Anzeige"
+L["Done"] = "Fertig"
+L["Edit filters:"] = "Filter bearbeiten:"
+L["Edit Mode"] = "Bearbeitungsmodus"
+L["Empowered casts"] = "Ermächtigte Zauber"
+L["Enable MSUF Style"] = "MSUF-Stil aktivieren"
+L["Existing profiles"] = "Vorhandene Profile"
+L["Exit MSUF Edit Mode"] = "MSUF-Bearbeitungsmodus verlassen"
+L["Export"] = "Exportieren"
+L["Focus Kick"] = "Fokus-Kick"
+L["Focus Kick Icon"] = "Fokus-Kick-Symbol"
+L["Gradient Options"] = "Verlauf-Optionen"
+L["Health (HP)"] = "Gesundheit (HP)"
+L["Hidden. Click Show to reveal slash commands + power tools."] = "Versteckt. Klicke „Anzeigen“, um Slash-Befehle + Power-Tools einzublenden."
+L["Hide"] = "Ausblenden"
+L["Hide Blizzard PlayerFrame (Turn off for other addon compatibility)"] = "Blizzard-Spielerframe ausblenden (für Addon-Kompatibilität deaktivieren)"
+L["HP Spacer on/off"] = "HP-Abstand ein/aus"
+L["Import"] = "Importieren"
+L["Include"] = "Einschließen"
+L["Indicator"] = "Indikator"
+L["Inline Text"] = "Inline-Text"
+L["Install \"SharedMedia\" (LibSharedMedia-3.0) to unlock more bar textures. Without it, you can still pick Blizzard built-in textures."] = "Installiere „SharedMedia“ (LibSharedMedia-3.0), um mehr Balkentexturen freizuschalten. Ohne das Addon kannst du weiterhin Blizzard-Texturen wählen."
+L["Install the addon 'SharedMedia' (LibSharedMedia-3.0) to select castbar textures. Without it, the default UI castbar texture is used."] = "Installiere das Addon „SharedMedia“ (LibSharedMedia-3.0), um Zauberleisten-Texturen auszuwählen. Ohne es wird die Standard-UI-Textur verwendet."
+L["Keep end: shows the last letters (clips the beginning)."] = "Ende behalten: zeigt die letzten Buchstaben (Anfang wird abgeschnitten)."
+L["Keep start: shows the first letters (clips the end)."] = "Anfang behalten: zeigt die ersten Buchstaben (Ende wird abgeschnitten)."
+L["Keep text + portrait visible"] = "Text + Porträt sichtbar lassen"
+L["Layout"] = "Layout"
+L["Left-click: set this frame override"] = "Linksklick: Override für dieses Frame setzen"
+L["Legacy clean mode uses plain FontString width clipping."] = "Legacy-Clean-Modus nutzt schlichtes FontString-Breiten-Clipping."
+L["Legacy Import"] = "Legacy-Import"
+L["Link"] = "Link"
+L["Main Menu"] = "Hauptmenü"
+L["Max name length"] = "Maximale Namenslänge"
+L["Midnight Simple Unit Frames"] = "Midnight Simple Unit Frames"
+L["Midnight Simple Unit Frames (Beta Version)"] = "Midnight Simple Unit Frames (Beta-Version)"
+L["Modules"] = "Module"
+L["MSUF Edit Mode"] = "MSUF-Bearbeitungsmodus"
+L["MSUF is configured via the in-game MSUF menu.\n\nUse the button below (or /msuf) to open it."] = "MSUF wird über das Ingame-MSUF-Menü konfiguriert.\n\nNutze den Button unten (oder /msuf), um es zu öffnen."
+L["MSUF is configured via the in-game MSUF menu.\\n\\nUse the button below (or /msuf) to open it."] = "MSUF wird über das Ingame-MSUF-Menü konfiguriert.\\n\\nNutze den Button unten (oder /msuf), um es zu öffnen."
+L["MSUF Menu"] = "MSUF-Menü"
+L["MSUF Options"] = "MSUF-Optionen"
+L["MSUF: Fonts builder missing CreateLabeledSlider (Core export)."] = "MSUF: Fonts-Builder fehlt CreateLabeledSlider (Core-Export)."
+L["MSUF: Fonts module missing (MSUF_Options_Fonts.lua)."] = "MSUF: Fonts-Modul fehlt (MSUF_Options_Fonts.lua)."
+L["MSUF: Misc module missing (MSUF_Options_Misc.lua)."] = "MSUF: Misc-Modul fehlt (MSUF_Options_Misc.lua)."
+L["Name Shortening"] = "Namenskürzung"
+L["Name shortening"] = "Namenskürzung"
+L["Navigation"] = "Navigation"
+L["New"] = "Neu"
+L["Off"] = "Aus"
+L["OFF: Keeps PlayerFrame alive as a hidden parent."] = "AUS: Lässt den PlayerFrame als versteckten Parent bestehen."
+L["On"] = "An"
+L["ON: Fully hides PlayerFrame (may break some resource bar addons)."] = "AN: Blendet den PlayerFrame vollständig aus (kann manche Ressourcenleisten-Addons brechen)."
+L["Open Auras 2.0"] = "Auren 2.0 öffnen"
+L["Open MSUF Menu"] = "MSUF-Menü öffnen"
+L["Optional MSUF modules and UI styling (MSUF only)."] = "Optionale MSUF-Module und UI-Styling (nur MSUF)."
+L["Outline thickness"] = "Konturdicke"
+L["Overrides"] = "Overrides"
+L["Overwrites your current active profile settings."] = "Überschreibt die Einstellungen deines aktuell aktiven Profils."
+L["Power"] = "Energie"
+L["Power bar height"] = "Höhe der Powerbar"
+L["Power Bar Settings"] = "Energie-/Powerbar-Einstellungen"
+L["Power Spacer on/off"] = "Power-Abstand ein/aus"
+L["Power text mode"] = "Power-Textmodus"
+L["Press Ctrl+C to copy:"] = "Strg+C zum Kopieren drücken:"
+L["Private Auras"] = "Private Auren"
+L["Profile export / import"] = "Profil exportieren / importieren"
+L["Profile: "] = "Profil: "
+L["Profiles"] = "Profile"
+L["Profiles are global. Each character selects one active profile. Create a new profile on the left or select an existing one on the right."] = "Profile sind global. Jeder Charakter wählt ein aktives Profil. Erstelle links ein neues Profil oder wähle rechts ein vorhandenes aus."
+L["Quick access"] = "Schnellzugriff"
+L["Quick tools & UI scale (same content as /msuf options)."] = "Schnelltools & UI-Skalierung (gleicher Inhalt wie /msuf options)."
+L["R"] = "R"
+L["Requires a UI reload."] = "Erfordert ein UI-Reload."
+L["Requires Layout: Separate rows."] = "Erfordert Layout: Separate Reihen."
+L["Reserved space"] = "Reservierter Platz"
+L["Reserved space (left)"] = "Reservierter Platz (links)"
+L["Reserved space (unused)"] = "Reservierter Platz (ungenutzt)"
+L["Reserved space protects the clipped edge (avoids overlaps)."] = "Reservierter Platz schützt die abgeschnittene Kante (verhindert Überlappungen)."
+L["Reset"] = "Zurücksetzen"
+L["Reset overrides"] = "Overrides zurücksetzen"
+L["Resets current indicator"] = "Setzt aktuellen Indikator zurück"
+L["Resets X/Y, Anchor and Size back to defaults."] = "Setzt X/Y, Anker und Größe auf Standardwerte zurück."
+L["Right-click: reset to global setting"] = "Rechtsklick: auf globale Einstellung zurücksetzen"
+L["Rounded unitframes"] = "Abgerundete Unitframes"
+L["Selected: "] = "Ausgewählt: "
+L["Selected: Player"] = "Ausgewählt: Spieler"
+L["Show"] = "Anzeigen"
+L["Shows enabled status icons even if the real state is not active."] = "Zeigt aktivierte Statussymbole auch dann, wenn der reale Zustand nicht aktiv ist."
+L["Snap to grid"] = "Am Raster ausrichten"
+L["Stack Anchor"] = "Stapel-Anker"
+L["Status icon"] = "Statussymbol"
+L["Status icons"] = "Statussymbole"
+L["Status icons test mode"] = "Statussymbole-Testmodus"
+L["Style"] = "Stil"
+L["Support the MSUF Development:"] = "Unterstütze die MSUF-Entwicklung:"
+L["Sync both"] = "Beide synchronisieren"
+L["Text Separators"] = "Text-Trenner"
+L["Text Spacers"] = "Text-Abstände"
+L["Textmode HP / Power"] = "Textmodus HP / Power"
+L["Texture and Empowered Cast"] = "Textur und Ermächtigte Zauber"
+L["Thank you for using MSUF."] = "Danke, dass du MSUF nutzt."
+L["Timer colors"] = "Timer-Farben"
+L["Tip:"] = "Tipp:"
+L["Tip: /msuf opens the menu."] = "Tipp: /msuf öffnet das Menü."
+L["Tip: Hold SHIFT (5) / CTRL (10) / ALT (grid step) for bigger steps."] = "Tipp: Halte SHIFT (5) / STRG (10) / ALT (Raster-Schritt) für größere Schritte."
+L["Toggle MSUF Edit Mode (only affects Midnight Simple Unit Frames)."] = "MSUF-Bearbeitungsmodus umschalten (betrifft nur Midnight Simple Unit Frames)."
+L["Truncation style"] = "Kürzungsstil"
+L["Turns off Override shared filters and caps for all units and reverts them to Shared."] = "Schaltet Override für gemeinsame Filter und Caps für alle Einheiten aus und setzt sie auf „Shared“ zurück."
+L["Units"] = "Einheiten"
+L["Useful for positioning/offset testing."] = "Nützlich zum Testen von Position/Offsets."
+L["What to export?"] = "Was exportieren?"
+L["Works only when the corresponding text mode is set to 'Full value + %' (or '% + Full value')."] = "Funktioniert nur, wenn der entsprechende Textmodus auf 'Voller Wert + %' (oder '% + voller Wert') gesetzt ist."
+L["Wrap rows"] = "Zeilen umbrechen"
