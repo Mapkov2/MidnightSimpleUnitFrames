@@ -2,6 +2,20 @@ local addonName, addonNS = ...
 local ns = (_G and _G.MSUF_NS) or addonNS or {}
 if _G then _G.MSUF_NS = ns end
 
+-- ---------------------------------------------------------------------------
+-- Localization helper (keys are English UI strings; fallback = key)
+-- ---------------------------------------------------------------------------
+ns.L = ns.L or (_G and _G.MSUF_L) or {}
+local L = ns.L
+if not getmetatable(L) then
+    setmetatable(L, { __index = function(t, k) return k end })
+end
+local isEn = (ns and ns.LOCALE) == "enUS"
+local function TR(v)
+    if type(v) ~= "string" then return v end
+    if isEn then return v end
+    return L[v] or v
+end
 -- Ensure the Castbars LoD addon is loaded before calling castbar functions.
 local function MSUF_EnsureCastbars()
     if type(_G.MSUF_EnsureAddonLoaded) == "function" then
@@ -1005,7 +1019,7 @@ local function MSUF_ShowStepperTipOnce(stepper)
         f:SetBackdropBorderColor(1, 1, 1, 0.12)
         local t = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         t:SetPoint("CENTER", f, "CENTER", 0, 0)
-        t:SetText("Tip: Hold SHIFT (5) / CTRL (10) / ALT (grid step) for bigger steps.")
+        t:SetText(TR("Tip: Hold SHIFT (5) / CTRL (10) / ALT (grid step) for bigger steps."))
         f.text = t
         f:Hide()
         parent._msufStepperTipFrame = f
@@ -1257,7 +1271,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local alphaSyncCB = CreateFrame("CheckButton", "MSUF_UF_AlphaSyncCB", sizeBox, "UICheckButtonTemplate")
     alphaSyncCB:SetPoint("TOPRIGHT", sizeBox, "TOPRIGHT", -12, -6)
     if alphaSyncCB.Text then
-        alphaSyncCB.Text:SetText("Sync both")
+        alphaSyncCB.Text:SetText(TR("Sync both"))
         alphaSyncCB.Text:ClearAllPoints()
         alphaSyncCB.Text:SetPoint("RIGHT", alphaSyncCB, "LEFT", -4, 0)
         alphaSyncCB.Text:SetJustifyH("RIGHT")
@@ -1267,12 +1281,12 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local alphaExcludeCB = CreateFrame("CheckButton", "MSUF_UF_AlphaExcludeTextPortraitCB", sizeBox, "UICheckButtonTemplate")
     alphaExcludeCB:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", 12, -25)
     if alphaExcludeCB.Text then
-        alphaExcludeCB.Text:SetText("Keep text + portrait visible")
+        alphaExcludeCB.Text:SetText(TR("Keep text + portrait visible"))
     end
     panel.playerAlphaExcludeTextPortraitCB = alphaExcludeCB
     local alphaLayerLabel = sizeBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     alphaLayerLabel:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", 12, -58)
-    alphaLayerLabel:SetText("Alpha sliders affect")
+    alphaLayerLabel:SetText(TR("Alpha sliders affect"))
     local alphaLayerDD = CreateFrame("Frame", "MSUF_UF_AlphaLayerDropDown", sizeBox, "UIDropDownMenuTemplate")
     alphaLayerDD:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", -6, -70)
     alphaLayerDD:Show()
@@ -1424,7 +1438,7 @@ end
 		if not panel.playerLeaderIndicatorHeader then
 			panel.playerLeaderIndicatorHeader = textGroup:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 		end
-		panel.playerLeaderIndicatorHeader:SetText("Indicator")
+		panel.playerLeaderIndicatorHeader:SetText(TR("Indicator"))
 		panel.playerLeaderIndicatorHeader:Hide()
 		-- Shared layout constants for the indicator template
 		local IND_COL_X          = 175
@@ -1448,7 +1462,7 @@ end
 			panel.petAnchorToLabel = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 			panel.petAnchorToLabel:SetJustifyH("LEFT")
 		end
-		panel.petAnchorToLabel:SetText("Anchor pet to")
+		panel.petAnchorToLabel:SetText(TR("Anchor pet to"))
 		panel.petAnchorToLabel:Hide()
 		if not panel.petAnchorToDD then
 			local dd = CreateFrame("Frame", "MSUF_PetAnchorToDropDown", textGroup, "UIDropDownMenuTemplate")
@@ -1471,7 +1485,7 @@ end
 		local STATUS_ROW_STEP      = -64
 		panel.statusIconsHeader = panel.statusIconsHeader or (statusBox and statusBox:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
 		if panel.statusIconsHeader then
-			panel.statusIconsHeader:SetText("Status icons")
+			panel.statusIconsHeader:SetText(TR("Status icons"))
 			panel.statusIconsHeader:Hide()
 		end
 		panel.statusCombatIconCB = panel.statusCombatIconCB or CreateCheck(statusBox or textGroup, "MSUF_StatusCombatIconCB", "Combat", 12, STATUS_BASE_TOGGLE_Y + (0 * STATUS_ROW_STEP))
@@ -1498,7 +1512,7 @@ end
 			else
 				panel[field] = CreateFrame("Button", nil, parentOverride or textGroup, "UIPanelButtonTemplate")
 				panel[field]:SetSize(20, 20)
-				panel[field]:SetText("R")
+				panel[field]:SetText(TR("R"))
 				local fs = panel[field].GetFontString and panel[field]:GetFontString()
 				if fs then
 					fs:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
@@ -1508,7 +1522,7 @@ end
 				panel[field]:SetScript("OnEnter", function(self)
 					if not GameTooltip then  return end
 					GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-					GameTooltip:SetText("Resets current indicator", 1, 1, 1)
+					GameTooltip:SetText(TR("Resets current indicator"), 1, 1, 1)
 					GameTooltip:AddLine("Resets X/Y, Anchor and Size back to defaults.", 0.85, 0.85, 0.85, true)
 					GameTooltip:Show()
 				 end)
@@ -1812,7 +1826,7 @@ end
         local hintKey   = prefix .. "CopyToHint"
         if not panel[labelKey] then
             panel[labelKey] = (parentOverride or textGroup):CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            panel[labelKey]:SetText("Copy to")
+            panel[labelKey]:SetText(TR("Copy to"))
             panel[labelKey]:Hide()
         end
         if not panel[dropKey] then
@@ -1868,7 +1882,7 @@ end
         if not panel[btnKey] then
             panel[btnKey] = CreateFrame("Button", nil, parentOverride or textGroup, "UIPanelButtonTemplate")
             panel[btnKey]:SetSize(64, 20)
-            panel[btnKey]:SetText("Copy")
+            panel[btnKey]:SetText(TR("Copy"))
             panel[btnKey]:Hide()
         end
         if not panel[hintKey] then
@@ -1979,7 +1993,7 @@ end
         panel.petEditModeButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
         panel.petEditModeButton:SetSize(220, 28)
         panel.petEditModeButton:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 12, 20)
-        panel.petEditModeButton:SetText("Edit Mode")
+        panel.petEditModeButton:SetText(TR("Edit Mode"))
         panel.petEditModeButton:SetScript("OnClick", function()
             local fn = _G and _G.MSUF_SetMSUFEditModeDirect
             if type(fn) == "function" then
@@ -2424,13 +2438,13 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     if panel.playerTextLayoutGroup and panel.playerTextLayoutGroup._msufTitleText then
         local t = panel.playerTextLayoutGroup._msufTitleText
         if isFramesTab and isPetKey then
-            t:SetText("")
+            t:SetText(TR(""))
             t:Hide()
         elseif isToTKey and isFramesTab then
-            t:SetText("Inline Text")
+            t:SetText(TR("Inline Text"))
             t:Show()
         else
-            t:SetText("Castbar")
+            t:SetText(TR("Castbar"))
             t:Show()
         end
     end
@@ -3290,7 +3304,7 @@ local function MSUF_BindStatusIconToggle(cb, field, allowedKey)
     cb:HookScript("OnEnter", function(self)
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Status icon")
+            GameTooltip:SetText(TR("Status icon"))
             GameTooltip:AddLine("Left-click: set this frame override", 1, 1, 1)
             GameTooltip:AddLine("Right-click: reset to global setting", 1, 1, 1)
             GameTooltip:Show()
@@ -3323,7 +3337,7 @@ if panel.statusIconsTestModeCB then
     panel.statusIconsTestModeCB:HookScript("OnEnter", function(self)
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Status icons test mode")
+            GameTooltip:SetText(TR("Status icons test mode"))
             GameTooltip:AddLine("Shows enabled status icons even if the real state is not active.", 1, 1, 1)
             GameTooltip:AddLine("Useful for positioning/offset testing.", 1, 1, 1)
             GameTooltip:Show()
@@ -3472,7 +3486,7 @@ local function _MSUF_SetCastTimeTextVisible(bar, show)
         bar.timeText:Show()
         bar.timeText:SetAlpha(1)
     else
-        bar.timeText:SetText("")
+        bar.timeText:SetText(TR(""))
         bar.timeText:Show()
         bar.timeText:SetAlpha(0)
     end
@@ -3480,8 +3494,8 @@ local function _MSUF_SetCastTimeTextVisible(bar, show)
 local function _MSUF_ClearInterruptFeedback(bar)
     if not bar or not bar.interruptFeedbackEndTime then  return end
     bar.interruptFeedbackEndTime = nil
-    if bar.castText then bar.castText:SetText("") end
-    if bar.timeText then bar.timeText:SetText("") end
+    if bar.castText then bar.castText:SetText(TR("")) end
+    if bar.timeText then bar.timeText:SetText(TR("")) end
     bar:Hide()
  end
 local function _MSUF_ClearInterruptFeedback_Boss()
@@ -3491,8 +3505,8 @@ local function _MSUF_ClearInterruptFeedback_Boss()
         local b = frames[i]
         if b and b.interruptFeedbackEndTime then
             b.interruptFeedbackEndTime = nil
-            if b.castText then b.castText:SetText("") end
-            if b.timeText then b.timeText:SetText("") end
+            if b.castText then b.castText:SetText(TR("")) end
+            if b.timeText then b.timeText:SetText(TR("")) end
             b:Hide()
         end
     end

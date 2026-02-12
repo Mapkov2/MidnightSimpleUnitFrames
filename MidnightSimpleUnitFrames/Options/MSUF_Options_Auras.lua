@@ -3,6 +3,21 @@
 -- This file contains ONLY the Auras 2.0 Settings UI. Runtime logic stays in MidnightSimpleUnitFrames_Auras.lua.
 local addonName, ns = ...
 ns = ns or {}
+
+-- ---------------------------------------------------------------------------
+-- Localization helper (keys are English UI strings; fallback = key)
+-- ---------------------------------------------------------------------------
+ns.L = ns.L or (_G and _G.MSUF_L) or {}
+local L = ns.L
+if not getmetatable(L) then
+    setmetatable(L, { __index = function(t, k) return k end })
+end
+local isEn = (ns and ns.LOCALE) == "enUS"
+local function TR(v)
+    if type(v) ~= "string" then return v end
+    if isEn then return v end
+    return L[v] or v
+end
 -- ------------------------------------------------------------
 -- Single-apply pipeline (Options -> coalesced -> Runtime apply)
 -- ------------------------------------------------------------
@@ -430,8 +445,8 @@ local function MSUF_StyleAuras2CompactSlider(s, opts)
         local n = s:GetName()
         local low = (n and _G[n .. "Low"]) or s.Low
         local high = (n and _G[n .. "High"]) or s.High
-        if low then low:SetText(""); low:Hide() end
-        if high then high:SetText(""); high:Hide() end
+        if low then low:SetText(TR("")); low:Hide() end
+        if high then high:SetText(TR("")); high:Hide() end
     end
     -- Left-align the title (OptionsSliderTemplate defaults to centered).
     if opts.leftTitle then
@@ -532,7 +547,7 @@ local function CreateLayoutDropdown(parent, x, y, getter, setter)
     MSUF_FixUIDropDown(dd, 130)
     local title = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("BOTTOMLEFT", dd, "TOPLEFT", 16, 4)
-    title:SetText("Layout")
+    title:SetText(TR("Layout"))
     local function OnClick(self)
         setter(self.value)
         UIDropDownMenu_SetSelectedValue(dd, self.value)
@@ -826,7 +841,7 @@ local function CreateA2_BuffDebuffAnchorDPads(parent, x, y, getPreset, setPreset
     anchor:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     local header = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     header:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 4)
-    header:SetText("")
+    header:SetText(TR(""))
     local buffPad, debuffPad
     local function SyncAll()
         local enabled = IsSeparateRows()
@@ -856,7 +871,7 @@ local function CreateRowWrapDropdown(parent, x, y, getter, setter)
     MSUF_FixUIDropDown(dd, 130)
     local title = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("BOTTOMLEFT", dd, "TOPLEFT", 16, 4)
-    title:SetText("Wrap rows")
+    title:SetText(TR("Wrap rows"))
     local function OnClick(self)
         setter(self.value)
         UIDropDownMenu_SetSelectedValue(dd, self.value)
@@ -895,7 +910,7 @@ local function CreateStackAnchorDropdown(parent, x, y, getter, setter)
     MSUF_FixUIDropDown(dd, 130)
     local title = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("BOTTOMLEFT", dd, "TOPLEFT", 16, 4)
-    title:SetText("Stack Anchor")
+    title:SetText(TR("Stack Anchor"))
     local function OnClick(self)
         setter(self.value)
         UIDropDownMenu_SetSelectedValue(dd, self.value)
@@ -956,7 +971,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
 	if editBtn.SetFrameLevel and panel.GetFrameLevel then
 		editBtn:SetFrameLevel((panel:GetFrameLevel() or 0) + 50)
 	end
-	editBtn:SetText("MSUF Edit Mode")
+	editBtn:SetText(TR("MSUF Edit Mode"))
 	local function MSUF_Auras2_IsEditModeActive()
 		if type(_G.MSUF_IsMSUFEditModeActive) == "function" then
 			return _G.MSUF_IsMSUFEditModeActive() and true or false
@@ -966,9 +981,9 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
 	end
 	local function RefreshEditBtnText()
 		if MSUF_Auras2_IsEditModeActive() then
-			editBtn:SetText("Exit MSUF Edit Mode")
+			editBtn:SetText(TR("Exit MSUF Edit Mode"))
 		else
-			editBtn:SetText("MSUF Edit Mode")
+			editBtn:SetText(TR("MSUF Edit Mode"))
 		end
 	 end
 	editBtn:SetScript("OnShow", RefreshEditBtnText)
@@ -996,7 +1011,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
 		GameTooltip:SetOwner(self, "ANCHOR_NONE")
         GameTooltip:ClearAllPoints()
         GameTooltip:SetPoint("TOPLEFT", self, "TOPRIGHT", 12, 0)
-		GameTooltip:SetText("MSUF Edit Mode", 1, 1, 1)
+		GameTooltip:SetText(TR("MSUF Edit Mode"), 1, 1, 1)
 		GameTooltip:AddLine("Toggle MSUF Edit Mode (only affects Midnight Simple Unit Frames).", 0.8, 0.8, 0.8, true)
 		GameTooltip:Show()
 	 end)
@@ -1582,7 +1597,7 @@ local function UpdateAdvancedEnabled()
     -- ------------------------------------------------------------
     local h1 = leftTop:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     h1:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 12, -10)
-    h1:SetText("Auras 2.0")
+    h1:SetText(TR("Auras 2.0"))
     -- Master toggles (top cluster)
     CreateBoolCheckboxPath(leftTop, "Enable Auras 2.0", 12, -34, A2_DB, "enabled", nil,
         "Master toggle. When off, no auras are shown for Target/Focus/Boss.")
@@ -1689,7 +1704,7 @@ local function UpdateAdvancedEnabled()
 do
     local editLbl = leftTop:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     editLbl:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 380, -36)
-    editLbl:SetText("Edit filters:")
+    editLbl:SetText(TR("Edit filters:"))
     ddEditFilters = CreateFrame("Frame", "MSUF_Auras2_EditFiltersDropDown", leftTop, "UIDropDownMenuTemplate")
     ddEditFilters:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 452, -42)
     MSUF_FixUIDropDown(ddEditFilters, 160)
@@ -1753,7 +1768,7 @@ do
     local btnResetOverrides = CreateFrame("Button", nil, leftTop, "UIPanelButtonTemplate")
     btnResetOverrides:SetSize(92, 18)
     btnResetOverrides:SetPoint("TOPRIGHT", leftTop, "TOPRIGHT", -24, -70)
-    btnResetOverrides:SetText("Reset")
+    btnResetOverrides:SetText(TR("Reset"))
     -- Status row under checkbox
     local overrideRow = CreateFrame("Frame", nil, leftTop)
     overrideRow:SetPoint("TOPLEFT", cbOverrideCaps, "BOTTOMLEFT", 24, -4)
@@ -1766,7 +1781,7 @@ local overrideWarn = leftTop:CreateFontString(nil, "ARTWORK", "GameFontDisableSm
 overrideWarn:SetPoint("TOPLEFT", overrideRow, "BOTTOMLEFT", 0, -2)
 overrideWarn:SetWidth(340)
 overrideWarn:SetJustifyH("LEFT")
-overrideWarn:SetText("")
+overrideWarn:SetText(TR(""))
 overrideWarn:Hide()
 panel.__msufA2_overrideWarn = overrideWarn
     local function BuildOverrideSummary(active)
@@ -1829,7 +1844,7 @@ panel.__msufA2_overrideWarn = overrideWarn
         GameTooltip:SetOwner(self, "ANCHOR_NONE")
         GameTooltip:ClearAllPoints()
         GameTooltip:SetPoint("TOPLEFT", self, "TOPRIGHT", 12, 0)
-        GameTooltip:SetText("Reset overrides", 1, 1, 1)
+        GameTooltip:SetText(TR("Reset overrides"), 1, 1, 1)
         GameTooltip:AddLine("Turns off Override shared filters and caps for all units and reverts them to Shared.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
      end)
@@ -1867,7 +1882,7 @@ end
     -- Units
     local h2 = leftTop:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     h2:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 12, -92)
-    h2:SetText("Units")
+    h2:SetText(TR("Units"))
     -- Compact unit toggles: use MSUF on/off buttons (no checkbox tick coloring).
     -- Keep this row tight so it doesn't collide with the Display section below.
     CreateBoolToggleButtonPath(leftTop, "Player", 12, -120, 90, 22, A2_DB, "showPlayer")
@@ -1877,7 +1892,7 @@ end
     -- Display (two-column layout)
     local h3 = leftTop:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     h3:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 12, -156)
-    h3:SetText("Display")
+    h3:SetText(TR("Display"))
     local TIP_SHOW_STACK = 'Shows stack/application counts (e.g. "2") on aura icons. Disable to hide stack numbers.'
     local TIP_HIDE_PERMANENT = 'Hides buffs with no duration. Debuffs are never hidden by this option.\n\nNote: Target/Focus APIs may still show permanent buffs during combat due to API limitations.'
     local TIP_ADV_INFO = 'Use "Enable filters" in the Auras 2.0 box as the master switch.\n\nInclude toggles are additive (they never hide your normal auras).\nHighlight toggles only change border colors.\n\nDebuff types: if you select ANY type, debuffs are limited to the selected types.'
@@ -2029,7 +2044,7 @@ end
         GameTooltip:SetOwner(splitSpacingSlider, "ANCHOR_NONE")
         GameTooltip:ClearAllPoints()
         GameTooltip:SetPoint("TOPLEFT", splitSpacingSlider, "TOPRIGHT", 12, 0)
-        GameTooltip:SetText("Block spacing", 1, 1, 1)
+        GameTooltip:SetText(TR("Block spacing"), 1, 1, 1)
         GameTooltip:AddLine("Controls how far Buff and Debuff blocks are pushed away from the unitframe when using split anchors.", 0.8, 0.8, 0.8, true)
         GameTooltip:AddLine("Requires Layout: Separate rows.", 1, 0.82, 0, true)
         GameTooltip:Show()
@@ -2220,10 +2235,10 @@ end
     -- ------------------------------------------------------------
     local rTitle = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     rTitle:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -10)
-    rTitle:SetText("Advanced")
+    rTitle:SetText(TR("Advanced"))
     local incH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     incH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -34)
-    incH:SetText("Include")
+    incH:SetText(TR("Include"))
     do
         local refs = {}
         BuildBoolPathCheckboxes(advBox, {
@@ -2260,7 +2275,7 @@ end
         -- Private Auras live in their own box between "Timer colors" and "Advanced" (see layout above).
         local paH = privateBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         paH:SetPoint("TOPLEFT", privateBox, "TOPLEFT", 12, -10)
-        paH:SetText("Private Auras")
+        paH:SetText(TR("Private Auras"))
         local btnPrivateEnable = CreateBoolToggleButtonPath(
             privateBox,
             "Enabled",
@@ -2392,7 +2407,7 @@ end
         if privateMaxOther  then advGate[#advGate + 1] = privateMaxOther end
         local dtH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         dtH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -270)
-        dtH:SetText("Debuff types")
+        dtH:SetText(TR("Debuff types"))
         BuildBoolPathCheckboxes(advBox, {
             { "Magic", 12, -294, A2_FilterDebuffs, "dispelMagic", nil, nil, "cbMagic" },
             { "Curse", 140, -294, A2_FilterDebuffs, "dispelCurse", nil, nil, "cbCurse" },

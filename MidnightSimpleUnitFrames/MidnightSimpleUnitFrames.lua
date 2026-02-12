@@ -9,6 +9,31 @@ ns.Icons  = ns.Icons  or {}
 ns.Util   = ns.Util   or {}
 ns.Cache  = ns.Cache  or {}
 ns.Compat = ns.Compat or {}
+-- ---------------------------------------------------------------------------
+-- Localization (minimal, translator-friendly)
+-- - ns.L is a key->string map with fallback to the key itself.
+-- - ns.AddLocale(locale, dict) merges translations for the active locale.
+-- NOTE: Full scaffold lives in Locales/MSUF_Localization.lua, but this fallback
+-- keeps MSUF safe even if localization files are missing or load-order changes.
+-- ---------------------------------------------------------------------------
+ns.LOCALE = ns.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
+ns.L = ns.L or (_G and _G.MSUF_L) or {}
+local _L = ns.L
+if not getmetatable(_L) then
+    setmetatable(_L, { __index = function(t, k) return k end })
+end
+if _G then _G.MSUF_L = _L end
+ns.AddLocale = ns.AddLocale or function(locale, dict)
+    if type(dict) ~= "table" then return end
+    local active = ns.LOCALE or "enUS"
+    if locale ~= active then return end
+    for k, v in pairs(dict) do
+        if type(k) == "string" and type(v) == "string" then
+            _L[k] = v
+        end
+    end
+end
+
 -- Patch M: table-driven hide helpers (safe, no string compares)
 ns.Bars._outlineParts = ns.Bars._outlineParts or { "top", "bottom", "left", "right", "tl", "tr", "bl", "br" }
 ns.Util.HideKeys = ns.Util.HideKeys or function(t, keys, extraKey)

@@ -9,6 +9,10 @@
 ## X-Wago-ID: XKq9aoKy
 
 MSUF_Libs.lua
+Locales\MSUF_Localization.lua
+Locales\enUS.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
 MSUF_Util.lua
 MSUF_Defaults.lua
 MSUF_Profiles.lua

@@ -761,7 +761,7 @@ Elements.Portrait = {
         -- as "static" or only update once per unit swap.
         --
         -- Player + Boss: static portraits (only touch when explicitly dirty or settings/layout changed).
-        -- Target/Focus: update portrait texture only once per swap.
+        -- Target/Focus: update portrait texture only once per swap (handled via GUID change in the main UF update path).
         if (unit == "player" or unit == "target" or unit == "focus" or f.isBoss) and (not f._msufPortraitDirty) then
             local mode = conf.portraitMode or "OFF"
             local render = conf.portraitRender

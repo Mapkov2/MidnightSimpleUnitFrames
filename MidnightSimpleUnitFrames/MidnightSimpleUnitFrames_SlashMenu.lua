@@ -13,7 +13,12 @@
 --   - Indentation reflects block structure (if/for/function/repeat).
 -- ============================================================================
 
-local addonName,ns=...local function MSUF_LeftJustifyButtonText(btn,leftPad) leftPad=leftPad or 10 if not btn or not btn.GetFontString then return end
+local addonName,ns=...;ns=ns or {}
+local L=ns.L or (_G and _G.MSUF_L)
+if not L then L={}setmetatable(L,{__index=function(t,k)return k end})ns.L=L end
+local isEn=(ns and ns.LOCALE)=="enUS"
+local function T(v) if type(v)=="string" then if isEn then return v end return L[v] or v end return v end
+local function MSUF_LeftJustifyButtonText(btn,leftPad) leftPad=leftPad or 10 if not btn or not btn.GetFontString then return end
 local fs=btn:GetFontString()if not fs then return end
 if fs.SetJustifyH then fs:SetJustifyH("LEFT")end
 if fs.ClearAllPoints and fs.SetPoint then fs:ClearAllPoints();fs:SetPoint("LEFT",btn,"LEFT",leftPad,0)fs:SetPoint("RIGHT",btn,"RIGHT",-8,0)end
@@ -54,7 +59,7 @@ end
 end
 local function UI_Button(parent,text,w,h,a1,rel,a2,x,y,onClick,template) local b=CreateFrame("Button",nil,parent,template or"UIPanelButtonTemplate")if w and h then b:SetSize(w,h)end
 if a1 then b:SetPoint(a1,rel or parent,a2 or a1,x or 0,y or 0)end
-if text~=nil and b.SetText then b:SetText(text)end
+if text~=nil and b.SetText then b:SetText(T(text))end
 if type(MSUF_SkinButton)=="function"then MSUF_SkinButton(b)end
 if onClick then b:SetScript("OnClick",onClick)end
 return b end
@@ -62,17 +67,17 @@ local function UI_CloseButton(parent,a1,rel,a2,x,y,onClick) local b=CreateFrame(
 if onClick then b:SetScript("OnClick",onClick)end
 return b end
 local function UI_Btn(parent,text,w,h,a1,rel,a2,x,y,onClick,tipTitle,tipBody,skinFn,template) local b=UI_Button(parent,text,w,h,a1,rel,a2,x,y,onClick,template)if skinFn then skinFn(b)end
-if MSUF_AddTooltip and tipTitle then MSUF_AddTooltip(b,tipTitle,tipBody)end
+if MSUF_AddTooltip and tipTitle then MSUF_AddTooltip(b,T(tipTitle),T(tipBody))end
 return b end
 local function UI_Text(parent,font,a1,rel,a2,x,y,txt,skinFn) local fs=parent:CreateFontString(nil,"OVERLAY",font or"GameFontHighlight")if a1 then fs:SetPoint(a1,rel or parent,a2 or a1,x or 0,y or 0)end
-if txt~=nil then fs:SetText(txt)end
+if txt~=nil then fs:SetText(T(txt))end
 if skinFn then skinFn(fs)end
 return fs end
 local function UI_Check(parent,label,a1,rel,a2,x,y,onClick,tipTitle,tipBody,skinFn,template) local cb=CreateFrame("CheckButton",nil,parent,template or"UICheckButtonTemplate")if a1 then cb:SetPoint(a1,rel or parent,a2 or a1,x or 0,y or 0)end
-if cb.Text and cb.Text.SetText then cb.Text:SetText(label or"")end
+if cb.Text and cb.Text.SetText then cb.Text:SetText(T(label or""))end
 if skinFn and cb.Text then skinFn(cb.Text)end
 if onClick then cb:SetScript("OnClick",onClick)end
-if MSUF_AddTooltip and tipTitle then MSUF_AddTooltip(cb,tipTitle,tipBody)end
+if MSUF_AddTooltip and tipTitle then MSUF_AddTooltip(cb,T(tipTitle),T(tipBody))end
 return cb end
 local function MSUF_LayoutColumn(parent,startX,startY,defaultRowH,defaultGap) local L={parent=parent,x=startX or 12,y=startY or-12,rowH=defaultRowH or 20,gap=defaultGap or 6,}function L:Row(h,gap) local x,y=self.x,self.y;self.y=self.y-(h or self.rowH)-(gap or self.gap) return x,y end
 function L:MoveY(dy) self.y=self.y+(dy or 0); return self end

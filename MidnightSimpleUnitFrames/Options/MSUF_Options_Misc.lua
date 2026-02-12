@@ -1,4 +1,20 @@
 local addonName, ns = ...
+
+-- ---------------------------------------------------------------------------
+-- Localization helper (keys are English UI strings; fallback = key)
+-- ---------------------------------------------------------------------------
+ns = ns or {}
+ns.L = ns.L or (_G and _G.MSUF_L) or {}
+local L = ns.L
+if not getmetatable(L) then
+    setmetatable(L, { __index = function(t, k) return k end })
+end
+local isEn = (ns and ns.LOCALE) == "enUS"
+local function TR(v)
+    if type(v) ~= "string" then return v end
+    if isEn then return v end
+    return L[v] or v
+end
 ns = ns or {}
 
 -- Misc Options (spec-driven, single-file)
@@ -583,7 +599,7 @@ end
     local function HardKillTooltip_OnEnter(self)
         if not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Hide Blizzard PlayerFrame (Turn off for other addon compatibility)", 1, 0.9, 0.4)
+        GameTooltip:SetText(TR("Hide Blizzard PlayerFrame (Turn off for other addon compatibility)"), 1, 0.9, 0.4)
         GameTooltip:AddLine("OFF: Keeps PlayerFrame alive as a hidden parent.", 0.95, 0.95, 0.95, true)
         GameTooltip:AddLine("ON: Fully hides PlayerFrame (may break some resource bar addons).", 1, 0.82, 0.2, true)
         GameTooltip:AddLine("Requires a UI reload.", 0.9, 0.9, 0.9, true)

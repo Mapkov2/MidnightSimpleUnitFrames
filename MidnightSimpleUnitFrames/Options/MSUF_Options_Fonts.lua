@@ -4,6 +4,21 @@ local addonName, addonNS = ...
 -- Unify ns across split option modules and Options_Core (some builds use global ns).
 ns = (_G and _G.MSUF_NS) or addonNS or ns or {}
 if _G then _G.MSUF_NS = ns end
+
+-- ---------------------------------------------------------------------------
+-- Localization helper (keys are English UI strings; fallback = key)
+-- ---------------------------------------------------------------------------
+ns.L = ns.L or (_G and _G.MSUF_L) or {}
+local L = ns.L
+if not getmetatable(L) then
+    setmetatable(L, { __index = function(t, k) return k end })
+end
+local isEn = (ns and ns.LOCALE) == "enUS"
+local function TR(v)
+    if type(v) ~= "string" then return v end
+    if isEn then return v end
+    return L[v] or v
+end
 function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     if not panel or not fontGroup then  return end
     -- ---------------------------------------------------------------------
@@ -24,7 +39,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     if type(CreateLabeledSlider) ~= "function" then
         local warn = fontGroup:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         warn:SetPoint("TOPLEFT", fontGroup, "TOPLEFT", 16, -140)
-        warn:SetText("MSUF: Fonts builder missing CreateLabeledSlider (Core export).")
+        warn:SetText(TR("MSUF: Fonts builder missing CreateLabeledSlider (Core export)."))
          return
     end
     if type(MSUF_ExpandDropdownClickArea) ~= "function" then MSUF_ExpandDropdownClickArea = function()   end end
@@ -177,12 +192,12 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             parent[name] = fs
             fs:SetWidth(120)
             fs:SetJustifyH("CENTER")
-            fs:SetText("")
+            fs:SetText(TR(""))
             fs:EnableMouse(true)
             fs:SetScript("OnEnter", function(self)
                 if self.MSUF_FullOverrideList and self.MSUF_FullOverrideList ~= "" then
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText("Overrides", 1, 0.9, 0.4)
+                    GameTooltip:SetText(TR("Overrides"), 1, 0.9, 0.4)
                     GameTooltip:AddLine(self.MSUF_FullOverrideList, 1, 1, 1, true)
                     GameTooltip:Show()
                 end
@@ -382,7 +397,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         resetBtn = CreateFrame("Button", "MSUF_ResetFontOverridesBtn", left, "UIPanelButtonTemplate")
         resetBtn:SetSize(280, 20)
         resetBtn:SetPoint("BOTTOMLEFT", left, "BOTTOMLEFT", 14, 14)
-        resetBtn:SetText("Reset overrides")
+        resetBtn:SetText(TR("Reset overrides"))
         resetBtn.tooltipText = "Clears per-unit Name/Health/Power and per-castbar Cast Name/Time font size overrides so everything inherits the global defaults again."
     else
         resetBtn:ClearAllPoints()
@@ -509,7 +524,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     if not shortenNameClipSideLabel then
         shortenNameClipSideLabel = right:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         right.MSUF_ShortenNameClipSideLabel = shortenNameClipSideLabel
-        shortenNameClipSideLabel:SetText("Truncation style")
+        shortenNameClipSideLabel:SetText(TR("Truncation style"))
     end
     shortenNameClipSideLabel:ClearAllPoints()
     shortenNameClipSideLabel:SetPoint("TOPLEFT", shortenNamesCheck, "BOTTOMLEFT", 16, -10)
@@ -529,9 +544,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         shortenNameMaxCharsSlider:SetValueStep(1)
         shortenNameMaxCharsSlider:SetObeyStepOnDrag(true)
         if MSUF_StyleSlider then MSUF_StyleSlider(shortenNameMaxCharsSlider) end
-        _G["MSUF_ShortenNameMaxCharsSliderLow"]:SetText("6")
-        _G["MSUF_ShortenNameMaxCharsSliderHigh"]:SetText("30")
-        _G["MSUF_ShortenNameMaxCharsSliderText"]:SetText("Max name length")
+        _G["MSUF_ShortenNameMaxCharsSliderLow"]:SetText(TR("6"))
+        _G["MSUF_ShortenNameMaxCharsSliderHigh"]:SetText(TR("30"))
+        _G["MSUF_ShortenNameMaxCharsSliderText"]:SetText(TR("Max name length"))
     end
     shortenNameMaxCharsSlider:ClearAllPoints()
     shortenNameMaxCharsSlider:SetPoint("TOPLEFT", shortenNameClipSideDrop, "BOTTOMLEFT", 16, -12)
@@ -543,9 +558,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         shortenNameFrontMaskSlider:SetValueStep(1)
         shortenNameFrontMaskSlider:SetObeyStepOnDrag(true)
         if MSUF_StyleSlider then MSUF_StyleSlider(shortenNameFrontMaskSlider) end
-        _G["MSUF_ShortenNameFrontMaskSliderLow"]:SetText("0")
-        _G["MSUF_ShortenNameFrontMaskSliderHigh"]:SetText("40")
-        _G["MSUF_ShortenNameFrontMaskSliderText"]:SetText("Reserved space")
+        _G["MSUF_ShortenNameFrontMaskSliderLow"]:SetText(TR("0"))
+        _G["MSUF_ShortenNameFrontMaskSliderHigh"]:SetText(TR("40"))
+        _G["MSUF_ShortenNameFrontMaskSliderText"]:SetText(TR("Reserved space"))
     end
     shortenNameFrontMaskSlider:ClearAllPoints()
     shortenNameFrontMaskSlider:SetPoint("TOPLEFT", shortenNameMaxCharsSlider, "BOTTOMLEFT", 0, -20)
@@ -563,7 +578,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                  return
             end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Name Shortening")
+            GameTooltip:SetText(TR("Name Shortening"))
             EnsureDB()
             local side = (MSUF_DB and MSUF_DB.general and MSUF_DB.general.shortenNameClipSide) or "LEFT"
             if side == "RIGHT" then
@@ -596,11 +611,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         local t = _G["MSUF_ShortenNameFrontMaskSliderText"]
         if t and t.SetText then
             if (not shortenEnabled) then
-                t:SetText("Reserved space")
+                t:SetText(TR("Reserved space"))
             elseif side == "RIGHT" then
-                t:SetText("Reserved space (unused)")
+                t:SetText(TR("Reserved space (unused)"))
             else
-                t:SetText("Reserved space (left)")
+                t:SetText(TR("Reserved space (left)"))
             end
         end
         if shortenNameFrontMaskSlider and shortenNameFrontMaskSlider.Enable and shortenNameFrontMaskSlider.Disable then
