@@ -33,7 +33,6 @@ ns.AddLocale = ns.AddLocale or function(locale, dict)
         end
     end
 end
-
 -- Patch M: table-driven hide helpers (safe, no string compares)
 ns.Bars._outlineParts = ns.Bars._outlineParts or { "top", "bottom", "left", "right", "tl", "tr", "bl", "br" }
 ns.Util.HideKeys = ns.Util.HideKeys or function(t, keys, extraKey)
@@ -3078,7 +3077,10 @@ function _G.__MSUF_UFREQ_Flush()
     local q = _G.MSUF_QueueUnitframeUpdate
     for f in pairs(frames) do
         if f then
-            if layout[f] then
+            -- UFCore may not be loaded yet during early init / frame creation.
+            -- Never hard-crash: if the layout function isn't available yet, we simply
+            -- skip the layout request and still enqueue the regular unit update.
+            if layout[f] and reqLayout then
                 reqLayout(f, reason or "MSUF_RequestUnitframeUpdate", false)
             end
             q(f, force[f] and true or false)
@@ -3092,10 +3094,12 @@ function _G.MSUF_RequestUnitframeUpdate(frame, forceFull, wantLayout, reason, ur
         frame = _G["MSUF_" .. frame]
     end
     if not frame then  return end
-        local reqLayout = _G.MSUF_UFCore_RequestLayout
+    local reqLayout = _G.MSUF_UFCore_RequestLayout
     if urgentNow == true then
         if wantLayout then
-            reqLayout(frame, reason or "MSUF_RequestUnitframeUpdate", true)
+            if reqLayout then
+                reqLayout(frame, reason or "MSUF_RequestUnitframeUpdate", true)
+            end
     end
         _G.MSUF_QueueUnitframeUpdate(frame, forceFull and true or false)
          return
@@ -6057,9 +6061,6 @@ _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or funct
     if type(_G.MSUF_EnsureToTFallbackTicker) == "function" then
         _G.MSUF_EnsureToTFallbackTicker()
     end
-if type(_G.MSUF_RefreshSelfHealPredUnitEvent) == "function" then
-    _G.MSUF_RefreshSelfHealPredUnitEvent()
-end
     if _G.MSUF_UnitFrameApplyState and _G.MSUF_UnitFrameApplyState.dirty then
         for k in pairs(_G.MSUF_UnitFrameApplyState.dirty) do
             _G.MSUF_UnitFrameApplyState.dirty[k] = nil
@@ -7267,7 +7268,6 @@ end
     if type(_G.MSUF_Auras2_RefreshAll) == "function" then
         _G.MSUF_Auras2_RefreshAll()
     end
-
 -- Player self-heal prediction: request a Player frame update when heal prediction changes
 -- (this can change without UNIT_HEALTH firing).
 -- MAX performance path: register UNIT_* directly with RegisterUnitEvent (oUF-style).
@@ -7317,6 +7317,17 @@ end
 if type(_G.MSUF_RefreshSelfHealPredUnitEvent) == "function" then
     _G.MSUF_RefreshSelfHealPredUnitEvent()
 end
+            local f = UnitFrames and UnitFrames.player
+            if not f or (f.IsShown and not f:IsShown()) then return end
+            if ns and ns.UF and ns.UF.RequestUpdate then
+                ns.UF.RequestUpdate(f, true, false, "UNIT_HEAL_PREDICTION")
+            end
+        end)
+    end
+
+
+
+
 
     if type(_G.MSUF_RangeFade_InitPostLogin) == "function" then
         _G.MSUF_RangeFade_InitPostLogin()

@@ -1783,76 +1783,6 @@ local MSUF_MAX_BOSS_FRAMES = 5
 -- Unit frame registry is exported by the main file
 local UnitFrames = _G.MSUF_UnitFrames or {}
 
--- ------------------------------------------------------------
--- Edit Mode: White Arrow (nudge buttons) visibility toggle
--- ------------------------------------------------------------
-local function MSUF_EM_GetHideWhiteArrows() 
-    return (MSUF_DB and MSUF_DB.general and MSUF_DB.general.editModeHideWhiteArrows) and true or false
-end
-
-local function MSUF_EM_SetHideWhiteArrows(hide) 
-    if not MSUF_DB then return end
-    MSUF_DB.general = MSUF_DB.general or {}
-    MSUF_DB.general.editModeHideWhiteArrows = hide and true or false
-end
-
-local function MSUF_EM_HideArrowButtonsOnFrame(fr) 
-    if not fr then return end
-    if fr.MSUF_ArrowLeft  and fr.MSUF_ArrowLeft.Hide  then fr.MSUF_ArrowLeft:Hide()  end
-    if fr.MSUF_ArrowRight and fr.MSUF_ArrowRight.Hide then fr.MSUF_ArrowRight:Hide() end
-    if fr.MSUF_ArrowUp    and fr.MSUF_ArrowUp.Hide    then fr.MSUF_ArrowUp:Hide()    end
-    if fr.MSUF_ArrowDown  and fr.MSUF_ArrowDown.Hide  then fr.MSUF_ArrowDown:Hide()  end
-end
-
--- Wrap UpdateEditArrows once so any future calls also respect the hide toggle.
-local function MSUF_EM_WrapUpdateEditArrows(fr) 
-    if not fr or type(fr) ~= "table" then return end
-    if fr.__MSUF_EM_OrigUpdateEditArrows then return end
-    if type(fr.UpdateEditArrows) ~= "function" then
-        -- No method yet; just apply hiding if needed.
-        if MSUF_EM_GetHideWhiteArrows() then
-            MSUF_EM_HideArrowButtonsOnFrame(fr)
-        end
-        return
-    end
-
-    fr.__MSUF_EM_OrigUpdateEditArrows = fr.UpdateEditArrows
-    fr.UpdateEditArrows = function(self, ...) 
-        -- Call original first (it handles combat + edit mode active state).
-        local origFn = rawget(self, "__MSUF_EM_OrigUpdateEditArrows")
-        if type(origFn) == "function" then
-            origFn(self, ...)
-        end
-
-        -- Force-hide if the user toggled arrows off.
-        if MSUF_EM_GetHideWhiteArrows() then
-            MSUF_EM_HideArrowButtonsOnFrame(self)
-        end
-    end
-end
-
-local function MSUF_EM_RefreshWhiteArrows() 
-    -- Unitframes
-    if type(UnitFrames) == "table" then
-        for _, fr in pairs(UnitFrames) do
-            if fr then
-                MSUF_EM_WrapUpdateEditArrows(fr)
-                if fr.UpdateEditArrows then fr:UpdateEditArrows() end
-            end
-        end
-    end
-
-    -- Castbar previews (if they use arrows too)
-    local p = _G.MSUF_PlayerCastbarPreview
-    if p then MSUF_EM_WrapUpdateEditArrows(p); if p.UpdateEditArrows then p:UpdateEditArrows() end end
-    local t = _G.MSUF_TargetCastbarPreview
-    if t then MSUF_EM_WrapUpdateEditArrows(t); if t.UpdateEditArrows then t:UpdateEditArrows() end end
-    local f = _G.MSUF_FocusCastbarPreview
-    if f then MSUF_EM_WrapUpdateEditArrows(f); if f.UpdateEditArrows then f:UpdateEditArrows() end end
-    local b = _G.MSUF_BossCastbarPreview
-    if b then MSUF_EM_WrapUpdateEditArrows(b); if b.UpdateEditArrows then b:UpdateEditArrows() end end
-end
-
 -- fallback for MSUF_GetUnitLabelForKey (exported by main in normal builds)
 if not _G.MSUF_GetUnitLabelForKey then
     _G.MSUF_GetUnitLabelForKey = function(key) 
@@ -2243,63 +2173,11 @@ local function MSUF_CreateGridFrame()
 
      f.gridSlider = gridSlider
 
-    -- White arrows toggle (hides nudge arrows around frames)
-    local arrowsBtn = ns.MSUF_EM_UIH.ButtonAt(f, "MSUF_EditModeWhiteArrowsToggle", 110, 22, "TOP", gridSlider, "BOTTOM", 0, -8, nil, "UIPanelButtonTemplate")
+    -- White arrow buttons + MODE toggle removed (clean Edit Mode). Keyboard arrow keys still nudge frames.
 
-    local function UpdateArrowsUI() 
-        local hideArrows = MSUF_EM_GetHideWhiteArrows()
-        arrowsBtn:SetText(hideArrows and "Arrows: OFF" or "Arrows: ON")
+    -- Always hide the on-frame white arrow buttons in Edit Mode.
 
-        local fs = arrowsBtn:GetFontString()
-        if fs and fs.SetTextColor then
-            if hideArrows then
-                fs:SetTextColor(0.70, 0.70, 0.70, 1)
-            else
-                fs:SetTextColor(0.20, 1.00, 0.20, 1)
-            end
-        end
-    end
-
-    if arrowsBtn.HookScript then
-        arrowsBtn:HookScript("OnEnter", UpdateArrowsUI)
-        arrowsBtn:HookScript("OnLeave", UpdateArrowsUI)
-    end
-
-    arrowsBtn:SetScript("OnClick", function() 
-        MSUF_EM_SetHideWhiteArrows(not MSUF_EM_GetHideWhiteArrows())
-        UpdateArrowsUI()
-        -- Apply immediately (unitframes + castbar previews)
-        MSUF_EM_RefreshWhiteArrows()
-    end)
-
-    UpdateArrowsUI()
-
-    local modeBtn = ns.MSUF_EM_UIH.ButtonAt(f, "MSUF_EditModeModeButton", 210, 30, "TOP", arrowsBtn, "BOTTOM", 0, -12, nil, "UIPanelButtonTemplate")
-    local modeFS = modeBtn:GetFontString()
-    if modeFS then
-        local font, _, flags = modeFS:GetFont()
-        modeFS:SetFont(font, 14, flags or "")
-    end
-
-    local function UpdateModeButtonVisual() 
-        if MSUF_EditModeSizing then
-            modeBtn:SetText("MODE: SIZE")
-        else
-            modeBtn:SetText("MODE: POSITION")
-        end
-    end
-
-    modeBtn:SetScript("OnClick", function(self) 
-        MSUF_EditModeSizing = not MSUF_EditModeSizing
-        UpdateModeButtonVisual()
-        if MSUF_UpdateEditModeInfo then
-            MSUF_UpdateEditModeInfo()
-        end
-    end)
-
-    UpdateModeButtonVisual()
-
-    local anchorCheck = ns.MSUF_EM_UIH.TextCheck(f, "MSUF_EditModeAnchorToCooldownCheck", "TOP", modeBtn, "BOTTOM", 0, -8, "Anchor Cooldownmanager")
+    local anchorCheck = ns.MSUF_EM_UIH.TextCheck(f, "MSUF_EditModeAnchorToCooldownCheck", "TOP", gridSlider, "BOTTOM", 0, -12, "Anchor Cooldownmanager")
     MSUF_EM_EnsureDB()
     anchorCheck:SetChecked(MSUF_DB and MSUF_DB.general and MSUF_DB.general.anchorToCooldown)
 
@@ -2863,7 +2741,7 @@ MSUF_EM_ForceWhiteButtonText(resetBtn)
 
         -- Positioning section
         posHeader:ClearAllPoints()
-        posHeader:SetPoint("TOP", modeBtn or _info, "BOTTOM", 0, -10)
+        posHeader:SetPoint("TOP", _info, "BOTTOM", 0, -14)
 
         -- Custom anchor input first; cooldown anchor toggle sits next to the input
 anchorNameLabel:ClearAllPoints()
@@ -2898,7 +2776,8 @@ anchorCheck:SetPoint("LEFT", anchorNameInput, "RIGHT", 10, -1)
 
         -- Frames section
         framesHeader:ClearAllPoints()
-        framesHeader:SetPoint("TOP", arrowsBtn, "BOTTOM", _msufCenterShiftX, -14)
+        local _afterOverlay = gridSlider
+        framesHeader:SetPoint("TOP", _afterOverlay, "BOTTOM", _msufCenterShiftX, -14)
 
         local row = f._msufFrameEnableBtnRow
         if row then
@@ -2997,51 +2876,26 @@ local function MSUF_UpdateEditModeInfo()
         MSUF_GridFrame._msufSyncFrameEnableButtons()
     end
 
-
     MSUF_EM_EnsureDB()
 
     local key = MSUF_CurrentEditUnitKey
-    if not key or not MSUF_DB[key] then
-        if MSUF_EditModeSizing then
-            textWidget:SetText("MSUF Edit Mode – MODE: SIZE")
-        else
-            textWidget:SetText("MSUF Edit Mode – MODE: POSITION")
-        end
-
-        if MSUF_GridFrame.modeHint then
-            if MSUF_EditModeSizing then
-                MSUF_GridFrame.modeHint:SetText("|cff00ff00MODE: SIZE – drag & arrows change frame SIZE.|r\n|cffaaaaaaHold SHIFT (5) / CTRL (10) / ALT (grid) for bigger steps.|r")
-            else
-                MSUF_GridFrame.modeHint:SetText("|cffffff00MODE: POSITION – drag & arrows move frames. Click MODE for SIZE.|r\n|cffaaaaaaHold SHIFT (5) / CTRL (10) / ALT (grid) for bigger steps.|r")
-            end
-            MSUF_GridFrame.modeHint:Show()
-        end
-        return
-    end
-
-    local conf  = MSUF_DB[key]
-    local label = MSUF_GetUnitLabelForKey(key)
-
-    if MSUF_EditModeSizing then
-        local w = conf.width or 0
-        local h = conf.height or 0
-        textWidget:SetText(string.format("Sizing: %s (W: %d, H: %d)", label, w, h))
+    if not key or not MSUF_DB or not MSUF_DB[key] then
+        textWidget:SetText("MSUF Edit Mode")
     else
+        local conf  = MSUF_DB[key]
+        local label = MSUF_GetUnitLabelForKey(key)
 
-    local x = MSUF_SanitizePopupOffset(conf.offsetX, 0)
-    local y = MSUF_SanitizePopupOffset(conf.offsetY, 0)
-    -- Auto-repair corrupted offsets so the UI and DB stay sane.
-    if conf.offsetX ~= x then conf.offsetX = x end
-    if conf.offsetY ~= y then conf.offsetY = y end
+        local x = MSUF_SanitizePopupOffset(conf.offsetX, 0)
+        local y = MSUF_SanitizePopupOffset(conf.offsetY, 0)
+        -- Auto-repair corrupted offsets so the UI and DB stay sane.
+        if conf.offsetX ~= x then conf.offsetX = x end
+        if conf.offsetY ~= y then conf.offsetY = y end
+
         textWidget:SetText(string.format("Editing: %s (X: %d, Y: %d)", label, x, y))
     end
 
     if MSUF_GridFrame.modeHint then
-        if MSUF_EditModeSizing then
-            MSUF_GridFrame.modeHint:SetText("|cff00ff00MODE: SIZE – drag & arrows change frame SIZE.|r\n|cffaaaaaaHold SHIFT (5) / CTRL (10) / ALT (grid) for bigger steps.|r")
-        else
-            MSUF_GridFrame.modeHint:SetText("|cffffff00MODE: POSITION – drag & arrows move frames. Click MODE for SIZE.|r\n|cffaaaaaaHold SHIFT (5) / CTRL (10) / ALT (grid) for bigger steps.|r")
-        end
+        MSUF_GridFrame.modeHint:SetText("|cffffff00Drag or use Arrow keys to move. SHIFT=5 / CTRL=10 / ALT=grid step.|r")
         MSUF_GridFrame.modeHint:Show()
     end
 end
@@ -4411,23 +4265,22 @@ local function MSUF_UpdateCastbarEditInfo(unit)
         return
     end
 
-    local textWidget = MSUF_GridFrame.infoText
-
-    if MSUF_EditModeSizing then
-        local w = g[prefix .. "BarWidth"]  or g.castbarGlobalWidth  or 0
-        local h = g[prefix .. "BarHeight"] or g.castbarGlobalHeight or 0
-        textWidget:SetText(string.format("Sizing: %s (W: %d, H: %d)", label, w, h))
+    local defaultX, defaultY
+    if unit == "player" then
+        defaultX, defaultY = 0, 5
     else
-        local defaultX, defaultY
-        if unit == "player" then
-            defaultX, defaultY = 0, 5
-        else
-            defaultX, defaultY = 65, -15
-        end
+        defaultX, defaultY = 65, -15
+    end
 
-        local x = g[prefix .. "OffsetX"] or defaultX
-        local y = g[prefix .. "OffsetY"] or defaultY
-        textWidget:SetText(string.format("Editing: %s (X: %d, Y: %d)", label, x, y))
+    local x = g[prefix .. "OffsetX"] or defaultX
+    local y = g[prefix .. "OffsetY"] or defaultY
+
+    local textWidget = MSUF_GridFrame.infoText
+    textWidget:SetText(string.format("Editing: %s (X: %d, Y: %d)", label, x, y))
+
+    if MSUF_GridFrame.modeHint then
+        MSUF_GridFrame.modeHint:SetText("|cffffff00Drag or use Arrow keys to move. SHIFT=5 / CTRL=10 / ALT=grid step.|r")
+        MSUF_GridFrame.modeHint:Show()
     end
 end
 local function MSUF_UpdateGridOverlay() 
@@ -5273,40 +5126,6 @@ end
     pf:Raise()
 end
 local function MSUF_UpdateEditModeVisuals() 
-    if not UnitFrames then return end
-
-    local pf = UnitFrames["player"]
-    if pf and pf.UpdateEditArrows then
-        pf:UpdateEditArrows()
-    end
-
-    local tf = UnitFrames["target"]
-    if tf and tf.UpdateEditArrows then
-        tf:UpdateEditArrows()
-    end
-
-    local ff = UnitFrames["focus"]
-    if ff and ff.UpdateEditArrows then
-        ff:UpdateEditArrows()
-    end
-
-    local pet = UnitFrames["pet"]
-    if pet and pet.UpdateEditArrows then
-        pet:UpdateEditArrows()
-    end
-
-    local tot = UnitFrames["targettarget"]
-    if tot and tot.UpdateEditArrows then
-        tot:UpdateEditArrows()
-    end
-
-    for i = 1, MSUF_MAX_BOSS_FRAMES do
-        local bf = UnitFrames["boss" .. i]
-        if bf and bf.UpdateEditArrows then
-            bf:UpdateEditArrows()
-        end
-    end
-
     MSUF_UpdateGridOverlay()
 end
 function MSUF_SyncCastbarPositionPopup(unit, force) 
@@ -7089,6 +6908,7 @@ function MSUF_SetMSUFEditModeFromBlizzard(active)
         end
 
         MSUF_EM_SetActive(true, "player")
+        MSUF_EditModeSizing = false
 MSUF_EditMode_StartCombatWarningListener()
         if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(true) end
         if type(MSUF_RefreshAllUnitVisibilityDrivers)=="function" then MSUF_EditMode_RequestVisibilityDrivers(true) end
@@ -7236,8 +7056,7 @@ MSUF_EditMode_StartCombatWarningListener()
             if MSUF_UpdateEditModeVisuals then
                 MSUF_UpdateEditModeVisuals()
             end
-            -- Respect "hide white arrows" toggle immediately on enter.
-            MSUF_EM_RefreshWhiteArrows()
+            -- Always hide the on-frame white arrow buttons (UI cleanup).
             if MSUF_UpdateEditModeInfo then
                 MSUF_UpdateEditModeInfo()
             end
@@ -7791,4 +7610,3 @@ do
         Edit.Transitions.SetMSUFEditModeDirect = _G.MSUF_SetMSUFEditModeDirect
     end
 end
-
