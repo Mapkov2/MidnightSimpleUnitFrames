@@ -4245,16 +4245,16 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
     end
         local unit = f.unit
         local hasUnit = false
+        -- HOT PATH: UnitExists/UnitHealth are error-safe (they just return false/0/nil).
+        -- Using MSUF_FastCall/pcall here is pure overhead and balloons UNIT_HEALTH cost.
         if unit and F.UnitExists then
-            local okExists, exists = MSUF_FastCall(F.UnitExists, unit)
-            hasUnit = okExists and exists
-    end
+            hasUnit = (F.UnitExists(unit) and true) or false
+        end
         if hasUnit and F.UnitHealth then
-            local okHp, hp = MSUF_FastCall(F.UnitHealth, unit)
-            if okHp then
-                f._msufLastHpValue = nil
-                _G.MSUF_UFCore_UpdateHpTextFast(f, hp)
-            end
+            local hp = F.UnitHealth(unit)
+            -- Secret-safe: we never compare hp here; we just pass it through.
+            f._msufLastHpValue = nil
+            _G.MSUF_UFCore_UpdateHpTextFast(f, hp)
             if conf.showPower ~= nil then
                 f.showPowerText = (conf.showPower ~= false)
             end
@@ -4859,18 +4859,12 @@ end
 _G.MSUF_GetUnitLevelText = MSUF_GetUnitLevelText
 local function MSUF_GetUnitHealthPercent(unit)
     if type(UnitHealthPercent) == "function" then
-        local ok, pct
+        -- HOT PATH: UnitHealthPercent is error-safe; wrapping in MSUF_FastCall/pcall is unnecessary overhead.
+        -- Secret-safe: we do not do arithmetic/compare on pct here; callers must treat it as opaque.
         if CurveConstants and CurveConstants.ScaleTo100 then
-            -- Secret-safe + snappy: usePredicted=true (avoid Lua arithmetic on secret values)
-            ok, pct = MSUF_FastCall(UnitHealthPercent, unit, true, CurveConstants.ScaleTo100)
-        else
-            ok, pct = MSUF_FastCall(UnitHealthPercent, unit, true, true)
-    end
-        -- Secret-safe: avoid comparing returned values in Lua (pct may be a "secret" number).
-        if ok then
-             return pct
-    end
-         return nil
+            return UnitHealthPercent(unit, true, CurveConstants.ScaleTo100)
+        end
+        return UnitHealthPercent(unit, true, true)
     end
     -- 12.0+: If UnitHealthPercent is unavailable, avoid computing percent in Lua (secret-safe).
      return nil
