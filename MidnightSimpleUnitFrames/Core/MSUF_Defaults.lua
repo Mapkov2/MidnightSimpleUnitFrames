@@ -256,19 +256,6 @@ end
     if g.enablePowerGradient == nil then
         g.enablePowerGradient = false
     end
-    -- Bars: Aggro highlight overlay (Target/Focus/Boss)
-    -- Aggro indicator: re-uses the HP outline border as an orange warning when YOU have aggro (target/focus/boss).
-    if g.aggroIndicatorMode == nil then
-        if g.enableAggroHighlight == true then
-            g.aggroIndicatorMode = "border" -- legacy migrate
-        else
-            g.aggroIndicatorMode = "off"
-        end
-    end
-    if g.aggroIndicatorMode ~= "border" then
-        g.aggroIndicatorMode = "off"
-    end
-
     if g.gradientStrength == nil then
         g.gradientStrength = 0.45
     end
@@ -348,6 +335,9 @@ end
     end
     if g.barBorderStyle == nil then
         g.barBorderStyle = "THIN"
+    end
+    if g.aggroOutlineMode == nil then
+        g.aggroOutlineMode = 0 -- 0=Off, 1=Aggro border indicator
     end
     if g.boldText == nil then
         g.boldText = false

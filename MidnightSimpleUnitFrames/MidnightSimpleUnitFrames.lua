@@ -5710,16 +5710,48 @@ do
     end
 end
 local MSUF_ApplyRareVisuals
+-- Aggro outline indicator: reuse the bar-outline border and recolor/thicken it
+-- when the player has full aggro on target/focus/boss frames.
+local function MSUF_IsAggroOutlineUnit(unit)
+    if unit == "target" or unit == "focus" then return true end
+    if type(unit) == "string" and unit:sub(1, 4) == "boss" then
+        local n = tonumber(unit:sub(5))
+        if n and n >= 1 and n <= 5 then return true end
+    end
+    return false
+end
 MSUF_ApplyRareVisuals = function(self)
     if not self or not self.unit then  return end
     if self.border then
         self.border:Hide()
     end
-    local thickness = 0
+    local baseThickness = 0
     if type(MSUF_GetDesiredBarBorderThicknessAndStamp) == "function" then
-        thickness = select(1, MSUF_GetDesiredBarBorderThicknessAndStamp())
+        baseThickness = select(1, MSUF_GetDesiredBarBorderThicknessAndStamp())
     end
-    thickness = tonumber(thickness) or 0
+    baseThickness = tonumber(baseThickness) or 0
+
+    -- Optional: convert the outline border into an aggro indicator (target/focus/boss only).
+    local g = (MSUF_DB and MSUF_DB.general) or nil
+    local aggroMode = g and g.aggroOutlineMode or 0 -- 0=Off, 1=Aggro border indicator
+    local wantAggro = MSUF_IsAggroOutlineUnit(self.unit) and ((aggroMode == 1) or (_G and _G.MSUF_AggroBorderTestMode))
+    local threat = false
+    if wantAggro then
+        -- Options-only test mode (cold path): force the aggro border on so users can tune outline thickness.
+        -- This flag is toggled from the Bars menu and is cleared when the Settings panel closes.
+        if _G and _G.MSUF_AggroBorderTestMode then
+            threat = true
+        elseif UnitThreatSituation then
+            threat = (UnitThreatSituation("player", self.unit) == 3)
+        end
+    end
+
+    local thickness = baseThickness
+    -- If the user disabled outlines, we still show an aggro outline while threat is active.
+    -- If outlines are enabled but thin, force a visible minimum while threatened.
+    -- User-requested: allow the minimum to be as low as 1px (no forced 4px).
+    if threat and thickness < 1 then thickness = 1 end
+
     local o = self._msufBarOutline
     if thickness <= 0 then
         if o then
@@ -5758,10 +5790,29 @@ MSUF_ApplyRareVisuals = function(self)
     local edge = (type(snap) == "function") and snap(f, thickness) or thickness
     if o._msufLastEdgeSize ~= edge then
         f:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
-        f:SetBackdropBorderColor(0, 0, 0, 1)
+        -- Keep the border color consistent when thickness changes (prevents black overwrite in testmode / threat).
+        if threat then
+            f:SetBackdropBorderColor(1, 0.50, 0, 1)
+            o._msufLastBorderColorKey = 1
+        else
+            f:SetBackdropBorderColor(0, 0, 0, 1)
+            o._msufLastBorderColorKey = 0
+        end
         o._msufLastEdgeSize = edge
         self._msufBarOutlineEdgeSize = -1
     end
+
+    -- Apply aggro recolor (same outline border). Only flips on state change.
+    local colorKey = threat and 1 or 0
+    if o._msufLastBorderColorKey ~= colorKey then
+        if threat then
+            f:SetBackdropBorderColor(1, 0.50, 0, 1)
+        else
+            f:SetBackdropBorderColor(0, 0, 0, 1)
+        end
+        o._msufLastBorderColorKey = colorKey
+    end
+
     if (self._msufBarOutlineThickness ~= thickness) or (self._msufBarOutlineEdgeSize ~= edge) or (self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false)) then
         f:ClearAllPoints()
         if hb then
@@ -5777,6 +5828,89 @@ MSUF_ApplyRareVisuals = function(self)
     f:Show()
  end
 _G.MSUF_RefreshRareBarVisuals = MSUF_ApplyRareVisuals
+
+-- Cold-path helpers for the Bars menu (no runtime cost during combat/raiding).
+-- 1) Live-apply outline thickness while the Settings panel is open.
+-- 2) Aggro border test mode so users can tune thickness visually.
+_G.MSUF_ApplyBarOutlineThickness_All = _G.MSUF_ApplyBarOutlineThickness_All or function()
+    -- IMPORTANT: Live updates must not depend on gradient toggles or queued UFCore flush.
+    -- We do a direct apply (cold path) and also sync the UFCore border stamp so the
+    -- next UFCore pass won't "snap back" to the previous cached thickness.
+    if MSUF_BarBorderCache then
+        MSUF_BarBorderCache.stamp = nil
+        MSUF_BarBorderCache.thickness = 0
+    end
+
+    local get = MSUF_GetDesiredBarBorderThicknessAndStamp
+    local thickness, stamp = 0, 0
+    if type(get) == "function" then
+        thickness, stamp = get()
+    end
+
+    local apply = _G.MSUF_RefreshRareBarVisuals
+    MSUF_ForEachUnitFrame(function(uf)
+        if not uf or not uf.unit then return end
+
+        -- Sync UFCore border bookkeeping to the NEW stamp.
+        uf._msufBarBorderStamp = stamp
+        uf._msufBarOutlineThickness = thickness
+        uf._msufBarOutlineEdgeSize = -1
+
+        -- Bottom-is-power impacts the outline rect; keep it consistent.
+        local pb = uf.targetPowerBar
+        uf._msufBarOutlineBottomIsPower = (pb and pb.IsShown and pb:IsShown()) and true or false
+
+        if type(apply) == "function" then
+            apply(uf)
+        end
+    end)
+end
+
+_G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(active)
+    _G.MSUF_AggroBorderTestMode = active and true or false
+    local fn = _G.MSUF_RefreshRareBarVisuals
+    local frames = _G.MSUF_UnitFrames
+    if type(fn) ~= "function" or not frames then return end
+    local t = frames.target
+    if t and t.unit == "target" then fn(t) end
+    local f = frames.focus
+    if f and f.unit == "focus" then fn(f) end
+    for i = 1, 5 do
+        local b = frames["boss" .. i]
+        if b and b.unit == ("boss" .. i) then fn(b) end
+    end
+end
+
+
+-- Aggro outline event driver (event-only, no OnUpdate)
+do
+    local ef = F.CreateFrame("Frame")
+    ef:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+    ef:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
+    ef:RegisterEvent("PLAYER_TARGET_CHANGED")
+    ef:RegisterEvent("PLAYER_FOCUS_CHANGED")
+    ef:SetScript("OnEvent", function(_, event, unit)
+        local g = MSUF_DB and MSUF_DB.general
+        if not (g and g.aggroOutlineMode == 1) then return end
+
+        local u = unit
+        if event == "PLAYER_TARGET_CHANGED" then
+            u = "target"
+        elseif event == "PLAYER_FOCUS_CHANGED" then
+            u = "focus"
+        end
+        if not u or not MSUF_IsAggroOutlineUnit(u) then return end
+
+        local frames = _G and _G.MSUF_UnitFrames
+        local uf = frames and frames[u]
+        if not uf or uf.unit ~= u then return end
+
+        local fn = _G and _G.MSUF_RefreshRareBarVisuals
+        if type(fn) == "function" then
+            fn(uf)
+        end
+    end)
+end
 do
     local f = F.CreateFrame("Frame")
     f:RegisterEvent("UI_SCALE_CHANGED")

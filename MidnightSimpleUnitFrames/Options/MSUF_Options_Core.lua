@@ -4382,6 +4382,90 @@ do
     if t < 0 then t = 0 elseif t > 6 then t = 6 end
     MSUF_SetLabeledSliderValue(barOutlineThicknessSlider, t)
 end
+
+-- Live-apply outline thickness while the Settings panel is open (cold path).
+-- Once set, runtime uses the cached value and doesn't reapply constantly.
+barOutlineThicknessSlider.onValueChanged = function(_, value)
+    EnsureDB()
+    MSUF_DB.bars = MSUF_DB.bars or {}
+    MSUF_DB.bars.barOutlineThickness = value
+    if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then
+        _G.MSUF_ApplyBarOutlineThickness_All()
+    else
+        ApplyAllSettings()
+    end
+end
+
+
+-- Aggro border indicator: reuse outline border as a thick orange threat border (target/focus/boss).
+-- No extra header label; the dropdown itself is the control.
+local aggroOutlineDrop = CreateFrame("Frame", "MSUF_AggroOutlineDropdown", barGroup, "UIDropDownMenuTemplate")
+MSUF_ExpandDropdownClickArea(aggroOutlineDrop)
+
+-- The UIDropDownMenuTemplate has extra left padding; keep the control comfortably inside the left panel.
+-- Also keep enough room for the "Test" checkbox to the right (avoid clipping into the right column).
+-- Move the dropdown slightly lower to avoid clipping against the slider section.
+aggroOutlineDrop:SetPoint("TOPLEFT", barOutlineThicknessSlider, "BOTTOMLEFT", 6, -34)
+UIDropDownMenu_SetWidth(aggroOutlineDrop, 170)
+	-- Prevent the list from being cut off near the bottom edge of the Settings scroll area.
+	if UIDropDownMenu_SetClampedToScreen then UIDropDownMenu_SetClampedToScreen(aggroOutlineDrop, true) end
+MSUF_MakeDropdownScrollable(aggroOutlineDrop, 10)
+
+local function _AggroOutline_Set(val)
+    EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    MSUF_DB.general.aggroOutlineMode = val
+    -- Refresh outlines immediately (cheap).
+    local fn = _G and _G.MSUF_RefreshRareBarVisuals
+    local frames = _G and _G.MSUF_UnitFrames
+    if type(fn) == "function" and frames then
+        local t = frames.target
+        if t and t.unit == "target" then fn(t) end
+        local f = frames.focus
+        if f and f.unit == "focus" then fn(f) end
+        for i = 1, 5 do
+            local b = frames["boss" .. i]
+            if b and b.unit == ("boss" .. i) then fn(b) end
+        end
+    end
+end
+
+	-- Use the shared helper so selected text updates correctly (avoids "visual-only" desync).
+	local _AggroOutline_Options = {
+	    { key = 0, label = TR("Aggro border off") },
+	    { key = 1, label = TR("Aggro border on") },
+	}
+	local function _AggroOutline_Get()
+	    EnsureDB()
+	    local g = (MSUF_DB and MSUF_DB.general) or {}
+	    return g.aggroOutlineMode or 0
+	end
+	MSUF_InitSimpleDropdown(
+	    aggroOutlineDrop,
+	    _AggroOutline_Options,
+	    _AggroOutline_Get,
+	    function(v) _AggroOutline_Set(v) end,
+	    function() _AggroOutline_Set(_AggroOutline_Get()) end,
+	    170
+	)
+	-- Keep for LoadFromDB sync.
+	aggroOutlineDrop._msufAggroOutlineOptions = _AggroOutline_Options
+	aggroOutlineDrop._msufAggroOutlineGet = _AggroOutline_Get
+
+-- Options-only: Test mode to force the aggro border on while this menu is open.
+local aggroTestCheck = CreateFrame("CheckButton", "MSUF_AggroOutlineTestCheck", barGroup, "ChatConfigCheckButtonTemplate")
+-- Keep the toggle visually attached but within the panel width.
+-- Nudge the checkbox down to align visually with the dropdown and avoid edge clipping.
+aggroTestCheck:SetPoint("LEFT", aggroOutlineDrop, "RIGHT", 6, -4)
+aggroTestCheck.Text:SetText(TR("Test"))
+aggroTestCheck:SetScript("OnClick", function(self)
+    local on = self:GetChecked() and true or false
+    if type(_G.MSUF_SetAggroBorderTestMode) == "function" then
+        _G.MSUF_SetAggroBorderTestMode(on)
+    end
+end)
+
+
 -- Bars menu style: boxed layout like the new Castbar/Focus Kick menus
 -- (Two framed columns: Bar appearance / Power Bar Settings)
 do
@@ -4863,6 +4947,16 @@ local function MSUF_SyncBarsTabToggles()
         if t < 0 then t = 0 elseif t > 6 then t = 6 end
         MSUF_SetLabeledSliderValue(barOutlineThicknessSlider, t)
         MSUF_SetLabeledSliderEnabled(barOutlineThicknessSlider, true)
+        local g = (MSUF_DB and MSUF_DB.general) or {}
+        local mode = g.aggroOutlineMode or 0
+        local dd = _G["MSUF_AggroOutlineDropdown"]
+        if dd then
+            if mode == 1 then
+                UIDropDownMenu_SetText(dd, TR("Aggro border on"))
+            else
+                UIDropDownMenu_SetText(dd, TR("Aggro border off"))
+            end
+        end
     end
     SyncCB(targetPowerBarCheck, b.showTargetPowerBar)
     SyncCB(bossPowerBarCheck, b.showBossPowerBar)
@@ -5007,7 +5101,13 @@ do
                 MSUF_DB.bars = MSUF_DB.bars or {}
                 MSUF_DB.bars.barOutlineThickness = v
              end,
-            apply = ApplyAllSettings,
+            apply = function()
+                if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then
+                    _G.MSUF_ApplyBarOutlineThickness_All()
+                else
+                    ApplyAllSettings()
+                end
+             end,
         },
     }
     local function Clamp(v, minV, maxV, asInt)
@@ -5102,6 +5202,8 @@ end
     panel.hpModeDrop                 = hpModeDrop
 panel.barTextureDrop             = barTextureDrop
     panel.barOutlineThicknessSlider = barOutlineThicknessSlider
+	    panel.aggroOutlineDrop          = aggroOutlineDrop
+    panel.aggroTestCheck            = aggroTestCheck
 panel.fontSizeSlider     = fontSizeSlider
 panel.updateThrottleSlider = updateThrottleSlider
 panel.powerBarHeightSlider = powerBarHeightSlider
@@ -5138,7 +5240,12 @@ panel.infoTooltipDisableCheck = infoTooltipDisableCheck
         powerBarHeightEdit = self.powerBarHeightEdit
         hpModeDrop = self.hpModeDrop
         barOutlineThicknessSlider = self.barOutlineThicknessSlider
+	        local aggroOutlineDrop = self.aggroOutlineDrop
         bossSpacingSlider = self.bossSpacingSlider
+	        if aggroOutlineDrop and aggroOutlineDrop._msufAggroOutlineOptions and aggroOutlineDrop._msufAggroOutlineGet then
+	            MSUF_SyncSimpleDropdown(aggroOutlineDrop, aggroOutlineDrop._msufAggroOutlineOptions, aggroOutlineDrop._msufAggroOutlineGet)
+				if self.aggroTestCheck then self.aggroTestCheck:SetChecked((_G and _G.MSUF_AggroBorderTestMode) and true or false) end
+	        end
         if anchorEdit then anchorEdit:SetText(g.anchorName or "UIParent") end
         if anchorCheck then
             anchorCheck:SetChecked(g.anchorToCooldown and true or false)
@@ -5243,6 +5350,19 @@ end
     -- Style all toggle labels: checked = white, unchecked = grey
     if MSUF_StyleAllToggles then MSUF_StyleAllToggles(panel) end
     panel.__MSUF_FullBuilt = true
+    -- Ensure aggro-border test mode never leaks outside the Settings panel.
+    if not panel.__MSUF_AggroTestHooked then
+        panel.__MSUF_AggroTestHooked = true
+        panel:HookScript("OnHide", function()
+            if type(_G.MSUF_SetAggroBorderTestMode) == "function" then
+                _G.MSUF_SetAggroBorderTestMode(false)
+            end
+            if panel.aggroTestCheck then
+                panel.aggroTestCheck:SetChecked(false)
+            end
+        end)
+    end
+
 SetCurrentKey("player")
 panel:LoadFromDB()
 MSUF_CallUpdateAllFonts()

@@ -55,6 +55,9 @@ local function UFCore_ClampNum(v, def, minv, maxv)
     return v
 end
 
+-- Forward declaration: used by fast-path helpers defined above the cache implementation.
+local UFCore_GetSettingsCache
+
 local function UFCore_RefreshSettingsCache(reason)
     local cache = Core._settingsCache or {}
     Core._settingsCache = cache
@@ -97,6 +100,11 @@ local function UFCore_RefreshSettingsCache(reason)
     cache.showTargetPowerBar = not (bars and bars.showTargetPowerBar == false)
     cache.showFocusPowerBar  = not (bars and bars.showFocusPowerBar == false)
     cache.showBossPowerBar   = not (bars and bars.showBossPowerBar == false)
+    -- Bars: Aggro indicator (Target/Focus/Boss) - mode: 'off' | 'border'
+    local ag = g and g.aggroIndicatorMode
+    if ag ~= "border" then ag = nil end
+    if not ag and g and g.enableAggroHighlight == true then ag = "border" end -- legacy migrate
+    cache.aggroIndicatorMode = ag or "off"
 
     -- Bar mode (authoritative): "dark" | "class" | "unified"
     local mode = g and g.barMode or nil
@@ -157,7 +165,52 @@ local function UFCore_RefreshSettingsCache(reason)
     cache._lastReason = reason
 end
 
-local function UFCore_GetSettingsCache()
+-- ---------------------------------------------------------------------------
+-- Aggro indicator (Target/Focus/Boss): re-use the existing HP outline border
+-- as an aggro warning (orange). Event-driven via UNIT_THREAT_*.
+--
+-- Behavior:
+--  - If Outline border is enabled (Bars->Outline), that same border turns orange
+--    while you have aggro on the unit, otherwise it stays black.
+--  - If Outline border is disabled, we temporarily show a thick (1px) outline
+--    ONLY while you have aggro.
+-- ---------------------------------------------------------------------------
+
+local function UFCore_UpdateAggroBorder(frame, unit)
+    if not frame then return end
+
+    local cache = UFCore_GetSettingsCache()
+    local mode = cache and cache.aggroIndicatorMode or "off"
+    if mode ~= "border" then
+        if frame._msufAggroOutlineOn then
+            frame._msufAggroOutlineOn = nil
+            if _G.MSUF_RefreshRareBarVisuals then _G.MSUF_RefreshRareBarVisuals(frame) end
+        end
+        return
+    end
+
+    if not unit or (UnitExists and not UnitExists(unit)) then
+        if frame._msufAggroOutlineOn then
+            frame._msufAggroOutlineOn = nil
+            if _G.MSUF_RefreshRareBarVisuals then _G.MSUF_RefreshRareBarVisuals(frame) end
+        end
+        return
+    end
+
+    local threat = UnitThreatSituation and UnitThreatSituation("player", unit) or nil
+    local on = (threat == 3) and true or false
+
+    if frame._msufAggroOutlineOn == on then
+        return
+    end
+    frame._msufAggroOutlineOn = on
+
+    if _G.MSUF_RefreshRareBarVisuals then
+        _G.MSUF_RefreshRareBarVisuals(frame)
+    end
+end
+
+UFCore_GetSettingsCache = function()
     local cache = Core._settingsCache
     if cache and cache.valid then
         local db = _G.MSUF_DB
@@ -478,6 +531,11 @@ local function UFCore_UpdateStatusFast(frame, conf)
     if not (FN_ApplyUnitAlpha and FN_UpdateStatusIndicatorForFrame) then UFCore_ResolveFastFns() end
     local fn = FN_ApplyUnitAlpha; if fn then fn(frame, key) end
     fn = FN_UpdateStatusIndicatorForFrame; if fn then fn(frame) end
+
+    -- Aggro highlight overlay (Target/Focus/Boss only)
+    if frame.aggroHighlightTex then
+        UFCore_UpdateAggroBorder(frame, frame.unit)
+    end
     return true
 end
 
@@ -2201,6 +2259,8 @@ Global:RegisterEvent("UPDATE_EXHAUSTION")
 
 Global:RegisterEvent("PLAYER_TARGET_CHANGED")
 Global:RegisterEvent("PLAYER_FOCUS_CHANGED")
+Global:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+Global:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
 Global:RegisterEvent("UNIT_TARGET")
 Global:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
 Global:RegisterEvent("GROUP_ROSTER_UPDATE")
@@ -2347,6 +2407,21 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     if event == "PLAYER_FOCUS_CHANGED" then
         QueueUnit("focus", true, MASK_UNIT_SWAP, event)
         DeferSwapWork("focus", event, true, false)
+        return
+    end
+
+    if event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
+        -- Aggro highlight is driven by Status element (cheap) and is only relevant for
+        -- Target/Focus/Boss frames. Mark only those.
+        if arg1 == "target" or arg1 == "focus" then
+            MarkUnit(arg1, DIRTY_STATUS, false, event)
+        elseif type(arg1) == "string" then
+            -- boss1..boss5
+            local b1 = arg1:byte(1)
+            if b1 == 98 and arg1:byte(2) == 111 and arg1:byte(3) == 115 and arg1:byte(4) == 115 then
+                MarkUnit(arg1, DIRTY_STATUS, false, event)
+            end
+        end
         return
     end
 
