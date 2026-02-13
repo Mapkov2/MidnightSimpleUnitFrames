@@ -1735,28 +1735,33 @@ if UpdateDarkBarControls then
 end
 
     --------------------------------------------------
-    -- Extra Color Options (Text links, Bars in Spalte rechts)
+    -- Unitframe Colors + Bar Colors (two-column layout)
     --------------------------------------------------
-    local npcHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    npcHeader:SetPoint("TOPLEFT", darkToneSlider, "BOTTOMLEFT", 0, -48)
-    npcHeader:SetText("Extra Color Options")
-    F.CreateHeaderDividerAbove(npcHeader)
+    local leftHeaderX   = 0
+    local rightHeaderX  = 420
 
-    local npcRowHeight  = 22
-    local npcStartY     = -8
-    local npcLabelX     = 0    -- Text-Start
-    local npcBarX       = 220  -- X-Position aller Bars
-    local npcBarWidth   = 120  -- einheitliche Balkenlänge
+    local rowH          = 22
+    local startY        = -8
+
+    -- Left block: Unitframe Colors
+    local unitHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    unitHeader:SetPoint("TOPLEFT", darkToneSlider, "BOTTOMLEFT", leftHeaderX, -48)
+    unitHeader:SetText("Unitframe Colors")
+    F.CreateHeaderDividerAbove(unitHeader)
+
+    local unitLabelX    = 0
+    local unitBarX      = 220
+    local unitBarW      = 120
 
     -- Friendly
     local friendlyLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    friendlyLabel:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcLabelX, npcStartY)
+    friendlyLabel:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitLabelX, startY)
     friendlyLabel:SetJustifyH("LEFT")
     friendlyLabel:SetText("Friendly NPC Color")
 
     local npcFriendlySwatch = CreateFrame("Button", "MSUF_Colors_NPCFriendlySwatch", content)
-    npcFriendlySwatch:SetSize(npcBarWidth, 16)
-    npcFriendlySwatch:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcBarX, npcStartY)
+    npcFriendlySwatch:SetSize(unitBarW, 16)
+    npcFriendlySwatch:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitBarX, startY)
 
     npcFriendlyTex = npcFriendlySwatch:CreateTexture(nil, "ARTWORK")
     npcFriendlyTex:SetAllPoints()
@@ -1771,13 +1776,13 @@ end
 
     -- Neutral
     local neutralLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    neutralLabel:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcLabelX, npcStartY - npcRowHeight)
+    neutralLabel:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitLabelX, startY - rowH)
     neutralLabel:SetJustifyH("LEFT")
     neutralLabel:SetText("Neutral NPC Color")
 
     local npcNeutralSwatch = CreateFrame("Button", "MSUF_Colors_NPCNeutralSwatch", content)
-    npcNeutralSwatch:SetSize(npcBarWidth, 16)
-    npcNeutralSwatch:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcBarX, npcStartY - npcRowHeight)
+    npcNeutralSwatch:SetSize(unitBarW, 16)
+    npcNeutralSwatch:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitBarX, startY - rowH)
 
     npcNeutralTex = npcNeutralSwatch:CreateTexture(nil, "ARTWORK")
     npcNeutralTex:SetAllPoints()
@@ -1792,13 +1797,13 @@ end
 
     -- Enemy
     local enemyLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    enemyLabel:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcLabelX, npcStartY - 2 * npcRowHeight)
+    enemyLabel:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitLabelX, startY - 2 * rowH)
     enemyLabel:SetJustifyH("LEFT")
     enemyLabel:SetText("Enemy NPC Color")
 
     local npcEnemySwatch = CreateFrame("Button", "MSUF_Colors_NPCEnemySwatch", content)
-    npcEnemySwatch:SetSize(npcBarWidth, 16)
-    npcEnemySwatch:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcBarX, npcStartY - 2 * npcRowHeight)
+    npcEnemySwatch:SetSize(unitBarW, 16)
+    npcEnemySwatch:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitBarX, startY - 2 * rowH)
 
     npcEnemyTex = npcEnemySwatch:CreateTexture(nil, "ARTWORK")
     npcEnemyTex:SetAllPoints()
@@ -1811,16 +1816,15 @@ end
         end)
     end)
 
-
     -- Dead
     local deadLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    deadLabel:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcLabelX, npcStartY - 3 * npcRowHeight)
+    deadLabel:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitLabelX, startY - 3 * rowH)
     deadLabel:SetJustifyH("LEFT")
     deadLabel:SetText("Dead NPC Color")
 
     local npcDeadSwatch = CreateFrame("Button", "MSUF_Colors_NPCDeadSwatch", content)
-    npcDeadSwatch:SetSize(npcBarWidth, 16)
-    npcDeadSwatch:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcBarX, npcStartY - 3 * npcRowHeight)
+    npcDeadSwatch:SetSize(unitBarW, 16)
+    npcDeadSwatch:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitBarX, startY - 3 * rowH)
 
     npcDeadTex = npcDeadSwatch:CreateTexture(nil, "ARTWORK")
     npcDeadTex:SetAllPoints()
@@ -1835,13 +1839,13 @@ end
 
     -- Pet frame
     local petLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    petLabel:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcLabelX, npcStartY - 4 * npcRowHeight)
+    petLabel:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitLabelX, startY - 4 * rowH)
     petLabel:SetJustifyH("LEFT")
     petLabel:SetText("Pet Frame Color")
 
     local petFrameSwatch = CreateFrame("Button", "MSUF_Colors_PetFrameSwatch", content)
-    petFrameSwatch:SetSize(npcBarWidth, 16)
-    petFrameSwatch:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcBarX, npcStartY - 4 * npcRowHeight)
+    petFrameSwatch:SetSize(unitBarW, 16)
+    petFrameSwatch:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitBarX, startY - 4 * rowH)
 
     petFrameTex = petFrameSwatch:CreateTexture(nil, "ARTWORK")
     petFrameTex:SetAllPoints()
@@ -1861,21 +1865,31 @@ end
     end)
 
 
+    -- Right block: Bar Colors
+    local barHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    barHeader:SetPoint("TOPLEFT", darkToneSlider, "BOTTOMLEFT", rightHeaderX, -48)
+    barHeader:SetText("Bar Colors")
+    F.CreateHeaderDividerAbove(barHeader)
+
+    local barLabelX     = 0
+    local barSwatchX    = 210
+    local barSwatchW    = 120
+
     -- Absorb overlay
-    petLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    petLabel:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcLabelX, npcStartY - 5 * npcRowHeight)
-    petLabel:SetJustifyH("LEFT")
-    petLabel:SetText("Absorb Bar Color")
+    local absorbLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    absorbLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY)
+    absorbLabel:SetJustifyH("LEFT")
+    absorbLabel:SetText("Absorb Bar Color")
 
-    petFrameSwatch = CreateFrame("Button", "MSUF_Colors_AbsorbOverlaySwatch", content)
-    petFrameSwatch:SetSize(npcBarWidth, 16)
-    petFrameSwatch:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcBarX, npcStartY - 5 * npcRowHeight)
+    local absorbSwatch = CreateFrame("Button", "MSUF_Colors_AbsorbOverlaySwatch", content)
+    absorbSwatch:SetSize(barSwatchW, 16)
+    absorbSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY)
 
-    panel.__MSUF_ExtraColorAbsorbTex = petFrameSwatch:CreateTexture(nil, "ARTWORK")
+    panel.__MSUF_ExtraColorAbsorbTex = absorbSwatch:CreateTexture(nil, "ARTWORK")
     panel.__MSUF_ExtraColorAbsorbTex:SetAllPoints()
     panel.__MSUF_ExtraColorAbsorbTex:SetColorTexture(GetAbsorbOverlayColor())
 
-    petFrameSwatch:SetScript("OnClick", function()
+    absorbSwatch:SetScript("OnClick", function()
         local r, g, b = GetAbsorbOverlayColor()
         OpenColorPicker(r, g, b, function(nr, ng, nb)
             SetAbsorbOverlayColor(nr, ng, nb)
@@ -1885,20 +1899,20 @@ end
     end)
 
     -- Heal-Absorb overlay
-    petLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    petLabel:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcLabelX, npcStartY - 6 * npcRowHeight)
-    petLabel:SetJustifyH("LEFT")
-    petLabel:SetText("Heal-Absorb Bar Color")
+    local healAbsorbLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    healAbsorbLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - rowH)
+    healAbsorbLabel:SetJustifyH("LEFT")
+    healAbsorbLabel:SetText("Heal-Absorb Bar Color")
 
-    petFrameSwatch = CreateFrame("Button", "MSUF_Colors_HealAbsorbOverlaySwatch", content)
-    petFrameSwatch:SetSize(npcBarWidth, 16)
-    petFrameSwatch:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcBarX, npcStartY - 6 * npcRowHeight)
+    local healAbsorbSwatch = CreateFrame("Button", "MSUF_Colors_HealAbsorbOverlaySwatch", content)
+    healAbsorbSwatch:SetSize(barSwatchW, 16)
+    healAbsorbSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - rowH)
 
-    panel.__MSUF_ExtraColorHealAbsorbTex = petFrameSwatch:CreateTexture(nil, "ARTWORK")
+    panel.__MSUF_ExtraColorHealAbsorbTex = healAbsorbSwatch:CreateTexture(nil, "ARTWORK")
     panel.__MSUF_ExtraColorHealAbsorbTex:SetAllPoints()
     panel.__MSUF_ExtraColorHealAbsorbTex:SetColorTexture(GetHealAbsorbOverlayColor())
 
-    petFrameSwatch:SetScript("OnClick", function()
+    healAbsorbSwatch:SetScript("OnClick", function()
         local r, g, b = GetHealAbsorbOverlayColor()
         OpenColorPicker(r, g, b, function(nr, ng, nb)
             SetHealAbsorbOverlayColor(nr, ng, nb)
@@ -1907,24 +1921,22 @@ end
         end)
     end)
 
-
     -- Power bar background
-    petLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    petLabel:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcLabelX, npcStartY - 7 * npcRowHeight)
-    petLabel:SetJustifyH("LEFT")
-    petLabel:SetText("Power Bar Background Color")
+    local powerBgLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    powerBgLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 2 * rowH)
+    powerBgLabel:SetJustifyH("LEFT")
+    powerBgLabel:SetText("Power Bar Background Color")
 
-    petFrameSwatch = CreateFrame("Button", "MSUF_Colors_PowerBarBackgroundSwatch", content)
+    local powerBgSwatch = CreateFrame("Button", "MSUF_Colors_PowerBarBackgroundSwatch", content)
+    panel.__MSUF_ExtraColorPowerBgSwatch = powerBgSwatch
+    powerBgSwatch:SetSize(barSwatchW, 16)
+    powerBgSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 2 * rowH)
 
-    panel.__MSUF_ExtraColorPowerBgSwatch = petFrameSwatch
-    petFrameSwatch:SetSize(npcBarWidth, 16)
-    petFrameSwatch:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcBarX, npcStartY - 7 * npcRowHeight)
-
-    panel.__MSUF_ExtraColorPowerBgTex = petFrameSwatch:CreateTexture(nil, "ARTWORK")
+    panel.__MSUF_ExtraColorPowerBgTex = powerBgSwatch:CreateTexture(nil, "ARTWORK")
     panel.__MSUF_ExtraColorPowerBgTex:SetAllPoints()
     panel.__MSUF_ExtraColorPowerBgTex:SetColorTexture(GetPowerBarBackgroundColor())
 
-    petFrameSwatch:SetScript("OnClick", function()
+    powerBgSwatch:SetScript("OnClick", function()
         local r, g, b = GetPowerBarBackgroundColor()
         OpenColorPicker(r, g, b, function(nr, ng, nb)
             SetPowerBarBackgroundColor(nr, ng, nb)
@@ -1933,11 +1945,9 @@ end
         end)
     end)
 
-    -- Optional: dynamically match the Power BG hue to the CURRENT HP bar color
-    -- (useful when the power bar is embedded into the health bar).
     panel.__MSUF_ExtraColorPowerBgMatchCheck = panel.__MSUF_ExtraColorPowerBgMatchCheck or CreateFrame("CheckButton", "MSUF_Colors_PowerBarBgMatchHP", content, "UICheckButtonTemplate")
     panel.__MSUF_ExtraColorPowerBgMatchCheck:ClearAllPoints()
-    panel.__MSUF_ExtraColorPowerBgMatchCheck:SetPoint("LEFT", petFrameSwatch, "RIGHT", 14, 0)
+    panel.__MSUF_ExtraColorPowerBgMatchCheck:SetPoint("LEFT", powerBgSwatch, "RIGHT", 14, 0)
     if not panel.__MSUF_ExtraColorPowerBgMatchCheck.text then
         panel.__MSUF_ExtraColorPowerBgMatchCheck.text = panel.__MSUF_ExtraColorPowerBgMatchCheck:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         panel.__MSUF_ExtraColorPowerBgMatchCheck.text:SetPoint("LEFT", panel.__MSUF_ExtraColorPowerBgMatchCheck, "RIGHT", 2, 0)
@@ -1946,43 +1956,39 @@ end
     panel.__MSUF_ExtraColorPowerBgMatchCheck:SetChecked(GetPowerBarBackgroundMatchHP())
     panel.__MSUF_ExtraColorPowerBgMatchCheck:SetScript("OnClick", function(btn)
         SetPowerBarBackgroundMatchHP(btn:GetChecked())
-        if petFrameSwatch and petFrameSwatch.EnableMouse then
-            petFrameSwatch:EnableMouse(not btn:GetChecked())
+        if powerBgSwatch and powerBgSwatch.EnableMouse then
+            powerBgSwatch:EnableMouse(not btn:GetChecked())
         end
-        if petFrameSwatch and petFrameSwatch.SetAlpha then
-            petFrameSwatch:SetAlpha(btn:GetChecked() and 0.35 or 1)
+        if powerBgSwatch and powerBgSwatch.SetAlpha then
+            powerBgSwatch:SetAlpha(btn:GetChecked() and 0.35 or 1)
         end
     end)
 
-    -- Initial state sync (disable the swatch when Match HP is on)
     if GetPowerBarBackgroundMatchHP() then
-        if petFrameSwatch and petFrameSwatch.EnableMouse then
-            petFrameSwatch:EnableMouse(false)
+        if powerBgSwatch and powerBgSwatch.EnableMouse then
+            powerBgSwatch:EnableMouse(false)
         end
-        if petFrameSwatch and petFrameSwatch.SetAlpha then
-            petFrameSwatch:SetAlpha(0.35)
+        if powerBgSwatch and powerBgSwatch.SetAlpha then
+            powerBgSwatch:SetAlpha(0.35)
         end
     else
-        if petFrameSwatch and petFrameSwatch.EnableMouse then
-            petFrameSwatch:EnableMouse(true)
+        if powerBgSwatch and powerBgSwatch.EnableMouse then
+            powerBgSwatch:EnableMouse(true)
         end
-        if petFrameSwatch and petFrameSwatch.SetAlpha then
-            petFrameSwatch:SetAlpha(1)
+        if powerBgSwatch and powerBgSwatch.SetAlpha then
+            powerBgSwatch:SetAlpha(1)
         end
     end
 
-
-
-
     -- Aggro border (outline indicator)
     local aggroLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    aggroLabel:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcLabelX, npcStartY - 8 * npcRowHeight)
+    aggroLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 3 * rowH)
     aggroLabel:SetJustifyH("LEFT")
     aggroLabel:SetText("Aggro Border Color")
 
     local aggroSwatch = CreateFrame("Button", "MSUF_Colors_AggroBorderSwatch", content)
-    aggroSwatch:SetSize(npcBarWidth, 16)
-    aggroSwatch:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcBarX, npcStartY - 8 * npcRowHeight)
+    aggroSwatch:SetSize(barSwatchW, 16)
+    aggroSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 3 * rowH)
 
     panel.__MSUF_ExtraColorAggroBorderTex = aggroSwatch:CreateTexture(nil, "ARTWORK")
     panel.__MSUF_ExtraColorAggroBorderTex:SetAllPoints()
@@ -1997,10 +2003,10 @@ end
         end)
     end)
 
-    -- Reset Extra Color
+    -- Reset (kept for 0-regression; affects both columns)
     local npcResetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
     npcResetBtn:SetSize(160, 22)
-    npcResetBtn:SetPoint("TOPLEFT", aggroLabel, "BOTTOMLEFT", 0, -12)
+    npcResetBtn:SetPoint("TOPLEFT", petLabel, "BOTTOMLEFT", 0, -12)
     npcResetBtn:SetText("Reset Extra Color")
     npcResetBtn:SetScript("OnClick", function()
         if EnsureDB and MSUF_DB then
@@ -2017,7 +2023,6 @@ end
             gen.powerBarBgMatchHPColor = nil
             MSUF_DB.bars = MSUF_DB.bars or {}
             MSUF_DB.bars.powerBarBgMatchBarColor = nil
-
 
             PushVisualUpdates()
         end
@@ -2038,6 +2043,10 @@ end
             local dr, dg, db = GetNPCColor("dead")
             npcDeadTex:SetColorTexture(dr, dg, db)
         end
+        if petFrameTex then
+            local pr, pg, pb = GetPetFrameColor()
+            petFrameTex:SetColorTexture(pr, pg, pb)
+        end
         local aTex = panel.__MSUF_ExtraColorAbsorbTex
         if aTex then
             aTex:SetColorTexture(GetAbsorbOverlayColor())
@@ -2054,7 +2063,6 @@ end
         if agTex then
             agTex:SetColorTexture(GetAggroBorderColor())
         end
-
 
         if panel.__MSUF_ExtraColorPowerBgMatchCheck then
             panel.__MSUF_ExtraColorPowerBgMatchCheck:SetChecked(false)
