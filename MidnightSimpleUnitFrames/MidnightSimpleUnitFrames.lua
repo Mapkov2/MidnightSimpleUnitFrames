@@ -501,15 +501,15 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     end
     local pType, pTok
     if wantPercent then
-        local okPT; okPT, pType, pTok = MSUF_FastCall(UnitPowerType, unit)
-        if not okPT then return _MSUF_Bars_HidePower(bar, false) end
-        local okPct, pct
+        pType, pTok = UnitPowerType(unit)
+        if pType == nil then return _MSUF_Bars_HidePower(bar, false) end
+        local pct
         if CurveConstants and CurveConstants.ScaleTo100 then
-            okPct, pct = MSUF_FastCall(UnitPowerPercent, unit, pType, false, CurveConstants.ScaleTo100)
+            pct = UnitPowerPercent(unit, pType, false, CurveConstants.ScaleTo100)
         else
-            okPct, pct = MSUF_FastCall(UnitPowerPercent, unit, pType, false, true)
+            pct = UnitPowerPercent(unit, pType, false, true)
     end
-        if not okPct then return _MSUF_Bars_HidePower(bar, false) end
+        if pct == nil then return _MSUF_Bars_HidePower(bar, false) end
         ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
         MSUF_SetBarMinMax(bar, 0, 100)
         bar:SetScript("OnUpdate", nil)
@@ -921,19 +921,15 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
  end
 function ns.Text.GetUnitPowerPercent(unit)
     if type(UnitPowerPercent) == "function" then
-        -- Secret-safe: avoid computing percent in Lua; use API pass-through if available.
         local pType
         if type(UnitPowerType) == "function" then
-            local okType, pt = MSUF_FastCall(UnitPowerType, unit)
-            if okType then pType = pt end
-    end
-        local ok, pct
+            pType = UnitPowerType(unit)
+        end
         if CurveConstants and CurveConstants.ScaleTo100 then
-            ok, pct = MSUF_FastCall(UnitPowerPercent, unit, pType, false, CurveConstants.ScaleTo100)
+            return UnitPowerPercent(unit, pType, false, CurveConstants.ScaleTo100)
         else
-            ok, pct = MSUF_FastCall(UnitPowerPercent, unit, pType, false, true)
-    end
-        if ok then  return pct end
+            return UnitPowerPercent(unit, pType, false, true)
+        end
     end
      return nil
 end
@@ -976,12 +972,12 @@ function ns.Text.RenderPowerText(self)
     local isFocus  = self._msufIsFocus
     if isPlayer or isFocus or F.UnitIsPlayer(unit) then
         local curText, maxText
-        local okCur, curValue = MSUF_FastCall(F.UnitPower, unit)
-        local okMax, maxValue = MSUF_FastCall(F.UnitPowerMax, unit)
-        if okCur and curValue ~= nil then
+        local curValue = F.UnitPower(unit)
+        local maxValue = F.UnitPowerMax(unit)
+        if curValue ~= nil then
             curText = (AbbreviateLargeNumbers and AbbreviateLargeNumbers(curValue)) or tostring(curValue)
     end
-        if okMax and maxValue ~= nil then
+        if maxValue ~= nil then
             maxText = (AbbreviateLargeNumbers and AbbreviateLargeNumbers(maxValue)) or tostring(maxValue)
     end
         local powerPct = ns.Text.GetUnitPowerPercent(unit)
@@ -1037,16 +1033,18 @@ function ns.Text.RenderPowerText(self)
         ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
          return
     elseif self.isBoss and C_StringUtil and C_StringUtil.TruncateWhenZero then
-        local okCur, curText2 = MSUF_FastCall(function()  return C_StringUtil.TruncateWhenZero(F.UnitPower(unit)) end)
-        local okMax, maxText2 = MSUF_FastCall(function()  return C_StringUtil.TruncateWhenZero(F.UnitPowerMax(unit)) end)
+        local pCur = F.UnitPower(unit)
+        local pMax = F.UnitPowerMax(unit)
+        local curText2 = (pCur ~= nil) and C_StringUtil.TruncateWhenZero(pCur) or nil
+        local maxText2 = (pMax ~= nil) and C_StringUtil.TruncateWhenZero(pMax) or nil
         ns.Text.ClearField(self, "powerTextPct")
-        if okCur and curText2 and okMax and maxText2 then
+        if curText2 and maxText2 then
             ns.Text.SetFormatted(self.powerText, true, "%s%s%s", curText2, powerSep, maxText2)
             ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-        elseif okCur and curText2 then
+        elseif curText2 then
             ns.Text.Set(self.powerText, curText2, true)
             ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-        elseif okMax and maxText2 then
+        elseif maxText2 then
             ns.Text.Set(self.powerText, maxText2, true)
             ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
         else
@@ -1159,8 +1157,8 @@ function ns.Text.ApplyPowerTextColorByType(self, unit, enabled)
     -- Secret-safe & pass-through: avoid extra comparisons/caching; just apply resolved color.
     if not enabled then  return end
     if not (self and self.powerText and UnitPowerType) then  return end
-    local okPT, pType, pTok = MSUF_FastCall(UnitPowerType, unit)
-    if not okPT then  return end
+    local pType, pTok = UnitPowerType(unit)
+    if pType == nil then  return end
     if type(MSUF_GetResolvedPowerColor) ~= "function" then  return end
     local pr, pg, pb = MSUF_GetResolvedPowerColor(pType, pTok)
     if not pr then  return end
@@ -4263,12 +4261,11 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
         local unit = f.unit
         local hasUnit = false
         if unit and F.UnitExists then
-            local okExists, exists = MSUF_FastCall(F.UnitExists, unit)
-            hasUnit = okExists and exists
+            hasUnit = F.UnitExists(unit) and true or false
     end
         if hasUnit and F.UnitHealth then
-            local okHp, hp = MSUF_FastCall(F.UnitHealth, unit)
-            if okHp then
+            local hp = F.UnitHealth(unit)
+            if hp ~= nil then
                 f._msufLastHpValue = nil
                 _G.MSUF_UFCore_UpdateHpTextFast(f, hp)
             end
@@ -4876,18 +4873,11 @@ end
 _G.MSUF_GetUnitLevelText = MSUF_GetUnitLevelText
 local function MSUF_GetUnitHealthPercent(unit)
     if type(UnitHealthPercent) == "function" then
-        local ok, pct
         if CurveConstants and CurveConstants.ScaleTo100 then
-            -- Secret-safe + snappy: usePredicted=true (avoid Lua arithmetic on secret values)
-            ok, pct = MSUF_FastCall(UnitHealthPercent, unit, true, CurveConstants.ScaleTo100)
+            return UnitHealthPercent(unit, true, CurveConstants.ScaleTo100)
         else
-            ok, pct = MSUF_FastCall(UnitHealthPercent, unit, true, true)
-    end
-        -- Secret-safe: avoid comparing returned values in Lua (pct may be a "secret" number).
-        if ok then
-             return pct
-    end
-         return nil
+            return UnitHealthPercent(unit, true, true)
+        end
     end
     -- 12.0+: If UnitHealthPercent is unavailable, avoid computing percent in Lua (secret-safe).
      return nil
