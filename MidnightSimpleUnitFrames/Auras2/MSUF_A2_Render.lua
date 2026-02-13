@@ -956,6 +956,10 @@ local function MarkAllDirty(delay)
 end
 
 local function RefreshAll()
+    -- Bump configGen so CommitIcon diff-gate forces full re-apply on all icons
+    _configGen = _configGen + 1
+    if Icons and Icons.BumpConfigGen then Icons.BumpConfigGen() end
+
     local Store = API.Store
     if Store and Store.InvalidateUnit then
         Store.InvalidateUnit("player")
@@ -1033,6 +1037,12 @@ API.RefreshUnit = RefreshUnit
 API.RequestUnit = function(unit, delay) MarkDirty(unit, delay) end
 API.HardDisableAll = HardDisableAll
 API.Flush = Flush
+
+-- RequestApply: called by Options after any settings change (checkboxes, sliders, etc.)
+-- Must bump configGen so CommitIcon diff-gate triggers a full re-apply (highlights, timers, etc.)
+API.RequestApply = function()
+    InvalidateDB()
+end
 
 -- Global wrappers for backward compat
 _G.MSUF_Auras2_RefreshAll = function() return API.RefreshAll() end

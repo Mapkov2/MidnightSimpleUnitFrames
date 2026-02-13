@@ -130,6 +130,11 @@ end
 --   ._msufAuraInstanceID  (= auraInstanceID, cached for Apply)
 --   ._msufIsPlayerAura    (bool, derived from IsAuraFilteredOutByInstanceID)
 --   ._msufIsHelpful       (bool, derived from the filter string we passed)
+--
+-- Performance: when no filters are active, the API request cap equals the
+-- display cap — a cap of 4 means exactly 4 GetAuraSlots + 4 GetAuraDataBySlot
+-- calls. When filters are active, we over-fetch by a bounded multiplier to
+-- compensate for filtered-out auras while still limiting total API work.
 -- ────────────────────────────────────────────────────────────────
 
 function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyBoss, out)
@@ -152,17 +157,33 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
         return out, 0
     end
 
-    local cap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
+    local outputCap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
     local isHelpful = (filter == FILTER_HELPFUL)
     local playerFilter = PlayerFilter(filter)
     local canCheckFiltered = (type(isFiltered) == "function")
 
+    -- Determine how many slots to request from the API.
+    -- No filters → request exactly outputCap (minimum API calls, maximum perf gain).
+    -- Filters active → over-fetch to compensate for filtering losses (bounded).
+    local hasFilters = onlyMine or hidePermanent or onlyBoss
+    local requestCap
+    if hasFilters then
+        -- Request 3× the output cap, clamped to [outputCap, 40].
+        -- This usually fills the output after filtering without scanning all auras.
+        requestCap = outputCap * 3
+        if requestCap < outputCap then requestCap = outputCap end
+        if requestCap > 40 then requestCap = 40 end
+    else
+        -- No filters: request equals output. Pure performance win.
+        requestCap = outputCap
+    end
+
     -- Collect slots (skip continuation token at index 1)
-    local nSlots = CaptureSlots(_scratch, select(2, getSlots(unit, filter, cap, nil)))
+    local nSlots = CaptureSlots(_scratch, select(2, getSlots(unit, filter, requestCap, nil)))
 
     local n = 0
     for i = 1, nSlots do
-        if n >= cap then break end
+        if n >= outputCap then break end
 
         local data = getBySlot(unit, _scratch[i])
         if type(data) == "table" then
@@ -225,17 +246,18 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, merg
     out = (type(out) == "table") and out or {}
     mergeOut = (type(mergeOut) == "table") and mergeOut or {}
 
-    -- 1. Get player-only auras
-    local _, playerN = Collect.GetAuras(unit, filter, maxCount, true, hidePermanent, false, out)
+    local outputCap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
 
-    -- 2. Get all auras (for boss detection)
-    local _, allN = Collect.GetAuras(unit, filter, maxCount, false, hidePermanent, false, mergeOut)
+    -- 1. Get player-only auras (uses smart over-fetch since onlyMine filter is active)
+    local _, playerN = Collect.GetAuras(unit, filter, outputCap, true, hidePermanent, false, out)
+
+    -- 2. Get all auras for boss detection. Must request a full scan (40) because boss
+    --    auras can appear anywhere in the slot list and a low cap would miss them.
+    local _, allN = Collect.GetAuras(unit, filter, 40, false, hidePermanent, false, mergeOut)
 
     -- 3. Merge: add boss auras from all-list that aren't already in player-list
-    -- Reuse a scratch seen-set keyed by auraInstanceID (zero alloc steady state)
     local seen = out._msufA2_seen
     if not seen then seen = {}; out._msufA2_seen = seen end
-    -- Clear previous entries (wipe reused table)
     for k in pairs(seen) do seen[k] = nil end
 
     for i = 1, playerN do
@@ -248,7 +270,7 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, merg
 
     local n = playerN
     for i = 1, allN do
-        if n >= maxCount then break end
+        if n >= outputCap then break end
         local d = mergeOut[i]
         if d and IsBossAura(d) then
             local aid = d._msufAuraInstanceID or d.auraInstanceID
