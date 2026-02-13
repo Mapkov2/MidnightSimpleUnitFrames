@@ -49,6 +49,41 @@ local function EnsureBindings()
     if not CT then CT = API.CooldownText end
 end
 
+-- ── Fast-path Collect helpers (skip guard checks in hot path) ──
+local _getDurationFast   -- Collect.GetDurationObjectFast (bound on first use)
+local _getStackCountFast -- Collect.GetStackCountFast
+local _hasExpirationFast -- Collect.HasExpirationFast
+local _fastPathBound = false
+
+local function BindFastPaths()
+    if _fastPathBound then return end
+    if not Collect then return end
+    _getDurationFast   = Collect.GetDurationObjectFast or Collect.GetDurationObject
+    _getStackCountFast = Collect.GetStackCountFast or Collect.GetStackCount
+    _hasExpirationFast = Collect.HasExpirationFast or Collect.HasExpiration
+    _fastPathBound = true
+end
+
+-- ── Cached shared.* flags (resolve once per configGen, not per icon) ──
+local _sharedFlagsGen   = -1
+local _showSwipe        = false
+local _showText         = true
+local _swipeReverse     = false
+local _showStacks       = false
+local _wantBuffHL       = false
+local _wantDebuffHL     = false
+
+local function RefreshSharedFlags(shared, gen)
+    if _sharedFlagsGen == gen then return end
+    _sharedFlagsGen = gen
+    _showSwipe    = (shared and shared.showCooldownSwipe == true) or false
+    _showText     = (shared and shared.showCooldownText ~= false) -- default true
+    _swipeReverse = (shared and shared.cooldownSwipeDarkenOnLoss == true) or false
+    _showStacks   = (shared and shared.showStackCount == true) or false
+    _wantBuffHL   = (shared and shared.highlightOwnBuffs == true) or false
+    _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
+end
+
 -- DB access
 local function GetAuras2DB()
     if API.GetDB then return API.GetDB() end
@@ -174,6 +209,10 @@ function Icons.AcquireIcon(container, index)
         container._msufIcons = pool
     end
 
+    -- Track high water mark for HideUnused bounded iteration
+    local activeN = container._msufA2_activeN or 0
+    if index > activeN then container._msufA2_activeN = index end
+
     local icon = pool[index]
     if icon then
         icon:Show()
@@ -196,18 +235,32 @@ function Icons.HideUnused(container, fromIndex)
     if not container then return end
     local pool = container._msufIcons
     if not pool then return end
-    for i = fromIndex, #pool do
+
+    -- Bound iteration to the last known active count (high water mark).
+    local highWater = container._msufA2_activeN or #pool
+    if fromIndex > highWater then return end -- nothing to hide
+
+    local map = container._msufA2_iconByAid
+    for i = fromIndex, highWater do
         local icon = pool[i]
         if icon then
-            icon:Hide()
-            -- Clear AID mapping
-            local aid = icon._msufAuraInstanceID
-            local map = container._msufA2_iconByAid
-            if aid and map and map[aid] == icon then
-                map[aid] = nil
+            if icon:IsShown() then
+                icon:Hide()
+                local aid = icon._msufAuraInstanceID
+                if aid and map and map[aid] == icon then
+                    map[aid] = nil
+                end
+                icon._msufAuraInstanceID = nil
             end
-            icon._msufAuraInstanceID = nil
         end
+    end
+
+    -- Update active count (the caller just committed fromIndex-1 icons)
+    container._msufA2_activeN = fromIndex - 1
+
+    -- Invalidate layout cache when count shrinks (forces re-layout on next grow)
+    if container._msufA2_lastLayoutN and fromIndex - 1 < container._msufA2_lastLayoutN then
+        container._msufA2_lastLayoutN = nil
     end
 end
 
@@ -217,6 +270,16 @@ end
 
 function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, rowWrap)
     if not container or count <= 0 then return end
+
+    -- ── Layout diff gate ──
+    -- If count and configGen match last call, positions are identical. Skip.
+    -- configGen covers iconSize, spacing, perRow, growth, rowWrap (all settings).
+    local gen = _configGen
+    if count == container._msufA2_lastLayoutN and gen == container._msufA2_lastLayoutGen then
+        return
+    end
+    container._msufA2_lastLayoutN = count
+    container._msufA2_lastLayoutGen = gen
 
     iconSize = iconSize or 26
     spacing = spacing or 2
@@ -270,13 +333,22 @@ local _configGen = 0  -- bumped by InvalidateDB
 function Icons.BumpConfigGen()
     _configGen = _configGen + 1
     _bindingsDone = false  -- re-bind on next commit (picks up late-loaded modules)
+    _fastPathBound = false -- re-bind fast paths
+    _sharedFlagsGen = -1   -- force shared flags refresh
 end
 
 local _bindingsDone = false
 
 function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, masterOn, isOwn, stackCountAnchor, configGen)
     if not icon then return false end
-    if not _bindingsDone then EnsureBindings(); _bindingsDone = true end
+    if not _bindingsDone then
+        EnsureBindings()
+        BindFastPaths()
+        _bindingsDone = true
+    end
+
+    local gen = configGen or _configGen
+    RefreshSharedFlags(shared, gen)
 
     icon._msufUnit = unit
     icon._msufFilter = isHelpful and "HELPFUL" or "HARMFUL"
@@ -368,18 +440,15 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
     local cd = icon.cooldown
     if not cd then return end
 
-    local showSwipe = (shared and shared.showCooldownSwipe == true) or false
-    local showText = (shared and shared.showCooldownText ~= false) -- default true
-    local reverse = (shared and shared.cooldownSwipeDarkenOnLoss == true) or false
-
-    cd:SetDrawSwipe(showSwipe)
-    cd:SetReverse(reverse)
-    cd:SetHideCountdownNumbers(not showText)
+    -- Use cached shared flags (refreshed per configGen in CommitIcon/RefreshAssignedIcons)
+    cd:SetDrawSwipe(_showSwipe)
+    cd:SetReverse(_swipeReverse)
+    cd:SetHideCountdownNumbers(not _showText)
 
     local hadTimer = false
 
-    -- Get duration object (secret-safe)
-    local obj = Collect and Collect.GetDurationObject(unit, aid)
+    -- Get duration object (secret-safe) — fast path skips 3 guards
+    local obj = _getDurationFast and _getDurationFast(unit, aid)
     if obj then
         -- Cache method reference on cd frame to avoid type() check per call
         local cdSetFn = cd._msufA2_cdSetFn
@@ -409,7 +478,7 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
     end
 
     if not hadTimer then
-        local hasExp = Collect and Collect.HasExpiration(unit, aid)
+        local hasExp = _hasExpirationFast and _hasExpirationFast(unit, aid)
         if hasExp == false then
             if cd.Clear then cd:Clear() end
             if cd.SetCooldown then cd:SetCooldown(0, 0) end
@@ -420,7 +489,7 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
 
     -- Cooldown text manager integration (CT already bound by CommitIcon)
     CT = CT or API.CooldownText
-    local wantText = showText and (icon._msufA2_hideCDNumbers ~= true)
+    local wantText = _showText and (icon._msufA2_hideCDNumbers ~= true)
     if CT then
         if wantText and hadTimer then
             if CT.RegisterIcon then CT.RegisterIcon(icon) end
@@ -438,11 +507,10 @@ function Icons._RefreshTimer(icon, unit, aid, shared)
     local cd = icon.cooldown
     if not cd then return end
 
-    local showSwipe = (shared and shared.showCooldownSwipe == true) or false
-    local showText = (shared and shared.showCooldownText ~= false)
-    if not showSwipe and not showText then return end
+    -- Use cached shared flags (no shared table reads)
+    if not _showSwipe and not _showText then return end
 
-    local obj = Collect and Collect.GetDurationObject(unit, aid)
+    local obj = _getDurationFast and _getDurationFast(unit, aid)
     if obj then
         -- Use cached method ref (set by _ApplyTimer)
         local cdSetFn = cd._msufA2_cdSetFn
@@ -486,8 +554,8 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
     local countFS = icon.count
     if not countFS then return end
 
-    local showStacks = (shared and shared.showStackCount == true) or false
-    if not showStacks then
+    -- Use cached shared flag (no shared table read)
+    if not _showStacks then
         if icon._msufA2_lastStackText then
             countFS:SetText("")
             countFS:Hide()
@@ -496,7 +564,7 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
         return
     end
 
-    local stacks = Collect and Collect.GetStackCount(unit, aid)
+    local stacks = _getStackCountFast and _getStackCountFast(unit, aid)
     if type(stacks) == "number" and stacks >= 2 then
         -- Only SetText when value changed
         if icon._msufA2_lastStackText ~= stacks then
@@ -555,15 +623,13 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     local glow = icon._msufOwnGlow
     if not glow then return end
 
-    local wantBuffHL = (shared and shared.highlightOwnBuffs == true) or false
-    local wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
-
+    -- Use cached shared flags (no shared table reads)
     local show = false
     if isOwn then
         if isHelpful then
-            show = wantBuffHL
+            show = _wantBuffHL
         else
-            show = wantDebuffHL
+            show = _wantDebuffHL
         end
     end
 
@@ -594,14 +660,23 @@ end
 
 function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
     if not entry then return end
-    if not _bindingsDone then EnsureBindings(); _bindingsDone = true end
+    if not _bindingsDone then
+        EnsureBindings()
+        BindFastPaths()
+        _bindingsDone = true
+    end
+
+    -- Ensure cached shared flags are current
+    RefreshSharedFlags(shared, _configGen)
 
     -- Inline container refresh (no closure allocation)
-    local pool, icon, aid
+    -- Use activeN for bounded iteration (avoids walking dead pool entries)
+    local pool, activeN, icon, aid
 
     pool = entry.buffs and entry.buffs._msufIcons
     if pool then
-        for i = 1, #pool do
+        activeN = entry.buffs._msufA2_activeN or #pool
+        for i = 1, activeN do
             icon = pool[i]
             if icon and icon:IsShown() then
                 aid = icon._msufAuraInstanceID
@@ -615,7 +690,8 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
 
     pool = entry.debuffs and entry.debuffs._msufIcons
     if pool then
-        for i = 1, #pool do
+        activeN = entry.debuffs._msufA2_activeN or #pool
+        for i = 1, activeN do
             icon = pool[i]
             if icon and icon:IsShown() then
                 aid = icon._msufAuraInstanceID
@@ -629,7 +705,8 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
 
     pool = entry.mixed and entry.mixed._msufIcons
     if pool then
-        for i = 1, #pool do
+        activeN = entry.mixed._msufA2_activeN or #pool
+        for i = 1, activeN do
             icon = pool[i]
             if icon and icon:IsShown() then
                 aid = icon._msufAuraInstanceID

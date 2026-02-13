@@ -69,29 +69,30 @@ end
 -- ------------------------------------------------------------
 API.__applyPending = (API.__applyPending == true)
 
+-- File-scope apply function (avoid closure allocation per RequestApply call)
+local function _DoApply()
+    API.__applyPending = false
+
+    if API.Init then
+        API.Init()
+    end
+
+    local r = API.RefreshAll
+    if type(r) == "function" then
+        r()
+    elseif type(_G) == "table" and type(_G.MSUF_Auras2_RefreshAll) == "function" then
+        _G.MSUF_Auras2_RefreshAll()
+    end
+end
+
 function API.RequestApply()
     if API.__applyPending then return end
     API.__applyPending = true
 
-    local function _do()
-        API.__applyPending = false
-
-        if API.Init then
-            API.Init()
-        end
-
-        local r = API.RefreshAll
-        if type(r) == "function" then
-            r()
-        elseif type(_G) == "table" and type(_G.MSUF_Auras2_RefreshAll) == "function" then
-            _G.MSUF_Auras2_RefreshAll()
-        end
-    end
-
     if C_Timer and C_Timer.After then
-        C_Timer.After(0, _do)
+        C_Timer.After(0, _DoApply)
     else
-        _do()
+        _DoApply()
     end
 end
 

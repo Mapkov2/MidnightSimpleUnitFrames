@@ -44,11 +44,18 @@ local function ReadRGB(t, defR, defG, defB)
      return r, g, b
 end
 
+-- Cached general ref (invalidated by InvalidateCache, avoids _G.MSUF_DB per call)
+local _cachedGeneral = nil
+local _generalValid = false
+
 local function GetGeneral() 
+    if _generalValid then return _cachedGeneral end
     local db = _G and _G.MSUF_DB or nil
-    if type(db) ~= "table" then  return nil end
+    if type(db) ~= "table" then _cachedGeneral = nil; return nil end
     local g = db.general
-    if type(g) ~= "table" then  return nil end
+    if type(g) ~= "table" then _cachedGeneral = nil; return nil end
+    _cachedGeneral = g
+    _generalValid = true
      return g
 end
 
@@ -94,6 +101,8 @@ function Colors.InvalidateCache()
         e.r, e.g, e.b = nil, nil, nil
         e.rr, e.gg, e.bb = nil, nil, nil
     end
+    _generalValid = false
+    _cachedGeneral = nil
  end
 
 -- Own buff highlight (border + glow)

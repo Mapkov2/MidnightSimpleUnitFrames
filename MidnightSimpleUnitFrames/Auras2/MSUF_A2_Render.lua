@@ -187,6 +187,7 @@ local function InvalidateDB()
     _ensureReady = false
     _lastDB = nil
     _configGen = _configGen + 1
+    _modulesBound = false  -- re-bind modules on next RenderUnit (picks up late-loaded modules)
     if API.DB and API.DB.InvalidateCache then API.DB.InvalidateCache() end
     if API.Colors and API.Colors.InvalidateCache then API.Colors.InvalidateCache() end
     Icons = API.Icons or API.Apply
@@ -394,6 +395,8 @@ local function EnsureAttached(unit)
         _lastDebuffCount = 0,
         _lastEpoch = -1,
         _lastConfigGen = -1,
+        _lastAnchorGen = -1,
+        _lastPrivateGen = -1,
     }
     AurasByUnit[unit] = entry
     return entry
@@ -723,57 +726,104 @@ local function RenderUnit(entry)
     local a2, shared = GetAuras2DB()
     if not a2 or not shared then return end
 
-    local unitExists = UnitExists and UnitExists(unit)
-
-    -- Resolve config (cheap: just reads from DB tables)
-    local iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, layoutMode, stackCountAnchor =
-        ResolveUnitConfig(unit, a2, shared)
-
-    -- Resolve filters
-    local tf, masterOn, onlyBossAuras, buffsOnlyMine, debuffsOnlyMine, buffsIncludeBoss, debuffsIncludeBoss, hidePermanentBuffs
-    if Filters and Filters.ResolveRuntimeFlags then
-        tf, masterOn, onlyBossAuras, buffsOnlyMine, debuffsOnlyMine, buffsIncludeBoss, debuffsIncludeBoss, hidePermanentBuffs = Filters.ResolveRuntimeFlags(a2, shared, unit)
-    else
-        masterOn = false
-        buffsOnlyMine, debuffsOnlyMine = false, false
-        buffsIncludeBoss, debuffsIncludeBoss = false, false
-        hidePermanentBuffs = false
-        onlyBossAuras = false
+    -- ── Cache resolved config per configGen (eliminates ~40 table reads per aura event) ──
+    local cfg = entry._cfg
+    if not cfg then
+        cfg = { _gen = -1 }
+        entry._cfg = cfg
     end
 
-    local showBuffs = (shared.showBuffs == true)
-    local showDebuffs = (shared.showDebuffs == true)
-    local useSingleRow = (layoutMode == "SINGLE")
+    local gen = _configGen
+    if cfg._gen ~= gen then
+        cfg._gen = gen
 
-    -- Pre-compute: do we need player-aura detection? Only if highlights are on.
-    local needPlayerAura = (shared.highlightOwnBuffs == true) or (shared.highlightOwnDebuffs == true)
+        -- Layout config (9 values)
+        cfg.iconSize, cfg.spacing, cfg.perRow, cfg.maxBuffs, cfg.maxDebuffs,
+        cfg.growth, cfg.rowWrap, cfg.layoutMode, cfg.stackCountAnchor =
+            ResolveUnitConfig(unit, a2, shared)
+
+        -- Filter flags (8 values)
+        if Filters and Filters.ResolveRuntimeFlags then
+            cfg.tf, cfg.masterOn, cfg.onlyBossAuras, cfg.buffsOnlyMine, cfg.debuffsOnlyMine,
+            cfg.buffsIncludeBoss, cfg.debuffsIncludeBoss, cfg.hidePermanentBuffs =
+                Filters.ResolveRuntimeFlags(a2, shared, unit)
+        else
+            cfg.tf = nil
+            cfg.masterOn = false
+            cfg.onlyBossAuras = false
+            cfg.buffsOnlyMine = false
+            cfg.debuffsOnlyMine = false
+            cfg.buffsIncludeBoss = false
+            cfg.debuffsIncludeBoss = false
+            cfg.hidePermanentBuffs = false
+        end
+
+        -- Display flags
+        cfg.showBuffs = (shared.showBuffs == true)
+        cfg.showDebuffs = (shared.showDebuffs == true)
+        cfg.needPlayerAura = (shared.highlightOwnBuffs == true) or (shared.highlightOwnDebuffs == true)
+        cfg.useSingleRow = (cfg.layoutMode == "SINGLE")
+    end
+
+    -- Local aliases for hot-path values
+    local iconSize          = cfg.iconSize
+    local spacing           = cfg.spacing
+    local perRow            = cfg.perRow
+    local maxBuffs          = cfg.maxBuffs
+    local maxDebuffs        = cfg.maxDebuffs
+    local growth            = cfg.growth
+    local rowWrap           = cfg.rowWrap
+    local stackCountAnchor  = cfg.stackCountAnchor
+    local showBuffs         = cfg.showBuffs
+    local showDebuffs       = cfg.showDebuffs
+    local useSingleRow      = cfg.useSingleRow
+    local needPlayerAura    = cfg.needPlayerAura
+    local masterOn          = cfg.masterOn
+
+    -- ── Early bail: no unit, no edit mode → nothing to render ──
+    local unitExists = UnitExists and UnitExists(unit)
+    local isEditActive = (not _inCombat) and IsEditModeActive() or false
+
+    if not unitExists and not isEditActive then
+        Icons.HideUnused(entry.debuffs, 1)
+        Icons.HideUnused(entry.buffs, 1)
+        if entry.mixed then Icons.HideUnused(entry.mixed, 1) end
+        entry.anchor:Hide()
+        return
+    end
 
     -- ── Edit Mode: create movers before anchoring so UpdateAnchor can position them ──
-    local isEditActive = (not _inCombat) and IsEditModeActive() or false
     local EditMode = isEditActive and API.EditMode or nil
     if EditMode and EditMode.EnsureMovers then
         EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
     end
 
-    -- Anchor (also positions containers + movers with per-group offsets)
-    UpdateAnchor(entry, shared, isEditActive)
+    -- Anchor: only reposition when config changes (configGen bumped) or edit mode active
+    if gen ~= entry._lastAnchorGen or isEditActive then
+        UpdateAnchor(entry, shared, isEditActive)
+        entry._lastAnchorGen = gen
+    end
     entry.anchor:Show()
 
-    -- Private auras
-    PrivateRebuild(entry, shared, iconSize, spacing)
+    -- Private auras: only rebuild when config changes
+    if gen ~= entry._lastPrivateGen then
+        PrivateRebuild(entry, shared, iconSize, spacing)
+        entry._lastPrivateGen = gen
+    end
 
-    -- ── Edit Mode: show/hide movers ──
-    if EditMode then
-        if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
-    elseif not _inCombat then
-        local EM = API.EditMode
-        if EM and EM.HideMovers then EM.HideMovers(entry) end
+    -- ── Edit Mode: show/hide movers (skip entirely in combat) ──
+    if not _inCombat then
+        if EditMode then
+            if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
+        else
+            local EM = API.EditMode
+            if EM and EM.HideMovers then EM.HideMovers(entry) end
+        end
     end
 
     local showTest = (shared.showInEditMode == true and isEditActive)
 
     if showTest then
-        -- Force containers visible so preview icons/movers render
         if entry.buffs then entry.buffs:Show() end
         if entry.debuffs then entry.debuffs:Show() end
         if entry.mixed then entry.mixed:Show() end
@@ -785,7 +835,6 @@ local function RenderUnit(entry)
 
     -- ── Edit Mode preview (no real unit present) ──
     if showTest and not unitExists then
-        -- Force both buff/debuff rows visible in preview
         if Icons.RenderPreviewIcons then
             local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, maxBuffs, maxDebuffs, stackCountAnchor)
             Icons.LayoutIcons(entry.buffs, bc or 0, iconSize, spacing, perRow, growth, rowWrap)
@@ -806,7 +855,6 @@ local function RenderUnit(entry)
 
     -- ── Epoch diff: skip full rebuild if nothing changed ──
     local epoch = Store and Store.GetEpoch(unit) or 0
-    local gen = _configGen
 
     if epoch == entry._lastEpoch and gen == entry._lastConfigGen then
         -- Nothing changed — just refresh timers and stacks
@@ -820,6 +868,12 @@ local function RenderUnit(entry)
     -- ── Collect auras (single pass) ──
     local buffCount = 0
     local debuffCount = 0
+    local buffsOnlyMine    = cfg.buffsOnlyMine
+    local debuffsOnlyMine  = cfg.debuffsOnlyMine
+    local buffsIncludeBoss = cfg.buffsIncludeBoss
+    local debuffsIncludeBoss = cfg.debuffsIncludeBoss
+    local onlyBossAuras    = cfg.onlyBossAuras
+    local hidePermanentBuffs = cfg.hidePermanentBuffs
 
     if showDebuffs then
         local list
@@ -829,12 +883,11 @@ local function RenderUnit(entry)
             list, debuffCount = Collect.GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, entry._debuffList, needPlayerAura)
         end
 
-        -- Commit to icons
         local container = useSingleRow and entry.mixed or entry.debuffs
         for i = 1, debuffCount do
             local aura = list[i]
             if aura then
-                local icon = Icons.AcquireIcon(container, useSingleRow and i or i)
+                local icon = Icons.AcquireIcon(container, i)
                 Icons.CommitIcon(icon, unit, aura, shared, false, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
             end
         end
@@ -972,6 +1025,12 @@ end
 
 local function RefreshUnit(unit)
     if not unit then return end
+    -- Bump configGen: RefreshUnit is called when per-unit settings change
+    -- (caps, layout, filters). Config-dependent gates (anchor, layout, private)
+    -- must invalidate so the new values take effect.
+    _configGen = _configGen + 1
+    Icons = API.Icons or API.Apply
+    if Icons and Icons.BumpConfigGen then Icons.BumpConfigGen() end
     local Store = API.Store
     if Store and Store.InvalidateUnit then Store.InvalidateUnit(unit) end
     MarkDirty(unit, 0)

@@ -22,6 +22,9 @@ DB.cache = DB.cache or {
     unitEnabled = {}, -- key -> bool (player/target/focus/boss1-5)
 }
 
+-- Pre-cached boss unit strings
+local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+
 local function _SetUnitEnabled(cache, a2) 
     local ue = cache.unitEnabled
     -- wipe without realloc
@@ -37,7 +40,7 @@ local function _SetUnitEnabled(cache, a2)
 
     local showBoss = (a2.showBoss == true)
     for i = 1, 5 do
-        ue["boss" .. i] = showBoss
+        ue[_BOSS_UNITS[i]] = showBoss
     end
  end
 
@@ -49,6 +52,7 @@ function DB.InvalidateCache()
     c.shared = nil
     c.enabled = false
     c.showInEditMode = false
+    c._unitHasVisibleAuras = nil
     if c.unitEnabled then
         for k in pairs(c.unitEnabled) do c.unitEnabled[k] = nil end
     end
@@ -69,6 +73,19 @@ function DB.RebuildCache(a2, shared)
     c.showInEditMode = (shared.showInEditMode == true)
 
     _SetUnitEnabled(c, a2)
+
+    -- Pre-compute: does the shared config allow any visible auras?
+    -- (Used by Events.ShouldProcessUnitEvent to skip UNIT_AURA quickly)
+    local hasVisible = false
+    if shared.showBuffs == true then
+        local n = shared.maxBuffs
+        if type(n) == "number" and n > 0 then hasVisible = true end
+    end
+    if not hasVisible and shared.showDebuffs == true then
+        local n = shared.maxDebuffs
+        if type(n) == "number" and n > 0 then hasVisible = true end
+    end
+    c._unitHasVisibleAuras = hasVisible
 
     c.ready = true
  end

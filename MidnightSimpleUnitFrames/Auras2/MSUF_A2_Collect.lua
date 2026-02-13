@@ -213,7 +213,6 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
                 if not skip then
                     n = n + 1
                     data._msufAuraInstanceID = aid
-                    data._msufIsHelpful = isHelpful
 
                     if onlyMine then
                         data._msufIsPlayerAura = isPlayerAura
@@ -311,6 +310,29 @@ function Collect.HasExpiration(unit, auraInstanceID)
     if not _apisBound then BindAPIs() end
     if type(_doesExpire) ~= "function" then return nil end
     local v = _doesExpire(unit, auraInstanceID)
+    if IsSV(v) then return nil end
+    if type(v) == "boolean" then return v end
+    if type(v) == "number" then return (v > 0) end
+    return nil
+end
+
+-- ────────────────────────────────────────────────────────────────
+-- Fast-path helpers (no guards — Icons.lua binds these after
+-- APIs are confirmed available, saving 3 checks per call per icon)
+-- ────────────────────────────────────────────────────────────────
+
+function Collect.GetDurationObjectFast(unit, aid)
+    local obj = _getDuration(unit, aid)
+    if obj ~= nil and type(obj) ~= "number" then return obj end
+    return nil
+end
+
+function Collect.GetStackCountFast(unit, aid)
+    return _getStackCount(unit, aid, 2, 99)
+end
+
+function Collect.HasExpirationFast(unit, aid)
+    local v = _doesExpire(unit, aid)
     if IsSV(v) then return nil end
     if type(v) == "boolean" then return v end
     if type(v) == "number" then return (v > 0) end

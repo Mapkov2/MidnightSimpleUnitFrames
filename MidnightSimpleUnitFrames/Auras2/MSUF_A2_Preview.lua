@@ -20,19 +20,22 @@ local Preview = API.Preview
 -- ------------------------------------------------------------
 
 local function IsEditModeActive() 
-    -- MSUF-only Edit Mode (Blizzard Edit Mode intentionally ignored here).
-    -- Keep this identical to the helper used in the render module so preview/flush transitions are reliable.
+    -- Fast path: use Render's cached version when available
+    local fn = API.IsEditModeActive
+    if type(fn) == "function" then
+        return fn() == true
+    end
+
+    -- Fallback: MSUF-only Edit Mode
     local st = rawget(_G, "MSUF_EditState")
     if type(st) == "table" and st.active == true then
          return true
     end
 
-    -- Legacy global boolean used by older patches
     if rawget(_G, "MSUF_UnitEditModeActive") == true then
          return true
     end
 
-    -- Exported helper from MSUF_EditMode.lua
     local f = rawget(_G, "MSUF_IsInEditMode")
     if type(f) == "function" then
         local v = f()
@@ -41,7 +44,6 @@ local function IsEditModeActive()
         end
     end
 
-    -- Compatibility hook name from older experiments (last resort)
     local g = rawget(_G, "MSUF_IsMSUFEditModeActive")
     if type(g) == "function" then
         local v = g()
@@ -192,13 +194,36 @@ local function ForEachPreviewIcon(fn)
 
     for _, entry in pairs(AurasByUnit) do
         if entry and entry._msufA2_previewActive == true then
-            local containers = { entry.buffs, entry.debuffs, entry.mixed, entry.private }
-            for _, container in ipairs(containers) do
-                if container and container._msufIcons then
-                    for _, icon in ipairs(container._msufIcons) do
-                        if icon and icon:IsShown() and icon._msufA2_isPreview == true then
-                            fn(icon)
-                        end
+            -- Inline container iteration (no temp table allocation)
+            local container = entry.buffs
+            if container and container._msufIcons then
+                for _, icon in ipairs(container._msufIcons) do
+                    if icon and icon:IsShown() and icon._msufA2_isPreview == true then
+                        fn(icon)
+                    end
+                end
+            end
+            container = entry.debuffs
+            if container and container._msufIcons then
+                for _, icon in ipairs(container._msufIcons) do
+                    if icon and icon:IsShown() and icon._msufA2_isPreview == true then
+                        fn(icon)
+                    end
+                end
+            end
+            container = entry.mixed
+            if container and container._msufIcons then
+                for _, icon in ipairs(container._msufIcons) do
+                    if icon and icon:IsShown() and icon._msufA2_isPreview == true then
+                        fn(icon)
+                    end
+                end
+            end
+            container = entry.private
+            if container and container._msufIcons then
+                for _, icon in ipairs(container._msufIcons) do
+                    if icon and icon:IsShown() and icon._msufA2_isPreview == true then
+                        fn(icon)
                     end
                 end
             end
@@ -206,82 +231,94 @@ local function ForEachPreviewIcon(fn)
     end
  end
 
+-- File-scope state for preview tick callbacks (avoid closure per tick)
+local _tickShared = nil
+local _tickStackCountAnchor = nil
+local _tickApplyAnchorStyle = nil
+local _tickApplyOffsets = nil
+local _tickApplyCDOffsets = nil
+local _tickReg = nil
+
+local function _PreviewStackIconFn(icon)
+    if not icon or not icon.count then return end
+
+    if _tickApplyAnchorStyle then
+        _tickApplyAnchorStyle(icon, _tickStackCountAnchor)
+    end
+    if _tickApplyOffsets then
+        _tickApplyOffsets(icon, icon._msufUnit, _tickShared, _tickStackCountAnchor)
+    end
+
+    icon._msufA2_previewStackT = (icon._msufA2_previewStackT or 0) + 1
+
+    local num = icon._msufA2_previewStackT
+    if num > 9 then
+        num = 1
+        icon._msufA2_previewStackT = 1
+    end
+
+    icon.count:SetText(num)
+
+    if _tickShared and _tickShared.showStackCount == false then
+        icon.count:Hide()
+    else
+        icon.count:Show()
+    end
+end
+
 local function PreviewTickStacks() 
     local a2, shared = EnsureDB()
     if not ShouldRunPreviewTicker("stacks", a2, shared) then  return end
 
     local A = GetApply()
-    local applyAnchorStyle = A and A.ApplyStackCountAnchorStyle
-    local applyOffsets = A and A.ApplyStackTextOffsets
 
-    local stackCountAnchor = shared and shared.stackCountAnchor
+    -- Set file-scope upvalues for callback
+    _tickShared = shared
+    _tickStackCountAnchor = shared and shared.stackCountAnchor
+    _tickApplyAnchorStyle = A and A.ApplyStackCountAnchorStyle
+    _tickApplyOffsets = A and A.ApplyStackTextOffsets
 
-    ForEachPreviewIcon(function(icon) 
-        if not icon or not icon.count then  return end
-
-        if type(applyAnchorStyle) == "function" then
-            applyAnchorStyle(icon, stackCountAnchor)
-        end
-        if type(applyOffsets) == "function" then
-            applyOffsets(icon, icon._msufUnit, shared, stackCountAnchor)
-        end
-
-        icon._msufA2_previewStackT = (icon._msufA2_previewStackT or 0) + 1
-
-        local num = icon._msufA2_previewStackT
-        if num > 9 then
-            num = 1
-            icon._msufA2_previewStackT = 1
-        end
-
-        icon.count:SetText(num)
-
-        if shared and shared.showStackCount == false then
-            icon.count:Hide()
-        else
-            icon.count:Show()
-        end
-     end)
+    ForEachPreviewIcon(_PreviewStackIconFn)
  end
+
+local function _PreviewCooldownIconFn(icon)
+    if not icon or not icon.cooldown then return end
+
+    -- Ensure countdown text is visible (OmniCC removed in Midnight).
+    if icon.cooldown.SetHideCountdownNumbers then
+        icon.cooldown:SetHideCountdownNumbers(false)
+    end
+
+    if _tickApplyCDOffsets then
+        _tickApplyCDOffsets(icon, icon._msufUnit, _tickShared)
+    end
+
+    -- Update cooldown visuals (duration object preferred; fallback to SetCooldown).
+    if icon._msufA2_previewDurationObj and icon.cooldown.SetCooldownFromDurationObject then
+        icon.cooldown:SetCooldownFromDurationObject(icon._msufA2_previewDurationObj)
+    elseif icon.cooldown.SetCooldown then
+        local start = (icon._msufA2_previewCooldownT or 0) + (GetTime() - 10)
+        local dur = 10
+        icon.cooldown:SetCooldown(start, dur)
+    end
+
+    if _tickReg then
+        _tickReg(icon)
+    end
+end
 
 local function PreviewTickCooldown() 
     local a2, shared = EnsureDB()
     if not ShouldRunPreviewTicker("cooldown", a2, shared) then  return end
 
     local A = GetApply()
-    local applyOffsets = A and A.ApplyCooldownTextOffsets
 
-    local reg, unreg = GetCooldownTextMgr()
+    -- Set file-scope upvalues for callback
+    _tickShared = shared
+    _tickApplyCDOffsets = A and A.ApplyCooldownTextOffsets
+    _tickReg, _ = GetCooldownTextMgr()
 
-    ForEachPreviewIcon(function(icon) 
-        if not icon or not icon.cooldown then  return end
-
-        -- Ensure countdown text is visible (OmniCC removed in Midnight).
-        if icon.cooldown.SetHideCountdownNumbers then
-            icon.cooldown:SetHideCountdownNumbers(false)
-        end
-
-        if type(applyOffsets) == "function" then
-            applyOffsets(icon, icon._msufUnit, shared)
-        end
-
-        -- Update cooldown visuals (duration object preferred; fallback to SetCooldown).
-        if icon._msufA2_previewDurationObj and icon.cooldown.SetCooldownFromDurationObject then
-            icon.cooldown:SetCooldownFromDurationObject(icon._msufA2_previewDurationObj)
-        elseif icon.cooldown.SetCooldown then
-            local start = (icon._msufA2_previewCooldownT or 0) + (GetTime() - 10)
-            local dur = 10
-            icon.cooldown:SetCooldown(start, dur)
-        end
-
-        if type(reg) == "function" then
-            reg(icon)
-        end
-        if type(unreg) == "function" then
-            -- RegisterIcon may already manage its own registry; we only unregister when ticker stops/clears.
-            -- Leave unreg here unused during active ticking.
-        end
-     end)
+    ForEachPreviewIcon(_PreviewCooldownIconFn)
  end
 
 local function EnsureTicker(kind, need, interval, fn) 

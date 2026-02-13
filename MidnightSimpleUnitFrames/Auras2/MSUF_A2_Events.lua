@@ -20,6 +20,29 @@ local Events = API.Events
 local _G = _G
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
+local type = type
+
+-- Pre-cached boss unit strings (avoid "boss"..i in all loops)
+local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+local _BOSS_MAX = 5
+
+-- Cached module refs (bound lazily, reset on InvalidateDB)
+local _cachedReqUnit      -- API.RequestUnit (fast MarkDirty path)
+local _cachedMarkDirty    -- API.MarkDirty (fallback)
+local _cachedOnUnitAura   -- API.Store.OnUnitAura
+local _cachedInvalidUnit  -- API.Store.InvalidateUnit
+local _cachedIsEditFn     -- API.IsEditModeActive
+local _refsBound = false
+
+local function BindCachedRefs()
+    _cachedReqUnit     = API.RequestUnit
+    _cachedMarkDirty   = API.MarkDirty
+    local Store = API.Store
+    _cachedOnUnitAura  = Store and Store.OnUnitAura
+    _cachedInvalidUnit = Store and Store.InvalidateUnit
+    _cachedIsEditFn    = API.IsEditModeActive
+    _refsBound = true
+end
 
 -- ------------------------------------------------------------
 -- Helpers
@@ -39,42 +62,39 @@ end
 -- to request immediate refresh.
 local function MarkDirty(unit, delay)
     if not unit then return end
+    if not _refsBound then BindCachedRefs() end
 
-    local req = API.RequestUnit
-    if type(req) == "function" then
-        -- Default delay for UNIT_AURA should be small but non-zero.
-        -- (0 would still be next-frame, but 0.01 collapses most burst patterns.)
+    local req = _cachedReqUnit
+    if req then
         if delay == nil then delay = 0.01 end
         req(unit, delay)
         return
     end
 
-    local f = API.MarkDirty
-    if type(f) == "function" then
+    local f = _cachedMarkDirty
+    if f then
         f(unit, delay)
     end
 end
 
 local function IsEditModeActive()
-    -- Prefer exported Auras2 helper, but provide a robust local fallback so we never need polling
-    -- just to detect MSUF Edit Mode transitions.
-    local f = API.IsEditModeActive
-    if type(f) == "function" then
-        return f() == true
+    -- Fast path: cached API function (set once by Render, never changes)
+    if not _refsBound then BindCachedRefs() end
+    local fn = _cachedIsEditFn
+    if fn then
+        return fn() == true
     end
 
-    -- MSUF-only Edit Mode (Blizzard Edit Mode intentionally ignored here).
+    -- Fallback chain (rare: only before Render loads)
     local st = rawget(_G, "MSUF_EditState")
     if type(st) == "table" and st.active == true then
         return true
     end
 
-    -- Legacy global boolean used by older patches
     if rawget(_G, "MSUF_UnitEditModeActive") == true then
         return true
     end
 
-    -- Exported helper from MSUF_EditMode.lua
     local g = rawget(_G, "MSUF_IsInEditMode")
     if type(g) == "function" then
         local ok, v = MSUF_A2_FastCall(g)
@@ -83,7 +103,6 @@ local function IsEditModeActive()
         end
     end
 
-    -- Compatibility hook name from older experiments (last resort)
     local h = rawget(_G, "MSUF_IsMSUFEditModeActive")
     if type(h) == "function" then
         local ok, v = MSUF_A2_FastCall(h)
@@ -113,82 +132,77 @@ local function ShouldProcessUnitEvent(unit, forAuraEvent)
     if not unit then return false end
 
     local DB = API.DB
-    if DB and DB.UnitEnabledCached and DB.cache and DB.cache.ready then
-        -- MSUF Edit Mode preview should always stay responsive (no polling).
-        if DB.cache.showInEditMode and IsEditModeActive() then
-            return true
-        end
+    local c = DB and DB.cache
 
-        -- Non-UNIT_AURA events: allow when the unit's Auras2 is enabled.
-        if not forAuraEvent then
-            return DB.UnitEnabledCached(unit) == true
+    -- Cold start: ensure DB once, then use cache.
+    if not (c and c.ready == true) then
+        local a2, shared = EnsureDB()
+        DB = API.DB
+        if DB and DB.RebuildCache then
+            DB.RebuildCache(a2, shared)
         end
-
-        -- UNIT_AURA events are extremely spammy. Only process them when we actually render standard auras.
-        if DB.UnitEnabledCached(unit) ~= true then
+        c = DB and DB.cache
+        if not (c and c.ready == true) then
             return false
         end
+    end
 
-        local shared = DB.cache.shared
-        if not shared then return false end
+    local ue = c.unitEnabled
+    if not ue then return false end
 
-        if shared.showBuffs == true then
-            local n = shared.maxBuffs
-            if type(n) ~= "number" then n = 0 end
-            if n > 0 then return true end
-        end
-        if shared.showDebuffs == true then
-            local n = shared.maxDebuffs
-            if type(n) ~= "number" then n = 0 end
-            if n > 0 then return true end
-        end
+    -- MSUF Edit Mode preview should always stay responsive.
+    if c.showInEditMode and IsEditModeActive() then
+        return true
+    end
 
+    -- Unit must be enabled
+    if ue[unit] ~= true then
         return false
     end
 
-    -- Cold start: ensure DB once, then retry cache path.
-    local a2, shared = EnsureDB()
-    DB = API.DB
-    if DB and DB.RebuildCache then
-        DB.RebuildCache(a2, shared)
+    -- Non-UNIT_AURA events: allow when unit is enabled.
+    if not forAuraEvent then
+        return true
     end
 
-    if DB and DB.UnitEnabledCached and DB.cache and DB.cache.ready then
-        if DB.cache.showInEditMode and IsEditModeActive() then
-            return true
-        end
-
-        if not forAuraEvent then
-            return DB.UnitEnabledCached(unit) == true
-        end
-
-        if DB.UnitEnabledCached(unit) ~= true then
-            return false
-        end
-
-        shared = DB.cache.shared
-        if not shared then return false end
-
-        if shared.showBuffs == true then
-            local n = shared.maxBuffs
-            if type(n) ~= "number" then n = 0 end
-            if n > 0 then return true end
-        end
-        if shared.showDebuffs == true then
-            local n = shared.maxDebuffs
-            if type(n) ~= "number" then n = 0 end
-            if n > 0 then return true end
-        end
-
-        return false
+    -- UNIT_AURA: also require that at least one aura group has cap > 0.
+    -- Use pre-computed flag from DB.RebuildCache when available.
+    if c._unitHasVisibleAuras ~= nil then
+        return c._unitHasVisibleAuras == true
     end
 
-    -- Fallback (should be rare): conservative deny.
+    -- Fallback: read shared directly
+    local shared = c.shared
+    if not shared then return false end
+
+    if shared.showBuffs == true then
+        local n = shared.maxBuffs
+        if type(n) ~= "number" then n = 0 end
+        if n > 0 then return true end
+    end
+    if shared.showDebuffs == true then
+        local n = shared.maxDebuffs
+        if type(n) ~= "number" then n = 0 end
+        if n > 0 then return true end
+    end
+
     return false
 end
 
 -- Export so Render/Options can call the exact same gating without duplicating logic.
 API.ShouldProcessUnitEvent = API.ShouldProcessUnitEvent or ShouldProcessUnitEvent
+
+-- Pre-cached unit frame global names (avoid "MSUF_"..unit string concat per call)
+local _UNIT_FRAME_NAMES = {
+    player = "MSUF_player",
+    target = "MSUF_target",
+    focus  = "MSUF_focus",
+    boss1  = "MSUF_boss1",
+    boss2  = "MSUF_boss2",
+    boss3  = "MSUF_boss3",
+    boss4  = "MSUF_boss4",
+    boss5  = "MSUF_boss5",
+}
 
 local function FindUnitFrame(unit)
     local f = API.FindUnitFrame
@@ -200,8 +214,8 @@ local function FindUnitFrame(unit)
     if type(uf) == "table" and unit and uf[unit] then
         return uf[unit]
     end
-    local g = _G and unit and _G["MSUF_" .. unit]
-    return g
+    local name = _UNIT_FRAME_NAMES[unit]
+    return name and _G[name] or nil
 end
 
 -- ------------------------------------------------------------
@@ -388,8 +402,8 @@ local function StartBossAttachRetry()
         tries = tries + 1
 
         local anyPending = false
-        for i = 1, 5 do
-            local u = "boss" .. i
+        for i = 1, _BOSS_MAX do
+            local u = _BOSS_UNITS[i]
             if ShouldProcessUnitEvent(u) then
                 local f = FindUnitFrame(u)
                 if f and f.IsShown and f:IsShown() and UnitExists and UnitExists(u) then
@@ -413,7 +427,7 @@ local function MarkAllDirty()
     MarkDirty("player")
     MarkDirty("target")
     MarkDirty("focus")
-    for i = 1, 5 do MarkDirty("boss" .. i) end
+    for i = 1, _BOSS_MAX do MarkDirty(_BOSS_UNITS[i]) end
 end
 
 local function OnAnyEditModeChanged(active)
@@ -756,24 +770,18 @@ end
 
                 local units = self._msufA2_unitAuraUnits
                 if units then
-                    local u1, u2 = units[1], units[2]
-                    if unit ~= u1 and unit ~= u2 then
+                    if unit ~= units[1] and unit ~= units[2] then
                         return
                     end
                 end
 
                 -- No-op skip: some clients can fire UNIT_AURA with an empty updateInfo.
-                -- Avoid waking Render/Store when nothing actually changed.
                 if type(updateInfo) == "table" then
-                    local full = updateInfo.isFullUpdate
-                    if full ~= true then
+                    if not updateInfo.isFullUpdate then
                         local a = updateInfo.addedAuras
                         local r = updateInfo.removedAuraInstanceIDs
                         local u = updateInfo.updatedAuraInstanceIDs
-                        local na = (type(a) == "table" and #a) or 0
-                        local nr = (type(r) == "table" and #r) or 0
-                        local nu = (type(u) == "table" and #u) or 0
-                        if na == 0 and nr == 0 and nu == 0 then
+                        if (not a or #a == 0) and (not r or #r == 0) and (not u or #u == 0) then
                             return
                         end
                     end
@@ -781,14 +789,13 @@ end
 
 
                 if unit and ShouldProcessUnitEvent(unit, true) then
-                    -- Feed delta info into the Aura Store (secret-safe; avoids full rescan per burst).
-                    local Store = API and API.Store
-                    local onAura = Store and Store.OnUnitAura
-                    if type(onAura) == "function" then
+                    -- Feed delta into Store (cached ref, no guard chains)
+                    if not _refsBound then BindCachedRefs() end
+                    local onAura = _cachedOnUnitAura
+                    if onAura then
                         onAura(unit, updateInfo)
                     end
 
-                    -- MarkDirty expects a numeric delay (or nil). Never pass updateInfo (table).
                     MarkDirty(unit)
                 end
             end
@@ -835,26 +842,27 @@ function Events.Init()
     ef:SetScript("OnEvent", function(_, event, arg1)
         if event == "PLAYER_TARGET_CHANGED" then
             -- Target swap should feel instant: request next-frame render (0 delay)
-            local Store = API and API.Store
-            if Store and Store.InvalidateUnit then Store.InvalidateUnit("target") end
+            if not _refsBound then BindCachedRefs() end
+            if _cachedInvalidUnit then _cachedInvalidUnit("target") end
             if ShouldProcessUnitEvent("target") then MarkDirty("target", 0) end
             return
         end
 
         if event == "PLAYER_FOCUS_CHANGED" then
-            local Store = API and API.Store
-            if Store and Store.InvalidateUnit then Store.InvalidateUnit("focus") end
+            if not _refsBound then BindCachedRefs() end
+            if _cachedInvalidUnit then _cachedInvalidUnit("focus") end
             if ShouldProcessUnitEvent("focus") then MarkDirty("focus", 0) end
             return
         end
 
         if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-            local Store = API and API.Store
-            if Store and Store.InvalidateUnit then
-                for i = 1, 5 do Store.InvalidateUnit("boss" .. i) end
+            if not _refsBound then BindCachedRefs() end
+            local inv = _cachedInvalidUnit
+            if inv then
+                for i = 1, _BOSS_MAX do inv(_BOSS_UNITS[i]) end
             end
-            for i = 1, 5 do
-                local u = "boss" .. i
+            for i = 1, _BOSS_MAX do
+                local u = _BOSS_UNITS[i]
                 if ShouldProcessUnitEvent(u) then
                     MarkDirty(u, 0)
                 end
@@ -866,26 +874,27 @@ function Events.Init()
         if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
             EnsureDB() -- prime + cache
 
+            -- Re-bind cached refs (Render may have just loaded)
+            BindCachedRefs()
+
             -- Ensure event registration is aligned now that EnsureDB is definitely bound and cache is ready.
-            -- Fixes a rare load-order case where Events.Init ran before Render bound EnsureDB, which
-            -- could leave UNIT_AURA bindings (especially for player) disabled until a manual RefreshAll.
             if Events.ApplyEventRegistration then
                 Events.ApplyEventRegistration()
             end
 
-            local Store = API and API.Store
-            if Store and Store.InvalidateUnit then
-                Store.InvalidateUnit("player")
-                Store.InvalidateUnit("target")
-                Store.InvalidateUnit("focus")
-                for i = 1, 5 do Store.InvalidateUnit("boss" .. i) end
+            local inv = _cachedInvalidUnit
+            if inv then
+                inv("player")
+                inv("target")
+                inv("focus")
+                for i = 1, _BOSS_MAX do inv(_BOSS_UNITS[i]) end
             end
 
             if ShouldProcessUnitEvent("player") then MarkDirty("player", 0) end
             if ShouldProcessUnitEvent("target") then MarkDirty("target", 0) end
             if ShouldProcessUnitEvent("focus") then MarkDirty("focus") end
-            for i = 1, 5 do
-                local u = "boss" .. i
+            for i = 1, _BOSS_MAX do
+                local u = _BOSS_UNITS[i]
                 if ShouldProcessUnitEvent(u) then
                     MarkDirty(u)
                 end
