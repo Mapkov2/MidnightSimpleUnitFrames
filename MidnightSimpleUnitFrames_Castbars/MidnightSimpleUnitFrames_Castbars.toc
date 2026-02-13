@@ -1,8 +1,8 @@
 ## Interface: 120001, 120000
 ## Title: Midnight Simple UnitFrames - Castbars
 ## Notes: Castbar LoD for MSUF
-## Author: Midnight
-## Version: 2.0 Beta 5
+## Author: Mapko
+## Version: 2.0 Beta 6
 ## Category: Combat
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1
