@@ -48,10 +48,10 @@ Auras2\MSUF_A2_Units.lua
 Auras2\MSUF_A2_Masque.lua
 Auras2\MSUF_A2_Preview.lua
 Auras2\MSUF_A2_CooldownText.lua
-Auras2\MSUF_A2_Store.lua
-Auras2\MSUF_A2_Model.lua
-Auras2\MSUF_A2_Apply.lua
+Auras2\MSUF_A2_Collect.lua
+Auras2\MSUF_A2_Icons.lua
 Auras2\MSUF_A2_Render.lua
+Auras2\MSUF_A2_EditMode.lua
 Auras2\MSUF_A2_Events.lua
 
 MidnightSimpleUnitFrames_Colors.lua

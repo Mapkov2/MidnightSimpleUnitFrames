@@ -1,0 +1,3 @@
+local _, ns = ...
+if not ns or not ns.MSUF_AddLocale then return end
+ns.MSUF_AddLocale("enGB", {})

@@ -807,3 +807,98 @@ end
 -- Marker for gating / debug
 _G.__MSUF_STYLE_VERSION = 5
 _G.__MSUF_STYLE_TAG = "editmode-scanfix-v5-optionCheckmarks"
+
+-- ---------------------------------------------------------------------------
+-- UIDropDownMenuTemplate: minimal flat field + tiny 1px "blue bars" accent
+-- Used by Edit Mode popups (Copy settings dropdowns). Keeps full Blizzard behavior.
+-- ---------------------------------------------------------------------------
+local function _MSUF_GetDropRegion(drop, suffix)
+  if not drop then return nil end
+  local name = (drop.GetName and drop:GetName()) or nil
+  if name and _G[name .. suffix] then
+    return _G[name .. suffix]
+  end
+  return drop[suffix]
+end
+
+function Style.SkinUIDDropDownTinyBars(drop)
+  if not drop or drop.__msufTinyDropSkinned then return end
+  if Style.IsEnabled and not Style.IsEnabled() then return end
+  drop.__msufTinyDropSkinned = true
+
+  -- Soft-hide Blizzard dropdown body textures (do not nil them so the template keeps working).
+  local left   = drop.Left   or _MSUF_GetDropRegion(drop, "Left")
+  local middle = drop.Middle or _MSUF_GetDropRegion(drop, "Middle")
+  local right  = drop.Right  or _MSUF_GetDropRegion(drop, "Right")
+  if left and left.SetAlpha then left:SetAlpha(0) end
+  if middle and middle.SetAlpha then middle:SetAlpha(0) end
+  if right and right.SetAlpha then right:SetAlpha(0) end
+
+  -- Flat background field.
+  local bg = drop._msufTinyDropBG
+  if not bg then
+    bg = drop:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(drop)
+    drop._msufTinyDropBG = bg
+  end
+  if bg.SetColorTexture then
+    bg:SetColorTexture(THEME.btnR, THEME.btnG, THEME.btnB, 0.88)
+  end
+
+  -- Tiny top/bottom accent bars (1px) – keep them subtle.
+  local barA = 0.18
+  local top = drop._msufTinyDropTop
+  if not top then
+    top = drop:CreateTexture(nil, "BORDER")
+    top:SetPoint("TOPLEFT", drop, "TOPLEFT", 1, -1)
+    top:SetPoint("TOPRIGHT", drop, "TOPRIGHT", -1, -1)
+    top:SetHeight(1)
+    drop._msufTinyDropTop = top
+  end
+  if top.SetColorTexture then
+    top:SetColorTexture(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, barA)
+  end
+
+  local bottom = drop._msufTinyDropBottom
+  if not bottom then
+    bottom = drop:CreateTexture(nil, "BORDER")
+    bottom:SetPoint("BOTTOMLEFT", drop, "BOTTOMLEFT", 1, 1)
+    bottom:SetPoint("BOTTOMRIGHT", drop, "BOTTOMRIGHT", -1, 1)
+    bottom:SetHeight(1)
+    drop._msufTinyDropBottom = bottom
+  end
+  if bottom.SetColorTexture then
+    bottom:SetColorTexture(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, barA)
+  end
+
+  -- Thin dark border (also 1px) so the field still reads as an input.
+  local border = drop._msufTinyDropBorder
+  if not border and drop.CreateTexture then
+    border = {
+      l = drop:CreateTexture(nil, "BORDER"),
+      r = drop:CreateTexture(nil, "BORDER"),
+      t = drop:CreateTexture(nil, "BORDER"),
+      b = drop:CreateTexture(nil, "BORDER"),
+    }
+    drop._msufTinyDropBorder = border
+    border.l:SetPoint("TOPLEFT", drop, "TOPLEFT", 0, 0)
+    border.l:SetPoint("BOTTOMLEFT", drop, "BOTTOMLEFT", 0, 0)
+    border.l:SetWidth(1)
+    border.r:SetPoint("TOPRIGHT", drop, "TOPRIGHT", 0, 0)
+    border.r:SetPoint("BOTTOMRIGHT", drop, "BOTTOMRIGHT", 0, 0)
+    border.r:SetWidth(1)
+    border.t:SetPoint("TOPLEFT", drop, "TOPLEFT", 0, 0)
+    border.t:SetPoint("TOPRIGHT", drop, "TOPRIGHT", 0, 0)
+    border.t:SetHeight(1)
+    border.b:SetPoint("BOTTOMLEFT", drop, "BOTTOMLEFT", 0, 0)
+    border.b:SetPoint("BOTTOMRIGHT", drop, "BOTTOMRIGHT", 0, 0)
+    border.b:SetHeight(1)
+  end
+  if border then
+    local br, bgc, bb, ba = 0, 0, 0, 0.85
+    if border.l and border.l.SetColorTexture then border.l:SetColorTexture(br, bgc, bb, ba) end
+    if border.r and border.r.SetColorTexture then border.r:SetColorTexture(br, bgc, bb, ba) end
+    if border.t and border.t.SetColorTexture then border.t:SetColorTexture(br, bgc, bb, ba) end
+    if border.b and border.b.SetColorTexture then border.b:SetColorTexture(br, bgc, bb, ba) end
+  end
+end
