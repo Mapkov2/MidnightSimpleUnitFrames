@@ -262,8 +262,8 @@ local function CreateMover(entry, unitKey, kind, labelText)
         -- Write to DB
         local function ApplyToUnit(unitK)
             WriteOffset(a2, unitK, mk, newX, newY)
-            -- Trigger a re-render so anchor positions update live
-            if API.MarkDirty then API.MarkDirty(unitK, 0) end
+            -- Immediate anchor refresh for instant drag feedback
+            if API.UpdateUnitAnchor then API.UpdateUnitAnchor(unitK) end
         end
 
         -- Boss units: edit together when enabled
@@ -363,9 +363,7 @@ function EM.EnsureMovers(entry, unit, shared, iconSize, spacing)
     CreateMover(entry, unit, "buff",    base .. " Buffs")
     CreateMover(entry, unit, "debuff",  base .. " Debuffs")
     CreateMover(entry, unit, "private", base .. " Private")
-
-    -- Position movers to match their containers
-    EM.PositionMovers(entry, shared, iconSize, spacing)
+    -- Mover positioning is handled by Render's UpdateAnchor after containers are placed
 end
 
 -- ────────────────────────────────────────────────────────────────

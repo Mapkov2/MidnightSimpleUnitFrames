@@ -572,28 +572,127 @@ local function UpdateAnchor(entry, shared)
     -- Per-unit layout overrides
     local a2 = MSUF_DB and MSUF_DB.auras2
     local pu = a2 and a2.perUnit and a2.perUnit[unit]
-    if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
-        local lay = pu.layout
+    local lay = (pu and pu.overrideLayout == true and type(pu.layout) == "table") and pu.layout or nil
+
+    if lay then
         if type(lay.offsetX) == "number" then offX = lay.offsetX end
         if type(lay.offsetY) == "number" then offY = lay.offsetY end
     end
 
+    -- Sizing
     local iconSize = shared.iconSize or 26
     local spacing = shared.spacing or 2
-    local buffOffsetY = shared.buffOffsetY or (iconSize + spacing + 4)
+    local perRow = shared.perRow or 12
+    if lay then
+        if type(lay.iconSize) == "number" and lay.iconSize > 1 then iconSize = lay.iconSize end
+        if type(lay.spacing) == "number" and lay.spacing >= 0 then spacing = lay.spacing end
+    end
 
+    -- Buff/Debuff separation (buffOffsetY)
+    local buffOffsetY = shared.buffOffsetY
+    if lay and type(lay.buffOffsetY) == "number" then buffOffsetY = lay.buffOffsetY end
+    if type(buffOffsetY) ~= "number" then buffOffsetY = iconSize + spacing + 4 end
+
+    -- ── Per-group offsets (drag movers write to these) ──
+    local function RN(key, def)
+        local v = shared[key]
+        if lay and lay[key] ~= nil then v = lay[key] end
+        v = tonumber(v)
+        if v == nil then v = def end
+        if v < -2000 then v = -2000 end
+        if v >  2000 then v =  2000 end
+        return math.floor(v + 0.5)
+    end
+
+    local buffDX   = RN("buffGroupOffsetX",   0)
+    local buffDY   = RN("buffGroupOffsetY",   0)
+    local debuffDX = RN("debuffGroupOffsetX", 0)
+    local debuffDY = RN("debuffGroupOffsetY", 0)
+    local privOffX = RN("privateOffsetX",     0)
+    local privOffY = RN("privateOffsetY",     0)
+
+    -- Layout mode
+    local layoutMode = shared.layoutMode or "SEPARATE"
+    local lsOvr = (pu and pu.overrideSharedLayout == true and type(pu.layoutShared) == "table") and pu.layoutShared or nil
+    if lsOvr and lsOvr.layoutMode and A2_LAYOUTMODE_OK[lsOvr.layoutMode] then layoutMode = lsOvr.layoutMode end
+
+    local isEditActive = IsEditModeActive()
+
+    -- Edit Mode QoL: ensure min separation so movers don't overlap
+    if isEditActive then
+        local minSep = iconSize + spacing + 8
+        if buffOffsetY < minSep then buffOffsetY = minSep end
+        -- If private offsets are unset, auto-stack above buffs
+        local hasPrivOverride = (lay and (lay.privateOffsetX ~= nil or lay.privateOffsetY ~= nil))
+        if not hasPrivOverride then
+            privOffY = buffOffsetY + minSep
+        end
+    end
+
+    -- ── Position anchor ──
     entry.anchor:ClearAllPoints()
     entry.anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
 
-    entry.debuffs:ClearAllPoints()
-    entry.debuffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
-
-    entry.buffs:ClearAllPoints()
-    entry.buffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, buffOffsetY)
-
-    if entry.mixed then
+    -- ── Position containers ──
+    if layoutMode == "SINGLE" and entry.mixed then
+        -- Single-row mode: everything stacked at anchor origin
         entry.mixed:ClearAllPoints()
         entry.mixed:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+        entry.debuffs:ClearAllPoints()
+        entry.debuffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+        entry.buffs:ClearAllPoints()
+        entry.buffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+    else
+        -- SEPARATE mode: Debuffs at base, Buffs offset above, each with their own group offsets
+        entry.debuffs:ClearAllPoints()
+        entry.debuffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", debuffDX, debuffDY)
+
+        entry.buffs:ClearAllPoints()
+        entry.buffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", buffDX, buffOffsetY + buffDY)
+
+        if entry.mixed then
+            entry.mixed:ClearAllPoints()
+            entry.mixed:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+        end
+    end
+
+    -- Private
+    if entry.private then
+        entry.private:ClearAllPoints()
+        entry.private:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", privOffX, privOffY)
+    end
+
+    -- ── Position edit movers (mirror containers) ──
+    if isEditActive then
+        local step = iconSize + spacing
+        local maxBuff = (shared.maxBuffs or shared.maxIcons or 12)
+        local maxDebuff = (shared.maxDebuffs or shared.maxIcons or 12)
+        local cols = (maxBuff < perRow) and maxBuff or perRow
+        local dcols = (maxDebuff < perRow) and maxDebuff or perRow
+        local bw = cols * step
+        local dw = dcols * step
+        local pw = 4 * step
+        local headerH = 20
+
+        local function MirrorMover(mover, container, w, h)
+            if not mover then return end
+            mover:ClearAllPoints()
+            if container and container.GetPoint and container:GetNumPoints() > 0 then
+                local p, rel, rp, ox, oy = container:GetPoint(1)
+                if p and rel and rp then
+                    mover:SetPoint(p, rel, rp, ox or 0, oy or 0)
+                else
+                    mover:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+                end
+            else
+                mover:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+            end
+            if w and h then mover:SetSize(w, h) end
+        end
+
+        MirrorMover(entry.editMoverBuff,    entry.buffs,   bw, iconSize + headerH)
+        MirrorMover(entry.editMoverDebuff,  entry.debuffs, dw, iconSize + headerH)
+        MirrorMover(entry.editMoverPrivate, entry.private, pw, iconSize + headerH)
     end
 end
 
@@ -638,21 +737,25 @@ local function RenderUnit(entry)
     local showDebuffs = (shared.showDebuffs == true)
     local useSingleRow = (layoutMode == "SINGLE")
 
-    -- Anchor
+    -- ── Edit Mode: create movers before anchoring so UpdateAnchor can position them ──
+    local isEditActive = IsEditModeActive()
+    local EditMode = API.EditMode
+    if EditMode and isEditActive then
+        if EditMode.EnsureMovers then
+            EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
+        end
+    end
+
+    -- Anchor (also positions containers + movers with per-group offsets)
     UpdateAnchor(entry, shared)
     entry.anchor:Show()
 
     -- Private auras
     PrivateRebuild(entry, shared, iconSize, spacing)
 
-    -- ── Edit Mode: movers + preview ──
-    local isEditActive = IsEditModeActive()
-    local EditMode = API.EditMode
+    -- ── Edit Mode: show/hide movers ──
     if EditMode then
         if isEditActive then
-            if EditMode.EnsureMovers then
-                EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
-            end
             if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
         else
             if EditMode.HideMovers then EditMode.HideMovers(entry) end
@@ -942,8 +1045,20 @@ _G.MSUF_UpdateTargetAuras = function() MarkDirty("target") end
 -- Init: prime DB + kick off events
 -- ────────────────────────────────────────────────────────────────
 
+-- ────────────────────────────────────────────────────────────────
 -- API bridge for Options / EditMode / Fonts
+-- ────────────────────────────────────────────────────────────────
 API._Render = API._Render or {}
+
+-- UpdateUnitAnchor: immediate re-anchor for a single unit (used by EditMode drag for instant feedback)
+API.UpdateUnitAnchor = function(unit)
+    if not unit then return end
+    local entry = AurasByUnit[unit]
+    if not entry then return end
+    local a2, shared = GetAuras2DB()
+    if shared then UpdateAnchor(entry, shared) end
+end
+
 API.ApplyEventRegistration = API.ApplyEventRegistration or function()
     local Ev = API.Events
     if Ev and Ev.ApplyEventRegistration then return Ev.ApplyEventRegistration() end
