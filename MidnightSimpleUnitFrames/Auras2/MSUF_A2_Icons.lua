@@ -226,7 +226,7 @@ function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
     local step = iconSize + spacing
 
     -- Direction multipliers
-    local dx, dy = 1, 1    -- growth RIGHT, wrap DOWN
+    local dx, dy = 1, -1  -- growth RIGHT, wrap DOWN
     local anchorX, anchorY = "LEFT", "BOTTOM"
 
     if growth == "LEFT" then
@@ -235,9 +235,10 @@ function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
     end
     if rowWrap == "UP" then
         dy = 1
-    else
-        dy = -1
     end
+
+    -- Precompute anchor string ONCE (not per icon)
+    local anchor = anchorY .. anchorX
 
     local pool = container._msufIcons
     if not pool then return end
@@ -245,17 +246,13 @@ function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
     for i = 1, count do
         local icon = pool[i]
         if icon then
-            local col = (i - 1) % perRow
-            local row = floor((i - 1) / perRow)
+            local idx = i - 1
+            local col = idx % perRow
+            local row = (idx - col) / perRow  -- integer division (faster than floor)
 
             icon:ClearAllPoints()
             icon:SetSize(iconSize, iconSize)
-
-            local xOff = col * step * dx
-            local yOff = row * step * dy
-
-            local anchor = anchorY .. anchorX
-            icon:SetPoint(anchor, container, anchor, xOff, yOff)
+            icon:SetPoint(anchor, container, anchor, col * step * dx, row * step * dy)
         end
     end
 end
@@ -272,16 +269,19 @@ local _configGen = 0  -- bumped by InvalidateDB
 
 function Icons.BumpConfigGen()
     _configGen = _configGen + 1
+    _bindingsDone = false  -- re-bind on next commit (picks up late-loaded modules)
 end
+
+local _bindingsDone = false
 
 function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, masterOn, isOwn, stackCountAnchor, configGen)
     if not icon then return false end
-    EnsureBindings()
+    if not _bindingsDone then EnsureBindings(); _bindingsDone = true end
 
     icon._msufUnit = unit
     icon._msufFilter = isHelpful and "HELPFUL" or "HARMFUL"
 
-    -- Clear preview state if recycled
+    -- Clear preview state if recycled (only when actually preview)
     if icon._msufA2_isPreview then
         icon._msufA2_isPreview = nil
         icon._msufA2_previewKind = nil
@@ -310,8 +310,6 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     if aid and aidMap then aidMap[aid] = icon end
 
     -- ── Diff gate ──
-    -- Compare only safe values: auraInstanceID, config gen, our own booleans.
-    -- NEVER compare aura.duration/expirationTime/applications (may be secret).
     local gen = configGen or _configGen
     local last = icon._msufA2_lastCommit
 
@@ -376,8 +374,6 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
 
     cd:SetDrawSwipe(showSwipe)
     cd:SetReverse(reverse)
-    -- Let Blizzard create the countdown FontString when text is wanted;
-    -- our CT manager only RECOLORS it — it does not create or set text.
     cd:SetHideCountdownNumbers(not showText)
 
     local hadTimer = false
@@ -385,19 +381,27 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
     -- Get duration object (secret-safe)
     local obj = Collect and Collect.GetDurationObject(unit, aid)
     if obj then
-        if type(cd.SetCooldownFromDurationObject) == "function" then
-            cd:SetCooldownFromDurationObject(obj)
-            hadTimer = true
-        elseif type(cd.SetTimerDuration) == "function" then
-            cd:SetTimerDuration(obj)
+        -- Cache method reference on cd frame to avoid type() check per call
+        local cdSetFn = cd._msufA2_cdSetFn
+        if cdSetFn == nil then
+            if type(cd.SetCooldownFromDurationObject) == "function" then
+                cdSetFn = cd.SetCooldownFromDurationObject
+            elseif type(cd.SetTimerDuration) == "function" then
+                cdSetFn = cd.SetTimerDuration
+            else
+                cdSetFn = false  -- sentinel: no method available
+            end
+            cd._msufA2_cdSetFn = cdSetFn
+        end
+
+        if cdSetFn then
+            cdSetFn(cd, obj)
             hadTimer = true
         end
+
         icon._msufA2_durationObj = obj
         cd._msufA2_durationObj = obj
 
-        -- Invalidate cached FontString lookup: Blizzard creates the countdown
-        -- FontString lazily when the cooldown starts. If a previous lookup cached
-        -- `false` (not found yet), clear it so CT rediscovers the new FontString.
         if cd._msufCooldownFontString == false then
             cd._msufCooldownFontString = nil
             cd._msufCooldownFontStringRetryAt = nil
@@ -405,10 +409,8 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
     end
 
     if not hadTimer then
-        -- Check if this aura explicitly has no expiration
         local hasExp = Collect and Collect.HasExpiration(unit, aid)
         if hasExp == false then
-            -- Confirmed no timer — clear
             if cd.Clear then cd:Clear() end
             if cd.SetCooldown then cd:SetCooldown(0, 0) end
             icon._msufA2_durationObj = nil
@@ -416,9 +418,8 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
         end
     end
 
-    -- Cooldown text manager integration
-    EnsureBindings()
-    CT = API.CooldownText
+    -- Cooldown text manager integration (CT already bound by CommitIcon)
+    CT = CT or API.CooldownText
     local wantText = showText and (icon._msufA2_hideCDNumbers ~= true)
     if CT then
         if wantText and hadTimer then
@@ -441,25 +442,35 @@ function Icons._RefreshTimer(icon, unit, aid, shared)
     local showText = (shared and shared.showCooldownText ~= false)
     if not showSwipe and not showText then return end
 
-    -- Re-fetch duration object (may have changed on reapply)
     local obj = Collect and Collect.GetDurationObject(unit, aid)
     if obj then
-        if type(cd.SetCooldownFromDurationObject) == "function" then
-            cd:SetCooldownFromDurationObject(obj)
-        elseif type(cd.SetTimerDuration) == "function" then
-            cd:SetTimerDuration(obj)
+        -- Use cached method ref (set by _ApplyTimer)
+        local cdSetFn = cd._msufA2_cdSetFn
+        if cdSetFn == nil then
+            if type(cd.SetCooldownFromDurationObject) == "function" then
+                cdSetFn = cd.SetCooldownFromDurationObject
+            elseif type(cd.SetTimerDuration) == "function" then
+                cdSetFn = cd.SetTimerDuration
+            else
+                cdSetFn = false
+            end
+            cd._msufA2_cdSetFn = cdSetFn
         end
+
+        if cdSetFn then
+            cdSetFn(cd, obj)
+        end
+
         icon._msufA2_durationObj = obj
         cd._msufA2_durationObj = obj
         icon._msufA2_lastHadTimer = true
 
-        -- Invalidate stale FontString cache so CT rediscovers it
         if cd._msufCooldownFontString == false then
             cd._msufCooldownFontString = nil
             cd._msufCooldownFontStringRetryAt = nil
         end
 
-        CT = API.CooldownText
+        CT = CT or API.CooldownText
         if CT and CT.TouchIcon then CT.TouchIcon(icon) end
     end
 end
@@ -468,51 +479,77 @@ end
 -- Stack count display
 -- ────────────────────────────────────────────────────────────────
 
+-- Cached stack count color (invalidated by BumpConfigGen)
+local _stackR, _stackG, _stackB, _stackColorGen = 1, 1, 1, -1
+
 function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
     local countFS = icon.count
     if not countFS then return end
 
     local showStacks = (shared and shared.showStackCount == true) or false
     if not showStacks then
-        countFS:SetText("")
-        countFS:Hide()
+        if icon._msufA2_lastStackText then
+            countFS:SetText("")
+            countFS:Hide()
+            icon._msufA2_lastStackText = nil
+        end
         return
     end
 
     local stacks = Collect and Collect.GetStackCount(unit, aid)
     if type(stacks) == "number" and stacks >= 2 then
-        countFS:SetText(stacks)
+        -- Only SetText when value changed
+        if icon._msufA2_lastStackText ~= stacks then
+            countFS:SetText(stacks)
+            icon._msufA2_lastStackText = stacks
+        end
         countFS:Show()
     else
-        countFS:SetText("")
+        if icon._msufA2_lastStackText then
+            countFS:SetText("")
+            icon._msufA2_lastStackText = nil
+        end
         countFS:Hide()
+        return
     end
 
-    -- Anchor the stack text
+    -- Anchor: only reposition when anchor setting changed
     local anchor = stackCountAnchor or "TOPRIGHT"
-    countFS:ClearAllPoints()
-    if anchor == "TOPLEFT" then
-        countFS:SetPoint("TOPLEFT", icon, "TOPLEFT", 1, -1)
-        countFS:SetJustifyH("LEFT")
-    elseif anchor == "BOTTOMLEFT" then
-        countFS:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 1, 1)
-        countFS:SetJustifyH("LEFT")
-    elseif anchor == "BOTTOMRIGHT" then
-        countFS:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
-        countFS:SetJustifyH("RIGHT")
-    else -- TOPRIGHT default
-        countFS:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -1, -1)
-        countFS:SetJustifyH("RIGHT")
+    if icon._msufA2_lastStackAnchor ~= anchor then
+        icon._msufA2_lastStackAnchor = anchor
+        countFS:ClearAllPoints()
+        if anchor == "TOPLEFT" then
+            countFS:SetPoint("TOPLEFT", icon, "TOPLEFT", 1, -1)
+            countFS:SetJustifyH("LEFT")
+        elseif anchor == "BOTTOMLEFT" then
+            countFS:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 1, 1)
+            countFS:SetJustifyH("LEFT")
+        elseif anchor == "BOTTOMRIGHT" then
+            countFS:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
+            countFS:SetJustifyH("RIGHT")
+        else
+            countFS:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -1, -1)
+            countFS:SetJustifyH("RIGHT")
+        end
     end
 
-    -- Stack text color
-    local r, g, b = GetStackCountRGB()
-    countFS:SetTextColor(r, g, b)
+    -- Color: cache to avoid _G lookup per icon
+    local gen = _configGen
+    if _stackColorGen ~= gen then
+        _stackR, _stackG, _stackB = GetStackCountRGB()
+        _stackColorGen = gen
+    end
+    countFS:SetTextColor(_stackR, _stackG, _stackB)
 end
 
 -- ────────────────────────────────────────────────────────────────
 -- Own-aura highlight
 -- ────────────────────────────────────────────────────────────────
+
+-- Cached highlight colors (invalidated by configGen change)
+local _hlBuffR, _hlBuffG, _hlBuffB = 1.0, 0.85, 0.2
+local _hlDebR, _hlDebG, _hlDebB = 1.0, 0.3, 0.3
+local _hlColorGen = -1
 
 function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     local glow = icon._msufOwnGlow
@@ -523,18 +560,27 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
 
     local show = false
     if isOwn then
-        if isHelpful and wantBuffHL then show = true end
-        if not isHelpful and wantDebuffHL then show = true end
+        if isHelpful then
+            show = wantBuffHL
+        else
+            show = wantDebuffHL
+        end
     end
 
     if show then
-        local r, g, b
-        if isHelpful then
-            r, g, b = GetOwnBuffHighlightRGB()
-        else
-            r, g, b = GetOwnDebuffHighlightRGB()
+        -- Refresh cached colors when config changes
+        local gen = _configGen
+        if _hlColorGen ~= gen then
+            _hlBuffR, _hlBuffG, _hlBuffB = GetOwnBuffHighlightRGB()
+            _hlDebR, _hlDebG, _hlDebB = GetOwnDebuffHighlightRGB()
+            _hlColorGen = gen
         end
-        glow:SetColorTexture(r, g, b, 0.3)
+
+        if isHelpful then
+            glow:SetColorTexture(_hlBuffR, _hlBuffG, _hlBuffB, 0.3)
+        else
+            glow:SetColorTexture(_hlDebR, _hlDebG, _hlDebB, 0.3)
+        end
         glow:Show()
     else
         glow:Hide()
@@ -548,17 +594,18 @@ end
 
 function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
     if not entry then return end
-    EnsureBindings()
+    if not _bindingsDone then EnsureBindings(); _bindingsDone = true end
 
-    local function RefreshContainer(container)
-        if not container then return end
-        local pool = container._msufIcons
-        if not pool then return end
+    -- Inline container refresh (no closure allocation)
+    local pool, icon, aid
+
+    pool = entry.buffs and entry.buffs._msufIcons
+    if pool then
         for i = 1, #pool do
-            local icon = pool[i]
+            icon = pool[i]
             if icon and icon:IsShown() then
-                local aid = icon._msufAuraInstanceID
-                if aid and unit then
+                aid = icon._msufAuraInstanceID
+                if aid then
                     Icons._RefreshTimer(icon, unit, aid, shared)
                     Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
                 end
@@ -566,9 +613,33 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
         end
     end
 
-    RefreshContainer(entry.buffs)
-    RefreshContainer(entry.debuffs)
-    RefreshContainer(entry.mixed)
+    pool = entry.debuffs and entry.debuffs._msufIcons
+    if pool then
+        for i = 1, #pool do
+            icon = pool[i]
+            if icon and icon:IsShown() then
+                aid = icon._msufAuraInstanceID
+                if aid then
+                    Icons._RefreshTimer(icon, unit, aid, shared)
+                    Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+                end
+            end
+        end
+    end
+
+    pool = entry.mixed and entry.mixed._msufIcons
+    if pool then
+        for i = 1, #pool do
+            icon = pool[i]
+            if icon and icon:IsShown() then
+                aid = icon._msufAuraInstanceID
+                if aid then
+                    Icons._RefreshTimer(icon, unit, aid, shared)
+                    Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+                end
+            end
+        end
+    end
 end
 
 -- ────────────────────────────────────────────────────────────────

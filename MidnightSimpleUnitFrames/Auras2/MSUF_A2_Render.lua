@@ -562,7 +562,39 @@ end
 -- UpdateAnchor (position the aura container relative to unitframe)
 -- ────────────────────────────────────────────────────────────────
 
-local function UpdateAnchor(entry, shared)
+-- ── File-scope helpers for UpdateAnchor (zero closure alloc) ──
+
+local _mathFloor = math.floor
+
+-- Read numeric offset from shared/perUnit.layout, clamped to [-2000,2000]
+local function ReadOffset(shared, lay, key, def)
+    local v = shared[key]
+    if lay and lay[key] ~= nil then v = lay[key] end
+    v = tonumber(v)
+    if v == nil then return def end
+    if v < -2000 then return -2000 end
+    if v >  2000 then return  2000 end
+    return _mathFloor(v + 0.5)
+end
+
+-- Position a mover to match its container's anchor point
+local function MirrorMover(mover, container, fallbackAnchor, w, h)
+    if not mover then return end
+    mover:ClearAllPoints()
+    if container and container:GetNumPoints() > 0 then
+        local p, rel, rp, ox, oy = container:GetPoint(1)
+        if p and rel and rp then
+            mover:SetPoint(p, rel, rp, ox or 0, oy or 0)
+        else
+            mover:SetPoint("BOTTOMLEFT", fallbackAnchor, "BOTTOMLEFT", 0, 0)
+        end
+    else
+        mover:SetPoint("BOTTOMLEFT", fallbackAnchor, "BOTTOMLEFT", 0, 0)
+    end
+    if w and h then mover:SetSize(w, h) end
+end
+
+local function UpdateAnchor(entry, shared, isEditActive)
     if not entry or not entry.anchor or not entry.frame or not shared then return end
 
     local unit = entry.unit
@@ -594,35 +626,22 @@ local function UpdateAnchor(entry, shared)
     if type(buffOffsetY) ~= "number" then buffOffsetY = iconSize + spacing + 4 end
 
     -- ── Per-group offsets (drag movers write to these) ──
-    local function RN(key, def)
-        local v = shared[key]
-        if lay and lay[key] ~= nil then v = lay[key] end
-        v = tonumber(v)
-        if v == nil then v = def end
-        if v < -2000 then v = -2000 end
-        if v >  2000 then v =  2000 end
-        return math.floor(v + 0.5)
-    end
-
-    local buffDX   = RN("buffGroupOffsetX",   0)
-    local buffDY   = RN("buffGroupOffsetY",   0)
-    local debuffDX = RN("debuffGroupOffsetX", 0)
-    local debuffDY = RN("debuffGroupOffsetY", 0)
-    local privOffX = RN("privateOffsetX",     0)
-    local privOffY = RN("privateOffsetY",     0)
+    local buffDX   = ReadOffset(shared, lay, "buffGroupOffsetX",   0)
+    local buffDY   = ReadOffset(shared, lay, "buffGroupOffsetY",   0)
+    local debuffDX = ReadOffset(shared, lay, "debuffGroupOffsetX", 0)
+    local debuffDY = ReadOffset(shared, lay, "debuffGroupOffsetY", 0)
+    local privOffX = ReadOffset(shared, lay, "privateOffsetX",     0)
+    local privOffY = ReadOffset(shared, lay, "privateOffsetY",     0)
 
     -- Layout mode
     local layoutMode = shared.layoutMode or "SEPARATE"
     local lsOvr = (pu and pu.overrideSharedLayout == true and type(pu.layoutShared) == "table") and pu.layoutShared or nil
     if lsOvr and lsOvr.layoutMode and A2_LAYOUTMODE_OK[lsOvr.layoutMode] then layoutMode = lsOvr.layoutMode end
 
-    local isEditActive = IsEditModeActive()
-
     -- Edit Mode QoL: ensure min separation so movers don't overlap
     if isEditActive then
         local minSep = iconSize + spacing + 8
         if buffOffsetY < minSep then buffOffsetY = minSep end
-        -- If private offsets are unset, auto-stack above buffs
         local hasPrivOverride = (lay and (lay.privateOffsetX ~= nil or lay.privateOffsetY ~= nil))
         if not hasPrivOverride then
             privOffY = buffOffsetY + minSep
@@ -630,36 +649,35 @@ local function UpdateAnchor(entry, shared)
     end
 
     -- ── Position anchor ──
-    entry.anchor:ClearAllPoints()
-    entry.anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
+    local anchor = entry.anchor
+    anchor:ClearAllPoints()
+    anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
 
     -- ── Position containers ──
     if layoutMode == "SINGLE" and entry.mixed then
-        -- Single-row mode: everything stacked at anchor origin
         entry.mixed:ClearAllPoints()
-        entry.mixed:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+        entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
         entry.debuffs:ClearAllPoints()
-        entry.debuffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+        entry.debuffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
         entry.buffs:ClearAllPoints()
-        entry.buffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+        entry.buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
     else
-        -- SEPARATE mode: Debuffs at base, Buffs offset above, each with their own group offsets
         entry.debuffs:ClearAllPoints()
-        entry.debuffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", debuffDX, debuffDY)
+        entry.debuffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", debuffDX, debuffDY)
 
         entry.buffs:ClearAllPoints()
-        entry.buffs:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", buffDX, buffOffsetY + buffDY)
+        entry.buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", buffDX, buffOffsetY + buffDY)
 
         if entry.mixed then
             entry.mixed:ClearAllPoints()
-            entry.mixed:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
+            entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
         end
     end
 
     -- Private
     if entry.private then
         entry.private:ClearAllPoints()
-        entry.private:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", privOffX, privOffY)
+        entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
     end
 
     -- ── Position edit movers (mirror containers) ──
@@ -669,32 +687,19 @@ local function UpdateAnchor(entry, shared)
         local maxDebuff = (shared.maxDebuffs or shared.maxIcons or 12)
         local cols = (maxBuff < perRow) and maxBuff or perRow
         local dcols = (maxDebuff < perRow) and maxDebuff or perRow
-        local bw = cols * step
-        local dw = dcols * step
-        local pw = 4 * step
         local headerH = 20
 
-        local function MirrorMover(mover, container, w, h)
-            if not mover then return end
-            mover:ClearAllPoints()
-            if container and container.GetPoint and container:GetNumPoints() > 0 then
-                local p, rel, rp, ox, oy = container:GetPoint(1)
-                if p and rel and rp then
-                    mover:SetPoint(p, rel, rp, ox or 0, oy or 0)
-                else
-                    mover:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
-                end
-            else
-                mover:SetPoint("BOTTOMLEFT", entry.anchor, "BOTTOMLEFT", 0, 0)
-            end
-            if w and h then mover:SetSize(w, h) end
-        end
-
-        MirrorMover(entry.editMoverBuff,    entry.buffs,   bw, iconSize + headerH)
-        MirrorMover(entry.editMoverDebuff,  entry.debuffs, dw, iconSize + headerH)
-        MirrorMover(entry.editMoverPrivate, entry.private, pw, iconSize + headerH)
+        MirrorMover(entry.editMoverBuff,    entry.buffs,   anchor, cols * step,  iconSize + headerH)
+        MirrorMover(entry.editMoverDebuff,  entry.debuffs, anchor, dcols * step, iconSize + headerH)
+        MirrorMover(entry.editMoverPrivate, entry.private, anchor, 4 * step,     iconSize + headerH)
     end
 end
+
+-- Pre-cached boss unit strings (avoid "boss"..i concatenation in loops)
+local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+
+-- Module binding flag (set once, reset only on hard reload)
+local _modulesBound = false
 
 -- ────────────────────────────────────────────────────────────────
 -- RenderUnit — the core render loop (single pass, clean)
@@ -703,11 +708,14 @@ end
 local function RenderUnit(entry)
     if not entry then return end
 
-    -- Bind modules on first call
-    if not Collect then Collect = API.Collect end
-    if not Icons then Icons = API.Icons or API.Apply end
-    if not Store then Store = API.Store end
-    if not Filters then Filters = API.Filters end
+    -- Bind modules once
+    if not _modulesBound then
+        Collect = API.Collect
+        Icons   = API.Icons or API.Apply
+        Store   = API.Store
+        Filters = API.Filters
+        if Collect and Icons then _modulesBound = true end
+    end
 
     if not Collect or not Icons then return end
 
@@ -737,17 +745,18 @@ local function RenderUnit(entry)
     local showDebuffs = (shared.showDebuffs == true)
     local useSingleRow = (layoutMode == "SINGLE")
 
+    -- Pre-compute: do we need player-aura detection? Only if highlights are on.
+    local needPlayerAura = (shared.highlightOwnBuffs == true) or (shared.highlightOwnDebuffs == true)
+
     -- ── Edit Mode: create movers before anchoring so UpdateAnchor can position them ──
-    local isEditActive = IsEditModeActive()
-    local EditMode = API.EditMode
-    if EditMode and isEditActive then
-        if EditMode.EnsureMovers then
-            EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
-        end
+    local isEditActive = (not _inCombat) and IsEditModeActive() or false
+    local EditMode = isEditActive and API.EditMode or nil
+    if EditMode and EditMode.EnsureMovers then
+        EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
     end
 
     -- Anchor (also positions containers + movers with per-group offsets)
-    UpdateAnchor(entry, shared)
+    UpdateAnchor(entry, shared, isEditActive)
     entry.anchor:Show()
 
     -- Private auras
@@ -755,11 +764,10 @@ local function RenderUnit(entry)
 
     -- ── Edit Mode: show/hide movers ──
     if EditMode then
-        if isEditActive then
-            if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
-        else
-            if EditMode.HideMovers then EditMode.HideMovers(entry) end
-        end
+        if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
+    elseif not _inCombat then
+        local EM = API.EditMode
+        if EM and EM.HideMovers then EM.HideMovers(entry) end
     end
 
     local showTest = (shared.showInEditMode == true and isEditActive)
@@ -816,9 +824,9 @@ local function RenderUnit(entry)
     if showDebuffs then
         local list
         if debuffsOnlyMine and debuffsIncludeBoss then
-            list, debuffCount = Collect.GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, entry._debuffList, entry._mergeList)
+            list, debuffCount = Collect.GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, entry._debuffList, entry._mergeList, needPlayerAura)
         else
-            list, debuffCount = Collect.GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, entry._debuffList)
+            list, debuffCount = Collect.GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, entry._debuffList, needPlayerAura)
         end
 
         -- Commit to icons
@@ -835,9 +843,9 @@ local function RenderUnit(entry)
     if showBuffs then
         local list
         if buffsOnlyMine and buffsIncludeBoss then
-            list, buffCount = Collect.GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, entry._buffList, entry._mergeList)
+            list, buffCount = Collect.GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, entry._buffList, entry._mergeList, needPlayerAura)
         else
-            list, buffCount = Collect.GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, entry._buffList)
+            list, buffCount = Collect.GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, entry._buffList, needPlayerAura)
         end
 
         local container = useSingleRow and entry.mixed or entry.buffs
@@ -899,24 +907,17 @@ Flush = function()
         local unit = list[i]
         local frame = FindUnitFrame(unit)
 
-        if not frame then
-            local entry = AurasByUnit[unit]
-            if entry and entry.anchor then entry.anchor:Hide() end
-        elseif showTest then
+        -- Fast path: should we render?
+        local shouldRender = frame
+            and (showTest or (UnitEnabled(a2, unit) and frame:IsShown() and (not UnitExists or UnitExists(unit))))
+
+        if shouldRender then
             local e = EnsureAttached(unit)
             if e then RenderUnit(e) end
-        elseif not UnitEnabled(a2, unit) then
-            local entry = AurasByUnit[unit]
-            if entry and entry.anchor then entry.anchor:Hide() end
-        elseif not frame:IsShown() then
-            local entry = AurasByUnit[unit]
-            if entry and entry.anchor then entry.anchor:Hide() end
-        elseif UnitExists and not UnitExists(unit) then
-            local entry = AurasByUnit[unit]
-            if entry and entry.anchor then entry.anchor:Hide() end
         else
-            local e = EnsureAttached(unit)
-            if e then RenderUnit(e) end
+            -- Hide anchor if it exists
+            local entry = AurasByUnit[unit]
+            if entry and entry.anchor then entry.anchor:Hide() end
         end
     end
 
@@ -945,18 +946,17 @@ local function MarkAllDirty(delay)
         if ue.target then MarkDirty("target", delay) end
         if ue.focus then MarkDirty("focus", delay) end
         for i = 1, 5 do
-            if ue["boss" .. i] then MarkDirty("boss" .. i, delay) end
+            if ue[_BOSS_UNITS[i]] then MarkDirty(_BOSS_UNITS[i], delay) end
         end
     else
         MarkDirty("player", delay)
         MarkDirty("target", delay)
         MarkDirty("focus", delay)
-        for i = 1, 5 do MarkDirty("boss" .. i, delay) end
+        for i = 1, 5 do MarkDirty(_BOSS_UNITS[i], delay) end
     end
 end
 
 local function RefreshAll()
-    -- Bump configGen so CommitIcon diff-gate forces full re-apply on all icons
     _configGen = _configGen + 1
     if Icons and Icons.BumpConfigGen then Icons.BumpConfigGen() end
 
@@ -965,7 +965,7 @@ local function RefreshAll()
         Store.InvalidateUnit("player")
         Store.InvalidateUnit("target")
         Store.InvalidateUnit("focus")
-        for i = 1, 5 do Store.InvalidateUnit("boss" .. i) end
+        for i = 1, 5 do Store.InvalidateUnit(_BOSS_UNITS[i]) end
     end
     MarkAllDirty(0)
 end
@@ -1001,28 +1001,30 @@ end
 -- ClearAllPreviews (called by Events when leaving Edit Mode)
 -- ────────────────────────────────────────────────────────────────
 
+-- Helper: clear preview state from a single container (file-scope, no closure alloc)
+local function _ClearPreviewContainer(container)
+    if not container then return end
+    local pool = container._msufIcons
+    if not pool then return end
+    for i = 1, #pool do
+        local icon = pool[i]
+        if icon and icon._msufA2_isPreview then
+            icon._msufA2_isPreview = nil
+            icon._msufA2_previewKind = nil
+            icon:Hide()
+        end
+    end
+end
+
 local function ClearAllPreviews()
     Icons = API.Icons or API.Apply
     if not Icons then return end
 
     for _, entry in pairs(AurasByUnit) do
         if entry then
-            local function ClearPreview(container)
-                if not container then return end
-                local pool = container._msufIcons
-                if not pool then return end
-                for i = 1, #pool do
-                    local icon = pool[i]
-                    if icon and icon._msufA2_isPreview then
-                        icon._msufA2_isPreview = nil
-                        icon._msufA2_previewKind = nil
-                        icon:Hide()
-                    end
-                end
-            end
-            ClearPreview(entry.buffs)
-            ClearPreview(entry.debuffs)
-            ClearPreview(entry.mixed)
+            _ClearPreviewContainer(entry.buffs)
+            _ClearPreviewContainer(entry.debuffs)
+            _ClearPreviewContainer(entry.mixed)
         end
     end
 end
@@ -1066,7 +1068,7 @@ API.UpdateUnitAnchor = function(unit)
     local entry = AurasByUnit[unit]
     if not entry then return end
     local a2, shared = GetAuras2DB()
-    if shared then UpdateAnchor(entry, shared) end
+    if shared then UpdateAnchor(entry, shared, (not _inCombat) and IsEditModeActive() or false) end
 end
 
 API.ApplyEventRegistration = API.ApplyEventRegistration or function()

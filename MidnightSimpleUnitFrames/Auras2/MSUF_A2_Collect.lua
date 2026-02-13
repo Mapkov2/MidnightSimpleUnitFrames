@@ -2,11 +2,14 @@
 -- MSUF_A2_Collect.lua — Auras 3.0 Collection Layer
 -- Replaces MSUF_A2_Store.lua + MSUF_A2_Model.lua
 --
--- Single-pass aura collection via GetAuraSlots → GetAuraDataBySlot.
--- Inline filtering (onlyMine, hidePermanent, onlyBoss). Zero caching layers.
--- Secret-safe: derives isHelpful/isPlayerAura from filter strings, never
--- reads secret booleans. Uses C_UnitAuras.IsAuraFilteredOutByInstanceID()
--- for player-aura detection (oUF pattern).
+-- Performance optimizations:
+--   • C_UnitAuras functions localized once at file scope
+--   • SecretsActive() hoisted out of per-aura loop (1 call per GetAuras)
+--   • isFiltered() called ONCE per aura (combined onlyMine + playerAura)
+--   • needPlayerAura flag skips isFiltered when highlights disabled
+--   • Split request-cap vs output-cap: low caps = low API work
+--   • Stale-tail clear skipped when count unchanged
+--   • PlayerFilter cached in table (no if-chain)
 -- ============================================================================
 
 local addonName, ns = ...
@@ -20,27 +23,40 @@ ns.__MSUF_A2_COLLECT_LOADED = true
 API.Collect = (type(API.Collect) == "table") and API.Collect or {}
 local Collect = API.Collect
 
--- Locals (hot path)
+-- ────────────────────────────────────────────────────────────────
+-- Hot locals
+-- ────────────────────────────────────────────────────────────────
 local type = type
 local select = select
 local C_UnitAuras = C_UnitAuras
 local issecretvalue = _G and _G.issecretvalue
 
+-- Localized API functions (bound once, avoids table lookup per aura)
+local _getSlots, _getBySlot, _isFiltered, _doesExpire, _getDuration, _getStackCount
+local _apisBound = false
+
+local function BindAPIs()
+    if _apisBound then return end
+    if not C_UnitAuras then return end
+    _getSlots      = C_UnitAuras.GetAuraSlots
+    _getBySlot     = C_UnitAuras.GetAuraDataBySlot
+    _isFiltered    = C_UnitAuras.IsAuraFilteredOutByInstanceID
+    _doesExpire    = C_UnitAuras.DoesAuraHaveExpirationTime
+    _getDuration   = C_UnitAuras.GetAuraDuration
+    _getStackCount = C_UnitAuras.GetAuraApplicationDisplayCount
+    _apisBound = true
+end
+
 -- ────────────────────────────────────────────────────────────────
 -- Secret-safe helpers
 -- ────────────────────────────────────────────────────────────────
 
--- Check if a value is a secret. Cheap; no pcall.
 local function IsSV(v)
     if v == nil then return false end
-    if issecretvalue then
-        local ok, r = true, issecretvalue(v)
-        return (r == true)
-    end
+    if issecretvalue then return (issecretvalue(v) == true) end
     return false
 end
 
--- Secret-mode check (throttled). When active, all aura fields may be secret.
 local _secretActive = nil
 local _secretCheckAt = 0
 local _GetTime = GetTime
@@ -56,29 +72,20 @@ local function SecretsActive()
     return _secretActive
 end
 
--- Detect if an aura is a boss aura. Secret-safe.
-local function IsBossAura(data)
-    if data == nil then return false end
-    if SecretsActive() then return false end
-    local v = data.isBossAura
-    if v == true then return true end
-    if v == false or v == nil then return false end
-    return false
-end
-
--- Detect if an aura has zero duration (permanent). Secret-safe.
--- Returns true ONLY when we can confirm duration == 0.
--- In secret mode, returns false (don't hide — we can't tell).
-local function IsPermanentAura(unit, aid)
-    if SecretsActive() then return false end
-    if not C_UnitAuras then return false end
-    local fn = C_UnitAuras.DoesAuraHaveExpirationTime
-    if type(fn) ~= "function" then return false end
-    local v = fn(unit, aid)
+-- NOTE: secretsActive parameter passed in (hoisted from loop)
+local function IsPermanentAura(unit, aid, secretsNow)
+    if secretsNow then return false end
+    if type(_doesExpire) ~= "function" then return false end
+    local v = _doesExpire(unit, aid)
     if IsSV(v) then return false end
     if type(v) == "boolean" then return (v == false) end
     if type(v) == "number" then return (v <= 0) end
     return false
+end
+
+local function IsBossAura(data, secretsNow)
+    if data == nil or secretsNow then return false end
+    return (data.isBossAura == true)
 end
 
 -- ────────────────────────────────────────────────────────────────
@@ -91,7 +98,7 @@ local function CaptureSlots(t, ...)
     local prev = t._n or 0
     t._n = n
     if n == 0 then
-        -- noop
+        -- skip
     elseif n <= 16 then
         local a,b,c,d,e,f,g,h,i,j,k,l,m,o,p,q = ...
         t[1]=a;  t[2]=b;  t[3]=c;  t[4]=d
@@ -102,124 +109,116 @@ local function CaptureSlots(t, ...)
         local tmp = {...}
         for i = 1, n do t[i] = tmp[i] end
     end
-    for i = n + 1, prev do t[i] = nil end
+    if n < prev then
+        for i = n + 1, prev do t[i] = nil end
+    end
     return n
 end
 
 -- ────────────────────────────────────────────────────────────────
--- Pre-cached filter strings (avoid concatenation in hot path)
+-- Pre-cached filter strings
 -- ────────────────────────────────────────────────────────────────
 local FILTER_HELPFUL         = "HELPFUL"
 local FILTER_HARMFUL         = "HARMFUL"
 local FILTER_HELPFUL_PLAYER  = "HELPFUL|PLAYER"
 local FILTER_HARMFUL_PLAYER  = "HARMFUL|PLAYER"
 
+local _pFilterMap = {
+    [FILTER_HELPFUL] = FILTER_HELPFUL_PLAYER,
+    [FILTER_HARMFUL] = FILTER_HARMFUL_PLAYER,
+}
 local function PlayerFilter(filter)
-    if filter == FILTER_HELPFUL then return FILTER_HELPFUL_PLAYER end
-    if filter == FILTER_HARMFUL then return FILTER_HARMFUL_PLAYER end
-    return filter .. "|PLAYER"
+    return _pFilterMap[filter] or (filter .. "|PLAYER")
 end
 
 -- ────────────────────────────────────────────────────────────────
 -- Core collection function
--- 
--- Returns: out (reused array), count
 --
--- Each entry in `out` is the raw aura data table from GetAuraDataBySlot,
--- augmented with:
---   ._msufAuraInstanceID  (= auraInstanceID, cached for Apply)
---   ._msufIsPlayerAura    (bool, derived from IsAuraFilteredOutByInstanceID)
---   ._msufIsHelpful       (bool, derived from the filter string we passed)
---
--- Performance: when no filters are active, the API request cap equals the
--- display cap — a cap of 4 means exactly 4 GetAuraSlots + 4 GetAuraDataBySlot
--- calls. When filters are active, we over-fetch by a bounded multiplier to
--- compensate for filtered-out auras while still limiting total API work.
+-- needPlayerAura: when false, skips the isFiltered() call for
+-- player-aura detection. Pass false when both highlightOwnBuffs
+-- AND highlightOwnDebuffs are disabled — saves 1 C API call per aura.
 -- ────────────────────────────────────────────────────────────────
 
-function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyBoss, out)
+function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyBoss, out, needPlayerAura)
     out = (type(out) == "table") and out or {}
-    local prevN = out._msufA2_n or #out
+    local prevN = out._msufA2_n or 0
 
     if not unit or not C_UnitAuras then
-        for i = 1, prevN do out[i] = nil end
+        if prevN > 0 then for i = 1, prevN do out[i] = nil end end
         out._msufA2_n = 0
         return out, 0
     end
 
-    local getSlots   = C_UnitAuras.GetAuraSlots
-    local getBySlot  = C_UnitAuras.GetAuraDataBySlot
-    local isFiltered = C_UnitAuras.IsAuraFilteredOutByInstanceID
-
-    if type(getSlots) ~= "function" or type(getBySlot) ~= "function" then
-        for i = 1, prevN do out[i] = nil end
+    if not _apisBound then BindAPIs() end
+    if type(_getSlots) ~= "function" or type(_getBySlot) ~= "function" then
+        if prevN > 0 then for i = 1, prevN do out[i] = nil end end
         out._msufA2_n = 0
         return out, 0
     end
 
     local outputCap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
     local isHelpful = (filter == FILTER_HELPFUL)
-    local playerFilter = PlayerFilter(filter)
-    local canCheckFiltered = (type(isFiltered) == "function")
 
-    -- Determine how many slots to request from the API.
-    -- No filters → request exactly outputCap (minimum API calls, maximum perf gain).
-    -- Filters active → over-fetch to compensate for filtering losses (bounded).
+    -- ── Split request-cap vs output-cap ──
     local hasFilters = onlyMine or hidePermanent or onlyBoss
     local requestCap
     if hasFilters then
-        -- Request 3× the output cap, clamped to [outputCap, 40].
-        -- This usually fills the output after filtering without scanning all auras.
         requestCap = outputCap * 3
-        if requestCap < outputCap then requestCap = outputCap end
         if requestCap > 40 then requestCap = 40 end
     else
-        -- No filters: request equals output. Pure performance win.
         requestCap = outputCap
     end
 
-    -- Collect slots (skip continuation token at index 1)
-    local nSlots = CaptureSlots(_scratch, select(2, getSlots(unit, filter, requestCap, nil)))
+    -- ── Hoist expensive checks ──
+    local canFilter = (type(_isFiltered) == "function")
+    -- Only call SecretsActive if we actually need it for boss/permanent checks
+    local secretsNow = (hidePermanent or onlyBoss) and SecretsActive() or false
+    -- Determine if we need a separate isFiltered call for playerAura detection
+    -- When onlyMine is true, we get isPlayerAura for free from the filter check
+    local wantPlayerAura = (needPlayerAura ~= false) and canFilter
+    local detectSeparately = wantPlayerAura and (not onlyMine)
+    local playerFilter = (onlyMine or detectSeparately) and PlayerFilter(filter) or nil
+
+    -- ── Collect slots ──
+    local nSlots = CaptureSlots(_scratch, select(2, _getSlots(unit, filter, requestCap, nil)))
 
     local n = 0
     for i = 1, nSlots do
         if n >= outputCap then break end
 
-        local data = getBySlot(unit, _scratch[i])
+        local data = _getBySlot(unit, _scratch[i])
         if type(data) == "table" then
             local aid = data.auraInstanceID
             if aid ~= nil then
-                -- Inline filtering (single pass, no post-filter)
-                local dominated = false
+                local skip = false
+                local isPlayerAura = false
 
-                -- onlyMine: use IsAuraFilteredOutByInstanceID (secret-safe)
-                if not dominated and onlyMine and canCheckFiltered then
-                    if isFiltered(unit, aid, playerFilter) then
-                        dominated = true
+                -- onlyMine filter + captures isPlayerAura as side effect
+                if onlyMine and canFilter then
+                    if _isFiltered(unit, aid, playerFilter) then
+                        skip = true
+                    else
+                        isPlayerAura = true -- passed PLAYER filter = player's aura
                     end
                 end
 
-                -- onlyBoss: check isBossAura (skipped in secret mode)
-                if not dominated and onlyBoss and not IsBossAura(data) then
-                    dominated = true
+                if not skip and onlyBoss and not IsBossAura(data, secretsNow) then
+                    skip = true
                 end
 
-                -- hidePermanent: check expiration (skipped in secret mode)
-                if not dominated and hidePermanent and IsPermanentAura(unit, aid) then
-                    dominated = true
+                if not skip and hidePermanent and IsPermanentAura(unit, aid, secretsNow) then
+                    skip = true
                 end
 
-                if not dominated then
-                    -- Passed all filters — add to output
+                if not skip then
                     n = n + 1
-
-                    -- Augment with safe derived metadata
                     data._msufAuraInstanceID = aid
                     data._msufIsHelpful = isHelpful
 
-                    -- Player-aura detection (oUF pattern): secret-safe
-                    if canCheckFiltered then
-                        data._msufIsPlayerAura = not isFiltered(unit, aid, playerFilter)
+                    if onlyMine then
+                        data._msufIsPlayerAura = isPlayerAura
+                    elseif detectSeparately then
+                        data._msufIsPlayerAura = not _isFiltered(unit, aid, playerFilter)
                     else
                         data._msufIsPlayerAura = false
                     end
@@ -230,32 +229,29 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
         end
     end
 
-    -- Clear stale tail
-    for i = n + 1, prevN do out[i] = nil end
+    if n < prevN then
+        for i = n + 1, prevN do out[i] = nil end
+    end
     out._msufA2_n = n
-
     return out, n
 end
 
 -- ────────────────────────────────────────────────────────────────
 -- Merged collection: player-only + boss auras from full list
--- (Used when onlyMine=true AND includeBoss=true)
 -- ────────────────────────────────────────────────────────────────
 
-function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, mergeOut)
+function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, mergeOut, needPlayerAura)
     out = (type(out) == "table") and out or {}
     mergeOut = (type(mergeOut) == "table") and mergeOut or {}
 
     local outputCap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
 
-    -- 1. Get player-only auras (uses smart over-fetch since onlyMine filter is active)
-    local _, playerN = Collect.GetAuras(unit, filter, outputCap, true, hidePermanent, false, out)
+    local _, playerN = Collect.GetAuras(unit, filter, outputCap, true, hidePermanent, false, out, needPlayerAura)
+    local _, allN = Collect.GetAuras(unit, filter, 40, false, hidePermanent, false, mergeOut, needPlayerAura)
 
-    -- 2. Get all auras for boss detection. Must request a full scan (40) because boss
-    --    auras can appear anywhere in the slot list and a low cap would miss them.
-    local _, allN = Collect.GetAuras(unit, filter, 40, false, hidePermanent, false, mergeOut)
+    -- Hoist SecretsActive for IsBossAura calls
+    local secretsNow = SecretsActive()
 
-    -- 3. Merge: add boss auras from all-list that aren't already in player-list
     local seen = out._msufA2_seen
     if not seen then seen = {}; out._msufA2_seen = seen end
     for k in pairs(seen) do seen[k] = nil end
@@ -272,7 +268,7 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, merg
     for i = 1, allN do
         if n >= outputCap then break end
         local d = mergeOut[i]
-        if d and IsBossAura(d) then
+        if d and IsBossAura(d, secretsNow) then
             local aid = d._msufAuraInstanceID or d.auraInstanceID
             if aid and not seen[aid] then
                 seen[aid] = true
@@ -282,68 +278,51 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, merg
         end
     end
 
-    -- Clear stale tail
     local prevN = out._msufA2_n or 0
-    for i = n + 1, prevN do out[i] = nil end
+    if n < prevN then
+        for i = n + 1, prevN do out[i] = nil end
+    end
     out._msufA2_n = n
-
     return out, n
 end
 
 -- ────────────────────────────────────────────────────────────────
--- Stack count (direct API call, no caching)
--- C_UnitAuras.GetAuraApplicationDisplayCount is secret-safe (returns number)
+-- Stack count / Duration / Expiration (direct API, no caching)
 -- ────────────────────────────────────────────────────────────────
 
 function Collect.GetStackCount(unit, auraInstanceID)
     if not unit or auraInstanceID == nil then return nil end
-    local fn = C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount
-    if type(fn) ~= "function" then return nil end
-    return fn(unit, auraInstanceID, 2, 99)
+    if not _apisBound then BindAPIs() end
+    if type(_getStackCount) ~= "function" then return nil end
+    return _getStackCount(unit, auraInstanceID, 2, 99)
 end
-
--- ────────────────────────────────────────────────────────────────
--- Duration object (for cooldown display). Secret-safe pass-through.
--- ────────────────────────────────────────────────────────────────
 
 function Collect.GetDurationObject(unit, auraInstanceID)
     if not unit or auraInstanceID == nil then return nil end
-    local fn = C_UnitAuras and C_UnitAuras.GetAuraDuration
-    if type(fn) ~= "function" then return nil end
-    local obj = fn(unit, auraInstanceID)
-    -- Only return duration objects, not raw numbers (which could be secret)
-    if obj ~= nil and type(obj) ~= "number" then
-        return obj
-    end
+    if not _apisBound then BindAPIs() end
+    if type(_getDuration) ~= "function" then return nil end
+    local obj = _getDuration(unit, auraInstanceID)
+    if obj ~= nil and type(obj) ~= "number" then return obj end
     return nil
 end
 
--- ────────────────────────────────────────────────────────────────
--- Has expiration check (secret-safe)
--- ────────────────────────────────────────────────────────────────
-
 function Collect.HasExpiration(unit, auraInstanceID)
     if not unit or auraInstanceID == nil then return nil end
-    local fn = C_UnitAuras and C_UnitAuras.DoesAuraHaveExpirationTime
-    if type(fn) ~= "function" then return nil end
-    local v = fn(unit, auraInstanceID)
-    if IsSV(v) then return nil end -- can't tell
+    if not _apisBound then BindAPIs() end
+    if type(_doesExpire) ~= "function" then return nil end
+    local v = _doesExpire(unit, auraInstanceID)
+    if IsSV(v) then return nil end
     if type(v) == "boolean" then return v end
     if type(v) == "number" then return (v > 0) end
     return nil
 end
 
 -- ────────────────────────────────────────────────────────────────
--- Exports for backward compatibility
--- (Some peripheral modules reference API.Store or API.Model)
+-- Backward compat stubs
 -- ────────────────────────────────────────────────────────────────
 
--- Stub Store so Events.lua's OnUnitAura doesn't crash
 API.Store = (type(API.Store) == "table") and API.Store or {}
 local Store = API.Store
-
--- OnUnitAura: called by Events with UNIT_AURA updateInfo.
--- In the new architecture, we don't track deltas — just bump an epoch.
 Store._epochs = Store._epochs or {}
 
 function Store.OnUnitAura(unit, updateInfo)
@@ -360,7 +339,6 @@ function Store.GetEpoch(unit)
     return Store._epochs[unit] or 0
 end
 
--- Stubs for any code that still references old APIs
 function Store.GetEpochSig(unit) return Store.GetEpoch(unit) end
 function Store.GetRawSig() return nil end
 function Store.PopUpdated() return nil, 0 end
@@ -368,17 +346,11 @@ function Store.ForceScanForReuse() return nil end
 function Store.GetLastScannedAuraList() return nil end
 function Store.GetStackCount(unit, aid) return Collect.GetStackCount(unit, aid) end
 
--- Stub Model
 API.Model = (type(API.Model) == "table") and API.Model or {}
 local Model = API.Model
+Model.IsBossAura = function(data) return IsBossAura(data, SecretsActive()) end
+Model.GetPlayerAuraIdSetCached = nil
 
--- Model.IsBossAura used by Render budget loop — redirect
-Model.IsBossAura = IsBossAura
-
--- Export for Apply backward compat
-Model.GetPlayerAuraIdSetCached = nil -- no longer needed; Icons handles this inline
-
--- Collect-level helpers exported
 Collect.SecretsActive = SecretsActive
-Collect.IsBossAura = IsBossAura
+Collect.IsBossAura = function(data) return IsBossAura(data, SecretsActive()) end
 Collect.IsSV = IsSV
