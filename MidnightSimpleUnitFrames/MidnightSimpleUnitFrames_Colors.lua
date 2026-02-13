@@ -952,6 +952,39 @@ local function SetPowerBarBackgroundColor(r, g, b)
     PushVisualUpdates()
 end
 
+------------------------------------------------------
+-- Helpers: Aggro border (outline indicator) color
+-- Stored under MSUF_DB.general.aggroBorderColorR/G/B.
+------------------------------------------------------
+local function GetAggroBorderColor()
+    local defR, defG, defB = 1, 0.50, 0
+    if EnsureDB and MSUF_DB then
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        local g = MSUF_DB.general
+        local r = g.aggroBorderColorR
+        local gg = g.aggroBorderColorG
+        local b = g.aggroBorderColorB
+        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+            return r, gg, b
+        end
+    end
+    return defR, defG, defB
+end
+
+local function SetAggroBorderColor(r, g, b)
+    if not EnsureDB or not MSUF_DB then return end
+    EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    local gen = MSUF_DB.general
+    gen.aggroBorderColorR = r
+    gen.aggroBorderColorG = g
+    gen.aggroBorderColorB = b
+    PushVisualUpdates()
+end
+
+
+
 
 -- Toggle: Match power bar background hue to the CURRENT health bar color.
 -- Stored under MSUF_DB.general.powerBarBgMatchHPColor.
@@ -1940,10 +1973,34 @@ end
 
 
 
+
+    -- Aggro border (outline indicator)
+    local aggroLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    aggroLabel:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcLabelX, npcStartY - 8 * npcRowHeight)
+    aggroLabel:SetJustifyH("LEFT")
+    aggroLabel:SetText("Aggro Border Color")
+
+    local aggroSwatch = CreateFrame("Button", "MSUF_Colors_AggroBorderSwatch", content)
+    aggroSwatch:SetSize(npcBarWidth, 16)
+    aggroSwatch:SetPoint("TOPLEFT", npcHeader, "BOTTOMLEFT", npcBarX, npcStartY - 8 * npcRowHeight)
+
+    panel.__MSUF_ExtraColorAggroBorderTex = aggroSwatch:CreateTexture(nil, "ARTWORK")
+    panel.__MSUF_ExtraColorAggroBorderTex:SetAllPoints()
+    panel.__MSUF_ExtraColorAggroBorderTex:SetColorTexture(GetAggroBorderColor())
+
+    aggroSwatch:SetScript("OnClick", function()
+        local r, g, b = GetAggroBorderColor()
+        OpenColorPicker(r, g, b, function(nr, ng, nb)
+            SetAggroBorderColor(nr, ng, nb)
+            local tex = panel.__MSUF_ExtraColorAggroBorderTex
+            if tex then tex:SetColorTexture(nr, ng, nb) end
+        end)
+    end)
+
     -- Reset Extra Color
     local npcResetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
     npcResetBtn:SetSize(160, 22)
-    npcResetBtn:SetPoint("TOPLEFT", petLabel, "BOTTOMLEFT", 0, -12)
+    npcResetBtn:SetPoint("TOPLEFT", aggroLabel, "BOTTOMLEFT", 0, -12)
     npcResetBtn:SetText("Reset Extra Color")
     npcResetBtn:SetScript("OnClick", function()
         if EnsureDB and MSUF_DB then
@@ -1955,6 +2012,8 @@ end
             gen.absorbBarColorR, gen.absorbBarColorG, gen.absorbBarColorB = nil, nil, nil
             gen.healAbsorbBarColorR, gen.healAbsorbBarColorG, gen.healAbsorbBarColorB = nil, nil, nil
             gen.powerBarBgColorR, gen.powerBarBgColorG, gen.powerBarBgColorB = nil, nil, nil
+            gen.aggroBorderColorR, gen.aggroBorderColorG, gen.aggroBorderColorB = nil, nil, nil
+
             gen.powerBarBgMatchHPColor = nil
             MSUF_DB.bars = MSUF_DB.bars or {}
             MSUF_DB.bars.powerBarBgMatchBarColor = nil
@@ -1991,6 +2050,11 @@ end
         if pTex then
             pTex:SetColorTexture(GetPowerBarBackgroundColor())
         end
+        local agTex = panel.__MSUF_ExtraColorAggroBorderTex
+        if agTex then
+            agTex:SetColorTexture(GetAggroBorderColor())
+        end
+
 
         if panel.__MSUF_ExtraColorPowerBgMatchCheck then
             panel.__MSUF_ExtraColorPowerBgMatchCheck:SetChecked(false)

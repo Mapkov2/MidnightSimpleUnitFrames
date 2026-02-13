@@ -5746,6 +5746,17 @@ MSUF_ApplyRareVisuals = function(self)
         end
     end
 
+	local aggroR, aggroG, aggroB = 1, 0.50, 0
+	if g then
+		local r = g.aggroBorderColorR
+		local gg = g.aggroBorderColorG
+		local b = g.aggroBorderColorB
+		if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+			aggroR, aggroG, aggroB = r, gg, b
+		end
+	end
+
+
     local thickness = baseThickness
     -- If the user disabled outlines, we still show an aggro outline while threat is active.
     -- If outlines are enabled but thin, force a visible minimum while threatened.
@@ -5792,7 +5803,7 @@ MSUF_ApplyRareVisuals = function(self)
         f:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
         -- Keep the border color consistent when thickness changes (prevents black overwrite in testmode / threat).
         if threat then
-            f:SetBackdropBorderColor(1, 0.50, 0, 1)
+            f:SetBackdropBorderColor(aggroR, aggroG, aggroB, 1)
             o._msufLastBorderColorKey = 1
         else
             f:SetBackdropBorderColor(0, 0, 0, 1)
@@ -5806,7 +5817,7 @@ MSUF_ApplyRareVisuals = function(self)
     local colorKey = threat and 1 or 0
     if o._msufLastBorderColorKey ~= colorKey then
         if threat then
-            f:SetBackdropBorderColor(1, 0.50, 0, 1)
+            f:SetBackdropBorderColor(aggroR, aggroG, aggroB, 1)
         else
             f:SetBackdropBorderColor(0, 0, 0, 1)
         end

@@ -339,6 +339,13 @@ end
     if g.aggroOutlineMode == nil then
         g.aggroOutlineMode = 0 -- 0=Off, 1=Aggro border indicator
     end
+	if g.aggroBorderColorR == nil or g.aggroBorderColorG == nil or g.aggroBorderColorB == nil then
+		-- Default aggro border color (orange). Used by the optional "Aggro border" outline indicator.
+		g.aggroBorderColorR = 1
+		g.aggroBorderColorG = 0.50
+		g.aggroBorderColorB = 0
+	end
+
     if g.boldText == nil then
         g.boldText = false
     end
