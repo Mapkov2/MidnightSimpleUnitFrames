@@ -46,16 +46,15 @@ local _BOSS_MAX = 5
 -- Cached module refs (bound lazily, reset on InvalidateDB)
 local _cachedReqUnit      -- API.RequestUnit (fast MarkDirty path)
 local _cachedMarkDirty    -- API.MarkDirty (fallback)
+local _epochs             -- API.Store._epochs (direct table, −4 indirections)
 local _cachedIsEditFn     -- API.IsEditModeActive
 local _refsBound = false
--- Phase 4: direct epoch table (shared by UNIT_AURA + main handlers, bound lazily)
-local _epochs
 
 local function BindCachedRefs()
     _cachedReqUnit     = API.RequestUnit
     _cachedMarkDirty   = API.MarkDirty
     local Store = API.Store
-    _epochs            = (Store and Store._epochs) or {}
+    _epochs            = Store and Store._epochs
     _cachedIsEditFn    = API.IsEditModeActive
     _refsBound = true
 end
@@ -781,7 +780,6 @@ end
     if type(list) == "table" then
         local handler = ef._msufA2_unitAuraOnEvent
         if not handler then
-            -- Phase 4: direct epoch bump + MarkDirty (eliminates Store.OnUnitAura indirection)
             handler = function(self, event, unit, updateInfo)
                 if event ~= "UNIT_AURA" then return end
 
@@ -804,11 +802,14 @@ end
                     end
                 end
 
+
                 if unit and ShouldProcessUnitEvent(unit, true) then
-                    -- Direct epoch bump (was: Store.OnUnitAura indirection)
+                    -- Phase 4B: direct epoch bump (was: BindCachedRefs → _cachedOnUnitAura → Store.OnUnitAura)
+                    if not _refsBound then BindCachedRefs() end
                     if _epochs then
                         _epochs[unit] = (_epochs[unit] or 0) + 1
                     end
+
                     MarkDirty(unit)
                 end
             end
@@ -851,31 +852,30 @@ function Events.Init()
     local ef = CreateFrame("Frame")
     Events._eventFrame = ef
 
-    -- Phase 4: ensure _epochs is bound before handlers use it
-    if not _epochs then
-        local Store = API.Store
-        _epochs = (Store and Store._epochs) or {}
-    end
-
     -- EventFrame main handler (non-UNIT_AURA)
     ef:SetScript("OnEvent", function(_, event, arg1)
         if event == "PLAYER_TARGET_CHANGED" then
             -- Target swap should feel instant: request next-frame render (0 delay)
-            _epochs["target"] = (_epochs["target"] or 0) + 1
+            if not _refsBound then BindCachedRefs() end
+            if _epochs then _epochs["target"] = (_epochs["target"] or 0) + 1 end
             if ShouldProcessUnitEvent("target") then MarkDirty("target", 0) end
             return
         end
 
         if event == "PLAYER_FOCUS_CHANGED" then
-            _epochs["focus"] = (_epochs["focus"] or 0) + 1
+            if not _refsBound then BindCachedRefs() end
+            if _epochs then _epochs["focus"] = (_epochs["focus"] or 0) + 1 end
             if ShouldProcessUnitEvent("focus") then MarkDirty("focus", 0) end
             return
         end
 
         if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-            for i = 1, _BOSS_MAX do
-                local u = _BOSS_UNITS[i]
-                _epochs[u] = (_epochs[u] or 0) + 1
+            if not _refsBound then BindCachedRefs() end
+            if _epochs then
+                for i = 1, _BOSS_MAX do
+                    local u = _BOSS_UNITS[i]
+                    _epochs[u] = (_epochs[u] or 0) + 1
+                end
             end
             for i = 1, _BOSS_MAX do
                 local u = _BOSS_UNITS[i]
@@ -898,12 +898,14 @@ function Events.Init()
                 Events.ApplyEventRegistration()
             end
 
-            _epochs["player"] = (_epochs["player"] or 0) + 1
-            _epochs["target"] = (_epochs["target"] or 0) + 1
-            _epochs["focus"] = (_epochs["focus"] or 0) + 1
-            for i = 1, _BOSS_MAX do
-                local u = _BOSS_UNITS[i]
-                _epochs[u] = (_epochs[u] or 0) + 1
+            if _epochs then
+                _epochs["player"] = (_epochs["player"] or 0) + 1
+                _epochs["target"] = (_epochs["target"] or 0) + 1
+                _epochs["focus"]  = (_epochs["focus"] or 0) + 1
+                for i = 1, _BOSS_MAX do
+                    local u = _BOSS_UNITS[i]
+                    _epochs[u] = (_epochs[u] or 0) + 1
+                end
             end
 
             if ShouldProcessUnitEvent("player") then MarkDirty("player", 0) end
