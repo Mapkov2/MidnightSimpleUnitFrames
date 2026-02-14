@@ -30,6 +30,7 @@ local GameTooltip = GameTooltip
 local UIParent = UIParent
 local floor = math.floor
 local max = math.max
+local DebuffTypeColor = DebuffTypeColor
 
 -- PERF: File-scope C_UnitAuras function cache
 local _C_UnitAuras = C_UnitAuras
@@ -578,6 +579,11 @@ local function AcquireIcon(container, index)
         end
         icon._msufA2_previewLabelText = nil
 
+        if icon._msufA2_typeBorder then
+            icon._msufA2_typeBorder:Hide()
+        end
+        icon._msufA2_typeBorderKey = nil
+
         icon._msufA2_container = container
         return icon
     end
@@ -684,6 +690,16 @@ icon._msufA2_previewLabel:Hide()
             icon._msufA2_lastStackTextSize = stackSize
         end
     end
+
+    -- Debuff-type border (optional): uses Blizzard's UI-Debuff-Overlays border region
+    icon._msufA2_typeBorder = icon:CreateTexture(nil, "OVERLAY")
+    icon._msufA2_typeBorder:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
+    icon._msufA2_typeBorder:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
+    icon._msufA2_typeBorder:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
+    icon._msufA2_typeBorder:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 1, -1)
+    icon._msufA2_typeBorder:Hide()
+    icon._msufA2_typeBorderKey = nil
+
 
 
 
@@ -1200,6 +1216,7 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
     -- Default: hide optional visuals (no base border work).
     if icon._msufOwnGlow then icon._msufOwnGlow:Hide() end
     if icon._msufPrivateMark then icon._msufPrivateMark:Hide() end
+    if icon._msufA2_typeBorder then icon._msufA2_typeBorder:Hide() end
 
     local auraInstanceID = nil
 
@@ -1247,6 +1264,64 @@ local function SetDispelBorder(icon, unit, aura, isHelpful, shared, allowHighlig
         end
     end
 
+
+    -- Optional: private-style borders for normal auras (dispel-type colors).
+    if shared and shared.useDebuffTypeBorders == true and icon._msufA2_typeBorder then
+        local show = false
+        local key = nil
+        local r, g, b = nil, nil, nil
+
+        if aura ~= nil then
+            if isHelpful then
+                -- Stealable/purgeable buffs are treated as Magic (blue) border.
+                local st = aura.isStealable
+                if st ~= nil and not _A2_IsSecretValue(st) then
+                    local t = type(st)
+                    local yes = false
+                    if t == "boolean" then
+                        yes = st
+                    elseif t == "number" then
+                        yes = (st > 0)
+                    end
+                    if yes then
+                        local c = DebuffTypeColor and (DebuffTypeColor.Magic or DebuffTypeColor.magic)
+                        if type(c) == "table" then
+                            r, g, b = c.r or 0, c.g or 0, c.b or 0
+                            show = true
+                            key = "STEAL"
+                        end
+                    end
+                end
+            else
+                -- Debuffs: color border by dispel type if available.
+                local dt = aura.dispelName or aura.dispelType or aura.debuffType
+                if dt ~= nil and not _A2_IsSecretValue(dt) then
+                    local c = DebuffTypeColor and DebuffTypeColor[dt]
+                    if type(c) == "table" then
+                        r, g, b = c.r or 0, c.g or 0, c.b or 0
+                        show = true
+                        key = dt
+                    end
+                end
+            end
+        end
+
+        if show and r ~= nil then
+            if icon._msufA2_typeBorderKey ~= key then
+                icon._msufA2_typeBorderKey = key
+                icon._msufA2_typeBorder:SetVertexColor(r, g, b, 1)
+            end
+            icon._msufA2_typeBorder:Show()
+        else
+            icon._msufA2_typeBorderKey = nil
+            icon._msufA2_typeBorder:Hide()
+        end
+    else
+        if icon._msufA2_typeBorder then
+            icon._msufA2_typeBorderKey = nil
+            icon._msufA2_typeBorder:Hide()
+        end
+    end
     if allowHighlights ~= true then
         return
     end

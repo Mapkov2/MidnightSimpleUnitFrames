@@ -15,12 +15,22 @@
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
--- Locals (used in this file)
-local tonumber = tonumber
-local pairs, next = pairs, next
+-- =========================================================================
+-- PERF LOCALS (Auras2 runtime)
+--  - Reduce global table lookups in high-frequency aura pipelines.
+--  - Secret-safe: localizing function references only (no value comparisons).
+-- =========================================================================
+local type, tostring, tonumber, select = type, tostring, tonumber, select
+local pairs, ipairs, next = pairs, ipairs, next
+local math_min, math_max, math_floor = math.min, math.max, math.floor
+local string_format, string_match, string_sub = string.format, string.match, string.sub
+local CreateFrame, GetTime = CreateFrame, GetTime
 local UnitExists = UnitExists
 local InCombatLockdown = InCombatLockdown
+local C_Timer = C_Timer
 local C_UnitAuras = C_UnitAuras
+local C_Secrets = C_Secrets
+local C_CurveUtil = C_CurveUtil
 
 -- FastCall: no pcall in hot paths
 local function MSUF_A2_FastCall(fn, ...)
@@ -58,6 +68,7 @@ local Collect  -- API.Collect
 local Icons    -- API.Icons / API.Apply
 local Store    -- API.Store (epoch only)
 local Filters  -- API.Filters
+local _epochs  -- Phase 4: direct epoch table ref (Store._epochs)
 
 --â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Combat / Edit Mode state (cheap cached checks)
@@ -772,6 +783,7 @@ local function RenderUnit(entry)
         Icons   = API.Icons or API.Apply
         Store   = API.Store
         Filters = API.Filters
+        _epochs = Store and Store._epochs  -- Phase 4: direct epoch table
         if Collect and Icons then _modulesBound = true end
     end
 
@@ -915,7 +927,7 @@ local function RenderUnit(entry)
     end
 
     -- Epoch diff: skip full rebuild if nothing changed â”€â”€
-    local epoch = Store and Store.GetEpoch(unit) or 0
+    local epoch = (_epochs and _epochs[unit]) or 0  -- Phase 4: direct table lookup
 
     if epoch == entry._lastEpoch and gen == entry._lastConfigGen then
         -- Nothing changed â€” just refresh timers and stacks

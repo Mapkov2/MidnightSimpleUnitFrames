@@ -14,6 +14,22 @@
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
+-- =========================================================================
+-- PERF LOCALS (Auras2 runtime)
+--  - Reduce global table lookups in high-frequency aura pipelines.
+--  - Secret-safe: localizing function references only (no value comparisons).
+-- =========================================================================
+local type, tostring, tonumber, select = type, tostring, tonumber, select
+local pairs, ipairs, next = pairs, ipairs, next
+local math_min, math_max, math_floor = math.min, math.max, math.floor
+local string_format, string_match, string_sub = string.format, string.match, string.sub
+local CreateFrame, GetTime = CreateFrame, GetTime
+local UnitExists = UnitExists
+local InCombatLockdown = InCombatLockdown
+local C_Timer = C_Timer
+local C_UnitAuras = C_UnitAuras
+local C_Secrets = C_Secrets
+local C_CurveUtil = C_CurveUtil
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 
@@ -247,45 +263,84 @@ end
 -- Merged collection: player-only + boss auras from full list
 -- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+-- Phase 4: single-pass merged collection.
+-- Old code did 2× GetAuraSlots + 2× N×GetAuraDataBySlot (double C_UnitAuras scan).
+-- New code: 1× GetAuraSlots + 1× N×GetAuraDataBySlot, two output stages for ordering.
+-- Output order preserved: player auras first, then non-player boss auras.
 function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, mergeOut, needPlayerAura)
     out = (type(out) == "table") and out or {}
-    mergeOut = (type(mergeOut) == "table") and mergeOut or {}
+    -- mergeOut kept in signature for backward compat but unused in single-pass
 
+    local prevN = out._msufA2_n or 0
     local outputCap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
 
-    local _, playerN = Collect.GetAuras(unit, filter, outputCap, true, hidePermanent, false, out, needPlayerAura)
-    local _, allN = Collect.GetAuras(unit, filter, 40, false, hidePermanent, false, mergeOut, needPlayerAura)
-
-    -- Hoist SecretsActive for IsBossAura calls
-    local secretsNow = SecretsActive()
-
-    local seen = out._msufA2_seen
-    if not seen then seen = {}; out._msufA2_seen = seen end
-    for k in pairs(seen) do seen[k] = nil end
-
-    for i = 1, playerN do
-        local d = out[i]
-        if d then
-            local aid = d._msufAuraInstanceID or d.auraInstanceID
-            if aid then seen[aid] = true end
-        end
+    if not unit or not C_UnitAuras then
+        if prevN > 0 then for i = 1, prevN do out[i] = nil end end
+        out._msufA2_n = 0
+        return out, 0
     end
 
-    local n = playerN
-    for i = 1, allN do
-        if n >= outputCap then break end
-        local d = mergeOut[i]
-        if d and IsBossAura(d, secretsNow) then
-            local aid = d._msufAuraInstanceID or d.auraInstanceID
-            if aid and not seen[aid] then
-                seen[aid] = true
-                n = n + 1
-                out[n] = d
+    if not _apisBound then BindAPIs() end
+    if type(_getSlots) ~= "function" or type(_getBySlot) ~= "function" then
+        if prevN > 0 then for i = 1, prevN do out[i] = nil end end
+        out._msufA2_n = 0
+        return out, 0
+    end
+
+    local canFilter = (type(_isFiltered) == "function")
+    local secretsNow = SecretsActive()
+    local playerFilter = canFilter and PlayerFilter(filter) or nil
+
+    -- Single scan: request up to 40 slots
+    local nSlots = CaptureSlots(_scratch, select(2, _getSlots(unit, filter, 40, nil)))
+
+    -- Two-stage output from single scan: player auras first, then boss-only auras.
+    -- Stage 1: collect player auras + classify boss auras (no second GetAuraDataBySlot)
+    local n = 0
+    local bossCount = 0
+    local _bossBuf = out._msufA2_bossBuf
+    if not _bossBuf then _bossBuf = {}; out._msufA2_bossBuf = _bossBuf end
+
+    for i = 1, nSlots do
+        local data = _getBySlot(unit, _scratch[i])
+        if type(data) == "table" then
+            local aid = data.auraInstanceID
+            if aid ~= nil then
+                if hidePermanent and IsPermanentAura(unit, aid, secretsNow) then
+                    -- skip permanent
+                else
+                    local isPlayerAura = false
+                    if canFilter and playerFilter then
+                        isPlayerAura = not _isFiltered(unit, aid, playerFilter)
+                    end
+
+                    data._msufAuraInstanceID = aid
+                    data._msufIsPlayerAura = isPlayerAura
+
+                    if isPlayerAura then
+                        if n < outputCap then
+                            n = n + 1
+                            out[n] = data
+                        end
+                    elseif IsBossAura(data, secretsNow) then
+                        bossCount = bossCount + 1
+                        _bossBuf[bossCount] = data
+                    end
+                end
             end
         end
     end
 
-    local prevN = out._msufA2_n or 0
+    -- Stage 2: append non-player boss auras
+    for i = 1, bossCount do
+        if n >= outputCap then break end
+        n = n + 1
+        out[n] = _bossBuf[i]
+        _bossBuf[i] = nil  -- release ref
+    end
+    -- Clear remaining boss buffer entries
+    for i = bossCount + 1, #_bossBuf do _bossBuf[i] = nil end
+
     if n < prevN then
         for i = n + 1, prevN do out[i] = nil end
     end
@@ -347,10 +402,8 @@ function Collect.HasExpirationFast(unit, aid)
     return nil
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
--- Backward compat stubs
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+-- Store epoch layer (used by Events.lua + Render.lua for change detection)
 API.Store = (type(API.Store) == "table") and API.Store or {}
 local Store = API.Store
 Store._epochs = Store._epochs or {}
@@ -369,17 +422,8 @@ function Store.GetEpoch(unit)
     return Store._epochs[unit] or 0
 end
 
-function Store.GetEpochSig(unit) return Store.GetEpoch(unit) end
-function Store.GetRawSig() return nil end
-function Store.PopUpdated() return nil, 0 end
-function Store.ForceScanForReuse() return nil end
-function Store.GetLastScannedAuraList() return nil end
-function Store.GetStackCount(unit, aid) return Collect.GetStackCount(unit, aid) end
-
-API.Model = (type(API.Model) == "table") and API.Model or {}
-local Model = API.Model
-Model.IsBossAura = function(data) return IsBossAura(data, SecretsActive()) end
-Model.GetPlayerAuraIdSetCached = nil
+-- Phase 4: removed 7 dead compat stubs (GetEpochSig, GetRawSig, PopUpdated,
+-- ForceScanForReuse, GetLastScannedAuraList, GetStackCount, Model.*)
 
 Collect.SecretsActive = SecretsActive
 Collect.IsBossAura = function(data) return IsBossAura(data, SecretsActive()) end

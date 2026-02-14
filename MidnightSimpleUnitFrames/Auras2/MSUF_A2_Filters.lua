@@ -42,6 +42,7 @@ function Filters.NormalizeFilters(f, sharedSettings, migrateFlagKey)
     Default(d, "onlyMine", false)
     Default(d, "includeBoss", false)
     Default(f, "onlyBossAuras", false)
+    Default(f, "onlyRaidInCombatAuras", false)
 end
 
 -- Ensure shared.filters exists, migrate legacy storage if needed, and keep legacy shared flags in sync.
