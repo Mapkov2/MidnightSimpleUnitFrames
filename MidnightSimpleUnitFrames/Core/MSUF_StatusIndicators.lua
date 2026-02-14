@@ -62,16 +62,7 @@ end
 -- Backwards alias used by older call sites
 MSUF_GetStatusIndicatorDB = _G.MSUF_GetStatusIndicatorDB
 -- ------------------------------------------------------------
--- Midnight/Beta (12.0+): AFK/DND can return secret booleans in instances / chat-lockdown / combat.
---
--- We *never* query AFK/DND while:
---   - InCombatLockdown
---   - Encounter in progress
---   - C_ChatInfo.InChatMessagingLockdown() (this is where UnitIsAFK/DND may return secret booleans)
---   - In any instance (party/raid/scenario/etc.) per MSUF design choice
---
--- We cache this suppression state via events to avoid hotpath checks.
--- ------------------------------------------------------------
+-- Midnight/Beta (12.0+): AFK/DND can return secret booleans in combat/encounters.
 -- Cache suppression state via events to avoid per-frame InCombatLockdown/IsEncounter calls.
 -- ------------------------------------------------------------
 if ns._msufAwaySuppressed == nil then
@@ -96,15 +87,6 @@ if ns._msufAwaySuppressed == nil then
         if CIE and CIE.IsEncounterInProgress and CIE.IsEncounterInProgress() then
             return true
         end
-                local CChat = _G.C_ChatInfo
-        if CChat and CChat.InChatMessagingLockdown and CChat.InChatMessagingLockdown() then
-            return true
-        end
-        if IsInInstance and IsInInstance() then
-            return true
-        end
-        return false
-    end
         return false
     end
 
@@ -665,8 +647,8 @@ _G.MSUF_RefreshStatusIndicators = function()
     for _, f in pairs(frames) do
         MSUF_UpdateStatusIndicatorForFrame(f)
     end
- end
- 
+    end
+    
 -- ------------------------------------------------------------
 -- Death / Ghost state reliability
 -- Fixes rare cases where "DEAD" can remain shown after a resurrection (e.g., M+ battle-res).
@@ -710,7 +692,7 @@ do
 
         f:SetScript("OnEvent", _MSUF_RefreshPlayerLifeState)
     end
-end
+ end
 -- Keep a compatibility stub because older code may call this helper.
 do
     local function _MSUF_StopStatusIndicatorTicker()

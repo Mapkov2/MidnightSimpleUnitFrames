@@ -6,6 +6,11 @@ local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
     if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
 end
 
+-- NOTE: Core stores the unitframe table on _G.MSUF_UnitFrames (not a global "UnitFrames").
+-- The LoD module must anchor Edit Mode previews against that table, otherwise previews
+-- can appear missing (unanchored/off-screen).
+local UnitFrames = _G.MSUF_UnitFrames
+
 local function MSUF_HideBlizzardPlayerCastbar()
     EnsureDB()
     local frames = {}
@@ -898,34 +903,140 @@ end
 
 
 local function MSUF_CreatePlayerCastbarPreview()
-    local fn = _G.MSUF_CreatePlayerCastbarPreview
-    if type(fn) == "function" then
-        return fn()
+    -- Real implementation (no recursion). Creates the MSUF Edit Mode preview for the player castbar.
+    if _G.MSUF_PlayerCastbarPreview then
+        MSUF_PlayerCastbarPreview = _G.MSUF_PlayerCastbarPreview
+        return MSUF_PlayerCastbarPreview
     end
-    if MSUF_DevPrint then
-        MSUF_DevPrint("MSUF: MSUF_CreatePlayerCastbarPreview missing")
+
+    EnsureDB()
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+
+    local w = tonumber(g.castbarPlayerBarWidth) or tonumber(g.castbarGlobalWidth) or 250
+    local h = tonumber(g.castbarPlayerBarHeight) or tonumber(g.castbarGlobalHeight) or 18
+
+    local f = MSUF_CreateCastbarPreviewFrame("player", "MSUF_PlayerCastbarPreview", {
+        parent = UIParent,
+        strata = "DIALOG",
+        width  = w,
+        height = h,
+        label  = "Player castbar preview",
+        showIcon = true,
+        showTime = true,
+        bgAlpha = 0.8,
+        initialValue = 0.5,
+    })
+    if not f then return end
+
+    _G.MSUF_PlayerCastbarPreview = f
+    MSUF_PlayerCastbarPreview = f
+
+    MSUF_SetupCastbarPreviewEditHandlers(f, "player")
+
+    -- Apply visuals once so the preview matches current settings.
+    if type(MSUF_UpdateCastbarVisuals) == "function" then
+        MSUF_UpdateCastbarVisuals()
     end
+    if type(MSUF_UpdateCastbarTextures) == "function" then
+        MSUF_UpdateCastbarTextures()
+    end
+
+    if type(MSUF_PositionPlayerCastbarPreview) == "function" then
+        MSUF_PositionPlayerCastbarPreview()
+    end
+
+    return f
 end
 
 
 local function MSUF_CreateTargetCastbarPreview()
-    local fn = _G.MSUF_CreateTargetCastbarPreview
-    if type(fn) == "function" then
-        return fn()
+    -- Real implementation (no recursion). Creates the MSUF Edit Mode preview for the target castbar.
+    if _G.MSUF_TargetCastbarPreview then
+        MSUF_TargetCastbarPreview = _G.MSUF_TargetCastbarPreview
+        return MSUF_TargetCastbarPreview
     end
-    if MSUF_DevPrint then
-        MSUF_DevPrint("MSUF: MSUF_CreateTargetCastbarPreview missing")
+
+    EnsureDB()
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+
+    local w = tonumber(g.castbarTargetBarWidth) or tonumber(g.castbarGlobalWidth) or 250
+    local h = tonumber(g.castbarTargetBarHeight) or tonumber(g.castbarGlobalHeight) or 18
+
+    local f = MSUF_CreateCastbarPreviewFrame("target", "MSUF_TargetCastbarPreview", {
+        parent = UIParent,
+        strata = "DIALOG",
+        width  = w,
+        height = h,
+        label  = "Target castbar preview",
+        showIcon = true,
+        showTime = true,
+        bgAlpha = 0.8,
+        initialValue = 0.5,
+    })
+    if not f then return end
+
+    _G.MSUF_TargetCastbarPreview = f
+    MSUF_TargetCastbarPreview = f
+
+    MSUF_SetupCastbarPreviewEditHandlers(f, "target")
+
+    if type(MSUF_UpdateCastbarVisuals) == "function" then
+        MSUF_UpdateCastbarVisuals()
     end
+    if type(MSUF_UpdateCastbarTextures) == "function" then
+        MSUF_UpdateCastbarTextures()
+    end
+
+    if type(MSUF_PositionTargetCastbarPreview) == "function" then
+        MSUF_PositionTargetCastbarPreview()
+    end
+
+    return f
 end
 
 local function MSUF_CreateFocusCastbarPreview()
-    local fn = _G.MSUF_CreateFocusCastbarPreview
-    if type(fn) == "function" then
-        return fn()
+    -- Real implementation (no recursion). Creates the MSUF Edit Mode preview for the focus castbar.
+    if _G.MSUF_FocusCastbarPreview then
+        MSUF_FocusCastbarPreview = _G.MSUF_FocusCastbarPreview
+        return MSUF_FocusCastbarPreview
     end
-    if MSUF_DevPrint then
-        MSUF_DevPrint("MSUF: MSUF_CreateFocusCastbarPreview missing")
+
+    EnsureDB()
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+
+    local w = tonumber(g.castbarFocusBarWidth) or tonumber(g.castbarGlobalWidth) or 250
+    local h = tonumber(g.castbarFocusBarHeight) or tonumber(g.castbarGlobalHeight) or 18
+
+    local f = MSUF_CreateCastbarPreviewFrame("focus", "MSUF_FocusCastbarPreview", {
+        parent = UIParent,
+        strata = "DIALOG",
+        width  = w,
+        height = h,
+        label  = "Focus castbar preview",
+        showIcon = true,
+        showTime = true,
+        bgAlpha = 0.8,
+        initialValue = 0.5,
+    })
+    if not f then return end
+
+    _G.MSUF_FocusCastbarPreview = f
+    MSUF_FocusCastbarPreview = f
+
+    MSUF_SetupCastbarPreviewEditHandlers(f, "focus")
+
+    if type(MSUF_UpdateCastbarVisuals) == "function" then
+        MSUF_UpdateCastbarVisuals()
     end
+    if type(MSUF_UpdateCastbarTextures) == "function" then
+        MSUF_UpdateCastbarTextures()
+    end
+
+    if type(MSUF_PositionFocusCastbarPreview) == "function" then
+        MSUF_PositionFocusCastbarPreview()
+    end
+
+    return f
 end
 
 
@@ -1246,6 +1357,9 @@ function MSUF_PositionPlayerCastbarPreview()
         return
     end
 
+    -- Core owns the unitframe table; refresh our reference (safe, edit-mode only).
+    UnitFrames = UnitFrames or _G.MSUF_UnitFrames
+
     EnsureDB()
     local g = MSUF_DB.general or {}
 
@@ -1293,6 +1407,8 @@ function MSUF_PositionTargetCastbarPreview()
     if not MSUF_TargetCastbarPreview then
         return
     end
+
+    UnitFrames = UnitFrames or _G.MSUF_UnitFrames
 
     EnsureDB()
     local g = MSUF_DB.general or {}
@@ -1354,6 +1470,8 @@ function MSUF_PositionFocusCastbarPreview()
         return
     end
 
+    UnitFrames = UnitFrames or _G.MSUF_UnitFrames
+
     EnsureDB()
     local g = MSUF_DB.general or {}
 
@@ -1402,6 +1520,8 @@ end
 function MSUF_UpdatePlayerCastbarPreview()
     EnsureDB()
     local g = MSUF_DB.general or {}
+
+    UnitFrames = UnitFrames or _G.MSUF_UnitFrames
 
     if not g.castbarPlayerPreviewEnabled then
         if MSUF_PlayerCastbarPreview then
@@ -1483,11 +1603,9 @@ end
 _G.MSUF_HideBlizzardPlayerCastbar      = MSUF_HideBlizzardPlayerCastbar
 _G.MSUF_SyncBossCastbarSliders         = MSUF_SyncBossCastbarSliders
 _G.MSUF_CreateCastbarEditArrows        = MSUF_CreateCastbarEditArrows
-_G.MSUF_CreateCastbarPreviewFrame      = MSUF_CreateCastbarPreviewFrame
-_G.MSUF_SetupCastbarPreviewEditHandlers = MSUF_SetupCastbarPreviewEditHandlers
-_G.MSUF_CreatePlayerCastbarPreview     = MSUF_CreatePlayerCastbarPreview
-_G.MSUF_CreateTargetCastbarPreview     = MSUF_CreateTargetCastbarPreview
-_G.MSUF_CreateFocusCastbarPreview      = MSUF_CreateFocusCastbarPreview
+if type(_G.MSUF_CreatePlayerCastbarPreview) ~= 'function' then _G.MSUF_CreatePlayerCastbarPreview = MSUF_CreatePlayerCastbarPreview end
+if type(_G.MSUF_CreateTargetCastbarPreview) ~= 'function' then _G.MSUF_CreateTargetCastbarPreview = MSUF_CreateTargetCastbarPreview end
+if type(_G.MSUF_CreateFocusCastbarPreview) ~= 'function' then _G.MSUF_CreateFocusCastbarPreview = MSUF_CreateFocusCastbarPreview end
 _G.MSUF_PositionPlayerCastbarPreview   = MSUF_PositionPlayerCastbarPreview
 _G.MSUF_PositionTargetCastbarPreview   = MSUF_PositionTargetCastbarPreview
 _G.MSUF_PositionFocusCastbarPreview    = MSUF_PositionFocusCastbarPreview
