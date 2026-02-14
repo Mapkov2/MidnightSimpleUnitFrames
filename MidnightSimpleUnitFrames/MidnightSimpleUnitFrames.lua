@@ -5770,7 +5770,16 @@ MSUF_ApplyRareVisuals = function(self)
 		end
 	end
 
+    -- Dispel border color (Colors menu) with fallback to the original light-blue default.
     local dispelR, dispelG, dispelB = 0.25, 0.75, 1.00
+    if g then
+        local r = g.dispelBorderColorR
+        local gg = g.dispelBorderColorG
+        local b = g.dispelBorderColorB
+        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+            dispelR, dispelG, dispelB = r, gg, b
+        end
+    end
 
     local thickness = baseThickness
 

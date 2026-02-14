@@ -4407,6 +4407,8 @@ MSUF_ExpandDropdownClickArea(aggroOutlineDrop)
 -- Move the dropdown slightly lower to avoid clipping against the slider section.
 aggroOutlineDrop:SetPoint("TOPLEFT", barOutlineThicknessSlider, "BOTTOMLEFT", 6, -34)
 UIDropDownMenu_SetWidth(aggroOutlineDrop, 170)
+	-- Match Dispel dropdown text alignment (true left-justify)
+	if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(aggroOutlineDrop, "LEFT") end
 	-- Prevent the list from being cut off near the bottom edge of the Settings scroll area.
 	if UIDropDownMenu_SetClampedToScreen then UIDropDownMenu_SetClampedToScreen(aggroOutlineDrop, true) end
 MSUF_MakeDropdownScrollable(aggroOutlineDrop, 10)
@@ -4473,14 +4475,8 @@ MSUF_ExpandDropdownClickArea(dispelOutlineDrop)
 dispelOutlineDrop:SetPoint("TOPLEFT", aggroOutlineDrop, "BOTTOMLEFT", 0, -18)
 UIDropDownMenu_SetWidth(dispelOutlineDrop, 170)
 if UIDropDownMenu_SetClampedToScreen then UIDropDownMenu_SetClampedToScreen(dispelOutlineDrop, true) end
-if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(dispelOutlineDrop, "LEFT") end
-if dispelOutlineDrop.Left then dispelOutlineDrop.Left:Hide() end
-if dispelOutlineDrop.Middle then dispelOutlineDrop.Middle:Hide() end
-if dispelOutlineDrop.Right then dispelOutlineDrop.Right:Hide() end
-if dispelOutlineDrop.Text then
-    dispelOutlineDrop.Text:ClearAllPoints()
-    dispelOutlineDrop.Text:SetPoint("LEFT", dispelOutlineDrop, "LEFT", 16, 2)
-end
+	-- Keep default dropdown visuals (same look as Aggro border dropdown).
+	if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(dispelOutlineDrop, "LEFT") end
 MSUF_MakeDropdownScrollable(dispelOutlineDrop, 10)
 
 local dispelOutlineOptions = {
@@ -4527,7 +4523,8 @@ dispelOutlineDrop._msufDispelOutlineOptions = dispelOutlineOptions
 do
     -- Panel height must include the HP + Power Spacer controls at the bottom of the right column.
     -- Keep this as a single constant so creation + live re-layout always match (no drift/regressions).
-    local BARS_PANEL_H = 780
+    -- Increased slightly to ensure the Highlight Border section (and dropdown buttons) never clip at the bottom.
+    local BARS_PANEL_H = 950
     -- Create panels once
     if not _G["MSUF_BarsMenuPanelLeft"] then
         local function SetupPanel(panel)
@@ -4565,6 +4562,10 @@ do
         local gradHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         gradHeader:SetText(TR("Gradient Options"))
         _G.MSUF_BarsMenuGradientHeader = gradHeader
+        -- Highlight border section label in left panel
+        local highlightHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        highlightHeader:SetText(TR("Bar Highlight Border"))
+        _G.MSUF_BarsMenuHighlightHeader = highlightHeader
         -- Section label in right panel
         local borderHeader = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         borderHeader:SetText(TR("Border & Text Options"))
@@ -4891,6 +4892,76 @@ if barOutlineThicknessSlider and outlineLine and outlineLine:IsShown() then
             t:SetText(TR(""))
             t:Hide()
         end
+    end
+end
+
+-- Left panel: Highlight border section (Aggro/Dispel + future border highlights)
+do
+    local leftPanel = _G["MSUF_BarsMenuPanelLeft"]
+    local outlineSlider = barOutlineThicknessSlider
+
+    -- Hide the simple label created during initial panel build; we render this section
+    -- using the same header+divider style as "Gradient Options" / "Outline thickness".
+    local legacyHeader = _G.MSUF_BarsMenuHighlightHeader
+    if legacyHeader then legacyHeader:Hide() end
+
+    -- Section header
+    local highlightHeader = leftPanel and leftPanel.MSUF_SectionHeader_Highlight
+    if leftPanel and not highlightHeader then
+        highlightHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        leftPanel.MSUF_SectionHeader_Highlight = highlightHeader
+        highlightHeader:SetText(TR("Bar Highlight Border"))
+    end
+
+    if highlightHeader and outlineSlider then
+        highlightHeader:ClearAllPoints()
+        -- Give it a bit more breathing room than the outline section.
+        highlightHeader:SetPoint("TOPLEFT", outlineSlider, "BOTTOMLEFT", 0, -44)
+        highlightHeader:Show()
+    elseif highlightHeader then
+        highlightHeader:Hide()
+    end
+
+    -- Divider line under the header (same styling as other section dividers)
+    local highlightLine = leftPanel and leftPanel.MSUF_SectionLine_Highlight
+    if leftPanel then
+        if not highlightLine then
+            highlightLine = leftPanel:CreateTexture(nil, "ARTWORK")
+            leftPanel.MSUF_SectionLine_Highlight = highlightLine
+            highlightLine:SetColorTexture(1, 1, 1, 0.20)
+            highlightLine:SetHeight(1)
+        end
+        highlightLine:ClearAllPoints()
+        if highlightHeader and highlightHeader:IsShown() then
+            highlightLine:SetPoint("TOPLEFT", highlightHeader, "BOTTOMLEFT", -16, -4)
+            highlightLine:SetWidth(296)
+            highlightLine:Show()
+        else
+            highlightLine:Hide()
+        end
+    end
+
+    -- Re-anchor Aggro + Dispel border dropdowns under the new divider line
+    local aggroDrop = _G["MSUF_AggroOutlineDropdown"]
+    local aggroTest = _G["MSUF_AggroOutlineTestCheck"]
+    local dispelDrop = _G["MSUF_DispelOutlineDropdown"]
+
+    if aggroDrop and highlightLine and highlightLine:IsShown() then
+        aggroDrop:ClearAllPoints()
+        -- UIDropDownMenuTemplate has an internal left padding. To visually align the *boxed* dropdown
+        -- with our section divider line (same as other dropdowns in this panel), we offset by -16px.
+        aggroDrop:SetPoint("TOPLEFT", highlightLine, "BOTTOMLEFT", -16, -10)
+        UIDropDownMenu_SetWidth(aggroDrop, 170)
+		if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(aggroDrop, "LEFT") end
+    end
+    if aggroTest and aggroDrop then
+        aggroTest:ClearAllPoints()
+        aggroTest:SetPoint("LEFT", aggroDrop, "RIGHT", 6, -4)
+    end
+    if dispelDrop and aggroDrop then
+        dispelDrop:ClearAllPoints()
+        dispelDrop:SetPoint("TOPLEFT", aggroDrop, "BOTTOMLEFT", 0, -12)
+        UIDropDownMenu_SetWidth(dispelDrop, 170)
     end
 end
 -- Right panel: text modes start under power bar height
