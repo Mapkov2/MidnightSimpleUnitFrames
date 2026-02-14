@@ -3720,7 +3720,7 @@ if absorbTexTestCB then
     -- Player-only: show your own incoming heals as a small prediction segment behind the HP bar.
     local selfHealPredCB = CreateLabeledCheckButton(
         "MSUF_SelfHealPredictionCheck",
-        "Own heal prediction",
+        "Heal prediction",
         barGroup,
         16, -1 -- placeholder; we re-anchor below
     )
@@ -4517,6 +4517,18 @@ MSUF_InitSimpleDropdown(
     170
 )
 dispelOutlineDrop._msufDispelOutlineOptions = dispelOutlineOptions
+dispelOutlineDrop._msufDispelOutlineGet = _DispelOutline_Get
+
+-- Options-only: Test mode to force the dispel border on while this menu is open.
+local dispelTestCheck = CreateFrame("CheckButton", "MSUF_DispelOutlineTestCheck", barGroup, "ChatConfigCheckButtonTemplate")
+dispelTestCheck:SetPoint("LEFT", dispelOutlineDrop, "RIGHT", 6, -4)
+dispelTestCheck.Text:SetText(TR("Test"))
+dispelTestCheck:SetScript("OnClick", function(self)
+    local on = self:GetChecked() and true or false
+    if type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+        _G.MSUF_SetDispelBorderTestMode(on)
+    end
+end)
 
 -- Bars menu style: boxed layout like the new Castbar/Focus Kick menus
 -- (Two framed columns: Bar appearance / Power Bar Settings)
@@ -4945,6 +4957,7 @@ do
     local aggroDrop = _G["MSUF_AggroOutlineDropdown"]
     local aggroTest = _G["MSUF_AggroOutlineTestCheck"]
     local dispelDrop = _G["MSUF_DispelOutlineDropdown"]
+    local dispelTest = _G["MSUF_DispelOutlineTestCheck"]
 
     if aggroDrop and highlightLine and highlightLine:IsShown() then
         aggroDrop:ClearAllPoints()
@@ -4963,6 +4976,10 @@ do
         dispelDrop:SetPoint("TOPLEFT", aggroDrop, "BOTTOMLEFT", 0, -12)
         UIDropDownMenu_SetWidth(dispelDrop, 170)
     end
+	if dispelTest and dispelDrop then
+		dispelTest:ClearAllPoints()
+		dispelTest:SetPoint("LEFT", dispelDrop, "RIGHT", 6, -4)
+	end
 end
 -- Right panel: text modes start under power bar height
     if hpModeLabel then
@@ -5341,6 +5358,8 @@ panel.barTextureDrop             = barTextureDrop
     panel.barOutlineThicknessSlider = barOutlineThicknessSlider
 	    panel.aggroOutlineDrop          = aggroOutlineDrop
     panel.aggroTestCheck            = aggroTestCheck
+	panel.dispelOutlineDrop         = dispelOutlineDrop
+	panel.dispelTestCheck           = dispelTestCheck
 panel.fontSizeSlider     = fontSizeSlider
 panel.updateThrottleSlider = updateThrottleSlider
 panel.powerBarHeightSlider = powerBarHeightSlider
@@ -5378,11 +5397,16 @@ panel.infoTooltipDisableCheck = infoTooltipDisableCheck
         hpModeDrop = self.hpModeDrop
         barOutlineThicknessSlider = self.barOutlineThicknessSlider
 	        local aggroOutlineDrop = self.aggroOutlineDrop
+			local dispelOutlineDrop = self.dispelOutlineDrop
         bossSpacingSlider = self.bossSpacingSlider
 	        if aggroOutlineDrop and aggroOutlineDrop._msufAggroOutlineOptions and aggroOutlineDrop._msufAggroOutlineGet then
 	            MSUF_SyncSimpleDropdown(aggroOutlineDrop, aggroOutlineDrop._msufAggroOutlineOptions, aggroOutlineDrop._msufAggroOutlineGet)
 				if self.aggroTestCheck then self.aggroTestCheck:SetChecked((_G and _G.MSUF_AggroBorderTestMode) and true or false) end
 	        end
+			if dispelOutlineDrop and dispelOutlineDrop._msufDispelOutlineOptions and dispelOutlineDrop._msufDispelOutlineGet then
+				MSUF_SyncSimpleDropdown(dispelOutlineDrop, dispelOutlineDrop._msufDispelOutlineOptions, dispelOutlineDrop._msufDispelOutlineGet)
+				if self.dispelTestCheck then self.dispelTestCheck:SetChecked((_G and _G.MSUF_DispelBorderTestMode) and true or false) end
+			end
         if anchorEdit then anchorEdit:SetText(g.anchorName or "UIParent") end
         if anchorCheck then
             anchorCheck:SetChecked(g.anchorToCooldown and true or false)
@@ -5494,9 +5518,15 @@ end
             if type(_G.MSUF_SetAggroBorderTestMode) == "function" then
                 _G.MSUF_SetAggroBorderTestMode(false)
             end
+            if type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+                _G.MSUF_SetDispelBorderTestMode(false)
+            end
             if panel.aggroTestCheck then
                 panel.aggroTestCheck:SetChecked(false)
             end
+			if panel.dispelTestCheck then
+				panel.dispelTestCheck:SetChecked(false)
+			end
         end)
     end
 

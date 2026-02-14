@@ -5785,13 +5785,16 @@ MSUF_ApplyRareVisuals = function(self)
 
     -- Dispel border (Bars menu): light-blue outline when the player can dispel something on the unit.
     -- Kept event-driven (UNIT_AURA) via self._msufDispelOutlineOn to avoid any aura scanning in hot paths.
+    -- User request: Dispel highlight has PRIORITY over Aggro highlight.
     local dispel = false
-    if threat ~= true then
+    do
         local dispelMode = g and g.dispelOutlineMode or 0
-        if dispelMode == 1 then
+        local test = (_G and _G.MSUF_DispelBorderTestMode) and true or false
+        local wantDispel = (dispelMode == 1) or test
+        if wantDispel then
             local u = self.unit
             if u == "player" or u == "target" or u == "focus" or u == "targettarget" then
-                dispel = (self._msufDispelOutlineOn == true)
+                dispel = test or (self._msufDispelOutlineOn == true)
             end
         end
     end
@@ -5837,7 +5840,8 @@ MSUF_ApplyRareVisuals = function(self)
     local f = o.frame
     local snap = _G.MSUF_Snap
     local edge = (type(snap) == "function") and snap(f, thickness) or thickness
-    local colorKey = threat and 1 or (dispel and 2 or 0)
+    -- 2 = Dispel, 1 = Aggro, 0 = normal (Dispel has priority)
+    local colorKey = (dispel and 2) or (threat and 1) or 0
 
     if o._msufLastEdgeSize ~= edge then
         f:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
@@ -5932,6 +5936,24 @@ _G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(acti
         local b = frames["boss" .. i]
         if b and b.unit == ("boss" .. i) then fn(b) end
     end
+end
+
+-- Options-only: Test mode to force the dispel border on while the Settings panel is open.
+-- This does NOT change the DB or aura filters; it only affects the outline highlight rendering.
+_G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(active)
+    _G.MSUF_DispelBorderTestMode = active and true or false
+    local fn = _G.MSUF_RefreshRareBarVisuals
+    local frames = _G.MSUF_UnitFrames
+    if type(fn) ~= "function" or not frames then return end
+
+    local p = frames.player
+    if p and p.unit == "player" then fn(p) end
+    local t = frames.target
+    if t and t.unit == "target" then fn(t) end
+    local f = frames.focus
+    if f and f.unit == "focus" then fn(f) end
+    local tt = frames.targettarget
+    if tt and tt.unit == "targettarget" then fn(tt) end
 end
 
 
