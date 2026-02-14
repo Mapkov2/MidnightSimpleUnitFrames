@@ -1,10 +1,10 @@
 -- ============================================================================
--- MSUF_A2_Render.lua â€” Auras 3.0 Orchestrator
+-- MSUF_A2_Render.lua — Auras 3.0 Orchestrator
 -- Replaces the 3357-line monolith.
 --
 -- Responsibilities:
 --   - Dirty queue + coalesced flush (OnUpdate driver)
---   - RenderUnit: collect â†’ commit â†’ layout (single pass)
+--   - RenderUnit: collect → commit → layout (single pass)
 --   - Config resolution + caching (cold path, invalidated on DB change)
 --   - Private aura anchor management
 --   - Edit Mode mover integration
@@ -52,13 +52,12 @@ API.perf  = (type(API.perf)  == "table") and API.perf  or {}
 
 local A2_STATE = API.state
 
---
+-- ────────────────────────────────────────────────────────────────
 -- Hot locals
---
+-- ────────────────────────────────────────────────────────────────
 local type = type
 local pairs = pairs
 local CreateFrame = CreateFrame
-local C_Timer = C_Timer
 local GetTime = GetTime
 local UnitExists = UnitExists
 local floor = math.floor
@@ -70,9 +69,9 @@ local Icons    -- API.Icons / API.Apply
 local Store    -- API.Store (epoch only)
 local Filters  -- API.Filters
 
---
+-- ────────────────────────────────────────────────────────────────
 -- Combat / Edit Mode state (cheap cached checks)
---
+-- ────────────────────────────────────────────────────────────────
 local _inCombat = false
 do
     local f = CreateFrame("Frame")
@@ -111,12 +110,12 @@ end
 
 API.IsEditModeActive = IsEditModeActive
 
---
+-- ────────────────────────────────────────────────────────────────
 -- DB access + config cache
---
+-- ────────────────────────────────────────────────────────────────
 local MSUF_DB
 
--- DB defaults (copied from original Render â€” must stay identical for migration compat)
+-- DB defaults (copied from original Render — must stay identical for migration compat)
 local A2_AURAS2_DEFAULTS = { enabled=true, showTarget=true, showFocus=true, showBoss=true, showPlayer=false }
 local A2_SHARED_DEFAULTS = {
     showBuffs=true, showDebuffs=true, showTooltip=true,
@@ -200,15 +199,6 @@ end
 -- Config invalidation
 local _configGen = 0
 
-local function _A2_PostInvalidate()
-    -- Rebuild DB/cache and realign event registration after an options change.
-    EnsureDB()
-    local Ev = API.Events
-    if Ev and Ev.ApplyEventRegistration then
-        Ev.ApplyEventRegistration()
-    end
-end
-
 local function InvalidateDB()
     _ensureReady = false
     _lastDB = nil
@@ -218,19 +208,8 @@ local function InvalidateDB()
     if API.Colors and API.Colors.InvalidateCache then API.Colors.InvalidateCache() end
     Icons = API.Icons or API.Apply
     if Icons and Icons.BumpConfigGen then Icons.BumpConfigGen() end
-
-    -- Schedule refresh (force all units, incl. newly disabled ones)
+    -- Schedule refresh
     if API.MarkAllDirty then API.MarkAllDirty(0) end
-
-    -- Rebind events next frame so enable/disable + caps/layout changes take effect immediately.
-    local Ev = API.Events
-    if Ev and Ev.ApplyEventRegistration then
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, _A2_PostInvalidate)
-        else
-            _A2_PostInvalidate()
-        end
-    end
 end
 
 API.InvalidateDB = InvalidateDB
@@ -246,9 +225,9 @@ if API.DB and API.DB.BindEnsure then
     API.DB.BindEnsure(EnsureDB)
 end
 
-
+-- ────────────────────────────────────────────────────────────────
 -- Per-unit state
-
+-- ────────────────────────────────────────────────────────────────
 A2_STATE.aurasByUnit = (type(A2_STATE.aurasByUnit) == "table") and A2_STATE.aurasByUnit or {}
 local AurasByUnit = A2_STATE.aurasByUnit
 
@@ -271,9 +250,9 @@ local function UnitEnabled(a2, unit)
     return false
 end
 
---
+-- ────────────────────────────────────────────────────────────────
 -- Dirty queue + flush driver
---
+-- ────────────────────────────────────────────────────────────────
 local DirtyA, DirtyB = {}, {}
 local DirtyList = DirtyA
 local DirtyCount = 0
@@ -336,9 +315,9 @@ local function ScheduleFlush(delay)
     end
 end
 
---
+-- ────────────────────────────────────────────────────────────────
 -- MarkDirty (public entry point for scheduling unit updates)
---
+-- ────────────────────────────────────────────────────────────────
 
 local function MarkDirty(unit, delay)
     if not unit then return end
@@ -364,9 +343,9 @@ local function MarkDirty(unit, delay)
     ScheduleFlush(delay)
 end
 
---
+-- ────────────────────────────────────────────────────────────────
 -- EnsureAttached: create per-unit anchor + container frames
---
+-- ────────────────────────────────────────────────────────────────
 
 local function EnsureAttached(unit)
     local entry = AurasByUnit[unit]
@@ -439,9 +418,9 @@ local function EnsureAttached(unit)
     return entry
 end
 
---
+-- ────────────────────────────────────────────────────────────────
 -- Config resolution (pre-computed per InvalidateDB, not per render)
---
+-- ────────────────────────────────────────────────────────────────
 
 local function ResolveUnitConfig(unit, a2, shared)
     local iconSize = shared.iconSize or 26
@@ -472,35 +451,37 @@ local function ResolveUnitConfig(unit, a2, shared)
         if type(lay.spacing) == "number" and lay.spacing >= 0 then spacing = lay.spacing end
     end
 
-    -- Per-group icon sizes: buff / debuff / private
-    -- Fallback chain: perUnit.layout.<group> → shared.<group> → iconSize
-    local lay = (pu and pu.overrideLayout == true and type(pu.layout) == "table") and pu.layout or nil
-    local buffIconSize = iconSize
-    local debuffIconSize = iconSize
-    local privateIconSize = iconSize
 
-    -- Buff group icon size
-    local v = lay and lay.buffGroupIconSize
-    if type(v) ~= "number" or v < 1 then v = shared.buffGroupIconSize end
-    if type(v) == "number" and v >= 1 then buffIconSize = v end
+-- Group-specific sizing (Edit Mode controls)
+local buffIconSize = iconSize
+local debuffIconSize = iconSize
+local privateIconSize = iconSize
 
-    -- Debuff group icon size
-    v = lay and lay.debuffGroupIconSize
-    if type(v) ~= "number" or v < 1 then v = shared.debuffGroupIconSize end
-    if type(v) == "number" and v >= 1 then debuffIconSize = v end
+-- Shared defaults (if present)
+local bsz = shared.buffGroupIconSize
+if type(bsz) == "number" and bsz > 1 then buffIconSize = bsz end
+local dsz = shared.debuffGroupIconSize
+if type(dsz) == "number" and dsz > 1 then debuffIconSize = dsz end
+local psz = shared.privateSize
+if type(psz) == "number" and psz > 1 then privateIconSize = psz end
 
-    -- Private aura icon size
-    v = lay and lay.privateSize
-    if type(v) ~= "number" or v < 1 then v = shared.privateSize end
-    if type(v) == "number" and v >= 1 then privateIconSize = v end
-
-    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, layoutMode, stackCountAnchor,
-           buffIconSize, debuffIconSize, privateIconSize
+-- Per-unit overrides (only when overrideLayout is enabled)
+if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
+    local lay = pu.layout
+    bsz = lay.buffGroupIconSize
+    if type(bsz) == "number" and bsz > 1 then buffIconSize = bsz end
+    dsz = lay.debuffGroupIconSize
+    if type(dsz) == "number" and dsz > 1 then debuffIconSize = dsz end
+    psz = lay.privateSize
+    if type(psz) == "number" and psz > 1 then privateIconSize = psz end
 end
 
---
+    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, layoutMode, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize
+end
+
+-- ────────────────────────────────────────────────────────────────
 -- Private Auras (Blizzard-rendered)
---
+-- ────────────────────────────────────────────────────────────────
 
 local function PrivateAurasSupported()
     return C_UnitAuras
@@ -525,7 +506,7 @@ local function PrivateClear(entry)
     if entry.private then entry.private:Hide() end
 end
 
-local function PrivateRebuild(entry, shared, iconSize, spacing)
+local function PrivateRebuild(entry, shared, privateIconSize, spacing)
     if not entry or not shared then return end
     local unit = entry.unit
 
@@ -544,14 +525,14 @@ local function PrivateRebuild(entry, shared, iconSize, spacing)
     maxN = Clamp(maxN, 4, 0, 12)
     if maxN == 0 then PrivateClear(entry); return end
 
-    -- Effective unit token (focusâ†’player if focus IS player)
+    -- Effective unit token (focus→player if focus IS player)
     local effectiveToken = unit
     if unit ~= "player" and UnitIsUnit and UnitIsUnit(unit, "player") then
         effectiveToken = "player"
     end
 
     -- Signature to avoid rebuilding when nothing changed
-    local sig = unit .. "|" .. effectiveToken .. "|" .. iconSize .. "|" .. spacing .. "|" .. maxN
+    local sig = unit .. "|" .. effectiveToken .. "|" .. privateIconSize .. "|" .. spacing .. "|" .. maxN
     if entry._privateSig == sig and type(entry._privateAnchorIDs) == "table" then
         if entry.private then entry.private:Show() end
         return
@@ -562,13 +543,13 @@ local function PrivateRebuild(entry, shared, iconSize, spacing)
 
     local slots = entry._privateSlots or {}
     entry._privateSlots = slots
-    local step = iconSize + spacing
+    local step = privateIconSize + spacing
     if step <= 0 then step = 28 end
 
     entry.private:Show()
     entry._privateSig = sig
     entry._privateAnchorIDs = {}
-    entry.private:SetSize((maxN * step) - spacing, iconSize)
+    entry.private:SetSize((maxN * step) - spacing, privateIconSize)
 
     -- Reuse args table (avoid allocation per slot)
     local args = entry._privateArgs
@@ -580,8 +561,8 @@ local function PrivateRebuild(entry, shared, iconSize, spacing)
             showCountdownFrame = false,
             showCountdownNumbers = false,
             iconInfo = {
-                iconWidth = iconSize,
-                iconHeight = iconSize,
+                iconWidth = privateIconSize,
+                iconHeight = privateIconSize,
                 iconAnchor = {
                     point = "CENTER", relativeTo = nil, relativePoint = "CENTER",
                     offsetX = 0, offsetY = 0,
@@ -601,7 +582,7 @@ local function PrivateRebuild(entry, shared, iconSize, spacing)
         end
         slot:ClearAllPoints()
         slot:SetPoint("BOTTOMLEFT", entry.private, "BOTTOMLEFT", (i - 1) * step, 0)
-        slot:SetSize(iconSize, iconSize)
+        slot:SetSize(privateIconSize, privateIconSize)
         slot:Show()
 
         -- Update reused args
@@ -610,8 +591,8 @@ local function PrivateRebuild(entry, shared, iconSize, spacing)
         args.parent = slot
         args.showCountdownFrame = (shared.showCooldownSwipe == true)
         args.showCountdownNumbers = (shared.showCooldownText == true)
-        args.iconInfo.iconWidth = iconSize
-        args.iconInfo.iconHeight = iconSize
+        args.iconInfo.iconWidth = privateIconSize
+        args.iconInfo.iconHeight = privateIconSize
         args.iconInfo.iconAnchor.relativeTo = slot
 
         local ok, anchorID = MSUF_A2_FastCall(C_UnitAuras.AddPrivateAuraAnchor, args)
@@ -621,11 +602,11 @@ local function PrivateRebuild(entry, shared, iconSize, spacing)
     end
 end
 
---
+-- ────────────────────────────────────────────────────────────────
 -- UpdateAnchor (position the aura container relative to unitframe)
---
+-- ────────────────────────────────────────────────────────────────
 
--- â”€â”€ File-scope helpers for UpdateAnchor (zero closure alloc) â”€â”€
+-- ── File-scope helpers for UpdateAnchor (zero closure alloc) ──
 
 local _mathFloor = math.floor
 
@@ -683,32 +664,34 @@ local function UpdateAnchor(entry, shared, isEditActive)
         if type(lay.spacing) == "number" and lay.spacing >= 0 then spacing = lay.spacing end
     end
 
-    -- Per-group icon sizes (same fallback chain as ResolveUnitConfig)
-    local buffIconSize = iconSize
-    local debuffIconSize = iconSize
-    local privateIconSize = iconSize
-    do
-        local v = lay and lay.buffGroupIconSize
-        if type(v) ~= "number" or v < 1 then v = shared.buffGroupIconSize end
-        if type(v) == "number" and v >= 1 then buffIconSize = v end
+-- Group-specific sizing (Edit Mode controls)
+local buffIconSize = iconSize
+local debuffIconSize = iconSize
+local privateIconSize = iconSize
 
-        v = lay and lay.debuffGroupIconSize
-        if type(v) ~= "number" or v < 1 then v = shared.debuffGroupIconSize end
-        if type(v) == "number" and v >= 1 then debuffIconSize = v end
+local bsz = shared.buffGroupIconSize
+if type(bsz) == "number" and bsz > 1 then buffIconSize = bsz end
+local dsz = shared.debuffGroupIconSize
+if type(dsz) == "number" and dsz > 1 then debuffIconSize = dsz end
+local psz = shared.privateSize
+if type(psz) == "number" and psz > 1 then privateIconSize = psz end
 
-        v = lay and lay.privateSize
-        if type(v) ~= "number" or v < 1 then v = shared.privateSize end
-        if type(v) == "number" and v >= 1 then privateIconSize = v end
-    end
+if lay then
+    bsz = lay.buffGroupIconSize
+    if type(bsz) == "number" and bsz > 1 then buffIconSize = bsz end
+    dsz = lay.debuffGroupIconSize
+    if type(dsz) == "number" and dsz > 1 then debuffIconSize = dsz end
+    psz = lay.privateSize
+    if type(psz) == "number" and psz > 1 then privateIconSize = psz end
+end
+
 
     -- Buff/Debuff separation (buffOffsetY)
     local buffOffsetY = shared.buffOffsetY
     if lay and type(lay.buffOffsetY) == "number" then buffOffsetY = lay.buffOffsetY end
-    -- Default: separate by the taller group (debuff row height) + spacing
-    local tallestGroup = debuffIconSize > buffIconSize and debuffIconSize or buffIconSize
-    if type(buffOffsetY) ~= "number" then buffOffsetY = tallestGroup + spacing + 4 end
+    if type(buffOffsetY) ~= "number" then buffOffsetY = debuffIconSize + spacing + 4 end
 
-    -- â”€â”€ Per-group offsets (drag movers write to these) â”€â”€
+    -- ── Per-group offsets (drag movers write to these) ──
     local buffDX   = ReadOffset(shared, lay, "buffGroupOffsetX",   0)
     local buffDY   = ReadOffset(shared, lay, "buffGroupOffsetY",   0)
     local debuffDX = ReadOffset(shared, lay, "debuffGroupOffsetX", 0)
@@ -723,7 +706,7 @@ local function UpdateAnchor(entry, shared, isEditActive)
 
     -- Edit Mode QoL: ensure min separation so movers don't overlap
     if isEditActive then
-        local minSep = tallestGroup + spacing + 8
+        local minSep = (math.max(buffIconSize, debuffIconSize) + spacing + 8)
         if buffOffsetY < minSep then buffOffsetY = minSep end
         local hasPrivOverride = (lay and (lay.privateOffsetX ~= nil or lay.privateOffsetY ~= nil))
         if not hasPrivOverride then
@@ -731,12 +714,12 @@ local function UpdateAnchor(entry, shared, isEditActive)
         end
     end
 
-    -- â”€â”€ Position anchor â”€â”€
+    -- ── Position anchor ──
     local anchor = entry.anchor
     anchor:ClearAllPoints()
     anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
 
-    -- â”€â”€ Position containers â”€â”€
+    -- ── Position containers ──
     if layoutMode == "SINGLE" and entry.mixed then
         entry.mixed:ClearAllPoints()
         entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
@@ -763,20 +746,20 @@ local function UpdateAnchor(entry, shared, isEditActive)
         entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
     end
 
-    -- â”€â”€ Position edit movers (mirror containers) â”€â”€
+    -- ── Position edit movers (mirror containers) ──
     if isEditActive then
-        local buffStep = buffIconSize + spacing
-        local debuffStep = debuffIconSize + spacing
-        local privStep = privateIconSize + spacing
+        local stepB = buffIconSize + spacing
+        local stepD = debuffIconSize + spacing
+        local stepP = privateIconSize + spacing
         local maxBuff = (shared.maxBuffs or shared.maxIcons or 12)
         local maxDebuff = (shared.maxDebuffs or shared.maxIcons or 12)
         local cols = (maxBuff < perRow) and maxBuff or perRow
         local dcols = (maxDebuff < perRow) and maxDebuff or perRow
         local headerH = 20
 
-        MirrorMover(entry.editMoverBuff,    entry.buffs,   anchor, cols * buffStep,   buffIconSize + headerH)
-        MirrorMover(entry.editMoverDebuff,  entry.debuffs, anchor, dcols * debuffStep, debuffIconSize + headerH)
-        MirrorMover(entry.editMoverPrivate, entry.private, anchor, 4 * privStep,       privateIconSize + headerH)
+        MirrorMover(entry.editMoverBuff,    entry.buffs,   anchor, cols * stepB,  buffIconSize + headerH)
+        MirrorMover(entry.editMoverDebuff,  entry.debuffs, anchor, dcols * stepD, debuffIconSize + headerH)
+        MirrorMover(entry.editMoverPrivate, entry.private, anchor, 4 * stepP,     privateIconSize + headerH)
     end
 end
 
@@ -786,9 +769,9 @@ local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 -- Module binding flag (set once, reset only on hard reload)
 local _modulesBound = false
 
---
--- RenderUnit â€” the core render loop (single pass, clean)
---
+-- ────────────────────────────────────────────────────────────────
+-- RenderUnit — the core render loop (single pass, clean)
+-- ────────────────────────────────────────────────────────────────
 
 local function RenderUnit(entry)
     if not entry then return end
@@ -808,7 +791,7 @@ local function RenderUnit(entry)
     local a2, shared = GetAuras2DB()
     if not a2 or not shared then return end
 
-    -- â”€â”€ Cache resolved config per configGen (eliminates ~40 table reads per aura event) â”€â”€
+    -- ── Cache resolved config per configGen (eliminates ~40 table reads per aura event) ──
     local cfg = entry._cfg
     if not cfg then
         cfg = { _gen = -1 }
@@ -819,7 +802,7 @@ local function RenderUnit(entry)
     if cfg._gen ~= gen then
         cfg._gen = gen
 
-        -- Layout config (9 + 3 per-group size values)
+        -- Layout config (9 values)
         cfg.iconSize, cfg.spacing, cfg.perRow, cfg.maxBuffs, cfg.maxDebuffs,
         cfg.growth, cfg.rowWrap, cfg.layoutMode, cfg.stackCountAnchor,
         cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize =
@@ -850,6 +833,9 @@ local function RenderUnit(entry)
 
     -- Local aliases for hot-path values
     local iconSize          = cfg.iconSize
+    local buffIconSize      = cfg.buffIconSize or iconSize
+    local debuffIconSize    = cfg.debuffIconSize or iconSize
+    local privateIconSize   = cfg.privateIconSize or iconSize
     local spacing           = cfg.spacing
     local perRow            = cfg.perRow
     local maxBuffs          = cfg.maxBuffs
@@ -862,11 +848,8 @@ local function RenderUnit(entry)
     local useSingleRow      = cfg.useSingleRow
     local needPlayerAura    = cfg.needPlayerAura
     local masterOn          = cfg.masterOn
-    local buffIconSize      = cfg.buffIconSize
-    local debuffIconSize    = cfg.debuffIconSize
-    local privateIconSize   = cfg.privateIconSize
 
-    -- â”€â”€ Early bail: no unit, no edit mode â†’ nothing to render â”€â”€
+    -- ── Early bail: no unit, no edit mode → nothing to render ──
     local unitExists = UnitExists and UnitExists(unit)
     local isEditActive = (not _inCombat) and IsEditModeActive() or false
 
@@ -878,7 +861,7 @@ local function RenderUnit(entry)
         return
     end
 
-    -- â”€â”€ Edit Mode: create movers before anchoring so UpdateAnchor can position them â”€â”€
+    -- ── Edit Mode: create movers before anchoring so UpdateAnchor can position them ──
     local EditMode = isEditActive and API.EditMode or nil
     if EditMode and EditMode.EnsureMovers then
         EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
@@ -897,7 +880,7 @@ local function RenderUnit(entry)
         entry._lastPrivateGen = gen
     end
 
-    -- â”€â”€ Edit Mode: show/hide movers (skip entirely in combat) â”€â”€
+    -- ── Edit Mode: show/hide movers (skip entirely in combat) ──
     if not _inCombat then
         if EditMode then
             if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
@@ -919,12 +902,14 @@ local function RenderUnit(entry)
         entry._msufA2_previewActive = nil
     end
 
-    -- â”€â”€ Edit Mode preview (no real unit present) â”€â”€
+    -- ── Edit Mode preview (no real unit present) ──
     if showTest and not unitExists then
         if Icons.RenderPreviewIcons then
             local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, maxBuffs, maxDebuffs, stackCountAnchor)
-            Icons.LayoutIcons(entry.buffs, bc or 0, buffIconSize, spacing, perRow, growth, rowWrap)
-            Icons.LayoutIcons(entry.debuffs, dc or 0, debuffIconSize, spacing, perRow, growth, rowWrap)
+            local bSize = useSingleRow and iconSize or buffIconSize
+            local dSize = useSingleRow and iconSize or debuffIconSize
+            Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, growth, rowWrap)
+            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, growth, rowWrap)
         end
         if Icons.RenderPreviewPrivateIcons then
             Icons.RenderPreviewPrivateIcons(entry, unit, shared, privateIconSize, spacing, stackCountAnchor)
@@ -939,11 +924,11 @@ local function RenderUnit(entry)
         return
     end
 
-    -- â”€â”€ Epoch diff: skip full rebuild if nothing changed â”€â”€
+    -- ── Epoch diff: skip full rebuild if nothing changed ──
     local epoch = Store and Store.GetEpoch(unit) or 0
 
     if epoch == entry._lastEpoch and gen == entry._lastConfigGen then
-        -- Nothing changed â€” just refresh timers and stacks
+        -- Nothing changed — just refresh timers and stacks
         Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
         return
     end
@@ -951,7 +936,7 @@ local function RenderUnit(entry)
     entry._lastEpoch = epoch
     entry._lastConfigGen = gen
 
-    -- â”€â”€ Collect auras (single pass) â”€â”€
+    -- ── Collect auras (single pass) ──
     local buffCount = 0
     local debuffCount = 0
     local buffsOnlyMine    = cfg.buffsOnlyMine
@@ -998,7 +983,7 @@ local function RenderUnit(entry)
         end
     end
 
-    -- â”€â”€ Layout â”€â”€
+    -- ── Layout ──
     if useSingleRow and entry.mixed then
         local total = debuffCount + buffCount
         Icons.LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap)
@@ -1027,9 +1012,9 @@ local function RenderUnit(entry)
     entry._lastDebuffCount = debuffCount
 end
 
---
+-- ────────────────────────────────────────────────────────────────
 -- Flush
---
+-- ────────────────────────────────────────────────────────────────
 
 Flush = function()
     local now = GetTime()
@@ -1072,34 +1057,26 @@ Flush = function()
     end
 end
 
---
+-- ────────────────────────────────────────────────────────────────
 -- Public API
---
-
-local function MarkDirtyForce(unit, delay)
-    -- Force-dirty helper: bypass UnitEnabled/UnitExists gating so disable/hide applies immediately.
-    if not unit then return end
-
-    -- Dedupe, but still ensure a flush is scheduled.
-    if DirtyMark[unit] == DirtyGen then
-        FlushScheduled = true
-        ScheduleFlush(delay or 0)
-        return
-    end
-
-    DirtyAdd(unit)
-    FlushScheduled = true
-    ScheduleFlush(delay or 0)
-end
+-- ────────────────────────────────────────────────────────────────
 
 local function MarkAllDirty(delay)
-    -- IMPORTANT: Mark *all* units dirty, even if just disabled or the unit doesn't currently exist.
-    -- We need the next Flush() to run so anchors/icons are hidden immediately (no "stuck on until a later UNIT_AURA").
-    MarkDirtyForce("player", delay)
-    MarkDirtyForce("target", delay)
-    MarkDirtyForce("focus", delay)
-    for i = 1, 5 do
-        MarkDirtyForce(_BOSS_UNITS[i], delay)
+    local DB = API.DB
+    local c = DB and DB.cache
+    local ue = c and c.unitEnabled
+    if ue then
+        if ue.player then MarkDirty("player", delay) end
+        if ue.target then MarkDirty("target", delay) end
+        if ue.focus then MarkDirty("focus", delay) end
+        for i = 1, 5 do
+            if ue[_BOSS_UNITS[i]] then MarkDirty(_BOSS_UNITS[i], delay) end
+        end
+    else
+        MarkDirty("player", delay)
+        MarkDirty("target", delay)
+        MarkDirty("focus", delay)
+        for i = 1, 5 do MarkDirty(_BOSS_UNITS[i], delay) end
     end
 end
 
@@ -1150,9 +1127,9 @@ local function HardDisableAll()
     end
 end
 
---
+-- ────────────────────────────────────────────────────────────────
 -- ClearAllPreviews (called by Events when leaving Edit Mode)
---
+-- ────────────────────────────────────────────────────────────────
 
 -- Helper: clear preview state from a single container (file-scope, no closure alloc)
 local function _ClearPreviewContainer(container)
@@ -1195,12 +1172,8 @@ API.Flush = Flush
 
 -- RequestApply: called by Options after any settings change (checkboxes, sliders, etc.)
 -- Must bump configGen so CommitIcon diff-gate triggers a full re-apply (highlights, timers, etc.)
-local function _A2_RequestApply_FromRender()
-    if API.Init then API.Init() end
+API.RequestApply = function()
     InvalidateDB()
-end
-if type(API.RequestApply) ~= "function" then
-    API.RequestApply = _A2_RequestApply_FromRender
 end
 
 -- Global wrappers for backward compat
@@ -1210,13 +1183,13 @@ _G.MSUF_A2_RequestUnit = function(unit, delay) return API.RequestUnit(unit, dela
 _G.MSUF_A2_HardDisableAll = function() return API.HardDisableAll() end
 _G.MSUF_UpdateTargetAuras = function() MarkDirty("target") end
 
---
+-- ────────────────────────────────────────────────────────────────
 -- Init: prime DB + kick off events
---
+-- ────────────────────────────────────────────────────────────────
 
---
+-- ────────────────────────────────────────────────────────────────
 -- API bridge for Options / EditMode / Fonts
---
+-- ────────────────────────────────────────────────────────────────
 API._Render = API._Render or {}
 
 -- UpdateUnitAnchor: immediate re-anchor for a single unit (used by EditMode drag for instant feedback)
@@ -1237,20 +1210,13 @@ function API.Init()
     if API._renderInited then return end
     API._renderInited = true
 
-    -- Prime DB so all caches are warm (also makes DB/cache ready for Events binding)
+    -- Prime DB so all caches are warm
     EnsureDB()
 
+    -- If Events module is already loaded, initialize it
     local Ev = API.Events
     if Ev and Ev.Init then
         Ev.Init()
-    end
-    if Ev and Ev.ApplyEventRegistration then
-        Ev.ApplyEventRegistration()
-    end
-
-    -- One-shot full render on init so auras show immediately even if early events were missed.
-    if API.MarkAllDirty then
-        API.MarkAllDirty(0)
     end
 end
 

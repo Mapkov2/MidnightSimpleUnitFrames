@@ -27,7 +27,6 @@ local C_Timer = C_Timer
 local C_UnitAuras = C_UnitAuras
 local C_Secrets = C_Secrets
 local C_CurveUtil = C_CurveUtil
-
 ns.MSUF_Auras2 = ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 
@@ -134,10 +133,7 @@ local function MSUF_A2_GetCooldownFontString(icon, now)
     end
 
     local cached = cd._msufCooldownFontString
-    if cached == false then
-        return nil
-    end
-    if cached then
+    if cached and cached ~= false then
         return cached
     end
 

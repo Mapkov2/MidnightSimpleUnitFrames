@@ -47,6 +47,9 @@ local GameTooltip = GameTooltip
 local floor = math.floor
 local max = math.max
 
+-- Secret value detector (Midnight/Beta)
+local issecretvalue = _G and _G.issecretvalue
+
 local function FastCall(fn, ...)
     if fn == nil then return false end
     return true, fn(...)
@@ -90,18 +93,20 @@ local _wantBuffHL       = false
 local _wantDebuffHL     = false
 
 local function RefreshSharedFlags(shared, gen)
+    if type(shared) ~= "table" then return end
     if _sharedFlagsGen == gen then return end
     _sharedFlagsGen = gen
     _showSwipe    = (shared and shared.showCooldownSwipe == true) or false
     _showText     = (shared and shared.showCooldownText ~= false) -- default true
     _swipeReverse = (shared and shared.cooldownSwipeDarkenOnLoss == true) or false
-    _showStacks   = (shared and shared.showStackCount == true) or false
+    _showStacks   = (shared and shared.showStackCount ~= false) -- default true
     _wantBuffHL   = (shared and shared.highlightOwnBuffs == true) or false
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
 end
 
 -- ────────────────────────────────────────────────────────────────
 -- Text config resolution (per-icon; cached by configGen)
+-- Applies stack/cooldown text sizes + offsets from shared + per-unit layout
 -- Zero per-frame cost: runs only when configGen changes.
 -- ────────────────────────────────────────────────────────────────
 
@@ -203,6 +208,12 @@ end
 local function CreateIcon(container, index)
     local icon = CreateFrame("Button", nil, container)
     icon:SetSize(26, 26)
+-- Stack count overlay frame (keeps stacks above Masque/borders)
+local countFrame = CreateFrame("Frame", nil, icon)
+countFrame:SetAllPoints(icon)
+countFrame:SetFrameLevel(icon:GetFrameLevel() + 10)
+icon.countFrame = countFrame
+
     icon:EnableMouse(true)
     icon:RegisterForClicks("RightButtonUp")
     icon._msufA2_container = container
@@ -224,7 +235,7 @@ local function CreateIcon(container, index)
     icon.cooldown = cd
 
     -- Stack count text
-    local count = icon:CreateFontString(nil, "OVERLAY")
+    local count = (icon.countFrame or icon):CreateFontString(nil, "OVERLAY")
     count:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
     count:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
     count:SetJustifyH("RIGHT")
@@ -395,6 +406,10 @@ function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
 
             icon:ClearAllPoints()
             icon:SetSize(iconSize, iconSize)
+local cf = icon.countFrame
+if cf and cf.SetFrameLevel and icon.GetFrameLevel then
+    cf:SetFrameLevel(icon:GetFrameLevel() + 10)
+end
             icon:SetPoint(anchor, container, anchor, col * step * dx, row * step * dy)
         end
     end
@@ -470,8 +485,9 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         and last.gen == gen
         and last.isOwn == isOwn
     then
-        -- Fast path: same aura, same config. Just refresh cooldown timer.
+        -- Fast path: same aura, same config. Refresh timer + stacks.
         Icons._RefreshTimer(icon, unit, aid, shared)
+        Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
         return true
     end
 
@@ -528,6 +544,15 @@ local function ApplyCooldownTextStyle(icon, cd, now, force)
     local offY = icon._msufA2_cooldownTextOffsetY or 0
 
     local fs = cd._msufCooldownFontString
+
+-- Prefer render-flush timestamp to avoid per-icon GetTime() calls.
+if type(now) ~= "number" then
+    local st = API and API.state
+    local stNow = st and st.now
+    if type(stNow) == "number" then
+        now = stNow
+    end
+end
     if fs == false then fs = nil end
 
     -- If the font string isn't discovered yet, only attempt discovery when a timestamp is provided.
@@ -591,11 +616,6 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
 
         icon._msufA2_durationObj = obj
         cd._msufA2_durationObj = obj
-
-        if cd._msufCooldownFontString == false then
-            cd._msufCooldownFontString = nil
-            cd._msufCooldownFontStringRetryAt = nil
-        end
     end
 
     if not hadTimer then
@@ -622,7 +642,7 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
 
     -- Apply cooldown text font size + offsets (needs fontstring discovery once)
     if hadTimer and _showText == true and icon._msufA2_hideCDNumbers ~= true then
-        ApplyCooldownTextStyle(icon, cd, GetTime())
+        ApplyCooldownTextStyle(icon, cd, nil)
     end
 
     icon._msufA2_lastHadTimer = hadTimer
@@ -658,11 +678,6 @@ function Icons._RefreshTimer(icon, unit, aid, shared)
         icon._msufA2_durationObj = obj
         cd._msufA2_durationObj = obj
         icon._msufA2_lastHadTimer = true
-
-        if cd._msufCooldownFontString == false then
-            cd._msufCooldownFontString = nil
-            cd._msufCooldownFontStringRetryAt = nil
-        end
 
         CT = CT or API.CooldownText
         if CT and CT.TouchIcon then CT.TouchIcon(icon) end
@@ -745,25 +760,55 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
     end
 
     local count = _getStackCountFast and _getStackCountFast(unit, aid)
-    if type(count) == "number" and count > 1 then
-        countFS:SetText(count)
-
-        if _showOwnHighlight and shared and shared.ownStackCountColor then
-            if icon._msufA2_lastCommit and icon._msufA2_lastCommit.isOwn == true then
-                local r, g, b = GetStackCountRGB(shared)
-                countFS:SetTextColor(r, g, b)
-            else
-                countFS:SetTextColor(1, 1, 1)
-            end
-        else
-            countFS:SetTextColor(1, 1, 1)
-        end
-
-        if not countFS.IsShown or not countFS:IsShown() then
-            countFS:Show()
-        end
-    else
+    if count == nil then
         if countFS.IsShown and countFS:IsShown() then countFS:Hide() end
+        icon._msufA2_lastCountText = nil
+        return
+    end
+
+    -- Midnight/Secret-mode: stack display values can be secret.
+    -- PASS-THROUGH to FontStrings is allowed; avoid comparisons/arithmetic.
+    if issecretvalue and issecretvalue(count) == true then
+        countFS:SetText(count)
+        icon._msufA2_lastCountText = nil
+    else
+        local txt
+        if type(count) == "number" then
+            if count <= 1 then
+                if countFS.IsShown and countFS:IsShown() then countFS:Hide() end
+                icon._msufA2_lastCountText = nil
+                return
+            end
+            txt = tostring(count)
+        elseif type(count) == "string" then
+            if count == "" then
+                if countFS.IsShown and countFS:IsShown() then countFS:Hide() end
+                icon._msufA2_lastCountText = nil
+                return
+            end
+            txt = count
+        else
+            if countFS.IsShown and countFS:IsShown() then countFS:Hide() end
+            icon._msufA2_lastCountText = nil
+            return
+        end
+
+        if icon._msufA2_lastCountText ~= txt then
+            icon._msufA2_lastCountText = txt
+            countFS:SetText(txt)
+        end
+    end
+
+    -- At this point we have a visible stack display (count already set)
+    if shared and shared.ownStackCountColor == true and icon._msufA2_lastCommit and icon._msufA2_lastCommit.isOwn == true then
+        local r, g, b = GetStackCountRGB()
+        countFS:SetTextColor(r, g, b)
+    else
+        countFS:SetTextColor(1, 1, 1)
+    end
+
+    if not countFS.IsShown or not countFS:IsShown() then
+        countFS:Show()
     end
 end
 
