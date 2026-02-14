@@ -16,8 +16,6 @@ local next   = _G.next
 local tonumber = _G.tonumber
 local tostring = _G.tostring
 local select   = _G.select
-local IsInInstance = _G.IsInInstance
-local issecretvalue = _G.issecretvalue
 -- Lua 5.1 (WoW) uses global unpack; some environments expose table.unpack
 local unpack = _G.unpack
 if not unpack then
@@ -62,29 +60,30 @@ end
 -- Backwards alias used by older call sites
 MSUF_GetStatusIndicatorDB = _G.MSUF_GetStatusIndicatorDB
 -- ------------------------------------------------------------
--- Midnight/Beta (12.0+): AFK/DND can return secret booleans in combat/encounters.
--- Cache suppression state via events to avoid per-frame InCombatLockdown/IsEncounter calls.
+-- Midnight/Beta (12.0+): AFK/DND can return secret booleans in instances / chat-lockdown / combat.
+--
+-- We *never* query AFK/DND while:
+--   - InCombatLockdown
+--   - Encounter in progress
+--   - C_ChatInfo.InChatMessagingLockdown() (this is where UnitIsAFK/DND may return secret booleans)
+--   - In any instance (party/raid/scenario/etc.) per MSUF design choice
+--
+-- We cache this suppression state via events to avoid hotpath checks.
 -- ------------------------------------------------------------
 if ns._msufAwaySuppressed == nil then
     local function _MSUF_AwaySuppressedNow()
         if InCombatLockdown and InCombatLockdown() then
             return true
         end
-
-        -- Midnight/Beta (12.0+): chat messaging lockdown causes UnitIsAFK/UnitIsDND to return secret values.
-        local CCI = _G.C_ChatInfo
-        if CCI and CCI.InChatMessagingLockdown and CCI.InChatMessagingLockdown() then
-            return true
-        end
-        -- Instances: AFK/DND status is non-essential; avoid secret values entirely.
-        if IsInInstance then
-            local inInst = IsInInstance()
-            if inInst then
-                return true
-            end
-        end
         local CIE = _G.C_InstanceEncounter
         if CIE and CIE.IsEncounterInProgress and CIE.IsEncounterInProgress() then
+            return true
+        end
+        local CChat = _G.C_ChatInfo
+        if CChat and CChat.InChatMessagingLockdown and CChat.InChatMessagingLockdown() then
+            return true
+        end
+        if IsInInstance and IsInInstance() then
             return true
         end
         return false
@@ -575,31 +574,32 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
                 txt = "DEAD"
             end
         end
-	    if txt == "" and (showAFK or showDND) then
-	        -- Midnight/Beta (12.0+): UnitIsAFK/UnitIsDND can return *secret booleans*
-	        -- during combat/encounters, which hard-error on boolean tests.
-	        -- We suppress AFK/DND checks while locked down (cached via events; see file top).
-	        if ns._msufAwaySuppressed ~= true then
-	            if showAFK and UnitIsAFK then
-	                local afk = UnitIsAFK(unit)
+
+        if txt == "" and (showAFK or showDND) then
+            -- Midnight/Beta (12.0+): UnitIsAFK/UnitIsDND can return secret booleans.
+            -- We suppress checks while away-suppressed and also sanitize via issecretvalue as a failsafe.
+            if ns._msufAwaySuppressed ~= true then
+                local issecretvalue = _G.issecretvalue
+                if showAFK and UnitIsAFK then
+                    local afk = UnitIsAFK(unit)
                     if issecretvalue and issecretvalue(afk) then
                         afk = nil
                     end
                     if afk then
-	                    txt = "AFK"
-	                end
-	            end
-	            if txt == "" and showDND and UnitIsDND then
-	                local dnd = UnitIsDND(unit)
+                        txt = "AFK"
+                    end
+                end
+                if txt == "" and showDND and UnitIsDND then
+                    local dnd = UnitIsDND(unit)
                     if issecretvalue and issecretvalue(dnd) then
                         dnd = nil
                     end
                     if dnd then
-	                    txt = "DND"
-	                end
-	            end
-	        end
-	    end
+                        txt = "DND"
+                    end
+                end
+            end
+        end
     end
     local fs = frame.statusIndicatorText
     local ovText = frame.statusIndicatorOverlayText
@@ -648,6 +648,52 @@ _G.MSUF_RefreshStatusIndicators = function()
         MSUF_UpdateStatusIndicatorForFrame(f)
     end
  end
+
+-- ------------------------------------------------------------
+-- Death / Ghost state reliability
+-- Fixes rare cases where "DEAD" can remain shown after a resurrection (e.g., M+ battle-res).
+-- These events are rare, so this has effectively zero performance impact.
+-- ------------------------------------------------------------
+do
+    if not _G.MSUF_StatusIndicatorLifeEventFrame and CreateFrame then
+        local f = CreateFrame("Frame")
+        _G.MSUF_StatusIndicatorLifeEventFrame = f
+
+        f:RegisterEvent("PLAYER_DEAD")
+        f:RegisterEvent("PLAYER_ALIVE")
+        f:RegisterEvent("PLAYER_UNGHOST")
+        f:RegisterEvent("PLAYER_ENTERING_WORLD")
+
+        local function _MSUF_RefreshPlayerLifeState()
+            local uf = _G.MSUF_UnitFrames
+            if type(uf) ~= "table" then return end
+
+            local pf = uf.player
+            if pf then
+                MSUF_UpdateStatusIndicatorForFrame(pf)
+            end
+
+            local UnitIsUnit = _G.UnitIsUnit
+            if UnitIsUnit then
+                local tf = uf.target
+                if tf and UnitIsUnit("target", "player") then
+                    MSUF_UpdateStatusIndicatorForFrame(tf)
+                end
+                local ff = uf.focus
+                if ff and UnitIsUnit("focus", "player") then
+                    MSUF_UpdateStatusIndicatorForFrame(ff)
+                end
+                local ttf = uf.targettarget
+                if ttf and UnitIsUnit("targettarget", "player") then
+                    MSUF_UpdateStatusIndicatorForFrame(ttf)
+                end
+            end
+        end
+
+        f:SetScript("OnEvent", _MSUF_RefreshPlayerLifeState)
+    end
+end
+
 -- Keep a compatibility stub because older code may call this helper.
 do
     local function _MSUF_StopStatusIndicatorTicker()

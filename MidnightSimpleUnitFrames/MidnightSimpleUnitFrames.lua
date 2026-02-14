@@ -9,15 +9,9 @@ ns.Icons  = ns.Icons  or {}
 ns.Util   = ns.Util   or {}
 ns.Cache  = ns.Cache  or {}
 ns.Compat = ns.Compat or {}
--- =========================================================================
--- PERF LOCALS (core runtime)
---  - Reduce global table lookups in high-frequency event/render paths.
---  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
+-- Locals (used in this file)
 local type, tostring, tonumber, select = type, tostring, tonumber, select
 local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
 local UnitExists, UnitIsPlayer = UnitExists, UnitIsPlayer
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
@@ -730,7 +724,7 @@ local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
         predBar:SetReverseFill(rev and true or false)
     end
 
-    -- Incoming heals (self only) – pass-through to StatusBar API.
+    -- Incoming heals (self only) â€“ pass-through to StatusBar API.
     local inc = _MSUF_GetIncomingSelfHeals(unit)
     if type(inc) ~= "number" then
         inc = 0
@@ -1598,7 +1592,7 @@ _G.MSUF_FONT_COLORS = _G.MSUF_FONT_COLORS or MSUF_FONT_COLORS
 MSUF_GetNPCReactionColor = function(kind)
     local defaultR, defaultG, defaultB
     if kind == "friendly" then
-        defaultR, defaultG, defaultB = 0, 1, 0           -- grün
+        defaultR, defaultG, defaultB = 0, 1, 0           -- grÃ¼n
     elseif kind == "neutral" then
         defaultR, defaultG, defaultB = 1, 1, 0           -- gelb
     elseif kind == "enemy" then
@@ -1915,7 +1909,7 @@ local function MSUF_GetFontFlags()
     elseif g.boldText then
          return "THICKOUTLINE"  -- fetter schwarzer Rand
     else
-         return "OUTLINE"       -- normaler dünner Rand
+         return "OUTLINE"       -- normaler dÃ¼nner Rand
     end
  end
 function ns.MSUF_GetGlobalFontSettings()
@@ -2849,7 +2843,7 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
     end
         g.castbarPlayerPreviewEnabled = not (g.castbarPlayerPreviewEnabled and true or false)
         if g.castbarPlayerPreviewEnabled then
-            print("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r – drag player/target/focus castbars with the mouse.")
+            print("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r â€“ drag player/target/focus castbars with the mouse.")
         else
             print("|cffffd700MSUF:|r Castbar Edit Mode |cffff0000OFF|r.")
     end
@@ -7216,7 +7210,7 @@ local function CreateSimpleUnitFrame(unit)
     end
         -- Classification indicator text (Target only)
         -- Rendered as TEXT at runtime (reliable even without Media assets).
-        -- IMPORTANT: don't call :SetText() here — font may not be applied yet during frame creation.
+        -- IMPORTANT: don't call :SetText() here â€” font may not be applied yet during frame creation.
         if unit == "target" and textFrame and textFrame.CreateFontString then
             if not f.classificationIndicatorText then
                 -- Use a known-good template so the FontString has a font object immediately.
@@ -7678,7 +7672,7 @@ end
     if type(MSUF_InitPlayerCastbarPreviewToggle) == "function" then
         C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
     end
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 2.0 Beta 5 |cff565f89•|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89â€¢|r  |cff9ece6a Beta Build 2.0 Beta 5 |cff565f89â€¢|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
  end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then

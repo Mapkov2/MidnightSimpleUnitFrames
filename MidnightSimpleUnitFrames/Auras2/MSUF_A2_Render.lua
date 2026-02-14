@@ -1,10 +1,10 @@
 -- ============================================================================
--- MSUF_A2_Render.lua — Auras 3.0 Orchestrator
+-- MSUF_A2_Render.lua â€” Auras 3.0 Orchestrator
 -- Replaces the 3357-line monolith.
 --
 -- Responsibilities:
 --   - Dirty queue + coalesced flush (OnUpdate driver)
---   - RenderUnit: collect → commit → layout (single pass)
+--   - RenderUnit: collect â†’ commit â†’ layout (single pass)
 --   - Config resolution + caching (cold path, invalidated on DB change)
 --   - Private aura anchor management
 --   - Edit Mode mover integration
@@ -15,22 +15,12 @@
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
--- =========================================================================
--- PERF LOCALS (Auras2 runtime)
---  - Reduce global table lookups in high-frequency aura pipelines.
---  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
-local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
-local CreateFrame, GetTime = CreateFrame, GetTime
+-- Locals (used in this file)
+local tonumber = tonumber
+local pairs, next = pairs, next
 local UnitExists = UnitExists
 local InCombatLockdown = InCombatLockdown
-local C_Timer = C_Timer
 local C_UnitAuras = C_UnitAuras
-local C_Secrets = C_Secrets
-local C_CurveUtil = C_CurveUtil
 
 -- FastCall: no pcall in hot paths
 local function MSUF_A2_FastCall(fn, ...)
@@ -52,9 +42,9 @@ API.perf  = (type(API.perf)  == "table") and API.perf  or {}
 
 local A2_STATE = API.state
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Hot locals
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 local type = type
 local pairs = pairs
 local CreateFrame = CreateFrame
@@ -69,9 +59,9 @@ local Icons    -- API.Icons / API.Apply
 local Store    -- API.Store (epoch only)
 local Filters  -- API.Filters
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Combat / Edit Mode state (cheap cached checks)
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 local _inCombat = false
 do
     local f = CreateFrame("Frame")
@@ -110,12 +100,12 @@ end
 
 API.IsEditModeActive = IsEditModeActive
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- DB access + config cache
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 local MSUF_DB
 
--- DB defaults (copied from original Render — must stay identical for migration compat)
+-- DB defaults (copied from original Render â€” must stay identical for migration compat)
 local A2_AURAS2_DEFAULTS = { enabled=true, showTarget=true, showFocus=true, showBoss=true, showPlayer=false }
 local A2_SHARED_DEFAULTS = {
     showBuffs=true, showDebuffs=true, showTooltip=true,
@@ -225,9 +215,9 @@ if API.DB and API.DB.BindEnsure then
     API.DB.BindEnsure(EnsureDB)
 end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Per-unit state
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 A2_STATE.aurasByUnit = (type(A2_STATE.aurasByUnit) == "table") and A2_STATE.aurasByUnit or {}
 local AurasByUnit = A2_STATE.aurasByUnit
 
@@ -250,9 +240,9 @@ local function UnitEnabled(a2, unit)
     return false
 end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Dirty queue + flush driver
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 local DirtyA, DirtyB = {}, {}
 local DirtyList = DirtyA
 local DirtyCount = 0
@@ -315,9 +305,9 @@ local function ScheduleFlush(delay)
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- MarkDirty (public entry point for scheduling unit updates)
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function MarkDirty(unit, delay)
     if not unit then return end
@@ -343,9 +333,9 @@ local function MarkDirty(unit, delay)
     ScheduleFlush(delay)
 end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- EnsureAttached: create per-unit anchor + container frames
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function EnsureAttached(unit)
     local entry = AurasByUnit[unit]
@@ -418,9 +408,9 @@ local function EnsureAttached(unit)
     return entry
 end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Config resolution (pre-computed per InvalidateDB, not per render)
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function ResolveUnitConfig(unit, a2, shared)
     local iconSize = shared.iconSize or 26
@@ -479,9 +469,9 @@ end
     return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, layoutMode, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize
 end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Private Auras (Blizzard-rendered)
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function PrivateAurasSupported()
     return C_UnitAuras
@@ -525,7 +515,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing)
     maxN = Clamp(maxN, 4, 0, 12)
     if maxN == 0 then PrivateClear(entry); return end
 
-    -- Effective unit token (focus→player if focus IS player)
+    -- Effective unit token (focusâ†’player if focus IS player)
     local effectiveToken = unit
     if unit ~= "player" and UnitIsUnit and UnitIsUnit(unit, "player") then
         effectiveToken = "player"
@@ -602,11 +592,11 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing)
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- UpdateAnchor (position the aura container relative to unitframe)
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
--- ── File-scope helpers for UpdateAnchor (zero closure alloc) ──
+-- File-scope helpers for UpdateAnchor (zero closure alloc) â”€â”€
 
 local _mathFloor = math.floor
 
@@ -691,7 +681,7 @@ end
     if lay and type(lay.buffOffsetY) == "number" then buffOffsetY = lay.buffOffsetY end
     if type(buffOffsetY) ~= "number" then buffOffsetY = debuffIconSize + spacing + 4 end
 
-    -- ── Per-group offsets (drag movers write to these) ──
+    -- Per-group offsets (drag movers write to these) â”€â”€
     local buffDX   = ReadOffset(shared, lay, "buffGroupOffsetX",   0)
     local buffDY   = ReadOffset(shared, lay, "buffGroupOffsetY",   0)
     local debuffDX = ReadOffset(shared, lay, "debuffGroupOffsetX", 0)
@@ -714,12 +704,12 @@ end
         end
     end
 
-    -- ── Position anchor ──
+    -- Position anchor â”€â”€
     local anchor = entry.anchor
     anchor:ClearAllPoints()
     anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
 
-    -- ── Position containers ──
+    -- Position containers â”€â”€
     if layoutMode == "SINGLE" and entry.mixed then
         entry.mixed:ClearAllPoints()
         entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
@@ -746,7 +736,7 @@ end
         entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
     end
 
-    -- ── Position edit movers (mirror containers) ──
+    -- Position edit movers (mirror containers) â”€â”€
     if isEditActive then
         local stepB = buffIconSize + spacing
         local stepD = debuffIconSize + spacing
@@ -769,9 +759,9 @@ local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 -- Module binding flag (set once, reset only on hard reload)
 local _modulesBound = false
 
--- ────────────────────────────────────────────────────────────────
--- RenderUnit — the core render loop (single pass, clean)
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- RenderUnit â€” the core render loop (single pass, clean)
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function RenderUnit(entry)
     if not entry then return end
@@ -791,7 +781,7 @@ local function RenderUnit(entry)
     local a2, shared = GetAuras2DB()
     if not a2 or not shared then return end
 
-    -- ── Cache resolved config per configGen (eliminates ~40 table reads per aura event) ──
+    -- Cache resolved config per configGen (eliminates ~40 table reads per aura event) â”€â”€
     local cfg = entry._cfg
     if not cfg then
         cfg = { _gen = -1 }
@@ -849,7 +839,7 @@ local function RenderUnit(entry)
     local needPlayerAura    = cfg.needPlayerAura
     local masterOn          = cfg.masterOn
 
-    -- ── Early bail: no unit, no edit mode → nothing to render ──
+    -- Early bail: no unit, no edit mode â†’ nothing to render â”€â”€
     local unitExists = UnitExists and UnitExists(unit)
     local isEditActive = (not _inCombat) and IsEditModeActive() or false
 
@@ -861,7 +851,7 @@ local function RenderUnit(entry)
         return
     end
 
-    -- ── Edit Mode: create movers before anchoring so UpdateAnchor can position them ──
+    -- Edit Mode: create movers before anchoring so UpdateAnchor can position them â”€â”€
     local EditMode = isEditActive and API.EditMode or nil
     if EditMode and EditMode.EnsureMovers then
         EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
@@ -880,7 +870,7 @@ local function RenderUnit(entry)
         entry._lastPrivateGen = gen
     end
 
-    -- ── Edit Mode: show/hide movers (skip entirely in combat) ──
+    -- Edit Mode: show/hide movers (skip entirely in combat) â”€â”€
     if not _inCombat then
         if EditMode then
             if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
@@ -902,7 +892,7 @@ local function RenderUnit(entry)
         entry._msufA2_previewActive = nil
     end
 
-    -- ── Edit Mode preview (no real unit present) ──
+    -- Edit Mode preview (no real unit present) â”€â”€
     if showTest and not unitExists then
         if Icons.RenderPreviewIcons then
             local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, maxBuffs, maxDebuffs, stackCountAnchor)
@@ -924,11 +914,11 @@ local function RenderUnit(entry)
         return
     end
 
-    -- ── Epoch diff: skip full rebuild if nothing changed ──
+    -- Epoch diff: skip full rebuild if nothing changed â”€â”€
     local epoch = Store and Store.GetEpoch(unit) or 0
 
     if epoch == entry._lastEpoch and gen == entry._lastConfigGen then
-        -- Nothing changed — just refresh timers and stacks
+        -- Nothing changed â€” just refresh timers and stacks
         Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
         return
     end
@@ -936,7 +926,7 @@ local function RenderUnit(entry)
     entry._lastEpoch = epoch
     entry._lastConfigGen = gen
 
-    -- ── Collect auras (single pass) ──
+    -- Collect auras (single pass) â”€â”€
     local buffCount = 0
     local debuffCount = 0
     local buffsOnlyMine    = cfg.buffsOnlyMine
@@ -983,7 +973,7 @@ local function RenderUnit(entry)
         end
     end
 
-    -- ── Layout ──
+    -- Layout â”€â”€
     if useSingleRow and entry.mixed then
         local total = debuffCount + buffCount
         Icons.LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap)
@@ -1012,9 +1002,9 @@ local function RenderUnit(entry)
     entry._lastDebuffCount = debuffCount
 end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Flush
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 Flush = function()
     local now = GetTime()
@@ -1057,9 +1047,9 @@ Flush = function()
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Public API
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function MarkAllDirty(delay)
     local DB = API.DB
@@ -1127,9 +1117,9 @@ local function HardDisableAll()
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- ClearAllPreviews (called by Events when leaving Edit Mode)
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 -- Helper: clear preview state from a single container (file-scope, no closure alloc)
 local function _ClearPreviewContainer(container)
@@ -1183,13 +1173,13 @@ _G.MSUF_A2_RequestUnit = function(unit, delay) return API.RequestUnit(unit, dela
 _G.MSUF_A2_HardDisableAll = function() return API.HardDisableAll() end
 _G.MSUF_UpdateTargetAuras = function() MarkDirty("target") end
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Init: prime DB + kick off events
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- API bridge for Options / EditMode / Fonts
--- ────────────────────────────────────────────────────────────────
+--â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 API._Render = API._Render or {}
 
 -- UpdateUnitAnchor: immediate re-anchor for a single unit (used by EditMode drag for instant feedback)

@@ -1,10 +1,10 @@
 -- ============================================================================
--- MSUF_A2_Icons.lua — Auras 3.0 Icon Factory + Visual Commit + Layout
+-- MSUF_A2_Icons.lua â€” Auras 3.0 Icon Factory + Visual Commit + Layout
 -- Replaces the core of MSUF_A2_Apply.lua
 --
 -- Responsibilities:
 --   1. Icon pool (AcquireIcon / HideUnused)
---   2. Visual commit (CommitIcon — texture, cooldown, stacks, border)
+--   2. Visual commit (CommitIcon â€” texture, cooldown, stacks, border)
 --   3. Grid layout (LayoutIcons)
 --   4. Refresh helpers (RefreshAssignedIcons)
 --
@@ -14,22 +14,6 @@
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
--- =========================================================================
--- PERF LOCALS (Auras2 runtime)
---  - Reduce global table lookups in high-frequency aura pipelines.
---  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
-local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
-local CreateFrame, GetTime = CreateFrame, GetTime
-local UnitExists = UnitExists
-local InCombatLockdown = InCombatLockdown
-local C_Timer = C_Timer
-local C_UnitAuras = C_UnitAuras
-local C_Secrets = C_Secrets
-local C_CurveUtil = C_CurveUtil
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 
@@ -68,7 +52,7 @@ local function EnsureBindings()
     if not CT then CT = API.CooldownText end
 end
 
--- ── Fast-path Collect helpers (skip guard checks in hot path) ──
+-- â”€â”€ Fast-path Collect helpers (skip guard checks in hot path) â”€â”€
 local _getDurationFast   -- Collect.GetDurationObjectFast (bound on first use)
 local _getStackCountFast -- Collect.GetStackCountFast
 local _hasExpirationFast -- Collect.HasExpirationFast
@@ -83,7 +67,7 @@ local function BindFastPaths()
     _fastPathBound = true
 end
 
--- ── Cached shared.* flags (resolve once per configGen, not per icon) ──
+-- â”€â”€ Cached shared.* flags (resolve once per configGen, not per icon) â”€â”€
 local _sharedFlagsGen   = -1
 local _showSwipe        = false
 local _showText         = true
@@ -104,11 +88,11 @@ local function RefreshSharedFlags(shared, gen)
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Text config resolution (per-icon; cached by configGen)
 -- Applies stack/cooldown text sizes + offsets from shared + per-unit layout
 -- Zero per-frame cost: runs only when configGen changes.
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function ResolveTextConfig(icon, unit, shared, gen)
     if not icon then return end
@@ -176,9 +160,9 @@ local function GetAuras2DB()
     return nil, nil
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Color helpers (late-bound from API.Colors or fallback)
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function GetOwnBuffHighlightRGB()
     local f = _G.MSUF_A2_GetOwnBuffHighlightRGB
@@ -198,9 +182,9 @@ local function GetStackCountRGB()
     return 1.0, 1.0, 1.0
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Icon Pool
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 -- Icons are stored on container._msufIcons[index]
 -- Each icon is a Button with: .tex, .cooldown, .count, .border, .overlay
@@ -313,7 +297,7 @@ function Icons.AcquireIcon(container, index)
     icon = CreateIcon(container, index)
     pool[index] = icon
 
-    -- Keep an AID→icon map on the container for fast delta lookups
+    -- Keep an AIDâ†’icon map on the container for fast delta lookups
     if not container._msufA2_iconByAid then
         container._msufA2_iconByAid = {}
     end
@@ -355,14 +339,14 @@ function Icons.HideUnused(container, fromIndex)
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Layout Engine
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, rowWrap)
     if not container or count <= 0 then return end
 
-    -- ── Layout diff gate ──
+    -- â”€â”€ Layout diff gate â”€â”€
     -- If count and configGen match last call, positions are identical. Skip.
     -- configGen covers iconSize, spacing, perRow, growth, rowWrap (all settings).
     local gen = _configGen
@@ -415,13 +399,13 @@ end
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Visual Commit (CommitIcon)
 -- 
 -- This is the ONLY function that touches icon visuals.
 -- Called once per icon per render. Uses diff gating on
 -- auraInstanceID + config generation to skip redundant work.
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local _configGen = 0  -- bumped by InvalidateDB
 
@@ -476,7 +460,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     icon._msufAuraInstanceID = aid
     if aid and aidMap then aidMap[aid] = icon end
 
-    -- ── Diff gate ──
+    -- â”€â”€ Diff gate â”€â”€
     local gen = configGen or _configGen
     local last = icon._msufA2_lastCommit
 
@@ -491,7 +475,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         return true
     end
 
-    -- ── Full apply ──
+    -- â”€â”€ Full apply â”€â”€
     if not last then
         last = {}
         icon._msufA2_lastCommit = last
@@ -529,10 +513,10 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     return true
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Timer application (cooldown swipe + text)
 -- Uses duration objects (secret-safe pass-through)
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 local function ClearCooldownVisual(icon, cd)
@@ -615,7 +599,7 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
 
     local hadTimer = false
 
-    -- Get duration object (secret-safe) — fast path skips 3 guards
+    -- Get duration object (secret-safe) â€” fast path skips 3 guards
     local obj = _getDurationFast and _getDurationFast(unit, aid)
     if obj then
         -- Cache method reference on cd frame to avoid type() check per call
@@ -722,9 +706,9 @@ function Icons._RefreshTimer(icon, unit, aid, shared)
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Stack count display
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 -- Cached stack count color (invalidated by BumpConfigGen)
 local _stackR, _stackG, _stackB, _stackColorGen = 1, 1, 1, -1
@@ -846,9 +830,9 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
 end
 
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Own-aura highlight
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 -- Cached highlight colors (invalidated by configGen change)
 local _hlBuffR, _hlBuffG, _hlBuffB = 1.0, 0.85, 0.2
@@ -889,10 +873,10 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Refresh all assigned icons (fast path: timer + stacks only)
 -- Called when aura membership hasn't changed but values may have
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
     if not entry then return end
@@ -958,9 +942,9 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Preview icons (Edit Mode)
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, debuffCap, stackCountAnchor)
     -- Delegate to existing preview system if available
@@ -1012,10 +996,10 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Backward-compatible exports into API.Apply
 -- (Options, CooldownText, Preview, Masque all reference API.Apply.*)
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 Apply.AcquireIcon = Icons.AcquireIcon
 Apply.HideUnused = Icons.HideUnused
