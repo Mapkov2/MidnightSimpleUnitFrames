@@ -16,6 +16,8 @@ local next   = _G.next
 local tonumber = _G.tonumber
 local tostring = _G.tostring
 local select   = _G.select
+local IsInInstance = _G.IsInInstance
+local issecretvalue = _G.issecretvalue
 -- Lua 5.1 (WoW) uses global unpack; some environments expose table.unpack
 local unpack = _G.unpack
 if not unpack then
@@ -68,6 +70,19 @@ if ns._msufAwaySuppressed == nil then
         if InCombatLockdown and InCombatLockdown() then
             return true
         end
+
+        -- Midnight/Beta (12.0+): chat messaging lockdown causes UnitIsAFK/UnitIsDND to return secret values.
+        local CCI = _G.C_ChatInfo
+        if CCI and CCI.InChatMessagingLockdown and CCI.InChatMessagingLockdown() then
+            return true
+        end
+        -- Instances: AFK/DND status is non-essential; avoid secret values entirely.
+        if IsInInstance then
+            local inInst = IsInInstance()
+            if inInst then
+                return true
+            end
+        end
         local CIE = _G.C_InstanceEncounter
         if CIE and CIE.IsEncounterInProgress and CIE.IsEncounterInProgress() then
             return true
@@ -83,6 +98,8 @@ if ns._msufAwaySuppressed == nil then
         f:RegisterEvent("PLAYER_REGEN_ENABLED")
         f:RegisterEvent("ENCOUNTER_START")
         f:RegisterEvent("ENCOUNTER_END")
+        f:RegisterEvent("PLAYER_ENTERING_WORLD")
+        f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
         local function _MSUF_AwayState_OnEvent()
             ns._msufAwaySuppressed = _MSUF_AwaySuppressedNow()
@@ -565,13 +582,19 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
 	        if ns._msufAwaySuppressed ~= true then
 	            if showAFK and UnitIsAFK then
 	                local afk = UnitIsAFK(unit)
-	                if afk then
+                    if issecretvalue and issecretvalue(afk) then
+                        afk = nil
+                    end
+                    if afk then
 	                    txt = "AFK"
 	                end
 	            end
 	            if txt == "" and showDND and UnitIsDND then
 	                local dnd = UnitIsDND(unit)
-	                if dnd then
+                    if issecretvalue and issecretvalue(dnd) then
+                        dnd = nil
+                    end
+                    if dnd then
 	                    txt = "DND"
 	                end
 	            end
