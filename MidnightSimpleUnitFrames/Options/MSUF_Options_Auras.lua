@@ -1037,7 +1037,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     -- and control OnShow scripts on the very first open. Users then have to click away/back.
     -- We provide a single, shared refresh path that Settings can call on selection.
     -- Layout (Step 3+): wide main box, Timer Colors box, Private Auras box, Advanced box below
-    local leftTop = MakeBox(content, 720, 460)
+    local leftTop = MakeBox(content, 720, 484)
     leftTop:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
     -- Timer / cooldown text color controls live here (breakpoints are added in later steps).
     local timerBox = MakeBox(content, 720, 200)
@@ -1906,6 +1906,9 @@ end
                 "Highlights your own buffs with a border color (visual only; does not filter).", "cbHLOwnBuffs" },
             { "Highlight own debuffs", 200, -228, A2_Settings, "highlightOwnDebuffs", nil,
                 "Highlights your own debuffs with a border color (visual only; does not filter).", "cbHLOwnDebuffs" },
+            { "Dispel-type borders", 12, -324, A2_Settings, "useDebuffTypeBorders", nil,
+                "Colors aura borders by debuff dispel type (Magic/Curse/Poison/Disease), similar to Blizzard private aura borders.",
+                "cbDispelTypeBorders" },
             { "Show cooldown swipe", 12, -252, A2_Settings, "showCooldownSwipe", nil, nil, "cbShowSwipe" },
             { "Swipe darkens on loss", 12, -300, A2_Settings, "cooldownSwipeDarkenOnLoss", nil, TIP_SWIPE_STYLE, "cbSwipeStyle" },
             { "Show stack count", 200, -276, A2_Settings, "showStackCount", nil, TIP_SHOW_STACK, "cbShowStackCount" },
@@ -1991,20 +1994,20 @@ end
 	local A2_DD_STEP = 24
     -- Caps: restore Max Buffs / Max Debuffs controls (0 = unlimited)
     -- Caps: moved slightly down so the sliders breathe under the tooltip/stack toggles.
-    local maxBuffsSlider = CreateAuras2CompactSlider(leftTop, "Max Buffs", 0, 40, 1, 12, -336, nil, GetMaxBuffs, function(v)  A2_AutoOverrideCapsIfNeeded(); SetMaxBuffs(v)  end)
+    local maxBuffsSlider = CreateAuras2CompactSlider(leftTop, "Max Buffs", 0, 40, 1, 12, -360, nil, GetMaxBuffs, function(v)  A2_AutoOverrideCapsIfNeeded(); SetMaxBuffs(v)  end)
     A2_Track("caps", maxBuffsSlider)
     -- Caps sliders manage refresh via A2_SetCapsValue (targeted/coalesced). Avoid double refresh.
     maxBuffsSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(maxBuffsSlider, { leftTitle = true })
     AttachSliderValueBox(maxBuffsSlider, 0, 40, 1, GetMaxBuffs)
-    local maxDebuffsSlider = CreateAuras2CompactSlider(leftTop, "Max Debuffs", 0, 40, 1, 200, -336, nil, GetMaxDebuffs, function(v)  A2_AutoOverrideCapsIfNeeded(); SetMaxDebuffs(v)  end)
+    local maxDebuffsSlider = CreateAuras2CompactSlider(leftTop, "Max Debuffs", 0, 40, 1, 200, -360, nil, GetMaxDebuffs, function(v)  A2_AutoOverrideCapsIfNeeded(); SetMaxDebuffs(v)  end)
     A2_Track("caps", maxDebuffsSlider)
     maxDebuffsSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(maxDebuffsSlider, { leftTitle = true })
     AttachSliderValueBox(maxDebuffsSlider, 0, 40, 1, GetMaxDebuffs)
     -- Split-anchor spacing: when buff/debuff blocks are anchored around the unitframe, this controls
     -- how far they are pushed away from the frame edges.
-    local splitSpacingSlider = CreateAuras2CompactSlider(leftTop, "Block spacing", 0, 40, 1, 200, -414, nil, GetSplitSpacing, function(v)  A2_AutoOverrideCapsIfNeeded(); SetSplitSpacing(v)  end)
+    local splitSpacingSlider = CreateAuras2CompactSlider(leftTop, "Block spacing", 0, 40, 1, 200, -438, nil, GetSplitSpacing, function(v)  A2_AutoOverrideCapsIfNeeded(); SetSplitSpacing(v)  end)
     A2_Track("caps", splitSpacingSlider)
     splitSpacingSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(splitSpacingSlider, { leftTitle = true })
@@ -2057,7 +2060,7 @@ end
         splitSpacingSlider.__MSUF_valueBox:SetScript("OnLeave", HideAnyTooltip)
     end
     -- Layout row (cleaner): Icons-per-row on the left, Growth dropdown aligned on the right.
-    local perRowSlider = CreateAuras2CompactSlider(leftTop, "Icons per row", 4, 20, 1, 12, -414, nil, GetPerRow, function(v)  A2_AutoOverrideCapsIfNeeded(); SetPerRow(v)  end)
+    local perRowSlider = CreateAuras2CompactSlider(leftTop, "Icons per row", 4, 20, 1, 12, -438, nil, GetPerRow, function(v)  A2_AutoOverrideCapsIfNeeded(); SetPerRow(v)  end)
     A2_Track("caps", perRowSlider)
     perRowSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(perRowSlider, { leftTitle = true })
@@ -2248,12 +2251,10 @@ end
                 "Additive: this will NOT hide your normal debuffs.", "cbDispellable" },
             { "Only show boss auras", 380, -58, GetEditingFilters, "onlyBossAuras", nil,
                 "Hard filter: when enabled (and filters are enabled), only auras flagged as boss auras will be shown.", "cbOnlyBoss" },
-            { "Only show raid in-combat auras", 380, -86, GetEditingFilters, "onlyRaidInCombatAuras", nil,
-                "Hard filter: when enabled (and filters are enabled), only auras in Blizzard's RAID_IN_COMBAT filter set will be shown.", "cbOnlyRaidInCombat" },
         }, refs)
 -- Track scopes + auto-override wrappers (Auras 2 menu only)
 do
-    local filterKeys = { "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss", "cbOnlyRaidInCombat",
+    local filterKeys = { "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss",
         "cbMagic", "cbCurse", "cbDisease", "cbPoison", "cbEnrage" }
     for i = 1, #filterKeys do
         local cb = refs[filterKeys[i]]
@@ -2402,7 +2403,7 @@ end
                 if cb then advGate[#advGate + 1] = cb end
             end
          end
-        Track({ "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss", "cbOnlyRaidInCombat", "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
+        Track({ "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss", "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
         -- Advanced gating should also affect the Private Auras master + sliders.
         if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end
         if privateMaxPlayer then advGate[#advGate + 1] = privateMaxPlayer end

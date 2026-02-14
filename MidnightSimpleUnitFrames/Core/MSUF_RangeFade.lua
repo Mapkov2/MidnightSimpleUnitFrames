@@ -409,10 +409,20 @@ do
         reg("TRAIT_CONFIG_UPDATED", "MSUF_RANGEFADE", Rebuild)
 
         -- Target swap: clear stale in-range state (fail-safe to in-range until updates arrive).
-        reg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
-            local reset = _G.MSUF_RangeFade_Reset
-            if reset then reset() end
-        end)
+        -- Phase 1: migrated from EventBus to UFCore hook (eliminates EventBus dispatch overhead).
+        local Hook = _G.MSUF_UFCore_Hook
+        if Hook then
+            Hook("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
+                local reset = _G.MSUF_RangeFade_Reset
+                if reset then reset() end
+            end)
+        else
+            -- Fallback: EventBus registration (UFCore not loaded yet — shouldn't happen with TOC order)
+            reg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
+                local reset = _G.MSUF_RangeFade_Reset
+                if reset then reset() end
+            end)
+        end
     end
 end
 

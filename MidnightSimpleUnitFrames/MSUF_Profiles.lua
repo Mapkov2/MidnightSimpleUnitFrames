@@ -321,6 +321,10 @@ function MSUF_ResetProfile(name)
     MSUF_GlobalDB.profiles[name] = {}
     if name == MSUF_ActiveProfile then
         MSUF_DB = MSUF_GlobalDB.profiles[name]
+        -- Phase 3: invalidate settings cache immediately after DB swap
+        if type(_G.MSUF_UFCore_InvalidateSettingsCache) == "function" then
+            _G.MSUF_UFCore_InvalidateSettingsCache()
+        end
         if EnsureDB then
             EnsureDB()
         end

@@ -1049,8 +1049,6 @@ filters = {
                     enabled = true,
                     hidePermanent = false,
                     onlyBossAuras = false,
-
-                    onlyRaidInCombatAuras = false,
                     buffs = {
                         includeBoss = false,
                         includeStealable = false,
@@ -1085,8 +1083,6 @@ filters = {
                         enabled = true,
                         hidePermanent = false,
                         onlyBossAuras = false,
-
-                        onlyRaidInCombatAuras = false,
                         buffs = {
                             includeBoss = false,
                             includeStealable = false,
@@ -1120,8 +1116,6 @@ filters = {
                         enabled = true,
                         hidePermanent = false,
                         onlyBossAuras = false,
-
-                        onlyRaidInCombatAuras = false,
                         buffs = {
                             includeBoss = false,
                             includeStealable = false,
@@ -1160,8 +1154,6 @@ filters = {
                     enabled = true,
                     hidePermanent = false,
                     onlyBossAuras = false,
-
-                    onlyRaidInCombatAuras = false,
                     buffs = {
                         includeBoss = false,
                         includeStealable = false,

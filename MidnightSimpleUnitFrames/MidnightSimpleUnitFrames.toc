@@ -28,7 +28,6 @@ MSUF_Profiles.lua
 MSUF_Presets.lua
 MSUF_Style.lua
 MSUF_Modules.lua
-MSUF_UpdateManager.lua
 MSUF_EventBus.lua
 MSUF_EditMode.lua
 MSUF_Castbars_LoDStub.lua

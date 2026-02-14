@@ -1,11 +1,22 @@
 local addonName, ns = ...
 ns = ns or {}
 
--- Locals (used in this file)
+-- =========================================================================
+-- PERF LOCALS (core runtime)
+--  - Reduce global table lookups in high-frequency event/render paths.
+--  - Secret-safe: localizing function references only (no value comparisons).
+-- =========================================================================
 local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs = pairs
+local pairs, ipairs, next = pairs, ipairs, next
+local math_min, math_max, math_floor = math.min, math.max, math.floor
+local string_format, string_match, string_sub = string.format, string.match, string.sub
+local UnitExists, UnitIsPlayer = UnitExists, UnitIsPlayer
+local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
+local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
+local UnitPowerType = UnitPowerType
+local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
 local InCombatLockdown = InCombatLockdown
-local CreateFrame = CreateFrame
+local CreateFrame, GetTime = CreateFrame, GetTime
 
 -- MSUF_Util.lua
 -- Stateless helpers / pure functions extracted from MidnightSimpleUnitFrames.lua
@@ -633,6 +644,37 @@ do
         _cachedBase768 = nil
         EnsureBase()
         return true
+    end
+end
+
+-- =============================================================
+-- Phase 2: Global helpers relocated from MSUF_UpdateManager.lua
+-- (These must load before any consumer; MSUF_Util.lua is in TOC slot 2.)
+-- =============================================================
+
+-- Fast-path replacement for protected calls.
+-- Intentionally does NOT catch errors (for maximum performance).
+-- Preserves (ok, ...) return convention and returns false if fn is not callable.
+if not _G.MSUF_FastCall then
+    function _G.MSUF_FastCall(fn, ...)
+        if type(fn) ~= "function" then
+             return false
+        end
+        return true, fn(...)
+    end
+end
+
+-- Global helper: "any edit mode" (MSUF Edit Mode OR Blizzard Edit Mode)
+if not _G.MSUF_IsInAnyEditMode then
+    function _G.MSUF_IsInAnyEditMode()
+        local st = rawget(_G, "MSUF_EditState")
+        if type(st) == "table" and st.active == true then
+             return true
+        end
+        if rawget(_G, "MSUF_UnitEditModeActive") == true then
+             return true
+        end
+         return false
     end
 end
 

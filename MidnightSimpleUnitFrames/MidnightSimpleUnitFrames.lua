@@ -9,9 +9,15 @@ ns.Icons  = ns.Icons  or {}
 ns.Util   = ns.Util   or {}
 ns.Cache  = ns.Cache  or {}
 ns.Compat = ns.Compat or {}
--- Locals (used in this file)
+-- =========================================================================
+-- PERF LOCALS (core runtime)
+--  - Reduce global table lookups in high-frequency event/render paths.
+--  - Secret-safe: localizing function references only (no value comparisons).
+-- =========================================================================
 local type, tostring, tonumber, select = type, tostring, tonumber, select
 local pairs, ipairs, next = pairs, ipairs, next
+local math_min, math_max, math_floor = math.min, math.max, math.floor
+local string_format, string_match, string_sub = string.format, string.match, string.sub
 local UnitExists, UnitIsPlayer = UnitExists, UnitIsPlayer
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
@@ -5951,18 +5957,13 @@ _G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(ac
 end
 
 
--- Aggro outline event driver (event-only, no OnUpdate)
+-- Aggro outline event driver — Phase 1: migrated from hidden frame to UFCore hooks.
 do
-    local ef = F.CreateFrame("Frame")
-    ef:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
-    ef:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
-    ef:RegisterEvent("PLAYER_TARGET_CHANGED")
-    ef:RegisterEvent("PLAYER_FOCUS_CHANGED")
-    ef:SetScript("OnEvent", function(_, event, unit)
+    local function _AggroOutlineHook(event, arg1)
         local g = MSUF_DB and MSUF_DB.general
         if not (g and g.aggroOutlineMode == 1) then return end
 
-        local u = unit
+        local u = arg1
         if event == "PLAYER_TARGET_CHANGED" then
             u = "target"
         elseif event == "PLAYER_FOCUS_CHANGED" then
@@ -5978,24 +5979,22 @@ do
         if type(fn) == "function" then
             fn(uf)
         end
-    end)
+    end
+    local Hook = _G.MSUF_UFCore_Hook
+    if Hook then
+        Hook("UNIT_THREAT_SITUATION_UPDATE", "AGGRO_OUTLINE", _AggroOutlineHook)
+        Hook("UNIT_THREAT_LIST_UPDATE",      "AGGRO_OUTLINE", _AggroOutlineHook)
+        Hook("PLAYER_TARGET_CHANGED",        "AGGRO_OUTLINE", _AggroOutlineHook)
+        Hook("PLAYER_FOCUS_CHANGED",         "AGGRO_OUTLINE", _AggroOutlineHook)
+    end
 end
 
 
 -- Dispel border event driver: refresh the rare outline when dispellable debuffs appear/disappear.
 -- Uses GetAuraSlots(..., "HARMFUL|RAID_PLAYER_DISPELLABLE", 1) so it's O(1) and very cheap.
+-- Phase 1: PLAYER_TARGET_CHANGED / FOCUS_CHANGED / ENTERING_WORLD migrated to UFCore hooks.
+--          UNIT_AURA stays on a dedicated frame (unit-filtered RegisterUnitEvent).
 do
-    local f = F.CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    f:RegisterEvent("PLAYER_TARGET_CHANGED")
-    f:RegisterEvent("PLAYER_FOCUS_CHANGED")
-
-    if f.RegisterUnitEvent then
-        f:RegisterUnitEvent("UNIT_AURA", "player", "target", "focus", "targettarget")
-    else
-        f:RegisterEvent("UNIT_AURA")
-    end
-
     local function HasDispellable(unit)
         local getSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
         if type(getSlots) ~= "function" then return false end
@@ -6035,32 +6034,35 @@ do
         UpdateUnit("targettarget", true)
     end
 
+    -- UNIT_AURA: stays on dedicated frame (unit-filtered, not available on Global driver)
+    local f = F.CreateFrame("Frame")
+    if f.RegisterUnitEvent then
+        f:RegisterUnitEvent("UNIT_AURA", "player", "target", "focus", "targettarget")
+    else
+        f:RegisterEvent("UNIT_AURA")
+    end
     f:SetScript("OnEvent", function(_, event, unit)
-        if event == "UNIT_AURA" then
-            if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
-            local g = MSUF_DB and MSUF_DB.general
-            if not (g and g.dispelOutlineMode == 1) then return end
-            UpdateUnit(unit, false)
-            return
-        end
+        if event ~= "UNIT_AURA" then return end
+        if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
+        local g = MSUF_DB and MSUF_DB.general
+        if not (g and g.dispelOutlineMode == 1) then return end
+        UpdateUnit(unit, false)
+    end)
 
-        if event == "PLAYER_TARGET_CHANGED" then
+    -- Hooks for non-UNIT_AURA events (Phase 1)
+    local Hook = _G.MSUF_UFCore_Hook
+    if Hook then
+        Hook("PLAYER_TARGET_CHANGED", "DISPEL_BORDER", function()
             UpdateUnit("target", true)
             UpdateUnit("targettarget", true)
-            return
-        end
-
-        if event == "PLAYER_FOCUS_CHANGED" then
+        end)
+        Hook("PLAYER_FOCUS_CHANGED", "DISPEL_BORDER", function()
             UpdateUnit("focus", true)
-            return
-        end
-
-        -- Init / safety clear so state is correct without requiring Edit Mode / manual refresh.
-        if event == "PLAYER_ENTERING_WORLD" then
+        end)
+        Hook("PLAYER_ENTERING_WORLD", "DISPEL_BORDER", function()
             _G.MSUF_RefreshDispelOutlineStates(true)
-            return
-        end
-    end)
+        end)
+    end
 end
 
 do
@@ -7822,39 +7824,38 @@ do
         end
     end
 
-    local function _MSUF_SwapRecolor_Schedule(driver)
-        if driver._msufSwapRecolorQueued then return end
-        driver._msufSwapRecolorQueued = true
+    -- Phase 1: coalescing via local flag instead of hidden frame field
+    local _swapRecolorQueued = false
+    local function _MSUF_SwapRecolor_Schedule()
+        if _swapRecolorQueued then return end
+        _swapRecolorQueued = true
         if C_Timer and C_Timer.After then
             C_Timer.After(0, function()
-                driver._msufSwapRecolorQueued = false
+                _swapRecolorQueued = false
                 _MSUF_SwapRecolor_Do()
             end)
         else
-            driver._msufSwapRecolorQueued = false
+            _swapRecolorQueued = false
             _MSUF_SwapRecolor_Do()
         end
     end
 
-    _G.MSUF_EnsureSwapRecolorDriver = _G.MSUF_EnsureSwapRecolorDriver or function()
-        if _G.MSUF_SwapRecolorDriver then return _G.MSUF_SwapRecolorDriver end
-        local d = CreateFrame("Frame", "MSUF_SwapRecolorDriver", UIParent)
-        d._msufSwapRecolorQueued = false
-        d:RegisterEvent("PLAYER_TARGET_CHANGED")
-        d:RegisterEvent("PLAYER_FOCUS_CHANGED")
-        d:RegisterEvent("UNIT_TARGET")
-        d:SetScript("OnEvent", function(self, event, arg1)
-            if event == "UNIT_TARGET" then
-                if arg1 ~= "target" then return end -- ToT updates from target only
-            end
-            _MSUF_SwapRecolor_Schedule(self)
+    -- Phase 1: hooks replace hidden MSUF_SwapRecolorDriver frame
+    local Hook = _G.MSUF_UFCore_Hook
+    if Hook then
+        Hook("PLAYER_TARGET_CHANGED", "SWAP_RECOLOR", function() _MSUF_SwapRecolor_Schedule() end)
+        Hook("PLAYER_FOCUS_CHANGED",  "SWAP_RECOLOR", function() _MSUF_SwapRecolor_Schedule() end)
+        Hook("UNIT_TARGET",           "SWAP_RECOLOR", function(_, arg1)
+            if arg1 == "target" then _MSUF_SwapRecolor_Schedule() end
         end)
-        _G.MSUF_SwapRecolorDriver = d
-        return d
     end
+
+    -- Compat: keep global symbol alive (some callers check it)
+    _G.MSUF_EnsureSwapRecolorDriver = _G.MSUF_EnsureSwapRecolorDriver or function() end
+    _G.MSUF_SwapRecolorDriver = true  -- truthy sentinel
 end
 
--- Start the driver immediately (safe: does nothing until frames exist).
+-- SwapRecolor is now initialized via hooks above (no-op compat call).
 if _G.MSUF_EnsureSwapRecolorDriver then
     _G.MSUF_EnsureSwapRecolorDriver()
 end

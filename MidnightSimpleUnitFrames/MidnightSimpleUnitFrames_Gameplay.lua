@@ -97,10 +97,52 @@ local LSM           = LibStub and LibStub("LibSharedMedia-3.0", true)
 
 
 ------------------------------------------------------
--- UpdateManager accessor (avoid repeating global lookups everywhere)
+-- Phase 2: Local micro-scheduler replacing MSUF_UpdateManager.
+-- Same API surface (Register/SetEnabled/Kick/Unregister) backed by
+-- per-task C_Timer.NewTicker handles.  30 lines, zero external deps.
 ------------------------------------------------------
+local _uTasks = {}
+local _microUM = {}
+
+function _microUM:Register(name, fn, interval, _priority)
+    if type(name) ~= "string" or type(fn) ~= "function" then return end
+    self:SetEnabled(name, false) -- cancel any existing ticker
+    _uTasks[name] = { fn = fn, iv = interval, enabled = false, ticker = nil }
+end
+
+function _microUM:SetEnabled(name, enabled)
+    local t = _uTasks[name]
+    if not t then return end
+    local on = enabled and true or false
+    if t.enabled == on then return end
+    t.enabled = on
+    if on then
+        local sec = (type(t.iv) == "function") and t.iv() or t.iv
+        if type(sec) ~= "number" or sec <= 0 then sec = 0.25 end
+        if C_Timer and C_Timer.NewTicker then
+            t.ticker = C_Timer.NewTicker(sec, function()
+                if t.enabled and t.fn then t.fn(sec) end
+            end)
+        end
+    else
+        if t.ticker then t.ticker:Cancel(); t.ticker = nil end
+    end
+end
+
+function _microUM:Kick(name)
+    local t = _uTasks[name]
+    if not t or not t.fn then return end
+    local sec = (type(t.iv) == "function") and t.iv() or t.iv
+    t.fn(type(sec) == "number" and sec or 0)
+end
+
+function _microUM:Unregister(name)
+    self:SetEnabled(name, false)
+    _uTasks[name] = nil
+end
+
 local function MSUF_GetUpdateManager()
-    return _G.MSUF_UpdateManager or (ns and ns.MSUF_UpdateManager)
+    return _microUM
 end
 
 ------------------------------------------------------
@@ -392,7 +434,7 @@ end
 
 
 ------------------------------------------------------
--- One-time tip popup: gameplay colors live in Colors → Gameplay
+-- One-time tip popup: gameplay colors live in Colors â†’ Gameplay
 ------------------------------------------------------
 do
     local POPUP_KEY = "MSUF_GAMEPLAY_COLORS_TIP"
@@ -559,7 +601,6 @@ local combatStateText
 local combatEventFrame
 local combatCrosshairFrame
 local combatCrosshairEventFrame
-local updater
 
 -- Forward declarations (helpers are referenced before their definitions below)
 local MSUF_CrosshairHasValidTarget
@@ -1077,14 +1118,6 @@ EnsureFirstDanceTaskRegistered = function()
 
         -- Ensure no leftover per-frame updater stays attached
         combatStateFrame:SetScript("OnUpdate", nil)
-    else
-        -- Fallback: local OnUpdate if UpdateManager isn't available
-        if ns then
-            ns._MSUF_FirstDanceTaskRegistered = true
-        end
-        combatStateFrame:SetScript("OnUpdate", function(self, elapsed)
-            _TickFirstDance()
-        end)
     end
 end
 
@@ -1109,7 +1142,7 @@ local function MSUF_ShouldCrosshairFollowCamera()
     end
 
     if GetCVarBool then
-        -- Zusätzliche Flags
+        -- ZusÃ¤tzliche Flags
         if GetCVarBool("findYourselfModeAll")
         or GetCVarBool("findYourselfModeAlways")
         or GetCVarBool("findYourselfModeCombat") then
@@ -1145,8 +1178,8 @@ local function MSUF_AnchorCombatCrosshair()
     local offsetX  = 0
     local offsetY  = -20   -- Fallback, wenn wir keine Nameplate haben
 
-    -- Wenn Blizzard-Selfhighlight / Nameplates aktiv sind → an persönliche
-    -- Nameplate hängen und den Offset abhängig vom Zoom berechnen.
+    -- Wenn Blizzard-Selfhighlight / Nameplates aktiv sind â†’ an persÃ¶nliche
+    -- Nameplate hÃ¤ngen und den Offset abhÃ¤ngig vom Zoom berechnen.
     if MSUF_ShouldCrosshairFollowCamera() then
         local personal = _G.NamePlatePersonalFrame
         if personal then
@@ -1310,8 +1343,7 @@ local function EnsureCombatCrosshair()
         MSUF_CrosshairSyncRangeCacheFromGameplay(g)
         MSUF_UpdateCombatCrosshairRangeColor()
 
-        -- Range color tick: prefer MSUF_UpdateManager (single global OnUpdate) and
--- fall back to a local throttled OnUpdate if needed.
+        -- Range color tick: micro-scheduler backed by C_Timer.NewTicker (Phase 2).
 local umRange = MSUF_GetUpdateManager()
 if umRange and umRange.Register and umRange.SetEnabled then
     if not ns._MSUF_CrosshairRangeTaskRegistered then
@@ -1342,6 +1374,7 @@ if umRange and umRange.Register and umRange.SetEnabled then
         end)
         umRange:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", false)
     end
+end -- close UpdateManager gate (was missing; prevented EnsureCombatCrosshair from closing)
 
         MSUF_RefreshCrosshairRangeTaskEnabled()
 
@@ -1351,33 +1384,6 @@ if umRange and umRange.Register and umRange.SetEnabled then
         combatCrosshairFrame.MSUF_RangeOnUpdate = nil
         combatCrosshairFrame.MSUF_RangeElapsed = nil
     end
-else
-    -- Legacy fallback: local throttled OnUpdate to keep range color responsive while moving
-    if g.enableCombatCrosshairMeleeRangeColor then
-        if not combatCrosshairFrame.MSUF_RangeOnUpdate then
-            combatCrosshairFrame.MSUF_RangeOnUpdate = true
-            combatCrosshairFrame.MSUF_RangeElapsed = 0
-            combatCrosshairFrame:SetScript("OnUpdate", function(self, elapsed)
-                if not self:IsShown() then return end
-                local g3 = EnsureGameplayDefaults()
-                if not g3.enableCombatCrosshair or not g3.enableCombatCrosshairMeleeRangeColor then
-                    self:SetScript("OnUpdate", nil)
-                    self.MSUF_RangeOnUpdate = nil
-                    return
-                end
-                self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
-                if self.MSUF_RangeElapsed < 0.15 then return end
-                self.MSUF_RangeElapsed = 0
-                MSUF_UpdateCombatCrosshairRangeColor()
-            end)
-        end
-    else
-        if combatCrosshairFrame.MSUF_RangeOnUpdate then
-            combatCrosshairFrame:SetScript("OnUpdate", nil)
-            combatCrosshairFrame.MSUF_RangeOnUpdate = nil
-        end
-    end
-end
 
     end
 
@@ -2885,7 +2891,7 @@ function ns.MSUF_RequestGameplayApply()
 
     Gameplay_ApplyAllFeatures(g)
 
--- Centralized throttling: register combat-timer ticks in the global MSUF_UpdateManager
+-- Centralized throttling: combat-timer ticks via local micro-scheduler (Phase 2)
     local um = MSUF_GetUpdateManager()
     if um and um.Register and um.SetEnabled then
         if not ns._MSUF_GameplayTasksRegistered then
@@ -2960,11 +2966,6 @@ function ns.MSUF_RequestGameplayApply()
             wasInCombat = false
             combatStartTime = nil
             lastTimerText = ""
-        end
-    else
-        -- Legacy fallback (should be rare): if UpdateManager isn't available, keep existing behavior.
-        if not updater then
-            updater = CreateFrame("Frame")
         end
     end
 end
@@ -3127,7 +3128,7 @@ panel.meleeSpellUsedByText = meleeUsedBy
 
 local meleeSharedWarn = content:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 meleeSharedWarn:SetPoint("TOPLEFT", meleeUsedBy, "BOTTOMLEFT", 0, -2)
-meleeSharedWarn:SetText("|cffff8800No melee range spell selected — Crosshair will not work.|r")
+meleeSharedWarn:SetText("|cffff8800No melee range spell selected â€” Crosshair will not work.|r")
 meleeSharedWarn:Hide()
 panel.meleeSpellWarningText = meleeSharedWarn
 
@@ -4117,7 +4118,7 @@ _totemsLeftBottom = totemsDragHint
 
     local crosshairRangeHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", crosshairRangeColorCheck, "BOTTOMLEFT", 24, -2, "Uses the spell selected below.", "crosshairRangeHintText")
 
-    local crosshairRangeWarn = _MSUF_Label("GameFontNormalSmall", "TOPLEFT", crosshairRangeHint, "BOTTOMLEFT", 0, -2, "|cffff8800No melee range spell selected — Crosshair will not work.|r", "crosshairRangeWarnText")
+    local crosshairRangeWarn = _MSUF_Label("GameFontNormalSmall", "TOPLEFT", crosshairRangeHint, "BOTTOMLEFT", 0, -2, "|cffff8800No melee range spell selected â€” Crosshair will not work.|r", "crosshairRangeWarnText")
     crosshairRangeWarn:Hide()
 
     -- Move "Melee range spell" selector into the Combat crosshair section (no separate header)
@@ -4898,7 +4899,7 @@ end
         InterfaceOptions_AddCategory(panel)
     end
 
-    -- Beim Öffnen des Panels SavedVariables → UI syncen
+    -- Beim Ã–ffnen des Panels SavedVariables â†’ UI syncen
     panel:refresh()
     UpdateContentHeight()
 

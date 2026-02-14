@@ -8,6 +8,23 @@ local _, addon = ...
 
 addon = addon or {}
 
+-- =========================================================================
+-- PERF LOCALS (core runtime)
+--  - Reduce global table lookups in high-frequency event/render paths.
+--  - Secret-safe: localizing function references only (no value comparisons).
+-- =========================================================================
+local type, tostring, tonumber, select = type, tostring, tonumber, select
+local pairs, ipairs, next = pairs, ipairs, next
+local math_min, math_max, math_floor = math.min, math.max, math.floor
+local string_format, string_match, string_sub = string.format, string.match, string.sub
+local UnitExists, UnitIsPlayer = UnitExists, UnitIsPlayer
+local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
+local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
+local UnitPowerType = UnitPowerType
+local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
+local InCombatLockdown = InCombatLockdown
+local CreateFrame, GetTime = CreateFrame, GetTime
+
 -- Hotpath locals (avoid _G lookups)
 local _G = _G
 local type   = _G.type
@@ -1936,7 +1953,7 @@ local function RunUpdate(f)
 
     -- DIRTY_VISUAL: refresh rare visuals (outline/background/gradients) without
     -- forcing a legacy full update + layout. This is the main source of large spikes
-    -- on TARGET/FOCUS acquire (frames were hidden -> OnShow + UNIT_SWAP).
+    -- on TARGET/FOCUS acquire (frames were hidden â†’ OnShow + UNIT_SWAP).
     if mask ~= 0 and band(mask, DIRTY_VISUAL) ~= 0 then
         local fn = _G.MSUF_RefreshRareBarVisuals
         if type(fn) ~= "function" then fn = _G.MSUF_ApplyRareVisuals end
@@ -2108,26 +2125,85 @@ do
     UNIT_EVENT_MAP.UNIT_THREAT_SITUATION_UPDATE = { mask = DIRTY_INDICATOR }
 end
 
+-- ============================================================================
+-- Phase 6: Direct-Apply dispatch (oUF-style same-frame updates)
+--
+-- Cheap element updates bypass the MarkDirty → Queue → Flush chain entirely.
+-- Event → Element.Update() in the SAME frame = perceived snappiness.
+--
+-- Only events that map to exactly ONE cheap element are eligible.
+-- Multi-element events (UNIT_FACTION, UNIT_FLAGS) stay on the queued path.
+-- Portrait stays deferred (expensive texture ops).
+-- ============================================================================
+
+local DIRECT_APPLY = {}
+
+-- 6.1: Health direct-apply (no conf needed)
+local _DirectHealth = Elements.Health.Update
+local function DirectHealthHandler(f, event)
+    if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
+        f._msufAbsorbDirty = true
+    elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
+        f._msufHealAbsorbDirty = true
+    end
+    _DirectHealth(f)
+end
+
+DIRECT_APPLY["UNIT_HEALTH"]                      = DirectHealthHandler
+DIRECT_APPLY["UNIT_MAXHEALTH"]                    = DirectHealthHandler
+DIRECT_APPLY["UNIT_ABSORB_AMOUNT_CHANGED"]        = DirectHealthHandler
+DIRECT_APPLY["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"]   = DirectHealthHandler
+DIRECT_APPLY["UNIT_HEAL_PREDICTION"]              = DirectHealthHandler
+DIRECT_APPLY["UNIT_MAXHEALTHMODIFIER"]            = DirectHealthHandler
+
+-- 6.1: Power direct-apply (no conf needed)
+local _DirectPower = Elements.Power.Update
+DIRECT_APPLY["UNIT_POWER_UPDATE"]    = _DirectPower
+DIRECT_APPLY["UNIT_MAXPOWER"]        = _DirectPower
+DIRECT_APPLY["UNIT_DISPLAYPOWER"]    = _DirectPower
+DIRECT_APPLY["UNIT_POWER_BAR_SHOW"]  = _DirectPower
+DIRECT_APPLY["UNIT_POWER_BAR_HIDE"]  = _DirectPower
+
+-- 6.2: Identity direct-apply (needs conf; excludes UNIT_FACTION which overlaps Health)
+local _DirectIdentity = Elements.Identity.Update
+local function DirectIdentityHandler(f)
+    _DirectIdentity(f, GetFrameConf(f))
+end
+DIRECT_APPLY["UNIT_NAME_UPDATE"]             = DirectIdentityHandler
+DIRECT_APPLY["UNIT_LEVEL"]                   = DirectIdentityHandler
+DIRECT_APPLY["UNIT_CLASSIFICATION_CHANGED"]  = DirectIdentityHandler
+
+-- 6.2: Status direct-apply (needs conf; excludes UNIT_FLAGS which overlaps Health)
+local _DirectStatus = Elements.Status.Update
+local function DirectStatusHandler(f)
+    _DirectStatus(f, GetFrameConf(f))
+end
+DIRECT_APPLY["UNIT_CONNECTION"]              = DirectStatusHandler
+DIRECT_APPLY["INCOMING_RESURRECT_CHANGED"]   = DirectStatusHandler
+
 local function FrameOnEvent(self, event, arg1, ...)
     -- oUF-like: skip hidden frames (free win).
     -- Frames can opt out (e.g. previews) by setting self.MSUF_AllowHiddenEvents = true.
     if not self:IsVisible() and not self.MSUF_AllowHiddenEvents then
         return
     end
-    -- Global events are routed by the UFCore global driver (keeps per-frame registrations minimal).
 
-    -- Unit events: only react to our unit.
+    -- Phase 6: Direct-Apply path — cheap element updates in the SAME frame.
+    -- Bypasses MarkDirty → Queue → Flush entirely (saves ~0.8ms total call depth).
+    local directFn = DIRECT_APPLY[event]
+    if directFn then
+        if arg1 == self.unit then
+            directFn(self, event)
+        end
+        return
+    end
+
+    -- Queued path: multi-element, expensive, or unknown events.
     local info = UNIT_EVENT_MAP[event]
     if info then
         if arg1 == self.unit then
-            -- Mark overlays dirty on absorb/heal-absorb events (no secret compares).
-            if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
-                self._msufAbsorbDirty = true
-            elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
-                self._msufHealAbsorbDirty = true
-            elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
-                -- Health bar color can change for NPC reaction / PvP / flags.
-                -- Keep it out of the hot value path unless explicitly needed.
+            -- Multi-element flag handling (UNIT_FACTION/UNIT_FLAGS span Health + another element)
+            if event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
                 self._msufHealthColorDirty = true
             end
             Core.MarkDirty(self, info.mask, info.urgent, event)
