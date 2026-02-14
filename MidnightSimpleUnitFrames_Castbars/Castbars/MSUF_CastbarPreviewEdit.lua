@@ -54,16 +54,104 @@ local function MSUF_GetFirstNonNil(g, keys, fallback)
     return fallback
 end
 
+-- ============================================================
+-- Edit Mode UX: clicking any castbar preview should immediately
+-- play the fill animation (dummy cast) so the user can see
+-- progress/texture/alpha changes while positioning.
+--
+-- Requirements:
+-- - Works for player/target/focus/boss previews.
+-- - Must not persist settings; click is a temporary "pulse".
+-- - Must not fight dragging (drag OnUpdate overrides test mode).
+-- - Must be very low cost (Edit Mode only).
+-- ============================================================
+
+local MSUF_PREVIEW_PULSE_SECONDS = 8
+
+local function MSUF_PulseCastbarPreview(kind)
+    if not kind or not MSUF_UnitEditModeActive then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+
+    if type(EnsureDB) == "function" then EnsureDB() end
+    local g = (MSUF_DB and MSUF_DB.general) or nil
+    if not g then return end
+
+    -- Resolve start/stop funcs and the persistent DB key.
+    local startFn, stopFn, dbKey
+    if kind == "player" then
+        startFn = _G.MSUF_SetPlayerCastbarTestMode
+        stopFn  = _G.MSUF_SetPlayerCastbarTestMode
+        dbKey   = "playerCastbarTestMode"
+    elseif kind == "target" then
+        startFn = _G.MSUF_SetTargetCastbarTestMode
+        stopFn  = _G.MSUF_SetTargetCastbarTestMode
+        dbKey   = "targetCastbarTestMode"
+    elseif kind == "focus" then
+        startFn = _G.MSUF_SetFocusCastbarTestMode
+        stopFn  = _G.MSUF_SetFocusCastbarTestMode
+        dbKey   = "focusCastbarTestMode"
+    elseif kind == "boss" then
+        startFn = _G.MSUF_SetBossCastbarTestMode
+        stopFn  = _G.MSUF_SetBossCastbarTestMode
+        dbKey   = "bossCastbarTestMode"
+    else
+        return
+    end
+
+    if type(startFn) ~= "function" or type(stopFn) ~= "function" then
+        return
+    end
+
+    -- Start/refresh the dummy cast WITHOUT persisting the setting.
+    startFn(true, true)
+
+    -- Coalesce stop timers per kind (avoid timer spam if the user clicks repeatedly).
+    local timers = _G.MSUF_CastbarPreviewPulseTimers
+    if not timers then
+        timers = {}
+        _G.MSUF_CastbarPreviewPulseTimers = timers
+    end
+
+    if not (C_Timer and C_Timer.NewTimer) then
+        return
+    end
+
+    local function ScheduleStop(delay)
+        local old = timers[kind]
+        if old and old.Cancel then
+            old:Cancel()
+        end
+        timers[kind] = C_Timer.NewTimer(delay, function()
+            if not MSUF_UnitEditModeActive then return end
+            if InCombatLockdown and InCombatLockdown() then return end
+            if type(EnsureDB) == "function" then EnsureDB() end
+            local gg = (MSUF_DB and MSUF_DB.general) or nil
+            if not gg then return end
+
+            -- If the user enabled the persistent test mode toggle, never stop via pulse.
+            if dbKey and gg[dbKey] then
+                return
+            end
+
+            -- If the edit popup for this castbar is open, keep animating and check again shortly.
+            local popup = _G.MSUF_CastbarPositionPopup
+            if popup and popup.IsShown and popup:IsShown() and popup.unit == kind then
+                ScheduleStop(2)
+                return
+            end
+
+            stopFn(false, true)
+        end)
+    end
+
+    ScheduleStop(MSUF_PREVIEW_PULSE_SECONDS)
+end
+
 function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
     if not frame or frame.MSUF_PreviewEditHandlersSetup then return end
     frame.MSUF_PreviewEditHandlersSetup = true
 
     local cfg = MSUF_PreviewEditCfg[kind] or MSUF_PreviewEditCfg.player
-
-    if type(MSUF_CreateCastbarEditArrows) == "function" then
-        MSUF_CreateCastbarEditArrows(frame, kind)
-    end
-
     frame:SetClampedToScreen(true)
     frame:SetFrameStrata("DIALOG")
     frame:EnableMouse(true)
@@ -198,6 +286,10 @@ end
             self.isDragging = false
             self:SetScript("OnUpdate", nil)
         end
+
+        -- After any click/drag ends, ensure the preview fill animation runs.
+        -- (Dragging temporarily overrides OnUpdate, so we restart the pulse here.)
+        MSUF_PulseCastbarPreview(kind)
 
         -- Simple click (no drag) opens the edit popup (same behavior as unitframes).
         if (not wasMoved) and MSUF_UnitEditModeActive and type(MSUF_OpenCastbarPositionPopup) == "function" then

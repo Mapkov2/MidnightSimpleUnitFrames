@@ -92,16 +92,28 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
 
     local f = CreateFrame("Frame", frameName, parent, opts.template or "BackdropTemplate")
     f.unit = kind
+    -- Mark as preview so centralized visuals can apply preview-only behavior:
+    -- - always show icon in Edit Mode
+    -- - apply preview fill color (from Colors menu)
+    -- - keep texts visible for positioning
+    -- Boss preview already did this; other previews must match.
+    f._msufIsPreview = true
     f:SetClampedToScreen(true)
     f:SetFrameStrata(opts.strata or "DIALOG")
     f:SetSize(w, h)
 
-    local bg = f:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(f)
-    bg:SetColorTexture(0, 0, 0, opts.bgAlpha or 0.8)
-    f.backgroundBar = bg
+    -- Outer frame background (behind everything). This is NOT the bar background.
+    -- IMPORTANT: The bar background MUST be parented to the StatusBar (see boss preview),
+    -- otherwise a parent texture can visually cover the fill animation.
+    local frameBG = f:CreateTexture(nil, "BACKGROUND")
+    frameBG:SetAllPoints(f)
+    frameBG:SetColorTexture(0, 0, 0, opts.bgAlpha or 0.8)
+    f._msufFrameBG = frameBG
 
     local statusBar = CreateFrame("StatusBar", nil, f)
+    if f.GetFrameLevel and statusBar.SetFrameLevel then
+        statusBar:SetFrameLevel(f:GetFrameLevel() + 1)
+    end
     statusBar:SetPoint("LEFT", f, "LEFT", 0, 0)
     statusBar:SetSize(w, sbH)
     local tex = (type(MSUF_GetCastbarTexture) == "function" and MSUF_GetCastbarTexture()) or "Interface\\TargetingFrame\\UI-StatusBar"
@@ -110,6 +122,19 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
     if sbTex and sbTex.SetHorizTile then
         sbTex:SetHorizTile(true)
     end
+
+    -- Bar background (must be a StatusBar region; see Boss preview layering).
+    local barBG = statusBar:CreateTexture(nil, "BACKGROUND")
+    barBG:SetAllPoints(statusBar)
+    barBG:SetTexture("Interface\\Buttons\\WHITE8X8")
+    barBG:SetAlpha(0.25)
+    f.backgroundBar = barBG
+
+    -- Ensure the fill texture stays above the background in all cases.
+    if sbTex and sbTex.SetDrawLayer then
+        sbTex:SetDrawLayer("ARTWORK", 0)
+    end
+
     statusBar:SetMinMaxValues(0, 1)
     if opts.initialValue ~= nil then
         statusBar:SetValue(tonumber(opts.initialValue) or 0)

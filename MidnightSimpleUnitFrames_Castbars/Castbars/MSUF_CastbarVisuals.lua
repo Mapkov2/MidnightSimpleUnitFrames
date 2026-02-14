@@ -92,47 +92,67 @@ end
 
 
 
-local function ApplyPreviewInterruptibleColor(frame, g)
+local function ApplyPreviewInterruptibleColor(frame, unitKey, g)
     if not (frame and frame._msufIsPreview and frame.statusBar) then return end
-    if not g then return end
 
-    local ir, ig, ib, ia = nil, nil, nil, 1
-    if type(_G.MSUF_GetInterruptibleCastColor) == "function" then
-        ir, ig, ib, ia = _G.MSUF_GetInterruptibleCastColor()
-    end
-    if not (ir and ig and ib) then
-        local key = g.castbarInterruptibleColor or "turquoise"
-        local c = (type(_G.MSUF_GetColorFromKey) == "function") and _G.MSUF_GetColorFromKey(key) or nil
-        if c and c.GetRGB then
-            ir, ig, ib = c:GetRGB()
+    -- Boss previews are handled by the Boss module (it applies the user-configured colors directly).
+    if unitKey == "boss" then return end
+
+    g = g or {}
+
+    -- Player preview must respect the optional Player Castbar Override color (Colors menu).
+    -- This should match the real player castbar fill whenever the override is enabled.
+    if unitKey == "player" and g.playerCastbarOverrideEnabled then
+        local mode = g.playerCastbarOverrideMode
+        local r, gg, b
+
+        if mode == "CUSTOM" then
+            r  = tonumber(g.playerCastbarOverrideR)
+            gg = tonumber(g.playerCastbarOverrideG)
+            b  = tonumber(g.playerCastbarOverrideB)
+        else
+            local _, classToken = UnitClass("player")
+            if classToken then
+                if type(_G.MSUF_GetClassBarColor) == "function" then
+                    r, gg, b = _G.MSUF_GetClassBarColor(classToken)
+                end
+                if (not r) and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken] then
+                    local c = RAID_CLASS_COLORS[classToken]
+                    r, gg, b = c.r, c.g, c.b
+                end
+            end
+        end
+
+        if r and gg and b then
+            if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
+                _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, r, gg, b, 1)
+            elseif frame.statusBar.SetStatusBarColor then
+                frame.statusBar:SetStatusBarColor(r, gg, b, 1)
+            end
+            return
         end
     end
+
+    -- Default preview: interruptible cast color as configured in Colors menu.
+    local ir, ig, ib, nr, ng, nb
+    if type(_G.MSUF_ResolveCastbarColors) == "function" then
+        ir, ig, ib, nr, ng, nb = _G.MSUF_ResolveCastbarColors()
+    end
     if not (ir and ig and ib) then
+        -- Fallback (should never happen).
         ir, ig, ib = 0.2, 0.8, 0.8
-    end
-
-    local nr, ng, nb, na = nil, nil, nil, 1
-    if type(_G.MSUF_GetNonInterruptibleCastColor) == "function" then
-        nr, ng, nb, na = _G.MSUF_GetNonInterruptibleCastColor()
-    end
-    if not (nr and ng and nb) then
-        local key = g.castbarNonInterruptibleColor or "red"
-        local c = (type(_G.MSUF_GetColorFromKey) == "function") and _G.MSUF_GetColorFromKey(key) or nil
-        if c and c.GetRGB then
-            nr, ng, nb = c:GetRGB()
-        end
     end
     if not (nr and ng and nb) then
         nr, ng, nb = 0.9, 0.1, 0.1
     end
 
     if type(_G.MSUF_Castbar_ApplyNonInterruptibleTint) == "function" then
-        -- Preview is always shown as interruptible color.
-        _G.MSUF_Castbar_ApplyNonInterruptibleTint(frame, false, nr, ng, nb, na, ir, ig, ib, ia, false)
+        -- Preview is always shown as interruptible (we don't simulate shielded casts here).
+        _G.MSUF_Castbar_ApplyNonInterruptibleTint(frame, false, nr, ng, nb, 1, ir, ig, ib, 1, false)
     elseif type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, ir, ig, ib, ia or 1)
+        _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, ir, ig, ib, 1)
     elseif frame.statusBar.SetStatusBarColor then
-        frame.statusBar:SetStatusBarColor(ir, ig, ib, ia or 1)
+        frame.statusBar:SetStatusBarColor(ir, ig, ib, 1)
     end
 end
 local function ApplyShadow(fs, useShadow)
@@ -482,6 +502,6 @@ function _G.MSUF_UpdateCastbarVisuals()
 
         ApplyIconAndBarLayout(frame, unitKey, g)
         ApplyFontsAndTextLayout(frame, unitKey, g)
-        ApplyPreviewInterruptibleColor(frame, g)
+        ApplyPreviewInterruptibleColor(frame, unitKey, g)
     end)
 end
