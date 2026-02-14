@@ -5636,8 +5636,24 @@ uconf.layout = uconf.layout or {}
 
             -- IMPORTANT: Only write offsets when they previously existed OR the user changed them.
             -- If we always clear them to nil, the popup X/Y controls appear "dead".
-            local writeStackOffsets = haveStackOffsets or isDirty('stackTextOffsetX') or isDirty('stackTextOffsetY')
-            local writeCooldownOffsets = haveCooldownOffsets or isDirty('cooldownTextOffsetX') or isDirty('cooldownTextOffsetY')
+            local function _MSUF_A2_BoxHasText(box)
+                if not box or not box.GetText then return false end
+                local t = box:GetText()
+                return (t ~= nil and t ~= "")
+            end
+
+            -- IMPORTANT: Only write offsets when they previously existed OR the user changed them.
+            -- Also treat non-empty editboxes as "changed" (stepper buttons / programmatic SetText may not mark dirty).
+            local writeStackOffsets =
+                haveStackOffsets
+                or isDirty('stackTextOffsetX') or isDirty('stackTextOffsetY')
+                or _MSUF_A2_BoxHasText(pf.stackTextOffsetXBox) or _MSUF_A2_BoxHasText(pf.stackTextOffsetYBox)
+
+            local writeCooldownOffsets =
+                haveCooldownOffsets
+                or isDirty('cooldownTextOffsetX') or isDirty('cooldownTextOffsetY')
+                or _MSUF_A2_BoxHasText(pf.cooldownTextOffsetXBox) or _MSUF_A2_BoxHasText(pf.cooldownTextOffsetYBox)
+
 
 local function ApplyLayoutToUnit(k) 
     a2db.perUnit[k] = a2db.perUnit[k] or {}
