@@ -647,51 +647,6 @@ _G.MSUF_RefreshStatusIndicators = function()
     for _, f in pairs(frames) do
         MSUF_UpdateStatusIndicatorForFrame(f)
     end
-    end
-    
--- ------------------------------------------------------------
--- Death / Ghost state reliability
--- Fixes rare cases where "DEAD" can remain shown after a resurrection (e.g., M+ battle-res).
--- These events are rare, so this has effectively zero performance impact.
--- ------------------------------------------------------------
-do
-    if not _G.MSUF_StatusIndicatorLifeEventFrame and CreateFrame then
-        local f = CreateFrame("Frame")
-        _G.MSUF_StatusIndicatorLifeEventFrame = f
-
-        f:RegisterEvent("PLAYER_DEAD")
-        f:RegisterEvent("PLAYER_ALIVE")
-        f:RegisterEvent("PLAYER_UNGHOST")
-        f:RegisterEvent("PLAYER_ENTERING_WORLD")
-
-        local function _MSUF_RefreshPlayerLifeState()
-            local uf = _G.MSUF_UnitFrames
-            if type(uf) ~= "table" then return end
-
-            local pf = uf.player
-            if pf then
-                MSUF_UpdateStatusIndicatorForFrame(pf)
-            end
-
-            local UnitIsUnit = _G.UnitIsUnit
-            if UnitIsUnit then
-                local tf = uf.target
-                if tf and UnitIsUnit("target", "player") then
-                    MSUF_UpdateStatusIndicatorForFrame(tf)
-                end
-                local ff = uf.focus
-                if ff and UnitIsUnit("focus", "player") then
-                    MSUF_UpdateStatusIndicatorForFrame(ff)
-                end
-                local ttf = uf.targettarget
-                if ttf and UnitIsUnit("targettarget", "player") then
-                    MSUF_UpdateStatusIndicatorForFrame(ttf)
-                end
-            end
-        end
-
-        f:SetScript("OnEvent", _MSUF_RefreshPlayerLifeState)
-    end
  end
 -- Keep a compatibility stub because older code may call this helper.
 do
