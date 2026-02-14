@@ -534,6 +534,36 @@ end
 -- Uses duration objects (secret-safe pass-through)
 -- ────────────────────────────────────────────────────────────────
 
+
+local function ClearCooldownVisual(icon, cd)
+    if not icon or not cd then return end
+
+    -- Unregister from the cooldown text manager to prevent stale updates.
+    CT = CT or (API and API.CooldownText)
+    if CT and CT.UnregisterIcon then
+        CT.UnregisterIcon(icon)
+    end
+
+    -- Clear swipe/timer state (works across template variants).
+    if cd.Clear then cd:Clear() end
+    if cd.SetCooldown then cd:SetCooldown(0, 0) end
+
+    -- Force-hide countdown numbers when no timer is present (prevents stale text).
+    if cd.SetHideCountdownNumbers then
+        cd:SetHideCountdownNumbers(true)
+    end
+
+    -- If we already discovered the cooldown fontstring, clear its text.
+    local fs = cd._msufCooldownFontString
+    if fs and fs ~= false and fs.SetText then
+        fs:SetText("")
+    end
+
+    icon._msufA2_durationObj = nil
+    cd._msufA2_durationObj = nil
+    icon._msufA2_lastHadTimer = false
+end
+
 local function ApplyCooldownTextStyle(icon, cd, now, force)
     if not icon or not cd then return end
     if icon._msufA2_hideCDNumbers == true then return end
@@ -544,20 +574,14 @@ local function ApplyCooldownTextStyle(icon, cd, now, force)
     local offY = icon._msufA2_cooldownTextOffsetY or 0
 
     local fs = cd._msufCooldownFontString
-
--- Prefer render-flush timestamp to avoid per-icon GetTime() calls.
-if type(now) ~= "number" then
-    local st = API and API.state
-    local stNow = st and st.now
-    if type(stNow) == "number" then
-        now = stNow
-    end
-end
     if fs == false then fs = nil end
 
-    -- If the font string isn't discovered yet, only attempt discovery when a timestamp is provided.
-    if not fs and type(now) == "number" then
-        CT = CT or API.CooldownText
+    -- Only discover the cooldown fontstring when needed (rare) to keep hot paths cheap.
+    if not fs then
+        if type(now) ~= "number" then
+            now = GetTime()
+        end
+        CT = CT or (API and API.CooldownText)
         local getfs = CT and CT.GetCooldownFontString
         if type(getfs) == "function" then
             fs = getfs(icon, now)
@@ -565,7 +589,9 @@ end
     end
 
     if not fs then return end
+    cd._msufCooldownFontString = fs
 
+    -- Apply size (only when changed)
     if cd._msufA2_cdTextSize ~= size and fs.GetFont and fs.SetFont then
         local font, _, flags = fs:GetFont()
         if font then
@@ -574,6 +600,7 @@ end
         cd._msufA2_cdTextSize = size
     end
 
+    -- Apply offsets (only when changed)
     if cd._msufA2_cdTextOffX ~= offX or cd._msufA2_cdTextOffY ~= offY then
         cd._msufA2_cdTextOffX = offX
         cd._msufA2_cdTextOffY = offY
@@ -585,11 +612,6 @@ end
 function Icons._ApplyTimer(icon, unit, aid, shared)
     local cd = icon.cooldown
     if not cd then return end
-
-    -- Use cached shared flags (refreshed per configGen in CommitIcon/RefreshAssignedIcons)
-    cd:SetDrawSwipe(_showSwipe)
-    cd:SetReverse(_swipeReverse)
-    cd:SetHideCountdownNumbers(not _showText)
 
     local hadTimer = false
 
@@ -618,14 +640,16 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
         cd._msufA2_durationObj = obj
     end
 
-    if not hadTimer then
-        local hasExp = _hasExpirationFast and _hasExpirationFast(unit, aid)
-        if hasExp == false then
-            if cd.Clear then cd:Clear() end
-            if cd.SetCooldown then cd:SetCooldown(0, 0) end
-            icon._msufA2_durationObj = nil
-            cd._msufA2_durationObj = nil
-        end
+    -- Apply shared visual flags.
+    -- Important: permanent auras must force-hide countdown numbers to prevent stale text.
+    cd:SetDrawSwipe(_showSwipe)
+    cd:SetReverse(_swipeReverse)
+    if hadTimer then
+        cd:SetHideCountdownNumbers(not _showText)
+    else
+        -- No duration object => treat as "no timer" and clear any old visuals.
+        -- We intentionally do NOT rely on DoesAuraHaveExpirationTime here because it can be secret.
+        ClearCooldownVisual(icon, cd)
     end
 
     -- Cooldown text manager integration (CT already bound by CommitIcon)
@@ -635,7 +659,8 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
         if wantText and hadTimer then
             if CT.RegisterIcon then CT.RegisterIcon(icon) end
             if CT.TouchIcon then CT.TouchIcon(icon) end
-        elseif icon._msufA2_cdMgrRegistered and CT.UnregisterIcon then
+        elseif CT.UnregisterIcon then
+            -- Ensure stale registrations are removed when the aura has no timer.
             CT.UnregisterIcon(icon)
         end
     end
@@ -653,10 +678,18 @@ function Icons._RefreshTimer(icon, unit, aid, shared)
     local cd = icon.cooldown
     if not cd then return end
 
+    local obj = _getDurationFast and _getDurationFast(unit, aid)
+    if not obj then
+        -- If this icon previously had a timer, clear stale text/swipe now.
+        if icon._msufA2_lastHadTimer == true or cd._msufA2_durationObj ~= nil then
+            ClearCooldownVisual(icon, cd)
+        end
+        return
+    end
+
     -- Use cached shared flags (no shared table reads)
     if not _showSwipe and not _showText then return end
 
-    local obj = _getDurationFast and _getDurationFast(unit, aid)
     if obj then
         -- Use cached method ref (set by _ApplyTimer)
         local cdSetFn = cd._msufA2_cdSetFn
