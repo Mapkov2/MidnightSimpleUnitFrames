@@ -5634,6 +5634,11 @@ uconf.layout = uconf.layout or {}
             cooldownTextOffsetX = clampOff(cooldownTextOffsetX)
             cooldownTextOffsetY = clampOff(cooldownTextOffsetY)
 
+            -- IMPORTANT: Only write offsets when they previously existed OR the user changed them.
+            -- If we always clear them to nil, the popup X/Y controls appear "dead".
+            local writeStackOffsets = haveStackOffsets or isDirty('stackTextOffsetX') or isDirty('stackTextOffsetY')
+            local writeCooldownOffsets = haveCooldownOffsets or isDirty('cooldownTextOffsetX') or isDirty('cooldownTextOffsetY')
+
 local function ApplyLayoutToUnit(k) 
     a2db.perUnit[k] = a2db.perUnit[k] or {}
     local uc = a2db.perUnit[k]
