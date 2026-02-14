@@ -15,7 +15,6 @@
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
-
 -- =========================================================================
 -- PERF LOCALS (Auras2 runtime)
 --  - Reduce global table lookups in high-frequency aura pipelines.
@@ -59,6 +58,7 @@ local A2_STATE = API.state
 local type = type
 local pairs = pairs
 local CreateFrame = CreateFrame
+local C_Timer = C_Timer
 local GetTime = GetTime
 local UnitExists = UnitExists
 local floor = math.floor
@@ -200,6 +200,15 @@ end
 -- Config invalidation
 local _configGen = 0
 
+local function _A2_PostInvalidate()
+    -- Rebuild DB/cache and realign event registration after an options change.
+    EnsureDB()
+    local Ev = API.Events
+    if Ev and Ev.ApplyEventRegistration then
+        Ev.ApplyEventRegistration()
+    end
+end
+
 local function InvalidateDB()
     _ensureReady = false
     _lastDB = nil
@@ -209,8 +218,19 @@ local function InvalidateDB()
     if API.Colors and API.Colors.InvalidateCache then API.Colors.InvalidateCache() end
     Icons = API.Icons or API.Apply
     if Icons and Icons.BumpConfigGen then Icons.BumpConfigGen() end
-    -- Schedule refresh
+
+    -- Schedule refresh (force all units, incl. newly disabled ones)
     if API.MarkAllDirty then API.MarkAllDirty(0) end
+
+    -- Rebind events next frame so enable/disable + caps/layout changes take effect immediately.
+    local Ev = API.Events
+    if Ev and Ev.ApplyEventRegistration then
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, _A2_PostInvalidate)
+        else
+            _A2_PostInvalidate()
+        end
+    end
 end
 
 API.InvalidateDB = InvalidateDB
@@ -1007,22 +1027,30 @@ end
 -- Public API
 -- ────────────────────────────────────────────────────────────────
 
+local function MarkDirtyForce(unit, delay)
+    -- Force-dirty helper: bypass UnitEnabled/UnitExists gating so disable/hide applies immediately.
+    if not unit then return end
+
+    -- Dedupe, but still ensure a flush is scheduled.
+    if DirtyMark[unit] == DirtyGen then
+        FlushScheduled = true
+        ScheduleFlush(delay or 0)
+        return
+    end
+
+    DirtyAdd(unit)
+    FlushScheduled = true
+    ScheduleFlush(delay or 0)
+end
+
 local function MarkAllDirty(delay)
-    local DB = API.DB
-    local c = DB and DB.cache
-    local ue = c and c.unitEnabled
-    if ue then
-        if ue.player then MarkDirty("player", delay) end
-        if ue.target then MarkDirty("target", delay) end
-        if ue.focus then MarkDirty("focus", delay) end
-        for i = 1, 5 do
-            if ue[_BOSS_UNITS[i]] then MarkDirty(_BOSS_UNITS[i], delay) end
-        end
-    else
-        MarkDirty("player", delay)
-        MarkDirty("target", delay)
-        MarkDirty("focus", delay)
-        for i = 1, 5 do MarkDirty(_BOSS_UNITS[i], delay) end
+    -- IMPORTANT: Mark *all* units dirty, even if just disabled or the unit doesn't currently exist.
+    -- We need the next Flush() to run so anchors/icons are hidden immediately (no "stuck on until a later UNIT_AURA").
+    MarkDirtyForce("player", delay)
+    MarkDirtyForce("target", delay)
+    MarkDirtyForce("focus", delay)
+    for i = 1, 5 do
+        MarkDirtyForce(_BOSS_UNITS[i], delay)
     end
 end
 
@@ -1118,8 +1146,12 @@ API.Flush = Flush
 
 -- RequestApply: called by Options after any settings change (checkboxes, sliders, etc.)
 -- Must bump configGen so CommitIcon diff-gate triggers a full re-apply (highlights, timers, etc.)
-API.RequestApply = function()
+local function _A2_RequestApply_FromRender()
+    if API.Init then API.Init() end
     InvalidateDB()
+end
+if type(API.RequestApply) ~= "function" then
+    API.RequestApply = _A2_RequestApply_FromRender
 end
 
 -- Global wrappers for backward compat
@@ -1156,13 +1188,20 @@ function API.Init()
     if API._renderInited then return end
     API._renderInited = true
 
-    -- Prime DB so all caches are warm
+    -- Prime DB so all caches are warm (also makes DB/cache ready for Events binding)
     EnsureDB()
 
-    -- If Events module is already loaded, initialize it
     local Ev = API.Events
     if Ev and Ev.Init then
         Ev.Init()
+    end
+    if Ev and Ev.ApplyEventRegistration then
+        Ev.ApplyEventRegistration()
+    end
+
+    -- One-shot full render on init so auras show immediately even if early events were missed.
+    if API.MarkAllDirty then
+        API.MarkAllDirty(0)
     end
 end
 

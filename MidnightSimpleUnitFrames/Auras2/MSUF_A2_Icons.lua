@@ -30,7 +30,6 @@ local C_Timer = C_Timer
 local C_UnitAuras = C_UnitAuras
 local C_Secrets = C_Secrets
 local C_CurveUtil = C_CurveUtil
-
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 
@@ -100,6 +99,70 @@ local function RefreshSharedFlags(shared, gen)
     _wantBuffHL   = (shared and shared.highlightOwnBuffs == true) or false
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
 end
+
+-- ────────────────────────────────────────────────────────────────
+-- Text config resolution (per-icon; cached by configGen)
+-- Zero per-frame cost: runs only when configGen changes.
+-- ────────────────────────────────────────────────────────────────
+
+local function ResolveTextConfig(icon, unit, shared, gen)
+    if not icon then return end
+    if icon._msufA2_textCfgGen == gen then return end
+    icon._msufA2_textCfgGen = gen
+
+    local stackSize = (shared and shared.stackTextSize) or 14
+    local cdSize = (shared and shared.cooldownTextSize) or 14
+
+    local stackOffX = (shared and shared.stackTextOffsetX)
+    if type(stackOffX) ~= "number" then stackOffX = -1 end
+    local stackOffY = (shared and shared.stackTextOffsetY)
+    if type(stackOffY) ~= "number" then stackOffY = 1 end
+    local cdOffX = (shared and shared.cooldownTextOffsetX) or 0
+    local cdOffY = (shared and shared.cooldownTextOffsetY) or 0
+
+    -- Per-unit overrides (a2.perUnit[unit].layout)
+    local a2 = nil
+    local DB = API and API.DB
+    local cache = DB and DB.cache
+    if cache and cache.ready and type(cache.a2) == "table" then
+        a2 = cache.a2
+    else
+        -- Fallback for early load-order: query via API.GetDB if present
+        local getdb = API and API.GetDB
+        if type(getdb) == "function" then
+            local aa, ss = getdb()
+            if type(aa) == "table" then a2 = aa end
+            if not shared and type(ss) == "table" then shared = ss end
+        end
+    end
+
+    local pu = a2 and a2.perUnit and unit and a2.perUnit[unit]
+    if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
+        local lay = pu.layout
+        if type(lay.stackTextSize) == "number" then stackSize = lay.stackTextSize end
+        if type(lay.cooldownTextSize) == "number" then cdSize = lay.cooldownTextSize end
+
+        if type(lay.stackTextOffsetX) == "number" then stackOffX = lay.stackTextOffsetX end
+        if type(lay.stackTextOffsetY) == "number" then stackOffY = lay.stackTextOffsetY end
+        if type(lay.cooldownTextOffsetX) == "number" then cdOffX = lay.cooldownTextOffsetX end
+        if type(lay.cooldownTextOffsetY) == "number" then cdOffY = lay.cooldownTextOffsetY end
+    end
+
+    if type(stackSize) ~= "number" or stackSize <= 0 then stackSize = 14 end
+    if type(cdSize) ~= "number" or cdSize <= 0 then cdSize = 14 end
+    if type(stackOffX) ~= "number" then stackOffX = 0 end
+    if type(stackOffY) ~= "number" then stackOffY = 0 end
+    if type(cdOffX) ~= "number" then cdOffX = 0 end
+    if type(cdOffY) ~= "number" then cdOffY = 0 end
+
+    icon._msufA2_stackTextSize = stackSize
+    icon._msufA2_cooldownTextSize = cdSize
+    icon._msufA2_stackTextOffsetX = stackOffX
+    icon._msufA2_stackTextOffsetY = stackOffY
+    icon._msufA2_cooldownTextOffsetX = cdOffX
+    icon._msufA2_cooldownTextOffsetY = cdOffY
+end
+
 
 -- DB access
 local function GetAuras2DB()
@@ -421,6 +484,8 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     last.gen = gen
     last.isOwn = isOwn
 
+    ResolveTextConfig(icon, unit, shared, gen)
+
     -- 1. Texture (only when aid changed)
     if icon._msufA2_lastTexAid ~= aid then
         icon._msufA2_lastTexAid = aid
@@ -452,6 +517,45 @@ end
 -- Timer application (cooldown swipe + text)
 -- Uses duration objects (secret-safe pass-through)
 -- ────────────────────────────────────────────────────────────────
+
+local function ApplyCooldownTextStyle(icon, cd, now, force)
+    if not icon or not cd then return end
+    if icon._msufA2_hideCDNumbers == true then return end
+    if not force and _showText ~= true then return end
+
+    local size = icon._msufA2_cooldownTextSize or 14
+    local offX = icon._msufA2_cooldownTextOffsetX or 0
+    local offY = icon._msufA2_cooldownTextOffsetY or 0
+
+    local fs = cd._msufCooldownFontString
+    if fs == false then fs = nil end
+
+    -- If the font string isn't discovered yet, only attempt discovery when a timestamp is provided.
+    if not fs and type(now) == "number" then
+        CT = CT or API.CooldownText
+        local getfs = CT and CT.GetCooldownFontString
+        if type(getfs) == "function" then
+            fs = getfs(icon, now)
+        end
+    end
+
+    if not fs then return end
+
+    if cd._msufA2_cdTextSize ~= size and fs.GetFont and fs.SetFont then
+        local font, _, flags = fs:GetFont()
+        if font then
+            fs:SetFont(font, size, flags)
+        end
+        cd._msufA2_cdTextSize = size
+    end
+
+    if cd._msufA2_cdTextOffX ~= offX or cd._msufA2_cdTextOffY ~= offY then
+        cd._msufA2_cdTextOffX = offX
+        cd._msufA2_cdTextOffY = offY
+        fs:ClearAllPoints()
+        fs:SetPoint("CENTER", cd, "CENTER", offX, offY)
+    end
+end
 
 function Icons._ApplyTimer(icon, unit, aid, shared)
     local cd = icon.cooldown
@@ -516,6 +620,11 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
         end
     end
 
+    -- Apply cooldown text font size + offsets (needs fontstring discovery once)
+    if hadTimer and _showText == true and icon._msufA2_hideCDNumbers ~= true then
+        ApplyCooldownTextStyle(icon, cd, GetTime())
+    end
+
     icon._msufA2_lastHadTimer = hadTimer
 end
 
@@ -557,6 +666,11 @@ function Icons._RefreshTimer(icon, unit, aid, shared)
 
         CT = CT or API.CooldownText
         if CT and CT.TouchIcon then CT.TouchIcon(icon) end
+
+        -- Keep cooldown text style in sync when refreshing (no font discovery here)
+        if _showText == true and icon._msufA2_hideCDNumbers ~= true then
+            ApplyCooldownTextStyle(icon, cd, nil)
+        end
     end
 end
 
@@ -571,61 +685,88 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
     local countFS = icon.count
     if not countFS then return end
 
-    -- Use cached shared flag (no shared table read)
-    if not _showStacks then
-        if icon._msufA2_lastStackText then
-            countFS:SetText("")
-            countFS:Hide()
-            icon._msufA2_lastStackText = nil
+    -- Ensure per-icon text config is resolved for this configGen
+    local gen = (icon._msufA2_lastCommit and icon._msufA2_lastCommit.gen) or _configGen
+    ResolveTextConfig(icon, unit, shared, gen)
+
+    -- Apply stack font size (only when changed)
+    local wantSize = icon._msufA2_stackTextSize or 14
+    if icon._msufA2_lastStackFontSize ~= wantSize and countFS.GetFont and countFS.SetFont then
+        local font, _, flags = countFS:GetFont()
+        if font then
+            countFS:SetFont(font, wantSize, flags)
         end
-        return
+        icon._msufA2_lastStackFontSize = wantSize
     end
 
-    local stacks = _getStackCountFast and _getStackCountFast(unit, aid)
-    if type(stacks) == "number" and stacks >= 2 then
-        -- Only SetText when value changed
-        if icon._msufA2_lastStackText ~= stacks then
-            countFS:SetText(stacks)
-            icon._msufA2_lastStackText = stacks
-        end
-        countFS:Show()
-    else
-        if icon._msufA2_lastStackText then
-            countFS:SetText("")
-            icon._msufA2_lastStackText = nil
-        end
-        countFS:Hide()
-        return
-    end
-
-    -- Anchor: only reposition when anchor setting changed
+    -- Anchor style (justify) + offsets
     local anchor = stackCountAnchor or "TOPRIGHT"
-    if icon._msufA2_lastStackAnchor ~= anchor then
-        icon._msufA2_lastStackAnchor = anchor
+    if icon._msufA2_lastStackJustifyAnchor ~= anchor then
+        icon._msufA2_lastStackJustifyAnchor = anchor
+
+        if anchor == "TOPLEFT" or anchor == "BOTTOMLEFT" then
+            countFS:SetJustifyH("LEFT")
+        else
+            countFS:SetJustifyH("RIGHT")
+        end
+        if anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT" then
+            countFS:SetJustifyV("BOTTOM")
+        else
+            countFS:SetJustifyV("TOP")
+        end
+    end
+
+    local offX = icon._msufA2_stackTextOffsetX or 0
+    local offY = icon._msufA2_stackTextOffsetY or 0
+    if icon._msufA2_lastStackPointAnchor ~= anchor
+        or icon._msufA2_lastStackPointX ~= offX
+        or icon._msufA2_lastStackPointY ~= offY
+    then
+        icon._msufA2_lastStackPointAnchor = anchor
+        icon._msufA2_lastStackPointX = offX
+        icon._msufA2_lastStackPointY = offY
+
         countFS:ClearAllPoints()
         if anchor == "TOPLEFT" then
-            countFS:SetPoint("TOPLEFT", icon, "TOPLEFT", 1, -1)
-            countFS:SetJustifyH("LEFT")
+            countFS:SetPoint("TOPLEFT", icon, "TOPLEFT", offX, offY)
         elseif anchor == "BOTTOMLEFT" then
-            countFS:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 1, 1)
-            countFS:SetJustifyH("LEFT")
+            countFS:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", offX, offY)
         elseif anchor == "BOTTOMRIGHT" then
-            countFS:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
-            countFS:SetJustifyH("RIGHT")
+            countFS:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", offX, offY)
         else
-            countFS:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -1, -1)
-            countFS:SetJustifyH("RIGHT")
+            countFS:SetPoint("TOPRIGHT", icon, "TOPRIGHT", offX, offY)
         end
     end
 
-    -- Color: cache to avoid _G lookup per icon
-    local gen = _configGen
-    if _stackColorGen ~= gen then
-        _stackR, _stackG, _stackB = GetStackCountRGB()
-        _stackColorGen = gen
+    -- Shared flags cache determines if stack display is enabled.
+    if not _showStacks then
+        if countFS.IsShown and countFS:IsShown() then countFS:Hide() end
+        return
     end
-    countFS:SetTextColor(_stackR, _stackG, _stackB)
+
+    local count = _getStackCountFast and _getStackCountFast(unit, aid)
+    if type(count) == "number" and count > 1 then
+        countFS:SetText(count)
+
+        if _showOwnHighlight and shared and shared.ownStackCountColor then
+            if icon._msufA2_lastCommit and icon._msufA2_lastCommit.isOwn == true then
+                local r, g, b = GetStackCountRGB(shared)
+                countFS:SetTextColor(r, g, b)
+            else
+                countFS:SetTextColor(1, 1, 1)
+            end
+        else
+            countFS:SetTextColor(1, 1, 1)
+        end
+
+        if not countFS.IsShown or not countFS:IsShown() then
+            countFS:Show()
+        end
+    else
+        if countFS.IsShown and countFS:IsShown() then countFS:Hide() end
+    end
 end
+
 
 -- ────────────────────────────────────────────────────────────────
 -- Own-aura highlight
@@ -698,6 +839,7 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
             if icon and icon:IsShown() then
                 aid = icon._msufAuraInstanceID
                 if aid then
+                    ResolveTextConfig(icon, unit, shared, _configGen)
                     Icons._RefreshTimer(icon, unit, aid, shared)
                     Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
                 end
@@ -713,6 +855,7 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
             if icon and icon:IsShown() then
                 aid = icon._msufAuraInstanceID
                 if aid then
+                    ResolveTextConfig(icon, unit, shared, _configGen)
                     Icons._RefreshTimer(icon, unit, aid, shared)
                     Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
                 end
@@ -728,6 +871,7 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
             if icon and icon:IsShown() then
                 aid = icon._msufAuraInstanceID
                 if aid then
+                    ResolveTextConfig(icon, unit, shared, _configGen)
                     Icons._RefreshTimer(icon, unit, aid, shared)
                     Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
                 end
@@ -815,21 +959,113 @@ end
 
 -- Font application helpers (referenced by Options/Fonts)
 function Apply.ApplyFontsFromGlobal()
-    -- Iterate all icons and re-apply font sizes
+    -- Iterate all active icons and re-apply text settings (no layout rebuild)
     local state = API.state
     local aby = state and state.aurasByUnit
     if not aby then return end
+
+    local a2, shared = GetAuras2DB()
+    if type(shared) ~= "table" then return end
+
     for _, entry in pairs(aby) do
         if entry then
-            Icons.RefreshAssignedIcons(entry, entry.unit, nil, nil)
+            local unit = entry.unit
+            local stackCountAnchor = shared.stackCountAnchor
+
+            -- Respect per-unit stack anchor overrides
+            local pu = a2 and a2.perUnit and unit and a2.perUnit[unit]
+            if pu and pu.overrideSharedLayout == true and type(pu.layoutShared) == "table" then
+                local v = pu.layoutShared.stackCountAnchor
+                if type(v) == "string" then
+                    stackCountAnchor = v
+                end
+            end
+
+            Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
         end
     end
 end
 
 -- Text offset stubs (Edit Mode references)
-Apply.ApplyCooldownTextOffsets = Apply.ApplyCooldownTextOffsets or function() end
-Apply.ApplyStackTextOffsets = Apply.ApplyStackTextOffsets or function() end
-Apply.ApplyStackCountAnchorStyle = Apply.ApplyStackCountAnchorStyle or function() end
+
+function Apply.ApplyStackCountAnchorStyle(icon, stackCountAnchor)
+    local countFS = icon and icon.count
+    if not countFS then return end
+
+    local anchor = stackCountAnchor or "TOPRIGHT"
+    if icon._msufA2_lastStackJustifyAnchor ~= anchor then
+        icon._msufA2_lastStackJustifyAnchor = anchor
+
+        if anchor == "TOPLEFT" or anchor == "BOTTOMLEFT" then
+            countFS:SetJustifyH("LEFT")
+        else
+            countFS:SetJustifyH("RIGHT")
+        end
+        if anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT" then
+            countFS:SetJustifyV("BOTTOM")
+        else
+            countFS:SetJustifyV("TOP")
+        end
+    end
+end
+
+function Apply.ApplyStackTextOffsets(icon, unit, shared, stackCountAnchor)
+    local countFS = icon and icon.count
+    if not countFS then return end
+
+    ResolveTextConfig(icon, unit, shared, _configGen)
+
+    -- Font size
+    local wantSize = icon._msufA2_stackTextSize or 14
+    if icon._msufA2_lastStackFontSize ~= wantSize and countFS.GetFont and countFS.SetFont then
+        local font, _, flags = countFS:GetFont()
+        if font then
+            countFS:SetFont(font, wantSize, flags)
+        end
+        icon._msufA2_lastStackFontSize = wantSize
+    end
+
+    -- Anchor style + offsets
+    local anchor = stackCountAnchor or "TOPRIGHT"
+    Apply.ApplyStackCountAnchorStyle(icon, anchor)
+
+    local offX = icon._msufA2_stackTextOffsetX or 0
+    local offY = icon._msufA2_stackTextOffsetY or 0
+    if icon._msufA2_lastStackPointAnchor ~= anchor
+        or icon._msufA2_lastStackPointX ~= offX
+        or icon._msufA2_lastStackPointY ~= offY
+    then
+        icon._msufA2_lastStackPointAnchor = anchor
+        icon._msufA2_lastStackPointX = offX
+        icon._msufA2_lastStackPointY = offY
+
+        countFS:ClearAllPoints()
+        if anchor == "TOPLEFT" then
+            countFS:SetPoint("TOPLEFT", icon, "TOPLEFT", offX, offY)
+        elseif anchor == "BOTTOMLEFT" then
+            countFS:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", offX, offY)
+        elseif anchor == "BOTTOMRIGHT" then
+            countFS:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", offX, offY)
+        else
+            countFS:SetPoint("TOPRIGHT", icon, "TOPRIGHT", offX, offY)
+        end
+    end
+end
+
+function Apply.ApplyCooldownTextOffsets(icon, unit, shared)
+    local cd = icon and icon.cooldown
+    if not cd then return end
+
+    ResolveTextConfig(icon, unit, shared, _configGen)
+
+    -- Ensure fontstring is discovered (safe: uses cached retry logic in cooldown module)
+    CT = CT or API.CooldownText
+    local getfs = CT and CT.GetCooldownFontString
+    if type(getfs) ~= "function" then return end
+
+    local now = GetTime()
+    ApplyCooldownTextStyle(icon, cd, now, true)
+end
 
 API.ApplyFontsFromGlobal = Apply.ApplyFontsFromGlobal
 

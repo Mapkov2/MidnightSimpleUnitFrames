@@ -30,7 +30,6 @@ local C_Timer = C_Timer
 local C_UnitAuras = C_UnitAuras
 local C_Secrets = C_Secrets
 local C_CurveUtil = C_CurveUtil
-
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 
@@ -96,23 +95,6 @@ end
 -- (Later this can be gated behind a toggle.)
 -- ---------------------------------------------------------------------------
 
-local _ShouldUnitAuraBeSecret = C_Secrets and C_Secrets.ShouldUnitAuraInstanceBeSecret
-
-local function IsSafeTimedAura(unit, aid)
-    -- If the API isn't available, treat as "not safe-timed" so we never hide.
-    if type(_doesExpire) ~= "function" then return false end
-
-    -- Secret aura? Never filter based on timing.
-    if type(_ShouldUnitAuraBeSecret) == "function" and _ShouldUnitAuraBeSecret(unit, aid) == true then
-        return false
-    end
-
-    local v = _doesExpire(unit, aid)
-    if IsSV(v) then return false end
-    if type(v) == "boolean" then return (v == true) end
-    if type(v) == "number" then return (v > 0) end
-    return false
-end
 
 -- NOTE: secretsActive parameter passed in (hoisted from loop)
 local function IsPermanentAura(unit, aid, secretsNow)
@@ -234,11 +216,6 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
             if aid ~= nil then
                 local skip = false
                 local isPlayerAura = false
-
-                -- TEST: hide safe-timed auras (expiration readable and non-secret)
-                if IsSafeTimedAura(unit, aid) then
-                    skip = true
-                end
 
                 -- onlyMine filter + captures isPlayerAura as side effect
                 if onlyMine and canFilter then
