@@ -1023,6 +1023,7 @@ end
 
 
 
+
 -- Toggle: Match power bar background hue to the CURRENT health bar color.
 -- Stored under MSUF_DB.general.powerBarBgMatchHPColor.
 -- Backward-compatible: also mirrors MSUF_DB.bars.powerBarBgMatchBarColor (legacy location).
@@ -2048,6 +2049,59 @@ end
         end)
     end)
 
+    
+    -- Local helpers: Dispel border (outline indicator) color
+    -- Keep these inside the panel builder to avoid hitting WoW's 60-upvalue limit.
+    local function GetDispelBorderColor()
+        local defR, defG, defB = 0.25, 0.75, 1.00
+        if EnsureDB and MSUF_DB then
+            EnsureDB()
+            MSUF_DB.general = MSUF_DB.general or {}
+            local g = MSUF_DB.general
+            local r = g.dispelBorderColorR
+            local gg = g.dispelBorderColorG
+            local b = g.dispelBorderColorB
+            if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+                return r, gg, b
+            end
+        end
+        return defR, defG, defB
+    end
+
+    local function SetDispelBorderColor(r, g, b)
+        if not EnsureDB or not MSUF_DB then return end
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        local gen = MSUF_DB.general
+        gen.dispelBorderColorR = r
+        gen.dispelBorderColorG = g
+        gen.dispelBorderColorB = b
+        PushVisualUpdates()
+    end
+
+-- Dispel border (outline indicator)
+    local dispelLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    dispelLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 4 * rowH)
+    dispelLabel:SetJustifyH("LEFT")
+    dispelLabel:SetText("Dispel Border Color")
+
+    local dispelSwatch = CreateFrame("Button", "MSUF_Colors_DispelBorderSwatch", content)
+    dispelSwatch:SetSize(barSwatchW, 16)
+    dispelSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 4 * rowH)
+
+    panel.__MSUF_ExtraColorDispelBorderTex = dispelSwatch:CreateTexture(nil, "ARTWORK")
+    panel.__MSUF_ExtraColorDispelBorderTex:SetAllPoints()
+    panel.__MSUF_ExtraColorDispelBorderTex:SetColorTexture(GetDispelBorderColor())
+
+    dispelSwatch:SetScript("OnClick", function()
+        local r, g, b = GetDispelBorderColor()
+        OpenColorPicker(r, g, b, function(nr, ng, nb)
+            SetDispelBorderColor(nr, ng, nb)
+            local tex = panel.__MSUF_ExtraColorDispelBorderTex
+            if tex then tex:SetColorTexture(nr, ng, nb) end
+        end)
+    end)
+
     -- Reset (kept for 0-regression; affects both columns)
     local npcResetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
     npcResetBtn:SetSize(160, 22)
@@ -2065,6 +2119,7 @@ end
                         gen.healAbsorbBarColorR, gen.healAbsorbBarColorG, gen.healAbsorbBarColorB = nil, nil, nil
                         gen.powerBarBgColorR, gen.powerBarBgColorG, gen.powerBarBgColorB = nil, nil, nil
                         gen.aggroBorderColorR, gen.aggroBorderColorG, gen.aggroBorderColorB = nil, nil, nil
+                        gen.dispelBorderColorR, gen.dispelBorderColorG, gen.dispelBorderColorB = nil, nil, nil
             
                         gen.powerBarBgMatchHPColor = nil
                         MSUF_DB.bars = MSUF_DB.bars or {}
@@ -2104,6 +2159,11 @@ end
                     local pTex = panel.__MSUF_ExtraColorPowerBgTex
                     if pTex then
                         pTex:SetColorTexture(GetPowerBarBackgroundColor())
+                    end
+
+                    local dTex = panel.__MSUF_ExtraColorDispelBorderTex
+                    if dTex then
+                        dTex:SetColorTexture(GetDispelBorderColor())
                     end
                     local agTex = panel.__MSUF_ExtraColorAggroBorderTex
                     if agTex then
