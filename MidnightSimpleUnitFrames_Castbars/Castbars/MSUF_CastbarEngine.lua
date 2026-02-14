@@ -12,11 +12,20 @@
 local addonName, ns = ...
 ns = ns or {}
 
+-- P3 Fix #16 + #10: Local FastCall cache + frame-tick BuildState cache.
+local MSUF_FastCall = MSUF_FastCall or function(...) return pcall(...) end
+
 local Registry = ns.MSUF_CastbarRegistry  -- loaded earlier in the TOC
 local Style    = ns.MSUF_CastbarStyle     -- loaded earlier in the TOC
 
 ns.MSUF_CastbarEngine = ns.MSUF_CastbarEngine or {}
 local E = ns.MSUF_CastbarEngine
+
+-- P3 Fix #16: Per-unit frame-tick cache.
+-- When BuildState is called multiple times for the same unit in the same game frame
+-- (same GetTime() value), return the cached result instead of re-querying WoW APIs.
+-- This avoids redundant UnitCastingInfo + UnitChannelInfo calls during event dispatch.
+local _buildCacheTime = {}  -- unit -> GetTime() of last build
 
 E.VERSION = 3
 E._subs  = E._subs  or {}  -- key -> { callbacks }
@@ -89,14 +98,13 @@ end
 --
 -- IMPORTANT: This does not apply anything to frames.
 
-local function EnsureDBSafe()
-    if type(EnsureDB) == "function" then
-        EnsureDB()
-    end
+-- Phase 1A: Use shared _G.MSUF_EnsureDBLazy (defined in Utils, loaded earlier).
+local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
+    if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
 end
 
 local function GetFillDirectionReverseFor(castType)
-    EnsureDBSafe()
+    _EnsureDBLazy()
     local g = (MSUF_DB and MSUF_DB.general) or {}
 
     local baseReverse = (g.castbarFillDirection == "RTL") and true or false
@@ -129,13 +137,7 @@ local function DetectEmpower(unit)
     -- Best-effort: if empower stage API exists and stage count > 0 while casting, treat as empower.
     if type(GetUnitEmpowerStageCount) ~= "function" then return false end
 
-    local ok, c
-    if type(MSUF_FastCall) == "function" then
-        ok, c = MSUF_FastCall(GetUnitEmpowerStageCount, unit)
-    else
-        ok = true
-        c = GetUnitEmpowerStageCount(unit)
-    end
+    local ok, c = MSUF_FastCall(GetUnitEmpowerStageCount, unit)
 
     -- Secret-safe: convert and compare only plain numbers.
     if ok then
@@ -150,6 +152,13 @@ end
 
 function E:BuildState(unit, frameHint)
     if not unit then return { active = false } end
+
+    -- P3 Fix #16: Frame-tick cache — if already built for this unit in this game frame, return cached.
+    local now = GetTime()
+    if _buildCacheTime[unit] == now and E._state[unit] then
+        return E._state[unit]
+    end
+    _buildCacheTime[unit] = now
 
     local state = E._state[unit]
     if not state then
@@ -195,12 +204,8 @@ function E:BuildState(unit, frameHint)
 
         -- Duration object (if available)
         if type(UnitCastingDuration) == "function" then
-            if type(MSUF_FastCall) == "function" then
-                local ok, d = MSUF_FastCall(UnitCastingDuration, unit)
-                if ok then state.durationObj = d end
-            else
-                state.durationObj = UnitCastingDuration(unit)
-            end
+            local ok, d = MSUF_FastCall(UnitCastingDuration, unit)
+            if ok then state.durationObj = d end
         end
 
         state.reverseFill = GetFillDirectionReverseFor(state.castType)
@@ -225,12 +230,8 @@ function E:BuildState(unit, frameHint)
         state.isNotInterruptible = DetectNonInterruptible(unit, frameHint)
 
         if type(UnitChannelDuration) == "function" then
-            if type(MSUF_FastCall) == "function" then
-                local ok, d = MSUF_FastCall(UnitChannelDuration, unit)
-                if ok then state.durationObj = d end
-            else
-                state.durationObj = UnitChannelDuration(unit)
-            end
+            local ok, d = MSUF_FastCall(UnitChannelDuration, unit)
+            if ok then state.durationObj = d end
         end
 
         state.reverseFill = GetFillDirectionReverseFor(state.castType)

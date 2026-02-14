@@ -1,7 +1,7 @@
 ## Interface: 120001, 120000
 ## Title: Midnight Simple UnitFrames - Castbars
 ## Notes: Castbar LoD for MSUF
-## Author: Mapko
+## Author: Midnight
 ## Version: 2.0 Beta 6
 ## Category: Combat
 ## Dependencies: MidnightSimpleUnitFrames
@@ -12,7 +12,11 @@
 Castbars\MSUF_CastbarRegistry.lua
 Castbars\MSUF_CastbarStyle.lua
 Castbars\MSUF_CastbarUtils.lua
+Castbars\MSUF_CastbarEmpower.lua
+Castbars\MSUF_CastbarChannelTicks.lua
 Castbars\MSUF_CastbarFrames.lua
+Castbars\MSUF_CastbarAnchors.lua
+Castbars\MSUF_PlayerCastbarRuntime.lua
 Castbars\MSUF_CastbarPreviewEdit.lua
 Castbars\MSUF_CastbarPreviews.lua
 Castbars\MSUF_CastbarVisuals.lua
