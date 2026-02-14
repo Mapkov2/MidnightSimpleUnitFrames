@@ -78,7 +78,50 @@ local function MSUF_Options_ShowGradientReloadPopup()
 -- Keep a no-op stub to avoid nil errors if older UI handlers still call it.
 local function MSUF_ScheduleReloadRecommend()   end
 local castbarEnemyGroup, castbarTargetGroup, castbarFocusGroup, castbarBossGroup, castbarPlayerGroup
-local barGroup, miscGroup, profileGroup
+local barGroupHost, barGroup, miscGroup, profileGroup
+-- ---------------------------------------------------------------------------
+-- Bars menu: scroll container (same UIPanelScrollFrameTemplate method as Auras/Gameplay/Colors)
+-- ---------------------------------------------------------------------------
+local function MSUF_BarsMenu_QueueScrollUpdate()
+    local host = barGroupHost
+    local scroll = (_G and _G.MSUF_BarsMenuScrollFrame) or (host and host._msufBarsScroll) or nil
+    local child  = (_G and _G.MSUF_BarsMenuScrollChild) or (host and host._msufBarsScrollChild) or nil
+    if not (scroll and child and child.SetHeight and child.GetTop and child.GetBottom) then return end
+
+    local anchor = _G and (_G.MSUF_BarsMenuPanelRight or _G.MSUF_BarsMenuPanelLeft) or nil
+    if not (anchor and anchor.GetBottom) then anchor = barGroup end
+    if not (anchor and anchor.GetBottom) then return end
+
+    if host then
+        if host._msufBarsScrollQueued then return end
+        host._msufBarsScrollQueued = true
+    end
+
+    local function run()
+        if host then host._msufBarsScrollQueued = false end
+        if not (scroll and child and anchor) then return end
+        local top = child:GetTop()
+        local bottom = anchor:GetBottom()
+        if not (top and bottom) then return end
+
+        local h = math.ceil((top - bottom) + 24)
+        if h < 500 then h = 500 end
+        child:SetHeight(h)
+
+        local w = scroll:GetWidth()
+        if w and w > 1 then child:SetWidth(w) end
+
+        if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
+        if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, run)
+    else
+        run()
+    end
+end
+
 -- SharedMedia helper (LSM is initialized in MSUF_Libs.lua)
 local function MSUF_GetLSM()
     return (ns and ns.LSM) or _G.MSUF_LSM
@@ -774,8 +817,31 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     castbarPlayerGroup = CreateFrame("Frame", "MSUF_CastbarPlayerGroup", castbarGroup)
     castbarPlayerGroup:SetAllPoints()
     castbarPlayerGroup:Hide()
-    barGroup = CreateFrame("Frame", nil, panel)
-    barGroup:SetAllPoints()
+    -- Bars menu: make it scrollable like Auras/Gameplay/Colors (UIPanelScrollFrameTemplate).
+    -- We keep the existing absolute Y offsets by placing an inner content root 110px ABOVE the scroll child.
+    barGroupHost = CreateFrame("Frame", "MSUF_BarsMenuHost", panel)
+    barGroupHost:SetAllPoints()
+
+    local barsScroll = CreateFrame("ScrollFrame", "MSUF_BarsMenuScrollFrame", barGroupHost, "UIPanelScrollFrameTemplate")
+    barsScroll:SetPoint("TOPLEFT", barGroupHost, "TOPLEFT", 0, -110)
+    barsScroll:SetPoint("BOTTOMRIGHT", barGroupHost, "BOTTOMRIGHT", -36, 16)
+
+    local barsScrollChild = CreateFrame("Frame", "MSUF_BarsMenuScrollChild", barsScroll)
+    barsScrollChild:SetSize(1, 1)
+    barsScroll:SetScrollChild(barsScrollChild)
+
+    -- Inner root used by ALL bars widgets (same offsets as before; no layout regression).
+    barGroup = CreateFrame("Frame", "MSUF_BarsMenuContent", barsScrollChild)
+    barGroup:SetPoint("TOPLEFT", barsScrollChild, "TOPLEFT", 0, 110)
+    barGroup:SetSize(760, 1200)
+
+    -- Cache for the height updater + attach cold-path resize hooks.
+    barGroupHost._msufBarsScroll = barsScroll
+    barGroupHost._msufBarsScrollChild = barsScrollChild
+    if barGroupHost.HookScript then
+        barGroupHost:HookScript("OnShow", MSUF_BarsMenu_QueueScrollUpdate)
+        barGroupHost:HookScript("OnSizeChanged", MSUF_BarsMenu_QueueScrollUpdate)
+    end
     miscGroup = CreateFrame("Frame", nil, panel)
     miscGroup:SetAllPoints()
     profileGroup = CreateFrame("Frame", nil, panel)
@@ -820,7 +886,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             fontGroup:Show()
             auraGroup:Hide()
             castbarGroup:Hide()
-            barGroup:Hide()
+            barGroupHost:Hide()
             miscGroup:Hide()
             profileGroup:Hide()
         elseif currentTabKey == "bars" then
@@ -828,7 +894,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             fontGroup:Hide()
             auraGroup:Hide()
             castbarGroup:Hide()
-            barGroup:Show()
+            barGroupHost:Show()
             miscGroup:Hide()
             profileGroup:Hide()
         elseif currentTabKey == "auras" then
@@ -836,7 +902,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             fontGroup:Hide()
             auraGroup:Show()
             castbarGroup:Hide()
-            barGroup:Hide()
+            barGroupHost:Hide()
             miscGroup:Hide()
             profileGroup:Hide()
         elseif currentTabKey == "castbar" then
@@ -844,7 +910,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             fontGroup:Hide()
             auraGroup:Hide()
             castbarGroup:Show()
-            barGroup:Hide()
+            barGroupHost:Hide()
             miscGroup:Hide()
             profileGroup:Hide()
         elseif currentTabKey == "misc" then
@@ -852,7 +918,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             fontGroup:Hide()
             auraGroup:Hide()
             castbarGroup:Hide()
-            barGroup:Hide()
+            barGroupHost:Hide()
             miscGroup:Show()
             profileGroup:Hide()
         elseif currentTabKey == "profiles" then
@@ -860,7 +926,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             fontGroup:Hide()
             auraGroup:Hide()
             castbarGroup:Hide()
-            barGroup:Hide()
+            barGroupHost:Hide()
             miscGroup:Hide()
             profileGroup:Show()
         else
@@ -868,7 +934,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             fontGroup:Hide()
             auraGroup:Hide()
             castbarGroup:Hide()
-            barGroup:Hide()
+            barGroupHost:Hide()
             miscGroup:Hide()
             profileGroup:Hide()
             -- Player-only layout: hide the old right-column offset sliders and show the compact group.
@@ -941,7 +1007,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             castbarFocusGroup = castbarFocusGroup,
             castbarBossGroup  = castbarBossGroup,
             castbarPlayerGroup= castbarPlayerGroup,
-            barGroup          = barGroup,
+            barGroup          = barGroupHost,
             miscGroup         = miscGroup,
             profileGroup      = profileGroup,
             buttons           = buttons,
@@ -5158,6 +5224,7 @@ end
     end
     SetControlEnabled(powerBarBorderSizeEdit, (anyPBEnabled and borderEnabled), true)
  end
+ MSUF_BarsMenu_QueueScrollUpdate()
 if barGroup and barGroup.HookScript then barGroup:HookScript('OnShow', MSUF_SyncBarsTabToggles) end
 local function MSUF_BarsApplyGradient()
     -- Note to user: gradients may not fully apply until /reload (shown once to avoid spam).
