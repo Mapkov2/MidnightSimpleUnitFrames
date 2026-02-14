@@ -501,15 +501,15 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     end
     local pType, pTok
     if wantPercent then
-        pType, pTok = UnitPowerType(unit)
-        if pType == nil then return _MSUF_Bars_HidePower(bar, false) end
-        local pct
+        local okPT; okPT, pType, pTok = MSUF_FastCall(UnitPowerType, unit)
+        if not okPT then return _MSUF_Bars_HidePower(bar, false) end
+        local okPct, pct
         if CurveConstants and CurveConstants.ScaleTo100 then
-            pct = UnitPowerPercent(unit, pType, false, CurveConstants.ScaleTo100)
+            okPct, pct = MSUF_FastCall(UnitPowerPercent, unit, pType, false, CurveConstants.ScaleTo100)
         else
-            pct = UnitPowerPercent(unit, pType, false, true)
+            okPct, pct = MSUF_FastCall(UnitPowerPercent, unit, pType, false, true)
     end
-        if pct == nil then return _MSUF_Bars_HidePower(bar, false) end
+        if not okPct then return _MSUF_Bars_HidePower(bar, false) end
         ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
         MSUF_SetBarMinMax(bar, 0, 100)
         bar:SetScript("OnUpdate", nil)
@@ -1157,8 +1157,8 @@ function ns.Text.ApplyPowerTextColorByType(self, unit, enabled)
     -- Secret-safe & pass-through: avoid extra comparisons/caching; just apply resolved color.
     if not enabled then  return end
     if not (self and self.powerText and UnitPowerType) then  return end
-    local pType, pTok = UnitPowerType(unit)
-    if pType == nil then  return end
+    local okPT, pType, pTok = MSUF_FastCall(UnitPowerType, unit)
+    if not okPT then  return end
     if type(MSUF_GetResolvedPowerColor) ~= "function" then  return end
     local pr, pg, pb = MSUF_GetResolvedPowerColor(pType, pTok)
     if not pr then  return end
@@ -4873,11 +4873,18 @@ end
 _G.MSUF_GetUnitLevelText = MSUF_GetUnitLevelText
 local function MSUF_GetUnitHealthPercent(unit)
     if type(UnitHealthPercent) == "function" then
+        local ok, pct
         if CurveConstants and CurveConstants.ScaleTo100 then
-            return UnitHealthPercent(unit, true, CurveConstants.ScaleTo100)
+            -- Secret-safe + snappy: usePredicted=true (avoid Lua arithmetic on secret values)
+            ok, pct = MSUF_FastCall(UnitHealthPercent, unit, true, CurveConstants.ScaleTo100)
         else
-            return UnitHealthPercent(unit, true, true)
-        end
+            ok, pct = MSUF_FastCall(UnitHealthPercent, unit, true, true)
+    end
+        -- Secret-safe: avoid comparing returned values in Lua (pct may be a "secret" number).
+        if ok then
+             return pct
+    end
+         return nil
     end
     -- 12.0+: If UnitHealthPercent is unavailable, avoid computing percent in Lua (secret-safe).
      return nil
@@ -5763,12 +5770,27 @@ MSUF_ApplyRareVisuals = function(self)
 		end
 	end
 
+    local dispelR, dispelG, dispelB = 0.25, 0.75, 1.00
 
     local thickness = baseThickness
-    -- If the user disabled outlines, we still show an aggro outline while threat is active.
-    -- If outlines are enabled but thin, force a visible minimum while threatened.
+
+    -- Dispel border (Bars menu): light-blue outline when the player can dispel something on the unit.
+    -- Kept event-driven (UNIT_AURA) via self._msufDispelOutlineOn to avoid any aura scanning in hot paths.
+    local dispel = false
+    if threat ~= true then
+        local dispelMode = g and g.dispelOutlineMode or 0
+        if dispelMode == 1 then
+            local u = self.unit
+            if u == "player" or u == "target" or u == "focus" or u == "targettarget" then
+                dispel = (self._msufDispelOutlineOn == true)
+            end
+        end
+    end
+
+    -- If the user disabled outlines, we still show an outline while threat/dispel is active.
+    -- If outlines are enabled but thin, force a visible minimum while active.
     -- User-requested: allow the minimum to be as low as 1px (no forced 4px).
-    if threat and thickness < 1 then thickness = 1 end
+    if (threat or dispel) and thickness < 1 then thickness = 1 end
 
     local o = self._msufBarOutline
     if thickness <= 0 then
@@ -5806,25 +5828,29 @@ MSUF_ApplyRareVisuals = function(self)
     local f = o.frame
     local snap = _G.MSUF_Snap
     local edge = (type(snap) == "function") and snap(f, thickness) or thickness
+    local colorKey = threat and 1 or (dispel and 2 or 0)
+
     if o._msufLastEdgeSize ~= edge then
         f:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
-        -- Keep the border color consistent when thickness changes (prevents black overwrite in testmode / threat).
-        if threat then
+        -- Keep the border color consistent when thickness changes (prevents black overwrite in testmode / state flips).
+        if colorKey == 1 then
             f:SetBackdropBorderColor(aggroR, aggroG, aggroB, 1)
-            o._msufLastBorderColorKey = 1
+        elseif colorKey == 2 then
+            f:SetBackdropBorderColor(dispelR, dispelG, dispelB, 1)
         else
             f:SetBackdropBorderColor(0, 0, 0, 1)
-            o._msufLastBorderColorKey = 0
         end
+        o._msufLastBorderColorKey = colorKey
         o._msufLastEdgeSize = edge
         self._msufBarOutlineEdgeSize = -1
     end
 
-    -- Apply aggro recolor (same outline border). Only flips on state change.
-    local colorKey = threat and 1 or 0
+    -- Apply state recolor (same outline border). Only flips on state change.
     if o._msufLastBorderColorKey ~= colorKey then
-        if threat then
+        if colorKey == 1 then
             f:SetBackdropBorderColor(aggroR, aggroG, aggroB, 1)
+        elseif colorKey == 2 then
+            f:SetBackdropBorderColor(dispelR, dispelG, dispelB, 1)
         else
             f:SetBackdropBorderColor(0, 0, 0, 1)
         end
@@ -5929,6 +5955,89 @@ do
         end
     end)
 end
+
+
+-- Dispel border event driver: refresh the rare outline when dispellable debuffs appear/disappear.
+-- Uses GetAuraSlots(..., "HARMFUL|RAID_PLAYER_DISPELLABLE", 1) so it's O(1) and very cheap.
+do
+    local f = F.CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    f:RegisterEvent("PLAYER_TARGET_CHANGED")
+    f:RegisterEvent("PLAYER_FOCUS_CHANGED")
+
+    if f.RegisterUnitEvent then
+        f:RegisterUnitEvent("UNIT_AURA", "player", "target", "focus", "targettarget")
+    else
+        f:RegisterEvent("UNIT_AURA")
+    end
+
+    local function HasDispellable(unit)
+        local getSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
+        if type(getSlots) ~= "function" then return false end
+
+        -- Friendly: dispellable debuffs; Enemy: purgeable buffs. Check both lists (each is O(1) due to maxSlots=1).
+        local slot1 = select(2, getSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1, nil))
+        if slot1 ~= nil then return true end
+
+        slot1 = select(2, getSlots(unit, "HELPFUL|RAID_PLAYER_DISPELLABLE", 1, nil))
+        return slot1 ~= nil
+    end
+
+    local function UpdateUnit(unit, forceRefresh)
+        local uf = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit]
+        if not uf or uf.unit ~= unit then return end
+
+        local g = MSUF_DB and MSUF_DB.general
+        local enabled = (g and g.dispelOutlineMode == 1)
+
+        local on = false
+        if enabled then
+            on = HasDispellable(unit)
+        end
+
+        if forceRefresh or uf._msufDispelOutlineOn ~= on then
+            uf._msufDispelOutlineOn = on
+            if type(_G.MSUF_RefreshRareBarVisuals) == "function" then
+                _G.MSUF_RefreshRareBarVisuals(uf)
+            end
+        end
+    end
+
+    _G.MSUF_RefreshDispelOutlineStates = function(forceRefresh)
+        UpdateUnit("player", forceRefresh)
+        UpdateUnit("target", true)
+        UpdateUnit("focus", true)
+        UpdateUnit("targettarget", true)
+    end
+
+    f:SetScript("OnEvent", function(_, event, unit)
+        if event == "UNIT_AURA" then
+            if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
+            local g = MSUF_DB and MSUF_DB.general
+            if not (g and g.dispelOutlineMode == 1) then return end
+            UpdateUnit(unit, false)
+            return
+        end
+
+        if event == "PLAYER_TARGET_CHANGED" then
+            UpdateUnit("target", true)
+            UpdateUnit("targettarget", true)
+            return
+        end
+
+        if event == "PLAYER_FOCUS_CHANGED" then
+            UpdateUnit("focus", true)
+            return
+        end
+
+        -- Init / safety clear so state is correct without requiring Edit Mode / manual refresh.
+        if event == "PLAYER_ENTERING_WORLD" then
+            _G.MSUF_RefreshDispelOutlineStates(true)
+            return
+        end
+    end)
+end
+
 do
     local f = F.CreateFrame("Frame")
     f:RegisterEvent("UI_SCALE_CHANGED")
@@ -7538,7 +7647,7 @@ end
     if type(MSUF_InitPlayerCastbarPreviewToggle) == "function" then
         C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
     end
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 2.0 Beta 6 |cff565f89•|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89•|r  |cff9ece6a Beta Build 2.0 Beta 5 |cff565f89•|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
  end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then

@@ -4466,6 +4466,62 @@ aggroTestCheck:SetScript("OnClick", function(self)
 end)
 
 
+
+-- Dispel border: light-blue outline border when the player can dispel something on the unit (RAID_PLAYER_DISPELLABLE).
+local dispelOutlineDrop = CreateFrame("Frame", "MSUF_DispelOutlineDropdown", barGroup, "UIDropDownMenuTemplate")
+MSUF_ExpandDropdownClickArea(dispelOutlineDrop)
+dispelOutlineDrop:SetPoint("TOPLEFT", aggroOutlineDrop, "BOTTOMLEFT", 0, -18)
+UIDropDownMenu_SetWidth(dispelOutlineDrop, 170)
+if UIDropDownMenu_SetClampedToScreen then UIDropDownMenu_SetClampedToScreen(dispelOutlineDrop, true) end
+if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(dispelOutlineDrop, "LEFT") end
+if dispelOutlineDrop.Left then dispelOutlineDrop.Left:Hide() end
+if dispelOutlineDrop.Middle then dispelOutlineDrop.Middle:Hide() end
+if dispelOutlineDrop.Right then dispelOutlineDrop.Right:Hide() end
+if dispelOutlineDrop.Text then
+    dispelOutlineDrop.Text:ClearAllPoints()
+    dispelOutlineDrop.Text:SetPoint("LEFT", dispelOutlineDrop, "LEFT", 16, 2)
+end
+MSUF_MakeDropdownScrollable(dispelOutlineDrop, 10)
+
+local dispelOutlineOptions = {
+    { key = 0, label = TR("Dispel border off") },
+    { key = 1, label = TR("Dispel border on") },
+}
+
+local function _DispelOutline_Get()
+    local g = MSUF_DB and MSUF_DB.general
+    return (g and g.dispelOutlineMode) or 0
+end
+
+local function _DispelOutline_Set(val)
+    EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    MSUF_DB.general.dispelOutlineMode = val
+
+    if type(_G.MSUF_RefreshDispelOutlineStates) == "function" then
+        _G.MSUF_RefreshDispelOutlineStates(true)
+    else
+        local fn = _G.MSUF_RefreshRareBarVisuals
+        local frames = _G.MSUF_UnitFrames
+        if type(fn) == "function" and type(frames) == "table" then
+            if frames.player then fn(frames.player) end
+            if frames.target then fn(frames.target) end
+            if frames.focus then fn(frames.focus) end
+            if frames.targettarget then fn(frames.targettarget) end
+        end
+    end
+end
+
+MSUF_InitSimpleDropdown(
+    dispelOutlineDrop,
+    dispelOutlineOptions,
+    _DispelOutline_Get,
+    function(v) _DispelOutline_Set(v) end,
+    function() _DispelOutline_Set(_DispelOutline_Get()) end,
+    170
+)
+dispelOutlineDrop._msufDispelOutlineOptions = dispelOutlineOptions
+
 -- Bars menu style: boxed layout like the new Castbar/Focus Kick menus
 -- (Two framed columns: Bar appearance / Power Bar Settings)
 do
@@ -4957,6 +5013,16 @@ local function MSUF_SyncBarsTabToggles()
                 UIDropDownMenu_SetText(dd, TR("Aggro border off"))
             end
         end
+
+-- Dispel border dropdown
+local dispelDrop = _G["MSUF_DispelOutlineDropdown"]
+if dispelDrop then
+	UIDropDownMenu_SetText(dispelDrop, TR("Dispel border off"))
+	if (g.dispelOutlineMode or 0) == 1 then
+		UIDropDownMenu_SetText(dispelDrop, TR("Dispel border on"))
+	end
+end
+
     end
     SyncCB(targetPowerBarCheck, b.showTargetPowerBar)
     SyncCB(bossPowerBarCheck, b.showBossPowerBar)
