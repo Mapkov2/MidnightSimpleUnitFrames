@@ -104,11 +104,11 @@ local function RefreshSharedFlags(shared, gen)
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
 end
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Text config resolution (per-icon; cached by configGen)
 -- Applies stack/cooldown text sizes + offsets from shared + per-unit layout
 -- Zero per-frame cost: runs only when configGen changes.
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function ResolveTextConfig(icon, unit, shared, gen)
     if not icon then return end
@@ -176,9 +176,9 @@ local function GetAuras2DB()
     return nil, nil
 end
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Color helpers (late-bound from API.Colors or fallback)
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function GetOwnBuffHighlightRGB()
     local f = _G.MSUF_A2_GetOwnBuffHighlightRGB
@@ -198,9 +198,9 @@ local function GetStackCountRGB()
     return 1.0, 1.0, 1.0
 end
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Icon Pool
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 -- Icons are stored on container._msufIcons[index]
 -- Each icon is a Button with: .tex, .cooldown, .count, .border, .overlay
@@ -375,9 +375,9 @@ function Icons.BumpConfigGen()
     _sharedFlagsGen = -1   -- force shared flags refresh
 end
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Layout Engine
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, rowWrap, configGen)
     if not container or count <= 0 then return end
@@ -435,13 +435,13 @@ end
     end
 end
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Visual Commit (CommitIcon)
 -- 
 -- This is the ONLY function that touches icon visuals.
 -- Called once per icon per render. Uses diff gating on
 -- auraInstanceID + config generation to skip redundant work.
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 
@@ -541,10 +541,10 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     return true
 end
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Timer application (cooldown swipe + text)
 -- Uses duration objects (secret-safe pass-through)
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 local function ClearCooldownVisual(icon, cd)
@@ -734,9 +734,9 @@ function Icons._RefreshTimer(icon, unit, aid, shared)
     end
 end
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Stack count display
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 -- Cached stack count color (invalidated by BumpConfigGen)
 local _stackR, _stackG, _stackB, _stackColorGen = 1, 1, 1, -1
@@ -858,9 +858,9 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
 end
 
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Own-aura highlight
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 -- Cached highlight colors (invalidated by configGen change)
 local _hlBuffR, _hlBuffG, _hlBuffB = 1.0, 0.85, 0.2
@@ -901,10 +901,10 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     end
 end
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Refresh all assigned icons (fast path: timer + stacks only)
 -- Called when aura membership hasn't changed but values may have
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
     if not entry then return end
@@ -970,9 +970,9 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
     end
 end
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Preview icons (Edit Mode)
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, debuffCap, stackCountAnchor)
     -- Delegate to existing preview system if available
@@ -1066,10 +1066,10 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
     end
 end
 
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Backward-compatible exports into API.Apply
 -- (Options, CooldownText, Preview, Masque all reference API.Apply.*)
--- --
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 Apply.AcquireIcon = Icons.AcquireIcon
 Apply.HideUnused = Icons.HideUnused
@@ -1215,19 +1215,18 @@ function Apply.ApplyStackCountAnchorStyle(icon, stackCountAnchor)
     if not countFS then return end
 
     local anchor = stackCountAnchor or "TOPRIGHT"
-    if icon._msufA2_lastStackJustifyAnchor ~= anchor then
-        icon._msufA2_lastStackJustifyAnchor = anchor
+    -- Always apply (Preview-only; force-invalidate)
+    icon._msufA2_lastStackJustifyAnchor = anchor
 
-        if anchor == "TOPLEFT" or anchor == "BOTTOMLEFT" then
-            countFS:SetJustifyH("LEFT")
-        else
-            countFS:SetJustifyH("RIGHT")
-        end
-        if anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT" then
-            countFS:SetJustifyV("BOTTOM")
-        else
-            countFS:SetJustifyV("TOP")
-        end
+    if anchor == "TOPLEFT" or anchor == "BOTTOMLEFT" then
+        countFS:SetJustifyH("LEFT")
+    else
+        countFS:SetJustifyH("RIGHT")
+    end
+    if anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT" then
+        countFS:SetJustifyV("BOTTOM")
+    else
+        countFS:SetJustifyV("TOP")
     end
 end
 
@@ -1235,42 +1234,42 @@ function Apply.ApplyStackTextOffsets(icon, unit, shared, stackCountAnchor)
     local countFS = icon and icon.count
     if not countFS then return end
 
+    -- Force-invalidate text config cache so ResolveTextConfig re-reads DB.
+    -- This function is Preview-only (ticker + RenderPreviewIcons), so the
+    -- unconditional invalidation has zero cost on live aura hot paths.
+    icon._msufA2_textCfgGen = nil
     ResolveTextConfig(icon, unit, shared, _configGen)
 
-    -- Font size
+    -- Font size (always re-apply: clear diff cache)
     local wantSize = icon._msufA2_stackTextSize or 14
-    if icon._msufA2_lastStackFontSize ~= wantSize and countFS.GetFont and countFS.SetFont then
+    if countFS.GetFont and countFS.SetFont then
         local font, _, flags = countFS:GetFont()
         if font then
             countFS:SetFont(font, wantSize, flags)
         end
-        icon._msufA2_lastStackFontSize = wantSize
     end
+    icon._msufA2_lastStackFontSize = wantSize
 
-    -- Anchor style + offsets
+    -- Anchor style + offsets (always re-apply: clear diff cache)
     local anchor = stackCountAnchor or "TOPRIGHT"
+    icon._msufA2_lastStackJustifyAnchor = nil
     Apply.ApplyStackCountAnchorStyle(icon, anchor)
 
     local offX = icon._msufA2_stackTextOffsetX or 0
     local offY = icon._msufA2_stackTextOffsetY or 0
-    if icon._msufA2_lastStackPointAnchor ~= anchor
-        or icon._msufA2_lastStackPointX ~= offX
-        or icon._msufA2_lastStackPointY ~= offY
-    then
-        icon._msufA2_lastStackPointAnchor = anchor
-        icon._msufA2_lastStackPointX = offX
-        icon._msufA2_lastStackPointY = offY
+    icon._msufA2_lastStackPointAnchor = nil
+    icon._msufA2_lastStackPointX = nil
+    icon._msufA2_lastStackPointY = nil
 
-        countFS:ClearAllPoints()
-        if anchor == "TOPLEFT" then
-            countFS:SetPoint("TOPLEFT", icon, "TOPLEFT", offX, offY)
-        elseif anchor == "BOTTOMLEFT" then
-            countFS:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", offX, offY)
-        elseif anchor == "BOTTOMRIGHT" then
-            countFS:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", offX, offY)
-        else
-            countFS:SetPoint("TOPRIGHT", icon, "TOPRIGHT", offX, offY)
-        end
+    countFS:ClearAllPoints()
+    if anchor == "TOPLEFT" then
+        countFS:SetPoint("TOPLEFT", icon, "TOPLEFT", offX, offY)
+    elseif anchor == "BOTTOMLEFT" then
+        countFS:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", offX, offY)
+    elseif anchor == "BOTTOMRIGHT" then
+        countFS:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", offX, offY)
+    else
+        countFS:SetPoint("TOPRIGHT", icon, "TOPRIGHT", offX, offY)
     end
 end
 
@@ -1278,7 +1277,14 @@ function Apply.ApplyCooldownTextOffsets(icon, unit, shared)
     local cd = icon and icon.cooldown
     if not cd then return end
 
+    -- Force-invalidate text config cache (Preview-only function).
+    icon._msufA2_textCfgGen = nil
     ResolveTextConfig(icon, unit, shared, _configGen)
+
+    -- Force-invalidate cooldown diff caches so new values always apply
+    cd._msufA2_cdTextSize = nil
+    cd._msufA2_cdTextOffX = nil
+    cd._msufA2_cdTextOffY = nil
 
     -- Ensure fontstring is discovered (safe: uses cached retry logic in cooldown module)
     CT = CT or API.CooldownText
