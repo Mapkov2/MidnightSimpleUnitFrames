@@ -1488,31 +1488,13 @@ local function EnsureFallbackDriver()
 end
 
 local function RequestFlushNextFrame()
-    -- Always schedule a UFCore flush for the next frame when something became dirty.
-    local UM = _G.MSUF_UpdateManager
-    if UM and UM.Kick then
-        UM:Kick("UFCoreFlush")
-        return
-    end
-    -- Fallback: keep a simple OnUpdate driver alive while work remains.
+    -- Schedule a UFCore flush for the next frame when something became dirty.
     EnsureFallbackDriver():Show()
 end
 
 local function EnsureFlushEnabled()
     if FlushEnabled then return end
     FlushEnabled = true
-    local UM = _G.MSUF_UpdateManager
-    if UM and UM.Register and UM.SetEnabled then
-        if not Core._umTaskRegistered then
-            Core._umTaskRegistered = true
-            Core._umFlushFn = Core._umFlushFn or UFCore_FlushTask
-            UM:Register("UFCoreFlush", Core._umFlushFn, 0.03, 20)
-            UM:SetEnabled("UFCoreFlush", false)
-        end
-        UM:SetEnabled("UFCoreFlush", true)
-        RequestFlushNextFrame()
-        return
-    end
     EnsureFallbackDriver():Show()
 end
 
@@ -1521,10 +1503,6 @@ local function DisableFlushIfIdle()
         return
     end
     FlushEnabled = false
-    local UM = _G.MSUF_UpdateManager
-    if UM and UM.SetEnabled then
-        UM:SetEnabled("UFCoreFlush", false)
-    end
     if Core._fallbackFrame then
         Core._fallbackFrame:Hide()
     end
@@ -2125,61 +2103,31 @@ do
     UNIT_EVENT_MAP.UNIT_THREAT_SITUATION_UPDATE = { mask = DIRTY_INDICATOR }
 end
 
--- ============================================================================
--- Phase 6: Direct-Apply dispatch (oUF-style same-frame updates)
---
--- Cheap element updates bypass the MarkDirty → Queue → Flush chain entirely.
--- Event → Element.Update() in the SAME frame = perceived snappiness.
---
--- Only events that map to exactly ONE cheap element are eligible.
--- Multi-element events (UNIT_FACTION, UNIT_FLAGS) stay on the queued path.
--- Portrait stays deferred (expensive texture ops).
--- ============================================================================
-
+-- Phase 6: Direct-Apply map for cheap elements (Health / Power).
+-- These skip the queue entirely and update in the SAME frame as the event.
+-- Only events that map to EXACTLY ONE element are safe here.
+-- UNIT_FACTION (Health+Identity) and UNIT_FLAGS (Health+Status) stay on the queue.
 local DIRECT_APPLY = {}
-
--- 6.1: Health direct-apply (no conf needed)
-local _DirectHealth = Elements.Health.Update
-local function DirectHealthHandler(f, event)
-    if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
-        f._msufAbsorbDirty = true
-    elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
-        f._msufHealAbsorbDirty = true
+do
+    local healthFn = Elements.Health and Elements.Health.Update
+    if healthFn then
+        DIRECT_APPLY["UNIT_HEALTH"]                       = healthFn
+        DIRECT_APPLY["UNIT_MAXHEALTH"]                    = healthFn
+        DIRECT_APPLY["UNIT_ABSORB_AMOUNT_CHANGED"]        = healthFn
+        DIRECT_APPLY["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"]   = healthFn
+        DIRECT_APPLY["UNIT_HEAL_PREDICTION"]              = healthFn
+        DIRECT_APPLY["UNIT_MAXHEALTHMODIFIER"]            = healthFn
     end
-    _DirectHealth(f)
+
+    local powerFn = Elements.Power and Elements.Power.Update
+    if powerFn then
+        DIRECT_APPLY["UNIT_POWER_UPDATE"]     = powerFn
+        DIRECT_APPLY["UNIT_MAXPOWER"]         = powerFn
+        DIRECT_APPLY["UNIT_DISPLAYPOWER"]     = powerFn
+        DIRECT_APPLY["UNIT_POWER_BAR_SHOW"]   = powerFn
+        DIRECT_APPLY["UNIT_POWER_BAR_HIDE"]   = powerFn
+    end
 end
-
-DIRECT_APPLY["UNIT_HEALTH"]                      = DirectHealthHandler
-DIRECT_APPLY["UNIT_MAXHEALTH"]                    = DirectHealthHandler
-DIRECT_APPLY["UNIT_ABSORB_AMOUNT_CHANGED"]        = DirectHealthHandler
-DIRECT_APPLY["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"]   = DirectHealthHandler
-DIRECT_APPLY["UNIT_HEAL_PREDICTION"]              = DirectHealthHandler
-DIRECT_APPLY["UNIT_MAXHEALTHMODIFIER"]            = DirectHealthHandler
-
--- 6.1: Power direct-apply (no conf needed)
-local _DirectPower = Elements.Power.Update
-DIRECT_APPLY["UNIT_POWER_UPDATE"]    = _DirectPower
-DIRECT_APPLY["UNIT_MAXPOWER"]        = _DirectPower
-DIRECT_APPLY["UNIT_DISPLAYPOWER"]    = _DirectPower
-DIRECT_APPLY["UNIT_POWER_BAR_SHOW"]  = _DirectPower
-DIRECT_APPLY["UNIT_POWER_BAR_HIDE"]  = _DirectPower
-
--- 6.2: Identity direct-apply (needs conf; excludes UNIT_FACTION which overlaps Health)
-local _DirectIdentity = Elements.Identity.Update
-local function DirectIdentityHandler(f)
-    _DirectIdentity(f, GetFrameConf(f))
-end
-DIRECT_APPLY["UNIT_NAME_UPDATE"]             = DirectIdentityHandler
-DIRECT_APPLY["UNIT_LEVEL"]                   = DirectIdentityHandler
-DIRECT_APPLY["UNIT_CLASSIFICATION_CHANGED"]  = DirectIdentityHandler
-
--- 6.2: Status direct-apply (needs conf; excludes UNIT_FLAGS which overlaps Health)
-local _DirectStatus = Elements.Status.Update
-local function DirectStatusHandler(f)
-    _DirectStatus(f, GetFrameConf(f))
-end
-DIRECT_APPLY["UNIT_CONNECTION"]              = DirectStatusHandler
-DIRECT_APPLY["INCOMING_RESURRECT_CHANGED"]   = DirectStatusHandler
 
 local function FrameOnEvent(self, event, arg1, ...)
     -- oUF-like: skip hidden frames (free win).
@@ -2187,25 +2135,31 @@ local function FrameOnEvent(self, event, arg1, ...)
     if not self:IsVisible() and not self.MSUF_AllowHiddenEvents then
         return
     end
+    -- Global events are routed by the UFCore global driver (keeps per-frame registrations minimal).
 
-    -- Phase 6: Direct-Apply path — cheap element updates in the SAME frame.
-    -- Bypasses MarkDirty → Queue → Flush entirely (saves ~0.8ms total call depth).
-    local directFn = DIRECT_APPLY[event]
-    if directFn then
-        if arg1 == self.unit then
-            directFn(self, event)
-        end
-        return
-    end
-
-    -- Queued path: multi-element, expensive, or unknown events.
+    -- Unit events: only react to our unit.
     local info = UNIT_EVENT_MAP[event]
     if info then
         if arg1 == self.unit then
-            -- Multi-element flag handling (UNIT_FACTION/UNIT_FLAGS span Health + another element)
-            if event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
+            -- Mark overlays dirty on absorb/heal-absorb events (no secret compares).
+            if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
+                self._msufAbsorbDirty = true
+            elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
+                self._msufHealAbsorbDirty = true
+            elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
+                -- Health bar color can change for NPC reaction / PvP / flags.
+                -- Keep it out of the hot value path unless explicitly needed.
                 self._msufHealthColorDirty = true
             end
+
+            -- Phase 6: Direct-apply for cheap elements (health/power).
+            -- Updates in the SAME frame instead of next-frame via queue.
+            local directFn = DIRECT_APPLY[event]
+            if directFn then
+                directFn(self)
+                return
+            end
+
             Core.MarkDirty(self, info.mask, info.urgent, event)
         end
         return
@@ -2333,8 +2287,7 @@ Global:RegisterEvent("PLAYER_REGEN_ENABLED")
 Global:RegisterEvent("PLAYER_UPDATE_RESTING")
 Global:RegisterEvent("UPDATE_EXHAUSTION")
 
-Global:RegisterEvent("PLAYER_TARGET_CHANGED")
-Global:RegisterEvent("PLAYER_FOCUS_CHANGED")
+-- Phase 1: PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED moved to EventBus (below)
 Global:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
 Global:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
 Global:RegisterEvent("UNIT_TARGET")
@@ -2457,14 +2410,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         return
     end
 
-    if event == "PLAYER_TARGET_CHANGED" then
-        QueueUnit("target", true, MASK_UNIT_SWAP, event)
-        -- Urgent lane: keep ToT snappy (no perceptible delay).
-        QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
-        DeferSwapWork("target", event, true, false)
-        DeferSwapWork("targettarget", event, false, false)
-        return
-    end
+    -- Phase 1: PLAYER_TARGET_CHANGED handled via EventBus (see bottom of file)
 
     if event == "UNIT_TARGET" and arg1 == "target" then
         -- Target-of-target changes: refresh ToT inline (independent of the ToT unitframe).
@@ -2480,11 +2426,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         return
     end
 
-    if event == "PLAYER_FOCUS_CHANGED" then
-        QueueUnit("focus", true, MASK_UNIT_SWAP, event)
-        DeferSwapWork("focus", event, true, false)
-        return
-    end
+    -- Phase 1: PLAYER_FOCUS_CHANGED handled via EventBus (see bottom of file)
 
     if event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
         -- Aggro highlight is driven by Status element (cheap) and is only relevant for
@@ -2525,6 +2467,25 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         return
     end
 end)
+
+-- Phase 1 Fan-out: route PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED through EventBus
+-- so all modules (UFCore, Auras, RangeFade, etc.) share ONE engine-level registration.
+do
+    local busReg = _G.MSUF_EventBus_Register
+    if type(busReg) == "function" then
+        busReg("PLAYER_TARGET_CHANGED", "MSUF_UFCORE", function()
+            QueueUnit("target", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
+            QueueUnit("targettarget", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
+            DeferSwapWork("target", "PLAYER_TARGET_CHANGED", true, false)
+            DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", false, false)
+        end)
+
+        busReg("PLAYER_FOCUS_CHANGED", "MSUF_UFCORE", function()
+            QueueUnit("focus", true, MASK_UNIT_SWAP, "PLAYER_FOCUS_CHANGED")
+            DeferSwapWork("focus", "PLAYER_FOCUS_CHANGED", true, false)
+        end)
+    end
+end
 
 -- Expose a stable attach function name (so main can call it without addon table lookups)
 function _G.MSUF_UFCore_AttachFrame(f)

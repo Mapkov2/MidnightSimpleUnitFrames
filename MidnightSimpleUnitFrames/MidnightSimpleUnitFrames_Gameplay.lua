@@ -97,52 +97,10 @@ local LSM           = LibStub and LibStub("LibSharedMedia-3.0", true)
 
 
 ------------------------------------------------------
--- Phase 2: Local micro-scheduler replacing MSUF_UpdateManager.
--- Same API surface (Register/SetEnabled/Kick/Unregister) backed by
--- per-task C_Timer.NewTicker handles.  30 lines, zero external deps.
+-- UpdateManager accessor (avoid repeating global lookups everywhere)
 ------------------------------------------------------
-local _uTasks = {}
-local _microUM = {}
-
-function _microUM:Register(name, fn, interval, _priority)
-    if type(name) ~= "string" or type(fn) ~= "function" then return end
-    self:SetEnabled(name, false) -- cancel any existing ticker
-    _uTasks[name] = { fn = fn, iv = interval, enabled = false, ticker = nil }
-end
-
-function _microUM:SetEnabled(name, enabled)
-    local t = _uTasks[name]
-    if not t then return end
-    local on = enabled and true or false
-    if t.enabled == on then return end
-    t.enabled = on
-    if on then
-        local sec = (type(t.iv) == "function") and t.iv() or t.iv
-        if type(sec) ~= "number" or sec <= 0 then sec = 0.25 end
-        if C_Timer and C_Timer.NewTicker then
-            t.ticker = C_Timer.NewTicker(sec, function()
-                if t.enabled and t.fn then t.fn(sec) end
-            end)
-        end
-    else
-        if t.ticker then t.ticker:Cancel(); t.ticker = nil end
-    end
-end
-
-function _microUM:Kick(name)
-    local t = _uTasks[name]
-    if not t or not t.fn then return end
-    local sec = (type(t.iv) == "function") and t.iv() or t.iv
-    t.fn(type(sec) == "number" and sec or 0)
-end
-
-function _microUM:Unregister(name)
-    self:SetEnabled(name, false)
-    _uTasks[name] = nil
-end
-
 local function MSUF_GetUpdateManager()
-    return _microUM
+    return _G.MSUF_UpdateManager or (ns and ns.MSUF_UpdateManager)
 end
 
 ------------------------------------------------------
@@ -601,6 +559,7 @@ local combatStateText
 local combatEventFrame
 local combatCrosshairFrame
 local combatCrosshairEventFrame
+local updater
 
 -- Forward declarations (helpers are referenced before their definitions below)
 local MSUF_CrosshairHasValidTarget
@@ -1118,6 +1077,14 @@ EnsureFirstDanceTaskRegistered = function()
 
         -- Ensure no leftover per-frame updater stays attached
         combatStateFrame:SetScript("OnUpdate", nil)
+    else
+        -- Fallback: local OnUpdate if UpdateManager isn't available
+        if ns then
+            ns._MSUF_FirstDanceTaskRegistered = true
+        end
+        combatStateFrame:SetScript("OnUpdate", function(self, elapsed)
+            _TickFirstDance()
+        end)
     end
 end
 
@@ -1277,8 +1244,6 @@ local function EnsureCombatCrosshair()
                     MSUF_RequestCrosshairRangeRefresh()
                 elseif event == "NAME_PLATE_UNIT_REMOVED" and arg1 == "player" then
                     MSUF_AnchorCombatCrosshair()
-                elseif event == "PLAYER_TARGET_CHANGED" then
-                    MSUF_RequestCrosshairRangeRefresh()
                 elseif event == "SPELL_RANGE_CHECK_UPDATE" then
                     MSUF_RequestCrosshairRangeRefresh()
                 elseif event == "DISPLAY_SIZE_CHANGED" then
@@ -1343,7 +1308,8 @@ local function EnsureCombatCrosshair()
         MSUF_CrosshairSyncRangeCacheFromGameplay(g)
         MSUF_UpdateCombatCrosshairRangeColor()
 
-        -- Range color tick: micro-scheduler backed by C_Timer.NewTicker (Phase 2).
+        -- Range color tick: prefer MSUF_UpdateManager (single global OnUpdate) and
+-- fall back to a local throttled OnUpdate if needed.
 local umRange = MSUF_GetUpdateManager()
 if umRange and umRange.Register and umRange.SetEnabled then
     if not ns._MSUF_CrosshairRangeTaskRegistered then
@@ -1374,7 +1340,6 @@ if umRange and umRange.Register and umRange.SetEnabled then
         end)
         umRange:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", false)
     end
-end -- close UpdateManager gate (was missing; prevented EnsureCombatCrosshair from closing)
 
         MSUF_RefreshCrosshairRangeTaskEnabled()
 
@@ -1384,6 +1349,33 @@ end -- close UpdateManager gate (was missing; prevented EnsureCombatCrosshair fr
         combatCrosshairFrame.MSUF_RangeOnUpdate = nil
         combatCrosshairFrame.MSUF_RangeElapsed = nil
     end
+else
+    -- Legacy fallback: local throttled OnUpdate to keep range color responsive while moving
+    if g.enableCombatCrosshairMeleeRangeColor then
+        if not combatCrosshairFrame.MSUF_RangeOnUpdate then
+            combatCrosshairFrame.MSUF_RangeOnUpdate = true
+            combatCrosshairFrame.MSUF_RangeElapsed = 0
+            combatCrosshairFrame:SetScript("OnUpdate", function(self, elapsed)
+                if not self:IsShown() then return end
+                local g3 = EnsureGameplayDefaults()
+                if not g3.enableCombatCrosshair or not g3.enableCombatCrosshairMeleeRangeColor then
+                    self:SetScript("OnUpdate", nil)
+                    self.MSUF_RangeOnUpdate = nil
+                    return
+                end
+                self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
+                if self.MSUF_RangeElapsed < 0.15 then return end
+                self.MSUF_RangeElapsed = 0
+                MSUF_UpdateCombatCrosshairRangeColor()
+            end)
+        end
+    else
+        if combatCrosshairFrame.MSUF_RangeOnUpdate then
+            combatCrosshairFrame:SetScript("OnUpdate", nil)
+            combatCrosshairFrame.MSUF_RangeOnUpdate = nil
+        end
+    end
+end
 
     end
 
@@ -2130,7 +2122,12 @@ local function MSUF_Gameplay_ApplyCombatCrosshair(g)
             combatCrosshairEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
             combatCrosshairEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
             combatCrosshairEventFrame:RegisterEvent("PLAYER_LOGIN")
-            combatCrosshairEventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+            -- Phase 1: PLAYER_TARGET_CHANGED via EventBus
+            if type(MSUF_EventBus_Register) == "function" then
+                MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_CROSSHAIR", function()
+                    MSUF_RequestCrosshairRangeRefresh()
+                end)
+            end
             -- Only listen for range-check updates when range-color is enabled.
             if combatCrosshairFrame and combatCrosshairFrame._msufUseRangeColor then
                 combatCrosshairEventFrame:RegisterEvent("SPELL_RANGE_CHECK_UPDATE")
@@ -2149,6 +2146,10 @@ local function MSUF_Gameplay_ApplyCombatCrosshair(g)
     else
         if combatCrosshairEventFrame then
             combatCrosshairEventFrame:UnregisterAllEvents()
+        end
+        -- Phase 1: also unregister EventBus callback
+        if type(MSUF_EventBus_Unregister) == "function" then
+            MSUF_EventBus_Unregister("PLAYER_TARGET_CHANGED", "MSUF_CROSSHAIR")
         end
 
         -- Off means off: stop any range-color background task too
@@ -2891,7 +2892,7 @@ function ns.MSUF_RequestGameplayApply()
 
     Gameplay_ApplyAllFeatures(g)
 
--- Centralized throttling: combat-timer ticks via local micro-scheduler (Phase 2)
+-- Centralized throttling: register combat-timer ticks in the global MSUF_UpdateManager
     local um = MSUF_GetUpdateManager()
     if um and um.Register and um.SetEnabled then
         if not ns._MSUF_GameplayTasksRegistered then
@@ -2966,6 +2967,11 @@ function ns.MSUF_RequestGameplayApply()
             wasInCombat = false
             combatStartTime = nil
             lastTimerText = ""
+        end
+    else
+        -- Legacy fallback (should be rare): if UpdateManager isn't available, keep existing behavior.
+        if not updater then
+            updater = CreateFrame("Frame")
         end
     end
 end

@@ -46,7 +46,8 @@ local _BOSS_MAX = 5
 -- Cached module refs (bound lazily, reset on InvalidateDB)
 local _cachedReqUnit      -- API.RequestUnit (fast MarkDirty path)
 local _cachedMarkDirty    -- API.MarkDirty (fallback)
-local _epochs             -- API.Store._epochs (direct table, −4 indirections)
+local _cachedOnUnitAura   -- API.Store.OnUnitAura
+local _cachedInvalidUnit  -- API.Store.InvalidateUnit
 local _cachedIsEditFn     -- API.IsEditModeActive
 local _refsBound = false
 
@@ -54,7 +55,8 @@ local function BindCachedRefs()
     _cachedReqUnit     = API.RequestUnit
     _cachedMarkDirty   = API.MarkDirty
     local Store = API.Store
-    _epochs            = Store and Store._epochs
+    _cachedOnUnitAura  = Store and Store.OnUnitAura
+    _cachedInvalidUnit = Store and Store.InvalidateUnit
     _cachedIsEditFn    = API.IsEditModeActive
     _refsBound = true
 end
@@ -706,6 +708,13 @@ end
         -- No enabled units: unregister everything (OFF = ~0 overhead)
         ApplyOwnedEvents(ef, {})
 
+        -- Phase 1: also unregister EventBus callbacks
+        local busUnreg = _G.MSUF_EventBus_Unregister
+        if type(busUnreg) == "function" then
+            busUnreg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS")
+            busUnreg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS")
+        end
+
         local list = ef._msufA2_unitAuraFrames
         if type(list) == "table" then
             for i = 1, #list do
@@ -762,11 +771,9 @@ end
     }
 
     if needTarget then
-        desired.PLAYER_TARGET_CHANGED = "Core"
         desired.UNIT_TARGETABLE_CHANGED = "Core"
     end
     if needFocus then
-        desired.PLAYER_FOCUS_CHANGED = "Core"
         desired.UNIT_TARGETABLE_CHANGED = "Core"
     end
     if needBoss then
@@ -774,6 +781,32 @@ end
     end
 
     ApplyOwnedEvents(ef, desired)
+
+    -- Phase 1 Fan-out: use EventBus for PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED
+    -- instead of registering on our own frame.  Reduces engine-level dispatches.
+    local busReg = _G.MSUF_EventBus_Register
+    local busUnreg = _G.MSUF_EventBus_Unregister
+    if type(busReg) == "function" and type(busUnreg) == "function" then
+        if needTarget then
+            busReg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS", function()
+                if not _refsBound then BindCachedRefs() end
+                if _cachedInvalidUnit then _cachedInvalidUnit("target") end
+                if ShouldProcessUnitEvent("target") then MarkDirty("target", 0) end
+            end)
+        else
+            busUnreg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS")
+        end
+
+        if needFocus then
+            busReg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS", function()
+                if not _refsBound then BindCachedRefs() end
+                if _cachedInvalidUnit then _cachedInvalidUnit("focus") end
+                if ShouldProcessUnitEvent("focus") then MarkDirty("focus", 0) end
+            end)
+        else
+            busUnreg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS")
+        end
+    end
 
     -- Apply UNIT_AURA handler only on frames that are actually registered
     local list = ef._msufA2_unitAuraFrames
@@ -804,10 +837,11 @@ end
 
 
                 if unit and ShouldProcessUnitEvent(unit, true) then
-                    -- Phase 4B: direct epoch bump (was: BindCachedRefs → _cachedOnUnitAura → Store.OnUnitAura)
+                    -- Feed delta into Store (cached ref, no guard chains)
                     if not _refsBound then BindCachedRefs() end
-                    if _epochs then
-                        _epochs[unit] = (_epochs[unit] or 0) + 1
+                    local onAura = _cachedOnUnitAura
+                    if onAura then
+                        onAura(unit, updateInfo)
                     end
 
                     MarkDirty(unit)
@@ -854,28 +888,11 @@ function Events.Init()
 
     -- EventFrame main handler (non-UNIT_AURA)
     ef:SetScript("OnEvent", function(_, event, arg1)
-        if event == "PLAYER_TARGET_CHANGED" then
-            -- Target swap should feel instant: request next-frame render (0 delay)
-            if not _refsBound then BindCachedRefs() end
-            if _epochs then _epochs["target"] = (_epochs["target"] or 0) + 1 end
-            if ShouldProcessUnitEvent("target") then MarkDirty("target", 0) end
-            return
-        end
-
-        if event == "PLAYER_FOCUS_CHANGED" then
-            if not _refsBound then BindCachedRefs() end
-            if _epochs then _epochs["focus"] = (_epochs["focus"] or 0) + 1 end
-            if ShouldProcessUnitEvent("focus") then MarkDirty("focus", 0) end
-            return
-        end
-
         if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
             if not _refsBound then BindCachedRefs() end
-            if _epochs then
-                for i = 1, _BOSS_MAX do
-                    local u = _BOSS_UNITS[i]
-                    _epochs[u] = (_epochs[u] or 0) + 1
-                end
+            local inv = _cachedInvalidUnit
+            if inv then
+                for i = 1, _BOSS_MAX do inv(_BOSS_UNITS[i]) end
             end
             for i = 1, _BOSS_MAX do
                 local u = _BOSS_UNITS[i]
@@ -898,14 +915,12 @@ function Events.Init()
                 Events.ApplyEventRegistration()
             end
 
-            if _epochs then
-                _epochs["player"] = (_epochs["player"] or 0) + 1
-                _epochs["target"] = (_epochs["target"] or 0) + 1
-                _epochs["focus"]  = (_epochs["focus"] or 0) + 1
-                for i = 1, _BOSS_MAX do
-                    local u = _BOSS_UNITS[i]
-                    _epochs[u] = (_epochs[u] or 0) + 1
-                end
+            local inv = _cachedInvalidUnit
+            if inv then
+                inv("player")
+                inv("target")
+                inv("focus")
+                for i = 1, _BOSS_MAX do inv(_BOSS_UNITS[i]) end
             end
 
             if ShouldProcessUnitEvent("player") then MarkDirty("player", 0) end

@@ -403,7 +403,6 @@ local function EnsureAttached(unit)
         -- Reusable list buffers (zero alloc on steady state)
         _buffList = {},
         _debuffList = {},
-        _mergeList = {},
         -- Last rendered state for diff
         _lastBuffAids = {},
         _lastDebuffAids = {},
@@ -875,9 +874,7 @@ local function RenderUnit(entry)
     entry.anchor:Show()
 
     -- Private auras: only rebuild when config changes
-    -- Skip in Edit Mode preview (no real unit) — RenderPreviewPrivateIcons handles it.
-    local _skipPrivateRebuild = isEditActive and (shared.showInEditMode == true)
-    if not _skipPrivateRebuild and gen ~= entry._lastPrivateGen then
+    if gen ~= entry._lastPrivateGen then
         PrivateRebuild(entry, shared, privateIconSize, spacing)
         entry._lastPrivateGen = gen
     end
@@ -901,48 +898,17 @@ local function RenderUnit(entry)
         if entry.private then entry.private:Show() end
         entry._msufA2_previewActive = true
     else
-        -- Leaving edit mode (or preview disabled): scrub ALL private preview
-        -- icons from the pool.  PrivateRebuild uses _privateSlots (Blizzard
-        -- anchors), so it never touches _msufIcons — we must do it here.
-        if entry._msufA2_previewActive then
-            entry._msufA2_previewActive = nil
-            local pc = entry.private
-            if pc and pc._msufIcons then
-                for _, icon in ipairs(pc._msufIcons) do
-                    if icon then
-                        icon._msufA2_isPreview = nil
-                        icon._msufA2_previewKind = nil
-                        icon:Hide()
-                        if icon._msufPrivateBorder then icon._msufPrivateBorder:Hide() end
-                        if icon._msufPrivateLock then icon._msufPrivateLock:Hide() end
-                    end
-                end
-            end
-            -- Also wipe buff/debuff preview overlays
-            Icons.HideUnused(entry.buffs, 1)
-            Icons.HideUnused(entry.debuffs, 1)
-            if entry.mixed then Icons.HideUnused(entry.mixed, 1) end
-            -- Force PrivateRebuild on next render so real anchors are recreated
-            entry._lastPrivateGen = -1
-        end
+        entry._msufA2_previewActive = nil
     end
 
-    -- â”€â”€ Edit Mode preview (all units, including player) â”€â”€
-    if showTest then
-        -- Clear any Blizzard private aura anchors (from a previous non-preview
-        -- render) so they don't overlap with our preview icons.
-        if entry._privateAnchorIDs then
-            PrivateClear(entry)
-            entry._lastPrivateGen = -1  -- force rebuild when leaving edit mode
-        end
-        if entry.private then entry.private:Show() end
-
+    -- â”€â”€ Edit Mode preview (no real unit present) â”€â”€
+    if showTest and not unitExists then
         if Icons.RenderPreviewIcons then
             local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, maxBuffs, maxDebuffs, stackCountAnchor)
             local bSize = useSingleRow and iconSize or buffIconSize
             local dSize = useSingleRow and iconSize or debuffIconSize
-            Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, growth, rowWrap, gen)
-            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, growth, rowWrap, gen)
+            Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, growth, rowWrap)
+            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, growth, rowWrap)
         end
         if Icons.RenderPreviewPrivateIcons then
             Icons.RenderPreviewPrivateIcons(entry, unit, shared, privateIconSize, spacing, stackCountAnchor)
@@ -982,7 +948,7 @@ local function RenderUnit(entry)
     if showDebuffs then
         local list
         if debuffsOnlyMine and debuffsIncludeBoss then
-            list, debuffCount = Collect.GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, entry._debuffList, entry._mergeList, needPlayerAura)
+            list, debuffCount = Collect.GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, entry._debuffList, nil, needPlayerAura)
         else
             list, debuffCount = Collect.GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, entry._debuffList, needPlayerAura)
         end
@@ -1000,7 +966,7 @@ local function RenderUnit(entry)
     if showBuffs then
         local list
         if buffsOnlyMine and buffsIncludeBoss then
-            list, buffCount = Collect.GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, entry._buffList, entry._mergeList, needPlayerAura)
+            list, buffCount = Collect.GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, entry._buffList, nil, needPlayerAura)
         else
             list, buffCount = Collect.GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, entry._buffList, needPlayerAura)
         end
@@ -1019,20 +985,20 @@ local function RenderUnit(entry)
     -- â”€â”€ Layout â”€â”€
     if useSingleRow and entry.mixed then
         local total = debuffCount + buffCount
-        Icons.LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap, gen)
+        Icons.LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap)
         Icons.HideUnused(entry.mixed, total + 1)
         Icons.HideUnused(entry.debuffs, 1)
         Icons.HideUnused(entry.buffs, 1)
     else
         if showDebuffs then
-            Icons.LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, growth, rowWrap, gen)
+            Icons.LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, growth, rowWrap)
             Icons.HideUnused(entry.debuffs, debuffCount + 1)
         else
             Icons.HideUnused(entry.debuffs, 1)
         end
 
         if showBuffs then
-            Icons.LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, growth, rowWrap, gen)
+            Icons.LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, growth, rowWrap)
             Icons.HideUnused(entry.buffs, buffCount + 1)
         else
             Icons.HideUnused(entry.buffs, 1)

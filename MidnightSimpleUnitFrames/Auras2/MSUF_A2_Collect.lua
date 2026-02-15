@@ -39,9 +39,9 @@ ns.__MSUF_A2_COLLECT_LOADED = true
 API.Collect = (type(API.Collect) == "table") and API.Collect or {}
 local Collect = API.Collect
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Hot locals
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 local type = type
 local select = select
 local C_UnitAuras = C_UnitAuras
@@ -63,9 +63,9 @@ local function BindAPIs()
     _apisBound = true
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Secret-safe helpers
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 local function IsSV(v)
     if v == nil then return false end
@@ -112,9 +112,9 @@ local function IsBossAura(data, secretsNow)
     return (data.isBossAura == true)
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Varargs capture (zero-alloc for n â‰¤ 16)
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 local _scratch = { _n = 0 }
 
 local function CaptureSlots(t, ...)
@@ -139,9 +139,9 @@ local function CaptureSlots(t, ...)
     return n
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Pre-cached filter strings
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 local FILTER_HELPFUL         = "HELPFUL"
 local FILTER_HARMFUL         = "HARMFUL"
 local FILTER_HELPFUL_PLAYER  = "HELPFUL|PLAYER"
@@ -155,13 +155,13 @@ local function PlayerFilter(filter)
     return _pFilterMap[filter] or (filter .. "|PLAYER")
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Core collection function
 --
 -- needPlayerAura: when false, skips the isFiltered() call for
 -- player-aura detection. Pass false when both highlightOwnBuffs
 -- AND highlightOwnDebuffs are disabled â€” saves 1 C API call per aura.
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyBoss, out, needPlayerAura)
     out = (type(out) == "table") and out or {}
@@ -259,17 +259,19 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
     return out, n
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
--- Merged collection: player-only + boss auras from full list
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- Merged collection: player-only + boss auras -- SINGLE PASS
+--
+-- Old approach: 2x GetAuraSlots + up to 80x GetAuraDataBySlot
+-- New approach: 1x GetAuraSlots + up to 40x GetAuraDataBySlot
+--
+-- Semantic equivalence: player auras first (priority), then
+-- non-duplicate boss auras appended up to cap.
 
--- Phase 4A: Single-pass merged collection (−1 full C_UnitAuras scan).
--- Old: 2× GetAuraSlots + 2× N×GetAuraDataBySlot + O(n) dedup
--- New: 1× GetAuraSlots + 1× N×GetAuraDataBySlot, inline filter
--- Saves ~25µs per call on merged-config units (onlyMine + includeBoss).
+-- Scratch table for boss auras during merge (avoids allocation)
+local _bossScratch = {}
+
 function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, mergeOut, needPlayerAura)
     out = (type(out) == "table") and out or {}
-    -- mergeOut kept in signature for backward compat but no longer used
     local prevN = out._msufA2_n or 0
 
     if not unit or not C_UnitAuras then
@@ -286,47 +288,69 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, merg
     end
 
     local outputCap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
-    local canFilter = (type(_isFiltered) == "function")
-    local secretsNow = SecretsActive()
-    local playerFilter = canFilter and PlayerFilter(filter) or nil
-    local wantPlayerAura = (needPlayerAura ~= false) and canFilter
 
-    -- Single scan: request full 40 slots since boss auras can be anywhere
+    -- Single GetAuraSlots call (request full 40)
     local nSlots = CaptureSlots(_scratch, select(2, _getSlots(unit, filter, 40, nil)))
 
-    local n = 0
-    for i = 1, nSlots do
-        if n >= outputCap then break end
+    -- Hoist expensive state
+    local canFilter = (type(_isFiltered) == "function")
+    -- Need secrets for both hidePermanent and IsBossAura
+    local secretsNow = SecretsActive()
+    local playerFilter = canFilter and PlayerFilter(filter) or nil
+    local wantPlayerAura = (needPlayerAura ~= false)
 
+    -- Single pass: classify each aura into player or boss bucket
+    local playerN = 0
+    local bossN = 0
+
+    for i = 1, nSlots do
         local data = _getBySlot(unit, _scratch[i])
         if type(data) == "table" then
             local aid = data.auraInstanceID
             if aid ~= nil then
-                -- Check: is this a player aura?
-                local isPlayerAura = false
-                if canFilter and playerFilter then
-                    isPlayerAura = not _isFiltered(unit, aid, playerFilter)
-                end
-
-                -- Check: is this a boss aura?
-                local isBoss = IsBossAura(data, secretsNow)
-
-                -- Include if player's OR boss
-                if isPlayerAura or isBoss then
-                    -- Apply hidePermanent filter
-                    if hidePermanent and IsPermanentAura(unit, aid, secretsNow) then
-                        -- skip permanent auras
-                    else
-                        n = n + 1
-                        data._msufAuraInstanceID = aid
-                        data._msufIsPlayerAura = isPlayerAura
-                        out[n] = data
+                -- hidePermanent filter (applied to all auras)
+                local dominated = hidePermanent and IsPermanentAura(unit, aid, secretsNow)
+                if not dominated then
+                    -- Classify: is this the player's own aura?
+                    local isPlayer = false
+                    if canFilter and playerFilter then
+                        -- _isFiltered returns true if aura does NOT match the filter
+                        -- So "not filtered by PLAYER filter" = IS the player's aura
+                        isPlayer = not _isFiltered(unit, aid, playerFilter)
                     end
+
+                    data._msufAuraInstanceID = aid
+                    data._msufIsPlayerAura = wantPlayerAura and isPlayer or false
+
+                    if isPlayer then
+                        -- Player's own aura: primary bucket
+                        if playerN < outputCap then
+                            playerN = playerN + 1
+                            out[playerN] = data
+                        end
+                    elseif IsBossAura(data, secretsNow) then
+                        -- Not player's, but is a boss aura: secondary bucket
+                        bossN = bossN + 1
+                        _bossScratch[bossN] = data
+                    end
+                    -- Non-player, non-boss auras: dropped (merge semantics)
                 end
             end
         end
     end
 
+    -- Append boss auras after player auras (up to cap)
+    local n = playerN
+    for i = 1, bossN do
+        if n >= outputCap then break end
+        n = n + 1
+        out[n] = _bossScratch[i]
+    end
+
+    -- Clear boss scratch (avoid stale references)
+    for i = 1, bossN do _bossScratch[i] = nil end
+
+    -- Stale-tail clear
     if n < prevN then
         for i = n + 1, prevN do out[i] = nil end
     end
@@ -334,9 +358,9 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, merg
     return out, n
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Stack count / Duration / Expiration (direct API, no caching)
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 function Collect.GetStackCount(unit, auraInstanceID)
     if not unit or auraInstanceID == nil then return nil end
@@ -365,10 +389,10 @@ function Collect.HasExpiration(unit, auraInstanceID)
     return nil
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Fast-path helpers (no guards â€” Icons.lua binds these after
 -- APIs are confirmed available, saving 3 checks per call per icon)
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 function Collect.GetDurationObjectFast(unit, aid)
     local obj = _getDuration(unit, aid)
@@ -388,9 +412,9 @@ function Collect.HasExpirationFast(unit, aid)
     return nil
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Backward compat stubs
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 API.Store = (type(API.Store) == "table") and API.Store or {}
 local Store = API.Store
@@ -410,11 +434,17 @@ function Store.GetEpoch(unit)
     return Store._epochs[unit] or 0
 end
 
--- Phase 4D: Dead compat stubs removed (GetEpochSig, GetRawSig,
--- PopUpdated, ForceScanForReuse, GetLastScannedAuraList, Store.GetStackCount,
--- Model.IsBossAura, Model.GetPlayerAuraIdSetCached — none referenced by active TOC files).
+function Store.GetEpochSig(unit) return Store.GetEpoch(unit) end
+function Store.GetRawSig() return nil end
+function Store.PopUpdated() return nil, 0 end
+function Store.ForceScanForReuse() return nil end
+function Store.GetLastScannedAuraList() return nil end
+function Store.GetStackCount(unit, aid) return Collect.GetStackCount(unit, aid) end
 
 API.Model = (type(API.Model) == "table") and API.Model or {}
+local Model = API.Model
+Model.IsBossAura = function(data) return IsBossAura(data, SecretsActive()) end
+Model.GetPlayerAuraIdSetCached = nil
 
 Collect.SecretsActive = SecretsActive
 Collect.IsBossAura = function(data) return IsBossAura(data, SecretsActive()) end
