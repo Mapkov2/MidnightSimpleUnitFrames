@@ -1197,11 +1197,11 @@ local v=tonumber(g.msufUiScale)
 if not v then v=tonumber(g.uiScale)
 end
 if not v then v=1.0 end
-return clamp(v,0.6,1.4) end
+return clamp(v,0.25,1.5) end
 local function MSUF_SetSavedMsufScale(v) local g=MSUF_EnsureGeneral()
 if not g then return end
 v=tonumber(v)
-or 1.0 g.msufUiScale=clamp(v,0.6,1.4) end
+or 1.0 g.msufUiScale=clamp(v,0.25,1.5) end
 local function MSUF_IsScalingDisabled() local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
 or nil return (g and g.disableScaling)
 and true or false end
@@ -1214,7 +1214,7 @@ and not(opts and opts.ignoreDisable)
 then return end
 scale=tonumber(scale)
 if not scale then return end
-scale=clamp(scale,0.6,1.4)
+scale=clamp(scale,0.25,1.5)
 if InCombatLockdown and InCombatLockdown()
 then _MSUF_pendingMsufScale=scale if MSUF_EnsureScaleApplyAfterCombat then MSUF_EnsureScaleApplyAfterCombat()
 end
@@ -1504,7 +1504,65 @@ end},
 },8)
 msufReset,msufOff=row and row[1],row and row[2]
 
-api.ui={title=title,globalCur=globalCur,btn1080=btn1080,btn1440=btn1440,btn4k=btn4k,btnAuto=btnAuto,msufReset=msufReset,msufOff=msufOff,}
+-- MSUF-only (unitframes + castbars) scale slider
+local msufScaleLabel=UI_Text(parent,"GameFontHighlight","TOPLEFT",(msufOff or msufReset or (row and row[1]) or (btn1080 or globalCur)),"BOTTOMLEFT",0,-12,"MSUF Unitframe Scale",MSUF_SkinText)
+local msufScaleCur=UI_Text(parent,"GameFontHighlightSmall","TOPLEFT",msufScaleLabel,"BOTTOMLEFT",0,-6,"Current: ...",MSUF_SkinText)
+local msufScaleSlider=CreateFrame("Slider","MSUF_Tools_MsufScaleSlider",parent,"OptionsSliderTemplate")
+msufScaleSlider:ClearAllPoints()
+-- Anchor within the box so the thumb never clips.
+msufScaleSlider:SetPoint("TOP",msufScaleCur,"BOTTOM",0,-8)
+msufScaleSlider:SetPoint("LEFT",parent,"LEFT",16,0)
+msufScaleSlider:SetPoint("RIGHT",parent,"RIGHT",-28,0)
+msufScaleSlider:SetMinMaxValues(25,150)
+msufScaleSlider:SetValueStep(5)
+msufScaleSlider:SetObeyStepOnDrag(true)
+if msufScaleSlider.SetStepsPerPage then msufScaleSlider:SetStepsPerPage(1) end
+
+do
+local n=(msufScaleSlider.GetName and msufScaleSlider:GetName())
+local t=(n and _G[n.."Text"]) or msufScaleSlider.Text
+if t then t:SetText(""); t:Hide() end
+local low=(n and _G[n.."Low"]) or msufScaleSlider.Low
+if low then low:SetText(""); low:Hide() end
+local high=(n and _G[n.."High"]) or msufScaleSlider.High
+if high then high:SetText(""); high:Hide() end
+end
+
+local function MSUF_UpdateMsufScaleRow(scale)
+scale=tonumber(scale) or 1.0
+scale=clamp(scale,0.25,1.5)
+local pct=math.floor(scale*100+0.5)
+if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f (%d%%)",scale,pct)) end
+end
+
+local function MSUF_SnapMsufScalePct(pct)
+pct=tonumber(pct) or 100
+pct=math.floor((pct/5)+0.5)*5
+if pct<25 then pct=25 elseif pct>150 then pct=150 end
+return pct
+end
+
+msufScaleSlider:EnableMouseWheel(true)
+msufScaleSlider:SetScript("OnMouseWheel",function(self,delta)
+if not delta then return end
+local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100
+v=v+(delta>0 and 5 or -5)
+self:SetValue(MSUF_SnapMsufScalePct(v))
+end)
+
+msufScaleSlider:SetScript("OnValueChanged",function(self,value)
+if self.__msufSkip then return end
+local pct=MSUF_SnapMsufScalePct(value)
+if pct~=value then self.__msufSkip=true; self:SetValue(pct); self.__msufSkip=nil; return end
+local scale=pct/100
+MSUF_SetSavedMsufScale(scale)
+MSUF_ApplyMsufScale(scale)
+MSUF_UpdateMsufScaleRow(scale)
+end)
+
+if MSUF_AddTooltip then pcall(MSUF_AddTooltip,msufScaleSlider,"MSUF Unitframe Scale","Scales only MSUF frames (unitframes + castbars). Range 25%–150% (0.25–1.50). Applied immediately; in combat it applies after combat.") end
+
+api.ui={title=title,globalCur=globalCur,btn1080=btn1080,btn1440=btn1440,btn4k=btn4k,btnAuto=btnAuto,msufReset=msufReset,msufOff=msufOff,msufScaleLabel=msufScaleLabel,msufScaleCur=msufScaleCur,msufScaleSlider=msufScaleSlider,}
 
 function api.UpdateEnabledStates()
 local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
@@ -1515,6 +1573,9 @@ MSUF_SetEnabled(btn1440,not disabled)
 MSUF_SetEnabled(btn4k,not disabled)
 MSUF_SetEnabled(btnAuto,not disabled)
 MSUF_SetEnabled(msufReset,not disabled)
+MSUF_SetEnabled(msufScaleSlider,not disabled)
+if msufScaleLabel and msufScaleLabel.SetAlpha then msufScaleLabel:SetAlpha(disabled and 0.55 or 1.0) end
+if msufScaleCur and msufScaleCur.SetAlpha then msufScaleCur:SetAlpha(disabled and 0.55 or 1.0) end
 return disabled and true or false
 end
 
@@ -1555,9 +1616,16 @@ local disabled=g and g.disableScaling
 if api.UpdateEnabledStates then api.UpdateEnabledStates()
 end
 local cur=MSUF_GetCurrentGlobalUiScale()
-if cur then globalCur:SetText(string.format("Current: %.4f",cur))
-else globalCur:SetText("Current: ?")
-end
+local ms=clamp(MSUF_GetSavedMsufScale(),0.25,1.5)
+local pct=MSUF_SnapMsufScalePct(ms*100)
+local scale=pct/100
+MSUF_UpdateMsufScaleRow(scale)
+if msufScaleSlider and msufScaleSlider.SetValue then msufScaleSlider.__msufSkip=true; msufScaleSlider:SetValue(pct); msufScaleSlider.__msufSkip=nil end
+if math.abs(ms-scale)>0.001 then MSUF_SetSavedMsufScale(scale); MSUF_ApplyMsufScale(scale) end
+
+local ms=clamp(MSUF_GetSavedMsufScale(),0.25,1.5)
+MSUF_UpdateMsufScaleRow(ms)
+if msufScaleSlider and msufScaleSlider.SetValue then msufScaleSlider.__msufSkip=true; msufScaleSlider:SetValue(ms); msufScaleSlider.__msufSkip=nil end
 
 if disabled then
 if btn1080 and btn1080._msufSetSelected then btn1080:_msufSetSelected(false)
@@ -2749,4 +2817,3 @@ end
 end
 )
 end
-
