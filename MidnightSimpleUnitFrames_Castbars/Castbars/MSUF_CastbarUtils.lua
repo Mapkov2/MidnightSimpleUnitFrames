@@ -844,6 +844,8 @@ function _G.MSUF_CB_ResetStateOnStop(frame, reasonOrState, opts)
             MSUF_UnregisterCastbar(frame)
         end
         frame.MSUF_durationObj = nil
+        frame._msufPlainEndTime = nil
+        frame._msufPlainTotal = nil
         frame.MSUF_isChanneled = nil
         frame.MSUF_channelDirect = nil
         frame.MSUF_timerDriven = nil
@@ -868,6 +870,8 @@ function _G.MSUF_CB_ResetStateOnStop(frame, reasonOrState, opts)
             MSUF_UnregisterCastbar(frame)
         end
         frame.MSUF_durationObj = nil
+        frame._msufPlainEndTime = nil
+        frame._msufPlainTotal = nil
         frame.castDuration = nil
         frame.castElapsed  = nil
         frame.MSUF_timerDriven = nil
@@ -915,6 +919,8 @@ function _G.MSUF_CB_ResetStateOnStop(frame, reasonOrState, opts)
     end
 
     frame.MSUF_durationObj = nil
+    frame._msufPlainEndTime = nil
+    frame._msufPlainTotal = nil
     frame.MSUF_isChanneled = nil
     frame.MSUF_channelDirect = nil
     frame.MSUF_timerDriven = nil

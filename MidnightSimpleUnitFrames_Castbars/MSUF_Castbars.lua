@@ -380,6 +380,29 @@ do
     _G.MSUF_CastbarStyleRev = _G.MSUF__castbarStyleGlobalRev
     -- P1 Fix #6: local upvalue for fast per-tick style-rev comparison (avoids _G lookup per tick).
     local _styleRevLocal = _G.MSUF__castbarStyleGlobalRev
+
+    -- PERF: Resolve time source once at load (avoids conditional per frame).
+    local _Now = GetTimePreciseSec or GetTime
+
+    -- PERF: Cache hot-path function refs as upvalues (avoids type(_G.xxx)=="function" per tick).
+    local _GlowFade = _G.MSUF_ApplyCastbarGlowFade
+    local _GlowReset = _G.MSUF_ResetCastbarGlowFade
+    local _IsGCDEnabled = _G.MSUF_IsGCDBarEnabled
+    local _GCDStop = _G.MSUF_PlayerGCDBar_Stop
+    local _GCDSubOpts = _G.MSUF_GCD_GetSubOptions
+    local _RefreshStyleCache = _G.MSUF_RefreshCastbarStyleCache
+
+    -- Deferred re-cache after all files loaded (handles load-order where globals aren't set yet).
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            _GlowFade = _G.MSUF_ApplyCastbarGlowFade or _GlowFade
+            _GlowReset = _G.MSUF_ResetCastbarGlowFade or _GlowReset
+            _IsGCDEnabled = _G.MSUF_IsGCDBarEnabled or _IsGCDEnabled
+            _GCDStop = _G.MSUF_PlayerGCDBar_Stop or _GCDStop
+            _GCDSubOpts = _G.MSUF_GCD_GetSubOptions or _GCDSubOpts
+            _RefreshStyleCache = _G.MSUF_RefreshCastbarStyleCache or _RefreshStyleCache
+        end)
+    end
     function _G.MSUF_BumpCastbarStyleRev()
         _G.MSUF__castbarStyleGlobalRev = (_G.MSUF__castbarStyleGlobalRev or 1) + 1
         _G.MSUF_CastbarStyleRev = _G.MSUF__castbarStyleGlobalRev
@@ -507,12 +530,25 @@ do
             return
         end
 
-        local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
+        local now = _Now()
 
         for frame in pairs(active) do
             if not frame or not frame:IsShown() or not frame.statusBar then
                 active[frame] = nil
             else
+                -- FAST PATH (oUF-style): Pure arithmetic time-text update every tick (~60fps).
+                -- Uses plain-number snapshot from Cast() start. Zero API calls, zero ToPlain.
+                -- Re-snapshots automatically on DELAYED / CHANNEL_UPDATE / target change events.
+                if frame.timeText and frame._msufCastTimeEnabled ~= false and not frame.MSUF_gcdActive and not frame.isEmpower then
+                    local endT = frame._msufPlainEndTime
+                    if endT then
+                        local remaining = endT - now
+                        if remaining < 0 then remaining = 0 end
+                        MSUF_SetCastTimeText_Dedup(frame, remaining)
+                    end
+                end
+
+                -- HEAVY PATH: Full update (hard-stop, glow, style-rev, GCD, empower) at per-bar cadence.
                 local nextTick = frame._msufNextTick
                 if (not nextTick) or now >= nextTick then
                     local fi = frame._msufTickInterval or 0.10
@@ -543,14 +579,14 @@ do
 
         if frame._msufTickInterval == nil then
             local u = frame.unit
-            -- Most bars are Duration-Object driven; we only tick for time-text / glow fade / hard-stop safety.
-            -- Player needs a bit more cadence than default so the time text feels responsive without per-frame OnUpdate.
+            -- Heavy-path cadence: hard-stop, glow, style-rev, GCD, empower.
+            -- Time text is handled at 60fps by the manager fast-path (no per-bar gate).
             if u == "target" or u == "focus" then
-                frame._msufTickInterval = 0.016
+                frame._msufTickInterval = 0.05
             elseif u == "player" then
-                frame._msufTickInterval = 0.016
+                frame._msufTickInterval = 0.05
             elseif type(u) == "string" and u:sub(1,4) == "boss" then
-                frame._msufTickInterval = 0.016
+                frame._msufTickInterval = 0.05
             else
                 frame._msufTickInterval = (frame.isEmpower and 0.03) or 0.10
             end
@@ -568,8 +604,8 @@ do
         if not MSUF_CastbarManager or not MSUF_CastbarManager.active then return end
 
         -- Restore base color if the optional end-of-cast fade was active.
-        if type(_G.MSUF_ResetCastbarGlowFade) == "function" then
-            _G.MSUF_ResetCastbarGlowFade(frame)
+        if _GlowReset then
+            _GlowReset(frame)
         end
 
         MSUF_CastbarManager.active[frame] = nil
@@ -597,46 +633,40 @@ do
         -- P1 Fix #6: Inlined style-rev check (was EnsureCastbarStyleCache function call per tick).
         -- Only calls the heavy refresh when the global style rev bumps (user changed settings).
         if frame._msufCastbarStyleRev ~= _styleRevLocal then
-            local refresh = _G.MSUF_RefreshCastbarStyleCache
-            if type(refresh) == "function" then
-                refresh(frame)
+            if _RefreshStyleCache then
+                _RefreshStyleCache(frame)
             end
             frame._msufCastbarStyleRev = _styleRevLocal
         end
 
-        local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
+        -- `now` is passed from the manager; external callers (Empower, PlayerRuntime) may omit it.
+        if not now then
+            now = (_Now or GetTimePreciseSec)()
+        end
 
         -- GCD bar virtual cast (instant casts): driven by MSUF_CastbarGCD + CastbarManager tick.
         if frame.MSUF_gcdActive then
-            if type(_G.MSUF_IsGCDBarEnabled) == "function" and not _G.MSUF_IsGCDBarEnabled() then
-                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
-                    _G.MSUF_PlayerGCDBar_Stop(frame)
-                end
+            if _IsGCDEnabled and not _IsGCDEnabled() then
+                if _GCDStop then _GCDStop(frame) end
                 return
             end
 
             -- Real casts/channel/empower always win.
             if frame.isEmpower then
-                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
-                    _G.MSUF_PlayerGCDBar_Stop(frame, true)
-                end
+                if _GCDStop then _GCDStop(frame, true) end
                 return
             end
 
             local u = frame.MSUF_gcdUnit or frame.unit or "player"
             if UnitCastingInfo(u) or UnitChannelInfo(u) then
-                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
-                    _G.MSUF_PlayerGCDBar_Stop(frame, true)
-                end
+                if _GCDStop then _GCDStop(frame, true) end
                 return
             end
 
             local startT = frame.MSUF_gcdStart or 0
             local dur = frame.MSUF_gcdDur or 0
             if dur <= 0 then
-                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
-                    _G.MSUF_PlayerGCDBar_Stop(frame)
-                end
+                if _GCDStop then _GCDStop(frame) end
                 return
             end
 
@@ -646,17 +676,15 @@ do
 
             local rem = dur - elapsed
             if rem <= 0.001 then
-                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
-                    _G.MSUF_PlayerGCDBar_Stop(frame)
-                end
+                if _GCDStop then _GCDStop(frame) end
                 return
             end
 
             -- Live read sub-toggles so UI changes apply immediately.
             local showTime = true
             local showSpell = true
-            if type(_G.MSUF_GCD_GetSubOptions) == "function" then
-                showTime, showSpell = _G.MSUF_GCD_GetSubOptions()
+            if _GCDSubOpts then
+                showTime, showSpell = _GCDSubOpts()
             end
 
             frame.MSUF_gcdShowTime = showTime
@@ -694,8 +722,8 @@ do
             end
 
             -- Optional glow fade near completion.
-            if type(_G.MSUF_ApplyCastbarGlowFade) == "function" then
-                _G.MSUF_ApplyCastbarGlowFade(frame, rem, dur)
+            if _GlowFade then
+                _GlowFade(frame, rem, dur)
             end
 
             return
@@ -756,12 +784,12 @@ do
             end
 
             -- "Glow effect": fade towards white as the empower cast approaches completion.
-            if type(_G.MSUF_ApplyCastbarGlowFade) == "function" then
+            if _GlowFade then
                 local base = frame._msufEmpowerBaseNum or ToPlain(frame.empowerTotalBase) or total
                 if base and base > 0 then
                     local rem = base - elapsed
                     if rem < 0 then rem = 0 end
-                    _G.MSUF_ApplyCastbarGlowFade(frame, rem, base)
+                    _GlowFade(frame, rem, base)
                 end
             end
 
@@ -885,18 +913,22 @@ do
             if remNum then
                 if remNum < 0 then remNum = 0 end
 
-                if frame.timeText and castTimeEnabled then
-                    MSUF_SetCastTimeText_Dedup(frame, remNum)
-                end
+                -- oUF-style: re-snapshot endTime for drift correction (heavy path runs at 20Hz).
+                -- This keeps the 60fps fast-path accurate without any per-tick API calls.
+                frame._msufPlainEndTime = now + remNum
+
+                -- Time text is handled by the manager fast-path at 60fps via _msufPlainEndTime.
+                -- No time text update needed here.
 
                 -- "Glow effect": fade towards white as the cast approaches completion.
-                if type(_G.MSUF_ApplyCastbarGlowFade) == "function" then
-                    local totalNum
-                    if dObj.GetTotalDuration then
-                        totalNum = ToPlain(dObj:GetTotalDuration())
+                if _GlowFade then
+                    -- Use cached total from Cast() snapshot when available (avoids GetTotalDuration + ToPlain).
+                    local totalNum = frame._msufPlainTotal
+                    if not totalNum then
+                        if dObj.GetTotalDuration then
+                            totalNum = ToPlain(dObj:GetTotalDuration())
+                        end
                     end
-                    -- P1 Fix #4: Reuse cached span from the fallback block above instead of
-                    -- repeating pcall(GetMinMaxValues) + 2Ã— ToPlain for the same bar.
                     if (not totalNum) and _fallbackSpan then
                         totalNum = _fallbackSpan
                     end
@@ -912,7 +944,7 @@ do
                         end
                     end
                     if totalNum and totalNum > 0 then
-                        _G.MSUF_ApplyCastbarGlowFade(frame, remNum, totalNum)
+                        _GlowFade(frame, remNum, totalNum)
                     end
                 end
 
@@ -960,7 +992,7 @@ do
             end
 
             -- "Glow effect": fade towards white as the cast approaches completion.
-            if type(_G.MSUF_ApplyCastbarGlowFade) == "function" and frame.statusBar then
+            if _GlowFade and frame.statusBar then
                 local bar = frame.statusBar
                 local okMM, minV, maxV = pcall(bar.GetMinMaxValues, bar)
                 if okMM then
@@ -969,7 +1001,7 @@ do
                     if maxV and maxV > minV then
                         local totalNum = maxV - minV
                         if totalNum and totalNum > 0 then
-                            _G.MSUF_ApplyCastbarGlowFade(frame, remNum, totalNum)
+                            _GlowFade(frame, remNum, totalNum)
                         end
                     end
                 end

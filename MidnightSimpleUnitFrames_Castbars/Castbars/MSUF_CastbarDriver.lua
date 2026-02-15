@@ -655,6 +655,29 @@ if spellName and durationObj then
             self.MSUF_durationObj = durationObj
             self.MSUF_isChanneled = isChanneled
 
+            -- oUF-style snapshot: read remaining + total ONCE at cast start.
+            -- The manager fast-path then uses pure arithmetic (endTime - now) instead of
+            -- calling dObj:GetRemainingDuration() + ToPlain() every tick.
+            -- Re-snapshots automatically on DELAYED / CHANNEL_UPDATE / target change (re-Cast).
+            do
+                local snapRem, snapTotal
+                if durationObj.GetRemainingDuration then
+                    snapRem = MSUF__ToNumber_SecretSafe(durationObj:GetRemainingDuration())
+                elseif durationObj.GetRemaining then
+                    snapRem = MSUF__ToNumber_SecretSafe(durationObj:GetRemaining())
+                end
+                if durationObj.GetTotalDuration then
+                    snapTotal = MSUF__ToNumber_SecretSafe(durationObj:GetTotalDuration())
+                end
+                local snapNow = GetTime()
+                if snapRem and snapRem > 0 then
+                    self._msufPlainEndTime = snapNow + snapRem
+                else
+                    self._msufPlainEndTime = nil
+                end
+                self._msufPlainTotal = snapTotal
+            end
+
             -- Reset hard-stop persistence timers on a successful (re)start.
             self._msufHardStopNoChannelSince = nil
             self._msufHardStopNoCastSince = nil
