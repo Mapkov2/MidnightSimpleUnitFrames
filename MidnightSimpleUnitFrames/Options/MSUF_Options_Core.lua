@@ -2748,6 +2748,7 @@ local function MSUF_SyncCastbarsTabToggles()
         if UIDropDownMenu_SetText then UIDropDownMenu_SetText(castbarFillDirDrop, (dir == "LTR") and "Left to right" or "Right to left (default)") end
         MSUF_SetDropDownEnabled(castbarFillDirDrop, castbarFillDirLabel, true)
     end
+    CB(castbarOpositeDirectionTarget, (g.castbarOpositeDirectionTarget ~= false))
     CB(castbarChannelTicksCheck, (g.castbarShowChannelTicks ~= false))
     CB(castbarGCDBarCheck, (g.showGCDBar ~= false))
     local gcdOn = (g.showGCDBar ~= false)
@@ -2917,9 +2918,10 @@ end
         MSUF_SyncSimpleDropdown(castbarFillDirDrop, castbarFillDirOptions, MSUF_GetCastbarFillDir)
      end)
     -- Step 16: Apply dispatch handles castbar updates (castbarVisuals/castbarTicks/castbarGlow/castbarLatency)
--- Channeled casts: show 5 tick lines
+    -- Able to have the two cast bars be oposite each other
+    castbarOpositeDirectionTarget = CB("MSUF_CastbarOpositeDirectionTarget", "Use opposite fill direction for target", 16, 0, "castbarOpositeDirectionTarget", "castbarOpositeDirectionTarget", function(cb)  cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarFillDirDrop, "BOTTOMLEFT", 16, -10)  end)
     -- Channeled casts: show 5 tick lines
-    castbarChannelTicksCheck = CB("MSUF_CastbarChannelTicksCheck", "Show channel tick lines (5)", 16, 0, "castbarShowChannelTicks", "castbarTicks", function(cb)  if castbarFillDirDrop then cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarFillDirDrop, "BOTTOMLEFT", 16, -10) end  end)
+    castbarChannelTicksCheck = CB("MSUF_CastbarChannelTicksCheck", "Show channel tick lines (5)", 16, 0, "castbarShowChannelTicks", "castbarTicks", function(cb)  if castbarFillDirDrop then cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", castbarOpositeDirectionTarget, "BOTTOMLEFT", 0, -10) end  end)
 -- GCD bar (player): show a short bar for instant casts that trigger the global cooldown
     local function _MSUF_ApplyGCDBarToggle(v)
         v = (v and true) or false
@@ -3042,7 +3044,8 @@ empowerStageBlinkTimeSlider:SetScript("OnShow", function(self)
         A(castbarFillDirLabel, "TOPLEFT", castbarUnifiedDirCheck, "BOTTOMLEFT", 0, -14)
         A(castbarFillDirDrop, "TOPLEFT", castbarFillDirLabel, "BOTTOMLEFT", -16, -4)
         -- keep alignment with dropdown padding (-16) by offsetting back +16
-        A(castbarChannelTicksCheck, "TOPLEFT", castbarFillDirDrop, "BOTTOMLEFT", 16, -10)
+        A(castbarOpositeDirectionTarget, "TOPLEFT", castbarFillDirDrop, "BOTTOMLEFT", 16, -10)
+        A(castbarChannelTicksCheck, "TOPLEFT", castbarOpositeDirectionTarget, "BOTTOMLEFT", 0, -10)
         A(castbarGCDBarCheck, "TOPLEFT", castbarChannelTicksCheck, "BOTTOMLEFT", 0, -8)
         -- Style (right)
         A(castbarTextureLabel, "TOPLEFT", rightCol, "TOPLEFT", 0, -20); T(castbarTextureLabel, "Castbar texture")
