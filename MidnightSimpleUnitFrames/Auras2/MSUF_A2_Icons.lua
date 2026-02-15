@@ -89,6 +89,7 @@ local _showSwipe        = false
 local _showText         = true
 local _swipeReverse     = false
 local _showStacks       = false
+local _IS_BOSS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local _wantBuffHL       = false
 local _wantDebuffHL     = false
 
@@ -104,11 +105,11 @@ local function RefreshSharedFlags(shared, gen)
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Text config resolution (per-icon; cached by configGen)
 -- Applies stack/cooldown text sizes + offsets from shared + per-unit layout
 -- Zero per-frame cost: runs only when configGen changes.
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 local function ResolveTextConfig(icon, unit, shared, gen)
     if not icon then return end
@@ -176,9 +177,9 @@ local function GetAuras2DB()
     return nil, nil
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Color helpers (late-bound from API.Colors or fallback)
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 local function GetOwnBuffHighlightRGB()
     local f = _G.MSUF_A2_GetOwnBuffHighlightRGB
@@ -198,9 +199,9 @@ local function GetStackCountRGB()
     return 1.0, 1.0, 1.0
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Icon Pool
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 -- Icons are stored on container._msufIcons[index]
 -- Each icon is a Button with: .tex, .cooldown, .count, .border, .overlay
@@ -375,9 +376,9 @@ function Icons.BumpConfigGen()
     _sharedFlagsGen = -1   -- force shared flags refresh
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Layout Engine
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, rowWrap, configGen)
     if not container or count <= 0 then return end
@@ -435,13 +436,13 @@ end
     end
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Visual Commit (CommitIcon)
 -- 
 -- This is the ONLY function that touches icon visuals.
 -- Called once per icon per render. Uses diff gating on
 -- auraInstanceID + config generation to skip redundant work.
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 
 
@@ -541,10 +542,10 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     return true
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Timer application (cooldown swipe + text)
 -- Uses duration objects (secret-safe pass-through)
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 
 local function ClearCooldownVisual(icon, cd)
@@ -734,9 +735,9 @@ function Icons._RefreshTimer(icon, unit, aid, shared)
     end
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Stack count display
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 -- Cached stack count color (invalidated by BumpConfigGen)
 local _stackR, _stackG, _stackB, _stackColorGen = 1, 1, 1, -1
@@ -858,9 +859,9 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
 end
 
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Own-aura highlight
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 -- Cached highlight colors (invalidated by configGen change)
 local _hlBuffR, _hlBuffG, _hlBuffB = 1.0, 0.85, 0.2
@@ -901,10 +902,10 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     end
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Refresh all assigned icons (fast path: timer + stacks only)
 -- Called when aura membership hasn't changed but values may have
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
     if not entry then return end
@@ -970,9 +971,45 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
     end
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Preview icons (Edit Mode)
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
+
+-- Sample textures for varied preview icons (common WoW spell icons)
+local _PREVIEW_BUFF_TEXTURES = {
+    136116,  -- generic buff (INV_Misc_QuestionMark)
+    135932,  -- Arcane Intellect
+    135987,  -- Power Word: Fortitude
+    136085,  -- Mark of the Wild
+    135915,  -- Blessing of Kings
+    132333,  -- Renew
+    136075,  -- Rejuvenation
+    135981,  -- Prayer of Mending
+    136076,  -- Regrowth
+    135964,  -- Shield
+    136048,  -- Heroism / Bloodlust
+    132316,  -- Beacon of Light
+}
+local _PREVIEW_DEBUFF_TEXTURES = {
+    136118,  -- generic debuff
+    136139,  -- Shadow Word: Pain
+    136197,  -- Corruption
+    135817,  -- Agony
+    132851,  -- Flame Shock
+    135813,  -- Moonfire
+    136188,  -- Curse of Tongues
+    136186,  -- Slow
+    135975,  -- Polymorph
+    132337,  -- Frost Nova
+    136093,  -- Rend
+    136170,  -- Deep Wounds
+}
+local _PREVIEW_BUFF_TEX_N = #_PREVIEW_BUFF_TEXTURES
+local _PREVIEW_DEBUFF_TEX_N = #_PREVIEW_DEBUFF_TEXTURES
+
+-- Cooldown durations per preview slot (varying so they don't all tick together)
+local _PREVIEW_CD_DURATIONS = { 12, 18, 8, 25, 15, 10, 20, 30, 6, 22, 14, 9 }
+local _PREVIEW_CD_DUR_N = #_PREVIEW_CD_DURATIONS
 
 function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, debuffCap, stackCountAnchor)
     -- Delegate to existing preview system if available
@@ -985,16 +1022,30 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
     local debuffCount = 0
     local gen = _configGen
     local showStacks = (shared and shared.showStackCount ~= false)
+    local now = GetTime()
 
-    -- Apply full text config to a preview icon (stack size/offsets, cooldown size/offsets)
-    local function ApplyPreviewTextConfig(icon)
+    -- Apply full text config + cooldown to a preview icon
+    local function SetupPreviewIcon(icon, idx, kind)
+        icon._msufA2_isPreview = true
+        icon._msufA2_previewKind = kind
         icon._msufUnit = unit
-        -- Invalidate text cfg cache so ResolveTextConfig re-reads current DB values
+
+        -- Varied texture
+        if icon.tex then
+            if kind == "buff" then
+                icon.tex:SetTexture(_PREVIEW_BUFF_TEXTURES[((idx - 1) % _PREVIEW_BUFF_TEX_N) + 1])
+            else
+                icon.tex:SetTexture(_PREVIEW_DEBUFF_TEXTURES[((idx - 1) % _PREVIEW_DEBUFF_TEX_N) + 1])
+            end
+        end
+
+        icon:Show()
+
+        -- Invalidate + resolve text config
         icon._msufA2_textCfgGen = nil
         ResolveTextConfig(icon, unit, shared, gen)
 
-        -- Stack text: size + anchor + offsets
-        -- Invalidate diff caches to force re-application
+        -- Stack text
         icon._msufA2_lastStackFontSize = nil
         icon._msufA2_lastStackPointAnchor = nil
         icon._msufA2_lastStackPointX = nil
@@ -1002,10 +1053,10 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
         icon._msufA2_lastStackJustifyAnchor = nil
         Apply.ApplyStackTextOffsets(icon, unit, shared, stackCountAnchor)
 
-        -- Show sample stack count
         if icon.count then
             if showStacks then
-                local n = icon._msufA2_previewStackT or 3
+                local n = icon._msufA2_previewStackT or (((idx - 1) % 9) + 1)
+                icon._msufA2_previewStackT = icon._msufA2_previewStackT or n
                 icon.count:SetText(n)
                 icon.count:Show()
             else
@@ -1013,41 +1064,47 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
             end
         end
 
-        -- Cooldown text: size + offsets
-        -- Invalidate cooldown frame diff caches
+        -- Cooldown swipe + countdown text
         local cd = icon.cooldown
         if cd then
             cd._msufA2_cdTextSize = nil
             cd._msufA2_cdTextOffX = nil
             cd._msufA2_cdTextOffY = nil
+
+            local dur = _PREVIEW_CD_DURATIONS[((idx - 1) % _PREVIEW_CD_DUR_N) + 1]
+            -- Stagger start times so icons show different remaining times
+            local elapsed = (idx * 2.7) % dur
+            local startTime = now - elapsed
+
+            if cd.SetHideCountdownNumbers then
+                cd:SetHideCountdownNumbers(false)
+            end
+            if cd.SetCooldown then
+                cd:SetCooldown(startTime, dur)
+            end
+
+            Apply.ApplyCooldownTextOffsets(icon, unit, shared)
         end
-        Apply.ApplyCooldownTextOffsets(icon, unit, shared)
     end
 
+    -- Buffs: show up to buffCap preview icons
     if entry.buffs and buffCap > 0 then
-        for i = 1, math.min(3, buffCap) do
+        for i = 1, buffCap do
             local icon = Icons.AcquireIcon(entry.buffs, i)
             if icon then
-                icon._msufA2_isPreview = true
-                icon._msufA2_previewKind = "buff"
-                if icon.tex then icon.tex:SetTexture(136116) end
-                icon:Show()
-                ApplyPreviewTextConfig(icon)
+                SetupPreviewIcon(icon, i, "buff")
                 buffCount = buffCount + 1
             end
         end
         Icons.HideUnused(entry.buffs, buffCount + 1)
     end
 
+    -- Debuffs: show up to debuffCap preview icons
     if entry.debuffs and debuffCap > 0 then
-        for i = 1, math.min(3, debuffCap) do
+        for i = 1, debuffCap do
             local icon = Icons.AcquireIcon(entry.debuffs, i)
             if icon then
-                icon._msufA2_isPreview = true
-                icon._msufA2_previewKind = "debuff"
-                if icon.tex then icon.tex:SetTexture(136118) end
-                icon:Show()
-                ApplyPreviewTextConfig(icon)
+                SetupPreviewIcon(icon, i, "debuff")
                 debuffCount = debuffCount + 1
             end
         end
@@ -1064,12 +1121,117 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
     if type(fn) == "function" then
         return fn(entry, unit, shared, privIconSize, spacing, stackCountAnchor)
     end
+
+    -- Private aura preview: show placeholder icons in the private container
+    -- (real private auras use C_UnitAuras.AddPrivateAuraAnchor, but in Edit Mode
+    -- with no unit present we simulate them with regular icon pool frames)
+    local container = entry.private
+    if not container then return end
+
+    local enabled = false
+    if unit == "player" then enabled = (shared and shared.showPrivateAurasPlayer == true)
+    elseif unit == "focus" then enabled = (shared and shared.showPrivateAurasFocus == true)
+    else
+        if _IS_BOSS[unit] then enabled = (shared and shared.showPrivateAurasBoss == true) end
+    end
+
+    if not enabled then
+        Icons.HideUnused(container, 1)
+        return
+    end
+
+    local maxN = (unit == "player")
+        and (shared.privateAuraMaxPlayer or 4)
+        or  (shared.privateAuraMaxOther or 4)
+    if maxN <= 0 then
+        Icons.HideUnused(container, 1)
+        return
+    end
+
+    local gen = _configGen
+    local now = GetTime()
+    local showStacks = (shared and shared.showStackCount ~= false)
+    local privCount = 0
+
+    for i = 1, maxN do
+        local icon = Icons.AcquireIcon(container, i)
+        if icon then
+            icon._msufA2_isPreview = true
+            icon._msufA2_previewKind = "private"
+            icon._msufUnit = unit
+
+            -- Private aura lock texture
+            if icon.tex then
+                icon.tex:SetTexture(134400) -- Padlock / private aura icon
+            end
+            icon:SetSize(privIconSize, privIconSize)
+            icon:Show()
+
+            -- Position: horizontal row
+            icon:ClearAllPoints()
+            if i == 1 then
+                icon:SetPoint("LEFT", container, "LEFT", 0, 0)
+            else
+                local prev = container._msufIcons and container._msufIcons[i - 1]
+                if prev then
+                    icon:SetPoint("LEFT", prev, "RIGHT", spacing, 0)
+                end
+            end
+
+            -- Text config
+            icon._msufA2_textCfgGen = nil
+            ResolveTextConfig(icon, unit, shared, gen)
+
+            -- Stack text
+            icon._msufA2_lastStackFontSize = nil
+            icon._msufA2_lastStackPointAnchor = nil
+            Apply.ApplyStackTextOffsets(icon, unit, shared, stackCountAnchor)
+
+            if icon.count then
+                if showStacks then
+                    local n = icon._msufA2_previewStackT or (((i - 1) % 5) + 1)
+                    icon._msufA2_previewStackT = icon._msufA2_previewStackT or n
+                    icon.count:SetText(n)
+                    icon.count:Show()
+                else
+                    icon.count:Hide()
+                end
+            end
+
+            -- Cooldown
+            local cd = icon.cooldown
+            if cd then
+                cd._msufA2_cdTextSize = nil
+                cd._msufA2_cdTextOffX = nil
+                cd._msufA2_cdTextOffY = nil
+
+                local dur = _PREVIEW_CD_DURATIONS[((i - 1) % _PREVIEW_CD_DUR_N) + 1]
+                local elapsed = (i * 3.1) % dur
+
+                if cd.SetHideCountdownNumbers then
+                    cd:SetHideCountdownNumbers(false)
+                end
+                if cd.SetCooldown then
+                    cd:SetCooldown(now - elapsed, dur)
+                end
+                Apply.ApplyCooldownTextOffsets(icon, unit, shared)
+            end
+
+            privCount = privCount + 1
+        end
+    end
+    Icons.HideUnused(container, privCount + 1)
+
+    -- Size the container so it wraps its children
+    local step = privIconSize + spacing
+    container:SetSize(math_max(1, (privCount * step) - spacing), privIconSize)
+    container:Show()
 end
 
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 -- Backward-compatible exports into API.Apply
 -- (Options, CooldownText, Preview, Masque all reference API.Apply.*)
--- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- --
 
 Apply.AcquireIcon = Icons.AcquireIcon
 Apply.HideUnused = Icons.HideUnused
