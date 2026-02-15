@@ -8,7 +8,7 @@
 local addonName, ns = ...
 
 -- =====================================================================
--- Phase 1A: Canonical lazy EnsureDB — single definition for all files.
+-- Phase 1A: Canonical lazy EnsureDB â€” single definition for all files.
 -- After PLAYER_LOGIN, MSUF_DB is always populated; the nil-guard short-circuits.
 -- =====================================================================
 local function _EnsureDBLazy()
@@ -166,13 +166,23 @@ end
 --  - it only consumes the provided state and writes it to the frame
 -- -------------------------------------------------
 
+-- PERF: Resolve once at load, re-resolve after all files loaded.
+local _cachedSetTextIfChanged = _G.MSUF_SetTextIfChanged
+
 local function _MSUF_SetTextIfChanged(fs, s)
     if not (fs and fs.SetText) then return end
-    if type(_G.MSUF_SetTextIfChanged) == "function" then
-        _G.MSUF_SetTextIfChanged(fs, s or "")
+    if _cachedSetTextIfChanged then
+        _cachedSetTextIfChanged(fs, s or "")
     else
         fs:SetText(s or "")
     end
+end
+
+-- Deferred re-cache after all addons loaded.
+if _G.C_Timer and _G.C_Timer.After then
+    _G.C_Timer.After(0, function()
+        _cachedSetTextIfChanged = _G.MSUF_SetTextIfChanged or _cachedSetTextIfChanged
+    end)
 end
 
 local function _MSUF_GetReverseFill(frame, state, isChanneled)
@@ -181,16 +191,18 @@ local function _MSUF_GetReverseFill(frame, state, isChanneled)
         return (state.reverseFill == true)
     end
     -- Otherwise defer to the user setting logic.
-    if type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-        local ok, rev = pcall(_G.MSUF_GetCastbarReverseFillForFrame, frame, isChanneled and true or false)
-        if ok and rev ~= nil then
+    local fn = _G.MSUF_GetCastbarReverseFillForFrame
+    if type(fn) == "function" then
+        -- This is trusted internal code; pcall overhead is unnecessary.
+        local rev = fn(frame, isChanneled and true or false)
+        if rev ~= nil then
             return (rev == true)
         end
     end
     return false
 end
 
--- Phase 1C: Global export — simplified 2-arg form for callers that don't have a state table.
+-- Phase 1C: Global export â€” simplified 2-arg form for callers that don't have a state table.
 -- Returns a plain boolean (true/false, never nil).
 function _G.MSUF_GetReverseFillSafe(frame, isChanneled)
     return _MSUF_GetReverseFill(frame, nil, isChanneled)
@@ -690,7 +702,7 @@ end
 
 
 -- =====================================================================
--- Cluster A: Canonical ClearEmpowerState — single definition for all files.
+-- Cluster A: Canonical ClearEmpowerState â€” single definition for all files.
 -- Clears all empower-related frame fields and hides tick/segment overlays.
 -- Previously duplicated identically in Driver and Boss.
 -- =====================================================================

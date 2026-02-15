@@ -98,24 +98,32 @@ end
 
 -- Step 2 (DurationObjects): keep cast time text working without relying on secret duration values.
 -- We derive remaining time from the StatusBar's animated value/min/max (timer-driven or manual).
+-- Pre-built probe: avoids creating a closure per IsPlainNumber call.
+-- pcall passes arguments through, so n arrives as the first param.
+local function _msuf_probeNum(n)
+    local _ = n + 0
+    local __ = (n > -1e308)
+    return _ and __ ~= nil
+end
+
 local function MSUF__IsPlainNumber_SecretSafe(n)
     if type(n) ~= "number" then return false end
     -- Secret numbers can still report type=="number" but will throw on arithmetic/comparisons.
-    local ok = pcall(function()
-        local _ = n + 0
-        local __ = (n > -1e308) -- force a comparison too
-        return _ and __ ~= nil
-    end)
+    -- PERF: Reuse a single probe function (no closure allocation per call).
+    local ok = pcall(_msuf_probeNum, n)
     return ok
 end
+
+-- PERF: Cache ToPlain once (avoids _G lookup per call in hot path).
+local _ToPlain_Driver = _G.ToPlain
 
 local function MSUF__ToNumber_SecretSafe(v)
     if v == nil then return nil end
 
     -- In Midnight/Beta, "secret numbers" can still report type(v) == "number" but will error on arithmetic/comparisons.
     -- Therefore: prefer ToPlain() when available, but STILL validate the result.
-    if type(_G.ToPlain) == "function" then
-        local ok, pv = pcall(_G.ToPlain, v)
+    if _ToPlain_Driver then
+        local ok, pv = pcall(_ToPlain_Driver, v)
         if ok then
             local n = tonumber(pv)
             if n ~= nil and MSUF__IsPlainNumber_SecretSafe(n) then

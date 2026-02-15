@@ -46,14 +46,10 @@ local function SafeCall(fn, ...)
     return nil
 end
 
+-- PERF: Resolve time source once at load.
+local _BossNow = _G.GetTimePreciseSec or _G.GetTime or function() return 0 end
 local function MSUF_Now()
-    if type(_G.GetTimePreciseSec) == "function" then
-        return _G.GetTimePreciseSec()
-    end
-    if type(_G.GetTime) == "function" then
-        return _G.GetTime()
-    end
-    return 0
+    return _BossNow()
 end
 
 -- Canonical-unit helper for boss castbars: when a boss is also your target/focus,
@@ -81,24 +77,24 @@ local function MSUF_GetCanonicalCastUnitForBoss(unit)
 end
 
 
+-- PERF: Pre-built arithmetic probe (avoids closure per ToPlainNumber call).
+local function _bossAddZero(v) return v + 0 end
+
 -- Secret-safe number coercion: returns a plain Lua number or nil if the value is a secret.
 local function ToPlainNumber(v)
     if v == nil then return nil end
-    -- Midnight/12.0: secret numbers have type()=="number" but can't be compared/arithmeticked.
-    -- Strip taint by round-tripping through tostring → tonumber.
     if type(v) == "number" then
         local s = tostring(v)
         return tonumber(s)
     end
-    local ok, n = pcall(function()
-        return v + 0
-    end)
+    local ok, n = pcall(_bossAddZero, v)
     if ok and type(n) == "number" then
         local s = tostring(n)
         return tonumber(s)
     end
     return nil
 end
+
 
 -- ------------------------------------------------------------
 -- Empower support (make boss empower castbars look like player)
@@ -844,39 +840,55 @@ end
 -- Boss castbars can be driven by the central MSUF CastbarManager, but when that manager is disabled
 -- we self-drive the remaining time text via an OnUpdate. We intentionally avoid any numeric comparisons
 -- (e.g. "remaining > 0") because duration values can be secret in Midnight.
+local _floor = math.floor
+
 local function BossCastbar_OnUpdate(self, elapsed)
     if not self or not self.unit or not self:IsShown() then return end
-    -- Boss can despawn/die without a reliable STOP event; hard-kill the bar if the unit vanishes.
-    if not UnitExists(self.unit) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(self.unit)) then
-        BossCastbar_Stop(self)
-        return
+
+    -- PERF: Gate UnitExists/Dead check at ~4Hz instead of every frame.
+    -- Boss despawn is caught by the watchdog ticker too, so this is pure safety.
+    local now = _BossNow()
+    local nextCheck = self._msufBossExistNext or 0
+    if now >= nextCheck then
+        self._msufBossExistNext = now + 0.25
+        if not UnitExists(self.unit) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(self.unit)) then
+            BossCastbar_Stop(self)
+            return
+        end
     end
 
     local dObj = (self._msufCastState and self._msufCastState.durationObj) or self.MSUF_durationObj
     local rem
     if dObj then
+        -- PERF: Direct method call (no SafeCall/pcall wrapper). GetRemainingDuration is stable API.
         if dObj.GetRemainingDuration then
-            rem = SafeCall(dObj.GetRemainingDuration, dObj)
+            rem = dObj:GetRemainingDuration()
         elseif dObj.GetRemaining then
-            rem = SafeCall(dObj.GetRemaining, dObj)
+            rem = dObj:GetRemaining()
         end
     end
 
     local remNum = ToPlainNumber(rem)
 
-    -- Midnight: Remaining can be secret. If we can't coerce to a plain number, don't try to
-    -- "derive" it from StatusBar min/max (those can be secret too). Just clear the time text.
+    -- Midnight: Remaining can be secret. If we can't coerce to a plain number, just clear time text.
     if (not remNum) and self.timeText then
         self.timeText:SetText("")
     end
 
     if remNum then
         if remNum < 0 then remNum = 0 end
-        if self.timeText and self.timeText.SetFormattedText then
-            SafeCall(self.timeText.SetFormattedText, self.timeText, "%.1f", remNum)
-        elseif self.timeText then
-            local ok, txt = MSUF_FastCall(string.format, "%.1f", remNum)
-            self.timeText:SetText(ok and txt or "")
+        -- PERF: Dedup time text (skip SetFormattedText when displayed decimal hasn't changed).
+        if self.timeText then
+            local dec = _floor(remNum * 10)
+            if dec ~= self._msufLastTimeDecimal then
+                self._msufLastTimeDecimal = dec
+                if self.timeText.SetFormattedText then
+                    self.timeText:SetFormattedText("%.1f", remNum)
+                else
+                    local ok, txt = MSUF_FastCall(string.format, "%.1f", remNum)
+                    self.timeText:SetText(ok and txt or "")
+                end
+            end
         end
         return
     end
@@ -890,20 +902,15 @@ local function BossCastbar_OnUpdate(self, elapsed)
     end
 
     -- Refresh duration object if possible (no comparisons).
+    local castUnit = MSUF_GetCanonicalCastUnitForBoss(self.unit)
     local newObj
     if chanName then
-        local castUnit = MSUF_GetCanonicalCastUnitForBoss(self.unit)
         newObj = SafeCall(UnitChannelDuration, castUnit)
     else
-        local castUnit = MSUF_GetCanonicalCastUnitForBoss(self.unit)
         newObj = SafeCall(UnitCastingDuration, castUnit)
     end
     if newObj then
         self.MSUF_durationObj = newObj
-        if self._msufCastState then self._msufCastState.durationObj = newObj end
-        if self._msufCastState then
-            self._msufCastState.durationObj = newObj
-        end
         if self._msufCastState then self._msufCastState.durationObj = newObj end
         if self.statusBar and self.statusBar.SetTimerDuration then
             SafeCall(self.statusBar.SetTimerDuration, self.statusBar, newObj, 0)

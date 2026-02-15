@@ -74,18 +74,15 @@ local function UpdateNow()
   end
 end
 
--- PERF: Pre-build the timer callback once (avoids closure allocation per event).
-local function _FocusKickTimerCB()
-  pending = false
-  UpdateNow()
-end
-
 local function ScheduleUpdate()
   if pending then return end
   pending = true
 
   if C_Timer_After then
-    C_Timer_After(0, _FocusKickTimerCB)
+    C_Timer_After(0, function()
+      pending = false
+      UpdateNow()
+    end)
   else
     pending = false
     UpdateNow()

@@ -20,7 +20,9 @@ local CreateFrame = CreateFrame
 --   MSUF_DB.general.showGCDBar        (default: true)
 --   MSUF_DB.general.showGCDBarTime    (default: true)
 --   MSUF_DB.general.showGCDBarSpell   (default: true)
+local _gcdDefaultsSet = false
 local function EnsureGCDDBDefault()
+    if _gcdDefaultsSet then return end
     local db = _G.MSUF_DB
     if not db then return end
     local g = db.general
@@ -29,6 +31,7 @@ local function EnsureGCDDBDefault()
     if g.showGCDBar == nil then g.showGCDBar = true end
     if g.showGCDBarTime == nil then g.showGCDBarTime = true end
     if g.showGCDBarSpell == nil then g.showGCDBarSpell = true end
+    _gcdDefaultsSet = true
 end
 
 function _G.MSUF_IsGCDBarEnabled()
@@ -71,11 +74,10 @@ EnsureGCDDBDefault()
 -- ============================================================
 -- Helpers
 -- ============================================================
+-- PERF: Resolve time source once.
+local _GCDNow = GetTimePreciseSec or GetTime
 local function Now()
-    if GetTimePreciseSec then
-        return GetTimePreciseSec()
-    end
-    return GetTime()
+    return _GCDNow()
 end
 
 -- PERF FIX #5: Cache spellIDs that are known to be hard-casts (castTime > 0) or have no GCD.
@@ -279,7 +281,7 @@ local function OnSucceeded(_, _, unitTarget, _, spellID)
         return
     end
 
-    -- Real cast/channel always wins — check BEFORE expensive enabled/DB lookups.
+    -- Real cast/channel always wins â€” check BEFORE expensive enabled/DB lookups.
     if UnitCastingInfo(unitTarget) or UnitChannelInfo(unitTarget) then
         return
     end
