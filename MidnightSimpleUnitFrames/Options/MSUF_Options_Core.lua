@@ -1338,7 +1338,7 @@ editModeButton:SetScript("OnClick", function()
                 AudioOptionsFrame:Hide()
             end
         end
-                        print("|cffffd700MSUF:|r " .. label .. " Edit Mode |cff00ff00ON|r “ drag the " .. label .. " frame with the left mouse button or use the arrow buttons.")
+                        print("|cffffd700MSUF:|r " .. label .. " Edit Mode |cff00ff00ON|r  drag the " .. label .. " frame with the left mouse button or use the arrow buttons.")
         else
             print("|cffffd700MSUF:|r " .. label .. " Edit Mode |cffff0000OFF|r.")
         end
@@ -2776,7 +2776,7 @@ end
         "MSUF_CastbarShakeIntensitySlider",
         "Shake intensity",
         castbarEnemyGroup,
-        0, 30, 1,         --  strength
+        0, 30, 1,         -- strength
         175, -200          -- Next to the toggles
     )
     if _G and _G.MSUF_Options_BindGeneralNumberSlider then _G.MSUF_Options_BindGeneralNumberSlider(castbarShakeIntensitySlider, "castbarShakeStrength", { def = 8, min = 0, max = 30, int = true }) end
@@ -4471,6 +4471,10 @@ local highlightBorderThicknessSlider = CreateLabeledSlider(
     16, -420
 )
 do
+    local txt = _G["MSUF_HighlightBorderThicknessSliderText"]
+    if txt and txt.SetFontObject then txt:SetFontObject("GameFontHighlightSmall") end
+end
+do
     EnsureDB()
     local gen = (MSUF_DB and MSUF_DB.general) or {}
     local t = tonumber(gen.highlightBorderThickness)
@@ -4555,6 +4559,13 @@ local aggroTestCheck = CreateFrame("CheckButton", "MSUF_AggroOutlineTestCheck", 
 -- Nudge the checkbox down to align visually with the dropdown and avoid edge clipping.
 aggroTestCheck:SetPoint("LEFT", aggroOutlineDrop, "RIGHT", 6, -4)
 aggroTestCheck.Text:SetText(TR("Test"))
+aggroTestCheck.tooltipText = TR("Aggro border: Target, Focus, Boss frames")
+aggroTestCheck:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(self.tooltipText, 1, 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+aggroTestCheck:HookScript("OnLeave", function() GameTooltip:Hide() end)
 aggroTestCheck:SetScript("OnClick", function(self)
     local on = self:GetChecked() and true or false
     if type(_G.MSUF_SetAggroBorderTestMode) == "function" then
@@ -4618,6 +4629,13 @@ dispelOutlineDrop._msufDispelOutlineGet = _DispelOutline_Get
 local dispelTestCheck = CreateFrame("CheckButton", "MSUF_DispelOutlineTestCheck", barGroup, "ChatConfigCheckButtonTemplate")
 dispelTestCheck:SetPoint("LEFT", dispelOutlineDrop, "RIGHT", 6, -4)
 dispelTestCheck.Text:SetText(TR("Test"))
+dispelTestCheck.tooltipText = TR("Dispel border: Player, Target, Focus, Target of Target")
+dispelTestCheck:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(self.tooltipText, 1, 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+dispelTestCheck:HookScript("OnLeave", function() GameTooltip:Hide() end)
 dispelTestCheck:SetScript("OnClick", function(self)
     local on = self:GetChecked() and true or false
     if type(_G.MSUF_SetDispelBorderTestMode) == "function" then
@@ -4625,7 +4643,7 @@ dispelTestCheck:SetScript("OnClick", function(self)
     end
 end)
 
--- Purge border: yellow outline border when the player can purge/spellsteal a buff on the unit (HELPFUL|RAID_PLAYER_DISPELLABLE).
+-- Purge border: yellow outline border when the player can purge/spellsteal a buff on the unit.
 local purgeOutlineDrop = CreateFrame("Frame", "MSUF_PurgeOutlineDropdown", barGroup, "UIDropDownMenuTemplate")
 MSUF_ExpandDropdownClickArea(purgeOutlineDrop)
 purgeOutlineDrop:SetPoint("TOPLEFT", dispelOutlineDrop, "BOTTOMLEFT", 0, -18)
@@ -4648,7 +4666,6 @@ local function _PurgeOutline_Set(val)
     EnsureDB()
     MSUF_DB.general = MSUF_DB.general or {}
     MSUF_DB.general.purgeOutlineMode = val
-
     if type(_G.MSUF_RefreshDispelOutlineStates) == "function" then
         _G.MSUF_RefreshDispelOutlineStates(true)
     else
@@ -4677,6 +4694,13 @@ purgeOutlineDrop._msufPurgeOutlineGet = _PurgeOutline_Get
 local purgeTestCheck = CreateFrame("CheckButton", "MSUF_PurgeOutlineTestCheck", barGroup, "ChatConfigCheckButtonTemplate")
 purgeTestCheck:SetPoint("LEFT", purgeOutlineDrop, "RIGHT", 6, -4)
 purgeTestCheck.Text:SetText(TR("Test"))
+purgeTestCheck.tooltipText = TR("Purge border: Target, Focus, Target of Target")
+purgeTestCheck:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(self.tooltipText, 1, 1, 1, 1, true)
+    GameTooltip:Show()
+end)
+purgeTestCheck:HookScript("OnLeave", function() GameTooltip:Hide() end)
 purgeTestCheck:SetScript("OnClick", function(self)
     local on = self:GetChecked() and true or false
     if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
@@ -4684,13 +4708,204 @@ purgeTestCheck:SetScript("OnClick", function(self)
     end
 end)
 
+-- ── Highlight priority reorder ──
+-- Draggable rows to set display priority of highlight borders (Aggro/Dispel/Purge).
+-- Default order: Dispel > Aggro > Purge.  Custom order stored in DB.
+local _PRIO_DEFAULTS = { "dispel", "aggro", "purge" }  -- must match render fallback order
+local _PRIO_LABELS   = { dispel = "Dispel", aggro = "Aggro", purge = "Purge" }
+
+local prioCheck = CreateFrame("CheckButton", "MSUF_HighlightPrioCheck", barGroup, "ChatConfigCheckButtonTemplate")
+prioCheck:SetPoint("TOPLEFT", purgeOutlineDrop, "BOTTOMLEFT", 16, -10)
+prioCheck.Text:SetText(TR("Custom highlight priority"))
+prioCheck.tooltipText = TR("Drag to reorder which highlight border takes priority when multiple are active.")
+prioCheck:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(TR("Custom highlight priority"), 1, 1, 1)
+    GameTooltip:AddLine(self.tooltipText, 0.8, 0.8, 0.8, true)
+    GameTooltip:Show()
+end)
+prioCheck:HookScript("OnLeave", function() GameTooltip:Hide() end)
+
+local prioContainer = CreateFrame("Frame", "MSUF_HighlightPrioContainer", barGroup)
+prioContainer:SetSize(200, 78)
+prioContainer:SetPoint("TOPLEFT", prioCheck, "BOTTOMLEFT", -2, -4)
+
+local _PRIO_ROW_H, _PRIO_ROW_GAP = 22, 4
+local _prioRows = {}
+
+local function _Prio_GetOrder()
+    local g = MSUF_DB and MSUF_DB.general
+    local o = g and g.highlightPrioOrder
+    if type(o) == "table" and #o == 3 then return { o[1], o[2], o[3] } end
+    return { _PRIO_DEFAULTS[1], _PRIO_DEFAULTS[2], _PRIO_DEFAULTS[3] }
+end
+
+local function _Prio_SlotY(s)
+    return -((s - 1) * (_PRIO_ROW_H + _PRIO_ROW_GAP))
+end
+
+local function _Prio_SnapAll()
+    for i = 1, 3 do
+        local row = _prioRows[i]
+        row.frame:ClearAllPoints()
+        row.frame:SetPoint("TOPLEFT", prioContainer, "TOPLEFT", 0, _Prio_SlotY(row.slotIndex))
+    end
+end
+
+local function _Prio_SaveOrder()
+    EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    local sorted = {}
+    for i = 1, 3 do sorted[i] = _prioRows[i] end
+    table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
+    local order = {}
+    for i = 1, 3 do order[i] = sorted[i].key end
+    MSUF_DB.general.highlightPrioOrder = order
+    -- Full refresh: covers player/target/focus/targettarget/boss1-5.
+    if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then
+        _G.MSUF_ApplyBarOutlineThickness_All()
+    end
+end
+
+local function _Prio_SetEnabled(enabled)
+    for i = 1, 3 do
+        local row = _prioRows[i]
+        row.frame:SetAlpha(enabled and 1 or 0.4)
+        row.frame:EnableMouse(enabled and true or false)
+    end
+end
+
+for i = 1, 3 do
+    local rf = CreateFrame("Frame", "MSUF_PrioRow" .. i, prioContainer, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    rf:SetSize(190, _PRIO_ROW_H)
+    rf:SetMovable(true)
+    rf:EnableMouse(true)
+    rf:RegisterForDrag("LeftButton")
+    rf:SetBackdrop({
+        bgFile   = MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8",
+        edgeFile = MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    rf:SetBackdropColor(0.12, 0.12, 0.12, 0.85)
+    rf:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.6)
+    local stripe = rf:CreateTexture(nil, "ARTWORK")
+    stripe:SetSize(4, _PRIO_ROW_H - 2)
+    stripe:SetPoint("LEFT", rf, "LEFT", 2, 0)
+    rf._stripe = stripe
+    local label = rf:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    label:SetPoint("LEFT", stripe, "RIGHT", 6, 0)
+    rf._label = label
+    local num = rf:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    num:SetPoint("RIGHT", rf, "RIGHT", -8, 0)
+    num:SetTextColor(0.5, 0.5, 0.5, 1)
+    rf._numText = num
+    rf:SetScript("OnEnter", function(self)
+        local g = MSUF_DB and MSUF_DB.general
+        if not (g and g.highlightPrioEnabled == 1) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(TR("Drag to reorder"), 1, 1, 1)
+        GameTooltip:AddLine(TR("Left-click and drag up or down to change highlight priority."), 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    rf:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    rf:SetScript("OnDragStart", function(self)
+        GameTooltip:Hide()
+        self:StartMoving()
+        self:SetFrameStrata("TOOLTIP")
+    end)
+    rf:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        self:SetFrameStrata(prioContainer:GetFrameStrata())
+        local _, selfY = self:GetCenter()
+        local contTop = prioContainer:GetTop()
+        local bestSlot, bestDist = 1, math.huge
+        for s = 1, 3 do
+            local slotY = contTop + _Prio_SlotY(s) - _PRIO_ROW_H / 2
+            local dist = math.abs(selfY - slotY)
+            if dist < bestDist then bestDist = dist; bestSlot = s end
+        end
+        local myRow
+        for idx = 1, 3 do
+            if _prioRows[idx].frame == self then myRow = _prioRows[idx]; break end
+        end
+        if myRow and myRow.slotIndex ~= bestSlot then
+            for idx = 1, 3 do
+                if _prioRows[idx].slotIndex == bestSlot then
+                    _prioRows[idx].slotIndex = myRow.slotIndex; break
+                end
+            end
+            myRow.slotIndex = bestSlot
+        end
+        for idx = 1, 3 do
+            _prioRows[idx].frame._numText:SetText(tostring(_prioRows[idx].slotIndex))
+        end
+        _Prio_SnapAll()
+        _Prio_SaveOrder()
+    end)
+    _prioRows[i] = { frame = rf, key = "", slotIndex = i }
+end
+
+local function _Prio_InitRows()
+    local order = _Prio_GetOrder()
+    local g = MSUF_DB and MSUF_DB.general
+    -- Read actual colors from Colors menu DB, with fallback defaults.
+    local dbColors = {
+        dispel = {
+            (g and g.dispelBorderColorR) or 0.25,
+            (g and g.dispelBorderColorG) or 0.75,
+            (g and g.dispelBorderColorB) or 1.00,
+        },
+        aggro = {
+            (g and g.aggroBorderColorR) or 1.00,
+            (g and g.aggroBorderColorG) or 0.50,
+            (g and g.aggroBorderColorB) or 0.00,
+        },
+        purge = {
+            (g and g.purgeBorderColorR) or 1.00,
+            (g and g.purgeBorderColorG) or 0.85,
+            (g and g.purgeBorderColorB) or 0.00,
+        },
+    }
+    for i = 1, 3 do
+        local key = order[i]
+        local col = dbColors[key] or { 1, 1, 1 }
+        _prioRows[i].key = key
+        _prioRows[i].slotIndex = i
+        _prioRows[i].frame._stripe:SetColorTexture(col[1], col[2], col[3], 1)
+        _prioRows[i].frame._label:SetText(TR(_PRIO_LABELS[key] or key))
+        _prioRows[i].frame._numText:SetText(tostring(i))
+    end
+    _Prio_SnapAll()
+end
+_Prio_InitRows()
+
+_G.MSUF_PrioRows_Reinit = function()
+    _Prio_InitRows()
+    local g = MSUF_DB and MSUF_DB.general
+    _Prio_SetEnabled(g and g.highlightPrioEnabled == 1)
+end
+
+prioCheck:SetScript("OnClick", function(self)
+    EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    local on = self:GetChecked() and true or false
+    MSUF_DB.general.highlightPrioEnabled = on and 1 or 0
+    _Prio_SetEnabled(on)
+    _Prio_SaveOrder()
+end)
+do
+    local g = MSUF_DB and MSUF_DB.general
+    prioCheck:SetChecked(g and g.highlightPrioEnabled == 1)
+    _Prio_SetEnabled(g and g.highlightPrioEnabled == 1)
+end
+
 -- Bars menu style: boxed layout like the new Castbar/Focus Kick menus
 -- (Two framed columns: Bar appearance / Power Bar Settings)
 do
     -- Panel height must include the HP + Power Spacer controls at the bottom of the right column.
     -- Keep this as a single constant so creation + live re-layout always match (no drift/regressions).
     -- Increased slightly to ensure the Highlight Border section (and dropdown buttons) never clip at the bottom.
-    local BARS_PANEL_H = 950
+    local BARS_PANEL_H = 1100
     -- Create panels once
     if not _G["MSUF_BarsMenuPanelLeft"] then
         local function SetupPanel(panel)
@@ -5071,7 +5286,7 @@ do
     local legacyHeader = _G.MSUF_BarsMenuHighlightHeader
     if legacyHeader then legacyHeader:Hide() end
 
-    -- Section header
+    -- Section header — compact font
     local highlightHeader = leftPanel and leftPanel.MSUF_SectionHeader_Highlight
     if leftPanel and not highlightHeader then
         highlightHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -5081,8 +5296,7 @@ do
 
     if highlightHeader and outlineSlider then
         highlightHeader:ClearAllPoints()
-        -- Give it a bit more breathing room than the outline section.
-        highlightHeader:SetPoint("TOPLEFT", outlineSlider, "BOTTOMLEFT", 0, -44)
+        highlightHeader:SetPoint("TOPLEFT", outlineSlider, "BOTTOMLEFT", 0, -62)
         highlightHeader:Show()
     elseif highlightHeader then
         highlightHeader:Hide()
@@ -5107,7 +5321,7 @@ do
         end
     end
 
-    -- Re-anchor highlight thickness slider + Aggro/Dispel/Purge dropdowns under the new divider line
+    -- Re-anchor highlight thickness slider + Aggro/Dispel/Purge dropdowns + priority widget
     local hlSlider = _G["MSUF_HighlightBorderThicknessSlider"]
     local aggroDrop = _G["MSUF_AggroOutlineDropdown"]
     local aggroTest = _G["MSUF_AggroOutlineTestCheck"]
@@ -5115,16 +5329,18 @@ do
     local dispelTest = _G["MSUF_DispelOutlineTestCheck"]
     local purgeDrop = _G["MSUF_PurgeOutlineDropdown"]
     local purgeTest = _G["MSUF_PurgeOutlineTestCheck"]
+    local prioChk = _G["MSUF_HighlightPrioCheck"]
+    local prioCont = _G["MSUF_HighlightPrioContainer"]
 
     if hlSlider and highlightLine and highlightLine:IsShown() then
         hlSlider:ClearAllPoints()
-        hlSlider:SetPoint("TOPLEFT", highlightLine, "BOTTOMLEFT", 16, -14)
+        hlSlider:SetPoint("TOPLEFT", highlightLine, "BOTTOMLEFT", 16, -18)
         hlSlider:SetWidth(280)
     end
 
     if aggroDrop and hlSlider then
         aggroDrop:ClearAllPoints()
-        aggroDrop:SetPoint("TOPLEFT", hlSlider, "BOTTOMLEFT", -16, -18)
+        aggroDrop:SetPoint("TOPLEFT", hlSlider, "BOTTOMLEFT", -16, -28)
         UIDropDownMenu_SetWidth(aggroDrop, 170)
 		if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(aggroDrop, "LEFT") end
     end
@@ -5149,6 +5365,14 @@ do
     if purgeTest and purgeDrop then
         purgeTest:ClearAllPoints()
         purgeTest:SetPoint("LEFT", purgeDrop, "RIGHT", 6, -4)
+    end
+    if prioChk and purgeDrop then
+        prioChk:ClearAllPoints()
+        prioChk:SetPoint("TOPLEFT", purgeDrop, "BOTTOMLEFT", 16, -10)
+    end
+    if prioCont and prioChk then
+        prioCont:ClearAllPoints()
+        prioCont:SetPoint("TOPLEFT", prioChk, "BOTTOMLEFT", -2, -4)
     end
 end
 -- Right panel: text modes start under power bar height
@@ -5261,7 +5485,6 @@ local function MSUF_SyncBarsTabToggles()
         if t < 0 then t = 0 elseif t > 6 then t = 6 end
         MSUF_SetLabeledSliderValue(barOutlineThicknessSlider, t)
         MSUF_SetLabeledSliderEnabled(barOutlineThicknessSlider, true)
-    end
     -- Highlight border thickness (1..6) for aggro/dispel/purge overlay.
     if highlightBorderThicknessSlider then
         local ht = tonumber(g.highlightBorderThickness)
@@ -5271,7 +5494,6 @@ local function MSUF_SyncBarsTabToggles()
         MSUF_SetLabeledSliderValue(highlightBorderThicknessSlider, ht)
         MSUF_SetLabeledSliderEnabled(highlightBorderThicknessSlider, true)
     end
-    do
         local g = (MSUF_DB and MSUF_DB.general) or {}
         local mode = g.aggroOutlineMode or 0
         local dd = _G["MSUF_AggroOutlineDropdown"]
@@ -5299,6 +5521,15 @@ if purgeDrop then
 	if (g.purgeOutlineMode or 0) == 1 then
 		UIDropDownMenu_SetText(purgeDrop, TR("Purge border on"))
 	end
+end
+
+-- Highlight priority
+local prioChk = _G["MSUF_HighlightPrioCheck"]
+if prioChk then
+	prioChk:SetChecked((g.highlightPrioEnabled or 0) == 1)
+end
+if type(_G.MSUF_PrioRows_Reinit) == "function" then
+	_G.MSUF_PrioRows_Reinit()
 end
 
     end
@@ -5547,13 +5778,14 @@ end
     panel.hpModeDrop                 = hpModeDrop
 panel.barTextureDrop             = barTextureDrop
     panel.barOutlineThicknessSlider = barOutlineThicknessSlider
+    panel.highlightBorderThicknessSlider = highlightBorderThicknessSlider
 	    panel.aggroOutlineDrop          = aggroOutlineDrop
     panel.aggroTestCheck            = aggroTestCheck
 	panel.dispelOutlineDrop         = dispelOutlineDrop
 	panel.dispelTestCheck           = dispelTestCheck
 	panel.purgeOutlineDrop          = purgeOutlineDrop
 	panel.purgeTestCheck            = purgeTestCheck
-	panel.highlightBorderThicknessSlider = highlightBorderThicknessSlider
+	panel.prioCheck                 = prioCheck
 panel.fontSizeSlider     = fontSizeSlider
 panel.updateThrottleSlider = updateThrottleSlider
 panel.powerBarHeightSlider = powerBarHeightSlider
@@ -5592,7 +5824,6 @@ panel.infoTooltipDisableCheck = infoTooltipDisableCheck
         barOutlineThicknessSlider = self.barOutlineThicknessSlider
 	        local aggroOutlineDrop = self.aggroOutlineDrop
 			local dispelOutlineDrop = self.dispelOutlineDrop
-			local purgeOutlineDrop = self.purgeOutlineDrop
         bossSpacingSlider = self.bossSpacingSlider
 	        if aggroOutlineDrop and aggroOutlineDrop._msufAggroOutlineOptions and aggroOutlineDrop._msufAggroOutlineGet then
 	            MSUF_SyncSimpleDropdown(aggroOutlineDrop, aggroOutlineDrop._msufAggroOutlineOptions, aggroOutlineDrop._msufAggroOutlineGet)
@@ -5602,9 +5833,18 @@ panel.infoTooltipDisableCheck = infoTooltipDisableCheck
 				MSUF_SyncSimpleDropdown(dispelOutlineDrop, dispelOutlineDrop._msufDispelOutlineOptions, dispelOutlineDrop._msufDispelOutlineGet)
 				if self.dispelTestCheck then self.dispelTestCheck:SetChecked((_G and _G.MSUF_DispelBorderTestMode) and true or false) end
 			end
+			local purgeOutlineDrop = self.purgeOutlineDrop
 			if purgeOutlineDrop and purgeOutlineDrop._msufPurgeOutlineOptions and purgeOutlineDrop._msufPurgeOutlineGet then
 				MSUF_SyncSimpleDropdown(purgeOutlineDrop, purgeOutlineDrop._msufPurgeOutlineOptions, purgeOutlineDrop._msufPurgeOutlineGet)
-				if self.purgeTestCheck then self.purgeTestCheck:SetChecked((_G and _G.MSUF_PurgeBorderTestMode) and true or false) end
+			end
+			if self.purgeTestCheck then self.purgeTestCheck:SetChecked((_G and _G.MSUF_PurgeBorderTestMode) and true or false) end
+			-- Deferred hook: if slash menu window was created after panel build, hook it now.
+			do
+				local sw = _G.MSUF_StandaloneOptionsWindow
+				if sw and not sw.__MSUF_TestCleanupHooked and type(_G.MSUF_TestCleanup_Deferred) == "function" then
+					sw.__MSUF_TestCleanupHooked = true
+					sw:HookScript("OnHide", _G.MSUF_TestCleanup_Deferred)
+				end
 			end
         if anchorEdit then anchorEdit:SetText(g.anchorName or "UIParent") end
         if anchorCheck then
@@ -5710,10 +5950,11 @@ end
     -- Style all toggle labels: checked = white, unchecked = grey
     if MSUF_StyleAllToggles then MSUF_StyleAllToggles(panel) end
     panel.__MSUF_FullBuilt = true
-    -- Ensure aggro-border test mode never leaks outside the Settings panel.
+    -- Ensure aggro/dispel/purge test modes persist while the user navigates
+    -- between menu tabs (Bars ↔ Colors), but clear when the slash menu closes.
     if not panel.__MSUF_AggroTestHooked then
         panel.__MSUF_AggroTestHooked = true
-        panel:HookScript("OnHide", function()
+        local function _ClearAllTestModes()
             if type(_G.MSUF_SetAggroBorderTestMode) == "function" then
                 _G.MSUF_SetAggroBorderTestMode(false)
             end
@@ -5723,16 +5964,20 @@ end
             if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
                 _G.MSUF_SetPurgeBorderTestMode(false)
             end
-            if panel.aggroTestCheck then
-                panel.aggroTestCheck:SetChecked(false)
-            end
-			if panel.dispelTestCheck then
-				panel.dispelTestCheck:SetChecked(false)
-			end
-			if panel.purgeTestCheck then
-				panel.purgeTestCheck:SetChecked(false)
-			end
-        end)
+            if panel.aggroTestCheck then panel.aggroTestCheck:SetChecked(false) end
+            if panel.dispelTestCheck then panel.dispelTestCheck:SetChecked(false) end
+            if panel.purgeTestCheck then panel.purgeTestCheck:SetChecked(false) end
+        end
+        -- Standalone slash menu window (/msuf)
+        local slashWin = _G.MSUF_StandaloneOptionsWindow
+        if slashWin and not slashWin.__MSUF_TestCleanupHooked then
+            slashWin.__MSUF_TestCleanupHooked = true
+            slashWin:HookScript("OnHide", _ClearAllTestModes)
+        end
+        -- If slash window is created later, hook it on next Show.
+        if not slashWin then
+            _G.MSUF_TestCleanup_Deferred = _ClearAllTestModes
+        end
     end
 
 SetCurrentKey("player")

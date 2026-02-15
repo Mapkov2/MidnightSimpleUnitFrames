@@ -99,6 +99,16 @@ local function PushVisualUpdates()
         ns.MSUF_RefreshAllFrames()
     end
 
+    -- Sync highlight priority stripe colors when border colors change.
+    local reinit = _G.MSUF_PrioRows_Reinit
+    if type(reinit) == "function" then reinit() end
+
+    -- Live-update highlight border colors during test mode (zero cost when no test active).
+    if _G.MSUF_AggroBorderTestMode or _G.MSUF_DispelBorderTestMode or _G.MSUF_PurgeBorderTestMode then
+        local applyAll = _G.MSUF_ApplyBarOutlineThickness_All
+        if type(applyAll) == "function" then applyAll() end
+    end
+
     -- Safety: keep mouseover highlight bound to the correct unitframe.
     -- Throttled (coalesces rapid UI changes into 1 pass).
     if ns.MSUF_ScheduleMouseoverHighlightFix then
@@ -519,7 +529,7 @@ local function GetNonInterruptibleCastColor()
         return c[1], c[2], c[3]
     end
 
-    -- Fallback: „red“ aus der Palette
+    -- Fallback: â€žredâ€œ aus der Palette
     if MSUF_FONT_COLORS and MSUF_FONT_COLORS["red"] then
         local c = MSUF_FONT_COLORS["red"]
         return c[1], c[2], c[3]
@@ -529,7 +539,7 @@ local function GetNonInterruptibleCastColor()
     return 0.4, 0.01, 0.01
 end
 
--- global alias für die Castbar-Logik im Main-File
+-- global alias fÃ¼r die Castbar-Logik im Main-File
 MSUF_GetNonInterruptibleCastColor = GetNonInterruptibleCastColor
 
 local function SetNonInterruptibleCastColor(r, g, b)
@@ -2102,6 +2112,56 @@ end
         end)
     end)
 
+-- Purge border (outline indicator for purgeable/spellstealable buffs)
+    local function GetPurgeBorderColor()
+        local defR, defG, defB = 1.00, 0.85, 0.00
+        if EnsureDB and MSUF_DB then
+            EnsureDB()
+            MSUF_DB.general = MSUF_DB.general or {}
+            local g = MSUF_DB.general
+            local r = g.purgeBorderColorR
+            local gg = g.purgeBorderColorG
+            local b = g.purgeBorderColorB
+            if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+                return r, gg, b
+            end
+        end
+        return defR, defG, defB
+    end
+
+    local function SetPurgeBorderColor(r, g, b)
+        if not EnsureDB or not MSUF_DB then return end
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        local gen = MSUF_DB.general
+        gen.purgeBorderColorR = r
+        gen.purgeBorderColorG = g
+        gen.purgeBorderColorB = b
+        PushVisualUpdates()
+    end
+
+    local purgeLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    purgeLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 5 * rowH)
+    purgeLabel:SetJustifyH("LEFT")
+    purgeLabel:SetText("Purge Border Color")
+
+    local purgeSwatch = CreateFrame("Button", "MSUF_Colors_PurgeBorderSwatch", content)
+    purgeSwatch:SetSize(barSwatchW, 16)
+    purgeSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 5 * rowH)
+
+    panel.__MSUF_ExtraColorPurgeBorderTex = purgeSwatch:CreateTexture(nil, "ARTWORK")
+    panel.__MSUF_ExtraColorPurgeBorderTex:SetAllPoints()
+    panel.__MSUF_ExtraColorPurgeBorderTex:SetColorTexture(GetPurgeBorderColor())
+
+    purgeSwatch:SetScript("OnClick", function()
+        local r, g, b = GetPurgeBorderColor()
+        OpenColorPicker(r, g, b, function(nr, ng, nb)
+            SetPurgeBorderColor(nr, ng, nb)
+            local tex = panel.__MSUF_ExtraColorPurgeBorderTex
+            if tex then tex:SetColorTexture(nr, ng, nb) end
+        end)
+    end)
+
     -- Reset (kept for 0-regression; affects both columns)
     local npcResetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
     npcResetBtn:SetSize(160, 22)
@@ -2120,6 +2180,7 @@ end
                         gen.powerBarBgColorR, gen.powerBarBgColorG, gen.powerBarBgColorB = nil, nil, nil
                         gen.aggroBorderColorR, gen.aggroBorderColorG, gen.aggroBorderColorB = nil, nil, nil
                         gen.dispelBorderColorR, gen.dispelBorderColorG, gen.dispelBorderColorB = nil, nil, nil
+                        gen.purgeBorderColorR, gen.purgeBorderColorG, gen.purgeBorderColorB = nil, nil, nil
             
                         gen.powerBarBgMatchHPColor = nil
                         MSUF_DB.bars = MSUF_DB.bars or {}

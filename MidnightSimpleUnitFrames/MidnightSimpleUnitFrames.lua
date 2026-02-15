@@ -730,7 +730,7 @@ local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
         predBar:SetReverseFill(rev and true or false)
     end
 
-    -- Incoming heals (self only)  pass-through to StatusBar API.
+    -- Incoming heals (self only)pass-through to StatusBar API.
     local inc = _MSUF_GetIncomingSelfHeals(unit)
     if type(inc) ~= "number" then
         inc = 0
@@ -2849,7 +2849,7 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
     end
         g.castbarPlayerPreviewEnabled = not (g.castbarPlayerPreviewEnabled and true or false)
         if g.castbarPlayerPreviewEnabled then
-            print("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r  drag player/target/focus castbars with the mouse.")
+            print("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r drag player/target/focus castbars with the mouse.")
         else
             print("|cffffd700MSUF:|r Castbar Edit Mode |cffff0000OFF|r.")
     end
@@ -5781,13 +5781,23 @@ MSUF_ApplyRareVisuals = function(self)
         end
     end
 
+    -- Purge border color (Colors menu) with fallback to bright yellow.
+    local purgeR, purgeG, purgeB = 1.00, 0.85, 0.00
+    if g then
+        local r = g.purgeBorderColorR
+        local gg = g.purgeBorderColorG
+        local b = g.purgeBorderColorB
+        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+            purgeR, purgeG, purgeB = r, gg, b
+        end
+    end
+
     local thickness = baseThickness
 
     -- Dispel border (Bars menu): light-blue outline when the player can dispel something on the unit.
     -- Kept event-driven (UNIT_AURA) via self._msufDispelOutlineOn to avoid any aura scanning in hot paths.
-    -- User request: Dispel highlight has PRIORITY over Aggro highlight.
-    -- NOTE: Purge border is handled by sentinel frames (see UpdatePurgeSentinels) which use
-    -- SetAlpha with secret values directly — no boolean tracking needed in render path.
+    -- NOTE: Purge border uses sentinel frames for secret-safe rendering in combat,
+    -- but is also tracked here for the highlight priority system.
     local dispel = false
     do
         local dispelMode = g and g.dispelOutlineMode or 0
@@ -5797,6 +5807,20 @@ MSUF_ApplyRareVisuals = function(self)
             local u = self.unit
             if u == "player" or u == "target" or u == "focus" or u == "targettarget" then
                 dispel = test or (self._msufDispelOutlineOn == true)
+            end
+        end
+    end
+
+    -- Purge border: tracked for highlight priority overlay.
+    local purge = false
+    do
+        local purgeMode = g and g.purgeOutlineMode or 0
+        local test = (_G and _G.MSUF_PurgeBorderTestMode) and true or false
+        local wantPurge = (purgeMode == 1) or test
+        if wantPurge then
+            local u = self.unit
+            if u == "target" or u == "focus" or u == "targettarget" then
+                purge = test or (self._msufPurgeOutlineOn == true)
             end
         end
     end
@@ -5860,11 +5884,23 @@ MSUF_ApplyRareVisuals = function(self)
     f:Show()
     end -- outline block
 
-    -- ── Highlight overlay (aggro/dispel) — independent frame + thickness ──
+    -- ── Highlight overlay (aggro/dispel/purge) — independent frame + thickness ──
     -- Sits on top of the normal outline with its own user-configurable thickness.
-    -- Purge border is handled separately by sentinel frames (secret-safe).
-    -- 2 = Dispel, 1 = Aggro, 0 = none (Dispel > Aggro priority)
-    local hlKey = (dispel and 2) or (threat and 1) or 0
+    -- 3 = Purge, 2 = Dispel, 1 = Aggro, 0 = none.
+    -- Default priority: Dispel > Aggro > Purge.  Custom priority via DB order.
+    local hlKey = 0
+    if g and g.highlightPrioEnabled == 1 and type(g.highlightPrioOrder) == "table" then
+        -- Custom priority: first match in order wins.
+        for _, kind in ipairs(g.highlightPrioOrder) do
+            if kind == "dispel" and dispel then hlKey = 2; break
+            elseif kind == "aggro" and threat then hlKey = 1; break
+            elseif kind == "purge" and purge then hlKey = 3; break
+            end
+        end
+    else
+        -- Default: Dispel > Aggro > Purge
+        hlKey = (dispel and 2) or (threat and 1) or (purge and 3) or 0
+    end
     local hlFrame = self._msufHighlightOutline
 
     if hlKey == 0 then
@@ -5910,6 +5946,8 @@ MSUF_ApplyRareVisuals = function(self)
                 hlFrame:SetBackdropBorderColor(aggroR, aggroG, aggroB, 1)
             elseif hlKey == 2 then
                 hlFrame:SetBackdropBorderColor(dispelR, dispelG, dispelB, 1)
+            elseif hlKey == 3 then
+                hlFrame:SetBackdropBorderColor(purgeR, purgeG, purgeB, 1)
             end
             self._msufHighlightColorKey = hlKey
         end
@@ -5959,6 +5997,7 @@ _G.MSUF_ApplyBarOutlineThickness_All = _G.MSUF_ApplyBarOutlineThickness_All or f
 
         -- Force highlight overlay to re-read its thickness too.
         uf._msufHighlightEdgeSize = -1
+        uf._msufHighlightColorKey = -1  -- force recolor on priority change
         uf._msufHighlightBottomIsPower = nil
 
         -- Bottom-is-power impacts the outline rect; keep it consistent.
@@ -6010,6 +6049,7 @@ _G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(acti
     local frames = _G.MSUF_UnitFrames
     if not frames then return end
 
+    local fn = _G.MSUF_RefreshRareBarVisuals
     local units = { "target", "focus", "targettarget" }
     for _, u in ipairs(units) do
         local uf = frames[u]
@@ -6071,6 +6111,8 @@ _G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(acti
                     for i = 1, #pool do pool[i]:SetAlpha(0) end
                 end
             end
+            -- Refresh overlay so highlight priority system picks up the change.
+            if type(fn) == "function" then fn(uf) end
         end
     end
 end
@@ -6274,10 +6316,13 @@ do
         -- returns true for same-faction duel opponents, which breaks purge detection).
         local canAssist = UnitCanAssist and UnitCanAssist("player", unit)
         local canAttack = UnitCanAttack and UnitCanAttack("player", unit)
-        if dispelEnabled and canAssist then dispelOn = HasDispellableDebuff(unit) end
+        if dispelEnabled and canAssist then
+            dispelOn = HasDispellableDebuff(unit)
+        end
 
         -- Purge: sentinel frames handle rendering via SetAlpha with secret values.
-        -- No boolean tracking needed — sentinels are the border.
+        -- Secret constraints prevent boolean tracking — sentinels ARE the border.
+        -- Purge participates in highlight priority only via test mode.
         if purgeEnabled and canAttack and unit ~= "player" then
             UpdatePurgeSentinels(uf, unit)
         else
