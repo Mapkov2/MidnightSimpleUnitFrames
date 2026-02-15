@@ -1,6 +1,5 @@
 -- MSUF Castbar LoD: GCD bar (instant casts)
 -- Shows a short "GCD castbar" on the Player castbar for instant spells that trigger the global cooldown.
--- Phase 5: folded into the CastbarManager tick (no per-frame OnUpdate) and driven by a small event driver.
 
 local _G = _G
 local C_Spell = C_Spell

@@ -1,5 +1,4 @@
 -- Castbars/MSUF_CastbarEmpower.lua
--- Phase 1 extraction: Empower timeline, ticks, stage segments, blink, start/clear.
 -- All public functions exported to _G for cross-file resolution.
 
 local MSUF_FastCall = _G.MSUF_FastCall or function(...) return pcall(...) end
@@ -552,7 +551,6 @@ local function MSUF_PlayerCastbar_EmpowerStart(self, spellID)
     else
         self._msufEmpowerStageEndsNum = nil
     end
-    -- Phase 1C + 1B: Use shared reverseFill + timer direction helpers for empower.
     local rf = _G.MSUF_GetReverseFillSafe(self, true)
     local empDObj = nil
     if type(UnitCastingDuration) == "function" then

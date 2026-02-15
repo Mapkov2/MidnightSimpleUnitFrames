@@ -1,5 +1,4 @@
 -- Castbars/MSUF_CastbarPreviews.lua
--- Phase 2 extraction: All preview, test mode, and edit mode functions.
 -- Zero combat path — only used in MSUF Edit Mode.
 
 local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()

@@ -1,5 +1,5 @@
 -- Castbars/MSUF_CastbarVisuals.lua
--- Step 9: Centralize Castbar fonts/colors/icon layering + basic sizing/anchors.
+-- Centralize Castbar fonts/colors/icon layering + basic sizing/anchors.
 
 local _, ns = ...
 

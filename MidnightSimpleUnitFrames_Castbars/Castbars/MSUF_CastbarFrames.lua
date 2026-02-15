@@ -1,5 +1,4 @@
 -- Castbars/MSUF_CastbarFrames.lua
--- Step 11: Move castbar frame construction helpers out of MSUF_Castbars.lua (safe refactor).
 -- Contains ONLY constructors/builders (no runtime cast logic).
 
 local _G = _G

@@ -1,4 +1,3 @@
--- MSUF Castbars Step 7.2 - Boss preview text layout hook (safe, no logic changes)
 -- Ensures ALL Boss Castbar Previews use the shared StyleKit text layout (castText/timeText anchors, offsets, sizes).
 
 local addonName, ns = ...

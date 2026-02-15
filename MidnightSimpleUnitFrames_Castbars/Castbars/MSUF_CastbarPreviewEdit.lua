@@ -1,5 +1,4 @@
 -- Castbars/MSUF_CastbarPreviewEdit.lua
--- Step 12: extracted preview edit handlers out of MSUF_Castbars.lua (cumulative, no behavior change)
 
 local MSUF_PreviewEditCfg = {
     player = {

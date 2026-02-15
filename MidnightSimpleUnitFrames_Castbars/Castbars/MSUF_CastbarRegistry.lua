@@ -2,8 +2,7 @@
 --
 -- Goal (later): central place to register castbar instances (player/target/focus/boss etc.)
 -- so the Engine can drive updates consistently.
---
--- Step 1: Provide a safe shared table + minimal helpers.
+-- This file is intentionally minimal for now, just a simple registry with no behavior.
 -- This file MUST NOT change existing behavior yet.
 
 local addonName, ns = ...

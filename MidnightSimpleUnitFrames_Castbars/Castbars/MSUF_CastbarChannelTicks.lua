@@ -7,7 +7,7 @@
 -- Secret-safe: uses only UnitSpellHaste("player") + StatusBar width. No duration math, no combat log, no secret comparisons.
 -------------------------------------------------------------------------------
 
--- Master toggle (Options â†’ Castbars â†’ Behavior â†’ "Show channeled cast tick lines")
+-- Master toggle (Options Castbars Behavior "Show channeled cast tick lines")
 -- Default ON (nil treated as true). Stored in MSUF_DB.general.castbarShowChannelTicks.
 local function MSUF_IsChannelTickLinesEnabled()
     local g = (MSUF_DB and MSUF_DB.general) or nil
@@ -147,8 +147,6 @@ local function MSUF_PlayerChannelHasteMarkers_Update(self, force)
     end
 end
 
--- P2 Fix #9: Export stripe functions to _G for the Driver to delegate to,
--- eliminating the duplicate 5-texture stripe system in MSUF_CastbarDriver.lua.
 
 -- Export: Options can call this to apply immediately (overrides core LoD stub).
 function _G.MSUF_UpdateCastbarChannelTicks()

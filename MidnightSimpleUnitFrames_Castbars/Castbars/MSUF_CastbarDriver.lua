@@ -1,16 +1,11 @@
--- BUILD_ID: MSUF_driver_clean_replace_2026-01-08
--- Castbars/MSUF_CastbarDriver.lua
--- Step 14: Spawn + driver split.
 -- Owns creation of Target/Focus castbar frames and the EventBus driver that creates them on login.
 -- Keeps MSUF_Castbars.lua focused on runtime/update + reanchor/apply utilities.
 
 -- -------------------------------------------------
--- Step 14: Driver-side cast-state change detector (max performance)
 -- Avoid redundant :Cast() rebuilds when the cast state hasn't actually changed.
 -- -------------------------------------------------
 local addonName, ns = ...
 
--- P2 Fix #10: Cache MSUF_FastCall as local upvalue (avoids _G lookup per call).
 -- Safe: parent addon loads first due to ## Dependencies, FastCall is always available.
 local MSUF_FastCall = MSUF_FastCall or function(...) return pcall(...) end
 
@@ -18,7 +13,6 @@ local MSUF_FastCall = MSUF_FastCall or function(...) return pcall(...) end
 _G.MSUF_INTERRUPT_FEEDBACK_DURATION = _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5
 
 
--- Step 5 (engine/state): driver-side safe fallback for enabled checks.
 -- MSUF_IsCastbarEnabledForUnit is normally provided by MSUF_Castbars.lua, but this file can
 -- receive events very early (or in partial-load scenarios). Avoid hard nil errors.
 local function MSUF_Driver_IsCastbarEnabled(unit)
@@ -54,9 +48,6 @@ local function MSUF_Driver_IsCastbarEnabled(unit)
     end
 end
 
-
-
--- Step 5 (perf, smoothness-safe): cache expensive UI calls.
 -- Avoid repeated StatusBar:SetStatusBarColor with identical values.
 function _G.MSUF_SetStatusBarColorIfChanged(sb, r, g, b, a)
     if not sb or not sb.SetStatusBarColor then return end
@@ -80,7 +71,6 @@ function _G.MSUF_SetStatusBarColorIfChanged(sb, r, g, b, a)
 end
 
 
--- P2 Fix #9: Channel haste stripes are now authoritative in MSUF_Castbars.lua,
 -- exported as _G.MSUF_PlayerChannelHasteMarkers_Update/Hide.
 -- These thin delegators replace the duplicate 5-texture system that was here.
 -- No textures are created in this file anymore.
@@ -94,9 +84,6 @@ local function MSUF__UpdatePlayerChannelHasteStripes(frame, force)
     if type(fn) == "function" then fn(frame, force) end
 end
 
-
-
--- Step 2 (DurationObjects): keep cast time text working without relying on secret duration values.
 -- We derive remaining time from the StatusBar's animated value/min/max (timer-driven or manual).
 -- Pre-built probe: avoids creating a closure per IsPlainNumber call.
 -- pcall passes arguments through, so n arrives as the first param.
@@ -212,7 +199,6 @@ local function CreateCastBar(name, unit)
             return
         end
 
-        -- P3 Fix #14: Fast-path skip.
         if not MSUF_DB then EnsureDB() end
         local isNonInterruptible = (self.isNotInterruptible == true)
 
@@ -237,8 +223,6 @@ local function CreateCastBar(name, unit)
     end
 
     
-    -- Step 8 (Engine integration): build cast state once (Unit APIs) and feed it into :Cast(state)
-    -- so we don't call UnitCastingInfo/UnitChannelInfo twice per event/timer.
     local function MSUF_Driver_BuildCastStateFor(self)
         local E = (_G.MSUF_GetCastbarEngine and _G.MSUF_GetCastbarEngine()) or nil
         if E and E.BuildState then
@@ -247,8 +231,6 @@ local function CreateCastBar(name, unit)
         return nil
     end
 
-    -- Step 4 (accuracy, secret-safe): track a numeric cast identity to ignore stale STOP/FAILED events
-    -- without relying on castGUID (which may be a secret value in Midnight/Beta).
     -- Identity is OPTIONAL: we only gate when we have numeric values (spellId and/or spellSequenceID).
     local function MSUF_Driver_SetActiveIdentity(self, st)
         if not self then return end
@@ -305,8 +287,6 @@ local function CreateCastBar(name, unit)
         t = self._msufStopTimer2; if t and t.Cancel then t:Cancel() end; self._msufStopTimer2 = nil
         t = self._msufStopTimer3; if t and t.Cancel then t:Cancel() end; self._msufStopTimer3 = nil
     end
-
-    -- P2 Fix #7: Pre-build reusable timer callbacks once per frame.
     -- Callbacks capture `self` (constant) and read changing parameters from frame fields:
     --   _msufStopExpToken, _msufStopExpSeq, _msufStopT2, _msufStartRetryToken
     -- This eliminates 3-5 closure allocations per stop/start event.
@@ -368,7 +348,6 @@ local function CreateCastBar(name, unit)
             end
         end
 
-        -- P2 Fix #8: Reusable start-retry callback
         self._msufStartRetryCB = function()
             if not self or self.interrupted then return end
             if (self._msufCastToken or 0) ~= (self._msufStartRetryToken or 0) then return end
@@ -392,7 +371,6 @@ local function CreateCastBar(name, unit)
         local snapSeq = self._msufActiveSeq
         MSUF_Driver_CancelStopConfirm(self)
 
-        -- P2 Fix #7: Store parameters on frame for reusable callbacks (no new closures).
         _EnsureDriverCallbacks(self)
         self._msufStopExpToken = token
         self._msufStopExpSeq   = snapSeq
@@ -468,7 +446,6 @@ end
             local tok = MSUF_Driver_BumpCastToken(self)
             self.isNotInterruptible = false
             MSUF_Driver_CastResync(self)
-            -- P2 Fix #8: Only schedule retry when initial state is incomplete.
             -- Most casts are correctly detected on first attempt; this avoids a closure+timer per start.
             local st = MSUF_Driver_BuildCastStateFor(self)
             if not (st and st.active and st.spellName) then

@@ -1,5 +1,4 @@
 -- Castbars/MSUF_CastbarAnchors.lua
--- Phase 4 extraction: All castbar anchoring, sizing, and layout functions.
 -- Pure layout logic (ClearAllPoints, SetPoint, SetSize) — no combat-path code.
 
 local MSUF_SetPointIfChanged = _G.MSUF_SetPointIfChanged or function(frame, ...)

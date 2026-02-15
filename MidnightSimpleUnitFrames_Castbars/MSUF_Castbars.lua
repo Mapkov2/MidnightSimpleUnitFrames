@@ -180,11 +180,11 @@ local MSUF_GetAnchorFrame = _G.MSUF_GetAnchorFrame
 -- All functions are available via _G (set by earlier TOC files).
 -- =========================================================================
 
--- Phase 1: Empower â†’ Castbars/MSUF_CastbarEmpower.lua
--- Phase 3: Channel Ticks â†’ Castbars/MSUF_CastbarChannelTicks.lua
--- Phase 4: Anchors â†’ Castbars/MSUF_CastbarAnchors.lua
--- Phase 5: Player Runtime â†’ Castbars/MSUF_PlayerCastbarRuntime.lua
--- Phase 2: Previews/TestMode â†’ Castbars/MSUF_CastbarPreviews.lua
+-- Phase 1: Empower  Castbars/MSUF_CastbarEmpower.lua
+-- Phase 3: Channel Ticks Castbars/MSUF_CastbarChannelTicks.lua
+-- Phase 4: Anchors Castbars/MSUF_CastbarAnchors.lua
+-- Phase 5: Player Runtime Castbars/MSUF_PlayerCastbarRuntime.lua
+-- Phase 2: Previews/TestMode Castbars/MSUF_CastbarPreviews.lua
 
 -- Local aliases for cross-file functions (all set by earlier TOC files)
 local MSUF_PlayerCastbar_Cast                    = _G.MSUF_PlayerCastbar_Cast

@@ -1,5 +1,5 @@
 -- Castbars/MSUF_PlayerCastbarRuntime.lua
--- Phase 5 extraction: Player castbar runtime (latency, color, interrupt, cast, OnEvent).
+--  extraction: Player castbar runtime (latency, color, interrupt, cast, OnEvent).
 -- Loaded AFTER Empower + ChannelTicks (needs _G exports from those files).
 
 local MSUF_FastCall = _G.MSUF_FastCall or function(...) return pcall(...) end

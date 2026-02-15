@@ -1,4 +1,4 @@
--- MSUF_FocusKick_StateDriver.lua (Step 17)
+-- MSUF_FocusKick_StateDriver.lua 
 -- Drives the Focus Interrupt Tracker icon using the Castbar Engine state.
 --
 -- Goals:

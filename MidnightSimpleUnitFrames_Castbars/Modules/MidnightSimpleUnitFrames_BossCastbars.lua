@@ -1,9 +1,4 @@
 -- MidnightSimpleUnitFrames - Boss Castbar Module (bootstrap)
--- Step 0: Show MSUF-style boss castbars (boss1..boss5) without options UI.
--- Goals for Step 0:
---   - Use the SAME interruptible/non-interruptible color sources as MSUF (so the Colors menu applies automatically).
---   - Use MSUF's castbar layout (icon is OUTSIDE the statusbar fill area; no overlap).
---   - Use duration-objects (UnitCastingDuration/UnitChannelDuration) + MSUF_CastbarManager if available.
 
 local addonName, ns = ...
 ns = ns or {}
@@ -343,7 +338,7 @@ local function CreateBossCastbarFrame(unit)
 local h = self:GetHeight() or 18
 if h < 12 then h = 12 end
 
--- Boss-specific castbar icon settings (Step 2)
+-- Boss-specific castbar icon settings
 EnsureDBSafe()
 local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 local showIcon = (g.showBossCastIcon == nil) and (g.castbarShowIcon ~= false) or (g.showBossCastIcon ~= false)

@@ -1,5 +1,4 @@
 -- Castbars/MSUF_CastbarUtils.lua
--- Step 10: Split low-risk shared helpers out of MSUF_Castbars.lua.
 --
 -- This file intentionally defines GLOBAL helpers because multiple MSUF modules
 -- (Edit Mode, Boss, Options) may call into castbar helpers across files.
@@ -154,7 +153,7 @@ end
 
 
 -- -------------------------------------------------
--- Step 6: Shared castbar APPLY helper (maintainability + less drift)
+-- Shared castbar APPLY helper (maintainability + less drift)
 -- Single place to:
 --  - set icon/text
 --  - apply durationObj to StatusBar via SetTimerDuration (and direction)
@@ -759,7 +758,7 @@ function _G.MSUF_ClearEmpowerState(frame)
 end
 
 -- =====================================================================
--- Phase 2A: Shared interrupt feedback bar visuals.
+--  Shared interrupt feedback bar visuals.
 -- Performs the common visual steps for showing "Interrupted" on any castbar.
 -- Callers handle their own lifecycle (timers, state tracking, cleanup).
 --

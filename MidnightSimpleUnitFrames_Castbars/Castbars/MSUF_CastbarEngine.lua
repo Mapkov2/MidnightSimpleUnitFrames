@@ -21,7 +21,6 @@ local Style    = ns.MSUF_CastbarStyle     -- loaded earlier in the TOC
 ns.MSUF_CastbarEngine = ns.MSUF_CastbarEngine or {}
 local E = ns.MSUF_CastbarEngine
 
--- P3 Fix #16: Per-unit frame-tick cache.
 -- When BuildState is called multiple times for the same unit in the same game frame
 -- (same GetTime() value), return the cached result instead of re-querying WoW APIs.
 -- This avoids redundant UnitCastingInfo + UnitChannelInfo calls during event dispatch.
@@ -153,7 +152,6 @@ end
 function E:BuildState(unit, frameHint)
     if not unit then return { active = false } end
 
-    -- P3 Fix #16: Frame-tick cache — if already built for this unit in this game frame, return cached.
     local now = GetTime()
     if _buildCacheTime[unit] == now and E._state[unit] then
         return E._state[unit]

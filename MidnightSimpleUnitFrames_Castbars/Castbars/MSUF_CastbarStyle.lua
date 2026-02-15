@@ -2,7 +2,7 @@
 -- MSUF Castbar Style (Step 2: Outline extraction)
 --
 -- Goal: centralized visual apply helpers for ALL castbars (player/target/focus/boss/previews).
--- Step 2: Move castbar outline/border logic here (no behavior change).
+-- outline/border logic here (no behavior change).
 
 local addonName, ns = ...
 ns = ns or {}
@@ -160,10 +160,6 @@ if not _G.MSUF_ApplyCastbarOutlineToAll then
     end
 end
 
-
--- -------------------------------------------------
--- Step 4 (hotfix): Centralize StatusBar timer direction application
--- -------------------------------------------------
 -- WoW Midnight: StatusBar:SetTimerDuration has signature:
 --   self:SetTimerDuration(duration [, interpolation, direction])
 -- The "direction" parameter is NOT stable across builds. In some builds it is an enum
@@ -479,11 +475,7 @@ _G.MSUF_ApplyStatusBarTimerAndReverse = function(statusBar, durationObj, reverse
     return S:ApplyTimerDirection(statusBar, durationObj, reverseFill)
 end
 
--- -------------------------------------------------
 
--- -------------------------------------------------
--- Step 7.3: Shared text/time layout helpers
--- -------------------------------------------------
 -- These helpers reduce drift between real castbars and previews
 -- and provide a single source of truth for text anchor rules.
 
@@ -659,7 +651,7 @@ _G.MSUF_ApplyCastbarTimeTextLayout = function(frame, unitKey)
 end
 
 -- -------------------------------------------------
--- Step 9: Shared spell-name (castText) layout helper
+-- Shared spell-name (castText) layout helper
 -- -------------------------------------------------
 -- Mirrors the existing DB keys used by Options/Edit Mode:
 --   g.castbarShowSpellName (global)
