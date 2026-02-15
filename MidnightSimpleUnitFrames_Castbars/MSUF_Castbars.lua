@@ -513,6 +513,12 @@ do
     manager.elapsed = 0
     manager:Hide()
 
+    -- Fix 5: Cache heavy-path function as upvalue (deferred for load-order safety).
+    local _HeavyUpdate = nil
+    C_Timer.After(0, function()
+        _HeavyUpdate = _G.MSUF_UpdateCastbarFrame
+    end)
+
     local function ManagerOnUpdate(self, elapsed)
         -- Run at frame rate (~60fps) so time text updates smoothly for all castbars.
         -- Bar fill is C-side animated (SetTimerDuration); per-bar heavy work is self-gated.
@@ -532,7 +538,10 @@ do
 
         local now = _Now()
 
-        for frame in pairs(active) do
+        -- Fix 6: next()-based loop avoids pairs() iterator closure allocation per tick.
+        local frame = next(active)
+        while frame do
+            local nextFrame = next(active, frame)
             if not frame or not frame:IsShown() or not frame.statusBar then
                 active[frame] = nil
             else
@@ -556,11 +565,13 @@ do
                     if fi < minFi then fi = minFi end
                     if fi > 0.50 then fi = 0.50 end
                     frame._msufNextTick = now + fi
-                    if _G.MSUF_UpdateCastbarFrame then
-                        _G.MSUF_UpdateCastbarFrame(frame, dt, now)
+                    local fn = _HeavyUpdate or _G.MSUF_UpdateCastbarFrame
+                    if fn then
+                        fn(frame, dt, now)
                     end
                 end
             end
+            frame = nextFrame
         end
 
         if not next(active) then
@@ -577,18 +588,24 @@ do
         if not frame then return end
         if not MSUF_CastbarManager or not MSUF_CastbarManager.active then return end
 
-        if frame._msufTickInterval == nil then
+        -- Empower bars drive SetValue() directly (not C-side animated), so they need 20Hz for smooth fill.
+        -- Always re-evaluate when empower state changes (a frame may switch between normal and empower).
+        if frame.isEmpower then
+            frame._msufTickInterval = 0.03  -- ~33Hz for smooth empower bar fill
+        elseif frame._msufTickInterval == nil or frame._msufTickInterval < 0.10 then
+            -- First registration or switching back from empower: set normal cadence.
             local u = frame.unit
-            -- Heavy-path cadence: hard-stop, glow, style-rev, GCD, empower.
+            -- Heavy-path cadence: hard-stop, glow, style-rev, GCD.
             -- Time text is handled at 60fps by the manager fast-path (no per-bar gate).
+            -- Bar fill is C-side animated (SetTimerDuration). 10Hz is sufficient for heavy work.
             if u == "target" or u == "focus" then
-                frame._msufTickInterval = 0.05
+                frame._msufTickInterval = 0.10
             elseif u == "player" then
-                frame._msufTickInterval = 0.05
+                frame._msufTickInterval = 0.10
             elseif type(u) == "string" and u:sub(1,4) == "boss" then
-                frame._msufTickInterval = 0.05
+                frame._msufTickInterval = 0.10
             else
-                frame._msufTickInterval = (frame.isEmpower and 0.03) or 0.10
+                frame._msufTickInterval = 0.10
             end
         end
         frame._msufNextTick = 0
@@ -862,60 +879,89 @@ do
                 frame._msufTimerAssumeCountdown = nil
             end
 
-            local rem
-            if dObj.GetRemainingDuration then
-                rem = dObj:GetRemainingDuration()
-            else
-                rem = dObj:GetRemaining()
-            end
+            -- Fix 2: Only read the expensive API + ToPlain when remaining < 1s or no snapshot exists.
+            -- When remaining > 1s, drift (max ~100ms at 10Hz) is visually imperceptible.
+            local snapEndT = frame._msufPlainEndTime
+            local snapRem = snapEndT and (snapEndT - now) or nil
+            local needsApiRead = (not snapRem) or (snapRem < 1.0)
 
-            local remNum = ToPlain(rem)
-
-            -- P1 Fix #4: Cache StatusBar-derived span so the glow path below never repeats pcall+ToPlain.
+            local remNum
             local _fallbackSpan = nil
 
-            -- Midnight/Beta: for non-interruptible casts, Remaining can be a secret value.
-            -- If we can't safely coerce it, derive remaining from the animated StatusBar value instead.
-            if (not remNum) and frame.statusBar and frame.MSUF_timerDriven then
-                local bar = frame.statusBar
-                local okMM, minV, maxV = pcall(bar.GetMinMaxValues, bar)
-                local okV, val = pcall(bar.GetValue, bar)
-                if okMM and okV then
-                    minV = ToPlain(minV) or 0
-                    maxV = ToPlain(maxV)
-                    val  = ToPlain(val)
+            if needsApiRead then
+                local rem
+                if dObj.GetRemainingDuration then
+                    rem = dObj:GetRemainingDuration()
+                else
+                    rem = dObj:GetRemaining()
+                end
 
-                    if maxV and val and maxV > minV then
-                        local span = maxV - minV
-                        _fallbackSpan = span  -- cache for glow reuse
+                remNum = ToPlain(rem)
 
-                        -- Detect whether bar value represents Remaining (countdown) or Elapsed (countup).
-                        local assumeCountdown = frame._msufTimerAssumeCountdown
-                        if assumeCountdown == nil then
-                            local distMin = math.abs(val - minV)
-                            local distMax = math.abs(maxV - val)
-                            assumeCountdown = (distMax < distMin)
-                            frame._msufTimerAssumeCountdown = assumeCountdown
+                -- Midnight/Beta: for non-interruptible casts, Remaining can be a secret value.
+                -- If we can't safely coerce it, derive remaining from the animated StatusBar value instead.
+                if (not remNum) and frame.statusBar and frame.MSUF_timerDriven then
+                    local bar = frame.statusBar
+                    local okMM, minV, maxV = pcall(bar.GetMinMaxValues, bar)
+                    local okV, val = pcall(bar.GetValue, bar)
+                    if okMM and okV then
+                        minV = ToPlain(minV) or 0
+                        maxV = ToPlain(maxV)
+                        val  = ToPlain(val)
+
+                        if maxV and val and maxV > minV then
+                            local span = maxV - minV
+                            _fallbackSpan = span
+
+                            local assumeCountdown = frame._msufTimerAssumeCountdown
+                            if assumeCountdown == nil then
+                                local distMin = math.abs(val - minV)
+                                local distMax = math.abs(maxV - val)
+                                assumeCountdown = (distMax < distMin)
+                                frame._msufTimerAssumeCountdown = assumeCountdown
+                            end
+
+                            if assumeCountdown then
+                                remNum = val - minV
+                            else
+                                remNum = maxV - val
+                            end
+
+                            if remNum < 0 then remNum = 0 end
+                            if remNum > span then remNum = span end
                         end
-
-                        if assumeCountdown then
-                            remNum = val - minV
-                        else
-                            remNum = maxV - val
-                        end
-
-                        if remNum < 0 then remNum = 0 end
-                        if remNum > span then remNum = span end
                     end
                 end
+
+                -- If we still couldn't read remaining and have no snapshot, show raw value as last resort.
+                if not remNum and not snapRem then
+                    if frame.timeText and castTimeEnabled and rem ~= nil then
+                        local t = ""
+                        local okFmt, s = pcall(string.format, "%.1f", rem)
+                        if okFmt and s then
+                            t = s
+                        else
+                            t = tostring(rem)
+                        end
+                        MSUF_SetTextIfChanged(frame.timeText, t)
+                        frame._msufZeroCount = nil
+                    end
+                    return
+                end
+            else
+                -- Remaining > 1s: use snapshot directly, no API call needed.
+                remNum = snapRem
             end
 
             if remNum then
                 if remNum < 0 then remNum = 0 end
 
-                -- oUF-style: re-snapshot endTime for drift correction (heavy path runs at 20Hz).
-                -- This keeps the 60fps fast-path accurate without any per-tick API calls.
-                frame._msufPlainEndTime = now + remNum
+                -- Re-snapshot only when we actually read from the API (drift correction).
+                -- When using snapshot directly (>1s), no need to write back the same value.
+                -- Heavy path runs at 10Hz; fast-path at 60fps for smooth time text.
+                if needsApiRead then
+                    frame._msufPlainEndTime = now + remNum
+                end
 
                 -- Time text is handled by the manager fast-path at 60fps via _msufPlainEndTime.
                 -- No time text update needed here.
@@ -965,17 +1011,6 @@ do
                 else
                     frame._msufZeroCount = nil
                 end
-            elseif frame.timeText and castTimeEnabled and rem ~= nil then
-                -- Last resort: show whatever the API returns (never error, helps debugging).
-                local t = ""
-                local okFmt, s = pcall(string.format, "%.1f", rem)
-                if okFmt and s then
-                    t = s
-                else
-                    t = tostring(rem)
-                end
-                MSUF_SetTextIfChanged(frame.timeText, t)
-                frame._msufZeroCount = nil
             end
 
             return
