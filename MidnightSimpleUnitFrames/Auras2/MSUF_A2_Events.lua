@@ -83,7 +83,7 @@ local function MarkDirty(unit, delay)
 
     local req = _cachedReqUnit
     if req then
-        if delay == nil then delay = 0.01 end
+        if delay == nil then delay = 0.02 end
         req(unit, delay)
         return
     end

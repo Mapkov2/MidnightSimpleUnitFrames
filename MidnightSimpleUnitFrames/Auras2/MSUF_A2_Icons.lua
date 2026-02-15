@@ -83,6 +83,13 @@ local function BindFastPaths()
     _fastPathBound = true
 end
 
+-- Phase 8: file-scope locals for Icons._ methods (eliminates hash-table
+-- lookup per icon in tight loops).  Assigned after method definitions.
+local _fast_ApplyTimer
+local _fast_RefreshTimer
+local _fast_ApplyStacks
+local _fast_ApplyOwnHighlight
+
 -- â”€â”€ Cached shared.* flags (resolve once per configGen, not per icon) â”€â”€
 local _sharedFlagsGen   = -1
 local _showSwipe        = false
@@ -92,6 +99,7 @@ local _showStacks       = false
 local _IS_BOSS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local _wantBuffHL       = false
 local _wantDebuffHL     = false
+local _useBlizzardTimer = false  -- true = Blizzard C++ pass-through for countdown text
 
 -- Cached global MSUF font family (resolved once, updated by ApplyFontsFromGlobal)
 local _globalFontPath   = nil   -- nil = not yet resolved
@@ -119,6 +127,7 @@ local function RefreshSharedFlags(shared, gen)
     _showStacks   = (shared and shared.showStackCount ~= false) -- default true
     _wantBuffHL   = (shared and shared.highlightOwnBuffs == true) or false
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
+    _useBlizzardTimer = (shared and shared.useBlizzardTimerText == true) or false
 end
 
 -- --
@@ -443,10 +452,6 @@ function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
 
             icon:ClearAllPoints()
             icon:SetSize(iconSize, iconSize)
-local cf = icon.countFrame
-if cf and cf.SetFrameLevel and icon.GetFrameLevel then
-    cf:SetFrameLevel(icon:GetFrameLevel() + 10)
-end
             icon:SetPoint(anchor, container, anchor, col * step * dx, row * step * dy)
         end
     end
@@ -518,8 +523,8 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         and last.isOwn == isOwn
     then
         -- Fast path: same aura, same config. Refresh timer + stacks.
-        Icons._RefreshTimer(icon, unit, aid, shared)
-        Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+        _fast_RefreshTimer(icon, unit, aid, shared)
+        _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
         return true
     end
 
@@ -544,13 +549,13 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     end
 
     -- 2. Cooldown / Timer
-    Icons._ApplyTimer(icon, unit, aid, shared)
+    _fast_ApplyTimer(icon, unit, aid, shared)
 
     -- 3. Stack count
-    Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
 
     -- 4. Own-aura highlight
-    Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
+    _fast_ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
 
     -- 5. Masque sync
     if Masque and icon.MSUF_MasqueAdded and Masque.SyncIconOverlayLevels then
@@ -579,6 +584,7 @@ local function ClearCooldownVisual(icon, cd)
     -- Clear swipe/timer state (works across template variants).
     if cd.Clear then cd:Clear() end
     if cd.SetCooldown then cd:SetCooldown(0, 0) end
+    if cd.SetUseAuraDisplayTime then cd:SetUseAuraDisplayTime(false) end
 
     -- Force-hide countdown numbers when no timer is present (prevents stale text).
     if cd.SetHideCountdownNumbers then
@@ -655,83 +661,9 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
 
     local hadTimer = false
 
-    -- Get duration object (secret-safe) â€” fast path skips 3 guards
+    -- Get duration object (secret-safe) -- needed for both modes (swipe + timer data).
     local obj = _getDurationFast and _getDurationFast(unit, aid)
     if obj then
-        -- Cache method reference on cd frame to avoid type() check per call
-        local cdSetFn = cd._msufA2_cdSetFn
-        if cdSetFn == nil then
-            if type(cd.SetCooldownFromDurationObject) == "function" then
-                cdSetFn = cd.SetCooldownFromDurationObject
-            elseif type(cd.SetTimerDuration) == "function" then
-                cdSetFn = cd.SetTimerDuration
-            else
-                cdSetFn = false  -- sentinel: no method available
-            end
-            cd._msufA2_cdSetFn = cdSetFn
-        end
-
-        if cdSetFn then
-            cdSetFn(cd, obj)
-            hadTimer = true
-        end
-
-        icon._msufA2_durationObj = obj
-        cd._msufA2_durationObj = obj
-    end
-
-    -- Apply shared visual flags.
-    -- Important: permanent auras must force-hide countdown numbers to prevent stale text.
-    cd:SetDrawSwipe(_showSwipe)
-    cd:SetReverse(_swipeReverse)
-    if hadTimer then
-        cd:SetHideCountdownNumbers(not _showText)
-    else
-        -- No duration object => treat as "no timer" and clear any old visuals.
-        -- We intentionally do NOT rely on DoesAuraHaveExpirationTime here because it can be secret.
-        ClearCooldownVisual(icon, cd)
-    end
-
-    -- Cooldown text manager integration (CT already bound by CommitIcon)
-    CT = CT or API.CooldownText
-    local wantText = _showText and (icon._msufA2_hideCDNumbers ~= true)
-    if CT then
-        if wantText and hadTimer then
-            if CT.RegisterIcon then CT.RegisterIcon(icon) end
-            if CT.TouchIcon then CT.TouchIcon(icon) end
-        elseif CT.UnregisterIcon then
-            -- Ensure stale registrations are removed when the aura has no timer.
-            CT.UnregisterIcon(icon)
-        end
-    end
-
-    -- Apply cooldown text font size + offsets (needs fontstring discovery once)
-    if hadTimer and _showText == true and icon._msufA2_hideCDNumbers ~= true then
-        ApplyCooldownTextStyle(icon, cd, nil)
-    end
-
-    icon._msufA2_lastHadTimer = hadTimer
-end
-
--- Fast-path timer refresh (same auraInstanceID, possible reapply)
-function Icons._RefreshTimer(icon, unit, aid, shared)
-    local cd = icon.cooldown
-    if not cd then return end
-
-    local obj = _getDurationFast and _getDurationFast(unit, aid)
-    if not obj then
-        -- If this icon previously had a timer, clear stale text/swipe now.
-        if icon._msufA2_lastHadTimer == true or cd._msufA2_durationObj ~= nil then
-            ClearCooldownVisual(icon, cd)
-        end
-        return
-    end
-
-    -- Use cached shared flags (no shared table reads)
-    if not _showSwipe and not _showText then return end
-
-    if obj then
-        -- Use cached method ref (set by _ApplyTimer)
         local cdSetFn = cd._msufA2_cdSetFn
         if cdSetFn == nil then
             if type(cd.SetCooldownFromDurationObject) == "function" then
@@ -746,19 +678,96 @@ function Icons._RefreshTimer(icon, unit, aid, shared)
 
         if cdSetFn then
             cdSetFn(cd, obj)
+            hadTimer = true
         end
 
         icon._msufA2_durationObj = obj
         cd._msufA2_durationObj = obj
-        icon._msufA2_lastHadTimer = true
+    end
 
+    -- Pass-through: tell Blizzard CooldownFrame to render aura timer natively in C++.
+    if _useBlizzardTimer and cd.SetUseAuraDisplayTime then
+        cd:SetUseAuraDisplayTime(hadTimer)
+    end
+
+    -- Apply shared visual flags.
+    cd:SetDrawSwipe(_showSwipe)
+    cd:SetReverse(_swipeReverse)
+    if hadTimer then
+        cd:SetHideCountdownNumbers(not _showText)
+    else
+        ClearCooldownVisual(icon, cd)
+    end
+
+    -- Cooldown text manager: skip entirely in pass-through (Blizzard C++ renders text).
+    if not _useBlizzardTimer then
+        CT = CT or API.CooldownText
+        local wantText = _showText and (icon._msufA2_hideCDNumbers ~= true)
+        if CT then
+            if wantText and hadTimer then
+                if CT.RegisterIcon then CT.RegisterIcon(icon) end
+                if CT.TouchIcon then CT.TouchIcon(icon) end
+            elseif CT.UnregisterIcon then
+                CT.UnregisterIcon(icon)
+            end
+        end
+    else
+        -- Pass-through: ensure CT is not tracking this icon.
+        CT = CT or API.CooldownText
+        if CT and CT.UnregisterIcon then CT.UnregisterIcon(icon) end
+    end
+
+    -- Apply cooldown text font size + offsets (styles Blizzard native text too).
+    if hadTimer and _showText == true and icon._msufA2_hideCDNumbers ~= true then
+        ApplyCooldownTextStyle(icon, cd, nil)
+    end
+
+    icon._msufA2_lastHadTimer = hadTimer
+end
+
+-- Fast-path timer refresh (same auraInstanceID, possible reapply)
+function Icons._RefreshTimer(icon, unit, aid, shared)
+    local cd = icon.cooldown
+    if not cd then return end
+
+    local obj = _getDurationFast and _getDurationFast(unit, aid)
+    if not obj then
+        if icon._msufA2_lastHadTimer == true or cd._msufA2_durationObj ~= nil then
+            ClearCooldownVisual(icon, cd)
+        end
+        return
+    end
+
+    -- Both swipe and text disabled: nothing to update.
+    if not _showSwipe and not _showText then return end
+
+    -- Refresh duration on the CooldownFrame (needed for both swipe and text).
+    local cdSetFn = cd._msufA2_cdSetFn
+    if cdSetFn == nil then
+        if type(cd.SetCooldownFromDurationObject) == "function" then
+            cdSetFn = cd.SetCooldownFromDurationObject
+        elseif type(cd.SetTimerDuration) == "function" then
+            cdSetFn = cd.SetTimerDuration
+        else
+            cdSetFn = false
+        end
+        cd._msufA2_cdSetFn = cdSetFn
+    end
+
+    if cdSetFn then
+        cdSetFn(cd, obj)
+    end
+
+    icon._msufA2_durationObj = obj
+    cd._msufA2_durationObj = obj
+    icon._msufA2_lastHadTimer = true
+
+    -- CT ticker: only when NOT pass-through AND text is enabled.
+    -- Pass-through: Blizzard C++ auto-updates countdown from SetUseAuraDisplayTime.
+    -- Text disabled: no reason to touch CT at all.
+    if not _useBlizzardTimer and _showText then
         CT = CT or API.CooldownText
         if CT and CT.TouchIcon then CT.TouchIcon(icon) end
-
-        -- Keep cooldown text style in sync when refreshing (no font discovery here)
-        if _showText == true and icon._msufA2_hideCDNumbers ~= true then
-            ApplyCooldownTextStyle(icon, cd, nil)
-        end
     end
 end
 
@@ -773,23 +782,26 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
     local countFS = icon.count
     if not countFS then return end
 
-    -- Ensure per-icon text config is resolved for this configGen
-    local gen = (icon._msufA2_lastCommit and icon._msufA2_lastCommit.gen) or _configGen
-    ResolveTextConfig(icon, unit, shared, gen)
+    -- Phase 8: ResolveTextConfig already called by all callers (CommitIcon / RefreshAssignedIcons).
 
-    -- Apply stack font family + size (diff-gated on both size AND font path)
-    local wantSize = icon._msufA2_stackTextSize or 14
-    if countFS.GetFont and countFS.SetFont then
-        local gFont, gFlags = ResolveGlobalFont()
-        local curFont, curSize, curFlags = countFS:GetFont()
-        local wantFont = gFont or curFont
-        local wantFlags = gFlags or curFlags or "OUTLINE"
-        if icon._msufA2_lastStackFontSize ~= wantSize or icon._msufA2_lastStackFontPath ~= wantFont then
-            if wantFont then
-                countFS:SetFont(wantFont, wantSize, wantFlags)
+
+
+    -- Apply stack font family + size (gen-guarded: skip GetFont C-API on hot path)
+    if icon._msufA2_stackFontGen ~= _configGen then
+        icon._msufA2_stackFontGen = _configGen
+        local wantSize = icon._msufA2_stackTextSize or 14
+        if countFS.GetFont and countFS.SetFont then
+            local gFont, gFlags = ResolveGlobalFont()
+            local curFont, curSize, curFlags = countFS:GetFont()
+            local wantFont = gFont or curFont
+            local wantFlags = gFlags or curFlags or "OUTLINE"
+            if icon._msufA2_lastStackFontSize ~= wantSize or icon._msufA2_lastStackFontPath ~= wantFont then
+                if wantFont then
+                    countFS:SetFont(wantFont, wantSize, wantFlags)
+                end
+                icon._msufA2_lastStackFontSize = wantSize
+                icon._msufA2_lastStackFontPath = wantFont
             end
-            icon._msufA2_lastStackFontSize = wantSize
-            icon._msufA2_lastStackFontPath = wantFont
         end
     end
 
@@ -878,12 +890,17 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
         end
     end
 
-    -- At this point we have a visible stack display (count already set)
+    -- At this point we have a visible stack display (count already set).
+    -- Diff-gate SetTextColor to avoid redundant C-API calls on hot path.
+    local wantR, wantG, wantB = 1, 1, 1
     if shared and shared.ownStackCountColor == true and icon._msufA2_lastCommit and icon._msufA2_lastCommit.isOwn == true then
-        local r, g, b = GetStackCountRGB()
-        countFS:SetTextColor(r, g, b)
-    else
-        countFS:SetTextColor(1, 1, 1)
+        wantR, wantG, wantB = GetStackCountRGB()
+    end
+    if icon._msufA2_lastStackR ~= wantR or icon._msufA2_lastStackG ~= wantG or icon._msufA2_lastStackB ~= wantB then
+        icon._msufA2_lastStackR = wantR
+        icon._msufA2_lastStackG = wantG
+        icon._msufA2_lastStackB = wantB
+        countFS:SetTextColor(wantR, wantG, wantB)
     end
 
     if not countFS.IsShown or not countFS:IsShown() then
@@ -935,6 +952,12 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     end
 end
 
+-- Phase 8: bind file-scope locals (defined above) now that methods exist.
+_fast_ApplyTimer        = Icons._ApplyTimer
+_fast_RefreshTimer      = Icons._RefreshTimer
+_fast_ApplyStacks       = Icons._ApplyStacks
+_fast_ApplyOwnHighlight = Icons._ApplyOwnHighlight
+
 -- --
 -- Refresh all assigned icons (fast path: timer + stacks only)
 -- Called when aura membership hasn't changed but values may have
@@ -964,8 +987,8 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
                 aid = icon._msufAuraInstanceID
                 if aid then
                     ResolveTextConfig(icon, unit, shared, _configGen)
-                    Icons._RefreshTimer(icon, unit, aid, shared)
-                    Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+                    _fast_RefreshTimer(icon, unit, aid, shared)
+                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
                 end
             end
         end
@@ -980,8 +1003,8 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
                 aid = icon._msufAuraInstanceID
                 if aid then
                     ResolveTextConfig(icon, unit, shared, _configGen)
-                    Icons._RefreshTimer(icon, unit, aid, shared)
-                    Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+                    _fast_RefreshTimer(icon, unit, aid, shared)
+                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
                 end
             end
         end
@@ -996,8 +1019,8 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
                 aid = icon._msufAuraInstanceID
                 if aid then
                     ResolveTextConfig(icon, unit, shared, _configGen)
-                    Icons._RefreshTimer(icon, unit, aid, shared)
-                    Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+                    _fast_RefreshTimer(icon, unit, aid, shared)
+                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
                 end
             end
         end

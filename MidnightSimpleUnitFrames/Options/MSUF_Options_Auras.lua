@@ -1040,7 +1040,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     local leftTop = MakeBox(content, 720, 484)
     leftTop:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
     -- Timer / cooldown text color controls live here (breakpoints are added in later steps).
-    local timerBox = MakeBox(content, 720, 200)
+    local timerBox = MakeBox(content, 720, 228)
     timerBox:SetPoint("TOPLEFT", leftTop, "BOTTOMLEFT", 0, -14)
     -- Blizzard-rendered Private Auras (anchor controls)
     local privateBox = MakeBox(content, 720, 270)
@@ -2132,7 +2132,19 @@ end
             EnsureDB()
             return (MSUF_DB and MSUF_DB.general) or nil
         end
-        local cbTimerBuckets = CreateBoolCheckboxPath(timerBox, 'Color aura timers by remaining time', 12, -34, GetGeneral, 'aurasCooldownTextUseBuckets', nil,
+        -- Blizzard pass-through toggle: Blizzard C++ renders countdown text natively.
+        local cbBlizzardTimer = CreateBoolCheckboxPath(timerBox, 'Use Blizzard timer text (max performance)', 12, -34, A2_Settings, 'useBlizzardTimerText', nil,
+            'When enabled, Blizzard handles countdown numbers natively in C++.\nDisables timer colors but eliminates all periodic timer CPU overhead.\nFont, size and position are still controlled by MSUF.',
+            function()
+                if timerBox and timerBox._msufApplyTimerColorsEnabledState then
+                    pcall(timerBox._msufApplyTimerColorsEnabledState)
+                end
+                A2_RequestCooldownTextRecolor()
+                A2_RequestApply()
+             end)
+        A2_Track('global', cbBlizzardTimer)
+
+        local cbTimerBuckets = CreateBoolCheckboxPath(timerBox, 'Color aura timers by remaining time', 12, -58, GetGeneral, 'aurasCooldownTextUseBuckets', nil,
             'When enabled, aura cooldown text uses Safe / Warning / Urgent colors based on remaining time.\nWhen disabled, aura cooldown text always uses the Safe color.',
             function()
                 if timerBox and timerBox._msufApplyTimerColorsEnabledState then
@@ -2192,22 +2204,24 @@ end
 			A2_RequestCooldownTextRecolor()
 			A2_RequestApply()
          end
-        local safeSlider = CreateAuras2CompactSlider(timerBox, 'Safe (seconds)', 0, 600, 1, 12, -72, 220, GetSafe, SetSafe)
+        local safeSlider = CreateAuras2CompactSlider(timerBox, 'Safe (seconds)', 0, 600, 1, 12, -96, 220, GetSafe, SetSafe)
         A2_Track("global", safeSlider)
         MSUF_StyleAuras2CompactSlider(safeSlider, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(safeSlider, 0, 600, 1, GetSafe)
-        local warnSlider = CreateAuras2CompactSlider(timerBox, 'Warning (<=)', 0, 30, 1, 260, -72, 200, GetWarn, SetWarn)
+        local warnSlider = CreateAuras2CompactSlider(timerBox, 'Warning (<=)', 0, 30, 1, 260, -96, 200, GetWarn, SetWarn)
         A2_Track("global", warnSlider)
         MSUF_StyleAuras2CompactSlider(warnSlider, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(warnSlider, 0, 30, 1, GetWarn)
-        local urgSlider = CreateAuras2CompactSlider(timerBox, 'Urgent (<=)', 0, 15, 1, 486, -72, 200, GetUrg, SetUrg)
+        local urgSlider = CreateAuras2CompactSlider(timerBox, 'Urgent (<=)', 0, 15, 1, 486, -96, 200, GetUrg, SetUrg)
         A2_Track("global", urgSlider)
         MSUF_StyleAuras2CompactSlider(urgSlider, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(urgSlider, 0, 15, 1, GetUrg)
-        -- Enable-state: when bucket coloring is OFF, only Safe remains configurable (Step 3).
+        -- Enable-state: Blizzard mode greys out all custom timer controls.
         local function ApplyTimerEnabledState()
+            local _, shared = GetAuras2DB()
+            local blizzardMode = (shared and shared.useBlizzardTimerText == true)
             local g = GetGeneral()
-            local enabled = not (g and g.aurasCooldownTextUseBuckets == false)
+            local bucketsOn = not (g and g.aurasCooldownTextUseBuckets == false)
             local function SetWidgetEnabled(sl, on)
                 if not sl then  return end
                 if on then
@@ -2217,8 +2231,6 @@ end
                         sl.__MSUF_valueBox:Show(); sl.__MSUF_valueBox:Enable(); sl.__MSUF_valueBox:SetAlpha(1)
                     end
                 else
-                    -- Step 3: when bucket coloring is OFF, only Safe remains configurable.
-                    -- Hide the extra sliders entirely to keep the section clean.
                     sl:Disable(); sl:SetAlpha(0.35)
                     if sl.Hide then sl:Hide() end
                     if sl.__MSUF_valueBox then
@@ -2227,8 +2239,10 @@ end
                     end
                 end
              end
-            SetWidgetEnabled(warnSlider, enabled)
-            SetWidgetEnabled(urgSlider, enabled)
+            SetCheckboxEnabled(cbTimerBuckets, not blizzardMode)
+            SetWidgetEnabled(safeSlider, not blizzardMode)
+            SetWidgetEnabled(warnSlider, not blizzardMode and bucketsOn)
+            SetWidgetEnabled(urgSlider, not blizzardMode and bucketsOn)
          end
         timerBox._msufApplyTimerColorsEnabledState = ApplyTimerEnabledState
         ApplyTimerEnabledState()

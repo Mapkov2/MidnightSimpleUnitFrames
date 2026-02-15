@@ -48,7 +48,6 @@ end
 local C_Timer      = C_Timer
 local C_Timer_After = C_Timer and C_Timer.After
 
-
 ------------------------------------------------------
 -- Apply queue: coalesce multiple option changes into a single Apply per frame
 ------------------------------------------------------
@@ -77,7 +76,6 @@ do
     end
 end
 
-
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local GetCameraZoom = GetCameraZoom
 local GetNumSpellTabs       = GetNumSpellTabs
@@ -91,17 +89,13 @@ local tonumber              = tonumber
 local table_sort            = table.sort
 local ipairs                = ipairs
 
-
 local LibStub       = LibStub
 local LSM           = LibStub and LibStub("LibSharedMedia-3.0", true)
-
 
 ------------------------------------------------------
 -- UpdateManager accessor (avoid repeating global lookups everywhere)
 ------------------------------------------------------
-local function MSUF_GetUpdateManager()
-    return _G.MSUF_UpdateManager or (ns and ns.MSUF_UpdateManager)
-end
+-- MSUF_GetUpdateManager removed (Phase 7A): UpdateManager no longer exists.
 
 ------------------------------------------------------
 -- SavedVars helper (own sub-table under MSUF_DB)
@@ -145,7 +139,6 @@ local function EnsureGameplayDefaults()
     if g.lockCombatTimer == nil then
         g.lockCombatTimer = false
     end
-
 
     -- Anchor target for the combat timer (none/player/target/focus)
     if g.combatTimerAnchor == nil then
@@ -194,7 +187,6 @@ local function EnsureGameplayDefaults()
         g.combatStateLeaveText = "-Combat"
     end
 
-
 -- Combat state text colors (configured from the Colors menu)
 -- Stored as {r,g,b}. Defaults match the legacy hardcoded colors:
 --  Enter = white, Leave = light gray.
@@ -228,7 +220,6 @@ end
         g.crosshairSize = 40
     end
 
-
     -- Combat crosshair: color by melee range (uses the shared melee spell selection)
     -- Green = in melee range, Red = out of melee range
     if g.enableCombatCrosshairMeleeRangeColor == nil then
@@ -246,7 +237,6 @@ end
     -- TEMPORARILY DISABLED: CooldownManager "bars as icons" mode will be reworked.
     -- Keep the key for backward compatibility, but hard-force OFF for now.
     g.cooldownIcons = false
-
 
     -- Shaman: player totem tracker (player-only for now)
     -- Default ON for Shamans on first run; otherwise default OFF.
@@ -310,7 +300,6 @@ local function GetGameplayDBFast()
     end
     return EnsureGameplayDefaults()
 end
-
 
 ------------------------------------------------------
 -- Cooldown Manager Icon Mode: hard stop idle CPU
@@ -390,7 +379,6 @@ do
     ScheduleHookAttempts()
 end
 
-
 ------------------------------------------------------
 -- One-time tip popup: gameplay colors live in Colors â†’ Gameplay
 ------------------------------------------------------
@@ -429,7 +417,6 @@ do
         end
     end
 end
-
 
 ------------------------------------------------------
 -- Font helper: reuse global MSUF text style
@@ -498,8 +485,6 @@ local function GetGameplayFontSettings(kind)
     return fontPath, flags, fr, fg, fb, effSize, useShadow
 end
 
-
-
 ------------------------------------------------------
 -- Combat state text colors (Enter/Leave)
 ------------------------------------------------------
@@ -553,13 +538,12 @@ end
 ------------------------------------------------------
 local combatFrame
 local combatTimerText
-local combatTimerEventFrame
 local combatStateFrame
 local combatStateText
 local combatEventFrame
+local MSUF_CombatState_OnEvent  -- forward declaration (Phase 7B: used by EventBus)
 local combatCrosshairFrame
 local combatCrosshairEventFrame
-local updater
 
 -- Forward declarations (helpers are referenced before their definitions below)
 local MSUF_CrosshairHasValidTarget
@@ -626,8 +610,6 @@ local function MSUF_CrosshairSyncRangeCacheFromGameplay(g)
     -- Dynamic interval: fast while it matters (combat + valid target); otherwise we keep the task disabled.
     combatCrosshairFrame._msufRangeTickInterval = 0.25
 end
-
-
 
 -- In-combat timer state
 local combatStartTime = nil
@@ -699,6 +681,15 @@ local firstDanceActive = false
 local firstDanceEndTime = 0
 local firstDanceLastText = nil
 
+local _TickFirstDance  -- forward declaration (defined after StartFirstDanceWindow)
+
+-- Phase 7A: stop the FirstDance OnUpdate tick (event-driven start/stop)
+local function _StopFirstDanceTick()
+    firstDanceActive = false
+    firstDanceEndTime = 0
+    firstDanceLastText = nil
+    if combatStateFrame then combatStateFrame:SetScript("OnUpdate", nil) end
+end
 
 -- Make the combat enter/leave text click-through while it is actively displayed
 -- so it never steals clicks / focus (e.g. targeting) while flashing on screen.
@@ -722,7 +713,6 @@ local function MSUF_CombatState_SetClickThrough(active)
         combatStateFrame:EnableMouse(true)
     end
 end
-
 
 local function ApplyFontToCounter()
     -- If nothing exists yet, nothing to do
@@ -771,13 +761,8 @@ local function StartFirstDanceWindow()
 
     -- Feature off = make sure state is hard-reset and updater is off
     if not g.enableFirstDanceTimer then
-        firstDanceActive = false
-        firstDanceEndTime = 0
-        firstDanceLastText = nil
-        local umFD = MSUF_GetUpdateManager()
-        if umFD and umFD.SetEnabled then
-            umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
-        end
+        _StopFirstDanceTick()
+
         MSUF_CombatState_SetClickThrough(false)
         return
     end
@@ -787,10 +772,6 @@ local function StartFirstDanceWindow()
     end
 
     if not combatStateText then
-        local umFD = MSUF_GetUpdateManager()
-        if umFD and umFD.SetEnabled then
-            umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
-        end
         MSUF_CombatState_SetClickThrough(false)
         return
     end
@@ -816,15 +797,13 @@ local function StartFirstDanceWindow()
 
     combatStateText:Show()
 
-    -- Ensure the First Dance tick task exists even if this triggers before a full Apply() pass.
-    if EnsureFirstDanceTaskRegistered then
-        EnsureFirstDanceTaskRegistered()
+    -- Start the tick for this animation window
+    if combatStateFrame then
+        combatStateFrame:SetScript("OnUpdate", function(self, elapsed)
+            _TickFirstDance()
+        end)
     end
 
-    local umFD = MSUF_GetUpdateManager()
-    if umFD and umFD.SetEnabled then
-        umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", true)
-    end
 end
 
 ------------------------------------------------------
@@ -887,10 +866,8 @@ EnsureCombatStateText = function()
     combatStateText:Hide()
 
     if not combatEventFrame then
-        combatEventFrame = CreateFrame("Frame", "MSUF_CombatStateEventFrame", UIParent)
-        -- Events are registered/unregistered in ns.MSUF_RequestGameplayApply() for performance.
-        combatEventFrame:UnregisterAllEvents()
-local function MSUF_CombatState_OnEvent(_, event)
+        combatEventFrame = true  -- sentinel: frame replaced by EventBus (Phase 7B)
+MSUF_CombatState_OnEvent = function(event)
     local g = GetGameplayDBFast()
     if not g or (not g.enableCombatStateText and not g.enableFirstDanceTimer) then
         if combatStateText then
@@ -900,9 +877,8 @@ local function MSUF_CombatState_OnEvent(_, event)
         end
         MSUF_CombatState_SetClickThrough(false)
         -- Always hard-stop First Dance if feature is disabled
-        firstDanceActive = false
-        firstDanceEndTime = 0
-        firstDanceLastText = nil
+        _StopFirstDanceTick()
+
         return
     end
 
@@ -916,9 +892,7 @@ local function MSUF_CombatState_OnEvent(_, event)
 
     if event == "PLAYER_REGEN_DISABLED" then
         -- Enter combat: "+Combat"
-        firstDanceActive = false
-        firstDanceEndTime = 0
-        firstDanceLastText = nil
+        _StopFirstDanceTick()
 
         if not wantState then
             if combatStateText then
@@ -954,9 +928,7 @@ local function MSUF_CombatState_OnEvent(_, event)
 
     elseif event == "PLAYER_REGEN_ENABLED" then
         -- Leave combat: "-Combat" OR First Dance timer
-        firstDanceActive = false
-        firstDanceEndTime = 0
-        firstDanceLastText = nil
+        _StopFirstDanceTick()
 
         if g.enableFirstDanceTimer then
             StartFirstDanceWindow()
@@ -996,7 +968,7 @@ local function MSUF_CombatState_OnEvent(_, event)
         end
     end
 end
-combatEventFrame:SetScript("OnEvent", MSUF_CombatState_OnEvent)
+-- Phase 7B: combatEventFrame → EventBus. Registration handled in Apply path.
     end
 
 end
@@ -1004,25 +976,20 @@ end
 ------------------------------------------------------
 -- "First Dance" countdown tick
 ------------------------------------------------------
-local function _TickFirstDance()
+_TickFirstDance = function()
     if not firstDanceActive then
         return
     end
 
     local gFD = GetGameplayDBFast()
     if not gFD.enableFirstDanceTimer then
-        firstDanceActive = false
-        firstDanceEndTime = 0
-        firstDanceLastText = nil
+        _StopFirstDanceTick()
+
         if combatStateText then
             combatStateText:SetText("")
             combatStateText:Hide()
         end
         MSUF_CombatState_SetClickThrough(false)
-        local umFD = MSUF_GetUpdateManager()
-        if umFD and umFD.SetEnabled then
-            umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
-        end
         return
     end
 
@@ -1038,16 +1005,11 @@ local function _TickFirstDance()
     local now = GetTime()
     local remaining = firstDanceEndTime - now
     if remaining <= 0 then
-        firstDanceActive = false
-        firstDanceEndTime = 0
-        firstDanceLastText = nil
+        _StopFirstDanceTick()
+
         combatStateText:SetText("")
         combatStateText:Hide()
         MSUF_CombatState_SetClickThrough(false)
-        local umFD = MSUF_GetUpdateManager()
-        if umFD and umFD.SetEnabled then
-            umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
-        end
         return
     end
 
@@ -1058,37 +1020,10 @@ local function _TickFirstDance()
     end
 end
 
-
 EnsureFirstDanceTaskRegistered = function()
-    if ns and ns._MSUF_FirstDanceTaskRegistered then
-        return
-    end
-    if not combatStateFrame then
-        return
-    end
-
-    local umFD = MSUF_GetUpdateManager()
-    if umFD and umFD.Register and umFD.SetEnabled then
-        if ns then
-            ns._MSUF_FirstDanceTaskRegistered = true
-        end
-        umFD:Register("MSUF_GAMEPLAY_FIRSTDANCE", _TickFirstDance, 0.10)  -- 10Hz is plenty
-        umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
-
-        -- Ensure no leftover per-frame updater stays attached
-        combatStateFrame:SetScript("OnUpdate", nil)
-    else
-        -- Fallback: local OnUpdate if UpdateManager isn't available
-        if ns then
-            ns._MSUF_FirstDanceTaskRegistered = true
-        end
-        combatStateFrame:SetScript("OnUpdate", function(self, elapsed)
-            _TickFirstDance()
-        end)
-    end
+    -- Phase 7A: OnUpdate is now started/stopped directly in StartFirstDanceWindow/_TickFirstDance.
+    -- This function is kept as a no-op for any callers that still reference it.
 end
-
-
 
 ------------------------------------------------------
 -- Combat crosshair (simple green crosshair at player feet)
@@ -1308,49 +1243,7 @@ local function EnsureCombatCrosshair()
         MSUF_CrosshairSyncRangeCacheFromGameplay(g)
         MSUF_UpdateCombatCrosshairRangeColor()
 
-        -- Range color tick: prefer MSUF_UpdateManager (single global OnUpdate) and
--- fall back to a local throttled OnUpdate if needed.
-local umRange = MSUF_GetUpdateManager()
-if umRange and umRange.Register and umRange.SetEnabled then
-    if not ns._MSUF_CrosshairRangeTaskRegistered then
-        ns._MSUF_CrosshairRangeTaskRegistered = true
-        umRange:Register("MSUF_GAMEPLAY_CROSSHAIR_RANGE", function()
-            if not combatCrosshairFrame or not combatCrosshairFrame:IsShown() then
-                return
-            end
-
-            -- No DB reads in the hotpath: rely on cached flags/spellID from Apply.
-            if not combatCrosshairFrame._msufUseRangeColor or (combatCrosshairFrame._msufRangeSpellID or 0) <= 0 then
-                -- Neutralize and stop ticking until config becomes valid again
-                MSUF_UpdateCombatCrosshairRangeColor()
-                umRange:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", false)
-                return
-            end
-
-            if not MSUF_CrosshairHasValidTarget() then
-                -- No valid target: revert to neutral and stop the background tick until a new target appears
-                MSUF_UpdateCombatCrosshairRangeColor()
-                umRange:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", false)
-                return
-            end
-
-            MSUF_UpdateCombatCrosshairRangeColor()
-        end, function()
-            return (combatCrosshairFrame and combatCrosshairFrame._msufRangeTickInterval) or 0.25
-        end)
-        umRange:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", false)
-    end
-
-        MSUF_RefreshCrosshairRangeTaskEnabled()
-
-    -- Kill any older per-frame updater we may have had
-    if combatCrosshairFrame.MSUF_RangeOnUpdate then
-        combatCrosshairFrame:SetScript("OnUpdate", nil)
-        combatCrosshairFrame.MSUF_RangeOnUpdate = nil
-        combatCrosshairFrame.MSUF_RangeElapsed = nil
-    end
-else
-    -- Legacy fallback: local throttled OnUpdate to keep range color responsive while moving
+        -- Phase 7A: direct range-color tick (UpdateManager removed)
     if g.enableCombatCrosshairMeleeRangeColor then
         if not combatCrosshairFrame.MSUF_RangeOnUpdate then
             combatCrosshairFrame.MSUF_RangeOnUpdate = true
@@ -1375,7 +1268,6 @@ else
             combatCrosshairFrame.MSUF_RangeOnUpdate = nil
         end
     end
-end
 
     end
 
@@ -1403,8 +1295,6 @@ local function ApplyLockState()
         end
     end
 end
-
-
 
 -- Combat Timer anchor helpers
 local function _MSUF_ValidateCombatTimerAnchor(v)
@@ -1471,7 +1361,6 @@ local function MSUF_Gameplay_ApplyCombatTimerAnchor(g)
         end
     end
 end
-
 
 -- Export so the main file can call this from UpdateAllFonts()
 function ns.MSUF_ApplyGameplayFontFromGlobal()
@@ -1552,7 +1441,6 @@ local function CreateCombatTimerFrame()
     return combatFrame
 end
 
-
 ------------------------------------------------------
 -- Counting logic
 ------------------------------------------------------
@@ -1563,7 +1451,6 @@ local MSUF_MeleeSpellCache
 local MSUF_MeleeSpellCacheBuilt = false
 local MSUF_MeleeSpellCacheBuilding = false
 local MSUF_MeleeSpellCachePending = false
-local MSUF_MeleeSpellCacheEventFrame
 
 local function MSUF_BuildMeleeSpellCache()
     if MSUF_MeleeSpellCacheBuilt then
@@ -1576,20 +1463,17 @@ local function MSUF_BuildMeleeSpellCache()
     -- Never build suggestions in combat: defer until we leave combat to avoid stutters in raids.
     if InCombatLockdown and InCombatLockdown() then
         MSUF_MeleeSpellCachePending = true
-        if not MSUF_MeleeSpellCacheEventFrame then
-            MSUF_MeleeSpellCacheEventFrame = CreateFrame("Frame", "MSUF_MeleeSpellCacheEventFrame", UIParent)
-            local function MSUF_MeleeSpellCache_OnEvent()
-                if not MSUF_MeleeSpellCachePending then
-                    return
-                end
+        -- Phase 7B: one-shot EventBus callback instead of frame
+        if type(MSUF_EventBus_Register) == "function" then
+            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_MELEE_SPELL_CACHE", function()
+                if not MSUF_MeleeSpellCachePending then return end
                 MSUF_MeleeSpellCachePending = false
-                MSUF_MeleeSpellCacheEventFrame:UnregisterAllEvents()
+                if type(MSUF_EventBus_Unregister) == "function" then
+                    MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_MELEE_SPELL_CACHE")
+                end
                 MSUF_BuildMeleeSpellCache()
-            end
-            MSUF_MeleeSpellCacheEventFrame:SetScript("OnEvent", MSUF_MeleeSpellCache_OnEvent)
-
+            end)
         end
-        MSUF_MeleeSpellCacheEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
     end
 
@@ -1749,8 +1633,9 @@ local function MSUF_BuildMeleeSpellCache()
         MSUF_MeleeSpellCacheBuilding = false
         MSUF_MeleeSpellCacheBuilt = true
         MSUF_MeleeSpellCachePending = false
-        if MSUF_MeleeSpellCacheEventFrame then
-            MSUF_MeleeSpellCacheEventFrame:UnregisterAllEvents()
+        -- Phase 7B: cleanup EventBus registration if any
+        if type(MSUF_EventBus_Unregister) == "function" then
+            MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_MELEE_SPELL_CACHE")
         end
     end
 
@@ -1877,9 +1762,25 @@ MSUF_CrosshairHasValidTarget = function()
 end
 
 local function MSUF_SetCrosshairRangeTaskEnabled(enabled)
-    local um = MSUF_GetUpdateManager()
-    if um and um.SetEnabled then
-        um:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", enabled and true or false)
+    -- Phase 7A: toggle the local OnUpdate tick on combatCrosshairFrame directly
+    if not combatCrosshairFrame then return end
+    if enabled then
+        if not combatCrosshairFrame.MSUF_RangeOnUpdate then
+            combatCrosshairFrame.MSUF_RangeOnUpdate = true
+            combatCrosshairFrame.MSUF_RangeElapsed = 0
+            combatCrosshairFrame:SetScript("OnUpdate", function(self, elapsed)
+                if not self:IsShown() then return end
+                self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
+                if self.MSUF_RangeElapsed < 0.15 then return end
+                self.MSUF_RangeElapsed = 0
+                MSUF_UpdateCombatCrosshairRangeColor()
+            end)
+        end
+    else
+        if combatCrosshairFrame.MSUF_RangeOnUpdate then
+            combatCrosshairFrame:SetScript("OnUpdate", nil)
+            combatCrosshairFrame.MSUF_RangeOnUpdate = nil
+        end
     end
 end
 
@@ -2047,22 +1948,17 @@ local function MSUF_Gameplay_ApplyCombatStateText(g)
 
         -- If First Dance is OFF, make sure any leftover state/task is hard-stopped.
         if not wantDance then
-            firstDanceActive = false
-            firstDanceEndTime = 0
-            firstDanceLastText = nil
-            local umFD = MSUF_GetUpdateManager()
-            if umFD and umFD.SetEnabled then
-                umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
-            end
+            _StopFirstDanceTick()
+
         end
 
         -- Ensure the frame is draggable again when configuring / previewing
         MSUF_CombatState_SetClickThrough(false)
 
-        -- We need combat regen events for BOTH: enter/leave text + first dance window start.
-        if combatEventFrame then
-            combatEventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-            combatEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        -- Phase 7B: combat state events via EventBus
+        if type(MSUF_EventBus_Register) == "function" then
+            MSUF_EventBus_Register("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_STATE", MSUF_CombatState_OnEvent)
+            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_STATE", MSUF_CombatState_OnEvent)
         end
 
         -- Preview while unlocked: show something so the user can position the text
@@ -2096,18 +1992,14 @@ local function MSUF_Gameplay_ApplyCombatStateText(g)
             combatStateText:SetText("")
             combatStateText:Hide()
         end
-        if combatEventFrame then
-            combatEventFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
-            combatEventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        -- Phase 7B: unregister combat state from EventBus
+        if type(MSUF_EventBus_Unregister) == "function" then
+            MSUF_EventBus_Unregister("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_STATE")
+            MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_STATE")
         end
 
-        firstDanceActive = false
-        firstDanceEndTime = 0
-        firstDanceLastText = nil
-        local umFD = MSUF_GetUpdateManager()
-        if umFD and umFD.SetEnabled then
-            umFD:SetEnabled("MSUF_GAMEPLAY_FIRSTDANCE", false)
-        end
+        _StopFirstDanceTick()
+
     end
 end
 
@@ -2153,10 +2045,7 @@ local function MSUF_Gameplay_ApplyCombatCrosshair(g)
         end
 
         -- Off means off: stop any range-color background task too
-        local umRange = MSUF_GetUpdateManager()
-        if umRange and umRange.SetEnabled then
-            umRange:SetEnabled("MSUF_GAMEPLAY_CROSSHAIR_RANGE", false)
-        end
+        MSUF_SetCrosshairRangeTaskEnabled(false)
 
         if combatCrosshairFrame then
             -- Ensure we do not keep any spell-range-check enabled when the crosshair is disabled.
@@ -2169,8 +2058,6 @@ local function MSUF_Gameplay_ApplyCombatCrosshair(g)
         end
     end
 end
-
-
 
 ------------------------------------------------------
 -- Shaman: Player Totems tracker (player-only)
@@ -2192,7 +2079,6 @@ do
         end
         return false
     end
-
 
     local function _ToNumberSafe(v)
         if type(v) == "number" then
@@ -2713,7 +2599,6 @@ local function _UpdateTotemsNow(g)
     return any
 end
 
-
 local function _TickTotemText()
     local g = GetGameplayDBFast()
     if not g or not g.enablePlayerTotems or not g.playerTotemsShowText then
@@ -2754,21 +2639,22 @@ local function _TickTotemText()
     end
 end
 
-
+    local _totemTicker = nil
     local function _UpdateTotemTickEnabled(g, any)
-        local um = MSUF_GetUpdateManager()
-        if not um or not um.Register or not um.SetEnabled then
-            return
-        end
-
-        if not ns._MSUF_PlayerTotemTaskRegistered then
-            ns._MSUF_PlayerTotemTaskRegistered = true
-            local function _Interval() return (ns._MSUF_PlayerTotemsTickInterval or 0.50) end -- dynamic countdown interval
-            um:Register("MSUF_GAMEPLAY_PLAYERTOTEMS", _TickTotemText, _Interval, 90)
-        end
-
         local enableTick = (g and g.enablePlayerTotems and g.playerTotemsShowText and any) and true or false
-        um:SetEnabled("MSUF_GAMEPLAY_PLAYERTOTEMS", enableTick)
+        if enableTick then
+            if not _totemTicker and C_Timer and C_Timer.NewTicker then
+                local interval = (ns._MSUF_PlayerTotemsTickInterval or 0.50)
+                _totemTicker = C_Timer.NewTicker(interval, function()
+                    _TickTotemText()
+                end)
+            end
+        else
+            if _totemTicker then
+                _totemTicker:Cancel()
+                _totemTicker = nil
+            end
+        end
     end
 
     local function _RefreshTotems()
@@ -2845,7 +2731,6 @@ end
 
 end
 
-
 -- Feature tables (single-file modules) for readability and safer future refactors
 local GameplayFeatures = {
     CombatTimer     = {},
@@ -2889,93 +2774,93 @@ end
 function ns.MSUF_RequestGameplayApply()
     local g = EnsureGameplayDefaults()
 
-
     Gameplay_ApplyAllFeatures(g)
 
--- Centralized throttling: register combat-timer ticks in the global MSUF_UpdateManager
-    local um = MSUF_GetUpdateManager()
-    if um and um.Register and um.SetEnabled then
-        if not ns._MSUF_GameplayTasksRegistered then
-            ns._MSUF_GameplayTasksRegistered = true
-
-            local function _CombatInterval()
-                -- Timer is formatted as mm:ss, so it only changes once per second.
-                -- Keeping this at 1.0s reduces CPU in raids without any visible downside.
-                return 1.0
-            end
-            um:Register("MSUF_GAMEPLAY_COMBATTIMER", MSUF_Gameplay_TickCombatTimer, _CombatInterval, 90)
-        end
-
-        -- Off means off: enable only what is configured
-        um:SetEnabled("MSUF_GAMEPLAY_COMBATTIMER", g.enableCombatTimer and true or false)
-
-        -- Make combat timer start immediately on combat start (no 0-1s "lag").
-        -- We also set combatStartTime from the event timestamp so the timer isn't permanently behind.
-        if not combatTimerEventFrame then
-            combatTimerEventFrame = CreateFrame("Frame", "MSUF_CombatTimerEventFrame", UIParent)
-            combatTimerEventFrame:SetScript("OnEvent", function(_, event)
-                local gd = GetGameplayDBFast()
-                if not gd or not gd.enableCombatTimer then
-                    return
-                end
-
-                if event == "PLAYER_REGEN_DISABLED" then
-                    combatStartTime = GetTime()
-                    wasInCombat = true
-                    -- Force a refresh even if text would be the same.
-                    lastTimerText = ""
-                    MSUF_Gameplay_TickCombatTimer()
-                elseif event == "PLAYER_REGEN_ENABLED" then
-                    wasInCombat = false
-                    combatStartTime = nil
-                    lastTimerText = ""
-                    MSUF_Gameplay_TickCombatTimer()
-                elseif event == "PLAYER_ENTERING_WORLD" then
-                    -- Safety reset on zoning/loading screens.
-                    lastTimerText = ""
-                    if UnitAffectingCombat and UnitAffectingCombat("player") then
-                        if not combatStartTime then
-                            combatStartTime = GetTime()
-                        end
-                        wasInCombat = true
-                    else
-                        wasInCombat = false
-                        combatStartTime = nil
-                    end
-                    MSUF_Gameplay_TickCombatTimer()
-                end
+-- Phase 7A: combat-timer tick — event-driven start/stop (no permanent ticker)
+    local function _StartCombatTimerTick()
+        if ns._MSUF_CombatTimerTicker then return end  -- already running
+        if C_Timer and C_Timer.NewTicker then
+            ns._MSUF_CombatTimerTicker = C_Timer.NewTicker(1.0, function()
+                MSUF_Gameplay_TickCombatTimer()
             end)
         end
-
-        combatTimerEventFrame:UnregisterAllEvents()
-        if g.enableCombatTimer then
-            combatTimerEventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-            combatTimerEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-            combatTimerEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-
-            -- If the user enables the timer while already in combat, show it immediately.
-            if UnitAffectingCombat and UnitAffectingCombat("player") then
-                if not combatStartTime then
-                    combatStartTime = GetTime()
-                end
-                wasInCombat = true
-                lastTimerText = ""
-                MSUF_Gameplay_TickCombatTimer()
-            end
-        else
-            -- Ensure state is hard-reset when turned off.
-            wasInCombat = false
-            combatStartTime = nil
-            lastTimerText = ""
-        end
-    else
-        -- Legacy fallback (should be rare): if UpdateManager isn't available, keep existing behavior.
-        if not updater then
-            updater = CreateFrame("Frame")
+    end
+    local function _StopCombatTimerTick()
+        if ns._MSUF_CombatTimerTicker then
+            ns._MSUF_CombatTimerTicker:Cancel()
+            ns._MSUF_CombatTimerTicker = nil
         end
     end
-end
 
+    -- Phase 7B: combat timer events via EventBus (frame eliminated)
+    local function _CombatTimer_OnRegenDisabled()
+        local gd = GetGameplayDBFast()
+        if not gd or not gd.enableCombatTimer then return end
+        combatStartTime = GetTime()
+        wasInCombat = true
+        lastTimerText = ""
+        MSUF_Gameplay_TickCombatTimer()
+        _StartCombatTimerTick()
+    end
+    local function _CombatTimer_OnRegenEnabled()
+        local gd = GetGameplayDBFast()
+        if not gd or not gd.enableCombatTimer then return end
+        _StopCombatTimerTick()
+        wasInCombat = false
+        combatStartTime = nil
+        lastTimerText = ""
+        MSUF_Gameplay_TickCombatTimer()
+    end
+    local function _CombatTimer_OnPEW()
+        local gd = GetGameplayDBFast()
+        if not gd or not gd.enableCombatTimer then return end
+        lastTimerText = ""
+        if UnitAffectingCombat and UnitAffectingCombat("player") then
+            if not combatStartTime then
+                combatStartTime = GetTime()
+            end
+            wasInCombat = true
+            MSUF_Gameplay_TickCombatTimer()
+            _StartCombatTimerTick()
+        else
+            _StopCombatTimerTick()
+            wasInCombat = false
+            combatStartTime = nil
+        end
+        MSUF_Gameplay_TickCombatTimer()
+    end
+
+    -- Unregister previous (idempotent)
+    if type(MSUF_EventBus_Unregister) == "function" then
+        MSUF_EventBus_Unregister("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_TIMER")
+        MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_TIMER")
+        MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", "MSUF_COMBAT_TIMER")
+    end
+    _StopCombatTimerTick()
+
+    if g.enableCombatTimer then
+        if type(MSUF_EventBus_Register) == "function" then
+            MSUF_EventBus_Register("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_TIMER", _CombatTimer_OnRegenDisabled)
+            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_TIMER", _CombatTimer_OnRegenEnabled)
+            MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_COMBAT_TIMER", _CombatTimer_OnPEW)
+        end
+
+        -- If the user enables the timer while already in combat, show it immediately.
+        if UnitAffectingCombat and UnitAffectingCombat("player") then
+            if not combatStartTime then
+                combatStartTime = GetTime()
+            end
+            wasInCombat = true
+            lastTimerText = ""
+            MSUF_Gameplay_TickCombatTimer()
+            _StartCombatTimerTick()
+        end
+    else
+        wasInCombat = false
+        combatStartTime = nil
+        lastTimerText = ""
+    end
+end
 
 -- Backwards-compatible entrypoint used by other modules (e.g. Colors)
 -- Apply all Gameplay visuals immediately (frames + fonts + colors).
@@ -2985,7 +2870,6 @@ function ns.MSUF_ApplyGameplayVisuals()
         ns.MSUF_RequestGameplayApply()
     end
 end
-
 
 ------------------------------------------------------
 -- Options panel
@@ -3010,9 +2894,6 @@ function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
     scrollFrame:SetScrollChild(content)
 
     local lastControl
-
-
-
 
     local function RequestApply()
         if ns and ns.MSUF_RequestGameplayApply then
@@ -3138,7 +3019,6 @@ meleeSharedWarn:SetText("|cffff8800No melee range spell selected â€” Crossh
 meleeSharedWarn:Hide()
 panel.meleeSpellWarningText = meleeSharedWarn
 
-
 local suggestionFrame = CreateFrame("Frame", "MSUF_Gameplay_MeleeSpellSuggestions", content, "BackdropTemplate")
 suggestionFrame:SetPoint("TOPLEFT", meleeInput, "BOTTOMLEFT", 0, -2)
 suggestionFrame:SetSize(360, 8 * 18 + 10)
@@ -3255,7 +3135,6 @@ local function QuerySuggestions(query)
     end
     return out
 end
-
 
 MSUF_SelectMeleeSpell = function(spellID, spellName, preferNameInBox)
     local g = EnsureGameplayDefaults()
@@ -3476,7 +3355,6 @@ end)
         return cb
     end
 
-
     local function _MSUF_ColorSwatch(name, point, rel, relPoint, x, y, labelText, field, key, defaultRGB, after)
         local btn = CreateFrame("Button", name, content, "BackdropTemplate")
         btn:SetPoint(point, rel, relPoint, x or 0, y or 0)
@@ -3621,7 +3499,6 @@ local function _MSUF_Dropdown(name, point, rel, relPoint, x, y, width, field)
     end
     return dd
 end
-
 
     -- Combat Timer header + separator
     local combatSeparator = _MSUF_Sep(subText, -36)
@@ -3958,7 +3835,6 @@ _totemsLeftBottom = totemsDragHint
             true
         )
 
-
         local totemsLayoutLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", totemsFontSize, "BOTTOMLEFT", 0, -12, "Layout", "playerTotemsLayoutLabel")
         panel.playerTotemsLayoutLabel = totemsLayoutLabel
 
@@ -4035,7 +3911,6 @@ _totemsLeftBottom = totemsDragHint
             if UIDropDownMenu_SetText then UIDropDownMenu_SetText(growthDD, cur) end
         end
 
-
 	        local anchorFromBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorFromBtn", "TOPLEFT", growthDD, "TOPRIGHT", 8, -4, 122, 20, "From: TOPLEFT", "playerTotemsAnchorFromButton", function()
             local g = MSUF_DB and MSUF_DB.gameplay
             if not g then return end
@@ -4081,7 +3956,6 @@ _totemsLeftBottom = totemsDragHint
         panel.playerTotemsNotShamanHint = shamanHint
         _classSpecAnchorRef = shamanHint
     end
-
 
     -- Rogue: "The First Dance" tracker (separate class block)
     -- Place it clearly BELOW the Shaman block (right column bottom), aligned to the left column.
@@ -4154,7 +4028,6 @@ _totemsLeftBottom = totemsDragHint
             meleeSharedWarn:SetPoint("BOTTOMLEFT", meleeSelected, "TOPLEFT", 0, 4)
         end
     end
-
 
     -- Crosshair preview (in-menu)
     -- Shows a live preview of size/thickness and (optionally) the melee-range color mode.
@@ -4447,7 +4320,6 @@ local function _MSUF_SetDropdownEnabled(dd, enabled)
     end
 end
 
-
     local function _MSUF_SetEditBoxEnabled(eb, enabled)
         if not eb then return end
         if not enabled and eb.ClearFocus then
@@ -4505,7 +4377,6 @@ end
             isRogue = (class == "ROGUE")
         end
         _MSUF_SetCheckEnabled(self.firstDanceCheck, isRogue)
-
 
         -- Shaman: Player Totems dependents
         local isShaman = false
@@ -4585,7 +4456,6 @@ end
     end
 
     lastControl = cooldownIconsCheck
-
 
     ------------------------------------------------------
     -- Panel scripts (refresh/okay/default)
@@ -4815,8 +4685,6 @@ end
         self._msufSuppressSliderChanges = false
     end
 
-
-
 -- Live-sync: allow the Totem preview frame to drag-update X/Y without spamming Apply().
 function panel:MSUF_SyncTotemOffsetSliders()
     if not self.playerTotemsOffsetXSlider or not self.playerTotemsOffsetYSlider then
@@ -4918,7 +4786,6 @@ end
     return panel
 end
 
-
 -- Lightweight wrapper: register the category at login, but build the heavy UI only when opened.
 function ns.MSUF_RegisterGameplayOptions(parentCategory)
     if not Settings or not Settings.RegisterCanvasLayoutSubcategory or not parentCategory then
@@ -4928,7 +4795,6 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
 
     local panel = (_G and _G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
     panel.name = "Gameplay"
-
 
     -- IMPORTANT: Panels created with UIParent are shown by default.
     -- If we rely on OnShow for first-time build, we must ensure the panel starts hidden,
@@ -4989,7 +4855,6 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
 
     end
 
-
 ------------------------------------------------------
 -- Auto-apply Gameplay features on load
 -- Fixes: after /reload or relog, Combat Enter/Leave text (and other Gameplay
@@ -5002,7 +4867,6 @@ do
     local function AutoApplyOnce()
         if didApply then return end
         didApply = true
-
 
         -- Export a global helper so core can force-apply after autoloading this LoD addon.
         if type(ns.MSUF_RequestGameplayApply) == "function" then
