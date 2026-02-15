@@ -108,8 +108,10 @@ local function Boss_SnapshotPlainTimes(frame, durObj)
     local remNum = ToPlainNumber(rem)
     if remNum and remNum > 0 then
         frame._msufPlainEndTime = _BossNow() + remNum
+        frame._msufRemaining = remNum
     else
         frame._msufPlainEndTime = nil
+        frame._msufRemaining = nil
     end
     local total
     if durObj.GetTotalDuration then
@@ -682,14 +684,10 @@ local function BossCastbar_StartWatchdog(frame)
             return
         end
 
+        -- Watchdog only checks unit validity (despawn/death).
+        -- Cast/channel completion is handled by CastbarManager (fast-path rem≤0 + hard-stop).
+        -- Events (STOP/FAILED/INTERRUPTED) handle the normal end-of-cast.
         if not UnitExists(frame.unit) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(frame.unit)) then
-            BossCastbar_Stop(frame)
-            return
-        end
-
-        local castName = UnitCastingInfo(frame.unit)
-        local chanName = UnitChannelInfo(frame.unit)
-        if not castName and not chanName then
             BossCastbar_Stop(frame)
             return
         end
@@ -712,6 +710,8 @@ BossCastbar_Stop = function(frame)
 
     frame.MSUF_durationObj = nil
     frame._msufPlainEndTime = nil
+    frame._msufRemaining = nil
+    frame._msufFastText = nil
     frame._msufPlainTotal = nil
     frame._msufLastTimeDecimal = nil
     frame.MSUF_isChanneled = false
@@ -784,6 +784,8 @@ local function BossCastbar_ShowInterruptFeedback(frame, label)
     -- Stop driving updates & clear duration object
     frame.MSUF_durationObj = nil
     frame._msufPlainEndTime = nil
+    frame._msufRemaining = nil
+    frame._msufFastText = nil
     frame._msufPlainTotal = nil
     frame._msufLastTimeDecimal = nil
     frame.MSUF_isChanneled = false
@@ -1011,6 +1013,8 @@ BossCastbar_Start = function(frame)
                 Boss_ClearEmpowerState(frame)
                 frame.MSUF_durationObj = nil
                 frame._msufPlainEndTime = nil
+                frame._msufRemaining = nil
+                frame._msufFastText = nil
                 frame._msufPlainTotal = nil
                 frame.MSUF_isChanneled = false
                 frame.MSUF_channelDirect = nil
@@ -1063,7 +1067,7 @@ BossCastbar_Start = function(frame)
                 if type(_G.MSUF_RegisterCastbar) == "function" then
                     -- Force manager to re-evaluate tick rate (empower wants ~0.03).
                     frame._msufTickInterval = nil
-                    frame._msufNextTick = nil
+                    frame._msufHeavyIn = nil
                     _G.MSUF_RegisterCastbar(frame)
                 end
                 return

@@ -520,7 +520,9 @@ end
 -- NOTE: This is intentionally texture-agnostic and does not rely on background/foreground textures matching.
 -- It simply blends the current fill color towards white as the cast approaches completion.
 
+-- Fix 3: Fast-path for plain numbers (callers already pass converted values).
 local function _MSUF_ToPlainNumber(x)
+    if type(x) == "number" then return x end
     local fn = _G.MSUF_ToPlainNumber
     if type(fn) == "function" then
         return fn(x)
@@ -530,14 +532,24 @@ local function _MSUF_ToPlainNumber(x)
     return nil
 end
 
+-- Fix 4: Cache IsGlowFadeEnabled per style rev (avoids DB lookup every call).
+local _glowEnabledCache = nil
+local _glowEnabledCacheRev = -1
+
 local function _MSUF_IsGlowFadeEnabled()
+    local rev = _G.MSUF__castTimeGlobalRev or 1
+    if _glowEnabledCacheRev == rev and _glowEnabledCache ~= nil then
+        return _glowEnabledCache
+    end
     _EnsureDBLazy()
     local g = (MSUF_DB and MSUF_DB.general) or nil
     if g and g.castbarShowGlow == false then
-        return false
+        _glowEnabledCache = false
+    else
+        _glowEnabledCache = true
     end
-    -- default ON
-    return true
+    _glowEnabledCacheRev = rev
+    return _glowEnabledCache
 end
 
 function _G.MSUF_ResetCastbarGlowFade(frame)
@@ -719,6 +731,15 @@ function _G.MSUF_ClearEmpowerState(frame)
     frame.MSUF_empowerRetryCount = nil
     frame.MSUF_empowerRetryActive = nil
 
+    -- Clear cached plain-number conversions.
+    frame._msufEmpowerTotalNum = nil
+    frame._msufEmpowerStartNum = nil
+    frame._msufEmpowerBaseNum = nil
+    frame._msufEmpowerStageEndsNum = nil
+    frame._msufEmpowerMinMaxSet = nil
+    frame._msufEmpowerElapsed = nil
+    frame._msufEmpowerTimerDriven = nil
+
     if frame.empowerTicks then
         for i = 1, #frame.empowerTicks do
             local t = frame.empowerTicks[i]
@@ -845,6 +866,8 @@ function _G.MSUF_CB_ResetStateOnStop(frame, reasonOrState, opts)
         end
         frame.MSUF_durationObj = nil
         frame._msufPlainEndTime = nil
+        frame._msufRemaining = nil
+        frame._msufFastText = nil
         frame._msufPlainTotal = nil
         frame.MSUF_isChanneled = nil
         frame.MSUF_channelDirect = nil
@@ -871,6 +894,8 @@ function _G.MSUF_CB_ResetStateOnStop(frame, reasonOrState, opts)
         end
         frame.MSUF_durationObj = nil
         frame._msufPlainEndTime = nil
+        frame._msufRemaining = nil
+        frame._msufFastText = nil
         frame._msufPlainTotal = nil
         frame.castDuration = nil
         frame.castElapsed  = nil
@@ -920,6 +945,8 @@ function _G.MSUF_CB_ResetStateOnStop(frame, reasonOrState, opts)
 
     frame.MSUF_durationObj = nil
     frame._msufPlainEndTime = nil
+    frame._msufRemaining = nil
+    frame._msufFastText = nil
     frame._msufPlainTotal = nil
     frame.MSUF_isChanneled = nil
     frame.MSUF_channelDirect = nil

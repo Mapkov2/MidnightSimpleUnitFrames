@@ -672,8 +672,10 @@ if spellName and durationObj then
                 local snapNow = GetTime()
                 if snapRem and snapRem > 0 then
                     self._msufPlainEndTime = snapNow + snapRem
+                    self._msufRemaining = snapRem
                 else
                     self._msufPlainEndTime = nil
+                    self._msufRemaining = nil
                 end
                 self._msufPlainTotal = snapTotal
             end
@@ -840,8 +842,8 @@ end
     frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", unit)
     frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", unit)
 
-    frame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTIBLE")
-    frame:RegisterEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE")
+    frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", unit)
+    frame:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
 
     frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit)
     frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit)
