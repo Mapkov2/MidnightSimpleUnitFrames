@@ -2083,6 +2083,7 @@ function MSUF_GetGlobalCastbarStyleCache()
     end
     local g = (MSUF_DB and MSUF_DB.general) or {}
     cache.unifiedDirection = (g.castbarUnifiedDirection == true)
+    cache.oppositeDirForTarget = (g.castbarOpositeDirectionTarget == true)
     local tex
     if type(MSUF_GetCastbarTexture) == "function" then
         tex = MSUF_GetCastbarTexture()
@@ -2123,6 +2124,7 @@ function MSUF_RefreshCastbarStyleCache(frame)
         frame.MSUF_cachedCastbarBackgroundTexture = c.bgTexture or c.texture
         frame.MSUF_cachedReverseFillNormal    = (c.reverseFillNormal == true)
         frame.MSUF_cachedReverseFillChanneled = (c.reverseFillChanneled == true)
+        frame.MSUF_cachedOppositeDirForTarget = (c.oppositeDirForTarget == true)
     end
  end
 local function MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
@@ -2137,7 +2139,14 @@ local function MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
     else
         base = (type(MSUF_GetCastbarReverseFill) == "function" and MSUF_GetCastbarReverseFill(isChanneled)) or false
     end
-    return base and true or false
+
+    local shouldReverseForTargetFrame = frame.unit == "target" and frame.MSUF_cachedOppositeDirForTarget == true
+    local baseBool = base and true or false
+
+    if shouldReverseForTargetFrame == true then
+        return not baseBool
+    end
+    return baseBool
 end
 _G.MSUF_GetCastbarReverseFillForFrame = MSUF_GetCastbarReverseFillForFrame
 local function MSUF_ForMainCastbars(fn)

@@ -102,11 +102,15 @@ local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
     if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
 end
 
-local function GetFillDirectionReverseFor(castType)
+local function GetFillDirectionReverseFor(castType, unit)
     _EnsureDBLazy()
     local g = (MSUF_DB and MSUF_DB.general) or {}
 
     local baseReverse = (g.castbarFillDirection == "RTL") and true or false
+    if unit == "target" and g.castbarOpositeDirectionTarget == true then
+        baseReverse = not baseReverse
+    end
+
     local unified = (g.castbarUnifiedDirection == true)
 
     if castType == "CHANNEL" or castType == "EMPOWER" then
@@ -206,7 +210,7 @@ function E:BuildState(unit, frameHint)
             if ok then state.durationObj = d end
         end
 
-        state.reverseFill = GetFillDirectionReverseFor(state.castType)
+        state.reverseFill = GetFillDirectionReverseFor(state.castType, state.unit)
         return state
     end
 
@@ -232,7 +236,7 @@ function E:BuildState(unit, frameHint)
             if ok then state.durationObj = d end
         end
 
-        state.reverseFill = GetFillDirectionReverseFor(state.castType)
+        state.reverseFill = GetFillDirectionReverseFor(state.castType, state.unit)
         return state
     end
 

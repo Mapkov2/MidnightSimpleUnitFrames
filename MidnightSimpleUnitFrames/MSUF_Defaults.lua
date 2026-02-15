@@ -464,6 +464,10 @@ if g.castbarUnifiedFillDirection ~= nil then
     if g.castbarShowChannelTicks == nil then
         g.castbarShowChannelTicks = false
     end
+    -- Opposite fill-direction for enemy castbar
+    if g.castbarOpositeDirectionTarget == nil then
+        g.castbarOpositeDirectionTarget = false
+    end
     -- GCD/Instant-cast bar (disabled by default; options treat nil as enabled)
     if g.showGCDBar == nil then g.showGCDBar = false end
     if g.showGCDBarTime == nil then g.showGCDBarTime = true end
