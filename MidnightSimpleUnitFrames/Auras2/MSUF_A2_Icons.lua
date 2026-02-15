@@ -1,10 +1,10 @@
 -- ============================================================================
--- MSUF_A2_Icons.lua — Auras 3.0 Icon Factory + Visual Commit + Layout
+-- MSUF_A2_Icons.lua â€” Auras 3.0 Icon Factory + Visual Commit + Layout
 -- Replaces the core of MSUF_A2_Apply.lua
 --
 -- Responsibilities:
 --   1. Icon pool (AcquireIcon / HideUnused)
---   2. Visual commit (CommitIcon — texture, cooldown, stacks, border)
+--   2. Visual commit (CommitIcon â€” texture, cooldown, stacks, border)
 --   3. Grid layout (LayoutIcons)
 --   4. Refresh helpers (RefreshAssignedIcons)
 --
@@ -68,7 +68,7 @@ local function EnsureBindings()
     if not CT then CT = API.CooldownText end
 end
 
--- ── Fast-path Collect helpers (skip guard checks in hot path) ──
+-- â”€â”€ Fast-path Collect helpers (skip guard checks in hot path) â”€â”€
 local _getDurationFast   -- Collect.GetDurationObjectFast (bound on first use)
 local _getStackCountFast -- Collect.GetStackCountFast
 local _hasExpirationFast -- Collect.HasExpirationFast
@@ -83,7 +83,7 @@ local function BindFastPaths()
     _fastPathBound = true
 end
 
--- ── Cached shared.* flags (resolve once per configGen, not per icon) ──
+-- â”€â”€ Cached shared.* flags (resolve once per configGen, not per icon) â”€â”€
 local _sharedFlagsGen   = -1
 local _showSwipe        = false
 local _showText         = true
@@ -104,11 +104,11 @@ local function RefreshSharedFlags(shared, gen)
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Text config resolution (per-icon; cached by configGen)
 -- Applies stack/cooldown text sizes + offsets from shared + per-unit layout
 -- Zero per-frame cost: runs only when configGen changes.
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function ResolveTextConfig(icon, unit, shared, gen)
     if not icon then return end
@@ -176,9 +176,9 @@ local function GetAuras2DB()
     return nil, nil
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Color helpers (late-bound from API.Colors or fallback)
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 local function GetOwnBuffHighlightRGB()
     local f = _G.MSUF_A2_GetOwnBuffHighlightRGB
@@ -198,9 +198,9 @@ local function GetStackCountRGB()
     return 1.0, 1.0, 1.0
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Icon Pool
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 -- Icons are stored on container._msufIcons[index]
 -- Each icon is a Button with: .tex, .cooldown, .count, .border, .overlay
@@ -236,7 +236,15 @@ icon.countFrame = countFrame
 
     -- Stack count text
     local count = (icon.countFrame or icon):CreateFontString(nil, "OVERLAY")
-    count:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
+    -- Use global MSUF font when available, fallback to default
+    local _initFont, _initFlags = "Fonts\\FRIZQT__.TTF", "OUTLINE"
+    local _gfs = _G.MSUF_GetGlobalFontSettings
+    if type(_gfs) == "function" then
+        local p, fl = _gfs()
+        if type(p) == "string" then _initFont = p end
+        if type(fl) == "string" then _initFlags = fl end
+    end
+    count:SetFont(_initFont, 14, _initFlags)
     count:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
     count:SetJustifyH("RIGHT")
     count:SetTextColor(GetStackCountRGB())
@@ -313,7 +321,7 @@ function Icons.AcquireIcon(container, index)
     icon = CreateIcon(container, index)
     pool[index] = icon
 
-    -- Keep an AID→icon map on the container for fast delta lookups
+    -- Keep an AIDâ†’icon map on the container for fast delta lookups
     if not container._msufA2_iconByAid then
         container._msufA2_iconByAid = {}
     end
@@ -355,17 +363,29 @@ function Icons.HideUnused(container, fromIndex)
     end
 end
 
--- ────────────────────────────────────────────────────────────────
--- Layout Engine
--- ────────────────────────────────────────────────────────────────
+-- Config generation counter: MUST be declared before LayoutIcons and BumpConfigGen
+-- so Lua 5.1 captures it as a proper upvalue (not a global nil reference).
+local _configGen = 0
+local _bindingsDone = false
 
-function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, rowWrap)
+function Icons.BumpConfigGen()
+    _configGen = _configGen + 1
+    _bindingsDone = false  -- re-bind on next commit (picks up late-loaded modules)
+    _fastPathBound = false -- re-bind fast paths
+    _sharedFlagsGen = -1   -- force shared flags refresh
+end
+
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- Layout Engine
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, rowWrap, configGen)
     if not container or count <= 0 then return end
 
-    -- ── Layout diff gate ──
+    -- â”€â”€ Layout diff gate â”€â”€
     -- If count and configGen match last call, positions are identical. Skip.
     -- configGen covers iconSize, spacing, perRow, growth, rowWrap (all settings).
-    local gen = _configGen
+    local gen = configGen or _configGen
     if count == container._msufA2_lastLayoutN and gen == container._msufA2_lastLayoutGen then
         return
     end
@@ -415,24 +435,16 @@ end
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Visual Commit (CommitIcon)
 -- 
 -- This is the ONLY function that touches icon visuals.
 -- Called once per icon per render. Uses diff gating on
 -- auraInstanceID + config generation to skip redundant work.
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-local _configGen = 0  -- bumped by InvalidateDB
 
-function Icons.BumpConfigGen()
-    _configGen = _configGen + 1
-    _bindingsDone = false  -- re-bind on next commit (picks up late-loaded modules)
-    _fastPathBound = false -- re-bind fast paths
-    _sharedFlagsGen = -1   -- force shared flags refresh
-end
 
-local _bindingsDone = false
 
 function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, masterOn, isOwn, stackCountAnchor, configGen)
     if not icon then return false end
@@ -476,7 +488,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     icon._msufAuraInstanceID = aid
     if aid and aidMap then aidMap[aid] = icon end
 
-    -- ── Diff gate ──
+    -- â”€â”€ Diff gate â”€â”€
     local gen = configGen or _configGen
     local last = icon._msufA2_lastCommit
 
@@ -491,7 +503,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         return true
     end
 
-    -- ── Full apply ──
+    -- â”€â”€ Full apply â”€â”€
     if not last then
         last = {}
         icon._msufA2_lastCommit = last
@@ -529,10 +541,10 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     return true
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Timer application (cooldown swipe + text)
 -- Uses duration objects (secret-safe pass-through)
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 local function ClearCooldownVisual(icon, cd)
@@ -615,7 +627,7 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
 
     local hadTimer = false
 
-    -- Get duration object (secret-safe) — fast path skips 3 guards
+    -- Get duration object (secret-safe) â€” fast path skips 3 guards
     local obj = _getDurationFast and _getDurationFast(unit, aid)
     if obj then
         -- Cache method reference on cd frame to avoid type() check per call
@@ -722,9 +734,9 @@ function Icons._RefreshTimer(icon, unit, aid, shared)
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Stack count display
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 -- Cached stack count color (invalidated by BumpConfigGen)
 local _stackR, _stackG, _stackB, _stackColorGen = 1, 1, 1, -1
@@ -846,9 +858,9 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
 end
 
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Own-aura highlight
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 -- Cached highlight colors (invalidated by configGen change)
 local _hlBuffR, _hlBuffG, _hlBuffB = 1.0, 0.85, 0.2
@@ -889,10 +901,10 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Refresh all assigned icons (fast path: timer + stacks only)
 -- Called when aura membership hasn't changed but values may have
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
     if not entry then return end
@@ -958,9 +970,9 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Preview icons (Edit Mode)
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, debuffCap, stackCountAnchor)
     -- Delegate to existing preview system if available
@@ -1012,10 +1024,10 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
     end
 end
 
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- Backward-compatible exports into API.Apply
 -- (Options, CooldownText, Preview, Masque all reference API.Apply.*)
--- ────────────────────────────────────────────────────────────────
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 Apply.AcquireIcon = Icons.AcquireIcon
 Apply.HideUnused = Icons.HideUnused
@@ -1037,13 +1049,67 @@ end
 
 -- Font application helpers (referenced by Options/Fonts)
 function Apply.ApplyFontsFromGlobal()
-    -- Iterate all active icons and re-apply text settings (no layout rebuild)
+    -- Bump configGen so ResolveTextConfig cache is invalidated and new
+    -- font values from shared.stackTextSize / cooldownTextSize take effect.
+    _configGen = _configGen + 1
+    _sharedFlagsGen = -1
+
+    -- Resolve global MSUF font family (path + flags)
+    local fontPath, fontFlags
+    local getFontSettings = _G.MSUF_GetGlobalFontSettings
+    if type(getFontSettings) == "function" then
+        fontPath, fontFlags = getFontSettings()
+    end
+    if type(fontPath) ~= "string" then fontPath = nil end
+    if type(fontFlags) ~= "string" then fontFlags = "OUTLINE" end
+
+    -- Iterate all active icons and re-apply text settings + font family
     local state = API.state
     local aby = state and state.aurasByUnit
     if not aby then return end
 
     local a2, shared = GetAuras2DB()
     if type(shared) ~= "table" then return end
+
+    -- Helper: apply font family + size to a FontString
+    local function ApplyFontFamily(fs, wantSize)
+        if not fs or not fs.SetFont or not fs.GetFont then return end
+        local curFont, curSize, curFlags = fs:GetFont()
+        local newFont = fontPath or curFont
+        local newFlags = fontFlags or curFlags or "OUTLINE"
+        local newSize = wantSize or curSize or 14
+        if newFont then
+            fs:SetFont(newFont, newSize, newFlags)
+        end
+    end
+
+    -- Helper: refresh font on all icons in a container
+    local function RefreshContainerFonts(container, unit, sca)
+        if not container or not container._msufIcons then return end
+        local pool = container._msufIcons
+        local activeN = container._msufA2_activeN or #pool
+        for i = 1, activeN do
+            local icon = pool[i]
+            if icon and icon:IsShown() then
+                -- Resolve text config (sizes, offsets) for this configGen
+                ResolveTextConfig(icon, unit, shared, _configGen)
+
+                -- Apply font family to stack count text
+                if icon.count then
+                    ApplyFontFamily(icon.count, icon._msufA2_stackTextSize)
+                end
+
+                -- Apply font family to cooldown text
+                local cd = icon.cooldown
+                if cd then
+                    local cdFS = cd._msufA2_cdFS or (cd.GetRegions and select(1, cd:GetRegions()))
+                    if cdFS and cdFS.SetFont then
+                        ApplyFontFamily(cdFS, icon._msufA2_cooldownTextSize)
+                    end
+                end
+            end
+        end
+    end
 
     for _, entry in pairs(aby) do
         if entry then
@@ -1059,7 +1125,43 @@ function Apply.ApplyFontsFromGlobal()
                 end
             end
 
+            -- Standard refresh (timer + stacks positioning)
             Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
+
+            -- Font family refresh (the part that was missing)
+            if fontPath then
+                RefreshContainerFonts(entry.buffs, unit, stackCountAnchor)
+                RefreshContainerFonts(entry.debuffs, unit, stackCountAnchor)
+                RefreshContainerFonts(entry.mixed, unit, stackCountAnchor)
+            end
+
+            -- Also refresh preview icons (they lack _msufAuraInstanceID so
+            -- RefreshAssignedIcons skips them)
+            if entry._msufA2_previewActive then
+                local gen = _configGen
+                local ctr = entry.buffs
+                if ctr and ctr._msufIcons then
+                    for _, icon in ipairs(ctr._msufIcons) do
+                        if icon and icon:IsShown() and icon._msufA2_isPreview then
+                            ResolveTextConfig(icon, unit, shared, gen)
+                            if icon.count and fontPath then
+                                ApplyFontFamily(icon.count, icon._msufA2_stackTextSize)
+                            end
+                        end
+                    end
+                end
+                ctr = entry.debuffs
+                if ctr and ctr._msufIcons then
+                    for _, icon in ipairs(ctr._msufIcons) do
+                        if icon and icon:IsShown() and icon._msufA2_isPreview then
+                            ResolveTextConfig(icon, unit, shared, gen)
+                            if icon.count and fontPath then
+                                ApplyFontFamily(icon.count, icon._msufA2_stackTextSize)
+                            end
+                        end
+                    end
+                end
+            end
         end
     end
 end

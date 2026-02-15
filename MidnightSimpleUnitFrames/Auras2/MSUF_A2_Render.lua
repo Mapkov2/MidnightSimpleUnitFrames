@@ -67,7 +67,6 @@ local max = math.max
 local Collect  -- API.Collect
 local Icons    -- API.Icons / API.Apply
 local Store    -- API.Store (epoch only)
-local _epochs  -- API.Store._epochs (Phase 4C: direct table, −1 function call per RenderUnit)
 local Filters  -- API.Filters
 
 -- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -782,7 +781,6 @@ local function RenderUnit(entry)
         Collect = API.Collect
         Icons   = API.Icons or API.Apply
         Store   = API.Store
-        _epochs = Store and Store._epochs
         Filters = API.Filters
         if Collect and Icons then _modulesBound = true end
     end
@@ -910,8 +908,8 @@ local function RenderUnit(entry)
             local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, maxBuffs, maxDebuffs, stackCountAnchor)
             local bSize = useSingleRow and iconSize or buffIconSize
             local dSize = useSingleRow and iconSize or debuffIconSize
-            Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, growth, rowWrap)
-            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, growth, rowWrap)
+            Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, growth, rowWrap, gen)
+            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, growth, rowWrap, gen)
         end
         if Icons.RenderPreviewPrivateIcons then
             Icons.RenderPreviewPrivateIcons(entry, unit, shared, privateIconSize, spacing, stackCountAnchor)
@@ -927,8 +925,7 @@ local function RenderUnit(entry)
     end
 
     -- â”€â”€ Epoch diff: skip full rebuild if nothing changed â”€â”€
-    -- Phase 4C: direct epoch table lookup (was: Store.GetEpoch(unit) function call)
-    local epoch = _epochs and _epochs[unit] or 0
+    local epoch = Store and Store.GetEpoch(unit) or 0
 
     if epoch == entry._lastEpoch and gen == entry._lastConfigGen then
         -- Nothing changed â€” just refresh timers and stacks
@@ -989,20 +986,20 @@ local function RenderUnit(entry)
     -- â”€â”€ Layout â”€â”€
     if useSingleRow and entry.mixed then
         local total = debuffCount + buffCount
-        Icons.LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap)
+        Icons.LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap, gen)
         Icons.HideUnused(entry.mixed, total + 1)
         Icons.HideUnused(entry.debuffs, 1)
         Icons.HideUnused(entry.buffs, 1)
     else
         if showDebuffs then
-            Icons.LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, growth, rowWrap)
+            Icons.LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, growth, rowWrap, gen)
             Icons.HideUnused(entry.debuffs, debuffCount + 1)
         else
             Icons.HideUnused(entry.debuffs, 1)
         end
 
         if showBuffs then
-            Icons.LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, growth, rowWrap)
+            Icons.LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, growth, rowWrap, gen)
             Icons.HideUnused(entry.buffs, buffCount + 1)
         else
             Icons.HideUnused(entry.buffs, 1)
