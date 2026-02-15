@@ -495,33 +495,6 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
         if self.icon then self.icon:SetTexture(chanTex or nil) end
         if self.castText then MSUF_SetTextIfChanged(self.castText, chanName or "") end
 
-        -- Snapshot plain end/total timestamps for manager fast-path.
-        -- Fix: DurationObjects can briefly report stale remaining when a channel is cancelled/restarted (SpellQueueWindow / same-frame).
-        do
-            self._msufPlainEndTime = nil
-            self._msufPlainTotal = nil
-            self._msufRemaining = nil
-            self._msufLastTimeDecimal = nil
-            self._msufZeroCount = nil
-            self._msufLastDurationObj = nil
-            self._msufTimerAssumeCountdown = nil
-
-            local now = GetTime()
-            if type(endTimeMS) == "number" then
-                local endSec = endTimeMS / 1000
-                local r = endSec - now
-                if type(r) == "number" and r > 0 then
-                    self._msufPlainEndTime = endSec
-                    self._msufRemaining = r
-                end
-            end
-            if type(startTimeMS) == "number" and type(endTimeMS) == "number" then
-                local tot = (endTimeMS - startTimeMS) / 1000
-                if type(tot) == "number" and tot > 0 then
-                    self._msufPlainTotal = tot
-                end
-            end
-        end
 
         -- Apply current (possibly overridden) player castbar color.
         MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
