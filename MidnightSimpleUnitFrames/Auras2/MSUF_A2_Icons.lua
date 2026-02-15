@@ -1,10 +1,10 @@
 -- ============================================================================
--- MSUF_A2_Icons.lua â€” Auras 3.0 Icon Factory + Visual Commit + Layout
+-- MSUF_A2_Icons.lua  Auras 3.0 Icon Factory + Visual Commit + Layout
 -- Replaces the core of MSUF_A2_Apply.lua
 --
 -- Responsibilities:
 --   1. Icon pool (AcquireIcon / HideUnused)
---   2. Visual commit (CommitIcon â€” texture, cooldown, stacks, border)
+--   2. Visual commit (CommitIcon  texture, cooldown, stacks, border)
 --   3. Grid layout (LayoutIcons)
 --   4. Refresh helpers (RefreshAssignedIcons)
 --
@@ -68,7 +68,7 @@ local function EnsureBindings()
     if not CT then CT = API.CooldownText end
 end
 
--- â”€â”€ Fast-path Collect helpers (skip guard checks in hot path) â”€â”€
+--  Fast-path Collect helpers (skip guard checks in hot path) 
 local _getDurationFast   -- Collect.GetDurationObjectFast (bound on first use)
 local _getStackCountFast -- Collect.GetStackCountFast
 local _hasExpirationFast -- Collect.HasExpirationFast
@@ -89,8 +89,9 @@ local _fast_ApplyTimer
 local _fast_RefreshTimer
 local _fast_ApplyStacks
 local _fast_ApplyOwnHighlight
+local _fast_ApplyDispelBorder
 
--- â”€â”€ Cached shared.* flags (resolve once per configGen, not per icon) â”€â”€
+--  Cached shared.* flags (resolve once per configGen, not per icon) 
 local _sharedFlagsGen   = -1
 local _showSwipe        = false
 local _showText         = true
@@ -100,6 +101,55 @@ local _IS_BOSS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local _wantBuffHL       = false
 local _wantDebuffHL     = false
 local _useBlizzardTimer = false  -- true = Blizzard C++ pass-through for countdown text
+local _useDispelBorders = false  -- dispel-type border coloring for debuffs
+
+-- ── Debuff dispel-type color lookup (à la R41z0r / Blizzard) ──
+-- Maps dispel index → Blizzard color object; used for both manual
+-- fallback and the C_CurveUtil-based GetAuraDispelTypeColor() API.
+local _debuffColorByIndex = {
+    [1] = _G.DEBUFF_TYPE_MAGIC_COLOR,
+    [2] = _G.DEBUFF_TYPE_CURSE_COLOR,
+    [3] = _G.DEBUFF_TYPE_DISEASE_COLOR,
+    [4] = _G.DEBUFF_TYPE_POISON_COLOR,
+    [5] = _G.DEBUFF_TYPE_BLEED_COLOR,
+    [0] = _G.DEBUFF_TYPE_NONE_COLOR,
+}
+local _dispelNameToIndex = {
+    Magic   = 1,
+    Curse   = 2,
+    Disease = 3,
+    Poison  = 4,
+    Bleed   = 5,
+    None    = 0,
+}
+
+-- Build a step-curve for C_UnitAuras.GetAuraDispelTypeColor() (secret-safe).
+-- This mirrors R41z0r's approach: one-time init, reused every commit.
+local _debuffColorCurve
+do
+    local ok, curve = pcall(function()
+        if not C_CurveUtil or not C_CurveUtil.CreateColorCurve then return nil end
+        if not Enum or not Enum.LuaCurveType or not Enum.LuaCurveType.Step then return nil end
+        local c = C_CurveUtil.CreateColorCurve()
+        c:SetType(Enum.LuaCurveType.Step)
+        for idx, col in pairs(_debuffColorByIndex) do
+            if col then c:AddPoint(idx, col) end
+        end
+        return c
+    end)
+    _debuffColorCurve = ok and curve or nil
+end
+
+-- Manual fallback: dispelName string → r, g, b
+local function GetDebuffColorFromName(name)
+    local idx = _dispelNameToIndex[name] or 0
+    local col = _debuffColorByIndex[idx] or _debuffColorByIndex[0]
+    if not col then return 1, 0, 0 end
+    if col.GetRGBA then return col:GetRGBA() end
+    if col.GetRGB  then return col:GetRGB()  end
+    if col.r       then return col.r, col.g, col.b end
+    return col[1] or 1, col[2] or 0, col[3] or 0
+end
 
 -- Cached global MSUF font family (resolved once, updated by ApplyFontsFromGlobal)
 local _globalFontPath   = nil   -- nil = not yet resolved
@@ -128,6 +178,7 @@ local function RefreshSharedFlags(shared, gen)
     _wantBuffHL   = (shared and shared.highlightOwnBuffs == true) or false
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
     _useBlizzardTimer = (shared and shared.useBlizzardTimerText == true) or false
+    _useDispelBorders = (shared and shared.useDebuffTypeBorders == true) or false
 end
 
 -- --
@@ -284,6 +335,15 @@ icon.countFrame = countFrame
     glow:Hide()
     icon._msufOwnGlow = glow
 
+    -- Dispel-type colored border overlay (hidden by default)
+    -- Uses Blizzard's standard debuff overlay texture, colored per dispel type.
+    local dispelBdr = icon:CreateTexture(nil, "OVERLAY", nil, 1)
+    dispelBdr:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
+    dispelBdr:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
+    dispelBdr:SetAllPoints(icon)
+    dispelBdr:Hide()
+    icon._msufDispelBorder = dispelBdr
+
     -- Background (subtle dark backdrop)
     local bg = icon:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
@@ -347,7 +407,7 @@ function Icons.AcquireIcon(container, index)
     icon = CreateIcon(container, index)
     pool[index] = icon
 
-    -- Keep an AIDâ†’icon map on the container for fast delta lookups
+    -- Keep an AIDÃ¢â€ â€™icon map on the container for fast delta lookups
     if not container._msufA2_iconByAid then
         container._msufA2_iconByAid = {}
     end
@@ -408,7 +468,7 @@ end
 function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, rowWrap, configGen)
     if not container or count <= 0 then return end
 
-    -- â”€â”€ Layout diff gate â”€â”€
+    --  Layout diff gate 
     -- If count and configGen match last call, positions are identical. Skip.
     -- configGen covers iconSize, spacing, perRow, growth, rowWrap (all settings).
     local gen = configGen or _configGen
@@ -491,6 +551,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         -- Hide private aura preview overlays
         if icon._msufPrivateBorder then icon._msufPrivateBorder:Hide() end
         if icon._msufPrivateLock then icon._msufPrivateLock:Hide() end
+        if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
         icon._msufA2_lastCommit = nil
     end
 
@@ -503,6 +564,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
             aidMap[prevAid] = nil
         end
         icon._msufAuraInstanceID = nil
+        if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
         return false
     end
 
@@ -513,7 +575,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     icon._msufAuraInstanceID = aid
     if aid and aidMap then aidMap[aid] = icon end
 
-    -- â”€â”€ Diff gate â”€â”€
+    --  Diff gate 
     local gen = configGen or _configGen
     local last = icon._msufA2_lastCommit
 
@@ -528,7 +590,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         return true
     end
 
-    -- â”€â”€ Full apply â”€â”€
+    --  Full apply 
     if not last then
         last = {}
         icon._msufA2_lastCommit = last
@@ -557,7 +619,10 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     -- 4. Own-aura highlight
     _fast_ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
 
-    -- 5. Masque sync
+    -- 5. Dispel-type border (Magic/Curse/Poison/Disease colored)
+    _fast_ApplyDispelBorder(icon, unit, aura, isHelpful)
+
+    -- 6. Masque sync
     if Masque and icon.MSUF_MasqueAdded and Masque.SyncIconOverlayLevels then
         Masque.SyncIconOverlayLevels(icon)
     end
@@ -952,11 +1017,77 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     end
 end
 
+-- ── Dispel-type border (Magic/Curse/Poison/Disease/Bleed colored) ──
+-- Purely cosmetic classification border for debuffs that have an actual
+-- dispel school (Magic/Curse/Disease/Poison/Bleed).  Non-dispellable
+-- debuffs (dispelName == nil / "" / "None") are left without a border.
+-- This is independent of the bar-outline dispel highlight (Bars menu)
+-- which tracks whether the *player* can actively dispel on that unit.
+--
+-- Color resolution:
+--   1. Try C_UnitAuras.GetAuraDispelTypeColor() with step-curve (secret-safe)
+--   2. Fallback to manual dispelName → DEBUFF_TYPE_*_COLOR lookup
+function Icons._ApplyDispelBorder(icon, unit, aura, isHelpful)
+    local bdr = icon._msufDispelBorder
+    if not bdr then return end
+
+    -- Only show on harmful auras when the feature is enabled
+    if isHelpful or not _useDispelBorders or not aura then
+        bdr:Hide()
+        return
+    end
+
+    -- Gate: only debuffs with a *real* dispel school get a border.
+    -- dispelName may be a secret value on private auras — in that case
+    -- we allow the API path below to resolve the color (it's secret-safe).
+    local dName = aura.dispelName
+    local isSecret = issecretvalue and dName ~= nil and issecretvalue(dName)
+    if not isSecret then
+        if not dName or dName == "" or dName == "None" then
+            bdr:Hide()
+            return
+        end
+    end
+
+    local r, g, b = 1, 0.25, 0.25  -- default debuff red
+    local usedApi = false
+
+    -- Primary: C_UnitAuras.GetAuraDispelTypeColor (secret-safe, works for private auras)
+    local aid = aura._msufAuraInstanceID or aura.auraInstanceID
+    if aid and unit and _debuffColorCurve
+       and C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor then
+        local ok, color = pcall(C_UnitAuras.GetAuraDispelTypeColor, unit, aid, _debuffColorCurve)
+        if ok and color then
+            usedApi = true
+            if color.GetRGBA then
+                r, g, b = color:GetRGBA()
+            elseif color.r then
+                r, g, b = color.r, color.g, color.b
+            end
+        end
+    end
+
+    -- Fallback: manual dispelName lookup (only reached for non-secret values)
+    if not usedApi then
+        if isSecret then
+            -- Secret dispelName but API unavailable — can't determine type safely
+            bdr:Hide()
+            return
+        end
+        local fr, fg, fb = GetDebuffColorFromName(dName)
+        if fr then r, g, b = fr, fg, fb end
+    end
+
+    bdr:SetVertexColor(r, g, b, 1)
+    bdr:Show()
+end
+
 -- Phase 8: bind file-scope locals (defined above) now that methods exist.
 _fast_ApplyTimer        = Icons._ApplyTimer
 _fast_RefreshTimer      = Icons._RefreshTimer
 _fast_ApplyStacks       = Icons._ApplyStacks
 _fast_ApplyOwnHighlight = Icons._ApplyOwnHighlight
+_fast_ApplyDispelBorder = Icons._ApplyDispelBorder
 
 -- --
 -- Refresh all assigned icons (fast path: timer + stacks only)
@@ -1180,7 +1311,7 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
         return fn(entry, unit, shared, privIconSize, spacing, stackCountAnchor)
     end
 
-    -- Always show private aura previews in Edit Mode (no enabled-gate needed —
+    -- Always show private aura previews in Edit Mode (no enabled-gate needed 
     -- this function is only called from the preview path). Use configured max
     -- counts so the user sees exactly how many slots they have allocated.
     local container = entry.private
@@ -1217,7 +1348,7 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
             end
             icon:SetSize(privIconSize, privIconSize)
 
-            -- ── Purple border to mark as "private aura" ──
+            --  Purple border to mark as "private aura" 
             if not icon._msufPrivateBorder then
                 local border = icon:CreateTexture(nil, "OVERLAY", nil, 2)
                 border:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
