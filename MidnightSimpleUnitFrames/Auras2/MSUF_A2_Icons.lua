@@ -93,6 +93,22 @@ local _IS_BOSS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local _wantBuffHL       = false
 local _wantDebuffHL     = false
 
+-- Cached global MSUF font family (resolved once, updated by ApplyFontsFromGlobal)
+local _globalFontPath   = nil   -- nil = not yet resolved
+local _globalFontFlags  = "OUTLINE"
+
+-- Resolve the global MSUF font (lazy; caches after first call)
+local function ResolveGlobalFont()
+    if _globalFontPath then return _globalFontPath, _globalFontFlags end
+    local gfs = _G.MSUF_GetGlobalFontSettings
+    if type(gfs) == "function" then
+        local p, fl = gfs()
+        if type(p) == "string" then _globalFontPath = p end
+        if type(fl) == "string" then _globalFontFlags = fl end
+    end
+    return _globalFontPath, _globalFontFlags
+end
+
 local function RefreshSharedFlags(shared, gen)
     if type(shared) ~= "table" then return end
     if _sharedFlagsGen == gen then return end
@@ -467,6 +483,9 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         icon._msufA2_previewKind = nil
         local lbl = icon._msufA2_previewLabel
         if lbl and lbl.Hide then lbl:Hide() end
+        -- Hide private aura preview overlays
+        if icon._msufPrivateBorder then icon._msufPrivateBorder:Hide() end
+        if icon._msufPrivateLock then icon._msufPrivateLock:Hide() end
         icon._msufA2_lastCommit = nil
     end
 
@@ -604,13 +623,21 @@ local function ApplyCooldownTextStyle(icon, cd, now, force)
     if not fs then return end
     cd._msufCooldownFontString = fs
 
-    -- Apply size (only when changed)
-    if cd._msufA2_cdTextSize ~= size and fs.GetFont and fs.SetFont then
-        local font, _, flags = fs:GetFont()
-        if font then
-            fs:SetFont(font, size, flags)
+    -- Resolve global font family (cached, cheap)
+    local gFont, gFlags = ResolveGlobalFont()
+
+    -- Apply font family + size (diff-gated on both size AND font path)
+    if fs.GetFont and fs.SetFont then
+        local curFont, curSize, curFlags = fs:GetFont()
+        local wantFont = gFont or curFont
+        local wantFlags = gFlags or curFlags or "OUTLINE"
+        if cd._msufA2_cdTextSize ~= size or cd._msufA2_cdFontPath ~= wantFont then
+            if wantFont then
+                fs:SetFont(wantFont, size, wantFlags)
+            end
+            cd._msufA2_cdTextSize = size
+            cd._msufA2_cdFontPath = wantFont
         end
-        cd._msufA2_cdTextSize = size
     end
 
     -- Apply offsets (only when changed)
@@ -750,14 +777,20 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
     local gen = (icon._msufA2_lastCommit and icon._msufA2_lastCommit.gen) or _configGen
     ResolveTextConfig(icon, unit, shared, gen)
 
-    -- Apply stack font size (only when changed)
+    -- Apply stack font family + size (diff-gated on both size AND font path)
     local wantSize = icon._msufA2_stackTextSize or 14
-    if icon._msufA2_lastStackFontSize ~= wantSize and countFS.GetFont and countFS.SetFont then
-        local font, _, flags = countFS:GetFont()
-        if font then
-            countFS:SetFont(font, wantSize, flags)
+    if countFS.GetFont and countFS.SetFont then
+        local gFont, gFlags = ResolveGlobalFont()
+        local curFont, curSize, curFlags = countFS:GetFont()
+        local wantFont = gFont or curFont
+        local wantFlags = gFlags or curFlags or "OUTLINE"
+        if icon._msufA2_lastStackFontSize ~= wantSize or icon._msufA2_lastStackFontPath ~= wantFont then
+            if wantFont then
+                countFS:SetFont(wantFont, wantSize, wantFlags)
+            end
+            icon._msufA2_lastStackFontSize = wantSize
+            icon._msufA2_lastStackFontPath = wantFont
         end
-        icon._msufA2_lastStackFontSize = wantSize
     end
 
     -- Anchor style (justify) + offsets
@@ -1047,6 +1080,7 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
 
         -- Stack text
         icon._msufA2_lastStackFontSize = nil
+        icon._msufA2_lastStackFontPath = nil
         icon._msufA2_lastStackPointAnchor = nil
         icon._msufA2_lastStackPointX = nil
         icon._msufA2_lastStackPointY = nil
@@ -1068,6 +1102,7 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
         local cd = icon.cooldown
         if cd then
             cd._msufA2_cdTextSize = nil
+            cd._msufA2_cdFontPath = nil
             cd._msufA2_cdTextOffX = nil
             cd._msufA2_cdTextOffY = nil
 
@@ -1122,36 +1157,29 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
         return fn(entry, unit, shared, privIconSize, spacing, stackCountAnchor)
     end
 
-    -- Private aura preview: show placeholder icons in the private container
-    -- (real private auras use C_UnitAuras.AddPrivateAuraAnchor, but in Edit Mode
-    -- with no unit present we simulate them with regular icon pool frames)
+    -- Always show private aura previews in Edit Mode (no enabled-gate needed —
+    -- this function is only called from the preview path). Use configured max
+    -- counts so the user sees exactly how many slots they have allocated.
     local container = entry.private
     if not container then return end
 
-    local enabled = false
-    if unit == "player" then enabled = (shared and shared.showPrivateAurasPlayer == true)
-    elseif unit == "focus" then enabled = (shared and shared.showPrivateAurasFocus == true)
+    local maxN = 4
+    if unit == "player" then
+        maxN = (shared and shared.privateAuraMaxPlayer) or 4
     else
-        if _IS_BOSS[unit] then enabled = (shared and shared.showPrivateAurasBoss == true) end
+        maxN = (shared and shared.privateAuraMaxOther) or 4
     end
-
-    if not enabled then
-        Icons.HideUnused(container, 1)
-        return
-    end
-
-    local maxN = (unit == "player")
-        and (shared.privateAuraMaxPlayer or 4)
-        or  (shared.privateAuraMaxOther or 4)
-    if maxN <= 0 then
-        Icons.HideUnused(container, 1)
-        return
-    end
+    if maxN <= 0 then maxN = 4 end -- always show at least a few in preview
 
     local gen = _configGen
     local now = GetTime()
     local showStacks = (shared and shared.showStackCount ~= false)
     local privCount = 0
+
+    -- Sample private-aura-ish textures (shield/lock/eye themed)
+    local privTex = { 136177, 134400, 135894, 136116, 135987, 136085,
+                      132333, 135932, 136075, 135981, 136048, 132316 }
+    local privTexN = #privTex
 
     for i = 1, maxN do
         local icon = Icons.AcquireIcon(container, i)
@@ -1160,11 +1188,35 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
             icon._msufA2_previewKind = "private"
             icon._msufUnit = unit
 
-            -- Private aura lock texture
+            -- Aura texture (varied)
             if icon.tex then
-                icon.tex:SetTexture(134400) -- Padlock / private aura icon
+                icon.tex:SetTexture(privTex[((i - 1) % privTexN) + 1])
             end
             icon:SetSize(privIconSize, privIconSize)
+
+            -- ── Purple border to mark as "private aura" ──
+            if not icon._msufPrivateBorder then
+                local border = icon:CreateTexture(nil, "OVERLAY", nil, 2)
+                border:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
+                border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 1, -1)
+                border:SetColorTexture(0.6, 0.2, 0.9, 0.0) -- start transparent
+                icon._msufPrivateBorder = border
+            end
+            icon._msufPrivateBorder:SetColorTexture(0.6, 0.2, 0.9, 0.55)
+            icon._msufPrivateBorder:Show()
+
+            -- Small lock icon overlay (bottom-left corner)
+            if not icon._msufPrivateLock then
+                local lock = icon:CreateTexture(nil, "OVERLAY", nil, 3)
+                lock:SetSize(math_max(10, privIconSize * 0.35), math_max(10, privIconSize * 0.35))
+                lock:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 1, 1)
+                lock:SetTexture(134400) -- padlock
+                lock:SetDesaturated(false)
+                icon._msufPrivateLock = lock
+            end
+            icon._msufPrivateLock:SetSize(math_max(10, privIconSize * 0.35), math_max(10, privIconSize * 0.35))
+            icon._msufPrivateLock:Show()
+
             icon:Show()
 
             -- Position: horizontal row
@@ -1184,6 +1236,7 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
 
             -- Stack text
             icon._msufA2_lastStackFontSize = nil
+            icon._msufA2_lastStackFontPath = nil
             icon._msufA2_lastStackPointAnchor = nil
             Apply.ApplyStackTextOffsets(icon, unit, shared, stackCountAnchor)
 
@@ -1198,10 +1251,11 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
                 end
             end
 
-            -- Cooldown
+            -- Cooldown swipe + countdown text
             local cd = icon.cooldown
             if cd then
                 cd._msufA2_cdTextSize = nil
+                cd._msufA2_cdFontPath = nil
                 cd._msufA2_cdTextOffX = nil
                 cd._msufA2_cdTextOffY = nil
 
@@ -1222,9 +1276,10 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
     end
     Icons.HideUnused(container, privCount + 1)
 
-    -- Size the container so it wraps its children
+    -- Size the container to wrap its children
     local step = privIconSize + spacing
-    container:SetSize(math_max(1, (privCount * step) - spacing), privIconSize)
+    if step <= 0 then step = privIconSize + 2 end
+    container:SetSize(math_max(1, (privCount * step) - spacing), math_max(1, privIconSize))
     container:Show()
 end
 
@@ -1258,7 +1313,10 @@ function Apply.ApplyFontsFromGlobal()
     _configGen = _configGen + 1
     _sharedFlagsGen = -1
 
-    -- Resolve global MSUF font family (path + flags)
+    -- Resolve global MSUF font family (path + flags) and flush the file-scope cache
+    -- so ApplyCooldownTextStyle / _ApplyStacks pick up the new font immediately.
+    _globalFontPath = nil
+    _globalFontFlags = "OUTLINE"
     local fontPath, fontFlags
     local getFontSettings = _G.MSUF_GetGlobalFontSettings
     if type(getFontSettings) == "function" then
@@ -1266,6 +1324,9 @@ function Apply.ApplyFontsFromGlobal()
     end
     if type(fontPath) ~= "string" then fontPath = nil end
     if type(fontFlags) ~= "string" then fontFlags = "OUTLINE" end
+    -- Update file-scope cache
+    _globalFontPath = fontPath
+    _globalFontFlags = fontFlags
 
     -- Iterate all active icons and re-apply text settings + font family
     local state = API.state
@@ -1306,7 +1367,19 @@ function Apply.ApplyFontsFromGlobal()
                 -- Apply font family to cooldown text
                 local cd = icon.cooldown
                 if cd then
-                    local cdFS = cd._msufA2_cdFS or (cd.GetRegions and select(1, cd:GetRegions()))
+                    -- Use the cached fontstring from CooldownText module
+                    local cdFS = cd._msufCooldownFontString
+                    if cdFS == false then cdFS = nil end
+                    -- Fallback: try to discover via EnumerateRegions
+                    if not cdFS and cd.EnumerateRegions then
+                        for region in cd:EnumerateRegions() do
+                            if region and region.GetObjectType and region:GetObjectType() == "FontString" then
+                                cdFS = region
+                                cd._msufCooldownFontString = region
+                                break
+                            end
+                        end
+                    end
                     if cdFS and cdFS.SetFont then
                         ApplyFontFamily(cdFS, icon._msufA2_cooldownTextSize)
                     end
@@ -1337,34 +1410,48 @@ function Apply.ApplyFontsFromGlobal()
                 RefreshContainerFonts(entry.buffs, unit, stackCountAnchor)
                 RefreshContainerFonts(entry.debuffs, unit, stackCountAnchor)
                 RefreshContainerFonts(entry.mixed, unit, stackCountAnchor)
+                RefreshContainerFonts(entry.private, unit, stackCountAnchor)
             end
 
             -- Also refresh preview icons (they lack _msufAuraInstanceID so
             -- RefreshAssignedIcons skips them)
             if entry._msufA2_previewActive then
                 local gen = _configGen
-                local ctr = entry.buffs
-                if ctr and ctr._msufIcons then
+                local function RefreshPreviewFonts(ctr)
+                    if not ctr or not ctr._msufIcons then return end
                     for _, icon in ipairs(ctr._msufIcons) do
                         if icon and icon:IsShown() and icon._msufA2_isPreview then
                             ResolveTextConfig(icon, unit, shared, gen)
+                            -- Stack count font
                             if icon.count and fontPath then
                                 ApplyFontFamily(icon.count, icon._msufA2_stackTextSize)
+                            end
+                            -- Cooldown text font
+                            if fontPath then
+                                local cd = icon.cooldown
+                                if cd then
+                                    local cdFS = cd._msufCooldownFontString
+                                    if cdFS == false then cdFS = nil end
+                                    if not cdFS and cd.EnumerateRegions then
+                                        for region in cd:EnumerateRegions() do
+                                            if region and region.GetObjectType and region:GetObjectType() == "FontString" then
+                                                cdFS = region
+                                                cd._msufCooldownFontString = region
+                                                break
+                                            end
+                                        end
+                                    end
+                                    if cdFS and cdFS.SetFont then
+                                        ApplyFontFamily(cdFS, icon._msufA2_cooldownTextSize)
+                                    end
+                                end
                             end
                         end
                     end
                 end
-                ctr = entry.debuffs
-                if ctr and ctr._msufIcons then
-                    for _, icon in ipairs(ctr._msufIcons) do
-                        if icon and icon:IsShown() and icon._msufA2_isPreview then
-                            ResolveTextConfig(icon, unit, shared, gen)
-                            if icon.count and fontPath then
-                                ApplyFontFamily(icon.count, icon._msufA2_stackTextSize)
-                            end
-                        end
-                    end
-                end
+                RefreshPreviewFonts(entry.buffs)
+                RefreshPreviewFonts(entry.debuffs)
+                RefreshPreviewFonts(entry.private)
             end
         end
     end
@@ -1402,12 +1489,15 @@ function Apply.ApplyStackTextOffsets(icon, unit, shared, stackCountAnchor)
     icon._msufA2_textCfgGen = nil
     ResolveTextConfig(icon, unit, shared, _configGen)
 
-    -- Font size (always re-apply: clear diff cache)
+    -- Font family + size (always re-apply: Preview-only)
     local wantSize = icon._msufA2_stackTextSize or 14
     if countFS.GetFont and countFS.SetFont then
-        local font, _, flags = countFS:GetFont()
-        if font then
-            countFS:SetFont(font, wantSize, flags)
+        local gFont, gFlags = ResolveGlobalFont()
+        local curFont, _, curFlags = countFS:GetFont()
+        local wantFont = gFont or curFont
+        local wantFlags = gFlags or curFlags or "OUTLINE"
+        if wantFont then
+            countFS:SetFont(wantFont, wantSize, wantFlags)
         end
     end
     icon._msufA2_lastStackFontSize = wantSize
@@ -1445,6 +1535,7 @@ function Apply.ApplyCooldownTextOffsets(icon, unit, shared)
 
     -- Force-invalidate cooldown diff caches so new values always apply
     cd._msufA2_cdTextSize = nil
+    cd._msufA2_cdFontPath = nil
     cd._msufA2_cdTextOffX = nil
     cd._msufA2_cdTextOffY = nil
 

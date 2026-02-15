@@ -875,7 +875,9 @@ local function RenderUnit(entry)
     entry.anchor:Show()
 
     -- Private auras: only rebuild when config changes
-    if gen ~= entry._lastPrivateGen then
+    -- Skip in Edit Mode preview (no real unit) — RenderPreviewPrivateIcons handles it.
+    local _skipPrivateRebuild = isEditActive and (shared.showInEditMode == true)
+    if not _skipPrivateRebuild and gen ~= entry._lastPrivateGen then
         PrivateRebuild(entry, shared, privateIconSize, spacing)
         entry._lastPrivateGen = gen
     end
@@ -899,11 +901,42 @@ local function RenderUnit(entry)
         if entry.private then entry.private:Show() end
         entry._msufA2_previewActive = true
     else
-        entry._msufA2_previewActive = nil
+        -- Leaving edit mode (or preview disabled): scrub ALL private preview
+        -- icons from the pool.  PrivateRebuild uses _privateSlots (Blizzard
+        -- anchors), so it never touches _msufIcons — we must do it here.
+        if entry._msufA2_previewActive then
+            entry._msufA2_previewActive = nil
+            local pc = entry.private
+            if pc and pc._msufIcons then
+                for _, icon in ipairs(pc._msufIcons) do
+                    if icon then
+                        icon._msufA2_isPreview = nil
+                        icon._msufA2_previewKind = nil
+                        icon:Hide()
+                        if icon._msufPrivateBorder then icon._msufPrivateBorder:Hide() end
+                        if icon._msufPrivateLock then icon._msufPrivateLock:Hide() end
+                    end
+                end
+            end
+            -- Also wipe buff/debuff preview overlays
+            Icons.HideUnused(entry.buffs, 1)
+            Icons.HideUnused(entry.debuffs, 1)
+            if entry.mixed then Icons.HideUnused(entry.mixed, 1) end
+            -- Force PrivateRebuild on next render so real anchors are recreated
+            entry._lastPrivateGen = -1
+        end
     end
 
-    -- â”€â”€ Edit Mode preview (no real unit present) â”€â”€
-    if showTest and not unitExists then
+    -- â”€â”€ Edit Mode preview (all units, including player) â”€â”€
+    if showTest then
+        -- Clear any Blizzard private aura anchors (from a previous non-preview
+        -- render) so they don't overlap with our preview icons.
+        if entry._privateAnchorIDs then
+            PrivateClear(entry)
+            entry._lastPrivateGen = -1  -- force rebuild when leaving edit mode
+        end
+        if entry.private then entry.private:Show() end
+
         if Icons.RenderPreviewIcons then
             local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, maxBuffs, maxDebuffs, stackCountAnchor)
             local bSize = useSingleRow and iconSize or buffIconSize
