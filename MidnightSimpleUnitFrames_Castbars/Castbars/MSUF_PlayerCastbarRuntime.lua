@@ -316,7 +316,8 @@ local function MSUF_PlayerCastbar_ShowInterruptFeedback(self, label)
     -- Phase 2A: Use shared interrupt bar visuals (replaces ~25 lines of inline setup).
     local rf = _G.MSUF_GetReverseFillSafe and _G.MSUF_GetReverseFillSafe(self, false) or false
     _G.MSUF_ApplyInterruptBarVisuals(self, {
-        barValue = 0.8,
+        -- Player interrupt feedback should fully fill the bar (matches target/focus/boss).
+        barValue = 1,
         colorR = 0.8, colorG = 0.1, colorB = 0.1,
         reverseFill = rf,
         label = label or INTERRUPTED,
@@ -392,7 +393,7 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
         -- Ensure fill direction updates for this cast type (cast vs channel) immediately.
         self.MSUF_isChanneled = false
         MSUF_PlayerChannelHasteMarkers_Hide(self)
-	    local castName, castText, castTex, _, _, _, _, notInterruptible = UnitCastingInfo(unit)
+	    local castName, castText, castTex, startTimeMS, endTimeMS, _, _, notInterruptible = UnitCastingInfo(unit)
 	    -- IMPORTANT (Midnight/Beta): do NOT apply boolean operators (e.g. `not not x`) to potentially-secret values.
 	    -- Derive a plain Lua boolean via a truthiness branch.
 	    local apiNI = false
@@ -400,6 +401,34 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
 	    self.isNotInterruptible = apiNI
         if self.icon then self.icon:SetTexture(castTex or nil) end
         if self.castText then MSUF_SetTextIfChanged(self.castText, castName or "") end
+
+        -- Snapshot plain end/total timestamps for manager fast-path.
+        -- Fix: DurationObjects can briefly report stale remaining when a cast is cancelled/restarted (SpellQueueWindow / same-frame).
+        do
+            self._msufPlainEndTime = nil
+            self._msufPlainTotal = nil
+            self._msufRemaining = nil
+            self._msufLastTimeDecimal = nil
+            self._msufZeroCount = nil
+            self._msufLastDurationObj = nil
+            self._msufTimerAssumeCountdown = nil
+
+            local now = GetTime()
+            if type(endTimeMS) == "number" then
+                local endSec = endTimeMS / 1000
+                local r = endSec - now
+                if type(r) == "number" and r > 0 then
+                    self._msufPlainEndTime = endSec
+                    self._msufRemaining = r
+                end
+            end
+            if type(startTimeMS) == "number" and type(endTimeMS) == "number" then
+                local tot = (endTimeMS - startTimeMS) / 1000
+                if type(tot) == "number" and tot > 0 then
+                    self._msufPlainTotal = tot
+                end
+            end
+        end
 
         -- Apply current (possibly overridden) player castbar color.
         MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
@@ -457,7 +486,7 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
         self.MSUF_isChanneled = true
         self._msufStripeReverseFill = (__msuf_rf and true or false)
         MSUF_PlayerChannelHasteMarkers_Update(self, true)
-	        local chanName, chanText, chanTex, _, _, _, notInterruptible = UnitChannelInfo(unit)
+	        local chanName, chanText, chanTex, startTimeMS, endTimeMS, _, notInterruptible = UnitChannelInfo(unit)
 	        -- IMPORTANT (Midnight/Beta): do NOT apply boolean operators (e.g. `not not x`) to potentially-secret values.
 	        -- Derive a plain Lua boolean via a truthiness branch.
 	        local apiNI = false
@@ -465,6 +494,34 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
 	        self.isNotInterruptible = apiNI
         if self.icon then self.icon:SetTexture(chanTex or nil) end
         if self.castText then MSUF_SetTextIfChanged(self.castText, chanName or "") end
+
+        -- Snapshot plain end/total timestamps for manager fast-path.
+        -- Fix: DurationObjects can briefly report stale remaining when a channel is cancelled/restarted (SpellQueueWindow / same-frame).
+        do
+            self._msufPlainEndTime = nil
+            self._msufPlainTotal = nil
+            self._msufRemaining = nil
+            self._msufLastTimeDecimal = nil
+            self._msufZeroCount = nil
+            self._msufLastDurationObj = nil
+            self._msufTimerAssumeCountdown = nil
+
+            local now = GetTime()
+            if type(endTimeMS) == "number" then
+                local endSec = endTimeMS / 1000
+                local r = endSec - now
+                if type(r) == "number" and r > 0 then
+                    self._msufPlainEndTime = endSec
+                    self._msufRemaining = r
+                end
+            end
+            if type(startTimeMS) == "number" and type(endTimeMS) == "number" then
+                local tot = (endTimeMS - startTimeMS) / 1000
+                if type(tot) == "number" and tot > 0 then
+                    self._msufPlainTotal = tot
+                end
+            end
+        end
 
         -- Apply current (possibly overridden) player castbar color.
         MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
@@ -519,6 +576,13 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
         self._msufHardStopNilSince = nil
         self.MSUF_durationObj = nil
         self.MSUF_timerDriven = nil
+        self._msufPlainEndTime = nil
+        self._msufPlainTotal = nil
+        self._msufRemaining = nil
+        self._msufLastTimeDecimal = nil
+        self._msufZeroCount = nil
+        self._msufLastDurationObj = nil
+        self._msufTimerAssumeCountdown = nil
         if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
 
         MSUF_PlayerChannelHasteMarkers_Hide(self)
