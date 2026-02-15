@@ -280,7 +280,7 @@ local function MSUF_ApplyDropdownListScroll(listFrame, maxVisible)
         sb:SetPoint("BOTTOMRIGHT", listFrame, "BOTTOMRIGHT", -6, 18)
         sb:SetMinMaxValues(0, 0)
         -- CRITICAL: UIPanelScrollBarTemplate ships with a default handler that expects
-        -- sb.scrollFrame:SetVerticalScroll(). DropDownList1 is NOT a scrollFrame → nil crash.
+        -- sb.scrollFrame:SetVerticalScroll(). DropDownList1 is NOT a scrollFrame  nil crash.
         sb.scrollFrame = nil
         if sb.SetScript then sb:SetScript("OnValueChanged", nil) end
         sb:SetValue(0)
@@ -537,7 +537,7 @@ local function MSUF_CallUpdateAllFonts()
     end
     if type(fn) == "function" then return fn() end
  end
--- Local number parser (Options chunk can’t rely on main-file locals)
+-- Local number parser (Options chunk cant rely on main-file locals)
 local function MSUF_GetNumber(text, default, minVal, maxVal)
     local n = tonumber(text)
     if n == nil then n = default end
@@ -1338,7 +1338,7 @@ editModeButton:SetScript("OnClick", function()
                 AudioOptionsFrame:Hide()
             end
         end
-                        print("|cffffd700MSUF:|r " .. label .. " Edit Mode |cff00ff00ON|r – drag the " .. label .. " frame with the left mouse button or use the arrow buttons.")
+                        print("|cffffd700MSUF:|r " .. label .. " Edit Mode |cff00ff00ON|r “ drag the " .. label .. " frame with the left mouse button or use the arrow buttons.")
         else
             print("|cffffd700MSUF:|r " .. label .. " Edit Mode |cffff0000OFF|r.")
         end
@@ -1933,7 +1933,7 @@ if ns then
 end
 --[[
     Split-module exports (very small, very safe)
-    True file-splits (Misc/Fonts/…)
+    True file-splits (Misc/Fonts/)
     MUST NOT depend on Core file-scope locals.
     We therefore export a small, stable helper surface via `ns.*`.
     Idempotent and intentionally behavior-neutral.
@@ -2438,7 +2438,7 @@ deleteBtn:SetScript("OnClick", function()
         nil,
         {
             name  = name,   -- geht an data.name im Popup
-            panel = panel,  -- geht an data.panel -> für UpdateProfileUI
+            panel = panel,  -- geht an data.panel ->  UpdateProfileUI
         }
     )
  end)
@@ -2776,7 +2776,7 @@ end
         "MSUF_CastbarShakeIntensitySlider",
         "Shake intensity",
         castbarEnemyGroup,
-        0, 30, 1,         -- 0–30 strength
+        0, 30, 1,         --  strength
         175, -200          -- Next to the toggles
     )
     if _G and _G.MSUF_Options_BindGeneralNumberSlider then _G.MSUF_Options_BindGeneralNumberSlider(castbarShakeIntensitySlider, "castbarShakeStrength", { def = 8, min = 0, max = 30, int = true }) end
@@ -4039,7 +4039,7 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         hpSepDrop.relativePoint = "BOTTOMLEFT"
     end
     local textSepOptions = {
-        { key = "",  label = " ", menuText = "Space / none" }, -- empty → looks blank, just space between values
+        { key = "",  label = " ", menuText = "Space / none" }, -- empty  looks blank, just space between values
         { key = "-", label = "-" },
         { key = "/", label = "/" },
         { key = "\\", label = "\\" },
@@ -4462,6 +4462,35 @@ barOutlineThicknessSlider.onValueChanged = function(_, value)
     end
 end
 
+-- Highlight border thickness (separate overlay for aggro/dispel/purge)
+local highlightBorderThicknessSlider = CreateLabeledSlider(
+    "MSUF_HighlightBorderThicknessSlider",
+    "Highlight border thickness",
+    barGroup,
+    1, 6, 1,
+    16, -420
+)
+do
+    EnsureDB()
+    local gen = (MSUF_DB and MSUF_DB.general) or {}
+    local t = tonumber(gen.highlightBorderThickness)
+    if type(t) ~= "number" then t = 2 end
+    t = math.floor(t + 0.5)
+    if t < 1 then t = 1 elseif t > 6 then t = 6 end
+    MSUF_SetLabeledSliderValue(highlightBorderThicknessSlider, t)
+end
+
+highlightBorderThicknessSlider.onValueChanged = function(_, value)
+    EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    MSUF_DB.general.highlightBorderThickness = value
+    if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then
+        _G.MSUF_ApplyBarOutlineThickness_All()
+    else
+        ApplyAllSettings()
+    end
+end
+
 
 -- Aggro border indicator: reuse outline border as a thick orange threat border (target/focus/boss).
 -- No extra header label; the dropdown itself is the control.
@@ -4593,6 +4622,65 @@ dispelTestCheck:SetScript("OnClick", function(self)
     local on = self:GetChecked() and true or false
     if type(_G.MSUF_SetDispelBorderTestMode) == "function" then
         _G.MSUF_SetDispelBorderTestMode(on)
+    end
+end)
+
+-- Purge border: yellow outline border when the player can purge/spellsteal a buff on the unit (HELPFUL|RAID_PLAYER_DISPELLABLE).
+local purgeOutlineDrop = CreateFrame("Frame", "MSUF_PurgeOutlineDropdown", barGroup, "UIDropDownMenuTemplate")
+MSUF_ExpandDropdownClickArea(purgeOutlineDrop)
+purgeOutlineDrop:SetPoint("TOPLEFT", dispelOutlineDrop, "BOTTOMLEFT", 0, -18)
+UIDropDownMenu_SetWidth(purgeOutlineDrop, 170)
+if UIDropDownMenu_SetClampedToScreen then UIDropDownMenu_SetClampedToScreen(purgeOutlineDrop, true) end
+	if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(purgeOutlineDrop, "LEFT") end
+MSUF_MakeDropdownScrollable(purgeOutlineDrop, 10)
+
+local purgeOutlineOptions = {
+    { key = 0, label = TR("Purge border off") },
+    { key = 1, label = TR("Purge border on") },
+}
+
+local function _PurgeOutline_Get()
+    local g = MSUF_DB and MSUF_DB.general
+    return (g and g.purgeOutlineMode) or 0
+end
+
+local function _PurgeOutline_Set(val)
+    EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    MSUF_DB.general.purgeOutlineMode = val
+
+    if type(_G.MSUF_RefreshDispelOutlineStates) == "function" then
+        _G.MSUF_RefreshDispelOutlineStates(true)
+    else
+        local fn = _G.MSUF_RefreshRareBarVisuals
+        local frames = _G.MSUF_UnitFrames
+        if type(fn) == "function" and type(frames) == "table" then
+            if frames.player then fn(frames.player) end
+            if frames.target then fn(frames.target) end
+            if frames.focus then fn(frames.focus) end
+            if frames.targettarget then fn(frames.targettarget) end
+        end
+    end
+end
+
+MSUF_InitSimpleDropdown(
+    purgeOutlineDrop,
+    purgeOutlineOptions,
+    _PurgeOutline_Get,
+    function(v) _PurgeOutline_Set(v) end,
+    function() _PurgeOutline_Set(_PurgeOutline_Get()) end,
+    170
+)
+purgeOutlineDrop._msufPurgeOutlineOptions = purgeOutlineOptions
+purgeOutlineDrop._msufPurgeOutlineGet = _PurgeOutline_Get
+
+local purgeTestCheck = CreateFrame("CheckButton", "MSUF_PurgeOutlineTestCheck", barGroup, "ChatConfigCheckButtonTemplate")
+purgeTestCheck:SetPoint("LEFT", purgeOutlineDrop, "RIGHT", 6, -4)
+purgeTestCheck.Text:SetText(TR("Test"))
+purgeTestCheck:SetScript("OnClick", function(self)
+    local on = self:GetChecked() and true or false
+    if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
+        _G.MSUF_SetPurgeBorderTestMode(on)
     end
 end)
 
@@ -5019,17 +5107,24 @@ do
         end
     end
 
-    -- Re-anchor Aggro + Dispel border dropdowns under the new divider line
+    -- Re-anchor highlight thickness slider + Aggro/Dispel/Purge dropdowns under the new divider line
+    local hlSlider = _G["MSUF_HighlightBorderThicknessSlider"]
     local aggroDrop = _G["MSUF_AggroOutlineDropdown"]
     local aggroTest = _G["MSUF_AggroOutlineTestCheck"]
     local dispelDrop = _G["MSUF_DispelOutlineDropdown"]
     local dispelTest = _G["MSUF_DispelOutlineTestCheck"]
+    local purgeDrop = _G["MSUF_PurgeOutlineDropdown"]
+    local purgeTest = _G["MSUF_PurgeOutlineTestCheck"]
 
-    if aggroDrop and highlightLine and highlightLine:IsShown() then
+    if hlSlider and highlightLine and highlightLine:IsShown() then
+        hlSlider:ClearAllPoints()
+        hlSlider:SetPoint("TOPLEFT", highlightLine, "BOTTOMLEFT", 16, -14)
+        hlSlider:SetWidth(280)
+    end
+
+    if aggroDrop and hlSlider then
         aggroDrop:ClearAllPoints()
-        -- UIDropDownMenuTemplate has an internal left padding. To visually align the *boxed* dropdown
-        -- with our section divider line (same as other dropdowns in this panel), we offset by -16px.
-        aggroDrop:SetPoint("TOPLEFT", highlightLine, "BOTTOMLEFT", -16, -10)
+        aggroDrop:SetPoint("TOPLEFT", hlSlider, "BOTTOMLEFT", -16, -18)
         UIDropDownMenu_SetWidth(aggroDrop, 170)
 		if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(aggroDrop, "LEFT") end
     end
@@ -5046,6 +5141,15 @@ do
 		dispelTest:ClearAllPoints()
 		dispelTest:SetPoint("LEFT", dispelDrop, "RIGHT", 6, -4)
 	end
+    if purgeDrop and dispelDrop then
+        purgeDrop:ClearAllPoints()
+        purgeDrop:SetPoint("TOPLEFT", dispelDrop, "BOTTOMLEFT", 0, -12)
+        UIDropDownMenu_SetWidth(purgeDrop, 170)
+    end
+    if purgeTest and purgeDrop then
+        purgeTest:ClearAllPoints()
+        purgeTest:SetPoint("LEFT", purgeDrop, "RIGHT", 6, -4)
+    end
 end
 -- Right panel: text modes start under power bar height
     if hpModeLabel then
@@ -5157,6 +5261,17 @@ local function MSUF_SyncBarsTabToggles()
         if t < 0 then t = 0 elseif t > 6 then t = 6 end
         MSUF_SetLabeledSliderValue(barOutlineThicknessSlider, t)
         MSUF_SetLabeledSliderEnabled(barOutlineThicknessSlider, true)
+    end
+    -- Highlight border thickness (1..6) for aggro/dispel/purge overlay.
+    if highlightBorderThicknessSlider then
+        local ht = tonumber(g.highlightBorderThickness)
+        if type(ht) ~= "number" then ht = 2 end
+        ht = math.floor(ht + 0.5)
+        if ht < 1 then ht = 1 elseif ht > 6 then ht = 6 end
+        MSUF_SetLabeledSliderValue(highlightBorderThicknessSlider, ht)
+        MSUF_SetLabeledSliderEnabled(highlightBorderThicknessSlider, true)
+    end
+    do
         local g = (MSUF_DB and MSUF_DB.general) or {}
         local mode = g.aggroOutlineMode or 0
         local dd = _G["MSUF_AggroOutlineDropdown"]
@@ -5174,6 +5289,15 @@ if dispelDrop then
 	UIDropDownMenu_SetText(dispelDrop, TR("Dispel border off"))
 	if (g.dispelOutlineMode or 0) == 1 then
 		UIDropDownMenu_SetText(dispelDrop, TR("Dispel border on"))
+	end
+end
+
+-- Purge border dropdown
+local purgeDrop = _G["MSUF_PurgeOutlineDropdown"]
+if purgeDrop then
+	UIDropDownMenu_SetText(purgeDrop, TR("Purge border off"))
+	if (g.purgeOutlineMode or 0) == 1 then
+		UIDropDownMenu_SetText(purgeDrop, TR("Purge border on"))
 	end
 end
 
@@ -5427,6 +5551,9 @@ panel.barTextureDrop             = barTextureDrop
     panel.aggroTestCheck            = aggroTestCheck
 	panel.dispelOutlineDrop         = dispelOutlineDrop
 	panel.dispelTestCheck           = dispelTestCheck
+	panel.purgeOutlineDrop          = purgeOutlineDrop
+	panel.purgeTestCheck            = purgeTestCheck
+	panel.highlightBorderThicknessSlider = highlightBorderThicknessSlider
 panel.fontSizeSlider     = fontSizeSlider
 panel.updateThrottleSlider = updateThrottleSlider
 panel.powerBarHeightSlider = powerBarHeightSlider
@@ -5465,6 +5592,7 @@ panel.infoTooltipDisableCheck = infoTooltipDisableCheck
         barOutlineThicknessSlider = self.barOutlineThicknessSlider
 	        local aggroOutlineDrop = self.aggroOutlineDrop
 			local dispelOutlineDrop = self.dispelOutlineDrop
+			local purgeOutlineDrop = self.purgeOutlineDrop
         bossSpacingSlider = self.bossSpacingSlider
 	        if aggroOutlineDrop and aggroOutlineDrop._msufAggroOutlineOptions and aggroOutlineDrop._msufAggroOutlineGet then
 	            MSUF_SyncSimpleDropdown(aggroOutlineDrop, aggroOutlineDrop._msufAggroOutlineOptions, aggroOutlineDrop._msufAggroOutlineGet)
@@ -5473,6 +5601,10 @@ panel.infoTooltipDisableCheck = infoTooltipDisableCheck
 			if dispelOutlineDrop and dispelOutlineDrop._msufDispelOutlineOptions and dispelOutlineDrop._msufDispelOutlineGet then
 				MSUF_SyncSimpleDropdown(dispelOutlineDrop, dispelOutlineDrop._msufDispelOutlineOptions, dispelOutlineDrop._msufDispelOutlineGet)
 				if self.dispelTestCheck then self.dispelTestCheck:SetChecked((_G and _G.MSUF_DispelBorderTestMode) and true or false) end
+			end
+			if purgeOutlineDrop and purgeOutlineDrop._msufPurgeOutlineOptions and purgeOutlineDrop._msufPurgeOutlineGet then
+				MSUF_SyncSimpleDropdown(purgeOutlineDrop, purgeOutlineDrop._msufPurgeOutlineOptions, purgeOutlineDrop._msufPurgeOutlineGet)
+				if self.purgeTestCheck then self.purgeTestCheck:SetChecked((_G and _G.MSUF_PurgeBorderTestMode) and true or false) end
 			end
         if anchorEdit then anchorEdit:SetText(g.anchorName or "UIParent") end
         if anchorCheck then
@@ -5588,11 +5720,17 @@ end
             if type(_G.MSUF_SetDispelBorderTestMode) == "function" then
                 _G.MSUF_SetDispelBorderTestMode(false)
             end
+            if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
+                _G.MSUF_SetPurgeBorderTestMode(false)
+            end
             if panel.aggroTestCheck then
                 panel.aggroTestCheck:SetChecked(false)
             end
 			if panel.dispelTestCheck then
 				panel.dispelTestCheck:SetChecked(false)
+			end
+			if panel.purgeTestCheck then
+				panel.purgeTestCheck:SetChecked(false)
 			end
         end)
     end

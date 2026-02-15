@@ -730,7 +730,7 @@ local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
         predBar:SetReverseFill(rev and true or false)
     end
 
-    -- Incoming heals (self only) â€“ pass-through to StatusBar API.
+    -- Incoming heals (self only)  pass-through to StatusBar API.
     local inc = _MSUF_GetIncomingSelfHeals(unit)
     if type(inc) ~= "number" then
         inc = 0
@@ -1598,7 +1598,7 @@ _G.MSUF_FONT_COLORS = _G.MSUF_FONT_COLORS or MSUF_FONT_COLORS
 MSUF_GetNPCReactionColor = function(kind)
     local defaultR, defaultG, defaultB
     if kind == "friendly" then
-        defaultR, defaultG, defaultB = 0, 1, 0           -- grÃ¼n
+        defaultR, defaultG, defaultB = 0, 1, 0           -- grÃƒÂ¼n
     elseif kind == "neutral" then
         defaultR, defaultG, defaultB = 1, 1, 0           -- gelb
     elseif kind == "enemy" then
@@ -1915,7 +1915,7 @@ local function MSUF_GetFontFlags()
     elseif g.boldText then
          return "THICKOUTLINE"  -- fetter schwarzer Rand
     else
-         return "OUTLINE"       -- normaler dÃ¼nner Rand
+         return "OUTLINE"       -- normaler dÃƒÂ¼nner Rand
     end
  end
 function ns.MSUF_GetGlobalFontSettings()
@@ -2849,7 +2849,7 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
     end
         g.castbarPlayerPreviewEnabled = not (g.castbarPlayerPreviewEnabled and true or false)
         if g.castbarPlayerPreviewEnabled then
-            print("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r â€“ drag player/target/focus castbars with the mouse.")
+            print("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r  drag player/target/focus castbars with the mouse.")
         else
             print("|cffffd700MSUF:|r Castbar Edit Mode |cffff0000OFF|r.")
     end
@@ -5786,6 +5786,8 @@ MSUF_ApplyRareVisuals = function(self)
     -- Dispel border (Bars menu): light-blue outline when the player can dispel something on the unit.
     -- Kept event-driven (UNIT_AURA) via self._msufDispelOutlineOn to avoid any aura scanning in hot paths.
     -- User request: Dispel highlight has PRIORITY over Aggro highlight.
+    -- NOTE: Purge border is handled by sentinel frames (see UpdatePurgeSentinels) which use
+    -- SetAlpha with secret values directly — no boolean tracking needed in render path.
     local dispel = false
     do
         local dispelMode = g and g.dispelOutlineMode or 0
@@ -5799,11 +5801,7 @@ MSUF_ApplyRareVisuals = function(self)
         end
     end
 
-    -- If the user disabled outlines, we still show an outline while threat/dispel is active.
-    -- If outlines are enabled but thin, force a visible minimum while active.
-    -- User-requested: allow the minimum to be as low as 1px (no forced 4px).
-    if (threat or dispel) and thickness < 1 then thickness = 1 end
-
+    -- ── Normal outline (always black, user-configured thickness) ──
     local o = self._msufBarOutline
     if thickness <= 0 then
         if o then
@@ -5812,8 +5810,7 @@ MSUF_ApplyRareVisuals = function(self)
         self._msufBarOutlineThickness = 0
         self._msufBarOutlineEdgeSize = 0
         self._msufBarOutlineBottomIsPower = false
-         return
-    end
+    else
     if not o then
         o = {}
         self._msufBarOutline = o
@@ -5840,34 +5837,12 @@ MSUF_ApplyRareVisuals = function(self)
     local f = o.frame
     local snap = _G.MSUF_Snap
     local edge = (type(snap) == "function") and snap(f, thickness) or thickness
-    -- 2 = Dispel, 1 = Aggro, 0 = normal (Dispel has priority)
-    local colorKey = (dispel and 2) or (threat and 1) or 0
 
     if o._msufLastEdgeSize ~= edge then
         f:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
-        -- Keep the border color consistent when thickness changes (prevents black overwrite in testmode / state flips).
-        if colorKey == 1 then
-            f:SetBackdropBorderColor(aggroR, aggroG, aggroB, 1)
-        elseif colorKey == 2 then
-            f:SetBackdropBorderColor(dispelR, dispelG, dispelB, 1)
-        else
-            f:SetBackdropBorderColor(0, 0, 0, 1)
-        end
-        o._msufLastBorderColorKey = colorKey
+        f:SetBackdropBorderColor(0, 0, 0, 1)
         o._msufLastEdgeSize = edge
         self._msufBarOutlineEdgeSize = -1
-    end
-
-    -- Apply state recolor (same outline border). Only flips on state change.
-    if o._msufLastBorderColorKey ~= colorKey then
-        if colorKey == 1 then
-            f:SetBackdropBorderColor(aggroR, aggroG, aggroB, 1)
-        elseif colorKey == 2 then
-            f:SetBackdropBorderColor(dispelR, dispelG, dispelB, 1)
-        else
-            f:SetBackdropBorderColor(0, 0, 0, 1)
-        end
-        o._msufLastBorderColorKey = colorKey
     end
 
     if (self._msufBarOutlineThickness ~= thickness) or (self._msufBarOutlineEdgeSize ~= edge) or (self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false)) then
@@ -5883,6 +5858,75 @@ MSUF_ApplyRareVisuals = function(self)
         self._msufBarOutlineBottomIsPower = bottomIsPower and true or false
     end
     f:Show()
+    end -- outline block
+
+    -- ── Highlight overlay (aggro/dispel) — independent frame + thickness ──
+    -- Sits on top of the normal outline with its own user-configurable thickness.
+    -- Purge border is handled separately by sentinel frames (secret-safe).
+    -- 2 = Dispel, 1 = Aggro, 0 = none (Dispel > Aggro priority)
+    local hlKey = (dispel and 2) or (threat and 1) or 0
+    local hlFrame = self._msufHighlightOutline
+
+    if hlKey == 0 then
+        if hlFrame then hlFrame:Hide() end
+        self._msufHighlightColorKey = 0
+    else
+        local hlThickness = (g and g.highlightBorderThickness) or 2
+        hlThickness = tonumber(hlThickness) or 2
+        if hlThickness < 1 then hlThickness = 1 end
+
+        if not hlFrame then
+            local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
+            hlFrame = F.CreateFrame("Frame", nil, self, template)
+            hlFrame:EnableMouse(false)
+            hlFrame:SetFrameStrata(self:GetFrameStrata())
+            local baseLevel = self:GetFrameLevel() + 3
+            if self.hpBar and self.hpBar.GetFrameLevel then
+                baseLevel = self.hpBar:GetFrameLevel() + 3
+            end
+            hlFrame:SetFrameLevel(baseLevel)
+            self._msufHighlightOutline = hlFrame
+            self._msufHighlightEdgeSize = -1
+            self._msufHighlightColorKey = -1
+            self._msufHighlightBottomIsPower = nil
+        end
+
+        local hb = self.hpBar
+        local pb = self.targetPowerBar
+        local pbWanted = (pb ~= nil) and (self._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
+        local bottomBar = pbWanted and pb or hb
+        local bottomIsPower = pbWanted and true or false
+        local snap = _G.MSUF_Snap
+        local hlEdge = (type(snap) == "function") and snap(hlFrame, hlThickness) or hlThickness
+
+        if self._msufHighlightEdgeSize ~= hlEdge then
+            hlFrame:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = hlEdge })
+            self._msufHighlightEdgeSize = hlEdge
+            self._msufHighlightColorKey = -1  -- force recolor
+        end
+
+        if self._msufHighlightColorKey ~= hlKey then
+            if hlKey == 1 then
+                hlFrame:SetBackdropBorderColor(aggroR, aggroG, aggroB, 1)
+            elseif hlKey == 2 then
+                hlFrame:SetBackdropBorderColor(dispelR, dispelG, dispelB, 1)
+            end
+            self._msufHighlightColorKey = hlKey
+        end
+
+        if self._msufHighlightBottomIsPower ~= bottomIsPower then
+            hlFrame:ClearAllPoints()
+            if hb then
+                hlFrame:SetPoint("TOPLEFT", hb, "TOPLEFT", -hlEdge, hlEdge)
+            end
+            if bottomBar then
+                hlFrame:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", hlEdge, -hlEdge)
+            end
+            self._msufHighlightBottomIsPower = bottomIsPower
+        end
+
+        hlFrame:Show()
+    end
  end
 _G.MSUF_RefreshRareBarVisuals = MSUF_ApplyRareVisuals
 
@@ -5912,6 +5956,10 @@ _G.MSUF_ApplyBarOutlineThickness_All = _G.MSUF_ApplyBarOutlineThickness_All or f
         uf._msufBarBorderStamp = stamp
         uf._msufBarOutlineThickness = thickness
         uf._msufBarOutlineEdgeSize = -1
+
+        -- Force highlight overlay to re-read its thickness too.
+        uf._msufHighlightEdgeSize = -1
+        uf._msufHighlightBottomIsPower = nil
 
         -- Bottom-is-power impacts the outline rect; keep it consistent.
         local pb = uf.targetPowerBar
@@ -5956,6 +6004,77 @@ _G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(ac
     if tt and tt.unit == "targettarget" then fn(tt) end
 end
 
+-- Options-only: Test mode to force the purge border on while the Settings panel is open.
+_G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(active)
+    _G.MSUF_PurgeBorderTestMode = active and true or false
+    local frames = _G.MSUF_UnitFrames
+    if not frames then return end
+
+    local units = { "target", "focus", "targettarget" }
+    for _, u in ipairs(units) do
+        local uf = frames[u]
+        if uf and uf.unit == u then
+            if active then
+                -- Show one sentinel at full alpha for test preview
+                local pool = uf._msufPurgeSentinels
+                if not pool then
+                    pool = {}
+                    uf._msufPurgeSentinels = pool
+                end
+                if #pool < 1 then
+                    local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
+                    local s = CreateFrame("Frame", nil, uf, template)
+                    s:EnableMouse(false)
+                    s:SetFrameStrata(uf:GetFrameStrata())
+                    local baseLevel = uf:GetFrameLevel() + 3
+                    if uf.hpBar and uf.hpBar.GetFrameLevel then
+                        baseLevel = uf.hpBar:GetFrameLevel() + 3
+                    end
+                    s:SetFrameLevel(baseLevel)
+                    s._msufEdge = -1
+                    pool[1] = s
+                end
+                local s = pool[1]
+                local g = MSUF_DB and MSUF_DB.general
+                local hlThickness = (g and g.highlightBorderThickness) or 2
+                hlThickness = tonumber(hlThickness) or 2
+                if hlThickness < 1 then hlThickness = 1 end
+                local snap = _G.MSUF_Snap
+                local edge = (type(snap) == "function") and snap(s, hlThickness) or hlThickness
+                s:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
+                local pr, pg, pb = 1.00, 0.85, 0.00
+                if g then
+                    local r = g.purgeBorderColorR
+                    local gg = g.purgeBorderColorG
+                    local b = g.purgeBorderColorB
+                    if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+                        pr, pg, pb = r, gg, b
+                    end
+                end
+                s:SetBackdropBorderColor(pr, pg, pb, 1)
+                s:ClearAllPoints()
+                local hb = uf.hpBar
+                local pb2 = uf.targetPowerBar
+                local pbWanted = (pb2 ~= nil) and (uf._msufPowerBarReserved or (pb2.IsShown and pb2:IsShown()))
+                local bottomBar = pbWanted and pb2 or hb
+                if hb then s:SetPoint("TOPLEFT", hb, "TOPLEFT", -edge, edge) end
+                if bottomBar then s:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", edge, -edge) end
+                s._msufEdge = edge
+                s:Show()
+                s:SetAlpha(1)
+                -- Hide excess
+                for i = 2, #pool do pool[i]:SetAlpha(0) end
+            else
+                -- Hide all sentinels
+                local pool = uf._msufPurgeSentinels
+                if pool then
+                    for i = 1, #pool do pool[i]:SetAlpha(0) end
+                end
+            end
+        end
+    end
+end
+
 
 -- Aggro outline event driver (event-only, no OnUpdate)
 do
@@ -5988,8 +6107,12 @@ do
 end
 
 
--- Dispel border event driver: refresh the rare outline when dispellable debuffs appear/disappear.
--- Uses GetAuraSlots(..., "HARMFUL|RAID_PLAYER_DISPELLABLE", 1) so it's O(1) and very cheap.
+-- Dispel / Purge border event driver: refresh the rare outline when dispellable debuffs
+-- or purgeable buffs appear/disappear.
+-- Dispel: HARMFUL|RAID_PLAYER_DISPELLABLE (O(1) filter, covers defensive cleanse).
+-- Purge:  scans HELPFUL auras for isStealable (RAID_PLAYER_DISPELLABLE doesn't cover
+--         Spellsteal / offensive purge in all patches).  Event-driven only, no OnUpdate.
+-- Dispel (friendly debuffs) and Purge (enemy buffs) tracked independently.
 do
     local f = F.CreateFrame("Frame")
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -6000,16 +6123,141 @@ do
         f:RegisterEvent("UNIT_AURA")
     end
 
-    local function HasDispellable(unit)
+    local function HasDispellableDebuff(unit)
         local getSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
         if type(getSlots) ~= "function" then return false end
-
-        -- Friendly: dispellable debuffs; Enemy: purgeable buffs. Check both lists (each is O(1) due to maxSlots=1).
-        local slot1 = select(2, getSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1, nil))
-        if slot1 ~= nil then return true end
-
-        slot1 = select(2, getSlots(unit, "HELPFUL|RAID_PLAYER_DISPELLABLE", 1, nil))
+        local _, slot1 = getSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1, nil)
         return slot1 ~= nil
+    end
+
+    -- Purge/Spellsteal detection (combat-safe for 12.0).
+    -- Secret booleans can't be compared or branched on, but visual APIs (SetAlpha,
+    -- SetBackdropBorderColor) accept secret values directly.  We use "sentinel frames"
+    -- — one per HELPFUL aura slot, all positioned identically over the unit frame border.
+    -- Each sentinel's alpha is set from isStealable via EvaluateColorFromBoolean.
+    -- The returned color has SECRET RGBA — we pass color.a straight to SetAlpha()
+    -- (a visual API) so we never compare the secret value.  If ANY sentinel has
+    -- alpha=1, the purge border is visually rendered (frame compositing = OR logic).
+    local _colorTrue  = CreateColor and CreateColor(1, 1, 1, 1)
+    local _colorFalse = CreateColor and CreateColor(0, 0, 0, 0)
+    local _evalBool   = C_CurveUtil and C_CurveUtil.EvaluateColorFromBoolean
+    local _getSlots   = C_UnitAuras and C_UnitAuras.GetAuraSlots
+    local _getBySlot  = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
+    local _bdTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local _bdTable    = { edgeFile = MSUF_TEX_WHITE8, edgeSize = 0 }
+
+    -- Cached purge color — refreshed once per UpdatePurgeSentinels call.
+    local _purgeR, _purgeG, _purgeB = 1.00, 0.85, 0.00
+    local function _RefreshPurgeColor()
+        local g = MSUF_DB and MSUF_DB.general
+        if not g then return end
+        local r, gg, b = g.purgeBorderColorR, g.purgeBorderColorG, g.purgeBorderColorB
+        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+            _purgeR, _purgeG, _purgeB = r, gg, b
+        end
+    end
+
+    local function _EnsureSentinel(uf, idx)
+        local pool = uf._msufPurgeSentinels
+        if not pool then
+            pool = {}
+            uf._msufPurgeSentinels = pool
+        end
+        local s = pool[idx]
+        if s then return s end
+        s = F.CreateFrame("Frame", nil, uf, _bdTemplate)
+        s:EnableMouse(false)
+        s:SetFrameStrata(uf:GetFrameStrata())
+        local baseLevel = uf:GetFrameLevel() + 3
+        if uf.hpBar and uf.hpBar.GetFrameLevel then
+            baseLevel = uf.hpBar:GetFrameLevel() + 3
+        end
+        s:SetFrameLevel(baseLevel)
+        s:SetAlpha(0)
+        s._msufEdge = -1
+        pool[idx] = s
+        return s
+    end
+
+    local function _LayoutSentinel(s, uf, edge)
+        if s._msufEdge == edge then return end
+        _bdTable.edgeSize = edge
+        s:SetBackdrop(_bdTable)
+        s:SetBackdropBorderColor(_purgeR, _purgeG, _purgeB, 1)
+        s:ClearAllPoints()
+        local hb = uf.hpBar
+        local pb = uf.targetPowerBar
+        local pbWanted = (pb ~= nil) and (uf._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
+        local bottomBar = pbWanted and pb or hb
+        if hb then s:SetPoint("TOPLEFT", hb, "TOPLEFT", -edge, edge) end
+        if bottomBar then s:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", edge, -edge) end
+        s._msufEdge = edge
+        s:Show()
+    end
+
+    -- Single-pass: scan HELPFUL slots and set sentinel alphas inline.
+    -- No intermediate allSlots table — process each batch directly.
+    local _purgeScratch = {}
+    local function UpdatePurgeSentinels(uf, unit)
+        if type(_getSlots) ~= "function" or type(_getBySlot) ~= "function" then return false end
+
+        _RefreshPurgeColor()
+
+        local g = MSUF_DB and MSUF_DB.general
+        local hlThickness = (g and g.highlightBorderThickness) or 2
+        hlThickness = tonumber(hlThickness) or 2
+        if hlThickness < 1 then hlThickness = 1 end
+        local snap = _G.MSUF_Snap
+
+        local sentIdx = 0
+        local cont = nil
+        repeat
+            local t = _purgeScratch
+            t[1], t[2], t[3], t[4], t[5], t[6], t[7], t[8], t[9], t[10],
+            t[11], t[12], t[13], t[14], t[15], t[16], t[17], t[18], t[19], t[20], t[21]
+                = _getSlots(unit, "HELPFUL", 20, cont)
+            cont = t[1]
+            for i = 2, 21 do
+                local slot = t[i]
+                if not slot then break end
+                sentIdx = sentIdx + 1
+                local s = _EnsureSentinel(uf, sentIdx)
+                local edge = (type(snap) == "function") and snap(s, hlThickness) or hlThickness
+                _LayoutSentinel(s, uf, edge)
+                local data = _getBySlot(unit, slot)
+                if data then
+                    local stealable = data.isStealable
+                    if _evalBool and _colorTrue then
+                        local color = _evalBool(stealable, _colorTrue, _colorFalse)
+                        if color then
+                            s:SetAlpha(color.a)
+                        else
+                            s:SetAlpha(0)
+                        end
+                    else
+                        s:SetAlpha((stealable == true) and 1 or 0)
+                    end
+                else
+                    s:SetAlpha(0)
+                end
+            end
+        until not cont
+        -- Hide excess sentinels from previous scan
+        local pool = uf._msufPurgeSentinels
+        if pool then
+            for idx = sentIdx + 1, #pool do
+                pool[idx]:SetAlpha(0)
+            end
+        end
+        return true
+    end
+
+    local function HideAllPurgeSentinels(uf)
+        local pool = uf._msufPurgeSentinels
+        if not pool then return end
+        for i = 1, #pool do
+            pool[i]:SetAlpha(0)
+        end
     end
 
     local function UpdateUnit(unit, forceRefresh)
@@ -6017,15 +6265,32 @@ do
         if not uf or uf.unit ~= unit then return end
 
         local g = MSUF_DB and MSUF_DB.general
-        local enabled = (g and g.dispelOutlineMode == 1)
+        local dispelEnabled = (g and g.dispelOutlineMode == 1)
+        local purgeEnabled  = (g and g.purgeOutlineMode  == 1)
 
-        local on = false
-        if enabled then
-            on = HasDispellable(unit)
+        local dispelOn = false
+        -- Dispel = remove debuffs from allies; Purge = steal/remove buffs from enemies.
+        -- UnitCanAssist/UnitCanAttack handle duels and PvP correctly (UnitIsFriend
+        -- returns true for same-faction duel opponents, which breaks purge detection).
+        local canAssist = UnitCanAssist and UnitCanAssist("player", unit)
+        local canAttack = UnitCanAttack and UnitCanAttack("player", unit)
+        if dispelEnabled and canAssist then dispelOn = HasDispellableDebuff(unit) end
+
+        -- Purge: sentinel frames handle rendering via SetAlpha with secret values.
+        -- No boolean tracking needed — sentinels are the border.
+        if purgeEnabled and canAttack and unit ~= "player" then
+            UpdatePurgeSentinels(uf, unit)
+        else
+            HideAllPurgeSentinels(uf)
         end
 
-        if forceRefresh or uf._msufDispelOutlineOn ~= on then
-            uf._msufDispelOutlineOn = on
+        local changed = false
+        if forceRefresh or uf._msufDispelOutlineOn ~= dispelOn then
+            uf._msufDispelOutlineOn = dispelOn
+            changed = true
+        end
+
+        if changed then
             if type(_G.MSUF_RefreshRareBarVisuals) == "function" then
                 _G.MSUF_RefreshRareBarVisuals(uf)
             end
@@ -6043,7 +6308,7 @@ do
         if event == "UNIT_AURA" then
             if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
             local g = MSUF_DB and MSUF_DB.general
-            if not (g and g.dispelOutlineMode == 1) then return end
+            if not (g and (g.dispelOutlineMode == 1 or g.purgeOutlineMode == 1)) then return end
             UpdateUnit(unit, false)
             return
         end
@@ -7212,7 +7477,7 @@ local function CreateSimpleUnitFrame(unit)
     end
         -- Classification indicator text (Target only)
         -- Rendered as TEXT at runtime (reliable even without Media assets).
-        -- IMPORTANT: don't call :SetText() here â€” font may not be applied yet during frame creation.
+        -- IMPORTANT: don't call :SetText() here Ã¢â‚¬â€ font may not be applied yet during frame creation.
         if unit == "target" and textFrame and textFrame.CreateFontString then
             if not f.classificationIndicatorText then
                 -- Use a known-good template so the FontString has a font object immediately.
