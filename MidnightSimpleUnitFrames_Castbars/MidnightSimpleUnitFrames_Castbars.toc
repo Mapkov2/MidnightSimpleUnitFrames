@@ -2,7 +2,7 @@
 ## Title: Midnight Simple UnitFrames - Castbars
 ## Notes: Castbar LoD for MSUF
 ## Author: Mapko 
-## Version: 2.0 Beta 7
+## Version: 2.0 Beta 8
 ## Category: Combat
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1
