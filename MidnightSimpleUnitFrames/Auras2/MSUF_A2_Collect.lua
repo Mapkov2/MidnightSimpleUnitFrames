@@ -141,6 +141,9 @@ local FILTER_HELPFUL         = "HELPFUL"
 local FILTER_HARMFUL         = "HARMFUL"
 local FILTER_HELPFUL_PLAYER  = "HELPFUL|PLAYER"
 local FILTER_HARMFUL_PLAYER  = "HARMFUL|PLAYER"
+-- IMPORTANT is evaluated like Unhalted/oUF: include the aura type in the filter string.
+local FILTER_HELPFUL_IMPORTANT = "HELPFUL|IMPORTANT"
+local FILTER_HARMFUL_IMPORTANT = "HARMFUL|IMPORTANT"
 
 local _pFilterMap = {
     [FILTER_HELPFUL] = FILTER_HELPFUL_PLAYER,
@@ -169,6 +172,37 @@ end
 -- Expose for Events module
 Collect.InvalidateCache = InvalidateCache
 
+-- Scan flags
+-- We only compute expensive per-aura tags (e.g. IMPORTANT) when any frame needs them.
+local _scanImportant = false
+
+function Collect.SetScanFlags(needImportant)
+    needImportant = (needImportant == true)
+    if _scanImportant == needImportant then return end
+    _scanImportant = needImportant
+
+    -- Enabling IMPORTANT should take effect immediately: invalidate unit caches so next render re-tags.
+    if needImportant then
+        local Store = API.Store
+        if Store and type(Store.InvalidateUnit) == "function" then
+            Store.InvalidateUnit("player")
+            Store.InvalidateUnit("target")
+            Store.InvalidateUnit("focus")
+            for i = 1, 5 do
+                Store.InvalidateUnit("boss" .. i)
+            end
+        else
+            -- Fallback: clear result cache only
+            InvalidateCache("player")
+            InvalidateCache("target")
+            InvalidateCache("focus")
+            for i = 1, 5 do
+                InvalidateCache("boss" .. i)
+            end
+        end
+    end
+end
+
 -- --
 -- Core collection function
 --
@@ -177,7 +211,7 @@ Collect.InvalidateCache = InvalidateCache
 -- AND highlightOwnDebuffs are disabled  saves 1 C API call per aura.
 -- --
 
-function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyBoss, out, needPlayerAura)
+function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyBoss, onlyImportant, out, needPlayerAura)
     out = out or {}
     local prevN = out._msufA2_n or 0
 
@@ -207,6 +241,12 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
             out._msufA2_n = 0
             return out, 0
         end
+    end
+
+    -- Ensure IMPORTANT tags are available when requested
+    if onlyImportant and raw._msufImportantEpoch ~= raw.epoch then
+        PreScanUnit(unit, true)
+        raw = Store._rawAuras[unit]
     end
 
     -- PERF: Now filter from cached data (PURE LUA - ZERO C API calls!)
@@ -239,6 +279,14 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
                 dominated = true
             end
 
+            -- Check 2b: IMPORTANT filter (pre-computed when enabled)
+            if not dominated and onlyImportant then
+                -- Unhalted/oUF behavior: IMPORTANT-only mode only accepts confirmed IMPORTANT auras.
+                -- nil (unknown/secret/not-tagged) is treated as NOT important.
+                if data._msufIsImportant ~= true then
+                    dominated = true
+                end
+            end
             -- Check 3: Permanent filter (uses pre-computed doesExpire)
             -- SECRET-SAFE: _msufDoesExpire is nil if secret (set in PreScan)
             if not dominated and checkPermanent then
@@ -276,91 +324,138 @@ end
 -- Scratch table for boss auras during merge (avoids allocation)
 local _bossScratch = {}
 
-function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, out, mergeOut, needPlayerAura)
-    out = (type(out) == "table") and out or {}
-    local prevN = out._msufA2_n or 0
-
-    if not unit or not C_UnitAuras then
-        if prevN > 0 then for i = 1, prevN do out[i] = nil end end
+function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImportant, out, mergeOut, needPlayerAura)
+    if type(unit) ~= "string" then
         out._msufA2_n = 0
         return out, 0
     end
 
-    if not _apisBound then BindAPIs() end
-    if type(_getSlots) ~= "function" or type(_getBySlot) ~= "function" then
-        if prevN > 0 then for i = 1, prevN do out[i] = nil end end
+    maxCount = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
+
+    local Store = API.Store
+    if not Store or not Store._epochs then
         out._msufA2_n = 0
         return out, 0
     end
 
-    local outputCap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
+    local epoch = Store._epochs[unit] or 0
+    local raw = Store._rawAuras[unit]
 
-    -- Single GetAuraSlots call (request full 40)
-    local nSlots = CaptureSlots(_scratch, select(2, _getSlots(unit, filter, 40, nil)))
+    -- Ensure we have fresh raw data for this unit.
+    if not raw or raw.epoch ~= epoch then
+        PreScanUnit(unit, (onlyImportant == true))
+        epoch = Store._epochs[unit] or 0
+        raw = Store._rawAuras[unit]
+    end
 
-    -- Hoist expensive state
-    local canFilter = (type(_isFiltered) == "function")
-    -- Need secrets for both hidePermanent and IsBossAura
-    local secretsNow = SecretsActive()
-    local playerFilter = canFilter and PlayerFilter(filter) or nil
-    local wantPlayerAura = (needPlayerAura ~= false)
+    if not raw then
+        out._msufA2_n = 0
+        return out, 0
+    end
 
-    -- Single pass: classify each aura into player or boss bucket
-    local playerN = 0
-    local bossN = 0
+    -- Ensure IMPORTANT tags exist when requested.
+    if onlyImportant and raw._msufImportantEpoch ~= raw.epoch then
+        PreScanUnit(unit, true)
+        raw = Store._rawAuras[unit]
+        if not raw then
+            out._msufA2_n = 0
+            return out, 0
+        end
+    end
 
-    for i = 1, nSlots do
-        local data = _getBySlot(unit, _scratch[i])
-        if type(data) == "table" then
-            local aid = data.auraInstanceID
-            if aid ~= nil then
-                -- hidePermanent filter (applied to all auras)
-                local dominated = hidePermanent and IsPermanentAura(unit, aid, secretsNow)
-                if not dominated then
-                    -- Classify: is this the player's own aura?
-                    local isPlayer = false
-                    if canFilter and playerFilter then
-                        -- _isFiltered returns true if aura does NOT match the filter
-                        -- So "not filtered by PLAYER filter" = IS the player's aura
-                        isPlayer = not _isFiltered(unit, aid, playerFilter)
-                    end
+    local isHelpful = (filter == FILTER_HELPFUL) or (filter == FILTER_HELPFUL_PLAYER)
+    local source = isHelpful and raw.helpful or raw.harmful
+    local sourceN = isHelpful and raw.helpfulN or raw.harmfulN
 
-                    data._msufAuraInstanceID = aid
-                    data._msufIsPlayerAura = wantPlayerAura and isPlayer or false
+    local playerScratch = _playerScratch
+    local bossScratch = _bossScratch
+    local mergedScratch = _mergedScratch
 
-                    if isPlayer then
-                        -- Player's own aura: primary bucket
-                        if playerN < outputCap then
-                            playerN = playerN + 1
-                            out[playerN] = data
-                        end
-                    elseif IsBossAura(data, secretsNow) then
-                        -- Not player's, but is a boss aura: secondary bucket
-                        bossN = bossN + 1
-                        _bossScratch[bossN] = data
-                    end
-                    -- Non-player, non-boss auras: dropped (merge semantics)
+    local nPlayer, nBoss, nMerged = 0, 0, 0
+
+    local checkPermanent = (hidePermanent == true)
+    local checkImportant = (onlyImportant == true)
+    local wantPlayer = (needPlayerAura == true)
+
+    for i = 1, (sourceN or 0) do
+        local data = source[i]
+        if data ~= nil then
+            local dominated = false
+
+            if checkPermanent and data._msufDoesExpire == false then
+                dominated = true
+            end
+
+            if not dominated and checkImportant then
+                if data._msufIsImportant ~= true then
+                    dominated = true
+                end
+            end
+
+            if not dominated then
+                if wantPlayer and data._msufIsPlayerAura == true then
+                    nPlayer = nPlayer + 1
+                    playerScratch[nPlayer] = data
+                elseif data.isBossAura then
+                    nBoss = nBoss + 1
+                    bossScratch[nBoss] = data
+                else
+                    nMerged = nMerged + 1
+                    mergedScratch[nMerged] = data
+                end
+
+                if (nPlayer + nBoss + nMerged) >= maxCount then
+                    break
                 end
             end
         end
     end
 
-    -- Append boss auras after player auras (up to cap)
-    local n = playerN
-    for i = 1, bossN do
-        if n >= outputCap then break end
+    local n = 0
+
+    for i = 1, nPlayer do
         n = n + 1
-        out[n] = _bossScratch[i]
+        out[n] = playerScratch[i]
+        playerScratch[i] = nil
+        if n >= maxCount then break end
     end
 
-    -- Clear boss scratch (avoid stale references)
-    for i = 1, bossN do _bossScratch[i] = nil end
-
-    -- Stale-tail clear
-    if n < prevN then
-        for i = n + 1, prevN do out[i] = nil end
+    if n < maxCount then
+        for i = 1, nBoss do
+            n = n + 1
+            out[n] = bossScratch[i]
+            bossScratch[i] = nil
+            if n >= maxCount then break end
+        end
+    else
+        for i = 1, nBoss do
+            bossScratch[i] = nil
+        end
     end
+
+    if n < maxCount then
+        for i = 1, nMerged do
+            n = n + 1
+            out[n] = mergedScratch[i]
+            mergedScratch[i] = nil
+            if n >= maxCount then break end
+        end
+    else
+        for i = 1, nMerged do
+            mergedScratch[i] = nil
+        end
+    end
+
     out._msufA2_n = n
+
+    local lastN = out._msufA2_lastN or 0
+    if lastN > n then
+        for i = n + 1, lastN do
+            out[i] = nil
+        end
+    end
+    out._msufA2_lastN = n
+
     return out, n
 end
 
@@ -444,11 +539,12 @@ end
 
 -- Pre-scan all auras for a unit (called from UNIT_AURA)
 -- Caches: aura data + isPlayerAura + doesExpire + duration + stacks (ZERO C calls in render!)
-local function PreScanUnit(unit)
+PreScanUnit = function(unit, forceImportant)
     if not _apisBound then BindAPIs() end
     if not _getSlots or not _getBySlot then return end
     
     local raw = Store._rawAuras[unit]
+    local doImportant = (_scanImportant == true) or (forceImportant == true)
     if not raw then
         raw = { helpful = {}, harmful = {}, epoch = 0 }
         Store._rawAuras[unit] = raw
@@ -461,6 +557,11 @@ local function PreScanUnit(unit)
     local canExpire = _doesExpire
     local getDuration = _getDuration
     local getStackCount = _getStackCount
+
+    -- IMPORTANT tagging (Unhalted/oUF style): use IsAuraFilteredOutByInstanceID(unit, auraInstanceID, "IMPORTANT")
+    -- We only compute this when any frame actually needs it (scan flag) or when forced by a one-off request.
+    local doTagImportant = (doImportant == true and canFilter) and true or false
+    local isSecret = issecretvalue
     
     -- PERF: Use configured limits instead of hardcoded 40
     local maxH = _maxHelpfulScan
@@ -481,6 +582,16 @@ local function PreScanUnit(unit)
                 data._msufIsPlayerAura = not filtered
             else
                 data._msufIsPlayerAura = false
+            end
+
+            -- PERF/Correctness: Tag IMPORTANT only when requested.
+            if doTagImportant then
+                local v = canFilter(unit, aid, FILTER_HELPFUL_IMPORTANT)
+                if v ~= nil and isSecret and isSecret(v) then
+                    data._msufIsImportant = nil
+                else
+                    data._msufIsImportant = not v
+                end
             end
             -- PERF: Pre-compute doesExpire (SECRET-SAFE: store nil if secret)
             if canExpire then
@@ -523,6 +634,16 @@ local function PreScanUnit(unit)
             else
                 data._msufIsPlayerAura = false
             end
+
+            -- PERF/Correctness: Tag IMPORTANT only when requested.
+            if doTagImportant then
+                local v = canFilter(unit, aid, FILTER_HARMFUL_IMPORTANT)
+                if v ~= nil and isSecret and isSecret(v) then
+                    data._msufIsImportant = nil
+                else
+                    data._msufIsImportant = not v
+                end
+            end
             -- PERF: Pre-compute doesExpire (SECRET-SAFE: store nil if secret)
             if canExpire then
                 local v = canExpire(unit, aid)
@@ -546,6 +667,14 @@ local function PreScanUnit(unit)
     end
     for i = dCount + 1, #harmful do harmful[i] = nil end
     raw.harmfulN = dCount
+
+    -- Mark IMPORTANT epoch only when we actually computed IMPORTANT tags.
+    -- This prevents GetAuras() from assuming tags exist when scan flags are off.
+    if doTagImportant then
+        raw._msufImportantEpoch = raw.epoch
+    else
+        raw._msufImportantEpoch = nil
+    end
 end
 
 function Store.OnUnitAura(unit, updateInfo)

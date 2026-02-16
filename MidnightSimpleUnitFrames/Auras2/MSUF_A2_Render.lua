@@ -825,6 +825,32 @@ local function RenderUnit(entry)
             end
             Collect.SetScanLimits(maxB, maxD)
         end
+
+        -- Scan flags (only compute expensive per-aura tags when any frame needs them)
+        if sharedDb and Collect.SetScanFlags then
+            local needImportant = false
+            local function HasImportantToggle(f)
+                if type(f) ~= "table" then return false end
+                if f.onlyImportantAuras == true then return true end -- legacy
+                local b = f.buffs
+                if type(b) == "table" and b.onlyImportant == true then return true end
+                local d = f.debuffs
+                if type(d) == "table" and d.onlyImportant == true then return true end
+                return false
+            end
+            local sf = sharedDb.filters
+            if HasImportantToggle(sf) then
+                needImportant = true
+            elseif a2db and a2db.perUnit then
+                for _, pu in pairs(a2db.perUnit) do
+                    if pu and pu.overrideFilters == true and HasImportantToggle(pu.filters) then
+                        needImportant = true
+                        break
+                    end
+                end
+            end
+            Collect.SetScanFlags(needImportant)
+        end
     end
 
     local unit = entry.unit
@@ -872,24 +898,27 @@ local function RenderUnit(entry)
         cfg.iconSize, cfg.spacing, cfg.perRow, cfg.maxBuffs, cfg.maxDebuffs,
         cfg.growth, cfg.rowWrap, cfg.layoutMode, cfg.stackCountAnchor,
         cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize =
-            ResolveUnitConfig(unit, a2, shared)
-
-        -- Filter flags (8 values)
+            ResolveUnitConfig(unit, a2, shared)        -- Filter flags
         if Filters and Filters.ResolveRuntimeFlags then
-            cfg.tf, cfg.masterOn, cfg.onlyBossAuras, cfg.buffsOnlyMine, cfg.debuffsOnlyMine,
-            cfg.buffsIncludeBoss, cfg.debuffsIncludeBoss, cfg.hidePermanentBuffs =
+            cfg.tf, cfg.masterOn,
+            cfg.onlyBossAuras,
+            cfg.onlyImportantBuffs, cfg.onlyImportantDebuffs,
+            cfg.buffsOnlyMine, cfg.debuffsOnlyMine,
+            cfg.buffsIncludeBoss, cfg.debuffsIncludeBoss,
+            cfg.hidePermanentBuffs =
                 Filters.ResolveRuntimeFlags(a2, shared, unit)
         else
             cfg.tf = nil
             cfg.masterOn = false
             cfg.onlyBossAuras = false
+            cfg.onlyImportantBuffs = false
+            cfg.onlyImportantDebuffs = false
             cfg.buffsOnlyMine = false
             cfg.debuffsOnlyMine = false
             cfg.buffsIncludeBoss = false
             cfg.debuffsIncludeBoss = false
             cfg.hidePermanentBuffs = false
         end
-
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
         cfg.showDebuffs = (shared.showDebuffs == true)
@@ -1039,6 +1068,8 @@ local function RenderUnit(entry)
     local buffsIncludeBoss = cfg.buffsIncludeBoss
     local debuffsIncludeBoss = cfg.debuffsIncludeBoss
     local onlyBossAuras    = cfg.onlyBossAuras
+    local onlyImportantBuffs = cfg.onlyImportantBuffs
+    local onlyImportantDebuffs = cfg.onlyImportantDebuffs
     local hidePermanentBuffs = cfg.hidePermanentBuffs
 
     -- PERF: Local function references eliminate table lookups in hot loops
@@ -1053,9 +1084,9 @@ local function RenderUnit(entry)
     if showDebuffs and not skipDebuffs then
         local list
         if debuffsOnlyMine and debuffsIncludeBoss then
-            list, debuffCount = _GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, entry._debuffList, nil, needPlayerAura)
+            list, debuffCount = _GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, onlyImportantDebuffs, entry._debuffList, nil, needPlayerAura)
         else
-            list, debuffCount = _GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, entry._debuffList, needPlayerAura)
+            list, debuffCount = _GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, onlyImportantDebuffs, entry._debuffList, needPlayerAura)
         end
 
         local container = useSingleRow and entry.mixed or entry.debuffs
@@ -1071,9 +1102,9 @@ local function RenderUnit(entry)
     if showBuffs then
         local list
         if buffsOnlyMine and buffsIncludeBoss then
-            list, buffCount = _GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, entry._buffList, nil, needPlayerAura)
+            list, buffCount = _GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, onlyImportantBuffs, entry._buffList, nil, needPlayerAura)
         else
-            list, buffCount = _GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, entry._buffList, needPlayerAura)
+            list, buffCount = _GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, onlyImportantBuffs, entry._buffList, needPlayerAura)
         end
 
         local container = useSingleRow and entry.mixed or entry.buffs
@@ -1161,7 +1192,7 @@ Flush = function()
         local unit = list[i]
         local entry = AurasByUnit[unit]
 
-        -- Fast path: entry already attached with valid frame  skip FindUnitFrame
+        -- Fast path: entry already attached with valid frame â†’ skip FindUnitFrame
         if entry and entry.frame then
             RenderUnit(entry)
         else

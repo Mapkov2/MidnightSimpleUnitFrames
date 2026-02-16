@@ -1053,10 +1053,12 @@ filters = {
                     enabled = true,
                     hidePermanent = false,
                     onlyBossAuras = false,
+                    onlyImportantAuras = false,
                     buffs = {
                         includeBoss = false,
                         includeStealable = false,
                         onlyMine = false,
+                        onlyImportant = false,
                     },
                     debuffs = {
                         dispelCurse = false,
@@ -1067,6 +1069,7 @@ filters = {
                         includeBoss = false,
                         includeDispellable = false,
                         onlyMine = false,
+                        onlyImportant = false,
                     },
                 },
             },
@@ -1087,10 +1090,12 @@ filters = {
                         enabled = true,
                         hidePermanent = false,
                         onlyBossAuras = false,
+                        onlyImportantAuras = false,
                         buffs = {
                             includeBoss = false,
                             includeStealable = false,
                             onlyMine = false,
+                            onlyImportant = false,
                         },
                         debuffs = {
                             dispelCurse = false,
@@ -1101,6 +1106,7 @@ filters = {
                             includeBoss = false,
                             includeDispellable = false,
                             onlyMine = false,
+                            onlyImportant = false,
                         },
                     },
                 },
@@ -1120,10 +1126,12 @@ filters = {
                         enabled = true,
                         hidePermanent = false,
                         onlyBossAuras = false,
+                        onlyImportantAuras = false,
                         buffs = {
                             includeBoss = false,
                             includeStealable = false,
                             onlyMine = false,
+                            onlyImportant = false,
                         },
                         debuffs = {
                             dispelCurse = false,
@@ -1134,6 +1142,7 @@ filters = {
                             includeBoss = false,
                             includeDispellable = false,
                             onlyMine = false,
+                            onlyImportant = false,
                         },
                     },
                 },
@@ -1158,10 +1167,12 @@ filters = {
                     enabled = true,
                     hidePermanent = false,
                     onlyBossAuras = false,
+                    onlyImportantAuras = false,
                     buffs = {
                         includeBoss = false,
                         includeStealable = false,
                         onlyMine = false,
+                        onlyImportant = false,
                     },
                     debuffs = {
                         dispelCurse = false,
@@ -1172,11 +1183,50 @@ filters = {
                         includeBoss = false,
                         includeDispellable = false,
                         onlyMine = false,
+                        onlyImportant = false,
                     },
                 },
             }
         end
     end
+    -- Auras 2.0: ensure curated IMPORTANT filter keys exist for existing profiles
+    -- IMPORTANT = Blizzard curated "important" aura list for unitframe aura APIs.
+    -- Split toggles: Buffs + Debuffs have their own IMPORTANT toggle (like Unhalted).
+    if MSUF_DB and MSUF_DB.auras2 then
+        local a2 = MSUF_DB.auras2
+        local function EnsureImportantSplit(f)
+            if type(f) ~= "table" then return end
+            f.buffs = (type(f.buffs) == "table") and f.buffs or {}
+            f.debuffs = (type(f.debuffs) == "table") and f.debuffs or {}
+            local b, d = f.buffs, f.debuffs
+
+            -- One-time migration: legacy onlyImportantAuras -> per-type toggles
+            if f._msufA2_onlyImportantSplitMigrated_v1 ~= true then
+                if f.onlyImportantAuras == true then
+                    if b.onlyImportant == nil then b.onlyImportant = true end
+                    if d.onlyImportant == nil then d.onlyImportant = true end
+                    f.onlyImportantAuras = false
+                end
+                f._msufA2_onlyImportantSplitMigrated_v1 = true
+            end
+
+            if f.onlyImportantAuras == nil then f.onlyImportantAuras = false end
+            if b.onlyImportant == nil then b.onlyImportant = false end
+            if d.onlyImportant == nil then d.onlyImportant = false end
+        end
+
+        if a2.shared and a2.shared.filters then
+            EnsureImportantSplit(a2.shared.filters)
+        end
+        if a2.perUnit then
+            for _, pu in pairs(a2.perUnit) do
+                if pu and pu.filters then
+                    EnsureImportantSplit(pu.filters)
+                end
+            end
+        end
+    end
+
 local function fill(key, defaults)
         MSUF_DB[key] = MSUF_DB[key] or {}
         local t = MSUF_DB[key]

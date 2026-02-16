@@ -2274,10 +2274,14 @@ end
                 "Additive: this will NOT hide your normal debuffs.", "cbDispellable" },
             { "Only show boss auras", 380, -58, GetEditingFilters, "onlyBossAuras", nil,
                 "Hard filter: when enabled (and filters are enabled), only auras flagged as boss auras will be shown.", "cbOnlyBoss" },
+            { "Only show IMPORTANT buffs", 380, -86, A2_FilterBuffs, "onlyImportant", nil,
+                "Hard filter: when enabled (and filters are enabled), only buffs in Blizzard\'s curated IMPORTANT list will be shown (e.g. raid mechanics, key defensives, etc.).", "cbOnlyImpBuffs" },
+            { "Only show IMPORTANT debuffs", 380, -114, A2_FilterDebuffs, "onlyImportant", nil,
+                "Hard filter: when enabled (and filters are enabled), only debuffs in Blizzard\'s curated IMPORTANT list will be shown (e.g. raid mechanics, key defensives, etc.).", "cbOnlyImpDebuffs" },
         }, refs)
 -- Track scopes + auto-override wrappers (Auras 2 menu only)
 do
-    local filterKeys = { "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss",
+    local filterKeys = { "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss", "cbOnlyImpBuffs", "cbOnlyImpDebuffs",
         "cbMagic", "cbCurse", "cbDisease", "cbPoison", "cbEnrage" }
     for i = 1, #filterKeys do
         local cb = refs[filterKeys[i]]
@@ -2426,7 +2430,7 @@ end
                 if cb then advGate[#advGate + 1] = cb end
             end
          end
-        Track({ "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss", "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
+        Track({ "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss", "cbOnlyImpBuffs", "cbOnlyImpDebuffs", "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
         -- Advanced gating should also affect the Private Auras master + sliders.
         if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end
         if privateMaxPlayer then advGate[#advGate + 1] = privateMaxPlayer end
