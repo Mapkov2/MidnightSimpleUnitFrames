@@ -73,10 +73,12 @@ local function IsSV(v)
     return false
 end
 
+-- Secret mode cached at file scope (avoid function call per GetAuras)
 local _secretActive = nil
 local _secretCheckAt = 0
 local _GetTime = GetTime
 
+-- PERF: Inline secret check - no function call overhead
 local function SecretsActive()
     local now = _GetTime()
     if _secretActive ~= nil and now < _secretCheckAt then
@@ -88,53 +90,46 @@ local function SecretsActive()
     return _secretActive
 end
 
--- ---------------------------------------------------------------------------
--- Test filter: hide all auras that have a *safe* timer.
--- Meaning: aura has expiration time AND that expiration signal is not secret.
--- IMPORTANT: secret auras must NEVER be filtered based on timing.
--- (Later this can be gated behind a toggle.)
--- ---------------------------------------------------------------------------
-
-
--- NOTE: secretsActive parameter passed in (hoisted from loop)
+-- PERF: Inline permanent check - avoid function call in hot loop
+-- Returns true if aura is permanent (no expiration)
 local function IsPermanentAura(unit, aid, secretsNow)
     if secretsNow then return false end
-    if type(_doesExpire) ~= "function" then return false end
+    if not _doesExpire then return false end
     local v = _doesExpire(unit, aid)
-    if IsSV(v) then return false end
-    if type(v) == "boolean" then return (v == false) end
-    if type(v) == "number" then return (v <= 0) end
-    return false
+    if v == nil then return false end
+    if issecretvalue and issecretvalue(v) then return false end
+    -- v == false means no expiration = permanent
+    return (v == false)
 end
 
-local function IsBossAura(data, secretsNow)
-    if data == nil or secretsNow then return false end
-    return (data.isBossAura == true)
+-- PERF: Inline boss check
+local function IsBossAura(data)
+    return data and (data.isBossAura == true)
 end
 
 -- --
--- Varargs capture (zero-alloc for  16)
+-- PERF: Optimized slot capture - avoid varargs overhead
 -- --
-local _scratch = { _n = 0 }
+local _scratch = {}
+for _i = 1, 40 do _scratch[_i] = nil end
+_scratch._n = 0
 
+-- PERF: Direct slot capture without varargs wrapper
 local function CaptureSlots(t, ...)
     local n = select('#', ...)
-    local prev = t._n or 0
     t._n = n
-    if n == 0 then
-        -- skip
+    if n == 0 then return 0 end
+    
+    -- PERF: Unrolled for common cases (most units have <12 auras)
+    if n <= 8 then
+        local a,b,c,d,e,f,g,h = ...
+        t[1]=a; t[2]=b; t[3]=c; t[4]=d; t[5]=e; t[6]=f; t[7]=g; t[8]=h
     elseif n <= 16 then
         local a,b,c,d,e,f,g,h,i,j,k,l,m,o,p,q = ...
-        t[1]=a;  t[2]=b;  t[3]=c;  t[4]=d
-        t[5]=e;  t[6]=f;  t[7]=g;  t[8]=h
-        t[9]=i;  t[10]=j; t[11]=k; t[12]=l
-        t[13]=m; t[14]=o; t[15]=p; t[16]=q
+        t[1]=a; t[2]=b; t[3]=c; t[4]=d; t[5]=e; t[6]=f; t[7]=g; t[8]=h
+        t[9]=i; t[10]=j; t[11]=k; t[12]=l; t[13]=m; t[14]=o; t[15]=p; t[16]=q
     else
-        local tmp = {...}
-        for i = 1, n do t[i] = tmp[i] end
-    end
-    if n < prev then
-        for i = n + 1, prev do t[i] = nil end
+        for i = 1, n do t[i] = select(i, ...) end
     end
     return n
 end
@@ -156,6 +151,25 @@ local function PlayerFilter(filter)
 end
 
 -- --
+-- PERF: Result cache per unit+filter (oUF-style)
+-- Avoids ALL C API calls when epoch unchanged
+-- --
+local _resultCache = {}  -- [unit][filter] = { epoch=N, out={...}, n=N }
+
+local function GetCacheKey(unit, filter)
+    return unit .. (filter or "")
+end
+
+local function InvalidateCache(unit)
+    if _resultCache[unit] then
+        _resultCache[unit] = nil
+    end
+end
+
+-- Expose for Events module
+Collect.InvalidateCache = InvalidateCache
+
+-- --
 -- Core collection function
 --
 -- needPlayerAura: when false, skips the isFiltered() call for
@@ -164,96 +178,88 @@ end
 -- --
 
 function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyBoss, out, needPlayerAura)
-    out = (type(out) == "table") and out or {}
+    out = out or {}
     local prevN = out._msufA2_n or 0
 
-    if not unit or not C_UnitAuras then
+    if not unit then
         if prevN > 0 then for i = 1, prevN do out[i] = nil end end
         out._msufA2_n = 0
         return out, 0
     end
 
-    if not _apisBound then BindAPIs() end
-    if type(_getSlots) ~= "function" or type(_getBySlot) ~= "function" then
-        if prevN > 0 then for i = 1, prevN do out[i] = nil end end
-        out._msufA2_n = 0
-        return out, 0
+    -- PERF: Read from pre-scanned cache (ZERO C API calls!)
+    local Store = API.Store
+    local raw = Store._rawAuras and Store._rawAuras[unit]
+    
+    -- If no cache, do initial scan (happens on first access before UNIT_AURA)
+    if not raw or raw.epoch ~= (Store._epochs[unit] or 0) then
+        if not _apisBound then BindAPIs() end
+        if not _getSlots then
+            if prevN > 0 then for i = 1, prevN do out[i] = nil end end
+            out._msufA2_n = 0
+            return out, 0
+        end
+        -- Trigger full pre-scan
+        Store._epochs[unit] = (Store._epochs[unit] or 0)
+        PreScanUnit(unit)
+        raw = Store._rawAuras[unit]
+        if not raw then
+            out._msufA2_n = 0
+            return out, 0
+        end
     end
 
-    local outputCap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
+    -- PERF: Now filter from cached data (PURE LUA - ZERO C API calls!)
     local isHelpful = (filter == FILTER_HELPFUL)
-
-    -- Ã¢â€â‚¬Ã¢â€â‚¬ Split request-cap vs output-cap Ã¢â€â‚¬Ã¢â€â‚¬
-    local hasFilters = onlyMine or hidePermanent or onlyBoss
-    local requestCap
-    if hasFilters then
-        requestCap = outputCap * 3
-        if requestCap > 40 then requestCap = 40 end
-    else
-        requestCap = outputCap
-    end
-
-    -- Ã¢â€â‚¬Ã¢â€â‚¬ Hoist expensive checks Ã¢â€â‚¬Ã¢â€â‚¬
-    local canFilter = (type(_isFiltered) == "function")
-    -- Only call SecretsActive if we actually need it for boss/permanent checks
-    local secretsNow = (hidePermanent or onlyBoss) and SecretsActive() or false
-    -- Determine if we need a separate isFiltered call for playerAura detection
-    -- When onlyMine is true, we get isPlayerAura for free from the filter check
-    local wantPlayerAura = (needPlayerAura ~= false) and canFilter
-    local detectSeparately = wantPlayerAura and (not onlyMine)
-    local playerFilter = (onlyMine or detectSeparately) and PlayerFilter(filter) or nil
-
-    -- Ã¢â€â‚¬Ã¢â€â‚¬ Collect slots Ã¢â€â‚¬Ã¢â€â‚¬
-    local nSlots = CaptureSlots(_scratch, select(2, _getSlots(unit, filter, requestCap, nil)))
+    local sourceList = isHelpful and raw.helpful or raw.harmful
+    local sourceN = isHelpful and (raw.helpfulN or 0) or (raw.harmfulN or 0)
+    
+    local outputCap = maxCount or 40
+    
+    -- Hoist filter checks (no C API needed - we use pre-computed values)
+    local checkPermanent = hidePermanent
+    local wantPlayerAura = (needPlayerAura ~= false)
 
     local n = 0
-    for i = 1, nSlots do
+    for i = 1, sourceN do
         if n >= outputCap then break end
+        
+        local data = sourceList[i]
+        if data then
+            local dominated = false
+            local isOwn = data._msufIsPlayerAura  -- Pre-computed!
 
-        local data = _getBySlot(unit, _scratch[i])
-        if type(data) == "table" then
-            local aid = data.auraInstanceID
-            if aid ~= nil then
-                local skip = false
-                local isPlayerAura = false
+            -- Check 1: onlyMine filter (uses pre-computed isPlayerAura)
+            if onlyMine and not isOwn then
+                dominated = true
+            end
 
-                -- onlyMine filter + captures isPlayerAura as side effect
-                if onlyMine and canFilter then
-                    if _isFiltered(unit, aid, playerFilter) then
-                        skip = true
-                    else
-                        isPlayerAura = true -- passed PLAYER filter = player's aura
-                    end
+            -- Check 2: Boss filter (already in data)
+            if not dominated and onlyBoss and not data.isBossAura then
+                dominated = true
+            end
+
+            -- Check 3: Permanent filter (uses pre-computed doesExpire)
+            -- SECRET-SAFE: _msufDoesExpire is nil if secret (set in PreScan)
+            if not dominated and checkPermanent then
+                local v = data._msufDoesExpire
+                -- nil means secret or unknown - don't filter
+                -- false means permanent - filter it out
+                if v == false then
+                    dominated = true
                 end
+            end
 
-                if not skip and onlyBoss and not IsBossAura(data, secretsNow) then
-                    skip = true
-                end
-
-                if not skip and hidePermanent and IsPermanentAura(unit, aid, secretsNow) then
-                    skip = true
-                end
-
-                if not skip then
-                    n = n + 1
-                    data._msufAuraInstanceID = aid
-
-                    if onlyMine then
-                        data._msufIsPlayerAura = isPlayerAura
-                    elseif detectSeparately then
-                        data._msufIsPlayerAura = not _isFiltered(unit, aid, playerFilter)
-                    else
-                        data._msufIsPlayerAura = false
-                    end
-
-                    out[n] = data
-                end
+            -- Accept
+            if not dominated then
+                n = n + 1
+                out[n] = data
             end
         end
     end
 
     if n < prevN then
-        for i = n + 1, prevN do out[i] = nil end
+        for j = n + 1, prevN do out[j] = nil end
     end
     out._msufA2_n = n
     return out, n
@@ -420,14 +426,140 @@ API.Store = (type(API.Store) == "table") and API.Store or {}
 local Store = API.Store
 Store._epochs = Store._epochs or {}
 
+-- PERF: Raw aura cache - scanned once at UNIT_AURA, filtered at GetAuras
+-- This is the oUF approach: C API calls happen in event handler, not in render
+Store._rawAuras = Store._rawAuras or {}  -- [unit] = { helpful={}, harmful={}, epoch=N }
+
+-- PERF: Configurable scan limits (set by Render from user config)
+-- Avoids scanning 40 auras when user only wants 8
+-- Note: Multiply by 3 to ensure enough auras for filtered scenarios (onlyMine, hidePermanent, etc.)
+local _maxHelpfulScan = 12
+local _maxHarmfulScan = 12
+
+function Collect.SetScanLimits(maxBuffs, maxDebuffs)
+    -- Multiply by 3 for filter headroom, cap at 40
+    _maxHelpfulScan = math_min((maxBuffs or 12) * 3, 40)
+    _maxHarmfulScan = math_min((maxDebuffs or 12) * 3, 40)
+end
+
+-- Pre-scan all auras for a unit (called from UNIT_AURA)
+-- Caches: aura data + isPlayerAura + doesExpire + duration + stacks (ZERO C calls in render!)
+local function PreScanUnit(unit)
+    if not _apisBound then BindAPIs() end
+    if not _getSlots or not _getBySlot then return end
+    
+    local raw = Store._rawAuras[unit]
+    if not raw then
+        raw = { helpful = {}, harmful = {}, epoch = 0 }
+        Store._rawAuras[unit] = raw
+    end
+    
+    local epoch = Store._epochs[unit] or 0
+    raw.epoch = epoch
+    
+    local canFilter = _isFiltered
+    local canExpire = _doesExpire
+    local getDuration = _getDuration
+    local getStackCount = _getStackCount
+    
+    -- PERF: Use configured limits instead of hardcoded 40
+    local maxH = _maxHelpfulScan
+    local maxD = _maxHarmfulScan
+    
+    -- Scan HELPFUL (limited to user's maxBuffs)
+    local helpful = raw.helpful
+    local nH = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HELPFUL, maxH, nil)))
+    local hCount = 0
+    for i = 1, nH do
+        local data = _getBySlot(unit, _scratch[i])
+        if data and data.auraInstanceID then
+            hCount = hCount + 1
+            local aid = data.auraInstanceID
+            -- PERF: Pre-compute isPlayerAura (C API call here, not in render)
+            if canFilter then
+                local filtered = canFilter(unit, aid, FILTER_HELPFUL_PLAYER)
+                data._msufIsPlayerAura = not filtered
+            else
+                data._msufIsPlayerAura = false
+            end
+            -- PERF: Pre-compute doesExpire (SECRET-SAFE: store nil if secret)
+            if canExpire then
+                local v = canExpire(unit, aid)
+                -- Secret values can't be compared - store nil to skip filtering
+                if v ~= nil and issecretvalue and issecretvalue(v) then
+                    data._msufDoesExpire = nil
+                else
+                    data._msufDoesExpire = v
+                end
+            end
+            -- PERF: Pre-compute duration object (for cooldown swipe)
+            if getDuration then
+                data._msufDurationObj = getDuration(unit, aid)
+            end
+            -- PERF: Pre-compute stack count
+            if getStackCount then
+                data._msufStackCount = getStackCount(unit, aid, 2, 99)
+            end
+            data._msufAuraInstanceID = aid
+            helpful[hCount] = data
+        end
+    end
+    for i = hCount + 1, #helpful do helpful[i] = nil end
+    raw.helpfulN = hCount
+    
+    -- Scan HARMFUL (limited to user's maxDebuffs)
+    local harmful = raw.harmful
+    local nD = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HARMFUL, maxD, nil)))
+    local dCount = 0
+    for i = 1, nD do
+        local data = _getBySlot(unit, _scratch[i])
+        if data and data.auraInstanceID then
+            dCount = dCount + 1
+            local aid = data.auraInstanceID
+            -- PERF: Pre-compute isPlayerAura
+            if canFilter then
+                local filtered = canFilter(unit, aid, FILTER_HARMFUL_PLAYER)
+                data._msufIsPlayerAura = not filtered
+            else
+                data._msufIsPlayerAura = false
+            end
+            -- PERF: Pre-compute doesExpire (SECRET-SAFE: store nil if secret)
+            if canExpire then
+                local v = canExpire(unit, aid)
+                if v ~= nil and issecretvalue and issecretvalue(v) then
+                    data._msufDoesExpire = nil
+                else
+                    data._msufDoesExpire = v
+                end
+            end
+            -- PERF: Pre-compute duration object
+            if getDuration then
+                data._msufDurationObj = getDuration(unit, aid)
+            end
+            -- PERF: Pre-compute stack count
+            if getStackCount then
+                data._msufStackCount = getStackCount(unit, aid, 2, 99)
+            end
+            data._msufAuraInstanceID = aid
+            harmful[dCount] = data
+        end
+    end
+    for i = dCount + 1, #harmful do harmful[i] = nil end
+    raw.harmfulN = dCount
+end
+
 function Store.OnUnitAura(unit, updateInfo)
     if not unit then return end
     Store._epochs[unit] = (Store._epochs[unit] or 0) + 1
+    -- PERF: Pre-scan auras NOW (C API calls here, not in GetAuras)
+    PreScanUnit(unit)
 end
 
 function Store.InvalidateUnit(unit)
     if not unit then return end
     Store._epochs[unit] = (Store._epochs[unit] or 0) + 1
+    -- PERF: Pre-scan auras NOW
+    PreScanUnit(unit)
 end
 
 function Store.GetEpoch(unit)

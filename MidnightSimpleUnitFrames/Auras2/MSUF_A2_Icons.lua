@@ -400,7 +400,10 @@ function Icons.AcquireIcon(container, index)
 
     local icon = pool[index]
     if icon then
-        icon:Show()
+        -- PERF: Skip Show() if already visible (IsShown() is cheaper than Show())
+        if not icon:IsShown() then
+            icon:Show()
+        end
         return icon
     end
 
@@ -422,8 +425,18 @@ function Icons.HideUnused(container, fromIndex)
     if not pool then return end
 
     -- Bound iteration to the last known active count (high water mark).
-    local highWater = container._msufA2_activeN or #pool
-    if fromIndex > highWater then return end -- nothing to hide
+    local highWater = container._msufA2_activeN or 0
+    
+    -- PERF: Early exit if nothing to hide (fromIndex > active count)
+    -- This skips the loop entirely when all icons are already in use
+    if fromIndex > highWater then
+        -- Still update active count for caller's bookkeeping
+        container._msufA2_activeN = fromIndex - 1
+        return
+    end
+    
+    -- PERF: Early exit if activeN already matches (no change)
+    if highWater == fromIndex - 1 then return end
 
     local map = container._msufA2_iconByAid
     for i = fromIndex, highWater do
@@ -503,16 +516,34 @@ function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
     local pool = container._msufIcons
     if not pool then return end
 
+    -- PERF: Cache container-level layout params to skip per-icon checks
+    local lastSize = container._msufA2_lastIconSize
+    local sizeChanged = (lastSize ~= iconSize)
+    if sizeChanged then container._msufA2_lastIconSize = iconSize end
+
     for i = 1, count do
         local icon = pool[i]
         if icon then
             local idx = i - 1
             local col = idx % perRow
             local row = (idx - col) / perRow  -- integer division (faster than floor)
+            local x = col * step * dx
+            local y = row * step * dy
 
-            icon:ClearAllPoints()
-            icon:SetSize(iconSize, iconSize)
-            icon:SetPoint(anchor, container, anchor, col * step * dx, row * step * dy)
+            -- PERF: Skip SetPoint if position unchanged
+            if icon._msufA2_lastX ~= x or icon._msufA2_lastY ~= y or icon._msufA2_lastAnchor ~= anchor then
+                icon._msufA2_lastX = x
+                icon._msufA2_lastY = y
+                icon._msufA2_lastAnchor = anchor
+                icon:ClearAllPoints()
+                icon:SetPoint(anchor, container, anchor, x, y)
+            end
+            
+            -- PERF: Skip SetSize if unchanged
+            if sizeChanged or icon._msufA2_lastSize ~= iconSize then
+                icon._msufA2_lastSize = iconSize
+                icon:SetSize(iconSize, iconSize)
+            end
         end
     end
 end
@@ -537,7 +568,10 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     end
 
     local gen = configGen or _configGen
-    RefreshSharedFlags(shared, gen)
+    -- PERF: Inline gen-check to skip function call overhead (most calls hit this fast-path)
+    if _sharedFlagsGen ~= gen then
+        RefreshSharedFlags(shared, gen)
+    end
 
     if not aura then
         local container = icon._msufA2_container or icon:GetParent()
@@ -553,7 +587,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
 
     local aid = aura._msufAuraInstanceID or aura.auraInstanceID
 
-    --  Fast-path diff gate: same aura, same config → skip all bookkeeping 
+    --  Fast-path diff gate: same aura, same config †’ skip all bookkeeping 
     local last = icon._msufA2_lastCommit
     if last
         and last.aid == aid
@@ -561,8 +595,9 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         and last.isOwn == isOwn
     then
         -- Same aura, same config. Only refresh timer + stacks (values may have changed).
-        _fast_RefreshTimer(icon, unit, aid, shared)
-        _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+        -- PERF: Pass aura object to use pre-cached duration/stack values
+        _fast_RefreshTimer(icon, unit, aid, shared, aura)
+        _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
         return true
     end
 
@@ -592,6 +627,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         aidMap[prevAid] = nil
     end
     icon._msufAuraInstanceID = aid
+    icon._msufAura = aura  -- PERF: Store aura ref for cached duration/stacks
     if aid and aidMap then aidMap[aid] = icon end
 
     if not last then
@@ -602,7 +638,10 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     last.gen = gen
     last.isOwn = isOwn
 
-    ResolveTextConfig(icon, unit, shared, gen)
+    -- PERF: Inline gen-check to skip function call overhead
+    if icon._msufA2_textCfgGen ~= gen then
+        ResolveTextConfig(icon, unit, shared, gen)
+    end
 
     -- 1. Texture (only when aid changed)
     if icon._msufA2_lastTexAid ~= aid then
@@ -614,10 +653,10 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     end
 
     -- 2. Cooldown / Timer
-    _fast_ApplyTimer(icon, unit, aid, shared)
+    _fast_ApplyTimer(icon, unit, aid, shared, aura)
 
     -- 3. Stack count
-    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
 
     -- 4. Own-aura highlight
     _fast_ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
@@ -723,14 +762,20 @@ local function ApplyCooldownTextStyle(icon, cd, now, force)
     end
 end
 
-function Icons._ApplyTimer(icon, unit, aid, shared)
+-- PERF: aura parameter for pre-cached duration object (ZERO C API calls!)
+function Icons._ApplyTimer(icon, unit, aid, shared, aura)
     local cd = icon.cooldown
     if not cd then return end
 
     local hadTimer = false
 
-    -- Get duration object (secret-safe) -- needed for both modes (swipe + timer data).
-    local obj = _getDurationFast and _getDurationFast(unit, aid)
+    -- PERF: Use pre-cached duration object instead of C API call
+    local obj = aura and aura._msufDurationObj
+    if not obj and _getDurationFast then
+        -- Fallback if no cached value
+        obj = _getDurationFast(unit, aid)
+    end
+    
     if obj then
         local cdSetFn = cd._msufA2_cdSetFn
         if cdSetFn == nil then
@@ -794,11 +839,18 @@ function Icons._ApplyTimer(icon, unit, aid, shared)
 end
 
 -- Fast-path timer refresh (same auraInstanceID, possible reapply)
-function Icons._RefreshTimer(icon, unit, aid, shared)
+-- PERF: Uses pre-cached duration object from aura (ZERO C API calls!)
+function Icons._RefreshTimer(icon, unit, aid, shared, aura)
     local cd = icon.cooldown
     if not cd then return end
 
-    local obj = _getDurationFast and _getDurationFast(unit, aid)
+    -- PERF: Use pre-cached duration object instead of C API call
+    local obj = aura and aura._msufDurationObj
+    if not obj and _getDurationFast then
+        -- Fallback if no cached value
+        obj = _getDurationFast(unit, aid)
+    end
+    
     if not obj then
         if icon._msufA2_lastHadTimer == true or cd._msufA2_durationObj ~= nil then
             ClearCooldownVisual(icon, cd)
@@ -846,7 +898,8 @@ end
 -- Cached stack count color (invalidated by BumpConfigGen)
 local _stackR, _stackG, _stackB, _stackColorGen = 1, 1, 1, -1
 
-function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+-- PERF: aura parameter for pre-cached stack count (ZERO C API calls!)
+function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
     local countFS = icon.count
     if not countFS then return end
 
@@ -918,7 +971,13 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
         return
     end
 
-    local count = _getStackCountFast and _getStackCountFast(unit, aid)
+    -- PERF: Use pre-cached stack count instead of C API call
+    local count = aura and aura._msufStackCount
+    if count == nil and _getStackCountFast then
+        -- Fallback if no cached value
+        count = _getStackCountFast(unit, aid)
+    end
+    
     if count == nil then
         if countFS.IsShown and countFS:IsShown() then countFS:Hide() end
         icon._msufA2_lastCountText = nil
@@ -1105,12 +1164,15 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
         _bindingsDone = true
     end
 
-    -- Ensure cached shared flags are current
-    RefreshSharedFlags(shared, _configGen)
+    -- PERF: Inline gen-check to skip function call overhead
+    if _sharedFlagsGen ~= _configGen then
+        RefreshSharedFlags(shared, _configGen)
+    end
 
     -- Inline container refresh (no closure allocation)
     -- Use activeN for bounded iteration (avoids walking dead pool entries)
     local pool, activeN, icon, aid
+    local gen = _configGen  -- Cache for inner loop
 
     pool = entry.buffs and entry.buffs._msufIcons
     if pool then
@@ -1120,9 +1182,14 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
             if icon and icon:IsShown() then
                 aid = icon._msufAuraInstanceID
                 if aid then
-                    ResolveTextConfig(icon, unit, shared, _configGen)
-                    _fast_RefreshTimer(icon, unit, aid, shared)
-                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+                    -- PERF: Inline gen-check for ResolveTextConfig
+                    if icon._msufA2_textCfgGen ~= gen then
+                        ResolveTextConfig(icon, unit, shared, gen)
+                    end
+                    -- PERF: Use stored aura ref for cached duration/stacks
+                    local aura = icon._msufAura
+                    _fast_RefreshTimer(icon, unit, aid, shared, aura)
+                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
                 end
             end
         end
@@ -1136,9 +1203,13 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
             if icon and icon:IsShown() then
                 aid = icon._msufAuraInstanceID
                 if aid then
-                    ResolveTextConfig(icon, unit, shared, _configGen)
-                    _fast_RefreshTimer(icon, unit, aid, shared)
-                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+                    -- PERF: Inline gen-check
+                    if icon._msufA2_textCfgGen ~= gen then
+                        ResolveTextConfig(icon, unit, shared, gen)
+                    end
+                    local aura = icon._msufAura
+                    _fast_RefreshTimer(icon, unit, aid, shared, aura)
+                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
                 end
             end
         end
@@ -1152,9 +1223,13 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
             if icon and icon:IsShown() then
                 aid = icon._msufAuraInstanceID
                 if aid then
-                    ResolveTextConfig(icon, unit, shared, _configGen)
-                    _fast_RefreshTimer(icon, unit, aid, shared)
-                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+                    -- PERF: Inline gen-check
+                    if icon._msufA2_textCfgGen ~= gen then
+                        ResolveTextConfig(icon, unit, shared, gen)
+                    end
+                    local aura = icon._msufAura
+                    _fast_RefreshTimer(icon, unit, aid, shared, aura)
+                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
                 end
             end
         end

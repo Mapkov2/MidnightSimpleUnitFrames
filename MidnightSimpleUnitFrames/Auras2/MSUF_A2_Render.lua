@@ -800,13 +800,55 @@ local function RenderUnit(entry)
 
     if not Collect or not Icons then return end
 
+    -- PERF: Update scan limits once per configGen (reduces C API calls)
+    local gen = _configGen
+    if Collect._scanLimitsGen ~= gen then
+        Collect._scanLimitsGen = gen
+        local a2db, sharedDb = GetAuras2DB()
+        if sharedDb and Collect.SetScanLimits then
+            -- Start with shared values
+            local maxB = sharedDb.maxBuffs or 12
+            local maxD = sharedDb.maxDebuffs or 12
+            -- Check perUnit overrides for higher values
+            if a2db and a2db.perUnit then
+                for _, pu in pairs(a2db.perUnit) do
+                    if pu.overrideSharedLayout and pu.layoutShared then
+                        local ls = pu.layoutShared
+                        if type(ls.maxBuffs) == "number" and ls.maxBuffs > maxB then
+                            maxB = ls.maxBuffs
+                        end
+                        if type(ls.maxDebuffs) == "number" and ls.maxDebuffs > maxD then
+                            maxD = ls.maxDebuffs
+                        end
+                    end
+                end
+            end
+            Collect.SetScanLimits(maxB, maxD)
+        end
+    end
+
     local unit = entry.unit
+    
+    -- PERF: Fast-path epoch check BEFORE expensive DB/config resolution
+    -- If epoch unchanged AND configGen unchanged AND not in edit mode, skip entirely
+    local epoch = _storeEpochs and _storeEpochs[unit] or 0
+    local gen = _configGen
+    local isEditActive = (not _inCombat) and IsEditModeActive() or false
+    
+    if epoch == entry._lastEpoch 
+       and gen == entry._lastConfigGen 
+       and not isEditActive 
+       and entry._unitExisted  -- Only fast-path if unit existed last time
+    then
+        return  -- Nothing changed, skip all work
+    end
+    
     local a2, shared = GetAuras2DB()
     if not a2 or not shared then return end
 
     -- Unit disabled via options toggle: hide all icons + anchor and bail out.
     -- Edit mode preview bypasses this so movers remain visible for positioning.
-    if not UnitEnabled(a2, unit) and not ((not _inCombat) and IsEditModeActive()) then
+    if not UnitEnabled(a2, unit) and not isEditActive then
         Icons.HideUnused(entry.buffs, 1)
         Icons.HideUnused(entry.debuffs, 1)
         if entry.mixed then Icons.HideUnused(entry.mixed, 1) end
@@ -875,7 +917,7 @@ local function RenderUnit(entry)
 
     -- Early bail: no unit, no edit mode  nothing to render 
     local unitExists = UnitExists and UnitExists(unit)
-    local isEditActive = (not _inCombat) and IsEditModeActive() or false
+    -- PERF: isEditActive already computed at top of function
 
     if not unitExists and not isEditActive then
         Icons.HideUnused(entry.debuffs, 1)
@@ -979,20 +1021,15 @@ local function RenderUnit(entry)
         Icons.HideUnused(entry.debuffs, 1)
         Icons.HideUnused(entry.buffs, 1)
         entry.anchor:Hide()
+        entry._unitExisted = false  -- PERF: Track for fast-path
         return
     end
 
-    -- Epoch diff: skip full rebuild if nothing changed 
-    local epoch = _storeEpochs and _storeEpochs[unit] or 0
-
-    if epoch == entry._lastEpoch and gen == entry._lastConfigGen then
-        -- Phase 8: CooldownFrame handles animation natively via C++.
-        -- Stacks only change on UNIT_AURA (epoch bump). CT has own ticker.
-        return
-    end
-
+    -- PERF: Epoch already checked at top of function for fast-path
+    -- Here we just update the tracking vars
     entry._lastEpoch = epoch
     entry._lastConfigGen = gen
+    entry._unitExisted = true  -- PERF: Track for fast-path
 
     -- Collect auras (single pass) 
     local buffCount = 0
@@ -1004,23 +1041,29 @@ local function RenderUnit(entry)
     local onlyBossAuras    = cfg.onlyBossAuras
     local hidePermanentBuffs = cfg.hidePermanentBuffs
 
+    -- PERF: Local function references eliminate table lookups in hot loops
+    local _AcquireIcon = Icons.AcquireIcon
+    local _CommitIcon = Icons.CommitIcon
+    local _GetAuras = Collect.GetAuras
+    local _GetMergedAuras = Collect.GetMergedAuras
+
     -- Player in edit mode: debuffs already rendered as preview above, skip real debuff path.
     local skipDebuffs = (showTest and unit == "player")
 
     if showDebuffs and not skipDebuffs then
         local list
         if debuffsOnlyMine and debuffsIncludeBoss then
-            list, debuffCount = Collect.GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, entry._debuffList, nil, needPlayerAura)
+            list, debuffCount = _GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, entry._debuffList, nil, needPlayerAura)
         else
-            list, debuffCount = Collect.GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, entry._debuffList, needPlayerAura)
+            list, debuffCount = _GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, entry._debuffList, needPlayerAura)
         end
 
         local container = useSingleRow and entry.mixed or entry.debuffs
         for i = 1, debuffCount do
             local aura = list[i]
             if aura then
-                local icon = Icons.AcquireIcon(container, i)
-                Icons.CommitIcon(icon, unit, aura, shared, false, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
+                local icon = _AcquireIcon(container, i)
+                _CommitIcon(icon, unit, aura, shared, false, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
             end
         end
     end
@@ -1028,9 +1071,9 @@ local function RenderUnit(entry)
     if showBuffs then
         local list
         if buffsOnlyMine and buffsIncludeBoss then
-            list, buffCount = Collect.GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, entry._buffList, nil, needPlayerAura)
+            list, buffCount = _GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, entry._buffList, nil, needPlayerAura)
         else
-            list, buffCount = Collect.GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, entry._buffList, needPlayerAura)
+            list, buffCount = _GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, entry._buffList, needPlayerAura)
         end
 
         local container = useSingleRow and entry.mixed or entry.buffs
@@ -1038,42 +1081,63 @@ local function RenderUnit(entry)
         for i = 1, buffCount do
             local aura = list[i]
             if aura then
-                local icon = Icons.AcquireIcon(container, offset + i)
-                Icons.CommitIcon(icon, unit, aura, shared, true, hidePermanentBuffs, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
+                local icon = _AcquireIcon(container, offset + i)
+                _CommitIcon(icon, unit, aura, shared, true, hidePermanentBuffs, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
             end
         end
     end
 
     -- Layout 
+    -- PERF: Local function references
+    local _LayoutIcons = Icons.LayoutIcons
+    local _HideUnused = Icons.HideUnused
+    
+    -- PERF: Skip redundant HideUnused when counts unchanged
+    local lastBuffCount = entry._lastBuffCount or 0
+    local lastDebuffCount = entry._lastDebuffCount or 0
+    local countsChanged = (buffCount ~= lastBuffCount) or (debuffCount ~= lastDebuffCount)
+    
     if useSingleRow and entry.mixed and not skipDebuffs then
         local total = debuffCount + buffCount
-        Icons.LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap)
-        Icons.HideUnused(entry.mixed, total + 1)
-        Icons.HideUnused(entry.debuffs, 1)
-        Icons.HideUnused(entry.buffs, 1)
+        _LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap)
+        if countsChanged then
+            _HideUnused(entry.mixed, total + 1)
+            _HideUnused(entry.debuffs, 1)
+            _HideUnused(entry.buffs, 1)
+        end
     elseif useSingleRow and entry.mixed and skipDebuffs then
         -- Player edit mode + single row: layout only real buffs in mixed, leave debuffs alone.
-        Icons.LayoutIcons(entry.mixed, buffCount, iconSize, spacing, perRow, growth, rowWrap)
-        Icons.HideUnused(entry.mixed, buffCount + 1)
-        Icons.HideUnused(entry.buffs, 1)
+        _LayoutIcons(entry.mixed, buffCount, iconSize, spacing, perRow, growth, rowWrap)
+        if countsChanged then
+            _HideUnused(entry.mixed, buffCount + 1)
+            _HideUnused(entry.buffs, 1)
+        end
     else
         if skipDebuffs then
             -- Player edit mode: debuff layout already handled by preview path.
         elseif showDebuffs then
-            Icons.LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, growth, rowWrap)
-            Icons.HideUnused(entry.debuffs, debuffCount + 1)
+            _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, growth, rowWrap)
+            if debuffCount ~= lastDebuffCount then
+                _HideUnused(entry.debuffs, debuffCount + 1)
+            end
         else
-            Icons.HideUnused(entry.debuffs, 1)
+            if lastDebuffCount > 0 then
+                _HideUnused(entry.debuffs, 1)
+            end
         end
 
         if showBuffs then
-            Icons.LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, growth, rowWrap)
-            Icons.HideUnused(entry.buffs, buffCount + 1)
+            _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, growth, rowWrap)
+            if buffCount ~= lastBuffCount then
+                _HideUnused(entry.buffs, buffCount + 1)
+            end
         else
-            Icons.HideUnused(entry.buffs, 1)
+            if lastBuffCount > 0 then
+                _HideUnused(entry.buffs, 1)
+            end
         end
 
-        if entry.mixed then Icons.HideUnused(entry.mixed, 1) end
+        if entry.mixed and countsChanged then _HideUnused(entry.mixed, 1) end
     end
 
     entry._lastBuffCount = buffCount
@@ -1097,7 +1161,7 @@ Flush = function()
         local unit = list[i]
         local entry = AurasByUnit[unit]
 
-        -- Fast path: entry already attached with valid frame → skip FindUnitFrame
+        -- Fast path: entry already attached with valid frame  skip FindUnitFrame
         if entry and entry.frame then
             RenderUnit(entry)
         else
