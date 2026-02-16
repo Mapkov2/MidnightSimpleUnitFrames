@@ -22,61 +22,13 @@ end
 local panel, title, sub
 local searchBox
 local frameGroup, fontGroup, auraGroup, castbarGroup
+local MSUF_BarsApplyGradient -- forward decl; assigned in Bars section below
 -- ---------------------------------------------------------------------------
--- Reload prompt (Gradients)
--- Shown when user toggles Power Bar Gradient or clicks the Gradient Direction pad.
--- Provides "Reload now" / "Later" buttons (no slider-spam).
+-- Gradient changes apply live (no reload required).
+-- Keep a no-op stub so any stale call-sites (older builds) don't nil-error.
 -- ---------------------------------------------------------------------------
-local function MSUF_Options_ShowGradientReloadPopup()
-    if not _G then  return end
-    -- Avoid stacking popups
-    if _G.StaticPopup_Visible and _G.StaticPopup_Visible("MSUF_GRADIENTS_RELOAD_PROMPT") then
-         return
-    end
-    -- If we are in combat, defer the popup until combat ends (no chat spam).
-    if type(InCombatLockdown) == "function" and InCombatLockdown() then
-        _G.__MSUF_GRADIENTS_RELOAD_PENDING = true
-        if not _G.__MSUF_GRADIENTS_RELOAD_WATCHER then
-            local f = CreateFrame("Frame")
-            _G.__MSUF_GRADIENTS_RELOAD_WATCHER = f
-            f:RegisterEvent("PLAYER_REGEN_ENABLED")
-            f:SetScript("OnEvent", function()
-                if _G.__MSUF_GRADIENTS_RELOAD_PENDING then
-                    _G.__MSUF_GRADIENTS_RELOAD_PENDING = false
-                    -- Delay to next tick so UI is fully unlocked.
-                    if C_Timer and C_Timer.After then
-                        C_Timer.After(0, MSUF_Options_ShowGradientReloadPopup)
-                    else
-                        MSUF_Options_ShowGradientReloadPopup()
-                    end
-                end
-             end)
-        end
-         return
-    end
-    -- If popup API is missing, do nothing (user requested only a Reload Now/Later prompt).
-    if not _G.StaticPopupDialogs then  return end
-    if not _G.StaticPopupDialogs["MSUF_GRADIENTS_RELOAD_PROMPT"] then
-        _G.StaticPopupDialogs["MSUF_GRADIENTS_RELOAD_PROMPT"] = {
-            text = "Apply gradient changes with a reload?\n\nSome gradient changes may not fully apply until you /reload.",
-            button1 = "Reload now",
-            button2 = "Later",
-            OnAccept = function()
-                if _G.ReloadUI then _G.ReloadUI() end
-             end,
-            timeout = 0,
-            whileDead = 1,
-            hideOnEscape = 1,
-            preferredIndex = 3,
-        }
-    end
-    if _G.StaticPopup_Show then
-        _G.StaticPopup_Show("MSUF_GRADIENTS_RELOAD_PROMPT")
-    end
- end
--- Step 11 cleanup: We only prompt reload for Power Bar Gradient toggle / Gradient D-pad clicks.
--- Keep a no-op stub to avoid nil errors if older UI handlers still call it.
-local function MSUF_ScheduleReloadRecommend()   end
+local function MSUF_Options_ShowGradientReloadPopup() end -- no-op stub (live apply, backward compat)
+local function MSUF_ScheduleReloadRecommend()   end       -- no-op stub (backward compat)
 local castbarEnemyGroup, castbarTargetGroup, castbarFocusGroup, castbarBossGroup, castbarPlayerGroup
 local barGroupHost, barGroup, miscGroup, profileGroup
 -- ---------------------------------------------------------------------------
@@ -582,6 +534,12 @@ function MSUF_RegisterOptionsCategoryLazy()
                     if pending then
                         _G.MSUF_PendingOpenAfterCombat = nil
                         pending()
+                    end
+                    -- Zero combat overhead: unregister when nothing is pending
+                    if not (_G and _G.MSUF_PendingOpenAfterCombat) then
+                        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+                        self:SetScript("OnEvent", nil)
+                        if _G then _G.MSUF_CombatDeferFrame = nil end
                     end
                  end)
             end
@@ -1482,21 +1440,11 @@ local function MSUF_CreateGradientDirectionPad(parent)
             -- Keep legacy key around as "last touched" for older builds/tools.
             g.gradientDirection = dirKey
             if pad.SyncFromDB then pad:SyncFromDB() end
-            -- Prompt to /reload so gradient direction applies reliably.
-            if type(MSUF_Options_ShowGradientReloadPopup) == "function" then
-                MSUF_Options_ShowGradientReloadPopup()
-            end
-            if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
-            -- Force-refresh unitframes so gradient direction applies immediately (HP and/or Power).
-            local frames = _G and _G.MSUF_UnitFrames
-            if frames and type(_G.MSUF_RequestUnitframeUpdate) == "function" then
-                for _, f in pairs(frames) do
-                    if f and f.unit and f.hpBar then
-                        _G.MSUF_RequestUnitframeUpdate(f, true, true, "GradientDirPad")
-                    end
-                end
-            elseif ns and ns.MSUF_RefreshAllFrames then
-                ns.MSUF_RefreshAllFrames()
+            -- Apply gradient changes live (HP + Power, throttle-safe).
+            if type(MSUF_BarsApplyGradient) == "function" then
+                MSUF_BarsApplyGradient()
+            elseif type(ApplyAllSettings) == "function" then
+                ApplyAllSettings()
             end
          end)
         pad.buttons[dirKey] = b
@@ -4711,7 +4659,7 @@ purgeTestCheck:SetScript("OnClick", function(self)
     end
 end)
 
--- ── Highlight priority reorder ──
+-- â”€â”€ Highlight priority reorder â”€â”€
 -- Draggable rows to set display priority of highlight borders (Aggro/Dispel/Purge).
 -- Default order: Dispel > Aggro > Purge.  Custom order stored in DB.
 local _PRIO_DEFAULTS = { "dispel", "aggro", "purge" }  -- must match render fallback order
@@ -5289,7 +5237,7 @@ do
     local legacyHeader = _G.MSUF_BarsMenuHighlightHeader
     if legacyHeader then legacyHeader:Hide() end
 
-    -- Section header — compact font
+    -- Section header â€” compact font
     local highlightHeader = leftPanel and leftPanel.MSUF_SectionHeader_Highlight
     if leftPanel and not highlightHeader then
         highlightHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -5584,8 +5532,8 @@ end
  end
  MSUF_BarsMenu_QueueScrollUpdate()
 if barGroup and barGroup.HookScript then barGroup:HookScript('OnShow', MSUF_SyncBarsTabToggles) end
-local function MSUF_BarsApplyGradient()
-    -- Note to user: gradients may not fully apply until /reload (shown once to avoid spam).
+MSUF_BarsApplyGradient = function()
+    -- Live-apply gradient changes (HP + Power). No reload required.
     -- Ensure the strength isn't accidentally zeroed (old hidden slider could leave 0, making gradients look "dead").
     EnsureDB()
     local g = (MSUF_DB and MSUF_DB.general) or {}
@@ -5645,14 +5593,6 @@ local function MSUF_BarsApplyGradient()
 if _G and _G.MSUF_Options_BindDBBoolCheck then
     _G.MSUF_Options_BindDBBoolCheck(gradientCheck, "general.enableGradient", MSUF_BarsApplyGradient, MSUF_SyncBarsTabToggles)
     _G.MSUF_Options_BindDBBoolCheck(powerGradientCheck, "general.enablePowerGradient", MSUF_BarsApplyGradient, MSUF_SyncBarsTabToggles)
-end
--- Prompt for reload when toggling Power Bar Gradient (user click).
-if powerGradientCheck and powerGradientCheck.HookScript then
-    powerGradientCheck:HookScript("OnClick", function()
-        if type(MSUF_Options_ShowGradientReloadPopup) == "function" then
-            MSUF_Options_ShowGradientReloadPopup()
-        end
-     end)
 end
 do
     local SIMPLE_BAR_SLIDERS = {
@@ -5954,7 +5894,7 @@ end
     if MSUF_StyleAllToggles then MSUF_StyleAllToggles(panel) end
     panel.__MSUF_FullBuilt = true
     -- Ensure aggro/dispel/purge test modes persist while the user navigates
-    -- between menu tabs (Bars ↔ Colors), but clear when the slash menu closes.
+    -- between menu tabs (Bars â†” Colors), but clear when the slash menu closes.
     if not panel.__MSUF_AggroTestHooked then
         panel.__MSUF_AggroTestHooked = true
         local function _ClearAllTestModes()
