@@ -460,9 +460,9 @@ local function MSUF_StyleAuras2CompactSlider(s, opts)
     end
  end
 -- Dropdown UX fix:
---  • Ensure dropdown frame width matches visual width
---  • Anchor the dropdown list directly under the control (prevents detached menus)
---  • Use single-choice (radio) selections so it reads like a real dropdown (not a toggle list)
+--   Ensure dropdown frame width matches visual width
+--   Anchor the dropdown list directly under the control (prevents detached menus)
+--   Use single-choice (radio) selections so it reads like a real dropdown (not a toggle list)
 local function MSUF_FixUIDropDown(dd, width)
     if not dd then  return end
     -- Width: keep the template visuals intact (don't manually widen the parent frame).
@@ -1600,7 +1600,16 @@ local function UpdateAdvancedEnabled()
     h1:SetText(TR("Auras 2.0"))
     -- Master toggles (top cluster)
     CreateBoolCheckboxPath(leftTop, "Enable Auras 2.0", 12, -34, A2_DB, "enabled", nil,
-        "Master toggle. When off, no auras are shown for Target/Focus/Boss.")
+        "Master toggle. When off, no auras are shown for Target/Focus/Boss.",
+        function(on)
+            if not on then
+                -- Immediately hide all aura frames when disabling.
+                if type(_G.MSUF_A2_HardDisableAll) == "function" then
+                    _G.MSUF_A2_HardDisableAll()
+                end
+            end
+            A2_RequestApply()
+        end)
     -- Filters (master): gates all filter logic (Only-mine/Hide-permanent + Advanced)
     local cbEnableFilters = CreateBoolCheckboxPath(leftTop, "Enable filters", 200, -34, GetEditingFilters, "enabled", nil,
         "Master for all filtering for the selected profile (Shared or a per-unit override). When off, no filtering/highlight is applied.")
@@ -1760,9 +1769,9 @@ do
         "When off, this unit uses Shared caps (Max Buffs/Debuffs, Icons per row). When on, it uses its own caps.")
     -- Overrides: global summary + reset (good UX)
     -- Layout goals:
-    --  • Checkbox + Reset sit on the SAME row (no overlap with dropdown)
-    --  • Status sits under the checkbox (short + readable)
-    --  • Status stays "short": shows up to 2 units, then "+N"
+    --   Checkbox + Reset sit on the SAME row (no overlap with dropdown)
+    --   Status sits under the checkbox (short + readable)
+    --   Status stays "short": shows up to 2 units, then "+N"
     local overrideKeys = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
     -- Reset button aligned to the right edge of the box, same row as the checkbox
     local btnResetOverrides = CreateFrame("Button", nil, leftTop, "UIPanelButtonTemplate")
@@ -1885,10 +1894,10 @@ end
     h2:SetText(TR("Units"))
     -- Compact unit toggles: use MSUF on/off buttons (no checkbox tick coloring).
     -- Keep this row tight so it doesn't collide with the Display section below.
-    CreateBoolToggleButtonPath(leftTop, "Player", 12, -120, 90, 22, A2_DB, "showPlayer")
-    CreateBoolToggleButtonPath(leftTop, "Target", 108, -120, 90, 22, A2_DB, "showTarget")
-    CreateBoolToggleButtonPath(leftTop, "Focus", 204, -120, 90, 22, A2_DB, "showFocus")
-    CreateBoolToggleButtonPath(leftTop, "Boss 1-5", 300, -120, 96, 22, A2_DB, "showBoss")
+    CreateBoolToggleButtonPath(leftTop, "Player", 12, -120, 90, 22, A2_DB, "showPlayer", nil, nil, A2_RequestApply)
+    CreateBoolToggleButtonPath(leftTop, "Target", 108, -120, 90, 22, A2_DB, "showTarget", nil, nil, A2_RequestApply)
+    CreateBoolToggleButtonPath(leftTop, "Focus", 204, -120, 90, 22, A2_DB, "showFocus", nil, nil, A2_RequestApply)
+    CreateBoolToggleButtonPath(leftTop, "Boss 1-5", 300, -120, 96, 22, A2_DB, "showBoss", nil, nil, A2_RequestApply)
     -- Display (two-column layout)
     local h3 = leftTop:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     h3:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 12, -156)

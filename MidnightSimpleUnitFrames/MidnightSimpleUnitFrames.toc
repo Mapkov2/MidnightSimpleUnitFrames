@@ -58,6 +58,12 @@ MidnightSimpleUnitFrames_Colors.lua
 MidnightSimpleUnitFrames_Gameplay.lua
 MidnightSimpleUnitFrames_SlashMenu.lua
 MidnightSimpleUnitFrames.lua
+Core\MSUF_Text.lua
+Core\MSUF_Bars.lua
+Core\MSUF_Castbars.lua
+Core\MSUF_Portraits.lua
+Core\MSUF_Alpha.lua
+Core\MSUF_Borders.lua
 
 Options\MSUF_Options_Core.lua
 Options\MSUF_Options_Player.lua

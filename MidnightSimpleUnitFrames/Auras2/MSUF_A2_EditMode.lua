@@ -40,9 +40,9 @@ ns.__MSUF_A2_EDITMODE_LOADED = true
 API.EditMode = (type(API.EditMode) == "table") and API.EditMode or {}
 local EM = API.EditMode
 
---
+
 -- Locals
---
+
 local type = type
 local pairs = pairs
 local floor = math.floor
@@ -57,9 +57,9 @@ local function FastCall(fn, ...)
     return true, fn(...)
 end
 
---
+
 -- DB access
---
+
 local function EnsureDB()
     if API.EnsureDB then return API.EnsureDB() end
     return nil, nil
@@ -70,9 +70,9 @@ local function GetAuras2DB()
     return EnsureDB()
 end
 
---
+
 -- Edit Mode state detection (use Render's cached check if available)
---
+
 local function IsEditModeActive()
     if API.IsEditModeActive then return API.IsEditModeActive() end
     local st = rawget(_G, "MSUF_EditState")
@@ -81,9 +81,9 @@ local function IsEditModeActive()
     return false
 end
 
---
+
 -- Per-unit state (shared with Render)
---
+
 local function GetAurasByUnit()
     local st = API.state
     return (type(st) == "table") and st.aurasByUnit or nil
@@ -91,9 +91,9 @@ end
 
 local _IS_BOSS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 
---
+
 -- Offset DB keys per mover kind
---
+
 local MOVER_KEYS = {
     buff    = { x = "buffGroupOffsetX",   y = "buffGroupOffsetY"   },
     buffs   = { x = "buffGroupOffsetX",   y = "buffGroupOffsetY"   },
@@ -145,9 +145,9 @@ local function WriteOffset(a2, unitKey, kind, newX, newY)
     u.layout[ky] = newY
 end
 
---
+
 -- Mover creation
---
+
 
 local function GetCursorScaled()
     local scale = (UIParent and UIParent.GetEffectiveScale) and UIParent:GetEffectiveScale() or 1
@@ -360,9 +360,9 @@ local function CreateMover(entry, unitKey, kind, labelText)
     return mover
 end
 
---
+
 -- Ensure all three movers exist for a unit
---
+
 
 local function UnitLabel(unit)
     if unit == "player" then return "Player" end
@@ -386,9 +386,9 @@ function EM.EnsureMovers(entry, unit, shared, iconSize, spacing)
     -- Mover positioning is handled by Render's UpdateAnchor after containers are placed
 end
 
---
+
 -- Mover positioning (mirrors container anchors)
---
+
 
 function EM.PositionMovers(entry, shared, iconSize, spacing)
     if not entry then return end
@@ -449,9 +449,9 @@ function EM.PositionMovers(entry, shared, iconSize, spacing)
     end
 end
 
---
+
 -- Show / Hide movers
---
+
 
 function EM.ShowMovers(entry)
     if not entry then return end
@@ -472,9 +472,9 @@ function EM.AnyMoverExists(entry)
     return entry and (entry.editMoverBuff or entry.editMoverDebuff or entry.editMoverPrivate) and true or false
 end
 
---
+
 -- Hide all movers across all units
---
+
 
 function EM.HideAllMovers()
     local aby = GetAurasByUnit()
@@ -495,10 +495,10 @@ function EM.ShowAllMovers()
     end
 end
 
---
+
 -- Edit Mode transition handler
 -- (Called by the AnyEditModeListener registered below)
---
+
 
 local function OnEditModeChanged(active)
     if active then
@@ -531,10 +531,10 @@ end
 
 EM.OnEditModeChanged = OnEditModeChanged
 
---
+
 -- Backward compatibility exports
 -- (Old Render.lua exposed these globally; some code may reference them)
---
+
 
 -- Global offsets writer (used by position popup)
 _G.MSUF_A2_WriteMoverOffsets = _G.MSUF_A2_WriteMoverOffsets or function(a2, unitKey, kind, newX, newY)
@@ -551,9 +551,9 @@ _G.MSUF_A2_GetMoverKeyPair = _G.MSUF_A2_GetMoverKeyPair or function(kind)
     return GetMoverKeyPair(kind)
 end
 
---
+
 -- Register for Edit Mode notifications
---
+
 
 local _registered = false
 

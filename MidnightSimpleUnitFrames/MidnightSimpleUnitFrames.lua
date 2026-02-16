@@ -15,13 +15,15 @@ ns.Compat = ns.Compat or {}
 --  - Secret-safe: localizing function references only (no value comparisons).
 -- =========================================================================
 local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
+local pairs, ipairs, next, unpack = pairs, ipairs, next, unpack or table.unpack
 local math_min, math_max, math_floor = math.min, math.max, math.floor
 local string_format, string_match, string_sub = string.format, string.match, string.sub
 local UnitExists, UnitIsPlayer = UnitExists, UnitIsPlayer
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
 local UnitPowerType = UnitPowerType
+local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+local UnitIsConnected = UnitIsConnected
 local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
 local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
@@ -220,7 +222,7 @@ ns.UF.HpSpacerSelect_OnMouseDown = ns.UF.HpSpacerSelect_OnMouseDown or function(
  end
 ns.UF.UpdateHighlightColor = ns.UF.UpdateHighlightColor or function(self)
     if not self then  return end
-    if type(EnsureDB) == "function" then EnsureDB() end
+    if not MSUF_DB then EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or {}; local hr, hg, hb = 1, 1, 1; local hc = g.highlightColor
     if type(hc) == "table" then hr, hg, hb = hc[1] or 1, hc[2] or 1, hc[3] or 1
     else
@@ -228,12 +230,12 @@ ns.UF.UpdateHighlightColor = ns.UF.UpdateHighlightColor or function(self)
         local col = (type(MSUF_FONT_COLORS) == "table" and (MSUF_FONT_COLORS[key] or MSUF_FONT_COLORS.white)) or nil
         if col then hr, hg, hb = col[1] or 1, col[2] or 1, col[3] or 1 end
     end
-    local s = tostring(hr) .. "|" .. tostring(hg) .. "|" .. tostring(hb)
+    local s = math_floor(hr * 1000) * 1000000 + math_floor(hg * 1000) * 1000 + math_floor(hb * 1000)
     if self._msufHighlightColorStamp ~= s then self._msufHighlightColorStamp = s; local b = self.highlightBorder; if b and b.SetBackdropBorderColor then b:SetBackdropBorderColor(hr, hg, hb, 1) end end
  end
 ns.UF.Unitframe_OnEnter = ns.UF.Unitframe_OnEnter or function(self)
     if not self then  return end
-    if type(EnsureDB) == "function" then EnsureDB() end
+    if not MSUF_DB then EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local hb = self.highlightBorder
     if hb then
@@ -334,8 +336,7 @@ function ns.UF.ShouldRunHeavyVisual(self, key, exists)
     end
      return false
 end
-ns.__msuf_patchF = ns.__msuf_patchF or { version = "F1", note = "compact locals + secret-safe clear text" }
-local ROOT_G = (getfenv and getfenv(0)) or _G
+local ROOT_G = _G
 do
     local realG = _G
     if type(realG.MSUF_GetCastbarTexture) ~= "function" then
@@ -345,8 +346,6 @@ do
     end
     ROOT_G.MSUF_GetCastbarTexture = realG.MSUF_GetCastbarTexture
 end
-local pairs, ipairs, unpack, tonumber, type = pairs, ipairs, unpack or table.unpack, tonumber, type
-local math_floor, math_max = math.floor, math.max
 local UnitFramesList = {}
 -- Patch AA2: move shared helpers earlier (used by early functions) + keep deterministic iteration
 local UnitFrames = _G.MSUF_UnitFrames
@@ -368,6 +367,7 @@ local function MSUF_ForEachUnitFrame(fn)
         if f then fn(f, unitKey) end
     end
  end
+_G.MSUF_ForEachUnitFrame = MSUF_ForEachUnitFrame
 local function MSUF_Export2(key, fn, aliasKey, forceAlias)
     if ns then ns[key] = fn end
     _G[key] = fn
@@ -392,6 +392,7 @@ local function MSUF_EnsureUnitFlags(f)
     f._msufBossIndex = bi and tonumber(bi) or nil
     f._msufUnitFlagsInited = true
  end
+_G.MSUF_EnsureUnitFlags = MSUF_EnsureUnitFlags
 local function MSUF_IsTargetLikeFrame(f)
     return (f and (f.isBoss or f._msufIsPlayer or f._msufIsTarget or f._msufIsFocus)) and true or false
 end
@@ -423,9 +424,9 @@ function ns.Bars.HideAndResetPowerBar(bar)
 function ns.Bars.ApplyPowerGradientOnce(frame)
     if not frame then  return end
     if frame.powerGradients then
-        if MSUF_ApplyPowerGradient then MSUF_ApplyPowerGradient(frame) end
+        if ns.Bars._ApplyPowerGradient then ns.Bars._ApplyPowerGradient(frame) end
     elseif frame.powerGradient then
-        if MSUF_ApplyPowerGradient then MSUF_ApplyPowerGradient(frame.powerGradient) end
+        if ns.Bars._ApplyPowerGradient then ns.Bars._ApplyPowerGradient(frame.powerGradient) end
     end
  end
 function ns.Bars.PowerBarAllowed(barsConf, isBoss, isPlayer, isTarget, isFocus)
@@ -547,202 +548,9 @@ end
 ns.Bars._msufPatchC = ns.Bars._msufPatchC or { version = "C1" }
 -- Player self-heal prediction (own incoming heals only).
 -- Implemented as a behind-the-HP statusbar so the additional segment only appears past current HP.
-local _MSUF_SelfHealPredCalc -- nil = unknown, false = unavailable, table = calc
-local function _MSUF_GetSelfHealPredCalc()
-    if _MSUF_SelfHealPredCalc ~= nil then return _MSUF_SelfHealPredCalc end
-    _MSUF_SelfHealPredCalc = false
-    local fn = _G and _G.CreateUnitHealPredictionCalculator
-    if type(fn) == "function" then
-        local ok, calc
-        if _G and type(_G.MSUF_FastCall) == "function" then
-            ok, calc = _G.MSUF_FastCall(fn)
-        else
-            ok, calc = pcall(fn)
-        end
-        if ok and calc then
-            _MSUF_SelfHealPredCalc = calc
-        end
-    end
-    return _MSUF_SelfHealPredCalc
-end
 
-local function _MSUF_GetIncomingHealsFromPlayer(unit)
-    if not unit then return 0 end
+-- Self-heal prediction system moved to MSUF_SelfHealPred.lua
 
-    -- Fast path if the classic C-API is available.
-    local fnInc = _G and _G.UnitGetIncomingHeals
-    if type(fnInc) == "function" then
-        local ok, v
-        if _G and type(_G.MSUF_FastCall) == "function" then
-            ok, v = _G.MSUF_FastCall(fnInc, unit, "player")
-        else
-            ok, v = pcall(fnInc, unit, "player")
-        end
-        if ok and type(v) == "number" then
-            return v
-        end
-    end
-
-    -- Fallback: detailed prediction calculator.
-    local calc = _MSUF_GetSelfHealPredCalc()
-    local fnDet = _G and _G.UnitGetDetailedHealPrediction
-    if calc and type(fnDet) == "function" then
-        local ok
-        if _G and type(_G.MSUF_FastCall) == "function" then
-            ok = select(1, _G.MSUF_FastCall(fnDet, unit, "player", calc))
-        else
-            ok = pcall(fnDet, unit, "player", calc)
-        end
-        if ok and calc.GetIncomingHeals then
-            local total, fromHealer = calc:GetIncomingHeals()
-            if type(fromHealer) == "number" then return fromHealer end
-            if type(total) == "number" then return total end
-        end
-    end
-
-    return 0
-end
-
-local _msufSelfHealCalc = nil
-local _msufSelfHealPredPixelCalcBar = nil
-
-local function _MSUF_EnsureSelfHealPredPixelCalcBar()
-    local bar = _msufSelfHealPredPixelCalcBar
-    if bar then
-        return bar
-    end
-
-    bar = _G.CreateFrame("StatusBar", "MSUF_SelfHealPredPixelCalcBar", _G.UIParent)
-    bar:SetSize(1, 1)
-    bar:SetPoint("TOPLEFT", _G.UIParent, "TOPLEFT", -5000, 0)
-    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-    bar:SetMinMaxValues(0, 1)
-    bar:SetValue(0)
-    bar:SetAlpha(0)
-    bar:Show()
-
-    _msufSelfHealPredPixelCalcBar = bar
-    return bar
-end
-
-local function _MSUF_GetIncomingSelfHeals(unit)
-    unit = unit or "player"
-
-    local calc = _msufSelfHealCalc
-    if not calc and _G.CreateUnitHealPredictionCalculator then
-        calc = _G.CreateUnitHealPredictionCalculator()
-        _msufSelfHealCalc = calc
-    end
-
-    if calc and _G.UnitGetDetailedHealPrediction then
-        local data = _G.UnitGetDetailedHealPrediction(unit, "player", calc)
-        if data and type(data) == "table" then
-            -- Prefer the clamped amount if provided, so it never visually overflows missing health.
-            -- IMPORTANT (Midnight/Secret-safe): never use secret numbers in boolean context (no 'or' fallback).
-            local v = data.clampedIncomingHealsFromHealer
-            if type(v) ~= "number" then
-                v = data.incomingHealsFromHealer
-            end
-            if type(v) == "number" then
-                return v
-            end
-        end
-    end
-
-    if _G.UnitGetIncomingHeals then
-        local v = _G.UnitGetIncomingHeals(unit, "player")
-        if type(v) == "number" then
-            return v
-        end
-    end
-
-    return 0
-end
-
-local function _MSUF_HideSelfHealPredBar(frame)
-    if not frame or not frame.selfHealPredBar then return end
-    local bar = frame.selfHealPredBar
-    bar:Hide()
-    bar._msufSelfHealPredLastW = nil
-    bar._msufSelfHealPredAnchorTex = nil
-    bar._msufSelfHealPredAnchorRev = nil
-end
-
-
-local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
-    local g = MSUF_DB and MSUF_DB.general
-    if not g or not g.showSelfHealPrediction then
-        _MSUF_HideSelfHealPredBar(frame)
-        return
-    end
-
-    if not frame or not frame.selfHealPredBar or not frame.hpBar then return end
-    local predBar = frame.selfHealPredBar
-    local hpBar = frame.hpBar
-
-    -- Early outs
-    if frame.IsShown and not frame:IsShown() then
-        _MSUF_HideSelfHealPredBar(frame)
-        return
-    end
-    if hpBar.IsShown and not hpBar:IsShown() then
-        _MSUF_HideSelfHealPredBar(frame)
-        return
-    end
-
-    local hpTex = hpBar.GetStatusBarTexture and hpBar:GetStatusBarTexture()
-    if not hpTex then
-        _MSUF_HideSelfHealPredBar(frame)
-        return
-    end
-
-    -- NOTE (Midnight/secret-safe):
-    -- - Do NOT do ANY arithmetic or comparisons on incoming-heal numbers (can be secret-tainted).
-    -- - Do NOT read/compare HP texture width.
-    -- Instead: render a second statusbar segment anchored to the current HP texture edge.
-    -- The statusbar fill itself computes the pixel length (inc/maxHP) internally.
-    -- Overflow (inc > missing) is clipped by the dedicated clip-frame created at unitframe build.
-
-    -- Sync size to full HP bar size (frame dimensions are safe numbers).
-    if hpBar.GetWidth and hpBar.GetHeight then
-        local w = hpBar:GetWidth()
-        local h = hpBar:GetHeight()
-        if type(w) == "number" and type(h) == "number" then
-            predBar:SetSize(w, h)
-        end
-    end
-
-    -- Sync reverse fill + anchor to the HP texture edge.
-    local rev = (hpBar.GetReverseFill and hpBar:GetReverseFill()) or false
-    if predBar._msufSelfHealPredAnchorTex ~= hpTex or predBar._msufSelfHealPredAnchorRev ~= rev then
-        predBar:ClearAllPoints()
-        if rev then
-            predBar:SetPoint("TOPRIGHT", hpTex, "TOPLEFT", 0, 0)
-            predBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMLEFT", 0, 0)
-        else
-            predBar:SetPoint("TOPLEFT", hpTex, "TOPRIGHT", 0, 0)
-            predBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
-        end
-        predBar._msufSelfHealPredAnchorTex = hpTex
-        predBar._msufSelfHealPredAnchorRev = rev
-    end
-    if predBar.SetReverseFill then
-        predBar:SetReverseFill(rev and true or false)
-    end
-
-    -- Incoming heals (self only)pass-through to StatusBar API.
-    local inc = _MSUF_GetIncomingSelfHeals(unit)
-    if type(inc) ~= "number" then
-        inc = 0
-    end
-    if type(maxHP) == "number" then
-        predBar:SetMinMaxValues(0, maxHP)
-    else
-        predBar:SetMinMaxValues(0, 1)
-    end
-    MSUF_SetBarValue(predBar, inc, false)
-    predBar:Show()
-end
 function ns.Bars.ResetHealthAndOverlays(frame, clearAbsorbs)
     if not frame then  return end
     MSUF_ResetBarZero(frame.hpBar)
@@ -769,459 +577,19 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
         MSUF_SetBarValue(frame.hpBar, hp)
     end
     if frame.absorbBar then
-        MSUF_UpdateAbsorbBar(frame, unit, maxHP)
+        ns.Bars._UpdateAbsorbBar(frame, unit, maxHP)
     end
     if frame.healAbsorbBar then
-        MSUF_UpdateHealAbsorbBar(frame, unit, maxHP)
+        ns.Bars._UpdateHealAbsorbBar(frame, unit, maxHP)
     end
     if frame.selfHealPredBar then
-        _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
+        if ns.Bars._UpdateSelfHealPrediction then ns.Bars._UpdateSelfHealPrediction(frame, unit, maxHP, hp) end
     end
      return hp, maxHP
 end
-ns.Text._msufPatchD = ns.Text._msufPatchD or { version = "D1" }
-function ns.Text.Set(fs, text, show)
-    -- Secret-safe: do NOT compare strings. Pass-through to API only.
-    if not fs then  return end
-    if not show then
-        if fs.Hide then fs:Hide() end
-        -- Clearing to empty string is safe (non-secret).
-        if fs.SetText then fs:SetText("") end
-         return
-    end
-    if text == nil then text = "" end
-    if fs.SetText then fs:SetText(text) end
-    if fs.Show then fs:Show() end
- end
-ns.Text._msufPatchE = ns.Text._msufPatchE or { version = "E1" }
--- Secret-safe: numeric clamps only; no text comparisons.
-ns.Text._msufPatchG = ns.Text._msufPatchG or { version = "G1" }
-function ns.Text.ClampSpacerValue(value, maxValue, enabled)
-    if not enabled then  return 0 end
-    local v = tonumber(value) or 0
-    if v < 0 then v = 0 end
-    local m = tonumber(maxValue) or 0
-    if m < 0 then m = 0 end
-    if v > m then v = m end
-     return v
-end
-_G.MSUF_TEXTLAYOUT_VALID_KEYS = _G.MSUF_TEXTLAYOUT_VALID_KEYS or { player=true, target=true, focus=true, targettarget=true, pet=true, boss=true }
-function _G.MSUF_NormalizeTextLayoutUnitKey(unitKey, fallbackKey)
-    local k = unitKey
-    if not k or k == "" then k = fallbackKey or (MSUF_DB and MSUF_DB.general and MSUF_DB.general.hpSpacerSelectedUnitKey) or "player" end
-    if k == "tot" then k = "targettarget" end
-    if type(k) == "string" then local ok, m = MSUF_FastCall(string.match, k, "^boss%d+$"); if ok and m then k = "boss" end end
-    if not _G.MSUF_TEXTLAYOUT_VALID_KEYS[k] then k = "player" end
-     return k
-end
-function ns.Text.SetFormatted(fs, show, fmt, ...)
-    -- Secret-safe: do NOT compare results. Pass-through to FontString API.
-    if not fs then  return end
-    if not show then
-        if fs.Hide then fs:Hide() end
-        if fs.SetText then fs:SetText("") end
-         return
-    end
-    if fs.SetFormattedText then
-        fs:SetFormattedText(fmt, ...)
-    else
-        -- Fallback: avoid string.format on potentially secret args; just clear.
-        if fs.SetText then fs:SetText("") end
-    end
-    if fs.Show then fs:Show() end
- end
-function ns.Text.Clear(fs, hide)
-    -- Secret-safe: do NOT compare strings.
-    if not fs then  return end
-    if fs.SetText then fs:SetText("") end
-    if hide and fs.Hide then fs:Hide() end
- end
-function ns.Text.ClearField(self, field)
-    if not self then  return end
-    local fs = self[field]
-    if not fs then  return end
-    ns.Text.Clear(fs, true)
- end
--- Patch O: central text renderers (HP/Power/Pct/ToT inline) - secret-safe (no string compares)
-function ns.Text._SepToken(raw, fallback)
-    local sep = raw
-    if sep == nil then sep = fallback end
-    if sep == nil then sep = "" end
-    if sep == "" then
-         return " "
-    end
-    return " " .. sep .. " "
-end
-function ns.Text._ShouldSplitHP(self, conf, g, hpMode)
-    if not self or not self.hpTextPct then  return false end
-    if hpMode ~= "FULL_PLUS_PERCENT" and hpMode ~= "PERCENT_PLUS_FULL" then  return false end
-    local on = (conf and conf.hpTextSpacerEnabled == true) or (not conf and g and g.hpTextSpacerEnabled == true)
-    if not on then  return false end
-    local x = (conf and tonumber(conf.hpTextSpacerX)) or (g and tonumber(g.hpTextSpacerX)) or 0
-    x = tonumber(x) or 0
-    return (x > 0)
-end
-function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbText, absorbStyle)
-    if not self or not self.hpText then  return end
-    if not show then
-        ns.Text.Set(self.hpText, "", false)
-        ns.Text.ClearField(self, "hpTextPct")
-         return
-    end
-    local hpMode = (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
-    local sep = ns.Text._SepToken(g and g.hpTextSeparator, nil)
-    local split = (hasPct == true) and ns.Text._ShouldSplitHP(self, conf, g, hpMode) or false
-    local function SetWithAbsorb(fmtNo, fmtSpace, fmtParen, ...)
-        -- IMPORTANT: Never put `...` before another argument in a call.
-        -- In Lua, varargs only expand fully in the last position.
-        local n = select('#', ...)
-        local a1, a2, a3 = ...
-        if absorbText then
-            local fmt = (absorbStyle == "PAREN") and fmtParen or fmtSpace
-            if n <= 0 then
-                ns.Text.SetFormatted(self.hpText, true, fmt, absorbText)
-            elseif n == 1 then
-                ns.Text.SetFormatted(self.hpText, true, fmt, a1, absorbText)
-            elseif n == 2 then
-                ns.Text.SetFormatted(self.hpText, true, fmt, a1, a2, absorbText)
-            else
-                ns.Text.SetFormatted(self.hpText, true, fmt, a1, a2, a3, absorbText)
-            end
-        else
-            if n <= 0 then
-                ns.Text.SetFormatted(self.hpText, true, fmtNo)
-            elseif n == 1 then
-                ns.Text.SetFormatted(self.hpText, true, fmtNo, a1)
-            elseif n == 2 then
-                ns.Text.SetFormatted(self.hpText, true, fmtNo, a1, a2)
-            else
-                ns.Text.SetFormatted(self.hpText, true, fmtNo, a1, a2, a3)
-            end
-        end
-     end
-    if split then
-        SetWithAbsorb("%s", "%s %s", "%s (%s)", hpStr or "")
-        ns.Text.SetFormatted(self.hpTextPct, true, "%.1f%%", hpPct)
-         return
-    end
-    ns.Text.ClearField(self, "hpTextPct")
-    if not hasPct then
-        SetWithAbsorb("%s", "%s %s", "%s (%s)", hpStr or "")
-         return
-    end
-    if hpMode == "FULL_ONLY" then
-        SetWithAbsorb("%s", "%s %s", "%s (%s)", hpStr or "")
-    elseif hpMode == "PERCENT_ONLY" then
-        SetWithAbsorb("%.1f%%", "%.1f%% %s", "%.1f%% (%s)", hpPct)
-    elseif hpMode == "PERCENT_PLUS_FULL" then
-        SetWithAbsorb("%.1f%%%s%s", "%.1f%%%s%s %s", "%.1f%%%s%s (%s)", hpPct, sep, hpStr or "")
-    else
-        SetWithAbsorb("%s%s%.1f%%", "%s%s%.1f%% %s", "%s%s%.1f%% (%s)", hpStr or "", sep, hpPct)
-    end
- end
-function ns.Text.GetUnitPowerPercent(unit)
-    if type(UnitPowerPercent) == "function" then
-        local pType
-        if type(UnitPowerType) == "function" then
-            pType = UnitPowerType(unit)
-        end
-        if CurveConstants and CurveConstants.ScaleTo100 then
-            return UnitPowerPercent(unit, pType, false, CurveConstants.ScaleTo100)
-        else
-            return UnitPowerPercent(unit, pType, false, true)
-        end
-    end
-     return nil
-end
-_G.MSUF_GetUnitPowerPercent = _G.MSUF_GetUnitPowerPercent or ns.Text.GetUnitPowerPercent
-function ns.Text._ShouldSplitPower(self, pMode, hasPct)
-    if not self or not hasPct or not self.powerTextPct then  return false end
-    if pMode ~= "FULL_PLUS_PERCENT" and pMode ~= "PERCENT_PLUS_FULL" then  return false end
-    if type(EnsureDB) == "function" then EnsureDB() end
-    local key = self.msufConfigKey
-    local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
-    local gen = (MSUF_DB and MSUF_DB.general) or nil
-    local on = (udb and udb.powerTextSpacerEnabled == true) or (not udb and gen and gen.powerTextSpacerEnabled == true)
-    if not on then  return false end
-    local x = (udb and tonumber(udb.powerTextSpacerX)) or ((gen and tonumber(gen.powerTextSpacerX)) or 0)
-    x = tonumber(x) or 0
-    if x <= 0 then  return false end
-    if key then
-        local maxP = tonumber(_G.MSUF_GetPowerSpacerMaxForUnitKey(key)) or 0
-        if x < 0 then x = 0 end
-        if x > maxP then x = maxP end
-    end
-    return (x > 0)
-end
-function ns.Text.RenderPowerText(self)
-    if not self or not self.unit or not self.powerText then  return end
-    local unit = self.unit
-    local showPower = self.showPowerText
-    if showPower == nil then showPower = true end
-    if not showPower then
-        ns.Text.Set(self.powerText, "", false)
-        ns.Text.ClearField(self, "powerTextPct")
-         return
-    end
-    local gPower = (MSUF_DB and MSUF_DB.general) or {}
-    local colorByType = (gPower.colorPowerTextByType == true)
-    local pMode = gPower.powerTextMode or "FULL_SLASH_MAX"
-    local powerSep = ns.Text._SepToken(gPower.powerTextSeparator, gPower.hpTextSeparator)
-    MSUF_EnsureUnitFlags(self)
-    local isPlayer = self._msufIsPlayer
-    local isFocus  = self._msufIsFocus
-    if isPlayer or isFocus or F.UnitIsPlayer(unit) then
-        local curText, maxText
-        local curValue = F.UnitPower(unit)
-        local maxValue = F.UnitPowerMax(unit)
-        if curValue ~= nil then
-            curText = (AbbreviateLargeNumbers and AbbreviateLargeNumbers(curValue)) or tostring(curValue)
-    end
-        if maxValue ~= nil then
-            maxText = (AbbreviateLargeNumbers and AbbreviateLargeNumbers(maxValue)) or tostring(maxValue)
-    end
-        local powerPct = ns.Text.GetUnitPowerPercent(unit)
-        local hasPct = (type(powerPct) == "number")
-        local split = ns.Text._ShouldSplitPower(self, pMode, hasPct)
-        if pMode == "FULL_ONLY" then
-            ns.Text.Set(self.powerText, curText or "", true)
-            ns.Text.ClearField(self, "powerTextPct")
-        elseif pMode == "PERCENT_ONLY" then
-            ns.Text.ClearField(self, "powerTextPct")
-            if hasPct then
-                ns.Text.SetFormatted(self.powerText, true, "%.1f%%", powerPct)
-            else
-                ns.Text.Set(self.powerText, curText or "", true)
-            end
-        elseif pMode == "FULL_PLUS_PERCENT" then
-            if hasPct then
-                if split then
-                    ns.Text.Set(self.powerText, curText or "", true)
-                    ns.Text.SetFormatted(self.powerTextPct, true, "%.1f%%", powerPct)
-                else
-                    ns.Text.ClearField(self, "powerTextPct")
-                    ns.Text.SetFormatted(self.powerText, true, "%s%s%.1f%%", curText or "", powerSep, powerPct)
-                end
-            else
-                ns.Text.ClearField(self, "powerTextPct")
-                ns.Text.Set(self.powerText, curText or "", true)
-            end
-        elseif pMode == "PERCENT_PLUS_FULL" then
-            if hasPct and split then
-                ns.Text.Set(self.powerText, curText or "", true)
-                ns.Text.SetFormatted(self.powerTextPct, true, "%.1f%%", powerPct)
-            else
-                ns.Text.ClearField(self, "powerTextPct")
-                if hasPct then
-                    ns.Text.SetFormatted(self.powerText, true, "%.1f%%%s%s", powerPct, powerSep, curText or "")
-                else
-                    ns.Text.Set(self.powerText, curText or "", true)
-                end
-            end
-        else
-            ns.Text.ClearField(self, "powerTextPct")
-            if curText and maxText then
-                ns.Text.SetFormatted(self.powerText, true, "%s%s%s", curText, powerSep, maxText)
-            elseif curText then
-                ns.Text.Set(self.powerText, curText, true)
-            elseif maxText then
-                ns.Text.Set(self.powerText, maxText, true)
-            else
-                ns.Text.Set(self.powerText, "", true)
-            end
-    end
-        ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-         return
-    elseif self.isBoss and C_StringUtil and C_StringUtil.TruncateWhenZero then
-        local pCur = F.UnitPower(unit)
-        local pMax = F.UnitPowerMax(unit)
-        local curText2 = (pCur ~= nil) and C_StringUtil.TruncateWhenZero(pCur) or nil
-        local maxText2 = (pMax ~= nil) and C_StringUtil.TruncateWhenZero(pMax) or nil
-        ns.Text.ClearField(self, "powerTextPct")
-        if curText2 and maxText2 then
-            ns.Text.SetFormatted(self.powerText, true, "%s%s%s", curText2, powerSep, maxText2)
-            ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-        elseif curText2 then
-            ns.Text.Set(self.powerText, curText2, true)
-            ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-        elseif maxText2 then
-            ns.Text.Set(self.powerText, maxText2, true)
-            ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-        else
-            ns.Text.Set(self.powerText, "", false)
-    end
-         return
-    end
-    ns.Text.ClearField(self, "powerTextPct")
-    ns.Text.Set(self.powerText, "", false)
- end
- -- Forward declarations for helper color lookups used by ToT inline.
- -- These helpers are defined later in this file; without forward-declare, early
- -- callers resolve the names as globals and can hit nil.
- local MSUF_GetNPCReactionColor, MSUF_GetClassBarColor
 
- function ns.Text.RenderToTInline(targetFrame, totConf)
-    if not targetFrame or not targetFrame.nameText then  return end
-    local sep = targetFrame._msufToTInlineSep
-    local txt = targetFrame._msufToTInlineText
-    if not sep or not txt then  return end
-    local enabled = (totConf and totConf.showToTInTargetName) and true or false
-    if not enabled or not (F.UnitExists and F.UnitExists("target")) or not (F.UnitExists and F.UnitExists("targettarget")) then
-        ns.Util.SetShown(sep, false)
-        ns.Util.SetShown(txt, false)
-         return
-    end
-    local sepToken = (totConf and totConf.totInlineSeparator) or "|"
-    if type(sepToken) ~= "string" or sepToken == "" then sepToken = "|" end
-    sep:SetText(" " .. sepToken .. " ")
-    -- Match target name font (no secret ops).
-    local font, size, flags = targetFrame.nameText:GetFont()
-    if font and sep.SetFont then
-        sep:SetFont(font, size, flags)
-        txt:SetFont(font, size, flags)
-    end
-    -- Clamp ToT inline width (secret-safe, no string width math).
-    local frameWidth = (targetFrame.GetWidth and targetFrame:GetWidth()) or 0
-    local maxW = 120
-    if frameWidth and frameWidth > 0 then
-        maxW = math.floor(frameWidth * 0.32)
-        if maxW < 80 then maxW = 80 end
-        if maxW > 180 then maxW = 180 end
-    end
-    txt:SetWidth(maxW)
-    local r, gCol, b = 1, 1, 1
-    if F.UnitIsPlayer and F.UnitIsPlayer("targettarget") then
-        local useClass = false
-        local g = MSUF_DB and MSUF_DB.general
-        if g and g.nameClassColor then useClass = true end
-        if useClass then
-            local _, classToken = F.UnitClass("targettarget")
-            r, gCol, b = MSUF_GetClassBarColor(classToken)
-        else
-            r, gCol, b = 1, 1, 1
-    end
-    else
-        if F.UnitIsDeadOrGhost and F.UnitIsDeadOrGhost("targettarget") then
-            do
-                local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
-                if type(fastNPC) == "function" then
-                    r, gCol, b = fastNPC("dead")
-                else
-                    r, gCol, b = MSUF_GetNPCReactionColor("dead")
-                end
-            end
-        else
-            local reaction = F.UnitReaction and F.UnitReaction("player", "targettarget")
-            if reaction then
-                if reaction >= 5 then
-                    do
-                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
-                        if type(fastNPC) == "function" then
-                            r, gCol, b = fastNPC("friendly")
-                        else
-                            r, gCol, b = MSUF_GetNPCReactionColor("friendly")
-                        end
-                    end
-                elseif reaction == 4 then
-                    do
-                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
-                        if type(fastNPC) == "function" then
-                            r, gCol, b = fastNPC("neutral")
-                        else
-                            r, gCol, b = MSUF_GetNPCReactionColor("neutral")
-                        end
-                    end
-                else
-                    do
-                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
-                        if type(fastNPC) == "function" then
-                            r, gCol, b = fastNPC("enemy")
-                        else
-                            r, gCol, b = MSUF_GetNPCReactionColor("enemy")
-                        end
-                    end
-                end
-            else
-                r, gCol, b = MSUF_GetNPCReactionColor("enemy")
-            end
-    end
-    end
-    sep:SetTextColor(0.7, 0.7, 0.7)
-    txt:SetTextColor(r, gCol, b)
-    local totName = F.UnitName and F.UnitName("targettarget")
-    txt:SetText(totName or "")
-    ns.Util.SetShown(sep, true)
-    ns.Util.SetShown(txt, true)
- end
-function ns.Text.ApplyPowerTextColorByType(self, unit, enabled)
-    -- Secret-safe & pass-through: avoid extra comparisons/caching; just apply resolved color.
-    if not enabled then  return end
-    if not (self and self.powerText and UnitPowerType) then  return end
-    local okPT, pType, pTok = MSUF_FastCall(UnitPowerType, unit)
-    if not okPT then  return end
-    if type(MSUF_GetResolvedPowerColor) ~= "function" then  return end
-    local pr, pg, pb = MSUF_GetResolvedPowerColor(pType, pTok)
-    if not pr then  return end
-    self.powerText:SetTextColor(pr, pg, pb, 1)
-    self._msufPTColorByPower = true
-    self._msufPTColorType = pType
-    self._msufPTColorTok = pTok
- end
-function ns.Text.ApplyName(frame, unit, overrideText)
-    -- Secret-safe: do NOT compare name strings. Use API pass-through only.
-    if not frame or not frame.nameText then  return end
-    local show = (frame.showName ~= false)
-    local txt = overrideText
-    if txt == nil and show and unit and F.UnitName then
-        txt = F.UnitName(unit)
-    end
-    if txt == nil then
-        show = false
-        txt = ""
-    end
-    ns.Text.Set(frame.nameText, txt, show)
- end
-function ns.Text.ApplyLevel(frame, unit, conf, overrideText, forceShow)
-    -- Secret-safe: do NOT compare strings for emptiness.
-    if not frame or not frame.levelText then  return end
-    local showLevel = true
-    if conf and conf.showLevelIndicator == false then
-        showLevel = false
-    end
-    if forceShow ~= nil then
-        showLevel = (forceShow == true)
-    end
-    local txt = ""
-    if overrideText ~= nil then
-        txt = overrideText
-    elseif showLevel and unit and F.UnitExists and F.UnitExists(unit) then
-        txt = (MSUF_GetUnitLevelText and MSUF_GetUnitLevelText(unit)) or ""
-    end
-    ns.Text.Set(frame.levelText, txt, showLevel)
-    if MSUF_ClampNameWidth then
-        MSUF_ClampNameWidth(frame, conf)
-    end
- end
-function ns.Text.ApplyBossTestName(frame, unit)
-    if not frame then  return end
-    local txt = "Test Boss"
-    local idx
-    if type(unit) == "string" then
-        idx = unit:match("boss(%d+)")
-    end
-    if idx then
-        txt = "Test Boss " .. idx
-    end
-    ns.Text.ApplyName(frame, unit, txt)
- end
-function ns.Text.ApplyBossTestLevel(frame, conf)
-    if not frame or not frame.levelText then  return end
-    local show = (frame.showName ~= false)
-    ns.Text.Set(frame.levelText, "??", show)
-    if MSUF_ClampNameWidth then
-        MSUF_ClampNameWidth(frame, conf)
-    end
- end
+-- ns.Text core rendering moved to MSUF_Text.lua
+
 local MSUF_BarBorderCache = { stamp = nil, thickness = 0 }
 local function MSUF_GetBarBorderStyleId(style)
     if style == "THICK" then  return 2 end
@@ -1267,6 +635,8 @@ local function MSUF_GetDesiredBarBorderThicknessAndStamp()
     end
     return MSUF_BarBorderCache.thickness, MSUF_BarBorderCache.stamp
 end
+_G.MSUF_BarBorderCache = MSUF_BarBorderCache
+_G.MSUF_GetDesiredBarBorderThicknessAndStamp = MSUF_GetDesiredBarBorderThicknessAndStamp
 local function MSUF_ApplyPoint(frame, point, relFrame, relPoint, x, y)
     if not frame then  return end
     frame:ClearAllPoints()
@@ -1349,6 +719,9 @@ local function MSUF_ApplyHealAbsorbOverlayColor(bar)
     local r, g, b, a = MSUF_GetHealAbsorbOverlayColor()
     MSUF_ApplyOverlayBarColorCached(bar, r, g, b, a)
  end
+ns.Bars._ApplyAbsorbOverlayColor = MSUF_ApplyAbsorbOverlayColor
+ns.Bars._ApplyHealAbsorbOverlayColor = MSUF_ApplyHealAbsorbOverlayColor
+ns.Bars._ResetBarZero = MSUF_ResetBarZero
 local function MSUF_NormalizeUnitKeyForDB(key)
     if not key or type(key) ~= "string" then  return nil end
     if key == "tot" then
@@ -1518,7 +891,8 @@ if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegi
         if MSUF_RebuildFontChoices then
             MSUF_RebuildFontChoices()
     end
-        if MSUF_DB and MSUF_DB.general and MSUF_DB.general.fontKey == key then
+        local _g = MSUF_DB and MSUF_DB.general
+        if _g and _g.fontKey == key then
             C_Timer.After(0, function()  if UpdateAllFonts then UpdateAllFonts() end  end)
     end
      end)
@@ -1598,7 +972,7 @@ _G.MSUF_FONT_COLORS = _G.MSUF_FONT_COLORS or MSUF_FONT_COLORS
 MSUF_GetNPCReactionColor = function(kind)
     local defaultR, defaultG, defaultB
     if kind == "friendly" then
-        defaultR, defaultG, defaultB = 0, 1, 0           -- grÃƒÂ¼n
+        defaultR, defaultG, defaultB = 0, 1, 0           -- grÃƒÆ’Ã‚Â¼n
     elseif kind == "neutral" then
         defaultR, defaultG, defaultB = 1, 1, 0           -- gelb
     elseif kind == "enemy" then
@@ -1611,7 +985,7 @@ MSUF_GetNPCReactionColor = function(kind)
     if not MSUF_DB or not EnsureDB then
          return defaultR, defaultG, defaultB
     end
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     MSUF_DB.npcColors = MSUF_DB.npcColors or {}
     local t = MSUF_DB.npcColors[kind]
     if t and t.r and t.g and t.b then
@@ -1624,7 +998,7 @@ MSUF_GetClassBarColor = function(classToken)
     if not classToken then
          return defaultR, defaultG, defaultB
     end
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     MSUF_DB.classColors = MSUF_DB.classColors or {}
     local override = MSUF_DB.classColors[classToken]
     if type(override) == "table" and override.r and override.g and override.b then
@@ -1647,7 +1021,7 @@ local function MSUF_GetPowerBarColor(powerType, powerToken)
     if not MSUF_DB or not EnsureDB then
          return nil
     end
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local g = MSUF_DB.general
     local ov = g and g.powerColorOverrides
     if type(ov) ~= "table" then
@@ -1700,7 +1074,7 @@ end
 _G.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
 ns.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
 local function MSUF_GetConfiguredFontColor()
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local g = MSUF_DB.general or {}
     if g.useCustomFontColor and g.fontColorCustomR and g.fontColorCustomG and g.fontColorCustomB then
         return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
@@ -1770,530 +1144,9 @@ function GetInternalFontPathByKey(key)
     end
      return nil
 end
-MSUF_BossTestMode = MSUF_BossTestMode or false
-local MSUF_CooldownWarningFrame
-_G.MSUF_CastbarUnitInfo = _G.MSUF_CastbarUnitInfo or {
-    player = { label = "Player Castbar", prefix = "castbarPlayer", defaultX = 0,  defaultY = 5,   showTimeKey = "showPlayerCastTime", isBoss = false },
-    target = { label = "Target Castbar", prefix = "castbarTarget", defaultX = 65, defaultY = -15, showTimeKey = "showTargetCastTime", isBoss = false },
-    focus  = { label = "Focus Castbar",  prefix = "castbarFocus",  defaultX = 65, defaultY = -15, showTimeKey = "showFocusCastTime",  isBoss = false },
-    boss   = { label = "Boss Castbar",   prefix = nil,             defaultX = 0,  defaultY = 0,   showTimeKey = "showBossCastTime",   isBoss = true  },
-}
-function MSUF_GetCastbarUnitInfo(unitKey)
-    local m = _G.MSUF_CastbarUnitInfo
-    return m and m[unitKey] or nil
-end
-function MSUF_IsBossCastbarUnit(unitKey)
-    local i = MSUF_GetCastbarUnitInfo(unitKey)
-    return (i and i.isBoss) and true or false
-end
-function MSUF_GetCastbarPrefix(unitKey)
-    local i = MSUF_GetCastbarUnitInfo(unitKey)
-    return i and i.prefix or nil
-end
-function MSUF_GetCastbarLabel(unitKey)
-    local i = MSUF_GetCastbarUnitInfo(unitKey)
-    return (i and i.label) or tostring(unitKey or "")
-end
-function MSUF_GetCastbarDefaultOffsets(unitKey)
-    local i = MSUF_GetCastbarUnitInfo(unitKey)
-    if not i then  return 0, 0 end
-    return i.defaultX or 0, i.defaultY or 0
-end
-function MSUF_GetCastbarShowTimeKey(unitKey)
-    local i = MSUF_GetCastbarUnitInfo(unitKey)
-    return i and i.showTimeKey or nil
-end
-function MSUF_GetCastbarShowNameKey(unitKey)
-    if MSUF_IsBossCastbarUnit(unitKey) then
-         return "showBossCastName"
-    end
-    local p = MSUF_GetCastbarPrefix(unitKey)
-    return p and (p .. "ShowSpellName") or nil
-end
-function MSUF_GetCastbarShowIconKey(unitKey)
-    if MSUF_IsBossCastbarUnit(unitKey) then
-         return "showBossCastIcon"
-    end
-    local p = MSUF_GetCastbarPrefix(unitKey)
-    return p and (p .. "ShowIcon") or nil
-end
-function MSUF_GetCastbarUnitFromFrame(frame)
-    if not frame then  return nil end
-    if _G.MSUF_BossCastbarPreview and frame == _G.MSUF_BossCastbarPreview then
-         return "boss"
-    end
-    if (MSUF_PlayerCastbar and frame == MSUF_PlayerCastbar) or (MSUF_PlayerCastbarPreview and frame == MSUF_PlayerCastbarPreview) then
-         return "player"
-    end
-    if (MSUF_TargetCastbar and frame == MSUF_TargetCastbar) or (MSUF_TargetCastbarPreview and frame == MSUF_TargetCastbarPreview) then
-         return "target"
-    end
-    if (MSUF_FocusCastbar and frame == MSUF_FocusCastbar) or (MSUF_FocusCastbarPreview and frame == MSUF_FocusCastbarPreview) then
-         return "focus"
-    end
-     return nil
-end
-function MSUF_ApplyUnitframeKeyAndSync(key, changedFonts)
-    if not key then  return end
-    EnsureDB()
-    if ApplySettingsForKey then
-        ApplySettingsForKey(key)
-    elseif ApplyAllSettings then
-        ApplyAllSettings()
-    end
-    if changedFonts then
-        if _G.MSUF_UpdateAllFonts then
-            _G.MSUF_UpdateAllFonts()
-        elseif ns and ns.MSUF_UpdateAllFonts then
-            ns.MSUF_UpdateAllFonts()
-    end
-    end
-if (key == "target" or key == "targettarget") and ns and ns.MSUF_ToTInline_RequestRefresh then
-    ns.MSUF_ToTInline_RequestRefresh("UF_APPLY")
-end
-    if MSUF_UpdateEditModeInfo then
-        MSUF_UpdateEditModeInfo()
-    end
- end
-function MSUF_ApplyCastbarUnitAndSync(unitKey)
-    if not unitKey then  return end
-    EnsureDB()
-    if MSUF_IsBossCastbarUnit(unitKey) then
-        if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
-            _G.MSUF_ApplyBossCastbarPositionSetting()
-    end
-        if type(_G.MSUF_ApplyBossCastbarTimeSetting) == "function" then
-            _G.MSUF_ApplyBossCastbarTimeSetting()
-    end
-        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-            _G.MSUF_UpdateBossCastbarPreview()
-    end
-        if type(MSUF_SyncCastbarPositionPopup) == "function" then
-            MSUF_SyncCastbarPositionPopup("boss")
-    end
-         return
-    end
-    if unitKey == "player" and type(MSUF_ReanchorPlayerCastBar) == "function" then
-        MSUF_ReanchorPlayerCastBar()
-    elseif unitKey == "target" and type(MSUF_ReanchorTargetCastBar) == "function" then
-        MSUF_ReanchorTargetCastBar()
-    elseif unitKey == "focus" and type(MSUF_ReanchorFocusCastBar) == "function" then
-        MSUF_ReanchorFocusCastBar()
-    end
-    MSUF_UpdateCastbarVisuals()
-    if type(MSUF_UpdateCastbarEditInfo) == "function" then
-        MSUF_UpdateCastbarEditInfo(unitKey)
-    end
-    if type(MSUF_SyncCastbarPositionPopup) == "function" then
-        MSUF_SyncCastbarPositionPopup(unitKey)
-    end
- end
-local function MSUF_GetFontPath()
-    if type(EnsureDB) == "function" then EnsureDB() end
-    MSUF_DB = MSUF_DB or {}
-    MSUF_DB.general = MSUF_DB.general or {}
-    local key = MSUF_DB.general.fontKey
-    if LSM and key and key ~= "" then
-        local p = LSM:Fetch("font", key, true)
-        if p then
-             return p
-    end
-    end
-    local internalPath = GetInternalFontPathByKey(key)
-    if internalPath then
-         return internalPath
-    end
-    return FONT_LIST[1].path
-end
-local function MSUF_GetFontFlags()
-    if type(EnsureDB) == "function" then EnsureDB() end
-    MSUF_DB = MSUF_DB or {}
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
-    if g.noOutline then
-         return ""              -- kein OUTLINE / THICKOUTLINE
-    elseif g.boldText then
-         return "THICKOUTLINE"  -- fetter schwarzer Rand
-    else
-         return "OUTLINE"       -- normaler dÃƒÂ¼nner Rand
-    end
- end
-function ns.MSUF_GetGlobalFontSettings()
-    EnsureDB()
-    local g = MSUF_DB.general or {}
-    local path  = MSUF_GetFontPath()
-    local flags = MSUF_GetFontFlags()
-    local fr, fg, fb = MSUF_GetConfiguredFontColor()
-    local baseSize  = g.fontSize or 14
-    local useShadow = g.textBackdrop and true or false
-     return path, flags, fr, fg, fb, baseSize, useShadow
-end
-function MSUF_GetGlobalFontSettings()
-    if ns and ns.MSUF_GetGlobalFontSettings then
-        return ns.MSUF_GetGlobalFontSettings()
-    end
-     return "Fonts\\FRIZQT__.TTF", "OUTLINE", 1, 1, 1, 14, false
-end
-function MSUF_GetCastbarTexture()
-    if not MSUF_DB then
-        EnsureDB()
-    end
-    local g = (MSUF_DB and MSUF_DB.general) or nil
-    local castKey = g and g.castbarTexture or nil
-    local barKey  = g and g.barTexture or nil
-    local cache = ROOT_G.MSUF_CastbarTextureCache
-    if not cache then
-        cache = {}
-        ROOT_G.MSUF_CastbarTextureCache = cache
-    end
-    local ck = tostring(castKey or "") .. "|" .. tostring(barKey or "")
-    local cached = cache[ck]
-    if cached ~= nil then
-         return cached
-    end
-    local function TryResolve(key)
-        if type(key) ~= "string" or key == "" then
-             return nil
-        end
-        local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
-        if type(builtins) == "table" then
-            local t = builtins[key]
-            if type(t) == "string" and t ~= "" then
-                 return t
-            end
-        end
-        if key:find("\\") or key:find("/") then
-             return key
-        end
-        if LSM and LSM.Fetch then
-            local tex = LSM:Fetch("statusbar", key)
-            if tex and tex ~= "" then
-                 return tex
-            end
-        end
-         return nil
-    end
-    local tex = TryResolve(castKey) or TryResolve(barKey) or "Interface\\TARGETINGFRAME\\UI-StatusBar"
-    cache[ck] = tex
-     return tex
-end
-ROOT_G.MSUF_GetCastbarTexture = MSUF_GetCastbarTexture
-_G.MSUF_GetCastbarTexture = MSUF_GetCastbarTexture
-function MSUF_GetCastbarBackgroundTexture()
-    if not MSUF_DB then
-        EnsureDB()
-    end
-    local g = MSUF_DB and MSUF_DB.general
-    local bgKey = g and g.castbarBackgroundTexture or nil
-    local castKey = g and g.castbarTexture or nil
-    local barKey = g and g.barTexture or nil
-    local key = bgKey
-    if key == nil or key == "" then
-        key = castKey
-    end
-    if key == nil or key == "" then
-        key = barKey
-    end
-    local cache = ROOT_G.MSUF_CastbarBackgroundTextureCache
-    if not cache then
-        cache = {}
-        ROOT_G.MSUF_CastbarBackgroundTextureCache = cache
-    end
-    local ck = tostring(key or "")
-    local cached = cache[ck]
-    if cached then
-         return cached
-    end
-    local tex
-    if type(MSUF_ResolveStatusbarTextureKey) == "function" then
-        tex = MSUF_ResolveStatusbarTextureKey(key)
-    end
-    if not tex or tex == "" then
-        tex = "Interface\\TARGETINGFRAME\\UI-StatusBar"
-    end
-    cache[ck] = tex
-     return tex
-end
-ROOT_G.MSUF_GetCastbarBackgroundTexture = MSUF_GetCastbarBackgroundTexture
-_G.MSUF_GetCastbarBackgroundTexture = MSUF_GetCastbarBackgroundTexture
-local function MSUF_IsCastTimeEnabled(frame)
-    local g = MSUF_DB and MSUF_DB.general
-    if not (frame and frame.unit and g) then  return true end
-    local u = frame.unit
-    local key = (u == "player" and "showPlayerCastTime") or (u == "target" and "showTargetCastTime") or (u == "focus" and "showFocusCastTime")
-    return (not key) and true or ns.Util.Enabled(nil, g, key, true)
-end
-function MSUF_GetCastbarReverseFill(isChanneled)
-    if not MSUF_DB then
-        EnsureDB()
-    end
-    local g = MSUF_DB and MSUF_DB.general
-    local dir = g and g.castbarFillDirection or "RTL"
-    local uni = g and g.castbarUnifiedDirection or false
-    if dir == "LEFT" then
-        dir = "RTL"
-    elseif dir == "RIGHT" then
-        dir = "LTR"
-    end
-    if dir ~= "RTL" and dir ~= "LTR" then
-        dir = "RTL"
-    end
-    local cache = _G.MSUF_CastbarReverseFillCache
-    if not cache then
-        cache = {}
-        _G.MSUF_CastbarReverseFillCache = cache
-    end
-    local ck = tostring(dir) .. "|" .. tostring(uni) .. "|" .. tostring(isChanneled and 1 or 0)
-    local cached = cache[ck]
-    if cached ~= nil then
-         return cached
-    end
-    local reverseNormal = (dir == "RTL")
-    local reverse
-    if uni then
-        reverse = reverseNormal
-    else
-        if isChanneled then
-            reverse = not reverseNormal
-        else
-            reverse = reverseNormal
-    end
-    end
-    cache[ck] = reverse and true or false
-    return cache[ck]
-end
-if not _G.MSUF_CastbarStyleRevision then
-    _G.MSUF_CastbarStyleRevision = 1
-end
-function MSUF_BumpCastbarStyleRevision()
-    local r = _G.MSUF_CastbarStyleRevision or 1
-    _G.MSUF_CastbarStyleRevision = r + 1
-    return _G.MSUF_CastbarStyleRevision
-end
-function MSUF_GetGlobalCastbarStyleCache()
-    local rev = _G.MSUF_CastbarStyleRevision or 1
-    local cache = _G.MSUF_GlobalCastbarStyleCache
-    if cache and cache.rev == rev then
-         return cache
-    end
-    cache = cache or {}
-    cache.rev = rev
-    if not MSUF_DB then
-        EnsureDB()
-    end
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-    cache.unifiedDirection = (g.castbarUnifiedDirection == true)
-    cache.oppositeDirForTarget = (g.castbarOpositeDirectionTarget == true)
-    local tex
-    if type(MSUF_GetCastbarTexture) == "function" then
-        tex = MSUF_GetCastbarTexture()
-    end
-    if not tex or tex == "" then
-        tex = "Interface\\TARGETINGFRAME\\UI-StatusBar"
-    end
-    cache.texture = tex
-    local bgTex
-    if type(MSUF_GetCastbarBackgroundTexture) == "function" then
-        bgTex = MSUF_GetCastbarBackgroundTexture()
-    end
-    if not bgTex or bgTex == "" then
-        bgTex = tex
-    end
-    cache.bgTexture = bgTex
-    if type(MSUF_GetCastbarReverseFill) == "function" then
-        cache.reverseFillNormal    = MSUF_GetCastbarReverseFill(false) and true or false
-        cache.reverseFillChanneled = MSUF_GetCastbarReverseFill(true)  and true or false
-    else
-        cache.reverseFillNormal    = false
-        cache.reverseFillChanneled = false
-    end
-    _G.MSUF_GlobalCastbarStyleCache = cache
-     return cache
-end
-function MSUF_RefreshCastbarStyleCache(frame)
-    if not frame then  return end
-    local rev = _G.MSUF_CastbarStyleRevision or 1
-    if frame.MSUF_castbarStyleRev == rev then
-         return
-    end
-    local c = MSUF_GetGlobalCastbarStyleCache and MSUF_GetGlobalCastbarStyleCache() or nil
-    frame.MSUF_castbarStyleRev = rev
-    if c then
-        frame.MSUF_cachedUnifiedDirection     = (c.unifiedDirection == true)
-        frame.MSUF_cachedCastbarTexture       = c.texture
-        frame.MSUF_cachedCastbarBackgroundTexture = c.bgTexture or c.texture
-        frame.MSUF_cachedReverseFillNormal    = (c.reverseFillNormal == true)
-        frame.MSUF_cachedReverseFillChanneled = (c.reverseFillChanneled == true)
-        frame.MSUF_cachedOppositeDirForTarget = (c.oppositeDirForTarget == true)
-    end
- end
-local function MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
-    MSUF_RefreshCastbarStyleCache(frame)
-    local base
-    if frame then
-        if isChanneled then
-            base = (frame.MSUF_cachedReverseFillChanneled == true)
-        else
-            base = (frame.MSUF_cachedReverseFillNormal == true)
-        end
-    else
-        base = (type(MSUF_GetCastbarReverseFill) == "function" and MSUF_GetCastbarReverseFill(isChanneled)) or false
-    end
 
-    local shouldReverseForTargetFrame = frame.unit == "target" and frame.MSUF_cachedOppositeDirForTarget == true
-    local baseBool = base and true or false
+-- Castbar utilities moved to MSUF_Castbars.lua
 
-    if shouldReverseForTargetFrame == true then
-        return not baseBool
-    end
-    return baseBool
-end
-_G.MSUF_GetCastbarReverseFillForFrame = MSUF_GetCastbarReverseFillForFrame
-local function MSUF_ForMainCastbars(fn)
-    fn(MSUF_PlayerCastbar)
-    fn(MSUF_TargetCastbar)
-    fn(MSUF_FocusCastbar)
-    fn(MSUF_PlayerCastbarPreview)
-    fn(MSUF_TargetCastbarPreview)
-    fn(MSUF_FocusCastbarPreview)
- end
-function MSUF_UpdateCastbarTextures()
-MSUF_BumpCastbarStyleRevision()
-    local __msufStyleRev = _G.MSUF_CastbarStyleRevision or 1
-    local tex = MSUF_GetCastbarTexture()
-    if not tex then  return end
-    local bgTex = tex
-    if type(MSUF_GetCastbarBackgroundTexture) == "function" then
-        local t2 = MSUF_GetCastbarBackgroundTexture()
-        if t2 and t2 ~= "" then
-            bgTex = t2
-        end
-    end
-    local function Apply(frame)
-        if frame and frame.statusBar then
-            frame.statusBar:SetStatusBarTexture(tex)
-            local sbt = frame.statusBar:GetStatusBarTexture()
-            if sbt then sbt:SetHorizTile(true) end
-            frame.MSUF_castbarStyleRev = __msufStyleRev
-            frame.MSUF_cachedCastbarTexture = tex
-            if type(MSUF_GetCastbarReverseFill) == "function" then
-                frame.MSUF_cachedReverseFillNormal    = MSUF_GetCastbarReverseFill(false) and true or false
-                frame.MSUF_cachedReverseFillChanneled = MSUF_GetCastbarReverseFill(true)  and true or false
-            end
-            EnsureDB(); frame.MSUF_cachedUnifiedDirection = (MSUF_DB and MSUF_DB.general and MSUF_DB.general.castbarUnifiedDirection) == true
-    end
-        if frame and frame.backgroundBar then
-            frame.backgroundBar:SetTexture(bgTex)
-            frame.MSUF_cachedCastbarBackgroundTexture = bgTex
-    end
-     end
-    MSUF_ForMainCastbars(Apply)
-    -- Boss castbars (LoD module)
-    local bossBars = _G.MSUF_BossCastbars
-    if bossBars and type(bossBars) == "table" then
-        for i = 1, #bossBars do
-            local f = bossBars[i]
-            if f and f.statusBar then
-                f.statusBar:SetStatusBarTexture(tex)
-                local sbt = f.statusBar:GetStatusBarTexture()
-                if sbt then sbt:SetHorizTile(true) end
-                f.MSUF_cachedCastbarTexture = tex
-            end
-            if f and f.backgroundBar then
-                f.backgroundBar:SetTexture(bgTex)
-                f.MSUF_cachedCastbarBackgroundTexture = bgTex
-            end
-        end
-    end
- end
-function MSUF_UpdateCastbarFillDirection()
-        MSUF_BumpCastbarStyleRevision()
-    local function Apply(frame)
-        if frame and frame.statusBar and frame.statusBar.SetReverseFill then
-            local isChanneled = false
-            if frame.isEmpower then
-                isChanneled = true
-            elseif frame.MSUF_isChanneled then
-                isChanneled = true
-            elseif frame.unit and (frame.unit == "player" or frame.unit == "target" or frame.unit == "focus") then
-                if UnitChannelInfo and UnitChannelInfo(frame.unit) then
-                    isChanneled = true
-                end
-            end
-                MSUF_RefreshCastbarStyleCache(frame)
-            local rf = MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
-            MSUF_FastCall(frame.statusBar.SetReverseFill, frame.statusBar, rf and true or false)
-    end
-     end
-    MSUF_ForMainCastbars(Apply)
- end
-function MSUF_ResolveStatusbarTextureKey(key)
-    local defaultTex = "Interface\\TargetingFrame\\UI-StatusBar"
-    local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
-    if type(builtins) == "table" and type(key) == "string" then
-        local t = builtins[key]
-        if type(t) == "string" and t ~= "" then
-             return t
-    end
-    end
-    if type(key) == "string" then
-        if key:find("\\") or key:find("/") then
-             return key
-    end
-    end
-    if LSM and type(LSM.Fetch) == "function" and type(key) == "string" and key ~= "" then
-        local tex = LSM:Fetch("statusbar", key, true)
-        if tex then
-             return tex
-    end
-    end
-     return defaultTex
-end
-_G.MSUF_ResolveStatusbarTextureKey = MSUF_ResolveStatusbarTextureKey
-_G.MSUF_BUILTIN_BAR_TEXTURES = _G.MSUF_BUILTIN_BAR_TEXTURES or {
-    Blizzard   = "Interface\\TargetingFrame\\UI-StatusBar",
-    Flat       = "Interface\\Buttons\\WHITE8x8",
-    RaidHP     = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill",
-    RaidPower  = "Interface\\RaidFrame\\Raid-Bar-Resource-Fill",
-    Skills     = "Interface\\PaperDollInfoFrame\\UI-Character-Skills-Bar",
-    Outline        = "Interface\\Tooltips\\UI-Tooltip-Background",
-    TooltipBorder  = "Interface\\Tooltips\\UI-Tooltip-Border",
-    DialogBG       = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    Parchment      = "Interface\\AchievementFrame\\UI-Achievement-StatsBackground",
-}
-function MSUF_GetBarTexture()
-    EnsureDB()
-    local g = (MSUF_DB and MSUF_DB.general) or nil
-    local key = g and g.barTexture
-    return MSUF_ResolveStatusbarTextureKey(key)
-end
-function MSUF_GetBarBackgroundTexture()
-    EnsureDB()
-    local g = (MSUF_DB and MSUF_DB.general) or nil
-    local key = g and g.barBackgroundTexture
-    if key == nil or key == "" then
-        key = g and g.barTexture
-    end
-    return MSUF_ResolveStatusbarTextureKey(key)
-end
-function MSUF_GetAbsorbBarTexture()
-    EnsureDB()
-    local g = (MSUF_DB and MSUF_DB.general) or nil
-    local key = g and g.absorbBarTexture
-    if key == nil or key == "" then
-        key = g and g.barTexture
-    end
-    return MSUF_ResolveStatusbarTextureKey(key)
-end
-function MSUF_GetHealAbsorbBarTexture()
-    EnsureDB()
-    local g = (MSUF_DB and MSUF_DB.general) or nil
-    local key = g and g.healAbsorbBarTexture
-    if key == nil or key == "" then
-        key = g and g.barTexture
-    end
-    return MSUF_ResolveStatusbarTextureKey(key)
-end
 local function MSUF_Clamp01(v)
     v = tonumber(v)
     if not v then  return 0 end
@@ -2302,7 +1155,7 @@ local function MSUF_Clamp01(v)
      return v
 end
 function MSUF_GetBarBackgroundTintRGBA()
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local r = MSUF_Clamp01(g.classBarBgR)
     local gg = MSUF_Clamp01(g.classBarBgG)
@@ -2315,7 +1168,7 @@ function MSUF_GetBarBackgroundTintRGBA()
      return r, gg, b, a
 end
 function MSUF_GetPowerBarBackgroundTintRGBA()
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local ar, ag, ab = g.powerBarBgColorR, g.powerBarBgColorG, g.powerBarBgColorB
     if type(ar) ~= "number" or type(ag) ~= "number" or type(ab) ~= "number" then
@@ -2409,7 +1262,7 @@ local function GetConfigKeyForUnit(unit)
      return nil
 end
 function _G.MSUF_GetHpSpacerSelectedUnitKey()
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
     local k = _G.MSUF_NormalizeTextLayoutUnitKey(g.hpSpacerSelectedUnitKey, "player")
@@ -2417,7 +1270,7 @@ function _G.MSUF_GetHpSpacerSelectedUnitKey()
      return k
 end
 function _G.MSUF_SetHpSpacerSelectedUnitKey(unitKey, suppressUIRefresh)
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
     local k = _G.MSUF_NormalizeTextLayoutUnitKey(unitKey, "player")
@@ -2429,467 +1282,12 @@ function _G.MSUF_SetHpSpacerSelectedUnitKey(unitKey, suppressUIRefresh)
         _G.MSUF_Options_RefreshPowerSpacerControls()
     end
  end
-function _G.MSUF_GetDesiredUnitAlpha(key)
-    EnsureDB()
-    local conf = key and MSUF_DB and MSUF_DB[key]
-    if not conf then
-         return 1
-    end
-    local aInLegacy  = tonumber(conf.alphaInCombat) or 1
-    local aOutLegacy = tonumber(conf.alphaOutOfCombat) or 1
-    local aIn, aOut = aInLegacy, aOutLegacy
-    if conf.alphaExcludeTextPortrait == true then
-        local mode = conf.alphaLayerMode
-        if mode == true or mode == 1 or mode == "background" then
-            mode = "background"
-        else
-            mode = "foreground"
-    end
-        if mode == "background" then
-            aIn  = tonumber(conf.alphaBGInCombat) or aInLegacy
-            aOut = tonumber(conf.alphaBGOutOfCombat) or aOutLegacy
-        else
-            aIn  = tonumber(conf.alphaFGInCombat) or aInLegacy
-            aOut = tonumber(conf.alphaFGOutOfCombat) or aOutLegacy
-    end
-    end
-    local sync = conf.alphaSyncBoth
-    if sync == nil then
-        sync = conf.alphaSync
-    end
-    if sync then
-        aOut = aIn
-    end
-    local inCombat = _G.MSUF_InCombat
-    if inCombat == nil then
-        inCombat = (F.InCombatLockdown and F.InCombatLockdown()) or false
-    end
-    local a = inCombat and aIn or aOut
-    if a < 0 then
-        a = 0
-    elseif a > 1 then
-        a = 1
-    end
-     return a
-end
--- ---------------------------------------------------------------------------
--- Layered Alpha helpers ("Keep text + portrait visible")
--- These are referenced by MSUF_ApplyUnitAlpha(). They may be missing after refactors.
--- Keep them tiny + fast; only DB reads + numeric clamps.
--- ---------------------------------------------------------------------------
-do
-    local function _Alpha_GetConf(key)
-        local db = MSUF_DB
-        if not db then
-            EnsureDB()
-            db = MSUF_DB
-        end
-        return (db and key) and db[key] or nil
-    end
-    local function _Clamp01(a)
-        if type(a) ~= "number" then  return 1 end
-        if a < 0 then  return 0 end
-        if a > 1 then  return 1 end
-         return a
-    end
-    if not _G.MSUF_Alpha_IsLayeredModeEnabled then
-        function _G.MSUF_Alpha_IsLayeredModeEnabled(key)
-            local conf = _Alpha_GetConf(key)
-            return (conf and conf.alphaExcludeTextPortrait == true) or false
-        end
-    end
-    if not _G.MSUF_Alpha_GetLayerMode then
-        function _G.MSUF_Alpha_GetLayerMode(key)
-            local conf = _Alpha_GetConf(key)
-            if not conf then  return "foreground" end
-            local mode = conf.alphaLayerMode
-            if mode == true or mode == 1 or mode == "background" then
-                 return "background"
-            end
-             return "foreground"
-        end
-    end
-    if not _G.MSUF_Alpha_GetAlphaInCombat then
-        function _G.MSUF_Alpha_GetAlphaInCombat(key)
-            local conf = _Alpha_GetConf(key)
-            if not conf then  return 1 end
-            local a = tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1
-            return _Clamp01(a)
-        end
-    end
-    if not _G.MSUF_Alpha_GetAlphaOOC then
-        function _G.MSUF_Alpha_GetAlphaOOC(key)
-            local conf = _Alpha_GetConf(key)
-            if not conf then  return 1 end
-            local sync = conf.alphaSyncBoth
-            if sync == nil then sync = conf.alphaSync end
-            if sync then
-                local a = tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1
-                return _Clamp01(a)
-            end
-            local a = tonumber(conf.alphaFGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1
-            return _Clamp01(a)
-        end
-    end
-    if not _G.MSUF_Alpha_GetBgAlphaInCombat then
-        function _G.MSUF_Alpha_GetBgAlphaInCombat(key)
-            local conf = _Alpha_GetConf(key)
-            if not conf then  return 1 end
-            local a = tonumber(conf.alphaBGInCombat) or tonumber(conf.alphaInCombat) or 1
-            return _Clamp01(a)
-        end
-    end
-    if not _G.MSUF_Alpha_GetBgAlphaOOC then
-        function _G.MSUF_Alpha_GetBgAlphaOOC(key)
-            local conf = _Alpha_GetConf(key)
-            if not conf then  return 1 end
-            local sync = conf.alphaSyncBoth
-            if sync == nil then sync = conf.alphaSync end
-            if sync then
-                local a = tonumber(conf.alphaBGInCombat) or tonumber(conf.alphaInCombat) or 1
-                return _Clamp01(a)
-            end
-            local a = tonumber(conf.alphaBGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1
-            return _Clamp01(a)
-        end
-    end
-end
-local function MSUF_Alpha_SetTextureAlpha(tex, a)
-    if tex and tex.SetAlpha and type(a) == "number" then
-        if a < 0 then a = 0 elseif a > 1 then a = 1 end
-        tex:SetAlpha(a)
-    end
- end
-local function MSUF_Alpha_SetStatusTextureAlpha(sb, a)
-    if not sb or not sb.GetStatusBarTexture then  return end
-    local t = sb:GetStatusBarTexture()
-    MSUF_Alpha_SetTextureAlpha(t, a)
- end
-local function MSUF_Alpha_SetGradientAlphaArray(grads, a)
-    if not grads or type(grads) ~= "table" then  return end
-    for i = 1, #grads do
-        MSUF_Alpha_SetTextureAlpha(grads[i], a)
-    end
- end
-local function MSUF_Alpha_SetTextAlpha(fs, a)
-    if fs and fs.SetAlpha then
-        MSUF_Alpha_SetTextureAlpha(fs, a)
-    end
- end
-local function MSUF_Alpha_ResetLayered(frame)
-    if not frame or not frame._msufAlphaLayeredMode then
-         return
-    end
-    local unitAlpha = frame._msufAlphaUnitAlpha or 1
-    frame._msufAlphaLayeredMode = nil
-    frame._msufAlphaLayerMode = nil
-    frame._msufAlphaUnitAlpha = nil
-    if frame.SetAlpha then
-        frame:SetAlpha(unitAlpha)
-    end
-    local one = 1
-    MSUF_Alpha_SetStatusTextureAlpha(frame.hpBar, one)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.targetPowerBar or frame.powerBar, one)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.absorbBar, one)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.healAbsorbBar, one)
-    MSUF_Alpha_SetTextureAlpha(frame.hpBarBG, one)
-    MSUF_Alpha_SetTextureAlpha(frame.powerBarBG, one)
-    MSUF_Alpha_SetTextureAlpha(frame.bg, one)
-    MSUF_Alpha_SetGradientAlphaArray(frame.hpGradients, one)
-    MSUF_Alpha_SetGradientAlphaArray(frame.powerGradients, one)
-    MSUF_Alpha_SetTextureAlpha(frame.portrait, one)
-    MSUF_Alpha_SetTextAlpha(frame.nameText, one)
-    MSUF_Alpha_SetTextAlpha(frame.hpText, one)
-    MSUF_Alpha_SetTextAlpha(frame.powerText, one)
- end
-local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
-    if not frame then  return end
-    if mode == true or mode == 1 or mode == "background" then
-        mode = "background"
-    else
-        mode = "foreground"
-    end
-    frame._msufAlphaLayeredMode = true
-    frame._msufAlphaLayerMode = mode
-    frame._msufAlphaUnitAlphaFG = alphaFG
-    frame._msufAlphaUnitAlphaBG = alphaBG
-    if frame.SetAlpha then
-        frame:SetAlpha(1)
-    end
-    local fg = type(alphaFG) == "number" and alphaFG or 1
-    local bg = type(alphaBG) == "number" and alphaBG or 1
-    if fg < 0 then fg = 0 elseif fg > 1 then fg = 1 end
-    if bg < 0 then bg = 0 elseif bg > 1 then bg = 1 end
-    MSUF_Alpha_SetTextureAlpha(frame.hpBarBG, bg)
-    MSUF_Alpha_SetTextureAlpha(frame.powerBarBG, bg)
-    MSUF_Alpha_SetTextureAlpha(frame.bg, bg)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.hpBar, fg)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.targetPowerBar or frame.powerBar, fg)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.absorbBar, fg)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.healAbsorbBar, fg)
-    MSUF_Alpha_SetGradientAlphaArray(frame.hpGradients, fg)
-    MSUF_Alpha_SetGradientAlphaArray(frame.powerGradients, fg)
-    local one = 1
-    MSUF_Alpha_SetTextureAlpha(frame.portrait, one)
-    MSUF_Alpha_SetTextAlpha(frame.nameText, one)
-    MSUF_Alpha_SetTextAlpha(frame.hpText, one)
-    MSUF_Alpha_SetTextAlpha(frame.powerText, one)
- end
-function _G.MSUF_ApplyUnitAlpha(frame, key)
-    EnsureDB()
-    if not frame or not frame.SetAlpha then  return end
-    local conf = (MSUF_DB and key) and MSUF_DB[key] or nil
-    if ns and ns.UF and ns.UF.IsDisabled and ns.UF.IsDisabled(conf) then  return end
-    local unit = frame.unit or key
-    if not unit then  return end
-    -- Do not fade the local player by range; also keep existing "dead/disconnected" behavior.
-    if unit ~= "player" and (not UnitExists(unit)) then
-        frame:SetAlpha(1)
-         return
-    end
-    if unit ~= "player" and UnitIsDeadOrGhost(unit) then
-        frame:SetAlpha(0.5)
-         return
-    end
-    if unit ~= "player" and UnitIsConnected and (UnitIsConnected(unit) == false) then
-        frame:SetAlpha(0.5)
-         return
-    end
-    -- Layered alpha mode: foreground/background alphas (e.g. bars dim) without dimming text/portrait.
-    local layered = _G.MSUF_Alpha_IsLayeredModeEnabled and _G.MSUF_Alpha_IsLayeredModeEnabled(key)
-    if layered and frame._msufAlphaSupportsLayered then
-        local layerMode = _G.MSUF_Alpha_GetLayerMode and _G.MSUF_Alpha_GetLayerMode(key) or "fgbg"
-        local inCombat = (_G.MSUF_InCombat == true)
-        local fgIn  = _G.MSUF_Alpha_GetAlphaInCombat and _G.MSUF_Alpha_GetAlphaInCombat(key) or 1
-        local fgOut = _G.MSUF_Alpha_GetAlphaOOC and _G.MSUF_Alpha_GetAlphaOOC(key) or 1
-        local bgIn  = _G.MSUF_Alpha_GetBgAlphaInCombat and _G.MSUF_Alpha_GetBgAlphaInCombat(key) or 1
-        local bgOut = _G.MSUF_Alpha_GetBgAlphaOOC and _G.MSUF_Alpha_GetBgAlphaOOC(key) or 1
-        local alphaFG = inCombat and fgIn or fgOut
-        local alphaBG = inCombat and bgIn or bgOut
-        -- Range-fade multiplier (Target/Focus). Defaults to 1.
-        local rm = _G.MSUF_GetRangeFadeMul
-        if type(rm) == "function" then
-            local m = rm(key, unit, frame)
-            if type(m) == "number" then
-                if m < 0 then m = 0 elseif m > 1 then m = 1 end
-                alphaFG = alphaFG * m
-                alphaBG = alphaBG * m
-            end
-        end
-        MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, layerMode)
-         return
-    end
-    -- Non-layered alpha mode: apply one alpha to the frame.
-    local a = _G.MSUF_GetDesiredUnitAlpha and _G.MSUF_GetDesiredUnitAlpha(key) or 1
-    if type(a) ~= "number" then a = 1 end
-    if a < 0 then a = 0 elseif a > 1 then a = 1 end
-    -- Range-fade multiplier (Target/Focus). Defaults to 1.
-    local rm = _G.MSUF_GetRangeFadeMul
-    if type(rm) == "function" then
-        local m = rm(key, unit, frame)
-        if type(m) == "number" then
-            if m < 0 then m = 0 elseif m > 1 then m = 1 end
-            a = a * m
-        end
-    end
-    if frame._msufAlphaLayeredMode then
-        MSUF_Alpha_ResetLayered(frame)
-    end
-    if frame.GetAlpha then
-        local cur = frame:GetAlpha() or 1
-        if math.abs(cur - a) > 0.001 then
-            frame:SetAlpha(a)
-        end
-    else
-        frame:SetAlpha(a)
-    end
- end
-function _G.MSUF_RefreshAllUnitAlphas()
-    EnsureDB()
-    local UnitFrames = _G.MSUF_UnitFrames
-    if not UnitFrames then  return end
-    local ApplyUnitAlpha = _G.MSUF_ApplyUnitAlpha
-    if type(ApplyUnitAlpha) ~= "function" then  return end
-    for unitKey, f in pairs(UnitFrames) do
-        if f and f.SetAlpha then
-            -- Use the canonical config key (boss frames share key "boss").
-            -- Important: MSUF_ApplyUnitAlpha expects a *config key*, not a conf table.
-            local cfgKey = f.msufConfigKey
-                or (GetConfigKeyForUnit and GetConfigKeyForUnit(f.unit or unitKey))
-                or unitKey
-            if cfgKey then
-                -- Cache for future calls (small perf win; behavior-neutral).
-                if not f.msufConfigKey then f.msufConfigKey = cfgKey end
-                ApplyUnitAlpha(f, cfgKey)
-            end
-        end
-    end
- end
-local function MSUF_DoAlphaRefresh()
-    if _G.MSUF_RefreshAllUnitAlphas then
-        _G.MSUF_RefreshAllUnitAlphas()
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, function()
-                if _G.MSUF_RefreshAllUnitAlphas then
-                    _G.MSUF_RefreshAllUnitAlphas()
-                end
-             end)
-        end
-    end
- end
-if not _G.MSUF_AlphaEventFrame then
-    _G.MSUF_AlphaEventFrame = CreateFrame("Frame")
-    _G.MSUF_AlphaEventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-    _G.MSUF_AlphaEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    _G.MSUF_AlphaEventFrame:SetScript("OnEvent", function(_, event)
-        if event == "PLAYER_REGEN_DISABLED" then
-            _G.MSUF_InCombat = true
-        elseif event == "PLAYER_REGEN_ENABLED" then
-            _G.MSUF_InCombat = false
-        end
-        MSUF_DoAlphaRefresh()
-     end)
-end
 
-local function MSUF_InitPlayerCastbarPreviewToggle()
-    if not MSUF_DB or not MSUF_DB.general then
-         return
-    end
-    local playerGroup = _G["MSUF_CastbarPlayerGroup"]
-    if not playerGroup then
-         return
-    end
-    local castbarGroup = playerGroup:GetParent() or playerGroup
-    local anchorParent = castbarGroup
-    local function MSUF_GetLastCastbarSubTabButton()
-        return _G["MSUF_CastbarBossButton"]
-            or _G["MSUF_CastbarFocusButton"]
-            or _G["MSUF_CastbarTargetButton"]
-            or _G["MSUF_CastbarPlayerButton"]
-            or _G["MSUF_CastbarEnemyButton"]
-    end
-    local oldCB = _G["MSUF_CastbarPlayerPreviewCheck"]
-    if oldCB then
-        oldCB:Hide()
-        oldCB:SetScript("OnClick", nil)
-        oldCB:SetScript("OnShow", nil)
-    end
-    local btn = _G["MSUF_CastbarEditModeButton"]
-    if not btn then
-        btn = F.CreateFrame("Button", "MSUF_CastbarEditModeButton", anchorParent, "UIPanelButtonTemplate")
-        btn:SetSize(160, 21)
-        local fs = btn:GetFontString()
-        if fs then
-            fs:SetFontObject("GameFontNormal")
-    end
-    end
-    if btn and not btn.__msufMidnightActionSkinned then
-        btn.__msufMidnightActionSkinned = true
-        if btn.Left then btn.Left:SetAlpha(0) end
-        if btn.Middle then btn.Middle:SetAlpha(0) end
-        if btn.Right then btn.Right:SetAlpha(0) end
-        local n = btn.GetNormalTexture and btn:GetNormalTexture()
-        if n then n:SetAlpha(0) end
-        local p = btn.GetPushedTexture and btn:GetPushedTexture()
-        if p then p:SetAlpha(0) end
-        local h = btn.GetHighlightTexture and btn:GetHighlightTexture()
-        if h then h:SetAlpha(0) end
-        local d = btn.GetDisabledTexture and btn:GetDisabledTexture()
-        if d then d:SetAlpha(0) end
-        local bg = btn:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture("Interface\\Buttons\\WHITE8x8")
-        bg:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
-        bg:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
-        bg:SetVertexColor(0.06, 0.06, 0.06, 0.92)
-        btn.__msufBg = bg
-        local bd = btn:CreateTexture(nil, "BORDER")
-        bd:SetTexture("Interface\\Buttons\\WHITE8x8")
-        bd:SetAllPoints(btn)
-        bd:SetVertexColor(0, 0, 0, 0.85)
-        btn.__msufBorder = bd
-        local fs = btn.GetFontString and btn:GetFontString()
-        if fs then
-            fs:SetTextColor(1, 0.82, 0)
-            fs:SetShadowColor(0, 0, 0, 0.9)
-            fs:SetShadowOffset(1, -1)
-    end
-    end
-    btn:ClearAllPoints()
-    local lastTab = MSUF_GetLastCastbarSubTabButton()
-    if lastTab then
-        btn:SetParent(lastTab:GetParent() or anchorParent)
-        btn:SetPoint("LEFT", lastTab, "RIGHT", 8, 0)
-    else
-        btn:SetPoint("TOPRIGHT", anchorParent, "TOPRIGHT", -175, -152)
-    end
-    local function UpdateButtonLabel()
-        EnsureDB()
-        local g       = MSUF_DB.general or {}
-        local active  = g.castbarPlayerPreviewEnabled and true or false
-        if active then
-            btn:SetText("Castbar Edit Mode: ON")
-        else
-            btn:SetText("Castbar Edit Mode: OFF")
-    end
-     end
-    btn:SetScript("OnClick", function(self)
-        EnsureDB()
-        local g = MSUF_DB.general or {}
-        local wasActive = g.castbarPlayerPreviewEnabled and true or false
-        if wasActive then
-            local bf = _G and _G.MSUF_BossCastbarPreview
-            if bf and bf.GetWidth and bf.GetHeight then
-                g.bossCastbarWidth  = math.floor((bf:GetWidth()  or (tonumber(g.bossCastbarWidth)  or 240)) + 0.5)
-                g.bossCastbarHeight = math.floor((bf:GetHeight() or (tonumber(g.bossCastbarHeight) or 18)) + 0.5)
-                bf.isDragging = false
-                if bf.SetScript then
-                    bf:SetScript("OnUpdate", nil)
-                end
-            end
-            if type(MSUF_SyncBossCastbarSliders) == "function" then
-                MSUF_SyncBossCastbarSliders()
-            end
-            if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
-                _G.MSUF_ApplyBossCastbarPositionSetting()
-            end
-            if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-                _G.MSUF_UpdateBossCastbarPreview()
-            end
-    end
-        g.castbarPlayerPreviewEnabled = not (g.castbarPlayerPreviewEnabled and true or false)
-        if g.castbarPlayerPreviewEnabled then
-            print("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r drag player/target/focus castbars with the mouse.")
-        else
-            print("|cffffd700MSUF:|r Castbar Edit Mode |cffff0000OFF|r.")
-    end
-        if MSUF_UpdatePlayerCastbarPreview then
-            MSUF_UpdatePlayerCastbarPreview()
-    end
-        if g.castbarPlayerPreviewEnabled then
-            if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
-                _G.MSUF_ApplyBossCastbarPositionSetting()
-            end
-            if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-                _G.MSUF_UpdateBossCastbarPreview()
-            end
-            if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
-                _G.MSUF_SetupBossCastbarPreviewEditMode()
-            end
-            C_Timer.After(0, function()
-                    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-                        _G.MSUF_UpdateBossCastbarPreview()
-                    end
-                    if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
-                        _G.MSUF_SetupBossCastbarPreviewEditMode()
-                    end
-                 end)
-    end
-        UpdateButtonLabel()
-     end)
-    btn:SetScript("OnShow", UpdateButtonLabel)
-    UpdateButtonLabel()
-    btn:Show()
- end
+-- Alpha system moved to MSUF_Alpha.lua
+
+
+-- Castbar preview toggle moved to MSUF_Castbars.lua
+
 local function KillFrame(frame, allowInEditMode)
     if not frame then  return end
     if frame.UnregisterAllEvents then
@@ -2977,7 +1375,7 @@ local function MSUF_ApplyCompatAnchor_PlayerFrame()
  end
 _G.MSUF_ApplyCompatAnchor_PlayerFrame = MSUF_ApplyCompatAnchor_PlayerFrame
 local function HideDefaultFrames()
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local g = MSUF_DB.general or {}
     if g.disableBlizzardUnitFrames == false then
          return
@@ -3031,9 +1429,7 @@ end
 local function MSUF_ApplyUnitVisibilityDriver(frame, forceShow)
     if not frame or not frame.unit then  return end
     if frame.unit == "player" then  return end
-if type(EnsureDB) == "function" then
-    EnsureDB()
-end
+if not MSUF_DB then EnsureDB() end
 local confKey
 if frame.isBoss or (type(frame.unit) == "string" and frame.unit:match("^boss%d+$")) then
     confKey = "boss"
@@ -3072,19 +1468,24 @@ end
         rsd(frame, "visibility", drv)
     end
  end
+local _iterState = {}
+
+local function _Iter_ApplyVisDriver(f)
+    MSUF_ApplyUnitVisibilityDriver(f, _iterState.forceShow)
+end
 local function MSUF_RefreshAllUnitVisibilityDrivers(forceShow)
-    MSUF_ForEachUnitFrame(function(f)
-        MSUF_ApplyUnitVisibilityDriver(f, forceShow)
-     end)
+    _iterState.forceShow = forceShow
+    MSUF_ForEachUnitFrame(_Iter_ApplyVisDriver)
  end
 _G.MSUF_RefreshAllUnitVisibilityDrivers = MSUF_RefreshAllUnitVisibilityDrivers
 local MSUF_GridFrame
-function ns.MSUF_RefreshAllFrames()
-    MSUF_ForEachUnitFrame(function(f)
-        if f and f.unit and f.hpBar then
-            ns.UF.RequestUpdate(f, true, false, "RefreshAllFrames")
+local function _Iter_RefreshFrame(f)
+    if f and f.unit and f.hpBar then
+        ns.UF.RequestUpdate(f, true, false, "RefreshAllFrames")
     end
-     end)
+end
+function ns.MSUF_RefreshAllFrames()
+    MSUF_ForEachUnitFrame(_Iter_RefreshFrame)
  end
 function _G.__MSUF_UFREQ_Flush()
     local co = _G.__MSUF_UFREQ_CO
@@ -3217,195 +1618,9 @@ local function MSUF_OpenOptionsToBossCastbarMenu()
     MSUF_OpenOptionsToCastbarMenu("boss")
  end
 _G.MSUF_OpenOptionsToBossCastbarMenu = MSUF_OpenOptionsToBossCastbarMenu
-function MSUF_UpdateCastbarVisuals()
-MSUF_BumpCastbarStyleRevision()
-    EnsureDB()
-    local g = MSUF_DB.general or {}
-    local showIcon    = ns.Util.Enabled(nil, g, "castbarShowIcon", true)
-    local showName    = ns.Util.Enabled(nil, g, "castbarShowSpellName", true)
-    local fontSize    = tonumber(g.castbarSpellNameFontSize) or 0
-    local iconOffsetX = tonumber(g.castbarIconOffsetX) or 0
-    local iconOffsetY = tonumber(g.castbarIconOffsetY) or 0
-    local fontPath    = MSUF_GetFontPath()
-    local fontFlags   = MSUF_GetFontFlags()
-    local fr, fg, fb = 1, 1, 1
-    if type(MSUF_GetCastbarTextColor) == "function" then
-        fr, fg, fb = MSUF_GetCastbarTextColor()
-    elseif type(MSUF_GetConfiguredFontColor) == "function" then
-        fr, fg, fb = MSUF_GetConfiguredFontColor()
-    else
-        local colorKey = (g.fontColor or "white"):lower()
-        local colorDef = (MSUF_FONT_COLORS and (MSUF_FONT_COLORS[colorKey] or MSUF_FONT_COLORS.white)) or { 1, 1, 1 }
-        fr, fg, fb = colorDef[1], colorDef[2], colorDef[3]
-    end
-    local useShadow = g.textBackdrop and true or false
-    local baseSize = g.fontSize or 14
-    local effectiveSize = (fontSize > 0) and fontSize or baseSize
-    local function ApplyFontColor(fs, size)
-        fs:SetFont(fontPath, size, fontFlags)
-        fs:SetTextColor(fr, fg, fb, 1)
-     end
-    local function ApplyShadow(fs)
-        if useShadow then
-            fs:SetShadowColor(0, 0, 0, 1)
-            fs:SetShadowOffset(1, -1)
-        else
-            fs:SetShadowOffset(0, 0)
-    end
-     end
-    local function ApplyBlizzard(frame)
-        if not frame then  return end
-        local icon = frame.Icon or frame.icon or (frame.IconFrame and frame.IconFrame.Icon)
-        if icon then icon:SetShown(showIcon) end
-        local text = frame.Text or frame.text
-        if text then
-            text:SetShown(showName)
-            ApplyFontColor(text, effectiveSize)
-            ApplyShadow(text)
-    end
-     end
-    ApplyBlizzard(TargetFrameSpellBar)
-    ApplyBlizzard(PetCastingBarFrame)
-    local function ApplyMSUF(frame)
-        if not frame or not frame.statusBar then  return end
-        local statusBar = frame.statusBar
-        local icon      = frame.icon or frame.Icon or (frame.IconFrame and (frame.IconFrame.Icon or frame.IconFrame.icon)) or frame.iconTexture or frame.IconTexture
-        local width     = frame:GetWidth()  or statusBar:GetWidth()  or 250
-        local height    = frame:GetHeight() or statusBar:GetHeight() or 18
-        local cfg = MSUF_DB and MSUF_DB.general
-        local unitKey, prefix
-        if cfg then
-            local gw = tonumber(cfg.castbarGlobalWidth)
-            local gh = tonumber(cfg.castbarGlobalHeight)
-            if gw and gw > 0 then width = gw; frame:SetWidth(width) end
-            if gh and gh > 0 then height = gh; frame:SetHeight(gh) end
-            unitKey = MSUF_GetCastbarUnitFromFrame(frame)
-            prefix = unitKey and MSUF_GetCastbarPrefix(unitKey) or nil
-            if prefix then
-                local bw = tonumber(cfg[prefix .. "BarWidth"])
-                local bh = tonumber(cfg[prefix .. "BarHeight"])
-                if bw and bw > 0 then width = bw; frame:SetWidth(width) end
-                if bh and bh > 0 then height = bh; frame:SetHeight(bh) end
-            end
-    end
-        local showIconLocal = showIcon
-        local iconOXLocal   = iconOffsetX
-        local iconOYLocal   = iconOffsetY
-        local iconSizeLocal = height
-        local cfgR = cfg
-        if cfgR then
-            if prefix then
-                local v = cfgR[prefix .. "ShowIcon"]
-                if v ~= nil then showIconLocal = (v ~= false) end
-                v = cfgR[prefix .. "IconOffsetX"]; if v ~= nil then iconOXLocal = tonumber(v) or 0 end
-                v = cfgR[prefix .. "IconOffsetY"]; if v ~= nil then iconOYLocal = tonumber(v) or 0 end
-                v = cfgR[prefix .. "IconSize"]
-                if v ~= nil then
-                    iconSizeLocal = tonumber(v) or iconSizeLocal
-                else
-                    local gv = tonumber(cfgR.castbarIconSize) or 0
-                    if gv and gv > 0 then iconSizeLocal = gv end
-                end
-            else
-                local gv = tonumber(cfgR.castbarIconSize) or 0
-                if gv and gv > 0 then iconSizeLocal = gv end
-            end
-    end
-        if iconSizeLocal < 6 then iconSizeLocal = 6 end
-        if iconSizeLocal > 128 then iconSizeLocal = 128 end
-        local isPlayerCastbar = (frame == MSUF_PlayerCastbar or frame == MSUF_PlayerCastbarPreview)
-        local iconDetached = (iconOXLocal ~= 0)
-        local backgroundBar = frame.backgroundBar
-        if isPlayerCastbar and type(_G.MSUF_ApplyPlayerCastbarIconLayout) == "function" then
-            _G.MSUF_ApplyPlayerCastbarIconLayout(frame, g, -1, 1)
-            if backgroundBar and frame.statusBar then
-                backgroundBar:ClearAllPoints()
-                backgroundBar:SetAllPoints(frame.statusBar)
-            end
-        else
-            if icon and statusBar and icon.GetParent and icon.SetParent then
-                local desiredParent = iconDetached and statusBar or frame
-                if icon:GetParent() ~= desiredParent then icon:SetParent(desiredParent) end
-            end
-            if icon then
-                icon:SetShown(showIconLocal)
-                icon:ClearAllPoints()
-                icon:SetPoint("LEFT", frame, "LEFT", iconOXLocal, iconOYLocal)
-                icon:SetSize(iconSizeLocal, iconSizeLocal)
-                if icon.SetDrawLayer then icon:SetDrawLayer("OVERLAY", 7) end
-            end
-            statusBar:ClearAllPoints()
-            if showIconLocal and icon and not iconDetached then
-                statusBar:SetPoint("LEFT", frame, "LEFT", iconSizeLocal + 1, 0)
-                statusBar:SetWidth(width - (iconSizeLocal + 1))
-            else
-                statusBar:SetPoint("LEFT", frame, "LEFT", 0, 0)
-                statusBar:SetWidth(width)
-            end
-            statusBar:SetHeight(height - 2)
-            if backgroundBar then
-                backgroundBar:ClearAllPoints()
-                backgroundBar:SetAllPoints(statusBar)
-            end
-    end
-        local cfg2 = cfg or {}
-        local showNameLocal = showName
-        local effectiveSizeLocal = effectiveSize
-        local textOX, textOY = 0, 0
-        local timeSizeLocal = effectiveSizeLocal
-        if prefix then
-            local v = cfg2[prefix .. "ShowSpellName"]
-            if v ~= nil then showNameLocal = (v ~= false) end
-            textOX = tonumber(cfg2[prefix .. "TextOffsetX"]) or 0
-            textOY = tonumber(cfg2[prefix .. "TextOffsetY"]) or 0
-            local ov = tonumber(cfg2[prefix .. "SpellNameFontSize"]) or 0
-            if ov and ov > 0 then effectiveSizeLocal = ov end
-            local tov = tonumber(cfg2[prefix .. "TimeFontSize"]) or 0
-            if tov and tov > 0 then
-                timeSizeLocal = tov
-            else
-                timeSizeLocal = effectiveSizeLocal
-            end
-    end
-        local text = frame.castText or frame.Text or frame.text
-        if text then
-            text:SetShown(showNameLocal)
-            ApplyFontColor(text, effectiveSizeLocal)
-            if text.SetPoint then
-                text:ClearAllPoints()
-                text:SetPoint("LEFT", statusBar, "LEFT", 2 + textOX, 0 + textOY)
-            end
-            ApplyShadow(text)
-    end
-        local tt = frame.timeText
-        if tt and MSUF_IsCastTimeEnabled(frame) then
-            ApplyFontColor(tt, timeSizeLocal or effectiveSize)
-            ApplyShadow(tt)
-    end
-     end
-    ApplyMSUF(MSUF_PlayerCastbar)
-    ApplyMSUF(MSUF_TargetCastbar)
-    ApplyMSUF(MSUF_FocusCastbar)
-    ApplyMSUF(MSUF_PlayerCastbarPreview)
-    ApplyMSUF(MSUF_TargetCastbarPreview)
-    ApplyMSUF(MSUF_FocusCastbarPreview)
-    if _G.MSUF_BossCastbarPreview then
-        ApplyMSUF(_G.MSUF_BossCastbarPreview)
-    end
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" and not _G.MSUF_BossPreviewRefreshLock then
-        _G.MSUF_BossPreviewRefreshLock = true
-        _G.MSUF_UpdateBossCastbarPreview()
-        if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
-            _G.MSUF_SetupBossCastbarPreviewEditMode()
-    end
-        _G.MSUF_BossPreviewRefreshLock = false
-    end
-    local bossN = _G.MSUF_MAX_BOSS_FRAMES or 5
-    for i = 1, bossN do
-        local bf = _G["MSUF_boss" .. i .. "CastBar"]
-        if bf then ApplyMSUF(bf) end
-    end
- end
+
+-- UpdateCastbarVisuals moved to MSUF_Castbars.lua
+
 local function MSUF_UpdateNameColor(frame)
     if not frame or not frame.nameText then  return end
 
@@ -3425,7 +1640,7 @@ local function MSUF_UpdateNameColor(frame)
 
     local g = (cache and cache.generalRef) or ((MSUF_DB and MSUF_DB.general) or nil)
     if not g then
-        if type(EnsureDB) == "function" then EnsureDB() end
+        if not MSUF_DB then EnsureDB() end
         g = (MSUF_DB and MSUF_DB.general) or nil
     end
 
@@ -3496,466 +1711,52 @@ local function MSUF_UpdateNameColor(frame)
         frame.levelText:SetTextColor(r or 1, gCol or 1, b or 1, 1)
     end
  end
+local function _Iter_RefreshNameColor(f)
+    if f and f.nameText and f.unit and F.UnitExists(f.unit) then
+        MSUF_UpdateNameColor(f)
+    end
+end
 _G.MSUF_RefreshAllIdentityColors = function()
     if type(_G.MSUF_DB) ~= "table" then  return end
-    local UpdateNameColor = MSUF_UpdateNameColor
-    local UnitExists = F.UnitExists
-    if type(UpdateNameColor) ~= "function" or type(UnitExists) ~= "function" then  return end
-    MSUF_ForEachUnitFrame(function(f)
-        if f and f.nameText and f.unit and UnitExists(f.unit) then
-            UpdateNameColor(f)
-    end
-     end)
+    if type(MSUF_UpdateNameColor) ~= "function" or type(F.UnitExists) ~= "function" then  return end
+    MSUF_ForEachUnitFrame(_Iter_RefreshNameColor)
  end
+local function _Iter_RefreshPowerColor(f)
+    local S = _iterState
+    if f and f.powerText and f.unit and F.UnitExists(f.unit) then
+        if S.colorByType then
+            if S.updatePowerFast then
+                S.updatePowerFast(f)
+            end
+        else
+            local fr, fg, fb = S.fr, S.fg, S.fb
+            if f.powerText.SetTextColor then
+                f.powerText:SetTextColor(fr, fg, fb, 1)
+                f.powerText._msufColorRev = nil
+            end
+            if f.powerTextPct and f.powerTextPct.SetTextColor then
+                f.powerTextPct:SetTextColor(fr, fg, fb, 1)
+                f.powerTextPct._msufColorRev = nil
+            end
+        end
+    end
+end
 _G.MSUF_RefreshAllPowerTextColors = function()
     if type(_G.MSUF_DB) ~= "table" then  return end
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     local enabled = (g and g.colorPowerTextByType == true)
-    local UnitExists = F.UnitExists
-    local UpdatePowerFast = _G.MSUF_UFCore_UpdatePowerTextFast
-    local GetFontColor = MSUF_GetConfiguredFontColor
-    if type(UnitExists) ~= "function" then  return end
-    MSUF_ForEachUnitFrame(function(f)
-        if f and f.powerText and f.unit and UnitExists(f.unit) then
-            if enabled then
-                if type(UpdatePowerFast) == "function" then
-                    UpdatePowerFast(f)
-                end
-            else
-                local fr, fg, fb = 1, 1, 1
-                if type(GetFontColor) == "function" then
-                    fr, fg, fb = GetFontColor()
-                end
-                if f.powerText.SetTextColor then
-                    f.powerText:SetTextColor(fr, fg, fb, 1)
-                    f.powerText._msufColorStamp = nil
-                end
-                if f.powerTextPct and f.powerTextPct.SetTextColor then
-                    f.powerTextPct:SetTextColor(fr, fg, fb, 1)
-                    f.powerTextPct._msufColorStamp = nil
-                end
-            end
-    end
-     end)
+    if type(F.UnitExists) ~= "function" then  return end
+    _iterState.colorByType = enabled
+    _iterState.updatePowerFast = _G.MSUF_UFCore_UpdatePowerTextFast
+    local fr, fg, fb = MSUF_GetConfiguredFontColor()
+    _iterState.fr = fr
+    _iterState.fg = fg
+    _iterState.fb = fb
+    MSUF_ForEachUnitFrame(_Iter_RefreshPowerColor)
  end
-local function MSUF_HideTex(t)  if t then t:Hide() end  end
-local _MSUF_GRAD_HIDE_KEYS = { "left", "right", "up", "down", "left2", "right2", "up2", "down2" }
-local function MSUF_HideGradSet(grads, startIdx)
-    if not grads then  return end
-    for i = startIdx or 1, 8 do
-        local t = grads[_MSUF_GRAD_HIDE_KEYS[i]]
-        if t then t:Hide() end
-    end
- end
-local function MSUF_SetGrad(tex, orientation, a1, a2, strength)
-    if not tex then  return end
-    if tex.SetGradientAlpha then
-        tex:SetGradientAlpha(orientation, 0, 0, 0, a1, 0, 0, 0, a2)
-    elseif tex.SetGradient then
-        tex:SetGradient(orientation, CreateColor(0, 0, 0, a1), CreateColor(0, 0, 0, a2))
-    else
-        tex:SetColorTexture(0, 0, 0, (a1 > a2) and a1 or a2)
-    end
-    if strength > 0 then tex:Show() else tex:Hide() end
- end
-local function MSUF_ApplyBarGradient(frameOrTex, isPower)
-    if not frameOrTex then  return end
-    EnsureDB()
-    local g = MSUF_DB.general or {}
-    local strength = g.gradientStrength or 0.45
-    if isPower then
-        if g.enablePowerGradient == false then strength = 0 end
-    else
-        if g.enableGradient == false then strength = 0 end
-    end
-    -- Allow applying to a standalone texture (used by some indicators).
-    if frameOrTex.SetGradientAlpha and not (isPower and frameOrTex.powerGradients or frameOrTex.hpGradients) then
-        local tex = frameOrTex
-        local dir = g.gradientDirection
-        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT'; g.gradientDirection = dir end
-        local orientation, a1, a2 = 'HORIZONTAL', 0, strength
-        if dir == 'LEFT' then a1, a2 = strength, 0
-        elseif dir == 'UP' then orientation = 'VERTICAL'; a1, a2 = 0, strength
-        elseif dir == 'DOWN' then orientation = 'VERTICAL'; a1, a2 = strength, 0 end
-        MSUF_SetGrad(tex, orientation, a1, a2, strength)
-         return
-    end
-    local frame = frameOrTex
-    local bar = isPower and (frame.targetPowerBar or frame.powerBar) or frame.hpBar
-    local grads = isPower and frame.powerGradients or frame.hpGradients
-    if not bar or not grads then  return end
-    -- Migrate old single-direction setting to the new per-edge toggles once.
-    local hasNew = (g.gradientDirLeft ~= nil) or (g.gradientDirRight ~= nil) or (g.gradientDirUp ~= nil) or (g.gradientDirDown ~= nil)
-    if not hasNew then
-        local dir = g.gradientDirection
-        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT' end
-        dir = string.upper(dir)
-        g.gradientDirLeft = (dir == 'LEFT')
-        g.gradientDirRight = (dir == 'RIGHT')
-        g.gradientDirUp = (dir == 'UP')
-        g.gradientDirDown = (dir == 'DOWN')
-    end
-    local left = (g.gradientDirLeft == true)
-    local right = (g.gradientDirRight == true)
-    local up = (g.gradientDirUp == true)
-    local down = (g.gradientDirDown == true)
-    if not left and not right and not up and not down then right = true; g.gradientDirRight = true end
-    if strength <= 0 then
-        MSUF_HideGradSet(grads)
-         return
-    end
-    if left then
-        local useHalf = (right == true)
-        local tex = grads.left
-        tex:ClearAllPoints()
-        if useHalf then tex:SetPoint('TOPLEFT', bar, 'TOPLEFT'); tex:SetPoint('BOTTOMLEFT', bar, 'BOTTOMLEFT'); tex:SetPoint('RIGHT', bar, 'CENTER')
-        else tex:SetAllPoints(bar) end
-        MSUF_SetGrad(tex, 'HORIZONTAL', strength, 0, strength)
-        tex:Show()
-    else MSUF_HideTex(grads.left) end
-    if right then
-        local useHalf = (left == true)
-        local tex = grads.right
-        tex:ClearAllPoints()
-        if useHalf then tex:SetPoint('TOPRIGHT', bar, 'TOPRIGHT'); tex:SetPoint('BOTTOMRIGHT', bar, 'BOTTOMRIGHT'); tex:SetPoint('LEFT', bar, 'CENTER')
-        else tex:SetAllPoints(bar) end
-        MSUF_SetGrad(tex, 'HORIZONTAL', 0, strength, strength)
-        tex:Show()
-    else MSUF_HideTex(grads.right) end
-    if up then
-        local useHalf = (down == true)
-        local tex = grads.up
-        tex:ClearAllPoints()
-        if useHalf then tex:SetPoint('TOPLEFT', bar, 'TOPLEFT'); tex:SetPoint('TOPRIGHT', bar, 'TOPRIGHT'); tex:SetPoint('BOTTOM', bar, 'CENTER')
-        else tex:SetAllPoints(bar) end
-        MSUF_SetGrad(tex, 'VERTICAL', 0, strength, strength)
-        tex:Show()
-    else MSUF_HideTex(grads.up) end
-    if down then
-        local useHalf = (up == true)
-        local tex = grads.down
-        tex:ClearAllPoints()
-        if useHalf then tex:SetPoint('BOTTOMLEFT', bar, 'BOTTOMLEFT'); tex:SetPoint('BOTTOMRIGHT', bar, 'BOTTOMRIGHT'); tex:SetPoint('TOP', bar, 'CENTER')
-        else tex:SetAllPoints(bar) end
-        MSUF_SetGrad(tex, 'VERTICAL', strength, 0, strength)
-        tex:Show()
-    else MSUF_HideTex(grads.down) end
-    MSUF_HideGradSet(grads, 5)
- end
-local function MSUF_ApplyHPGradient(frameOrTex)  return MSUF_ApplyBarGradient(frameOrTex, false) end
-local function MSUF_ApplyPowerGradient(frameOrTex)  return MSUF_ApplyBarGradient(frameOrTex, true) end
-function _G.MSUF_ApplyPowerBarBorder(bar)
-    if not bar then  return end
-    local bdb = (MSUF_DB and MSUF_DB.bars) or nil
-    local enabled = bdb and (bdb.powerBarBorderEnabled == true) or false
-    local size = bdb and tonumber(bdb.powerBarBorderSize) or 1
-    if type(size) ~= 'number' then size = 1 end
-    if size < 1 then size = 1 elseif size > 10 then size = 10 end
-    local border = bar._msufPowerBorder
-    if not border then
-        border = F.CreateFrame('Frame', nil, bar)
-        border:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 2)
-        border:EnableMouse(false)
-        bar._msufPowerBorder = border
-    end
-    if not enabled then
-        if border.Hide then border:Hide() end
-         return
-    end
-    if border.SetBackdrop then
-        border:SetBackdrop(nil)
-    end
-    border:ClearAllPoints()
-    border:SetPoint('TOPLEFT', bar, 'TOPLEFT', 0, 0)
-    border:SetPoint('TOPRIGHT', bar, 'TOPRIGHT', 0, 0)
-    border:SetHeight(size)
-    local line = border._msufSeparatorLine
-    if not line and border.CreateTexture then
-        line = border:CreateTexture(nil, 'OVERLAY')
-        line:SetTexture('Interface\\Buttons\\WHITE8x8')
-        line:SetVertexColor(0, 0, 0, 1)
-        line:SetAllPoints(border)
-        border._msufSeparatorLine = line
-    elseif line and line.SetAllPoints then
-        line:SetAllPoints(border)
-    end
-    border:Show()
- end
-function _G.MSUF_ApplyPowerBarBorder_All()
-    local frames = _G.MSUF_UnitFrames
-    if type(frames) ~= 'table' then  return end
-    for _, f in pairs(frames) do
-        local bar = f and (f.targetPowerBar or f.powerBar)
-        if bar then
-            _G.MSUF_ApplyPowerBarBorder(bar)
-    end
-    end
- end
-local function MSUF_PreCreateHPGradients(hpBar)
-    if not hpBar or not hpBar.CreateTexture then  return nil end
-    local function MakeTex()
-        local t = hpBar:CreateTexture(nil, "OVERLAY")
-        t:SetTexture("Interface\\Buttons\\WHITE8x8")
-        t:SetBlendMode("BLEND")
-        t:Hide()
-         return t
-    end
-    return {
-        left  = MakeTex(),
-        right = MakeTex(),
-        up    = MakeTex(),
-        down  = MakeTex(),
-    }
-end
-local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
-    local bar = isHeal and self and self.healAbsorbBar or self and self.absorbBar
-    local api = isHeal and UnitGetTotalHealAbsorbs or UnitGetTotalAbsorbs
-    if not self or not bar or type(api) ~= 'function' then  return end
-    local apply = _G.MSUF_ApplyAbsorbAnchorMode
-    if type(apply) == 'function' then apply(self) end
-    if isHeal then
-        MSUF_ApplyHealAbsorbOverlayColor(bar)
-    else
-        EnsureDB()
-        MSUF_ApplyAbsorbOverlayColor(bar)
-        local g = MSUF_DB.general or {}
-        if g.enableAbsorbBar == false then
-            MSUF_ResetBarZero(bar, true)
-             return
-    end
-    end
-    if _G.MSUF_AbsorbTextureTestMode then
-        local max = maxHP or F.UnitHealthMax(unit) or 1
-        bar:SetMinMaxValues(0, max)
-        MSUF_SetBarValue(bar, max * (isHeal and 0.15 or 0.25))
-        bar:Show()
-         return
-    end
-    local total = api(unit)
-    if not total then
-        MSUF_ResetBarZero(bar, true)
-         return
-    end
-    local max = maxHP or F.UnitHealthMax(unit) or 1
-    bar:SetMinMaxValues(0, max)
-    MSUF_SetBarValue(bar, total)
-    bar:Show()
- end
-local function MSUF_UpdateAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAbsorbBars(self, unit, maxHP, false) end
-local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAbsorbBars(self, unit, maxHP, true) end
-    ROOT_G.MSUF_UpdateAbsorbBar = ROOT_G.MSUF_UpdateAbsorbBar or MSUF_UpdateAbsorbBar
-    ROOT_G.MSUF_UpdateHealAbsorbBar = ROOT_G.MSUF_UpdateHealAbsorbBar or MSUF_UpdateHealAbsorbBar
 
-    -- Absorb / Heal-Absorb anchoring modes
-    -- 1/2: legacy (edge-anchored) with reverse-fill swap
-    -- 3: follow current HP edge (Blizzard-style) by anchoring to the moving HP StatusBarTexture edge and clipping.
-    -- NOTE: Mode 3 is secret-safe (no HP arithmetic) and reanchors only when mode/reverse-fill/width changes.
-    local function MSUF_ApplyAbsorbAnchorMode(self)
-        if not self then  return end
+-- Gradient system + Absorb bars moved to MSUF_Gradients.lua
 
-        EnsureDB()
-        local g = MSUF_DB and MSUF_DB.general or {}
-        local mode = g.absorbAnchorMode or 2
-
-        local hpBar = self.hpBar
-
-        -- Restore legacy overlay layout (full overlay over hpBar).
-        if mode ~= 3 then
-            if self._msufAbsorbAnchorModeStamp == mode and not self._msufAbsorbFollowActive then
-                return
-            end
-
-            self._msufAbsorbAnchorModeStamp = mode
-            self._msufAbsorbFollowActive = nil
-            self._msufAbsorbFollowRF = nil
-            self._msufAbsorbFollowW = nil
-
-            if self._msufAbsorbFollowClip and self._msufAbsorbFollowClip.Hide then
-                self._msufAbsorbFollowClip:Hide()
-            end
-
-            local absorbReverse = (mode ~= 1)
-            local healReverse   = not absorbReverse
-
-            if self.absorbBar then
-                if self.absorbBar.SetReverseFill then
-                    self.absorbBar:SetReverseFill(absorbReverse and true or false)
-                end
-                if hpBar then
-                    if self.absorbBar.GetParent and self.absorbBar:GetParent() ~= self then
-                        self.absorbBar:SetParent(self)
-                    end
-                    self.absorbBar:ClearAllPoints()
-                    self.absorbBar:SetAllPoints(hpBar)
-                    if self.absorbBar.SetFrameLevel and hpBar.GetFrameLevel then
-                        self.absorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 2)
-                    end
-                end
-            end
-
-            if self.healAbsorbBar then
-                if self.healAbsorbBar.SetReverseFill then
-                    self.healAbsorbBar:SetReverseFill(healReverse and true or false)
-                end
-                if hpBar then
-                    if self.healAbsorbBar.GetParent and self.healAbsorbBar:GetParent() ~= self then
-                        self.healAbsorbBar:SetParent(self)
-                    end
-                    self.healAbsorbBar:ClearAllPoints()
-                    self.healAbsorbBar:SetAllPoints(hpBar)
-                    if self.healAbsorbBar.SetFrameLevel and hpBar.GetFrameLevel then
-                        self.healAbsorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 3)
-                    end
-                end
-            end
-
-            return
-        end
-
-        -- Mode 3: follow current HP edge.
-        if not hpBar or not hpBar.GetStatusBarTexture then
-            return
-        end
-
-        local hpTex = hpBar:GetStatusBarTexture()
-        if not hpTex then
-            return
-        end
-
-        local hpReverse = false
-        if hpBar.GetReverseFill then
-            local ok, rf = pcall(hpBar.GetReverseFill, hpBar)
-            if ok and rf then
-                hpReverse = true
-            end
-        end
-
-        local w = nil
-        if hpBar.GetWidth then
-            w = hpBar:GetWidth()
-        end
-
-        if self._msufAbsorbAnchorModeStamp == 3 and self._msufAbsorbFollowActive
-            and self._msufAbsorbFollowRF == hpReverse and self._msufAbsorbFollowW == w then
-            return
-        end
-
-        self._msufAbsorbAnchorModeStamp = 3
-        self._msufAbsorbFollowActive = true
-        self._msufAbsorbFollowRF = hpReverse
-        self._msufAbsorbFollowW = w
-
-        local clip = self._msufAbsorbFollowClip
-        if not clip and _G.CreateFrame and hpBar then
-            clip = _G.CreateFrame("Frame", nil, hpBar)
-            clip:SetAllPoints(hpBar)
-            if clip.SetClipsChildren then
-                clip:SetClipsChildren(true)
-            end
-            self._msufAbsorbFollowClip = clip
-        elseif clip then
-            clip:ClearAllPoints()
-            clip:SetAllPoints(hpBar)
-        end
-        if clip and clip.SetFrameLevel and hpBar.GetFrameLevel then
-            clip:SetFrameLevel(hpBar:GetFrameLevel() + 2)
-        end
-        if clip and clip.Show then
-            clip:Show()
-        end
-
-        -- Absorb: outward (same direction as HP). Heal-Absorb: inward (opposite direction).
-        if self.absorbBar then
-            if clip and self.absorbBar.GetParent and self.absorbBar:GetParent() ~= clip then
-                self.absorbBar:SetParent(clip)
-            end
-            self.absorbBar:ClearAllPoints()
-            if hpReverse then
-                self.absorbBar:SetPoint("TOPRIGHT", hpTex, "TOPLEFT", 0, 0)
-                self.absorbBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMLEFT", 0, 0)
-                if self.absorbBar.SetReverseFill then
-                    self.absorbBar:SetReverseFill(true)
-                end
-            else
-                self.absorbBar:SetPoint("TOPLEFT", hpTex, "TOPRIGHT", 0, 0)
-                self.absorbBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
-                if self.absorbBar.SetReverseFill then
-                    self.absorbBar:SetReverseFill(false)
-                end
-            end
-            if type(w) == "number" and w > 0 and self.absorbBar.SetWidth then
-                if self.absorbBar._msufFollowW ~= w then
-                    self.absorbBar:SetWidth(w)
-                    self.absorbBar._msufFollowW = w
-                end
-            end
-            if self.absorbBar.SetFrameLevel and hpBar.GetFrameLevel then
-                self.absorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 2)
-            end
-        end
-
-        if self.healAbsorbBar then
-            if clip and self.healAbsorbBar.GetParent and self.healAbsorbBar:GetParent() ~= clip then
-                self.healAbsorbBar:SetParent(clip)
-            end
-            self.healAbsorbBar:ClearAllPoints()
-            if hpReverse then
-                -- inward: extend right into HP
-                self.healAbsorbBar:SetPoint("TOPLEFT", hpTex, "TOPLEFT", 0, 0)
-                self.healAbsorbBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMLEFT", 0, 0)
-                if self.healAbsorbBar.SetReverseFill then
-                    self.healAbsorbBar:SetReverseFill(false)
-                end
-            else
-                -- inward: extend left into HP
-                self.healAbsorbBar:SetPoint("TOPRIGHT", hpTex, "TOPRIGHT", 0, 0)
-                self.healAbsorbBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMRIGHT", 0, 0)
-                if self.healAbsorbBar.SetReverseFill then
-                    self.healAbsorbBar:SetReverseFill(true)
-                end
-            end
-            if type(w) == "number" and w > 0 and self.healAbsorbBar.SetWidth then
-                if self.healAbsorbBar._msufFollowW ~= w then
-                    self.healAbsorbBar:SetWidth(w)
-                    self.healAbsorbBar._msufFollowW = w
-                end
-            end
-            if self.healAbsorbBar.SetFrameLevel and hpBar.GetFrameLevel then
-                self.healAbsorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 3)
-            end
-        end
-     end
-_G.MSUF_ApplyAbsorbAnchorMode = MSUF_ApplyAbsorbAnchorMode
--- Per-unit reverse fill for HP/Power bars.
--- If Absorb Anchoring is set to "Follow current HP", this also re-syncs absorb/heal-absorb overlays.
-local function MSUF_ApplyReverseFillBars(self, conf)
-    if not self then  return end
-    local rf = (conf and conf.reverseFillBars == true) or false
-    if self._msufReverseFillBarsStamp == rf then
-         return
-    end
-    self._msufReverseFillBarsStamp = rf
-    if self.hpBar and self.hpBar.SetReverseFill then
-        self.hpBar:SetReverseFill(rf and true or false)
-    end
-    if self.selfHealPredBar and self.selfHealPredBar.SetReverseFill then
-        self.selfHealPredBar:SetReverseFill(rf and true or false)
-    end
-    local p = self.targetPowerBar or self.powerBar
-    if p and p.SetReverseFill then
-        p:SetReverseFill(rf and true or false)
-    end
-
-    -- Keep absorb/heal-absorb follow-HP anchoring in sync with reverse-fill changes.
-    local g = MSUF_DB and MSUF_DB.general
-    if g and g.absorbAnchorMode == 3 then
-        local apply = _G.MSUF_ApplyAbsorbAnchorMode
-        if apply then
-            apply(self)
-        end
-    end
- end
-_G.MSUF_ApplyReverseFillBars = _G.MSUF_ApplyReverseFillBars or MSUF_ApplyReverseFillBars
 local function PositionUnitFrame(f, unit)
     if not f or not unit then  return end
     if f._msufDragActive then  return end
@@ -3970,7 +1771,7 @@ local function PositionUnitFrame(f, unit)
     end
     local conf = f.cachedConfig
     if not conf then
-        EnsureDB()
+        if not MSUF_DB then EnsureDB() end
         conf = MSUF_DB and MSUF_DB[key]
         f.cachedConfig = conf
     end
@@ -3987,7 +1788,8 @@ local function PositionUnitFrame(f, unit)
         end
     end
     local ecv = _G["EssentialCooldownViewer"]
-    if MSUF_DB and MSUF_DB.general and MSUF_DB.general.anchorToCooldown and ecv and anchor == ecv then
+    local _g = MSUF_DB and MSUF_DB.general
+    if _g and _g.anchorToCooldown and ecv and anchor == ecv then
         local rule = MSUF_ECV_ANCHORS[key]
         if rule then
             local point, relPoint, baseX, extraY = rule[1], rule[2], rule[3], rule[4]
@@ -4008,76 +1810,43 @@ local function PositionUnitFrame(f, unit)
         MSUF_ApplyPoint(f, "CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
     end
  end
-local function MSUF_GetApproxPercentTextWidth(templateFS)
-    if not templateFS or not templateFS.GetFont then
-         return 0
-    end
+local _MSUF_MeasureCache = {}
+local _MSUF_MeasureFS
+
+local function MSUF_MeasureTextWidth(templateFS, sampleText)
+    if not templateFS or not templateFS.GetFont then return 0 end
     local font, size, flags = templateFS:GetFont()
-    local fontKey = tostring(font or "") .. "|" .. tostring(size or 0) .. "|" .. tostring(flags or "")
-    _G.MSUF_PctWidthCache = _G.MSUF_PctWidthCache or {}
-    local cache = _G.MSUF_PctWidthCache
-    local cached = cache[fontKey]
-    if cached then
-         return cached
-    end
-    local fs = _G.MSUF_PctMeasureFS
-    if not fs then
-        local holder = F.CreateFrame("Frame", "MSUF_PctMeasureFrame", UIParent)
+    if not font then return 0 end
+    local cacheKey = tostring(font) .. "|" .. tostring(size or 0) .. "|" .. tostring(flags or "") .. "|" .. sampleText
+    local cached = _MSUF_MeasureCache[cacheKey]
+    if cached then return cached end
+    if not _MSUF_MeasureFS then
+        local holder = F.CreateFrame("Frame", "MSUF_MeasureFrame", UIParent)
         holder:Hide()
-        fs = holder:CreateFontString(nil, "OVERLAY")
-        fs:Hide()
-        _G.MSUF_PctMeasureFS = fs
+        _MSUF_MeasureFS = holder:CreateFontString(nil, "OVERLAY")
+        _MSUF_MeasureFS:Hide()
     end
-    fs:SetFont(font, size, flags)
-    fs:SetText("100.0%")
-    local w = 0
-    if fs.GetStringWidth then
-        w = fs:GetStringWidth() or 0
-    end
+    _MSUF_MeasureFS:SetFont(font, size, flags)
+    _MSUF_MeasureFS:SetText(sampleText)
+    local w = _MSUF_MeasureFS:GetStringWidth() or 0
     w = tonumber(w) or 0
     if w < 0 then w = 0 end
     w = math.ceil(w + 2)
-    cache[fontKey] = w
-     return w
+    _MSUF_MeasureCache[cacheKey] = w
+    return w
 end
--- Approximate width for a "full HP" value text (secret-safe).
+
+local function MSUF_GetApproxPercentTextWidth(templateFS)
+    return MSUF_MeasureTextWidth(templateFS, "100.0%")
+end
+
 local function MSUF_GetApproxHpFullTextWidth(templateFS)
-    if not templateFS or not templateFS.GetFont then
-         return 0
-    end
-    local font, size, flags = templateFS:GetFont()
-    local fontKey = tostring(font or "") .. "|" .. tostring(size or 0) .. "|" .. tostring(flags or "")
-    _G.MSUF_HPFullWidthCache = _G.MSUF_HPFullWidthCache or {}
-    local cache = _G.MSUF_HPFullWidthCache
-    local cached = cache[fontKey]
-    if cached then
-         return cached
-    end
-    local fs = _G.MSUF_HPFullMeasureFS
-    if not fs then
-        local holder = F.CreateFrame("Frame", "MSUF_HPFullMeasureFrame", UIParent)
-        holder:Hide()
-        fs = holder:CreateFontString(nil, "OVERLAY")
-        fs:Hide()
-        _G.MSUF_HPFullMeasureFS = fs
-    end
-    fs:SetFont(font, size, flags)
-    -- (We avoid any secret arithmetic/string ops by using a constant.)
-    fs:SetText("999.9M")
-    local w = 0
-    if fs.GetStringWidth then
-        w = fs:GetStringWidth() or 0
-    end
-    w = tonumber(w) or 0
-    if w < 0 then w = 0 end
-    w = math.ceil(w + 2)
-    cache[fontKey] = w
-     return w
+    return MSUF_MeasureTextWidth(templateFS, "999.9M")
 end
 local MSUF_HP_SPACER_SCALE = 1.15
 local MSUF_HP_SPACER_MAXCAP = 2000
 function _G.MSUF_GetHPSpacerMaxForUnitKey(unitKey)
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local k = _G.MSUF_NormalizeTextLayoutUnitKey(unitKey)
     local frameName
     if k == "boss" then
@@ -4098,6 +1867,7 @@ function _G.MSUF_GetHPSpacerMaxForUnitKey(unitKey)
         local confFallback = MSUF_DB[k]
         w = tonumber(confFallback and confFallback.width) or tonumber(MSUF_DB.general and MSUF_DB.general.frameWidth) or 0
     end
+    local g = MSUF_DB.general or {}
     local conf = MSUF_DB[k] or {}
     local hX = ns.Util.Offset(conf.hpOffsetX, -4)
     local leftPad = 8
@@ -4105,7 +1875,6 @@ function _G.MSUF_GetHPSpacerMaxForUnitKey(unitKey)
     if f and f.hpTextPct then
         pctW = MSUF_GetApproxPercentTextWidth(f.hpTextPct)
     end
-    local g = (MSUF_DB and MSUF_DB.general) or {}
     local hpMode = g.hpTextMode or "FULL_PLUS_PERCENT"
     local movingW = pctW
     if hpMode == "FULL_PLUS_PERCENT" then
@@ -4128,7 +1897,7 @@ end
 local MSUF_POWER_SPACER_SCALE = 1.15
 local MSUF_POWER_SPACER_MAXCAP = 2000
 function _G.MSUF_GetPowerSpacerMaxForUnitKey(unitKey)
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local k = _G.MSUF_NormalizeTextLayoutUnitKey(unitKey)
     local frameName
     if k == "boss" then
@@ -4149,6 +1918,7 @@ function _G.MSUF_GetPowerSpacerMaxForUnitKey(unitKey)
         local confFallback = MSUF_DB[k]
         w = tonumber(confFallback and confFallback.width) or tonumber(MSUF_DB.general and MSUF_DB.general.frameWidth) or 0
     end
+    local g = MSUF_DB.general or {}
     local conf = MSUF_DB[k] or {}
     local pX = ns.Util.Offset(conf.powerOffsetX, -4)
     local leftPad = 8
@@ -4158,7 +1928,6 @@ function _G.MSUF_GetPowerSpacerMaxForUnitKey(unitKey)
     elseif f and f.powerText then
         pctW = MSUF_GetApproxPercentTextWidth(f.powerText)
     end
-    local g = (MSUF_DB and MSUF_DB.general) or {}
     local pMode = g.powerTextMode or "FULL_PLUS_PERCENT"
     local movingW = pctW
     if pMode == "FULL_PLUS_PERCENT" then
@@ -4236,16 +2005,14 @@ local function ApplyTextLayout(f, conf)
     MSUF_TextLayout_ApplyGroup(f, tf, conf, MSUF_TEXT_LAYOUT_PWR, pMode,  pHasPct,  pOn,  pEff)
  end
 function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
-    if type(EnsureDB) == "function" then
-        EnsureDB()
-    end
+    if not MSUF_DB then EnsureDB() end
     local k = _G.MSUF_NormalizeTextLayoutUnitKey(unitKey)
     local function ApplyForFrame(f)
         if not f then  return end
         f._msufTextLayoutStamp = nil
         ns.Cache.ClearStamp(f, "TextLayout")
         local key = f.msufConfigKey
-        if not key and f.unit and type(GetConfigKeyForUnit) == "function" then
+        if not key and f.unit then
             key = GetConfigKeyForUnit(f.unit)
             f.msufConfigKey = key
     end
@@ -4303,281 +2070,36 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
         ApplyForFrame(_G["MSUF_" .. k])
     end
  end
-function MSUF_UpdateBossPortraitLayout(f, conf)
-    if not f or not f.portrait or not conf then  return end
-    local mode = conf.portraitMode or "OFF"
-    local h = conf.height or (f.GetHeight and f:GetHeight()) or 30
-    local size = math.max(16, h - 4)
-    local portrait = f.portrait
-    portrait:ClearAllPoints()
-    portrait:SetSize(size, size)
-    local anchor = f.hpBar or f
-    if f._msufPowerBarReserved then
-        anchor = f
-    end
-    if mode == "LEFT" then
-        portrait:SetPoint("RIGHT", anchor, "LEFT", 0, 0)
-        portrait:Show()
-    elseif mode == "RIGHT" then
-        portrait:SetPoint("LEFT", anchor, "RIGHT", 0, 0)
-        portrait:Show()
-    else
-        portrait:Hide()
-    end
- end
-local MSUF_PORTRAIT_MIN_INTERVAL = 0.06 -- seconds; small enough to feel instant
-local MSUF_PORTRAIT_BUDGET_USED = false
-local MSUF_PORTRAIT_BUDGET_RESET_SCHEDULED = false
-local function MSUF_ResetPortraitBudgetNextFrame()
-    if MSUF_PORTRAIT_BUDGET_RESET_SCHEDULED then  return end
-    MSUF_PORTRAIT_BUDGET_RESET_SCHEDULED = true
-    C_Timer.After(0, function()
-        MSUF_PORTRAIT_BUDGET_USED = false
-        MSUF_PORTRAIT_BUDGET_RESET_SCHEDULED = false
-     end)
- end
-local function MSUF_ApplyPortraitLayoutIfNeeded(f, conf)
-    if not f or not conf then  return end
-    local portrait = f.portrait
-    if not portrait then  return end
-    local mode = conf.portraitMode or "OFF"
-    local h = conf.height or (f.GetHeight and f:GetHeight()) or 30
-    if ns.Cache.StampChanged(f, "PortraitLayout", mode, h) then
-        f._msufPortraitLayoutStamp = 1
-        MSUF_UpdateBossPortraitLayout(f, conf)
-    end
- end
-local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
-    if not f or not f.portrait or not conf then  return end
-    local mode = conf.portraitMode or "OFF"
 
-    -- Render mode: "2D" (default/legacy), "3D" (external module), "CLASS" (class icon).
-    local render = conf.portraitRender
-    if render ~= "3D" and render ~= "CLASS" then
-        render = "2D"
-    end
-    if f._msufPortraitRenderStamp ~= render then
-        f._msufPortraitRenderStamp = render
-        if mode ~= "OFF" then
-            f._msufPortraitDirty = true
-            f._msufPortraitNextAt = 0
-        end
-    end
-    if f._msufPortraitModeStamp ~= mode then
-        f._msufPortraitModeStamp = mode
-        if mode ~= "OFF" then
-            f._msufPortraitDirty = true
-            f._msufPortraitNextAt = 0
-    end
-    end
-    if mode == "OFF" then
-        f.portrait:Hide()
-        return
-    end
-    -- In Edit Mode (or Boss Test Mode), show a placeholder portrait even if the unit doesn't exist,
-    -- so users can position/size it reliably.
-    local allowPreview = false
-    if not existsForPortrait then
-        local inCombat = (F.InCombatLockdown and F.InCombatLockdown()) and true or false
-        if not inCombat and (MSUF_UnitEditModeActive or (f.isBoss and MSUF_BossTestMode)) then
-            allowPreview = true
-        end
-    end
-    if not existsForPortrait and not allowPreview then
-        f.portrait:Hide()
-        return
-    end
-    MSUF_ApplyPortraitLayoutIfNeeded(f, conf)
-    if f._msufPortraitDirty then
-        local now = (F.GetTime and F.GetTime()) or 0
-        local nextAt = tonumber(f._msufPortraitNextAt) or 0
-        if (now >= nextAt) and (not MSUF_PORTRAIT_BUDGET_USED) then
-            local portrait = f.portrait
-            if render == "CLASS" then
-                -- Important: only render class icon for *player* units.
-                -- Boss/NPC targets can still return a class token via UnitClass(), but should keep their 2D portrait.
-                local useClassIcon = false
-                if not existsForPortrait then
-                    -- EditMode/BossTest placeholder: show player's class icon.
-                    useClassIcon = true
-                elseif F.UnitIsPlayer and (F.UnitIsPlayer(unit) == true) then
-                    useClassIcon = true
-                end
+-- Portrait system moved to MSUF_Portraits.lua
 
-                if useClassIcon then
-                    local u = existsForPortrait and unit or "player"
-                    local class = (F.UnitClassBase and F.UnitClassBase(u)) or (F.UnitClass and select(2, F.UnitClass(u)))
-                    local coords = (class and _G.CLASS_ICON_TCOORDS and _G.CLASS_ICON_TCOORDS[class]) or nil
-                    if coords and portrait.SetTexture and portrait.SetTexCoord then
-                        portrait:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES")
-                        portrait:SetTexCoord(coords[1] or 0, coords[2] or 1, coords[3] or 0, coords[4] or 1)
-                    else
-                        -- Fallback: render a normal portrait if we can't resolve class coords.
-                        if portrait.SetTexCoord then
-                            portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-                        end
-                        if existsForPortrait and SetPortraitTexture then
-                            SetPortraitTexture(portrait, unit)
-                        elseif portrait.SetTexture then
-                            portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
-                        end
-                    end
-                else
-                    -- NPC/Boss: keep normal 2D portrait even when "Class Icon" render is selected.
-                    if portrait.SetTexCoord then
-                        portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-                    end
-                    if existsForPortrait and SetPortraitTexture then
-                        SetPortraitTexture(portrait, unit)
-                    elseif portrait.SetTexture then
-                        portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
-                    end
-                end
-            else
-                -- 2D (and legacy 3D fallback): standard portrait texture with a small crop.
-                if portrait.SetTexCoord then
-                    portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-                end
-                if existsForPortrait and SetPortraitTexture then
-                    SetPortraitTexture(portrait, unit)
-                elseif portrait.SetTexture then
-                    portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
-                end
-            end
-            f._msufPortraitDirty = nil
-            f._msufPortraitNextAt = now + MSUF_PORTRAIT_MIN_INTERVAL
-            MSUF_PORTRAIT_BUDGET_USED = true
-            MSUF_ResetPortraitBudgetNextFrame()
-        else
-            if not f._msufPortraitRetryScheduled and C_Timer and C_Timer.After then
-                f._msufPortraitRetryScheduled = true
-                local delay = 0
-                if now < nextAt then
-                    delay = nextAt - now
-                    if delay < 0 then delay = 0 end
-                end
-                C_Timer.After(delay, function()
-                    if not f then  return end
-                    f._msufPortraitRetryScheduled = nil
-                    if not f._msufPortraitDirty then  return end
-                    ns.UF.RequestUpdate(f, false, false, "PortraitRetry")
-                 end)
-            end
-            MSUF_ResetPortraitBudgetNextFrame()
-    end
-    end
-    f.portrait:Show()
- end
-
--- Export for UFCore's spec-driven Portrait element (avoids forcing full legacy updates on portrait events).
-_G.MSUF_UpdatePortraitIfNeeded = MSUF_UpdatePortraitIfNeeded
-
--- Hot-path gate: portraits should not be touched every UF update. We only re-render when:
---  - portrait settings (mode/render) change
---  - portrait layout (height) changes
---  - the unit identity changes (target/focus)
---  - the frame is explicitly marked dirty (e.g. unit appeared/disappeared)
-local function MSUF_MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
-    if not f or not f.portrait or not conf then  return end
-
-    local mode = conf.portraitMode or "OFF"
-    local render = conf.portraitRender
-    if render ~= "3D" and render ~= "CLASS" then
-        render = "2D"
-    end
-
-    -- Fast OFF gate (still guarantees a hide if something left it shown).
-    if mode == "OFF" and f._msufPortraitModeStamp == "OFF" and (not f._msufPortraitDirty) then
-        local p = f.portrait
-        if p and p.IsShown and p:IsShown() then
-            p:Hide()
-        end
-        return
-    end
-
-    local need = false
-
-    -- Settings change
-    if f._msufPortraitModeStamp ~= mode or f._msufPortraitRenderStamp ~= render then
-        need = true
-    end
-
-    -- Layout change (height impacts portrait size/anchor)
-    local h = tonumber(conf.height) or (f.GetHeight and f:GetHeight()) or 0
-    if f._msufPortraitLayoutModeStamp ~= mode or f._msufPortraitLayoutHStamp ~= h then
-        f._msufPortraitLayoutModeStamp = mode
-        f._msufPortraitLayoutHStamp = h
-        need = true
-    end
-
-    -- Identity-based gate: only re-render once per unit swap (GUID change).
-    -- This avoids repeated portrait work during UNIT_MODEL_CHANGED / UNIT_PORTRAIT_UPDATE spam,
-    -- while still updating correctly when the underlying unit token points to a new unit.
-    local doGuidGate = false
-    if unit == "target" or unit == "focus" or unit == "targettarget" then
-        doGuidGate = true
-    elseif unit ~= "player" and type(unit) == "string" and unit:sub(1, 4) == "boss" then
-        doGuidGate = true
-    end
-
-    if existsForPortrait and doGuidGate then
-        local guid = (F.UnitGUID and F.UnitGUID(unit)) or nil
-        if guid ~= f._msufPortraitLastGuid then
-            f._msufPortraitLastGuid = guid
-            f._msufPortraitDirty = true
-            f._msufPortraitNextAt = 0
-            need = true
-        end
-    end
-
-    if f._msufPortraitDirty then
-        need = true
-    end
-
-    if not need then
-        return
-    end
-
-    MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
-end
-
--- Export so UFCore can use the same gating (and avoid repeated work on UNIT_MODEL_CHANGED spam).
-_G.MSUF_MaybeUpdatePortrait = MSUF_MaybeUpdatePortrait
--- then multiplies by maxChars to get a clip width. Never measures secret unit names. to get a clip width. Never measures secret unit names.
 local function MSUF_GetApproxNameWidthForChars(templateFS, maxChars)
-    if not templateFS or not templateFS.GetFont then  return nil end
+    if not templateFS or not templateFS.GetFont then return nil end
     maxChars = tonumber(maxChars) or 16
     if maxChars < 1 then maxChars = 1 end
     if maxChars > 60 then maxChars = 60 end
     local font, size, flags = templateFS:GetFont()
-    local fontKey = tostring(font or "") .. "|" .. tostring(size or 0) .. "|" .. tostring(flags or "")
+    if not font then return nil end
+    local fontKey = tostring(font) .. "|" .. tostring(size or 0) .. "|" .. tostring(flags or "")
     _G.MSUF_NameWidthAvgCache = _G.MSUF_NameWidthAvgCache or {}
-    local cache = _G.MSUF_NameWidthAvgCache
-    local avg = cache[fontKey]
+    local avg = _G.MSUF_NameWidthAvgCache[fontKey]
     if not avg then
-        local fs = _G.MSUF_NameMeasureFS
-        if not fs then
-            local holder = F.CreateFrame("Frame", "MSUF_NameMeasureFrame", UIParent)
+        if not _MSUF_MeasureFS then
+            local holder = F.CreateFrame("Frame", "MSUF_MeasureFrame", UIParent)
             holder:Hide()
-            fs = holder:CreateFontString(nil, "OVERLAY")
-            fs:Hide()
-            _G.MSUF_NameMeasureFS = fs
-    end
-        if font and size then
-            fs:SetFont(font, size, flags)
-    end
+            _MSUF_MeasureFS = holder:CreateFontString(nil, "OVERLAY")
+            _MSUF_MeasureFS:Hide()
+        end
+        _MSUF_MeasureFS:SetFont(font, size, flags)
         local sample = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        fs:SetText(sample)
-        local w = fs:GetStringWidth()
-        if type(w) == "number" and w > 0 then
-            avg = w / #sample
-        else
-            avg = (tonumber(size) or 12) * 0.55
-    end
-        cache[fontKey] = avg
+        _MSUF_MeasureFS:SetText(sample)
+        local w = _MSUF_MeasureFS:GetStringWidth()
+        avg = (type(w) == "number" and w > 0) and (w / #sample) or ((tonumber(size) or 12) * 0.55)
+        _G.MSUF_NameWidthAvgCache[fontKey] = avg
     end
     return avg * maxChars
 end
+local _AP_HASH = { TOPLEFT=1, TOP=2, TOPRIGHT=3, LEFT=4, CENTER=5, RIGHT=6, BOTTOMLEFT=7, BOTTOM=8, BOTTOMRIGHT=9 }
 function MSUF_ClampNameWidth(f, conf)
     if not f or not f.nameText then  return end
     f.nameText:SetWordWrap(false)
@@ -4596,7 +2118,7 @@ function MSUF_ClampNameWidth(f, conf)
         local arp = f._msufNameAnchorRelPoint or "TOPLEFT"
         local ax  = (type(f._msufNameAnchorX) == "number") and f._msufNameAnchorX or 4
         local ay  = (type(f._msufNameAnchorY) == "number") and f._msufNameAnchorY or -4
-        local stamp = "OFF|"..tostring(ap).."|"..tostring(arp).."|"..tostring(ax).."|"..tostring(ay)
+        local stamp = (_AP_HASH[ap] or 0) * 100003 + (_AP_HASH[arp] or 0) * 10007 + math_floor((ax + 200) * 100) * 101 + math_floor((ay + 200) * 100)
         if f._msufClampStamp == stamp then
              return
     end
@@ -4702,7 +2224,20 @@ function MSUF_ClampNameWidth(f, conf)
     local arp = f._msufNameAnchorRelPoint or "TOPLEFT"
     local ax  = (type(f._msufNameAnchorX) == "number") and f._msufNameAnchorX or 4
     local ay  = (type(f._msufNameAnchorY) == "number") and f._msufNameAnchorY or -4
-    local stamp = "ON|"..tostring(frameWidth).."|"..tostring(baseWidth).."|"..tostring(reservedRight).."|"..tostring(nameWidth).."|"..tostring(maxChars).."|"..tostring(lvlShown and 1 or 0).."|"..tostring(ap).."|"..tostring(arp).."|"..tostring(ax).."|"..tostring(ay).."|"..tostring(mode).."|"..tostring(maskPx).."|"..tostring(showDots and 1 or 0)
+    local stamp = 1000000000
+              + frameWidth * 1000003
+              + baseWidth * 100003
+              + reservedRight * 10007
+              + nameWidth * 1009
+              + maxChars * 101
+              + (lvlShown and 70001 or 0)
+              + (_AP_HASH[ap] or 0) * 7000003
+              + (_AP_HASH[arp] or 0) * 700003
+              + math_floor((ax + 200) * 100) * 71
+              + math_floor((ay + 200) * 100) * 7
+              + (mode == "LEFT" and 3 or 0)
+              + maskPx * 17
+              + (showDots and 1 or 0)
     if f._msufClampStamp == stamp then
          return
     end
@@ -4776,8 +2311,14 @@ function MSUF_ClampNameWidth(f, conf)
     if clipH < 12 then clipH = 12 end
     if clipH > 48 then clipH = 48 end
     clip:SetSize(clipW, clipH)
-    local anchorStamp = tostring(ap) .. "|" .. tostring(arp) .. "|" .. tostring(ax) .. "|" .. tostring(ay)
-        .. "|" .. tostring(clipSide) .. "|" .. tostring(maskPx) .. "|" .. tostring(clipW) .. "|" .. tostring(clipH)
+    local anchorStamp = (_AP_HASH[ap] or 0) * 100000007
+        + (_AP_HASH[arp] or 0) * 10000019
+        + math_floor((ax + 200) * 100) * 100003
+        + math_floor((ay + 200) * 100) * 10007
+        + (clipSide == "LEFT" and 1000003 or 0)
+        + maskPx * 1009
+        + clipW * 101
+        + clipH
     if f._msufNameClipAnchorStamp ~= anchorStamp then
         f._msufNameClipAnchorStamp = anchorStamp
         clip:ClearAllPoints()
@@ -4790,7 +2331,7 @@ function MSUF_ClampNameWidth(f, conf)
     end
     end
     -- IMPORTANT: this must be resilient against other code (e.g. font/apply passes) resetting justify/anchors.
-    local textStamp = tostring(clipSide)
+    local textStamp = (clipSide == "LEFT") and 1 or 2
     local desiredJustify = (clipSide == "LEFT") and "RIGHT" or "LEFT"
     local needTextReanchor = (f._msufNameClipTextStamp ~= textStamp)
     if not needTextReanchor then
@@ -4846,7 +2387,13 @@ function MSUF_ClampNameWidth(f, conf)
                 dots:SetFont(ff, sz, fl)
             end
     end
-        local dotStamp = tostring(clipSide) .. "|" .. tostring(maskPx) .. "|" .. tostring(ap) .. "|" .. tostring(arp) .. "|" .. tostring(ax) .. "|" .. tostring(ay) .. "|" .. tostring(nameWidth)
+        local dotStamp = (clipSide == "LEFT" and 10000019 or 0)
+            + maskPx * 100003
+            + (_AP_HASH[ap] or 0) * 10007
+            + (_AP_HASH[arp] or 0) * 1009
+            + math_floor((ax + 200) * 100) * 101
+            + math_floor((ay + 200) * 100) * 7
+            + nameWidth
         if f._msufNameDotsStamp ~= dotStamp then
             f._msufNameDotsStamp = dotStamp
             dots:ClearAllPoints()
@@ -4914,11 +2461,11 @@ local function MSUF_NumberToTextFast(v)
 end
 ns.Icons._layout = ns.Icons._layout or {}
 function ns.Icons._layout.GetConf(f)
-    if (not MSUF_DB) and type(EnsureDB) == "function" then EnsureDB() end
+    if not MSUF_DB then EnsureDB() end
     local db = MSUF_DB
     if not db then  return nil, nil, nil end
     local g = db.general or {}
-    local key = (f and f.unit and type(GetConfigKeyForUnit) == "function") and GetConfigKeyForUnit(f.unit) or nil
+    local key = (f and f.unit) and GetConfigKeyForUnit(f.unit) or nil
     return g, key, (key and db[key]) or nil
 end
 function ns.Icons._layout.Resolve(anchor, allowCenter)
@@ -5044,7 +2591,7 @@ local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
 local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
     if not self or self.isBoss then  return end
     if F.InCombatLockdown and F.InCombatLockdown() then  return end
-    if type(EnsureDB) == "function" then EnsureDB() end
+    if not MSUF_DB then EnsureDB() end
     g = g or ((MSUF_DB and MSUF_DB.general) or {})
 
     if self.Show then self:Show() end
@@ -5085,9 +2632,9 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
             MSUF_ApplyBarBackgroundVisual(self)
         end
         if self.hpGradients then
-            MSUF_ApplyHPGradient(self)
+            ns.Bars._ApplyHPGradient(self)
         elseif self.hpGradient then
-            MSUF_ApplyHPGradient(self.hpGradient)
+            ns.Bars._ApplyHPGradient(self.hpGradient)
         end
     end
 
@@ -5203,6 +2750,25 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
 end
 _G.MSUF_ApplyUnitframeEditPreview = MSUF_ApplyUnitframeEditPreview
 
+-- =========================================================================
+-- HOT-PATH LOCAL CACHE
+-- Resolve _G function references once; avoids hash lookup on every call.
+-- Functions are defined above this point or in files loaded earlier (TOC).
+-- Mutable state (_G.MSUF_UnitTokenChanged, _G.MSUF_UFCORE_FLUSH_SERIAL)
+-- stays on _G since the values change every flush.
+-- =========================================================================
+local _MSUF_ApplyUnitAlpha  -- resolved lazily (Core/MSUF_Alpha.lua loads after main)
+local _MSUF_MaybeUpdatePortrait  -- resolved lazily (Core/MSUF_Portraits.lua loads after main)
+local _MSUF_ApplyUnitframeEditPreview  -- resolved lazily
+local _MSUF_UFCore_UpdateHpTextFast    = _G.MSUF_UFCore_UpdateHpTextFast
+local _MSUF_UFCore_UpdatePowerTextFast = _G.MSUF_UFCore_UpdatePowerTextFast
+local _MSUF_UFCore_UpdatePowerBarFast  = _G.MSUF_UFCore_UpdatePowerBarFast
+local _MSUF_ApplyBossTestHpPreviewText = _G.MSUF_ApplyBossTestHpPreviewText
+local _MSUF_QueueUnitframeVisual       = _G.MSUF_QueueUnitframeVisual
+local _MSUF_ApplyLeaderIconLayout      = MSUF_ApplyLeaderIconLayout
+local _MSUF_ApplyRaidMarkerLayout      = MSUF_ApplyRaidMarkerLayout
+local _MSUF_TPA_SyncAnchors            -- forward decl: assigned after definition below
+
 local function MSUF_SyncTargetPowerBar(self, unit, barsConf, isPlayer, isTarget, isFocus)
     if not self then  return false end
     MSUF_EnsureUnitFlags(self)
@@ -5212,7 +2778,7 @@ local function MSUF_UFStep_BasicHealth(self, unit)
     local hp = ns.Bars.ApplyHealthBars(self, unit)
      return hp
 end
-local function MSUF_UFStep_HeavyVisual(self, unit, key)
+local function MSUF_UFStep_HeavyVisual(self, unit, key, g_opt)
         local doHeavyVisual = true
         local forceHeavy = false
         local tokenFlags = _G.MSUF_UnitTokenChanged
@@ -5232,7 +2798,7 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key)
             self._msufHeavyVisualNextAt = now
     end
         if doHeavyVisual then
-        local g = (MSUF_DB and MSUF_DB.general) or {}
+        local g = g_opt or ((MSUF_DB and MSUF_DB.general) or {})
         local mode = g.barMode
         if mode ~= "dark" and mode ~= "class" and mode ~= "unified" then
             mode = (g.useClassColors and "class") or (g.darkMode and "dark") or "dark"
@@ -5293,9 +2859,9 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key)
     end
         self.hpBar:SetStatusBarColor(barR, barG, barB, 1)
         if self.hpGradients then
-            MSUF_ApplyHPGradient(self)
+            ns.Bars._ApplyHPGradient(self)
         elseif self.hpGradient then
-            MSUF_ApplyHPGradient(self.hpGradient)
+            ns.Bars._ApplyHPGradient(self.hpGradient)
     end
         if self.bg then
             MSUF_ApplyBarBackgroundVisual(self)
@@ -5332,8 +2898,8 @@ local function MSUF_UFStep_Border(self)
             if self._msufBarOutlineBottomIsPower ~= bottomIsPower then
                 need = true
             end
-            if need and type(_G.MSUF_QueueUnitframeVisual) == "function" then
-                _G.MSUF_QueueUnitframeVisual(self)
+            if need and _MSUF_QueueUnitframeVisual then
+                _MSUF_QueueUnitframeVisual(self)
             end
     end
  end
@@ -5351,7 +2917,7 @@ if self.leaderIcon then
         if tex and self.leaderIcon.SetTexture then self.leaderIcon:SetTexture(tex); ns.Util.SetShown(self.leaderIcon, true) else ns.Util.SetShown(self.leaderIcon, false) end
     end
 end
-if self.leaderIcon and _G.MSUF_ApplyLeaderIconLayout then _G.MSUF_ApplyLeaderIconLayout(self) end
+if self.leaderIcon and _MSUF_ApplyLeaderIconLayout then _MSUF_ApplyLeaderIconLayout(self) end
 if self.raidMarkerIcon then
     if not ns.Util.Enabled(conf, g, "showRaidMarker", true) then
         ns.Util.SetShown(self.raidMarkerIcon, false)
@@ -5362,7 +2928,7 @@ if self.raidMarkerIcon then
         if idx and SetRaidTargetIconTexture then SetRaidTargetIconTexture(self.raidMarkerIcon, idx); ns.Util.SetShown(self.raidMarkerIcon, true) else ns.Util.SetShown(self.raidMarkerIcon, false) end
     end
 end
-if self.raidMarkerIcon and _G.MSUF_ApplyRaidMarkerLayout then _G.MSUF_ApplyRaidMarkerLayout(self) end
+if self.raidMarkerIcon and _MSUF_ApplyRaidMarkerLayout then _MSUF_ApplyRaidMarkerLayout(self) end
  end
 local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     -- Secret-safe text gating + per-flush coalesce (no compares on hp/power values)
@@ -5370,53 +2936,62 @@ local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     local showPowerText = (self.showPowerText ~= false)
     local textStamp = self._msufTextLayoutStamp or 0
     -- Coalesce within the same millisecond-bucket (approx "per-flush" when multiple updates burst)
-    local now = (_G.GetTime and _G.GetTime()) or 0
-    local nowMs = _G.math and _G.math.floor(now * 1000) or now
+    local now = GetTime()
+    local nowMs = math_floor(now * 1000)
+    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes → short keys on small table)
+    local ts = self._msufTS
+    if not ts then ts = {}; self._msufTS = ts end
     -- HP text: force when layout/toggle changed, otherwise rate-limit
-    local forceHP = (self._msufLastHpTextStamp ~= textStamp) or (self._msufLastShowHPText ~= showHPText)
+    local forceHP = (ts[1] ~= textStamp) or (ts[2] ~= showHPText) -- [1]=hpStamp, [2]=showHP
     if showHPText then
-        if forceHP or (self._msufLastHpTextAt == nil) or ((now - (self._msufLastHpTextAt or 0)) >= 0.10) then
-            if forceHP or (self._msufHpTextCoalesceMs ~= nowMs) then
-                _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
-                self._msufLastHpTextAt = now
-                self._msufHpTextCoalesceMs = nowMs
+        if forceHP or (ts[3] == nil) or ((now - (ts[3] or 0)) >= 0.10) then -- [3]=hpAt
+            if forceHP or (ts[4] ~= nowMs) then -- [4]=hpMs
+                _MSUF_UFCore_UpdateHpTextFast(self, hp)
+                ts[3] = now
+                ts[4] = nowMs
             end
         end
     else
         -- still call once on toggle-off so the fast path can hide/clear
         if forceHP then
-            _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
-            self._msufLastHpTextAt = now
-            self._msufHpTextCoalesceMs = nowMs
+            _MSUF_UFCore_UpdateHpTextFast(self, hp)
+            ts[3] = now
+            ts[4] = nowMs
         end
     end
-    self._msufLastHpTextStamp = textStamp
-    self._msufLastShowHPText = showHPText
+    ts[1] = textStamp
+    ts[2] = showHPText
     -- Power text: same gating (no power value reads here)
-    local forcePower = (self._msufLastPowerTextStamp ~= textStamp) or (self._msufLastShowPowerText ~= showPowerText)
+    local forcePower = (ts[5] ~= textStamp) or (ts[6] ~= showPowerText) -- [5]=pwStamp, [6]=showPw
     if showPowerText then
-        if forcePower or (self._msufLastPowerTextAt == nil) or ((now - (self._msufLastPowerTextAt or 0)) >= 0.10) then
-            if forcePower or (self._msufPowerTextCoalesceMs ~= nowMs) then
-                _G.MSUF_UFCore_UpdatePowerTextFast(self)
-                self._msufLastPowerTextAt = now
-                self._msufPowerTextCoalesceMs = nowMs
+        if forcePower or (ts[7] == nil) or ((now - (ts[7] or 0)) >= 0.10) then -- [7]=pwAt
+            if forcePower or (ts[8] ~= nowMs) then -- [8]=pwMs
+                _MSUF_UFCore_UpdatePowerTextFast(self)
+                ts[7] = now
+                ts[8] = nowMs
             end
         end
     else
         if forcePower then
-            _G.MSUF_UFCore_UpdatePowerTextFast(self)
-            self._msufLastPowerTextAt = now
-            self._msufPowerTextCoalesceMs = nowMs
+            _MSUF_UFCore_UpdatePowerTextFast(self)
+            ts[7] = now
+            ts[8] = nowMs
         end
     end
-    self._msufLastPowerTextStamp = textStamp
-    self._msufLastShowPowerText = showPowerText
+    ts[5] = textStamp
+    ts[6] = showPowerText
     if not didPowerBarSync then
-        _G.MSUF_UFCore_UpdatePowerBarFast(self)
+        _MSUF_UFCore_UpdatePowerBarFast(self)
     end
     MSUF_UpdateStatusIndicatorForFrame(self)
  end
 function UpdateSimpleUnitFrame(self)
+        -- Lazy-resolve split-module upvalues (Core/ files load after main)
+        if not _MSUF_ApplyUnitAlpha then _MSUF_ApplyUnitAlpha = _G.MSUF_ApplyUnitAlpha end
+        if not _MSUF_MaybeUpdatePortrait then _MSUF_MaybeUpdatePortrait = _G.MSUF_MaybeUpdatePortrait end
+        if not _MSUF_ApplyUnitframeEditPreview then _MSUF_ApplyUnitframeEditPreview = _G.MSUF_ApplyUnitframeEditPreview end
+        local _flushSerial = _G.MSUF_UFCORE_FLUSH_SERIAL  -- cache once per call
+
         -- Hot path: prefer UFCore's settings snapshot (avoids repeated deep MSUF_DB traversals).
         local db, g, barsConf
 
@@ -5440,9 +3015,7 @@ function UpdateSimpleUnitFrame(self)
         end
 
         if not db then
-            if (not MSUF_DB) and type(EnsureDB) == "function" then
-                EnsureDB()
-            end
+            if not MSUF_DB then EnsureDB() end
             db = MSUF_DB
         end
 
@@ -5456,11 +3029,11 @@ function UpdateSimpleUnitFrame(self)
     local isPet    = self._msufIsPet
     local isToT    = self._msufIsToT
     local unitValid = (type(unit) == "string" and unit ~= "") and true or false
-    -- Step 5: cache UnitExists per UFCore flush (same frame can be updated multiple times in one flush).
+    -- Cache UnitExists per UFCore flush (avoid repeated C-calls for same frame).
     local UnitExists = F.UnitExists
     local exists = false
     if unitValid and UnitExists then
-        local s = _G.MSUF_UFCORE_FLUSH_SERIAL
+        local s = _flushSerial
         if s and self._msufExistsSerial == s and self._msufExistsUnit == unit then
             exists = (self._msufCachedExists == true)
         else
@@ -5473,7 +3046,7 @@ function UpdateSimpleUnitFrame(self)
         -- Keep cache coherent (useful for callers that read the cached fields).
         self._msufCachedExists = false
         self._msufExistsUnit = unit
-        self._msufExistsSerial = _G.MSUF_UFCORE_FLUSH_SERIAL
+        self._msufExistsSerial = _flushSerial
     end
 local key, conf = ns.UF.ResolveKeyAndConf(self, unit, db)
 if ns.UF.HandleDisabledFrame(self, conf) then
@@ -5502,12 +3075,12 @@ end
     end
     end
 end
-    MSUF_ApplyReverseFillBars(self, conf)
+    ns.Bars._ApplyReverseFillBars(self, conf)
     local didPowerBarSync = false
     if self.isBoss and MSUF_BossTestMode then
         if not F.InCombatLockdown() then
             self:Show()
-            _G.MSUF_ApplyUnitAlpha(self, key)
+            _MSUF_ApplyUnitAlpha(self, key)
     end
     if self.bg then
         MSUF_ApplyBarBackgroundVisual(self)
@@ -5536,7 +3109,7 @@ end
         if self.hpText then
     local show = (self.showHPText ~= false)
     if show then
-        _G.MSUF_ApplyBossTestHpPreviewText(self, conf)
+        _MSUF_ApplyBossTestHpPreviewText(self, conf)
     else
         MSUF_SetTextIfChanged(self.hpText, "")
     ns.Text.ClearField(self, "hpTextPct")
@@ -5577,9 +3150,8 @@ if not exists then
     -- In MSUF Edit Mode, keep a persistent placeholder for missing units
     -- (so frames stay visible while editing, even when the unit doesn't exist).
     if MSUF_UnitEditModeActive and (not (F.InCombatLockdown and F.InCombatLockdown())) and unit ~= "player" and self and not self.isBoss then
-        local fn = _G and _G.MSUF_ApplyUnitframeEditPreview
-        if type(fn) == "function" then
-            fn(self, key, conf, g)
+        if _MSUF_ApplyUnitframeEditPreview then
+            _MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
         else
             if self.Show then self:Show() end
         end
@@ -5596,9 +3168,9 @@ if not exists then
     self._msufNoUnitCleared = true
      return
 else
-    _G.MSUF_ApplyUnitAlpha(self, key)
+    _MSUF_ApplyUnitAlpha(self, key)
     self._msufNoUnitCleared = nil
-    MSUF_MaybeUpdatePortrait(self, unit, conf, exists)
+    if _MSUF_MaybeUpdatePortrait then _MSUF_MaybeUpdatePortrait(self, unit, conf, exists) end
 end
     local hp = MSUF_UFStep_BasicHealth(self, unit)
     if MSUF_UFStep_SyncTargetPower(self, unit, barsConf, isPlayer, isTarget, isFocus) then
@@ -5621,7 +3193,7 @@ end
         doHeavy = ns.UF.ShouldRunHeavyVisual(self, key, true)
     end
     if doHeavy then
-        MSUF_UFStep_HeavyVisual(self, unit, key)
+        MSUF_UFStep_HeavyVisual(self, unit, key, g)
         MSUF_UFStep_Border(self)
         self._msufLayoutWhy = nil
         self._msufVisualQueuedUFCore = nil
@@ -5629,10 +3201,10 @@ end
     end
     -- IMPORTANT: layered alpha uses per-texture alpha, which visual steps reset.
     if conf and conf.alphaExcludeTextPortrait == true then
-        _G.MSUF_ApplyUnitAlpha(self, key)
+        _MSUF_ApplyUnitAlpha(self, key)
     end
-    if _G then
-        _G.MSUF_TPA_SyncAnchors(self)
+    if _MSUF_TPA_SyncAnchors then
+        _MSUF_TPA_SyncAnchors(self)
     end
  end
 do
@@ -5687,6 +3259,8 @@ _G.MSUF_TPA_EnsureAllAnchors = function()
     MSUF_TPA_GetOrCreate("MSUF_TPA_TargetSecondaryPower")
  end
 end
+-- Resolve forward-declared hot-path local (TPA defined above)
+_MSUF_TPA_SyncAnchors = _G.MSUF_TPA_SyncAnchors
 do
     local function MSUF_TryRegisterBCDMAnchors()
         if _G and _G.MSUF_BCDM_AnchorsRegistered then  return true end
@@ -5732,683 +3306,11 @@ do
          end)
     end
 end
-local MSUF_ApplyRareVisuals
--- Aggro outline indicator: reuse the bar-outline border and recolor/thicken it
--- when the player has full aggro on target/focus/boss frames.
-local function MSUF_IsAggroOutlineUnit(unit)
-    if unit == "target" or unit == "focus" then return true end
-    if type(unit) == "string" and unit:sub(1, 4) == "boss" then
-        local n = tonumber(unit:sub(5))
-        if n and n >= 1 and n <= 5 then return true end
-    end
-    return false
-end
-MSUF_ApplyRareVisuals = function(self)
-    if not self or not self.unit then  return end
-    if self.border then
-        self.border:Hide()
-    end
-    local baseThickness = 0
-    if type(MSUF_GetDesiredBarBorderThicknessAndStamp) == "function" then
-        baseThickness = select(1, MSUF_GetDesiredBarBorderThicknessAndStamp())
-    end
-    baseThickness = tonumber(baseThickness) or 0
 
-    -- Optional: convert the outline border into an aggro indicator (target/focus/boss only).
-    local g = (MSUF_DB and MSUF_DB.general) or nil
-    local aggroMode = g and g.aggroOutlineMode or 0 -- 0=Off, 1=Aggro border indicator
-    local wantAggro = MSUF_IsAggroOutlineUnit(self.unit) and ((aggroMode == 1) or (_G and _G.MSUF_AggroBorderTestMode))
-    local threat = false
-    if wantAggro then
-        -- Options-only test mode (cold path): force the aggro border on so users can tune outline thickness.
-        -- This flag is toggled from the Bars menu and is cleared when the Settings panel closes.
-        if _G and _G.MSUF_AggroBorderTestMode then
-            threat = true
-        elseif UnitThreatSituation then
-            threat = (UnitThreatSituation("player", self.unit) == 3)
-        end
-    end
+-- Borders system (aggro/dispel/purge outlines + UI_SCALE handler) moved to MSUF_Borders.lua
 
-	local aggroR, aggroG, aggroB = 1, 0.50, 0
-	if g then
-		local r = g.aggroBorderColorR
-		local gg = g.aggroBorderColorG
-		local b = g.aggroBorderColorB
-		if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
-			aggroR, aggroG, aggroB = r, gg, b
-		end
-	end
-
-    -- Dispel border color (Colors menu) with fallback to the original light-blue default.
-    local dispelR, dispelG, dispelB = 0.25, 0.75, 1.00
-    if g then
-        local r = g.dispelBorderColorR
-        local gg = g.dispelBorderColorG
-        local b = g.dispelBorderColorB
-        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
-            dispelR, dispelG, dispelB = r, gg, b
-        end
-    end
-
-    -- Purge border color (Colors menu) with fallback to bright yellow.
-    local purgeR, purgeG, purgeB = 1.00, 0.85, 0.00
-    if g then
-        local r = g.purgeBorderColorR
-        local gg = g.purgeBorderColorG
-        local b = g.purgeBorderColorB
-        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
-            purgeR, purgeG, purgeB = r, gg, b
-        end
-    end
-
-    local thickness = baseThickness
-
-    -- Dispel border (Bars menu): light-blue outline when the player can dispel something on the unit.
-    -- Kept event-driven (UNIT_AURA) via self._msufDispelOutlineOn to avoid any aura scanning in hot paths.
-    -- NOTE: Purge border uses sentinel frames for secret-safe rendering in combat,
-    -- but is also tracked here for the highlight priority system.
-    local dispel = false
-    do
-        local dispelMode = g and g.dispelOutlineMode or 0
-        local test = (_G and _G.MSUF_DispelBorderTestMode) and true or false
-        local wantDispel = (dispelMode == 1) or test
-        if wantDispel then
-            local u = self.unit
-            if u == "player" or u == "target" or u == "focus" or u == "targettarget" then
-                dispel = test or (self._msufDispelOutlineOn == true)
-            end
-        end
-    end
-
-    -- Purge border: tracked for highlight priority overlay.
-    local purge = false
-    do
-        local purgeMode = g and g.purgeOutlineMode or 0
-        local test = (_G and _G.MSUF_PurgeBorderTestMode) and true or false
-        local wantPurge = (purgeMode == 1) or test
-        if wantPurge then
-            local u = self.unit
-            if u == "target" or u == "focus" or u == "targettarget" then
-                purge = test or (self._msufPurgeOutlineOn == true)
-            end
-        end
-    end
-
-    -- ── Normal outline (always black, user-configured thickness) ──
-    local o = self._msufBarOutline
-    if thickness <= 0 then
-        if o then
-            ns.Util.HideKeys(o, ns.Bars._outlineParts, "frame")
-    end
-        self._msufBarOutlineThickness = 0
-        self._msufBarOutlineEdgeSize = 0
-        self._msufBarOutlineBottomIsPower = false
-    else
-    if not o then
-        o = {}
-        self._msufBarOutline = o
-    end
-    ns.Util.HideKeys(o, ns.Bars._outlineParts)
-    if not o.frame then
-        local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
-        local f = F.CreateFrame("Frame", nil, self, template)
-        f:EnableMouse(false)
-        f:SetFrameStrata(self:GetFrameStrata())
-        local baseLevel = self:GetFrameLevel() + 2
-        if self.hpBar and self.hpBar.GetFrameLevel then
-            baseLevel = self.hpBar:GetFrameLevel() + 2
-    end
-        f:SetFrameLevel(baseLevel)
-        o.frame = f
-        o._msufLastEdgeSize = -1
-    end
-    local hb = self.hpBar
-    local pb = self.targetPowerBar
-    local pbWanted = (pb ~= nil) and (self._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
-    local bottomBar = pbWanted and pb or hb
-    local bottomIsPower = pbWanted and true or false
-    local f = o.frame
-    local snap = _G.MSUF_Snap
-    local edge = (type(snap) == "function") and snap(f, thickness) or thickness
-
-    if o._msufLastEdgeSize ~= edge then
-        f:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
-        f:SetBackdropBorderColor(0, 0, 0, 1)
-        o._msufLastEdgeSize = edge
-        self._msufBarOutlineEdgeSize = -1
-    end
-
-    if (self._msufBarOutlineThickness ~= thickness) or (self._msufBarOutlineEdgeSize ~= edge) or (self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false)) then
-        f:ClearAllPoints()
-        if hb then
-            f:SetPoint("TOPLEFT", hb, "TOPLEFT", -edge, edge)
-    end
-        if bottomBar then
-            f:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", edge, -edge)
-    end
-        self._msufBarOutlineThickness = thickness
-        self._msufBarOutlineEdgeSize = edge
-        self._msufBarOutlineBottomIsPower = bottomIsPower and true or false
-    end
-    f:Show()
-    end -- outline block
-
-    -- ── Highlight overlay (aggro/dispel/purge) — independent frame + thickness ──
-    -- Sits on top of the normal outline with its own user-configurable thickness.
-    -- 3 = Purge, 2 = Dispel, 1 = Aggro, 0 = none.
-    -- Default priority: Dispel > Aggro > Purge.  Custom priority via DB order.
-    local hlKey = 0
-    if g and g.highlightPrioEnabled == 1 and type(g.highlightPrioOrder) == "table" then
-        -- Custom priority: first match in order wins.
-        for _, kind in ipairs(g.highlightPrioOrder) do
-            if kind == "dispel" and dispel then hlKey = 2; break
-            elseif kind == "aggro" and threat then hlKey = 1; break
-            elseif kind == "purge" and purge then hlKey = 3; break
-            end
-        end
-    else
-        -- Default: Dispel > Aggro > Purge
-        hlKey = (dispel and 2) or (threat and 1) or (purge and 3) or 0
-    end
-    local hlFrame = self._msufHighlightOutline
-
-    if hlKey == 0 then
-        if hlFrame then hlFrame:Hide() end
-        self._msufHighlightColorKey = 0
-    else
-        local hlThickness = (g and g.highlightBorderThickness) or 2
-        hlThickness = tonumber(hlThickness) or 2
-        if hlThickness < 1 then hlThickness = 1 end
-
-        if not hlFrame then
-            local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
-            hlFrame = F.CreateFrame("Frame", nil, self, template)
-            hlFrame:EnableMouse(false)
-            hlFrame:SetFrameStrata(self:GetFrameStrata())
-            local baseLevel = self:GetFrameLevel() + 3
-            if self.hpBar and self.hpBar.GetFrameLevel then
-                baseLevel = self.hpBar:GetFrameLevel() + 3
-            end
-            hlFrame:SetFrameLevel(baseLevel)
-            self._msufHighlightOutline = hlFrame
-            self._msufHighlightEdgeSize = -1
-            self._msufHighlightColorKey = -1
-            self._msufHighlightBottomIsPower = nil
-        end
-
-        local hb = self.hpBar
-        local pb = self.targetPowerBar
-        local pbWanted = (pb ~= nil) and (self._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
-        local bottomBar = pbWanted and pb or hb
-        local bottomIsPower = pbWanted and true or false
-        local snap = _G.MSUF_Snap
-        local hlEdge = (type(snap) == "function") and snap(hlFrame, hlThickness) or hlThickness
-
-        if self._msufHighlightEdgeSize ~= hlEdge then
-            hlFrame:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = hlEdge })
-            self._msufHighlightEdgeSize = hlEdge
-            self._msufHighlightColorKey = -1  -- force recolor
-        end
-
-        if self._msufHighlightColorKey ~= hlKey then
-            if hlKey == 1 then
-                hlFrame:SetBackdropBorderColor(aggroR, aggroG, aggroB, 1)
-            elseif hlKey == 2 then
-                hlFrame:SetBackdropBorderColor(dispelR, dispelG, dispelB, 1)
-            elseif hlKey == 3 then
-                hlFrame:SetBackdropBorderColor(purgeR, purgeG, purgeB, 1)
-            end
-            self._msufHighlightColorKey = hlKey
-        end
-
-        if self._msufHighlightBottomIsPower ~= bottomIsPower then
-            hlFrame:ClearAllPoints()
-            if hb then
-                hlFrame:SetPoint("TOPLEFT", hb, "TOPLEFT", -hlEdge, hlEdge)
-            end
-            if bottomBar then
-                hlFrame:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", hlEdge, -hlEdge)
-            end
-            self._msufHighlightBottomIsPower = bottomIsPower
-        end
-
-        hlFrame:Show()
-    end
- end
-_G.MSUF_RefreshRareBarVisuals = MSUF_ApplyRareVisuals
-
--- Cold-path helpers for the Bars menu (no runtime cost during combat/raiding).
--- 1) Live-apply outline thickness while the Settings panel is open.
--- 2) Aggro border test mode so users can tune thickness visually.
-_G.MSUF_ApplyBarOutlineThickness_All = _G.MSUF_ApplyBarOutlineThickness_All or function()
-    -- IMPORTANT: Live updates must not depend on gradient toggles or queued UFCore flush.
-    -- We do a direct apply (cold path) and also sync the UFCore border stamp so the
-    -- next UFCore pass won't "snap back" to the previous cached thickness.
-    if MSUF_BarBorderCache then
-        MSUF_BarBorderCache.stamp = nil
-        MSUF_BarBorderCache.thickness = 0
-    end
-
-    local get = MSUF_GetDesiredBarBorderThicknessAndStamp
-    local thickness, stamp = 0, 0
-    if type(get) == "function" then
-        thickness, stamp = get()
-    end
-
-    local apply = _G.MSUF_RefreshRareBarVisuals
-    MSUF_ForEachUnitFrame(function(uf)
-        if not uf or not uf.unit then return end
-
-        -- Sync UFCore border bookkeeping to the NEW stamp.
-        uf._msufBarBorderStamp = stamp
-        uf._msufBarOutlineThickness = thickness
-        uf._msufBarOutlineEdgeSize = -1
-
-        -- Force highlight overlay to re-read its thickness too.
-        uf._msufHighlightEdgeSize = -1
-        uf._msufHighlightColorKey = -1  -- force recolor on priority change
-        uf._msufHighlightBottomIsPower = nil
-
-        -- Bottom-is-power impacts the outline rect; keep it consistent.
-        local pb = uf.targetPowerBar
-        uf._msufBarOutlineBottomIsPower = (pb and pb.IsShown and pb:IsShown()) and true or false
-
-        if type(apply) == "function" then
-            apply(uf)
-        end
-    end)
-end
-
-_G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(active)
-    _G.MSUF_AggroBorderTestMode = active and true or false
-    local fn = _G.MSUF_RefreshRareBarVisuals
-    local frames = _G.MSUF_UnitFrames
-    if type(fn) ~= "function" or not frames then return end
-    local t = frames.target
-    if t and t.unit == "target" then fn(t) end
-    local f = frames.focus
-    if f and f.unit == "focus" then fn(f) end
-    for i = 1, 5 do
-        local b = frames["boss" .. i]
-        if b and b.unit == ("boss" .. i) then fn(b) end
-    end
-end
-
--- Options-only: Test mode to force the dispel border on while the Settings panel is open.
--- This does NOT change the DB or aura filters; it only affects the outline highlight rendering.
-_G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(active)
-    _G.MSUF_DispelBorderTestMode = active and true or false
-    local fn = _G.MSUF_RefreshRareBarVisuals
-    local frames = _G.MSUF_UnitFrames
-    if type(fn) ~= "function" or not frames then return end
-
-    local p = frames.player
-    if p and p.unit == "player" then fn(p) end
-    local t = frames.target
-    if t and t.unit == "target" then fn(t) end
-    local f = frames.focus
-    if f and f.unit == "focus" then fn(f) end
-    local tt = frames.targettarget
-    if tt and tt.unit == "targettarget" then fn(tt) end
-end
-
--- Options-only: Test mode to force the purge border on while the Settings panel is open.
-_G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(active)
-    _G.MSUF_PurgeBorderTestMode = active and true or false
-    local frames = _G.MSUF_UnitFrames
-    if not frames then return end
-
-    local fn = _G.MSUF_RefreshRareBarVisuals
-    local units = { "target", "focus", "targettarget" }
-    for _, u in ipairs(units) do
-        local uf = frames[u]
-        if uf and uf.unit == u then
-            if active then
-                -- Show one sentinel at full alpha for test preview
-                local pool = uf._msufPurgeSentinels
-                if not pool then
-                    pool = {}
-                    uf._msufPurgeSentinels = pool
-                end
-                if #pool < 1 then
-                    local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
-                    local s = CreateFrame("Frame", nil, uf, template)
-                    s:EnableMouse(false)
-                    s:SetFrameStrata(uf:GetFrameStrata())
-                    local baseLevel = uf:GetFrameLevel() + 3
-                    if uf.hpBar and uf.hpBar.GetFrameLevel then
-                        baseLevel = uf.hpBar:GetFrameLevel() + 3
-                    end
-                    s:SetFrameLevel(baseLevel)
-                    s._msufEdge = -1
-                    pool[1] = s
-                end
-                local s = pool[1]
-                local g = MSUF_DB and MSUF_DB.general
-                local hlThickness = (g and g.highlightBorderThickness) or 2
-                hlThickness = tonumber(hlThickness) or 2
-                if hlThickness < 1 then hlThickness = 1 end
-                local snap = _G.MSUF_Snap
-                local edge = (type(snap) == "function") and snap(s, hlThickness) or hlThickness
-                s:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
-                local pr, pg, pb = 1.00, 0.85, 0.00
-                if g then
-                    local r = g.purgeBorderColorR
-                    local gg = g.purgeBorderColorG
-                    local b = g.purgeBorderColorB
-                    if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
-                        pr, pg, pb = r, gg, b
-                    end
-                end
-                s:SetBackdropBorderColor(pr, pg, pb, 1)
-                s:ClearAllPoints()
-                local hb = uf.hpBar
-                local pb2 = uf.targetPowerBar
-                local pbWanted = (pb2 ~= nil) and (uf._msufPowerBarReserved or (pb2.IsShown and pb2:IsShown()))
-                local bottomBar = pbWanted and pb2 or hb
-                if hb then s:SetPoint("TOPLEFT", hb, "TOPLEFT", -edge, edge) end
-                if bottomBar then s:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", edge, -edge) end
-                s._msufEdge = edge
-                s:Show()
-                s:SetAlpha(1)
-                -- Hide excess
-                for i = 2, #pool do pool[i]:SetAlpha(0) end
-            else
-                -- Hide all sentinels
-                local pool = uf._msufPurgeSentinels
-                if pool then
-                    for i = 1, #pool do pool[i]:SetAlpha(0) end
-                end
-            end
-            -- Refresh overlay so highlight priority system picks up the change.
-            if type(fn) == "function" then fn(uf) end
-        end
-    end
-end
-
-
--- Aggro outline event driver (event-only, no OnUpdate)
-do
-    local function RefreshAggroForUnit(u)
-        local g = MSUF_DB and MSUF_DB.general
-        if not (g and g.aggroOutlineMode == 1) then return end
-        if not u or not MSUF_IsAggroOutlineUnit(u) then return end
-        local frames = _G and _G.MSUF_UnitFrames
-        local uf = frames and frames[u]
-        if not uf or uf.unit ~= u then return end
-        local fn = _G and _G.MSUF_RefreshRareBarVisuals
-        if type(fn) == "function" then fn(uf) end
-    end
-
-    -- UNIT_THREAT_* stay on dedicated frame (EventBus rejects UNIT_* events)
-    local ef = F.CreateFrame("Frame")
-    ef:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
-    ef:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
-    ef:SetScript("OnEvent", function(_, event, unit)
-        RefreshAggroForUnit(unit)
-    end)
-
-    -- Phase 1: TARGET/FOCUS via EventBus
-    MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE", function()
-        RefreshAggroForUnit("target")
-    end)
-    MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE", function()
-        RefreshAggroForUnit("focus")
-    end)
-end
-
-
--- Dispel / Purge border event driver: refresh the rare outline when dispellable debuffs
--- or purgeable buffs appear/disappear.
--- Dispel: HARMFUL|RAID_PLAYER_DISPELLABLE (O(1) filter, covers defensive cleanse).
--- Purge:  scans HELPFUL auras for isStealable (RAID_PLAYER_DISPELLABLE doesn't cover
---         Spellsteal / offensive purge in all patches).  Event-driven only, no OnUpdate.
--- Dispel (friendly debuffs) and Purge (enemy buffs) tracked independently.
-do
-    local f = F.CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-
-    if f.RegisterUnitEvent then
-        f:RegisterUnitEvent("UNIT_AURA", "player", "target", "focus", "targettarget")
-    else
-        f:RegisterEvent("UNIT_AURA")
-    end
-
-    local function HasDispellableDebuff(unit)
-        local getSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
-        if type(getSlots) ~= "function" then return false end
-        local _, slot1 = getSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1, nil)
-        return slot1 ~= nil
-    end
-
-    -- Purge/Spellsteal detection (combat-safe for 12.0).
-    -- Secret booleans can't be compared or branched on, but visual APIs (SetAlpha,
-    -- SetBackdropBorderColor) accept secret values directly.  We use "sentinel frames"
-    -- — one per HELPFUL aura slot, all positioned identically over the unit frame border.
-    -- Each sentinel's alpha is set from isStealable via EvaluateColorFromBoolean.
-    -- The returned color has SECRET RGBA — we pass color.a straight to SetAlpha()
-    -- (a visual API) so we never compare the secret value.  If ANY sentinel has
-    -- alpha=1, the purge border is visually rendered (frame compositing = OR logic).
-    local _colorTrue  = CreateColor and CreateColor(1, 1, 1, 1)
-    local _colorFalse = CreateColor and CreateColor(0, 0, 0, 0)
-    local _evalBool   = C_CurveUtil and C_CurveUtil.EvaluateColorFromBoolean
-    local _getSlots   = C_UnitAuras and C_UnitAuras.GetAuraSlots
-    local _getBySlot  = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
-    local _bdTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
-    local _bdTable    = { edgeFile = MSUF_TEX_WHITE8, edgeSize = 0 }
-
-    -- Cached purge color — refreshed once per UpdatePurgeSentinels call.
-    local _purgeR, _purgeG, _purgeB = 1.00, 0.85, 0.00
-    local function _RefreshPurgeColor()
-        local g = MSUF_DB and MSUF_DB.general
-        if not g then return end
-        local r, gg, b = g.purgeBorderColorR, g.purgeBorderColorG, g.purgeBorderColorB
-        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
-            _purgeR, _purgeG, _purgeB = r, gg, b
-        end
-    end
-
-    local function _EnsureSentinel(uf, idx)
-        local pool = uf._msufPurgeSentinels
-        if not pool then
-            pool = {}
-            uf._msufPurgeSentinels = pool
-        end
-        local s = pool[idx]
-        if s then return s end
-        s = F.CreateFrame("Frame", nil, uf, _bdTemplate)
-        s:EnableMouse(false)
-        s:SetFrameStrata(uf:GetFrameStrata())
-        local baseLevel = uf:GetFrameLevel() + 3
-        if uf.hpBar and uf.hpBar.GetFrameLevel then
-            baseLevel = uf.hpBar:GetFrameLevel() + 3
-        end
-        s:SetFrameLevel(baseLevel)
-        s:SetAlpha(0)
-        s._msufEdge = -1
-        pool[idx] = s
-        return s
-    end
-
-    local function _LayoutSentinel(s, uf, edge)
-        if s._msufEdge == edge then return end
-        _bdTable.edgeSize = edge
-        s:SetBackdrop(_bdTable)
-        s:SetBackdropBorderColor(_purgeR, _purgeG, _purgeB, 1)
-        s:ClearAllPoints()
-        local hb = uf.hpBar
-        local pb = uf.targetPowerBar
-        local pbWanted = (pb ~= nil) and (uf._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
-        local bottomBar = pbWanted and pb or hb
-        if hb then s:SetPoint("TOPLEFT", hb, "TOPLEFT", -edge, edge) end
-        if bottomBar then s:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", edge, -edge) end
-        s._msufEdge = edge
-        s:Show()
-    end
-
-    -- Single-pass: scan HELPFUL slots and set sentinel alphas inline.
-    -- No intermediate allSlots table — process each batch directly.
-    local _purgeScratch = {}
-    local function UpdatePurgeSentinels(uf, unit)
-        if type(_getSlots) ~= "function" or type(_getBySlot) ~= "function" then return false end
-
-        _RefreshPurgeColor()
-
-        local g = MSUF_DB and MSUF_DB.general
-        local hlThickness = (g and g.highlightBorderThickness) or 2
-        hlThickness = tonumber(hlThickness) or 2
-        if hlThickness < 1 then hlThickness = 1 end
-        local snap = _G.MSUF_Snap
-
-        local sentIdx = 0
-        local cont = nil
-        repeat
-            local t = _purgeScratch
-            t[1], t[2], t[3], t[4], t[5], t[6], t[7], t[8], t[9], t[10],
-            t[11], t[12], t[13], t[14], t[15], t[16], t[17], t[18], t[19], t[20], t[21]
-                = _getSlots(unit, "HELPFUL", 20, cont)
-            cont = t[1]
-            for i = 2, 21 do
-                local slot = t[i]
-                if not slot then break end
-                sentIdx = sentIdx + 1
-                local s = _EnsureSentinel(uf, sentIdx)
-                local edge = (type(snap) == "function") and snap(s, hlThickness) or hlThickness
-                _LayoutSentinel(s, uf, edge)
-                local data = _getBySlot(unit, slot)
-                if data then
-                    local stealable = data.isStealable
-                    if _evalBool and _colorTrue then
-                        local color = _evalBool(stealable, _colorTrue, _colorFalse)
-                        if color then
-                            s:SetAlpha(color.a)
-                        else
-                            s:SetAlpha(0)
-                        end
-                    else
-                        s:SetAlpha((stealable == true) and 1 or 0)
-                    end
-                else
-                    s:SetAlpha(0)
-                end
-            end
-        until not cont
-        -- Hide excess sentinels from previous scan
-        local pool = uf._msufPurgeSentinels
-        if pool then
-            for idx = sentIdx + 1, #pool do
-                pool[idx]:SetAlpha(0)
-            end
-        end
-        return true
-    end
-
-    local function HideAllPurgeSentinels(uf)
-        local pool = uf._msufPurgeSentinels
-        if not pool then return end
-        for i = 1, #pool do
-            pool[i]:SetAlpha(0)
-        end
-    end
-
-    local function UpdateUnit(unit, forceRefresh)
-        local uf = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit]
-        if not uf or uf.unit ~= unit then return end
-
-        local g = MSUF_DB and MSUF_DB.general
-        local dispelEnabled = (g and g.dispelOutlineMode == 1)
-        local purgeEnabled  = (g and g.purgeOutlineMode  == 1)
-
-        local dispelOn = false
-        -- Dispel = remove debuffs from allies; Purge = steal/remove buffs from enemies.
-        -- UnitCanAssist/UnitCanAttack handle duels and PvP correctly (UnitIsFriend
-        -- returns true for same-faction duel opponents, which breaks purge detection).
-        local canAssist = UnitCanAssist and UnitCanAssist("player", unit)
-        local canAttack = UnitCanAttack and UnitCanAttack("player", unit)
-        if dispelEnabled and canAssist then
-            dispelOn = HasDispellableDebuff(unit)
-        end
-
-        -- Purge: sentinel frames handle rendering via SetAlpha with secret values.
-        -- Secret constraints prevent boolean tracking — sentinels ARE the border.
-        -- Purge participates in highlight priority only via test mode.
-        if purgeEnabled and canAttack and unit ~= "player" then
-            UpdatePurgeSentinels(uf, unit)
-        else
-            HideAllPurgeSentinels(uf)
-        end
-
-        local changed = false
-        if forceRefresh or uf._msufDispelOutlineOn ~= dispelOn then
-            uf._msufDispelOutlineOn = dispelOn
-            changed = true
-        end
-
-        if changed then
-            if type(_G.MSUF_RefreshRareBarVisuals) == "function" then
-                _G.MSUF_RefreshRareBarVisuals(uf)
-            end
-        end
-    end
-
-    _G.MSUF_RefreshDispelOutlineStates = function(forceRefresh)
-        UpdateUnit("player", forceRefresh)
-        UpdateUnit("target", true)
-        UpdateUnit("focus", true)
-        UpdateUnit("targettarget", true)
-    end
-
-    f:SetScript("OnEvent", function(_, event, unit)
-        if event == "UNIT_AURA" then
-            if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
-            local g = MSUF_DB and MSUF_DB.general
-            if not (g and (g.dispelOutlineMode == 1 or g.purgeOutlineMode == 1)) then return end
-            UpdateUnit(unit, false)
-            return
-        end
-
-        -- Init / safety clear so state is correct without requiring Edit Mode / manual refresh.
-        if event == "PLAYER_ENTERING_WORLD" then
-            _G.MSUF_RefreshDispelOutlineStates(true)
-            return
-        end
-    end)
-
-    -- Phase 1: TARGET/FOCUS via EventBus
-    MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()
-        UpdateUnit("target", true)
-        UpdateUnit("targettarget", true)
-    end)
-    MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE", function()
-        UpdateUnit("focus", true)
-    end)
-end
-
-do
-    local f = F.CreateFrame("Frame")
-    f:RegisterEvent("UI_SCALE_CHANGED")
-    f:RegisterEvent("DISPLAY_SIZE_CHANGED")
-    f:SetScript("OnEvent", function()
-        if type(_G.MSUF_UpdatePixelPerfect) == "function" then
-            _G.MSUF_UpdatePixelPerfect()
-    end
-        if MSUF_BarBorderCache then
-            MSUF_BarBorderCache.stamp = nil
-    end
-        MSUF_ForEachUnitFrame(function(uf)
-            if uf and uf.unit then
-                uf._msufBarBorderStamp = nil
-                uf._msufBarOutlineEdgeSize = -1
-                if type(_G.MSUF_QueueUnitframeVisual) == "function" then
-                    _G.MSUF_QueueUnitframeVisual(uf)
-                end
-            end
-         end)
-_G.MSUF_UpdateCastbarVisuals()
-     end)
-end
 local function MSUF_ApplyUnitFrameKey_Immediate(key)
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local conf = MSUF_DB[key]
     if not conf then  return end
 	    -- Ensure UnitframeCore refreshes event masks + option caches for this unit so
@@ -6480,7 +3382,7 @@ f:Hide()
     end
         -- Live-apply per-unit reverse fill (HP/Power) when applying settings from Options.
         -- This used to require /reload because ApplyUnitKey is a layout-only path.
-        MSUF_ApplyReverseFillBars(f, conf)
+        ns.Bars._ApplyReverseFillBars(f, conf)
         local showName  = (conf.showName  ~= false)
         local showHP    = (conf.showHP    ~= false)
         local showPower = (conf.showPower ~= false)
@@ -6632,7 +3534,7 @@ _G.MSUF_ApplySettingsForKey_Immediate = _G.MSUF_ApplySettingsForKey_Immediate or
     end
  end
 _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or function()
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     -- Keep UnitframeCore caches + event masks in sync so settings apply immediately
     -- (fixes level/leader indicators and other cached-option regressions).
     if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
@@ -6730,174 +3632,134 @@ end
     st.queued = false
     MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT")
  end
+-- Changes:
+-- 1. Numeric hash replaces string concat stamps (cheaper comparison)
+-- 2. Inner closures hoisted to file-level (no re-creation per call)
+-- 3. 3-stamp-layer collapsed to 2 (global + per-key)
+
+-- Module-local font state (populated once per UpdateAllFonts call, read by hoisted helpers)
+local _fontState = {}
+
+local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
+    if not fs then return end
+    local S = _fontState
+    -- Content-based: only call SetFont when path/flags (serial) or size actually changed
+    local rev = S.pathSerial + size * 1000003
+    if fs._msufFontRev ~= rev then
+        fs:SetFont(S.path, size, S.flags)
+        fs._msufFontRev = rev
+        fs._msufShadowOn = nil
+    end
+    if setColor then
+        local crev = cr * 1000000 + cg * 1000 + cb
+        if fs._msufColorRev ~= crev then
+            fs:SetTextColor(cr, cg, cb, 1)
+            fs._msufColorRev = crev
+        end
+    end
+    local sh = S.useShadow and 1 or 0
+    if fs._msufShadowOn ~= sh then
+        if sh == 1 then
+            fs:SetShadowColor(0, 0, 0, 1)
+            fs:SetShadowOffset(1, -1)
+        else
+            fs:SetShadowOffset(0, 0)
+        end
+        fs._msufShadowOn = sh
+    end
+end
+
+local function _MSUF_ApplyFontsToFrame(f)
+    if not f then return end
+    local S = _fontState
+    local key = f.msufConfigKey
+    if (not key) and f.unit then
+        key = GetConfigKeyForUnit(f.unit)
+    end
+    if S.onlyKey and key ~= S.onlyKey then return end
+
+    local conf
+    if key and MSUF_DB then conf = MSUF_DB[key] end
+    local nameSize  = (conf and conf.nameFontSize)  or S.globalNameSize
+    local hpSize    = (conf and conf.hpFontSize)    or S.globalHPSize
+    local powerSize = (conf and conf.powerFontSize) or S.globalPowSize
+
+    if f.nameText then
+        _MSUF_ApplyFontCached(f.nameText, nameSize, false, 0, 0, 0)
+    end
+    if f.levelText then
+        _MSUF_ApplyFontCached(f.levelText, (conf and conf.levelIndicatorSize) or nameSize, false, 0, 0, 0)
+    end
+    if f.classificationIndicatorText then
+        _MSUF_ApplyFontCached(f.classificationIndicatorText, (conf and conf.classificationIndicatorSize) or nameSize, true, S.fr, S.fg, S.fb)
+    end
+    local statusSize = nameSize + 2
+    if f.statusIndicatorText then
+        _MSUF_ApplyFontCached(f.statusIndicatorText, statusSize, true, S.fr, S.fg, S.fb)
+    end
+    if f.statusIndicatorOverlayText then
+        _MSUF_ApplyFontCached(f.statusIndicatorOverlayText, statusSize, true, S.fr, S.fg, S.fb)
+    end
+    if f.nameText and S.UpdateNameColor then
+        S.UpdateNameColor(f)
+    end
+    if f.hpText then
+        _MSUF_ApplyFontCached(f.hpText, hpSize, true, S.fr, S.fg, S.fb)
+    end
+    if f.hpTextPct then
+        _MSUF_ApplyFontCached(f.hpTextPct, hpSize, true, S.fr, S.fg, S.fb)
+    end
+    local pwSetColor = not S.colorPowerByType
+    local pCr, pCg, pCb = pwSetColor and S.fr or 0, pwSetColor and S.fg or 0, pwSetColor and S.fb or 0
+    if f.powerTextPct then
+        _MSUF_ApplyFontCached(f.powerTextPct, powerSize, pwSetColor, pCr, pCg, pCb)
+    end
+    if f.powerText then
+        _MSUF_ApplyFontCached(f.powerText, powerSize, pwSetColor, pCr, pCg, pCb)
+    end
+end
+
 local function UpdateAllFonts(onlyKey)
-    local path  = MSUF_GetFontPath()
-    local flags = MSUF_GetFontFlags()
-    EnsureDB()
+    local path  = ns.Castbars._GetFontPath()
+    local flags = ns.Castbars._GetFontFlags()
+    if not MSUF_DB then EnsureDB() end
     local g = MSUF_DB.general or {}
     local fr, fg, fb = MSUF_GetConfiguredFontColor()
     local baseSize       = g.fontSize or 14
     local globalNameSize = g.nameFontSize  or baseSize
     local globalHPSize   = g.hpFontSize    or baseSize
     local globalPowSize  = g.powerFontSize or baseSize
-local useShadow = g.textBackdrop and true or false
-local colorPowerTextByType = (g.colorPowerTextByType == true)
+    local useShadow      = g.textBackdrop and true or false
+    local colorPowerByType = (g.colorPowerTextByType == true)
 
-    -- Font update gating:
-    -- UpdateAllFonts() is reachable from broad "ApplyAllSettings" paths.
-    -- We keep those call sites intact (no regression), but avoid doing any real work
-    -- unless a font-related setting actually changed (global or per-unit overrides).
     if onlyKey == "tot" or onlyKey == "targetoftarget" then onlyKey = "targettarget" end
     if type(onlyKey) == "string" and onlyKey:match("^boss%d+$") then onlyKey = "boss" end
 
-    local function _MSUF_FontKeyStamp(key)
-        local c = (MSUF_DB and MSUF_DB[key]) or nil
-        if not c then
-            return "nil|nil|nil|nil|nil"
-        end
-        return tostring(c.nameFontSize or "nil")
-            .. "|" .. tostring(c.hpFontSize or "nil")
-            .. "|" .. tostring(c.powerFontSize or "nil")
-            .. "|" .. tostring(c.levelIndicatorSize or "nil")
-            .. "|" .. tostring(c.classificationIndicatorSize or "nil")
+    -- Build numeric global hash (cheap to compare)
+    -- Include path+flags via their string hash (changes rarely)
+    local pathKey = tostring(path) .. "|" .. tostring(flags) .. "|" .. tostring(fr) .. "|" .. tostring(fg) .. "|" .. tostring(fb)
+    if _G.MSUF_FontPathKey ~= pathKey then
+        _G.MSUF_FontPathKey = pathKey
+        _G.MSUF_FontPathSerial = (_G.MSUF_FontPathSerial or 0) + 1
     end
 
-    local globalStamp = tostring(path or "")
-        .. "|" .. tostring(flags or "")
-        .. "|" .. tostring(baseSize or 14)
-        .. "|" .. tostring(globalNameSize or 14)
-        .. "|" .. tostring(globalHPSize or 14)
-        .. "|" .. tostring(globalPowSize or 14)
-        .. "|" .. tostring(useShadow and 1 or 0)
-        .. "|" .. tostring(colorPowerTextByType and 1 or 0)
-        .. "|" .. tostring(fr or 1) .. "|" .. tostring(fg or 1) .. "|" .. tostring(fb or 1)
+    -- Populate shared state for hoisted helpers
+    _fontState.path = path
+    _fontState.flags = flags
+    _fontState.pathSerial = _G.MSUF_FontPathSerial or 0
+    _fontState.fr = fr
+    _fontState.fg = fg
+    _fontState.fb = fb
+    _fontState.globalNameSize = globalNameSize
+    _fontState.globalHPSize = globalHPSize
+    _fontState.globalPowSize = globalPowSize
+    _fontState.useShadow = useShadow
+    _fontState.colorPowerByType = colorPowerByType
+    _fontState.onlyKey = onlyKey
+    _fontState.UpdateNameColor = MSUF_UpdateNameColor
 
-    local keyStamps = _G.MSUF_FontKeyStamps
-    if not keyStamps then
-        keyStamps = {}
-        _G.MSUF_FontKeyStamps = keyStamps
-    end
+    MSUF_ForEachUnitFrame(_MSUF_ApplyFontsToFrame)
 
-    local pendingKeyStamp, pendingMasterStamp
-    if onlyKey then
-        pendingKeyStamp = globalStamp .. "|" .. _MSUF_FontKeyStamp(onlyKey)
-        if keyStamps[onlyKey] == pendingKeyStamp and _G.MSUF_FontGlobalStamp == globalStamp then
-            return
-        end
-    else
-        pendingMasterStamp = globalStamp
-            .. "|" .. _MSUF_FontKeyStamp("player")
-            .. "|" .. _MSUF_FontKeyStamp("target")
-            .. "|" .. _MSUF_FontKeyStamp("focus")
-            .. "|" .. _MSUF_FontKeyStamp("targettarget")
-            .. "|" .. _MSUF_FontKeyStamp("pet")
-            .. "|" .. _MSUF_FontKeyStamp("boss")
-        if _G.MSUF_FontMasterStamp == pendingMasterStamp then
-            return
-        end
-    end
-
-
-        -- UnitFramesList iteration handled by MSUF_ForEachUnitFrame()
-        local UpdateNameColor = MSUF_UpdateNameColor
-        local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb, useShadow)
-            if not fs then  return end
-            local stamp = tostring(path) .. "|" .. tostring(size) .. "|" .. tostring(flags)
-            if fs._msufFontStamp ~= stamp then
-                fs:SetFont(path, size, flags)
-                fs._msufFontStamp = stamp
-                fs._msufShadowOn = nil
-            end
-            if setColor then
-                local cstamp = tostring(cr) .. "|" .. tostring(cg) .. "|" .. tostring(cb)
-                if fs._msufColorStamp ~= cstamp then
-                    fs:SetTextColor(cr, cg, cb, 1)
-                    fs._msufColorStamp = cstamp
-                end
-            end
-            local sh = useShadow and 1 or 0
-            if fs._msufShadowOn ~= sh then
-                if sh == 1 then
-                    fs:SetShadowColor(0, 0, 0, 1)
-                    fs:SetShadowOffset(1, -1)
-                else
-                    fs:SetShadowOffset(0, 0)
-                end
-                fs._msufShadowOn = sh
-            end
-     end
-        local function ApplyFontsToFrame(f)
-            if not f then  return end
-            local key = f.msufConfigKey
-            if (not key) and f.unit then
-                local fn = GetConfigKeyForUnit
-                if type(fn) == "function" then
-                    key = fn(f.unit)
-                end
-            end
-            if onlyKey and key ~= onlyKey then
-                return
-            end
-            local conf
-            if key and MSUF_DB then
-                conf = MSUF_DB[key]
-            end
-            local nameSize  = (conf and conf.nameFontSize)  or globalNameSize
-            local hpSize    = (conf and conf.hpFontSize)    or globalHPSize
-            local powerSize = (conf and conf.powerFontSize) or globalPowSize
-            local nameText = f.nameText
-            if nameText then
-                _MSUF_ApplyFontCached(nameText, nameSize, false, 0,0,0, useShadow)
-            end
-            local levelText = f.levelText
-            if levelText then
-                local levelSize = (conf and conf.levelIndicatorSize) or nameSize
-                                _MSUF_ApplyFontCached(levelText, levelSize, false, 0,0,0, useShadow)
-            end
-            -- Target classification indicator (TEXT) uses the same font pipeline.
-            local classText = f.classificationIndicatorText
-            if classText then
-                local clsSize = (conf and conf.classificationIndicatorSize) or nameSize
-                _MSUF_ApplyFontCached(classText, clsSize, true, fr, fg, fb, useShadow)
-            end
-            local statusSize = nameSize + 2
-            local st = f.statusIndicatorText
-            if st then
-                _MSUF_ApplyFontCached(st, statusSize, true, fr, fg, fb, useShadow)
-            end
-            local st2 = f.statusIndicatorOverlayText
-            if st2 then
-                _MSUF_ApplyFontCached(st2, statusSize, true, fr, fg, fb, useShadow)
-            end
-            if nameText and UpdateNameColor then
-                UpdateNameColor(f)
-            end
-            local hpText = f.hpText
-            if hpText then
-                _MSUF_ApplyFontCached(hpText, hpSize, true, fr, fg, fb, useShadow)
-            end
-            local hpTextPct = f.hpTextPct
-            if hpTextPct then
-                _MSUF_ApplyFontCached(hpTextPct, hpSize, true, fr, fg, fb, useShadow)
-            end
-            local powerTextPct = f.powerTextPct
-            if powerTextPct then
-                if colorPowerTextByType then
-                    _MSUF_ApplyFontCached(powerTextPct, powerSize, false, 0, 0, 0, useShadow)
-                else
-                    _MSUF_ApplyFontCached(powerTextPct, powerSize, true, fr, fg, fb, useShadow)
-                end
-            end
-            local powerText = f.powerText
-            if powerText then
-                if colorPowerTextByType then
-                    _MSUF_ApplyFontCached(powerText, powerSize, false, 0, 0, 0, useShadow)
-                else
-                    _MSUF_ApplyFontCached(powerText, powerSize, true, fr, fg, fb, useShadow)
-                end
-            end
-     end
-        MSUF_ForEachUnitFrame(ApplyFontsToFrame)
     if _G.MSUF_UpdateCastbarVisuals_Immediate then
         _G.MSUF_UpdateCastbarVisuals_Immediate()
     elseif MSUF_UpdateCastbarVisuals then
@@ -6912,25 +3774,10 @@ local colorPowerTextByType = (g.colorPowerTextByType == true)
     if type(_G.MSUF_Auras2_ApplyFontsFromGlobal) == "function" then
         _G.MSUF_Auras2_ApplyFontsFromGlobal()
     end
-if ns and ns.MSUF_ToTInline_RequestRefresh then
-    ns.MSUF_ToTInline_RequestRefresh("FONTS")
-end
-    -- Update cache stamps only after a successful apply pass (avoids "cached but not applied" edge cases).
-    _G.MSUF_FontGlobalStamp = globalStamp
-    if onlyKey then
-        keyStamps[onlyKey] = pendingKeyStamp
-    else
-        _G.MSUF_FontMasterStamp = pendingMasterStamp
-        -- Also cache per-key stamps so targeted updates can early-out afterwards.
-        keyStamps["player"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("player")
-        keyStamps["target"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("target")
-        keyStamps["focus"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("focus")
-        keyStamps["targettarget"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("targettarget")
-        keyStamps["pet"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("pet")
-        keyStamps["boss"] = globalStamp .. "|" .. _MSUF_FontKeyStamp("boss")
+    if ns and ns.MSUF_ToTInline_RequestRefresh then
+        ns.MSUF_ToTInline_RequestRefresh("FONTS")
     end
-
- end
+end
 MSUF_Export2("MSUF_UpdateAllFonts", UpdateAllFonts, "UpdateAllFonts")
 if type(MSUF_UpdateCastbarVisuals) == "function" and not _G.MSUF_UpdateCastbarVisuals_Immediate then
     _G.MSUF_UpdateCastbarVisuals_Immediate = MSUF_UpdateCastbarVisuals
@@ -6972,31 +3819,37 @@ if not _G.MSUF_UpdateAllFonts_Immediate then
      end
     _G.UpdateAllFonts = _G.MSUF_UpdateAllFonts
 end
+local function _ApplyTexCached(sb, tex)
+    if not sb or not tex then return end
+    if sb.MSUF_cachedStatusbarTexture ~= tex then
+        sb:SetStatusBarTexture(tex)
+        sb.MSUF_cachedStatusbarTexture = tex
+    end
+end
+local function _Iter_ApplyAllBarTex(f)
+    local S = _iterState
+    _ApplyTexCached(f.hpBar, S.texHP)
+    _ApplyTexCached(f.absorbBar, S.texAbs)
+    _ApplyTexCached(f.healAbsorbBar, S.texHeal)
+    _ApplyTexCached(f.selfHealPredBar, S.texHP)
+    if S.applyBg then S.applyBg(f) end
+    _ApplyTexCached(f.targetPowerBar, S.texHP)
+end
+local function _Iter_ApplyAbsorbTex(f)
+    local S = _iterState
+    _ApplyTexCached(f.absorbBar, S.texAbs)
+    _ApplyTexCached(f.healAbsorbBar, S.texHeal)
+end
 local function UpdateAllBarTextures()
     local texHP = MSUF_GetBarTexture()
     if not texHP then  return end
     local texAbs  = MSUF_GetAbsorbBarTexture()
     local texHeal = MSUF_GetHealAbsorbBarTexture()
-    texAbs  = texAbs  or texHP
-    texHeal = texHeal or texHP
-    local function ApplyTex(sb, tex)
-        if not sb or not tex then  return end
-        if sb.MSUF_cachedStatusbarTexture ~= tex then
-            sb:SetStatusBarTexture(tex)
-            sb.MSUF_cachedStatusbarTexture = tex
-    end
-     end
-    local applyBg = MSUF_ApplyBarBackgroundVisual
-    MSUF_ForEachUnitFrame(function(f)
-        ApplyTex(f.hpBar, texHP)
-        ApplyTex(f.absorbBar, texAbs)
-        ApplyTex(f.healAbsorbBar, texHeal)
-        ApplyTex(f.selfHealPredBar, texHP)
-        if applyBg then
-            applyBg(f)
-    end
-        ApplyTex(f.targetPowerBar, texHP)
-     end)
+    _iterState.texHP   = texHP
+    _iterState.texAbs  = texAbs  or texHP
+    _iterState.texHeal = texHeal or texHP
+    _iterState.applyBg = MSUF_ApplyBarBackgroundVisual
+    MSUF_ForEachUnitFrame(_Iter_ApplyAllBarTex)
     -- Keep castbars in sync when they inherit from the global bar texture.
     if type(_G.MSUF_UpdateCastbarTextures_Immediate) == "function" then
         _G.MSUF_UpdateCastbarTextures_Immediate()
@@ -7013,17 +3866,9 @@ local function UpdateAbsorbBarTextures()
         texHeal = texHeal or texHP
         if not texAbs or not texHeal then  return end
     end
-    local function ApplyTex(sb, tex)
-        if not sb or not tex then  return end
-        if sb.MSUF_cachedStatusbarTexture ~= tex then
-            sb:SetStatusBarTexture(tex)
-            sb.MSUF_cachedStatusbarTexture = tex
-    end
-     end
-    MSUF_ForEachUnitFrame(function(f)
-        ApplyTex(f.absorbBar, texAbs)
-        ApplyTex(f.healAbsorbBar, texHeal)
-     end)
+    _iterState.texAbs  = texAbs
+    _iterState.texHeal = texHeal
+    MSUF_ForEachUnitFrame(_Iter_ApplyAbsorbTex)
  end
 MSUF_Export2("MSUF_UpdateAbsorbBarTextures", UpdateAbsorbBarTextures)
 MSUF_Export2("MSUF_UpdateAllBarTextures", UpdateAllBarTextures, "UpdateAllBarTextures", true)
@@ -7044,7 +3889,7 @@ end
 --   general.enableAbsorbBar
 --   general.showTotalAbsorbAmount
 local function MSUF_UpdateAbsorbTextMode()
-    if type(EnsureDB) == "function" then EnsureDB() end
+    if not MSUF_DB then EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     if not g then  return end
     local mode = tonumber(g.absorbTextMode)
@@ -7066,7 +3911,7 @@ local function MSUF_UpdateAbsorbTextMode()
 MSUF_Export2("MSUF_UpdateAbsorbTextMode", MSUF_UpdateAbsorbTextMode, "MSUF_UpdateAbsorbTextMode")
 local function MSUF_NudgeUnitFrameOffset(unit, parent, deltaX, deltaY)
     if not unit or not parent then  return end
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local key  = GetConfigKeyForUnit(unit)
     local conf = key and MSUF_DB[key]
     if not conf then  return end
@@ -7133,7 +3978,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         self._msufSavedClickAttrs = nil
      end
     local function _GetConfAndKey()
-        EnsureDB()
+        if not MSUF_DB then EnsureDB() end
         local key = GetConfigKeyForUnit(unit)
         local conf = key and MSUF_DB and MSUF_DB[key]
          return key, conf
@@ -7155,7 +4000,8 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         if not self or not conf or not key then  return end
         local anchor = MSUF_GetAnchorFrame and MSUF_GetAnchorFrame() or UIParent
         if not anchor or not anchor.GetCenter or not self.GetCenter then  return end
-        if MSUF_DB and MSUF_DB.general and MSUF_DB.general.anchorToCooldown then
+        local _g = MSUF_DB and MSUF_DB.general
+        if _g and _g.anchorToCooldown then
             local ecv = _G and _G["EssentialCooldownViewer"]
             if ecv and anchor == ecv then
                 local rule = MSUF_ECV_ANCHORS and MSUF_ECV_ANCHORS[key]
@@ -7326,7 +4172,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         ns.Cache.ClearStamp(f, "PBEmbedLayout")
          return
     end
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local b = (MSUF_DB and MSUF_DB.bars) or {}
     local h = tonumber(b.powerBarHeight) or 3
     h = math.floor(h + 0.5)
@@ -7375,15 +4221,67 @@ _G.MSUF_ApplyPowerBarEmbedLayout_All = function()
     end
     end
  end
+
+local function _CreateSelfHealPredBar(f, hpBar)
+    -- Own-heals-only prediction segment (player incoming heals only).
+    -- Secret-safe: no arithmetic/comparisons on heal values.
+    local clip = _G.CreateFrame("Frame", nil, hpBar)
+    clip:SetAllPoints(hpBar)
+    if clip.SetClipsChildren then clip:SetClipsChildren(true) end
+    clip:SetFrameLevel(hpBar:GetFrameLevel() + 1)
+    f.selfHealPredClip = clip
+    local bar = _G.CreateFrame("StatusBar", nil, clip)
+    bar:SetStatusBarTexture(MSUF_GetBarTexture())
+    bar:SetMinMaxValues(0, 1)
+    MSUF_SetBarValue(bar, 0, false)
+    bar.MSUF_lastValue = 0
+    bar:SetFrameLevel(clip:GetFrameLevel())
+    bar:SetStatusBarColor(0.0, 1.0, 0.4, 0.35)
+    bar:Hide()
+    f.selfHealPredBar = bar
+    if hpBar and hpBar.GetReverseFill and bar.SetReverseFill then
+        local okRF, rf = pcall(hpBar.GetReverseFill, hpBar)
+        if okRF and rf ~= nil then pcall(bar.SetReverseFill, bar, rf and true or false) end
+    end
+end
+
+local function _CreateClassificationText(f, textFrame, conf, fontPath, flags, fr, fg, fb)
+    if not textFrame or not textFrame.CreateFontString then return end
+    if f.classificationIndicatorText then return end
+    local fs = textFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    if not fs then return end
+    fs:SetAlpha(1)
+    if fs.SetJustifyH then fs:SetJustifyH("CENTER") end
+    if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+    local g2 = (type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general) or {}
+    local baseSize = (type(g2) == "table" and g2.fontSize) or 14
+    local nameSize = (type(g2) == "table" and g2.nameFontSize) or baseSize
+    local clsSize = (conf and conf.classificationIndicatorSize) or (conf and conf.nameFontSize) or nameSize
+    if type(clsSize) ~= "number" then clsSize = nameSize end
+    clsSize = math.floor(math.max(8, math.min(64, clsSize)) + 0.5)
+    if fs.SetFont and type(fontPath) == "string" and fontPath ~= "" then
+        fs:SetFont(fontPath, clsSize, flags)
+    end
+    if fs.SetTextColor then fs:SetTextColor(fr or 1, fg or 1, fb or 1, 1) end
+    if (type(g2) == "table" and g2.textBackdrop == true) and fs.SetShadowColor and fs.SetShadowOffset then
+        fs:SetShadowColor(0, 0, 0, 1)
+        fs:SetShadowOffset(1, -1)
+    elseif fs.SetShadowOffset then
+        fs:SetShadowOffset(0, 0)
+    end
+    fs:Hide()
+    f.classificationIndicatorText = fs
+end
+
 local function CreateSimpleUnitFrame(unit)
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     local key  = GetConfigKeyForUnit(unit)
     local conf = key and MSUF_DB[key] or {}
     local f = F.CreateFrame("Button", "MSUF_" .. unit, UIParent, "BackdropTemplate,SecureUnitButtonTemplate,PingableUnitFrameTemplate")
     f.unit = unit
     MSUF_EnsureUnitFlags(f)
     f.msufConfigKey = key
-    f.cachedConfig = conf -- Step 5: cache config on creation as well
+    f.cachedConfig = conf
     f:SetClampedToScreen(true)
     local isBossUnit = (f._msufBossIndex ~= nil)
     local def = MSUF_UNIT_CREATE_DEFS[unit] or (isBossUnit and MSUF_UNIT_CREATE_DEF_BOSS) or nil
@@ -7424,42 +4322,13 @@ local function CreateSimpleUnitFrame(unit)
     portrait:Hide()
     local grads = f.hpGradients
     if not grads then
-        grads = MSUF_PreCreateHPGradients(hpBar)
+        grads = ns.Bars._PreCreateHPGradients(hpBar)
         f.hpGradients = grads
         f.hpGradient = grads and grads.right or nil
     end
-    MSUF_ApplyHPGradient(f)
+    ns.Bars._ApplyHPGradient(f)
     if unit == "player" then
-        -- Own-heals-only prediction segment (your incoming heals only).
-        -- IMPORTANT (Midnight/secret-safe):
-        -- Incoming-heal numbers and HP state can be secret-tainted.
-        -- We therefore do NO arithmetic/comparisons on those values.
-        -- Rendering is done by a second StatusBar anchored to the current HP texture edge;
-        -- the StatusBar fill computes the pixel length internally, and overflow is clipped.
-        local clip = _G.CreateFrame("Frame", nil, hpBar)
-        clip:SetAllPoints(hpBar)
-        if clip.SetClipsChildren then clip:SetClipsChildren(true) end
-        -- Keep it above the HP bar but below absorb overlays.
-        clip:SetFrameLevel(hpBar:GetFrameLevel() + 1)
-        f.selfHealPredClip = clip
-
-        local bar = _G.CreateFrame("StatusBar", nil, clip)
-        bar:SetStatusBarTexture(MSUF_GetBarTexture())
-        bar:SetMinMaxValues(0, 1)
-        MSUF_SetBarValue(bar, 0, false)
-        bar.MSUF_lastValue = 0
-        bar:SetFrameLevel(clip:GetFrameLevel())
-        bar:SetStatusBarColor(0.0, 1.0, 0.4, 0.35)
-        bar:Hide()
-        f.selfHealPredBar = bar
-
-        -- Keep reverse-fill in sync for completeness (direction doesn't matter when value=1).
-        if hpBar and hpBar.GetReverseFill and bar.SetReverseFill then
-            local okRF, rf = pcall(hpBar.GetReverseFill, hpBar)
-            if okRF and rf ~= nil then
-                pcall(bar.SetReverseFill, bar, rf and true or false)
-            end
-        end
+        _CreateSelfHealPredBar(f, hpBar)
     end
     f.absorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 2, MSUF_GetAbsorbOverlayColor(), true)
     f.healAbsorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 3, MSUF_GetHealAbsorbOverlayColor(), false)
@@ -7480,19 +4349,19 @@ local function CreateSimpleUnitFrame(unit)
         MSUF_ApplyBarBackgroundVisual(f)
         local pgrads = f.powerGradients
         if not pgrads then
-            pgrads = MSUF_PreCreateHPGradients(pBar)
+            pgrads = ns.Bars._PreCreateHPGradients(pBar)
             f.powerGradients = pgrads
             f.powerGradient = pgrads and pgrads.right or nil
     end
-        MSUF_ApplyPowerGradient(f)
+        ns.Bars._ApplyPowerGradient(f)
         if _G.MSUF_ApplyPowerBarBorder then _G.MSUF_ApplyPowerBarBorder(pBar) end
         pBar:Hide()
     end
     local textFrame = ns.UF.MakeFrame(f, "textFrame", "Frame", "self")
     textFrame:SetAllPoints()
     textFrame:SetFrameLevel(hpBar:GetFrameLevel() + 3)
-    local fontPath = MSUF_GetFontPath()
-    local flags    = MSUF_GetFontFlags()
+    local fontPath = ns.Castbars._GetFontPath()
+    local flags    = ns.Castbars._GetFontFlags()
     local fr, fg, fb = MSUF_GetConfiguredFontColor()
     ns.UF.EnsureTextObjects(f, fontPath, flags, fr, fg, fb)
     ns.UF.EnsureStatusIndicatorOverlays(f, unit, fontPath, flags, fr, fg, fb)
@@ -7530,44 +4399,8 @@ local function CreateSimpleUnitFrame(unit)
             end
     end
         -- Classification indicator text (Target only)
-        -- Rendered as TEXT at runtime (reliable even without Media assets).
-        -- IMPORTANT: don't call :SetText() here Ã¢â‚¬â€ font may not be applied yet during frame creation.
-        if unit == "target" and textFrame and textFrame.CreateFontString then
-            if not f.classificationIndicatorText then
-                -- Use a known-good template so the FontString has a font object immediately.
-                local fs = textFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-                if fs then
-                    fs:SetAlpha(1)
-                    if fs.SetJustifyH then fs:SetJustifyH("CENTER") end
-                    if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
-                    -- Bind immediately to MSUF global font + color (live updates handled via UpdateAllFonts).
-                    do
-                        local db = _G.MSUF_DB
-                        local g2 = (type(db) == "table" and db.general) or {}
-                        local baseSize = (type(g2) == "table" and g2.fontSize) or 14
-                        local nameSize = (type(g2) == "table" and g2.nameFontSize) or baseSize
-                        local clsSize = (conf and conf.classificationIndicatorSize) or (conf and conf.nameFontSize) or nameSize
-                        if type(clsSize) ~= "number" then clsSize = nameSize end
-                        if clsSize < 8 then clsSize = 8 end
-                        if clsSize > 64 then clsSize = 64 end
-                        clsSize = math.floor(clsSize + 0.5)
-                        if fs.SetFont and type(fontPath) == "string" and fontPath ~= "" then
-                            fs:SetFont(fontPath, clsSize, flags)
-                        end
-                        if fs.SetTextColor then
-                            fs:SetTextColor(fr or 1, fg or 1, fb or 1, 1)
-                        end
-                        if (type(g2) == "table" and g2.textBackdrop == true) and fs.SetShadowColor and fs.SetShadowOffset then
-                            fs:SetShadowColor(0, 0, 0, 1)
-                            fs:SetShadowOffset(1, -1)
-                        elseif fs.SetShadowOffset then
-                            fs:SetShadowOffset(0, 0)
-                        end
-                    end
-                    fs:Hide()
-                    f.classificationIndicatorText = fs
-                end
-            end
+        if unit == "target" then
+            _CreateClassificationText(f, textFrame, conf, fontPath, flags, fr, fg, fb)
         end
     end
     -- NOTE: Unitframe events are now registered centrally by MSUF_UnitframeCore.lua.
@@ -7594,7 +4427,7 @@ local function CreateSimpleUnitFrame(unit)
     if f.targetPowerBar and f.hpBar then
         MSUF_ApplyPowerBarEmbedLayout(f)
     end
-    MSUF_ApplyReverseFillBars(f, conf)
+    ns.Bars._ApplyReverseFillBars(f, conf)
     ns.UF.RequestUpdate(f, true, true, "F.CreateFrame")
     -- Auras2 must be primed on unitframe creation; do NOT rely on a later UNIT_AURA burst.
     -- This prevents the "auras only start after Edit Mode / toggle" regression.
@@ -7619,7 +4452,7 @@ do
         _msufHadTarget = F.UnitExists and F.UnitExists("target") or false
      end
     local function MSUF_TargetSoundDriver_OnTargetChanged()
-        if type(EnsureDB) == "function" then EnsureDB() end
+        if not MSUF_DB then EnsureDB() end
         local g = (MSUF_DB and MSUF_DB.general) or {}
         local hasTarget = (F.UnitExists and F.UnitExists("target")) or false
         local hadTarget = _msufHadTarget
@@ -7662,7 +4495,7 @@ do
         if _msufTargetSoundFrame then
              return
     end
-        -- Phase 1: use EventBus instead of dedicated frame
+        -- Use EventBus instead of dedicated frame
         _msufTargetSoundFrame = true -- sentinel to prevent re-entry
         MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_TARGET_SOUND", function()
             MSUF_TargetSoundDriver_OnTargetChanged()
@@ -7674,7 +4507,7 @@ do
 end
 MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_STARTUP", function(event)
     MSUF_InitProfiles()
-    EnsureDB()
+    if not MSUF_DB then EnsureDB() end
     do
         local g = (MSUF_DB and MSUF_DB.general) or {}
         if g.playTargetSelectLostSounds == true and _G.MSUF_TargetSoundDriver_Ensure then
@@ -7821,9 +4654,7 @@ local function MSUF_EnsureTargetToTInlineFS(targetFrame)
  end
 function MSUF_RuntimeUpdateTargetToTInline(targetFrame)
     if not targetFrame or not targetFrame.nameText then  return end
-    if type(EnsureDB) == "function" then
-        EnsureDB()
-    end
+    if not MSUF_DB then EnsureDB() end
     if not MSUF_DB then  return end
     if type(MSUF_DB.targettarget) ~= "table" then
         MSUF_DB.targettarget = {}
@@ -7992,8 +4823,8 @@ end
 	    if type(_G.MSUF_HookCooldownViewer) == "function" then
 	        C_Timer.After(1, _G.MSUF_HookCooldownViewer)
 	    end
-    if type(MSUF_InitPlayerCastbarPreviewToggle) == "function" then
-        C_Timer.After(1.1, MSUF_InitPlayerCastbarPreviewToggle)
+    if type(ns.Castbars._InitPlayerCastbarPreviewToggle) == "function" then
+        C_Timer.After(1.1, ns.Castbars._InitPlayerCastbarPreviewToggle)
     end
     print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89|r  |cff9ece6a Beta Build 2.0 Beta 8 |cff565f89|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
  end, nil, true)
@@ -8163,7 +4994,7 @@ do
         if _G.MSUF_SwapRecolorDriver then return _G.MSUF_SwapRecolorDriver end
         local d = CreateFrame("Frame", "MSUF_SwapRecolorDriver", UIParent)
         d._msufSwapRecolorQueued = false
-        -- Phase 1: TARGET/FOCUS via EventBus, keep UNIT_TARGET on frame
+        -- TARGET/FOCUS via EventBus, keep UNIT_TARGET on frame
         d:RegisterEvent("UNIT_TARGET")
         d:SetScript("OnEvent", function(self, event, arg1)
             if event == "UNIT_TARGET" then
