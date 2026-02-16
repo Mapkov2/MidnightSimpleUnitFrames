@@ -1,10 +1,10 @@
 -- ============================================================================
--- MSUF_A2_Render.lua â€” Auras 3.0 Orchestrator
+-- MSUF_A2_Render.lua  Auras 3.0 Orchestrator
 -- Replaces the 3357-line monolith.
 --
 -- Responsibilities:
 --   - Dirty queue + coalesced flush (OnUpdate driver)
---   - RenderUnit: collect â†’ commit â†’ layout (single pass)
+--   - RenderUnit: collect  commit  layout (single pass)
 --   - Config resolution + caching (cold path, invalidated on DB change)
 --   - Private aura anchor management
 --   - Edit Mode mover integration
@@ -116,7 +116,7 @@ API.IsEditModeActive = IsEditModeActive
 
 local MSUF_DB
 
--- DB defaults (copied from original Render â€” must stay identical for migration compat)
+-- DB defaults (copied from original Render  must stay identical for migration compat)
 local A2_AURAS2_DEFAULTS = { enabled=true, showTarget=true, showFocus=true, showBoss=true, showPlayer=false }
 local A2_SHARED_DEFAULTS = {
     showBuffs=true, showDebuffs=true, showTooltip=true,
@@ -337,12 +337,13 @@ local function MarkDirty(unit, delay)
         return
     end
 
-    -- Gate: skip disabled/nonexistent units (not in edit mode preview)
+    -- Gate: skip nonexistent units (not in edit mode preview).
+    -- Note: UnitEnabled is NOT checked here — disabled units must still be queued
+    -- so the render function can hide their lingering icons.
     local a2, shared = GetAuras2DB()
     local allowPreview = (shared and shared.showInEditMode == true and IsEditModeActive())
 
     if not allowPreview then
-        if not UnitEnabled(a2, unit) then return end
         if UnitExists and not UnitExists(unit) then return end
     end
 
@@ -533,7 +534,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing)
     maxN = Clamp(maxN, 4, 0, 12)
     if maxN == 0 then PrivateClear(entry); return end
 
-    -- Effective unit token (focusâ†’player if focus IS player)
+    -- Effective unit token (focusplayer if focus IS player)
     local effectiveToken = unit
     if unit ~= "player" and UnitIsUnit and UnitIsUnit(unit, "player") then
         effectiveToken = "player"
@@ -614,7 +615,7 @@ end
 -- UpdateAnchor (position the aura container relative to unitframe)
 
 
--- â”€â”€ File-scope helpers for UpdateAnchor (zero closure alloc) â”€â”€
+-- File-scope helpers for UpdateAnchor (zero closure alloc) Ã¢â€â‚¬Ã¢â€â‚¬
 
 local _mathFloor = math.floor
 
@@ -699,7 +700,7 @@ end
     if lay and type(lay.buffOffsetY) == "number" then buffOffsetY = lay.buffOffsetY end
     if type(buffOffsetY) ~= "number" then buffOffsetY = debuffIconSize + spacing + 4 end
 
-    -- â”€â”€ Per-group offsets (drag movers write to these) â”€â”€
+    -- Per-group offsets (drag movers write to these) Ã¢â€â‚¬Ã¢â€â‚¬
     local buffDX   = ReadOffset(shared, lay, "buffGroupOffsetX",   0)
     local buffDY   = ReadOffset(shared, lay, "buffGroupOffsetY",   0)
     local debuffDX = ReadOffset(shared, lay, "debuffGroupOffsetX", 0)
@@ -722,12 +723,12 @@ end
         end
     end
 
-    -- â”€â”€ Position anchor â”€â”€
+    -- Position anchor Ã¢â€â‚¬Ã¢â€â‚¬
     local anchor = entry.anchor
     anchor:ClearAllPoints()
     anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
 
-    -- â”€â”€ Position containers â”€â”€
+    -- Position containers Ã¢â€â‚¬Ã¢â€â‚¬
     if layoutMode == "SINGLE" and entry.mixed then
         entry.mixed:ClearAllPoints()
         entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
@@ -754,7 +755,7 @@ end
         entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
     end
 
-    -- â”€â”€ Position edit movers (mirror containers) â”€â”€
+    -- Position edit movers (mirror containers) Ã¢â€â‚¬Ã¢â€â‚¬
     if isEditActive then
         local stepB = buffIconSize + spacing
         local stepD = debuffIconSize + spacing
@@ -767,7 +768,10 @@ end
 
         MirrorMover(entry.editMoverBuff,    entry.buffs,   anchor, cols * stepB,  buffIconSize + headerH)
         MirrorMover(entry.editMoverDebuff,  entry.debuffs, anchor, dcols * stepD, debuffIconSize + headerH)
-        MirrorMover(entry.editMoverPrivate, entry.private, anchor, 4 * stepP,     privateIconSize + headerH)
+        -- Private auras are player-only; skip mover for target.
+        if unit ~= "target" then
+            MirrorMover(entry.editMoverPrivate, entry.private, anchor, 4 * stepP,     privateIconSize + headerH)
+        end
     end
 end
 
@@ -778,7 +782,7 @@ local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local _modulesBound = false
 
 
--- RenderUnit â€” the core render loop (single pass, clean)
+-- RenderUnit  the core render loop (single pass, clean)
 
 
 local function RenderUnit(entry)
@@ -800,7 +804,18 @@ local function RenderUnit(entry)
     local a2, shared = GetAuras2DB()
     if not a2 or not shared then return end
 
-    -- â”€â”€ Cache resolved config per configGen (eliminates ~40 table reads per aura event) â”€â”€
+    -- Unit disabled via options toggle: hide all icons + anchor and bail out.
+    -- Edit mode preview bypasses this so movers remain visible for positioning.
+    if not UnitEnabled(a2, unit) and not ((not _inCombat) and IsEditModeActive()) then
+        Icons.HideUnused(entry.buffs, 1)
+        Icons.HideUnused(entry.debuffs, 1)
+        if entry.mixed then Icons.HideUnused(entry.mixed, 1) end
+        PrivateClear(entry)
+        if entry.anchor then entry.anchor:Hide() end
+        return
+    end
+
+    -- Cache resolved config per configGen (eliminates ~40 table reads per aura event) Ã¢â€â‚¬Ã¢â€â‚¬
     local cfg = entry._cfg
     if not cfg then
         cfg = { _gen = -1 }
@@ -858,7 +873,7 @@ local function RenderUnit(entry)
     local needPlayerAura    = cfg.needPlayerAura
     local masterOn          = cfg.masterOn
 
-    -- â”€â”€ Early bail: no unit, no edit mode â†’ nothing to render â”€â”€
+    -- Early bail: no unit, no edit mode  nothing to render Ã¢â€â‚¬Ã¢â€â‚¬
     local unitExists = UnitExists and UnitExists(unit)
     local isEditActive = (not _inCombat) and IsEditModeActive() or false
 
@@ -870,7 +885,7 @@ local function RenderUnit(entry)
         return
     end
 
-    -- â”€â”€ Edit Mode: create movers before anchoring so UpdateAnchor can position them â”€â”€
+    -- Edit Mode: create movers before anchoring so UpdateAnchor can position them Ã¢â€â‚¬Ã¢â€â‚¬
     local EditMode = isEditActive and API.EditMode or nil
     if EditMode and EditMode.EnsureMovers then
         EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
@@ -889,7 +904,7 @@ local function RenderUnit(entry)
         entry._lastPrivateGen = gen
     end
 
-    -- â”€â”€ Edit Mode: show/hide movers (skip entirely in combat) â”€â”€
+    -- Edit Mode: show/hide movers (skip entirely in combat) Ã¢â€â‚¬Ã¢â€â‚¬
     if not _inCombat then
         if EditMode then
             if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
@@ -905,25 +920,59 @@ local function RenderUnit(entry)
         if entry.buffs then entry.buffs:Show() end
         if entry.debuffs then entry.debuffs:Show() end
         if entry.mixed then entry.mixed:Show() end
-        if entry.private then entry.private:Show() end
+        -- Private auras are player-only; skip for target.
+        if entry.private and unit ~= "target" then entry.private:Show() end
         entry._msufA2_previewActive = true
     else
-        entry._msufA2_previewActive = nil
+        -- Leaving edit mode or previews disabled: ensure preview state is cleared.
+        if entry._msufA2_previewActive then
+            local Preview = API.Preview
+            if Preview and Preview.ClearPreviewsForEntry then
+                Preview.ClearPreviewsForEntry(entry)
+            else
+                entry._msufA2_previewActive = nil
+            end
+            -- Invalidate epoch + config caches so the real aura path runs a
+            -- full rebuild instead of hitting the epoch-diff early-out.
+            entry._lastEpoch = -1
+            entry._lastConfigGen = -1
+            entry._msufA2_playerPreviewInit = nil
+        end
     end
 
-    -- â”€â”€ Edit Mode preview (no real unit present) â”€â”€
-    if showTest and not unitExists then
-        if Icons.RenderPreviewIcons then
+    -- Edit Mode preview: always show fake auras while active
+    -- Player always has a live frame, so skip buff previews and let real buffs render.
+    if showTest then
+        local isPlayer = (unit == "player")
+
+        if Icons.RenderPreviewIcons and not isPlayer then
+            -- Non-player units: full preview (buffs + debuffs)
             local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, maxBuffs, maxDebuffs, stackCountAnchor)
             local bSize = useSingleRow and iconSize or buffIconSize
             local dSize = useSingleRow and iconSize or debuffIconSize
             Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, growth, rowWrap)
             Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, growth, rowWrap)
+        elseif Icons.RenderPreviewIcons and isPlayer then
+            -- Player: debuff preview only (buffCap = 0), real buffs render below
+            local _, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, 0, maxDebuffs, stackCountAnchor)
+            local dSize = useSingleRow and iconSize or debuffIconSize
+            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, growth, rowWrap)
         end
-        if Icons.RenderPreviewPrivateIcons then
+
+        if Icons.RenderPreviewPrivateIcons and unit ~= "target" then
             Icons.RenderPreviewPrivateIcons(entry, unit, shared, privateIconSize, spacing, stackCountAnchor)
         end
-        return
+
+        -- Non-player: done. Player: fall through to real aura path for buffs.
+        if not isPlayer then
+            return
+        end
+        -- Player: invalidate epoch once on preview entry so real buff path runs.
+        if not entry._msufA2_playerPreviewInit then
+            entry._msufA2_playerPreviewInit = true
+            entry._lastEpoch = -1
+            entry._lastConfigGen = -1
+        end
     end
 
     if not unitExists then
@@ -933,7 +982,7 @@ local function RenderUnit(entry)
         return
     end
 
-    -- â”€â”€ Epoch diff: skip full rebuild if nothing changed â”€â”€
+    -- Epoch diff: skip full rebuild if nothing changed Ã¢â€â‚¬Ã¢â€â‚¬
     local epoch = _storeEpochs and _storeEpochs[unit] or 0
 
     if epoch == entry._lastEpoch and gen == entry._lastConfigGen then
@@ -945,7 +994,7 @@ local function RenderUnit(entry)
     entry._lastEpoch = epoch
     entry._lastConfigGen = gen
 
-    -- â”€â”€ Collect auras (single pass) â”€â”€
+    -- Collect auras (single pass) Ã¢â€â‚¬Ã¢â€â‚¬
     local buffCount = 0
     local debuffCount = 0
     local buffsOnlyMine    = cfg.buffsOnlyMine
@@ -955,7 +1004,10 @@ local function RenderUnit(entry)
     local onlyBossAuras    = cfg.onlyBossAuras
     local hidePermanentBuffs = cfg.hidePermanentBuffs
 
-    if showDebuffs then
+    -- Player in edit mode: debuffs already rendered as preview above, skip real debuff path.
+    local skipDebuffs = (showTest and unit == "player")
+
+    if showDebuffs and not skipDebuffs then
         local list
         if debuffsOnlyMine and debuffsIncludeBoss then
             list, debuffCount = Collect.GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, entry._debuffList, nil, needPlayerAura)
@@ -992,15 +1044,22 @@ local function RenderUnit(entry)
         end
     end
 
-    -- â”€â”€ Layout â”€â”€
-    if useSingleRow and entry.mixed then
+    -- Layout Ã¢â€â‚¬Ã¢â€â‚¬
+    if useSingleRow and entry.mixed and not skipDebuffs then
         local total = debuffCount + buffCount
         Icons.LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap)
         Icons.HideUnused(entry.mixed, total + 1)
         Icons.HideUnused(entry.debuffs, 1)
         Icons.HideUnused(entry.buffs, 1)
+    elseif useSingleRow and entry.mixed and skipDebuffs then
+        -- Player edit mode + single row: layout only real buffs in mixed, leave debuffs alone.
+        Icons.LayoutIcons(entry.mixed, buffCount, iconSize, spacing, perRow, growth, rowWrap)
+        Icons.HideUnused(entry.mixed, buffCount + 1)
+        Icons.HideUnused(entry.buffs, 1)
     else
-        if showDebuffs then
+        if skipDebuffs then
+            -- Player edit mode: debuff layout already handled by preview path.
+        elseif showDebuffs then
             Icons.LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, growth, rowWrap)
             Icons.HideUnused(entry.debuffs, debuffCount + 1)
         else
@@ -1033,24 +1092,21 @@ Flush = function()
     FlushScheduled = true
 
     local list, count = DirtySwap()
-    local a2, shared = GetAuras2DB()
-    local showTest = (shared and shared.showInEditMode == true and IsEditModeActive())
 
     for i = 1, count do
         local unit = list[i]
         local frame = FindUnitFrame(unit)
+        local entry = AurasByUnit[unit]
 
-        -- Fast path: should we render?
-        local shouldRender = frame
-            and (showTest or (UnitEnabled(a2, unit) and frame:IsShown() and (not UnitExists or UnitExists(unit))))
-
-        if shouldRender then
+        if not frame then
+            -- No parent frame at all: just hide anchor if leftover
+            if entry and entry.anchor then entry.anchor:Hide() end
+        else
+            -- Always let RenderUnit handle both rendering AND cleanup.
+            -- UnitEnabled gating lives inside RenderUnit so disabled units
+            -- get their icons hidden properly.
             local e = EnsureAttached(unit)
             if e then RenderUnit(e) end
-        else
-            -- Hide anchor if it exists
-            local entry = AurasByUnit[unit]
-            if entry and entry.anchor then entry.anchor:Hide() end
         end
     end
 
@@ -1071,22 +1127,12 @@ end
 
 
 local function MarkAllDirty(delay)
-    local DB = API.DB
-    local c = DB and DB.cache
-    local ue = c and c.unitEnabled
-    if ue then
-        if ue.player then MarkDirty("player", delay) end
-        if ue.target then MarkDirty("target", delay) end
-        if ue.focus then MarkDirty("focus", delay) end
-        for i = 1, 5 do
-            if ue[_BOSS_UNITS[i]] then MarkDirty(_BOSS_UNITS[i], delay) end
-        end
-    else
-        MarkDirty("player", delay)
-        MarkDirty("target", delay)
-        MarkDirty("focus", delay)
-        for i = 1, 5 do MarkDirty(_BOSS_UNITS[i], delay) end
-    end
+    -- Always mark ALL units, not just enabled ones.
+    -- Disabled units need a render pass to hide their lingering icons.
+    MarkDirty("player", delay)
+    MarkDirty("target", delay)
+    MarkDirty("focus", delay)
+    for i = 1, 5 do MarkDirty(_BOSS_UNITS[i], delay) end
 end
 
 local function RefreshAll()
@@ -1150,6 +1196,14 @@ local function _ClearPreviewContainer(container)
         if icon and icon._msufA2_isPreview then
             icon._msufA2_isPreview = nil
             icon._msufA2_previewKind = nil
+            icon._msufA2_previewCDCounter = nil
+            icon._msufA2_lastCommit = nil
+            -- Hide preview CD text FontString so it doesn't bleed into real auras.
+            local pvFS = icon._msufA2_previewCDText
+            if pvFS then
+                pvFS:Hide()
+                pvFS:SetText("")
+            end
             icon:Hide()
         end
     end
@@ -1159,11 +1213,26 @@ local function ClearAllPreviews()
     Icons = API.Icons or API.Apply
     if not Icons then return end
 
+    -- Prefer Preview module's thorough cleanup (unreg from CD manager,
+    -- clear duration objects, visual ID caches, preview CD FontStrings).
+    local Preview = API.Preview
+    local deepClean = Preview and Preview.ClearPreviewsForEntry
+
     for _, entry in pairs(AurasByUnit) do
         if entry then
-            _ClearPreviewContainer(entry.buffs)
-            _ClearPreviewContainer(entry.debuffs)
-            _ClearPreviewContainer(entry.mixed)
+            if deepClean then
+                deepClean(entry)
+            else
+                _ClearPreviewContainer(entry.buffs)
+                _ClearPreviewContainer(entry.debuffs)
+                _ClearPreviewContainer(entry.mixed)
+                _ClearPreviewContainer(entry.private)
+                entry._msufA2_previewActive = nil
+            end
+            -- Force full rebuild so real auras render after preview exit.
+            entry._lastEpoch = -1
+            entry._lastConfigGen = -1
+            entry._msufA2_playerPreviewInit = nil
         end
     end
 end
