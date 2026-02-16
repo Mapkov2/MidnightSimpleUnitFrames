@@ -74,7 +74,7 @@ end
 if panel._msufStatusLine and panel._msufStatusLine.SetText then local edit=(type(MSUF_IsMSUFEditModeActive)=="function"and MSUF_IsMSUFEditModeActive())
 and"On"or"Off";
 local combat=(InCombatLockdown and InCombatLockdown())
-and"In combat"or"Out of combat"panel._msufStatusLine:SetText("Profile: "..tostring(prof).."   â€¢   Edit Mode: "..edit.."   â€¢   "..combat)
+and"In combat"or"Out of combat"panel._msufStatusLine:SetText("Profile: "..tostring(prof).."   •   Edit Mode: "..edit.."   •   "..combat)
 end
 end
 local function MSUF_Print(msg) if type(print)=="function"then print("|cff00ff00MSUF:|r "..tostring(msg))
@@ -380,7 +380,7 @@ end
 if fill and fill.SetVertexColor then fill:SetVertexColor(MSUF_THEME.bgR,MSUF_THEME.bgG,MSUF_THEME.bgB,0.90)
 end
 return fill,border end
-local MSUF_TIPS={"Bigger steps: Hold |cff00ff00SHIFT|r while adjusting sliders to change values faster.","Fine tuning: Hold |cff00ff00CTRL|r while adjusting sliders for smaller steps.","Quick reset: If something feels off, try |cff00ff00/msuf reset|r (frame positions).","Factory reset: Use |cff00ff00Menu â†’ Advanced â†’ Factory Reset|r (or /msuf fullreset confirm + /reload).","Edit Mode: Use |cff00ff00Toggle Edit Mode|r to move frames quickly, then fine-tune with the position popup.","Profiles safety: Create a new profile before big experiments â€” switch back instantly if needed.","Colors: The |cff00ff00Colors|r tab lets you customize almost everything (fonts, bars, castbars, highlights).","Gameplay: The |cff00ff00Gameplay|r tab contains extra UI tools and warnings you can enable/disable.","Recommended: |cff00ff00Sensei Resource Bar|r pairs insanely well with MSUF to track resources cleanly.","UI scale tip: MSUF has its own UI scale â€” separate from the Global UI scale.","Troubleshoot: If visuals donâ€™t update, a quick |cff00ff00/reload|r fixes most UI state issues.","Readability: Slightly larger fonts often help more than bigger frames (especially in raids).","During development of MSUF Unhalted, R41z0r and other great addon developers helped out!","Danders is a great Party/Raidframe addon and works really well with MSUF","Community: If you like MSUF, share it with a friend â€” UI addons grow by word of mouth.",}
+local MSUF_TIPS={"Bigger steps: Hold |cff00ff00SHIFT|r while adjusting sliders to change values faster.","Fine tuning: Hold |cff00ff00CTRL|r while adjusting sliders for smaller steps.","Quick reset: If something feels off, try |cff00ff00/msuf reset|r (frame positions).","Factory reset: Use |cff00ff00Menu → Advanced → Factory Reset|r (or /msuf fullreset confirm + /reload).","Edit Mode: Use |cff00ff00Toggle Edit Mode|r to move frames quickly, then fine-tune with the position popup.","Profiles safety: Create a new profile before big experiments — switch back instantly if needed.","Colors: The |cff00ff00Colors|r tab lets you customize almost everything (fonts, bars, castbars, highlights).","Gameplay: The |cff00ff00Gameplay|r tab contains extra UI tools and warnings you can enable/disable.","Recommended: |cff00ff00Sensei Resource Bar|r pairs insanely well with MSUF to track resources cleanly.","UI scale tip: MSUF has its own UI scale — separate from the Global UI scale.","Troubleshoot: If visuals don’t update, a quick |cff00ff00/reload|r fixes most UI state issues.","Readability: Slightly larger fonts often help more than bigger frames (especially in raids).","During development of MSUF Unhalted, R41z0r and other great addon developers helped out!","Danders is a great Party/Raidframe addon and works really well with MSUF","Community: If you like MSUF, share it with a friend — UI addons grow by word of mouth.",}
 MSUF_GetNextTip=function() local tips=MSUF_TIPS if not tips or#tips==0 then return nil,0,0 end
 local general=MSUF_EnsureGeneral();
 local idx=1 if general then idx=(tonumber(general.tipCycleIndex)
@@ -628,6 +628,10 @@ g.R:SetAllPoints(fillGroup.R)
 g:Hide()
 btn._msufNavActive3=g return g end
 MSUF_SkinButton=function(btn) if not btn then return end
+-- Opt-out: Options panels manage their own action buttons (Edit Mode / Copy / Import Cancel etc).
+if btn._msufNoSlashSkin or btn.__msufMidnightActionSkinned or btn.__msufMidnightTabSkinned then
+if type(_G.MSUF_ForceShowUIPanelButtonPieces)=="function"then pcall(_G.MSUF_ForceShowUIPanelButtonPieces,btn) end
+return end
 if btn.__MSUF_MidnightSkinned or btn.__MSUF_NavSkinned or btn.__MSUF_DashSkinned then return end
 btn.__MSUF_MidnightSkinned=true local looksPanel=false if(btn.Left and btn.Middle and btn.Right)
 then looksPanel=true elseif btn.GetRegions then local regions={btn:GetRegions()}
@@ -1585,7 +1589,7 @@ MSUF_ApplyMsufScale(scale)
 MSUF_UpdateMsufScaleRow(scale)
 end)
 
-if MSUF_AddTooltip then pcall(MSUF_AddTooltip,msufScaleSlider,"MSUF Unitframe Scale","TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only MSUF frames (unitframes + castbars). Range 25%â€“150% (0.25â€“1.50). Drag or click to adjust. Applied immediately; in combat it applies after combat.") end
+if MSUF_AddTooltip then pcall(MSUF_AddTooltip,msufScaleSlider,"MSUF Unitframe Scale","TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only MSUF frames (unitframes + castbars). Range 25%–150% (0.25–1.50). Drag or click to adjust. Applied immediately; in combat it applies after combat.") end
 
 -- Slash menu scale slider (scales only the MSUF standalone options window)
 local menuScaleLabel=UI_Text(parent,"GameFontHighlight","TOPLEFT",msufScaleSlider,"BOTTOMLEFT",0,-18,"MSUF Slash Menu Scale",MSUF_SkinText)
@@ -1635,7 +1639,7 @@ MSUF_ApplySlashMenuScale(scale,{ignoreDisable=true})
 MSUF_UpdateSlashMenuScaleRow(scale)
 end)
 
-if MSUF_AddTooltip then pcall(MSUF_AddTooltip,menuScaleSlider,"MSUF Slash Menu Scale","TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only the MSUF Slash Menu window. Range 25%â€“150% (0.25â€“1.50). Drag or click to adjust. Applied immediately.") end
+if MSUF_AddTooltip then pcall(MSUF_AddTooltip,menuScaleSlider,"MSUF Slash Menu Scale","TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only the MSUF Slash Menu window. Range 25%–150% (0.25–1.50). Drag or click to adjust. Applied immediately.") end
 
 api.ui={title=title,globalCur=globalCur,btn1080=btn1080,btn1440=btn1440,btn4k=btn4k,btnAuto=btnAuto,msufReset=msufReset,msufOff=msufOff,msufScaleLabel=msufScaleLabel,msufScaleCur=msufScaleCur,msufScaleSlider=msufScaleSlider,menuScaleLabel=menuScaleLabel,menuScaleCur=menuScaleCur,menuScaleSlider=menuScaleSlider,}
 

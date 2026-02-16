@@ -1,4 +1,4 @@
--- Shared Flash Menu / Dashboard Midnight styling helpers.
+-- Shared “Flash Menu / Dashboard” Midnight styling helpers.
 --
 -- Goal
 --   - Centralize the Flash Menu style so Options / Edit Mode / popups reuse the same look.
@@ -338,6 +338,13 @@ function Style.SkinIconButton(btn, opts)
 function Style.SkinButton(btn, opts)
   if not Style.IsEnabled() then  return end
   if not btn then  return end
+  -- Opt-out: some buttons manage their own visuals (Options action buttons).
+  if btn._msufNoSlashSkin or btn.__msufMidnightActionSkinned or btn.__msufMidnightTabSkinned then
+    if type(_G.MSUF_ForceShowUIPanelButtonPieces) == "function" then
+      pcall(_G.MSUF_ForceShowUIPanelButtonPieces, btn)
+    end
+    return
+  end
   -- Specialized: dropdown arrows / icon-only buttons
   if _MSUF_IsDropButton(btn) then
     return Style.SkinDropButton(btn, opts)
@@ -845,7 +852,7 @@ function Style.SkinUIDDropDownTinyBars(drop)
     bg:SetColorTexture(THEME.btnR, THEME.btnG, THEME.btnB, 0.88)
   end
 
-
+  -- Tiny top/bottom accent bars (1px) – keep them subtle.
   local barA = 0.18
   local top = drop._msufTinyDropTop
   if not top then

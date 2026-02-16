@@ -678,3 +678,38 @@ if not _G.MSUF_IsInAnyEditMode then
     end
 end
 
+
+-- Global helper: restore UIPanelButtonTemplate pieces if another skin/hide pass removed them.
+-- This is defensive and safe to call repeatedly; it only touches obvious regions (Left/Middle/Right/Normal/Font).
+if not _G.MSUF_ForceShowUIPanelButtonPieces then
+    function _G.MSUF_ForceShowUIPanelButtonPieces(btn)
+        if not btn then return end
+
+        local name = (btn.GetName and btn:GetName()) or nil
+        local left  = btn.Left   or (name and _G[name .. "Left"])   or nil
+        local mid   = btn.Middle or (name and _G[name .. "Middle"]) or nil
+        local right = btn.Right  or (name and _G[name .. "Right"])  or nil
+
+        local function ShowTex(t)
+            if not t then return end
+            if t.SetAlpha then pcall(t.SetAlpha, t, 1) end
+            if t.Show then pcall(t.Show, t) end
+        end
+
+        ShowTex(left)
+        ShowTex(mid)
+        ShowTex(right)
+
+        local nt = (btn.GetNormalTexture and btn:GetNormalTexture()) or nil
+        ShowTex(nt)
+
+        local fs = (btn.GetFontString and btn:GetFontString()) or btn.Text or nil
+        if fs then
+            if fs.SetAlpha then pcall(fs.SetAlpha, fs, 1) end
+            if fs.SetDrawLayer then pcall(fs.SetDrawLayer, fs, "OVERLAY", 7) end
+            if fs.Show then pcall(fs.Show, fs) end
+        end
+
+        if btn.SetAlpha then pcall(btn.SetAlpha, btn, 1) end
+    end
+end

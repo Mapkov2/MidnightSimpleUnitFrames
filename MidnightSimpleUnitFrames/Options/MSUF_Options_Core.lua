@@ -22,61 +22,13 @@ end
 local panel, title, sub
 local searchBox
 local frameGroup, fontGroup, auraGroup, castbarGroup
+local MSUF_BarsApplyGradient -- forward decl; assigned in Bars section below
 -- ---------------------------------------------------------------------------
--- Reload prompt (Gradients)
--- Shown when user toggles Power Bar Gradient or clicks the Gradient Direction pad.
--- Provides "Reload now" / "Later" buttons (no slider-spam).
+-- Gradient changes apply live (no reload required).
+-- Keep a no-op stub so any stale call-sites (older builds) don't nil-error.
 -- ---------------------------------------------------------------------------
-local function MSUF_Options_ShowGradientReloadPopup()
-    if not _G then  return end
-    -- Avoid stacking popups
-    if _G.StaticPopup_Visible and _G.StaticPopup_Visible("MSUF_GRADIENTS_RELOAD_PROMPT") then
-         return
-    end
-    -- If we are in combat, defer the popup until combat ends (no chat spam).
-    if type(InCombatLockdown) == "function" and InCombatLockdown() then
-        _G.__MSUF_GRADIENTS_RELOAD_PENDING = true
-        if not _G.__MSUF_GRADIENTS_RELOAD_WATCHER then
-            local f = CreateFrame("Frame")
-            _G.__MSUF_GRADIENTS_RELOAD_WATCHER = f
-            f:RegisterEvent("PLAYER_REGEN_ENABLED")
-            f:SetScript("OnEvent", function()
-                if _G.__MSUF_GRADIENTS_RELOAD_PENDING then
-                    _G.__MSUF_GRADIENTS_RELOAD_PENDING = false
-                    -- Delay to next tick so UI is fully unlocked.
-                    if C_Timer and C_Timer.After then
-                        C_Timer.After(0, MSUF_Options_ShowGradientReloadPopup)
-                    else
-                        MSUF_Options_ShowGradientReloadPopup()
-                    end
-                end
-             end)
-        end
-         return
-    end
-    -- If popup API is missing, do nothing (user requested only a Reload Now/Later prompt).
-    if not _G.StaticPopupDialogs then  return end
-    if not _G.StaticPopupDialogs["MSUF_GRADIENTS_RELOAD_PROMPT"] then
-        _G.StaticPopupDialogs["MSUF_GRADIENTS_RELOAD_PROMPT"] = {
-            text = "Apply gradient changes with a reload?\n\nSome gradient changes may not fully apply until you /reload.",
-            button1 = "Reload now",
-            button2 = "Later",
-            OnAccept = function()
-                if _G.ReloadUI then _G.ReloadUI() end
-             end,
-            timeout = 0,
-            whileDead = 1,
-            hideOnEscape = 1,
-            preferredIndex = 3,
-        }
-    end
-    if _G.StaticPopup_Show then
-        _G.StaticPopup_Show("MSUF_GRADIENTS_RELOAD_PROMPT")
-    end
- end
--- Step 11 cleanup: We only prompt reload for Power Bar Gradient toggle / Gradient D-pad clicks.
--- Keep a no-op stub to avoid nil errors if older UI handlers still call it.
-local function MSUF_ScheduleReloadRecommend()   end
+local function MSUF_Options_ShowGradientReloadPopup() end -- no-op stub (live apply, backward compat)
+local function MSUF_ScheduleReloadRecommend()   end       -- no-op stub (backward compat)
 local castbarEnemyGroup, castbarTargetGroup, castbarFocusGroup, castbarBossGroup, castbarPlayerGroup
 local barGroupHost, barGroup, miscGroup, profileGroup
 -- ---------------------------------------------------------------------------
@@ -583,6 +535,12 @@ function MSUF_RegisterOptionsCategoryLazy()
                         _G.MSUF_PendingOpenAfterCombat = nil
                         pending()
                     end
+                    -- Zero combat overhead: unregister when nothing is pending
+                    if not (_G and _G.MSUF_PendingOpenAfterCombat) then
+                        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+                        self:SetScript("OnEvent", nil)
+                        if _G then _G.MSUF_CombatDeferFrame = nil end
+                    end
                  end)
             end
             if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
@@ -1088,51 +1046,80 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     -- Flat midnight-style button for small action buttons (Focus Kick / Castbar Edit Mode, etc.)
     -- Keeps the dark look without the sticky blue highlight.
     local function MSUF_SkinMidnightActionButton(btn, opts)
-        if not btn or btn.__msufMidnightActionSkinned then  return end
+        if not btn then  return end
+        -- Prevent the SlashMenu mirror skin from overriding Options action buttons.
+        btn._msufNoSlashSkin = true
         btn.__msufMidnightActionSkinned = true
+
+        if type(_G.MSUF_ForceShowUIPanelButtonPieces) == "function" then
+            pcall(_G.MSUF_ForceShowUIPanelButtonPieces, btn)
+        end
+
         opts = opts or {}
         local r, g, b, a = (opts.r or 0.06), (opts.g or 0.06), (opts.b or 0.06), (opts.a or 0.92)
+
         local function SetRegionColor(self, rr, gg, bb, aa)
             local name = self.GetName and self:GetName()
             local left  = self.Left  or (name and _G[name .. "Left"]) or nil
             local mid   = self.Middle or (name and _G[name .. "Middle"]) or nil
             local right = self.Right or (name and _G[name .. "Right"]) or nil
-            if left then left:SetTexture("Interface\\Buttons\\WHITE8x8"); left:SetVertexColor(rr, gg, bb, aa or 1) end
-            if mid then mid:SetTexture("Interface\\Buttons\\WHITE8x8"); mid:SetVertexColor(rr, gg, bb, aa or 1) end
-            if right then right:SetTexture("Interface\\Buttons\\WHITE8x8"); right:SetVertexColor(rr, gg, bb, aa or 1) end
+
+            local function Paint(t)
+                if not t then return end
+                if t.SetTexture then t:SetTexture("Interface\\Buttons\\WHITE8x8") end
+                if t.SetVertexColor then t:SetVertexColor(rr, gg, bb, aa or 1) end
+                if t.SetAlpha then t:SetAlpha(1) end
+                if t.Show then t:Show() end
+            end
+
+            Paint(left); Paint(mid); Paint(right)
+
             local nt = self.GetNormalTexture and self:GetNormalTexture()
             if nt then
-                nt:SetTexture("Interface\\Buttons\\WHITE8x8")
-                nt:SetVertexColor(rr, gg, bb, aa or 1)
-                nt:SetTexCoord(0, 1, 0, 1)
-            end
-         end
-        SetRegionColor(btn, r, g, b, a)
-        -- Subtle overlays; avoid calling SetHighlightTexture/SetPushedTexture directly (can error on some builds).
-        do
-            local hl = btn.GetHighlightTexture and btn:GetHighlightTexture() or nil
-            if hl then
-                hl:SetTexture("Interface/Buttons/WHITE8x8")
-                hl:SetVertexColor(1, 1, 1, 0) -- fully transparent
-                hl:SetTexCoord(0, 1, 0, 1)
-                hl:SetAllPoints(btn)
-            end
-            local pt = btn.GetPushedTexture and btn:GetPushedTexture() or nil
-            if pt then
-                pt:SetTexture("Interface/Buttons/WHITE8x8")
-                pt:SetVertexColor(1, 1, 1, 0.06) -- tiny pressed tint
-                pt:SetTexCoord(0, 1, 0, 1)
-                pt:SetAllPoints(btn)
+                if nt.SetTexture then nt:SetTexture("Interface\\Buttons\\WHITE8x8") end
+                if nt.SetVertexColor then nt:SetVertexColor(rr, gg, bb, aa or 1) end
+                if nt.SetTexCoord then nt:SetTexCoord(0, 1, 0, 1) end
+                if nt.SetAlpha then nt:SetAlpha(1) end
+                if nt.Show then nt:Show() end
             end
         end
+
+        SetRegionColor(btn, r, g, b, a)
+
+        -- Pushed texture: tiny tint so the click feedback is visible.
+        local pt = btn.GetPushedTexture and btn:GetPushedTexture() or nil
+        if pt then
+            pt:SetTexture("Interface/Buttons/WHITE8x8")
+            pt:SetVertexColor(1, 1, 1, 0.06)
+            pt:SetTexCoord(0, 1, 0, 1)
+            pt:SetAllPoints(btn)
+            pt:Show()
+        end
+
+        -- Highlight texture: keep it effectively invisible (we handle hover elsewhere).
+        local hl = btn.GetHighlightTexture and btn:GetHighlightTexture() or nil
+        if hl then
+            hl:SetTexture("Interface/Buttons/WHITE8x8")
+            hl:SetVertexColor(1, 1, 1, 0)
+            hl:SetTexCoord(0, 1, 0, 1)
+            hl:SetAllPoints(btn)
+            hl:Show()
+        end
+
         local fs = btn.GetFontString and btn:GetFontString() or nil
         if fs and fs.SetTextColor then
             local tr = (opts.textR ~= nil) and opts.textR or 0.92
             local tg = (opts.textG ~= nil) and opts.textG or 0.92
             local tb = (opts.textB ~= nil) and opts.textB or 0.92
             fs:SetTextColor(tr, tg, tb)
+            if fs.SetAlpha then fs:SetAlpha(1) end
+            if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", 7) end
+            if fs.Show then fs:Show() end
         end
+
+        if btn.SetAlpha then btn:SetAlpha(1) end
      end
+
     -- Legacy top navigation strip removed.
     -- Navigation is driven exclusively by the Slash/Flash menu.
     -- We keep SetCurrentKey() + MSUF_GetTabButtonHelpers() so the slash menu can switch
@@ -1163,6 +1150,8 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     snapCheck:Hide()
 emFont = editModeButton:GetFontString()
 if emFont then emFont:SetFontObject("GameFontNormalLarge") end
+    -- Ensure this action button is immune to SlashMenu mirror reskin passes.
+    MSUF_SkinMidnightActionButton(editModeButton)
     function MSUF_SyncCastbarEditModeWithUnitEdit()
     if not MSUF_DB or not MSUF_DB.general then  return end
     local g = MSUF_DB.general
@@ -1482,21 +1471,11 @@ local function MSUF_CreateGradientDirectionPad(parent)
             -- Keep legacy key around as "last touched" for older builds/tools.
             g.gradientDirection = dirKey
             if pad.SyncFromDB then pad:SyncFromDB() end
-            -- Prompt to /reload so gradient direction applies reliably.
-            if type(MSUF_Options_ShowGradientReloadPopup) == "function" then
-                MSUF_Options_ShowGradientReloadPopup()
-            end
-            if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
-            -- Force-refresh unitframes so gradient direction applies immediately (HP and/or Power).
-            local frames = _G and _G.MSUF_UnitFrames
-            if frames and type(_G.MSUF_RequestUnitframeUpdate) == "function" then
-                for _, f in pairs(frames) do
-                    if f and f.unit and f.hpBar then
-                        _G.MSUF_RequestUnitframeUpdate(f, true, true, "GradientDirPad")
-                    end
-                end
-            elseif ns and ns.MSUF_RefreshAllFrames then
-                ns.MSUF_RefreshAllFrames()
+            -- Apply gradient changes live (HP + Power, throttle-safe).
+            if type(MSUF_BarsApplyGradient) == "function" then
+                MSUF_BarsApplyGradient()
+            elseif type(ApplyAllSettings) == "function" then
+                ApplyAllSettings()
             end
          end)
         pad.buttons[dirKey] = b
@@ -5584,8 +5563,8 @@ end
  end
  MSUF_BarsMenu_QueueScrollUpdate()
 if barGroup and barGroup.HookScript then barGroup:HookScript('OnShow', MSUF_SyncBarsTabToggles) end
-local function MSUF_BarsApplyGradient()
-    -- Note to user: gradients may not fully apply until /reload (shown once to avoid spam).
+MSUF_BarsApplyGradient = function()
+    -- Live-apply gradient changes (HP + Power). No reload required.
     -- Ensure the strength isn't accidentally zeroed (old hidden slider could leave 0, making gradients look "dead").
     EnsureDB()
     local g = (MSUF_DB and MSUF_DB.general) or {}
@@ -5645,14 +5624,6 @@ local function MSUF_BarsApplyGradient()
 if _G and _G.MSUF_Options_BindDBBoolCheck then
     _G.MSUF_Options_BindDBBoolCheck(gradientCheck, "general.enableGradient", MSUF_BarsApplyGradient, MSUF_SyncBarsTabToggles)
     _G.MSUF_Options_BindDBBoolCheck(powerGradientCheck, "general.enablePowerGradient", MSUF_BarsApplyGradient, MSUF_SyncBarsTabToggles)
-end
--- Prompt for reload when toggling Power Bar Gradient (user click).
-if powerGradientCheck and powerGradientCheck.HookScript then
-    powerGradientCheck:HookScript("OnClick", function()
-        if type(MSUF_Options_ShowGradientReloadPopup) == "function" then
-            MSUF_Options_ShowGradientReloadPopup()
-        end
-     end)
 end
 do
     local SIMPLE_BAR_SLIDERS = {
