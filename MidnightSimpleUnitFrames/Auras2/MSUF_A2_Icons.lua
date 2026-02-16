@@ -103,8 +103,8 @@ local _wantDebuffHL     = false
 local _useBlizzardTimer = false  -- true = Blizzard C++ pass-through for countdown text
 local _useDispelBorders = false  -- dispel-type border coloring for debuffs
 
--- ── Debuff dispel-type color lookup (à la R41z0r / Blizzard) ──
--- Maps dispel index → Blizzard color object; used for both manual
+--  Debuff dispel-type color lookup (  la R41z0r / Blizzard) 
+-- Maps dispel index  Blizzard color object; used for both manual
 -- fallback and the C_CurveUtil-based GetAuraDispelTypeColor() API.
 local _debuffColorByIndex = {
     [1] = _G.DEBUFF_TYPE_MAGIC_COLOR,
@@ -140,7 +140,7 @@ do
     _debuffColorCurve = ok and curve or nil
 end
 
--- Manual fallback: dispelName string → r, g, b
+-- Manual fallback: dispelName string  r, g, b
 local function GetDebuffColorFromName(name)
     local idx = _dispelNameToIndex[name] or 0
     local col = _debuffColorByIndex[idx] or _debuffColorByIndex[0]
@@ -407,7 +407,7 @@ function Icons.AcquireIcon(container, index)
     icon = CreateIcon(container, index)
     pool[index] = icon
 
-    -- Keep an AIDÃ¢â€ â€™icon map on the container for fast delta lookups
+    -- Keep an icon map on the container for fast delta lookups
     if not container._msufA2_iconByAid then
         container._msufA2_iconByAid = {}
     end
@@ -539,6 +539,34 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     local gen = configGen or _configGen
     RefreshSharedFlags(shared, gen)
 
+    if not aura then
+        local container = icon._msufA2_container or icon:GetParent()
+        local aidMap = container and container._msufA2_iconByAid
+        local prevAid = icon._msufAuraInstanceID
+        if prevAid and aidMap and aidMap[prevAid] == icon then
+            aidMap[prevAid] = nil
+        end
+        icon._msufAuraInstanceID = nil
+        if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
+        return false
+    end
+
+    local aid = aura._msufAuraInstanceID or aura.auraInstanceID
+
+    --  Fast-path diff gate: same aura, same config → skip all bookkeeping 
+    local last = icon._msufA2_lastCommit
+    if last
+        and last.aid == aid
+        and last.gen == gen
+        and last.isOwn == isOwn
+    then
+        -- Same aura, same config. Only refresh timer + stacks (values may have changed).
+        _fast_RefreshTimer(icon, unit, aid, shared)
+        _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
+        return true
+    end
+
+    --  Full apply: update all bookkeeping + visuals 
     icon._msufUnit = unit
     icon._msufFilter = isHelpful and "HELPFUL" or "HARMFUL"
 
@@ -552,6 +580,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         if icon._msufPrivateBorder then icon._msufPrivateBorder:Hide() end
         if icon._msufPrivateLock then icon._msufPrivateLock:Hide() end
         if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
+        last = nil
         icon._msufA2_lastCommit = nil
     end
 
@@ -559,38 +588,12 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     local aidMap = container and container._msufA2_iconByAid
 
     local prevAid = icon._msufAuraInstanceID
-    if not aura then
-        if prevAid and aidMap and aidMap[prevAid] == icon then
-            aidMap[prevAid] = nil
-        end
-        icon._msufAuraInstanceID = nil
-        if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
-        return false
-    end
-
-    local aid = aura._msufAuraInstanceID or aura.auraInstanceID
     if prevAid and prevAid ~= aid and aidMap and aidMap[prevAid] == icon then
         aidMap[prevAid] = nil
     end
     icon._msufAuraInstanceID = aid
     if aid and aidMap then aidMap[aid] = icon end
 
-    --  Diff gate 
-    local gen = configGen or _configGen
-    local last = icon._msufA2_lastCommit
-
-    if last
-        and last.aid == aid
-        and last.gen == gen
-        and last.isOwn == isOwn
-    then
-        -- Fast path: same aura, same config. Refresh timer + stacks.
-        _fast_RefreshTimer(icon, unit, aid, shared)
-        _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor)
-        return true
-    end
-
-    --  Full apply 
     if not last then
         last = {}
         icon._msufA2_lastCommit = last
@@ -1017,7 +1020,7 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     end
 end
 
--- ── Dispel-type border (Magic/Curse/Poison/Disease/Bleed colored) ──
+--  Dispel-type border (Magic/Curse/Poison/Disease/Bleed colored) 
 -- Purely cosmetic classification border for debuffs that have an actual
 -- dispel school (Magic/Curse/Disease/Poison/Bleed).  Non-dispellable
 -- debuffs (dispelName == nil / "" / "None") are left without a border.
@@ -1026,7 +1029,7 @@ end
 --
 -- Color resolution:
 --   1. Try C_UnitAuras.GetAuraDispelTypeColor() with step-curve (secret-safe)
---   2. Fallback to manual dispelName → DEBUFF_TYPE_*_COLOR lookup
+--   2. Fallback to manual dispelName  DEBUFF_TYPE_*_COLOR lookup
 function Icons._ApplyDispelBorder(icon, unit, aura, isHelpful)
     local bdr = icon._msufDispelBorder
     if not bdr then return end
@@ -1038,7 +1041,7 @@ function Icons._ApplyDispelBorder(icon, unit, aura, isHelpful)
     end
 
     -- Gate: only debuffs with a *real* dispel school get a border.
-    -- dispelName may be a secret value on private auras — in that case
+    -- dispelName may be a secret value on private auras in that case
     -- we allow the API path below to resolve the color (it's secret-safe).
     local dName = aura.dispelName
     local isSecret = issecretvalue and dName ~= nil and issecretvalue(dName)
@@ -1070,7 +1073,7 @@ function Icons._ApplyDispelBorder(icon, unit, aura, isHelpful)
     -- Fallback: manual dispelName lookup (only reached for non-secret values)
     if not usedApi then
         if isSecret then
-            -- Secret dispelName but API unavailable — can't determine type safely
+            -- Secret dispelName but API unavailable can't determine type safely
             bdr:Hide()
             return
         end

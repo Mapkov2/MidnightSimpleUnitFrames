@@ -1,4 +1,4 @@
--- Core/MSUF_Alpha.lua — Unit frame alpha / layered transparency system
+-- Core/MSUF_Alpha.lua  Unit frame alpha / layered transparency system
 -- Extracted from MidnightSimpleUnitFrames.lua (Phase 2 file split)
 -- Loads AFTER MidnightSimpleUnitFrames.lua in the TOC.
 local addonName, ns = ...

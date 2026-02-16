@@ -205,7 +205,7 @@ local function CreateMover(entry, unitKey, kind, labelText)
     mover:SetBackdropColor(0.20, 0.65, 1.00, 0.12)
     mover:SetBackdropBorderColor(0.20, 0.65, 1.00, 0.55)
 
-    -- â”€â”€ Header bar + label â”€â”€
+    --  Header bar + label 
     local style = MOVER_COLORS[kind] or MOVER_COLORS.private
     local headerH = 18
 
@@ -253,7 +253,7 @@ local function CreateMover(entry, unitKey, kind, labelText)
     mover._msufAuraUnitKey  = unitKey
     mover._msufA2MoverKind  = kind
 
-    -- â”€â”€ Drag logic â”€â”€
+    --  Drag logic 
 
     local function ApplyDragDelta(self, dx, dy)
         if InCombatLockdown() then return end

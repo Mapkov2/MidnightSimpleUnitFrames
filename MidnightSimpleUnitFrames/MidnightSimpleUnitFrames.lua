@@ -576,10 +576,14 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
     if type(hp) == "number" then
         MSUF_SetBarValue(frame.hpBar, hp)
     end
-    if frame.absorbBar then
+    -- Absorb overlays: only update when marked dirty (absorb/maxHP events),
+    -- not on every UNIT_HEALTH. Dirty flags set by FrameOnEvent + OnShow + AttachFrame.
+    if frame.absorbBar and frame._msufAbsorbDirty then
+        frame._msufAbsorbDirty = false
         ns.Bars._UpdateAbsorbBar(frame, unit, maxHP)
     end
-    if frame.healAbsorbBar then
+    if frame.healAbsorbBar and frame._msufHealAbsorbDirty then
+        frame._msufHealAbsorbDirty = false
         ns.Bars._UpdateHealAbsorbBar(frame, unit, maxHP)
     end
     if frame.selfHealPredBar then
@@ -972,7 +976,7 @@ _G.MSUF_FONT_COLORS = _G.MSUF_FONT_COLORS or MSUF_FONT_COLORS
 MSUF_GetNPCReactionColor = function(kind)
     local defaultR, defaultG, defaultB
     if kind == "friendly" then
-        defaultR, defaultG, defaultB = 0, 1, 0           -- grÃƒÆ’Ã‚Â¼n
+        defaultR, defaultG, defaultB = 0, 1, 0           -- grÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼n
     elseif kind == "neutral" then
         defaultR, defaultG, defaultB = 1, 1, 0           -- gelb
     elseif kind == "enemy" then
@@ -2938,7 +2942,7 @@ local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     -- Coalesce within the same millisecond-bucket (approx "per-flush" when multiple updates burst)
     local now = GetTime()
     local nowMs = math_floor(now * 1000)
-    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes → short keys on small table)
+    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes â†’ short keys on small table)
     local ts = self._msufTS
     if not ts then ts = {}; self._msufTS = ts end
     -- HP text: force when layout/toggle changed, otherwise rate-limit

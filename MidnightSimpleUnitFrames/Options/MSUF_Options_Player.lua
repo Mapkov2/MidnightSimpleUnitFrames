@@ -320,7 +320,7 @@ local _MSUF_INDICATOR_SPECS = {
             { MSUF_LevelAnchorText("BOTTOMLEFT"), "BOTTOMLEFT" },
             { MSUF_LevelAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
         },
-        -- Level: eigene Größe (per-unit). Nil => folgt Name-Fontgröße (Fallback in Apply/Runtime).
+        -- Level: eigene Gre (per-unit). Nil => folgt Name-Fontgre (Fallback in Apply/Runtime).
         sizeEdit  = "playerLevelSizeEdit",
         sizeLabel = "playerLevelSizeLabel",
         sizeField = "levelIndicatorSize",
@@ -383,9 +383,9 @@ local MSUF_TOTINLINE_SEP_OPTIONS = {
     { value = "<<<", text = "<<<" },
     { value = ">>>", text = ">>>" },
     -- optional extras (UTF-8 is fine in Lua sources)
-    { value = "•",   text = "•"   },
-    { value = "—",   text = "—"   },
-    { value = "·",   text = "·"   },
+    { value = "â€¢",   text = "â€¢"   },
+    { value = "â€”",   text = "â€”"   },
+    { value = "Â·",   text = "Â·"   },
     { value = ">",   text = ">"   },
     { value = "<",   text = "<"   },
 }
@@ -539,7 +539,7 @@ local function MSUF_BindDropdown(panel, fieldName, confKey, options, textFn, IsF
             info.value = opt.value
             info.func  = OnClick
             info.arg1  = opt.value
-            -- safe checked function, don’t rely on btn.text being non-nil
+            -- safe checked function, donâ€™t rely on btn.text being non-nil
             info.checked = function()
                 local conf = EnsureKeyDBFn and EnsureKeyDBFn()
                 local v = conf and conf[confKey]
@@ -1431,7 +1431,7 @@ end
         end
     end
 		---------------------------------------------------------------------
-		-- Indicator (Leader / Raid Marker / Level) — spec-driven build
+		-- Indicator (Leader / Raid Marker / Level) â€” spec-driven build
 		-- All layout for other unit tabs is handled by LayoutIndicatorTemplate().
 		---------------------------------------------------------------------
 		-- Section title (anchored to first divider in LayoutIndicatorTemplate)
@@ -1661,7 +1661,7 @@ end
 			if cb then cb:Hide() end
 		 end
 		---------------------------------------------------------------------
-		-- Indicator rows (Leader / Raid Marker / Level) — spec-driven
+		-- Indicator rows (Leader / Raid Marker / Level) â€” spec-driven
 		---------------------------------------------------------------------
 		local function _MSUF_BuildIndicatorRow(spec, idx)
 			if not spec then  return end
@@ -1721,7 +1721,7 @@ end
 			_MSUF_BuildIndicatorRow(_MSUF_INDICATOR_SPECS and _MSUF_INDICATOR_SPECS[id], idx)
 		end
 		---------------------------------------------------------------------
-		-- Status Icons rows (Combat / Rested / Incoming Rez) — spec-driven
+		-- Status Icons rows (Combat / Rested / Incoming Rez) â€” spec-driven
 		---------------------------------------------------------------------
 		local STATUS_ROW_SPECS = {
 			{
@@ -2723,7 +2723,7 @@ local function MSUF_ApplyIndicatorUI(spec)
         local v = conf and conf[spec.sizeField]
         if type(v) ~= "number" and g then v = g[spec.sizeField] end
         if type(v) ~= "number" and spec.id == "level" then
-            -- Wenn kein eigener Wert gesetzt ist: zeige effektive Name-Fontgröße als Default.
+            -- Wenn kein eigener Wert gesetzt ist: zeige effektive Name-Fontgre als Default.
             v = MSUF_ReadNumber(conf, g, "nameFontSize", 14)
         end
         v = tonumber(v) or spec.sizeDefault or 14

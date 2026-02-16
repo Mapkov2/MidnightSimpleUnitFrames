@@ -1,4 +1,4 @@
--- Shared “Flash Menu / Dashboard” Midnight styling helpers.
+-- Shared Flash Menu / Dashboard Midnight styling helpers.
 --
 -- Goal
 --   - Centralize the Flash Menu style so Options / Edit Mode / popups reuse the same look.
@@ -845,7 +845,7 @@ function Style.SkinUIDDropDownTinyBars(drop)
     bg:SetColorTexture(THEME.btnR, THEME.btnG, THEME.btnB, 0.88)
   end
 
-  -- Tiny top/bottom accent bars (1px) – keep them subtle.
+
   local barA = 0.18
   local top = drop._msufTinyDropTop
   if not top then

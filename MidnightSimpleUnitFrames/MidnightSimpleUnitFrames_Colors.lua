@@ -529,7 +529,7 @@ local function GetNonInterruptibleCastColor()
         return c[1], c[2], c[3]
     end
 
-    -- Fallback: â€žredâ€œ aus der Palette
+    -- Fallback: aus der Palette
     if MSUF_FONT_COLORS and MSUF_FONT_COLORS["red"] then
         local c = MSUF_FONT_COLORS["red"]
         return c[1], c[2], c[3]
@@ -539,7 +539,7 @@ local function GetNonInterruptibleCastColor()
     return 0.4, 0.01, 0.01
 end
 
--- global alias fÃ¼r die Castbar-Logik im Main-File
+-- global alias die Castbar-Logik im Main-File
 MSUF_GetNonInterruptibleCastColor = GetNonInterruptibleCastColor
 
 local function SetNonInterruptibleCastColor(r, g, b)

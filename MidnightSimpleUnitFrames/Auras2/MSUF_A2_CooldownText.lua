@@ -439,7 +439,7 @@ local function EnsureMgr()
 
         -- Step 6 perf: lazy-resolve secret-check function once per Tick.
         -- issecretvalue may have been nil at module load due to load-order; re-check _G.
-        -- If still nil → pre-12.0 client where secret values don't exist → == is safe.
+        -- If still nil  pre-12.0 client where secret values don't exist  == is safe.
         local isv = issecretvalue
         if not isv then
             isv = _G.issecretvalue
@@ -455,8 +455,8 @@ local function EnsureMgr()
         -- value comparisons (safety > colors until the next tick).
         local secretNoDetector = (secretsActive and not isv)
 
-        -- Step 6 perf: per-icon secret check uses isv(r) — ONE C-call per evaluated
-        -- icon instead of the original 4× C_Secrets.IsSecret(r/g/b/a).
+        -- Step 6 perf: per-icon secret check uses isv(r) â€” ONE C-call per evaluated
+        -- icon instead of the original 4Ã— C_Secrets.IsSecret(r/g/b/a).
         -- Only r is checked: if r is secret from GetRGBA(), g/b/a from the same
         -- Color object will be too. Icons in skip (NORMAL/SAFE bucket) don't reach
         -- the evaluation path at all, reducing total calls to ~5-8 per tick.
@@ -491,7 +491,7 @@ local function EnsureMgr()
                     -- every tick because their color is constant until the next threshold.
                     local skipUntil = icon._msufA2_cdSkipUntil
                     if skipUntil and now < skipUntil then
-                        -- Bucket hasn't changed since last eval → nothing to do.
+                        -- Bucket hasn't changed since last eval  nothing to do.
                         -- (fs and color were already set on the last real evaluation.)
                     else
                                                 -- Full evaluation path (same bucket result as before, just less frequent).
@@ -536,7 +536,7 @@ local function EnsureMgr()
                             bucket = 3
                         end
 
-                        -- Identify bucket by color match (non-secret only) → sets wantFast.
+                        -- Identify bucket by color match (non-secret only)  sets wantFast.
                         if (not iconSecret) and bucketsEnabled then
                             if r == expR and g == expG and b == expB then
                                 bucket = 0
@@ -561,7 +561,7 @@ local function EnsureMgr()
                         -- Set per-icon skip for stable buckets.
                         -- (bucket identification is best-effort for skip/wantFast only;
                         --  if Color precision causes a mismatch, bucket defaults to 3
-                        --  which gives a conservative 2s skip — safe and still beneficial.)
+                        --  which gives a conservative 2s skip â€” safe and still beneficial.)
                         if iconSecret then
                             icon._msufA2_cdSkipUntil = nil -- secret: re-evaluate each tick
                         elseif bucket == 4 then
@@ -639,6 +639,13 @@ local function EnsureMgr()
         end
     end
 
+    -- Stable callback: created once, reused on every Schedule call.
+    -- Eliminates ~1,500 closure allocations/min from C_Timer.NewTimer.
+    local _tickCallback = function()
+        mgr.timer = nil
+        Tick()
+    end
+
     local function Schedule(delay)
         if mgr.count <= 0 then
             StopIfIdle()
@@ -654,14 +661,12 @@ local function EnsureMgr()
 
         local timerAPI = C_Timer
         if timerAPI and type(timerAPI.NewTimer) == "function" then
-            mgr.timer = timerAPI.NewTimer(delay, function()
-                mgr.timer = nil
-                Tick()
-            end)
+            mgr.timer = timerAPI.NewTimer(delay, _tickCallback)
             return
         end
 
         -- Fallback (older clients): After() has no cancel; use a generation guard.
+        -- This path still allocates a closure (unavoidable without Cancel support).
         if timerAPI and type(timerAPI.After) == "function" then
             mgr.timerGen = (mgr.timerGen or 0) + 1
             local gen = mgr.timerGen

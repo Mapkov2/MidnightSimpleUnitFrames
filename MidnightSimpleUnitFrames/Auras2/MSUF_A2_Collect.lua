@@ -1,15 +1,15 @@
 -- ============================================================================
--- MSUF_A2_Collect.lua â€” Auras 3.0 Collection Layer
+-- MSUF_A2_Collect.lua  Auras 3.0 Collection Layer
 -- Replaces MSUF_A2_Store.lua + MSUF_A2_Model.lua
 --
 -- Performance optimizations:
---   â€¢ C_UnitAuras functions localized once at file scope
---   â€¢ SecretsActive() hoisted out of per-aura loop (1 call per GetAuras)
---   â€¢ isFiltered() called ONCE per aura (combined onlyMine + playerAura)
---   â€¢ needPlayerAura flag skips isFiltered when highlights disabled
---   â€¢ Split request-cap vs output-cap: low caps = low API work
---   â€¢ Stale-tail clear skipped when count unchanged
---   â€¢ PlayerFilter cached in table (no if-chain)
+--    C_UnitAuras functions localized once at file scope
+--    SecretsActive() hoisted out of per-aura loop (1 call per GetAuras)
+--    isFiltered() called ONCE per aura (combined onlyMine + playerAura)
+--    needPlayerAura flag skips isFiltered when highlights disabled
+--    Split request-cap vs output-cap: low caps = low API work
+--    Stale-tail clear skipped when count unchanged
+--    PlayerFilter cached in table (no if-chain)
 -- ============================================================================
 
 local addonName, ns = ...
@@ -113,7 +113,7 @@ local function IsBossAura(data, secretsNow)
 end
 
 -- --
--- Varargs capture (zero-alloc for n â‰¤ 16)
+-- Varargs capture (zero-alloc for  16)
 -- --
 local _scratch = { _n = 0 }
 
@@ -160,7 +160,7 @@ end
 --
 -- needPlayerAura: when false, skips the isFiltered() call for
 -- player-aura detection. Pass false when both highlightOwnBuffs
--- AND highlightOwnDebuffs are disabled â€” saves 1 C API call per aura.
+-- AND highlightOwnDebuffs are disabled  saves 1 C API call per aura.
 -- --
 
 function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyBoss, out, needPlayerAura)
@@ -183,7 +183,7 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
     local outputCap = (type(maxCount) == "number" and maxCount > 0) and maxCount or 40
     local isHelpful = (filter == FILTER_HELPFUL)
 
-    -- â”€â”€ Split request-cap vs output-cap â”€â”€
+    -- Ã¢â€â‚¬Ã¢â€â‚¬ Split request-cap vs output-cap Ã¢â€â‚¬Ã¢â€â‚¬
     local hasFilters = onlyMine or hidePermanent or onlyBoss
     local requestCap
     if hasFilters then
@@ -193,7 +193,7 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
         requestCap = outputCap
     end
 
-    -- â”€â”€ Hoist expensive checks â”€â”€
+    -- Ã¢â€â‚¬Ã¢â€â‚¬ Hoist expensive checks Ã¢â€â‚¬Ã¢â€â‚¬
     local canFilter = (type(_isFiltered) == "function")
     -- Only call SecretsActive if we actually need it for boss/permanent checks
     local secretsNow = (hidePermanent or onlyBoss) and SecretsActive() or false
@@ -203,7 +203,7 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
     local detectSeparately = wantPlayerAura and (not onlyMine)
     local playerFilter = (onlyMine or detectSeparately) and PlayerFilter(filter) or nil
 
-    -- â”€â”€ Collect slots â”€â”€
+    -- Ã¢â€â‚¬Ã¢â€â‚¬ Collect slots Ã¢â€â‚¬Ã¢â€â‚¬
     local nSlots = CaptureSlots(_scratch, select(2, _getSlots(unit, filter, requestCap, nil)))
 
     local n = 0
@@ -390,7 +390,7 @@ function Collect.HasExpiration(unit, auraInstanceID)
 end
 
 -- --
--- Fast-path helpers (no guards â€” Icons.lua binds these after
+-- Fast-path helpers (no guards  Icons.lua binds these after
 -- APIs are confirmed available, saving 3 checks per call per icon)
 -- --
 

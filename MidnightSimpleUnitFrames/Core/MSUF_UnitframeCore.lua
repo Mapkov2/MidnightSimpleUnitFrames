@@ -1931,7 +1931,7 @@ local function RunUpdate(f)
 
     -- DIRTY_VISUAL: refresh rare visuals (outline/background/gradients) without
     -- forcing a legacy full update + layout. This is the main source of large spikes
-    -- on TARGET/FOCUS acquire (frames were hidden â†’ OnShow + UNIT_SWAP).
+    -- on TARGET/FOCUS acquire (frames were hidden  OnShow + UNIT_SWAP).
     if mask ~= 0 and band(mask, DIRTY_VISUAL) ~= 0 then
         local fn = _G.MSUF_RefreshRareBarVisuals
         if type(fn) ~= "function" then fn = _G.MSUF_ApplyRareVisuals end
@@ -2146,6 +2146,10 @@ local function FrameOnEvent(self, event, arg1, ...)
                 self._msufAbsorbDirty = true
             elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
                 self._msufHealAbsorbDirty = true
+            elseif event == "UNIT_MAXHEALTH" or event == "UNIT_MAXHEALTHMODIFIER" then
+                -- maxHP affects absorb bar scale (SetMinMaxValues).
+                self._msufAbsorbDirty = true
+                self._msufHealAbsorbDirty = true
             elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
                 -- Health bar color can change for NPC reaction / PvP / flags.
                 -- Keep it out of the hot value path unless explicitly needed.
@@ -2187,6 +2191,9 @@ function Core.AttachFrame(f)
     f._msufQueuedUFCore = nil
     f._msufWarmupQueuedUFCore = nil
     f._msufVisualQueuedUFCore = nil
+    -- Mark absorb overlays dirty so first health update initializes them.
+    f._msufAbsorbDirty = true
+    f._msufHealAbsorbDirty = true
 
     f:SetScript("OnEvent", FrameOnEvent)
 

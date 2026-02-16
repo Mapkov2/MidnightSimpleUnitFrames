@@ -958,7 +958,7 @@ local function MSUF_EditMode_ShowStepModifierTipOnce(anchorFrame)
         f.__msufStepperTipText = tip
     end
 
-    -- Kurzer, unaufdringlicher Hinweis (wie frÃ¼her).
+    -- Kurzer, unaufdringlicher Hinweis (wie frher).
     tip:SetText("")
     tip:Show()
 
@@ -1579,7 +1579,7 @@ end
 local function MSUF_EditMode_QueueNoticeOnce()
     if MSUF__EditModeCombatNoticeShown then return end
     MSUF__EditModeCombatNoticeShown = true
-    print("|cffffd700MSUF:|r Ã„nderungen werden im Kampf gepuffert und nach Kampfende angewendet.")
+    print("|cffffd700MSUF:|r €žnderungen werden im Kampf gepuffert und nach Kampfende angewendet.")
 end
 
 local function MSUF_EM_CombatGuardFlush()
@@ -2552,7 +2552,7 @@ MSUF_EM_ForceWhiteButtonText(resetBtn)
 
         if not MSUF_CurrentEditUnitKey then
             if MSUF_GridFrame and MSUF_GridFrame.infoText then
-                MSUF_GridFrame.infoText:SetText("Reset: Kein Frame ausgewÃ¤hlt  klicke zuerst ein Frame.")
+                MSUF_GridFrame.infoText:SetText("Reset: Kein Frame ausgew¤hlt  klicke zuerst ein Frame.")
             end
             return
         end
@@ -3728,7 +3728,7 @@ local function ApplyUnitPopupValues()
         MSUF__UnitPopupApplying = true
         local ok, err = MSUF_FastCall(function()
             if InCombatLockdown and InCombatLockdown() then
-                print("|cffffd700MSUF:|r Position/GrÃ¶ÃŸe kann im Kampf nicht geÃ¤ndert werden.")
+                print("|cffffd700MSUF:|r Position/Gr¶ÃƒÅ¸e kann im Kampf nicht ge¤ndert werden.")
                 return
             end
 
@@ -3850,7 +3850,7 @@ local function ApplyUnitPopupValues()
     end
 
     if InCombatLockdown and InCombatLockdown() then
-        print("|cffffd700MSUF:|r Position/GrÃ¶ÃŸe kann im Kampf nicht geÃ¤ndert werden.")
+        print("|cffffd700MSUF:|r Position/Gr¶ÃƒÅ¸e kann im Kampf nicht ge¤ndert werden.")
         return
     end
     if not unit or not parent then
@@ -4183,7 +4183,7 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
         return
     end
     if InCombatLockdown and InCombatLockdown() then
-        print("|cffffd700MSUF:|r Position/GrÃ¶ÃŸe der Castbar kann im Kampf nicht geÃ¤ndert werden.")
+        print("|cffffd700MSUF:|r Position/Gr¶ÃƒÅ¸e der Castbar kann im Kampf nicht ge¤ndert werden.")
         return
     end
 
@@ -5984,7 +5984,7 @@ function _G.MSUF_OpenAuras2PositionPopup(unit, parent)
         return
     end
     if InCombatLockdown and InCombatLockdown() then
-        print('|cffffd700MSUF:|r Position/GrÃ¶ÃŸe kann im Kampf nicht geÃ¤ndert werden.')
+        print('|cffffd700MSUF:|r Position/Gr¶ÃƒÅ¸e kann im Kampf nicht ge¤ndert werden.')
         return
     end
 

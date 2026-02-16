@@ -338,7 +338,7 @@ local function MarkDirty(unit, delay)
     end
 
     -- Gate: skip nonexistent units (not in edit mode preview).
-    -- Note: UnitEnabled is NOT checked here — disabled units must still be queued
+    -- Note: UnitEnabled is NOT checked here  disabled units must still be queued
     -- so the render function can hide their lingering icons.
     local a2, shared = GetAuras2DB()
     local allowPreview = (shared and shared.showInEditMode == true and IsEditModeActive())
@@ -615,7 +615,7 @@ end
 -- UpdateAnchor (position the aura container relative to unitframe)
 
 
--- File-scope helpers for UpdateAnchor (zero closure alloc) Ã¢â€â‚¬Ã¢â€â‚¬
+-- File-scope helpers for UpdateAnchor (zero closure alloc) 
 
 local _mathFloor = math.floor
 
@@ -700,7 +700,7 @@ end
     if lay and type(lay.buffOffsetY) == "number" then buffOffsetY = lay.buffOffsetY end
     if type(buffOffsetY) ~= "number" then buffOffsetY = debuffIconSize + spacing + 4 end
 
-    -- Per-group offsets (drag movers write to these) Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Per-group offsets (drag movers write to these) 
     local buffDX   = ReadOffset(shared, lay, "buffGroupOffsetX",   0)
     local buffDY   = ReadOffset(shared, lay, "buffGroupOffsetY",   0)
     local debuffDX = ReadOffset(shared, lay, "debuffGroupOffsetX", 0)
@@ -723,12 +723,12 @@ end
         end
     end
 
-    -- Position anchor Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Position anchor 
     local anchor = entry.anchor
     anchor:ClearAllPoints()
     anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
 
-    -- Position containers Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Position containers 
     if layoutMode == "SINGLE" and entry.mixed then
         entry.mixed:ClearAllPoints()
         entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
@@ -755,7 +755,7 @@ end
         entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
     end
 
-    -- Position edit movers (mirror containers) Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Position edit movers (mirror containers) 
     if isEditActive then
         local stepB = buffIconSize + spacing
         local stepD = debuffIconSize + spacing
@@ -815,7 +815,7 @@ local function RenderUnit(entry)
         return
     end
 
-    -- Cache resolved config per configGen (eliminates ~40 table reads per aura event) Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Cache resolved config per configGen (eliminates ~40 table reads per aura event) 
     local cfg = entry._cfg
     if not cfg then
         cfg = { _gen = -1 }
@@ -873,7 +873,7 @@ local function RenderUnit(entry)
     local needPlayerAura    = cfg.needPlayerAura
     local masterOn          = cfg.masterOn
 
-    -- Early bail: no unit, no edit mode  nothing to render Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Early bail: no unit, no edit mode  nothing to render 
     local unitExists = UnitExists and UnitExists(unit)
     local isEditActive = (not _inCombat) and IsEditModeActive() or false
 
@@ -885,7 +885,7 @@ local function RenderUnit(entry)
         return
     end
 
-    -- Edit Mode: create movers before anchoring so UpdateAnchor can position them Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Edit Mode: create movers before anchoring so UpdateAnchor can position them 
     local EditMode = isEditActive and API.EditMode or nil
     if EditMode and EditMode.EnsureMovers then
         EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
@@ -904,7 +904,7 @@ local function RenderUnit(entry)
         entry._lastPrivateGen = gen
     end
 
-    -- Edit Mode: show/hide movers (skip entirely in combat) Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Edit Mode: show/hide movers (skip entirely in combat) 
     if not _inCombat then
         if EditMode then
             if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
@@ -982,7 +982,7 @@ local function RenderUnit(entry)
         return
     end
 
-    -- Epoch diff: skip full rebuild if nothing changed Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Epoch diff: skip full rebuild if nothing changed 
     local epoch = _storeEpochs and _storeEpochs[unit] or 0
 
     if epoch == entry._lastEpoch and gen == entry._lastConfigGen then
@@ -994,7 +994,7 @@ local function RenderUnit(entry)
     entry._lastEpoch = epoch
     entry._lastConfigGen = gen
 
-    -- Collect auras (single pass) Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Collect auras (single pass) 
     local buffCount = 0
     local debuffCount = 0
     local buffsOnlyMine    = cfg.buffsOnlyMine
@@ -1044,7 +1044,7 @@ local function RenderUnit(entry)
         end
     end
 
-    -- Layout Ã¢â€â‚¬Ã¢â€â‚¬
+    -- Layout 
     if useSingleRow and entry.mixed and not skipDebuffs then
         local total = debuffCount + buffCount
         Icons.LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap)
@@ -1095,18 +1095,23 @@ Flush = function()
 
     for i = 1, count do
         local unit = list[i]
-        local frame = FindUnitFrame(unit)
         local entry = AurasByUnit[unit]
 
-        if not frame then
-            -- No parent frame at all: just hide anchor if leftover
-            if entry and entry.anchor then entry.anchor:Hide() end
+        -- Fast path: entry already attached with valid frame → skip FindUnitFrame
+        if entry and entry.frame then
+            RenderUnit(entry)
         else
-            -- Always let RenderUnit handle both rendering AND cleanup.
-            -- UnitEnabled gating lives inside RenderUnit so disabled units
-            -- get their icons hidden properly.
-            local e = EnsureAttached(unit)
-            if e then RenderUnit(e) end
+            local frame = FindUnitFrame(unit)
+            if not frame then
+                -- No parent frame at all: just hide anchor if leftover
+                if entry and entry.anchor then entry.anchor:Hide() end
+            else
+                -- Always let RenderUnit handle both rendering AND cleanup.
+                -- UnitEnabled gating lives inside RenderUnit so disabled units
+                -- get their icons hidden properly.
+                local e = EnsureAttached(unit)
+                if e then RenderUnit(e) end
+            end
         end
     end
 

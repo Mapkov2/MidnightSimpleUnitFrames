@@ -1,4 +1,4 @@
--- Core/MSUF_Borders.lua — Aggro / Dispel / Purge border system + UI_SCALE handler
+-- Core/MSUF_Borders.lua  Aggro / Dispel / Purge border system + UI_SCALE handler
 -- Extracted from MidnightSimpleUnitFrames.lua (Phase 2 file split)
 -- Loads AFTER MidnightSimpleUnitFrames.lua in the TOC.
 local addonName, ns = ...
@@ -453,9 +453,9 @@ do
     -- Purge/Spellsteal detection (combat-safe for 12.0).
     -- Secret booleans can't be compared or branched on, but visual APIs (SetAlpha,
     -- SetBackdropBorderColor) accept secret values directly.  We use "sentinel frames"
-    -- â€” one per HELPFUL aura slot, all positioned identically over the unit frame border.
+    -- Ã¢â‚¬â€ one per HELPFUL aura slot, all positioned identically over the unit frame border.
     -- Each sentinel's alpha is set from isStealable via EvaluateColorFromBoolean.
-    -- The returned color has SECRET RGBA â€” we pass color.a straight to SetAlpha()
+    -- The returned color has SECRET RGBA Ã¢â‚¬â€ we pass color.a straight to SetAlpha()
     -- (a visual API) so we never compare the secret value.  If ANY sentinel has
     -- alpha=1, the purge border is visually rendered (frame compositing = OR logic).
     local _colorTrue  = CreateColor and CreateColor(1, 1, 1, 1)
@@ -466,7 +466,7 @@ do
     local _bdTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
     local _bdTable    = { edgeFile = MSUF_TEX_WHITE8, edgeSize = 0 }
 
-    -- Cached purge color â€” refreshed once per UpdatePurgeSentinels call.
+    -- Cached purge color Ã¢â‚¬â€ refreshed once per UpdatePurgeSentinels call.
     local _purgeR, _purgeG, _purgeB = 1.00, 0.85, 0.00
     local function _RefreshPurgeColor()
         local g = MSUF_DB and MSUF_DB.general
@@ -512,7 +512,7 @@ do
     end
 
     -- Single-pass: scan HELPFUL slots and set sentinel alphas inline.
-    -- No intermediate allSlots table â€” process each batch directly.
+    -- No intermediate allSlots table Ã¢â‚¬â€ process each batch directly.
     local _purgeScratch = {}
     local function UpdatePurgeSentinels(uf, unit)
         if type(_getSlots) ~= "function" or type(_getBySlot) ~= "function" then return false end
@@ -595,7 +595,7 @@ do
         end
 
         -- Purge: sentinel frames handle rendering via SetAlpha with secret values.
-        -- Secret constraints prevent boolean tracking â€” sentinels ARE the border.
+        -- Secret constraints prevent boolean tracking Ã¢â‚¬â€ sentinels ARE the border.
         -- Purge participates in highlight priority only via test mode.
         if purgeEnabled and canAttack and unit ~= "player" then
             UpdatePurgeSentinels(uf, unit)

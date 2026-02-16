@@ -20,9 +20,9 @@ local function MSUF_DoFullReset(opts)
     MSUF_DB = nil
     MSUF_GlobalDB = nil
     MSUF_ActiveProfile = nil
-    print("|cffff0000MSUF:|r FULL RESET executed – all MSUF profiles & settings deleted for this account.")
+    print("|cffff0000MSUF:|r FULL RESET executed  all MSUF profiles & settings deleted for this account.")
     if skipReload then
-        print("|cffffff00MSUF:|r Reset staged. Please type |cff00ff00/reload|r OR use: MSUF Menu → Advanced → Factory Reset.")
+        print("|cffffff00MSUF:|r Reset staged. Please type |cff00ff00/reload|r OR use: MSUF Menu  Advanced  Factory Reset.")
          return
     end
     print("|cffffff00MSUF:|r Reloading UI to rebuild clean defaults...")
@@ -39,7 +39,7 @@ local function MSUF_PrintHelp()
     print("  /msuf help      - Show this help.")
     print("  /msuf reset     - Reset all MSUF frame positions and visibility to defaults.")
     print("  /msuf fullreset - FULL factory reset (all profiles/settings).")
-    print("                   Confirm stages the reset; reload via /reload or MSUF Menu → Advanced → Factory Reset.")
+    print("                   Confirm stages the reset; reload via /reload or MSUF Menu  Advanced  Factory Reset.")
     print("  /msuf absorb    - Toggle showing total absorb amount in HP text.")
     print("  !msuf help      - Print this help via chat (from your own character).")
  end
@@ -136,7 +136,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             MSUF_FullResetPending = true
             print("|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & settings for this account.")
             print("|cffffcc00MSUF:|r Type |cffffff00/msuf fullreset confirm|r to stage the reset.")
-            print("|cffffcc00MSUF:|r Then click: MSUF Menu → Advanced → Factory Reset (or type /reload).")
+            print("|cffffcc00MSUF:|r Then click: MSUF Menu  Advanced  Factory Reset (or type /reload).")
              return
         end
         if msg ~= "fullreset confirm" then
@@ -144,7 +144,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             print("|cffffcc00MSUF:|r Full reset cancelled. If you still want it, type:")
             print("  /msuf fullreset")
             print("  /msuf fullreset confirm")
-            print("  (then /reload OR MSUF Menu → Advanced → Factory Reset)")
+            print("  (then /reload OR MSUF Menu  Advanced  Factory Reset)")
              return
         end
         MSUF_FullResetPending = false
@@ -227,7 +227,7 @@ local function MSUF_GetPlayerInfoFrame()
     nameFS:SetPoint("TOPLEFT", 8, -8)
     nameFS:SetJustifyH("LEFT")
     nameFS:SetText("")
-    nameFS:SetTextColor(1, 1, 1) -- Weiß wie normaler Tooltip-Text
+    nameFS:SetTextColor(1, 1, 1) -- Wei wie normaler Tooltip-Text
     local line2FS = f:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
     line2FS:SetPoint("TOPLEFT", nameFS, "BOTTOMLEFT", 0, -2)
     line2FS:SetJustifyH("LEFT")
@@ -296,7 +296,7 @@ local function MSUF_UnitInfo_BuildLine4(faction, isPVP)
     local text = faction or ""
     if isPVP then
         if text ~= "" then
-            text = text .. " – PvP"
+            text = text .. "  PvP"
         else
             text = "PvP"
         end

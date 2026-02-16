@@ -1,4 +1,4 @@
--- Core/MSUF_Portraits.lua — Portrait system (3D portraits + boss portrait layout)
+-- Core/MSUF_Portraits.lua  Portrait system (3D portraits + boss portrait layout)
 -- Extracted from MidnightSimpleUnitFrames.lua (Phase 2 file split)
 -- Loads AFTER MidnightSimpleUnitFrames.lua in the TOC.
 local addonName, ns = ...

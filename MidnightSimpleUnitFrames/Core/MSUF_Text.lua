@@ -1,4 +1,4 @@
--- Core/MSUF_Text.lua — Core text rendering (HP, power, name, level, separators)
+-- Core/MSUF_Text.lua  Core text rendering (HP, power, name, level, separators)
 -- Extracted from MidnightSimpleUnitFrames.lua (Phase 2 file split)
 -- Loads AFTER MidnightSimpleUnitFrames.lua in the TOC.
 local addonName, ns = ...
@@ -88,6 +88,34 @@ function ns.Text._ShouldSplitHP(self, conf, g, hpMode)
     x = tonumber(x) or 0
     return (x > 0)
 end
+-- File-scope helper: replaces per-call closure to avoid ~1,000 garbage closures/min.
+-- Captures: hpText (fontstring), absorbText, absorbStyle passed as explicit params.
+local function _SetWithAbsorb(hpText, absorbText, absorbStyle, fmtNo, fmtSpace, fmtParen, ...)
+    local n = select('#', ...)
+    local a1, a2, a3 = ...
+    if absorbText then
+        local fmt = (absorbStyle == "PAREN") and fmtParen or fmtSpace
+        if n <= 0 then
+            ns.Text.SetFormatted(hpText, true, fmt, absorbText)
+        elseif n == 1 then
+            ns.Text.SetFormatted(hpText, true, fmt, a1, absorbText)
+        elseif n == 2 then
+            ns.Text.SetFormatted(hpText, true, fmt, a1, a2, absorbText)
+        else
+            ns.Text.SetFormatted(hpText, true, fmt, a1, a2, a3, absorbText)
+        end
+    else
+        if n <= 0 then
+            ns.Text.SetFormatted(hpText, true, fmtNo)
+        elseif n == 1 then
+            ns.Text.SetFormatted(hpText, true, fmtNo, a1)
+        elseif n == 2 then
+            ns.Text.SetFormatted(hpText, true, fmtNo, a1, a2)
+        else
+            ns.Text.SetFormatted(hpText, true, fmtNo, a1, a2, a3)
+        end
+    end
+end
 function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbText, absorbStyle)
     if not self or not self.hpText then  return end
     if not show then
@@ -98,52 +126,25 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     local hpMode = (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
     local sep = ns.Text._SepToken(g and g.hpTextSeparator, nil)
     local split = (hasPct == true) and ns.Text._ShouldSplitHP(self, conf, g, hpMode) or false
-    local function SetWithAbsorb(fmtNo, fmtSpace, fmtParen, ...)
-        -- IMPORTANT: Never put `...` before another argument in a call.
-        -- In Lua, varargs only expand fully in the last position.
-        local n = select('#', ...)
-        local a1, a2, a3 = ...
-        if absorbText then
-            local fmt = (absorbStyle == "PAREN") and fmtParen or fmtSpace
-            if n <= 0 then
-                ns.Text.SetFormatted(self.hpText, true, fmt, absorbText)
-            elseif n == 1 then
-                ns.Text.SetFormatted(self.hpText, true, fmt, a1, absorbText)
-            elseif n == 2 then
-                ns.Text.SetFormatted(self.hpText, true, fmt, a1, a2, absorbText)
-            else
-                ns.Text.SetFormatted(self.hpText, true, fmt, a1, a2, a3, absorbText)
-            end
-        else
-            if n <= 0 then
-                ns.Text.SetFormatted(self.hpText, true, fmtNo)
-            elseif n == 1 then
-                ns.Text.SetFormatted(self.hpText, true, fmtNo, a1)
-            elseif n == 2 then
-                ns.Text.SetFormatted(self.hpText, true, fmtNo, a1, a2)
-            else
-                ns.Text.SetFormatted(self.hpText, true, fmtNo, a1, a2, a3)
-            end
-        end
-     end
+    local hpText = self.hpText
     if split then
-        SetWithAbsorb("%s", "%s %s", "%s (%s)", hpStr or "")
+        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
         ns.Text.SetFormatted(self.hpTextPct, true, "%.1f%%", hpPct)
          return
     end
     ns.Text.ClearField(self, "hpTextPct")
     if not hasPct then
-        SetWithAbsorb("%s", "%s %s", "%s (%s)", hpStr or "")
+        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
          return
     end
     if hpMode == "FULL_ONLY" then
-        SetWithAbsorb("%s", "%s %s", "%s (%s)", hpStr or "")
+        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
     elseif hpMode == "PERCENT_ONLY" then
-        SetWithAbsorb("%.1f%%", "%.1f%% %s", "%.1f%% (%s)", hpPct)
+        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%.1f%%", "%.1f%% %s", "%.1f%% (%s)", hpPct)
     elseif hpMode == "PERCENT_PLUS_FULL" then
-        SetWithAbsorb("%.1f%%%s%s", "%.1f%%%s%s %s", "%.1f%%%s%s (%s)", hpPct, sep, hpStr or "")
+        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%.1f%%%s%s", "%.1f%%%s%s %s", "%.1f%%%s%s (%s)", hpPct, sep, hpStr or "")
     else
-        SetWithAbsorb("%s%s%.1f%%", "%s%s%.1f%% %s", "%s%s%.1f%% (%s)", hpStr or "", sep, hpPct)
+        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s%s%.1f%%", "%s%s%.1f%% %s", "%s%s%.1f%% (%s)", hpStr or "", sep, hpPct)
     end
  end
 function ns.Text.GetUnitPowerPercent(unit)
