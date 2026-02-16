@@ -283,6 +283,60 @@ end
         g.playerTotemsTextColor = { 1, 1, 1 }
     end
 
+
+    -- Party Interrupt Tracker (Kick tracker)
+    if g.enableKickTracker == nil then
+        g.enableKickTracker = false
+    end
+    if g.lockKickTracker == nil then
+        g.lockKickTracker = false
+    end
+    if g.kickTrackerOffsetX == nil then
+        g.kickTrackerOffsetX = 0
+    end
+    if g.kickTrackerOffsetY == nil then
+        g.kickTrackerOffsetY = -140
+    end
+    if g.kickTrackerWidth == nil then
+        g.kickTrackerWidth = 220
+    end
+    if g.kickTrackerIconSize == nil then
+        g.kickTrackerIconSize = 26
+    end
+    if g.kickTrackerSpacing == nil then
+        g.kickTrackerSpacing = 4
+    end
+    if g.kickTrackerFontSize == nil or g.kickTrackerFontSize <= 0 then
+        g.kickTrackerFontSize = 14
+    end
+    if g.kickTrackerShowNames == nil then
+        g.kickTrackerShowNames = true
+    end
+    if g.kickTrackerShowReady == nil then
+        g.kickTrackerShowReady = true
+    end
+    if g.kickTrackerShowInDungeon == nil then
+        g.kickTrackerShowInDungeon = true
+    end
+    if g.kickTrackerShowInOpenWorld == nil then
+        g.kickTrackerShowInOpenWorld = true
+    end
+    if g.kickTrackerShowInRaid == nil then
+        g.kickTrackerShowInRaid = false
+    end
+
+
+    if g.kickTrackerBgAlpha == nil then
+        g.kickTrackerBgAlpha = 0.35
+    end
+    g.kickTrackerBgAlpha = _MSUF_Clamp(tonumber(g.kickTrackerBgAlpha) or 0.35, 0, 1)
+
+    -- Clamp to sane ranges (avoid layout blowups from bad profiles)
+    g.kickTrackerWidth = _MSUF_Clamp(g.kickTrackerWidth, 160, 420)
+    g.kickTrackerIconSize = _MSUF_Clamp(g.kickTrackerIconSize, 14, 48)
+    g.kickTrackerSpacing = _MSUF_Clamp(g.kickTrackerSpacing, 0, 18)
+    g.kickTrackerFontSize = _MSUF_Clamp(g.kickTrackerFontSize, 8, 28)
+
     -- One-time tip popup flag
     if g.shownGameplayColorsTip == nil then
         g.shownGameplayColorsTip = false
@@ -2731,12 +2785,983 @@ end
 
 end
 
+
+
+------------------------------------------------------
+-- Party Interrupt Tracker (Kick tracker)
+-- Event-driven; ticker only while any cooldown is active.
+-- SpellID laundering uses a hidden StatusBar (MIT-style) to remain 12.0-safe.
+------------------------------------------------------
+local GameplayFeatures_KickTracker_Apply
+do
+    local CreateFrame = CreateFrame
+    local UIParent = UIParent
+    local GetTime = GetTime
+    local IsInInstance = IsInInstance
+    local IsInGroup = IsInGroup
+    local IsInRaid = IsInRaid
+    local UnitExists = UnitExists
+    local UnitName = UnitName
+    local UnitClass = UnitClass
+    local UnitGUID = UnitGUID
+    local IsSpellKnown = IsSpellKnown
+    local pcall = pcall
+    local floor = math.floor
+    local format = string.format
+
+local KT_ALL_INTERRUPTS = {
+    [6552]   = { name = "Pummel",            cd = 15, icon = 132938 },
+    [1766]   = { name = "Kick",              cd = 15, icon = 132219 },
+    [2139]   = { name = "Counterspell",      cd = 24, icon = 135856 },
+    [57994]  = { name = "Wind Shear",        cd = 12, icon = 136018 },
+    [106839] = { name = "Skull Bash",        cd = 15, icon = 236946 },
+    [78675]  = { name = "Solar Beam",        cd = 60, icon = 236748 },
+    [47528]  = { name = "Mind Freeze",       cd = 15, icon = 237527 },
+    [96231]  = { name = "Rebuke",            cd = 15, icon = 523893 },
+    [183752] = { name = "Disrupt",           cd = 15, icon = 1305153 },
+    [116705] = { name = "Spear Hand Strike", cd = 15, icon = 608940 },
+    [15487]  = { name = "Silence",           cd = 45, icon = 458230 },
+    [147362] = { name = "Counter Shot",      cd = 24, icon = 249170 },
+    [187707] = { name = "Muzzle",            cd = 15, icon = 1376045 },
+    [19647]  = { name = "Spell Lock",        cd = 24, icon = 136174 },
+    [132409] = { name = "Spell Lock",        cd = 24, icon = 136174 },
+    [119914] = { name = "Axe Toss",          cd = 30, icon = "Interface\\Icons\\ability_warrior_titansgrip" },
+    [1276467] = { name = "Fel Ravager",      cd = 25, icon = "Interface\\Icons\\spell_shadow_summonfelhunter" },
+    [351338] = { name = "Quell",             cd = 20, icon = 4622469 },
+}
+
+    local KT_CLASS_INTERRUPT_LIST = {
+    WARRIOR     = { 6552 },
+    ROGUE       = { 1766 },
+    MAGE        = { 2139 },
+    SHAMAN      = { 57994 },
+    DRUID       = { 106839, 78675 },           -- Skull Bash (feral/guardian), Solar Beam (balance)
+    DEATHKNIGHT = { 47528 },
+    PALADIN     = { 96231 },
+    DEMONHUNTER = { 183752 },
+    MONK        = { 116705 },
+    PRIEST      = { 15487 },                    -- Silence (shadow only)
+    HUNTER      = { 147362, 187707 },           -- Counter Shot (BM/MM), Muzzle (survival)
+    WARLOCK     = { 19647, 132409, 119914 },
+    EVOKER      = { 351338 },
+}
+
+-- Class colors: use MSUF's customizable class color table (Colors menu) when present.
+-- Cached + invalidated on Gameplay Apply to ensure live updates when the user edits class colors.
+local ktClassColorCache = {}
+local ktClassColorGen = 1
+
+local function KT_BumpClassColorGen()
+    ktClassColorGen = ktClassColorGen + 1
+    for k in pairs(ktClassColorCache) do
+        ktClassColorCache[k] = nil
+    end
+end
+
+local function KT_GetClassColor(classToken)
+    if not classToken then
+        return 1, 1, 1
+    end
+
+    local hit = ktClassColorCache[classToken]
+    if hit then
+        return hit[1], hit[2], hit[3]
+    end
+
+    local r, g, b
+
+    -- Prefer MSUF's custom class colors (Colors > Class bar colors).
+    local db = _G and _G.MSUF_DB or MSUF_DB
+    if db and type(db.classColors) == "table" then
+        local t = db.classColors[classToken]
+        if type(t) == "table" and type(t.r) == "number" and type(t.g) == "number" and type(t.b) == "number" then
+            r, g, b = t.r, t.g, t.b
+        elseif type(t) == "string" and type(_G) == "table" and type(_G.MSUF_FONT_COLORS) == "table" and type(_G.MSUF_FONT_COLORS[t]) == "table" then
+            local c = _G.MSUF_FONT_COLORS[t]
+            r, g, b = c[1], c[2], c[3]
+        end
+    end
+
+    if r == nil then
+        local c = (RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]) or nil
+        if c then
+            r, g, b = c.r, c.g, c.b
+        end
+    end
+
+    if r == nil and C_ClassColor and C_ClassColor.GetClassColor then
+        local ccObj = C_ClassColor.GetClassColor(classToken)
+        if ccObj and ccObj.GetRGB then
+            r, g, b = ccObj:GetRGB()
+        end
+    end
+
+    r, g, b = r or 1, g or 1, b or 1
+    ktClassColorCache[classToken] = { r, g, b }
+    return r, g, b
+end
+
+-- Preview mode (when unlocked): show dummy names + running dummy timers so you can move/size the tracker.
+local KT_PREVIEW_NAMES = {
+    "Dummy Rogue",
+    "Dummy Mage",
+    "Dummy Warrior",
+    "Dummy Demon Hunter",
+    "Dummy Monk",
+}
+local KT_PREVIEW_CLASSES = { "ROGUE", "MAGE", "WARRIOR", "DEMONHUNTER", "MONK" }
+local KT_PREVIEW_INTERRUPTS = { 1766, 2139, 6552, 183752, 116705 } -- Kick/CS/Pummel/Disrupt/Spear Hand
+
+
+    local ktFrame, ktEventFrame, ktTicker, ktCastFrames
+    local ktActive = false
+    local ktPreview = false
+    
+    -- Lightweight MSUF<->MSUF party sync (addon messages)
+    -- Only active while the tracker is active in Mythic+ (and NOT in preview mode).
+    local KT_SYNC_PREFIX = "MSUF_KT1"
+    local ktSyncFrame
+    local ktSyncRegistered = false
+    local ktSyncHelloSent = false
+    local ktSyncPeers = 0
+
+    local function KT_SyncGetChannel()
+        if IsInGroup and LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
+            return "INSTANCE_CHAT"
+        end
+        return "PARTY"
+    end
+
+    local function KT_SyncEnsure()
+        if ktSyncRegistered then return end
+        if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
+            -- Safe: runs only on activation (never in hot paths).
+            C_ChatInfo.RegisterAddonMessagePrefix(KT_SYNC_PREFIX)
+        end
+
+        ktSyncFrame = ktSyncFrame or CreateFrame("Frame")
+        ktSyncFrame:UnregisterAllEvents()
+        ktSyncFrame:RegisterEvent("CHAT_MSG_ADDON")
+        ktSyncFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sender)
+            if prefix ~= KT_SYNC_PREFIX or type(msg) ~= "string" then
+                return
+            end
+
+            -- Format:
+            --   H                    (hello)
+            --   A                    (ack)
+            --   K;<guid>;<spellID>;<cd>
+            local t, a, b, c = strsplit(";", msg)
+            if t == "H" then
+                if C_ChatInfo and C_ChatInfo.SendAddonMessage then
+                    C_ChatInfo.SendAddonMessage(KT_SYNC_PREFIX, "A", KT_SyncGetChannel())
+                end
+                return
+            elseif t == "A" then
+                ktSyncPeers = (ktSyncPeers or 0) + 1
+                return
+            elseif t == "K" then
+                local guid = a
+                local spellID = tonumber(b)
+                local cd = tonumber(c)
+                if not guid or not spellID or not cd then
+                    return
+                end
+                if not ktActive or ktPreview then
+                    return
+                end
+                local g = GetGameplayDBFast()
+                if not g or not g.enableKickTracker then
+                    return
+                end
+                local idx = ktGuidToIndex and ktGuidToIndex[guid]
+                if not idx then
+                    return
+                end
+                local row = ktRows and ktRows[idx]
+                if not row then
+                    return
+                end
+
+                row.interruptID = spellID
+                row.readyAt = GetTime() + cd
+                KT_UpdateVisuals(g)
+                return
+            end
+        end)
+
+        ktSyncRegistered = true
+    end
+
+    local function KT_SyncStop()
+        if ktSyncFrame then
+            ktSyncFrame:UnregisterAllEvents()
+            ktSyncFrame:SetScript("OnEvent", nil)
+        end
+        ktSyncRegistered = false
+        ktSyncHelloSent = false
+        ktSyncPeers = 0
+    end
+
+    local function KT_SyncHello()
+        if ktSyncHelloSent then return end
+        ktSyncHelloSent = true
+        if C_ChatInfo and C_ChatInfo.SendAddonMessage then
+            C_ChatInfo.SendAddonMessage(KT_SYNC_PREFIX, "H", KT_SyncGetChannel())
+        end
+    end
+
+    local function KT_SyncSendKick(guid, spellID, cd)
+        if not guid or not spellID or not cd then return end
+        if not ktActive or ktPreview then return end
+        if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return end
+        local msg = "K;" .. guid .. ";" .. tostring(spellID) .. ";" .. tostring(cd)
+        C_ChatInfo.SendAddonMessage(KT_SYNC_PREFIX, msg, KT_SyncGetChannel())
+    end
+
+    local ktRows = {}
+    local ktUnitToIndex = {}
+    local ktPetToOwner = {}
+    local ktRosterUnits = { "player" }
+
+    local ktWasher, ktWashedValue
+    local ktIsInterruptCache = {}
+
+    local KT_RegisterCastFramesForRoster
+
+    local function KT_EnsureWasher()
+        if ktWasher then return end
+        ktWasher = CreateFrame("StatusBar", nil, UIParent)
+        ktWasher:Hide()
+        ktWasher:SetMinMaxValues(0, 2000000)
+        ktWasher:SetValue(0)
+        ktWasher:SetScript("OnValueChanged", function(_, v)
+            ktWashedValue = v
+        end)
+    end
+
+    local function KT_LaunderSpellID(raw)
+        if raw == nil then return nil end
+        KT_EnsureWasher()
+        ktWashedValue = nil
+
+        -- The SetValue->OnValueChanged path "launders" the incoming param into a safe number.
+        -- Must be protected: in 12.0 some event args can be secret/tainted and crash SetValue.
+        ktWasher:SetValue(0)
+        pcall(ktWasher.SetValue, ktWasher, raw)
+
+        local v = ktWashedValue
+        if type(v) ~= "number" then
+            return nil
+        end
+        return v
+    end
+
+    local function KT_IsInterruptID(id)
+        local cached = ktIsInterruptCache[id]
+        if cached ~= nil then
+            return cached
+        end
+        local ok, data = pcall(function()
+            return KT_ALL_INTERRUPTS[id]
+        end)
+        cached = (ok and data ~= nil) and true or false
+        ktIsInterruptCache[id] = cached
+        return cached
+    end
+
+    local function KT_GetInterruptData(id)
+        return KT_ALL_INTERRUPTS[id]
+    end
+
+    local function KT_FormatRemaining(sec)
+        if sec <= 0 then return "0" end
+        if sec >= 60 then
+            local m = floor(sec / 60)
+            local s = floor(sec - (m * 60))
+            return format("%d:%02d", m, s)
+        end
+        return tostring(floor(sec + 0.5))
+    end
+
+        local function KT_ShouldShow(g)
+            -- Active in any 5-man dungeon instance (instType == 'party').
+            -- Keeps overhead near-zero outside dungeons: no unit events, no tickers, no UI.
+            if not g or not g.enableKickTracker then
+                return false
+            end
+    
+            -- Never show in raids.
+            if IsInRaid() then
+                return false
+            end
+    
+            local inInstance, instType = IsInInstance()
+            if not inInstance or instType ~= 'party' then
+                return false
+            end
+    
+            -- Respect the existing toggle if present (defaults to true).
+            if g.kickTrackerShowInDungeon == false then
+                return false
+            end
+    
+            return true
+        end
+
+
+    local function KT_EnsureFrame()
+        if ktFrame then return ktFrame end
+
+        local f = CreateFrame("Frame", "MSUF_KickTrackerFrame", UIParent)
+        f:SetClampedToScreen(true)
+        f:SetMovable(true)
+        f:EnableMouse(true)
+        f:RegisterForDrag("LeftButton")
+
+        f:SetScript("OnDragStart", function(self)
+            local g = EnsureGameplayDefaults()
+            if g.lockKickTracker then return end
+            self:StartMoving()
+        end)
+
+        f:SetScript("OnDragStop", function(self)
+            self:StopMovingOrSizing()
+            local g = EnsureGameplayDefaults()
+            local cx, cy = self:GetCenter()
+            local px, py = UIParent:GetCenter()
+            if cx and cy and px and py then
+                g.kickTrackerOffsetX = cx - px
+                g.kickTrackerOffsetY = cy - py
+            end
+        end)
+
+        local bg = f:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0, 0, 0, 0.35)
+        f.bg = bg
+
+        for i = 1, 5 do
+            local row = CreateFrame("Frame", nil, f)
+
+            row.bg = row:CreateTexture(nil, "BACKGROUND")
+            row.bg:SetAllPoints()
+            row.bg:SetColorTexture(0, 0, 0, 0.20)
+
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetPoint("LEFT", row, "LEFT", 0, 0)
+            row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+            row.nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.nameText:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+            row.nameText:SetJustifyH("LEFT")
+
+            row.timeText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.timeText:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+            row.timeText:SetJustifyH("RIGHT")
+
+            row.unit = nil
+            row.guid = nil
+            row.name = nil
+            row.class = nil
+            row.interruptID = nil
+            row.readyAt = 0
+
+            ktRows[i] = row
+        end
+
+        ktFrame = f
+        return f
+    end
+
+    local function KT_StopTicker()
+        if ktTicker then
+            ktTicker:Cancel()
+            ktTicker = nil
+        end
+    end
+
+    local function KT_ApplyPoint(g)
+        KT_SyncEnsure()
+        KT_SyncHello()
+
+        local f = KT_EnsureFrame()
+        f:ClearAllPoints()
+        f:SetPoint("CENTER", UIParent, "CENTER", g.kickTrackerOffsetX or 0, g.kickTrackerOffsetY or -140)
+    end
+
+    local function KT_ApplyLayout(g)
+        local f = KT_EnsureFrame()
+
+        local w = g.kickTrackerWidth or 220
+        local iconSize = g.kickTrackerIconSize or 26
+        local spacing = g.kickTrackerSpacing or 4
+        local fontSize = g.kickTrackerFontSize or 14
+        local showNames = g.kickTrackerShowNames and true or false
+        local bgAlpha = tonumber(g.kickTrackerBgAlpha) or 0.35
+        bgAlpha = _MSUF_Clamp(bgAlpha, 0, 1)
+        local rowBgAlpha = _MSUF_Clamp(bgAlpha * 0.57, 0, 1)
+
+        if f._msuf_w == w and f._msuf_icon == iconSize and f._msuf_spacing == spacing and f._msuf_font == fontSize and f._msuf_showNames == showNames and f._msuf_bgAlpha == bgAlpha then
+            return
+        end
+        f._msuf_w = w
+        f._msuf_icon = iconSize
+        f._msuf_spacing = spacing
+        f._msuf_font = fontSize
+        f._msuf_showNames = showNames
+
+        f._msuf_bgAlpha = bgAlpha
+
+        if f.bg then
+            f.bg:SetColorTexture(0, 0, 0, bgAlpha)
+        end
+        f:SetWidth(w)
+
+        local padX, padY = 6, 6
+        local rowW = w - (padX * 2)
+        local rowH = iconSize
+
+        local fontPath, fontFlags, cr, cg, cb = GetGameplayFontSettings()
+
+        for i = 1, 5 do
+            local row = ktRows[i]
+            row:SetWidth(rowW)
+            row:SetHeight(rowH)
+            if row.bg then
+                row.bg:SetColorTexture(0, 0, 0, rowBgAlpha)
+            end
+            row:ClearAllPoints()
+
+            if i == 1 then
+                row:SetPoint("TOPLEFT", f, "TOPLEFT", padX, -padY)
+            else
+                row:SetPoint("TOPLEFT", ktRows[i - 1], "BOTTOMLEFT", 0, -spacing)
+            end
+
+            row.icon:SetSize(iconSize, iconSize)
+
+            if showNames then
+                row.nameText:Show()
+                row.timeText:ClearAllPoints()
+                row.timeText:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+            else
+                row.nameText:Hide()
+                row.timeText:ClearAllPoints()
+                row.timeText:SetPoint("CENTER", row, "CENTER", 0, 0)
+            end
+
+            if fontPath then
+                row.nameText:SetFont(fontPath, fontSize, fontFlags or "")
+                row.timeText:SetFont(fontPath, fontSize, fontFlags or "")
+            end
+            if cr then
+                -- Match Gameplay font color for the timer text; names use class colors.
+                row.timeText:SetTextColor(cr, cg, cb)
+            end
+        end
+
+        local height = (padY * 2) + (rowH * 5) + (spacing * 4)
+        f:SetHeight(height)
+    end
+
+    local function KT_RebuildMappings()
+        for k in pairs(ktUnitToIndex) do ktUnitToIndex[k] = nil end
+        for k in pairs(ktPetToOwner) do ktPetToOwner[k] = nil end
+
+        for i = 1, 5 do
+            local row = ktRows[i]
+            local unit = row.unit
+            if unit then
+                ktUnitToIndex[unit] = i
+
+                if unit == "player" then
+                    ktPetToOwner["pet"] = "player"
+                elseif unit:sub(1, 5) == "party" then
+                    local n = unit:sub(6)
+                    if n and n ~= "" then
+                        ktPetToOwner["partypet" .. n] = unit
+                    end
+                elseif unit:sub(1, 4) == "raid" then
+                    local n = unit:sub(5)
+                    if n and n ~= "" then
+                        ktPetToOwner["raidpet" .. n] = unit
+                    end
+                end
+            end
+        end
+    end
+
+    local function KT_PickDefaultInterruptID(unit, classTag)
+        if not classTag then return nil end
+        local list = KT_CLASS_INTERRUPT_LIST[classTag]
+        if not list then return nil end
+
+        -- For the player we can be accurate by checking IsSpellKnown().
+        if unit == "player" and IsSpellKnown then
+            for i = 1, #list do
+                local id = list[i]
+                if id and IsSpellKnown(id) then
+                    return id
+                end
+            end
+        end
+
+        return list[1]
+    end
+
+    local function KT_SetRowVisual(row, now, g)
+        local id = row.interruptID
+        local data = id and KT_GetInterruptData(id)
+
+        if data and data.icon then
+            row.icon:SetTexture(data.icon)
+        else
+            row.icon:SetTexture(nil)
+        end
+
+        local name = row.name or ""
+        row.nameText:SetText(name)
+
+        local classToken = row.class
+if classToken then
+    -- Avoid repeated lookups per-tick: only recompute when class changes or colors were invalidated.
+    if row._msuf_colorGen ~= ktClassColorGen or row._msuf_lastClass ~= classToken then
+        local r, g, b = KT_GetClassColor(classToken)
+        row._msuf_lastClass = classToken
+        row._msuf_colorGen = ktClassColorGen
+        row._msuf_nameR, row._msuf_nameG, row._msuf_nameB = r, g, b
+    end
+    row.nameText:SetTextColor(row._msuf_nameR or 1, row._msuf_nameG or 1, row._msuf_nameB or 1)
+else
+    row.nameText:SetTextColor(1, 1, 1)
+end
+
+        local remaining = (row.readyAt or 0) - now
+        if remaining > 0.05 then
+            row.timeText:SetText(KT_FormatRemaining(remaining))
+            return true
+        end
+
+        row.readyAt = 0
+        if g.kickTrackerShowReady then
+            row.timeText:SetText("READY")
+        else
+            row.timeText:SetText("")
+        end
+        return false
+    end
+
+    local function KT_UpdateVisuals(g)
+        if not ktFrame then return end
+        if not ktFrame:IsShown() then
+            KT_StopTicker()
+            return
+        end
+
+        local now = GetTime()
+        local anyActive = false
+
+
+
+if ktPreview then
+    -- Ensure dummy data and keep timers running.
+    for i = 1, 5 do
+        local row = ktRows[i]
+        row:Show()
+        row.unit = nil
+        row.guid = nil
+
+        if not row._msuf_previewInited then
+            row._msuf_previewInited = true
+            row.name = KT_PREVIEW_NAMES[i] or ("Dummy " .. i)
+            row.class = KT_PREVIEW_CLASSES[i]
+            row.interruptID = KT_PREVIEW_INTERRUPTS[i] or 1766
+            -- Staggered initial remaining time so the list "moves" immediately.
+            row.readyAt = now + (2 + (i * 2.5))
+        end
+
+        -- When a timer completes, restart it with the real CD (if known) to keep it cycling.
+        if not row.readyAt or (row.readyAt - now) <= 0.05 then
+            local data = KT_GetInterruptData(row.interruptID)
+            local cd = (data and data.cd) or (12 + (i * 2))
+            row.readyAt = now + cd
+        end
+
+        if KT_SetRowVisual(row, now, g) then
+            anyActive = true
+        end
+    end
+
+    if anyActive then
+        if not ktTicker then
+            ktTicker = C_Timer.NewTicker(0.20, function()
+                local g = EnsureGameplayDefaults()
+                if not g.enableKickTracker or not ktFrame or not ktFrame:IsShown() or not ktActive then
+                    KT_StopTicker()
+                    return
+                end
+                KT_UpdateVisuals(g)
+            end)
+        end
+    else
+        KT_StopTicker()
+    end
+    return
+end
+        for i = 1, 5 do
+            local row = ktRows[i]
+            local unit = row.unit
+
+            if unit and UnitExists(unit) then
+                row:Show()
+                if KT_SetRowVisual(row, now, g) then
+                    anyActive = true
+                end
+            else
+                row:Hide()
+            end
+        end
+
+        if anyActive then
+            if not ktTicker then
+                ktTicker = C_Timer.NewTicker(0.20, function()
+                    local g = EnsureGameplayDefaults()
+                    if not g.enableKickTracker or not ktFrame or not ktFrame:IsShown() or not ktActive then
+                        KT_StopTicker()
+                        return
+                    end
+                    KT_UpdateVisuals(g)
+                end)
+            end
+        else
+            KT_StopTicker()
+        end
+    end
+
+    local function KT_UpdateRoster(g)
+        KT_EnsureFrame()
+
+        local units = ktRosterUnits
+        units[1] = "player"
+        units[2], units[3], units[4], units[5] = nil, nil, nil, nil
+
+        if IsInGroup() and not IsInRaid() then
+            for i = 1, 4 do
+                local u = "party" .. i
+                if UnitExists(u) then
+                    units[i + 1] = u
+                end
+            end
+        elseif IsInRaid() and g.kickTrackerShowInRaid then
+            local myGuid = UnitGUID("player")
+            local n = 1
+            for i = 1, 40 do
+                local u = "raid" .. i
+                if UnitExists(u) then
+                    local guid = UnitGUID(u)
+                    if guid and guid ~= myGuid then
+                        n = n + 1
+                        units[n] = u
+                        if n >= 5 then break end
+                    end
+                end
+            end
+        end
+
+        for i = 1, 5 do
+            local row = ktRows[i]
+            local unit = units[i]
+
+            row.unit = unit
+            row.guid = nil
+            row.name = nil
+            row.class = nil
+
+            if unit and UnitExists(unit) then
+                row.guid = UnitGUID(unit)
+                row.name = UnitName(unit) or unit
+                local _, classTag = UnitClass(unit)
+                row.class = classTag
+
+                if not row.interruptID then
+                    row.interruptID = KT_PickDefaultInterruptID(unit, classTag)
+                end
+            else
+                row.readyAt = 0
+            end
+        end
+
+        KT_RebuildMappings()
+        KT_RegisterCastFramesForRoster()
+        KT_UpdateVisuals(g)
+    end
+
+    local function KT_OnSpellSucceeded(unit, rawSpellID)
+        if not unit then return end
+
+        local ownerUnit = ktPetToOwner[unit] or unit
+        local idx = ktUnitToIndex[ownerUnit]
+        if not idx then
+            return
+        end
+
+        local spellID = KT_LaunderSpellID(rawSpellID)
+        if not spellID then
+            return
+        end
+
+        if not KT_IsInterruptID(spellID) then
+            return
+        end
+
+        local row = ktRows[idx]
+        if not row then return end
+
+        local data = KT_GetInterruptData(spellID)
+        if not data or not data.cd then
+            return
+        end
+
+        row.interruptID = spellID
+        row.readyAt = GetTime() + data.cd
+        KT_SyncSendKick(row.guid, spellID, data.cd)
+
+        local g = EnsureGameplayDefaults()
+        KT_UpdateVisuals(g)
+    end
+
+
+    -- In 12.0, UNIT_SPELLCAST_SUCCEEDED is a UNIT EVENT and may not fire unless registered via RegisterUnitEvent.
+    -- To keep it performant and reliable, we maintain 5 tiny cast frames that are re-registered whenever the roster changes.
+    local function KT_EnsureCastFrames()
+        if ktCastFrames then return end
+        ktCastFrames = {}
+        for i = 1, 5 do
+            local cf = CreateFrame("Frame")
+            cf:SetScript("OnEvent", function(_, _, unit, _, spellID)
+                local g = EnsureGameplayDefaults()
+                if not g.enableKickTracker or not ktActive then return end
+                if not ktFrame or not ktFrame:IsShown() then return end
+                KT_OnSpellSucceeded(unit, spellID)
+            end)
+            ktCastFrames[i] = cf
+        end
+    end
+
+    local function KT_UnregisterCastFrames()
+        if not ktCastFrames then return end
+        for i = 1, 5 do
+            local cf = ktCastFrames[i]
+            if cf then
+                cf:UnregisterAllEvents()
+            end
+        end
+    end
+
+    KT_RegisterCastFramesForRoster = function()
+        KT_EnsureCastFrames()
+        -- Re-register per slot (unit + its pet) to guarantee we get SUCCEEDED events in 12.0.
+        for i = 1, 5 do
+            local cf = ktCastFrames[i]
+            if cf then
+                cf:UnregisterAllEvents()
+                local unit = ktRows[i] and ktRows[i].unit
+                if unit and UnitExists(unit) then
+                    if cf.RegisterUnitEvent then
+                        if unit == "player" then
+                            cf:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "pet")
+                        elseif unit:sub(1, 5) == "party" then
+                            local n = unit:sub(6)
+                            local pet = (n and n ~= "") and ("partypet" .. n) or nil
+                            if pet and UnitExists(pet) then
+                                cf:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit, pet)
+                            else
+                                cf:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit)
+                            end
+                        elseif unit:sub(1, 4) == "raid" then
+                            local n = unit:sub(5)
+                            local pet = (n and n ~= "") and ("raidpet" .. n) or nil
+                            if pet and UnitExists(pet) then
+                                cf:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit, pet)
+                            else
+                                cf:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit)
+                            end
+                        else
+                            cf:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit)
+                        end
+                    else
+                        -- Fallback (older builds): broad register and filter inside KT_OnSpellSucceeded.
+                        cf:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+                    end
+                end
+            end
+        end
+    end
+
+    local function KT_EnsureEvents()
+        if ktEventFrame then return end
+        ktEventFrame = CreateFrame("Frame")
+        ktEventFrame:SetScript("OnEvent", function(_, event, ...)
+            local g = EnsureGameplayDefaults()
+            if not g.enableKickTracker then
+                return
+            end
+
+            -- While active we handle roster/pet changes; otherwise we only react to instance/challenge transitions.
+            if event == "GROUP_ROSTER_UPDATE" or event == "UNIT_PET" then
+                if not ktActive then return end
+                KT_UpdateRoster(g)
+                return
+            end
+
+            local shouldShow = KT_ShouldShow(g)
+            if not shouldShow then
+                if ktActive then
+                    ktActive = false
+                    -- Stop roster listeners while inactive (0 overhead outside M+).
+                    ktEventFrame:UnregisterEvent("GROUP_ROSTER_UPDATE")
+                    ktEventFrame:UnregisterEvent("UNIT_PET")
+                end
+                if ktFrame then ktFrame:Hide() end
+                KT_StopTicker()
+                KT_UnregisterCastFrames()
+                    KT_SyncStop()
+                    return
+            end
+
+            -- Becoming (or staying) active.
+            if not ktActive then
+                ktActive = true
+                ktEventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+                ktEventFrame:RegisterEvent("UNIT_PET")
+            end
+
+            KT_SyncEnsure()
+            KT_SyncHello()
+
+            local f = KT_EnsureFrame()
+            f:Show()
+            KT_ApplyPoint(g)
+            KT_ApplyLayout(g)
+            KT_UpdateRoster(g)
+        end)
+    end
+
+    local function KT_RegisterEvents()
+        KT_EnsureEvents()
+        ktEventFrame:UnregisterAllEvents()
+        -- Minimal watchers. Roster/pet events are registered only while active.
+        ktEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        ktEventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+    end
+
+    local function KT_UnregisterEvents()
+        if ktEventFrame then
+            ktEventFrame:UnregisterAllEvents()
+        end
+        KT_UnregisterCastFrames()
+        KT_SyncStop()
+    end
+
+    local function KT_Apply(g)
+        if not g or not g.enableKickTracker then
+            ktActive = false
+            
+            ktPreview = false
+if ktEventFrame then
+                ktEventFrame:UnregisterEvent("GROUP_ROSTER_UPDATE")
+                ktEventFrame:UnregisterEvent("UNIT_PET")
+            end
+            if ktFrame then ktFrame:Hide() end
+            KT_StopTicker()
+            KT_UnregisterEvents()
+            return
+        end
+
+        KT_RegisterEvents()
+
+
+
+        -- Class colors may have changed via Colors menu; invalidate cache so rows pick up the latest.
+        KT_BumpClassColorGen()
+
+-- Preview mode when unlocked: show dummy rows so the frame can be positioned anywhere.
+-- This intentionally overrides real tracking while unlocked (stable preview UX).
+if not g.lockKickTracker then
+    ktPreview = true
+    ktActive = true
+
+    -- No backend listeners while previewing (zero gameplay overhead; only the preview ticker runs).
+    if ktEventFrame then
+        ktEventFrame:UnregisterEvent("GROUP_ROSTER_UPDATE")
+        ktEventFrame:UnregisterEvent("UNIT_PET")
+    end
+    KT_UnregisterCastFrames()
+    KT_SyncStop()
+
+    local f = KT_EnsureFrame()
+    f:Show()
+    KT_ApplyPoint(g)
+    KT_ApplyLayout(g)
+
+    -- Reset preview init so layout changes reflect immediately.
+    for i = 1, 5 do
+        local row = ktRows[i]
+        row._msuf_previewInited = nil
+    end
+
+    KT_UpdateVisuals(g)
+    return
+end
+
+ktPreview = false
+        local shouldShow = KT_ShouldShow(g)
+        if not shouldShow then
+            ktActive = false
+            
+            ktPreview = false
+if ktEventFrame then
+                ktEventFrame:UnregisterEvent("GROUP_ROSTER_UPDATE")
+                ktEventFrame:UnregisterEvent("UNIT_PET")
+            end
+            if ktFrame then ktFrame:Hide() end
+            KT_StopTicker()
+            KT_UnregisterCastFrames()
+            KT_SyncStop()
+            return
+        end
+
+                ktPreview = false
+
+        -- Active in Mythic+ now.
+        if not ktActive then
+            ktActive = true
+            if ktEventFrame then
+                ktEventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+                ktEventFrame:RegisterEvent("UNIT_PET")
+            end
+        end
+
+        local f = KT_EnsureFrame()
+        f:Show()
+        KT_ApplyPoint(g)
+        KT_ApplyLayout(g)
+        KT_UpdateRoster(g)
+    end
+
+    GameplayFeatures_KickTracker_Apply = function(g)
+        KT_Apply(g)
+    end
+end
+
 -- Feature tables (single-file modules) for readability and safer future refactors
 local GameplayFeatures = {
     CombatTimer     = {},
     CombatStateText = {},
     CombatCrosshair = {},
     PlayerTotems    = {},
+    KickTracker     = {},
 }
 
 function GameplayFeatures.CombatTimer.Apply(g)
@@ -2758,8 +3783,9 @@ GameplayFeatures.CombatStateText.Apply = MSUF_Gameplay_ApplyCombatStateText
 GameplayFeatures.CombatCrosshair.Apply = MSUF_Gameplay_ApplyCombatCrosshair
 
 GameplayFeatures.PlayerTotems.Apply = GameplayFeatures_PlayerTotems_Apply
+    GameplayFeatures.KickTracker.Apply = GameplayFeatures_KickTracker_Apply
 
-local GameplayFeatureOrder = { "CombatTimer", "CombatStateText", "CombatCrosshair", "PlayerTotems" }
+local GameplayFeatureOrder = {"CombatTimer", "CombatStateText", "CombatCrosshair", "PlayerTotems", "KickTracker" }
 
 local function Gameplay_ApplyAllFeatures(g)
     for i = 1, #GameplayFeatureOrder do
@@ -2928,14 +3954,17 @@ function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
         end)
     end
 
-    local function BindSlider(sl, key, roundFunc, after, applyNow)
+	    local function BindSlider(sl, key, roundFunc, after, applyNow)
         sl:SetScript("OnValueChanged", function(self, value)
             -- UI sync (panel:refresh / drag-sync) should not write DB or trigger apply.
             if panel and panel._msufSuppressSliderChanges then
                 return
             end
-            local g = EnsureGameplayDefaults()
-            if roundFunc then value = roundFunc(value) end
+	            local g = EnsureGameplayDefaults()
+	            -- Defensive: only call a real round/transform function.
+	            if type(roundFunc) == "function" then
+	                value = roundFunc(value)
+	            end
             g[key] = value
             if after then after(self, g, value) end
             if applyNow then RequestApply() end
@@ -4211,6 +5240,169 @@ _totemsLeftBottom = totemsDragHint
     )
     cooldownIconsCheck:SetChecked(false)
     if cooldownIconsCheck.Disable then cooldownIconsCheck:Disable() end
+
+    ------------------------------------------------------
+    -- Party Interrupt Tracker (Kick tracker)
+    ------------------------------------------------------
+    local kickTrackerSeparator = _MSUF_Sep(cooldownIconsCheck, -30)
+    local kickTrackerHeader = _MSUF_Header(kickTrackerSeparator, "Party Interrupt Tracker")
+
+    -- One-time warning when enabling: this tracker is best-guess (12.0 secret-safe constraints).
+    local function _MSUF_ShowKickTrackerEnableWarningOnce()
+        local g = EnsureGameplayDefaults()
+        if not g or g.kickTrackerWarned then return end
+        if not StaticPopupDialogs then
+            g.kickTrackerWarned = true
+            return
+        end
+        if not StaticPopupDialogs["MSUF_KT_ENABLE_WARN"] then
+            StaticPopupDialogs["MSUF_KT_ENABLE_WARN"] = {
+                text = "Party Interrupt Tracker\n\nThis is a BEST-GUESS tracker:\n• Detects PARTY interrupts via UNIT_SPELLCAST_SUCCEEDED.\n• Cooldowns are estimated from a static table (talents/resets may differ).\n• Some abilities/modifiers cannot be inspected reliably in 12.0.\n\nIf other party members also use MSUF, kicks are synced via addon messages to improve reliability.\n\nMythic+ only (party). Disabled in raid/open world.",
+                button1 = OKAY,
+                timeout = 0,
+                whileDead = 1,
+                hideOnEscape = 1,
+                OnAccept = function()
+                    local gg = EnsureGameplayDefaults()
+                    if gg then gg.kickTrackerWarned = true end
+                end,
+                preferredIndex = 3,
+            }
+        end
+        StaticPopup_Show("MSUF_KT_ENABLE_WARN")
+    end
+
+
+    local kickTrackerCheck = _MSUF_Check(
+        "MSUF_Gameplay_KickTrackerCheck",
+        "TOPLEFT", kickTrackerHeader, "BOTTOMLEFT",
+        0, -8,
+        "Enable party interrupt tracker",
+        "kickTrackerCheck", "enableKickTracker",
+        function(self, g)
+            if g and g.enableKickTracker then
+                _MSUF_ShowKickTrackerEnableWarningOnce()
+            end
+        end
+    )
+
+    local kickTrackerLockCheck = _MSUF_Check(
+        "MSUF_Gameplay_KickTrackerLockCheck",
+        "LEFT", kickTrackerCheck, "RIGHT",
+        260, 0,
+        "Lock position",
+        "kickTrackerLockCheck", "lockKickTracker"
+    )
+
+    local kickTrackerWarnLabel = _MSUF_Label(
+        "GameFontHighlightSmall",
+        "TOPLEFT", kickTrackerCheck, "BOTTOMLEFT",
+        0, -6,
+        [[|cffffcc00WARNING: Best-guess tracking. Cooldowns are estimated; talents/resets may differ.
+If other party members use MSUF, kicks are synced via addon messages for better accuracy.|r]],
+        "kickTrackerWarnLabel"
+    )
+    kickTrackerWarnLabel:SetWidth(560)
+    kickTrackerWarnLabel:SetJustifyH("LEFT")
+
+
+    local kickTrackerShowNamesCheck = _MSUF_Check(
+        "MSUF_Gameplay_KickTrackerShowNamesCheck",
+        "TOPLEFT", kickTrackerWarnLabel, "BOTTOMLEFT",
+        0, -6,
+        "Show names",
+        "kickTrackerShowNamesCheck", "kickTrackerShowNames"
+    )
+
+    local kickTrackerShowReadyCheck = _MSUF_Check(
+        "MSUF_Gameplay_KickTrackerShowReadyCheck",
+        "LEFT", kickTrackerShowNamesCheck, "RIGHT",
+        220, 0,
+        "Show READY",
+        "kickTrackerShowReadyCheck", "kickTrackerShowReady"
+    )
+
+
+    local kickTrackerModeNote = _MSUF_Label(
+        "GameFontDisableSmall",
+        "TOPLEFT", kickTrackerShowNamesCheck, "BOTTOMLEFT",
+        0, -6,
+        "Mythic+ only (party). Optional MSUF sync via addon messages. Disabled in raid/open world (0 overhead).",
+        "kickTrackerModeNote"
+    )
+
+    local kickTrackerWidthSlider = _MSUF_Slider(
+        "MSUF_Gameplay_KickTrackerWidthSlider",
+        "TOPLEFT", kickTrackerModeNote, "BOTTOMLEFT",
+        0, -16,
+        220,
+        160, 420, 5,
+        "160", "420",
+        "Width",
+        "kickTrackerWidthSlider", "kickTrackerWidth",
+        function(v) return (floor((v / 5) + 0.5) * 5) end,
+        nil,
+        true
+    )
+
+    local kickTrackerIconSizeSlider = _MSUF_Slider(
+        "MSUF_Gameplay_KickTrackerIconSizeSlider",
+        "TOPLEFT", kickTrackerWidthSlider, "BOTTOMLEFT",
+        0, -12,
+        220,
+        14, 48, 1,
+        "14", "48",
+        "Icon size",
+        "kickTrackerIconSizeSlider", "kickTrackerIconSize",
+        function(v) return floor(v + 0.5) end,
+        nil,
+        true
+    )
+
+    local kickTrackerSpacingSlider = _MSUF_Slider(
+        "MSUF_Gameplay_KickTrackerSpacingSlider",
+        "TOPLEFT", kickTrackerIconSizeSlider, "BOTTOMLEFT",
+        0, -12,
+        220,
+        0, 18, 1,
+        "0", "18",
+        "Row spacing",
+        "kickTrackerSpacingSlider", "kickTrackerSpacing",
+        function(v) return floor(v + 0.5) end,
+        nil,
+        true
+    )
+
+    local kickTrackerFontSizeSlider = _MSUF_Slider(
+        "MSUF_Gameplay_KickTrackerFontSizeSlider",
+        "TOPLEFT", kickTrackerSpacingSlider, "BOTTOMLEFT",
+        0, -12,
+        220,
+        8, 28, 1,
+        "8", "28",
+        "Font size",
+        "kickTrackerFontSizeSlider", "kickTrackerFontSize",
+        function(v) return floor(v + 0.5) end,
+        nil,
+        true
+    )
+
+
+    local kickTrackerBgAlphaSlider = _MSUF_Slider(
+        "MSUF_Gameplay_KickTrackerBgAlphaSlider",
+        "TOPLEFT", kickTrackerFontSizeSlider, "BOTTOMLEFT",
+        0, -12,
+        220,
+        0, 1, 0.05,
+        "0%", "100%",
+        "Background alpha",
+        "kickTrackerBgAlphaSlider", "kickTrackerBgAlpha",
+        function(v) return (floor((v * 20) + 0.5) / 20) end,
+        nil,
+        true
+    )
+
+
 ------------------------------------------------------
     -- Disabled/greyed state styling (match Main menu behavior)
     ------------------------------------------------------
@@ -4351,6 +5543,7 @@ end
         _MSUF_SetCheckStyle(self.combatStateCheck, true)
         _MSUF_SetCheckStyle(self.combatCrosshairCheck, true)
         _MSUF_SetCheckStyle(self.cooldownIconsCheck, false)
+        _MSUF_SetCheckStyle(self.kickTrackerCheck, true)
 
         -- Combat Timer dependents
         local timerOn = g.enableCombatTimer and true or false
@@ -4390,6 +5583,17 @@ end
 
         _MSUF_SetButtonEnabled(self.playerTotemsPreviewButton, isShaman)
 
+
+        local kickTrackerOn = g.enableKickTracker and true or false
+        _MSUF_SetCheckEnabled(self.kickTrackerLockCheck, kickTrackerOn)
+        _MSUF_SetCheckEnabled(self.kickTrackerShowNamesCheck, kickTrackerOn)
+        _MSUF_SetCheckEnabled(self.kickTrackerShowReadyCheck, kickTrackerOn)
+                _MSUF_SetSliderEnabled(self.kickTrackerWidthSlider, kickTrackerOn)
+        _MSUF_SetSliderEnabled(self.kickTrackerIconSizeSlider, kickTrackerOn)
+        _MSUF_SetSliderEnabled(self.kickTrackerSpacingSlider, kickTrackerOn)
+        _MSUF_SetSliderEnabled(self.kickTrackerFontSizeSlider, kickTrackerOn)
+
+        _MSUF_SetSliderEnabled(self.kickTrackerBgAlphaSlider, kickTrackerOn)
         local previewActive = (ns and ns.MSUF_PlayerTotems_IsPreviewActive and ns.MSUF_PlayerTotems_IsPreviewActive()) and true or false
         local totemsOn = (isShaman and (g.enablePlayerTotems or previewActive)) and true or false
         _MSUF_SetCheckEnabled(self.playerTotemsShowTextCheck, totemsOn)
@@ -4455,7 +5659,7 @@ end
         end
     end
 
-    lastControl = cooldownIconsCheck
+    lastControl = kickTrackerBgAlphaSlider
 
     ------------------------------------------------------
     -- Panel scripts (refresh/okay/default)
@@ -4506,6 +5710,21 @@ end
         "crosshairSize",
 
         "cooldownIcons",
+
+        "enableKickTracker",
+        "lockKickTracker",
+        "kickTrackerOffsetX",
+        "kickTrackerOffsetY",
+        "kickTrackerWidth",
+        "kickTrackerIconSize",
+        "kickTrackerSpacing",
+        "kickTrackerFontSize",
+        "kickTrackerShowNames",
+        "kickTrackerShowReady",
+        "kickTrackerShowInDungeon",
+        "kickTrackerShowInOpenWorld",
+        "kickTrackerShowInRaid",
+
 
     }
 
@@ -4582,6 +5801,10 @@ end
             {"crosshairRangeColorCheck", "enableCombatCrosshairMeleeRangeColor"},
 
             {"cooldownIconsCheck", "cooldownIcons", true},
+            {"kickTrackerCheck", "enableKickTracker", true},
+            {"kickTrackerLockCheck", "lockKickTracker", true},
+            {"kickTrackerShowNamesCheck", "kickTrackerShowNames", true},
+            {"kickTrackerShowReadyCheck", "kickTrackerShowReady", true},
         }
         for i = 1, #checks do
             local t = checks[i]
@@ -4599,6 +5822,12 @@ end
             {"playerTotemsFontSizeSlider", "playerTotemsFontSize", 14},
             {"playerTotemsOffsetXSlider", "playerTotemsOffsetX", 0},
             {"playerTotemsOffsetYSlider", "playerTotemsOffsetY", -6},
+            {"kickTrackerWidthSlider", "kickTrackerWidth", 220},
+            {"kickTrackerIconSizeSlider", "kickTrackerIconSize", 26},
+            {"kickTrackerSpacingSlider", "kickTrackerSpacing", 4},
+            {"kickTrackerFontSizeSlider", "kickTrackerFontSize", 14},
+
+            {"kickTrackerBgAlphaSlider", "kickTrackerBgAlpha", 0.35},
         }
         for i = 1, #sliders do
             local t = sliders[i]
