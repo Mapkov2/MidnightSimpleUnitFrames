@@ -99,22 +99,25 @@ local function IsEditModeActive()
 end
 local function MSUF_A2_IsMasqueAddonLoaded()
     local api = _A2_API()
-    if api and type(api.IsMasqueAddonLoaded) == "function" then
-        return api.IsMasqueAddonLoaded() and true or false
+    local msq = api and api.Masque
+    if msq and type(msq.IsAddonLoaded) == "function" then
+        return msq.IsAddonLoaded() and true or false
     end
      return false
 end
 local function MSUF_A2_IsMasqueReadyForToggle()
     local api = _A2_API()
-    if api and type(api.IsMasqueReadyForToggle) == "function" then
-        return api.IsMasqueReadyForToggle() and true or false
+    local msq = api and api.Masque
+    if msq and type(msq.IsReadyForToggle) == "function" then
+        return msq.IsReadyForToggle() and true or false
     end
      return false
 end
 local function MSUF_A2_EnsureMasqueGroup()
     local api = _A2_API()
-    if api and type(api.EnsureMasqueGroup) == "function" then
-        return api.EnsureMasqueGroup() and true or false
+    local msq = api and api.Masque
+    if msq and type(msq.EnsureGroup) == "function" then
+        return msq.EnsureGroup() and true or false
     end
      return false
 end

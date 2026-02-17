@@ -41,6 +41,7 @@ local C_AddOns = _G.C_AddOns
 local MSQ_LIB = nil
 local MSQ_GROUP = nil
 local RESKIN_QUEUED = false
+local _masqueButtonCount = 0  -- Track registered button count for structural-change-only reskin
 
 -- ---------------------------------------------------------------------------
 -- Load / group helpers
@@ -178,80 +179,57 @@ EnsureReloadPopup()
 local function SyncIconOverlayLevels(icon) 
     if not icon then  return end
 
-    -- Base should come from the button + its Cooldown child.
-    -- IMPORTANT: don't include our own overlay frames here, or we'd "ratchet" framelevels upward.
+    -- One-time sync after Masque registration: ensure MSUF overlays
+    -- (countFrame, dispel border) sit above any Masque skin layers.
     local base = (icon.GetFrameLevel and icon:GetFrameLevel()) or 0
     if icon.cooldown and icon.cooldown.GetFrameLevel then
         local lvl = icon.cooldown:GetFrameLevel() or 0
         if lvl > base then base = lvl end
     end
 
-    local strata = (icon.GetFrameStrata and icon:GetFrameStrata()) or "MEDIUM"
-
-    -- Border should be ABOVE Masque skin art (so caps/highlights still show)
-    if icon._msufBorder and icon._msufBorder.SetFrameLevel then
-        if icon._msufBorder.SetFrameStrata then
-            icon._msufBorder:SetFrameStrata(strata)
-        end
-        icon._msufBorder:SetFrameLevel(base + 50)
-    end
-
-    -- Count should be ABOVE cooldown + border
-    if icon._msufCountFrame and icon._msufCountFrame.SetFrameLevel then
-        if icon._msufCountFrame.SetFrameStrata then
-            icon._msufCountFrame:SetFrameStrata(strata)
-        end
-        icon._msufCountFrame:SetFrameLevel(base + 60)
+    -- countFrame (stack count overlay)
+    if icon.countFrame and icon.countFrame.SetFrameLevel then
+        icon.countFrame:SetFrameLevel(base + 10)
     end
  end
 
 local function SkinHasBorder(btn) 
-    if not btn or not btn.Border or not btn.Border.GetTexture then  return false end
-    local t = btn.Border:GetTexture()
-    if t == nil or t == "" then  return false end
-     return true
+    -- No Border region passed to Masque (MSA pattern), so Masque never renders borders.
+     return false
 end
 
 -- ---------------------------------------------------------------------------
--- Regions + registration
+-- Regions + registration (MSA pattern: Icon/Cooldown/Count only, no Normal/Border)
 -- ---------------------------------------------------------------------------
 
 local function EnsureMasqueRegions(btn) 
     if not btn then  return end
-
-    -- Canonical Masque fields are created by Render.
-    -- We add Normal/Border regions so skins that expect them can render correctly.
-    if not btn._msufMasqueNormal then
-        local normal = btn:CreateTexture(nil, "BACKGROUND")
-        normal:SetAllPoints()
-        normal:SetTexture("")
-        btn._msufMasqueNormal = normal
-    end
-    if not btn._msufMasqueBorder then
-        local border = btn:CreateTexture(nil, "OVERLAY")
-        border:SetAllPoints()
-        border:SetTexture("")
-        btn._msufMasqueBorder = border
-    end
-
-    btn.Normal = btn._msufMasqueNormal
-    btn.Border = btn._msufMasqueBorder
 
     if not btn._msufMasqueRegions then
         btn._msufMasqueRegions = {}
     end
 
     local r = btn._msufMasqueRegions
-    r.Icon = btn.Icon
-    r.Cooldown = btn.Cooldown or btn.cooldown
-    r.Normal = btn.Normal
-    r.Border = btn.Border
+    -- Map MSUF field names to Masque-expected keys
+    -- btn.tex = icon texture,  btn.cooldown = Cooldown frame,  btn.count = count FontString
+    r.Icon     = btn.tex
+    r.Cooldown = btn.cooldown
+    r.Count    = btn.count
+    -- No Normal/Border: Masque only skins icon appearance + cooldown (like MSA).
+    -- MSUF's own dispel borders / highlight glows are unaffected.
  end
+
+local _lastReskinCount = -1  -- Count at last ReSkin; -1 forces initial reskin
 
 local function ReskinNow() 
     RESKIN_QUEUED = false
     local g = MSQ_GROUP or _G.MSUF_MasqueAuras2
     if not g then  return end
+
+    -- Skip ReSkin if button count hasn't changed since last reskin
+    -- (icon textures/cooldowns don't need it, only structural adds/removes)
+    if _masqueButtonCount == _lastReskinCount then  return end
+    _lastReskinCount = _masqueButtonCount
 
     -- Masque uses ReSkin() (case varies across versions / forks)
     if g.ReSkin then
@@ -292,6 +270,9 @@ local function AddButton(btn, shared)
     local ok = MSUF_A2_FastCall(g.AddButton, g, btn, btn._msufMasqueRegions)
     if ok then
         btn.MSUF_MasqueAdded = true
+        _masqueButtonCount = _masqueButtonCount + 1
+        -- One-time overlay sync: keep countFrame above Masque layers
+        SyncIconOverlayLevels(btn)
         RequestReskin()
          return true
     end
@@ -310,6 +291,7 @@ local function RemoveButton(btn)
     if btn.MSUF_MasqueAdded == true then
         MSUF_A2_FastCall(g.RemoveButton, g, btn)
         btn.MSUF_MasqueAdded = false
+        _masqueButtonCount = _masqueButtonCount > 0 and (_masqueButtonCount - 1) or 0
         RequestReskin()
     end
  end
@@ -340,6 +322,11 @@ MasqueMod.PrepareButton = EnsureMasqueRegions
 MasqueMod.AddButton = AddButton
 MasqueMod.RemoveButton = RemoveButton
 MasqueMod.RequestReskin = RequestReskin
+MasqueMod.ForceReskin = function()
+    -- Explicit skin change: bypass count guard
+    _lastReskinCount = -1
+    RequestReskin()
+end
 MasqueMod.SyncIconOverlayLevels = SyncIconOverlayLevels
 MasqueMod.SkinHasBorder = SkinHasBorder
 MasqueMod.IsReadyForToggle = IsReadyForToggle
@@ -353,7 +340,11 @@ _G.MSUF_A2_EnsureMasqueGroup = function()
     EnsureReloadPopup()
     return EnsureMasqueGroup()
 end
-_G.MSUF_A2_RequestMasqueReskin = RequestReskin
+_G.MSUF_A2_RequestMasqueReskin = function()
+    -- External callers (Options, skin change) bypass count guard
+    _lastReskinCount = -1
+    RequestReskin()
+end
 _G.MSUF_A2_IsMasqueReadyForToggle = IsReadyForToggle
 _G.MSUF_A2_SyncIconOverlayLevels = SyncIconOverlayLevels
 _G.MSUF_A2_MasqueSkinHasBorder = SkinHasBorder

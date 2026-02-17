@@ -103,7 +103,7 @@ local _wantDebuffHL     = false
 local _useBlizzardTimer = false  -- true = Blizzard C++ pass-through for countdown text
 local _useDispelBorders = false  -- dispel-type border coloring for debuffs
 
---  Debuff dispel-type color lookup (  la R41z0r / Blizzard) 
+--  Debuff dispel-type color lookup (Ã‚Â  la R41z0r / Blizzard) 
 -- Maps dispel index  Blizzard color object; used for both manual
 -- fallback and the C_CurveUtil-based GetAuraDispelTypeColor() API.
 local _debuffColorByIndex = {
@@ -371,15 +371,13 @@ icon.countFrame = countFrame
         end
     end)
 
-    -- Masque integration
+    -- Masque integration (MSA pattern: register button, regions built in AddButton)
     EnsureBindings()
-    if Masque and Masque.PrepareButton then
-        Masque.PrepareButton(icon)
-    end
     local _, shared = GetAuras2DB()
     if Masque and Masque.IsEnabled and Masque.IsEnabled(shared) and Masque.AddButton then
-        Masque.AddButton(icon)
-        icon.MSUF_MasqueAdded = true
+        if Masque.AddButton(icon, shared) then
+            icon.MSUF_MasqueAdded = true
+        end
     end
 
     return icon
@@ -587,7 +585,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
 
     local aid = aura._msufAuraInstanceID or aura.auraInstanceID
 
-    --  Fast-path diff gate: same aura, same config †’ skip all bookkeeping 
+    --  Fast-path diff gate: same aura, same config Ã¢â€ â€™ skip all bookkeeping 
     local last = icon._msufA2_lastCommit
     if last
         and last.aid == aid
@@ -664,10 +662,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     -- 5. Dispel-type border (Magic/Curse/Poison/Disease colored)
     _fast_ApplyDispelBorder(icon, unit, aura, isHelpful)
 
-    -- 6. Masque sync
-    if Masque and icon.MSUF_MasqueAdded and Masque.SyncIconOverlayLevels then
-        Masque.SyncIconOverlayLevels(icon)
-    end
+    -- 6. (Masque overlay sync removed from hot path — handled once in AddButton)
 
     icon:Show()
     return true

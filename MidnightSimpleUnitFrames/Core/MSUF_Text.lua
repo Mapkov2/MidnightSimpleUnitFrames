@@ -71,9 +71,14 @@ function ns.Text.ClearField(self, field)
  end
 -- Patch O: central text renderers (HP/Power/Pct/ToT inline) - secret-safe (no string compares)
 function ns.Text._SepToken(raw, fallback)
+    -- Accept legacy/malformed values (e.g. false) safely.
     local sep = raw
-    if sep == nil then sep = fallback end
-    if sep == nil then sep = "" end
+    if sep == nil or sep == false then sep = fallback end
+    if sep == nil or sep == false then sep = "" end
+    if type(sep) ~= "string" then
+        -- Treat non-string separators as "none" (prevents concat errors).
+        sep = ""
+    end
     if sep == "" then
          return " "
     end
@@ -123,9 +128,15 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
         ns.Text.ClearField(self, "hpTextPct")
          return
     end
-    local hpMode = (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
-    local sep = ns.Text._SepToken(g and g.hpTextSeparator, nil)
-    local split = (hasPct == true) and ns.Text._ShouldSplitHP(self, conf, g, hpMode) or false
+    local useOverride = (conf and conf.hpPowerTextOverride == true)
+    -- Per-unit override for HP text mode + separator (falls back to Shared if unset).
+    local hpMode = (useOverride and conf and conf.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
+    local sepRaw = (useOverride and conf and conf.hpTextSeparator)
+    if sepRaw == nil then sepRaw = (g and g.hpTextSeparator) end
+    local sep = ns.Text._SepToken(sepRaw, nil)
+    -- Spacers inherit Shared unless per-unit override is enabled.
+    local spacerConf = (useOverride and conf) or nil
+    local split = (hasPct == true) and ns.Text._ShouldSplitHP(self, spacerConf, g, hpMode) or false
     local hpText = self.hpText
     if split then
         _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
@@ -169,9 +180,11 @@ function ns.Text._ShouldSplitPower(self, pMode, hasPct)
     local key = self.msufConfigKey
     local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
     local gen = (MSUF_DB and MSUF_DB.general) or nil
-    local on = (udb and udb.powerTextSpacerEnabled == true) or (not udb and gen and gen.powerTextSpacerEnabled == true)
+    -- Spacers inherit Shared unless per-unit override is enabled.
+    local useOverride = (udb and udb.hpPowerTextOverride == true)
+    local on = (useOverride and udb and udb.powerTextSpacerEnabled == true) or ((not useOverride) and gen and gen.powerTextSpacerEnabled == true)
     if not on then  return false end
-    local x = (udb and tonumber(udb.powerTextSpacerX)) or ((gen and tonumber(gen.powerTextSpacerX)) or 0)
+    local x = (useOverride and udb and tonumber(udb.powerTextSpacerX)) or ((gen and tonumber(gen.powerTextSpacerX)) or 0)
     x = tonumber(x) or 0
     if x <= 0 then  return false end
     if key then
@@ -193,8 +206,27 @@ function ns.Text.RenderPowerText(self)
     end
     local gPower = (MSUF_DB and MSUF_DB.general) or {}
     local colorByType = (gPower.colorPowerTextByType == true)
-    local pMode = gPower.powerTextMode or "FULL_SLASH_MAX"
-    local powerSep = ns.Text._SepToken(gPower.powerTextSeparator, gPower.hpTextSeparator)
+
+    -- Per-unit override for Power text mode + separators.
+    local key = self.msufConfigKey or self._msufConfigKey or self._msufUnitKey or self.unitKey
+    local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
+    local useOverride = (udb and udb.hpPowerTextOverride == true)
+
+    local pMode = (useOverride and udb and udb.powerTextMode) or gPower.powerTextMode or "FULL_SLASH_MAX"
+
+    -- Power separator: prefer explicit power sep; else fall back to HP sep.
+    local rawPowerSep
+    if useOverride and udb then
+        if udb.powerTextSeparator ~= nil then
+            rawPowerSep = udb.powerTextSeparator
+        elseif udb.hpTextSeparator ~= nil then
+            rawPowerSep = udb.hpTextSeparator
+        end
+    else
+        rawPowerSep = gPower.powerTextSeparator
+    end
+    local rawHpSep = (useOverride and udb and udb.hpTextSeparator) or gPower.hpTextSeparator
+    local powerSep = ns.Text._SepToken(rawPowerSep, rawHpSep)
     MSUF_EnsureUnitFlags(self)
     local isPlayer = self._msufIsPlayer
     local isFocus  = self._msufIsFocus

@@ -3948,8 +3948,96 @@ gradientCheck = CreateLabeledCheckButton(
     powerBarBorderSizeEdit:SetAutoFocus(false)
     powerBarBorderSizeEdit:SetPoint("LEFT", powerBarBorderSizeLabel, "RIGHT", 10, 0)
     powerBarBorderSizeEdit:SetTextInsets(4, 4, 2, 2)
+
+    -- HP/Power text scope (Shared vs per-unit override). Replaces click-selection.
+    hpPowerScopeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    hpPowerScopeLabel:SetPoint("TOPLEFT", powerBarBorderSizeLabel or powerBarBorderCheck or powerBarEmbedCheck or powerBarHeightLabel, "BOTTOMLEFT", 0, -16)
+    hpPowerScopeLabel:SetText(TR("HP/Power text settings"))
+    hpPowerScopeDrop = CreateFrame("Frame", "MSUF_HPTextScopeDropdown", barGroup, "UIDropDownMenuTemplate")
+    MSUF_ExpandDropdownClickArea(hpPowerScopeDrop)
+    hpPowerScopeDrop:SetPoint("TOPLEFT", hpPowerScopeLabel, "BOTTOMLEFT", -16, -4)
+    hpPowerScopeOptions = {
+        { key = "shared",      label = "Shared" },
+        { key = "player",      label = "Player" },
+        { key = "target",      label = "Target" },
+        { key = "targettarget",label = "Target of Target" },
+        { key = "focus",       label = "Focus" },
+        { key = "pet",         label = "Pet" },
+        { key = "boss",        label = "Boss" },
+    }
+
+    local function _MSUF_HPText_NormalizeScopeKey(k)
+        if k == "tot" then k = "targettarget" end
+        if type(k) == "string" and k:match("^boss%d+$") then k = "boss" end
+        if k ~= "shared" and k ~= "player" and k ~= "target" and k ~= "focus" and k ~= "targettarget" and k ~= "pet" and k ~= "boss" then
+            return "shared"
+        end
+        return k
+    end
+
+    local function _MSUF_HPText_GetScopeKey()
+        EnsureDB()
+        local g = MSUF_DB.general
+        local k = _MSUF_HPText_NormalizeScopeKey(g.hpPowerTextSelectedKey)
+        g.hpPowerTextSelectedKey = k
+        return k
+    end
+
+    local function _MSUF_HPText_GetUnitKey()
+        local k = _MSUF_HPText_GetScopeKey()
+        if k == "shared" then return nil end
+        return k
+    end
+
+    local function _MSUF_HPText_GetUnitDB(unitKey)
+        if not unitKey then return nil end
+        EnsureDB()
+        MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
+        return MSUF_DB[unitKey]
+    end
+
+    local function _MSUF_HPText_EnableOverride(unitKey)
+        if not unitKey then return end
+        EnsureDB()
+        local g = MSUF_DB.general
+        local u = _MSUF_HPText_GetUnitDB(unitKey)
+        if not u then return end
+        if u.hpPowerTextOverride ~= true then
+            u.hpPowerTextOverride = true
+        end
+        if u.hpTextMode == nil then u.hpTextMode = g.hpTextMode end
+        if u.powerTextMode == nil then u.powerTextMode = g.powerTextMode end
+        if u.hpTextSeparator == nil then u.hpTextSeparator = g.hpTextSeparator end
+        if u.powerTextSeparator == nil then
+            u.powerTextSeparator = (g.powerTextSeparator ~= nil) and g.powerTextSeparator or g.hpTextSeparator
+        end
+	        -- Spacers: copy Shared into unit on first enable so the unit starts identical.
+	        if u.hpTextSpacerEnabled == nil then u.hpTextSpacerEnabled = g.hpTextSpacerEnabled end
+	        if u.hpTextSpacerX == nil then u.hpTextSpacerX = g.hpTextSpacerX end
+	        if u.powerTextSpacerEnabled == nil then u.powerTextSpacerEnabled = g.powerTextSpacerEnabled end
+	        if u.powerTextSpacerX == nil then u.powerTextSpacerX = g.powerTextSpacerX end
+    end
+
+    -- Override checkbox (only relevant for unit scopes).
+    hpPowerOverrideCheck = CreateFrame('CheckButton', 'MSUF_HPTextOverrideCheck', barGroup, 'UICheckButtonTemplate')
+    hpPowerOverrideCheck:SetPoint('TOPLEFT', hpPowerScopeDrop, 'BOTTOMLEFT', 16, -6)
+    hpPowerOverrideCheck.text = _G['MSUF_HPTextOverrideCheckText']
+    if hpPowerOverrideCheck.text then
+        hpPowerOverrideCheck.text:SetText(TR('Override shared settings'))
+    end
+    MSUF_StyleToggleText(hpPowerOverrideCheck)
+    MSUF_StyleCheckmark(hpPowerOverrideCheck)
+    hpPowerOverrideCheck:SetScript('OnEnter', function(self)
+        GameTooltip:SetOwner(self, 'ANCHOR_RIGHT')
+        GameTooltip:SetText('Per-unit override', 1, 1, 1)
+        GameTooltip:AddLine('When unchecked, this unit inherits Shared settings.', 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine('Changing any dropdown below will auto-enable override.', 0.9, 0.9, 0.9, true)
+        GameTooltip:Show()
+    end)
+    hpPowerOverrideCheck:SetScript('OnLeave', function() GameTooltip:Hide() end)
+
     hpModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    hpModeLabel:SetPoint("TOPLEFT", powerBarBorderSizeLabel or powerBarBorderCheck or powerBarEmbedCheck or powerBarHeightLabel, "BOTTOMLEFT", 0, -16)
+    hpModeLabel:SetPoint("TOPLEFT", hpPowerOverrideCheck, "BOTTOMLEFT", 0, -44)
     hpModeLabel:SetText(TR("Textmode HP / Power"))
     -- Make this header white (requested UX): the dropdown items remain normal.
     hpModeLabel:SetTextColor(1, 1, 1, 1)
@@ -3962,13 +4050,56 @@ gradientCheck = CreateLabeledCheckButton(
         { key = "PERCENT_PLUS_FULL",  label = "% + Full value" },
         { key = "PERCENT_ONLY",       label = "Only %" },
     }
+
+    local function _MSUF_HPText_GetHpModeKey()
+        EnsureDB()
+        local g = MSUF_DB.general
+        local unitKey = _MSUF_HPText_GetUnitKey()
+        if not unitKey then
+            return (g.hpTextMode or "FULL_PLUS_PERCENT")
+        end
+        local u = _MSUF_HPText_GetUnitDB(unitKey)
+        if u and u.hpPowerTextOverride == true and u.hpTextMode ~= nil then
+            return u.hpTextMode
+        end
+        return (g.hpTextMode or "FULL_PLUS_PERCENT")
+    end
+
+    local function _MSUF_HPText_SetHpModeKey(v)
+        EnsureDB()
+        local g = MSUF_DB.general
+        local unitKey = _MSUF_HPText_GetUnitKey()
+        if not unitKey then
+            g.hpTextMode = v
+            return
+        end
+        local u = _MSUF_HPText_GetUnitDB(unitKey)
+        if u and u.hpPowerTextOverride ~= true then
+            _MSUF_HPText_EnableOverride(unitKey)
+        end
+        u.hpTextMode = v
+    end
+    hpModeDrop._msufGetCurrentKey = _MSUF_HPText_GetHpModeKey
     MSUF_InitSimpleDropdown(
         hpModeDrop,
         hpModeOptions,
-        function()  EnsureDB(); return (MSUF_DB.general.hpTextMode or "FULL_PLUS_PERCENT") end,
-        function(v)  EnsureDB(); MSUF_DB.general.hpTextMode = v  end,
+        _MSUF_HPText_GetHpModeKey,
+        _MSUF_HPText_SetHpModeKey,
         function(v, opt)
             ApplyAllSettings()
+            local unitKey = _MSUF_HPText_GetUnitKey()
+            if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+                if unitKey then
+                    _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
+                else
+                    _G.MSUF_ForceTextLayoutForUnitKey("player")
+                    _G.MSUF_ForceTextLayoutForUnitKey("target")
+                    _G.MSUF_ForceTextLayoutForUnitKey("focus")
+                    _G.MSUF_ForceTextLayoutForUnitKey("targettarget")
+                    _G.MSUF_ForceTextLayoutForUnitKey("pet")
+                    _G.MSUF_ForceTextLayoutForUnitKey("boss")
+                end
+            end
             if type(_G.MSUF_Options_RefreshHPSpacerControls) == "function" then _G.MSUF_Options_RefreshHPSpacerControls() end
          end,
         BAR_DROPDOWN_WIDTH
@@ -3986,13 +4117,56 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         { key = "PERCENT_PLUS_FULL",  label = "% + Full value" },
         { key = "PERCENT_ONLY",       label = "Only %" },
     }
+
+    local function _MSUF_HPText_GetPowerModeKey()
+        EnsureDB()
+        local g = MSUF_DB.general
+        local unitKey = _MSUF_HPText_GetUnitKey()
+        if not unitKey then
+            return (g.powerTextMode or "FULL_PLUS_PERCENT")
+        end
+        local u = _MSUF_HPText_GetUnitDB(unitKey)
+        if u and u.hpPowerTextOverride == true and u.powerTextMode ~= nil then
+            return u.powerTextMode
+        end
+        return (g.powerTextMode or "FULL_PLUS_PERCENT")
+    end
+
+    local function _MSUF_HPText_SetPowerModeKey(v)
+        EnsureDB()
+        local g = MSUF_DB.general
+        local unitKey = _MSUF_HPText_GetUnitKey()
+        if not unitKey then
+            g.powerTextMode = v
+            return
+        end
+        local u = _MSUF_HPText_GetUnitDB(unitKey)
+        if u and u.hpPowerTextOverride ~= true then
+            _MSUF_HPText_EnableOverride(unitKey)
+        end
+        u.powerTextMode = v
+    end
+    powerModeDrop._msufGetCurrentKey = _MSUF_HPText_GetPowerModeKey
     MSUF_InitSimpleDropdown(
         powerModeDrop,
         powerModeOptions,
-        function()  EnsureDB(); return (MSUF_DB.general.powerTextMode or "FULL_PLUS_PERCENT") end,
-        function(v)  EnsureDB(); MSUF_DB.general.powerTextMode = v  end,
+        _MSUF_HPText_GetPowerModeKey,
+        _MSUF_HPText_SetPowerModeKey,
         function(v, opt)
             ApplyAllSettings()
+            local unitKey = _MSUF_HPText_GetUnitKey()
+            if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+                if unitKey then
+                    _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
+                else
+                    _G.MSUF_ForceTextLayoutForUnitKey("player")
+                    _G.MSUF_ForceTextLayoutForUnitKey("target")
+                    _G.MSUF_ForceTextLayoutForUnitKey("focus")
+                    _G.MSUF_ForceTextLayoutForUnitKey("targettarget")
+                    _G.MSUF_ForceTextLayoutForUnitKey("pet")
+                    _G.MSUF_ForceTextLayoutForUnitKey("boss")
+                end
+            end
          end,
         BAR_DROPDOWN_WIDTH
     )
@@ -4030,8 +4204,33 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     MSUF_InitSimpleDropdown(
         hpSepDrop,
         textSepOptions,
-        function()  EnsureDB(); return (MSUF_DB.general.hpTextSeparator or "") end,
-        function(v)  EnsureDB(); MSUF_DB.general.hpTextSeparator = v  end,
+        function()
+            EnsureDB()
+            local g = MSUF_DB.general
+            local unitKey = _MSUF_HPText_GetUnitKey()
+            if not unitKey then
+                return (g.hpTextSeparator or "")
+            end
+            local u = _MSUF_HPText_GetUnitDB(unitKey)
+            if u and u.hpPowerTextOverride == true and u.hpTextSeparator ~= nil then
+                return u.hpTextSeparator
+            end
+            return (g.hpTextSeparator or "")
+        end,
+        function(v)
+            EnsureDB()
+            local g = MSUF_DB.general
+            local unitKey = _MSUF_HPText_GetUnitKey()
+            if not unitKey then
+                g.hpTextSeparator = v
+                return
+            end
+            local u = _MSUF_HPText_GetUnitDB(unitKey)
+            if u and u.hpPowerTextOverride ~= true then
+                _MSUF_HPText_EnableOverride(unitKey)
+            end
+            u.hpTextSeparator = v
+        end,
         "all"
     )
 -- Power separator (separate from HP separator; falls back to HP separator if unset for backward compatibility)
@@ -4058,11 +4257,133 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         function()
             EnsureDB()
             local g = MSUF_DB.general
+            local unitKey = _MSUF_HPText_GetUnitKey()
+            if unitKey then
+                local u = _MSUF_HPText_GetUnitDB(unitKey)
+                if u and u.hpPowerTextOverride == true then
+                    if u.powerTextSeparator ~= nil then return u.powerTextSeparator end
+                    if u.hpTextSeparator ~= nil then return u.hpTextSeparator end
+                end
+            end
             return (g.powerTextSeparator ~= nil) and g.powerTextSeparator or (g.hpTextSeparator or "")
         end,
-        function(v)  EnsureDB(); MSUF_DB.general.powerTextSeparator = v  end,
+        function(v)
+            EnsureDB()
+            local g = MSUF_DB.general
+            local unitKey = _MSUF_HPText_GetUnitKey()
+            if not unitKey then
+                g.powerTextSeparator = v
+                return
+            end
+            local u = _MSUF_HPText_GetUnitDB(unitKey)
+            if u and u.hpPowerTextOverride ~= true then
+                _MSUF_HPText_EnableOverride(unitKey)
+            end
+            u.powerTextSeparator = v
+        end,
         "all"
     )
+
+    local function _MSUF_SyncHpPowerTextScopeUI()
+        EnsureDB()
+        local g = MSUF_DB.general
+        local scopeKey = _MSUF_HPText_GetScopeKey()
+        local unitKey = _MSUF_HPText_GetUnitKey()
+        if hpPowerScopeDrop and hpPowerScopeOptions then
+            MSUF_SyncSimpleDropdown(hpPowerScopeDrop, hpPowerScopeOptions, _MSUF_HPText_GetScopeKey)
+        end
+        if hpPowerOverrideCheck then
+            if unitKey then
+                local u = _MSUF_HPText_GetUnitDB(unitKey)
+                hpPowerOverrideCheck:Enable()
+                hpPowerOverrideCheck:SetAlpha(1)
+                hpPowerOverrideCheck:SetChecked(u and u.hpPowerTextOverride == true)
+            else
+                hpPowerOverrideCheck:Disable()
+                hpPowerOverrideCheck:SetAlpha(0.5)
+                hpPowerOverrideCheck:SetChecked(false)
+            end
+        end
+        if hpModeDrop and hpModeOptions and hpModeDrop._msufGetCurrentKey then
+            MSUF_SyncSimpleDropdown(hpModeDrop, hpModeOptions, hpModeDrop._msufGetCurrentKey)
+        end
+        if powerModeDrop and powerModeOptions and powerModeDrop._msufGetCurrentKey then
+            MSUF_SyncSimpleDropdown(powerModeDrop, powerModeOptions, powerModeDrop._msufGetCurrentKey)
+        end
+        if hpSepDrop and textSepOptions then
+            MSUF_SyncSimpleDropdown(hpSepDrop, textSepOptions, function()
+                EnsureDB()
+                local g0 = MSUF_DB.general
+                local uKey = _MSUF_HPText_GetUnitKey()
+                if not uKey then return (g0.hpTextSeparator or "") end
+                local u0 = _MSUF_HPText_GetUnitDB(uKey)
+                if u0 and u0.hpPowerTextOverride == true and u0.hpTextSeparator ~= nil then return u0.hpTextSeparator end
+                return (g0.hpTextSeparator or "")
+            end)
+        end
+        if powerSepDrop and textSepOptions then
+            MSUF_SyncSimpleDropdown(powerSepDrop, textSepOptions, function()
+                EnsureDB()
+                local g0 = MSUF_DB.general
+                local uKey = _MSUF_HPText_GetUnitKey()
+                if uKey then
+                    local u0 = _MSUF_HPText_GetUnitDB(uKey)
+                    if u0 and u0.hpPowerTextOverride == true then
+                        if u0.powerTextSeparator ~= nil then return u0.powerTextSeparator end
+                        if u0.hpTextSeparator ~= nil then return u0.hpTextSeparator end
+                    end
+                end
+                return (g0.powerTextSeparator ~= nil) and g0.powerTextSeparator or (g0.hpTextSeparator or "")
+            end)
+        end
+        if type(_G.MSUF_Options_RefreshHPSpacerControls) == "function" then
+            _G.MSUF_Options_RefreshHPSpacerControls()
+        end
+    end
+
+    MSUF_InitSimpleDropdown(
+        hpPowerScopeDrop,
+        hpPowerScopeOptions,
+        _MSUF_HPText_GetScopeKey,
+        function(v)
+            EnsureDB()
+            local g = MSUF_DB.general
+            local k = _MSUF_HPText_NormalizeScopeKey(v)
+            g.hpPowerTextSelectedKey = k
+            if k ~= "shared" then
+                g.hpSpacerSelectedUnitKey = k
+            end
+        end,
+        function() _MSUF_SyncHpPowerTextScopeUI() end,
+        BAR_DROPDOWN_WIDTH
+    )
+
+    hpPowerOverrideCheck:SetScript('OnClick', function(self)
+        EnsureDB()
+        local unitKey = _MSUF_HPText_GetUnitKey()
+        if not unitKey then
+            self:SetChecked(false)
+            return
+        end
+        local u = _MSUF_HPText_GetUnitDB(unitKey)
+        if not u then
+            self:SetChecked(false)
+            return
+        end
+        if self:GetChecked() then
+            _MSUF_HPText_EnableOverride(unitKey)
+        else
+            u.hpPowerTextOverride = false
+        end
+        ApplyAllSettings()
+        if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+            _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
+        end
+        _MSUF_SyncHpPowerTextScopeUI()
+    end)
+
+    -- Initial sync.
+    _MSUF_SyncHpPowerTextScopeUI()
 -- HP % Spacer (split FULL value + % into two text anchors)
     -- Per-unit settings are stored on MSUF_DB[unitKey].hpTextSpacerEnabled / hpTextSpacerX.
     -- The Bars menu shows the settings for the *last clicked* MSUF unitframe (stored as a UI selection
@@ -4072,7 +4393,7 @@ hpSpacerSelectedLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontHighl
 hpSpacerSelectedLabel:ClearAllPoints()
 hpSpacerSelectedLabel:SetPoint("TOPLEFT", hpSepDrop, "BOTTOMLEFT", 16, -8)
 hpSpacerSelectedLabel:SetTextColor(1, 0.82, 0, 1)
-hpSpacerSelectedLabel:SetText(TR("Selected: Player"))
+hpSpacerSelectedLabel:SetText(TR("Selected: Shared"))
 hpSpacerInfoButton = CreateFrame("Button", "MSUF_HPSpacerInfoButton", barGroup)
 hpSpacerInfoButton:SetSize(14, 14)
 hpSpacerInfoButton:ClearAllPoints()
@@ -4084,13 +4405,14 @@ do
     hpSpacerInfoButton._msufTex = t
 end
 hpSpacerInfoButton:SetScript("OnEnter", function(self)
-    if not GameTooltip then  return end
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine("Text Spacers", 1, 1, 1)
-    GameTooltip:AddLine("Click a MSUF unitframe (Player/Target/Focus/ToT/Pet/Boss) to choose which unit these spacer settings apply to.", 0.9, 0.9, 0.9, true)
-    GameTooltip:AddLine("Works only when the corresponding text mode is set to 'Full value + %' (or '% + Full value').", 0.9, 0.9, 0.9, true)
-    GameTooltip:Show()
- end)
+   if not GameTooltip then  return end
+   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+   GameTooltip:AddLine("Text Spacers", 1, 1, 1)
+   GameTooltip:AddLine("Use the HP/Power text scope dropdown above to choose which unit these spacer settings apply to.", 0.9, 0.9, 0.9, true)
+	   GameTooltip:AddLine("When scope is set to 'Shared', these spacer settings apply globally. Select a unit and enable 'Override shared settings' to customize per unitframe.", 0.9, 0.9, 0.9, true)
+   GameTooltip:AddLine("Works only when the corresponding text mode is set to 'Full value + %' (or '% + Full value').", 0.9, 0.9, 0.9, true)
+   GameTooltip:Show()
+end)
 hpSpacerInfoButton:SetScript("OnLeave", function()  if GameTooltip then GameTooltip:Hide() end  end)
 -- HP spacer controls
 hpSpacerCheck = CreateFrame("CheckButton", "MSUF_HPTextSpacerCheck", barGroup, "UICheckButtonTemplate")
@@ -4119,23 +4441,37 @@ local powerSpacerSlider = CreateLabeledSlider("MSUF_PowerTextSpacerSlider", "Pow
 powerSpacerSlider:ClearAllPoints()
 powerSpacerSlider:SetPoint("TOPLEFT", powerSpacerCheck, "BOTTOMLEFT", 0, -18)
 if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
-    local function _MSUF_HPSpacer_GetSelectedUnitKey()
-        EnsureDB()
-        MSUF_DB.general = MSUF_DB.general or {}
-        local g = MSUF_DB.general
-        local k = g.hpSpacerSelectedUnitKey or "player"
-        if k == "tot" then k = "targettarget" end
-        if type(k) == "string" and k:match("^boss%d+$") then k = "boss" end
-        if k ~= "player" and k ~= "target" and k ~= "focus" and k ~= "targettarget" and k ~= "pet" and k ~= "boss" then k = "player" end
-        g.hpSpacerSelectedUnitKey = k
-         return k
-    end
-    local function _MSUF_HPSpacer_GetUnitDB()
-        local unitKey = _MSUF_HPSpacer_GetSelectedUnitKey()
-        MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
-        return unitKey, MSUF_DB[unitKey]
-    end
-    local function _MSUF_TextModeAllowsSpacer(mode)
+	local function _MSUF_HPSpacer_GetSelection()
+	    -- Selection is driven by the HP/Power scope dropdown above.
+	    EnsureDB()
+	    MSUF_DB.general = MSUF_DB.general or {}
+	    local g = MSUF_DB.general
+	    local scope = (type(_MSUF_HPText_GetScopeKey) == "function") and _MSUF_HPText_GetScopeKey() or nil
+	    if type(_MSUF_HPText_NormalizeScopeKey) == "function" then
+	        scope = _MSUF_HPText_NormalizeScopeKey(scope)
+	    end
+	    if scope == "shared" then
+	        return nil, true
+	    end
+	    local k = scope
+	    if type(_G.MSUF_NormalizeTextLayoutUnitKey) == "function" then
+	        k = _G.MSUF_NormalizeTextLayoutUnitKey(k, "player")
+	    end
+	    if not k or k == "shared" then k = "player" end
+	    g.hpSpacerSelectedUnitKey = k
+	    return k, false
+	end
+	local function _MSUF_HPSpacer_GetDB()
+	    local unitKey, isShared = _MSUF_HPSpacer_GetSelection()
+	    EnsureDB()
+	    MSUF_DB.general = MSUF_DB.general or {}
+	    if isShared then
+	        return nil, MSUF_DB.general, true
+	    end
+	    MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
+	    return unitKey, MSUF_DB[unitKey], false
+	end
+local function _MSUF_TextModeAllowsSpacer(mode)
         return (mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL")
     end
     local SPACER_SPECS = {
@@ -4189,100 +4525,180 @@ if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
         if spec.maxCap and mv > spec.maxCap then mv = spec.maxCap end
          return mv
     end
-    local function _MSUF_SyncSpacerControls()
-        EnsureDB()
-        local unitKey, u = _MSUF_HPSpacer_GetUnitDB()
-        local g0 = MSUF_DB.general or {}
-        if hpSpacerSelectedLabel and hpSpacerSelectedLabel.SetText then
-            hpSpacerSelectedLabel:SetText("Selected: " .. _MSUF_NiceUnitKey(unitKey))
-        end
-        for _, spec in ipairs(SPACER_SPECS) do
-            local mode = g0[spec.modeKey] or "FULL_PLUS_PERCENT"
-            local modeAllows = _MSUF_TextModeAllowsSpacer(mode)
-            local cb = spec.check
-            local sl = spec.slider
-            local enabled = (u[spec.enabledKey] == true)
-            if cb and cb.SetChecked then cb:SetChecked(enabled) end
-            if cb and cb.SetEnabled then cb:SetEnabled(modeAllows) end
-            if cb and cb.SetAlpha then cb:SetAlpha(modeAllows and 1 or 0.45) end
-            -- Optional: dim HP spacer toggle label when disabled by mode (requested UX).
-            if spec.dimText and cb and cb.text and cb.text.SetTextColor then
-                local c = modeAllows and 1 or 0.5
-                cb.text:SetTextColor(c, c, c, 1)
+	local function _MSUF_GetEffectiveSpacerMode(unitKey, spec, g0)
+	    if not spec or not spec.modeKey then  return "FULL_PLUS_PERCENT" end
+	    -- Shared selection uses Shared mode directly.
+	    if not unitKey then
+	        return (g0 and g0[spec.modeKey]) or "FULL_PLUS_PERCENT"
+	    end
+	    local u0 = (MSUF_DB and MSUF_DB[unitKey]) or nil
+	    local useOverride = (u0 and u0.hpPowerTextOverride == true)
+	    local m = (useOverride and u0 and u0[spec.modeKey]) or (g0 and g0[spec.modeKey]) or "FULL_PLUS_PERCENT"
+	    return m
+	end
+
+local function _MSUF_SyncSpacerControls()
+    EnsureDB()
+	    local g0 = MSUF_DB.general or {}
+	    -- Seed Shared spacer defaults from Player (user expectation: Shared starts "like Player").
+	    do
+	        local p = MSUF_DB and MSUF_DB.player
+	        if p then
+	            if g0.hpTextSpacerEnabled == nil and p.hpTextSpacerEnabled ~= nil then g0.hpTextSpacerEnabled = p.hpTextSpacerEnabled end
+	            if g0.hpTextSpacerX == nil and p.hpTextSpacerX ~= nil then g0.hpTextSpacerX = p.hpTextSpacerX end
+	            if g0.powerTextSpacerEnabled == nil and p.powerTextSpacerEnabled ~= nil then g0.powerTextSpacerEnabled = p.powerTextSpacerEnabled end
+	            if g0.powerTextSpacerX == nil and p.powerTextSpacerX ~= nil then g0.powerTextSpacerX = p.powerTextSpacerX end
+	        end
+	    end
+	    local unitKey, u, isShared = _MSUF_HPSpacer_GetDB()
+	    local unitOverride = (not isShared) and (u and u.hpPowerTextOverride == true)
+
+	    if hpSpacerSelectedLabel and hpSpacerSelectedLabel.SetText then
+	        local nice = (isShared and "Shared") or _MSUF_NiceUnitKey(unitKey)
+	        hpSpacerSelectedLabel:SetText("Selected: " .. nice)
+	    end
+
+    for _, spec in ipairs(SPACER_SPECS) do
+        local cb = spec.check
+        local sl = spec.slider
+
+	        local canEdit = isShared or unitOverride
+	        -- If unit override is OFF, show effective (Shared) values but keep controls disabled.
+	        local src = (isShared and g0) or (unitOverride and u or g0)
+	        local enabled = (src and src[spec.enabledKey] == true) or false
+	        local mode = _MSUF_GetEffectiveSpacerMode(unitKey, spec, g0)
+	        local modeAllows = _MSUF_TextModeAllowsSpacer(mode)
+
+	        if cb and cb.SetChecked then cb:SetChecked(enabled) end
+	        if cb and cb.SetEnabled then cb:SetEnabled(canEdit and modeAllows) end
+	        if cb and cb.SetAlpha then cb:SetAlpha((canEdit and modeAllows) and 1 or 0.45) end
+
+        -- Optional: dim HP spacer toggle label when disabled by mode (requested UX).
+	        if spec.dimText and cb and cb.text and cb.text.SetTextColor then
+	            local c = (modeAllows and (canEdit and 1 or 0.75)) or 0.5
+	            cb.text:SetTextColor(c, c, c, 1)
+	        end
+
+	        -- Shared slider range is based on Player (requested). Unit scope uses its own unit.
+	        local maxKey = isShared and "player" or unitKey
+	        local maxV = _MSUF_GetSpacerMax(spec, maxKey)
+
+        if sl and sl.SetMinMaxValues then
+            sl:SetMinMaxValues(0, maxV)
+            sl.minVal = 0
+            sl.maxVal = maxV
+
+            local n = (sl.GetName and sl:GetName())
+            if n and _G then
+                local high = _G[n .. "High"]
+                local low  = _G[n .. "Low"]
+                if high and high.SetText then high:SetText(tostring(maxV)) end
+                if low  and low.SetText  then low:SetText(TR("0")) end
             end
-            local maxV = _MSUF_GetSpacerMax(spec, unitKey)
-            if sl and sl.SetMinMaxValues then
-                sl:SetMinMaxValues(0, maxV)
-                sl.minVal = 0
-                sl.maxVal = maxV
-                local n = (sl.GetName and sl:GetName())
-                if n and _G then
-                    local high = _G[n .. "High"]
-                    local low  = _G[n .. "Low"]
-                    if high and high.SetText then high:SetText(tostring(maxV)) end
-                    if low  and low.SetText  then low:SetText(TR("0")) end
-                end
-                local v = tonumber(u[spec.xKey]) or 0
-                if v < 0 then v = 0 end
-                if v > maxV then v = maxV end
-                u[spec.xKey] = v
-                if type(MSUF_SetLabeledSliderValue) == "function" then
-                    MSUF_SetLabeledSliderValue(sl, v)
-                else
-                    sl.MSUF_SkipCallback = true
-                    sl:SetValue(v)
-                    sl.MSUF_SkipCallback = nil
-                end
-                local slEnabled = (modeAllows and enabled)
-                if type(MSUF_SetLabeledSliderEnabled) == "function" then
-                    MSUF_SetLabeledSliderEnabled(sl, slEnabled)
-                    if (not slEnabled) and sl.SetAlpha then sl:SetAlpha(0.45) end -- keep old visual
-                else
-                    if sl.SetEnabled then sl:SetEnabled(slEnabled) end
-                    if sl.SetAlpha then sl:SetAlpha(slEnabled and 1 or 0.45) end
-                end
+
+	            local v = tonumber(src and src[spec.xKey]) or 0
+	            if v < 0 then v = 0 end
+	            if v > maxV then v = maxV end
+	            -- Only write back when the scope is editable; never clamp Shared based on a smaller unit.
+	            if canEdit then
+	                if isShared then
+	                    g0[spec.xKey] = v
+	                elseif u then
+	                    u[spec.xKey] = v
+	                end
+	            end
+
+            if type(MSUF_SetLabeledSliderValue) == "function" then
+                MSUF_SetLabeledSliderValue(sl, v)
+            else
+                sl.MSUF_SkipCallback = true
+                sl:SetValue(v)
+                sl.MSUF_SkipCallback = nil
+            end
+
+	            local slEnabled = (canEdit and modeAllows and enabled)
+            if type(MSUF_SetLabeledSliderEnabled) == "function" then
+                MSUF_SetLabeledSliderEnabled(sl, slEnabled)
+                if (not slEnabled) and sl.SetAlpha then sl:SetAlpha(0.45) end -- keep old visual
+            else
+                if sl.SetEnabled then sl:SetEnabled(slEnabled) end
+                if sl.SetAlpha then sl:SetAlpha(slEnabled and 1 or 0.45) end
             end
         end
-     end
-    local function _MSUF_BindSpacerToggle(spec)
+    end
+ end
+
+	local _MSUF_TEXT_LAYOUT_KEYS = { "player", "target", "focus", "targettarget", "pet", "boss" }
+	local function _MSUF_RequestTextLayoutForScope(unitKey, isShared, reason)
+	    if isShared then
+	        for _, k in ipairs(_MSUF_TEXT_LAYOUT_KEYS) do
+	            if type(MSUF_Options_RequestLayoutForKey) == "function" then
+	                MSUF_Options_RequestLayoutForKey(k, reason)
+	            end
+	            if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+	                _G.MSUF_ForceTextLayoutForUnitKey(k)
+	            end
+	        end
+	        return
+	    end
+	    if type(MSUF_Options_RequestLayoutForKey) == "function" then
+	        MSUF_Options_RequestLayoutForKey(unitKey, reason)
+	    end
+	    if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+	        _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
+	    end
+	end
+
+local function _MSUF_BindSpacerToggle(spec)
         if not spec or not spec.check then  return end
         spec.check:SetScript("OnClick", function(self)
             EnsureDB()
-            local g = MSUF_DB.general or {}
-            local mode = g[spec.modeKey] or "FULL_PLUS_PERCENT"
-            if not _MSUF_TextModeAllowsSpacer(mode) then
-                _MSUF_SyncSpacerControls()
-                 return
-            end
-            local unitKey, u = _MSUF_HPSpacer_GetUnitDB()
-            u[spec.enabledKey] = self:GetChecked() and true or false
-            _MSUF_SyncSpacerControls()
-            MSUF_Options_RequestLayoutForKey(unitKey, spec.reqToggle)
-            if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then _G.MSUF_ForceTextLayoutForUnitKey(unitKey) end
+	            local unitKey, db, isShared = _MSUF_HPSpacer_GetDB()
+	            local g = MSUF_DB.general or {}
+	            local canEdit = isShared or (db and db.hpPowerTextOverride == true)
+	            if not canEdit then
+	                _MSUF_SyncSpacerControls()
+	                return
+	            end
+	            local mode = _MSUF_GetEffectiveSpacerMode(unitKey, spec, g)
+	            if not _MSUF_TextModeAllowsSpacer(mode) then
+	                _MSUF_SyncSpacerControls()
+	                return
+	            end
+	            local targetDB = isShared and g or db
+	            targetDB[spec.enabledKey] = self:GetChecked() and true or false
+	            _MSUF_SyncSpacerControls()
+	            _MSUF_RequestTextLayoutForScope(unitKey, isShared, spec.reqToggle)
          end)
      end
     local function _MSUF_BindSpacerSlider(spec)
         if not spec or not spec.slider then  return end
         spec.slider.onValueChanged = function(self, value)
             EnsureDB()
-            local g = MSUF_DB.general or {}
-            local mode = g[spec.modeKey] or "FULL_PLUS_PERCENT"
-            if not _MSUF_TextModeAllowsSpacer(mode) then
-                _MSUF_SyncSpacerControls()
-                 return
-            end
-            local unitKey, u = _MSUF_HPSpacer_GetUnitDB()
-            local maxV = _MSUF_GetSpacerMax(spec, unitKey)
-            local v = tonumber(value) or 0
-            if v < 0 then v = 0 end
-            if v > maxV then v = maxV end
-            u[spec.xKey] = v
+	            local unitKey, db, isShared = _MSUF_HPSpacer_GetDB()
+	            local g = MSUF_DB.general or {}
+	            local canEdit = isShared or (db and db.hpPowerTextOverride == true)
+	            if not canEdit then
+	                _MSUF_SyncSpacerControls()
+	                return
+	            end
+	            local mode = _MSUF_GetEffectiveSpacerMode(unitKey, spec, g)
+	            if not _MSUF_TextModeAllowsSpacer(mode) then
+	                _MSUF_SyncSpacerControls()
+	                return
+	            end
+	            local maxKey = isShared and "player" or unitKey
+	            local maxV = _MSUF_GetSpacerMax(spec, maxKey)
+	            local v = tonumber(value) or 0
+	            if v < 0 then v = 0 end
+	            if v > maxV then v = maxV end
+	            local targetDB = isShared and g or db
+	            targetDB[spec.xKey] = v
             -- If clamped, snap slider back (without triggering callbacks).
             if v ~= value and type(MSUF_SetLabeledSliderValue) == "function" then
                 MSUF_SetLabeledSliderValue(self, v)
             end
-            MSUF_Options_RequestLayoutForKey(unitKey, spec.reqX)
-            if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then _G.MSUF_ForceTextLayoutForUnitKey(unitKey) end
+	            _MSUF_RequestTextLayoutForScope(unitKey, isShared, spec.reqX)
          end
      end
     for _, spec in ipairs(SPACER_SPECS) do
@@ -4290,7 +4706,7 @@ if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
         _MSUF_BindSpacerSlider(spec)
     end
     _MSUF_SyncSpacerControls()
-    -- Let the main file refresh this UI when the user clicks a unitframe.
+    -- Let other code refresh this UI when selection/scope changes.
     _G.MSUF_Options_RefreshHPSpacerControls = _MSUF_SyncSpacerControls
 local barTextureDrop
         local barBgTextureDrop
@@ -5357,17 +5773,31 @@ do
         prioCont:SetPoint("TOPLEFT", prioChk, "BOTTOMLEFT", -2, -4)
     end
 end
--- Right panel: text modes start under power bar height
+-- Right panel: text modes start under power bar height (scope dropdown above, then override, then modes)
+    local textTopAnchor = powerBarBorderSizeLabel or powerBarBorderCheck or powerBarEmbedCheck or powerBarHeightLabel
+    if hpPowerScopeLabel then
+        hpPowerScopeLabel:ClearAllPoints()
+        if textTopAnchor then
+            hpPowerScopeLabel:SetPoint("TOPLEFT", textTopAnchor, "BOTTOMLEFT", 0, -28)
+        end
+    end
+    if hpPowerScopeDrop and hpPowerScopeLabel then
+        hpPowerScopeDrop:ClearAllPoints()
+        hpPowerScopeDrop:SetPoint("TOPLEFT", hpPowerScopeLabel, "BOTTOMLEFT", -16, -6)
+        UIDropDownMenu_SetWidth(hpPowerScopeDrop, 260)
+    end
+    if hpPowerOverrideCheck and hpPowerScopeDrop then
+        hpPowerOverrideCheck:ClearAllPoints()
+        hpPowerOverrideCheck:SetPoint("TOPLEFT", hpPowerScopeDrop, "BOTTOMLEFT", 16, -10)
+    end
     if hpModeLabel then
         hpModeLabel:ClearAllPoints()
-        if powerBarBorderSizeLabel then
-            hpModeLabel:SetPoint("TOPLEFT", powerBarBorderSizeLabel, "BOTTOMLEFT", 0, -28)
-        elseif powerBarBorderCheck then
-            hpModeLabel:SetPoint("TOPLEFT", powerBarBorderCheck, "BOTTOMLEFT", 0, -28)
-        elseif powerBarEmbedCheck then
-            hpModeLabel:SetPoint("TOPLEFT", powerBarEmbedCheck, "BOTTOMLEFT", 0, -28)
-        elseif powerBarHeightLabel then
-            hpModeLabel:SetPoint("TOPLEFT", powerBarHeightLabel, "BOTTOMLEFT", 0, -28)
+        if hpPowerOverrideCheck then
+            hpModeLabel:SetPoint("TOPLEFT", hpPowerOverrideCheck, "BOTTOMLEFT", 0, -44)
+        elseif hpPowerScopeDrop then
+            hpModeLabel:SetPoint("TOPLEFT", hpPowerScopeDrop, "BOTTOMLEFT", 16, -44)
+        elseif textTopAnchor then
+            hpModeLabel:SetPoint("TOPLEFT", textTopAnchor, "BOTTOMLEFT", 0, -44)
         end
     end
     local textModesLine

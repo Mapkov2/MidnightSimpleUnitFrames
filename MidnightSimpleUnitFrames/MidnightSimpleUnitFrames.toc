@@ -9,6 +9,7 @@
 ## X-Wago-ID: XKq9aoKy
 
 MSUF_Libs.lua
+
 Locales\MSUF_Localization.lua
 Locales\enUS.lua
 Locales\zhCN.lua
@@ -74,3 +75,4 @@ Options\MSUF_Options_Misc.lua
 Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua
 Modules\MSUF_RoundedUnitframes.lua
 Modules\MSUF_3DPortraits.lua
+

@@ -216,10 +216,17 @@ function ns.UF.EnsureTextObjects(f, fontPath, flags, fr, fg, fb)
     end
     end
  end
-ns.UF.HpSpacerSelect_OnMouseDown = ns.UF.HpSpacerSelect_OnMouseDown or function(self)
-    local k = self and (self.msufConfigKey or ((self.unit and GetConfigKeyForUnit) and GetConfigKeyForUnit(self.unit))) or nil
-    if k and type(_G.MSUF_SetHpSpacerSelectedUnitKey) == "function" then _G.MSUF_SetHpSpacerSelectedUnitKey(k) end
+ns.UF.HpSpacerSelect_OnMouseDown = ns.UF.HpSpacerSelect_OnMouseDown or function(self, button)
+    -- Selection is driven primarily by the Bars menu dropdown. This click helper only runs while the MSUF settings UI is open.
+    local p = _G and _G.MSUF_OptionsPanel
+    if not (p and p.IsShown and p:IsShown()) then  return end
+    if button and button ~= "LeftButton" then  return end
+    local k = self and (self.msufConfigKey or self._msufConfigKey or self._msufUnitKey or self.unitKey) or nil
+    if k and type(_G.MSUF_SetHpSpacerSelectedUnitKey) == "function" then
+        _G.MSUF_SetHpSpacerSelectedUnitKey(k)
+    end
  end
+
 ns.UF.UpdateHighlightColor = ns.UF.UpdateHighlightColor or function(self)
     if not self then  return end
     if not MSUF_DB then EnsureDB() end
@@ -1279,6 +1286,11 @@ function _G.MSUF_SetHpSpacerSelectedUnitKey(unitKey, suppressUIRefresh)
     local g = MSUF_DB.general
     local k = _G.MSUF_NormalizeTextLayoutUnitKey(unitKey, "player")
     g.hpSpacerSelectedUnitKey = k
+    
+    -- Keep the Bars menu scope dropdown in sync.
+    if k and k ~= "shared" then
+        g.hpPowerTextSelectedKey = k
+    end
     if not suppressUIRefresh and type(_G.MSUF_Options_RefreshHPSpacerControls) == "function" then
         _G.MSUF_Options_RefreshHPSpacerControls()
     end
@@ -1879,7 +1891,8 @@ function _G.MSUF_GetHPSpacerMaxForUnitKey(unitKey)
     if f and f.hpTextPct then
         pctW = MSUF_GetApproxPercentTextWidth(f.hpTextPct)
     end
-    local hpMode = g.hpTextMode or "FULL_PLUS_PERCENT"
+    local useOverride = (conf and conf.hpPowerTextOverride == true)
+    local hpMode = (useOverride and conf.hpTextMode) or g.hpTextMode or "FULL_PLUS_PERCENT"
     local movingW = pctW
     if hpMode == "FULL_PLUS_PERCENT" then
         if f and f.hpText then
@@ -1932,7 +1945,8 @@ function _G.MSUF_GetPowerSpacerMaxForUnitKey(unitKey)
     elseif f and f.powerText then
         pctW = MSUF_GetApproxPercentTextWidth(f.powerText)
     end
-    local pMode = g.powerTextMode or "FULL_PLUS_PERCENT"
+    local useOverride = (conf and conf.hpPowerTextOverride == true)
+    local pMode = (useOverride and conf.powerTextMode) or g.powerTextMode or "FULL_PLUS_PERCENT"
     local movingW = pctW
     if pMode == "FULL_PLUS_PERCENT" then
         if f and f.powerText then
@@ -1957,6 +1971,17 @@ local MSUF_TEXT_LAYOUT_PWR = { full="powerText", pct="powerTextPct", point="BOTT
     xKey="powerOffsetX", yKey="powerOffsetY", defX=-4, defY= 4, spacerOn="powerTextSpacerEnabled", spacerX="powerTextSpacerX", maxFn=_G.MSUF_GetPowerSpacerMaxForUnitKey, limitMode=true }
 local function MSUF_TextLayout_GetSpacer(key, udb, g, hasPct, spec)
     if not hasPct then  return false, 0 end
+    -- One-time seed: make Shared spacers start like Player (if Shared keys are missing).
+    if g and _G.MSUF_TextSpacersSeeded ~= true then
+        local p = (MSUF_DB and MSUF_DB.player) or nil
+        if p then
+            if g.hpTextSpacerEnabled == nil and p.hpTextSpacerEnabled ~= nil then g.hpTextSpacerEnabled = p.hpTextSpacerEnabled end
+            if g.hpTextSpacerX == nil and p.hpTextSpacerX ~= nil then g.hpTextSpacerX = p.hpTextSpacerX end
+            if g.powerTextSpacerEnabled == nil and p.powerTextSpacerEnabled ~= nil then g.powerTextSpacerEnabled = p.powerTextSpacerEnabled end
+            if g.powerTextSpacerX == nil and p.powerTextSpacerX ~= nil then g.powerTextSpacerX = p.powerTextSpacerX end
+        end
+        _G.MSUF_TextSpacersSeeded = true
+    end
     local on = ((udb and udb[spec.spacerOn] == true) or (not udb and g and g[spec.spacerOn] == true)) or false
     local x  = (udb and tonumber(udb[spec.spacerX])) or ((g and tonumber(g[spec.spacerX])) or 0)
     local max = (key and spec.maxFn and spec.maxFn(key)) or 0
@@ -1982,12 +2007,15 @@ local function ApplyTextLayout(f, conf)
     if not key and f.unit and GetConfigKeyForUnit then key = GetConfigKeyForUnit(f.unit) end
     local udb = (MSUF_DB and key and MSUF_DB[key]) or nil
     local g = (MSUF_DB and MSUF_DB.general) or nil
-    local hpMode = (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
-    local pMode  = (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
+    local useOverride = (udb and udb.hpPowerTextOverride == true)
+    local hpMode = (useOverride and udb.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
+    local pMode  = (useOverride and udb.powerTextMode) or (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
     local hpHasPct = (f[MSUF_TEXT_LAYOUT_HP.pct] ~= nil)
     local pHasPct  = (f[MSUF_TEXT_LAYOUT_PWR.pct] ~= nil)
-    local hpOn, hpEff = MSUF_TextLayout_GetSpacer(key, udb, g, hpHasPct, MSUF_TEXT_LAYOUT_HP)
-    local pOn,  pEff  = MSUF_TextLayout_GetSpacer(key, udb, g, pHasPct,  MSUF_TEXT_LAYOUT_PWR)
+    -- Spacers inherit Shared unless per-unit override is enabled.
+    local spacerDB = useOverride and udb or nil
+    local hpOn, hpEff = MSUF_TextLayout_GetSpacer(key, spacerDB, g, hpHasPct, MSUF_TEXT_LAYOUT_HP)
+    local pOn,  pEff  = MSUF_TextLayout_GetSpacer(key, spacerDB, g, pHasPct,  MSUF_TEXT_LAYOUT_PWR)
     local hX = ns.Util.Offset(conf.hpOffsetX,    -4)
     local hY = ns.Util.Offset(conf.hpOffsetY,    -4)
     local pX = ns.Util.Offset(conf.powerOffsetX, -4)
