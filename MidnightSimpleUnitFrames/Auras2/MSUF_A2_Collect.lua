@@ -46,6 +46,7 @@ local type = type
 local select = select
 local C_UnitAuras = C_UnitAuras
 local issecretvalue = _G and _G.issecretvalue
+local canaccessvalue = _G and _G.canaccessvalue
 
 -- Localized API functions (bound once, avoids table lookup per aura)
 local _getSlots, _getBySlot, _isFiltered, _doesExpire, _getDuration, _getStackCount
@@ -103,8 +104,49 @@ local function IsPermanentAura(unit, aid, secretsNow)
 end
 
 -- PERF: Inline boss check
+-- Secret-safe boss flag read:
+--  - Never boolean-test a potentially secret boolean.
+--  - Cache as small integer: 1=true, 0=false, -1=unknown/secret.
+local function _ReadBossFlag(data)
+    if type(data) ~= "table" then return -1 end
+
+    local v = data.isBossAura
+    if v == nil then
+        return -1
+    end
+
+    -- If the value is secret, we must not test it.
+    if type(canaccessvalue) == "function" then
+        if canaccessvalue(v) ~= true then
+            return -1
+        end
+    elseif issecretvalue and issecretvalue(v) == true then
+        return -1
+    end
+
+    -- Now safe to read/compare.
+    return (v == true) and 1 or 0
+end
+
 local function IsBossAura(data)
-    return data and (data.isBossAura == true)
+    if type(data) ~= "table" then return false end
+    local f = data._msufA2_bossFlag
+    if f == nil then
+        f = _ReadBossFlag(data)
+        data._msufA2_bossFlag = f
+    end
+    return (f == 1)
+end
+
+-- Returns cached boss flag int: 1=true, 0=false, -1=unknown/secret.
+local function GetBossFlagInt(data)
+    if type(data) ~= "table" then return -1 end
+    local f = data._msufA2_bossFlag
+    if f == nil then
+        f = _ReadBossFlag(data)
+        data._msufA2_bossFlag = f
+    end
+    return f
 end
 
 -- --
@@ -274,9 +316,12 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
                 dominated = true
             end
 
-            -- Check 2: Boss filter (already in data)
-            if not dominated and onlyBoss and not data.isBossAura then
-                dominated = true
+            -- Check 2: Boss filter (secret-safe)
+            -- If boss flag is unknown/secret, fail-open (do not filter it out).
+            if not dominated and onlyBoss then
+                if GetBossFlagInt(data) == 0 then
+                    dominated = true
+                end
             end
 
             -- Check 2b: IMPORTANT filter (pre-computed when enabled)
@@ -396,7 +441,7 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImpor
                 if wantPlayer and data._msufIsPlayerAura == true then
                     nPlayer = nPlayer + 1
                     playerScratch[nPlayer] = data
-                elseif data.isBossAura then
+                elseif IsBossAura(data) then
                     nBoss = nBoss + 1
                     bossScratch[nBoss] = data
                 else
