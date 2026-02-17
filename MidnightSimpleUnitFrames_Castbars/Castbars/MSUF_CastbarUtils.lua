@@ -7,6 +7,37 @@
 local addonName, ns = ...
 
 -- =====================================================================
+-- 12.0 API guard: StatusBar:SetTimerDuration signature
+--
+-- Patch 12.0 uses: SetTimerDuration(duration [, interpolationBool, direction])
+-- Legacy/ported codepaths sometimes pass a NUMBER as arg #2 (often `dt` or `0`).
+-- In 12.0 this hard-errors with:
+--   "bad argument #2 ... (Usage: self:SetTimerDuration(duration [, interpolation, direction]))"
+--
+-- We harden the underlying method ONCE by coercing arg #2 to boolean when it
+-- is provided but not already a boolean.
+-- =====================================================================
+do
+  if not _G.MSUF__SetTimerDurationSigGuard then
+    _G.MSUF__SetTimerDurationSigGuard = true
+
+    local probe = CreateFrame("StatusBar", nil, UIParent)
+    local mt = probe and getmetatable(probe)
+    local idx = mt and mt.__index
+    local orig = idx and idx.SetTimerDuration
+
+    if type(orig) == "function" then
+      idx.SetTimerDuration = function(self, duration, interpolation, direction)
+        if interpolation ~= nil and type(interpolation) ~= "boolean" then
+          interpolation = (interpolation ~= 0 and interpolation ~= false) and true or false
+        end
+        return orig(self, duration, interpolation, direction)
+      end
+    end
+  end
+end
+
+-- =====================================================================
 -- Phase 1A: Canonical lazy EnsureDB â€” single definition for all files.
 -- After PLAYER_LOGIN, MSUF_DB is always populated; the nil-guard short-circuits.
 -- =====================================================================

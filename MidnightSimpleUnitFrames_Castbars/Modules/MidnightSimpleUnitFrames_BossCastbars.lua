@@ -954,7 +954,7 @@ local function BossCastbar_OnUpdate(self, elapsed)
         self.MSUF_durationObj = newObj
         if self._msufCastState then self._msufCastState.durationObj = newObj end
         if self.statusBar and self.statusBar.SetTimerDuration then
-            SafeCall(self.statusBar.SetTimerDuration, self.statusBar, newObj, 0)
+            SafeCall(self.statusBar.SetTimerDuration, self.statusBar, newObj)
         end
         -- Re-snapshot for future ticks.
         Boss_SnapshotPlainTimes(self, newObj)
@@ -1141,7 +1141,7 @@ BossCastbar_Start = function(frame)
         end
 
         if frame.statusBar and frame.statusBar.SetTimerDuration then
-            SafeCall(frame.statusBar.SetTimerDuration, frame.statusBar, durObj, 0)
+            SafeCall(frame.statusBar.SetTimerDuration, frame.statusBar, durObj)
         end
         Boss_SnapshotPlainTimes(frame, durObj)
 	    
@@ -1215,7 +1215,7 @@ BossCastbar_Start = function(frame)
         end
 
         if frame.statusBar and frame.statusBar.SetTimerDuration then
-            SafeCall(frame.statusBar.SetTimerDuration, frame.statusBar, durObj, 0)
+            SafeCall(frame.statusBar.SetTimerDuration, frame.statusBar, durObj)
         end
         Boss_SnapshotPlainTimes(frame, durObj)
 	    

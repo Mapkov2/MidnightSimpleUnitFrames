@@ -851,6 +851,10 @@ do
 
 
         -- Empowered casts: update value + time text and stage blink.
+        -- IMPORTANT (12.0/Midnight): dt is not reliable for player empower updates (can be 0),
+        -- and StatusBar:SetTimerDuration expects a DurationObject and must NOT be mixed with SetValue.
+        -- Use the known-good legacy behavior: compute elapsed from wall clock each tick and
+        -- drive the statusbar manually with SetValue(elapsed).
         if frame.isEmpower and frame.empowerStartTime and frame.empowerTotalWithGrace then
             -- Cache plain numbers once (first tick after empower start).
             local total = frame._msufEmpowerTotalNum
@@ -860,52 +864,28 @@ do
             end
             if total <= 0 then total = 0.01 end
 
-            -- oUF-style elapsed accumulator — eliminates GetTimePreciseSec per tick.
-            -- First tick: seed from wall clock. Subsequent ticks: += dt.
-            local elapsed = frame._msufEmpowerElapsed
-            if not elapsed then
-                -- Seed: compute initial elapsed from wall clock (once).
-                local startT = frame._msufEmpowerStartNum
-                if not startT then
-                    if not now then now = (_Now or GetTimePreciseSec)() end
-                    startT = ToPlain(frame.empowerStartTime) or now
-                    frame._msufEmpowerStartNum = startT
-                end
-                if not now then now = (_Now or GetTimePreciseSec)() end
-                elapsed = now - startT
-                if elapsed < 0 then elapsed = 0 end
-            else
-                elapsed = elapsed + dt
+            -- Wall-clock driven elapsed (dt can be 0 here).
+            if not now then now = (_Now or GetTimePreciseSec)() end
+            local startT = frame._msufEmpowerStartNum
+            if not startT then
+                startT = ToPlain(frame.empowerStartTime) or now
+                frame._msufEmpowerStartNum = startT
             end
+
+            local elapsed = now - startT
+            if elapsed < 0 then elapsed = 0 end
             if elapsed > total then elapsed = total end
             frame._msufEmpowerElapsed = elapsed
 
-            -- SetMinMaxValues once per empower cast (total is constant).
-            -- 12.0: SetTimerDuration lets C-engine animate bar → no per-tick SetValue.
+            -- SetMinMaxValues once per empower cast (total is constant), then drive value manually.
             if not frame._msufEmpowerMinMaxSet then
                 frame._msufEmpowerMinMaxSet = true
                 if frame.statusBar.SetMinMaxValues then
                     frame.statusBar:SetMinMaxValues(0, total)
                 end
-                -- Seed bar at current elapsed, then let C-engine animate the rest.
-                if frame.statusBar.SetTimerDuration then
-                    if frame.statusBar.SetValue then
-                        frame.statusBar:SetValue(elapsed)
-                    end
-                    local remDur = total - elapsed
-                    if remDur > 0 then
-                        frame.statusBar:SetTimerDuration(remDur)
-                    end
-                    frame._msufEmpowerTimerDriven = true
-                else
-                    frame._msufEmpowerTimerDriven = false
-                end
             end
-            -- Fallback: manual SetValue for pre-12.0 clients without SetTimerDuration.
-            if not frame._msufEmpowerTimerDriven then
-                if frame.statusBar.SetValue then
-                    frame.statusBar:SetValue(elapsed)
-                end
+            if frame.statusBar.SetValue then
+                frame.statusBar:SetValue(elapsed)
             end
 
             -- Compute base once per tick (used for timeText + glowFade).
