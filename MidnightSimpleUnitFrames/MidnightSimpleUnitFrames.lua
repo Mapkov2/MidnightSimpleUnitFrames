@@ -983,7 +983,7 @@ _G.MSUF_FONT_COLORS = _G.MSUF_FONT_COLORS or MSUF_FONT_COLORS
 MSUF_GetNPCReactionColor = function(kind)
     local defaultR, defaultG, defaultB
     if kind == "friendly" then
-        defaultR, defaultG, defaultB = 0, 1, 0           -- grÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼n
+        defaultR, defaultG, defaultB = 0, 1, 0           -- 
     elseif kind == "neutral" then
         defaultR, defaultG, defaultB = 1, 1, 0           -- gelb
     elseif kind == "enemy" then
@@ -1969,6 +1969,20 @@ local MSUF_TEXT_LAYOUT_HP  = { full="hpText",    pct="hpTextPct",    point="TOPR
     xKey="hpOffsetX",    yKey="hpOffsetY",    defX=-4, defY=-4, spacerOn="hpTextSpacerEnabled",    spacerX="hpTextSpacerX",    maxFn=_G.MSUF_GetHPSpacerMaxForUnitKey,    limitMode=false }
 local MSUF_TEXT_LAYOUT_PWR = { full="powerText", pct="powerTextPct", point="BOTTOMRIGHT", relPoint="BOTTOMRIGHT",
     xKey="powerOffsetX", yKey="powerOffsetY", defX=-4, defY= 4, spacerOn="powerTextSpacerEnabled", spacerX="powerTextSpacerX", maxFn=_G.MSUF_GetPowerSpacerMaxForUnitKey, limitMode=true }
+-- Resolve a text anchor setting ("RIGHT"/"LEFT"/"CENTER") into layout params.
+-- isTop: true for HP (top row), false for Power (bottom row)
+local function MSUF_ResolveTextAnchor(anchor, isTop)
+    if anchor == "LEFT" then
+        local pt = isTop and "TOPLEFT" or "BOTTOMLEFT"
+        return pt, pt, 4, "LEFT", 1    -- defX, justifyH, spacerSign (+1 = grow right)
+    elseif anchor == "CENTER" then
+        local pt = isTop and "TOP" or "BOTTOM"
+        return pt, pt, 0, "CENTER", 1  -- spacer grows right from center
+    else -- "RIGHT" (default)
+        local pt = isTop and "TOPRIGHT" or "BOTTOMRIGHT"
+        return pt, pt, -4, "RIGHT", -1 -- spacerSign (-1 = grow left)
+    end
+end
 local function MSUF_TextLayout_GetSpacer(key, udb, g, hasPct, spec)
     if not hasPct then  return false, 0 end
     -- One-time seed: make Shared spacers start like Player (if Shared keys are missing).
@@ -1987,16 +2001,26 @@ local function MSUF_TextLayout_GetSpacer(key, udb, g, hasPct, spec)
     local max = (key and spec.maxFn and spec.maxFn(key)) or 0
     return on, ns.Text.ClampSpacerValue(x, max, on)
 end
-local function MSUF_TextLayout_ApplyGroup(f, tf, conf, spec, mode, hasPct, on, eff)
+local function MSUF_TextLayout_ApplyGroup(f, tf, conf, spec, mode, hasPct, on, eff, anchorPt, anchorRelPt, anchorDefX, anchorJustify, anchorSign)
     local fullObj, pctObj = f[spec.full], f[spec.pct]
     if not (fullObj or hasPct) then  return end
-    local baseX = ns.Util.Offset(conf[spec.xKey], spec.defX)
+    local pt    = anchorPt or spec.point
+    local relPt = anchorRelPt or spec.relPoint
+    local dX    = anchorDefX or spec.defX
+    local sign  = anchorSign or -1
+    local baseX = ns.Util.Offset(conf[spec.xKey], dX)
     local baseY = ns.Util.Offset(conf[spec.yKey], spec.defY)
     local fullX, pctX = baseX, baseX
     local canSplit = hasPct and on and eff ~= 0 and (not spec.limitMode or mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL")
-    if canSplit then if mode == "FULL_PLUS_PERCENT" then fullX = baseX - eff else pctX = baseX - eff end end
-    if fullObj then MSUF_ApplyPoint(fullObj, spec.point, tf, spec.relPoint, fullX, baseY) end
-    if hasPct  then MSUF_ApplyPoint(pctObj,  spec.point, tf, spec.relPoint, pctX,  baseY) end
+    if canSplit then if mode == "FULL_PLUS_PERCENT" then fullX = baseX + sign * eff else pctX = baseX + sign * eff end end
+    if fullObj then
+        MSUF_ApplyPoint(fullObj, pt, tf, relPt, fullX, baseY)
+        if anchorJustify and fullObj.SetJustifyH then fullObj:SetJustifyH(anchorJustify) end
+    end
+    if hasPct then
+        MSUF_ApplyPoint(pctObj, pt, tf, relPt, pctX, baseY)
+        if anchorJustify and pctObj and pctObj.SetJustifyH then pctObj:SetJustifyH(anchorJustify) end
+    end
  end
 local function ApplyTextLayout(f, conf)
     if not f or not f.textFrame or not conf then  return end
@@ -2010,6 +2034,12 @@ local function ApplyTextLayout(f, conf)
     local useOverride = (udb and udb.hpPowerTextOverride == true)
     local hpMode = (useOverride and udb.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
     local pMode  = (useOverride and udb.powerTextMode) or (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
+    -- Text anchors: per-unit → general → default RIGHT (no override gate; set per-unit via EditMode popup)
+    local hpAnchor    = (udb and udb.hpTextAnchor)    or (g and g.hpTextAnchor)    or "RIGHT"
+    local powerAnchor = (udb and udb.powerTextAnchor) or (g and g.powerTextAnchor) or "RIGHT"
+    local nameAnchor  = (udb and udb.nameTextAnchor)  or "LEFT"
+    local hpPt, hpRelPt, hpDefX, hpJustify, hpSign       = MSUF_ResolveTextAnchor(hpAnchor, true)
+    local pwrPt, pwrRelPt, pwrDefX, pwrJustify, pwrSign   = MSUF_ResolveTextAnchor(powerAnchor, false)
     local hpHasPct = (f[MSUF_TEXT_LAYOUT_HP.pct] ~= nil)
     local pHasPct  = (f[MSUF_TEXT_LAYOUT_PWR.pct] ~= nil)
     -- Spacers inherit Shared unless per-unit override is enabled.
@@ -2024,17 +2054,27 @@ local function ApplyTextLayout(f, conf)
     if (not wUsed or wUsed == 0) and tf and tf.GetWidth then wUsed = tf:GetWidth() or 0 end
     if (not wUsed or wUsed == 0) and conf then wUsed = tonumber(conf.width) or wUsed end
     wUsed = tonumber(wUsed) or 0
-    if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY, hpHasPct, hpOn, hpEff, wUsed, (key or ""), (hpMode or ""), pHasPct, pOn, pEff, (pMode or "")) then  return end
+    if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY, hpHasPct, hpOn, hpEff, wUsed, (key or ""), (hpMode or ""), pHasPct, pOn, pEff, (pMode or ""), (hpAnchor or ""), (powerAnchor or ""), (nameAnchor or "")) then  return end
     f._msufTextLayoutStamp = 1
     if f.nameText then
-        MSUF_ApplyPoint(f.nameText, "TOPLEFT", tf, "TOPLEFT", nX, nY)
-        f._msufNameAnchorPoint, f._msufNameAnchorRel, f._msufNameAnchorRelPoint, f._msufNameAnchorX, f._msufNameAnchorY = "TOPLEFT", tf, "TOPLEFT", nX, nY
+        -- Resolve name anchor: LEFT (default), CENTER, RIGHT
+        local namePt, nameRelPt, nameDefX
+        if nameAnchor == "RIGHT" then
+            namePt, nameRelPt, nameDefX = "TOPRIGHT", "TOPRIGHT", -nX
+        elseif nameAnchor == "CENTER" then
+            namePt, nameRelPt, nameDefX = "TOP", "TOP", 0
+        else
+            namePt, nameRelPt, nameDefX = "TOPLEFT", "TOPLEFT", nX
+        end
+        MSUF_ApplyPoint(f.nameText, namePt, tf, nameRelPt, nameDefX, nY)
+        if f.nameText.SetJustifyH then f.nameText:SetJustifyH(nameAnchor == "RIGHT" and "RIGHT" or nameAnchor == "CENTER" and "CENTER" or "LEFT") end
+        f._msufNameAnchorPoint, f._msufNameAnchorRel, f._msufNameAnchorRelPoint, f._msufNameAnchorX, f._msufNameAnchorY = namePt, tf, nameRelPt, nameDefX, nY
         f._msufNameClipSideApplied, f._msufNameClipReservedRight, f._msufNameClipTextStamp, f._msufNameClipAnchorStamp, f._msufClampStamp = nil, nil, nil, nil, nil
     end
     if f.levelText and f.nameText then MSUF_ApplyLevelIndicatorLayout_Internal(f, conf) end
     -- HP group uses hpMode (shifts pct side for any non FULL_PLUS_PERCENT, matching legacy behavior).
-    MSUF_TextLayout_ApplyGroup(f, tf, conf, MSUF_TEXT_LAYOUT_HP,  hpMode, hpHasPct, hpOn, hpEff)
-    MSUF_TextLayout_ApplyGroup(f, tf, conf, MSUF_TEXT_LAYOUT_PWR, pMode,  pHasPct,  pOn,  pEff)
+    MSUF_TextLayout_ApplyGroup(f, tf, conf, MSUF_TEXT_LAYOUT_HP,  hpMode, hpHasPct, hpOn, hpEff, hpPt, hpRelPt, hpDefX, hpJustify, hpSign)
+    MSUF_TextLayout_ApplyGroup(f, tf, conf, MSUF_TEXT_LAYOUT_PWR, pMode,  pHasPct,  pOn,  pEff, pwrPt, pwrRelPt, pwrDefX, pwrJustify, pwrSign)
  end
 function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
     if not MSUF_DB then EnsureDB() end
@@ -2559,7 +2599,16 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
     local hasPct = (type(hpPct) == "number")
     local g = MSUF_DB.general or {}
     local absorbText, absorbStyle = nil, nil
-    if g.showTotalAbsorbAmount and UnitGetTotalAbsorbs then
+    -- Per-unit absorb text display: resolve from unit override or fall back to general.
+    local _showAbsorbText = false
+    local _resolveAbsorb = ns.Bars and ns.Bars._ResolveAbsorbDisplay
+    if type(_resolveAbsorb) == "function" then
+        local _, showText = _resolveAbsorb(unit)
+        _showAbsorbText = showText
+    else
+        _showAbsorbText = (g.showTotalAbsorbAmount == true)
+    end
+    if _showAbsorbText and UnitGetTotalAbsorbs then
         if C_StringUtil and C_StringUtil.TruncateWhenZero then
             local ok, txt = MSUF_FastCall(function()
                 return C_StringUtil.TruncateWhenZero(UnitGetTotalAbsorbs(unit))
@@ -2918,7 +2967,8 @@ local function MSUF_UFStep_Border(self)
             end
             local thickness, stamp = MSUF_GetDesiredBarBorderThicknessAndStamp()
             local pb = self.targetPowerBar
-            local bottomIsPower = (pb and pb.IsShown and pb:IsShown()) and true or false
+            local pbDetached = self._msufPowerBarDetached
+            local bottomIsPower = (pb and not pbDetached and pb.IsShown and pb:IsShown()) and true or false
             local need = false
             if self._msufBarBorderStamp ~= stamp then
                 self._msufBarBorderStamp = stamp
@@ -2970,7 +3020,7 @@ local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     -- Coalesce within the same millisecond-bucket (approx "per-flush" when multiple updates burst)
     local now = GetTime()
     local nowMs = math_floor(now * 1000)
-    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes â†’ short keys on small table)
+    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes Ã¢â€ â€™ short keys on small table)
     local ts = self._msufTS
     if not ts then ts = {}; self._msufTS = ts end
     -- HP text: force when layout/toggle changed, otherwise rate-limit
@@ -3214,7 +3264,8 @@ end
     -- We still force a visual pass when the "bottom bar" (power vs health) changes.
     do
         local pb = self.targetPowerBar
-        local pbWanted = (pb ~= nil) and (self._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
+        local pbDetached = self._msufPowerBarDetached
+        local pbWanted = (pb ~= nil) and not pbDetached and (self._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
         local bottomIsPower = pbWanted and true or false
         if self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false) then
             self._msufNeedsBorderVisual = true
@@ -4221,10 +4272,36 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     elseif type(unit) == 'string' and string.sub(unit, 1, 4) == 'boss' then
         enabled = (b.showBossPowerBar ~= false)
     end
-        local reserve = (embed and enabled and h > 0)
-    if not ns.Cache.StampChanged(f, "PBEmbedLayout", (reserve and 1 or 0), h) then  return end
+
+    -- Detach: per-unit config for player/target/focus (detach overrides embed)
+    local detached = false
+    local dW, dH, dX, dY = 0, 0, 0, 0
+    if (unit == 'player' or unit == 'target' or unit == 'focus') then
+        local key = f.msufConfigKey
+        if not key and GetConfigKeyForUnit then key = GetConfigKeyForUnit(unit) end
+        local conf = (key and MSUF_DB and MSUF_DB[key]) or nil
+        if conf and conf.powerBarDetached == true then
+            detached = true
+            dW = tonumber(conf.detachedPowerBarWidth) or math.floor((conf.width or 250) + 0.5)
+            dH = tonumber(conf.detachedPowerBarHeight) or 6
+            dX = tonumber(conf.detachedPowerBarOffsetX) or 0
+            dY = tonumber(conf.detachedPowerBarOffsetY) or -4
+        end
+    end
+
+    local reserve = (embed and not detached and enabled and h > 0)
+    if not ns.Cache.StampChanged(f, "PBEmbedLayout", (reserve and 1 or 0), h, (detached and 1 or 0), dW, dH, dX, dY) then  return end
     f._msufPBLayoutStamp = 1
     f._msufPowerBarReserved = reserve and true or nil
+    f._msufPowerBarDetached = detached and true or nil
+    -- Force border system to re-evaluate when detach state changes
+    f._msufBarOutlineThickness = -1
+    f._msufBarOutlineBottomIsPower = nil
+    f._msufHighlightBottomIsPower = nil
+    -- Re-anchor mouseover highlight (it was set up at init and doesn't auto-update)
+    if type(_G.MSUF_FixHighlightForFrame) == "function" then
+        _G.MSUF_FixHighlightForFrame(f)
+    end
     local hb = f.hpBar
     hb:ClearAllPoints()
     hb:SetPoint('TOPLEFT', f, 'TOPLEFT', 2, -2)
@@ -4234,16 +4311,23 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         hb:SetPoint('BOTTOMRIGHT', f, 'BOTTOMRIGHT', -2, 2)
     end
     pb:ClearAllPoints()
-    pb:SetHeight(h)
-    if reserve then
+    if detached then
+        -- Detached: freely positioned relative to parent frame (overrides embed)
+        if dW < 20 then dW = 20 elseif dW > 800 then dW = 800 end
+        if dH < 2 then dH = 2 elseif dH > 80 then dH = 80 end
+        pb:SetSize(dW, dH)
+        pb:SetPoint('TOPLEFT', f, 'BOTTOMLEFT', dX, dY)
+    elseif reserve then
+        pb:SetHeight(h)
         pb:SetPoint('BOTTOMLEFT', f, 'BOTTOMLEFT', 2, 2)
         pb:SetPoint('BOTTOMRIGHT', f, 'BOTTOMRIGHT', -2, 2)
     else
+        pb:SetHeight(h)
         pb:SetPoint('TOPLEFT', hb, 'BOTTOMLEFT', 0, 0)
         pb:SetPoint('TOPRIGHT', hb, 'BOTTOMRIGHT', 0, 0)
     end
-    f._msufBarOutlineThickness = -1
  end
+
 _G.MSUF_ApplyPowerBarEmbedLayout = MSUF_ApplyPowerBarEmbedLayout
 _G.MSUF_ApplyPowerBarEmbedLayout_All = function()
     if not UnitFrames then  return end

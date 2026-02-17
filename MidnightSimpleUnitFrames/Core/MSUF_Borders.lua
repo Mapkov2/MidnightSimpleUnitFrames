@@ -25,7 +25,8 @@ local function _Iter_SyncBorderStamps(uf)
     uf._msufHighlightColorKey = -1
     uf._msufHighlightBottomIsPower = nil
     local pb = uf.targetPowerBar
-    uf._msufBarOutlineBottomIsPower = (pb and pb.IsShown and pb:IsShown()) and true or false
+    local pbDetached = uf._msufPowerBarDetached
+    uf._msufBarOutlineBottomIsPower = (pb and not pbDetached and pb.IsShown and pb:IsShown()) and true or false
     if S.apply then S.apply(uf) end
 end
 
@@ -92,7 +93,8 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
     end
     local hb = self.hpBar
     local pb = self.targetPowerBar
-    local pbWanted = (pb ~= nil) and (self._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
+    local pbDetached = self._msufPowerBarDetached
+    local pbWanted = (pb ~= nil) and not pbDetached and (self._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
     local bottomBar = pbWanted and pb or hb
     local bottomIsPower = pbWanted and true or false
     local f = o.frame
@@ -119,6 +121,31 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
         self._msufBarOutlineBottomIsPower = bottomIsPower and true or false
     end
     f:Show()
+
+    -- Detached power bar: apply its own outline frame
+    if pb and pbDetached and pb.IsShown and pb:IsShown() then
+        local dpbO = self._msufDetachedPBOutline
+        if not dpbO then
+            local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
+            dpbO = F.CreateFrame("Frame", nil, pb, template)
+            dpbO:EnableMouse(false)
+            dpbO:SetFrameLevel((pb.GetFrameLevel and pb:GetFrameLevel() or 0) + 2)
+            self._msufDetachedPBOutline = dpbO
+            dpbO._msufLastEdgeSize = -1
+        end
+        local dpbEdge = (type(snap) == "function") and snap(dpbO, thickness) or thickness
+        if dpbO._msufLastEdgeSize ~= dpbEdge then
+            dpbO:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = dpbEdge })
+            dpbO:SetBackdropBorderColor(0, 0, 0, 1)
+            dpbO._msufLastEdgeSize = dpbEdge
+        end
+        dpbO:ClearAllPoints()
+        dpbO:SetPoint("TOPLEFT", pb, "TOPLEFT", -dpbEdge, dpbEdge)
+        dpbO:SetPoint("BOTTOMRIGHT", pb, "BOTTOMRIGHT", dpbEdge, -dpbEdge)
+        dpbO:Show()
+    elseif self._msufDetachedPBOutline then
+        self._msufDetachedPBOutline:Hide()
+    end
 end
 
 -- Sub-function: create/update highlight overlay frame for aggro/dispel/purge.
@@ -153,7 +180,8 @@ local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, g)
 
     local hb = self.hpBar
     local pb = self.targetPowerBar
-    local pbWanted = (pb ~= nil) and (self._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
+    local pbDetached = self._msufPowerBarDetached
+    local pbWanted = (pb ~= nil) and not pbDetached and (self._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
     local bottomBar = pbWanted and pb or hb
     local bottomIsPower = pbWanted and true or false
     local snap = _G.MSUF_Snap
@@ -453,9 +481,9 @@ do
     -- Purge/Spellsteal detection (combat-safe for 12.0).
     -- Secret booleans can't be compared or branched on, but visual APIs (SetAlpha,
     -- SetBackdropBorderColor) accept secret values directly.  We use "sentinel frames"
-    -- Ã¢â‚¬â€ one per HELPFUL aura slot, all positioned identically over the unit frame border.
+    -- ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â one per HELPFUL aura slot, all positioned identically over the unit frame border.
     -- Each sentinel's alpha is set from isStealable via EvaluateColorFromBoolean.
-    -- The returned color has SECRET RGBA Ã¢â‚¬â€ we pass color.a straight to SetAlpha()
+    -- The returned color has SECRET RGBA ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â we pass color.a straight to SetAlpha()
     -- (a visual API) so we never compare the secret value.  If ANY sentinel has
     -- alpha=1, the purge border is visually rendered (frame compositing = OR logic).
     local _colorTrue  = CreateColor and CreateColor(1, 1, 1, 1)
@@ -466,7 +494,7 @@ do
     local _bdTemplate = BackdropTemplateMixin and "BackdropTemplate" or nil
     local _bdTable    = { edgeFile = MSUF_TEX_WHITE8, edgeSize = 0 }
 
-    -- Cached purge color Ã¢â‚¬â€ refreshed once per UpdatePurgeSentinels call.
+    -- Cached purge color ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â refreshed once per UpdatePurgeSentinels call.
     local _purgeR, _purgeG, _purgeB = 1.00, 0.85, 0.00
     local function _RefreshPurgeColor()
         local g = MSUF_DB and MSUF_DB.general
@@ -512,7 +540,7 @@ do
     end
 
     -- Single-pass: scan HELPFUL slots and set sentinel alphas inline.
-    -- No intermediate allSlots table Ã¢â‚¬â€ process each batch directly.
+    -- No intermediate allSlots table ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â process each batch directly.
     local _purgeScratch = {}
     local function UpdatePurgeSentinels(uf, unit)
         if type(_getSlots) ~= "function" or type(_getBySlot) ~= "function" then return false end
@@ -595,7 +623,7 @@ do
         end
 
         -- Purge: sentinel frames handle rendering via SetAlpha with secret values.
-        -- Secret constraints prevent boolean tracking Ã¢â‚¬â€ sentinels ARE the border.
+        -- Secret constraints prevent boolean tracking ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â sentinels ARE the border.
         -- Purge participates in highlight priority only via test mode.
         if purgeEnabled and canAttack and unit ~= "player" then
             UpdatePurgeSentinels(uf, unit)

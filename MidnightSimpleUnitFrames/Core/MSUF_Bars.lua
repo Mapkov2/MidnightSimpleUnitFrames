@@ -10,6 +10,56 @@ local MSUF_ApplyAbsorbOverlayColor     = ns.Bars._ApplyAbsorbOverlayColor
 local MSUF_ApplyHealAbsorbOverlayColor = ns.Bars._ApplyHealAbsorbOverlayColor
 local MSUF_ResetBarZero                = ns.Bars._ResetBarZero
 
+-- Per-unit absorb setting resolver.
+-- Checks MSUF_DB[unitKey] for override, falls back to MSUF_DB.general.
+local function _MSUF_NormalizeUnitKey(unit)
+    if not unit then return nil end
+    if unit == "tot" then return "targettarget" end
+    if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
+    return unit
+end
+
+-- Resolve absorb display flags (enableBar, showText) for a unit.
+-- Uses absorbTextMode from per-unit DB if overridden, else from general.
+local function _MSUF_ResolveAbsorbDisplay(unit)
+    if not MSUF_DB then EnsureDB() end
+    local g = MSUF_DB.general or {}
+    local mode = nil
+    local nk = _MSUF_NormalizeUnitKey(unit)
+    if nk then
+        local u = MSUF_DB[nk]
+        if u and u.hpPowerTextOverride == true and u.absorbTextMode ~= nil then
+            mode = tonumber(u.absorbTextMode)
+        end
+    end
+    if not mode then
+        mode = tonumber(g.absorbTextMode)
+    end
+    if not mode then
+        return (g.enableAbsorbBar ~= false), (g.showTotalAbsorbAmount == true)
+    end
+    local enableBar = (mode == 2 or mode == 3)
+    local showText  = (mode == 3 or mode == 4)
+    return enableBar, showText
+end
+
+-- Resolve absorb anchor mode for a unit.
+local function _MSUF_ResolveAbsorbAnchor(unit)
+    if not MSUF_DB then EnsureDB() end
+    local g = MSUF_DB.general or {}
+    local nk = _MSUF_NormalizeUnitKey(unit)
+    if nk then
+        local u = MSUF_DB[nk]
+        if u and u.hpPowerTextOverride == true and u.absorbAnchorMode ~= nil then
+            return tonumber(u.absorbAnchorMode) or 2
+        end
+    end
+    return tonumber(g.absorbAnchorMode) or 2
+end
+-- Export resolvers for main file (absorb text display).
+ns.Bars._ResolveAbsorbDisplay = _MSUF_ResolveAbsorbDisplay
+ns.Bars._ResolveAbsorbAnchor  = _MSUF_ResolveAbsorbAnchor
+
 -- ══════════════════════════════════════════════════════════════
 -- Self-heal prediction overlay (was MSUF_SelfHealPred.lua)
 -- ══════════════════════════════════════════════════════════════
@@ -330,6 +380,10 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
     local size = bdb and tonumber(bdb.powerBarBorderSize) or 1
     if type(size) ~= 'number' then size = 1 end
     if size < 1 then size = 1 elseif size > 10 then size = 10 end
+    -- When power bar is detached, the separator border is meaningless
+    -- (the outline system in MSUF_Borders handles the detached bar's border).
+    local parentUF = bar:GetParent()
+    local detached = parentUF and parentUF._msufPowerBarDetached
     local border = bar._msufPowerBorder
     if not border then
         border = F.CreateFrame('Frame', nil, bar)
@@ -337,7 +391,7 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
         border:EnableMouse(false)
         bar._msufPowerBorder = border
     end
-    if not enabled then
+    if not enabled or detached then
         if border.Hide then border:Hide() end
          return
     end
@@ -397,8 +451,8 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
     else
         if not MSUF_DB then EnsureDB() end
         MSUF_ApplyAbsorbOverlayColor(bar)
-        local g = MSUF_DB.general or {}
-        if g.enableAbsorbBar == false then
+        local enableBar = _MSUF_ResolveAbsorbDisplay(unit)
+        if not enableBar then
             MSUF_ResetBarZero(bar, true)
              return
     end
@@ -428,21 +482,17 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
     -- Absorb / Heal-Absorb anchoring modes
     -- 1/2: legacy (edge-anchored) with reverse-fill swap
     -- 3: follow current HP edge (Blizzard-style) by anchoring to the moving HP StatusBarTexture edge and clipping.
-    -- 4: follow current HP edge (overflow) — same as 3 but absorb bar is NOT clipped,
-    --    so it extends beyond the HP bar boundary when absorb exceeds remaining bar space.
-    -- NOTE: Modes 3/4 are secret-safe (no HP arithmetic) and reanchor only when mode/reverse-fill/width changes.
+    -- 4: follow current HP edge (overflow) — same as 3 but absorb bar is NOT clipped, can extend beyond HP bar.
+    -- NOTE: Mode 3/4 are secret-safe (no HP arithmetic) and reanchor only when mode/reverse-fill/width changes.
     local function MSUF_ApplyAbsorbAnchorMode(self)
         if not self then  return end
 
-        if not MSUF_DB then EnsureDB() end
-        local g = MSUF_DB and MSUF_DB.general or {}
-        local mode = g.absorbAnchorMode or 2
-        local isFollow = (mode == 3 or mode == 4)
+        local mode = _MSUF_ResolveAbsorbAnchor(self.unit)
 
         local hpBar = self.hpBar
 
         -- Restore legacy overlay layout (full overlay over hpBar).
-        if not isFollow then
+        if mode ~= 3 and mode ~= 4 then
             if self._msufAbsorbAnchorModeStamp == mode and not self._msufAbsorbFollowActive then
                 return
             end
@@ -495,8 +545,6 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
         end
 
         -- Mode 3/4: follow current HP edge.
-        -- Mode 3: clipped within HP bar bounds (Blizzard-style).
-        -- Mode 4: overflow — absorb extends beyond HP bar when shield is large enough.
         if not hpBar or not hpBar.GetStatusBarTexture then
             return
         end
@@ -531,7 +579,6 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
 
         local isOverflow = (mode == 4)
 
-        -- Clip frame: used by mode 3 for both bars, mode 4 only for healAbsorb (inward).
         local clip = self._msufAbsorbFollowClip
         if not clip and _G.CreateFrame and hpBar then
             clip = _G.CreateFrame("Frame", nil, hpBar)
@@ -551,9 +598,10 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
             clip:Show()
         end
 
-        -- Absorb: outward (same direction as HP).
-        -- Mode 3: parented to clip (clipped). Mode 4: parented to self (overflow).
+        -- Absorb: outward (same direction as HP). Heal-Absorb: inward (opposite direction).
         if self.absorbBar then
+            -- Mode 4 (overflow): parent absorb bar to unitframe (self), not clip frame.
+            -- Mode 3 (clipped): parent absorb bar to clip frame.
             local absorbParent = isOverflow and self or clip
             if absorbParent and self.absorbBar.GetParent and self.absorbBar:GetParent() ~= absorbParent then
                 self.absorbBar:SetParent(absorbParent)
@@ -583,7 +631,6 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
             end
         end
 
-        -- Heal-absorb: always inward (opposite direction), always clipped.
         if self.healAbsorbBar then
             if clip and self.healAbsorbBar.GetParent and self.healAbsorbBar:GetParent() ~= clip then
                 self.healAbsorbBar:SetParent(clip)
@@ -638,7 +685,8 @@ local function MSUF_ApplyReverseFillBars(self, conf)
 
     -- Keep absorb/heal-absorb follow-HP anchoring in sync with reverse-fill changes.
     local g = MSUF_DB and MSUF_DB.general
-    if g and (g.absorbAnchorMode == 3 or g.absorbAnchorMode == 4) then
+    local absorbMode = _MSUF_ResolveAbsorbAnchor(self.unit)
+    if absorbMode == 3 or absorbMode == 4 then
         local apply = _G.MSUF_ApplyAbsorbAnchorMode
         if apply then
             apply(self)

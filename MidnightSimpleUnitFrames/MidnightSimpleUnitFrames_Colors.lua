@@ -148,11 +148,14 @@ local function MSUF_FixHighlightForFrame(frame)
     -- Ensure it is anchored to the unitframe (and includes the power bar if it extends below the main frame).
     -- Also try to snap to pixel grid to avoid "one side thicker" artifacts at non-integer UI scales.
     local bottomAnchor = frame
-    local pb =
+    -- When power bar is detached, highlight only covers the HP bar area.
+    local pbDetached = frame._msufPowerBarDetached
+    local pb = not pbDetached and (
         frame.targetPowerBar or frame.TargetPowerBar or frame.powerBar or frame.PowerBar
         or frame.power or frame.Power or frame.ManaBar or frame.manaBar
         or frame.MSUF_powerBar or frame.MSUF_PowerBar or frame.MSUFPowerBar
         or frame.resourceBar or frame.ResourceBar or frame.classPowerBar or frame.ClassPowerBar
+    ) or nil
 
     if pb and pb.IsShown and pb.GetObjectType then
         -- Only use it if it behaves like a Region/Frame and is currently shown.
@@ -166,7 +169,8 @@ local function MSUF_FixHighlightForFrame(frame)
     end
 
     -- If we didn't find a known power bar field, try a lightweight child scan by name.
-    if bottomAnchor == frame and frame.GetChildren then
+    -- Skip scan when power bar is detached (highlight should only cover HP bar).
+    if not pbDetached and bottomAnchor == frame and frame.GetChildren then
         local children = { frame:GetChildren() }
         for i = 1, #children do
             local c = children[i]
@@ -223,6 +227,8 @@ local function MSUF_FixHighlightForFrame(frame)
         end)
     end
 end
+-- Export so other files can re-fix highlight anchors (e.g. after detach state changes)
+_G.MSUF_FixHighlightForFrame = MSUF_FixHighlightForFrame
 
 function ns.MSUF_FixMouseoverHighlightBindings()
     -- Prefer EnumerateFrames() (safe, doesn't touch _G and avoids odd tables like _G itself).

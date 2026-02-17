@@ -3465,6 +3465,12 @@ BAR_DROPDOWN_WIDTH = 260
     barsTitle:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 16, -120)
     barsTitle:SetText(TR("Bar appearance"))
 local MSUF_RefreshAbsorbBarUIEnabled
+-- Forward-declared scope refs (filled when scope system is created below).
+-- These allow absorb dropdowns to be scope-aware even though they're created first.
+local _MSUF_BarScope_GetUnitKey     -- function() → unitKey or nil
+local _MSUF_BarScope_GetUnitDB      -- function(unitKey) → unit DB table
+local _MSUF_BarScope_EnableOverride -- function(unitKey)
+local _MSUF_BarScope_SyncUI         -- function()  (refresh all scope-aware controls)
 -- Absorb display (moved from Misc -> Bar appearance; replaces Bar mode which is now in Colors)
 absorbDisplayLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 absorbDisplayLabel:SetPoint("TOPLEFT", barsTitle, "BOTTOMLEFT", 0, -8)
@@ -3482,6 +3488,17 @@ local absorbDisplayOptions = {
 local function MSUF_GetAbsorbDisplayMode()
     EnsureDB()
     local g = MSUF_DB.general or {}
+    -- Per-unit override
+    if type(_MSUF_BarScope_GetUnitKey) == "function" then
+        local unitKey = _MSUF_BarScope_GetUnitKey()
+        if unitKey then
+            local u = MSUF_DB[unitKey]
+            if u and u.hpPowerTextOverride == true and u.absorbTextMode ~= nil then
+                local m = tonumber(u.absorbTextMode)
+                if m and m >= 1 and m <= 4 then return m end
+            end
+        end
+    end
     local mode = tonumber(g.absorbTextMode)
     if mode and mode >= 1 and mode <= 4 then  return mode end
     local barOn  = (g.enableAbsorbBar ~= false)
@@ -3495,10 +3512,24 @@ local function MSUF_BindAbsorbDropdown(drop, options, getKey, dbField, applyFunc
     if not drop then  return end
     MSUF_InitSimpleDropdown(drop, options, getKey, function(mode)
         EnsureDB()
-        MSUF_DB.general = MSUF_DB.general or {}
-        MSUF_DB.general[dbField] = mode
+        -- Scope-aware: write to unit DB if a unit is selected, else to general.
+        local unitKey = type(_MSUF_BarScope_GetUnitKey) == "function" and _MSUF_BarScope_GetUnitKey() or nil
+        if unitKey then
+            local u = type(_MSUF_BarScope_GetUnitDB) == "function" and _MSUF_BarScope_GetUnitDB(unitKey) or nil
+            if u then
+                if u.hpPowerTextOverride ~= true and type(_MSUF_BarScope_EnableOverride) == "function" then
+                    _MSUF_BarScope_EnableOverride(unitKey)
+                end
+                u[dbField] = mode
+            end
+        else
+            MSUF_DB.general = MSUF_DB.general or {}
+            MSUF_DB.general[dbField] = mode
+        end
         if type(applyFunc) == "function" then pcall(applyFunc, mode) end
         if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
+        -- Sync override checkbox (may have been auto-enabled).
+        if type(_MSUF_BarScope_SyncUI) == "function" then _MSUF_BarScope_SyncUI() end
      end, nil, BAR_DROPDOWN_WIDTH)
     drop:HookScript("OnShow", function()
         MSUF_SyncSimpleDropdown(drop, options, getKey)
@@ -3532,6 +3563,16 @@ local absorbAnchorOptions = {
 local function MSUF_GetAbsorbAnchorMode()
     EnsureDB()
     local g = MSUF_DB.general or {}
+    -- Per-unit override
+    if type(_MSUF_BarScope_GetUnitKey) == "function" then
+        local unitKey = _MSUF_BarScope_GetUnitKey()
+        if unitKey then
+            local u = MSUF_DB[unitKey]
+            if u and u.hpPowerTextOverride == true and u.absorbAnchorMode ~= nil then
+                return tonumber(u.absorbAnchorMode) or 2
+            end
+        end
+    end
     return tonumber(g.absorbAnchorMode) or 2
 end
 MSUF_BindAbsorbDropdown(absorbAnchorDrop, absorbAnchorOptions, MSUF_GetAbsorbAnchorMode, "absorbAnchorMode", function()
@@ -3842,8 +3883,10 @@ if absorbTexTestCB then
 -- Absorb display dropdown remains enabled so users can turn the bar back on.
 MSUF_RefreshAbsorbBarUIEnabled = function()
     EnsureDB()
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-    local barEnabled = (g.enableAbsorbBar ~= false) and true or false
+    -- Determine bar enabled state from current scope
+    local barEnabled
+    local mode = MSUF_GetAbsorbDisplayMode()
+    barEnabled = (mode == 2 or mode == 3)
     -- Anchor mode only matters when a bar is rendered
     MSUF_SetDropDownEnabled(absorbAnchorDrop, absorbAnchorLabel, barEnabled)
     -- Texture overrides + test mode only apply to the bars
@@ -3950,10 +3993,10 @@ gradientCheck = CreateLabeledCheckButton(
     powerBarBorderSizeEdit:SetPoint("LEFT", powerBarBorderSizeLabel, "RIGHT", 10, 0)
     powerBarBorderSizeEdit:SetTextInsets(4, 4, 2, 2)
 
-    -- HP/Power text scope (Shared vs per-unit override). Replaces click-selection.
+    -- Bar settings scope (Shared vs per-unit override). Controls text + absorb per-unit.
     hpPowerScopeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     hpPowerScopeLabel:SetPoint("TOPLEFT", powerBarBorderSizeLabel or powerBarBorderCheck or powerBarEmbedCheck or powerBarHeightLabel, "BOTTOMLEFT", 0, -16)
-    hpPowerScopeLabel:SetText(TR("HP/Power text settings"))
+    hpPowerScopeLabel:SetText(TR("Bar settings"))
     hpPowerScopeDrop = CreateFrame("Frame", "MSUF_HPTextScopeDropdown", barGroup, "UIDropDownMenuTemplate")
     MSUF_ExpandDropdownClickArea(hpPowerScopeDrop)
     hpPowerScopeDrop:SetPoint("TOPLEFT", hpPowerScopeLabel, "BOTTOMLEFT", -16, -4)
@@ -4017,7 +4060,18 @@ gradientCheck = CreateLabeledCheckButton(
 	        if u.hpTextSpacerX == nil then u.hpTextSpacerX = g.hpTextSpacerX end
 	        if u.powerTextSpacerEnabled == nil then u.powerTextSpacerEnabled = g.powerTextSpacerEnabled end
 	        if u.powerTextSpacerX == nil then u.powerTextSpacerX = g.powerTextSpacerX end
+	        -- Absorb settings: copy Shared into unit on first enable.
+	        if u.absorbTextMode == nil then u.absorbTextMode = g.absorbTextMode end
+	        if u.absorbAnchorMode == nil then u.absorbAnchorMode = g.absorbAnchorMode end
+		        -- Text anchors: copy Shared into unit on first enable.
+		        if u.hpTextAnchor == nil then u.hpTextAnchor = g.hpTextAnchor end
+		        if u.powerTextAnchor == nil then u.powerTextAnchor = g.powerTextAnchor end
     end
+
+    -- Wire up forward-declared scope refs so absorb dropdowns (created earlier) can be scope-aware.
+    _MSUF_BarScope_GetUnitKey     = _MSUF_HPText_GetUnitKey
+    _MSUF_BarScope_GetUnitDB      = _MSUF_HPText_GetUnitDB
+    _MSUF_BarScope_EnableOverride = _MSUF_HPText_EnableOverride
 
     -- Override checkbox (only relevant for unit scopes).
     hpPowerOverrideCheck = CreateFrame('CheckButton', 'MSUF_HPTextOverrideCheck', barGroup, 'UICheckButtonTemplate')
@@ -4031,8 +4085,8 @@ gradientCheck = CreateLabeledCheckButton(
     hpPowerOverrideCheck:SetScript('OnEnter', function(self)
         GameTooltip:SetOwner(self, 'ANCHOR_RIGHT')
         GameTooltip:SetText('Per-unit override', 1, 1, 1)
-        GameTooltip:AddLine('When unchecked, this unit inherits Shared settings.', 0.9, 0.9, 0.9, true)
-        GameTooltip:AddLine('Changing any dropdown below will auto-enable override.', 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine('When unchecked, this unit inherits Shared settings for text modes, absorb display, and spacers.', 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine('Changing any per-unit setting will auto-enable this override.', 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
     end)
     hpPowerOverrideCheck:SetScript('OnLeave', function() GameTooltip:Hide() end)
@@ -4102,6 +4156,8 @@ gradientCheck = CreateLabeledCheckButton(
                 end
             end
             if type(_G.MSUF_Options_RefreshHPSpacerControls) == "function" then _G.MSUF_Options_RefreshHPSpacerControls() end
+            -- Sync override checkbox (may have been auto-enabled)
+            if type(_MSUF_BarScope_SyncUI) == "function" then _MSUF_BarScope_SyncUI() end
          end,
         BAR_DROPDOWN_WIDTH
     )
@@ -4168,6 +4224,7 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
                     _G.MSUF_ForceTextLayoutForUnitKey("boss")
                 end
             end
+            if type(_MSUF_BarScope_SyncUI) == "function" then _MSUF_BarScope_SyncUI() end
          end,
         BAR_DROPDOWN_WIDTH
     )
@@ -4231,6 +4288,7 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
                 _MSUF_HPText_EnableOverride(unitKey)
             end
             u.hpTextSeparator = v
+            if type(_MSUF_BarScope_SyncUI) == "function" then _MSUF_BarScope_SyncUI() end
         end,
         "all"
     )
@@ -4281,6 +4339,7 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
                 _MSUF_HPText_EnableOverride(unitKey)
             end
             u.powerTextSeparator = v
+            if type(_MSUF_BarScope_SyncUI) == "function" then _MSUF_BarScope_SyncUI() end
         end,
         "all"
     )
@@ -4296,13 +4355,32 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         if hpPowerOverrideCheck then
             if unitKey then
                 local u = _MSUF_HPText_GetUnitDB(unitKey)
+                hpPowerOverrideCheck:Show()
                 hpPowerOverrideCheck:Enable()
                 hpPowerOverrideCheck:SetAlpha(1)
                 hpPowerOverrideCheck:SetChecked(u and u.hpPowerTextOverride == true)
             else
-                hpPowerOverrideCheck:Disable()
-                hpPowerOverrideCheck:SetAlpha(0.5)
-                hpPowerOverrideCheck:SetChecked(false)
+                hpPowerOverrideCheck:Hide()
+            end
+        end
+        -- Show reset button only in Shared scope (when any override exists)
+        local resetBtn = _G["MSUF_HPTextResetOverridesBtn"]
+        if resetBtn then
+            if unitKey then
+                resetBtn:Hide()
+            else
+                -- Show only if at least one unit has an active override
+                local anyOverride = false
+                local unitKeys = { "player", "target", "focus", "targettarget", "pet", "boss" }
+                for _, uKey in ipairs(unitKeys) do
+                    local u = MSUF_DB[uKey]
+                    if u and u.hpPowerTextOverride == true then anyOverride = true; break end
+                end
+                if anyOverride then
+                    resetBtn:Show()
+                else
+                    resetBtn:Hide()
+                end
             end
         end
         if hpModeDrop and hpModeOptions and hpModeDrop._msufGetCurrentKey then
@@ -4340,6 +4418,110 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         if type(_G.MSUF_Options_RefreshHPSpacerControls) == "function" then
             _G.MSUF_Options_RefreshHPSpacerControls()
         end
+        -- Sync absorb dropdowns with current scope
+        if absorbDisplayDrop and absorbDisplayOptions then
+            MSUF_SyncSimpleDropdown(absorbDisplayDrop, absorbDisplayOptions, MSUF_GetAbsorbDisplayMode)
+        end
+        if absorbAnchorDrop and absorbAnchorOptions then
+            MSUF_SyncSimpleDropdown(absorbAnchorDrop, absorbAnchorOptions, MSUF_GetAbsorbAnchorMode)
+        end
+        if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
+
+        -- ── Gray out global-only controls when a per-unit scope is active ──
+        -- Per-unit controls (absorb display, absorb anchor, text modes, spacers) stay active.
+        -- Everything else (textures, gradients, outline, highlight, power bar) is global-only.
+        local isUnit = (unitKey ~= nil)
+        local ena = not isUnit  -- true = enabled (Shared), false = disabled (unit scope)
+        local dimAlpha = isUnit and 0.35 or 1
+        -- Helper: dim/enable a dropdown by global name
+        local function DimDrop(name, labelFS)
+            MSUF_SetDropDownEnabled(_G[name], labelFS, ena)
+        end
+        -- Helper: dim/enable a checkbox by global name
+        local function DimCheck(name)
+            MSUF_SetCheckboxEnabled(_G[name], ena)
+        end
+        -- Helper: dim/enable a slider or generic frame
+        local function DimSlider(name)
+            MSUF_SetLabeledSliderEnabled(_G[name], ena)
+        end
+        local function DimFrame(name)
+            local f = _G[name]
+            if not f then return end
+            if f.SetAlpha then f:SetAlpha(dimAlpha) end
+            if ena then
+                if f.Enable then pcall(f.Enable, f) end
+            else
+                if f.Disable then pcall(f.Disable, f) end
+            end
+            if f.EnableMouse then pcall(f.EnableMouse, f, ena) end
+        end
+        -- Helper: dim a section header / label fontstring
+        local function DimLabel(fs)
+            if not fs then return end
+            if fs.SetTextColor then
+                if ena then fs:SetTextColor(1, 1, 1) else fs:SetTextColor(0.35, 0.35, 0.35) end
+            elseif fs.SetAlpha then
+                fs:SetAlpha(dimAlpha)
+            end
+        end
+
+        -- ── Left panel: global-only sections ──
+        -- Absorb textures (global)
+        DimDrop("MSUF_AbsorbBarTextureDropdown", nil)
+        DimDrop("MSUF_HealAbsorbBarTextureDropdown", nil)
+        DimCheck("MSUF_AbsorbTextureTestModeCheck")
+        DimCheck("MSUF_SelfHealPredictionCheck")
+        DimLabel(absorbTextureLabel)
+        -- Bar textures (global)
+        DimDrop("MSUF_BarTextureDropdown", nil)
+        DimDrop("MSUF_BarBackgroundTextureDropdown", nil)
+        DimFrame("MSUF_BarTexturePreview")
+        DimLabel(barTextureLabel)
+        DimLabel(barBgTextureLabel)
+        DimLabel(_G.MSUF_BarsMenuTexturesHeader)
+        -- Gradient section (global)
+        DimCheck("MSUF_GradientEnableCheck")
+        DimCheck("MSUF_PowerGradientEnableCheck")
+        DimSlider("MSUF_GradientStrengthSlider")
+        DimFrame("MSUF_GradientDirectionPad")
+        DimLabel(_G.MSUF_BarsMenuGradientHeader)
+        -- Outline thickness (global)
+        DimSlider("MSUF_BarOutlineThicknessSlider")
+        -- Highlight border section (global)
+        DimSlider("MSUF_HighlightBorderThicknessSlider")
+        DimDrop("MSUF_AggroOutlineDropdown", nil)
+        DimCheck("MSUF_AggroOutlineTestCheck")
+        DimDrop("MSUF_DispelOutlineDropdown", nil)
+        DimCheck("MSUF_DispelOutlineTestCheck")
+        DimDrop("MSUF_PurgeOutlineDropdown", nil)
+        DimCheck("MSUF_PurgeOutlineTestCheck")
+        DimCheck("MSUF_HighlightPrioCheck")
+        DimFrame("MSUF_HighlightPrioContainer")
+        DimLabel(_G.MSUF_BarsMenuHighlightHeader)
+        -- Left panel section divider lines + headers stored on panel
+        local lp = _G["MSUF_BarsMenuPanelLeft"]
+        if lp then
+            if lp.MSUF_SectionLine_Textures then lp.MSUF_SectionLine_Textures:SetAlpha(dimAlpha) end
+            if lp.MSUF_SectionLine_Gradient then lp.MSUF_SectionLine_Gradient:SetAlpha(dimAlpha) end
+            if lp.MSUF_SectionLine_Highlight then lp.MSUF_SectionLine_Highlight:SetAlpha(dimAlpha) end
+            if lp.MSUF_SectionHeader_Outline then DimLabel(lp.MSUF_SectionHeader_Outline) end
+            if lp.MSUF_SectionLine_Outline then lp.MSUF_SectionLine_Outline:SetAlpha(dimAlpha) end
+        end
+
+        -- ── Right panel: global-only sections ──
+        -- Power bar settings (global)
+        DimCheck("MSUF_TargetPowerBarCheck")
+        DimCheck("MSUF_BossPowerBarCheck")
+        DimCheck("MSUF_PlayerPowerBarCheck")
+        DimCheck("MSUF_FocusPowerBarCheck")
+        DimFrame("MSUF_PowerBarHeightEdit")
+        DimCheck("MSUF_PowerBarEmbedCheck")
+        DimCheck("MSUF_PowerBarBorderCheck")
+        DimFrame("MSUF_PowerBarBorderSizeEdit")
+        DimLabel(powerBarHeightLabel)
+        DimLabel(powerBarBorderSizeLabel)
+        DimLabel(_G.MSUF_BarsMenuRightHeader)
     end
 
     MSUF_InitSimpleDropdown(
@@ -4380,8 +4562,70 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
             _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
         end
+        -- Re-apply absorb settings for affected frames
+        if _G.MSUF_UnitFrames then
+            for _, frame in pairs(_G.MSUF_UnitFrames) do
+                if frame and frame.unit then
+                    if type(_G.MSUF_ApplyAbsorbAnchorMode) == "function" then
+                        _G.MSUF_ApplyAbsorbAnchorMode(frame)
+                    end
+                    if UpdateSimpleUnitFrame then UpdateSimpleUnitFrame(frame) end
+                end
+            end
+        end
         _MSUF_SyncHpPowerTextScopeUI()
     end)
+
+    -- "Reset all overrides" button — only visible when Shared scope is selected.
+    local hpPowerResetBtn = CreateFrame("Button", "MSUF_HPTextResetOverridesBtn", barGroup, "UIPanelButtonTemplate")
+    hpPowerResetBtn:SetSize(140, 22)
+    hpPowerResetBtn:SetPoint("TOPLEFT", hpPowerOverrideCheck, "TOPLEFT", 0, 2)
+    hpPowerResetBtn:SetText(TR("Reset all overrides"))
+    hpPowerResetBtn:SetNormalFontObject("GameFontNormalSmall")
+    hpPowerResetBtn:SetHighlightFontObject("GameFontHighlightSmall")
+    hpPowerResetBtn:Hide()
+    hpPowerResetBtn:SetScript("OnClick", function()
+        EnsureDB()
+        local unitKeys = { "player", "target", "focus", "targettarget", "pet", "boss" }
+        local anyReset = false
+        for _, uKey in ipairs(unitKeys) do
+            local u = MSUF_DB[uKey]
+            if u and u.hpPowerTextOverride then
+                u.hpPowerTextOverride = false
+                anyReset = true
+            end
+        end
+        if anyReset then
+            ApplyAllSettings()
+            -- Re-apply absorb + text layout for all frames
+            if _G.MSUF_UnitFrames then
+                for _, frame in pairs(_G.MSUF_UnitFrames) do
+                    if frame and frame.unit then
+                        if type(_G.MSUF_ApplyAbsorbAnchorMode) == "function" then
+                            _G.MSUF_ApplyAbsorbAnchorMode(frame)
+                        end
+                        if UpdateSimpleUnitFrame then UpdateSimpleUnitFrame(frame) end
+                    end
+                end
+            end
+            for _, uKey in ipairs(unitKeys) do
+                if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+                    _G.MSUF_ForceTextLayoutForUnitKey(uKey)
+                end
+            end
+        end
+        _MSUF_SyncHpPowerTextScopeUI()
+    end)
+    hpPowerResetBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Reset all overrides")
+        GameTooltip:AddLine("Clears per-unit overrides for all units (Player, Target, Focus, etc.) so they all use the shared settings again.", 0.9, 0.9, 0.9, true)
+        GameTooltip:Show()
+    end)
+    hpPowerResetBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Wire up scope sync so absorb apply callbacks can trigger a full refresh.
+    _MSUF_BarScope_SyncUI = _MSUF_SyncHpPowerTextScopeUI
 
     -- Initial sync.
     _MSUF_SyncHpPowerTextScopeUI()
@@ -4409,8 +4653,8 @@ hpSpacerInfoButton:SetScript("OnEnter", function(self)
    if not GameTooltip then  return end
    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
    GameTooltip:AddLine("Text Spacers", 1, 1, 1)
-   GameTooltip:AddLine("Use the HP/Power text scope dropdown above to choose which unit these spacer settings apply to.", 0.9, 0.9, 0.9, true)
-	   GameTooltip:AddLine("When scope is set to 'Shared', these spacer settings apply globally. Select a unit and enable 'Override shared settings' to customize per unitframe.", 0.9, 0.9, 0.9, true)
+   GameTooltip:AddLine("Use the Bar settings scope dropdown (left panel, bottom) to choose which unit these settings apply to.", 0.9, 0.9, 0.9, true)
+	   GameTooltip:AddLine("When scope is set to 'Shared', settings apply globally. Select a unit and enable 'Override shared settings' to customize per unitframe.", 0.9, 0.9, 0.9, true)
    GameTooltip:AddLine("Works only when the corresponding text mode is set to 'Full value + %' (or '% + Full value').", 0.9, 0.9, 0.9, true)
    GameTooltip:Show()
 end)
@@ -4709,6 +4953,7 @@ local function _MSUF_BindSpacerToggle(spec)
     _MSUF_SyncSpacerControls()
     -- Let other code refresh this UI when selection/scope changes.
     _G.MSUF_Options_RefreshHPSpacerControls = _MSUF_SyncSpacerControls
+
 local barTextureDrop
         local barBgTextureDrop
         -- Shared helper used by both bar texture dropdowns (foreground + background)
@@ -5107,7 +5352,7 @@ purgeTestCheck:SetScript("OnClick", function(self)
     end
 end)
 
---  Highlight priority reorder 
+-- Ã¢â€â‚¬Ã¢â€â‚¬ Highlight priority reorder Ã¢â€â‚¬Ã¢â€â‚¬
 -- Draggable rows to set display priority of highlight borders (Aggro/Dispel/Purge).
 -- Default order: Dispel > Aggro > Purge.  Custom order stored in DB.
 local _PRIO_DEFAULTS = { "dispel", "aggro", "purge" }  -- must match render fallback order
@@ -5331,6 +5576,7 @@ do
         local rightHeader = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         rightHeader:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 16, -12)
         rightHeader:SetText(TR("Power Bar Settings"))
+        _G.MSUF_BarsMenuRightHeader = rightHeader
         -- Section labels in left panel
         local absorbHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         absorbHeader:SetPoint("TOPLEFT", leftHeader, "BOTTOMLEFT", 0, -18)
@@ -5774,13 +6020,34 @@ do
         prioCont:SetPoint("TOPLEFT", prioChk, "BOTTOMLEFT", -2, -4)
     end
 end
--- Right panel: text modes start under power bar height (scope dropdown above, then override, then modes)
-    local textTopAnchor = powerBarBorderSizeLabel or powerBarBorderCheck or powerBarEmbedCheck or powerBarHeightLabel
-    if hpPowerScopeLabel then
-        hpPowerScopeLabel:ClearAllPoints()
-        if textTopAnchor then
-            hpPowerScopeLabel:SetPoint("TOPLEFT", textTopAnchor, "BOTTOMLEFT", 0, -28)
+-- Left panel bottom: scope dropdown + override checkbox (below highlight priority container)
+do
+    local prioCont2 = _G["MSUF_HighlightPrioContainer"]
+    local leftPanel2 = _G["MSUF_BarsMenuPanelLeft"]
+    -- Section divider
+    if leftPanel2 then
+        if not leftPanel2.MSUF_SectionLine_BarScope then
+            local ln = leftPanel2:CreateTexture(nil, "ARTWORK")
+            leftPanel2.MSUF_SectionLine_BarScope = ln
+            ln:SetColorTexture(1, 1, 1, 0.20)
+            ln:SetHeight(1)
         end
+        local scopeLine = leftPanel2.MSUF_SectionLine_BarScope
+        scopeLine:ClearAllPoints()
+        if prioCont2 then
+            scopeLine:SetPoint("TOPLEFT", prioCont2, "BOTTOMLEFT", -14, -18)
+            scopeLine:SetWidth(296)
+            scopeLine:Show()
+        else
+            scopeLine:Hide()
+        end
+        if hpPowerScopeLabel and scopeLine:IsShown() then
+            hpPowerScopeLabel:ClearAllPoints()
+            hpPowerScopeLabel:SetPoint("TOPLEFT", scopeLine, "BOTTOMLEFT", 16, -8)
+        end
+    elseif hpPowerScopeLabel and prioCont2 then
+        hpPowerScopeLabel:ClearAllPoints()
+        hpPowerScopeLabel:SetPoint("TOPLEFT", prioCont2, "BOTTOMLEFT", 0, -24)
     end
     if hpPowerScopeDrop and hpPowerScopeLabel then
         hpPowerScopeDrop:ClearAllPoints()
@@ -5791,14 +6058,13 @@ end
         hpPowerOverrideCheck:ClearAllPoints()
         hpPowerOverrideCheck:SetPoint("TOPLEFT", hpPowerScopeDrop, "BOTTOMLEFT", 16, -10)
     end
+end
+-- Right panel: text modes anchor directly under power bar border (scope dropdown moved to left)
+    local textTopAnchor = powerBarBorderSizeLabel or powerBarBorderCheck or powerBarEmbedCheck or powerBarHeightLabel
     if hpModeLabel then
         hpModeLabel:ClearAllPoints()
-        if hpPowerOverrideCheck then
-            hpModeLabel:SetPoint("TOPLEFT", hpPowerOverrideCheck, "BOTTOMLEFT", 0, -44)
-        elseif hpPowerScopeDrop then
-            hpModeLabel:SetPoint("TOPLEFT", hpPowerScopeDrop, "BOTTOMLEFT", 16, -44)
-        elseif textTopAnchor then
-            hpModeLabel:SetPoint("TOPLEFT", textTopAnchor, "BOTTOMLEFT", 0, -44)
+        if textTopAnchor then
+            hpModeLabel:SetPoint("TOPLEFT", textTopAnchor, "BOTTOMLEFT", 0, -28)
         end
     end
     local textModesLine

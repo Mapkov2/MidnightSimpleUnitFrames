@@ -527,6 +527,11 @@ local function MSUF_EM_CopyUnitSettings(srcKey, dstKey, mode)
             _G.MSUF_ApplyAllSettings_Immediate()
         end
 
+        -- Force text layout update for destination (anchors may have changed)
+        if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+            _G.MSUF_ForceTextLayoutForUnitKey(dstKey)
+        end
+
         if st then st.popupOpen = wasOpen end
     end
 
@@ -541,6 +546,7 @@ local function MSUF_EM_CopyUnitSettings(srcKey, dstKey, mode)
     dst.hpOffsetX, dst.hpOffsetY = src.hpOffsetX, src.hpOffsetY
     dst.powerOffsetX, dst.powerOffsetY = src.powerOffsetX, src.powerOffsetY
     dst.nameFontSize, dst.hpFontSize, dst.powerFontSize = src.nameFontSize, src.hpFontSize, src.powerFontSize
+    dst.nameTextAnchor, dst.hpTextAnchor, dst.powerTextAnchor = src.nameTextAnchor, src.hpTextAnchor, src.powerTextAnchor
 
     ForceApplyDestination(true)
 end
@@ -1579,7 +1585,7 @@ end
 local function MSUF_EditMode_QueueNoticeOnce()
     if MSUF__EditModeCombatNoticeShown then return end
     MSUF__EditModeCombatNoticeShown = true
-    print("|cffffd700MSUF:|r €žnderungen werden im Kampf gepuffert und nach Kampfende angewendet.")
+    print("|cffffd700MSUF:|r â‚¬Å¾nderungen werden im Kampf gepuffert und nach Kampfende angewendet.")
 end
 
 local function MSUF_EM_CombatGuardFlush()
@@ -2552,7 +2558,7 @@ MSUF_EM_ForceWhiteButtonText(resetBtn)
 
         if not MSUF_CurrentEditUnitKey then
             if MSUF_GridFrame and MSUF_GridFrame.infoText then
-                MSUF_GridFrame.infoText:SetText("Reset: Kein Frame ausgew¤hlt  klicke zuerst ein Frame.")
+                MSUF_GridFrame.infoText:SetText("Reset: Kein Frame ausgewÂ¤hlt  klicke zuerst ein Frame.")
             end
             return
         end
@@ -2948,6 +2954,9 @@ local MSUF_EM_UNIT_POPUP_PREV_KEYS = {
     "nameOffsetX","nameOffsetY","hpOffsetX","hpOffsetY","powerOffsetX","powerOffsetY",
     "showName","showHP","showPower",
     "nameFontSize","hpFontSize","powerFontSize",
+    "hpTextAnchor","powerTextAnchor","nameTextAnchor",
+    "powerBarDetached","detachedPowerBarWidth","detachedPowerBarHeight",
+    "detachedPowerBarOffsetX","detachedPowerBarOffsetY",
 }
 
 local function MSUF_EM_CopyKeys(dst, src, keys)
@@ -3728,7 +3737,7 @@ local function ApplyUnitPopupValues()
         MSUF__UnitPopupApplying = true
         local ok, err = MSUF_FastCall(function()
             if InCombatLockdown and InCombatLockdown() then
-                print("|cffffd700MSUF:|r Position/Gr¶ÃƒÅ¸e kann im Kampf nicht ge¤ndert werden.")
+                print("|cffffd700MSUF:|r Position/GrÂ¶ÃƒÆ’Ã…Â¸e kann im Kampf nicht geÂ¤ndert werden.")
                 return
             end
 
@@ -3788,6 +3797,33 @@ local function ApplyUnitPopupValues()
             conf.showHP   = showHPVal
             conf.showPower = showPowerVal
 
+            -- Text anchors (per-unit)
+            if pf._msufNameAnchorVal then
+                conf.nameTextAnchor = pf._msufNameAnchorVal
+            end
+            if pf._msufHPAnchorVal then
+                conf.hpTextAnchor = pf._msufHPAnchorVal
+            end
+            if pf._msufPowerAnchorVal then
+                conf.powerTextAnchor = pf._msufPowerAnchorVal
+            end
+
+            -- Detached power bar (player/target/focus only)
+            if pf.detachPowerBarCB and (pf.unit == "player" or pf.unit == "target" or pf.unit == "focus") then
+                local wasDetached = (conf.powerBarDetached == true)
+                conf.powerBarDetached = (pf.detachPowerBarCB:GetChecked() and true or false)
+                if conf.powerBarDetached then
+                    local dpbW = pf.dpbWBox and tonumber(pf.dpbWBox:GetText())
+                    local dpbH = pf.dpbHBox and tonumber(pf.dpbHBox:GetText())
+                    local dpbX = pf.dpbXBox and tonumber(pf.dpbXBox:GetText())
+                    local dpbY = pf.dpbYBox and tonumber(pf.dpbYBox:GetText())
+                    if dpbW then dpbW = math.floor(dpbW + 0.5); if dpbW < 20 then dpbW = 20 elseif dpbW > 800 then dpbW = 800 end; conf.detachedPowerBarWidth = dpbW end
+                    if dpbH then dpbH = math.floor(dpbH + 0.5); if dpbH < 2 then dpbH = 2 elseif dpbH > 80 then dpbH = 80 end; conf.detachedPowerBarHeight = dpbH end
+                    if dpbX then dpbX = math.floor(dpbX + 0.5); conf.detachedPowerBarOffsetX = dpbX end
+                    if dpbY then dpbY = math.floor(dpbY + 0.5); conf.detachedPowerBarOffsetY = dpbY end
+                end
+            end
+
             if pf.UpdateEnabledStates then pf.UpdateEnabledStates() end
             -- Text size overrides (Name / HP / Power)
             local g = (MSUF_DB and MSUF_DB.general) or {}
@@ -3816,6 +3852,16 @@ local function ApplyUnitPopupValues()
             elseif ApplyAllSettings then
                 ApplyAllSettings()
             end
+            -- Force text re-layout when anchors may have changed
+            if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+                _G.MSUF_ForceTextLayoutForUnitKey(key)
+            end
+
+            -- Re-apply power bar layout (handles detach/embed changes)
+            if type(_G.MSUF_ApplyPowerBarEmbedLayout) == "function" and pf.parent then
+                _G.MSUF_ApplyPowerBarEmbedLayout(pf.parent)
+            end
+            if pf.UpdateDetachSection then pf.UpdateDetachSection() end
 
             if MSUF_CurrentOptionsKey == key then
                 local xSlider = _G["MSUF_OffsetXSlider"]
@@ -3850,7 +3896,7 @@ local function ApplyUnitPopupValues()
     end
 
     if InCombatLockdown and InCombatLockdown() then
-        print("|cffffd700MSUF:|r Position/Gr¶ÃƒÅ¸e kann im Kampf nicht ge¤ndert werden.")
+        print("|cffffd700MSUF:|r Position/GrÂ¶ÃƒÆ’Ã…Â¸e kann im Kampf nicht geÂ¤ndert werden.")
         return
     end
     if not unit or not parent then
@@ -3879,7 +3925,7 @@ local function ApplyUnitPopupValues()
         if Edit and Edit.Popups and Edit.Popups.Register then Edit.Popups.Register(pf) end
 
         MSUF_InitEditPopupFrame(pf, {
-            w = 320,
+            w = 360,
             h = 480,
             useDefaultBackdrop = true,
         })
@@ -3893,7 +3939,7 @@ local frameRows = {
     { key = "h", label = "Height:",   box = "$parentHBox", dy = -8 },
 }
 MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitPopupValues, "UnitPopup:LiveApply")
-        local textDivider = MSUF_EM_AddDivider(pf, "textDivider", 290, "TOPLEFT", pf.hLabel, "BOTTOMLEFT", 0, -8)
+        local textDivider = MSUF_EM_AddDivider(pf, "textDivider", 330, "TOPLEFT", pf.hLabel, "BOTTOMLEFT", 0, -8)
         local textHeader  = MSUF_EM_AddSectionHeader(pf, "textHeader", "Text", "TOPLEFT", textDivider, "BOTTOMLEFT", 0, -8)
 
         -- Text offsets + per-unit font overrides (Phase 9 shrink)
@@ -3946,6 +3992,150 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
 
         MSUF_EM_UI_BuildUnitPopup_Text_Extras(pf, ApplyUnitPopupValues)
 
+        -- ── Text Anchor dropdowns (Name + HP + Power, per-unit) ──
+        do
+            local lastTextRow = pf.powerSizeLabel or pf.powerYLabel or pf.hpSizeLabel
+            local anchorLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            anchorLabel:SetPoint("TOPLEFT", lastTextRow, "BOTTOMLEFT", 0, -12)
+            anchorLabel:SetText("Text Anchor")
+            if MSUF_PopupStyleLabel then MSUF_PopupStyleLabel(anchorLabel) end
+            pf.textAnchorLabel = anchorLabel
+
+            local ANCHOR_OPTIONS = {
+                { key = "RIGHT",  label = "Right" },
+                { key = "LEFT",   label = "Left" },
+                { key = "CENTER", label = "Center" },
+            }
+            local function _AnchorLabel(k)
+                for _, o in ipairs(ANCHOR_OPTIONS) do if o.key == k then return o.label end end
+                return "Left"
+            end
+            local function _PrefixedLabel(prefix, k)
+                return prefix .. ": " .. _AnchorLabel(k)
+            end
+
+            -- Generic dropdown builder (no separate label; prefix baked into dropdown text)
+            local function _BuildAnchorDrop(prefix, parentAnchor, parentPoint, relPoint, ox, oy, dropName, pfDropKey, stateKey, defaultVal)
+                local drop = CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate")
+                drop:SetPoint(parentPoint, parentAnchor, relPoint, ox, oy)
+                if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(drop, 88) end
+                if ns and ns.MSUF_ExpandDropdownClickArea then ns.MSUF_ExpandDropdownClickArea(drop) end
+                pf[pfDropKey] = drop
+
+                UIDropDownMenu_Initialize(drop, function(self, level)
+                    local info = UIDropDownMenu_CreateInfo()
+                    local p = MSUF_PositionPopup or pf
+                    local cur = p[stateKey] or defaultVal
+                    for _, opt in ipairs(ANCHOR_OPTIONS) do
+                        info.text = opt.label
+                        info.value = opt.key
+                        info.checked = (opt.key == cur)
+                        info.func = function(btn)
+                            p[stateKey] = btn.value
+                            UIDropDownMenu_SetSelectedValue(drop, btn.value)
+                            UIDropDownMenu_SetText(drop, _PrefixedLabel(prefix, btn.value))
+                            ApplyUnitPopupValues()
+                        end
+                        UIDropDownMenu_AddButton(info, level)
+                    end
+                end)
+                return drop
+            end
+
+            -- Three dropdowns in a row below the header
+            local nameAncDrop = _BuildAnchorDrop(
+                "Name", anchorLabel, "TOPLEFT", "BOTTOMLEFT", -16, -2,
+                "$parentNameAnchorDrop", "nameAnchorDrop",
+                "_msufNameAnchorVal", "LEFT")
+
+            local hpAncDrop = _BuildAnchorDrop(
+                "HP", nameAncDrop, "LEFT", "RIGHT", -28, 0,
+                "$parentHPAnchorDrop", "hpAnchorDrop",
+                "_msufHPAnchorVal", "RIGHT")
+
+            local pwrAncDrop = _BuildAnchorDrop(
+                "Power", hpAncDrop, "LEFT", "RIGHT", -28, 0,
+                "$parentPowerAnchorDrop", "powerAnchorDrop",
+                "_msufPowerAnchorVal", "RIGHT")
+        end
+
+        -- ── Power Bar detach section (player/target/focus only) ──
+        do
+            local lastTextRow = pf.textAnchorLabel or pf.powerSizeLabel or pf.powerYLabel or pf.hpSizeLabel
+            local pbDivider = MSUF_EM_AddDivider(pf, "pbDivider", 330, "TOPLEFT", lastTextRow, "BOTTOMLEFT", 0, -36)
+            local pbHeader = MSUF_EM_AddSectionHeader(pf, "pbHeader", "Power Bar", "TOPLEFT", pbDivider, "BOTTOMLEFT", 0, -6)
+
+            local detachCB = CreateFrame("CheckButton", "$parentDetachPowerBar", pf, "UICheckButtonTemplate")
+            detachCB:SetSize(20, 20)
+            detachCB:SetPoint("TOPLEFT", pbHeader, "BOTTOMLEFT", 0, -4)
+            local detachText = detachCB.Text or (detachCB.GetName and _G[detachCB:GetName() .. "Text"])
+            if detachText then detachText:SetText("Detach from frame") end
+            pf.detachPowerBarCB = detachCB
+
+            detachCB:SetScript("OnEnter", function()
+                MSUF_EM_PopupShowTooltip(pf,
+                    "Detach Power Bar",
+                    "Separates the power bar from the unit frame so you can position and size it freely.")
+            end)
+            detachCB:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
+            -- Detached power bar numeric rows (W, H, X, Y)
+            local detachRows = {
+                { key = "dpbW", label = "Width:",    box = "$parentDPBWBox", dy = -6 },
+                { key = "dpbH", label = "Height:",   box = "$parentDPBHBox", dy = -8 },
+                { key = "dpbX", label = "Offset X:", box = "$parentDPBXBox", dy = -8 },
+                { key = "dpbY", label = "Offset Y:", box = "$parentDPBYBox", dy = -8 },
+            }
+            MSUF_EM_BuildNumericRows(pf, detachRows, detachCB, "BOTTOMLEFT", 0, ApplyUnitPopupValues)
+
+            -- Show/hide + enable detach controls based on unit
+            pf.UpdateDetachSection = function()
+                local p = MSUF_PositionPopup or pf
+                if not p then return end
+                local unit = p.unit
+                local canDetach = (unit == "player" or unit == "target" or unit == "focus")
+
+                -- Hide entire section for non-detachable units
+                local elements = { p.pbDivider, p.pbHeader, p.detachPowerBarCB,
+                    p.dpbWLabel, p.dpbWBox, p.dpbWMinus, p.dpbWPlus,
+                    p.dpbHLabel, p.dpbHBox, p.dpbHMinus, p.dpbHPlus,
+                    p.dpbXLabel, p.dpbXBox, p.dpbXMinus, p.dpbXPlus,
+                    p.dpbYLabel, p.dpbYBox, p.dpbYMinus, p.dpbYPlus }
+                for _, el in ipairs(elements) do
+                    if el and el.SetShown then el:SetShown(canDetach) end
+                end
+
+                -- Resize popup
+                local h = 520
+                if canDetach then
+                    local isDetached = (p.detachPowerBarCB and p.detachPowerBarCB:GetChecked()) and true or false
+
+                    -- Show/hide detach rows only when detached
+                    local showRows = isDetached
+                    local rowEls = {
+                        { p.dpbWLabel, p.dpbWBox, p.dpbWMinus, p.dpbWPlus },
+                        { p.dpbHLabel, p.dpbHBox, p.dpbHMinus, p.dpbHPlus },
+                        { p.dpbXLabel, p.dpbXBox, p.dpbXMinus, p.dpbXPlus },
+                        { p.dpbYLabel, p.dpbYBox, p.dpbYMinus, p.dpbYPlus },
+                    }
+                    for _, row in ipairs(rowEls) do
+                        for _, el in ipairs(row) do
+                            if el and el.SetShown then el:SetShown(showRows) end
+                        end
+                    end
+
+                    h = h + 30  -- divider + header + checkbox
+                    if showRows then h = h + 110 end  -- W/H/X/Y rows
+                end
+                if p.SetSize then p:SetSize(360, h) end
+            end
+
+            detachCB:SetScript("OnClick", function(self)
+                if pf.UpdateDetachSection then pf.UpdateDetachSection() end
+                ApplyUnitPopupValues()
+            end)
+        end
+
         local UISpec = Edit and Edit.Popups and Edit.Popups.UISpec
         local US = UISpec and UISpec.Unit
 
@@ -3995,6 +4185,14 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
                     ApplyAllSettings()
                 end
                 if _G.MSUF_UpdateAllFonts then _G.MSUF_UpdateAllFonts() end
+                -- Force text layout restore on cancel (anchors may have changed)
+                if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+                    _G.MSUF_ForceTextLayoutForUnitKey(key)
+                end
+                -- Re-apply power bar layout on cancel (restore detach state)
+                if type(_G.MSUF_ApplyPowerBarEmbedLayout) == "function" and pf.parent then
+                    _G.MSUF_ApplyPowerBarEmbedLayout(pf.parent)
+                end
             end
             MSUF_PositionPopup:Hide()
         end)
@@ -4005,16 +4203,22 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
             pf.xBox, pf.yBox, pf.wBox, pf.hBox, pf.spacingBox,
             pf.nameXBox, pf.nameYBox, pf.nameSizeBox,
             pf.hpXBox, pf.hpYBox, pf.hpSizeBox,
-            pf.powerXBox, pf.powerYBox, pf.powerSizeBox
+            pf.powerXBox, pf.powerYBox, pf.powerSizeBox,
+            pf.dpbWBox, pf.dpbHBox, pf.dpbXBox, pf.dpbYBox
         )
     end
 
-    -- Ensure popup is large enough for all controls (e.g. power icon size override).
-    -- Also applies when the popup already exists (created earlier in the session).
+    -- Dynamic popup height: taller when power bar section is visible
     do
         local pf = MSUF_PositionPopup
         if pf and pf.SetSize then
-            pf:SetSize(320, 470)
+            local unit = pf.unit
+            local canDetach = (unit == "player" or unit == "target" or unit == "focus")
+            local isDetached = canDetach and pf.detachPowerBarCB and pf.detachPowerBarCB:GetChecked()
+            local h = 520
+            if canDetach then h = h + 30 end          -- divider + header + checkbox
+            if isDetached then h = h + 110 end         -- W/H/X/Y rows
+            pf:SetSize(360, h)
         end
     end
 
@@ -4069,6 +4273,29 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
         end
     end
 
+    -- Sync text anchor dropdowns
+    do
+        local nameAnc = conf.nameTextAnchor or "LEFT"
+        local hpAnc  = conf.hpTextAnchor or "RIGHT"
+        local pwrAnc = conf.powerTextAnchor or "RIGHT"
+        pf._msufNameAnchorVal  = nameAnc
+        pf._msufHPAnchorVal    = hpAnc
+        pf._msufPowerAnchorVal = pwrAnc
+        local function _AncLbl(k) return k == "LEFT" and "Left" or k == "CENTER" and "Center" or "Right" end
+        if pf.nameAnchorDrop then
+            UIDropDownMenu_SetSelectedValue(pf.nameAnchorDrop, nameAnc)
+            UIDropDownMenu_SetText(pf.nameAnchorDrop, "Name: " .. _AncLbl(nameAnc))
+        end
+        if pf.hpAnchorDrop then
+            UIDropDownMenu_SetSelectedValue(pf.hpAnchorDrop, hpAnc)
+            UIDropDownMenu_SetText(pf.hpAnchorDrop, "HP: " .. _AncLbl(hpAnc))
+        end
+        if pf.powerAnchorDrop then
+            UIDropDownMenu_SetSelectedValue(pf.powerAnchorDrop, pwrAnc)
+            UIDropDownMenu_SetText(pf.powerAnchorDrop, "Power: " .. _AncLbl(pwrAnc))
+        end
+    end
+
     if pf.RefreshCopyTextDropdown then
         pf.RefreshCopyTextDropdown()
     end
@@ -4086,12 +4313,25 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
     if pf.powerShowCB and pf.powerShowCB.SetChecked then
         pf.powerShowCB:SetChecked(conf.showPower ~= false)
     end
+    -- Sync detached power bar controls
+    if pf.detachPowerBarCB then
+        local isDetachable = (unit == "player" or unit == "target" or unit == "focus")
+        if isDetachable then
+            pf.detachPowerBarCB:SetChecked(conf.powerBarDetached == true)
+            local parentW = (parent and parent:GetWidth()) or 250
+            if pf.dpbWBox then pf.dpbWBox:SetText(tostring(conf.detachedPowerBarWidth or math.floor(parentW + 0.5))) end
+            if pf.dpbHBox then pf.dpbHBox:SetText(tostring(conf.detachedPowerBarHeight or 6)) end
+            if pf.dpbXBox then pf.dpbXBox:SetText(tostring(conf.detachedPowerBarOffsetX or 0)) end
+            if pf.dpbYBox then pf.dpbYBox:SetText(tostring(conf.detachedPowerBarOffsetY or -4)) end
+        end
+    end
     -- Smart open: only position when the popup is opened for a new frame.
     -- If it is already open for this unit, do NOT snap it back (user may have moved it).
     if needReposition then
         MSUF_PositionPopupSmart(pf, parent, 200)
     end
     if pf.UpdateEnabledStates then pf.UpdateEnabledStates() end
+    if pf.UpdateDetachSection then pf.UpdateDetachSection() end
 pf.MSUF_prev = pf.MSUF_prev or {}
 pf.MSUF_prev.key = key
 MSUF_EM_CopyKeys(pf.MSUF_prev, conf, MSUF_EM_UNIT_POPUP_PREV_KEYS)
@@ -4183,7 +4423,7 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
         return
     end
     if InCombatLockdown and InCombatLockdown() then
-        print("|cffffd700MSUF:|r Position/Gr¶ÃƒÅ¸e der Castbar kann im Kampf nicht ge¤ndert werden.")
+        print("|cffffd700MSUF:|r Position/GrÂ¶ÃƒÆ’Ã…Â¸e der Castbar kann im Kampf nicht geÂ¤ndert werden.")
         return
     end
 
@@ -4720,7 +4960,7 @@ end
     do
         local pf = MSUF_CastbarPositionPopup
         if pf and pf.SetSize then
-            pf:SetSize(320, 470)
+            pf:SetSize(360, 470)
         end
     end
 
@@ -5984,7 +6224,7 @@ function _G.MSUF_OpenAuras2PositionPopup(unit, parent)
         return
     end
     if InCombatLockdown and InCombatLockdown() then
-        print('|cffffd700MSUF:|r Position/Gr¶ÃƒÅ¸e kann im Kampf nicht ge¤ndert werden.')
+        print('|cffffd700MSUF:|r Position/GrÂ¶ÃƒÆ’Ã…Â¸e kann im Kampf nicht geÂ¤ndert werden.')
         return
     end
 
