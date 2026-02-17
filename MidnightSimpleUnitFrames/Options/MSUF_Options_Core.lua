@@ -3527,6 +3527,7 @@ local absorbAnchorOptions = {
     { key = 1, label = "Anchor to left side" },
     { key = 2, label = "Anchor to right side" },
 	    { key = 3, label = "Follow HP bar" },
+	    { key = 4, label = "Follow HP bar (overflow)" },
 }
 local function MSUF_GetAbsorbAnchorMode()
     EnsureDB()
@@ -5106,7 +5107,7 @@ purgeTestCheck:SetScript("OnClick", function(self)
     end
 end)
 
--- â”€â”€ Highlight priority reorder â”€â”€
+--  Highlight priority reorder 
 -- Draggable rows to set display priority of highlight borders (Aggro/Dispel/Purge).
 -- Default order: Dispel > Aggro > Purge.  Custom order stored in DB.
 local _PRIO_DEFAULTS = { "dispel", "aggro", "purge" }  -- must match render fallback order
@@ -5684,7 +5685,7 @@ do
     local legacyHeader = _G.MSUF_BarsMenuHighlightHeader
     if legacyHeader then legacyHeader:Hide() end
 
-    -- Section header â€” compact font
+    -- Section header Ã¢â‚¬â€ compact font
     local highlightHeader = leftPanel and leftPanel.MSUF_SectionHeader_Highlight
     if leftPanel and not highlightHeader then
         highlightHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -6355,7 +6356,7 @@ end
     if MSUF_StyleAllToggles then MSUF_StyleAllToggles(panel) end
     panel.__MSUF_FullBuilt = true
     -- Ensure aggro/dispel/purge test modes persist while the user navigates
-    -- between menu tabs (Bars â†” Colors), but clear when the slash menu closes.
+    -- between menu tabs (Bars Ã¢â€ â€ Colors), but clear when the slash menu closes.
     if not panel.__MSUF_AggroTestHooked then
         panel.__MSUF_AggroTestHooked = true
         local function _ClearAllTestModes()

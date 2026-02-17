@@ -428,18 +428,21 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
     -- Absorb / Heal-Absorb anchoring modes
     -- 1/2: legacy (edge-anchored) with reverse-fill swap
     -- 3: follow current HP edge (Blizzard-style) by anchoring to the moving HP StatusBarTexture edge and clipping.
-    -- NOTE: Mode 3 is secret-safe (no HP arithmetic) and reanchors only when mode/reverse-fill/width changes.
+    -- 4: follow current HP edge (overflow) — same as 3 but absorb bar is NOT clipped,
+    --    so it extends beyond the HP bar boundary when absorb exceeds remaining bar space.
+    -- NOTE: Modes 3/4 are secret-safe (no HP arithmetic) and reanchor only when mode/reverse-fill/width changes.
     local function MSUF_ApplyAbsorbAnchorMode(self)
         if not self then  return end
 
         if not MSUF_DB then EnsureDB() end
         local g = MSUF_DB and MSUF_DB.general or {}
         local mode = g.absorbAnchorMode or 2
+        local isFollow = (mode == 3 or mode == 4)
 
         local hpBar = self.hpBar
 
         -- Restore legacy overlay layout (full overlay over hpBar).
-        if mode ~= 3 then
+        if not isFollow then
             if self._msufAbsorbAnchorModeStamp == mode and not self._msufAbsorbFollowActive then
                 return
             end
@@ -491,7 +494,9 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
             return
         end
 
-        -- Mode 3: follow current HP edge.
+        -- Mode 3/4: follow current HP edge.
+        -- Mode 3: clipped within HP bar bounds (Blizzard-style).
+        -- Mode 4: overflow — absorb extends beyond HP bar when shield is large enough.
         if not hpBar or not hpBar.GetStatusBarTexture then
             return
         end
@@ -514,16 +519,19 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
             w = hpBar:GetWidth()
         end
 
-        if self._msufAbsorbAnchorModeStamp == 3 and self._msufAbsorbFollowActive
+        if self._msufAbsorbAnchorModeStamp == mode and self._msufAbsorbFollowActive
             and self._msufAbsorbFollowRF == hpReverse and self._msufAbsorbFollowW == w then
             return
         end
 
-        self._msufAbsorbAnchorModeStamp = 3
+        self._msufAbsorbAnchorModeStamp = mode
         self._msufAbsorbFollowActive = true
         self._msufAbsorbFollowRF = hpReverse
         self._msufAbsorbFollowW = w
 
+        local isOverflow = (mode == 4)
+
+        -- Clip frame: used by mode 3 for both bars, mode 4 only for healAbsorb (inward).
         local clip = self._msufAbsorbFollowClip
         if not clip and _G.CreateFrame and hpBar then
             clip = _G.CreateFrame("Frame", nil, hpBar)
@@ -543,10 +551,12 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
             clip:Show()
         end
 
-        -- Absorb: outward (same direction as HP). Heal-Absorb: inward (opposite direction).
+        -- Absorb: outward (same direction as HP).
+        -- Mode 3: parented to clip (clipped). Mode 4: parented to self (overflow).
         if self.absorbBar then
-            if clip and self.absorbBar.GetParent and self.absorbBar:GetParent() ~= clip then
-                self.absorbBar:SetParent(clip)
+            local absorbParent = isOverflow and self or clip
+            if absorbParent and self.absorbBar.GetParent and self.absorbBar:GetParent() ~= absorbParent then
+                self.absorbBar:SetParent(absorbParent)
             end
             self.absorbBar:ClearAllPoints()
             if hpReverse then
@@ -573,6 +583,7 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
             end
         end
 
+        -- Heal-absorb: always inward (opposite direction), always clipped.
         if self.healAbsorbBar then
             if clip and self.healAbsorbBar.GetParent and self.healAbsorbBar:GetParent() ~= clip then
                 self.healAbsorbBar:SetParent(clip)
@@ -627,7 +638,7 @@ local function MSUF_ApplyReverseFillBars(self, conf)
 
     -- Keep absorb/heal-absorb follow-HP anchoring in sync with reverse-fill changes.
     local g = MSUF_DB and MSUF_DB.general
-    if g and g.absorbAnchorMode == 3 then
+    if g and (g.absorbAnchorMode == 3 or g.absorbAnchorMode == 4) then
         local apply = _G.MSUF_ApplyAbsorbAnchorMode
         if apply then
             apply(self)
