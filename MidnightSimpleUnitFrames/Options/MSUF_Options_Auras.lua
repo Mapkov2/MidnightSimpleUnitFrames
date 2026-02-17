@@ -99,25 +99,22 @@ local function IsEditModeActive()
 end
 local function MSUF_A2_IsMasqueAddonLoaded()
     local api = _A2_API()
-    local msq = api and api.Masque
-    if msq and type(msq.IsAddonLoaded) == "function" then
-        return msq.IsAddonLoaded() and true or false
+    if api and type(api.IsMasqueAddonLoaded) == "function" then
+        return api.IsMasqueAddonLoaded() and true or false
     end
      return false
 end
 local function MSUF_A2_IsMasqueReadyForToggle()
     local api = _A2_API()
-    local msq = api and api.Masque
-    if msq and type(msq.IsReadyForToggle) == "function" then
-        return msq.IsReadyForToggle() and true or false
+    if api and type(api.IsMasqueReadyForToggle) == "function" then
+        return api.IsMasqueReadyForToggle() and true or false
     end
      return false
 end
 local function MSUF_A2_EnsureMasqueGroup()
     local api = _A2_API()
-    local msq = api and api.Masque
-    if msq and type(msq.EnsureGroup) == "function" then
-        return msq.EnsureGroup() and true or false
+    if api and type(api.EnsureMasqueGroup) == "function" then
+        return api.EnsureMasqueGroup() and true or false
     end
      return false
 end
@@ -622,27 +619,16 @@ local function A2_BuildBuffDebuffAnchorPreset(buffDir, debuffDir, changedKind)
     if type(debuffDir) ~= "string" then debuffDir = "BOTTOM" end
     buffDir = string.upper(buffDir)
     debuffDir = string.upper(debuffDir)
-    -- Same direction => treat as stacked (legacy).
-    if buffDir == debuffDir then
-         return "STACKED", buffDir, debuffDir
-    end
-    -- Both horizontal isn't representable with the current preset set.
-    -- Snap the *other* side to TOP so we stay predictable and compatible.
+    -- NOTE (12.0+): Do NOT collapse "same direction" into STACKED.
+    -- STACKED is a legacy preset that re-parses to the TOP/BOTTOM default,
+    -- which causes D-Pad clicks to "bounce" and appear to change the *other* pad.
+    -- We intentionally allow *all* direction pairs, including BOTH horizontal.
     if IsH(buffDir) and IsH(debuffDir) then
-        if changedKind == "BUFF" then
-            debuffDir = "TOP"
-        else
-            buffDir = "TOP"
-        end
+        return (buffDir .. "_" .. debuffDir .. "_BUFFS"), buffDir, debuffDir
     end
-    -- Vertical pair: only TOP/BOTTOM is supported (as a special "TOP_BOTTOM_*" preset).
+    -- Vertical pair: represent directly (covers TOP_BOTTOM, BOTTOM_TOP, TOP_TOP, BOTTOM_BOTTOM).
     if IsV(buffDir) and IsV(debuffDir) then
-        if buffDir == "TOP" and debuffDir == "BOTTOM" then
-             return "TOP_BOTTOM_BUFFS", buffDir, debuffDir
-        elseif buffDir == "BOTTOM" and debuffDir == "TOP" then
-             return "TOP_BOTTOM_DEBUFFS", buffDir, debuffDir
-        end
-         return "STACKED", buffDir, debuffDir
+        return (buffDir .. "_" .. debuffDir .. "_BUFFS"), buffDir, debuffDir
     end
     -- Mapping table for the 8 split presets (vertical<->horizontal).
     local map = {
@@ -673,6 +659,13 @@ local function MSUF_A2_StyleDPadButton(btn, glyph)
     btn.__msufA2Styled = true
     local WHITE8 = _G.MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8"
     btn:SetSize(22, 22)
+
+    -- Plain buttons (no template) must explicitly register clicks, otherwise
+    -- OnClick can be inconsistent depending on UI state / overlays.
+    btn:EnableMouse(true)
+    if btn.RegisterForClicks then
+        btn:RegisterForClicks("AnyUp")
+    end
     local normal = btn:CreateTexture(nil, "BACKGROUND")
     normal:SetAllPoints()
     normal:SetTexture(WHITE8)
@@ -755,10 +748,13 @@ local function CreateA2_AnchorDPad(parent, titleText, kind, getPreset, setPreset
         local b = CreateFrame("Button", nil, pad)
         MSUF_A2_StyleDPadButton(b, glyph)
         b.__msufDirKey = dirKey
-        b:SetScript("OnClick", function()
+        if b.SetFrameLevel and pad.GetFrameLevel then
+            b:SetFrameLevel((pad:GetFrameLevel() or 0) + 2)
+        end
+        b:SetScript("OnClick", function(self)
             -- Disabled when Layout is SINGLE (Mixed)
             if type(pad.__msufIsEnabled) == "function" and not pad.__msufIsEnabled() then  return end
-            ClickDir(dirKey)
+            ClickDir(self and self.__msufDirKey or dirKey)
          end)
         pad.buttons[dirKey] = b
          return b
@@ -804,6 +800,8 @@ local function CreateA2_AnchorDPad(parent, titleText, kind, getPreset, setPreset
         local preset = (type(self.__msufGetPreset) == "function" and self.__msufGetPreset()) or "STACKED"
         local buffDir, debuffDir = A2_ParseBuffDebuffAnchorPreset(preset)
         local wantDir = (self.__msufKind == "BUFF") and buffDir or debuffDir
+	    local otherDir = (self.__msufKind == "BUFF") and debuffDir or buffDir
+	    local function IsH(d) return (d == "LEFT") or (d == "RIGHT") end
         for dir, btn in pairs(self.buttons) do
             local isOn = (dir == wantDir)
             if btn.__msufSel then btn.__msufSel:SetShown(isOn) end
@@ -826,7 +824,16 @@ local function CreateA2_AnchorDPad(parent, titleText, kind, getPreset, setPreset
         if type(self.__msufIsEnabled) == "function" then
             enabled = self.__msufIsEnabled() and true or false
         end
-        self:SetEnabledVisual(enabled)
+	    -- Base enabled/disabled visuals (Layout SINGLE disables all).
+	    self:SetEnabledVisual(enabled)
+	    -- Additionally, prevent the unsupported case where BOTH blocks are horizontal.
+	    -- If the other block is already LEFT/RIGHT, disable LEFT/RIGHT on this pad.
+	    if enabled and IsH(otherDir) then
+	        local l = self.buttons["LEFT"]
+	        local r = self.buttons["RIGHT"]
+	        if l then l:Disable(); l:SetAlpha(0.35) end
+	        if r then r:Disable(); r:SetAlpha(0.35) end
+	    end
      end
     pad:SyncFromDB()
      return pad
@@ -2277,14 +2284,10 @@ end
                 "Additive: this will NOT hide your normal debuffs.", "cbDispellable" },
             { "Only show boss auras", 380, -58, GetEditingFilters, "onlyBossAuras", nil,
                 "Hard filter: when enabled (and filters are enabled), only auras flagged as boss auras will be shown.", "cbOnlyBoss" },
-            { "Only show IMPORTANT buffs", 380, -86, A2_FilterBuffs, "onlyImportant", nil,
-                "Hard filter: when enabled (and filters are enabled), only buffs in Blizzard\'s curated IMPORTANT list will be shown (e.g. raid mechanics, key defensives, etc.).", "cbOnlyImpBuffs" },
-            { "Only show IMPORTANT debuffs", 380, -114, A2_FilterDebuffs, "onlyImportant", nil,
-                "Hard filter: when enabled (and filters are enabled), only debuffs in Blizzard\'s curated IMPORTANT list will be shown (e.g. raid mechanics, key defensives, etc.).", "cbOnlyImpDebuffs" },
         }, refs)
 -- Track scopes + auto-override wrappers (Auras 2 menu only)
 do
-    local filterKeys = { "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss", "cbOnlyImpBuffs", "cbOnlyImpDebuffs",
+    local filterKeys = { "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss",
         "cbMagic", "cbCurse", "cbDisease", "cbPoison", "cbEnrage" }
     for i = 1, #filterKeys do
         local cb = refs[filterKeys[i]]
@@ -2433,7 +2436,7 @@ end
                 if cb then advGate[#advGate + 1] = cb end
             end
          end
-        Track({ "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss", "cbOnlyImpBuffs", "cbOnlyImpDebuffs", "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
+        Track({ "cbBossBuffs", "cbBossDebuffs", "cbDispellable", "cbOnlyBoss", "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB", "cbPrivateHL" })
         -- Advanced gating should also affect the Private Auras master + sliders.
         if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end
         if privateMaxPlayer then advGate[#advGate + 1] = privateMaxPlayer end
