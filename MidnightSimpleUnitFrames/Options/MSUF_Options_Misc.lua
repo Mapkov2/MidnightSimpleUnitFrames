@@ -696,20 +696,13 @@ end
         return g.statusIndicators
     end
 
-    local function IsBetaClient()
-        local ok, v
-        if type(_G.IsBetaBuild) == "function" then ok, v = pcall(_G.IsBetaBuild); if ok and v then return true end end
-        if type(_G.IsTestBuild) == "function" then ok, v = pcall(_G.IsTestBuild); if ok and v then return true end end
-        if type(_G.IsAlphaBuild) == "function" then ok, v = pcall(_G.IsAlphaBuild); if ok and v then return true end end
-        return false
-    end
-
-    local function EnsureBetaStatusPopup()
+    -- Always show a warning when enabling AFK/DND indicators (these are constrained in instance-combat).
+    local function EnsureStatusAFKDNDPopupWarning()
         if not _G.StaticPopupDialogs then return end
-        if _G.StaticPopupDialogs["MSUF_BETA_STATUS_AFKDND_WARNING"] then return end
+        if _G.StaticPopupDialogs["MSUF_STATUS_AFKDND_WARNING"] then return end
 
-        _G.StaticPopupDialogs["MSUF_BETA_STATUS_AFKDND_WARNING"] = {
-            text = "BETA WARNING:\n\nAFK/DND status indicators are currently unreliable on the Beta client due to API changes.\nThey may not update correctly or may behave unexpectedly.\n\nEnable anyway?",
+        _G.StaticPopupDialogs["MSUF_STATUS_AFKDND_WARNING"] = {
+            text = "WARNING:\n\nAFK/DND status indicators do NOT update while you are inside an instance AND in combat.\nThis is a client/API limitation.\n\nOutside of instance combat they should work normally.\n\nEnable anyway?",
             button1 = "Enable",
             button2 = "Cancel",
             timeout = 0,
@@ -815,8 +808,8 @@ end
     local y0 = -10
 
     local statusSpecs = {
-        { key = "showAFK",   label = "Show AFK",   confirmBeta = true },
-        { key = "showDND",   label = "Show DND",   confirmBeta = true },
+        { key = "showAFK",   label = "Show AFK",   confirm = true },
+        { key = "showDND",   label = "Show DND",   confirm = true },
         { key = "showDead",  label = "Show Dead" },
         { key = "showGhost", label = "Show Ghost" },
     }
@@ -839,13 +832,13 @@ end
         cb:SetScript("OnClick", function(selfBtn)
             local want = selfBtn:GetChecked() and true or false
 
-            if want and s.confirmBeta and IsBetaClient() and _G.StaticPopup_Show then
-                EnsureBetaStatusPopup()
+            if want and s.confirm and _G.StaticPopup_Show then
+                EnsureStatusAFKDNDPopupWarning()
                 selfBtn:SetChecked(false)
                 local db = GetStatusDB()
                 db[s.key] = false
 
-                local popup = _G.StaticPopup_Show("MSUF_BETA_STATUS_AFKDND_WARNING", nil, nil, { key = s.key, cb = selfBtn, getDB = GetStatusDB })
+                local popup = _G.StaticPopup_Show("MSUF_STATUS_AFKDND_WARNING", nil, nil, { key = s.key, cb = selfBtn, getDB = GetStatusDB })
                 if popup then return end
                 want = true
                 selfBtn:SetChecked(true)
