@@ -315,10 +315,10 @@ function ns.Text.RenderPowerText(self)
     ns.Text.ClearField(self, "powerTextPct")
     ns.Text.Set(self.powerText, "", false)
  end
- -- Forward declarations for helper color lookups used by ToT inline.
- -- These helpers are defined later in this file; without forward-declare, early
- -- callers resolve the names as globals and can hit nil.
- local MSUF_GetNPCReactionColor, MSUF_GetClassBarColor
+ -- Resolve helper color lookups used by ToT inline.
+ -- These are global functions defined in MidnightSimpleUnitFrames.lua (loaded before this file).
+ local MSUF_GetNPCReactionColor = _G.MSUF_GetNPCReactionColor or function(kind) return 1, 1, 1 end
+ local MSUF_GetClassBarColor    = _G.MSUF_GetClassBarColor    or function(tok)  return 1, 1, 1 end
 
  function ns.Text.RenderToTInline(targetFrame, totConf)
     if not targetFrame or not targetFrame.nameText then  return end

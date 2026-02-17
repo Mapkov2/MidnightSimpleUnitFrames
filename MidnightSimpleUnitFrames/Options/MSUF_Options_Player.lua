@@ -320,7 +320,7 @@ local _MSUF_INDICATOR_SPECS = {
             { MSUF_LevelAnchorText("BOTTOMLEFT"), "BOTTOMLEFT" },
             { MSUF_LevelAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
         },
-        -- Level: eigene Gre (per-unit). Nil => folgt Name-Fontgre (Fallback in Apply/Runtime).
+        -- Level: eigene  (per-unit). Nil => folgt Name-Font (Fallback in Apply/Runtime).
         sizeEdit  = "playerLevelSizeEdit",
         sizeLabel = "playerLevelSizeLabel",
         sizeField = "levelIndicatorSize",
@@ -2761,7 +2761,7 @@ local function MSUF_ApplyIndicatorUI(spec)
         local v = conf and conf[spec.sizeField]
         if type(v) ~= "number" and g then v = g[spec.sizeField] end
         if type(v) ~= "number" and spec.id == "level" then
-            -- Wenn kein eigener Wert gesetzt ist: zeige effektive Name-Fontgre als Default.
+            -- Wenn kein eigener Wert gesetzt ist: zeige effektive Name-Font als Default.
             v = MSUF_ReadNumber(conf, g, "nameFontSize", 14)
         end
         v = tonumber(v) or spec.sizeDefault or 14
