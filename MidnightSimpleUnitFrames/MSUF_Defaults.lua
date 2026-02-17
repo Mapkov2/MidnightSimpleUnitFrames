@@ -1354,6 +1354,7 @@ local function fill(key, defaults)
         offsetX      = 507,
         offsetY      = 309,
         spacing      = -96,
+        invertBossOrder = false,
         showName     = true,
         showLevelIndicator = false,
         showHP       = true,

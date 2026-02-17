@@ -1820,6 +1820,7 @@ local function PositionUnitFrame(f, unit)
         local index = tonumber(unit:match("^boss(%d+)$")) or 1
         local x = conf.offsetX
         local spacing = conf.spacing or -36
+        if conf.invertBossOrder then spacing = -spacing end
         local y = conf.offsetY + (index - 1) * spacing
         MSUF_ApplyPoint(f, "CENTER", anchor, "CENTER", x, y)
     else
@@ -2034,7 +2035,7 @@ local function ApplyTextLayout(f, conf)
     local useOverride = (udb and udb.hpPowerTextOverride == true)
     local hpMode = (useOverride and udb.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
     local pMode  = (useOverride and udb.powerTextMode) or (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
-    -- Text anchors: per-unit → general → default RIGHT (no override gate; set per-unit via EditMode popup)
+    -- Text anchors: per-unit  general  default RIGHT (no override gate; set per-unit via EditMode popup)
     local hpAnchor    = (udb and udb.hpTextAnchor)    or (g and g.hpTextAnchor)    or "RIGHT"
     local powerAnchor = (udb and udb.powerTextAnchor) or (g and g.powerTextAnchor) or "RIGHT"
     local nameAnchor  = (udb and udb.nameTextAnchor)  or "LEFT"
@@ -3020,7 +3021,7 @@ local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     -- Coalesce within the same millisecond-bucket (approx "per-flush" when multiple updates burst)
     local now = GetTime()
     local nowMs = math_floor(now * 1000)
-    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes Ã¢â€ â€™ short keys on small table)
+    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ short keys on small table)
     local ts = self._msufTS
     if not ts then ts = {}; self._msufTS = ts end
     -- HP text: force when layout/toggle changed, otherwise rate-limit

@@ -320,7 +320,7 @@ local _MSUF_INDICATOR_SPECS = {
             { MSUF_LevelAnchorText("BOTTOMLEFT"), "BOTTOMLEFT" },
             { MSUF_LevelAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
         },
-        -- Level: eigene Größe (per-unit). Nil => folgt Name-Fontgröße (Fallback in Apply/Runtime).
+        -- Level: eigene Gre (per-unit). Nil => folgt Name-Fontgre (Fallback in Apply/Runtime).
         sizeEdit  = "playerLevelSizeEdit",
         sizeLabel = "playerLevelSizeLabel",
         sizeField = "levelIndicatorSize",
@@ -383,9 +383,9 @@ local MSUF_TOTINLINE_SEP_OPTIONS = {
     { value = "<<<", text = "<<<" },
     { value = ">>>", text = ">>>" },
     -- optional extras (UTF-8 is fine in Lua sources)
-    { value = "•",   text = "•"   },
-    { value = "—",   text = "—"   },
-    { value = "·",   text = "·"   },
+    { value = "â€¢",   text = "â€¢"   },
+    { value = "",   text = ""   },
+    { value = "Â·",   text = "Â·"   },
     { value = ">",   text = ">"   },
     { value = "<",   text = "<"   },
 }
@@ -539,7 +539,7 @@ local function MSUF_BindDropdown(panel, fieldName, confKey, options, textFn, IsF
             info.value = opt.value
             info.func  = OnClick
             info.arg1  = opt.value
-            -- safe checked function, don’t rely on btn.text being non-nil
+            -- safe checked function, donâ€™t rely on btn.text being non-nil
             info.checked = function()
                 local conf = EnsureKeyDBFn and EnsureKeyDBFn()
                 local v = conf and conf[confKey]
@@ -1431,7 +1431,7 @@ end
         end
     end
 		---------------------------------------------------------------------
-		-- Indicator (Leader / Raid Marker / Level) — spec-driven build
+		-- Indicator (Leader / Raid Marker / Level)  spec-driven build
 		-- All layout for other unit tabs is handled by LayoutIndicatorTemplate().
 		---------------------------------------------------------------------
 		-- Section title (anchored to first divider in LayoutIndicatorTemplate)
@@ -1457,6 +1457,9 @@ end
 		panel.playerBossSpacingSlider = panel.playerBossSpacingSlider or CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", textGroup, -200, 0, 1, 12, bossSpacingY)
 		FinalizeCompactSlider(panel.playerBossSpacingSlider, (rightW - 24))
 		panel.playerBossSpacingSlider:Hide()
+		-- Boss-only: invert boss order toggle (boss 1 at bottom instead of top)
+		panel.playerInvertBossOrderCB = panel.playerInvertBossOrderCB or CreateCheck(textGroup, "MSUF_UF_InvertBossOrderCB", "Invert boss order", 12, bossSpacingY - 50)
+		panel.playerInvertBossOrderCB:Hide()
 		-- Pet-only: anchor pet frame relative to Player/Target (shown only on pet pages by LayoutIndicatorTemplate)
 		if not panel.petAnchorToLabel then
 			panel.petAnchorToLabel = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1661,7 +1664,7 @@ end
 			if cb then cb:Hide() end
 		 end
 		---------------------------------------------------------------------
-		-- Indicator rows (Leader / Raid Marker / Level) — spec-driven
+		-- Indicator rows (Leader / Raid Marker / Level)  spec-driven
 		---------------------------------------------------------------------
 		local function _MSUF_BuildIndicatorRow(spec, idx)
 			if not spec then  return end
@@ -1721,7 +1724,7 @@ end
 			_MSUF_BuildIndicatorRow(_MSUF_INDICATOR_SPECS and _MSUF_INDICATOR_SPECS[id], idx)
 		end
 		---------------------------------------------------------------------
-		-- Status Icons rows (Combat / Rested / Incoming Rez) — spec-driven
+		-- Status Icons rows (Combat / Rested / Incoming Rez)  spec-driven
 		---------------------------------------------------------------------
 		local STATUS_ROW_SPECS = {
 			{
@@ -2054,6 +2057,7 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
             SetShownByName(spec.resetBtn, false)
         end
         if panel.playerBossSpacingSlider then panel.playerBossSpacingSlider:Hide() end
+        if panel.playerInvertBossOrderCB then panel.playerInvertBossOrderCB:Hide() end
         -- Status icons (and Step-1 Combat row controls) must also be hard-hidden outside Frames tab
         if panel.statusIconsHeader then panel.statusIconsHeader:Hide() end
         if panel.statusCombatIconCB then panel.statusCombatIconCB:Hide() end
@@ -2349,7 +2353,24 @@ local isBossKey = false
             panel.playerBossSpacingSlider:SetPoint("TOPLEFT", container, "TOPLEFT", 12, ctrlY)
         end
     end
+    -- Invert boss order toggle (boss only, placed below spacing slider)
+    if panel.playerInvertBossOrderCB then
+        local show = isBossKey and true or false
+        panel.playerInvertBossOrderCB:SetShown(show)
+        if show then
+            local ctrlY = baseCtrlY + (row * step) - 50
+            panel.playerInvertBossOrderCB:ClearAllPoints()
+            panel.playerInvertBossOrderCB:SetPoint("TOPLEFT", container, "TOPLEFT", 12, ctrlY)
+        end
+    end
  end
+-- Forward declarations for alpha helpers (defined after ApplyFromDB, used inside it).
+local MSUF_Alpha_NormalizeMode
+local MSUF_Alpha_GetKeysForMode
+local MSUF_Alpha_ReadPair
+local MSUF_Alpha_WritePair
+local MSUF_AlphaUI_SetSlider
+local MSUF_AlphaUI_RefreshSliders
 function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffsetValue)
     if not panel or not currentKey then  return end
     -- Be robust when the core passes nil conf/g (e.g. first time opening a unit tab).
@@ -2606,6 +2627,14 @@ end
             ForceSliderEditBox(panel.playerBossSpacingSlider)
         end
     end
+    -- Invert Boss Order (boss only)
+    if panel.playerInvertBossOrderCB then
+        local show = (currentKey == "boss")
+        panel.playerInvertBossOrderCB:SetShown(show)
+        if show then
+            panel.playerInvertBossOrderCB:SetChecked((conf.invertBossOrder == true) and true or false)
+        end
+    end
     -- Copy settings button (Player menu)
     MSUF_BindAllCopyButtons(panel)
     -- Copy settings button (Target menu)
@@ -2732,7 +2761,7 @@ local function MSUF_ApplyIndicatorUI(spec)
         local v = conf and conf[spec.sizeField]
         if type(v) ~= "number" and g then v = g[spec.sizeField] end
         if type(v) ~= "number" and spec.id == "level" then
-            -- Wenn kein eigener Wert gesetzt ist: zeige effektive Name-Fontgröße als Default.
+            -- Wenn kein eigener Wert gesetzt ist: zeige effektive Name-Fontgre als Default.
             v = MSUF_ReadNumber(conf, g, "nameFontSize", 14)
         end
         v = tonumber(v) or spec.sizeDefault or 14
@@ -3706,7 +3735,7 @@ MSUF_RefreshLevelIndicatorFrames = function()
 -- Layered keys (when alphaExcludeTextPortrait == true):
 --   Foreground: alphaFGInCombat / alphaFGOutOfCombat
 --   Background: alphaBGInCombat / alphaBGOutOfCombat
-local function MSUF_Alpha_NormalizeMode(mode)
+MSUF_Alpha_NormalizeMode = function(mode)
     -- IMPORTANT: Some DB sanitizers keep only numbers/bools.
     -- Accept both the legacy string modes and a compact numeric/bool encoding.
     --   background: true / 1 / "background"
@@ -3719,7 +3748,7 @@ local function MSUF_Alpha_NormalizeMode(mode)
     end
      return "foreground"
 end
-local function MSUF_Alpha_GetKeysForMode(conf, mode)
+MSUF_Alpha_GetKeysForMode = function(conf, mode)
     mode = MSUF_Alpha_NormalizeMode(mode)
     local layered = (conf and conf.alphaExcludeTextPortrait == true)
     if layered then
@@ -3730,7 +3759,7 @@ local function MSUF_Alpha_GetKeysForMode(conf, mode)
     end
      return "alphaInCombat", "alphaOutOfCombat"
 end
-local function MSUF_Alpha_ReadPair(conf, mode)
+MSUF_Alpha_ReadPair = function(conf, mode)
     if not conf then  return 1, 1 end
     mode = MSUF_Alpha_NormalizeMode(mode)
     local aInLegacy  = tonumber(conf.alphaInCombat) or 1
@@ -3750,14 +3779,14 @@ local function MSUF_Alpha_ReadPair(conf, mode)
     end
      return aIn, aOut
 end
-local function MSUF_Alpha_WritePair(conf, mode, aIn, aOut)
+MSUF_Alpha_WritePair = function(conf, mode, aIn, aOut)
     if not conf then  return end
     mode = MSUF_Alpha_NormalizeMode(mode)
     local kIn, kOut = MSUF_Alpha_GetKeysForMode(conf, mode)
     conf[kIn] = aIn
     conf[kOut] = aOut
  end
-local function MSUF_AlphaUI_SetSlider(slider, v)
+MSUF_AlphaUI_SetSlider = function(slider, v)
     if slider and slider.SetValue then
         slider.MSUF_SkipCallback = true
         slider:SetValue(v)
@@ -3765,7 +3794,7 @@ local function MSUF_AlphaUI_SetSlider(slider, v)
         if slider.editBox then ForceSliderEditBox(slider) end
     end
  end
-local function MSUF_AlphaUI_RefreshSliders()
+MSUF_AlphaUI_RefreshSliders = function()
     if not IsFramesTab() then  return end
     local conf = EnsureKeyDB()
     local mode = MSUF_Alpha_NormalizeMode(conf.alphaLayerMode)
@@ -3901,6 +3930,15 @@ if bs then
         ApplyCurrent()
      end
     if bs.HookScript then bs:HookScript("OnShow", function()  ForceSliderEditBox(bs)  end) end
+end
+-- Invert boss order toggle (boss key only)
+if panel.playerInvertBossOrderCB then
+    panel.playerInvertBossOrderCB:SetScript("OnClick", function(self)
+        if not IsFramesTab() or CurrentKey() ~= "boss" then  return end
+        local conf = EnsureKeyDB()
+        conf.invertBossOrder = self:GetChecked() and true or false
+        ApplyCurrent()
+     end)
 end
 -- Copy settings button (Player menu)
     MSUF_BindAllCopyButtons(panel)
