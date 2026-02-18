@@ -1585,7 +1585,7 @@ end
 local function MSUF_EditMode_QueueNoticeOnce()
     if MSUF__EditModeCombatNoticeShown then return end
     MSUF__EditModeCombatNoticeShown = true
-    print("|cffffd700MSUF:|r â‚¬Å¾nderungen werden im Kampf gepuffert und nach Kampfende angewendet.")
+    print("|cffffd700MSUF:|r Your in combat changes applied after.")
 end
 
 local function MSUF_EM_CombatGuardFlush()
@@ -2558,7 +2558,7 @@ MSUF_EM_ForceWhiteButtonText(resetBtn)
 
         if not MSUF_CurrentEditUnitKey then
             if MSUF_GridFrame and MSUF_GridFrame.infoText then
-                MSUF_GridFrame.infoText:SetText("Reset: Kein Frame ausgewÂ¤hlt  klicke zuerst ein Frame.")
+                MSUF_GridFrame.infoText:SetText("Reset: Kein Frame ausgewÃ‚Â¤hlt  klicke zuerst ein Frame.")
             end
             return
         end
@@ -3737,7 +3737,7 @@ local function ApplyUnitPopupValues()
         MSUF__UnitPopupApplying = true
         local ok, err = MSUF_FastCall(function()
             if InCombatLockdown and InCombatLockdown() then
-                print("|cffffd700MSUF:|r Position/GrÂ¶ÃƒÆ’Ã…Â¸e kann im Kampf nicht geÂ¤ndert werden.")
+                print("|cffffd700MSUF:|r Position/GrÃ‚Â¶ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â¸e kann im Kampf nicht geÃ‚Â¤ndert werden.")
                 return
             end
 
@@ -3896,7 +3896,7 @@ local function ApplyUnitPopupValues()
     end
 
     if InCombatLockdown and InCombatLockdown() then
-        print("|cffffd700MSUF:|r Position/GrÂ¶ÃƒÆ’Ã…Â¸e kann im Kampf nicht geÂ¤ndert werden.")
+        print("|cffffd700MSUF:|r Position/GrÃ‚Â¶ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â¸e kann im Kampf nicht geÃ‚Â¤ndert werden.")
         return
     end
     if not unit or not parent then
@@ -3992,7 +3992,7 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
 
         MSUF_EM_UI_BuildUnitPopup_Text_Extras(pf, ApplyUnitPopupValues)
 
-        -- ── Text Anchor dropdowns (Name + HP + Power, per-unit) ──
+        -- â”€â”€ Text Anchor dropdowns (Name + HP + Power, per-unit) â”€â”€
         do
             local lastTextRow = pf.powerSizeLabel or pf.powerYLabel or pf.hpSizeLabel
             local anchorLabel = pf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -4059,7 +4059,7 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
                 "_msufPowerAnchorVal", "RIGHT")
         end
 
-        -- ── Power Bar detach section (player/target/focus only) ──
+        -- â”€â”€ Power Bar detach section (player/target/focus only) â”€â”€
         do
             local lastTextRow = pf.textAnchorLabel or pf.powerSizeLabel or pf.powerYLabel or pf.hpSizeLabel
             local pbDivider = MSUF_EM_AddDivider(pf, "pbDivider", 330, "TOPLEFT", lastTextRow, "BOTTOMLEFT", 0, -36)
@@ -4423,7 +4423,7 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
         return
     end
     if InCombatLockdown and InCombatLockdown() then
-        print("|cffffd700MSUF:|r Position/GrÂ¶ÃƒÆ’Ã…Â¸e der Castbar kann im Kampf nicht geÂ¤ndert werden.")
+        print("|cffffd700MSUF:|r Position/GrÃ‚Â¶ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â¸e der Castbar kann im Kampf nicht geÃ‚Â¤ndert werden.")
         return
     end
 
@@ -6224,7 +6224,7 @@ function _G.MSUF_OpenAuras2PositionPopup(unit, parent)
         return
     end
     if InCombatLockdown and InCombatLockdown() then
-        print('|cffffd700MSUF:|r Position/GrÂ¶ÃƒÆ’Ã…Â¸e kann im Kampf nicht geÂ¤ndert werden.')
+        print('|cffffd700MSUF:|r Position/GrÃ‚Â¶ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â¸e kann im Kampf nicht geÃ‚Â¤ndert werden.')
         return
     end
 
@@ -6505,6 +6505,10 @@ local function MSUF_CloseAllPositionPopups()
     end
     if MSUF_CastbarPositionPopup and MSUF_CastbarPositionPopup.Hide then
         MSUF_CastbarPositionPopup:Hide()
+    end
+    -- Tooltip Edit Mode drag preview
+    if type(_G.MSUF_Tooltip_HideEditPreview) == "function" then
+        _G.MSUF_Tooltip_HideEditPreview()
     end
     if GameTooltip and GameTooltip.Hide then
         GameTooltip:Hide()

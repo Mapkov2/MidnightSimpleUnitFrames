@@ -253,6 +253,16 @@ end
 local function MSUF_PositionPlayerInfoFrame(frame)
     EnsureDB()
     local g = MSUF_DB.general or {}
+
+    -- Custom position from Edit Mode drag takes priority over style-based positioning.
+    local cx = g.tooltipPosX
+    local cy = g.tooltipPosY
+    if type(cx) == "number" and type(cy) == "number" then
+        frame:ClearAllPoints()
+        frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx, cy)
+        return
+    end
+
     local style = g.unitInfoTooltipStyle or "classic"
     frame:ClearAllPoints()
     if style == "modern" and GetCursorPosition and UIParent then
@@ -487,3 +497,140 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
 end
 -- [8c6] Removed PLAYER_LOGIN Options relayout hook (Bars).
 ns.MSUF_UpdateAllFonts = ns.MSUF_UpdateAllFonts or UpdateAllFonts
+
+-- ==========================================================================
+-- Edit Mode: Tooltip Position Drag Handle
+-- Shows a preview of the MSUF tooltip and makes it draggable to set a custom
+-- position. Persists to MSUF_DB.general.tooltipPosX / .tooltipPosY.
+-- Only active while MSUF Edit Mode is on; zero OnUpdate cost outside of drag.
+-- ==========================================================================
+do
+    local tooltipDragHandle          -- overlay frame (lazy-created)
+    local tooltipEditPreviewActive = false
+
+    -- ---- persistence -------------------------------------------------------
+    local function MSUF_Tooltip_SavePosition(frame)
+        if not frame then return end
+        if type(EnsureDB) == "function" then EnsureDB() end
+        local g = type(MSUF_DB) == "table" and MSUF_DB.general
+        if type(g) ~= "table" then return end
+        local left   = frame.GetLeft   and frame:GetLeft()
+        local bottom = frame.GetBottom and frame:GetBottom()
+        if type(left) == "number" and type(bottom) == "number" then
+            g.tooltipPosX = math.floor(left + 0.5)
+            g.tooltipPosY = math.floor(bottom + 0.5)
+        end
+    end
+
+    -- ---- reset helper (called from Options / slash) ------------------------
+    local function MSUF_Tooltip_ResetPosition()
+        if type(EnsureDB) == "function" then EnsureDB() end
+        local g = type(MSUF_DB) == "table" and MSUF_DB.general
+        if type(g) ~= "table" then return end
+        g.tooltipPosX = nil
+        g.tooltipPosY = nil
+    end
+    _G.MSUF_Tooltip_ResetPosition = MSUF_Tooltip_ResetPosition
+
+    -- ---- drag handle (lazy) ------------------------------------------------
+    local function MSUF_Tooltip_EnsureDragHandle(parent)
+        if tooltipDragHandle then
+            -- Re-parent in case tooltip was re-created (shouldn't happen, but safe).
+            if tooltipDragHandle:GetParent() ~= parent then
+                tooltipDragHandle:SetParent(parent)
+            end
+            tooltipDragHandle:SetAllPoints(parent)
+            return tooltipDragHandle
+        end
+
+        local dh = CreateFrame("Frame", "MSUF_TooltipDragHandle", parent)
+        dh:SetAllPoints(parent)
+        dh:EnableMouse(true)
+        dh:RegisterForDrag("LeftButton")
+        dh:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 10)
+
+        -- Subtle visual overlay so the user knows it's draggable
+        local bg = dh:CreateTexture(nil, "OVERLAY")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0.2, 0.6, 1.0, 0.12)
+        dh._bg = bg
+
+        local label = dh:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        label:SetPoint("TOP", dh, "TOP", 0, -2)
+        label:SetText("Drag to reposition")
+        label:SetTextColor(0.4, 0.8, 1.0, 0.9)
+        dh._label = label
+
+        dh:SetScript("OnDragStart", function(self)
+            if InCombatLockdown and InCombatLockdown() then return end
+            local p = self:GetParent()
+            if p then
+                p:SetMovable(true)
+                p:SetClampedToScreen(true)
+                p:StartMoving()
+            end
+        end)
+
+        dh:SetScript("OnDragStop", function(self)
+            local p = self:GetParent()
+            if not p then return end
+            p:StopMovingOrSizing()
+            p:SetMovable(false)
+            MSUF_Tooltip_SavePosition(p)
+        end)
+
+        dh:Hide()
+        tooltipDragHandle = dh
+        return dh
+    end
+
+    -- ---- Edit Mode enter/exit ----------------------------------------------
+    local function MSUF_Tooltip_ShowEditPreview()
+        local f = MSUF_GetPlayerInfoFrame()
+        if not f then return end
+
+        -- Fill with placeholder content so the user sees size/layout
+        if f.name  then f.name:SetText("Player Name")           end
+        if f.line2 then f.line2:SetText("Level 80 Human Paladin") end
+        if f.line3 then f.line3:SetText("Protection Paladin")     end
+        if f.line4 then f.line4:SetText("Alliance")               end
+        if f.line5 then f.line5:SetText("Stormwind City")         end
+
+        -- Position (uses saved pos if available, else style default)
+        MSUF_PositionPlayerInfoFrame(f)
+        f:Show()
+
+        -- Enable drag
+        local dh = MSUF_Tooltip_EnsureDragHandle(f)
+        dh:Show()
+        tooltipEditPreviewActive = true
+    end
+
+    local function MSUF_Tooltip_HideEditPreview()
+        if tooltipDragHandle then
+            tooltipDragHandle:Hide()
+        end
+        tooltipEditPreviewActive = false
+        -- Hide the tooltip preview (but not if a real tooltip is being shown outside edit mode).
+        -- The preview uses placeholder text, so we can safely hide it.
+        if MSUF_PlayerInfoFrame then
+            MSUF_PlayerInfoFrame:SetMovable(false)
+            MSUF_PlayerInfoFrame:Hide()
+        end
+    end
+
+    -- Expose for CloseAllPositionPopups and external callers
+    _G.MSUF_Tooltip_HideEditPreview = MSUF_Tooltip_HideEditPreview
+    _G.MSUF_Tooltip_ShowEditPreview = MSUF_Tooltip_ShowEditPreview
+
+    -- Register as AnyEditMode listener (fires on MSUF and/or Blizzard Edit Mode transitions).
+    if type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
+        _G.MSUF_RegisterAnyEditModeListener(function(active)
+            if active then
+                MSUF_Tooltip_ShowEditPreview()
+            else
+                MSUF_Tooltip_HideEditPreview()
+            end
+        end)
+    end
+end

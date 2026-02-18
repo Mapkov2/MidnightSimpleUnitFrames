@@ -430,6 +430,12 @@ end
     if g.unitInfoTooltipStyle == nil then
         g.unitInfoTooltipStyle = "classic"
     end
+    -- Tooltip custom position (set via Edit Mode drag).
+    -- nil / false = use default style-based positioning (classic/modern).
+    -- When set, these are BOTTOMLEFT-relative pixel coordinates on UIParent.
+    -- Intentionally NOT defaulted: absence means "no custom position".
+    if g.tooltipPosX ~= nil and type(g.tooltipPosX) ~= "number" then g.tooltipPosX = nil end
+    if g.tooltipPosY ~= nil and type(g.tooltipPosY) ~= "number" then g.tooltipPosY = nil end
     if g.castbarInterruptibleColor == nil then
         g.castbarInterruptibleColor = "turquoise"
     end
@@ -575,7 +581,7 @@ end
         g.castbarGlobalWidth = 200   -- Standardbreite
     end
     if g.castbarGlobalHeight == nil then
-        g.castbarGlobalHeight = 18   -- Standardhöhe
+        g.castbarGlobalHeight = 18   -- StandardhÃ¶he
     end
     -- Per-castbar default sizes (match Edit Mode preview defaults)
     if g.castbarPlayerBarWidth == nil then g.castbarPlayerBarWidth = 271 end
