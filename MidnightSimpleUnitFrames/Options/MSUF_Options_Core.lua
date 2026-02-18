@@ -174,6 +174,8 @@ local function MSUF_ResetDropdownListScroll(listFrame)
                     )
                 end
                 if btn.Show then btn:Show() end
+                -- DropDownList1 is global/reused: restore default hitbox when scroll mode ends.
+                if btn.SetHitRectInsets then btn:SetHitRectInsets(0, 0, 0, 0) end
                 btn._msufHiddenByMSUF = nil
             end
         end
@@ -257,6 +259,11 @@ local function MSUF_ApplyDropdownListScroll(listFrame, maxVisible)
          end)
     end
     if not sb then  return end
+    -- Ensure scrollbar sits above dropdown buttons so it receives mouse events first.
+    if sb.SetFrameLevel and listFrame.GetFrameLevel then
+        sb:SetFrameLevel((listFrame:GetFrameLevel() or 0) + 50)
+    end
+
     local maxOffset = numButtons - maxVisible
     if maxOffset < 0 then maxOffset = 0 end
     sb:SetMinMaxValues(0, maxOffset)
@@ -295,9 +302,13 @@ local function MSUF_ApplyDropdownListScroll(listFrame, maxVisible)
                 if visIndex < 1 or visIndex > maxVisible then
                     if btn.Hide then btn:Hide() end
                     btn._msufHiddenByMSUF = true
+                    if btn.SetHitRectInsets then btn:SetHitRectInsets(0, 0, 0, 0) end
                 else
                     if btn.Show then btn:Show() end
                     btn._msufHiddenByMSUF = nil
+                    -- Exclude the scrollbar area from the button hitbox so clicks fall through to the scrollbar.
+                    -- Reserve 24px on the right (16px scrollbar + 6px margin + 2px padding).
+                    if btn.SetHitRectInsets then btn:SetHitRectInsets(0, 24, 0, 0) end
                     btn:ClearAllPoints()
                     local y = topY + ((visIndex - 1) * step * dir)
                     btn:SetPoint(topPoint, listFrame, topRelPoint, topX, y)
@@ -4187,7 +4198,6 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         if mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL" then return "CURPERCENT" end
         return mode
     end
-
     local function _MSUF_HPText_GetPowerModeKey()
         EnsureDB()
         local g = MSUF_DB.general
@@ -4730,7 +4740,7 @@ if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
 	    return unitKey, MSUF_DB[unitKey], false
 	end
 local function _MSUF_TextModeAllowsSpacer(mode)
-        return (mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL" or mode == "CURPERCENT" or mode == "CURMAXPERCENT")
+  return (mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL" or mode == "CURPERCENT" or mode == "CURMAXPERCENT")
     end
     local SPACER_SPECS = {
         {
