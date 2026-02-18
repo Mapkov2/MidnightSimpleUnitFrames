@@ -9,13 +9,24 @@ local addonName, ns = ...
 -- =====================================================================
 -- 12.0 API guard: StatusBar:SetTimerDuration signature
 --
--- Patch 12.0 uses: SetTimerDuration(duration [, interpolationBool, direction])
--- Legacy/ported codepaths sometimes pass a NUMBER as arg #2 (often `dt` or `0`).
--- In 12.0 this hard-errors with:
---   "bad argument #2 ... (Usage: self:SetTimerDuration(duration [, interpolation, direction]))"
+-- Patch 12.0 uses: SetTimerDuration(duration [, interpolationEnum, directionEnum])
+-- Where:
+--   interpolationEnum = Enum.StatusBarInterpolation.*
+--   directionEnum     = Enum.StatusBarTimerDirection.*
 --
--- We harden the underlying method ONCE by coercing arg #2 to boolean when it
--- is provided but not already a boolean.
+-- Some legacy/ported code (or older libs) still call SetTimerDuration like:
+--   SetTimerDuration(duration, dt)
+--   SetTimerDuration(duration, 0/1)
+--   SetTimerDuration(duration, true/false)
+-- which can hard-error (arg #2/#3) and break unrelated addons because we
+-- hook the shared StatusBar method.
+--
+-- Guard strategy:
+--   * Accept and forward ONLY valid enum values for arg #2/#3.
+--   * If arg #2/#3 are invalid (e.g. dt float), drop the optional pair and
+--     call orig(self, duration) to avoid hard errors.
+--   * Preserve the "paired optional args" contract: never pass arg #2
+--     without a valid arg #3.
 -- =====================================================================
 do
   if not _G.MSUF__SetTimerDurationSigGuard then
@@ -27,20 +38,74 @@ do
     local orig = idx and idx.SetTimerDuration
 
     if type(orig) == "function" then
-      idx.SetTimerDuration = function(self, duration, interpolation, direction)
-        -- Coerce non-boolean interpolation to boolean (legacy callers pass 0/1).
-        if interpolation ~= nil and type(interpolation) ~= "boolean" then
-          interpolation = (interpolation ~= 0 and interpolation ~= false) and true or false
+      local enumInterp = _G.Enum and _G.Enum.StatusBarInterpolation
+      local enumDir    = _G.Enum and _G.Enum.StatusBarTimerDirection
+
+      local validInterp = nil
+      local validDir    = nil
+
+      if type(enumInterp) == "table" then
+        validInterp = {}
+        for _, v in pairs(enumInterp) do
+          if type(v) == "number" then validInterp[v] = true end
         end
+      end
+
+      if type(enumDir) == "table" then
+        validDir = {}
+        for _, v in pairs(enumDir) do
+          if type(v) == "number" then validDir[v] = true end
+        end
+      end
+
+      local function _NormalizeInterpolation(x)
+        if x == nil then return nil end
+        local t = type(x)
+        if t == "number" then
+          -- Only accept when it matches the enum (Plater/Blizz pass these).
+          if validInterp and validInterp[x] then return x end
+          -- Legacy 0/1, dt floats, etc. are treated as invalid.
+          return nil
+        elseif t == "boolean" then
+          -- Legacy boolean: treat as Immediate (safest) if available.
+          if enumInterp and type(enumInterp.Immediate) == "number" then
+            return enumInterp.Immediate
+          end
+          return nil
+        end
+        return nil
+      end
+
+      local function _NormalizeDirection(x)
+        if x == nil then return nil end
+        local t = type(x)
+        if t == "number" then
+          if validDir and validDir[x] then return x end
+          return nil
+        elseif t == "boolean" then
+          -- Legacy boolean: map to Remaining/Elapsed when possible.
+          if enumDir then
+            local rem = enumDir.RemainingTime
+            local ela = enumDir.ElapsedTime
+            if x and type(rem) == "number" then return rem end
+            if (not x) and type(ela) == "number" then return ela end
+          end
+          return nil
+        end
+        -- Treat strings/other types as invalid; drop them.
+        return nil
+      end
+
+      idx.SetTimerDuration = function(self, duration, interpolation, direction)
+        interpolation = _NormalizeInterpolation(interpolation)
+        direction     = _NormalizeDirection(direction)
+
         -- 12.0 C API: [interpolation, direction] are a paired optional group.
-        -- Passing interpolation WITHOUT direction → "bad argument #3".
-        -- Passing explicit nil as trailing arg → same error.
-        -- Only forward the full triplet when BOTH optional args are present.
+        -- Only forward the full triplet when BOTH optional args are valid.
         if interpolation ~= nil and direction ~= nil then
           return orig(self, duration, interpolation, direction)
-        else
-          return orig(self, duration)
         end
+        return orig(self, duration)
       end
     end
   end
