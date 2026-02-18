@@ -4168,25 +4168,38 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     MSUF_ExpandDropdownClickArea(powerModeDrop)
     powerModeDrop:SetPoint("TOPLEFT", powerModeLabel, "BOTTOMLEFT", -16, -16)
     powerModeOptions = {
-        { key = "FULL_SLASH_MAX",     label = "Current / Max" },
-        { key = "FULL_ONLY",          label = "Full value only" },
-        { key = "FULL_PLUS_PERCENT",  label = "Full value + %" },
-        { key = "PERCENT_PLUS_FULL",  label = "% + Full value" },
-        { key = "PERCENT_ONLY",       label = "Only %" },
+        { key = "curpp:maxpp",  label = "Current / Max" },
+        { key = "curpp",        label = "Current only" },
+        { key = "curpp:perpp",  label = "Current + %" },
+        { key = "perpp:curpp",  label = "% + Current" },
+        { key = "perpp",        label = "Only %" },
     }
+
+    local function _MSUF_NormalizePowerModeKey(v)
+        if type(v) ~= "string" then return "curpp:perpp" end
+        if string.find(v, "curpp", 1, true) or string.find(v, "perpp", 1, true) or string.find(v, "maxpp", 1, true) then
+            return v
+        end
+        if v == "FULL_SLASH_MAX" then return "curpp:maxpp" end
+        if v == "FULL_ONLY" then return "curpp" end
+        if v == "FULL_PLUS_PERCENT" then return "curpp:perpp" end
+        if v == "PERCENT_PLUS_FULL" then return "perpp:curpp" end
+        if v == "PERCENT_ONLY" then return "perpp" end
+        return "curpp:perpp"
+    end
 
     local function _MSUF_HPText_GetPowerModeKey()
         EnsureDB()
         local g = MSUF_DB.general
         local unitKey = _MSUF_HPText_GetUnitKey()
         if not unitKey then
-            return (g.powerTextMode or "FULL_PLUS_PERCENT")
+            return ns.Text and ns.Text._NormalizePowerMode and ns.Text._NormalizePowerMode(g.powerTextMode) or (g.powerTextMode or "curpp:perpp")
         end
         local u = _MSUF_HPText_GetUnitDB(unitKey)
         if u and u.hpPowerTextOverride == true and u.powerTextMode ~= nil then
-            return u.powerTextMode
+            return _MSUF_NormalizePowerModeKey(u.powerTextMode)
         end
-        return (g.powerTextMode or "FULL_PLUS_PERCENT")
+        return ns.Text and ns.Text._NormalizePowerMode and ns.Text._NormalizePowerMode(g.powerTextMode) or (g.powerTextMode or "curpp:perpp")
     end
 
     local function _MSUF_HPText_SetPowerModeKey(v)
@@ -4194,14 +4207,14 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         local g = MSUF_DB.general
         local unitKey = _MSUF_HPText_GetUnitKey()
         if not unitKey then
-            g.powerTextMode = v
+            g.powerTextMode = _MSUF_NormalizePowerModeKey(v)
             return
         end
         local u = _MSUF_HPText_GetUnitDB(unitKey)
         if u and u.hpPowerTextOverride ~= true then
             _MSUF_HPText_EnableOverride(unitKey)
         end
-        u.powerTextMode = v
+        u.powerTextMode = _MSUF_NormalizePowerModeKey(v)
     end
     powerModeDrop._msufGetCurrentKey = _MSUF_HPText_GetPowerModeKey
     MSUF_InitSimpleDropdown(

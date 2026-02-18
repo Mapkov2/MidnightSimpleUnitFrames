@@ -194,16 +194,86 @@ function ns.Text._ShouldSplitPower(self, pMode, hasPct)
     end
     return (x > 0)
 end
+function ns.Text._NormalizePowerMode(mode)
+    -- Supports legacy enum keys and Unhalted-style tag strings (curpp/maxpp/perpp).
+    if mode == nil then return "curpp:perpp" end
+    if type(mode) ~= "string" then return "curpp:perpp" end
+
+    -- Already in tag format?
+    if string.find(mode, "curpp", 1, true) or string.find(mode, "perpp", 1, true) or string.find(mode, "maxpp", 1, true) then
+        return mode
+    end
+
+    -- Legacy enums
+    if mode == "FULL_SLASH_MAX" then return "curpp:maxpp" end
+    if mode == "FULL_ONLY" then return "curpp" end
+    if mode == "FULL_PLUS_PERCENT" then return "curpp:perpp" end
+    if mode == "PERCENT_PLUS_FULL" then return "perpp:curpp" end
+    if mode == "PERCENT_ONLY" then return "perpp" end
+
+    return "curpp:perpp"
+end
+
+local function _MSUF_FormatPowerValue(v)
+    if v == nil then return nil end
+    -- Do NOT tonumber/compare; value may be secret.
+    if AbbreviateLargeNumbers then
+        return AbbreviateLargeNumbers(v)
+    end
+    if BreakUpLargeNumbers then
+        return BreakUpLargeNumbers(v)
+    end
+    return tostring(v)
+end
+
+local function _MSUF_SafePowerPercent(unit)
+    -- Midnight 12.0: Percent can be a secret number. We must NOT compare/format it numerically.
+    -- Return it as-is (best effort). Caller will use tostring(pct) .. "%%" with no numeric ops.
+    if type(UnitPowerPercent) ~= "function" then return nil end
+
+    local pType
+    if type(UnitPowerType) == "function" then
+        pType = UnitPowerType(unit)
+    end
+
+    -- Prefer ScaleTo100 curve if available so we can display without multiplying.
+    local curve = (type(CurveConstants) == "table" and CurveConstants.ScaleTo100) or nil
+
+    local pct = UnitPowerPercent(unit, pType, false, curve)
+    if pct == nil then
+        pct = UnitPowerPercent(unit, pType)
+    end
+    if pct == nil then
+        pct = UnitPowerPercent(unit)
+    end
+    return pct
+end
+
+
+local function _MSUF_TokenizeMode(mode)
+    local t = {}
+    local n = 0
+    for part in string.gmatch(mode, "([^:]+)") do
+        if part and part ~= "" then
+            n = n + 1
+            t[n] = part
+        end
+    end
+    return t, n
+end
+
 function ns.Text.RenderPowerText(self)
-    if not self or not self.unit or not self.powerText then  return end
+    if not self or not self.unit or not self.powerText then return end
+
     local unit = self.unit
     local showPower = self.showPowerText
     if showPower == nil then showPower = true end
     if not showPower then
         ns.Text.Set(self.powerText, "", false)
         ns.Text.ClearField(self, "powerTextPct")
-         return
+        return
     end
+
     local gPower = (MSUF_DB and MSUF_DB.general) or {}
     local colorByType = (gPower.colorPowerTextByType == true)
 
@@ -212,7 +282,8 @@ function ns.Text.RenderPowerText(self)
     local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
     local useOverride = (udb and udb.hpPowerTextOverride == true)
 
-    local pMode = (useOverride and udb and udb.powerTextMode) or gPower.powerTextMode or "FULL_SLASH_MAX"
+    local rawMode = (useOverride and udb and udb.powerTextMode) or gPower.powerTextMode
+    local mode = ns.Text._NormalizePowerMode(rawMode)
 
     -- Power separator: prefer explicit power sep; else fall back to HP sep.
     local rawPowerSep
@@ -227,94 +298,77 @@ function ns.Text.RenderPowerText(self)
     end
     local rawHpSep = (useOverride and udb and udb.hpTextSeparator) or gPower.hpTextSeparator
     local powerSep = ns.Text._SepToken(rawPowerSep, rawHpSep)
-    MSUF_EnsureUnitFlags(self)
-    local isPlayer = self._msufIsPlayer
-    local isFocus  = self._msufIsFocus
-    if isPlayer or isFocus or F.UnitIsPlayer(unit) then
-        local curText, maxText
-        local curValue = F.UnitPower(unit)
-        local maxValue = F.UnitPowerMax(unit)
-        if curValue ~= nil then
-            curText = (AbbreviateLargeNumbers and AbbreviateLargeNumbers(curValue)) or tostring(curValue)
-    end
-        if maxValue ~= nil then
-            maxText = (AbbreviateLargeNumbers and AbbreviateLargeNumbers(maxValue)) or tostring(maxValue)
-    end
-        local powerPct = ns.Text.GetUnitPowerPercent(unit)
-        local hasPct = (type(powerPct) == "number")
-        local split = ns.Text._ShouldSplitPower(self, pMode, hasPct)
-        if pMode == "FULL_ONLY" then
+
+    -- Fetch power values for ANY unit (player, NPC, boss, pet, etc).
+    -- Use current displayed power type implicitly (UnitPower default uses UnitPowerType).
+    local curValue = (F.UnitPower and F.UnitPower(unit)) or (UnitPower and UnitPower(unit))
+    local maxValue = (F.UnitPowerMax and F.UnitPowerMax(unit)) or (UnitPowerMax and UnitPowerMax(unit))
+
+    local curText = _MSUF_FormatPowerValue(curValue)
+    local maxText = _MSUF_FormatPowerValue(maxValue)
+
+    local pct = _MSUF_SafePowerPercent(unit)
+
+    -- Optional split display (uses the same spacer logic as before).
+    local hasPct = (pct ~= nil)
+    local split = ns.Text._ShouldSplitPower(self, mode, hasPct)
+
+    -- Build output based on token order (Unhalted-style).
+    local parts, n = _MSUF_TokenizeMode(mode)
+    if n <= 0 then parts, n = {"curpp","perpp"}, 2 end
+
+    -- Determine whether we are outputting 2 lines (split).
+    if split and hasPct then
+        -- powerText holds the first "value" token and powerTextPct holds percent.
+        -- If mode begins with perpp, still place percent into powerTextPct to match HP split UX.
+        local firstToken = parts[1]
+        if firstToken == "perpp" then
             ns.Text.Set(self.powerText, curText or "", true)
-            ns.Text.ClearField(self, "powerTextPct")
-        elseif pMode == "PERCENT_ONLY" then
-            ns.Text.ClearField(self, "powerTextPct")
-            if hasPct then
-                ns.Text.SetFormatted(self.powerText, true, "%.1f%%", powerPct)
-            else
-                ns.Text.Set(self.powerText, curText or "", true)
-            end
-        elseif pMode == "FULL_PLUS_PERCENT" then
-            if hasPct then
-                if split then
-                    ns.Text.Set(self.powerText, curText or "", true)
-                    ns.Text.SetFormatted(self.powerTextPct, true, "%.1f%%", powerPct)
-                else
-                    ns.Text.ClearField(self, "powerTextPct")
-                    ns.Text.SetFormatted(self.powerText, true, "%s%s%.1f%%", curText or "", powerSep, powerPct)
-                end
-            else
-                ns.Text.ClearField(self, "powerTextPct")
-                ns.Text.Set(self.powerText, curText or "", true)
-            end
-        elseif pMode == "PERCENT_PLUS_FULL" then
-            if hasPct and split then
-                ns.Text.Set(self.powerText, curText or "", true)
-                ns.Text.SetFormatted(self.powerTextPct, true, "%.1f%%", powerPct)
-            else
-                ns.Text.ClearField(self, "powerTextPct")
-                if hasPct then
-                    ns.Text.SetFormatted(self.powerText, true, "%.1f%%%s%s", powerPct, powerSep, curText or "")
-                else
-                    ns.Text.Set(self.powerText, curText or "", true)
-                end
-            end
+            ns.Text.Set(self.powerTextPct, tostring(pct) .. "%", true)
         else
-            ns.Text.ClearField(self, "powerTextPct")
-            if curText and maxText then
-                ns.Text.SetFormatted(self.powerText, true, "%s%s%s", curText, powerSep, maxText)
-            elseif curText then
-                ns.Text.Set(self.powerText, curText, true)
-            elseif maxText then
-                ns.Text.Set(self.powerText, maxText, true)
-            else
-                ns.Text.Set(self.powerText, "", true)
-            end
-    end
+            ns.Text.Set(self.powerText, curText or "", true)
+            ns.Text.Set(self.powerTextPct, tostring(pct) .. "%", true)
+        end
         ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-         return
-    elseif self.isBoss and C_StringUtil and C_StringUtil.TruncateWhenZero then
-        local pCur = F.UnitPower(unit)
-        local pMax = F.UnitPowerMax(unit)
-        local curText2 = (pCur ~= nil) and C_StringUtil.TruncateWhenZero(pCur) or nil
-        local maxText2 = (pMax ~= nil) and C_StringUtil.TruncateWhenZero(pMax) or nil
-        ns.Text.ClearField(self, "powerTextPct")
-        if curText2 and maxText2 then
-            ns.Text.SetFormatted(self.powerText, true, "%s%s%s", curText2, powerSep, maxText2)
-            ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-        elseif curText2 then
-            ns.Text.Set(self.powerText, curText2, true)
-            ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-        elseif maxText2 then
-            ns.Text.Set(self.powerText, maxText2, true)
-            ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
-        else
-            ns.Text.Set(self.powerText, "", false)
+        return
     end
-         return
-    end
+
     ns.Text.ClearField(self, "powerTextPct")
-    ns.Text.Set(self.powerText, "", false)
- end
+
+    -- Single-line assembly.
+    local out = nil
+    local wrote = false
+    for i = 1, n do
+        local tok = parts[i]
+        local piece = nil
+        if tok == "curpp" then
+            piece = curText
+        elseif tok == "maxpp" then
+            piece = maxText
+        elseif tok == "perpp" then
+            if hasPct then
+                piece = tostring(pct) .. "%"
+            end
+        end
+		-- Midnight 12.0: `piece` may be a secret string (e.g. formatted from secret numbers).
+		-- NEVER compare secret strings (even against ""). Only nil-check.
+		if piece then
+            if not wrote then
+                out = piece
+                wrote = true
+            else
+                out = out .. powerSep .. piece
+            end
+        end
+    end
+
+    if not wrote then
+        out = ""
+    end
+
+    ns.Text.Set(self.powerText, out, wrote)
+    ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
+end
  -- Resolve helper color lookups used by ToT inline.
  -- These are global functions defined in MidnightSimpleUnitFrames.lua (loaded before this file).
  local MSUF_GetNPCReactionColor = _G.MSUF_GetNPCReactionColor or function(kind) return 1, 1, 1 end

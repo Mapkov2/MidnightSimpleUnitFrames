@@ -778,8 +778,29 @@ end
             end
         end
     end
+    local function _MSUF_MigratePowerTextMode(v)
+        if type(v) ~= "string" then return "curpp:perpp" end
+        if string.find(v, "curpp", 1, true) or string.find(v, "perpp", 1, true) or string.find(v, "maxpp", 1, true) then
+            return v
+        end
+        if v == "FULL_SLASH_MAX" then return "curpp:maxpp" end
+        if v == "FULL_ONLY" then return "curpp" end
+        if v == "FULL_PLUS_PERCENT" then return "curpp:perpp" end
+        if v == "PERCENT_PLUS_FULL" then return "perpp:curpp" end
+        if v == "PERCENT_ONLY" then return "perpp" end
+        return v
+    end
+
     if g.powerTextMode == nil then
-        g.powerTextMode = "FULL_PLUS_PERCENT"
+        g.powerTextMode = "curpp:perpp"
+    else
+        g.powerTextMode = _MSUF_MigratePowerTextMode(g.powerTextMode)
+    end
+    for _, unitKey in ipairs({"player","target","focus","targettarget","pet","boss"}) do
+        local u = MSUF_DB[unitKey]
+        if type(u) == "table" and u.hpPowerTextOverride == true and u.powerTextMode ~= nil then
+            u.powerTextMode = _MSUF_MigratePowerTextMode(u.powerTextMode)
+        end
     end
     if g.showTotalAbsorbAmount == nil then
         g.showTotalAbsorbAmount = false

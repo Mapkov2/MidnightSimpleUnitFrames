@@ -80,6 +80,19 @@ ns.Util.SetShown = ns.Util.SetShown or function(obj, show)
     if not obj then  return end; if show then if obj.Show then obj:Show() end else if obj.Hide then obj:Hide() end end
  end
 ns.Util.Offset = ns.Util.Offset or function(v, default)  return (v == nil) and default or v end
+
+-- Patch: ensure this helper exists before any core code needs it.
+-- Used by text-layout + spacer logic. Must be available during core init.
+if _G and type(_G.MSUF_NormalizeTextLayoutUnitKey) ~= "function" then
+    function _G.MSUF_NormalizeTextLayoutUnitKey(unitKey, defaultKey)
+        if unitKey == nil then return defaultKey or "player" end
+        if unitKey == "shared" then return defaultKey or "player" end
+        if unitKey == "tot" or unitKey == "targetoftarget" then return "targettarget" end
+        if unitKey == "boss1" or unitKey == "boss2" or unitKey == "boss3" or unitKey == "boss4" or unitKey == "boss5" then return "boss" end
+        return unitKey
+    end
+end
+
 local F = ns.Cache.F or {}; ns.Cache.F = F
 if not F._msufInit then
     F._msufInit = true
