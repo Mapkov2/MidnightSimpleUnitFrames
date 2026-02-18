@@ -4168,24 +4168,24 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     MSUF_ExpandDropdownClickArea(powerModeDrop)
     powerModeDrop:SetPoint("TOPLEFT", powerModeLabel, "BOTTOMLEFT", -16, -16)
     powerModeOptions = {
-        { key = "curpp:maxpp",  label = "Current / Max" },
-        { key = "curpp",        label = "Current only" },
-        { key = "curpp:perpp",  label = "Current + %" },
-        { key = "perpp:curpp",  label = "% + Current" },
-        { key = "perpp",        label = "Only %" },
+        { key = "CURRENT", label = "Current" },
+        { key = "MAX", label = "Max" },
+        { key = "CURMAX", label = "Cur/Max" },
+        { key = "PERCENT", label = "Percent" },
+        { key = "CURPERCENT", label = "Cur + Percent" },
+        { key = "CURMAXPERCENT", label = "Cur/Max + Percent" },
     }
 
-    local function _MSUF_NormalizePowerModeKey(v)
-        if type(v) ~= "string" then return "curpp:perpp" end
-        if string.find(v, "curpp", 1, true) or string.find(v, "perpp", 1, true) or string.find(v, "maxpp", 1, true) then
-            return v
+    local function _MSUF_NormalizePowerTextMode_Local(mode)
+        if type(_G.MSUF_NormalizePowerTextMode) == "function" then
+            return _G.MSUF_NormalizePowerTextMode(mode)
         end
-        if v == "FULL_SLASH_MAX" then return "curpp:maxpp" end
-        if v == "FULL_ONLY" then return "curpp" end
-        if v == "FULL_PLUS_PERCENT" then return "curpp:perpp" end
-        if v == "PERCENT_PLUS_FULL" then return "perpp:curpp" end
-        if v == "PERCENT_ONLY" then return "perpp" end
-        return "curpp:perpp"
+        if mode == nil then return "CURPERCENT" end
+        if mode == "FULL_SLASH_MAX" then return "CURMAX" end
+        if mode == "FULL_ONLY" then return "CURRENT" end
+        if mode == "PERCENT_ONLY" then return "PERCENT" end
+        if mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL" then return "CURPERCENT" end
+        return mode
     end
 
     local function _MSUF_HPText_GetPowerModeKey()
@@ -4193,13 +4193,13 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         local g = MSUF_DB.general
         local unitKey = _MSUF_HPText_GetUnitKey()
         if not unitKey then
-            return ns.Text and ns.Text._NormalizePowerMode and ns.Text._NormalizePowerMode(g.powerTextMode) or (g.powerTextMode or "curpp:perpp")
+            return _MSUF_NormalizePowerTextMode_Local(g.powerTextMode)
         end
         local u = _MSUF_HPText_GetUnitDB(unitKey)
         if u and u.hpPowerTextOverride == true and u.powerTextMode ~= nil then
-            return _MSUF_NormalizePowerModeKey(u.powerTextMode)
+            return _MSUF_NormalizePowerTextMode_Local(u.powerTextMode)
         end
-        return ns.Text and ns.Text._NormalizePowerMode and ns.Text._NormalizePowerMode(g.powerTextMode) or (g.powerTextMode or "curpp:perpp")
+        return _MSUF_NormalizePowerTextMode_Local(g.powerTextMode)
     end
 
     local function _MSUF_HPText_SetPowerModeKey(v)
@@ -4207,14 +4207,14 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         local g = MSUF_DB.general
         local unitKey = _MSUF_HPText_GetUnitKey()
         if not unitKey then
-            g.powerTextMode = _MSUF_NormalizePowerModeKey(v)
+            g.powerTextMode = v
             return
         end
         local u = _MSUF_HPText_GetUnitDB(unitKey)
         if u and u.hpPowerTextOverride ~= true then
             _MSUF_HPText_EnableOverride(unitKey)
         end
-        u.powerTextMode = _MSUF_NormalizePowerModeKey(v)
+        u.powerTextMode = v
     end
     powerModeDrop._msufGetCurrentKey = _MSUF_HPText_GetPowerModeKey
     MSUF_InitSimpleDropdown(
@@ -4730,7 +4730,7 @@ if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
 	    return unitKey, MSUF_DB[unitKey], false
 	end
 local function _MSUF_TextModeAllowsSpacer(mode)
-        return (mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL")
+        return (mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL" or mode == "CURPERCENT" or mode == "CURMAXPERCENT")
     end
     local SPACER_SPECS = {
         {

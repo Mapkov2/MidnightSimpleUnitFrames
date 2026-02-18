@@ -611,48 +611,65 @@ local function A2_ParseBuffDebuffAnchorPreset(preset)
      return "TOP", "BOTTOM"
 end
 local function A2_BuildBuffDebuffAnchorPreset(buffDir, debuffDir, changedKind)
-    -- Normalize & snap to supported preset space:
-    -- Supported pairs are: vertical+vertical (TOP/BOTTOM), vertical+horizontal, horizontal+vertical.
-    local function IsH(d)  return (d == "LEFT") or (d == "RIGHT") end
-    local function IsV(d)  return (d == "TOP") or (d == "BOTTOM") end
+    -- Normalize & snap to the canonical preset space.
+    -- Valid presets use the pattern <VERTICAL>_<SIDE>_<BUFFS|DEBUFFS> where
+    -- the first position is always the vertical/primary side (TOP/BOTTOM).
+    -- Horizontal (LEFT/RIGHT) can appear as the second position only.
+    local function IsH(d) return (d == "LEFT") or (d == "RIGHT") end
+    local function IsV(d) return (d == "TOP") or (d == "BOTTOM") end
+    local function OppositeV(d) return (d == "TOP") and "BOTTOM" or "TOP" end
+    local function OppositeH(d) return (d == "LEFT") and "RIGHT" or "LEFT" end
+
     if type(buffDir) ~= "string" then buffDir = "TOP" end
     if type(debuffDir) ~= "string" then debuffDir = "BOTTOM" end
     buffDir = string.upper(buffDir)
     debuffDir = string.upper(debuffDir)
-    -- NOTE (12.0+): Do NOT collapse "same direction" into STACKED.
-    -- STACKED is a legacy preset that re-parses to the TOP/BOTTOM default,
-    -- which causes D-Pad clicks to "bounce" and appear to change the *other* pad.
-    -- We intentionally allow *all* direction pairs, including BOTH horizontal.
+
+    -- Collision resolution: same direction → swap the OTHER pad to opposite.
+    -- This keeps presets always valid and prevents "nothing happens" clicks.
+    if buffDir == debuffDir then
+        if changedKind == "BUFF" then
+            debuffDir = IsV(debuffDir) and OppositeV(debuffDir) or OppositeH(debuffDir)
+        else
+            buffDir = IsV(buffDir) and OppositeV(buffDir) or OppositeH(buffDir)
+        end
+    end
+
+    -- Block both-horizontal (unsupported). Force the unchanged pad to opposite vertical.
     if IsH(buffDir) and IsH(debuffDir) then
-        return (buffDir .. "_" .. debuffDir .. "_BUFFS"), buffDir, debuffDir
+        if changedKind == "BUFF" then
+            debuffDir = "BOTTOM"
+        else
+            buffDir = "TOP"
+        end
     end
-    -- Vertical pair: represent directly (covers TOP_BOTTOM, BOTTOM_TOP, TOP_TOP, BOTTOM_BOTTOM).
+
+    -- Vertical + Vertical: normalize to canonical TOP_BOTTOM prefix.
+    -- Buff=TOP, Debuff=BOTTOM → TOP_BOTTOM_BUFFS
+    -- Buff=BOTTOM, Debuff=TOP → TOP_BOTTOM_DEBUFFS
     if IsV(buffDir) and IsV(debuffDir) then
-        return (buffDir .. "_" .. debuffDir .. "_BUFFS"), buffDir, debuffDir
+        if buffDir == "TOP" then
+            return "TOP_BOTTOM_BUFFS", buffDir, debuffDir
+        else
+            return "TOP_BOTTOM_DEBUFFS", buffDir, debuffDir
+        end
     end
-    -- Mapping table for the 8 split presets (vertical<->horizontal).
+
+    -- Vertical + Horizontal (or vice versa): map to canonical preset.
     local map = {
         -- Buffs vertical, Debuffs horizontal
-        TOP_RIGHT   = "TOP_RIGHT_BUFFS",
-        TOP_LEFT    = "TOP_LEFT_BUFFS",
-        BOTTOM_RIGHT= "BOTTOM_RIGHT_BUFFS",
-        BOTTOM_LEFT = "BOTTOM_LEFT_BUFFS",
-        -- Debuffs vertical, Buffs horizontal (note: preset name still starts with the vertical side)
-        RIGHT_TOP   = "TOP_RIGHT_DEBUFFS",
-        LEFT_TOP    = "TOP_LEFT_DEBUFFS",
-        RIGHT_BOTTOM= "BOTTOM_RIGHT_DEBUFFS",
-        LEFT_BOTTOM = "BOTTOM_LEFT_DEBUFFS",
+        TOP_RIGHT    = "TOP_RIGHT_BUFFS",
+        TOP_LEFT     = "TOP_LEFT_BUFFS",
+        BOTTOM_RIGHT = "BOTTOM_RIGHT_BUFFS",
+        BOTTOM_LEFT  = "BOTTOM_LEFT_BUFFS",
+        -- Buffs horizontal, Debuffs vertical → flip to DEBUFFS suffix
+        RIGHT_TOP    = "TOP_RIGHT_DEBUFFS",
+        LEFT_TOP     = "TOP_LEFT_DEBUFFS",
+        RIGHT_BOTTOM = "BOTTOM_RIGHT_DEBUFFS",
+        LEFT_BOTTOM  = "BOTTOM_LEFT_DEBUFFS",
     }
-    if IsV(buffDir) and IsH(debuffDir) then
-        local key = buffDir .. "_" .. debuffDir
-        return map[key] or "TOP_BOTTOM_BUFFS", buffDir, debuffDir
-    end
-    if IsH(buffDir) and IsV(debuffDir) then
-        local key = buffDir .. "_" .. debuffDir
-        return map[key] or "TOP_BOTTOM_BUFFS", buffDir, debuffDir
-    end
-    -- Fallback
-     return "TOP_BOTTOM_BUFFS", buffDir, debuffDir
+    local key = buffDir .. "_" .. debuffDir
+    return map[key] or "TOP_BOTTOM_BUFFS", buffDir, debuffDir
 end
 local function MSUF_A2_StyleDPadButton(btn, glyph)
     if not btn or btn.__msufA2Styled then  return end

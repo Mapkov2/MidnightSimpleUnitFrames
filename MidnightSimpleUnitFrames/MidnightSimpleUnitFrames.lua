@@ -3034,7 +3034,7 @@ local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     -- Coalesce within the same millisecond-bucket (approx "per-flush" when multiple updates burst)
     local now = GetTime()
     local nowMs = math_floor(now * 1000)
-    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ short keys on small table)
+    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ short keys on small table)
     local ts = self._msufTS
     if not ts then ts = {}; self._msufTS = ts end
     -- HP text: force when layout/toggle changed, otherwise rate-limit
@@ -3709,9 +3709,19 @@ function MSUF_CommitApplyDirty()
         if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
             MSUF_FastCall(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit)
     end
+        -- Reanchor boss castbar position BEFORE updating the preview.
+        -- Without this, boss castbar previews lose their anchor when boss
+        -- frames reposition (e.g. spacing slider) and disappear.
+        if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+            MSUF_FastCall(_G.MSUF_ApplyBossCastbarPositionSetting)
+        end
         if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
             MSUF_FastCall(_G.MSUF_UpdateBossCastbarPreview)
     end
+        -- Keep the castbar position popup synced if it is currently open.
+        if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
+            MSUF_FastCall(_G.MSUF_SyncCastbarPositionPopup, "boss")
+        end
     end
     if st.tickers then
         if type(_G.MSUF_EnsureStatusIndicatorTicker) == "function" then _G.MSUF_EnsureStatusIndicatorTicker() end
