@@ -1816,9 +1816,9 @@ local function PositionUnitFrame(f, unit)
     end
     if not conf then  return end
     local anchor = MSUF_GetAnchorFrame()
-    -- Pet-only: allow anchoring the pet frame relative to Player/Target.
+    -- Pet / Focus: allow anchoring relative to Player/Target.
     -- This is a pure anchor swap; offsets remain the same (measured from the chosen anchor).
-    if key == "pet" and conf and (conf.anchorToUnitframe == "player" or conf.anchorToUnitframe == "target") then
+    if (key == "pet" or key == "focus") and conf and (conf.anchorToUnitframe == "player" or conf.anchorToUnitframe == "target") then
         local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
         if conf.anchorToUnitframe == "player" then
             anchor = (uf and (uf.player or uf["player"])) or _G.MSUF_player or anchor
@@ -3044,7 +3044,7 @@ local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     -- Coalesce within the same millisecond-bucket (approx "per-flush" when multiple updates burst)
     local now = GetTime()
     local nowMs = math_floor(now * 1000)
-    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ short keys on small table)
+    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ short keys on small table)
     local ts = self._msufTS
     if not ts then ts = {}; self._msufTS = ts end
     -- HP text: force when layout/toggle changed, otherwise rate-limit
@@ -4123,6 +4123,18 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
     local function _UpdateDBFromFrame(self, key, conf)
         if not self or not conf or not key then  return end
         local anchor = MSUF_GetAnchorFrame and MSUF_GetAnchorFrame() or UIParent
+        -- Pet / Focus: use the same anchor as PositionUnitFrame when anchored to a unitframe.
+        if (key == "pet" or key == "focus") and conf.anchorToUnitframe then
+            local atv = conf.anchorToUnitframe
+            if atv == "player" or atv == "target" then
+                local uf = _G.MSUF_UnitFrames or _G.UnitFrames
+                local relFrame = uf and (uf[atv] or uf[atv])
+                if not relFrame then relFrame = _G["MSUF_" .. atv] end
+                if relFrame and relFrame.GetCenter then
+                    anchor = relFrame
+                end
+            end
+        end
         if not anchor or not anchor.GetCenter or not self.GetCenter then  return end
         local _g = MSUF_DB and MSUF_DB.general
         if _g and _g.anchorToCooldown then

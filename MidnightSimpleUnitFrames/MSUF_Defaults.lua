@@ -581,7 +581,7 @@ end
         g.castbarGlobalWidth = 200   -- Standardbreite
     end
     if g.castbarGlobalHeight == nil then
-        g.castbarGlobalHeight = 18   -- StandardhÃ¶he
+        g.castbarGlobalHeight = 18   -- Standardhöhe
     end
     -- Per-castbar default sizes (match Edit Mode preview defaults)
     if g.castbarPlayerBarWidth == nil then g.castbarPlayerBarWidth = 271 end
@@ -1331,6 +1331,10 @@ local function fill(key, defaults)
         portraitMode = "OFF",
         -- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
+        -- Focus-only: optional relative anchor for positioning.
+        -- "GLOBAL" keeps the classic behavior (anchored to the MSUF global anchor).
+        -- Other supported values: "player", "target".
+        anchorToUnitframe = "GLOBAL",
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.focus[k] == nil then MSUF_DB.focus[k] = v end

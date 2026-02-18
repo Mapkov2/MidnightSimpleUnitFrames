@@ -383,9 +383,9 @@ local MSUF_TOTINLINE_SEP_OPTIONS = {
     { value = "<<<", text = "<<<" },
     { value = ">>>", text = ">>>" },
     -- optional extras (UTF-8 is fine in Lua sources)
-    { value = "â€¢",   text = "â€¢"   },
+    { value = "||",   text = "||"   },
     { value = "",   text = ""   },
-    { value = "Â·",   text = "Â·"   },
+    { value = "--",   text = "--"   },
     { value = ">",   text = ">"   },
     { value = "<",   text = "<"   },
 }
@@ -539,7 +539,7 @@ local function MSUF_BindDropdown(panel, fieldName, confKey, options, textFn, IsF
             info.value = opt.value
             info.func  = OnClick
             info.arg1  = opt.value
-            -- safe checked function, donâ€™t rely on btn.text being non-nil
+            -- safe checked function, donÃ¢â‚¬â„¢t rely on btn.text being non-nil
             info.checked = function()
                 local conf = EnsureKeyDBFn and EnsureKeyDBFn()
                 local v = conf and conf[confKey]
@@ -1481,6 +1481,27 @@ end
 			end
 		end
 		panel.petAnchorToDD:Hide()
+		-- Focus-only: anchor focus frame relative to Player/Target (shown only on focus pages).
+		if not panel.focusAnchorToLabel then
+			panel.focusAnchorToLabel = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			panel.focusAnchorToLabel:SetJustifyH("LEFT")
+		end
+		panel.focusAnchorToLabel:SetText(TR("Anchor focus to"))
+		panel.focusAnchorToLabel:Hide()
+		if not panel.focusAnchorToDD then
+			local dd = CreateFrame("Frame", "MSUF_FocusAnchorToDropDown", textGroup, "UIDropDownMenuTemplate")
+			panel.focusAnchorToDD = dd
+			if UIDropDownMenu_SetWidth then
+				UIDropDownMenu_SetWidth(dd, 180)
+			end
+			dd._msufDropWidth = 180
+			if type(_G.MSUF_ExpandDropdownClickArea) == "function" then
+				_G.MSUF_ExpandDropdownClickArea(dd)
+			elseif type(MSUF_ExpandDropdownClickArea) == "function" then
+				MSUF_ExpandDropdownClickArea(dd)
+			end
+		end
+		panel.focusAnchorToDD:Hide()
 		-- Status icons (player/target only; lives in its own box)
 		local statusBox = panel._msufStatusIconsGroup
 		local STATUS_BASE_TOGGLE_Y = -34
@@ -2045,6 +2066,9 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
 		-- Pet-only widgets inside this template must also be hard-hidden outside the Frames tab.
 		if panel.petAnchorToLabel then panel.petAnchorToLabel:Hide() end
 		if panel.petAnchorToDD then panel.petAnchorToDD:Hide() end
+		-- Focus-only widgets: same treatment.
+		if panel.focusAnchorToLabel then panel.focusAnchorToLabel:Hide() end
+		if panel.focusAnchorToDD then panel.focusAnchorToDD:Hide() end
         for _, spec in pairs(_MSUF_INDICATOR_SPECS) do
             SetShownByName(spec.showCB, false)
             SetShownByName(spec.xStepper, false)
@@ -2166,6 +2190,28 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
 			end
 			if panel.petAnchorToDD.SetFrameLevel and container.GetFrameLevel then
 				panel.petAnchorToDD:SetFrameLevel((container:GetFrameLevel() or 0) + 2)
+			end
+		end
+	end
+	-- Focus-only: allow anchoring the focus frame to Player/Target (same layout slot as pet anchor).
+	local showFocusAnchorTo = (currentKey == "focus") and true or false
+	if panel.focusAnchorToLabel then panel.focusAnchorToLabel:SetShown(showFocusAnchorTo) end
+	if panel.focusAnchorToDD then panel.focusAnchorToDD:SetShown(showFocusAnchorTo) end
+	if showFocusAnchorTo then
+		local y = baseToggleY + (row * step) + 6
+		if panel.focusAnchorToLabel then
+			panel.focusAnchorToLabel:ClearAllPoints()
+			panel.focusAnchorToLabel:SetPoint("TOPLEFT", container, "TOPLEFT", 12, y)
+		end
+		if panel.focusAnchorToDD then
+			panel.focusAnchorToDD:ClearAllPoints()
+			if panel.focusAnchorToLabel then
+				panel.focusAnchorToDD:SetPoint("TOPLEFT", panel.focusAnchorToLabel, "BOTTOMLEFT", -18, -6)
+			else
+				panel.focusAnchorToDD:SetPoint("TOPLEFT", container, "TOPLEFT", -6, y - 22)
+			end
+			if panel.focusAnchorToDD.SetFrameLevel and container.GetFrameLevel then
+				panel.focusAnchorToDD:SetFrameLevel((container:GetFrameLevel() or 0) + 2)
 			end
 		end
 	end
@@ -2460,6 +2506,21 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
 			if UIDropDownMenu_SetText then
 				local txt = (v == "player" and "Player frame") or (v == "target" and "Target frame") or "Free (global anchor)"
 				UIDropDownMenu_SetText(panel.petAnchorToDD, txt)
+			end
+		end
+	end
+	-- Focus-only: anchor focus frame relative to Player/Target.
+	if panel.focusAnchorToDD then
+		local show = (isFocusKey and isFramesTab) and true or false
+		panel.focusAnchorToDD:SetShown(show)
+		if panel.focusAnchorToLabel then panel.focusAnchorToLabel:SetShown(show) end
+		if show then
+			local v = conf.anchorToUnitframe
+			if v ~= "player" and v ~= "target" then v = "GLOBAL" end
+			if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.focusAnchorToDD, v) end
+			if UIDropDownMenu_SetText then
+				local txt = (v == "player" and "Player frame") or (v == "target" and "Target frame") or "Free (global anchor)"
+				UIDropDownMenu_SetText(panel.focusAnchorToDD, txt)
 			end
 		end
 	end
@@ -3001,37 +3062,36 @@ for _, rowId in ipairs(MSUF_INDICATOR_ORDER) do
     MSUF_BindIndicatorRow(INDICATOR_SPECS[rowId])
 end
 
--- Pet-only: "Anchor pet to" dropdown (Indicator box)
-if panel.petAnchorToDD and UIDropDownMenu_Initialize then
-    local drop = panel.petAnchorToDD
-    local function GetEffectiveValue(conf)
-        local v = conf and conf.anchorToUnitframe
-        if v == "player" or v == "target" then
-            return v
-        end
-        -- Treat nil/"GLOBAL"/unknown as global anchor.
-        return "GLOBAL"
-    end
-    local function TextFor(v)
-        if v == "player" then return "Player frame" end
-        if v == "target" then return "Target frame" end
-        return "Free (global anchor)"
-    end
+-- Shared helpers for pet/focus "Anchor to" dropdowns.
+local function _MSUF_AnchorToEffectiveValue(conf)
+    local v = conf and conf.anchorToUnitframe
+    if v == "player" or v == "target" then return v end
+    return "GLOBAL"
+end
+local function _MSUF_AnchorToTextFor(v)
+    if v == "player" then return "Player frame" end
+    if v == "target" then return "Target frame" end
+    return "Free (global anchor)"
+end
+local _MSUF_ANCHOR_TO_CHOICES = {
+    {"Free (global anchor)", "GLOBAL"},
+    {"Player frame", "player"},
+    {"Target frame", "target"},
+}
+
+-- Bind an "Anchor <unit> to" dropdown for a given unit key.
+local function _MSUF_BindAnchorToDropdown(drop, requiredKey)
+    if not drop or not UIDropDownMenu_Initialize then return end
     UIDropDownMenu_Initialize(drop, function(self, level)
         if not level or level ~= 1 then  return end
         if not IsFramesTab() then  return end
         local k = (CurrentKey and CurrentKey()) or "player"
         if k == "tot" then k = "targettarget" end
-        if k ~= "pet" then  return end
+        if k ~= requiredKey then  return end
 
         local conf = EnsureKeyDB()
-        local cur = GetEffectiveValue(conf)
-        local choices = {
-            {"Free (global anchor)", "GLOBAL"},
-            {"Player frame", "player"},
-            {"Target frame", "target"},
-        }
-        for _, pair in ipairs(choices) do
+        local cur = _MSUF_AnchorToEffectiveValue(conf)
+        for _, pair in ipairs(_MSUF_ANCHOR_TO_CHOICES) do
             local textLabel, value = pair[1], pair[2]
             local info = UIDropDownMenu_CreateInfo()
             info.text = textLabel
@@ -3043,10 +3103,9 @@ if panel.petAnchorToDD and UIDropDownMenu_Initialize then
                 if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(drop, value) end
                 if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, textLabel) end
                 if CloseDropDownMenus then CloseDropDownMenus() end
-                -- Apply immediately (PositionUnitFrame uses this field for pet).
                 ApplyCurrent()
             end
-            info.checked = function()  return (GetEffectiveValue(conf) == value) end
+            info.checked = function()  return (_MSUF_AnchorToEffectiveValue(conf) == value) end
             info.isNotRadio = false
             UIDropDownMenu_AddButton(info, level)
         end
@@ -3056,13 +3115,15 @@ if panel.petAnchorToDD and UIDropDownMenu_Initialize then
         if not IsFramesTab() then  return end
         local k = (CurrentKey and CurrentKey()) or "player"
         if k == "tot" then k = "targettarget" end
-        if k ~= "pet" then  return end
+        if k ~= requiredKey then  return end
         local conf = EnsureKeyDB()
-        local v = GetEffectiveValue(conf)
+        local v = _MSUF_AnchorToEffectiveValue(conf)
         if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(drop, v) end
-        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, TextFor(v)) end
+        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, _MSUF_AnchorToTextFor(v)) end
     end)
 end
+_MSUF_BindAnchorToDropdown(panel.petAnchorToDD, "pet")
+_MSUF_BindAnchorToDropdown(panel.focusAnchorToDD, "focus")
 
 -- Status icons (Step 1): Combat row uses indicator-style controls (player/target)
 _G.MSUF_RequestStatusCombatIndicatorRefresh = _G.MSUF_RequestStatusCombatIndicatorRefresh or function()
