@@ -495,17 +495,34 @@ function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
     if perRow < 1 then perRow = 1 end
 
     local step = iconSize + spacing
+    local vertical = (growth == "UP" or growth == "DOWN")
 
-    -- Direction multipliers
-    local dx, dy = 1, -1  -- growth RIGHT, wrap DOWN
+    -- Direction multipliers + anchor
+    local dx, dy = 1, -1  -- defaults: growth RIGHT, wrap DOWN
     local anchorX, anchorY = "LEFT", "BOTTOM"
 
-    if growth == "LEFT" then
-        dx = -1
-        anchorX = "RIGHT"
-    end
-    if rowWrap == "UP" then
-        dy = 1
+    if vertical then
+        -- Vertical: fill a column first (perRow icons), then wrap rightward.
+        -- UP:   anchor BOTTOMLEFT, icons go upward   (dy = +1)
+        -- DOWN: anchor TOPLEFT,    icons go downward  (dy = -1)
+        if growth == "DOWN" then
+            anchorY = "TOP"
+            dy = -1
+        else -- UP
+            anchorY = "BOTTOM"
+            dy = 1
+        end
+        dx = 1
+        anchorX = "LEFT"
+    else
+        -- Horizontal: fill a row first, then wrap vertically.
+        if growth == "LEFT" then
+            dx = -1
+            anchorX = "RIGHT"
+        end
+        if rowWrap == "UP" then
+            dy = 1
+        end
     end
 
     -- Precompute anchor string ONCE (not per icon)
@@ -523,8 +540,16 @@ function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
         local icon = pool[i]
         if icon then
             local idx = i - 1
-            local col = idx % perRow
-            local row = (idx - col) / perRow  -- integer division (faster than floor)
+            local col, row
+            if vertical then
+                -- Fill column first (row within column), then wrap to next column
+                row = idx % perRow
+                col = (idx - row) / perRow  -- integer division
+            else
+                -- Fill row first (col within row), then wrap to next row
+                col = idx % perRow
+                row = (idx - col) / perRow  -- integer division
+            end
             local x = col * step * dx
             local y = row * step * dy
 
@@ -1377,11 +1402,11 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
     return buffCount, debuffCount
 end
 
-function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spacing, stackCountAnchor)
+function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spacing, stackCountAnchor, privateGrowth)
     -- Delegate to existing preview system
     local fn = API._Render and API._Render.RenderPreviewPrivateIcons
     if type(fn) == "function" then
-        return fn(entry, unit, shared, privIconSize, spacing, stackCountAnchor)
+        return fn(entry, unit, shared, privIconSize, spacing, stackCountAnchor, privateGrowth)
     end
 
     -- Always show private aura previews in Edit Mode (no enabled-gate needed 
@@ -1397,6 +1422,25 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
         maxN = (shared and shared.privateAuraMaxOther) or 4
     end
     if maxN <= 0 then maxN = 4 end -- always show at least a few in preview
+
+    -- Growth direction
+    privateGrowth = privateGrowth or "RIGHT"
+    local vertical = (privateGrowth == "UP" or privateGrowth == "DOWN")
+    local anchorX, anchorY = "LEFT", "BOTTOM"
+    local dirX, dirY = 1, 0
+    if vertical then
+        dirX, dirY = 0, 1
+        if privateGrowth == "DOWN" then
+            anchorY = "TOP"
+            dirY = -1
+        end
+    else
+        if privateGrowth == "LEFT" then
+            anchorX = "RIGHT"
+            dirX = -1
+        end
+    end
+    local anchorPt = anchorY .. anchorX
 
     local gen = _configGen
     local now = GetTime()
@@ -1446,16 +1490,10 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
 
             icon:Show()
 
-            -- Position: horizontal row
+            -- Position using growth direction
             icon:ClearAllPoints()
-            if i == 1 then
-                icon:SetPoint("LEFT", container, "LEFT", 0, 0)
-            else
-                local prev = container._msufIcons and container._msufIcons[i - 1]
-                if prev then
-                    icon:SetPoint("LEFT", prev, "RIGHT", spacing, 0)
-                end
-            end
+            local off = (i - 1) * (privIconSize + spacing)
+            icon:SetPoint(anchorPt, container, anchorPt, off * dirX, off * dirY)
 
             -- Text config
             icon._msufA2_textCfgGen = nil
@@ -1506,7 +1544,11 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
     -- Size the container to wrap its children
     local step = privIconSize + spacing
     if step <= 0 then step = privIconSize + 2 end
-    container:SetSize(math_max(1, (privCount * step) - spacing), math_max(1, privIconSize))
+    if vertical then
+        container:SetSize(math_max(1, privIconSize), math_max(1, (privCount * step) - spacing))
+    else
+        container:SetSize(math_max(1, (privCount * step) - spacing), math_max(1, privIconSize))
+    end
     container:Show()
 end
 

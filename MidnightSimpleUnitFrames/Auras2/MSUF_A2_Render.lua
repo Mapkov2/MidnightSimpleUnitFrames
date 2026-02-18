@@ -161,6 +161,10 @@ local function EnsureDB()
     s.showPrivateAurasTarget = false
     s.privateAuraMaxPlayer = Clamp(s.privateAuraMaxPlayer, 4, 0, 12)
     s.privateAuraMaxOther  = Clamp(s.privateAuraMaxOther,  4, 0, 12)
+    -- Per-type growth: sanitize invalid values (nil = fall back to s.growth)
+    if s.buffGrowth ~= nil and not A2_GROWTH_OK[s.buffGrowth] then s.buffGrowth = nil end
+    if s.debuffGrowth ~= nil and not A2_GROWTH_OK[s.debuffGrowth] then s.debuffGrowth = nil end
+    if s.privateGrowth ~= nil and not A2_GROWTH_OK[s.privateGrowth] then s.privateGrowth = nil end
 
     -- Filters
     Filters = API.Filters
@@ -441,6 +445,10 @@ local function ResolveUnitConfig(unit, a2, shared)
     local rowWrap = shared.rowWrap or "DOWN"
     local layoutMode = shared.layoutMode or "SEPARATE"
     local stackCountAnchor = shared.stackCountAnchor or "TOPRIGHT"
+    -- Per-type growth (nil = fall back to growth)
+    local buffGrowth = shared.buffGrowth
+    local debuffGrowth = shared.debuffGrowth
+    local privateGrowth = shared.privateGrowth
 
     -- Per-unit overrides
     local pu = a2.perUnit and a2.perUnit[unit]
@@ -450,10 +458,18 @@ local function ResolveUnitConfig(unit, a2, shared)
         if type(ls.maxBuffs) == "number" then maxBuffs = ls.maxBuffs end
         if type(ls.maxDebuffs) == "number" then maxDebuffs = ls.maxDebuffs end
         if ls.growth and A2_GROWTH_OK[ls.growth] then growth = ls.growth end
+        if ls.buffGrowth and A2_GROWTH_OK[ls.buffGrowth] then buffGrowth = ls.buffGrowth end
+        if ls.debuffGrowth and A2_GROWTH_OK[ls.debuffGrowth] then debuffGrowth = ls.debuffGrowth end
+        if ls.privateGrowth and A2_GROWTH_OK[ls.privateGrowth] then privateGrowth = ls.privateGrowth end
         if ls.rowWrap and A2_ROWWRAP_OK[ls.rowWrap] then rowWrap = ls.rowWrap end
         if ls.layoutMode and A2_LAYOUTMODE_OK[ls.layoutMode] then layoutMode = ls.layoutMode end
         if ls.stackCountAnchor and A2_STACKANCHOR_OK[ls.stackCountAnchor] then stackCountAnchor = ls.stackCountAnchor end
     end
+    -- Resolve per-type fallback: nil → growth
+    if not buffGrowth or not A2_GROWTH_OK[buffGrowth] then buffGrowth = growth end
+    if not debuffGrowth or not A2_GROWTH_OK[debuffGrowth] then debuffGrowth = growth end
+    if not privateGrowth or not A2_GROWTH_OK[privateGrowth] then privateGrowth = growth end
+
     if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
         local lay = pu.layout
         if type(lay.iconSize) == "number" and lay.iconSize > 1 then iconSize = lay.iconSize end
@@ -485,7 +501,7 @@ if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
     if type(psz) == "number" and psz > 1 then privateIconSize = psz end
 end
 
-    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, rowWrap, layoutMode, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize
+    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, privateGrowth, rowWrap, layoutMode, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize
 end
 
 
@@ -515,7 +531,7 @@ local function PrivateClear(entry)
     if entry.private then entry.private:Hide() end
 end
 
-local function PrivateRebuild(entry, shared, privateIconSize, spacing)
+local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
     if not entry or not shared then return end
     local unit = entry.unit
 
@@ -540,8 +556,12 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing)
         effectiveToken = "player"
     end
 
+    -- Resolve growth direction
+    privateGrowth = (privateGrowth and A2_GROWTH_OK[privateGrowth]) and privateGrowth or "RIGHT"
+    local vertical = (privateGrowth == "UP" or privateGrowth == "DOWN")
+
     -- Signature to avoid rebuilding when nothing changed
-    local sig = unit .. "|" .. effectiveToken .. "|" .. privateIconSize .. "|" .. spacing .. "|" .. maxN
+    local sig = unit .. "|" .. effectiveToken .. "|" .. privateIconSize .. "|" .. spacing .. "|" .. maxN .. "|" .. privateGrowth
     if entry._privateSig == sig and type(entry._privateAnchorIDs) == "table" then
         if entry.private then entry.private:Show() end
         return
@@ -558,7 +578,30 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing)
     entry.private:Show()
     entry._privateSig = sig
     entry._privateAnchorIDs = {}
-    entry.private:SetSize((maxN * step) - spacing, privateIconSize)
+
+    -- Container sizing: horizontal = wide row, vertical = tall column
+    if vertical then
+        entry.private:SetSize(privateIconSize, (maxN * step) - spacing)
+    else
+        entry.private:SetSize((maxN * step) - spacing, privateIconSize)
+    end
+
+    -- Direction + anchor (same logic as Icons.LayoutIcons)
+    local anchorX, anchorY = "LEFT", "BOTTOM"
+    local dx, dy = 1, 0
+    if vertical then
+        dx, dy = 0, 1
+        if privateGrowth == "DOWN" then
+            anchorY = "TOP"
+            dy = -1
+        end
+    else
+        if privateGrowth == "LEFT" then
+            anchorX = "RIGHT"
+            dx = -1
+        end
+    end
+    local anchor = anchorY .. anchorX
 
     -- Reuse args table (avoid allocation per slot)
     local args = entry._privateArgs
@@ -590,7 +633,8 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing)
             slots[i] = slot
         end
         slot:ClearAllPoints()
-        slot:SetPoint("BOTTOMLEFT", entry.private, "BOTTOMLEFT", (i - 1) * step, 0)
+        local off = (i - 1) * step
+        slot:SetPoint(anchor, entry.private, anchor, off * dx, off * dy)
         slot:SetSize(privateIconSize, privateIconSize)
         slot:Show()
 
@@ -770,7 +814,16 @@ end
         MirrorMover(entry.editMoverDebuff,  entry.debuffs, anchor, dcols * stepD, debuffIconSize + headerH)
         -- Private auras are player-only; skip mover for target.
         if unit ~= "target" then
-            MirrorMover(entry.editMoverPrivate, entry.private, anchor, 4 * stepP,     privateIconSize + headerH)
+            local privVertical = (privateGrowth == "UP" or privateGrowth == "DOWN")
+            local privW, privH
+            if privVertical then
+                privW = privateIconSize
+                privH = (4 * stepP) + headerH
+            else
+                privW = 4 * stepP
+                privH = privateIconSize + headerH
+            end
+            MirrorMover(entry.editMoverPrivate, entry.private, anchor, privW, privH)
         end
     end
 end
@@ -894,9 +947,9 @@ local function RenderUnit(entry)
     if cfg._gen ~= gen then
         cfg._gen = gen
 
-        -- Layout config (9 values)
+        -- Layout config
         cfg.iconSize, cfg.spacing, cfg.perRow, cfg.maxBuffs, cfg.maxDebuffs,
-        cfg.growth, cfg.rowWrap, cfg.layoutMode, cfg.stackCountAnchor,
+        cfg.growth, cfg.buffGrowth, cfg.debuffGrowth, cfg.privateGrowth, cfg.rowWrap, cfg.layoutMode, cfg.stackCountAnchor,
         cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize =
             ResolveUnitConfig(unit, a2, shared)        -- Filter flags
         if Filters and Filters.ResolveRuntimeFlags then
@@ -936,6 +989,9 @@ local function RenderUnit(entry)
     local maxBuffs          = cfg.maxBuffs
     local maxDebuffs        = cfg.maxDebuffs
     local growth            = cfg.growth
+    local buffGrowth        = cfg.buffGrowth or growth
+    local debuffGrowth      = cfg.debuffGrowth or growth
+    local privateGrowth     = cfg.privateGrowth or growth
     local rowWrap           = cfg.rowWrap
     local stackCountAnchor  = cfg.stackCountAnchor
     local showBuffs         = cfg.showBuffs
@@ -971,7 +1027,7 @@ local function RenderUnit(entry)
 
     -- Private auras: only rebuild when config changes
     if gen ~= entry._lastPrivateGen then
-        PrivateRebuild(entry, shared, privateIconSize, spacing)
+        PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
         entry._lastPrivateGen = gen
     end
 
@@ -1021,17 +1077,17 @@ local function RenderUnit(entry)
             local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, maxBuffs, maxDebuffs, stackCountAnchor)
             local bSize = useSingleRow and iconSize or buffIconSize
             local dSize = useSingleRow and iconSize or debuffIconSize
-            Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, growth, rowWrap)
-            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, growth, rowWrap)
+            Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, buffGrowth, rowWrap)
+            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, debuffGrowth, rowWrap)
         elseif Icons.RenderPreviewIcons and isPlayer then
             -- Player: debuff preview only (buffCap = 0), real buffs render below
             local _, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, 0, maxDebuffs, stackCountAnchor)
             local dSize = useSingleRow and iconSize or debuffIconSize
-            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, growth, rowWrap)
+            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, debuffGrowth, rowWrap)
         end
 
         if Icons.RenderPreviewPrivateIcons and unit ~= "target" then
-            Icons.RenderPreviewPrivateIcons(entry, unit, shared, privateIconSize, spacing, stackCountAnchor)
+            Icons.RenderPreviewPrivateIcons(entry, unit, shared, privateIconSize, spacing, stackCountAnchor, privateGrowth)
         end
 
         -- Non-player: done. Player: fall through to real aura path for buffs.
@@ -1138,7 +1194,7 @@ local function RenderUnit(entry)
         end
     elseif useSingleRow and entry.mixed and skipDebuffs then
         -- Player edit mode + single row: layout only real buffs in mixed, leave debuffs alone.
-        _LayoutIcons(entry.mixed, buffCount, iconSize, spacing, perRow, growth, rowWrap)
+        _LayoutIcons(entry.mixed, buffCount, iconSize, spacing, perRow, buffGrowth, rowWrap)
         if countsChanged then
             _HideUnused(entry.mixed, buffCount + 1)
             _HideUnused(entry.buffs, 1)
@@ -1147,7 +1203,7 @@ local function RenderUnit(entry)
         if skipDebuffs then
             -- Player edit mode: debuff layout already handled by preview path.
         elseif showDebuffs then
-            _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, growth, rowWrap)
+            _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, rowWrap)
             if debuffCount ~= lastDebuffCount then
                 _HideUnused(entry.debuffs, debuffCount + 1)
             end
@@ -1158,7 +1214,7 @@ local function RenderUnit(entry)
         end
 
         if showBuffs then
-            _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, growth, rowWrap)
+            _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, rowWrap)
             if buffCount ~= lastBuffCount then
                 _HideUnused(entry.buffs, buffCount + 1)
             end

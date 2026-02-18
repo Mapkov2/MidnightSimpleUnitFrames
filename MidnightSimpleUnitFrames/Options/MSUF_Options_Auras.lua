@@ -588,310 +588,7 @@ local function CreateLayoutDropdown(parent, x, y, getter, setter)
      return dd
 end
 -- ------------------------------------------------------------
--- Buff/Debuff Anchor DPads (Auras 2)
--- Two D-pads that visually set the same "buffDebuffAnchor" preset used by the dropdown,
--- without introducing new DB keys (no runtime regression).
--- Works only with Layout: Separate rows (Single row / Mixed disables split anchoring).
--- ------------------------------------------------------------
-local function A2_ParseBuffDebuffAnchorPreset(preset)
-    if type(preset) ~= "string" or preset == "" or preset == "STACKED" then
-         return "TOP", "BOTTOM" -- sensible default
-    end
-    -- Presets: <A>_<B>_BUFFS  => Buffs=A, Debuffs=B
-    --          <A>_<B>_DEBUFFS=> Debuffs=A, Buffs=B
-    local a, b, kind = string.match(preset, "^(%u+)%_(%u+)%_(%u+)$")
-    if not (a and b and kind) then
-         return "TOP", "BOTTOM"
-    end
-    if kind == "BUFFS" then
-         return a, b
-    elseif kind == "DEBUFFS" then
-         return b, a
-    end
-     return "TOP", "BOTTOM"
-end
-local function A2_BuildBuffDebuffAnchorPreset(buffDir, debuffDir, changedKind)
-    -- Normalize & snap to the canonical preset space.
-    -- Valid presets use the pattern <VERTICAL>_<SIDE>_<BUFFS|DEBUFFS> where
-    -- the first position is always the vertical/primary side (TOP/BOTTOM).
-    -- Horizontal (LEFT/RIGHT) can appear as the second position only.
-    local function IsH(d) return (d == "LEFT") or (d == "RIGHT") end
-    local function IsV(d) return (d == "TOP") or (d == "BOTTOM") end
-    local function OppositeV(d) return (d == "TOP") and "BOTTOM" or "TOP" end
-    local function OppositeH(d) return (d == "LEFT") and "RIGHT" or "LEFT" end
-
-    if type(buffDir) ~= "string" then buffDir = "TOP" end
-    if type(debuffDir) ~= "string" then debuffDir = "BOTTOM" end
-    buffDir = string.upper(buffDir)
-    debuffDir = string.upper(debuffDir)
-
-    -- Collision resolution: same direction → swap the OTHER pad to opposite.
-    -- This keeps presets always valid and prevents "nothing happens" clicks.
-    if buffDir == debuffDir then
-        if changedKind == "BUFF" then
-            debuffDir = IsV(debuffDir) and OppositeV(debuffDir) or OppositeH(debuffDir)
-        else
-            buffDir = IsV(buffDir) and OppositeV(buffDir) or OppositeH(buffDir)
-        end
-    end
-
-    -- Block both-horizontal (unsupported). Force the unchanged pad to opposite vertical.
-    if IsH(buffDir) and IsH(debuffDir) then
-        if changedKind == "BUFF" then
-            debuffDir = "BOTTOM"
-        else
-            buffDir = "TOP"
-        end
-    end
-
-    -- Vertical + Vertical: normalize to canonical TOP_BOTTOM prefix.
-    -- Buff=TOP, Debuff=BOTTOM → TOP_BOTTOM_BUFFS
-    -- Buff=BOTTOM, Debuff=TOP → TOP_BOTTOM_DEBUFFS
-    if IsV(buffDir) and IsV(debuffDir) then
-        if buffDir == "TOP" then
-            return "TOP_BOTTOM_BUFFS", buffDir, debuffDir
-        else
-            return "TOP_BOTTOM_DEBUFFS", buffDir, debuffDir
-        end
-    end
-
-    -- Vertical + Horizontal (or vice versa): map to canonical preset.
-    local map = {
-        -- Buffs vertical, Debuffs horizontal
-        TOP_RIGHT    = "TOP_RIGHT_BUFFS",
-        TOP_LEFT     = "TOP_LEFT_BUFFS",
-        BOTTOM_RIGHT = "BOTTOM_RIGHT_BUFFS",
-        BOTTOM_LEFT  = "BOTTOM_LEFT_BUFFS",
-        -- Buffs horizontal, Debuffs vertical → flip to DEBUFFS suffix
-        RIGHT_TOP    = "TOP_RIGHT_DEBUFFS",
-        LEFT_TOP     = "TOP_LEFT_DEBUFFS",
-        RIGHT_BOTTOM = "BOTTOM_RIGHT_DEBUFFS",
-        LEFT_BOTTOM  = "BOTTOM_LEFT_DEBUFFS",
-    }
-    local key = buffDir .. "_" .. debuffDir
-    return map[key] or "TOP_BOTTOM_BUFFS", buffDir, debuffDir
-end
-local function MSUF_A2_StyleDPadButton(btn, glyph)
-    if not btn or btn.__msufA2Styled then  return end
-    btn.__msufA2Styled = true
-    local WHITE8 = _G.MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8"
-    btn:SetSize(22, 22)
-
-    -- Plain buttons (no template) must explicitly register clicks, otherwise
-    -- OnClick can be inconsistent depending on UI state / overlays.
-    btn:EnableMouse(true)
-    if btn.RegisterForClicks then
-        btn:RegisterForClicks("AnyUp")
-    end
-    local normal = btn:CreateTexture(nil, "BACKGROUND")
-    normal:SetAllPoints()
-    normal:SetTexture(WHITE8)
-    normal:SetVertexColor(0, 0, 0, 0.90)
-    btn:SetNormalTexture(normal)
-    local pushed = btn:CreateTexture(nil, "BACKGROUND")
-    pushed:SetAllPoints()
-    pushed:SetTexture(WHITE8)
-    pushed:SetVertexColor(0.70, 0.55, 0.15, 0.95)
-    btn:SetPushedTexture(pushed)
-    local highlight = btn:CreateTexture(nil, "HIGHLIGHT")
-    highlight:SetAllPoints()
-    highlight:SetTexture(WHITE8)
-    highlight:SetVertexColor(1, 0.9, 0.4, 0.25)
-    btn:SetHighlightTexture(highlight)
-    local border = CreateFrame("Frame", nil, btn, "BackdropTemplate")
-    border:SetAllPoints()
-    border:SetBackdrop({ edgeFile = WHITE8, edgeSize = 1 })
-    border:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
-    btn.__msufBorder = border
-    local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:SetPoint("CENTER")
-    fs:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
-    fs:SetTextColor(0.35, 0.35, 0.35, 1)
-    fs:SetText(glyph or "?")
-    btn.text = fs
-    local sel = btn:CreateTexture(nil, "ARTWORK")
-    sel:SetAllPoints()
-    sel:SetTexture(WHITE8)
-    sel:SetVertexColor(1, 1, 1, 0.12)
-    sel:Hide()
-    btn.__msufSel = sel
- end
-local function CreateA2_AnchorDPad(parent, titleText, kind, getPreset, setPreset, isEnabledFn, onChanged)
-    local WHITE8 = _G.MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8"
-    local pad = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    pad:SetSize(82, 66)
-    pad.__msufKind = kind
-    pad.__msufGetPreset = getPreset
-    pad.__msufSetPreset = setPreset
-    pad.__msufIsEnabled = isEnabledFn
-    pad.__msufOnChanged = onChanged
-    pad:SetBackdrop({
-        bgFile = WHITE8,
-        edgeFile = WHITE8,
-        edgeSize = 1,
-    })
-    pad:SetBackdropColor(0, 0, 0, 0.25)
-    pad:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
-    local title = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    title:SetPoint("BOTTOMLEFT", pad, "TOPLEFT", 0, 4)
-    title:SetText(titleText or "Anchor")
-    pad.__MSUF_titleFS = title
-    pad.buttons = {}
-    local function ApplyPreset(newPreset, changedKind)
-        if type(pad.__msufSetPreset) == "function" then
-            pad.__msufSetPreset(newPreset)
-        end
-        if type(onChanged) == "function" then
-            onChanged(newPreset)
-        end
-        if type(A2_RequestApply) == "function" then
-            A2_RequestApply()
-        end
-        if pad.SyncFromDB then pad:SyncFromDB() end
-     end
-    local function ClickDir(dirKey)
-        local preset = (type(pad.__msufGetPreset) == "function" and pad.__msufGetPreset()) or "STACKED"
-        local buffDir, debuffDir = A2_ParseBuffDebuffAnchorPreset(preset)
-        if pad.__msufKind == "BUFF" then
-            buffDir = dirKey
-        else
-            debuffDir = dirKey
-        end
-        local newPreset
-        newPreset, buffDir, debuffDir = A2_BuildBuffDebuffAnchorPreset(buffDir, debuffDir, pad.__msufKind)
-        ApplyPreset(newPreset, pad.__msufKind)
-     end
-    local function MakeBtn(dirKey, glyph)
-        local b = CreateFrame("Button", nil, pad)
-        MSUF_A2_StyleDPadButton(b, glyph)
-        b.__msufDirKey = dirKey
-        if b.SetFrameLevel and pad.GetFrameLevel then
-            b:SetFrameLevel((pad:GetFrameLevel() or 0) + 2)
-        end
-        b:SetScript("OnClick", function(self)
-            -- Disabled when Layout is SINGLE (Mixed)
-            if type(pad.__msufIsEnabled) == "function" and not pad.__msufIsEnabled() then  return end
-            ClickDir(self and self.__msufDirKey or dirKey)
-         end)
-        pad.buttons[dirKey] = b
-         return b
-    end
-    local bUp    = MakeBtn("TOP",    "^")
-    local bDown  = MakeBtn("BOTTOM", "v")
-    local bLeft  = MakeBtn("LEFT",   "<")
-    local bRight = MakeBtn("RIGHT",  ">")
-    bUp:SetPoint("CENTER", pad, "CENTER", 0, 20)
-    bDown:SetPoint("CENTER", pad, "CENTER", 0, -20)
-    bLeft:SetPoint("CENTER", pad, "CENTER", -20, 0)
-    bRight:SetPoint("CENTER", pad, "CENTER", 20, 0)
-    local dot = pad:CreateTexture(nil, "ARTWORK")
-    dot:SetSize(9, 9)
-    dot:SetPoint("CENTER")
-    dot:SetTexture(WHITE8)
-    dot:SetVertexColor(0.7, 0.7, 0.7, 0.25)
-    pad.__msufDot = dot
-    function pad:SetEnabledVisual(enabled)
-        for _, btn in pairs(self.buttons) do
-            if enabled then
-                btn:Enable()
-                btn:SetAlpha(1)
-            else
-                btn:Disable()
-                btn:SetAlpha(0.35)
-            end
-        end
-        self:SetAlpha(enabled and 1 or 0.55)
-        if self.__MSUF_titleFS then
-            if enabled then
-                self.__MSUF_titleFS:SetTextColor(1, 1, 1)
-            else
-                self.__MSUF_titleFS:SetTextColor(0.5, 0.5, 0.5)
-            end
-        end
-     end
-    -- Let A2_ApplyScopeState() disable this via A2_SetWidgetEnabled().
-    function pad:SetEnabled(enabled)
-        self:SetEnabledVisual(enabled)
-     end
-    function pad:SyncFromDB()
-        local preset = (type(self.__msufGetPreset) == "function" and self.__msufGetPreset()) or "STACKED"
-        local buffDir, debuffDir = A2_ParseBuffDebuffAnchorPreset(preset)
-        local wantDir = (self.__msufKind == "BUFF") and buffDir or debuffDir
-	    local otherDir = (self.__msufKind == "BUFF") and debuffDir or buffDir
-	    local function IsH(d) return (d == "LEFT") or (d == "RIGHT") end
-        for dir, btn in pairs(self.buttons) do
-            local isOn = (dir == wantDir)
-            if btn.__msufSel then btn.__msufSel:SetShown(isOn) end
-            if btn.__msufBorder then
-                if isOn then
-                    btn.__msufBorder:SetBackdropBorderColor(0.70, 0.70, 0.70, 1)
-                else
-                    btn.__msufBorder:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
-                end
-            end
-            if btn.text then
-                if isOn then
-                    btn.text:SetTextColor(1, 0.9, 0.4, 1)
-                else
-                    btn.text:SetTextColor(0.35, 0.35, 0.35, 1)
-                end
-            end
-        end
-        local enabled = true
-        if type(self.__msufIsEnabled) == "function" then
-            enabled = self.__msufIsEnabled() and true or false
-        end
-	    -- Base enabled/disabled visuals (Layout SINGLE disables all).
-	    self:SetEnabledVisual(enabled)
-	    -- Additionally, prevent the unsupported case where BOTH blocks are horizontal.
-	    -- If the other block is already LEFT/RIGHT, disable LEFT/RIGHT on this pad.
-	    if enabled and IsH(otherDir) then
-	        local l = self.buttons["LEFT"]
-	        local r = self.buttons["RIGHT"]
-	        if l then l:Disable(); l:SetAlpha(0.35) end
-	        if r then r:Disable(); r:SetAlpha(0.35) end
-	    end
-     end
-    pad:SyncFromDB()
-     return pad
-end
-local function CreateA2_BuffDebuffAnchorDPads(parent, x, y, getPreset, setPreset, layoutGetter)
-    local function IsSeparateRows()
-        if type(layoutGetter) == "function" then
-            return (layoutGetter() or "SEPARATE") ~= "SINGLE"
-        end
-         return true
-    end
-    -- Anchor frame so we can position the pair like a dropdown row.
-    local anchor = CreateFrame("Frame", nil, parent)
-    anchor:SetSize(1, 1)
-    anchor:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    local header = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    header:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 4)
-    header:SetText(TR(""))
-    local buffPad, debuffPad
-    local function SyncAll()
-        local enabled = IsSeparateRows()
-        if enabled then
-            header:SetTextColor(1, 1, 1)
-        else
-            header:SetTextColor(0.5, 0.5, 0.5)
-        end
-        if buffPad and buffPad.SyncFromDB then buffPad:SyncFromDB() end
-        if debuffPad and debuffPad.SyncFromDB then debuffPad:SyncFromDB() end
-     end
-    local function OnChanged()
-        -- When one pad changes the shared preset, refresh both pads.
-        SyncAll()
-     end
-    buffPad = CreateA2_AnchorDPad(parent, "Buff Anchor", "BUFF", getPreset, setPreset, IsSeparateRows, OnChanged)
-    debuffPad = CreateA2_AnchorDPad(parent, "Debuff Anchor", "DEBUFF", getPreset, setPreset, IsSeparateRows, OnChanged)
-    -- Layout: side-by-side (this replaces the old dropdown + pads stack).
-    buffPad:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, 0)
-    debuffPad:SetPoint("TOPLEFT", buffPad, "TOPRIGHT", 10, 0)
-    SyncAll()
-     return buffPad, debuffPad
-end
+-- (DPad anchoring removed â€” auras can now be freely positioned via Edit Mode.)
 local function CreateRowWrapDropdown(parent, x, y, getter, setter)
     local dd = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
     dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, y + 4)
@@ -1572,6 +1269,9 @@ SetOverrideCapsForEditing = function(v)
         if ls.perRow == nil then ls.perRow = shared.perRow end
         if ls.layoutMode == nil then ls.layoutMode = shared.layoutMode end
         if ls.growth == nil then ls.growth = shared.growth end
+        if ls.buffGrowth == nil then ls.buffGrowth = shared.buffGrowth end
+        if ls.debuffGrowth == nil then ls.debuffGrowth = shared.debuffGrowth end
+        if ls.privateGrowth == nil then ls.privateGrowth = shared.privateGrowth end
         if ls.rowWrap == nil then ls.rowWrap = shared.rowWrap end
         if ls.buffDebuffAnchor == nil then ls.buffDebuffAnchor = shared.buffDebuffAnchor end
         if ls.splitSpacing == nil then ls.splitSpacing = shared.splitSpacing end
@@ -1595,12 +1295,27 @@ local function SyncLegacySharedFromSharedFilters()
  end
 local function SetCheckboxEnabled(cb, enabled)
     if not cb then  return end
-    cb:SetEnabled(enabled and true or false)
+    enabled = enabled and true or false
+    -- UIDropDownMenuTemplate frames lack :SetEnabled(); use Enable/Disable or alpha fallback.
+    if cb.SetEnabled then
+        cb:SetEnabled(enabled)
+    elseif cb.Enable and cb.Disable then
+        if enabled then cb:Enable() else cb:Disable() end
+    end
+    if cb.SetAlpha then cb:SetAlpha(enabled and 1 or 0.35) end
     if cb.text then
         if enabled then
             cb.text:SetTextColor(1, 1, 1)
         else
             cb.text:SetTextColor(0.5, 0.5, 0.5)
+        end
+    end
+    -- Dropdown title label
+    if cb.__MSUF_titleFS then
+        if enabled then
+            cb.__MSUF_titleFS:SetTextColor(1, 1, 1)
+        else
+            cb.__MSUF_titleFS:SetTextColor(0.5, 0.5, 0.5)
         end
     end
  end
@@ -2101,12 +1816,19 @@ end
     perRowSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(perRowSlider, { leftTitle = true })
     AttachSliderValueBox(perRowSlider, 4, 20, 1, GetPerRow)
-    -- Grow direction (right column)
-    local growthDD = CreateDropdown(leftTop, "Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 9) - 92,
-        function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "growth", "RIGHT") end,
-        function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "growth", v)  end)
-    A2_Track("caps", growthDD)
-	-- Layout mode / layout helpers (right column)
+    -- Per-type grow direction (right column)
+    local buffGrowthDD = CreateDropdown(leftTop, "Buff Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 5) - 12,
+        function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "buffGrowth", A2_GetCapsValue(key, "growth", "RIGHT")) end,
+        function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "buffGrowth", v)  end)
+    A2_Track("caps", buffGrowthDD)
+    local debuffGrowthDD = CreateDropdown(leftTop, "Debuff Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 8) - 12,
+        function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "debuffGrowth", A2_GetCapsValue(key, "growth", "RIGHT")) end,
+        function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "debuffGrowth", v)  end)
+    A2_Track("caps", debuffGrowthDD)
+    local privateGrowthCapsDD = CreateDropdown(leftTop, "Private Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 11) - 12,
+        function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "privateGrowth", A2_GetCapsValue(key, "growth", "RIGHT")) end,
+        function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "privateGrowth", v)  end)
+    A2_Track("caps", privateGrowthCapsDD)
 	-- Row wrap direction for per-row limits (when icons exceed "Icons per row").
 	-- This controls whether the 2nd row spawns below (default) or above the first row.
 	local rowWrapDD = CreateRowWrapDropdown(leftTop, A2_DD_X, A2_DD_Y0,
@@ -2122,39 +1844,8 @@ end
         function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "stackCountAnchor", "TOPRIGHT") end,
         function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "stackCountAnchor", v)  end)
     A2_Track("caps", stackAnchorDD)
-    -- Buff/Debuff placement around the unitframe (Blizzard-like)
-    local function GetBuffDebuffAnchorPreset()
-        local key = GetEditingKey()
-        return A2_GetCapsValue(key, "buffDebuffAnchor", "STACKED")
-    end
-    local function SetBuffDebuffAnchorPreset(v)
-        A2_AutoOverrideCapsIfNeeded()
-        local key = GetEditingKey()
-        A2_SetCapsValue(key, "buffDebuffAnchor", v)
-     end
-    local function GetLayoutModeForAnchors()
-        local key = GetEditingKey()
-        return A2_GetCapsValue(key, "layoutMode", "SEPARATE")
-    end
-    -- Buff/Debuff placement around the unitframe (Blizzard-like)
-    -- D-Pads are the single source of truth (no dropdown).
-    -- NOTE: keep the D-Pads fully inside the "Auras 2.0 Display" box.
-    -- The previous extra -46px offset pushed them below the box border on some layouts.
-    local buffAnchorPad, debuffAnchorPad = CreateA2_BuffDebuffAnchorDPads(leftTop, A2_DD_X, (A2_DD_Y0 - (A2_DD_STEP * 5) - 12),
-        GetBuffDebuffAnchorPreset,
-        SetBuffDebuffAnchorPreset,
-        GetLayoutModeForAnchors)
-    A2_Track("caps", buffAnchorPad)
-    A2_Track("caps", debuffAnchorPad)
-    -- Move Growth directly under the Buff/Debuff Anchor D-Pads (keeps it inside the Display box).
-    if growthDD and buffAnchorPad and growthDD.ClearAllPoints and growthDD.SetPoint then
-        growthDD:ClearAllPoints()
-        growthDD:SetPoint("TOPLEFT", buffAnchorPad, "BOTTOMLEFT", 0, -16)
-    end
     -- Allow the Layout dropdown to notify dependent widgets immediately.
     leftTop._msufA2_OnLayoutModeChanged = function()
-        if buffAnchorPad and buffAnchorPad.SyncFromDB then buffAnchorPad:SyncFromDB() end
-        if debuffAnchorPad and debuffAnchorPad.SyncFromDB then debuffAnchorPad:SyncFromDB() end
         if leftTop._msufA2_ApplySplitSpacingEnabledState then leftTop._msufA2_ApplySplitSpacingEnabledState() end
      end
     -- ------------------------------------------------------------
