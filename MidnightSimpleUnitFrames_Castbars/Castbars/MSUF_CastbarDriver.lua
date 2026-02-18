@@ -85,56 +85,52 @@ local function MSUF__UpdatePlayerChannelHasteStripes(frame, force)
 end
 
 -- We derive remaining time from the StatusBar's animated value/min/max (timer-driven or manual).
--- MIDNIGHT/12.0 SECRET-SAFE NOTE:
--- "Secret numbers" still report type()=="number" but ANY arithmetic/comparison on them is blocked.
--- Therefore we must NEVER probe numbers via arithmetic (even in pcall). Only operate on plain values.
---
--- PERF: Cache ToPlain once (avoids _G lookup per call in hot path).
--- Midnight/12.0: ToPlain is typically exposed via C_Secrets.ToPlain (sometimes SecretUtil.ToPlain).
--- DO NOT rely on _G.ToPlain being present.
-local _ToPlain_Driver -- resolved lazily (C_Secrets may not exist at file load)
-
-local function MSUF__GetToPlain_Driver()
-    if _ToPlain_Driver == false then return nil end
-    if _ToPlain_Driver then return _ToPlain_Driver end
-    local tp = (_G.C_Secrets and _G.C_Secrets.ToPlain) or (_G.SecretUtil and _G.SecretUtil.ToPlain) or _G.ToPlain
-    if tp then
-        _ToPlain_Driver = tp
-        return tp
-    end
-    -- Remember miss to avoid repeated global lookups. If C_Secrets/SecretUtil later load,
-    -- we will still re-check once in ToNumber when requested (see below).
-    _ToPlain_Driver = false
-    return nil
+-- Pre-built probe: avoids creating a closure per IsPlainNumber call.
+-- pcall passes arguments through, so n arrives as the first param.
+local function _msuf_probeNum(n)
+    local _ = n + 0
+    local __ = (n > -1e308)
+    return _ and __ ~= nil
 end
+
+local function MSUF__IsPlainNumber_SecretSafe(n)
+    if type(n) ~= "number" then return false end
+    -- Secret numbers can still report type=="number" but will throw on arithmetic/comparisons.
+    -- PERF: Reuse a single probe function (no closure allocation per call).
+    local ok = pcall(_msuf_probeNum, n)
+    return ok
+end
+
+-- PERF: Cache ToPlain once (avoids _G lookup per call in hot path).
+local _ToPlain_Driver = _G.ToPlain
 
 local function MSUF__ToNumber_SecretSafe(v)
     if v == nil then return nil end
 
-    -- Midnight/12.0: if ToPlain exists, it is the ONLY safe way to obtain a usable number.
-    local tp = MSUF__GetToPlain_Driver()
-    if not tp then
-        -- If secret system exists but ToPlain isn't accessible yet, DO NOT accept raw numbers.
-        -- Return nil to avoid blocked arithmetic/comparisons on secret numbers.
-        if (_G.C_Secrets or _G.SecretUtil) then
-            -- Try one more direct resolve in case C_Secrets appeared after our cached miss.
-            _ToPlain_Driver = nil
-            tp = MSUF__GetToPlain_Driver()
-            if not tp then
-                return nil
+    -- In Midnight/Beta, "secret numbers" can still report type(v) == "number" but will error on arithmetic/comparisons.
+    -- Therefore: prefer ToPlain() when available, but STILL validate the result.
+    if _ToPlain_Driver then
+        local ok, pv = pcall(_ToPlain_Driver, v)
+        if ok then
+            local n = tonumber(pv)
+            if n ~= nil and MSUF__IsPlainNumber_SecretSafe(n) then
+                return n
             end
-        else
-            -- Legacy fallback (non-Midnight clients): allow numbers and stringy values.
-            if type(v) == "number" then return v end
-            local ok2, n2 = pcall(tonumber, v)
-            if ok2 then return n2 end
-            return nil
         end
     end
 
-    local ok, pv = pcall(tp, v)
-    if ok then
-        return tonumber(pv)
+    -- If it's a number, validate it via pcall arithmetic/comparison.
+    if type(v) == "number" then
+        if MSUF__IsPlainNumber_SecretSafe(v) then
+            return v
+        end
+        return nil
+    end
+
+    -- Last resort: try tonumber on stringy values safely, then validate.
+    local ok2, n2 = pcall(tonumber, v)
+    if ok2 and n2 ~= nil and MSUF__IsPlainNumber_SecretSafe(n2) then
+        return n2
     end
     return nil
 end
@@ -149,32 +145,21 @@ local function MSUF__GetRemainingFromStatusBar(frame)
     local okMM, minV, maxV = MSUF_FastCall(sb.GetMinMaxValues, sb)
     if not okMM then return nil end
 
-    -- Convert via ToPlain (secret-safe). If conversion fails, do not attempt arithmetic.
     v    = MSUF__ToNumber_SecretSafe(v)
     minV = MSUF__ToNumber_SecretSafe(minV)
     maxV = MSUF__ToNumber_SecretSafe(maxV)
 
-    if type(v) ~= "number" or type(minV) ~= "number" or type(maxV) ~= "number" then
-        return nil
-    end
-
+    if not (v and minV and maxV) then return nil end
     local span = maxV - minV
-    if type(span) ~= "number" or span <= 0 then
-        return nil
-    end
+    if not (type(span) == "number" and span > 0) then return nil end
 
     -- Heuristic: if value decreases across ticks, treat value as "remaining".
     -- Otherwise treat (max - value) as remaining. This handles differing timer directions.
     local last = frame._msufLastSBValue
     frame._msufLastSBValue = v
+    local decreasing = (last ~= nil and v < (last - 0.0001))
 
-    local rem
-    if type(last) == "number" and v < (last - 0.0001) then
-        rem = v - minV
-    else
-        rem = maxV - v
-    end
-
+    local rem = decreasing and (v - minV) or (maxV - v)
     if type(rem) ~= "number" then return nil end
     if rem < 0 then rem = 0 end
     return rem
@@ -647,12 +632,30 @@ if spellName and durationObj then
             self.MSUF_durationObj = durationObj
             self.MSUF_isChanneled = isChanneled
 
-	            -- Snapshot fast-path disabled (Midnight/12.0 secret-safe).
-	            -- Remaining/total can be secret numbers; comparing/adding them is blocked.
-	            -- We rely on StatusBar timer-driven values (or manual updates) for cast-time text.
-	            self._msufPlainEndTime = nil
-	            self._msufRemaining = nil
-	            self._msufPlainTotal = nil
+            -- oUF-style snapshot: read remaining + total ONCE at cast start.
+            -- The manager fast-path then uses pure arithmetic (endTime - now) instead of
+            -- calling dObj:GetRemainingDuration() + ToPlain() every tick.
+            -- Re-snapshots automatically on DELAYED / CHANNEL_UPDATE / target change (re-Cast).
+            do
+                local snapRem, snapTotal
+                if durationObj.GetRemainingDuration then
+                    snapRem = MSUF__ToNumber_SecretSafe(durationObj:GetRemainingDuration())
+                elseif durationObj.GetRemaining then
+                    snapRem = MSUF__ToNumber_SecretSafe(durationObj:GetRemaining())
+                end
+                if durationObj.GetTotalDuration then
+                    snapTotal = MSUF__ToNumber_SecretSafe(durationObj:GetTotalDuration())
+                end
+                local snapNow = GetTime()
+                if snapRem and snapRem > 0 then
+                    self._msufPlainEndTime = snapNow + snapRem
+                    self._msufRemaining = snapRem
+                else
+                    self._msufPlainEndTime = nil
+                    self._msufRemaining = nil
+                end
+                self._msufPlainTotal = snapTotal
+            end
 
             -- Reset hard-stop persistence timers on a successful (re)start.
             self._msufHardStopNoChannelSince = nil
