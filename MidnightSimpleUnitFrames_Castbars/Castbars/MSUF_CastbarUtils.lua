@@ -27,94 +27,27 @@ do
     local orig = idx and idx.SetTimerDuration
 
     if type(orig) == "function" then
-      -- IMPORTANT (12.0): The C API is strict about argument *count*.
-      -- We must be able to detect when a caller explicitly passed a trailing nil:
-      --   SetTimerDuration(durationObj, false, nil)
-      -- In a fixed-arg function signature we cannot see the real arg-count, so we
-      -- wrap using varargs and branch by select('#', ...).
-      idx.SetTimerDuration = function(self, ...)
-        local argc = select('#', ...)
-        local duration = select(1, ...)
-        local interpolation = select(2, ...)
-        local direction = select(3, ...)
-
-        -- 12.0 quirk: some call sites pass `false` to mean "use default / no interpolation".
-        -- Treat it as "not provided" and fall back to the 1-arg form.
-        if argc >= 2 and interpolation == false then
-          interpolation = nil
-          argc = 1
-        end
-
-        -- Coerce non-boolean interpolation to boolean (legacy callers sometimes pass 0/1 or dt).
-        if argc >= 2 and interpolation ~= nil and type(interpolation) ~= "boolean" then
+      idx.SetTimerDuration = function(self, duration, interpolation, direction)
+        -- Coerce non-boolean interpolation to boolean (legacy callers pass 0/1).
+        if interpolation ~= nil and type(interpolation) ~= "boolean" then
           interpolation = (interpolation ~= 0 and interpolation ~= false) and true or false
         end
-
-        -- Normalize direction: only pass through values that the C API accepts.
-        -- Some external addons pass booleans / numbers here (especially for "reverse").
-        -- If we can't safely map it, drop the arg so we don't hard-error.
-        local function NormalizeDirection(dir)
-          if dir == nil then return nil end
-          local t = type(dir)
-
-          -- Never pass booleans as direction.
-          if t == "boolean" then return nil end
-
-          -- If the client exposes Enum.StatusBarTimerDirection, accept/match it.
-          local E = _G.Enum and _G.Enum.StatusBarTimerDirection
-          if E then
-            if dir == E.FORWARD or dir == E.REVERSE then
-              return dir
-            end
-            if t == "string" then
-              local s = dir
-              if s == "FORWARD" then return E.FORWARD end
-              if s == "REVERSE" then return E.REVERSE end
-            elseif t == "number" then
-              -- Common legacy encodings.
-              if dir == 1 then return E.FORWARD end
-              if dir == -1 then return E.REVERSE end
-              if dir == 0 then return E.FORWARD end
-            end
-            return nil
-          end
-
-          -- No enum available: only allow numeric directions (some builds accept 0/1).
-          if t == "number" then
-            return dir
-          end
-
-          -- Otherwise drop.
-          return nil
+        -- 12.0 C API: [interpolation, direction] are a paired optional group.
+        -- Passing interpolation WITHOUT direction → "bad argument #3".
+        -- Passing explicit nil as trailing arg → same error.
+        -- Only forward the full triplet when BOTH optional args are present.
+        if interpolation ~= nil and direction ~= nil then
+          return orig(self, duration, interpolation, direction)
+        else
+          return orig(self, duration)
         end
-
-        if argc >= 3 then
-          local ndir = NormalizeDirection(direction)
-          if ndir ~= nil then
-            -- If interpolation collapsed to nil, call the 1-arg form.
-            if interpolation == nil then
-              return orig(self, duration)
-            end
-            return orig(self, duration, interpolation, ndir)
-          end
-          -- Drop invalid direction (prevents "bad argument #3").
-          argc = 2
-        end
-
-        if argc >= 2 then
-          if interpolation == nil then
-            return orig(self, duration)
-          end
-          return orig(self, duration, interpolation)
-        end
-        return orig(self, duration)
       end
     end
   end
 end
 
 -- =====================================================================
--- Phase 1A: Canonical lazy EnsureDB Ã¢â‚¬â€ single definition for all files.
+-- Phase 1A: Canonical lazy EnsureDB  single definition for all files.
 -- After PLAYER_LOGIN, MSUF_DB is always populated; the nil-guard short-circuits.
 -- =====================================================================
 local function _EnsureDBLazy()
@@ -308,7 +241,7 @@ local function _MSUF_GetReverseFill(frame, state, isChanneled)
     return false
 end
 
--- Phase 1C: Global export Ã¢â‚¬â€ simplified 2-arg form for callers that don't have a state table.
+-- Phase 1C: Global export  simplified 2-arg form for callers that don't have a state table.
 -- Returns a plain boolean (true/false, never nil).
 function _G.MSUF_GetReverseFillSafe(frame, isChanneled)
     return _MSUF_GetReverseFill(frame, nil, isChanneled)
@@ -820,7 +753,7 @@ end
 
 
 -- =====================================================================
--- Cluster A: Canonical ClearEmpowerState Ã¢â‚¬â€ single definition for all files.
+-- Cluster A: Canonical ClearEmpowerState  single definition for all files.
 -- Clears all empower-related frame fields and hides tick/segment overlays.
 -- Previously duplicated identically in Driver and Boss.
 -- =====================================================================
