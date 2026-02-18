@@ -3,7 +3,7 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko 
 ## Category: Combat
-## Version: 2.0 rc1
+## Version: 2.0 rc2
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## X-Wago-ID: XKq9aoKy

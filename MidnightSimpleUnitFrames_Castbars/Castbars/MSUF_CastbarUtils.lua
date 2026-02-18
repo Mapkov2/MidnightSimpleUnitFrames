@@ -38,34 +38,76 @@ do
         local interpolation = select(2, ...)
         local direction = select(3, ...)
 
-	        -- 12.0 quirk: some codepaths pass `false` to mean "use default / no interpolation".
-	        -- Some client builds reject boolean false as arg #3. Treat it as "not provided".
-	        if interpolation == false then
-	          interpolation = nil
-	          if argc >= 2 then argc = 1 end
-	        end
+        -- 12.0 quirk: some call sites pass `false` to mean "use default / no interpolation".
+        -- Treat it as "not provided" and fall back to the 1-arg form.
+        if argc >= 2 and interpolation == false then
+          interpolation = nil
+          argc = 1
+        end
 
-        -- Coerce non-boolean interpolation to boolean (legacy callers pass 0/1).
+        -- Coerce non-boolean interpolation to boolean (legacy callers sometimes pass 0/1 or dt).
         if argc >= 2 and interpolation ~= nil and type(interpolation) ~= "boolean" then
           interpolation = (interpolation ~= 0 and interpolation ~= false) and true or false
         end
 
-        if argc >= 3 then
-          -- Caller passed an explicit 3rd arg; drop it if nil (prevents "bad argument #3").
-          if direction == nil then
-            return orig(self, duration, interpolation)
+        -- Normalize direction: only pass through values that the C API accepts.
+        -- Some external addons pass booleans / numbers here (especially for "reverse").
+        -- If we can't safely map it, drop the arg so we don't hard-error.
+        local function NormalizeDirection(dir)
+          if dir == nil then return nil end
+          local t = type(dir)
+
+          -- Never pass booleans as direction.
+          if t == "boolean" then return nil end
+
+          -- If the client exposes Enum.StatusBarTimerDirection, accept/match it.
+          local E = _G.Enum and _G.Enum.StatusBarTimerDirection
+          if E then
+            if dir == E.FORWARD or dir == E.REVERSE then
+              return dir
+            end
+            if t == "string" then
+              local s = dir
+              if s == "FORWARD" then return E.FORWARD end
+              if s == "REVERSE" then return E.REVERSE end
+            elseif t == "number" then
+              -- Common legacy encodings.
+              if dir == 1 then return E.FORWARD end
+              if dir == -1 then return E.REVERSE end
+              if dir == 0 then return E.FORWARD end
+            end
+            return nil
           end
-          return orig(self, duration, interpolation, direction)
+
+          -- No enum available: only allow numeric directions (some builds accept 0/1).
+          if t == "number" then
+            return dir
+          end
+
+          -- Otherwise drop.
+          return nil
         end
 
-	        if argc >= 2 then
-	          -- If interpolation collapsed to nil, call the 1-arg form.
-	          if interpolation == nil then
-	            return orig(self, duration)
-	          end
-	          return orig(self, duration, interpolation)
-	        end
-	        return orig(self, duration)
+        if argc >= 3 then
+          local ndir = NormalizeDirection(direction)
+          if ndir ~= nil then
+            -- If interpolation collapsed to nil, call the 1-arg form.
+            if interpolation == nil then
+              return orig(self, duration)
+            end
+            return orig(self, duration, interpolation, ndir)
+          end
+          -- Drop invalid direction (prevents "bad argument #3").
+          argc = 2
+        end
+
+        if argc >= 2 then
+          if interpolation == nil then
+            return orig(self, duration)
+          end
+          return orig(self, duration, interpolation)
+        end
+        return orig(self, duration)
       end
     end
   end
