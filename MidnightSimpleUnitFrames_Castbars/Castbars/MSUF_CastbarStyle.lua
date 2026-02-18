@@ -277,12 +277,12 @@ local function ProbeTimerDirectionMapping(statusBar, durationObj)
 
     local foundLTR = nil
     local foundRTL = nil
-    local bestInterp = false
+    local bestInterp = nil
 
-    -- Try the common interpolation values first.
-    local interps = { false, true, nil }
-
-    for _, interp in ipairs(interps) do
+    -- Probe: nil (omit) first, then true.
+    -- false is NOT valid for the 12.0 C-API interpolation parameter.
+    for pass = 1, 2 do
+        local interp = (pass == 2) and true or nil
         for i = 1, #candidates do
             local dir = candidates[i]
             if PCallMethod(fn, statusBar, durationObj, interp, dir) then

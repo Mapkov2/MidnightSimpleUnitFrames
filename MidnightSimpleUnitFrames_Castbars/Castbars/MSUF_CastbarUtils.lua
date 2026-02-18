@@ -28,8 +28,20 @@ do
 
     if type(orig) == "function" then
       idx.SetTimerDuration = function(self, duration, interpolation, direction)
-        if interpolation ~= nil and type(interpolation) ~= "boolean" then
-          interpolation = (interpolation ~= 0 and interpolation ~= false) and true or false
+        -- 12.0 C-API rejects `false` for interpolation (only accepts `true` or nil/omit).
+        -- Coerce any non-true value to nil so the C function sees it as "omitted".
+        if interpolation ~= nil then
+          if type(interpolation) ~= "boolean" then
+            interpolation = (interpolation ~= 0 and interpolation ~= false) and true or false
+          end
+          -- C-side only accepts true; false → nil (omit).
+          if interpolation == false then
+            interpolation = nil
+          end
+        end
+        -- direction must be nil or a valid enum; strip non-nil falsy values.
+        if direction ~= nil and not direction then
+          direction = nil
         end
         return orig(self, duration, interpolation, direction)
       end
@@ -38,7 +50,7 @@ do
 end
 
 -- =====================================================================
--- Phase 1A: Canonical lazy EnsureDB â€” single definition for all files.
+-- Phase 1A: Canonical lazy EnsureDB Ã¢â‚¬â€ single definition for all files.
 -- After PLAYER_LOGIN, MSUF_DB is always populated; the nil-guard short-circuits.
 -- =====================================================================
 local function _EnsureDBLazy()
@@ -232,7 +244,7 @@ local function _MSUF_GetReverseFill(frame, state, isChanneled)
     return false
 end
 
--- Phase 1C: Global export â€” simplified 2-arg form for callers that don't have a state table.
+-- Phase 1C: Global export simplified 2-arg form for callers that don't have a state table.
 -- Returns a plain boolean (true/false, never nil).
 function _G.MSUF_GetReverseFillSafe(frame, isChanneled)
     return _MSUF_GetReverseFill(frame, nil, isChanneled)
@@ -744,7 +756,7 @@ end
 
 
 -- =====================================================================
--- Cluster A: Canonical ClearEmpowerState â€” single definition for all files.
+-- Cluster A: Canonical ClearEmpowerState single definition for all files.
 -- Clears all empower-related frame fields and hides tick/segment overlays.
 -- Previously duplicated identically in Driver and Boss.
 -- =====================================================================
