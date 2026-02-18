@@ -78,16 +78,43 @@ function _G.MSUF_InstallTimerDurationGuard(statusBar, label)
   statusBar.__msufGuardLabel = label or SafeName(statusBar)
 
   -- Wrap SetTimerDuration
-  if statusBar.SetTimerDuration and not statusBar.__msufOrigSetTimerDuration then
-    statusBar.__msufOrigSetTimerDuration = statusBar.SetTimerDuration
-    statusBar.SetTimerDuration = function(self, duration, interpolation, direction)
+	  if statusBar.SetTimerDuration and not statusBar.__msufOrigSetTimerDuration then
+	    statusBar.__msufOrigSetTimerDuration = statusBar.SetTimerDuration
+	    -- Vararg wrapper so we can detect callers that explicitly pass a trailing nil direction.
+	    statusBar.SetTimerDuration = function(self, ...)
 	      if (self.__msufAllowTimerDuration or 0) <= 0 then
-        WarnOnce(self, ("Direct SetTimerDuration on %s (label=%s). Use MSUF_ApplyCastbarTimerDirection().")
-          :format(SafeName(self), tostring(self.__msufGuardLabel)))
-      end
-      return self:__msufOrigSetTimerDuration(duration, interpolation, direction)
-    end
-  end
+	        WarnOnce(self, ("Direct SetTimerDuration on %s (label=%s). Use MSUF_ApplyCastbarTimerDirection().")
+	          :format(SafeName(self), tostring(self.__msufGuardLabel)))
+	      end
+
+	      local argc = select('#', ...)
+	      local duration = select(1, ...)
+	      local interpolation = select(2, ...)
+	      local direction = select(3, ...)
+
+	      -- 12.0 quirk: callers sometimes pass `false` to mean "default / no interpolation".
+	      -- Some client builds reject boolean false as arg #3.
+	      if interpolation == false then
+	        interpolation = nil
+	        if argc >= 2 then argc = 1 end
+	      end
+
+	      -- 12.0 C API is strict about argument count; never forward a trailing nil.
+	      if argc >= 3 then
+	        if direction == nil then
+	          return self:__msufOrigSetTimerDuration(duration, interpolation)
+	        end
+	        return self:__msufOrigSetTimerDuration(duration, interpolation, direction)
+	      end
+	      if argc >= 2 then
+	        if interpolation == nil then
+	          return self:__msufOrigSetTimerDuration(duration)
+	        end
+	        return self:__msufOrigSetTimerDuration(duration, interpolation)
+	      end
+	      return self:__msufOrigSetTimerDuration(duration)
+	    end
+	  end
 
   -- Wrap SetReverseFill
   if statusBar.SetReverseFill and not statusBar.__msufOrigSetReverseFill then

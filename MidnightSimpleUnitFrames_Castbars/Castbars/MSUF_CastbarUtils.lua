@@ -27,18 +27,52 @@ do
     local orig = idx and idx.SetTimerDuration
 
     if type(orig) == "function" then
-      idx.SetTimerDuration = function(self, duration, interpolation, direction)
-        if interpolation ~= nil and type(interpolation) ~= "boolean" then
+      -- IMPORTANT (12.0): The C API is strict about argument *count*.
+      -- We must be able to detect when a caller explicitly passed a trailing nil:
+      --   SetTimerDuration(durationObj, false, nil)
+      -- In a fixed-arg function signature we cannot see the real arg-count, so we
+      -- wrap using varargs and branch by select('#', ...).
+      idx.SetTimerDuration = function(self, ...)
+        local argc = select('#', ...)
+        local duration = select(1, ...)
+        local interpolation = select(2, ...)
+        local direction = select(3, ...)
+
+	        -- 12.0 quirk: some codepaths pass `false` to mean "use default / no interpolation".
+	        -- Some client builds reject boolean false as arg #3. Treat it as "not provided".
+	        if interpolation == false then
+	          interpolation = nil
+	          if argc >= 2 then argc = 1 end
+	        end
+
+        -- Coerce non-boolean interpolation to boolean (legacy callers pass 0/1).
+        if argc >= 2 and interpolation ~= nil and type(interpolation) ~= "boolean" then
           interpolation = (interpolation ~= 0 and interpolation ~= false) and true or false
         end
-        return orig(self, duration, interpolation, direction)
+
+        if argc >= 3 then
+          -- Caller passed an explicit 3rd arg; drop it if nil (prevents "bad argument #3").
+          if direction == nil then
+            return orig(self, duration, interpolation)
+          end
+          return orig(self, duration, interpolation, direction)
+        end
+
+	        if argc >= 2 then
+	          -- If interpolation collapsed to nil, call the 1-arg form.
+	          if interpolation == nil then
+	            return orig(self, duration)
+	          end
+	          return orig(self, duration, interpolation)
+	        end
+	        return orig(self, duration)
       end
     end
   end
 end
 
 -- =====================================================================
--- Phase 1A: Canonical lazy EnsureDB â€” single definition for all files.
+-- Phase 1A: Canonical lazy EnsureDB Ã¢â‚¬â€ single definition for all files.
 -- After PLAYER_LOGIN, MSUF_DB is always populated; the nil-guard short-circuits.
 -- =====================================================================
 local function _EnsureDBLazy()
@@ -232,7 +266,7 @@ local function _MSUF_GetReverseFill(frame, state, isChanneled)
     return false
 end
 
--- Phase 1C: Global export â€” simplified 2-arg form for callers that don't have a state table.
+-- Phase 1C: Global export Ã¢â‚¬â€ simplified 2-arg form for callers that don't have a state table.
 -- Returns a plain boolean (true/false, never nil).
 function _G.MSUF_GetReverseFillSafe(frame, isChanneled)
     return _MSUF_GetReverseFill(frame, nil, isChanneled)
@@ -744,7 +778,7 @@ end
 
 
 -- =====================================================================
--- Cluster A: Canonical ClearEmpowerState â€” single definition for all files.
+-- Cluster A: Canonical ClearEmpowerState Ã¢â‚¬â€ single definition for all files.
 -- Clears all empower-related frame fields and hides tick/segment overlays.
 -- Previously duplicated identically in Driver and Boss.
 -- =====================================================================

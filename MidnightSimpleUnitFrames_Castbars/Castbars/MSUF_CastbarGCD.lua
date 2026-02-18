@@ -180,49 +180,102 @@ function _G.MSUF_PlayerGCDBar_Start(frame, unitToken, durationSec, spellName, sp
     frame.MSUF_gcdShowSpell = showSpell
     frame.MSUF_gcdSpellName = spellName
     frame.MSUF_gcdSpellIcon = spellIcon
-    frame._msufGcdElapsed = 0  -- oUF-style accumulator — eliminates wall clock per tick
+    frame._msufGcdElapsed = 0
 
-    -- Make the bar feel smooth: temporarily run the manager at ~60fps and update this frame at the same cadence.
-    -- Save/restore so we don't permanently change the player's castbar cadence.
-    -- 12.0 optimization: SetTimerDuration lets C-engine animate the bar → heavy path only needs ~20Hz for time-text.
+    -- Save/restore tick interval so we don't permanently change the player's castbar cadence.
     if frame.MSUF_gcdPrevTick == nil then
         frame.MSUF_gcdPrevTick = frame._msufTickInterval
     end
-    frame._msufTickInterval = 0.05  -- ~20Hz: time-text + GlowFade (was 0.016/60Hz when SetValue drove bar)
+    frame._msufTickInterval = 0.05
     frame._msufHeavyIn = 0
-
-
-    -- Clear any legacy OnUpdate (older builds used per-frame OnUpdate).
-    if frame.SetScript then
-        frame:SetScript("OnUpdate", nil)
-    end
 
     if frame.latencyBar and frame.latencyBar.Hide then
         frame.latencyBar:Hide()
     end
 
+    -- Spell name text.
+    if frame.castText then
+        if showSpell and spellName then
+            frame.castText:SetText(spellName)
+        else
+            frame.castText:SetText("")
+        end
+    end
+
+    -- Icon.
+    if frame.icon and spellIcon then
+        frame.icon:SetTexture(spellIcon)
+    end
+
+    -- Set up the status bar.
     if frame.statusBar and frame.statusBar.SetMinMaxValues then
         frame.statusBar:SetMinMaxValues(0, durationSec)
     end
-    -- 12.0: C-engine animates bar fill via SetTimerDuration — eliminates SetValue per tick.
+
+    -- 12.0: try C-engine animation via SetTimerDuration (pcall-safe).
+    local timerOK = false
     if frame.statusBar and frame.statusBar.SetTimerDuration then
-        frame.statusBar:SetTimerDuration(durationSec)
-        frame._msufGcdTimerDriven = true
-    elseif frame.statusBar and frame.statusBar.SetValue then
+        timerOK = pcall(frame.statusBar.SetTimerDuration, frame.statusBar, durationSec)
+    end
+    frame._msufGcdTimerDriven = timerOK
+
+    if not timerOK and frame.statusBar and frame.statusBar.SetValue then
         frame.statusBar:SetValue(0)
-        frame._msufGcdTimerDriven = false
-        -- Fallback: need higher tick rate for manual SetValue.
-        frame._msufTickInterval = 0.016
     end
 
     if frame.Show then frame:Show() end
 
-    -- Register with CastbarManager so MSUF_UpdateCastbarFrame() can drive the bar.
+    -- Self-contained OnUpdate tick: drives time-text, bar fill (fallback), and auto-stop.
+    -- This replaces the nonexistent MSUF_CastbarManager / MSUF_UpdateCastbarFrame path.
+    local _string_format = string.format
+    if frame.SetScript then
+        frame:SetScript("OnUpdate", function(self, elapsed)
+            if not self.MSUF_gcdActive then
+                self:SetScript("OnUpdate", nil)
+                return
+            end
+
+            local gcdElapsed = (self._msufGcdElapsed or 0) + elapsed
+            self._msufGcdElapsed = gcdElapsed
+            local dur = self.MSUF_gcdDur or 0
+
+            -- Auto-stop when GCD expires.
+            if gcdElapsed >= dur then
+                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+                    _G.MSUF_PlayerGCDBar_Stop(self)
+                end
+                return
+            end
+
+            -- Abort if a real cast/channel started mid-GCD.
+            local u = self.MSUF_gcdUnit or "player"
+            if UnitCastingInfo(u) or UnitChannelInfo(u) then
+                if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
+                    _G.MSUF_PlayerGCDBar_Stop(self)
+                end
+                return
+            end
+
+            -- Manual bar fill (only when SetTimerDuration failed / unavailable).
+            if not self._msufGcdTimerDriven then
+                if self.statusBar and self.statusBar.SetValue then
+                    self.statusBar:SetValue(gcdElapsed)
+                end
+            end
+
+            -- Time text.
+            if self.MSUF_gcdShowTime and self.timeText then
+                local remain = dur - gcdElapsed
+                if remain < 0 then remain = 0 end
+                self.timeText:SetText(_string_format("%.1f", remain))
+            end
+        end)
+    end
+
+    -- Still register with CastbarManager if it exists (future-proof).
     if type(_G.MSUF_EnsureCastbarManager) == "function" then
         _G.MSUF_EnsureCastbarManager()
     end
-
-    -- Ensure the manager runs at the higher cadence while the GCD bar is active.
     local m = _G.MSUF_CastbarManager
     if m then
         m._msufHasGCD = true
@@ -245,6 +298,14 @@ function _G.MSUF_PlayerGCDBar_Stop(frame, keepVisible)
     frame.MSUF_gcdShowSpell = nil
     frame.MSUF_gcdSpellName = nil
     frame.MSUF_gcdSpellIcon = nil
+
+    -- Stop the self-contained OnUpdate tick.
+    if frame.SetScript then
+        frame:SetScript("OnUpdate", nil)
+    end
+
+    -- Clear time text so it doesn't linger.
+    if frame.timeText then frame.timeText:SetText("") end
 
     -- Clear per-GCD dedup caches.
     frame._msufGcdMinMaxSet = nil
@@ -340,7 +401,7 @@ local function OnSucceeded(_, _, unitTarget, _, spellID)
 end
 
 local driver = CreateFrame("Frame", "MSUF_GCDBarDriver")
--- Always register initially (DB might not be loaded yet → defaults to enabled).
+-- Always register initially (DB might not be loaded yet â†’ defaults to enabled).
 -- A deferred sync below will unregister if the saved setting is off.
 driver:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "vehicle")
 driver:SetScript("OnEvent", OnSucceeded)
