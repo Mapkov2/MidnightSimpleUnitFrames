@@ -441,6 +441,15 @@ function MSUF_ShowPetInfoTooltip()
  end
 function MSUF_HidePlayerInfoTooltip()
     if MSUF_PlayerInfoFrame then
+        -- If the Edit Mode tooltip preview is active, restore the preview
+        -- instead of hiding the frame (OnLeave from unit frames must not
+        -- kill the persistent drag-preview).
+        if MSUF_PlayerInfoFrame._msufEditPreviewActive then
+            if type(_G.MSUF_Tooltip_ShowEditPreview) == "function" then
+                _G.MSUF_Tooltip_ShowEditPreview()
+            end
+            return
+        end
         MSUF_PlayerInfoFrame:Hide()
     end
  end
@@ -600,6 +609,10 @@ do
         MSUF_PositionPlayerInfoFrame(f)
         f:Show()
 
+        -- Mark frame as in edit-preview so MSUF_HidePlayerInfoTooltip
+        -- restores the preview instead of hiding it.
+        f._msufEditPreviewActive = true
+
         -- Enable drag
         local dh = MSUF_Tooltip_EnsureDragHandle(f)
         dh:Show()
@@ -614,6 +627,7 @@ do
         -- Hide the tooltip preview (but not if a real tooltip is being shown outside edit mode).
         -- The preview uses placeholder text, so we can safely hide it.
         if MSUF_PlayerInfoFrame then
+            MSUF_PlayerInfoFrame._msufEditPreviewActive = false
             MSUF_PlayerInfoFrame:SetMovable(false)
             MSUF_PlayerInfoFrame:Hide()
         end
