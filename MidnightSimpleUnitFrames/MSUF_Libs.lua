@@ -82,9 +82,6 @@ local function RegisterBundledFonts()
     for _, info in ipairs(fonts) do
         local path = base .. info.file
         pcall(LSM.Register, LSM, "font", info.key, path)
-        if info.name then
-            pcall(LSM.Register, LSM, "font", info.name, path)
-        end
     end
 
     -- Bundled bar/castbar textures (Media/Bars).
