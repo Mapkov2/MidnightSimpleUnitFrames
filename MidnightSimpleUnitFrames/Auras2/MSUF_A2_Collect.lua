@@ -369,6 +369,12 @@ end
 -- Scratch table for boss auras during merge (avoids allocation)
 local _bossScratch = {}
 
+-- Scratch tables for merged collection (avoids allocation)
+-- NOTE: These are intentionally module-level so we can reuse them without
+-- allocating on each render tick.
+local _playerScratch = {}
+local _mergedScratch = {}
+
 function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImportant, out, mergeOut, needPlayerAura)
     if type(unit) ~= "string" then
         out._msufA2_n = 0
@@ -413,8 +419,22 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImpor
     local sourceN = isHelpful and raw.helpfulN or raw.harmfulN
 
     local playerScratch = _playerScratch
+    if playerScratch == nil then
+        playerScratch = {}
+        _playerScratch = playerScratch
+    end
+
     local bossScratch = _bossScratch
+    if bossScratch == nil then
+        bossScratch = {}
+        _bossScratch = bossScratch
+    end
+
     local mergedScratch = _mergedScratch
+    if mergedScratch == nil then
+        mergedScratch = {}
+        _mergedScratch = mergedScratch
+    end
 
     local nPlayer, nBoss, nMerged = 0, 0, 0
 
