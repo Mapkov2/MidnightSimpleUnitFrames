@@ -135,6 +135,9 @@ local A2_SHARED_DEFAULTS = {
 
 local A2_GROWTH_OK = {RIGHT=true,LEFT=true,UP=true,DOWN=true}
 local A2_ROWWRAP_OK = {DOWN=true,UP=true}
+-- LayoutMode (SINGLE vs SEPARATE) is intentionally deprecated in MSUF Auras2.
+-- Auras are positioned via Edit Mode movers (per-group offsets). Keeping the
+-- DB key for backwards compatibility, but runtime always uses separate groups.
 local A2_LAYOUTMODE_OK = {SEPARATE=true,SINGLE=true}
 local A2_STACKANCHOR_OK = {TOPRIGHT=true,TOPLEFT=true,BOTTOMRIGHT=true,BOTTOMLEFT=true}
 
@@ -155,6 +158,12 @@ local function EnsureDB()
     if type(a2.shared) ~= "table" then a2.shared = {} end
     local s = a2.shared
     DefaultKV(s, A2_SHARED_DEFAULTS)
+
+    -- Hard-disable legacy layoutMode behavior (SINGLE/SEPARATE logic).
+    -- We keep the stored value for profile compatibility, but the runtime
+    -- always uses separate Buff/Debuff containers positioned by movers.
+    -- (Fixes login/reload drift caused by growth-direction anchorpoints.)
+    s.layoutMode = "SEPARATE"
 
     if s.maxBuffs == nil then s.maxBuffs = s.maxIcons or 12 end
     if s.maxDebuffs == nil then s.maxDebuffs = s.maxIcons or 12 end
@@ -443,7 +452,8 @@ local function ResolveUnitConfig(unit, a2, shared)
     local maxDebuffs = shared.maxDebuffs or shared.maxIcons or 12
     local growth = shared.growth or "RIGHT"
     local rowWrap = shared.rowWrap or "DOWN"
-    local layoutMode = shared.layoutMode or "SEPARATE"
+    -- Legacy layoutMode is ignored at runtime (always separate groups).
+    local layoutMode = "SEPARATE"
     local stackCountAnchor = shared.stackCountAnchor or "TOPRIGHT"
     -- Per-type growth (nil = fall back to growth)
     local buffGrowth = shared.buffGrowth
@@ -462,7 +472,7 @@ local function ResolveUnitConfig(unit, a2, shared)
         if ls.debuffGrowth and A2_GROWTH_OK[ls.debuffGrowth] then debuffGrowth = ls.debuffGrowth end
         if ls.privateGrowth and A2_GROWTH_OK[ls.privateGrowth] then privateGrowth = ls.privateGrowth end
         if ls.rowWrap and A2_ROWWRAP_OK[ls.rowWrap] then rowWrap = ls.rowWrap end
-        if ls.layoutMode and A2_LAYOUTMODE_OK[ls.layoutMode] then layoutMode = ls.layoutMode end
+        -- layoutMode intentionally ignored
         if ls.stackCountAnchor and A2_STACKANCHOR_OK[ls.stackCountAnchor] then stackCountAnchor = ls.stackCountAnchor end
     end
     -- Resolve per-type fallback: nil → growth
@@ -739,11 +749,6 @@ if lay then
 end
 
 
-    -- Buff/Debuff separation (buffOffsetY)
-    local buffOffsetY = shared.buffOffsetY
-    if lay and type(lay.buffOffsetY) == "number" then buffOffsetY = lay.buffOffsetY end
-    if type(buffOffsetY) ~= "number" then buffOffsetY = debuffIconSize + spacing + 4 end
-
     -- Per-group offsets (drag movers write to these) 
     local buffDX   = ReadOffset(shared, lay, "buffGroupOffsetX",   0)
     local buffDY   = ReadOffset(shared, lay, "buffGroupOffsetY",   0)
@@ -752,45 +757,23 @@ end
     local privOffX = ReadOffset(shared, lay, "privateOffsetX",     0)
     local privOffY = ReadOffset(shared, lay, "privateOffsetY",     0)
 
-    -- Layout mode
-    local layoutMode = shared.layoutMode or "SEPARATE"
-    local lsOvr = (pu and pu.overrideSharedLayout == true and type(pu.layoutShared) == "table") and pu.layoutShared or nil
-    if lsOvr and lsOvr.layoutMode and A2_LAYOUTMODE_OK[lsOvr.layoutMode] then layoutMode = lsOvr.layoutMode end
-
-    -- Edit Mode QoL: ensure min separation so movers don't overlap
-    if isEditActive then
-        local minSep = (math.max(buffIconSize, debuffIconSize) + spacing + 8)
-        if buffOffsetY < minSep then buffOffsetY = minSep end
-        local hasPrivOverride = (lay and (lay.privateOffsetX ~= nil or lay.privateOffsetY ~= nil))
-        if not hasPrivOverride then
-            privOffY = buffOffsetY + minSep
-        end
-    end
-
     -- Position anchor 
     local anchor = entry.anchor
     anchor:ClearAllPoints()
     anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
 
-    -- Position containers 
-    if layoutMode == "SINGLE" and entry.mixed then
+    -- Position containers (always separate groups, always driven by per-group offsets)
+    entry.debuffs:ClearAllPoints()
+    entry.debuffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", debuffDX, debuffDY)
+
+    entry.buffs:ClearAllPoints()
+    entry.buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", buffDX, buffDY)
+
+    -- Mixed container is legacy; keep hidden so it can't influence layout/anchors.
+    if entry.mixed then
         entry.mixed:ClearAllPoints()
         entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
-        entry.debuffs:ClearAllPoints()
-        entry.debuffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
-        entry.buffs:ClearAllPoints()
-        entry.buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
-    else
-        entry.debuffs:ClearAllPoints()
-        entry.debuffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", debuffDX, debuffDY)
-
-        entry.buffs:ClearAllPoints()
-        entry.buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", buffDX, buffOffsetY + buffDY)
-
-        if entry.mixed then
-            entry.mixed:ClearAllPoints()
-            entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
-        end
+        entry.mixed:Hide()
     end
 
     -- Private
@@ -976,7 +959,8 @@ local function RenderUnit(entry)
         cfg.showBuffs = (shared.showBuffs == true)
         cfg.showDebuffs = (shared.showDebuffs == true)
         cfg.needPlayerAura = (shared.highlightOwnBuffs == true) or (shared.highlightOwnDebuffs == true)
-        cfg.useSingleRow = (cfg.layoutMode == "SINGLE")
+        -- Legacy SINGLE-row rendering is deprecated; always render separate groups.
+        cfg.useSingleRow = false
     end
 
     -- Local aliases for hot-path values
@@ -996,7 +980,7 @@ local function RenderUnit(entry)
     local stackCountAnchor  = cfg.stackCountAnchor
     local showBuffs         = cfg.showBuffs
     local showDebuffs       = cfg.showDebuffs
-    local useSingleRow      = cfg.useSingleRow
+    local useSingleRow      = false
     local needPlayerAura    = cfg.needPlayerAura
     local masterOn          = cfg.masterOn
 
@@ -1046,7 +1030,7 @@ local function RenderUnit(entry)
     if showTest then
         if entry.buffs then entry.buffs:Show() end
         if entry.debuffs then entry.debuffs:Show() end
-        if entry.mixed then entry.mixed:Show() end
+        if entry.mixed then entry.mixed:Hide() end
         -- Private auras are player-only; skip for target.
         if entry.private and unit ~= "target" then entry.private:Show() end
         entry._msufA2_previewActive = true
@@ -1074,15 +1058,15 @@ local function RenderUnit(entry)
 
         if Icons.RenderPreviewIcons and not isPlayer then
             -- Non-player units: full preview (buffs + debuffs)
-            local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, maxBuffs, maxDebuffs, stackCountAnchor)
-            local bSize = useSingleRow and iconSize or buffIconSize
-            local dSize = useSingleRow and iconSize or debuffIconSize
+            local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, maxBuffs, maxDebuffs, stackCountAnchor)
+            local bSize = buffIconSize
+            local dSize = debuffIconSize
             Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, buffGrowth, rowWrap)
             Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, debuffGrowth, rowWrap)
         elseif Icons.RenderPreviewIcons and isPlayer then
             -- Player: debuff preview only (buffCap = 0), real buffs render below
-            local _, dc = Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, 0, maxDebuffs, stackCountAnchor)
-            local dSize = useSingleRow and iconSize or debuffIconSize
+            local _, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, 0, maxDebuffs, stackCountAnchor)
+            local dSize = debuffIconSize
             Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, debuffGrowth, rowWrap)
         end
 
@@ -1145,7 +1129,7 @@ local function RenderUnit(entry)
             list, debuffCount = _GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, onlyImportantDebuffs, entry._debuffList, needPlayerAura)
         end
 
-        local container = useSingleRow and entry.mixed or entry.debuffs
+        local container = entry.debuffs
         for i = 1, debuffCount do
             local aura = list[i]
             if aura then
@@ -1163,8 +1147,8 @@ local function RenderUnit(entry)
             list, buffCount = _GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, onlyImportantBuffs, entry._buffList, needPlayerAura)
         end
 
-        local container = useSingleRow and entry.mixed or entry.buffs
-        local offset = useSingleRow and debuffCount or 0
+        local container = entry.buffs
+        local offset = 0
         for i = 1, buffCount do
             local aura = list[i]
             if aura then
@@ -1184,48 +1168,32 @@ local function RenderUnit(entry)
     local lastDebuffCount = entry._lastDebuffCount or 0
     local countsChanged = (buffCount ~= lastBuffCount) or (debuffCount ~= lastDebuffCount)
     
-    if useSingleRow and entry.mixed and not skipDebuffs then
-        local total = debuffCount + buffCount
-        _LayoutIcons(entry.mixed, total, iconSize, spacing, perRow, growth, rowWrap)
-        if countsChanged then
-            _HideUnused(entry.mixed, total + 1)
-            _HideUnused(entry.debuffs, 1)
-            _HideUnused(entry.buffs, 1)
-        end
-    elseif useSingleRow and entry.mixed and skipDebuffs then
-        -- Player edit mode + single row: layout only real buffs in mixed, leave debuffs alone.
-        _LayoutIcons(entry.mixed, buffCount, iconSize, spacing, perRow, buffGrowth, rowWrap)
-        if countsChanged then
-            _HideUnused(entry.mixed, buffCount + 1)
-            _HideUnused(entry.buffs, 1)
+    -- SEPARATE (only) layout path
+    if skipDebuffs then
+        -- Player edit mode: debuff layout already handled by preview path.
+    elseif showDebuffs then
+        _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, rowWrap)
+        if debuffCount ~= lastDebuffCount then
+            _HideUnused(entry.debuffs, debuffCount + 1)
         end
     else
-        if skipDebuffs then
-            -- Player edit mode: debuff layout already handled by preview path.
-        elseif showDebuffs then
-            _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, rowWrap)
-            if debuffCount ~= lastDebuffCount then
-                _HideUnused(entry.debuffs, debuffCount + 1)
-            end
-        else
-            if lastDebuffCount > 0 then
-                _HideUnused(entry.debuffs, 1)
-            end
+        if lastDebuffCount > 0 then
+            _HideUnused(entry.debuffs, 1)
         end
-
-        if showBuffs then
-            _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, rowWrap)
-            if buffCount ~= lastBuffCount then
-                _HideUnused(entry.buffs, buffCount + 1)
-            end
-        else
-            if lastBuffCount > 0 then
-                _HideUnused(entry.buffs, 1)
-            end
-        end
-
-        if entry.mixed and countsChanged then _HideUnused(entry.mixed, 1) end
     end
+
+    if showBuffs then
+        _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, rowWrap)
+        if buffCount ~= lastBuffCount then
+            _HideUnused(entry.buffs, buffCount + 1)
+        end
+    else
+        if lastBuffCount > 0 then
+            _HideUnused(entry.buffs, 1)
+        end
+    end
+
+    if entry.mixed and countsChanged then _HideUnused(entry.mixed, 1) end
 
     entry._lastBuffCount = buffCount
     entry._lastDebuffCount = debuffCount
@@ -1452,6 +1420,25 @@ function API.Init()
     if Ev and Ev.Init then
         Ev.Init()
     end
+
+
+-- IMPORTANT: On /reload, Auras2 can initialize before MSUF core has fully
+-- hydrated SavedVariables (or before some modules finish their first Apply).
+-- That can cause the initial anchor placement to use default offsets until
+-- Edit Mode forces a re-anchor.
+--
+-- Fix: one-shot post-init invalidate on the next tick so we re-read the
+-- final DB state and force UpdateAnchor to run with the correct offsets.
+if not API._didPostInitInvalidate then
+    API._didPostInitInvalidate = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            InvalidateDB()
+        end)
+    else
+        InvalidateDB()
+    end
+end
 end
 
 -- Deferred auto-init: if Events already loaded, Init now; otherwise Events.lua calls API.Init() at its tail
