@@ -311,6 +311,68 @@ end
 function _G.MSUF_GetReverseFillSafe(frame, isChanneled)
     return _MSUF_GetReverseFill(frame, nil, isChanneled)
 end
+-- =====================================================================
+-- Phase 1C: Canonical reverse-fill resolution (single source of truth)
+--
+-- This MUST return a plain Lua boolean. It is used by:
+--   * Driver Cast() (timer direction + stripe/latency anchoring)
+--   * Frame builders (previews)
+--
+-- Rules:
+--   * base direction from MSUF_DB.general.castbarFillDirection ("LTR"/"RTL")
+--   * if castbarOpositeDirectionTarget == true => invert ONLY for target (and target preview)
+--   * if castbarUnifiedDirection ~= true and isChanneled => invert (channels drain opposite)
+-- =====================================================================
+local function _MSUF_ResolveCastbarUnitKey(frame)
+    if not frame then return nil end
+
+    local u = frame.unit or frame.MSUF_unit or frame._msufUnit or frame.unitKey
+    if type(u) == "string" and u ~= "" then
+        return u
+    end
+
+    local k = frame._msufBarKey or frame.barKey or frame.key
+    if type(k) == "string" and k ~= "" then
+        if k == "player" or k == "target" or k == "focus" then return k end
+        if k == "boss" or k:sub(1, 4) == "boss" then return k end
+    end
+
+    if frame == _G.MSUF_PlayerCastbar or frame == _G.MSUF_PlayerCastbarPreview then return "player" end
+    if frame == _G.MSUF_TargetCastbar or frame == _G.MSUF_TargetCastbarPreview then return "target" end
+    if frame == _G.MSUF_FocusCastbar  or frame == _G.MSUF_FocusCastbarPreview  then return "focus" end
+
+    local n = frame.GetName and frame:GetName() or nil
+    if type(n) == "string" then
+        if n:find("Target", 1, true) then return "target" end
+        if n:find("Focus", 1, true) then return "focus" end
+        if n:find("Player", 1, true) then return "player" end
+        if n:find("boss", 1, true) or n:find("Boss", 1, true) then return "boss" end
+    end
+
+    return nil
+end
+
+function _G.MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
+    _EnsureDBLazy()
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+
+    local baseReverse = (g.castbarFillDirection == "RTL") and true or false
+
+    if g.castbarOpositeDirectionTarget == true then
+        local unitKey = _MSUF_ResolveCastbarUnitKey(frame)
+        if unitKey == "target" then
+            baseReverse = not baseReverse
+        end
+    end
+
+    if isChanneled == true then
+        if g.castbarUnifiedDirection ~= true then
+            return not baseReverse
+        end
+    end
+
+    return baseReverse
+end
 
 -- =====================================================================
 -- Phase 1B: Canonical timer-direction + reverse-fill application.
