@@ -24,6 +24,7 @@ local GetCVar    = GetCVar
 local GetCVarBool = GetCVarBool
 local math_min     = math.min
 local math_max     = math.max
+local IsAltKeyDown  = IsAltKeyDown
 ------------------------------------------------------
 -- Small math helpers
 ------------------------------------------------------
@@ -1332,10 +1333,16 @@ end
 local function ApplyLockState()
     local g = EnsureGameplayDefaults()
     if combatFrame then
+        -- Always click-through by default (never steal clicks on unitframes).
+        -- When UNLOCKED, hold ALT to temporarily enable mouse so you can drag it.
         if g.lockCombatTimer then
             combatFrame:EnableMouse(false)
         else
-            combatFrame:EnableMouse(true)
+            if IsAltKeyDown and IsAltKeyDown() then
+                combatFrame:EnableMouse(true)
+            else
+                combatFrame:EnableMouse(false)
+            end
         end
     end
 
@@ -1491,6 +1498,26 @@ local function CreateCombatTimerFrame()
 
     -- Apply initial lock state
     ApplyLockState()
+
+
+    -- Modifier listener: keep timer click-through unless ALT is held (when unlocked).
+    if not ns._MSUF_CombatTimerModifierFrame then
+        local f = CreateFrame("Frame")
+        ns._MSUF_CombatTimerModifierFrame = f
+        f:RegisterEvent("MODIFIER_STATE_CHANGED")
+        f:SetScript("OnEvent", function()
+            if not combatFrame then return end
+            local gd = GetGameplayDBFast()
+            if not gd or not gd.enableCombatTimer or gd.lockCombatTimer then
+                return
+            end
+            if IsAltKeyDown and IsAltKeyDown() then
+                combatFrame:EnableMouse(true)
+            else
+                combatFrame:EnableMouse(false)
+            end
+        end)
+    end
 
     return combatFrame
 end
