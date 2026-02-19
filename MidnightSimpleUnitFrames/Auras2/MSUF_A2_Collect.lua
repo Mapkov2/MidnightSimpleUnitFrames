@@ -430,47 +430,34 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImpor
         _bossScratch = bossScratch
     end
 
-    local mergedScratch = _mergedScratch
-    if mergedScratch == nil then
-        mergedScratch = {}
-        _mergedScratch = mergedScratch
-    end
-
-    local nPlayer, nBoss, nMerged = 0, 0, 0
+    local nPlayer, nBoss = 0, 0
 
     local checkPermanent = (hidePermanent == true)
     local checkImportant = (onlyImportant == true)
-    local wantPlayer = (needPlayerAura == true)
+
+    -- IMPORTANT: This merged path is used for "Only Mine + Include Boss".
+    -- It must return ONLY player auras and boss auras (no "fill with others").
+    -- Default = want player-aura detection unless explicitly disabled.
+    local wantPlayer = true  -- always needed for merged player+boss
 
     for i = 1, (sourceN or 0) do
         local data = source[i]
         if data ~= nil then
-            local dominated = false
+            -- Filter: hide permanent
+            if not (checkPermanent and data._msufDoesExpire == false) then
+                -- Filter: IMPORTANT-only
+                if not (checkImportant and data._msufIsImportant ~= true) then
+                    if wantPlayer and data._msufIsPlayerAura == true then
+                        nPlayer = nPlayer + 1
+                        playerScratch[nPlayer] = data
+                    elseif IsBossAura(data) then
+                        nBoss = nBoss + 1
+                        bossScratch[nBoss] = data
+                    end
 
-            if checkPermanent and data._msufDoesExpire == false then
-                dominated = true
-            end
-
-            if not dominated and checkImportant then
-                if data._msufIsImportant ~= true then
-                    dominated = true
-                end
-            end
-
-            if not dominated then
-                if wantPlayer and data._msufIsPlayerAura == true then
-                    nPlayer = nPlayer + 1
-                    playerScratch[nPlayer] = data
-                elseif IsBossAura(data) then
-                    nBoss = nBoss + 1
-                    bossScratch[nBoss] = data
-                else
-                    nMerged = nMerged + 1
-                    mergedScratch[nMerged] = data
-                end
-
-                if (nPlayer + nBoss + nMerged) >= maxCount then
-                    break
+                    if (nPlayer + nBoss) >= maxCount then
+                        break
+                    end
                 end
             end
         end
@@ -495,19 +482,6 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImpor
     else
         for i = 1, nBoss do
             bossScratch[i] = nil
-        end
-    end
-
-    if n < maxCount then
-        for i = 1, nMerged do
-            n = n + 1
-            out[n] = mergedScratch[i]
-            mergedScratch[i] = nil
-            if n >= maxCount then break end
-        end
-    else
-        for i = 1, nMerged do
-            mergedScratch[i] = nil
         end
     end
 
