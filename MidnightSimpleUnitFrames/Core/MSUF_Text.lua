@@ -372,7 +372,7 @@ function ns.Text.RenderPowerText(self)
     local mainText, sideText = _MSUF_FormatPowerByMode(pMode, curText, maxText, pctText, powerSep, powerSep, splitAllowed)
 
     ns.Text.Set(self.powerText, mainText or "", true)
-    if sideText ~= nil and sideText ~= "" and self.powerTextPct then
+    if sideText ~= nil and self.powerTextPct then
         ns.Text.Set(self.powerTextPct, sideText, true)
     else
         ns.Text.ClearField(self, "powerTextPct")
