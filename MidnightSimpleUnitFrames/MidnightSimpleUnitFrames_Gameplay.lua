@@ -46,6 +46,22 @@ if not _MSUF_Clamp then
     _G._MSUF_Clamp = _MSUF_Clamp
 end
 
+
+local _MSUF_RoundInt = _G._MSUF_RoundInt
+if not _MSUF_RoundInt then
+    _MSUF_RoundInt = function(v)
+        v = tonumber(v)
+        if not v then
+            return 0
+        end
+        if v >= 0 then
+            return math.floor(v + 0.5)
+        end
+        return math.ceil(v - 0.5)
+    end
+    _G._MSUF_RoundInt = _MSUF_RoundInt
+end
+
 local C_Timer      = C_Timer
 local C_Timer_After = C_Timer and C_Timer.After
 
@@ -140,6 +156,12 @@ local function EnsureGameplayDefaults()
     if g.lockCombatTimer == nil then
         g.lockCombatTimer = false
     end
+    -- When enabled, the combat timer frame never steals clicks (recommended).
+    -- When disabled, the timer can be dragged normally while unlocked (no ALT needed).
+    if g.combatTimerClickThrough == nil then
+        g.combatTimerClickThrough = true
+    end
+
 
     -- Anchor target for the combat timer (none/player/target/focus)
     if g.combatTimerAnchor == nil then
@@ -684,6 +706,9 @@ local function MSUF_Gameplay_TickCombatTimer()
             lastTimerText = ""
             combatTimerText:SetText("")
         end
+        if combatFrame and combatFrame.IsShown and combatFrame:IsShown() then
+            combatFrame:Hide()
+        end
         wasInCombat = false
         combatStartTime = nil
         return
@@ -694,6 +719,9 @@ local function MSUF_Gameplay_TickCombatTimer()
     local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) or (InCombatLockdown and InCombatLockdown()) or false
 
     if inCombat then
+        if combatFrame and combatFrame.Show and (not combatFrame:IsShown()) then
+            combatFrame:Show()
+        end
         local now = GetTime()
         if not combatStartTime then
             combatStartTime = now
@@ -713,16 +741,23 @@ local function MSUF_Gameplay_TickCombatTimer()
             combatTimerText:SetText(text)
         end
     else
-        -- Out of combat: show preview only when unlocked & enabled
-        if not gNow.lockCombatTimer then
-            if lastTimerText ~= "0:00" then
-                lastTimerText = "0:00"
-                combatTimerText:SetText("0:00")
+        -- Out of combat: when locked, hide the entire timer (no preview).
+        -- When unlocked, show a 0:00 preview so the user can position it.
+        if gNow.lockCombatTimer then
+            if combatFrame and combatFrame.IsShown and combatFrame:IsShown() then
+                combatFrame:Hide()
             end
-        else
             if lastTimerText ~= "" then
                 lastTimerText = ""
                 combatTimerText:SetText("")
+            end
+        else
+            if combatFrame and combatFrame.Show and (not combatFrame:IsShown()) then
+                combatFrame:Show()
+            end
+            if lastTimerText ~= "0:00" then
+                lastTimerText = "0:00"
+                combatTimerText:SetText("0:00")
             end
         end
         wasInCombat = false
@@ -1333,15 +1368,26 @@ end
 local function ApplyLockState()
     local g = EnsureGameplayDefaults()
     if combatFrame then
-        -- Always click-through by default (never steal clicks on unitframes).
-        -- When UNLOCKED, hold ALT to temporarily enable mouse so you can drag it.
-        if g.lockCombatTimer then
+        -- Combat Timer mouse behavior:
+        -- • While dragging: keep mouse enabled so OnDragStop always fires (prevents "stuck to mouse").
+        -- • Locked: always click-through (never steal clicks / never invisible clickbox).
+        -- • Unlocked: either click-through with ALT-to-drag, or always-interactive when click-through is disabled.
+        if combatFrame._msufDragging then
+            combatFrame:EnableMouse(true)
+        elseif not g.enableCombatTimer then
+            combatFrame:EnableMouse(false)
+        elseif g.lockCombatTimer then
             combatFrame:EnableMouse(false)
         else
-            if IsAltKeyDown and IsAltKeyDown() then
-                combatFrame:EnableMouse(true)
+            local clickThrough = (g.combatTimerClickThrough ~= false)
+            if clickThrough then
+                if IsAltKeyDown and IsAltKeyDown() then
+                    combatFrame:EnableMouse(true)
+                else
+                    combatFrame:EnableMouse(false)
+                end
             else
-                combatFrame:EnableMouse(false)
+                combatFrame:EnableMouse(true)
             end
         end
     end
@@ -1385,11 +1431,14 @@ local function _MSUF_GetCombatTimerAnchorFrame(g)
         return UIParent
     end
     local f = _MSUF_GetUnitFrameForAnchor(key)
-    if f and f.GetCenter then
+    if f then
+        -- Always return the chosen frame if it exists.
+        -- The anchor must work even if the frame is currently hidden or has no center yet.
         return f
     end
     return UIParent
 end
+
 
 local function MSUF_Gameplay_ApplyCombatTimerAnchor(g)
     if not combatFrame then
@@ -1449,44 +1498,50 @@ local function CreateCombatTimerFrame()
             return
         end
 
-        -- When the timer is anchored to a unitframe, keeping the relative anchor while dragging
-        -- can make the movement feel "sticky"/jittery (SetPoint fights the mouse). Detach it
-        -- to UIParent for the duration of the drag, then re-attach on drag stop.
-        self._msufDragging = true
-        local x, y = self:GetCenter()
-        if x and y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
+        -- Safety: if click-through is enabled, dragging is only allowed while ALT is held.
+        -- (Prevents accidental drags when the frame is temporarily interactive.)
+        if gd.combatTimerClickThrough ~= false then
+            if not (IsAltKeyDown and IsAltKeyDown()) then
+                return
+            end
         end
+
+        self._msufDragging = true
         self:StartMoving()
     end)
 
     combatFrame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         self._msufDragging = nil
-        local x, y = self:GetCenter()
-        if not x or not y then
-            return
-        end
 
+        -- Use the same proven "combat enter/leave" drag-save logic:
+        -- store offsets from the CURRENT anchor's center (or UIParent fallback).
         local db = EnsureGameplayDefaults()
         local anchor = _MSUF_GetCombatTimerAnchorFrame(db)
-        local ax, ay
-        if anchor and anchor.GetCenter then
-            ax, ay = anchor:GetCenter()
-        end
-        if not ax or not ay then
-            ax, ay = UIParent:GetCenter()
-        end
-        if not ax or not ay then
-            return
+
+        local x, y = self:GetCenter()
+        if x and y then
+            local ax, ay = UIParent:GetCenter()
+            if anchor and anchor.GetCenter then
+                local tx, ty = anchor:GetCenter()
+                if tx and ty then
+                    ax, ay = tx, ty
+                end
+            end
+            if ax and ay then
+                db.combatOffsetX = _MSUF_RoundInt(x - ax)
+                db.combatOffsetY = _MSUF_RoundInt(y - ay)
+            end
         end
 
-        db.combatOffsetX = x - ax
-        db.combatOffsetY = y - ay
+        -- Live-sync offset sliders in the Gameplay panel (if open).
+        local p = _G and _G.MSUF_GameplayPanel
+        if p and p.MSUF_SyncCombatTimerOffsetSliders then
+            p:MSUF_SyncCombatTimerOffsetSliders()
+        end
 
-        -- Re-attach to the configured anchor immediately so it stays stable.
-        MSUF_Gameplay_ApplyCombatTimerAnchor(db)
+        -- Re-apply click-through / ALT-to-drag state after the drag ends.
+        ApplyLockState()
     end)
 
     combatTimerText = combatFrame:CreateFontString(nil, "OVERLAY")
@@ -1507,10 +1562,26 @@ local function CreateCombatTimerFrame()
         f:RegisterEvent("MODIFIER_STATE_CHANGED")
         f:SetScript("OnEvent", function()
             if not combatFrame then return end
-            local gd = GetGameplayDBFast()
-            if not gd or not gd.enableCombatTimer or gd.lockCombatTimer then
+
+            -- Never toggle mouse while dragging; otherwise OnDragStop can fail to fire
+            -- and the frame may appear to "stick" to the cursor.
+            if combatFrame._msufDragging then
+                combatFrame:EnableMouse(true)
                 return
             end
+
+            local gd = GetGameplayDBFast()
+            if not gd or not gd.enableCombatTimer or gd.lockCombatTimer then
+                if combatFrame then combatFrame:EnableMouse(false) end
+                return
+            end
+
+            -- If click-through is disabled, keep it interactive while unlocked.
+            if gd.combatTimerClickThrough == false then
+                combatFrame:EnableMouse(true)
+                return
+            end
+
             if IsAltKeyDown and IsAltKeyDown() then
                 combatFrame:EnableMouse(true)
             else
@@ -4677,8 +4748,48 @@ end
         end
     )
 
+    -- Click-through toggle (affects UNLOCKED behavior):
+    -- ON  = timer never steals clicks; unlock + hold ALT to drag.
+    -- OFF = timer is draggable normally while unlocked.
+    local combatClickThrough = _MSUF_Check("MSUF_Gameplay_CombatTimerClickThroughCheck", "TOPLEFT", combatLock, "BOTTOMLEFT", 0, -8,
+        "Click-through (ALT to drag when unlocked)",
+        "combatTimerClickThroughCheck", "combatTimerClickThrough",
+        function()
+            ApplyLockState()
+        end
+    )
+
+    -- Precise position sliders (offset from chosen anchor)
+    local combatPosLabel = _MSUF_Label("GameFontHighlight", "TOPLEFT", combatSlider, "BOTTOMLEFT", 0, -20, "Timer position (offset)", "combatTimerPosLabel")
+
+    local combatOffsetXSlider = _MSUF_Slider("MSUF_Gameplay_CombatTimerOffsetXSlider", "TOPLEFT", combatPosLabel, "BOTTOMLEFT", 0, -12, 240, -800, 800, 1, "-800", "800", "X: 0",
+        "combatTimerOffsetXSlider", "combatOffsetX",
+        function(v) return math.floor(v + 0.5) end,
+        function(self, g, v)
+            local t = _G[self:GetName() .. "Text"]
+            if t then t:SetText(string.format("X: %d", v)) end
+            MSUF_Gameplay_ApplyCombatTimerAnchor(g)
+            MSUF_Gameplay_TickCombatTimer()
+        end,
+        false
+    )
+    _MSUF_SliderTextRight("MSUF_Gameplay_CombatTimerOffsetXSlider")
+
+    local combatOffsetYSlider = _MSUF_Slider("MSUF_Gameplay_CombatTimerOffsetYSlider", "TOPLEFT", combatOffsetXSlider, "BOTTOMLEFT", 0, -12, 240, -800, 800, 1, "-800", "800", "Y: -200",
+        "combatTimerOffsetYSlider", "combatOffsetY",
+        function(v) return math.floor(v + 0.5) end,
+        function(self, g, v)
+            local t = _G[self:GetName() .. "Text"]
+            if t then t:SetText(string.format("Y: %d", v)) end
+            MSUF_Gameplay_ApplyCombatTimerAnchor(g)
+            MSUF_Gameplay_TickCombatTimer()
+        end,
+        false
+    )
+    _MSUF_SliderTextRight("MSUF_Gameplay_CombatTimerOffsetYSlider")
+
     -- Combat Enter/Leave header + separator
-    local combatStateSeparator = _MSUF_Sep(combatSlider, -24)
+    local combatStateSeparator = _MSUF_Sep(combatOffsetYSlider, -24)
     local combatStateHeader = _MSUF_Header(combatStateSeparator, "Combat Enter/Leave")
 
     -- Combat state text checkbox
@@ -5576,8 +5687,12 @@ end
         local timerOn = g.enableCombatTimer and true or false
         _MSUF_SetSliderEnabled(self.combatFontSizeSlider, timerOn)
         _MSUF_SetCheckEnabled(self.lockCombatTimerCheck, timerOn)
+        _MSUF_SetCheckEnabled(self.combatTimerClickThroughCheck, timerOn)
         _MSUF_SetFontStringEnabled(self.combatTimerAnchorLabel, timerOn, false)
         _MSUF_SetDropdownEnabled(self.combatTimerAnchorDropdown, timerOn)
+        _MSUF_SetFontStringEnabled(self.combatTimerPosLabel, timerOn, false)
+        _MSUF_SetSliderEnabled(self.combatTimerOffsetXSlider, timerOn)
+        _MSUF_SetSliderEnabled(self.combatTimerOffsetYSlider, timerOn)
 
         -- Combat Enter/Leave dependents
         local stateOn = g.enableCombatStateText and true or false
@@ -5706,6 +5821,7 @@ end
         "combatFontSize",
         "enableCombatTimer",
         "lockCombatTimer",
+        "combatTimerClickThrough",
 
         "combatStateOffsetX",
         "combatStateOffsetY",
@@ -5814,6 +5930,7 @@ end
         local checks = {
             {"combatTimerCheck", "enableCombatTimer"},
             {"lockCombatTimerCheck", "lockCombatTimer"},
+            {"combatTimerClickThroughCheck", "combatTimerClickThrough"},
 
             {"combatStateCheck", "enableCombatStateText"},
             {"lockCombatStateCheck", "lockCombatState"},
@@ -5841,6 +5958,8 @@ end
         -- Simple sliders
         local sliders = {
             {"combatFontSizeSlider", "combatFontSize", 0},
+            {"combatTimerOffsetXSlider", "combatOffsetX", 0},
+            {"combatTimerOffsetYSlider", "combatOffsetY", -200},
             {"combatStateFontSizeSlider", "combatStateFontSize", 0},
             {"combatStateDurationSlider", "combatStateDuration", 1.5},
 
@@ -5859,6 +5978,18 @@ end
         for i = 1, #sliders do
             local t = sliders[i]
             SetSlider(t[1], t[2], t[3])
+        end
+
+        -- Combat Timer offset label text (refresh runs with slider-changes suppressed)
+        if self.combatTimerOffsetXSlider then
+            local vx = tonumber(g.combatOffsetX) or 0
+            local txt = _G[self.combatTimerOffsetXSlider:GetName() .. "Text"]
+            if txt then txt:SetText(string.format("X: %d", math.floor(vx + 0.5))) end
+        end
+        if self.combatTimerOffsetYSlider then
+            local vy = tonumber(g.combatOffsetY) or -200
+            local txt = _G[self.combatTimerOffsetYSlider:GetName() .. "Text"]
+            if txt then txt:SetText(string.format("Y: %d", math.floor(vy + 0.5))) end
         end
 
         -- Combat Timer anchor dropdown
@@ -5940,6 +6071,26 @@ end
         -- Done syncing; re-enable bindings.
         self._msufSuppressSliderChanges = false
     end
+
+-- Live-sync: allow the Combat Timer frame to drag-update X/Y without spamming Apply().
+function panel:MSUF_SyncCombatTimerOffsetSliders()
+    if not self.combatTimerOffsetXSlider or not self.combatTimerOffsetYSlider then
+        return
+    end
+    local g = EnsureGameplayDefaults()
+    self._msufSuppressSliderChanges = true
+    local vx = _MSUF_RoundInt(g.combatOffsetX)
+    local vy = _MSUF_RoundInt(g.combatOffsetY)
+    self.combatTimerOffsetXSlider:SetValue(vx)
+    self.combatTimerOffsetYSlider:SetValue(vy)
+
+    local t = _G[self.combatTimerOffsetXSlider:GetName() .. "Text"]
+    if t then t:SetText(string.format("X: %d", vx)) end
+    t = _G[self.combatTimerOffsetYSlider:GetName() .. "Text"]
+    if t then t:SetText(string.format("Y: %d", vy)) end
+
+    self._msufSuppressSliderChanges = false
+end
 
 -- Live-sync: allow the Totem preview frame to drag-update X/Y without spamming Apply().
 function panel:MSUF_SyncTotemOffsetSliders()
