@@ -309,7 +309,13 @@ local function ProbeTimerDirectionMapping(statusBar, durationObj)
         SafeSetReverseFill(statusBar, origRF)
     end
 
-    if foundLTR ~= nil or foundRTL ~= nil then
+    -- IMPORTANT (12.0 Beta/Midnight): Some StatusBars can report the same fill-side regardless of
+    -- the passed direction enum, which makes the mapping unusable (dirFalse == dirTrue or one side
+    -- missing). If we accept that mapping, changing reverseFill later appears to do nothing because
+    -- ReverseFill is intentionally kept OFF in "dir" mode.
+    --
+    -- Robust rule: only enter "dir" mode if we can reliably map BOTH sides AND they differ.
+    if (foundLTR ~= nil) and (foundRTL ~= nil) and (foundLTR ~= foundRTL) then
         return {
             mode = "dir",
             interp = bestInterp,
@@ -473,6 +479,109 @@ _G.MSUF_ClearStatusBarTimerDuration = _G.MSUF_ClearCastbarTimerDuration
 
 _G.MSUF_ApplyStatusBarTimerAndReverse = function(statusBar, durationObj, reverseFill)
     return S:ApplyTimerDirection(statusBar, durationObj, reverseFill)
+end
+
+
+-- ==============================================================
+-- Fill direction live-apply (Options -> Castbars -> Fill direction)
+--
+-- Regression note:
+-- The options menu calls MSUF_UpdateCastbarFillDirection(), but older builds relied on
+-- side-effects during Cast() to update ReverseFill. In 12.0, we can (and often must)
+-- drive the visual direction via SetTimerDuration(direction), which means simply toggling
+-- StatusBar:SetReverseFill() is not sufficient (and can even double-invert).
+--
+-- This function re-applies timer direction + reverse fill to all known MSUF castbars and
+-- previews and also re-anchors the player latency zone to match the chosen direction.
+-- ==============================================================
+_G.MSUF_UpdateCastbarFillDirection = function()
+    -- Force a fresh timer signature probe after changing direction.
+    -- Prevents a bad cached mapping (dirFalse==dirTrue) from making the dropdown appear "dead".
+    S._timerSig = nil
+
+    -- Ensure castbars exist if the project exports the helper.
+    if type(_G.MSUF_EnsureCastbars) == "function" then
+        pcall(_G.MSUF_EnsureCastbars)
+    end
+
+    local function applyToFrame(f)
+        if not f or not f.statusBar then return end
+
+        -- Determine current cast type for this frame (channel vs cast) so we mirror correctly.
+        local isChan = (f.MSUF_isChanneled == true) or (f.isChanneling == true)
+        if f.isEmpower then
+            isChan = true
+        end
+
+        -- IMPORTANT: compute reverseFill from the canonical resolver (DB-driven).
+        -- This must reflect the latest Options value immediately.
+        local rf = (type(_G.MSUF_GetReverseFillSafe) == "function") and (_G.MSUF_GetReverseFillSafe(f, isChan) and true or false) or false
+
+        -- If the bar is currently timer-driven, re-apply the timer direction using the stored duration object.
+        -- (If nil, ApplyTimerDirection will fall back to ReverseFill only.)
+        local durObj = f.MSUF_durationObj
+        if type(_G.MSUF_ApplyCastbarTimerDirection) == "function" then
+            _G.MSUF_ApplyCastbarTimerDirection(f.statusBar, durObj, rf)
+        elseif f.statusBar.SetReverseFill then
+            -- Fallback for ultra-legacy environments.
+            pcall(f.statusBar.SetReverseFill, f.statusBar, rf and true or false)
+        end
+
+        -- Latency zone is player-only; it must flip sides with direction.
+        if f.latencyBar and type(_G.MSUF_PlayerCastbar_UpdateLatencyZone) == "function" then
+            local durSec = f.MSUF_latencyLastDurSec
+            if type(durSec) == "number" and durSec > 0 then
+                _G.MSUF_PlayerCastbar_UpdateLatencyZone(f, isChan, durSec)
+            else
+                -- No cached duration -> just force anchor + hide.
+                _G.MSUF_PlayerCastbar_UpdateLatencyZone(f, isChan, 0)
+            end
+        end
+
+        -- If this frame is actively casting, force a lightweight recast so any
+        -- bar-local cached fields (timer-driven flags, stripe anchoring, etc.)
+        -- are recomputed under the new direction.
+        local build = _G.MSUF_Driver_BuildCastStateFor
+        if build and f.Cast and type(build) == "function" then
+            local st = build(f)
+            if st and st.active then
+                f:Cast(st)
+            end
+        end
+
+        -- Empower stage markers/segments anchor based on direction.
+        -- Layout is handled inside the empower module via its own hooks, but we can nudge it
+        -- by marking the layout pending and triggering a cheap visual refresh.
+        if f.isEmpower then
+            f.MSUF_empowerLayoutPending = true
+        end
+    end
+
+    -- Real castbars
+    applyToFrame(_G.MSUF_PlayerCastbar)
+    applyToFrame(_G.MSUF_TargetCastbar)
+    applyToFrame(_G.MSUF_FocusCastbar)
+
+    -- Previews
+    applyToFrame(_G.MSUF_PlayerCastbarPreview)
+    applyToFrame(_G.MSUF_TargetCastbarPreview)
+    applyToFrame(_G.MSUF_FocusCastbarPreview)
+
+    -- Boss castbars + previews
+    local n = tonumber(_G.MAX_BOSS_FRAMES) or 5
+    if n < 1 or n > 12 then n = 5 end
+    for i = 1, n do
+        applyToFrame(_G["MSUF_boss" .. i .. "Castbar"])
+        if i == 1 then
+            applyToFrame(_G.MSUF_BossCastbarPreview)
+        end
+        applyToFrame(_G["MSUF_BossCastbarPreview" .. i])
+    end
+
+    -- If any centralized visuals refresh exists, run it so previews reflect immediately.
+    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+        pcall(_G.MSUF_UpdateCastbarVisuals)
+    end
 end
 
 
