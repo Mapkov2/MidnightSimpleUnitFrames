@@ -2822,7 +2822,38 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
             end
 
             local pr = conf.portraitRender
-            if pr == "CLASS" then
+            local model = self.portrait3D or self.portrait3d or self.portraitModel or self.portraitModelFrame
+                or self.portrait3DModel or self.portrait3DFrame or self.modelPortrait or self.model3D
+
+            -- If a 3D model portrait exists, hide the 2D texture in 3D mode to prevent bleed-through.
+            if pr == "3D" and model then
+                if self.portrait.SetTexture then
+                    self.portrait:SetTexture(nil)
+                end
+                if self.portrait.Hide then
+                    self.portrait:Hide()
+                end
+
+                if model.ClearAllPoints then model:ClearAllPoints() end
+                if model.SetAllPoints then
+                    model:SetAllPoints(self.portrait)
+                elseif model.SetPoint then
+                    model:SetPoint("CENTER", self.portrait, "CENTER", 0, 0)
+                    if model.SetSize and self.portrait.GetSize then
+                        local w, h = self.portrait:GetSize()
+                        model:SetSize(w or 0, h or 0)
+                    end
+                end
+                if model.SetFrameLevel and self.portrait.GetFrameLevel then
+                    model:SetFrameLevel((self.portrait:GetFrameLevel() or 0) + 5)
+                end
+                if model.SetUnit then
+                    model:SetUnit("player")
+                end
+                if model.Show then model:Show() end
+
+            elseif pr == "CLASS" then
+                if model and model.Hide then model:Hide() end
                 local class = (F.UnitClassBase and F.UnitClassBase("player")) or (F.UnitClass and select(2, F.UnitClass("player")))
                 local coords = (class and _G.CLASS_ICON_TCOORDS and _G.CLASS_ICON_TCOORDS[class]) or nil
                 if coords and self.portrait.SetTexture and self.portrait.SetTexCoord then
@@ -2835,6 +2866,7 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
                     end
                 end
             else
+                if model and model.Hide then model:Hide() end
                 -- Placeholder portrait (question mark) so the portrait position/size can be edited.
                 if self.portrait.SetTexture then
                     self.portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
@@ -2844,9 +2876,15 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
                 end
             end
 
-            if self.portrait.Show then self.portrait:Show() end
+            -- Only show the 2D texture portrait when not using a 3D model.
+            if not (pr == "3D" and model) then
+                if self.portrait.Show then self.portrait:Show() end
+            end
         else
             if self.portrait.Hide then self.portrait:Hide() end
+            local model = self.portrait3D or self.portrait3d or self.portraitModel or self.portraitModelFrame
+                or self.portrait3DModel or self.portrait3DFrame or self.modelPortrait or self.model3D
+            if model and model.Hide then model:Hide() end
         end
     end
 
@@ -4995,7 +5033,7 @@ end
     if type(ns.Castbars._InitPlayerCastbarPreviewToggle) == "function" then
         C_Timer.After(1.1, ns.Castbars._InitPlayerCastbarPreviewToggle)
     end
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89|r  |cff9ece6a Version: 2.0 rc4 |cff565f89|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89|r  |cff9ece6a Version: 2.0 rc1 |cff565f89|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
  end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then
