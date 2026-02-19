@@ -4713,6 +4713,19 @@ do
     _G.MSUF_TargetSoundDriver_ResetState = MSUF_TargetSoundDriver_ResetState
 end
 MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_STARTUP", function(event)
+    -- Force-load bundled media (statusbar textures/fonts) even under weird install layouts
+    -- or load-order edge cases. Cold-path only (runs on login + one delayed retry).
+    if type(_G.MSUF_ForceRegisterBundledMedia) == "function" then
+        _G.MSUF_ForceRegisterBundledMedia()
+        if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+            _G.C_Timer.After(1, function()
+                if type(_G.MSUF_ForceRegisterBundledMedia) == "function" then
+                    _G.MSUF_ForceRegisterBundledMedia()
+                end
+            end)
+        end
+    end
+
     MSUF_InitProfiles()
     if not MSUF_DB then EnsureDB() end
     do
