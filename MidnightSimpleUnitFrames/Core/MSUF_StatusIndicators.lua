@@ -332,12 +332,6 @@ local function _MSUF_GetDefaultClassificationSymbolKey(state)
     end
      return nil
 end
-local function _MSUF_NormalizeClassificationSymbolKey(symbolKey, state)
-    if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
-        return _MSUF_GetDefaultClassificationSymbolKey(state)
-    end
-     return symbolKey
-end
 local function _MSUF_GetClassificationLabel(state)
     if state == "BOSS" then
          return "BOSS"
@@ -352,26 +346,6 @@ local function _MSUF_GetClassificationLabel(state)
          return "ELITE"
     end
      return ""
-end
--- Ensure a FontString has a font before calling :SetText().
--- Some FontStrings may be created without a template; in that case SetText() can throw "Font not set".
-local function _MSUF_EnsureFontStringHasFont(fs)
-    if not fs then  return false end
-    if fs.GetFont then
-        local p = fs:GetFont()
-        if p then  return true end
-    end
-    -- Prefer a known-good UI FontObject.
-    if fs.SetFontObject and _G.GameFontHighlightLarge then
-        fs:SetFontObject(_G.GameFontHighlightLarge)
-         return true
-    end
-    -- Fallback: raw font file (should exist everywhere).
-    if fs.SetFont and _G.STANDARD_TEXT_FONT then
-        fs:SetFont(_G.STANDARD_TEXT_FONT, 12, "")
-         return true
-    end
-     return false
 end
 -- ------------------------------------------------------------
 -- Status icons update (Combat / Resting / Incoming Res)

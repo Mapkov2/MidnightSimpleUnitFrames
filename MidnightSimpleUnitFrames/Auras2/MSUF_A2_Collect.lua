@@ -9,7 +9,6 @@
 --    needPlayerAura flag skips isFiltered when highlights disabled
 --    Split request-cap vs output-cap: low caps = low API work
 --    Stale-tail clear skipped when count unchanged
---    PlayerFilter cached in table (no if-chain)
 -- ============================================================================
 
 local addonName, ns = ...
@@ -19,17 +18,12 @@ ns = (rawget(_G, "MSUF_NS") or ns) or {}
 --  - Reduce global table lookups in high-frequency aura pipelines.
 --  - Secret-safe: localizing function references only (no value comparisons).
 -- =========================================================================
-local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
-local CreateFrame, GetTime = CreateFrame, GetTime
-local UnitExists = UnitExists
-local InCombatLockdown = InCombatLockdown
-local C_Timer = C_Timer
+local type, tonumber, select = type, tonumber, select
+local pairs, next = pairs, next
+local math_min = math.min
+local GetTime = GetTime
 local C_UnitAuras = C_UnitAuras
 local C_Secrets = C_Secrets
-local C_CurveUtil = C_CurveUtil
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 
@@ -42,9 +36,6 @@ local Collect = API.Collect
 -- --
 -- Hot locals
 -- --
-local type = type
-local select = select
-local C_UnitAuras = C_UnitAuras
 local issecretvalue = _G and _G.issecretvalue
 local canaccessvalue = _G and _G.canaccessvalue
 
@@ -90,18 +81,6 @@ local function SecretsActive()
     local fn = C_Secrets and C_Secrets.ShouldAurasBeSecret
     _secretActive = (type(fn) == "function" and fn() == true) or false
     return _secretActive
-end
-
--- PERF: Inline permanent check - avoid function call in hot loop
--- Returns true if aura is permanent (no expiration)
-local function IsPermanentAura(unit, aid, secretsNow)
-    if secretsNow then return false end
-    if not _doesExpire then return false end
-    local v = _doesExpire(unit, aid)
-    if v == nil then return false end
-    if issecretvalue and issecretvalue(v) then return false end
-    -- v == false means no expiration = permanent
-    return (v == false)
 end
 
 -- PERF: Inline boss check
@@ -154,7 +133,6 @@ end
 -- PERF: Optimized slot capture - avoid varargs overhead
 -- --
 local _scratch = {}
-for _i = 1, 40 do _scratch[_i] = nil end
 _scratch._n = 0
 
 -- PERF: Direct slot capture without varargs wrapper
@@ -188,33 +166,6 @@ local FILTER_HARMFUL_PLAYER  = "HARMFUL|PLAYER"
 local FILTER_HELPFUL_IMPORTANT = "HELPFUL|IMPORTANT"
 local FILTER_HARMFUL_IMPORTANT = "HARMFUL|IMPORTANT"
 
-local _pFilterMap = {
-    [FILTER_HELPFUL] = FILTER_HELPFUL_PLAYER,
-    [FILTER_HARMFUL] = FILTER_HARMFUL_PLAYER,
-}
-local function PlayerFilter(filter)
-    return _pFilterMap[filter] or (filter .. "|PLAYER")
-end
-
--- --
--- PERF: Result cache per unit+filter (oUF-style)
--- Avoids ALL C API calls when epoch unchanged
--- --
-local _resultCache = {}  -- [unit][filter] = { epoch=N, out={...}, n=N }
-
-local function GetCacheKey(unit, filter)
-    return unit .. (filter or "")
-end
-
-local function InvalidateCache(unit)
-    if _resultCache[unit] then
-        _resultCache[unit] = nil
-    end
-end
-
--- Expose for Events module
-Collect.InvalidateCache = InvalidateCache
-
 -- Scan flags
 -- We only compute expensive per-aura tags (e.g. IMPORTANT) when any frame needs them.
 local _scanImportant = false
@@ -233,14 +184,6 @@ function Collect.SetScanFlags(needImportant)
             Store.InvalidateUnit("focus")
             for i = 1, 5 do
                 Store.InvalidateUnit("boss" .. i)
-            end
-        else
-            -- Fallback: clear result cache only
-            InvalidateCache("player")
-            InvalidateCache("target")
-            InvalidateCache("focus")
-            for i = 1, 5 do
-                InvalidateCache("boss" .. i)
             end
         end
     end
@@ -367,14 +310,9 @@ end
 -- Semantic equivalence: player auras first (priority), then
 -- non-duplicate boss auras appended up to cap.
 
--- Scratch table for boss auras during merge (avoids allocation)
-local _bossScratch = {}
-
 -- Scratch tables for merged collection (avoids allocation)
--- NOTE: These are intentionally module-level so we can reuse them without
--- allocating on each render tick.
 local _playerScratch = {}
-local _mergedScratch = {}
+local _bossScratch = {}
 
 function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImportant, out, mergeOut, needPlayerAura)
     if type(unit) ~= "string" then
@@ -972,17 +910,11 @@ function Store.GetEpoch(unit)
     return Store._epochs[unit] or 0
 end
 
-function Store.GetEpochSig(unit) return Store.GetEpoch(unit) end
-function Store.GetRawSig() return nil end
-function Store.PopUpdated() return nil, 0 end
-function Store.ForceScanForReuse() return nil end
-function Store.GetLastScannedAuraList() return nil end
 function Store.GetStackCount(unit, aid) return Collect.GetStackCount(unit, aid) end
 
 API.Model = (type(API.Model) == "table") and API.Model or {}
 local Model = API.Model
 Model.IsBossAura = function(data) return IsBossAura(data, SecretsActive()) end
-Model.GetPlayerAuraIdSetCached = nil
 
 Collect.SecretsActive = SecretsActive
 Collect.IsBossAura = function(data) return IsBossAura(data, SecretsActive()) end

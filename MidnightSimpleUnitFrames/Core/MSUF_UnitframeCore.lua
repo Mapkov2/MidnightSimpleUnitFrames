@@ -252,13 +252,6 @@ UFCore_GetSettingsCache = function()
     return Core._settingsCache
 end
 
--- UFCore flush budgeting: configurable via MSUF_DB.general
--- Defaults are ensured in MSUF_Defaults.lua.
-local function UFCore_GetFlushBudgetSettings()
-    local cache = UFCore_GetSettingsCache()
-    return cache.ufcoreFlushBudgetMs or 2.0, cache.ufcoreUrgentMaxPerFlush or 10
-end
-
 addon.MSUF_UnitframeCore = Core
 
 -- Deferred layout application (combat safety)

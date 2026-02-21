@@ -94,32 +94,10 @@ ns.Bars._ResolveAbsorbDisplay = _MSUF_ResolveAbsorbDisplay
 ns.Bars._ResolveAbsorbAnchor  = _MSUF_ResolveAbsorbAnchor
 
 -- ══════════════════════════════════════════════════════════════
--- Self-heal prediction overlay (was MSUF_SelfHealPred.lua)
+-- Self-heal prediction overlay
 -- ══════════════════════════════════════════════════════════════
--- NOTE: _MSUF_GetSelfHealPredCalc and _MSUF_GetIncomingHealsFromPlayer were removed
--- (dead code — only _MSUF_GetIncomingSelfHeals is used in the active hotpath).
 
 local _msufSelfHealCalc = nil
-local _msufSelfHealPredPixelCalcBar = nil
-
-local function _MSUF_EnsureSelfHealPredPixelCalcBar()
-    local bar = _msufSelfHealPredPixelCalcBar
-    if bar then
-        return bar
-    end
-
-    bar = _G.CreateFrame("StatusBar", "MSUF_SelfHealPredPixelCalcBar", _G.UIParent)
-    bar:SetSize(1, 1)
-    bar:SetPoint("TOPLEFT", _G.UIParent, "TOPLEFT", -5000, 0)
-    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-    bar:SetMinMaxValues(0, 1)
-    bar:SetValue(0)
-    bar:SetAlpha(0)
-    bar:Show()
-
-    _msufSelfHealPredPixelCalcBar = bar
-    return bar
-end
 
 local function _MSUF_GetIncomingSelfHeals(unit)
     unit = unit or "player"
