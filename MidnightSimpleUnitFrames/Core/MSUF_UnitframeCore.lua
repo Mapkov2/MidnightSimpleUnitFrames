@@ -1132,8 +1132,50 @@ function UFCore_UpdateToTInline(f)
     end
 
     if show then
+        -- Width clamp: cap ToT inline text to ~32% of frame width (secret-safe, no string math).
+        local txt = f._msufToTInlineText
+        local frameWidth = (f.GetWidth and f:GetWidth()) or 0
+        local maxW = 120
+        if frameWidth > 0 then
+            maxW = math.floor(frameWidth * 0.32)
+            if maxW < 80 then maxW = 80 end
+            if maxW > 180 then maxW = 180 end
+        end
+        txt:SetWidth(maxW)
+
+        -- Coloring: class color for players, reaction color for NPCs (secret-safe, no string compares).
+        local r, g, b = 1, 1, 1
+        if not inEdit then
+            if UnitIsPlayer and UnitIsPlayer("targettarget") then
+                local cache = UFCore_GetSettingsCache()
+                if cache and cache.nameClassColor then
+                    local _, classToken = UnitClass("targettarget")
+                    r, g, b = UFCore_GetClassBarColorFast(classToken)
+                end
+            else
+                if UnitIsDeadOrGhost and UnitIsDeadOrGhost("targettarget") then
+                    r, g, b = UFCore_GetNPCReactionColorFast("dead")
+                else
+                    local reaction = UnitReaction and UnitReaction("player", "targettarget")
+                    if reaction then
+                        if reaction >= 5 then
+                            r, g, b = UFCore_GetNPCReactionColorFast("friendly")
+                        elseif reaction == 4 then
+                            r, g, b = UFCore_GetNPCReactionColorFast("neutral")
+                        else
+                            r, g, b = UFCore_GetNPCReactionColorFast("enemy")
+                        end
+                    else
+                        r, g, b = UFCore_GetNPCReactionColorFast("enemy")
+                    end
+                end
+            end
+        end
+        f._msufToTInlineSep:SetTextColor(0.7, 0.7, 0.7)
+        txt:SetTextColor(r, g, b)
+
         _SetShown(f._msufToTInlineSep, true)
-        _SetShown(f._msufToTInlineText, true)
+        _SetShown(txt, true)
     else
         if f._msufToTInlineSep and f._msufToTInlineSep.Hide then f._msufToTInlineSep:Hide() end
         if f._msufToTInlineText and f._msufToTInlineText.Hide then f._msufToTInlineText:Hide() end
@@ -1625,6 +1667,8 @@ function UFCore_EnsureToTInlineWidgets(f, conf)
         end
     end
 
+    local created = false
+
     local sep = f._msufToTInlineSep
     if not sep then
         sep = overlay:CreateFontString(nil, "OVERLAY")
@@ -1632,6 +1676,7 @@ function UFCore_EnsureToTInlineWidgets(f, conf)
         sep:SetFontObject(GameFontNormalSmall)
         sep:SetJustifyH("LEFT")
         sep:SetJustifyV("MIDDLE")
+        created = true
     else
         if sep:GetParent() ~= overlay then
             sep:SetParent(overlay)
@@ -1645,6 +1690,7 @@ function UFCore_EnsureToTInlineWidgets(f, conf)
         tt:SetFontObject(GameFontNormalSmall)
         tt:SetJustifyH("LEFT")
         tt:SetJustifyV("MIDDLE")
+        created = true
     else
         if tt:GetParent() ~= overlay then
             tt:SetParent(overlay)
@@ -1660,6 +1706,19 @@ function UFCore_EnsureToTInlineWidgets(f, conf)
 
     tt:ClearAllPoints()
     tt:SetPoint("LEFT", sep, "RIGHT", 0, 0)
+
+    -- Immediately inherit font from nameText (master) so the widgets never
+    -- flash with the wrong GameFontNormalSmall size.  Invalidate _msufFontRev
+    -- so the central font system re-applies cleanly on the next pass.
+    if created and name.GetFont then
+        local font, size, flags = name:GetFont()
+        if font then
+            sep:SetFont(font, size, flags)
+            tt:SetFont(font, size, flags)
+            sep._msufFontRev = nil
+            tt._msufFontRev = nil
+        end
+    end
 
     sep:Hide()
     tt:Hide()

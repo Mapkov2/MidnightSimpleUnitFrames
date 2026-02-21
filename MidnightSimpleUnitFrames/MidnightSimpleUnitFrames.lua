@@ -4835,6 +4835,19 @@ local function MSUF_EnsureTargetToTInlineFS(targetFrame)
     sep:SetPoint("LEFT", targetFrame.nameText, "RIGHT", 0, 0)
     txt:ClearAllPoints()
     txt:SetPoint("LEFT", sep, "RIGHT", 0, 0)
+    -- Immediately inherit font from nameText (master) so ToT inline never
+    -- displays with the wrong GameFontHighlight size.  Invalidate _msufFontRev
+    -- so the central font cache re-applies cleanly on the next pass.
+    local nameFS = targetFrame.nameText
+    if nameFS and nameFS.GetFont then
+        local font, size, flags = nameFS:GetFont()
+        if font then
+            sep:SetFont(font, size, flags)
+            txt:SetFont(font, size, flags)
+            sep._msufFontRev = nil
+            txt._msufFontRev = nil
+        end
+    end
     targetFrame._msufToTInlineSep = sep
     targetFrame._msufToTInlineText = txt
  end
