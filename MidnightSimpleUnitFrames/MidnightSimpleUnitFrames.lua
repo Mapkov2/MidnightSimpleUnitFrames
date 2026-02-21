@@ -1990,9 +1990,9 @@ function _G.MSUF_GetPowerSpacerMaxForUnitKey(unitKey)
      return maxSpacer
 end
 local MSUF_TEXT_LAYOUT_HP  = { full="hpText",    pct="hpTextPct",    point="TOPRIGHT",    relPoint="TOPRIGHT",
-    xKey="hpOffsetX",    yKey="hpOffsetY",    defX=-4, defY=-4, spacerOn="hpTextSpacerEnabled",    spacerX="hpTextSpacerX",    spacerY="hpTextSpacerY",    maxFn=_G.MSUF_GetHPSpacerMaxForUnitKey,    limitMode=false }
+    xKey="hpOffsetX",    yKey="hpOffsetY",    defX=-4, defY=-4, spacerOn="hpTextSpacerEnabled",    spacerX="hpTextSpacerX",    maxFn=_G.MSUF_GetHPSpacerMaxForUnitKey,    limitMode=false }
 local MSUF_TEXT_LAYOUT_PWR = { full="powerText", pct="powerTextPct", point="BOTTOMRIGHT", relPoint="BOTTOMRIGHT",
-    xKey="powerOffsetX", yKey="powerOffsetY", defX=-4, defY= 4, spacerOn="powerTextSpacerEnabled", spacerX="powerTextSpacerX", spacerY="powerTextSpacerY", maxFn=_G.MSUF_GetPowerSpacerMaxForUnitKey, limitMode=true }
+    xKey="powerOffsetX", yKey="powerOffsetY", defX=-4, defY= 4, spacerOn="powerTextSpacerEnabled", spacerX="powerTextSpacerX", maxFn=_G.MSUF_GetPowerSpacerMaxForUnitKey, limitMode=true }
 -- Resolve a text anchor setting ("RIGHT"/"LEFT"/"CENTER") into layout params.
 -- isTop: true for HP (top row), false for Power (bottom row)
 local function MSUF_ResolveTextAnchor(anchor, isTop)
@@ -2008,30 +2008,24 @@ local function MSUF_ResolveTextAnchor(anchor, isTop)
     end
 end
 local function MSUF_TextLayout_GetSpacer(key, udb, g, hasPct, spec)
-    if not hasPct then  return false, 0, 0 end
+    if not hasPct then  return false, 0 end
     -- One-time seed: make Shared spacers start like Player (if Shared keys are missing).
     if g and _G.MSUF_TextSpacersSeeded ~= true then
         local p = (MSUF_DB and MSUF_DB.player) or nil
         if p then
             if g.hpTextSpacerEnabled == nil and p.hpTextSpacerEnabled ~= nil then g.hpTextSpacerEnabled = p.hpTextSpacerEnabled end
             if g.hpTextSpacerX == nil and p.hpTextSpacerX ~= nil then g.hpTextSpacerX = p.hpTextSpacerX end
-            if g.hpTextSpacerY == nil and p.hpTextSpacerY ~= nil then g.hpTextSpacerY = p.hpTextSpacerY end
             if g.powerTextSpacerEnabled == nil and p.powerTextSpacerEnabled ~= nil then g.powerTextSpacerEnabled = p.powerTextSpacerEnabled end
             if g.powerTextSpacerX == nil and p.powerTextSpacerX ~= nil then g.powerTextSpacerX = p.powerTextSpacerX end
-            if g.powerTextSpacerY == nil and p.powerTextSpacerY ~= nil then g.powerTextSpacerY = p.powerTextSpacerY end
         end
         _G.MSUF_TextSpacersSeeded = true
     end
     local on = ((udb and udb[spec.spacerOn] == true) or (not udb and g and g[spec.spacerOn] == true)) or false
     local x  = (udb and tonumber(udb[spec.spacerX])) or ((g and tonumber(g[spec.spacerX])) or 0)
-    local y  = 0
-    if spec.spacerY then
-        y = (udb and tonumber(udb[spec.spacerY])) or ((g and tonumber(g[spec.spacerY])) or 0)
-    end
     local max = (key and spec.maxFn and spec.maxFn(key)) or 0
-    return on, ns.Text.ClampSpacerValue(x, max, on), (on and y or 0)
+    return on, ns.Text.ClampSpacerValue(x, max, on)
 end
-local function MSUF_TextLayout_ApplyGroup(f, tf, conf, spec, mode, hasPct, on, eff, anchorPt, anchorRelPt, anchorDefX, anchorJustify, anchorSign, spacerYOff)
+local function MSUF_TextLayout_ApplyGroup(f, tf, conf, spec, mode, hasPct, on, eff, anchorPt, anchorRelPt, anchorDefX, anchorJustify, anchorSign)
     local fullObj, pctObj = f[spec.full], f[spec.pct]
     if not (fullObj or hasPct) then  return end
     local pt    = anchorPt or spec.point
@@ -2041,7 +2035,6 @@ local function MSUF_TextLayout_ApplyGroup(f, tf, conf, spec, mode, hasPct, on, e
     local baseX = ns.Util.Offset(conf[spec.xKey], dX)
     local baseY = ns.Util.Offset(conf[spec.yKey], spec.defY)
     local fullX, pctX = baseX, baseX
-    local pctY = baseY
     local canSplit = hasPct and on and eff ~= 0 and (not spec.limitMode or mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL")
     if canSplit then
         if mode == "FULL_PLUS_PERCENT" then
@@ -2049,18 +2042,13 @@ local function MSUF_TextLayout_ApplyGroup(f, tf, conf, spec, mode, hasPct, on, e
         else
             pctX = baseX + sign * eff
         end
-        -- Apply Y offset to the split pct text element.
-        local yOff = tonumber(spacerYOff) or 0
-        if yOff ~= 0 then
-            pctY = baseY + yOff
-        end
     end
     if fullObj then
         MSUF_ApplyPoint(fullObj, pt, tf, relPt, fullX, baseY)
         if anchorJustify and fullObj.SetJustifyH then fullObj:SetJustifyH(anchorJustify) end
     end
     if hasPct then
-        MSUF_ApplyPoint(pctObj, pt, tf, relPt, pctX, pctY)
+        MSUF_ApplyPoint(pctObj, pt, tf, relPt, pctX, baseY)
         if anchorJustify and pctObj and pctObj.SetJustifyH then pctObj:SetJustifyH(anchorJustify) end
     end
  end
@@ -2086,8 +2074,8 @@ local function ApplyTextLayout(f, conf)
     local pHasPct  = (f[MSUF_TEXT_LAYOUT_PWR.pct] ~= nil)
     -- Spacers inherit Shared unless per-unit override is enabled.
     local spacerDB = useOverride and udb or nil
-    local hpOn, hpEff, hpYOff = MSUF_TextLayout_GetSpacer(key, spacerDB, g, hpHasPct, MSUF_TEXT_LAYOUT_HP)
-    local pOn,  pEff,  pYOff  = MSUF_TextLayout_GetSpacer(key, spacerDB, g, pHasPct,  MSUF_TEXT_LAYOUT_PWR)
+    local hpOn, hpEff = MSUF_TextLayout_GetSpacer(key, spacerDB, g, hpHasPct, MSUF_TEXT_LAYOUT_HP)
+    local pOn,  pEff  = MSUF_TextLayout_GetSpacer(key, spacerDB, g, pHasPct,  MSUF_TEXT_LAYOUT_PWR)
     local hX = ns.Util.Offset(conf.hpOffsetX,    -4)
     local hY = ns.Util.Offset(conf.hpOffsetY,    -4)
     local pX = ns.Util.Offset(conf.powerOffsetX, -4)
@@ -2096,7 +2084,7 @@ local function ApplyTextLayout(f, conf)
     if (not wUsed or wUsed == 0) and tf and tf.GetWidth then wUsed = tf:GetWidth() or 0 end
     if (not wUsed or wUsed == 0) and conf then wUsed = tonumber(conf.width) or wUsed end
     wUsed = tonumber(wUsed) or 0
-    if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY, hpHasPct, hpOn, hpEff, hpYOff, wUsed, (key or ""), (hpMode or ""), pHasPct, pOn, pEff, pYOff, (pMode or ""), (hpAnchor or ""), (powerAnchor or ""), (nameAnchor or "")) then  return end
+    if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY, hpHasPct, hpOn, hpEff, wUsed, (key or ""), (hpMode or ""), pHasPct, pOn, pEff, (pMode or ""), (hpAnchor or ""), (powerAnchor or ""), (nameAnchor or "")) then  return end
     f._msufTextLayoutStamp = 1
     if f.nameText then
         -- Resolve name anchor: LEFT (default), CENTER, RIGHT
@@ -2115,8 +2103,8 @@ local function ApplyTextLayout(f, conf)
     end
     if f.levelText and f.nameText then MSUF_ApplyLevelIndicatorLayout_Internal(f, conf) end
     -- HP group uses hpMode (shifts pct side for any non FULL_PLUS_PERCENT, matching legacy behavior).
-    MSUF_TextLayout_ApplyGroup(f, tf, conf, MSUF_TEXT_LAYOUT_HP,  hpMode, hpHasPct, hpOn, hpEff, hpPt, hpRelPt, hpDefX, hpJustify, hpSign, hpYOff)
-    MSUF_TextLayout_ApplyGroup(f, tf, conf, MSUF_TEXT_LAYOUT_PWR, pMode,  pHasPct,  pOn,  pEff, pwrPt, pwrRelPt, pwrDefX, pwrJustify, pwrSign, pYOff)
+    MSUF_TextLayout_ApplyGroup(f, tf, conf, MSUF_TEXT_LAYOUT_HP,  hpMode, hpHasPct, hpOn, hpEff, hpPt, hpRelPt, hpDefX, hpJustify, hpSign)
+    MSUF_TextLayout_ApplyGroup(f, tf, conf, MSUF_TEXT_LAYOUT_PWR, pMode,  pHasPct,  pOn,  pEff, pwrPt, pwrRelPt, pwrDefX, pwrJustify, pwrSign)
  end
 function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
     if not MSUF_DB then EnsureDB() end

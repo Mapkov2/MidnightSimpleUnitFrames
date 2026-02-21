@@ -4069,10 +4069,8 @@ gradientCheck = CreateLabeledCheckButton(
 	        -- Spacers: copy Shared into unit on first enable so the unit starts identical.
 	        if u.hpTextSpacerEnabled == nil then u.hpTextSpacerEnabled = g.hpTextSpacerEnabled end
 	        if u.hpTextSpacerX == nil then u.hpTextSpacerX = g.hpTextSpacerX end
-	        if u.hpTextSpacerY == nil then u.hpTextSpacerY = g.hpTextSpacerY end
 	        if u.powerTextSpacerEnabled == nil then u.powerTextSpacerEnabled = g.powerTextSpacerEnabled end
 	        if u.powerTextSpacerX == nil then u.powerTextSpacerX = g.powerTextSpacerX end
-	        if u.powerTextSpacerY == nil then u.powerTextSpacerY = g.powerTextSpacerY end
 	        -- Absorb settings: copy Shared into unit on first enable.
 	        if u.absorbTextMode == nil then u.absorbTextMode = g.absorbTextMode end
 	        if u.absorbAnchorMode == nil then u.absorbAnchorMode = g.absorbAnchorMode end
@@ -4283,6 +4281,14 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         { key = "/", label = "/" },
         { key = "\\", label = "\\" },
         { key = "|", label = "|" },
+        { key = "<", label = "<" },
+        { key = ">", label = ">" },
+        { key = "~", label = "~" },
+        { key = "\194\183", label = "\194\183", menuText = "\194\183  (middle dot)" },
+        { key = "\226\128\162", label = "\226\128\162", menuText = "\226\128\162  (bullet)" },
+        { key = ":", label = ":" },
+        { key = "\194\187", label = "\194\187", menuText = "\194\187  (guillemet right)" },
+        { key = "\194\171", label = "\194\171", menuText = "\194\171  (guillemet left)" },
     }
     MSUF_InitSimpleDropdown(
         hpSepDrop,
@@ -4720,13 +4726,9 @@ hpSpacerSlider = CreateLabeledSlider("MSUF_HPTextSpacerSlider", "HP Spacer (X)",
 hpSpacerSlider:ClearAllPoints()
 hpSpacerSlider:SetPoint("TOPLEFT", hpSpacerCheck, "BOTTOMLEFT", 0, -18)
 if hpSpacerSlider.SetWidth then hpSpacerSlider:SetWidth(260) end
-local hpSpacerYSlider = CreateLabeledSlider("MSUF_HPTextSpacerYSlider", "HP Spacer (Y)", barGroup, -50, 50, 1, 16, -200)
-hpSpacerYSlider:ClearAllPoints()
-hpSpacerYSlider:SetPoint("TOPLEFT", hpSpacerSlider, "BOTTOMLEFT", 0, -14)
-if hpSpacerYSlider.SetWidth then hpSpacerYSlider:SetWidth(260) end
 -- Power spacer controls
 local powerSpacerHeader = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-powerSpacerHeader:SetPoint("TOPLEFT", hpSpacerYSlider, "BOTTOMLEFT", 0, -18)
+powerSpacerHeader:SetPoint("TOPLEFT", hpSpacerSlider, "BOTTOMLEFT", 0, -18)
 powerSpacerHeader:SetText(TR(""))
 local powerSpacerCheck = CreateFrame("CheckButton", "MSUF_PowerTextSpacerCheck", barGroup, "UICheckButtonTemplate")
 powerSpacerCheck:ClearAllPoints()
@@ -4739,10 +4741,6 @@ local powerSpacerSlider = CreateLabeledSlider("MSUF_PowerTextSpacerSlider", "Pow
 powerSpacerSlider:ClearAllPoints()
 powerSpacerSlider:SetPoint("TOPLEFT", powerSpacerCheck, "BOTTOMLEFT", 0, -18)
 if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
-local powerSpacerYSlider = CreateLabeledSlider("MSUF_PowerTextSpacerYSlider", "Power Spacer (Y)", barGroup, -50, 50, 1, 16, -200)
-powerSpacerYSlider:ClearAllPoints()
-powerSpacerYSlider:SetPoint("TOPLEFT", powerSpacerSlider, "BOTTOMLEFT", 0, -14)
-if powerSpacerYSlider.SetWidth then powerSpacerYSlider:SetWidth(260) end
 	local function _MSUF_HPSpacer_GetSelection()
 	    -- Selection is driven by the HP/Power scope dropdown above.
 	    EnsureDB()
@@ -4781,34 +4779,28 @@ local function _MSUF_TextModeAllowsSpacer(mode)
             id = "hp",
             check = hpSpacerCheck,
             slider = hpSpacerSlider,
-            ySlider = hpSpacerYSlider,
             modeKey = "hpTextMode",
             enabledKey = "hpTextSpacerEnabled",
             xKey = "hpTextSpacerX",
-            yKey = "hpTextSpacerY",
             maxFuncName = "MSUF_GetHPSpacerMaxForUnitKey",
             maxDefault = 1000,
             maxCap = 2000,
             reqToggle = "HP_SPACER_TOGGLE",
             reqX = "HP_SPACER_X",
-            reqY = "HP_SPACER_Y",
             dimText = true, -- dim label text when mode doesn't allow spacer
         },
         {
             id = "power",
             check = powerSpacerCheck,
             slider = powerSpacerSlider,
-            ySlider = powerSpacerYSlider,
             modeKey = "powerTextMode",
             enabledKey = "powerTextSpacerEnabled",
             xKey = "powerTextSpacerX",
-            yKey = "powerTextSpacerY",
             maxFuncName = "MSUF_GetPowerSpacerMaxForUnitKey",
             maxDefault = 1000,
             maxCap = 1000,
             reqToggle = "POWER_SPACER_TOGGLE",
             reqX = "POWER_SPACER_X",
-            reqY = "POWER_SPACER_Y",
         },
     }
     local function _MSUF_NiceUnitKey(unitKey)
@@ -4854,10 +4846,8 @@ local function _MSUF_SyncSpacerControls()
 	        if p then
 	            if g0.hpTextSpacerEnabled == nil and p.hpTextSpacerEnabled ~= nil then g0.hpTextSpacerEnabled = p.hpTextSpacerEnabled end
 	            if g0.hpTextSpacerX == nil and p.hpTextSpacerX ~= nil then g0.hpTextSpacerX = p.hpTextSpacerX end
-	            if g0.hpTextSpacerY == nil and p.hpTextSpacerY ~= nil then g0.hpTextSpacerY = p.hpTextSpacerY end
 	            if g0.powerTextSpacerEnabled == nil and p.powerTextSpacerEnabled ~= nil then g0.powerTextSpacerEnabled = p.powerTextSpacerEnabled end
 	            if g0.powerTextSpacerX == nil and p.powerTextSpacerX ~= nil then g0.powerTextSpacerX = p.powerTextSpacerX end
-	            if g0.powerTextSpacerY == nil and p.powerTextSpacerY ~= nil then g0.powerTextSpacerY = p.powerTextSpacerY end
 	        end
 	    end
 	    local unitKey, u, isShared = _MSUF_HPSpacer_GetDB()
@@ -4871,7 +4861,6 @@ local function _MSUF_SyncSpacerControls()
     for _, spec in ipairs(SPACER_SPECS) do
         local cb = spec.check
         local sl = spec.slider
-        local ysl = spec.ySlider
 
 	        local canEdit = isShared or unitOverride
 	        -- If unit override is OFF, show effective (Shared) values but keep controls disabled.
@@ -4934,28 +4923,6 @@ local function _MSUF_SyncSpacerControls()
             else
                 if sl.SetEnabled then sl:SetEnabled(slEnabled) end
                 if sl.SetAlpha then sl:SetAlpha(slEnabled and 1 or 0.45) end
-            end
-        end
-
-        -- Y offset slider (mirrors X slider enabled/disabled state).
-        if ysl and spec.yKey then
-            local yv = tonumber(src and src[spec.yKey]) or 0
-            if yv < -50 then yv = -50 end
-            if yv > 50 then yv = 50 end
-            if type(MSUF_SetLabeledSliderValue) == "function" then
-                MSUF_SetLabeledSliderValue(ysl, yv)
-            else
-                ysl.MSUF_SkipCallback = true
-                ysl:SetValue(yv)
-                ysl.MSUF_SkipCallback = nil
-            end
-            local yslEnabled = (canEdit and modeAllows and enabled)
-            if type(MSUF_SetLabeledSliderEnabled) == "function" then
-                MSUF_SetLabeledSliderEnabled(ysl, yslEnabled)
-                if (not yslEnabled) and ysl.SetAlpha then ysl:SetAlpha(0.45) end
-            else
-                if ysl.SetEnabled then ysl:SetEnabled(yslEnabled) end
-                if ysl.SetAlpha then ysl:SetAlpha(yslEnabled and 1 or 0.45) end
             end
         end
     end
@@ -5034,37 +5001,9 @@ local function _MSUF_BindSpacerToggle(spec)
 	            _MSUF_RequestTextLayoutForScope(unitKey, isShared, spec.reqX)
          end
      end
-    local function _MSUF_BindSpacerYSlider(spec)
-        if not spec or not spec.ySlider or not spec.yKey then  return end
-        spec.ySlider.onValueChanged = function(self, value)
-            EnsureDB()
-            local unitKey, db, isShared = _MSUF_HPSpacer_GetDB()
-            local g = MSUF_DB.general or {}
-            local canEdit = isShared or (db and db.hpPowerTextOverride == true)
-            if not canEdit then
-                _MSUF_SyncSpacerControls()
-                return
-            end
-            local mode = _MSUF_GetEffectiveSpacerMode(unitKey, spec, g)
-            if not _MSUF_TextModeAllowsSpacer(mode) then
-                _MSUF_SyncSpacerControls()
-                return
-            end
-            local v = tonumber(value) or 0
-            if v < -50 then v = -50 end
-            if v > 50 then v = 50 end
-            local targetDB = isShared and g or db
-            targetDB[spec.yKey] = v
-            if v ~= value and type(MSUF_SetLabeledSliderValue) == "function" then
-                MSUF_SetLabeledSliderValue(self, v)
-            end
-            _MSUF_RequestTextLayoutForScope(unitKey, isShared, spec.reqY or "SPACER_Y")
-         end
-     end
     for _, spec in ipairs(SPACER_SPECS) do
         _MSUF_BindSpacerToggle(spec)
         _MSUF_BindSpacerSlider(spec)
-        _MSUF_BindSpacerYSlider(spec)
     end
     _MSUF_SyncSpacerControls()
     -- Let other code refresh this UI when selection/scope changes.
