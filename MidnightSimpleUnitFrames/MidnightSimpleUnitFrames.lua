@@ -608,14 +608,20 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
     end
     -- Absorb overlays: only update when marked dirty (absorb/maxHP events),
     -- not on every UNIT_HEALTH. Dirty flags set by FrameOnEvent + OnShow + AttachFrame.
-    if frame.absorbBar and frame._msufAbsorbDirty then
+    -- Exception: test mode needs unconditional updates (on→show fakes, off→clear fakes).
+    local absorbTestMode = _G.MSUF_AbsorbTextureTestMode
+    local wasTestMode = frame._msufAbsorbTestActive
+    if absorbTestMode then frame._msufAbsorbTestActive = true end
+    local absorbForce = absorbTestMode or wasTestMode
+    if frame.absorbBar and (frame._msufAbsorbDirty or absorbForce) then
         frame._msufAbsorbDirty = false
         ns.Bars._UpdateAbsorbBar(frame, unit, maxHP)
     end
-    if frame.healAbsorbBar and frame._msufHealAbsorbDirty then
+    if frame.healAbsorbBar and (frame._msufHealAbsorbDirty or absorbForce) then
         frame._msufHealAbsorbDirty = false
         ns.Bars._UpdateHealAbsorbBar(frame, unit, maxHP)
     end
+    if wasTestMode and not absorbTestMode then frame._msufAbsorbTestActive = nil end
     if frame.selfHealPredBar then
         if ns.Bars._UpdateSelfHealPrediction then ns.Bars._UpdateSelfHealPrediction(frame, unit, maxHP, hp) end
     end
