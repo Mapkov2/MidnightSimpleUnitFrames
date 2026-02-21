@@ -75,6 +75,14 @@ end
 -- Forward declaration: used by fast-path helpers defined above the cache implementation.
 local UFCore_GetSettingsCache
 
+-- PERF: File-scope cached debug flag (set in RefreshSettingsCache, read in MarkDirty).
+-- Eliminates UFCore_GetSettingsCache() call from the hottest path (~500 calls/sec in raids).
+local _ufcoreDebugDirty = false
+-- PERF: File-scope cached flush budget values (set in RefreshSettingsCache).
+-- Eliminates UFCore_GetSettingsCache() from Flush and FlushTask hot paths.
+local _ufcoreFlushBudgetMs = 2.0
+local _ufcoreUrgentMax = 10
+
 local function UFCore_RefreshSettingsCache(reason)
     local cache = Core._settingsCache or {}
     Core._settingsCache = cache
@@ -105,6 +113,10 @@ local function UFCore_RefreshSettingsCache(reason)
 
     -- Debug flag: record last dirty reason/mask on frames (hotpath uses cache to avoid DB reads).
     cache.ufcoreDebugDirty = (g and g.ufcoreDebugDirty) and true or false
+    _ufcoreDebugDirty = cache.ufcoreDebugDirty
+    -- PERF: Sync file-scope budget locals (read by Flush/FlushTask without cache lookup).
+    _ufcoreFlushBudgetMs = cache.ufcoreFlushBudgetMs
+    _ufcoreUrgentMax = cache.ufcoreUrgentMaxPerFlush
 
     -- Global indicator defaults (used by Indicators element when per-unit overrides are nil).
     cache.showLeaderIconDefault = (g and g.showLeaderIcon ~= false) and true or false
@@ -1473,8 +1485,8 @@ end
 local FlushEnabled = false
 
 local function UFCore_FlushTask()
-    local budgetMs = UFCore_GetFlushBudgetSettings()
-    Core.Flush(budgetMs)
+    -- PERF: Use file-scope cached budget (no UFCore_GetSettingsCache call).
+    Core.Flush(_ufcoreFlushBudgetMs)
 end
 
 local function EnsureFallbackDriver()
@@ -1559,14 +1571,12 @@ end
 
 function Core.MarkDirty(f, mask, urgent, reason)
     if not f then return end
-    -- Default mask is full, but callers should pass explicit masks whenever possible.
     mask = mask or DIRTY_FULL
 
     _AddDirtyMask(f, mask)
 
-    -- Optional debug: capture the last reason/mask that dirtied this frame.
-    local cache = UFCore_GetSettingsCache()
-    if cache and cache.ufcoreDebugDirty then
+    -- Optional debug: only when pre-cached flag is set (ZERO function calls on hot path).
+    if _ufcoreDebugDirty then
         f._msufLastDirtyReason = reason or "?"
         f._msufLastDirtyMask = mask
         f._msufLastDirtyAt = debugprofilestop and debugprofilestop() or 0
@@ -1837,13 +1847,15 @@ local function PopFirst(q)
                     set[v] = nil
                     q.head = h
                     q.size = q.size - 1
-                    MaybeCompactQueue(q)
+                    -- PERF: Inline compaction early-exit (avoids function call per pop).
+                    -- MaybeCompactQueue only does work when head > 256 AND head > tail*0.5.
+                    if h > 256 then MaybeCompactQueue(q) end
                     return v
                 end
             else
                 q.head = h
                 q.size = q.size - 1
-                MaybeCompactQueue(q)
+                if h > 256 then MaybeCompactQueue(q) end
                 return v
             end
         end
@@ -2018,8 +2030,8 @@ function Core.Flush(budgetMs)
     -- Policy note: urgent frames (player/target/focus/ToT/boss) are processed first
     -- to keep gameplay snappy, but we cap per-flush work so event floods can
     -- never create a single big frame-time spike.
-    local cache = UFCore_GetSettingsCache()
-    local URGENT_MAX_PER_FLUSH = (cache and cache.ufcoreUrgentMaxPerFlush) or 10
+    -- PERF: Use file-scope cached urgent max (no UFCore_GetSettingsCache call).
+    local URGENT_MAX_PER_FLUSH = _ufcoreUrgentMax
     local urgentCount = 0
     while urgentQueue.size > 0 do
         RunUpdate(PopFirst(urgentQueue))
@@ -2103,25 +2115,79 @@ do
     UNIT_EVENT_MAP.UNIT_THREAT_SITUATION_UPDATE = { mask = DIRTY_INDICATOR }
 end
 
--- Phase 6: Direct-Apply map for cheap elements (Health / Power).
+-- ============================================================================
+-- Phase 6: Direct-Apply — flattened hot-path for Health / Power.
 -- These skip the queue entirely and update in the SAME frame as the event.
--- Only events that map to EXACTLY ONE element are safe here.
 -- UNIT_FACTION (Health+Identity) and UNIT_FLAGS (Health+Status) stay on the queue.
+--
+-- ARCHITECTURE vs oUF:
+-- oUF runs Color + Absorb + HealPrediction + PredictionSize on EVERY UNIT_HEALTH.
+-- MSUF splits the path:
+--   _HealthValueFast  — UNIT_HEALTH only (most frequent: 10-50/sec per unit)
+--                       Inlined: 1 C-API + 1 widget call + text. No indirection.
+--   _HealthFullFast   — UNIT_MAXHEALTH, absorb, heal-prediction, maxHP-modifier
+--                       Full chain: SetMinMaxValues + value + absorb dirty + text.
+-- Color updates are NEVER on this path (dirty-flag gated in Elements.Health.Update).
+-- ============================================================================
+
+-- _HealthValueFast: absolute minimum for UNIT_HEALTH.
+-- Call chain: FrameOnEvent → _HealthValueFast (1 hop, vs 7 hops before).
+-- No UnitExists check: unit events guarantee the unit exists.
+-- No type() checks: UnitHealth always returns a number.
+-- No SetMinMaxValues: maxHP doesn't change on UNIT_HEALTH.
+-- No absorb overlay: absorb amount doesn't change on UNIT_HEALTH.
+local function _HealthValueFast(f)
+    local bar = f.hpBar
+    if not bar then return end
+    local hp = UnitHealth(f.unit)       -- upvalue (line 21), no F.table lookup
+    bar:SetValue(hp)                    -- direct widget call, no MSUF_SetBarValue wrapper
+    -- HP text (complex: abbreviation + pct + absorb — keep as function call)
+    local fnTxt = FN_UpdateHpTextFast
+    if fnTxt then fnTxt(f, hp) end
+end
+
+-- _HealthFullFast: for non-UNIT_HEALTH events (UNIT_MAXHEALTH, absorb, prediction).
+-- These fire much less frequently (~1-10/sec total vs 10-50/sec for UNIT_HEALTH).
+-- Uses the existing Elements.Health.Update which correctly handles:
+--   SetMinMaxValues, absorb dirty overlays, heal prediction, color dirty, text.
+local _HealthFullFast = Elements.Health and Elements.Health.Update
+
 local DIRECT_APPLY = {}
 do
-    local healthFn = Elements.Health and Elements.Health.Update
-    if healthFn then
-        DIRECT_APPLY["UNIT_HEALTH"]                       = healthFn
-        DIRECT_APPLY["UNIT_MAXHEALTH"]                    = healthFn
-        DIRECT_APPLY["UNIT_ABSORB_AMOUNT_CHANGED"]        = healthFn
-        DIRECT_APPLY["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"]   = healthFn
-        DIRECT_APPLY["UNIT_HEAL_PREDICTION"]              = healthFn
-        DIRECT_APPLY["UNIT_MAXHEALTHMODIFIER"]            = healthFn
+    -- UNIT_HEALTH → value-only fast path (most frequent event).
+    -- Eliminates: UnitExists check, SetMinMaxValues, type() guards,
+    -- ns.Bars.ApplySpec dispatch, MSUF_SetBarValue wrapper.
+    DIRECT_APPLY["UNIT_HEALTH"] = _HealthValueFast
+
+    -- All other health events → full path (includes range + overlays).
+    -- These fire 5-50x less often than UNIT_HEALTH, so the 7-hop chain is acceptable.
+    if _HealthFullFast then
+        DIRECT_APPLY["UNIT_MAXHEALTH"]                    = _HealthFullFast
+        DIRECT_APPLY["UNIT_ABSORB_AMOUNT_CHANGED"]        = _HealthFullFast
+        DIRECT_APPLY["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"]   = _HealthFullFast
+        DIRECT_APPLY["UNIT_HEAL_PREDICTION"]              = _HealthFullFast
+        DIRECT_APPLY["UNIT_MAXHEALTHMODIFIER"]            = _HealthFullFast
     end
 
     local powerFn = Elements.Power and Elements.Power.Update
     if powerFn then
-        DIRECT_APPLY["UNIT_POWER_UPDATE"]     = powerFn
+        -- UNIT_POWER_UPDATE → value-only fast path (most frequent power event).
+        -- If bar is already visible: just UnitPowerType + UnitPower + SetValue.
+        -- Eliminates: Elements.Power.Update wrapper (IsShown before+after for outline),
+        -- ns.Bars.ApplySpec dispatch, UnitExists check, MSUF_IsTargetLikeFrame,
+        -- PowerBarAllowed, ApplyPowerBarVisual (color), SetMinMaxValues, type() guards.
+        DIRECT_APPLY["UNIT_POWER_UPDATE"] = function(f)
+            local bar = f.targetPowerBar or f.powerBar
+            if not bar or not bar:IsShown() then return end -- bar hidden → skip (no work)
+            local pType = UnitPowerType(f.unit)             -- upvalue (line 23)
+            if pType == nil then return end
+            local cur = UnitPower(f.unit, pType)            -- upvalue (line 22)
+            bar:SetValue(cur)                               -- direct widget call
+            local fnTxt = FN_UpdatePowerTextFast
+            if fnTxt then fnTxt(f) end
+        end
+
+        -- Rare power events → full chain (correct: handles visibility, color, range).
         DIRECT_APPLY["UNIT_MAXPOWER"]         = powerFn
         DIRECT_APPLY["UNIT_DISPLAYPOWER"]     = powerFn
         DIRECT_APPLY["UNIT_POWER_BAR_SHOW"]   = powerFn
@@ -2129,35 +2195,49 @@ do
     end
 end
 
+-- Pre-computed dirty flags for specific events. Eliminates the if/elseif chain
+-- that ran on every event (5 string comparisons before reaching DIRECT_APPLY).
+-- Lua hash-compares event strings in O(1) via this table lookup.
+local EVENT_DIRTY_FLAGS = {
+    UNIT_ABSORB_AMOUNT_CHANGED       = "absorbDirty",
+    UNIT_HEAL_ABSORB_AMOUNT_CHANGED  = "healAbsorbDirty",
+    UNIT_MAXHEALTH                   = "bothAbsorbDirty",
+    UNIT_MAXHEALTHMODIFIER           = "bothAbsorbDirty",
+    UNIT_FACTION                     = "healthColorDirty",
+    UNIT_FLAGS                       = "healthColorDirty",
+}
+
+-- Byte at position 1 of "UNIT_" is 85 (= 'U'). Use string.byte for the fallback
+-- instead of string.sub which allocates a new string on every call.
+local BYTE_U = 85  -- string.byte("U")
+
 local function FrameOnEvent(self, event, arg1, ...)
     -- oUF-like: skip hidden frames (free win).
     -- Frames can opt out (e.g. previews) by setting self.MSUF_AllowHiddenEvents = true.
     if not self:IsVisible() and not self.MSUF_AllowHiddenEvents then
         return
     end
-    -- Global events are routed by the UFCore global driver (keeps per-frame registrations minimal).
 
     -- Unit events: only react to our unit.
     local info = UNIT_EVENT_MAP[event]
     if info then
         if arg1 == self.unit then
-            -- Mark overlays dirty on absorb/heal-absorb events (no secret compares).
-            if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
-                self._msufAbsorbDirty = true
-            elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
-                self._msufHealAbsorbDirty = true
-            elseif event == "UNIT_MAXHEALTH" or event == "UNIT_MAXHEALTHMODIFIER" then
-                -- maxHP affects absorb bar scale (SetMinMaxValues).
-                self._msufAbsorbDirty = true
-                self._msufHealAbsorbDirty = true
-            elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
-                -- Health bar color can change for NPC reaction / PvP / flags.
-                -- Keep it out of the hot value path unless explicitly needed.
-                self._msufHealthColorDirty = true
+            -- Set dirty flags via pre-computed map (1 hash lookup vs 5 string compares).
+            local dfk = EVENT_DIRTY_FLAGS[event]
+            if dfk then
+                if dfk == "absorbDirty" then
+                    self._msufAbsorbDirty = true
+                elseif dfk == "healAbsorbDirty" then
+                    self._msufHealAbsorbDirty = true
+                elseif dfk == "bothAbsorbDirty" then
+                    self._msufAbsorbDirty = true
+                    self._msufHealAbsorbDirty = true
+                else -- "healthColorDirty"
+                    self._msufHealthColorDirty = true
+                end
             end
 
             -- Phase 6: Direct-apply for cheap elements (health/power).
-            -- Updates in the SAME frame instead of next-frame via queue.
             local directFn = DIRECT_APPLY[event]
             if directFn then
                 directFn(self)
@@ -2169,9 +2249,9 @@ local function FrameOnEvent(self, event, arg1, ...)
         return
     end
 
-    -- Default: unknown UNIT_* events should NOT force full legacy redraws.
-    -- Coalesce into a conservative, non-layout update (lane priority is determined by MarkDirty).
-    if event:sub(1, 5) == "UNIT_" then
+    -- Fallback: unknown UNIT_* events. Use byte comparison instead of string.sub
+    -- to avoid garbage string allocation. Cold path (almost never reached).
+    if event:byte(1) == BYTE_U and event:byte(5) == 95 then  -- 95 = '_'
         if arg1 ~= self.unit then return end
         Core.MarkDirty(self, MASK_UNIT_EVENT_FALLBACK, nil, event)
     end

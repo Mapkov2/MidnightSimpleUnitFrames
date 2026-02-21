@@ -19,13 +19,29 @@ local function _MSUF_NormalizeUnitKey(unit)
     return unit
 end
 
+-- Absorb display/anchor resolver cache (invalidated on DB reference change).
+local _absorbCache = {}
+local _absorbCacheDBRef = nil
+
+local function _MSUF_InvalidateAbsorbCache()
+    _absorbCache = {}
+    _absorbCacheDBRef = MSUF_DB
+end
+
 -- Resolve absorb display flags (enableBar, showText) for a unit.
 -- Uses absorbTextMode from per-unit DB if overridden, else from general.
 local function _MSUF_ResolveAbsorbDisplay(unit)
     if not MSUF_DB then EnsureDB() end
+    -- Invalidate cache if DB reference changed (profile switch).
+    if _absorbCacheDBRef ~= MSUF_DB then _MSUF_InvalidateAbsorbCache() end
+
+    local nk = _MSUF_NormalizeUnitKey(unit)
+    local cacheKey = nk or "_g"
+    local c = _absorbCache[cacheKey]
+    if c then return c[1], c[2] end
+
     local g = MSUF_DB.general or {}
     local mode = nil
-    local nk = _MSUF_NormalizeUnitKey(unit)
     if nk then
         local u = MSUF_DB[nk]
         if u and u.hpPowerTextOverride == true and u.absorbTextMode ~= nil then
@@ -35,27 +51,44 @@ local function _MSUF_ResolveAbsorbDisplay(unit)
     if not mode then
         mode = tonumber(g.absorbTextMode)
     end
+    local enableBar, showText
     if not mode then
-        return (g.enableAbsorbBar ~= false), (g.showTotalAbsorbAmount == true)
+        enableBar = (g.enableAbsorbBar ~= false)
+        showText = (g.showTotalAbsorbAmount == true)
+    else
+        enableBar = (mode == 2 or mode == 3)
+        showText = (mode == 3 or mode == 4)
     end
-    local enableBar = (mode == 2 or mode == 3)
-    local showText  = (mode == 3 or mode == 4)
+    _absorbCache[cacheKey] = { enableBar, showText }
     return enableBar, showText
 end
 
 -- Resolve absorb anchor mode for a unit.
 local function _MSUF_ResolveAbsorbAnchor(unit)
     if not MSUF_DB then EnsureDB() end
-    local g = MSUF_DB.general or {}
+    if _absorbCacheDBRef ~= MSUF_DB then _MSUF_InvalidateAbsorbCache() end
+
     local nk = _MSUF_NormalizeUnitKey(unit)
+    local anchorKey = (nk or "_g") .. "_a"
+    local c = _absorbCache[anchorKey]
+    if c then return c end
+
+    local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
         if u and u.hpPowerTextOverride == true and u.absorbAnchorMode ~= nil then
-            return tonumber(u.absorbAnchorMode) or 2
+            local v = tonumber(u.absorbAnchorMode) or 2
+            _absorbCache[anchorKey] = v
+            return v
         end
     end
-    return tonumber(g.absorbAnchorMode) or 2
+    local v = tonumber(g.absorbAnchorMode) or 2
+    _absorbCache[anchorKey] = v
+    return v
 end
+
+-- Public invalidation hook (called by config change paths).
+_G.MSUF_InvalidateAbsorbCache = _MSUF_InvalidateAbsorbCache
 -- Export resolvers for main file (absorb text display).
 ns.Bars._ResolveAbsorbDisplay = _MSUF_ResolveAbsorbDisplay
 ns.Bars._ResolveAbsorbAnchor  = _MSUF_ResolveAbsorbAnchor
@@ -63,61 +96,8 @@ ns.Bars._ResolveAbsorbAnchor  = _MSUF_ResolveAbsorbAnchor
 -- ══════════════════════════════════════════════════════════════
 -- Self-heal prediction overlay (was MSUF_SelfHealPred.lua)
 -- ══════════════════════════════════════════════════════════════
-local _MSUF_SelfHealPredCalc -- nil = unknown, false = unavailable, table = calc
-local function _MSUF_GetSelfHealPredCalc()
-    if _MSUF_SelfHealPredCalc ~= nil then return _MSUF_SelfHealPredCalc end
-    _MSUF_SelfHealPredCalc = false
-    local fn = _G and _G.CreateUnitHealPredictionCalculator
-    if type(fn) == "function" then
-        local ok, calc
-        if _G and type(_G.MSUF_FastCall) == "function" then
-            ok, calc = _G.MSUF_FastCall(fn)
-        else
-            ok, calc = pcall(fn)
-        end
-        if ok and calc then
-            _MSUF_SelfHealPredCalc = calc
-        end
-    end
-    return _MSUF_SelfHealPredCalc
-end
-
-local function _MSUF_GetIncomingHealsFromPlayer(unit)
-    if not unit then return 0 end
-
-    -- Fast path if the classic C-API is available.
-    local fnInc = _G and _G.UnitGetIncomingHeals
-    if type(fnInc) == "function" then
-        local ok, v
-        if _G and type(_G.MSUF_FastCall) == "function" then
-            ok, v = _G.MSUF_FastCall(fnInc, unit, "player")
-        else
-            ok, v = pcall(fnInc, unit, "player")
-        end
-        if ok and type(v) == "number" then
-            return v
-        end
-    end
-
-    -- Fallback: detailed prediction calculator.
-    local calc = _MSUF_GetSelfHealPredCalc()
-    local fnDet = _G and _G.UnitGetDetailedHealPrediction
-    if calc and type(fnDet) == "function" then
-        local ok
-        if _G and type(_G.MSUF_FastCall) == "function" then
-            ok = select(1, _G.MSUF_FastCall(fnDet, unit, "player", calc))
-        else
-            ok = pcall(fnDet, unit, "player", calc)
-        end
-        if ok and calc.GetIncomingHeals then
-            local total, fromHealer = calc:GetIncomingHeals()
-            if type(fromHealer) == "number" then return fromHealer end
-            if type(total) == "number" then return total end
-        end
-    end
-
-    return 0
-end
+-- NOTE: _MSUF_GetSelfHealPredCalc and _MSUF_GetIncomingHealsFromPlayer were removed
+-- (dead code — only _MSUF_GetIncomingSelfHeals is used in the active hotpath).
 
 local _msufSelfHealCalc = nil
 local _msufSelfHealPredPixelCalcBar = nil

@@ -100,8 +100,9 @@ local function IsEditModeActive()
     if not active then
         local fn = rawget(_G, "MSUF_IsInEditMode")
         if type(fn) == "function" then
-            local ok, v = MSUF_A2_FastCall(fn)
-            if ok and v == true then active = true end
+            -- Direct call (no FastCall overhead). fn() returns boolean.
+            local v = fn()
+            if v == true then active = true end
         end
     end
 
@@ -350,9 +351,18 @@ local function MarkDirty(unit, delay)
         return
     end
 
-    -- Gate: skip nonexistent units (not in edit mode preview).
-    -- Note: UnitEnabled is NOT checked here  disabled units must still be queued
-    -- so the render function can hide their lingering icons.
+    -- PERF: Combat fast-path — skip DB validation and edit mode check.
+    -- In combat, edit mode is impossible and DB doesn't change.
+    if _inCombat then
+        if UnitExists and not UnitExists(unit) then return end
+        DirtyAdd(unit)
+        if not delay or delay < 0 then delay = 0 end
+        FlushScheduled = true
+        ScheduleFlush(delay)
+        return
+    end
+
+    -- Out-of-combat: full validation (DB + edit mode preview)
     local a2, shared = GetAuras2DB()
     local allowPreview = (shared and shared.showInEditMode == true and IsEditModeActive())
 
@@ -406,12 +416,12 @@ local function EnsureAttached(unit)
     private:SetPoint("BOTTOMLEFT", buffs, "TOPLEFT", 0, 0)
     private:Hide()
 
-    -- Sync visibility with parent unitframe
-    local ok1, _ = MSUF_A2_FastCall(frame.HookScript, frame, "OnShow", function()
+    -- Sync visibility with parent unitframe (direct calls - no FastCall overhead)
+    frame:HookScript("OnShow", function()
         if anchor then anchor:Show() end
         if API.MarkAllDirty then API.MarkAllDirty(0) end
     end)
-    local ok2, _ = MSUF_A2_FastCall(frame.HookScript, frame, "OnHide", function()
+    frame:HookScript("OnHide", function()
         if anchor then anchor:Hide() end
     end)
 
@@ -528,8 +538,11 @@ local function PrivateClear(entry)
     if not entry then return end
     local ids = entry._privateAnchorIDs
     if type(ids) == "table" and C_UnitAuras then
-        for i = 1, #ids do
-            if ids[i] then MSUF_A2_FastCall(C_UnitAuras.RemovePrivateAuraAnchor, ids[i]) end
+        local removeFn = C_UnitAuras.RemovePrivateAuraAnchor
+        if removeFn then
+            for i = 1, #ids do
+                if ids[i] then removeFn(ids[i]) end
+            end
         end
     end
     entry._privateAnchorIDs = nil
@@ -658,7 +671,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
         args.iconInfo.iconHeight = privateIconSize
         args.iconInfo.iconAnchor.relativeTo = slot
 
-        local ok, anchorID = MSUF_A2_FastCall(C_UnitAuras.AddPrivateAuraAnchor, args)
+        local ok, anchorID = true, C_UnitAuras.AddPrivateAuraAnchor(args)
         if ok and anchorID then
             entry._privateAnchorIDs[#entry._privateAnchorIDs + 1] = anchorID
         end

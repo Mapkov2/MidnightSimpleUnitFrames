@@ -172,26 +172,31 @@ end
 --   resurrection_*   -> Media/Symbols/Ress           (64)
 --   classification_* -> Media/Symbols/Classification (64)
 -- ------------------------------------------------------------
+local _MSUF_TexPathCache = {}
 local function _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
     if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then
          return nil
     end
+    -- Memoize: symbolKey + style rarely change; avoid repeated string concatenation.
+    local cacheKey = useMidnight and symbolKey or (symbolKey .. "\0C")
+    local cached = _MSUF_TexPathCache[cacheKey]
+    if cached then return cached end
+
     local folder = "Combat"
-    local suffix = (useMidnight == true) and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
-    -- Rested icons use a different folder + size/suffix convention.
+    local suffix = useMidnight and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
     if string.find(symbolKey, "^rested_") then
         folder = "Rested"
-        suffix = (useMidnight == true) and "_midnight_64.tga" or "_classic_64.tga"
-    -- Resurrection icons use a different folder + size/suffix convention.
+        suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
     elseif string.find(symbolKey, "^resurrection_") then
         folder = "Ress"
-        suffix = (useMidnight == true) and "_midnight_64.tga" or "_classic_64.tga"
-    -- Target classification icons (Boss/Elite/Rare) use 64px symbols.
+        suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
     elseif string.find(symbolKey, "^classification_") then
         folder = "Classification"
-        suffix = (useMidnight == true) and "_midnight_64.tga" or "_classic_64.tga"
+        suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
     end
-    return "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\" .. folder .. "\\" .. symbolKey .. suffix
+    local path = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\" .. folder .. "\\" .. symbolKey .. suffix
+    _MSUF_TexPathCache[cacheKey] = path
+    return path
 end
 local function _MSUF_EnsurePulseAnim(tex)
     if not tex or not tex.CreateAnimationGroup then  return nil end

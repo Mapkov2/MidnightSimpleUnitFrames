@@ -532,15 +532,15 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     end
     local pType, pTok
     if wantPercent then
-        local okPT; okPT, pType, pTok = MSUF_FastCall(UnitPowerType, unit)
-        if not okPT then return _MSUF_Bars_HidePower(bar, false) end
-        local okPct, pct
+        pType, pTok = UnitPowerType(unit)
+        if pType == nil then return _MSUF_Bars_HidePower(bar, false) end
+        local pct
         if CurveConstants and CurveConstants.ScaleTo100 then
-            okPct, pct = MSUF_FastCall(UnitPowerPercent, unit, pType, false, CurveConstants.ScaleTo100)
+            pct = UnitPowerPercent(unit, pType, false, CurveConstants.ScaleTo100)
         else
-            okPct, pct = MSUF_FastCall(UnitPowerPercent, unit, pType, false, true)
+            pct = UnitPowerPercent(unit, pType, false, true)
     end
-        if not okPct then return _MSUF_Bars_HidePower(bar, false) end
+        if pct == nil then return _MSUF_Bars_HidePower(bar, false) end
         ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
         MSUF_SetBarMinMax(bar, 0, 100)
         bar:SetScript("OnUpdate", nil)
@@ -2524,35 +2524,21 @@ end
 -- Keeping this avoids blank/missing level text when a legacy full update runs.
 _G.MSUF_GetUnitLevelText = MSUF_GetUnitLevelText
 local function MSUF_GetUnitHealthPercent(unit)
-    if type(UnitHealthPercent) == "function" then
-        local ok, pct
-        if CurveConstants and CurveConstants.ScaleTo100 then
-            -- Secret-safe + snappy: usePredicted=true (avoid Lua arithmetic on secret values)
-            ok, pct = MSUF_FastCall(UnitHealthPercent, unit, true, CurveConstants.ScaleTo100)
-        else
-            ok, pct = MSUF_FastCall(UnitHealthPercent, unit, true, true)
+    if type(UnitHealthPercent) ~= "function" then return nil end
+    -- Direct call: UnitHealthPercent is a C-API (guaranteed callable).
+    -- Return value may be secret — caller must not do arithmetic/comparisons.
+    if CurveConstants and CurveConstants.ScaleTo100 then
+        return UnitHealthPercent(unit, true, CurveConstants.ScaleTo100)
     end
-        -- Secret-safe: avoid comparing returned values in Lua (pct may be a "secret" number).
-        if ok then
-             return pct
-    end
-         return nil
-    end
-    -- 12.0+: If UnitHealthPercent is unavailable, avoid computing percent in Lua (secret-safe).
-     return nil
+    return UnitHealthPercent(unit, true, true)
 end
 local function MSUF_NumberToTextFast(v)
     if type(v) ~= "number" then
          return nil
     end
-    -- Prefer Blizzard/C-side abbreviators (K/M/B). Treat returned text as opaque (secret-safe).
+    -- v is guaranteed plain number (type-checked above). Direct call, no FastCall overhead.
     local abbr = _G.ShortenNumber or _G.AbbreviateNumbers or _G.AbbreviateLargeNumbers
-    if abbr then
-        local ok, s = MSUF_FastCall(abbr, v)
-        if ok then
-             return s
-    end
-    end
+    if abbr then return abbr(v) end
     return tostring(v)
 end
 ns.Icons._layout = ns.Icons._layout or {}
@@ -2634,30 +2620,23 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
     end
     if _showAbsorbText and UnitGetTotalAbsorbs then
         if C_StringUtil and C_StringUtil.TruncateWhenZero then
-            local ok, txt = MSUF_FastCall(function()
-                return C_StringUtil.TruncateWhenZero(UnitGetTotalAbsorbs(unit))
-            end)
-            if ok and txt then
+            -- Both are C-APIs; direct call is secret-safe. No closure allocation.
+            local txt = C_StringUtil.TruncateWhenZero(UnitGetTotalAbsorbs(unit))
+            if txt ~= nil then
                 absorbText = txt
                 absorbStyle = "SPACE"
             end
         else
-            -- Secret-safe fallback: only pass through text (no comparisons or formatting ops).
+            -- Secret-safe fallback: C-side abbreviators accept secret values natively.
             local absorbValue = UnitGetTotalAbsorbs(unit)
             if absorbValue ~= nil then
                 local abbr = _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.AbbreviateNumbers
                 if abbr then
-                    local ok, txt = MSUF_FastCall(abbr, absorbValue)
-                    if ok and txt then
-                        absorbText = txt
-                        absorbStyle = "PAREN"
-                    end
+                    absorbText = abbr(absorbValue)
+                    absorbStyle = "PAREN"
                 else
-                    local ok, txt = MSUF_FastCall(tostring, absorbValue)
-                    if ok and txt then
-                        absorbText = txt
-                        absorbStyle = "PAREN"
-                    end
+                    absorbText = tostring(absorbValue)
+                    absorbStyle = "PAREN"
                 end
             end
     end
@@ -4713,19 +4692,6 @@ do
     _G.MSUF_TargetSoundDriver_ResetState = MSUF_TargetSoundDriver_ResetState
 end
 MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_STARTUP", function(event)
-    -- Force-load bundled media (statusbar textures/fonts) even under weird install layouts
-    -- or load-order edge cases. Cold-path only (runs on login + one delayed retry).
-    if type(_G.MSUF_ForceRegisterBundledMedia) == "function" then
-        _G.MSUF_ForceRegisterBundledMedia()
-        if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-            _G.C_Timer.After(1, function()
-                if type(_G.MSUF_ForceRegisterBundledMedia) == "function" then
-                    _G.MSUF_ForceRegisterBundledMedia()
-                end
-            end)
-        end
-    end
-
     MSUF_InitProfiles()
     if not MSUF_DB then EnsureDB() end
     do

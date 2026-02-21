@@ -823,11 +823,21 @@ function Icons._ApplyTimer(icon, unit, aid, shared, aura)
         cd:SetUseAuraDisplayTime(hadTimer)
     end
 
-    -- Apply shared visual flags.
-    cd:SetDrawSwipe(_showSwipe)
-    cd:SetReverse(_swipeReverse)
+    -- PERF: Diff-gate cooldown visual flags (avoid redundant C-API calls per icon).
+    if cd._msufA2_lastSwipe ~= _showSwipe then
+        cd._msufA2_lastSwipe = _showSwipe
+        cd:SetDrawSwipe(_showSwipe)
+    end
+    if cd._msufA2_lastReverse ~= _swipeReverse then
+        cd._msufA2_lastReverse = _swipeReverse
+        cd:SetReverse(_swipeReverse)
+    end
     if hadTimer then
-        cd:SetHideCountdownNumbers(not _showText)
+        local wantHide = not _showText
+        if cd._msufA2_lastHideNumbers ~= wantHide then
+            cd._msufA2_lastHideNumbers = wantHide
+            cd:SetHideCountdownNumbers(wantHide)
+        end
     else
         ClearCooldownVisual(icon, cd)
     end
@@ -872,14 +882,18 @@ function Icons._RefreshTimer(icon, unit, aid, shared, aura)
     end
     
     if not obj then
+        -- PERF: Only clear if there WAS a timer before (avoid redundant ClearCooldownVisual calls)
         if icon._msufA2_lastHadTimer == true or cd._msufA2_durationObj ~= nil then
             ClearCooldownVisual(icon, cd)
         end
         return
     end
 
-    -- Both swipe and text disabled: nothing to update.
-    if not _showSwipe and not _showText then return end
+    -- Both swipe and text disabled: nothing visual to update.
+    if not _showSwipe and not _showText then
+        icon._msufA2_lastHadTimer = true
+        return
+    end
 
     -- Refresh duration on the CooldownFrame (needed for both swipe and text).
     local cdSetFn = cd._msufA2_cdSetFn
@@ -1135,11 +1149,12 @@ function Icons._ApplyDispelBorder(icon, unit, aura, isHelpful)
     local usedApi = false
 
     -- Primary: C_UnitAuras.GetAuraDispelTypeColor (secret-safe, works for private auras)
+    -- PERF: Direct call (no pcall). C API is guaranteed callable; pcall cost ~10× per icon.
     local aid = aura._msufAuraInstanceID or aura.auraInstanceID
     if aid and unit and _debuffColorCurve
        and C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor then
-        local ok, color = pcall(C_UnitAuras.GetAuraDispelTypeColor, unit, aid, _debuffColorCurve)
-        if ok and color then
+        local color = C_UnitAuras.GetAuraDispelTypeColor(unit, aid, _debuffColorCurve)
+        if color then
             usedApi = true
             if color.GetRGBA then
                 r, g, b = color:GetRGBA()

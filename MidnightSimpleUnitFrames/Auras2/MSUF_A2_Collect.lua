@@ -49,7 +49,7 @@ local issecretvalue = _G and _G.issecretvalue
 local canaccessvalue = _G and _G.canaccessvalue
 
 -- Localized API functions (bound once, avoids table lookup per aura)
-local _getSlots, _getBySlot, _isFiltered, _doesExpire, _getDuration, _getStackCount
+local _getSlots, _getBySlot, _getByAid, _isFiltered, _doesExpire, _getDuration, _getStackCount
 local _apisBound = false
 
 local function BindAPIs()
@@ -57,6 +57,7 @@ local function BindAPIs()
     if not C_UnitAuras then return end
     _getSlots      = C_UnitAuras.GetAuraSlots
     _getBySlot     = C_UnitAuras.GetAuraDataBySlot
+    _getByAid      = C_UnitAuras.GetAuraDataByAuraInstanceID  -- Delta updates
     _isFiltered    = C_UnitAuras.IsAuraFilteredOutByInstanceID
     _doesExpire    = C_UnitAuras.DoesAuraHaveExpirationTime
     _getDuration   = C_UnitAuras.GetAuraDuration
@@ -578,6 +579,282 @@ end
 
 -- Pre-scan all auras for a unit (called from UNIT_AURA)
 -- Caches: aura data + isPlayerAura + doesExpire + duration + stacks (ZERO C calls in render!)
+
+-- ============================================================================
+-- SHARED: Per-aura enrichment (used by both full scan and delta path)
+-- Sets: _msufIsPlayerAura, _msufDoesExpire, _msufDurationObj, _msufStackCount,
+--        _msufIsImportant, _msufAuraInstanceID
+-- Secret-safe: stores nil for secret values (GetAuras treats nil as "don't filter")
+-- ============================================================================
+local function EnrichAura(data, unit, aid, isHelpful, doTagImportant)
+    local canFilter = _isFiltered
+    local isSecret = issecretvalue
+
+    -- isPlayerAura
+    if canFilter then
+        local fStr = isHelpful and FILTER_HELPFUL_PLAYER or FILTER_HARMFUL_PLAYER
+        data._msufIsPlayerAura = not canFilter(unit, aid, fStr)
+    else
+        data._msufIsPlayerAura = false
+    end
+
+    -- IMPORTANT tag (only when requested)
+    if doTagImportant and canFilter then
+        local fStr = isHelpful and FILTER_HELPFUL_IMPORTANT or FILTER_HARMFUL_IMPORTANT
+        local v = canFilter(unit, aid, fStr)
+        if v ~= nil and isSecret and isSecret(v) then
+            data._msufIsImportant = nil
+        else
+            data._msufIsImportant = not v
+        end
+    end
+
+    -- doesExpire (SECRET-SAFE: store nil if secret)
+    if _doesExpire then
+        local v = _doesExpire(unit, aid)
+        if v ~= nil and isSecret and isSecret(v) then
+            data._msufDoesExpire = nil
+        else
+            data._msufDoesExpire = v
+        end
+    end
+
+    -- duration object (for cooldown swipe)
+    if _getDuration then
+        data._msufDurationObj = _getDuration(unit, aid)
+    end
+
+    -- stack count
+    if _getStackCount then
+        data._msufStackCount = _getStackCount(unit, aid, 2, 99)
+    end
+
+    data._msufAuraInstanceID = aid
+end
+
+-- ============================================================================
+-- DELTA PROCESSING: Incremental aura cache updates from UNIT_AURA deltas
+--
+-- Instead of rescanning ALL auras on every UNIT_AURA event (GetAuraSlots + 
+-- GetAuraDataBySlot × N + 4-5 enrichment C calls × N), delta processing only
+-- touches the specific auras that changed.
+--
+-- Data structures:
+--   raw.helpful[1..helpfulN]   = compact array of enriched AuraData
+--   raw.harmful[1..harmfulN]   = compact array of enriched AuraData
+--   raw._hAidIdx[aid] = index  = O(1) AID→array-index lookup (helpful)
+--   raw._dAidIdx[aid] = index  = O(1) AID→array-index lookup (harmful)
+--
+-- Removal uses swap-with-last for O(1) compaction (order irrelevant for
+-- GetAuras which applies its own filtering/capping).
+--
+-- Secret-safe: only compares auraInstanceID (always plain number, never secret).
+-- ============================================================================
+
+-- Swap-remove element at `idx` from `list` of size `count`.
+-- Updates `aidMap` for the swapped element. Returns new count.
+local function SwapRemoveAura(list, count, aidMap, idx)
+    local removed = list[idx]
+    if removed and removed._msufAuraInstanceID and aidMap then
+        aidMap[removed._msufAuraInstanceID] = nil
+    end
+
+    if idx == count then
+        -- Last element: just nil it
+        list[idx] = nil
+    else
+        -- Swap last into this slot
+        local last = list[count]
+        list[idx] = last
+        list[count] = nil
+        -- Update map for swapped element
+        if last and last._msufAuraInstanceID and aidMap then
+            aidMap[last._msufAuraInstanceID] = idx
+        end
+    end
+    return count - 1
+end
+
+-- Remove aura by auraInstanceID from the raw cache.
+local function DeltaRemove(raw, aid)
+    -- Check helpful first
+    local hMap = raw._hAidIdx
+    if hMap then
+        local idx = hMap[aid]
+        if idx then
+            raw.helpfulN = SwapRemoveAura(raw.helpful, raw.helpfulN or 0, hMap, idx)
+            return true
+        end
+    end
+
+    -- Check harmful
+    local dMap = raw._dAidIdx
+    if dMap then
+        local idx = dMap[aid]
+        if idx then
+            raw.harmfulN = SwapRemoveAura(raw.harmful, raw.harmfulN or 0, dMap, idx)
+            return true
+        end
+    end
+
+    return false  -- AID not found (stale remove, harmless)
+end
+
+-- Add a new aura from addedAuras payload.
+-- SECRET-SAFE classification: oUF approach — use IsAuraFilteredOutByInstanceID()
+-- to determine HELPFUL/HARMFUL instead of reading data.isHarmful (which is secret).
+-- If NOT filtered out by "HELPFUL" → it's a buff. Otherwise check "HARMFUL".
+local function DeltaAdd(raw, unit, data, doTagImportant)
+    if not data or not data.auraInstanceID then return true end  -- skip malformed, not a failure
+    if not _isFiltered then return false end  -- API not available → full scan
+    local aid = data.auraInstanceID
+
+    -- oUF-style classification: C API returns nil/boolean, never secret
+    local isHelpful
+    if not _isFiltered(unit, aid, FILTER_HELPFUL) then
+        isHelpful = true
+    elseif not _isFiltered(unit, aid, FILTER_HARMFUL) then
+        isHelpful = false
+    else
+        -- Aura matches neither filter (private aura?) — skip silently
+        return true
+    end
+
+    -- Pick target array + map
+    local list, countKey, aidMap
+    if isHelpful then
+        list = raw.helpful
+        countKey = "helpfulN"
+        aidMap = raw._hAidIdx
+    else
+        list = raw.harmful
+        countKey = "harmfulN"
+        aidMap = raw._dAidIdx
+    end
+
+    if not list or not aidMap then return false end
+
+    -- Guard: don't exceed scan limits
+    local count = raw[countKey] or 0
+    local maxScan = isHelpful and _maxHelpfulScan or _maxHarmfulScan
+    if count >= maxScan then
+        return false  -- At capacity → full scan fallback
+    end
+
+    -- Dedupe: if AID already tracked, replace in-place
+    if aidMap[aid] then
+        local idx = aidMap[aid]
+        list[idx] = data
+        EnrichAura(data, unit, aid, isHelpful, doTagImportant)
+        return true
+    end
+
+    -- Append
+    count = count + 1
+    raw[countKey] = count
+    list[count] = data
+    aidMap[aid] = count
+
+    EnrichAura(data, unit, aid, isHelpful, doTagImportant)
+    return true
+end
+
+-- Update an existing aura (re-fetch data + re-enrich).
+-- Called for updatedAuraInstanceIDs.
+local function DeltaUpdate(raw, unit, aid, doTagImportant)
+    if not _getByAid then return false end
+
+    -- Find which array this AID lives in
+    local list, aidMap, isHelpful
+    local hMap = raw._hAidIdx
+    if hMap and hMap[aid] then
+        list = raw.helpful
+        aidMap = hMap
+        isHelpful = true
+    else
+        local dMap = raw._dAidIdx
+        if dMap and dMap[aid] then
+            list = raw.harmful
+            aidMap = dMap
+            isHelpful = false
+        else
+            return true  -- AID not tracked (out of scan range, no-op)
+        end
+    end
+
+    local idx = aidMap[aid]
+    if not idx then return false end
+
+    -- Re-fetch updated aura data from C API
+    local data = _getByAid(unit, aid)
+    if not data then
+        -- Aura vanished between events — treat as remove
+        if isHelpful then
+            raw.helpfulN = SwapRemoveAura(list, raw.helpfulN or 0, aidMap, idx)
+        else
+            raw.harmfulN = SwapRemoveAura(list, raw.harmfulN or 0, aidMap, idx)
+        end
+        return true
+    end
+
+    -- Replace in-place + re-enrich
+    list[idx] = data
+    EnrichAura(data, unit, aid, isHelpful, doTagImportant)
+    return true
+end
+
+-- Process a full delta from UNIT_AURA updateInfo.
+-- Returns true if delta was applied, false if full scan needed.
+--
+-- SECRET-SAFE: Classification of new auras uses IsAuraFilteredOutByInstanceID()
+-- (oUF approach) instead of reading data.isHarmful (which is secret).
+-- AIDs are always plain numbers — safe for all map lookups and comparisons.
+local function DeltaProcessUnit(raw, unit, updateInfo, doTagImportant)
+    -- Safety: require AID maps (built by PreScanUnit)
+    if not raw._hAidIdx or not raw._dAidIdx then
+        return false
+    end
+
+    -- Process removals first (before adds — WoW sends remove+re-add for reapplies)
+    local removed = updateInfo.removedAuraInstanceIDs
+    if removed then
+        for i = 1, #removed do
+            DeltaRemove(raw, removed[i])
+        end
+    end
+
+    -- Process updates (re-fetch + re-enrich in place)
+    -- AID→index map tells us which array → no isHarmful comparison needed
+    local updated = updateInfo.updatedAuraInstanceIDs
+    if updated then
+        for i = 1, #updated do
+            if not DeltaUpdate(raw, unit, updated[i], doTagImportant) then
+                return false
+            end
+        end
+    end
+
+    -- Process additions (oUF-style: classify via IsAuraFilteredOutByInstanceID)
+    local added = updateInfo.addedAuras
+    if added then
+        for i = 1, #added do
+            if not DeltaAdd(raw, unit, added[i], doTagImportant) then
+                return false  -- capacity or API failure → full scan fallback
+            end
+        end
+    end
+
+    -- Update IMPORTANT epoch if we tagged
+    if doTagImportant then
+        raw._msufImportantEpoch = raw.epoch
+    end
+
+    return true
+end
+
+-- ============================================================================
+-- FULL SCAN (original PreScanUnit, now also builds AID→index maps for delta)
+-- ============================================================================
 PreScanUnit = function(unit, forceImportant)
     if not _apisBound then BindAPIs() end
     if not _getSlots or not _getBySlot then return end
@@ -585,27 +862,31 @@ PreScanUnit = function(unit, forceImportant)
     local raw = Store._rawAuras[unit]
     local doImportant = (_scanImportant == true) or (forceImportant == true)
     if not raw then
-        raw = { helpful = {}, harmful = {}, epoch = 0 }
+        raw = { helpful = {}, harmful = {}, epoch = 0,
+                _hAidIdx = {}, _dAidIdx = {} }
         Store._rawAuras[unit] = raw
     end
     
     local epoch = Store._epochs[unit] or 0
     raw.epoch = epoch
-    
-    local canFilter = _isFiltered
-    local canExpire = _doesExpire
-    local getDuration = _getDuration
-    local getStackCount = _getStackCount
 
-    -- IMPORTANT tagging (Unhalted/oUF style): use IsAuraFilteredOutByInstanceID(unit, auraInstanceID, "IMPORTANT")
-    -- We only compute this when any frame actually needs it (scan flag) or when forced by a one-off request.
-    local doTagImportant = (doImportant == true and canFilter) and true or false
-    local isSecret = issecretvalue
+    local doTagImportant = (doImportant == true and _isFiltered) and true or false
     
     -- PERF: Use configured limits instead of hardcoded 40
     local maxH = _maxHelpfulScan
     local maxD = _maxHarmfulScan
-    
+
+    -- Ensure AID maps exist (may be missing on legacy raw entries)
+    local hAidIdx = raw._hAidIdx
+    if not hAidIdx then hAidIdx = {}; raw._hAidIdx = hAidIdx end
+    local dAidIdx = raw._dAidIdx
+    if not dAidIdx then dAidIdx = {}; raw._dAidIdx = dAidIdx end
+
+    -- Wipe maps (full scan rebuilds from scratch)
+    -- PERF: Only wipe if non-empty (common case after first scan)
+    if next(hAidIdx) then for k in pairs(hAidIdx) do hAidIdx[k] = nil end end
+    if next(dAidIdx) then for k in pairs(dAidIdx) do dAidIdx[k] = nil end end
+
     -- Scan HELPFUL (limited to user's maxBuffs)
     local helpful = raw.helpful
     local nH = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HELPFUL, maxH, nil)))
@@ -615,43 +896,9 @@ PreScanUnit = function(unit, forceImportant)
         if data and data.auraInstanceID then
             hCount = hCount + 1
             local aid = data.auraInstanceID
-            -- PERF: Pre-compute isPlayerAura (C API call here, not in render)
-            if canFilter then
-                local filtered = canFilter(unit, aid, FILTER_HELPFUL_PLAYER)
-                data._msufIsPlayerAura = not filtered
-            else
-                data._msufIsPlayerAura = false
-            end
-
-            -- PERF/Correctness: Tag IMPORTANT only when requested.
-            if doTagImportant then
-                local v = canFilter(unit, aid, FILTER_HELPFUL_IMPORTANT)
-                if v ~= nil and isSecret and isSecret(v) then
-                    data._msufIsImportant = nil
-                else
-                    data._msufIsImportant = not v
-                end
-            end
-            -- PERF: Pre-compute doesExpire (SECRET-SAFE: store nil if secret)
-            if canExpire then
-                local v = canExpire(unit, aid)
-                -- Secret values can't be compared - store nil to skip filtering
-                if v ~= nil and issecretvalue and issecretvalue(v) then
-                    data._msufDoesExpire = nil
-                else
-                    data._msufDoesExpire = v
-                end
-            end
-            -- PERF: Pre-compute duration object (for cooldown swipe)
-            if getDuration then
-                data._msufDurationObj = getDuration(unit, aid)
-            end
-            -- PERF: Pre-compute stack count
-            if getStackCount then
-                data._msufStackCount = getStackCount(unit, aid, 2, 99)
-            end
-            data._msufAuraInstanceID = aid
+            EnrichAura(data, unit, aid, true, doTagImportant)
             helpful[hCount] = data
+            hAidIdx[aid] = hCount
         end
     end
     for i = hCount + 1, #helpful do helpful[i] = nil end
@@ -666,42 +913,9 @@ PreScanUnit = function(unit, forceImportant)
         if data and data.auraInstanceID then
             dCount = dCount + 1
             local aid = data.auraInstanceID
-            -- PERF: Pre-compute isPlayerAura
-            if canFilter then
-                local filtered = canFilter(unit, aid, FILTER_HARMFUL_PLAYER)
-                data._msufIsPlayerAura = not filtered
-            else
-                data._msufIsPlayerAura = false
-            end
-
-            -- PERF/Correctness: Tag IMPORTANT only when requested.
-            if doTagImportant then
-                local v = canFilter(unit, aid, FILTER_HARMFUL_IMPORTANT)
-                if v ~= nil and isSecret and isSecret(v) then
-                    data._msufIsImportant = nil
-                else
-                    data._msufIsImportant = not v
-                end
-            end
-            -- PERF: Pre-compute doesExpire (SECRET-SAFE: store nil if secret)
-            if canExpire then
-                local v = canExpire(unit, aid)
-                if v ~= nil and issecretvalue and issecretvalue(v) then
-                    data._msufDoesExpire = nil
-                else
-                    data._msufDoesExpire = v
-                end
-            end
-            -- PERF: Pre-compute duration object
-            if getDuration then
-                data._msufDurationObj = getDuration(unit, aid)
-            end
-            -- PERF: Pre-compute stack count
-            if getStackCount then
-                data._msufStackCount = getStackCount(unit, aid, 2, 99)
-            end
-            data._msufAuraInstanceID = aid
+            EnrichAura(data, unit, aid, false, doTagImportant)
             harmful[dCount] = data
+            dAidIdx[aid] = dCount
         end
     end
     for i = dCount + 1, #harmful do harmful[i] = nil end
@@ -719,8 +933,32 @@ end
 function Store.OnUnitAura(unit, updateInfo)
     if not unit then return end
     Store._epochs[unit] = (Store._epochs[unit] or 0) + 1
-    -- PERF: Pre-scan auras NOW (C API calls here, not in GetAuras)
-    PreScanUnit(unit)
+
+    if not _apisBound then BindAPIs() end
+
+    -- Full scan cases:
+    --  1. isFullUpdate flag from WoW (aura set completely replaced)
+    --  2. No updateInfo (legacy or unknown caller)
+    --  3. No existing cache (first event for this unit)
+    --  4. Delta API unavailable (pre-10.0 client)
+    local raw = Store._rawAuras[unit]
+    if not updateInfo
+        or not raw
+        or updateInfo.isFullUpdate
+        or not _getByAid
+    then
+        PreScanUnit(unit)
+        return
+    end
+
+    -- Attempt delta processing
+    raw.epoch = Store._epochs[unit]
+    local doImportant = (_scanImportant == true and _isFiltered ~= nil) and true or false
+
+    if not DeltaProcessUnit(raw, unit, updateInfo, doImportant) then
+        -- Delta failed (capacity, missing data, etc.) — full scan as fallback
+        PreScanUnit(unit)
+    end
 end
 
 function Store.InvalidateUnit(unit)

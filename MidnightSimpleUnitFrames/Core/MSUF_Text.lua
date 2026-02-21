@@ -37,7 +37,7 @@ function _G.MSUF_NormalizeTextLayoutUnitKey(unitKey, fallbackKey)
     local k = unitKey
     if not k or k == "" then local _g = MSUF_DB and MSUF_DB.general; k = fallbackKey or (_g and _g.hpSpacerSelectedUnitKey) or "player" end
     if k == "tot" then k = "targettarget" end
-    if type(k) == "string" then local ok, m = MSUF_FastCall(string.match, k, "^boss%d+$"); if ok and m then k = "boss" end end
+    if type(k) == "string" and k:match("^boss%d+$") then k = "boss" end
     if not _G.MSUF_TEXTLAYOUT_VALID_KEYS[k] then k = "player" end
      return k
 end
@@ -195,33 +195,42 @@ _G.MSUF_NormalizePowerTextMode = _G.MSUF_NormalizePowerTextMode or ns.Text.Norma
 
 local function _MSUF_TextifyValue(val)
     if val == nil then return nil end
-    local abbr = _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.AbbreviateNumbers
-    if type(abbr) == "function" then
-        local ok, txt = MSUF_FastCall(abbr, val)
-        if ok and txt ~= nil then return txt end
+    -- Fast path: plain numbers (99%+ of calls) bypass secret handling entirely.
+    if type(val) == "number" then
+        local abbr = _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.AbbreviateNumbers
+        if abbr then return abbr(val) end
+        return tostring(val)
     end
-    local ok2, txt2 = MSUF_FastCall(tostring, val)
-    if ok2 and txt2 ~= nil then return txt2 end
+    if type(val) == "string" then return val end
+    -- Secret / unknown type: pass to C-side abbreviator (secret-safe, no Lua arithmetic).
+    local abbr = _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.AbbreviateNumbers
+    if abbr then
+        local txt = abbr(val)
+        if txt ~= nil then return txt end
+    end
     return nil
 end
 
+-- Pre-build common percent strings (0%-100%) to avoid per-frame string allocations.
+local _MSUF_PCT_CACHE = {}
+for _pci = 0, 100 do _MSUF_PCT_CACHE[_pci] = tostring(_pci) .. "%" end
+
 local function _MSUF_TextifyPercent(percentValue)
     if percentValue == nil then return nil end
+    -- Secret value path: delegate to C-side formatting (no Lua arithmetic).
     if _MSUF_IsSecret(percentValue) then
-        if _G.C_StringUtil and type(C_StringUtil.RoundToNearestString) == "function" then
-            local ok, txt = MSUF_FastCall(C_StringUtil.RoundToNearestString, percentValue, 0.01)
-            if ok and txt ~= nil then
-                return tostring(txt) .. "%"
-            end
+        local CSU = _G.C_StringUtil
+        if CSU and CSU.RoundToNearestString then
+            local txt = CSU.RoundToNearestString(percentValue, 0.01)
+            if txt ~= nil then return tostring(txt) .. "%" end
         end
-        local ok2, txt2 = MSUF_FastCall(tostring, percentValue)
-        if ok2 and txt2 ~= nil then return txt2 .. "%" end
         return nil
     end
+    -- Normal number fast path: use cached strings for 0-100%.
     local pv = tonumber(percentValue)
     if not pv then return nil end
     local pctInt = math.floor(pv + 0.5)
-    return tostring(pctInt) .. "%"
+    return _MSUF_PCT_CACHE[pctInt] or (tostring(pctInt) .. "%")
 end
 
 local function _MSUF_PowerModeAllowsSplit(mode)
@@ -482,8 +491,9 @@ function ns.Text.ApplyPowerTextColorByType(self, unit, enabled)
     -- Secret-safe & pass-through: avoid extra comparisons/caching; just apply resolved color.
     if not enabled then  return end
     if not (self and self.powerText and UnitPowerType) then  return end
-    local okPT, pType, pTok = MSUF_FastCall(UnitPowerType, unit)
-    if not okPT then  return end
+    -- UnitPowerType existence is guarded above. Direct call (no FastCall overhead).
+    local pType, pTok = UnitPowerType(unit)
+    if pType == nil then  return end
     if type(MSUF_GetResolvedPowerColor) ~= "function" then  return end
     local pr, pg, pb = MSUF_GetResolvedPowerColor(pType, pTok)
     if not pr then  return end

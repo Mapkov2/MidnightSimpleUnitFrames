@@ -63,48 +63,14 @@ end
 -- -----------------------------------------------------------------------------
 
 local function RegisterBundledFonts()
-    -- Allow explicit re-register (force) without toggling global state.
-    -- Normal flow sets the global once.
-    local force = (_G.MSUF_FORCE_MEDIA_REREGISTER == true)
-    if _G.MSUF_BUNDLED_FONTS_REGISTERED and not force then return end
+    if _G.MSUF_BUNDLED_FONTS_REGISTERED then return end
 
     local LSM = ns.LSM
     if not LSM or type(LSM.Register) ~= "function" then
         return
     end
 
-    -- Robust Media base resolver (supports accidental nested addon folders).
-    -- We intentionally avoid GetFileIDFromPath here because it can return nil
-    -- in some environments even when the file is readable.
-    local function ResolveMediaBase_ByProbe()
-        local folder = tostring(addonName or "MidnightSimpleUnitFrames")
-
-        local candidates = {
-            "Interface\\AddOns\\" .. folder .. "\\Media\\",
-            "Interface\\AddOns\\" .. folder .. "\\" .. folder .. "\\Media\\",
-            "Interface\\AddOns\\" .. folder .. "\\" .. folder .. "\\" .. folder .. "\\Media\\",
-        }
-
-        local probe = "Bars\\Charcoal.tga"
-        local tmp = CreateFrame("Frame")
-        local tex = tmp:CreateTexture(nil, "ARTWORK")
-        for i = 1, #candidates do
-            tex:SetTexture(candidates[i] .. probe)
-            local cur = tex:GetTexture()
-            -- When the file exists, GetTexture() returns the exact path (string) or a fileID.
-            if cur ~= nil then
-                return candidates[i]
-            end
-        end
-
-        -- Fallback to the expected normal path.
-        return candidates[1]
-    end
-
-    local mediaBase = ResolveMediaBase_ByProbe()
-    _G.MSUF_MediaBasePath = mediaBase
-
-    local base = mediaBase .. "Fonts\\"
+    local base = "Interface/AddOns/" .. tostring(addonName) .. "/Media/Fonts/"
     local fonts = {
         { key = "EXPRESSWAY", name = "Expressway Regular (MSUF)", file = "Expressway Regular.ttf" },
         { key = "EXPRESSWAY_BOLD", name = "Expressway Bold (MSUF)", file = "Expressway Bold.ttf" },
@@ -120,7 +86,7 @@ local function RegisterBundledFonts()
 
     -- Bundled bar/castbar textures (Media/Bars).
     -- Registered here to be load-order-safe.
-    local baseBars = mediaBase .. "Bars\\"
+    local baseBars = "Interface/AddOns/" .. tostring(addonName) .. "/Media/Bars/"
     local function Reg(name, file)
         pcall(LSM.Register, LSM, "statusbar", name, baseBars .. file)
     end
@@ -188,22 +154,7 @@ local function RegisterBundledFonts()
         MigrateLegacyBarKeys()
     end
 
-    if not force then
-        _G.MSUF_BUNDLED_FONTS_REGISTERED = true
-    end
-end
-
--- Public helper: force re-register bundled media (solves load-order or bad install nesting).
--- Safe: if LibSharedMedia is missing, this is a no-op.
-function _G.MSUF_ForceRegisterBundledMedia()
-    _G.MSUF_FORCE_MEDIA_REREGISTER = true
-    local ok = TryInitLSM()
-    if ok then
-        EnsureLSMCallbacks()
-        RegisterBundledFonts()
-    end
-    _G.MSUF_FORCE_MEDIA_REREGISTER = nil
-    return ok and true or false
+    _G.MSUF_BUNDLED_FONTS_REGISTERED = true
 end
 
 -- Initial attempt (works when libs are already available)
