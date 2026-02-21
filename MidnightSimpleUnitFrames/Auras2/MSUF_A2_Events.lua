@@ -8,19 +8,31 @@ local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
 -- =========================================================================
 -- PERF LOCALS (Auras2 runtime)
+--  - Reduce global table lookups in high-frequency aura pipelines.
+--  - Secret-safe: localizing function references only (no value comparisons).
 -- =========================================================================
-local type = type
-local pairs = pairs
-local _G = _G
-local CreateFrame = CreateFrame
+local type, tostring, tonumber, select = type, tostring, tonumber, select
+local pairs, ipairs, next = pairs, ipairs, next
+local math_min, math_max, math_floor = math.min, math.max, math.floor
+local string_format, string_match, string_sub = string.format, string.match, string.sub
+local CreateFrame, GetTime = CreateFrame, GetTime
 local UnitExists = UnitExists
+local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
+local C_UnitAuras = C_UnitAuras
+local C_Secrets = C_Secrets
+local C_CurveUtil = C_CurveUtil
 
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 
 API.Events = (type(API.Events) == "table") and API.Events or {}
 local Events = API.Events
+
+local _G = _G
+local CreateFrame = CreateFrame
+local C_Timer = C_Timer
+local type = type
 
 -- Pre-cached boss unit strings (avoid "boss"..i in all loops)
 local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
@@ -47,6 +59,7 @@ end
 -- ------------------------------------------------------------
 -- Helpers
 -- ------------------------------------------------------------
+
 -- Strict coalescing for UNIT_AURA bursts:
 --  * Never render "per event".
 --  * Batch same-frame (and small multi-event bursts) into a single render.
@@ -91,16 +104,12 @@ local function IsEditModeActive()
 
     local g = rawget(_G, "MSUF_IsInEditMode")
     if type(g) == "function" then
-        if g() == true then
-            return true
-        end
+        if g() == true then return true end
     end
 
     local h = rawget(_G, "MSUF_IsMSUFEditModeActive")
     if type(h) == "function" then
-        if h() == true then
-            return true
-        end
+        if h() == true then return true end
     end
 
     return false

@@ -17,14 +17,20 @@ local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
 -- =========================================================================
 -- PERF LOCALS (Auras2 runtime)
+--  - Reduce global table lookups in high-frequency aura pipelines.
+--  - Secret-safe: localizing function references only (no value comparisons).
 -- =========================================================================
-local type, tonumber = type, tonumber
-local pairs, next = pairs, next
+local type, tostring, tonumber, select = type, tostring, tonumber, select
+local pairs, ipairs, next = pairs, ipairs, next
+local math_min, math_max, math_floor = math.min, math.max, math.floor
+local string_format, string_match, string_sub = string.format, string.match, string.sub
 local CreateFrame, GetTime = CreateFrame, GetTime
 local UnitExists = UnitExists
 local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
 local C_UnitAuras = C_UnitAuras
+local C_Secrets = C_Secrets
+local C_CurveUtil = C_CurveUtil
 
 -- FastCall: no pcall in hot paths
 local function MSUF_A2_FastCall(fn, ...)
@@ -48,6 +54,12 @@ local A2_STATE = API.state
 
 
 -- Hot locals
+
+local type = type
+local pairs = pairs
+local CreateFrame = CreateFrame
+local GetTime = GetTime
+local UnitExists = UnitExists
 local floor = math.floor
 local max = math.max
 
@@ -124,10 +136,7 @@ local A2_SHARED_DEFAULTS = {
 
 local A2_GROWTH_OK = {RIGHT=true,LEFT=true,UP=true,DOWN=true}
 local A2_ROWWRAP_OK = {DOWN=true,UP=true}
--- LayoutMode (SINGLE vs SEPARATE) is intentionally deprecated in MSUF Auras2.
--- Auras are positioned via Edit Mode movers (per-group offsets). Keeping the
--- DB key for backwards compatibility, but runtime always uses separate groups.
-local A2_LAYOUTMODE_OK = {SEPARATE=true,SINGLE=true}
+-- LayoutMode (SINGLE vs SEPARATE) permanently deprecated — runtime always uses separate groups.
 local A2_STACKANCHOR_OK = {TOPRIGHT=true,TOPLEFT=true,BOTTOMRIGHT=true,BOTTOMLEFT=true}
 
 local function DefaultKV(t, d) for k, v in pairs(d) do if t[k] == nil then t[k] = v end end end
@@ -295,9 +304,11 @@ local Flush -- forward decl
 local _flushDriver = CreateFrame("Frame")
 _flushDriver:Hide()
 local _flushNextAt = nil
+local _flushDriverActive = false   -- PERF: Boolean gate replaces GetScript() C API call
 
 local function StopFlushDriver()
     _flushNextAt = nil
+    _flushDriverActive = false
     _flushDriver:SetScript("OnUpdate", nil)
     _flushDriver:Hide()
 end
@@ -306,7 +317,6 @@ local function FlushDriverOnUpdate()
     local at = _flushNextAt
     if not at then StopFlushDriver(); return end
     local now = GetTime()
-    A2_STATE.now = now
     if now >= at then
         _flushNextAt = nil
         if Flush then Flush() end
@@ -315,15 +325,25 @@ end
 
 local function ScheduleFlush(delay)
     if not delay or delay < 0 then delay = 0 end
-    local now = GetTime()
-    local at = now + delay
-    if (not _flushNextAt) or at < _flushNextAt then
-        _flushNextAt = at
+
+    if _flushDriverActive then
+        -- Driver already running. Only update target time if new delay is sooner.
+        if delay == 0 then
+            _flushNextAt = 0  -- immediate (next OnUpdate)
+        else
+            local at = GetTime() + delay
+            if not _flushNextAt or at < _flushNextAt then
+                _flushNextAt = at
+            end
+        end
+        return
     end
-    if not _flushDriver:GetScript("OnUpdate") then
-        _flushDriver:Show()
-        _flushDriver:SetScript("OnUpdate", FlushDriverOnUpdate)
-    end
+
+    -- Start driver
+    _flushNextAt = (delay == 0) and 0 or (GetTime() + delay)
+    _flushDriverActive = true
+    _flushDriver:Show()
+    _flushDriver:SetScript("OnUpdate", FlushDriverOnUpdate)
 end
 
 
@@ -335,7 +355,11 @@ local function MarkDirty(unit, delay)
 
     -- Early dedupe
     if DirtyMark[unit] == DirtyGen then
-        if FlushScheduled then ScheduleFlush(delay or 0) end
+        -- Unit already queued. Only bring flush forward if caller wants immediate
+        -- and driver is actually running (safe guard against stopped-driver edge case).
+        if delay and delay == 0 and _flushDriverActive and _flushNextAt and _flushNextAt > 0 then
+            _flushNextAt = 0
+        end
         return
     end
 
@@ -450,8 +474,6 @@ local function ResolveUnitConfig(unit, a2, shared)
     local maxDebuffs = shared.maxDebuffs or shared.maxIcons or 12
     local growth = shared.growth or "RIGHT"
     local rowWrap = shared.rowWrap or "DOWN"
-    -- Legacy layoutMode is ignored at runtime (always separate groups).
-    local layoutMode = "SEPARATE"
     local stackCountAnchor = shared.stackCountAnchor or "TOPRIGHT"
     -- Per-type growth (nil = fall back to growth)
     local buffGrowth = shared.buffGrowth
@@ -470,7 +492,6 @@ local function ResolveUnitConfig(unit, a2, shared)
         if ls.debuffGrowth and A2_GROWTH_OK[ls.debuffGrowth] then debuffGrowth = ls.debuffGrowth end
         if ls.privateGrowth and A2_GROWTH_OK[ls.privateGrowth] then privateGrowth = ls.privateGrowth end
         if ls.rowWrap and A2_ROWWRAP_OK[ls.rowWrap] then rowWrap = ls.rowWrap end
-        -- layoutMode intentionally ignored
         if ls.stackCountAnchor and A2_STACKANCHOR_OK[ls.stackCountAnchor] then stackCountAnchor = ls.stackCountAnchor end
     end
     -- Resolve per-type fallback: nil → growth
@@ -509,7 +530,7 @@ if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
     if type(psz) == "number" and psz > 1 then privateIconSize = psz end
 end
 
-    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, privateGrowth, rowWrap, layoutMode, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize
+    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, privateGrowth, rowWrap, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize
 end
 
 
@@ -534,7 +555,12 @@ local function PrivateClear(entry)
         end
     end
     entry._privateAnchorIDs = nil
-    entry._privateSig = nil
+    entry._privUnit = nil
+    entry._privToken = nil
+    entry._privSize = nil
+    entry._privSpacing = nil
+    entry._privMax = nil
+    entry._privGrowth = nil
     local slots = entry._privateSlots
     if type(slots) == "table" then
         for i = 1, #slots do if slots[i] then slots[i]:Hide() end end
@@ -571,9 +597,15 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
     privateGrowth = (privateGrowth and A2_GROWTH_OK[privateGrowth]) and privateGrowth or "RIGHT"
     local vertical = (privateGrowth == "UP" or privateGrowth == "DOWN")
 
-    -- Signature to avoid rebuilding when nothing changed
-    local sig = unit .. "|" .. effectiveToken .. "|" .. privateIconSize .. "|" .. spacing .. "|" .. maxN .. "|" .. privateGrowth
-    if entry._privateSig == sig and type(entry._privateAnchorIDs) == "table" then
+    -- PERF: Zero-alloc diff check (replaces 6× string concat + comparison)
+    if entry._privUnit == unit
+       and entry._privToken == effectiveToken
+       and entry._privSize == privateIconSize
+       and entry._privSpacing == spacing
+       and entry._privMax == maxN
+       and entry._privGrowth == privateGrowth
+       and type(entry._privateAnchorIDs) == "table"
+    then
         if entry.private then entry.private:Show() end
         return
     end
@@ -581,13 +613,20 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
     PrivateClear(entry)
     if not entry.private then return end
 
+    -- Store fields for next diff check
+    entry._privUnit = unit
+    entry._privToken = effectiveToken
+    entry._privSize = privateIconSize
+    entry._privSpacing = spacing
+    entry._privMax = maxN
+    entry._privGrowth = privateGrowth
+
     local slots = entry._privateSlots or {}
     entry._privateSlots = slots
     local step = privateIconSize + spacing
     if step <= 0 then step = 28 end
 
     entry.private:Show()
-    entry._privateSig = sig
     entry._privateAnchorIDs = {}
 
     -- Container sizing: horizontal = wide row, vertical = tall column
@@ -812,6 +851,17 @@ end
     end
 end
 
+-- PERF: File-scope helper (avoids closure allocation inside RenderUnit)
+local function HasImportantToggle(f)
+    if type(f) ~= "table" then return false end
+    if f.onlyImportantAuras == true then return true end -- legacy
+    local b = f.buffs
+    if type(b) == "table" and b.onlyImportant == true then return true end
+    local d = f.debuffs
+    if type(d) == "table" and d.onlyImportant == true then return true end
+    return false
+end
+
 -- Pre-cached boss unit strings (avoid "boss"..i concatenation in loops)
 local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 
@@ -837,18 +887,22 @@ local function RenderUnit(entry)
 
     if not Collect or not Icons then return end
 
-    -- PERF: Update scan limits once per configGen (reduces C API calls)
+    -- Single gen read for entire function (value cannot change mid-call)
     local gen = _configGen
+
+    -- PERF: Update scan limits once per configGen (reduces C API calls)
+    -- GetAuras2DB result is reused by the main render path below.
+    local a2, shared
     if Collect._scanLimitsGen ~= gen then
         Collect._scanLimitsGen = gen
-        local a2db, sharedDb = GetAuras2DB()
-        if sharedDb and Collect.SetScanLimits then
+        a2, shared = GetAuras2DB()
+        if shared and Collect.SetScanLimits then
             -- Start with shared values
-            local maxB = sharedDb.maxBuffs or 12
-            local maxD = sharedDb.maxDebuffs or 12
+            local maxB = shared.maxBuffs or 12
+            local maxD = shared.maxDebuffs or 12
             -- Check perUnit overrides for higher values
-            if a2db and a2db.perUnit then
-                for _, pu in pairs(a2db.perUnit) do
+            if a2 and a2.perUnit then
+                for _, pu in pairs(a2.perUnit) do
                     if pu.overrideSharedLayout and pu.layoutShared then
                         local ls = pu.layoutShared
                         if type(ls.maxBuffs) == "number" and ls.maxBuffs > maxB then
@@ -864,22 +918,13 @@ local function RenderUnit(entry)
         end
 
         -- Scan flags (only compute expensive per-aura tags when any frame needs them)
-        if sharedDb and Collect.SetScanFlags then
+        if shared and Collect.SetScanFlags then
             local needImportant = false
-            local function HasImportantToggle(f)
-                if type(f) ~= "table" then return false end
-                if f.onlyImportantAuras == true then return true end -- legacy
-                local b = f.buffs
-                if type(b) == "table" and b.onlyImportant == true then return true end
-                local d = f.debuffs
-                if type(d) == "table" and d.onlyImportant == true then return true end
-                return false
-            end
-            local sf = sharedDb.filters
+            local sf = shared.filters
             if HasImportantToggle(sf) then
                 needImportant = true
-            elseif a2db and a2db.perUnit then
-                for _, pu in pairs(a2db.perUnit) do
+            elseif a2 and a2.perUnit then
+                for _, pu in pairs(a2.perUnit) do
                     if pu and pu.overrideFilters == true and HasImportantToggle(pu.filters) then
                         needImportant = true
                         break
@@ -895,7 +940,6 @@ local function RenderUnit(entry)
     -- PERF: Fast-path epoch check BEFORE expensive DB/config resolution
     -- If epoch unchanged AND configGen unchanged AND not in edit mode, skip entirely
     local epoch = _storeEpochs and _storeEpochs[unit] or 0
-    local gen = _configGen
     local isEditActive = (not _inCombat) and IsEditModeActive() or false
     
     if epoch == entry._lastEpoch 
@@ -906,7 +950,10 @@ local function RenderUnit(entry)
         return  -- Nothing changed, skip all work
     end
     
-    local a2, shared = GetAuras2DB()
+    -- Reuse DB from scan-limits path if available, otherwise fetch now
+    if not a2 or not shared then
+        a2, shared = GetAuras2DB()
+    end
     if not a2 or not shared then return end
 
     -- Unit disabled via options toggle: hide all icons + anchor and bail out.
@@ -927,13 +974,12 @@ local function RenderUnit(entry)
         entry._cfg = cfg
     end
 
-    local gen = _configGen
     if cfg._gen ~= gen then
         cfg._gen = gen
 
         -- Layout config
         cfg.iconSize, cfg.spacing, cfg.perRow, cfg.maxBuffs, cfg.maxDebuffs,
-        cfg.growth, cfg.buffGrowth, cfg.debuffGrowth, cfg.privateGrowth, cfg.rowWrap, cfg.layoutMode, cfg.stackCountAnchor,
+        cfg.growth, cfg.buffGrowth, cfg.debuffGrowth, cfg.privateGrowth, cfg.rowWrap, cfg.stackCountAnchor,
         cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize =
             ResolveUnitConfig(unit, a2, shared)        -- Filter flags
         if Filters and Filters.ResolveRuntimeFlags then
@@ -959,9 +1005,10 @@ local function RenderUnit(entry)
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
         cfg.showDebuffs = (shared.showDebuffs == true)
-        cfg.needPlayerAura = (shared.highlightOwnBuffs == true) or (shared.highlightOwnDebuffs == true)
-        -- Legacy SINGLE-row rendering is deprecated; always render separate groups.
-        cfg.useSingleRow = false
+        cfg.needPlayerAura = (shared.highlightOwnBuffs == true)
+            or (shared.highlightOwnDebuffs == true)
+            or cfg.buffsOnlyMine
+            or cfg.debuffsOnlyMine
     end
 
     -- Local aliases for hot-path values
@@ -981,7 +1028,6 @@ local function RenderUnit(entry)
     local stackCountAnchor  = cfg.stackCountAnchor
     local showBuffs         = cfg.showBuffs
     local showDebuffs       = cfg.showDebuffs
-    local useSingleRow      = false
     local needPlayerAura    = cfg.needPlayerAura
     local masterOn          = cfg.masterOn
 
@@ -1205,8 +1251,6 @@ end
 
 
 Flush = function()
-    local now = GetTime()
-    A2_STATE.now = now
     _isFlushing = true
     _dirtyWhileFlushing = false
     FlushScheduled = true
@@ -1369,7 +1413,7 @@ API.MarkDirty = MarkDirty
 API.MarkAllDirty = MarkAllDirty
 API.RefreshAll = RefreshAll
 API.RefreshUnit = RefreshUnit
-API.RequestUnit = function(unit, delay) MarkDirty(unit, delay) end
+API.RequestUnit = MarkDirty
 API.HardDisableAll = HardDisableAll
 API.Flush = Flush
 

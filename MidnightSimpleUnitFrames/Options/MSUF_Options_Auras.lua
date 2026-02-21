@@ -1286,6 +1286,8 @@ SetOverrideCapsForEditing = function(v)
  end
 local function SyncLegacySharedFromSharedFilters()
     -- Keep legacy/shared fields in sync for backward compatibility.
+    -- Only sync when editing the SHARED profile — per-unit overrides must NOT touch shared flags.
+    if GetEditingKey() ~= "shared" then return end
     local a2, s = GetAuras2DB()
     if not (a2 and s and a2.shared and a2.shared.filters) then  return end
     local f = a2.shared.filters
@@ -1690,12 +1692,23 @@ end
              end)
         end
     end
-    -- Only-mine + permanent filters are stored per-unit (Target first), but we also sync shared fields for now.
-    BuildBoolPathCheckboxes(leftTop, {
-        { "Only my buffs", 12, -204, A2_FilterBuffs, "onlyMine", nil, nil, nil, SyncLegacySharedFromSharedFilters },
-        { "Only my debuffs", 200, -204, A2_FilterDebuffs, "onlyMine", nil, nil, nil, SyncLegacySharedFromSharedFilters },
-        { "Hide permanent buffs", 200, -252, GetEditingFilters, "hidePermanent", nil, TIP_HIDE_PERMANENT, nil, SyncLegacySharedFromSharedFilters },
-    })
+    -- Only-mine + permanent filters: stored in the per-unit filter table (via A2_FilterBuffs/Debuffs).
+    -- Tracked as "filters" scope so per-unit override auto-enables and scope greying works correctly.
+    do
+        local filterCB = {}
+        BuildBoolPathCheckboxes(leftTop, {
+            { "Only my buffs", 12, -204, A2_FilterBuffs, "onlyMine", nil, nil, "cbOnlyMyBuffs", SyncLegacySharedFromSharedFilters },
+            { "Only my debuffs", 200, -204, A2_FilterDebuffs, "onlyMine", nil, nil, "cbOnlyMyDebuffs", SyncLegacySharedFromSharedFilters },
+            { "Hide permanent buffs", 200, -252, GetEditingFilters, "hidePermanent", nil, TIP_HIDE_PERMANENT, "cbHidePermanent", SyncLegacySharedFromSharedFilters },
+        }, filterCB)
+        for _, key in ipairs({ "cbOnlyMyBuffs", "cbOnlyMyDebuffs", "cbHidePermanent" }) do
+            local cb = filterCB[key]
+            if cb then
+                A2_Track("filters", cb)
+                A2_WrapCheckboxAutoOverride(cb, "filters")
+            end
+        end
+    end
     -- Caps (live here in the Auras 2.0 box) + numeric entry boxes
     local function MakeCapsNumberGS(key, default, legacyKey)
         local function get()

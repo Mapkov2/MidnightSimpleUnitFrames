@@ -97,6 +97,7 @@ end
 
 -- Resolve which filter table to use for a unit.
 -- Default: shared.filters. If per-unit overrideFilters is enabled, use that unit's filters table.
+-- Lazy-normalizes per-unit tables on first access (defensive against manual DB edits).
 function Filters.GetEffectiveFilterTable(a2, shared, unitKey)
     if type(shared) ~= "table" then return nil end
     local tf = shared.filters
@@ -106,7 +107,14 @@ function Filters.GetEffectiveFilterTable(a2, shared, unitKey)
         local u = pu and pu[unitKey]
         if type(u) == "table" and u.overrideFilters == true then
             local puf = u.filters
-            if puf ~= nil then tf = puf end
+            if puf ~= nil then
+                -- Lazy normalize: ensure schema is complete (one-time per profile load)
+                if not puf._msufA2_normalizedRuntime then
+                    Filters.NormalizeFilters(puf)
+                    puf._msufA2_normalizedRuntime = true
+                end
+                tf = puf
+            end
         end
     end
 
