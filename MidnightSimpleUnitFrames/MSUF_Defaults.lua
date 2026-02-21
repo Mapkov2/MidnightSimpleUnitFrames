@@ -728,6 +728,13 @@ end
     if g.hpTextSpacerX == nil then
         g.hpTextSpacerX = 140
     end
+    if g.hpTextSpacerY == nil then
+        g.hpTextSpacerY = 0
+    end
+    -- Bar settings scope: always default to Shared so users edit globally first.
+    if g.hpPowerTextSelectedKey == nil then
+        g.hpPowerTextSelectedKey = "shared"
+    end
     -- Which unit's HP spacer settings are currently shown/edited in the Bars menu.
     -- This is purely a UI selection state (does not change gameplay behavior).
     if g.hpSpacerSelectedUnitKey == nil then
@@ -755,6 +762,9 @@ end
         if u.hpTextSpacerX == nil then
             u.hpTextSpacerX = 140
         end
+        if u.hpTextSpacerY == nil then
+            u.hpTextSpacerY = 0
+        end
     end
     -- Power text spacer (per-unit; matches HP spacer behavior)
     if g.powerTextSpacerEnabled == nil then
@@ -762,6 +772,9 @@ end
     end
     if g.powerTextSpacerX == nil then
         g.powerTextSpacerX = 140
+    end
+    if g.powerTextSpacerY == nil then
+        g.powerTextSpacerY = 0
     end
     do
         local legacyEnabled = g.powerTextSpacerEnabled
@@ -780,6 +793,9 @@ end
                 end
                 if u.powerTextSpacerX == nil then
                     u.powerTextSpacerX = 140
+                end
+                if u.powerTextSpacerY == nil then
+                    u.powerTextSpacerY = 0
                 end
             end
         end

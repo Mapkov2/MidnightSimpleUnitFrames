@@ -131,8 +131,14 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     local useOverride = (conf and conf.hpPowerTextOverride == true)
     -- Per-unit override for HP text mode + separator (falls back to Shared if unset).
     local hpMode = (useOverride and conf and conf.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
-    local sepRaw = (useOverride and conf and conf.hpTextSeparator)
-    if sepRaw == nil then sepRaw = (g and g.hpTextSeparator) end
+    -- HP separator: per-unit override → Shared fallback (matches Power pattern).
+    local sepRaw
+    if useOverride and conf then
+        sepRaw = conf.hpTextSeparator
+    end
+    if sepRaw == nil then
+        sepRaw = (g and g.hpTextSeparator)
+    end
     local sep = ns.Text._SepToken(sepRaw, nil)
     -- Spacers inherit Shared unless per-unit override is enabled.
     local spacerConf = (useOverride and conf) or nil
