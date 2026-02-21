@@ -2166,6 +2166,128 @@ end
         if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end
         if privateMaxPlayer then advGate[#advGate + 1] = privateMaxPlayer end
         if privateMaxOther  then advGate[#advGate + 1] = privateMaxOther end
+        -- ------------------------------------------------------------
+        -- Sort order dropdown (Blizzard Enum.AuraSortOrder)
+        -- Stored in shared.filters.sortOrder (respects per-unit filter overrides).
+        -- Passed to C_UnitAuras.GetAuraSlots as 4th arg — sorting happens in C code (zero Lua cost).
+        -- Secret-safe: plain numeric config, never compared with secret data.
+        -- ------------------------------------------------------------
+        do
+            local SORT_ITEMS = {
+                { text = TR("Unsorted (default)"), value = 0 },
+                { text = TR("Default (player > canApply > ID)"), value = 1 },
+                { text = TR("Big Defensive (longest first)"), value = 2 },
+                { text = TR("Expiration (soonest first)"), value = 3 },
+                { text = TR("Expiration only"), value = 4 },
+                { text = TR("Name (alphabetical)"), value = 5 },
+                { text = TR("Name only"), value = 6 },
+            }
+            -- LUT for display text by value (OnShow uses this to set label)
+            local SORT_TEXT = {}
+            for i = 1, #SORT_ITEMS do
+                SORT_TEXT[SORT_ITEMS[i].value] = SORT_ITEMS[i].text
+            end
+            local sortH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+            sortH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -160)
+            sortH:SetText(TR("Sort order"))
+            local ddSort = CreateFrame("Frame", "MSUF_Auras2_SortOrderDropDown", advBox, "UIDropDownMenuTemplate")
+            ddSort:SetPoint("TOPLEFT", advBox, "TOPLEFT", 90, -166)
+            MSUF_FixUIDropDown(ddSort, 220)
+            local function SortGet()
+                local f = GetEditingFilters()
+                return (f and type(f.sortOrder) == "number") and f.sortOrder or 0
+            end
+            local function SortSet(v)
+                local f = GetEditingFilters()
+                if not f then return end
+                f.sortOrder = v
+            end
+            local function SortOnClick(self)
+                SortSet(self.value)
+                UIDropDownMenu_SetSelectedValue(ddSort, self.value)
+                UIDropDownMenu_SetText(ddSort, SORT_TEXT[self.value] or SORT_ITEMS[1].text)
+                CloseDropDownMenus()
+                A2_AutoOverrideFiltersIfNeeded()
+                A2_RequestApply()
+            end
+            UIDropDownMenu_Initialize(ddSort, function()
+                local cur = SortGet()
+                for i = 1, #SORT_ITEMS do
+                    local item = SORT_ITEMS[i]
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = item.text
+                    info.value = item.value
+                    info.func = SortOnClick
+                    info.keepShownOnClick = false
+                    info.checked = (cur == item.value)
+                    UIDropDownMenu_AddButton(info)
+                end
+            end)
+            ddSort:SetScript("OnShow", function()
+                local v = SortGet()
+                UIDropDownMenu_SetSelectedValue(ddSort, v)
+                UIDropDownMenu_SetText(ddSort, SORT_TEXT[v] or SORT_ITEMS[1].text)
+            end)
+            A2_Track("filters", ddSort)
+            advGate[#advGate + 1] = ddSort
+            if sortH then advGate[#advGate + 1] = sortH end
+
+            -- "Reverse order" checkbox: flips the C API sort result in Lua.
+            -- Only meaningful when a sort order != Unsorted is selected.
+            local cbSortReverse = CreateCheckbox(advBox, TR("Reverse order"), 360, -160,
+                function()
+                    local f = GetEditingFilters()
+                    return (f and f.sortReverse == true)
+                end,
+                function(v)
+                    local f = GetEditingFilters()
+                    if not f then return end
+                    f.sortReverse = (v == true)
+                    A2_AutoOverrideFiltersIfNeeded()
+                end,
+                "Reverses the sort direction.\n\n"
+                .. "Name: Z\226\134\146A instead of A\226\134\146Z.\n"
+                .. "Expiration: longest first instead of soonest first.\n"
+                .. "Big Defensive: shortest first instead of longest first.\n\n"
+                .. "Only available when a sort order is selected.")
+            A2_Track("filters", cbSortReverse)
+            advGate[#advGate + 1] = cbSortReverse
+
+            -- Gate: disable Reverse when sort order is Unsorted (0).
+            local function UpdateSortReverseEnabled()
+                local v = SortGet()
+                local on = (v ~= 0)
+                SetCheckboxEnabled(cbSortReverse, on)
+            end
+
+            -- Refresh when dropdown changes or panel opens.
+            local origOnClick = SortOnClick
+            SortOnClick = function(self)
+                origOnClick(self)
+                UpdateSortReverseEnabled()
+            end
+            -- Re-initialize dropdown with updated OnClick
+            UIDropDownMenu_Initialize(ddSort, function()
+                local cur = SortGet()
+                for i = 1, #SORT_ITEMS do
+                    local item = SORT_ITEMS[i]
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = item.text
+                    info.value = item.value
+                    info.func = SortOnClick
+                    info.keepShownOnClick = false
+                    info.checked = (cur == item.value)
+                    UIDropDownMenu_AddButton(info)
+                end
+            end)
+            local origDDOnShow = ddSort:GetScript("OnShow")
+            ddSort:SetScript("OnShow", function(self)
+                if origDDOnShow then origDDOnShow(self) end
+                UpdateSortReverseEnabled()
+            end)
+            cbSortReverse:HookScript("OnShow", UpdateSortReverseEnabled)
+            UpdateSortReverseEnabled()
+        end
         local dtH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         dtH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -270)
         dtH:SetText(TR("Debuff types"))

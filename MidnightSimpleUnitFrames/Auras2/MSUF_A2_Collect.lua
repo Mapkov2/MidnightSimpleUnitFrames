@@ -324,6 +324,19 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
     if n < prevN then
         for j = n + 1, prevN do out[j] = nil end
     end
+
+    -- PERF: In-place reverse if sort order + reverse are active.
+    -- Typical n is 4-12, so this is ~6 swaps — negligible cost.
+    -- Secret-safe: only swaps table slots, never reads/compares aura values.
+    if _sortReverse and _sortOrder and n > 1 then
+        local lo, hi = 1, n
+        while lo < hi do
+            out[lo], out[hi] = out[hi], out[lo]
+            lo = lo + 1
+            hi = hi - 1
+        end
+    end
+
     out._msufA2_n = n
     return out, n
 end
@@ -465,6 +478,16 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImpor
     end
     out._msufA2_lastN = n
 
+    -- In-place reverse (mirrors GetAuras behaviour for sort order).
+    if _sortReverse and _sortOrder and n > 1 then
+        local lo, hi = 1, n
+        while lo < hi do
+            out[lo], out[hi] = out[hi], out[lo]
+            lo = lo + 1
+            hi = hi - 1
+        end
+    end
+
     return out, n
 end
 
@@ -539,11 +562,42 @@ Store._rawAuras = Store._rawAuras or {}  -- [unit] = { helpful={}, harmful={}, e
 -- Note: Multiply by 3 to ensure enough auras for filtered scenarios (onlyMine, hidePermanent, etc.)
 local _maxHelpfulScan = 12
 local _maxHarmfulScan = 12
+-- Aura sort order passed to C_UnitAuras.GetAuraSlots (4th arg).
+-- 0=Unsorted (nil equivalent), 1-6 correspond to Enum.AuraSortOrder values.
+-- Secret-safe: plain numeric config value, never compared with secret data.
+local _sortOrder = nil
+-- When true, GetAuras reverses the output array after filtering.
+-- The C API has no reverse parameter; we do a cheap in-place swap on the small output array.
+local _sortReverse = false
 
 function Collect.SetScanLimits(maxBuffs, maxDebuffs)
     -- Multiply by 3 for filter headroom, cap at 40
     _maxHelpfulScan = math_min((maxBuffs or 12) * 3, 40)
     _maxHarmfulScan = math_min((maxDebuffs or 12) * 3, 40)
+end
+
+-- Set the aura sort order used for GetAuraSlots calls.
+-- Invalidates all unit caches when the order changes so the next render
+-- triggers a full re-scan with the new ordering.
+function Collect.SetSortOrder(order)
+    -- Normalise: 0 / nil both mean "Unsorted" (pass nil to the C API)
+    if order == 0 then order = nil end
+    if _sortOrder == order then return end
+    _sortOrder = order
+    -- Invalidate all units so PreScanUnit re-scans with the new order
+    local Store = API.Store
+    if Store then
+        Store._epochs = Store._epochs or {}
+        for _, u in ipairs({"player","target","focus","boss1","boss2","boss3","boss4","boss5"}) do
+            Store._epochs[u] = (Store._epochs[u] or 0) + 1
+        end
+    end
+end
+
+-- Set whether GetAuras output should be reversed.
+-- No cache invalidation needed: reversal is applied at GetAuras read time.
+function Collect.SetSortReverse(reverse)
+    _sortReverse = (reverse == true)
 end
 
 -- Pre-scan all auras for a unit (called from UNIT_AURA)
@@ -858,7 +912,7 @@ PreScanUnit = function(unit, forceImportant)
 
     -- Scan HELPFUL (limited to user's maxBuffs)
     local helpful = raw.helpful
-    local nH = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HELPFUL, maxH, nil)))
+    local nH = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HELPFUL, maxH, _sortOrder)))
     local hCount = 0
     for i = 1, nH do
         local data = _getBySlot(unit, _scratch[i])
@@ -875,7 +929,7 @@ PreScanUnit = function(unit, forceImportant)
     
     -- Scan HARMFUL (limited to user's maxDebuffs)
     local harmful = raw.harmful
-    local nD = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HARMFUL, maxD, nil)))
+    local nD = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HARMFUL, maxD, _sortOrder)))
     local dCount = 0
     for i = 1, nD do
         local data = _getBySlot(unit, _scratch[i])

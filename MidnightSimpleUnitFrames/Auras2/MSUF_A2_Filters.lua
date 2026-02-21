@@ -59,6 +59,12 @@ function Filters.NormalizeFilters(f, sharedSettings, migrateFlagKey)
     Default(f, "onlyBossAuras", false)
     Default(f, "onlyImportantAuras", false)
     Default(f, "onlyRaidInCombatAuras", false)
+    -- Aura sort order (passed to C_UnitAuras.GetAuraSlots).
+    -- 0=Unsorted (default/legacy), 1=Default, 2=BigDefensive, 3=Expiration,
+    -- 4=ExpirationOnly, 5=Name, 6=NameOnly.
+    Default(f, "sortOrder", 0)
+    -- When true, reverses the C API sort order in Lua (e.g. Z→A instead of A→Z).
+    Default(f, "sortReverse", false)
 end
 
 -- Ensure shared.filters exists, migrate legacy storage if needed, and keep legacy shared flags in sync.
@@ -128,7 +134,8 @@ end
 --   onlyImportantBuffs, onlyImportantDebuffs,
 --   buffsOnlyMine, debuffsOnlyMine,
 --   buffsIncludeBoss, debuffsIncludeBoss,
---   hidePermanentBuffs
+--   hidePermanentBuffs,
+--   sortOrder, sortReverse
 function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
     local tf = Filters.GetEffectiveFilterTable(a2, shared, unitKey)
 
@@ -188,5 +195,10 @@ function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
         onlyImportantDebuffs = false
     end
 
-    return tf, masterOn, onlyBossAuras, onlyImportantBuffs, onlyImportantDebuffs, buffsOnlyMine, debuffsOnlyMine, buffsIncludeBoss, debuffsIncludeBoss, hidePermanentBuffs
+    -- Aura sort order (numeric enum for C_UnitAuras.GetAuraSlots 4th arg)
+    local sortOrder = (tf and type(tf.sortOrder) == "number") and tf.sortOrder or 0
+    -- Reverse the C API sort order in Lua (e.g. Z→A, longest→soonest)
+    local sortReverse = (tf and tf.sortReverse == true) and true or false
+
+    return tf, masterOn, onlyBossAuras, onlyImportantBuffs, onlyImportantDebuffs, buffsOnlyMine, debuffsOnlyMine, buffsIncludeBoss, debuffsIncludeBoss, hidePermanentBuffs, sortOrder, sortReverse
 end

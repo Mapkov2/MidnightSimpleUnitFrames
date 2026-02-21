@@ -933,6 +933,17 @@ local function RenderUnit(entry)
             end
             Collect.SetScanFlags(needImportant)
         end
+
+        -- Aura sort order: read from shared.filters, pass to Collect.
+        -- Uses the Blizzard Enum.AuraSortOrder values (0-6) on the
+        -- C_UnitAuras.GetAuraSlots 4th parameter.  Secret-safe: plain number.
+        if shared and Collect.SetSortOrder then
+            local sf = shared.filters
+            Collect.SetSortOrder(sf and sf.sortOrder or 0)
+            if Collect.SetSortReverse then
+                Collect.SetSortReverse(sf and sf.sortReverse or false)
+            end
+        end
     end
 
     local unit = entry.unit
@@ -988,7 +999,8 @@ local function RenderUnit(entry)
             cfg.onlyImportantBuffs, cfg.onlyImportantDebuffs,
             cfg.buffsOnlyMine, cfg.debuffsOnlyMine,
             cfg.buffsIncludeBoss, cfg.debuffsIncludeBoss,
-            cfg.hidePermanentBuffs =
+            cfg.hidePermanentBuffs,
+            cfg.sortOrder, cfg.sortReverse =
                 Filters.ResolveRuntimeFlags(a2, shared, unit)
         else
             cfg.tf = nil
@@ -1001,6 +1013,8 @@ local function RenderUnit(entry)
             cfg.buffsIncludeBoss = false
             cfg.debuffsIncludeBoss = false
             cfg.hidePermanentBuffs = false
+            cfg.sortOrder = 0
+            cfg.sortReverse = false
         end
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
