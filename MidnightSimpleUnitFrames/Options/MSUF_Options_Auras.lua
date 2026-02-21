@@ -99,22 +99,25 @@ local function IsEditModeActive()
 end
 local function MSUF_A2_IsMasqueAddonLoaded()
     local api = _A2_API()
-    if api and type(api.IsMasqueAddonLoaded) == "function" then
-        return api.IsMasqueAddonLoaded() and true or false
+    local m = api and api.Masque
+    if m and type(m.IsAddonLoaded) == "function" then
+        return m.IsAddonLoaded() and true or false
     end
      return false
 end
 local function MSUF_A2_IsMasqueReadyForToggle()
     local api = _A2_API()
-    if api and type(api.IsMasqueReadyForToggle) == "function" then
-        return api.IsMasqueReadyForToggle() and true or false
+    local m = api and api.Masque
+    if m and type(m.IsReadyForToggle) == "function" then
+        return m.IsReadyForToggle() and true or false
     end
      return false
 end
 local function MSUF_A2_EnsureMasqueGroup()
     local api = _A2_API()
-    if api and type(api.EnsureMasqueGroup) == "function" then
-        return api.EnsureMasqueGroup() and true or false
+    local m = api and api.Masque
+    if m and type(m.EnsureGroup) == "function" then
+        return m.EnsureGroup() and true or false
     end
      return false
 end
@@ -403,11 +406,10 @@ local function AttachSliderValueBox(slider, minV, maxV, step, getter)
          return v
     end
     eb:SetScript("OnEnterPressed", function(self)
-        self:ClearFocus()
         local v = ClampRound(self:GetText())
-        slider:SetValue(v) -- triggers the slider's OnValueChanged (setter + refresh)
         self:SetText(tostring(v))
-        self:HighlightText(0, 0)
+        slider:SetValue(v) -- triggers the slider's OnValueChanged (setter + refresh)
+        self:ClearFocus()
      end)
     eb:SetScript("OnEscapePressed", function(self)
         self:ClearFocus()
@@ -2103,7 +2105,11 @@ end
             s.privateAuraMaxOther = v
          end
         local privateMaxPlayer = CreateAuras2CompactSlider(privateBox, "Max slots (Player)", 0, 12, 1, 12, -178, 300, GetPrivateMaxPlayer, SetPrivateMaxPlayer)
+        MSUF_StyleAuras2CompactSlider(privateMaxPlayer, { leftTitle = true })
+        AttachSliderValueBox(privateMaxPlayer, 0, 12, 1, GetPrivateMaxPlayer)
         local privateMaxOther  = CreateAuras2CompactSlider(privateBox, "Max slots (Focus/Boss)", 0, 12, 1, 12, -226, 300, GetPrivateMaxOther, SetPrivateMaxOther)
+        MSUF_StyleAuras2CompactSlider(privateMaxOther, { leftTitle = true })
+        AttachSliderValueBox(privateMaxOther, 0, 12, 1, GetPrivateMaxOther)
         if privateMaxPlayer then A2_Track("global", privateMaxPlayer) end
         if privateMaxOther  then A2_Track("global", privateMaxOther) end
         local function UpdatePrivateAurasEnabled()
@@ -2231,62 +2237,6 @@ end
             A2_Track("filters", ddSort)
             advGate[#advGate + 1] = ddSort
             if sortH then advGate[#advGate + 1] = sortH end
-
-            -- "Reverse order" checkbox: flips the C API sort result in Lua.
-            -- Only meaningful when a sort order != Unsorted is selected.
-            local cbSortReverse = CreateCheckbox(advBox, TR("Reverse order"), 360, -160,
-                function()
-                    local f = GetEditingFilters()
-                    return (f and f.sortReverse == true)
-                end,
-                function(v)
-                    local f = GetEditingFilters()
-                    if not f then return end
-                    f.sortReverse = (v == true)
-                    A2_AutoOverrideFiltersIfNeeded()
-                end,
-                "Reverses the sort direction.\n\n"
-                .. "Name: Z\226\134\146A instead of A\226\134\146Z.\n"
-                .. "Expiration: longest first instead of soonest first.\n"
-                .. "Big Defensive: shortest first instead of longest first.\n\n"
-                .. "Only available when a sort order is selected.")
-            A2_Track("filters", cbSortReverse)
-            advGate[#advGate + 1] = cbSortReverse
-
-            -- Gate: disable Reverse when sort order is Unsorted (0).
-            local function UpdateSortReverseEnabled()
-                local v = SortGet()
-                local on = (v ~= 0)
-                SetCheckboxEnabled(cbSortReverse, on)
-            end
-
-            -- Refresh when dropdown changes or panel opens.
-            local origOnClick = SortOnClick
-            SortOnClick = function(self)
-                origOnClick(self)
-                UpdateSortReverseEnabled()
-            end
-            -- Re-initialize dropdown with updated OnClick
-            UIDropDownMenu_Initialize(ddSort, function()
-                local cur = SortGet()
-                for i = 1, #SORT_ITEMS do
-                    local item = SORT_ITEMS[i]
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text = item.text
-                    info.value = item.value
-                    info.func = SortOnClick
-                    info.keepShownOnClick = false
-                    info.checked = (cur == item.value)
-                    UIDropDownMenu_AddButton(info)
-                end
-            end)
-            local origDDOnShow = ddSort:GetScript("OnShow")
-            ddSort:SetScript("OnShow", function(self)
-                if origDDOnShow then origDDOnShow(self) end
-                UpdateSortReverseEnabled()
-            end)
-            cbSortReverse:HookScript("OnShow", UpdateSortReverseEnabled)
-            UpdateSortReverseEnabled()
         end
         local dtH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         dtH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -270)
