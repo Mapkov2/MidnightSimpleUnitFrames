@@ -4139,12 +4139,13 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
     local function _ApplySnapAndClamp(key, conf)
         if not conf then  return end
         local g = MSUF_DB and MSUF_DB.general or nil
-        if g and g.editModeSnapToGrid then
-            local gridStep = g.editModeGridStep or 20
-            if gridStep < 1 then gridStep = 1 end
+        if g and g.editModeSnapToGrid == true then
+            local gridStep = tonumber(g.editModeGridStep) or 20
+            if gridStep < 8 then gridStep = 8 end
+            if gridStep > 64 then gridStep = 64 end
             local half = gridStep / 2
-            local x = conf.offsetX or 0
-            local y = conf.offsetY or 0
+            local x = tonumber(conf.offsetX) or 0
+            local y = tonumber(conf.offsetY) or 0
             conf.offsetX = math.floor((x + half) / gridStep) * gridStep
             conf.offsetY = math.floor((y + half) / gridStep) * gridStep
         end
@@ -4196,10 +4197,14 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
                     local ax2, ay2 = _PointXY(ecv, relPoint)
                     local fx2, fy2 = _PointXY(self, point)
                     if ax2 and ay2 and fx2 and fy2 then
-                        local x = fx2 - ax2
-                        local y = fy2 - ay2
-                        conf.offsetX = floor((x - baseX) + 0.5)
-                        conf.offsetY = floor((y - extraY) + 0.5)
+                        local fs = (self.GetEffectiveScale and self:GetEffectiveScale()) or 1
+                        local as = (ecv.GetEffectiveScale and ecv:GetEffectiveScale()) or 1
+                        if fs == 0 then fs = 1 end
+                        if as == 0 then as = 1 end
+                        local x = (fx2 * fs - ax2 * as) / as
+                        local y = (fy2 * fs - ay2 * as) / as
+                        conf.offsetX = floor(((x - baseX)) + 0.5)
+                        conf.offsetY = floor(((y - extraY)) + 0.5)
                         if MSUF_SyncUnitPositionPopup then
                             MSUF_SyncUnitPositionPopup(unit, conf)
                         end
@@ -4214,15 +4219,19 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         local ax, ay = anchor:GetCenter()
         local fx, fy = self:GetCenter()
         if not ax or not ay or not fx or not fy then  return end
-        local newX = fx - ax
-        local newY = fy - ay
+        local fs = (self.GetEffectiveScale and self:GetEffectiveScale()) or 1
+        local as = (anchor.GetEffectiveScale and anchor:GetEffectiveScale()) or 1
+        if fs == 0 then fs = 1 end
+        if as == 0 then as = 1 end
+        local newX = (fx * fs - ax * as) / as
+        local newY = (fy * fs - ay * as) / as
         if key == "boss" then
             local index = tonumber(unit:match("^boss(%d+)$")) or 1
             local spacing = conf.spacing or -36
             newY = newY - ((index - 1) * spacing)
     end
-        conf.offsetX = newX
-        conf.offsetY = newY
+        conf.offsetX = floor((newX) + 0.5)
+        conf.offsetY = floor((newY) + 0.5)
         if MSUF_SyncUnitPositionPopup then
             MSUF_SyncUnitPositionPopup(unit, conf)
     end
@@ -4281,6 +4290,9 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         if key and conf then
             _UpdateDBFromFrame(self, key, conf)
             _ApplySnapAndClamp(key, conf)
+            -- Keep cachedConfig in sync so PositionUnitFrame reads the live DB
+            -- table, not a stale ref from before a profile import/switch.
+            self.cachedConfig = conf
             if key == "boss" then
                 for i = 1, MSUF_MAX_BOSS_FRAMES do
                     local bossUnit = "boss" .. i
