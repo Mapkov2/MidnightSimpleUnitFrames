@@ -448,14 +448,16 @@ function ns.Text.RenderPowerText(self)
     local powerSep = ptc.powerSep
     local colorByType = ptc.colorByType
 
-    -- PERF: Reuse pType + curValue from DIRECT_APPLY handler if same frame.
-    -- Saves 2 C-API calls (~2μs) on the most frequent path.
-    local pType, curValue, maxValue
+    -- PERF: Reuse pType/cur/max/pct from DIRECT_APPLY handler if same frame.
+    -- This keeps the text 1:1 in sync with the bar fast-path.
+    local pType, curValue, maxValue, powerPct
     local frameSerial = _G._MSUF_FrameSerial
     local cachedSerial = self._msufCachedPSerial
     if cachedSerial and frameSerial and cachedSerial == frameSerial then
         pType = self._msufCachedPType
         curValue = self._msufCachedPCur
+        maxValue = self._msufCachedPMax
+        powerPct = self._msufCachedPPct
     end
     -- Fallback: fetch from C-API if no valid cache
     if pType == nil then
@@ -463,22 +465,24 @@ function ns.Text.RenderPowerText(self)
     end
     if pType ~= nil then
         if curValue == nil then
-            curValue = (F.UnitPower and F.UnitPower(unit, pType)) or (UnitPower and UnitPower(unit, pType)) or nil
+            curValue = (F.UnitPower and F.UnitPower(unit, pType, false)) or (UnitPower and UnitPower(unit, pType, false)) or nil
         end
-        maxValue = (F.UnitPowerMax and F.UnitPowerMax(unit, pType)) or (UnitPowerMax and UnitPowerMax(unit, pType)) or nil
+        if maxValue == nil then
+            maxValue = (F.UnitPowerMax and F.UnitPowerMax(unit, pType, false)) or (UnitPowerMax and UnitPowerMax(unit, pType, false)) or nil
+        end
     else
         curValue = (F.UnitPower and F.UnitPower(unit)) or (UnitPower and UnitPower(unit)) or nil
         maxValue = (F.UnitPowerMax and F.UnitPowerMax(unit)) or (UnitPowerMax and UnitPowerMax(unit)) or nil
     end
-    if maxValue ~= nil and (not _MSUF_IsSecret(maxValue)) then
-        local mv = tonumber(maxValue) or 0
-        if mv <= 0 then
-            ns.Text.ClearField(self, "powerTextPct")
-            ns.Text.Set(self.powerText, "", false)
-            return
+    -- Percent: pass-through UnitPowerPercent (more accurate than recomputing).
+    if powerPct == nil then
+        local fn = _MSUF_UnitPowerPercent
+        if fn then
+            local curve = _MSUF_PwrScaleTo100 or true
+            powerPct = fn(unit, pType, false, curve)
+            if type(powerPct) ~= "number" then powerPct = nil end
         end
     end
-    local powerPct = ns.Text.GetUnitPowerPercent(unit)
 
 
     local curText = _MSUF_TextifyValue(curValue)

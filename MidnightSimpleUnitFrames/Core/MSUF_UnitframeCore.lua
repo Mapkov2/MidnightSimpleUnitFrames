@@ -2328,32 +2328,69 @@ do
         -- Eliminates: Elements.Power.Update wrapper (IsShown before+after for outline),
         -- ns.Bars.ApplySpec dispatch, UnitExists check, MSUF_IsTargetLikeFrame,
         -- PowerBarAllowed, ApplyPowerBarVisual (color), SetMinMaxValues, type() guards.
+        -- Power fast-path (12.0/Midnight secret-safe):
+        -- * Use ONLY UnitPower/UnitPowerMax/UnitPowerPercent (+ UnitPowerType) pass-through.
+        -- * Avoid any comparisons/arithmetic on returned values in the hot path.
+        -- * Cache cur/max/pct so MSUF_Text can render accurate text matching the bar.
+        local _UnitPower        = UnitPower
+        local _UnitPowerMax     = UnitPowerMax
+        local _UnitPowerPercent = UnitPowerPercent
+        local _UnitPowerType    = UnitPowerType
+        local _Curve100         = (CurveConstants and CurveConstants.ScaleTo100) or true
+
         DIRECT_APPLY["UNIT_POWER_UPDATE"] = function(f)
             local bar = f.targetPowerBar or f.powerBar
-            if not bar or not bar:IsShown() then return end -- bar hidden → skip (no work)
+            if not bar then return end
+
             local unit = f.unit
-            local pType = UnitPowerType(unit)               -- upvalue (line 23)
+            local pType = _UnitPowerType(unit)
             if pType == nil then return end
-            local cur = UnitPower(unit, pType)              -- upvalue (line 22)
-            bar:SetValue(cur)                               -- ALWAYS: direct widget call
-            -- PERF: Cache pType + cur on frame so RenderPowerText can skip re-fetching.
-            -- Saves 2 C-API calls (~2μs) per power text update.
-            f._msufCachedPType = pType
-            f._msufCachedPCur = cur
+
+            local cur = _UnitPower(unit, pType, false)
+            if type(cur) ~= "number" then cur = 0 end
+
+            local mx = _UnitPowerMax(unit, pType, false)
+            if type(mx) == "number" then
+                -- Always apply MinMax (cheap, keeps bar+text consistent after UNIT_MAXPOWER).
+                bar:SetMinMaxValues(0, mx)
+            else
+                mx = nil
+            end
+
+            bar:SetValue(cur)
+
+            -- Cache values for MSUF_Text.RenderPowerText.
+            f._msufCachedPType   = pType
+            f._msufCachedPCur    = cur
+            f._msufCachedPMax    = mx
+            if _UnitPowerPercent then
+                local pct = _UnitPowerPercent(unit, pType, false, _Curve100)
+                if type(pct) == "number" then
+                    f._msufCachedPPct = pct
+                else
+                    f._msufCachedPPct = nil
+                end
+            else
+                f._msufCachedPPct = nil
+            end
             f._msufCachedPSerial = Core._frameNowSerial
-            -- PERF: Text is budget-gated + rate-limited.
+
+            -- Text update: budget gated + player faster rate.
             local fnTxt = FN_UpdatePowerTextFast
             if fnTxt then
                 local now = _RefreshFrameNow()
-                if (now - (f._msufPwrTxtAt or 0)) >= 0.10 then
+                local interval = (f._msufIsPlayer and 0.03) or 0.10
+                if (now - (f._msufPwrTxtAt or 0)) >= interval then
                     if _DirectTextAllowed() then
                         f._msufPwrTxtAt = now + (f._msufTextStagger or 0)
                         fnTxt(f)
                     end
-                    -- else: budget exceeded → DON'T update timestamp → retry next frame
                 end
             end
         end
+
+        -- UNIT_POWER_FREQUENT should use the same fast path.
+        DIRECT_APPLY["UNIT_POWER_FREQUENT"] = DIRECT_APPLY["UNIT_POWER_UPDATE"]
 
         -- Rare power events → full chain (correct: handles visibility, color, range).
         -- Set visibility-check flag so Elements.Power.Update only does before/after
