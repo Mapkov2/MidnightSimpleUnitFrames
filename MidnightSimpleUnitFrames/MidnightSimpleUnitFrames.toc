@@ -42,6 +42,7 @@ MSUF_Style.lua
 MSUF_Modules.lua
 MSUF_EventBus.lua
 MSUF_EditMode.lua
+MSUF_EM_UndoRedo.lua
 MSUF_Castbars_LoDStub.lua
 MidnightSimpleUnitFrames_MinimapButton.lua
 MSUF_AddonCompartment.lua

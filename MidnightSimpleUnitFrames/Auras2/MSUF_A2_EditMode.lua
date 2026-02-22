@@ -308,6 +308,11 @@ local function CreateMover(entry, unitKey, kind, labelText)
         local key = self._msufAuraUnitKey
         local mk  = self._msufA2MoverKind or "buff"
 
+        -- Undo: capture aura state BEFORE drag moves anything
+        if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+            _G.MSUF_EM_UndoBeforeChange("aura", key)
+        end
+
         local startX, startY = ReadOffset(key, shared, mk)
         self._msufDragStartOffsetX = startX
         self._msufDragStartOffsetY = startY

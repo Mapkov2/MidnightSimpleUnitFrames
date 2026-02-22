@@ -4271,6 +4271,12 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         if F.InCombatLockdown and F.InCombatLockdown() then  return end
         local key, conf = _GetConfAndKey()
         if not key or not conf then  return end
+
+        -- Undo: capture state BEFORE drag moves the frame
+        if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+            _G.MSUF_EM_UndoBeforeChange("unit", key)
+        end
+
         self._msufDragDidStart = true
         self._msufDragActive = true
         self._msufDragKey = key

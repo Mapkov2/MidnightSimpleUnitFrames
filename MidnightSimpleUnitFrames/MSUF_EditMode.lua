@@ -1097,6 +1097,11 @@ end
 
 local function MSUF_EditMode_HardTeardown()
 
+    -- Clear undo/redo history on exit
+    if type(_G.MSUF_EM_UndoClear) == "function" then
+        _G.MSUF_EM_UndoClear()
+    end
+
     MSUF__EditModeFlushSeq = (MSUF__EditModeFlushSeq or 0) + 1
 
     MSUF__EM_AfterSeq = (MSUF__EM_AfterSeq or 0) + 1
@@ -2563,12 +2568,70 @@ MSUF_EM_ForceWhiteButtonText(resetBtn)
             return
         end
 
+        -- Undo: capture state BEFORE reset
+        if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+            _G.MSUF_EM_UndoBeforeChange("unit", MSUF_CurrentEditUnitKey)
+        end
+
         if MSUF_ResetCurrentEditUnit then
             MSUF_ResetCurrentEditUnit()
         end
     end)
 
     f.resetButton = resetBtn
+
+    -- Undo / Redo buttons (Edit Mode history)
+    local undoBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeUndoBtn", 80, 22, nil, "UIPanelButtonTemplate")
+    undoBtn:SetText("< Undo")
+    undoBtn:SetEnabled(false)
+    undoBtn:SetAlpha(0.4)
+    MSUF_EM_ForceWhiteButtonText(undoBtn)
+    undoBtn:SetScript("OnClick", function()
+        if not MSUF_UnitEditModeActive then return end
+        local EM_U = _G.MSUF_Edit and _G.MSUF_Edit.Undo
+        if EM_U and EM_U.DoUndo then EM_U.DoUndo() end
+    end)
+    undoBtn:SetScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText("Undo last change", 1, 1, 1)
+            GameTooltip:Show()
+        end
+    end)
+    undoBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    f.undoButton = undoBtn
+
+    local redoBtn = ns.MSUF_EM_UIH.Button(f, "MSUF_EditModeRedoBtn", 80, 22, nil, "UIPanelButtonTemplate")
+    redoBtn:SetText("Redo >")
+    redoBtn:SetEnabled(false)
+    redoBtn:SetAlpha(0.4)
+    MSUF_EM_ForceWhiteButtonText(redoBtn)
+    redoBtn:SetScript("OnClick", function()
+        if not MSUF_UnitEditModeActive then return end
+        local EM_U = _G.MSUF_Edit and _G.MSUF_Edit.Undo
+        if EM_U and EM_U.DoRedo then EM_U.DoRedo() end
+    end)
+    redoBtn:SetScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText("Redo last undone change", 1, 1, 1)
+            GameTooltip:Show()
+        end
+    end)
+    redoBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    f.redoButton = redoBtn
+
+    -- Register buttons with the Undo module (deferred: module loads after this file)
+    C_Timer.After(0, function()
+        local EM_U = _G.MSUF_Edit and _G.MSUF_Edit.Undo
+        if EM_U and EM_U.SetButtons then
+            EM_U.SetButtons(undoBtn, redoBtn)
+        end
+    end)
 
     -- Edit Mode UI layout refresh (visual only)
     -- Goal: clearer sections + boss preview toggle near Boss ON + bottom action bar.
@@ -2693,27 +2756,33 @@ anchorCheck:SetPoint("LEFT", anchorNameInput, "RIGHT", 10, -1)
             auraPreviewCheck:Show()
         end
 
-        -- Actions: Cancel | Reset | Exit as one row
-        local gap = 10
-        local cW, rW, eW, h = 160, 150, 190, 24
+        -- Actions: Cancel | Undo | Redo | Reset | Exit as one row
+        local gap = 6
+        local cW, uW, rdW, rW, eW, h = 140, 80, 80, 130, 170, 24
 
         cancelBtn:SetSize(cW, h)
+        undoBtn:SetSize(uW, h)
+        redoBtn:SetSize(rdW, h)
         resetBtn:SetSize(rW, h)
         exitBtn:SetSize(eW, h)
 
-        actionRow:SetSize(cW + rW + eW + (gap * 2), h)
+        actionRow:SetSize(cW + uW + rdW + rW + eW + (gap * 4), h)
         actionRow:ClearAllPoints()
         actionRow:SetPoint("TOP", (row or framesHeader), "BOTTOM", _msufCenterShiftX, -18)
         actionRow:Show()
 
         cancelBtn:ClearAllPoints()
+        undoBtn:ClearAllPoints()
+        redoBtn:ClearAllPoints()
         resetBtn:ClearAllPoints()
         exitBtn:ClearAllPoints()
 
         cancelBtn:SetPoint("LEFT", actionRow, "LEFT", 0, 0)
-        resetBtn:SetPoint("LEFT", cancelBtn, "RIGHT", gap, 0)
+        undoBtn:SetPoint("LEFT", cancelBtn, "RIGHT", gap, 0)
+        redoBtn:SetPoint("LEFT", undoBtn, "RIGHT", gap, 0)
+        resetBtn:SetPoint("LEFT", redoBtn, "RIGHT", gap, 0)
         exitBtn:SetPoint("LEFT", resetBtn, "RIGHT", gap, 0)
-        cancelBtn:Show(); resetBtn:Show(); exitBtn:Show()
+        cancelBtn:Show(); undoBtn:Show(); redoBtn:Show(); resetBtn:Show(); exitBtn:Show()
     end
 
     MSUF_EM_ApplyEditModeLayout()
@@ -3733,6 +3802,8 @@ local function ApplyUnitPopupValues()
         if MSUF__UnitPopupSyncing or MSUF__UnitPopupApplying then
             return
         end
+        -- Block popup re-fire during undo/redo restore
+        if _G.MSUF__UndoRestoring then return end
 
         MSUF__UnitPopupApplying = true
         local ok, err = MSUF_FastCall(function()
@@ -3779,6 +3850,12 @@ local function ApplyUnitPopupValues()
             if pf.powerShowCB and pf.powerShowCB.GetChecked then
                 showPowerVal = (pf.powerShowCB:GetChecked() and true or false)
             end
+
+            -- Undo: capture state BEFORE popup apply writes
+            if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+                _G.MSUF_EM_UndoBeforeChange("unit", key)
+            end
+
             conf.offsetX = xVal
             conf.offsetY = yVal
             conf.width   = wVal
@@ -4447,6 +4524,8 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
         if MSUF__CastbarPopupSyncing or MSUF__CastbarPopupApplying then
             return
         end
+        -- Block popup re-fire during undo/redo restore
+        if _G.MSUF__UndoRestoring then return end
 
         MSUF__CastbarPopupApplying = true
         local ok, err = MSUF_FastCall(function()
@@ -4469,6 +4548,11 @@ function MSUF_OpenCastbarPositionPopup(unit, parent)
             -- Always read the active popup context from the panel (prevents stale/old-unit writes).
             local unit = pf._msufUnitKey or pf.unit
             local parent = pf.parent
+
+            -- Undo: capture castbar state BEFORE popup apply writes
+            if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+                _G.MSUF_EM_UndoBeforeChange("castbar", unit)
+            end
 
             local function GlobalCastFont()
                 local baseSize = tonumber(g.fontSize) or 14
@@ -5424,6 +5508,8 @@ function _G.MSUF_A2_EnsureAuraPositionPopup()
 
     local function Apply()
         if (pf and (pf._msufAuras2PopupApplying or pf._msufAuras2PopupSyncing)) or _G.MSUF__Auras2PopupApplying then return end
+        -- Block popup re-fire during undo/redo restore
+        if _G.MSUF__UndoRestoring then return end
         if pf then pf._msufAuras2PopupApplying = true end
         _G.MSUF__Auras2PopupApplying = true
 
@@ -5432,6 +5518,12 @@ function _G.MSUF_A2_EnsureAuraPositionPopup()
         if not MSUF_DB or not MSUF_DB.auras2 then return end
 
         local unitKey = pf.unit or 'target'
+
+        -- Undo: capture aura state BEFORE popup apply writes
+        if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+            _G.MSUF_EM_UndoBeforeChange("aura", unitKey)
+        end
+
         local a2db = MSUF_DB.auras2
         a2db.shared = a2db.shared or {}
         a2db.perUnit = a2db.perUnit or {}
@@ -6506,6 +6598,17 @@ end
 -- IMPORTANT: SetOverrideBindingClick's "clickButton" param MUST be a real mouse button name.
 -- Note: Uses globals deliberately to avoid hitting the "200 locals" limit in large files.
 local MSUF_EM_GetCastbarOffsetKeys -- castbar offset key helper (used by snap + arrow-key nudging)
+MSUF_EM_GetCastbarOffsetKeys = function(unit)
+    if not unit then return nil, nil end
+    if unit == "boss" then
+        return "bossCastbarOffsetX", "bossCastbarOffsetY"
+    end
+    local getPrefix = _G.MSUF_GetCastbarPrefix
+    if type(getPrefix) ~= "function" then return nil, nil end
+    local prefix = getPrefix(unit)
+    if not prefix or prefix == "" then return nil, nil end
+    return prefix .. "OffsetX", prefix .. "OffsetY"
+end
 
 if not _G.MSUF_EnableArrowKeyNudge then
 function _G.MSUF_EnableArrowKeyNudge(enable)
@@ -6582,6 +6685,11 @@ function _G.MSUF_EnableArrowKeyNudge(enable)
             end
             if not xKey or not yKey then return end
 
+            -- Undo: capture castbar state BEFORE nudge (debounced)
+            if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+                _G.MSUF_EM_UndoBeforeChange("castbar", unit, true)
+            end
+
             g[xKey] = math.floor(((tonumber(g[xKey]) or 0) + ndx) + 0.5)
             g[yKey] = math.floor(((tonumber(g[yKey]) or 0) + ndy) + 0.5)
 
@@ -6607,6 +6715,12 @@ function _G.MSUF_EnableArrowKeyNudge(enable)
 
         local s = GetStep()
         local ndx, ndy = dx * s, dy * s
+
+        -- Undo: capture state BEFORE nudge (debounced)
+        if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+            _G.MSUF_EM_UndoBeforeChange("unit", key, true)
+        end
+
         conf.offsetX = math.floor(((tonumber(conf.offsetX) or 0) + ndx) + 0.5)
         conf.offsetY = math.floor(((tonumber(conf.offsetY) or 0) + ndy) + 0.5)
 
@@ -7062,6 +7176,80 @@ if type(_G.MSUF_SyncCastbarEditModeWithUnitEdit) ~= "function" then
     end
 end
 
+-- ═══════════════════════════════════════════════════════════════
+-- Hook castbar preview frames for Undo (drag capture)
+-- The LoD castbar addon makes preview frames movable/draggable.
+-- We HookScript("OnMouseDown") to snapshot BEFORE the drag writes to DB.
+-- ═══════════════════════════════════════════════════════════════
+local CASTBAR_PREVIEW_UNDO_MAP = {
+    MSUF_PlayerCastbarPreview = "player",
+    MSUF_TargetCastbarPreview = "target",
+    MSUF_FocusCastbarPreview  = "focus",
+    MSUF_BossCastbarPreview   = "boss",
+}
+
+local function MSUF_HookCastbarPreviewsForUndo()
+    local bc = _G.MSUF_EM_UndoBeforeChange
+    if type(bc) ~= "function" then return end
+
+    for globalName, unitKey in pairs(CASTBAR_PREVIEW_UNDO_MAP) do
+        local frame = _G[globalName]
+        if frame and frame.HookScript and not frame.__msufUndoDragHooked then
+            frame.__msufUndoDragHooked = true
+            frame:HookScript("OnMouseDown", function()
+                if not MSUF_UnitEditModeActive then return end
+                if _G.MSUF__UndoRestoring then return end
+                bc("castbar", unitKey)
+            end)
+        end
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- Hook unit frames for Undo (drag capture)
+-- MSUF_EnableUnitFrameDrag (MidnightSimpleUnitFrames.lua) sets up
+-- drag via OnDragStart/OnDragStop but has no undo hook.
+-- We HookScript("OnMouseDown") to snapshot BEFORE the drag writes to DB.
+-- ═══════════════════════════════════════════════════════════════
+local UNITFRAME_UNDO_LIST = {
+    { global = "MSUF_player",       key = "player" },
+    { global = "MSUF_target",       key = "target" },
+    { global = "MSUF_focus",        key = "focus" },
+    { global = "MSUF_targettarget", key = "targettarget" },
+    { global = "MSUF_pet",          key = "pet" },
+}
+local MSUF_MAX_BOSS_FRAMES_UNDO = 5
+
+local function MSUF_HookUnitFramesForUndo()
+    local bc = _G.MSUF_EM_UndoBeforeChange
+    if type(bc) ~= "function" then return end
+
+    for _, entry in ipairs(UNITFRAME_UNDO_LIST) do
+        local frame = _G[entry.global]
+        if frame and frame.HookScript and not frame.__msufUndoDragHooked then
+            frame.__msufUndoDragHooked = true
+            local cfgKey = entry.key
+            frame:HookScript("OnMouseDown", function()
+                if not MSUF_UnitEditModeActive then return end
+                if _G.MSUF__UndoRestoring then return end
+                bc("unit", cfgKey)
+            end)
+        end
+    end
+    -- Boss frames: boss1..boss5
+    for i = 1, MSUF_MAX_BOSS_FRAMES_UNDO do
+        local frame = _G["MSUF_boss" .. i]
+        if frame and frame.HookScript and not frame.__msufUndoDragHooked then
+            frame.__msufUndoDragHooked = true
+            frame:HookScript("OnMouseDown", function()
+                if not MSUF_UnitEditModeActive then return end
+                if _G.MSUF__UndoRestoring then return end
+                bc("unit", "boss")
+            end)
+        end
+    end
+end
+
 if not _G.MSUF_SetMSUFEditModeDirect then
     function _G.MSUF_SetMSUFEditModeDirect(active, unitKey)
         if InCombatLockdown and InCombatLockdown() then
@@ -7089,6 +7277,12 @@ if not _G.MSUF_SetMSUFEditModeDirect then
             end
 
             MSUF_EM_SetActive(true, unitKey)
+
+            -- Clear undo/redo history for the new session
+            if type(_G.MSUF_EM_UndoClear) == "function" then
+                _G.MSUF_EM_UndoClear()
+            end
+
             if type(_G.MSUF_Auras2_RefreshAll) == "function" then
                 _G.MSUF_Auras2_RefreshAll()
             end
@@ -7114,6 +7308,15 @@ MSUF_EditMode_StartCombatWarningListener()
             end
             if type(MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
                 MSUF_SyncBossUnitframePreviewWithUnitEdit()
+            end
+
+            -- Hook castbar preview frames for undo (drag capture).
+            -- Immediate + delayed: LoD addon may create frames asynchronously.
+            MSUF_HookCastbarPreviewsForUndo()
+            -- Hook unit frames for undo (drag capture).
+            MSUF_HookUnitFramesForUndo()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.3, MSUF_HookCastbarPreviewsForUndo)
             end
 
             if MSUF_UpdateEditModeVisuals then
