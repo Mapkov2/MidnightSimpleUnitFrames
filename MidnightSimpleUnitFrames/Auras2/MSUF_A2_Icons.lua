@@ -433,6 +433,12 @@ function Icons.HideUnused(container, fromIndex)
                     map[aid] = nil
                 end
                 icon._msufAuraInstanceID = nil
+                -- Bug 1 fix: Clear stale commit + texture cache so recycled
+                -- icons always do a full CommitIcon on next AcquireIcon.
+                -- Without this, a reused icon can skip SetTexture if the
+                -- old _msufA2_lastTexAid happens to match the new aura's aid.
+                icon._msufA2_lastCommit = nil
+                icon._msufA2_lastTexAid = nil
             end
         end
     end
@@ -652,12 +658,13 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         ResolveTextConfig(icon, unit, shared, gen)
     end
 
-    -- 1. Texture (only when aid changed)
+    -- 1. Texture (update when aid changed)
+    -- SECRET-SAFE: aura.icon CAN be a secret value in WoW 12.0.
+    -- Never compare, store, or nil-check it. SetTexture handles secrets internally.
     if icon._msufA2_lastTexAid ~= aid then
         icon._msufA2_lastTexAid = aid
-        local tex = aura.icon
-        if tex ~= nil and icon.tex then
-            icon.tex:SetTexture(tex)
+        if icon.tex then
+            icon.tex:SetTexture(aura.icon)
         end
     end
 

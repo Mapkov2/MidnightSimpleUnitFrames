@@ -164,6 +164,9 @@ local function ClearPreviewIconsInContainer(container)
             icon._msufA2_lastCooldownUsesDurationObject = nil
             icon._msufA2_lastCooldownUsesExpiration = nil
             icon._msufA2_lastCooldownType = nil
+            -- Bug 1 fix: Also clear texture diff cache so real auras always
+            -- get their texture set after preview exit.
+            icon._msufA2_lastTexAid = nil
             -- Force CommitIcon to do a full apply (bypass diff-gate).
             icon._msufA2_lastCommit = nil
 

@@ -121,6 +121,32 @@ local function _SetWithAbsorb(hpText, absorbText, absorbStyle, fmtNo, fmtSpace, 
         end
     end
 end
+-- Pre-build common percent strings (0%-100% integer AND 0.0%-100.0% with one decimal)
+-- to avoid per-frame string allocations. Integer cache for power text, decimal cache for HP text.
+local _MSUF_PCT_CACHE = {}
+for _pci = 0, 100 do _MSUF_PCT_CACHE[_pci] = tostring(_pci) .. "%" end
+-- Decimal cache: keyed by 10x value (e.g. 753 = "75.3%"). Covers 0.0 to 100.0.
+local _MSUF_PCT_CACHE_1D = {}
+for _pci10 = 0, 1000 do
+    local whole = math.floor(_pci10 / 10)
+    local frac = _pci10 - (whole * 10)
+    _MSUF_PCT_CACHE_1D[_pci10] = tostring(whole) .. "." .. tostring(frac) .. "%"
+end
+-- PERF: Fast percent-to-string using pre-built cache. Eliminates C-side format calls.
+-- Returns cached "75.3%" string for values 0.0-100.0; falls back to format for out-of-range.
+-- SECRET-SAFE: Must bail on secret numbers before any arithmetic.
+local _string_format = string.format
+local _pct1d_issecret = _G.issecretvalue  -- resolve once; nil if API absent
+local function _MSUF_PctToStr1D(pct)
+    if pct == nil then return nil end
+    if _pct1d_issecret and _pct1d_issecret(pct) then return nil end
+    if type(pct) ~= "number" then return nil end
+    local key = math.floor(pct * 10 + 0.5)
+    if key >= 0 and key <= 1000 then
+        return _MSUF_PCT_CACHE_1D[key]
+    end
+    return _string_format("%.1f%%", pct)
+end
 function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbText, absorbStyle)
     if not self or not self.hpText then  return end
     if not show then
@@ -128,63 +154,122 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
         ns.Text.ClearField(self, "hpTextPct")
          return
     end
-    local useOverride = (conf and conf.hpPowerTextOverride == true)
-    -- Per-unit override for HP text mode + separator (falls back to Shared if unset).
-    local hpMode = (useOverride and conf and conf.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
-    -- HP separator: per-unit override → Shared fallback (matches Power pattern).
-    local sepRaw
-    if useOverride and conf then
-        sepRaw = conf.hpTextSeparator
+
+    -- PERF: Cache per-frame HP text config. Mode/separator/split don't change
+    -- during combat but were resolved from MSUF_DB on every call (50-250x/sec total).
+    -- Cache is invalidated when cachedConfig is cleared (config change).
+    local htc = self._msufHpTextConf
+    if not htc then
+        if not g then g = (MSUF_DB and MSUF_DB.general) or {} end
+        local useOverride = (conf and conf.hpPowerTextOverride == true)
+        local hpMode = (useOverride and conf and conf.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
+        local sepRaw
+        if useOverride and conf then
+            sepRaw = conf.hpTextSeparator
+        end
+        if sepRaw == nil then
+            sepRaw = (g and g.hpTextSeparator)
+        end
+        local sep = ns.Text._SepToken(sepRaw, nil)
+        local spacerConf = (useOverride and conf) or nil
+        htc = { hpMode = hpMode, sep = sep, spacerConf = spacerConf, g = g }
+        self._msufHpTextConf = htc
     end
-    if sepRaw == nil then
-        sepRaw = (g and g.hpTextSeparator)
-    end
-    local sep = ns.Text._SepToken(sepRaw, nil)
-    -- Spacers inherit Shared unless per-unit override is enabled.
-    local spacerConf = (useOverride and conf) or nil
-    local split = (hasPct == true) and ns.Text._ShouldSplitHP(self, spacerConf, g, hpMode) or false
+
+    local hpMode = htc.hpMode
+    local sep = htc.sep
+    local split = (hasPct == true) and ns.Text._ShouldSplitHP(self, htc.spacerConf, htc.g, hpMode) or false
     local hpText = self.hpText
     if split then
-        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
-        ns.Text.SetFormatted(self.hpTextPct, true, "%.1f%%", hpPct)
+        -- PERF: Fast path for split with no absorb
+        if not absorbText then
+            ns.Text.Set(hpText, hpStr or "", true)
+        else
+            _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
+        end
+        -- PERF: Use pre-cached percent string instead of SetFormattedText("%.1f%%").
+        local pctStr = _MSUF_PctToStr1D(hpPct)
+        if pctStr then
+            ns.Text.Set(self.hpTextPct, pctStr, true)
+        else
+            ns.Text.SetFormatted(self.hpTextPct, true, "%.1f%%", hpPct)
+        end
          return
     end
     ns.Text.ClearField(self, "hpTextPct")
     if not hasPct then
-        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
+        if not absorbText then
+            ns.Text.Set(hpText, hpStr or "", true)
+        else
+            _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
+        end
          return
+    end
+    -- PERF: Pre-compute percent string; pass as %s to avoid C-side format + GC.
+    local hpPctStr = _MSUF_PctToStr1D(hpPct)
+    -- PERF: Fast path: no absorb text (most users) + cached percent → direct SetText.
+    -- Eliminates _SetWithAbsorb overhead + C-side format parsing + varargs.
+    if not absorbText and hpPctStr then
+        local h = hpStr or ""
+        if hpMode == "FULL_ONLY" then
+            ns.Text.Set(hpText, h, true)
+        elseif hpMode == "PERCENT_ONLY" then
+            ns.Text.Set(hpText, hpPctStr, true)
+        elseif hpMode == "PERCENT_PLUS_FULL" then
+            ns.Text.Set(hpText, hpPctStr .. sep .. h, true)
+        else -- FULL_PLUS_PERCENT (default)
+            ns.Text.Set(hpText, h .. sep .. hpPctStr, true)
+        end
+        return
     end
     if hpMode == "FULL_ONLY" then
         _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
     elseif hpMode == "PERCENT_ONLY" then
-        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%.1f%%", "%.1f%% %s", "%.1f%% (%s)", hpPct)
+        if hpPctStr then
+            _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpPctStr)
+        else
+            _SetWithAbsorb(hpText, absorbText, absorbStyle, "%.1f%%", "%.1f%% %s", "%.1f%% (%s)", hpPct)
+        end
     elseif hpMode == "PERCENT_PLUS_FULL" then
-        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%.1f%%%s%s", "%.1f%%%s%s %s", "%.1f%%%s%s (%s)", hpPct, sep, hpStr or "")
+        if hpPctStr then
+            _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s%s%s", "%s%s%s %s", "%s%s%s (%s)", hpPctStr, sep, hpStr or "")
+        else
+            _SetWithAbsorb(hpText, absorbText, absorbStyle, "%.1f%%%s%s", "%.1f%%%s%s %s", "%.1f%%%s%s (%s)", hpPct, sep, hpStr or "")
+        end
     else
-        _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s%s%.1f%%", "%s%s%.1f%% %s", "%s%s%.1f%% (%s)", hpStr or "", sep, hpPct)
+        if hpPctStr then
+            _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s%s%s", "%s%s%s %s", "%s%s%s (%s)", hpStr or "", sep, hpPctStr)
+        else
+            _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s%s%.1f%%", "%s%s%.1f%% %s", "%s%s%.1f%% (%s)", hpStr or "", sep, hpPct)
+        end
     end
  end
+-- PERF: Cache function refs + constants at file scope (called 50-200x/sec in combat).
+local _MSUF_UnitPowerPercent = (type(UnitPowerPercent) == "function") and UnitPowerPercent or nil
+local _MSUF_UnitPowerTypeFn = (type(UnitPowerType) == "function") and UnitPowerType or nil
+local _MSUF_PwrScaleTo100 = (CurveConstants and CurveConstants.ScaleTo100) or nil
 function ns.Text.GetUnitPowerPercent(unit)
-    if type(UnitPowerPercent) == "function" then
-        local pType
-        if type(UnitPowerType) == "function" then
-            pType = UnitPowerType(unit)
-        end
-        if CurveConstants and CurveConstants.ScaleTo100 then
-            return UnitPowerPercent(unit, pType, false, CurveConstants.ScaleTo100)
-        else
-            return UnitPowerPercent(unit, pType, false, true)
-        end
+    local fn = _MSUF_UnitPowerPercent
+    if not fn then return nil end
+    local pType
+    local ptFn = _MSUF_UnitPowerTypeFn
+    if ptFn then pType = ptFn(unit) end
+    if _MSUF_PwrScaleTo100 then
+        return fn(unit, pType, false, _MSUF_PwrScaleTo100)
     end
-     return nil
+    return fn(unit, pType, false, true)
 end
 _G.MSUF_GetUnitPowerPercent = _G.MSUF_GetUnitPowerPercent or ns.Text.GetUnitPowerPercent
 -- EQoL-style power text modes:
 -- CURRENT, MAX, CURMAX, PERCENT, CURPERCENT, CURMAXPERCENT
 
+-- PERF: Resolve issecretvalue once at load. Eliminates type() check per call (50-200x/sec).
 local _MSUF_issecret = _G.issecretvalue
-local function _MSUF_IsSecret(v)
-    return (type(_MSUF_issecret) == "function" and _MSUF_issecret(v)) and true or false
+local _MSUF_IsSecret
+if type(_MSUF_issecret) == "function" then
+    _MSUF_IsSecret = function(v) return _MSUF_issecret(v) and true or false end
+else
+    _MSUF_IsSecret = function() return false end
 end
 
 function ns.Text.NormalizePowerTextMode(mode)
@@ -199,27 +284,26 @@ function ns.Text.NormalizePowerTextMode(mode)
 end
 _G.MSUF_NormalizePowerTextMode = _G.MSUF_NormalizePowerTextMode or ns.Text.NormalizePowerTextMode
 
+-- PERF: Cache abbreviation function at file scope (called 100-400x/sec across all units).
+local _MSUF_TextAbbrFn = _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.AbbreviateNumbers
+
 local function _MSUF_TextifyValue(val)
     if val == nil then return nil end
     -- Fast path: plain numbers (99%+ of calls) bypass secret handling entirely.
     if type(val) == "number" then
-        local abbr = _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.AbbreviateNumbers
+        local abbr = _MSUF_TextAbbrFn
         if abbr then return abbr(val) end
         return tostring(val)
     end
     if type(val) == "string" then return val end
     -- Secret / unknown type: pass to C-side abbreviator (secret-safe, no Lua arithmetic).
-    local abbr = _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.AbbreviateNumbers
+    local abbr = _MSUF_TextAbbrFn
     if abbr then
         local txt = abbr(val)
         if txt ~= nil then return txt end
     end
     return nil
 end
-
--- Pre-build common percent strings (0%-100%) to avoid per-frame string allocations.
-local _MSUF_PCT_CACHE = {}
-for _pci = 0, 100 do _MSUF_PCT_CACHE[_pci] = tostring(_pci) .. "%" end
 
 local function _MSUF_TextifyPercent(percentValue)
     if percentValue == nil then return nil end
@@ -329,38 +413,58 @@ function ns.Text.RenderPowerText(self)
         return
     end
 
-    local gPower = (MSUF_DB and MSUF_DB.general) or {}
-    local colorByType = (gPower.colorPowerTextByType == true)
+    -- PERF: Cache per-frame power text config. Mode/separator/colorByType don't change
+    -- during combat but were resolved from MSUF_DB on every call (50-200x/sec total).
+    -- Cache is invalidated when cachedConfig is cleared (config change).
+    local ptc = self._msufPwrTextConf
+    if not ptc then
+        local gPower = (MSUF_DB and MSUF_DB.general) or {}
+        local colorByType = (gPower.colorPowerTextByType == true)
+        local key = self.msufConfigKey or self._msufConfigKey or self._msufUnitKey or self.unitKey
+        local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
+        local useOverride = (udb and udb.hpPowerTextOverride == true)
 
-    -- Per-unit override for Power text mode + separators.
-    local key = self.msufConfigKey or self._msufConfigKey or self._msufUnitKey or self.unitKey
-    local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
-    local useOverride = (udb and udb.hpPowerTextOverride == true)
+        local rawMode = (useOverride and udb and udb.powerTextMode) or gPower.powerTextMode
+        local pMode = ns.Text.NormalizePowerTextMode(rawMode)
 
-    local rawMode = (useOverride and udb and udb.powerTextMode) or gPower.powerTextMode
-    local pMode = ns.Text.NormalizePowerTextMode(rawMode)
-
-    -- Power separator: prefer explicit power sep; else fall back to HP sep.
-    local rawPowerSep
-    if useOverride and udb then
-        if udb.powerTextSeparator ~= nil then
-            rawPowerSep = udb.powerTextSeparator
-        elseif udb.hpTextSeparator ~= nil then
-            rawPowerSep = udb.hpTextSeparator
+        local rawPowerSep
+        if useOverride and udb then
+            if udb.powerTextSeparator ~= nil then
+                rawPowerSep = udb.powerTextSeparator
+            elseif udb.hpTextSeparator ~= nil then
+                rawPowerSep = udb.hpTextSeparator
+            end
+        else
+            rawPowerSep = gPower.powerTextSeparator
         end
-    else
-        rawPowerSep = gPower.powerTextSeparator
+        local rawHpSep = (useOverride and udb and udb.hpTextSeparator) or gPower.hpTextSeparator
+        local powerSep = ns.Text._SepToken(rawPowerSep, rawHpSep)
+
+        ptc = { pMode = pMode, powerSep = powerSep, colorByType = colorByType }
+        self._msufPwrTextConf = ptc
     end
-    local rawHpSep = (useOverride and udb and udb.hpTextSeparator) or gPower.hpTextSeparator
-    local powerSep = ns.Text._SepToken(rawPowerSep, rawHpSep)
 
+    local pMode = ptc.pMode
+    local powerSep = ptc.powerSep
+    local colorByType = ptc.colorByType
 
-    -- Show power text for any unit that actually has a power pool.
-    -- If max power is a known numeric 0 (and not a secret value), treat as "no power" and hide.
-    local pType = (F.UnitPowerType and F.UnitPowerType(unit)) or (UnitPowerType and UnitPowerType(unit))
-    local curValue, maxValue
+    -- PERF: Reuse pType + curValue from DIRECT_APPLY handler if same frame.
+    -- Saves 2 C-API calls (~2μs) on the most frequent path.
+    local pType, curValue, maxValue
+    local frameSerial = _G._MSUF_FrameSerial
+    local cachedSerial = self._msufCachedPSerial
+    if cachedSerial and frameSerial and cachedSerial == frameSerial then
+        pType = self._msufCachedPType
+        curValue = self._msufCachedPCur
+    end
+    -- Fallback: fetch from C-API if no valid cache
+    if pType == nil then
+        pType = (F.UnitPowerType and F.UnitPowerType(unit)) or (UnitPowerType and UnitPowerType(unit))
+    end
     if pType ~= nil then
-        curValue = (F.UnitPower and F.UnitPower(unit, pType)) or (UnitPower and UnitPower(unit, pType)) or nil
+        if curValue == nil then
+            curValue = (F.UnitPower and F.UnitPower(unit, pType)) or (UnitPower and UnitPower(unit, pType)) or nil
+        end
         maxValue = (F.UnitPowerMax and F.UnitPowerMax(unit, pType)) or (UnitPowerMax and UnitPowerMax(unit, pType)) or nil
     else
         curValue = (F.UnitPower and F.UnitPower(unit)) or (UnitPower and UnitPower(unit)) or nil
@@ -393,7 +497,13 @@ function ns.Text.RenderPowerText(self)
         ns.Text.ClearField(self, "powerTextPct")
     end
 
-    ns.Text.ApplyPowerTextColorByType(self, unit, colorByType)
+    -- PERF: Skip SetTextColor when power type hasn't changed since last apply.
+    -- UnitPowerType only changes on UNIT_DISPLAYPOWER (very rare).
+    if colorByType then
+        if self._msufPTColorType ~= pType or not self._msufPTColorByPower then
+            ns.Text.ApplyPowerTextColorByType(self, unit, true)
+        end
+    end
 end
 -- Resolve helper color lookups used by ToT inline.
  -- These are global functions defined in MidnightSimpleUnitFrames.lua (loaded before this file).

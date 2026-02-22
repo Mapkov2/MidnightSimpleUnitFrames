@@ -434,6 +434,15 @@ end
 local function OnAnyEditModeChanged(active)
     local _, shared = EnsureDB()
 
+    -- CRITICAL: Force-set the cached edit mode state IMMEDIATELY.
+    -- Without this, IsEditModeActive() returns stale TRUE for up to 100ms,
+    -- causing MarkAllDirty → RenderUnit to re-enter the preview path and
+    -- undo the ClearAllPreviews() cleanup below.
+    local forceSet = API.ForceSetEditModeActive
+    if type(forceSet) == "function" then
+        forceSet(active)
+    end
+
     local wantPreview = (shared and shared.showInEditMode == true) or false
 
     -- Clear previews when leaving Edit Mode OR when previews are disabled.
@@ -441,6 +450,15 @@ local function OnAnyEditModeChanged(active)
     if (active == false) or (wantPreview ~= true) then
         if API.ClearAllPreviews then
             API.ClearAllPreviews()
+        end
+
+        -- Bug 2 fix: Force Masque reskin after clearing previews.
+        -- Preview icons modified cooldown/texture state that Masque's skin
+        -- (e.g. Shadow) tracks internally. Without a reskin, the stale
+        -- overlay state causes icons to appear very dark.
+        local MasqueMod = API.Masque
+        if MasqueMod and MasqueMod.ForceReskin then
+            MasqueMod.ForceReskin()
         end
     end
 

@@ -6009,6 +6009,217 @@ function _G.MSUF_A2_EnsureAuraPositionPopup()
         end)
     end
 
+    -- ===================================================================
+    -- Scrollable + Resizable popup  (fixes zhCN / zhTW font clipping)
+    -- ===================================================================
+    -- Strategy: wrap all *content* widgets (between title bar and footer
+    -- buttons) in a ScrollFrame.  Widget-to-widget anchors survive
+    -- SetParent() in modern WoW so existing layout chains remain valid.
+    -- The title, close button, copy dropdown, and Cancel/Okay buttons
+    -- stay parented to pf (they are in the fixed header/footer areas).
+    -- ===================================================================
+    do
+        local SCROLL_TOP_INSET  = 38   -- px below pf top  (title + gap)
+        local SCROLL_BOT_INSET  = 88   -- px above pf bottom (copy dd + btns)
+        local SCROLL_SIDE_PAD   = 6
+
+        -- --- ScrollFrame (clips content, provides vertical scroll) ---
+        local sf = CreateFrame("ScrollFrame", nil, pf)
+        sf:SetPoint("TOPLEFT",  pf, "TOPLEFT",  SCROLL_SIDE_PAD, -SCROLL_TOP_INSET)
+        sf:SetPoint("BOTTOMRIGHT", pf, "BOTTOMRIGHT", -SCROLL_SIDE_PAD, SCROLL_BOT_INSET)
+        sf:SetFrameLevel((pf:GetFrameLevel() or 0) + 1)
+        sf:SetClipsChildren(true)
+
+        local sc = CreateFrame("Frame", nil, sf)
+        sf:SetScrollChild(sc)
+        sc:SetWidth(math.max(100, (pf:GetWidth() or 320) - SCROLL_SIDE_PAD * 2))
+        sc:SetHeight(1)  -- placeholder; computed on first show
+        pf._scrollFrame  = sf
+        pf._scrollChild  = sc
+
+        -- Mouse-wheel scrolling (no visible scrollbar – clean look)
+        sf:EnableMouseWheel(true)
+        sf:SetScript("OnMouseWheel", function(self, delta)
+            local maxV = math.max(0, sc:GetHeight() - self:GetHeight())
+            if maxV <= 0 then return end
+            local cur  = self:GetVerticalScroll()
+            local step = 30
+            if IsShiftKeyDown and IsShiftKeyDown() then step = 90 end
+            local nv = math.max(0, math.min(maxV, cur - delta * step))
+            self:SetVerticalScroll(nv)
+        end)
+
+        -- Minimal scroll indicator (thin bar, right edge)
+        local ind = sf:CreateTexture(nil, "OVERLAY")
+        ind:SetWidth(3)
+        ind:SetTexture("Interface\\Buttons\\WHITE8x8")
+        ind:SetVertexColor(1, 1, 1, 0.18)
+        ind:Hide()
+        pf._scrollIndicator = ind
+
+        local function UpdateScrollIndicator()
+            local sfH = sf:GetHeight() or 0
+            local scH = sc:GetHeight() or 0
+            if scH <= sfH or scH <= 0 or sfH <= 0 then
+                ind:Hide()
+                return
+            end
+            local ratio = sfH / scH
+            local barH  = math.max(20, math.floor(sfH * ratio))
+            ind:SetHeight(barH)
+            local scroll    = sf:GetVerticalScroll() or 0
+            local maxScroll = scH - sfH
+            local pct    = (maxScroll > 0) and (scroll / maxScroll) or 0
+            local travel = sfH - barH
+            ind:ClearAllPoints()
+            ind:SetPoint("TOPRIGHT", sf, "TOPRIGHT", -1, -(pct * travel))
+            ind:Show()
+        end
+
+        sf:SetScript("OnScrollRangeChanged", function() UpdateScrollIndicator() end)
+        sf:HookScript("OnMouseWheel",        function() UpdateScrollIndicator() end)
+
+        -- --- Re-parent content widgets into the scroll child ---
+        -- Only frameHeader is anchored directly to pf; every other
+        -- content widget chains to the previous one (widget-to-widget),
+        -- so anchors survive the SetParent() call intact.
+        local CONTENT_REFS = {
+            "frameHeader",
+            -- Frame / Spacing
+            "spacingRow", "spacingLabel", "spacingBox", "spacingMinus", "spacingPlus",
+            "bossTogetherCheck",
+            -- Stacks text
+            "stackTextSizeRow",    "stackTextSizeLabel",    "stackTextSizeBox",    "stackTextSizeMinus",    "stackTextSizePlus",
+            "stackTextOffsetXRow", "stackTextOffsetXLabel", "stackTextOffsetXBox", "stackTextOffsetXMinus", "stackTextOffsetXPlus",
+            "stackTextOffsetYRow", "stackTextOffsetYLabel", "stackTextOffsetYBox", "stackTextOffsetYMinus", "stackTextOffsetYPlus",
+            -- Cooldown text
+            "cooldownTextSizeRow",    "cooldownTextSizeLabel",    "cooldownTextSizeBox",    "cooldownTextSizeMinus",    "cooldownTextSizePlus",
+            "cooldownTextOffsetXRow", "cooldownTextOffsetXLabel", "cooldownTextOffsetXBox", "cooldownTextOffsetXMinus", "cooldownTextOffsetXPlus",
+            "cooldownTextOffsetYRow", "cooldownTextOffsetYLabel", "cooldownTextOffsetYBox", "cooldownTextOffsetYMinus", "cooldownTextOffsetYPlus",
+            -- Buffs / Debuffs header + rows
+            "buffDebuffHeader",
+            "buffGroupOffsetXRow",   "buffGroupOffsetXLabel",   "buffGroupOffsetXBox",   "buffGroupOffsetXMinus",   "buffGroupOffsetXPlus",
+            "buffGroupOffsetYRow",   "buffGroupOffsetYLabel",   "buffGroupOffsetYBox",   "buffGroupOffsetYMinus",   "buffGroupOffsetYPlus",
+            "buffGroupIconSizeRow",  "buffGroupIconSizeLabel",  "buffGroupIconSizeBox",  "buffGroupIconSizeMinus",  "buffGroupIconSizePlus",
+            "debuffGroupOffsetXRow", "debuffGroupOffsetXLabel", "debuffGroupOffsetXBox", "debuffGroupOffsetXMinus", "debuffGroupOffsetXPlus",
+            "debuffGroupOffsetYRow", "debuffGroupOffsetYLabel", "debuffGroupOffsetYBox", "debuffGroupOffsetYMinus", "debuffGroupOffsetYPlus",
+            "debuffGroupIconSizeRow","debuffGroupIconSizeLabel","debuffGroupIconSizeBox","debuffGroupIconSizeMinus","debuffGroupIconSizePlus",
+            -- Private Auras header + rows
+            "privateHeader",
+            "privatePreviewCheck",
+            "privateOffsetXRow", "privateOffsetXLabel", "privateOffsetXBox", "privateOffsetXMinus", "privateOffsetXPlus",
+            "privateOffsetYRow", "privateOffsetYLabel", "privateOffsetYBox", "privateOffsetYMinus", "privateOffsetYPlus",
+            "privateSizeRow",    "privateSizeLabel",    "privateSizeBox",    "privateSizeMinus",    "privateSizePlus",
+        }
+
+        for i = 1, #CONTENT_REFS do
+            local w = pf[CONTENT_REFS[i]]
+            if w and type(w.SetParent) == "function" then
+                w:SetParent(sc)
+            end
+        end
+
+        -- Re-anchor the first content widget to scroll-child top
+        -- (it was anchored to pf TOPLEFT which would pin it outside the scroll).
+        if pf.frameHeader then
+            pf.frameHeader:ClearAllPoints()
+            pf.frameHeader:SetPoint("TOPLEFT", sc, "TOPLEFT", 16, 0)
+        end
+
+        -- --- Auto-calculate scroll child height ---
+        local function MSUF_A2_RecalcScrollHeight()
+            if not pf:IsShown() or not sf:IsShown() then return end
+            local top = sc:GetTop()
+            if not top then
+                sc:SetHeight(600)   -- safe fallback
+                return
+            end
+            local lowestBottom = top
+            for i = 1, #CONTENT_REFS do
+                local w = pf[CONTENT_REFS[i]]
+                if w and type(w.GetBottom) == "function" then
+                    local ok2, b = pcall(w.GetBottom, w)
+                    if ok2 and b and b < lowestBottom then
+                        lowestBottom = b
+                    end
+                end
+            end
+            local h = math.max(200, (top - lowestBottom) + 28)
+            sc:SetHeight(h)
+            UpdateScrollIndicator()
+        end
+        pf._recalcScrollHeight = MSUF_A2_RecalcScrollHeight
+
+        -- Trigger height recalc on show (deferred so layout is ready)
+        pf:HookScript("OnShow", function()
+            sf:SetVerticalScroll(0)
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0,    MSUF_A2_RecalcScrollHeight)
+                C_Timer.After(0.15, MSUF_A2_RecalcScrollHeight)
+            end
+        end)
+
+        -- --- Resizable popup ---
+        pf:SetResizable(true)
+        if pf.SetResizeBounds then
+            pf:SetResizeBounds(300, 340, 500, 900)
+        elseif pf.SetMinResize then  -- legacy API fallback
+            pf:SetMinResize(300, 340)
+            pf:SetMaxResize(500, 900)
+        end
+
+        local grip = CreateFrame("Button", nil, pf)
+        grip:SetPoint("BOTTOMRIGHT", pf, "BOTTOMRIGHT", -3, 3)
+        grip:SetSize(16, 16)
+        grip:SetFrameLevel((pf:GetFrameLevel() or 0) + 30)
+        grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+        grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+        grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+
+        -- CRITICAL: The parent pf has RegisterForDrag("LeftButton") + OnDragStart
+        -- that calls StartMoving().  If we only call StartSizing() in OnMouseDown,
+        -- the parent's drag detection will fire once the drag threshold is reached
+        -- and override our sizing with a move.
+        -- Fix: temporarily disable SetMovable(false) so the parent's
+        -- "if self:IsMovable()" guard in OnDragStart fails.
+        grip:SetScript("OnMouseDown", function(self, button)
+            if button ~= "LeftButton" then return end
+            pf.__msufWasMovable = pf:IsMovable()
+            pf:SetMovable(false)
+            pf:StartSizing("BOTTOMRIGHT")
+        end)
+        grip:SetScript("OnMouseUp", function(self, button)
+            if button ~= "LeftButton" then return end
+            pf:StopMovingOrSizing()
+            if pf.__msufWasMovable then
+                pf:SetMovable(true)
+            end
+            pf.__msufWasMovable = nil
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, MSUF_A2_RecalcScrollHeight)
+            end
+        end)
+        pf._resizeGrip = grip
+
+        -- Safety: restore movable if popup hides mid-resize (Escape, combat, etc.)
+        pf:HookScript("OnHide", function(self)
+            if self.__msufWasMovable then
+                self:SetMovable(true)
+                self.__msufWasMovable = nil
+            end
+        end)
+
+        -- Keep scroll child width in sync on resize
+        pf:HookScript("OnSizeChanged", function(self, w)
+            w = tonumber(w) or 320
+            sc:SetWidth(math.max(100, w - SCROLL_SIDE_PAD * 2))
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, MSUF_A2_RecalcScrollHeight)
+            end
+        end)
+    end
+    -- === End scrollable + resizable wrapper ===
+
     return pf
 end
 
@@ -6208,6 +6419,10 @@ end
     end
     if pf.RefreshCopyAuraDropdown then
         pf.RefreshCopyAuraDropdown()
+    end
+    -- Recalc scroll height (boss toggle visibility may have changed layout)
+    if pf._recalcScrollHeight and C_Timer and C_Timer.After then
+        C_Timer.After(0, pf._recalcScrollHeight)
     end
     pf._msufAuras2PopupSyncing = false
 end

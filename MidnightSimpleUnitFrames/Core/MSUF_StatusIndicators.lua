@@ -366,59 +366,93 @@ local function _MSUF_UpdateStatusIcons(frame)
          return
     end
     if type(conf) ~= "table" then  return end
-    -- Test mode is global (sync across frames) but we accept per-frame legacy keys if present.
-    local testMode = ((type(g) == "table" and g.stateIconsTestMode == true) or (type(conf) == "table" and conf.stateIconsTestMode == true)) and true or false
-    local showCombat = _MSUF_ReadBool(conf, g, "showCombatStateIndicator", false)
-    local showRest = false
-    if frame._msufIsPlayer then
-        showRest = _MSUF_ReadBool(conf, g, "showRestingIndicator", false, "showRestedStateIndicator")
+
+    -- PERF: Cache resolved icon config per-frame. DB reads don't change in combat.
+    -- Cache invalidated when cachedConfig is cleared (config change).
+    local sic = frame._msufStatusIconsConf
+    if not sic then
+        local testMode = ((type(g) == "table" and g.stateIconsTestMode == true) or (type(conf) == "table" and conf.stateIconsTestMode == true)) and true or false
+        local showCombat = _MSUF_ReadBool(conf, g, "showCombatStateIndicator", false)
+        local showRest = false
+        if frame._msufIsPlayer then
+            showRest = _MSUF_ReadBool(conf, g, "showRestingIndicator", false, "showRestedStateIndicator")
+        end
+        local showRez = _MSUF_ReadBool(conf, g, "showIncomingResIndicator", false)
+        local showClass = false
+        if frame._msufIsTarget then
+            showClass = _MSUF_ReadBool(conf, g, "showClassificationIndicator", false)
+        end
+        local useMidnight = _MSUF_GetStatusIconsUseMidnight(conf, g)
+        local combatSymbol = _MSUF_ReadStr(conf, g, "combatStateIndicatorSymbol", "DEFAULT")
+        local restSymbol   = _MSUF_ReadStr(conf, g, "restedStateIndicatorSymbol", "DEFAULT", "restingStateIndicatorSymbol")
+        local rezSymbol    = _MSUF_ReadStr(conf, g, "incomingResIndicatorSymbol", "DEFAULT")
+        local iconAlpha = _MSUF_ReadNumber(conf, g, "stateIconsAlpha", 1)
+        local combatCorner = _MSUF_ReadStr(conf, g, "combatStateIndicatorAnchor", (type(g) == "table" and g.combatStateIndicatorPos) or "TOPLEFT", "combatStateIndicatorPos")
+        local combatX = _MSUF_ReadNumber(conf, g, "combatStateIndicatorOffsetX", 0)
+        local combatY = _MSUF_ReadNumber(conf, g, "combatStateIndicatorOffsetY", 0)
+        local combatSize = _MSUF_ReadNumber(conf, g, "combatStateIndicatorSize", 18)
+        local restCorner = _MSUF_ReadStr(conf, g, "restedStateIndicatorAnchor", combatCorner)
+        local restX = _MSUF_ReadNumber(conf, g, "restedStateIndicatorOffsetX", 0)
+        local restY = _MSUF_ReadNumber(conf, g, "restedStateIndicatorOffsetY", 0)
+        local restSize = _MSUF_ReadNumber(conf, g, "restedStateIndicatorSize", 18)
+        local rezCorner = _MSUF_ReadStr(conf, g, "incomingResIndicatorAnchor", (type(g) == "table" and g.incomingResIndicatorPos) or "TOPRIGHT", "incomingResIndicatorPos")
+        local rezX = _MSUF_ReadNumber(conf, g, "incomingResIndicatorOffsetX", 0)
+        local rezY = _MSUF_ReadNumber(conf, g, "incomingResIndicatorOffsetY", 0)
+        local rezSize = _MSUF_ReadNumber(conf, g, "incomingResIndicatorSize", 18)
+        local classCorner = _MSUF_ReadStr(conf, g, "classificationIndicatorAnchor", "TOPLEFT")
+        local classX = _MSUF_ReadNumber(conf, g, "classificationIndicatorOffsetX", 0)
+        local classY = _MSUF_ReadNumber(conf, g, "classificationIndicatorOffsetY", 0)
+        local classSize = _MSUF_ReadNumber(conf, g, "classificationIndicatorSize", 18)
+        if type(classSize) ~= "number" then classSize = 18 end
+        if classSize < 8 then classSize = 8 end
+        if classSize > 64 then classSize = 64 end
+        classSize = math.floor(classSize + 0.5)
+        sic = {
+            testMode = testMode, showCombat = showCombat, showRest = showRest,
+            showRez = showRez, showClass = showClass, useMidnight = useMidnight,
+            combatSymbol = combatSymbol, restSymbol = restSymbol, rezSymbol = rezSymbol,
+            iconAlpha = iconAlpha,
+            combatCorner = combatCorner, combatX = combatX, combatY = combatY, combatSize = combatSize,
+            restCorner = restCorner, restX = restX, restY = restY, restSize = restSize,
+            rezCorner = rezCorner, rezX = rezX, rezY = rezY, rezSize = rezSize,
+            classCorner = classCorner, classX = classX, classY = classY, classSize = classSize,
+            restNeedsPulse = (type(restSymbol) == "string" and string.find(restSymbol, "^rested_") ~= nil),
+        }
+        frame._msufStatusIconsConf = sic
     end
-    local showRez = _MSUF_ReadBool(conf, g, "showIncomingResIndicator", false)
+
+    local testMode = sic.testMode
+    -- Symbol textures (apply once per config, not per call)
     local combatIcon = frame.combatStateIndicatorIcon
     local restIcon = frame.restingIndicatorIcon
     local rezIcon = frame.incomingResIndicatorIcon
     local classIcon = frame.classificationIndicatorIcon
     local classText = frame.classificationIndicatorText
-        -- Safety: Summon was removed; if any leftover texture exists, hard-hide it.
+    -- Safety: Summon was removed; if any leftover texture exists, hard-hide it.
     local summonIcon = frame.summonIndicatorIcon
     if summonIcon and summonIcon.Hide then
         summonIcon:Hide()
     end
-    -- Symbol textures (selected via Options -> Status icons)
-    local useMidnight = _MSUF_GetStatusIconsUseMidnight(conf, g)
-    local combatSymbol = _MSUF_ReadStr(conf, g, "combatStateIndicatorSymbol", "DEFAULT")
-    local restSymbol   = _MSUF_ReadStr(conf, g, "restedStateIndicatorSymbol", "DEFAULT", "restingStateIndicatorSymbol")
-    local rezSymbol    = _MSUF_ReadStr(conf, g, "incomingResIndicatorSymbol", "DEFAULT")
-    -- Rested custom symbols get a gentle pulse to mimic Blizzard's feel.
-    _MSUF_ApplyStatusIconSymbolTexture(combatIcon, combatSymbol, useMidnight, false)
-    _MSUF_ApplyStatusIconSymbolTexture(restIcon,   restSymbol,   useMidnight, (type(restSymbol) == "string" and string.find(restSymbol, "^rested_") ~= nil))
-    _MSUF_ApplyStatusIconSymbolTexture(rezIcon,    rezSymbol,    useMidnight, false)
-local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffectingCombat(unit)) and true or false)))
-    local restOn = (showRest and (testMode or ((IsResting and IsResting()) and true or false)))
-    local rezOn = (showRez and (testMode or ((UnitHasIncomingResurrection and UnitHasIncomingResurrection(unit)) and true or false)))
-    -- Target classification (Boss/Elite/Rare)
-    local showClass = false
-    if frame._msufIsTarget then
-        showClass = _MSUF_ReadBool(conf, g, "showClassificationIndicator", false)
-    end
+    _MSUF_ApplyStatusIconSymbolTexture(combatIcon, sic.combatSymbol, sic.useMidnight, false)
+    _MSUF_ApplyStatusIconSymbolTexture(restIcon,   sic.restSymbol,   sic.useMidnight, sic.restNeedsPulse)
+    _MSUF_ApplyStatusIconSymbolTexture(rezIcon,    sic.rezSymbol,    sic.useMidnight, false)
+    local combatOn = (sic.showCombat and (testMode or ((UnitAffectingCombat and UnitAffectingCombat(unit)) and true or false)))
+    local restOn = (sic.showRest and (testMode or ((IsResting and IsResting()) and true or false)))
+    local rezOn = (sic.showRez and (testMode or ((UnitHasIncomingResurrection and UnitHasIncomingResurrection(unit)) and true or false)))
     local classState = nil
-    if showClass then
+    if sic.showClass then
         classState = testMode and "BOSS" or _MSUF_GetClassificationState(unit)
     end
-    local classOn = (showClass and classState ~= nil)
-    local iconAlpha = _MSUF_ReadNumber(conf, g, "stateIconsAlpha", 1)
+    local classOn = (sic.showClass and classState ~= nil)
+    local iconAlpha = sic.iconAlpha
     -- Combat layout
-    local combatCorner = _MSUF_ReadStr(conf, g, "combatStateIndicatorAnchor", (type(g) == "table" and g.combatStateIndicatorPos) or "TOPLEFT", "combatStateIndicatorPos")
-    local combatX = _MSUF_ReadNumber(conf, g, "combatStateIndicatorOffsetX", 0)
-    local combatY = _MSUF_ReadNumber(conf, g, "combatStateIndicatorOffsetY", 0)
-    local combatSize = _MSUF_ReadNumber(conf, g, "combatStateIndicatorSize", 18)
     if combatIcon then
         if combatOn then
-            if combatIcon._msufSizeStamp ~= combatSize then
-                combatIcon:SetSize(combatSize, combatSize)
-                combatIcon._msufSizeStamp = combatSize
+            if combatIcon._msufSizeStamp ~= sic.combatSize then
+                combatIcon:SetSize(sic.combatSize, sic.combatSize)
+                combatIcon._msufSizeStamp = sic.combatSize
             end
-            _MSUF_AnchorCorner(combatIcon, frame, combatCorner, combatX, combatY)
+            _MSUF_AnchorCorner(combatIcon, frame, sic.combatCorner, sic.combatX, sic.combatY)
             combatIcon:SetAlpha(iconAlpha)
             combatIcon:Show()
         else
@@ -427,20 +461,11 @@ local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffe
     end
     if restIcon then
         if restOn then
-            local restCorner = _MSUF_ReadStr(conf, g, "restedStateIndicatorAnchor", combatCorner)
-            -- NOTE: Rested icon offsets are intentionally independent from combat offsets (no implicit inheritance).
-            local restX = _MSUF_ReadNumber(conf, g, "restedStateIndicatorOffsetX", 0)
-            local restY = _MSUF_ReadNumber(conf, g, "restedStateIndicatorOffsetY", 0)
-            local restSize = _MSUF_ReadNumber(conf, g, "restedStateIndicatorSize", 18)
-            if restIcon._msufSizeStamp ~= restSize then
-                restIcon:SetSize(restSize, restSize)
-                restIcon._msufSizeStamp = restSize
+            if restIcon._msufSizeStamp ~= sic.restSize then
+                restIcon:SetSize(sic.restSize, sic.restSize)
+                restIcon._msufSizeStamp = sic.restSize
             end
-	            -- NOTE: Do NOT auto-stack Rested under Combat.
-	            -- Old profiles (pre-status-icons) don't have explicit Rested positioning keys yet;
-	            -- auto-stacking caused the Rested icon to *shift* when Combat toggled on/off.
-	            -- We always anchor Rested using its own configured corner + offsets.
-	            _MSUF_AnchorCorner(restIcon, frame, restCorner, restX, restY)
+            _MSUF_AnchorCorner(restIcon, frame, sic.restCorner, sic.restX, sic.restY)
             restIcon:SetAlpha(iconAlpha)
             restIcon:Show()
         else
@@ -450,15 +475,11 @@ local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffe
     end
     if rezIcon then
         if rezOn then
-            local rezCorner = _MSUF_ReadStr(conf, g, "incomingResIndicatorAnchor", (type(g) == "table" and g.incomingResIndicatorPos) or "TOPRIGHT", "incomingResIndicatorPos")
-            local rezX = _MSUF_ReadNumber(conf, g, "incomingResIndicatorOffsetX", 0)
-            local rezY = _MSUF_ReadNumber(conf, g, "incomingResIndicatorOffsetY", 0)
-            local rezSize = _MSUF_ReadNumber(conf, g, "incomingResIndicatorSize", 18)
-            if rezIcon._msufSizeStamp ~= rezSize then
-                rezIcon:SetSize(rezSize, rezSize)
-                rezIcon._msufSizeStamp = rezSize
+            if rezIcon._msufSizeStamp ~= sic.rezSize then
+                rezIcon:SetSize(sic.rezSize, sic.rezSize)
+                rezIcon._msufSizeStamp = sic.rezSize
             end
-            _MSUF_AnchorCorner(rezIcon, frame, rezCorner, rezX, rezY)
+            _MSUF_AnchorCorner(rezIcon, frame, sic.rezCorner, sic.rezX, sic.rezY)
             rezIcon:SetAlpha(iconAlpha)
             rezIcon:Show()
         else
@@ -466,23 +487,13 @@ local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffe
         end
     end
     -- Classification indicator: always render as TEXT (reliable even without Media assets)
-    -- Keep the texture slot hidden for future icon assets.
     if classIcon and classIcon.Hide then
         classIcon:Hide()
     end
     if classText then
         if classOn then
-            local classCorner = _MSUF_ReadStr(conf, g, "classificationIndicatorAnchor", "TOPLEFT")
-            local classX = _MSUF_ReadNumber(conf, g, "classificationIndicatorOffsetX", 0)
-            local classY = _MSUF_ReadNumber(conf, g, "classificationIndicatorOffsetY", 0)
-            local classSize = _MSUF_ReadNumber(conf, g, "classificationIndicatorSize", 18)
-            if type(classSize) ~= "number" then classSize = 18 end
-            if classSize < 8 then classSize = 8 end
-            if classSize > 64 then classSize = 64 end
-            classSize = math.floor(classSize + 0.5)
-            -- Size is now a FONT size; trigger the shared font pipeline when it changes.
-            if classText._msufClassSizeStamp ~= classSize then
-                classText._msufClassSizeStamp = classSize
+            if classText._msufClassSizeStamp ~= sic.classSize then
+                classText._msufClassSizeStamp = sic.classSize
                 if type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then
                     _G.MSUF_UpdateAllFonts_Immediate()
                 elseif type(_G.MSUF_UpdateAllFonts) == "function" then
@@ -491,14 +502,13 @@ local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffe
                     _G.UpdateAllFonts()
                 end
             end
-            _MSUF_AnchorCorner(classText, frame, classCorner, classX, classY)
+            _MSUF_AnchorCorner(classText, frame, sic.classCorner, sic.classX, sic.classY)
             classText:SetAlpha(iconAlpha)
-            -- Justification (avoids looking off on right anchors)
             if classText.SetJustifyH then
                 local j = "LEFT"
-                if classCorner == "CENTER" then
+                if sic.classCorner == "CENTER" then
                     j = "CENTER"
-                elseif classCorner == "TOPRIGHT" or classCorner == "BOTTOMRIGHT" then
+                elseif sic.classCorner == "TOPRIGHT" or sic.classCorner == "BOTTOMRIGHT" then
                     j = "RIGHT"
                 end
                 if classText._msufJustifyStamp ~= j then
@@ -523,6 +533,18 @@ local combatOn = (showCombat and (testMode or ((UnitAffectingCombat and UnitAffe
         end
     end
  end
+-- PERF: Upvalue frequently-called functions (avoid _G hash lookup in hot paths).
+local _MSUF_SetTextIfChanged = _G.MSUF_SetTextIfChanged
+local _MSUF_StatusSetText
+do
+    -- Resolve once; use direct call in hot path.
+    if type(_MSUF_SetTextIfChanged) == "function" then
+        _MSUF_StatusSetText = _MSUF_SetTextIfChanged
+    else
+        _MSUF_StatusSetText = function(fs, txt) fs:SetText(txt) end
+    end
+end
+
 -- ------------------------------------------------------------
 -- Status text update (calls status icons update at the end)
 -- ------------------------------------------------------------
@@ -531,12 +553,24 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
          return
     end
     local unit = frame.unit
-    local db = _G.MSUF_GetStatusIndicatorDB and _G.MSUF_GetStatusIndicatorDB() or nil
-    db = (type(db) == "table") and db or {}
-    local showAFK   = (db.showAFK == true)
-    local showDND   = (db.showDND == true)
-    local showDead  = (db.showDead == true)   -- also covers OFFLINE
-    local showGhost = (db.showGhost == true)
+    -- PERF: Cache resolved status indicator flags per-frame.
+    -- The DB doesn't change in combat; cache is invalidated when cachedConfig is cleared.
+    local sc = frame._msufStatusConf
+    if not sc then
+        local db = MSUF_GetStatusIndicatorDB and MSUF_GetStatusIndicatorDB() or nil
+        db = (type(db) == "table") and db or {}
+        sc = {
+            showAFK   = (db.showAFK == true),
+            showDND   = (db.showDND == true),
+            showDead  = (db.showDead == true),
+            showGhost = (db.showGhost == true),
+        }
+        frame._msufStatusConf = sc
+    end
+    local showAFK   = sc.showAFK
+    local showDND   = sc.showDND
+    local showDead  = sc.showDead
+    local showGhost = sc.showGhost
     local txt = ""
     if unit and UnitExists and UnitExists(unit) then
         if showDead and UnitIsConnected and (UnitIsConnected(unit) == false) then
@@ -584,20 +618,12 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
     local ovText = frame.statusIndicatorOverlayText
     local ovFrame = frame.statusIndicatorOverlayFrame
     if ovText and ovFrame then
-        if type(_G.MSUF_SetTextIfChanged) == "function" then
-            _G.MSUF_SetTextIfChanged(ovText, "")
-        else
-            ovText:SetText("")
-        end
+        _MSUF_StatusSetText(ovText, "")
         ovText:Hide()
         ovFrame:Hide()
     end
     if txt ~= "" then
-        if type(_G.MSUF_SetTextIfChanged) == "function" then
-            _G.MSUF_SetTextIfChanged(fs, txt)
-        else
-            fs:SetText(txt)
-        end
+        _MSUF_StatusSetText(fs, txt)
         if fs.SetIgnoreParentAlpha then
             fs:SetIgnoreParentAlpha((txt == "OFFLINE" or txt == "DEAD"))
         end
@@ -608,11 +634,7 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
             fs:SetIgnoreParentAlpha(false)
         end
         fs:SetAlpha(1)
-        if type(_G.MSUF_SetTextIfChanged) == "function" then
-            _G.MSUF_SetTextIfChanged(fs, "")
-        else
-            fs:SetText("")
-        end
+        _MSUF_StatusSetText(fs, "")
         fs:Hide()
     end
     _MSUF_UpdateStatusIcons(frame)

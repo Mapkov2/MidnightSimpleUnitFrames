@@ -727,9 +727,15 @@ end
 -- SECRET-SAFE classification: oUF approach — use IsAuraFilteredOutByInstanceID()
 -- to determine HELPFUL/HARMFUL instead of reading data.isHarmful (which is secret).
 -- If NOT filtered out by "HELPFUL" → it's a buff. Otherwise check "HARMFUL".
+--
+-- IMPORTANT: We use the event payload ONLY for classification (auraInstanceID).
+-- The actual cached data is ALWAYS re-fetched via GetAuraDataByAuraInstanceID
+-- because the event payload can have incomplete fields (.icon = nil/0 in WoW 12.0).
+-- This matches DeltaUpdate's approach and Blizzard's own CompactUnitFrame pattern.
 local function DeltaAdd(raw, unit, data, doTagImportant)
     if not data or not data.auraInstanceID then return true end  -- skip malformed, not a failure
     if not _isFiltered then return false end  -- API not available → full scan
+    if not _getByAid then return false end    -- Need full API for re-fetch
     local aid = data.auraInstanceID
 
     -- oUF-style classification: C API returns nil/boolean, never secret
@@ -740,6 +746,14 @@ local function DeltaAdd(raw, unit, data, doTagImportant)
         isHelpful = false
     else
         -- Aura matches neither filter (private aura?) — skip silently
+        return true
+    end
+
+    -- Re-fetch COMPLETE aura data from C API (event payload may be incomplete).
+    -- This is the same pattern DeltaUpdate uses — one C call per added aura.
+    local fullData = _getByAid(unit, aid)
+    if not fullData then
+        -- Aura vanished between event and our processing — harmless, skip.
         return true
     end
 
@@ -767,18 +781,18 @@ local function DeltaAdd(raw, unit, data, doTagImportant)
     -- Dedupe: if AID already tracked, replace in-place
     if aidMap[aid] then
         local idx = aidMap[aid]
-        list[idx] = data
-        EnrichAura(data, unit, aid, isHelpful, doTagImportant)
+        list[idx] = fullData
+        EnrichAura(fullData, unit, aid, isHelpful, doTagImportant)
         return true
     end
 
     -- Append
     count = count + 1
     raw[countKey] = count
-    list[count] = data
+    list[count] = fullData
     aidMap[aid] = count
 
-    EnrichAura(data, unit, aid, isHelpful, doTagImportant)
+    EnrichAura(fullData, unit, aid, isHelpful, doTagImportant)
     return true
 end
 

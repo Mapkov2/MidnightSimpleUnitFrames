@@ -2535,21 +2535,24 @@ end
 -- Export for legacy paths (some earlier helpers reference this as a global).
 -- Keeping this avoids blank/missing level text when a legacy full update runs.
 _G.MSUF_GetUnitLevelText = MSUF_GetUnitLevelText
+-- PERF: Cache function refs + constants at file scope (called 70-350x/sec in combat).
+local _MSUF_UnitHealthPercent = (type(UnitHealthPercent) == "function") and UnitHealthPercent or nil
+local _MSUF_ScaleTo100 = (CurveConstants and CurveConstants.ScaleTo100) or nil
 local function MSUF_GetUnitHealthPercent(unit)
-    if type(UnitHealthPercent) ~= "function" then return nil end
-    -- Direct call: UnitHealthPercent is a C-API (guaranteed callable).
-    -- Return value may be secret — caller must not do arithmetic/comparisons.
-    if CurveConstants and CurveConstants.ScaleTo100 then
-        return UnitHealthPercent(unit, true, CurveConstants.ScaleTo100)
+    local fn = _MSUF_UnitHealthPercent
+    if not fn then return nil end
+    if _MSUF_ScaleTo100 then
+        return fn(unit, true, _MSUF_ScaleTo100)
     end
-    return UnitHealthPercent(unit, true, true)
+    return fn(unit, true, true)
 end
+-- PERF: Cache abbreviation function at file scope (called 70-350x/sec).
+local _MSUF_AbbrNumFn = _G.ShortenNumber or _G.AbbreviateNumbers or _G.AbbreviateLargeNumbers
 local function MSUF_NumberToTextFast(v)
     if type(v) ~= "number" then
          return nil
     end
-    -- v is guaranteed plain number (type-checked above). Direct call, no FastCall overhead.
-    local abbr = _G.ShortenNumber or _G.AbbreviateNumbers or _G.AbbreviateLargeNumbers
+    local abbr = _MSUF_AbbrNumFn
     if abbr then return abbr(v) end
     return tostring(v)
 end
@@ -2619,30 +2622,32 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
     local hpStr = MSUF_NumberToTextFast(hp)
     local hpPct = MSUF_GetUnitHealthPercent(unit)
     local hasPct = (type(hpPct) == "number")
-    local g = MSUF_DB.general or {}
     local absorbText, absorbStyle = nil, nil
-    -- Per-unit absorb text display: resolve from unit override or fall back to general.
-    local _showAbsorbText = false
-    local _resolveAbsorb = ns.Bars and ns.Bars._ResolveAbsorbDisplay
-    if type(_resolveAbsorb) == "function" then
-        local _, showText = _resolveAbsorb(unit)
-        _showAbsorbText = showText
-    else
-        _showAbsorbText = (g.showTotalAbsorbAmount == true)
+    -- PERF: Cache absorb text display flag per-frame. Invalidated when cachedConfig is cleared
+    -- (config change). Most users have absorb text disabled → skip all absorb work entirely.
+    local showAbsorbCached = self._msufCachedShowAbsorbText
+    if showAbsorbCached == nil then
+        local g = MSUF_DB and MSUF_DB.general or {}
+        local _resolveAbsorb = ns.Bars and ns.Bars._ResolveAbsorbDisplay
+        if type(_resolveAbsorb) == "function" then
+            local _, showText = _resolveAbsorb(unit)
+            showAbsorbCached = showText and true or false
+        else
+            showAbsorbCached = (g.showTotalAbsorbAmount == true) and true or false
+        end
+        self._msufCachedShowAbsorbText = showAbsorbCached
     end
-    if _showAbsorbText and UnitGetTotalAbsorbs then
+    if showAbsorbCached and UnitGetTotalAbsorbs then
         if C_StringUtil and C_StringUtil.TruncateWhenZero then
-            -- Both are C-APIs; direct call is secret-safe. No closure allocation.
             local txt = C_StringUtil.TruncateWhenZero(UnitGetTotalAbsorbs(unit))
             if txt ~= nil then
                 absorbText = txt
                 absorbStyle = "SPACE"
             end
         else
-            -- Secret-safe fallback: C-side abbreviators accept secret values natively.
             local absorbValue = UnitGetTotalAbsorbs(unit)
             if absorbValue ~= nil then
-                local abbr = _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.AbbreviateNumbers
+                local abbr = _MSUF_AbbrNumFn or _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.AbbreviateNumbers
                 if abbr then
                     absorbText = abbr(absorbValue)
                     absorbStyle = "PAREN"
@@ -2653,7 +2658,7 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
             end
     end
     end
-    ns.Text.RenderHpMode(self, true, hpStr, hpPct, hasPct, conf, g, absorbText, absorbStyle)
+    ns.Text.RenderHpMode(self, true, hpStr, hpPct, hasPct, conf, nil, absorbText, absorbStyle)
  end
 function _G.MSUF_ApplyBossTestHpPreviewText(self, conf)
     if not self or not self.hpText then  return end
@@ -3118,7 +3123,14 @@ local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     if not didPowerBarSync then
         _MSUF_UFCore_UpdatePowerBarFast(self)
     end
-    MSUF_UpdateStatusIndicatorForFrame(self)
+    -- PERF: Rate-limit StatusIndicator to 4Hz (0.25s) during combat.
+    -- DEAD/GHOST/AFK/DND text and Combat/Rest/Rez icons don't change at 60fps.
+    -- Out of combat: always run (responsive to config changes).
+    local forceStatus = (ts[9] == nil)  -- [9] = statusAt
+    if forceStatus or (not InCombatLockdown()) or ((now - (ts[9] or 0)) >= 0.25) then
+        ts[9] = now
+        MSUF_UpdateStatusIndicatorForFrame(self)
+    end
  end
 function UpdateSimpleUnitFrame(self)
         -- Lazy-resolve split-module upvalues (Core/ files load after main)
@@ -5049,7 +5061,7 @@ end
     if type(ns.Castbars._InitPlayerCastbarPreviewToggle) == "function" then
         C_Timer.After(1.1, ns.Castbars._InitPlayerCastbarPreviewToggle)
     end
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89|r  |cff9ece6a Version: 2.06 |cff565f89|r  |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
+    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89|r |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
  end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then

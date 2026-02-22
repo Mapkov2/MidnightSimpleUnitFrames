@@ -1034,7 +1034,9 @@ end
     -- This lets users run a single profile across multiple characters without
     -- having to swap the spell whenever they change class.
     if gp.meleeSpellPerClass == nil then gp.meleeSpellPerClass = false end
+    if gp.meleeSpellPerSpec == nil then gp.meleeSpellPerSpec = false end
     if gp.nameplateMeleeSpellIDByClass == nil then gp.nameplateMeleeSpellIDByClass = {} end
+    if gp.nameplateMeleeSpellIDBySpec == nil then gp.nameplateMeleeSpellIDBySpec = {} end
     -- Auras: legacy auras DB removed in Patch 6D Step 2 (Auras 2.0 uses MSUF_DB.auras2)
     if MSUF_DB.auras ~= nil then MSUF_DB.auras = nil end
 -- Root toggle: Shorten unit names (Frames -> General)

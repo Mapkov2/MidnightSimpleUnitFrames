@@ -112,6 +112,14 @@ end
 
 API.IsEditModeActive = IsEditModeActive
 
+-- Force-set the cached edit-mode state (called by Events.OnAnyEditModeChanged
+-- to avoid the 100ms stale-cache race that re-enables previews after exit).
+local function ForceSetEditModeActive(active)
+    _editModeActive = (active == true)
+    _editModeCheckAt = GetTime() + 0.10
+end
+API.ForceSetEditModeActive = ForceSetEditModeActive
+
 
 -- DB access + config cache
 
@@ -1264,14 +1272,55 @@ end
 -- Flush
 
 
+-- PERF: Budget cap for aura flush. Shared with UFCore for combined frame budget.
+-- Own cap: 350μs. Shared total: 700μs (UFCore 350 + A2 350 max).
+-- In practice UFCore uses 50-200μs → A2 gets 500-650μs on most frames.
+-- Spiky frames (UFCore near cap): A2 gets min 150μs = enough for 1 unit.
+local _A2_FLUSH_BUDGET_US = 350  -- own cap (microseconds)
+local _A2_SHARED_BUDGET_US = 700 -- combined MSUF budget per frame
+local _A2_MIN_BUDGET_US = 150    -- minimum budget (always process ≥1 unit)
+local _debugprofilestop = debugprofilestop  -- microsecond timer (nil if unavailable)
+
 Flush = function()
     _isFlushing = true
     _dirtyWhileFlushing = false
     FlushScheduled = true
 
     local list, count = DirtySwap()
+    local startUs = _debugprofilestop and _debugprofilestop() or nil
+
+    -- PERF: Shared frame budget with UFCore. Deduct UFCore's usage from our cap.
+    local effectiveBudget = _A2_FLUSH_BUDGET_US
+    if startUs then
+        local ufcoreUsed = _G._MSUF_FrameBudgetUsed
+        local ufcoreStart = _G._MSUF_FrameBudgetStart
+        -- Only trust if UFCore ran recently (same frame = within ~20ms of us starting)
+        if ufcoreUsed and ufcoreStart and (startUs - ufcoreStart) < 20000 then
+            local remaining = _A2_SHARED_BUDGET_US - ufcoreUsed
+            if remaining < _A2_MIN_BUDGET_US then remaining = _A2_MIN_BUDGET_US end
+            if remaining < effectiveBudget then
+                effectiveBudget = remaining
+            end
+        end
+    end
+
+    local budgetHit = false
 
     for i = 1, count do
+        -- PERF: Budget check after each unit (not each aura icon).
+        if startUs and i > 1 then
+            local elapsed = _debugprofilestop() - startUs
+            if elapsed >= effectiveBudget then
+                -- Re-queue remaining units for next frame.
+                for j = i, count do
+                    local u = list[j]
+                    if u then MarkDirty(u, 0) end
+                end
+                budgetHit = true
+                break
+            end
+        end
+
         local unit = list[i]
         local entry = AurasByUnit[unit]
 
@@ -1295,11 +1344,11 @@ Flush = function()
 
     _isFlushing = false
 
-    if _dirtyWhileFlushing then
+    if _dirtyWhileFlushing or budgetHit then
         ScheduleFlush(0)
     end
 
-    if DirtyCount == 0 then
+    if DirtyCount == 0 and not budgetHit then
         FlushScheduled = false
         StopFlushDriver()
     end
@@ -1381,6 +1430,7 @@ local function _ClearPreviewContainer(container)
             icon._msufA2_previewKind = nil
             icon._msufA2_previewCDCounter = nil
             icon._msufA2_lastCommit = nil
+            icon._msufA2_lastTexAid = nil
             -- Hide preview CD text FontString so it doesn't bleed into real auras.
             local pvFS = icon._msufA2_previewCDText
             if pvFS then
@@ -1417,6 +1467,15 @@ local function ClearAllPreviews()
             entry._lastConfigGen = -1
             entry._msufA2_playerPreviewInit = nil
         end
+    end
+
+    -- Bug 2 fix: Force Masque reskin after clearing previews.
+    -- Preview icons modified cooldown/texture state that Masque skins
+    -- (e.g. Shadow) track internally. Without a reskin, stale overlay
+    -- state causes icons to appear very dark.
+    local MasqueMod = API.Masque
+    if MasqueMod and MasqueMod.ForceReskin then
+        MasqueMod.ForceReskin()
     end
 end
 
