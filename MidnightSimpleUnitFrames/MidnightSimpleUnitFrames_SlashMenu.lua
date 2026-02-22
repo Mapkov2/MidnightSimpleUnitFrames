@@ -53,16 +53,6 @@ local sf=panel.ScrollFrame or panel.scrollFrame or panel.scroll or panel.Scroll 
 end
 end
 local S={win=nil,content=nil,scale={},mirror={host=nil,currentKey="home",currentPanel=nil,homePanel=nil,homeToolsApi=nil,tipText=nil,},}
--- Transition helpers (populated after MSUF_Transitions loads; nil-safe fallback)
-local function _T() return ns.MSUF_Transitions end
-local function _TFadeIn(f,d,cb)  local t=_T() if t then t.FadeIn(f,d,cb)  elseif f and f.Show then f:Show() end end
-local function _TDismiss(f,d,cb) local t=_T() if t then t.Dismiss(f,d,cb) elseif f and f.Hide then f:Hide() end end
-local function _TScaleReveal(f,d,cb)  local t=_T() if t then t.ScaleReveal(f,d,cb)  else _TFadeIn(f,d,cb) end end
-local function _TScaleDismiss(f,d,cb) local t=_T() if t then t.ScaleDismiss(f,d,cb) else _TDismiss(f,d,cb) end end
-local function _TCancel(f) local t=_T() if t then t.Cancel(f) end end
-local TRANS_OPEN  = 0.15   -- main window open
-local TRANS_CLOSE = 0.12   -- main window close (faster = snappy)
-local TRANS_PAGE  = 0.10   -- page switch crossfade
 local function MSUF_UpdateHomePanel(panel) if not panel then return end
 local tip=S and S.mirror and S.mirror.tipText if not tip and _G and type(_G.MSUF_GetNextTip)=="function"then tip=_G.MSUF_GetNextTip()
 if S and S.mirror then S.mirror.tipText=tip end
@@ -2112,12 +2102,10 @@ end
 local function MSUF_IsCastbarKey(k) return k=="castbar"or k=="opt_castbar" end
 local function MSUF_Standalone_UpdateTitle(activeKey) if not(S.win and S.win._msufTitleFS and S.win._msufTitleFS.SetText)
 then return end
-local _ver = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
-local _vStr = (type(_ver) == "string" and _ver ~= "") and ("  |cff9ece6av" .. _ver .. "|r") or ""
-if activeKey=="home"then S.win._msufTitleFS:SetText("MSUF Menu" .. _vStr) return end
+if activeKey=="home"then S.win._msufTitleFS:SetText("MSUF Menu") return end
 local info=MSUF_GetMirrorPageInfo(activeKey)
-S.win._msufTitleFS:SetText(((info and info.title)
-or"MSUF Menu") .. _vStr) end
+S.win._msufTitleFS:SetText((info and info.title)
+or"MSUF Menu") end
 local function MSUF_Standalone_UpdateNav(activeKey) if not(S.win and S.win._msufNavButtons)
 then return end
 local buttons=S.win._msufNavButtons;
@@ -2197,14 +2185,13 @@ then MSUF_Standalone_SetCastbarTopButtonsHidden(false)
 end
 if S.mirror.currentPanel then MSUF_DetachMirroredPanel(S.mirror.currentPanel)
 S.mirror.currentPanel=nil end
-S.mirror.currentKey="home"if S.mirror.homePanel then _TFadeIn(S.mirror.homePanel,TRANS_PAGE)
+S.mirror.currentKey="home"if S.mirror.homePanel then if S.mirror.homePanel.Show then S.mirror.homePanel:Show()
+end
 MSUF_UpdateHomePanel(S.mirror.homePanel)
 end
 MSUF_Standalone_UpdateTitle("home")
 MSUF_Standalone_UpdateNav("home") return end
-if S.mirror.homePanel then _TCancel(S.mirror.homePanel)
-if S.mirror.homePanel.SetAlpha then S.mirror.homePanel:SetAlpha(1) end
-if S.mirror.homePanel.Hide then S.mirror.homePanel:Hide() end
+if S.mirror.homePanel and S.mirror.homePanel.Hide then S.mirror.homePanel:Hide()
 end
 local isCastbarKey=MSUF_IsCastbarKey(key)
 if S.mirror.currentKey==key and S.mirror.currentPanel and S.mirror.currentPanel.IsShown and S.mirror.currentPanel:IsShown()
@@ -2214,11 +2201,9 @@ MSUF_Standalone_UpdateNav(key) return end
 if S.mirror and MSUF_IsCastbarKey(S.mirror.currentKey)
 and not isCastbarKey then MSUF_Standalone_SetCastbarTopButtonsHidden(false)
 end
-local prevPanel = S.mirror.currentPanel
 if S.mirror.currentPanel then MSUF_DetachMirroredPanel(S.mirror.currentPanel)
 S.mirror.currentPanel=nil end
 S.mirror.currentKey=key S.mirror.currentPanel=MSUF_Standalone_AttachMirrorPanel(key)
-if S.mirror.currentPanel and S.mirror.currentPanel ~= prevPanel then _TFadeIn(S.mirror.currentPanel,TRANS_PAGE) end
 MSUF_Standalone_ApplySelection(key,subkey,isCastbarKey)
 MSUF_Standalone_AfterAttachFixups(key,isCastbarKey)
 MSUF_Standalone_UpdateTitle(key)
@@ -2401,7 +2386,6 @@ title:SetPoint("TOPLEFT",12,-10)
 title:SetText("MSUF Options")
 MSUF_SkinTitle(title)
 f._msufTitleFS=title local close=UI_CloseButton(f,"TOPRIGHT",f,"TOPRIGHT",-4,-4)
-close:SetScript("OnClick",function() _TScaleDismiss(f,TRANS_CLOSE) end)
 local function MSUF_SetPropagateKeyboardInputSafe(frame,enabled) if not frame or not frame.SetPropagateKeyboardInput then return end
 if type(InCombatLockdown)=="function"and InCombatLockdown()
 then frame._msufPendingPropagateKeyboard=enabled return end
@@ -2762,19 +2746,6 @@ else b:SetPoint("RIGHT",prev,"LEFT",-gap,0)
 end
 prev=b end
 end
-do
-    local aboutLine = presetsCard:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    aboutLine:SetPoint("BOTTOMLEFT", supportLabel, "TOPLEFT", 0, 4)
-    aboutLine:SetJustifyH("LEFT")
-    local aboutVer = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
-    local aboutStr = "by |cffccd0d9Mapko|r"
-    if type(aboutVer) == "string" and aboutVer ~= "" then
-        aboutStr = "v" .. aboutVer .. "  •  " .. aboutStr .. "  •  with help from |cffccd0d9R41z0r|r and the community"
-    end
-    aboutLine:SetText(aboutStr)
-    aboutLine:SetAlpha(0.65)
-    if MSUF_SkinMuted then pcall(MSUF_SkinMuted, aboutLine) end
-end
 local function MSUF_DashboardLayout() local wL=(colL and colL.GetWidth and colL:GetWidth())
 or 0;
 local wR=(colR and colR.GetWidth and colR:GetWidth())
@@ -2856,18 +2827,19 @@ local function MSUF_ToggleOptionsWindow(key,subkey) local w=MSUF_CreateOptionsWi
 if w:IsShown()
 then if key and S.mirror.currentKey~=key then MSUF_SwitchMirrorPage(key,subkey) return end
 if subkey then MSUF_SwitchMirrorPage(key or S.mirror.currentKey or"home",subkey) return end
-_TScaleDismiss(w,TRANS_CLOSE) return end
-w._msufInitialKey=key w._msufInitialSubKey=subkey or"home"w._msufInitialSubKey=subkey _TScaleReveal(w,TRANS_OPEN) end
+w:Hide() return end
+w._msufInitialKey=key w._msufInitialSubKey=subkey or"home"w._msufInitialSubKey=subkey w:Show() end
 local function MSUF_ShowOptionsWindow(key,subkey) local w=MSUF_CreateOptionsWindow()
 key=key or"home"if w.IsShown and w:IsShown()
 then if key and S and S.mirror and S.mirror.currentKey~=key then MSUF_SwitchMirrorPage(key,subkey)
 elseif key then MSUF_SwitchMirrorPage(key,subkey)
 end
 return w end
-w._msufInitialKey=key w._msufInitialSubKey=subkey _TScaleReveal(w,TRANS_OPEN)
+w._msufInitialKey=key w._msufInitialSubKey=subkey if w.Show then w:Show()
+end
 return w end
 local function MSUF_HideOptionsWindow() if S and S.win and S.win.IsShown and S.win:IsShown()
-then _TScaleDismiss(S.win,TRANS_CLOSE)
+and S.win.Hide then S.win:Hide()
 end
 end
 _G.MSUF_ShowStandaloneOptionsWindow=MSUF_ShowOptionsWindow _G.MSUF_OpenStandaloneOptionsWindow=MSUF_ShowOptionsWindow _G.MSUF_HideStandaloneOptionsWindow=MSUF_HideOptionsWindow _G.MSUF_OpenPage=function(key,subkey) key=(key or"home")
@@ -2911,7 +2883,6 @@ else openKey("castbar")
 end
 return end
 if first=="profiles"then openKey("profiles") return end
-if first=="versiontest"then if _G.MSUF_VersionCheck_DebugFakeUpdate then _G.MSUF_VersionCheck_DebugFakeUpdate() end return end
 return original(msg) end
 end
 SLASH_MSUFOPTIONS1="/msufoptions"SlashCmdList["MSUFOPTIONS"]=function() MSUF_ToggleOptionsWindow("main") end
