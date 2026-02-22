@@ -78,6 +78,15 @@ function MSUF_ReanchorTargetCastBar()
         local height = frame:GetHeight() or 18
         MSUF_SetWidthIfChanged(frame, width)
 
+        -- Keep the TARGET preview size 1:1 with the real bar.
+        -- In "auto width" mode (no explicit DB width while attached), the real bar tracks the
+        -- unitframe width. The preview must follow the same computed width/height or it will
+        -- drift after profile resets/imports/reloads.
+        if MSUF_TargetCastbarPreview and type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
+            local ph = tonumber(g.castbarTargetBarHeight) or tonumber(g.castbarGlobalHeight) or height
+            _G.MSUF_ApplyPlayerCastbarSizeAndLayout(MSUF_TargetCastbarPreview, g, width, ph)
+        end
+
         if frame.statusBar then
             MSUF_SetWidthIfChanged(frame.statusBar, width - height - 1)
         end
@@ -160,6 +169,12 @@ function MSUF_ReanchorFocusCastBar()
         end
         local height = frame:GetHeight() or 18
         MSUF_SetWidthIfChanged(frame, width)
+
+        -- Keep the FOCUS preview size 1:1 with the real bar (see Target notes above).
+        if MSUF_FocusCastbarPreview and type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
+            local ph = tonumber(g.castbarFocusBarHeight) or tonumber(g.castbarGlobalHeight) or height
+            _G.MSUF_ApplyPlayerCastbarSizeAndLayout(MSUF_FocusCastbarPreview, g, width, ph)
+        end
 
         if frame.statusBar then
             MSUF_SetWidthIfChanged(frame.statusBar, width - height - 1)

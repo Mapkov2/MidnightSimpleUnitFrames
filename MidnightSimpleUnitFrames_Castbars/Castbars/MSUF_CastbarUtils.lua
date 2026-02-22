@@ -112,6 +112,77 @@ do
 end
 
 -- =====================================================================
+-- Edit Mode Preview Hard-Sync
+--
+-- After profile reset/import/load (and /reload), DB values can be transient
+-- while the *real* castbar has already resolved its final runtime size
+-- (auto-width, unitframe-driven width, detach, scale). Previews that compute
+-- size from DB/defaults can drift from the real bar.
+--
+-- Fix: In MSUF Edit Mode, always hard-sync preview size/scale directly from
+-- the real castbar when the preview is positioned/shown.
+-- Preview-only: does not affect real castbar sizing.
+-- =====================================================================
+
+if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
+  function _G.MSUF_HardSyncCastbarPreview(preview, real)
+    if not preview or not real then
+      return
+    end
+
+    -- Frame size
+    if real.GetSize and preview.SetSize then
+      local w, h = real:GetSize()
+      if w and h and w > 0 and h > 0 then
+        preview:SetSize(w, h)
+      end
+    end
+
+    -- Frame scale
+    if real.GetScale and preview.SetScale then
+      local s = real:GetScale()
+      if s and s > 0 then
+        preview:SetScale(s)
+      end
+    end
+
+    -- StatusBar footprint (preview StatusBar is NOT SetAllPoints; must be resized too)
+    if preview.statusBar and preview.statusBar.SetSize then
+      if real.statusBar and real.statusBar.GetSize then
+        local sw, sh = real.statusBar:GetSize()
+        if sw and sh and sw > 0 and sh > 0 then
+          preview.statusBar:SetSize(sw, sh)
+        end
+      else
+        -- Best-effort fallback based on outer frame size
+        if preview.GetSize then
+          local w, h = preview:GetSize()
+          if w and h and w > 0 and h > 0 then
+            preview.statusBar:SetSize(w, math.max(4, h - 2))
+          end
+        end
+      end
+    end
+
+    -- Icon size
+    if preview.icon and preview.icon.SetSize and real.icon and real.icon.GetSize then
+      local iw, ih = real.icon:GetSize()
+      if iw and ih and iw > 0 and ih > 0 then
+        preview.icon:SetSize(iw, ih)
+      end
+    end
+
+    -- Player latency bar width (preview-only element)
+    if preview.latencyBar and preview.latencyBar.SetWidth and real.latencyBar and real.latencyBar.GetWidth then
+      local lw = real.latencyBar:GetWidth()
+      if lw and lw > 0 then
+        preview.latencyBar:SetWidth(lw)
+      end
+    end
+  end
+end
+
+-- =====================================================================
 -- Phase 1A: Canonical lazy EnsureDB  single definition for all files.
 -- After PLAYER_LOGIN, MSUF_DB is always populated; the nil-guard short-circuits.
 -- =====================================================================

@@ -1832,6 +1832,14 @@ function _G.MSUF_UpdateBossCastbarPreview()
         if uf and uf.IsShown and uf:IsShown() then
             MSUF_PositionBossCastbarPreview(f, i)
             MSUF_ApplyBossCastbarPreviewLayout(f, i)
+
+            -- Hard-sync preview size/scale to the real boss castbar (runtime truth)
+            -- to avoid profile apply/import timing drift.
+            if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
+                local real = (_G.MSUF_BossCastbars and _G.MSUF_BossCastbars[i]) or _G["MSUF_BossCastbar" .. i]
+                _G.MSUF_HardSyncCastbarPreview(f, real)
+            end
+
             f:Show()
         else
             f:Hide()

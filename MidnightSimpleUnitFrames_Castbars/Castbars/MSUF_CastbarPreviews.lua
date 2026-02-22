@@ -988,6 +988,13 @@ end
         local f = _G.MSUF_BossCastbarPreview or MSUF_CreateBossCastbarPreview_Fallback()
         MSUF_PositionBossCastbarPreview_Fallback()
         MSUF_ApplyBossCastbarPreviewLayout_Fallback()
+
+        -- Hard-sync fallback boss preview to the real boss castbar (runtime truth)
+        if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
+            local real = (_G.MSUF_BossCastbars and _G.MSUF_BossCastbars[1]) or _G.MSUF_BossCastbar
+            _G.MSUF_HardSyncCastbarPreview(f, real)
+        end
+
         f:Show()
     end
 end
@@ -1124,29 +1131,9 @@ function MSUF_PositionPlayerCastbarPreview()
         return
     end
 
-    -- HARD SYNC (size + scale): keep preview identical to the real player castbar.
-    -- This protects against profile reset/import ordering issues where DB values
-    -- are applied in a different order across LoD/core during /reload.
-    do
-        local real = _G.MSUF_PlayerCastbar or _G.PlayerCastingBarFrame or _G.CastingBarFrame
-        if real and real.GetSize and MSUF_PlayerCastbarPreview and MSUF_PlayerCastbarPreview.SetSize then
-            local rw, rh = real:GetSize()
-            if rw and rh and rw > 0 and rh > 0 then
-                local pw, ph = MSUF_PlayerCastbarPreview:GetSize()
-                if pw ~= rw or ph ~= rh then
-                    MSUF_PlayerCastbarPreview:SetSize(rw, rh)
-                end
-            end
-            if real.GetScale and MSUF_PlayerCastbarPreview.SetScale then
-                local rs = real:GetScale()
-                if rs and rs > 0 then
-                    local ps = MSUF_PlayerCastbarPreview:GetScale()
-                    if ps ~= rs then
-                        MSUF_PlayerCastbarPreview:SetScale(rs)
-                    end
-                end
-            end
-        end
+    -- Hard-sync preview to the real bar (runtime truth) to avoid profile apply/import timing drift.
+    if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
+        _G.MSUF_HardSyncCastbarPreview(MSUF_PlayerCastbarPreview, _G.MSUF_PlayerCastbar)
     end
 
     -- Core owns the unitframe table; refresh our reference (safe, edit-mode only).
@@ -1200,37 +1187,9 @@ function MSUF_PositionTargetCastbarPreview()
         return
     end
 
-    -- ============================================================
-    -- HARD SYNC: Preview size must always match the REAL castbar size.
-    --
-    -- Target/Focus real bars can use "auto width" (nil width key), which
-    -- follows the unitframe width. The preview is created from DB defaults
-    -- and (previously) never had its size updated during positioning.
-    -- After profile import/reset + /reload, this makes the preview drift.
-    --
-    -- Fix: whenever we (re)position the preview, copy real:GetSize() and
-    -- (when available) the inner statusBar size into the preview.
-    -- ============================================================
-    do
-        local real = _G.MSUF_TargetCastbar or _G.TargetCastBar
-        if real and real.GetSize and MSUF_TargetCastbarPreview and MSUF_TargetCastbarPreview.SetSize then
-            local rw, rh = real:GetSize()
-            if rw and rh and rw > 0 and rh > 0 then
-                local pw, ph = MSUF_TargetCastbarPreview:GetSize()
-                if pw ~= rw or ph ~= rh then
-                    MSUF_TargetCastbarPreview:SetSize(rw, rh)
-                end
-            end
-            if real.GetScale and MSUF_TargetCastbarPreview.SetScale then
-                local rs = real:GetScale()
-                if rs and rs > 0 then
-                    local ps = MSUF_TargetCastbarPreview:GetScale()
-                    if ps ~= rs then
-                        MSUF_TargetCastbarPreview:SetScale(rs)
-                    end
-                end
-            end
-        end
+    -- Hard-sync preview to the real bar (runtime truth) to avoid profile apply/import timing drift.
+    if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
+        _G.MSUF_HardSyncCastbarPreview(MSUF_TargetCastbarPreview, _G.MSUF_TargetCastbar)
     end
 
     UnitFrames = UnitFrames or _G.MSUF_UnitFrames
@@ -1295,27 +1254,9 @@ function MSUF_PositionFocusCastbarPreview()
         return
     end
 
-    -- HARD SYNC: keep preview size identical to real bar (see Target note above).
-    do
-        local real = _G.MSUF_FocusCastbar or _G.FocusCastBar
-        if real and real.GetSize and MSUF_FocusCastbarPreview and MSUF_FocusCastbarPreview.SetSize then
-            local rw, rh = real:GetSize()
-            if rw and rh and rw > 0 and rh > 0 then
-                local pw, ph = MSUF_FocusCastbarPreview:GetSize()
-                if pw ~= rw or ph ~= rh then
-                    MSUF_FocusCastbarPreview:SetSize(rw, rh)
-                end
-            end
-            if real.GetScale and MSUF_FocusCastbarPreview.SetScale then
-                local rs = real:GetScale()
-                if rs and rs > 0 then
-                    local ps = MSUF_FocusCastbarPreview:GetScale()
-                    if ps ~= rs then
-                        MSUF_FocusCastbarPreview:SetScale(rs)
-                    end
-                end
-            end
-        end
+    -- Hard-sync preview to the real bar (runtime truth) to avoid profile apply/import timing drift.
+    if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
+        _G.MSUF_HardSyncCastbarPreview(MSUF_FocusCastbarPreview, _G.MSUF_FocusCastbar)
     end
 
     UnitFrames = UnitFrames or _G.MSUF_UnitFrames
@@ -1413,9 +1354,38 @@ end
 
     end
 
+    -- Helper: compute preview size the same way the real bar does (supports "auto width" when attached).
+    local function GetAttachedWidthOrDB(widthKey, detachedFlag, unitKey, fallback)
+        local wv = tonumber(g[widthKey])
+        if not wv or wv <= 0 then
+            if not detachedFlag and UnitFrames and UnitFrames[unitKey] and UnitFrames[unitKey].GetWidth then
+                wv = UnitFrames[unitKey]:GetWidth()
+            end
+        end
+        if not wv or wv <= 0 then
+            wv = tonumber(g.castbarGlobalWidth) or fallback or 250
+        end
+        return wv
+    end
+    local function GetHeightOrDB(heightKey, fallback)
+        local hv = tonumber(g[heightKey])
+        if not hv or hv <= 0 then
+            hv = tonumber(g.castbarGlobalHeight)
+        end
+        if not hv or hv <= 0 then
+            hv = fallback or 18
+        end
+        return hv
+    end
+
     if UnitFrames and UnitFrames["target"] then
         local targetPreview = MSUF_TargetCastbarPreview or MSUF_CreateTargetCastbarPreview()
         if targetPreview and MSUF_PositionTargetCastbarPreview then
+            if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
+                local tw = GetAttachedWidthOrDB("castbarTargetBarWidth", g.castbarTargetDetached, "target", 250)
+                local th = GetHeightOrDB("castbarTargetBarHeight", 18)
+                _G.MSUF_ApplyPlayerCastbarSizeAndLayout(targetPreview, g, tw, th)
+            end
             MSUF_PositionTargetCastbarPreview()
             targetPreview:Show()
         end
@@ -1426,6 +1396,15 @@ end
     if UnitFrames and UnitFrames["focus"] then
         local focusPreview = MSUF_FocusCastbarPreview or MSUF_CreateFocusCastbarPreview()
         if focusPreview and MSUF_PositionFocusCastbarPreview then
+            if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
+                local fw = GetAttachedWidthOrDB("castbarFocusBarWidth", g.castbarFocusDetached, "focus", 250)
+                -- If focus is attached but has no unitframe yet, mirror target as a pragmatic fallback.
+                if (not fw or fw <= 0) and (UnitFrames and UnitFrames["target"] and UnitFrames["target"].GetWidth) then
+                    fw = UnitFrames["target"]:GetWidth()
+                end
+                local fh = GetHeightOrDB("castbarFocusBarHeight", 18)
+                _G.MSUF_ApplyPlayerCastbarSizeAndLayout(focusPreview, g, fw, fh)
+            end
             MSUF_PositionFocusCastbarPreview()
             focusPreview:Show()
         end
