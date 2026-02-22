@@ -5061,7 +5061,9 @@ end
     if type(ns.Castbars._InitPlayerCastbarPreviewToggle) == "function" then
         C_Timer.After(1.1, ns.Castbars._InitPlayerCastbarPreviewToggle)
     end
-    print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89|r |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
+    if not MSUF_DB or not MSUF_DB.general or MSUF_DB.general.showWelcomeMessage ~= false then
+        print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89|r |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
+    end
  end, nil, true)
 do
     if not _G.MSUF__BucketUpdateManager then

@@ -333,9 +333,9 @@ end
 
     local LEFT_W, RIGHT_W = 330, 330
 
-    local leftPanel = UI:MakePanel(miscGroup, "Updates", miscGroup, 0, -110, LEFT_W, 330)
-    local rightPanel = UI:MakePanel(miscGroup, "Unit info panel", leftPanel, LEFT_W, 0, RIGHT_W, 330)
-    local bottomPanel = UI:MakePanel(miscGroup, "Indicators", leftPanel, 0, -(330 + 16), LEFT_W + RIGHT_W, 180)
+    local leftPanel = UI:MakePanel(miscGroup, "Updates", miscGroup, 0, -110, LEFT_W, 396)
+    local rightPanel = UI:MakePanel(miscGroup, "Unit info panel", leftPanel, LEFT_W, 0, RIGHT_W, 396)
+    local bottomPanel = UI:MakePanel(miscGroup, "Indicators", leftPanel, 0, -(396 + 16), LEFT_W + RIGHT_W, 180)
 
     local centerDivider = miscGroup:CreateTexture(nil, "ARTWORK")
     centerDivider:SetColorTexture(1, 1, 1, 0.10)
@@ -514,6 +514,53 @@ end
         end,
     })
 
+
+    -- Welcome message & version check toggles (below sliders, still in Updates)
+    -- Note: StyleCheckbox references MSUF_DisableBlizzUFCheck which is created
+    -- later (right panel). We re-style on OnShow when the ref exists.
+    local function DeferredRestyle(cb)
+        local origOnShow = cb:GetScript("OnShow")
+        cb:SetScript("OnShow", function(self)
+            UI:StyleCheckbox(self)
+            if origOnShow then origOnShow(self) end
+        end)
+    end
+
+    local welcomeMsgCheck = UI:MakeCheck({
+        name   = "MSUF_ShowWelcomeMessageCheck",
+        parent = leftPanel,
+        template = "UICheckButtonTemplate",
+        anchor = sliders.ufcoreUrgent,
+        x = 0, y = -20,
+        label  = "Show welcome message on login",
+        get = function()
+            local g = EnsureGeneral()
+            return (g.showWelcomeMessage ~= false)
+        end,
+        set = function(v)
+            local g = EnsureGeneral()
+            g.showWelcomeMessage = v and true or false
+        end,
+    })
+    DeferredRestyle(welcomeMsgCheck)
+
+    local versionCheckCheck = UI:MakeCheck({
+        name   = "MSUF_VersionCheckEnabledCheck",
+        parent = leftPanel,
+        template = "UICheckButtonTemplate",
+        anchor = welcomeMsgCheck,
+        x = 0, y = -6,
+        label  = "Enable version check (peer-to-peer)",
+        get = function()
+            local g = EnsureGeneral()
+            return (g.versionCheckEnabled ~= false)
+        end,
+        set = function(v)
+            local g = EnsureGeneral()
+            g.versionCheckEnabled = v and true or false
+        end,
+    })
+    DeferredRestyle(versionCheckCheck)
 
     -------------------------------------------------------------------------
     -- Unit info panel & misc toggles (right panel)

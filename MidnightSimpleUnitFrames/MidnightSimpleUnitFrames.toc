@@ -70,6 +70,7 @@ Auras2\MSUF_A2_Events.lua
 MidnightSimpleUnitFrames_Colors.lua
 MidnightSimpleUnitFrames_Gameplay.lua
 MidnightSimpleUnitFrames_SlashMenu.lua
+MSUF_VersionCheck.lua
 MidnightSimpleUnitFrames.lua
 Core\MSUF_Text.lua
 Core\MSUF_Bars.lua

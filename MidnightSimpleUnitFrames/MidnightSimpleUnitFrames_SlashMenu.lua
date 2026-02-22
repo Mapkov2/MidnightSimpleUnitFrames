@@ -2911,6 +2911,7 @@ else openKey("castbar")
 end
 return end
 if first=="profiles"then openKey("profiles") return end
+if first=="versiontest"then if _G.MSUF_VersionCheck_DebugFakeUpdate then _G.MSUF_VersionCheck_DebugFakeUpdate() end return end
 return original(msg) end
 end
 SLASH_MSUFOPTIONS1="/msufoptions"SlashCmdList["MSUFOPTIONS"]=function() MSUF_ToggleOptionsWindow("main") end
