@@ -177,6 +177,11 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
         self.isDragging = true
         self.dragMoved = false
 
+        -- Undo/Redo integration:
+        -- Only create an undo snapshot once the user actually DRAGS (passes threshold),
+        -- so a simple click doesn't pollute the undo stack.
+        self._msufUndoFired = false
+
         local uiScale = UIParent:GetEffectiveScale() or 1
         local cx, cy = GetCursorPosition()
         cx, cy = cx / uiScale, cy / uiScale
@@ -216,6 +221,15 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
                     return
                 end
                 self.dragMoved = true
+
+                -- Fire undo snapshot exactly once per drag gesture.
+                if not self._msufUndoFired then
+                    self._msufUndoFired = true
+                    local before = _G.MSUF_EM_UndoBeforeChange
+                    if type(before) == "function" then
+                        before("castbar", kind, false)
+                    end
+                end
             end
 
             EnsureDB()
