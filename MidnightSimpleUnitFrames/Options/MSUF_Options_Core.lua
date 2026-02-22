@@ -3601,6 +3601,7 @@ local absorbAnchorOptions = {
     { key = 2, label = "Anchor to right side" },
 	    { key = 3, label = "Follow HP bar" },
 	    { key = 4, label = "Follow HP bar (overflow)" },
+	    { key = 5, label = "Reverse from max" },
 }
 local function MSUF_GetAbsorbAnchorMode()
     EnsureDB()

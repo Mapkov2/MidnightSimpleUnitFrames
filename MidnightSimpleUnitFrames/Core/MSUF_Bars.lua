@@ -441,7 +441,10 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
     -- 1/2: legacy (edge-anchored) with reverse-fill swap
     -- 3: follow current HP edge (Blizzard-style) by anchoring to the moving HP StatusBarTexture edge and clipping.
     -- 4: follow current HP edge (overflow) — same as 3 but absorb bar is NOT clipped, can extend beyond HP bar.
-    -- NOTE: Mode 3/4 are secret-safe (no HP arithmetic) and reanchor only when mode/reverse-fill/width changes.
+    -- 5: reverse from max — absorb fills from the HP bar's max-edge backwards toward current HP.
+    --    Shows effective HP pool (current HP + absorb relative to max). Uses full overlay (like 1/2)
+    --    but dynamically sets reverse-fill based on the HP bar's fill direction. Secret-safe.
+    -- NOTE: Mode 3/4/5 are secret-safe (no HP arithmetic).
     local function MSUF_ApplyAbsorbAnchorMode(self)
         if not self then  return end
 
@@ -450,22 +453,39 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
         local hpBar = self.hpBar
 
         -- Restore legacy overlay layout (full overlay over hpBar).
+        -- Mode 5 (reverse from max) also uses full overlay but with dynamic reverse-fill.
         if mode ~= 3 and mode ~= 4 then
-            if self._msufAbsorbAnchorModeStamp == mode and not self._msufAbsorbFollowActive then
+            -- For mode 5, the reverse-fill depends on the HP bar direction.
+            local hpReverse = false
+            if mode == 5 and hpBar and hpBar.GetReverseFill then
+                hpReverse = hpBar:GetReverseFill() and true or false
+            end
+
+            if self._msufAbsorbAnchorModeStamp == mode and not self._msufAbsorbFollowActive
+                and (mode ~= 5 or self._msufAbsorbFollowRF == hpReverse) then
                 return
             end
 
             self._msufAbsorbAnchorModeStamp = mode
             self._msufAbsorbFollowActive = nil
-            self._msufAbsorbFollowRF = nil
+            self._msufAbsorbFollowRF = (mode == 5) and hpReverse or nil
             self._msufAbsorbFollowW = nil
 
             if self._msufAbsorbFollowClip and self._msufAbsorbFollowClip.Hide then
                 self._msufAbsorbFollowClip:Hide()
             end
 
-            local absorbReverse = (mode ~= 1)
-            local healReverse   = not absorbReverse
+            local absorbReverse, healReverse
+            if mode == 5 then
+                -- Reverse from max: absorb fills from HP bar's max-edge backwards.
+                -- If HP fills L→R (normal): absorb fills R→L (reverse=true).
+                -- If HP fills R→L (reverse): absorb fills L→R (reverse=false).
+                absorbReverse = not hpReverse
+                healReverse   = hpReverse
+            else
+                absorbReverse = (mode ~= 1)
+                healReverse   = not absorbReverse
+            end
 
             if self.absorbBar then
                 if self.absorbBar.SetReverseFill then
@@ -644,7 +664,7 @@ local function MSUF_ApplyReverseFillBars(self, conf)
     -- Keep absorb/heal-absorb follow-HP anchoring in sync with reverse-fill changes.
     local g = MSUF_DB and MSUF_DB.general
     local absorbMode = _MSUF_ResolveAbsorbAnchor(self.unit)
-    if absorbMode == 3 or absorbMode == 4 then
+    if absorbMode == 3 or absorbMode == 4 or absorbMode == 5 then
         local apply = _G.MSUF_ApplyAbsorbAnchorMode
         if apply then
             apply(self)
