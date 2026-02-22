@@ -217,6 +217,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
     local conf = (MSUF_DB and key) and MSUF_DB[key] or nil
     if ns and ns.UF and ns.UF.IsDisabled and ns.UF.IsDisabled(conf) then  return end
     local isEditMode = (_G.MSUF_UnitEditModeActive == true)
+    local isCombatLocked = (F.InCombatLockdown and F.InCombatLockdown()) and true or false
     -- -----------------------------------------------------------------------
     -- Load Conditions gate (secret-safe, zero overhead when unused).
     -- conf.loadCondActive is a boolean flag maintained by Options UI.
@@ -228,7 +229,12 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
             if not frame._msufLoadCondHidden then
                 frame._msufLoadCondHidden = true
                 frame:SetAlpha(0)
-                if frame.EnableMouse then frame:EnableMouse(false) end
+                -- EnableMouse is protected on secure frames — defer during combat.
+                -- The existing PLAYER_REGEN_ENABLED → MSUF_DoAlphaRefresh will
+                -- re-run this path with InCombatLockdown() == false and flush it.
+                if frame.EnableMouse and (not isCombatLocked) then
+                    frame:EnableMouse(false)
+                end
             end
             return
         end
@@ -236,7 +242,9 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
     -- Restore from load-condition hide (condition cleared or Edit Mode entered).
     if frame._msufLoadCondHidden then
         frame._msufLoadCondHidden = nil
-        if frame.EnableMouse then frame:EnableMouse(true) end
+        if frame.EnableMouse and (not isCombatLocked) then
+            frame:EnableMouse(true)
+        end
     end
     local unit = frame.unit or key
     if not unit then  return end

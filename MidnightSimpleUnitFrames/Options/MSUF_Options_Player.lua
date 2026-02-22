@@ -3935,12 +3935,21 @@ local function ApplyAlphaOnly()
 do
     local specs = panel._msufLoadCondSpecs
     if specs then
+        -- Collect all load-cond checkboxes for combat enable/disable.
+        local allLoadCondCBs = {}
         for _, s in ipairs(specs) do
             local cb = panel[s[1]]
             local dbField = s[2]
             if cb then
+                allLoadCondCBs[#allLoadCondCBs + 1] = cb
                 cb:SetScript("OnClick", function(self)
                     if not IsFramesTab() then return end
+                    -- Block changes during combat (EnableMouse on secure frames = taint).
+                    if InCombatLockdown and InCombatLockdown() then
+                        -- Revert the visual check (click already toggled it).
+                        self:SetChecked(not self:GetChecked())
+                        return
+                    end
                     local conf = EnsureKeyDB()
                     conf[dbField] = self:GetChecked() and true or false
                     -- Recompute the fast-path flag (zero overhead when no conditions set).
@@ -3951,6 +3960,27 @@ do
                     if type(lcRefresh) == "function" then lcRefresh() end
                 end)
             end
+        end
+        -- Combat lockdown: grey out checkboxes on enter, restore on leave.
+        local function _SetLoadCondCBsEnabled(enabled)
+            for i = 1, #allLoadCondCBs do
+                local cb = allLoadCondCBs[i]
+                if enabled then
+                    if cb.Enable then cb:Enable() end
+                else
+                    if cb.Disable then cb:Disable() end
+                end
+            end
+        end
+        local lcCombatFrame = CreateFrame("Frame")
+        lcCombatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+        lcCombatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        lcCombatFrame:SetScript("OnEvent", function(_, event)
+            _SetLoadCondCBsEnabled(event == "PLAYER_REGEN_ENABLED")
+        end)
+        -- If we load mid-combat, disable immediately.
+        if InCombatLockdown and InCombatLockdown() then
+            _SetLoadCondCBsEnabled(false)
         end
     end
 end
