@@ -244,8 +244,18 @@ local function ApplyAfterRestore(snap)
             if type(fn) == "function" then fn(unit)
             elseif type(_G.ApplyAllSettings) == "function" then _G.ApplyAllSettings() end
         end
-        if unit == "boss" and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-            _G.MSUF_UpdateBossCastbarPreview()
+        if unit == "boss" then
+            -- Boss castbar needs explicit position + time apply;
+            -- MSUF_ApplyAllSettings_Immediate does NOT call these.
+            if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+                pcall(_G.MSUF_ApplyBossCastbarPositionSetting)
+            end
+            if type(_G.MSUF_ApplyBossCastbarTimeSetting) == "function" then
+                pcall(_G.MSUF_ApplyBossCastbarTimeSetting)
+            end
+            if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+                pcall(_G.MSUF_UpdateBossCastbarPreview)
+            end
         end
         -- Explicit reanchor for position changes (belt-and-suspenders)
         local REANCHOR = {
@@ -259,6 +269,21 @@ local function ApplyAfterRestore(snap)
         if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
             pcall(_G.MSUF_UpdateCastbarVisuals)
         end
+        -- Preview sync: reposition + resize preview to match real castbar
+        local PREVIEW_UPDATE = {
+            player = "MSUF_UpdatePlayerCastbarPreview",
+            target = "MSUF_UpdateTargetCastbarPreview",
+            focus  = "MSUF_UpdateFocusCastbarPreview",
+        }
+        local PREVIEW_POS = {
+            player = "MSUF_PositionPlayerCastbarPreview",
+            target = "MSUF_PositionTargetCastbarPreview",
+            focus  = "MSUF_PositionFocusCastbarPreview",
+        }
+        local pu = PREVIEW_UPDATE[unit]
+        if pu and type(_G[pu]) == "function" then pcall(_G[pu]) end
+        local pp = PREVIEW_POS[unit]
+        if pp and type(_G[pp]) == "function" then pcall(_G[pp]) end
         if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
             _G.MSUF_SyncCastbarPositionPopup(unit)
         end

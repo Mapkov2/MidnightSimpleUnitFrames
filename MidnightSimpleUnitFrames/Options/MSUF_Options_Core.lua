@@ -887,6 +887,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             if panel and panel.playerBasicsBox then
                 panel.playerBasicsBox:SetShown(isUnitFrame)
             end
+            if panel and panel.playerLoadCondBox then panel.playerLoadCondBox:SetShown(isUnitFrame) end
             if panel and panel.playerSizeBox then panel.playerSizeBox:SetShown(isUnitFrame) end
         end
         if editModeButton then

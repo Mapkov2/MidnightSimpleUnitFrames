@@ -216,6 +216,21 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
     if not frame or not frame.SetAlpha then  return end
     local conf = (MSUF_DB and key) and MSUF_DB[key] or nil
     if ns and ns.UF and ns.UF.IsDisabled and ns.UF.IsDisabled(conf) then  return end
+    -- Load Conditions: hide frame when per-unit conditions are met (mounted, vehicle, etc.).
+    -- Secret-safe: MSUF_LoadCond_ShouldHide uses only cached boolean state, no secret values.
+    local _lcShouldHide = _G.MSUF_LoadCond_ShouldHide
+    if type(_lcShouldHide) == "function" and _lcShouldHide(key) then
+        if not frame._msufLoadCondHidden then
+            frame._msufLoadCondHidden = true
+            frame:SetAlpha(0)
+            if frame.EnableMouse then frame:EnableMouse(false) end
+        end
+        return
+    end
+    if frame._msufLoadCondHidden then
+        frame._msufLoadCondHidden = nil
+        if frame.EnableMouse then frame:EnableMouse(true) end
+    end
     local unit = frame.unit or key
     if not unit then  return end
     -- Do not fade the local player by range; also keep existing "dead/disconnected" behavior.
