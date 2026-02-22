@@ -25,6 +25,21 @@ local GetCVarBool = GetCVarBool
 local math_min     = math.min
 local math_max     = math.max
 local IsAltKeyDown  = IsAltKeyDown
+local GetSpecialization    = GetSpecialization
+local GetSpecializationInfo = GetSpecializationInfo
+
+-- Per-spec helper: returns the current specialization ID (globally unique)
+-- or nil if unavailable.  Used as key in nameplateMeleeSpellIDBySpec.
+local function MSUF_GetPlayerSpecID()
+    if not GetSpecialization then return nil end
+    local specIndex = GetSpecialization()
+    if not specIndex or specIndex <= 0 then return nil end
+    if not GetSpecializationInfo then return nil end
+    local specID = GetSpecializationInfo(specIndex)
+    if not specID or specID <= 0 then return nil end
+    return specID
+end
+
 ------------------------------------------------------
 -- Small math helpers
 ------------------------------------------------------
@@ -255,6 +270,11 @@ end
     if type(g.crosshairOutRangeColor) ~= "table" then
         g.crosshairOutRangeColor = { 1, 0, 0 } -- default red
     end
+    -- Per-class / per-spec storage for the melee range spell
+    if g.meleeSpellPerClass == nil then g.meleeSpellPerClass = false end
+    if g.meleeSpellPerSpec == nil then g.meleeSpellPerSpec = false end
+    if type(g.nameplateMeleeSpellIDByClass) ~= "table" then g.nameplateMeleeSpellIDByClass = {} end
+    if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then g.nameplateMeleeSpellIDBySpec = {} end
     -- Shaman: player totem tracker (player-only for now)
     -- Default ON for Shamans on first run; otherwise default OFF.
     if g.enablePlayerTotems == nil then
@@ -500,9 +520,20 @@ local function MSUF_ResolveCrosshairRangeSpellIDFromGameplay(g)
         spellID = tonumber(g.meleeRangeSpellID) or 0
     end
     if spellID <= 0 then
-        -- New: optional per-class storage for the shared melee-range spell.
-        -- If enabled and a class entry exists, prefer that.
-        if g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
+        -- Per-spec storage takes priority over per-class.
+        -- Resolution order: per-spec -> per-class -> global fallback.
+        if g.meleeSpellPerSpec and type(g.nameplateMeleeSpellIDBySpec) == "table" then
+            local specID = MSUF_GetPlayerSpecID()
+            if specID then
+                local perSpec = tonumber(g.nameplateMeleeSpellIDBySpec[specID]) or 0
+                if perSpec > 0 then
+                    spellID = perSpec
+                end
+            end
+        end
+
+        -- Per-class fallback (only if per-spec didn't resolve)
+        if spellID <= 0 and g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
             local _, class = UnitClass("player")
             if class then
                 local perClass = tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0
@@ -3017,10 +3048,34 @@ perClassCB:SetPoint("TOPLEFT", meleeInput, "BOTTOMLEFT", 4, -6)
 perClassCB.Text:SetText("Store per class")
 panel.meleeSpellPerClassCheck = perClassCB
 
-local perClassHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-perClassHint:SetPoint("TOPLEFT", perClassCB, "BOTTOMLEFT", 20, -2)
-perClassHint:SetText("Keeps per character settings.")
-panel.meleeSpellPerClassHint = perClassHint
+-- Optional per-spec storage: each specialization can have its own range spell.
+-- Takes priority over per-class when both are enabled.
+local perSpecCB = CreateFrame("CheckButton", "MSUF_Gameplay_MeleeSpellPerSpecCheck", content, "InterfaceOptionsCheckButtonTemplate")
+perSpecCB:SetPoint("TOPLEFT", perClassCB, "BOTTOMLEFT", 0, 2)
+perSpecCB.Text:SetText("Store per spec")
+panel.meleeSpellPerSpecCheck = perSpecCB
+
+local perStorageHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+perStorageHint:SetPoint("TOPLEFT", perSpecCB, "BOTTOMLEFT", 20, -2)
+perStorageHint:SetText("Keeps per character / spec settings.")
+panel.meleeSpellPerStorageHint = perStorageHint
+
+-- Tooltips for per-class / per-spec (since hint label may be hidden in compact layout)
+local function _SetStorageTooltip(cb, title, body)
+    cb:SetScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(title, 1, 1, 1)
+            GameTooltip:AddLine(body, 1, 0.82, 0, true)
+            GameTooltip:Show()
+        end
+    end)
+    cb:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+end
+_SetStorageTooltip(perClassCB, "Store per class", "Each class keeps its own melee range spell.\nAllows one profile across multiple characters.")
+_SetStorageTooltip(perSpecCB, "Store per spec", "Each specialization keeps its own melee range spell.\nRequires 'Store per class' to be enabled.")
 
 local meleeSelected = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 meleeSelected:SetPoint("LEFT", meleeInput, "RIGHT", 12, 0)
@@ -3087,7 +3142,15 @@ end
 local function UpdateSelectedTextFromDB()
     local g = EnsureGameplayDefaults()
     local id = 0
-    if g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
+    -- Per-spec takes priority
+    if g.meleeSpellPerSpec and type(g.nameplateMeleeSpellIDBySpec) == "table" then
+        local specID = MSUF_GetPlayerSpecID()
+        if specID then
+            id = tonumber(g.nameplateMeleeSpellIDBySpec[specID]) or 0
+        end
+    end
+    -- Per-class fallback
+    if id <= 0 and g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
         local _, class = UnitClass("player")
         if class then
             id = tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0
@@ -3160,7 +3223,16 @@ MSUF_SelectMeleeSpell = function(spellID, spellName, preferNameInBox)
     spellID = tonumber(spellID) or 0
     if spellID <= 0 then return end
 
-    -- Persist selection (global + optional per-class)
+    -- Persist selection (global + optional per-class + optional per-spec)
+    if g.meleeSpellPerSpec then
+        if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then
+            g.nameplateMeleeSpellIDBySpec = {}
+        end
+        local specID = MSUF_GetPlayerSpecID()
+        if specID then
+            g.nameplateMeleeSpellIDBySpec[specID] = spellID
+        end
+    end
     if g.meleeSpellPerClass then
         if type(g.nameplateMeleeSpellIDByClass) ~= "table" then
             g.nameplateMeleeSpellIDByClass = {}
@@ -3245,6 +3317,15 @@ meleeInput:SetScript("OnTextChanged", function(self)
 
     local asNum = tonumber(txt)
     if asNum and asNum > 0 then
+        if g.meleeSpellPerSpec then
+            if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then
+                g.nameplateMeleeSpellIDBySpec = {}
+            end
+            local specID = MSUF_GetPlayerSpecID()
+            if specID then
+                g.nameplateMeleeSpellIDBySpec[specID] = asNum
+            end
+        end
         if g.meleeSpellPerClass then
             if type(g.nameplateMeleeSpellIDByClass) ~= "table" then
                 g.nameplateMeleeSpellIDByClass = {}
@@ -3304,6 +3385,50 @@ perClassCB:SetScript("OnClick", function(self)
                 if not g.nameplateMeleeSpellIDByClass[class] or tonumber(g.nameplateMeleeSpellIDByClass[class]) <= 0 then
                     g.nameplateMeleeSpellIDByClass[class] = tonumber(g.nameplateMeleeSpellID) or 0
                 end
+            end
+        end
+    else
+        -- If per-class is disabled, per-spec makes no sense either.
+        g.meleeSpellPerSpec = false
+        if perSpecCB then perSpecCB:SetChecked(false) end
+        if perSpecCB then perSpecCB:SetEnabled(false) end
+    end
+
+    -- Enable/disable per-spec checkbox based on per-class state
+    if perSpecCB then perSpecCB:SetEnabled(want) end
+
+    -- Refresh UI + apply immediately.
+    if panel and panel.refresh then
+        panel:refresh()
+    end
+    ns.MSUF_RequestGameplayApply()
+end)
+
+-- Per-spec checkbox behavior (only meaningful when per-class is also enabled).
+perSpecCB:SetScript("OnClick", function(self)
+    local g = EnsureGameplayDefaults()
+    local want = self:GetChecked() and true or false
+    g.meleeSpellPerSpec = want
+    if want then
+        if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then
+            g.nameplateMeleeSpellIDBySpec = {}
+        end
+        -- Seed spec entry from current per-class or global spell if missing.
+        local specID = MSUF_GetPlayerSpecID()
+        if specID then
+            if not g.nameplateMeleeSpellIDBySpec[specID] or tonumber(g.nameplateMeleeSpellIDBySpec[specID]) <= 0 then
+                -- Try per-class first, then global
+                local seed = 0
+                if g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
+                    local _, class = UnitClass("player")
+                    if class then
+                        seed = tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0
+                    end
+                end
+                if seed <= 0 then
+                    seed = tonumber(g.nameplateMeleeSpellID) or 0
+                end
+                g.nameplateMeleeSpellIDBySpec[specID] = seed
             end
         end
     end
@@ -4086,6 +4211,22 @@ _totemsLeftBottom = totemsDragHint
             meleeSharedWarn:ClearAllPoints()
             meleeSharedWarn:SetPoint("BOTTOMLEFT", meleeSelected, "TOPLEFT", 0, 4)
         end
+
+        -- Position per-class / per-spec checkboxes inline (horizontal) in the right column
+        -- to avoid vertical overlap with the thickness/size sliders below.
+        -- Layout:  Selected: Backstab (53)   [✓] Store per class
+        --          Used by: Crosshair color  [✓] Store per spec
+        if perClassCB then
+            perClassCB:ClearAllPoints()
+            perClassCB:SetPoint("LEFT", meleeSelected, "RIGHT", 8, 0)
+        end
+        if perSpecCB then
+            perSpecCB:ClearAllPoints()
+            perSpecCB:SetPoint("LEFT", meleeUsedBy, "RIGHT", 8, 0)
+        end
+        if panel.meleeSpellPerStorageHint then
+            panel.meleeSpellPerStorageHint:Hide()
+        end
     end
 
     -- Crosshair preview (in-menu)
@@ -4274,7 +4415,9 @@ _totemsLeftBottom = totemsDragHint
     local _MSUF_GAMEPLAY_DEFAULT_KEYS = {
         "nameplateMeleeSpellID",
         "meleeSpellPerClass",
+        "meleeSpellPerSpec",
         "nameplateMeleeSpellIDByClass",
+        "nameplateMeleeSpellIDBySpec",
 
         "combatOffsetX",
         "combatOffsetY",
@@ -4337,7 +4480,15 @@ _totemsLeftBottom = totemsDragHint
         local meleeInput = self.meleeSpellInput
         if meleeInput then
             local id = 0
-            if g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
+            -- Per-spec takes priority
+            if g.meleeSpellPerSpec and type(g.nameplateMeleeSpellIDBySpec) == "table" then
+                local specID = MSUF_GetPlayerSpecID()
+                if specID then
+                    id = tonumber(g.nameplateMeleeSpellIDBySpec[specID]) or 0
+                end
+            end
+            -- Per-class fallback
+            if id <= 0 and g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
                 local _, class = UnitClass("player")
                 if class then
                     id = tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0
@@ -4351,6 +4502,11 @@ _totemsLeftBottom = totemsDragHint
 
         if self.meleeSpellPerClassCheck then
             self.meleeSpellPerClassCheck:SetChecked(g.meleeSpellPerClass and true or false)
+        end
+        if self.meleeSpellPerSpecCheck then
+            self.meleeSpellPerSpecCheck:SetChecked(g.meleeSpellPerSpec and true or false)
+            -- Per-spec only meaningful when per-class is on
+            self.meleeSpellPerSpecCheck:SetEnabled(g.meleeSpellPerClass and true or false)
         end
         if UpdateSelectedTextFromDB then
             UpdateSelectedTextFromDB()
