@@ -10,6 +10,15 @@ ns.Util   = ns.Util   or {}
 ns.Cache  = ns.Cache  or {}
 ns.Compat = ns.Compat or {}
 -- =========================================================================
+-- Clique / click-casting integration
+-- Initialize the global table early so compliant addons (Clique etc.) can
+-- discover our frames regardless of load order.  This is safe and does
+-- nothing on its own — it just enables Clique to come along later and
+-- pick up the frames for registration.
+-- =========================================================================
+if not ClickCastFrames then ClickCastFrames = {} end
+
+-- =========================================================================
 -- PERF LOCALS (core runtime)
 --  - Reduce global table lookups in high-frequency event/render paths.
 --  - Secret-safe: localizing function references only (no value comparisons).
@@ -4522,7 +4531,6 @@ local function CreateSimpleUnitFrame(unit)
     f:SetAttribute("unit", unit)
     f:SetAttribute("*type1", "target")
     f:SetAttribute("*type2", "togglemenu")
-    if ClickCastFrames then ClickCastFrames[f] = true end
     if not f._msufHpSpacerSelectHooked then
         f._msufHpSpacerSelectHooked = true
         f:HookScript("OnMouseDown", ns.UF.HpSpacerSelect_OnMouseDown)
@@ -4646,6 +4654,10 @@ local function CreateSimpleUnitFrame(unit)
     f.UpdateHighlightColor = ns.UF.UpdateHighlightColor
     f:SetScript("OnEnter", ns.UF.Unitframe_OnEnter)
     f:SetScript("OnLeave", ns.UF.Unitframe_OnLeave)
+    -- Clique / click-casting: register AFTER OnEnter/OnLeave are set.
+    -- Clique wraps these scripts; if we register before they exist, Clique
+    -- has nothing to wrap and our later SetScript overwrites its hooks.
+    ClickCastFrames[f] = true
     if f.targetPowerBar and f.hpBar then
         MSUF_ApplyPowerBarEmbedLayout(f)
     end

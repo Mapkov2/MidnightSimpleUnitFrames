@@ -6,7 +6,7 @@
 ## Version: 2.2
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
-## OptionalDeps: Masque, LibSharedMedia-3.0
+## OptionalDeps: Masque, LibSharedMedia-3.0, Clique
 ## X-Wago-ID: XKq9aoKy
 ## X-Website: https://discord.gg/JQnhZXnTAK
 ## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU
