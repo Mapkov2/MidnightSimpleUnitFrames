@@ -658,6 +658,7 @@ local MSUF_COPY_BASIC_FIELDS = {
     "loadCondHideSolo",
     "loadCondHideInGroup",
     "loadCondHideInInstance",
+    "loadCondActive",
 }
 local MSUF_COPY_INDICATOR_FIELDS = {
     "showLeaderIcon",
@@ -2685,6 +2686,9 @@ end
             end
         end
     end
+    -- Ensure the fast-path flag is in sync (covers profile import/Copy-To/DB reset).
+    local lcRecompute = _G.MSUF_LoadCond_RecomputeActive
+    if type(lcRecompute) == "function" then lcRecompute(conf) end
     -- Unit Alpha (in/out of combat) [spec-driven]
     local excludeTP = (conf.alphaExcludeTextPortrait == true)
     if panel.playerAlphaExcludeTextPortraitCB then
@@ -3939,6 +3943,9 @@ do
                     if not IsFramesTab() then return end
                     local conf = EnsureKeyDB()
                     conf[dbField] = self:GetChecked() and true or false
+                    -- Recompute the fast-path flag (zero overhead when no conditions set).
+                    local recompute = _G.MSUF_LoadCond_RecomputeActive
+                    if type(recompute) == "function" then recompute(conf) end
                     -- Trigger load conditions re-evaluation immediately.
                     local lcRefresh = _G.MSUF_LoadCond_RefreshAll
                     if type(lcRefresh) == "function" then lcRefresh() end

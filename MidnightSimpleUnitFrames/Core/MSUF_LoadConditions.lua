@@ -97,21 +97,28 @@ end
 -- ---------------------------------------------------------------------------
 -- Core evaluator: returns true if the frame for `key` should be hidden.
 -- Zero allocation, zero secret-value access, pure boolean logic.
+-- IMPORTANT: Only called when conf.loadCondActive == true (Alpha hook gate).
 -- ---------------------------------------------------------------------------
 local function MSUF_LoadCond_ShouldHide(key)
     if not key then return false end
+    -- Edit Mode bypass: never hide frames while user is positioning/dragging.
+    if _G.MSUF_UnitEditModeActive then return false end
     local db = _G.MSUF_DB
     if not db then return false end
     local conf = db[key]
     if not conf then return false end
 
-    -- Fast-exit: if no load conditions are set, nothing to check.
     -- Each check is a simple boolean field read + cached state read.
     if conf.loadCondHideMounted     and _state.mounted   then return true end
     if conf.loadCondHideInVehicle   and _state.vehicle    then return true end
     if conf.loadCondHideResting     and _state.resting    then return true end
-    if conf.loadCondHideInCombat    and _state.combat     then return true end
-    if conf.loadCondHideOutOfCombat and (not _state.combat) then return true end
+    -- Combat: read MSUF_InCombat directly instead of cached _state.combat.
+    -- The Alpha event frame fires PLAYER_REGEN_* before our event frame (TOC order),
+    -- so _state.combat can be stale by one frame when MSUF_RefreshAllUnitAlphas runs.
+    -- Reading the global eliminates this race entirely.
+    local inCombat = (_G.MSUF_InCombat == true)
+    if conf.loadCondHideInCombat    and inCombat       then return true end
+    if conf.loadCondHideOutOfCombat and (not inCombat)  then return true end
     if conf.loadCondHideStealthed   and _state.stealthed  then return true end
     if conf.loadCondHideSolo        and _state.solo       then return true end
     if conf.loadCondHideInGroup     and _state.inGroup    then return true end
@@ -120,6 +127,26 @@ local function MSUF_LoadCond_ShouldHide(key)
     return false
 end
 _G.MSUF_LoadCond_ShouldHide = MSUF_LoadCond_ShouldHide
+
+-- ---------------------------------------------------------------------------
+-- loadCondActive flag: set to true when ANY condition is checked for a unit,
+-- false/nil when all unchecked.  The Alpha hook reads this single boolean
+-- BEFORE calling ShouldHide → zero function-call overhead when unused.
+-- ---------------------------------------------------------------------------
+local function MSUF_LoadCond_RecomputeActive(conf)
+    if not conf then return end
+    local active = (conf.loadCondHideMounted == true)
+                or (conf.loadCondHideInVehicle == true)
+                or (conf.loadCondHideResting == true)
+                or (conf.loadCondHideInCombat == true)
+                or (conf.loadCondHideOutOfCombat == true)
+                or (conf.loadCondHideStealthed == true)
+                or (conf.loadCondHideSolo == true)
+                or (conf.loadCondHideInGroup == true)
+                or (conf.loadCondHideInInstance == true)
+    conf.loadCondActive = active or false
+end
+_G.MSUF_LoadCond_RecomputeActive = MSUF_LoadCond_RecomputeActive
 
 -- ---------------------------------------------------------------------------
 -- Apply visibility to all unitframes.  Called when any tracked state changes.
@@ -173,9 +200,74 @@ end)
 -- Initial state snapshot (safe even before login because APIs return defaults).
 _RefreshAll()
 
+-- ---------------------------------------------------------------------------
+-- Boot-time loadCondActive recompute: ensures the fast-path flag is correct
+-- even after profile import/load where the flag might not have been set.
+-- Runs once on PLAYER_ENTERING_WORLD after MSUF_DB is guaranteed to exist.
+-- ---------------------------------------------------------------------------
+do
+    local _bootDone = false
+    local _UNIT_KEYS = { "player", "target", "focus", "pet", "boss", "targettarget" }
+    local bootFrame = CreateFrame("Frame")
+    bootFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    bootFrame:SetScript("OnEvent", function(self)
+        if _bootDone then return end
+        _bootDone = true
+        self:UnregisterAllEvents()
+        self:SetScript("OnEvent", nil)
+        local db = _G.MSUF_DB
+        if type(db) ~= "table" then return end
+        for i = 1, #_UNIT_KEYS do
+            local conf = db[_UNIT_KEYS[i]]
+            if type(conf) == "table" then
+                MSUF_LoadCond_RecomputeActive(conf)
+            end
+        end
+    end)
+end
+
 -- Expose for debug / external modules.
 _G.MSUF_LoadCond_State = _state
 _G.MSUF_LoadCond_RefreshAll = function()
     _RefreshAll()
     _ScheduleRefresh()
+end
+
+-- ---------------------------------------------------------------------------
+-- Edit Mode exit hook: post-hook MSUF_RefreshAllUnitVisibilityDrivers.
+-- When forceShow transitions to false (Edit Mode deactivation), schedule an
+-- alpha refresh so load conditions apply immediately without waiting for the
+-- next event.  This is a one-time hook installed at boot — zero runtime cost
+-- when Edit Mode is not in use.
+-- ---------------------------------------------------------------------------
+do
+    local _hooked = false
+    local _origVisDriverFn = nil
+    local function _TryHookVisDrivers()
+        if _hooked then return end
+        local orig = _G.MSUF_RefreshAllUnitVisibilityDrivers
+        if type(orig) ~= "function" then return end
+        _origVisDriverFn = orig
+        _hooked = true
+        _G.MSUF_RefreshAllUnitVisibilityDrivers = function(forceShow, ...)
+            _origVisDriverFn(forceShow, ...)
+            -- When exiting Edit Mode (forceShow=false), trigger alpha refresh.
+            -- This ensures load conditions + alpha sliders re-evaluate immediately.
+            if (not forceShow) and (not _G.MSUF_UnitEditModeActive) then
+                _ScheduleRefresh()
+            end
+        end
+    end
+    -- The visibility driver function is defined in MidnightSimpleUnitFrames.lua (earlier in TOC).
+    -- Try to hook immediately; if not yet available, defer to PLAYER_ENTERING_WORLD.
+    _TryHookVisDrivers()
+    if not _hooked then
+        local hookFrame = CreateFrame("Frame")
+        hookFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        hookFrame:SetScript("OnEvent", function(self)
+            _TryHookVisDrivers()
+            self:UnregisterAllEvents()
+            self:SetScript("OnEvent", nil)
+        end)
+    end
 end
