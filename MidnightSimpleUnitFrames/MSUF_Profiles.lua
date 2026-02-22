@@ -369,6 +369,30 @@ function MSUF_DeleteProfile(name)
     end
     print("|cffffd700MSUF:|r Profile '"..name.."' deleted.")
  end
+function MSUF_CopyProfile(sourceName, destName)
+    if not sourceName or sourceName == "" then
+        print("|cffff0000MSUF:|r No source profile specified.")
+        return false
+    end
+    if not destName or destName == "" then
+        print("|cffff0000MSUF:|r No destination name specified.")
+        return false
+    end
+    MSUF_GlobalDB = MSUF_GlobalDB or {}
+    MSUF_GlobalDB.profiles = MSUF_GlobalDB.profiles or {}
+    local src = MSUF_GlobalDB.profiles[sourceName]
+    if not src then
+        print("|cffff0000MSUF:|r Source profile '"..sourceName.."' not found.")
+        return false
+    end
+    if MSUF_GlobalDB.profiles[destName] then
+        print("|cffff0000MSUF:|r Profile '"..destName.."' already exists.")
+        return false
+    end
+    MSUF_GlobalDB.profiles[destName] = CopyTable(src)
+    print("|cff00ff00MSUF:|r Copied '"..sourceName.."' → '"..destName.."'.")
+    return true
+end
 function MSUF_GetAllProfiles()
     local list = {}
     if MSUF_GlobalDB and MSUF_GlobalDB.profiles then

@@ -6,7 +6,13 @@
 ## Version: 2.1
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
+## OptionalDeps: Masque, LibSharedMedia-3.0
 ## X-Wago-ID: XKq9aoKy
+## X-Website: https://discord.gg/JQnhZXnTAK
+## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU
+## AddonCompartmentFunc: MSUF_AddonCompartment_OnClick
+## AddonCompartmentFuncOnEnter: MSUF_AddonCompartment_OnEnter
+## AddonCompartmentFuncOnLeave: MSUF_AddonCompartment_OnLeave
 
 Libs/LibStub/LibStub.lua
 Libs/CallbackHandler-1.0/CallbackHandler-1.0.lua
@@ -28,6 +34,7 @@ Locales\ptBR.lua
 Locales\ruRU.lua
 
 MSUF_Util.lua
+MSUF_Transitions.lua
 MSUF_Defaults.lua
 MSUF_Profiles.lua
 MSUF_Presets.lua
@@ -37,6 +44,7 @@ MSUF_EventBus.lua
 MSUF_EditMode.lua
 MSUF_Castbars_LoDStub.lua
 MidnightSimpleUnitFrames_MinimapButton.lua
+MSUF_AddonCompartment.lua
 Media\MSUF_Media.lua
 
 Core\MSUF_ProfileIO.lua
@@ -79,6 +87,4 @@ Options\MSUF_Options_Misc.lua
 Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua
 Modules\MSUF_RoundedUnitframes.lua
 Modules\MSUF_3DPortraits.lua
-
-MSUF_Transitions.lua
 

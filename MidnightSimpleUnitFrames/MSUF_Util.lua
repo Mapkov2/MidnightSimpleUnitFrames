@@ -713,3 +713,38 @@ if not _G.MSUF_ForceShowUIPanelButtonPieces then
         if btn.SetAlpha then pcall(btn.SetAlpha, btn, 1) end
     end
 end
+
+-- =========================================================================
+-- Keybinding support (Bindings.xml auto-discovered by WoW, NOT in TOC)
+-- =========================================================================
+BINDING_HEADER_MSUF_HEADER = "Midnight Simple Unit Frames"
+BINDING_NAME_MSUF_TOGGLE_OPTIONS = "Toggle MSUF Options"
+BINDING_NAME_MSUF_TOGGLE_EDITMODE = "Toggle MSUF Edit Mode"
+
+function MSUF_Keybind_ToggleOptions()
+    if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
+        local win = _G.MSUF_StandaloneOptionsWindow
+        if win and win.IsShown and win:IsShown() then
+            if type(_G.MSUF_HideStandaloneOptionsWindow) == "function" then
+                _G.MSUF_HideStandaloneOptionsWindow()
+            elseif win.Hide then
+                win:Hide()
+            end
+        else
+            _G.MSUF_OpenStandaloneOptionsWindow("home")
+        end
+    end
+end
+
+function MSUF_Keybind_ToggleEditMode()
+    if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
+        local st = _G.MSUF_EditState
+        local nextActive = true
+        if type(st) == "table" and st.active ~= nil then
+            nextActive = not st.active
+        end
+        pcall(_G.MSUF_SetMSUFEditModeDirect, nextActive, nil)
+    elseif type(_G.MSUF_ToggleEditMode) == "function" then
+        pcall(_G.MSUF_ToggleEditMode)
+    end
+end

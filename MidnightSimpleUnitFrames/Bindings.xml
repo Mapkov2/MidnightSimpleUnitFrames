@@ -1,0 +1,13 @@
+<Bindings>
+    <Binding name="MSUF_TOGGLE_OPTIONS"
+             category="MSUF"
+             >
+        MSUF_Keybind_ToggleOptions()
+    </Binding>
+
+    <Binding name="MSUF_TOGGLE_EDITMODE"
+             category="MSUF"
+             >
+        MSUF_Keybind_ToggleEditMode()
+    </Binding>
+</Bindings>
