@@ -569,6 +569,9 @@ local _sortOrder = nil
 -- When true, GetAuras reverses the output array after filtering.
 -- The C API has no reverse parameter; we do a cheap in-place swap on the small output array.
 local _sortReverse = false
+-- Per-unit sort order: allows different units to use different sort orders.
+-- Key = unitToken, value = normalised order (nil = unsorted).
+local _perUnitSortOrder = {}
 
 function Collect.SetScanLimits(maxBuffs, maxDebuffs)
     -- Multiply by 3 for filter headroom, cap at 40
@@ -597,6 +600,26 @@ end
 -- Set whether GetAuras output should be reversed.
 -- No cache invalidation needed: reversal is applied at GetAuras read time.
 function Collect.SetSortReverse(reverse)
+    _sortReverse = (reverse == true)
+end
+
+-- Set the aura sort order for a specific unit (per-unit override).
+-- Only invalidates that unit's cache when the order actually changes.
+-- Secret-safe: plain numeric config, never compared with secret data.
+function Collect.SetUnitSortOrder(unit, order, reverse)
+    if order == 0 then order = nil end
+    local prev = _perUnitSortOrder[unit]
+    if prev ~= order then
+        _perUnitSortOrder[unit] = order
+        -- Invalidate only this unit so PreScanUnit re-scans with the new order
+        local Store = API.Store
+        if Store then
+            Store._epochs = Store._epochs or {}
+            Store._epochs[unit] = (Store._epochs[unit] or 0) + 1
+        end
+    end
+    -- Set global for read-time reverse logic in GetAuras/GetMergedAuras
+    _sortOrder = order
     _sortReverse = (reverse == true)
 end
 
@@ -896,6 +919,10 @@ PreScanUnit = function(unit, forceImportant)
     if not _apisBound then BindAPIs() end
     if not _getSlots or not _getBySlot then return end
     
+    -- Per-unit sort order (falls back to global _sortOrder)
+    local unitSort = _perUnitSortOrder[unit]
+    if unitSort == nil then unitSort = _sortOrder end
+    
     local raw = Store._rawAuras[unit]
     local doImportant = (_scanImportant == true) or (forceImportant == true)
     if not raw then
@@ -926,7 +953,7 @@ PreScanUnit = function(unit, forceImportant)
 
     -- Scan HELPFUL (limited to user's maxBuffs)
     local helpful = raw.helpful
-    local nH = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HELPFUL, maxH, _sortOrder)))
+    local nH = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HELPFUL, maxH, unitSort)))
     local hCount = 0
     for i = 1, nH do
         local data = _getBySlot(unit, _scratch[i])
@@ -943,7 +970,7 @@ PreScanUnit = function(unit, forceImportant)
     
     -- Scan HARMFUL (limited to user's maxDebuffs)
     local harmful = raw.harmful
-    local nD = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HARMFUL, maxD, _sortOrder)))
+    local nD = CaptureSlots(_scratch, select(2, _getSlots(unit, FILTER_HARMFUL, maxD, unitSort)))
     local dCount = 0
     for i = 1, nD do
         local data = _getBySlot(unit, _scratch[i])

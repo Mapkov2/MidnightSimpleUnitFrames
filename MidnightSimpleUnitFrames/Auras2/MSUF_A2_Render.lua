@@ -483,10 +483,24 @@ local function ResolveUnitConfig(unit, a2, shared)
     local growth = shared.growth or "RIGHT"
     local rowWrap = shared.rowWrap or "DOWN"
     local stackCountAnchor = shared.stackCountAnchor or "TOPRIGHT"
+    -- Sort order (caps level — per-unit overridable via layoutShared)
+    -- Falls back to shared.filters.sortOrder for backward compatibility.
+    local sf = shared.filters
+    local sortOrder = shared.sortOrder
+    if type(sortOrder) ~= "number" then
+        sortOrder = (sf and type(sf.sortOrder) == "number") and sf.sortOrder or 0
+    end
+    local sortReverse = shared.sortReverse
+    if sortReverse == nil then
+        sortReverse = (sf and sf.sortReverse == true) and true or false
+    end
     -- Per-type growth (nil = fall back to growth)
     local buffGrowth = shared.buffGrowth
     local debuffGrowth = shared.debuffGrowth
     local privateGrowth = shared.privateGrowth
+    -- Per-type row wrap (nil = fall back to rowWrap)
+    local buffRowWrap = shared.buffRowWrap
+    local debuffRowWrap = shared.debuffRowWrap
 
     -- Per-unit overrides
     local pu = a2.perUnit and a2.perUnit[unit]
@@ -500,12 +514,19 @@ local function ResolveUnitConfig(unit, a2, shared)
         if ls.debuffGrowth and A2_GROWTH_OK[ls.debuffGrowth] then debuffGrowth = ls.debuffGrowth end
         if ls.privateGrowth and A2_GROWTH_OK[ls.privateGrowth] then privateGrowth = ls.privateGrowth end
         if ls.rowWrap and A2_ROWWRAP_OK[ls.rowWrap] then rowWrap = ls.rowWrap end
+        if ls.buffRowWrap and A2_ROWWRAP_OK[ls.buffRowWrap] then buffRowWrap = ls.buffRowWrap end
+        if ls.debuffRowWrap and A2_ROWWRAP_OK[ls.debuffRowWrap] then debuffRowWrap = ls.debuffRowWrap end
         if ls.stackCountAnchor and A2_STACKANCHOR_OK[ls.stackCountAnchor] then stackCountAnchor = ls.stackCountAnchor end
+        if type(ls.sortOrder) == "number" then sortOrder = ls.sortOrder end
+        if ls.sortReverse ~= nil then sortReverse = (ls.sortReverse == true) end
     end
     -- Resolve per-type fallback: nil → growth
     if not buffGrowth or not A2_GROWTH_OK[buffGrowth] then buffGrowth = growth end
     if not debuffGrowth or not A2_GROWTH_OK[debuffGrowth] then debuffGrowth = growth end
     if not privateGrowth or not A2_GROWTH_OK[privateGrowth] then privateGrowth = growth end
+    -- Resolve per-type rowWrap fallback: nil → rowWrap
+    if not buffRowWrap or not A2_ROWWRAP_OK[buffRowWrap] then buffRowWrap = rowWrap end
+    if not debuffRowWrap or not A2_ROWWRAP_OK[debuffRowWrap] then debuffRowWrap = rowWrap end
 
     if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
         local lay = pu.layout
@@ -538,7 +559,7 @@ if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
     if type(psz) == "number" and psz > 1 then privateIconSize = psz end
 end
 
-    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, privateGrowth, rowWrap, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize
+    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, privateGrowth, rowWrap, buffRowWrap, debuffRowWrap, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize, sortOrder, sortReverse
 end
 
 
@@ -998,8 +1019,8 @@ local function RenderUnit(entry)
 
         -- Layout config
         cfg.iconSize, cfg.spacing, cfg.perRow, cfg.maxBuffs, cfg.maxDebuffs,
-        cfg.growth, cfg.buffGrowth, cfg.debuffGrowth, cfg.privateGrowth, cfg.rowWrap, cfg.stackCountAnchor,
-        cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize =
+        cfg.growth, cfg.buffGrowth, cfg.debuffGrowth, cfg.privateGrowth, cfg.rowWrap, cfg.buffRowWrap, cfg.debuffRowWrap, cfg.stackCountAnchor,
+        cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize, cfg.capsSortOrder, cfg.capsSortReverse =
             ResolveUnitConfig(unit, a2, shared)        -- Filter flags
         if Filters and Filters.ResolveRuntimeFlags then
             cfg.tf, cfg.masterOn,
@@ -1047,6 +1068,8 @@ local function RenderUnit(entry)
     local debuffGrowth      = cfg.debuffGrowth or growth
     local privateGrowth     = cfg.privateGrowth or growth
     local rowWrap           = cfg.rowWrap
+    local buffRowWrap       = cfg.buffRowWrap or rowWrap
+    local debuffRowWrap     = cfg.debuffRowWrap or rowWrap
     local stackCountAnchor  = cfg.stackCountAnchor
     local showBuffs         = cfg.showBuffs
     local showDebuffs       = cfg.showDebuffs
@@ -1130,13 +1153,13 @@ local function RenderUnit(entry)
             local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, maxBuffs, maxDebuffs, stackCountAnchor)
             local bSize = buffIconSize
             local dSize = debuffIconSize
-            Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, buffGrowth, rowWrap)
-            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, debuffGrowth, rowWrap)
+            Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, buffGrowth, buffRowWrap)
+            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, debuffGrowth, debuffRowWrap)
         elseif Icons.RenderPreviewIcons and isPlayer then
             -- Player: debuff preview only (buffCap = 0), real buffs render below
             local _, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, 0, maxDebuffs, stackCountAnchor)
             local dSize = debuffIconSize
-            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, debuffGrowth, rowWrap)
+            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, debuffGrowth, debuffRowWrap)
         end
 
         if Icons.RenderPreviewPrivateIcons and unit ~= "target" then
@@ -1170,6 +1193,11 @@ local function RenderUnit(entry)
     entry._unitExisted = true  -- PERF: Track for fast-path
 
     -- Collect auras (single pass) 
+    -- Per-unit sort order: set before collect so PreScanUnit uses the right order.
+    -- Secret-safe: plain numeric config, never compared with secret data.
+    if Collect.SetUnitSortOrder then
+        Collect.SetUnitSortOrder(unit, cfg.capsSortOrder or 0, cfg.capsSortReverse)
+    end
     local buffCount = 0
     local debuffCount = 0
     local buffsOnlyMine    = cfg.buffsOnlyMine
@@ -1241,7 +1269,7 @@ local function RenderUnit(entry)
     if skipDebuffs then
         -- Player edit mode: debuff layout already handled by preview path.
     elseif showDebuffs then
-        _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, rowWrap)
+        _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, debuffRowWrap)
         if debuffCount ~= lastDebuffCount then
             _HideUnused(entry.debuffs, debuffCount + 1)
         end
@@ -1252,7 +1280,7 @@ local function RenderUnit(entry)
     end
 
     if showBuffs then
-        _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, rowWrap)
+        _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, buffRowWrap)
         if buffCount ~= lastBuffCount then
             _HideUnused(entry.buffs, buffCount + 1)
         end

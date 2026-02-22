@@ -591,13 +591,14 @@ local function CreateLayoutDropdown(parent, x, y, getter, setter)
 end
 -- ------------------------------------------------------------
 -- (DPad anchoring removed Ã¢â‚¬â€ auras can now be freely positioned via Edit Mode.)
-local function CreateRowWrapDropdown(parent, x, y, getter, setter)
+local function CreateRowWrapDropdown(parent, x, y, getter, setter, titleText)
+    titleText = titleText or "Wrap rows"
     local dd = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
     dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, y + 4)
     MSUF_FixUIDropDown(dd, 130)
     local title = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("BOTTOMLEFT", dd, "TOPLEFT", 16, 4)
-    title:SetText(TR("Wrap rows"))
+    title:SetText(TR(titleText))
     local function OnClick(self)
         setter(self.value)
         UIDropDownMenu_SetSelectedValue(dd, self.value)
@@ -1275,9 +1276,13 @@ SetOverrideCapsForEditing = function(v)
         if ls.debuffGrowth == nil then ls.debuffGrowth = shared.debuffGrowth end
         if ls.privateGrowth == nil then ls.privateGrowth = shared.privateGrowth end
         if ls.rowWrap == nil then ls.rowWrap = shared.rowWrap end
+        if ls.buffRowWrap == nil then ls.buffRowWrap = shared.buffRowWrap end
+        if ls.debuffRowWrap == nil then ls.debuffRowWrap = shared.debuffRowWrap end
         if ls.buffDebuffAnchor == nil then ls.buffDebuffAnchor = shared.buffDebuffAnchor end
         if ls.splitSpacing == nil then ls.splitSpacing = shared.splitSpacing end
         if ls.stackCountAnchor == nil then ls.stackCountAnchor = shared.stackCountAnchor end
+        if ls.sortOrder == nil then ls.sortOrder = shared.sortOrder end
+        if ls.sortReverse == nil then ls.sortReverse = shared.sortReverse end
     else
         u.overrideSharedLayout = false
     end
@@ -1756,7 +1761,7 @@ end
 	-- Dropdown column layout (Auras 2.0 Display): align with the "Show Debuffs" row and keep
 	-- everything safely to the right so it never overlaps the 2-column checkbox area.
 	local A2_DD_X = 500
-	local A2_DD_Y0 = -180 -- aligns with "Show Debuffs"
+	local A2_DD_Y0 = -170 -- aligns with "Show Debuffs"
 	local A2_DD_STEP = 24
     -- Caps: restore Max Buffs / Max Debuffs controls (0 = unlimited)
     -- Caps: moved slightly down so the sliders breathe under the tooltip/stack toggles.
@@ -1832,30 +1837,36 @@ end
     MSUF_StyleAuras2CompactSlider(perRowSlider, { leftTitle = true })
     AttachSliderValueBox(perRowSlider, 4, 20, 1, GetPerRow)
     -- Per-type grow direction (right column)
-    local buffGrowthDD = CreateDropdown(leftTop, "Buff Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 5) - 12,
+    local buffGrowthDD = CreateDropdown(leftTop, "Buff Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 8),
         function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "buffGrowth", A2_GetCapsValue(key, "growth", "RIGHT")) end,
         function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "buffGrowth", v)  end)
     A2_Track("caps", buffGrowthDD)
-    local debuffGrowthDD = CreateDropdown(leftTop, "Debuff Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 8) - 12,
+    local debuffGrowthDD = CreateDropdown(leftTop, "Debuff Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 10),
         function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "debuffGrowth", A2_GetCapsValue(key, "growth", "RIGHT")) end,
         function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "debuffGrowth", v)  end)
     A2_Track("caps", debuffGrowthDD)
-    local privateGrowthCapsDD = CreateDropdown(leftTop, "Private Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 11) - 12,
+    local privateGrowthCapsDD = CreateDropdown(leftTop, "Private Growth", A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 12),
         function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "privateGrowth", A2_GetCapsValue(key, "growth", "RIGHT")) end,
         function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "privateGrowth", v)  end)
     A2_Track("caps", privateGrowthCapsDD)
-	-- Row wrap direction for per-row limits (when icons exceed "Icons per row").
-	-- This controls whether the 2nd row spawns below (default) or above the first row.
-	local rowWrapDD = CreateRowWrapDropdown(leftTop, A2_DD_X, A2_DD_Y0,
-        function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "rowWrap", "DOWN") end,
-        function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "rowWrap", v)  end)
-    A2_Track("caps", rowWrapDD)
-    local layoutDD = CreateLayoutDropdown(leftTop, A2_DD_X, A2_DD_Y0 - A2_DD_STEP,
+	-- Per-type row wrap direction (independent for buffs and debuffs).
+	-- Controls whether the 2nd row spawns below (default) or above the first row.
+	local buffRowWrapDD = CreateRowWrapDropdown(leftTop, A2_DD_X, A2_DD_Y0,
+        function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "buffRowWrap", A2_GetCapsValue(key, "rowWrap", "DOWN")) end,
+        function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "buffRowWrap", v)  end,
+        "Buff wrap rows")
+    A2_Track("caps", buffRowWrapDD)
+	local debuffRowWrapDD = CreateRowWrapDropdown(leftTop, A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 2),
+        function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "debuffRowWrap", A2_GetCapsValue(key, "rowWrap", "DOWN")) end,
+        function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "debuffRowWrap", v)  end,
+        "Debuff wrap rows")
+    A2_Track("caps", debuffRowWrapDD)
+    local layoutDD = CreateLayoutDropdown(leftTop, A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 4),
         function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "layoutMode", "SEPARATE") end,
         function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "layoutMode", v)  end)
     A2_Track("caps", layoutDD)
 	-- Stack Anchor dropdown (right column)
-	local stackAnchorDD = CreateStackAnchorDropdown(leftTop, A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 3) - 8,
+	local stackAnchorDD = CreateStackAnchorDropdown(leftTop, A2_DD_X, A2_DD_Y0 - (A2_DD_STEP * 6),
         function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "stackCountAnchor", "TOPRIGHT") end,
         function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "stackCountAnchor", v)  end)
     A2_Track("caps", stackAnchorDD)
@@ -2159,7 +2170,7 @@ end
         if privateMaxOther  then advGate[#advGate + 1] = privateMaxOther end
         -- ------------------------------------------------------------
         -- Sort order dropdown (Blizzard Enum.AuraSortOrder)
-        -- Stored in shared.filters.sortOrder (respects per-unit filter overrides).
+        -- Stored in shared.sortOrder (caps level — per-unit overridable via layoutShared).
         -- Passed to C_UnitAuras.GetAuraSlots as 4th arg — sorting happens in C code (zero Lua cost).
         -- Secret-safe: plain numeric config, never compared with secret data.
         -- ------------------------------------------------------------
@@ -2185,20 +2196,23 @@ end
             ddSort:SetPoint("TOPLEFT", advBox, "TOPLEFT", 90, -136)
             MSUF_FixUIDropDown(ddSort, 220)
             local function SortGet()
+                local key = GetEditingKey()
+                local v = A2_GetCapsValue(key, "sortOrder", nil)
+                if type(v) == "number" then return v end
+                -- Backward compat: fall back to filters.sortOrder for existing profiles
                 local f = GetEditingFilters()
                 return (f and type(f.sortOrder) == "number") and f.sortOrder or 0
             end
             local function SortSet(v)
-                local f = GetEditingFilters()
-                if not f then return end
-                f.sortOrder = v
+                A2_AutoOverrideCapsIfNeeded()
+                local key = GetEditingKey()
+                A2_SetCapsValue(key, "sortOrder", v)
             end
             local function SortOnClick(self)
                 SortSet(self.value)
                 UIDropDownMenu_SetSelectedValue(ddSort, self.value)
                 UIDropDownMenu_SetText(ddSort, SORT_TEXT[self.value] or SORT_ITEMS[1].text)
                 CloseDropDownMenus()
-                A2_AutoOverrideFiltersIfNeeded()
                 A2_RequestApply()
             end
             UIDropDownMenu_Initialize(ddSort, function()
@@ -2219,7 +2233,7 @@ end
                 UIDropDownMenu_SetSelectedValue(ddSort, v)
                 UIDropDownMenu_SetText(ddSort, SORT_TEXT[v] or SORT_ITEMS[1].text)
             end)
-            A2_Track("filters", ddSort)
+            A2_Track("caps", ddSort)
             advGate[#advGate + 1] = ddSort
             if sortH then advGate[#advGate + 1] = sortH end
         end

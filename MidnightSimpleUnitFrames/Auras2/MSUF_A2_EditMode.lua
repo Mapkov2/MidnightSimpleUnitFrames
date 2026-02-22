@@ -296,22 +296,32 @@ local function CreateMover(entry, unitKey, kind, labelText)
         end
     end
 
-    -- OnMouseDown: start drag
+    -- OnMouseDown: start drag + set active nudge group for arrow-key nudging
     mover:SetScript("OnMouseDown", function(self, button)
+        -- Always track which group was last clicked for arrow-key nudging,
+        -- even if drag is blocked (popup open, combat, etc.)
+        local pf = _G.MSUF_Auras2PositionPopup
+        if pf then
+            pf._msufActiveNudgeGroup = kind
+        end
+
         if button ~= "LeftButton" then return end
         if InCombatLockdown() then return end
         if IsAnyPopupOpen() then return end
+
+        -- Undo: capture aura state BEFORE drag writes to DB
+        if not _G.MSUF__UndoRestoring then
+            local bc = _G.MSUF_EM_UndoBeforeChange
+            if type(bc) == "function" then
+                bc("aura", self._msufAuraUnitKey or unitKey)
+            end
+        end
 
         local _, shared = GetAuras2DB()
         if not shared then return end
 
         local key = self._msufAuraUnitKey
         local mk  = self._msufA2MoverKind or "buff"
-
-        -- Undo: capture aura state BEFORE drag moves anything
-        if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-            _G.MSUF_EM_UndoBeforeChange("aura", key)
-        end
 
         local startX, startY = ReadOffset(key, shared, mk)
         self._msufDragStartOffsetX = startX
@@ -355,9 +365,23 @@ local function CreateMover(entry, unitKey, kind, labelText)
         end
 
         -- Click without drag: open position popup
+        -- Set nudge group BEFORE opening popup so arrow keys target the correct group.
+        local pf = _G.MSUF_Auras2PositionPopup
+        if pf then
+            pf._msufActiveNudgeGroup = self._msufA2MoverKind or kind
+        end
+
         local key = self._msufAuraUnitKey
         if type(_G.MSUF_OpenAuras2PositionPopup) == "function" then
             _G.MSUF_OpenAuras2PositionPopup(key, self)
+        end
+
+        -- Popup may have been created lazily — set group on newly created popup too
+        if not pf then
+            pf = _G.MSUF_Auras2PositionPopup
+            if pf then
+                pf._msufActiveNudgeGroup = self._msufA2MoverKind or kind
+            end
         end
     end)
 
