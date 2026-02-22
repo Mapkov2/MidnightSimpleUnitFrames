@@ -28,6 +28,15 @@ local MSUF_BarsApplyGradient -- forward decl; assigned in Bars section below
 -- Keep a no-op stub so any stale call-sites (older builds) don't nil-error.
 -- ---------------------------------------------------------------------------
 local function MSUF_Options_ShowGradientReloadPopup() end -- no-op stub (live apply, backward compat)
+-- ---------------------------------------------------------------------------
+-- Transition helpers (optional, graceful fallback to instant Show/Hide)
+-- ---------------------------------------------------------------------------
+local function _T() return ns.MSUF_Transitions end
+local function _TFadeIn(f, d)
+    local T = _T()
+    if T and T.FadeIn then T.FadeIn(f, d) else if f and f.Show then f:Show() end end
+end
+local TRANS_TAB = 0.10
 local function MSUF_ScheduleReloadRecommend()   end       -- no-op stub (backward compat)
 local castbarEnemyGroup, castbarTargetGroup, castbarFocusGroup, castbarBossGroup, castbarPlayerGroup
 local barGroupHost, barGroup, miscGroup, profileGroup
@@ -850,62 +859,28 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
          return key
     end
     local function UpdateGroupVisibility()
+        -- Hide all instantly, then FadeIn the active group
+        frameGroup:Hide()
+        fontGroup:Hide()
+        auraGroup:Hide()
+        castbarGroup:Hide()
+        barGroupHost:Hide()
+        miscGroup:Hide()
+        profileGroup:Hide()
         if currentTabKey == "fonts" then
-            frameGroup:Hide()
-            fontGroup:Show()
-            auraGroup:Hide()
-            castbarGroup:Hide()
-            barGroupHost:Hide()
-            miscGroup:Hide()
-            profileGroup:Hide()
+            _TFadeIn(fontGroup, TRANS_TAB)
         elseif currentTabKey == "bars" then
-            frameGroup:Hide()
-            fontGroup:Hide()
-            auraGroup:Hide()
-            castbarGroup:Hide()
-            barGroupHost:Show()
-            miscGroup:Hide()
-            profileGroup:Hide()
+            _TFadeIn(barGroupHost, TRANS_TAB)
         elseif currentTabKey == "auras" then
-            frameGroup:Hide()
-            fontGroup:Hide()
-            auraGroup:Show()
-            castbarGroup:Hide()
-            barGroupHost:Hide()
-            miscGroup:Hide()
-            profileGroup:Hide()
+            _TFadeIn(auraGroup, TRANS_TAB)
         elseif currentTabKey == "castbar" then
-            frameGroup:Hide()
-            fontGroup:Hide()
-            auraGroup:Hide()
-            castbarGroup:Show()
-            barGroupHost:Hide()
-            miscGroup:Hide()
-            profileGroup:Hide()
+            _TFadeIn(castbarGroup, TRANS_TAB)
         elseif currentTabKey == "misc" then
-            frameGroup:Hide()
-            fontGroup:Hide()
-            auraGroup:Hide()
-            castbarGroup:Hide()
-            barGroupHost:Hide()
-            miscGroup:Show()
-            profileGroup:Hide()
+            _TFadeIn(miscGroup, TRANS_TAB)
         elseif currentTabKey == "profiles" then
-            frameGroup:Hide()
-            fontGroup:Hide()
-            auraGroup:Hide()
-            castbarGroup:Hide()
-            barGroupHost:Hide()
-            miscGroup:Hide()
-            profileGroup:Show()
+            _TFadeIn(profileGroup, TRANS_TAB)
         else
-            frameGroup:Show()
-            fontGroup:Hide()
-            auraGroup:Hide()
-            castbarGroup:Hide()
-            barGroupHost:Hide()
-            miscGroup:Hide()
-            profileGroup:Hide()
+            _TFadeIn(frameGroup, TRANS_TAB)
             -- Player-only layout: hide the old right-column offset sliders and show the compact group.
             local isUnitFrame = (UNIT_FRAME_KEYS[currentKey] == true)
             if panel and panel.playerTextLayoutGroup then panel.playerTextLayoutGroup:SetShown(isUnitFrame) end

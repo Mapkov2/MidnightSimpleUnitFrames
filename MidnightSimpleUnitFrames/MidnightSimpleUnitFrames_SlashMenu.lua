@@ -2112,10 +2112,12 @@ end
 local function MSUF_IsCastbarKey(k) return k=="castbar"or k=="opt_castbar" end
 local function MSUF_Standalone_UpdateTitle(activeKey) if not(S.win and S.win._msufTitleFS and S.win._msufTitleFS.SetText)
 then return end
-if activeKey=="home"then S.win._msufTitleFS:SetText("MSUF Menu") return end
+local _ver = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
+local _vStr = (type(_ver) == "string" and _ver ~= "") and ("  |cff9ece6av" .. _ver .. "|r") or ""
+if activeKey=="home"then S.win._msufTitleFS:SetText("MSUF Menu" .. _vStr) return end
 local info=MSUF_GetMirrorPageInfo(activeKey)
-S.win._msufTitleFS:SetText((info and info.title)
-or"MSUF Menu") end
+S.win._msufTitleFS:SetText(((info and info.title)
+or"MSUF Menu") .. _vStr) end
 local function MSUF_Standalone_UpdateNav(activeKey) if not(S.win and S.win._msufNavButtons)
 then return end
 local buttons=S.win._msufNavButtons;
@@ -2759,6 +2761,19 @@ if not prev then b:SetPoint("RIGHT",row,"RIGHT",0,0)
 else b:SetPoint("RIGHT",prev,"LEFT",-gap,0)
 end
 prev=b end
+end
+do
+    local aboutLine = presetsCard:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    aboutLine:SetPoint("BOTTOMLEFT", supportLabel, "TOPLEFT", 0, 4)
+    aboutLine:SetJustifyH("LEFT")
+    local aboutVer = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
+    local aboutStr = "by |cffccd0d9Mapko|r"
+    if type(aboutVer) == "string" and aboutVer ~= "" then
+        aboutStr = "v" .. aboutVer .. "  •  " .. aboutStr .. "  •  with help from |cffccd0d9R41z0r|r and the community"
+    end
+    aboutLine:SetText(aboutStr)
+    aboutLine:SetAlpha(0.65)
+    if MSUF_SkinMuted then pcall(MSUF_SkinMuted, aboutLine) end
 end
 local function MSUF_DashboardLayout() local wL=(colL and colL.GetWidth and colL:GetWidth())
 or 0;
