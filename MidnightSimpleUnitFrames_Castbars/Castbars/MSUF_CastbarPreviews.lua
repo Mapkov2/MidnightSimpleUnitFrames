@@ -1124,6 +1124,31 @@ function MSUF_PositionPlayerCastbarPreview()
         return
     end
 
+    -- HARD SYNC (size + scale): keep preview identical to the real player castbar.
+    -- This protects against profile reset/import ordering issues where DB values
+    -- are applied in a different order across LoD/core during /reload.
+    do
+        local real = _G.MSUF_PlayerCastbar or _G.PlayerCastingBarFrame or _G.CastingBarFrame
+        if real and real.GetSize and MSUF_PlayerCastbarPreview and MSUF_PlayerCastbarPreview.SetSize then
+            local rw, rh = real:GetSize()
+            if rw and rh and rw > 0 and rh > 0 then
+                local pw, ph = MSUF_PlayerCastbarPreview:GetSize()
+                if pw ~= rw or ph ~= rh then
+                    MSUF_PlayerCastbarPreview:SetSize(rw, rh)
+                end
+            end
+            if real.GetScale and MSUF_PlayerCastbarPreview.SetScale then
+                local rs = real:GetScale()
+                if rs and rs > 0 then
+                    local ps = MSUF_PlayerCastbarPreview:GetScale()
+                    if ps ~= rs then
+                        MSUF_PlayerCastbarPreview:SetScale(rs)
+                    end
+                end
+            end
+        end
+    end
+
     -- Core owns the unitframe table; refresh our reference (safe, edit-mode only).
     UnitFrames = UnitFrames or _G.MSUF_UnitFrames
 
@@ -1173,6 +1198,39 @@ end
 function MSUF_PositionTargetCastbarPreview()
     if not MSUF_TargetCastbarPreview then
         return
+    end
+
+    -- ============================================================
+    -- HARD SYNC: Preview size must always match the REAL castbar size.
+    --
+    -- Target/Focus real bars can use "auto width" (nil width key), which
+    -- follows the unitframe width. The preview is created from DB defaults
+    -- and (previously) never had its size updated during positioning.
+    -- After profile import/reset + /reload, this makes the preview drift.
+    --
+    -- Fix: whenever we (re)position the preview, copy real:GetSize() and
+    -- (when available) the inner statusBar size into the preview.
+    -- ============================================================
+    do
+        local real = _G.MSUF_TargetCastbar or _G.TargetCastBar
+        if real and real.GetSize and MSUF_TargetCastbarPreview and MSUF_TargetCastbarPreview.SetSize then
+            local rw, rh = real:GetSize()
+            if rw and rh and rw > 0 and rh > 0 then
+                local pw, ph = MSUF_TargetCastbarPreview:GetSize()
+                if pw ~= rw or ph ~= rh then
+                    MSUF_TargetCastbarPreview:SetSize(rw, rh)
+                end
+            end
+            if real.GetScale and MSUF_TargetCastbarPreview.SetScale then
+                local rs = real:GetScale()
+                if rs and rs > 0 then
+                    local ps = MSUF_TargetCastbarPreview:GetScale()
+                    if ps ~= rs then
+                        MSUF_TargetCastbarPreview:SetScale(rs)
+                    end
+                end
+            end
+        end
     end
 
     UnitFrames = UnitFrames or _G.MSUF_UnitFrames
@@ -1235,6 +1293,29 @@ end
 function MSUF_PositionFocusCastbarPreview()
     if not MSUF_FocusCastbarPreview then
         return
+    end
+
+    -- HARD SYNC: keep preview size identical to real bar (see Target note above).
+    do
+        local real = _G.MSUF_FocusCastbar or _G.FocusCastBar
+        if real and real.GetSize and MSUF_FocusCastbarPreview and MSUF_FocusCastbarPreview.SetSize then
+            local rw, rh = real:GetSize()
+            if rw and rh and rw > 0 and rh > 0 then
+                local pw, ph = MSUF_FocusCastbarPreview:GetSize()
+                if pw ~= rw or ph ~= rh then
+                    MSUF_FocusCastbarPreview:SetSize(rw, rh)
+                end
+            end
+            if real.GetScale and MSUF_FocusCastbarPreview.SetScale then
+                local rs = real:GetScale()
+                if rs and rs > 0 then
+                    local ps = MSUF_FocusCastbarPreview:GetScale()
+                    if ps ~= rs then
+                        MSUF_FocusCastbarPreview:SetScale(rs)
+                    end
+                end
+            end
+        end
     end
 
     UnitFrames = UnitFrames or _G.MSUF_UnitFrames
