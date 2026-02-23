@@ -61,6 +61,24 @@ local T = {
     --SlashMenu
     ["Main Menu"] = "主菜单",
     ["Quick tools & UI scale (same content as /msuf options)."]  = "快速工具 & UI缩放(与 /msuf 选项相同).",
+    ["Tip:"] = "提示:",
+    ["Bigger steps: Hold |cff00ff00SHIFT|r while adjusting sliders to change values faster."]   = "更大的步骤: 调整滑块时按住|cff00ff00SHIFT|r以更快地更改值.",
+    ["Fine tuning: Hold |cff00ff00CTRL|r while adjusting sliders for smaller steps."]  = "精细调整: 调整滑块时按住|cff00ff00CTRL|r以进行更小的步骤.",
+    ["Quick reset: If something feels off, try |cff00ff00/msuf reset|r (frame positions)."]  = "快速重置: 如果感觉不对,请尝试|cff00ff00/msuf reset|r(框架位置).",
+    ["Factory reset: Use |cff00ff00Menu → Advanced → Factory Reset|r (or /msuf fullreset confirm + /reload)."]  = "重置为默认: 使用|cff00ff00菜单 → 高级 → 重置为默认|r(或/msuf fullreset confirm + /reload).",
+    ["Edit Mode: Use |cff00ff00Toggle Edit Mode|r to move frames quickly, then fine-tune with the position popup."]  = "编辑模式: 使用|cff00ff00切换编辑模式|r快速移动框架,然后使用位置弹出窗口进行精细调整.",
+    ["Profiles safety: Create a new profile before big experiments — switch back instantly if needed."]  = "配置文件安全: 在进行大型实验之前创建一个新的配置文件——如果需要,可以立即切换回来.",
+    ["Colors: The |cff00ff00Colors|r tab lets you customize almost everything (fonts, bars, castbars, highlights)."]  = "颜色: |cff00ff00颜色|r选项卡允许您自定义几乎所有内容(字体,计量条,施法条,高亮显示).",
+    ["Gameplay: The |cff00ff00Gameplay|r tab contains extra UI tools and warnings you can enable/disable."]  = "游戏玩法: |cff00ff00游戏玩法|r选项卡包含您可以启用/禁用的额外UI工具和警告.",
+    ["Recommended: |cff00ff00Sensei Resource Bar|r pairs insanely well with MSUF to track resources cleanly."]  = "推荐: |cff00ff00Sensei Resource Bar|r与MSUF搭配使用,可以清晰地跟踪资源.",
+    ["UI scale tip: MSUF has its own UI scale — separate from the Global UI scale."]    = "UI缩放提示: MSUF有自己的UI缩放——与全局UI缩放分开.",
+    ["Troubleshoot: If visuals don’t update, a quick |cff00ff00/reload|r fixes most UI state issues."]  = "故障排除: 如果视觉效果没有更新,一个快速的|cff00ff00/reload|r可以解决大多数UI状态问题.",
+    ["Readability: Slightly larger fonts often help more than bigger frames (especially in raids)."]  = "可读性: 较大的字体通常比更大的框架更有帮助(尤其是在团队中).",
+    ["During development of MSUF Unhalted, R41z0r and other great addon developers helped out!"]  = "在MSUF Unhalted的开发过程中,R41z0r和其他伟大的插件开发人员提供了帮助!",
+    ["Danders is a great Party/Raidframe addon and works really well with MSUF"]  = "Danders是一个很棒的团队/团队框架插件,与MSUF配合使用效果非常好",
+    ["Community: If you like MSUF, share it with a friend — UI addons grow by word of mouth."]  = "社区: 如果您喜欢MSUF,请与朋友分享——UI插件是通过口碑传播的.",
+
+
     ["Profile: "] = "配置文件: ",
     ["   •   Edit Mode: "] = "   •  编辑模式: ",
     ["In combat"] =    "战斗中",
@@ -164,7 +182,26 @@ local T = {
     ["Player frame"] = "玩家框架",
     ["Target frame"] = "目标框架",
     ["Anchor focus to"] = "焦点锚点" ,
+    ["Player Load Conditions"] = "玩家加载条件",
+    ["Target Load Conditions"] = "目标加载条件",
+    ["Focus Load Conditions"] = "焦点加载条件",
+    ["Pet Load Conditions"] = "宠物加载条件",
+    ["Boss Load Conditions"] = "首领加载条件",
+    ["ToT Load Conditions"] = "目标的目标加载条件",
+    ["Mounted"] = "骑乘中",
+    ["In vehicle"] = "载具中",
+    ["Resting"] = "休息中",
+    ["Stealthed"] = "潜行",
+    ["In combat"] = "战斗中",
+    ["Out of combat"] = "脱离战斗",
+    ["Solo"] = "单刷",
+    ["In group"] = "组队",
+    ["In instance"] = "副本中",
 
+
+
+
+    
 
 
     ["Castbar"] = "施法条",
@@ -293,7 +330,7 @@ local T = {
     ["Works only when the corresponding text mode is set to 'Full value + %' (or '% + Full value')."] = "仅当相应的文本模式设置为 '数值 + %' (或 '% + 数值') 时才有效.",
     ["Selected: Shared"]    = "已选中: 共享",
     ["Reset all overrides"] = "重置所有覆盖",
-    ["Clears per-unit overrides for all units (Player, Target, Focus, etc.) so they all use the shared settings again."]    = "清除所有单位（玩家、目标、焦点等）的逐单位覆盖设置，使其重新采用共享设置.",
+    ["Clears per-unit overrides for all units (Player, Target, Focus, etc.) so they all use the shared settings again."]    = "清除所有单位(玩家、目标、焦点等)的逐单位覆盖设置，使其重新采用共享设置.",
     ["Selected: "]  = "已选中: ",
 
     ["Fonts"] = "字体",
@@ -435,6 +472,9 @@ local T = {
     ["Re-anchors Blizzard Private Auras to MSUF Focus."] = "将暴雪私人光环锚定到MSUF焦点.",
     ["Show (Boss)"] = "显示 (首领)",
     ["Re-anchors Blizzard Private Auras to MSUF Boss frames."] = "将暴雪私人光环锚定到MSUF首领框架.",
+    ["Max (Player)"] = "最大 (玩家)",
+    ["Max (Focus/Boss)"] = "最大 (焦点/首领)",
+
     ["Preview"] = "预览",
     ["Visual only: adds a purple border + corner marker on private aura slots."] = "仅视觉: 在私人光环槽上添加紫色边框 + 角标记.",
     ["Debuff types"] = "Debuff类型",
@@ -443,20 +483,32 @@ local T = {
     ["Poison"] = "中毒",
     ["Disease"] = "疾病",
     ["Enrage"]  = "激怒",
-    ['Use "Enable filters" in the Auras 2.0 box as the master switch.\n\nInclude toggles are additive (they never hide your normal auras).\nHighlight toggles only change border colors.\n\nDebuff types: if you select ANY type, debuffs are limited to the selected types.'] =   '使用光环2.0框中的 "启用过滤器" 作为主开关.\n\n包含切换是附加的 (它们从不隐藏你的正常光环).\n高亮切换仅更改边框颜色.\n\nDebuff类型: 如果你选择任何类型, Debuffs将限制为所选类型.',
+    ['Use "Enable filters" in the Auras 2.0 box as the master switch.\n\nInclude toggles are additive (they never hide your normal auras).\nHighlight toggles only change border colors.'] = '使用光环2.0框中的 "启用过滤器" 作为主开关.\n\n包含切换是附加的 (它们从不隐藏你的正常光环).\n高亮切换仅更改边框颜色.',
     ["Max slots (Player)"] = "最多光环槽位 (玩家)",
     ["Max slots (Focus/Boss)"] = "最多光环槽位 (焦点/首领)",
-    ["2nd row down"]  = "第二行（下方）",
-    ["2nd row up"]  = "第二行（上方）",
+    ["2nd row down"]  = "第二行(下方)",
+    ["2nd row up"]  = "第二行(上方)",
     ["Separate rows"]  = "分开行",
     ["Single row (Mixed)"]  = "单行 (混合)",
     ["Grow Right"] = "向右增长",
     ["Grow Left"]   = "向左增长",
     ["Vertical Up"] = "垂直向上",
     ["Vertical Down"]   = "垂直向下",
+    ["Sort order"]  = "排序",
+    ["Unsorted (default)"]  = "未排序 (默认)",
+    ["Default (player > canApply > ID)"]  = "默认 (玩家 > 可施加 > ID)",
+    ["Big Defensive (longest first)"]   = "重要减益(最长优先)",
+    ["Expiration (soonest first)"] = "到期(最近优先)",
+    ["Expiration only"] = "仅到期",
+    ["Name (alphabetical)"] = "名称 (字母顺序)",
+    ["Name only"]   = "仅名称",
+    ["Buff Growth"] = "Buff增长",
+    ["Debuff Growth"] = "Debuff增长",
+    ["Private Growth"] = "私人增长",
+    ["Buff wrap rows"] = "Buff换行",
+    ["Debuff wrap rows"] = "Debuff换行",
 
-
-
+    
 
 
 
@@ -520,6 +572,8 @@ local T = {
     ["Enable Focus Range Fade"]   = "启用焦点距离渐隐",
     ["Enable Boss Range Fade"]   = "启用首领距离渐隐",
     ["WARNING:\n\nAFK/DND status indicators do NOT update while you are inside an instance AND in combat.\nThis is a client/API limitation.\n\nOutside of instance combat they should work normally.\n\nEnable anyway?"] = "警告:\n\n在副本中并且战斗时, AFK/DND状态指示器不会更新.\n这是客户端/API限制.\n\n在副本外战斗它们应该正常工作.\n\n仍要启用?",
+    ["Show welcome message on login"]   = "登录时显示欢迎消息",
+    ["Enable version check (peer-to-peer)"] = "启用版本检查 (点对点)",
 
 
 
@@ -609,7 +663,16 @@ local T = {
     ["Cooldown text: Safe"] =    "冷却文本: 安全",
     ["Cooldown text: Warning"] =    "冷却文本: 警告",
     ["Cooldown text: Urgent"] =    "冷却文本: 紧急",
-    
+    ["Mana"] =    "法力",
+    ["Rage"] =    "怒气",
+    ["Energy"] =    "能量",
+    ["Focus"] =    "集中值",
+    ["Runic Power"]     = "符文能量",
+    ["Insanity"] =    "虚空能量",
+    ["Fury"] =    "恶魔之怒",
+    ["Pain"] =    "痛苦",
+    ["Essence"] =    "精华",
+
 
 
 
@@ -683,7 +746,7 @@ local T = {
     ["Show names"] = "显示名称",
     ["WARNING: Best-guess tracking. Cooldowns are estimated; talents/resets may differ. If other party members use MSUF, kicks are synced via addon messages for better accuracy."] = "警告: 最佳猜测追踪. 冷却时间是估计的; 天赋/重置可能不同. 如果其他小队成员使用MSUF, 通过插件消息同步踢击以获得更好的准确性.",
     ["Show READY"] = "显示就绪",
-    ["Mythic+ only (party). Optional MSUF sync via addon messages. Disabled in raid/open world (0 overhead)."] = "仅限大秘境（小队）.可选通过插件消息同步 MSUF.团队/野外禁用(0 开销).",
+    ["Mythic+ only (party). Optional MSUF sync via addon messages. Disabled in raid/open world (0 overhead)."] = "仅限大秘境(小队).可选通过插件消息同步 MSUF.团队/野外禁用(0 开销).",
     ["Background alpha"] = "背景透明度",
     ["Row spacing"] = "行间距",
 
@@ -702,8 +765,12 @@ local T = {
     ["Profiles"] = "配置文件",
     ["Reset profile"] = "重置配置文件",
     ["|cffff0000MSUF:|r No active profile selected to reset."] = "|cffff0000MSUF:|r 没有选择要重置的激活配置文件.",
+    ["Reset all font size overrides?\n\nThis clears per-unit overrides for Name/Health/Power AND per-castbar overrides for Cast Name/Time so everything inherits the global defaults."] = "|cffff0000MSUF:|r 重置所有字体大小覆盖?\n\n这将清除单位名称/生命值/能量覆盖和施法条名称/时间覆盖, 因此一切都会继承全局默认设置.",
     ["Delete profile"] = "删除配置文件",
     ["Profiles are global. Each character selects one active profile. Create a new profile on the left or select an existing one on the right."] = "配置文件是全局的. 每个角色选择一个激活的配置文件. 在左侧创建一个新的配置文件或右侧选择一个现有的.",
+    ["Are you sure you want to delete '%s'?"] = "你确定要删除 '%s'?",
+    ["Copy profile"] = "复制配置文件",
+    ["Copy profile '%s' to new name:"] = "复制配置文件 '%s' 到新名称:",
     ["Auto-switch profile by specialization"] = "根据专精自动切换配置文件",
     ["New"] = "新建",
     ["Existing profiles"] = "现有配置文件",
