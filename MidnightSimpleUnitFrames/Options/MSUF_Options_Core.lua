@@ -21,7 +21,7 @@ end
 -- File-scope locals (avoid accidental globals; safe for split modules)
 local panel, title, sub
 local searchBox
-local frameGroup, fontGroup, auraGroup, castbarGroup
+local frameGroup, frameGroupHost, fontGroup, auraGroup, castbarGroup, castbarGroupHost
 local MSUF_BarsApplyGradient -- forward decl; assigned in Bars section below
 -- ---------------------------------------------------------------------------
 -- Gradient changes apply live (no reload required).
@@ -66,6 +66,109 @@ local function MSUF_BarsMenu_QueueScrollUpdate()
         if not (top and bottom) then return end
 
         local h = math.ceil((top - bottom) + 24)
+        if h < 500 then h = 500 end
+        child:SetHeight(h)
+
+        local w = scroll:GetWidth()
+        if w and w > 1 then child:SetWidth(w) end
+
+        if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
+        if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, run)
+    else
+        run()
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Frames menu: scroll container (same pattern as Bars menu above)
+-- ---------------------------------------------------------------------------
+local function MSUF_FramesMenu_QueueScrollUpdate()
+    local host = frameGroupHost
+    if not host then return end
+    local scroll = host._msufFramesScroll
+    local child  = host._msufFramesScrollChild
+    if not (scroll and child and child.SetHeight) then return end
+
+    if host._msufFramesScrollQueued then return end
+    host._msufFramesScrollQueued = true
+
+    local function run()
+        host._msufFramesScrollQueued = false
+        if not (scroll and child) then return end
+
+        -- Measure from scroll child top to the lowest visible group box bottom.
+        local top = child.GetTop and child:GetTop()
+        if not top then return end
+
+        local lowest = top
+        local content = host._msufFramesContent
+        if content then
+            local regions = { content:GetChildren() }
+            for i = 1, #regions do
+                local r = regions[i]
+                if r and r.IsShown and r:IsShown() and r.GetBottom then
+                    local b = r:GetBottom()
+                    if b and b < lowest then lowest = b end
+                end
+            end
+        end
+
+        local h = math.ceil((top - lowest) + 32)
+        if h < 500 then h = 500 end
+        child:SetHeight(h)
+
+        local w = scroll:GetWidth()
+        if w and w > 1 then child:SetWidth(w) end
+
+        if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
+        if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, run)
+    else
+        run()
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Castbar menu: scroll container (same pattern as Frames/Bars menus)
+-- ---------------------------------------------------------------------------
+local function MSUF_CastbarMenu_QueueScrollUpdate()
+    local host = castbarGroupHost
+    if not host then return end
+    local scroll = host._msufCastbarScroll
+    local child  = host._msufCastbarScrollChild
+    if not (scroll and child and child.SetHeight) then return end
+
+    if host._msufCastbarScrollQueued then return end
+    host._msufCastbarScrollQueued = true
+
+    local function run()
+        host._msufCastbarScrollQueued = false
+        if not (scroll and child) then return end
+
+        local top = child.GetTop and child:GetTop()
+        if not top then return end
+
+        local lowest = top
+        local content = host._msufCastbarContent
+        if content then
+            local regions = { content:GetChildren() }
+            for i = 1, #regions do
+                local r = regions[i]
+                if r and r.IsShown and r:IsShown() and r.GetBottom then
+                    local b = r:GetBottom()
+                    if b and b < lowest then lowest = b end
+                end
+            end
+        end
+
+        local h = math.ceil((top - lowest) + 32)
         if h < 500 then h = 500 end
         child:SetHeight(h)
 
@@ -749,14 +852,60 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
         if searchLabel and searchLabel.Hide then searchLabel:Hide() end
         if searchBox and searchBox.Hide then searchBox:Hide() end
     end
-    frameGroup = CreateFrame("Frame", nil, panel)
-    frameGroup:SetAllPoints()
+    -- Frames menu: scrollable host (same pattern as Bars menu).
+    frameGroupHost = CreateFrame("Frame", "MSUF_FramesMenuHost", panel)
+    frameGroupHost:SetAllPoints()
+
+    local framesScroll = CreateFrame("ScrollFrame", "MSUF_FramesMenuScrollFrame", frameGroupHost, "UIPanelScrollFrameTemplate")
+    framesScroll:SetPoint("TOPLEFT", frameGroupHost, "TOPLEFT", 0, -110)
+    framesScroll:SetPoint("BOTTOMRIGHT", frameGroupHost, "BOTTOMRIGHT", -36, 16)
+
+    local framesScrollChild = CreateFrame("Frame", "MSUF_FramesMenuScrollChild", framesScroll)
+    framesScrollChild:SetSize(1, 1)
+    framesScroll:SetScrollChild(framesScrollChild)
+
+    -- Content root: same offsets as before; no layout regression.
+    frameGroup = CreateFrame("Frame", "MSUF_FramesMenuContent", framesScrollChild)
+    frameGroup:SetPoint("TOPLEFT", framesScrollChild, "TOPLEFT", 0, 110)
+    frameGroup:SetSize(760, 1200)
+
+    -- Cache for the height updater + resize hooks.
+    frameGroupHost._msufFramesScroll      = framesScroll
+    frameGroupHost._msufFramesScrollChild = framesScrollChild
+    frameGroupHost._msufFramesContent     = frameGroup
+    if frameGroupHost.HookScript then
+        frameGroupHost:HookScript("OnShow", MSUF_FramesMenu_QueueScrollUpdate)
+        frameGroupHost:HookScript("OnSizeChanged", MSUF_FramesMenu_QueueScrollUpdate)
+    end
     fontGroup = CreateFrame("Frame", nil, panel)
     fontGroup:SetAllPoints()
     auraGroup = CreateFrame("Frame", nil, panel)
     auraGroup:SetAllPoints()
-    castbarGroup = CreateFrame("Frame", nil, panel)
-    castbarGroup:SetAllPoints()
+    -- Castbar menu: scrollable host (same pattern as Frames/Bars menus).
+    castbarGroupHost = CreateFrame("Frame", "MSUF_CastbarMenuHost", panel)
+    castbarGroupHost:SetAllPoints()
+
+    local castbarScroll = CreateFrame("ScrollFrame", "MSUF_CastbarMenuScrollFrame", castbarGroupHost, "UIPanelScrollFrameTemplate")
+    castbarScroll:SetPoint("TOPLEFT", castbarGroupHost, "TOPLEFT", 0, -110)
+    castbarScroll:SetPoint("BOTTOMRIGHT", castbarGroupHost, "BOTTOMRIGHT", -36, 16)
+
+    local castbarScrollChild = CreateFrame("Frame", "MSUF_CastbarMenuScrollChild", castbarScroll)
+    castbarScrollChild:SetSize(1, 1)
+    castbarScroll:SetScrollChild(castbarScrollChild)
+
+    -- Content root: same offsets as before; no layout regression.
+    castbarGroup = CreateFrame("Frame", "MSUF_CastbarMenuContent", castbarScrollChild)
+    castbarGroup:SetPoint("TOPLEFT", castbarScrollChild, "TOPLEFT", 0, 110)
+    castbarGroup:SetSize(760, 1200)
+
+    -- Cache for the height updater + resize hooks.
+    castbarGroupHost._msufCastbarScroll      = castbarScroll
+    castbarGroupHost._msufCastbarScrollChild = castbarScrollChild
+    castbarGroupHost._msufCastbarContent     = castbarGroup
+    if castbarGroupHost.HookScript then
+        castbarGroupHost:HookScript("OnShow", MSUF_CastbarMenu_QueueScrollUpdate)
+        castbarGroupHost:HookScript("OnSizeChanged", MSUF_CastbarMenu_QueueScrollUpdate)
+    end
     local function MSUF_HideLegacyCastbarEditButton()
         local names = {
             'MSUF_CastbarEditModeButton',
@@ -860,10 +1009,10 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     end
     local function UpdateGroupVisibility()
         -- Hide all instantly, then FadeIn the active group
-        frameGroup:Hide()
+        frameGroupHost:Hide()
         fontGroup:Hide()
         auraGroup:Hide()
-        castbarGroup:Hide()
+        castbarGroupHost:Hide()
         barGroupHost:Hide()
         miscGroup:Hide()
         profileGroup:Hide()
@@ -874,13 +1023,24 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
         elseif currentTabKey == "auras" then
             _TFadeIn(auraGroup, TRANS_TAB)
         elseif currentTabKey == "castbar" then
-            _TFadeIn(castbarGroup, TRANS_TAB)
+            -- Reset scroll to top when switching to castbar tab.
+            local cbScroll = castbarGroupHost._msufCastbarScroll
+            if cbScroll and cbScroll.SetVerticalScroll then
+                cbScroll:SetVerticalScroll(0)
+            end
+            _TFadeIn(castbarGroupHost, TRANS_TAB)
+            MSUF_CastbarMenu_QueueScrollUpdate()
         elseif currentTabKey == "misc" then
             _TFadeIn(miscGroup, TRANS_TAB)
         elseif currentTabKey == "profiles" then
             _TFadeIn(profileGroup, TRANS_TAB)
         else
-            _TFadeIn(frameGroup, TRANS_TAB)
+            -- Reset scroll to top when switching unit tabs.
+            local frScroll = frameGroupHost._msufFramesScroll
+            if frScroll and frScroll.SetVerticalScroll then
+                frScroll:SetVerticalScroll(0)
+            end
+            _TFadeIn(frameGroupHost, TRANS_TAB)
             -- Player-only layout: hide the old right-column offset sliders and show the compact group.
             local isUnitFrame = (UNIT_FRAME_KEYS[currentKey] == true)
             if panel and panel.playerTextLayoutGroup then panel.playerTextLayoutGroup:SetShown(isUnitFrame) end
@@ -889,12 +1049,23 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             end
             if panel and panel.playerLoadCondBox then panel.playerLoadCondBox:SetShown(isUnitFrame) end
             if panel and panel.playerSizeBox then panel.playerSizeBox:SetShown(isUnitFrame) end
+            -- Recalculate scroll height after layout changes.
+            MSUF_FramesMenu_QueueScrollUpdate()
         end
         if editModeButton then
             -- Show the shared bottom-left Edit Mode button in:
-            -- * Frames tab (unit frames)
-            -- * Castbar tab (castbar edit mode)
+            -- * Frames tab (unit frames) — inside scroll content
+            -- * Castbar tab (castbar edit mode) — fixed at panel bottom
             if currentTabKey == "castbar" then
+                -- Place inside castbar scroll content below the menu panel.
+                editModeButton:SetParent(castbarGroup)
+                editModeButton:ClearAllPoints()
+                local cbPanel = _G["MSUF_CastbarMenuPanel"]
+                if cbPanel then
+                    editModeButton:SetPoint("TOPLEFT", cbPanel, "BOTTOMLEFT", 0, -12)
+                else
+                    editModeButton:SetPoint("BOTTOMLEFT", castbarGroup, "BOTTOMLEFT", 16, 16)
+                end
                 editModeButton:Show()
             elseif currentTabKey == "frames" and (
                 currentKey == "player"
@@ -904,6 +1075,15 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
                 or currentKey == "boss"
                 or currentKey == "pet"
             ) then
+                -- Place inside scroll content below the Unit Alpha box.
+                editModeButton:SetParent(frameGroup)
+                editModeButton:ClearAllPoints()
+                local sizeBox = panel and panel.playerSizeBox
+                if sizeBox then
+                    editModeButton:SetPoint("TOPLEFT", sizeBox, "BOTTOMLEFT", 8, -56)
+                else
+                    editModeButton:SetPoint("BOTTOMLEFT", frameGroup, "BOTTOMLEFT", 16, 16)
+                end
                 editModeButton:Show()
             else
                 editModeButton:Hide()
@@ -2148,6 +2328,8 @@ local function MSUF_StyleToggleText(cb)
             CreateLabeledSlider = CreateLabeledSlider,
             CreateAxisStepper   = CreateAxisStepper,
         })
+    -- Store scroll updater on panel so Options_Player layout functions can trigger it.
+    panel._msufFramesScrollUpdate = MSUF_FramesMenu_QueueScrollUpdate
     -- Re-anchor boss-only controls into the boxed unitframe UI (so they don't float around)
     -- (removed) old boss portrait reposition block
     if bossSpacingSlider and panel and panel.playerSizeBox then
@@ -3026,13 +3208,13 @@ empowerStageBlinkTimeSlider:SetScript("OnShow", function(self)
         local panel = _G["MSUF_CastbarMenuPanel"]
         if not panel then
             panel = CreateFrame("Frame", "MSUF_CastbarMenuPanel", castbarEnemyGroup, "BackdropTemplate")
-            panel:SetPoint("TOPLEFT", castbarEnemyGroup, "TOPLEFT", 16, -175); panel:SetPoint("BOTTOMRIGHT", castbarEnemyGroup, "BOTTOMRIGHT", -16, 60); panel:EnableMouse(false)
+            panel:SetPoint("TOPLEFT", castbarEnemyGroup, "TOPLEFT", 16, -175); panel:SetPoint("RIGHT", castbarEnemyGroup, "RIGHT", -16, 0); panel:SetHeight(620); panel:EnableMouse(false)
             local tex = MSUF_TEX_WHITE8 or "Interface\\Buttons\\WHITE8X8"
             panel:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1, insets = { left = 0, right = 0, top = 0, bottom = 0 } })
             panel:SetBackdropColor(0, 0, 0, 0.20); panel:SetBackdropBorderColor(1, 1, 1, 0.15)
             -- Split lines
-            local vLine = panel:CreateTexture(nil, "ARTWORK"); vLine:SetColorTexture(1, 1, 1, 0.12); vLine:SetWidth(1); vLine:SetPoint("TOP", panel, "TOP", 0, -16); vLine:SetPoint("BOTTOM", panel, "BOTTOM", 0, 120)
-            local hLine = panel:CreateTexture(nil, "ARTWORK"); hLine:SetColorTexture(1, 1, 1, 0.12); hLine:SetHeight(1); hLine:SetPoint("LEFT", panel, "LEFT", 16, 0); hLine:SetPoint("RIGHT", panel, "RIGHT", -16, 0); hLine:SetPoint("BOTTOM", panel, "BOTTOM", 0, 120)
+            local vLine = panel:CreateTexture(nil, "ARTWORK"); vLine:SetColorTexture(1, 1, 1, 0.12); vLine:SetWidth(1); vLine:SetPoint("TOP", panel, "TOP", 0, -16); vLine:SetPoint("BOTTOM", panel, "BOTTOM", 0, 150)
+            local hLine = panel:CreateTexture(nil, "ARTWORK"); hLine:SetColorTexture(1, 1, 1, 0.12); hLine:SetHeight(1); hLine:SetPoint("LEFT", panel, "LEFT", 16, 0); hLine:SetPoint("RIGHT", panel, "RIGHT", -16, 0); hLine:SetPoint("BOTTOM", panel, "BOTTOM", 0, 150)
             -- Columns + empowered area
             local leftCol = CreateFrame("Frame", "MSUF_CastbarMenuPanelLeft", panel); leftCol:EnableMouse(false)
             leftCol:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -16); leftCol:SetPoint("RIGHT", vLine, "LEFT", -16, 0); leftCol:SetPoint("BOTTOM", hLine, "TOP", 0, 12)
@@ -3505,7 +3687,7 @@ do
 end
 BAR_DROPDOWN_WIDTH = 260
     barsTitle = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    barsTitle:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 16, -120)
+    barsTitle:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 16, -178)
     barsTitle:SetText(TR("Bar appearance"))
 local MSUF_RefreshAbsorbBarUIEnabled
 -- Forward-declared scope refs (filled when scope system is created below).
@@ -4134,6 +4316,22 @@ gradientCheck = CreateLabeledCheckButton(
         GameTooltip:Show()
     end)
     hpPowerOverrideCheck:SetScript('OnLeave', function() GameTooltip:Hide() end)
+
+    -- Re-anchor Bar scope (Shared/Override) to the TOP of the Bars menu so it's always visible.
+    -- A header label makes the purpose clear.
+    if not barGroup._msufBarScopeHeader then
+        local hdr = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        hdr:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 16, -120)
+        hdr:SetText(TR("Bar scope"))
+        barGroup._msufBarScopeHeader = hdr
+    end
+    hpPowerScopeLabel:ClearAllPoints()
+    hpPowerScopeLabel:SetPoint("TOPLEFT", barGroup._msufBarScopeHeader, "BOTTOMLEFT", 0, -6)
+    hpPowerScopeLabel:SetText(TR("Configure settings for"))
+    hpPowerScopeDrop:ClearAllPoints()
+    hpPowerScopeDrop:SetPoint("TOPLEFT", hpPowerScopeLabel, "BOTTOMLEFT", -16, -4)
+    hpPowerOverrideCheck:ClearAllPoints()
+    hpPowerOverrideCheck:SetPoint("TOPLEFT", hpPowerScopeDrop, "TOPRIGHT", 10, -4)
 
     hpModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     hpModeLabel:SetPoint("TOPLEFT", hpPowerOverrideCheck, "BOTTOMLEFT", 0, -44)
@@ -5652,7 +5850,7 @@ do
          end
         local leftPanel = CreateFrame("Frame", "MSUF_BarsMenuPanelLeft", barGroup, "BackdropTemplate")
         leftPanel:SetSize(330, BARS_PANEL_H)
-        leftPanel:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, -110)
+        leftPanel:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, -172)
         SetupPanel(leftPanel)
         local rightPanel = CreateFrame("Frame", "MSUF_BarsMenuPanelRight", barGroup, "BackdropTemplate")
         rightPanel:SetSize(320, BARS_PANEL_H)
@@ -5736,7 +5934,7 @@ do
     if leftPanel then
         leftPanel:ClearAllPoints()
         leftPanel:SetSize(330, BARS_PANEL_H)
-        leftPanel:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, -110)
+        leftPanel:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, -172)
     end
     if rightPanel and leftPanel then
         rightPanel:ClearAllPoints()
@@ -6108,43 +6306,33 @@ do
         prioCont:SetPoint("TOPLEFT", prioChk, "BOTTOMLEFT", -2, -4)
     end
 end
--- Left panel bottom: scope dropdown + override checkbox (below highlight priority container)
+-- Bar scope: positioned ABOVE both panels so it's always visible at the top.
 do
-    local prioCont2 = _G["MSUF_HighlightPrioContainer"]
     local leftPanel2 = _G["MSUF_BarsMenuPanelLeft"]
-    -- Section divider
-    if leftPanel2 then
-        if not leftPanel2.MSUF_SectionLine_BarScope then
-            local ln = leftPanel2:CreateTexture(nil, "ARTWORK")
-            leftPanel2.MSUF_SectionLine_BarScope = ln
-            ln:SetColorTexture(1, 1, 1, 0.20)
-            ln:SetHeight(1)
-        end
-        local scopeLine = leftPanel2.MSUF_SectionLine_BarScope
-        scopeLine:ClearAllPoints()
-        if prioCont2 then
-            scopeLine:SetPoint("TOPLEFT", prioCont2, "BOTTOMLEFT", -14, -18)
-            scopeLine:SetWidth(296)
-            scopeLine:Show()
-        else
-            scopeLine:Hide()
-        end
-        if hpPowerScopeLabel and scopeLine:IsShown() then
-            hpPowerScopeLabel:ClearAllPoints()
-            hpPowerScopeLabel:SetPoint("TOPLEFT", scopeLine, "BOTTOMLEFT", 16, -8)
-        end
-    elseif hpPowerScopeLabel and prioCont2 then
+    -- Hide the old scope section line inside the left panel (no longer needed there).
+    if leftPanel2 and leftPanel2.MSUF_SectionLine_BarScope then
+        leftPanel2.MSUF_SectionLine_BarScope:Hide()
+    end
+    -- Anchor scope header + dropdown above the two-column panels.
+    local scopeHeader = barGroup._msufBarScopeHeader
+    if scopeHeader then
+        scopeHeader:ClearAllPoints()
+        scopeHeader:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 16, -120)
+        scopeHeader:Show()
+    end
+    if hpPowerScopeLabel and scopeHeader then
         hpPowerScopeLabel:ClearAllPoints()
-        hpPowerScopeLabel:SetPoint("TOPLEFT", prioCont2, "BOTTOMLEFT", 0, -24)
+        hpPowerScopeLabel:SetPoint("LEFT", scopeHeader, "RIGHT", 12, 0)
+        hpPowerScopeLabel:SetText(TR("Configure settings for"))
     end
     if hpPowerScopeDrop and hpPowerScopeLabel then
         hpPowerScopeDrop:ClearAllPoints()
-        hpPowerScopeDrop:SetPoint("TOPLEFT", hpPowerScopeLabel, "BOTTOMLEFT", -16, -6)
-        UIDropDownMenu_SetWidth(hpPowerScopeDrop, 260)
+        hpPowerScopeDrop:SetPoint("LEFT", hpPowerScopeLabel, "RIGHT", -10, -2)
+        UIDropDownMenu_SetWidth(hpPowerScopeDrop, 160)
     end
     if hpPowerOverrideCheck and hpPowerScopeDrop then
         hpPowerOverrideCheck:ClearAllPoints()
-        hpPowerOverrideCheck:SetPoint("TOPLEFT", hpPowerScopeDrop, "BOTTOMLEFT", 16, -10)
+        hpPowerOverrideCheck:SetPoint("LEFT", hpPowerScopeDrop, "RIGHT", -10, 0)
     end
 end
 -- Right panel: text modes anchor directly under power bar border (scope dropdown moved to left)

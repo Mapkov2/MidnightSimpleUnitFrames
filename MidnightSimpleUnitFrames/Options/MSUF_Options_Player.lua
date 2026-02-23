@@ -1960,15 +1960,18 @@ end
             panel[hintKey]:SetText(hintText)
             panel[hintKey]:Hide()
         end
-        -- Single, stable anchor for all copy UIs (above the Edit Mode button, avoids indicator overlap)
-        panel[dropKey]:ClearAllPoints()
-        panel[dropKey]:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 52, 96)
-        panel[labelKey]:ClearAllPoints()
-        panel[labelKey]:SetPoint("LEFT", panel[dropKey], "LEFT", -40, 2)
-        panel[btnKey]:ClearAllPoints()
-        panel[btnKey]:SetPoint("LEFT", panel[dropKey], "RIGHT", -14, 2)
-        panel[hintKey]:ClearAllPoints()
-        panel[hintKey]:SetPoint("TOPLEFT", panel[dropKey], "BOTTOMLEFT", -32, -2)
+        -- Anchor inside scroll content (below the Unit Alpha box) so it scrolls with the layout.
+        local sizeBox = panel.playerSizeBox
+        if sizeBox then
+            panel[dropKey]:ClearAllPoints()
+            panel[dropKey]:SetPoint("TOPLEFT", sizeBox, "BOTTOMLEFT", 44, -16)
+            panel[labelKey]:ClearAllPoints()
+            panel[labelKey]:SetPoint("LEFT", panel[dropKey], "LEFT", -40, 2)
+            panel[btnKey]:ClearAllPoints()
+            panel[btnKey]:SetPoint("LEFT", panel[dropKey], "RIGHT", -14, 2)
+            panel[hintKey]:ClearAllPoints()
+            panel[hintKey]:SetPoint("TOPLEFT", panel[dropKey], "BOTTOMLEFT", -32, -2)
+        end
      end
     local _MSUF_COPY_UI_SPECS = {
         {
@@ -2445,6 +2448,10 @@ local isBossKey = false
             panel.playerInvertBossOrderCB:ClearAllPoints()
             panel.playerInvertBossOrderCB:SetPoint("TOPLEFT", container, "TOPLEFT", 12, ctrlY)
         end
+    end
+    -- Notify scroll container that content height may have changed.
+    if panel._msufFramesScrollUpdate then
+        panel._msufFramesScrollUpdate()
     end
  end
 -- Forward declarations for alpha helpers (defined after ApplyFromDB, used inside it).
