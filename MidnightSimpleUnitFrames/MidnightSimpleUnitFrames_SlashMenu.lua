@@ -2714,6 +2714,7 @@ presetHint:SetText("Overwrites your current active profile settings.")
 MSUF_SkinMuted(presetHint)
 do local KO_FI_URL="https://ko-fi.com/midnightsimpleunitframes#linkModal";
 local PAYPAL_URL="https://www.paypal.com/ncp/payment/H3N2P87S53KBQ";
+local PATREON_URL="https://www.patreon.com/cw/MidnightSimpleUnitframes";
 local GITHUB_URL="https://github.com/Mapkov2/MidnightSimpleUnitFrames";
 local ICON_DIR="Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\";
 local supportLabel=presetsCard:CreateFontString(nil,"OVERLAY","GameFontNormal")
@@ -2726,7 +2727,7 @@ if MSUF_SkinMuted then pcall(MSUF_SkinMuted,supportLabel)
 end
 local row=CreateFrame("Frame",nil,presetsCard)
 row:SetHeight(24)
-row:SetWidth(120)
+row:SetWidth(150)
 row:SetPoint("BOTTOMRIGHT",presetsCard,"BOTTOMRIGHT",-12,12)
 local function CreateIcon(texFile,size,tooltipTitle,tooltipText,onClick) local b=CreateFrame("Button",nil,row)
 b:SetSize(size,size)
@@ -2752,7 +2753,8 @@ end
 end
 return b end
 local sz=22;
-local gap=7 local icons={{tex="PayPal.png",title="PayPal",tip="Click to copy the PayPal support link.",onClick=function() MSUF_ShowCopyLink("PayPal",PAYPAL_URL) end
+local gap=7 local icons={{tex="Patreon.png",title="Patreon",tip="Click to copy the Patreon support link.",onClick=function() MSUF_ShowCopyLink("Patreon",PATREON_URL) end
+},{tex="PayPal.png",title="PayPal",tip="Click to copy the PayPal support link.",onClick=function() MSUF_ShowCopyLink("PayPal",PAYPAL_URL) end
 },{tex="Ko-Fi.png",title="Ko-fi",tip="Click to copy the Ko-fi link.",onClick=function() MSUF_ShowCopyLink("Ko-fi",KO_FI_URL) end
 },{tex="GitHub.png",title="GitHub",tip="Click to copy the GitHub repository link.",onClick=function() MSUF_ShowCopyLink("GitHub",GITHUB_URL) end
 },}
