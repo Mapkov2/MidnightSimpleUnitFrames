@@ -531,42 +531,31 @@ end
 local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer, isTarget, isFocus, wantPercent)
     if not (frame and bar and unit) then  return false end
     if not (F.UnitExists and F.UnitExists(unit)) then
-        return _MSUF_Bars_HidePower(bar, not wantPercent)
-    end
-    if not MSUF_IsTargetLikeFrame(frame) then
-        return _MSUF_Bars_HidePower(bar, not wantPercent)
-    end
-    if not ns.Bars.PowerBarAllowed(barsConf, isBoss, isPlayer, isTarget, isFocus) then
-        return _MSUF_Bars_HidePower(bar, not wantPercent)
-    end
-    local pType, pTok
-    if wantPercent then
-        pType, pTok = UnitPowerType(unit)
-        if pType == nil then return _MSUF_Bars_HidePower(bar, false) end
-        local pct
-        if CurveConstants and CurveConstants.ScaleTo100 then
-            pct = UnitPowerPercent(unit, pType, false, CurveConstants.ScaleTo100)
-        else
-            pct = UnitPowerPercent(unit, pType, false, true)
-    end
-        if pct == nil then return _MSUF_Bars_HidePower(bar, false) end
-        ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
-        MSUF_SetBarMinMax(bar, 0, 100)
-        bar:SetScript("OnUpdate", nil)
-        MSUF_SetBarValue(bar, pct, true)
-        bar:Show()
-         return true
-    end
-    pType, pTok = UnitPowerType(unit)
-    local cur = F.UnitPower(unit, pType)
-    local max = F.UnitPowerMax(unit, pType)
-    if cur == nil or max == nil then
         return _MSUF_Bars_HidePower(bar, true)
     end
+    if not MSUF_IsTargetLikeFrame(frame) then
+        return _MSUF_Bars_HidePower(bar, true)
+    end
+    if not ns.Bars.PowerBarAllowed(barsConf, isBoss, isPlayer, isTarget, isFocus) then
+        return _MSUF_Bars_HidePower(bar, true)
+    end
+    local pType, pTok
+    pType, pTok = UnitPowerType(unit)
+    if pType == nil then return _MSUF_Bars_HidePower(bar, false) end
+    -- Always use UnitPowerPercent for bar fill (secret-safe: returns a regular
+    -- number, never a secret). UnitPower/UnitPowerMax return secret values in
+    -- 12.0 that can leave StatusBar stuck at 100% after zone transitions.
+    local pct
+    if CurveConstants and CurveConstants.ScaleTo100 then
+        pct = UnitPowerPercent(unit, pType, false, CurveConstants.ScaleTo100)
+    else
+        pct = UnitPowerPercent(unit, pType, false, true)
+    end
+    if pct == nil then return _MSUF_Bars_HidePower(bar, false) end
     ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
-    bar:SetMinMaxValues(0, max)
+    MSUF_SetBarMinMax(bar, 0, 100)
     bar:SetScript("OnUpdate", nil)
-    MSUF_SetBarValue(bar, cur)
+    MSUF_SetBarValue(bar, pct, true)
     bar:Show()
      return true
 end
@@ -1342,32 +1331,204 @@ function _G.MSUF_SetHpSpacerSelectedUnitKey(unitKey, suppressUIRefresh)
 
 -- Castbar preview toggle moved to MSUF_Castbars.lua
 
+-- ═══════════════════════════════════════════════════════════════════════
+-- Blizzard Frame Kill System
+-- ═══════════════════════════════════════════════════════════════════════
+-- Tracks killed frames for re-assertion on PLAYER_ENTERING_WORLD
+-- (loading screens, flight, zone transitions).
+-- Combat-deferred RegisterStateDriver via lazy PLAYER_REGEN_ENABLED.
+-- Zero per-frame overhead: no OnUpdate, no polling.
+-- ═══════════════════════════════════════════════════════════════════════
+local _msufKilledFrames = {}           -- { [frame] = allowInEditMode }
+local _msufDeferredCount = 0           -- count of entries in deferred set (avoids next() check)
+local _msufKillProtectedDeferred = {}  -- { [frame] = true }
+local _msufKillGuardFrame              -- persistent event frame (created once)
+local _msufRegenListening = false      -- true when guard is listening to PLAYER_REGEN_ENABLED
+
+-- Pre-allocated handler references (no closures in hot paths).
+local _MSUF_ReassertKilledFrames       -- forward decl
+local _MSUF_FlushDeferred              -- forward decl
+
+local function _MSUF_ApplyStateDriverHide(frame)
+    if not (frame and RegisterStateDriver) then return false end
+    if F.InCombatLockdown and F.InCombatLockdown() then
+        if not _msufKillProtectedDeferred[frame] then
+            _msufKillProtectedDeferred[frame] = true
+            _msufDeferredCount = _msufDeferredCount + 1
+        end
+        -- Lazy-register REGEN listener only when there is actual deferred work.
+        if not _msufRegenListening and _msufKillGuardFrame then
+            _msufKillGuardFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            _msufRegenListening = true
+        end
+        return false
+    end
+    RegisterStateDriver(frame, "visibility", "hide")
+    frame.MSUF_StateDriverHidden = true
+    if _msufKillProtectedDeferred[frame] then
+        _msufKillProtectedDeferred[frame] = nil
+        _msufDeferredCount = _msufDeferredCount - 1
+    end
+    return true
+end
+
 local function KillFrame(frame, allowInEditMode)
     if not frame then  return end
+
+    _msufKilledFrames[frame] = allowInEditMode or false
+
     if frame.UnregisterAllEvents then
         frame:UnregisterAllEvents()
     end
     frame:Hide()
+
     local isProtected = frame.IsProtected and frame:IsProtected()
     if isProtected then
-        if RegisterStateDriver and not frame.MSUF_StateDriverHidden then
-            if not (F.InCombatLockdown and F.InCombatLockdown()) then
-                RegisterStateDriver(frame, "visibility", "hide")
-                frame.MSUF_StateDriverHidden = true
-            end
+        -- Primary: RegisterStateDriver (deferred if in combat).
+        if not frame.MSUF_StateDriverHidden then
+            _MSUF_ApplyStateDriverHide(frame)
+        end
+        -- Secondary: HookScript OnShow as safety net (fires only if frame re-shows).
+        if frame.HookScript and not frame.MSUF_KillOnShowHooked then
+            frame.MSUF_KillOnShowHooked = true
+            frame:HookScript("OnShow", function(f)
+                if allowInEditMode and MSUF_IsInEditMode and MSUF_IsInEditMode() then
+                    return
+                end
+                -- In combat: can't Hide() protected frames → alpha 0 + queue deferred.
+                if F.InCombatLockdown and F.InCombatLockdown() then
+                    if f.SetAlpha then f:SetAlpha(0) end
+                    if not _msufKillProtectedDeferred[f] then
+                        _msufKillProtectedDeferred[f] = true
+                        _msufDeferredCount = _msufDeferredCount + 1
+                    end
+                    if not _msufRegenListening and _msufKillGuardFrame then
+                        _msufKillGuardFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+                        _msufRegenListening = true
+                    end
+                    return
+                end
+                f:Hide()
+            end)
+        end
+    else
+        -- Non-protected: SetScript is sufficient (overwrite, not additive).
+        if frame.SetScript then
+            frame:SetScript("OnShow", function(f)
+                if allowInEditMode and MSUF_IsInEditMode and MSUF_IsInEditMode() then
+                    return
+                end
+                f:Hide()
+            end)
+        end
     end
-    elseif frame.SetScript then
-        frame:SetScript("OnShow", function(f)
-            if allowInEditMode and MSUF_IsInEditMode and MSUF_IsInEditMode() then
-                 return
-            end
-            f:Hide()
-         end)
-    end
+
     if frame.EnableMouse then
         frame:EnableMouse(false)
     end
  end
+
+-- Re-assert all killed frames. Called on PLAYER_ENTERING_WORLD only.
+-- Iterates 6-10 frames; not a hot path.
+_MSUF_ReassertKilledFrames = function()
+    if not MSUF_DB then return end
+    local g = MSUF_DB.general
+    if not g or g.disableBlizzardUnitFrames == false then return end
+
+    local inCombat = F.InCombatLockdown and F.InCombatLockdown()
+
+    for frame, allowInEditMode in pairs(_msufKilledFrames) do
+        -- Re-unregister events (Blizzard can re-register after loading screens).
+        if frame.UnregisterAllEvents then
+            frame:UnregisterAllEvents()
+        end
+
+        local isProtected = frame.IsProtected and frame:IsProtected()
+        if isProtected then
+            -- Re-apply or re-assert state driver.
+            if not frame.MSUF_StateDriverHidden then
+                _MSUF_ApplyStateDriverHide(frame)
+            elseif not inCombat then
+                -- Force re-eval (state driver may have been disrupted by loading screen).
+                RegisterStateDriver(frame, "visibility", "hide")
+            end
+            -- Reset combat-fallback alpha.
+            if not inCombat and frame.GetAlpha and frame:GetAlpha() ~= 1 then
+                frame:SetAlpha(1)
+            end
+        else
+            -- Non-protected: just re-hide if somehow visible.
+            if frame.IsShown and frame:IsShown() then
+                if not (allowInEditMode and MSUF_IsInEditMode and MSUF_IsInEditMode()) then
+                    frame:Hide()
+                end
+            end
+        end
+
+        if frame.EnableMouse then
+            frame:EnableMouse(false)
+        end
+    end
+end
+
+-- Flush deferred protected frames. Called on PLAYER_REGEN_ENABLED only.
+_MSUF_FlushDeferred = function()
+    if _msufDeferredCount <= 0 then return end
+    for frame in pairs(_msufKillProtectedDeferred) do
+        _MSUF_ApplyStateDriverHide(frame)
+        -- Reset combat-fallback alpha.
+        if frame.GetAlpha and frame:GetAlpha() ~= 1 then
+            frame:SetAlpha(1)
+        end
+        if frame.IsShown and frame:IsShown() then
+            frame:Hide()
+        end
+    end
+end
+
+-- Pre-allocated callback for PLAYER_ENTERING_WORLD timer (no closure per transition).
+local function _MSUF_KillGuard_PEW_Callback()
+    _MSUF_ReassertKilledFrames()
+    if _G.MSUF_ApplyCompatAnchor_PlayerFrame then
+        _G.MSUF_ApplyCompatAnchor_PlayerFrame()
+    end
+end
+
+-- Pre-allocated OnEvent handler (no closure per call).
+local function _MSUF_KillGuard_OnEvent(_, event)
+    if event == "PLAYER_ENTERING_WORLD" then
+        -- Delayed by one frame so Blizzard's own setup code runs first.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, _MSUF_KillGuard_PEW_Callback)
+        else
+            _MSUF_KillGuard_PEW_Callback()
+        end
+        return
+    end
+
+    if event == "PLAYER_REGEN_ENABLED" then
+        _MSUF_FlushDeferred()
+        -- Re-apply compat anchor (may have been deferred).
+        if _G.MSUF_ApplyCompatAnchor_PlayerFrame then
+            _G.MSUF_ApplyCompatAnchor_PlayerFrame()
+        end
+        -- Stop listening if no more deferred work.
+        if _msufDeferredCount <= 0 and _msufKillGuardFrame then
+            _msufKillGuardFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            _msufRegenListening = false
+        end
+        return
+    end
+end
+
+local function _MSUF_EnsureKillGuard()
+    if _msufKillGuardFrame then return end
+    _msufKillGuardFrame = F.CreateFrame("Frame")
+    -- Always listen to zone transitions.
+    _msufKillGuardFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    -- PLAYER_REGEN_ENABLED: registered lazily only when deferred work exists.
+    _msufKillGuardFrame:SetScript("OnEvent", _MSUF_KillGuard_OnEvent)
+end
 local function MSUF_GetMSUFPlayerFrame()
     if _G and _G.MSUF_player then return _G.MSUF_player end
     local list = _G and _G.MSUF_UnitFrames
@@ -1465,6 +1626,8 @@ local function HideDefaultFrames()
             end
     end
     end
+    -- Start the persistent kill guard (re-asserts on PLAYER_ENTERING_WORLD + PLAYER_REGEN_ENABLED).
+    _MSUF_EnsureKillGuard()
  end
 local function MSUF_GetVisibilityDriverForUnit(unit)
     if unit == "target" then
@@ -2682,7 +2845,16 @@ function _G.MSUF_UFCore_UpdatePowerTextFast(self)
 end
 function _G.MSUF_UFCore_UpdatePowerBarFast(self)
     if not self then  return end
-    ns.Bars.ApplySpec(self, self.unit, "power_abs")
+    local bar = self.targetPowerBar
+    if not (bar and self.unit) then  return end
+    -- Use the percentage path (power_pct) instead of the absolute path (power_abs).
+    -- UnitPowerPercent returns a regular number (never secret), which reliably
+    -- drives StatusBar:SetMinMaxValues(0,100) + SetValue(pct) across all zone
+    -- transitions (including M+ exit). The absolute path used UnitPower/UnitPowerMax
+    -- which return secret values in 12.0 that can leave the bar stuck at 100%.
+    MSUF_EnsureUnitFlags(self)
+    local barsConf = (MSUF_DB and MSUF_DB.bars) or {}
+    ns.Bars.ApplySpec(self, self.unit, "power_pct", barsConf, self.isBoss, self._msufIsPlayer, self._msufIsTarget, self._msufIsFocus)
  end
 local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
     ns.Bars.ResetHealthAndOverlays(self, clearAbsorbs)

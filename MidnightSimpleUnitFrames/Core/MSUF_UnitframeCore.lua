@@ -2346,31 +2346,33 @@ do
             local pType = _UnitPowerType(unit)
             if pType == nil then return end
 
+            -- TEXT CACHE: Fetch cur/max once for MSUF_Text.RenderPowerText.
+            -- (Text rendering handles secret values correctly via C_StringUtil.)
+            f._msufCachedPType = pType
             local cur = _UnitPower(unit, pType, false)
-            if type(cur) ~= "number" then cur = 0 end
+            local mx  = _UnitPowerMax(unit, pType, false)
+            f._msufCachedPCur  = (type(cur) == "number") and cur or nil
+            f._msufCachedPMax  = (type(mx) == "number") and mx or nil
 
-            local mx = _UnitPowerMax(unit, pType, false)
-            if type(mx) == "number" then
-                -- Always apply MinMax (cheap, keeps bar+text consistent after UNIT_MAXPOWER).
-                bar:SetMinMaxValues(0, mx)
-            else
-                mx = nil
-            end
-
-            bar:SetValue(cur)
-
-            -- Cache values for MSUF_Text.RenderPowerText.
-            f._msufCachedPType   = pType
-            f._msufCachedPCur    = cur
-            f._msufCachedPMax    = mx
+            -- BAR FILL: Use UnitPowerPercent (returns a regular number, never
+            -- a secret) so the StatusBar always renders the correct fill.
+            -- UnitPower/UnitPowerMax can return secret values that do not
+            -- reliably drive SetMinMaxValues+SetValue after zone transitions
+            -- (e.g. leaving M+), causing the bar to appear permanently full.
             if _UnitPowerPercent then
                 local pct = _UnitPowerPercent(unit, pType, false, _Curve100)
                 if type(pct) == "number" then
+                    bar:SetMinMaxValues(0, 100)
+                    bar:SetValue(pct)
                     f._msufCachedPPct = pct
                 else
                     f._msufCachedPPct = nil
                 end
             else
+                -- Fallback: UnitPowerPercent unavailable (shouldn't happen in 12.0).
+                -- Reuse cur/mx from text cache above.
+                if type(mx) == "number" then bar:SetMinMaxValues(0, mx) end
+                if type(cur) == "number" then bar:SetValue(cur) end
                 f._msufCachedPPct = nil
             end
             f._msufCachedPSerial = Core._frameNowSerial
