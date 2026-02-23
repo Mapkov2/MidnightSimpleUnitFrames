@@ -7,106 +7,90 @@
 local addonName, ns = ...
 
 -- =====================================================================
--- 12.0 API guard: StatusBar:SetTimerDuration signature
+-- 12.0 SetTimerDuration helper (NO global hook)
 --
--- Patch 12.0 uses: SetTimerDuration(duration [, interpolationEnum, directionEnum])
--- Where:
---   interpolationEnum = Enum.StatusBarInterpolation.*
---   directionEnum     = Enum.StatusBarTimerDirection.*
+-- IMPORTANT (Midnight/secret values):
+-- Replacing or hooksecuring the shared StatusBar:SetTimerDuration method will
+-- route *all* Blizzard timer bars through addon Lua, which taints the duration/
+-- remaining-time values. Blizzard UI (e.g. EncounterTimeline) then can crash on
+-- secret-number comparisons ("attempt to compare ... secret number value tainted by ...").
 --
--- Some legacy/ported code (or older libs) still call SetTimerDuration like:
---   SetTimerDuration(duration, dt)
---   SetTimerDuration(duration, 0/1)
---   SetTimerDuration(duration, true/false)
--- which can hard-error (arg #2/#3) and break unrelated addons because we
--- hook the shared StatusBar method.
+-- Therefore we MUST NOT hook/override StatusBar:SetTimerDuration globally.
 --
--- Guard strategy:
---   * Accept and forward ONLY valid enum values for arg #2/#3.
---   * If arg #2/#3 are invalid (e.g. dt float), drop the optional pair and
---     call orig(self, duration) to avoid hard errors.
---   * Preserve the "paired optional args" contract: never pass arg #2
---     without a valid arg #3.
+-- Instead, MSUF uses this scoped helper for its own statusbars to normalize the
+-- optional interpolation/direction arguments and avoid legacy callers passing dt/0/1/bool.
 -- =====================================================================
+
 do
-  if not _G.MSUF__SetTimerDurationSigGuard then
-    _G.MSUF__SetTimerDurationSigGuard = true
+  if type(_G.MSUF_StatusBarSetTimerDurationSafe) ~= "function" then
+    local enumInterp = _G.Enum and _G.Enum.StatusBarInterpolation
+    local enumDir    = _G.Enum and _G.Enum.StatusBarTimerDirection
 
-    local probe = CreateFrame("StatusBar", nil, UIParent)
-    local mt = probe and getmetatable(probe)
-    local idx = mt and mt.__index
-    local orig = idx and idx.SetTimerDuration
+    local validInterp = nil
+    local validDir    = nil
 
-    if type(orig) == "function" then
-      local enumInterp = _G.Enum and _G.Enum.StatusBarInterpolation
-      local enumDir    = _G.Enum and _G.Enum.StatusBarTimerDirection
-
-      local validInterp = nil
-      local validDir    = nil
-
-      if type(enumInterp) == "table" then
-        validInterp = {}
-        for _, v in pairs(enumInterp) do
-          if type(v) == "number" then validInterp[v] = true end
-        end
+    if type(enumInterp) == "table" then
+      validInterp = {}
+      for _, v in pairs(enumInterp) do
+        if type(v) == "number" then validInterp[v] = true end
       end
+    end
 
-      if type(enumDir) == "table" then
-        validDir = {}
-        for _, v in pairs(enumDir) do
-          if type(v) == "number" then validDir[v] = true end
-        end
+    if type(enumDir) == "table" then
+      validDir = {}
+      for _, v in pairs(enumDir) do
+        if type(v) == "number" then validDir[v] = true end
       end
+    end
 
-      local function _NormalizeInterpolation(x)
-        if x == nil then return nil end
-        local t = type(x)
-        if t == "number" then
-          -- Only accept when it matches the enum (Plater/Blizz pass these).
-          if validInterp and validInterp[x] then return x end
-          -- Legacy 0/1, dt floats, etc. are treated as invalid.
-          return nil
-        elseif t == "boolean" then
-          -- Legacy boolean: treat as Immediate (safest) if available.
-          if enumInterp and type(enumInterp.Immediate) == "number" then
-            return enumInterp.Immediate
-          end
-          return nil
+    local function _NormalizeInterpolation(x)
+      if x == nil then return nil end
+      local t = type(x)
+      if t == "number" then
+        if validInterp and validInterp[x] then return x end
+        return nil
+      elseif t == "boolean" then
+        if enumInterp and type(enumInterp.Immediate) == "number" then
+          return enumInterp.Immediate
         end
         return nil
       end
+      return nil
+    end
 
-      local function _NormalizeDirection(x)
-        if x == nil then return nil end
-        local t = type(x)
-        if t == "number" then
-          if validDir and validDir[x] then return x end
-          return nil
-        elseif t == "boolean" then
-          -- Legacy boolean: map to Remaining/Elapsed when possible.
-          if enumDir then
-            local rem = enumDir.RemainingTime
-            local ela = enumDir.ElapsedTime
-            if x and type(rem) == "number" then return rem end
-            if (not x) and type(ela) == "number" then return ela end
-          end
-          return nil
+    local function _NormalizeDirection(x)
+      if x == nil then return nil end
+      local t = type(x)
+      if t == "number" then
+        if validDir and validDir[x] then return x end
+        return nil
+      elseif t == "boolean" then
+        if enumDir then
+          local rem = enumDir.RemainingTime
+          local ela = enumDir.ElapsedTime
+          if x and type(rem) == "number" then return rem end
+          if (not x) and type(ela) == "number" then return ela end
         end
-        -- Treat strings/other types as invalid; drop them.
         return nil
       end
+      return nil
+    end
 
-      idx.SetTimerDuration = function(self, duration, interpolation, direction)
-        interpolation = _NormalizeInterpolation(interpolation)
-        direction     = _NormalizeDirection(direction)
-
-        -- 12.0 C API: [interpolation, direction] are a paired optional group.
-        -- Only forward the full triplet when BOTH optional args are valid.
-        if interpolation ~= nil and direction ~= nil then
-          return orig(self, duration, interpolation, direction)
-        end
-        return orig(self, duration)
+    function _G.MSUF_StatusBarSetTimerDurationSafe(statusBar, duration, interpolation, direction)
+      if not statusBar or not statusBar.SetTimerDuration then
+        return false
       end
+
+      interpolation = _NormalizeInterpolation(interpolation)
+      direction     = _NormalizeDirection(direction)
+
+      if interpolation ~= nil and direction ~= nil then
+        statusBar:SetTimerDuration(duration, interpolation, direction)
+        return true
+      end
+
+      statusBar:SetTimerDuration(duration)
+      return true
     end
   end
 end
