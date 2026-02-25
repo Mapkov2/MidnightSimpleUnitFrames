@@ -78,6 +78,8 @@ do
         activeSpells = {}, -- [spellID] = true
         spellState   = {}, -- [spellID] = 1/0/nil
         activeCount  = 0,
+        knownCount   = 0,
+        inRangeCount = 0,
 
         inRangeAny = true,
         lastAppliedAlpha = -1,
@@ -105,18 +107,33 @@ do
     end
 
     local function RF_RecomputeInRangeAny()
-        local anyKnown = false
-        local anyTrue = false
-        for _, v in pairs(RF.spellState) do
-            if v ~= nil then
-                anyKnown = true
-                if v == 1 then
-                    anyTrue = true
-                    break
-                end
+        RF.inRangeAny = (RF.knownCount <= 0) or (RF.inRangeCount > 0)
+    end
+
+    local function RF_SetSpellState(spellID, newValue)
+        local oldValue = RF.spellState[spellID]
+        if oldValue == newValue then
+            return
+        end
+
+        if oldValue ~= nil then
+            RF.knownCount = RF.knownCount - 1
+            if oldValue == 1 then
+                RF.inRangeCount = RF.inRangeCount - 1
             end
         end
-        RF.inRangeAny = (not anyKnown) or anyTrue
+
+        RF.spellState[spellID] = newValue
+
+        if newValue ~= nil then
+            RF.knownCount = RF.knownCount + 1
+            if newValue == 1 then
+                RF.inRangeCount = RF.inRangeCount + 1
+            end
+        end
+
+        if RF.knownCount < 0 then RF.knownCount = 0 end
+        if RF.inRangeCount < 0 then RF.inRangeCount = 0 end
     end
 
     local function RF_ResolveSpellID(spellIdentifier)
@@ -142,7 +159,7 @@ do
         RF.activeSpells[spellID] = nil
         RF.activeCount = RF.activeCount - 1
         EnableSpellRangeCheck(spellID, false)
-        RF.spellState[spellID] = nil
+        RF_SetSpellState(spellID, nil)
     end
 
     local function RF_DisableAllSpells()
@@ -152,6 +169,8 @@ do
         wipe(RF.activeSpells)
         wipe(RF.spellState)
         RF.activeCount = 0
+        RF.knownCount = 0
+        RF.inRangeCount = 0
         RF.inRangeAny = true
     end
 
@@ -311,9 +330,9 @@ do
 
         if checksRange == true then
             local v = ((isInRange == true) or (isInRange == 1)) and 1 or 0
-            RF.spellState[spellID] = v
+            RF_SetSpellState(spellID, v)
         else
-            RF.spellState[spellID] = nil
+            RF_SetSpellState(spellID, nil)
         end
 
         RF_RecomputeInRangeAny()
@@ -331,6 +350,8 @@ do
 
     function _G.MSUF_RangeFade_Reset()
         wipe(RF.spellState)
+        RF.knownCount = 0
+        RF.inRangeCount = 0
         RF.inRangeAny = true
         RF.lastAppliedAlpha = -1
         RF_ApplyAlphaIfChanged(true)
