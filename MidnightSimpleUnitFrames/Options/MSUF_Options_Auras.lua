@@ -467,6 +467,8 @@ local function MSUF_StyleAuras2CompactSlider(s, opts)
 --   Use single-choice (radio) selections so it reads like a real dropdown (not a toggle list)
 local function MSUF_FixUIDropDown(dd, width)
     if not dd then  return end
+    -- Mark as dropdown so gating/enabling logic can use UIDropDownMenu_* helpers reliably.
+    dd.__MSUF_isDropDown = true
     -- Width: keep the template visuals intact (don't manually widen the parent frame).
     if width then
         -- UIDropDownMenu_SetWidth handles the internal regions (Text/Left/Middle/Right) correctly.
@@ -1304,11 +1306,22 @@ local function SyncLegacySharedFromSharedFilters()
 local function SetCheckboxEnabled(cb, enabled)
     if not cb then  return end
     enabled = enabled and true or false
-    -- UIDropDownMenuTemplate frames lack :SetEnabled(); use Enable/Disable or alpha fallback.
-    if cb.SetEnabled then
-        cb:SetEnabled(enabled)
-    elseif cb.Enable and cb.Disable then
-        if enabled then cb:Enable() else cb:Disable() end
+    -- UIDropDownMenuTemplate: use Blizzard helpers (methods differ across versions).
+    if cb.__MSUF_isDropDown or cb.Button or cb.Text then
+        if type(UIDropDownMenu_EnableDropDown) == "function" and type(UIDropDownMenu_DisableDropDown) == "function" then
+            if enabled then
+                UIDropDownMenu_EnableDropDown(cb)
+            else
+                UIDropDownMenu_DisableDropDown(cb)
+            end
+        end
+    else
+        -- Regular checkboxes/sliders.
+        if cb.SetEnabled then
+            cb:SetEnabled(enabled)
+        elseif cb.Enable and cb.Disable then
+            if enabled then cb:Enable() else cb:Disable() end
+        end
     end
     if cb.SetAlpha then cb:SetAlpha(enabled and 1 or 0.35) end
     if cb.text then

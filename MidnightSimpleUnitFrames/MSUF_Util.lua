@@ -163,21 +163,12 @@ end
 
 function MSUF_SetTextIfChanged(fs, text)
     if not fs then return end
-
-    -- Midnight/Beta "secret value" safety:
-    -- Never compare or cache text, because secret values will error on equality checks.
-    -- Just push the text through to the FontString.
-    local tt = type(text)
-    if tt == "nil" then
-        fs:SetText("")
-    elseif tt == "string" then
-        fs:SetText(text)
-    elseif tt == "number" then
-        -- IMPORTANT: do NOT tostring() here. Midnight/Beta "secret values" can
-        -- error during string conversion; the FontString API can handle numbers.
+    -- PERF: Simplified hot path. FontString:SetText() handles nil→"", numbers, and
+    -- secret values natively via C-side. No Lua-side type() branching needed.
+    -- Secret-safe: no comparison on text value, just nil gate.
+    if text ~= nil then
         fs:SetText(text)
     else
-        -- Be conservative: avoid passing unknown types (could error without pcall).
         fs:SetText("")
     end
 end

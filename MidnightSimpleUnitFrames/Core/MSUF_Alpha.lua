@@ -211,9 +211,36 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
     MSUF_Alpha_SetTextAlpha(frame.hpText, one)
     MSUF_Alpha_SetTextAlpha(frame.powerText, one)
  end
+-- PERF: Cache layered alpha helper refs at file scope (called 5-20x/sec during combat).
+-- All 6 functions are defined in this file above; _G refs are stable after load.
+local _cachedIsLayeredEnabled = nil
+local _cachedGetLayerMode = nil
+local _cachedGetAlphaIC = nil
+local _cachedGetAlphaOOC = nil
+local _cachedGetBgAlphaIC = nil
+local _cachedGetBgAlphaOOC = nil
+local _cachedGetDesiredAlpha = nil
+local _cachedGetRangeFadeMul = nil
+local _alphaFnsCached = false
+
+local function _CacheAlphaFns()
+    if _alphaFnsCached then return end
+    _cachedIsLayeredEnabled = _G.MSUF_Alpha_IsLayeredModeEnabled
+    _cachedGetLayerMode = _G.MSUF_Alpha_GetLayerMode
+    _cachedGetAlphaIC = _G.MSUF_Alpha_GetAlphaInCombat
+    _cachedGetAlphaOOC = _G.MSUF_Alpha_GetAlphaOOC
+    _cachedGetBgAlphaIC = _G.MSUF_Alpha_GetBgAlphaInCombat
+    _cachedGetBgAlphaOOC = _G.MSUF_Alpha_GetBgAlphaOOC
+    _cachedGetDesiredAlpha = _G.MSUF_GetDesiredUnitAlpha
+    _cachedGetRangeFadeMul = _G.MSUF_GetRangeFadeMul
+    _alphaFnsCached = true
+end
+
 function _G.MSUF_ApplyUnitAlpha(frame, key)
     if not MSUF_DB then EnsureDB() end
     if not frame or not frame.SetAlpha then  return end
+    -- PERF: Resolve function refs once (eliminates 6-8 _G hash lookups per call).
+    if not _alphaFnsCached then _CacheAlphaFns() end
     local conf = (MSUF_DB and key) and MSUF_DB[key] or nil
     if ns and ns.UF and ns.UF.IsDisabled and ns.UF.IsDisabled(conf) then  return end
     local isEditMode = (_G.MSUF_UnitEditModeActive == true)
@@ -262,18 +289,18 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
          return
     end
     -- Layered alpha mode: foreground/background alphas (e.g. bars dim) without dimming text/portrait.
-    local layered = _G.MSUF_Alpha_IsLayeredModeEnabled and _G.MSUF_Alpha_IsLayeredModeEnabled(key)
+    local layered = _cachedIsLayeredEnabled and _cachedIsLayeredEnabled(key)
     if layered and frame._msufAlphaSupportsLayered then
-        local layerMode = _G.MSUF_Alpha_GetLayerMode and _G.MSUF_Alpha_GetLayerMode(key) or "fgbg"
+        local layerMode = _cachedGetLayerMode and _cachedGetLayerMode(key) or "fgbg"
         local inCombat = (_G.MSUF_InCombat == true)
-        local fgIn  = _G.MSUF_Alpha_GetAlphaInCombat and _G.MSUF_Alpha_GetAlphaInCombat(key) or 1
-        local fgOut = _G.MSUF_Alpha_GetAlphaOOC and _G.MSUF_Alpha_GetAlphaOOC(key) or 1
-        local bgIn  = _G.MSUF_Alpha_GetBgAlphaInCombat and _G.MSUF_Alpha_GetBgAlphaInCombat(key) or 1
-        local bgOut = _G.MSUF_Alpha_GetBgAlphaOOC and _G.MSUF_Alpha_GetBgAlphaOOC(key) or 1
+        local fgIn  = _cachedGetAlphaIC and _cachedGetAlphaIC(key) or 1
+        local fgOut = _cachedGetAlphaOOC and _cachedGetAlphaOOC(key) or 1
+        local bgIn  = _cachedGetBgAlphaIC and _cachedGetBgAlphaIC(key) or 1
+        local bgOut = _cachedGetBgAlphaOOC and _cachedGetBgAlphaOOC(key) or 1
         local alphaFG = inCombat and fgIn or fgOut
         local alphaBG = inCombat and bgIn or bgOut
         -- Range-fade multiplier (Target/Focus). Defaults to 1.
-        local rm = _G.MSUF_GetRangeFadeMul
+        local rm = _cachedGetRangeFadeMul
         if type(rm) == "function" then
             local m = rm(key, unit, frame)
             if type(m) == "number" then
@@ -290,11 +317,11 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
          return
     end
     -- Non-layered alpha mode: apply one alpha to the frame.
-    local a = _G.MSUF_GetDesiredUnitAlpha and _G.MSUF_GetDesiredUnitAlpha(key) or 1
+    local a = _cachedGetDesiredAlpha and _cachedGetDesiredAlpha(key) or 1
     if type(a) ~= "number" then a = 1 end
     if a < 0 then a = 0 elseif a > 1 then a = 1 end
     -- Range-fade multiplier (Target/Focus). Defaults to 1.
-    local rm = _G.MSUF_GetRangeFadeMul
+    local rm = _cachedGetRangeFadeMul
     if type(rm) == "function" then
         local m = rm(key, unit, frame)
         if type(m) == "number" then

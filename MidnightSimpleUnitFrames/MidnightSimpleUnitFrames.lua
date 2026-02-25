@@ -506,7 +506,32 @@ function ns.Bars.SetOverlayBarTexture(bar, texGetter)
 -- Patch Q2: Bars spec-driven Apply (Health/Power/Absorb/HealAbsorb + Reset/Hide)
 ns.Bars._msufPatchQ = ns.Bars._msufPatchQ or { version = "Q2" }
 ns.Bars.Spec = ns.Bars.Spec or {}
+-- PERF: Cache health/power spec functions at file scope (called 50-250x/sec in combat).
+-- These are static after init; eliminates ns→Bars→Spec→[key] table chain from hot path.
+-- Secret-safe: no value comparisons, pure function reference caching.
+local _cachedHealthSpec = nil
+local _cachedPowerPctSpec = nil
+
 function ns.Bars.ApplySpec(frame, unit, key, ...)
+    if key == "health" then
+        local fn = _cachedHealthSpec
+        if not fn then
+            fn = ns.Bars.Spec and ns.Bars.Spec.health
+            _cachedHealthSpec = fn
+        end
+        if fn then return fn(frame, unit, ...) end
+        return nil
+    end
+    if key == "power_pct" then
+        local fn = _cachedPowerPctSpec
+        if not fn then
+            fn = ns.Bars.Spec and ns.Bars.Spec.power_pct
+            _cachedPowerPctSpec = fn
+        end
+        if fn then return fn(frame, unit, ...) end
+        return nil
+    end
+    -- Cold path: other spec keys (rare / non-combat)
     local fn = ns.Bars.Spec and ns.Bars.Spec[key]
     if not fn then  return nil end
     return fn(frame, unit, ...)

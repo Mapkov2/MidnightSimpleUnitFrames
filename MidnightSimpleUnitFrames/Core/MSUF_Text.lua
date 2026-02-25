@@ -6,17 +6,41 @@ local F = ns.Cache and ns.Cache.F or {}
 local type, tonumber, select = type, tonumber, select
 local string_format = string.format
 
+-- PERF: Resolve issecretvalue once at load. Must be before any function that
+-- uses it (ns.Text.Set, RenderHpMode, RenderPowerText).
+local _MSUF_issecret = _G.issecretvalue
+local _MSUF_IsSecret
+if type(_MSUF_issecret) == "function" then
+    _MSUF_IsSecret = function(v) return _MSUF_issecret(v) and true or false end
+else
+    _MSUF_IsSecret = function() return false end
+end
+
 ns.Text._msufPatchD = ns.Text._msufPatchD or { version = "D1" }
 function ns.Text.Set(fs, text, show)
-    -- Secret-safe: do NOT compare strings. Pass-through to API only.
+    -- Secret-safe: do NOT compare secret strings.
     if not fs then  return end
     if not show then
         if fs.Hide then fs:Hide() end
-        -- Clearing to empty string is safe (non-secret).
+        if fs._msufLastSetT then fs._msufLastSetT = nil end
         if fs.SetText then fs:SetText("") end
          return
     end
     if text == nil then text = "" end
+    -- PERF: Skip SetText if text unchanged. Saves C-side string copy + layout
+    -- invalidation + GC of the old internal string.
+    -- Secret-safe: issecretvalue guards the comparison. Secret strings
+    -- (from ShortenNumber on secret UnitPower values) fall through to SetText.
+    local isv = _G.issecretvalue
+    if not isv or not isv(text) then
+        if text == fs._msufLastSetT then
+            if fs.Show then fs:Show() end
+            return
+        end
+        fs._msufLastSetT = text
+    else
+        fs._msufLastSetT = nil
+    end
     if fs.SetText then fs:SetText(text) end
     if fs.Show then fs:Show() end
  end
@@ -47,9 +71,12 @@ function ns.Text.SetFormatted(fs, show, fmt, ...)
     if not fs then  return end
     if not show then
         if fs.Hide then fs:Hide() end
+        if fs._msufLastSetT then fs._msufLastSetT = nil end
         if fs.SetText then fs:SetText("") end
          return
     end
+    -- Invalidate diff cache (SetFormattedText changes text through C side)
+    fs._msufLastSetT = nil
     if fs.SetFormattedText then
         fs:SetFormattedText(fmt, ...)
     else
@@ -61,6 +88,7 @@ function ns.Text.SetFormatted(fs, show, fmt, ...)
 function ns.Text.Clear(fs, hide)
     -- Secret-safe: do NOT compare strings.
     if not fs then  return end
+    if fs._msufLastSetT then fs._msufLastSetT = nil end
     if fs.SetText then fs:SetText("") end
     if hide and fs.Hide then fs:Hide() end
  end
@@ -184,16 +212,30 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     if split then
         -- PERF: Fast path for split with no absorb
         if not absorbText then
-            ns.Text.Set(hpText, hpStr or "", true)
+            local h = hpStr or ""
+            -- PERF: Component diff for split mode (2 FontStrings)
+            -- Secret-safe: skip diff if h could be a secret string (ShortenNumber on secret HP)
+            local pctStr = _MSUF_PctToStr1D(hpPct)
+            if not _MSUF_IsSecret(h) and h == self._msufLastH and pctStr == self._msufLastPctS then return end
+            if not _MSUF_IsSecret(h) then self._msufLastH = h else self._msufLastH = nil end
+            self._msufLastPctS = pctStr
+            ns.Text.Set(hpText, h, true)
+            if pctStr then
+                ns.Text.Set(self.hpTextPct, pctStr, true)
+            else
+                ns.Text.SetFormatted(self.hpTextPct, true, "%.1f%%", hpPct)
+            end
         else
             _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
-        end
-        -- PERF: Use pre-cached percent string instead of SetFormattedText("%.1f%%").
-        local pctStr = _MSUF_PctToStr1D(hpPct)
-        if pctStr then
-            ns.Text.Set(self.hpTextPct, pctStr, true)
-        else
-            ns.Text.SetFormatted(self.hpTextPct, true, "%.1f%%", hpPct)
+            -- PERF: Use pre-cached percent string instead of SetFormattedText("%.1f%%").
+            local pctStr = _MSUF_PctToStr1D(hpPct)
+            if pctStr then
+                ns.Text.Set(self.hpTextPct, pctStr, true)
+            else
+                ns.Text.SetFormatted(self.hpTextPct, true, "%.1f%%", hpPct)
+            end
+            -- Invalidate component cache (absorb changed)
+            self._msufLastH = nil
         end
          return
     end
@@ -212,6 +254,13 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     -- Eliminates _SetWithAbsorb overhead + C-side format parsing + varargs.
     if not absorbText and hpPctStr then
         local h = hpStr or ""
+        -- PERF: Component-level diff guard. Skip string concat entirely if
+        -- abbreviated HP + percent string haven't changed since last call.
+        -- Saves 2-3 string allocations per call (concat + intermediates).
+        -- Secret-safe: skip diff if h is a secret string from ShortenNumber.
+        if not _MSUF_IsSecret(h) and h == self._msufLastH and hpPctStr == self._msufLastPctS then return end
+        if not _MSUF_IsSecret(h) then self._msufLastH = h else self._msufLastH = nil end
+        self._msufLastPctS = hpPctStr
         if hpMode == "FULL_ONLY" then
             ns.Text.Set(hpText, h, true)
         elseif hpMode == "PERCENT_ONLY" then
@@ -223,6 +272,9 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
         end
         return
     end
+    -- Absorb path (or no hpPctStr): invalidate component cache so next
+    -- no-absorb call re-renders instead of matching stale cache.
+    self._msufLastH = nil
     if hpMode == "FULL_ONLY" then
         _SetWithAbsorb(hpText, absorbText, absorbStyle, "%s", "%s %s", "%s (%s)", hpStr or "")
     elseif hpMode == "PERCENT_ONLY" then
@@ -264,14 +316,7 @@ _G.MSUF_GetUnitPowerPercent = _G.MSUF_GetUnitPowerPercent or ns.Text.GetUnitPowe
 -- EQoL-style power text modes:
 -- CURRENT, MAX, CURMAX, PERCENT, CURPERCENT, CURMAXPERCENT
 
--- PERF: Resolve issecretvalue once at load. Eliminates type() check per call (50-200x/sec).
-local _MSUF_issecret = _G.issecretvalue
-local _MSUF_IsSecret
-if type(_MSUF_issecret) == "function" then
-    _MSUF_IsSecret = function(v) return _MSUF_issecret(v) and true or false end
-else
-    _MSUF_IsSecret = function() return false end
-end
+-- (_MSUF_IsSecret is declared at file top, before ns.Text.Set)
 
 function ns.Text.NormalizePowerTextMode(mode)
     if mode == nil then return "CURPERCENT" end
@@ -490,6 +535,27 @@ function ns.Text.RenderPowerText(self)
     local maxText = _MSUF_TextifyValue(maxValue)
     local pctText = _MSUF_TextifyPercent(powerPct)
 
+    -- PERF: Component-level diff guard. Skip string concat + SetText if all
+    -- abbreviated components are unchanged. Saves 3-5 string allocations per call.
+    -- Secret-safe: ShortenNumber on secret UnitPower returns secret strings.
+    -- If ANY component is secret, skip caching entirely (fail-open to normal path).
+    local _secretCur = _MSUF_IsSecret(curText)
+    local _secretMax = _MSUF_IsSecret(maxText)
+    local _secretPct = _MSUF_IsSecret(pctText)
+    if not _secretCur and not _secretMax and not _secretPct then
+        if curText == self._msufLastPwrC and maxText == self._msufLastPwrM and pctText == self._msufLastPwrP then
+            return
+        end
+        self._msufLastPwrC = curText
+        self._msufLastPwrM = maxText
+        self._msufLastPwrP = pctText
+    else
+        -- Secret: invalidate cache so next non-secret call re-renders
+        self._msufLastPwrC = nil
+        self._msufLastPwrM = nil
+        self._msufLastPwrP = nil
+    end
+
     local hasPct = (pctText ~= nil)
     local splitAllowed = (self.powerTextPct ~= nil) and ns.Text._ShouldSplitPower(self, pMode, hasPct) or false
 
@@ -514,6 +580,26 @@ end
  -- These are global functions defined in MidnightSimpleUnitFrames.lua (loaded before this file).
  local MSUF_GetNPCReactionColor = _G.MSUF_GetNPCReactionColor or function(kind) return 1, 1, 1 end
  local MSUF_GetClassBarColor    = _G.MSUF_GetClassBarColor    or function(tok)  return 1, 1, 1 end
+
+ -- PERF: Cache FastNPC function ref at file scope (called 4× per RenderToTInline).
+ -- Resolved lazily; avoids 4 separate _G lookups + type() checks per target swap.
+ local _RenderToTInline_FastNPC = nil
+ local _RenderToTInline_FastNPCChecked = false
+
+ local function _GetToTFastNPC()
+     if _RenderToTInline_FastNPCChecked then return _RenderToTInline_FastNPC end
+     local fn = _G.MSUF_UFCore_GetNPCReactionColorFast
+     _RenderToTInline_FastNPC = (type(fn) == "function") and fn or nil
+     _RenderToTInline_FastNPCChecked = true
+     return _RenderToTInline_FastNPC
+ end
+
+ -- PERF: Unified NPC color resolver. Uses fast UFCore path if available, falls back to legacy.
+ local function _ToTInlineNPCColor(kind)
+     local fn = _GetToTFastNPC()
+     if fn then return fn(kind) end
+     return MSUF_GetNPCReactionColor(kind)
+ end
 
  function ns.Text.RenderToTInline(targetFrame, totConf)
     if not targetFrame or not targetFrame.nameText then  return end
@@ -557,47 +643,19 @@ end
     end
     else
         if F.UnitIsDeadOrGhost and F.UnitIsDeadOrGhost("targettarget") then
-            do
-                local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
-                if type(fastNPC) == "function" then
-                    r, gCol, b = fastNPC("dead")
-                else
-                    r, gCol, b = MSUF_GetNPCReactionColor("dead")
-                end
-            end
+            r, gCol, b = _ToTInlineNPCColor("dead")
         else
             local reaction = F.UnitReaction and F.UnitReaction("player", "targettarget")
             if reaction then
                 if reaction >= 5 then
-                    do
-                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
-                        if type(fastNPC) == "function" then
-                            r, gCol, b = fastNPC("friendly")
-                        else
-                            r, gCol, b = MSUF_GetNPCReactionColor("friendly")
-                        end
-                    end
+                    r, gCol, b = _ToTInlineNPCColor("friendly")
                 elseif reaction == 4 then
-                    do
-                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
-                        if type(fastNPC) == "function" then
-                            r, gCol, b = fastNPC("neutral")
-                        else
-                            r, gCol, b = MSUF_GetNPCReactionColor("neutral")
-                        end
-                    end
+                    r, gCol, b = _ToTInlineNPCColor("neutral")
                 else
-                    do
-                        local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
-                        if type(fastNPC) == "function" then
-                            r, gCol, b = fastNPC("enemy")
-                        else
-                            r, gCol, b = MSUF_GetNPCReactionColor("enemy")
-                        end
-                    end
+                    r, gCol, b = _ToTInlineNPCColor("enemy")
                 end
             else
-                r, gCol, b = MSUF_GetNPCReactionColor("enemy")
+                r, gCol, b = _ToTInlineNPCColor("enemy")
             end
     end
     end

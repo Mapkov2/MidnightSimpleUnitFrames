@@ -2789,7 +2789,11 @@ end
 function ns.MSUF_Options_Player_InstallHandlers(panel, api)
     if not panel or not api then  return end
     local function IsFramesTab()
-        return (api.getTabKey and api.getTabKey() == "frames")
+        -- Some cores use different internal tab keys ("frames", "player", etc.).
+        -- Options_Player widgets should remain interactive as long as we are on *any* MSUF frames/options page.
+        if not api.getTabKey then return true end
+        local k = api.getTabKey()
+        return (k == nil) or (k == "frames") or (k == "player") or (k == "unitframes")
     end
     local function CurrentKey()
         return (api.getKey and api.getKey()) or "player"
@@ -2810,7 +2814,10 @@ local function ApplyLayoutCurrent(reason)
     if type(fn) == "function" then
         local urgent = (key == "target" or key == "targettarget" or key == "focus")
         pcall(fn, key, reason or "OPTIONS_LAYOUT", urgent)
-         return
+        -- Many layout-only requests don't re-run the full Apply path (position/size/anchor).
+        -- In options, we prefer correctness/snappiness over micro-optimizing a click handler.
+        ApplyCurrent()
+        return
     end
     ApplyCurrent()
  end

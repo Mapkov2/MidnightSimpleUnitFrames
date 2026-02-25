@@ -54,7 +54,7 @@ local function EnsureBindings()
     if not CT then CT = API.CooldownText end
 end
 
---  Fast-path Collect helpers (skip guard checks in hot path)
+--  Fast-path Collect helpers (skip guard checks in hot path) 
 local _getDurationFast   -- Collect.GetDurationObjectFast (bound on first use)
 local _getStackCountFast -- Collect.GetStackCountFast
 local _hasExpirationFast -- Collect.HasExpirationFast
@@ -77,7 +77,7 @@ local _fast_ApplyStacks
 local _fast_ApplyOwnHighlight
 local _fast_ApplyDispelBorder
 
---  Cached shared.* flags (resolve once per configGen, not per icon)
+--  Cached shared.* flags (resolve once per configGen, not per icon) 
 local _sharedFlagsGen   = -1
 local _showSwipe        = false
 local _showText         = true
@@ -89,7 +89,7 @@ local _wantDebuffHL     = false
 local _useBlizzardTimer = false  -- true = Blizzard C++ pass-through for countdown text
 local _useDispelBorders = false  -- dispel-type border coloring for debuffs
 
---  Debuff dispel-type color lookup (Ã‚Â  la R41z0r / Blizzard)
+--  Debuff dispel-type color lookup (Ã‚Â  la R41z0r / Blizzard) 
 -- Maps dispel index  Blizzard color object; used for both manual
 -- fallback and the C_CurveUtil-based GetAuraDispelTypeColor() API.
 local _debuffColorByIndex = {
@@ -230,6 +230,7 @@ local function ResolveTextConfig(icon, unit, shared, gen)
     icon._msufA2_cooldownTextOffsetX = cdOffX
     icon._msufA2_cooldownTextOffsetY = cdOffY
 end
+
 
 -- DB access
 local function GetAuras2DB()
@@ -409,7 +410,7 @@ function Icons.HideUnused(container, fromIndex)
 
     -- Bound iteration to the last known active count (high water mark).
     local highWater = container._msufA2_activeN or 0
-
+    
     -- PERF: Early exit if nothing to hide (fromIndex > active count)
     -- This skips the loop entirely when all icons are already in use
     if fromIndex > highWater then
@@ -417,7 +418,7 @@ function Icons.HideUnused(container, fromIndex)
         container._msufA2_activeN = fromIndex - 1
         return
     end
-
+    
     -- PERF: Early exit if activeN already matches (no change)
     if highWater == fromIndex - 1 then return end
 
@@ -470,7 +471,7 @@ end
 function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, rowWrap, configGen)
     if not container or count <= 0 then return end
 
-    --  Layout diff gate
+    --  Layout diff gate 
     -- If count and configGen match last call, positions are identical. Skip.
     -- configGen covers iconSize, spacing, perRow, growth, rowWrap (all settings).
     local gen = configGen or _configGen
@@ -552,7 +553,7 @@ function Icons.LayoutIcons(container, count, iconSize, spacing, perRow, growth, 
                 icon:ClearAllPoints()
                 icon:SetPoint(anchor, container, anchor, x, y)
             end
-
+            
             -- PERF: Skip SetSize if unchanged
             if sizeChanged or icon._msufA2_lastSize ~= iconSize then
                 icon._msufA2_lastSize = iconSize
@@ -564,11 +565,14 @@ end
 
 -- --
 -- Visual Commit (CommitIcon)
---
+-- 
 -- This is the ONLY function that touches icon visuals.
 -- Called once per icon per render. Uses diff gating on
 -- auraInstanceID + config generation to skip redundant work.
 -- --
+
+
+
 
 function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, masterOn, isOwn, stackCountAnchor, configGen)
     if not icon then return false end
@@ -598,40 +602,21 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
 
     local aid = aura._msufAuraInstanceID or aura.auraInstanceID
 
-    --  Fast-path diff gate: same aura, same config → refresh timer + stacks only.
+    --  Fast-path diff gate: same aura, same config Ã¢â€ â€™ skip all bookkeeping 
     local last = icon._msufA2_lastCommit
     if last
         and last.aid == aid
         and last.gen == gen
         and last.isOwn == isOwn
     then
-        -- Timer: reapply/pandemic can update duration on same AID
+        -- Same aura, same config. Only refresh timer + stacks (values may have changed).
+        -- Timer/stacks always read fresh from C API for correctness.
         _fast_RefreshTimer(icon, unit, aid, shared, aura)
-        -- Stacks: stack count can change on same AID
-        if _showStacks then
-            local countFS = icon.count
-            if countFS then
-                local count = _getStackCountFast and _getStackCountFast(unit, aid)
-                local lastCV = icon._msufA2_lastCountVal
-                -- Secret-safe: if old OR new value is secret, skip diff and always update
-                local changed = (lastCV == nil) or (issecretvalue and (issecretvalue(lastCV) == true or issecretvalue(count) == true)) or (count ~= lastCV)
-                if changed then
-                    icon._msufA2_lastCountVal = count
-                    if issecretvalue and issecretvalue(count) == true then
-                        countFS:SetText(count)
-                    elseif type(count) == "number" and count > 1 then
-                        countFS:SetText(count)
-                        if not countFS:IsShown() then countFS:Show() end
-                    elseif countFS:IsShown() then
-                        countFS:Hide()
-                    end
-                end
-            end
-        end
+        _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
         return true
     end
 
-    --  Full apply: update all bookkeeping + visuals
+    --  Full apply: update all bookkeeping + visuals 
     icon._msufUnit = unit
     icon._msufFilter = isHelpful and "HELPFUL" or "HARMFUL"
 
@@ -705,6 +690,7 @@ end
 -- Timer application (cooldown swipe + text)
 -- Uses duration objects (secret-safe pass-through)
 -- --
+
 
 local function ClearCooldownVisual(icon, cd)
     if not icon or not cd then return end
@@ -796,7 +782,7 @@ function Icons._ApplyTimer(icon, unit, aid, shared, aura)
 
     local hadTimer = false
 
-    -- JIT: Always fetch fresh from C API (no enrichment cache)
+    -- JIT: Always fetch fresh duration from C API (cache can be stale after pandemic/refresh)
     local obj = _getDurationFast and _getDurationFast(unit, aid)
 
     if obj then
@@ -872,12 +858,12 @@ function Icons._ApplyTimer(icon, unit, aid, shared, aura)
 end
 
 -- Fast-path timer refresh (same auraInstanceID, possible reapply)
--- JIT: Always fetches fresh duration from C API
+-- PERF: Uses pre-cached duration object from aura (ZERO C API calls!)
 function Icons._RefreshTimer(icon, unit, aid, shared, aura)
     local cd = icon.cooldown
     if not cd then return end
 
-    -- JIT: Always fetch fresh from C API (no enrichment cache)
+    -- JIT: Always fetch fresh duration from C API (cache can be stale after pandemic/refresh)
     local obj = _getDurationFast and _getDurationFast(unit, aid)
 
     if not obj then
@@ -937,6 +923,8 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
     if not countFS then return end
 
     -- Phase 8: ResolveTextConfig already called by all callers (CommitIcon / RefreshAssignedIcons).
+
+
 
     -- Apply stack font family + size (gen-guarded: skip GetFont C-API on hot path)
     if icon._msufA2_stackFontGen ~= _configGen then
@@ -1002,7 +990,7 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
         return
     end
 
-    -- JIT: Always fetch fresh from C API (no enrichment cache)
+    -- JIT: Always fetch fresh stack count from C API (cache can be stale)
     local count = _getStackCountFast and _getStackCountFast(unit, aid)
 
     if count == nil then
@@ -1062,6 +1050,7 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
     end
 end
 
+
 -- --
 -- Own-aura highlight
 -- --
@@ -1105,7 +1094,7 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     end
 end
 
---  Dispel-type border (Magic/Curse/Poison/Disease/Bleed colored)
+--  Dispel-type border (Magic/Curse/Poison/Disease/Bleed colored) 
 -- Purely cosmetic classification border for debuffs that have an actual
 -- dispel school (Magic/Curse/Disease/Poison/Bleed).  Non-dispellable
 -- debuffs (dispelName == nil / "" / "None") are left without a border.
@@ -1416,7 +1405,7 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
         return fn(entry, unit, shared, privIconSize, spacing, stackCountAnchor, privateGrowth)
     end
 
-    -- Always show private aura previews in Edit Mode (no enabled-gate needed
+    -- Always show private aura previews in Edit Mode (no enabled-gate needed 
     -- this function is only called from the preview path). Use configured max
     -- counts so the user sees exactly how many slots they have allocated.
     local container = entry.private
@@ -1472,7 +1461,7 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
             end
             icon:SetSize(privIconSize, privIconSize)
 
-            --  Purple border to mark as "private aura"
+            --  Purple border to mark as "private aura" 
             if not icon._msufPrivateBorder then
                 local border = icon:CreateTexture(nil, "OVERLAY", nil, 2)
                 border:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
