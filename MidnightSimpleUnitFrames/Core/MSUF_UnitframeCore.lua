@@ -92,7 +92,7 @@ local function UFCore_RefreshSettingsCache(reason)
     cache.npcColorsRef = (db and type(db.npcColors) == "table") and db.npcColors or nil
 
     -- UFCore budgets
-    cache.ufcoreFlushBudgetMs = UFCore_ClampNum(g and g.ufcoreFlushBudgetMs, 2.0, 0.25, 10.0)
+    cache.ufcoreFlushBudgetMs = UFCore_ClampNum(g and g.ufcoreFlushBudgetMs, 0.6, 0.25, 2.0)
 
     local urgentMax = g and g.ufcoreUrgentMaxPerFlush
     if type(urgentMax) ~= "number" then urgentMax = 10 end
