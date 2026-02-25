@@ -469,10 +469,6 @@ local function ResolveUnitConfig(unit, a2, shared)
     if type(sortOrder) ~= "number" then
         sortOrder = (sf and type(sf.sortOrder) == "number") and sf.sortOrder or 0
     end
-    local sortReverse = shared.sortReverse
-    if sortReverse == nil then
-        sortReverse = (sf and sf.sortReverse == true) and true or false
-    end
     -- Per-type growth (nil = fall back to growth)
     local buffGrowth = shared.buffGrowth
     local debuffGrowth = shared.debuffGrowth
@@ -497,7 +493,6 @@ local function ResolveUnitConfig(unit, a2, shared)
         if ls.debuffRowWrap and A2_ROWWRAP_OK[ls.debuffRowWrap] then debuffRowWrap = ls.debuffRowWrap end
         if ls.stackCountAnchor and A2_STACKANCHOR_OK[ls.stackCountAnchor] then stackCountAnchor = ls.stackCountAnchor end
         if type(ls.sortOrder) == "number" then sortOrder = ls.sortOrder end
-        if ls.sortReverse ~= nil then sortReverse = (ls.sortReverse == true) end
     end
     -- Resolve per-type fallback: nil → growth
     if not buffGrowth or not A2_GROWTH_OK[buffGrowth] then buffGrowth = growth end
@@ -538,7 +533,7 @@ if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
     if type(psz) == "number" and psz > 1 then privateIconSize = psz end
 end
 
-    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, privateGrowth, rowWrap, buffRowWrap, debuffRowWrap, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize, sortOrder, sortReverse
+    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, privateGrowth, rowWrap, buffRowWrap, debuffRowWrap, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize, sortOrder
 end
 
 
@@ -948,9 +943,7 @@ local function RenderUnit(entry)
         if shared and Collect.SetSortOrder then
             local sf = shared.filters
             Collect.SetSortOrder(sf and sf.sortOrder or 0)
-            if Collect.SetSortReverse then
-                Collect.SetSortReverse(sf and sf.sortReverse or false)
-            end
+
         end
     end
 
@@ -987,7 +980,7 @@ local function RenderUnit(entry)
         -- Layout config
         cfg.iconSize, cfg.spacing, cfg.perRow, cfg.maxBuffs, cfg.maxDebuffs,
         cfg.growth, cfg.buffGrowth, cfg.debuffGrowth, cfg.privateGrowth, cfg.rowWrap, cfg.buffRowWrap, cfg.debuffRowWrap, cfg.stackCountAnchor,
-        cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize, cfg.capsSortOrder, cfg.capsSortReverse =
+        cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize, cfg.capsSortOrder =
             ResolveUnitConfig(unit, a2, shared)        -- Filter flags
         if Filters and Filters.ResolveRuntimeFlags then
             cfg.tf, cfg.masterOn,
@@ -996,7 +989,7 @@ local function RenderUnit(entry)
             cfg.buffsOnlyMine, cfg.debuffsOnlyMine,
             cfg.buffsIncludeBoss, cfg.debuffsIncludeBoss,
             cfg.hidePermanentBuffs,
-            cfg.sortOrder, cfg.sortReverse =
+            cfg.sortOrder =
                 Filters.ResolveRuntimeFlags(a2, shared, unit)
         else
             cfg.tf = nil
@@ -1010,7 +1003,7 @@ local function RenderUnit(entry)
             cfg.debuffsIncludeBoss = false
             cfg.hidePermanentBuffs = false
             cfg.sortOrder = 0
-            cfg.sortReverse = false
+            -- cfg.sortReverse removed (reverse sorting not supported)
         end
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
@@ -1160,7 +1153,7 @@ local function RenderUnit(entry)
     -- Per-unit sort order: set before collect so PreScanUnit uses the right order.
     -- Secret-safe: plain numeric config, never compared with secret data.
     if Collect.SetUnitSortOrder then
-        Collect.SetUnitSortOrder(unit, cfg.capsSortOrder or 0, cfg.capsSortReverse)
+        Collect.SetUnitSortOrder(unit, cfg.capsSortOrder or 0)
     end
     local buffCount = 0
     local debuffCount = 0
@@ -1179,15 +1172,19 @@ local function RenderUnit(entry)
     local _GetAuras = Collect.GetAuras
     local _GetMergedAuras = Collect.GetMergedAuras
 
+
+    -- Secret-safe sort params (passed into C_UnitAuras.GetAuraSlots)
+    local _sortOrder = cfg.capsSortOrder or cfg.sortOrder or 0
+    end
     -- Player in edit mode: debuffs already rendered as preview above, skip real debuff path.
     local skipDebuffs = (showTest and unit == "player")
 
     if showDebuffs and not skipDebuffs then
         local list
         if debuffsOnlyMine and debuffsIncludeBoss then
-            list, debuffCount = _GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, onlyImportantDebuffs, entry._debuffList, nil, needPlayerAura)
+            list, debuffCount = _GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, onlyImportantDebuffs, entry._debuffList, nil, needPlayerAura, _sortOrder)
         else
-            list, debuffCount = _GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, onlyImportantDebuffs, entry._debuffList, needPlayerAura)
+            list, debuffCount = _GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, onlyImportantDebuffs, entry._debuffList, needPlayerAura, _sortOrder)
         end
 
         local container = entry.debuffs
@@ -1203,9 +1200,9 @@ local function RenderUnit(entry)
     if showBuffs then
         local list
         if buffsOnlyMine and buffsIncludeBoss then
-            list, buffCount = _GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, onlyImportantBuffs, entry._buffList, nil, needPlayerAura)
+            list, buffCount = _GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, onlyImportantBuffs, entry._buffList, nil, needPlayerAura, _sortOrder)
         else
-            list, buffCount = _GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, onlyImportantBuffs, entry._buffList, needPlayerAura)
+            list, buffCount = _GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, onlyImportantBuffs, entry._buffList, needPlayerAura, _sortOrder)
         end
 
         local container = entry.buffs
