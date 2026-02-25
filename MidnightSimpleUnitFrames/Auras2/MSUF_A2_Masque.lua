@@ -4,27 +4,12 @@
 
 local addonName, ns = ...
 
-
--- =========================================================================
--- PERF LOCALS (Auras2 runtime)
---  - Reduce global table lookups in high-frequency aura pipelines.
---  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
-local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
-local CreateFrame, GetTime = CreateFrame, GetTime
-local UnitExists = UnitExists
-local InCombatLockdown = InCombatLockdown
+local type = type
 local C_Timer = C_Timer
-local C_UnitAuras = C_UnitAuras
-local C_Secrets = C_Secrets
-local C_CurveUtil = C_CurveUtil
 
 -- MSUF: Max-perf Auras2: replace protected calls (pcall) with direct calls.
 -- NOTE: this removes error-catching; any error will propagate.
-local function MSUF_A2_FastCall(fn, ...) 
+local function MSUF_A2_FastCall(fn, ...)
     return true, fn(...)
 end
 
@@ -47,7 +32,7 @@ local _masqueButtonCount = 0  -- Track registered button count for structural-ch
 -- Load / group helpers
 -- ---------------------------------------------------------------------------
 
-local function IsMasqueLoaded() 
+local function IsMasqueLoaded()
     if C_AddOns and C_AddOns.IsAddOnLoaded then
         return C_AddOns.IsAddOnLoaded("Masque") == true
     end
@@ -57,7 +42,7 @@ local function IsMasqueLoaded()
      return false
 end
 
-local function GetMasqueLib() 
+local function GetMasqueLib()
     if MSQ_LIB ~= nil then  return MSQ_LIB end
     if not LibStub then MSQ_LIB = false;  return nil end
     local ok, lib = MSUF_A2_FastCall(LibStub, "Masque", true)
@@ -69,7 +54,7 @@ local function GetMasqueLib()
      return nil
 end
 
-local function EnsureMasqueGroup() 
+local function EnsureMasqueGroup()
     if MSQ_GROUP then
         _G.MSUF_MasqueAuras2 = MSQ_GROUP -- legacy global for Options
          return MSQ_GROUP
@@ -94,7 +79,7 @@ end
 -- Reload popup (legacy UX used by Options)
 -- ---------------------------------------------------------------------------
 
-local function EnsureReloadPopup() 
+local function EnsureReloadPopup()
     if not _G.StaticPopupDialogs then  return end
 
     local function DoReload()
@@ -105,68 +90,35 @@ local function EnsureReloadPopup()
         if _G.ReloadUI then _G.ReloadUI() end
     end
 
-    if not _G.StaticPopupDialogs["MSUF_A2_RELOAD_MASQUE"] then
-        _G.StaticPopupDialogs["MSUF_A2_RELOAD_MASQUE"] = {
-            text = "Masque changes require a UI reload.",
-            button1 = "Reload UI",
-            button2 = "Cancel",
-            OnAccept = DoReload,
-            OnCancel = function() 
-                -- Options sets these globals before showing the popup.
-                local prev = _G.MSUF_A2_MASQUE_RELOAD_PREV
-                local cb = _G.MSUF_A2_MASQUE_RELOAD_CB
-
-                if type(prev) == "boolean" and API.DB and API.DB.Ensure then
-                    local _, shared = API.DB.Ensure()
-                    if shared then
-                        shared.masqueEnabled = prev
-                    end
-                end
-
-                if cb and cb.SetChecked and type(prev) == "boolean" then
-                    cb:SetChecked(prev)
-                end
-
-                _G.MSUF_A2_MASQUE_RELOAD_CB = nil
-                _G.MSUF_A2_MASQUE_RELOAD_PREV = nil
-            end,
-            timeout = 0,
-            whileDead = 1,
-            hideOnEscape = 1,
-            preferredIndex = 3,
-        }
-    end
-
-    if not _G.StaticPopupDialogs["MSUF_A2_RELOAD_MASQUE_BORDER"] then
-        _G.StaticPopupDialogs["MSUF_A2_RELOAD_MASQUE_BORDER"] = {
-            text = "Masque border changes require a UI reload.",
+    local function MakeDialog(dialogKey, text, prevGlobalKey, cbGlobalKey, sharedField)
+        if _G.StaticPopupDialogs[dialogKey] then return end
+        _G.StaticPopupDialogs[dialogKey] = {
+            text = text,
             button1 = "Reload UI",
             button2 = "Cancel",
             OnAccept = DoReload,
             OnCancel = function()
-                local prev = _G.MSUF_A2_MASQUE_BORDER_RELOAD_PREV
-                local cb = _G.MSUF_A2_MASQUE_BORDER_RELOAD_CB
-
+                local prev = _G[prevGlobalKey]
+                local cb = _G[cbGlobalKey]
                 if type(prev) == "boolean" and API.DB and API.DB.Ensure then
                     local _, shared = API.DB.Ensure()
-                    if shared then
-                        shared.masqueHideBorder = prev
-                    end
+                    if shared then shared[sharedField] = prev end
                 end
-
-                if cb and cb.SetChecked and type(prev) == "boolean" then
-                    cb:SetChecked(prev)
-                end
-
-                _G.MSUF_A2_MASQUE_BORDER_RELOAD_CB = nil
-                _G.MSUF_A2_MASQUE_BORDER_RELOAD_PREV = nil
+                if cb and cb.SetChecked and type(prev) == "boolean" then cb:SetChecked(prev) end
+                _G[cbGlobalKey] = nil
+                _G[prevGlobalKey] = nil
             end,
-            timeout = 0,
-            whileDead = 1,
-            hideOnEscape = 1,
-            preferredIndex = 3,
+            timeout = 0, whileDead = 1, hideOnEscape = 1, preferredIndex = 3,
         }
     end
+
+    MakeDialog("MSUF_A2_RELOAD_MASQUE",
+        "Masque changes require a UI reload.",
+        "MSUF_A2_MASQUE_RELOAD_PREV", "MSUF_A2_MASQUE_RELOAD_CB", "masqueEnabled")
+
+    MakeDialog("MSUF_A2_RELOAD_MASQUE_BORDER",
+        "Masque border changes require a UI reload.",
+        "MSUF_A2_MASQUE_BORDER_RELOAD_PREV", "MSUF_A2_MASQUE_BORDER_RELOAD_CB", "masqueHideBorder")
 end
 
 -- Ensure dialog exists early so Options can call StaticPopup_Show("MSUF_A2_RELOAD_MASQUE") directly.
@@ -176,7 +128,7 @@ EnsureReloadPopup()
 -- Overlay sync + border detection (Masque-safe)
 -- ---------------------------------------------------------------------------
 
-local function SyncIconOverlayLevels(icon) 
+local function SyncIconOverlayLevels(icon)
     if not icon then  return end
 
     -- One-time sync after Masque registration: ensure MSUF overlays
@@ -193,7 +145,7 @@ local function SyncIconOverlayLevels(icon)
     end
  end
 
-local function SkinHasBorder(btn) 
+local function SkinHasBorder(btn)
     -- No Border region passed to Masque (MSA pattern), so Masque never renders borders.
      return false
 end
@@ -202,7 +154,7 @@ end
 -- Regions + registration (MSA pattern: Icon/Cooldown/Count only, no Normal/Border)
 -- ---------------------------------------------------------------------------
 
-local function EnsureMasqueRegions(btn) 
+local function EnsureMasqueRegions(btn)
     if not btn then  return end
 
     if not btn._msufMasqueRegions then
@@ -221,7 +173,7 @@ local function EnsureMasqueRegions(btn)
 
 local _lastReskinCount = -1  -- Count at last ReSkin; -1 forces initial reskin
 
-local function ReskinNow() 
+local function ReskinNow()
     RESKIN_QUEUED = false
     local g = MSQ_GROUP or _G.MSUF_MasqueAuras2
     if not g then  return end
@@ -241,7 +193,7 @@ local function ReskinNow()
     end
  end
 
-local function RequestReskin() 
+local function RequestReskin()
     if RESKIN_QUEUED then  return end
     RESKIN_QUEUED = true
     if _G.C_Timer and _G.C_Timer.After then
@@ -252,7 +204,7 @@ local function RequestReskin()
     end
  end
 
-local function AddButton(btn, shared) 
+local function AddButton(btn, shared)
     if not btn then  return false end
     if not (shared and shared.masqueEnabled == true) then
          return false
@@ -281,7 +233,7 @@ local function AddButton(btn, shared)
      return false
 end
 
-local function RemoveButton(btn) 
+local function RemoveButton(btn)
     if not btn then  return end
     local g = MSQ_GROUP or _G.MSUF_MasqueAuras2
     if not g then
@@ -296,12 +248,12 @@ local function RemoveButton(btn)
     end
  end
 
-local function IsEnabled(shared) 
+local function IsEnabled(shared)
     if not (shared and shared.masqueEnabled == true) then  return false end
     return EnsureMasqueGroup() ~= nil
 end
 
-local function IsReadyForToggle(cb, prevValue) 
+local function IsReadyForToggle(cb, prevValue)
     EnsureReloadPopup()
     _G.MSUF_A2_MASQUE_RELOAD_CB = cb
     _G.MSUF_A2_MASQUE_RELOAD_PREV = prevValue
@@ -336,7 +288,7 @@ MasqueMod.IsReadyForToggle = IsReadyForToggle
 -- ---------------------------------------------------------------------------
 
 _G.MSUF_A2_IsMasqueAddonLoaded = IsMasqueLoaded
-_G.MSUF_A2_EnsureMasqueGroup = function() 
+_G.MSUF_A2_EnsureMasqueGroup = function()
     EnsureReloadPopup()
     return EnsureMasqueGroup()
 end

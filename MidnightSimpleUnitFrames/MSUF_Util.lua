@@ -18,6 +18,38 @@ local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
 local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
 
+-- ---------------------------------------------------------------------------
+-- Boss unit token helpers (perf)
+--
+-- Avoid pattern matching (string:match) in hot paths. Pattern matching is
+-- noticeably heavier than simple substring/tonumber checks.
+--
+-- Returns bossIndex (number) if u is "bossN" (N>=1), otherwise nil.
+-- NOTE: Keep global names stable so call-sites across files can use them.
+-- ---------------------------------------------------------------------------
+if type(_G.MSUF_GetBossIndexFromToken) ~= "function" then
+    function _G.MSUF_GetBossIndexFromToken(u)
+        if type(u) ~= "string" then
+            return nil
+        end
+        -- Fast prefix check
+        if string_sub(u, 1, 4) ~= "boss" then
+            return nil
+        end
+        local n = tonumber(string_sub(u, 5))
+        if n and n >= 1 then
+            return n
+        end
+        return nil
+    end
+end
+
+if type(_G.MSUF_IsBossUnitToken) ~= "function" then
+    function _G.MSUF_IsBossUnitToken(u)
+        return _G.MSUF_GetBossIndexFromToken(u) ~= nil
+    end
+end
+
 -- MSUF_Util.lua
 -- Stateless helpers / pure functions extracted from MidnightSimpleUnitFrames.lua
 -- Keep names stable (globals) to avoid touching call-sites.

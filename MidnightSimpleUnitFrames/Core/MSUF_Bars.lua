@@ -15,7 +15,7 @@ local MSUF_ResetBarZero                = ns.Bars._ResetBarZero
 local function _MSUF_NormalizeUnitKey(unit)
     if not unit then return nil end
     if unit == "tot" then return "targettarget" end
-    if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
+    if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit) then return "boss" end
     return unit
 end
 

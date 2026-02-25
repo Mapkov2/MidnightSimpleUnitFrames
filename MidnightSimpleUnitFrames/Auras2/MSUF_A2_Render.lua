@@ -15,29 +15,13 @@
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
--- =========================================================================
--- PERF LOCALS (Auras2 runtime)
---  - Reduce global table lookups in high-frequency aura pipelines.
---  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
-local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
+local type, tonumber = type, tonumber
+local pairs, next = pairs, next
 local CreateFrame, GetTime = CreateFrame, GetTime
 local UnitExists = UnitExists
 local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
 local C_UnitAuras = C_UnitAuras
-local C_Secrets = C_Secrets
-local C_CurveUtil = C_CurveUtil
-
--- FastCall: no pcall in hot paths
-local function MSUF_A2_FastCall(fn, ...)
-    if fn == nil then return false end
-    return true, fn(...)
-end
-_G.MSUF_A2_FastCall = MSUF_A2_FastCall
 
 if ns.__MSUF_A2_CORE_LOADED then return end
 ns.__MSUF_A2_CORE_LOADED = true
@@ -52,7 +36,6 @@ API.perf  = (type(API.perf)  == "table") and API.perf  or {}
 
 local A2_STATE = API.state
 
-
 -- Hot locals
 
 local type = type
@@ -66,10 +49,7 @@ local max = math.max
 -- Module references (late-bound)
 local Collect  -- API.Collect
 local Icons    -- API.Icons / API.Apply
-local Store    -- API.Store (epoch only)
-local _storeEpochs  -- Store._epochs (direct table, Phase 8)
 local Filters  -- API.Filters
-
 
 -- Combat / Edit Mode state (cheap cached checks)
 
@@ -120,7 +100,6 @@ local function ForceSetEditModeActive(active)
 end
 API.ForceSetEditModeActive = ForceSetEditModeActive
 
-
 -- DB access + config cache
 
 local MSUF_DB
@@ -153,7 +132,7 @@ local function Clamp(v, def, lo, hi) v = tonumber(v); if not v then v = def end;
 local function EnsureDB()
     local gdb = _G.MSUF_DB
     if type(gdb) ~= "table" then _G.MSUF_DB = {}; gdb = _G.MSUF_DB end
-    if type(_G.EnsureDB) == "function" then MSUF_A2_FastCall(_G.EnsureDB) end
+    if type(_G.EnsureDB) == "function" then _G.EnsureDB() end
     MSUF_DB = _G.MSUF_DB
     if type(MSUF_DB) ~= "table" then return nil end
 
@@ -245,7 +224,6 @@ if API.DB and API.DB.BindEnsure then
     API.DB.BindEnsure(EnsureDB)
 end
 
-
 -- Per-unit state
 
 A2_STATE.aurasByUnit = (type(A2_STATE.aurasByUnit) == "table") and A2_STATE.aurasByUnit or {}
@@ -278,7 +256,6 @@ local function UnitEnabled(a2, unit)
     return false
 end
 
-
 -- Dirty queue + flush driver
 
 local DirtyA, DirtyB = {}, {}
@@ -291,8 +268,6 @@ local _isFlushing = false
 local _dirtyWhileFlushing = false
 
 local function DirtyAdd(unit)
-    if not unit then return end
-    if DirtyMark[unit] == DirtyGen then return end
     DirtyMark[unit] = DirtyGen
     DirtyCount = DirtyCount + 1
     DirtyList[DirtyCount] = unit
@@ -354,51 +329,26 @@ local function ScheduleFlush(delay)
     _flushDriver:SetScript("OnUpdate", FlushDriverOnUpdate)
 end
 
-
 -- MarkDirty (public entry point for scheduling unit updates)
-
 
 local function MarkDirty(unit, delay)
     if not unit then return end
 
-    -- Early dedupe
+    -- PERF: Single table lookup dedupe (hottest check — runs on every UNIT_AURA)
     if DirtyMark[unit] == DirtyGen then
-        -- Unit already queued. Only bring flush forward if caller wants immediate
-        -- and driver is actually running (safe guard against stopped-driver edge case).
-        if delay and delay == 0 and _flushDriverActive and _flushNextAt and _flushNextAt > 0 then
+        if delay == 0 and _flushDriverActive and _flushNextAt and _flushNextAt > 0 then
             _flushNextAt = 0
         end
         return
     end
 
-    -- PERF: Combat fast-path — skip DB validation and edit mode check.
-    -- In combat, edit mode is impossible and DB doesn't change.
-    if _inCombat then
-        if UnitExists and not UnitExists(unit) then return end
-        DirtyAdd(unit)
-        if not delay or delay < 0 then delay = 0 end
-        FlushScheduled = true
-        ScheduleFlush(delay)
-        return
-    end
-
-    -- Out-of-combat: full validation (DB + edit mode preview)
-    local a2, shared = GetAuras2DB()
-    local allowPreview = (shared and shared.showInEditMode == true and IsEditModeActive())
-
-    if not allowPreview then
-        if UnitExists and not UnitExists(unit) then return end
-    end
-
     DirtyAdd(unit)
-    if not delay or delay < 0 then delay = 0 end
+    if not delay then delay = 0 end
     FlushScheduled = true
     ScheduleFlush(delay)
 end
 
-
 -- EnsureAttached: create per-unit anchor + container frames
-
 
 local function EnsureAttached(unit)
     local entry = AurasByUnit[unit]
@@ -470,9 +420,7 @@ local function EnsureAttached(unit)
     return entry
 end
 
-
 -- Config resolution (pre-computed per InvalidateDB, not per render)
-
 
 local function ResolveUnitConfig(unit, a2, shared)
     local iconSize = shared.iconSize or 26
@@ -489,10 +437,6 @@ local function ResolveUnitConfig(unit, a2, shared)
     local sortOrder = shared.sortOrder
     if type(sortOrder) ~= "number" then
         sortOrder = (sf and type(sf.sortOrder) == "number") and sf.sortOrder or 0
-    end
-    local sortReverse = shared.sortReverse
-    if sortReverse == nil then
-        sortReverse = (sf and sf.sortReverse == true) and true or false
     end
     -- Per-type growth (nil = fall back to growth)
     local buffGrowth = shared.buffGrowth
@@ -518,7 +462,6 @@ local function ResolveUnitConfig(unit, a2, shared)
         if ls.debuffRowWrap and A2_ROWWRAP_OK[ls.debuffRowWrap] then debuffRowWrap = ls.debuffRowWrap end
         if ls.stackCountAnchor and A2_STACKANCHOR_OK[ls.stackCountAnchor] then stackCountAnchor = ls.stackCountAnchor end
         if type(ls.sortOrder) == "number" then sortOrder = ls.sortOrder end
-        if ls.sortReverse ~= nil then sortReverse = (ls.sortReverse == true) end
     end
     -- Resolve per-type fallback: nil → growth
     if not buffGrowth or not A2_GROWTH_OK[buffGrowth] then buffGrowth = growth end
@@ -533,7 +476,6 @@ local function ResolveUnitConfig(unit, a2, shared)
         if type(lay.iconSize) == "number" and lay.iconSize > 1 then iconSize = lay.iconSize end
         if type(lay.spacing) == "number" and lay.spacing >= 0 then spacing = lay.spacing end
     end
-
 
 -- Group-specific sizing (Edit Mode controls)
 local buffIconSize = iconSize
@@ -559,12 +501,10 @@ if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
     if type(psz) == "number" and psz > 1 then privateIconSize = psz end
 end
 
-    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, privateGrowth, rowWrap, buffRowWrap, debuffRowWrap, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize, sortOrder, sortReverse
+    return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, privateGrowth, rowWrap, buffRowWrap, debuffRowWrap, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize, sortOrder
 end
 
-
 -- Private Auras (Blizzard-rendered)
-
 
 local function PrivateAurasSupported()
     return C_UnitAuras
@@ -734,11 +674,9 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
     end
 end
 
-
 -- UpdateAnchor (position the aura container relative to unitframe)
 
-
--- File-scope helpers for UpdateAnchor (zero closure alloc) 
+-- File-scope helpers for UpdateAnchor (zero closure alloc)
 
 local _mathFloor = math.floor
 
@@ -817,8 +755,7 @@ if lay then
     if type(psz) == "number" and psz > 1 then privateIconSize = psz end
 end
 
-
-    -- Per-group offsets (drag movers write to these) 
+    -- Per-group offsets (drag movers write to these)
     local buffDX   = ReadOffset(shared, lay, "buffGroupOffsetX",   0)
     local buffDY   = ReadOffset(shared, lay, "buffGroupOffsetY",   0)
     local debuffDX = ReadOffset(shared, lay, "debuffGroupOffsetX", 0)
@@ -826,7 +763,7 @@ end
     local privOffX = ReadOffset(shared, lay, "privateOffsetX",     0)
     local privOffY = ReadOffset(shared, lay, "privateOffsetY",     0)
 
-    -- Position anchor 
+    -- Position anchor
     local anchor = entry.anchor
     anchor:ClearAllPoints()
     anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
@@ -851,7 +788,7 @@ end
         entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
     end
 
-    -- Position edit movers (mirror containers) 
+    -- Position edit movers (mirror containers)
     if isEditActive then
         local stepB = buffIconSize + spacing
         local stepD = debuffIconSize + spacing
@@ -897,39 +834,32 @@ local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 -- Module binding flag (set once, reset only on hard reload)
 local _modulesBound = false
 
-
 -- RenderUnit  the core render loop (single pass, clean)
 
-
-local function RenderUnit(entry)
+local function RenderUnit(entry, a2, shared)
     if not entry then return end
 
-    -- Bind modules once
+    -- Bind modules once (first call only)
     if not _modulesBound then
         Collect = API.Collect
         Icons   = API.Icons or API.Apply
-        Store   = API.Store
-        _storeEpochs = Store and Store._epochs
         Filters = API.Filters
         if Collect and Icons then _modulesBound = true end
     end
 
     if not Collect or not Icons then return end
 
-    -- Single gen read for entire function (value cannot change mid-call)
     local gen = _configGen
 
-    -- PERF: Update scan limits once per configGen (reduces C API calls)
-    -- GetAuras2DB result is reused by the main render path below.
-    local a2, shared
+    -- Update scan limits once per configGen
     if Collect._scanLimitsGen ~= gen then
         Collect._scanLimitsGen = gen
-        a2, shared = GetAuras2DB()
+        if not a2 or not shared then
+            a2, shared = GetAuras2DB()
+        end
         if shared and Collect.SetScanLimits then
-            -- Start with shared values
             local maxB = shared.maxBuffs or 12
             local maxD = shared.maxDebuffs or 12
-            -- Check perUnit overrides for higher values
             if a2 and a2.perUnit then
                 for _, pu in pairs(a2.perUnit) do
                     if pu.overrideSharedLayout and pu.layoutShared then
@@ -946,7 +876,6 @@ local function RenderUnit(entry)
             Collect.SetScanLimits(maxB, maxD)
         end
 
-        -- Scan flags (only compute expensive per-aura tags when any frame needs them)
         if shared and Collect.SetScanFlags then
             local needImportant = false
             local sf = shared.filters
@@ -963,38 +892,107 @@ local function RenderUnit(entry)
             Collect.SetScanFlags(needImportant)
         end
 
-        -- Aura sort order: read from shared.filters, pass to Collect.
-        -- Uses the Blizzard Enum.AuraSortOrder values (0-6) on the
-        -- C_UnitAuras.GetAuraSlots 4th parameter.  Secret-safe: plain number.
-        if shared and Collect.SetSortOrder then
-            local sf = shared.filters
-            Collect.SetSortOrder(sf and sf.sortOrder or 0)
-            if Collect.SetSortReverse then
-                Collect.SetSortReverse(sf and sf.sortReverse or false)
-            end
-        end
     end
 
     local unit = entry.unit
-    
-    -- PERF: Fast-path epoch check BEFORE expensive DB/config resolution
-    -- If epoch unchanged AND configGen unchanged AND not in edit mode, skip entirely
-    local epoch = _storeEpochs and _storeEpochs[unit] or 0
-    local isEditActive = (not _inCombat) and IsEditModeActive() or false
-    
-    if epoch == entry._lastEpoch 
-       and gen == entry._lastConfigGen 
-       and not isEditActive 
-       and entry._unitExisted  -- Only fast-path if unit existed last time
-    then
-        return  -- Nothing changed, skip all work
-    end
-    
-    -- Reuse DB from scan-limits path if available, otherwise fetch now
-    if not a2 or not shared then
-        a2, shared = GetAuras2DB()
-    end
+
+    -- PERF: a2/shared passed from Flush (cached once per flush cycle)
     if not a2 or not shared then return end
+
+    -- =====================================================================
+    -- COMBAT FAST PATH: skip ALL edit mode, anchor, private aura logic.
+    -- In combat, edit mode is impossible, anchors don't move, privates
+    -- don't change config. Go straight to collect+commit.
+    -- =====================================================================
+    if _inCombat then
+        if not UnitEnabled(a2, unit) then return end
+        if not UnitExists(unit) then return end
+
+        local cfg = entry._cfg
+        if not cfg then
+            cfg = { _gen = -1 }
+            entry._cfg = cfg
+        end
+
+        if cfg._gen ~= gen then
+            cfg._gen = gen
+            cfg.iconSize, cfg.spacing, cfg.perRow, cfg.maxBuffs, cfg.maxDebuffs,
+            cfg.growth, cfg.buffGrowth, cfg.debuffGrowth, cfg.privateGrowth, cfg.rowWrap, cfg.buffRowWrap, cfg.debuffRowWrap, cfg.stackCountAnchor,
+            cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize, cfg.capsSortOrder =
+                ResolveUnitConfig(unit, a2, shared)
+            if Filters and Filters.ResolveRuntimeFlags then
+                cfg.tf, cfg.masterOn,
+                cfg.onlyBossAuras,
+                cfg.onlyImportantBuffs, cfg.onlyImportantDebuffs,
+                cfg.buffsOnlyMine, cfg.debuffsOnlyMine,
+                cfg.buffsIncludeBoss, cfg.debuffsIncludeBoss,
+                cfg.hidePermanentBuffs =
+                    Filters.ResolveRuntimeFlags(a2, shared, unit)
+            end
+            cfg.showBuffs = (shared.showBuffs == true)
+            cfg.showDebuffs = (shared.showDebuffs == true)
+            cfg.needPlayerAura = (shared.highlightOwnBuffs == true)
+                or (shared.highlightOwnDebuffs == true)
+                or cfg.buffsOnlyMine
+                or cfg.debuffsOnlyMine
+        end
+
+        -- Collect + commit (zero edit mode / anchor / private overhead)
+        local sortOrder = cfg.capsSortOrder or 0
+        local needPA = cfg.needPlayerAura
+        local mOn = cfg.masterOn
+        local scAnchor = cfg.stackCountAnchor
+        local _AcquireIcon = Icons.AcquireIcon
+        local _CommitIcon = Icons.CommitIcon
+
+        local debuffCount = 0
+        if cfg.showDebuffs then
+            local list
+            if cfg.debuffsOnlyMine and cfg.debuffsIncludeBoss then
+                list, debuffCount = Collect.GetMergedAuras(unit, "HARMFUL", cfg.maxDebuffs, false, cfg.onlyImportantDebuffs, entry._debuffList, nil, needPA, sortOrder)
+            else
+                list, debuffCount = Collect.GetAuras(unit, "HARMFUL", cfg.maxDebuffs, cfg.debuffsOnlyMine, false, cfg.onlyBossAuras, cfg.onlyImportantDebuffs, entry._debuffList, needPA, sortOrder)
+            end
+            local container = entry.debuffs
+            for i = 1, debuffCount do
+                _CommitIcon(_AcquireIcon(container, i), unit, list[i], shared, false, false, mOn, list[i]._msufIsPlayerAura, scAnchor, gen)
+            end
+        end
+
+        local buffCount = 0
+        if cfg.showBuffs then
+            local list
+            if cfg.buffsOnlyMine and cfg.buffsIncludeBoss then
+                list, buffCount = Collect.GetMergedAuras(unit, "HELPFUL", cfg.maxBuffs, cfg.hidePermanentBuffs, cfg.onlyImportantBuffs, entry._buffList, nil, needPA, sortOrder)
+            else
+                list, buffCount = Collect.GetAuras(unit, "HELPFUL", cfg.maxBuffs, cfg.buffsOnlyMine, cfg.hidePermanentBuffs, cfg.onlyBossAuras, cfg.onlyImportantBuffs, entry._buffList, needPA, sortOrder)
+            end
+            local container = entry.buffs
+            for i = 1, buffCount do
+                _CommitIcon(_AcquireIcon(container, i), unit, list[i], shared, true, cfg.hidePermanentBuffs, mOn, list[i]._msufIsPlayerAura, scAnchor, gen)
+            end
+        end
+
+        -- Layout + hide unused (only when counts change)
+        local lastBC = entry._lastBuffCount or 0
+        local lastDC = entry._lastDebuffCount or 0
+        if debuffCount ~= lastDC then
+            Icons.LayoutIcons(entry.debuffs, debuffCount, cfg.debuffIconSize or cfg.iconSize, cfg.spacing, cfg.perRow, cfg.debuffGrowth or cfg.growth, cfg.debuffRowWrap or cfg.rowWrap)
+            Icons.HideUnused(entry.debuffs, debuffCount + 1)
+        end
+        if buffCount ~= lastBC then
+            Icons.LayoutIcons(entry.buffs, buffCount, cfg.buffIconSize or cfg.iconSize, cfg.spacing, cfg.perRow, cfg.buffGrowth or cfg.growth, cfg.buffRowWrap or cfg.rowWrap)
+            Icons.HideUnused(entry.buffs, buffCount + 1)
+        end
+        entry._lastBuffCount = buffCount
+        entry._lastDebuffCount = debuffCount
+        return
+    end
+
+    -- =====================================================================
+    -- OUT-OF-COMBAT PATH (full: edit mode, anchors, private auras, preview)
+    -- =====================================================================
+    local isEditActive = IsEditModeActive() or false
 
     -- Unit disabled via options toggle: hide all icons + anchor and bail out.
     -- Edit mode preview bypasses this so movers remain visible for positioning.
@@ -1007,7 +1005,7 @@ local function RenderUnit(entry)
         return
     end
 
-    -- Cache resolved config per configGen (eliminates ~40 table reads per aura event) 
+    -- Cache resolved config per configGen (eliminates ~40 table reads per aura event)
     local cfg = entry._cfg
     if not cfg then
         cfg = { _gen = -1 }
@@ -1020,7 +1018,7 @@ local function RenderUnit(entry)
         -- Layout config
         cfg.iconSize, cfg.spacing, cfg.perRow, cfg.maxBuffs, cfg.maxDebuffs,
         cfg.growth, cfg.buffGrowth, cfg.debuffGrowth, cfg.privateGrowth, cfg.rowWrap, cfg.buffRowWrap, cfg.debuffRowWrap, cfg.stackCountAnchor,
-        cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize, cfg.capsSortOrder, cfg.capsSortReverse =
+        cfg.buffIconSize, cfg.debuffIconSize, cfg.privateIconSize, cfg.capsSortOrder =
             ResolveUnitConfig(unit, a2, shared)        -- Filter flags
         if Filters and Filters.ResolveRuntimeFlags then
             cfg.tf, cfg.masterOn,
@@ -1028,8 +1026,7 @@ local function RenderUnit(entry)
             cfg.onlyImportantBuffs, cfg.onlyImportantDebuffs,
             cfg.buffsOnlyMine, cfg.debuffsOnlyMine,
             cfg.buffsIncludeBoss, cfg.debuffsIncludeBoss,
-            cfg.hidePermanentBuffs,
-            cfg.sortOrder, cfg.sortReverse =
+            cfg.hidePermanentBuffs =
                 Filters.ResolveRuntimeFlags(a2, shared, unit)
         else
             cfg.tf = nil
@@ -1042,8 +1039,6 @@ local function RenderUnit(entry)
             cfg.buffsIncludeBoss = false
             cfg.debuffsIncludeBoss = false
             cfg.hidePermanentBuffs = false
-            cfg.sortOrder = 0
-            cfg.sortReverse = false
         end
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
@@ -1076,7 +1071,7 @@ local function RenderUnit(entry)
     local needPlayerAura    = cfg.needPlayerAura
     local masterOn          = cfg.masterOn
 
-    -- Early bail: no unit, no edit mode  nothing to render 
+    -- Early bail: no unit, no edit mode  nothing to render
     local unitExists = UnitExists and UnitExists(unit)
     -- PERF: isEditActive already computed at top of function
 
@@ -1088,7 +1083,7 @@ local function RenderUnit(entry)
         return
     end
 
-    -- Edit Mode: create movers before anchoring so UpdateAnchor can position them 
+    -- Edit Mode: create movers before anchoring so UpdateAnchor can position them
     local EditMode = isEditActive and API.EditMode or nil
     if EditMode and EditMode.EnsureMovers then
         EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
@@ -1107,7 +1102,7 @@ local function RenderUnit(entry)
         entry._lastPrivateGen = gen
     end
 
-    -- Edit Mode: show/hide movers (skip entirely in combat) 
+    -- Edit Mode: show/hide movers (skip entirely in combat)
     if not _inCombat then
         if EditMode then
             if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
@@ -1188,16 +1183,10 @@ local function RenderUnit(entry)
 
     -- PERF: Epoch already checked at top of function for fast-path
     -- Here we just update the tracking vars
-    entry._lastEpoch = epoch
     entry._lastConfigGen = gen
     entry._unitExisted = true  -- PERF: Track for fast-path
 
-    -- Collect auras (single pass) 
-    -- Per-unit sort order: set before collect so PreScanUnit uses the right order.
-    -- Secret-safe: plain numeric config, never compared with secret data.
-    if Collect.SetUnitSortOrder then
-        Collect.SetUnitSortOrder(unit, cfg.capsSortOrder or 0, cfg.capsSortReverse)
-    end
+    -- Collect auras (single pass)
     local buffCount = 0
     local debuffCount = 0
     local buffsOnlyMine    = cfg.buffsOnlyMine
@@ -1208,6 +1197,7 @@ local function RenderUnit(entry)
     local onlyImportantBuffs = cfg.onlyImportantBuffs
     local onlyImportantDebuffs = cfg.onlyImportantDebuffs
     local hidePermanentBuffs = cfg.hidePermanentBuffs
+    local sortOrder        = cfg.capsSortOrder or 0
 
     -- PERF: Local function references eliminate table lookups in hot loops
     local _AcquireIcon = Icons.AcquireIcon
@@ -1221,9 +1211,9 @@ local function RenderUnit(entry)
     if showDebuffs and not skipDebuffs then
         local list
         if debuffsOnlyMine and debuffsIncludeBoss then
-            list, debuffCount = _GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, onlyImportantDebuffs, entry._debuffList, nil, needPlayerAura)
+            list, debuffCount = _GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, onlyImportantDebuffs, entry._debuffList, nil, needPlayerAura, sortOrder)
         else
-            list, debuffCount = _GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, onlyImportantDebuffs, entry._debuffList, needPlayerAura)
+            list, debuffCount = _GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, onlyImportantDebuffs, entry._debuffList, needPlayerAura, sortOrder)
         end
 
         local container = entry.debuffs
@@ -1239,9 +1229,9 @@ local function RenderUnit(entry)
     if showBuffs then
         local list
         if buffsOnlyMine and buffsIncludeBoss then
-            list, buffCount = _GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, onlyImportantBuffs, entry._buffList, nil, needPlayerAura)
+            list, buffCount = _GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, onlyImportantBuffs, entry._buffList, nil, needPlayerAura, sortOrder)
         else
-            list, buffCount = _GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, onlyImportantBuffs, entry._buffList, needPlayerAura)
+            list, buffCount = _GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, onlyImportantBuffs, entry._buffList, needPlayerAura, sortOrder)
         end
 
         local container = entry.buffs
@@ -1255,16 +1245,16 @@ local function RenderUnit(entry)
         end
     end
 
-    -- Layout 
+    -- Layout
     -- PERF: Local function references
     local _LayoutIcons = Icons.LayoutIcons
     local _HideUnused = Icons.HideUnused
-    
+
     -- PERF: Skip redundant HideUnused when counts unchanged
     local lastBuffCount = entry._lastBuffCount or 0
     local lastDebuffCount = entry._lastDebuffCount or 0
     local countsChanged = (buffCount ~= lastBuffCount) or (debuffCount ~= lastDebuffCount)
-    
+
     -- SEPARATE (only) layout path
     if skipDebuffs then
         -- Player edit mode: debuff layout already handled by preview path.
@@ -1296,9 +1286,7 @@ local function RenderUnit(entry)
     entry._lastDebuffCount = debuffCount
 end
 
-
 -- Flush
-
 
 -- PERF: Budget cap for aura flush. Shared with UFCore for combined frame budget.
 -- Own cap: 350μs. Shared total: 700μs (UFCore 350 + A2 350 max).
@@ -1317,12 +1305,10 @@ Flush = function()
     local list, count = DirtySwap()
     local startUs = _debugprofilestop and _debugprofilestop() or nil
 
-    -- PERF: Shared frame budget with UFCore. Deduct UFCore's usage from our cap.
     local effectiveBudget = _A2_FLUSH_BUDGET_US
     if startUs then
         local ufcoreUsed = _G._MSUF_FrameBudgetUsed
         local ufcoreStart = _G._MSUF_FrameBudgetStart
-        -- Only trust if UFCore ran recently (same frame = within ~20ms of us starting)
         if ufcoreUsed and ufcoreStart and (startUs - ufcoreStart) < 20000 then
             local remaining = _A2_SHARED_BUDGET_US - ufcoreUsed
             if remaining < _A2_MIN_BUDGET_US then remaining = _A2_MIN_BUDGET_US end
@@ -1332,14 +1318,15 @@ Flush = function()
         end
     end
 
+    -- PERF: Cache DB once per flush (eliminates N-1 GetAuras2DB calls for N units)
+    local flushA2, flushShared = GetAuras2DB()
+
     local budgetHit = false
 
     for i = 1, count do
-        -- PERF: Budget check after each unit (not each aura icon).
         if startUs and i > 1 then
             local elapsed = _debugprofilestop() - startUs
             if elapsed >= effectiveBudget then
-                -- Re-queue remaining units for next frame.
                 for j = i, count do
                     local u = list[j]
                     if u then MarkDirty(u, 0) end
@@ -1352,20 +1339,15 @@ Flush = function()
         local unit = list[i]
         local entry = AurasByUnit[unit]
 
-        -- Fast path: entry already attached with valid frame â†’ skip FindUnitFrame
         if entry and entry.frame then
-            RenderUnit(entry)
+            RenderUnit(entry, flushA2, flushShared)
         else
             local frame = FindUnitFrame(unit)
             if not frame then
-                -- No parent frame at all: just hide anchor if leftover
                 if entry and entry.anchor then entry.anchor:Hide() end
             else
-                -- Always let RenderUnit handle both rendering AND cleanup.
-                -- UnitEnabled gating lives inside RenderUnit so disabled units
-                -- get their icons hidden properly.
                 local e = EnsureAttached(unit)
-                if e then RenderUnit(e) end
+                if e then RenderUnit(e, flushA2, flushShared) end
             end
         end
     end
@@ -1382,9 +1364,7 @@ Flush = function()
     end
 end
 
-
 -- Public API
-
 
 local function MarkAllDirty(delay)
     -- Always mark ALL units, not just enabled ones.
@@ -1398,14 +1378,7 @@ end
 local function RefreshAll()
     _configGen = _configGen + 1
     if Icons and Icons.BumpConfigGen then Icons.BumpConfigGen() end
-
-    local Store = API.Store
-    if Store and Store.InvalidateUnit then
-        Store.InvalidateUnit("player")
-        Store.InvalidateUnit("target")
-        Store.InvalidateUnit("focus")
-        for i = 1, 5 do Store.InvalidateUnit(_BOSS_UNITS[i]) end
-    end
+    -- JIT: no store cache to invalidate
     MarkAllDirty(0)
 end
 
@@ -1417,8 +1390,7 @@ local function RefreshUnit(unit)
     _configGen = _configGen + 1
     Icons = API.Icons or API.Apply
     if Icons and Icons.BumpConfigGen then Icons.BumpConfigGen() end
-    local Store = API.Store
-    if Store and Store.InvalidateUnit then Store.InvalidateUnit(unit) end
+    -- JIT: no store cache to invalidate
     MarkDirty(unit, 0)
 end
 
@@ -1442,9 +1414,7 @@ local function HardDisableAll()
     end
 end
 
-
 -- ClearAllPreviews (called by Events when leaving Edit Mode)
-
 
 -- Helper: clear preview state from a single container (file-scope, no closure alloc)
 local function _ClearPreviewContainer(container)
@@ -1531,10 +1501,7 @@ _G.MSUF_A2_RequestUnit = function(unit, delay) return API.RequestUnit(unit, dela
 _G.MSUF_A2_HardDisableAll = function() return API.HardDisableAll() end
 _G.MSUF_UpdateTargetAuras = function() MarkDirty("target") end
 
-
 -- Init: prime DB + kick off events
-
-
 
 -- API bridge for Options / EditMode / Fonts
 
@@ -1566,7 +1533,6 @@ function API.Init()
     if Ev and Ev.Init then
         Ev.Init()
     end
-
 
 -- IMPORTANT: On /reload, Auras2 can initialize before MSUF core has fully
 -- hydrated SavedVariables (or before some modules finish their first Apply).

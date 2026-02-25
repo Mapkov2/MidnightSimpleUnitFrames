@@ -330,8 +330,9 @@ local function InitUnitFlags(f)
     f._msufIsFocus  = (u == "focus")
     f._msufIsPet    = (u == "pet")
     f._msufIsToT    = (u == "targettarget")
-    local bi = u and u:match("^boss(%d+)$")
-    f._msufBossIndex = bi and tonumber(bi) or nil
+    -- Perf: avoid pattern matching.
+    local bi = (_G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(u))
+    f._msufBossIndex = bi or nil
     f._msufUnitFlagsInited = true
 end
 

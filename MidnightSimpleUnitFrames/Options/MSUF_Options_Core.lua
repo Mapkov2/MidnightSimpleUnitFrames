@@ -754,7 +754,7 @@ function CreateOptionsPanel()
 -- Options that affect layout should request a UFCore layout flush (DIRTY_LAYOUT) instead of forcing full updates.
 local function MSUF_Options_NormalizeUnitKey(unitKey)
     if unitKey == "tot" then  return "targettarget" end
-    if type(unitKey) == "string" and unitKey:match("^boss%d+$") then  return "boss" end
+    if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unitKey) then  return "boss" end
      return unitKey
 end
 local function MSUF_Options_IsUrgentUnitKey(unitKey)
@@ -4238,7 +4238,7 @@ gradientCheck = CreateLabeledCheckButton(
 
     local function _MSUF_HPText_NormalizeScopeKey(k)
         if k == "tot" then k = "targettarget" end
-        if type(k) == "string" and k:match("^boss%d+$") then k = "boss" end
+        if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(k) then k = "boss" end
         if k ~= "shared" and k ~= "player" and k ~= "target" and k ~= "focus" and k ~= "targettarget" and k ~= "pet" and k ~= "boss" then
             return "shared"
         end

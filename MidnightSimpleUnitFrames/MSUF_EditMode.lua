@@ -1716,7 +1716,7 @@ local function GetConfigKeyForUnit(unit)
         or unit == "pet"
     then
         return unit
-    elseif unit and unit:match("^boss%d+$") then
+    elseif _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit) then
         return "boss"
     end
     return nil
@@ -3792,7 +3792,7 @@ local function MSUF_OpenPositionPopup(unit, parent)
             key = GetConfigKeyForUnit(unit)
         end
         if not key and type(unit) == "string" then
-            if unit:match("^boss%d+$") then
+            if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit) then
                 key = "boss"
             elseif unit == "targettarget" or unit == "tot" or unit == "targetoftarget" then
                 key = "targettarget"
@@ -5959,14 +5959,14 @@ function _G.MSUF_A2_EnsureAuraPositionPopup()
             if key == "target" then return "Target" end
             if key == "focus" then return "Focus" end
             if type(key) == "string" then
-                local n = key:match("^boss(%d+)$")
+                local n = (_G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(key))
                 if n then return ("Boss %s"):format(n) end
             end
             return tostring(key or "")
         end
 
         local function MSUF_A2_IsBossAuraKey(key)
-            return (type(key) == "string") and key:match("^boss%d+$")
+            return (_G.MSUF_IsBossUnitToken and _G.MSUF_IsBossUnitToken(key)) and true or false
         end
 
         local function MSUF_A2_CopyAuraLayout(srcKey, dstKey)
@@ -6837,7 +6837,7 @@ function _G.MSUF_EnableArrowKeyNudge(enable)
             end
 
             -- Boss edit-together
-            local isBoss = unitKey:match("^boss%d+$")
+            local isBoss = (_G.MSUF_IsBossUnitToken and _G.MSUF_IsBossUnitToken(unitKey))
             local applyKeys
             if isBoss and a2.shared and a2.shared.bossEditTogether ~= false then
                 applyKeys = { "boss1","boss2","boss3","boss4","boss5" }

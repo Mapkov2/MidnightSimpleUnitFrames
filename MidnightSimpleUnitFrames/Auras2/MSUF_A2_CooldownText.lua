@@ -11,20 +11,10 @@
 local addonName, ns = ...
 
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
--- =========================================================================
--- PERF LOCALS (Auras2 runtime)
---  - Reduce global table lookups in high-frequency aura pipelines.
---  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
-local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
+local type, tonumber = type, tonumber
+local pairs = pairs
 local CreateFrame, GetTime = CreateFrame, GetTime
-local UnitExists = UnitExists
-local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
-local C_UnitAuras = C_UnitAuras
 local C_Secrets = C_Secrets
 local C_CurveUtil = C_CurveUtil
 ns.MSUF_Auras2 = ns.MSUF_Auras2 or {}
@@ -82,17 +72,8 @@ end
 -- ------------------------------------------------------------
 
 local function EnsureDB()
-    if API and API.EnsureDB then
-        API.EnsureDB()
-        return
-    end
-    if API and API.DB and API.DB.RebuildCache and API.GetDB then
-        -- Fallback for odd load order (should be rare)
-        local a2, s = API.GetDB()
-        if a2 and s then
-            API.DB.RebuildCache(a2, s)
-        end
-    end
+    local DB = API and API.DB
+    if DB and DB.Ensure then DB.Ensure() end
 end
 
 local function GetGeneral()

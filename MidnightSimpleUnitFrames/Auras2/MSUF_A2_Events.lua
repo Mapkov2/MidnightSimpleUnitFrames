@@ -4,24 +4,12 @@
 
 local addonName, ns = ...
 
-
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
--- =========================================================================
--- PERF LOCALS (Auras2 runtime)
---  - Reduce global table lookups in high-frequency aura pipelines.
---  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
-local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
-local CreateFrame, GetTime = CreateFrame, GetTime
+local type = type
+local pairs = pairs
+local CreateFrame = CreateFrame
 local UnitExists = UnitExists
-local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
-local C_UnitAuras = C_UnitAuras
-local C_Secrets = C_Secrets
-local C_CurveUtil = C_CurveUtil
 
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
@@ -41,17 +29,12 @@ local _BOSS_MAX = 5
 -- Cached module refs (bound lazily, reset on InvalidateDB)
 local _cachedReqUnit      -- API.RequestUnit (fast MarkDirty path)
 local _cachedMarkDirty    -- API.MarkDirty (fallback)
-local _cachedOnUnitAura   -- API.Store.OnUnitAura
-local _cachedInvalidUnit  -- API.Store.InvalidateUnit
 local _cachedIsEditFn     -- API.IsEditModeActive
 local _refsBound = false
 
 local function BindCachedRefs()
     _cachedReqUnit     = API.RequestUnit
     _cachedMarkDirty   = API.MarkDirty
-    local Store = API.Store
-    _cachedOnUnitAura  = Store and Store.OnUnitAura
-    _cachedInvalidUnit = Store and Store.InvalidateUnit
     _cachedIsEditFn    = API.IsEditModeActive
     _refsBound = true
 end
@@ -85,45 +68,19 @@ local function MarkDirty(unit, delay)
 end
 
 local function IsEditModeActive()
-    -- Fast path: cached API function (set once by Render, never changes)
     if not _refsBound then BindCachedRefs() end
     local fn = _cachedIsEditFn
-    if fn then
-        return fn() == true
-    end
-
-    -- Fallback chain (rare: only before Render loads)
+    if fn then return fn() == true end
+    -- Fallback (rare: only before Render loads)
     local st = rawget(_G, "MSUF_EditState")
-    if type(st) == "table" and st.active == true then
-        return true
-    end
-
-    if rawget(_G, "MSUF_UnitEditModeActive") == true then
-        return true
-    end
-
-    local g = rawget(_G, "MSUF_IsInEditMode")
-    if type(g) == "function" then
-        if g() == true then return true end
-    end
-
-    local h = rawget(_G, "MSUF_IsMSUFEditModeActive")
-    if type(h) == "function" then
-        if h() == true then return true end
-    end
-
+    if type(st) == "table" and st.active == true then return true end
+    if rawget(_G, "MSUF_UnitEditModeActive") == true then return true end
     return false
 end
 
 local function EnsureDB()
     local DB = API.DB
-    if DB and DB.Ensure then
-        return DB.Ensure()
-    end
-    local f = API.EnsureDB
-    if type(f) == "function" then
-        return f()
-    end
+    if DB and DB.Ensure then return DB.Ensure() end
     return nil
 end
 
@@ -477,7 +434,6 @@ local function OnAnyEditModeChanged(active)
     end
 end
 
-
 Events.OnAnyEditModeChanged = OnAnyEditModeChanged
 API.OnAnyEditModeChanged = API.OnAnyEditModeChanged or OnAnyEditModeChanged
 
@@ -791,8 +747,7 @@ end
     if type(busReg) == "function" and type(busUnreg) == "function" then
         if needTarget then
             busReg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS", function()
-                if not _refsBound then BindCachedRefs() end
-                if _cachedInvalidUnit then _cachedInvalidUnit("target") end
+                -- JIT: no cache to invalidate, just mark dirty for immediate re-render
                 if ShouldProcessUnitEvent("target") then MarkDirty("target", 0) end
             end)
         else
@@ -801,8 +756,7 @@ end
 
         if needFocus then
             busReg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS", function()
-                if not _refsBound then BindCachedRefs() end
-                if _cachedInvalidUnit then _cachedInvalidUnit("focus") end
+                -- JIT: no cache to invalidate, just mark dirty for immediate re-render
                 if ShouldProcessUnitEvent("focus") then MarkDirty("focus", 0) end
             end)
         else
@@ -815,39 +769,11 @@ end
     if type(list) == "table" then
         local handler = ef._msufA2_unitAuraOnEvent
         if not handler then
-            handler = function(self, event, unit, updateInfo)
-                if event ~= "UNIT_AURA" then return end
-
-                local units = self._msufA2_unitAuraUnits
-                if units then
-                    if unit ~= units[1] and unit ~= units[2] then
-                        return
-                    end
-                end
-
-                -- No-op skip: some clients can fire UNIT_AURA with an empty updateInfo.
-                if type(updateInfo) == "table" then
-                    if not updateInfo.isFullUpdate then
-                        local a = updateInfo.addedAuras
-                        local r = updateInfo.removedAuraInstanceIDs
-                        local u = updateInfo.updatedAuraInstanceIDs
-                        if (not a or #a == 0) and (not r or #r == 0) and (not u or #u == 0) then
-                            return
-                        end
-                    end
-                end
-
-
-                if unit and ShouldProcessUnitEvent(unit, true) then
-                    -- Feed delta into Store (cached ref, no guard chains)
-                    if not _refsBound then BindCachedRefs() end
-                    local onAura = _cachedOnUnitAura
-                    if onAura then
-                        onAura(unit, updateInfo)
-                    end
-
-                    MarkDirty(unit)
-                end
+            -- PERF: RegisterUnitEvent already filters to our units.
+            -- No event string check, no ShouldProcessUnitEvent (pre-validated at registration time).
+            -- This is the #1 hot path — every branch removed = measurable win.
+            handler = function(_, _, unit)
+                if unit then MarkDirty(unit) end
             end
             ef._msufA2_unitAuraOnEvent = handler
         end
@@ -891,11 +817,7 @@ function Events.Init()
     -- EventFrame main handler (non-UNIT_AURA)
     ef:SetScript("OnEvent", function(_, event, arg1)
         if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-            if not _refsBound then BindCachedRefs() end
-            local inv = _cachedInvalidUnit
-            if inv then
-                for i = 1, _BOSS_MAX do inv(_BOSS_UNITS[i]) end
-            end
+            -- JIT: no cache to invalidate, just mark all boss units dirty
             for i = 1, _BOSS_MAX do
                 local u = _BOSS_UNITS[i]
                 if ShouldProcessUnitEvent(u) then
@@ -917,14 +839,7 @@ function Events.Init()
                 Events.ApplyEventRegistration()
             end
 
-            local inv = _cachedInvalidUnit
-            if inv then
-                inv("player")
-                inv("target")
-                inv("focus")
-                for i = 1, _BOSS_MAX do inv(_BOSS_UNITS[i]) end
-            end
-
+            -- JIT: no cache to invalidate, just mark all units dirty
             if ShouldProcessUnitEvent("player") then MarkDirty("player", 0) end
             if ShouldProcessUnitEvent("target") then MarkDirty("target", 0) end
             if ShouldProcessUnitEvent("focus") then MarkDirty("focus") end

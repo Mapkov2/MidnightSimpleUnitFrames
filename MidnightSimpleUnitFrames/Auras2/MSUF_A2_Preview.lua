@@ -3,29 +3,11 @@
 
 local addonName, ns = ...
 
-
--- =========================================================================
--- PERF LOCALS (Auras2 runtime)
---  - Reduce global table lookups in high-frequency aura pipelines.
---  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
-local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
-local CreateFrame, GetTime = CreateFrame, GetTime
-local UnitExists = UnitExists
-local InCombatLockdown = InCombatLockdown
+local type, tostring = type, tostring
+local pairs, ipairs = pairs, ipairs
+local GetTime = GetTime
 local C_Timer = C_Timer
-local C_UnitAuras = C_UnitAuras
-local C_Secrets = C_Secrets
-local C_CurveUtil = C_CurveUtil
 
--- MSUF: Max-perf Auras2: replace protected calls (pcall) with direct calls.
--- NOTE: this removes error-catching; any error will propagate.
-local function MSUF_A2_FastCall(fn, ...)
-    return fn(...)
-end
 local API = ns and ns.MSUF_Auras2
 if type(API) ~= "table" then  return end
 
@@ -36,63 +18,30 @@ local Preview = API.Preview
 -- Helpers
 -- ------------------------------------------------------------
 
-local function IsEditModeActive() 
-    -- Fast path: use Render's cached version when available
+local function IsEditModeActive()
     local fn = API.IsEditModeActive
-    if type(fn) == "function" then
-        return fn() == true
-    end
-
-    -- Fallback: MSUF-only Edit Mode
+    if type(fn) == "function" then return fn() == true end
     local st = rawget(_G, "MSUF_EditState")
-    if type(st) == "table" and st.active == true then
-         return true
-    end
-
-    if rawget(_G, "MSUF_UnitEditModeActive") == true then
-         return true
-    end
-
-    local f = rawget(_G, "MSUF_IsInEditMode")
-    if type(f) == "function" then
-        local v = f()
-        if v == true then
-             return true
-        end
-    end
-
-    local g = rawget(_G, "MSUF_IsMSUFEditModeActive")
-    if type(g) == "function" then
-        local v = g()
-        if v == true then
-             return true
-        end
-    end
-
-     return false
+    if type(st) == "table" and st.active == true then return true end
+    if rawget(_G, "MSUF_UnitEditModeActive") == true then return true end
+    return false
 end
-
 
 -- API.IsEditModeActive is owned by Render (cached). Preview must not override it.
 
-local function EnsureDB() 
-    local Ensure = API.EnsureDB
-    if type(Ensure) ~= "function" and API.DB and type(API.DB.Ensure) == "function" then
-        Ensure = API.DB.Ensure
-    end
-    if type(Ensure) == "function" then
-        return Ensure()
-    end
-     return nil, nil
+local function EnsureDB()
+    local DB = API.DB
+    if DB and DB.Ensure then return DB.Ensure() end
+    return nil, nil
 end
 
-local function GetAurasByUnit() 
+local function GetAurasByUnit()
     local st = API.state
     if type(st) ~= "table" then  return nil end
     return st.aurasByUnit
 end
 
-local function GetCooldownTextMgr() 
+local function GetCooldownTextMgr()
     -- Prefer split module API, but keep legacy global aliases.
     local CT = API.CooldownText
     local reg = CT and CT.RegisterIcon
@@ -139,7 +88,7 @@ local function ClearPreviewCDText(icon, cd)
     icon._msufA2_pvCDFont = nil
 end
 
-local function ClearPreviewIconsInContainer(container) 
+local function ClearPreviewIconsInContainer(container)
     if not container or not container._msufIcons then  return end
 
     local _, unreg = GetCooldownTextMgr()
@@ -190,7 +139,7 @@ local function ClearPreviewIconsInContainer(container)
     end
  end
 
-local function ClearPreviewsForEntry(entry) 
+local function ClearPreviewsForEntry(entry)
     if not entry then  return end
     ClearPreviewIconsInContainer(entry.buffs)
     ClearPreviewIconsInContainer(entry.debuffs)
@@ -199,7 +148,7 @@ local function ClearPreviewsForEntry(entry)
     entry._msufA2_previewActive = nil
  end
 
-local function ClearAllPreviews() 
+local function ClearAllPreviews()
     local AurasByUnit = GetAurasByUnit()
     if type(AurasByUnit) ~= "table" then  return end
 
@@ -230,7 +179,7 @@ local PreviewTickers = {
     cooldown = nil,
 }
 
-local function ShouldRunPreviewTicker(kind, a2, shared) 
+local function ShouldRunPreviewTicker(kind, a2, shared)
     if not a2 or not a2.enabled then  return false end
     local DB = API and API.DB
     if DB and DB.AnyUnitEnabledCached and DB.AnyUnitEnabledCached() ~= true then  return false end
@@ -240,7 +189,7 @@ local function ShouldRunPreviewTicker(kind, a2, shared)
      return true
 end
 
-local function ForEachPreviewIcon(fn) 
+local function ForEachPreviewIcon(fn)
     local AurasByUnit = GetAurasByUnit()
     if type(AurasByUnit) ~= "table" then  return end
 
@@ -384,7 +333,7 @@ local function _PreviewStackIconFn(icon)
     end
 end
 
-local function PreviewTickStacks() 
+local function PreviewTickStacks()
     local a2, shared = EnsureDB()
     if not ShouldRunPreviewTicker("stacks", a2, shared) then  return end
 
@@ -467,7 +416,7 @@ local function _PreviewCooldownIconFn(icon)
     fs:Show()
 end
 
-local function PreviewTickCooldown() 
+local function PreviewTickCooldown()
     local a2, shared = EnsureDB()
     if not ShouldRunPreviewTicker("cooldown", a2, shared) then  return end
 
@@ -482,7 +431,7 @@ local function PreviewTickCooldown()
     pcall(ForEachPreviewIcon, _PreviewCooldownIconFn)
  end
 
-local function EnsureTicker(kind, need, interval, fn) 
+local function EnsureTicker(kind, need, interval, fn)
     local t = PreviewTickers[kind]
     if need then
         if not t then
@@ -496,7 +445,7 @@ local function EnsureTicker(kind, need, interval, fn)
     end
  end
 
-local function UpdatePreviewStackTicker() 
+local function UpdatePreviewStackTicker()
     local a2, shared = EnsureDB()
 
     -- If the user disables Edit Mode previews, hard-clear any existing preview icons immediately.
@@ -510,8 +459,7 @@ local function UpdatePreviewStackTicker()
     EnsureTicker("stacks", need, 0.50, PreviewTickStacks)
  end
 
-
-local function UpdatePreviewCooldownTicker() 
+local function UpdatePreviewCooldownTicker()
     local a2, shared = EnsureDB()
 
     -- If the user disables Edit Mode previews, hard-clear any existing preview icons immediately.
@@ -525,7 +473,6 @@ local function UpdatePreviewCooldownTicker()
     EnsureTicker("cooldown", need, 0.50, PreviewTickCooldown)
  end
 
-
 Preview.UpdatePreviewStackTicker = UpdatePreviewStackTicker
 Preview.UpdatePreviewCooldownTicker = UpdatePreviewCooldownTicker
 
@@ -533,7 +480,7 @@ API.UpdatePreviewStackTicker = API.UpdatePreviewStackTicker or UpdatePreviewStac
 API.UpdatePreviewCooldownTicker = API.UpdatePreviewCooldownTicker or UpdatePreviewCooldownTicker
 
 if _G and type(_G.MSUF_Auras2_UpdatePreviewStackTicker) ~= "function" then
-    _G.MSUF_Auras2_UpdatePreviewStackTicker = function() 
+    _G.MSUF_Auras2_UpdatePreviewStackTicker = function()
         if API and API.UpdatePreviewStackTicker then
             return API.UpdatePreviewStackTicker()
         end
@@ -541,7 +488,7 @@ if _G and type(_G.MSUF_Auras2_UpdatePreviewStackTicker) ~= "function" then
 end
 
 if _G and type(_G.MSUF_Auras2_UpdatePreviewCooldownTicker) ~= "function" then
-    _G.MSUF_Auras2_UpdatePreviewCooldownTicker = function() 
+    _G.MSUF_Auras2_UpdatePreviewCooldownTicker = function()
         if API and API.UpdatePreviewCooldownTicker then
             return API.UpdatePreviewCooldownTicker()
         end

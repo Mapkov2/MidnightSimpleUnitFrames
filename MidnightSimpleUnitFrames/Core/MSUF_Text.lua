@@ -37,7 +37,8 @@ function _G.MSUF_NormalizeTextLayoutUnitKey(unitKey, fallbackKey)
     local k = unitKey
     if not k or k == "" then local _g = MSUF_DB and MSUF_DB.general; k = fallbackKey or (_g and _g.hpSpacerSelectedUnitKey) or "player" end
     if k == "tot" then k = "targettarget" end
-    if type(k) == "string" and k:match("^boss%d+$") then k = "boss" end
+    -- Perf: avoid pattern matching in hot layout paths.
+    if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(k) then k = "boss" end
     if not _G.MSUF_TEXTLAYOUT_VALID_KEYS[k] then k = "player" end
      return k
 end

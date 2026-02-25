@@ -14,22 +14,11 @@
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
--- =========================================================================
--- PERF LOCALS (Auras2 runtime)
---  - Reduce global table lookups in high-frequency aura pipelines.
---  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
-local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
+local type, tostring = type, tostring
+local pairs = pairs
 local CreateFrame, GetTime = CreateFrame, GetTime
-local UnitExists = UnitExists
 local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
-local C_UnitAuras = C_UnitAuras
-local C_Secrets = C_Secrets
-local C_CurveUtil = C_CurveUtil
 
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
@@ -39,7 +28,6 @@ ns.__MSUF_A2_EDITMODE_LOADED = true
 
 API.EditMode = (type(API.EditMode) == "table") and API.EditMode or {}
 local EM = API.EditMode
-
 
 -- Locals
 
@@ -57,19 +45,22 @@ local function FastCall(fn, ...)
     return true, fn(...)
 end
 
-
 -- DB access
 
 local function EnsureDB()
-    if API.EnsureDB then return API.EnsureDB() end
+    local DB = API.DB
+    if DB and DB.Ensure then return DB.Ensure() end
     return nil, nil
 end
 
 local function GetAuras2DB()
-    if API.GetDB then return API.GetDB() end
+    local DB = API.DB
+    if DB and DB.GetCached then
+        local a2, shared = DB.GetCached()
+        if a2 and shared then return a2, shared end
+    end
     return EnsureDB()
 end
-
 
 -- Edit Mode state detection (use Render's cached check if available)
 
@@ -81,7 +72,6 @@ local function IsEditModeActive()
     return false
 end
 
-
 -- Per-unit state (shared with Render)
 
 local function GetAurasByUnit()
@@ -90,7 +80,6 @@ local function GetAurasByUnit()
 end
 
 local _IS_BOSS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
-
 
 -- Offset DB keys per mover kind
 
@@ -145,9 +134,7 @@ local function WriteOffset(a2, unitKey, kind, newX, newY)
     u.layout[ky] = newY
 end
 
-
 -- Mover creation
-
 
 local function GetCursorScaled()
     local scale = (UIParent and UIParent.GetEffectiveScale) and UIParent:GetEffectiveScale() or 1
@@ -205,7 +192,7 @@ local function CreateMover(entry, unitKey, kind, labelText)
     mover:SetBackdropColor(0.20, 0.65, 1.00, 0.12)
     mover:SetBackdropBorderColor(0.20, 0.65, 1.00, 0.55)
 
-    --  Header bar + label 
+    --  Header bar + label
     local style = MOVER_COLORS[kind] or MOVER_COLORS.private
     local headerH = 18
 
@@ -253,7 +240,7 @@ local function CreateMover(entry, unitKey, kind, labelText)
     mover._msufAuraUnitKey  = unitKey
     mover._msufA2MoverKind  = kind
 
-    --  Drag logic 
+    --  Drag logic
 
     local function ApplyDragDelta(self, dx, dy)
         if InCombatLockdown() then return end
@@ -284,15 +271,17 @@ local function CreateMover(entry, unitKey, kind, labelText)
         end
 
         -- Boss units: edit together when enabled
-        if shared.bossEditTogether == true and type(key) == "string" and key:match("^boss%d+$") then
+        if shared.bossEditTogether == true and _G.MSUF_IsBossUnitToken and _G.MSUF_IsBossUnitToken(key) then
             for i = 1, 5 do ApplyToUnit("boss" .. i) end
         else
             ApplyToUnit(key)
         end
 
         -- Sync position popup if open
-        if type(_G.MSUF_SyncAuras2PositionPopup) == "function" then
-            _G.MSUF_SyncAuras2PositionPopup(key)
+        -- Perf: cache global lookup + avoid repeated type() on the global.
+        local SyncPopup = _G.MSUF_SyncAuras2PositionPopup
+        if type(SyncPopup) == "function" then
+            SyncPopup(key)
         end
     end
 
@@ -389,15 +378,13 @@ local function CreateMover(entry, unitKey, kind, labelText)
     return mover
 end
 
-
 -- Ensure all three movers exist for a unit
-
 
 local function UnitLabel(unit)
     if unit == "player" then return "Player" end
     if unit == "target" then return "Target" end
     if unit == "focus"  then return "Focus"  end
-    local n = type(unit) == "string" and unit:match("^boss(%d+)$")
+    local n = (_G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit))
     if n then return "Boss " .. n end
     return tostring(unit)
 end
@@ -415,9 +402,7 @@ function EM.EnsureMovers(entry, unit, shared, iconSize, spacing)
     -- Mover positioning is handled by Render's UpdateAnchor after containers are placed
 end
 
-
 -- Mover positioning (mirrors container anchors)
-
 
 function EM.PositionMovers(entry, shared, iconSize, spacing)
     if not entry then return end
@@ -478,9 +463,7 @@ function EM.PositionMovers(entry, shared, iconSize, spacing)
     end
 end
 
-
 -- Show / Hide movers
-
 
 function EM.ShowMovers(entry)
     if not entry then return end
@@ -501,9 +484,7 @@ function EM.AnyMoverExists(entry)
     return entry and (entry.editMoverBuff or entry.editMoverDebuff or entry.editMoverPrivate) and true or false
 end
 
-
 -- Hide all movers across all units
-
 
 function EM.HideAllMovers()
     local aby = GetAurasByUnit()
@@ -524,10 +505,8 @@ function EM.ShowAllMovers()
     end
 end
 
-
 -- Edit Mode transition handler
 -- (Called by the AnyEditModeListener registered below)
-
 
 local function OnEditModeChanged(active)
     if active then
@@ -560,10 +539,8 @@ end
 
 EM.OnEditModeChanged = OnEditModeChanged
 
-
 -- Backward compatibility exports
 -- (Old Render.lua exposed these globally; some code may reference them)
-
 
 -- Global offsets writer (used by position popup)
 _G.MSUF_A2_WriteMoverOffsets = _G.MSUF_A2_WriteMoverOffsets or function(a2, unitKey, kind, newX, newY)
@@ -580,9 +557,7 @@ _G.MSUF_A2_GetMoverKeyPair = _G.MSUF_A2_GetMoverKeyPair or function(kind)
     return GetMoverKeyPair(kind)
 end
 
-
 -- Register for Edit Mode notifications
-
 
 local _registered = false
 

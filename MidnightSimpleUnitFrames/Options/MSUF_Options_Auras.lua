@@ -1209,7 +1209,7 @@ GetOverrideCapsForEditing = function()
 end
     local function A2_IsAuras2UnitKey(unitKey)
         if unitKey == "target" or unitKey == "focus" then  return true end
-        if type(unitKey) == "string" and unitKey:match("^boss%d+$") then  return true end
+        if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unitKey) then  return true end
          return false
     end
     -- Shared caps override helper (shared vs per-unit layoutShared)
@@ -1282,7 +1282,6 @@ SetOverrideCapsForEditing = function(v)
         if ls.splitSpacing == nil then ls.splitSpacing = shared.splitSpacing end
         if ls.stackCountAnchor == nil then ls.stackCountAnchor = shared.stackCountAnchor end
         if ls.sortOrder == nil then ls.sortOrder = shared.sortOrder end
-        if ls.sortReverse == nil then ls.sortReverse = shared.sortReverse end
     else
         u.overrideSharedLayout = false
     end

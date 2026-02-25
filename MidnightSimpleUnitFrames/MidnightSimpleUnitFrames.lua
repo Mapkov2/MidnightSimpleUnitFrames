@@ -427,8 +427,9 @@ local function MSUF_EnsureUnitFlags(f)
     f._msufIsFocus  = (u == "focus")
     f._msufIsPet    = (u == "pet")
     f._msufIsToT    = (u == "targettarget")
-    local bi = u and u:match("^boss(%d+)$")
-    f._msufBossIndex = bi and tonumber(bi) or nil
+    -- Perf: avoid pattern matching.
+    local bi = (_G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(u))
+    f._msufBossIndex = bi or nil
     f._msufUnitFlagsInited = true
  end
 _G.MSUF_EnsureUnitFlags = MSUF_EnsureUnitFlags
@@ -765,7 +766,7 @@ local function MSUF_NormalizeUnitKeyForDB(key)
     if key == "tot" then
          return "targettarget"
     end
-    if key:match("^boss%d+$") then
+    if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(key) then
          return "boss"
     end
      return key
@@ -922,6 +923,9 @@ local LSM = (ns and ns.LSM) or _G.MSUF_LSM or (LibStub and LibStub("LibSharedMed
 _G.MSUF_OnLSMReady = function(lsm)
     LSM = lsm
  end
+local function _MSUF_DeferredUpdateAllFonts()
+    if UpdateAllFonts then UpdateAllFonts() end
+end
 if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegistered then
     MSUF_LSM_FontCallbackRegistered = true
     LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
@@ -931,7 +935,7 @@ if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegi
     end
         local _g = MSUF_DB and MSUF_DB.general
         if _g and _g.fontKey == key then
-            C_Timer.After(0, function()  if UpdateAllFonts then UpdateAllFonts() end  end)
+            C_Timer.After(0, _MSUF_DeferredUpdateAllFonts)
     end
      end)
 end
@@ -1294,7 +1298,7 @@ local function GetConfigKeyForUnit(unit)
         or unit == "pet"
     then
          return unit
-    elseif unit and unit:match("^boss%d+$") then
+    elseif _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit) then
          return "boss"
     end
      return nil
@@ -1638,7 +1642,7 @@ local function MSUF_GetVisibilityDriverForUnit(unit)
          return "[@pet,exists] show; hide"
     elseif unit == "targettarget" then
          return "[@targettarget,exists] show; hide"
-    elseif type(unit) == "string" and unit:match("^boss%d+$") then
+    elseif _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit) then
         return ("[@" .. unit .. ",exists] show; hide")
     end
      return nil
@@ -1648,7 +1652,7 @@ local function MSUF_ApplyUnitVisibilityDriver(frame, forceShow)
     if frame.unit == "player" then  return end
 if not MSUF_DB then EnsureDB() end
 local confKey
-if frame.isBoss or (type(frame.unit) == "string" and frame.unit:match("^boss%d+$")) then
+if frame.isBoss or (_G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(frame.unit)) then
     confKey = "boss"
 else
     confKey = frame.unit
@@ -1712,10 +1716,8 @@ function _G.__MSUF_UFREQ_Flush()
     local force = co.force
     local layout = co.layout
     local reason = co.reason
-    co.frames = {}
-    co.force = {}
-    co.layout = {}
     co.reason = nil
+    local wipe = table.wipe
     local reqLayout = _G.MSUF_UFCore_RequestLayout
     local q = _G.MSUF_QueueUnitframeUpdate
     for f in pairs(frames) do
@@ -1725,6 +1727,11 @@ function _G.__MSUF_UFREQ_Flush()
             end
             q(f, force[f] and true or false)
     end
+    end
+    if wipe then
+        wipe(frames)
+        wipe(force)
+        wipe(layout)
     end
  end
 function _G.MSUF_RequestUnitframeUpdate(frame, forceFull, wantLayout, reason, urgentNow)
@@ -1790,20 +1797,49 @@ local MSUF_POPUP_BOX_W   = 92
 local MSUF_POPUP_BOX_H   = 20
 local MSUF_PositionPopup
 local MSUF_CastbarPositionPopup
+local __MSUF_OpenOptionsToKey_pendingTab
+local __MSUF_OpenOptionsToKey_queued = false
+local function __MSUF_OpenOptionsToKey_Flush()
+    __MSUF_OpenOptionsToKey_queued = false
+    local tabKey = __MSUF_OpenOptionsToKey_pendingTab
+    __MSUF_OpenOptionsToKey_pendingTab = nil
+    if type(tabKey) ~= "string" or tabKey == "" then tabKey = "home" end
+    local p = _G and _G.MSUF_OptionsPanel
+    if not p or type(MSUF_GetTabButtonHelpers) ~= "function" then  return end
+    local _, setKey = MSUF_GetTabButtonHelpers(p)
+    if type(setKey) == "function" then
+        setKey(tabKey)
+        if p.LoadFromDB then p:LoadFromDB() end
+    end
+end
+
+local __MSUF_OpenOptionsToCastbar_pendingUnit
+local __MSUF_OpenOptionsToCastbar_queued = false
+local function __MSUF_OpenOptionsToCastbar_Flush()
+    __MSUF_OpenOptionsToCastbar_queued = false
+    local unitKey = __MSUF_OpenOptionsToCastbar_pendingUnit
+    __MSUF_OpenOptionsToCastbar_pendingUnit = nil
+    if not unitKey then return end
+    local k = string.lower(tostring(unitKey))
+    if string.match(k, "^boss%d+$") then k = "boss" end
+    local setSub = _G and _G.MSUF_SetActiveCastbarSubPage
+    if type(setSub) == "function" then
+        setSub(k)
+    end
+    local p = _G and _G.MSUF_OptionsPanel
+    if p and p.LoadFromDB then p:LoadFromDB() end
+end
+
 local function MSUF_OpenOptionsToKey(tabKey)
     tabKey = (type(tabKey) == "string" and tabKey ~= "" and tabKey) or "home"
     local OpenPage = _G and _G.MSUF_OpenPage
     if type(OpenPage) ~= "function" then  return end
     OpenPage("options")
-    C_Timer.After(0, function()
-        local p = _G and _G.MSUF_OptionsPanel
-        if not p or type(MSUF_GetTabButtonHelpers) ~= "function" then  return end
-        local _, setKey = MSUF_GetTabButtonHelpers(p)
-        if type(setKey) == "function" then
-            setKey(tabKey)
-            if p.LoadFromDB then p:LoadFromDB() end
+    __MSUF_OpenOptionsToKey_pendingTab = tabKey
+    if not __MSUF_OpenOptionsToKey_queued then
+        __MSUF_OpenOptionsToKey_queued = true
+        C_Timer.After(0, __MSUF_OpenOptionsToKey_Flush)
     end
-     end)
  end
 local function MSUF_OpenOptionsToUnitMenu(unitKey)
     if not unitKey then  return end
@@ -1819,16 +1855,11 @@ local function MSUF_OpenOptionsToCastbarMenu(unitKey)
     local OpenPage = _G and _G.MSUF_OpenPage
     if type(OpenPage) ~= "function" then  return end
     OpenPage("opt_castbar")
-    C_Timer.After(0, function()
-        local k = string.lower(tostring(unitKey))
-        if string.match(k, "^boss%d+$") then k = "boss" end
-        local setSub = _G and _G.MSUF_SetActiveCastbarSubPage
-        if type(setSub) == "function" then
-            setSub(k)
+    __MSUF_OpenOptionsToCastbar_pendingUnit = unitKey
+    if not __MSUF_OpenOptionsToCastbar_queued then
+        __MSUF_OpenOptionsToCastbar_queued = true
+        C_Timer.After(0, __MSUF_OpenOptionsToCastbar_Flush)
     end
-        local p = _G and _G.MSUF_OptionsPanel
-        if p and p.LoadFromDB then p:LoadFromDB() end
-     end)
  end
 _G.MSUF_OpenOptionsToCastbarMenu = MSUF_OpenOptionsToCastbarMenu
 local function MSUF_OpenOptionsToBossCastbarMenu()
@@ -2018,7 +2049,7 @@ local function PositionUnitFrame(f, unit)
     end
     end
     if key == "boss" then
-        local index = tonumber(unit:match("^boss(%d+)$")) or 1
+        local index = (_G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit)) or 1
         local x = conf.offsetX
         local spacing = conf.spacing or -36
         if conf.invertBossOrder then spacing = -spacing end
@@ -4079,7 +4110,7 @@ local function UpdateAllFonts(onlyKey)
     local colorPowerByType = (g.colorPowerTextByType == true)
 
     if onlyKey == "tot" or onlyKey == "targetoftarget" then onlyKey = "targettarget" end
-    if type(onlyKey) == "string" and onlyKey:match("^boss%d+$") then onlyKey = "boss" end
+    if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(onlyKey) then onlyKey = "boss" end
 
     -- Build numeric global hash (cheap to compare)
     -- Include path+flags via their string hash (changes rarely)
@@ -4419,7 +4450,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         local newX = (fx * fs - ax * as) / as
         local newY = (fy * fs - ay * as) / as
         if key == "boss" then
-            local index = tonumber(unit:match("^boss(%d+)$")) or 1
+            local index = (_G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit)) or 1
             local spacing = conf.spacing or -36
             newY = newY - ((index - 1) * spacing)
     end
@@ -5272,6 +5303,7 @@ do
         bucket = {
             interval = interval or 0,
             accum = 0,
+            jobCount = 0,
             jobs = {},   -- [ownerFrame] = { [tag] = job }
             frame = F.CreateFrame("Frame"),
         }
@@ -5296,14 +5328,7 @@ do
                     end
                 end
             end
-            local hasAny = false
-            for _, tagMap in pairs(bucket.jobs) do
-                if tagMap and next(tagMap) then
-                    hasAny = true
-                    break
-                end
-            end
-            if not hasAny then
+            if (bucket.jobCount or 0) == 0 then
                 bucket.frame:SetScript("OnUpdate", nil)
                 bucket.active = false
             end
@@ -5324,8 +5349,15 @@ do
             bucket.frame:SetScript("OnUpdate", bucket._onUpdate)
             bucket.active = true
     end
-        bucket.jobs[owner] = bucket.jobs[owner] or {}
-        bucket.jobs[owner][tag] = {
+        local tagMap = bucket.jobs[owner]
+        if not tagMap then
+            tagMap = {}
+            bucket.jobs[owner] = tagMap
+        end
+        if not tagMap[tag] then
+            bucket.jobCount = (bucket.jobCount or 0) + 1
+        end
+        tagMap[tag] = {
             cb = cb,
             allowHidden = allowHidden and true or false,
         }
@@ -5345,9 +5377,18 @@ do
         if not interval then  return end
         local bucket = M.buckets[tostring(interval)]
         if bucket and bucket.jobs and bucket.jobs[owner] then
-            bucket.jobs[owner][tag] = nil
-            if not next(bucket.jobs[owner]) then
-                bucket.jobs[owner] = nil
+            local tagMap = bucket.jobs[owner]
+            if tagMap and tagMap[tag] then
+                tagMap[tag] = nil
+                bucket.jobCount = (bucket.jobCount or 1) - 1
+                if bucket.jobCount < 0 then bucket.jobCount = 0 end
+                if not next(tagMap) then
+                    bucket.jobs[owner] = nil
+                end
+                if bucket.jobCount == 0 then
+                    bucket.frame:SetScript("OnUpdate", nil)
+                    bucket.active = false
+                end
             end
     end
         jobs[tag] = nil
