@@ -1175,7 +1175,7 @@ local function RenderUnit(entry)
 
     -- Secret-safe sort params (passed into C_UnitAuras.GetAuraSlots)
     local _sortOrder = cfg.capsSortOrder or cfg.sortOrder or 0
-    end
+
     -- Player in edit mode: debuffs already rendered as preview above, skip real debuff path.
     local skipDebuffs = (showTest and unit == "player")
 

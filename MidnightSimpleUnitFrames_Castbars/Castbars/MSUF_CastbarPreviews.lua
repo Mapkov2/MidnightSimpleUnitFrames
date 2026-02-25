@@ -987,13 +987,14 @@ end
 
         local f = _G.MSUF_BossCastbarPreview or MSUF_CreateBossCastbarPreview_Fallback()
         MSUF_PositionBossCastbarPreview_Fallback()
-        MSUF_ApplyBossCastbarPreviewLayout_Fallback()
 
-        -- Hard-sync fallback boss preview to the real boss castbar (runtime truth)
+        -- Hard-sync first, then apply layout so live width/height edits show immediately.
         if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
             local real = (_G.MSUF_BossCastbars and _G.MSUF_BossCastbars[1]) or _G.MSUF_BossCastbar
             _G.MSUF_HardSyncCastbarPreview(f, real)
         end
+
+        MSUF_ApplyBossCastbarPreviewLayout_Fallback()
 
         f:Show()
     end

@@ -1831,14 +1831,16 @@ function _G.MSUF_UpdateBossCastbarPreview()
         -- Only show a preview when the corresponding boss unitframe preview exists & is visible.
         if uf and uf.IsShown and uf:IsShown() then
             MSUF_PositionBossCastbarPreview(f, i)
-            MSUF_ApplyBossCastbarPreviewLayout(f, i)
-
-            -- Hard-sync preview size/scale to the real boss castbar (runtime truth)
-            -- to avoid profile apply/import timing drift.
+            -- Hard-sync first (runtime truth), then apply layout from DB.
+            -- IMPORTANT: If we hard-sync *after* layout, it overrides live width/height edits
+            -- and makes the boss preview look like it "won't live apply".
             if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
                 local real = (_G.MSUF_BossCastbars and _G.MSUF_BossCastbars[i]) or _G["MSUF_BossCastbar" .. i]
                 _G.MSUF_HardSyncCastbarPreview(f, real)
             end
+
+            -- Apply DB-driven layout last so Edit Mode changes to width/height are visible immediately.
+            MSUF_ApplyBossCastbarPreviewLayout(f, i)
 
             f:Show()
         else
