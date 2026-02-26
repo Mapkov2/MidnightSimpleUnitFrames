@@ -19,8 +19,8 @@ local function MSUF_Driver_IsCastbarEnabled(unit)
     unit = unit or ""
     local fn = _G.MSUF_IsCastbarEnabledForUnit
     if type(fn) == "function" then
-        local ok, res = pcall(fn, unit)
-        if ok and res ~= nil then
+        local res = fn(unit)
+        if res ~= nil then
             return res
         end
     end
@@ -28,7 +28,7 @@ local function MSUF_Driver_IsCastbarEnabled(unit)
     if type(_G.MSUF_EnsureDBLazy) == "function" then
         _G.MSUF_EnsureDBLazy()
     elseif type(_G.MSUF_EnsureDB) == "function" then
-        pcall(_G.MSUF_EnsureDB)
+        _G.MSUF_EnsureDB()
     end
 
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
@@ -287,6 +287,14 @@ local function CreateCastBar(name, unit)
         t = self._msufStopTimer2; if t and t.Cancel then t:Cancel() end; self._msufStopTimer2 = nil
         t = self._msufStopTimer3; if t and t.Cancel then t:Cancel() end; self._msufStopTimer3 = nil
     end
+
+    local function MSUF_Driver_CancelStartRetry(self)
+        if not self then return end
+        local t = self._msufStartRetryTimer
+        if t and t.Cancel then t:Cancel() end
+        self._msufStartRetryTimer = nil
+        self._msufStartRetryPending = nil
+    end
     -- Callbacks capture `self` (constant) and read changing parameters from frame fields:
     --   _msufStopExpToken, _msufStopExpSeq, _msufStopT2, _msufStartRetryToken
     -- This eliminates 3-5 closure allocations per stop/start event.
@@ -349,6 +357,8 @@ local function CreateCastBar(name, unit)
         end
 
         self._msufStartRetryCB = function()
+            self._msufStartRetryPending = nil
+            self._msufStartRetryTimer = nil
             if not self or self.interrupted then return end
             if (self._msufCastToken or 0) ~= (self._msufStartRetryToken or 0) then return end
             local st = MSUF_Driver_BuildCastStateFor(self)
@@ -443,6 +453,7 @@ end
 
         if event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_EMPOWER_START" then
             MSUF_Driver_CancelStopConfirm(self)
+            MSUF_Driver_CancelStartRetry(self)
             local tok = MSUF_Driver_BumpCastToken(self)
             self.isNotInterruptible = false
             MSUF_Driver_CastResync(self)
@@ -451,7 +462,10 @@ end
             if not (st and st.active and st.spellName) then
                 _EnsureDriverCallbacks(self)
                 self._msufStartRetryToken = tok
-                C_Timer.After(0.05, self._msufStartRetryCB)
+                if not self._msufStartRetryPending then
+                    self._msufStartRetryPending = true
+                    self._msufStartRetryTimer = C_Timer.NewTimer(0.05, self._msufStartRetryCB)
+                end
             end
 
 	        elseif event == "UNIT_SPELLCAST_DELAYED" or event == "UNIT_SPELLCAST_CHANNEL_UPDATE" or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
@@ -510,6 +524,7 @@ end
             or (event == "PLAYER_FOCUS_CHANGED" and self.unit == "focus")
         then
             MSUF_Driver_CancelStopConfirm(self)
+            MSUF_Driver_CancelStartRetry(self)
             MSUF_Driver_BumpCastToken(self)
             if self.timer then
                 self.timer:Cancel()

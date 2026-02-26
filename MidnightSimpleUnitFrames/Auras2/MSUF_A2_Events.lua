@@ -37,6 +37,7 @@ local type = type
 -- Pre-cached boss unit strings (avoid "boss"..i in all loops)
 local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local _BOSS_MAX = 5
+local _After0 = C_Timer and C_Timer.After
 
 -- Cached module refs (bound lazily, reset on InvalidateDB)
 local _cachedReqUnit      -- API.RequestUnit (fast MarkDirty path)
@@ -91,7 +92,20 @@ local function HandlePlayerTargetChanged()
     if _cachedInvalidUnit then
         _cachedInvalidUnit("target")
     end
-    MarkDirty("target", 0)
+
+    -- Coalesce target swap to one next-frame aura refresh.
+    -- UNIT_AURA bursts arriving this frame still update Store deltas, then piggyback this flush.
+    if Events._targetSwapQueued then
+        return
+    end
+    Events._targetSwapQueued = true
+
+    if _After0 then
+        _After0(0, Events._flushTargetSwap)
+    else
+        Events._targetSwapQueued = nil
+        MarkDirty("target", 0)
+    end
 end
 
 local function HandlePlayerFocusChanged()
@@ -100,6 +114,11 @@ local function HandlePlayerFocusChanged()
         _cachedInvalidUnit("focus")
     end
     MarkDirty("focus", 0)
+end
+
+Events._flushTargetSwap = Events._flushTargetSwap or function()
+    Events._targetSwapQueued = nil
+    MarkDirty("target", 0)
 end
 
 local function IsEditModeActive()
@@ -856,6 +875,12 @@ end
                 local onAura = _cachedOnUnitAura
                 if onAura then
                     onAura(unit, updateInfo)
+                end
+
+                -- Target swap already scheduled a consolidated next-frame render.
+                -- Keep Store current but skip duplicate same-frame dirty marks.
+                if unit == "target" and Events._targetSwapQueued then
+                    return
                 end
 
                 MarkDirty(unit)
