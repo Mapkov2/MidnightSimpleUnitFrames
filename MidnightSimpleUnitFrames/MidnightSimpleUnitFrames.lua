@@ -1785,6 +1785,13 @@ function _G.MSUF_RequestUnitframeUpdate(frame, forceFull, wantLayout, reason, ur
         }
         _G.__MSUF_UFREQ_CO = co
     end
+    -- Fast dedupe: if this frame is already coalesced with equal/stronger flags,
+    -- avoid repeated table writes from event bursts (notably multi-boss encounters).
+    if co.frames[frame] then
+        if (not forceFull or co.force[frame]) and (not wantLayout or co.layout[frame]) then
+            return
+        end
+    end
     co.frames[frame] = true
     if forceFull then
         co.force[frame] = true
@@ -4959,15 +4966,16 @@ do
             end
     end
      end
+    local function _MSUF_TargetSound_OnTargetChanged_Bus()
+        MSUF_TargetSoundDriver_OnTargetChanged()
+    end
     local function MSUF_TargetSoundDriver_Ensure()
         if _msufTargetSoundFrame then
              return
     end
         -- Use EventBus instead of dedicated frame
         _msufTargetSoundFrame = true -- sentinel to prevent re-entry
-        MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_TARGET_SOUND", function()
-            MSUF_TargetSoundDriver_OnTargetChanged()
-        end)
+        MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_TARGET_SOUND", _MSUF_TargetSound_OnTargetChanged_Bus)
         MSUF_TargetSoundDriver_ResetState()
      end
     _G.MSUF_TargetSoundDriver_Ensure = MSUF_TargetSoundDriver_Ensure
@@ -5512,18 +5520,35 @@ do
         end
     end
 
+    local _msufSwapRecolorPendingDriver = nil
+    local function _MSUF_SwapRecolor_Flush()
+        local driver = _msufSwapRecolorPendingDriver
+        _msufSwapRecolorPendingDriver = nil
+        if driver then
+            driver._msufSwapRecolorQueued = false
+        end
+        _MSUF_SwapRecolor_Do()
+    end
+
     local function _MSUF_SwapRecolor_Schedule(driver)
         if driver._msufSwapRecolorQueued then return end
         driver._msufSwapRecolorQueued = true
         if C_Timer and C_Timer.After then
-            C_Timer.After(0, function()
-                driver._msufSwapRecolorQueued = false
-                _MSUF_SwapRecolor_Do()
-            end)
+            _msufSwapRecolorPendingDriver = driver
+            C_Timer.After(0, _MSUF_SwapRecolor_Flush)
         else
             driver._msufSwapRecolorQueued = false
             _MSUF_SwapRecolor_Do()
         end
+    end
+
+    local function _MSUF_SwapRecolor_OnTargetChanged()
+        local d = _G.MSUF_SwapRecolorDriver
+        if d then _MSUF_SwapRecolor_Schedule(d) end
+    end
+    local function _MSUF_SwapRecolor_OnFocusChanged()
+        local d = _G.MSUF_SwapRecolorDriver
+        if d then _MSUF_SwapRecolor_Schedule(d) end
     end
 
     _G.MSUF_EnsureSwapRecolorDriver = _G.MSUF_EnsureSwapRecolorDriver or function()
@@ -5540,12 +5565,8 @@ do
         end)
         _G.MSUF_SwapRecolorDriver = d
 
-        MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_SWAP_RECOLOR", function()
-            _MSUF_SwapRecolor_Schedule(d)
-        end)
-        MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_SWAP_RECOLOR_FOCUS", function()
-            _MSUF_SwapRecolor_Schedule(d)
-        end)
+        MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_SWAP_RECOLOR", _MSUF_SwapRecolor_OnTargetChanged)
+        MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_SWAP_RECOLOR_FOCUS", _MSUF_SwapRecolor_OnFocusChanged)
 
         return d
     end
