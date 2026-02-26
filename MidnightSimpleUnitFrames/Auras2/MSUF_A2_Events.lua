@@ -86,6 +86,22 @@ local function MarkDirty(unit, delay)
     end
 end
 
+local function HandlePlayerTargetChanged()
+    if not _refsBound then BindCachedRefs() end
+    if _cachedInvalidUnit then
+        _cachedInvalidUnit("target")
+    end
+    MarkDirty("target", 0)
+end
+
+local function HandlePlayerFocusChanged()
+    if not _refsBound then BindCachedRefs() end
+    if _cachedInvalidUnit then
+        _cachedInvalidUnit("focus")
+    end
+    MarkDirty("focus", 0)
+end
+
 local function IsEditModeActive()
     -- Fast path: cached API function (set once by Render, never changes)
     if not _refsBound then BindCachedRefs() end
@@ -792,21 +808,13 @@ end
     local busUnreg = _G.MSUF_EventBus_Unregister
     if type(busReg) == "function" and type(busUnreg) == "function" then
         if needTarget then
-            busReg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS", function()
-                if not _refsBound then BindCachedRefs() end
-                if _cachedInvalidUnit then _cachedInvalidUnit("target") end
-                MarkDirty("target", 0)
-            end)
+            busReg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS", HandlePlayerTargetChanged)
         else
             busUnreg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS")
         end
 
         if needFocus then
-            busReg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS", function()
-                if not _refsBound then BindCachedRefs() end
-                if _cachedInvalidUnit then _cachedInvalidUnit("focus") end
-                MarkDirty("focus", 0)
-            end)
+            busReg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS", HandlePlayerFocusChanged)
         else
             busUnreg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS")
         end
