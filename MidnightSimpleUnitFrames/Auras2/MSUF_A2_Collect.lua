@@ -279,6 +279,8 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
     local lIsFiltered = _isFiltered
     local lDoesExpire = _doesExpire
     local lIssecretvalue = issecretvalue
+    local lCanaccessvalue = canaccessvalue
+    local lHasCanaccessvalue = _hasCanaccessvalue
 
     local n = 0
     for i = 1, nSlots do
@@ -309,10 +311,15 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
                     -- Secret-safe: if doesExpire returns secret, issecretvalue catches it
                     if checkPermanent and not secretsNow then
                         local v = lDoesExpire(unit, aid)
-                        if v == false then break end  -- permanent → reject
-                        -- Secret check: if v is secret, don't filter (fail-open)
-                        if v ~= nil and lIssecretvalue and lIssecretvalue(v) then
-                            -- secret → treat as non-permanent (fail-open)
+                        if v ~= nil then
+                            -- Secret check first: do not compare inaccessible values.
+                            if lHasCanaccessvalue and lCanaccessvalue(v) ~= true then
+                                -- secret → treat as non-permanent (fail-open)
+                            elseif lIssecretvalue and lIssecretvalue(v) then
+                                -- secret → treat as non-permanent (fail-open)
+                            elseif v == false then
+                                break -- permanent → reject
+                            end
                         end
                     end
 
@@ -418,6 +425,8 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImpor
     local lIsFiltered = _isFiltered
     local lDoesExpire = _doesExpire
     local lIssecretvalue = issecretvalue
+    local lCanaccessvalue = canaccessvalue
+    local lHasCanaccessvalue = _hasCanaccessvalue
 
     local playerScratch = _playerScratch
     local bossScratch = _bossScratch
@@ -434,8 +443,15 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImpor
                     -- Filter: hidePermanent (inlined, secret-safe)
                     if checkPermanent and not secretsNow then
                         local v = lDoesExpire(unit, aid)
-                        if v == false then break end
-                        if v ~= nil and lIssecretvalue and lIssecretvalue(v) then end -- fail-open
+                        if v ~= nil then
+                            if lHasCanaccessvalue and lCanaccessvalue(v) ~= true then
+                                -- fail-open for secret values
+                            elseif lIssecretvalue and lIssecretvalue(v) then
+                                -- fail-open for secret values
+                            elseif v == false then
+                                break
+                            end
+                        end
                     end
 
                     -- Filter: onlyImportant (skip if C++ pre-filtered)
