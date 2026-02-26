@@ -800,29 +800,51 @@ end
     local privOffX = ReadOffset(shared, lay, "privateOffsetX",     0)
     local privOffY = ReadOffset(shared, lay, "privateOffsetY",     0)
 
-    -- Position anchor 
-    local anchor = entry.anchor
-    anchor:ClearAllPoints()
-    anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
-
-    -- Position containers (always separate groups, always driven by per-group offsets)
-    entry.debuffs:ClearAllPoints()
-    entry.debuffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", debuffDX, debuffDY)
-
-    entry.buffs:ClearAllPoints()
-    entry.buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", buffDX, buffDY)
-
-    -- Mixed container is legacy; keep hidden so it can't influence layout/anchors.
-    if entry.mixed then
-        entry.mixed:ClearAllPoints()
-        entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
-        entry.mixed:Hide()
+    -- PERF: Skip re-anchoring when target-swap refreshes request identical layout.
+    -- Cache uses only non-secret DB values + frame identity.
+    local layoutCache = entry._msufLayoutCache
+    if not layoutCache then
+        layoutCache = {}
+        entry._msufLayoutCache = layoutCache
     end
 
-    -- Private
-    if entry.private then
-        entry.private:ClearAllPoints()
-        entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
+    local cacheHit = (layoutCache.frame == entry.frame)
+        and (layoutCache.offX == offX and layoutCache.offY == offY)
+        and (layoutCache.debuffDX == debuffDX and layoutCache.debuffDY == debuffDY)
+        and (layoutCache.buffDX == buffDX and layoutCache.buffDY == buffDY)
+        and (layoutCache.privOffX == privOffX and layoutCache.privOffY == privOffY)
+
+    local anchor = entry.anchor
+    if not cacheHit then
+        layoutCache.frame = entry.frame
+        layoutCache.offX, layoutCache.offY = offX, offY
+        layoutCache.debuffDX, layoutCache.debuffDY = debuffDX, debuffDY
+        layoutCache.buffDX, layoutCache.buffDY = buffDX, buffDY
+        layoutCache.privOffX, layoutCache.privOffY = privOffX, privOffY
+
+        -- Position anchor
+        anchor:ClearAllPoints()
+        anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
+
+        -- Position containers (always separate groups, always driven by per-group offsets)
+        entry.debuffs:ClearAllPoints()
+        entry.debuffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", debuffDX, debuffDY)
+
+        entry.buffs:ClearAllPoints()
+        entry.buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", buffDX, buffDY)
+
+        -- Mixed container is legacy; keep hidden so it can't influence layout/anchors.
+        if entry.mixed then
+            entry.mixed:ClearAllPoints()
+            entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
+            entry.mixed:Hide()
+        end
+
+        -- Private
+        if entry.private then
+            entry.private:ClearAllPoints()
+            entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
+        end
     end
 
     -- Position edit movers (mirror containers) 
