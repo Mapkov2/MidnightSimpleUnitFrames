@@ -13,6 +13,70 @@ local MSUF_PlayerCastbar_ClearEmpower       = function(s, h) local fn = _G.MSUF_
 local MSUF_PlayerChannelHasteMarkers_Update = function(s, f) local fn = _G.MSUF_PlayerChannelHasteMarkers_Update; if fn then fn(s, f) end end
 local MSUF_PlayerChannelHasteMarkers_Hide   = function(s) local fn = _G.MSUF_PlayerChannelHasteMarkers_Hide; if fn then fn(s) end end
 
+local function MSUF_PlayerCastbar_ApplyLatencyZone(frame, pct, isChanneled)
+    if not frame or not frame.latencyBar or not frame.statusBar then
+        return
+    end
+
+    local bw = frame.statusBar:GetWidth() or 0
+    local ww = bw * (pct or 0)
+    local reverse = _G.MSUF_GetReverseFillSafe(frame, isChanneled and true or false)
+    local anchorOnLeft = reverse and true or false  -- finish edge (value always increases)
+
+    frame.latencyBar:ClearAllPoints()
+    if anchorOnLeft then
+        frame.latencyBar:SetPoint("TOPLEFT", frame.statusBar, "TOPLEFT", 0, 0)
+        frame.latencyBar:SetPoint("BOTTOMLEFT", frame.statusBar, "BOTTOMLEFT", 0, 0)
+    else
+        frame.latencyBar:SetPoint("TOPRIGHT", frame.statusBar, "TOPRIGHT", 0, 0)
+        frame.latencyBar:SetPoint("BOTTOMRIGHT", frame.statusBar, "BOTTOMRIGHT", 0, 0)
+    end
+
+    frame.latencyBar:SetWidth(ww)
+    if ww and ww > 0 then
+        frame.latencyBar:Show()
+    else
+        frame.latencyBar:Hide()
+    end
+end
+
+local function MSUF_PlayerCastbar_ApplyPendingLatencyZone(frame, generation)
+    if not frame then
+        return
+    end
+
+    local pending = frame._msufLatencyPending
+    if not pending then
+        return
+    end
+
+    if generation and pending.generation ~= generation then
+        return
+    end
+
+    MSUF_PlayerCastbar_ApplyLatencyZone(frame, pending.pct or 0, pending.isChanneled and true or false)
+end
+
+local MSUF_PlayerCastbar_LatencyZoneTimerQueue = {}
+
+local function MSUF_PlayerCastbar_RunQueuedLatencyZoneCallbacks()
+    local queue = MSUF_PlayerCastbar_LatencyZoneTimerQueue
+    local count = #queue
+    if count <= 0 then
+        return
+    end
+
+    local i = 1
+    while i <= count do
+        local frame = queue[i]
+        local generation = queue[i + 1]
+        MSUF_PlayerCastbar_ApplyPendingLatencyZone(frame, generation)
+        queue[i] = nil
+        queue[i + 1] = nil
+        i = i + 2
+    end
+end
+
 local function MSUF_PlayerCastbar_UpdateLatencyZone(self, isChanneled, durSec)
     if not self or not self.latencyBar or not self.statusBar then
         return
@@ -55,52 +119,26 @@ local function MSUF_PlayerCastbar_UpdateLatencyZone(self, isChanneled, durSec)
     self.MSUF_latencyLastDurSec = durSec
 
     local barW = self.statusBar:GetWidth() or 0
-    local w = barW * pct
+
+    local pending = self._msufLatencyPending
+    if not pending then
+        pending = {}
+        self._msufLatencyPending = pending
+    end
+    pending.pct = pct
+    pending.isChanneled = isChanneled and true or false
+    pending.generation = (pending.generation or 0) + 1
+    local generation = pending.generation
 
     if (not barW or barW <= 1) and C_Timer and C_Timer.After then
-        C_Timer.After(0, function()
-            if not self or not self.latencyBar or not self.statusBar then return end
-            local bw = self.statusBar:GetWidth() or 0
-            local ww = bw * (self.MSUF_latencyLastPct or 0)
-            local isChan = self.MSUF_latencyLastIsChanneled and true or false
-            local reverse = _G.MSUF_GetReverseFillSafe(self, isChan)
-            local anchorOnLeft = reverse and true or false  -- finish edge (value always increases)
-
-            self.latencyBar:ClearAllPoints()
-            if anchorOnLeft then
-                self.latencyBar:SetPoint("TOPLEFT", self.statusBar, "TOPLEFT", 0, 0)
-                self.latencyBar:SetPoint("BOTTOMLEFT", self.statusBar, "BOTTOMLEFT", 0, 0)
-            else
-                self.latencyBar:SetPoint("TOPRIGHT", self.statusBar, "TOPRIGHT", 0, 0)
-                self.latencyBar:SetPoint("BOTTOMRIGHT", self.statusBar, "BOTTOMRIGHT", 0, 0)
-            end
-            self.latencyBar:SetWidth(ww)
-            if ww and ww > 0 then
-                self.latencyBar:Show()
-            else
-                self.latencyBar:Hide()
-            end
-        end)
+        local queue = MSUF_PlayerCastbar_LatencyZoneTimerQueue
+        queue[#queue + 1] = self
+        queue[#queue + 1] = generation
+        C_Timer.After(0, MSUF_PlayerCastbar_RunQueuedLatencyZoneCallbacks)
         return
     end
 
-    local reverse = _G.MSUF_GetReverseFillSafe(self, isChanneled)
-    local anchorOnLeft = reverse and true or false  -- finish edge (value always increases)
-
-    self.latencyBar:ClearAllPoints()
-    if anchorOnLeft then
-        self.latencyBar:SetPoint("TOPLEFT", self.statusBar, "TOPLEFT", 0, 0)
-        self.latencyBar:SetPoint("BOTTOMLEFT", self.statusBar, "BOTTOMLEFT", 0, 0)
-    else
-        self.latencyBar:SetPoint("TOPRIGHT", self.statusBar, "TOPRIGHT", 0, 0)
-        self.latencyBar:SetPoint("BOTTOMRIGHT", self.statusBar, "BOTTOMRIGHT", 0, 0)
-    end
-    self.latencyBar:SetWidth(w)
-    if w and w > 0 then
-        self.latencyBar:Show()
-    else
-        self.latencyBar:Hide()
-    end
+    MSUF_PlayerCastbar_ApplyPendingLatencyZone(self, generation)
 end
 
 local function MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
