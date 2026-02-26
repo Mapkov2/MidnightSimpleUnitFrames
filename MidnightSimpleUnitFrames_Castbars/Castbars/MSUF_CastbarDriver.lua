@@ -19,8 +19,8 @@ local function MSUF_Driver_IsCastbarEnabled(unit)
     unit = unit or ""
     local fn = _G.MSUF_IsCastbarEnabledForUnit
     if type(fn) == "function" then
-        local ok, res = pcall(fn, unit)
-        if ok and res ~= nil then
+        local res = fn(unit)
+        if res ~= nil then
             return res
         end
     end
@@ -28,7 +28,7 @@ local function MSUF_Driver_IsCastbarEnabled(unit)
     if type(_G.MSUF_EnsureDBLazy) == "function" then
         _G.MSUF_EnsureDBLazy()
     elseif type(_G.MSUF_EnsureDB) == "function" then
-        pcall(_G.MSUF_EnsureDB)
+        _G.MSUF_EnsureDB()
     end
 
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
