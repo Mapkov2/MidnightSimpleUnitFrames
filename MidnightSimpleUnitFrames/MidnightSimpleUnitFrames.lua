@@ -5255,29 +5255,69 @@ end
     if MSUF_InitFocusKickIcon then
         MSUF_InitFocusKickIcon()
     end
+
+    local _msufTargetReanchorPending = false
+    local _msufFocusReanchorPending = false
+    local function _MSUF_TargetReanchorFlush()
+        _msufTargetReanchorPending = false
+        local fn = _G.MSUF_ReanchorTargetCastBar
+        if type(fn) == "function" then
+            fn()
+        end
+    end
+    local function _MSUF_FocusReanchorFlush()
+        _msufFocusReanchorPending = false
+        local fn = _G.MSUF_ReanchorFocusCastBar
+        if type(fn) == "function" then
+            fn()
+        end
+    end
+    local function _MSUF_ScheduleTargetReanchor()
+        if _msufTargetReanchorPending then return end
+        _msufTargetReanchorPending = true
+        C_Timer.After(0, _MSUF_TargetReanchorFlush)
+    end
+    local function _MSUF_ScheduleFocusReanchor()
+        if _msufFocusReanchorPending then return end
+        _msufFocusReanchorPending = true
+        C_Timer.After(0, _MSUF_FocusReanchorFlush)
+    end
+
     if TargetFrameSpellBar and not TargetFrameSpellBar.MSUF_Hooked then
         TargetFrameSpellBar.MSUF_Hooked = true
         TargetFrameSpellBar:HookScript("OnShow", function()
-            if type(_G.MSUF_ReanchorTargetCastBar) == "function" then
-                _G.MSUF_ReanchorTargetCastBar()
-            end
+            _MSUF_ScheduleTargetReanchor()
          end)
-        TargetFrameSpellBar:HookScript("OnEvent", function()
-            if type(_G.MSUF_ReanchorTargetCastBar) == "function" then
-                _G.MSUF_ReanchorTargetCastBar()
+        TargetFrameSpellBar:HookScript("OnEvent", function(_, event, unit)
+            if unit and unit ~= "target" then
+                return
+            end
+            if event == "UNIT_SPELLCAST_START"
+                or event == "UNIT_SPELLCAST_STOP"
+                or event == "UNIT_SPELLCAST_CHANNEL_START"
+                or event == "UNIT_SPELLCAST_CHANNEL_STOP"
+                or event == "UNIT_SPELLCAST_INTERRUPTED"
+                or event == "PLAYER_TARGET_CHANGED" then
+                _MSUF_ScheduleTargetReanchor()
             end
          end)
     end
     if FocusFrameSpellBar and not FocusFrameSpellBar.MSUF_Hooked then
         FocusFrameSpellBar.MSUF_Hooked = true
         FocusFrameSpellBar:HookScript("OnShow", function()
-            if type(_G.MSUF_ReanchorFocusCastBar) == "function" then
-                _G.MSUF_ReanchorFocusCastBar()
-            end
+            _MSUF_ScheduleFocusReanchor()
          end)
-        FocusFrameSpellBar:HookScript("OnEvent", function()
-            if type(_G.MSUF_ReanchorFocusCastBar) == "function" then
-                _G.MSUF_ReanchorFocusCastBar()
+        FocusFrameSpellBar:HookScript("OnEvent", function(_, event, unit)
+            if unit and unit ~= "focus" then
+                return
+            end
+            if event == "UNIT_SPELLCAST_START"
+                or event == "UNIT_SPELLCAST_STOP"
+                or event == "UNIT_SPELLCAST_CHANNEL_START"
+                or event == "UNIT_SPELLCAST_CHANNEL_STOP"
+                or event == "UNIT_SPELLCAST_INTERRUPTED"
+                or event == "PLAYER_FOCUS_CHANGED" then
+                _MSUF_ScheduleFocusReanchor()
             end
          end)
     end
