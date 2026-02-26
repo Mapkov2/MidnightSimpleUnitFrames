@@ -2697,6 +2697,31 @@ local function QueueUnit(unit, urgent, mask, reason)
     MarkUnit(unit, mask or DIRTY_FULL, urgent, reason or "GLOBAL")
 end
 
+-- Coalesced boss engage refresh (INSTANCE_ENCOUNTER_ENGAGE_UNIT can burst on pull).
+local _bossEngageQueued = false
+local _bossEngageMask = bor(MASK_UNIT_SWAP, DIRTY_VISUAL)
+local function _UFCore_FlushBossEngage()
+    _bossEngageQueued = false
+    for i = 1, 5 do
+        local unit = "boss" .. i
+        local f = FramesByUnit[unit]
+        -- Fast path: only queue live/visible boss frames; skip empty tokens.
+        if (UnitExists and UnitExists(unit)) or (f and f.IsShown and f:IsShown()) then
+            -- Non-urgent lane: preserve correctness while smoothing pull spikes.
+            QueueUnit(unit, false, _bossEngageMask, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+        end
+    end
+end
+local function _UFCore_ScheduleBossEngage()
+    if _bossEngageQueued then return end
+    _bossEngageQueued = true
+    if After0 then
+        After0(0, _UFCore_FlushBossEngage)
+    else
+        _UFCore_FlushBossEngage()
+    end
+end
+
 -- Step 4: Explicit Request-Update API boundary (global).
 -- Modules should request unitframe updates through this function instead of reaching into internals.
 -- This keeps all scheduling/dirty-masking centralized and makes future perf work safer.
@@ -2834,14 +2859,10 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-        -- PERF: DIRTY_FULL forces legacy UpdateSimpleUnitFrame (0.3-0.5ms per boss frame).
-        -- MASK_UNIT_SWAP covers health/power/identity/status/portrait (all dynamic data).
-        -- DIRTY_VISUAL adds bar color/gradient/background refresh (once on engage).
-        -- 5 frames × 0.04-0.08ms = 0.2-0.4ms instead of 1.5-2.5ms.
-        local engageMask = bor(MASK_UNIT_SWAP, DIRTY_VISUAL)
-        for i = 1, 5 do
-            QueueUnit("boss" .. i, true, engageMask, event)
-        end
+        -- PERF: Boss engage can fire in tight pull bursts.
+        -- Coalesce to one next-frame pass and queue only live/visible boss units.
+        -- This removes redundant urgent-lane spikes while preserving exact frame state.
+        _UFCore_ScheduleBossEngage()
         return
     end
 
