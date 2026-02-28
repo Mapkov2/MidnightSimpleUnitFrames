@@ -582,6 +582,9 @@ local function MSUF_SyncSimpleDropdown(dropdown, options, getCurrentKey)
         end
     end
  end
+-- Export dropdown helpers for split-out option modules (e.g. MSUF_Options_ClassPower).
+_G.MSUF_InitSimpleDropdown = MSUF_InitSimpleDropdown
+_G.MSUF_SyncSimpleDropdown = MSUF_SyncSimpleDropdown
 -- Options Core (extracted from MidnightSimpleUnitFrames.lua)
 -- NOTE: This file is intentionally self-contained for math/string locals to avoid relying on main-file locals.
 local floor  = math.floor
@@ -4972,6 +4975,102 @@ local powerSpacerSlider = CreateLabeledSlider("MSUF_PowerTextSpacerSlider", "Pow
 powerSpacerSlider:ClearAllPoints()
 powerSpacerSlider:SetPoint("TOPLEFT", powerSpacerCheck, "BOTTOMLEFT", 0, -18)
 if powerSpacerSlider.SetWidth then powerSpacerSlider:SetWidth(260) end
+
+-- ── Bar Animation + Text Accuracy ──────────────────────────────────
+-- Two independent toggles so users can pick:
+--   Both ON  = MidnightRogueBars style (hyper-smooth, pixel-accurate)
+--   Both OFF = Classic MSUF style (instant snap, battery-friendly)
+--   Mixed    = Custom blend
+local animHeader = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+animHeader:SetPoint("TOPLEFT", powerSpacerSlider, "BOTTOMLEFT", 0, -38)
+animHeader:SetText(TR("Bar Animation + Text Accuracy"))
+animHeader:SetTextColor(1, 0.82, 0, 1)
+_G.MSUF_SmoothPowerHeader = animHeader
+
+local animLine = barGroup:CreateTexture(nil, "ARTWORK")
+animLine:SetColorTexture(1, 1, 1, 0.20)
+animLine:SetHeight(1)
+animLine:SetPoint("TOPLEFT", animHeader, "BOTTOMLEFT", -16, -4)
+animLine:SetWidth(286)
+
+-- ─ Toggle 1: Smooth power bar (ExponentialEaseOut interpolation) ─
+local smoothBarCheck = CreateFrame("CheckButton", "MSUF_SmoothPowerBarCheck", barGroup, "UICheckButtonTemplate")
+smoothBarCheck:ClearAllPoints()
+smoothBarCheck:SetPoint("TOPLEFT", animLine, "BOTTOMLEFT", 16, -6)
+smoothBarCheck.text = _G["MSUF_SmoothPowerBarCheckText"]
+if smoothBarCheck.text then smoothBarCheck.text:SetText(TR("Smooth power bar")) end
+MSUF_StyleToggleText(smoothBarCheck)
+MSUF_StyleCheckmark(smoothBarCheck)
+local smoothBarHint = barGroup:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+smoothBarHint:SetPoint("TOPLEFT", smoothBarCheck, "BOTTOMLEFT", 0, -1)
+smoothBarHint:SetText(TR("C-side interpolation for fluid bar movement"))
+smoothBarHint:SetTextColor(0.45, 0.45, 0.45)
+smoothBarCheck:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Smooth Power Bar", 1, 1, 1)
+    GameTooltip:AddLine("Uses ExponentialEaseOut interpolation on the", 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine("StatusBar for silky-smooth bar animation.", 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine(" ", 0.9, 0.9, 0.9)
+    GameTooltip:AddLine("When OFF: Bar snaps instantly to new values.", 0.7, 0.7, 0.7, true)
+    GameTooltip:Show()
+end)
+smoothBarCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+do
+    EnsureDB()
+    MSUF_DB.bars = MSUF_DB.bars or {}
+    local val = MSUF_DB.bars.smoothPowerBar
+    if val == nil then val = true end
+    smoothBarCheck:SetChecked(val)
+end
+smoothBarCheck:SetScript("OnClick", function(self)
+    EnsureDB()
+    MSUF_DB.bars = MSUF_DB.bars or {}
+    MSUF_DB.bars.smoothPowerBar = self:GetChecked() and true or false
+    if type(_G.MSUF_UFCore_RefreshSettingsCache) == "function" then
+        _G.MSUF_UFCore_RefreshSettingsCache("SMOOTH_POWER")
+    end
+end)
+
+-- ─ Toggle 2: Real-time power text (every event, no throttle) ─
+local rtTextCheck = CreateFrame("CheckButton", "MSUF_RealtimePowerTextCheck", barGroup, "UICheckButtonTemplate")
+rtTextCheck:ClearAllPoints()
+rtTextCheck:SetPoint("TOPLEFT", smoothBarHint, "BOTTOMLEFT", 0, -6)
+rtTextCheck.text = _G["MSUF_RealtimePowerTextCheckText"]
+if rtTextCheck.text then rtTextCheck.text:SetText(TR("Real-time power text")) end
+MSUF_StyleToggleText(rtTextCheck)
+MSUF_StyleCheckmark(rtTextCheck)
+local rtTextHint = barGroup:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+rtTextHint:SetPoint("TOPLEFT", rtTextCheck, "BOTTOMLEFT", 0, -1)
+rtTextHint:SetText(TR("Update text every event (higher CPU, pixel-accurate)"))
+rtTextHint:SetTextColor(0.45, 0.45, 0.45)
+rtTextCheck:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Real-time Power Text", 1, 1, 1)
+    GameTooltip:AddLine("Updates the power number on every game event", 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine("for pixel-accurate text that matches the bar.", 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine(" ", 0.9, 0.9, 0.9)
+    GameTooltip:AddLine("When OFF: Text updates are budget-gated", 0.7, 0.7, 0.7, true)
+    GameTooltip:AddLine("(player 33Hz, others 10Hz) for lower CPU.", 0.7, 0.7, 0.7, true)
+    GameTooltip:Show()
+end)
+rtTextCheck:SetScript("OnLeave", function() GameTooltip:Hide() end)
+do
+    EnsureDB()
+    MSUF_DB.bars = MSUF_DB.bars or {}
+    local val = MSUF_DB.bars.realtimePowerText
+    if val == nil then val = true end
+    rtTextCheck:SetChecked(val)
+end
+rtTextCheck:SetScript("OnClick", function(self)
+    EnsureDB()
+    MSUF_DB.bars = MSUF_DB.bars or {}
+    MSUF_DB.bars.realtimePowerText = self:GetChecked() and true or false
+    if type(_G.MSUF_UFCore_RefreshSettingsCache) == "function" then
+        _G.MSUF_UFCore_RefreshSettingsCache("REALTIME_TEXT")
+    end
+end)
+-- ── End Bar Animation + Text Accuracy ──────────────────────────────
+
 	local function _MSUF_HPSpacer_GetSelection()
 	    -- Selection is driven by the HP/Power scope dropdown above.
 	    EnsureDB()
@@ -6533,6 +6632,19 @@ end
         end
     end
     SetControlEnabled(powerBarBorderSizeEdit, (anyPBEnabled and borderEnabled), true)
+    -- Smooth power bar + realtime text toggles sync
+    local smoothCB = _G["MSUF_SmoothPowerBarCheck"]
+    if smoothCB then
+        local sv = b.smoothPowerBar
+        if sv == nil then sv = true end
+        smoothCB:SetChecked(sv)
+    end
+    local rtCB = _G["MSUF_RealtimePowerTextCheck"]
+    if rtCB then
+        local rv = b.realtimePowerText
+        if rv == nil then rv = true end
+        rtCB:SetChecked(rv)
+    end
  end
  MSUF_BarsMenu_QueueScrollUpdate()
 if barGroup and barGroup.HookScript then barGroup:HookScript('OnShow', MSUF_SyncBarsTabToggles) end

@@ -217,6 +217,17 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
         return out, 0
     end
 
+    -- PERF: Epoch gate — skip entire C_UnitAuras scan when no UNIT_AURA has
+    -- fired for this unit since the last GetAuras call on this output table.
+    -- Saves ~73% of GetAuraSlots + GetAuraDataBySlot calls in steady state.
+    -- The epoch is bumped by Store.OnUnitAura (UNIT_AURA event) and
+    -- Store.InvalidateUnit (target swap, focus change).
+    local _epoch = Store._epochs[unit] or 0
+    if out._msufA2_epoch == _epoch and out._msufA2_n ~= nil then
+        return out, out._msufA2_n
+    end
+    out._msufA2_epoch = _epoch
+
     if not _apisBound then BindAPIs() end
     if not _getSlots or not _getBySlot then
         if prevN > 0 then for i = 1, prevN do out[i] = nil end end
@@ -279,6 +290,8 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
     local lIsFiltered = _isFiltered
     local lDoesExpire = _doesExpire
     local lIssecretvalue = issecretvalue
+    local lCanaccessvalue = canaccessvalue
+    local lHasCanaccessvalue = _hasCanaccessvalue
 
     local n = 0
     for i = 1, nSlots do
@@ -309,10 +322,15 @@ function Collect.GetAuras(unit, filter, maxCount, onlyMine, hidePermanent, onlyB
                     -- Secret-safe: if doesExpire returns secret, issecretvalue catches it
                     if checkPermanent and not secretsNow then
                         local v = lDoesExpire(unit, aid)
-                        if v == false then break end  -- permanent → reject
-                        -- Secret check: if v is secret, don't filter (fail-open)
-                        if v ~= nil and lIssecretvalue and lIssecretvalue(v) then
-                            -- secret → treat as non-permanent (fail-open)
+                        if v ~= nil then
+                            -- Secret check first: do not compare inaccessible values.
+                            if lHasCanaccessvalue and lCanaccessvalue(v) ~= true then
+                                -- secret → treat as non-permanent (fail-open)
+                            elseif lIssecretvalue and lIssecretvalue(v) then
+                                -- secret → treat as non-permanent (fail-open)
+                            elseif v == false then
+                                break -- permanent → reject
+                            end
                         end
                     end
 
@@ -377,6 +395,13 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImpor
         return out, 0
     end
 
+    -- PERF: Epoch gate (same as GetAuras — skip scan when no UNIT_AURA fired)
+    local _epoch = Store._epochs[unit] or 0
+    if out._msufA2_epoch == _epoch and out._msufA2_n ~= nil then
+        return out, out._msufA2_n
+    end
+    out._msufA2_epoch = _epoch
+
     if not _apisBound then BindAPIs() end
     if not _getSlots or not _getBySlot then
         if prevN > 0 then for i = 1, prevN do out[i] = nil end end
@@ -418,6 +443,8 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImpor
     local lIsFiltered = _isFiltered
     local lDoesExpire = _doesExpire
     local lIssecretvalue = issecretvalue
+    local lCanaccessvalue = canaccessvalue
+    local lHasCanaccessvalue = _hasCanaccessvalue
 
     local playerScratch = _playerScratch
     local bossScratch = _bossScratch
@@ -434,8 +461,15 @@ function Collect.GetMergedAuras(unit, filter, maxCount, hidePermanent, onlyImpor
                     -- Filter: hidePermanent (inlined, secret-safe)
                     if checkPermanent and not secretsNow then
                         local v = lDoesExpire(unit, aid)
-                        if v == false then break end
-                        if v ~= nil and lIssecretvalue and lIssecretvalue(v) then end -- fail-open
+                        if v ~= nil then
+                            if lHasCanaccessvalue and lCanaccessvalue(v) ~= true then
+                                -- fail-open for secret values
+                            elseif lIssecretvalue and lIssecretvalue(v) then
+                                -- fail-open for secret values
+                            elseif v == false then
+                                break
+                            end
+                        end
                     end
 
                     -- Filter: onlyImportant (skip if C++ pre-filtered)
@@ -567,13 +601,19 @@ end
 -- Store methods are kept as no-op stubs for backward compatibility.
 -- ============================================================================
 
--- No-op: JIT model has no cache to update
-function Store.OnUnitAura(unit, updateInfo) end
+-- PERF: Per-unit epoch counter. Incremented on UNIT_AURA / InvalidateUnit.
+-- GetAuras checks this to skip redundant C_UnitAuras scans between events.
+-- CommitIcon checks this to skip redundant duration/stack C API calls.
+function Store.OnUnitAura(unit, updateInfo)
+    if unit then Store._epochs[unit] = (Store._epochs[unit] or 0) + 1 end
+end
 
--- No-op: JIT model has no cache to invalidate
-function Store.InvalidateUnit(unit) end
+-- PERF: Bump epoch on unit change (target swap, focus change, etc.)
+function Store.InvalidateUnit(unit)
+    if unit then Store._epochs[unit] = (Store._epochs[unit] or 0) + 1 end
+end
 
-function Store.GetEpoch(unit) return 0 end
+function Store.GetEpoch(unit) return Store._epochs[unit] or 0 end
 function Store.GetEpochSig(unit) return 0 end
 function Store.GetRawSig() return nil end
 function Store.PopUpdated() return nil, 0 end

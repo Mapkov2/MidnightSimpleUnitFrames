@@ -3427,13 +3427,166 @@ F.UpdatePowerColorControls()
 lastControl = powerColorResetBtn
 
 
+--------------------------------------------------
+-- Class Power colors (Combo Points, Holy Power, etc.)
+--------------------------------------------------
+local cpColHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+cpColHeader:SetPoint("TOPLEFT", powerTypeDrop, "BOTTOMLEFT", 16, -34)
+cpColHeader:SetText("Class Power colors")
+F.CreateHeaderDividerAbove(cpColHeader)
+
+local cpColSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+cpColSub:SetPoint("TOPLEFT", cpColHeader, "BOTTOMLEFT", 0, -4)
+cpColSub:SetWidth(600)
+cpColSub:SetJustifyH("LEFT")
+cpColSub:SetText("Configure colors for secondary resource bars: Combo Points, Holy Power, Soul Shards, Chi, Runes, Arcane Charges, Essence.")
+
+local cpColTypeDrop = CreateFrame("Frame", "MSUF_Colors_ClassPowerTypeDropdown", content, "UIDropDownMenuTemplate")
+cpColTypeDrop:SetPoint("TOPLEFT", cpColSub, "BOTTOMLEFT", -16, -8)
+UIDropDownMenu_SetWidth(cpColTypeDrop, 220)
+MSUF_ExpandDropdownClickArea(cpColTypeDrop)
+
+local cpColSwatch = CreateFrame("Button", "MSUF_Colors_ClassPowerColorSwatch", content)
+cpColSwatch:SetSize(32, 16)
+cpColSwatch:SetPoint("LEFT", cpColTypeDrop, "RIGHT", 18, 2)
+local cpColTex = cpColSwatch:CreateTexture(nil, "ARTWORK")
+cpColTex:SetAllPoints()
+
+local cpColResetBtn = CreateFrame("Button", "MSUF_Colors_ClassPowerColorResetBtn", content, "UIPanelButtonTemplate")
+cpColResetBtn:SetText("Reset")
+cpColResetBtn:SetSize(70, 18)
+cpColResetBtn:SetPoint("LEFT", cpColSwatch, "RIGHT", 10, 0)
+
+-- Class power token options (secondary resources)
+local CP_TOKEN_OPTIONS = {
+    { token = "COMBO_POINTS",   label = "Combo Points" },
+    { token = "HOLY_POWER",     label = "Holy Power" },
+    { token = "SOUL_SHARDS",    label = "Soul Shards" },
+    { token = "CHI",            label = "Chi" },
+    { token = "ARCANE_CHARGES", label = "Arcane Charges" },
+    { token = "RUNES",          label = "Runes" },
+    { token = "ESSENCE",        label = "Essence" },
+    { token = "CHARGED",        label = "Empowered (Charged)" },
+}
+
+F.EnsureClassPowerColorsDB = function()
+    EnsureDB()
+    MSUF_DB.general = MSUF_DB.general or {}
+    local g = MSUF_DB.general
+    if type(g.classPowerColorOverrides) ~= "table" then
+        g.classPowerColorOverrides = {}
+    end
+    return g
+end
+
+F.GetDefaultClassPowerColor = function(token)
+    -- Charged/empowered has a built-in default (not in PowerBarColor)
+    if token == "CHARGED" then
+        return 0.60, 0.20, 0.80  -- MidnightRogueBars purple
+    end
+    -- Look up in PowerBarColor
+    local col = (PowerBarColor and token and PowerBarColor[token]) or nil
+    if type(col) == "table" then
+        local r = col.r or col[1]
+        local g = col.g or col[2]
+        local b = col.b or col[3]
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b
+        end
+    end
+    return 0.8, 0.8, 0.8
+end
+
+F.GetEffectiveClassPowerColor = function(token)
+    local g = (MSUF_DB and MSUF_DB.general) or nil
+    local ov = g and g.classPowerColorOverrides
+    local t = (type(ov) == "table" and token) and ov[token] or nil
+    if type(t) == "table" then
+        local r = t[1] or t.r
+        local gg = t[2] or t.g
+        local b = t[3] or t.b
+        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+            return r, gg, b, true
+        end
+    end
+    local dr, dg, db = F.GetDefaultClassPowerColor(token)
+    return dr, dg, db, false
+end
+
+F.UpdateClassPowerColorControls = function()
+    local token = cpColTypeDrop._msufSelectedToken or "COMBO_POINTS"
+    local r, gCol, bCol, hasOverride = F.GetEffectiveClassPowerColor(token)
+    if cpColTex then
+        cpColTex:SetColorTexture(r, gCol, bCol)
+    end
+    if cpColResetBtn then
+        cpColResetBtn:SetEnabled(hasOverride)
+        cpColResetBtn:SetAlpha(hasOverride and 1 or 0.35)
+    end
+end
+
+F.ClassPowerTypeDropdown_Init = function(self, level)
+    local selected = cpColTypeDrop._msufSelectedToken or "COMBO_POINTS"
+    for _, opt in ipairs(CP_TOKEN_OPTIONS) do
+        local info = UIDropDownMenu_CreateInfo()
+        info.text  = opt.label
+        info.value = opt.token
+        info.func  = function()
+            cpColTypeDrop._msufSelectedToken = opt.token
+            UIDropDownMenu_SetSelectedValue(cpColTypeDrop, opt.token)
+            UIDropDownMenu_SetText(cpColTypeDrop, opt.label)
+            F.UpdateClassPowerColorControls()
+        end
+        info.checked = (opt.token == selected)
+        UIDropDownMenu_AddButton(info, level)
+    end
+end
+
+UIDropDownMenu_Initialize(cpColTypeDrop, F.ClassPowerTypeDropdown_Init)
+cpColTypeDrop._msufSelectedToken = "COMBO_POINTS"
+UIDropDownMenu_SetSelectedValue(cpColTypeDrop, "COMBO_POINTS")
+UIDropDownMenu_SetText(cpColTypeDrop, "Combo Points")
+
+cpColSwatch:SetScript("OnClick", function()
+    local token = cpColTypeDrop._msufSelectedToken or "COMBO_POINTS"
+    local r, gCol, bCol = F.GetEffectiveClassPowerColor(token)
+    OpenColorPicker(r, gCol, bCol, function(nr, ng, nb)
+        local g = F.EnsureClassPowerColorsDB()
+        g.classPowerColorOverrides[token] = { nr, ng, nb }
+        F.UpdateClassPowerColorControls()
+        -- Live refresh class power bars
+        if type(_G.MSUF_ClassPower_InvalidateColors) == "function" then
+            _G.MSUF_ClassPower_InvalidateColors()
+        end
+        PushVisualUpdates()
+    end)
+end)
+
+cpColResetBtn:SetScript("OnClick", function()
+    MSUF_ConfirmColorReset("class power color", function()
+        local token = cpColTypeDrop._msufSelectedToken or "COMBO_POINTS"
+        F.EnsureClassPowerColorsDB()
+        if MSUF_DB and MSUF_DB.general and type(MSUF_DB.general.classPowerColorOverrides) == "table" then
+            MSUF_DB.general.classPowerColorOverrides[token] = nil
+        end
+        F.UpdateClassPowerColorControls()
+        if type(_G.MSUF_ClassPower_InvalidateColors) == "function" then
+            _G.MSUF_ClassPower_InvalidateColors()
+        end
+        PushVisualUpdates()
+    end)
+end)
+
+F.UpdateClassPowerColorControls()
+
+lastControl = cpColResetBtn
 
 
 --------------------------------------------------
 -- Auras (Auras 2.0)
 --------------------------------------------------
 local aurasHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-aurasHeader:SetPoint("TOPLEFT", powerTypeDrop, "BOTTOMLEFT", 16, -34)
+aurasHeader:SetPoint("TOPLEFT", cpColTypeDrop, "BOTTOMLEFT", 16, -34)
 aurasHeader:SetText("Auras")
 F.CreateHeaderDividerAbove(aurasHeader)
 

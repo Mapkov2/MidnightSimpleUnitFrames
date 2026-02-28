@@ -358,6 +358,11 @@ local function EnsureMgr()
         secretInterval = 0.20, -- 5 Hz in SecretMode (colors still animate; less CPU than 10 Hz)
         interval = 0.50,
         fastUntil = 0,
+        -- PERF: Coalescing flag for TouchIcon batches.
+        -- When CommitIcon processes N icons in one flush, each calls TouchIcon → Schedule(0).
+        -- Without coalescing: N× CancelTimer + N× NewTimer, only the last one fires.
+        -- With coalescing: 1× NewTimer for the entire batch.
+        _zeroScheduled = false,
     }
 
     CT._mgr = mgr
@@ -624,6 +629,7 @@ local function EnsureMgr()
     -- Eliminates ~1,500 closure allocations/min from C_Timer.NewTimer.
     local _tickCallback = function()
         mgr.timer = nil
+        mgr._zeroScheduled = false  -- PERF: Reset coalescing flag so next TouchIcon batch can schedule again
         Tick()
     end
 
@@ -635,6 +641,15 @@ local function EnsureMgr()
 
         if type(delay) ~= "number" or delay < 0 then
             delay = 0
+        end
+
+        -- PERF: Track zero-delay scheduling for TouchIcon coalescing.
+        -- Non-zero delays (from Tick reschedule) clear the flag so the next
+        -- TouchIcon batch can re-coalesce.
+        if delay > 0 then
+            mgr._zeroScheduled = false
+        else
+            mgr._zeroScheduled = true
         end
 
         -- Replace any pending timer.
@@ -741,6 +756,7 @@ local function UnregisterAll()
     end
     mgr.timer = nil
     mgr.timerGen = (mgr.timerGen or 0) + 1
+    mgr._zeroScheduled = false  -- PERF: Clear coalescing flag on full reset
 end
 
 local function TouchIcon(icon)
@@ -751,9 +767,16 @@ local function TouchIcon(icon)
     end
     local mgr = CT._mgr
     if mgr and mgr.count > 0 then
-        -- Tick ASAP (used when Options change or duration objects are reattached).
-        if mgr._Schedule then
-            mgr._Schedule(0)
+        -- PERF: Coalesce zero-delay schedules.  When CommitIcon processes N icons
+        -- in one flush, each calls TouchIcon.  Without this guard every call does
+        -- CancelTimer() + C_Timer.NewTimer(0, ...) = ~5µs overhead.  Only the last
+        -- timer actually fires → N-1 are wasted.  The flag ensures a single
+        -- Schedule(0) per batch; it is cleared when the tick fires or when a
+        -- non-zero interval Schedule runs from inside Tick().
+        if not mgr._zeroScheduled then
+            if mgr._Schedule then
+                mgr._Schedule(0)
+            end
         end
     end
 end

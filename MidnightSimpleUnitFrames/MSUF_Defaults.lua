@@ -975,6 +975,12 @@ if MSUF_DB.bars == nil then
     if MSUF_DB.bars.powerBarHeight == nil then
         MSUF_DB.bars.powerBarHeight = 3
     end
+    if MSUF_DB.bars.smoothPowerBar == nil then
+        MSUF_DB.bars.smoothPowerBar = true
+    end
+    if MSUF_DB.bars.realtimePowerText == nil then
+        MSUF_DB.bars.realtimePowerText = true
+    end
     if MSUF_DB.bars.embedPowerBarIntoHealth == nil then
         -- Pixel-perfect default: keep the power bar *inside* the unitframe bounds.
         -- This prevents the power bar from extending below the frame and breaking

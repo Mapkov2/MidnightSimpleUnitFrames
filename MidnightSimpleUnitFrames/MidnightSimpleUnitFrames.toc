@@ -1,9 +1,9 @@
-## Interface: 120000
+## Interface: 120000, 120001
 ## Title: Midnight Simple Unit Frames
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko 
 ## Category: Combat
-## Version: 2.23
+## Version: 2.3
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: Masque, LibSharedMedia-3.0, Clique
@@ -80,8 +80,10 @@ Core\MSUF_Portraits.lua
 Core\MSUF_Alpha.lua
 Core\MSUF_LoadConditions.lua
 Core\MSUF_Borders.lua
+Core\MSUF_ClassPower.lua
 
 Options\MSUF_Options_Core.lua
+Options\MSUF_Options_ClassPower.lua
 Options\MSUF_Options_Player.lua
 Options\MSUF_Options_Auras.lua
 Options\MSUF_Options_Fonts.lua

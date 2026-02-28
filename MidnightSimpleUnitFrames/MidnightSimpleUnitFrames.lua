@@ -568,20 +568,29 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     local pType, pTok
     pType, pTok = UnitPowerType(unit)
     if pType == nil then return _MSUF_Bars_HidePower(bar, false) end
-    -- Always use UnitPowerPercent for bar fill (secret-safe: returns a regular
-    -- number, never a secret). UnitPower/UnitPowerMax return secret values in
-    -- 12.0 that can leave StatusBar stuck at 100% after zone transitions.
-    local pct
-    if CurveConstants and CurveConstants.ScaleTo100 then
-        pct = UnitPowerPercent(unit, pType, false, CurveConstants.ScaleTo100)
-    else
-        pct = UnitPowerPercent(unit, pType, false, true)
-    end
-    if pct == nil then return _MSUF_Bars_HidePower(bar, false) end
+
     ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
-    MSUF_SetBarMinMax(bar, 0, 100)
     bar:SetScript("OnUpdate", nil)
-    MSUF_SetBarValue(bar, pct, true)
+
+    -- Raw values, 2 args (MidnightRogueBars approach).
+    -- Smooth interpolation ONLY for player frame — target/focus/boss always snap.
+    local cur = UnitPower(unit, pType)
+    local mx  = UnitPowerMax(unit, pType)
+    if type(cur) ~= "number" then cur = 0 end
+    if type(mx)  ~= "number" then mx  = 100 end
+
+    local _interp = isPlayer
+        and not (MSUF_DB and MSUF_DB.bars and MSUF_DB.bars.smoothPowerBar == false)
+        and Enum and Enum.StatusBarInterpolation
+        and Enum.StatusBarInterpolation.ExponentialEaseOut or nil
+    if _interp then
+        bar:SetMinMaxValues(0, mx, _interp)
+        bar:SetValue(cur, _interp)
+    else
+        bar:SetMinMaxValues(0, mx)
+        bar:SetValue(cur)
+    end
+
     bar:Show()
      return true
 end
@@ -1785,6 +1794,13 @@ function _G.MSUF_RequestUnitframeUpdate(frame, forceFull, wantLayout, reason, ur
         }
         _G.__MSUF_UFREQ_CO = co
     end
+    -- Fast dedupe: if this frame is already coalesced with equal/stronger flags,
+    -- avoid repeated table writes from event bursts (notably multi-boss encounters).
+    if co.frames[frame] then
+        if (not forceFull or co.force[frame]) and (not wantLayout or co.layout[frame]) then
+            return
+        end
+    end
     co.frames[frame] = true
     if forceFull then
         co.force[frame] = true
@@ -2903,11 +2919,7 @@ function _G.MSUF_UFCore_UpdatePowerBarFast(self)
     if not self then  return end
     local bar = self.targetPowerBar
     if not (bar and self.unit) then  return end
-    -- Use the percentage path (power_pct) instead of the absolute path (power_abs).
-    -- UnitPowerPercent returns a regular number (never secret), which reliably
-    -- drives StatusBar:SetMinMaxValues(0,100) + SetValue(pct) across all zone
-    -- transitions (including M+ exit). The absolute path used UnitPower/UnitPowerMax
-    -- which return secret values in 12.0 that can leave the bar stuck at 100%.
+    -- Raw UnitPower/UnitPowerMax + ExponentialEaseOut (MidnightRogueBars approach).
     MSUF_EnsureUnitFlags(self)
     local barsConf = (MSUF_DB and MSUF_DB.bars) or {}
     ns.Bars.ApplySpec(self, self.unit, "power_pct", barsConf, self.isBoss, self._msufIsPlayer, self._msufIsTarget, self._msufIsFocus)
@@ -4959,15 +4971,16 @@ do
             end
     end
      end
+    local function _MSUF_TargetSound_OnTargetChanged_Bus()
+        MSUF_TargetSoundDriver_OnTargetChanged()
+    end
     local function MSUF_TargetSoundDriver_Ensure()
         if _msufTargetSoundFrame then
              return
     end
         -- Use EventBus instead of dedicated frame
         _msufTargetSoundFrame = true -- sentinel to prevent re-entry
-        MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_TARGET_SOUND", function()
-            MSUF_TargetSoundDriver_OnTargetChanged()
-        end)
+        MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_TARGET_SOUND", _MSUF_TargetSound_OnTargetChanged_Bus)
         MSUF_TargetSoundDriver_ResetState()
      end
     _G.MSUF_TargetSoundDriver_Ensure = MSUF_TargetSoundDriver_Ensure
@@ -5255,29 +5268,69 @@ end
     if MSUF_InitFocusKickIcon then
         MSUF_InitFocusKickIcon()
     end
+
+    local _msufTargetReanchorPending = false
+    local _msufFocusReanchorPending = false
+    local function _MSUF_TargetReanchorFlush()
+        _msufTargetReanchorPending = false
+        local fn = _G.MSUF_ReanchorTargetCastBar
+        if type(fn) == "function" then
+            fn()
+        end
+    end
+    local function _MSUF_FocusReanchorFlush()
+        _msufFocusReanchorPending = false
+        local fn = _G.MSUF_ReanchorFocusCastBar
+        if type(fn) == "function" then
+            fn()
+        end
+    end
+    local function _MSUF_ScheduleTargetReanchor()
+        if _msufTargetReanchorPending then return end
+        _msufTargetReanchorPending = true
+        C_Timer.After(0, _MSUF_TargetReanchorFlush)
+    end
+    local function _MSUF_ScheduleFocusReanchor()
+        if _msufFocusReanchorPending then return end
+        _msufFocusReanchorPending = true
+        C_Timer.After(0, _MSUF_FocusReanchorFlush)
+    end
+
     if TargetFrameSpellBar and not TargetFrameSpellBar.MSUF_Hooked then
         TargetFrameSpellBar.MSUF_Hooked = true
         TargetFrameSpellBar:HookScript("OnShow", function()
-            if type(_G.MSUF_ReanchorTargetCastBar) == "function" then
-                _G.MSUF_ReanchorTargetCastBar()
-            end
+            _MSUF_ScheduleTargetReanchor()
          end)
-        TargetFrameSpellBar:HookScript("OnEvent", function()
-            if type(_G.MSUF_ReanchorTargetCastBar) == "function" then
-                _G.MSUF_ReanchorTargetCastBar()
+        TargetFrameSpellBar:HookScript("OnEvent", function(_, event, unit)
+            if unit and unit ~= "target" then
+                return
+            end
+            if event == "UNIT_SPELLCAST_START"
+                or event == "UNIT_SPELLCAST_STOP"
+                or event == "UNIT_SPELLCAST_CHANNEL_START"
+                or event == "UNIT_SPELLCAST_CHANNEL_STOP"
+                or event == "UNIT_SPELLCAST_INTERRUPTED"
+                or event == "PLAYER_TARGET_CHANGED" then
+                _MSUF_ScheduleTargetReanchor()
             end
          end)
     end
     if FocusFrameSpellBar and not FocusFrameSpellBar.MSUF_Hooked then
         FocusFrameSpellBar.MSUF_Hooked = true
         FocusFrameSpellBar:HookScript("OnShow", function()
-            if type(_G.MSUF_ReanchorFocusCastBar) == "function" then
-                _G.MSUF_ReanchorFocusCastBar()
-            end
+            _MSUF_ScheduleFocusReanchor()
          end)
-        FocusFrameSpellBar:HookScript("OnEvent", function()
-            if type(_G.MSUF_ReanchorFocusCastBar) == "function" then
-                _G.MSUF_ReanchorFocusCastBar()
+        FocusFrameSpellBar:HookScript("OnEvent", function(_, event, unit)
+            if unit and unit ~= "focus" then
+                return
+            end
+            if event == "UNIT_SPELLCAST_START"
+                or event == "UNIT_SPELLCAST_STOP"
+                or event == "UNIT_SPELLCAST_CHANNEL_START"
+                or event == "UNIT_SPELLCAST_CHANNEL_STOP"
+                or event == "UNIT_SPELLCAST_INTERRUPTED"
+                or event == "PLAYER_FOCUS_CHANGED" then
+                _MSUF_ScheduleFocusReanchor()
             end
          end)
     end
@@ -5472,18 +5525,35 @@ do
         end
     end
 
+    local _msufSwapRecolorPendingDriver = nil
+    local function _MSUF_SwapRecolor_Flush()
+        local driver = _msufSwapRecolorPendingDriver
+        _msufSwapRecolorPendingDriver = nil
+        if driver then
+            driver._msufSwapRecolorQueued = false
+        end
+        _MSUF_SwapRecolor_Do()
+    end
+
     local function _MSUF_SwapRecolor_Schedule(driver)
         if driver._msufSwapRecolorQueued then return end
         driver._msufSwapRecolorQueued = true
         if C_Timer and C_Timer.After then
-            C_Timer.After(0, function()
-                driver._msufSwapRecolorQueued = false
-                _MSUF_SwapRecolor_Do()
-            end)
+            _msufSwapRecolorPendingDriver = driver
+            C_Timer.After(0, _MSUF_SwapRecolor_Flush)
         else
             driver._msufSwapRecolorQueued = false
             _MSUF_SwapRecolor_Do()
         end
+    end
+
+    local function _MSUF_SwapRecolor_OnTargetChanged()
+        local d = _G.MSUF_SwapRecolorDriver
+        if d then _MSUF_SwapRecolor_Schedule(d) end
+    end
+    local function _MSUF_SwapRecolor_OnFocusChanged()
+        local d = _G.MSUF_SwapRecolorDriver
+        if d then _MSUF_SwapRecolor_Schedule(d) end
     end
 
     _G.MSUF_EnsureSwapRecolorDriver = _G.MSUF_EnsureSwapRecolorDriver or function()
@@ -5500,12 +5570,8 @@ do
         end)
         _G.MSUF_SwapRecolorDriver = d
 
-        MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_SWAP_RECOLOR", function()
-            _MSUF_SwapRecolor_Schedule(d)
-        end)
-        MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_SWAP_RECOLOR_FOCUS", function()
-            _MSUF_SwapRecolor_Schedule(d)
-        end)
+        MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_SWAP_RECOLOR", _MSUF_SwapRecolor_OnTargetChanged)
+        MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_SWAP_RECOLOR_FOCUS", _MSUF_SwapRecolor_OnFocusChanged)
 
         return d
     end

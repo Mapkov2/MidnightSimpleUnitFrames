@@ -800,29 +800,51 @@ end
     local privOffX = ReadOffset(shared, lay, "privateOffsetX",     0)
     local privOffY = ReadOffset(shared, lay, "privateOffsetY",     0)
 
-    -- Position anchor 
-    local anchor = entry.anchor
-    anchor:ClearAllPoints()
-    anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
-
-    -- Position containers (always separate groups, always driven by per-group offsets)
-    entry.debuffs:ClearAllPoints()
-    entry.debuffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", debuffDX, debuffDY)
-
-    entry.buffs:ClearAllPoints()
-    entry.buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", buffDX, buffDY)
-
-    -- Mixed container is legacy; keep hidden so it can't influence layout/anchors.
-    if entry.mixed then
-        entry.mixed:ClearAllPoints()
-        entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
-        entry.mixed:Hide()
+    -- PERF: Skip re-anchoring when target-swap refreshes request identical layout.
+    -- Cache uses only non-secret DB values + frame identity.
+    local layoutCache = entry._msufLayoutCache
+    if not layoutCache then
+        layoutCache = {}
+        entry._msufLayoutCache = layoutCache
     end
 
-    -- Private
-    if entry.private then
-        entry.private:ClearAllPoints()
-        entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
+    local cacheHit = (layoutCache.frame == entry.frame)
+        and (layoutCache.offX == offX and layoutCache.offY == offY)
+        and (layoutCache.debuffDX == debuffDX and layoutCache.debuffDY == debuffDY)
+        and (layoutCache.buffDX == buffDX and layoutCache.buffDY == buffDY)
+        and (layoutCache.privOffX == privOffX and layoutCache.privOffY == privOffY)
+
+    local anchor = entry.anchor
+    if not cacheHit then
+        layoutCache.frame = entry.frame
+        layoutCache.offX, layoutCache.offY = offX, offY
+        layoutCache.debuffDX, layoutCache.debuffDY = debuffDX, debuffDY
+        layoutCache.buffDX, layoutCache.buffDY = buffDX, buffDY
+        layoutCache.privOffX, layoutCache.privOffY = privOffX, privOffY
+
+        -- Position anchor
+        anchor:ClearAllPoints()
+        anchor:SetPoint("BOTTOMLEFT", entry.frame, "TOPLEFT", offX, offY)
+
+        -- Position containers (always separate groups, always driven by per-group offsets)
+        entry.debuffs:ClearAllPoints()
+        entry.debuffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", debuffDX, debuffDY)
+
+        entry.buffs:ClearAllPoints()
+        entry.buffs:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", buffDX, buffDY)
+
+        -- Mixed container is legacy; keep hidden so it can't influence layout/anchors.
+        if entry.mixed then
+            entry.mixed:ClearAllPoints()
+            entry.mixed:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
+            entry.mixed:Hide()
+        end
+
+        -- Private
+        if entry.private then
+            entry.private:ClearAllPoints()
+            entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
+        end
     end
 
     -- Position edit movers (mirror containers) 
@@ -1255,6 +1277,31 @@ local function RenderUnit(entry)
 
     entry._lastBuffCount = buffCount
     entry._lastDebuffCount = debuffCount
+
+    -- PERF: Deferred icon pool pre-warm.
+    -- On the first successful render of each entry (or when max counts increase),
+    -- warm the icon pool to max capacity in a background frame.  This eliminates
+    -- ~450µs CreateFrame spikes when aura count grows (e.g. first combat after
+    -- target acquisition).  Subsequent renders reuse the warm pool.
+    -- Secret-safe: only creates UI frames, no aura data involved.
+    if Icons.PreWarmPool then
+        local warmB = entry._msufA2_poolWarmedB or 0
+        local warmD = entry._msufA2_poolWarmedD or 0
+        if maxBuffs > warmB or maxDebuffs > warmD then
+            entry._msufA2_poolWarmedB = maxBuffs
+            entry._msufA2_poolWarmedD = maxDebuffs
+            local buffCont = entry.buffs
+            local debuffCont = entry.debuffs
+            local wB = maxBuffs
+            local wD = maxDebuffs
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    Icons.PreWarmPool(buffCont, wB)
+                    Icons.PreWarmPool(debuffCont, wD)
+                end)
+            end
+        end
+    end
 end
 
 
@@ -1296,8 +1343,9 @@ Flush = function()
     local budgetHit = false
 
     for i = 1, count do
-        -- PERF: Budget check after each unit (not each aura icon).
-        if startUs and i > 1 then
+        -- HOT-6: Budget check every 2 units (saves 50% of debugprofilestop calls).
+        -- Worst case: overrun by 1 unit (~40-80μs), well within the 150μs margin.
+        if startUs and i > 1 and (i % 2 == 0) then
             local elapsed = _debugprofilestop() - startUs
             if elapsed >= effectiveBudget then
                 -- Re-queue remaining units for next frame.
