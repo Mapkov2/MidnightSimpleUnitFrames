@@ -122,9 +122,16 @@ if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
   end
 
   function _G.MSUF_HardSyncCastbarPreview(preview, real)
-    if not preview or not real then
-      return
-    end
+    -- IMPORTANT: This function runs during Edit Mode preview build/sync. In Midnight/Beta,
+    -- various frame APIs can return "secret" numbers; ANY numeric comparisons/arithmetic
+    -- on such values can throw and would otherwise break Edit Mode entry.
+    --
+    -- Guard: keep Edit Mode stable even if some underlying values are secret/tainted.
+    -- This is NOT a hot path; a single pcall here is acceptable and avoids user-facing
+    -- LUA_WARNING spam after combat when entering Edit Mode.
+    if not preview or not real then return end
+
+    local ok = pcall(function()
 
     -- NOTE: Frame size (SetSize on the outer frame) is intentionally NOT synced
     -- here. Frame size is always authoritative from the DB via
@@ -140,37 +147,46 @@ if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
     end
 
     -- StatusBar footprint (preview StatusBar is NOT SetAllPoints; must be resized too)
-    if preview.statusBar and preview.statusBar.SetSize then
-      if real.statusBar and real.statusBar.GetSize then
-        local sw, sh = real.statusBar:GetSize()
-        if _ssPos(sw) and _ssPos(sh) then
-          preview.statusBar:SetSize(sw, sh)
-        end
-      else
-        -- Best-effort fallback based on outer frame size (preview is our own frame → safe)
-        if preview.GetSize then
-          local w, h = preview:GetSize()
-          if w and h and w > 0 and h > 0 then
-            preview.statusBar:SetSize(w, math.max(4, h - 2))
+      if preview.statusBar and preview.statusBar.SetSize then
+        if real.statusBar and real.statusBar.GetSize then
+          local sw, sh = real.statusBar:GetSize()
+          if _ssPos(sw) and _ssPos(sh) then
+            preview.statusBar:SetSize(sw, sh)
+          end
+        else
+          -- Best-effort fallback based on outer frame size.
+          -- Secret-safe: no numeric comparisons or arithmetic.
+          if preview.GetSize then
+            local w, h = preview:GetSize()
+            if w and h then
+              preview.statusBar:SetSize(w, h)
+            end
           end
         end
       end
-    end
 
     -- Icon size
-    if preview.icon and preview.icon.SetSize and real.icon and real.icon.GetSize then
-      local iw, ih = real.icon:GetSize()
-      if _ssPos(iw) and _ssPos(ih) then
-        preview.icon:SetSize(iw, ih)
+      if preview.icon and preview.icon.SetSize and real.icon and real.icon.GetSize then
+        local iw, ih = real.icon:GetSize()
+        if _ssPos(iw) and _ssPos(ih) then
+          preview.icon:SetSize(iw, ih)
+        end
       end
-    end
 
     -- Player latency bar width (preview-only element)
-    if preview.latencyBar and preview.latencyBar.SetWidth and real.latencyBar and real.latencyBar.GetWidth then
-      local lw = real.latencyBar:GetWidth()
-      if _ssPos(lw) then
-        preview.latencyBar:SetWidth(lw)
+      if preview.latencyBar and preview.latencyBar.SetWidth and real.latencyBar and real.latencyBar.GetWidth then
+        local lw = real.latencyBar:GetWidth()
+        if _ssPos(lw) then
+          preview.latencyBar:SetWidth(lw)
+        end
       end
+
+    end) -- pcall
+
+    if not ok then
+      -- Swallow any secret-value comparison/arithmetic errors so Edit Mode entry
+      -- never breaks. Preview will still be functional; it just won't hard-sync.
+      return
     end
   end
 end
