@@ -20,24 +20,12 @@ ns = (rawget(_G, "MSUF_NS") or ns) or {}
 --  - Reduce global table lookups in high-frequency aura pipelines.
 --  - Secret-safe: localizing function references only (no value comparisons).
 -- =========================================================================
-local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
+local type, pairs, next = type, pairs, next
 local CreateFrame, GetTime = CreateFrame, GetTime
 local UnitExists = UnitExists
 local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
 local C_UnitAuras = C_UnitAuras
-local C_Secrets = C_Secrets
-local C_CurveUtil = C_CurveUtil
-
--- FastCall: no pcall in hot paths
-local function MSUF_A2_FastCall(fn, ...)
-    if fn == nil then return false end
-    return true, fn(...)
-end
-_G.MSUF_A2_FastCall = MSUF_A2_FastCall
 
 if ns.__MSUF_A2_CORE_LOADED then return end
 ns.__MSUF_A2_CORE_LOADED = true
@@ -54,21 +42,14 @@ local A2_STATE = API.state
 
 
 -- Hot locals
-
-local type = type
-local pairs = pairs
-local CreateFrame = CreateFrame
-local GetTime = GetTime
-local UnitExists = UnitExists
 local floor = math.floor
 local max = math.max
+local tonumber = tonumber
 
 -- Module references (late-bound)
-local Collect  -- API.Collect
-local Icons    -- API.Icons / API.Apply
-local Store    -- API.Store (epoch only)
-local _storeEpochs  -- Store._epochs (direct table, Phase 8)
-local Filters  -- API.Filters
+local Icons        -- API.Icons / API.Apply
+local Filters      -- API.Filters
+local CacheModule  -- API.Cache (v4 delta cache)
 
 
 -- Combat / Edit Mode state (cheap cached checks)
@@ -153,7 +134,7 @@ local function Clamp(v, def, lo, hi) v = tonumber(v); if not v then v = def end;
 local function EnsureDB()
     local gdb = _G.MSUF_DB
     if type(gdb) ~= "table" then _G.MSUF_DB = {}; gdb = _G.MSUF_DB end
-    if type(_G.EnsureDB) == "function" then MSUF_A2_FastCall(_G.EnsureDB) end
+    if type(_G.EnsureDB) == "function" then _G.EnsureDB() end
     MSUF_DB = _G.MSUF_DB
     if type(MSUF_DB) ~= "table" then return nil end
 
@@ -218,6 +199,7 @@ end
 
 -- Config invalidation
 local _configGen = 0
+local _dbFetchGen = -1
 
 local function InvalidateDB()
     _ensureReady = false
@@ -228,6 +210,9 @@ local function InvalidateDB()
     if API.Colors and API.Colors.InvalidateCache then API.Colors.InvalidateCache() end
     Icons = API.Icons or API.Apply
     if Icons and Icons.BumpConfigGen then Icons.BumpConfigGen() end
+    -- v4: Invalidate delta cache (config change affects filter results)
+    local CM = API.Cache
+    if CM and CM.InvalidateAll then CM.InvalidateAll() end
     -- Schedule refresh
     if API.MarkAllDirty then API.MarkAllDirty(0) end
 end
@@ -435,15 +420,9 @@ local function EnsureAttached(unit)
         -- Reusable list buffers (zero alloc on steady state)
         _buffList = {},
         _debuffList = {},
-        -- Last rendered state for diff
-        _lastBuffAids = {},
-        _lastDebuffAids = {},
+        -- Last rendered counts for diff
         _lastBuffCount = 0,
         _lastDebuffCount = 0,
-        _lastEpoch = -1,
-        _lastConfigGen = -1,
-        _lastAnchorGen = -1,
-        _lastPrivateGen = -1,
     }
     AurasByUnit[unit] = entry
     return entry
@@ -876,16 +855,6 @@ end
     end
 end
 
--- PERF: File-scope helper (avoids closure allocation inside RenderUnit)
-local function HasImportantToggle(f)
-    if type(f) ~= "table" then return false end
-    if f.onlyImportantAuras == true then return true end -- legacy
-    local b = f.buffs
-    if type(b) == "table" and b.onlyImportant == true then return true end
-    local d = f.debuffs
-    if type(d) == "table" and d.onlyImportant == true then return true end
-    return false
-end
 
 -- Pre-cached boss unit strings (avoid "boss"..i concatenation in loops)
 local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
@@ -902,71 +871,22 @@ local function RenderUnit(entry)
 
     -- Bind modules once
     if not _modulesBound then
-        Collect = API.Collect
         Icons   = API.Icons or API.Apply
-        Store   = API.Store
-        _storeEpochs = Store and Store._epochs
         Filters = API.Filters
-        if Collect and Icons then _modulesBound = true end
+        CacheModule = API.Cache
+        if Icons and CacheModule then _modulesBound = true end
     end
 
-    if not Collect or not Icons then return end
+    if not Icons or not CacheModule then return end
 
     -- Single gen read for entire function (value cannot change mid-call)
     local gen = _configGen
 
-    -- PERF: Update scan limits once per configGen (reduces C API calls)
-    -- GetAuras2DB result is reused by the main render path below.
+    -- PERF: Cache DB fetch per configGen (avoids repeated GetAuras2DB per unit)
     local a2, shared
-    if Collect._scanLimitsGen ~= gen then
-        Collect._scanLimitsGen = gen
+    if _dbFetchGen ~= gen then
+        _dbFetchGen = gen
         a2, shared = GetAuras2DB()
-        if shared and Collect.SetScanLimits then
-            -- Start with shared values
-            local maxB = shared.maxBuffs or 12
-            local maxD = shared.maxDebuffs or 12
-            -- Check perUnit overrides for higher values
-            if a2 and a2.perUnit then
-                for _, pu in pairs(a2.perUnit) do
-                    if pu.overrideSharedLayout and pu.layoutShared then
-                        local ls = pu.layoutShared
-                        if type(ls.maxBuffs) == "number" and ls.maxBuffs > maxB then
-                            maxB = ls.maxBuffs
-                        end
-                        if type(ls.maxDebuffs) == "number" and ls.maxDebuffs > maxD then
-                            maxD = ls.maxDebuffs
-                        end
-                    end
-                end
-            end
-            Collect.SetScanLimits(maxB, maxD)
-        end
-
-        -- Scan flags (only compute expensive per-aura tags when any frame needs them)
-        if shared and Collect.SetScanFlags then
-            local needImportant = false
-            local sf = shared.filters
-            if HasImportantToggle(sf) then
-                needImportant = true
-            elseif a2 and a2.perUnit then
-                for _, pu in pairs(a2.perUnit) do
-                    if pu and pu.overrideFilters == true and HasImportantToggle(pu.filters) then
-                        needImportant = true
-                        break
-                    end
-                end
-            end
-            Collect.SetScanFlags(needImportant)
-        end
-
-        -- Aura sort order: read from shared.filters, pass to Collect.
-        -- Uses the Blizzard Enum.AuraSortOrder values (0-6) on the
-        -- C_UnitAuras.GetAuraSlots 4th parameter.  Secret-safe: plain number.
-        if shared and Collect.SetSortOrder then
-            local sf = shared.filters
-            Collect.SetSortOrder(sf and sf.sortOrder or 0)
-
-        end
     end
 
     local unit = entry.unit
@@ -1030,10 +950,6 @@ local function RenderUnit(entry)
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
         cfg.showDebuffs = (shared.showDebuffs == true)
-        cfg.needPlayerAura = (shared.highlightOwnBuffs == true)
-            or (shared.highlightOwnDebuffs == true)
-            or cfg.buffsOnlyMine
-            or cfg.debuffsOnlyMine
     end
 
     -- Local aliases for hot-path values
@@ -1055,7 +971,6 @@ local function RenderUnit(entry)
     local stackCountAnchor  = cfg.stackCountAnchor
     local showBuffs         = cfg.showBuffs
     local showDebuffs       = cfg.showDebuffs
-    local needPlayerAura    = cfg.needPlayerAura
     local masterOn          = cfg.masterOn
 
     -- Early bail: no unit, no edit mode  nothing to render 
@@ -1117,10 +1032,6 @@ local function RenderUnit(entry)
             else
                 entry._msufA2_previewActive = nil
             end
-            -- Invalidate epoch + config caches so the real aura path runs a
-            -- full rebuild instead of hitting the epoch-diff early-out.
-            entry._lastEpoch = -1
-            entry._lastConfigGen = -1
             entry._msufA2_playerPreviewInit = nil
         end
     end
@@ -1152,11 +1063,9 @@ local function RenderUnit(entry)
         if not isPlayer then
             return
         end
-        -- Player: invalidate epoch once on preview entry so real buff path runs.
+        -- Player: flag preview init so real buff path runs.
         if not entry._msufA2_playerPreviewInit then
             entry._msufA2_playerPreviewInit = true
-            entry._lastEpoch = -1
-            entry._lastConfigGen = -1
         end
     end
 
@@ -1168,47 +1077,31 @@ local function RenderUnit(entry)
         return
     end
 
-    -- Track configGen for config resolution caching
-    entry._lastConfigGen = gen
-
-    -- Collect auras (single pass) 
-    -- Per-unit sort order: set before collect so PreScanUnit uses the right order.
+    -- Collect auras via delta cache (handles both sorted and unsorted)
     -- Secret-safe: plain numeric config, never compared with secret data.
-    if Collect.SetUnitSortOrder then
-        Collect.SetUnitSortOrder(unit, cfg.capsSortOrder or 0)
-    end
+
     local buffCount = 0
     local debuffCount = 0
-    local buffsOnlyMine    = cfg.buffsOnlyMine
-    local debuffsOnlyMine  = cfg.debuffsOnlyMine
-    local buffsIncludeBoss = cfg.buffsIncludeBoss
-    local debuffsIncludeBoss = cfg.debuffsIncludeBoss
-    local onlyBossAuras    = cfg.onlyBossAuras
-    local onlyImportantBuffs = cfg.onlyImportantBuffs
-    local onlyImportantDebuffs = cfg.onlyImportantDebuffs
-    local hidePermanentBuffs = cfg.hidePermanentBuffs
 
     -- PERF: Local function references eliminate table lookups in hot loops
     local _AcquireIcon = Icons.AcquireIcon
     local _CommitIcon = Icons.CommitIcon
-    local _GetAuras = Collect.GetAuras
-    local _GetMergedAuras = Collect.GetMergedAuras
-
-
-    -- Secret-safe sort params (passed into C_UnitAuras.GetAuraSlots)
-    local _sortOrder = cfg.capsSortOrder or cfg.sortOrder or 0
 
     -- Player in edit mode: debuffs already rendered as preview above, skip real debuff path.
     local skipDebuffs = (showTest and unit == "player")
 
-    if showDebuffs and not skipDebuffs then
-        local list
-        if debuffsOnlyMine and debuffsIncludeBoss then
-            list, debuffCount = _GetMergedAuras(unit, "HARMFUL", maxDebuffs, false, onlyImportantDebuffs, entry._debuffList, nil, needPlayerAura, _sortOrder)
-        else
-            list, debuffCount = _GetAuras(unit, "HARMFUL", maxDebuffs, debuffsOnlyMine, false, onlyBossAuras, onlyImportantDebuffs, entry._debuffList, needPlayerAura, _sortOrder)
-        end
+    -- Pass sortOrder to cache (0 = unsorted fast-path, 1-6 = C++ sorted)
+    cfg.sortOrder = cfg.capsSortOrder or cfg.sortOrder or 0
 
+    local _, nB, _, nD = CacheModule.FilterAndSort(unit, cfg, entry._buffList, entry._debuffList)
+    CacheModule.ClearChanged(unit)
+
+    buffCount  = showBuffs and nB or 0
+    debuffCount = (showDebuffs and not skipDebuffs) and nD or 0
+
+    -- CommitIcon: debuffs
+    if debuffCount > 0 then
+        local list = entry._debuffList
         local container = entry.debuffs
         for i = 1, debuffCount do
             local aura = list[i]
@@ -1219,21 +1112,15 @@ local function RenderUnit(entry)
         end
     end
 
-    if showBuffs then
-        local list
-        if buffsOnlyMine and buffsIncludeBoss then
-            list, buffCount = _GetMergedAuras(unit, "HELPFUL", maxBuffs, hidePermanentBuffs, onlyImportantBuffs, entry._buffList, nil, needPlayerAura, _sortOrder)
-        else
-            list, buffCount = _GetAuras(unit, "HELPFUL", maxBuffs, buffsOnlyMine, hidePermanentBuffs, onlyBossAuras, onlyImportantBuffs, entry._buffList, needPlayerAura, _sortOrder)
-        end
-
+    -- CommitIcon: buffs
+    if buffCount > 0 then
+        local list = entry._buffList
         local container = entry.buffs
-        local offset = 0
         for i = 1, buffCount do
             local aura = list[i]
             if aura then
-                local icon = _AcquireIcon(container, offset + i)
-                _CommitIcon(icon, unit, aura, shared, true, hidePermanentBuffs, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
+                local icon = _AcquireIcon(container, i)
+                _CommitIcon(icon, unit, aura, shared, true, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
             end
         end
     end
@@ -1277,31 +1164,6 @@ local function RenderUnit(entry)
 
     entry._lastBuffCount = buffCount
     entry._lastDebuffCount = debuffCount
-
-    -- PERF: Deferred icon pool pre-warm.
-    -- On the first successful render of each entry (or when max counts increase),
-    -- warm the icon pool to max capacity in a background frame.  This eliminates
-    -- ~450µs CreateFrame spikes when aura count grows (e.g. first combat after
-    -- target acquisition).  Subsequent renders reuse the warm pool.
-    -- Secret-safe: only creates UI frames, no aura data involved.
-    if Icons.PreWarmPool then
-        local warmB = entry._msufA2_poolWarmedB or 0
-        local warmD = entry._msufA2_poolWarmedD or 0
-        if maxBuffs > warmB or maxDebuffs > warmD then
-            entry._msufA2_poolWarmedB = maxBuffs
-            entry._msufA2_poolWarmedD = maxDebuffs
-            local buffCont = entry.buffs
-            local debuffCont = entry.debuffs
-            local wB = maxBuffs
-            local wD = maxDebuffs
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    Icons.PreWarmPool(buffCont, wB)
-                    Icons.PreWarmPool(debuffCont, wD)
-                end)
-            end
-        end
-    end
 end
 
 
@@ -1343,9 +1205,8 @@ Flush = function()
     local budgetHit = false
 
     for i = 1, count do
-        -- HOT-6: Budget check every 2 units (saves 50% of debugprofilestop calls).
-        -- Worst case: overrun by 1 unit (~40-80μs), well within the 150μs margin.
-        if startUs and i > 1 and (i % 2 == 0) then
+        -- PERF: Budget check after each unit (not each aura icon).
+        if startUs and i > 1 then
             local elapsed = _debugprofilestop() - startUs
             if elapsed >= effectiveBudget then
                 -- Re-queue remaining units for next frame.
@@ -1415,6 +1276,9 @@ local function RefreshAll()
         Store.InvalidateUnit("focus")
         for i = 1, 5 do Store.InvalidateUnit(_BOSS_UNITS[i]) end
     end
+    -- v4: Invalidate cache (forces re-filter on next render)
+    local CM = API.Cache
+    if CM and CM.InvalidateAll then CM.InvalidateAll() end
     MarkAllDirty(0)
 end
 
@@ -1428,6 +1292,9 @@ local function RefreshUnit(unit)
     if Icons and Icons.BumpConfigGen then Icons.BumpConfigGen() end
     local Store = API.Store
     if Store and Store.InvalidateUnit then Store.InvalidateUnit(unit) end
+    -- v4: Invalidate cache for this unit (forces re-filter on next render)
+    local CM = API.Cache
+    if CM and CM.Invalidate then CM.Invalidate(unit) end
     MarkDirty(unit, 0)
 end
 
@@ -1499,9 +1366,6 @@ local function ClearAllPreviews()
                 _ClearPreviewContainer(entry.private)
                 entry._msufA2_previewActive = nil
             end
-            -- Force full rebuild so real auras render after preview exit.
-            entry._lastEpoch = -1
-            entry._lastConfigGen = -1
             entry._msufA2_playerPreviewInit = nil
         end
     end

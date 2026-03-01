@@ -46,17 +46,12 @@ local Collect   -- bound on first use
 local Colors    -- API.Colors
 local Masque    -- API.Masque
 local CT        -- API.CooldownText (cooldown text manager)
-local _storeEpochs  -- API.Store._epochs (per-unit epoch counters for diff-gating)
 
 local function EnsureBindings()
     if not Collect then Collect = API.Collect end
     if not Colors then Colors = API.Colors end
     if not Masque then Masque = API.Masque end
     if not CT then CT = API.CooldownText end
-    if not _storeEpochs then
-        local s = API.Store
-        _storeEpochs = (s and s._epochs) or {}
-    end
 end
 
 --  Fast-path Collect helpers (skip guard checks in hot path) 
@@ -170,6 +165,32 @@ local function RefreshSharedFlags(shared, gen)
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
     _useBlizzardTimer = (shared and shared.useBlizzardTimerText == true) or false
     _useDispelBorders = (shared and shared.useDebuffTypeBorders == true) or false
+end
+
+-- ---------------------------------------------------------------------------
+-- Masque backdrop compatibility
+--
+-- When Masque skins are used (often non-square shapes like circles), MSUF's
+-- subtle background texture can remain visible as a square "box" behind the
+-- skinned icon. This can also appear intermittently due to icon reuse.
+--
+-- Fix: diff-gated show/hide of the background texture whenever Masque is
+-- enabled and the icon has been registered with Masque.
+-- ---------------------------------------------------------------------------
+
+local function ApplyMasqueBackdrop(icon, shared)
+    local bg = icon and icon._msufBG
+    if not bg then return end
+
+    local hide = (shared and shared.masqueEnabled == true and icon.MSUF_MasqueAdded == true) or false
+    if icon._msufA2_bgHidden ~= hide then
+        icon._msufA2_bgHidden = hide
+        if hide then
+            bg:Hide()
+        else
+            bg:Show()
+        end
+    end
 end
 
 -- --
@@ -593,6 +614,9 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         RefreshSharedFlags(shared, gen)
     end
 
+    -- Masque: hide MSUF square backdrop behind non-square skins
+    ApplyMasqueBackdrop(icon, shared)
+
     if not aura then
         local container = icon._msufA2_container or icon:GetParent()
         local aidMap = container and container._msufA2_iconByAid
@@ -614,15 +638,6 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         and last.gen == gen
         and last.isOwn == isOwn
     then
-        -- PERF: Epoch gate — skip _RefreshTimer + _ApplyStacks when no UNIT_AURA
-        -- has fired for this unit since the last CommitIcon. Duration objects are
-        -- live references (Blizzard C++ auto-updates the swipe), and stack counts
-        -- only change on UNIT_AURA. Secret-safe: epoch is our own integer.
-        local curEpoch = _storeEpochs[unit]
-        if last.epoch == curEpoch then
-            return true
-        end
-        last.epoch = curEpoch
         -- Same aura, same config. Only refresh timer + stacks (values may have changed).
         -- Timer/stacks always read fresh from C API for correctness.
         _fast_RefreshTimer(icon, unit, aid, shared, aura)
@@ -666,7 +681,6 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     last.aid = aid
     last.gen = gen
     last.isOwn = isOwn
-    last.epoch = _storeEpochs[unit]
 
     -- PERF: Inline gen-check to skip function call overhead
     if icon._msufA2_textCfgGen ~= gen then
