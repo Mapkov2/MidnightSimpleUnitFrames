@@ -3439,11 +3439,11 @@ local cpColSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmal
 cpColSub:SetPoint("TOPLEFT", cpColHeader, "BOTTOMLEFT", 0, -4)
 cpColSub:SetWidth(600)
 cpColSub:SetJustifyH("LEFT")
-cpColSub:SetText("Configure colors for secondary resource bars: Combo Points, Holy Power, Soul Shards, Chi, Runes, Arcane Charges, Essence.")
+cpColSub:SetText("Configure colors for secondary resource bars: Combo Points, Holy Power, Soul Shards, Chi, Runes, Arcane Charges, Essence, Soul Fragments (DH), Maelstrom (Enh/Ele), Stagger (BrM), Insanity (Shadow), Whirlwind (Fury), Tip of the Spear (SV), Ebon Might (Aug).")
 
 local cpColTypeDrop = CreateFrame("Frame", "MSUF_Colors_ClassPowerTypeDropdown", content, "UIDropDownMenuTemplate")
 cpColTypeDrop:SetPoint("TOPLEFT", cpColSub, "BOTTOMLEFT", -16, -8)
-UIDropDownMenu_SetWidth(cpColTypeDrop, 220)
+UIDropDownMenu_SetWidth(cpColTypeDrop, 260)
 MSUF_ExpandDropdownClickArea(cpColTypeDrop)
 
 local cpColSwatch = CreateFrame("Button", "MSUF_Colors_ClassPowerColorSwatch", content)
@@ -3459,6 +3459,7 @@ cpColResetBtn:SetPoint("LEFT", cpColSwatch, "RIGHT", 10, 0)
 
 -- Class power token options (secondary resources)
 local CP_TOKEN_OPTIONS = {
+    -- ── Standard segmented ──
     { token = "COMBO_POINTS",   label = "Combo Points" },
     { token = "HOLY_POWER",     label = "Holy Power" },
     { token = "SOUL_SHARDS",    label = "Soul Shards" },
@@ -3467,6 +3468,30 @@ local CP_TOKEN_OPTIONS = {
     { token = "RUNES",          label = "Runes" },
     { token = "ESSENCE",        label = "Essence" },
     { token = "CHARGED",        label = "Empowered (Charged)" },
+    -- ── New: aura-based class powers ──
+    { token = "SOUL_FRAGMENTS",      label = "Soul Fragments (DH)" },
+    { token = "SOUL_FRAGMENTS_META", label = "Soul Fragments \124cFF9933EE(Void Meta)\124r" },
+    { token = "MAELSTROM",           label = "Maelstrom Weapon (Enh)" },
+    -- ── Balance Druid: Astral Power + Eclipse ──
+    { token = "ASTRAL_POWER",   label = "Astral Power (Balance)" },
+    { token = "ECLIPSE_SOLAR",  label = "Eclipse \124cFFD18F3F(Solar)\124r" },
+    { token = "ECLIPSE_LUNAR",  label = "Eclipse \124cFF697ED1(Lunar)\124r" },
+    { token = "ECLIPSE_CA",     label = "Eclipse \124cFF4DFF6D(Celestial Alignment)\124r" },
+    -- ── Stagger (Brewmaster Monk) ──
+    { token = "STAGGER_GREEN",  label = "Stagger \124cFF85FF85(Light)\124r" },
+    { token = "STAGGER_YELLOW", label = "Stagger \124cFFFFFAB8(Moderate)\124r" },
+    { token = "STAGGER_RED",    label = "Stagger \124cFFFF6B6B(Heavy)\124r" },
+    -- ── DH Vengeance ──
+    { token = "SOUL_FRAGMENTS_VENG", label = "Soul Fragments \124cFF570B76(Vengeance)\124r" },
+    -- ── Continuous bars ──
+    { token = "INSANITY",       label = "Insanity (Shadow)" },
+    { token = "MAELSTROM_POWER", label = "Maelstrom Power (Ele)" },
+    -- ── Spell Trackers ──
+    { token = "WHIRLWIND",      label = "Whirlwind (Fury)" },
+    { token = "TIP_OF_THE_SPEAR", label = "Tip of the Spear (SV)" },
+    -- ── Timer Bar ──
+    { token = "EBON_MIGHT",     label = "Ebon Might (Aug)" },
+    -- ── Text ──
     { token = "RESOURCE_TEXT",  label = "Resource Text" },
 }
 
@@ -3493,6 +3518,80 @@ F.GetDefaultClassPowerColor = function(token)
         end
         return 1, 1, 1
     end
+    -- DH Devourer: Soul Fragments (normal green)
+    if token == "SOUL_FRAGMENTS" then
+        return 0.00, 0.80, 0.00
+    end
+    -- DH Devourer: Void Metamorphosis purple
+    if token == "SOUL_FRAGMENTS_META" then
+        return 0.60, 0.20, 0.93
+    end
+    -- Enhancement Shaman: Maelstrom Weapon (use Maelstrom power bar color)
+    if token == "MAELSTROM" then
+        local col = PowerBarColor and PowerBarColor["MAELSTROM"]
+        if type(col) == "table" then
+            local r = col.r or col[1]
+            local g = col.g or col[2]
+            local b = col.b or col[3]
+            if type(r) == "number" then return r, g, b end
+        end
+        return 0.00, 0.50, 1.00  -- blue fallback
+    end
+    -- Balance Druid: Astral Power (Blizzard LunarPower blue)
+    if token == "ASTRAL_POWER" then
+        local col = PowerBarColor and PowerBarColor["LUNAR_POWER"]
+        if type(col) == "table" then
+            local r = col.r or col[1]
+            local g = col.g or col[2]
+            local b = col.b or col[3]
+            if type(r) == "number" then return r, g, b end
+        end
+        return 0.30, 0.52, 0.90  -- MCR default
+    end
+    -- Balance Druid: Eclipse colors (MCR/Shrom defaults)
+    if token == "ECLIPSE_SOLAR" then return 0.82, 0.56, 0.25 end
+    if token == "ECLIPSE_LUNAR" then return 0.41, 0.49, 0.82 end
+    if token == "ECLIPSE_CA"    then return 0.30, 1.00, 0.43 end
+    -- Stagger: Brewmaster Monk (oUF threshold colors)
+    if token == "STAGGER_GREEN" then
+        return 0.52, 1.00, 0.52
+    end
+    if token == "STAGGER_YELLOW" then
+        return 1.00, 0.98, 0.72
+    end
+    if token == "STAGGER_RED" then
+        return 1.00, 0.42, 0.42
+    end
+    -- DH Vengeance: Soul Fragments (MCR default — dark purple)
+    if token == "SOUL_FRAGMENTS_VENG" then return 0.34, 0.06, 0.46 end
+    -- Shadow Priest: Insanity (Blizzard PowerBarColor or MCR default)
+    if token == "INSANITY" then
+        local col = PowerBarColor and PowerBarColor["INSANITY"]
+        if type(col) == "table" then
+            local r = col.r or col[1]
+            local g = col.g or col[2]
+            local b = col.b or col[3]
+            if type(r) == "number" then return r, g, b end
+        end
+        return 0.44, 0.00, 0.74  -- MCR default purple
+    end
+    -- Ele Shaman: Maelstrom Power (Blizzard PowerBarColor or MCR default)
+    if token == "MAELSTROM_POWER" then
+        local col = PowerBarColor and PowerBarColor["MAELSTROM"]
+        if type(col) == "table" then
+            local r = col.r or col[1]
+            local g = col.g or col[2]
+            local b = col.b or col[3]
+            if type(r) == "number" then return r, g, b end
+        end
+        return 0.00, 0.50, 1.00  -- MCR default blue
+    end
+    -- Warrior Fury: Whirlwind (MCR default — green)
+    if token == "WHIRLWIND" then return 0.20, 0.80, 0.20 end
+    -- Hunter SV: Tip of the Spear (MCR default — lime-green)
+    if token == "TIP_OF_THE_SPEAR" then return 0.60, 0.80, 0.20 end
+    -- Evoker Aug: Ebon Might (MCR default — teal)
+    if token == "EBON_MIGHT" then return 0.40, 0.80, 0.60 end
     -- Look up in PowerBarColor
     local col = (PowerBarColor and token and PowerBarColor[token]) or nil
     if type(col) == "table" then
@@ -4019,6 +4118,11 @@ lastControl = auraCDUrgentSwatch
         -- Power bar colors
         if F.UpdatePowerColorControls then
             F.UpdatePowerColorControls()
+        end
+
+        -- Class power colors (CP, DH, Stagger, etc.)
+        if F.UpdateClassPowerColorControls then
+            F.UpdateClassPowerColorControls()
         end
 
         -- Auras colors

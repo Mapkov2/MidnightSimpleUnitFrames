@@ -1,20 +1,24 @@
 -- ============================================================================
--- MSUF_ClassPower.lua — Secondary Power (ClassPower/Runes) + Alt Mana Bar
+-- MSUF_ClassPower.lua — Class Resources + Alt Mana + Stagger
 --
 -- Features:
---   1. ClassPower: segmented bars for Combo Points, Holy Power, Soul Shards,
---      Arcane Charges, Chi, Essence, and DK Runes.
---   2. AltMana: extra Mana bar for dual-resource specs (Shadow Priest, etc.)
+--   1. ClassPower (segmented): Combo Points, Holy Power, Soul Shards (incl.
+--      fractional for Destruction), Arcane Charges, Chi, Essence.
+--   2. DK Runes: individual per-rune cooldown animation + sort order (oUF).
+--   3. DH Devourer: Soul Fragments (aura-based, normalized 0-1, dual color).
+--   4. Enh Shaman: Maelstrom Weapon stacks (aura-based segments).
+--   5. Vehicle: auto-switch to combo points in vehicle UI.
+--   6. AltMana: extra Mana bar for dual-resource specs.
+--   7. Stagger: Brewmaster Monk stagger bar (3-color threshold).
 --
 -- Architecture:
 --   - Self-contained: own event frame, own DB defaults, own layout.
 --   - Independent overlay (Unhalted approach): no HP bar reservation.
---     CP sits on top of the frame at a higher frame level.
---   - Width/Height/X/Y fully configurable via sliders in options panel.
---   - Secret-safe: raw UnitPower/UnitPowerMax (2 args, MidnightRogueBars approach),
---     nil-guarded, no arithmetic on return values.
---   - Max performance: event-driven only (zero polling), cached config,
---     pre-resolved colors, no closures/strings in hot paths.
+--   - Render modes: each class/spec resolves to a render mode at FullRefresh.
+--     Hot-path dispatch is a single mode check — zero branching for inactive.
+--   - Secret-safe: raw UnitPower/UnitPowerMax (2 args), nil-guarded.
+--   - Max performance: event-driven only (zero polling except DK rune OnUpdate
+--     which runs only on recharging runes, ~1-3 max simultaneous).
 -- ============================================================================
 
 -- Guard: only load once.
@@ -25,17 +29,31 @@ _G.__MSUF_ClassPower_Loaded = true
 -- Perf locals (eliminate global lookups in hot paths)
 -- ============================================================================
 local type, tonumber, pairs, select = type, tonumber, pairs, select
-local math_floor, math_max = math.floor, math.max
+local math_floor, math_max, math_ceil = math.floor, math.max, math.ceil
+local math_min = math.min
+local string_format = string.format
+local pairs = pairs
+local table_sort = table.sort
 local CreateFrame = CreateFrame
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
 local UnitPowerType = UnitPowerType
 local UnitPowerPercent = UnitPowerPercent
+local UnitPowerDisplayMod = UnitPowerDisplayMod
 local UnitClass = UnitClass
 local UnitExists = UnitExists
+local UnitStagger = UnitStagger
+local UnitHealthMax = UnitHealthMax
+local UnitHasVehicleUI = UnitHasVehicleUI
 local GetShapeshiftFormID = GetShapeshiftFormID
+local GetRuneCooldown = GetRuneCooldown
 local InCombatLockdown = InCombatLockdown
 local GetTime = GetTime
 local CurveScale100 = (CurveConstants and CurveConstants.ScaleTo100) or true
+
+-- Aura API (12.0)
+local C_UnitAuras = C_UnitAuras
+local C_Spell = C_Spell
+local C_SpellBook = C_SpellBook
 
 -- Secret-value guard (12.0 Midnight)
 local _issecretvalue = _G.issecretvalue
@@ -52,6 +70,128 @@ local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
 local _, PLAYER_CLASS = UnitClass("player")
 
 -- ============================================================================
+-- Render modes (resolved per FullRefresh, dispatch in hot paths)
+-- ============================================================================
+local MODE_NONE            = 0  -- no class resource active
+local MODE_SEGMENTED       = 1  -- standard: filled/empty per segment (CP, HP, Chi, etc.)
+local MODE_FRACTIONAL      = 2  -- Destruction Warlock: partial fill on current shard
+local MODE_RUNE_CD         = 3  -- DK: per-rune cooldown animation with sort
+local MODE_AURA_SEGMENTED  = 4  -- Enh Shaman: aura-stack count as segments
+local MODE_AURA_SINGLE     = 5  -- DH Devourer: normalized 0-1 single bar
+local MODE_CONTINUOUS      = 6  -- Balance Druid: Astral Power continuous bar + prediction
+local MODE_SPELL_TRACKER   = 7  -- Whirlwind / Tip of the Spear: spellcast-tracked stacks
+local MODE_TIMER_BAR       = 8  -- Ebon Might: aura countdown bar with OnUpdate
+
+-- ============================================================================
+-- Spec constants (sourced from Blizzard_FrameXMLBase/Constants.lua)
+-- ============================================================================
+local SPEC_DH_DEVOURER       = _G.SPEC_DEMONHUNTER_DEVOURER or 3
+local SPEC_MAGE_ARCANE        = _G.SPEC_MAGE_ARCANE or 1
+local SPEC_MONK_WINDWALKER    = _G.SPEC_MONK_WINDWALKER or 3
+local SPEC_MONK_BREWMASTER    = _G.SPEC_MONK_BREWMASTER or 1
+local SPEC_SHAMAN_ENHANCEMENT = 2
+local SPEC_SHAMAN_ELEMENTAL   = 1
+local SPEC_WARLOCK_DESTRUCTION = _G.SPEC_WARLOCK_DESTRUCTION or 3
+local SPEC_DRUID_BALANCE      = 1
+local SPEC_DH_VENGEANCE       = _G.SPEC_DEMONHUNTER_VENGEANCE or 2
+local SPEC_PRIEST_SHADOW      = 3
+local SPEC_WARRIOR_FURY       = 2
+local SPEC_HUNTER_SURVIVAL    = 3
+local SPEC_EVOKER_AUG         = 3
+
+-- ============================================================================
+-- Spell IDs (oUF-sourced: aura-based class powers)
+-- ============================================================================
+local SPELL_DARK_HEART          = (Constants and Constants.UnitPowerSpellIDs and Constants.UnitPowerSpellIDs.DARK_HEART_SPELL_ID) or 1225789
+local SPELL_SILENCE_THE_WHISPERS = (Constants and Constants.UnitPowerSpellIDs and Constants.UnitPowerSpellIDs.SILENCE_THE_WHISPERS_SPELL_ID) or 1227702
+local SPELL_VOID_METAMORPHOSIS  = (Constants and Constants.UnitPowerSpellIDs and Constants.UnitPowerSpellIDs.VOID_METAMORPHOSIS_SPELL_ID) or 1217607
+local SPELL_MAELSTROM_WEAPON       = 344179
+local SPELL_MAELSTROM_WEAPON_TALENT = 187880
+
+-- Balance Druid: Astral Power prediction + Eclipse tracking (MCR-sourced)
+local SPELL_NATURES_BALANCE     = 406890
+local SPELL_SOLAR_ECLIPSE       = 1233346
+local SPELL_LUNAR_ECLIPSE       = 1233272
+local SPELL_CELESTIAL_ALIGNMENT = 194223
+local SPELL_ORBITAL_STRIKE_CA   = 383410
+local SPELL_INCARNATION_BOOMKIN = 102560
+local SPELL_ORBITAL_STRIKE_INC  = 390414
+local SPELL_AP_WRATH            = 190984
+local SPELL_AP_STARFIRE          = 194153
+
+-- Balance: spellID → base AP generated
+local AP_GENERATORS = {
+    [190984] = 6,   -- Wrath
+    [194153] = 8,   -- Starfire
+    [274281] = 10,  -- New Moon
+    [274282] = 20,  -- Half Moon
+    [274283] = 40,  -- Full Moon
+}
+
+-- Balance: Eclipse aura IDs → type for fast lookup
+local ECLIPSE_AURAS = {
+    [SPELL_SOLAR_ECLIPSE]       = "SOLAR",
+    [SPELL_LUNAR_ECLIPSE]       = "LUNAR",
+    [SPELL_CELESTIAL_ALIGNMENT] = "CA",
+    [SPELL_ORBITAL_STRIKE_CA]   = "CA",
+    [SPELL_INCARNATION_BOOMKIN] = "INC",
+    [SPELL_ORBITAL_STRIKE_INC]  = "INC",
+}
+
+-- Balance: Eclipse bar colors (MCR/Shrom defaults; overridable via Colors menu)
+local BAL_CLR_SOLAR = { 0.82, 0.56, 0.25 }  -- #d18f3f
+local BAL_CLR_LUNAR = { 0.41, 0.49, 0.82 }  -- #697ed1
+local BAL_CLR_CA    = { 0.30, 1.00, 0.43 }  -- #4dff6d (CA / Incarnation)
+local BAL_PRED_ALPHA = 0.50                   -- prediction overlay opacity
+
+-- Warlock: per-spec shard generator spellIDs (for cast prediction indicator)
+local WL_GENERATORS = {
+    [1] = { [686]=true, [324536]=true, [198590]=true, [316099]=true, [980]=true },  -- Affliction
+    [2] = { [686]=true, [264178]=true, [267217]=true },                              -- Demonology
+    [3] = { [29722]=true, [17962]=true, [116858]=true, [196447]=true, [348]=true, [5740]=true }, -- Destruction
+}
+-- Warlock: low shard warning thresholds per spec (text turns red below this)
+local WL_LOW_THRESHOLD = { [3] = 2, [2] = 3 }
+
+-- DH Vengeance: Soul Fragments via C_Spell.GetSpellCastCount (MCR-sourced)
+local SPELL_SOUL_CLEAVE = 228477
+
+-- Warrior Fury: Whirlwind (Improved Whirlwind) spell tracker (MCR-sourced)
+local SPELL_IMPROVED_WHIRLWIND = 12950
+local SPELL_CRASHING_THUNDER   = 436707
+local SPELL_UNHINGED           = 386628
+local WW_GENERATORS  = { [190411]=true, [6343]=true, [435222]=true }  -- Whirlwind, Thunder Clap, Shockwave
+local WW_SPENDERS    = {
+    [23881]=true, [85288]=true, [280735]=true, [202168]=true,
+    [184367]=true, [335096]=true, [335097]=true, [5308]=true,
+}
+local WW_BLADESTORMS = {
+    [50622]=true, [46924]=true, [227847]=true, [184362]=true, [446035]=true,
+}
+
+-- Hunter Survival: Tip of the Spear spell tracker (MCR-sourced)
+local SPELL_TIP_OF_THE_SPEAR = 260285
+local SPELL_TIP_KILL_COMMAND  = 259489
+local SPELL_TIP_TWIN_FANG    = 1272139
+local SPELL_TIP_TAKEDOWN     = 1250646
+local SPELL_TIP_PRIMAL_SURGE = 1272154
+local TIP_SPENDERS = {
+    [186270]=true, [1262293]=true, [1261193]=true, [1253859]=true,
+    [259495]=true, [193265]=true, [1264949]=true, [1262343]=true,
+    [265189]=true, [1251592]=true,
+}
+
+-- Evoker Augmentation: Ebon Might timer bar (MCR-sourced)
+local SPELL_EBON_MIGHT = 395296
+local EBON_MIGHT_MAX_DURATION = 20  -- seconds
+
+-- ============================================================================
+-- Stagger thresholds (oUF-sourced: Blizzard_UnitFrame)
+-- ============================================================================
+local STAGGER_YELLOW_TRANSITION = _G.STAGGER_YELLOW_TRANSITION or 0.3
+local STAGGER_RED_TRANSITION    = _G.STAGGER_RED_TRANSITION    or 0.6
+
+-- ============================================================================
 -- PowerType constants (defensive: Enum.PowerType may not exist pre-load)
 -- ============================================================================
 local PT = {}
@@ -65,6 +205,10 @@ do
     PT.ArcaneCharges = (E and E.ArcaneCharges) or 16
     PT.Chi           = (E and E.Chi)            or 12
     PT.Essence       = (E and E.Essence)        or 19
+    PT.LunarPower    = (E and E.LunarPower)     or 8
+    PT.Energy        = (E and E.Energy)         or 3
+    PT.Insanity      = (E and E.Insanity)       or 13
+    PT.Maelstrom     = (E and E.Maelstrom)      or 11
 end
 
 -- ============================================================================
@@ -97,35 +241,163 @@ local function EnsureDefaults()
     if b.altManaColorR        == nil then b.altManaColorR        = 0.0   end
     if b.altManaColorG        == nil then b.altManaColorG        = 0.0   end
     if b.altManaColorB        == nil then b.altManaColorB        = 0.8   end
+
+    -- Stagger bar defaults (Brewmaster Monk)
+    if b.showStagger          == nil then b.showStagger          = true  end
+    if b.staggerHeight        == nil then b.staggerHeight        = 4     end
+    if b.staggerOffsetY       == nil then b.staggerOffsetY       = -2    end
+
+    -- DK Rune sort order: "asc" = ready first, "desc" = recharging first, nil = natural
+    if b.runeSortOrder        == nil then b.runeSortOrder        = "asc" end
+
+    -- Ele Shaman: Maelstrom Power continuous bar (off by default — niche preference)
+    if b.showEleMaelstrom     == nil then b.showEleMaelstrom     = false end
+    -- Evoker Aug: Ebon Might timer bar (on by default)
+    if b.showEbonMight        == nil then b.showEbonMight        = true  end
+
+    -- Auto-hide: visibility conditions
+    if b.classPowerHideOOC       == nil then b.classPowerHideOOC       = false end
+    if b.classPowerHideWhenFull  == nil then b.classPowerHideWhenFull  = false end
+    if b.classPowerHideWhenEmpty == nil then b.classPowerHideWhenEmpty = false end
+
+    -- Pip alpha (0.0-1.0)
+    if b.classPowerFilledAlpha   == nil then b.classPowerFilledAlpha   = 1.0   end
+    if b.classPowerEmptyAlpha    == nil then b.classPowerEmptyAlpha    = 0.3   end
+
+    -- Gap between pips (pixels, 0 = no gap — only tick separators)
+    if b.classPowerGap           == nil then b.classPowerGap           = 0     end
+
+    -- Fill direction: false = left→right (default), true = right→left
+    if b.classPowerFillReverse   == nil then b.classPowerFillReverse   = false end
 end
 
 -- ============================================================================
 -- Power-type detection (resolved per spec/form change, cached)
+-- Returns: powerType, renderMode, isAuraPower
+--   powerType:   Enum.PowerType or string token for aura-based
+--   renderMode:  MODE_* constant for hot-path dispatch
+--   isAuraPower: true if driven by UNIT_AURA instead of UNIT_POWER_UPDATE
 -- ============================================================================
 
--- ClassPower: returns Enum.PowerType or nil
+-- ClassPower: returns powerType, renderMode, isAuraPower
 local function GetClassPowerType()
+    -- Vehicle override: always combo points (oUF pattern)
+    if UnitHasVehicleUI and UnitHasVehicleUI("player") then
+        local hasCP = PlayerVehicleHasComboPoints and PlayerVehicleHasComboPoints()
+        if hasCP then
+            return PT.ComboPoints, MODE_SEGMENTED, false
+        end
+        return nil, MODE_NONE, false
+    end
+
     if PLAYER_CLASS == "DEATHKNIGHT" then
-        return PT.Runes
+        return PT.Runes, MODE_RUNE_CD, false
+
     elseif PLAYER_CLASS == "ROGUE" then
-        return PT.ComboPoints
+        return PT.ComboPoints, MODE_SEGMENTED, false
+
     elseif PLAYER_CLASS == "PALADIN" then
-        return PT.HolyPower
+        return PT.HolyPower, MODE_SEGMENTED, false
+
     elseif PLAYER_CLASS == "WARLOCK" then
-        return PT.SoulShards
+        local spec = GetSpec and GetSpec()
+        if spec == SPEC_WARLOCK_DESTRUCTION then
+            return PT.SoulShards, MODE_FRACTIONAL, false
+        end
+        return PT.SoulShards, MODE_SEGMENTED, false
+
     elseif PLAYER_CLASS == "EVOKER" then
-        return PT.Essence
+        local spec = GetSpec and GetSpec()
+        if spec == SPEC_EVOKER_AUG then
+            local b = MSUF_DB and MSUF_DB.bars
+            if b and b.showEbonMight then
+                return "EBON_MIGHT", MODE_TIMER_BAR, false
+            end
+        end
+        return PT.Essence, MODE_SEGMENTED, false
+
     elseif PLAYER_CLASS == "MAGE" then
         local spec = GetSpec and GetSpec()
-        if spec == 1 then return PT.ArcaneCharges end
+        if spec == SPEC_MAGE_ARCANE then return PT.ArcaneCharges, MODE_SEGMENTED, false end
+
     elseif PLAYER_CLASS == "MONK" then
         local spec = GetSpec and GetSpec()
-        if spec == 3 then return PT.Chi end
+        if spec == SPEC_MONK_WINDWALKER then return PT.Chi, MODE_SEGMENTED, false end
+
     elseif PLAYER_CLASS == "DRUID" then
         local form = GetShapeshiftFormID and GetShapeshiftFormID()
-        if form == 1 then return PT.ComboPoints end  -- Cat Form
+        if form == 1 then return PT.ComboPoints, MODE_SEGMENTED, false end
+        -- Balance: Astral Power continuous bar (caster form, spec 1)
+        local spec = GetSpec and GetSpec()
+        if spec == SPEC_DRUID_BALANCE then
+            local pType = UnitPowerType("player")
+            if NotSecret(pType) and pType == PT.LunarPower then
+                return PT.LunarPower, MODE_CONTINUOUS, false
+            end
+            -- Energy fallback (shapeshifted but not cat form)
+            if NotSecret(pType) and pType == PT.Energy then
+                return PT.ComboPoints, MODE_SEGMENTED, false
+            end
+        end
+
+    elseif PLAYER_CLASS == "DEMONHUNTER" then
+        local spec = GetSpec and GetSpec()
+        if spec == SPEC_DH_DEVOURER then
+            return "SOUL_FRAGMENTS", MODE_AURA_SINGLE, true
+        end
+        if spec == SPEC_DH_VENGEANCE then
+            return "SOUL_FRAGMENTS_VENG", MODE_AURA_SEGMENTED, true
+        end
+
+    elseif PLAYER_CLASS == "SHAMAN" then
+        local spec = GetSpec and GetSpec()
+        if spec == SPEC_SHAMAN_ENHANCEMENT then
+            -- Only if talent is known
+            if C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(SPELL_MAELSTROM_WEAPON_TALENT) then
+                return "MAELSTROM_WEAPON", MODE_AURA_SEGMENTED, true
+            end
+        end
+        if spec == SPEC_SHAMAN_ELEMENTAL then
+            local b = MSUF_DB and MSUF_DB.bars
+            if b and b.showEleMaelstrom then
+                return PT.Maelstrom, MODE_CONTINUOUS, false
+            end
+        end
+
+    elseif PLAYER_CLASS == "PRIEST" then
+        local spec = GetSpec and GetSpec()
+        if spec == SPEC_PRIEST_SHADOW then
+            return PT.Insanity, MODE_CONTINUOUS, false
+        end
+
+    elseif PLAYER_CLASS == "WARRIOR" then
+        local spec = GetSpec and GetSpec()
+        if spec == SPEC_WARRIOR_FURY then
+            local known = C_SpellBook and C_SpellBook.IsSpellKnown
+            if known and known(SPELL_IMPROVED_WHIRLWIND) then
+                return "WHIRLWIND", MODE_SPELL_TRACKER, false
+            end
+        end
+
+    elseif PLAYER_CLASS == "HUNTER" then
+        local spec = GetSpec and GetSpec()
+        if spec == SPEC_HUNTER_SURVIVAL then
+            local known = C_SpellBook and C_SpellBook.IsSpellKnown
+            if known and known(SPELL_TIP_OF_THE_SPEAR) then
+                return "TIP_OF_THE_SPEAR", MODE_SPELL_TRACKER, false
+            end
+        end
     end
-    return nil
+    return nil, MODE_NONE, false
+end
+
+-- Stagger detection (Brewmaster Monk only)
+local function NeedsStaggerBar()
+    if PLAYER_CLASS ~= "MONK" then return false end
+    local spec = GetSpec and GetSpec()
+    if spec ~= SPEC_MONK_BREWMASTER then return false end
+    if UnitHasVehicleUI and UnitHasVehicleUI("player") then return false end
+    return true
 end
 
 -- AltMana: returns true if we need a mana bar (primary power != Mana)
@@ -159,6 +431,17 @@ local POWER_TYPE_TOKENS = {
     [PT.Chi]           = "CHI",
     [PT.Essence]       = "ESSENCE",
     [PT.Mana]          = "MANA",
+    [PT.LunarPower]    = "ASTRAL_POWER",
+    [PT.Insanity]      = "INSANITY",
+    [PT.Maelstrom]     = "MAELSTROM_POWER",
+    -- String-keyed aura-based types (not in Enum.PowerType)
+    ["SOUL_FRAGMENTS"]      = "SOUL_FRAGMENTS",
+    ["SOUL_FRAGMENTS_VENG"] = "SOUL_FRAGMENTS_VENG",
+    ["MAELSTROM_WEAPON"]    = "MAELSTROM",  -- re-use Elemental's color token (oUF pattern)
+    ["STAGGER"]             = "STAGGER",
+    ["WHIRLWIND"]           = "WHIRLWIND",
+    ["TIP_OF_THE_SPEAR"]    = "TIP_OF_THE_SPEAR",
+    ["EBON_MIGHT"]          = "EBON_MIGHT",
 }
 
 -- ============================================================================
@@ -168,7 +451,11 @@ local _cachedColorR, _cachedColorG, _cachedColorB = 1, 1, 1
 local _cachedColorToken = nil
 
 local function ResolveClassPowerColor(powerType)
+    -- Token resolution: numeric powerType → string token, string → use directly
     local token = POWER_TYPE_TOKENS[powerType]
+    if not token and type(powerType) == "string" then
+        token = powerType  -- already a string token (e.g. "RESOURCE_TEXT", "SOUL_FRAGMENTS")
+    end
     if token == _cachedColorToken and _cachedColorToken then
         return _cachedColorR, _cachedColorG, _cachedColorB
     end
@@ -284,6 +571,25 @@ end
 -- ClassPower visual: segmented bars (created lazily on player frame)
 -- ============================================================================
 local MAX_CLASS_POWER = 10  -- Warlock can have up to 5 shards, Rogue up to 8+ combo pts
+
+-- CDM frame name lookup by width-mode key (shared between CP and DPB).
+local CDM_FRAMES = {
+    cooldown      = "EssentialCooldownViewer",
+    utility       = "UtilityCooldownViewer",
+    tracked_buffs = "BuffIconCooldownViewer",
+}
+
+-- CDM frames report their content-area width, but icons extend visually
+-- beyond the frame boundary (spacing, glow, padding).  This multiplier
+-- compensates so our bars match the perceived CDM width.  ~1.10 = 10 %.
+local CDM_WIDTH_SCALE = 1.10
+
+-- CDM hook definitions (setup-time only, never re-created).
+local CDM_HOOK_DEFS = {
+    { name = "EssentialCooldownViewer", flag = "_ecvHooked",  mode = "cooldown" },
+    { name = "UtilityCooldownViewer",   flag = "_ucvHooked",  mode = "utility" },
+    { name = "BuffIconCooldownViewer",  flag = "_bicvHooked", mode = "tracked_buffs" },
+}
 local CP = {
     bars      = {},      -- [i] = StatusBar
     ticks     = {},      -- [i] = Texture (separator lines)
@@ -293,26 +599,77 @@ local CP = {
     text      = nil,     -- FontString: resource count (e.g. "4")
     maxBars   = 0,       -- currently allocated bar count
     currentMax = 0,      -- current max power (e.g. 5 combo pts)
-    powerType = nil,     -- current Enum.PowerType
+    powerType = nil,     -- current Enum.PowerType or string token
+    renderMode = MODE_NONE,  -- active render mode
+    isAuraPower = false, -- true → driven by UNIT_AURA
+    isVehicle = false,   -- true → vehicle combo points active
     visible   = false,
     height    = 4,
+    -- Warlock shard prediction state
+    wlPredicting = false,  -- true when casting a shard generator
+    -- Balance Druid: Eclipse + AP prediction state
+    apPredTex    = nil,    -- prediction overlay texture (lazy, on bars[1])
+    apPredAmt    = 0,      -- predicted AP from current cast
+    apCastSpell  = nil,    -- active spell ID (nil when not casting)
+    apSolarExp   = 0,      -- solar eclipse expiration time
+    apLunarExp   = 0,      -- lunar eclipse expiration time
+    apCAExp      = 0,      -- celestial alignment expiration time
+    apIncExp     = 0,      -- incarnation expiration time
+    apEclipseColor = nil,  -- current eclipse color override {r,g,b} or nil
+    -- Spell Tracker state (Whirlwind / Tip of the Spear)
+    spStacks    = 0,       -- current stack count
+    spMaxStacks = 2,       -- max stacks (set per-feature in FullRefresh)
+    spExpires   = nil,     -- GetTime() expiry timestamp (nil = no timer)
+    spDuration  = 20,      -- buff duration in seconds (set per-feature)
+    spCachedQ   = -1,      -- skip-if-same quantizer
+    wwNoCon     = 0,       -- Unhinged no-consume window (GetTime + 2)
+    -- Timer Bar state (Ebon Might)
+    tbCachedQ   = -1,      -- quantized percentage for skip-if-same
+    tbOUA       = false,   -- true if OnUpdate is active
 }
+
+-- DK Rune map: [display_slot] = rune_id (1-6), sorted per sortOrder
+local _runeMap = { 1, 2, 3, 4, 5, 6 }
+local _runeHasSortOrder = false
+
+local function CP_ResolveTexture(key)
+    if key and key ~= "" then
+        local resolve = _G.MSUF_ResolveStatusbarTextureKey
+        if type(resolve) == "function" then
+            local p = resolve(key)
+            if p then return p end
+        end
+    end
+    -- Fallback: global bar texture → flat white
+    local getBar = _G.MSUF_GetBarTexture
+    return (getBar and getBar()) or "Interface\\Buttons\\WHITE8x8"
+end
 
 local function CP_EnsureBars(parent, count)
     if count <= CP.maxBars then return end
 
+    -- Resolve textures once for all new bars
+    local b = MSUF_DB and MSUF_DB.bars or {}
+    local fgPath = CP_ResolveTexture(b.classPowerTexture)
+    local bgKey  = b.classPowerBgTexture
+    local bgPath
+    if bgKey and bgKey ~= "" then
+        local resolve = _G.MSUF_ResolveStatusbarTextureKey
+        bgPath = (type(resolve) == "function" and resolve(bgKey)) or fgPath
+    else
+        bgPath = fgPath
+    end
+
     for i = CP.maxBars + 1, count do
         local bar = CreateFrame("StatusBar", nil, CP.container)
-        -- Flat texture for small segments — bar textures with gradients
-        -- make colors appear washed out / grayish on 4px-high bars.
-        bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+        bar:SetStatusBarTexture(fgPath)
         bar:SetMinMaxValues(0, 1)
         bar:SetValue(0)
         bar:Hide()
 
         local bg = bar:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints(bar)
-        bg:SetTexture("Interface\\Buttons\\WHITE8x8")
+        bg:SetTexture(bgPath)
         bg:SetVertexColor(0, 0, 0, 0.3)
         bar._bg = bg
 
@@ -435,6 +792,61 @@ local function CP_ApplyFont()
     end
 end
 
+-- ============================================================================
+-- Cached alpha values (resolved once in FullRefresh, used in hot paths)
+-- ============================================================================
+local _filledAlpha = 1.0
+local _emptyAlpha  = 0.3
+
+-- ============================================================================
+-- Auto-Hide: visibility check after each update (OOC / Full / Empty)
+-- Zero overhead when all three are disabled (early-out on first check).
+-- ============================================================================
+local _autoHideActive = false  -- true if any auto-hide option is enabled
+
+local function CP_CheckAutoHide(cur, maxP)
+    if not _autoHideActive or not CP.visible then return end
+    if not CP.container then return end
+
+    local b = MSUF_DB and MSUF_DB.bars or {}
+
+    -- OOC: hide when out of combat
+    if b.classPowerHideOOC and not InCombatLockdown() then
+        CP.container:SetAlpha(0)
+        return
+    end
+
+    -- Full: hide when all resources are at max
+    if b.classPowerHideWhenFull and cur ~= nil and maxP ~= nil then
+        -- Only check with non-secret values
+        if NotSecret(cur) and type(cur) == "number" and type(maxP) == "number" then
+            if cur >= maxP and maxP > 0 then
+                CP.container:SetAlpha(0)
+                return
+            end
+        end
+    end
+
+    -- Empty: hide when zero resources
+    if b.classPowerHideWhenEmpty and cur ~= nil then
+        if NotSecret(cur) and type(cur) == "number" then
+            if cur <= 0 then
+                CP.container:SetAlpha(0)
+                return
+            end
+        end
+    end
+
+    -- Visible: restore alpha
+    CP.container:SetAlpha(1)
+end
+
+-- Spell tracker auto-hide: uses CP.spStacks (always non-secret)
+local function CP_CheckAutoHide_SpellTracker()
+    if not _autoHideActive or not CP.visible then return end
+    CP_CheckAutoHide(CP.spStacks, CP.spMaxStacks)
+end
+
 local function CP_Layout(playerFrame, maxPower, height)
     if not CP.container or maxPower <= 0 then return end
 
@@ -446,31 +858,45 @@ local function CP_Layout(playerFrame, maxPower, height)
     if tickW < 0 then tickW = 0 elseif tickW > 4 then tickW = 4 end
 
     -- User-configurable dimensions & position.
-    -- Width mode: "player" = match player frame, "cooldown" = match ECV, "custom" = DB value.
+    -- Width mode: "player" = match player frame, "cooldown"/"utility"/"tracked_buffs" = CDM, "custom" = DB value.
     local widthMode = b.classPowerWidthMode or "player"
     local userW
 
-    if widthMode == "cooldown" then
-        -- Match Essential Cooldown Viewer width (BetterCooldownManager).
-        local ecv = _G["EssentialCooldownViewer"]
-        if ecv and ecv.GetWidth then
-            userW = math_floor(ecv:GetWidth() + 0.5)
+    -- CDM frame lookup (file-level CDM_FRAMES table)
+    local cdmName = CDM_FRAMES[widthMode]
+    if cdmName then
+        local cdmFrame = _G[cdmName]
+        -- Only read width when CDM is visible (Sensei pattern); hidden frames may return stale/0.
+        if cdmFrame and cdmFrame.IsShown and cdmFrame:IsShown() and cdmFrame.GetWidth then
+            userW = math_floor(cdmFrame:GetWidth() * CDM_WIDTH_SCALE + 0.5)
         end
         if not userW or userW < 30 then
-            -- Fallback to player frame if ECV not available.
-            local playerConf = MSUF_DB and MSUF_DB.player
-            userW = ((playerConf and tonumber(playerConf.width)) or 275) - 4
+            -- Fallback: actual player frame width (runtime) → DB → 275.
+            userW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
+            if userW < 30 then
+                local playerConf = MSUF_DB and MSUF_DB.player
+                userW = ((playerConf and tonumber(playerConf.width)) or 275)
+            end
+            userW = userW - 4
         end
     elseif widthMode == "custom" then
         userW = tonumber(b.classPowerWidth) or 0
         if userW < 30 then
-            local playerConf = MSUF_DB and MSUF_DB.player
-            userW = ((playerConf and tonumber(playerConf.width)) or 275) - 4
+            userW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
+            if userW < 30 then
+                local playerConf = MSUF_DB and MSUF_DB.player
+                userW = ((playerConf and tonumber(playerConf.width)) or 275)
+            end
+            userW = userW - 4
         end
     else
-        -- "player" (default): deterministic from DB (Unhalted approach).
-        local playerConf = MSUF_DB and MSUF_DB.player
-        userW = ((playerConf and tonumber(playerConf.width)) or 275) - 4
+        -- "player" (default): actual frame width (runtime), DB fallback.
+        userW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
+        if userW < 30 then
+            local playerConf = MSUF_DB and MSUF_DB.player
+            userW = ((playerConf and tonumber(playerConf.width)) or 275)
+        end
+        userW = userW - 4
     end
 
     local oX = tonumber(b.classPowerOffsetX) or 0
@@ -522,19 +948,39 @@ local function CP_Layout(playerFrame, maxPower, height)
 
     local frameW = userW
 
-    -- Bar width: subtract total tick space, divide evenly.
+    -- Gap between pips (pixels, 0 = no gap — only tick separators)
+    local gap = tonumber(b.classPowerGap) or 0
+    if gap < 0 then gap = 0 elseif gap > 8 then gap = 8 end
+    local snapGap = (gap > 0 and type(snap) == "function") and snap(CP.container, gap) or gap
+
+    -- Fill reverse: bars fill right-to-left
+    local fillReverse = (b.classPowerFillReverse == true)
+
+    -- Bar width: subtract total tick + gap space, divide evenly.
     -- All values pixel-snapped via MSUF_Snap to avoid subpixel bleed.
     local numTicks = maxPower - 1
     local snapTickW = (tickW > 0 and type(snap) == "function") and snap(CP.container, tickW) or tickW
-    local totalTickW = numTicks * snapTickW
-    local totalBarSpace = frameW - totalTickW
+    local totalSepW = numTicks * (snapTickW + snapGap)
+    local totalBarSpace = frameW - totalSepW
     local barW = math_floor(totalBarSpace / maxPower)
 
     -- BG alpha from config
     local bgA = tonumber(b.classPowerBgAlpha) or 0.3
     CP.bgTex:SetVertexColor(0, 0, 0, bgA)
 
+    -- Cache filled/empty alpha for hot paths (read once per layout, not per update)
+    _filledAlpha = tonumber(b.classPowerFilledAlpha) or 1.0
+    _emptyAlpha  = tonumber(b.classPowerEmptyAlpha)  or 0.3
+    if _filledAlpha < 0 then _filledAlpha = 0 elseif _filledAlpha > 1 then _filledAlpha = 1 end
+    if _emptyAlpha  < 0 then _emptyAlpha  = 0 elseif _emptyAlpha  > 1 then _emptyAlpha  = 1 end
+
+    -- Cache auto-hide state (avoid DB lookup in hot path)
+    _autoHideActive = (b.classPowerHideOOC == true)
+                   or (b.classPowerHideWhenFull == true)
+                   or (b.classPowerHideWhenEmpty == true)
+
     -- Layout individual bars (pixel-snapped positions)
+    local stepW = barW + snapTickW + snapGap  -- per-bar stride
     local xPos = 0
     for i = 1, maxPower do
         local bar = CP.bars[i]
@@ -542,11 +988,15 @@ local function CP_Layout(playerFrame, maxPower, height)
             bar:ClearAllPoints()
             -- Last bar: stretch to exactly fill remaining space (absorbs rounding remainder)
             local thisW = (i == maxPower) and (frameW - xPos) or barW
-            bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", xPos, 0)
+            if fillReverse then
+                bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -xPos, 0)
+            else
+                bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", xPos, 0)
+            end
             bar:SetSize(thisW, h)
             bar._bg:SetVertexColor(0, 0, 0, bgA)
             bar:Show()
-            xPos = xPos + thisW + snapTickW
+            xPos = xPos + thisW + snapTickW + snapGap
         end
     end
 
@@ -557,18 +1007,23 @@ local function CP_Layout(playerFrame, maxPower, height)
         if CP.bars[i] then CP.bars[i]:Hide() end
     end
 
-    -- Tick separators (between bars, pixel-snapped)
+    -- Tick separators (between bars, pixel-snapped, centered in gap+tick space)
     if snapTickW > 0 then
-        local tickX = barW  -- first tick after first bar
+        local tickX = barW + math_floor(snapGap / 2)  -- first tick after first bar + half gap
+        local tickStride = barW + snapTickW + snapGap
         for i = 1, numTicks do
             local tick = CP.ticks[i]
             if tick then
                 tick:ClearAllPoints()
-                tick:SetPoint("TOPLEFT", CP.container, "TOPLEFT", tickX, 0)
+                if fillReverse then
+                    tick:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -(tickX), 0)
+                else
+                    tick:SetPoint("TOPLEFT", CP.container, "TOPLEFT", tickX, 0)
+                end
                 tick:SetSize(snapTickW, h)
                 tick:Show()
             end
-            tickX = tickX + snapTickW + barW
+            tickX = tickX + tickStride
         end
     end
     -- Hide excess / all ticks when tickW == 0
@@ -661,6 +1116,7 @@ local function CP_UpdateValues(powerType, maxPower)
         if bar then
             local isFilled = (i <= cur)
             bar:SetValue(isFilled and 1 or 0)
+            bar:SetAlpha(isFilled and _filledAlpha or _emptyAlpha)
 
             local isCharged = showCharged and _chargedMap and _chargedMap[i]
 
@@ -690,12 +1146,31 @@ local function CP_UpdateValues(powerType, maxPower)
         local showText = MSUF_DB and MSUF_DB.bars
             and (MSUF_DB.bars.classPowerShowText == true)
         if showText and cur > 0 then
-            txt:SetText(cur)
+            -- Warlock: append "*" during shard generator cast
+            if CP.wlPredicting then
+                txt:SetText(cur .. "*")
+            else
+                txt:SetText(cur)
+            end
             txt:Show()
+            -- Warlock: low shard warning (text turns red below threshold)
+            if PLAYER_CLASS == "WARLOCK" then
+                local spec = GetSpec and GetSpec()
+                local threshold = spec and WL_LOW_THRESHOLD[spec]
+                if threshold and cur < threshold and cur > 0 then
+                    txt:SetTextColor(1, 0.2, 0.2, 1)
+                else
+                    local tR, tG, tB = ResolveClassPowerColor("RESOURCE_TEXT")
+                    txt:SetTextColor(tR or 1, tG or 1, tB or 1, 1)
+                end
+            end
         else
             txt:Hide()
         end
     end
+
+    -- Auto-hide check
+    CP_CheckAutoHide(cur, maxPower)
 end
 
 -- Legacy color-only refresh (called from FullRefresh for initial setup)
@@ -706,18 +1181,1094 @@ local function CP_ApplyColors(powerType)
 end
 
 local function CP_RefreshTexture()
-    -- Class power segments always use flat texture for crisp colors.
-    -- (User's bar texture with gradients makes small 4px bars look grayish.)
+    local b = MSUF_DB and MSUF_DB.bars or {}
+    local fgKey = b.classPowerTexture     -- nil/empty = follow global bar texture
+    local bgKey = b.classPowerBgTexture   -- nil/empty = follow foreground
+
+    local fgPath = CP_ResolveTexture(fgKey)
+    local bgPath
+    if bgKey and bgKey ~= "" then
+        local resolve = _G.MSUF_ResolveStatusbarTextureKey
+        bgPath = (type(resolve) == "function" and resolve(bgKey)) or fgPath
+    else
+        bgPath = fgPath
+    end
+
     for i = 1, CP.maxBars do
         local bar = CP.bars[i]
-        if bar then bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8") end
+        if bar then
+            bar:SetStatusBarTexture(fgPath)
+            if bar._bg then bar._bg:SetTexture(bgPath) end
+        end
+    end
+    -- Container background
+    if CP.bgTex then CP.bgTex:SetTexture(bgPath) end
+end
+
+-- ============================================================================
+-- MODE_FRACTIONAL: Destruction Warlock — partial Soul Shard fill (oUF pattern)
+-- UnitPower(unit, type, true) / UnitPowerDisplayMod(type) gives e.g. 3.7
+-- ============================================================================
+local function CP_UpdateValues_Fractional(powerType, maxPower)
+    if maxPower <= 0 then return end
+
+    -- Raw fractional value (3rd arg = true → unmodified)
+    local rawCur = UnitPower("player", powerType, true)
+    if not NotSecret(rawCur) then
+        -- Fallback: show all filled
+        for i = 1, maxPower do
+            local bar = CP.bars[i]
+            if bar then bar:SetValue(1) end
+        end
+        if CP.text then CP.text:Hide() end
+        return
+    end
+    rawCur = tonumber(rawCur) or 0
+
+    local mod = UnitPowerDisplayMod and UnitPowerDisplayMod(powerType) or 1
+    if type(mod) ~= "number" or mod <= 0 then mod = 1 end
+    local fractional = rawCur / mod  -- e.g. 3.7
+
+    -- Resolve color
+    local colorByType = true
+    if MSUF_DB and MSUF_DB.bars then
+        colorByType = (MSUF_DB.bars.classPowerColorByType ~= false)
+    end
+    local baseR, baseG, baseB
+    if colorByType then
+        baseR, baseG, baseB = ResolveClassPowerColor(powerType)
+    else
+        baseR, baseG, baseB = 1, 1, 1
+    end
+
+    local bgA = (MSUF_DB and MSUF_DB.bars and tonumber(MSUF_DB.bars.classPowerBgAlpha)) or 0.3
+
+    -- Per-bar fill: full bars + partial current bar
+    local fullBars = math_floor(fractional)
+    local partial  = fractional - fullBars  -- 0.0 – 0.999
+
+    for i = 1, maxPower do
+        local bar = CP.bars[i]
+        if bar then
+            if i <= fullBars then
+                bar:SetValue(1)
+                bar:SetAlpha(_filledAlpha)
+            elseif i == fullBars + 1 and partial > 0.001 then
+                bar:SetValue(partial)
+                bar:SetAlpha(_filledAlpha)
+            else
+                bar:SetValue(0)
+                bar:SetAlpha(_emptyAlpha)
+            end
+            bar:SetStatusBarColor(baseR, baseG, baseB, 1)
+            bar._bg:SetVertexColor(0, 0, 0, bgA)
+        end
+    end
+
+    -- Text: show fractional value (e.g. "3.7"), prediction "*", low shard warning
+    local txt = CP.text
+    if txt then
+        local showText = MSUF_DB and MSUF_DB.bars and (MSUF_DB.bars.classPowerShowText == true)
+        if showText then
+            local displayVal
+            if partial > 0.001 then
+                displayVal = string_format("%.1f", fractional)
+            else
+                displayVal = tostring(fullBars)
+            end
+            -- Append "*" during shard generator cast
+            if CP.wlPredicting then
+                displayVal = displayVal .. "*"
+            end
+            txt:SetText(displayVal)
+            txt:Show()
+            -- Low shard warning: text turns red below spec threshold
+            local spec = GetSpec and GetSpec()
+            local threshold = spec and WL_LOW_THRESHOLD[spec]
+            if threshold and fractional < threshold and fractional > 0 then
+                txt:SetTextColor(1, 0.2, 0.2, 1)
+            else
+                local tR, tG, tB = ResolveClassPowerColor("RESOURCE_TEXT")
+                txt:SetTextColor(tR or 1, tG or 1, tB or 1, 1)
+            end
+        else
+            txt:Hide()
+        end
+    end
+
+    -- Auto-hide check (use integer shard count for full/empty)
+    CP_CheckAutoHide(fullBars, maxPower)
+end
+
+-- ============================================================================
+-- MODE_RUNE_CD: Death Knight — per-rune cooldown animation (oUF pattern)
+-- Each rune bar animates its fill via OnUpdate when recharging.
+-- Sort order: "asc" = ready first, "desc" = depleted first.
+-- ============================================================================
+
+-- Sort functions (oUF pattern, direct == on booleans is safe)
+local function _runeAscSort(a, b)
+    local aStart, _, aReady = GetRuneCooldown(a)
+    local bStart, _, bReady = GetRuneCooldown(b)
+    if aReady ~= bReady then
+        return aReady  -- true sorts before false
+    elseif aStart ~= bStart then
+        return (aStart or 0) < (bStart or 0)
+    else
+        return a < b
+    end
+end
+
+local function _runeDescSort(a, b)
+    local aStart, _, aReady = GetRuneCooldown(a)
+    local bStart, _, bReady = GetRuneCooldown(b)
+    if aReady ~= bReady then
+        return bReady
+    elseif aStart ~= bStart then
+        return (aStart or 0) > (bStart or 0)
+    else
+        return a > b
+    end
+end
+
+-- Per-rune OnUpdate handler (only set on recharging runes)
+local function _runeBarOnUpdate(bar, elapsed)
+    local dur = bar._runeDuration + elapsed
+    bar._runeDuration = dur
+    bar:SetValue(dur)
+end
+
+local function CP_UpdateValues_RuneCD(powerType, maxPower)
+    if maxPower <= 0 then return end
+
+    -- Sort the rune map (oUF pattern)
+    local b = MSUF_DB and MSUF_DB.bars or {}
+    local sortOrder = b.runeSortOrder
+    if sortOrder == "asc" then
+        table_sort(_runeMap, _runeAscSort)
+        _runeHasSortOrder = true
+    elseif sortOrder == "desc" then
+        table_sort(_runeMap, _runeDescSort)
+        _runeHasSortOrder = true
+    elseif _runeHasSortOrder then
+        -- Reset to natural order
+        for i = 1, 6 do _runeMap[i] = i end
+        _runeHasSortOrder = false
+    end
+
+    -- Resolve color
+    local colorByType = true
+    if b then colorByType = (b.classPowerColorByType ~= false) end
+    local baseR, baseG, baseB
+    if colorByType then
+        baseR, baseG, baseB = ResolveClassPowerColor(powerType)
+    else
+        baseR, baseG, baseB = 1, 1, 1
+    end
+    local bgA = tonumber(b.classPowerBgAlpha) or 0.3
+
+    local now = GetTime()
+    local readyCount = 0
+
+    for displayIdx = 1, maxPower do
+        local runeID = _runeMap[displayIdx]
+        local bar = CP.bars[displayIdx]
+        if not bar then break end
+
+        if UnitHasVehicleUI and UnitHasVehicleUI("player") then
+            bar:Hide()
+        else
+            local start, duration, runeReady = GetRuneCooldown(runeID)
+
+            if runeReady then
+                -- Fully charged: show full, no OnUpdate
+                bar:SetMinMaxValues(0, 1)
+                bar:SetValue(1)
+                bar:SetScript("OnUpdate", nil)
+                bar._runeDuration = nil
+                bar:SetAlpha(_filledAlpha)
+                readyCount = readyCount + 1
+            elseif start and duration and duration > 0 then
+                -- Recharging: animate fill via OnUpdate
+                bar._runeDuration = now - start
+                bar:SetMinMaxValues(0, duration)
+                bar:SetValue(bar._runeDuration)
+                bar:SetScript("OnUpdate", _runeBarOnUpdate)
+                bar:SetAlpha(_filledAlpha)
+            else
+                -- Unknown state: show empty
+                bar:SetMinMaxValues(0, 1)
+                bar:SetValue(0)
+                bar:SetScript("OnUpdate", nil)
+                bar._runeDuration = nil
+                bar:SetAlpha(_emptyAlpha)
+            end
+
+            bar:SetStatusBarColor(baseR, baseG, baseB, 1)
+            bar._bg:SetVertexColor(0, 0, 0, bgA)
+            bar:Show()
+        end
+    end
+
+    -- Text: show ready count
+    local txt = CP.text
+    if txt then
+        local showText = MSUF_DB and MSUF_DB.bars and (MSUF_DB.bars.classPowerShowText == true)
+        if showText and readyCount > 0 then
+            txt:SetText(readyCount)
+            txt:Show()
+        else
+            txt:Hide()
+        end
+    end
+
+    -- Auto-hide check
+    CP_CheckAutoHide(readyCount, maxPower)
+end
+
+-- ============================================================================
+-- MODE_AURA_SEGMENTED: Enhancement Shaman — Maelstrom Weapon stacks (oUF)
+--                      DH Vengeance — Soul Fragments (C_Spell.GetSpellCastCount)
+-- SECRET-SAFE (Vengeance): GetSpellCastCount returns secret in 12.0.
+--   Trick: SetMinMaxValues(i-1, i) + SetValue(cur) per bar →
+--   C-side StatusBar does the range check, zero Lua comparisons on cur.
+--   Text: SetFormattedText("%d / %d", cur, mx) → C-side formats secret.
+-- ============================================================================
+local function CP_UpdateValues_AuraSegmented(powerType, maxPower)
+    if maxPower <= 0 then return end
+
+    -- Resolve color
+    local colorByType = true
+    local b = MSUF_DB and MSUF_DB.bars or {}
+    if b then colorByType = (b.classPowerColorByType ~= false) end
+    local baseR, baseG, baseB
+    if colorByType then
+        baseR, baseG, baseB = ResolveClassPowerColor(powerType)
+    else
+        baseR, baseG, baseB = 1, 1, 1
+    end
+    local bgA = tonumber(b.classPowerBgAlpha) or 0.3
+
+    if powerType == "SOUL_FRAGMENTS_VENG" then
+        -- DH Vengeance: C_Spell.GetSpellCastCount → SECRET number in 12.0
+        -- Zero Lua arithmetic on cur. C-side StatusBar handles range checks.
+        -- Alpha: can't distinguish filled/empty in Lua for secrets → all _filledAlpha.
+        local getCastCount = C_Spell and C_Spell.GetSpellCastCount
+        local cur = getCastCount and getCastCount(SPELL_SOUL_CLEAVE) or 0
+
+        for i = 1, maxPower do
+            local bar = CP.bars[i]
+            if bar then
+                -- C-side: if cur >= i → full, if cur < i-1 → empty
+                bar:SetMinMaxValues(i - 1, i)
+                bar:SetValue(cur)
+                bar:SetAlpha(_filledAlpha)
+                bar:SetStatusBarColor(baseR, baseG, baseB, 1)
+                bar._bg:SetVertexColor(0, 0, 0, bgA)
+            end
+        end
+
+        -- Text: SetFormattedText passes secret values to C-side
+        local txt = CP.text
+        if txt then
+            local showText = b.classPowerShowText == true
+            if showText then
+                txt:SetFormattedText("%d / %d", cur, maxPower)
+                txt:Show()
+            else
+                txt:Hide()
+            end
+        end
+        -- Vengeance: no auto-hide for secret cur (can't compare)
+    else
+        -- Enhancement Shaman: Maelstrom Weapon (applications is NOT secret)
+        local cur = 0
+        if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+            local info = C_UnitAuras.GetPlayerAuraBySpellID(SPELL_MAELSTROM_WEAPON)
+            if info and info.applications then
+                cur = info.applications
+            end
+        end
+
+        for i = 1, maxPower do
+            local bar = CP.bars[i]
+            if bar then
+                local isFilled = (i <= cur)
+                bar:SetMinMaxValues(0, 1)
+                bar:SetValue(isFilled and 1 or 0)
+                bar:SetAlpha(isFilled and _filledAlpha or _emptyAlpha)
+                bar:SetStatusBarColor(baseR, baseG, baseB, 1)
+                bar._bg:SetVertexColor(0, 0, 0, bgA)
+            end
+        end
+
+        -- Text
+        local txt = CP.text
+        if txt then
+            local showText = b.classPowerShowText == true
+            if showText and cur > 0 then
+                txt:SetText(cur)
+                txt:Show()
+            else
+                txt:Hide()
+            end
+        end
+
+        -- Auto-hide check
+        CP_CheckAutoHide(cur, maxPower)
     end
 end
 
 -- ============================================================================
+-- MODE_AURA_SINGLE: DH Devourer — Soul Fragments (oUF pattern)
+-- Normalized to 0-1 in a single bar. Dual color: normal vs Void Metamorphosis.
+-- Colors configurable via Colors menu (SOUL_FRAGMENTS / SOUL_FRAGMENTS_META).
+-- ============================================================================
+
+-- Resolve DH color from DB override → hardcoded default
+local function ResolveDHColor(isVoidMeta)
+    local ov = MSUF_DB and MSUF_DB.general and MSUF_DB.general.classPowerColorOverrides
+    if type(ov) == "table" then
+        local token = isVoidMeta and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS"
+        local c = ov[token]
+        if type(c) == "table" then
+            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                return r, g, b
+            end
+        end
+    end
+    -- Hardcoded defaults (oUF-sourced)
+    if isVoidMeta then
+        return 0.60, 0.20, 0.93  -- Void Meta purple
+    else
+        return 0.00, 0.80, 0.00  -- Normal green
+    end
+end
+
+local function CP_UpdateValues_AuraSingle(powerType, maxPower)
+    -- maxPower is always 1 for this mode (single normalized bar)
+    local cur = 0
+
+    if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+        local inMeta = C_UnitAuras.GetPlayerAuraBySpellID(SPELL_VOID_METAMORPHOSIS)
+        if inMeta then
+            -- Void Metamorphosis: track Silence the Whispers
+            local whispers = C_UnitAuras.GetPlayerAuraBySpellID(SPELL_SILENCE_THE_WHISPERS)
+            if whispers and whispers.applications then
+                local cost = (type(GetCollapsingStarCost) == "function") and GetCollapsingStarCost() or 1
+                if cost > 0 then
+                    cur = whispers.applications / cost
+                end
+            end
+        else
+            -- Normal: track Dark Heart
+            local darkHeart = C_UnitAuras.GetPlayerAuraBySpellID(SPELL_DARK_HEART)
+            if darkHeart and darkHeart.applications then
+                local maxApp = 1
+                if C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications then
+                    maxApp = C_Spell.GetSpellMaxCumulativeAuraApplications(SPELL_DARK_HEART) or 1
+                end
+                if maxApp > 0 then
+                    cur = darkHeart.applications / maxApp
+                end
+            end
+        end
+    end
+    if cur > 1 then cur = 1 end
+
+    -- Color: meta vs normal (configurable via Colors menu)
+    local colorByType = true
+    local b = MSUF_DB and MSUF_DB.bars or {}
+    if b then colorByType = (b.classPowerColorByType ~= false) end
+
+    local r, g, bl
+    if colorByType then
+        local inMeta = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
+            and C_UnitAuras.GetPlayerAuraBySpellID(SPELL_VOID_METAMORPHOSIS)
+        r, g, bl = ResolveDHColor(inMeta and true or false)
+    else
+        r, g, bl = 1, 1, 1
+    end
+
+    local bgA = tonumber(b.classPowerBgAlpha) or 0.3
+    local bar = CP.bars[1]
+    if bar then
+        bar:SetMinMaxValues(0, 1)
+        bar:SetValue(cur)
+        bar:SetAlpha(cur > 0.01 and _filledAlpha or _emptyAlpha)
+        bar:SetStatusBarColor(r, g, bl, 1)
+        bar._bg:SetVertexColor(0, 0, 0, bgA)
+    end
+
+    -- Hide bars 2+ (only 1 bar used)
+    for i = 2, CP.maxBars do
+        if CP.bars[i] then CP.bars[i]:Hide() end
+    end
+    -- Hide ticks (single bar = no separators)
+    for i = 1, #CP.ticks do
+        if CP.ticks[i] then CP.ticks[i]:Hide() end
+    end
+
+    -- Text: show as percentage
+    local txt = CP.text
+    if txt then
+        local showText = b.classPowerShowText == true
+        if showText and cur > 0.01 then
+            txt:SetText(math_floor(cur * 100 + 0.5) .. "%")
+            txt:Show()
+        else
+            txt:Hide()
+        end
+    end
+
+    -- Auto-hide: treat cur>0 as "has resource", 1.0 as "full"
+    local intCur = (cur > 0.01) and 1 or 0
+    CP_CheckAutoHide(intCur, 1)
+end
+
+-- ============================================================================
+-- MODE_CONTINUOUS: Balance Druid — Astral Power bar + Eclipse colors + prediction
+-- MCR-sourced architecture: single continuous bar, eclipse-aware coloring,
+-- cast prediction overlay texture on bars[1].
+-- SECRET-SAFE: UnitPower(LunarPower) may be secret → passed to SetValue
+-- directly (C-side handles secret numbers). No Lua arithmetic on cur.
+-- ============================================================================
+
+-- Resolve eclipse bar color from DB override → MCR defaults
+local function ResolveEclipseColor(token)
+    local ov = MSUF_DB and MSUF_DB.general and MSUF_DB.general.classPowerColorOverrides
+    if type(ov) == "table" then
+        local c = token and ov[token]
+        if type(c) == "table" then
+            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                return r, g, b
+            end
+        end
+    end
+    -- MCR/Shrom defaults
+    if token == "ECLIPSE_SOLAR" then return BAL_CLR_SOLAR[1], BAL_CLR_SOLAR[2], BAL_CLR_SOLAR[3] end
+    if token == "ECLIPSE_LUNAR" then return BAL_CLR_LUNAR[1], BAL_CLR_LUNAR[2], BAL_CLR_LUNAR[3] end
+    if token == "ECLIPSE_CA"    then return BAL_CLR_CA[1], BAL_CLR_CA[2], BAL_CLR_CA[3] end
+    return nil, nil, nil
+end
+
+-- Forward declaration (used by RefreshBalanceEclipses before definition)
+local ComputePredictedAP
+
+-- Scan active eclipse auras and update expiry timestamps + bar color
+local function RefreshBalanceEclipses()
+    local getAura = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
+    if not getAura then return end
+
+    CP.apSolarExp = 0
+    CP.apLunarExp = 0
+    CP.apCAExp    = 0
+    CP.apIncExp   = 0
+
+    for auraID, kind in pairs(ECLIPSE_AURAS) do
+        local aura = getAura(auraID)
+        if aura and aura.expirationTime then
+            local exp = aura.expirationTime
+            if kind == "SOLAR" then
+                CP.apSolarExp = exp
+            elseif kind == "LUNAR" then
+                CP.apLunarExp = exp
+            elseif kind == "CA" then
+                CP.apCAExp = exp
+            elseif kind == "INC" then
+                CP.apIncExp = exp
+            end
+        end
+    end
+
+    -- Determine bar color from active eclipse state
+    local now = GetTime()
+    local inCA  = CP.apCAExp > now
+    local inInc = CP.apIncExp > now
+    if inCA or inInc then
+        local r, g, b = ResolveEclipseColor("ECLIPSE_CA")
+        CP.apEclipseColor = r and { r, g, b } or BAL_CLR_CA
+    elseif CP.apSolarExp > now then
+        local r, g, b = ResolveEclipseColor("ECLIPSE_SOLAR")
+        CP.apEclipseColor = r and { r, g, b } or BAL_CLR_SOLAR
+    elseif CP.apLunarExp > now then
+        local r, g, b = ResolveEclipseColor("ECLIPSE_LUNAR")
+        CP.apEclipseColor = r and { r, g, b } or BAL_CLR_LUNAR
+    else
+        CP.apEclipseColor = nil  -- use default active color
+    end
+
+    -- Recompute prediction if currently casting
+    if CP.apCastSpell then
+        CP.apPredAmt = ComputePredictedAP(CP.apCastSpell)
+    end
+end
+
+-- Compute predicted AP for a given spell, accounting for Nature's Balance + Eclipse
+ComputePredictedAP = function(spellID)
+    if not spellID then return 0 end
+    local base = AP_GENERATORS[spellID]
+    if not base then return 0 end
+
+    -- Nature's Balance: +2 to Wrath and Starfire
+    if spellID == SPELL_AP_WRATH or spellID == SPELL_AP_STARFIRE then
+        local known = C_SpellBook and C_SpellBook.IsSpellKnown
+        if known and known(SPELL_NATURES_BALANCE) then
+            base = base + 2
+        end
+        -- Eclipse multiplier: ×1.4 during matching eclipse or CA/Inc
+        local now = GetTime()
+        local inCA  = CP.apCAExp > now
+        local inInc = CP.apIncExp > now
+        local inEclipse = false
+        if spellID == SPELL_AP_WRATH then
+            inEclipse = (CP.apSolarExp > now) or inCA or inInc
+        else
+            inEclipse = (CP.apLunarExp > now) or inCA or inInc
+        end
+        if inEclipse then
+            base = base * 1.4
+        end
+    end
+    return base
+end
+
+-- Ensure prediction overlay texture exists on bars[1] (lazy, created once)
+local function EnsurePredictionOverlay()
+    if CP.apPredTex then return end
+    local bar = CP.bars[1]
+    if not bar then return end
+    local tex = bar:CreateTexture(nil, "ARTWORK", nil, 1)
+    local getBarTex = _G.MSUF_GetBarTexture
+    tex:SetTexture(getBarTex and getBarTex() or "Interface\\Buttons\\WHITE8x8")
+    tex:SetVertexColor(1, 1, 1, BAL_PRED_ALPHA)
+    tex:SetHeight(1)
+    tex:Hide()
+    CP.apPredTex = tex
+end
+
+-- Update prediction overlay position & size
+-- Anchored to StatusBarTexture RIGHT edge (secret-safe — no cur arithmetic)
+local function UpdatePredictionOverlay()
+    local tex = CP.apPredTex
+    if not tex then return end
+
+    local bar = CP.bars[1]
+    if not bar then tex:Hide(); return end
+
+    if CP.apPredAmt <= 0 or not CP.apCastSpell then
+        tex:Hide()
+        return
+    end
+
+    -- mx (UnitPowerMax) is NOT secret — safe for arithmetic
+    local mx = UnitPowerMax("player", PT.LunarPower) or 100
+    if mx <= 0 then mx = 100 end
+    local predFrac = CP.apPredAmt / mx
+    if predFrac > 1 then predFrac = 1 end
+
+    local barW = bar:GetWidth()
+    local barH = bar:GetHeight()
+    if barW <= 0 or barH <= 0 then tex:Hide(); return end
+
+    local predW = barW * predFrac
+    if predW < 1 then tex:Hide(); return end
+
+    -- Use eclipse color if active, else default active color
+    local ec = CP.apEclipseColor
+    if ec then
+        tex:SetVertexColor(ec[1], ec[2], ec[3], BAL_PRED_ALPHA)
+    else
+        local baseR, baseG, baseB = ResolveClassPowerColor(PT.LunarPower)
+        tex:SetVertexColor(baseR, baseG, baseB, BAL_PRED_ALPHA)
+    end
+
+    -- Anchor to the fill texture's right edge (secret-safe positioning)
+    tex:ClearAllPoints()
+    tex:SetPoint("LEFT", bar:GetStatusBarTexture(), "RIGHT", 0, 0)
+    tex:SetSize(predW, barH)
+    tex:Show()
+end
+
+local function CP_UpdateValues_Continuous(powerType, maxPower)
+    -- SECRET-SAFE: cur may be a secret number in 12.0
+    -- No arithmetic, no comparisons, no string concat on cur allowed
+    local cur = UnitPower("player", powerType)
+    local mx  = UnitPowerMax("player", powerType) or 100
+    if mx <= 0 then mx = 100 end
+
+    -- Single bar: maxPower is always 1 (one continuous bar)
+    local bar = CP.bars[1]
+    if not bar then return end
+
+    -- Eclipse color override or default active color
+    local ec = CP.apEclipseColor
+    if ec then
+        bar:SetStatusBarColor(ec[1], ec[2], ec[3], 1)
+    else
+        local colorByType = true
+        local b = MSUF_DB and MSUF_DB.bars or {}
+        if b then colorByType = (b.classPowerColorByType ~= false) end
+        if colorByType then
+            local r, g, bl = ResolveClassPowerColor(powerType)
+            bar:SetStatusBarColor(r, g, bl, 1)
+        else
+            bar:SetStatusBarColor(1, 1, 1, 1)
+        end
+    end
+
+    -- Secret-safe: pass values directly to widget, zero Lua arithmetic on cur
+    bar:SetMinMaxValues(0, mx)
+    bar:SetValue(cur)
+    bar:SetAlpha(_filledAlpha)
+    bar:Show()
+
+    local bgA = (MSUF_DB and MSUF_DB.bars and tonumber(MSUF_DB.bars.classPowerBgAlpha)) or 0.3
+    bar._bg:SetVertexColor(0, 0, 0, bgA)
+
+    -- Hide bars 2+ (only 1 bar used)
+    for i = 2, CP.maxBars do
+        local b2 = CP.bars[i]
+        if b2 then b2:Hide() end
+    end
+    -- Hide ticks (single bar = no separators)
+    for i = 1, #CP.ticks do
+        if CP.ticks[i] then CP.ticks[i]:Hide() end
+    end
+
+    -- Text: secret value → SetFormattedText passes through to C-side safely
+    local txt = CP.text
+    if txt then
+        local showText = MSUF_DB and MSUF_DB.bars and (MSUF_DB.bars.classPowerShowText == true)
+        if showText then
+            txt:SetFormattedText("%d / %d", cur, mx)
+            txt:Show()
+        else
+            txt:Hide()
+        end
+    end
+
+    -- Update prediction overlay
+    UpdatePredictionOverlay()
+    if not CP.apPredTex then EnsurePredictionOverlay() end
+
+    -- Auto-hide: cur may be secret → CP_CheckAutoHide handles NotSecret guard
+    CP_CheckAutoHide(cur, mx)
+end
+
+-- ============================================================================
+-- MODE_SPELL_TRACKER: Whirlwind / Tip of the Spear (MCR-sourced)
+-- UNIT_SPELLCAST_SUCCEEDED based stack tracker — no UnitPower, no secret values.
+-- Generators add stacks, spenders consume. Expiry tracked via GetTime().
+-- ============================================================================
+
+local function CP_UpdateValues_SpellTracker(powerType, maxPower)
+    -- Check expiry
+    if CP.spExpires and GetTime() >= CP.spExpires then
+        CP.spStacks = 0
+        CP.spExpires = nil
+    end
+    local cur = CP.spStacks
+    local mx  = CP.spMaxStacks
+    if mx <= 0 then mx = 1 end
+
+    -- Skip-if-same
+    if cur == CP.spCachedQ then return end
+    CP.spCachedQ = cur
+
+    -- Resolve color
+    local colorByType = true
+    local b = MSUF_DB and MSUF_DB.bars or {}
+    if b then colorByType = (b.classPowerColorByType ~= false) end
+    local baseR, baseG, baseB
+    if colorByType then
+        baseR, baseG, baseB = ResolveClassPowerColor(powerType)
+    else
+        baseR, baseG, baseB = 1, 1, 1
+    end
+    local bgA = tonumber(b.classPowerBgAlpha) or 0.3
+
+    for i = 1, mx do
+        local bar = CP.bars[i]
+        if bar then
+            local isFilled = (i <= cur)
+            bar:SetMinMaxValues(0, 1)
+            bar:SetValue(isFilled and 1 or 0)
+            bar:SetAlpha(isFilled and _filledAlpha or _emptyAlpha)
+            bar:SetStatusBarColor(baseR, baseG, baseB, 1)
+            bar._bg:SetVertexColor(0, 0, 0, bgA)
+        end
+    end
+    for i = mx + 1, CP.maxBars do
+        local bar = CP.bars[i]
+        if bar then bar:Hide() end
+    end
+
+    -- Text
+    local txt = CP.text
+    if txt then
+        local showText = b.classPowerShowText == true
+        if showText and cur > 0 then
+            txt:SetText(cur .. " / " .. mx)
+            txt:Show()
+        else
+            txt:Hide()
+        end
+    end
+
+    -- Auto-hide check
+    CP_CheckAutoHide(cur, mx)
+end
+
+-- Whirlwind: on UNIT_SPELLCAST_SUCCEEDED (MCR-sourced)
+local function OnWhirlwindSpellCast(spellID)
+    local known = C_SpellBook and C_SpellBook.IsSpellKnown
+    if not known then return end
+
+    -- Unhinged no-consume window during Bladestorm
+    if known(SPELL_UNHINGED) and WW_BLADESTORMS[spellID] then
+        CP.wwNoCon = GetTime() + 2
+    end
+
+    -- Generator → set to max stacks
+    if WW_GENERATORS[spellID] then
+        -- Thunder Clap / Blast only if Crashing Thunder talented
+        if (spellID == 6343 or spellID == 435222) and not known(SPELL_CRASHING_THUNDER) then
+            return
+        end
+        CP.spStacks = CP.spMaxStacks
+        CP.spExpires = GetTime() + CP.spDuration
+        CP.spCachedQ = -1
+        CP_UpdateValues_SpellTracker(CP.powerType, CP.currentMax)
+        return
+    end
+
+    -- Spender → consume 1
+    if WW_SPENDERS[spellID] then
+        -- Bloodthirst during Unhinged window = no consume
+        if spellID == 23881 and GetTime() < CP.wwNoCon then return end
+        if CP.spStacks > 0 then
+            CP.spStacks = CP.spStacks - 1
+            if CP.spStacks == 0 then CP.spExpires = nil end
+            CP.spCachedQ = -1
+            CP_UpdateValues_SpellTracker(CP.powerType, CP.currentMax)
+        end
+    end
+end
+
+-- Tip of the Spear: on UNIT_SPELLCAST_SUCCEEDED (MCR-sourced)
+local function OnTipOfTheSpearSpellCast(spellID)
+    local known = C_SpellBook and C_SpellBook.IsSpellKnown
+    if not known then return end
+    if not known(SPELL_TIP_OF_THE_SPEAR) then return end
+
+    -- Kill Command → gain 1 (or 2 with Primal Surge)
+    if spellID == SPELL_TIP_KILL_COMMAND then
+        local gain = (known(SPELL_TIP_PRIMAL_SURGE)) and 2 or 1
+        CP.spStacks = math_min(CP.spMaxStacks, CP.spStacks + gain)
+        CP.spExpires = GetTime() + CP.spDuration
+        CP.spCachedQ = -1
+        CP_UpdateValues_SpellTracker(CP.powerType, CP.currentMax)
+        return
+    end
+
+    -- Takedown + Twin Fang → gain 2
+    if spellID == SPELL_TIP_TAKEDOWN and known(SPELL_TIP_TWIN_FANG) then
+        CP.spStacks = math_min(CP.spMaxStacks, CP.spStacks + 2)
+        CP.spExpires = GetTime() + CP.spDuration
+        CP.spCachedQ = -1
+        CP_UpdateValues_SpellTracker(CP.powerType, CP.currentMax)
+        return
+    end
+
+    -- Spender → consume 1
+    if TIP_SPENDERS[spellID] then
+        if CP.spStacks > 0 then
+            CP.spStacks = CP.spStacks - 1
+            if CP.spStacks == 0 then CP.spExpires = nil end
+            CP.spCachedQ = -1
+            CP_UpdateValues_SpellTracker(CP.powerType, CP.currentMax)
+        end
+    end
+end
+
+-- ============================================================================
+-- MODE_TIMER_BAR: Ebon Might — continuous countdown bar (MCR-sourced)
+-- C_UnitAuras.GetPlayerAuraBySpellID(395296).expirationTime based.
+-- Needs OnUpdate for smooth countdown (20fps cap = ~0.01ms overhead).
+-- Secret-safe: expirationTime is NOT secret.
+-- ============================================================================
+
+local function CP_UpdateValues_TimerBar(powerType, maxPower)
+    local getAura = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
+    local aura = getAura and getAura(SPELL_EBON_MIGHT)
+    local remaining = aura and (aura.expirationTime - GetTime()) or 0
+    if remaining < 0 then remaining = 0 end
+    local mx = EBON_MIGHT_MAX_DURATION
+
+    -- Quantize to 0.1s for skip-if-same
+    local qPct = math_floor(remaining * 10 + 0.5)
+    if qPct == CP.tbCachedQ then return end
+    CP.tbCachedQ = qPct
+
+    local pct = remaining / mx
+    if pct > 1 then pct = 1 end
+
+    -- Single continuous bar
+    local bar = CP.bars[1]
+    if not bar then return end
+
+    -- Resolve color
+    local colorByType = true
+    local b = MSUF_DB and MSUF_DB.bars or {}
+    if b then colorByType = (b.classPowerColorByType ~= false) end
+    local r, g, bl
+    if colorByType then
+        r, g, bl = ResolveClassPowerColor(powerType)
+    else
+        r, g, bl = 1, 1, 1
+    end
+    local bgA = tonumber(b.classPowerBgAlpha) or 0.3
+
+    bar:SetStatusBarColor(r, g, bl, 1)
+    bar:SetMinMaxValues(0, 1)
+    bar:SetValue(pct)
+    bar:SetAlpha(remaining > 0 and _filledAlpha or _emptyAlpha)
+    bar:Show()
+    bar._bg:SetVertexColor(0, 0, 0, bgA)
+
+    -- Hide bars 2+
+    for i = 2, CP.maxBars do
+        local b2 = CP.bars[i]
+        if b2 then b2:Hide() end
+    end
+    for i = 1, #CP.ticks do
+        if CP.ticks[i] then CP.ticks[i]:Hide() end
+    end
+
+    -- Text: countdown "12.3s"
+    local txt = CP.text
+    if txt then
+        local showText = b.classPowerShowText == true
+        if showText then
+            txt:SetText(string_format("%.1fs", remaining))
+            txt:Show()
+        else
+            txt:Hide()
+        end
+    end
+
+    -- Auto-hide: treat remaining>0 as "has resource"
+    local intCur = remaining > 0.1 and 1 or 0
+    CP_CheckAutoHide(intCur, 1)
+end
+
+-- Timer bar OnUpdate handler (pre-allocated, zero alloc) — 20fps cap
+local _tbElapsed = 0
+local function TimerBarOnUpdate_Tick(self, dt)
+    _tbElapsed = _tbElapsed + dt
+    if _tbElapsed < 0.05 then return end  -- 20fps cap
+    _tbElapsed = 0
+    CP_UpdateValues_TimerBar(CP.powerType, CP.currentMax)
+end
+
+local function SetTimerBarOnUpdate(on)
+    if not CP.container then return end
+    if on and not CP.tbOUA then
+        CP.tbOUA = true
+        _tbElapsed = 0
+        CP.container:SetScript("OnUpdate", TimerBarOnUpdate_Tick)
+    elseif not on and CP.tbOUA then
+        CP.tbOUA = false
+        CP.container:SetScript("OnUpdate", nil)
+    end
+end
+
+-- ============================================================================
+-- Warlock Shard Prediction: "*" indicator during generator casts
+-- Text turns red when below spec-specific low shard threshold.
+-- EVENT: UNIT_SPELLCAST_START/STOP/FAILED/INTERRUPTED
+-- ============================================================================
+
+-- Called from event handler when warlock starts casting a shard generator
+local function OnWarlockCastStart(spellID)
+    if PLAYER_CLASS ~= "WARLOCK" then return end
+    local spec = GetSpec and GetSpec()
+    local genTable = spec and WL_GENERATORS[spec]
+    if genTable and genTable[spellID] then
+        CP.wlPredicting = true
+        -- Re-render text with "*" indicator
+        local updateFn = MODE_UPDATE_FN and MODE_UPDATE_FN[CP.renderMode]
+        if updateFn then
+            updateFn(CP.powerType, CP.currentMax)
+        end
+    end
+end
+
+-- Called when warlock cast ends (any reason)
+local function OnWarlockCastEnd()
+    if not CP.wlPredicting then return end
+    CP.wlPredicting = false
+    local updateFn = MODE_UPDATE_FN and MODE_UPDATE_FN[CP.renderMode]
+    if updateFn then
+        updateFn(CP.powerType, CP.currentMax)
+    end
+end
+
+-- ============================================================================
+-- Update function dispatch table (set in FullRefresh, called in hot path)
+-- ============================================================================
+local MODE_UPDATE_FN = {
+    [MODE_SEGMENTED]      = CP_UpdateValues,
+    [MODE_FRACTIONAL]     = CP_UpdateValues_Fractional,
+    [MODE_RUNE_CD]        = CP_UpdateValues_RuneCD,
+    [MODE_AURA_SEGMENTED] = CP_UpdateValues_AuraSegmented,
+    [MODE_AURA_SINGLE]    = CP_UpdateValues_AuraSingle,
+    [MODE_CONTINUOUS]     = CP_UpdateValues_Continuous,
+    [MODE_SPELL_TRACKER]  = CP_UpdateValues_SpellTracker,
+    [MODE_TIMER_BAR]      = CP_UpdateValues_TimerBar,
+}
+
+-- Forward declaration (AM defined later; needed by ST_Layout for anchor chain)
+local AM
+
+-- ============================================================================
+-- Stagger Bar — Brewmaster Monk (oUF pattern)
+-- Standalone bar (like AltMana). 3-color threshold system.
+-- Event: UNIT_AURA (Blizzard uses UNIT_AURA for stagger updates)
+-- ============================================================================
+local ST = {
+    bar       = nil,
+    container = nil,
+    bgTex     = nil,
+    visible   = false,
+}
+
+-- Stagger colors (oUF-sourced defaults; overridable via Colors menu)
+local STAGGER_COLOR_DEFAULTS = {
+    { 0.52, 1.00, 0.52 },  -- green  (< 30%)
+    { 1.00, 0.98, 0.72 },  -- yellow (30-60%)
+    { 1.00, 0.42, 0.42 },  -- red    (> 60%)
+}
+
+-- Resolve stagger color from DB override → hardcoded default
+-- tier: 1 = green, 2 = yellow, 3 = red
+local STAGGER_TOKENS = { "STAGGER_GREEN", "STAGGER_YELLOW", "STAGGER_RED" }
+
+local function ResolveStaggerColor(tier)
+    local ov = MSUF_DB and MSUF_DB.general and MSUF_DB.general.classPowerColorOverrides
+    if type(ov) == "table" then
+        local token = STAGGER_TOKENS[tier]
+        local c = token and ov[token]
+        if type(c) == "table" then
+            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                return r, g, b
+            end
+        end
+    end
+    local def = STAGGER_COLOR_DEFAULTS[tier]
+    return def[1], def[2], def[3]
+end
+
+local function ST_Create(playerFrame)
+    if ST.container then return end
+
+    local c = CreateFrame("Frame", "MSUF_StaggerContainer", playerFrame)
+    c:SetFrameLevel(playerFrame:GetFrameLevel() + 2)
+    c:Hide()
+    ST.container = c
+
+    -- Background
+    local bg = c:CreateTexture(nil, "BACKGROUND")
+    bg:SetTexture("Interface\\Buttons\\WHITE8x8")
+    bg:SetAllPoints(c)
+    bg:SetVertexColor(0, 0, 0, 0.4)
+    ST.bgTex = bg
+
+    -- Border (1px black outline via backdrop)
+    local border = CreateFrame("Frame", nil, c, "BackdropTemplate")
+    border:SetPoint("TOPLEFT", c, "TOPLEFT", -1, 1)
+    border:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 1, -1)
+    border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    border:SetBackdropColor(0, 0, 0, 0)
+    border:SetBackdropBorderColor(0, 0, 0, 1)
+    border:SetFrameLevel(c:GetFrameLevel() + 1)
+    ST._border = border
+
+    -- Status bar
+    local getTexture = _G.MSUF_GetBarTexture
+    local bar = CreateFrame("StatusBar", nil, c)
+    bar:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
+    bar:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 0, 0)
+    bar:SetStatusBarTexture(getTexture and getTexture() or "Interface\\Buttons\\WHITE8x8")
+    bar:SetMinMaxValues(0, 100)
+    bar:SetValue(0)
+    bar:SetFrameLevel(c:GetFrameLevel() + 1)
+    ST.bar = bar
+end
+
+local function ST_Layout(playerFrame)
+    if not ST.container then return end
+    local b = MSUF_DB and MSUF_DB.bars or {}
+
+    local h = tonumber(b.staggerHeight) or 4
+    if h < 2 then h = 2 elseif h > 30 then h = 30 end
+    local oY = tonumber(b.staggerOffsetY) or -2
+
+    -- Position: below AltMana if visible, else below playerFrame
+    local anchor = playerFrame
+    if AM and AM.visible and AM.container then
+        anchor = AM.container
+        oY = -2  -- small gap below alt mana
+    end
+
+    ST.container:ClearAllPoints()
+    if anchor == playerFrame then
+        ST.container:SetPoint("TOPLEFT",  playerFrame, "BOTTOMLEFT",   2, oY)
+        ST.container:SetPoint("TOPRIGHT", playerFrame, "BOTTOMRIGHT", -2, oY)
+    else
+        ST.container:SetPoint("TOPLEFT",  anchor, "BOTTOMLEFT",   0, oY)
+        ST.container:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT",  0, oY)
+    end
+    ST.container:SetHeight(h)
+end
+
+local function ST_UpdateValue()
+    if not ST.bar then return end
+
+    local cur = UnitStagger and UnitStagger("player") or 0
+    local mx  = UnitHealthMax("player") or 1
+    if type(cur) ~= "number" then cur = 0 end
+    if type(mx)  ~= "number" or mx <= 0 then mx = 1 end
+
+    ST.bar:SetMinMaxValues(0, mx)
+    ST.bar:SetValue(cur)
+
+    -- 3-color threshold (oUF pattern; colors configurable via Colors menu)
+    local perc = cur / mx
+    local r, g, b
+    if perc >= STAGGER_RED_TRANSITION then
+        r, g, b = ResolveStaggerColor(3)
+    elseif perc > STAGGER_YELLOW_TRANSITION then
+        r, g, b = ResolveStaggerColor(2)
+    else
+        r, g, b = ResolveStaggerColor(1)
+    end
+    ST.bar:SetStatusBarColor(r, g, b, 1)
+end
+
+local function ST_RefreshTexture()
+    if not ST.bar then return end
+    local getTexture = _G.MSUF_GetBarTexture
+    ST.bar:SetStatusBarTexture(getTexture and getTexture() or "Interface\\Buttons\\WHITE8x8")
+end
+-- ============================================================================
 -- AltMana visual: single StatusBar (created lazily on player frame)
 -- ============================================================================
-local AM = {
+AM = {
     bar       = nil,
     container = nil,
     bgTex     = nil,
@@ -848,22 +2399,35 @@ local function FullRefresh()
         end)
     end
 
-    -- Hook Essential Cooldown Viewer resize/visibility (for "cooldown" width mode + anchor mode).
-    if not CP._ecvHooked then
-        local ecv = _G["EssentialCooldownViewer"]
-        if ecv and ecv.HookScript then
-            CP._ecvHooked = true
-            local function _ecvRefresh()
-                local bars = MSUF_DB and MSUF_DB.bars
-                local mode = bars and bars.classPowerWidthMode
-                local anchored = bars and (bars.classPowerAnchorToCooldown == true)
-                if (mode == "cooldown" or anchored) and type(_G.MSUF_ClassPower_Refresh) == "function" then
-                    _G.MSUF_ClassPower_Refresh()
+    -- Hook CDM frames (Essential/Utility/Tracked Buffs) for width-sync + anchor mode.
+    -- Each hook captures its mode as a plain string — direct == compare, no tables, no loops.
+    for i = 1, 3 do
+        local def = CDM_HOOK_DEFS[i]
+        if not CP[def.flag] then
+            local cdm = _G[def.name]
+            if cdm and cdm.HookScript then
+                CP[def.flag] = true
+                local myMode = def.mode  -- captured once, never changes
+                local function _cdmRefresh()
+                    local bars = MSUF_DB and MSUF_DB.bars
+                    -- Class power: refresh if this CDM's mode is active or anchored
+                    if (bars and bars.classPowerWidthMode == myMode)
+                    or (bars and bars.classPowerAnchorToCooldown == true) then
+                        if type(_G.MSUF_ClassPower_Refresh) == "function" then
+                            _G.MSUF_ClassPower_Refresh()
+                        end
+                    end
+                    -- Detached power bar: refresh if its width mode matches
+                    if bars and bars.detachedPowerBarWidthMode == myMode then
+                        if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
+                            _G.MSUF_ApplyPowerBarEmbedLayout_All()
+                        end
+                    end
                 end
+                cdm:HookScript("OnSizeChanged", _cdmRefresh)
+                cdm:HookScript("OnShow", _cdmRefresh)
+                cdm:HookScript("OnHide", _cdmRefresh)
             end
-            ecv:HookScript("OnSizeChanged", _ecvRefresh)
-            ecv:HookScript("OnShow", _ecvRefresh)
-            ecv:HookScript("OnHide", _ecvRefresh)
         end
     end
 
@@ -874,20 +2438,65 @@ local function FullRefresh()
 
     -- ---- ClassPower ----
     local cpEnabled = (b.showClassPower ~= false)
-    local powerType = GetClassPowerType()
+    local powerType, renderMode, isAuraPower = GetClassPowerType()
     local cpHeight = tonumber(b.classPowerHeight) or 4
     if cpHeight < 2 then cpHeight = 2 elseif cpHeight > 30 then cpHeight = 30 end
 
-    if cpEnabled and powerType then
+    if cpEnabled and powerType and renderMode ~= MODE_NONE then
         CP_Create(playerFrame)
 
-        -- Get max power
-        local maxP = UnitPowerMax("player", powerType)
-        if not NotSecret(maxP) or type(maxP) ~= "number" then
-            -- Heuristic fallback (safe; most are 5-6)
-            if powerType == PT.Runes then maxP = 6
-            elseif powerType == PT.ComboPoints then maxP = 7
-            else maxP = 5 end
+        -- Resolve max power based on render mode
+        local maxP
+        if renderMode == MODE_RUNE_CD then
+            maxP = 6  -- DK always 6 runes
+        elseif renderMode == MODE_AURA_SINGLE then
+            maxP = 1  -- DH Devourer: single normalized bar
+        elseif renderMode == MODE_CONTINUOUS then
+            maxP = 1  -- Balance Druid / Insanity / Ele Maelstrom: single continuous bar
+        elseif renderMode == MODE_TIMER_BAR then
+            maxP = 1  -- Ebon Might: single countdown bar
+        elseif renderMode == MODE_SPELL_TRACKER then
+            -- Whirlwind: 2 stacks, 20s. TotS: 3 stacks, 10s.
+            if powerType == "WHIRLWIND" then
+                CP.spMaxStacks = 2
+                CP.spDuration  = 20
+                CP.spStacks    = 0
+                CP.spExpires   = nil
+                CP.spCachedQ   = -1
+                CP.wwNoCon     = 0
+                maxP = 2
+            elseif powerType == "TIP_OF_THE_SPEAR" then
+                CP.spMaxStacks = 3
+                CP.spDuration  = 10
+                CP.spStacks    = 0
+                CP.spExpires   = nil
+                CP.spCachedQ   = -1
+                maxP = 3
+            else
+                maxP = 3  -- fallback
+            end
+        elseif renderMode == MODE_AURA_SEGMENTED then
+            if powerType == "MAELSTROM_WEAPON" then
+                -- Maelstrom Weapon: max stacks from spell data
+                maxP = 10  -- default
+                if C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications then
+                    local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(SPELL_MAELSTROM_WEAPON)
+                    if type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
+                end
+            elseif powerType == "SOUL_FRAGMENTS_VENG" then
+                maxP = 6  -- Vengeance: 6 soul fragment segments
+            else
+                maxP = 10
+            end
+        else
+            -- Standard / Fractional: UnitPowerMax
+            maxP = UnitPowerMax("player", powerType)
+            if not NotSecret(maxP) or type(maxP) ~= "number" then
+                -- Heuristic fallback (safe; most are 5-6)
+                if powerType == PT.Runes then maxP = 6
+                elseif powerType == PT.ComboPoints then maxP = 7
+                else maxP = 5 end
+            end
         end
         maxP = math_floor(maxP)
         if maxP < 1 then maxP = 1 end
@@ -896,18 +2505,78 @@ local function FullRefresh()
         CP_EnsureBars(playerFrame, maxP)
         CP_Layout(playerFrame, maxP, cpHeight)
         CP.powerType = powerType
-        RefreshChargedPoints()
+        CP.renderMode = renderMode
+        CP.isAuraPower = isAuraPower
+        CP.isVehicle = (UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
+
+        -- Charged points only for standard segmented (CP/HP)
+        if renderMode == MODE_SEGMENTED then
+            RefreshChargedPoints()
+        end
+
+        -- Balance Druid: init eclipse tracking + prediction overlay
+        if renderMode == MODE_CONTINUOUS and PLAYER_CLASS == "DRUID" then
+            EnsurePredictionOverlay()
+            CP.apCastSpell = nil
+            CP.apPredAmt = 0
+            RefreshBalanceEclipses()
+        else
+            -- Clear prediction state when not in continuous mode
+            CP.apCastSpell = nil
+            CP.apPredAmt = 0
+            if CP.apPredTex then CP.apPredTex:Hide() end
+        end
+
+        -- Warlock: reset prediction state
+        CP.wlPredicting = false
+
+        -- Timer bar: start/stop OnUpdate
+        if renderMode == MODE_TIMER_BAR then
+            SetTimerBarOnUpdate(true)
+        else
+            SetTimerBarOnUpdate(false)
+        end
+
         CP_ApplyFont()
-        CP_UpdateValues(powerType, maxP)
+
+        -- Reset container alpha before update (auto-hide in updateFn may override)
+        CP.container:SetAlpha(1)
+
+        -- Dispatch to correct update function
+        local updateFn = MODE_UPDATE_FN[renderMode]
+        if updateFn then
+            updateFn(powerType, maxP)
+        end
+
         CP.container:Show()
         CP.visible = true
 
-
     else
+        -- Clean up rune OnUpdate scripts when hiding
+        if CP.renderMode == MODE_RUNE_CD then
+            for i = 1, CP.maxBars do
+                local bar = CP.bars[i]
+                if bar then
+                    bar:SetScript("OnUpdate", nil)
+                    bar._runeDuration = nil
+                end
+            end
+        end
+        -- Stop timer bar OnUpdate
+        SetTimerBarOnUpdate(false)
         if CP.container then CP.container:Hide() end
         CP.visible = false
         CP.powerType = nil
-
+        CP.renderMode = MODE_NONE
+        CP.isAuraPower = false
+        CP.isVehicle = false
+        CP.wlPredicting = false
+        CP.apCastSpell = nil
+        CP.apPredAmt = 0
+        CP.spStacks = 0
+        CP.spExpires = nil
+        CP.spCachedQ = -1
+        if CP.apPredTex then CP.apPredTex:Hide() end
     end
 
     -- ---- AltMana ----
@@ -925,6 +2594,22 @@ local function FullRefresh()
         if AM.container then AM.container:Hide() end
         AM.visible = false
     end
+
+    -- ---- Stagger (Brewmaster Monk) ----
+    local stEnabled = (b.showStagger ~= false)
+    local needsSt = NeedsStaggerBar()
+
+    if stEnabled and needsSt and not inEditMode then
+        ST_Create(playerFrame)
+        ST_Layout(playerFrame)
+        ST_RefreshTexture()
+        ST_UpdateValue()
+        ST.container:Show()
+        ST.visible = true
+    else
+        if ST.container then ST.container:Hide() end
+        ST.visible = false
+    end
 end
 
 -- ============================================================================
@@ -934,17 +2619,90 @@ end
 -- ClassPower value-only update (fires on UNIT_POWER_UPDATE for player)
 local function OnPowerUpdate(powerToken)
     if not CP.visible or not CP.powerType then return end
+    -- Aura-based modes are driven by UNIT_AURA, not UNIT_POWER_UPDATE
+    if CP.isAuraPower then return end
+    -- DK Runes use RUNE_POWER_UPDATE, not UNIT_POWER_UPDATE
+    if CP.renderMode == MODE_RUNE_CD then return end
+    -- Spell tracker: driven by UNIT_SPELLCAST_SUCCEEDED
+    if CP.renderMode == MODE_SPELL_TRACKER then return end
+    -- Timer bar: driven by OnUpdate + UNIT_AURA
+    if CP.renderMode == MODE_TIMER_BAR then return end
 
     -- Quick token filter: only react to our power type
     local expectedToken = POWER_TYPE_TOKENS[CP.powerType]
     if powerToken and expectedToken and powerToken ~= expectedToken then
-        -- Also handle RUNES token name variations
-        if CP.powerType ~= PT.Runes or powerToken ~= "RUNES" then
-            return
-        end
+        return
     end
 
-    CP_UpdateValues(CP.powerType, CP.currentMax)
+    -- Dispatch to correct update function
+    local updateFn = MODE_UPDATE_FN[CP.renderMode]
+    if updateFn then
+        updateFn(CP.powerType, CP.currentMax)
+    end
+end
+
+-- Hot path: UNIT_AURA handler for aura-based class powers (DH, Enh Shaman)
+-- Also handles Balance Druid eclipse tracking and Brewmaster stagger
+local function OnAuraUpdate(unit)
+    -- Class power: aura-based modes
+    if CP.visible and CP.isAuraPower then
+        local updateFn = MODE_UPDATE_FN[CP.renderMode]
+        if updateFn then
+            updateFn(CP.powerType, CP.currentMax)
+        end
+    end
+    -- Balance Druid: eclipse aura changes affect bar color + prediction
+    if CP.visible and CP.renderMode == MODE_CONTINUOUS and PLAYER_CLASS == "DRUID" then
+        RefreshBalanceEclipses()
+        local updateFn = MODE_UPDATE_FN[CP.renderMode]
+        if updateFn then
+            updateFn(CP.powerType, CP.currentMax)
+        end
+    end
+    -- Timer bar: Ebon Might aura applied/refreshed/removed
+    if CP.visible and CP.renderMode == MODE_TIMER_BAR then
+        CP.tbCachedQ = -1  -- force refresh
+        CP_UpdateValues_TimerBar(CP.powerType, CP.currentMax)
+    end
+    -- Stagger: also aura-driven (Blizzard_UnitFrame uses UNIT_AURA)
+    if ST.visible then
+        ST_UpdateValue()
+    end
+end
+
+-- Hot path: RUNE_POWER_UPDATE handler (DK only)
+local function OnRuneUpdate(runeID, energize)
+    if not CP.visible or CP.renderMode ~= MODE_RUNE_CD then return end
+    CP_UpdateValues_RuneCD(CP.powerType, CP.currentMax)
+end
+
+-- Spellcast handlers: Warlock prediction + Balance Druid AP prediction
+local function OnSpellcastStart(spellID)
+    if not CP.visible then return end
+    -- Warlock: shard generator prediction
+    if PLAYER_CLASS == "WARLOCK" and (CP.renderMode == MODE_SEGMENTED or CP.renderMode == MODE_FRACTIONAL) then
+        OnWarlockCastStart(spellID)
+    end
+    -- Balance Druid: AP cast prediction overlay
+    if CP.renderMode == MODE_CONTINUOUS and PLAYER_CLASS == "DRUID" then
+        CP.apCastSpell = spellID
+        CP.apPredAmt = ComputePredictedAP(spellID)
+        UpdatePredictionOverlay()
+    end
+end
+
+local function OnSpellcastEnd()
+    if not CP.visible then return end
+    -- Warlock
+    if CP.wlPredicting then
+        OnWarlockCastEnd()
+    end
+    -- Balance Druid
+    if CP.renderMode == MODE_CONTINUOUS then
+        CP.apCastSpell = nil
+        CP.apPredAmt = 0
+        UpdatePredictionOverlay()
+    end
 end
 
 local function OnManaUpdate()
@@ -968,7 +2726,7 @@ local function ThrottledFullRefresh()
     FullRefresh()
 end
 
-eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
+eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     if event == "UNIT_POWER_UPDATE" then
         if arg1 == "player" then
             OnPowerUpdate(arg2)
@@ -985,6 +2743,54 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
         return
     end
 
+    if event == "UNIT_AURA" then
+        if arg1 == "player" then
+            OnAuraUpdate(arg1)
+        end
+        return
+    end
+
+    if event == "RUNE_POWER_UPDATE" then
+        -- arg1 = runeID (1-6), arg2 = energize boolean
+        OnRuneUpdate(arg1, arg2)
+        return
+    end
+
+    -- Spellcast: Warlock shard prediction + Balance Druid AP prediction
+    -- arg1 = unitTarget, arg2 = castGUID, arg3 = spellID
+    if event == "UNIT_SPELLCAST_START" then
+        if arg1 == "player" then
+            OnSpellcastStart(arg3)
+        end
+        return
+    end
+    if event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_FAILED"
+       or event == "UNIT_SPELLCAST_INTERRUPTED" then
+        if arg1 == "player" then
+            OnSpellcastEnd()
+        end
+        return
+    end
+    if event == "UNIT_SPELLCAST_SUCCEEDED" then
+        if arg1 == "player" then
+            -- Balance/Warlock: clear prediction on successful cast
+            OnSpellcastEnd()
+            -- Spell tracker: Whirlwind / Tip of the Spear
+            if CP.visible and CP.renderMode == MODE_SPELL_TRACKER then
+                if CP.powerType == "WHIRLWIND" then
+                    OnWhirlwindSpellCast(arg3)
+                elseif CP.powerType == "TIP_OF_THE_SPEAR" then
+                    OnTipOfTheSpearSpellCast(arg3)
+                end
+            end
+            -- DH Vengeance: soul fragment count changes on spellcast
+            if CP.visible and CP.powerType == "SOUL_FRAGMENTS_VENG" then
+                CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
+            end
+        end
+        return
+    end
+
     if event == "UNIT_MAXPOWER" then
         if arg1 == "player" then
             -- Max power changed → full refresh (e.g. gained/lost combo point talent)
@@ -995,10 +2801,12 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
 
     if event == "UNIT_POWER_POINT_CHARGE" then
         if arg1 == "player" then
-            RefreshChargedPoints()
-            -- Re-apply colors with new charged state
-            if CP.visible and CP.powerType then
-                CP_UpdateValues(CP.powerType, CP.currentMax)
+            -- Only relevant for standard segmented mode (CP/HP)
+            if CP.renderMode == MODE_SEGMENTED then
+                RefreshChargedPoints()
+                if CP.visible and CP.powerType then
+                    CP_UpdateValues(CP.powerType, CP.currentMax)
+                end
             end
         end
         return
@@ -1007,6 +2815,36 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
     if event == "UNIT_DISPLAYPOWER" then
         if arg1 == "player" then
             ThrottledFullRefresh()
+        end
+        return
+    end
+
+    -- Stagger: health changes affect threshold colors
+    if event == "UNIT_HEALTH" then
+        if arg1 == "player" and ST.visible then
+            ST_UpdateValue()
+        end
+        return
+    end
+
+    -- Vehicle enter/exit: rebuild everything (CP type may change)
+    if event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
+        if arg1 == "player" then
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.1, FullRefresh)
+            else
+                ThrottledFullRefresh()
+            end
+        end
+        return
+    end
+
+    -- Combat state change: re-evaluate auto-hide (OOC toggle)
+    if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+        if _autoHideActive and CP.visible and CP.container then
+            -- Re-run the current mode's update to trigger CP_CheckAutoHide
+            local fn = MODE_UPDATE_FN[CP.mode]
+            if fn then fn(CP.powerType, CP.currentMax) end
         end
         return
     end
@@ -1037,6 +2875,23 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
             local pf = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player
             if pf then
                 FullRefresh()
+                -- CDM frames (from another addon) may load after MSUF.
+                -- Retry hook installation at increasing intervals until all 3 CDM hooks are placed.
+                if C_Timer and C_Timer.After then
+                    local cdmRetries = 0
+                    local function TryCDMHooks()
+                        cdmRetries = cdmRetries + 1
+                        local allHooked = CP._ecvHooked and CP._ucvHooked and CP._bicvHooked
+                        if allHooked then return end
+                        -- FullRefresh installs hooks for any newly-available CDM frame.
+                        FullRefresh()
+                        if cdmRetries < 8 then
+                            -- Backoff: 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0 (total ~18s)
+                            C_Timer.After(0.5 * cdmRetries, TryCDMHooks)
+                        end
+                    end
+                    C_Timer.After(0.5, TryCDMHooks)
+                end
             elseif retries < 20 then
                 -- Not ready yet — retry quickly (total max ≈ 1s)
                 C_Timer.After(0.05, TryRefresh)
@@ -1064,11 +2919,24 @@ eventFrame:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player")
 eventFrame:RegisterUnitEvent("UNIT_MAXPOWER", "player")
 eventFrame:RegisterUnitEvent("UNIT_DISPLAYPOWER", "player")
 eventFrame:RegisterUnitEvent("UNIT_POWER_POINT_CHARGE", "player")
+eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
+eventFrame:RegisterEvent("RUNE_POWER_UPDATE")
+eventFrame:RegisterUnitEvent("UNIT_ENTERED_VEHICLE", "player")
+eventFrame:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player")
+eventFrame:RegisterUnitEvent("UNIT_HEALTH", "player")
+-- Spellcast events: Warlock shard prediction + Balance Druid AP prediction
+eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
+eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
+eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
+eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
+eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 
 -- ============================================================================
 -- Public API (for Options, Edit Mode, and other modules)
@@ -1084,6 +2952,7 @@ end
 function _G.MSUF_ClassPower_RefreshTextures()
     CP_RefreshTexture()
     AM_RefreshTexture()
+    ST_RefreshTexture()
 end
 
 -- Refresh class power text font (called from UpdateAllFonts)
@@ -1098,7 +2967,11 @@ function _G.MSUF_ClassPower_GetState()
         classPowerVisible = CP.visible,
         classPowerType    = CP.powerType,
         classPowerMax     = CP.currentMax,
+        renderMode        = CP.renderMode,
+        isVehicle         = CP.isVehicle,
+        isAuraPower       = CP.isAuraPower,
         altManaVisible    = AM.visible,
+        staggerVisible    = ST.visible,
     }
 end
 

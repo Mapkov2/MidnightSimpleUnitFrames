@@ -3040,6 +3040,7 @@ local MSUF_EM_UNIT_POPUP_PREV_KEYS = {
     "detachedPowerBarOffsetX","detachedPowerBarOffsetY",
     "detachedPowerBarSyncClassPower",
     "detachedPowerBarAnchorToClassPower",
+    "detachedPowerBarTextOnBar",
 }
 
 local function MSUF_EM_CopyKeys(dst, src, keys)
@@ -3920,6 +3921,10 @@ local function ApplyUnitPopupValues()
                     if pf.anchorToClassPowerCB and pf.unit == "player" then
                         conf.detachedPowerBarAnchorToClassPower = (pf.anchorToClassPowerCB:GetChecked() and true or false)
                     end
+                    -- Power text on detached bar
+                    if pf.powerTextOnBarCB then
+                        conf.detachedPowerBarTextOnBar = (pf.powerTextOnBarCB:GetChecked() and true or false)
+                    end
                 end
                 -- Refresh power bar outline slider dim state in Bars menu
                 if type(_G.MSUF_RefreshDPBOutlineSliderState) == "function" then
@@ -4222,6 +4227,26 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
                 ApplyUnitPopupValues()
             end)
 
+            -- Show power text on detached power bar instead of unit frame
+            local textOnBarCB = CreateFrame("CheckButton", "$parentPowerTextOnBar", pf, "UICheckButtonTemplate")
+            textOnBarCB:SetSize(20, 20)
+            textOnBarCB:SetPoint("TOPLEFT", anchorCPCB, "BOTTOMLEFT", 0, -2)
+            local textOnBarText = textOnBarCB.Text or (textOnBarCB.GetName and _G[textOnBarCB:GetName() .. "Text"])
+            if textOnBarText then textOnBarText:SetText("Power text on bar") end
+            pf.powerTextOnBarCB = textOnBarCB
+
+            textOnBarCB:SetScript("OnEnter", function()
+                MSUF_EM_PopupShowTooltip(pf,
+                    "Power Text on Bar",
+                    "Moves the power text from the unit frame onto the detached power bar.\n\nText offset X/Y still works relative to the power bar.")
+            end)
+            textOnBarCB:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
+            textOnBarCB:SetScript("OnClick", function(self)
+                if pf.UpdateDetachSection then pf.UpdateDetachSection() end
+                ApplyUnitPopupValues()
+            end)
+
             -- Detached power bar numeric rows (W, H, X, Y)
             local detachRows = {
                 { key = "dpbW", label = "Width:",    box = "$parentDPBWBox", dy = -6 },
@@ -4229,7 +4254,7 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
                 { key = "dpbX", label = "Offset X:", box = "$parentDPBXBox", dy = -8 },
                 { key = "dpbY", label = "Offset Y:", box = "$parentDPBYBox", dy = -8 },
             }
-            MSUF_EM_BuildNumericRows(pf, detachRows, anchorCPCB, "BOTTOMLEFT", 0, ApplyUnitPopupValues)
+            MSUF_EM_BuildNumericRows(pf, detachRows, textOnBarCB, "BOTTOMLEFT", 0, ApplyUnitPopupValues)
 
             -- Show/hide + enable detach controls based on unit
             pf.UpdateDetachSection = function()
@@ -4240,7 +4265,7 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
 
                 -- Hide entire section for non-detachable units
                 local elements = { p.pbDivider, p.pbHeader, p.detachPowerBarCB,
-                    p.syncClassPowerCB, p.anchorToClassPowerCB,
+                    p.syncClassPowerCB, p.anchorToClassPowerCB, p.powerTextOnBarCB,
                     p.dpbWLabel, p.dpbWBox, p.dpbWMinus, p.dpbWPlus,
                     p.dpbHLabel, p.dpbHBox, p.dpbHMinus, p.dpbHPlus,
                     p.dpbXLabel, p.dpbXBox, p.dpbXMinus, p.dpbXPlus,
@@ -4263,6 +4288,19 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
                     if p.anchorToClassPowerCB then
                         p.anchorToClassPowerCB:SetShown(isDetached and isPlayer)
                     end
+                    -- Power text on bar: any detached unit
+                    if p.powerTextOnBarCB then
+                        p.powerTextOnBarCB:SetShown(isDetached)
+                        -- Re-anchor: below anchorCPCB for player, below detachCB for others
+                        if isDetached then
+                            p.powerTextOnBarCB:ClearAllPoints()
+                            if isPlayer and p.anchorToClassPowerCB then
+                                p.powerTextOnBarCB:SetPoint("TOPLEFT", p.anchorToClassPowerCB, "BOTTOMLEFT", 0, -2)
+                            else
+                                p.powerTextOnBarCB:SetPoint("TOPLEFT", p.detachPowerBarCB, "BOTTOMLEFT", 0, -2)
+                            end
+                        end
+                    end
 
                     -- Show/hide detach rows only when detached
                     local showRows = isDetached
@@ -4278,9 +4316,16 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
                         end
                     end
 
-                    -- Lock width row when synced (MRB pattern: alpha 0.4, mouse disabled)
+                    -- Lock width row when synced to class power OR CDM width mode
                     local isSynced = isDetached and isPlayer
                         and p.syncClassPowerCB and p.syncClassPowerCB:GetChecked()
+                    -- Also lock when global CDM width mode is active
+                    if isDetached and not isSynced then
+                        local dpbWMode = MSUF_DB and MSUF_DB.bars and MSUF_DB.bars.detachedPowerBarWidthMode
+                        if dpbWMode and dpbWMode ~= "manual" and dpbWMode ~= "" then
+                            isSynced = true
+                        end
+                    end
                     local wEls = { p.dpbWLabel, p.dpbWBox, p.dpbWMinus, p.dpbWPlus }
                     for _, el in ipairs(wEls) do
                         if el then
@@ -4301,8 +4346,9 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
                         end
                     end
 
-                    h = h + 30  -- divider + header + checkbox
-                    if isDetached and isPlayer then h = h + 48 end  -- sync + anchor checkboxes
+                    h = h + 30  -- divider + header + detach checkbox
+                    if isDetached and isPlayer then h = h + 48 end  -- sync + anchor checkboxes (player only)
+                    if isDetached then h = h + 24 end  -- text on bar checkbox (any unit)
                     if showRows then h = h + 110 end  -- W/H/X/Y rows
                 end
                 if p.SetSize then p:SetSize(360, h) end
@@ -4510,6 +4556,10 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
             -- Anchor to resource bar (player only)
             if pf.anchorToClassPowerCB then
                 pf.anchorToClassPowerCB:SetChecked(unit == "player" and conf.detachedPowerBarAnchorToClassPower == true)
+            end
+            -- Power text on bar
+            if pf.powerTextOnBarCB then
+                pf.powerTextOnBarCB:SetChecked(conf.detachedPowerBarTextOnBar == true)
             end
         end
     end

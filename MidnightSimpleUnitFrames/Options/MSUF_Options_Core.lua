@@ -2132,6 +2132,7 @@ local function MSUF_InstallCompatWrappers()
     ExportFn("MSUF_SetDropDownEnabled", (ns and ns.MSUF_SetDropDownEnabled) or MSUF_SetDropDownEnabled)
     ExportFn("MSUF_StyleSlider", (ns and ns.MSUF_StyleSlider) or MSUF_StyleSlider)
     ExportFn("MSUF_SkinMidnightActionButton", (ns and ns.MSUF_SkinMidnightActionButton) or MSUF_SkinMidnightActionButton)
+    ExportFn("MSUF_StyleSmallButton", MSUF_StyleSmallButton)
     ExportFn("MSUF_Options_RequestLayoutAll", (ns and ns.MSUF_Options_RequestLayoutAll) or MSUF_Options_RequestLayoutAll)
     ExportFn("MSUF_CallUpdateAllFonts", (ns and ns.MSUF_CallUpdateAllFonts) or MSUF_CallUpdateAllFonts)
     -- Keep the known-good bar-texture exports if present (v101 baseline).
@@ -3982,6 +3983,24 @@ local function _MSUF_InitStatusbarTextureDropdown(drop, cfg)
     end
     _MSUF_SyncStatusbarTextureDropdown(drop)
  end
+_G.MSUF_InitStatusbarTextureDropdown = _MSUF_InitStatusbarTextureDropdown
+_G.MSUF_SyncStatusbarTextureDropdown = _MSUF_SyncStatusbarTextureDropdown
+_G.MSUF_KillMenuPreviewBar = MSUF_KillMenuPreviewBar
+
+-- Resolve a SharedMedia statusbar key (e.g. "Flat") → texture path.
+-- Used by ClassPower, Absorb bars, and anywhere a per-panel texture override
+-- needs to be resolved from a stored key name to an actual file path.
+if not _G.MSUF_ResolveStatusbarTextureKey then
+    function _G.MSUF_ResolveStatusbarTextureKey(key)
+        if type(key) ~= "string" or key == "" then return nil end
+        local LSM = MSUF_GetLSM and MSUF_GetLSM()
+        if LSM and type(LSM.Fetch) == "function" then
+            local ok, tex = pcall(LSM.Fetch, LSM, "statusbar", key, true)
+            if ok and type(tex) == "string" and tex ~= "" then return tex end
+        end
+        return nil
+    end
+end
 local function _MSUF_InitAbsorbTextureDropdown(drop, dbKey, followText)
     if not drop then  return end
     followText = followText or "Use foreground texture"
