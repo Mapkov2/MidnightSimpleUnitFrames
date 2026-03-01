@@ -4188,6 +4188,9 @@ local function UpdateAllFonts(onlyKey)
     if type(_G.MSUF_Auras2_ApplyFontsFromGlobal) == "function" then
         _G.MSUF_Auras2_ApplyFontsFromGlobal()
     end
+    if type(_G.MSUF_ClassPower_ApplyFonts) == "function" then
+        _G.MSUF_ClassPower_ApplyFonts()
+    end
     if ns and ns.MSUF_ToTInline_RequestRefresh then
         ns.MSUF_ToTInline_RequestRefresh("FONTS")
     end
@@ -4637,6 +4640,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     -- Detach: per-unit config for player/target/focus (detach overrides embed)
     local detached = false
     local dW, dH, dX, dY = 0, 0, 0, 0
+    local anchorToCP = false
     if (unit == 'player' or unit == 'target' or unit == 'focus') then
         local key = f.msufConfigKey
         if not key and GetConfigKeyForUnit then key = GetConfigKeyForUnit(unit) end
@@ -4647,11 +4651,14 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
             dH = tonumber(conf.detachedPowerBarHeight) or 6
             dX = tonumber(conf.detachedPowerBarOffsetX) or 0
             dY = tonumber(conf.detachedPowerBarOffsetY) or -4
+            if unit == 'player' and conf.detachedPowerBarAnchorToClassPower == true then
+                anchorToCP = true
+            end
         end
     end
 
     local reserve = (embed and not detached and enabled and h > 0)
-    if not ns.Cache.StampChanged(f, "PBEmbedLayout", (reserve and 1 or 0), h, (detached and 1 or 0), dW, dH, dX, dY) then  return end
+    if not ns.Cache.StampChanged(f, "PBEmbedLayout", (reserve and 1 or 0), h, (detached and 1 or 0), dW, dH, dX, dY, (anchorToCP and 1 or 0)) then  return end
     f._msufPBLayoutStamp = 1
     f._msufPowerBarReserved = reserve and true or nil
     f._msufPowerBarDetached = detached and true or nil
@@ -4677,7 +4684,18 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         if dW < 20 then dW = 20 elseif dW > 800 then dW = 800 end
         if dH < 2 then dH = 2 elseif dH > 80 then dH = 80 end
         pb:SetSize(dW, dH)
-        pb:SetPoint('TOPLEFT', f, 'BOTTOMLEFT', dX, dY)
+        -- Anchor to class power container (MRB energy→combo pattern) or to unit frame
+        if anchorToCP then
+            local cpContainer = _G["MSUF_ClassPowerContainer"]
+            if cpContainer and cpContainer.IsShown and cpContainer:IsShown() then
+                pb:SetPoint('TOP', cpContainer, 'BOTTOM', dX, dY)
+            else
+                -- Fallback: anchor to unit frame when CP not visible
+                pb:SetPoint('TOPLEFT', f, 'BOTTOMLEFT', dX, dY)
+            end
+        else
+            pb:SetPoint('TOPLEFT', f, 'BOTTOMLEFT', dX, dY)
+        end
     elseif reserve then
         pb:SetHeight(h)
         pb:SetPoint('BOTTOMLEFT', f, 'BOTTOMLEFT', 2, 2)

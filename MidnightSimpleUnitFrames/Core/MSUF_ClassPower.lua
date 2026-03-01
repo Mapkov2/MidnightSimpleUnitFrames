@@ -88,6 +88,7 @@ local function EnsureDefaults()
     if b.classPowerOffsetY    == nil then b.classPowerOffsetY    = 0     end
     if b.smoothPowerBar       == nil then b.smoothPowerBar       = false end
     if b.showChargedComboPoints == nil then b.showChargedComboPoints = true end
+    if b.classPowerShowText    == nil then b.classPowerShowText    = false end
 
     -- AltMana defaults
     if b.showAltMana          == nil then b.showAltMana          = true  end
@@ -284,15 +285,17 @@ end
 -- ============================================================================
 local MAX_CLASS_POWER = 10  -- Warlock can have up to 5 shards, Rogue up to 8+ combo pts
 local CP = {
-    bars     = {},      -- [i] = StatusBar
-    ticks    = {},      -- [i] = Texture (separator lines)
-    bgTex    = nil,     -- background texture
-    container = nil,    -- parent frame
-    maxBars  = 0,       -- currently allocated bar count
-    currentMax = 0,     -- current max power (e.g. 5 combo pts)
-    powerType = nil,    -- current Enum.PowerType
-    visible  = false,
-    height   = 4,
+    bars      = {},      -- [i] = StatusBar
+    ticks     = {},      -- [i] = Texture (separator lines)
+    bgTex     = nil,     -- background texture
+    container = nil,     -- parent frame
+    textFrame = nil,     -- Frame: elevated overlay for text (MRB pattern)
+    text      = nil,     -- FontString: resource count (e.g. "4")
+    maxBars   = 0,       -- currently allocated bar count
+    currentMax = 0,      -- current max power (e.g. 5 combo pts)
+    powerType = nil,     -- current Enum.PowerType
+    visible   = false,
+    height    = 4,
 }
 
 local function CP_EnsureBars(parent, count)
@@ -347,6 +350,89 @@ local function CP_Create(playerFrame)
 
     -- Pre-allocate common max (6 for DK, 5 for most others)
     CP_EnsureBars(playerFrame, 8)
+
+    -- Text overlay (MRB pattern: separate Frame at elevated level so text
+    -- is always above individual bar segments and tick separators)
+    local tf = CreateFrame("Frame", nil, c)
+    tf:SetAllPoints(c)
+    tf:SetFrameLevel(c:GetFrameLevel() + 10)
+    CP.textFrame = tf
+
+    local fs = tf:CreateFontString(nil, "OVERLAY")
+    fs:SetPoint("CENTER", tf, "CENTER", 0, 0)
+    fs:SetJustifyH("CENTER")
+    if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+    fs:SetFontObject("GameFontHighlightSmall")
+    fs:SetTextColor(1, 1, 1, 1)
+    fs:SetShadowColor(0, 0, 0, 1)
+    fs:SetShadowOffset(1, -1)
+    fs:Hide()
+    CP.text = fs
+end
+
+-- ============================================================================
+-- Font application (MRB MSCB_Energy_ApplyFontFromDB pattern)
+-- Reads global font settings from MSUF Fonts menu. Called on create,
+-- FullRefresh, and when MSUF_UpdateAllFonts fires.
+-- ============================================================================
+local _cpFontRev = 0  -- serial for skip-if-same optimization
+
+local function CP_ApplyFont()
+    local fs = CP.text
+    if not fs then return end
+
+    -- Resolve global font settings (same source as MRB energy text)
+    local path, flags, fr, fg, fb, baseSize, useShadow
+    if type(_G.MSUF_GetGlobalFontSettings) == "function" then
+        path, flags, fr, fg, fb, baseSize, useShadow = _G.MSUF_GetGlobalFontSettings()
+    end
+    path     = path or "Fonts\\FRIZQT__.TTF"
+    flags    = flags or "OUTLINE"
+    fr       = fr or 1
+    fg       = fg or 1
+    fb       = fb or 1
+    baseSize = baseSize or 14
+
+    -- Use global power font size (per-unit overrides not applicable here)
+    local fontSize = baseSize
+    if MSUF_DB and MSUF_DB.general then
+        fontSize = MSUF_DB.general.powerFontSize or baseSize
+    end
+    if fontSize < 6 then fontSize = 6 end
+
+    -- Content-based skip: avoid redundant C-side SetFont calls
+    local rev = (_G.MSUF_FontPathSerial or 0) + fontSize * 1000003
+    if _cpFontRev ~= rev then
+        fs:SetFont(path, fontSize, flags)
+        _cpFontRev = rev
+    end
+
+    -- Text color: check for RESOURCE_TEXT override in classPowerColorOverrides
+    -- (same DB path as all class power colors, editable in Colors panel)
+    local tr, tg, tb = fr, fg, fb
+    if MSUF_DB and MSUF_DB.general then
+        local ov = MSUF_DB.general.classPowerColorOverrides
+        if type(ov) == "table" then
+            local c = ov["RESOURCE_TEXT"]
+            if type(c) == "table" then
+                local cr = c[1] or c.r
+                local cg = c[2] or c.g
+                local cb = c[3] or c.b
+                if type(cr) == "number" and type(cg) == "number" and type(cb) == "number" then
+                    tr, tg, tb = cr, cg, cb
+                end
+            end
+        end
+    end
+
+    fs:SetTextColor(tr, tg, tb, 1)
+
+    if useShadow then
+        fs:SetShadowColor(0, 0, 0, 1)
+        fs:SetShadowOffset(1, -1)
+    else
+        fs:SetShadowOffset(0, 0)
+    end
 end
 
 local function CP_Layout(playerFrame, maxPower, height)
@@ -390,11 +476,20 @@ local function CP_Layout(playerFrame, maxPower, height)
     local oX = tonumber(b.classPowerOffsetX) or 0
     local oY = tonumber(b.classPowerOffsetY) or 0
 
-    -- Anchor to playerFrame directly.
-    -- CP is an independent overlay (Unhalted approach) — no HP bar reservation.
+    -- Anchor: either to Essential Cooldown Viewer (MRB pattern) or to playerFrame.
     CP.container:ClearAllPoints()
     CP.container:SetSize(userW, h)
-    CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+    if b.classPowerAnchorToCooldown == true then
+        local ecv = _G["EssentialCooldownViewer"]
+        if ecv and ecv.IsShown and ecv:IsShown() then
+            CP.container:SetPoint("TOP", ecv, "BOTTOM", oX, oY)
+        else
+            -- Fallback to player frame when ECV not available
+            CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+        end
+    else
+        CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+    end
 
     -- Pixel-perfect outline (BackdropTemplate, same pattern as MSUF_ApplyBarOutline).
     -- Wraps the container with a snapped black border. Thickness from DB (0 = hidden).
@@ -421,8 +516,8 @@ local function CP_Layout(playerFrame, maxPower, height)
         CP._outline:SetPoint("TOPLEFT", CP.container, "TOPLEFT", -edge, edge)
         CP._outline:SetPoint("BOTTOMRIGHT", CP.container, "BOTTOMRIGHT", edge, -edge)
         CP._outline:Show()
-    elseif CP._outline then
-        CP._outline:Hide()
+    else
+        if CP._outline then CP._outline:Hide() end
     end
 
     local frameW = userW
@@ -484,6 +579,33 @@ local function CP_Layout(playerFrame, maxPower, height)
 
     CP.currentMax = maxPower
     CP.height = h
+
+    -- MRB syncEnergyWithCombo pattern:
+    -- Master (class power) writes its container width directly into the slave's
+    -- (power bar) DB width field, then calls Reanchor. Each bar draws its own
+    -- outline independently — sync is pure container-to-container, no outline
+    -- compensation needed. If both outlines match, they align pixel-perfect.
+    local conf = MSUF_DB and MSUF_DB.player
+    local needPBRefresh = false
+    if conf and conf.powerBarDetached == true then
+        if conf.detachedPowerBarSyncClassPower == true then
+            conf.detachedPowerBarWidth = math_floor(userW + 0.5)
+            needPBRefresh = true
+        end
+        -- When PB is anchored to CP container, reanchor after every layout
+        if conf.detachedPowerBarAnchorToClassPower == true then
+            needPBRefresh = true
+        end
+    end
+    if needPBRefresh and type(_G.MSUF_ApplyPowerBarEmbedLayout) == "function" then
+        local uf = _G.MSUF_UnitFrames
+        local pf = uf and uf.player
+        if pf and pf.targetPowerBar then
+            local sc = pf._msufStampCache
+            if sc then sc["PBEmbedLayout"] = nil end
+            _G.MSUF_ApplyPowerBarEmbedLayout(pf)
+        end
+    end
 end
 
 -- Secret-safe value update + per-bar coloring (charged/empowered support)
@@ -498,6 +620,8 @@ local function CP_UpdateValues(powerType, maxPower)
             local bar = CP.bars[i]
             if bar then bar:SetValue(1) end
         end
+        -- Hide text overlay (secret values cannot be displayed)
+        if CP.text then CP.text:Hide() end
         return
     end
 
@@ -557,6 +681,19 @@ local function CP_UpdateValues(powerType, maxPower)
                 bar:SetStatusBarColor(baseR, baseG, baseB, 1)
                 bar._bg:SetVertexColor(0, 0, 0, bgA)
             end
+        end
+    end
+
+    -- Resource count text (MRB pattern: just SetText(current), zero concat)
+    local txt = CP.text
+    if txt then
+        local showText = MSUF_DB and MSUF_DB.bars
+            and (MSUF_DB.bars.classPowerShowText == true)
+        if showText and cur > 0 then
+            txt:SetText(cur)
+            txt:Show()
+        else
+            txt:Hide()
         end
     end
 end
@@ -711,29 +848,29 @@ local function FullRefresh()
         end)
     end
 
-    -- Hook Essential Cooldown Viewer resize (for "cooldown" width mode).
+    -- Hook Essential Cooldown Viewer resize/visibility (for "cooldown" width mode + anchor mode).
     if not CP._ecvHooked then
         local ecv = _G["EssentialCooldownViewer"]
         if ecv and ecv.HookScript then
             CP._ecvHooked = true
-            ecv:HookScript("OnSizeChanged", function()
-                local mode = MSUF_DB and MSUF_DB.bars and MSUF_DB.bars.classPowerWidthMode
-                if mode == "cooldown" and type(_G.MSUF_ClassPower_Refresh) == "function" then
+            local function _ecvRefresh()
+                local bars = MSUF_DB and MSUF_DB.bars
+                local mode = bars and bars.classPowerWidthMode
+                local anchored = bars and (bars.classPowerAnchorToCooldown == true)
+                if (mode == "cooldown" or anchored) and type(_G.MSUF_ClassPower_Refresh) == "function" then
                     _G.MSUF_ClassPower_Refresh()
                 end
-            end)
+            end
+            ecv:HookScript("OnSizeChanged", _ecvRefresh)
+            ecv:HookScript("OnShow", _ecvRefresh)
+            ecv:HookScript("OnHide", _ecvRefresh)
         end
     end
 
-    -- Edit mode: hide both
-    if _G.MSUF_UnitEditModeActive == true then
-        if CP.container then CP.container:Hide() end
-        if AM.container then AM.container:Hide() end
-
-        CP.visible = false
-        AM.visible = false
-        return
-    end
+    -- Edit mode: keep class power visible as live preview so bars-menu
+    -- adjustments (width, height, offsets) are visible immediately.
+    -- Alt-mana bar has no user-facing settings → stay hidden in edit mode.
+    local inEditMode = (_G.MSUF_UnitEditModeActive == true)
 
     -- ---- ClassPower ----
     local cpEnabled = (b.showClassPower ~= false)
@@ -760,6 +897,7 @@ local function FullRefresh()
         CP_Layout(playerFrame, maxP, cpHeight)
         CP.powerType = powerType
         RefreshChargedPoints()
+        CP_ApplyFont()
         CP_UpdateValues(powerType, maxP)
         CP.container:Show()
         CP.visible = true
@@ -776,7 +914,7 @@ local function FullRefresh()
     local amEnabled = (b.showAltMana ~= false)
     local needsAlt = NeedsAltManaBar()
 
-    if amEnabled and needsAlt then
+    if amEnabled and needsAlt and not inEditMode then
         AM_Create(playerFrame)
         AM_Layout(playerFrame)
         AM_ApplyColor()
@@ -891,9 +1029,21 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
 
     if event == "PLAYER_ENTERING_WORLD" then
         EnsureDefaults()
-        -- Delay to let MSUF frames initialize
+        -- Retry until player frame is available (fixes slow load when
+        -- MSUF_UnitFrames.player isn't ready after a single fixed delay).
+        local retries = 0
+        local function TryRefresh()
+            retries = retries + 1
+            local pf = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player
+            if pf then
+                FullRefresh()
+            elseif retries < 20 then
+                -- Not ready yet — retry quickly (total max ≈ 1s)
+                C_Timer.After(0.05, TryRefresh)
+            end
+        end
         if C_Timer and C_Timer.After then
-            C_Timer.After(0.3, FullRefresh)
+            C_Timer.After(0.05, TryRefresh)
         else
             FullRefresh()
         end
@@ -934,6 +1084,12 @@ end
 function _G.MSUF_ClassPower_RefreshTextures()
     CP_RefreshTexture()
     AM_RefreshTexture()
+end
+
+-- Refresh class power text font (called from UpdateAllFonts)
+function _G.MSUF_ClassPower_ApplyFonts()
+    _cpFontRev = 0  -- force re-apply
+    CP_ApplyFont()
 end
 
 -- Query state (for options UI display)

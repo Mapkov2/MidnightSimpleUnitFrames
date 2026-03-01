@@ -109,13 +109,16 @@ end
 -- =====================================================================
 
 if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
-  -- Secret-safe positive check: tonumber() returns nil for secret values.
-  -- Secret (non-nil, non-tonumber) → trust it (valid from GetSize/GetScale).
-  -- Normal number → standard > 0 guard.   nil → reject.
+  -- Secret-safe validity check for size/scale values.
+  -- IMPORTANT: never do numeric comparisons (>, <, ==) on values that might be secret.
+  -- We only need to reject nil/false; 0 is truthy in Lua and won't crash us.
   local function _ssPos(v)
-    if not v then return false end
-    local n = tonumber(v)
-    return n == nil or n > 0
+    -- Secret-safe truthiness check:
+    -- - nil/false -> invalid
+    -- - 0 is truthy in Lua, and GetSize/GetScale should not return falsey values
+    -- Avoid ANY numeric comparisons/arithmetic on potentially secret numbers.
+    if v then return true end
+    return false
   end
 
   function _G.MSUF_HardSyncCastbarPreview(preview, real)

@@ -240,6 +240,8 @@ local cpBgAlphaRow     -- slider row: Background opacity
 local cpTickRow        -- slider row: Separator width
 local cpOutlineRow     -- slider row: Outline thickness
 local cpChargedCheck   -- "Show empowered combo points"
+local cpTextCheck      -- "Show resource text"
+local cpAnchorCooldownCheck -- "Anchor to Essential Cooldown"
 local amShowCheck      -- "Show alternative mana bar"
 local amHeightRow      -- slider row: Height
 local amOffsetRow      -- slider row: Y offset
@@ -261,7 +263,7 @@ local function BuildClassPowerOptions()
     -- ── Third panel (full width, below both columns) ──
     cpPanel = CreateFrame("Frame", "MSUF_ClassPowerOptionsPanel", leftPanel:GetParent(), "BackdropTemplate")
     local totalW = leftPanel:GetWidth() + rightPanel:GetWidth()
-    cpPanel:SetSize(totalW, 380)
+    cpPanel:SetSize(totalW, 435)
     cpPanel:SetPoint("TOPLEFT", leftPanel, "BOTTOMLEFT", 0, -10)
     cpPanel:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
@@ -281,6 +283,8 @@ local function BuildClassPowerOptions()
     local cpHeader = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     cpHeader:SetPoint("TOPLEFT", cpPanel, "TOPLEFT", PAD_X, PAD_Y)
     cpHeader:SetText(TR("Class Power"))
+    -- GameFontNormalLarge is yellow by default; force consistent white section headers.
+    if cpHeader.SetTextColor then cpHeader:SetTextColor(1, 1, 1) end
     cpPanel._cpHeader = cpHeader
 
     -- Subtitle
@@ -379,10 +383,20 @@ local function BuildClassPowerOptions()
     cpChargedCheck = MakeCheck("MSUF_ShowChargedCPCheck", TR("Show empowered combo points"), cpPanel)
     cpChargedCheck:SetPoint("TOPLEFT", cpOutlineRow.label, "BOTTOMLEFT", 0, -10)
 
+    -- Show resource text overlay (e.g. "4/7" on the bar)
+    cpTextCheck = MakeCheck("MSUF_ClassPowerTextCheck", TR("Show resource text"), cpPanel)
+    cpTextCheck:SetPoint("TOPLEFT", cpChargedCheck, "BOTTOMLEFT", 0, -4)
+
+    -- Anchor to Essential Cooldown Manager (MRB anchorToCooldownManager pattern)
+    cpAnchorCooldownCheck = MakeCheck("MSUF_ClassPowerAnchorCooldownCheck", TR("Anchor to Essential Cooldown"), cpPanel)
+    cpAnchorCooldownCheck:SetPoint("TOPLEFT", cpTextCheck, "BOTTOMLEFT", 0, -4)
+
     -- ── Right column: Alt Mana ──
     local amHeader = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     amHeader:SetPoint("TOPLEFT", cpPanel, "TOPLEFT", colW + PAD_X, PAD_Y)
     amHeader:SetText(TR("Alternative Mana Bar"))
+    -- GameFontNormalLarge is yellow by default; force consistent white section headers.
+    if amHeader.SetTextColor then amHeader:SetTextColor(1, 1, 1) end
     cpPanel._amHeader = amHeader
 
     -- Subtitle
@@ -424,6 +438,8 @@ local function BuildClassPowerOptions()
         BindBool(cpShowCheck,  "bars.showClassPower",        CPRefresh, SyncClassPowerToggles)
         BindBool(cpColorCheck, "bars.classPowerColorByType",  CPRefresh, SyncClassPowerToggles)
         BindBool(cpChargedCheck, "bars.showChargedComboPoints", CPRefresh, SyncClassPowerToggles)
+        BindBool(cpTextCheck,  "bars.classPowerShowText",     CPRefresh, SyncClassPowerToggles)
+        BindBool(cpAnchorCooldownCheck, "bars.classPowerAnchorToCooldown", CPRefresh, SyncClassPowerToggles)
         BindBool(amShowCheck,  "bars.showAltMana",            CPRefresh, SyncClassPowerToggles)
     end
 
@@ -546,6 +562,14 @@ local function SyncClassPowerToggles()
         cpChargedCheck:SetChecked(b.showChargedComboPoints ~= false)
         if cpChargedCheck.__msufToggleUpdate then cpChargedCheck.__msufToggleUpdate() end
     end
+    if cpTextCheck then
+        cpTextCheck:SetChecked(b.classPowerShowText == true)
+        if cpTextCheck.__msufToggleUpdate then cpTextCheck.__msufToggleUpdate() end
+    end
+    if cpAnchorCooldownCheck then
+        cpAnchorCooldownCheck:SetChecked(b.classPowerAnchorToCooldown == true)
+        if cpAnchorCooldownCheck.__msufToggleUpdate then cpAnchorCooldownCheck.__msufToggleUpdate() end
+    end
 
     -- AltMana
     if amShowCheck then
@@ -583,6 +607,7 @@ local function SyncClassPowerToggles()
 
     SetEnabled(cpColorCheck, cpOn)
     SetEnabled(cpChargedCheck, cpOn)
+    SetEnabled(cpTextCheck, cpOn)
     if cpHeightRow   then cpHeightRow:SetEnabled(cpOn)   end
     -- cpWidthRow enabled/disabled by widthMode sync above
     if cpXOffsetRow  then cpXOffsetRow:SetEnabled(cpOn)  end

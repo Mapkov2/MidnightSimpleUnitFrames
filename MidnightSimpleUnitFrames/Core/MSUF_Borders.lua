@@ -122,7 +122,9 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
     end
     f:Show()
 
-    -- Detached power bar: apply its own outline frame
+    -- Detached power bar: apply its own outline frame.
+    -- Uses its own thickness setting (detachedPowerBarOutline) so the user
+    -- can match class power outline independently from the main frame outline.
     if pb and pbDetached and pb.IsShown and pb:IsShown() then
         local dpbO = self._msufDetachedPBOutline
         if not dpbO then
@@ -133,16 +135,23 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
             self._msufDetachedPBOutline = dpbO
             dpbO._msufLastEdgeSize = -1
         end
-        local dpbEdge = (type(snap) == "function") and snap(dpbO, thickness) or thickness
-        if dpbO._msufLastEdgeSize ~= dpbEdge then
-            dpbO:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = dpbEdge })
-            dpbO:SetBackdropBorderColor(0, 0, 0, 1)
-            dpbO._msufLastEdgeSize = dpbEdge
+        local barsDB = MSUF_DB and MSUF_DB.bars
+        local dpbThick = (barsDB and tonumber(barsDB.detachedPowerBarOutline)) or thickness
+        if dpbThick < 0 then dpbThick = 0 elseif dpbThick > 6 then dpbThick = 6 end
+        if dpbThick <= 0 then
+            dpbO:Hide()
+        else
+            local dpbEdge = (type(snap) == "function") and snap(dpbO, dpbThick) or dpbThick
+            if dpbO._msufLastEdgeSize ~= dpbEdge then
+                dpbO:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = dpbEdge })
+                dpbO:SetBackdropBorderColor(0, 0, 0, 1)
+                dpbO._msufLastEdgeSize = dpbEdge
+            end
+            dpbO:ClearAllPoints()
+            dpbO:SetPoint("TOPLEFT", pb, "TOPLEFT", -dpbEdge, dpbEdge)
+            dpbO:SetPoint("BOTTOMRIGHT", pb, "BOTTOMRIGHT", dpbEdge, -dpbEdge)
+            dpbO:Show()
         end
-        dpbO:ClearAllPoints()
-        dpbO:SetPoint("TOPLEFT", pb, "TOPLEFT", -dpbEdge, dpbEdge)
-        dpbO:SetPoint("BOTTOMRIGHT", pb, "BOTTOMRIGHT", dpbEdge, -dpbEdge)
-        dpbO:Show()
     elseif self._msufDetachedPBOutline then
         self._msufDetachedPBOutline:Hide()
     end

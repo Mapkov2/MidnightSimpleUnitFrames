@@ -3467,6 +3467,7 @@ local CP_TOKEN_OPTIONS = {
     { token = "RUNES",          label = "Runes" },
     { token = "ESSENCE",        label = "Essence" },
     { token = "CHARGED",        label = "Empowered (Charged)" },
+    { token = "RESOURCE_TEXT",  label = "Resource Text" },
 }
 
 F.EnsureClassPowerColorsDB = function()
@@ -3483,6 +3484,14 @@ F.GetDefaultClassPowerColor = function(token)
     -- Charged/empowered has a built-in default (not in PowerBarColor)
     if token == "CHARGED" then
         return 0.60, 0.20, 0.80  -- MidnightRogueBars purple
+    end
+    -- Resource text: default = global font color from MSUF settings
+    if token == "RESOURCE_TEXT" then
+        if type(_G.MSUF_GetGlobalFontSettings) == "function" then
+            local _, _, fr, fg, fb = _G.MSUF_GetGlobalFontSettings()
+            if type(fr) == "number" then return fr, fg, fb end
+        end
+        return 1, 1, 1
     end
     -- Look up in PowerBarColor
     local col = (PowerBarColor and token and PowerBarColor[token]) or nil
