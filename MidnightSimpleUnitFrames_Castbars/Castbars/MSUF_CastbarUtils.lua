@@ -109,23 +109,29 @@ end
 -- =====================================================================
 
 if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
+  -- Secret-safe positive check: tonumber() returns nil for secret values.
+  -- Secret (non-nil, non-tonumber) → trust it (valid from GetSize/GetScale).
+  -- Normal number → standard > 0 guard.   nil → reject.
+  local function _ssPos(v)
+    if not v then return false end
+    local n = tonumber(v)
+    return n == nil or n > 0
+  end
+
   function _G.MSUF_HardSyncCastbarPreview(preview, real)
     if not preview or not real then
       return
     end
 
-    -- Frame size
-    if real.GetSize and preview.SetSize then
-      local w, h = real:GetSize()
-      if w and h and w > 0 and h > 0 then
-        preview:SetSize(w, h)
-      end
-    end
+    -- NOTE: Frame size (SetSize on the outer frame) is intentionally NOT synced
+    -- here. Frame size is always authoritative from the DB via
+    -- MSUF_ApplyPlayerCastbarSizeAndLayout. Copying the real bar's runtime size
+    -- would override DB values and cause the preview to jump on first interaction.
 
     -- Frame scale
     if real.GetScale and preview.SetScale then
       local s = real:GetScale()
-      if s and s > 0 then
+      if _ssPos(s) then
         preview:SetScale(s)
       end
     end
@@ -134,11 +140,11 @@ if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
     if preview.statusBar and preview.statusBar.SetSize then
       if real.statusBar and real.statusBar.GetSize then
         local sw, sh = real.statusBar:GetSize()
-        if sw and sh and sw > 0 and sh > 0 then
+        if _ssPos(sw) and _ssPos(sh) then
           preview.statusBar:SetSize(sw, sh)
         end
       else
-        -- Best-effort fallback based on outer frame size
+        -- Best-effort fallback based on outer frame size (preview is our own frame → safe)
         if preview.GetSize then
           local w, h = preview:GetSize()
           if w and h and w > 0 and h > 0 then
@@ -151,7 +157,7 @@ if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
     -- Icon size
     if preview.icon and preview.icon.SetSize and real.icon and real.icon.GetSize then
       local iw, ih = real.icon:GetSize()
-      if iw and ih and iw > 0 and ih > 0 then
+      if _ssPos(iw) and _ssPos(ih) then
         preview.icon:SetSize(iw, ih)
       end
     end
@@ -159,7 +165,7 @@ if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
     -- Player latency bar width (preview-only element)
     if preview.latencyBar and preview.latencyBar.SetWidth and real.latencyBar and real.latencyBar.GetWidth then
       local lw = real.latencyBar:GetWidth()
-      if lw and lw > 0 then
+      if _ssPos(lw) then
         preview.latencyBar:SetWidth(lw)
       end
     end
