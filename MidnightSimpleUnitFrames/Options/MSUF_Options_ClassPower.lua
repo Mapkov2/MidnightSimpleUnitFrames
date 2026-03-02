@@ -34,6 +34,44 @@ local MSUF_SyncStatusbarTextureDropdown = _G.MSUF_SyncStatusbarTextureDropdown
 -- Makes large SharedMedia dropdown lists scrollable (mousewheel + scrollbar).
 local MSUF_MakeDropdownScrollable = (ns and ns.MSUF_MakeDropdownScrollable) or _G.MSUF_MakeDropdownScrollable
 
+-- Expand dropdown click area so the whole dropdown is clickable (not only the arrow).
+-- Exported by Options_Core.
+local MSUF_ExpandDropdownClickArea = (ns and ns.MSUF_ExpandDropdownClickArea) or _G.MSUF_ExpandDropdownClickArea
+
+-- Stepper modifier support (match Options_Player behavior):
+-- default = baseStep, Shift = x5, Ctrl = x10, Alt = grid step (Edit Mode)
+-- (Alt > Ctrl > Shift priority)
+local function MSUF_GetCurrentGridStep()
+    local MIN, MAX = 8, 64
+    local step
+    local slider = _G and _G["MSUF_EditModeGridSlider"]
+    if slider and slider.GetValue then
+        step = slider:GetValue()
+    elseif MSUF_DB and MSUF_DB.general and type(MSUF_DB.general.editModeGridStep) == "number" then
+        step = MSUF_DB.general.editModeGridStep
+    else
+        step = 20
+    end
+    step = tonumber(step) or 20
+    if step < MIN then step = MIN end
+    if step > MAX then step = MAX end
+    return step
+end
+
+local function MSUF_GetModifierStep(baseStep)
+    baseStep = tonumber(baseStep) or 1
+    if IsAltKeyDown and IsAltKeyDown() then
+        return MSUF_GetCurrentGridStep()
+    end
+    local mult = 1
+    if IsControlKeyDown and IsControlKeyDown() then
+        mult = 10
+    elseif IsShiftKeyDown and IsShiftKeyDown() then
+        mult = 5
+    end
+    return baseStep * mult
+end
+
 
 
 -- ============================================================================
@@ -184,8 +222,12 @@ local function CreateLabeledSlider(name, label, parent, minVal, maxVal, step)
         MSUF_SetLabeledSliderValue(slider, v)
         if slider.onValueChanged then slider.onValueChanged(slider, v) end
     end
-    minus:SetScript("OnClick", function() Step(-step) end)
-    plus:SetScript("OnClick", function() Step(step) end)
+    minus:SetScript("OnClick", function()
+        Step(-MSUF_GetModifierStep(step))
+    end)
+    plus:SetScript("OnClick", function()
+        Step(MSUF_GetModifierStep(step))
+    end)
 
     slider:HookScript("OnValueChanged", function(self, value)
         if self.MSUF_SkipCallback then return end
@@ -308,7 +350,8 @@ local function MakeCompactSlider(name, labelText, parent, minVal, maxVal, step, 
 
     local function StepValue(sign)
         local v = tonumber(eb:GetText()) or (s:GetValue() or minVal)
-        v = v + sign * step
+        local delta = MSUF_GetModifierStep(step)
+        v = v + sign * delta
         if step >= 1 then v = math_floor(v + 0.5) end
         if v < minVal then v = minVal elseif v > maxVal then v = maxVal end
         eb:SetText(tostring(v))
@@ -472,6 +515,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpWidthModeDrop = CreateFrame("Frame", "MSUF_CPWidthModeDrop", cpPanel, "UIDropDownMenuTemplate")
     cpWidthModeDrop:SetPoint("LEFT", cpWidthModeLabel, "RIGHT", 4, -2)
     UIDropDownMenu_SetWidth(cpWidthModeDrop, 155)
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(cpWidthModeDrop) end
 
     local WIDTH_MODE_OPTIONS = {
         { key = "player",       label = TR("Player frame") },
@@ -570,6 +614,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     dpbWidthModeDrop = CreateFrame("Frame", "MSUF_DPBWidthModeDrop", cpPanel, "UIDropDownMenuTemplate")
     dpbWidthModeDrop:SetPoint("LEFT", dpbWidthModeLabel, "RIGHT", 4, -2)
     UIDropDownMenu_SetWidth(dpbWidthModeDrop, 155)
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(dpbWidthModeDrop) end
 
     local DPB_WIDTH_MODE_OPTIONS = {
         { key = "manual",       label = TR("Manual") },
@@ -613,6 +658,8 @@ local function BuildClassPowerOptions(leftName, rightName)
     dpbFgDrop:SetPoint("TOPLEFT", dpbFgLabel, "BOTTOMLEFT", -16, -2)
     UIDropDownMenu_SetWidth(dpbFgDrop, DPB_TEX_DROP_W)
     dpbFgDrop._msufTweakBarTexturePreview = true
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(dpbFgDrop) end
+    if MSUF_MakeDropdownScrollable then MSUF_MakeDropdownScrollable(dpbFgDrop, 12) end
 
     -- BG texture
     local dpbBgLabel = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -625,6 +672,8 @@ local function BuildClassPowerOptions(leftName, rightName)
     dpbBgDrop:SetPoint("TOPLEFT", dpbBgLabel, "BOTTOMLEFT", -16, -2)
     UIDropDownMenu_SetWidth(dpbBgDrop, DPB_TEX_DROP_W)
     dpbBgDrop._msufTweakBarTexturePreview = true
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(dpbBgDrop) end
+    if MSUF_MakeDropdownScrollable then MSUF_MakeDropdownScrollable(dpbBgDrop, 12) end
 
     
     -- Power bar outline (Detached Power Bar) — moved here from Options_Core (Bars).
@@ -738,7 +787,8 @@ local function BuildClassPowerOptions(leftName, rightName)
 
         local function StepValue(sign)
             local cur = Clamp(eb:GetText()) or Clamp(s:GetValue()) or minVal
-            cur = cur + sign * step
+            local delta = MSUF_GetModifierStep(step)
+            cur = cur + sign * delta
             if cur < minVal then cur = minVal elseif cur > maxVal then cur = maxVal end
             eb:SetText(tostring(cur))
             s:SetValue(cur)
@@ -885,6 +935,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     local cpFgTexDrop = CreateFrame("Frame", "MSUF_CPFgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
     cpFgTexDrop:SetPoint("TOPLEFT", cpFgTexLabel, "BOTTOMLEFT", -16, -2)
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(cpFgTexDrop) end
 
     -- Make the LSM list scrollable like Options_Core (prevents huge lists from going offscreen)
     if MSUF_MakeDropdownScrollable then MSUF_MakeDropdownScrollable(cpFgTexDrop, 12) end
@@ -948,6 +999,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     local cpBgTexDrop = CreateFrame("Frame", "MSUF_CPBgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
     cpBgTexDrop:SetPoint("TOPLEFT", cpBgTexLabel, "BOTTOMLEFT", -16, -2)
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(cpBgTexDrop) end
 
     if MSUF_MakeDropdownScrollable then MSUF_MakeDropdownScrollable(cpBgTexDrop, 12) end
     cpBgTexDrop._msufTweakBarTexturePreview = true
