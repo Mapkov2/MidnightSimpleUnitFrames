@@ -240,6 +240,11 @@ end
     if g.darkBgBrightness == nil then
         g.darkBgBrightness = 0.25      -- 25% Grau als Standard
     end
+    -- When true, dark mode uses the bar-background tint color directly (no brightness dimming).
+    -- Allows fully custom background colors (including white) in dark mode.
+    if g.darkBgCustomColor == nil then
+        g.darkBgCustomColor = false
+    end
     if g.classBarBgR == nil or g.classBarBgG == nil or g.classBarBgB == nil then
         g.classBarBgR = 0.0   -- default: black background
         g.classBarBgG = 0.0
