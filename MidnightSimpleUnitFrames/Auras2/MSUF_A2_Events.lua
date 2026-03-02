@@ -37,6 +37,8 @@ local type = type
 -- Pre-cached boss unit strings (avoid "boss"..i in all loops)
 local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local _BOSS_MAX = 5
+-- O(1) lookup for UNIT_TARGETABLE_CHANGED handler (boss adds spawning mid-fight)
+local _IS_BOSS_UNIT = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local _After0 = C_Timer and C_Timer.After
 
 -- Cached module refs (bound lazily, reset on InvalidateDB)
@@ -419,44 +421,13 @@ local function ApplyOwnedEvents(frame, desiredOwners)
 end
 
 -- ------------------------------------------------------------
--- Boss attach retry (ENGAGE_UNIT race)
--- ------------------------------------------------------------
-local BossAttachRetryTicker = nil
-
-local function StopBossRetry()
-    if BossAttachRetryTicker then
-        BossAttachRetryTicker:Cancel()
-        BossAttachRetryTicker = nil
-    end
-end
-
-local function StartBossAttachRetry()
-    StopBossRetry()
-
-    if not C_Timer or not C_Timer.NewTicker then return end
-
-    local tries = 0
-    BossAttachRetryTicker = C_Timer.NewTicker(0.15, function()
-        tries = tries + 1
-
-        local anyPending = false
-        for i = 1, _BOSS_MAX do
-            local u = _BOSS_UNITS[i]
-            if ShouldProcessUnitEvent(u) then
-                local f = FindUnitFrame(u)
-                if f and f.IsShown and f:IsShown() and UnitExists and UnitExists(u) then
-                    MarkDirty(u)
-                else
-                    anyPending = true
-                end
-            end
-        end
-
-        if (not anyPending) or tries >= 10 then
-            StopBossRetry()
-        end
-    end)
-end
+-- Boss attach retry: REMOVED.
+-- Replaced by two event-driven paths that are both faster and zero-cost:
+--   1. EnsureAttached OnShow hook: InvalidateUnit + MarkDirty when boss frame appears
+--   2. UNIT_TARGETABLE_CHANGED handler: InvalidateUnit + MarkDirty when mob enters slot
+-- The old ticker polled every 150ms for up to 1.5s — pure waste now.
+local function StopBossRetry() end  -- no-op (call sites still reference this)
+local function StartBossAttachRetry() end  -- no-op
 
 -- ------------------------------------------------------------
 -- Edit Mode preview refresh + fallback poll
@@ -817,6 +788,9 @@ end
     end
     if needBoss then
         desired.INSTANCE_ENCOUNTER_ENGAGE_UNIT = "Core"
+        -- Boss adds can spawn mid-fight (INSTANCE_ENCOUNTER_ENGAGE_UNIT only fires once at pull).
+        -- UNIT_TARGETABLE_CHANGED fires when a new mob enters a boss slot → force cache re-scan.
+        desired.UNIT_TARGETABLE_CHANGED = "Core"
     end
 
     ApplyOwnedEvents(ef, desired)
@@ -936,6 +910,20 @@ function Events.Init()
                 MarkDirty(_BOSS_UNITS[i], 0)
             end
             StartBossAttachRetry()
+            return
+        end
+
+        -- Boss adds spawning mid-fight: the add occupies a boss slot and
+        -- UNIT_TARGETABLE_CHANGED fires with the boss token ("boss2" etc.).
+        -- Force a cache re-scan so pre-existing auras are picked up
+        -- immediately — without waiting for the player to interact.
+        if event == "UNIT_TARGETABLE_CHANGED" then
+            if arg1 and _IS_BOSS_UNIT[arg1] then
+                if not _refsBound then BindCachedRefs() end
+                local inv = _cachedInvalidUnit
+                if inv then inv(arg1) end
+                MarkDirty(arg1, 0)
+            end
             return
         end
 
