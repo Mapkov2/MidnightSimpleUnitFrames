@@ -2367,7 +2367,7 @@ local function MSUF_StyleToggleText(cb)
             if c and c.GetChildren then MSUF_StyleAllToggles(c) end
         end
      end
-    local function CreateLabeledCheckButton(name, label, parent, x, y)
+    local function CreateLabeledCheckButton(name, label, parent, x, y, maxTextWidth)
         local cb = CreateFrame('CheckButton', name, parent, 'UICheckButtonTemplate')
         local extraY = 0
         if parent == frameGroup or parent == fontGroup or parent == barGroup or parent == profileGroup then extraY = -40 end
@@ -2376,6 +2376,9 @@ local function MSUF_StyleToggleText(cb)
         if cb.text then cb.text:SetText(TR(label or "")) end
         MSUF_StyleToggleText(cb)
         MSUF_StyleCheckmark(cb)
+        if maxTextWidth and _G.MSUF_ClampCheckboxText then
+            _G.MSUF_ClampCheckboxText(cb, maxTextWidth)
+        end
          return cb
     end
     -- Player options UI is implemented in Options\MSUF_Options_Player.lua (refactored out of Options Core).

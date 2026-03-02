@@ -131,10 +131,18 @@ local function StyleCheckmark(cb)
     end
 end
 
-local function MakeCheck(name, label, parent)
+local function MakeCheck(name, label, parent, maxWidth)
     local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
     local fs = _G[name .. "Text"]
-    if fs then fs:SetText(TR(label or "")) end
+    if fs then
+        fs:SetText(TR(label or ""))
+        -- i18n safety: clamp text width so long translations don't overflow column
+        if maxWidth and fs.SetWidth then
+            fs:SetWidth(maxWidth)
+            if fs.SetWordWrap then fs:SetWordWrap(false) end
+            if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(false) end
+        end
+    end
     cb.text = fs
     StyleToggleText(cb)
     StyleCheckmark(cb)
@@ -454,7 +462,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     -- ── Third panel (full width, below both columns) ──
     cpPanel = CreateFrame("Frame", "MSUF_ClassPowerOptionsPanel", leftPanel:GetParent(), "BackdropTemplate")
     local totalW = leftPanel:GetWidth() + rightPanel:GetWidth()
-    cpPanel:SetSize(totalW, 680)
+    cpPanel:SetSize(totalW, 740)
     cpPanel:SetPoint("TOPLEFT", leftPanel, "BOTTOMLEFT", 0, -10)
     cpPanel:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
@@ -493,12 +501,17 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpLine:SetWidth(LINE_W)
 
     -- [x] Show class power
-    cpShowCheck = MakeCheck("MSUF_ClassPowerShowCheck", "Show class power", cpPanel)
+    cpShowCheck = MakeCheck("MSUF_ClassPowerShowCheck", "Show class power", cpPanel, L_CHECK_TW)
     cpShowCheck:SetPoint("TOPLEFT", cpLine, "BOTTOMLEFT", PAD_X, -10)
 
     -- Column alignment: fixed label width per column
     local L_LABEL_W = 62   -- left column: Height, Width, X offset, Y offset
     local R_LABEL_W = 70   -- right column: BG opacity, Separator, Outline, Height, Y offset
+
+    -- Max text width for checkboxes (colW minus checkbox ~26px minus padding)
+    -- Prevents long i18n strings from overflowing into the adjacent column.
+    local L_CHECK_TW = colW - 42
+    local R_CHECK_TW = colW - 42
 
     -- Height
     cpHeightRow = MakeCompactSlider("MSUF_CPHeight", "Height", cpPanel, 2, 30, 1, "classPowerHeight",
@@ -562,25 +575,25 @@ local function BuildClassPowerOptions(leftName, rightName)
     end
 
     -- Checkboxes: behavior toggles
-    cpAnchorCooldownCheck = MakeCheck("MSUF_ClassPowerAnchorCooldownCheck", TR("Anchor to Essential Cooldown"), cpPanel)
+    cpAnchorCooldownCheck = MakeCheck("MSUF_ClassPowerAnchorCooldownCheck", TR("Anchor to Essential Cooldown"), cpPanel, L_CHECK_TW)
     cpAnchorCooldownCheck:SetPoint("TOPLEFT", cpYOffsetRow.label, "BOTTOMLEFT", 0, -12)
 
-    cpChargedCheck = MakeCheck("MSUF_ShowChargedCPCheck", TR("Show empowered combo points"), cpPanel)
+    cpChargedCheck = MakeCheck("MSUF_ShowChargedCPCheck", TR("Show empowered combo points"), cpPanel, L_CHECK_TW)
     cpChargedCheck:SetPoint("TOPLEFT", cpAnchorCooldownCheck, "BOTTOMLEFT", 0, -4)
 
-    cpTextCheck = MakeCheck("MSUF_ClassPowerTextCheck", TR("Show resource text"), cpPanel)
+    cpTextCheck = MakeCheck("MSUF_ClassPowerTextCheck", TR("Show resource text"), cpPanel, L_CHECK_TW)
     cpTextCheck:SetPoint("TOPLEFT", cpChargedCheck, "BOTTOMLEFT", 0, -4)
 
-    cpRuneTimeCheck = MakeCheck("MSUF_RuneTimeTextCheck", TR("Show rune time (per rune)"), cpPanel)
+    cpRuneTimeCheck = MakeCheck("MSUF_RuneTimeTextCheck", TR("Show rune time (per rune)"), cpPanel, L_CHECK_TW)
     cpRuneTimeCheck:SetPoint("TOPLEFT", cpTextCheck, "BOTTOMLEFT", 0, -4)
 
-    cpFillReverseCheck = MakeCheck("MSUF_ClassPowerReverseCheck", TR("Fill right-to-left"), cpPanel)
+    cpFillReverseCheck = MakeCheck("MSUF_ClassPowerReverseCheck", TR("Fill right-to-left"), cpPanel, L_CHECK_TW)
     cpFillReverseCheck:SetPoint("TOPLEFT", cpRuneTimeCheck, "BOTTOMLEFT", 0, -4)
 
-    cpEleMaelCheck = MakeCheck("MSUF_ClassPowerEleMaelCheck", TR("Show Maelstrom bar (Elemental)"), cpPanel)
+    cpEleMaelCheck = MakeCheck("MSUF_ClassPowerEleMaelCheck", TR("Show Maelstrom bar (Elemental)"), cpPanel, L_CHECK_TW)
     cpEleMaelCheck:SetPoint("TOPLEFT", cpFillReverseCheck, "BOTTOMLEFT", 0, -4)
 
-    cpEbonMightCheck = MakeCheck("MSUF_ClassPowerEbonMightCheck", TR("Show Ebon Might timer (Aug)"), cpPanel)
+    cpEbonMightCheck = MakeCheck("MSUF_ClassPowerEbonMightCheck", TR("Show Ebon Might timer (Aug)"), cpPanel, L_CHECK_TW)
     cpEbonMightCheck:SetPoint("TOPLEFT", cpEleMaelCheck, "BOTTOMLEFT", 0, -4)
 
     -- =====================================================================
@@ -879,7 +892,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     styleLine:SetWidth(LINE_W)
 
     -- [x] Color by resource type
-    cpColorCheck = MakeCheck("MSUF_ClassPowerColorCheck", "Color by resource type", cpPanel)
+    cpColorCheck = MakeCheck("MSUF_ClassPowerColorCheck", "Color by resource type", cpPanel, R_CHECK_TW)
     cpColorCheck:SetPoint("TOPLEFT", styleLine, "BOTTOMLEFT", PAD_X, -10)
 
     -- BG opacity / Separator / Outline
@@ -916,13 +929,13 @@ local function BuildClassPowerOptions(leftName, rightName)
     ahHeader:SetTextColor(0.85, 0.85, 0.85)
     cpPanel._ahHeader = ahHeader
 
-    cpHideOOCCheck = MakeCheck("MSUF_ClassPowerHideOOC", TR("Hide out of combat"), cpPanel)
+    cpHideOOCCheck = MakeCheck("MSUF_ClassPowerHideOOC", TR("Hide out of combat"), cpPanel, R_CHECK_TW)
     cpHideOOCCheck:SetPoint("TOPLEFT", ahHeader, "BOTTOMLEFT", 0, -6)
 
-    cpHideFullCheck = MakeCheck("MSUF_ClassPowerHideFull", TR("Hide when full"), cpPanel)
+    cpHideFullCheck = MakeCheck("MSUF_ClassPowerHideFull", TR("Hide when full"), cpPanel, R_CHECK_TW)
     cpHideFullCheck:SetPoint("TOPLEFT", cpHideOOCCheck, "BOTTOMLEFT", 0, -4)
 
-    cpHideEmptyCheck = MakeCheck("MSUF_ClassPowerHideEmpty", TR("Hide when empty"), cpPanel)
+    cpHideEmptyCheck = MakeCheck("MSUF_ClassPowerHideEmpty", TR("Hide when empty"), cpPanel, R_CHECK_TW)
     cpHideEmptyCheck:SetPoint("TOPLEFT", cpHideFullCheck, "BOTTOMLEFT", 0, -4)
 
     -- Texture dropdowns
@@ -1146,7 +1159,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     amSub:SetJustifyH("LEFT")
 
     -- [x] Show mana bar
-    amShowCheck = MakeCheck("MSUF_AltManaShowCheck", "Show mana bar (dual resource)", cpPanel)
+    amShowCheck = MakeCheck("MSUF_AltManaShowCheck", "Show mana bar (dual resource)", cpPanel, R_CHECK_TW)
     amShowCheck:SetPoint("TOPLEFT", amSub, "BOTTOMLEFT", 0, -6)
 
     -- Height / Y offset
@@ -1208,13 +1221,28 @@ local function BuildClassPowerOptions(leftName, rightName)
         end
     end
 
+    -- ── Divider above quick-action buttons ──
+    local btnDivider = cpPanel:CreateTexture(nil, "ARTWORK")
+    btnDivider:SetColorTexture(1, 1, 1, 0.12)
+    btnDivider:SetHeight(1)
+    btnDivider:SetPoint("TOPLEFT", dpbOutlineRow.label, "BOTTOMLEFT", -PAD_X, -14)
+    btnDivider:SetWidth(totalW - 2)
+
     local btnW, btnH = 140, 22
-    local btnY = 12
+    local BTN_PAD = 24  -- horizontal text padding inside button
 
     local editBtn = CreateFrame("Button", "MSUF_ClassPower_EditModeButton", cpPanel, "UIPanelButtonTemplate")
-    editBtn:SetSize(btnW, btnH)
-    editBtn:SetPoint("BOTTOMLEFT", cpPanel, "BOTTOMLEFT", PAD_X, btnY)
+    editBtn:SetHeight(btnH)
     editBtn:SetText(TR("Edit Mode"))
+    -- Auto-width: measure text then clamp to minimum
+    do
+        local fs = editBtn:GetFontString()
+        local tw = (fs and fs.GetStringWidth and fs:GetStringWidth()) or 0
+        local w = tw + BTN_PAD
+        if w < btnW then w = btnW end
+        editBtn:SetWidth(w)
+    end
+    editBtn:SetPoint("TOPLEFT", btnDivider, "BOTTOMLEFT", PAD_X, -10)
     editBtn:SetScript("OnClick", _ToggleMSUFEditMode)
 
 	-- Match Options_Player action button styling (and prevent SlashMenu mirror skin from breaking click/hover).
@@ -1226,9 +1254,16 @@ local function BuildClassPowerOptions(leftName, rightName)
 	end
 
     local colorBtn = CreateFrame("Button", "MSUF_ClassPower_ClassColorButton", cpPanel, "UIPanelButtonTemplate")
-    colorBtn:SetSize(btnW, btnH)
-    colorBtn:SetPoint("LEFT", editBtn, "RIGHT", 12, 0)
+    colorBtn:SetHeight(btnH)
     colorBtn:SetText(TR("Class color"))
+    do
+        local fs = colorBtn:GetFontString()
+        local tw = (fs and fs.GetStringWidth and fs:GetStringWidth()) or 0
+        local w = tw + BTN_PAD
+        if w < btnW then w = btnW end
+        colorBtn:SetWidth(w)
+    end
+    colorBtn:SetPoint("LEFT", editBtn, "RIGHT", 12, 0)
     colorBtn:SetScript("OnClick", _OpenClassPowerClassColorDropdown)
 
 	colorBtn._msufNoSlashSkin = true
@@ -1238,11 +1273,23 @@ local function BuildClassPowerOptions(leftName, rightName)
 		colorBtn.__msufMidnightActionSkinned = true
 	end
 
-    -- Make sure the scroll child is tall enough so the bottom buttons are reachable.
+    -- Dynamically size panel to actual content (buttons are last element).
+    -- This avoids clipping regardless of font size or scale.
     do
-        local curH = (cpPanel.GetHeight and cpPanel:GetHeight()) or 0
-        if curH < 620 and cpPanel.SetHeight then
-            cpPanel:SetHeight(620)
+        local BTN_BOTTOM_PAD = 14
+        if editBtn and editBtn.GetHeight and cpPanel and cpPanel.SetHeight then
+            local function RecalcPanelHeight()
+                if not (editBtn.GetBottom and cpPanel.GetTop) then return end
+                local pTop = cpPanel:GetTop()
+                local bBot = editBtn:GetBottom()
+                if pTop and bBot then
+                    local needed = math.ceil(pTop - bBot) + BTN_BOTTOM_PAD
+                    if needed < 700 then needed = 700 end
+                    cpPanel:SetHeight(needed)
+                end
+            end
+            editBtn:HookScript("OnShow", RecalcPanelHeight)
+            C_Timer.After(0.05, RecalcPanelHeight)
         end
     end
 

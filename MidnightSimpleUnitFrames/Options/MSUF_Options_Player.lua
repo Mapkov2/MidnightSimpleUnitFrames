@@ -906,7 +906,7 @@ local function MSUF_ExpandDropdownClickArea(dropdown)
         Apply()
     end
  end
-local function CreateCheck(parent, name, label, x, y)
+local function CreateCheck(parent, name, label, x, y, maxTextWidth)
     local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
     cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     if cb.Text then
@@ -914,6 +914,9 @@ local function CreateCheck(parent, name, label, x, y)
     else
         local t = _G[name .. "Text"]
         if t then t:SetText(label) end
+    end
+    if maxTextWidth and _G.MSUF_ClampCheckboxText then
+        _G.MSUF_ClampCheckboxText(cb, maxTextWidth)
     end
      return cb
 end
@@ -1294,6 +1297,16 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     for _, s in ipairs(LOAD_COND_UI_SPECS) do
         panel[s[1]] = CreateCheck(loadCondBox, "MSUF_UF_" .. s[1], s[3], s[4], s[5])
     end
+    -- i18n: clamp checkbox text in tight two-column layout.
+    -- Left column (x=12) must not overflow into right column (x=132).
+    -- Right column (x=132) must not overflow the 250px-wide box.
+    if _G.MSUF_ClampCheckboxText then
+        for _, s in ipairs(LOAD_COND_UI_SPECS) do
+            local cb = panel[s[1]]
+            local maxTW = (s[4] < 100) and 90 or 86
+            _G.MSUF_ClampCheckboxText(cb, maxTW)
+        end
+    end
     -- Left: Unit Alpha (shifted down to accommodate Load Conditions box)
     local sizeBox = CreateGroupBox(frameGroup, "Unit Alpha", leftX, topY - basicsH - 12 - loadCondH - 12, leftW, sizeH, texWhite, texWhite2)
     sizeBox:Hide()
@@ -1320,6 +1333,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     if alphaExcludeCB.Text then
         alphaExcludeCB.Text:SetText(TR("Keep text + portrait visible"))
     end
+    if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(alphaExcludeCB, 196) end
     panel.playerAlphaExcludeTextPortraitCB = alphaExcludeCB
     local alphaLayerLabel = sizeBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     alphaLayerLabel:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", 12, -58)
