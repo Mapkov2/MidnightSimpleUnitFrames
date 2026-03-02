@@ -78,8 +78,9 @@ local MODE_FRACTIONAL      = 2  -- Destruction Warlock: partial fill on current 
 local MODE_RUNE_CD         = 3  -- DK: per-rune cooldown animation with sort
 local MODE_AURA_SEGMENTED  = 4  -- Enh Shaman: aura-stack count as segments
 local MODE_AURA_SINGLE     = 5  -- DH Devourer: normalized 0-1 single bar
-local MODE_CONTINUOUS      = 6  -- Balance Druid: Astral Power continuous bar + prediction
+local MODE_CONTINUOUS      = 6  -- Ele Shaman Maelstrom: continuous bar (opt-in)
 local MODE_TIMER_BAR       = 8  -- Ebon Might: aura countdown bar with OnUpdate
+local MODE_STAGGER         = 9  -- Brewmaster Monk: stagger bar (3-color threshold)
 
 -- ============================================================================
 -- Spec constants (sourced from Blizzard_FrameXMLBase/Constants.lua)
@@ -105,6 +106,7 @@ local SPELL_SILENCE_THE_WHISPERS = (Constants and Constants.UnitPowerSpellIDs an
 local SPELL_VOID_METAMORPHOSIS  = (Constants and Constants.UnitPowerSpellIDs and Constants.UnitPowerSpellIDs.VOID_METAMORPHOSIS_SPELL_ID) or 1217607
 local SPELL_MAELSTROM_WEAPON       = 344179
 local SPELL_MAELSTROM_WEAPON_TALENT = 187880
+local MW_SPEND_THRESHOLD           = 5  -- stacks 6+ colored differently (spender empowered)
 
 -- Balance Druid: Astral Power prediction + Eclipse tracking (MCR-sourced)
 local SPELL_NATURES_BALANCE     = 406890
@@ -595,6 +597,10 @@ do
     PT.Maelstrom     = (E and E.Maelstrom)      or 11
 end
 
+-- Sentinel power type for Brewmaster stagger (not a real WoW power type).
+-- Used only for internal CP system routing; never passed to UnitPower/UnitPowerMax.
+local PT_STAGGER = -1
+
 -- ============================================================================
 -- DB Defaults (self-contained; runs on every login, no-ops if keys exist)
 -- ============================================================================
@@ -708,6 +714,14 @@ local function GetClassPowerType()
     elseif PLAYER_CLASS == "MONK" then
         local spec = GetSpec and GetSpec()
         if spec == SPEC_MONK_WINDWALKER then return PT.Chi, MODE_SEGMENTED, false end
+        -- Brewmaster: Stagger as class resource (3-color threshold, CDM-synced).
+        -- Energy is primary → main power bar. Stagger → class power overlay.
+        if spec == SPEC_MONK_BREWMASTER then
+            local bb = MSUF_DB and MSUF_DB.bars
+            if not bb or bb.showStagger ~= false then
+                return PT_STAGGER, MODE_STAGGER, false
+            end
+        end
 
     elseif PLAYER_CLASS == "DRUID" then
         local form = GetShapeshiftFormID and GetShapeshiftFormID()
@@ -741,10 +755,8 @@ local function GetClassPowerType()
         end
 
     elseif PLAYER_CLASS == "PRIEST" then
-        local spec = GetSpec and GetSpec()
-        if spec == SPEC_PRIEST_SHADOW then
-            return PT.Insanity, MODE_CONTINUOUS, false
-        end
+        -- Shadow: Insanity is primary resource → already shown in main power bar.
+        -- No class power overlay needed (same pattern as Balance Druid Astral Power).
 
     elseif PLAYER_CLASS == "WARRIOR" then
         -- All Warrior specs use Whirlwind as class resource (Fury, Arms, Prot).
@@ -765,16 +777,11 @@ local function GetClassPowerType()
 end
 
 -- Stagger detection (Brewmaster Monk only)
-local function NeedsStaggerBar()
-    if PLAYER_CLASS ~= "MONK" then return false end
-    local spec = GetSpec and GetSpec()
-    if spec ~= SPEC_MONK_BREWMASTER then return false end
-    if UnitHasVehicleUI and UnitHasVehicleUI("player") then return false end
-    return true
-end
 
 -- AltMana: returns true if we need a mana bar (primary power != Mana)
 local function NeedsAltManaBar()
+    -- Ele Shaman: when Maelstrom is in class power, main bar shows Mana → no alt needed
+    if _G.MSUF_EleMaelstromActive then return false end
     local pType = UnitPowerType("player")
     -- pType == 0 = Mana primary → no alt bar needed
     if NotSecret(pType) then
@@ -814,7 +821,7 @@ local POWER_TYPE_TOKENS = {
     [PT.Mana]          = "MANA",
     [PT.LunarPower]    = "ASTRAL_POWER",
     [PT.Insanity]      = "INSANITY",
-    [PT.Maelstrom]     = "MAELSTROM_POWER",
+    [PT.Maelstrom]     = "MAELSTROM",
     -- String-keyed aura-based types (not in Enum.PowerType)
     ["SOUL_FRAGMENTS"]      = "SOUL_FRAGMENTS",
     ["SOUL_FRAGMENTS_VENG"] = "SOUL_FRAGMENTS_VENG",
@@ -830,6 +837,29 @@ local POWER_TYPE_TOKENS = {
 -- ============================================================================
 local _cachedColorR, _cachedColorG, _cachedColorB = 1, 1, 1
 local _cachedColorToken = nil
+local _staggerCachedTier = 0  -- Stagger: avoid redundant SetStatusBarColor when tier unchanged
+
+-- Maelstrom Weapon 5+ threshold color (cached independently)
+local _mwAbove5R, _mwAbove5G, _mwAbove5B
+local _mwAbove5Resolved = false
+
+local function ResolveMWAbove5Color()
+    if _mwAbove5Resolved then return _mwAbove5R, _mwAbove5G, _mwAbove5B end
+    _mwAbove5Resolved = true
+    local ov = MSUF_DB and MSUF_DB.general and MSUF_DB.general.classPowerColorOverrides
+    if type(ov) == "table" then
+        local c = ov["MAELSTROM_ABOVE_5"]
+        if type(c) == "table" then
+            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                _mwAbove5R, _mwAbove5G, _mwAbove5B = r, g, b
+                return r, g, b
+            end
+        end
+    end
+    _mwAbove5R, _mwAbove5G, _mwAbove5B = 1.00, 0.50, 0.00  -- Sensei orange default
+    return _mwAbove5R, _mwAbove5G, _mwAbove5B
+end
 
 local function ResolveClassPowerColor(powerType)
     -- Token resolution: numeric powerType → string token, string → use directly
@@ -890,6 +920,8 @@ end
 _G.MSUF_ClassPower_InvalidateColors = function()
     _cachedColorToken = nil
     _cachedChargedR = nil  -- also invalidate charged cache
+    _staggerCachedTier = 0  -- force stagger color re-apply
+    _mwAbove5Resolved = false  -- force MW threshold color re-resolve
     -- Balance Druid: refresh eclipse + prediction overlay colors
     if type(_G.MSUF_BAL_InvalidateColors) == "function" then
         _G.MSUF_BAL_InvalidateColors()
@@ -1889,6 +1921,13 @@ local function CP_UpdateValues_AuraSegmented(powerType, maxPower)
             cur = CP.spStacks
         end
 
+        -- Maelstrom Weapon: resolve threshold color for stacks > 5 (spender empowered)
+        local mwAbove5 = (powerType == "MAELSTROM_WEAPON" and cur > MW_SPEND_THRESHOLD)
+        local abR, abG, abB
+        if mwAbove5 then
+            abR, abG, abB = ResolveMWAbove5Color()
+        end
+
         for i = 1, maxPower do
             local bar = CP.bars[i]
             if bar then
@@ -1896,7 +1935,12 @@ local function CP_UpdateValues_AuraSegmented(powerType, maxPower)
                 bar:SetMinMaxValues(0, 1)
                 bar:SetValue(isFilled and 1 or 0)
                 bar:SetAlpha(isFilled and _filledAlpha or _emptyAlpha)
-                bar:SetStatusBarColor(baseR, baseG, baseB, 1)
+                -- MW threshold: segments above 5 get "spender ready" color
+                if mwAbove5 and isFilled and i > MW_SPEND_THRESHOLD then
+                    bar:SetStatusBarColor(abR, abG, abB, 1)
+                else
+                    bar:SetStatusBarColor(baseR, baseG, baseB, 1)
+                end
                 bar._bg:SetVertexColor(0, 0, 0, bgA)
             end
         end
@@ -2276,42 +2320,14 @@ local function OnSpellTrackerReset()
 end
 
 -- ============================================================================
--- Update function dispatch table (set in FullRefresh, called in hot path)
--- ============================================================================
-local MODE_UPDATE_FN = {
-    [MODE_SEGMENTED]      = CP_UpdateValues,
-    [MODE_FRACTIONAL]     = CP_UpdateValues_Fractional,
-    [MODE_RUNE_CD]        = CP_UpdateValues_RuneCD,
-    [MODE_AURA_SEGMENTED] = CP_UpdateValues_AuraSegmented,
-    [MODE_AURA_SINGLE]    = CP_UpdateValues_AuraSingle,
-    [MODE_CONTINUOUS]     = CP_UpdateValues_Continuous,
-    [MODE_TIMER_BAR]      = CP_UpdateValues_TimerBar,
-}
-
--- Forward declaration (AM defined later; needed by ST_Layout for anchor chain)
-local AM
-
--- ============================================================================
--- Stagger Bar — Brewmaster Monk (oUF pattern)
--- Standalone bar (like AltMana). 3-color threshold system.
--- Event: UNIT_AURA (Blizzard uses UNIT_AURA for stagger updates)
--- ============================================================================
-local ST = {
-    bar       = nil,
-    container = nil,
-    bgTex     = nil,
-    visible   = false,
-}
-
 -- Stagger colors (oUF-sourced defaults; overridable via Colors menu)
+-- Used by CP_UpdateValues_Stagger for 3-color threshold system.
+-- ============================================================================
 local STAGGER_COLOR_DEFAULTS = {
     { 0.52, 1.00, 0.52 },  -- green  (< 30%)
     { 1.00, 0.98, 0.72 },  -- yellow (30-60%)
     { 1.00, 0.42, 0.42 },  -- red    (> 60%)
 }
-
--- Resolve stagger color from DB override → hardcoded default
--- tier: 1 = green, 2 = yellow, 3 = red
 local STAGGER_TOKENS = { "STAGGER_GREEN", "STAGGER_YELLOW", "STAGGER_RED" }
 
 local function ResolveStaggerColor(tier)
@@ -2330,98 +2346,88 @@ local function ResolveStaggerColor(tier)
     return def[1], def[2], def[3]
 end
 
-local function ST_Create(playerFrame)
-    if ST.container then return end
-
-    local c = CreateFrame("Frame", "MSUF_StaggerContainer", playerFrame)
-    c:SetFrameLevel(playerFrame:GetFrameLevel() + 2)
-    c:Hide()
-    ST.container = c
-
-    -- Background
-    local bg = c:CreateTexture(nil, "BACKGROUND")
-    bg:SetTexture("Interface\\Buttons\\WHITE8x8")
-    bg:SetAllPoints(c)
-    bg:SetVertexColor(0, 0, 0, 0.4)
-    ST.bgTex = bg
-
-    -- Border (1px black outline via backdrop)
-    local border = CreateFrame("Frame", nil, c, "BackdropTemplate")
-    border:SetPoint("TOPLEFT", c, "TOPLEFT", -1, 1)
-    border:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 1, -1)
-    border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-    border:SetBackdropColor(0, 0, 0, 0)
-    border:SetBackdropBorderColor(0, 0, 0, 1)
-    border:SetFrameLevel(c:GetFrameLevel() + 1)
-    ST._border = border
-
-    -- Status bar
-    local getTexture = _G.MSUF_GetBarTexture
-    local bar = CreateFrame("StatusBar", nil, c)
-    bar:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
-    bar:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 0, 0)
-    bar:SetStatusBarTexture(getTexture and getTexture() or "Interface\\Buttons\\WHITE8x8")
-    bar:SetMinMaxValues(0, 100)
-    bar:SetValue(0)
-    bar:SetFrameLevel(c:GetFrameLevel() + 1)
-    ST.bar = bar
-end
-
-local function ST_Layout(playerFrame)
-    if not ST.container then return end
-    local b = MSUF_DB and MSUF_DB.bars or {}
-
-    local h = tonumber(b.staggerHeight) or 4
-    if h < 2 then h = 2 elseif h > 30 then h = 30 end
-    local oY = tonumber(b.staggerOffsetY) or -2
-
-    -- Position: below AltMana if visible, else below playerFrame
-    local anchor = playerFrame
-    if AM and AM.visible and AM.container then
-        anchor = AM.container
-        oY = -2  -- small gap below alt mana
-    end
-
-    ST.container:ClearAllPoints()
-    if anchor == playerFrame then
-        ST.container:SetPoint("TOPLEFT",  playerFrame, "BOTTOMLEFT",   2, oY)
-        ST.container:SetPoint("TOPRIGHT", playerFrame, "BOTTOMRIGHT", -2, oY)
-    else
-        ST.container:SetPoint("TOPLEFT",  anchor, "BOTTOMLEFT",   0, oY)
-        ST.container:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT",  0, oY)
-    end
-    ST.container:SetHeight(h)
-end
-
-local function ST_UpdateValue()
-    if not ST.bar then return end
-
+-- ============================================================================
+-- MODE_STAGGER: Brewmaster Monk — stagger bar (oUF 3-color threshold pattern)
+-- Reads UnitStagger("player") / UnitHealthMax("player"). Event-driven via
+-- UNIT_AURA (stagger amount) and UNIT_HEALTH (max health = bar max).
+-- Secret-safe: UnitStagger returns plain numbers, not secrets.
+-- ============================================================================
+local function CP_UpdateValues_Stagger(powerType, maxPower)
     local cur = UnitStagger and UnitStagger("player") or 0
     local mx  = UnitHealthMax("player") or 1
     if type(cur) ~= "number" then cur = 0 end
-    if type(mx)  ~= "number" or mx <= 0 then mx = 1 end
+    if type(mx) ~= "number" or mx <= 0 then mx = 1 end
 
-    ST.bar:SetMinMaxValues(0, mx)
-    ST.bar:SetValue(cur)
+    local bar = CP.bars[1]
+    if not bar then return end
+
+    bar:SetMinMaxValues(0, mx)
+    bar:SetValue(cur)
+    bar:SetAlpha(_filledAlpha)
+    bar:Show()
 
     -- 3-color threshold (oUF pattern; colors configurable via Colors menu)
     local perc = cur / mx
-    local r, g, b
-    if perc >= STAGGER_RED_TRANSITION then
-        r, g, b = ResolveStaggerColor(3)
-    elseif perc > STAGGER_YELLOW_TRANSITION then
-        r, g, b = ResolveStaggerColor(2)
-    else
-        r, g, b = ResolveStaggerColor(1)
+    local tier
+    if perc >= STAGGER_RED_TRANSITION then tier = 3
+    elseif perc > STAGGER_YELLOW_TRANSITION then tier = 2
+    else tier = 1 end
+
+    if tier ~= _staggerCachedTier then
+        _staggerCachedTier = tier
+        local r, g, b = ResolveStaggerColor(tier)
+        bar:SetStatusBarColor(r, g, b, 1)
     end
-    ST.bar:SetStatusBarColor(r, g, b, 1)
+
+    local bgA = (MSUF_DB and MSUF_DB.bars and tonumber(MSUF_DB.bars.classPowerBgAlpha)) or 0.3
+    if bar._bg then bar._bg:SetVertexColor(0, 0, 0, bgA) end
+
+    -- Hide bars 2+ (single bar mode)
+    for i = 2, CP.maxBars do
+        local b2 = CP.bars[i]
+        if b2 then b2:Hide() end
+    end
+    -- Hide ticks (single bar = no separators)
+    for i = 1, #CP.ticks do
+        if CP.ticks[i] then CP.ticks[i]:Hide() end
+    end
+
+    -- Text: show stagger amount in K (e.g. "12.3K") — more useful than %
+    local txt = CP.text
+    if txt then
+        local showText = MSUF_DB and MSUF_DB.bars and (MSUF_DB.bars.classPowerShowText == true)
+        if showText then
+            if cur >= 1000 then
+                txt:SetFormattedText("%.1fK", cur / 1000)
+            else
+                txt:SetFormattedText("%d", cur)
+            end
+            txt:Show()
+        else
+            txt:Hide()
+        end
+    end
+
+    CP_CheckAutoHide(cur, mx)
 end
 
-local function ST_RefreshTexture()
-    if not ST.bar then return end
-    local getTexture = _G.MSUF_GetBarTexture
-    ST.bar:SetStatusBarTexture(getTexture and getTexture() or "Interface\\Buttons\\WHITE8x8")
-end
+-- ============================================================================
+-- Update function dispatch table (set in FullRefresh, called in hot path)
+-- ============================================================================
+local MODE_UPDATE_FN = {
+    [MODE_SEGMENTED]      = CP_UpdateValues,
+    [MODE_FRACTIONAL]     = CP_UpdateValues_Fractional,
+    [MODE_RUNE_CD]        = CP_UpdateValues_RuneCD,
+    [MODE_AURA_SEGMENTED] = CP_UpdateValues_AuraSegmented,
+    [MODE_AURA_SINGLE]    = CP_UpdateValues_AuraSingle,
+    [MODE_CONTINUOUS]     = CP_UpdateValues_Continuous,
+    [MODE_TIMER_BAR]      = CP_UpdateValues_TimerBar,
+    [MODE_STAGGER]        = CP_UpdateValues_Stagger,
+}
+
+-- Forward declaration (AM defined later)
+local AM
+
 -- ============================================================================
 -- AltMana visual: single StatusBar (created lazily on player frame)
 -- ============================================================================
@@ -2624,6 +2630,19 @@ local function FullRefresh()
     local cpHeight = tonumber(b.classPowerHeight) or 4
     if cpHeight < 2 then cpHeight = 2 elseif cpHeight > 30 then cpHeight = 30 end
 
+    -- Ele Shaman: main power bar ALWAYS shows Mana (Maelstrom is UnitPowerType default).
+    -- showEleMaelstrom only controls whether the class resource bar displays Maelstrom.
+    -- Flag is unconditional for Ele spec → all hot paths (UnitframeCore, Text) override pType to Mana.
+    local isEleShaman = (PLAYER_CLASS == "SHAMAN" and GetSpec and GetSpec() == SPEC_SHAMAN_ELEMENTAL)
+    local eleMaelChanged = ((isEleShaman or false) ~= (_G.MSUF_EleMaelstromActive == true))
+    _G.MSUF_EleMaelstromActive = isEleShaman or false
+    -- Force player power bar refresh so it immediately switches Mana ↔ Maelstrom
+    if eleMaelChanged then
+        if type(_G.MSUF_RefreshPlayerPowerBar) == "function" then
+            _G.MSUF_RefreshPlayerPowerBar()
+        end
+    end
+
     if cpEnabled and powerType and renderMode ~= MODE_NONE then
         CP_Create(playerFrame)
 
@@ -2634,7 +2653,9 @@ local function FullRefresh()
         elseif renderMode == MODE_AURA_SINGLE then
             maxP = 1  -- DH Devourer: single normalized bar
         elseif renderMode == MODE_CONTINUOUS then
-            maxP = 1  -- Balance Druid / Insanity / Ele Maelstrom: single continuous bar
+            maxP = 1  -- Ele Maelstrom: single continuous bar
+        elseif renderMode == MODE_STAGGER then
+            maxP = 1  -- Brewmaster Monk: single stagger bar (max = UnitHealthMax inside update fn)
         elseif renderMode == MODE_TIMER_BAR then
             maxP = 1  -- Ebon Might: single countdown bar
         elseif renderMode == MODE_AURA_SEGMENTED then
@@ -2753,22 +2774,6 @@ local function FullRefresh()
         if AM.container then AM.container:Hide() end
         AM.visible = false
     end
-
-    -- ---- Stagger (Brewmaster Monk) ----
-    local stEnabled = (b.showStagger ~= false)
-    local needsSt = NeedsStaggerBar()
-
-    if stEnabled and needsSt and not inEditMode then
-        ST_Create(playerFrame)
-        ST_Layout(playerFrame)
-        ST_RefreshTexture()
-        ST_UpdateValue()
-        ST.container:Show()
-        ST.visible = true
-    else
-        if ST.container then ST.container:Hide() end
-        ST.visible = false
-    end
 end
 
 -- ============================================================================
@@ -2784,6 +2789,8 @@ local function OnPowerUpdate(powerToken)
     if CP.renderMode == MODE_RUNE_CD then return end
     -- Timer bar: driven by OnUpdate + UNIT_AURA
     if CP.renderMode == MODE_TIMER_BAR then return end
+    -- Stagger: driven by UNIT_AURA + UNIT_HEALTH, not UNIT_POWER_UPDATE
+    if CP.renderMode == MODE_STAGGER then return end
 
     -- Quick token filter: only react to our power type
     local expectedToken = POWER_TYPE_TOKENS[CP.powerType]
@@ -2814,9 +2821,9 @@ local function OnAuraUpdate(unit)
         CP.tbCachedQ = -1  -- force refresh
         CP_UpdateValues_TimerBar(CP.powerType, CP.currentMax)
     end
-    -- Stagger: also aura-driven (Blizzard_UnitFrame uses UNIT_AURA)
-    if ST.visible then
-        ST_UpdateValue()
+    -- Stagger: aura-driven (Blizzard_UnitFrame uses UNIT_AURA for stagger updates)
+    if CP.visible and CP.renderMode == MODE_STAGGER then
+        CP_UpdateValues_Stagger(CP.powerType, CP.currentMax)
     end
 end
 
@@ -2966,10 +2973,13 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
         return
     end
 
-    -- Stagger: health changes affect threshold colors
+    -- Stagger: health changes affect threshold colors + bar max
     if event == "UNIT_HEALTH" then
-        if arg1 == "player" and ST.visible then
-            ST_UpdateValue()
+        if arg1 == "player" then
+            -- CP stagger: max health = bar max, threshold recalculation
+            if CP.visible and CP.renderMode == MODE_STAGGER then
+                CP_UpdateValues_Stagger(CP.powerType, CP.currentMax)
+            end
         end
         return
     end
@@ -3118,7 +3128,6 @@ end
 function _G.MSUF_ClassPower_RefreshTextures()
     CP_RefreshTexture()
     AM_RefreshTexture()
-    ST_RefreshTexture()
 end
 
 -- Refresh class power text font (called from UpdateAllFonts)
@@ -3137,7 +3146,7 @@ function _G.MSUF_ClassPower_GetState()
         isVehicle         = CP.isVehicle,
         isAuraPower       = CP.isAuraPower,
         altManaVisible    = AM.visible,
-        staggerVisible    = ST.visible,
+        staggerVisible    = (CP.visible and CP.renderMode == MODE_STAGGER) or false,
     }
 end
 

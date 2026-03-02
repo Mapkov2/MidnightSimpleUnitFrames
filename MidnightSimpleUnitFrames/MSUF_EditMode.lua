@@ -1043,16 +1043,37 @@ local MSUF__CastbarPopupApplying = false
 local MSUF__CastbarPopupSyncing = false
 local MSUF__EditModeCombatFrame
 local MSUF__EditModeCombatNoticeShown = false
-local MSUF__EditModeCombatWarnFrame
-local MSUF__EditModeCombatWarnShownThisCombat = false
 
-local function MSUF_EditMode_ShowCombatWarning()
+-- ══════════════════════════════════════════════════════════════════════
+-- Combat Lockdown Guard  (replaces the old "warning-only" listener)
+-- ──────────────────────────────────────────────────────────────────────
+-- PLAYER_REGEN_DISABLED → force-close Edit Mode immediately.
+-- This prevents taint, secure-frame violations and addon errors that
+-- occur when Edit Mode manipulates frames during combat.
+--
+-- Secret-safe: no secret value comparisons; InCombatLockdown() returns
+-- a plain boolean and MSUF_UnitEditModeActive is addon-owned state.
+-- ══════════════════════════════════════════════════════════════════════
+local MSUF__EditModeCombatLockdownFrame
+local MSUF__EditModeCombatLockdownClosedThisCombat = false
+
+local function MSUF_EditMode_CombatForceClose()
+    -- Guard: only act when Edit Mode is actually active.
     if not MSUF_UnitEditModeActive then return end
-    if not (InCombatLockdown and InCombatLockdown()) then return end
-    if MSUF__EditModeCombatWarnShownThisCombat then return end
-    MSUF__EditModeCombatWarnShownThisCombat = true
 
-    local msg = "|cffffd700MSUF Edit Mode:|r You are in combat - changes/movement will be applied after combat ends."
+    MSUF__EditModeCombatLockdownClosedThisCombat = true
+
+    -- Use the deterministic exit path (combat-safe: defers secure work).
+    if Edit and Edit.Flow and type(Edit.Flow.Exit) == "function" then
+        Edit.Flow.Exit("combat_lockdown", { flushPending = false })
+    elseif type(MSUF_EditMode_ExitDeterministic) == "function" then
+        MSUF_EditMode_ExitDeterministic("combat_lockdown", { flushPending = false })
+    else
+        -- Absolute fallback: at minimum flip state off.
+        MSUF_EM_SetActive(false, nil)
+    end
+
+    local msg = "|cffffd700MSUF:|r Edit Mode closed — you entered combat."
     if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
         _G.DEFAULT_CHAT_FRAME:AddMessage(msg)
     else
@@ -1060,39 +1081,39 @@ local function MSUF_EditMode_ShowCombatWarning()
     end
 end
 
-local function MSUF_EditMode_StartCombatWarningListener()
-    if MSUF__EditModeCombatWarnFrame then return end
-    MSUF__EditModeCombatWarnFrame = CreateFrame("Frame")
-    MSUF__EditModeCombatWarnFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-    MSUF__EditModeCombatWarnFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    MSUF__EditModeCombatWarnFrame:SetScript("OnEvent", function(_, event)
+local function MSUF_EditMode_StartCombatLockdown()
+    if MSUF__EditModeCombatLockdownFrame then return end
+
+    MSUF__EditModeCombatLockdownFrame = CreateFrame("Frame")
+    MSUF__EditModeCombatLockdownFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    MSUF__EditModeCombatLockdownFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    MSUF__EditModeCombatLockdownFrame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" then
-            if MSUF_UnitEditModeActive then
-                MSUF_EditMode_ShowCombatWarning()
-            end
+            MSUF_EditMode_CombatForceClose()
         else -- PLAYER_REGEN_ENABLED
-            MSUF__EditModeCombatWarnShownThisCombat = false
+            MSUF__EditModeCombatLockdownClosedThisCombat = false
         end
     end)
 
-    -- If we enter Edit Mode while already in combat, warn immediately (Das klappt nicht so richtig)
-    if InCombatLockdown and InCombatLockdown() and MSUF_UnitEditModeActive then
-        MSUF_EditMode_ShowCombatWarning()
+    -- Belt-and-suspenders: if we somehow got here while already in combat,
+    -- force-close right now (should never happen due to Flow.Enter guard).
+    if InCombatLockdown and InCombatLockdown() then
+        MSUF_EditMode_CombatForceClose()
     end
 end
 
-local function MSUF_EditMode_StopCombatWarningListener()
-    if not MSUF__EditModeCombatWarnFrame then return end
-    if MSUF__EditModeCombatWarnFrame.UnregisterAllEvents then
-        MSUF__EditModeCombatWarnFrame:UnregisterAllEvents()
+local function MSUF_EditMode_StopCombatLockdown()
+    if not MSUF__EditModeCombatLockdownFrame then return end
+    if MSUF__EditModeCombatLockdownFrame.UnregisterAllEvents then
+        MSUF__EditModeCombatLockdownFrame:UnregisterAllEvents()
     else
-        MSUF__EditModeCombatWarnFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
-        MSUF__EditModeCombatWarnFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        MSUF__EditModeCombatLockdownFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
+        MSUF__EditModeCombatLockdownFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
     end
-    MSUF__EditModeCombatWarnFrame:SetScript("OnEvent", nil)
-    MSUF__EditModeCombatWarnFrame:Hide()
-    MSUF__EditModeCombatWarnFrame = nil
-    MSUF__EditModeCombatWarnShownThisCombat = false
+    MSUF__EditModeCombatLockdownFrame:SetScript("OnEvent", nil)
+    MSUF__EditModeCombatLockdownFrame:Hide()
+    MSUF__EditModeCombatLockdownFrame = nil
+    MSUF__EditModeCombatLockdownClosedThisCombat = false
 end
 
 local function MSUF_EditMode_HardTeardown()
@@ -1135,8 +1156,8 @@ local function MSUF_EditMode_HardTeardown()
         MSUF__EditModeCombatFrame = nil
     end
 
-    -- Kill combat warning listener
-    MSUF_EditMode_StopCombatWarningListener()
+    -- Kill combat lockdown listener
+    MSUF_EditMode_StopCombatLockdown()
 
     local nudge = _G and _G.MSUF_ArrowKeyNudgeFrame
     if nudge then
@@ -7436,7 +7457,7 @@ function MSUF_SetMSUFEditModeFromBlizzard(active)
 
         MSUF_EM_SetActive(true, "player")
         MSUF_EditModeSizing = false
-MSUF_EditMode_StartCombatWarningListener()
+MSUF_EditMode_StartCombatLockdown()
         if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(true) end
         if type(MSUF_RefreshAllUnitVisibilityDrivers)=="function" then MSUF_EditMode_RequestVisibilityDrivers(true) end
         if not MSUF_CurrentEditUnitKey then
@@ -7693,7 +7714,7 @@ if not _G.MSUF_SetMSUFEditModeDirect then
             if type(_G.MSUF_Auras2_RefreshAll) == "function" then
                 _G.MSUF_Auras2_RefreshAll()
             end
-MSUF_EditMode_StartCombatWarningListener()
+MSUF_EditMode_StartCombatLockdown()
             if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(true) end
             if unitKey then
                 MSUF_CurrentEditUnitKey = unitKey
@@ -8199,6 +8220,10 @@ do
 
     -- Convenience helpers (used by Options/commands; keeps behavior identical).
     Edit.Flow.Enter = function(unitKey)
+        -- Combat lockdown: block entering Edit Mode in combat (defense-in-depth).
+        if InCombatLockdown and InCombatLockdown() then
+            return
+        end
         if Edit.Util and Edit.Util.ClearKeyboardFocus then
             Edit.Util.ClearKeyboardFocus()
         end
@@ -8218,6 +8243,10 @@ do
     Edit.Flow.Toggle = function(unitKey)
         if MSUF_UnitEditModeActive then
             return Edit.Flow.Exit("toggle", { flushPending = true })
+        end
+        -- Combat lockdown: block toggling ON in combat (defense-in-depth).
+        if InCombatLockdown and InCombatLockdown() then
+            return
         end
         return Edit.Flow.Enter(unitKey)
     end
