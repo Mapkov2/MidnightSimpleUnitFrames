@@ -416,6 +416,7 @@ local cpTickRow        -- slider row: Separator width
 local cpOutlineRow     -- slider row: Outline thickness
 local cpChargedCheck   -- "Show empowered combo points"
 local cpTextCheck      -- "Show resource text"
+local cpRuneTimeCheck  -- DK: show rune time text
 local cpAnchorCooldownCheck -- "Anchor to Essential Cooldown"
 local cpFillReverseCheck    -- "Fill right-to-left"
 local cpEleMaelCheck        -- "Show Maelstrom bar (Elemental)"
@@ -570,8 +571,11 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpTextCheck = MakeCheck("MSUF_ClassPowerTextCheck", TR("Show resource text"), cpPanel)
     cpTextCheck:SetPoint("TOPLEFT", cpChargedCheck, "BOTTOMLEFT", 0, -4)
 
+    cpRuneTimeCheck = MakeCheck("MSUF_RuneTimeTextCheck", TR("Show rune time (per rune)"), cpPanel)
+    cpRuneTimeCheck:SetPoint("TOPLEFT", cpTextCheck, "BOTTOMLEFT", 0, -4)
+
     cpFillReverseCheck = MakeCheck("MSUF_ClassPowerReverseCheck", TR("Fill right-to-left"), cpPanel)
-    cpFillReverseCheck:SetPoint("TOPLEFT", cpTextCheck, "BOTTOMLEFT", 0, -4)
+    cpFillReverseCheck:SetPoint("TOPLEFT", cpRuneTimeCheck, "BOTTOMLEFT", 0, -4)
 
     cpEleMaelCheck = MakeCheck("MSUF_ClassPowerEleMaelCheck", TR("Show Maelstrom bar (Elemental)"), cpPanel)
     cpEleMaelCheck:SetPoint("TOPLEFT", cpFillReverseCheck, "BOTTOMLEFT", 0, -4)
@@ -1255,6 +1259,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         BindBool(cpColorCheck, "bars.classPowerColorByType",  CPRefresh, SyncClassPowerToggles)
         BindBool(cpChargedCheck, "bars.showChargedComboPoints", CPRefresh, SyncClassPowerToggles)
         BindBool(cpTextCheck,  "bars.classPowerShowText",     CPRefresh, SyncClassPowerToggles)
+        BindBool(cpRuneTimeCheck, "bars.runeShowTimeText",          CPRefresh, SyncClassPowerToggles)
         BindBool(cpAnchorCooldownCheck, "bars.classPowerAnchorToCooldown", CPRefresh, SyncClassPowerToggles)
         BindBool(cpFillReverseCheck,   "bars.classPowerFillReverse",      CPRefresh, SyncClassPowerToggles)
         BindBool(cpEleMaelCheck,       "bars.showEleMaelstrom",           CPRefresh, SyncClassPowerToggles)
@@ -1477,6 +1482,10 @@ local function SyncClassPowerToggles()
         cpTextCheck:SetChecked(b.classPowerShowText == true)
         if cpTextCheck.__msufToggleUpdate then cpTextCheck.__msufToggleUpdate() end
     end
+    if cpRuneTimeCheck then
+        cpRuneTimeCheck:SetChecked(b.runeShowTimeText == true)
+        if cpRuneTimeCheck.__msufToggleUpdate then cpRuneTimeCheck.__msufToggleUpdate() end
+    end
     if cpAnchorCooldownCheck then
         cpAnchorCooldownCheck:SetChecked(b.classPowerAnchorToCooldown == true)
         if cpAnchorCooldownCheck.__msufToggleUpdate then cpAnchorCooldownCheck.__msufToggleUpdate() end
@@ -1550,6 +1559,7 @@ local function SyncClassPowerToggles()
     SetEnabled(cpColorCheck, cpOn)
     SetEnabled(cpChargedCheck, cpOn)
     SetEnabled(cpTextCheck, cpOn)
+    SetEnabled(cpRuneTimeCheck, cpOn and (b.classPowerShowText == true))
     SetEnabled(cpAnchorCooldownCheck, cpOn)
     SetEnabled(cpFillReverseCheck, cpOn)
     SetEnabled(cpEleMaelCheck, cpOn)
