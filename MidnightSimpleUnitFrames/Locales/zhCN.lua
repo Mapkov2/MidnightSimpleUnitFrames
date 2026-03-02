@@ -33,7 +33,9 @@ local T = {
     ["Off"] = "关",
     ["ON"]  = "开",
     ["OFF"]  = "关",
-   
+    ["Copy to"] = "复制到",
+    ["Copy"] = "复制",
+
 
     ["Override"] = "覆盖",
     ["Overrides"] = "覆盖",
@@ -52,6 +54,7 @@ local T = {
     ["Top Right"] = "右上",
     ["Bottom Left"] = "左下",
     ["Bottom Right"] = "右下",
+    ["Hold Shift"]  = "按住Shift",
 
 
 
@@ -508,7 +511,11 @@ local T = {
     ["Buff wrap rows"] = "Buff换行",
     ["Debuff wrap rows"] = "Debuff换行",
 
-    
+    ---------A2-----------
+    [" Buffs"] = " Buffs",
+    [" Debuffs"] = " Debuffs",
+    [" Private"] = " 私人",
+    ["Boss "] = "首领 ",
 
 
 
@@ -666,13 +673,46 @@ local T = {
     ["Mana"] =    "法力",
     ["Rage"] =    "怒气",
     ["Energy"] =    "能量",
-    ["Focus"] =    "集中值",
+    ["Power:Focus"] =    "集中值",
     ["Runic Power"]     = "符文能量",
     ["Insanity"] =    "虚空能量",
     ["Fury"] =    "恶魔之怒",
     ["Pain"] =    "痛苦",
     ["Essence"] =    "精华",
 
+
+
+    ["Class Power colors"] = "职业能量颜色",
+    ["Configure colors for secondary resource bars: Combo Points, Holy Power, Soul Shards, Chi, Runes, Arcane Charges, Essence, Soul Fragments (DH), Maelstrom (Enh/Ele), Stagger (BrM), Insanity (Shadow), Whirlwind (Fury), Tip of the Spear (SV), Ebon Might (Aug), Eclipse + Prediction (Balance)."] = "配置次要资源条的颜色: 连击点, 神圣能量, 灵魂碎片, 真气, 符文, 奥术充能, 精华, 灵魂残片 (DH), 漩涡值 (增强/元素), 醉拳 (酒仙), 狂乱值 (暗影), 激怒值 (狂暴), 利矛之刃 (生存), 黑檀之力 (增辉), 日月之蚀 + 预测 (平衡).",
+
+    ["Combo Points"] = "连击点",
+    ["Holy Power"] = "神圣能量",
+    ["Soul Shards"] = "灵魂碎片",
+    ["Chi"] = "真气",
+    ["Arcane Charges"] = "奥术充能",
+    ["Runes"] = "符文",
+    ["Essence"] = "精华",
+    ["Empowered (Charged)"] = "强化 (充能)",
+    ["Soul Fragments (DH)"] = "灵魂残片 (DH)",
+    ["Soul Fragments \124cFF9933EE(Void Meta)\124r"] = "灵魂残片 \124cFF9933EE虚空变形\124r",
+    ["Maelstrom Weapon (Enh)"] = "漩涡武器 (增强)",
+    ["Astral Power (Balance)"] = "星界能量 (平衡)",
+    ["Astral Power \124cFF7799CC(Prediction Overlay)\124r"] = "星界能量 \124cFF7799CC预测叠加层\124r",
+    ["Eclipse \124cFFD18F3F(Solar)\124r"]   = "日月之蚀 \124cFFD18F3F日蚀\124r",
+    ["Eclipse \124cFF697ED1(Lunar)\124r"] = "日月之蚀 \124cFF697ED1月蚀\124r",
+    ["Eclipse \124cFF4DFF6D(Celestial Alignment)\124r"] = "日月之蚀 \124cFF4DFF6D超凡之盟\124r",
+    ["Stagger \124cFF85FF85(Light)\124r"] = "醉拳 \124cFF85FF85轻度\124r",
+    ["Stagger \124cFFFFFAB8(Moderate)\124r"] = "醉拳 \124cFFFFFAB8中度\124r",
+    ["Stagger \124cFFFF6B6B(Heavy)\124r"] = "醉拳 \124cFFFF6B6B重度\124r",
+    ["Soul Fragments \124cFF570B76(Vengeance)\124r"] = "灵魂残片 \124cFF570B76复仇\124r",
+    ["Insanity (Shadow)"] = "狂乱值 (暗影)",
+    ["Maelstrom Power (Ele)"] = "漩涡值 (元素)",
+    ["Whirlwind (Fury)"] = "激怒值 (狂暴)",
+    ["Tip of the Spear (SV)"] = "利矛之刃 (生存)",
+    ["Ebon Might (Aug)"] = "黑檀之力 (增辉)",
+    ["Resource Text"] = "资源文本",
+
+       
 
 
 
@@ -802,6 +842,10 @@ local T = {
     ["Cancel Changes"] =   "取消更改",
     ["Reset Frame"] =    "重置框架",
     ["Exit MSUF Edit Mode"] =    "退出MSUF编辑模式",
+    ["< Undo"] =    "< 撤销",
+    ["Undo last change"] =    "撤销上次更改",
+    ["Redo >"] =    "重做 >",
+    ["Redo last undone change"] =    "重做上次撤销的更改",
 
 
 
