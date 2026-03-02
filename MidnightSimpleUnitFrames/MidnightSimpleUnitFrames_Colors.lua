@@ -3439,7 +3439,7 @@ local cpColSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmal
 cpColSub:SetPoint("TOPLEFT", cpColHeader, "BOTTOMLEFT", 0, -4)
 cpColSub:SetWidth(600)
 cpColSub:SetJustifyH("LEFT")
-cpColSub:SetText("Configure colors for secondary resource bars: Combo Points, Holy Power, Soul Shards, Chi, Runes, Arcane Charges, Essence, Soul Fragments (DH), Maelstrom (Enh/Ele), Stagger (BrM), Insanity (Shadow), Whirlwind (Fury), Tip of the Spear (SV), Ebon Might (Aug).")
+cpColSub:SetText("Configure colors for secondary resource bars: Combo Points, Holy Power, Soul Shards, Chi, Runes, Arcane Charges, Essence, Soul Fragments (DH), Maelstrom (Enh/Ele), Stagger (BrM), Insanity (Shadow), Whirlwind (Fury), Tip of the Spear (SV), Ebon Might (Aug), Eclipse + Prediction (Balance).")
 
 local cpColTypeDrop = CreateFrame("Frame", "MSUF_Colors_ClassPowerTypeDropdown", content, "UIDropDownMenuTemplate")
 cpColTypeDrop:SetPoint("TOPLEFT", cpColSub, "BOTTOMLEFT", -16, -8)
@@ -3474,6 +3474,7 @@ local CP_TOKEN_OPTIONS = {
     { token = "MAELSTROM",           label = "Maelstrom Weapon (Enh)" },
     -- ── Balance Druid: Astral Power + Eclipse ──
     { token = "ASTRAL_POWER",   label = "Astral Power (Balance)" },
+    { token = "AP_PREDICTION",  label = "Astral Power \124cFF7799CC(Prediction Overlay)\124r" },
     { token = "ECLIPSE_SOLAR",  label = "Eclipse \124cFFD18F3F(Solar)\124r" },
     { token = "ECLIPSE_LUNAR",  label = "Eclipse \124cFF697ED1(Lunar)\124r" },
     { token = "ECLIPSE_CA",     label = "Eclipse \124cFF4DFF6D(Celestial Alignment)\124r" },
@@ -3547,6 +3548,17 @@ F.GetDefaultClassPowerColor = function(token)
             if type(r) == "number" then return r, g, b end
         end
         return 0.30, 0.52, 0.90  -- MCR default
+    end
+    -- Balance Druid: Prediction overlay (inherits Astral Power default)
+    if token == "AP_PREDICTION" then
+        local col = PowerBarColor and PowerBarColor["LUNAR_POWER"]
+        if type(col) == "table" then
+            local r = col.r or col[1]
+            local g = col.g or col[2]
+            local b = col.b or col[3]
+            if type(r) == "number" then return r, g, b end
+        end
+        return 0.30, 0.52, 0.90  -- same as Astral Power
     end
     -- Balance Druid: Eclipse colors (MCR/Shrom defaults)
     if token == "ECLIPSE_SOLAR" then return 0.82, 0.56, 0.25 end

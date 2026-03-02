@@ -379,6 +379,27 @@ do
             return base
         end
 
+        -- Resolve prediction overlay color (non-eclipse fallback)
+        -- Reads AP_PREDICTION from classPowerColorOverrides, falls back to power bar color
+        local function _resolvePredColor()
+            local ov = MSUF_DB and MSUF_DB.general and MSUF_DB.general.classPowerColorOverrides
+            if type(ov) == "table" then
+                local c = ov["AP_PREDICTION"]
+                if type(c) == "table" then
+                    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+                    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                        return r, g, b
+                    end
+                end
+            end
+            -- Fallback: main power bar color
+            if _G.MSUF_GetPowerBarColor then
+                local r, g, b = _G.MSUF_GetPowerBarColor(LUNAR_POWER, "LUNAR_POWER")
+                if type(r) == "number" then return r, g, b end
+            end
+            return 0.30, 0.52, 0.90  -- MCR default
+        end
+
         -- Apply eclipse color to main power bar
         local function _applyEclipseColor()
             local bar = _getPowerBar()
@@ -428,12 +449,7 @@ do
             if _eclColor then
                 _predTex:SetVertexColor(_eclColor[1], _eclColor[2], _eclColor[3], BAL_PRED_ALPHA)
             else
-                -- Default Astral Power color
-                local pr, pg, pb = 1, 1, 1
-                if _G.MSUF_GetPowerBarColor then
-                    local r, g, b = _G.MSUF_GetPowerBarColor(LUNAR_POWER, "LUNAR_POWER")
-                    if type(r) == "number" then pr, pg, pb = r, g, b end
-                end
+                local pr, pg, pb = _resolvePredColor()
                 _predTex:SetVertexColor(pr, pg, pb, BAL_PRED_ALPHA)
             end
 
@@ -522,6 +538,16 @@ do
                 end
             end
         end)
+
+        -- Global hook: called by MSUF_ClassPower_InvalidateColors when user changes colors
+        _G.MSUF_BAL_InvalidateColors = function()
+            if not _active then return end
+            _refreshEclipses()
+            _applyEclipseColor()
+            if _castSpell then
+                _updateOverlay()
+            end
+        end
     end
 end
 
@@ -864,6 +890,10 @@ end
 _G.MSUF_ClassPower_InvalidateColors = function()
     _cachedColorToken = nil
     _cachedChargedR = nil  -- also invalidate charged cache
+    -- Balance Druid: refresh eclipse + prediction overlay colors
+    if type(_G.MSUF_BAL_InvalidateColors) == "function" then
+        _G.MSUF_BAL_InvalidateColors()
+    end
     if type(_G.MSUF_ClassPower_Refresh) == "function" then
         _G.MSUF_ClassPower_Refresh()
     end
