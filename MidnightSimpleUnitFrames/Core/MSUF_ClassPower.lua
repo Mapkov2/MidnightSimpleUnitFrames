@@ -79,7 +79,6 @@ local MODE_RUNE_CD         = 3  -- DK: per-rune cooldown animation with sort
 local MODE_AURA_SEGMENTED  = 4  -- Enh Shaman: aura-stack count as segments
 local MODE_AURA_SINGLE     = 5  -- DH Devourer: normalized 0-1 single bar
 local MODE_CONTINUOUS      = 6  -- Balance Druid: Astral Power continuous bar + prediction
-local MODE_SPELL_TRACKER   = 7  -- Whirlwind / Tip of the Spear: spellcast-tracked stacks
 local MODE_TIMER_BAR       = 8  -- Ebon Might: aura countdown bar with OnUpdate
 
 -- ============================================================================
@@ -95,7 +94,6 @@ local SPEC_WARLOCK_DESTRUCTION = _G.SPEC_WARLOCK_DESTRUCTION or 3
 local SPEC_DRUID_BALANCE      = 1
 local SPEC_DH_VENGEANCE       = _G.SPEC_DEMONHUNTER_VENGEANCE or 2
 local SPEC_PRIEST_SHADOW      = 3
-local SPEC_WARRIOR_FURY       = 2
 local SPEC_HUNTER_SURVIVAL    = 3
 local SPEC_EVOKER_AUG         = 3
 
@@ -144,37 +142,121 @@ local BAL_CLR_LUNAR = { 0.41, 0.49, 0.82 }  -- #697ed1
 local BAL_CLR_CA    = { 0.30, 1.00, 0.43 }  -- #4dff6d (CA / Incarnation)
 local BAL_PRED_ALPHA = 0.50                   -- prediction overlay opacity
 
--- Warlock: per-spec shard generator spellIDs (for cast prediction indicator)
-local WL_GENERATORS = {
-    [1] = { [686]=true, [324536]=true, [198590]=true, [316099]=true, [980]=true },  -- Affliction
-    [2] = { [686]=true, [264178]=true, [267217]=true },                              -- Demonology
-    [3] = { [29722]=true, [17962]=true, [116858]=true, [196447]=true, [348]=true, [5740]=true }, -- Destruction
+-- Warlock: per-spec spell → shard delta (positive = generates, negative = spends)
+-- Only cast-time spells (UNIT_SPELLCAST_START): channels/instants don't show prediction.
+-- Destruction values are fractional display units (1.0 = 1 shard); Demo/Affli are integers.
+-- Jay's approach: show predicted post-cast value with "*" suffix during cast.
+local WL_SHARD_DELTAS = {
+    [1] = {  -- Affliction (integer)
+        [686]    =  1,    -- Shadow Bolt: +1
+    },
+    [2] = {  -- Demonology (integer)
+        [686]    =  1,    -- Shadow Bolt: +1
+        [264178] =  2,    -- Demonbolt: +2
+    },
+    [3] = {  -- Destruction (fractional display units)
+        [29722]  =  0.2,  -- Incinerate: +0.2
+        [116858] = -2.0,  -- Chaos Bolt: −2.0 (spender)
+    },
 }
--- Warlock: low shard warning thresholds per spec (text turns red below this)
-local WL_LOW_THRESHOLD = { [3] = 2, [2] = 3 }
 
 -- DH Vengeance: Soul Fragments via C_Spell.GetSpellCastCount (MCR-sourced)
 local SPELL_SOUL_CLEAVE = 228477
 
--- Warrior Fury: Whirlwind (Improved Whirlwind) spell tracker (MCR-sourced)
-local SPELL_IMPROVED_WHIRLWIND = 12950
-local SPELL_CRASHING_THUNDER   = 436707
-local SPELL_UNHINGED           = 386628
-local WW_GENERATORS  = { [190411]=true, [6343]=true, [435222]=true }  -- Whirlwind, Thunder Clap, Shockwave
-local WW_SPENDERS    = {
-    [23881]=true, [85288]=true, [280735]=true, [202168]=true,
-    [184367]=true, [335096]=true, [335097]=true, [5308]=true,
-}
-local WW_BLADESTORMS = {
-    [50622]=true, [46924]=true, [227847]=true, [184362]=true, [446035]=true,
-}
+-- ============================================================================
+-- Whirlwind Tracker (Sensei pattern — own event frame, polled by OnUpdate)
+-- ============================================================================
+local WW = {}
+do
+    local MAX_STACKS = 4
+    local DURATION   = 20
+    local CRASHING_THUNDER  = 436707
+    local UNHINGED          = 386628
+    local GENERATORS = { [190411]=true, [6343]=true, [435222]=true }
+    local SPENDERS   = {
+        [23881]=true, [85288]=true, [280735]=true, [202168]=true,
+        [184367]=true, [335096]=true, [335097]=true, [5308]=true,
+    }
+    local BLADESTORMS = {
+        [50622]=true, [46924]=true, [227847]=true, [184362]=true, [446035]=true,
+    }
 
--- Hunter Survival: Tip of the Spear spell tracker (MCR-sourced)
-local SPELL_TIP_OF_THE_SPEAR = 260285
-local SPELL_TIP_KILL_COMMAND  = 259489
-local SPELL_TIP_TWIN_FANG    = 1272139
-local SPELL_TIP_TAKEDOWN     = 1250646
-local SPELL_TIP_PRIMAL_SURGE = 1272154
+    local stacks       = 0
+    local expiresAt    = nil
+    local noConsumeUntil = 0
+    local seenCastGUID = {}
+
+    WW.MAX_STACKS = MAX_STACKS
+    WW.dirty = false  -- set true by event handler on stack change
+
+    function WW.GetStacks()
+        if expiresAt and GetTime() >= expiresAt then
+            stacks = 0
+            expiresAt = nil
+            WW.dirty = true
+        end
+        return stacks
+    end
+
+    -- Warrior-only: own event frame (Sensei pattern)
+    if PLAYER_CLASS == "WARRIOR" then
+        local f = CreateFrame("Frame")
+        f:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+        f:RegisterEvent("PLAYER_DEAD")
+        f:RegisterEvent("PLAYER_ALIVE")
+        f:SetScript("OnEvent", function(_, event, unit, castGUID, spellID)
+            if event == "PLAYER_DEAD" or event == "PLAYER_ALIVE" then
+                stacks = 0
+                expiresAt = nil
+                seenCastGUID = {}
+                WW.dirty = true
+                return
+            end
+            if event ~= "UNIT_SPELLCAST_SUCCEEDED" or unit ~= "player" then return end
+
+            local known = C_SpellBook and C_SpellBook.IsSpellKnown
+
+            -- castGUID dedup
+            if castGUID and seenCastGUID[castGUID] then return end
+            if castGUID then seenCastGUID[castGUID] = true end
+
+            -- Unhinged no-consume window
+            if known and known(UNHINGED) and BLADESTORMS[spellID] then
+                noConsumeUntil = GetTime() + 2
+            end
+
+            -- Generator → max stacks
+            if GENERATORS[spellID] then
+                if (spellID == 6343 or spellID == 435222) then
+                    if not (known and known(CRASHING_THUNDER)) then return end
+                end
+                stacks = MAX_STACKS
+                expiresAt = GetTime() + DURATION
+                WW.dirty = true
+                return
+            end
+
+            -- Spender → consume 1
+            if SPENDERS[spellID] then
+                if spellID == 23881 and GetTime() < noConsumeUntil then return end
+                if stacks > 0 then
+                    stacks = stacks - 1
+                    if stacks == 0 then expiresAt = nil end
+                    WW.dirty = true
+                end
+            end
+        end)
+    end
+end
+
+-- Hunter Survival: Tip of the Spear (talent 260285)
+local TIP_TALENT_ID     = 260285
+local TIP_KILL_COMMAND   = 259489
+local TIP_TWIN_FANG      = 1272139
+local TIP_TAKEDOWN       = 1250646
+local TIP_PRIMAL_SURGE   = 1272154
+local TIP_MAX_STACKS     = 3
+local TIP_DURATION        = 10
 local TIP_SPENDERS = {
     [186270]=true, [1262293]=true, [1261193]=true, [1253859]=true,
     [259495]=true, [193265]=true, [1264949]=true, [1262343]=true,
@@ -233,6 +315,7 @@ local function EnsureDefaults()
     if b.smoothPowerBar       == nil then b.smoothPowerBar       = false end
     if b.showChargedComboPoints == nil then b.showChargedComboPoints = true end
     if b.classPowerShowText    == nil then b.classPowerShowText    = false end
+    if b.classPowerFontSize    == nil then b.classPowerFontSize    = 16    end
 
     -- AltMana defaults
     if b.showAltMana          == nil then b.showAltMana          = true  end
@@ -371,20 +454,17 @@ local function GetClassPowerType()
         end
 
     elseif PLAYER_CLASS == "WARRIOR" then
-        local spec = GetSpec and GetSpec()
-        if spec == SPEC_WARRIOR_FURY then
-            local known = C_SpellBook and C_SpellBook.IsSpellKnown
-            if known and known(SPELL_IMPROVED_WHIRLWIND) then
-                return "WHIRLWIND", MODE_SPELL_TRACKER, false
-            end
-        end
+        -- All Warrior specs use Whirlwind as class resource (Fury, Arms, Prot).
+        -- No talent gate: IsSpellKnown(12950) unreliable in 12.0 for passive talents.
+        -- If player doesn't have Improved Whirlwind, stacks stay 0 → auto-hide handles it.
+        return "WHIRLWIND", MODE_AURA_SEGMENTED, false
 
     elseif PLAYER_CLASS == "HUNTER" then
         local spec = GetSpec and GetSpec()
         if spec == SPEC_HUNTER_SURVIVAL then
             local known = C_SpellBook and C_SpellBook.IsSpellKnown
-            if known and known(SPELL_TIP_OF_THE_SPEAR) then
-                return "TIP_OF_THE_SPEAR", MODE_SPELL_TRACKER, false
+            if known and known(TIP_TALENT_ID) then
+                return "TIP_OF_THE_SPEAR", MODE_AURA_SEGMENTED, false
             end
         end
     end
@@ -605,8 +685,8 @@ local CP = {
     isVehicle = false,   -- true → vehicle combo points active
     visible   = false,
     height    = 4,
-    -- Warlock shard prediction state
-    wlPredicting = false,  -- true when casting a shard generator
+    -- Warlock shard prediction state (Jay's approach: predicted post-cast value)
+    wlPredDelta = 0,       -- shard delta for active cast (0 = no prediction)
     -- Balance Druid: Eclipse + AP prediction state
     apPredTex    = nil,    -- prediction overlay texture (lazy, on bars[1])
     apPredAmt    = 0,      -- predicted AP from current cast
@@ -616,16 +696,13 @@ local CP = {
     apCAExp      = 0,      -- celestial alignment expiration time
     apIncExp     = 0,      -- incarnation expiration time
     apEclipseColor = nil,  -- current eclipse color override {r,g,b} or nil
-    -- Spell Tracker state (Whirlwind / Tip of the Spear)
-    spStacks    = 0,       -- current stack count
-    spMaxStacks = 2,       -- max stacks (set per-feature in FullRefresh)
-    spExpires   = nil,     -- GetTime() expiry timestamp (nil = no timer)
-    spDuration  = 20,      -- buff duration in seconds (set per-feature)
-    spCachedQ   = -1,      -- skip-if-same quantizer
-    wwNoCon     = 0,       -- Unhinged no-consume window (GetTime + 2)
     -- Timer Bar state (Ebon Might)
     tbCachedQ   = -1,      -- quantized percentage for skip-if-same
     tbOUA       = false,   -- true if OnUpdate is active
+    -- Spell Tracker state (Tip of the Spear only — Whirlwind uses WW module)
+    spStacks    = 0,       -- current stack count
+    spExpires   = nil,     -- GetTime() expiry timestamp (nil = no timer)
+    spCachedQ   = -1,      -- skip-if-same quantizer
 }
 
 -- DK Rune map: [display_slot] = rune_id (1-6), sorted per sortOrder
@@ -750,10 +827,10 @@ local function CP_ApplyFont()
     fb       = fb or 1
     baseSize = baseSize or 14
 
-    -- Use global power font size (per-unit overrides not applicable here)
+    -- Use dedicated class power font size (independent of global power text size)
     local fontSize = baseSize
-    if MSUF_DB and MSUF_DB.general then
-        fontSize = MSUF_DB.general.powerFontSize or baseSize
+    if MSUF_DB and MSUF_DB.bars then
+        fontSize = MSUF_DB.bars.classPowerFontSize or baseSize
     end
     if fontSize < 6 then fontSize = 6 end
 
@@ -839,12 +916,6 @@ local function CP_CheckAutoHide(cur, maxP)
 
     -- Visible: restore alpha
     CP.container:SetAlpha(1)
-end
-
--- Spell tracker auto-hide: uses CP.spStacks (always non-secret)
-local function CP_CheckAutoHide_SpellTracker()
-    if not _autoHideActive or not CP.visible then return end
-    CP_CheckAutoHide(CP.spStacks, CP.spMaxStacks)
 end
 
 local function CP_Layout(playerFrame, maxPower, height)
@@ -1140,29 +1211,25 @@ local function CP_UpdateValues(powerType, maxPower)
         end
     end
 
-    -- Resource count text (MRB pattern: just SetText(current), zero concat)
+    -- Resource count text (Jay's Warlock prediction: show predicted post-cast value)
     local txt = CP.text
     if txt then
         local showText = MSUF_DB and MSUF_DB.bars
             and (MSUF_DB.bars.classPowerShowText == true)
-        if showText and cur > 0 then
-            -- Warlock: append "*" during shard generator cast
-            if CP.wlPredicting then
-                txt:SetText(cur .. "*")
-            else
+        if showText then
+            local predDelta = CP.wlPredDelta
+            if predDelta ~= 0 and PLAYER_CLASS == "WARLOCK" then
+                -- Predicted value with "*" suffix (e.g. "3*" during Shadow Bolt)
+                local predicted = cur + predDelta
+                if predicted < 0 then predicted = 0 end
+                if predicted > maxPower then predicted = maxPower end
+                txt:SetText(predicted .. "*")
+                txt:Show()
+            elseif cur > 0 then
                 txt:SetText(cur)
-            end
-            txt:Show()
-            -- Warlock: low shard warning (text turns red below threshold)
-            if PLAYER_CLASS == "WARLOCK" then
-                local spec = GetSpec and GetSpec()
-                local threshold = spec and WL_LOW_THRESHOLD[spec]
-                if threshold and cur < threshold and cur > 0 then
-                    txt:SetTextColor(1, 0.2, 0.2, 1)
-                else
-                    local tR, tG, tB = ResolveClassPowerColor("RESOURCE_TEXT")
-                    txt:SetTextColor(tR or 1, tG or 1, tB or 1, 1)
-                end
+                txt:Show()
+            else
+                txt:Hide()
             end
         else
             txt:Hide()
@@ -1226,7 +1293,11 @@ local function CP_UpdateValues_Fractional(powerType, maxPower)
     rawCur = tonumber(rawCur) or 0
 
     local mod = UnitPowerDisplayMod and UnitPowerDisplayMod(powerType) or 1
-    if type(mod) ~= "number" or mod <= 0 then mod = 1 end
+    -- Secret-safe: UnitPowerDisplayMod can return secret in 12.0.
+    -- If secret or invalid, fall back to 100 for Soul Shards (standard Blizzard mod).
+    if not NotSecret(mod) or type(mod) ~= "number" or mod <= 0 then
+        mod = 100
+    end
     local fractional = rawCur / mod  -- e.g. 3.7
 
     -- Resolve color
@@ -1265,32 +1336,31 @@ local function CP_UpdateValues_Fractional(powerType, maxPower)
         end
     end
 
-    -- Text: show fractional value (e.g. "3.7"), prediction "*", low shard warning
+    -- Text: show fractional value (Jay's prediction: predicted post-cast value with "*")
     local txt = CP.text
     if txt then
         local showText = MSUF_DB and MSUF_DB.bars and (MSUF_DB.bars.classPowerShowText == true)
         if showText then
-            local displayVal
-            if partial > 0.001 then
-                displayVal = string_format("%.1f", fractional)
+            local predDelta = CP.wlPredDelta
+            if predDelta ~= 0 then
+                -- Predicted post-cast value (e.g. "3.5*" during Incinerate, "1.3*" during Chaos Bolt)
+                local predicted = fractional + predDelta
+                if predicted < 0 then predicted = 0 end
+                if predicted > maxPower then predicted = maxPower end
+                local predPartial = predicted - math_floor(predicted)
+                if predPartial > 0.001 then
+                    txt:SetText(string_format("%.1f*", predicted))
+                else
+                    txt:SetText(math_floor(predicted) .. "*")
+                end
             else
-                displayVal = tostring(fullBars)
+                if partial > 0.001 then
+                    txt:SetText(string_format("%.1f", fractional))
+                else
+                    txt:SetText(fullBars)
+                end
             end
-            -- Append "*" during shard generator cast
-            if CP.wlPredicting then
-                displayVal = displayVal .. "*"
-            end
-            txt:SetText(displayVal)
             txt:Show()
-            -- Low shard warning: text turns red below spec threshold
-            local spec = GetSpec and GetSpec()
-            local threshold = spec and WL_LOW_THRESHOLD[spec]
-            if threshold and fractional < threshold and fractional > 0 then
-                txt:SetTextColor(1, 0.2, 0.2, 1)
-            else
-                local tR, tG, tB = ResolveClassPowerColor("RESOURCE_TEXT")
-                txt:SetTextColor(tR or 1, tG or 1, tB or 1, 1)
-            end
         else
             txt:Hide()
         end
@@ -1427,12 +1497,16 @@ local function CP_UpdateValues_RuneCD(powerType, maxPower)
 end
 
 -- ============================================================================
--- MODE_AURA_SEGMENTED: Enhancement Shaman — Maelstrom Weapon stacks (oUF)
---                      DH Vengeance — Soul Fragments (C_Spell.GetSpellCastCount)
+-- MODE_AURA_SEGMENTED: Aura-based stack display (oUF pattern)
+--   Enhancement Shaman — Maelstrom Weapon (10 stacks)
+--   Fury Warrior — Whirlwind cleave buff (2 stacks)
+--   Survival Hunter — Tip of the Spear (3 stacks)
+--   DH Vengeance — Soul Fragments (C_Spell.GetSpellCastCount, SECRET)
 -- SECRET-SAFE (Vengeance): GetSpellCastCount returns secret in 12.0.
 --   Trick: SetMinMaxValues(i-1, i) + SetValue(cur) per bar →
 --   C-side StatusBar does the range check, zero Lua comparisons on cur.
 --   Text: SetFormattedText("%d / %d", cur, mx) → C-side formats secret.
+-- Non-secret types: read aura stacks via C_UnitAuras.GetPlayerAuraBySpellID.
 -- ============================================================================
 local function CP_UpdateValues_AuraSegmented(powerType, maxPower)
     if maxPower <= 0 then return end
@@ -1481,13 +1555,27 @@ local function CP_UpdateValues_AuraSegmented(powerType, maxPower)
         end
         -- Vengeance: no auto-hide for secret cur (can't compare)
     else
-        -- Enhancement Shaman: Maelstrom Weapon (applications is NOT secret)
+        -- Non-secret stack-based resources.
+        -- Maelstrom Weapon: aura-driven (UNIT_AURA → GetPlayerAuraBySpellID).
+        -- Whirlwind / Tip of the Spear: spell-tracked (UNIT_SPELLCAST_SUCCEEDED).
         local cur = 0
-        if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
-            local info = C_UnitAuras.GetPlayerAuraBySpellID(SPELL_MAELSTROM_WEAPON)
-            if info and info.applications then
-                cur = info.applications
+        if powerType == "MAELSTROM_WEAPON" then
+            if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+                local info = C_UnitAuras.GetPlayerAuraBySpellID(SPELL_MAELSTROM_WEAPON)
+                if info and info.applications then
+                    cur = info.applications
+                end
             end
+        elseif powerType == "WHIRLWIND" then
+            -- Whirlwind: polled from self-contained WW module (own event frame)
+            cur = WW.GetStacks()
+        elseif powerType == "TIP_OF_THE_SPEAR" then
+            -- Tip of the Spear: spell-tracked via main event handler
+            if CP.spExpires and GetTime() >= CP.spExpires then
+                CP.spStacks = 0
+                CP.spExpires = nil
+            end
+            cur = CP.spStacks
         end
 
         for i = 1, maxPower do
@@ -1859,142 +1947,6 @@ local function CP_UpdateValues_Continuous(powerType, maxPower)
 end
 
 -- ============================================================================
--- MODE_SPELL_TRACKER: Whirlwind / Tip of the Spear (MCR-sourced)
--- UNIT_SPELLCAST_SUCCEEDED based stack tracker — no UnitPower, no secret values.
--- Generators add stacks, spenders consume. Expiry tracked via GetTime().
--- ============================================================================
-
-local function CP_UpdateValues_SpellTracker(powerType, maxPower)
-    -- Check expiry
-    if CP.spExpires and GetTime() >= CP.spExpires then
-        CP.spStacks = 0
-        CP.spExpires = nil
-    end
-    local cur = CP.spStacks
-    local mx  = CP.spMaxStacks
-    if mx <= 0 then mx = 1 end
-
-    -- Skip-if-same
-    if cur == CP.spCachedQ then return end
-    CP.spCachedQ = cur
-
-    -- Resolve color
-    local colorByType = true
-    local b = MSUF_DB and MSUF_DB.bars or {}
-    if b then colorByType = (b.classPowerColorByType ~= false) end
-    local baseR, baseG, baseB
-    if colorByType then
-        baseR, baseG, baseB = ResolveClassPowerColor(powerType)
-    else
-        baseR, baseG, baseB = 1, 1, 1
-    end
-    local bgA = tonumber(b.classPowerBgAlpha) or 0.3
-
-    for i = 1, mx do
-        local bar = CP.bars[i]
-        if bar then
-            local isFilled = (i <= cur)
-            bar:SetMinMaxValues(0, 1)
-            bar:SetValue(isFilled and 1 or 0)
-            bar:SetAlpha(isFilled and _filledAlpha or _emptyAlpha)
-            bar:SetStatusBarColor(baseR, baseG, baseB, 1)
-            bar._bg:SetVertexColor(0, 0, 0, bgA)
-        end
-    end
-    for i = mx + 1, CP.maxBars do
-        local bar = CP.bars[i]
-        if bar then bar:Hide() end
-    end
-
-    -- Text
-    local txt = CP.text
-    if txt then
-        local showText = b.classPowerShowText == true
-        if showText and cur > 0 then
-            txt:SetText(cur .. " / " .. mx)
-            txt:Show()
-        else
-            txt:Hide()
-        end
-    end
-
-    -- Auto-hide check
-    CP_CheckAutoHide(cur, mx)
-end
-
--- Whirlwind: on UNIT_SPELLCAST_SUCCEEDED (MCR-sourced)
-local function OnWhirlwindSpellCast(spellID)
-    local known = C_SpellBook and C_SpellBook.IsSpellKnown
-    if not known then return end
-
-    -- Unhinged no-consume window during Bladestorm
-    if known(SPELL_UNHINGED) and WW_BLADESTORMS[spellID] then
-        CP.wwNoCon = GetTime() + 2
-    end
-
-    -- Generator → set to max stacks
-    if WW_GENERATORS[spellID] then
-        -- Thunder Clap / Blast only if Crashing Thunder talented
-        if (spellID == 6343 or spellID == 435222) and not known(SPELL_CRASHING_THUNDER) then
-            return
-        end
-        CP.spStacks = CP.spMaxStacks
-        CP.spExpires = GetTime() + CP.spDuration
-        CP.spCachedQ = -1
-        CP_UpdateValues_SpellTracker(CP.powerType, CP.currentMax)
-        return
-    end
-
-    -- Spender → consume 1
-    if WW_SPENDERS[spellID] then
-        -- Bloodthirst during Unhinged window = no consume
-        if spellID == 23881 and GetTime() < CP.wwNoCon then return end
-        if CP.spStacks > 0 then
-            CP.spStacks = CP.spStacks - 1
-            if CP.spStacks == 0 then CP.spExpires = nil end
-            CP.spCachedQ = -1
-            CP_UpdateValues_SpellTracker(CP.powerType, CP.currentMax)
-        end
-    end
-end
-
--- Tip of the Spear: on UNIT_SPELLCAST_SUCCEEDED (MCR-sourced)
-local function OnTipOfTheSpearSpellCast(spellID)
-    local known = C_SpellBook and C_SpellBook.IsSpellKnown
-    if not known then return end
-    if not known(SPELL_TIP_OF_THE_SPEAR) then return end
-
-    -- Kill Command → gain 1 (or 2 with Primal Surge)
-    if spellID == SPELL_TIP_KILL_COMMAND then
-        local gain = (known(SPELL_TIP_PRIMAL_SURGE)) and 2 or 1
-        CP.spStacks = math_min(CP.spMaxStacks, CP.spStacks + gain)
-        CP.spExpires = GetTime() + CP.spDuration
-        CP.spCachedQ = -1
-        CP_UpdateValues_SpellTracker(CP.powerType, CP.currentMax)
-        return
-    end
-
-    -- Takedown + Twin Fang → gain 2
-    if spellID == SPELL_TIP_TAKEDOWN and known(SPELL_TIP_TWIN_FANG) then
-        CP.spStacks = math_min(CP.spMaxStacks, CP.spStacks + 2)
-        CP.spExpires = GetTime() + CP.spDuration
-        CP.spCachedQ = -1
-        CP_UpdateValues_SpellTracker(CP.powerType, CP.currentMax)
-        return
-    end
-
-    -- Spender → consume 1
-    if TIP_SPENDERS[spellID] then
-        if CP.spStacks > 0 then
-            CP.spStacks = CP.spStacks - 1
-            if CP.spStacks == 0 then CP.spExpires = nil end
-            CP.spCachedQ = -1
-            CP_UpdateValues_SpellTracker(CP.powerType, CP.currentMax)
-        end
-    end
-end
-
--- ============================================================================
 -- MODE_TIMER_BAR: Ebon Might — continuous countdown bar (MCR-sourced)
 -- C_UnitAuras.GetPlayerAuraBySpellID(395296).expirationTime based.
 -- Needs OnUpdate for smooth countdown (20fps cap = ~0.01ms overhead).
@@ -2092,14 +2044,15 @@ end
 -- EVENT: UNIT_SPELLCAST_START/STOP/FAILED/INTERRUPTED
 -- ============================================================================
 
--- Called from event handler when warlock starts casting a shard generator
+-- Called from event handler when warlock starts casting a known spell
 local function OnWarlockCastStart(spellID)
     if PLAYER_CLASS ~= "WARLOCK" then return end
     local spec = GetSpec and GetSpec()
-    local genTable = spec and WL_GENERATORS[spec]
-    if genTable and genTable[spellID] then
-        CP.wlPredicting = true
-        -- Re-render text with "*" indicator
+    local deltaTable = spec and WL_SHARD_DELTAS[spec]
+    local delta = deltaTable and deltaTable[spellID]
+    if delta then
+        CP.wlPredDelta = delta
+        -- Re-render with predicted value
         local updateFn = MODE_UPDATE_FN and MODE_UPDATE_FN[CP.renderMode]
         if updateFn then
             updateFn(CP.powerType, CP.currentMax)
@@ -2109,12 +2062,62 @@ end
 
 -- Called when warlock cast ends (any reason)
 local function OnWarlockCastEnd()
-    if not CP.wlPredicting then return end
-    CP.wlPredicting = false
+    if CP.wlPredDelta == 0 then return end
+    CP.wlPredDelta = 0
     local updateFn = MODE_UPDATE_FN and MODE_UPDATE_FN[CP.renderMode]
     if updateFn then
         updateFn(CP.powerType, CP.currentMax)
     end
+end
+
+-- ============================================================================
+-- Spell Tracker: Whirlwind / Tip of the Spear (Sensei-proven pattern)
+-- UNIT_SPELLCAST_SUCCEEDED based — aura tracking unreliable for these.
+-- castGUID dedup prevents double-counting on server echo.
+-- ============================================================================
+
+-- (Whirlwind tracking moved to self-contained WW module with own event frame)
+
+local function OnTipOfTheSpearSpellCast(spellID)
+    local known = C_SpellBook and C_SpellBook.IsSpellKnown
+    if not known then return end
+    if not known(TIP_TALENT_ID) then return end
+
+    -- Kill Command → gain 1 (or 2 with Primal Surge)
+    if spellID == TIP_KILL_COMMAND then
+        local gain = known(TIP_PRIMAL_SURGE) and 2 or 1
+        CP.spStacks = math_min(TIP_MAX_STACKS, CP.spStacks + gain)
+        CP.spExpires = GetTime() + TIP_DURATION
+        CP.spCachedQ = -1
+        CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
+        return
+    end
+
+    -- Takedown + Twin Fang → gain 2
+    if spellID == TIP_TAKEDOWN and known(TIP_TWIN_FANG) then
+        CP.spStacks = math_min(TIP_MAX_STACKS, CP.spStacks + 2)
+        CP.spExpires = GetTime() + TIP_DURATION
+        CP.spCachedQ = -1
+        CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
+        return
+    end
+
+    -- Spender → consume 1
+    if TIP_SPENDERS[spellID] then
+        if CP.spStacks > 0 then
+            CP.spStacks = CP.spStacks - 1
+            if CP.spStacks == 0 then CP.spExpires = nil end
+            CP.spCachedQ = -1
+            CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
+        end
+    end
+end
+
+-- PLAYER_DEAD / PLAYER_ALIVE: reset spell tracker state (Sensei pattern)
+local function OnSpellTrackerReset()
+    CP.spStacks = 0
+    CP.spExpires = nil
+    CP.spCachedQ = -1
 end
 
 -- ============================================================================
@@ -2127,7 +2130,6 @@ local MODE_UPDATE_FN = {
     [MODE_AURA_SEGMENTED] = CP_UpdateValues_AuraSegmented,
     [MODE_AURA_SINGLE]    = CP_UpdateValues_AuraSingle,
     [MODE_CONTINUOUS]     = CP_UpdateValues_Continuous,
-    [MODE_SPELL_TRACKER]  = CP_UpdateValues_SpellTracker,
     [MODE_TIMER_BAR]      = CP_UpdateValues_TimerBar,
 }
 
@@ -2455,26 +2457,6 @@ local function FullRefresh()
             maxP = 1  -- Balance Druid / Insanity / Ele Maelstrom: single continuous bar
         elseif renderMode == MODE_TIMER_BAR then
             maxP = 1  -- Ebon Might: single countdown bar
-        elseif renderMode == MODE_SPELL_TRACKER then
-            -- Whirlwind: 2 stacks, 20s. TotS: 3 stacks, 10s.
-            if powerType == "WHIRLWIND" then
-                CP.spMaxStacks = 2
-                CP.spDuration  = 20
-                CP.spStacks    = 0
-                CP.spExpires   = nil
-                CP.spCachedQ   = -1
-                CP.wwNoCon     = 0
-                maxP = 2
-            elseif powerType == "TIP_OF_THE_SPEAR" then
-                CP.spMaxStacks = 3
-                CP.spDuration  = 10
-                CP.spStacks    = 0
-                CP.spExpires   = nil
-                CP.spCachedQ   = -1
-                maxP = 3
-            else
-                maxP = 3  -- fallback
-            end
         elseif renderMode == MODE_AURA_SEGMENTED then
             if powerType == "MAELSTROM_WEAPON" then
                 -- Maelstrom Weapon: max stacks from spell data
@@ -2485,6 +2467,13 @@ local function FullRefresh()
                 end
             elseif powerType == "SOUL_FRAGMENTS_VENG" then
                 maxP = 6  -- Vengeance: 6 soul fragment segments
+            elseif powerType == "WHIRLWIND" then
+                maxP = WW.MAX_STACKS  -- Warrior: 4 Whirlwind cleave stacks
+            elseif powerType == "TIP_OF_THE_SPEAR" then
+                maxP = TIP_MAX_STACKS  -- Survival Hunter: 3 Tip of the Spear stacks
+                CP.spStacks = 0
+                CP.spExpires = nil
+                CP.spCachedQ = -1
             else
                 maxP = 10
             end
@@ -2528,7 +2517,7 @@ local function FullRefresh()
         end
 
         -- Warlock: reset prediction state
-        CP.wlPredicting = false
+        CP.wlPredDelta = 0
 
         -- Timer bar: start/stop OnUpdate
         if renderMode == MODE_TIMER_BAR then
@@ -2551,6 +2540,24 @@ local function FullRefresh()
         CP.container:Show()
         CP.visible = true
 
+        -- Whirlwind: OnUpdate ticker polls WW.dirty flag.
+        -- Runs every frame but nearly free — single boolean check + early-out.
+        -- This is the Sensei equivalent of calling UpdateDisplay on events.
+        if powerType == "WHIRLWIND" then
+            CP.container:SetScript("OnUpdate", function()
+                if not CP.visible then return end
+                -- Check expiry (WW.GetStacks handles it, but we need to trigger redraw)
+                WW.GetStacks()
+                if WW.dirty then
+                    WW.dirty = false
+                    CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
+                end
+            end)
+        elseif renderMode ~= MODE_TIMER_BAR then
+            -- Non-timer, non-WW: clear any stale OnUpdate (timer bar manages its own)
+            CP.container:SetScript("OnUpdate", nil)
+        end
+
     else
         -- Clean up rune OnUpdate scripts when hiding
         if CP.renderMode == MODE_RUNE_CD then
@@ -2564,13 +2571,16 @@ local function FullRefresh()
         end
         -- Stop timer bar OnUpdate
         SetTimerBarOnUpdate(false)
-        if CP.container then CP.container:Hide() end
+        if CP.container then
+            CP.container:SetScript("OnUpdate", nil)
+            CP.container:Hide()
+        end
         CP.visible = false
         CP.powerType = nil
         CP.renderMode = MODE_NONE
         CP.isAuraPower = false
         CP.isVehicle = false
-        CP.wlPredicting = false
+        CP.wlPredDelta = 0
         CP.apCastSpell = nil
         CP.apPredAmt = 0
         CP.spStacks = 0
@@ -2623,8 +2633,6 @@ local function OnPowerUpdate(powerToken)
     if CP.isAuraPower then return end
     -- DK Runes use RUNE_POWER_UPDATE, not UNIT_POWER_UPDATE
     if CP.renderMode == MODE_RUNE_CD then return end
-    -- Spell tracker: driven by UNIT_SPELLCAST_SUCCEEDED
-    if CP.renderMode == MODE_SPELL_TRACKER then return end
     -- Timer bar: driven by OnUpdate + UNIT_AURA
     if CP.renderMode == MODE_TIMER_BAR then return end
 
@@ -2694,7 +2702,7 @@ end
 local function OnSpellcastEnd()
     if not CP.visible then return end
     -- Warlock
-    if CP.wlPredicting then
+    if CP.wlPredDelta ~= 0 then
         OnWarlockCastEnd()
     end
     -- Balance Druid
@@ -2723,6 +2731,18 @@ local function ThrottledFullRefresh()
     local now = GetTime()
     if now - _lastFullRefresh < FULL_REFRESH_THROTTLE then return end
     _lastFullRefresh = now
+    FullRefresh()
+end
+
+-- Pre-allocated callback for deferred PBEmbedLayout re-layout after zone transitions.
+-- Frame geometry may not have settled on the first FullRefresh; this second pass
+-- clears the stamp cache so the detached power bar picks up final dimensions.
+-- Defined once at file scope — zero closure allocations per PLAYER_ENTERING_WORLD.
+local function _CP_DeferredPBRelayout()
+    local fr = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player
+    if fr and fr._msufStampCache then
+        fr._msufStampCache["PBEmbedLayout"] = nil
+    end
     FullRefresh()
 end
 
@@ -2775,14 +2795,11 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
         if arg1 == "player" then
             -- Balance/Warlock: clear prediction on successful cast
             OnSpellcastEnd()
-            -- Spell tracker: Whirlwind / Tip of the Spear
-            if CP.visible and CP.renderMode == MODE_SPELL_TRACKER then
-                if CP.powerType == "WHIRLWIND" then
-                    OnWhirlwindSpellCast(arg3)
-                elseif CP.powerType == "TIP_OF_THE_SPEAR" then
-                    OnTipOfTheSpearSpellCast(arg3)
-                end
+            -- Tip of the Spear: spell-tracked via main handler
+            if CP.visible and CP.powerType == "TIP_OF_THE_SPEAR" then
+                OnTipOfTheSpearSpellCast(arg3)
             end
+            -- Whirlwind: handled by WW module's own event frame (no call needed here)
             -- DH Vengeance: soul fragment count changes on spellcast
             if CP.visible and CP.powerType == "SOUL_FRAGMENTS_VENG" then
                 CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
@@ -2843,8 +2860,17 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
         if _autoHideActive and CP.visible and CP.container then
             -- Re-run the current mode's update to trigger CP_CheckAutoHide
-            local fn = MODE_UPDATE_FN[CP.mode]
+            local fn = MODE_UPDATE_FN[CP.renderMode]
             if fn then fn(CP.powerType, CP.currentMax) end
+        end
+        return
+    end
+
+    -- Death/resurrection: reset spell tracker state (Sensei pattern)
+    if event == "PLAYER_DEAD" or event == "PLAYER_ALIVE" then
+        OnSpellTrackerReset()
+        if CP.visible then
+            CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
         end
         return
     end
@@ -2875,6 +2901,14 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
             local pf = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player
             if pf then
                 FullRefresh()
+                -- Deferred re-layout: frame dimensions and CDM frames may not
+                -- have settled on the first FullRefresh. Schedule a second pass
+                -- that clears the PBEmbedLayout stamp so the detached power bar
+                -- re-computes its width from the now-correct frame geometry.
+                -- Uses pre-allocated _CP_DeferredPBRelayout (zero closures).
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(0.35, _CP_DeferredPBRelayout)
+                end
                 -- CDM frames (from another addon) may load after MSUF.
                 -- Retry hook installation at increasing intervals until all 3 CDM hooks are placed.
                 if C_Timer and C_Timer.After then
@@ -2937,6 +2971,8 @@ eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+eventFrame:RegisterEvent("PLAYER_DEAD")
+eventFrame:RegisterEvent("PLAYER_ALIVE")
 
 -- ============================================================================
 -- Public API (for Options, Edit Mode, and other modules)

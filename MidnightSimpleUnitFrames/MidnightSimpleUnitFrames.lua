@@ -1581,11 +1581,36 @@ _MSUF_FlushDeferred = function()
     end
 end
 
+-- Pre-allocated callback for deferred detached power bar re-layout.
+-- Clears PBEmbedLayout stamps and re-runs layout for all unit frames so that
+-- highlight anchors, border anchors, and detach state flags are refreshed
+-- after frame geometry has settled post-zone-transition.
+-- Defined once at file scope — zero closure allocations per zone transition.
+local function _MSUF_DeferredPBRelayout()
+    local uf = _G.MSUF_UnitFrames
+    if not uf then return end
+    -- Clear stamps for all unit frames (player, target, focus, boss, etc.)
+    for _, fr in pairs(uf) do
+        if fr and fr._msufStampCache then
+            fr._msufStampCache["PBEmbedLayout"] = nil
+        end
+    end
+    if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
+        _G.MSUF_ApplyPowerBarEmbedLayout_All()
+    end
+end
+
 -- Pre-allocated callback for PLAYER_ENTERING_WORLD timer (no closure per transition).
 local function _MSUF_KillGuard_PEW_Callback()
     _MSUF_ReassertKilledFrames()
     if _G.MSUF_ApplyCompatAnchor_PlayerFrame then
         _G.MSUF_ApplyCompatAnchor_PlayerFrame()
+    end
+    -- Deferred detached power bar re-layout: frame geometry (and CDM frames)
+    -- may not have settled on the first layout pass. Clear PBEmbedLayout stamp
+    -- and re-apply after a brief delay so the bar picks up final dimensions.
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.40, _MSUF_DeferredPBRelayout)
     end
 end
 
