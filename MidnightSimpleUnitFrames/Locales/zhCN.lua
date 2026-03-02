@@ -254,6 +254,10 @@ local T = {
     ["Options"] = "选项",
 
     ["Bars"] = "计量条",
+    ["Bar scope"]   = "计量条范围",
+    ["Configure settings for"]  = "配置设置",
+
+
     ["Bar appearance"] = "计量条外观",
     ["Absorb display"] = "吸收显示",
     ["Absorb Display"] = "吸收显示",
@@ -262,6 +266,12 @@ local T = {
     ["Absorb bar + text"] = "吸收条 + 文本",
     ["Absorb text only"] = "仅吸收文本",
     ["Absorb bar anchoring"] = "吸收条锚点",
+    ["Anchor to left side"] = "锚定到左侧",
+    ["Anchor to right side"] = "锚定到右侧",
+    ["Follow HP bar"] = "跟随生命条",
+    ["Follow HP bar (overflow)"] = "跟随生命条 (溢出)",
+    ["Reverse from max"] = "反向从最大",
+
     ["Anchor to healthbar edge (default)"] = "锚定到生命条边缘 (默认)",
     ["Anchor to inside padding (prevents clipping)"] = "锚定到内边距 (防止裁剪)",
     ["Absorb bar texture (SharedMedia)"] = "吸收条材质 (SharedMedia)",
@@ -273,6 +283,7 @@ local T = {
     ["Enable power bar gradient"] = "启用能量条渐变",
     ["Gradient strength"] = "渐变强度",
     ["Outline thickness"] = "轮廓厚度",
+    ["Power bar outline"] = "能量条轮廓",
     ["Power Bar Settings"] = "能量条设置",
     ["Show power bar on target frame"] = "目标框架中显示能量条",
     ["Show power bar on boss frames"] = "首领框架中显示能量条",
@@ -335,7 +346,87 @@ local T = {
     ["Reset all overrides"] = "重置所有覆盖",
     ["Clears per-unit overrides for all units (Player, Target, Focus, etc.) so they all use the shared settings again."]    = "清除所有单位(玩家、目标、焦点等)的逐单位覆盖设置，使其重新采用共享设置.",
     ["Selected: "]  = "已选中: ",
+    ["Bar Animation + Text Accuracy"]   = "计量条动画 + 文本精确度",
+    ["Smooth power bar"]    = "平滑能量条",
+    ["C-side interpolation for fluid bar movement"] = "C-side插值以平滑计量条移动",
+    ["Uses ExponentialEaseOut interpolation on the"]    = "在C-side使用ExponentialEaseOut插值",
+    ["StatusBar for silky-smooth bar animation."]   = "以获得丝滑的计量条动画.",    
+    ["When OFF: Bar snaps instantly to new values."]   = "关闭时: 计量条立即跳转到新值.",
+    ["Real-time power text"]    = "实时能量文本",
+    ["Update text every event (higher CPU, pixel-accurate)"]    = "每个事件更新文本 (高CPU, 像素精确)",
+    ["Updates the power number on every game event"]    = "在每个游戏事件上更新能量数字",
+    ["for pixel-accurate text that matches the bar."]   = "以匹配计量条的像素精确文本.",
+    ["When OFF: Text updates are budget-gated"]    = "关闭时: 文本更新由预算控制",
+    ["(player 33Hz, others 10Hz) for lower CPU."]   = "(玩家33Hz, 其他10Hz) 以降低CPU.",
 
+--------ClassPower---------------
+    ["Class Power"] = "职业能量",
+    ["Combo Points, Holy Power, Soul Shards, Chi, Essence, Runes"] = "连击点, 神圣能量, 灵魂碎片, 真气, 精华, 符文",
+    ["Show class power"]    = "显示职业能量",
+    ["Match width"] = "匹配宽度",
+    ["Player frame"]    = "玩家框架",
+    ["Essential Cooldowns"] = "重要冷却",
+    ["Utility Cooldowns"] = "功能性冷却",
+    ["Tracked Buffs"] = "追踪增益",
+    ["Custom"]  = "自定义",
+    ["Width"]   = "宽度",
+    ["Height"]   = "高度",
+
+    ["Anchor to Essential Cooldown"] = "锚定到重要冷却",
+    ["Show empowered combo points"]    = "显示强化连击点",
+    ["Show resource text"]    = "显示资源文本",
+    ["Fill right-to-left"]  = "从右到左填充",
+    ["Show Maelstrom bar (Elemental)"]  = "显示旋涡条 (元素)",
+    ["Show Ebon Might timer (Aug)"]  = "显示黑檀之力计时器 (增辉)",
+    ["Detached Power Bar"]  = "分离能量条",
+    ["Only applies when power bar is detached"] = "仅当能量条分离时应用",
+    ["Manual"]  = "手动",
+    ["Utility Cooldowns"]   = "功能性冷却",
+    ["Foreground texture"]  = "前景纹理",
+    ["Background texture"]  = "背景纹理",
+    ["Colors, textures & visual tweaks"]    = "颜色、纹理和视觉调整",
+    ["Color by resource type"]  = "按资源类型着色",
+    ["BG opacity"] = "背景透明度",
+    ["Separator"]   = "分隔符",
+    ["Outline"] = "轮廓",
+    ["Filled %"]  = "填充%",
+    ["Empty %"]  = "空%",
+    ["Pip gap"]  = "点间隙",
+    ["Auto-Hide"]  = "自动隐藏",
+    ["Hide out of combat"]  = "脱战隐藏",
+    ["Hide when full"]  = "满时隐藏",
+    ["Hide when empty"]  = "空时隐藏",
+
+
+
+
+    ["Use global bar texture"]  = "使用全局计量条纹理",
+    ["Use foreground texture"]  = "使用前景纹理",
+    ["Alternative Mana Bar"]  = "替代法力条",
+    ["Shadow, Ret, Ele, Enh, Balance, Feral, WW"]  = "暗影, 恢复, 元素, 增强, 平衡, 野性, 双武器",
+    ["Show mana bar (dual resource)"]  = "显示法力条 (双资源)",
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ --------------------------------------   
     ["Fonts"] = "字体",
     ["Font Settings"] = "字体设置",
     ["Font color & style"] = "字体颜色 & 样式",
