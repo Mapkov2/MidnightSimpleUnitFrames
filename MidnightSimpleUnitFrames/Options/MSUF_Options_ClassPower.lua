@@ -26,6 +26,16 @@ if not getmetatable(L) then
 end
 local function TR(v) return (type(v) == "string" and L[v]) or v end
 
+-- SharedMedia statusbar texture dropdown init (1:1 with Options_Core)
+local MSUF_InitStatusbarTextureDropdown = _G.MSUF_InitStatusbarTextureDropdown
+local MSUF_SyncStatusbarTextureDropdown = _G.MSUF_SyncStatusbarTextureDropdown
+
+-- Dropdown scroll helpers (exported from Options_Core)
+-- Makes large SharedMedia dropdown lists scrollable (mousewheel + scrollbar).
+local MSUF_MakeDropdownScrollable = (ns and ns.MSUF_MakeDropdownScrollable) or _G.MSUF_MakeDropdownScrollable
+
+
+
 -- ============================================================================
 -- Toggle text styling (same behavior as MSUF_StyleToggleText; replicated
 -- to avoid depending on CreateOptionsPanel scope locals)
@@ -602,7 +612,6 @@ local function BuildClassPowerOptions(leftName, rightName)
     local dpbFgDrop = CreateFrame("Frame", "MSUF_DPBFgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
     dpbFgDrop:SetPoint("TOPLEFT", dpbFgLabel, "BOTTOMLEFT", -16, -2)
     UIDropDownMenu_SetWidth(dpbFgDrop, DPB_TEX_DROP_W)
-    dpbFgDrop._msufButtonWidth = DPB_TEX_DROP_W
     dpbFgDrop._msufTweakBarTexturePreview = true
 
     -- BG texture
@@ -615,7 +624,6 @@ local function BuildClassPowerOptions(leftName, rightName)
     local dpbBgDrop = CreateFrame("Frame", "MSUF_DPBBgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
     dpbBgDrop:SetPoint("TOPLEFT", dpbBgLabel, "BOTTOMLEFT", -16, -2)
     UIDropDownMenu_SetWidth(dpbBgDrop, DPB_TEX_DROP_W)
-    dpbBgDrop._msufButtonWidth = DPB_TEX_DROP_W
     dpbBgDrop._msufTweakBarTexturePreview = true
 
     
@@ -867,8 +875,6 @@ local function BuildClassPowerOptions(leftName, rightName)
     local TEX_DROP_W = 180
     local InitTexDrop = _G.MSUF_InitStatusbarTextureDropdown
     local KillPreview = _G.MSUF_KillMenuPreviewBar
-    local ExpandClick = _G.MSUF_ExpandDropdownClickArea
-    local MakeScroll  = _G.MSUF_MakeDropdownScrollable
 
     -- Foreground texture
     local cpFgTexLabel = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -879,11 +885,11 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     local cpFgTexDrop = CreateFrame("Frame", "MSUF_CPFgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
     cpFgTexDrop:SetPoint("TOPLEFT", cpFgTexLabel, "BOTTOMLEFT", -16, -2)
-    UIDropDownMenu_SetWidth(cpFgTexDrop, TEX_DROP_W)
-    cpFgTexDrop._msufButtonWidth = TEX_DROP_W
+
+    -- Make the LSM list scrollable like Options_Core (prevents huge lists from going offscreen)
+    if MSUF_MakeDropdownScrollable then MSUF_MakeDropdownScrollable(cpFgTexDrop, 12) end
+    -- Use the same small preview swatch layout as Options_Core so it doesn't cover the scrollbar area.
     cpFgTexDrop._msufTweakBarTexturePreview = true
-    if ExpandClick then ExpandClick(cpFgTexDrop) end
-    if MakeScroll  then MakeScroll(cpFgTexDrop, 12) end
 
     local cpFgTexPreview = CreateFrame("StatusBar", "MSUF_CPFgTexturePreview", cpPanel)
     cpFgTexPreview:SetSize(TEX_DROP_W, 10)
@@ -906,6 +912,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     if InitTexDrop then
         InitTexDrop(cpFgTexDrop, {
+            width = TEX_DROP_W,
             followText  = TR("Use global bar texture"),
             followValue = "",
             isFollow    = function(cur)  return (cur == nil or cur == "") end,
@@ -941,11 +948,9 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     local cpBgTexDrop = CreateFrame("Frame", "MSUF_CPBgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
     cpBgTexDrop:SetPoint("TOPLEFT", cpBgTexLabel, "BOTTOMLEFT", -16, -2)
-    UIDropDownMenu_SetWidth(cpBgTexDrop, TEX_DROP_W)
-    cpBgTexDrop._msufButtonWidth = TEX_DROP_W
+
+    if MSUF_MakeDropdownScrollable then MSUF_MakeDropdownScrollable(cpBgTexDrop, 12) end
     cpBgTexDrop._msufTweakBarTexturePreview = true
-    if ExpandClick then ExpandClick(cpBgTexDrop) end
-    if MakeScroll  then MakeScroll(cpBgTexDrop, 12) end
 
     local cpBgTexPreview = CreateFrame("StatusBar", "MSUF_CPBgTexturePreview", cpPanel)
     cpBgTexPreview:SetSize(TEX_DROP_W, 10)
@@ -970,6 +975,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     if InitTexDrop then
         InitTexDrop(cpBgTexDrop, {
+            width = TEX_DROP_W,
             followText  = TR("Use foreground texture"),
             followValue = "",
             isFollow    = function(cur)  return (cur == nil or cur == "") end,
@@ -998,10 +1004,12 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     -- ── Detached Power Bar texture dropdown init ──
     -- (Frames created earlier in left column; init here after helper vars are available.)
-    if ExpandClick then ExpandClick(dpbFgDrop) end
-    if MakeScroll  then MakeScroll(dpbFgDrop, 12) end
-    if ExpandClick then ExpandClick(dpbBgDrop) end
-    if MakeScroll  then MakeScroll(dpbBgDrop, 12) end
+    if MSUF_MakeDropdownScrollable then
+        MSUF_MakeDropdownScrollable(dpbFgDrop, 12)
+        MSUF_MakeDropdownScrollable(dpbBgDrop, 12)
+    end
+    dpbFgDrop._msufTweakBarTexturePreview = true
+    dpbBgDrop._msufTweakBarTexturePreview = true
 
     local DPB_Refresh = function()
         if type(_G.MSUF_DetachedPowerBar_RefreshTextures) == "function" then
@@ -1011,6 +1019,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     if InitTexDrop then
         InitTexDrop(dpbFgDrop, {
+            width = TEX_DROP_W,
             followText  = TR("Use global bar texture"),
             followValue = "",
             isFollow    = function(cur) return (cur == nil or cur == "") end,
@@ -1033,6 +1042,7 @@ local function BuildClassPowerOptions(leftName, rightName)
             end,
         })
         InitTexDrop(dpbBgDrop, {
+            width = TEX_DROP_W,
             followText  = TR("Use foreground texture"),
             followValue = "",
             isFollow    = function(cur) return (cur == nil or cur == "") end,
