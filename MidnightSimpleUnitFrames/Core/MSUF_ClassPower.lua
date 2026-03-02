@@ -274,6 +274,257 @@ do
     end
 end
 
+-- ============================================================================
+-- Balance Druid: Astral Power Prediction + Eclipse Colors on Main Power Bar
+-- Self-contained module with own event frame (same pattern as WW tracker).
+-- Only active when player is Balance spec AND primary power is Astral Power.
+-- ============================================================================
+do
+    if PLAYER_CLASS == "DRUID" then
+        local LUNAR_POWER = (Enum and Enum.PowerType and Enum.PowerType.LunarPower) or 8
+        local _active = false  -- true when Balance spec + Astral Power primary
+        local _castSpell = nil
+        local _predAmt = 0
+        local _solarExp, _lunarExp, _caExp, _incExp = 0, 0, 0, 0
+        local _predTex = nil   -- lazy overlay on power bar
+        local _eclColor = nil  -- {r,g,b} or nil
+
+        -- Resolve if module should be active (called on spec/form change)
+        local function _checkActive()
+            local spec = GetSpec and GetSpec()
+            if spec ~= 1 then _active = false; return end  -- not Balance
+            local pType = UnitPowerType("player")
+            if NotSecret(pType) and pType == LUNAR_POWER then
+                _active = true
+            else
+                _active = false
+            end
+        end
+
+        -- Get player power bar (lazy, may not exist early)
+        local function _getPowerBar()
+            local pf = _G.MSUF_player or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player)
+            return pf and pf.targetPowerBar or nil
+        end
+
+        -- Resolve eclipse color override from DB
+        local function _resolveEclColor(token)
+            local ov = MSUF_DB and MSUF_DB.general and MSUF_DB.general.classPowerColorOverrides
+            if type(ov) == "table" then
+                local c = token and ov[token]
+                if type(c) == "table" then
+                    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+                    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                        return r, g, b
+                    end
+                end
+            end
+            if token == "ECLIPSE_SOLAR" then return BAL_CLR_SOLAR[1], BAL_CLR_SOLAR[2], BAL_CLR_SOLAR[3] end
+            if token == "ECLIPSE_LUNAR" then return BAL_CLR_LUNAR[1], BAL_CLR_LUNAR[2], BAL_CLR_LUNAR[3] end
+            if token == "ECLIPSE_CA"    then return BAL_CLR_CA[1], BAL_CLR_CA[2], BAL_CLR_CA[3] end
+            return nil
+        end
+
+        -- Scan eclipse auras → update expiry + bar color
+        local function _refreshEclipses()
+            local getAura = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
+            if not getAura then return end
+            _solarExp, _lunarExp, _caExp, _incExp = 0, 0, 0, 0
+            for auraID, kind in pairs(ECLIPSE_AURAS) do
+                local aura = getAura(auraID)
+                if aura and aura.expirationTime then
+                    local exp = aura.expirationTime
+                    if kind == "SOLAR" then _solarExp = exp
+                    elseif kind == "LUNAR" then _lunarExp = exp
+                    elseif kind == "CA" then _caExp = exp
+                    elseif kind == "INC" then _incExp = exp end
+                end
+            end
+            local now = GetTime()
+            local inCA  = _caExp > now
+            local inInc = _incExp > now
+            if inCA or inInc then
+                local r, g, b = _resolveEclColor("ECLIPSE_CA")
+                _eclColor = r and { r, g, b } or BAL_CLR_CA
+            elseif _solarExp > now then
+                local r, g, b = _resolveEclColor("ECLIPSE_SOLAR")
+                _eclColor = r and { r, g, b } or BAL_CLR_SOLAR
+            elseif _lunarExp > now then
+                local r, g, b = _resolveEclColor("ECLIPSE_LUNAR")
+                _eclColor = r and { r, g, b } or BAL_CLR_LUNAR
+            else
+                _eclColor = nil
+            end
+        end
+
+        -- Compute predicted AP for a given spell
+        local function _computeAP(spellID)
+            if not spellID then return 0 end
+            local base = AP_GENERATORS[spellID]
+            if not base then return 0 end
+            if spellID == SPELL_AP_WRATH or spellID == SPELL_AP_STARFIRE then
+                local known = C_SpellBook and C_SpellBook.IsSpellKnown
+                if known and known(SPELL_NATURES_BALANCE) then base = base + 2 end
+                local now = GetTime()
+                local inCA  = _caExp > now
+                local inInc = _incExp > now
+                local inEcl = false
+                if spellID == SPELL_AP_WRATH then
+                    inEcl = (_solarExp > now) or inCA or inInc
+                else
+                    inEcl = (_lunarExp > now) or inCA or inInc
+                end
+                if inEcl then base = base * 1.4 end
+            end
+            return base
+        end
+
+        -- Apply eclipse color to main power bar
+        local function _applyEclipseColor()
+            local bar = _getPowerBar()
+            if not bar then return end
+            if _eclColor then
+                bar:SetStatusBarColor(_eclColor[1], _eclColor[2], _eclColor[3], 1)
+            end
+            -- (when _eclColor is nil, normal ApplyPowerBarVisual color applies
+            --  from the next UNIT_POWER_UPDATE cycle — no manual reset needed)
+        end
+
+        -- Update prediction overlay on main power bar
+        local function _updateOverlay()
+            local bar = _getPowerBar()
+            if not bar then return end
+
+            -- Lazy-create texture
+            if not _predTex then
+                local tex = bar:CreateTexture(nil, "ARTWORK", nil, 1)
+                local getBarTex = _G.MSUF_GetBarTexture
+                tex:SetTexture(getBarTex and getBarTex() or "Interface\\Buttons\\WHITE8x8")
+                tex:SetVertexColor(1, 1, 1, BAL_PRED_ALPHA)
+                tex:SetHeight(1)
+                tex:Hide()
+                _predTex = tex
+            end
+
+            if _predAmt <= 0 or not _castSpell then
+                _predTex:Hide()
+                return
+            end
+
+            -- mx (UnitPowerMax) is NOT secret — safe for arithmetic
+            local mx = UnitPowerMax("player", LUNAR_POWER) or 100
+            if mx <= 0 then mx = 100 end
+            local predFrac = _predAmt / mx
+            if predFrac > 1 then predFrac = 1 end
+
+            local barW = bar:GetWidth()
+            local barH = bar:GetHeight()
+            if barW <= 0 or barH <= 0 then _predTex:Hide(); return end
+
+            local predW = barW * predFrac
+            if predW < 1 then _predTex:Hide(); return end
+
+            -- Eclipse-aware color
+            if _eclColor then
+                _predTex:SetVertexColor(_eclColor[1], _eclColor[2], _eclColor[3], BAL_PRED_ALPHA)
+            else
+                -- Default Astral Power color
+                local pr, pg, pb = 1, 1, 1
+                if _G.MSUF_GetPowerBarColor then
+                    local r, g, b = _G.MSUF_GetPowerBarColor(LUNAR_POWER, "LUNAR_POWER")
+                    if type(r) == "number" then pr, pg, pb = r, g, b end
+                end
+                _predTex:SetVertexColor(pr, pg, pb, BAL_PRED_ALPHA)
+            end
+
+            -- Anchor to fill texture right edge (secret-safe positioning)
+            _predTex:ClearAllPoints()
+            _predTex:SetPoint("LEFT", bar:GetStatusBarTexture(), "RIGHT", 0, 0)
+            _predTex:SetSize(predW, barH)
+            _predTex:Show()
+        end
+
+        -- Clean up when deactivating
+        local function _cleanup()
+            _castSpell = nil
+            _predAmt = 0
+            _eclColor = nil
+            if _predTex then _predTex:Hide() end
+        end
+
+        -- Event frame
+        local f = CreateFrame("Frame")
+        f:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
+        f:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
+        f:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
+        f:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
+        f:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+        f:RegisterUnitEvent("UNIT_AURA", "player")
+        f:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
+        f:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+        f:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+        f:RegisterEvent("PLAYER_ENTERING_WORLD")
+        f:SetScript("OnEvent", function(_, event, arg1, _, arg3)
+            -- Spec/form change → recalculate active state
+            if event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
+            or event == "UPDATE_SHAPESHIFT_FORM"
+            or event == "PLAYER_ENTERING_WORLD" then
+                _checkActive()
+                if _active then
+                    _refreshEclipses()
+                    _applyEclipseColor()
+                else
+                    _cleanup()
+                end
+                return
+            end
+
+            if not _active then return end
+
+            -- Spellcast start → compute prediction
+            if event == "UNIT_SPELLCAST_START" and arg1 == "player" then
+                _castSpell = arg3
+                _predAmt = _computeAP(arg3)
+                _updateOverlay()
+                return
+            end
+
+            -- Spellcast end → clear prediction
+            if (event == "UNIT_SPELLCAST_STOP"
+             or event == "UNIT_SPELLCAST_FAILED"
+             or event == "UNIT_SPELLCAST_INTERRUPTED"
+             or event == "UNIT_SPELLCAST_SUCCEEDED") and arg1 == "player" then
+                _castSpell = nil
+                _predAmt = 0
+                _updateOverlay()
+                return
+            end
+
+            -- Aura change → refresh eclipses, recolor bar, recompute prediction
+            if event == "UNIT_AURA" and arg1 == "player" then
+                _refreshEclipses()
+                _applyEclipseColor()
+                if _castSpell then
+                    _predAmt = _computeAP(_castSpell)
+                    _updateOverlay()
+                end
+                return
+            end
+
+            -- Power update → reposition overlay (bar fill changed)
+            if event == "UNIT_POWER_UPDATE" and arg1 == "player" then
+                if _castSpell then
+                    _updateOverlay()
+                end
+                -- Re-apply eclipse color (ApplyPowerBarVisual may have overwritten it)
+                if _eclColor then
+                    _applyEclipseColor()
+                end
+            end
+        end)
+    end
+end
+
 -- Hunter Survival: Tip of the Spear (talent 260285)
 local TIP_TALENT_ID     = 260285
 local TIP_KILL_COMMAND   = 259489
@@ -711,15 +962,6 @@ local CP = {
     height    = 4,
     -- Warlock shard prediction state (Jay's approach: predicted post-cast value)
     wlPredDelta = 0,       -- shard delta for active cast (0 = no prediction)
-    -- Balance Druid: Eclipse + AP prediction state
-    apPredTex    = nil,    -- prediction overlay texture (lazy, on bars[1])
-    apPredAmt    = 0,      -- predicted AP from current cast
-    apCastSpell  = nil,    -- active spell ID (nil when not casting)
-    apSolarExp   = 0,      -- solar eclipse expiration time
-    apLunarExp   = 0,      -- lunar eclipse expiration time
-    apCAExp      = 0,      -- celestial alignment expiration time
-    apIncExp     = 0,      -- incarnation expiration time
-    apEclipseColor = nil,  -- current eclipse color override {r,g,b} or nil
     -- Timer Bar state (Ebon Might)
     tbCachedQ   = -1,      -- quantized percentage for skip-if-same
     tbOUA       = false,   -- true if OnUpdate is active
@@ -1754,162 +1996,8 @@ end
 -- directly (C-side handles secret numbers). No Lua arithmetic on cur.
 -- ============================================================================
 
--- Resolve eclipse bar color from DB override → MCR defaults
-local function ResolveEclipseColor(token)
-    local ov = MSUF_DB and MSUF_DB.general and MSUF_DB.general.classPowerColorOverrides
-    if type(ov) == "table" then
-        local c = token and ov[token]
-        if type(c) == "table" then
-            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                return r, g, b
-            end
-        end
-    end
-    -- MCR/Shrom defaults
-    if token == "ECLIPSE_SOLAR" then return BAL_CLR_SOLAR[1], BAL_CLR_SOLAR[2], BAL_CLR_SOLAR[3] end
-    if token == "ECLIPSE_LUNAR" then return BAL_CLR_LUNAR[1], BAL_CLR_LUNAR[2], BAL_CLR_LUNAR[3] end
-    if token == "ECLIPSE_CA"    then return BAL_CLR_CA[1], BAL_CLR_CA[2], BAL_CLR_CA[3] end
-    return nil, nil, nil
-end
-
--- Forward declaration (used by RefreshBalanceEclipses before definition)
-local ComputePredictedAP
-
--- Scan active eclipse auras and update expiry timestamps + bar color
-local function RefreshBalanceEclipses()
-    local getAura = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
-    if not getAura then return end
-
-    CP.apSolarExp = 0
-    CP.apLunarExp = 0
-    CP.apCAExp    = 0
-    CP.apIncExp   = 0
-
-    for auraID, kind in pairs(ECLIPSE_AURAS) do
-        local aura = getAura(auraID)
-        if aura and aura.expirationTime then
-            local exp = aura.expirationTime
-            if kind == "SOLAR" then
-                CP.apSolarExp = exp
-            elseif kind == "LUNAR" then
-                CP.apLunarExp = exp
-            elseif kind == "CA" then
-                CP.apCAExp = exp
-            elseif kind == "INC" then
-                CP.apIncExp = exp
-            end
-        end
-    end
-
-    -- Determine bar color from active eclipse state
-    local now = GetTime()
-    local inCA  = CP.apCAExp > now
-    local inInc = CP.apIncExp > now
-    if inCA or inInc then
-        local r, g, b = ResolveEclipseColor("ECLIPSE_CA")
-        CP.apEclipseColor = r and { r, g, b } or BAL_CLR_CA
-    elseif CP.apSolarExp > now then
-        local r, g, b = ResolveEclipseColor("ECLIPSE_SOLAR")
-        CP.apEclipseColor = r and { r, g, b } or BAL_CLR_SOLAR
-    elseif CP.apLunarExp > now then
-        local r, g, b = ResolveEclipseColor("ECLIPSE_LUNAR")
-        CP.apEclipseColor = r and { r, g, b } or BAL_CLR_LUNAR
-    else
-        CP.apEclipseColor = nil  -- use default active color
-    end
-
-    -- Recompute prediction if currently casting
-    if CP.apCastSpell then
-        CP.apPredAmt = ComputePredictedAP(CP.apCastSpell)
-    end
-end
-
--- Compute predicted AP for a given spell, accounting for Nature's Balance + Eclipse
-ComputePredictedAP = function(spellID)
-    if not spellID then return 0 end
-    local base = AP_GENERATORS[spellID]
-    if not base then return 0 end
-
-    -- Nature's Balance: +2 to Wrath and Starfire
-    if spellID == SPELL_AP_WRATH or spellID == SPELL_AP_STARFIRE then
-        local known = C_SpellBook and C_SpellBook.IsSpellKnown
-        if known and known(SPELL_NATURES_BALANCE) then
-            base = base + 2
-        end
-        -- Eclipse multiplier: ×1.4 during matching eclipse or CA/Inc
-        local now = GetTime()
-        local inCA  = CP.apCAExp > now
-        local inInc = CP.apIncExp > now
-        local inEclipse = false
-        if spellID == SPELL_AP_WRATH then
-            inEclipse = (CP.apSolarExp > now) or inCA or inInc
-        else
-            inEclipse = (CP.apLunarExp > now) or inCA or inInc
-        end
-        if inEclipse then
-            base = base * 1.4
-        end
-    end
-    return base
-end
-
--- Ensure prediction overlay texture exists on bars[1] (lazy, created once)
-local function EnsurePredictionOverlay()
-    if CP.apPredTex then return end
-    local bar = CP.bars[1]
-    if not bar then return end
-    local tex = bar:CreateTexture(nil, "ARTWORK", nil, 1)
-    local getBarTex = _G.MSUF_GetBarTexture
-    tex:SetTexture(getBarTex and getBarTex() or "Interface\\Buttons\\WHITE8x8")
-    tex:SetVertexColor(1, 1, 1, BAL_PRED_ALPHA)
-    tex:SetHeight(1)
-    tex:Hide()
-    CP.apPredTex = tex
-end
-
--- Update prediction overlay position & size
--- Anchored to StatusBarTexture RIGHT edge (secret-safe — no cur arithmetic)
-local function UpdatePredictionOverlay()
-    local tex = CP.apPredTex
-    if not tex then return end
-
-    local bar = CP.bars[1]
-    if not bar then tex:Hide(); return end
-
-    if CP.apPredAmt <= 0 or not CP.apCastSpell then
-        tex:Hide()
-        return
-    end
-
-    -- mx (UnitPowerMax) is NOT secret — safe for arithmetic
-    local mx = UnitPowerMax("player", PT.LunarPower) or 100
-    if mx <= 0 then mx = 100 end
-    local predFrac = CP.apPredAmt / mx
-    if predFrac > 1 then predFrac = 1 end
-
-    local barW = bar:GetWidth()
-    local barH = bar:GetHeight()
-    if barW <= 0 or barH <= 0 then tex:Hide(); return end
-
-    local predW = barW * predFrac
-    if predW < 1 then tex:Hide(); return end
-
-    -- Use eclipse color if active, else default active color
-    local ec = CP.apEclipseColor
-    if ec then
-        tex:SetVertexColor(ec[1], ec[2], ec[3], BAL_PRED_ALPHA)
-    else
-        local baseR, baseG, baseB = ResolveClassPowerColor(PT.LunarPower)
-        tex:SetVertexColor(baseR, baseG, baseB, BAL_PRED_ALPHA)
-    end
-
-    -- Anchor to the fill texture's right edge (secret-safe positioning)
-    tex:ClearAllPoints()
-    tex:SetPoint("LEFT", bar:GetStatusBarTexture(), "RIGHT", 0, 0)
-    tex:SetSize(predW, barH)
-    tex:Show()
-end
+-- (Balance Druid prediction + eclipse colors now live in self-contained BAL module
+--  above, with own event frame on the main power bar. Zero CP dependency.)
 
 local function CP_UpdateValues_Continuous(powerType, maxPower)
     -- SECRET-SAFE: cur may be a secret number in 12.0
@@ -1922,20 +2010,15 @@ local function CP_UpdateValues_Continuous(powerType, maxPower)
     local bar = CP.bars[1]
     if not bar then return end
 
-    -- Eclipse color override or default active color
-    local ec = CP.apEclipseColor
-    if ec then
-        bar:SetStatusBarColor(ec[1], ec[2], ec[3], 1)
+    -- Color from type (Ele Maelstrom / Shadow Insanity)
+    local colorByType = true
+    local b = MSUF_DB and MSUF_DB.bars or {}
+    if b then colorByType = (b.classPowerColorByType ~= false) end
+    if colorByType then
+        local r, g, bl = ResolveClassPowerColor(powerType)
+        bar:SetStatusBarColor(r, g, bl, 1)
     else
-        local colorByType = true
-        local b = MSUF_DB and MSUF_DB.bars or {}
-        if b then colorByType = (b.classPowerColorByType ~= false) end
-        if colorByType then
-            local r, g, bl = ResolveClassPowerColor(powerType)
-            bar:SetStatusBarColor(r, g, bl, 1)
-        else
-            bar:SetStatusBarColor(1, 1, 1, 1)
-        end
+        bar:SetStatusBarColor(1, 1, 1, 1)
     end
 
     -- Secret-safe: pass values directly to widget, zero Lua arithmetic on cur
@@ -1968,10 +2051,6 @@ local function CP_UpdateValues_Continuous(powerType, maxPower)
             txt:Hide()
         end
     end
-
-    -- Update prediction overlay
-    UpdatePredictionOverlay()
-    if not CP.apPredTex then EnsurePredictionOverlay() end
 
     -- Auto-hide: cur may be secret → CP_CheckAutoHide handles NotSecret guard
     CP_CheckAutoHide(cur, mx)
@@ -2534,19 +2613,6 @@ local function FullRefresh()
             RefreshChargedPoints()
         end
 
-        -- Balance Druid: init eclipse tracking + prediction overlay
-        if renderMode == MODE_CONTINUOUS and PLAYER_CLASS == "DRUID" then
-            EnsurePredictionOverlay()
-            CP.apCastSpell = nil
-            CP.apPredAmt = 0
-            RefreshBalanceEclipses()
-        else
-            -- Clear prediction state when not in continuous mode
-            CP.apCastSpell = nil
-            CP.apPredAmt = 0
-            if CP.apPredTex then CP.apPredTex:Hide() end
-        end
-
         -- Warlock: reset prediction state
         CP.wlPredDelta = 0
 
@@ -2594,12 +2660,9 @@ local function FullRefresh()
         CP.isAuraPower = false
         CP.isVehicle = false
         CP.wlPredDelta = 0
-        CP.apCastSpell = nil
-        CP.apPredAmt = 0
         CP.spStacks = 0
         CP.spExpires = nil
         CP.spCachedQ = -1
-        if CP.apPredTex then CP.apPredTex:Hide() end
     end
 
     -- ---- AltMana ----
@@ -2672,14 +2735,7 @@ local function OnAuraUpdate(unit)
             updateFn(CP.powerType, CP.currentMax)
         end
     end
-    -- Balance Druid: eclipse aura changes affect bar color + prediction
-    if CP.visible and CP.renderMode == MODE_CONTINUOUS and PLAYER_CLASS == "DRUID" then
-        RefreshBalanceEclipses()
-        local updateFn = MODE_UPDATE_FN[CP.renderMode]
-        if updateFn then
-            updateFn(CP.powerType, CP.currentMax)
-        end
-    end
+    -- Balance Druid eclipse tracking now handled by BAL module's own event frame
     -- Timer bar: Ebon Might aura applied/refreshed/removed
     if CP.visible and CP.renderMode == MODE_TIMER_BAR then
         CP.tbCachedQ = -1  -- force refresh
@@ -2704,12 +2760,6 @@ local function OnSpellcastStart(spellID)
     if PLAYER_CLASS == "WARLOCK" and (CP.renderMode == MODE_SEGMENTED or CP.renderMode == MODE_FRACTIONAL) then
         OnWarlockCastStart(spellID)
     end
-    -- Balance Druid: AP cast prediction overlay
-    if CP.renderMode == MODE_CONTINUOUS and PLAYER_CLASS == "DRUID" then
-        CP.apCastSpell = spellID
-        CP.apPredAmt = ComputePredictedAP(spellID)
-        UpdatePredictionOverlay()
-    end
 end
 
 local function OnSpellcastEnd()
@@ -2717,12 +2767,6 @@ local function OnSpellcastEnd()
     -- Warlock
     if CP.wlPredDelta ~= 0 then
         OnWarlockCastEnd()
-    end
-    -- Balance Druid
-    if CP.renderMode == MODE_CONTINUOUS then
-        CP.apCastSpell = nil
-        CP.apPredAmt = 0
-        UpdatePredictionOverlay()
     end
 end
 
