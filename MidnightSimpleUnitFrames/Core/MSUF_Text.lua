@@ -514,6 +514,8 @@ function ns.Text.RenderPowerText(self)
     if pType == nil then
         pType = (F.UnitPowerType and F.UnitPowerType(unit)) or (UnitPowerType and UnitPowerType(unit))
     end
+    -- Ele Shaman: class power shows Maelstrom → main bar + text show Mana
+    if self._msufIsPlayer and _G.MSUF_EleMaelstromActive then pType = 0 end
     if pType ~= nil then
         if curValue == nil then
             curValue = (F.UnitPower and F.UnitPower(unit, pType)) or (UnitPower and UnitPower(unit, pType)) or nil
@@ -681,6 +683,8 @@ function ns.Text.ApplyPowerTextColorByType(self, unit, enabled)
     -- UnitPowerType existence is guarded above. Direct call (no FastCall overhead).
     local pType, pTok = UnitPowerType(unit)
     if pType == nil then  return end
+    -- Ele Shaman: class power shows Maelstrom → text color matches Mana
+    if self._msufIsPlayer and _G.MSUF_EleMaelstromActive then pType = 0; pTok = "MANA" end
     if type(MSUF_GetResolvedPowerColor) ~= "function" then  return end
     local pr, pg, pb = MSUF_GetResolvedPowerColor(pType, pTok)
     if not pr then  return end

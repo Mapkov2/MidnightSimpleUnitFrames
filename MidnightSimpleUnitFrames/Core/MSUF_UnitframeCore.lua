@@ -2462,6 +2462,8 @@ do
             local unit = f.unit
             local pType = _UnitPowerType(unit)
             if pType == nil then return end
+            -- Ele Shaman: class power shows Maelstrom → main bar shows Mana
+            if f._msufIsPlayer and _G.MSUF_EleMaelstromActive then pType = 0 end
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
@@ -2500,6 +2502,7 @@ do
             local unit = f.unit
             local pType = _UnitPowerType(unit)
             if pType == nil then return end
+            if _G.MSUF_EleMaelstromActive then pType = 0 end
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
@@ -2535,6 +2538,7 @@ do
             local unit = f.unit
             local pType = _UnitPowerType(unit)
             if pType == nil then return end
+            if _G.MSUF_EleMaelstromActive then pType = 0 end
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
@@ -2566,6 +2570,7 @@ do
             local unit = f.unit
             local pType = _UnitPowerType(unit)
             if pType == nil then return end
+            if _G.MSUF_EleMaelstromActive then pType = 0 end
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
