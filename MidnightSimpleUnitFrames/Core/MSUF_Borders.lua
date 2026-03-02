@@ -533,18 +533,20 @@ do
     end
 
     local function _LayoutSentinel(s, uf, edge)
-        if s._msufEdge == edge then return end
+        local pbDetached = uf._msufPowerBarDetached and true or false
+        if s._msufEdge == edge and s._msufDetach == pbDetached then return end
         _bdTable.edgeSize = edge
         s:SetBackdrop(_bdTable)
         s:SetBackdropBorderColor(_purgeR, _purgeG, _purgeB, 1)
         s:ClearAllPoints()
         local hb = uf.hpBar
         local pb = uf.targetPowerBar
-        local pbWanted = (pb ~= nil) and (uf._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
+        local pbWanted = (pb ~= nil) and not pbDetached and (uf._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
         local bottomBar = pbWanted and pb or hb
         if hb then s:SetPoint("TOPLEFT", hb, "TOPLEFT", -edge, edge) end
         if bottomBar then s:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", edge, -edge) end
         s._msufEdge = edge
+        s._msufDetach = pbDetached
         s:Show()
     end
 

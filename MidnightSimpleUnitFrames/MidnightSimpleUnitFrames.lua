@@ -4923,6 +4923,15 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         pb:SetPoint('TOPLEFT', hb, 'BOTTOMLEFT', 0, 0)
         pb:SetPoint('TOPRIGHT', hb, 'BOTTOMRIGHT', 0, 0)
     end
+
+    -- FIX: Force border system refresh after layout completes.
+    -- Border stamps were invalidated above (thickness/bottomIsPower = -1/nil) but no
+    -- visual refresh was triggered — the outline stayed stale until a manual menu touch.
+    -- Direct call (cold path: EditMode / config apply, never combat hot path).
+    local fnVis = _G.MSUF_RefreshRareBarVisuals
+    if type(fnVis) == "function" then
+        fnVis(f)
+    end
  end
 
 _G.MSUF_ApplyPowerBarEmbedLayout = MSUF_ApplyPowerBarEmbedLayout
