@@ -2045,6 +2045,9 @@ local function _MSUF_DBSetPath(path, value)
             if type(MSUF_DB) ~= "table" then  return end
             local v = self:GetChecked() and true or false
                         _MSUF_DBSetPath(dbPath, v)
+            -- Force the widget's visual state to match the new value.
+            -- Some custom checkbox templates / skins don't auto-toggle reliably.
+            if self.SetChecked then self:SetChecked(v) end
             if type(applyFn) == "function" then applyFn(v, self)
             elseif type(applyFn) == "string" and _G and type(_G.MSUF_Options_Apply) == "function" then _G.MSUF_Options_Apply(applyFn, v, self) end
             if type(syncFn)  == "function" then syncFn() end
@@ -4846,7 +4849,6 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         DimLabel(_G.MSUF_BarsMenuGradientHeader)
         -- Outline thickness (global)
         DimSlider("MSUF_BarOutlineThicknessSlider")
-        DimSlider("MSUF_DPBOutlineThicknessSlider")
         -- Highlight border section (global)
         DimSlider("MSUF_HighlightBorderThicknessSlider")
         DimDrop("MSUF_AggroOutlineDropdown", nil)
@@ -5560,87 +5562,6 @@ barOutlineThicknessSlider.onValueChanged = function(_, value)
         ApplyAllSettings()
     end
 end
-
--- Detached power bar outline (separate from main frame outline so it can
--- match class power outline independently).  Shows only when any power bar
--- is detached; otherwise greyed out and falls back to the global outline.
-local dpbOutlineSlider = CreateLabeledSlider(
-    "MSUF_DPBOutlineThicknessSlider",
-    "Power bar outline",
-    barGroup,
-    0, 6, 1,
-    16, -350  -- temp Y; re-anchored below
-)
-dpbOutlineSlider:ClearAllPoints()
-dpbOutlineSlider:SetPoint("TOPLEFT", barOutlineThicknessSlider, "BOTTOMLEFT", 0, -50)
-do
-    EnsureDB()
-    local bars = (MSUF_DB and MSUF_DB.bars) or {}
-    local t = tonumber(bars.detachedPowerBarOutline)
-    if type(t) ~= "number" then
-        -- Default: same as main outline
-        t = tonumber(bars.barOutlineThickness) or 1
-    end
-    t = math.floor(t + 0.5)
-    if t < 0 then t = 0 elseif t > 6 then t = 6 end
-    MSUF_SetLabeledSliderValue(dpbOutlineSlider, t)
-end
-
-dpbOutlineSlider.onValueChanged = function(_, value)
-    EnsureDB()
-    MSUF_DB.bars = MSUF_DB.bars or {}
-    MSUF_DB.bars.detachedPowerBarOutline = value
-    if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then
-        _G.MSUF_ApplyBarOutlineThickness_All()
-    else
-        ApplyAllSettings()
-    end
-end
-
--- Grey out when no power bar is detached (any unit).
--- Called on panel show and when detach state changes in Edit Mode.
-local function MSUF_RefreshDPBOutlineSliderState()
-    EnsureDB()
-    local anyDetached = false
-    if MSUF_DB then
-        for _, key in ipairs({"player", "target", "focus"}) do
-            local conf = MSUF_DB[key]
-            if conf and conf.powerBarDetached == true then
-                anyDetached = true
-                break
-            end
-        end
-    end
-    local a = anyDetached and 1.0 or 0.35
-    dpbOutlineSlider:SetAlpha(a)
-    dpbOutlineSlider:EnableMouse(anyDetached)
-    if dpbOutlineSlider.editBox then
-        dpbOutlineSlider.editBox:SetAlpha(a)
-        dpbOutlineSlider.editBox:EnableMouse(anyDetached)
-    end
-    if dpbOutlineSlider.minusButton then
-        dpbOutlineSlider.minusButton:SetAlpha(a)
-        dpbOutlineSlider.minusButton:EnableMouse(anyDetached)
-    end
-    if dpbOutlineSlider.plusButton then
-        dpbOutlineSlider.plusButton:SetAlpha(a)
-        dpbOutlineSlider.plusButton:EnableMouse(anyDetached)
-    end
-    -- Dim label + Low/High texts
-    local txt = _G["MSUF_DPBOutlineThicknessSliderText"]
-    if txt then txt:SetAlpha(a) end
-    local lo = _G["MSUF_DPBOutlineThicknessSliderLow"]
-    if lo then lo:SetAlpha(a) end
-    local hi = _G["MSUF_DPBOutlineThicknessSliderHigh"]
-    if hi then hi:SetAlpha(a) end
-end
-_G.MSUF_RefreshDPBOutlineSliderState = MSUF_RefreshDPBOutlineSliderState
-
--- Auto-refresh when the bars panel becomes visible
-dpbOutlineSlider:HookScript("OnShow", MSUF_RefreshDPBOutlineSliderState)
-
--- Expose globally so the re-anchor block can reference it
-_G.MSUF_DPBOutlineSlider = dpbOutlineSlider
 
 -- Highlight border thickness (separate overlay for aggro/dispel/purge)
 local highlightBorderThicknessSlider = CreateLabeledSlider(

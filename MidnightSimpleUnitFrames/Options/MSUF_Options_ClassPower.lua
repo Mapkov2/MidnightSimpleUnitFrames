@@ -93,6 +93,98 @@ local function MakeCheck(name, label, parent)
     return cb
 end
 
+
+-- ============================================================================
+-- Labeled slider helper (copied from Options_Core style, trimmed for reuse)
+-- ============================================================================
+local function MSUF_SetLabeledSliderValue(slider, value)
+    if not slider then return end
+    slider.MSUF_SkipCallback = true
+    slider:SetValue(value)
+    slider.MSUF_SkipCallback = nil
+    if slider.editBox and slider.editBox.SetText and (not slider.editBox:HasFocus()) then
+        local cur = slider:GetValue()
+        local step = slider.step or 1
+        local formatted
+        if step >= 1 then
+            cur = math.floor((tonumber(cur) or 0) + 0.5)
+            formatted = tostring(cur)
+        else
+            formatted = string.format("%.2f", tonumber(cur) or 0)
+        end
+        slider.editBox:SetText(formatted)
+    end
+end
+
+local function CreateLabeledSlider(name, label, parent, minVal, maxVal, step)
+    local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
+    slider:SetMinMaxValues(minVal, maxVal)
+    slider:SetValueStep(step)
+    slider:SetObeyStepOnDrag(true)
+    slider.minVal = minVal
+    slider.maxVal = maxVal
+    slider.step   = step
+
+    local low  = _G[name .. "Low"]
+    local high = _G[name .. "High"]
+    local text = _G[name .. "Text"]
+    if low  then low:SetText(tostring(minVal)) end
+    if high then high:SetText(tostring(maxVal)) end
+    if text then text:SetText(TR(label or "")) end
+
+    -- Edit box + +/- buttons (matches MSUF stepper look used elsewhere)
+    local eb = CreateFrame("EditBox", name .. "Input", parent, "InputBoxTemplate")
+    eb:SetSize(60, 18)
+    eb:SetAutoFocus(false)
+    eb:SetPoint("TOP", slider, "BOTTOM", 0, -6)
+    eb:SetJustifyH("CENTER")
+    eb:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+        local v = tonumber(self:GetText())
+        if not v then
+            MSUF_SetLabeledSliderValue(slider, slider:GetValue())
+            return
+        end
+        if v < minVal then v = minVal elseif v > maxVal then v = maxVal end
+        v = math_floor((v / step) + 0.5) * step
+        MSUF_SetLabeledSliderValue(slider, v)
+        if slider.onValueChanged then slider.onValueChanged(slider, v) end
+    end)
+    eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    slider.editBox = eb
+
+    local minus = CreateFrame("Button", name .. "Minus", parent, "UIPanelButtonTemplate")
+    minus:SetSize(18, 18)
+    minus:SetPoint("RIGHT", eb, "LEFT", -4, 0)
+    minus:SetText("-")
+
+    local plus = CreateFrame("Button", name .. "Plus", parent, "UIPanelButtonTemplate")
+    plus:SetSize(18, 18)
+    plus:SetPoint("LEFT", eb, "RIGHT", 4, 0)
+    plus:SetText("+")
+
+    slider.minusButton = minus
+    slider.plusButton  = plus
+
+    local function Step(delta)
+        local v = tonumber(slider:GetValue()) or 0
+        v = v + delta
+        if v < minVal then v = minVal elseif v > maxVal then v = maxVal end
+        v = math_floor((v / step) + 0.5) * step
+        MSUF_SetLabeledSliderValue(slider, v)
+        if slider.onValueChanged then slider.onValueChanged(slider, v) end
+    end
+    minus:SetScript("OnClick", function() Step(-step) end)
+    plus:SetScript("OnClick", function() Step(step) end)
+
+    slider:HookScript("OnValueChanged", function(self, value)
+        if self.MSUF_SkipCallback then return end
+        MSUF_SetLabeledSliderValue(self, value)
+        if self.onValueChanged then self.onValueChanged(self, value) end
+    end)
+
+    return slider
+end
 -- ============================================================================
 -- Number edit box helper (matches existing power bar height edit pattern)
 -- ============================================================================
@@ -526,7 +618,77 @@ local function BuildClassPowerOptions(leftName, rightName)
     dpbBgDrop._msufButtonWidth = DPB_TEX_DROP_W
     dpbBgDrop._msufTweakBarTexturePreview = true
 
-    -- =====================================================================
+    
+    -- Power bar outline (Detached Power Bar) — moved here from Options_Core (Bars).
+    local dpbOutlineSlider = CreateLabeledSlider(
+        "MSUF_DPBOutlineThicknessSlider",
+        "Power bar outline",
+        cpPanel,
+        0, 6, 1
+    )
+    dpbOutlineSlider:ClearAllPoints()
+    dpbOutlineSlider:SetPoint("TOPLEFT", dpbBgDrop, "BOTTOMLEFT", 16, -26)
+
+    do
+        local bars = (MSUF_DB and MSUF_DB.bars) or {}
+        local t = tonumber(bars.detachedPowerBarOutline)
+        if type(t) ~= "number" then
+            -- Default: same as main outline (or 1).
+            t = tonumber(bars.barOutlineThickness) or 1
+        end
+        t = math.floor(t + 0.5)
+        if t < 0 then t = 0 elseif t > 6 then t = 6 end
+        MSUF_SetLabeledSliderValue(dpbOutlineSlider, t)
+    end
+
+    dpbOutlineSlider.onValueChanged = function(_, value)
+        if type(MSUF_DB) ~= "table" then return end
+        MSUF_DB.bars = MSUF_DB.bars or {}
+        MSUF_DB.bars.detachedPowerBarOutline = value
+        if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then
+            _G.MSUF_ApplyBarOutlineThickness_All()
+        end
+    end
+
+    -- Grey out when no power bar is detached (any unit).
+    local function MSUF_RefreshDPBOutlineSliderState()
+        local anyDetached = false
+        if type(MSUF_DB) == "table" then
+            for _, key in ipairs({ "player", "target", "focus" }) do
+                local conf = MSUF_DB[key]
+                if conf and conf.powerBarDetached == true then
+                    anyDetached = true
+                    break
+                end
+            end
+        end
+        local a = anyDetached and 1.0 or 0.35
+        dpbOutlineSlider:SetAlpha(a)
+        dpbOutlineSlider:EnableMouse(anyDetached)
+        if dpbOutlineSlider.editBox then
+            dpbOutlineSlider.editBox:SetAlpha(a)
+            dpbOutlineSlider.editBox:EnableMouse(anyDetached)
+        end
+        if dpbOutlineSlider.minusButton then
+            dpbOutlineSlider.minusButton:SetAlpha(a)
+            dpbOutlineSlider.minusButton:EnableMouse(anyDetached)
+        end
+        if dpbOutlineSlider.plusButton then
+            dpbOutlineSlider.plusButton:SetAlpha(a)
+            dpbOutlineSlider.plusButton:EnableMouse(anyDetached)
+        end
+        local txt = _G["MSUF_DPBOutlineThicknessSliderText"]
+        if txt then txt:SetAlpha(a) end
+        local lo = _G["MSUF_DPBOutlineThicknessSliderLow"]
+        if lo then lo:SetAlpha(a) end
+        local hi = _G["MSUF_DPBOutlineThicknessSliderHigh"]
+        if hi then hi:SetAlpha(a) end
+    end
+    _G.MSUF_RefreshDPBOutlineSliderState = MSUF_RefreshDPBOutlineSliderState
+    dpbOutlineSlider:HookScript("OnShow", MSUF_RefreshDPBOutlineSliderState)
+    _G.MSUF_DPBOutlineSlider = dpbOutlineSlider
+
+-- =====================================================================
     -- RIGHT COLUMN TOP: Style — Visual Appearance
     -- =====================================================================
     local styleHeader = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -845,6 +1007,61 @@ local function BuildClassPowerOptions(leftName, rightName)
         BindBool(amShowCheck,  "bars.showAltMana",            CPRefresh, SyncClassPowerToggles)
     end
 
+    -- Ensure checkbox visuals always reflect DB immediately.
+    -- Some templates/skins don't auto-toggle reliably, and our binder is
+    -- intentionally minimal; we explicitly load the checked state from DB
+    -- whenever the panel is shown (and once right after building).
+    local function LoadChecksFromDB()
+        if type(MSUF_DB) ~= "table" then return end
+        local b = MSUF_DB.bars or {}
+        local function _bool(key, defaultTrue)
+            local v = b[key]
+            if v == nil then return defaultTrue and true or false end
+            return v and true or false
+        end
+
+        if cpShowCheck and cpShowCheck.SetChecked then cpShowCheck:SetChecked(_bool("showClassPower", true)) end
+        if cpColorCheck and cpColorCheck.SetChecked then cpColorCheck:SetChecked(_bool("classPowerColorByType", true)) end
+        if cpChargedCheck and cpChargedCheck.SetChecked then cpChargedCheck:SetChecked(_bool("showChargedComboPoints", false)) end
+        if cpTextCheck and cpTextCheck.SetChecked then cpTextCheck:SetChecked(_bool("classPowerShowText", false)) end
+        if cpAnchorCooldownCheck and cpAnchorCooldownCheck.SetChecked then cpAnchorCooldownCheck:SetChecked(_bool("classPowerAnchorToCooldown", false)) end
+        if cpFillReverseCheck and cpFillReverseCheck.SetChecked then cpFillReverseCheck:SetChecked(_bool("classPowerFillReverse", false)) end
+        if cpEleMaelCheck and cpEleMaelCheck.SetChecked then cpEleMaelCheck:SetChecked(_bool("showEleMaelstrom", false)) end
+        if cpEbonMightCheck and cpEbonMightCheck.SetChecked then cpEbonMightCheck:SetChecked(_bool("showEbonMight", false)) end
+        if cpHideOOCCheck and cpHideOOCCheck.SetChecked then cpHideOOCCheck:SetChecked(_bool("classPowerHideOOC", false)) end
+        if cpHideFullCheck and cpHideFullCheck.SetChecked then cpHideFullCheck:SetChecked(_bool("classPowerHideWhenFull", false)) end
+        if cpHideEmptyCheck and cpHideEmptyCheck.SetChecked then cpHideEmptyCheck:SetChecked(_bool("classPowerHideWhenEmpty", false)) end
+        if amShowCheck and amShowCheck.SetChecked then amShowCheck:SetChecked(_bool("showAltMana", true)) end
+
+        if SyncClassPowerToggles then SyncClassPowerToggles() end
+    end
+
+    LoadChecksFromDB()
+    if cpPanel and cpPanel.HookScript then
+        cpPanel:HookScript("OnShow", LoadChecksFromDB)
+    end
+
+    -- IMPORTANT: Some checkbox skins / template scripts can replace the
+    -- checkbox's OnClick after our binder runs (or swallow the binder's
+    -- SetScript). This makes enabled/disabled greying appear only after
+    -- leaving/re-entering the tab (OnShow sync).
+    --
+    -- To guarantee *immediate* visual enable-state updates, we HookScript
+    -- (non-destructive) and sync on the next tick so GetChecked() is final.
+    local function HookImmediateSync(cb)
+        if not cb or not cb.HookScript or cb.__msufImmediateSyncHooked then return end
+        cb.__msufImmediateSyncHooked = true
+        cb:HookScript("OnClick", function()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function() if SyncClassPowerToggles then SyncClassPowerToggles() end end)
+            else
+                if SyncClassPowerToggles then SyncClassPowerToggles() end
+            end
+        end)
+    end
+    HookImmediateSync(cpShowCheck)
+    HookImmediateSync(amShowCheck)
+
     -- (Slider rows are self-binding — no HookEdit needed)
 
     -- ── Scope dimming: dim our panel when per-unit scope is active ──
@@ -915,15 +1132,30 @@ local function SyncClassPowerToggles()
 
     local function SetEnabled(ctrl, on)
         if not ctrl then return end
+        -- IMPORTANT UX: For checkboxes, we want the ON/OFF state to remain
+        -- visually readable even when the parent section is disabled by a
+        -- master toggle (e.g. 'Show class power'). Using :Disable() on a
+        -- UICheckButtonTemplate greys out the checkmark and makes an enabled
+        -- option look "off". Instead we keep it enabled but block mouse.
+        local isCheck = (ctrl.GetObjectType and ctrl:GetObjectType() == "CheckButton")
         if on then
             if ctrl.Enable then ctrl:Enable() end
             if ctrl.EnableMouse then ctrl:EnableMouse(true) end
             if ctrl.SetAlpha then ctrl:SetAlpha(1) end
         else
-            if ctrl.Disable then ctrl:Disable() end
-            if ctrl.EnableMouse then ctrl:EnableMouse(false) end
-            if ctrl.ClearFocus then ctrl:ClearFocus() end
-            if ctrl.SetAlpha then ctrl:SetAlpha(0.45) end
+            if isCheck then
+                -- Keep the check state visible (checked stays clearly visible).
+                if ctrl.Enable then ctrl:Enable() end
+                if ctrl.EnableMouse then ctrl:EnableMouse(false) end
+                if ctrl.SetAlpha then
+                    ctrl:SetAlpha((ctrl.GetChecked and ctrl:GetChecked()) and 0.85 or 0.55)
+                end
+            else
+                if ctrl.Disable then ctrl:Disable() end
+                if ctrl.EnableMouse then ctrl:EnableMouse(false) end
+                if ctrl.ClearFocus then ctrl:ClearFocus() end
+                if ctrl.SetAlpha then ctrl:SetAlpha(0.45) end
+            end
         end
     end
 
