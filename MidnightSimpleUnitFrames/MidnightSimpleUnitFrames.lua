@@ -1489,6 +1489,17 @@ local function _MSUF_ApplyStateDriverHide(frame)
     return true
 end
 
+
+-- Secret-safe / secure: never call protected methods on protected/forbidden frames.
+local function _MSUF_SafeDisableMouse(frame)
+    if not frame or not frame.EnableMouse then return end
+    -- Protected/forbidden frames block EnableMouse calls and can trigger ADDON_ACTION_BLOCKED.
+    if (frame.IsForbidden and frame:IsForbidden()) or (frame.IsProtected and frame:IsProtected()) then
+        return
+    end
+    frame:EnableMouse(false)
+end
+
 local function KillFrame(frame, allowInEditMode)
     if not frame then  return end
 
@@ -1540,9 +1551,7 @@ local function KillFrame(frame, allowInEditMode)
         end
     end
 
-    if frame.EnableMouse then
-        frame:EnableMouse(false)
-    end
+    _MSUF_SafeDisableMouse(frame)
  end
 
 -- Re-assert all killed frames. Called on PLAYER_ENTERING_WORLD only.
@@ -1581,10 +1590,7 @@ _MSUF_ReassertKilledFrames = function()
                 end
             end
         end
-
-        if frame.EnableMouse then
-            frame:EnableMouse(false)
-        end
+        _MSUF_SafeDisableMouse(frame)
     end
 end
 
@@ -1757,9 +1763,7 @@ local function HideDefaultFrames()
             if sel.UnregisterAllEvents then
                 sel:UnregisterAllEvents()
             end
-            if sel.EnableMouse then
-                sel:EnableMouse(false)
-            end
+            _MSUF_SafeDisableMouse(sel)
             sel:Hide()
             if sel.SetScript then
                 sel:SetScript("OnShow", function(f)  f:Hide()  end)

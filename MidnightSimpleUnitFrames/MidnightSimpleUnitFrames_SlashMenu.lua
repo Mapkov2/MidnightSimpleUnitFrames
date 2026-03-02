@@ -1874,6 +1874,26 @@ if p.LoadFromDB then pcall(p.LoadFromDB,p)
 end
 end
 end
+local function MSUF_ScrollBarsToAnchor(anchorFrame)
+    local scroll = _G and _G.MSUF_BarsMenuScrollFrame
+    local child  = _G and _G.MSUF_BarsMenuScrollChild
+    if not (scroll and child and anchorFrame and anchorFrame.GetTop and child.GetTop) then return end
+    local top = child:GetTop()
+    local aTop = anchorFrame:GetTop()
+    if not (top and aTop) then return end
+    local off = (top - aTop) - 12
+    if off < 0 then off = 0 end
+    if scroll.SetVerticalScroll then scroll:SetVerticalScroll(off) end
+    if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
+    if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+end
+local function MSUF_SelectClassResourcesPage()
+    -- Dedicated "Class Resources" tab (no Bars content).
+    MSUF_SelectMainOptionsKey("classpower")
+    if type(_G and _G.MSUF_EnsureClassPowerMenuBuilt) == "function" then
+        pcall(_G.MSUF_EnsureClassPowerMenuBuilt)
+    end
+end
 local function MSUF_SelectCastbarSubPage(unitKey) if type(_G and _G.MSUF_SetActiveCastbarSubPage)=="function"then pcall(_G.MSUF_SetActiveCastbarSubPage,unitKey)
 elseif type(MSUF_SetActiveCastbarSubPage)=="function"then pcall(MSUF_SetActiveCastbarSubPage,unitKey)
 end
@@ -1908,7 +1928,7 @@ if subkey and subkey~=""then MSUF_SelectCastbarSubPage(subkey)
 end
 end
 },profiles={title="MSUF Profiles",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("profiles") end
-},colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},gameplay={title="MSUF Gameplay",build=MSUF_EnsureGameplayPanelBuilt},modules={title="MSUF Modules",build=MSUF_EnsureModulesPanelBuilt}}
+},colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},classpower={title="MSUF Class Resources",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectClassResourcesPage},gameplay={title="MSUF Gameplay",build=MSUF_EnsureGameplayPanelBuilt},modules={title="MSUF Modules",build=MSUF_EnsureModulesPanelBuilt}}
 local function MSUF_GetMirrorPageInfo(key) return MIRROR_PAGES and key and MIRROR_PAGES[key]
 or nil end
 local function MSUF_NormalizeMirrorKey(key,allowHome) key=key or(allowHome and"home"or"main")
@@ -2257,7 +2277,7 @@ navParent._msufNavStripe=stripe end
 local function MakeButton(label,w,onClick,isHeader,isChild) local b=UI_Button(navParent,tostring(label or""),w,btnH,"TOPLEFT",navParent,"TOPLEFT",0,0,onClick)
 MSUF_LeftJustifyButtonText(b,isChild and 10 or 12)
 MSUF_SkinNavButton(b,isHeader,isChild) return b end
-local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_misc",label="Miscellaneous"},{key="opt_colors",label="Colors"},}},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
+local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_misc",label="Miscellaneous"},{key="opt_colors",label="Colors"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
 local headerLabels={}
 for _,node in ipairs(NAV)
 do if node.type=="header"then headerLabels[node.id]=node.label end

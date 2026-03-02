@@ -291,11 +291,16 @@ local dpbWidthModeDrop -- dropdown: DPB Match width to CDM
 -- ============================================================================
 local _built = false
 
-local function BuildClassPowerOptions()
+-- Build the Class Power options panel anchored under a given left/right panel pair.
+-- If no names are provided, defaults to the Bars tab panel pair.
+local function BuildClassPowerOptions(leftName, rightName)
     if _built then return end
 
-    local rightPanel = _G["MSUF_BarsMenuPanelRight"]
-    local leftPanel  = _G["MSUF_BarsMenuPanelLeft"]
+    leftName  = leftName  or "MSUF_BarsMenuPanelLeft"
+    rightName = rightName or "MSUF_BarsMenuPanelRight"
+
+    local rightPanel = _G[rightName]
+    local leftPanel  = _G[leftName]
     if not (rightPanel and leftPanel) then return end
 
     _built = true
@@ -1134,32 +1139,25 @@ end
 -- ============================================================================
 local _hooked = false
 
-local function HookBarsTabs()
+local function HookClassPowerTab()
     if _hooked then return end
 
-    local barGroupHost = _G["MSUF_BarsMenuHost"]
-    if not barGroupHost then return end
+    local host = _G["MSUF_ClassPowerMenuHost"]
+    if not host then return end
 
     _hooked = true
 
-    -- Build on first show of the Bars tab
-    barGroupHost:HookScript("OnShow", function()
-        BuildClassPowerOptions()
-        SyncClassPowerToggles()
-    end)
-
-    -- Also hook the inner content frame for sync-on-show (same as Core does)
-    local barGroup = _G["MSUF_BarsMenuContent"]
-    if barGroup and barGroup.HookScript then
-        barGroup:HookScript("OnShow", function()
-            -- Delayed so original MSUF_SyncBarsTabToggles runs first
-            C_Timer.After(0, SyncClassPowerToggles)
+    -- Build on first show of the dedicated Class Resources tab
+    if host.HookScript then
+        host:HookScript("OnShow", function()
+            BuildClassPowerOptions("MSUF_ClassPowerMenuPanelLeft", "MSUF_ClassPowerMenuPanelRight")
+            SyncClassPowerToggles()
         end)
     end
 
-    -- If bars tab is already visible right now, build + sync immediately
-    if barGroupHost.IsVisible and barGroupHost:IsVisible() then
-        BuildClassPowerOptions()
+    -- If the tab is already visible right now, build + sync immediately
+    if host.IsVisible and host:IsVisible() then
+        BuildClassPowerOptions("MSUF_ClassPowerMenuPanelLeft", "MSUF_ClassPowerMenuPanelRight")
         SyncClassPowerToggles()
     end
 end
@@ -1170,17 +1168,24 @@ end
 -- ============================================================================
 do
     -- 1) Already built? (e.g. file loaded after options panel)
-    if _G["MSUF_BarsMenuHost"] then
-        HookBarsTabs()
+    if _G["MSUF_ClassPowerMenuHost"] then
+        HookClassPowerTab()
     end
 
     -- 2) Not built yet: wrap CreateOptionsPanel to hook after it runs.
     if not _hooked and type(_G.CreateOptionsPanel) == "function" then
         hooksecurefunc(_G, "CreateOptionsPanel", function()
-            -- CreateOptionsPanel just finished; MSUF_BarsMenuHost now exists.
-            HookBarsTabs()
+            -- CreateOptionsPanel just finished; MSUF_ClassPowerMenuHost now exists.
+            HookClassPowerTab()
         end)
     end
+end
+
+-- Public helper for callers (SlashMenu mirror) to force-build if needed.
+_G.MSUF_EnsureClassPowerMenuBuilt = function()
+    HookClassPowerTab()
+    BuildClassPowerOptions("MSUF_ClassPowerMenuPanelLeft", "MSUF_ClassPowerMenuPanelRight")
+    SyncClassPowerToggles()
 end
 
 -- ============================================================================

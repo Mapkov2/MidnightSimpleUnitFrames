@@ -22,6 +22,8 @@ end
 local panel, title, sub
 local searchBox
 local frameGroup, frameGroupHost, fontGroup, auraGroup, castbarGroup, castbarGroupHost
+local barGroup, barGroupHost
+local classPowerGroup, classPowerGroupHost
 local MSUF_BarsApplyGradient -- forward decl; assigned in Bars section below
 -- ---------------------------------------------------------------------------
 -- Gradient changes apply live (no reload required).
@@ -972,6 +974,49 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
         barGroupHost:HookScript("OnShow", MSUF_BarsMenu_QueueScrollUpdate)
         barGroupHost:HookScript("OnSizeChanged", MSUF_BarsMenu_QueueScrollUpdate)
     end
+
+    -- Class Resources menu: dedicated tab (no Bars content).
+    classPowerGroupHost = CreateFrame("Frame", "MSUF_ClassPowerMenuHost", panel)
+    classPowerGroupHost:SetAllPoints()
+
+    local cpScroll = CreateFrame("ScrollFrame", "MSUF_ClassPowerMenuScrollFrame", classPowerGroupHost, "UIPanelScrollFrameTemplate")
+    cpScroll:SetPoint("TOPLEFT", classPowerGroupHost, "TOPLEFT", 0, -110)
+    cpScroll:SetPoint("BOTTOMRIGHT", classPowerGroupHost, "BOTTOMRIGHT", -36, 16)
+
+    local cpScrollChild = CreateFrame("Frame", "MSUF_ClassPowerMenuScrollChild", cpScroll)
+    cpScrollChild:SetSize(1, 1)
+    cpScroll:SetScrollChild(cpScrollChild)
+
+    classPowerGroup = CreateFrame("Frame", "MSUF_ClassPowerMenuContent", cpScrollChild)
+    -- NOTE: Unlike the legacy Bars layout, the Class Resources page is built
+    -- with a normal top-aligned header. Do NOT apply the +110px "legacy offset"
+    -- compensation here, or the first headers get pushed above the scroll view
+    -- and appear clipped.
+    classPowerGroup:SetPoint("TOPLEFT", cpScrollChild, "TOPLEFT", 0, 0)
+    classPowerGroup:SetSize(760, 900)
+
+    -- Dummy anchor panels (hidden) used by MSUF_Options_ClassPower to size/anchor cpPanel.
+    do
+        local lp = CreateFrame("Frame", "MSUF_ClassPowerMenuPanelLeft", classPowerGroup)
+        lp:SetSize(330, 1)
+        lp:SetPoint("TOPLEFT", classPowerGroup, "TOPLEFT", 0, -20)
+        lp:Hide()
+        local rp = CreateFrame("Frame", "MSUF_ClassPowerMenuPanelRight", classPowerGroup)
+        rp:SetSize(320, 1)
+        rp:SetPoint("TOPLEFT", lp, "TOPRIGHT", 0, 0)
+        rp:Hide()
+    end
+
+    classPowerGroupHost._msufClassPowerScroll = cpScroll
+    classPowerGroupHost._msufClassPowerScrollChild = cpScrollChild
+    if classPowerGroupHost.HookScript then
+        classPowerGroupHost:HookScript("OnShow", function()
+            if cpScroll and cpScroll.SetVerticalScroll then cpScroll:SetVerticalScroll(0) end
+            if type(_G.MSUF_EnsureClassPowerMenuBuilt) == "function" then
+                pcall(_G.MSUF_EnsureClassPowerMenuBuilt)
+            end
+        end)
+    end
     miscGroup = CreateFrame("Frame", nil, panel)
     miscGroup:SetAllPoints()
     profileGroup = CreateFrame("Frame", nil, panel)
@@ -997,6 +1042,8 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
              return "Boss Frames"
         elseif key == "bars" then
              return "Bars"
+        elseif key == "classpower" then
+             return "Class Resources"
         elseif key == "fonts" then
              return "Fonts"
         elseif key == "auras" then
@@ -1017,12 +1064,15 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
         auraGroup:Hide()
         castbarGroupHost:Hide()
         barGroupHost:Hide()
+        if classPowerGroupHost then classPowerGroupHost:Hide() end
         miscGroup:Hide()
         profileGroup:Hide()
         if currentTabKey == "fonts" then
             _TFadeIn(fontGroup, TRANS_TAB)
         elseif currentTabKey == "bars" then
             _TFadeIn(barGroupHost, TRANS_TAB)
+        elseif currentTabKey == "classpower" then
+            _TFadeIn(classPowerGroupHost, TRANS_TAB)
         elseif currentTabKey == "auras" then
             _TFadeIn(auraGroup, TRANS_TAB)
         elseif currentTabKey == "castbar" then
@@ -1094,7 +1144,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
         end
      end
     local function IsTabKey(k)
-        return k == "bars" or k == "fonts" or k == "auras" or k == "castbar" or k == "misc" or k == "profiles"
+        return k == "bars" or k == "classpower" or k == "fonts" or k == "auras" or k == "castbar" or k == "misc" or k == "profiles"
     end
     local function SetCurrentKey(newKey)
         if IsTabKey(newKey) then
