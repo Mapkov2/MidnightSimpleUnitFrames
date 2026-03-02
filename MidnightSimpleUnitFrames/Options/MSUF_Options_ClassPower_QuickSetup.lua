@@ -354,9 +354,9 @@ local function RefreshAll()
     if type(_G.MSUF_RefreshDPBOutlineSliderState) == "function" then
         _G.MSUF_RefreshDPBOutlineSliderState()
     end
-    -- Refresh text rendering (picks up powerTextMode change)
+    -- Refresh text rendering (invalidate cache + mark frames dirty for re-render)
     if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
-        _G.MSUF_UFCore_NotifyConfigChanged(nil, false, true, "QuickSetup")
+        _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, "QuickSetup")
     end
     if type(_G.MSUF_ClassPower_SyncOptions) == "function" then
         _G.MSUF_ClassPower_SyncOptions()
