@@ -434,19 +434,10 @@ local function GetClassPowerType()
 
     elseif PLAYER_CLASS == "DRUID" then
         local form = GetShapeshiftFormID and GetShapeshiftFormID()
+        -- Cat Form: Combo Points as class power (Energy is main bar)
         if form == 1 then return PT.ComboPoints, MODE_SEGMENTED, false end
-        -- Balance: Astral Power continuous bar (caster form, spec 1)
-        local spec = GetSpec and GetSpec()
-        if spec == SPEC_DRUID_BALANCE then
-            local pType = UnitPowerType("player")
-            if NotSecret(pType) and pType == PT.LunarPower then
-                return PT.LunarPower, MODE_CONTINUOUS, false
-            end
-            -- Energy fallback (shapeshifted but not cat form)
-            if NotSecret(pType) and pType == PT.Energy then
-                return PT.ComboPoints, MODE_SEGMENTED, false
-            end
-        end
+        -- Balance/Boomkin: Astral Power is already the main power bar → no class power.
+        -- Other forms (Bear etc.): main bar shows Rage/Mana → no secondary resource overlay.
 
     elseif PLAYER_CLASS == "DEMONHUNTER" then
         local spec = GetSpec and GetSpec()
@@ -510,20 +501,28 @@ local function NeedsAltManaBar()
     local pType = UnitPowerType("player")
     -- pType == 0 = Mana primary → no alt bar needed
     if NotSecret(pType) then
-        return (pType ~= nil and pType ~= PT.Mana)
+        if pType == nil or pType == PT.Mana then return false end
     end
-    -- If it's a secret value, fall back to class/spec heuristic
-    local SPECS_NEED_ALT = {
-        PRIEST  = { [3] = true },           -- Shadow
-        SHAMAN  = { [1] = true, [2] = true }, -- Ele, Enh
-        DRUID   = { [1] = true, [2] = true, [3] = true }, -- Balance, Feral, Guardian
-        PALADIN = { [3] = true },           -- Ret
-        MONK    = { [3] = true },           -- WW
-    }
-    local specs = SPECS_NEED_ALT[PLAYER_CLASS]
-    if not specs then return false end
-    local si = GetSpec and GetSpec()
-    return si and specs[si] or false
+    -- Must actually have a mana pool (Warriors, Rogues, DKs etc. have 0 max mana)
+    local maxMana = UnitPowerMax("player", PT.Mana)
+    if NotSecret(maxMana) and type(maxMana) == "number" and maxMana <= 0 then
+        return false
+    end
+    -- Non-secret primary + has mana pool → check class/spec heuristic
+    if not NotSecret(pType) then
+        local SPECS_NEED_ALT = {
+            PRIEST  = { [3] = true },           -- Shadow
+            SHAMAN  = { [1] = true, [2] = true }, -- Ele, Enh
+            DRUID   = { [1] = true, [2] = true, [3] = true }, -- Balance, Feral, Guardian
+            PALADIN = { [3] = true },           -- Ret
+            MONK    = { [3] = true },           -- WW
+        }
+        local specs = SPECS_NEED_ALT[PLAYER_CLASS]
+        if not specs then return false end
+        local si = GetSpec and GetSpec()
+        return si and specs[si] or false
+    end
+    return true
 end
 
 -- PowerType → token mapping (for color resolution)
