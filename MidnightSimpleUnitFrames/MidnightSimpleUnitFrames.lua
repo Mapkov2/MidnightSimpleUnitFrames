@@ -1270,8 +1270,6 @@ local _DPB = {
         utility       = "UtilityCooldownViewer",
         tracked_buffs = "BuffIconCooldownViewer",
     },
-    -- CDM frames report content-area; icons extend beyond. ~1.10 = 10 %.
-    CDM_SCALE = 1.10,
 }
 function _DPB.ResolveFg()
     local b = MSUF_DB and MSUF_DB.bars or {}
@@ -4827,10 +4825,10 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
             local cdmName = dpbWMode and _DPB.CDM[dpbWMode]
             if cdmName then
                 local cdm = _G[cdmName]
-                -- Only read width when CDM is visible (Sensei pattern)
-                if cdm and cdm.IsShown and cdm:IsShown() and cdm.GetWidth then
-                    local cw = math_floor(cdm:GetWidth() * _DPB.CDM_SCALE + 0.5)
-                    if cw >= 30 then dW = cw end
+                -- Scale-compensated width (Sensei pattern): convert CDM coords → our bar coords
+                if cdm and cdm.IsShown and cdm:IsShown() then
+                    local scaledW = _G.MSUF_CDM_GetScaledWidth and _G.MSUF_CDM_GetScaledWidth(cdm, pb)
+                    if scaledW and scaledW >= 30 then dW = scaledW end
                 end
                 -- If CDM hidden/unavailable, keep manual dW (from DB or frame width)
             end

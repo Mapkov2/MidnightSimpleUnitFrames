@@ -964,10 +964,25 @@ local CDM_FRAMES = {
     tracked_buffs = "BuffIconCooldownViewer",
 }
 
--- CDM frames report their content-area width, but icons extend visually
--- beyond the frame boundary (spacing, glow, padding).  This multiplier
--- compensates so our bars match the perceived CDM width.  ~1.10 = 10 %.
-local CDM_WIDTH_SCALE = 1.10
+-- Scale-compensated width: convert CDM width to target frame's coordinate space.
+-- CDM frames (EditMode-managed) may have a different effective scale than our bars.
+-- GetWidth() returns logical width in the frame's own coordinate space — we must
+-- convert through screen pixels to get the equivalent width in targetFrame coords.
+-- Sensei avoids this because its bars inherit CDM scale; our bars don't.
+local function CDM_GetScaledWidth(cdmFrame, targetFrame)
+    if not cdmFrame or not cdmFrame.GetWidth then return nil end
+    local w = cdmFrame:GetWidth()
+    if not w or w < 1 then return nil end
+    local cdmScale = (cdmFrame.GetEffectiveScale and cdmFrame:GetEffectiveScale()) or 1
+    local tgtScale = (targetFrame and targetFrame.GetEffectiveScale and targetFrame:GetEffectiveScale()) or 1
+    if cdmScale <= 0 then cdmScale = 1 end
+    if tgtScale <= 0 then tgtScale = 1 end
+    -- Same scale → no conversion needed (fast path)
+    if cdmScale == tgtScale then return math_floor(w + 0.5) end
+    return math_floor(w * cdmScale / tgtScale + 0.5)
+end
+-- Expose for DPB width sync in MidnightSimpleUnitFrames.lua
+_G.MSUF_CDM_GetScaledWidth = CDM_GetScaledWidth
 
 -- CDM hook definitions (setup-time only, never re-created).
 local CDM_HOOK_DEFS = {
@@ -1234,8 +1249,8 @@ local function CP_Layout(playerFrame, maxPower, height)
     if cdmName then
         local cdmFrame = _G[cdmName]
         -- Only read width when CDM is visible (Sensei pattern); hidden frames may return stale/0.
-        if cdmFrame and cdmFrame.IsShown and cdmFrame:IsShown() and cdmFrame.GetWidth then
-            userW = math_floor(cdmFrame:GetWidth() * CDM_WIDTH_SCALE + 0.5)
+        if cdmFrame and cdmFrame.IsShown and cdmFrame:IsShown() then
+            userW = CDM_GetScaledWidth(cdmFrame, CP.container)
         end
         if not userW or userW < 30 then
             -- Fallback: actual player frame width (runtime) → DB → 275.
@@ -2542,15 +2557,20 @@ local function FullRefresh()
     end
 
     -- Hook CDM frames (Essential/Utility/Tracked Buffs) for width-sync + anchor mode.
-    -- Each hook captures its mode as a plain string — direct == compare, no tables, no loops.
+    -- Sensei pattern: hooksecurefunc on SetSize/SetWidth/Show/Hide ensures we react to
+    -- every layout pass (including icon add/remove), not just actual size changes.
+    -- HookScript("OnSizeChanged") only fires when the size ACTUALLY differs — misses
+    -- re-layouts where CDM recalculates but arrives at the same total width.
     for i = 1, 3 do
         local def = CDM_HOOK_DEFS[i]
         if not CP[def.flag] then
             local cdm = _G[def.name]
-            if cdm and cdm.HookScript then
+            if cdm then
                 CP[def.flag] = true
                 local myMode = def.mode  -- captured once, never changes
-                local function _cdmRefresh()
+                local function _cdmRefresh(_, w)
+                    -- Filter spurious calls (Sensei pattern): ignore scale-like tiny values
+                    if type(w) == "number" and w <= 1 then return end
                     local bars = MSUF_DB and MSUF_DB.bars
                     -- Class power: refresh if this CDM's mode is active or anchored
                     if (bars and bars.classPowerWidthMode == myMode)
@@ -2566,9 +2586,10 @@ local function FullRefresh()
                         end
                     end
                 end
-                cdm:HookScript("OnSizeChanged", _cdmRefresh)
-                cdm:HookScript("OnShow", _cdmRefresh)
-                cdm:HookScript("OnHide", _cdmRefresh)
+                hooksecurefunc(cdm, "SetSize",  _cdmRefresh)
+                hooksecurefunc(cdm, "SetWidth", _cdmRefresh)
+                hooksecurefunc(cdm, "Show",     _cdmRefresh)
+                hooksecurefunc(cdm, "Hide",     _cdmRefresh)
             end
         end
     end
