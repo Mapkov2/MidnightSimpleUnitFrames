@@ -620,14 +620,135 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     
     -- Power bar outline (Detached Power Bar) — moved here from Options_Core (Bars).
-    local dpbOutlineSlider = CreateLabeledSlider(
+    -- IMPORTANT: Must look like the other compact X/Y sliders (inline label + slider + editbox + [-][+]).
+    local function CreateCompactIntRow(name, labelText, parent, minVal, maxVal, step, anchorTo, anchorPt, oX, oY, sliderW, labelW)
+        sliderW = sliderW or 150
+        step = step or 1
+        local row = {}
+
+        local lbl = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        lbl:SetPoint(anchorPt or "TOPLEFT", anchorTo or parent, anchorPt == "TOPLEFT" and "BOTTOMLEFT" or "BOTTOMLEFT", oX or 0, oY or -10)
+        lbl:SetText(TR(labelText))
+        lbl:SetTextColor(0.85, 0.85, 0.85)
+        if labelW then
+            lbl:SetWidth(labelW)
+            lbl:SetJustifyH("LEFT")
+        end
+        row.label = lbl
+
+        local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
+        s:SetPoint("LEFT", lbl, "RIGHT", 10, 0)
+        s:SetSize(sliderW, 14)
+        s:SetMinMaxValues(minVal, maxVal)
+        s:SetValueStep(step)
+        s:SetObeyStepOnDrag(true)
+        local track = s:CreateTexture(nil, "BACKGROUND")
+        track:SetColorTexture(0.06, 0.06, 0.06, 1)
+        track:SetPoint("TOPLEFT", s, "TOPLEFT", 0, -3)
+        track:SetPoint("BOTTOMRIGHT", s, "BOTTOMRIGHT", 0, 3)
+        s._track = track
+        s:HookScript("OnEnter", function(self) if self._track then self._track:SetColorTexture(0.20, 0.20, 0.20, 1) end end)
+        s:HookScript("OnLeave", function(self) if self._track then self._track:SetColorTexture(0.06, 0.06, 0.06, 1) end end)
+        local thumb = s:GetThumbTexture()
+        if thumb then thumb:SetTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal"); thumb:SetSize(10, 18) end
+        local lo = _G[name .. "Low"];  if lo  then lo:SetText("") end
+        local hi = _G[name .. "High"]; if hi  then hi:SetText("") end
+        local tx = _G[name .. "Text"]; if tx  then tx:SetText("") end
+        row.slider = s
+
+        local eb = CreateFrame("EditBox", name .. "EB", parent, "InputBoxTemplate")
+        eb:SetSize(44, 18)
+        eb:SetAutoFocus(false)
+        eb:SetPoint("LEFT", s, "RIGHT", 6, 0)
+        eb:SetJustifyH("CENTER")
+        eb:SetFontObject(GameFontHighlightSmall)
+        eb:SetTextColor(1, 1, 1, 1)
+        row.editBox = eb
+
+        local StyleBtn = _G.MSUF_StyleSmallButton
+        local minus = CreateFrame("Button", name .. "Minus", parent)
+        minus:SetPoint("LEFT", eb, "RIGHT", 3, 0)
+        if StyleBtn then StyleBtn(minus, false) else minus:SetSize(20, 20) end
+        row.minus = minus
+
+        local plus = CreateFrame("Button", name .. "Plus", parent)
+        plus:SetPoint("LEFT", minus, "RIGHT", 2, 0)
+        if StyleBtn then StyleBtn(plus, true) else plus:SetSize(20, 20) end
+        row.plus = plus
+
+        local function Clamp(v)
+            v = tonumber(v)
+            if type(v) ~= "number" then return nil end
+            v = math_floor(v + 0.5)
+            if v < minVal then v = minVal elseif v > maxVal then v = maxVal end
+            return v
+        end
+
+        function row:Set(val)
+            val = Clamp(val) or minVal
+            eb:SetText(tostring(val))
+            s:SetValue(val)
+        end
+
+        function row:SetEnabled(on)
+            local a = on and 1.0 or 0.35
+            s:SetAlpha(a)
+            eb:SetAlpha(a)
+            minus:SetAlpha(a)
+            plus:SetAlpha(a)
+            if on then
+                s:Enable(); eb:EnableMouse(true)
+                minus:EnableMouse(true); plus:EnableMouse(true)
+                lbl:SetTextColor(0.85, 0.85, 0.85)
+            else
+                s:Disable(); eb:EnableMouse(false); eb:ClearFocus()
+                minus:EnableMouse(false); plus:EnableMouse(false)
+                lbl:SetTextColor(0.35, 0.35, 0.35)
+            end
+        end
+
+        row.onValueChanged = nil
+
+        s:SetScript("OnValueChanged", function(_, val)
+            val = Clamp(val) or minVal
+            eb:SetText(tostring(val))
+            if row.onValueChanged then row.onValueChanged(val) end
+        end)
+
+        local function ApplyEB()
+            local v = Clamp(eb:GetText())
+            if not v then
+                eb:SetText(tostring(Clamp(s:GetValue()) or minVal))
+                return
+            end
+            eb:SetText(tostring(v))
+            s:SetValue(v)
+        end
+        eb:SetScript("OnEnterPressed", function(self) ApplyEB(); self:ClearFocus() end)
+        eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        eb:SetScript("OnEditFocusLost", function() ApplyEB() end)
+
+        local function StepValue(sign)
+            local cur = Clamp(eb:GetText()) or Clamp(s:GetValue()) or minVal
+            cur = cur + sign * step
+            if cur < minVal then cur = minVal elseif cur > maxVal then cur = maxVal end
+            eb:SetText(tostring(cur))
+            s:SetValue(cur)
+        end
+        minus:SetScript("OnClick", function() StepValue(-1) end)
+        plus:SetScript("OnClick",  function() StepValue(1) end)
+
+        return row
+    end
+
+    local dpbOutlineRow = CreateCompactIntRow(
         "MSUF_DPBOutlineThicknessSlider",
         "Power bar outline",
         cpPanel,
-        0, 6, 1
+        0, 6, 1,
+        dpbBgDrop, "TOPLEFT", 16, -26,
+        150, 110
     )
-    dpbOutlineSlider:ClearAllPoints()
-    dpbOutlineSlider:SetPoint("TOPLEFT", dpbBgDrop, "BOTTOMLEFT", 16, -26)
 
     do
         local bars = (MSUF_DB and MSUF_DB.bars) or {}
@@ -636,12 +757,13 @@ local function BuildClassPowerOptions(leftName, rightName)
             -- Default: same as main outline (or 1).
             t = tonumber(bars.barOutlineThickness) or 1
         end
-        t = math.floor(t + 0.5)
+        if type(t) ~= "number" then t = 1 end
+        t = math_floor(t + 0.5)
         if t < 0 then t = 0 elseif t > 6 then t = 6 end
-        MSUF_SetLabeledSliderValue(dpbOutlineSlider, t)
+        dpbOutlineRow:Set(t)
     end
 
-    dpbOutlineSlider.onValueChanged = function(_, value)
+    dpbOutlineRow.onValueChanged = function(value)
         if type(MSUF_DB) ~= "table" then return end
         MSUF_DB.bars = MSUF_DB.bars or {}
         MSUF_DB.bars.detachedPowerBarOutline = value
@@ -662,31 +784,15 @@ local function BuildClassPowerOptions(leftName, rightName)
                 end
             end
         end
-        local a = anyDetached and 1.0 or 0.35
-        dpbOutlineSlider:SetAlpha(a)
-        dpbOutlineSlider:EnableMouse(anyDetached)
-        if dpbOutlineSlider.editBox then
-            dpbOutlineSlider.editBox:SetAlpha(a)
-            dpbOutlineSlider.editBox:EnableMouse(anyDetached)
+        if dpbOutlineRow and dpbOutlineRow.SetEnabled then
+            dpbOutlineRow:SetEnabled(anyDetached)
         end
-        if dpbOutlineSlider.minusButton then
-            dpbOutlineSlider.minusButton:SetAlpha(a)
-            dpbOutlineSlider.minusButton:EnableMouse(anyDetached)
-        end
-        if dpbOutlineSlider.plusButton then
-            dpbOutlineSlider.plusButton:SetAlpha(a)
-            dpbOutlineSlider.plusButton:EnableMouse(anyDetached)
-        end
-        local txt = _G["MSUF_DPBOutlineThicknessSliderText"]
-        if txt then txt:SetAlpha(a) end
-        local lo = _G["MSUF_DPBOutlineThicknessSliderLow"]
-        if lo then lo:SetAlpha(a) end
-        local hi = _G["MSUF_DPBOutlineThicknessSliderHigh"]
-        if hi then hi:SetAlpha(a) end
     end
     _G.MSUF_RefreshDPBOutlineSliderState = MSUF_RefreshDPBOutlineSliderState
-    dpbOutlineSlider:HookScript("OnShow", MSUF_RefreshDPBOutlineSliderState)
-    _G.MSUF_DPBOutlineSlider = dpbOutlineSlider
+    if dpbOutlineRow and dpbOutlineRow.slider and dpbOutlineRow.slider.HookScript then
+        dpbOutlineRow.slider:HookScript("OnShow", MSUF_RefreshDPBOutlineSliderState)
+    end
+    _G.MSUF_DPBOutlineSlider = dpbOutlineRow
 
 -- =====================================================================
     -- RIGHT COLUMN TOP: Style — Visual Appearance
@@ -983,6 +1089,96 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     amOffsetRow = MakeCompactSlider("MSUF_AMOffset", "Y offset", cpPanel, -50, 50, 1, "altManaOffsetY",
         amHeightRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
+
+    -- =================================================================
+    -- Bottom quick actions
+    --   - Edit Mode: toggle MSUF Edit Mode
+    --   - Class color: open Colors page and jump to the Class Power color dropdown
+    -- =================================================================
+    local function _ToggleMSUFEditMode()
+        local st = _G and _G.MSUF_EditState
+        local isActive = (type(st) == "table" and st.active) and true or false
+        if type(_G and _G.MSUF_SetMSUFEditModeDirect) == "function" then
+            _G.MSUF_SetMSUFEditModeDirect(not isActive)
+        elseif type(_G and _G.MSUF_SetEditMode) == "function" then
+            _G.MSUF_SetEditMode(not isActive)
+        end
+    end
+
+    local function _OpenClassPowerClassColorDropdown()
+        if type(_G and _G.MSUF_OpenPage) == "function" then
+            _G.MSUF_OpenPage("colors")
+        end
+
+        local function JumpAndOpen()
+            local dd = _G and _G["MSUF_Colors_ClassPowerTypeDropdown"]
+            if not dd then return end
+
+            -- Scroll to dropdown (same math as Bars anchor helper, but for Colors)
+            local scroll = _G and _G["MSUF_ColorsScrollFrame"]
+            local child  = _G and _G["MSUF_ColorsScrollChild"]
+            if scroll and child and scroll.SetVerticalScroll and child.GetTop and dd.GetTop then
+                local top  = child:GetTop()
+                local aTop = dd:GetTop()
+                if top and aTop then
+                    local off = (top - aTop) - 12
+                    if off < 0 then off = 0 end
+                    scroll:SetVerticalScroll(off)
+                    if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
+                    if _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+                end
+            end
+
+            -- Open dropdown menu
+            if _G.ToggleDropDownMenu then
+                pcall(_G.ToggleDropDownMenu, 1, nil, dd, dd, 0, 0)
+            end
+        end
+
+        if _G and _G.C_Timer and _G.C_Timer.After then
+            _G.C_Timer.After(0, JumpAndOpen)
+        else
+            JumpAndOpen()
+        end
+    end
+
+    local btnW, btnH = 140, 22
+    local btnY = 12
+
+    local editBtn = CreateFrame("Button", "MSUF_ClassPower_EditModeButton", cpPanel, "UIPanelButtonTemplate")
+    editBtn:SetSize(btnW, btnH)
+    editBtn:SetPoint("BOTTOMLEFT", cpPanel, "BOTTOMLEFT", PAD_X, btnY)
+    editBtn:SetText(TR("Edit Mode"))
+    editBtn:SetScript("OnClick", _ToggleMSUFEditMode)
+
+	-- Match Options_Player action button styling (and prevent SlashMenu mirror skin from breaking click/hover).
+	editBtn._msufNoSlashSkin = true
+	if _G and _G.MSUF_SkinMidnightActionButton then
+		_G.MSUF_SkinMidnightActionButton(editBtn)
+	else
+		editBtn.__msufMidnightActionSkinned = true
+	end
+
+    local colorBtn = CreateFrame("Button", "MSUF_ClassPower_ClassColorButton", cpPanel, "UIPanelButtonTemplate")
+    colorBtn:SetSize(btnW, btnH)
+    colorBtn:SetPoint("LEFT", editBtn, "RIGHT", 12, 0)
+    colorBtn:SetText(TR("Class color"))
+    colorBtn:SetScript("OnClick", _OpenClassPowerClassColorDropdown)
+
+	colorBtn._msufNoSlashSkin = true
+	if _G and _G.MSUF_SkinMidnightActionButton then
+		_G.MSUF_SkinMidnightActionButton(colorBtn)
+	else
+		colorBtn.__msufMidnightActionSkinned = true
+	end
+
+    -- Make sure the scroll child is tall enough so the bottom buttons are reachable.
+    do
+        local curH = (cpPanel.GetHeight and cpPanel:GetHeight()) or 0
+        if curH < 620 and cpPanel.SetHeight then
+            cpPanel:SetHeight(620)
+        end
+    end
 
     -- ── Bind checkboxes to DB ──
     local BindBool = _G.MSUF_Options_BindDBBoolCheck

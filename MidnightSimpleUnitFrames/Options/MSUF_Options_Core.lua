@@ -6378,14 +6378,19 @@ if barOutlineThicknessSlider and outlineLine and outlineLine:IsShown() then
     end
 end
 -- Match Power bar outline slider width to Outline thickness (both 280)
-if _G.MSUF_DPBOutlineSlider then
-    _G.MSUF_DPBOutlineSlider:SetWidth(280)
+do
+    local dpb = _G.MSUF_DPBOutlineSlider
+    local s = dpb and (dpb.slider or dpb)
+    if s and s.SetWidth then
+        s:SetWidth(280)
+    end
 end
 
 -- Left panel: Highlight border section (Aggro/Dispel + future border highlights)
 do
     local leftPanel = _G["MSUF_BarsMenuPanelLeft"]
-    local outlineSlider = _G.MSUF_DPBOutlineSlider or barOutlineThicknessSlider
+    local dpb = _G.MSUF_DPBOutlineSlider
+    local outlineSlider = (dpb and (dpb.slider or dpb)) or barOutlineThicknessSlider
 
     -- Hide the simple label created during initial panel build; we render this section
     -- using the same header+divider style as "Gradient Options" / "Outline thickness".
