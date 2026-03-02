@@ -2557,41 +2557,60 @@ local function FullRefresh()
     end
 
     -- Hook CDM frames (Essential/Utility/Tracked Buffs) for width-sync + anchor mode.
-    -- Sensei pattern: hooksecurefunc on SetSize/SetWidth/Show/Hide ensures we react to
-    -- every layout pass (including icon add/remove), not just actual size changes.
-    -- HookScript("OnSizeChanged") only fires when the size ACTUALLY differs — misses
-    -- re-layouts where CDM recalculates but arrives at the same total width.
+    -- COMBAT LOCKDOWN: zero overhead in combat. OnSizeChanged fires but callback
+    -- exits at first line (InCombatLockdown check). A single catch-up relayout
+    -- runs on PLAYER_REGEN_ENABLED to sync any width changes that occurred mid-fight.
+    -- Out of combat: lightweight CP_Layout only (not FullRefresh).
     for i = 1, 3 do
         local def = CDM_HOOK_DEFS[i]
         if not CP[def.flag] then
             local cdm = _G[def.name]
-            if cdm then
+            if cdm and cdm.HookScript then
                 CP[def.flag] = true
-                local myMode = def.mode  -- captured once, never changes
-                local function _cdmRefresh(_, w)
-                    -- Filter spurious calls (Sensei pattern): ignore scale-like tiny values
-                    if type(w) == "number" and w <= 1 then return end
+                local myMode = def.mode
+                local function _cdmRefresh()
+                    -- COMBAT LOCKDOWN: zero work in combat
+                    if InCombatLockdown() then
+                        CP._cdmDirty = true
+                        return
+                    end
                     local bars = MSUF_DB and MSUF_DB.bars
-                    -- Class power: refresh if this CDM's mode is active or anchored
-                    if (bars and bars.classPowerWidthMode == myMode)
-                    or (bars and bars.classPowerAnchorToCooldown == true) then
-                        if type(_G.MSUF_ClassPower_Refresh) == "function" then
-                            _G.MSUF_ClassPower_Refresh()
+                    if not bars then return end
+                    if (bars.classPowerWidthMode == myMode)
+                    or (bars.classPowerAnchorToCooldown == true) then
+                        if CP.visible and CP._pf and CP.currentMax and CP.currentMax > 0 then
+                            CP_Layout(CP._pf, CP.currentMax, CP._layoutH or (bars.classPowerHeight or 4))
                         end
                     end
-                    -- Detached power bar: refresh if its width mode matches
-                    if bars and bars.detachedPowerBarWidthMode == myMode then
+                    if bars.detachedPowerBarWidthMode == myMode then
                         if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
                             _G.MSUF_ApplyPowerBarEmbedLayout_All()
                         end
                     end
                 end
-                hooksecurefunc(cdm, "SetSize",  _cdmRefresh)
-                hooksecurefunc(cdm, "SetWidth", _cdmRefresh)
-                hooksecurefunc(cdm, "Show",     _cdmRefresh)
-                hooksecurefunc(cdm, "Hide",     _cdmRefresh)
+                cdm:HookScript("OnSizeChanged", _cdmRefresh)
+                cdm:HookScript("OnShow", _cdmRefresh)
+                cdm:HookScript("OnHide", _cdmRefresh)
             end
         end
+    end
+
+    -- Combat end catch-up: single relayout for any CDM width changes during combat.
+    if not CP._regenHooked then
+        CP._regenHooked = true
+        local regenFrame = CreateFrame("Frame")
+        regenFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        regenFrame:SetScript("OnEvent", function()
+            if not CP._cdmDirty then return end
+            CP._cdmDirty = false
+            if CP.visible and CP._pf and CP.currentMax and CP.currentMax > 0 then
+                local bars = MSUF_DB and MSUF_DB.bars
+                CP_Layout(CP._pf, CP.currentMax, CP._layoutH or (bars and bars.classPowerHeight or 4))
+            end
+            if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
+                _G.MSUF_ApplyPowerBarEmbedLayout_All()
+            end
+        end)
     end
 
     -- Edit mode: keep class power visible as live preview so bars-menu
@@ -2654,6 +2673,9 @@ local function FullRefresh()
 
         CP_EnsureBars(playerFrame, maxP)
         CP_Layout(playerFrame, maxP, cpHeight)
+        -- Cache layout params for lightweight CDM relayout (avoids FullRefresh)
+        CP._pf = playerFrame
+        CP._layoutH = cpHeight
         CP.powerType = powerType
         CP.renderMode = renderMode
         CP.isAuraPower = isAuraPower
