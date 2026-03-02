@@ -164,8 +164,10 @@ local WL_SHARD_DELTAS = {
 local SPELL_SOUL_CLEAVE = 228477
 
 -- ============================================================================
--- Whirlwind Tracker (Sensei pattern — own event frame, polled by OnUpdate)
+-- Whirlwind Tracker (Sensei pattern — own event frame, event-driven render)
 -- ============================================================================
+local _wwRender  -- forward-declared; set after CP_UpdateValues_AuraSegmented exists
+
 local WW = {}
 do
     local MAX_STACKS = 4
@@ -185,17 +187,39 @@ do
     local expiresAt    = nil
     local noConsumeUntil = 0
     local seenCastGUID = {}
+    local _expiryTimer = nil  -- pending C_Timer handle for expiry
 
     WW.MAX_STACKS = MAX_STACKS
-    WW.dirty = false  -- set true by event handler on stack change
 
     function WW.GetStacks()
         if expiresAt and GetTime() >= expiresAt then
             stacks = 0
             expiresAt = nil
-            WW.dirty = true
         end
         return stacks
+    end
+
+    -- Schedule a one-shot expiry timer (replaces per-frame polling)
+    local function ScheduleExpiry()
+        if not expiresAt then return end
+        local remaining = expiresAt - GetTime()
+        if remaining <= 0 then
+            stacks = 0
+            expiresAt = nil
+            if _wwRender then _wwRender() end
+            return
+        end
+        -- Cancel previous timer token by bumping generation counter
+        _expiryTimer = (_expiryTimer or 0) + 1
+        local myTimer = _expiryTimer
+        C_Timer.After(remaining + 0.05, function()
+            if myTimer ~= _expiryTimer then return end  -- stale
+            if expiresAt and GetTime() >= expiresAt then
+                stacks = 0
+                expiresAt = nil
+                if _wwRender then _wwRender() end
+            end
+        end)
     end
 
     -- Warrior-only: own event frame (Sensei pattern)
@@ -209,7 +233,7 @@ do
                 stacks = 0
                 expiresAt = nil
                 seenCastGUID = {}
-                WW.dirty = true
+                if _wwRender then _wwRender() end
                 return
             end
             if event ~= "UNIT_SPELLCAST_SUCCEEDED" or unit ~= "player" then return end
@@ -232,7 +256,8 @@ do
                 end
                 stacks = MAX_STACKS
                 expiresAt = GetTime() + DURATION
-                WW.dirty = true
+                ScheduleExpiry()
+                if _wwRender then _wwRender() end
                 return
             end
 
@@ -242,7 +267,7 @@ do
                 if stacks > 0 then
                     stacks = stacks - 1
                     if stacks == 0 then expiresAt = nil end
-                    WW.dirty = true
+                    if _wwRender then _wwRender() end
                 end
             end
         end)
@@ -1607,6 +1632,13 @@ local function CP_UpdateValues_AuraSegmented(powerType, maxPower)
     end
 end
 
+-- Wire up WW event-driven render (forward-declared before WW module)
+_wwRender = function()
+    if CP.visible and CP.powerType == "WHIRLWIND" then
+        CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
+    end
+end
+
 -- ============================================================================
 -- MODE_AURA_SINGLE: DH Devourer — Soul Fragments (oUF pattern)
 -- Normalized to 0-1 in a single bar. Dual color: normal vs Void Metamorphosis.
@@ -2539,24 +2571,6 @@ local function FullRefresh()
 
         CP.container:Show()
         CP.visible = true
-
-        -- Whirlwind: OnUpdate ticker polls WW.dirty flag.
-        -- Runs every frame but nearly free — single boolean check + early-out.
-        -- This is the Sensei equivalent of calling UpdateDisplay on events.
-        if powerType == "WHIRLWIND" then
-            CP.container:SetScript("OnUpdate", function()
-                if not CP.visible then return end
-                -- Check expiry (WW.GetStacks handles it, but we need to trigger redraw)
-                WW.GetStacks()
-                if WW.dirty then
-                    WW.dirty = false
-                    CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
-                end
-            end)
-        elseif renderMode ~= MODE_TIMER_BAR then
-            -- Non-timer, non-WW: clear any stale OnUpdate (timer bar manages its own)
-            CP.container:SetScript("OnUpdate", nil)
-        end
 
     else
         -- Clean up rune OnUpdate scripts when hiding
