@@ -35,6 +35,9 @@ local T = {
     ["OFF"]  = "关",
     ["Copy to"] = "复制到",
     ["Copy"] = "复制",
+    ["OK"] = "确定",
+    ["Undo"] = "撤销",
+    ["All"] = "全部",
 
 
     ["Override"] = "覆盖",
@@ -147,8 +150,11 @@ local T = {
     ["ToT"] =    "目标的目标",
     ["Focus"] = "焦点",
     ["Boss Frames"] = "首领框架",
+    ["Boss frames"] = "首领框架",
     ["Boss"] = "首领",
     ["Pet"] = "宠物",
+    ["Class Resources"] = "职业资源",
+
     ["Frame Basics"] = "框架基础",
     ["Enable this frame"] = "启用框架",
     ["Show name"] =  "显示名称"       ,
@@ -376,6 +382,7 @@ local T = {
     ["Show empowered combo points"]    = "显示强化连击点",
     ["Show resource text"]    = "显示资源文本",
     ["Fill right-to-left"]  = "从右到左填充",
+    ["Show rune time (per rune)"]  = "显示符文时间 (每个符文)",
     ["Show Maelstrom bar (Elemental)"]  = "显示旋涡条 (元素)",
     ["Show Ebon Might timer (Aug)"]  = "显示黑檀之力计时器 (增辉)",
     ["Detached Power Bar"]  = "分离能量条",
@@ -397,15 +404,34 @@ local T = {
     ["Hide when full"]  = "满时隐藏",
     ["Hide when empty"]  = "空时隐藏",
 
-
-
-
     ["Use global bar texture"]  = "使用全局计量条纹理",
     ["Use foreground texture"]  = "使用前景纹理",
     ["Alternative Mana Bar"]  = "替代法力条",
     ["Shadow, Ret, Ele, Enh, Balance, Feral, WW"]  = "暗影, 恢复, 元素, 增强, 平衡, 野性, 双武器",
     ["Show mana bar (dual resource)"]  = "显示法力条 (双资源)",
-    
+
+
+    ["Welcome to Class Resources!\n\n" .. "Would you like to automatically set up a\n" .. "detached Class Bar positioned above your\n" .. "Essential Cooldowns?\n\n" .. "This configures class resources, power bar,\n" .. "anchoring and width matching in one click.\n\n" .. "You can always run this later via the\n" .. "|cff00ff00Quick Setup: Class Bar|r button below."]     = "欢迎来到职业资源!\n\n" .. "你想自动设置一个分离的类条，定位在你的重要冷却上方吗?\n\n" .. "这将在一击中配置职业资源、能量条、锚定和宽度匹配.\n\n" .. "你可以随时通过下面的 |cff00ff00快速设置: 职业计量条|r 按钮运行这个.",
+    ["Setup Now"] = "立即设置",
+    ["Not Now"] = "以后再说",
+    ["Quick Setup: Class Bar"]  = "快速设置: 职业计量条",
+    ["Quick Setup: Detached Class Bar"]  = "快速设置: 分离职业计量条",
+    ["One-click setup for a ready-to-use class bar:"]  = "一键设置一个即用型职业计量条:",
+    ["Detaches power bar from unit frame"]  = "从单位框架分离能量条",
+    ["Positions class bar ABOVE Essential Cooldowns"]  = "将职业计量条定位在重要冷却上方",
+    ["Match width: Essential Cooldowns"]  = "匹配宽度: 重要冷却",
+    ["Syncs & anchors power bar to class resources"]  = "同步并锚定能量条到职业资源",
+    ["Enables all features (text, Maelstrom,"]  = "启用所有功能 (文本, 旋涡,",
+    ["Ebon Might, charged CP, rune timers)"]  = "黑檀之力, 充能连击点, 符文计时器)",
+    ["CDM + Class Power detected"]  = "检测到CDM + 职业资源",
+    ["CDM detected (no class resource for this spec)"]  = "检测到CDM (此专精没有职业资源)",
+    ["CDM not visible — will center on screen"]  = "CDM不可见 — 将居中在屏幕上",
+    ["Click to apply. Undo available in popup."]  = "点击应用. 撤销在弹出窗口中可用.",
+    ["Quick Setup applied!\n\n" .. "Class Power + Power Bar are now\n" .. "positioned above Essential Cooldowns.\n\n" .. "Use Edit Mode for fine-tuning."]  = "快速设置已应用!\n\n" .. "职业资源 + 能量条现在定位在重要冷却上方.\n\n" .. "使用编辑模式进行微调.",
+    ["Quick Setup applied!\n\n" .. "Power Bar is positioned above\n" .. "Essential Cooldowns.\n\n" .. "Your spec has no class resource bar.\n" .. "If you respec, it will appear automatically.\n\n" .. "Use Edit Mode for fine-tuning."]   = "快速设置已应用!\n\n" .. "能量条定位在重要冷却上方.\n\n" .. "你的专精没有职业资源计量条.\n" .. "如果你转专, 它将自动出现.\n\n" .. "使用编辑模式进行微调.",
+    ["Quick Setup applied!\n\n" .. "Class Power + Power Bar are detached\n" .. "and positioned at screen center.\n\n" .. "Essential Cooldowns not detected.\n" .. "Enable it for automatic anchoring.\n\n" .. "Use Edit Mode for fine-tuning."]   = "快速设置已应用!\n\n" .. "职业资源 + 能量条被分离并定位在屏幕中心.\n\n" .. "重要冷却未检测到.\n" .. "启用它进行自动锚定.\n\n" .. "使用编辑模式进行微调.",
+
+
 
 
 
@@ -787,7 +813,10 @@ local T = {
     ["Soul Fragments (DH)"] = "灵魂残片 (DH)",
     ["Soul Fragments \124cFF9933EE(Void Meta)\124r"] = "灵魂残片 \124cFF9933EE虚空变形\124r",
     ["Maelstrom Weapon (Enh)"] = "漩涡武器 (增强)",
+    ["Maelstrom Weapon \124cFFFF8000(5+ Spender Ready)\124r"] = "漩涡武器 \124cFFFF80005+ 消耗就绪\124r",
     ["Astral Power (Balance)"] = "星界能量 (平衡)",
+    
+
     ["Astral Power \124cFF7799CC(Prediction Overlay)\124r"] = "星界能量 \124cFF7799CC预测叠加层\124r",
     ["Eclipse \124cFFD18F3F(Solar)\124r"]   = "日月之蚀 \124cFFD18F3F日蚀\124r",
     ["Eclipse \124cFF697ED1(Lunar)\124r"] = "日月之蚀 \124cFF697ED1月蚀\124r",
@@ -1022,6 +1051,15 @@ local T = {
     ["Anchor to Boss unitframe"] = "锚定到首领单位框架",
     ["Anchor to "]  = "锚定到 ",
     [" unitframe"] = " 单位框架",
+    ["Sync width to Resource Bar"]  = "同步宽度到资源条",
+    ["Matches the detached power bar width to the Class Power bar (Combo Points, Soul Shards, etc.).\n\nThe Resource Bar becomes the width master.\nWidth field is locked while synced."]   = "将分离的能量条宽度与职业能量条(连击点, 灵魂碎片等)匹配.\n\n资源条成为宽度主控.\n当同步时，宽度字段被锁定.",
+    ["Anchor to Resource Bar"]  = "锚定到资源条",
+    ["Attaches the detached power bar to the Class Power bar.\n\nMoving the Class Power bar also moves the power bar.\nYou can still adjust X/Y offsets relative to the resource bar."]  = "将分离的能量条锚定到职业能量条.\n\n移动职业能量条也会移动能量条.\n您仍然可以调整相对于资源条的X/Y偏移.",
+    ["Power text on bar"]   = "能量条文本",
+    ["Moves the power text from the unit frame onto the detached power bar.\n\nText offset X/Y still works relative to the power bar."]  = "将能量条文本从单位框架移动到分离的能量条.\n\n文本偏移X/Y仍然相对于能量条工作.",
+
+
+
 
     ["Copy size settings to..."] = "复制大小设置到...",
     ["Copy text settings to..."] = "复制文本设置到...",
