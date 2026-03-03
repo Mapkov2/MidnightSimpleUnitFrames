@@ -431,6 +431,7 @@ local cpEleMaelCheck        -- "Show Maelstrom bar (Elemental)"
 local cpEbonMightCheck      -- "Show Ebon Might timer (Aug)"
 local cpFilledAlphaRow      -- slider row: Filled pip alpha
 local cpEmptyAlphaRow       -- slider row: Empty pip alpha
+local cpFontSizeRow         -- slider row: Font size
 local cpGapRow              -- slider row: Gap between pips
 local cpHideOOCCheck        -- "Hide out of combat"
 local cpHideFullCheck       -- "Hide when full"
@@ -896,8 +897,11 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpColorCheck:SetPoint("TOPLEFT", styleLine, "BOTTOMLEFT", PAD_X, -10)
 
     -- BG opacity / Separator / Outline
-    cpBgAlphaRow = MakeCompactSlider("MSUF_CPBgAlpha", "BG opacity", cpPanel, 0, 100, 1, "classPowerBgAlpha",
+    cpFontSizeRow = MakeCompactSlider("MSUF_CPFontSize", "Font size", cpPanel, 6, 32, 1, "classPowerFontSize",
         cpColorCheck, "TOPLEFT", 0, -10, nil, R_LABEL_W)
+
+    cpBgAlphaRow = MakeCompactSlider("MSUF_CPBgAlpha", "BG opacity", cpPanel, 0, 100, 1, "classPowerBgAlpha",
+        cpFontSizeRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
 
     cpTickRow = MakeCompactSlider("MSUF_CPTick", "Separator", cpPanel, 0, 4, 1, "classPowerTickWidth",
         cpBgAlphaRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
@@ -1550,6 +1554,10 @@ local function SyncClassPowerToggles()
     if cpGapRow then
         cpGapRow:Set(tonumber(b.classPowerGap) or 0)
     end
+    -- Font size
+    if cpFontSizeRow then
+        cpFontSizeRow:Set(tonumber(b.classPowerFontSize) or 16)
+    end
     -- Fill reverse
     if cpFillReverseCheck then
         cpFillReverseCheck:SetChecked(b.classPowerFillReverse == true)
@@ -1623,6 +1631,7 @@ local function SyncClassPowerToggles()
     if cpFilledAlphaRow then cpFilledAlphaRow:SetEnabled(cpOn) end
     if cpEmptyAlphaRow  then cpEmptyAlphaRow:SetEnabled(cpOn)  end
     if cpGapRow         then cpGapRow:SetEnabled(cpOn)         end
+    if cpFontSizeRow    then cpFontSizeRow:SetEnabled(cpOn)    end
     if cpPanel and cpPanel._ahHeader then
         cpPanel._ahHeader:SetTextColor(cpOn and 0.85 or 0.35, cpOn and 0.85 or 0.35, cpOn and 0.85 or 0.35)
     end
