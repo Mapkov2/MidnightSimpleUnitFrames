@@ -778,12 +778,14 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     advBox:SetPoint("TOPLEFT", privateBox, "BOTTOMLEFT", 0, -14)
     local ignoreBox = MakeBox(content, 720, 200)
     ignoreBox:SetPoint("TOPLEFT", advBox, "BOTTOMLEFT", 0, -14)
+    local reminderBox = MakeBox(content, 720, 260)
+    reminderBox:SetPoint("TOPLEFT", ignoreBox, "BOTTOMLEFT", 0, -14)
     -- Movement controls are handled via MSUF Edit Mode now (no placeholder section here).
     -- Prevent dead scroll space: keep the scroll child height tight to the last section.
     local function MSUF_Auras2_UpdateContentHeight()
-        if not (content and ignoreBox and content.GetTop and ignoreBox.GetBottom) then  return end
+        if not (content and reminderBox and content.GetTop and reminderBox.GetBottom) then  return end
         local top = content:GetTop()
-        local bottom = ignoreBox:GetBottom()
+        local bottom = reminderBox:GetBottom()
         if not top or not bottom then  return end
         -- Add a small bottom padding so the last box doesn't stick to the edge.
         local h = (top - bottom) + 24
@@ -2496,6 +2498,145 @@ end
         -- Run once on build
         UpdateIgnoreBoxState()
     end
+
+    -- ================================================================
+    -- BUFF REMINDERS — per-buff toggles + expiry threshold slider
+    -- ================================================================
+    do
+        local remH = reminderBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        remH:SetPoint("TOPLEFT", reminderBox, "TOPLEFT", 12, -10)
+        remH:SetText(TR("Buff Reminders"))
+
+        local remDesc = reminderBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        remDesc:SetPoint("TOPLEFT", reminderBox, "TOPLEFT", 12, -28)
+        remDesc:SetWidth(500)
+        remDesc:SetJustifyH("LEFT")
+        remDesc:SetText("Ghost icons appear at the player frame when a buff is missing or about to expire. Position via Edit Mode mover.")
+
+        -- Master toggle
+        local cbShowReminders = CreateCheckbox(reminderBox, "Enable Buff Reminders", 12, -50,
+            function()
+                local s = A2_Settings()
+                return s and (s.showReminders ~= false)
+            end,
+            function(v)
+                local s = A2_Settings()
+                if s then s.showReminders = (v == true) end
+                A2_RequestApply()
+            end,
+            "Show ghost icons for missing buffs at the player frame.")
+        A2_Track("global", cbShowReminders)
+
+        -- Per-buff checkboxes
+        local provMeta = {
+            { key = "FORTITUDE",       label = "Power Word: Fortitude" },
+            { key = "ARCANE_INTELLECT", label = "Arcane Intellect" },
+            { key = "MARK_OF_WILD",    label = "Mark of the Wild" },
+            { key = "BATTLE_SHOUT",    label = "Battle Shout" },
+            { key = "SKYFURY",         label = "Skyfury" },
+            { key = "SOURCE_OF_MAGIC", label = "Source of Magic" },
+            { key = "BLESSING_BRONZE", label = "Blessing of the Bronze" },
+            { key = "ROGUE_LETHAL",    label = "Lethal Poison (Rogue)" },
+            { key = "ROGUE_NONLETHAL", label = "Non-Lethal Poison (Rogue)" },
+        }
+        -- Try to use live provider list if available
+        local a2api = ns and ns.MSUF_Auras2
+        local liveProv = a2api and a2api.Reminder and a2api.Reminder.PROVIDERS
+        if liveProv and #liveProv > 0 then provMeta = liveProv end
+
+        local function GetReminders()
+            local s = A2_Settings()
+            if not s then return nil end
+            if type(s.reminders) ~= "table" then s.reminders = {} end
+            return s.reminders
+        end
+
+        -- Two-column layout: nil = ON default, false = OFF
+        local remCbs = {}
+        local leftCount, rightCount = 0, 0
+        for i = 1, #provMeta do
+            local pm = provMeta[i]
+            local col, row
+            if i <= 5 then
+                leftCount = leftCount + 1
+                col = 12; row = leftCount
+            else
+                rightCount = rightCount + 1
+                col = 380; row = rightCount
+            end
+            local yOff = -74 - (row - 1) * 24
+            local pKey = pm.key
+            local cb = CreateCheckbox(reminderBox, pm.label, col, yOff,
+                function()
+                    local r = GetReminders()
+                    return r and (r[pKey] ~= false)  -- nil = ON
+                end,
+                function(v)
+                    local r = GetReminders()
+                    if r then r[pKey] = (v == true) and true or false end
+                end,
+                pm.label)
+            if cb then
+                remCbs[#remCbs + 1] = cb
+                A2_Track("global", cb)
+            end
+        end
+
+        -- Threshold slider
+        local thrLabel = reminderBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        thrLabel:SetPoint("TOPLEFT", reminderBox, "TOPLEFT", 12, -202)
+        thrLabel:SetText("Expiry Warning")
+
+        local thrDesc2 = reminderBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        thrDesc2:SetPoint("TOPLEFT", thrLabel, "BOTTOMLEFT", 0, -2)
+        thrDesc2:SetWidth(340)
+        thrDesc2:SetJustifyH("LEFT")
+        thrDesc2:SetText("Show reminder when buff expires within this time. 0 = only when missing.")
+
+        local thrSlider = CreateSlider(reminderBox, "", 0, 600, 5, 12, -244,
+            function()
+                local s = A2_Settings()
+                return (s and type(s.reminderThreshold) == "number") and s.reminderThreshold or 0
+            end,
+            function(v)
+                local s = A2_Settings()
+                if s then s.reminderThreshold = v end
+            end)
+        thrSlider:SetWidth(340)
+        local thrSliderName = thrSlider:GetName()
+        local thrLow = _G[thrSliderName .. "Low"]
+        local thrHigh = _G[thrSliderName .. "High"]
+        if thrLow then thrLow:SetText("0 (Off)") end
+        if thrHigh then thrHigh:SetText("10 min") end
+        A2_Track("global", thrSlider)
+
+        -- Gate: disable per-buff checkboxes + slider when master toggle off
+        local function UpdateReminderGating()
+            local s = A2_Settings()
+            local enabled = s and (s.showReminders ~= false)
+            for i = 1, #remCbs do
+                SetCheckboxEnabled(remCbs[i], enabled)
+            end
+            if thrSlider.EnableDisable then
+                thrSlider:EnableDisable(enabled)
+            elseif enabled then
+                thrSlider:Enable()
+            else
+                thrSlider:Disable()
+            end
+        end
+
+        if cbShowReminders then
+            local oldClick = cbShowReminders:GetScript("OnClick")
+            cbShowReminders:SetScript("OnClick", function(self, ...)
+                if oldClick then pcall(oldClick, self, ...) end
+                UpdateReminderGating()
+            end)
+        end
+
+        _G.MSUF_A2_UpdateReminderGating = UpdateReminderGating
+        UpdateReminderGating()
+    end
     -- Ensure checkbox state stays consistent after /reload or early panel opens
     local function MSUF_Auras2_RefreshOptionsControls()
         if not content then  return end
@@ -2540,6 +2681,9 @@ end
         -- Sync ignore list box state (editing key + override gating)
         local fn = rawget(_G, "MSUF_A2_UpdateIgnoreBoxState")
         if type(fn) == "function" then pcall(fn) end
+        -- Sync reminder gating (master toggle)
+        local fn2 = rawget(_G, "MSUF_A2_UpdateReminderGating")
+        if type(fn2) == "function" then pcall(fn2) end
      end
     -- Settings sometimes calls OnRefresh (old InterfaceOptions style) when a category is selected.
     -- Provide it so the panel refreshes even when OnShow does not re-fire.

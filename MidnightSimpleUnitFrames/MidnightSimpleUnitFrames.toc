@@ -65,6 +65,7 @@ Auras2\MSUF_A2_CooldownText.lua
 Auras2\MSUF_A2_Collect.lua
 Auras2\MSUF_A2_Cache.lua
 Auras2\MSUF_A2_Icons.lua
+Auras2\MSUF_A2_Reminder.lua
 Auras2\MSUF_A2_Render.lua
 Auras2\MSUF_A2_EditMode.lua
 Auras2\MSUF_A2_Events.lua

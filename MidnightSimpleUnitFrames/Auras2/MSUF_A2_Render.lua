@@ -123,6 +123,14 @@ local A2_SHARED_DEFAULTS = {
     privateAuraMaxPlayer=4, privateAuraMaxOther=4,
     showSated=true, satedShowAtSeconds=0,
     ignoreCats={},
+    showReminders=true,
+    reminders={},
+    reminderThreshold=0,
+    reminderOffsetX=0,
+    reminderOffsetY=0,
+    reminderIconSize=22,
+    reminderSpacing=2,
+    reminderGrowth="RIGHT",
 }
 
 local A2_GROWTH_OK = {RIGHT=true,LEFT=true,UP=true,DOWN=true}
@@ -403,6 +411,12 @@ local function EnsureAttached(unit)
     private:SetPoint("BOTTOMLEFT", buffs, "TOPLEFT", 0, 0)
     private:Hide()
 
+    -- Reminder container (player-only, but create for all — hidden by default)
+    local reminder = CreateFrame("Frame", nil, anchor)
+    reminder:SetSize(1, 1)
+    reminder:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
+    reminder:Hide()
+
     -- Sync visibility with parent unitframe (direct calls - no FastCall overhead)
     -- PERF: Capture unit in closure (set once per EnsureAttached, never changes).
     local _hookUnit = unit
@@ -433,6 +447,7 @@ local function EnsureAttached(unit)
         buffs = buffs,
         mixed = mixed,
         private = private,
+        reminder = reminder,
         -- Reusable list buffers (zero alloc on steady state)
         _buffList = {},
         _debuffList = {},
@@ -794,6 +809,8 @@ end
     local debuffDY = ReadOffset(shared, lay, "debuffGroupOffsetY", 0)
     local privOffX = ReadOffset(shared, lay, "privateOffsetX",     0)
     local privOffY = ReadOffset(shared, lay, "privateOffsetY",     0)
+    local remOffX  = ReadOffset(shared, lay, "reminderOffsetX",    0)
+    local remOffY  = ReadOffset(shared, lay, "reminderOffsetY",    0)
 
     -- PERF: Skip re-anchoring when target-swap refreshes request identical layout.
     -- Cache uses only non-secret DB values + frame identity.
@@ -808,6 +825,7 @@ end
         and (layoutCache.debuffDX == debuffDX and layoutCache.debuffDY == debuffDY)
         and (layoutCache.buffDX == buffDX and layoutCache.buffDY == buffDY)
         and (layoutCache.privOffX == privOffX and layoutCache.privOffY == privOffY)
+        and (layoutCache.remOffX == remOffX and layoutCache.remOffY == remOffY)
 
     local anchor = entry.anchor
     if not cacheHit then
@@ -816,6 +834,7 @@ end
         layoutCache.debuffDX, layoutCache.debuffDY = debuffDX, debuffDY
         layoutCache.buffDX, layoutCache.buffDY = buffDX, buffDY
         layoutCache.privOffX, layoutCache.privOffY = privOffX, privOffY
+        layoutCache.remOffX, layoutCache.remOffY = remOffX, remOffY
 
         -- Position anchor
         anchor:ClearAllPoints()
@@ -839,6 +858,12 @@ end
         if entry.private then
             entry.private:ClearAllPoints()
             entry.private:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", privOffX, privOffY)
+        end
+
+        -- Reminder
+        if entry.reminder then
+            entry.reminder:ClearAllPoints()
+            entry.reminder:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", remOffX, remOffY)
         end
     end
 
@@ -867,6 +892,26 @@ end
                 privH = privateIconSize + headerH
             end
             MirrorMover(entry.editMoverPrivate, entry.private, anchor, privW, privH)
+        end
+        -- Reminder mover (player-only, created by Reminder module)
+        if unit == "player" and entry.editMoverReminder and entry.reminder then
+            local remIconSz = ReadOffset(shared, lay, "reminderIconSize", 22)
+            if remIconSz < 10 then remIconSz = 10 end
+            local remSp = ReadOffset(shared, lay, "reminderSpacing", 2)
+            if remSp < 0 then remSp = 0 end
+            local remGrow = (lay and type(lay.reminderGrowth) == "string" and lay.reminderGrowth)
+                         or (shared and type(shared.reminderGrowth) == "string" and shared.reminderGrowth)
+                         or "RIGHT"
+            local remStep = remIconSz + remSp
+            local remW, remH
+            if remGrow == "UP" or remGrow == "DOWN" then
+                remW = remIconSz
+                remH = (9 * remStep) + headerH
+            else
+                remW = 9 * remStep
+                remH = remIconSz + headerH
+            end
+            MirrorMover(entry.editMoverReminder, entry.reminder, anchor, remW, remH)
         end
     end
 end
@@ -1018,6 +1063,11 @@ local function RenderUnit(entry)
     if EditMode and EditMode.EnsureMovers then
         EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
     end
+    -- Reminder mover (player-only, created by Reminder module)
+    local ReminderMod = API.Reminder
+    if isEditActive and unit == "player" and ReminderMod and ReminderMod.EnsureMover then
+        ReminderMod.EnsureMover(entry, unit, shared)
+    end
 
     -- Anchor: only reposition when config changes (configGen bumped) or edit mode active
     if gen ~= entry._lastAnchorGen or isEditActive then
@@ -1036,9 +1086,12 @@ local function RenderUnit(entry)
     if not _inCombat then
         if EditMode then
             if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
+            -- Reminder mover
+            if unit == "player" and entry.editMoverReminder then entry.editMoverReminder:Show() end
         else
             local EM = API.EditMode
             if EM and EM.HideMovers then EM.HideMovers(entry) end
+            if entry.editMoverReminder then entry.editMoverReminder:Hide() end
         end
     end
 
@@ -1192,6 +1245,12 @@ local function RenderUnit(entry)
 
     entry._lastBuffCount = buffCount
     entry._lastDebuffCount = debuffCount
+
+    -- Buff Reminders: ghost icons for missing group buffs (player only)
+    local ReminderMod = API.Reminder
+    if ReminderMod and ReminderMod.Render then
+        ReminderMod.Render(entry, unit, shared, buffIconSize, spacing, buffGrowth, showTest)
+    end
 end
 
 

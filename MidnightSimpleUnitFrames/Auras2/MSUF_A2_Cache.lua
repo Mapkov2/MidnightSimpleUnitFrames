@@ -234,6 +234,53 @@ end
 
 Cache._units = _units
 
+-- Check if a unit has any aura whose decoded spellId is in the given set.
+-- Used by Buff Reminder to detect missing buffs.  O(N) where N = active auras.
+function Cache.HasAnySpell(unit, spellSet)
+    local s = _units[unit]
+    if not s or not s.all then return false end
+    for _, data in next, s.all do
+        local sid = data._msufA2_sid
+        if sid and sid ~= 0 and spellSet[sid] then return true end
+    end
+    return false
+end
+
+-- Get the minimum remaining time (seconds) for any matching spell.
+-- Returns: remainingSec (number) or nil (no matching spell / all secret).
+-- Secret-safe: skips auras with secret expirationTime (fail-open → returns nil for those).
+function Cache.GetMinRemaining(unit, spellSet)
+    local s = _units[unit]
+    if not s or not s.all then return nil end
+    local now = GetTime()
+    local best = nil
+    for _, data in next, s.all do
+        local sid = data._msufA2_sid
+        if sid and sid ~= 0 and spellSet[sid] then
+            local exp = data.expirationTime
+            if exp ~= nil and exp ~= 0 then
+                -- Secret-safe check
+                local canRead = true
+                if _hasCanaccessvalue then
+                    canRead = (canaccessvalue(exp) == true)
+                elseif issecretvalue and issecretvalue(exp) == true then
+                    canRead = false
+                end
+                if canRead then
+                    local rem = exp - now
+                    if rem < 0 then rem = 0 end
+                    if not best or rem < best then best = rem end
+                end
+            else
+                -- No expiration (permanent buff) → treat as infinite remaining
+                -- Don't override a finite 'best'
+                if not best then best = 999999 end
+            end
+        end
+    end
+    return best
+end
+
 -- =========================================================================
 -- Player-aura classification (secret-safe)
 -- =========================================================================
