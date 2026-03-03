@@ -36,6 +36,11 @@ local UnitIsConnected = UnitIsConnected
 local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
 local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
+-- P0: issecretvalue upvalue for event handlers (secret-safe unit filtering)
+local _MSUF_issecretvalue = _G.issecretvalue
+-- P0: Absorb text path in UpdateHpTextFast (100-500x/sec)
+local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
+local C_StringUtil = C_StringUtil
 
 -- ---------------------------------------------------------------------------
 -- Localization (minimal, translator-friendly)
@@ -1500,6 +1505,62 @@ local function _MSUF_SafeDisableMouse(frame)
     frame:EnableMouse(false)
 end
 
+
+-- Shared OnShow kill handler (max perf, no per-frame closures).
+local function _MSUF_KillOnShow(f)
+    local allowInEditMode = _msufKilledFrames[f]
+    if allowInEditMode and MSUF_IsInEditMode and MSUF_IsInEditMode() then
+        return
+    end
+
+    local inCombat = _G.MSUF_InCombat
+    if inCombat == nil then
+        inCombat = (F.InCombatLockdown and F.InCombatLockdown()) or false
+    end
+
+    if inCombat then
+        -- Guard against Blizzard Show() spam: only apply once per frame.
+        if f.MSUF_KillCombatApplied then
+            return
+        end
+        f.MSUF_KillCombatApplied = true
+
+        if f.MSUF_KillIsProtected then
+            -- Protected frames: can't Hide() → alpha 0 + defer state-driver work.
+            if f.SetAlpha then
+                f:SetAlpha(0)
+            end
+
+            if not f.MSUF_KillDeferred then
+                f.MSUF_KillDeferred = true
+                if not _msufKillProtectedDeferred[f] then
+                    _msufKillProtectedDeferred[f] = true
+                    _msufDeferredCount = _msufDeferredCount + 1
+                end
+            end
+
+            if not _msufRegenListening and _msufKillGuardFrame then
+                _msufKillGuardFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+                _msufRegenListening = true
+            end
+            return
+        end
+
+        -- Non-protected frames can still Hide() in combat.
+        if f.Hide then
+            f:Hide()
+        end
+        return
+    end
+
+    -- Out of combat: normal hide works.
+    f.MSUF_KillCombatApplied = nil
+    f.MSUF_KillDeferred = nil
+    if f.Hide then
+        f:Hide()
+    end
+end
+
 local function KillFrame(frame, allowInEditMode)
     if not frame then  return end
 
@@ -1511,6 +1572,7 @@ local function KillFrame(frame, allowInEditMode)
     frame:Hide()
 
     local isProtected = frame.IsProtected and frame:IsProtected()
+    frame.MSUF_KillIsProtected = isProtected and true or false
     if isProtected then
         -- Primary: RegisterStateDriver (deferred if in combat).
         if not frame.MSUF_StateDriverHidden then
@@ -1519,35 +1581,12 @@ local function KillFrame(frame, allowInEditMode)
         -- Secondary: HookScript OnShow as safety net (fires only if frame re-shows).
         if frame.HookScript and not frame.MSUF_KillOnShowHooked then
             frame.MSUF_KillOnShowHooked = true
-            frame:HookScript("OnShow", function(f)
-                if allowInEditMode and MSUF_IsInEditMode and MSUF_IsInEditMode() then
-                    return
-                end
-                -- In combat: can't Hide() protected frames → alpha 0 + queue deferred.
-                if F.InCombatLockdown and F.InCombatLockdown() then
-                    if f.SetAlpha then f:SetAlpha(0) end
-                    if not _msufKillProtectedDeferred[f] then
-                        _msufKillProtectedDeferred[f] = true
-                        _msufDeferredCount = _msufDeferredCount + 1
-                    end
-                    if not _msufRegenListening and _msufKillGuardFrame then
-                        _msufKillGuardFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-                        _msufRegenListening = true
-                    end
-                    return
-                end
-                f:Hide()
-            end)
+            frame:HookScript("OnShow", _MSUF_KillOnShow)
         end
     else
         -- Non-protected: SetScript is sufficient (overwrite, not additive).
         if frame.SetScript then
-            frame:SetScript("OnShow", function(f)
-                if allowInEditMode and MSUF_IsInEditMode and MSUF_IsInEditMode() then
-                    return
-                end
-                f:Hide()
-            end)
+            frame:SetScript("OnShow", _MSUF_KillOnShow)
         end
     end
 
@@ -5295,7 +5334,12 @@ if type(_G.MSUF_RefreshSelfHealPredUnitEvent) ~= "function" then
             fr:Hide()
             fr._msufReg = false
             fr:SetScript("OnEvent", function(self, event, unit)
-                local isSecret = _G.issecretvalue
+                -- P0: Use file-scope upvalue; issecretvalue resolved at load
+                local isSecret = _MSUF_issecretvalue
+                if not isSecret then
+                    isSecret = _G.issecretvalue
+                    if isSecret then _MSUF_issecretvalue = isSecret end
+                end
                 if isSecret and isSecret(unit) then return end
                 if unit ~= "player" then return end
                 local gg = (MSUF_DB and MSUF_DB.general) or nil

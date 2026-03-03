@@ -351,6 +351,26 @@ end
 -- =========================================================================
 -- Full Scan
 -- =========================================================================
+
+-- P1 PERFORMANCE: Slot buffer for GetAuraSlots varargs packing.
+-- Eliminates 2-4 table allocations per FilterAndSort / FullScan call.
+-- At 5 units × 60fps = 300-600 tables/sec → 0 tables/sec.
+local _slotBuf = {}
+local _slotBufPrevN = 0
+
+-- Pack varargs from C_UnitAuras.GetAuraSlots() into reusable buffer.
+-- Returns count (including continuation token at index 1).
+-- Caller iterates: for i = 2, n do ... _slotBuf[i] ... end
+local function _PackSlots(...)
+    local n = select('#', ...)
+    local buf = _slotBuf
+    for i = 1, n do buf[i] = select(i, ...) end
+    -- Nil-terminate: clear trailing entries from a previous longer pack
+    for i = n + 1, _slotBufPrevN do buf[i] = nil end
+    _slotBufPrevN = n
+    return n
+end
+
 function Cache.FullScan(unit)
     if not _apisBound then BindAPIs() end
     if not _getSlots or not _getBySlot then return end
@@ -359,18 +379,19 @@ function Cache.FullScan(unit)
     s.changed = true
     s.epoch = s.epoch + 1
 
-    local slots = { _getSlots(unit, HELPFUL, 40) }
-    for i = 2, #slots do
-        local data = _getBySlot(unit, slots[i])
+    -- P1: Reuse _slotBuf instead of allocating { _getSlots(...) } tables
+    local slotsN = _PackSlots(_getSlots(unit, HELPFUL, 40))
+    for i = 2, slotsN do
+        local data = _getBySlot(unit, _slotBuf[i])
         if data and data.auraInstanceID then
             EnrichAura(unit, data, true)
             s.all[data.auraInstanceID] = data
         end
     end
 
-    slots = { _getSlots(unit, HARMFUL, 40) }
-    for i = 2, #slots do
-        local data = _getBySlot(unit, slots[i])
+    slotsN = _PackSlots(_getSlots(unit, HARMFUL, 40))
+    for i = 2, slotsN do
+        local data = _getBySlot(unit, _slotBuf[i])
         if data and data.auraInstanceID then
             EnrichAura(unit, data, false)
             s.all[data.auraInstanceID] = data
@@ -508,6 +529,7 @@ Cache.SecretsActive = SecretsActive
 -- =========================================================================
 local _mergedBossBuffScratch = {}
 local _mergedBossDebuffScratch = {}
+
 
 -- =========================================================================
 -- Shared filter logic (used by both unsorted + sorted paths)
@@ -698,10 +720,11 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
 
         -- Process HELPFUL (preserves C++ sort order)
         if (nB + nBossB) < maxBuffs then
-            local slots = { _getSlots(unit, HELPFUL, 40, sortOrder) }
-            for i = 2, #slots do
+            -- P1: Reuse _slotBuf instead of allocating { _getSlots(...) } table
+            local slotsN = _PackSlots(_getSlots(unit, HELPFUL, 40, sortOrder))
+            for i = 2, slotsN do
                 if (nB + nBossB) >= maxBuffs then break end
-                local data = _getBySlot(unit, slots[i])
+                local data = _getBySlot(unit, _slotBuf[i])
                 if data then
                     local aid = data.auraInstanceID
                     if aid then
@@ -732,10 +755,11 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
 
         -- Process HARMFUL (preserves C++ sort order)
         if (nD + nBossD) < maxDebuffs then
-            local slots = { _getSlots(unit, HARMFUL, 40, sortOrder) }
-            for i = 2, #slots do
+            -- P1: Reuse _slotBuf instead of allocating { _getSlots(...) } table
+            local slotsN = _PackSlots(_getSlots(unit, HARMFUL, 40, sortOrder))
+            for i = 2, slotsN do
                 if (nD + nBossD) >= maxDebuffs then break end
-                local data = _getBySlot(unit, slots[i])
+                local data = _getBySlot(unit, _slotBuf[i])
                 if data then
                     local aid = data.auraInstanceID
                     if aid then

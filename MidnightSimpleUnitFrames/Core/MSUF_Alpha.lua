@@ -257,7 +257,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
                 frame._msufLoadCondHidden = true
                 frame:SetAlpha(0)
                 -- EnableMouse is protected on secure frames — defer during combat.
-                -- The existing PLAYER_REGEN_ENABLED → MSUF_DoAlphaRefresh will
+                -- The existing PLAYER_REGEN_ENABLED → MSUF_RequestAlphaRefresh will
                 -- re-run this path with InCombatLockdown() == false and flush it.
                 if frame.EnableMouse and (not isCombatLocked) then
                     frame:EnableMouse(false)
@@ -366,18 +366,98 @@ function _G.MSUF_RefreshAllUnitAlphas()
         end
     end
  end
-local function MSUF_DoAlphaRefresh()
-    if _G.MSUF_RefreshAllUnitAlphas then
-        _G.MSUF_RefreshAllUnitAlphas()
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, function()
-                if _G.MSUF_RefreshAllUnitAlphas then
-                    _G.MSUF_RefreshAllUnitAlphas()
-                end
-             end)
+local function _MSUF_ConfWantsCombatAlphaSwap(conf)
+    if not conf then return false end
+    local aInLegacy  = tonumber(conf.alphaInCombat) or 1
+    local aOutLegacy = tonumber(conf.alphaOutOfCombat) or 1
+    local aIn, aOut = aInLegacy, aOutLegacy
+
+    if conf.alphaExcludeTextPortrait == true then
+        local mode = conf.alphaLayerMode
+        if mode == true or mode == 1 or mode == "background" then
+            mode = "background"
+        else
+            mode = "foreground"
+        end
+        if mode == "background" then
+            aIn  = tonumber(conf.alphaBGInCombat) or aInLegacy
+            aOut = tonumber(conf.alphaBGOutOfCombat) or aOutLegacy
+        else
+            aIn  = tonumber(conf.alphaFGInCombat) or aInLegacy
+            aOut = tonumber(conf.alphaFGOutOfCombat) or aOutLegacy
         end
     end
- end
+
+    local sync = conf.alphaSyncBoth
+    if sync == nil then sync = conf.alphaSync end
+    if sync then
+        aOut = aIn
+    end
+
+    if aIn < 0 then aIn = 0 elseif aIn > 1 then aIn = 1 end
+    if aOut < 0 then aOut = 0 elseif aOut > 1 then aOut = 1 end
+    return (aIn ~= aOut)
+end
+
+-- Fast combat-only alpha refresh:
+-- On combat toggles, only refresh frames whose configured alpha differs in/out-of-combat.
+function _G.MSUF_RefreshCombatUnitAlphas()
+    EnsureDB()
+    local UnitFrames = _G.MSUF_UnitFrames
+    if not UnitFrames then return false end
+    local ApplyUnitAlpha = _G.MSUF_ApplyUnitAlpha
+    if type(ApplyUnitAlpha) ~= "function" then return false end
+
+    local didAny = false
+    for unitKey, f in pairs(UnitFrames) do
+        local conf = (MSUF_DB and unitKey) and MSUF_DB[unitKey] or nil
+        if conf and _MSUF_ConfWantsCombatAlphaSwap(conf) then
+            didAny = true
+            if f and f.SetAlpha then
+                if not f.msufConfigKey then f.msufConfigKey = unitKey end
+                ApplyUnitAlpha(f, unitKey)
+            end
+        end
+    end
+    return didAny
+end
+
+-- Coalesced alpha refresh (max perf): dedupe to once per frame. Supports "combat-only" flush.
+do
+    local pending = false
+    local pendingCombatOnly = false
+
+    local function _Flush()
+        pending = false
+        local combatOnly = pendingCombatOnly
+        pendingCombatOnly = false
+
+        if combatOnly and _G.MSUF_RefreshCombatUnitAlphas then
+            local didAny = _G.MSUF_RefreshCombatUnitAlphas()
+            if didAny then return end
+            -- If nothing actually swaps alpha on combat, skip the global refresh completely.
+            return
+        end
+
+        if _G.MSUF_RefreshAllUnitAlphas then
+            _G.MSUF_RefreshAllUnitAlphas()
+        end
+    end
+
+    function _G.MSUF_RequestAlphaRefresh(combatOnly)
+        if combatOnly then
+            pendingCombatOnly = true
+        end
+        if pending then return end
+        pending = true
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, _Flush)
+        else
+            _Flush()
+        end
+    end
+end
+
 if not _G.MSUF_AlphaEventFrame then
     _G.MSUF_AlphaEventFrame = CreateFrame("Frame")
     _G.MSUF_AlphaEventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -388,7 +468,7 @@ if not _G.MSUF_AlphaEventFrame then
         elseif event == "PLAYER_REGEN_ENABLED" then
             _G.MSUF_InCombat = false
         end
-        MSUF_DoAlphaRefresh()
+        _G.MSUF_RequestAlphaRefresh(true)
      end)
 end
 

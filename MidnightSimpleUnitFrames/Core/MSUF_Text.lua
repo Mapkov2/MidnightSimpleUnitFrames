@@ -31,8 +31,8 @@ function ns.Text.Set(fs, text, show)
     -- invalidation + GC of the old internal string.
     -- Secret-safe: issecretvalue guards the comparison. Secret strings
     -- (from ShortenNumber on secret UnitPower values) fall through to SetText.
-    local isv = _G.issecretvalue
-    if not isv or not isv(text) then
+    -- P0: Use file-scope upvalue (_MSUF_issecret) instead of _G lookup per call.
+    if not _MSUF_issecret or not _MSUF_issecret(text) then
         if text == fs._msufLastSetT then
             if fs.Show then fs:Show() end
             return

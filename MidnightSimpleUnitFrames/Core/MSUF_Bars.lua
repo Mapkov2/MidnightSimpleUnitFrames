@@ -5,6 +5,21 @@ local addonName, ns = ...
 local F = ns.Cache and ns.Cache.F or {}
 local type, tonumber = type, tonumber
 
+-- ═══════════════════════════════════════════════════════════════════════
+-- P0 PERFORMANCE: WoW C API Upvalues for absorb + heal-prediction paths
+-- UNIT_ABSORB_AMOUNT_CHANGED fires 10-50x/sec on boss encounters
+-- ═══════════════════════════════════════════════════════════════════════
+local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
+local UnitGetTotalHealAbsorbs = UnitGetTotalHealAbsorbs
+local UnitGetDetailedHealPrediction = UnitGetDetailedHealPrediction
+local UnitGetIncomingHeals = UnitGetIncomingHeals
+local CreateUnitHealPredictionCalculator = CreateUnitHealPredictionCalculator
+
+-- P0: Cache boss token resolver once (called per absorb display resolve)
+local _MSUF_GetBossIndexFromToken = _G.MSUF_GetBossIndexFromToken
+-- P0: Cache absorb anchor mode function (late-bound, resolved on first call)
+local _cachedApplyAbsorbAnchorMode = nil
+
 -- From main file (ns.Bars exports)
 local MSUF_ApplyAbsorbOverlayColor     = ns.Bars._ApplyAbsorbOverlayColor
 local MSUF_ApplyHealAbsorbOverlayColor = ns.Bars._ApplyHealAbsorbOverlayColor
@@ -15,7 +30,13 @@ local MSUF_ResetBarZero                = ns.Bars._ResetBarZero
 local function _MSUF_NormalizeUnitKey(unit)
     if not unit then return nil end
     if unit == "tot" then return "targettarget" end
-    if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit) then return "boss" end
+    -- P0: Use file-scope cache; re-resolve if nil (load-order defense)
+    local bossFn = _MSUF_GetBossIndexFromToken
+    if not bossFn then
+        bossFn = _G.MSUF_GetBossIndexFromToken
+        if bossFn then _MSUF_GetBossIndexFromToken = bossFn end
+    end
+    if bossFn and bossFn(unit) then return "boss" end
     return unit
 end
 
@@ -103,13 +124,13 @@ local function _MSUF_GetIncomingSelfHeals(unit)
     unit = unit or "player"
 
     local calc = _msufSelfHealCalc
-    if not calc and _G.CreateUnitHealPredictionCalculator then
-        calc = _G.CreateUnitHealPredictionCalculator()
+    if not calc and CreateUnitHealPredictionCalculator then
+        calc = CreateUnitHealPredictionCalculator()
         _msufSelfHealCalc = calc
     end
 
-    if calc and _G.UnitGetDetailedHealPrediction then
-        local data = _G.UnitGetDetailedHealPrediction(unit, "player", calc)
+    if calc and UnitGetDetailedHealPrediction then
+        local data = UnitGetDetailedHealPrediction(unit, "player", calc)
         if data and type(data) == "table" then
             -- Prefer the clamped amount if provided, so it never visually overflows missing health.
             -- IMPORTANT (Midnight/Secret-safe): never use secret numbers in boolean context (no 'or' fallback).
@@ -123,8 +144,8 @@ local function _MSUF_GetIncomingSelfHeals(unit)
         end
     end
 
-    if _G.UnitGetIncomingHeals then
-        local v = _G.UnitGetIncomingHeals(unit, "player")
+    if UnitGetIncomingHeals then
+        local v = UnitGetIncomingHeals(unit, "player")
         if type(v) == "number" then
             return v
         end
@@ -402,7 +423,11 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
     local bar = isHeal and self and self.healAbsorbBar or self and self.absorbBar
     local api = isHeal and UnitGetTotalHealAbsorbs or UnitGetTotalAbsorbs
     if not self or not bar or type(api) ~= 'function' then  return end
-    local apply = _G.MSUF_ApplyAbsorbAnchorMode
+    -- P0: Cache anchor-mode applier (defined later in this file, resolves once on first call)
+    if not _cachedApplyAbsorbAnchorMode then
+        _cachedApplyAbsorbAnchorMode = _G.MSUF_ApplyAbsorbAnchorMode
+    end
+    local apply = _cachedApplyAbsorbAnchorMode
     if type(apply) == 'function' then apply(self) end
     if isHeal then
         MSUF_ApplyHealAbsorbOverlayColor(bar)
