@@ -74,9 +74,11 @@ local BARS_KEYS = {
     "classPowerOutline",
     "detachedPowerBarWidthMode",
     "detachedPowerBarOutline",
+    "showPlayerPowerBar",
 }
 
 local PLAYER_KEYS = {
+    "showPower",
     "powerBarDetached",
     "detachedPowerBarSyncClassPower",
     "detachedPowerBarAnchorToClassPower",
@@ -285,10 +287,14 @@ local function ApplyPhase1(offsets)
     b.classPowerOffsetY           = offsets.cpOffsetY
     b.classPowerOutline           = 1
     b.detachedPowerBarOutline     = 1
+    -- Force player power bar ON — installer requires visible power bar
+    b.showPlayerPowerBar          = true
 
     MSUF_DB.player = MSUF_DB.player or {}
     local p = MSUF_DB.player
 
+    -- Force per-unit power display ON
+    p.showPower                          = true
     p.powerBarDetached                   = true
     p.detachedPowerBarSyncClassPower     = offsets.anchorDPBtoCP and true or false
     p.detachedPowerBarAnchorToClassPower = offsets.anchorDPBtoCP and true or false
