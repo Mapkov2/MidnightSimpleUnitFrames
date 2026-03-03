@@ -522,10 +522,9 @@ local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow, no
         if sid ~= 0 and ignHash[sid] then return false end
     end
 
-    -- Sated/Exhaustion hard-ignore (O(1) flag check, earliest possible exit)
-    -- ALL sated spells are whitelisted → expirationTime is a plain number.
-    -- No secret checks needed. 'now' is cached GetTime() from outer loop.
-    if data._msufA2_isSated == 1 then
+    -- Sated/Exhaustion: ZERO overhead when sated is shown normally (default).
+    -- _checkSated is only true when showSated=false OR satedShowAt>0.
+    if cfg._checkSated and data._msufA2_isSated == 1 then
         if cfg._showSated ~= true then
             return false
         end
@@ -634,8 +633,13 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     cfg._showSated = (cfg.showSated ~= false)
     local _satedThr = cfg.satedShowAtSeconds
     cfg._satedShowAt = (type(_satedThr) == "number" and _satedThr > 0) and _satedThr or 0
-    -- Global Ignore List: build flat hashtable from enabled categories
-    cfg._ignoreHash = Cache.BuildIgnoreHash(cfg.ignoreCats)
+    -- PERF: _checkSated = false means sated code is COMPLETELY skipped in FilterAura.
+    -- Only active when sated is hidden OR threshold is set (actual filtering work to do).
+    cfg._checkSated = (cfg._showSated ~= true) or (cfg._satedShowAt > 0)
+    -- Global Ignore List: ZERO overhead when no categories enabled.
+    -- Only call BuildIgnoreHash if ignoreCats table exists and is non-empty.
+    local ic = cfg.ignoreCats
+    cfg._ignoreHash = (type(ic) == "table" and next(ic) ~= nil) and Cache.BuildIgnoreHash(ic) or nil
 
     local secretsNow = cfg._hidePermanent and SecretsActive() or false
     local now = GetTime()  -- PERF: cache once, passed to FilterAura

@@ -88,6 +88,7 @@ local _wantBuffHL       = false
 local _wantDebuffHL     = false
 local _useBlizzardTimer = false  -- true = Blizzard C++ pass-through for countdown text
 local _useDispelBorders = false  -- dispel-type border coloring for debuffs
+local _clickThrough     = false  -- true = all auras non-interactive (mouse pass-through)
 
 --  Debuff dispel-type color lookup (Ã‚Â  la R41z0r / Blizzard) 
 -- Maps dispel index  Blizzard color object; used for both manual
@@ -165,6 +166,7 @@ local function RefreshSharedFlags(shared, gen)
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
     _useBlizzardTimer = (shared and shared.useBlizzardTimerText == true) or false
     _useDispelBorders = (shared and shared.useDebuffTypeBorders == true) or false
+    _clickThrough     = (shared and shared.clickThroughAuras == true) or false
 end
 
 -- ---------------------------------------------------------------------------
@@ -710,6 +712,13 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     _fast_ApplyDispelBorder(icon, unit, aura, isHelpful)
 
     -- 6. (Masque overlay sync removed from hot path — handled once in AddButton)
+
+    -- 7. Click-through: diff-gated EnableMouse (PERF: only when state changes)
+    local wantMouse = not _clickThrough
+    if icon._msufA2_mouseOn ~= wantMouse then
+        icon._msufA2_mouseOn = wantMouse
+        icon:EnableMouse(wantMouse)
+    end
 
     icon:Show()
     return true
@@ -1351,6 +1360,13 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
 
         icon:Show()
 
+        -- Click-through: apply same setting as live icons (diff-gated)
+        local wantMouse = not _clickThrough
+        if icon._msufA2_mouseOn ~= wantMouse then
+            icon._msufA2_mouseOn = wantMouse
+            icon:EnableMouse(wantMouse)
+        end
+
         -- Invalidate + resolve text config
         icon._msufA2_textCfgGen = nil
         ResolveTextConfig(icon, unit, shared, gen)
@@ -1514,6 +1530,13 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
             icon._msufPrivateLock:Show()
 
             icon:Show()
+
+            -- Click-through (diff-gated)
+            local wantMouse = not _clickThrough
+            if icon._msufA2_mouseOn ~= wantMouse then
+                icon._msufA2_mouseOn = wantMouse
+                icon:EnableMouse(wantMouse)
+            end
 
             -- Position using growth direction
             icon:ClearAllPoints()

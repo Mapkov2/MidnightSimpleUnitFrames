@@ -1693,6 +1693,9 @@ end
             { "Show cooldown text", 200, -300, A2_Settings, "showCooldownText", nil,
                 "Shows the countdown numbers on aura icons. Disable to hide cooldown numbers (swipe can remain enabled).",
                 "cbShowCooldownText" },
+            { "Click-through auras", 200, -324, A2_Settings, "clickThroughAuras", nil,
+                "Makes all aura icons non-interactive. Mouse clicks and tooltips pass through to the game world.",
+                "cbClickThrough" },
             { "Show tooltip", 12, -276, A2_Settings, "showTooltip", nil, nil, "cbShowTooltip" },
         }, displayCB)
         for _, cb in pairs(displayCB) do
@@ -2527,6 +2530,9 @@ end
             function(v)
                 local s = A2_Settings()
                 if s then s.showReminders = (v == true) end
+                local _api = ns and ns.MSUF_Auras2
+                local rm = _api and _api.Reminder
+                if rm and rm.MarkDirty then rm.MarkDirty() end
                 A2_RequestApply()
             end,
             "Show ghost icons for missing buffs at the player frame.")
@@ -2579,6 +2585,9 @@ end
                 function(v)
                     local r = GetReminders()
                     if r then r[pKey] = (v == true) and true or false end
+                    local _api = ns and ns.MSUF_Auras2
+                    local rm = _api and _api.Reminder
+                    if rm and rm.MarkDirty then rm.MarkDirty() end
                 end,
                 pm.label)
             if cb then
@@ -2606,6 +2615,9 @@ end
             function(v)
                 local s = A2_Settings()
                 if s then s.reminderThreshold = v end
+                local _api = ns and ns.MSUF_Auras2
+                local rm = _api and _api.Reminder
+                if rm and rm.MarkDirty then rm.MarkDirty() end
             end)
         thrSlider:SetWidth(340)
         local thrSliderName = thrSlider:GetName()

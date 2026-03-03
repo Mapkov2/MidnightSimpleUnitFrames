@@ -111,7 +111,7 @@ local A2_AURAS2_DEFAULTS = { enabled=true, showTarget=true, showFocus=true, show
 local A2_SHARED_DEFAULTS = {
     showBuffs=true, showDebuffs=true, showTooltip=true,
     showCooldownSwipe=true, showCooldownText=true, cooldownSwipeDarkenOnLoss=false,
-    showInEditMode=true, showStackCount=true,
+    showInEditMode=true, showStackCount=true, clickThroughAuras=false,
     stackCountAnchor="TOPRIGHT", masqueEnabled=false, masqueHideBorder=false,
     layoutMode="SEPARATE", buffDebuffAnchor="STACKED", splitSpacing=0,
     highlightPrivatePlayerAuras=false, highlightOwnBuffs=false, highlightOwnDebuffs=false,
@@ -1064,8 +1064,10 @@ local function RenderUnit(entry)
         EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
     end
     -- Reminder mover (player-only, created by Reminder module)
+    -- PERF: Zero overhead when reminders disabled — no mover creation.
     local ReminderMod = API.Reminder
-    if isEditActive and unit == "player" and ReminderMod and ReminderMod.EnsureMover then
+    if isEditActive and unit == "player" and shared and shared.showReminders ~= false
+       and ReminderMod and ReminderMod.EnsureMover then
         ReminderMod.EnsureMover(entry, unit, shared)
     end
 
@@ -1246,10 +1248,13 @@ local function RenderUnit(entry)
     entry._lastBuffCount = buffCount
     entry._lastDebuffCount = debuffCount
 
-    -- Buff Reminders: ghost icons for missing group buffs (player only)
-    local ReminderMod = API.Reminder
-    if ReminderMod and ReminderMod.Render then
-        ReminderMod.Render(entry, unit, shared, buffIconSize, spacing, buffGrowth, showTest)
+    -- Buff Reminders: ghost icons for missing group buffs (player only).
+    -- PERF: Zero overhead when disabled or non-player — no function call at all.
+    if unit == "player" and shared and shared.showReminders ~= false then
+        local ReminderMod = API.Reminder
+        if ReminderMod and ReminderMod.Render then
+            ReminderMod.Render(entry, unit, shared, buffIconSize, spacing, buffGrowth, showTest)
+        end
     end
 end
 
