@@ -2367,7 +2367,7 @@ local function MSUF_StyleToggleText(cb)
             if c and c.GetChildren then MSUF_StyleAllToggles(c) end
         end
      end
-    local function CreateLabeledCheckButton(name, label, parent, x, y)
+    local function CreateLabeledCheckButton(name, label, parent, x, y, maxTextWidth)
         local cb = CreateFrame('CheckButton', name, parent, 'UICheckButtonTemplate')
         local extraY = 0
         if parent == frameGroup or parent == fontGroup or parent == barGroup or parent == profileGroup then extraY = -40 end
@@ -2376,6 +2376,9 @@ local function MSUF_StyleToggleText(cb)
         if cb.text then cb.text:SetText(TR(label or "")) end
         MSUF_StyleToggleText(cb)
         MSUF_StyleCheckmark(cb)
+        if maxTextWidth and _G.MSUF_ClampCheckboxText then
+            _G.MSUF_ClampCheckboxText(cb, maxTextWidth)
+        end
          return cb
     end
     -- Player options UI is implemented in Options\MSUF_Options_Player.lua (refactored out of Options Core).
@@ -6378,14 +6381,19 @@ if barOutlineThicknessSlider and outlineLine and outlineLine:IsShown() then
     end
 end
 -- Match Power bar outline slider width to Outline thickness (both 280)
-if _G.MSUF_DPBOutlineSlider then
-    _G.MSUF_DPBOutlineSlider:SetWidth(280)
+do
+    local dpb = _G.MSUF_DPBOutlineSlider
+    local s = dpb and (dpb.slider or dpb)
+    if s and s.SetWidth then
+        s:SetWidth(280)
+    end
 end
 
 -- Left panel: Highlight border section (Aggro/Dispel + future border highlights)
 do
     local leftPanel = _G["MSUF_BarsMenuPanelLeft"]
-    local outlineSlider = _G.MSUF_DPBOutlineSlider or barOutlineThicknessSlider
+    local dpb = _G.MSUF_DPBOutlineSlider
+    local outlineSlider = (dpb and (dpb.slider or dpb)) or barOutlineThicknessSlider
 
     -- Hide the simple label created during initial panel build; we render this section
     -- using the same header+divider style as "Gradient Options" / "Outline thickness".

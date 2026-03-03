@@ -26,6 +26,54 @@ if not getmetatable(L) then
 end
 local function TR(v) return (type(v) == "string" and L[v]) or v end
 
+-- SharedMedia statusbar texture dropdown init (1:1 with Options_Core)
+local MSUF_InitStatusbarTextureDropdown = _G.MSUF_InitStatusbarTextureDropdown
+local MSUF_SyncStatusbarTextureDropdown = _G.MSUF_SyncStatusbarTextureDropdown
+
+-- Dropdown scroll helpers (exported from Options_Core)
+-- Makes large SharedMedia dropdown lists scrollable (mousewheel + scrollbar).
+local MSUF_MakeDropdownScrollable = (ns and ns.MSUF_MakeDropdownScrollable) or _G.MSUF_MakeDropdownScrollable
+
+-- Expand dropdown click area so the whole dropdown is clickable (not only the arrow).
+-- Exported by Options_Core.
+local MSUF_ExpandDropdownClickArea = (ns and ns.MSUF_ExpandDropdownClickArea) or _G.MSUF_ExpandDropdownClickArea
+
+-- Stepper modifier support (match Options_Player behavior):
+-- default = baseStep, Shift = x5, Ctrl = x10, Alt = grid step (Edit Mode)
+-- (Alt > Ctrl > Shift priority)
+local function MSUF_GetCurrentGridStep()
+    local MIN, MAX = 8, 64
+    local step
+    local slider = _G and _G["MSUF_EditModeGridSlider"]
+    if slider and slider.GetValue then
+        step = slider:GetValue()
+    elseif MSUF_DB and MSUF_DB.general and type(MSUF_DB.general.editModeGridStep) == "number" then
+        step = MSUF_DB.general.editModeGridStep
+    else
+        step = 20
+    end
+    step = tonumber(step) or 20
+    if step < MIN then step = MIN end
+    if step > MAX then step = MAX end
+    return step
+end
+
+local function MSUF_GetModifierStep(baseStep)
+    baseStep = tonumber(baseStep) or 1
+    if IsAltKeyDown and IsAltKeyDown() then
+        return MSUF_GetCurrentGridStep()
+    end
+    local mult = 1
+    if IsControlKeyDown and IsControlKeyDown() then
+        mult = 10
+    elseif IsShiftKeyDown and IsShiftKeyDown() then
+        mult = 5
+    end
+    return baseStep * mult
+end
+
+
+
 -- ============================================================================
 -- Toggle text styling (same behavior as MSUF_StyleToggleText; replicated
 -- to avoid depending on CreateOptionsPanel scope locals)
@@ -83,10 +131,18 @@ local function StyleCheckmark(cb)
     end
 end
 
-local function MakeCheck(name, label, parent)
+local function MakeCheck(name, label, parent, maxWidth)
     local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
     local fs = _G[name .. "Text"]
-    if fs then fs:SetText(TR(label or "")) end
+    if fs then
+        fs:SetText(TR(label or ""))
+        -- i18n safety: clamp text width so long translations don't overflow column
+        if maxWidth and fs.SetWidth then
+            fs:SetWidth(maxWidth)
+            if fs.SetWordWrap then fs:SetWordWrap(false) end
+            if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(false) end
+        end
+    end
     cb.text = fs
     StyleToggleText(cb)
     StyleCheckmark(cb)
@@ -174,8 +230,12 @@ local function CreateLabeledSlider(name, label, parent, minVal, maxVal, step)
         MSUF_SetLabeledSliderValue(slider, v)
         if slider.onValueChanged then slider.onValueChanged(slider, v) end
     end
-    minus:SetScript("OnClick", function() Step(-step) end)
-    plus:SetScript("OnClick", function() Step(step) end)
+    minus:SetScript("OnClick", function()
+        Step(-MSUF_GetModifierStep(step))
+    end)
+    plus:SetScript("OnClick", function()
+        Step(MSUF_GetModifierStep(step))
+    end)
 
     slider:HookScript("OnValueChanged", function(self, value)
         if self.MSUF_SkipCallback then return end
@@ -298,7 +358,8 @@ local function MakeCompactSlider(name, labelText, parent, minVal, maxVal, step, 
 
     local function StepValue(sign)
         local v = tonumber(eb:GetText()) or (s:GetValue() or minVal)
-        v = v + sign * step
+        local delta = MSUF_GetModifierStep(step)
+        v = v + sign * delta
         if step >= 1 then v = math_floor(v + 0.5) end
         if v < minVal then v = minVal elseif v > maxVal then v = maxVal end
         eb:SetText(tostring(v))
@@ -363,6 +424,7 @@ local cpTickRow        -- slider row: Separator width
 local cpOutlineRow     -- slider row: Outline thickness
 local cpChargedCheck   -- "Show empowered combo points"
 local cpTextCheck      -- "Show resource text"
+local cpRuneTimeCheck  -- DK: show rune time text
 local cpAnchorCooldownCheck -- "Anchor to Essential Cooldown"
 local cpFillReverseCheck    -- "Fill right-to-left"
 local cpEleMaelCheck        -- "Show Maelstrom bar (Elemental)"
@@ -400,7 +462,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     -- ── Third panel (full width, below both columns) ──
     cpPanel = CreateFrame("Frame", "MSUF_ClassPowerOptionsPanel", leftPanel:GetParent(), "BackdropTemplate")
     local totalW = leftPanel:GetWidth() + rightPanel:GetWidth()
-    cpPanel:SetSize(totalW, 680)
+    cpPanel:SetSize(totalW, 740)
     cpPanel:SetPoint("TOPLEFT", leftPanel, "BOTTOMLEFT", 0, -10)
     cpPanel:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
@@ -439,12 +501,17 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpLine:SetWidth(LINE_W)
 
     -- [x] Show class power
-    cpShowCheck = MakeCheck("MSUF_ClassPowerShowCheck", "Show class power", cpPanel)
+    cpShowCheck = MakeCheck("MSUF_ClassPowerShowCheck", "Show class power", cpPanel, L_CHECK_TW)
     cpShowCheck:SetPoint("TOPLEFT", cpLine, "BOTTOMLEFT", PAD_X, -10)
 
     -- Column alignment: fixed label width per column
     local L_LABEL_W = 62   -- left column: Height, Width, X offset, Y offset
     local R_LABEL_W = 70   -- right column: BG opacity, Separator, Outline, Height, Y offset
+
+    -- Max text width for checkboxes (colW minus checkbox ~26px minus padding)
+    -- Prevents long i18n strings from overflowing into the adjacent column.
+    local L_CHECK_TW = colW - 42
+    local R_CHECK_TW = colW - 42
 
     -- Height
     cpHeightRow = MakeCompactSlider("MSUF_CPHeight", "Height", cpPanel, 2, 30, 1, "classPowerHeight",
@@ -462,6 +529,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpWidthModeDrop = CreateFrame("Frame", "MSUF_CPWidthModeDrop", cpPanel, "UIDropDownMenuTemplate")
     cpWidthModeDrop:SetPoint("LEFT", cpWidthModeLabel, "RIGHT", 4, -2)
     UIDropDownMenu_SetWidth(cpWidthModeDrop, 155)
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(cpWidthModeDrop) end
 
     local WIDTH_MODE_OPTIONS = {
         { key = "player",       label = TR("Player frame") },
@@ -507,22 +575,25 @@ local function BuildClassPowerOptions(leftName, rightName)
     end
 
     -- Checkboxes: behavior toggles
-    cpAnchorCooldownCheck = MakeCheck("MSUF_ClassPowerAnchorCooldownCheck", TR("Anchor to Essential Cooldown"), cpPanel)
+    cpAnchorCooldownCheck = MakeCheck("MSUF_ClassPowerAnchorCooldownCheck", TR("Anchor to Essential Cooldown"), cpPanel, L_CHECK_TW)
     cpAnchorCooldownCheck:SetPoint("TOPLEFT", cpYOffsetRow.label, "BOTTOMLEFT", 0, -12)
 
-    cpChargedCheck = MakeCheck("MSUF_ShowChargedCPCheck", TR("Show empowered combo points"), cpPanel)
+    cpChargedCheck = MakeCheck("MSUF_ShowChargedCPCheck", TR("Show empowered combo points"), cpPanel, L_CHECK_TW)
     cpChargedCheck:SetPoint("TOPLEFT", cpAnchorCooldownCheck, "BOTTOMLEFT", 0, -4)
 
-    cpTextCheck = MakeCheck("MSUF_ClassPowerTextCheck", TR("Show resource text"), cpPanel)
+    cpTextCheck = MakeCheck("MSUF_ClassPowerTextCheck", TR("Show resource text"), cpPanel, L_CHECK_TW)
     cpTextCheck:SetPoint("TOPLEFT", cpChargedCheck, "BOTTOMLEFT", 0, -4)
 
-    cpFillReverseCheck = MakeCheck("MSUF_ClassPowerReverseCheck", TR("Fill right-to-left"), cpPanel)
-    cpFillReverseCheck:SetPoint("TOPLEFT", cpTextCheck, "BOTTOMLEFT", 0, -4)
+    cpRuneTimeCheck = MakeCheck("MSUF_RuneTimeTextCheck", TR("Show rune time (per rune)"), cpPanel, L_CHECK_TW)
+    cpRuneTimeCheck:SetPoint("TOPLEFT", cpTextCheck, "BOTTOMLEFT", 0, -4)
 
-    cpEleMaelCheck = MakeCheck("MSUF_ClassPowerEleMaelCheck", TR("Show Maelstrom bar (Elemental)"), cpPanel)
+    cpFillReverseCheck = MakeCheck("MSUF_ClassPowerReverseCheck", TR("Fill right-to-left"), cpPanel, L_CHECK_TW)
+    cpFillReverseCheck:SetPoint("TOPLEFT", cpRuneTimeCheck, "BOTTOMLEFT", 0, -4)
+
+    cpEleMaelCheck = MakeCheck("MSUF_ClassPowerEleMaelCheck", TR("Show Maelstrom bar (Elemental)"), cpPanel, L_CHECK_TW)
     cpEleMaelCheck:SetPoint("TOPLEFT", cpFillReverseCheck, "BOTTOMLEFT", 0, -4)
 
-    cpEbonMightCheck = MakeCheck("MSUF_ClassPowerEbonMightCheck", TR("Show Ebon Might timer (Aug)"), cpPanel)
+    cpEbonMightCheck = MakeCheck("MSUF_ClassPowerEbonMightCheck", TR("Show Ebon Might timer (Aug)"), cpPanel, L_CHECK_TW)
     cpEbonMightCheck:SetPoint("TOPLEFT", cpEleMaelCheck, "BOTTOMLEFT", 0, -4)
 
     -- =====================================================================
@@ -560,6 +631,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     dpbWidthModeDrop = CreateFrame("Frame", "MSUF_DPBWidthModeDrop", cpPanel, "UIDropDownMenuTemplate")
     dpbWidthModeDrop:SetPoint("LEFT", dpbWidthModeLabel, "RIGHT", 4, -2)
     UIDropDownMenu_SetWidth(dpbWidthModeDrop, 155)
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(dpbWidthModeDrop) end
 
     local DPB_WIDTH_MODE_OPTIONS = {
         { key = "manual",       label = TR("Manual") },
@@ -602,8 +674,9 @@ local function BuildClassPowerOptions(leftName, rightName)
     local dpbFgDrop = CreateFrame("Frame", "MSUF_DPBFgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
     dpbFgDrop:SetPoint("TOPLEFT", dpbFgLabel, "BOTTOMLEFT", -16, -2)
     UIDropDownMenu_SetWidth(dpbFgDrop, DPB_TEX_DROP_W)
-    dpbFgDrop._msufButtonWidth = DPB_TEX_DROP_W
     dpbFgDrop._msufTweakBarTexturePreview = true
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(dpbFgDrop) end
+    if MSUF_MakeDropdownScrollable then MSUF_MakeDropdownScrollable(dpbFgDrop, 12) end
 
     -- BG texture
     local dpbBgLabel = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -615,19 +688,142 @@ local function BuildClassPowerOptions(leftName, rightName)
     local dpbBgDrop = CreateFrame("Frame", "MSUF_DPBBgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
     dpbBgDrop:SetPoint("TOPLEFT", dpbBgLabel, "BOTTOMLEFT", -16, -2)
     UIDropDownMenu_SetWidth(dpbBgDrop, DPB_TEX_DROP_W)
-    dpbBgDrop._msufButtonWidth = DPB_TEX_DROP_W
     dpbBgDrop._msufTweakBarTexturePreview = true
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(dpbBgDrop) end
+    if MSUF_MakeDropdownScrollable then MSUF_MakeDropdownScrollable(dpbBgDrop, 12) end
 
     
     -- Power bar outline (Detached Power Bar) — moved here from Options_Core (Bars).
-    local dpbOutlineSlider = CreateLabeledSlider(
+    -- IMPORTANT: Must look like the other compact X/Y sliders (inline label + slider + editbox + [-][+]).
+    local function CreateCompactIntRow(name, labelText, parent, minVal, maxVal, step, anchorTo, anchorPt, oX, oY, sliderW, labelW)
+        sliderW = sliderW or 150
+        step = step or 1
+        local row = {}
+
+        local lbl = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        lbl:SetPoint(anchorPt or "TOPLEFT", anchorTo or parent, anchorPt == "TOPLEFT" and "BOTTOMLEFT" or "BOTTOMLEFT", oX or 0, oY or -10)
+        lbl:SetText(TR(labelText))
+        lbl:SetTextColor(0.85, 0.85, 0.85)
+        if labelW then
+            lbl:SetWidth(labelW)
+            lbl:SetJustifyH("LEFT")
+        end
+        row.label = lbl
+
+        local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
+        s:SetPoint("LEFT", lbl, "RIGHT", 10, 0)
+        s:SetSize(sliderW, 14)
+        s:SetMinMaxValues(minVal, maxVal)
+        s:SetValueStep(step)
+        s:SetObeyStepOnDrag(true)
+        local track = s:CreateTexture(nil, "BACKGROUND")
+        track:SetColorTexture(0.06, 0.06, 0.06, 1)
+        track:SetPoint("TOPLEFT", s, "TOPLEFT", 0, -3)
+        track:SetPoint("BOTTOMRIGHT", s, "BOTTOMRIGHT", 0, 3)
+        s._track = track
+        s:HookScript("OnEnter", function(self) if self._track then self._track:SetColorTexture(0.20, 0.20, 0.20, 1) end end)
+        s:HookScript("OnLeave", function(self) if self._track then self._track:SetColorTexture(0.06, 0.06, 0.06, 1) end end)
+        local thumb = s:GetThumbTexture()
+        if thumb then thumb:SetTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal"); thumb:SetSize(10, 18) end
+        local lo = _G[name .. "Low"];  if lo  then lo:SetText("") end
+        local hi = _G[name .. "High"]; if hi  then hi:SetText("") end
+        local tx = _G[name .. "Text"]; if tx  then tx:SetText("") end
+        row.slider = s
+
+        local eb = CreateFrame("EditBox", name .. "EB", parent, "InputBoxTemplate")
+        eb:SetSize(44, 18)
+        eb:SetAutoFocus(false)
+        eb:SetPoint("LEFT", s, "RIGHT", 6, 0)
+        eb:SetJustifyH("CENTER")
+        eb:SetFontObject(GameFontHighlightSmall)
+        eb:SetTextColor(1, 1, 1, 1)
+        row.editBox = eb
+
+        local StyleBtn = _G.MSUF_StyleSmallButton
+        local minus = CreateFrame("Button", name .. "Minus", parent)
+        minus:SetPoint("LEFT", eb, "RIGHT", 3, 0)
+        if StyleBtn then StyleBtn(minus, false) else minus:SetSize(20, 20) end
+        row.minus = minus
+
+        local plus = CreateFrame("Button", name .. "Plus", parent)
+        plus:SetPoint("LEFT", minus, "RIGHT", 2, 0)
+        if StyleBtn then StyleBtn(plus, true) else plus:SetSize(20, 20) end
+        row.plus = plus
+
+        local function Clamp(v)
+            v = tonumber(v)
+            if type(v) ~= "number" then return nil end
+            v = math_floor(v + 0.5)
+            if v < minVal then v = minVal elseif v > maxVal then v = maxVal end
+            return v
+        end
+
+        function row:Set(val)
+            val = Clamp(val) or minVal
+            eb:SetText(tostring(val))
+            s:SetValue(val)
+        end
+
+        function row:SetEnabled(on)
+            local a = on and 1.0 or 0.35
+            s:SetAlpha(a)
+            eb:SetAlpha(a)
+            minus:SetAlpha(a)
+            plus:SetAlpha(a)
+            if on then
+                s:Enable(); eb:EnableMouse(true)
+                minus:EnableMouse(true); plus:EnableMouse(true)
+                lbl:SetTextColor(0.85, 0.85, 0.85)
+            else
+                s:Disable(); eb:EnableMouse(false); eb:ClearFocus()
+                minus:EnableMouse(false); plus:EnableMouse(false)
+                lbl:SetTextColor(0.35, 0.35, 0.35)
+            end
+        end
+
+        row.onValueChanged = nil
+
+        s:SetScript("OnValueChanged", function(_, val)
+            val = Clamp(val) or minVal
+            eb:SetText(tostring(val))
+            if row.onValueChanged then row.onValueChanged(val) end
+        end)
+
+        local function ApplyEB()
+            local v = Clamp(eb:GetText())
+            if not v then
+                eb:SetText(tostring(Clamp(s:GetValue()) or minVal))
+                return
+            end
+            eb:SetText(tostring(v))
+            s:SetValue(v)
+        end
+        eb:SetScript("OnEnterPressed", function(self) ApplyEB(); self:ClearFocus() end)
+        eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        eb:SetScript("OnEditFocusLost", function() ApplyEB() end)
+
+        local function StepValue(sign)
+            local cur = Clamp(eb:GetText()) or Clamp(s:GetValue()) or minVal
+            local delta = MSUF_GetModifierStep(step)
+            cur = cur + sign * delta
+            if cur < minVal then cur = minVal elseif cur > maxVal then cur = maxVal end
+            eb:SetText(tostring(cur))
+            s:SetValue(cur)
+        end
+        minus:SetScript("OnClick", function() StepValue(-1) end)
+        plus:SetScript("OnClick",  function() StepValue(1) end)
+
+        return row
+    end
+
+    local dpbOutlineRow = CreateCompactIntRow(
         "MSUF_DPBOutlineThicknessSlider",
         "Power bar outline",
         cpPanel,
-        0, 6, 1
+        0, 6, 1,
+        dpbBgDrop, "TOPLEFT", 16, -26,
+        150, 110
     )
-    dpbOutlineSlider:ClearAllPoints()
-    dpbOutlineSlider:SetPoint("TOPLEFT", dpbBgDrop, "BOTTOMLEFT", 16, -26)
 
     do
         local bars = (MSUF_DB and MSUF_DB.bars) or {}
@@ -636,12 +832,13 @@ local function BuildClassPowerOptions(leftName, rightName)
             -- Default: same as main outline (or 1).
             t = tonumber(bars.barOutlineThickness) or 1
         end
-        t = math.floor(t + 0.5)
+        if type(t) ~= "number" then t = 1 end
+        t = math_floor(t + 0.5)
         if t < 0 then t = 0 elseif t > 6 then t = 6 end
-        MSUF_SetLabeledSliderValue(dpbOutlineSlider, t)
+        dpbOutlineRow:Set(t)
     end
 
-    dpbOutlineSlider.onValueChanged = function(_, value)
+    dpbOutlineRow.onValueChanged = function(value)
         if type(MSUF_DB) ~= "table" then return end
         MSUF_DB.bars = MSUF_DB.bars or {}
         MSUF_DB.bars.detachedPowerBarOutline = value
@@ -662,31 +859,15 @@ local function BuildClassPowerOptions(leftName, rightName)
                 end
             end
         end
-        local a = anyDetached and 1.0 or 0.35
-        dpbOutlineSlider:SetAlpha(a)
-        dpbOutlineSlider:EnableMouse(anyDetached)
-        if dpbOutlineSlider.editBox then
-            dpbOutlineSlider.editBox:SetAlpha(a)
-            dpbOutlineSlider.editBox:EnableMouse(anyDetached)
+        if dpbOutlineRow and dpbOutlineRow.SetEnabled then
+            dpbOutlineRow:SetEnabled(anyDetached)
         end
-        if dpbOutlineSlider.minusButton then
-            dpbOutlineSlider.minusButton:SetAlpha(a)
-            dpbOutlineSlider.minusButton:EnableMouse(anyDetached)
-        end
-        if dpbOutlineSlider.plusButton then
-            dpbOutlineSlider.plusButton:SetAlpha(a)
-            dpbOutlineSlider.plusButton:EnableMouse(anyDetached)
-        end
-        local txt = _G["MSUF_DPBOutlineThicknessSliderText"]
-        if txt then txt:SetAlpha(a) end
-        local lo = _G["MSUF_DPBOutlineThicknessSliderLow"]
-        if lo then lo:SetAlpha(a) end
-        local hi = _G["MSUF_DPBOutlineThicknessSliderHigh"]
-        if hi then hi:SetAlpha(a) end
     end
     _G.MSUF_RefreshDPBOutlineSliderState = MSUF_RefreshDPBOutlineSliderState
-    dpbOutlineSlider:HookScript("OnShow", MSUF_RefreshDPBOutlineSliderState)
-    _G.MSUF_DPBOutlineSlider = dpbOutlineSlider
+    if dpbOutlineRow and dpbOutlineRow.slider and dpbOutlineRow.slider.HookScript then
+        dpbOutlineRow.slider:HookScript("OnShow", MSUF_RefreshDPBOutlineSliderState)
+    end
+    _G.MSUF_DPBOutlineSlider = dpbOutlineRow
 
 -- =====================================================================
     -- RIGHT COLUMN TOP: Style — Visual Appearance
@@ -711,7 +892,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     styleLine:SetWidth(LINE_W)
 
     -- [x] Color by resource type
-    cpColorCheck = MakeCheck("MSUF_ClassPowerColorCheck", "Color by resource type", cpPanel)
+    cpColorCheck = MakeCheck("MSUF_ClassPowerColorCheck", "Color by resource type", cpPanel, R_CHECK_TW)
     cpColorCheck:SetPoint("TOPLEFT", styleLine, "BOTTOMLEFT", PAD_X, -10)
 
     -- BG opacity / Separator / Outline
@@ -748,21 +929,19 @@ local function BuildClassPowerOptions(leftName, rightName)
     ahHeader:SetTextColor(0.85, 0.85, 0.85)
     cpPanel._ahHeader = ahHeader
 
-    cpHideOOCCheck = MakeCheck("MSUF_ClassPowerHideOOC", TR("Hide out of combat"), cpPanel)
+    cpHideOOCCheck = MakeCheck("MSUF_ClassPowerHideOOC", TR("Hide out of combat"), cpPanel, R_CHECK_TW)
     cpHideOOCCheck:SetPoint("TOPLEFT", ahHeader, "BOTTOMLEFT", 0, -6)
 
-    cpHideFullCheck = MakeCheck("MSUF_ClassPowerHideFull", TR("Hide when full"), cpPanel)
+    cpHideFullCheck = MakeCheck("MSUF_ClassPowerHideFull", TR("Hide when full"), cpPanel, R_CHECK_TW)
     cpHideFullCheck:SetPoint("TOPLEFT", cpHideOOCCheck, "BOTTOMLEFT", 0, -4)
 
-    cpHideEmptyCheck = MakeCheck("MSUF_ClassPowerHideEmpty", TR("Hide when empty"), cpPanel)
+    cpHideEmptyCheck = MakeCheck("MSUF_ClassPowerHideEmpty", TR("Hide when empty"), cpPanel, R_CHECK_TW)
     cpHideEmptyCheck:SetPoint("TOPLEFT", cpHideFullCheck, "BOTTOMLEFT", 0, -4)
 
     -- Texture dropdowns
     local TEX_DROP_W = 180
     local InitTexDrop = _G.MSUF_InitStatusbarTextureDropdown
     local KillPreview = _G.MSUF_KillMenuPreviewBar
-    local ExpandClick = _G.MSUF_ExpandDropdownClickArea
-    local MakeScroll  = _G.MSUF_MakeDropdownScrollable
 
     -- Foreground texture
     local cpFgTexLabel = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -773,11 +952,12 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     local cpFgTexDrop = CreateFrame("Frame", "MSUF_CPFgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
     cpFgTexDrop:SetPoint("TOPLEFT", cpFgTexLabel, "BOTTOMLEFT", -16, -2)
-    UIDropDownMenu_SetWidth(cpFgTexDrop, TEX_DROP_W)
-    cpFgTexDrop._msufButtonWidth = TEX_DROP_W
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(cpFgTexDrop) end
+
+    -- Make the LSM list scrollable like Options_Core (prevents huge lists from going offscreen)
+    if MSUF_MakeDropdownScrollable then MSUF_MakeDropdownScrollable(cpFgTexDrop, 12) end
+    -- Use the same small preview swatch layout as Options_Core so it doesn't cover the scrollbar area.
     cpFgTexDrop._msufTweakBarTexturePreview = true
-    if ExpandClick then ExpandClick(cpFgTexDrop) end
-    if MakeScroll  then MakeScroll(cpFgTexDrop, 12) end
 
     local cpFgTexPreview = CreateFrame("StatusBar", "MSUF_CPFgTexturePreview", cpPanel)
     cpFgTexPreview:SetSize(TEX_DROP_W, 10)
@@ -800,6 +980,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     if InitTexDrop then
         InitTexDrop(cpFgTexDrop, {
+            width = TEX_DROP_W,
             followText  = TR("Use global bar texture"),
             followValue = "",
             isFollow    = function(cur)  return (cur == nil or cur == "") end,
@@ -835,11 +1016,10 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     local cpBgTexDrop = CreateFrame("Frame", "MSUF_CPBgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
     cpBgTexDrop:SetPoint("TOPLEFT", cpBgTexLabel, "BOTTOMLEFT", -16, -2)
-    UIDropDownMenu_SetWidth(cpBgTexDrop, TEX_DROP_W)
-    cpBgTexDrop._msufButtonWidth = TEX_DROP_W
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(cpBgTexDrop) end
+
+    if MSUF_MakeDropdownScrollable then MSUF_MakeDropdownScrollable(cpBgTexDrop, 12) end
     cpBgTexDrop._msufTweakBarTexturePreview = true
-    if ExpandClick then ExpandClick(cpBgTexDrop) end
-    if MakeScroll  then MakeScroll(cpBgTexDrop, 12) end
 
     local cpBgTexPreview = CreateFrame("StatusBar", "MSUF_CPBgTexturePreview", cpPanel)
     cpBgTexPreview:SetSize(TEX_DROP_W, 10)
@@ -864,6 +1044,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     if InitTexDrop then
         InitTexDrop(cpBgTexDrop, {
+            width = TEX_DROP_W,
             followText  = TR("Use foreground texture"),
             followValue = "",
             isFollow    = function(cur)  return (cur == nil or cur == "") end,
@@ -892,10 +1073,12 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     -- ── Detached Power Bar texture dropdown init ──
     -- (Frames created earlier in left column; init here after helper vars are available.)
-    if ExpandClick then ExpandClick(dpbFgDrop) end
-    if MakeScroll  then MakeScroll(dpbFgDrop, 12) end
-    if ExpandClick then ExpandClick(dpbBgDrop) end
-    if MakeScroll  then MakeScroll(dpbBgDrop, 12) end
+    if MSUF_MakeDropdownScrollable then
+        MSUF_MakeDropdownScrollable(dpbFgDrop, 12)
+        MSUF_MakeDropdownScrollable(dpbBgDrop, 12)
+    end
+    dpbFgDrop._msufTweakBarTexturePreview = true
+    dpbBgDrop._msufTweakBarTexturePreview = true
 
     local DPB_Refresh = function()
         if type(_G.MSUF_DetachedPowerBar_RefreshTextures) == "function" then
@@ -905,6 +1088,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     if InitTexDrop then
         InitTexDrop(dpbFgDrop, {
+            width = TEX_DROP_W,
             followText  = TR("Use global bar texture"),
             followValue = "",
             isFollow    = function(cur) return (cur == nil or cur == "") end,
@@ -927,6 +1111,7 @@ local function BuildClassPowerOptions(leftName, rightName)
             end,
         })
         InitTexDrop(dpbBgDrop, {
+            width = TEX_DROP_W,
             followText  = TR("Use foreground texture"),
             followValue = "",
             isFollow    = function(cur) return (cur == nil or cur == "") end,
@@ -974,7 +1159,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     amSub:SetJustifyH("LEFT")
 
     -- [x] Show mana bar
-    amShowCheck = MakeCheck("MSUF_AltManaShowCheck", "Show mana bar (dual resource)", cpPanel)
+    amShowCheck = MakeCheck("MSUF_AltManaShowCheck", "Show mana bar (dual resource)", cpPanel, R_CHECK_TW)
     amShowCheck:SetPoint("TOPLEFT", amSub, "BOTTOMLEFT", 0, -6)
 
     -- Height / Y offset
@@ -983,6 +1168,130 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     amOffsetRow = MakeCompactSlider("MSUF_AMOffset", "Y offset", cpPanel, -50, 50, 1, "altManaOffsetY",
         amHeightRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
+
+    -- =================================================================
+    -- Bottom quick actions
+    --   - Edit Mode: toggle MSUF Edit Mode
+    --   - Class color: open Colors page and jump to the Class Power color dropdown
+    -- =================================================================
+    local function _ToggleMSUFEditMode()
+        local st = _G and _G.MSUF_EditState
+        local isActive = (type(st) == "table" and st.active) and true or false
+        if type(_G and _G.MSUF_SetMSUFEditModeDirect) == "function" then
+            _G.MSUF_SetMSUFEditModeDirect(not isActive)
+        elseif type(_G and _G.MSUF_SetEditMode) == "function" then
+            _G.MSUF_SetEditMode(not isActive)
+        end
+    end
+
+    local function _OpenClassPowerClassColorDropdown()
+        if type(_G and _G.MSUF_OpenPage) == "function" then
+            _G.MSUF_OpenPage("colors")
+        end
+
+        local function JumpAndOpen()
+            local dd = _G and _G["MSUF_Colors_ClassPowerTypeDropdown"]
+            if not dd then return end
+
+            -- Scroll to dropdown (same math as Bars anchor helper, but for Colors)
+            local scroll = _G and _G["MSUF_ColorsScrollFrame"]
+            local child  = _G and _G["MSUF_ColorsScrollChild"]
+            if scroll and child and scroll.SetVerticalScroll and child.GetTop and dd.GetTop then
+                local top  = child:GetTop()
+                local aTop = dd:GetTop()
+                if top and aTop then
+                    local off = (top - aTop) - 12
+                    if off < 0 then off = 0 end
+                    scroll:SetVerticalScroll(off)
+                    if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
+                    if _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+                end
+            end
+
+            -- Open dropdown menu
+            if _G.ToggleDropDownMenu then
+                pcall(_G.ToggleDropDownMenu, 1, nil, dd, dd, 0, 0)
+            end
+        end
+
+        if _G and _G.C_Timer and _G.C_Timer.After then
+            _G.C_Timer.After(0, JumpAndOpen)
+        else
+            JumpAndOpen()
+        end
+    end
+
+    -- ── Divider above quick-action buttons ──
+    local btnDivider = cpPanel:CreateTexture(nil, "ARTWORK")
+    btnDivider:SetColorTexture(1, 1, 1, 0.12)
+    btnDivider:SetHeight(1)
+    btnDivider:SetPoint("TOPLEFT", dpbOutlineRow.label, "BOTTOMLEFT", -PAD_X, -14)
+    btnDivider:SetWidth(totalW - 2)
+
+    local btnW, btnH = 140, 22
+    local BTN_PAD = 24  -- horizontal text padding inside button
+
+    local editBtn = CreateFrame("Button", "MSUF_ClassPower_EditModeButton", cpPanel, "UIPanelButtonTemplate")
+    editBtn:SetHeight(btnH)
+    editBtn:SetText(TR("Edit Mode"))
+    -- Auto-width: measure text then clamp to minimum
+    do
+        local fs = editBtn:GetFontString()
+        local tw = (fs and fs.GetStringWidth and fs:GetStringWidth()) or 0
+        local w = tw + BTN_PAD
+        if w < btnW then w = btnW end
+        editBtn:SetWidth(w)
+    end
+    editBtn:SetPoint("TOPLEFT", btnDivider, "BOTTOMLEFT", PAD_X, -10)
+    editBtn:SetScript("OnClick", _ToggleMSUFEditMode)
+
+	-- Match Options_Player action button styling (and prevent SlashMenu mirror skin from breaking click/hover).
+	editBtn._msufNoSlashSkin = true
+	if _G and _G.MSUF_SkinMidnightActionButton then
+		_G.MSUF_SkinMidnightActionButton(editBtn)
+	else
+		editBtn.__msufMidnightActionSkinned = true
+	end
+
+    local colorBtn = CreateFrame("Button", "MSUF_ClassPower_ClassColorButton", cpPanel, "UIPanelButtonTemplate")
+    colorBtn:SetHeight(btnH)
+    colorBtn:SetText(TR("Class color"))
+    do
+        local fs = colorBtn:GetFontString()
+        local tw = (fs and fs.GetStringWidth and fs:GetStringWidth()) or 0
+        local w = tw + BTN_PAD
+        if w < btnW then w = btnW end
+        colorBtn:SetWidth(w)
+    end
+    colorBtn:SetPoint("LEFT", editBtn, "RIGHT", 12, 0)
+    colorBtn:SetScript("OnClick", _OpenClassPowerClassColorDropdown)
+
+	colorBtn._msufNoSlashSkin = true
+	if _G and _G.MSUF_SkinMidnightActionButton then
+		_G.MSUF_SkinMidnightActionButton(colorBtn)
+	else
+		colorBtn.__msufMidnightActionSkinned = true
+	end
+
+    -- Dynamically size panel to actual content (buttons are last element).
+    -- This avoids clipping regardless of font size or scale.
+    do
+        local BTN_BOTTOM_PAD = 14
+        if editBtn and editBtn.GetHeight and cpPanel and cpPanel.SetHeight then
+            local function RecalcPanelHeight()
+                if not (editBtn.GetBottom and cpPanel.GetTop) then return end
+                local pTop = cpPanel:GetTop()
+                local bBot = editBtn:GetBottom()
+                if pTop and bBot then
+                    local needed = math.ceil(pTop - bBot) + BTN_BOTTOM_PAD
+                    if needed < 700 then needed = 700 end
+                    cpPanel:SetHeight(needed)
+                end
+            end
+            editBtn:HookScript("OnShow", RecalcPanelHeight)
+            C_Timer.After(0.05, RecalcPanelHeight)
+        end
+    end
 
     -- ── Bind checkboxes to DB ──
     local BindBool = _G.MSUF_Options_BindDBBoolCheck
@@ -997,6 +1306,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         BindBool(cpColorCheck, "bars.classPowerColorByType",  CPRefresh, SyncClassPowerToggles)
         BindBool(cpChargedCheck, "bars.showChargedComboPoints", CPRefresh, SyncClassPowerToggles)
         BindBool(cpTextCheck,  "bars.classPowerShowText",     CPRefresh, SyncClassPowerToggles)
+        BindBool(cpRuneTimeCheck, "bars.runeShowTimeText",          CPRefresh, SyncClassPowerToggles)
         BindBool(cpAnchorCooldownCheck, "bars.classPowerAnchorToCooldown", CPRefresh, SyncClassPowerToggles)
         BindBool(cpFillReverseCheck,   "bars.classPowerFillReverse",      CPRefresh, SyncClassPowerToggles)
         BindBool(cpEleMaelCheck,       "bars.showEleMaelstrom",           CPRefresh, SyncClassPowerToggles)
@@ -1219,6 +1529,10 @@ local function SyncClassPowerToggles()
         cpTextCheck:SetChecked(b.classPowerShowText == true)
         if cpTextCheck.__msufToggleUpdate then cpTextCheck.__msufToggleUpdate() end
     end
+    if cpRuneTimeCheck then
+        cpRuneTimeCheck:SetChecked(b.runeShowTimeText == true)
+        if cpRuneTimeCheck.__msufToggleUpdate then cpRuneTimeCheck.__msufToggleUpdate() end
+    end
     if cpAnchorCooldownCheck then
         cpAnchorCooldownCheck:SetChecked(b.classPowerAnchorToCooldown == true)
         if cpAnchorCooldownCheck.__msufToggleUpdate then cpAnchorCooldownCheck.__msufToggleUpdate() end
@@ -1292,6 +1606,7 @@ local function SyncClassPowerToggles()
     SetEnabled(cpColorCheck, cpOn)
     SetEnabled(cpChargedCheck, cpOn)
     SetEnabled(cpTextCheck, cpOn)
+    SetEnabled(cpRuneTimeCheck, cpOn and (b.classPowerShowText == true))
     SetEnabled(cpAnchorCooldownCheck, cpOn)
     SetEnabled(cpFillReverseCheck, cpOn)
     SetEnabled(cpEleMaelCheck, cpOn)

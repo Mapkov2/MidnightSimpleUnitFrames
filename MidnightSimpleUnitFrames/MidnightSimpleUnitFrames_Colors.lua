@@ -1461,12 +1461,51 @@ end
     -- Initial state
     UpdateClassBgMatchState()
 
+    -- Toggle: use tint color directly in Dark Mode (bypass brightness dimming).
+    -- Allows fully custom background colors (including white) in Dark Mode.
+    -- NOTE: All references stored on F to avoid adding locals (Lua 5.1 200-local limit).
+    F._darkBgCustomCheck = CreateFrame("CheckButton", "MSUF_Colors_DarkBgCustomColor", content, "UICheckButtonTemplate")
+    F._darkBgCustomCheck:SetPoint("TOPLEFT", classBgResetBtn, "BOTTOMLEFT", -4, -4)
+    if not F._darkBgCustomCheck.text then
+        F._darkBgCustomCheck.text = F._darkBgCustomCheck:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        F._darkBgCustomCheck.text:SetPoint("LEFT", F._darkBgCustomCheck, "RIGHT", 2, 0)
+    end
+    F._darkBgCustomCheck.text:SetText("Custom color in Dark Mode")
+
+    F.UpdateDarkBgCustomControls = function()
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        local g = MSUF_DB.general
+        local mode = g.barMode
+        if mode ~= "dark" and mode ~= "class" and mode ~= "unified" then
+            mode = (g.useClassColors and "class") or "dark"
+        end
+        local isDark = (mode == "dark")
+        local a = isDark and 1 or 0.35
+        F._darkBgCustomCheck:SetChecked(g.darkBgCustomColor and true or false)
+        if F._darkBgCustomCheck.Enable and F._darkBgCustomCheck.Disable then
+            if isDark then F._darkBgCustomCheck:Enable() else F._darkBgCustomCheck:Disable() end
+        end
+        F._darkBgCustomCheck:SetAlpha(a)
+        if F._darkBgCustomCheck.text then F._darkBgCustomCheck.text:SetAlpha(a) end
+    end
+
+    F._darkBgCustomCheck:SetScript("OnClick", function(btn)
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        MSUF_DB.general.darkBgCustomColor = btn:GetChecked() and true or false
+        PushVisualUpdates()
+        F.UpdateDarkBgCustomControls()
+    end)
+
+    F.UpdateDarkBgCustomControls()
+
 
     --------------------------------------------------
     -- Bar appearance (moved from Bars menu)
     --------------------------------------------------
     local barAppHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    barAppHeader:SetPoint("TOPLEFT", classBgResetBtn, "BOTTOMLEFT", 0, -28)
+    barAppHeader:SetPoint("TOPLEFT", F._darkBgCustomCheck, "BOTTOMLEFT", 4, -22)
     barAppHeader:SetText("Bar appearance")
     F.CreateHeaderDividerAbove(barAppHeader)
 
@@ -1520,6 +1559,7 @@ end
                 UIDropDownMenu_SetText(barModeDrop, opt.label)
 
                 if UpdateDarkBarControls then UpdateDarkBarControls() end
+                if F.UpdateDarkBgCustomControls then F.UpdateDarkBgCustomControls() end
                 if F.UpdateUnifiedBarControls then F.UpdateUnifiedBarControls() end
                 PushVisualUpdates()
             end
@@ -4208,6 +4248,7 @@ if darkToneSlider then
 end
 
             if UpdateDarkBarControls then UpdateDarkBarControls() end
+            if F.UpdateDarkBgCustomControls then F.UpdateDarkBgCustomControls() end
             if F.UpdateUnifiedBarControls then F.UpdateUnifiedBarControls() end
             barAppearanceRefreshing = false
         end

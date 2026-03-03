@@ -771,3 +771,45 @@ function MSUF_Keybind_ToggleEditMode()
         pcall(_G.MSUF_ToggleEditMode)
     end
 end
+
+-- =========================================================================
+-- i18n UI helpers — prevent text overflow in translated locales.
+--
+-- Checkbox text in narrow columns can overflow when German/Spanish/French
+-- strings are longer than English. These helpers clamp the FontString
+-- width so text truncates instead of overlapping adjacent UI elements.
+--
+-- Usage:  MSUF_ClampCheckboxText(cb, maxPixelWidth)
+--         MSUF_AutoSizeButton(btn, minWidth, padding)
+-- =========================================================================
+
+--- Clamp a checkbox's label FontString to a max pixel width.
+--- Disables word-wrap so long translations truncate cleanly.
+--- Safe to call on nil / non-checkbox frames (no-op).
+function MSUF_ClampCheckboxText(cb, maxWidth)
+    if not cb or not maxWidth then return end
+    local fs = cb.Text or cb.text
+    if (not fs) and cb.GetName then
+        local name = cb:GetName()
+        if name then fs = _G[name .. "Text"] end
+    end
+    if not (fs and fs.SetWidth) then return end
+    fs:SetWidth(maxWidth)
+    if fs.SetWordWrap then fs:SetWordWrap(false) end
+    if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(false) end
+end
+_G.MSUF_ClampCheckboxText = MSUF_ClampCheckboxText
+
+--- Auto-size a button to fit its current text content.
+--- Width = max(minWidth, textWidth + padding).
+function MSUF_AutoSizeButton(btn, minWidth, padding)
+    if not btn then return end
+    minWidth = minWidth or 120
+    padding  = padding  or 24
+    local fs = btn.GetFontString and btn:GetFontString()
+    local tw = (fs and fs.GetStringWidth and fs:GetStringWidth()) or 0
+    local w = tw + padding
+    if w < minWidth then w = minWidth end
+    btn:SetWidth(w)
+end
+_G.MSUF_AutoSizeButton = MSUF_AutoSizeButton

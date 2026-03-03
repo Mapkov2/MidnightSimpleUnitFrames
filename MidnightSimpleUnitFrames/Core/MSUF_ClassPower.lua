@@ -640,6 +640,8 @@ local function EnsureDefaults()
 
     -- DK Rune sort order: "asc" = ready first, "desc" = recharging first, nil = natural
     if b.runeSortOrder        == nil then b.runeSortOrder        = "asc" end
+    -- DK Runes: show per-rune cooldown time text on the runes (Sensei-style)
+    if b.runeShowTime        == nil then b.runeShowTime        = true end
 
     -- Ele Shaman: Maelstrom Power continuous bar (off by default — niche preference)
     if b.showEleMaelstrom     == nil then b.showEleMaelstrom     = false end
@@ -1093,6 +1095,19 @@ local function CP_EnsureBars(parent, count)
         bg:SetVertexColor(0, 0, 0, 0.3)
         bar._bg = bg
 
+        -- Per-rune cooldown time text (DK runes only; shown/hidden in MODE_RUNE_CD)
+        local rfs = bar:CreateFontString(nil, "OVERLAY")
+        rfs:SetPoint("CENTER", bar, "CENTER", 0, 0)
+        rfs:SetJustifyH("CENTER")
+        if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
+        rfs:SetFontObject("GameFontHighlightSmall")
+        rfs:SetTextColor(1, 1, 1, 1)
+        rfs:SetShadowColor(0, 0, 0, 1)
+        rfs:SetShadowOffset(1, -1)
+        rfs:Hide()
+        bar._runeText = rfs
+        bar._runeTextQ = -1
+
         CP.bars[i] = bar
     end
 
@@ -1182,6 +1197,17 @@ local function CP_ApplyFont()
     if _cpFontRev ~= rev then
         fs:SetFont(path, fontSize, flags)
         _cpFontRev = rev
+    end
+
+    -- Apply same font to per-rune texts (slightly smaller)
+    local runeSize = fontSize - 2
+    if runeSize < 6 then runeSize = 6 end
+    for i = 1, (CP.maxBars or 0) do
+        local bar = CP.bars[i]
+        local rfs = bar and bar._runeText
+        if rfs then
+            rfs:SetFont(path, runeSize, flags)
+        end
     end
 
     -- Text color: check for RESOURCE_TEXT override in classPowerColorOverrides
@@ -1746,9 +1772,33 @@ end
 
 -- Per-rune OnUpdate handler (only set on recharging runes)
 local function _runeBarOnUpdate(bar, elapsed)
-    local dur = bar._runeDuration + elapsed
+    local dur = (bar._runeDuration or 0) + elapsed
     bar._runeDuration = dur
     bar:SetValue(dur)
+
+    -- Optional per-rune remaining time text (Sensei-style).
+    -- No secret values involved (GetRuneCooldown + GetTime are safe).
+    local rfs = bar._runeText
+    if rfs and bar._runeShowTime and bar._runeTotalDuration and bar._runeTotalDuration > 0 then
+        local rem = bar._runeTotalDuration - dur
+        if rem < 0 then rem = 0 end
+
+        -- Quantize to 0.1s to avoid excessive SetText spam.
+        local q = math_floor(rem * 10 + 0.5) -- integer tenths
+        if q ~= (bar._runeTextQ or -1) then
+            bar._runeTextQ = q
+            if q <= 0 then
+                rfs:SetText("")
+                rfs:Hide()
+            else
+                rfs:SetFormattedText("%.1f", q / 10)
+                rfs:Show()
+            end
+        end
+    elseif rfs then
+        -- Ensure hidden when disabled
+        if rfs:IsShown() then rfs:Hide() end
+    end
 end
 
 local function CP_UpdateValues_RuneCD(powerType, maxPower)
@@ -1779,6 +1829,7 @@ local function CP_UpdateValues_RuneCD(powerType, maxPower)
         baseR, baseG, baseB = 1, 1, 1
     end
     local bgA = tonumber(b.classPowerBgAlpha) or 0.3
+    local showRuneTime = (b.runeShowTime ~= false)
 
     local now = GetTime()
     local readyCount = 0
@@ -1800,20 +1851,47 @@ local function CP_UpdateValues_RuneCD(powerType, maxPower)
                 bar:SetScript("OnUpdate", nil)
                 bar._runeDuration = nil
                 bar:SetAlpha(_filledAlpha)
+                bar._runeTotalDuration = nil
+                bar._runeShowTime = showRuneTime
+                bar._runeTextQ = -1
+                if bar._runeText then bar._runeText:SetText(""); bar._runeText:Hide() end
                 readyCount = readyCount + 1
             elseif start and duration and duration > 0 then
                 -- Recharging: animate fill via OnUpdate
                 bar._runeDuration = now - start
+                bar._runeTotalDuration = duration
+                bar._runeShowTime = showRuneTime
+                bar._runeTextQ = -1
                 bar:SetMinMaxValues(0, duration)
                 bar:SetValue(bar._runeDuration)
                 bar:SetScript("OnUpdate", _runeBarOnUpdate)
                 bar:SetAlpha(_filledAlpha)
+                if showRuneTime and bar._runeText then
+                    local rem = duration - bar._runeDuration
+                    if rem < 0 then rem = 0 end
+                    local q = math_floor(rem * 10 + 0.5)
+                    bar._runeTextQ = q
+                    if q > 0 then
+                        bar._runeText:SetFormattedText("%.1f", q / 10)
+                        bar._runeText:Show()
+                    else
+                        bar._runeText:SetText("")
+                        bar._runeText:Hide()
+                    end
+                elseif bar._runeText then
+                    bar._runeText:SetText("")
+                    bar._runeText:Hide()
+                end
             else
                 -- Unknown state: show empty
                 bar:SetMinMaxValues(0, 1)
                 bar:SetValue(0)
                 bar:SetScript("OnUpdate", nil)
                 bar._runeDuration = nil
+                bar._runeTotalDuration = nil
+                bar._runeShowTime = showRuneTime
+                bar._runeTextQ = -1
+                if bar._runeText then bar._runeText:SetText(""); bar._runeText:Hide() end
                 bar:SetAlpha(_emptyAlpha)
             end
 

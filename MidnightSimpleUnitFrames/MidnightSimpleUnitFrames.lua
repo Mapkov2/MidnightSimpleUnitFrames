@@ -1261,7 +1261,7 @@ function MSUF_GetBarBackgroundTintRGBA()
     local gg = MSUF_Clamp01(g.classBarBgG)
     local b = MSUF_Clamp01(g.classBarBgB)
     local a = 0.9
-    if g.darkMode then
+    if g.darkMode and not g.darkBgCustomColor then
         local br = MSUF_Clamp01(g.darkBgBrightness)
         r, gg, b = r * br, gg * br, b * br
     end
@@ -1278,7 +1278,7 @@ function MSUF_GetPowerBarBackgroundTintRGBA()
     local gg = MSUF_Clamp01(ag)
     local b = MSUF_Clamp01(ab)
     local a = 0.9
-    if g.darkMode then
+    if g.darkMode and not g.darkBgCustomColor then
         local br = MSUF_Clamp01(g.darkBgBrightness)
         r, gg, b = r * br, gg * br, b * br
     end
@@ -1323,7 +1323,7 @@ function MSUF_ApplyBarBackgroundVisual(frame)
     if gen and gen.barBgMatchHPColor and frame.hpBar and frame.hpBar.GetStatusBarColor then
         local fr, fg, fb = frame.hpBar:GetStatusBarColor()
         if type(fr) == "number" and type(fg) == "number" and type(fb) == "number" then
-            if gen.darkMode then
+            if gen.darkMode and not gen.darkBgCustomColor then
                 local br = gen.darkBgBrightness
                 if type(br) == "number" then
                     if br < 0 then br = 0 elseif br > 1 then br = 1 end
@@ -1364,7 +1364,7 @@ function MSUF_ApplyBarBackgroundVisual(frame)
     if matchHP and frame.hpBar and frame.hpBar.GetStatusBarColor then
         local fr, fg, fb = frame.hpBar:GetStatusBarColor()
         if type(fr) == "number" and type(fg) == "number" and type(fb) == "number" then
-            if gen and gen.darkMode then
+            if gen and gen.darkMode and not gen.darkBgCustomColor then
                 local br = gen.darkBgBrightness
                 if type(br) == "number" then
                     if br < 0 then br = 0 elseif br > 1 then br = 1 end
@@ -4922,6 +4922,15 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         pb:SetHeight(h)
         pb:SetPoint('TOPLEFT', hb, 'BOTTOMLEFT', 0, 0)
         pb:SetPoint('TOPRIGHT', hb, 'BOTTOMRIGHT', 0, 0)
+    end
+
+    -- FIX: Force border system refresh after layout completes.
+    -- Border stamps were invalidated above (thickness/bottomIsPower = -1/nil) but no
+    -- visual refresh was triggered — the outline stayed stale until a manual menu touch.
+    -- Direct call (cold path: EditMode / config apply, never combat hot path).
+    local fnVis = _G.MSUF_RefreshRareBarVisuals
+    if type(fnVis) == "function" then
+        fnVis(f)
     end
  end
 

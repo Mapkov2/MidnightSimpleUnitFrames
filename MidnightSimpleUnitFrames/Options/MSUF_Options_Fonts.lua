@@ -128,13 +128,16 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         fs:SetTextColor(1, 0.82, 0, 1)
          return fs
     end
-    local function MakeCheck(name, parent, label, tooltip)
+    local function MakeCheck(name, parent, label, tooltip, maxTextWidth)
         local cb = _G[name]
         if not cb then
             cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
             cb.text = _G[name .. "Text"]
             if cb.text then cb.text:SetText(label) end
             if tooltip then cb.tooltipText = tooltip end
+        end
+        if maxTextWidth and _G.MSUF_ClampCheckboxText then
+            _G.MSUF_ClampCheckboxText(cb, maxTextWidth)
         end
          return cb
     end
@@ -473,10 +476,12 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     UpdateOverrideInfo()
     -- ---------------------------------------------------------------------
     -- Right column: checkboxes + name shortening
+    -- i18n: right panel is 320px wide; checkbox text max = 320 - 42 = 278px
     -- ---------------------------------------------------------------------
-    local boldCheck = MakeCheck("MSUF_BoldTextCheck", right, "Use bold text (THICKOUTLINE)")
-    local noOutlineCheck = MakeCheck("MSUF_NoOutlineCheck", right, "Disable black outline around text")
-    local textBackdropCheck = MakeCheck("MSUF_TextBackdropCheck", right, "Add text shadow (backdrop)")
+    local R_CHECK_TW = 278
+    local boldCheck = MakeCheck("MSUF_BoldTextCheck", right, "Use bold text (THICKOUTLINE)", nil, R_CHECK_TW)
+    local noOutlineCheck = MakeCheck("MSUF_NoOutlineCheck", right, "Disable black outline around text", nil, R_CHECK_TW)
+    local textBackdropCheck = MakeCheck("MSUF_TextBackdropCheck", right, "Add text shadow (backdrop)", nil, R_CHECK_TW)
     boldCheck:ClearAllPoints()
     boldCheck:SetPoint("TOPLEFT", secStyle, "BOTTOMLEFT", -2, -8)
     noOutlineCheck:ClearAllPoints()
@@ -495,9 +500,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     colorsLine:ClearAllPoints()
     colorsLine:SetPoint("TOPLEFT", secColors, "BOTTOMLEFT", -16, -4)
     colorsLine:SetWidth(286)
-    local nameClassColorCheck = MakeCheck("MSUF_NameClassColorCheck", right, "Color player names by class")
-    local npcNameRedCheck = MakeCheck("MSUF_NPCNameRedCheck", right, "Color NPC/boss names using NPC colors")
-    local powerTextColorByTypeCheck = MakeCheck("MSUF_PowerTextColorByTypeCheck", right, "Color power text by power type")
+    local nameClassColorCheck = MakeCheck("MSUF_NameClassColorCheck", right, "Color player names by class", nil, R_CHECK_TW)
+    local npcNameRedCheck = MakeCheck("MSUF_NPCNameRedCheck", right, "Color NPC/boss names using NPC colors", nil, R_CHECK_TW)
+    local powerTextColorByTypeCheck = MakeCheck("MSUF_PowerTextColorByTypeCheck", right, "Color power text by power type", nil, R_CHECK_TW)
     nameClassColorCheck:ClearAllPoints()
     nameClassColorCheck:SetPoint("TOPLEFT", colorsLine, "BOTTOMLEFT", 14, -8)
     npcNameRedCheck:ClearAllPoints()
@@ -516,7 +521,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     namesLine:ClearAllPoints()
     namesLine:SetPoint("TOPLEFT", secNames, "BOTTOMLEFT", -16, -4)
     namesLine:SetWidth(286)
-    local shortenNamesCheck = MakeCheck("MSUF_ShortenNamesCheck", right, "Shorten unit names (except Player)")
+    local shortenNamesCheck = MakeCheck("MSUF_ShortenNamesCheck", right, "Shorten unit names (except Player)", nil, R_CHECK_TW)
     shortenNamesCheck:ClearAllPoints()
     shortenNamesCheck:SetPoint("TOPLEFT", namesLine, "BOTTOMLEFT", 14, -8)
     -- Truncation style dropdown

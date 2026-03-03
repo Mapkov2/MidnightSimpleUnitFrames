@@ -208,6 +208,11 @@ end
             if t and t.SetText then t:SetText(label) end
         end
 
+        -- i18n: clamp text width to prevent overflow in narrow panels
+        if spec.maxTextWidth and _G.MSUF_ClampCheckboxText then
+            _G.MSUF_ClampCheckboxText(cb, spec.maxTextWidth)
+        end
+
         self:StyleCheckbox(cb)
 
         cb:SetScript("OnShow", function(selfBtn)

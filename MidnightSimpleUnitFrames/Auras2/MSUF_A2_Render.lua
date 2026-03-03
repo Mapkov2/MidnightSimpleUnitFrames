@@ -401,9 +401,22 @@ local function EnsureAttached(unit)
     private:Hide()
 
     -- Sync visibility with parent unitframe (direct calls - no FastCall overhead)
+    -- PERF: Capture unit in closure (set once per EnsureAttached, never changes).
+    local _hookUnit = unit
     frame:HookScript("OnShow", function()
         if anchor then anchor:Show() end
-        if API.MarkAllDirty then API.MarkAllDirty(0) end
+        -- Force cache re-scan for THIS unit.  Boss adds can spawn with
+        -- pre-existing auras long after the initial INSTANCE_ENCOUNTER_ENGAGE_UNIT
+        -- already created an empty cache entry.  Without the invalidation,
+        -- FilterAndSort sees the stale empty entry and skips FullScan → 0 auras.
+        local Store = API.Store
+        if Store and Store.InvalidateUnit then
+            Store.InvalidateUnit(_hookUnit)
+        end
+        -- Targeted dirty (avoids wasteful MarkAllDirty for 8 units).
+        if API.MarkDirty then
+            API.MarkDirty(_hookUnit, 0)
+        end
     end)
     frame:HookScript("OnHide", function()
         if anchor then anchor:Hide() end
