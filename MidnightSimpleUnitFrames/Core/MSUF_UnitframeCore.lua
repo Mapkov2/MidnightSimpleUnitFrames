@@ -927,12 +927,21 @@ Elements.Status = {
     key = "Status",
     bit = EL_STATUS,
     dirty = DIRTY_STATUS,
-    urgent = true,
     events = {
         "UNIT_CONNECTION",
         "UNIT_FLAGS",
         -- Incoming resurrection (player/target).
         "INCOMING_RESURRECT_CHANGED",
+    },
+    -- IMPORTANT PERF POLICY:
+    -- UNIT_FLAGS can flood at boss pull (many units flip combat flags at once).
+    -- Never allow UNIT_FLAGS to bypass the normal UFCore flush queue, even for
+    -- target/focus/ToT which otherwise default-promote to urgent.
+    --
+    -- This preserves gameplay correctness (status updates still happen), but
+    -- prevents large spikes by forcing coalescing + budgeted flush.
+    eventUrgentOverrides = {
+        UNIT_FLAGS = false,
     },
     Enable = function(f, conf) end,
     Disable = function(f) end,
@@ -2340,6 +2349,7 @@ do
         if evs then
             local baseMask, baseUrgent = el.dirty, el.urgent
             local mo = el.eventMaskOverrides
+            local uo = el.eventUrgentOverrides
             for j = 1, #evs do
                 local ev = evs[j]
                 ev = UFCORE_EVENT_ALIAS[ev] or ev
@@ -2351,7 +2361,22 @@ do
                     info = { mask = m }
                     UNIT_EVENT_MAP[ev] = info
                 end
-                if baseUrgent then info.urgent = true end
+
+                -- Urgent policy (per-event override supported):
+                --   * Explicit false forces non-urgent, even if other callers
+                --     would default-promote (e.g. target/focus/ToT policy).
+                --   * Explicit true forces urgent.
+                --   * Otherwise, element-level urgent=true marks event as urgent.
+                local u = (uo and uo[ev])
+                if u == false then
+                    info.urgent = false
+                elseif u == true then
+                    info.urgent = true
+                elseif baseUrgent then
+                    if info.urgent ~= false then
+                        info.urgent = true
+                    end
+                end
             end
         end
     end
