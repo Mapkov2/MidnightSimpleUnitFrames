@@ -80,14 +80,139 @@ local _SATED_SPELLS = {
     [390435] = true,   -- Exhaustion (Drums)
 }
 
-local function _IsSatedSpellId(spellId)
-    if spellId == nil then return false end
+-- =========================================================================
+-- Global Aura Ignore List — Predefined categories of declassified spells.
+-- Users toggle categories on/off per-unit (shared or override).
+-- Runtime: enabled categories merge into a flat hashtable (_ignoreHash)
+-- checked in FilterAura via cached decoded spellId (data._msufA2_sid).
+-- Secret-safe: spellId is decoded once on ADD; ignore hash is plain numbers.
+-- =========================================================================
+local _IGNORE_CAT_SPELLS = {
+    DESERTER = {
+        [26013]  = true,   -- BG Deserter
+        [71041]  = true,   -- Dungeon Deserter
+    },
+    SKYRIDING = {
+        [427490] = true,   -- Ride Along Available
+        [447959] = true,   -- Ride Along Active
+        [447960] = true,   -- Ride Along Inactive
+    },
+    RAID_BUFFS = {
+        [1126]   = true,   -- Mark of the Wild
+        [1459]   = true,   -- Arcane Intellect
+        [6673]   = true,   -- Battle Shout
+        [21562]  = true,   -- Power Word: Fortitude
+        [369459] = true,   -- Source of Magic
+        [462854] = true,   -- Skyfury
+        [474754] = true,   -- Symbiotic Relationship
+    },
+    BLESSING_BRONZE = {
+        [381732] = true, [381741] = true, [381746] = true, [381748] = true,
+        [381749] = true, [381750] = true, [381751] = true, [381752] = true,
+        [381753] = true, [381754] = true, [381756] = true, [381757] = true,
+        [381758] = true,
+    },
+    HEALER_HOTS = {
+        -- Preservation Evoker
+        [355941] = true, [363502] = true, [364343] = true,
+        [366155] = true, [367364] = true, [373267] = true, [376788] = true,
+        -- Augmentation Evoker
+        [360827] = true, [395152] = true, [410089] = true,
+        [410263] = true, [410686] = true, [413984] = true,
+        -- Resto Druid
+        [774]    = true, [8936]   = true, [33763]  = true,
+        [48438]  = true, [155777] = true,
+        -- Disc Priest
+        [17]     = true, [194384] = true, [1253593]= true,
+        -- Holy Priest
+        [139]    = true, [41635]  = true, [77489]  = true,
+        -- Mistweaver Monk
+        [115175] = true, [119611] = true, [124682] = true, [450769] = true,
+        -- Restoration Shaman
+        [974]    = true, [383648] = true, [61295]  = true,
+        [207400] = true, [382024] = true, [444490] = true,
+        -- Holy Paladin
+        [53563]  = true, [156322] = true, [156910] = true, [1244893]= true,
+    },
+    ROGUE_POISONS = {
+        [2823]   = true,   -- Deadly Poison
+        [8679]   = true,   -- Wound Poison
+        [3408]   = true,   -- Crippling Poison
+        [5761]   = true,   -- Numbing Poison
+        [315584] = true,   -- Instant Poison
+        [381637] = true,   -- Atrophic Poison
+        [381664] = true,   -- Amplifying Poison
+    },
+    SHAMAN_IMBUE = {
+        [319773] = true, [319778] = true,   -- Windfury / Flametongue
+        [382021] = true, [382022] = true,   -- Earthliving Weapon
+        [457496] = true, [457481] = true,   -- Tidecaller's Guard
+        [462757] = true, [462742] = true,   -- Thunderstrike Ward
+    },
+    SELF_BUFFS = {
+        [433568] = true,   -- Rite of Sanctification
+        [433583] = true,   -- Rite of Adjuration
+    },
+    RESOURCE_AURAS = {
+        [205473] = true,   -- Mage Icicles
+        [260286] = true,   -- Hunter Tip of the Spear
+    },
+    COOLDOWNS = {
+        [8690]   = true,   -- Hearthstone
+        [20608]  = true,   -- Shaman Reincarnation
+    },
+}
+
+-- UI metadata (exposed to Options via API)
+local _IGNORE_CAT_META = {
+    { key = "RAID_BUFFS",       label = "Raid Buffs",              tooltip = "Mark of the Wild, Fortitude, Arcane Intellect, Battle Shout, etc." },
+    { key = "BLESSING_BRONZE",  label = "Blessing of the Bronze",  tooltip = "All class-specific Blessing of the Bronze variants." },
+    { key = "HEALER_HOTS",      label = "Healer HoTs",             tooltip = "All healer class HoTs and shields (Druid, Priest, Paladin, Shaman, Monk, Evoker)." },
+    { key = "ROGUE_POISONS",    label = "Rogue Poisons",           tooltip = "Self-applied poison buffs (Deadly, Wound, Crippling, etc.)." },
+    { key = "SHAMAN_IMBUE",     label = "Shaman Imbuements",       tooltip = "Weapon enchant buffs (Windfury, Flametongue, Earthliving, etc.)." },
+    { key = "DESERTER",         label = "Deserter",                tooltip = "BG and Dungeon deserter debuffs." },
+    { key = "SKYRIDING",        label = "Skyriding",               tooltip = "Ride Along auras (Available, Active, Inactive)." },
+    { key = "SELF_BUFFS",       label = "Long-term Self Buffs",    tooltip = "Rite of Sanctification, Rite of Adjuration." },
+    { key = "RESOURCE_AURAS",   label = "Resource-like Auras",     tooltip = "Mage Icicles, Hunter Tip of the Spear." },
+    { key = "COOLDOWNS",        label = "Cooldowns",               tooltip = "Hearthstone, Reincarnation cooldown auras." },
+}
+
+-- Expose for Options UI
+Cache.IGNORE_CAT_META = _IGNORE_CAT_META
+
+-- Secret-safe spellId decoder (called ONCE per aura on ADD).
+-- Returns plain number or 0 (secret/nil).
+local function _DecodeSpellId(data)
+    local sid = data.spellId or data.spellID
+    if sid == nil then return 0 end
     if _hasCanaccessvalue then
-        if canaccessvalue(spellId) ~= true then return false end
-    elseif issecretvalue and issecretvalue(spellId) == true then
-        return false
+        if canaccessvalue(sid) ~= true then return 0 end
+    elseif issecretvalue and issecretvalue(sid) == true then
+        return 0
     end
-    return (_SATED_SPELLS[spellId] == true)
+    return sid
+end
+
+-- Build flat ignore hashtable from enabled category keys.
+-- Called once per cfg resolve (not per aura). Returns table or nil.
+local _ignoreHashPool = {}  -- reusable table to avoid allocs
+function Cache.BuildIgnoreHash(enabledCats)
+    if type(enabledCats) ~= "table" then return nil end
+    local hash = _ignoreHashPool
+    wipe(hash)
+    local any = false
+    for catKey, enabled in next, enabledCats do
+        if enabled == true then
+            local spells = _IGNORE_CAT_SPELLS[catKey]
+            if spells then
+                for sid in next, spells do
+                    hash[sid] = true
+                    any = true
+                end
+            end
+        end
+    end
+    return any and hash or nil
 end
 
 -- =========================================================================
@@ -161,11 +286,11 @@ local function EnrichAura(unit, data, isHelpful)
     if not aid then return end
     data._msufIsHelpful    = isHelpful
     data._msufIsPlayerAura = ClassifyPlayer(unit, aid, isHelpful)
-    -- Cache: Sated/Exhaustion spell marker (evaluated only on ADD, O(1))
-    if data._msufA2_isSated == nil then
-        local sid = data.spellId or data.spellID
-        data._msufA2_isSated = _IsSatedSpellId(sid) and 1 or 0
-    end
+    -- Decode spellId once (secret-safe), cache for sated + ignore lookups
+    local sid = _DecodeSpellId(data)
+    data._msufA2_sid       = sid
+    data._msufA2_isSated   = (sid ~= 0 and _SATED_SPELLS[sid] == true) and 1 or 0
+    -- _msufA2_isIgnored is set per-frame in FilterAura (depends on per-unit cfg)
     return data
 end
 
@@ -238,7 +363,8 @@ function Cache.OnUnitAura(unit, updateInfo)
                     data._msufIsHelpful    = old._msufIsHelpful
                     data._msufIsPlayerAura = old._msufIsPlayerAura
                     data._msufA2_bossFlag  = old._msufA2_bossFlag
-                    data._msufA2_isSated    = old._msufA2_isSated
+                    data._msufA2_sid       = old._msufA2_sid
+                    data._msufA2_isSated   = old._msufA2_isSated
                     s.all[aid] = data
                     any = true
                 end
@@ -335,6 +461,13 @@ local _mergedBossDebuffScratch = {}
 -- =========================================================================
 local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow,
                           lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue)
+    -- Global Ignore List (O(1) hashtable lookup on pre-decoded spellId)
+    local ignHash = cfg._ignoreHash
+    if ignHash then
+        local sid = data._msufA2_sid
+        if sid ~= 0 and ignHash[sid] then return false end
+    end
+
     -- Sated/Exhaustion hard-ignore (O(1) flag check, earliest possible exit)
     -- Runs BEFORE helpful/harmful branch — applies to ALL auras.
     if data._msufA2_isSated == 1 then
@@ -456,6 +589,8 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     cfg._showSated = (cfg.showSated ~= false)
     local _satedThr = cfg.satedShowAtSeconds
     cfg._satedShowAt = (type(_satedThr) == "number" and _satedThr > 0) and _satedThr or 0
+    -- Global Ignore List: build flat hashtable from enabled categories
+    cfg._ignoreHash = Cache.BuildIgnoreHash(cfg.ignoreCats)
 
     local secretsNow = cfg._hidePermanent and SecretsActive() or false
 
@@ -526,6 +661,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                             data._msufIsHelpful    = true
                             data._msufIsPlayerAura = cached._msufIsPlayerAura
                             data._msufA2_bossFlag  = cached._msufA2_bossFlag
+                            data._msufA2_sid       = cached._msufA2_sid
                             data._msufA2_isSated   = cached._msufA2_isSated
                         else
                             EnrichAura(unit, data, true)
@@ -558,6 +694,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                             data._msufIsHelpful    = false
                             data._msufIsPlayerAura = cached._msufIsPlayerAura
                             data._msufA2_bossFlag  = cached._msufA2_bossFlag
+                            data._msufA2_sid       = cached._msufA2_sid
                             data._msufA2_isSated   = cached._msufA2_isSated
                         else
                             EnrichAura(unit, data, false)

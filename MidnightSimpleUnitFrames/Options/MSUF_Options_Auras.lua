@@ -776,12 +776,14 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     privateBox:SetPoint("TOPLEFT", timerBox, "BOTTOMLEFT", 0, -14)
     local advBox = MakeBox(content, 720, 240)
     advBox:SetPoint("TOPLEFT", privateBox, "BOTTOMLEFT", 0, -14)
+    local ignoreBox = MakeBox(content, 720, 200)
+    ignoreBox:SetPoint("TOPLEFT", advBox, "BOTTOMLEFT", 0, -14)
     -- Movement controls are handled via MSUF Edit Mode now (no placeholder section here).
     -- Prevent dead scroll space: keep the scroll child height tight to the last section.
     local function MSUF_Auras2_UpdateContentHeight()
-        if not (content and advBox and content.GetTop and advBox.GetBottom) then  return end
+        if not (content and ignoreBox and content.GetTop and ignoreBox.GetBottom) then  return end
         local top = content:GetTop()
-        local bottom = advBox:GetBottom()
+        local bottom = ignoreBox:GetBottom()
         if not top or not bottom then  return end
         -- Add a small bottom padding so the last box doesn't stick to the edge.
         local h = (top - bottom) + 24
@@ -2309,6 +2311,191 @@ end
         end
     end
     UpdateAdvancedEnabled()
+
+    -- ================================================================
+    -- GLOBAL IGNORE LIST — predefined category toggles (shared / per-unit)
+    -- Follows the same editing-key dropdown as filters (Shared/Player/Target/Focus).
+    -- Boss frames excluded from ignore list (makes no sense for boss auras).
+    -- ================================================================
+    do
+        local ignH = ignoreBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        ignH:SetPoint("TOPLEFT", ignoreBox, "TOPLEFT", 12, -10)
+        ignH:SetText(TR("Global Ignore List"))
+
+        -- Editing label (follows the top dropdown: Shared / Player / Target / Focus)
+        local ignEditLabel = ignoreBox:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        ignEditLabel:SetPoint("TOPLEFT", ignoreBox, "TOPLEFT", 170, -13)
+
+        -- Override ignore list getter/setter (mirrors filter override pattern)
+        local function GetIgnoreOverride()
+            local key = GetEditingKey()
+            if key == "shared" then return false end
+            local a2 = select(1, GetAuras2DB())
+            if not a2 or not a2.perUnit or not a2.perUnit[key] then return false end
+            return (a2.perUnit[key].overrideIgnore == true)
+        end
+        local function SetIgnoreOverride(v)
+            local key = GetEditingKey()
+            if key == "shared" then return end
+            local a2 = select(1, GetAuras2DB())
+            if not a2 then return end
+            a2.perUnit = (type(a2.perUnit) == "table") and a2.perUnit or {}
+            if type(a2.perUnit[key]) ~= "table" then a2.perUnit[key] = {} end
+            local u = a2.perUnit[key]
+            if v == true then
+                u.overrideIgnore = true
+                -- Deep-copy shared ignoreCats if no per-unit table yet
+                local s = A2_Settings()
+                if type(u.ignoreCats) ~= "table" then
+                    u.ignoreCats = {}
+                    if s and type(s.ignoreCats) == "table" then
+                        for k2, v2 in next, s.ignoreCats do u.ignoreCats[k2] = v2 end
+                    end
+                end
+            else
+                u.overrideIgnore = false
+            end
+            A2_RequestApply()
+            C_Timer.After(0, function()
+                if panel and panel.OnRefresh then panel.OnRefresh() end
+            end)
+        end
+        local function AutoOverrideIgnoreIfNeeded()
+            if GetEditingKey() == "shared" then return false end
+            if GetIgnoreOverride() then return false end
+            SetIgnoreOverride(true)
+            return true
+        end
+
+        -- Override checkbox (hidden when editing "shared")
+        local cbOverrideIgnore = CreateCheckbox(ignoreBox, "Override for this unit", 380, -10,
+            GetIgnoreOverride, SetIgnoreOverride,
+            "When off, this unit uses Shared ignore settings. When on, it uses its own copy.")
+
+        -- Resolve effective ignoreCats table for current editing key
+        local function GetEditingIgnoreCats()
+            local key = GetEditingKey()
+            local a2 = select(1, GetAuras2DB())
+            if not a2 then return nil end
+            -- Per-unit override path
+            if key ~= "shared" then
+                local u = a2.perUnit and a2.perUnit[key]
+                if u and u.overrideIgnore == true then
+                    if type(u.ignoreCats) ~= "table" then u.ignoreCats = {} end
+                    return u.ignoreCats
+                end
+            end
+            -- Shared path
+            local s = a2.shared
+            if not s then return nil end
+            if type(s.ignoreCats) ~= "table" then s.ignoreCats = {} end
+            return s.ignoreCats
+        end
+
+        -- Get category metadata from Cache module
+        local a2api = ns and ns.MSUF_Auras2
+        local catMeta = a2api and a2api.Cache and a2api.Cache.IGNORE_CAT_META
+        if not catMeta then
+            catMeta = {
+                { key = "RAID_BUFFS",      label = "Raid Buffs" },
+                { key = "BLESSING_BRONZE", label = "Blessing of the Bronze" },
+                { key = "HEALER_HOTS",     label = "Healer HoTs" },
+                { key = "ROGUE_POISONS",   label = "Rogue Poisons" },
+                { key = "SHAMAN_IMBUE",    label = "Shaman Imbuements" },
+                { key = "DESERTER",        label = "Deserter" },
+                { key = "SKYRIDING",       label = "Skyriding" },
+                { key = "SELF_BUFFS",      label = "Long-term Self Buffs" },
+                { key = "RESOURCE_AURAS",  label = "Resource-like Auras" },
+                { key = "COOLDOWNS",       label = "Cooldowns" },
+            }
+        end
+
+        -- Build two-column category checkboxes
+        local ignEntries = {}
+        local leftCount, rightCount = 0, 0
+        for i = 1, #catMeta do
+            local cm = catMeta[i]
+            local col, row
+            if i <= 5 then
+                leftCount = leftCount + 1
+                col = 12
+                row = leftCount
+            else
+                rightCount = rightCount + 1
+                col = 380
+                row = rightCount
+            end
+            local yOff = -34 - (row - 1) * 28
+            ignEntries[#ignEntries + 1] = {
+                cm.label, col, yOff, GetEditingIgnoreCats, cm.key, nil,
+                cm.tooltip, "cbIgn_" .. cm.key
+            }
+        end
+
+        local ignRefs = {}
+        BuildBoolPathCheckboxes(ignoreBox, ignEntries, ignRefs)
+
+        -- Collect all ignore checkboxes
+        local ignCbs = {}
+        for i = 1, #catMeta do
+            local refKey = "cbIgn_" .. catMeta[i].key
+            local cb = ignRefs[refKey]
+            if cb then
+                ignCbs[#ignCbs + 1] = cb
+                A2_Track("global", cb)
+                -- Auto-override + apply on click
+                local oldClick = cb:GetScript("OnClick")
+                cb:SetScript("OnClick", function(self, ...)
+                    AutoOverrideIgnoreIfNeeded()
+                    if oldClick then pcall(oldClick, self, ...) end
+                    A2_RequestApply()
+                end)
+            end
+        end
+
+        -- Gating: enable/disable checkboxes based on editing key + override state
+        local _IGNORE_UNIT_LABELS = { shared = "Shared (all units)", player = "Player", target = "Target", focus = "Focus" }
+        local function UpdateIgnoreBoxState()
+            local key = GetEditingKey()
+            local isBoss = (key == "boss1" or key == "boss2" or key == "boss3" or key == "boss4" or key == "boss5")
+            local isShared = (key == "shared")
+
+            -- Editing label
+            if isBoss then
+                ignEditLabel:SetText("|cff888888Not available for Boss frames|r")
+            else
+                ignEditLabel:SetText("Editing: |cffffd200" .. (_IGNORE_UNIT_LABELS[key] or key) .. "|r")
+            end
+
+            -- Override checkbox: show only for non-shared, non-boss
+            if cbOverrideIgnore then
+                if isShared or isBoss then
+                    cbOverrideIgnore:Hide()
+                else
+                    cbOverrideIgnore:Show()
+                end
+            end
+
+            -- Category checkboxes: enabled when shared, or when unit has override
+            local canEdit = false
+            if isBoss then
+                canEdit = false
+            elseif isShared then
+                canEdit = true
+            else
+                canEdit = GetIgnoreOverride()
+            end
+            for i = 1, #ignCbs do
+                SetCheckboxEnabled(ignCbs[i], canEdit)
+            end
+        end
+
+        -- Hook into the editing-key dropdown change path
+        _G.MSUF_A2_UpdateIgnoreBoxState = UpdateIgnoreBoxState
+
+        -- Run once on build
+        UpdateIgnoreBoxState()
+    end
     -- Ensure checkbox state stays consistent after /reload or early panel opens
     local function MSUF_Auras2_RefreshOptionsControls()
         if not content then  return end
@@ -2350,6 +2537,9 @@ end
         MSUF_Auras2_RefreshOptionsControls()
         UpdateAdvancedEnabled()
         ApplyOverrideUISafety()
+        -- Sync ignore list box state (editing key + override gating)
+        local fn = rawget(_G, "MSUF_A2_UpdateIgnoreBoxState")
+        if type(fn) == "function" then pcall(fn) end
      end
     -- Settings sometimes calls OnRefresh (old InterfaceOptions style) when a category is selected.
     -- Provide it so the panel refreshes even when OnShow does not re-fire.

@@ -122,6 +122,7 @@ local A2_SHARED_DEFAULTS = {
     showPrivateAurasPlayer=true, showPrivateAurasFocus=true, showPrivateAurasBoss=true,
     privateAuraMaxPlayer=4, privateAuraMaxOther=4,
     showSated=true, satedShowAtSeconds=0,
+    ignoreCats={},
 }
 
 local A2_GROWTH_OK = {RIGHT=true,LEFT=true,UP=true,DOWN=true}
@@ -964,6 +965,16 @@ local function RenderUnit(entry)
         -- Sated/Exhaustion filter (reads from shared, independent of master filter toggle)
         cfg.showSated = (shared.showSated ~= false)
         cfg.satedShowAtSeconds = (type(shared.satedShowAtSeconds) == "number") and shared.satedShowAtSeconds or 0
+        -- Global Ignore List (reads from shared, per-unit overridable, boss excluded)
+        if _IS_BOSS[unit] then
+            cfg.ignoreCats = nil
+        else
+            local cats = shared.ignoreCats
+            if pu and pu.overrideIgnore == true and type(pu.ignoreCats) == "table" then
+                cats = pu.ignoreCats
+            end
+            cfg.ignoreCats = (type(cats) == "table") and cats or nil
+        end
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
         cfg.showDebuffs = (shared.showDebuffs == true)
