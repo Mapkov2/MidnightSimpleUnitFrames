@@ -121,6 +121,7 @@ local A2_SHARED_DEFAULTS = {
     stackTextSize=14, cooldownTextSize=14, bossEditTogether=true,
     showPrivateAurasPlayer=true, showPrivateAurasFocus=true, showPrivateAurasBoss=true,
     privateAuraMaxPlayer=4, privateAuraMaxOther=4,
+    showSated=true, satedShowAtSeconds=0,
 }
 
 local A2_GROWTH_OK = {RIGHT=true,LEFT=true,UP=true,DOWN=true}
@@ -157,6 +158,7 @@ local function EnsureDB()
     s.showPrivateAurasTarget = false
     s.privateAuraMaxPlayer = Clamp(s.privateAuraMaxPlayer, 4, 0, 12)
     s.privateAuraMaxOther  = Clamp(s.privateAuraMaxOther,  4, 0, 12)
+    s.satedShowAtSeconds   = Clamp(s.satedShowAtSeconds, 0, 0, 3600)
     -- Per-type growth: sanitize invalid values (nil = fall back to s.growth)
     if s.buffGrowth ~= nil and not A2_GROWTH_OK[s.buffGrowth] then s.buffGrowth = nil end
     if s.debuffGrowth ~= nil and not A2_GROWTH_OK[s.debuffGrowth] then s.debuffGrowth = nil end
@@ -958,8 +960,10 @@ local function RenderUnit(entry)
             cfg.debuffsIncludeBoss = false
             cfg.hidePermanentBuffs = false
             cfg.sortOrder = 0
-            -- cfg.sortReverse removed (reverse sorting not supported)
         end
+        -- Sated/Exhaustion filter (reads from shared, independent of master filter toggle)
+        cfg.showSated = (shared.showSated ~= false)
+        cfg.satedShowAtSeconds = (type(shared.satedShowAtSeconds) == "number") and shared.satedShowAtSeconds or 0
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
         cfg.showDebuffs = (shared.showDebuffs == true)

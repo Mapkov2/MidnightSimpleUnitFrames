@@ -65,6 +65,32 @@ local HELPFUL_IMPORTANT = "HELPFUL|IMPORTANT"
 local HARMFUL_IMPORTANT = "HARMFUL|IMPORTANT"
 
 -- =========================================================================
+-- Sated/Exhaustion spellID hashtable (O(1) lookup, built once at load)
+-- Zero steady-state cost: spellId check happens only on ADD.
+-- Render path checks a cached integer flag (data._msufA2_isSated == 1).
+-- Secret-safe: if spellId is secret/unavailable we fail-closed (not-sated).
+-- =========================================================================
+local _SATED_SPELLS = {
+    [57723]  = true,   -- Exhaustion (Heroism/Bloodlust)
+    [57724]  = true,   -- Sated (Heroism/Bloodlust)
+    [80354]  = true,   -- Temporal Displacement (Mage Time Warp)
+    [95809]  = true,   -- Hunter Pet Insanity
+    [160455] = true,   -- Hunter Pet Fatigued
+    [264689] = true,   -- Hunter Pet Fatigued (alt ID)
+    [390435] = true,   -- Exhaustion (Drums)
+}
+
+local function _IsSatedSpellId(spellId)
+    if spellId == nil then return false end
+    if _hasCanaccessvalue then
+        if canaccessvalue(spellId) ~= true then return false end
+    elseif issecretvalue and issecretvalue(spellId) == true then
+        return false
+    end
+    return (_SATED_SPELLS[spellId] == true)
+end
+
+-- =========================================================================
 -- Per-unit state
 -- =========================================================================
 local _units = {}
@@ -135,6 +161,11 @@ local function EnrichAura(unit, data, isHelpful)
     if not aid then return end
     data._msufIsHelpful    = isHelpful
     data._msufIsPlayerAura = ClassifyPlayer(unit, aid, isHelpful)
+    -- Cache: Sated/Exhaustion spell marker (evaluated only on ADD, O(1))
+    if data._msufA2_isSated == nil then
+        local sid = data.spellId or data.spellID
+        data._msufA2_isSated = _IsSatedSpellId(sid) and 1 or 0
+    end
     return data
 end
 
@@ -207,6 +238,7 @@ function Cache.OnUnitAura(unit, updateInfo)
                     data._msufIsHelpful    = old._msufIsHelpful
                     data._msufIsPlayerAura = old._msufIsPlayerAura
                     data._msufA2_bossFlag  = old._msufA2_bossFlag
+                    data._msufA2_isSated    = old._msufA2_isSated
                     s.all[aid] = data
                     any = true
                 end
@@ -303,6 +335,30 @@ local _mergedBossDebuffScratch = {}
 -- =========================================================================
 local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow,
                           lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue)
+    -- Sated/Exhaustion hard-ignore (O(1) flag check, earliest possible exit)
+    -- Runs BEFORE helpful/harmful branch — applies to ALL auras.
+    if data._msufA2_isSated == 1 then
+        if cfg._showSated ~= true then
+            return false
+        end
+        local thr = cfg._satedShowAt
+        if thr and thr > 0 then
+            local exp = data.expirationTime
+            if exp == nil or exp == 0 then return false end
+            if lHasCanaccessvalue then
+                if lCanaccessvalue(exp) ~= true then
+                    -- secret → fail-open (show the aura)
+                else
+                    if exp - GetTime() > thr then return false end
+                end
+            elseif lIssecretvalue and lIssecretvalue(exp) == true then
+                -- secret → fail-open
+            else
+                if exp - GetTime() > thr then return false end
+            end
+        end
+    end
+
     if isHelpful then
         if cfg._buffsOnlyMine and not cfg._useMergeBuffs and not isOwn then return false end
 
@@ -396,6 +452,10 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     cfg._onlyImpDebuffs   = cfg.onlyImportantDebuffs
     cfg._useMergeBuffs    = cfg.buffsOnlyMine and cfg.buffsIncludeBoss
     cfg._useMergeDebuffs  = cfg.debuffsOnlyMine and cfg.debuffsIncludeBoss
+    -- Sated/Exhaustion runtime flags (from shared, not filters)
+    cfg._showSated = (cfg.showSated ~= false)
+    local _satedThr = cfg.satedShowAtSeconds
+    cfg._satedShowAt = (type(_satedThr) == "number" and _satedThr > 0) and _satedThr or 0
 
     local secretsNow = cfg._hidePermanent and SecretsActive() or false
 
@@ -466,6 +526,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                             data._msufIsHelpful    = true
                             data._msufIsPlayerAura = cached._msufIsPlayerAura
                             data._msufA2_bossFlag  = cached._msufA2_bossFlag
+                            data._msufA2_isSated   = cached._msufA2_isSated
                         else
                             EnrichAura(unit, data, true)
                             allCache[aid] = data
@@ -497,6 +558,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                             data._msufIsHelpful    = false
                             data._msufIsPlayerAura = cached._msufIsPlayerAura
                             data._msufA2_bossFlag  = cached._msufA2_bossFlag
+                            data._msufA2_isSated   = cached._msufA2_isSated
                         else
                             EnrichAura(unit, data, false)
                             allCache[aid] = data
