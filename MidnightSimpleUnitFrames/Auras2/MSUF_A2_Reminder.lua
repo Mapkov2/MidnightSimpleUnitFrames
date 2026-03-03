@@ -89,42 +89,111 @@ end
 
 -- =========================================================================
 -- Missing / expiring computation
+-- PERF: Pre-allocated result pool (zero alloc steady-state).
+-- PERF: Reverse spellId → provider index lookup (O(1) per aura instead of O(9)).
+-- ALL provider spells are whitelisted → expirationTime is a plain number,
+-- no secret checks needed.
 -- =========================================================================
 local _results = {}
 local _resultCount = 0
+-- Pre-allocated result entries (max 9 providers)
+for i = 1, 9 do _results[i] = { provider = nil, state = nil, remaining = nil } end
+
+-- PERF: Reverse lookup table — spellId → provider index.
+-- Built once at load. O(1) per aura instead of O(#_PROVIDERS) inner loop.
+local _spellToProvider = {}
+for i = 1, #_PROVIDERS do
+    for sid in next, _PROVIDERS[i].satisfiedBy do
+        _spellToProvider[sid] = i
+    end
+end
+
+-- Per-provider scan results (reset each frame, indexed by provider #)
+local _providerHasBuff = {}
+local _providerMinRem  = {}
+local _providerCount = #_PROVIDERS
+
+local function _ScanPlayerAuras(threshold)
+    local Cache = API.Cache
+    local s = Cache._units and Cache._units.player
+    if not s or not s.all then return end
+
+    local now = GetTime()
+    local thr = threshold
+    local spellLookup = _spellToProvider
+
+    for _, data in next, s.all do
+        local sid = data._msufA2_sid
+        if sid and sid ~= 0 then
+            local idx = spellLookup[sid]
+            if idx then
+                _providerHasBuff[idx] = true
+                -- Whitelisted: expirationTime is a plain number, direct arithmetic.
+                if thr > 0 then
+                    local exp = data.expirationTime
+                    if exp and exp ~= 0 then
+                        local rem = exp - now
+                        if rem < 0 then rem = 0 end
+                        local prev = _providerMinRem[idx]
+                        if not prev or rem < prev then
+                            _providerMinRem[idx] = rem
+                        end
+                    else
+                        if not _providerMinRem[idx] then
+                            _providerMinRem[idx] = 999999
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
 
 local function _ComputeMissing(reminders, threshold, isPreview)
-    wipe(_results)
     _resultCount = 0
-    local Cache = API.Cache
-    local hasSpell  = Cache and Cache.HasAnySpell
-    local getMinRem = Cache and Cache.GetMinRemaining
     local thr = (type(threshold) == "number" and threshold > 0) and threshold or 0
 
-    for i = 1, #_PROVIDERS do
+    if isPreview then
+        for i = 1, _providerCount do
+            local p = _PROVIDERS[i]
+            if not reminders or reminders[p.key] ~= false then
+                _resultCount = _resultCount + 1
+                local r = _results[_resultCount]
+                r.provider = p; r.state = "MISSING"; r.remaining = nil
+            end
+        end
+        return
+    end
+
+    -- Reset scan tables (fixed size, no wipe needed)
+    for i = 1, _providerCount do
+        _providerHasBuff[i] = false
+        _providerMinRem[i] = nil
+    end
+
+    -- Single pass over all player auras (O(N) where N = active auras)
+    _ScanPlayerAuras(thr)
+
+    for i = 1, _providerCount do
         local p = _PROVIDERS[i]
         if not reminders or reminders[p.key] ~= false then
-            if isPreview then
-                _resultCount = _resultCount + 1
-                _results[_resultCount] = { provider = p, state = "MISSING", remaining = nil }
+            local shouldCheck = false
+            if p.providerClass == "ROGUE_SELF" then
+                shouldCheck = (_playerClass == "ROGUE")
             else
-                local shouldCheck = false
-                if p.providerClass == "ROGUE_SELF" then
-                    shouldCheck = (_playerClass == "ROGUE")
-                else
-                    shouldCheck = (_presentClasses[p.providerClass] == true)
-                end
-                if shouldCheck and hasSpell then
-                    local hasBuff = hasSpell("player", p.satisfiedBy)
-                    if not hasBuff then
+                shouldCheck = (_presentClasses[p.providerClass] == true)
+            end
+            if shouldCheck then
+                if not _providerHasBuff[i] then
+                    _resultCount = _resultCount + 1
+                    local r = _results[_resultCount]
+                    r.provider = p; r.state = "MISSING"; r.remaining = nil
+                elseif thr > 0 then
+                    local rem = _providerMinRem[i]
+                    if rem and rem < thr then
                         _resultCount = _resultCount + 1
-                        _results[_resultCount] = { provider = p, state = "MISSING", remaining = nil }
-                    elseif thr > 0 and getMinRem then
-                        local rem = getMinRem("player", p.satisfiedBy)
-                        if rem and rem < thr then
-                            _resultCount = _resultCount + 1
-                            _results[_resultCount] = { provider = p, state = "EXPIRING", remaining = rem }
-                        end
+                        local r = _results[_resultCount]
+                        r.provider = p; r.state = "EXPIRING"; r.remaining = rem
                     end
                 end
             end
@@ -154,7 +223,10 @@ local _ghostActive = 0
 local function _AcquireGhost(container, index)
     local ghost = _ghostPool[index]
     if ghost then
-        ghost:SetParent(container)
+        -- PERF: SetParent triggers texture regeneration; skip if unchanged.
+        if ghost:GetParent() ~= container then
+            ghost:SetParent(container)
+        end
         if not ghost:IsShown() then ghost:Show() end
         return ghost
     end

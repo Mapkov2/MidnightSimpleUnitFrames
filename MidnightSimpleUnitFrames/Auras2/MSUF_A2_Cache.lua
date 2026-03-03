@@ -194,10 +194,20 @@ local function _DecodeSpellId(data)
 end
 
 -- Build flat ignore hashtable from enabled category keys.
--- Called once per cfg resolve (not per aura). Returns table or nil.
-local _ignoreHashPool = {}  -- reusable table to avoid allocs
+-- PERF: Caches result via generation counter. Only rebuilds when
+-- Cache.InvalidateIgnoreHash() is called (Options toggle).
+-- Zero allocation on steady-state (no string building, no table.concat).
+local _ignoreHashPool = {}  -- reusable table
+local _ignoreHashValid = false
+local _ignoreHashAny = false
+
 function Cache.BuildIgnoreHash(enabledCats)
     if type(enabledCats) ~= "table" then return nil end
+    -- PERF: return cached result if still valid
+    if _ignoreHashValid then
+        return _ignoreHashAny and _ignoreHashPool or nil
+    end
+    _ignoreHashValid = true
     local hash = _ignoreHashPool
     wipe(hash)
     local any = false
@@ -212,7 +222,13 @@ function Cache.BuildIgnoreHash(enabledCats)
             end
         end
     end
+    _ignoreHashAny = any
     return any and hash or nil
+end
+
+-- Invalidate ignore hash cache (called when user changes ignore settings)
+function Cache.InvalidateIgnoreHash()
+    _ignoreHashValid = false
 end
 
 -- =========================================================================
@@ -247,8 +263,9 @@ function Cache.HasAnySpell(unit, spellSet)
 end
 
 -- Get the minimum remaining time (seconds) for any matching spell.
--- Returns: remainingSec (number) or nil (no matching spell / all secret).
--- Secret-safe: skips auras with secret expirationTime (fail-open → returns nil for those).
+-- Returns: remainingSec (number) or nil (no matching spell).
+-- ALL provider spells (satisfiedBy sets) are whitelisted → expirationTime is
+-- a plain number, no secret checks needed.
 function Cache.GetMinRemaining(unit, spellSet)
     local s = _units[unit]
     if not s or not s.all then return nil end
@@ -258,22 +275,12 @@ function Cache.GetMinRemaining(unit, spellSet)
         local sid = data._msufA2_sid
         if sid and sid ~= 0 and spellSet[sid] then
             local exp = data.expirationTime
-            if exp ~= nil and exp ~= 0 then
-                -- Secret-safe check
-                local canRead = true
-                if _hasCanaccessvalue then
-                    canRead = (canaccessvalue(exp) == true)
-                elseif issecretvalue and issecretvalue(exp) == true then
-                    canRead = false
-                end
-                if canRead then
-                    local rem = exp - now
-                    if rem < 0 then rem = 0 end
-                    if not best or rem < best then best = rem end
-                end
+            if exp and exp ~= 0 then
+                local rem = exp - now
+                if rem < 0 then rem = 0 end
+                if not best or rem < best then best = rem end
             else
-                -- No expiration (permanent buff) → treat as infinite remaining
-                -- Don't override a finite 'best'
+                -- No expiration (permanent buff) → infinite remaining
                 if not best then best = 999999 end
             end
         end
@@ -506,7 +513,7 @@ local _mergedBossDebuffScratch = {}
 -- Shared filter logic (used by both unsorted + sorted paths)
 -- Returns: accept (boolean)
 -- =========================================================================
-local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow,
+local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow, now,
                           lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue)
     -- Global Ignore List (O(1) hashtable lookup on pre-decoded spellId)
     local ignHash = cfg._ignoreHash
@@ -516,26 +523,17 @@ local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow,
     end
 
     -- Sated/Exhaustion hard-ignore (O(1) flag check, earliest possible exit)
-    -- Runs BEFORE helpful/harmful branch — applies to ALL auras.
+    -- ALL sated spells are whitelisted → expirationTime is a plain number.
+    -- No secret checks needed. 'now' is cached GetTime() from outer loop.
     if data._msufA2_isSated == 1 then
         if cfg._showSated ~= true then
             return false
         end
         local thr = cfg._satedShowAt
-        if thr and thr > 0 then
+        if thr > 0 then
             local exp = data.expirationTime
-            if exp == nil or exp == 0 then return false end
-            if lHasCanaccessvalue then
-                if lCanaccessvalue(exp) ~= true then
-                    -- secret → fail-open (show the aura)
-                else
-                    if exp - GetTime() > thr then return false end
-                end
-            elseif lIssecretvalue and lIssecretvalue(exp) == true then
-                -- secret → fail-open
-            else
-                if exp - GetTime() > thr then return false end
-            end
+            if not exp or exp == 0 then return false end
+            if exp - now > thr then return false end
         end
     end
 
@@ -640,6 +638,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     cfg._ignoreHash = Cache.BuildIgnoreHash(cfg.ignoreCats)
 
     local secretsNow = cfg._hidePermanent and SecretsActive() or false
+    local now = GetTime()  -- PERF: cache once, passed to FilterAura
 
     -- Localize for inner loop
     local lIsFiltered = _isFiltered
@@ -666,14 +665,14 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
             local isOwn     = data._msufIsPlayerAura
 
             if isHelpful and (nB + nBossB) < maxBuffs then
-                if FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow,
+                if FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow, now,
                               lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
                     nB, nD, nBossB, nBossD = EmitAura(data, true, isOwn, cfg,
                         buffOut, debuffOut, bossBufScratch, bossDebScratch,
                         nB, nD, nBossB, nBossD)
                 end
             elseif not isHelpful and (nD + nBossD) < maxDebuffs then
-                if FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow,
+                if FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow, now,
                               lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
                     nB, nD, nBossB, nBossD = EmitAura(data, false, isOwn, cfg,
                         buffOut, debuffOut, bossBufScratch, bossDebScratch,
@@ -716,7 +715,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                         end
 
                         local isOwn = data._msufIsPlayerAura
-                        if FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow,
+                        if FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow, now,
                                       lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
                             nB, nD, nBossB, nBossD = EmitAura(data, true, isOwn, cfg,
                                 buffOut, debuffOut, bossBufScratch, bossDebScratch,
@@ -749,7 +748,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                         end
 
                         local isOwn = data._msufIsPlayerAura
-                        if FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow,
+                        if FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow, now,
                                       lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
                             nB, nD, nBossB, nBossD = EmitAura(data, false, isOwn, cfg,
                                 buffOut, debuffOut, bossBufScratch, bossDebScratch,

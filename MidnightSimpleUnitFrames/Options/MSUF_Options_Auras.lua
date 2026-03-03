@@ -2450,6 +2450,11 @@ end
                 cb:SetScript("OnClick", function(self, ...)
                     AutoOverrideIgnoreIfNeeded()
                     if oldClick then pcall(oldClick, self, ...) end
+                    -- Invalidate cached ignore hashtable so FilterAndSort rebuilds it
+                    local a2api = ns and ns.MSUF_Auras2
+                    if a2api and a2api.Cache and a2api.Cache.InvalidateIgnoreHash then
+                        a2api.Cache.InvalidateIgnoreHash()
+                    end
                     A2_RequestApply()
                 end)
             end
