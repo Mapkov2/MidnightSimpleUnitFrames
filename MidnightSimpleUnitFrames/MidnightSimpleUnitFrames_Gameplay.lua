@@ -40,6 +40,15 @@ local function MSUF_GetPlayerSpecID()
     return specID
 end
 
+-- Sub Rogue guard: Spec ID 261 = Subtlety Rogue
+local _SUB_ROGUE_SPEC_ID = 261
+local function MSUF_IsSubRogue()
+    if not UnitClass then return false end
+    local _, cls = UnitClass("player")
+    if cls ~= "ROGUE" then return false end
+    return MSUF_GetPlayerSpecID() == _SUB_ROGUE_SPEC_ID
+end
+
 ------------------------------------------------------
 -- Small math helpers
 ------------------------------------------------------
@@ -242,6 +251,20 @@ end
     if g.enableFirstDanceTimer == nil then
         g.enableFirstDanceTimer = false
     end
+
+    -- Rogue: Apex Alert — Trickster "Shadowstrike!" hint
+    -- Shadow Dance (185313) Cast + kein Overlay → SHADOWSTRIKE! Hinweis.
+    -- Ancient Arts: optional configurable aura ID (0 = disabled).
+    if g.enableApexAlert == nil then g.enableApexAlert = false end
+    if g.apexAlertOffsetX == nil then g.apexAlertOffsetX = 0 end
+    if g.apexAlertOffsetY == nil then g.apexAlertOffsetY = 60 end
+    if g.apexAlertFontSize == nil or g.apexAlertFontSize <= 0 then g.apexAlertFontSize = 26 end
+    if g.apexAlertMessage == nil then g.apexAlertMessage = "SHADOWSTRIKE!" end
+    if g.lockApexAlert == nil then g.lockApexAlert = false end
+    if g.apexAlertTrackOverlay == nil then g.apexAlertTrackOverlay = true end
+    -- Shadow Techniques toggle: wenn an, zusätzlich ≥5 Stacks prüfen (secret-safe)
+    -- Dance-Fenster in Sekunden (Kommazahl). Default 8.0s. +3s wenn FirstDance voll ausläuft.
+    if g.apexAlertDanceWindow == nil then g.apexAlertDanceWindow = 8.0 end
 
     -- Green combat crosshair under player while in combat
     if g.enableCombatCrosshair == nil then
@@ -994,6 +1017,11 @@ _TickFirstDance = function()
         combatStateText:SetText("")
         combatStateText:Hide()
         MSUF_CombatState_SetClickThrough(false)
+
+        -- FirstDance lief voll durch → Apex-Fenster um 3s verlängern
+        if ns.MSUF_ApexAlert_ExtendForFirstDance then
+            ns.MSUF_ApexAlert_ExtendForFirstDance()
+        end
         return
     end
 
@@ -1369,6 +1397,9 @@ end
 -- Export so the main file can call this from UpdateAllFonts()
 function ns.MSUF_ApplyGameplayFontFromGlobal()
     ApplyFontToCounter()
+    if ns and ns.MSUF_ApexAlert_ApplyFont then
+        ns.MSUF_ApexAlert_ApplyFont()
+    end
 end
 
 local function CreateCombatTimerFrame()
@@ -1981,7 +2012,8 @@ end
 ------------------------------------------------------
 local function MSUF_Gameplay_ApplyCombatStateText(g)
     local wantState = (g.enableCombatStateText == true)
-    local wantDance = (g.enableFirstDanceTimer == true)
+    -- First Dance nur für Sub Rogue
+    local wantDance = (g.enableFirstDanceTimer == true) and MSUF_IsSubRogue()
 
     if wantState or wantDance then
         EnsureCombatStateText()
@@ -2779,12 +2811,286 @@ end
 
 
 
+------------------------------------------------------
+-- SUB ROGUE: Apex Alert — Trickster "Shadowstrike!" hint
+--
+-- Zeigt SHADOWSTRIKE! nur während des Shadow Dance Fensters:
+--   • Shadow Dance gecastet (185313, UNIT_SPELLCAST_SUCCEEDED) → Fenster öffnet
+--   • Kein Spell Activation Overlay aktiv                      → zeige Meldung
+--   • Overlay aktiv (Ancient Arts proc)                        → Meldung weg
+--   • Shadow Dance Fenster abgelaufen (8.5s Timer)             → alles weg
+--
+-- Secret-safe:
+--   • Spell ID aus UNIT_SPELLCAST_SUCCEEDED = plain Event-Arg (kein C-API Return)
+--   • Overlay: boolean Event-Flag, kein Value-Vergleich
+------------------------------------------------------
+do
+    local _SHADOW_DANCE_ID     = 185313
+    local _SHADOW_DANCE_EXTRA = 3.0  -- extra Sekunden wenn FirstDance voll ausläuft
+
+    -- Liest die konfigurierte Dance-Dauer aus DB. Fallback 8.0s.
+    local function _GetDanceWindow()
+        local g = GetGameplayDBFast()
+        local v = tonumber(g and g.apexAlertDanceWindow)
+        if not v or v <= 0 then v = 8.0 end
+        return v
+    end
+
+    local _apexFrame        -- draggable container (MSUF_ApexAlertFrame)
+    local _apexText         -- FontString
+    local _apexLastText  = ""
+
+    local _aaOverlayActive    = false  -- Overlay aktiv = AA proc
+    local _shadowDanceActive  = false  -- Shadow Dance Fenster offen
+    local _shadowDanceTimer   = nil    -- C_Timer Handle
+    local _apexElapsed        = 0
+    local _APEX_INTERVAL      = 0.2    -- Target-Count Update alle 0.2s während Fenster offen
+
+    -- Fenster schließen (Timer-Callback oder Combat-End)
+    local function _ClearShadowDanceWindow()
+        _shadowDanceActive = false
+        _aaOverlayActive   = false
+        if _shadowDanceTimer then
+            _shadowDanceTimer:Cancel()
+            _shadowDanceTimer = nil
+        end
+        -- Tick stoppen
+        if _apexFrame then _apexFrame:SetScript("OnUpdate", nil) end
+    end
+
+    local function _ApexAlert_Hide()
+        -- Wenn unlocked und kein aktiver Dance: Preview behalten statt verstecken
+        local g = GetGameplayDBFast()
+        if g and not g.lockApexAlert and not _shadowDanceActive then
+            local msg = (g.apexAlertMessage and g.apexAlertMessage ~= "") and g.apexAlertMessage or "SHADOWSTRIKE!"
+            local prev = "|cff00ff00" .. msg .. "|r"
+            if prev ~= _apexLastText then
+                _apexLastText = prev
+                if _apexText  then _apexText:SetText(prev) end
+                if _apexFrame and not _apexFrame:IsShown() then _apexFrame:Show() end
+            end
+            return
+        end
+        if _apexLastText ~= "" then
+            _apexLastText = ""
+            if _apexText  then _apexText:SetText("") end
+            if _apexFrame then _apexFrame:Hide() end
+        end
+    end
+
+    -- Secret-safe helpers (module-local, A2_Cache pattern)
+    -- Shadow Techniques stack read — secret-safe (A2_Cache pattern).
+    -- Returns: number (accessible), false (secret value), nil (aura absent)
+    local function _ApexAlert_UpdateText()
+        if not _apexText then return end
+        local g = GetGameplayDBFast()
+        if not (g and g.enableApexAlert) or not _shadowDanceActive then
+            _ApexAlert_Hide()
+            return
+        end
+        -- Overlay aktiv = Ancient Arts proc → Eviscerate verwenden
+        if _aaOverlayActive then
+            _ApexAlert_Hide()
+            return
+        end
+        local msg = (g.apexAlertMessage and g.apexAlertMessage ~= "") and g.apexAlertMessage or "SHADOWSTRIKE!"
+        local t = "|cff00ff00" .. msg .. "|r"
+        if t ~= _apexLastText then
+            _apexLastText = t
+            _apexText:SetText(t)
+            if _apexFrame and not _apexFrame:IsShown() then _apexFrame:Show() end
+        end
+    end
+
+    -- Shadow Dance Cast erkannt → Fenster öffnen
+    local function _OnShadowDanceCast()
+        local gd = GetGameplayDBFast()
+        if not (gd and gd.enableApexAlert) then return end
+        if _shadowDanceTimer then
+            _shadowDanceTimer:Cancel()
+            _shadowDanceTimer = nil
+        end
+        _shadowDanceActive = true
+        _aaOverlayActive   = false
+        _ApexAlert_UpdateText()
+        -- OnUpdate Tick starten für live Target-Count während Fenster offen
+        if _apexFrame then
+            _apexElapsed = 0
+            _apexFrame:SetScript("OnUpdate", function(self, elapsed)
+                _apexElapsed = _apexElapsed + elapsed
+                if _apexElapsed < _APEX_INTERVAL then return end
+                _apexElapsed = 0
+                _ApexAlert_UpdateText()
+            end)
+        end
+        -- Fenster nach Shadow Dance Dauer automatisch schließen
+        _shadowDanceTimer = C_Timer.NewTimer(_GetDanceWindow(), function()
+            _shadowDanceTimer = nil
+            _ClearShadowDanceWindow()
+            _ApexAlert_Hide()
+        end)
+    end
+
+    -- Wird von _TickFirstDance aufgerufen wenn FirstDance voll ausläuft.
+    -- Verlängert ein aktives Apex-Fenster um _SHADOW_DANCE_EXTRA Sekunden.
+    function ns.MSUF_ApexAlert_ExtendForFirstDance()
+        if not _shadowDanceActive or not _shadowDanceTimer then return end
+        _shadowDanceTimer:Cancel()
+        _shadowDanceTimer = C_Timer.NewTimer(_SHADOW_DANCE_EXTRA, function()
+            _shadowDanceTimer = nil
+            _ClearShadowDanceWindow()
+            _ApexAlert_Hide()
+        end)
+    end
+
+    local function _ApexAlert_ApplyFont()
+        if not _apexText then return end
+        local g = GetGameplayDBFast()
+        local path, flags = GetGameplayFontSettings("state")
+        local sz = tonumber(g and g.apexAlertFontSize)
+        if not sz or sz <= 0 then sz = 26 end
+        _apexText:SetFont(path or "Fonts/FRIZQT__.TTF", sz, flags or "OUTLINE")
+        _apexText:SetShadowOffset(1, -1)
+        _apexText:SetShadowColor(0, 0, 0, 1)
+    end
+
+    local function _EnsureApexAlertFrame()
+        if _apexFrame then return end
+        local g = GetGameplayDBFast()
+        _apexFrame = CreateFrame("Frame", "MSUF_ApexAlertFrame", UIParent)
+        _apexFrame:SetSize(380, 50)
+        _apexFrame:SetPoint("CENTER", UIParent, "CENTER",
+            tonumber(g.apexAlertOffsetX) or 0,
+            tonumber(g.apexAlertOffsetY) or 60)
+        _apexFrame:SetFrameStrata("HIGH")
+        _apexFrame:SetClampedToScreen(true)
+        _apexFrame:SetMovable(true)
+        _apexFrame:EnableMouse(false)
+        _apexFrame:RegisterForDrag("LeftButton")
+        _apexFrame:SetScript("OnDragStart", function(self)
+            local gd = EnsureGameplayDefaults()
+            if gd and gd.lockApexAlert then return end
+            self:StartMoving()
+        end)
+        _apexFrame:SetScript("OnDragStop", function(self)
+            self:StopMovingOrSizing()
+            local db = EnsureGameplayDefaults()
+            local x, y = self:GetCenter()
+            local ux, uy = UIParent:GetCenter()
+            if x and y and ux and uy then
+                db.apexAlertOffsetX = _MSUF_RoundInt(x - ux)
+                db.apexAlertOffsetY = _MSUF_RoundInt(y - uy)
+            end
+        end)
+        _apexText = _apexFrame:CreateFontString("MSUF_ApexAlertText", "OVERLAY")
+        _apexText:SetPoint("CENTER")
+        _ApexAlert_ApplyFont()
+        _apexText:SetText("")
+        _apexFrame:Hide()
+    end
+
+    -- Separater Event-Frame für UNIT_SPELLCAST_SUCCEEDED (EventBus lehnt UNIT_* ab)
+    local _apexCastFrame
+    local function _EnsureCastFrame()
+        if _apexCastFrame then return end
+        _apexCastFrame = CreateFrame("Frame", "MSUF_ApexAlertCastFrame", UIParent)
+        _apexCastFrame:SetScript("OnEvent", function(_, event, unit, _, spellID)
+            -- spellID ist ein plain Event-Arg, kein C-API Secret Value
+            if unit == "player" and spellID == _SHADOW_DANCE_ID then
+                _OnShadowDanceCast()
+            end
+        end)
+    end
+
+    function GameplayFeatures_ApexAlert_Apply(g)
+        if not g then return end
+
+        -- Nur für Sub Rogue (Spec 261). Alles clearen wenn falsche Klasse/Spec.
+        if not MSUF_IsSubRogue() then
+            _ClearShadowDanceWindow()
+            _ApexAlert_Hide()
+            if _apexCastFrame then _apexCastFrame:UnregisterAllEvents() end
+            if type(MSUF_EventBus_Unregister) == "function" then
+                MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED",          "MSUF_APEX_ALERT")
+                MSUF_EventBus_Unregister("SPELL_ACTIVATION_OVERLAY_SHOW", "MSUF_APEX_ALERT")
+                MSUF_EventBus_Unregister("SPELL_ACTIVATION_OVERLAY_HIDE", "MSUF_APEX_ALERT")
+            end
+            return
+        end
+
+        if not g.enableApexAlert then
+            _ClearShadowDanceWindow()
+            _ApexAlert_Hide()
+            if _apexCastFrame then
+                _apexCastFrame:UnregisterAllEvents()
+            end
+            if type(MSUF_EventBus_Unregister) == "function" then
+                MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED",          "MSUF_APEX_ALERT")
+                MSUF_EventBus_Unregister("SPELL_ACTIVATION_OVERLAY_SHOW", "MSUF_APEX_ALERT")
+                MSUF_EventBus_Unregister("SPELL_ACTIVATION_OVERLAY_HIDE", "MSUF_APEX_ALERT")
+            end
+            return
+        end
+
+        _EnsureApexAlertFrame()
+        _ApexAlert_ApplyFont()
+        _EnsureCastFrame()
+
+        if _apexFrame then
+            _apexFrame:ClearAllPoints()
+            _apexFrame:SetPoint("CENTER", UIParent, "CENTER",
+                tonumber(g.apexAlertOffsetX) or 0,
+                tonumber(g.apexAlertOffsetY) or 60)
+            _apexFrame:EnableMouse(not (g.lockApexAlert and true or false))
+        end
+
+        -- UNIT_SPELLCAST_SUCCEEDED auf eigenem Frame (nicht EventBus)
+        _apexCastFrame:UnregisterAllEvents()
+        _apexCastFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+
+        if type(MSUF_EventBus_Register) == "function" then
+            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APEX_ALERT", function()
+                _ClearShadowDanceWindow()
+                _ApexAlert_Hide()
+            end)
+            MSUF_EventBus_Register("SPELL_ACTIVATION_OVERLAY_SHOW", "MSUF_APEX_ALERT", function()
+                local gd = GetGameplayDBFast()
+                if not (gd and gd.enableApexAlert) then return end
+                _aaOverlayActive = true
+                _ApexAlert_UpdateText()
+            end)
+            MSUF_EventBus_Register("SPELL_ACTIVATION_OVERLAY_HIDE", "MSUF_APEX_ALERT", function()
+                local gd = GetGameplayDBFast()
+                if not (gd and gd.enableApexAlert) then return end
+                _aaOverlayActive = false
+                _ApexAlert_UpdateText()
+            end)
+        end
+
+        -- Preview: wenn unlocked → immer anzeigen (auch im Kampf, solange kein echter Trigger)
+        if not g.lockApexAlert and _apexText and not _shadowDanceActive then
+            local gd2 = GetGameplayDBFast()
+            local msg = (gd2 and gd2.apexAlertMessage and gd2.apexAlertMessage ~= "") and gd2.apexAlertMessage or "SHADOWSTRIKE!"
+            local prev = "|cff00ff00" .. msg .. "|r"
+            _apexLastText = prev
+            _apexText:SetText(prev)
+            if _apexFrame then _apexFrame:Show() end
+        end
+    end
+
+    function ns.MSUF_ApexAlert_ApplyFont()
+        _ApexAlert_ApplyFont()
+    end
+end
+
+
 -- Feature tables (single-file modules) for readability and safer future refactors
 local GameplayFeatures = {
     CombatTimer     = {},
     CombatStateText = {},
     CombatCrosshair = {},
     PlayerTotems    = {},
+    ApexAlert       = {},
 }
 
 function GameplayFeatures.CombatTimer.Apply(g)
@@ -2806,7 +3112,8 @@ GameplayFeatures.CombatStateText.Apply = MSUF_Gameplay_ApplyCombatStateText
 GameplayFeatures.CombatCrosshair.Apply = MSUF_Gameplay_ApplyCombatCrosshair
 
 GameplayFeatures.PlayerTotems.Apply = GameplayFeatures_PlayerTotems_Apply
-local GameplayFeatureOrder = {"CombatTimer", "CombatStateText", "CombatCrosshair", "PlayerTotems" }
+GameplayFeatures.ApexAlert.Apply    = GameplayFeatures_ApexAlert_Apply
+local GameplayFeatureOrder = {"CombatTimer", "CombatStateText", "CombatCrosshair", "PlayerTotems", "ApexAlert"}
 
 local function Gameplay_ApplyAllFeatures(g)
     for i = 1, #GameplayFeatureOrder do
@@ -2916,6 +3223,18 @@ function ns.MSUF_ApplyGameplayVisuals()
     if ns and ns.MSUF_RequestGameplayApply then
         ns.MSUF_RequestGameplayApply()
     end
+end
+
+-- Spec-Wechsel: Sub-Rogue-Features sofort aktivieren/deaktivieren
+do
+    local _specChangeFrame = CreateFrame("Frame")
+    _specChangeFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+    _specChangeFrame:RegisterEvent("PLAYER_LOGIN")
+    _specChangeFrame:SetScript("OnEvent", function()
+        if ns and ns.MSUF_RequestGameplayApply then
+            ns.MSUF_RequestGameplayApply()
+        end
+    end)
 end
 
 ------------------------------------------------------
@@ -4164,9 +4483,161 @@ _totemsLeftBottom = totemsDragHint
         firstDanceCheck:SetEnabled(false)
     end
 
+    ------------------------------------------------------
+    -- Rogue: Apex Alert (Trickster – Shadowstrike! hint)
+    ------------------------------------------------------
+    local _apexUISep = content:CreateTexture(nil, "ARTWORK")
+    _apexUISep:SetColorTexture(1, 1, 1, 0.06)
+    _apexUISep:SetHeight(1)
+    _apexUISep:SetPoint("TOPLEFT", firstDanceCheck, "BOTTOMLEFT", 0, -14)
+    _apexUISep:SetSize(560, 1)
+
+    local apexTitle = _MSUF_Label("GameFontNormal", "TOPLEFT", _apexUISep, "BOTTOMLEFT", 0, -10,
+        "Rogue: Apex Alert (Shadowstrike! hint)", "apexAlertTitle")
+    local apexSub1 = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", apexTitle, "BOTTOMLEFT", 0, -2,
+        "Shows |cff00ff00SHADOWSTRIKE!|r if Shadow Dance (185313) is active.", "apexAlertSub1")
+    local apexSub2 = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", apexSub1, "BOTTOMLEFT", 0, -2,
+        "|cff00ff00SHADOWSTRIKE!|r User needs to check himself if shadow tech stacks are above 5.", "apexAlertSub2")
+
+    local apexCheck = _MSUF_Check("MSUF_Gameplay_ApexAlertCheck", "TOPLEFT", apexSub2, "BOTTOMLEFT", 0, -8,
+        "Enable Apex Alert (Shadowstrike hint)", "apexAlertCheck", "enableApexAlert")
+    if not _isRogue then apexCheck:SetEnabled(false) end
+    panel.apexAlertCheck = apexCheck
+
+    local apexLock = _MSUF_Check("MSUF_Gameplay_ApexAlertLockCheck", "LEFT", apexCheck, "RIGHT", 220, 0,
+        "Lock position", "apexAlertLockCheck", "lockApexAlert",
+        function()
+            local g2 = EnsureGameplayDefaults()
+            local f = _G.MSUF_ApexAlertFrame
+            if f then f:EnableMouse(not (g2.lockApexAlert and true or false)) end
+            -- Preview sofort zeigen/verstecken je nach Lock-State
+            RequestApply()
+        end)
+    panel.apexAlertLockCheck = apexLock
+
+    -- Schriftgröße (EditBox, Zahl)
+    local apexFontLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", apexCheck, "BOTTOMLEFT", 0, -16,
+        "Schriftgröße", "apexFontSizeLabel")
+    local apexFontInput = _MSUF_EditBox("MSUF_Gameplay_ApexFontSizeInput",
+        "TOPLEFT", apexFontLabel, "BOTTOMLEFT", -4, -6, 60, 20, "apexFontSizeInput")
+    _MSUF_Label("GameFontDisableSmall", "LEFT", apexFontInput, "RIGHT", 8, 0,
+        "px  (default 26)", "apexFontSizeHint")
+    panel.apexFontSizeInput = apexFontInput
+    local function _CommitApexFont()
+        local g2 = EnsureGameplayDefaults()
+        local v = tonumber(apexFontInput:GetText()) or 26
+        if v < 6 then v = 6 end
+        if v > 128 then v = 128 end
+        g2.apexAlertFontSize = v
+        if ns and ns.MSUF_ApexAlert_ApplyFont then ns.MSUF_ApexAlert_ApplyFont() end
+    end
+    apexFontInput:SetScript("OnEnterPressed", function(self) self:ClearFocus(); _CommitApexFont(); RequestApply() end)
+    apexFontInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    apexFontInput:SetScript("OnEditFocusLost",  function() _CommitApexFont(); RequestApply() end)
+
+    -- Anzeigetext
+    local apexMsgLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", apexFontInput, "BOTTOMLEFT", 0, -14,
+        "Anzeigetext", "apexMsgLabel")
+    local apexMsgInput = _MSUF_EditBox("MSUF_Gameplay_ApexMsgInput",
+        "TOPLEFT", apexMsgLabel, "BOTTOMLEFT", -4, -6, 220, 20, "apexMsgInput")
+    _MSUF_Label("GameFontDisableSmall", "TOPLEFT", apexMsgInput, "BOTTOMLEFT", 0, -2,
+        "Wird grün angezeigt. Default: SHADOWSTRIKE!", "apexMsgHint")
+    panel.apexMsgInput = apexMsgInput
+    local function _CommitApexMsg()
+        local g2 = EnsureGameplayDefaults()
+        local v = apexMsgInput:GetText()
+        if not v or v == "" then v = "SHADOWSTRIKE!" end
+        g2.apexAlertMessage = v
+        -- Preview sofort aktualisieren wenn unlocked
+        local f = _G.MSUF_ApexAlertFrame
+        if f and not g2.lockApexAlert then
+            local ft = _G.MSUF_ApexAlertText
+            if ft then
+                ft:SetText("|cff00ff00" .. v .. "|r")
+                f:Show()
+            end
+        end
+    end
+    apexMsgInput:SetScript("OnEnterPressed", function(self) self:ClearFocus(); _CommitApexMsg(); RequestApply() end)
+    apexMsgInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    apexMsgInput:SetScript("OnEditFocusLost",  function() _CommitApexMsg(); RequestApply() end)
+
+    local apexOffsetXSlider = _MSUF_Slider("MSUF_Gameplay_ApexAlertOffsetXSlider",
+        "TOPLEFT", apexMsgInput, "BOTTOMLEFT", 0, -18,
+        240, -800, 800, 1, "-800", "800", "X: 0",
+        "apexAlertOffsetXSlider", "apexAlertOffsetX",
+        function(v) return math.floor(v + 0.5) end,
+        function(self, gdb, v)
+            local t = _G[self:GetName() .. "Text"]
+            if t then t:SetText(string_format("X: %d", v)) end
+            local f = _G.MSUF_ApexAlertFrame
+            if f then
+                f:ClearAllPoints()
+                f:SetPoint("CENTER", UIParent, "CENTER",
+                    tonumber(gdb.apexAlertOffsetX) or 0,
+                    tonumber(gdb.apexAlertOffsetY) or 60)
+            end
+        end,
+        false
+    )
+    _MSUF_SliderTextRight("MSUF_Gameplay_ApexAlertOffsetXSlider")
+    panel.apexAlertOffsetXSlider = apexOffsetXSlider
+
+    local apexOffsetYSlider = _MSUF_Slider("MSUF_Gameplay_ApexAlertOffsetYSlider",
+        "TOPLEFT", apexOffsetXSlider, "BOTTOMLEFT", 0, -12,
+        240, -800, 800, 1, "-800", "800", "Y: 60",
+        "apexAlertOffsetYSlider", "apexAlertOffsetY",
+        function(v) return math.floor(v + 0.5) end,
+        function(self, gdb, v)
+            local t = _G[self:GetName() .. "Text"]
+            if t then t:SetText(string_format("Y: %d", v)) end
+            local f = _G.MSUF_ApexAlertFrame
+            if f then
+                f:ClearAllPoints()
+                f:SetPoint("CENTER", UIParent, "CENTER",
+                    tonumber(gdb.apexAlertOffsetX) or 0,
+                    tonumber(gdb.apexAlertOffsetY) or 60)
+            end
+        end,
+        false
+    )
+    _MSUF_SliderTextRight("MSUF_Gameplay_ApexAlertOffsetYSlider")
+    panel.apexAlertOffsetYSlider = apexOffsetYSlider
+
+    -- Shadow Dance Fenster-Dauer (Kommazahl, z.B. 8.0)
+    local danceWinLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", apexOffsetYSlider, "BOTTOMLEFT", 0, -16,
+        "Shadow Dance Dauer (s)", "apexDanceWinLabel")
+    local danceWinInput = _MSUF_EditBox("MSUF_Gameplay_ApexDanceWinInput",
+        "TOPLEFT", danceWinLabel, "BOTTOMLEFT", -4, -6, 80, 20, "apexDanceWinInput")
+    _MSUF_Label("GameFontDisableSmall", "LEFT", danceWinInput, "RIGHT", 8, 0,
+        "Default 8.0 — +3s automatisch wenn First Dance voll ausläuft.", "apexDanceWinHint")
+    panel.apexDanceWinInput = danceWinInput
+    local function _CommitDanceWin()
+        local g2 = EnsureGameplayDefaults()
+        local raw = danceWinInput:GetText():gsub(",", ".")
+        local v = tonumber(raw) or 8.0
+        if v <= 0 then v = 8.0 end
+        g2.apexAlertDanceWindow = v
+    end
+    danceWinInput:SetScript("OnEnterPressed", function(self) self:ClearFocus(); _CommitDanceWin(); RequestApply() end)
+    danceWinInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    danceWinInput:SetScript("OnEditFocusLost",  function() _CommitDanceWin(); RequestApply() end)
+
+    -- Ancient Arts: track via Spell Activation Overlay (event-driven, no aura ID needed)
+    local aaCheck = _MSUF_Check("MSUF_Gameplay_ApexAAOverlayCheck",
+        "TOPLEFT", danceWinInput, "BOTTOMLEFT", 0, -14,
+        "Track Ancient Arts via Spell Activation Overlay",
+        "apexAAOverlayCheck", "apexAlertTrackOverlay")
+    _MSUF_Label("GameFontDisableSmall", "TOPLEFT", aaCheck, "BOTTOMLEFT", 24, -2,
+        "Shows |cff00ccffAA|r on proc. Event-driven — Sub Rogue has exactly one overlay.", "apexAAHint")
+    panel.apexAAOverlayCheck = aaCheck
+    if not _isRogue then aaCheck:SetEnabled(false) end
+
+    lastControl = aaCheck
+
     -- Combat crosshair header + separator
 
-    local _classSpecBottom = firstDanceCheck
+    local _classSpecBottom = aaCheck
     local crosshairSeparator = _MSUF_Sep(_classSpecBottom, -20)
     local crosshairHeader = _MSUF_Header(crosshairSeparator, "Combat crosshair")
 
@@ -4455,6 +4926,15 @@ _totemsLeftBottom = totemsDragHint
         "enableCombatCrosshairMeleeRangeColor",
         "crosshairThickness",
         "crosshairSize",
+
+        "enableApexAlert",
+        "apexAlertOffsetX",
+        "apexAlertOffsetY",
+        "apexAlertFontSize",
+        "apexAlertMessage",
+        "lockApexAlert",
+        "apexAlertTrackOverlay",
+        "apexAlertDanceWindow",
     }
 
     local function _MSUF_ResetGameplayToDefaults()
@@ -4542,6 +5022,10 @@ _totemsLeftBottom = totemsDragHint
 
             {"combatCrosshairCheck", "enableCombatCrosshair"},
             {"crosshairRangeColorCheck", "enableCombatCrosshairMeleeRangeColor"},
+
+            {"apexAlertCheck",        "enableApexAlert"},
+            {"apexAlertLockCheck",    "lockApexAlert"},
+            {"apexAAOverlayCheck",    "apexAlertTrackOverlay"},
 }
         for i = 1, #checks do
             local t = checks[i]
@@ -4561,6 +5045,9 @@ _totemsLeftBottom = totemsDragHint
             {"playerTotemsFontSizeSlider", "playerTotemsFontSize", 14},
             {"playerTotemsOffsetXSlider", "playerTotemsOffsetX", 0},
             {"playerTotemsOffsetYSlider", "playerTotemsOffsetY", -6},
+
+            {"apexAlertOffsetXSlider",  "apexAlertOffsetX",   0},
+            {"apexAlertOffsetYSlider",  "apexAlertOffsetY",   60},
         }
         for i = 1, #sliders do
             local t = sliders[i]
@@ -4650,6 +5137,20 @@ _totemsLeftBottom = totemsDragHint
         if self.playerTotemsColorSwatch and self.playerTotemsColorSwatch.MSUF_Refresh then
             self.playerTotemsColorSwatch:MSUF_Refresh()
         end
+
+        -- Apex Alert input syncs
+        if self.apexFontSizeInput then
+            self.apexFontSizeInput:SetText(tostring(tonumber(g.apexAlertFontSize) or 26))
+        end
+        if self.apexMsgInput then
+            self.apexMsgInput:SetText(g.apexAlertMessage or "SHADOWSTRIKE!")
+        end
+        -- Dance window input sync
+        if self.apexDanceWinInput then
+            local dw = tonumber(g.apexAlertDanceWindow) or 8.0
+            self.apexDanceWinInput:SetText(string_format("%.1f", dw))
+        end
+
         -- Grey out dependent controls when their parent toggle is off
         if self.MSUF_UpdateGameplayDisabledStates then
             self:MSUF_UpdateGameplayDisabledStates()

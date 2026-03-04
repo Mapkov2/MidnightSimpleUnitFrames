@@ -1038,6 +1038,14 @@ end
     if gp.crosshairThickness == nil then gp.crosshairThickness = 2 end
     if gp.cooldownIcons == nil then gp.cooldownIcons = false end
     if gp.enableFirstDanceTimer == nil then gp.enableFirstDanceTimer = false end
+    if gp.enableApexAlert == nil then gp.enableApexAlert = false end
+    if gp.apexAlertOffsetX == nil then gp.apexAlertOffsetX = 0 end
+    if gp.apexAlertOffsetY == nil then gp.apexAlertOffsetY = 60 end
+    if gp.apexAlertFontSize == nil then gp.apexAlertFontSize = 26 end
+    if gp.apexAlertMessage == nil then gp.apexAlertMessage = "SHADOWSTRIKE!" end
+    if gp.lockApexAlert == nil then gp.lockApexAlert = false end
+    if gp.apexAlertTrackOverlay == nil then gp.apexAlertTrackOverlay = true end
+    if gp.apexAlertDanceWindow == nil then gp.apexAlertDanceWindow = 8.0 end
     if gp.nameplateMeleeSpellID == nil then gp.nameplateMeleeSpellID = 0 end
     -- Gameplay: Range fade for Target/Focus (default ON)
     -- Dims Target/Focus unitframes to a fixed alpha when the unit is out of range.
