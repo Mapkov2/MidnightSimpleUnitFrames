@@ -1928,7 +1928,13 @@ if subkey and subkey~=""then MSUF_SelectCastbarSubPage(subkey)
 end
 end
 },profiles={title="MSUF Profiles",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("profiles") end
-},colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},classpower={title="MSUF Class Resources",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectClassResourcesPage},gameplay={title="MSUF Gameplay",build=MSUF_EnsureGameplayPanelBuilt},modules={title="MSUF Modules",build=MSUF_EnsureModulesPanelBuilt}}
+},colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},classpower={title="MSUF Class Resources",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectClassResourcesPage},gameplay={title="MSUF Gameplay",build=MSUF_EnsureGameplayPanelBuilt},modules={title="MSUF Modules",build=MSUF_EnsureModulesPanelBuilt},
+-- Search results virtual page (panel built lazily by MSUF_Search.lua)
+search={title="Search Results",nav="Search",build=function()
+    local fn=ns and ns.MSUF_Search_EnsurePanel
+    if type(fn)=="function" then return fn() end
+    return nil
+end},}
 local function MSUF_GetMirrorPageInfo(key) return MIRROR_PAGES and key and MIRROR_PAGES[key]
 or nil end
 local function MSUF_NormalizeMirrorKey(key,allowHome) key=key or(allowHome and"home"or"main")
@@ -2239,6 +2245,8 @@ local prevPanel = S.mirror.currentPanel
 if S.mirror.currentPanel then local _p=S.mirror.currentPanel MSUF_DetachMirroredPanel(_p)
 S.mirror.currentPanel=nil if _p and _p.Hide then pcall(_p.Hide,_p) end end
 S.mirror.currentKey=key S.mirror.currentPanel=MSUF_Standalone_AttachMirrorPanel(key)
+-- Track current key on the window frame so MSUF_Search.lua can read it
+do local _w=_G and _G.MSUF_StandaloneOptionsWindow if _w then _w._msufCurrentKey=key end end
 if S.mirror.currentPanel and S.mirror.currentPanel ~= prevPanel then _TFadeIn(S.mirror.currentPanel,TRANS_PAGE) end
 MSUF_Standalone_ApplySelection(key,subkey,isCastbarKey)
 MSUF_Standalone_AfterAttachFixups(key,isCastbarKey)
@@ -2377,7 +2385,12 @@ C_Timer.After(0.05,ApplyMinHeight)
 else ApplyMinHeight()
 end
 end
-navParent._msufTreeReflow=Reflow Reflow() return out end
+navParent._msufTreeReflow=Reflow Reflow()
+-- Inject search EditBox at bottom of navRail (below Profiles) — MSUF_Search.lua
+if ns and type(ns.MSUF_Search_InjectNavEditBox)=="function" then
+    pcall(ns.MSUF_Search_InjectNavEditBox,navParent)
+end
+return out end
 local function MSUF_CreateOptionsWindow() if S.win then return S.win end
 local f=CreateFrame("Frame","MSUF_StandaloneOptionsWindow",UIParent,"BackdropTemplate")
 f:SetSize(900,650)
@@ -2893,7 +2906,9 @@ local function MSUF_HideOptionsWindow() if S and S.win and S.win.IsShown and S.w
 then _TScaleDismiss(S.win,TRANS_CLOSE)
 end
 end
-_G.MSUF_ShowStandaloneOptionsWindow=MSUF_ShowOptionsWindow _G.MSUF_OpenStandaloneOptionsWindow=MSUF_ShowOptionsWindow _G.MSUF_HideStandaloneOptionsWindow=MSUF_HideOptionsWindow _G.MSUF_OpenPage=function(key,subkey) key=(key or"home")
+_G.MSUF_ShowStandaloneOptionsWindow=MSUF_ShowOptionsWindow _G.MSUF_OpenStandaloneOptionsWindow=MSUF_ShowOptionsWindow _G.MSUF_HideStandaloneOptionsWindow=MSUF_HideOptionsWindow
+-- Export page-switch for MSUF_Search.lua result row navigation
+_G.MSUF_SwitchMirrorPage=MSUF_SwitchMirrorPage _G.MSUF_OpenPage=function(key,subkey) key=(key or"home")
 if type(key)=="string"then key=key:lower()
 else key="home"end
 if key=="menu"or key=="flash"then key="home"elseif key=="options"then key="main"elseif key=="unit"or key=="frames"then key="main"elseif key=="boss_castbar"or key=="bosscastbar"then key="castbar"subkey=subkey or"boss"end
