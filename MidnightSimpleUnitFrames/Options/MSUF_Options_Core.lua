@@ -2442,7 +2442,9 @@ local function MSUF_StyleToggleText(cb)
         button2 = CANCEL,
         hasEditBox = true,
         OnAccept = function(self, data)
-            local newName = (self.editBox:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            local eb = self.editBox or self.EditBox
+            if not (eb and eb.GetText) then return end
+            local newName = (eb:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
             if newName == "" then return end
             if data and data.source and data.panel then
                 if type(MSUF_CopyProfile) == "function" then
@@ -2462,8 +2464,10 @@ local function MSUF_StyleToggleText(cb)
             self:GetParent():Hide()
         end,
         OnShow = function(self)
-            self.editBox:SetText("")
-            self.editBox:SetFocus()
+            local eb = self.editBox or self.EditBox
+            if not (eb and eb.SetText and eb.SetFocus) then return end
+            eb:SetText("")
+            eb:SetFocus()
         end,
         timeout = 0,
         whileDead = true,
