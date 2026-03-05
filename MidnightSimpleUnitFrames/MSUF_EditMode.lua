@@ -7198,6 +7198,11 @@ local function MSUF_CloseAllPositionPopups()
     if MSUF_CastbarPositionPopup and MSUF_CastbarPositionPopup.Hide then
         MSUF_CastbarPositionPopup:Hide()
     end
+    -- Buff Reminder position popup (MSUF_A2_Reminder)
+    local _a2 = ns.MSUF_Auras2
+    if _a2 and _a2.Reminder and type(_a2.Reminder.HidePopup) == "function" then
+        _a2.Reminder.HidePopup()
+    end
     -- Tooltip Edit Mode drag preview
     if type(_G.MSUF_Tooltip_HideEditPreview) == "function" then
         _G.MSUF_Tooltip_HideEditPreview()

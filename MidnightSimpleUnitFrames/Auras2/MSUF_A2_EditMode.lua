@@ -475,13 +475,14 @@ end
 
 function EM.HideMovers(entry)
     if not entry then return end
-    if entry.editMoverBuff    then entry.editMoverBuff:Hide()    end
-    if entry.editMoverDebuff  then entry.editMoverDebuff:Hide()  end
-    if entry.editMoverPrivate then entry.editMoverPrivate:Hide() end
+    if entry.editMoverBuff      then entry.editMoverBuff:Hide()      end
+    if entry.editMoverDebuff    then entry.editMoverDebuff:Hide()    end
+    if entry.editMoverPrivate   then entry.editMoverPrivate:Hide()   end
+    if entry.editMoverReminder  then entry.editMoverReminder:Hide()  end
 end
 
 function EM.AnyMoverExists(entry)
-    return entry and (entry.editMoverBuff or entry.editMoverDebuff or entry.editMoverPrivate) and true or false
+    return entry and (entry.editMoverBuff or entry.editMoverDebuff or entry.editMoverPrivate or entry.editMoverReminder) and true or false
 end
 
 -- Hide all movers across all units
@@ -518,8 +519,12 @@ local function OnEditModeChanged(active)
         -- Schedule a full refresh so all units get their movers
         if API.MarkAllDirty then API.MarkAllDirty(0) end
     else
-        -- Hide all movers
+        -- Hide all movers (incl. reminder mover)
         EM.HideAllMovers()
+
+        -- Close reminder position popup if open
+        local Reminder = API.Reminder
+        if Reminder and Reminder.HidePopup then Reminder.HidePopup() end
 
         -- Clear previews
         if API.ClearAllPreviews then API.ClearAllPreviews() end
