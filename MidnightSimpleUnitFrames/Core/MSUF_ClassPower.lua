@@ -92,6 +92,11 @@ local SPEC_MONK_BREWMASTER    = _G.SPEC_MONK_BREWMASTER or 1
 local SPEC_SHAMAN_ENHANCEMENT = 2
 local SPEC_SHAMAN_ELEMENTAL   = 1
 local SPEC_WARLOCK_DESTRUCTION = _G.SPEC_WARLOCK_DESTRUCTION or 3
+local SPEC_WARLOCK_DEMONOLOGY  = _G.SPEC_WARLOCK_DEMONOLOGY  or 2
+
+-- Minimum shards before text turns red (prediction must be ON)
+-- Demo=3, Destro=2. Affli has no threshold (shard spending is gradual).
+local WL_LOW_SHARD_THRESHOLD   = { [SPEC_WARLOCK_DEMONOLOGY] = 3, [SPEC_WARLOCK_DESTRUCTION] = 2 }
 local SPEC_DRUID_BALANCE      = 1
 local SPEC_DH_VENGEANCE       = _G.SPEC_DEMONHUNTER_VENGEANCE or 2
 local SPEC_PRIEST_SHADOW      = 3
@@ -1603,22 +1608,32 @@ local function CP_UpdateValues(powerType, maxPower)
         end
     end
 
-    -- Resource count text (Jay's Warlock prediction: show predicted post-cast value)
+    -- Resource count text
     local txt = CP.text
     if txt then
         local showText = MSUF_DB and MSUF_DB.bars
             and (MSUF_DB.bars.classPowerShowText == true)
         if showText then
+            local predOn = MSUF_DB.bars.classPowerShowPrediction ~= false
             local predDelta = CP.wlPredDelta
             if predDelta ~= 0 and PLAYER_CLASS == "WARLOCK" then
-                -- Current value with "*" suffix — cast in progress, not post-cast prediction
+                -- Current value with "*" suffix — cast in progress indicator
                 txt:SetText(cur .. "*")
-                txt:Show()
-            elseif cur > 0 then
-                txt:SetText(cur)
-                txt:Show()
             else
-                txt:Hide()
+                txt:SetText(cur)
+            end
+            txt:Show()
+            -- Low-shard warning: red when below spec threshold (only if prediction enabled)
+            if PLAYER_CLASS == "WARLOCK" and predOn then
+                local spec = GetSpec and GetSpec()
+                local threshold = spec and WL_LOW_SHARD_THRESHOLD[spec]
+                if threshold and cur < threshold then
+                    txt:SetTextColor(1, 0.1, 0.1, 1)
+                else
+                    txt:SetTextColor(1, 1, 1, 1)
+                end
+            else
+                txt:SetTextColor(1, 1, 1, 1)
             end
         else
             txt:Hide()
@@ -1725,11 +1740,12 @@ local function CP_UpdateValues_Fractional(powerType, maxPower)
         end
     end
 
-    -- Text: show fractional value (Jay's prediction: predicted post-cast value with "*")
+    -- Text: show fractional value
     local txt = CP.text
     if txt then
         local showText = MSUF_DB and MSUF_DB.bars and (MSUF_DB.bars.classPowerShowText == true)
         if showText then
+            local predOn = MSUF_DB.bars.classPowerShowPrediction ~= false
             local predDelta = CP.wlPredDelta
             if predDelta ~= 0 then
                 -- Current value with "*" suffix — cast in progress indicator
@@ -1746,6 +1762,17 @@ local function CP_UpdateValues_Fractional(powerType, maxPower)
                 end
             end
             txt:Show()
+            -- Low-shard warning for Destro: red when fullBars < threshold (pred must be ON)
+            if predOn then
+                local threshold = WL_LOW_SHARD_THRESHOLD[SPEC_WARLOCK_DESTRUCTION]
+                if threshold and fullBars < threshold then
+                    txt:SetTextColor(1, 0.1, 0.1, 1)
+                else
+                    txt:SetTextColor(1, 1, 1, 1)
+                end
+            else
+                txt:SetTextColor(1, 1, 1, 1)
+            end
         else
             txt:Hide()
         end
