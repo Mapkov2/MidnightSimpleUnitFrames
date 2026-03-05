@@ -1608,7 +1608,7 @@ local function CP_UpdateValues(powerType, maxPower)
         end
     end
 
-    -- Resource count text
+    -- Resource count text Jayee Prediction approach: show current value with "*" suffix when a cast is in progress that will change the value.
     local txt = CP.text
     if txt then
         local showText = MSUF_DB and MSUF_DB.bars
