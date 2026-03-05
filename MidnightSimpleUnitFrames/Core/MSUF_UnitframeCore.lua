@@ -494,6 +494,38 @@ end
 
 local UFCore_GetNPCReactionColorFast, UFCore_GetClassBarColorFast
 
+-- P4: Cache per-frame unit identity facts computed from C API.
+-- Updated once per DIRTY_IDENTITY (unit swap, UNIT_FACTION, UNIT_NAME_UPDATE).
+-- Both color paths read the cache; zero C API calls during UNIT_HEALTH.
+-- Secret-safe: UnitIsPlayer returns a plain bool; UnitReaction is a plain number.
+local function _RefreshUnitIdentityCache(frame)
+    local unit = frame.unit
+    if not unit or not UnitExists(unit) then
+        frame._msufCachedIsPlayer     = false
+        frame._msufCachedReactionKind = "enemy"
+        return
+    end
+    frame._msufCachedIsPlayer = (UnitIsPlayer(unit) and true) or false
+    if not frame._msufCachedIsPlayer then
+        if UnitIsDeadOrGhost(unit) then
+            frame._msufCachedReactionKind = "dead"
+        else
+            local r = UnitReaction and UnitReaction("player", unit) or nil
+            if r then
+                if r >= 5 then
+                    frame._msufCachedReactionKind = "friendly"
+                elseif r == 4 then
+                    frame._msufCachedReactionKind = "neutral"
+                else
+                    frame._msufCachedReactionKind = "enemy"
+                end
+            else
+                frame._msufCachedReactionKind = "enemy"
+            end
+        end
+    end
+end
+
 local function _UpdateIdentityColors(frame)
     if not frame or not frame.nameText then return end
 
@@ -502,29 +534,22 @@ local function _UpdateIdentityColors(frame)
 
     local r, g, b
 
-    -- PERF: After PLAYER_LOGIN, UnitIsPlayer/UnitExists/UnitClass/UnitReaction are
-    -- always available. Eliminated redundant `API and API(unit)` nil-guard pattern.
-    if cache and cache.nameClassColor and unit and UnitIsPlayer(unit) then
+    -- P4: read identity cache (set once per DIRTY_IDENTITY, not per UNIT_HEALTH).
+    local isPlayer = frame._msufCachedIsPlayer
+    if isPlayer == nil then
+        -- cold start: populate cache now (first Identity update)
+        _RefreshUnitIdentityCache(frame)
+        isPlayer = frame._msufCachedIsPlayer
+    end
+
+    if cache and cache.nameClassColor and isPlayer then
         local _, classToken = UnitClass(unit)
         if classToken then
             r, g, b = UFCore_GetClassBarColorFast(classToken)
         end
 
-    elseif cache and cache.npcNameRed and unit and UnitExists(unit) and not UnitIsPlayer(unit) then
-        local kind
-        if UnitIsDeadOrGhost(unit) then
-            kind = "dead"
-        else
-            local reaction = UnitReaction and UnitReaction("player", unit) or nil
-            if reaction and reaction >= 5 then
-                kind = "friendly"
-            elseif reaction == 4 then
-                kind = "neutral"
-            else
-                kind = "enemy"
-            end
-        end
-        r, g, b = UFCore_GetNPCReactionColorFast(kind)
+    elseif cache and cache.npcNameRed and unit and UnitExists(unit) and not isPlayer then
+        r, g, b = UFCore_GetNPCReactionColorFast(frame._msufCachedReactionKind or "enemy")
     end
 
     if r == nil then
@@ -546,6 +571,10 @@ local function UFCore_UpdateIdentityFast(frame, conf)
 
     local unit = frame.unit
     local exists = unit and UnitExists(unit)
+
+    -- P4: refresh identity cache on every DIRTY_IDENTITY pass.
+    -- This is the only place UnitIsPlayer + UnitReaction are called for non-player frames.
+    if exists then _RefreshUnitIdentityCache(frame) end
 
     local showName = (frame.showName ~= false)
     if conf and conf.showName ~= nil then
@@ -695,6 +724,10 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
     -- Make sure the unit-type flags are up to date (pet, player, boss, etc.)
     InitUnitFlags(frame)
 
+    -- P4: invalidate identity cache on every color refresh trigger (unit swap / UNIT_FACTION).
+    -- _RefreshUnitIdentityCache will re-populate lazily on the next _UpdateIdentityColors call.
+    frame._msufCachedIsPlayer = nil
+
     local cache = UFCore_GetSettingsCache()
 
     -- Bar mode (authoritative): "dark" | "class" | "unified"
@@ -710,22 +743,18 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
 
     else
         -- mode == "class": players = class, NPCs = reaction
-        if UnitIsPlayer(unit) then
+        -- P4: read identity cache (avoids UnitIsPlayer + UnitReaction C calls here).
+        local isPlayer = frame._msufCachedIsPlayer
+        if isPlayer == nil then
+            -- cache cold (first color call before DIRTY_IDENTITY ran): populate now.
+            _RefreshUnitIdentityCache(frame)
+            isPlayer = frame._msufCachedIsPlayer
+        end
+        if isPlayer then
             local _, classToken = UnitClass(unit)
             barR, barG, barB = UFCore_GetClassBarColorFast(classToken)
         else
-            if UnitIsDeadOrGhost(unit) then
-                barR, barG, barB = UFCore_GetNPCReactionColorFast("dead")
-            else
-                local reaction = UnitReaction and UnitReaction("player", unit) or nil
-                if reaction and reaction >= 5 then
-                    barR, barG, barB = UFCore_GetNPCReactionColorFast("friendly")
-                elseif reaction == 4 then
-                    barR, barG, barB = UFCore_GetNPCReactionColorFast("neutral")
-                else
-                    barR, barG, barB = UFCore_GetNPCReactionColorFast("enemy")
-                end
-            end
+            barR, barG, barB = UFCore_GetNPCReactionColorFast(frame._msufCachedReactionKind or "enemy")
         end
 
         -- Pet frame override (only when using Class mode)
@@ -1907,7 +1936,7 @@ function Core.RequestLayout(f, reason, urgent)
     -- capture why (useful for debugging)
     f._msufLayoutWhy = reason or "LAYOUT"
     -- Combat safety: defer layout application until combat ends.
-    if InCombatLockdown and InCombatLockdown() then
+    if _G.MSUF_InCombat then
         local set = Core._layoutDeferredSet
         if not set then
             set = {}
@@ -2169,7 +2198,7 @@ local function RunUpdate(f)
     if mask ~= 0 and band(mask, DIRTY_LAYOUT) ~= 0 then
         -- Combat safety: do not apply layout while in combat. Keep the bit pending
         -- and re-apply immediately on PLAYER_REGEN_ENABLED.
-        if InCombatLockdown and InCombatLockdown() then
+        if _G.MSUF_InCombat then
             Core._layoutDeferredSet[f] = true
             f._msufDirtyMask = bor(f._msufDirtyMask or 0, DIRTY_LAYOUT)
             mask = band(mask, bnot(DIRTY_LAYOUT))

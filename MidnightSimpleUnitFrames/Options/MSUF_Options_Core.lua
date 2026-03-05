@@ -2943,11 +2943,12 @@ copyBtn:SetScript("OnClick", function()
 -- Castbar submenu trimmed (UI cleanup):
 -- Removed: BACK, Player, Target, Boss subpages
 -- Kept: Focus Kick options (toggle via button) + Castbar Edit Mode button
-castbarFocusButton = CreateFrame("Button", "MSUF_CastbarFocusButton", castbarGroup, "UIPanelButtonTemplate")
+castbarFocusButton = CreateFrame("Button", "MSUF_CastbarFocusButton", castbarGroupHost or castbarGroup, "UIPanelButtonTemplate")
 castbarFocusButton:SetSize(120, 22)
 castbarFocusButton:ClearAllPoints()
-castbarFocusButton:SetPoint("TOPLEFT", castbarGroup, "TOPLEFT", 16, -150)
+castbarFocusButton:SetPoint("TOPLEFT", castbarGroupHost or castbarGroup, "TOPLEFT", 16, -150)
 castbarFocusButton:SetText(TR("Focus Kick"))
+castbarFocusButton:SetFrameLevel(((castbarGroupHost or castbarGroup):GetFrameLevel() or 0) + 10)
 if MSUF_SkinMidnightActionButton then
     MSUF_SkinMidnightActionButton(castbarFocusButton)
 elseif MSUF_SkinMidnightTabButton then

@@ -38,6 +38,27 @@ local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
 -- P0: issecretvalue upvalue for event handlers (secret-safe unit filtering)
 local _MSUF_issecretvalue = _G.issecretvalue
+local _msuf_inCombat = false        -- P0: cached combat state (no C-call in hot paths)
+-- P0: Single event frame maintains _msuf_inCombat + _G.MSUF_InCombat.
+-- All modules read _G.MSUF_InCombat instead of calling InCombatLockdown() in event handlers.
+-- Only ONE InCombatLockdown() C-call total: the sync on PLAYER_ENTERING_WORLD.
+-- Secret-safe: boolean assignment only; no secret values involved.
+do
+    local _p0Frame = CreateFrame("Frame")
+    _p0Frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    _p0Frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    _p0Frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    _p0Frame:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            _msuf_inCombat = true
+        else
+            -- PLAYER_REGEN_ENABLED or PLAYER_ENTERING_WORLD: sync once with C-API
+            _msuf_inCombat = (InCombatLockdown and InCombatLockdown()) or false
+        end
+        _G.MSUF_InCombat = _msuf_inCombat
+    end)
+end
+
 -- P0: Absorb text path in UpdateHpTextFast (100-500x/sec)
 local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
 local C_StringUtil = C_StringUtil
@@ -324,7 +345,7 @@ function ns.UF.HandleDisabledFrame(self, conf)
 
     -- In MSUF Edit Mode, keep a persistent preview for frames that are disabled,
     -- so they can still be positioned/edited. Boss frames remain hard-hidden when disabled.
-    if MSUF_UnitEditModeActive and (not (F.InCombatLockdown and F.InCombatLockdown())) and self and not self.isBoss then
+    if MSUF_UnitEditModeActive and (not _msuf_inCombat) and self and not self.isBoss then
         local fn = _G and _G.MSUF_ApplyUnitframeEditPreview
         if type(fn) == "function" then
             fn(self, self.msufConfigKey or self.unit, conf)
@@ -335,7 +356,7 @@ function ns.UF.HandleDisabledFrame(self, conf)
         return true
     end
 
-    if not F.InCombatLockdown() then
+    if not _msuf_inCombat then
         if self and self.Hide then self:Hide() end
         if self and self.portrait and self.portrait.Hide then self.portrait:Hide() end
         if self and self.isFocus and type(MSUF_ReanchorFocusCastBar) == "function" then
@@ -986,7 +1007,10 @@ local LSM = (ns and ns.LSM) or _G.MSUF_LSM or (LibStub and LibStub("LibSharedMed
 _G.MSUF_OnLSMReady = function(lsm)
     LSM = lsm
  end
+-- P1: pending guard — prevents double-schedule from rapid LSM callbacks
+local _MSUF_DeferredFontsPending = false
 local function _MSUF_DeferredUpdateAllFonts()
+    _MSUF_DeferredFontsPending = false
     if UpdateAllFonts then UpdateAllFonts() end
 end
 if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegistered then
@@ -998,7 +1022,10 @@ if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegi
     end
         local _g = MSUF_DB and MSUF_DB.general
         if _g and _g.fontKey == key then
-            C_Timer.After(0, _MSUF_DeferredUpdateAllFonts)
+            if not _MSUF_DeferredFontsPending then
+                _MSUF_DeferredFontsPending = true
+                C_Timer.After(0, _MSUF_DeferredUpdateAllFonts)
+            end
     end
      end)
 end
@@ -1473,7 +1500,7 @@ local _MSUF_FlushDeferred              -- forward decl
 
 local function _MSUF_ApplyStateDriverHide(frame)
     if not (frame and RegisterStateDriver) then return false end
-    if F.InCombatLockdown and F.InCombatLockdown() then
+    if _msuf_inCombat then
         if not _msufKillProtectedDeferred[frame] then
             _msufKillProtectedDeferred[frame] = true
             _msufDeferredCount = _msufDeferredCount + 1
@@ -1513,10 +1540,7 @@ local function _MSUF_KillOnShow(f)
         return
     end
 
-    local inCombat = _G.MSUF_InCombat
-    if inCombat == nil then
-        inCombat = (F.InCombatLockdown and F.InCombatLockdown()) or false
-    end
+    local inCombat = _msuf_inCombat
 
     if inCombat then
         -- Guard against Blizzard Show() spam: only apply once per frame.
@@ -1600,7 +1624,7 @@ _MSUF_ReassertKilledFrames = function()
     local g = MSUF_DB.general
     if not g or g.disableBlizzardUnitFrames == false then return end
 
-    local inCombat = F.InCombatLockdown and F.InCombatLockdown()
+    local inCombat = _msuf_inCombat
 
     for frame, allowInEditMode in pairs(_msufKilledFrames) do
         -- Re-unregister events (Blizzard can re-register after loading screens).
@@ -1736,7 +1760,7 @@ local function MSUF_ApplyCompatAnchor_PlayerFrame()
     PlayerFrame.MSUF_CompatAnchorActive = true
     if PlayerFrame.SetAlpha then PlayerFrame:SetAlpha(0) end
     if PlayerFrame.Show then PlayerFrame:Show() end
-    if F.InCombatLockdown and F.InCombatLockdown() then
+    if _msuf_inCombat then
         MSUF_CompatAnchorPending = true
         if not MSUF_CompatAnchorEventFrame then
             MSUF_CompatAnchorEventFrame = F.CreateFrame("Frame")
@@ -1763,7 +1787,7 @@ local function MSUF_ApplyCompatAnchor_PlayerFrame()
         PlayerFrame:HookScript("OnShow", function()
             if not PlayerFrame or not PlayerFrame.MSUF_CompatAnchorActive then  return end
             if PlayerFrame.SetAlpha then PlayerFrame:SetAlpha(0) end
-            if F.InCombatLockdown and F.InCombatLockdown() then
+            if _msuf_inCombat then
                 MSUF_CompatAnchorPending = true
                  return
             end
@@ -1842,7 +1866,7 @@ local conf = (type(MSUF_DB) == "table" and confKey and MSUF_DB[confKey]) or nil
 if ns.UF.IsDisabled(conf) then
     -- In MSUF Edit Mode, keep disabled frames editable by allowing forceShow previews.
     -- Boss frames remain hard-hidden when disabled (see Boss preview invariants).
-    if not (forceShow and MSUF_UnitEditModeActive and (not (F.InCombatLockdown and F.InCombatLockdown())) and frame and not frame.isBoss) then
+    if not (forceShow and MSUF_UnitEditModeActive and (not _msuf_inCombat) and frame and not frame.isBoss) then
         ns.UF.ForceVisibilityHidden(frame)
         return
     end
@@ -2196,7 +2220,7 @@ local function PositionUnitFrame(f, unit)
         f.msufConfigKey = key
     end
     if not key then  return end
-    if F.InCombatLockdown() then
+    if _msuf_inCombat then
          return
     end
     local conf = f.cachedConfig
@@ -2616,7 +2640,7 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
             end
                 _G.MSUF_UFCore_UpdatePowerTextFast(f, unit)
         else
-            if not (F.InCombatLockdown and F.InCombatLockdown()) and (MSUF_UnitEditModeActive or (f.isBoss and MSUF_BossTestMode)) then
+            if (not _msuf_inCombat) and (MSUF_UnitEditModeActive or (f.isBoss and MSUF_BossTestMode)) then
                 if f.isBoss and MSUF_BossTestMode then
                     _G.MSUF_ApplyBossTestHpPreviewText(f, conf)
                 else
@@ -3154,7 +3178,7 @@ local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
 -- must never run in combat.
 local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
     if not self or self.isBoss then  return end
-    if F.InCombatLockdown and F.InCombatLockdown() then  return end
+    if _msuf_inCombat then  return end
     if not MSUF_DB then EnsureDB() end
     g = g or ((MSUF_DB and MSUF_DB.general) or {})
 
@@ -3593,7 +3617,7 @@ local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     -- DEAD/GHOST/AFK/DND text and Combat/Rest/Rez icons don't change at 60fps.
     -- Out of combat: always run (responsive to config changes).
     local forceStatus = (ts[9] == nil)  -- [9] = statusAt
-    if forceStatus or (not InCombatLockdown()) or ((now - (ts[9] or 0)) >= 0.25) then
+    if forceStatus or (not _msuf_inCombat) or ((now - (ts[9] or 0)) >= 0.25) then
         ts[9] = now
         MSUF_UpdateStatusIndicatorForFrame(self)
     end
@@ -3691,7 +3715,7 @@ end
     ns.Bars._ApplyReverseFillBars(self, conf)
     local didPowerBarSync = false
     if self.isBoss and MSUF_BossTestMode then
-        if not F.InCombatLockdown() then
+        if not _msuf_inCombat then
             self:Show()
             _UF.Alpha(self, key)
     end
@@ -3762,7 +3786,7 @@ end
 if not exists then
     -- In MSUF Edit Mode, keep a persistent placeholder for missing units
     -- (so frames stay visible while editing, even when the unit doesn't exist).
-    if MSUF_UnitEditModeActive and (not (F.InCombatLockdown and F.InCombatLockdown())) and unit ~= "player" and self and not self.isBoss then
+    if MSUF_UnitEditModeActive and (not _msuf_inCombat) and unit ~= "player" and self and not self.isBoss then
         if _UF.EditPrev then
             _UF.EditPrev(self, key, conf, g)
         else
@@ -3948,7 +3972,7 @@ f:Hide()
     if ns.UF.IsDisabled(conf) then
         -- In MSUF Edit Mode, keep disabled frames visible as previews so edits remain persistent.
         -- Boss frames must remain hard-hidden when disabled.
-        if MSUF_UnitEditModeActive and (not (F.InCombatLockdown and F.InCombatLockdown())) and key ~= "boss" then
+        if MSUF_UnitEditModeActive and (not _msuf_inCombat) and key ~= "boss" then
             local function previewFrame(unit)
                 local f = UnitFrames[unit]
                 if not f then  return end
@@ -4049,7 +4073,7 @@ function MSUF_MarkUnitFrameDirty(key)
 function MSUF_ApplyDirtyUnitFrames()
     local st = _G.MSUF_UnitFrameApplyState
     if not st or not st.dirty then  return end
-    if F.InCombatLockdown and F.InCombatLockdown() then
+    if _msuf_inCombat then
         st.queued = true
          return
     end
@@ -4129,7 +4153,7 @@ function ApplyAllSettings()
 _G.MSUF_ApplySettingsForKey_Immediate = _G.MSUF_ApplySettingsForKey_Immediate or function(key)
     if not key then  return end
     MSUF_MarkUnitFrameDirty(key)
-    if F.InCombatLockdown and F.InCombatLockdown() then
+    if _msuf_inCombat then
         local stUF = _G.MSUF_UnitFrameApplyState
         if stUF then
             stUF.queued = true
@@ -4194,7 +4218,7 @@ end
 function MSUF_CommitApplyDirty()
     local st = _G.MSUF_ApplyCommitState
     if not st then  return end
-    if F.InCombatLockdown and F.InCombatLockdown() then
+    if _msuf_inCombat then
         st.queued = true
         if type(MSUF_EventBus_Register) == "function" then
             MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT", MSUF_OnRegenEnabled_ApplyCommit)
@@ -4735,13 +4759,13 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
      end
     f:SetScript("OnMouseDown", function(self, button)
         if not MSUF_UnitEditModeActive then  return end
-        if F.InCombatLockdown and F.InCombatLockdown() then  return end
+        if _msuf_inCombat then  return end
         self._msufClickButton = button
         self._msufDragDidStart = false
      end)
     f:SetScript("OnDragStart", function(self, button)
         if not MSUF_UnitEditModeActive then  return end
-        if F.InCombatLockdown and F.InCombatLockdown() then  return end
+        if _msuf_inCombat then  return end
         local key, conf = _GetConfAndKey()
         if not key or not conf then  return end
 
@@ -4808,7 +4832,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
      end)
     f:SetScript("OnMouseUp", function(self, button)
         if not MSUF_UnitEditModeActive then  return end
-        if F.InCombatLockdown and F.InCombatLockdown() then  return end
+        if _msuf_inCombat then  return end
         if self._msufDragDidStart then
              return
     end

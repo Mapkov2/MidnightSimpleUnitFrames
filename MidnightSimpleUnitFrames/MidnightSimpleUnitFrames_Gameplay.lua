@@ -633,7 +633,7 @@ local function MSUF_Gameplay_TickCombatTimer()
 
     -- UnitAffectingCombat is the most reliable signal for "combat started" timing.
     -- InCombatLockdown is a safe fallback.
-    local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) or (InCombatLockdown and InCombatLockdown()) or false
+    local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true)
 
     if inCombat then
         if combatFrame and combatFrame.Show and (not combatFrame:IsShown()) then
@@ -1177,7 +1177,7 @@ local function EnsureCombatCrosshair()
                     return
                 end
 
-                local inCombat = ((InCombatLockdown and InCombatLockdown()) or (UnitAffectingCombat and UnitAffectingCombat("player")) or false)
+                local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true)
 
                 if event == "PLAYER_REGEN_DISABLED" then
                     combatCrosshairFrame:Show()
@@ -1538,7 +1538,7 @@ local function MSUF_BuildMeleeSpellCache()
     end
 
     -- Never build suggestions in combat: defer until we leave combat to avoid stutters in raids.
-    if InCombatLockdown and InCombatLockdown() then
+    if _G.MSUF_InCombat then
         MSUF_MeleeSpellCachePending = true
         -- Phase 7B: one-shot EventBus callback instead of frame
         if type(MSUF_EventBus_Register) == "function" then
@@ -2109,7 +2109,7 @@ local function MSUF_Gameplay_ApplyCombatCrosshair(g)
         end
 
         if frame then
-            local inCombat = (InCombatLockdown and InCombatLockdown() or UnitAffectingCombat and UnitAffectingCombat("player")) or false
+            local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true)
             frame:SetShown(inCombat)
             MSUF_RequestCrosshairRangeRefresh()
         end
