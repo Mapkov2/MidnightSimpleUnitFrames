@@ -10,7 +10,12 @@ local lower  = string.lower
 local find   = string.find
 local format = string.format
 
-local MAX_ROWS          = 20
+-- Visible row budget: if more results exist, we use a FauxScrollFrame to scroll.
+-- User request: scrollable list when > ~15 results.
+local VISIBLE_ROWS      = 15
+-- Hard cap to avoid building/rendering an unbounded list (menu-only anyway).
+local MAX_RESULTS_CAP   = 200
+local MAX_ROWS          = VISIBLE_ROWS
 local MIN_QUERY_LEN     = 2
 local DEBOUNCE_SEC      = 0.18
 local SEARCH_BOX_H      = 22
@@ -1630,7 +1635,8 @@ local function Query(text)
     end)
 
     local out = {}
-    local n = (#matches < MAX_ROWS) and #matches or MAX_ROWS
+    local n = #matches
+    if n > MAX_RESULTS_CAP then n = MAX_RESULTS_CAP end
     for i = 1, n do
         out[i] = matches[i].e
     end
@@ -1647,11 +1653,20 @@ local _panel    = nil
 local _rows     = {}
 local _subtitle = nil
 local _noResult = nil
+local _scroll   = nil
+
+local _curResults = nil
+local _curTotal   = 0
 
 local ROW_H    = 36
 local ROW_GAP  = 2
 local PAD_TOP  = 46
 local PAD_SIDE = 10
+-- Scrollbar insets: keep the scrollbar slightly inside the content area so it
+-- doesn't clip against the menu border. Also reserve a gutter so rows don't
+-- overlap the scrollbar.
+local SCROLLBAR_INSET_X = 8
+local SCROLLBAR_GUTTER  = 22
 
 local function _SkinRow(btn)
     if not btn then return end
@@ -1666,6 +1681,9 @@ local function _SkinRow(btn)
         if btn[m] then local t=btn[m](btn); if t then t:SetAlpha(0) end end
     end
 end
+
+-- Forward declare so the Search Results panel can reference it.
+local _NavigateAndScroll
 
 local function _BuildPanel()
     if _panel then return _panel end
@@ -1688,11 +1706,28 @@ local function _BuildPanel()
     if _G.MSUF_SkinMuted then _G.MSUF_SkinMuted(noRes) end
     _noResult = noRes
 
-    for i = 1, MAX_ROWS do
+    -- Faux scrollframe (shows scrollbar + provides scroll offset).
+    local sf = CreateFrame("ScrollFrame", "MSUF_SearchResultsScrollFrame", p, "FauxScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT", p, "TOPLEFT", PAD_SIDE, -(PAD_TOP - 4))
+    sf:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -(PAD_SIDE + SCROLLBAR_INSET_X), 8)
+    sf:Hide()
+    _scroll = sf
+
+    -- Move the scrollbar slightly inward so it won't clip against the border.
+    do
+        local sb = _G[sf:GetName() .. "ScrollBar"] or sf.ScrollBar
+        if sb and sb.ClearAllPoints and sb.SetPoint then
+            sb:ClearAllPoints()
+            sb:SetPoint("TOPRIGHT", sf, "TOPRIGHT", -SCROLLBAR_INSET_X, -16)
+            sb:SetPoint("BOTTOMRIGHT", sf, "BOTTOMRIGHT", -SCROLLBAR_INSET_X, 16)
+        end
+    end
+
+    for i = 1, VISIBLE_ROWS do
         local yOff = -(PAD_TOP + (i-1)*(ROW_H+ROW_GAP))
         local row  = CreateFrame("Button",nil,p)
         row:SetPoint("TOPLEFT",p,"TOPLEFT",PAD_SIDE,yOff)
-        row:SetPoint("TOPRIGHT",p,"TOPRIGHT",-PAD_SIDE,yOff)
+        row:SetPoint("TOPRIGHT",p,"TOPRIGHT",-(PAD_SIDE + SCROLLBAR_GUTTER),yOff)
         row:SetHeight(ROW_H)
         _SkinRow(row)
 
@@ -1718,13 +1753,67 @@ local function _BuildPanel()
         _rows[i] = row
     end
 
+    local function UpdateRows()
+        if not _panel then return end
+        local results = _curResults or {}
+        local listCount = #results
+        local offset = 0
+        if _scroll and _scroll:IsShown() and _G.FauxScrollFrame_GetOffset then
+            offset = _G.FauxScrollFrame_GetOffset(_scroll) or 0
+        end
+        for i = 1, VISIBLE_ROWS do
+            local row = _rows[i]
+            local idx = i + offset
+            local entry = results[idx]
+            if entry then
+                if row._msufLbl  then row._msufLbl:SetText(entry.label) end
+                if row._msufHint then row._msufHint:SetText(entry.hint) end
+                local pk = entry.pageKey
+                local sk = entry.subkey
+                local an = entry.anchor
+                row:SetScript("OnClick", function()
+                    _NavigateAndScroll(pk, an, sk)
+                end)
+                row:Show()
+            else
+                if row._msufLbl  then row._msufLbl:SetText("") end
+                if row._msufHint then row._msufHint:SetText("") end
+                row:SetScript("OnClick", nil)
+                row:Hide()
+            end
+        end
+    end
+
+    -- Wire scroll handlers (menu-only, no overhead when hidden).
+    sf:SetScript("OnVerticalScroll", function(self, offset)
+        if not _menuActive then return end
+        if _G.FauxScrollFrame_OnVerticalScroll then
+            _G.FauxScrollFrame_OnVerticalScroll(self, offset, (ROW_H + ROW_GAP), UpdateRows)
+        end
+    end)
+    sf:EnableMouseWheel(true)
+    sf:SetScript("OnMouseWheel", function(self, delta)
+        if not _menuActive then return end
+        local cur = self:GetVerticalScroll() or 0
+        local step = (ROW_H + ROW_GAP)
+        local new = cur - (delta * step * 3)
+        if new < 0 then new = 0 end
+        self:SetVerticalScroll(new)
+        if _G.FauxScrollFrame_Update then
+            _G.FauxScrollFrame_Update(self, (#(_curResults or {})), VISIBLE_ROWS, (ROW_H + ROW_GAP))
+        end
+        UpdateRows()
+    end)
+
+    p._msufSearchUpdateRows = UpdateRows
+
     _panel = p
     return p
 end
 
 -- Navigate to page, scroll to anchor (highlight flash removed).
 local _scrollEpoch = 0
-local function _NavigateAndScroll(pageKey, anchor, subkey)
+_NavigateAndScroll = function(pageKey, anchor, subkey)
     if type(_G.MSUF_SwitchMirrorPage) == "function" then
         _G.MSUF_SwitchMirrorPage(pageKey, subkey)
     elseif type(_G.MSUF_OpenPage) == "function" then
@@ -1751,37 +1840,35 @@ local function _NavigateAndScroll(pageKey, anchor, subkey)
 end
 
 local function _RenderResults(results, count, queryText)
-    count = count or #results
+    local shown = results and #results or 0
+    _curResults = results or {}
+    _curTotal   = count or shown
+
+    local total = _curTotal
     if _subtitle then
-        if count == 0 then
+        if total == 0 then
             _subtitle:SetText("")
-        elseif count >= MAX_ROWS then
-            _subtitle:SetText(format("Top %d results for \"%s\"", MAX_ROWS, tostring(queryText)))
+        elseif total > shown then
+            _subtitle:SetText(format("Top %d of %d results for \"%s\"", shown, total, tostring(queryText)))
         else
             _subtitle:SetText(format("%d result%s for \"%s\"",
-                count, count == 1 and "" or "s", tostring(queryText)))
+                total, total == 1 and "" or "s", tostring(queryText)))
         end
     end
-    if _noResult then _noResult:SetShown(count == 0) end
-    for i = 1, MAX_ROWS do
-        local row   = _rows[i]
-        local entry = results[i]
-        if entry then
-            if row._msufLbl  then row._msufLbl:SetText(entry.label)  end
-            if row._msufHint then row._msufHint:SetText(entry.hint)  end
-            local pk = entry.pageKey
-            local sk = entry.subkey
-            local an = entry.anchor
-            row:SetScript("OnClick", function()
-                _NavigateAndScroll(pk, an, sk)
-            end)
-            row:Show()
+    if _noResult then _noResult:SetShown(total == 0) end
+
+    -- Enable scrolling when there are more than VISIBLE_ROWS results.
+    if _scroll and _G.FauxScrollFrame_Update then
+        if shown > VISIBLE_ROWS then
+            _scroll:Show()
+            _G.FauxScrollFrame_Update(_scroll, shown, VISIBLE_ROWS, (ROW_H + ROW_GAP))
         else
-            if row._msufLbl  then row._msufLbl:SetText("")  end
-            if row._msufHint then row._msufHint:SetText("") end
-            row:SetScript("OnClick", nil)
-            row:Hide()
+            _scroll:SetVerticalScroll(0)
+            _scroll:Hide()
         end
+    end
+    if _panel and _panel._msufSearchUpdateRows then
+        _panel._msufSearchUpdateRows()
     end
 end
 
