@@ -31,6 +31,12 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             or (_G and _G.UFCore_EnsureDBOnce)
         if type(fn2) == "function" then pcall(fn2) end
      end
+
+-- Search helper (additive): Fonts UI is boxed (no scroll child). Register the
+-- named root panels so the search auto-index can traverse all labels.
+if _G and _G.MSUF_Search_RegisterRoots then
+    _G.MSUF_Search_RegisterRoots({ "fonts" }, { "MSUF_FontsMenuPanelLeft", "MSUF_FontsMenuPanelRight" }, "Fonts")
+end
     local CreateLabeledSlider = (ns and (ns.MSUF_CreateLabeledSlider or ns.CreateLabeledSlider)) or _G.CreateLabeledSlider
     local MSUF_ExpandDropdownClickArea = (ns and ns.MSUF_ExpandDropdownClickArea) or _G.MSUF_ExpandDropdownClickArea
     local MSUF_MakeDropdownScrollable = (ns and ns.MSUF_MakeDropdownScrollable) or (_G and _G.MSUF_MakeDropdownScrollable)

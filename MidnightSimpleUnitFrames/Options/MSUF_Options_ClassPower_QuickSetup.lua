@@ -26,6 +26,11 @@
 if _G.__MSUF_QuickSetup_ClassBar_Loaded then return end
 _G.__MSUF_QuickSetup_ClassBar_Loaded = true
 
+-- Search helper (additive): quick setup lives under Class Resources.
+if _G and _G.MSUF_Search_RegisterRoots then
+    _G.MSUF_Search_RegisterRoots({ "classpower" }, { "MSUF_ClassPowerOptionsPanel" }, "Class Resources")
+end
+
 local type, tonumber = type, tonumber
 local math_floor, math_ceil = math.floor, math.ceil
 

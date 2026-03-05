@@ -25,6 +25,11 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     if miscGroup._msufMiscSpecDrivenV1 then return end
     miscGroup._msufMiscSpecDrivenV1 = true
 
+    -- Search helper (menu-only): register the live miscGroup root for full text coverage.
+    if _G and _G.MSUF_Search_RegisterRoots then
+        _G.MSUF_Search_RegisterRoots({ "misc" }, miscGroup, "Miscellaneous")
+    end
+
     -- Localize the dropdown click-expander (it is a local helper in Options_Core; exported there onto ns).
     local ExpandDropdownClickArea = (ns and ns.MSUF_ExpandDropdownClickArea) or _G.MSUF_ExpandDropdownClickArea
 

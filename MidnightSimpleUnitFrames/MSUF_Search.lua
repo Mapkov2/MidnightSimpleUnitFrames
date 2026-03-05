@@ -1149,6 +1149,219 @@ local INDEX = {
       keywords={"rounded style module","round corners module","style rounded","circle frame style"} },
 }
 
+
+-- ---------------------------------------------------------------------------
+-- AUTO INDEX (UI crawl) — covers ALL labels in Options panels (including hidden sliders)
+-- Built on-demand when the user first searches (menu-only). Zero combat overhead.
+--
+-- Key point: Frames/Core sliders do not exist until CreateOptionsPanel() has built
+-- the main options UI. Auras2 may build earlier; therefore we force-build Options
+-- panels once (out of combat) and then crawl named roots (ScrollChild frames).
+-- ---------------------------------------------------------------------------
+
+local _AUTO_INDEX      = nil
+local _AUTO_BUILT      = false
+local _AUTO_BUILD_TRY  = 0  -- safety guard vs. repeated failed builds
+
+-- Cheap trim + numeric-only filter (avoid slider Low/High numbers polluting results)
+local function _Trim(s)
+    if type(s) ~= "string" then return nil end
+    s = s:gsub("^%s+", ""):gsub("%s+$", "")
+    if s == "" then return nil end
+    if s:match("^[%d%.%-]+$") then return nil end
+    return s
+end
+
+local function _FindNamedAnchor(obj)
+    local p = obj
+    local depth = 0
+    while p and depth < 10 do
+        if p.GetName then
+            local n = p:GetName()
+            if type(n) == "string" and n ~= "" then
+                return n
+            end
+        end
+        p = p.GetParent and p:GetParent() or nil
+        depth = depth + 1
+    end
+    return nil
+end
+
+local function _RouteFromContext(context, anchorName)
+    -- Return pageKey, subkey, hint
+    if context == "frames" then
+        local pk = "uf_player"
+        local hint = "Frames › Player"
+        if type(anchorName) == "string" then
+            if anchorName:find("Boss", 1, true) then
+                pk = "uf_boss"; hint = "Frames › Boss Frames"
+            elseif anchorName:find("TargetTarget", 1, true) or anchorName:find("ToT", 1, true) then
+                pk = "uf_targettarget"; hint = "Frames › Target of Target"
+            elseif anchorName:find("Target", 1, true) then
+                pk = "uf_target"; hint = "Frames › Target"
+            elseif anchorName:find("Focus", 1, true) then
+                pk = "uf_focus"; hint = "Frames › Focus"
+            elseif anchorName:find("Pet", 1, true) then
+                pk = "uf_pet"; hint = "Frames › Pet"
+            end
+        end
+        return pk, nil, hint
+    elseif context == "bars" then
+        return "opt_bars", nil, "Bars"
+    elseif context == "castbar" then
+        local sub = nil
+        if type(anchorName) == "string" then
+            if anchorName:find("Boss", 1, true) then sub = "boss"
+            elseif anchorName:find("Target", 1, true) then sub = "target"
+            elseif anchorName:find("Focus", 1, true) then sub = "focus"
+            elseif anchorName:find("Player", 1, true) then sub = "player"
+            else sub = "enemy" end
+        end
+        return "castbar", sub, "Castbar"
+    elseif context == "classpower" then
+        return "classpower", nil, "Class Resources"
+    elseif context == "colors" then
+        return "opt_colors", nil, "Colors"
+    elseif context == "gameplay" then
+        return "gameplay", nil, "Gameplay"
+    end
+    return "main", nil, "Options"
+end
+
+local function _EnsureOptionsPanelsBuiltForSearch()
+    if InCombatLockdown and InCombatLockdown() then
+        return false
+    end
+
+    -- Build the main Options panel (this creates Frames/Core sliders).
+    if type(CreateOptionsPanel) == "function" then
+        pcall(CreateOptionsPanel)
+    end
+
+    -- Other panels that may be lazy-built behind their own builders.
+    if _G then
+        if type(_G.MSUF_EnsureAuras2PanelBuilt) == "function" then pcall(_G.MSUF_EnsureAuras2PanelBuilt) end
+        if type(_G.MSUF_EnsureColorsPanelBuilt) == "function" then pcall(_G.MSUF_EnsureColorsPanelBuilt) end
+        if type(_G.MSUF_EnsureGameplayPanelBuilt) == "function" then pcall(_G.MSUF_EnsureGameplayPanelBuilt) end
+        if type(_G.MSUF_EnsureModulesPanelBuilt) == "function" then pcall(_G.MSUF_EnsureModulesPanelBuilt) end
+    end
+    return true
+end
+
+local function _AutoAddEntry(out, seen, label, context, anchorName)
+    label = _Trim(label)
+    if not label then return end
+
+    local pageKey, subkey, hint = _RouteFromContext(context, anchorName)
+
+    local k = (pageKey or "") .. "|" .. (subkey or "") .. "|" .. (anchorName or "") .. "|" .. label
+    if seen[k] then return end
+    seen[k] = true
+
+    out[#out + 1] = {
+        label  = label,
+        hint   = hint,
+        pageKey= pageKey,
+        subkey = subkey,
+        anchor = anchorName,
+        keywords = {}, -- keep empty; dynamic labels already cover the UI text
+    }
+end
+
+local function _ScanRoot(out, seen, rootFrame, context)
+    if not rootFrame or type(rootFrame) ~= "table" then return end
+    if rootFrame.IsForbidden and rootFrame:IsForbidden() then return end
+
+    local visited = {}
+    local function Walk(f, depth)
+        if not f or visited[f] then return end
+        visited[f] = true
+        if depth > 40 then return end
+        if f.IsForbidden and f:IsForbidden() then return end
+
+        -- Regions (FontStrings are here — critical for slider labels!)
+        if f.GetRegions then
+            local regs = { f:GetRegions() }
+            for i = 1, #regs do
+                local r = regs[i]
+                if r and r.GetObjectType and r:GetObjectType() == "FontString" and r.GetText then
+                    local txt = r:GetText()
+                    if txt and txt ~= "" then
+                        local anchor = _FindNamedAnchor(r:GetParent() or r) -- prefer parent frame name
+                        _AutoAddEntry(out, seen, txt, context, anchor)
+                    end
+                end
+            end
+        end
+
+        -- Some widgets store label on .Text/.text
+        if f.Text and f.Text.GetText then
+            local txt = f.Text:GetText()
+            if txt and txt ~= "" then
+                local anchor = _FindNamedAnchor(f)
+                _AutoAddEntry(out, seen, txt, context, anchor)
+            end
+        elseif f.text and f.text.GetText then
+            local txt = f.text:GetText()
+            if txt and txt ~= "" then
+                local anchor = _FindNamedAnchor(f)
+                _AutoAddEntry(out, seen, txt, context, anchor)
+            end
+        end
+
+        -- Children
+        if f.GetChildren then
+            local kids = { f:GetChildren() }
+            for i = 1, #kids do
+                Walk(kids[i], depth + 1)
+            end
+        end
+    end
+
+    Walk(rootFrame, 0)
+end
+
+local function _BuildAutoIndex()
+    if _AUTO_BUILT then return end
+    _AUTO_BUILD_TRY = _AUTO_BUILD_TRY + 1
+    if _AUTO_BUILD_TRY > 3 then
+        -- Don't spam rebuild attempts forever.
+        _AUTO_BUILT = true
+        _AUTO_INDEX = _AUTO_INDEX or {}
+        return
+    end
+
+    if not _EnsureOptionsPanelsBuiltForSearch() then
+        return
+    end
+
+    local out  = {}
+    local seen = {}
+
+    -- Primary named roots created by CreateOptionsPanel()
+    _ScanRoot(out, seen, _G and _G.MSUF_FramesMenuScrollChild,   "frames")
+    _ScanRoot(out, seen, _G and _G.MSUF_CastbarMenuScrollChild,  "castbar")
+    _ScanRoot(out, seen, _G and _G.MSUF_BarsMenuScrollChild,     "bars")
+    _ScanRoot(out, seen, _G and _G.MSUF_ClassPowerMenuScrollChild,"classpower")
+
+    -- Optional panels (only if present)
+    _ScanRoot(out, seen, _G and _G.MSUF_ColorsScrollChild,       "colors")
+    _ScanRoot(out, seen, _G and _G.MSUF_GameplayScrollChild,     "gameplay")
+
+    -- As a final safety net, crawl the whole Options panel (captures unnamed groups like Fonts/Misc/Profile).
+    _ScanRoot(out, seen, _G and _G.MSUF_OptionsPanel,            "main")
+
+    -- If nothing was discovered (e.g. panels not built yet), don't freeze an empty index.
+    if #out == 0 then
+        return
+    end
+
+    _AUTO_INDEX = out
+    _AUTO_BUILT = true
+end
+
+
 -- ---------------------------------------------------------------------------
 -- Query — pure Lua, no API calls, no comparisons on live values
 -- ---------------------------------------------------------------------------
@@ -1162,7 +1375,7 @@ local INDEX = {
 local function Query(text)
     if not text or #text < MIN_QUERY_LEN then return {}, 0 end
 
-    -- Build token list (split on spaces, skip empty)
+    -- Tokenize query (split on whitespace)
     local tokens = {}
     for tok in lower(text):gmatch("%S+") do
         tokens[#tokens + 1] = tok
@@ -1171,35 +1384,60 @@ local function Query(text)
 
     local results = {}
     local count   = 0
+    local seen    = {}
 
-    for i = 1, #INDEX do
-        if count >= MAX_ROWS then break end
-        local entry    = INDEX[i]
-        local labelL   = lower(entry.label)
-        local hintL    = lower(entry.hint)
-        local kws      = entry.keywords
+    local function EntryMatches(entry)
+        if not entry then return false end
+        local label = entry.label or ""
+        local hint  = entry.hint  or ""
+        local labelL = entry._msufLabelL
+        local hintL  = entry._msufHintL
+        if not labelL then labelL = lower(label); entry._msufLabelL = labelL end
+        if not hintL  then hintL  = lower(hint);  entry._msufHintL  = hintL  end
+        local kws = entry.keywords
 
-        -- Every token must hit somewhere in this entry
-        local allMatch = true
         for t = 1, #tokens do
             local tok = tokens[t]
-            local hit = find(labelL, tok, 1, true)
-                     or find(hintL,  tok, 1, true)
-            if not hit then
+            local hit = find(labelL, tok, 1, true) or find(hintL, tok, 1, true)
+            if not hit and kws then
                 for j = 1, #kws do
                     if find(kws[j], tok, 1, true) then hit = true; break end
                 end
             end
-            if not hit then allMatch = false; break end
+            if not hit then return false end
         end
+        return true
+    end
 
-        if allMatch then
-            count = count + 1
-            results[count] = entry
+    local function Push(entry)
+        if count >= MAX_ROWS then return end
+        local k = (entry.pageKey or "") .. "|" .. (entry.subkey or "") .. "|" .. (entry.anchor or "") .. "|" .. (entry.label or "")
+        if seen[k] then return end
+        seen[k] = true
+        count = count + 1
+        results[count] = entry
+    end
+
+    -- Prefer AUTO_INDEX hits first (these reflect the live UI text)
+    if _AUTO_INDEX then
+        for i = 1, #_AUTO_INDEX do
+            if count >= MAX_ROWS then break end
+            local e = _AUTO_INDEX[i]
+            if EntryMatches(e) then Push(e) end
         end
     end
+
+    -- Then the curated static INDEX (synonyms / hand-written hints)
+    for i = 1, #INDEX do
+        if count >= MAX_ROWS then break end
+        local e = INDEX[i]
+        if EntryMatches(e) then Push(e) end
+    end
+
     return results, count
 end
+
+
 
 -- ---------------------------------------------------------------------------
 -- Search Results Panel
@@ -1422,6 +1660,7 @@ local function MSUF_Search_InjectNavEditBox(navStack)
         end
         local p = _BuildPanel()
         if p then
+            _BuildAutoIndex()
             local results, count = Query(queryText)
             _RenderResults(results, count, queryText)
         end

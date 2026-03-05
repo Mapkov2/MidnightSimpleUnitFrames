@@ -1887,7 +1887,13 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
         end
      end)
     MSUF_StyleSlider(slider)
-     return slider
+     
+    -- Search helper: register slider label for menu search (no overhead outside menu).
+    if type(_G.MSUF_Search_RegisterSlider) == "function" and type(name) == "string" and type(label) == "string" then
+        _G.MSUF_Search_RegisterSlider(name, label)
+    end
+
+return slider
 end
 -- Show/Hide a labeled slider AND its attached editbox/plus/minus + template texts.
 -- Needed because our sliders' editboxes/buttons are parented to the container, not the slider itself.
