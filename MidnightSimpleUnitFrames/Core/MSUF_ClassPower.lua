@@ -418,6 +418,12 @@ do
             local bar = _getPowerBar()
             if not bar then return end
 
+            -- Prediction disabled by user setting
+            if MSUF_DB and MSUF_DB.bars and MSUF_DB.bars.classPowerShowPrediction == false then
+                if _predTex then _predTex:Hide() end
+                return
+            end
+
             -- Lazy-create texture
             if not _predTex then
                 local tex = bar:CreateTexture(nil, "ARTWORK", nil, 1)
@@ -624,6 +630,9 @@ local function EnsureDefaults()
     if b.showChargedComboPoints == nil then b.showChargedComboPoints = true end
     if b.classPowerShowText    == nil then b.classPowerShowText    = false end
     if b.classPowerFontSize    == nil then b.classPowerFontSize    = 16    end
+    if b.classPowerShowPrediction == nil then b.classPowerShowPrediction = true end
+    if b.classPowerTextOffsetX    == nil then b.classPowerTextOffsetX    = 0    end
+    if b.classPowerTextOffsetY    == nil then b.classPowerTextOffsetY    = 0    end
 
     -- AltMana defaults
     if b.showAltMana          == nil then b.showAltMana          = true  end
@@ -1169,6 +1178,19 @@ end
 -- ============================================================================
 local _cpFontRev = 0  -- serial for skip-if-same optimization
 
+-- Apply X/Y offset for the resource count text overlay.
+-- Called from CP_ApplyFont and MSUF_ClassPower_Refresh.
+local function CP_ApplyTextOffset()
+    local fs = CP.text
+    local tf = CP.textFrame
+    if not fs or not tf then return end
+    local b = MSUF_DB and MSUF_DB.bars
+    local ox = (b and tonumber(b.classPowerTextOffsetX)) or 0
+    local oy = (b and tonumber(b.classPowerTextOffsetY)) or 0
+    fs:ClearAllPoints()
+    fs:SetPoint("CENTER", tf, "CENTER", ox, oy)
+end
+
 local function CP_ApplyFont()
     local fs = CP.text
     if not fs then return end
@@ -1236,6 +1258,7 @@ local function CP_ApplyFont()
     else
         fs:SetShadowOffset(0, 0)
     end
+    CP_ApplyTextOffset()
 end
 
 -- ============================================================================
@@ -1588,11 +1611,8 @@ local function CP_UpdateValues(powerType, maxPower)
         if showText then
             local predDelta = CP.wlPredDelta
             if predDelta ~= 0 and PLAYER_CLASS == "WARLOCK" then
-                -- Predicted value with "*" suffix (e.g. "3*" during Shadow Bolt)
-                local predicted = cur + predDelta
-                if predicted < 0 then predicted = 0 end
-                if predicted > maxPower then predicted = maxPower end
-                txt:SetText(predicted .. "*")
+                -- Current value with "*" suffix — cast in progress, not post-cast prediction
+                txt:SetText(cur .. "*")
                 txt:Show()
             elseif cur > 0 then
                 txt:SetText(cur)
@@ -1712,15 +1732,11 @@ local function CP_UpdateValues_Fractional(powerType, maxPower)
         if showText then
             local predDelta = CP.wlPredDelta
             if predDelta ~= 0 then
-                -- Predicted post-cast value (e.g. "3.5*" during Incinerate, "1.3*" during Chaos Bolt)
-                local predicted = fractional + predDelta
-                if predicted < 0 then predicted = 0 end
-                if predicted > maxPower then predicted = maxPower end
-                local predPartial = predicted - math_floor(predicted)
-                if predPartial > 0.001 then
-                    txt:SetText(string_format("%.1f*", predicted))
+                -- Current value with "*" suffix — cast in progress indicator
+                if partial > 0.001 then
+                    txt:SetText(string_format("%.1f*", fractional))
                 else
-                    txt:SetText(math_floor(predicted) .. "*")
+                    txt:SetText(fullBars .. "*")
                 end
             else
                 if partial > 0.001 then
@@ -2324,6 +2340,7 @@ end
 -- Called from event handler when warlock starts casting a known spell
 local function OnWarlockCastStart(spellID)
     if PLAYER_CLASS ~= "WARLOCK" then return end
+    if MSUF_DB and MSUF_DB.bars and MSUF_DB.bars.classPowerShowPrediction == false then return end
     local spec = GetSpec and GetSpec()
     local deltaTable = spec and WL_SHARD_DELTAS[spec]
     local delta = deltaTable and deltaTable[spellID]
