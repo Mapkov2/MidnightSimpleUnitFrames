@@ -2909,6 +2909,16 @@ end
 _G.MSUF_ShowStandaloneOptionsWindow=MSUF_ShowOptionsWindow _G.MSUF_OpenStandaloneOptionsWindow=MSUF_ShowOptionsWindow _G.MSUF_HideStandaloneOptionsWindow=MSUF_HideOptionsWindow
 -- Export page-switch for MSUF_Search.lua result row navigation
 _G.MSUF_SwitchMirrorPage=MSUF_SwitchMirrorPage _G.MSUF_OpenPage=function(key,subkey) key=(key or"home")
+
+-- Export current page so MSUF_Search.lua can temporarily switch sub-pages while building the auto-index,
+-- then restore the user's current location. (Standalone menu only; zero combat overhead.)
+_G.MSUF_GetCurrentMirrorPage=function()
+local mk=(S and S.mirror and S.mirror.currentKey) or nil
+local ms=(S and S.mirror and S.mirror.currentSubKey) or nil
+return mk,ms
+end
+
+_G.MSUF_GetMirrorPages=function() return MIRROR_PAGES end
 if type(key)=="string"then key=key:lower()
 else key="home"end
 if key=="menu"or key=="flash"then key="home"elseif key=="options"then key="main"elseif key=="unit"or key=="frames"then key="main"elseif key=="boss_castbar"or key=="bosscastbar"then key="castbar"subkey=subkey or"boss"end

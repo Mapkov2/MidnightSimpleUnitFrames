@@ -810,6 +810,11 @@ local function DeepCopy(src)
     end
      return dst
 end
+
+-- Search helper (additive): Auras 2.0 options live on their own named panel.
+if _G and _G.MSUF_Search_RegisterRoots then
+    _G.MSUF_Search_RegisterRoots({ "auras" }, { "MSUF_AurasPanel" }, "Auras")
+end
 local function GetEditingKey()
     local k = panel.__msufAuras2_FilterEditKey
     if type(k) ~= "string" then k = "shared" end

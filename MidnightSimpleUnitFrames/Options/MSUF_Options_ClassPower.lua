@@ -1432,6 +1432,11 @@ local function BuildClassPowerOptions(leftName, rightName)
     end
 end
 
+-- Search helper (additive): register the Class Resources root panel (built lazily).
+if _G and _G.MSUF_Search_RegisterRoots then
+    _G.MSUF_Search_RegisterRoots({ "classpower" }, { "MSUF_ClassPowerOptionsPanel" }, "Class Resources")
+end
+
 -- ============================================================================
 -- Sync (called when Bars tab opens or state changes)
 -- ============================================================================

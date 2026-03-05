@@ -27,6 +27,11 @@ local function MSUF_EnsureCastbars()
         pcall(loader, "MidnightSimpleUnitFrames_Castbars")
     end
  end
+
+-- Search helper (additive): register the Frames tab root so slider labels are indexed.
+if _G and _G.MSUF_Search_RegisterRoots then
+    _G.MSUF_Search_RegisterRoots({ "player","target","targettarget","focus","pet","boss" }, { "MSUF_FramesMenuScrollChild" }, "Frames")
+end
 -- Early tab guard helper
 -- Some OnShow handlers call IsFramesTab() before the tab API is constructed.
 -- In this build, the controls are only created for the Frames UI anyway, so this must be safe.
