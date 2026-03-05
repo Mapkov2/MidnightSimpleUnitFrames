@@ -4537,11 +4537,11 @@ _totemsLeftBottom = totemsDragHint
 
     -- Anzeigetext
     local apexMsgLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", apexFontInput, "BOTTOMLEFT", 0, -14,
-        "Anzeigetext", "apexMsgLabel")
+        "Text", "apexMsgLabel")
     local apexMsgInput = _MSUF_EditBox("MSUF_Gameplay_ApexMsgInput",
         "TOPLEFT", apexMsgLabel, "BOTTOMLEFT", -4, -6, 220, 20, "apexMsgInput")
     _MSUF_Label("GameFontDisableSmall", "TOPLEFT", apexMsgInput, "BOTTOMLEFT", 0, -2,
-        "Wird grün angezeigt. Default: SHADOWSTRIKE!", "apexMsgHint")
+        "Default green. Default: SHADOWSTRIKE!", "apexMsgHint")
     panel.apexMsgInput = apexMsgInput
     local function _CommitApexMsg()
         local g2 = EnsureGameplayDefaults()
