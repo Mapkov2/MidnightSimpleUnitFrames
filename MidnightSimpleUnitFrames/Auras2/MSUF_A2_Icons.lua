@@ -298,6 +298,38 @@ end
 -- Icons are stored on container._msufIcons[index]
 -- Each icon is a Button with: .tex, .cooldown, .count, .border, .overlay
 
+-- Mouse interaction state helper (safe on 12.0+)
+-- 0 = normal (hover + clicks)
+-- 1 = tooltip only (hover on, clicks off)
+-- 2 = full click-through (hover off, clicks off)
+local function ApplyMouseState(icon, wantMS)
+    if not icon then return end
+    if icon._msufA2_mouseState == wantMS then return end
+    icon._msufA2_mouseState = wantMS
+
+    local wantHover = (wantMS ~= 2)
+    local wantClicks = (wantMS == 0)
+
+    if icon.SetMouseMotionEnabled then
+        icon:SetMouseMotionEnabled(wantHover)
+    end
+    if icon.SetMouseClickEnabled then
+        icon:SetMouseClickEnabled(wantClicks)
+    end
+
+    -- Backward-compatible fallback for older clients/widgets without the split API.
+    if (not icon.SetMouseMotionEnabled) or (not icon.SetMouseClickEnabled) then
+        icon:EnableMouse(wantHover or wantClicks)
+        if icon.RegisterForClicks then
+            if wantClicks then
+                icon:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            else
+                icon:RegisterForClicks()
+            end
+        end
+    end
+end
+
 local function CreateIcon(container, index)
     local icon = CreateFrame("Button", nil, container)
     icon:SetSize(26, 26)
@@ -307,8 +339,7 @@ countFrame:SetAllPoints(icon)
 countFrame:SetFrameLevel(icon:GetFrameLevel() + 10)
 icon.countFrame = countFrame
 
-    icon:EnableMouse(true)
-    icon:RegisterForClicks("RightButtonUp")
+    ApplyMouseState(icon, 0)
     icon._msufA2_container = container
 
     -- Texture
@@ -720,21 +751,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     -- 1 = click-through but tooltips on (mouse on, all buttons pass-through)
     -- 2 = full click-through (mouse off — no hover, no clicks)
     local wantMS = _clickThrough and (_showTooltip and 1 or 2) or 0
-    if icon._msufA2_mouseState ~= wantMS then
-        icon._msufA2_mouseState = wantMS
-        if wantMS == 2 then
-            icon:EnableMouse(false)
-        else
-            icon:EnableMouse(true)
-            if icon.SetPassThroughButtons then
-                if wantMS == 1 then
-                    icon:SetPassThroughButtons("LeftButton", "RightButton", "MiddleButton")
-                else
-                    icon:SetPassThroughButtons()
-                end
-            end
-        end
-    end
+    ApplyMouseState(icon, wantMS)
 
     icon:Show()
     return true
@@ -1378,21 +1395,7 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
 
         -- Click-through: apply same 3-state setting as live icons (diff-gated)
         local wantMS = _clickThrough and (_showTooltip and 1 or 2) or 0
-        if icon._msufA2_mouseState ~= wantMS then
-            icon._msufA2_mouseState = wantMS
-            if wantMS == 2 then
-                icon:EnableMouse(false)
-            else
-                icon:EnableMouse(true)
-                if icon.SetPassThroughButtons then
-                    if wantMS == 1 then
-                        icon:SetPassThroughButtons("LeftButton", "RightButton", "MiddleButton")
-                    else
-                        icon:SetPassThroughButtons()
-                    end
-                end
-            end
-        end
+        ApplyMouseState(icon, wantMS)
 
         -- Invalidate + resolve text config
         icon._msufA2_textCfgGen = nil
@@ -1560,21 +1563,7 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
 
             -- Click-through (3-state, diff-gated)
             local wantMS = _clickThrough and (_showTooltip and 1 or 2) or 0
-            if icon._msufA2_mouseState ~= wantMS then
-                icon._msufA2_mouseState = wantMS
-                if wantMS == 2 then
-                    icon:EnableMouse(false)
-                else
-                    icon:EnableMouse(true)
-                    if icon.SetPassThroughButtons then
-                        if wantMS == 1 then
-                            icon:SetPassThroughButtons("LeftButton", "RightButton", "MiddleButton")
-                        else
-                            icon:SetPassThroughButtons()
-                        end
-                    end
-                end
-            end
+            ApplyMouseState(icon, wantMS)
 
             -- Position using growth direction
             icon:ClearAllPoints()
