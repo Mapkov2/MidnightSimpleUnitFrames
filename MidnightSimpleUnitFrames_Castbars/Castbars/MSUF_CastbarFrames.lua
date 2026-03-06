@@ -67,11 +67,11 @@ function _G.MSUF_BuildCastbarFrameElements(self)
     end
     backgroundBar:SetTexture(bgTex)
     do
-        local br, bg, bb, ba = 0.176, 0.176, 0.176, 1
+        local r, g, b, a = 0.176, 0.176, 0.176, 1
         if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
-            br, bg, bb, ba = _G.MSUF_GetCastbarBackgroundColor()
+            r, g, b, a = _G.MSUF_GetCastbarBackgroundColor()
         end
-        backgroundBar:SetVertexColor(br, bg, bb, ba)
+        backgroundBar:SetVertexColor(r, g, b, a)
     end
     self.backgroundBar = backgroundBar
 
@@ -133,6 +133,13 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
     barBG:SetAllPoints(statusBar)
     barBG:SetTexture("Interface\\Buttons\\WHITE8X8")
     barBG:SetAlpha(0.25)
+    do
+        local br, bg, bb = 0.176, 0.176, 0.176
+        if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
+            br, bg, bb = _G.MSUF_GetCastbarBackgroundColor()
+        end
+        barBG:SetVertexColor(br, bg, bb)
+    end
     f.backgroundBar = barBG
 
     -- Ensure the fill texture stays above the background in all cases.

@@ -251,12 +251,12 @@ function MSUF_InitSafePlayerCastbar()
         end
         backgroundBar:SetTexture(bgTex)
         do
-            local br, bg, bb, ba = 0.176, 0.176, 0.176, 1
-            if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
-                br, bg, bb, ba = _G.MSUF_GetCastbarBackgroundColor()
-            end
-            backgroundBar:SetVertexColor(br, bg, bb, ba)
+        local r, g, b, a = 0.176, 0.176, 0.176, 1
+        if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
+            r, g, b, a = _G.MSUF_GetCastbarBackgroundColor()
         end
+        backgroundBar:SetVertexColor(r, g, b, a)
+    end
         frame.backgroundBar = backgroundBar
 
         local castText = statusBar:CreateFontString(nil, "OVERLAY")
