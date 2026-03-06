@@ -2211,6 +2211,31 @@ _G.MSUF_RefreshAllPowerTextColors = function()
 
 -- Gradient system + Absorb bars moved to MSUF_Gradients.lua
 
+local function MSUF_ResolveConfiguredAnchorFrame(key, conf, fallbackAnchor)
+    local anchor = fallbackAnchor or (MSUF_GetAnchorFrame and MSUF_GetAnchorFrame()) or UIParent
+    if not conf then return anchor end
+
+    local customName = conf.anchorFrameName
+    if type(customName) == "string" and customName ~= "" then
+        local custom = _G and _G[customName]
+        if custom and custom ~= UIParent and custom ~= WorldFrame and (not custom.IsForbidden or not custom:IsForbidden()) then
+            return custom
+        end
+    end
+
+    local atv = conf.anchorToUnitframe
+    if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "FREE" and atv ~= "global" then
+        local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
+        local rel = uf and uf[atv] or nil
+        if not rel then rel = _G and _G["MSUF_" .. atv] or nil end
+        if rel and rel ~= UIParent and rel ~= WorldFrame and (not rel.IsForbidden or not rel:IsForbidden()) then
+            return rel
+        end
+    end
+
+    return anchor
+end
+
 local function PositionUnitFrame(f, unit)
     if not f or not unit then  return end
     if f._msufDragActive then  return end
@@ -2230,17 +2255,7 @@ local function PositionUnitFrame(f, unit)
         f.cachedConfig = conf
     end
     if not conf then  return end
-    local anchor = MSUF_GetAnchorFrame()
-    -- Pet / Focus: allow anchoring relative to Player/Target.
-    -- This is a pure anchor swap; offsets remain the same (measured from the chosen anchor).
-    if (key == "pet" or key == "focus") and conf and (conf.anchorToUnitframe == "player" or conf.anchorToUnitframe == "target") then
-        local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
-        if conf.anchorToUnitframe == "player" then
-            anchor = (uf and (uf.player or uf["player"])) or _G.MSUF_player or anchor
-        elseif conf.anchorToUnitframe == "target" then
-            anchor = (uf and (uf.target or uf["target"])) or _G.MSUF_target or anchor
-        end
-    end
+    local anchor = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame())
     local ecv = _G["EssentialCooldownViewer"]
     local _g = MSUF_DB and MSUF_DB.general
     if _g and _g.anchorToCooldown and ecv and anchor == ecv then
@@ -4670,19 +4685,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
     end
     local function _UpdateDBFromFrame(self, key, conf)
         if not self or not conf or not key then  return end
-        local anchor = MSUF_GetAnchorFrame and MSUF_GetAnchorFrame() or UIParent
-        -- Pet / Focus: use the same anchor as PositionUnitFrame when anchored to a unitframe.
-        if (key == "pet" or key == "focus") and conf.anchorToUnitframe then
-            local atv = conf.anchorToUnitframe
-            if atv == "player" or atv == "target" then
-                local uf = _G.MSUF_UnitFrames or _G.UnitFrames
-                local relFrame = uf and (uf[atv] or uf[atv])
-                if not relFrame then relFrame = _G["MSUF_" .. atv] end
-                if relFrame and relFrame.GetCenter then
-                    anchor = relFrame
-                end
-            end
-        end
+        local anchor = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame and MSUF_GetAnchorFrame() or UIParent)
         if not anchor or not anchor.GetCenter or not self.GetCenter then  return end
         local _g = MSUF_DB and MSUF_DB.general
         if _g and _g.anchorToCooldown then
