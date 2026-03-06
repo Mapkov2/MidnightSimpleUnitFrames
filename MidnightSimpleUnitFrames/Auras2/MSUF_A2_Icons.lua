@@ -496,9 +496,10 @@ function Icons.HideUnused(container, fromIndex)
                 icon._msufAuraInstanceID = nil
                 -- Bug 1 fix: Clear stale commit + texture cache so recycled
                 -- icons always do a full CommitIcon on next AcquireIcon.
-                -- Without this, a reused icon can skip SetTexture if the
-                -- old _msufA2_lastTexAid happens to match the new aura's aid.
-                icon._msufA2_lastCommit = nil
+                -- PERF: Reuse the lastCommit table (avoid ~96B alloc on recycle).
+                -- Clearing .aid forces full re-apply in CommitIcon's diff gate.
+                local lc = icon._msufA2_lastCommit
+                if lc then lc.aid = nil end
                 icon._msufA2_lastTexAid = nil
             end
         end

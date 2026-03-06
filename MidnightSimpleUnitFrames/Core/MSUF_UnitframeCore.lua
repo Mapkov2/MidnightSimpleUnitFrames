@@ -419,6 +419,10 @@ function Core.InvalidateAllFrameConfigs()
             f._msufLastPwrC = nil
             f._msufLastPwrM = nil
             f._msufLastPwrP = nil
+            -- PERF: Invalidate raw-value power diff guard (Text.lua P0 guard)
+            f._msufRawPwrC = nil
+            f._msufRawPwrM = nil
+            f._msufRawPwrP = nil
         end
     end
 end
@@ -2712,6 +2716,20 @@ local EVENT_DIRTY_FLAGS = {
     UNIT_FLAGS                       = "healthColorDirty",
 }
 
+-- PERF P0: Merge DIRECT_APPLY + EVENT_DIRTY_FLAGS into UNIT_EVENT_MAP entries.
+-- FrameOnEvent now does ONE hash lookup (UNIT_EVENT_MAP[event]) instead of THREE
+-- separate table lookups per event. Saves ~100-200ns × 624 calls/20s.
+do
+    for ev, dfk in pairs(EVENT_DIRTY_FLAGS) do
+        local info = UNIT_EVENT_MAP[ev]
+        if info then info.dfk = dfk end
+    end
+    for ev, fn in pairs(DIRECT_APPLY) do
+        local info = UNIT_EVENT_MAP[ev]
+        if info then info.direct = fn end
+    end
+end
+
 -- Byte at position 1 of "UNIT_" is 85 (= 'U'). Use string.byte for the fallback
 -- instead of string.sub which allocates a new string on every call.
 local BYTE_U = 85  -- string.byte("U")
@@ -2724,11 +2742,12 @@ local function FrameOnEvent(self, event, arg1, ...)
     end
 
     -- Unit events: only react to our unit.
+    -- PERF P0: Single lookup carries mask + dirty flags + direct handler (merged).
     local info = UNIT_EVENT_MAP[event]
     if info then
         if arg1 == self.unit then
-            -- Set dirty flags via pre-computed map (1 hash lookup vs 5 string compares).
-            local dfk = EVENT_DIRTY_FLAGS[event]
+            -- Set dirty flags via pre-computed map (merged into info, 0 extra lookups).
+            local dfk = info.dfk
             if dfk then
                 if dfk == "absorbDirty" then
                     self._msufAbsorbDirty = true
@@ -2743,7 +2762,7 @@ local function FrameOnEvent(self, event, arg1, ...)
             end
 
             -- Phase 6: Direct-apply for cheap elements (health/power).
-            local directFn = DIRECT_APPLY[event]
+            local directFn = info.direct
             if directFn then
                 directFn(self)
                 return
@@ -2876,6 +2895,10 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     f._msufLastPwrC = nil
     f._msufLastPwrM = nil
     f._msufLastPwrP = nil
+    -- PERF: Invalidate raw-value power diff guard (Text.lua P0 guard)
+    f._msufRawPwrC = nil
+    f._msufRawPwrM = nil
+    f._msufRawPwrP = nil
     RefreshUnitEvents(f, true)
 
     if alsoUpdate then

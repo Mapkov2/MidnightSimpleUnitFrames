@@ -538,6 +538,31 @@ function ns.Text.RenderPowerText(self)
     end
 
 
+    -- PERF P0: Raw-value diff guard. Skip ALL textification + string work when
+    -- raw power values are unchanged (most frequent case: energy/mana hasn't
+    -- ticked between events). Saves 3× AbbreviateLargeNumbers + 1× FormatPercent
+    -- + downstream concat per skipped call (~790 B/call allocation eliminated).
+    -- Secret-safe: bail before any comparison if values could be secret.
+    if not _MSUF_issecret
+       or (not _MSUF_issecret(curValue) and not _MSUF_issecret(maxValue)
+           and (powerPct == nil or not _MSUF_issecret(powerPct)))
+    then
+        if curValue == self._msufRawPwrC
+           and maxValue == self._msufRawPwrM
+           and powerPct == self._msufRawPwrP
+        then
+            return
+        end
+        self._msufRawPwrC = curValue
+        self._msufRawPwrM = maxValue
+        self._msufRawPwrP = powerPct
+    else
+        -- Secret value: invalidate raw cache; fall through to text-level guard.
+        self._msufRawPwrC = nil
+        self._msufRawPwrM = nil
+        self._msufRawPwrP = nil
+    end
+
     local curText = _MSUF_TextifyValue(curValue)
     local maxText = _MSUF_TextifyValue(maxValue)
     local pctText = _MSUF_TextifyPercent(powerPct)
