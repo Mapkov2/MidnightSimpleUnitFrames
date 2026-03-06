@@ -853,6 +853,8 @@ local POWER_TYPE_TOKENS = {
 -- ============================================================================
 local _cachedColorR, _cachedColorG, _cachedColorB = 1, 1, 1
 local _cachedColorToken = nil
+local _cachedBgColorToken = nil
+local _cachedBgColorR, _cachedBgColorG, _cachedBgColorB = 0, 0, 0
 local _staggerCachedTier = 0  -- Stagger: avoid redundant SetStatusBarColor when tier unchanged
 
 -- Maelstrom Weapon 5+ threshold color (cached independently)
@@ -932,9 +934,38 @@ local function ResolveClassPowerColor(powerType)
     return 1, 1, 1
 end
 
+local function ResolveClassPowerBgColor(powerType)
+    local token = POWER_TYPE_TOKENS[powerType]
+    if not token and type(powerType) == "string" then
+        token = powerType
+    end
+    if token == _cachedBgColorToken and _cachedBgColorToken then
+        return _cachedBgColorR, _cachedBgColorG, _cachedBgColorB
+    end
+    _cachedBgColorToken = token
+
+    if MSUF_DB and MSUF_DB.general then
+        local ov = MSUF_DB.general.classPowerBgColorOverrides
+        if type(ov) == "table" and token then
+            local c = ov[token]
+            if type(c) == "table" then
+                local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+                if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                    _cachedBgColorR, _cachedBgColorG, _cachedBgColorB = r, g, b
+                    return r, g, b
+                end
+            end
+        end
+    end
+
+    _cachedBgColorR, _cachedBgColorG, _cachedBgColorB = 0, 0, 0
+    return 0, 0, 0
+end
+
 -- Public: invalidate class power color cache (called from Colors panel)
 _G.MSUF_ClassPower_InvalidateColors = function()
     _cachedColorToken = nil
+    _cachedBgColorToken = nil
     _cachedChargedR = nil  -- also invalidate charged cache
     _staggerCachedTier = 0  -- force stagger color re-apply
     _mwAbove5Resolved = false  -- force MW threshold color re-resolve
@@ -1434,7 +1465,8 @@ local function CP_Layout(playerFrame, maxPower, height)
 
     -- BG alpha from config
     local bgA = tonumber(b.classPowerBgAlpha) or 0.3
-    CP.bgTex:SetVertexColor(0, 0, 0, bgA)
+    local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
+    CP.bgTex:SetVertexColor(bgR, bgG, bgB, bgA)
 
     -- Cache filled/empty alpha for hot paths (read once per layout, not per update)
     _filledAlpha = tonumber(b.classPowerFilledAlpha) or 1.0
@@ -1462,7 +1494,7 @@ local function CP_Layout(playerFrame, maxPower, height)
                 bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", xPos, 0)
             end
             bar:SetSize(thisW, h)
-            bar._bg:SetVertexColor(0, 0, 0, bgA)
+            bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
             bar:Show()
             xPos = xPos + thisW + snapTickW + snapGap
         end
@@ -1577,6 +1609,7 @@ local function CP_UpdateValues(powerType, maxPower)
     if MSUF_DB and MSUF_DB.bars then
         bgA = tonumber(MSUF_DB.bars.classPowerBgAlpha) or 0.3
     end
+    local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
 
     -- Per-bar fill + color
     for i = 1, maxPower do
@@ -1592,7 +1625,7 @@ local function CP_UpdateValues(powerType, maxPower)
                 -- Charged: empowered color (filled or dim)
                 bar:SetStatusBarColor(chargedR, chargedG, chargedB, 1)
                 if isFilled then
-                    bar._bg:SetVertexColor(0, 0, 0, bgA)
+                    bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
                 else
                     -- Dim charged bg (visible when empty, shows the slot is empowered)
                     local dR = chargedR * 0.45; if dR < 0.05 then dR = 0.05 end
@@ -1603,7 +1636,7 @@ local function CP_UpdateValues(powerType, maxPower)
             else
                 -- Normal: base color
                 bar:SetStatusBarColor(baseR, baseG, baseB, 1)
-                bar._bg:SetVertexColor(0, 0, 0, bgA)
+                bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
             end
         end
     end
@@ -1717,6 +1750,7 @@ local function CP_UpdateValues_Fractional(powerType, maxPower)
     end
 
     local bgA = (MSUF_DB and MSUF_DB.bars and tonumber(MSUF_DB.bars.classPowerBgAlpha)) or 0.3
+    local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
 
     -- Per-bar fill: full bars + partial current bar
     local fullBars = math_floor(fractional)
@@ -1736,7 +1770,7 @@ local function CP_UpdateValues_Fractional(powerType, maxPower)
                 bar:SetAlpha(_emptyAlpha)
             end
             bar:SetStatusBarColor(baseR, baseG, baseB, 1)
-            bar._bg:SetVertexColor(0, 0, 0, bgA)
+            bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
         end
     end
 
@@ -1939,7 +1973,7 @@ local function CP_UpdateValues_RuneCD(powerType, maxPower)
             end
 
             bar:SetStatusBarColor(baseR, baseG, baseB, 1)
-            bar._bg:SetVertexColor(0, 0, 0, bgA)
+            bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
             bar:Show()
         end
     end
@@ -2002,7 +2036,7 @@ local function CP_UpdateValues_AuraSegmented(powerType, maxPower)
                 bar:SetValue(cur)
                 bar:SetAlpha(_filledAlpha)
                 bar:SetStatusBarColor(baseR, baseG, baseB, 1)
-                bar._bg:SetVertexColor(0, 0, 0, bgA)
+                bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
             end
         end
 
@@ -2062,7 +2096,7 @@ local function CP_UpdateValues_AuraSegmented(powerType, maxPower)
                 else
                     bar:SetStatusBarColor(baseR, baseG, baseB, 1)
                 end
-                bar._bg:SetVertexColor(0, 0, 0, bgA)
+                bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
             end
         end
 
@@ -2163,13 +2197,14 @@ local function CP_UpdateValues_AuraSingle(powerType, maxPower)
     end
 
     local bgA = tonumber(b.classPowerBgAlpha) or 0.3
+    local bgR, bgG, bgB = ResolveClassPowerBgColor((inMeta and true) and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS")
     local bar = CP.bars[1]
     if bar then
         bar:SetMinMaxValues(0, 1)
         bar:SetValue(cur)
         bar:SetAlpha(cur > 0.01 and _filledAlpha or _emptyAlpha)
         bar:SetStatusBarColor(r, g, bl, 1)
-        bar._bg:SetVertexColor(0, 0, 0, bgA)
+        bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
     end
 
     -- Hide bars 2+ (only 1 bar used)
@@ -2238,7 +2273,8 @@ local function CP_UpdateValues_Continuous(powerType, maxPower)
     bar:Show()
 
     local bgA = (MSUF_DB and MSUF_DB.bars and tonumber(MSUF_DB.bars.classPowerBgAlpha)) or 0.3
-    bar._bg:SetVertexColor(0, 0, 0, bgA)
+    local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
+    bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
 
     -- Hide bars 2+ (only 1 bar used)
     for i = 2, CP.maxBars do
@@ -2303,13 +2339,14 @@ local function CP_UpdateValues_TimerBar(powerType, maxPower)
         r, g, bl = 1, 1, 1
     end
     local bgA = tonumber(b.classPowerBgAlpha) or 0.3
+    local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
 
     bar:SetStatusBarColor(r, g, bl, 1)
     bar:SetMinMaxValues(0, 1)
     bar:SetValue(pct)
     bar:SetAlpha(remaining > 0 and _filledAlpha or _emptyAlpha)
     bar:Show()
-    bar._bg:SetVertexColor(0, 0, 0, bgA)
+    bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
 
     -- Hide bars 2+
     for i = 2, CP.maxBars do
@@ -2502,7 +2539,8 @@ local function CP_UpdateValues_Stagger(powerType, maxPower)
     end
 
     local bgA = (MSUF_DB and MSUF_DB.bars and tonumber(MSUF_DB.bars.classPowerBgAlpha)) or 0.3
-    if bar._bg then bar._bg:SetVertexColor(0, 0, 0, bgA) end
+    local bgR, bgG, bgB = ResolveClassPowerBgColor("STAGGER")
+    if bar._bg then bar._bg:SetVertexColor(bgR, bgG, bgB, bgA) end
 
     -- Hide bars 2+ (single bar mode)
     for i = 2, CP.maxBars do
@@ -3243,6 +3281,7 @@ eventFrame:RegisterEvent("PLAYER_ALIVE")
 -- Force full refresh (call after changing DB values)
 function _G.MSUF_ClassPower_Refresh()
     _cachedColorToken = nil  -- Invalidate color cache
+    _cachedBgColorToken = nil
     FullRefresh()
 end
 
