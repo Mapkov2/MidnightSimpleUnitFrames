@@ -92,6 +92,11 @@ local SPEC_MONK_BREWMASTER    = _G.SPEC_MONK_BREWMASTER or 1
 local SPEC_SHAMAN_ENHANCEMENT = 2
 local SPEC_SHAMAN_ELEMENTAL   = 1
 local SPEC_WARLOCK_DESTRUCTION = _G.SPEC_WARLOCK_DESTRUCTION or 3
+local SPEC_WARLOCK_DEMONOLOGY  = _G.SPEC_WARLOCK_DEMONOLOGY  or 2
+
+-- Minimum shards before text turns red (prediction must be ON)
+-- Demo=3, Destro=2. Affli has no threshold (shard spending is gradual).
+local WL_LOW_SHARD_THRESHOLD   = { [SPEC_WARLOCK_DEMONOLOGY] = 3, [SPEC_WARLOCK_DESTRUCTION] = 2 }
 local SPEC_DRUID_BALANCE      = 1
 local SPEC_DH_VENGEANCE       = _G.SPEC_DEMONHUNTER_VENGEANCE or 2
 local SPEC_PRIEST_SHADOW      = 3
@@ -418,6 +423,12 @@ do
             local bar = _getPowerBar()
             if not bar then return end
 
+            -- Prediction disabled by user setting
+            if MSUF_DB and MSUF_DB.bars and MSUF_DB.bars.classPowerShowPrediction == false then
+                if _predTex then _predTex:Hide() end
+                return
+            end
+
             -- Lazy-create texture
             if not _predTex then
                 local tex = bar:CreateTexture(nil, "ARTWORK", nil, 1)
@@ -624,6 +635,9 @@ local function EnsureDefaults()
     if b.showChargedComboPoints == nil then b.showChargedComboPoints = true end
     if b.classPowerShowText    == nil then b.classPowerShowText    = false end
     if b.classPowerFontSize    == nil then b.classPowerFontSize    = 16    end
+    if b.classPowerShowPrediction == nil then b.classPowerShowPrediction = true end
+    if b.classPowerTextOffsetX    == nil then b.classPowerTextOffsetX    = 0    end
+    if b.classPowerTextOffsetY    == nil then b.classPowerTextOffsetY    = 0    end
 
     -- AltMana defaults
     if b.showAltMana          == nil then b.showAltMana          = true  end
@@ -1169,6 +1183,19 @@ end
 -- ============================================================================
 local _cpFontRev = 0  -- serial for skip-if-same optimization
 
+-- Apply X/Y offset for the resource count text overlay.
+-- Called from CP_ApplyFont and MSUF_ClassPower_Refresh.
+local function CP_ApplyTextOffset()
+    local fs = CP.text
+    local tf = CP.textFrame
+    if not fs or not tf then return end
+    local b = MSUF_DB and MSUF_DB.bars
+    local ox = (b and tonumber(b.classPowerTextOffsetX)) or 0
+    local oy = (b and tonumber(b.classPowerTextOffsetY)) or 0
+    fs:ClearAllPoints()
+    fs:SetPoint("CENTER", tf, "CENTER", ox, oy)
+end
+
 local function CP_ApplyFont()
     local fs = CP.text
     if not fs then return end
@@ -1236,6 +1263,7 @@ local function CP_ApplyFont()
     else
         fs:SetShadowOffset(0, 0)
     end
+    CP_ApplyTextOffset()
 end
 
 -- ============================================================================
@@ -1580,25 +1608,32 @@ local function CP_UpdateValues(powerType, maxPower)
         end
     end
 
-    -- Resource count text (Jay's Warlock prediction: show predicted post-cast value)
+    -- Resource count text Jayee Prediction approach: show current value with "*" suffix when a cast is in progress that will change the value.
     local txt = CP.text
     if txt then
         local showText = MSUF_DB and MSUF_DB.bars
             and (MSUF_DB.bars.classPowerShowText == true)
         if showText then
+            local predOn = MSUF_DB.bars.classPowerShowPrediction ~= false
             local predDelta = CP.wlPredDelta
             if predDelta ~= 0 and PLAYER_CLASS == "WARLOCK" then
-                -- Predicted value with "*" suffix (e.g. "3*" during Shadow Bolt)
-                local predicted = cur + predDelta
-                if predicted < 0 then predicted = 0 end
-                if predicted > maxPower then predicted = maxPower end
-                txt:SetText(predicted .. "*")
-                txt:Show()
-            elseif cur > 0 then
-                txt:SetText(cur)
-                txt:Show()
+                -- Current value with "*" suffix — cast in progress indicator
+                txt:SetText(cur .. "*")
             else
-                txt:Hide()
+                txt:SetText(cur)
+            end
+            txt:Show()
+            -- Low-shard warning: red when below spec threshold (only if prediction enabled)
+            if PLAYER_CLASS == "WARLOCK" and predOn then
+                local spec = GetSpec and GetSpec()
+                local threshold = spec and WL_LOW_SHARD_THRESHOLD[spec]
+                if threshold and cur < threshold then
+                    txt:SetTextColor(1, 0.1, 0.1, 1)
+                else
+                    txt:SetTextColor(1, 1, 1, 1)
+                end
+            else
+                txt:SetTextColor(1, 1, 1, 1)
             end
         else
             txt:Hide()
@@ -1705,22 +1740,19 @@ local function CP_UpdateValues_Fractional(powerType, maxPower)
         end
     end
 
-    -- Text: show fractional value (Jay's prediction: predicted post-cast value with "*")
+    -- Text: show fractional value
     local txt = CP.text
     if txt then
         local showText = MSUF_DB and MSUF_DB.bars and (MSUF_DB.bars.classPowerShowText == true)
         if showText then
+            local predOn = MSUF_DB.bars.classPowerShowPrediction ~= false
             local predDelta = CP.wlPredDelta
             if predDelta ~= 0 then
-                -- Predicted post-cast value (e.g. "3.5*" during Incinerate, "1.3*" during Chaos Bolt)
-                local predicted = fractional + predDelta
-                if predicted < 0 then predicted = 0 end
-                if predicted > maxPower then predicted = maxPower end
-                local predPartial = predicted - math_floor(predicted)
-                if predPartial > 0.001 then
-                    txt:SetText(string_format("%.1f*", predicted))
+                -- Current value with "*" suffix — cast in progress indicator
+                if partial > 0.001 then
+                    txt:SetText(string_format("%.1f*", fractional))
                 else
-                    txt:SetText(math_floor(predicted) .. "*")
+                    txt:SetText(fullBars .. "*")
                 end
             else
                 if partial > 0.001 then
@@ -1730,6 +1762,17 @@ local function CP_UpdateValues_Fractional(powerType, maxPower)
                 end
             end
             txt:Show()
+            -- Low-shard warning for Destro: red when fullBars < threshold (pred must be ON)
+            if predOn then
+                local threshold = WL_LOW_SHARD_THRESHOLD[SPEC_WARLOCK_DESTRUCTION]
+                if threshold and fullBars < threshold then
+                    txt:SetTextColor(1, 0.1, 0.1, 1)
+                else
+                    txt:SetTextColor(1, 1, 1, 1)
+                end
+            else
+                txt:SetTextColor(1, 1, 1, 1)
+            end
         else
             txt:Hide()
         end
@@ -2324,6 +2367,7 @@ end
 -- Called from event handler when warlock starts casting a known spell
 local function OnWarlockCastStart(spellID)
     if PLAYER_CLASS ~= "WARLOCK" then return end
+    if MSUF_DB and MSUF_DB.bars and MSUF_DB.bars.classPowerShowPrediction == false then return end
     local spec = GetSpec and GetSpec()
     local deltaTable = spec and WL_SHARD_DELTAS[spec]
     local delta = deltaTable and deltaTable[spellID]

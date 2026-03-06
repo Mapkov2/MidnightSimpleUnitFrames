@@ -41,6 +41,30 @@ local _BOSS_MAX = 5
 local _IS_BOSS_UNIT = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local _After0 = C_Timer and C_Timer.After
 
+-- P3: Boss UNIT_AURA gate.
+-- UNIT_AURA for boss slots is only meaningful during an active encounter.
+-- Between encounters the engine still dispatches these events (boss units exist
+-- as tokens even when empty), wasting Store + MarkDirty work for 5 units.
+-- _bossEncounterActive = true  → INSTANCE_ENCOUNTER_ENGAGE_UNIT
+-- _bossEncounterActive = false → ENCOUNTER_END / PLAYER_ENTERING_WORLD
+-- Secret-safe: plain boolean, never compared to a secret value.
+local _bossEncounterActive = false
+
+-- P2: Per-unit UNIT_AURA burst dedup.
+-- Prevents N timer allocations when N UNIT_AURA events fire for the same unit
+-- within the same 20ms coalesce window.  One timer max per unit per burst.
+-- Clear functions are pre-allocated at module load (zero GC at runtime).
+local _unitAuraPending = {}   -- [unit] = true while a render timer is in flight
+local _unitAuraClearFns = {}  -- [unit] = pre-allocated clear closure
+do
+    local _knownUnits = {"player","target","focus","boss1","boss2","boss3","boss4","boss5"}
+    for _, u in ipairs(_knownUnits) do
+        local unit = u
+        _unitAuraClearFns[unit] = function() _unitAuraPending[unit] = nil end
+    end
+end
+
+
 -- Cached module refs (bound lazily, reset on InvalidateDB)
 local _cachedReqUnit      -- API.RequestUnit (fast MarkDirty path)
 local _cachedMarkDirty    -- API.MarkDirty (fallback)
@@ -94,6 +118,7 @@ local function HandlePlayerTargetChanged()
     if _cachedInvalidUnit then
         _cachedInvalidUnit("target")
     end
+    _unitAuraPending["target"] = nil   -- P2: clear dedup so next UNIT_AURA is accepted
 
     -- Coalesce target swap to one next-frame aura refresh.
     -- UNIT_AURA bursts arriving this frame still update Store deltas, then piggyback this flush.
@@ -115,6 +140,7 @@ local function HandlePlayerFocusChanged()
     if _cachedInvalidUnit then
         _cachedInvalidUnit("focus")
     end
+    _unitAuraPending["focus"] = nil    -- P2: clear dedup so next UNIT_AURA is accepted
     MarkDirty("focus", 0)
 end
 
@@ -791,6 +817,8 @@ end
         -- Boss adds can spawn mid-fight (INSTANCE_ENCOUNTER_ENGAGE_UNIT only fires once at pull).
         -- UNIT_TARGETABLE_CHANGED fires when a new mob enters a boss slot → force cache re-scan.
         desired.UNIT_TARGETABLE_CHANGED = "Core"
+        -- P3: ENCOUNTER_END closes the boss UNIT_AURA gate on wipe/kill.
+        desired.ENCOUNTER_END = "Core"
     end
 
     ApplyOwnedEvents(ef, desired)
@@ -842,6 +870,13 @@ end
                     end
                 end
 
+                -- P3: Boss UNIT_AURA gate — single table + bool check, ~0 cost.
+                -- Skips Store update + MarkDirty for boss slots outside encounters.
+                -- Cache is fully invalidated on INSTANCE_ENCOUNTER_ENGAGE_UNIT anyway.
+                if _IS_BOSS_UNIT[unit] and not _bossEncounterActive then
+                    return
+                end
+
                 -- Always feed delta into Store so cache stays current.
                 -- ShouldProcessUnitEvent is NOT gated here — RegisterUnitEvent
                 -- already ensures we only receive events for enabled units.
@@ -857,7 +892,14 @@ end
                     return
                 end
 
-                MarkDirty(unit)
+                -- P2: per-unit burst dedup — only one timer per unit per 20ms window.
+                if not _unitAuraPending[unit] then
+                    _unitAuraPending[unit] = true
+                    if _After0 then
+                        _After0(0.02, _unitAuraClearFns[unit] or function() _unitAuraPending[unit] = nil end)
+                    end
+                    MarkDirty(unit)
+                end
             end
             ef._msufA2_unitAuraOnEvent = handler
         end
@@ -901,6 +943,7 @@ function Events.Init()
     -- EventFrame main handler (non-UNIT_AURA)
     ef:SetScript("OnEvent", function(_, event, arg1)
         if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
+            _bossEncounterActive = true   -- P3: open boss UNIT_AURA gate
             if not _refsBound then BindCachedRefs() end
             local inv = _cachedInvalidUnit
             if inv then
@@ -910,6 +953,16 @@ function Events.Init()
                 MarkDirty(_BOSS_UNITS[i], 0)
             end
             StartBossAttachRetry()
+            return
+        end
+
+        -- P3: encounter ended (kill or wipe) — close boss UNIT_AURA gate.
+        -- Also clears P2 dedup flags so the next encounter starts fresh.
+        if event == "ENCOUNTER_END" then
+            _bossEncounterActive = false
+            for i = 1, _BOSS_MAX do
+                _unitAuraPending[_BOSS_UNITS[i]] = nil
+            end
             return
         end
 
@@ -928,6 +981,13 @@ function Events.Init()
         end
 
         if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+            -- P3: zone transition resets encounter state (boss units are gone).
+            if event == "PLAYER_ENTERING_WORLD" then
+                _bossEncounterActive = false
+                for i = 1, _BOSS_MAX do
+                    _unitAuraPending[_BOSS_UNITS[i]] = nil
+                end
+            end
             EnsureDB() -- prime + cache
 
             -- Re-bind cached refs (Render may have just loaded)

@@ -10,13 +10,51 @@ local lower  = string.lower
 local find   = string.find
 local format = string.format
 
-local MAX_ROWS          = 20
+-- Visible row budget: if more results exist, we use a FauxScrollFrame to scroll.
+-- User request: scrollable list when > ~15 results.
+local VISIBLE_ROWS      = 15
+-- Hard cap to avoid building/rendering an unbounded list (menu-only anyway).
+local MAX_RESULTS_CAP   = 200
+local MAX_ROWS          = VISIBLE_ROWS
 local MIN_QUERY_LEN     = 2
 local DEBOUNCE_SEC      = 0.18
 local SEARCH_BOX_H      = 22
 local SEARCH_RESERVE_PX = SEARCH_BOX_H + 14
 local SCROLL_DELAY      = 0.18   -- seconds after page switch before scrolling
 local SCROLL_RETRY      = 0.40   -- second attempt if first GetTop() returns nil
+
+-- ---------------------------------------------------------------------------
+-- Menu-active + cancelable timers (v19)
+-- Goal: when the Standalone Slash Menu is hidden, we cancel ALL pending timers
+-- so profiler shows 0.0 overhead outside the menu.
+-- ---------------------------------------------------------------------------
+local _menuActive = true
+local _tDebounce = nil
+local _tScroll   = nil
+local _tRetry    = nil
+
+local function _CancelTimer(t)
+    if t and t.Cancel then
+        t:Cancel()
+    end
+end
+
+local function _CancelAllSearchTimers()
+    _CancelTimer(_tDebounce); _tDebounce = nil
+    _CancelTimer(_tScroll);   _tScroll   = nil
+    _CancelTimer(_tRetry);    _tRetry    = nil
+end
+
+local function _StartTimer(sec, fn)
+    if not (C_Timer and fn) then return nil end
+    if C_Timer.NewTimer then
+        return C_Timer.NewTimer(sec, function()
+            if not _menuActive then return end
+            fn()
+        end)
+    end
+    return nil
+end
 
 -- ---------------------------------------------------------------------------
 -- SCROLL_MAP — which named ScrollFrame+ScrollChild serve each pageKey
@@ -38,63 +76,16 @@ local SCROLL_MAP = {
 }
 
 -- ---------------------------------------------------------------------------
--- HighlightWidget — animated gold flash around the target widget.
--- One-shot overlay, double-pulse, fades over ~1.4s. Secret-safe.
+-- HighlightWidget — removed (v19). Kept as a no-op for 0 regression / 0 overhead.
 -- ---------------------------------------------------------------------------
-local _hlFrame = nil
-
-local function HighlightWidget(anchor)
-    if not anchor then return end
-    local widget = _G[anchor]
-    if not widget then return end
-    local wTop  = widget:GetTop()
-    local wLeft = widget:GetLeft()
-    local wW    = widget:GetWidth()
-    local wH    = widget:GetHeight()
-    if not (wTop and wLeft and wW and wH) then return end
-
-    if not _hlFrame then
-        _hlFrame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        _hlFrame:SetFrameStrata("TOOLTIP")
-        _hlFrame:SetBackdrop({
-            bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 8, edgeSize = 10,
-            insets = { left=2, right=2, top=2, bottom=2 },
-        })
-        _hlFrame:SetBackdropColor(1, 0.82, 0, 0)
-        _hlFrame:SetBackdropBorderColor(1, 0.82, 0, 1)
-        _hlFrame:Hide()
-    end
-
-    local pad = 4
-    _hlFrame:ClearAllPoints()
-    _hlFrame:SetWidth(wW + pad * 2)
-    _hlFrame:SetHeight(wH + pad * 2)
-    local screenH = UIParent:GetHeight()
-    _hlFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT",
-        wLeft - pad, wTop - screenH + pad)
-    _hlFrame:SetAlpha(1)
-    _hlFrame:Show()
-
-    local step = 0
-    local STEPS = 28
-    local tickref = {}
-    tickref[1] = C_Timer.NewTicker(0.05, function()
-        step = step + 1
-        local t = step / STEPS
-        local a = (1 - t) * (0.5 + 0.5 * math.abs(math.sin(t * math.pi * 3)))
-        if a < 0 then a = 0 end
-        _hlFrame:SetAlpha(a)
-        if step >= STEPS then
-            tickref[1]:Cancel()
-            _hlFrame:Hide()
-        end
-    end, STEPS)
+local function HighlightWidget(_anchor)
+    -- no-op
 end
 
 -- ---------------------------------------------------------------------------
 -- ScrollToWidget — resolves globals AFTER the page has shown.
+-- Returns true on success so the caller can skip the retry.
+-- ---------------------------------------------------------------------------
 -- Returns true on success so the caller can skip the retry.
 -- ---------------------------------------------------------------------------
 local function ScrollToWidget(pageKey, anchor)
@@ -313,8 +304,11 @@ local INDEX = {
     { label="Show level (Player)",
       hint="Player › Indicator", pageKey="uf_player",
       keywords={"show level","level text","lvl","character level","level number","display level"} },
+    -- NOTE: These controls live under the Target-of-Target page in the Frames menu.
+    -- Options_Player builds shared widgets that are reused across unit tabs; if we tag
+    -- these as uf_player, clicks will always route to Player.
     { label="Inline Text (ToT / castbar inline)",
-      hint="Player › Inline Text", pageKey="uf_player",
+      hint="Frames › Target of Target", pageKey="uf_targettarget",
       keywords={"inline text","tot inline","target of target inline","castbar inline","inline"} },
     { label="Status icons: Combat indicator",
       hint="Player › Status Icons", pageKey="uf_player",anchor="MSUF_StatusCombatIconCB",
@@ -338,10 +332,10 @@ local INDEX = {
       hint="Player › Castbar Toggles", pageKey="uf_player",
       keywords={"castbar","enable castbar","player castbar","target castbar","focus castbar","boss castbar","cast bar toggle","casbar","casting bar","casbar toggle"} },
     { label="Show ToT inline in Target frame",
-      hint="Player › ToT Inline", pageKey="uf_player",anchor="MSUF_ToTInlineInTargetCB",
+      hint="Frames › Target of Target", pageKey="uf_targettarget",anchor="MSUF_ToTInlineInTargetCB",
       keywords={"tot inline","target of target inline","tot in target","secondary target text","tot text inline"} },
     { label="ToT inline separator style",
-      hint="Player › ToT Inline", pageKey="uf_player",anchor="MSUF_ToTInlineSeparatorDropDown",
+      hint="Frames › Target of Target", pageKey="uf_targettarget",anchor="MSUF_ToTInlineSeparatorDropDown",
       keywords={"tot separator","inline separator","tot divider","separator style tot"} },
     { label="Anchor pet to (frame)",
       hint="Player › Anchors", pageKey="uf_player",anchor="MSUF_PetAnchorToDropDown",
@@ -1150,6 +1144,23 @@ local INDEX = {
 }
 
 
+
+-- ---------------------------------------------------------------------------
+-- SearchModule integration (Options_Core.lua calls ns.MSUF_InitSearchModule(...))
+-- We store the passed group roots so AUTO_INDEX can cover Fonts/Misc/Profiles/etc
+-- without crawling the whole panel and generating dead/ambiguous routes.
+-- ---------------------------------------------------------------------------
+local _searchCtx = nil
+if not ns.__MSUF_Search_HookedInit then
+    ns.__MSUF_Search_HookedInit = true
+    local _prevInit = ns.MSUF_InitSearchModule
+    ns.MSUF_InitSearchModule = function(info)
+        _searchCtx = info
+        if type(_prevInit) == "function" then
+            pcall(_prevInit, info)
+        end
+    end
+end
 -- ---------------------------------------------------------------------------
 -- AUTO INDEX (UI crawl) — covers ALL labels in Options panels (including hidden sliders)
 -- Built on-demand when the user first searches (menu-only). Zero combat overhead.
@@ -1225,6 +1236,32 @@ local function _RouteFromContext(context, anchorName)
         return "opt_colors", nil, "Colors"
     elseif context == "gameplay" then
         return "gameplay", nil, "Gameplay"
+    elseif context == "fonts" then
+        return "opt_fonts", nil, "Fonts"
+    elseif context == "auras" then
+        return "opt_auras", nil, "Auras"
+    elseif context == "misc" then
+        return "opt_misc", nil, "Miscellaneous"
+    elseif context == "profiles" then
+        return "profiles", nil, "Profiles"
+    elseif context == "main" then
+        -- Best-effort routing for fallback crawls (avoid dead "Options" results).
+        if type(anchorName) == "string" then
+            if anchorName:find("Bars", 1, true) or anchorName:find("HPText", 1, true) or anchorName:find("PowerText", 1, true) then
+                return "opt_bars", nil, "Bars"
+            elseif anchorName:find("Font", 1, true) or anchorName:find("ShortenName", 1, true) then
+                return "opt_fonts", nil, "Fonts"
+            elseif anchorName:find("Aura", 1, true) then
+                return "opt_auras", nil, "Auras"
+            elseif anchorName:find("Profile", 1, true) then
+                return "profiles", nil, "Profiles"
+            elseif anchorName:find("Misc", 1, true) or anchorName:find("Minimap", 1, true) then
+                return "opt_misc", nil, "Miscellaneous"
+            elseif anchorName:find("Castbar", 1, true) then
+                return "opt_castbar", nil, "Castbar"
+            end
+        end
+        return "main", nil, "Options"
     end
     return "main", nil, "Options"
 end
@@ -1249,27 +1286,36 @@ local function _EnsureOptionsPanelsBuiltForSearch()
     return true
 end
 
-local function _AutoAddEntry(out, seen, label, context, anchorName)
+local function _AutoAddEntry(out, seen, label, context, anchorName, routeOverride)
     label = _Trim(label)
     if not label then return end
 
-    local pageKey, subkey, hint = _RouteFromContext(context, anchorName)
+    local pageKey, subkey, hint
+    if type(routeOverride) == "table" then
+        pageKey = routeOverride.pageKey or routeOverride.pk
+        subkey  = routeOverride.subkey
+        hint    = routeOverride.hint
+    end
+
+    if not pageKey then
+        pageKey, subkey, hint = _RouteFromContext(context, anchorName)
+    end
 
     local k = (pageKey or "") .. "|" .. (subkey or "") .. "|" .. (anchorName or "") .. "|" .. label
     if seen[k] then return end
     seen[k] = true
 
     out[#out + 1] = {
-        label  = label,
-        hint   = hint,
-        pageKey= pageKey,
-        subkey = subkey,
-        anchor = anchorName,
-        keywords = {}, -- keep empty; dynamic labels already cover the UI text
+        label   = label,
+        hint    = hint or "Options",
+        pageKey = pageKey or "main",
+        subkey  = subkey,
+        anchor  = anchorName,
+        keywords = {}, -- dynamic UI text already covers the real labels
     }
 end
 
-local function _ScanRoot(out, seen, rootFrame, context)
+local function _ScanRoot(out, seen, rootFrame, context, routeOverride, onlyShown)
     if not rootFrame or type(rootFrame) ~= "table" then return end
     if rootFrame.IsForbidden and rootFrame:IsForbidden() then return end
 
@@ -1280,16 +1326,22 @@ local function _ScanRoot(out, seen, rootFrame, context)
         if depth > 40 then return end
         if f.IsForbidden and f:IsForbidden() then return end
 
+        if onlyShown and f.IsShown and not f:IsShown() then
+            return
+        end
+
         -- Regions (FontStrings are here — critical for slider labels!)
         if f.GetRegions then
             local regs = { f:GetRegions() }
             for i = 1, #regs do
                 local r = regs[i]
                 if r and r.GetObjectType and r:GetObjectType() == "FontString" and r.GetText then
-                    local txt = r:GetText()
-                    if txt and txt ~= "" then
-                        local anchor = _FindNamedAnchor(r:GetParent() or r) -- prefer parent frame name
-                        _AutoAddEntry(out, seen, txt, context, anchor)
+                    if (not onlyShown) or (r.IsShown and r:IsShown()) then
+                        local txt = r:GetText()
+                        if txt and txt ~= "" then
+                            local anchor = _FindNamedAnchor(r:GetParent() or r) -- prefer parent frame name
+                            _AutoAddEntry(out, seen, txt, context, anchor, routeOverride)
+                        end
                     end
                 end
             end
@@ -1297,16 +1349,20 @@ local function _ScanRoot(out, seen, rootFrame, context)
 
         -- Some widgets store label on .Text/.text
         if f.Text and f.Text.GetText then
-            local txt = f.Text:GetText()
-            if txt and txt ~= "" then
-                local anchor = _FindNamedAnchor(f)
-                _AutoAddEntry(out, seen, txt, context, anchor)
+            if (not onlyShown) or (f.Text.IsShown and f.Text:IsShown()) then
+                local txt = f.Text:GetText()
+                if txt and txt ~= "" then
+                    local anchor = _FindNamedAnchor(f)
+                    _AutoAddEntry(out, seen, txt, context, anchor, routeOverride)
+                end
             end
         elseif f.text and f.text.GetText then
-            local txt = f.text:GetText()
-            if txt and txt ~= "" then
-                local anchor = _FindNamedAnchor(f)
-                _AutoAddEntry(out, seen, txt, context, anchor)
+            if (not onlyShown) or (f.text.IsShown and f.text:IsShown()) then
+                local txt = f.text:GetText()
+                if txt and txt ~= "" then
+                    local anchor = _FindNamedAnchor(f)
+                    _AutoAddEntry(out, seen, txt, context, anchor, routeOverride)
+                end
             end
         end
 
@@ -1320,6 +1376,64 @@ local function _ScanRoot(out, seen, rootFrame, context)
     end
 
     Walk(rootFrame, 0)
+end
+
+-- Frames (Options_Player.lua) uses shared widget names across Player/Target/ToT/Focus/Pet/Boss.
+-- To route correctly we must index the Frames tab once per unit selection and stamp pageKey explicitly.
+-- We do this in a hidden pass (panel alpha=0, mouse disabled) so the user sees no flicker.
+local function _ScanFramesPerUnit(out, seen)
+    local root = _G and _G.MSUF_FramesMenuScrollChild
+    if not root then return end
+
+    if not _searchCtx or type(_searchCtx.setCurrentKey) ~= "function" then
+        -- Fallback to the old heuristic-based scan.
+        _ScanRoot(out, seen, root, "frames")
+        return
+    end
+
+    local panel = (_searchCtx and _searchCtx.panel) or (_G and _G.MSUF_OptionsPanel)
+    if not panel then
+        _ScanRoot(out, seen, root, "frames")
+        return
+    end
+
+    local prevKey = nil
+    if type(_searchCtx.getCurrentKey) == "function" then
+        prevKey = _searchCtx.getCurrentKey()
+    end
+
+    -- Temporarily show the panel so IsShown() reflects per-widget visibility (not blocked by hidden parents).
+    local wasShown  = (panel.IsShown and panel:IsShown()) or false
+    local oldAlpha  = (panel.GetAlpha and panel:GetAlpha()) or 1
+    local oldMouse  = (panel.IsMouseEnabled and panel:IsMouseEnabled())
+    if panel.SetAlpha then pcall(panel.SetAlpha, panel, 0) end
+    if panel.EnableMouse and type(oldMouse) == "boolean" then pcall(panel.EnableMouse, panel, false) end
+    if panel.Show then pcall(panel.Show, panel) end
+
+    local units = {
+        { k = "player",      pk = "uf_player",       hint = "Frames › Player" },
+        { k = "target",      pk = "uf_target",       hint = "Frames › Target" },
+        { k = "targettarget",pk = "uf_targettarget", hint = "Frames › Target of Target" },
+        { k = "focus",       pk = "uf_focus",        hint = "Frames › Focus" },
+        { k = "boss",        pk = "uf_boss",         hint = "Frames › Boss Frames" },
+        { k = "pet",         pk = "uf_pet",          hint = "Frames › Pet" },
+    }
+
+    for i = 1, #units do
+        local u = units[i]
+        pcall(_searchCtx.setCurrentKey, u.k)
+        if panel.LoadFromDB then pcall(panel.LoadFromDB, panel) end
+        _ScanRoot(out, seen, root, "frames", { pageKey = u.pk, hint = u.hint }, true)
+    end
+
+    if prevKey then
+        pcall(_searchCtx.setCurrentKey, prevKey)
+        if panel.LoadFromDB then pcall(panel.LoadFromDB, panel) end
+    end
+
+    if panel.SetAlpha then pcall(panel.SetAlpha, panel, oldAlpha or 1) end
+    if panel.EnableMouse and type(oldMouse) == "boolean" then pcall(panel.EnableMouse, panel, oldMouse) end
+    if not wasShown and panel.Hide then pcall(panel.Hide, panel) end
 end
 
 local function _BuildAutoIndex()
@@ -1340,7 +1454,7 @@ local function _BuildAutoIndex()
     local seen = {}
 
     -- Primary named roots created by CreateOptionsPanel()
-    _ScanRoot(out, seen, _G and _G.MSUF_FramesMenuScrollChild,   "frames")
+    _ScanFramesPerUnit(out, seen)
     _ScanRoot(out, seen, _G and _G.MSUF_CastbarMenuScrollChild,  "castbar")
     _ScanRoot(out, seen, _G and _G.MSUF_BarsMenuScrollChild,     "bars")
     _ScanRoot(out, seen, _G and _G.MSUF_ClassPowerMenuScrollChild,"classpower")
@@ -1349,13 +1463,17 @@ local function _BuildAutoIndex()
     _ScanRoot(out, seen, _G and _G.MSUF_ColorsScrollChild,       "colors")
     _ScanRoot(out, seen, _G and _G.MSUF_GameplayScrollChild,     "gameplay")
 
-    -- As a final safety net, crawl the whole Options panel (captures unnamed groups like Fonts/Misc/Profile).
-    _ScanRoot(out, seen, _G and _G.MSUF_OptionsPanel,            "main")
+    -- Extra groups from Options_Core (Fonts/Auras/Misc/Profiles).
+if _searchCtx then
+    _ScanRoot(out, seen, _searchCtx.fontGroup,    "fonts")
+    _ScanRoot(out, seen, _searchCtx.auraGroup,    "auras")
+    _ScanRoot(out, seen, _searchCtx.miscGroup,    "misc")
+    _ScanRoot(out, seen, _searchCtx.profileGroup, "profiles")
+else
+    -- Fallback safety net if SearchModule ctx wasn't provided yet.
+    _ScanRoot(out, seen, _G and _G.MSUF_OptionsPanel, "main")
+end
 
-    -- If nothing was discovered (e.g. panels not built yet), don't freeze an empty index.
-    if #out == 0 then
-        return
-    end
 
     _AUTO_INDEX = out
     _AUTO_BUILT = true
@@ -1372,19 +1490,42 @@ end
 -- found in the combined searchable text of the entry → zero false negatives.
 -- Secret-safe: no C-API values touched, pure string operations only.
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- Query — fast substring-token match + scoring (no fuzzy flash, no timers)
+-- - Penalizes generic "Options" hits so Bars/Fonts/Castbar pages rank above.
+-- - Returns (topResults, totalMatchCount)
+-- ---------------------------------------------------------------------------
+local function _NormalizeQuery(q)
+    q = lower(q or "")
+    q = q:gsub("[%p%c]+", " ")
+    q = q:gsub("%s+", " ")
+    q = q:gsub("^%s+", "")
+    q = q:gsub("%s+$", "")
+    return q
+end
+
 local function Query(text)
     if not text or #text < MIN_QUERY_LEN then return {}, 0 end
 
-    -- Tokenize query (split on whitespace)
+    local qNorm = _NormalizeQuery(text)
+
+    -- Easter egg: "Dun-Illidan" (case/punct insensitive)
+    if qNorm == "dun illidan" then
+        local e = {
+            label   = "EASTER EGG — he is the one who requested this feature",
+            hint    = "Search",
+            pageKey = "home",
+            keywords = {},
+        }
+        return { e }, 1
+    end
+
+    -- Tokenize query
     local tokens = {}
-    for tok in lower(text):gmatch("%S+") do
+    for tok in qNorm:gmatch("%S+") do
         tokens[#tokens + 1] = tok
     end
     if #tokens == 0 then return {}, 0 end
-
-    local results = {}
-    local count   = 0
-    local seen    = {}
 
     local function EntryMatches(entry)
         if not entry then return false end
@@ -1409,48 +1550,123 @@ local function Query(text)
         return true
     end
 
-    local function Push(entry)
-        if count >= MAX_ROWS then return end
+    local function Score(entry, labelL, hintL)
+        local score = 0
+
+        -- Full-query bonuses (helps "name short" rank "Name shortening" above noise)
+        if labelL == qNorm then score = score + 500 end
+        if #qNorm > 0 then
+            if labelL:sub(1, #qNorm) == qNorm then score = score + 250 end
+            if find(labelL, qNorm, 1, true) then score = score + 200 end
+        end
+
+        -- Token location weighting: Label > Keywords > Hint
+        local kws = entry.keywords
+        for i = 1, #tokens do
+            local tok = tokens[i]
+            if find(labelL, tok, 1, true) then
+                score = score + 60
+            elseif kws then
+                local hitK = false
+                for j = 1, #kws do
+                    if find(kws[j], tok, 1, true) then hitK = true; break end
+                end
+                if hitK then score = score + 35
+                elseif find(hintL, tok, 1, true) then score = score + 18 end
+            else
+                if find(hintL, tok, 1, true) then score = score + 18 end
+            end
+        end
+
+        -- Prefer explicit pages over generic "Options"
+        if hintL == "options" or hintL:find("^options%s") then
+            score = score - 180
+        end
+        if entry.pageKey == "main" and (hintL == "options") then
+            score = score - 80
+        end
+
+        -- Minor tie-breakers
+        if entry.anchor then score = score + 5 end
+        if hintL:find("bars", 1, true) then score = score + 8 end
+        if hintL:find("fonts", 1, true) then score = score + 5 end
+        if hintL:find("castbar", 1, true) then score = score + 5 end
+
+        return score
+    end
+
+    local matches = {}
+    local total   = 0
+    local seen    = {}
+
+    local function Consider(entry)
+        if not EntryMatches(entry) then return end
         local k = (entry.pageKey or "") .. "|" .. (entry.subkey or "") .. "|" .. (entry.anchor or "") .. "|" .. (entry.label or "")
         if seen[k] then return end
         seen[k] = true
-        count = count + 1
-        results[count] = entry
+
+        local labelL = entry._msufLabelL or lower(entry.label or "")
+        local hintL  = entry._msufHintL  or lower(entry.hint  or "")
+        entry._msufLabelL = labelL
+        entry._msufHintL  = hintL
+
+        total = total + 1
+        matches[#matches + 1] = { e = entry, s = Score(entry, labelL, hintL) }
     end
 
-    -- Prefer AUTO_INDEX hits first (these reflect the live UI text)
+    -- Prefer AUTO_INDEX hits first (live UI), then curated static INDEX
     if _AUTO_INDEX then
         for i = 1, #_AUTO_INDEX do
-            if count >= MAX_ROWS then break end
-            local e = _AUTO_INDEX[i]
-            if EntryMatches(e) then Push(e) end
+            Consider(_AUTO_INDEX[i])
         end
     end
-
-    -- Then the curated static INDEX (synonyms / hand-written hints)
     for i = 1, #INDEX do
-        if count >= MAX_ROWS then break end
-        local e = INDEX[i]
-        if EntryMatches(e) then Push(e) end
+        Consider(INDEX[i])
     end
 
-    return results, count
+    if #matches == 0 then return {}, 0 end
+
+    table.sort(matches, function(a, b)
+        if a.s ~= b.s then return a.s > b.s end
+        local al = a.e.label or ""
+        local bl = b.e.label or ""
+        if #al ~= #bl then return #al < #bl end
+        return al < bl
+    end)
+
+    local out = {}
+    local n = #matches
+    if n > MAX_RESULTS_CAP then n = MAX_RESULTS_CAP end
+    for i = 1, n do
+        out[i] = matches[i].e
+    end
+    return out, total
 end
 
 
 
 -- ---------------------------------------------------------------------------
 -- Search Results Panel
+
 -- ---------------------------------------------------------------------------
 local _panel    = nil
 local _rows     = {}
 local _subtitle = nil
 local _noResult = nil
+local _scroll   = nil
+
+local _curResults = nil
+local _curTotal   = 0
 
 local ROW_H    = 36
 local ROW_GAP  = 2
 local PAD_TOP  = 46
 local PAD_SIDE = 10
+-- Scrollbar insets: keep the scrollbar slightly inside the content area so it
+-- doesn't clip against the menu border. Also reserve a gutter so rows don't
+-- overlap the scrollbar.
+local SCROLLBAR_INSET_X = 8
+local SCROLLBAR_GUTTER  = 22
 
 local function _SkinRow(btn)
     if not btn then return end
@@ -1465,6 +1681,9 @@ local function _SkinRow(btn)
         if btn[m] then local t=btn[m](btn); if t then t:SetAlpha(0) end end
     end
 end
+
+-- Forward declare so the Search Results panel can reference it.
+local _NavigateAndScroll
 
 local function _BuildPanel()
     if _panel then return _panel end
@@ -1487,11 +1706,28 @@ local function _BuildPanel()
     if _G.MSUF_SkinMuted then _G.MSUF_SkinMuted(noRes) end
     _noResult = noRes
 
-    for i = 1, MAX_ROWS do
+    -- Faux scrollframe (shows scrollbar + provides scroll offset).
+    local sf = CreateFrame("ScrollFrame", "MSUF_SearchResultsScrollFrame", p, "FauxScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT", p, "TOPLEFT", PAD_SIDE, -(PAD_TOP - 4))
+    sf:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -(PAD_SIDE + SCROLLBAR_INSET_X), 8)
+    sf:Hide()
+    _scroll = sf
+
+    -- Move the scrollbar slightly inward so it won't clip against the border.
+    do
+        local sb = _G[sf:GetName() .. "ScrollBar"] or sf.ScrollBar
+        if sb and sb.ClearAllPoints and sb.SetPoint then
+            sb:ClearAllPoints()
+            sb:SetPoint("TOPRIGHT", sf, "TOPRIGHT", -SCROLLBAR_INSET_X, -16)
+            sb:SetPoint("BOTTOMRIGHT", sf, "BOTTOMRIGHT", -SCROLLBAR_INSET_X, 16)
+        end
+    end
+
+    for i = 1, VISIBLE_ROWS do
         local yOff = -(PAD_TOP + (i-1)*(ROW_H+ROW_GAP))
         local row  = CreateFrame("Button",nil,p)
         row:SetPoint("TOPLEFT",p,"TOPLEFT",PAD_SIDE,yOff)
-        row:SetPoint("TOPRIGHT",p,"TOPRIGHT",-PAD_SIDE,yOff)
+        row:SetPoint("TOPRIGHT",p,"TOPRIGHT",-(PAD_SIDE + SCROLLBAR_GUTTER),yOff)
         row:SetHeight(ROW_H)
         _SkinRow(row)
 
@@ -1517,75 +1753,122 @@ local function _BuildPanel()
         _rows[i] = row
     end
 
+    local function UpdateRows()
+        if not _panel then return end
+        local results = _curResults or {}
+        local listCount = #results
+        local offset = 0
+        if _scroll and _scroll:IsShown() and _G.FauxScrollFrame_GetOffset then
+            offset = _G.FauxScrollFrame_GetOffset(_scroll) or 0
+        end
+        for i = 1, VISIBLE_ROWS do
+            local row = _rows[i]
+            local idx = i + offset
+            local entry = results[idx]
+            if entry then
+                if row._msufLbl  then row._msufLbl:SetText(entry.label) end
+                if row._msufHint then row._msufHint:SetText(entry.hint) end
+                local pk = entry.pageKey
+                local sk = entry.subkey
+                local an = entry.anchor
+                row:SetScript("OnClick", function()
+                    _NavigateAndScroll(pk, an, sk)
+                end)
+                row:Show()
+            else
+                if row._msufLbl  then row._msufLbl:SetText("") end
+                if row._msufHint then row._msufHint:SetText("") end
+                row:SetScript("OnClick", nil)
+                row:Hide()
+            end
+        end
+    end
+
+    -- Wire scroll handlers (menu-only, no overhead when hidden).
+    sf:SetScript("OnVerticalScroll", function(self, offset)
+        if not _menuActive then return end
+        if _G.FauxScrollFrame_OnVerticalScroll then
+            _G.FauxScrollFrame_OnVerticalScroll(self, offset, (ROW_H + ROW_GAP), UpdateRows)
+        end
+    end)
+    sf:EnableMouseWheel(true)
+    sf:SetScript("OnMouseWheel", function(self, delta)
+        if not _menuActive then return end
+        local cur = self:GetVerticalScroll() or 0
+        local step = (ROW_H + ROW_GAP)
+        local new = cur - (delta * step * 3)
+        if new < 0 then new = 0 end
+        self:SetVerticalScroll(new)
+        if _G.FauxScrollFrame_Update then
+            _G.FauxScrollFrame_Update(self, (#(_curResults or {})), VISIBLE_ROWS, (ROW_H + ROW_GAP))
+        end
+        UpdateRows()
+    end)
+
+    p._msufSearchUpdateRows = UpdateRows
+
     _panel = p
     return p
 end
 
--- Navigate to page, scroll to anchor, flash highlight.
+-- Navigate to page, scroll to anchor (highlight flash removed).
 local _scrollEpoch = 0
-local function _NavigateAndScroll(pageKey, anchor, subkey)
+_NavigateAndScroll = function(pageKey, anchor, subkey)
     if type(_G.MSUF_SwitchMirrorPage) == "function" then
         _G.MSUF_SwitchMirrorPage(pageKey, subkey)
     elseif type(_G.MSUF_OpenPage) == "function" then
         _G.MSUF_OpenPage(pageKey, subkey)
     end
     if not anchor then return end
+
     _scrollEpoch = _scrollEpoch + 1
     local epoch = _scrollEpoch
-    C_Timer.After(SCROLL_DELAY, function()
+
+    _CancelTimer(_tScroll); _tScroll = nil
+    _CancelTimer(_tRetry);  _tRetry  = nil
+
+    _tScroll = _StartTimer(SCROLL_DELAY, function()
         if _scrollEpoch ~= epoch then return end
         local ok = ScrollToWidget(pageKey, anchor)
-        if ok then
-            C_Timer.After(0.05, function()
-                if _scrollEpoch ~= epoch then return end
-                HighlightWidget(anchor)
-            end)
-        else
-            C_Timer.After(SCROLL_RETRY - SCROLL_DELAY, function()
-                if _scrollEpoch ~= epoch then return end
-                if ScrollToWidget(pageKey, anchor) then
-                    C_Timer.After(0.05, function()
-                        if _scrollEpoch ~= epoch then return end
-                        HighlightWidget(anchor)
-                    end)
-                end
-            end)
-        end
+        if ok then return end
+        _CancelTimer(_tRetry); _tRetry = nil
+        _tRetry = _StartTimer(SCROLL_RETRY - SCROLL_DELAY, function()
+            if _scrollEpoch ~= epoch then return end
+            ScrollToWidget(pageKey, anchor)
+        end)
     end)
 end
 
 local function _RenderResults(results, count, queryText)
-    count = count or #results
+    local shown = results and #results or 0
+    _curResults = results or {}
+    _curTotal   = count or shown
+
+    local total = _curTotal
     if _subtitle then
-        if count == 0 then
+        if total == 0 then
             _subtitle:SetText("")
-        elseif count >= MAX_ROWS then
-            _subtitle:SetText(format("Top %d results for \"%s\"", MAX_ROWS, tostring(queryText)))
+        elseif total > shown then
+            _subtitle:SetText(format("Top %d of %d results for \"%s\"", shown, total, tostring(queryText)))
         else
             _subtitle:SetText(format("%d result%s for \"%s\"",
-                count, count == 1 and "" or "s", tostring(queryText)))
+                total, total == 1 and "" or "s", tostring(queryText)))
         end
     end
-    if _noResult then _noResult:SetShown(count == 0) end
-    for i = 1, MAX_ROWS do
-        local row   = _rows[i]
-        local entry = results[i]
-        if entry then
-            if row._msufLbl  then row._msufLbl:SetText(entry.label)  end
-            if row._msufHint then row._msufHint:SetText(entry.hint)  end
-            local pk = entry.pageKey
-            local sk = entry.subkey
-            local an = entry.anchor
-            row:SetScript("OnClick", function()
-                _NavigateAndScroll(pk, an, sk)
-            end)
-            row:Show()
+    if _noResult then _noResult:SetShown(total == 0) end
+
+    -- Enable scrolling when there are more than VISIBLE_ROWS results.
+    if _scroll and _G.FauxScrollFrame_Update then
+        if shown > VISIBLE_ROWS then
+            _scroll:Show()
+            _G.FauxScrollFrame_Update(_scroll, shown, VISIBLE_ROWS, (ROW_H + ROW_GAP))
         else
-            if row._msufLbl  then row._msufLbl:SetText("")  end
-            if row._msufHint then row._msufHint:SetText("") end
-            row:SetScript("OnClick", nil)
-            row:Hide()
+            _scroll:SetVerticalScroll(0)
+            _scroll:Hide()
         end
+    end
+    if _panel and _panel._msufSearchUpdateRows then
+        _panel._msufSearchUpdateRows()
     end
 end
 
@@ -1617,13 +1900,11 @@ local function MSUF_Search_InjectNavEditBox(navStack)
     eb:SetPoint("BOTTOMLEFT",navRail,"BOTTOMLEFT",8,8)
     eb:SetPoint("BOTTOMRIGHT",navRail,"BOTTOMRIGHT",-8,8)
     eb:SetAutoFocus(false); eb:SetMaxLetters(48)
-    if eb.SetTextInsets then eb:SetTextInsets(20,6,0,0) end
+    if eb.SetTextInsets then eb:SetTextInsets(6,6,0,0) end
 
-    local icon = navRail:CreateFontString(nil,"ARTWORK","GameFontDisableSmall")
-    icon:SetPoint("LEFT",eb,"LEFT",5,0); icon:SetText("|cff445577⌕|r")
 
     local ph = navRail:CreateFontString(nil,"ARTWORK","GameFontDisableSmall")
-    ph:SetPoint("LEFT",eb,"LEFT",20,0); ph:SetPoint("RIGHT",eb,"RIGHT",-6,0)
+    ph:SetPoint("LEFT",eb,"LEFT",6,0); ph:SetPoint("RIGHT",eb,"RIGHT",-6,0)
     ph:SetJustifyH("LEFT"); ph:SetText("Search settings...")
     if _G.MSUF_SkinMuted then _G.MSUF_SkinMuted(ph) end
     eb._msufPlaceholder = ph
@@ -1665,19 +1946,41 @@ local function MSUF_Search_InjectNavEditBox(navStack)
             _RenderResults(results, count, queryText)
         end
     end
+-- 0-overhead outside the menu: cancel all pending timers on menu hide.
+local function OnMenuShow()
+    _menuActive = true
+end
+local function OnMenuHide()
+    _menuActive = false
+    _CancelAllSearchTimers()
+    _scrollEpoch = _scrollEpoch + 1 -- invalidate any pending scroll epochs
+    if eb and eb.SetText then eb:SetText("") end
+    if eb and eb.ClearFocus then eb:ClearFocus() end
+    _lastPageKey = nil
+    UpdatePlaceholder()
+end
+
+local win = _G.MSUF_StandaloneOptionsWindow or navRail:GetParent()
+if win and win.HookScript and not win.__msufSearchZeroOverhead then
+    win.__msufSearchZeroOverhead = true
+    win:HookScript("OnShow", OnMenuShow)
+    win:HookScript("OnHide", OnMenuHide)
+end
+
 
     eb:SetScript("OnTextChanged", function(self, userInput)
         if not userInput then return end
+        if not _menuActive then return end
         UpdatePlaceholder()
-        local txt      = self:GetText() or ""
-        _debounceEpoch = _debounceEpoch + 1
-        local epoch    = _debounceEpoch
-        if C_Timer and C_Timer.After then
-            C_Timer.After(DEBOUNCE_SEC, function()
-                if _debounceEpoch ~= epoch then return end
-                TriggerSearch(txt)
-            end)
-        else
+        local txt = self:GetText() or ""
+
+        _CancelTimer(_tDebounce); _tDebounce = nil
+        _tDebounce = _StartTimer(DEBOUNCE_SEC, function()
+            TriggerSearch(txt)
+        end)
+
+        -- Fallback if cancelable timers are unavailable.
+        if not _tDebounce then
             TriggerSearch(txt)
         end
     end)

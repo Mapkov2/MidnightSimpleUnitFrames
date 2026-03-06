@@ -34,6 +34,40 @@ local next = next
 local select = select
 local wipe = table.wipe or function(t) for k in next, t do t[k] = nil end return t end
 local C_UnitAuras = C_UnitAuras
+
+-- P7: Aura table pool (max 64 entries).
+-- "Remove" path: recycles aura tables back into the pool instead of abandoning them to GC.
+-- "Added"  path: acquires pooled tables for new entries (reuses instead of {}).
+-- "Updated" path: in-place field copy — the existing table is NEVER replaced.
+--   → zero Lua allocations for aura updates in steady-state raid combat.
+-- Secret-safe: only plain-value C fields + our own _msuf* enrichment fields are touched.
+local _auraPool  = {}
+local _auraPoolN = 0
+local _AURA_POOL_MAX = 64
+
+local function _AuraAcquire()
+    if _auraPoolN > 0 then
+        local t = _auraPool[_auraPoolN]
+        _auraPool[_auraPoolN] = nil
+        _auraPoolN = _auraPoolN - 1
+        return t
+    end
+    return {}
+end
+
+local function _AuraRelease(t)
+    if _auraPoolN < _AURA_POOL_MAX then
+        wipe(t)
+        _auraPoolN = _auraPoolN + 1
+        _auraPool[_auraPoolN] = t
+    end
+end
+
+-- Copy all fields from src into dst (used to write C API data into a pooled/existing table).
+-- Does NOT clear dst first — callers guarantee non-overlapping key sets or explicit wipe.
+local function _AuraCopyFields(dst, src)
+    for k, v in next, src do dst[k] = v end
+end
 local C_Secrets = C_Secrets
 local GetTime = GetTime
 local issecretvalue = _G and _G.issecretvalue
@@ -375,6 +409,8 @@ function Cache.FullScan(unit)
     if not _apisBound then BindAPIs() end
     if not _getSlots or not _getBySlot then return end
     local s = EnsureUnit(unit)
+    -- P7: release all cached aura tables back to pool before wiping.
+    for _, entry in next, s.all do _AuraRelease(entry) end
     wipe(s.all)
     s.changed = true
     s.epoch = s.epoch + 1
@@ -420,9 +456,13 @@ function Cache.OnUnitAura(unit, updateInfo)
         for _, data in next, added do
             local aid = data.auraInstanceID
             if aid then
+                -- P7: copy C data into pooled table so we own the lifecycle.
+                -- Enables release-on-remove instead of abandoning to GC.
+                local entry = _AuraAcquire()
+                _AuraCopyFields(entry, data)
                 local isHelpful = ClassifyHelpful(unit, aid)
-                EnrichAura(unit, data, isHelpful)
-                s.all[aid] = data
+                EnrichAura(unit, entry, isHelpful)
+                s.all[aid] = entry
                 any = true
             end
         end
@@ -431,16 +471,17 @@ function Cache.OnUnitAura(unit, updateInfo)
     local updated = updateInfo.updatedAuraInstanceIDs
     if updated then
         for _, aid in next, updated do
-            local old = s.all[aid]
-            if old then
-                local data = _getByAid and _getByAid(unit, aid)
-                if data then
-                    data._msufIsHelpful    = old._msufIsHelpful
-                    data._msufIsPlayerAura = old._msufIsPlayerAura
-                    data._msufA2_bossFlag  = old._msufA2_bossFlag
-                    data._msufA2_sid       = old._msufA2_sid
-                    data._msufA2_isSated   = old._msufA2_isSated
-                    s.all[aid] = data
+            local entry = s.all[aid]
+            if entry then
+                local fresh = _getByAid and _getByAid(unit, aid)
+                if fresh then
+                    -- P7: in-place update — copy fresh C fields INTO the existing pooled
+                    -- entry.  The table reference in s.all[aid] stays identical.
+                    -- Enrichment fields (_msuf*) are preserved; only C-side keys are
+                    -- overwritten.  Zero Lua table allocation on this hottest path.
+                    _AuraCopyFields(entry, fresh)
+                    -- bossFlag is cached from isBossAura; clear so it is re-read if changed.
+                    entry._msufA2_bossFlag = nil
                     any = true
                 end
             end
@@ -450,8 +491,11 @@ function Cache.OnUnitAura(unit, updateInfo)
     local removed = updateInfo.removedAuraInstanceIDs
     if removed then
         for _, aid in next, removed do
-            if s.all[aid] then
+            local entry = s.all[aid]
+            if entry then
                 s.all[aid] = nil
+                -- P7: return pooled table for reuse instead of abandoning to GC.
+                _AuraRelease(entry)
                 any = true
             end
         end

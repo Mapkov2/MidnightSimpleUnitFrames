@@ -721,12 +721,8 @@ function _G.MSUF_RangeFade_InitPostLogin()
 	        end
 
 	        local function AllowInteractCheck()
-	            if not InCombatLockdown then return false end
-	            local ic = InCombatLockdown()
-	            if NotSecretValue(ic) then
-	                return (ic ~= true)
-	            end
-	            return false
+	            -- P0: _G.MSUF_InCombat is always a plain bool — no secret-value guard needed.
+	            return (_G.MSUF_InCombat ~= true)
 	        end
 
 	        local function UnitSpellRange(unit, spells)
@@ -1021,6 +1017,10 @@ function _G.MSUF_RangeFade_InitPostLogin()
 	        ef:SetScript("OnEvent", function(_, event)
 	            if event == "SPELLS_CHANGED" or event == "PLAYER_ENTERING_WORLD" or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
 	                UpdateActiveSpells()
+	                -- P8: reset throttle on zone/login so first cooldown event always triggers a range check.
+	                if event == "PLAYER_ENTERING_WORLD" then
+	                    _rfThrottleAt = 0
+	                end
 	            end
 
 	            -- Cooldown events: throttle to avoid 27-48 range checks/sec

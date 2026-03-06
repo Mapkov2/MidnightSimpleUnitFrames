@@ -18,6 +18,72 @@ local function TR(v)
     if isEn then return v end
     return L[v] or v
 end
+
+-- ---------------------------------------------------------------------------
+-- Deferred Options Init System (Ellesmere-inspired)
+--
+-- Options files register heavy initialization via ns.MSUF_Options_DeferInit(fn).
+-- All registered closures execute on the first ns.MSUF_Options_EnsureLoaded()
+-- call, which fires when CreateOptionsPanel() runs for the first time.
+--
+-- This means ~18K lines of Options Lua across all files only execute their
+-- heavy widget-building code on first panel open — zero overhead at login
+-- beyond the unavoidable file parse.
+--
+-- Usage in split-out Options files (e.g. MSUF_Options_Auras.lua):
+--
+--   local addonName, ns = ...
+--   ns = ns or {}
+--   ns.MSUF_Options_DeferInit(function()
+--       -- 2789 lines of heavy aura options UI code
+--       function ns.MSUF_RegisterAurasOptions(rootCat) ... end
+--   end)
+--
+-- The closure body is NOT executed at login; it runs only when the user
+-- opens the MSUF options panel for the first time.
+-- ---------------------------------------------------------------------------
+do
+    -- Guard: another file in the suite may have already installed the system.
+    if not ns._optionsDeferredInits then
+        ns._optionsDeferredInits = {}
+        ns._optionsDeferredLoaded = false
+    end
+
+    if not ns.MSUF_Options_DeferInit then
+        --- Register a function to run on first options-panel open.
+        --- If EnsureLoaded has already fired (late-loaded file), executes immediately.
+        function ns.MSUF_Options_DeferInit(fn)
+            if type(fn) ~= "function" then return end
+            if ns._optionsDeferredLoaded then
+                fn()
+            else
+                local t = ns._optionsDeferredInits
+                t[#t + 1] = fn
+            end
+        end
+    end
+
+    if not ns.MSUF_Options_EnsureLoaded then
+        --- Execute all registered deferred inits (idempotent).
+        function ns.MSUF_Options_EnsureLoaded()
+            if ns._optionsDeferredLoaded then return end
+            ns._optionsDeferredLoaded = true
+            local inits = ns._optionsDeferredInits
+            for i = 1, #inits do
+                inits[i]()
+                inits[i] = nil          -- release reference for GC
+            end
+        end
+    end
+
+    -- Export to _G so split-out Options files that use _G.MSUF_NS can access it
+    -- without depending on the vararg `ns` (e.g. MSUF_Options_ClassPower.lua).
+    if _G then
+        _G.MSUF_Options_DeferInit    = _G.MSUF_Options_DeferInit    or ns.MSUF_Options_DeferInit
+        _G.MSUF_Options_EnsureLoaded = _G.MSUF_Options_EnsureLoaded or ns.MSUF_Options_EnsureLoaded
+    end
+end
+
 -- File-scope locals (avoid accidental globals; safe for split modules)
 local panel, title, sub
 local searchBox
@@ -747,6 +813,8 @@ local CreateLabeledSlider
 local MSUF_SetLabeledSliderValue
 function CreateOptionsPanel()
     if not Settings or not Settings.RegisterCanvasLayoutCategory then  return end
+    -- Run all deferred inits from split-out Options files (idempotent; zero cost after first call).
+    ns.MSUF_Options_EnsureLoaded()
     -- If the panel was already fully built, just refresh it.
     if _G and _G.MSUF_OptionsPanel and _G.MSUF_OptionsPanel.__MSUF_FullBuilt then
         local p = _G.MSUF_OptionsPanel
@@ -2442,7 +2510,9 @@ local function MSUF_StyleToggleText(cb)
         button2 = CANCEL,
         hasEditBox = true,
         OnAccept = function(self, data)
-            local newName = (self.editBox:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            local eb = self.editBox or self.EditBox
+            if not (eb and eb.GetText) then return end
+            local newName = (eb:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
             if newName == "" then return end
             if data and data.source and data.panel then
                 if type(MSUF_CopyProfile) == "function" then
@@ -2462,8 +2532,10 @@ local function MSUF_StyleToggleText(cb)
             self:GetParent():Hide()
         end,
         OnShow = function(self)
-            self.editBox:SetText("")
-            self.editBox:SetFocus()
+            local eb = self.editBox or self.EditBox
+            if not (eb and eb.SetText and eb.SetFocus) then return end
+            eb:SetText("")
+            eb:SetFocus()
         end,
         timeout = 0,
         whileDead = true,
@@ -2939,11 +3011,12 @@ copyBtn:SetScript("OnClick", function()
 -- Castbar submenu trimmed (UI cleanup):
 -- Removed: BACK, Player, Target, Boss subpages
 -- Kept: Focus Kick options (toggle via button) + Castbar Edit Mode button
-castbarFocusButton = CreateFrame("Button", "MSUF_CastbarFocusButton", castbarGroup, "UIPanelButtonTemplate")
+castbarFocusButton = CreateFrame("Button", "MSUF_CastbarFocusButton", castbarGroupHost or castbarGroup, "UIPanelButtonTemplate")
 castbarFocusButton:SetSize(120, 22)
 castbarFocusButton:ClearAllPoints()
-castbarFocusButton:SetPoint("TOPLEFT", castbarGroup, "TOPLEFT", 16, -150)
+castbarFocusButton:SetPoint("TOPLEFT", castbarGroupHost or castbarGroup, "TOPLEFT", 16, -150)
 castbarFocusButton:SetText(TR("Focus Kick"))
+castbarFocusButton:SetFrameLevel(((castbarGroupHost or castbarGroup):GetFrameLevel() or 0) + 10)
 if MSUF_SkinMidnightActionButton then
     MSUF_SkinMidnightActionButton(castbarFocusButton)
 elseif MSUF_SkinMidnightTabButton then

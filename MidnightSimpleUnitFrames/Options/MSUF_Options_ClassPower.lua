@@ -425,6 +425,7 @@ local cpOutlineRow     -- slider row: Outline thickness
 local cpChargedCheck   -- "Show empowered combo points"
 local cpTextCheck      -- "Show resource text"
 local cpRuneTimeCheck  -- DK: show rune time text
+local cpPredictionCheck -- "Show resource prediction (Warlock / Balance Druid)"
 local cpAnchorCooldownCheck -- "Anchor to Essential Cooldown"
 local cpFillReverseCheck    -- "Fill right-to-left"
 local cpEleMaelCheck        -- "Show Maelstrom bar (Elemental)"
@@ -432,6 +433,8 @@ local cpEbonMightCheck      -- "Show Ebon Might timer (Aug)"
 local cpFilledAlphaRow      -- slider row: Filled pip alpha
 local cpEmptyAlphaRow       -- slider row: Empty pip alpha
 local cpFontSizeRow         -- slider row: Font size
+local cpTextOffsetXRow      -- slider row: Text X offset
+local cpTextOffsetYRow      -- slider row: Text Y offset
 local cpGapRow              -- slider row: Gap between pips
 local cpHideOOCCheck        -- "Hide out of combat"
 local cpHideFullCheck       -- "Hide when full"
@@ -463,7 +466,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     -- ── Third panel (full width, below both columns) ──
     cpPanel = CreateFrame("Frame", "MSUF_ClassPowerOptionsPanel", leftPanel:GetParent(), "BackdropTemplate")
     local totalW = leftPanel:GetWidth() + rightPanel:GetWidth()
-    cpPanel:SetSize(totalW, 740)
+    cpPanel:SetSize(totalW, 788)
     cpPanel:SetPoint("TOPLEFT", leftPanel, "BOTTOMLEFT", 0, -10)
     cpPanel:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
@@ -597,13 +600,16 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpEbonMightCheck = MakeCheck("MSUF_ClassPowerEbonMightCheck", TR("Show Ebon Might timer (Aug)"), cpPanel, L_CHECK_TW)
     cpEbonMightCheck:SetPoint("TOPLEFT", cpEleMaelCheck, "BOTTOMLEFT", 0, -4)
 
+    cpPredictionCheck = MakeCheck("MSUF_ClassPowerPredictionCheck", TR("Show resource prediction"), cpPanel, L_CHECK_TW)
+    cpPredictionCheck:SetPoint("TOPLEFT", cpEbonMightCheck, "BOTTOMLEFT", 0, -4)
+
     -- =====================================================================
     -- LEFT COLUMN BOTTOM: Detached Power Bar — Texture Overrides
     -- =====================================================================
     local dpbDivider = cpPanel:CreateTexture(nil, "ARTWORK")
     dpbDivider:SetColorTexture(1, 1, 1, 0.12)
     dpbDivider:SetHeight(1)
-    dpbDivider:SetPoint("TOPLEFT", cpEbonMightCheck, "BOTTOMLEFT", -PAD_X, -10)
+    dpbDivider:SetPoint("TOPLEFT", cpPredictionCheck, "BOTTOMLEFT", -PAD_X, -10)
     dpbDivider:SetWidth(LINE_W)
 
     local dpbHeader = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -900,8 +906,14 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpFontSizeRow = MakeCompactSlider("MSUF_CPFontSize", "Font size", cpPanel, 6, 32, 1, "classPowerFontSize",
         cpColorCheck, "TOPLEFT", 0, -10, nil, R_LABEL_W)
 
-    cpBgAlphaRow = MakeCompactSlider("MSUF_CPBgAlpha", "BG opacity", cpPanel, 0, 100, 1, "classPowerBgAlpha",
+    cpTextOffsetXRow = MakeCompactSlider("MSUF_CPTextOffsetX", "Text X", cpPanel, -200, 200, 1, "classPowerTextOffsetX",
         cpFontSizeRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
+
+    cpTextOffsetYRow = MakeCompactSlider("MSUF_CPTextOffsetY", "Text Y", cpPanel, -200, 200, 1, "classPowerTextOffsetY",
+        cpTextOffsetXRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
+
+    cpBgAlphaRow = MakeCompactSlider("MSUF_CPBgAlpha", "BG opacity", cpPanel, 0, 100, 1, "classPowerBgAlpha",
+        cpTextOffsetYRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
 
     cpTickRow = MakeCompactSlider("MSUF_CPTick", "Separator", cpPanel, 0, 4, 1, "classPowerTickWidth",
         cpBgAlphaRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
@@ -1315,6 +1327,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         BindBool(cpFillReverseCheck,   "bars.classPowerFillReverse",      CPRefresh, SyncClassPowerToggles)
         BindBool(cpEleMaelCheck,       "bars.showEleMaelstrom",           CPRefresh, SyncClassPowerToggles)
         BindBool(cpEbonMightCheck,     "bars.showEbonMight",              CPRefresh, SyncClassPowerToggles)
+        BindBool(cpPredictionCheck,    "bars.classPowerShowPrediction",   CPRefresh, SyncClassPowerToggles)
         BindBool(cpHideOOCCheck,       "bars.classPowerHideOOC",          CPRefresh, SyncClassPowerToggles)
         BindBool(cpHideFullCheck,      "bars.classPowerHideWhenFull",     CPRefresh, SyncClassPowerToggles)
         BindBool(cpHideEmptyCheck,     "bars.classPowerHideWhenEmpty",    CPRefresh, SyncClassPowerToggles)
@@ -1563,6 +1576,13 @@ local function SyncClassPowerToggles()
     if cpFontSizeRow then
         cpFontSizeRow:Set(tonumber(b.classPowerFontSize) or 16)
     end
+    -- Text offset
+    if cpTextOffsetXRow then
+        cpTextOffsetXRow:Set(tonumber(b.classPowerTextOffsetX) or 0)
+    end
+    if cpTextOffsetYRow then
+        cpTextOffsetYRow:Set(tonumber(b.classPowerTextOffsetY) or 0)
+    end
     -- Fill reverse
     if cpFillReverseCheck then
         cpFillReverseCheck:SetChecked(b.classPowerFillReverse == true)
@@ -1576,6 +1596,10 @@ local function SyncClassPowerToggles()
     if cpEbonMightCheck then
         cpEbonMightCheck:SetChecked(b.showEbonMight ~= false)
         if cpEbonMightCheck.__msufToggleUpdate then cpEbonMightCheck.__msufToggleUpdate() end
+    end
+    if cpPredictionCheck then
+        cpPredictionCheck:SetChecked(b.classPowerShowPrediction ~= false)
+        if cpPredictionCheck.__msufToggleUpdate then cpPredictionCheck.__msufToggleUpdate() end
     end
     -- Auto-hide
     if cpHideOOCCheck then
@@ -1624,6 +1648,7 @@ local function SyncClassPowerToggles()
     SetEnabled(cpFillReverseCheck, cpOn)
     SetEnabled(cpEleMaelCheck, cpOn)
     SetEnabled(cpEbonMightCheck, cpOn)
+    SetEnabled(cpPredictionCheck, cpOn)
     SetEnabled(cpHideOOCCheck, cpOn)
     SetEnabled(cpHideFullCheck, cpOn)
     SetEnabled(cpHideEmptyCheck, cpOn)
@@ -1637,6 +1662,8 @@ local function SyncClassPowerToggles()
     if cpEmptyAlphaRow  then cpEmptyAlphaRow:SetEnabled(cpOn)  end
     if cpGapRow         then cpGapRow:SetEnabled(cpOn)         end
     if cpFontSizeRow    then cpFontSizeRow:SetEnabled(cpOn)    end
+    if cpTextOffsetXRow then cpTextOffsetXRow:SetEnabled(cpOn) end
+    if cpTextOffsetYRow then cpTextOffsetYRow:SetEnabled(cpOn) end
     if cpPanel and cpPanel._ahHeader then
         cpPanel._ahHeader:SetTextColor(cpOn and 0.85 or 0.35, cpOn and 0.85 or 0.35, cpOn and 0.85 or 0.35)
     end
