@@ -16,6 +16,35 @@ local RAID_CLASS_COLORS     = RAID_CLASS_COLORS
 local C_Timer               = C_Timer
 local hooksecurefunc        = hooksecurefunc
 local _G                    = _G
+local type                  = type
+local tonumber              = tonumber
+
+------------------------------------------------------
+-- P0 perf: Cached DB resolver.
+-- After PLAYER_LOGIN, EnsureDB() is a no-op and MSUF_DB.general
+-- always exists.  Every getter was paying for:
+--   1× global lookup (EnsureDB), 1× function call, 1× "or {}" guard
+-- ~20 getters × N calls/sec = thousands of redundant ops.
+--
+-- _general() caches the ref and only refreshes when MSUF_DB identity
+-- changes (profile switch replaces the entire table).
+------------------------------------------------------
+local _cachedDB, _cachedGen
+
+local function _general()
+    local db = MSUF_DB
+    if db and _cachedDB == db then
+        return _cachedGen
+    end
+    -- First call or profile switch: resolve fresh.
+    if EnsureDB then EnsureDB() end
+    db = MSUF_DB
+    if not db then return nil end
+    db.general = db.general or {}
+    _cachedDB  = db
+    _cachedGen = db.general
+    return _cachedGen
+end
 
 ------------------------------------------------------
 -- Helper: apply visual updates
@@ -237,13 +266,8 @@ end
 -- Helpers: Global font color
 ------------------------------------------------------
 local function GetGlobalFontColor()
-    if not EnsureDB or not MSUF_DB then
-        return 1, 1, 1
-    end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    local g = _general()
+    if not g then return 1, 1, 1 end
 
     if g.useCustomFontColor
        and g.fontColorCustomR and g.fontColorCustomG and g.fontColorCustomB
@@ -255,26 +279,20 @@ local function GetGlobalFontColor()
 end
 
 local function SetGlobalFontColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
+    local gen = _general()
+    if not gen then return end
 
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local general = MSUF_DB.general
-
-    general.fontColorCustomR = r or 1
-    general.fontColorCustomG = g or 1
-    general.fontColorCustomB = b or 1
-    general.useCustomFontColor = true
+    gen.fontColorCustomR = r or 1
+    gen.fontColorCustomG = g or 1
+    gen.fontColorCustomB = b or 1
+    gen.useCustomFontColor = true
 
     PushVisualUpdates()
 end
 
 local function ResetGlobalFontToPalette()
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    local g = _general()
+    if not g then return end
 
     g.useCustomFontColor = false
     g.fontColorCustomR = nil
@@ -289,13 +307,8 @@ end
 -- Helpers: Castbar text color (custom RGB; falls back to Global font color)
 ------------------------------------------------------
 local function GetCastbarTextColor()
-    if not EnsureDB or not MSUF_DB then
-        return GetGlobalFontColor()
-    end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    local g = _general()
+    if not g then return GetGlobalFontColor() end
 
     local r = tonumber(g.castbarTextR)
     local gg = tonumber(g.castbarTextG)
@@ -312,26 +325,20 @@ end
 MSUF_GetCastbarTextColor = GetCastbarTextColor
 
 local function SetCastbarTextColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
+    local gen = _general()
+    if not gen then return end
 
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local general = MSUF_DB.general
-
-    general.castbarTextR = r or 1
-    general.castbarTextG = g or 1
-    general.castbarTextB = b or 1
-    general.castbarTextUseCustom = true
+    gen.castbarTextR = r or 1
+    gen.castbarTextG = g or 1
+    gen.castbarTextB = b or 1
+    gen.castbarTextUseCustom = true
 
     PushVisualUpdates()
 end
 
 local function ResetCastbarTextColorToGlobal()
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    local g = _general()
+    if not g then return end
 
     g.castbarTextR = nil
     g.castbarTextG = nil
@@ -346,13 +353,8 @@ end
 -- Helpers: Castbar border color (Outline)
 ------------------------------------------------------
 local function GetCastbarBorderColor()
-    if not EnsureDB or not MSUF_DB then
-        return 0, 0, 0, 1
-    end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    local g = _general()
+    if not g then return 0, 0, 0, 1 end
 
     local r  = tonumber(g.castbarBorderR); if r  == nil then r  = 0 end
     local gg = tonumber(g.castbarBorderG); if gg == nil then gg = 0 end
@@ -362,16 +364,13 @@ local function GetCastbarBorderColor()
 end
 
 local function SetCastbarBorderColor(r, g, b, a)
-    if not EnsureDB or not MSUF_DB then return end
+    local gen = _general()
+    if not gen then return end
 
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local general = MSUF_DB.general
-
-    general.castbarBorderR = r
-    general.castbarBorderG = g
-    general.castbarBorderB = b
-    general.castbarBorderA = a or 1
+    gen.castbarBorderR = r
+    gen.castbarBorderG = g
+    gen.castbarBorderB = b
+    gen.castbarBorderA = a or 1
 
     if _G.MSUF_ApplyCastbarOutlineToAll then
         _G.MSUF_ApplyCastbarOutlineToAll(true)
@@ -379,11 +378,8 @@ local function SetCastbarBorderColor(r, g, b, a)
 end
 
 local function ResetCastbarBorderColor()
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    local g = _general()
+    if not g then return end
 
     g.castbarBorderR = nil
     g.castbarBorderG = nil
@@ -402,13 +398,8 @@ end
 -- Default: 0.176, 0.176, 0.176, 1 (dark grey, matches legacy)
 ------------------------------------------------------
 local function GetCastbarBackgroundColor()
-    if not EnsureDB or not MSUF_DB then
-        return 0.176, 0.176, 0.176, 1
-    end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    local g = _general()
+    if not g then return 0.176, 0.176, 0.176, 1 end
 
     local r  = tonumber(g.castbarBgR)
     local gg = tonumber(g.castbarBgG)
@@ -425,16 +416,13 @@ end
 _G.MSUF_GetCastbarBackgroundColor = GetCastbarBackgroundColor
 
 local function SetCastbarBackgroundColor(r, g, b, a)
-    if not EnsureDB or not MSUF_DB then return end
+    local gen = _general()
+    if not gen then return end
 
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local general = MSUF_DB.general
-
-    general.castbarBgR = r
-    general.castbarBgG = g
-    general.castbarBgB = b
-    general.castbarBgA = a or 1
+    gen.castbarBgR = r
+    gen.castbarBgG = g
+    gen.castbarBgB = b
+    gen.castbarBgA = a or 1
 
     -- Live-apply to all active castbar frames (same pattern as SetCastbarBorderColor)
     if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
@@ -443,11 +431,8 @@ local function SetCastbarBackgroundColor(r, g, b, a)
 end
 
 local function ResetCastbarBackgroundColor()
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    local g = _general()
+    if not g then return end
 
     g.castbarBgR = nil
     g.castbarBgG = nil
@@ -464,26 +449,18 @@ end
 -- Helpers: Interruptible cast color
 ------------------------------------------------------
 local function GetInterruptibleCastColor()
-    if not EnsureDB or not MSUF_DB then
-        return 0, 0.9, 0.8
-    end
+    local g = _general()
+    if not g then return 0, 0.9, 0.8 end
 
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
-
-    -- Neuer Weg: freie RGB-Farbe
     if g.castbarInterruptibleR and g.castbarInterruptibleG and g.castbarInterruptibleB then
         return g.castbarInterruptibleR, g.castbarInterruptibleG, g.castbarInterruptibleB
     end
 
-    -- Alter Weg: Palette-String aus alten SavedVariables
     if g.castbarInterruptibleColor and MSUF_FONT_COLORS and MSUF_FONT_COLORS[g.castbarInterruptibleColor] then
         local c = MSUF_FONT_COLORS[g.castbarInterruptibleColor]
         return c[1], c[2], c[3]
     end
 
-    -- Fallback: Turquoise aus der Palette
     if MSUF_FONT_COLORS and MSUF_FONT_COLORS["turquoise"] then
         local c = MSUF_FONT_COLORS["turquoise"]
         return c[1], c[2], c[3]
@@ -491,19 +468,15 @@ local function GetInterruptibleCastColor()
 
     return 0, 0.9, 0.8
 end
--- global alias, damit die Castbar-Logik im Main-File die Picker-Farbe nutzen kann
 MSUF_GetInterruptibleCastColor = GetInterruptibleCastColor
 
 local function SetInterruptibleCastColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
+    local gen = _general()
+    if not gen then return end
 
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local general = MSUF_DB.general
-
-    general.castbarInterruptibleR = r or 0
-    general.castbarInterruptibleG = g or 0.9
-    general.castbarInterruptibleB = b or 0.8
+    gen.castbarInterruptibleR = r or 0
+    gen.castbarInterruptibleG = g or 0.9
+    gen.castbarInterruptibleB = b or 0.8
 
     PushVisualUpdates()
 end
@@ -513,16 +486,9 @@ end
 -- Helpers: Non-interruptible cast color
 ------------------------------------------------------
 local function GetNonInterruptibleCastColor()
-    if not EnsureDB or not MSUF_DB then
-        -- Default: dunkles Rot
-        return 0.4, 0.01, 0.01
-    end
+    local g = _general()
+    if not g then return 0.4, 0.01, 0.01 end
 
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
-
-    -- Neuer Weg: freie RGB-Werte aus SavedVariables
     local r = tonumber(g.castbarNonInterruptibleR)
     local gg = tonumber(g.castbarNonInterruptibleG)
     local b = tonumber(g.castbarNonInterruptibleB)
@@ -531,7 +497,6 @@ local function GetNonInterruptibleCastColor()
         return r, gg, b
     end
 
-    -- Alter Weg: Palette-String aus alten SavedVariables
     if g.castbarNonInterruptibleColor
         and MSUF_FONT_COLORS
         and MSUF_FONT_COLORS[g.castbarNonInterruptibleColor]
@@ -540,29 +505,23 @@ local function GetNonInterruptibleCastColor()
         return c[1], c[2], c[3]
     end
 
-    -- Fallback: aus der Palette
     if MSUF_FONT_COLORS and MSUF_FONT_COLORS["red"] then
         local c = MSUF_FONT_COLORS["red"]
         return c[1], c[2], c[3]
     end
 
-    -- letzter Fallback: hartes Rot
     return 0.4, 0.01, 0.01
 end
 
--- global alias die Castbar-Logik im Main-File
 MSUF_GetNonInterruptibleCastColor = GetNonInterruptibleCastColor
 
 local function SetNonInterruptibleCastColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
+    local gen = _general()
+    if not gen then return end
 
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local general = MSUF_DB.general
-
-    general.castbarNonInterruptibleR = r or 0.4
-    general.castbarNonInterruptibleG = g or 0.01
-    general.castbarNonInterruptibleB = b or 0.01
+    gen.castbarNonInterruptibleR = r or 0.4
+    gen.castbarNonInterruptibleG = g or 0.01
+    gen.castbarNonInterruptibleB = b or 0.01
 
     PushVisualUpdates()
 end
@@ -572,15 +531,9 @@ end
 -- Helpers: Interrupt feedback color
 ------------------------------------------------------
 local function GetInterruptFeedbackCastColor()
-    if not EnsureDB or not MSUF_DB then
-        return 0.8, 0.1, 0.1
-    end
+    local g = _general()
+    if not g then return 0.8, 0.1, 0.1 end
 
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
-
-    -- Neuer Weg: freie RGB-Werte aus SavedVariables
     local r  = tonumber(g.castbarInterruptR)
     local gg = tonumber(g.castbarInterruptG)
     local b  = tonumber(g.castbarInterruptB)
@@ -589,7 +542,6 @@ local function GetInterruptFeedbackCastColor()
         return r, gg, b
     end
 
-    -- Alter Weg: Palette-String aus alten SavedVariables
     if g.castbarInterruptColor
         and MSUF_FONT_COLORS
         and MSUF_FONT_COLORS[g.castbarInterruptColor]
@@ -598,26 +550,21 @@ local function GetInterruptFeedbackCastColor()
         return c[1], c[2], c[3]
     end
 
-    -- Fallback: "red" aus der Palette
     if MSUF_FONT_COLORS and MSUF_FONT_COLORS["red"] then
         local c = MSUF_FONT_COLORS["red"]
         return c[1], c[2], c[3]
     end
 
-    -- letzter Fallback: hartes Rot
     return 0.8, 0.1, 0.1
 end
 
 local function SetInterruptFeedbackCastColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
+    local gen = _general()
+    if not gen then return end
 
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local general = MSUF_DB.general
-
-    general.castbarInterruptR = r or 0.8
-    general.castbarInterruptG = g or 0.1
-    general.castbarInterruptB = b or 0.1
+    gen.castbarInterruptR = r or 0.8
+    gen.castbarInterruptG = g or 0.1
+    gen.castbarInterruptB = b or 0.1
 
     PushVisualUpdates()
 end
@@ -627,57 +574,47 @@ end
 -- Helpers: Player castbar override
 ------------------------------------------------------
 local function GetPlayerCastbarOverrideEnabled()
-    if not EnsureDB or not MSUF_DB then return false end
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local general = MSUF_DB.general
-    return general.playerCastbarOverrideEnabled == true
+    local g = _general()
+    return g and g.playerCastbarOverrideEnabled == true or false
 end
 
 local function SetPlayerCastbarOverrideEnabled(enabled)
-    if not EnsureDB or not MSUF_DB then return end
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    MSUF_DB.general.playerCastbarOverrideEnabled = (enabled == true)
+    local g = _general()
+    if not g then return end
+    g.playerCastbarOverrideEnabled = (enabled == true)
     PushVisualUpdates()
 end
 
 local function GetPlayerCastbarOverrideMode()
-    if not EnsureDB or not MSUF_DB then return "CLASS" end
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local m = MSUF_DB.general.playerCastbarOverrideMode
+    local g = _general()
+    if not g then return "CLASS" end
+    local m = g.playerCastbarOverrideMode
     if m == "CUSTOM" or m == "CLASS" then return m end
     return "CLASS"
 end
 
 local function SetPlayerCastbarOverrideMode(mode)
-    if not EnsureDB or not MSUF_DB then return end
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    MSUF_DB.general.playerCastbarOverrideMode = (mode == "CUSTOM") and "CUSTOM" or "CLASS"
+    local g = _general()
+    if not g then return end
+    g.playerCastbarOverrideMode = (mode == "CUSTOM") and "CUSTOM" or "CLASS"
     PushVisualUpdates()
 end
 
 local function GetPlayerCastbarOverrideColor()
-    if not EnsureDB or not MSUF_DB then return 1, 1, 1 end
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local general = MSUF_DB.general
-    local r = tonumber(general.playerCastbarOverrideR) or 1
-    local g = tonumber(general.playerCastbarOverrideG) or 1
-    local b = tonumber(general.playerCastbarOverrideB) or 1
-    return r, g, b
+    local g = _general()
+    if not g then return 1, 1, 1 end
+    local r = tonumber(g.playerCastbarOverrideR) or 1
+    local gg = tonumber(g.playerCastbarOverrideG) or 1
+    local b = tonumber(g.playerCastbarOverrideB) or 1
+    return r, gg, b
 end
 
 local function SetPlayerCastbarOverrideColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local general = MSUF_DB.general
-    general.playerCastbarOverrideR = r or 1
-    general.playerCastbarOverrideG = g or 1
-    general.playerCastbarOverrideB = b or 1
+    local gen = _general()
+    if not gen then return end
+    gen.playerCastbarOverrideR = r or 1
+    gen.playerCastbarOverrideG = g or 1
+    gen.playerCastbarOverrideB = b or 1
     PushVisualUpdates()
 end
 
@@ -702,10 +639,10 @@ local CLASS_TOKENS = {
 }
 
 local function GetClassColor(token)
-    if EnsureDB and MSUF_DB then
-        EnsureDB()
-        MSUF_DB.classColors = MSUF_DB.classColors or {}
-        local t = MSUF_DB.classColors[token]
+    local db = MSUF_DB
+    if db then
+        local cc = db.classColors
+        local t = cc and cc[token]
         if t and t.r and t.g and t.b then
             return t.r, t.g, t.b
         end
@@ -720,23 +657,21 @@ local function GetClassColor(token)
 end
 
 local function SetClassColor(token, r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
+    local gen = _general()
+    if not gen then return end
 
-    EnsureDB()
-    MSUF_DB.classColors = MSUF_DB.classColors or {}
-    local t = MSUF_DB.classColors[token] or {}
+    local db = MSUF_DB
+    db.classColors = db.classColors or {}
+    local t = db.classColors[token] or {}
     t.r, t.g, t.b = r or 1, g or 1, b or 1
-    MSUF_DB.classColors[token] = t
+    db.classColors[token] = t
 
     PushVisualUpdates()
 end
 
 local function ResetAllClassColors()
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
+    if not MSUF_DB then return end
     MSUF_DB.classColors = nil
-
     PushVisualUpdates()
 end
 
@@ -745,13 +680,8 @@ end
 -- Helpers: Class Color bar background
 ------------------------------------------------------
 local function GetClassBarBgColor()
-    if not EnsureDB or not MSUF_DB then
-        return 0, 0, 0
-    end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    local g = _general()
+    if not g then return 0, 0, 0 end
 
     local r  = tonumber(g.classBarBgR) or 0
     local gg = tonumber(g.classBarBgG) or 0
@@ -765,21 +695,16 @@ local function GetClassBarBgColor()
 end
 
 local function SetClassBarBgColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local gen = MSUF_DB.general
-
+    local gen = _general()
+    if not gen then return end
     gen.classBarBgR = r or 0
     gen.classBarBgG = g or 0
     gen.classBarBgB = b or 0
-
     PushVisualUpdates()
 end
 
 local function ResetClassBarBgColor()
-    SetClassBarBgColor(0, 0, 0) -- default: black
+    SetClassBarBgColor(0, 0, 0)
 end
 
 
@@ -787,76 +712,63 @@ end
 -- Helpers: Bar background match HP color
 ------------------------------------------------------
 local function GetBarBgMatchHP()
-    if not EnsureDB or not MSUF_DB then return false end
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    return MSUF_DB.general.barBgMatchHPColor and true or false
+    local g = _general()
+    return g and g.barBgMatchHPColor and true or false
 end
 
 local function SetBarBgMatchHP(v)
-    if not EnsureDB or not MSUF_DB then return end
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    MSUF_DB.general.barBgMatchHPColor = v and true or false
+    local g = _general()
+    if not g then return end
+    g.barBgMatchHPColor = v and true or false
     PushVisualUpdates()
 end
 
 
 ------------------------------------------------------
 -- Helpers: NPC reaction colors
+-- P2 perf: lookup table eliminates if/elseif chain.
 ------------------------------------------------------
-local function GetNPCDefaultColor(kind)
-    if kind == "friendly" then
-        return 0, 1, 0
-    elseif kind == "neutral" then
-        return 1, 1, 0
-    elseif kind == "enemy" then
-        return 1, 0, 0
-    elseif kind == "dead" then
-        return 0.4, 0.4, 0.4
-    end
-    return 1, 1, 1
-end
+local NPC_DEFAULT_COLORS = {
+    friendly = { 0, 1, 0 },
+    neutral  = { 1, 1, 0 },
+    enemy    = { 1, 0, 0 },
+    dead     = { 0.4, 0.4, 0.4 },
+}
+local NPC_FALLBACK = { 1, 1, 1 }
 
 local function GetNPCColor(kind)
-    local defR, defG, defB = GetNPCDefaultColor(kind)
+    local def = NPC_DEFAULT_COLORS[kind] or NPC_FALLBACK
 
-    if not EnsureDB or not MSUF_DB then
-        return defR, defG, defB
+    local db = MSUF_DB
+    if db then
+        local nc = db.npcColors
+        local t = nc and nc[kind]
+        if t and t.r and t.g and t.b then
+            return t.r, t.g, t.b
+        end
     end
 
-    EnsureDB()
-    MSUF_DB.npcColors = MSUF_DB.npcColors or {}
-    local t = MSUF_DB.npcColors[kind]
-
-    if t and t.r and t.g and t.b then
-        return t.r, t.g, t.b
-    end
-
-    return defR, defG, defB
+    return def[1], def[2], def[3]
 end
 
 local function SetNPCColor(kind, r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
+    local gen = _general()
+    if not gen then return end
 
-    EnsureDB()
-    MSUF_DB.npcColors = MSUF_DB.npcColors or {}
-
-    local t = MSUF_DB.npcColors[kind] or {}
+    local db = MSUF_DB
+    db.npcColors = db.npcColors or {}
+    local t = db.npcColors[kind] or {}
     t.r = r or 1
     t.g = g or 1
     t.b = b or 1
-    MSUF_DB.npcColors[kind] = t
+    db.npcColors[kind] = t
 
     PushVisualUpdates()
 end
 
 local function ResetAllNPCColors()
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
+    if not MSUF_DB then return end
     MSUF_DB.npcColors = nil
-
     PushVisualUpdates()
 end
 
@@ -865,26 +777,17 @@ end
 -- Helpers: Pet frame bar color
 ------------------------------------------------------
 local function GetPetFrameColor()
-    -- Visual default (matches current behavior in "non-class" mode)
-    local defR, defG, defB = 0, 1, 0
-
-    if not EnsureDB or not MSUF_DB then
-        return defR, defG, defB
-    end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
+    local g = _general()
+    if not g then return 0, 1, 0 end
 
     local r = g.petFrameColorR
     local gg = g.petFrameColorG
     local b = g.petFrameColorB
 
     if type(r) ~= "number" or type(gg) ~= "number" or type(b) ~= "number" then
-        return defR, defG, defB
+        return 0, 1, 0
     end
 
-    -- Clamp to [0,1] to avoid bad values without touching secret APIs.
     if r < 0 then r = 0 elseif r > 1 then r = 1 end
     if gg < 0 then gg = 0 elseif gg > 1 then gg = 1 end
     if b < 0 then b = 0 elseif b > 1 then b = 1 end
@@ -893,16 +796,11 @@ local function GetPetFrameColor()
 end
 
 local function SetPetFrameColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local gen = MSUF_DB.general
-
+    local gen = _general()
+    if not gen then return end
     gen.petFrameColorR = r
     gen.petFrameColorG = g
     gen.petFrameColorB = b
-
     PushVisualUpdates()
 end
 
@@ -911,54 +809,42 @@ end
 -- Helpers: Absorb / Heal-Absorb overlay colors
 ------------------------------------------------------
 local function GetAbsorbOverlayColor()
-    local r, g, b = 0.8, 0.9, 1.0
-    if MSUF_DB and MSUF_DB.general then
-        local gen = MSUF_DB.general
-        local ar, ag, ab = gen.absorbBarColorR, gen.absorbBarColorG, gen.absorbBarColorB
+    local g = _general()
+    if g then
+        local ar, ag, ab = g.absorbBarColorR, g.absorbBarColorG, g.absorbBarColorB
         if type(ar) == "number" and type(ag) == "number" and type(ab) == "number" then
-            r, g, b = ar, ag, ab
+            return ar, ag, ab
         end
     end
-    return r, g, b
+    return 0.8, 0.9, 1.0
 end
 
 local function SetAbsorbOverlayColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local gen = MSUF_DB.general
-
+    local gen = _general()
+    if not gen then return end
     gen.absorbBarColorR = r
     gen.absorbBarColorG = g
     gen.absorbBarColorB = b
-
     PushVisualUpdates()
 end
 
 local function GetHealAbsorbOverlayColor()
-    local r, g, b = 1.0, 0.4, 0.4
-    if MSUF_DB and MSUF_DB.general then
-        local gen = MSUF_DB.general
-        local ar, ag, ab = gen.healAbsorbBarColorR, gen.healAbsorbBarColorG, gen.healAbsorbBarColorB
+    local g = _general()
+    if g then
+        local ar, ag, ab = g.healAbsorbBarColorR, g.healAbsorbBarColorG, g.healAbsorbBarColorB
         if type(ar) == "number" and type(ag) == "number" and type(ab) == "number" then
-            r, g, b = ar, ag, ab
+            return ar, ag, ab
         end
     end
-    return r, g, b
+    return 1.0, 0.4, 0.4
 end
 
 local function SetHealAbsorbOverlayColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local gen = MSUF_DB.general
-
+    local gen = _general()
+    if not gen then return end
     gen.healAbsorbBarColorR = r
     gen.healAbsorbBarColorG = g
     gen.healAbsorbBarColorB = b
-
     PushVisualUpdates()
 end
 
@@ -967,52 +853,39 @@ end
 -- Helpers: Power bar background color
 ------------------------------------------------------
 local function GetPowerBarBackgroundColor()
-    -- Default: mirror current Bar background tint (base values, not dark-brightness scaled)
-    local defR, defG, defB = 0, 0, 0
+    local g = _general()
+    if not g then return 0, 0, 0 end
 
-    if EnsureDB and MSUF_DB then
-        EnsureDB()
-        MSUF_DB.general = MSUF_DB.general or {}
-        local g = MSUF_DB.general
+    -- Check explicit power bar BG override first
+    local r = g.powerBarBgColorR
+    local gg = g.powerBarBgColorG
+    local b = g.powerBarBgColorB
 
-        local br = tonumber(g.classBarBgR)
-        local bg = tonumber(g.classBarBgG)
-        local bb = tonumber(g.classBarBgB)
-
-        if type(br) == "number" then defR = br end
-        if type(bg) == "number" then defG = bg end
-        if type(bb) == "number" then defB = bb end
-
-        if defR < 0 then defR = 0 elseif defR > 1 then defR = 1 end
-        if defG < 0 then defG = 0 elseif defG > 1 then defG = 1 end
-        if defB < 0 then defB = 0 elseif defB > 1 then defB = 1 end
-
-        local r = g.powerBarBgColorR
-        local gg = g.powerBarBgColorG
-        local b = g.powerBarBgColorB
-
-        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
-            if r < 0 then r = 0 elseif r > 1 then r = 1 end
-            if gg < 0 then gg = 0 elseif gg > 1 then gg = 1 end
-            if b < 0 then b = 0 elseif b > 1 then b = 1 end
-            return r, gg, b
-        end
+    if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+        if r < 0 then r = 0 elseif r > 1 then r = 1 end
+        if gg < 0 then gg = 0 elseif gg > 1 then gg = 1 end
+        if b < 0 then b = 0 elseif b > 1 then b = 1 end
+        return r, gg, b
     end
+
+    -- Fallback: mirror bar background tint
+    local defR = tonumber(g.classBarBgR) or 0
+    local defG = tonumber(g.classBarBgG) or 0
+    local defB = tonumber(g.classBarBgB) or 0
+
+    if defR < 0 then defR = 0 elseif defR > 1 then defR = 1 end
+    if defG < 0 then defG = 0 elseif defG > 1 then defG = 1 end
+    if defB < 0 then defB = 0 elseif defB > 1 then defB = 1 end
 
     return defR, defG, defB
 end
 
 local function SetPowerBarBackgroundColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
-
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local gen = MSUF_DB.general
-
+    local gen = _general()
+    if not gen then return end
     gen.powerBarBgColorR = r
     gen.powerBarBgColorG = g
     gen.powerBarBgColorB = b
-
     PushVisualUpdates()
 end
 
@@ -1021,11 +894,8 @@ end
 -- Helpers: Aggro border color
 ------------------------------------------------------
 local function GetAggroBorderColor()
-    local defR, defG, defB = 1, 0.50, 0
-    if EnsureDB and MSUF_DB then
-        EnsureDB()
-        MSUF_DB.general = MSUF_DB.general or {}
-        local g = MSUF_DB.general
+    local g = _general()
+    if g then
         local r = g.aggroBorderColorR
         local gg = g.aggroBorderColorG
         local b = g.aggroBorderColorB
@@ -1033,14 +903,12 @@ local function GetAggroBorderColor()
             return r, gg, b
         end
     end
-    return defR, defG, defB
+    return 1, 0.50, 0
 end
 
 local function SetAggroBorderColor(r, g, b)
-    if not EnsureDB or not MSUF_DB then return end
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    local gen = MSUF_DB.general
+    local gen = _general()
+    if not gen then return end
     gen.aggroBorderColorR = r
     gen.aggroBorderColorG = g
     gen.aggroBorderColorB = b
@@ -1052,29 +920,31 @@ end
 -- Helpers: Power bar background match HP
 ------------------------------------------------------
 local function GetPowerBarBackgroundMatchHP()
-    if MSUF_DB and MSUF_DB.general then
-        local v = MSUF_DB.general.powerBarBgMatchHPColor
+    local g = _general()
+    if g then
+        local v = g.powerBarBgMatchHPColor
         if v ~= nil then
             return v and true or false
         end
     end
-    -- Legacy fallback (older patch stored this under bars)
-    if MSUF_DB and MSUF_DB.bars then
-        return MSUF_DB.bars.powerBarBgMatchBarColor and true or false
+    -- Legacy fallback
+    local db = MSUF_DB
+    if db and db.bars then
+        return db.bars.powerBarBgMatchBarColor and true or false
     end
     return false
 end
 
 local function SetPowerBarBackgroundMatchHP(enabled)
-    if not EnsureDB or not MSUF_DB then return end
-    EnsureDB()
-    MSUF_DB.general = MSUF_DB.general or {}
-    MSUF_DB.bars = MSUF_DB.bars or {}
+    local g = _general()
+    if not g then return end
+
+    local db = MSUF_DB
+    db.bars = db.bars or {}
 
     local v = enabled and true or false
-    MSUF_DB.general.powerBarBgMatchHPColor = v
-    -- Keep legacy key in sync (so older UI paths still reflect the state)
-    MSUF_DB.bars.powerBarBgMatchBarColor = v
+    g.powerBarBgMatchHPColor = v
+    db.bars.powerBarBgMatchBarColor = v
 
     PushVisualUpdates()
 end
