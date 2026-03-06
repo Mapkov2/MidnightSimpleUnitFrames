@@ -66,7 +66,13 @@ function _G.MSUF_BuildCastbarFrameElements(self)
         end
     end
     backgroundBar:SetTexture(bgTex)
-    backgroundBar:SetVertexColor(0.176, 0.176, 0.176, 1)
+    do
+        local br, bg, bb, ba = 0.176, 0.176, 0.176, 1
+        if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
+            br, bg, bb, ba = _G.MSUF_GetCastbarBackgroundColor()
+        end
+        backgroundBar:SetVertexColor(br, bg, bb, ba)
+    end
     self.backgroundBar = backgroundBar
 
     local castText = statusBar:CreateFontString(nil, "OVERLAY")

@@ -299,6 +299,13 @@ local function CreateBossCastbarFrame(unit)
         __bg = (type(_G.MSUF_GetCastbarTexture) == "function" and _G.MSUF_GetCastbarTexture()) or "Interface\\TargetingFrame\\UI-StatusBar"
     end
     backgroundBar:SetTexture(__bg)
+    do
+        local br, bg, bb, ba = 0.176, 0.176, 0.176, 1
+        if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
+            br, bg, bb, ba = _G.MSUF_GetCastbarBackgroundColor()
+        end
+        backgroundBar:SetVertexColor(br, bg, bb, ba)
+    end
     frame.backgroundBar = backgroundBar
 
     -- Texts (inside statusbar region)
@@ -483,7 +490,13 @@ if self.backgroundBar then
         end
     end
     SafeCall(self.backgroundBar.SetTexture, self.backgroundBar, bgTex)
-    SafeCall(self.backgroundBar.SetVertexColor, self.backgroundBar, 0.176, 0.176, 0.176, 1)
+    do
+        local br, bg, bb, ba = 0.176, 0.176, 0.176, 1
+        if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
+            br, bg, bb, ba = _G.MSUF_GetCastbarBackgroundColor()
+        end
+        SafeCall(self.backgroundBar.SetVertexColor, self.backgroundBar, br, bg, bb, ba)
+    end
     if self.statusBar then
         self.backgroundBar:ClearAllPoints()
         self.backgroundBar:SetAllPoints(self.statusBar)
@@ -1693,6 +1706,14 @@ local function MSUF_ApplyBossCastbarPreviewLayout(f, index)
                 end
             end
             SafeCall(f.backgroundBar.SetTexture, f.backgroundBar, bgTex)
+            do
+                local br, bgc, bb = 0.176, 0.176, 0.176
+                local ba = (f.backgroundBar.GetAlpha and f.backgroundBar:GetAlpha()) or 1
+                if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
+                    br, bgc, bb = _G.MSUF_GetCastbarBackgroundColor()
+                end
+                SafeCall(f.backgroundBar.SetVertexColor, f.backgroundBar, br, bgc, bb, ba)
+            end
         end
     end
 
