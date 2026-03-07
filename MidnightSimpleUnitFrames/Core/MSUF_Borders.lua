@@ -12,6 +12,38 @@ local MSUF_ForEachUnitFrame = _G.MSUF_ForEachUnitFrame
 local MSUF_GetDesiredBarBorderThicknessAndStamp = _G.MSUF_GetDesiredBarBorderThicknessAndStamp
 local MSUF_BarBorderCache = _G.MSUF_BarBorderCache
 local MSUF_EventBus_Register = _G.MSUF_EventBus_Register
+local MSUF_EventBus_Unregister = _G.MSUF_EventBus_Unregister
+
+local _borderCfg = { serial = -1 }
+local function _Clamp01(v, def)
+    if type(v) ~= "number" then return def end
+    if v < 0 then return 0 elseif v > 1 then return 1 end
+    return v
+end
+local function _RefreshBorderSettingsCache()
+    local serial = _G.MSUF_UFCORE_SETTINGS_SERIAL or 0
+    if _borderCfg.serial == serial then return _borderCfg end
+    _borderCfg.serial = serial
+
+    local g = (MSUF_DB and MSUF_DB.general) or nil
+    _borderCfg.aggroOutlineMode = (g and g.aggroOutlineMode) or 0
+    _borderCfg.dispelOutlineMode = (g and g.dispelOutlineMode) or 0
+    _borderCfg.purgeOutlineMode = (g and g.purgeOutlineMode) or 0
+    _borderCfg.highlightBorderThickness = tonumber(g and g.highlightBorderThickness) or 2
+    if _borderCfg.highlightBorderThickness < 1 then _borderCfg.highlightBorderThickness = 1 end
+    _borderCfg.highlightPrioEnabled = (g and g.highlightPrioEnabled == 1) and true or false
+    _borderCfg.highlightPrioOrder = (g and type(g.highlightPrioOrder) == "table") and g.highlightPrioOrder or nil
+    _borderCfg.aggroR  = _Clamp01(g and g.aggroBorderColorR,  1.00)
+    _borderCfg.aggroG  = _Clamp01(g and g.aggroBorderColorG,  0.50)
+    _borderCfg.aggroB  = _Clamp01(g and g.aggroBorderColorB,  0.00)
+    _borderCfg.dispelR = _Clamp01(g and g.dispelBorderColorR, 0.25)
+    _borderCfg.dispelG = _Clamp01(g and g.dispelBorderColorG, 0.75)
+    _borderCfg.dispelB = _Clamp01(g and g.dispelBorderColorB, 1.00)
+    _borderCfg.purgeR  = _Clamp01(g and g.purgeBorderColorR,  1.00)
+    _borderCfg.purgeG  = _Clamp01(g and g.purgeBorderColorG,  0.85)
+    _borderCfg.purgeB  = _Clamp01(g and g.purgeBorderColorB,  0.00)
+    return _borderCfg
+end
 
 local _borderIterState = {}
 
@@ -158,7 +190,7 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
 end
 
 -- Sub-function: create/update highlight overlay frame for aggro/dispel/purge.
-local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, g)
+local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
     local hlFrame = self._msufHighlightOutline
 
     if hlKey == 0 then
@@ -167,9 +199,7 @@ local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, g)
         return
     end
 
-    local hlThickness = (g and g.highlightBorderThickness) or 2
-    hlThickness = tonumber(hlThickness) or 2
-    if hlThickness < 1 then hlThickness = 1 end
+    local hlThickness = (cfg and cfg.highlightBorderThickness) or 2
 
     if not hlFrame then
         local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
@@ -232,12 +262,10 @@ MSUF_ApplyRareVisuals = function(self)
     end
     baseThickness = tonumber(baseThickness) or 0
 
-    -- Read DB settings once for the entire function.
-    local g = (MSUF_DB and MSUF_DB.general) or nil
+    local cfg = _RefreshBorderSettingsCache()
 
     -- Aggro state detection (target/focus/boss only).
-    local aggroMode = g and g.aggroOutlineMode or 0
-    local wantAggro = MSUF_IsAggroOutlineUnit(self.unit) and ((aggroMode == 1) or (_G and _G.MSUF_AggroBorderTestMode))
+    local wantAggro = MSUF_IsAggroOutlineUnit(self.unit) and ((cfg.aggroOutlineMode == 1) or (_G and _G.MSUF_AggroBorderTestMode))
     local threat = false
     if wantAggro then
         if _G and _G.MSUF_AggroBorderTestMode then
@@ -247,17 +275,15 @@ MSUF_ApplyRareVisuals = function(self)
         end
     end
 
-    -- Read border colors from DB (deduplicated via _ReadRGB).
-    local aggroR,  aggroG,  aggroB  = _ReadRGB(g, "aggroBorderColorR",  "aggroBorderColorG",  "aggroBorderColorB",  1.00, 0.50, 0.00)
-    local dispelR, dispelG, dispelB = _ReadRGB(g, "dispelBorderColorR", "dispelBorderColorG", "dispelBorderColorB", 0.25, 0.75, 1.00)
-    local purgeR,  purgeG,  purgeB  = _ReadRGB(g, "purgeBorderColorR",  "purgeBorderColorG",  "purgeBorderColorB",  1.00, 0.85, 0.00)
+    local aggroR, aggroG, aggroB = cfg.aggroR, cfg.aggroG, cfg.aggroB
+    local dispelR, dispelG, dispelB = cfg.dispelR, cfg.dispelG, cfg.dispelB
+    local purgeR, purgeG, purgeB = cfg.purgeR, cfg.purgeG, cfg.purgeB
 
     -- Dispel state detection.
     local dispel = false
     do
-        local dispelMode = g and g.dispelOutlineMode or 0
         local test = (_G and _G.MSUF_DispelBorderTestMode) and true or false
-        local wantDispel = (dispelMode == 1) or test
+        local wantDispel = (cfg.dispelOutlineMode == 1) or test
         if wantDispel then
             local u = self.unit
             if u == "player" or u == "target" or u == "focus" or u == "targettarget" then
@@ -269,9 +295,8 @@ MSUF_ApplyRareVisuals = function(self)
     -- Purge state detection.
     local purge = false
     do
-        local purgeMode = g and g.purgeOutlineMode or 0
         local test = (_G and _G.MSUF_PurgeBorderTestMode) and true or false
-        local wantPurge = (purgeMode == 1) or test
+        local wantPurge = (cfg.purgeOutlineMode == 1) or test
         if wantPurge then
             local u = self.unit
             if u == "target" or u == "focus" or u == "targettarget" then
@@ -285,8 +310,8 @@ MSUF_ApplyRareVisuals = function(self)
 
     -- Resolve highlight priority: Dispel > Aggro > Purge (default), or custom order.
     local hlKey = 0
-    if g and g.highlightPrioEnabled == 1 and type(g.highlightPrioOrder) == "table" then
-        for _, kind in ipairs(g.highlightPrioOrder) do
+    if cfg.highlightPrioEnabled and type(cfg.highlightPrioOrder) == "table" then
+        for _, kind in ipairs(cfg.highlightPrioOrder) do
             if kind == "dispel" and dispel then hlKey = 2; break
             elseif kind == "aggro" and threat then hlKey = 1; break
             elseif kind == "purge" and purge then hlKey = 3; break
@@ -304,7 +329,7 @@ MSUF_ApplyRareVisuals = function(self)
     end
 
     -- Apply (or hide) the highlight overlay.
-    MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, g)
+    MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
  end
 _G.MSUF_RefreshRareBarVisuals = MSUF_ApplyRareVisuals
 
@@ -448,19 +473,43 @@ do
 
     -- UNIT_THREAT_* stay on dedicated frame (EventBus rejects UNIT_* events)
     local ef = F.CreateFrame("Frame")
-    ef:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
-    ef:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
     ef:SetScript("OnEvent", function(_, event, unit)
         RefreshAggroForUnit(unit)
     end)
 
-    -- Phase 1: TARGET/FOCUS via EventBus
-    MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE", function()
-        RefreshAggroForUnit("target")
-    end)
-    MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE", function()
-        RefreshAggroForUnit("focus")
-    end)
+    local function ApplyAggroOutlineEventRegistration()
+        local g = MSUF_DB and MSUF_DB.general
+        local want = (g and g.aggroOutlineMode == 1) and true or false
+
+        if want then
+            if not ef:IsEventRegistered("UNIT_THREAT_SITUATION_UPDATE") then
+                ef:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+            end
+            if not ef:IsEventRegistered("UNIT_THREAT_LIST_UPDATE") then
+                ef:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
+            end
+            MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE", function()
+                RefreshAggroForUnit("target")
+            end)
+            MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE", function()
+                RefreshAggroForUnit("focus")
+            end)
+        else
+            if ef:IsEventRegistered("UNIT_THREAT_SITUATION_UPDATE") then
+                ef:UnregisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+            end
+            if ef:IsEventRegistered("UNIT_THREAT_LIST_UPDATE") then
+                ef:UnregisterEvent("UNIT_THREAT_LIST_UPDATE")
+            end
+            if type(MSUF_EventBus_Unregister) == "function" then
+                MSUF_EventBus_Unregister("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE")
+                MSUF_EventBus_Unregister("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE")
+            end
+        end
+    end
+
+    _G.MSUF_AggroOutline_ApplyEventRegistration = ApplyAggroOutlineEventRegistration
+    ApplyAggroOutlineEventRegistration()
 end
 
 
@@ -472,13 +521,6 @@ end
 -- Dispel (friendly debuffs) and Purge (enemy buffs) tracked independently.
 do
     local f = F.CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-
-    if f.RegisterUnitEvent then
-        f:RegisterUnitEvent("UNIT_AURA", "player", "target", "focus", "targettarget")
-    else
-        f:RegisterEvent("UNIT_AURA")
-    end
 
     local function HasDispellableDebuff(unit)
         local getSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
@@ -678,14 +720,44 @@ do
         end
     end)
 
-    -- Phase 1: TARGET/FOCUS via EventBus
-    MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()
-        UpdateUnit("target", true)
-        UpdateUnit("targettarget", true)
-    end)
-    MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE", function()
-        UpdateUnit("focus", true)
-    end)
+    local function ApplyDispelOutlineEventRegistration()
+        local g = MSUF_DB and MSUF_DB.general
+        local want = (g and (g.dispelOutlineMode == 1 or g.purgeOutlineMode == 1)) and true or false
+
+        if want then
+            if not f:IsEventRegistered("PLAYER_ENTERING_WORLD") then
+                f:RegisterEvent("PLAYER_ENTERING_WORLD")
+            end
+            if f.RegisterUnitEvent then
+                if not f:IsEventRegistered("UNIT_AURA") then
+                    f:RegisterUnitEvent("UNIT_AURA", "player", "target", "focus", "targettarget")
+                end
+            elseif not f:IsEventRegistered("UNIT_AURA") then
+                f:RegisterEvent("UNIT_AURA")
+            end
+            MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()
+                UpdateUnit("target", true)
+                UpdateUnit("targettarget", true)
+            end)
+            MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE", function()
+                UpdateUnit("focus", true)
+            end)
+        else
+            if f:IsEventRegistered("PLAYER_ENTERING_WORLD") then
+                f:UnregisterEvent("PLAYER_ENTERING_WORLD")
+            end
+            if f:IsEventRegistered("UNIT_AURA") then
+                f:UnregisterEvent("UNIT_AURA")
+            end
+            if type(MSUF_EventBus_Unregister) == "function" then
+                MSUF_EventBus_Unregister("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE")
+                MSUF_EventBus_Unregister("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE")
+            end
+        end
+    end
+
+    _G.MSUF_DispelOutline_ApplyEventRegistration = ApplyDispelOutlineEventRegistration
+    ApplyDispelOutlineEventRegistration()
 end
 
 do

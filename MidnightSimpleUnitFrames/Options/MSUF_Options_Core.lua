@@ -5699,6 +5699,9 @@ local function _AggroOutline_Set(val)
     EnsureDB()
     MSUF_DB.general = MSUF_DB.general or {}
     MSUF_DB.general.aggroOutlineMode = val
+    if type(_G.MSUF_AggroOutline_ApplyEventRegistration) == "function" then
+        _G.MSUF_AggroOutline_ApplyEventRegistration()
+    end
     -- Refresh outlines immediately (cheap).
     local fn = _G and _G.MSUF_RefreshRareBarVisuals
     local frames = _G and _G.MSUF_UnitFrames
@@ -5782,6 +5785,9 @@ local function _DispelOutline_Set(val)
     EnsureDB()
     MSUF_DB.general = MSUF_DB.general or {}
     MSUF_DB.general.dispelOutlineMode = val
+    if type(_G.MSUF_DispelOutline_ApplyEventRegistration) == "function" then
+        _G.MSUF_DispelOutline_ApplyEventRegistration()
+    end
 
     if type(_G.MSUF_RefreshDispelOutlineStates) == "function" then
         _G.MSUF_RefreshDispelOutlineStates(true)
@@ -5849,6 +5855,9 @@ local function _PurgeOutline_Set(val)
     EnsureDB()
     MSUF_DB.general = MSUF_DB.general or {}
     MSUF_DB.general.purgeOutlineMode = val
+    if type(_G.MSUF_DispelOutline_ApplyEventRegistration) == "function" then
+        _G.MSUF_DispelOutline_ApplyEventRegistration()
+    end
     if type(_G.MSUF_RefreshDispelOutlineStates) == "function" then
         _G.MSUF_RefreshDispelOutlineStates(true)
     else

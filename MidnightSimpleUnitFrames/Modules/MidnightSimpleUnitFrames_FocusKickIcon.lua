@@ -503,7 +503,7 @@ local function FocusKick_UpdateFromUnit()
         return
     end
 
-    FocusKick_CreateFrame()
+    FocusKick_EnsureInitialized(true)
     if not FocusKickFrame then return end
 
     local isChannel = false
@@ -1393,18 +1393,31 @@ end
 ------------------------------------------------------
 -- Public API for main file
 ------------------------------------------------------
-function MSUF_InitFocusKickIcon()
+local FocusKick_Bootstrapped = false
+local function FocusKick_EnsureInitialized(forceFrame)
     FocusKick_EnsureDB()
-    FocusKick_CreateFrame()
-    FocusKick_AttachHooks()
-    FocusKick_UpdateAppearance()
-    FocusKick_UpdateMode()
+    if not FocusKick_Bootstrapped then
+        FocusKick_AttachHooks()
+        FocusKick_Bootstrapped = true
+    end
+    if forceFrame then
+        FocusKick_CreateFrame()
+        FocusKick_UpdateAppearance()
+        FocusKick_UpdateMode()
+    end
+end
+_G.MSUF_FocusKick_EnsureInitialized = FocusKick_EnsureInitialized
+
+function MSUF_InitFocusKickIcon()
+    FocusKick_EnsureInitialized(FocusKick_IsEnabled())
 end
 
 function MSUF_UpdateFocusKickIconOptions()
-    FocusKick_EnsureDB()
-    FocusKick_UpdateAppearance()
-    FocusKick_UpdateMode()
+    FocusKick_EnsureInitialized(FocusKick_IsEnabled())
+    if FocusKickFrame then
+        FocusKick_UpdateAppearance()
+        FocusKick_UpdateMode()
+    end
 end
 
 ------------------------------------------------------
@@ -1424,7 +1437,7 @@ function _G.MSUF_FocusKick_ApplyCastState(state)
         return
     end
 
-    FocusKick_CreateFrame()
+    FocusKick_EnsureInitialized(true)
     if not FocusKickFrame then return end
 
     if not state or state.active ~= true then
@@ -1467,6 +1480,6 @@ end
 function _G.MSUF_FocusKick_PlayInterruptFeedback()
     FocusKick_EnsureDB()
     if not FocusKick_IsEnabled() then return end
-    FocusKick_CreateFrame()
+    FocusKick_EnsureInitialized(true)
     FocusKick_PlayInterruptFeedback()
 end

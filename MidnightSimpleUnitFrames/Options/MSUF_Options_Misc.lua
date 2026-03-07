@@ -816,7 +816,11 @@ end
             local t = EnsureTarget()
             t.rangeFadeEnabled = v and true or false
             if _G.MSUF_RangeFade_Reset then _G.MSUF_RangeFade_Reset() end
-            if _G.MSUF_RangeFade_RebuildSpells then _G.MSUF_RangeFade_RebuildSpells() end
+            if _G.MSUF_RangeFade_EvaluateActive then
+                _G.MSUF_RangeFade_EvaluateActive(true)
+            elseif _G.MSUF_RangeFade_RebuildSpells then
+                _G.MSUF_RangeFade_RebuildSpells()
+            end
         end,
     })
 
@@ -835,8 +839,12 @@ end
             local t = EnsureFocus()
             t.rangeFadeEnabled = v and true or false
             if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
-            if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
-            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+            if _G.MSUF_RangeFadeFB_EvaluateActive then
+                _G.MSUF_RangeFadeFB_EvaluateActive(true)
+            else
+                if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
+                if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+            end
         end,
     })
 
@@ -855,8 +863,12 @@ end
             local t = EnsureBoss()
             t.rangeFadeEnabled = v and true or false
             if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
-            if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
-            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+            if _G.MSUF_RangeFadeFB_EvaluateActive then
+                _G.MSUF_RangeFadeFB_EvaluateActive(true)
+            else
+                if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
+                if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+            end
         end,
     })
 

@@ -398,14 +398,32 @@ end
 
 do
     local wired = false
-    function _G.MSUF_RangeFade_WireEvents()
-        if wired then return end
-        wired = true
 
+    local function TargetRangeFadeWanted()
+        local db = _G.MSUF_DB
+        local t = db and db.target
+        return (t and t.rangeFadeEnabled == true) and true or false
+    end
+
+    local function TargetRangeFadeRebuild()
+        local fn = _G.MSUF_RangeFade_RebuildSpells
+        if fn then
+            fn()
+        end
+    end
+
+    local function TargetRangeFadeReset()
+        local reset = _G.MSUF_RangeFade_Reset
+        if reset then reset() end
+    end
+
+    local function WireTargetRangeFadeEvents()
+        if wired then return true end
         local reg = _G.MSUF_EventBus_Register
         if type(reg) ~= "function" then
-            return
+            return false
         end
+        wired = true
 
         -- Hot path: fires only on range state changes (Blizzard-driven).
         reg("SPELL_RANGE_CHECK_UPDATE", "MSUF_RANGEFADE", function(event, spellIdentifier, isInRange, checksRange)
@@ -415,35 +433,51 @@ do
             end
         end)
 
-        local function Rebuild()
-            local fn = _G.MSUF_RangeFade_RebuildSpells
-            if fn then
-                fn()
-            end
-        end
-
         -- Rare rebuild triggers (spellbook/spec/talent updates).
-        reg("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE", Rebuild)
-        reg("SPELLS_CHANGED", "MSUF_RANGEFADE", Rebuild)
-        reg("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE", Rebuild)
-        reg("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE", Rebuild)
-        reg("TRAIT_CONFIG_UPDATED", "MSUF_RANGEFADE", Rebuild)
+        reg("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE", TargetRangeFadeRebuild)
+        reg("SPELLS_CHANGED", "MSUF_RANGEFADE", TargetRangeFadeRebuild)
+        reg("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE", TargetRangeFadeRebuild)
+        reg("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE", TargetRangeFadeRebuild)
+        reg("TRAIT_CONFIG_UPDATED", "MSUF_RANGEFADE", TargetRangeFadeRebuild)
 
         -- Target swap: clear stale in-range state (fail-safe to in-range until updates arrive).
-        -- Phase 1: migrated from EventBus to UFCore hook (eliminates EventBus dispatch overhead).
-        local Hook = _G.MSUF_UFCore_Hook
-        if Hook then
-            Hook("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
-                local reset = _G.MSUF_RangeFade_Reset
-                if reset then reset() end
-            end)
-        else
-            -- Fallback: EventBus registration (UFCore not loaded yet  shouldn't happen with TOC order)
-            reg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
-                local reset = _G.MSUF_RangeFade_Reset
-                if reset then reset() end
-            end)
+        reg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", TargetRangeFadeReset)
+        return true
+    end
+
+    local function UnwireTargetRangeFadeEvents()
+        if not wired then return end
+        wired = false
+        local unreg = _G.MSUF_EventBus_Unregister
+        if type(unreg) ~= "function" then
+            return
         end
+        unreg("SPELL_RANGE_CHECK_UPDATE", "MSUF_RANGEFADE")
+        unreg("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE")
+        unreg("SPELLS_CHANGED", "MSUF_RANGEFADE")
+        unreg("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE")
+        unreg("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE")
+        unreg("TRAIT_CONFIG_UPDATED", "MSUF_RANGEFADE")
+        unreg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE")
+    end
+
+    function _G.MSUF_RangeFade_EvaluateActive(force)
+        local want = TargetRangeFadeWanted()
+        if want then
+            if WireTargetRangeFadeEvents() then
+                TargetRangeFadeRebuild()
+            end
+            return
+        end
+
+        if force == true or wired then
+            TargetRangeFadeRebuild()
+            UnwireTargetRangeFadeEvents()
+        end
+    end
+
+    function _G.MSUF_RangeFade_WireEvents()
+        return _G.MSUF_RangeFade_EvaluateActive(true)
     end
 end
 
@@ -457,13 +491,17 @@ end
 
 function _G.MSUF_RangeFade_ApplyFromDB()
     -- RangeFade has no direct DB->apply; consumer reads MSUF_DB live.
-    if type(_G.MSUF_RangeFade_ApplyCurrent) == "function" then
+    if type(_G.MSUF_RangeFade_EvaluateActive) == "function" then
+        _G.MSUF_RangeFade_EvaluateActive(true)
+    elseif type(_G.MSUF_RangeFade_ApplyCurrent) == "function" then
         _G.MSUF_RangeFade_ApplyCurrent(true)
     end
 end
 
 function _G.MSUF_RangeFade_ApplyNow()
-    if type(_G.MSUF_RangeFade_ApplyCurrent) == "function" then
+    if type(_G.MSUF_RangeFade_EvaluateActive) == "function" then
+        _G.MSUF_RangeFade_EvaluateActive(true)
+    elseif type(_G.MSUF_RangeFade_ApplyCurrent) == "function" then
         _G.MSUF_RangeFade_ApplyCurrent(true)
     end
 end
@@ -972,68 +1010,118 @@ function _G.MSUF_RangeFade_InitPostLogin()
 	            end
 	        end
 
-	        function _G.MSUF_RangeFadeFB_RebuildSpells()
-	            UpdateActiveSpells()
-	        end
+	        local RangeFadeFBWanted
 
-	        function _G.MSUF_RangeFadeFB_Reset()
-	            local mulT = _G.MSUF_RangeFadeMul
-	            if type(mulT) ~= "table" then return end
-	            mulT.focus = 1
-	            for i = 1, _nBossUnits do
-	                mulT[_bossUnits[i]] = 1
-	            end
-	        end
+        function _G.MSUF_RangeFadeFB_RebuildSpells()
+            if RangeFadeFBWanted() ~= true then
+                return
+            end
+            UpdateActiveSpells()
+        end
 
-	        function _G.MSUF_RangeFadeFB_ApplyCurrent(force)
-	            -- force kept for API symmetry; not needed for this module.
-	            UpdateFocus()
-	            UpdateBosses()
-	        end
+        function _G.MSUF_RangeFadeFB_Reset()
+            local mulT = _G.MSUF_RangeFadeMul
+            if type(mulT) ~= "table" then return end
+            mulT.focus = 1
+            for i = 1, _nBossUnits do
+                mulT[_bossUnits[i]] = 1
+            end
+        end
 
-	        -- Initial spell selection
-	        UpdateActiveSpells()
+        local ef = CreateFrame("Frame")
+        local _rfEventsRegistered = false
+        local _rfThrottleAt = 0
+        local _RF_THROTTLE_INTERVAL = 0.2
 
-	        -- Event driver (no ticker)
-	        local ef = CreateFrame("Frame")
-	        ef:RegisterEvent("PLAYER_ENTERING_WORLD")
-	        ef:RegisterEvent("SPELLS_CHANGED")
-	        ef:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-	        ef:RegisterEvent("PLAYER_TALENT_UPDATE")
-	        ef:RegisterEvent("TRAIT_CONFIG_UPDATED")
+        local function RegisterFBEvents()
+            if _rfEventsRegistered then return end
+            _rfEventsRegistered = true
+            ef:RegisterEvent("PLAYER_ENTERING_WORLD")
+            ef:RegisterEvent("SPELLS_CHANGED")
+            ef:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+            ef:RegisterEvent("PLAYER_TALENT_UPDATE")
+            ef:RegisterEvent("TRAIT_CONFIG_UPDATED")
+            ef:RegisterEvent("PLAYER_FOCUS_CHANGED")
+            ef:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+            ef:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+            ef:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+        end
 
-	        ef:RegisterEvent("PLAYER_FOCUS_CHANGED")
-	        ef:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+        local function UnregisterFBEvents()
+            if not _rfEventsRegistered then return end
+            _rfEventsRegistered = false
+            ef:UnregisterEvent("PLAYER_ENTERING_WORLD")
+            ef:UnregisterEvent("SPELLS_CHANGED")
+            ef:UnregisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+            ef:UnregisterEvent("PLAYER_TALENT_UPDATE")
+            ef:UnregisterEvent("TRAIT_CONFIG_UPDATED")
+            ef:UnregisterEvent("PLAYER_FOCUS_CHANGED")
+            ef:UnregisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+            ef:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
+            ef:UnregisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+        end
 
-	        -- Frequent-but-event-only updates (Unhalted-style)
-	        ef:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-	        ef:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+        function RangeFadeFBWanted()
+            local db = _G.MSUF_DB
+            local focus = db and db.focus
+            if focus and focus.rangeFadeEnabled == true then
+                return true
+            end
+            local boss = db and db.boss
+            if boss and boss.rangeFadeEnabled == true then
+                return true
+            end
+            return false
+        end
 
-	        -- Throttle: cooldown events fire 27-48x/sec in combat but range changes slowly.
-	        -- Limit range checks to max 5/sec (0.2s interval) for cooldown events.
-	        local _rfThrottleAt = 0
-	        local _RF_THROTTLE_INTERVAL = 0.2
+        ef:SetScript("OnEvent", function(_, event)
+            if event == "SPELLS_CHANGED" or event == "PLAYER_ENTERING_WORLD" or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
+                UpdateActiveSpells()
+                -- P8: reset throttle on zone/login so first cooldown event always triggers a range check.
+                if event == "PLAYER_ENTERING_WORLD" then
+                    _rfThrottleAt = 0
+                end
+            end
 
-	        ef:SetScript("OnEvent", function(_, event)
-	            if event == "SPELLS_CHANGED" or event == "PLAYER_ENTERING_WORLD" or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
-	                UpdateActiveSpells()
-	                -- P8: reset throttle on zone/login so first cooldown event always triggers a range check.
-	                if event == "PLAYER_ENTERING_WORLD" then
-	                    _rfThrottleAt = 0
-	                end
-	            end
+            -- Cooldown events: throttle to avoid 27-48 range checks/sec
+            if event == "SPELL_UPDATE_COOLDOWN" or event == "ACTIONBAR_UPDATE_COOLDOWN" then
+                local now = GetTime()
+                if now < _rfThrottleAt then return end
+                _rfThrottleAt = now + _RF_THROTTLE_INTERVAL
+            end
 
-	            -- Cooldown events: throttle to avoid 27-48 range checks/sec
-	            if event == "SPELL_UPDATE_COOLDOWN" or event == "ACTIONBAR_UPDATE_COOLDOWN" then
-	                local now = GetTime()
-	                if now < _rfThrottleAt then return end
-	                _rfThrottleAt = now + _RF_THROTTLE_INTERVAL
-	            end
+            UpdateFocus()
+            UpdateBosses()
+        end)
 
-	            -- Apply (if disabled, this will clear multipliers)
-	            UpdateFocus()
-	            UpdateBosses()
-	        end)
+        function _G.MSUF_RangeFadeFB_EvaluateActive(force)
+            local want = RangeFadeFBWanted()
+
+            if want then
+                RegisterFBEvents()
+                if force == true then
+                    _rfThrottleAt = 0
+                end
+                UpdateActiveSpells()
+                UpdateFocus()
+                UpdateBosses()
+                return
+            end
+
+            if force == true or _rfEventsRegistered then
+                _rfThrottleAt = 0
+                UpdateFocus()
+                UpdateBosses()
+                UnregisterFBEvents()
+            end
+        end
+
+        function _G.MSUF_RangeFadeFB_ApplyCurrent(force)
+            -- force kept for API symmetry; also wakes/sleeps driver based on DB state.
+            _G.MSUF_RangeFadeFB_EvaluateActive(force)
+        end
+
+        _G.MSUF_RangeFadeFB_EvaluateActive(true)
 	    end
 	end
 	end
