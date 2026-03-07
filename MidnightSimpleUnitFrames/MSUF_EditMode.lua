@@ -1992,6 +1992,30 @@ do
     -- EnumerateFrames flat scan (full /fstack parity) -------------------------
     local _lastScanF, _lastScanN = nil, nil
 
+    -- Midnight/12.0 secret-safe visibility helper:
+    -- some frames can return a secret boolean from :IsVisible(), which must never
+    -- be used directly in a boolean test. Treat unknown/secret results as not pickable.
+    local _PickerNotSecretValue = type(_G.NotSecretValue) == "function" and _G.NotSecretValue or nil
+    local _PickerIsSecretValue = type(_G.issecretvalue) == "function" and _G.issecretvalue or nil
+
+    local function _PickerPlainBool(v)
+        if _PickerNotSecretValue then
+            if not _PickerNotSecretValue(v) then return nil end
+        elseif _PickerIsSecretValue and _PickerIsSecretValue(v) then
+            return nil
+        end
+        if v == true or v == 1 then return true end
+        if v == false or v == 0 then return false end
+        return nil
+    end
+
+    local function _SafeIsVisible(frame)
+        if not frame or not frame.IsVisible then return false end
+        local ok, v = pcall(frame.IsVisible, frame)
+        if not ok then return false end
+        return _PickerPlainBool(v) == true
+    end
+
     local function _GetNamedFrameUnderCursor()
         local cx, cy = GetCursorPosition()
         local scale = UIParent:GetEffectiveScale() or 1
@@ -2002,7 +2026,7 @@ do
             local frame = EnumerateFrames()
             while frame do
                 if not (frame.IsForbidden and frame:IsForbidden())
-                   and frame.IsVisible and frame:IsVisible()
+                   and _SafeIsVisible(frame)
                    and not _IsBlockedPickerFrame(frame) then
                     local name = frame.GetName and frame:GetName() or nil
                     if not _IsBlockedPickerName(name) then
