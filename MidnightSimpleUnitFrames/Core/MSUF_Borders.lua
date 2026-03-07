@@ -448,19 +448,43 @@ do
 
     -- UNIT_THREAT_* stay on dedicated frame (EventBus rejects UNIT_* events)
     local ef = F.CreateFrame("Frame")
-    ef:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
-    ef:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
     ef:SetScript("OnEvent", function(_, event, unit)
         RefreshAggroForUnit(unit)
     end)
 
-    -- Phase 1: TARGET/FOCUS via EventBus
-    MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE", function()
-        RefreshAggroForUnit("target")
-    end)
-    MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE", function()
-        RefreshAggroForUnit("focus")
-    end)
+    local function ApplyAggroOutlineEventRegistration()
+        local g = MSUF_DB and MSUF_DB.general
+        local want = (g and g.aggroOutlineMode == 1) and true or false
+
+        if want then
+            if not ef:IsEventRegistered("UNIT_THREAT_SITUATION_UPDATE") then
+                ef:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+            end
+            if not ef:IsEventRegistered("UNIT_THREAT_LIST_UPDATE") then
+                ef:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
+            end
+            MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE", function()
+                RefreshAggroForUnit("target")
+            end)
+            MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE", function()
+                RefreshAggroForUnit("focus")
+            end)
+        else
+            if ef:IsEventRegistered("UNIT_THREAT_SITUATION_UPDATE") then
+                ef:UnregisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+            end
+            if ef:IsEventRegistered("UNIT_THREAT_LIST_UPDATE") then
+                ef:UnregisterEvent("UNIT_THREAT_LIST_UPDATE")
+            end
+            if type(MSUF_EventBus_Unregister) == "function" then
+                MSUF_EventBus_Unregister("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE")
+                MSUF_EventBus_Unregister("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE")
+            end
+        end
+    end
+
+    _G.MSUF_AggroOutline_ApplyEventRegistration = ApplyAggroOutlineEventRegistration
+    ApplyAggroOutlineEventRegistration()
 end
 
 
@@ -472,13 +496,6 @@ end
 -- Dispel (friendly debuffs) and Purge (enemy buffs) tracked independently.
 do
     local f = F.CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-
-    if f.RegisterUnitEvent then
-        f:RegisterUnitEvent("UNIT_AURA", "player", "target", "focus", "targettarget")
-    else
-        f:RegisterEvent("UNIT_AURA")
-    end
 
     local function HasDispellableDebuff(unit)
         local getSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
@@ -678,14 +695,44 @@ do
         end
     end)
 
-    -- Phase 1: TARGET/FOCUS via EventBus
-    MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()
-        UpdateUnit("target", true)
-        UpdateUnit("targettarget", true)
-    end)
-    MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE", function()
-        UpdateUnit("focus", true)
-    end)
+    local function ApplyDispelOutlineEventRegistration()
+        local g = MSUF_DB and MSUF_DB.general
+        local want = (g and (g.dispelOutlineMode == 1 or g.purgeOutlineMode == 1)) and true or false
+
+        if want then
+            if not f:IsEventRegistered("PLAYER_ENTERING_WORLD") then
+                f:RegisterEvent("PLAYER_ENTERING_WORLD")
+            end
+            if f.RegisterUnitEvent then
+                if not f:IsEventRegistered("UNIT_AURA") then
+                    f:RegisterUnitEvent("UNIT_AURA", "player", "target", "focus", "targettarget")
+                end
+            elseif not f:IsEventRegistered("UNIT_AURA") then
+                f:RegisterEvent("UNIT_AURA")
+            end
+            MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()
+                UpdateUnit("target", true)
+                UpdateUnit("targettarget", true)
+            end)
+            MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE", function()
+                UpdateUnit("focus", true)
+            end)
+        else
+            if f:IsEventRegistered("PLAYER_ENTERING_WORLD") then
+                f:UnregisterEvent("PLAYER_ENTERING_WORLD")
+            end
+            if f:IsEventRegistered("UNIT_AURA") then
+                f:UnregisterEvent("UNIT_AURA")
+            end
+            if type(MSUF_EventBus_Unregister) == "function" then
+                MSUF_EventBus_Unregister("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE")
+                MSUF_EventBus_Unregister("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE")
+            end
+        end
+    end
+
+    _G.MSUF_DispelOutline_ApplyEventRegistration = ApplyDispelOutlineEventRegistration
+    ApplyDispelOutlineEventRegistration()
 end
 
 do

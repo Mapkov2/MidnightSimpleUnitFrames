@@ -5581,7 +5581,12 @@ end
     if type(_G.MSUF_ReanchorFocusCastBar) == "function" then
         _G.MSUF_ReanchorFocusCastBar()
     end
-    if MSUF_InitFocusKickIcon then
+    if type(_G.MSUF_FocusKick_EnsureInitialized) == "function" then
+        local gg = (MSUF_DB and MSUF_DB.general) or nil
+        if gg and gg.enableFocusKickIcon == true then
+            _G.MSUF_FocusKick_EnsureInitialized(true)
+        end
+    elseif MSUF_InitFocusKickIcon then
         MSUF_InitFocusKickIcon()
     end
 
