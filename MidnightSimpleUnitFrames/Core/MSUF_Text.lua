@@ -486,7 +486,23 @@ function ns.Text.RenderPowerText(self)
         local rawHpSep = (useOverride and udb and udb.hpTextSeparator) or gPower.hpTextSeparator
         local powerSep = ns.Text._SepToken(rawPowerSep, rawHpSep)
 
-        ptc = { pMode = pMode, powerSep = powerSep, colorByType = colorByType }
+        local splitEnabled = false
+        if self.powerTextPct and _MSUF_PowerModeAllowsSplit(pMode) then
+            local splitOn = (useOverride and udb and udb.powerTextSpacerEnabled == true) or ((not useOverride) and gPower and gPower.powerTextSpacerEnabled == true)
+            if splitOn then
+                local splitX = (useOverride and udb and tonumber(udb.powerTextSpacerX)) or ((gPower and tonumber(gPower.powerTextSpacerX)) or 0)
+                splitX = tonumber(splitX) or 0
+                if splitX > 0 then
+                    if key and type(_G.MSUF_GetPowerSpacerMaxForUnitKey) == "function" then
+                        local maxP = tonumber(_G.MSUF_GetPowerSpacerMaxForUnitKey(key)) or 0
+                        if splitX > maxP then splitX = maxP end
+                    end
+                    splitEnabled = (splitX > 0)
+                end
+            end
+        end
+
+        ptc = { pMode = pMode, powerSep = powerSep, colorByType = colorByType, splitEnabled = splitEnabled }
         self._msufPwrTextConf = ptc
     end
 
@@ -538,6 +554,31 @@ function ns.Text.RenderPowerText(self)
     end
 
 
+    -- PERF P0: Raw-value diff guard. Skip ALL textification + string work when
+    -- raw power values are unchanged (most frequent case: energy/mana hasn't
+    -- ticked between events). Saves 3× AbbreviateLargeNumbers + 1× FormatPercent
+    -- + downstream concat per skipped call (~790 B/call allocation eliminated).
+    -- Secret-safe: bail before any comparison if values could be secret.
+    if not _MSUF_issecret
+       or (not _MSUF_issecret(curValue) and not _MSUF_issecret(maxValue)
+           and (powerPct == nil or not _MSUF_issecret(powerPct)))
+    then
+        if curValue == self._msufRawPwrC
+           and maxValue == self._msufRawPwrM
+           and powerPct == self._msufRawPwrP
+        then
+            return
+        end
+        self._msufRawPwrC = curValue
+        self._msufRawPwrM = maxValue
+        self._msufRawPwrP = powerPct
+    else
+        -- Secret value: invalidate raw cache; fall through to text-level guard.
+        self._msufRawPwrC = nil
+        self._msufRawPwrM = nil
+        self._msufRawPwrP = nil
+    end
+
     local curText = _MSUF_TextifyValue(curValue)
     local maxText = _MSUF_TextifyValue(maxValue)
     local pctText = _MSUF_TextifyPercent(powerPct)
@@ -564,7 +605,7 @@ function ns.Text.RenderPowerText(self)
     end
 
     local hasPct = (pctText ~= nil)
-    local splitAllowed = (self.powerTextPct ~= nil) and ns.Text._ShouldSplitPower(self, pMode, hasPct) or false
+    local splitAllowed = (self.powerTextPct ~= nil) and hasPct and (ptc and ptc.splitEnabled == true) or false
 
     local mainText, sideText = _MSUF_FormatPowerByMode(pMode, curText, maxText, pctText, powerSep, powerSep, splitAllowed)
 

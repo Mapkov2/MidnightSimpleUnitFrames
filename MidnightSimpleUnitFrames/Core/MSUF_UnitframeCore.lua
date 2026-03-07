@@ -25,6 +25,48 @@ local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
 local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
 
+local Core = {}
+local _UFCORE_issecret = _G and _G.issecretvalue or nil
+
+local function UFCore_CanCompareNumber(v)
+    return type(v) == "number" and (not _UFCORE_issecret or not _UFCORE_issecret(v))
+end
+
+local function UFCore_SamePowerSnapshot(f, pType, cur, mx)
+    if not f or f._msufPowerVisCheckNeeded then return false end
+    if f._msufCachedPType ~= pType then return false end
+    local prevCur, prevMax = f._msufCachedPCur, f._msufCachedPMax
+    if not (UFCore_CanCompareNumber(cur) and UFCore_CanCompareNumber(mx) and UFCore_CanCompareNumber(prevCur) and UFCore_CanCompareNumber(prevMax)) then
+        return false
+    end
+    return (prevCur == cur and prevMax == mx)
+end
+
+local function UFCore_StorePowerSnapshot(f, pType, cur, mx)
+    f._msufCachedPType   = pType
+    f._msufCachedPCur    = cur
+    f._msufCachedPMax    = mx
+    f._msufCachedPPct    = nil
+    f._msufCachedPSerial = Core._frameNowSerial
+end
+
+local function UFCore_SamePowerTextSnapshot(f, pType, cur, mx)
+    if not f or f._msufPwrTextForce then return false end
+    if f._msufLastPwrTextType ~= pType then return false end
+    local prevCur, prevMax = f._msufLastPwrTextCur, f._msufLastPwrTextMax
+    if not (UFCore_CanCompareNumber(cur) and UFCore_CanCompareNumber(mx) and UFCore_CanCompareNumber(prevCur) and UFCore_CanCompareNumber(prevMax)) then
+        return false
+    end
+    return (prevCur == cur and prevMax == mx)
+end
+
+local function UFCore_StorePowerTextSnapshot(f, pType, cur, mx)
+    f._msufLastPwrTextType = pType
+    f._msufLastPwrTextCur  = cur
+    f._msufLastPwrTextMax  = mx
+    f._msufPwrTextForce    = nil
+end
+
 -- Hotpath locals: _G ref + unpack (kept for unpack compat, all others already localized above)
 local _G = _G
 -- Lua 5.1 (WoW) uses global unpack; some environments expose table.unpack
@@ -33,8 +75,6 @@ if not unpack then
     local tbl = _G.table
     unpack = tbl and tbl.unpack
 end
-
-local Core = {}
 
 -- Forward decl (used by settings cache + helpers below the definition).
 local UFCore_EnsureDBOnce
@@ -419,6 +459,10 @@ function Core.InvalidateAllFrameConfigs()
             f._msufLastPwrC = nil
             f._msufLastPwrM = nil
             f._msufLastPwrP = nil
+            -- PERF: Invalidate raw-value power diff guard (Text.lua P0 guard)
+            f._msufRawPwrC = nil
+            f._msufRawPwrM = nil
+            f._msufRawPwrP = nil
         end
     end
 end
@@ -829,6 +873,11 @@ Elements.Power = {
         -- When the Power element is disabled (power text AND power bar off),
         -- clear/hide both immediately so no stale 'last resource' UI remains.
         if not f then return end
+
+        f._msufLastPwrTextType = nil
+        f._msufLastPwrTextCur = nil
+        f._msufLastPwrTextMax = nil
+        f._msufPwrTextForce = true
 
         local pt = f.powerText
         if pt then
@@ -2507,6 +2556,20 @@ do
         local _PwrPctFn = UnitPowerPercent
         local _PwrScale = (type(CurveConstants) == "table" and CurveConstants.ScaleTo100) or true
 
+        local function _MaybeUpdatePowerText(f, unit, pType, cur, mx, budget)
+            local fnTxt = FN_UpdatePowerTextFast
+            if not fnTxt then return end
+            if budget then
+                local now = Core._frameNow
+                if (now - (f._msufPwrTxtAt or 0)) < budget then return end
+                f._msufPwrTxtAt = now
+            end
+            if UFCore_SamePowerTextSnapshot(f, pType, cur, mx) then return end
+            UFCore_StorePowerTextSnapshot(f, pType, cur, mx)
+            if _PwrPctFn then f._msufCachedPPct = _PwrPctFn(unit, pType, false, _PwrScale) end
+            fnTxt(f)
+        end
+
         -- ── Handler A: Both OFF — zero added overhead vs original MSUF ──
         -- No interpolation, budget-gated text. No function calls for time check.
         local function _PowerOff(f)
@@ -2524,28 +2587,17 @@ do
             if type(cur) ~= "number" then cur = 0 end
             if type(mx)  ~= "number" then mx  = 100 end
 
+            if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
+
             bar:SetMinMaxValues(0, mx)
             bar:SetValue(cur)
 
-            f._msufCachedPType   = pType
-            f._msufCachedPCur    = cur
-            f._msufCachedPMax    = mx
-            f._msufCachedPPct    = nil
-            f._msufCachedPSerial = Core._frameNowSerial
+            UFCore_StorePowerSnapshot(f, pType, cur, mx)
 
             -- Budget-gated text: direct table read (no function call).
             -- Core._frameNow is updated by FlushTask every frame — precise enough
             -- for a 33Hz/10Hz budget gate. Avoids _RefreshFrameNow() overhead.
-            local fnTxt = FN_UpdatePowerTextFast
-            if fnTxt then
-                local now = Core._frameNow
-                if (now - (f._msufPwrTxtAt or 0)) >= ((f._msufIsPlayer and 0.03) or 0.10) then
-                    f._msufPwrTxtAt = now
-                    -- PERF: Pre-cache percent so RenderPowerText skips UnitPowerPercent C-API.
-                    if _PwrPctFn then f._msufCachedPPct = _PwrPctFn(unit, pType, false, _PwrScale) end
-                    fnTxt(f)
-                end
-            end
+            _MaybeUpdatePowerText(f, unit, pType, cur, mx, (f._msufIsPlayer and 0.03) or 0.10)
         end
 
         -- ── Handler B: Smooth ON, text OFF — ExponentialEaseOut + budget text ──
@@ -2563,25 +2615,14 @@ do
             if type(cur) ~= "number" then cur = 0 end
             if type(mx)  ~= "number" then mx  = 100 end
 
+            if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
+
             bar:SetMinMaxValues(0, mx, _Interp)
             bar:SetValue(cur, _Interp)
 
-            f._msufCachedPType   = pType
-            f._msufCachedPCur    = cur
-            f._msufCachedPMax    = mx
-            f._msufCachedPPct    = nil
-            f._msufCachedPSerial = Core._frameNowSerial
+            UFCore_StorePowerSnapshot(f, pType, cur, mx)
 
-            local fnTxt = FN_UpdatePowerTextFast
-            if fnTxt then
-                local now = Core._frameNow
-                if (now - (f._msufPwrTxtAt or 0)) >= ((f._msufIsPlayer and 0.03) or 0.10) then
-                    f._msufPwrTxtAt = now
-                    -- PERF: Pre-cache percent so RenderPowerText skips UnitPowerPercent C-API.
-                    if _PwrPctFn then f._msufCachedPPct = _PwrPctFn(unit, pType, false, _PwrScale) end
-                    fnTxt(f)
-                end
-            end
+            _MaybeUpdatePowerText(f, unit, pType, cur, mx, (f._msufIsPlayer and 0.03) or 0.10)
         end
 
         -- ── Handler C: Realtime text ON — no interpolation, text every event ──
@@ -2599,21 +2640,14 @@ do
             if type(cur) ~= "number" then cur = 0 end
             if type(mx)  ~= "number" then mx  = 100 end
 
+            if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
+
             bar:SetMinMaxValues(0, mx)
             bar:SetValue(cur)
 
-            f._msufCachedPType   = pType
-            f._msufCachedPCur    = cur
-            f._msufCachedPMax    = mx
-            f._msufCachedPPct    = nil
-            f._msufCachedPSerial = Core._frameNowSerial
+            UFCore_StorePowerSnapshot(f, pType, cur, mx)
 
-            local fnTxt = FN_UpdatePowerTextFast
-            if fnTxt then
-                -- PERF: Pre-cache percent so RenderPowerText skips UnitPowerPercent C-API.
-                if _PwrPctFn then f._msufCachedPPct = _PwrPctFn(unit, pType, false, _PwrScale) end
-                fnTxt(f)
-            end
+            _MaybeUpdatePowerText(f, unit, pType, cur, mx, nil)
         end
 
         -- ── Handler D: Both ON — full MidnightRogueBars (hyper-accurate) ──
@@ -2631,21 +2665,14 @@ do
             if type(cur) ~= "number" then cur = 0 end
             if type(mx)  ~= "number" then mx  = 100 end
 
+            if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
+
             bar:SetMinMaxValues(0, mx, _Interp)
             bar:SetValue(cur, _Interp)
 
-            f._msufCachedPType   = pType
-            f._msufCachedPCur    = cur
-            f._msufCachedPMax    = mx
-            f._msufCachedPPct    = nil
-            f._msufCachedPSerial = Core._frameNowSerial
+            UFCore_StorePowerSnapshot(f, pType, cur, mx)
 
-            local fnTxt = FN_UpdatePowerTextFast
-            if fnTxt then
-                -- PERF: Pre-cache percent so RenderPowerText skips UnitPowerPercent C-API.
-                if _PwrPctFn then f._msufCachedPPct = _PwrPctFn(unit, pType, false, _PwrScale) end
-                fnTxt(f)
-            end
+            _MaybeUpdatePowerText(f, unit, pType, cur, mx, nil)
         end
 
         -- Pre-defined no-op (avoids closure allocation on every swap).
@@ -2712,6 +2739,20 @@ local EVENT_DIRTY_FLAGS = {
     UNIT_FLAGS                       = "healthColorDirty",
 }
 
+-- PERF P0: Merge DIRECT_APPLY + EVENT_DIRTY_FLAGS into UNIT_EVENT_MAP entries.
+-- FrameOnEvent now does ONE hash lookup (UNIT_EVENT_MAP[event]) instead of THREE
+-- separate table lookups per event. Saves ~100-200ns × 624 calls/20s.
+do
+    for ev, dfk in pairs(EVENT_DIRTY_FLAGS) do
+        local info = UNIT_EVENT_MAP[ev]
+        if info then info.dfk = dfk end
+    end
+    for ev, fn in pairs(DIRECT_APPLY) do
+        local info = UNIT_EVENT_MAP[ev]
+        if info then info.direct = fn end
+    end
+end
+
 -- Byte at position 1 of "UNIT_" is 85 (= 'U'). Use string.byte for the fallback
 -- instead of string.sub which allocates a new string on every call.
 local BYTE_U = 85  -- string.byte("U")
@@ -2724,11 +2765,12 @@ local function FrameOnEvent(self, event, arg1, ...)
     end
 
     -- Unit events: only react to our unit.
+    -- PERF P0: Single lookup carries mask + dirty flags + direct handler (merged).
     local info = UNIT_EVENT_MAP[event]
     if info then
         if arg1 == self.unit then
-            -- Set dirty flags via pre-computed map (1 hash lookup vs 5 string compares).
-            local dfk = EVENT_DIRTY_FLAGS[event]
+            -- Set dirty flags via pre-computed map (merged into info, 0 extra lookups).
+            local dfk = info.dfk
             if dfk then
                 if dfk == "absorbDirty" then
                     self._msufAbsorbDirty = true
@@ -2743,7 +2785,7 @@ local function FrameOnEvent(self, event, arg1, ...)
             end
 
             -- Phase 6: Direct-apply for cheap elements (health/power).
-            local directFn = DIRECT_APPLY[event]
+            local directFn = info.direct
             if directFn then
                 directFn(self)
                 return
@@ -2812,6 +2854,7 @@ function Core.AttachFrame(f)
             self._msufHealAbsorbDirty = true
             self._msufAbsorbInit = nil
             self._msufHealAbsorbInit = nil
+            self._msufPwrTextForce = true
             Core.MarkDirty(self, MASK_SHOW_REFRESH, true, "OnShow")
             DeferSwapWork(self.unit, "OnShow", true)
         end)
@@ -2876,6 +2919,10 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     f._msufLastPwrC = nil
     f._msufLastPwrM = nil
     f._msufLastPwrP = nil
+    -- PERF: Invalidate raw-value power diff guard (Text.lua P0 guard)
+    f._msufRawPwrC = nil
+    f._msufRawPwrM = nil
+    f._msufRawPwrP = nil
     RefreshUnitEvents(f, true)
 
     if alsoUpdate then

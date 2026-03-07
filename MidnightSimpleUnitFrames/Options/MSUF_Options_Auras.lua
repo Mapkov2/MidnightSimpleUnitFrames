@@ -1699,7 +1699,7 @@ end
                 "Shows the countdown numbers on aura icons. Disable to hide cooldown numbers (swipe can remain enabled).",
                 "cbShowCooldownText" },
             { "Click-through auras", 200, -324, A2_Settings, "clickThroughAuras", nil,
-                "Makes all aura icons non-interactive. Mouse clicks and tooltips pass through to the game world.",
+                "Makes aura icons click-through so mouse clicks pass to the game world.\n\nWhen 'Show tooltip' is also enabled, hovering still shows aura tooltips.\nWhen 'Show tooltip' is off, icons are fully non-interactive.",
                 "cbClickThrough" },
             { "Show tooltip", 12, -276, A2_Settings, "showTooltip", nil, nil, "cbShowTooltip" },
         }, displayCB)

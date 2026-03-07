@@ -75,30 +75,21 @@ local function GetUnitKey(frame)
     return u
 end
 
-local function GetCastbarBackgroundColor(g)
-    if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
-        local r, gg, b, a = _G.MSUF_GetCastbarBackgroundColor()
-        return r, gg, b, a
+local function GetFontColor(g, fr, fg, fb)
+    if not g then
+        return fr, fg, fb
     end
-    if g then
-        local r = tonumber(g.castbarBgR)
-        local gg = tonumber(g.castbarBgG)
-        local b = tonumber(g.castbarBgB)
-        local a = tonumber(g.castbarBgA)
+    if g.castbarTextUseCustom then
+        local r = tonumber(g.castbarTextR)
+        local gg = tonumber(g.castbarTextG)
+        local b = tonumber(g.castbarTextB)
         if r and gg and b then
-            return r, gg, b, a or 1
+            return r, gg, b
         end
     end
-    return 0.176, 0.176, 0.176, 1
+    return fr, fg, fb
 end
 
-local function ApplyBackgroundBarColor(frame, g)
-    local bg = frame and frame.backgroundBar
-    if not (bg and bg.SetVertexColor) then return end
-    local r, gg, b = GetCastbarBackgroundColor(g)
-    local a = (bg.GetAlpha and bg:GetAlpha()) or 1
-    bg:SetVertexColor(r, gg, b, a)
-end
 
 
 local function ApplyPreviewInterruptibleColor(frame, unitKey, g)
@@ -249,25 +240,6 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
         backgroundBar:ClearAllPoints()
         backgroundBar:SetAllPoints(statusBar)
     end
-end
-
-
-local function GetFontColor(g, defaultR, defaultG, defaultB)
-    if type(_G.MSUF_GetCastbarTextColor) == "function" then
-        local r, gg, b = _G.MSUF_GetCastbarTextColor()
-        if r ~= nil and gg ~= nil and b ~= nil then
-            return r, gg, b
-        end
-    end
-    if g and g.castbarTextUseCustom then
-        local r = tonumber(g.castbarTextR)
-        local gg = tonumber(g.castbarTextG)
-        local b = tonumber(g.castbarTextB)
-        if r and gg and b then
-            return r, gg, b
-        end
-    end
-    return defaultR or 1, defaultG or 1, defaultB or 1
 end
 
 local function ApplyFontsAndTextLayout(frame, unitKey, g)
@@ -489,14 +461,6 @@ local function IterateCastbarFrames(fn)
     fn(_G.MSUF_PlayerCastbar)
     fn(_G.MSUF_TargetCastbar)
     fn(_G.MSUF_FocusCastbar)
-    do
-        local bossBars = _G.MSUF_BossCastbars
-        if bossBars then
-            for i = 1, #bossBars do
-                fn(bossBars[i])
-            end
-        end
-    end
 
     -- Previews
     fn(_G.MSUF_PlayerCastbarPreview)
@@ -514,6 +478,21 @@ local function IterateCastbarFrames(fn)
         end
     end
 
+end
+
+------------------------------------------------------
+-- Background bar color (live-apply from Colors picker)
+------------------------------------------------------
+local function ApplyBackgroundBarColor(frame)
+    local bg = frame and frame.backgroundBar
+    if not (bg and bg.SetVertexColor) then return end
+    local r, g, b, a = 0.176, 0.176, 0.176, 1
+    if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
+        r, g, b, a = _G.MSUF_GetCastbarBackgroundColor()
+    end
+    -- Preserve the texture's own alpha (set at creation) for the 4th channel.
+    local ta = (bg.GetAlpha and bg:GetAlpha()) or 1
+    bg:SetVertexColor(r, g, b, ta)
 end
 
 -- Preserve any pre-existing implementation for safety.
@@ -537,7 +516,7 @@ function _G.MSUF_UpdateCastbarVisuals()
         end
 
         ApplyIconAndBarLayout(frame, unitKey, g)
-        ApplyBackgroundBarColor(frame, g)
+        ApplyBackgroundBarColor(frame)
         ApplyFontsAndTextLayout(frame, unitKey, g)
         ApplyPreviewInterruptibleColor(frame, unitKey, g)
     end)

@@ -685,8 +685,10 @@ local function RegisterIcon(icon)
 
     icon._msufA2_cdMgrRegistered = true
     icon._msufA2_cdMgrIndex = idx
+    icon._msufA2_cdTouchQueued = nil
 
     if mgr.count == 1 then
+        mgr._msufA2_touchPending = false
         if mgr._Schedule then
             mgr._Schedule(0)
         end
@@ -698,6 +700,7 @@ local function UnregisterIcon(icon)
         if icon then
             icon._msufA2_cdMgrIndex = nil
             icon._msufA2_cdMgrRegistered = false
+            icon._msufA2_cdTouchQueued = nil
         end
         return
     end
@@ -706,6 +709,7 @@ local function UnregisterIcon(icon)
     if not mgr or mgr.count <= 0 then
         icon._msufA2_cdMgrIndex = nil
         icon._msufA2_cdMgrRegistered = false
+        icon._msufA2_cdTouchQueued = nil
         return
     end
 
@@ -718,6 +722,7 @@ local function UnregisterIcon(icon)
     -- Fallback: rare desync (no search by default; just mark inactive)
     icon._msufA2_cdMgrIndex = nil
     icon._msufA2_cdMgrRegistered = false
+    icon._msufA2_cdTouchQueued = nil
 end
 
 local function UnregisterAll()
@@ -731,6 +736,7 @@ local function UnregisterAll()
         if icon then
             icon._msufA2_cdMgrIndex = nil
             icon._msufA2_cdMgrRegistered = false
+            icon._msufA2_cdTouchQueued = nil
         end
         mgr.icons[i] = nil
     end
@@ -748,11 +754,13 @@ local function TouchIcon(icon)
     -- this icon immediately (called when a duration object is reattached).
     if icon then
         icon._msufA2_cdSkipUntil = nil
+        icon._msufA2_cdTouchQueued = true
     end
     local mgr = CT._mgr
-    if mgr and mgr.count > 0 then
-        -- Tick ASAP (used when Options change or duration objects are reattached).
-        if mgr._Schedule then
+    if mgr and mgr.count > 0 and mgr._Schedule then
+        -- Coalesce repeated touches from the same render pass into one ASAP tick.
+        if mgr._msufA2_touchPending ~= true then
+            mgr._msufA2_touchPending = true
             mgr._Schedule(0)
         end
     end

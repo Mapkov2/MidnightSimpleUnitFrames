@@ -1516,16 +1516,16 @@ end
 		-- Boss-only: invert boss order toggle (boss 1 at bottom instead of top)
 		panel.playerInvertBossOrderCB = panel.playerInvertBossOrderCB or CreateCheck(textGroup, "MSUF_UF_InvertBossOrderCB", "Invert boss order", 12, bossSpacingY - 50)
 		panel.playerInvertBossOrderCB:Hide()
-		-- Pet-only: anchor pet frame relative to Player/Target (shown only on pet pages by LayoutIndicatorTemplate)
-		if not panel.petAnchorToLabel then
-			panel.petAnchorToLabel = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-			panel.petAnchorToLabel:SetJustifyH("LEFT")
+		-- Shared per-unit anchoring controls (player / target / ToT / focus / pet / boss).
+		if not panel.unitAnchorToLabel then
+			panel.unitAnchorToLabel = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			panel.unitAnchorToLabel:SetJustifyH("LEFT")
 		end
-		panel.petAnchorToLabel:SetText(TR("Anchor pet to"))
-		panel.petAnchorToLabel:Hide()
-		if not panel.petAnchorToDD then
-			local dd = CreateFrame("Frame", "MSUF_PetAnchorToDropDown", textGroup, "UIDropDownMenuTemplate")
-			panel.petAnchorToDD = dd
+		panel.unitAnchorToLabel:SetText(TR("Anchor unit to"))
+		panel.unitAnchorToLabel:Hide()
+		if not panel.unitAnchorToDD then
+			local dd = CreateFrame("Frame", "MSUF_UnitAnchorToDropDown", textGroup, "UIDropDownMenuTemplate")
+			panel.unitAnchorToDD = dd
 			if UIDropDownMenu_SetWidth then
 				UIDropDownMenu_SetWidth(dd, 180)
 			end
@@ -1536,28 +1536,66 @@ end
 				MSUF_ExpandDropdownClickArea(dd)
 			end
 		end
-		panel.petAnchorToDD:Hide()
-		-- Focus-only: anchor focus frame relative to Player/Target (shown only on focus pages).
-		if not panel.focusAnchorToLabel then
-			panel.focusAnchorToLabel = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-			panel.focusAnchorToLabel:SetJustifyH("LEFT")
+		panel.unitAnchorToDD:Hide()
+		if not panel.unitAnchorGroup then
+			local g = CreateGroupBox(frameGroup, "Anchoring", rightX, topY - _msufTextBaseH - 12, rightW, 118, texWhite, texWhite2)
+			panel.unitAnchorGroup = g
+			local sub = g:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			sub:SetPoint("TOPLEFT", g, "TOPLEFT", 10, -24)
+			sub:SetPoint("TOPRIGHT", g, "TOPRIGHT", -10, -24)
+			sub:SetJustifyH("LEFT")
+			sub:SetTextColor(0.78, 0.78, 0.78)
+			sub:SetText(TR("Pick any frame: click 'Pick with mouse', then hold CTRL + Left-Click on the target frame."))
+			g._msufSubText = sub
 		end
-		panel.focusAnchorToLabel:SetText(TR("Anchor focus to"))
-		panel.focusAnchorToLabel:Hide()
-		if not panel.focusAnchorToDD then
-			local dd = CreateFrame("Frame", "MSUF_FocusAnchorToDropDown", textGroup, "UIDropDownMenuTemplate")
-			panel.focusAnchorToDD = dd
-			if UIDropDownMenu_SetWidth then
-				UIDropDownMenu_SetWidth(dd, 180)
-			end
-			dd._msufDropWidth = 180
-			if type(_G.MSUF_ExpandDropdownClickArea) == "function" then
-				_G.MSUF_ExpandDropdownClickArea(dd)
-			elseif type(MSUF_ExpandDropdownClickArea) == "function" then
-				MSUF_ExpandDropdownClickArea(dd)
+		panel.unitAnchorGroup:Hide()
+		if not panel.unitCustomAnchorLabel then
+			panel.unitCustomAnchorLabel = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			panel.unitCustomAnchorLabel:SetJustifyH("LEFT")
+		end
+		panel.unitCustomAnchorLabel:SetText(TR("Custom anchor target (mouse picker)"))
+		panel.unitCustomAnchorLabel:Hide()
+		if not panel.unitCustomAnchorPickButton then
+			local b = CreateFrame("Button", nil, textGroup, "UIPanelButtonTemplate")
+			panel.unitCustomAnchorPickButton = b
+			b:SetSize(170, 22)
+			b:SetText(TR("Pick frame (CTRL+Click)"))
+		end
+		panel.unitCustomAnchorPickButton:Hide()
+		if not panel.unitCustomAnchorClearButton then
+			local b = CreateFrame("Button", nil, textGroup, "UIPanelButtonTemplate")
+			panel.unitCustomAnchorClearButton = b
+			b:SetSize(56, 22)
+			b:SetText(TR("Clear"))
+		end
+		panel.unitCustomAnchorClearButton:Hide()
+		if not panel.unitCustomAnchorValueText then
+			local fs = textGroup:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			panel.unitCustomAnchorValueText = fs
+			fs:SetJustifyH("LEFT")
+			fs:SetTextColor(0.85, 0.85, 0.85)
+		end
+		panel.unitCustomAnchorValueText:Hide()
+		if not panel.unitGlobalAnchorWarn then
+			panel.unitGlobalAnchorWarn = textGroup:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			panel.unitGlobalAnchorWarn:SetJustifyH("LEFT")
+			panel.unitGlobalAnchorWarn:SetTextColor(1, 0.82, 0.2)
+		end
+		panel.unitGlobalAnchorWarn:SetText(TR("Edit Mode custom anchor is global. Per-unit anchoring here overrides it for this unit."))
+		panel.unitGlobalAnchorWarn:Hide()
+		for _, w in ipairs({
+			panel.unitAnchorToLabel,
+			panel.unitAnchorToDD,
+			panel.unitCustomAnchorLabel,
+			panel.unitCustomAnchorPickButton,
+			panel.unitCustomAnchorClearButton,
+			panel.unitCustomAnchorValueText,
+			panel.unitGlobalAnchorWarn,
+		}) do
+			if w and w.SetParent and panel.unitAnchorGroup and w:GetParent() ~= panel.unitAnchorGroup then
+				w:SetParent(panel.unitAnchorGroup)
 			end
 		end
-		panel.focusAnchorToDD:Hide()
 		-- Status icons (player/target only; lives in its own box)
 		local statusBox = panel._msufStatusIconsGroup
 		local STATUS_BASE_TOGGLE_Y = -34
@@ -2122,12 +2160,13 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
     if not isFramesTab then
         if panel._msufStatusIconsGroup then panel._msufStatusIconsGroup:Hide() end
         if panel.playerLeaderIndicatorHeader then panel.playerLeaderIndicatorHeader:Hide() end
-		-- Pet-only widgets inside this template must also be hard-hidden outside the Frames tab.
-		if panel.petAnchorToLabel then panel.petAnchorToLabel:Hide() end
-		if panel.petAnchorToDD then panel.petAnchorToDD:Hide() end
-		-- Focus-only widgets: same treatment.
-		if panel.focusAnchorToLabel then panel.focusAnchorToLabel:Hide() end
-		if panel.focusAnchorToDD then panel.focusAnchorToDD:Hide() end
+		if panel.unitAnchorToLabel then panel.unitAnchorToLabel:Hide() end
+		if panel.unitAnchorToDD then panel.unitAnchorToDD:Hide() end
+		if panel.unitCustomAnchorLabel then panel.unitCustomAnchorLabel:Hide() end
+		if panel.unitCustomAnchorPickButton then panel.unitCustomAnchorPickButton:Hide() end
+		if panel.unitCustomAnchorClearButton then panel.unitCustomAnchorClearButton:Hide() end
+		if panel.unitCustomAnchorValueText then panel.unitCustomAnchorValueText:Hide() end
+		if panel.unitGlobalAnchorWarn then panel.unitGlobalAnchorWarn:Hide() end
         for _, spec in pairs(_MSUF_INDICATOR_SPECS) do
             SetShownByName(spec.showCB, false)
             SetShownByName(spec.xStepper, false)
@@ -2230,48 +2269,81 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         panel.playerLeaderIndicatorHeader:ClearAllPoints()
         panel.playerLeaderIndicatorHeader:SetPoint("LEFT", firstDivider, "LEFT", 0, 0)
     end
-	-- Pet-only: allow anchoring the pet frame to Player/Target (dropdown lives in the Indicator box).
-	local showPetAnchorTo = (currentKey == "pet") and true or false
-	if panel.petAnchorToLabel then panel.petAnchorToLabel:SetShown(showPetAnchorTo) end
-	if panel.petAnchorToDD then panel.petAnchorToDD:SetShown(showPetAnchorTo) end
-	if showPetAnchorTo then
-		local y = baseToggleY + (row * step) + 6
-		if panel.petAnchorToLabel then
-			panel.petAnchorToLabel:ClearAllPoints()
-			panel.petAnchorToLabel:SetPoint("TOPLEFT", container, "TOPLEFT", 12, y)
+	-- Shared per-unit anchoring controls.
+	local showUnitAnchorControls = (currentKey == "player" or currentKey == "target" or currentKey == "targettarget" or currentKey == "focus" or currentKey == "pet" or currentKey == "boss") and true or false
+	if panel.unitAnchorGroup then panel.unitAnchorGroup:SetShown(showUnitAnchorControls) end
+	if panel.unitAnchorToLabel then panel.unitAnchorToLabel:SetShown(showUnitAnchorControls) end
+	if panel.unitAnchorToDD then panel.unitAnchorToDD:SetShown(showUnitAnchorControls) end
+	if panel.unitCustomAnchorLabel then panel.unitCustomAnchorLabel:SetShown(showUnitAnchorControls) end
+	if panel.unitCustomAnchorPickButton then panel.unitCustomAnchorPickButton:SetShown(showUnitAnchorControls) end
+	if panel.unitCustomAnchorClearButton then panel.unitCustomAnchorClearButton:SetShown(showUnitAnchorControls) end
+	if panel.unitCustomAnchorValueText then panel.unitCustomAnchorValueText:SetShown(showUnitAnchorControls) end
+	if panel.unitGlobalAnchorWarn then panel.unitGlobalAnchorWarn:SetShown(showUnitAnchorControls) end
+	if showUnitAnchorControls and panel.unitAnchorGroup then
+		local group = panel.unitAnchorGroup
+		local textBox = panel._msufTextGroup or container
+		local statusBox = panel._msufStatusIconsGroup
+		local anchorTopTarget = textBox
+		local anchorYOffset = -12
+		local boxH = 118
+		if currentKey == "player" or currentKey == "target" then
+			anchorTopTarget = statusBox or textBox
+			anchorYOffset = -12
+		elseif currentKey == "boss" then
+			anchorTopTarget = textBox
+			anchorYOffset = -12
+			boxH = 126
+		else
+			anchorTopTarget = textBox
+			anchorYOffset = -12
 		end
-		if panel.petAnchorToDD then
-			panel.petAnchorToDD:ClearAllPoints()
-			if panel.petAnchorToLabel then
-				panel.petAnchorToDD:SetPoint("TOPLEFT", panel.petAnchorToLabel, "BOTTOMLEFT", -18, -6)
-			else
-				panel.petAnchorToDD:SetPoint("TOPLEFT", container, "TOPLEFT", -6, y - 22)
-			end
-			if panel.petAnchorToDD.SetFrameLevel and container.GetFrameLevel then
-				panel.petAnchorToDD:SetFrameLevel((container:GetFrameLevel() or 0) + 2)
+		group:ClearAllPoints()
+		if anchorTopTarget then
+			group:SetPoint("TOPLEFT", anchorTopTarget, "BOTTOMLEFT", 0, anchorYOffset)
+			group:SetPoint("TOPRIGHT", anchorTopTarget, "BOTTOMRIGHT", 0, anchorYOffset)
+		else
+			group:SetPoint("TOPLEFT", container, "BOTTOMLEFT", 0, -12)
+			group:SetPoint("TOPRIGHT", container, "BOTTOMRIGHT", 0, -12)
+		end
+		group:SetHeight(boxH)
+		if group._msufSubText then
+			group._msufSubText:ClearAllPoints()
+			group._msufSubText:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -24)
+			group._msufSubText:SetPoint("TOPRIGHT", group, "TOPRIGHT", -10, -24)
+		end
+		if panel.unitAnchorToLabel then
+			panel.unitAnchorToLabel:ClearAllPoints()
+			panel.unitAnchorToLabel:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -46)
+		end
+		if panel.unitAnchorToDD then
+			panel.unitAnchorToDD:ClearAllPoints()
+			panel.unitAnchorToDD:SetPoint("TOPLEFT", group, "TOPLEFT", 86, -38)
+			if panel.unitAnchorToDD.SetFrameLevel and group.GetFrameLevel then
+				panel.unitAnchorToDD:SetFrameLevel((group:GetFrameLevel() or 0) + 2)
 			end
 		end
-	end
-	-- Focus-only: allow anchoring the focus frame to Player/Target (same layout slot as pet anchor).
-	local showFocusAnchorTo = (currentKey == "focus") and true or false
-	if panel.focusAnchorToLabel then panel.focusAnchorToLabel:SetShown(showFocusAnchorTo) end
-	if panel.focusAnchorToDD then panel.focusAnchorToDD:SetShown(showFocusAnchorTo) end
-	if showFocusAnchorTo then
-		local y = baseToggleY + (row * step) + 6
-		if panel.focusAnchorToLabel then
-			panel.focusAnchorToLabel:ClearAllPoints()
-			panel.focusAnchorToLabel:SetPoint("TOPLEFT", container, "TOPLEFT", 12, y)
+		if panel.unitCustomAnchorLabel then
+			panel.unitCustomAnchorLabel:ClearAllPoints()
+			panel.unitCustomAnchorLabel:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -72)
 		end
-		if panel.focusAnchorToDD then
-			panel.focusAnchorToDD:ClearAllPoints()
-			if panel.focusAnchorToLabel then
-				panel.focusAnchorToDD:SetPoint("TOPLEFT", panel.focusAnchorToLabel, "BOTTOMLEFT", -18, -6)
-			else
-				panel.focusAnchorToDD:SetPoint("TOPLEFT", container, "TOPLEFT", -6, y - 22)
-			end
-			if panel.focusAnchorToDD.SetFrameLevel and container.GetFrameLevel then
-				panel.focusAnchorToDD:SetFrameLevel((container:GetFrameLevel() or 0) + 2)
-			end
+		if panel.unitCustomAnchorPickButton then
+			panel.unitCustomAnchorPickButton:ClearAllPoints()
+			panel.unitCustomAnchorPickButton:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -90)
+		end
+		if panel.unitCustomAnchorClearButton then
+			panel.unitCustomAnchorClearButton:ClearAllPoints()
+			panel.unitCustomAnchorClearButton:SetPoint("LEFT", panel.unitCustomAnchorPickButton, "RIGHT", 10, 0)
+		end
+		if panel.unitCustomAnchorValueText then
+			panel.unitCustomAnchorValueText:ClearAllPoints()
+			panel.unitCustomAnchorValueText:SetPoint("LEFT", panel.unitCustomAnchorClearButton, "RIGHT", 12, 0)
+			panel.unitCustomAnchorValueText:SetPoint("RIGHT", group, "RIGHT", -10, 0)
+			panel.unitCustomAnchorValueText:SetJustifyH("LEFT")
+		end
+		if panel.unitGlobalAnchorWarn then
+			panel.unitGlobalAnchorWarn:ClearAllPoints()
+			panel.unitGlobalAnchorWarn:SetPoint("TOPLEFT", panel.unitCustomAnchorPickButton, "BOTTOMLEFT", 0, -8)
+			panel.unitGlobalAnchorWarn:SetPoint("RIGHT", group, "RIGHT", -10, 0)
 		end
 	end
     -- Status icons live in their own box (player/target only).
@@ -2557,33 +2629,31 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
                 end
             end
         end
-	-- Pet-only: anchor pet frame relative to Player/Target (dropdown lives in the Indicator box).
-	if panel.petAnchorToDD then
-		local show = (isPetKey and isFramesTab) and true or false
-		panel.petAnchorToDD:SetShown(show)
-		if panel.petAnchorToLabel then panel.petAnchorToLabel:SetShown(show) end
+	-- Shared per-unit anchoring widgets.
+	if panel.unitAnchorToDD then
+		local show = ((currentKey == "player") or (currentKey == "target") or isFocusKey or isPetKey or isBossKey or isToTKey) and isFramesTab
+		panel.unitAnchorToDD:SetShown(show)
+		if panel.unitAnchorToLabel then panel.unitAnchorToLabel:SetShown(show) end
+		if panel.unitCustomAnchorLabel then panel.unitCustomAnchorLabel:SetShown(show) end
+		if panel.unitCustomAnchorPickButton then panel.unitCustomAnchorPickButton:SetShown(show) end
+		if panel.unitCustomAnchorClearButton then panel.unitCustomAnchorClearButton:SetShown(show) end
+		if panel.unitCustomAnchorValueText then panel.unitCustomAnchorValueText:SetShown(show) end
+		if panel.unitGlobalAnchorWarn then panel.unitGlobalAnchorWarn:SetShown(show) end
 		if show then
 			local v = conf.anchorToUnitframe
-			if v ~= "player" and v ~= "target" then v = "GLOBAL" end
-			if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.petAnchorToDD, v) end
+			if v ~= "player" and v ~= "target" and v ~= "focus" and v ~= "pet" and v ~= "targettarget" then v = "GLOBAL" end
+			if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.unitAnchorToDD, v) end
 			if UIDropDownMenu_SetText then
-				local txt = (v == "player" and "Player frame") or (v == "target" and "Target frame") or "Free (global anchor)"
-				UIDropDownMenu_SetText(panel.petAnchorToDD, txt)
+				local txt = (v == "player" and "Player frame") or (v == "target" and "Target frame") or (v == "focus" and "Focus frame") or (v == "pet" and "Pet frame") or (v == "targettarget" and "Target of Target frame") or "Free (global anchor)"
+				UIDropDownMenu_SetText(panel.unitAnchorToDD, txt)
 			end
-		end
-	end
-	-- Focus-only: anchor focus frame relative to Player/Target.
-	if panel.focusAnchorToDD then
-		local show = (isFocusKey and isFramesTab) and true or false
-		panel.focusAnchorToDD:SetShown(show)
-		if panel.focusAnchorToLabel then panel.focusAnchorToLabel:SetShown(show) end
-		if show then
-			local v = conf.anchorToUnitframe
-			if v ~= "player" and v ~= "target" then v = "GLOBAL" end
-			if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.focusAnchorToDD, v) end
-			if UIDropDownMenu_SetText then
-				local txt = (v == "player" and "Player frame") or (v == "target" and "Target frame") or "Free (global anchor)"
-				UIDropDownMenu_SetText(panel.focusAnchorToDD, txt)
+			if panel.unitCustomAnchorValueText and panel.unitCustomAnchorValueText.SetText then
+				local an = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
+				if an ~= "" then
+					panel.unitCustomAnchorValueText:SetText(TR("Current custom anchor: ") .. an)
+				else
+					panel.unitCustomAnchorValueText:SetText(TR("Current custom anchor: none"))
+				end
 			end
 		end
 	end
@@ -3159,68 +3229,128 @@ for _, rowId in ipairs(MSUF_INDICATOR_ORDER) do
     MSUF_BindIndicatorRow(INDICATOR_SPECS[rowId])
 end
 
--- Shared helpers for pet/focus "Anchor to" dropdowns.
+-- Shared helpers for per-unit anchor dropdown + custom /fstack frame input.
 local function _MSUF_AnchorToEffectiveValue(conf)
     local v = conf and conf.anchorToUnitframe
-    if v == "player" or v == "target" then return v end
+    if v == "player" or v == "target" or v == "focus" or v == "pet" or v == "targettarget" then return v end
     return "GLOBAL"
 end
 local function _MSUF_AnchorToTextFor(v)
     if v == "player" then return "Player frame" end
     if v == "target" then return "Target frame" end
+    if v == "focus" then return "Focus frame" end
+    if v == "pet" then return "Pet frame" end
+    if v == "targettarget" then return "Target of Target frame" end
     return "Free (global anchor)"
 end
 local _MSUF_ANCHOR_TO_CHOICES = {
     {"Free (global anchor)", "GLOBAL"},
     {"Player frame", "player"},
     {"Target frame", "target"},
+    {"Target of Target frame", "targettarget"},
+    {"Focus frame", "focus"},
+    {"Pet frame", "pet"},
 }
 
--- Bind an "Anchor <unit> to" dropdown for a given unit key.
-local function _MSUF_BindAnchorToDropdown(drop, requiredKey)
+local function _MSUF_GetAnchorableCurrentKey()
+    local k = (CurrentKey and CurrentKey()) or "player"
+    if k == "tot" or k == "targetoftarget" then k = "targettarget" end
+    return k
+end
+
+local function _MSUF_CurrentKeySupportsUnitAnchoring()
+    local k = _MSUF_GetAnchorableCurrentKey()
+    return (k == "player" or k == "target" or k == "targettarget" or k == "focus" or k == "pet" or k == "boss") and true or false
+end
+
+local function _MSUF_ApplyCurrentUnitAnchorWidgets()
+    if not panel.unitAnchorToDD then return end
+    if not IsFramesTab() then return end
+    if not _MSUF_CurrentKeySupportsUnitAnchoring() then return end
+    local conf = EnsureKeyDB()
+    local v = _MSUF_AnchorToEffectiveValue(conf)
+    if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.unitAnchorToDD, v) end
+    if UIDropDownMenu_SetText then UIDropDownMenu_SetText(panel.unitAnchorToDD, _MSUF_AnchorToTextFor(v)) end
+    if panel.unitCustomAnchorValueText and panel.unitCustomAnchorValueText.SetText then
+        local an = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
+        if an ~= "" then
+            panel.unitCustomAnchorValueText:SetText(TR("Current custom anchor: ") .. an)
+        else
+            panel.unitCustomAnchorValueText:SetText(TR("Current custom anchor: none"))
+        end
+    end
+end
+
+local function _MSUF_BindAnchorToDropdown(drop)
     if not drop or not UIDropDownMenu_Initialize then return end
     UIDropDownMenu_Initialize(drop, function(self, level)
-        if not level or level ~= 1 then  return end
-        if not IsFramesTab() then  return end
-        local k = (CurrentKey and CurrentKey()) or "player"
-        if k == "tot" then k = "targettarget" end
-        if k ~= requiredKey then  return end
-
+        if not level or level ~= 1 then return end
+        if not IsFramesTab() then return end
+        if not _MSUF_CurrentKeySupportsUnitAnchoring() then return end
         local conf = EnsureKeyDB()
         local cur = _MSUF_AnchorToEffectiveValue(conf)
+        local currentKey = _MSUF_GetAnchorableCurrentKey()
         for _, pair in ipairs(_MSUF_ANCHOR_TO_CHOICES) do
             local textLabel, value = pair[1], pair[2]
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = textLabel
-            info.value = value
-            info.func = function()
-                if not IsFramesTab() then  return end
-                local conf2 = EnsureKeyDB()
-                conf2.anchorToUnitframe = value
-                if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(drop, value) end
-                if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, textLabel) end
-                if CloseDropDownMenus then CloseDropDownMenus() end
-                ApplyCurrent()
+            if value == "GLOBAL" or value ~= currentKey then
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = textLabel
+                info.value = value
+                info.func = function()
+                    if not IsFramesTab() then return end
+                    local conf2 = EnsureKeyDB()
+                    conf2.anchorToUnitframe = value
+                    if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(drop, value) end
+                    if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, textLabel) end
+                    if CloseDropDownMenus then CloseDropDownMenus() end
+                    ApplyCurrent()
+                end
+                info.checked = function() return (cur == value) end
+                info.isNotRadio = false
+                UIDropDownMenu_AddButton(info, level)
             end
-            info.checked = function()  return (_MSUF_AnchorToEffectiveValue(conf) == value) end
-            info.isNotRadio = false
-            UIDropDownMenu_AddButton(info, level)
         end
     end)
+    drop:HookScript("OnShow", _MSUF_ApplyCurrentUnitAnchorWidgets)
+end
+_MSUF_BindAnchorToDropdown(panel.unitAnchorToDD)
 
-    drop:HookScript("OnShow", function()
-        if not IsFramesTab() then  return end
-        local k = (CurrentKey and CurrentKey()) or "player"
-        if k == "tot" then k = "targettarget" end
-        if k ~= requiredKey then  return end
-        local conf = EnsureKeyDB()
-        local v = _MSUF_AnchorToEffectiveValue(conf)
-        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(drop, v) end
-        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, _MSUF_AnchorToTextFor(v)) end
+-- ---------------------------------------------------------------------------
+-- Per-unit anchor picker — delegates to the global MSUF_AnchorPicker
+-- singleton (created in MSUF_EditMode.lua).  Only the _onPick callback
+-- differs: we write to the per-unit config instead of general.anchorName.
+-- ---------------------------------------------------------------------------
+
+if panel.unitCustomAnchorPickButton and (not panel._msufUnitCustomAnchorPickerHooked) then
+    panel._msufUnitCustomAnchorPickerHooked = true
+    panel.unitCustomAnchorPickButton:SetScript("OnClick", function()
+        if not IsFramesTab() then return end
+        if not _MSUF_CurrentKeySupportsUnitAnchoring() then return end
+        local ov = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker() or nil
+        if not ov then return end
+        ov._onPick = function(frameName)
+            if not IsFramesTab() or not _MSUF_CurrentKeySupportsUnitAnchoring() then return end
+            local conf = EnsureKeyDB()
+            conf.anchorFrameName = frameName
+            conf.anchorToUnitframe = "GLOBAL"
+            ApplyCurrent()
+            _MSUF_ApplyCurrentUnitAnchorWidgets()
+        end
+        ov:Show()
     end)
 end
-_MSUF_BindAnchorToDropdown(panel.petAnchorToDD, "pet")
-_MSUF_BindAnchorToDropdown(panel.focusAnchorToDD, "focus")
+
+if panel.unitCustomAnchorClearButton and (not panel._msufUnitCustomAnchorClearHooked) then
+    panel._msufUnitCustomAnchorClearHooked = true
+    panel.unitCustomAnchorClearButton:SetScript("OnClick", function()
+        if not IsFramesTab() then return end
+        if not _MSUF_CurrentKeySupportsUnitAnchoring() then return end
+        local conf = EnsureKeyDB()
+        conf.anchorFrameName = nil
+        ApplyCurrent()
+        _MSUF_ApplyCurrentUnitAnchorWidgets()
+    end)
+end
 
 -- Status icons (Step 1): Combat row uses indicator-style controls (player/target)
 _G.MSUF_RequestStatusCombatIndicatorRefresh = _G.MSUF_RequestStatusCombatIndicatorRefresh or function()

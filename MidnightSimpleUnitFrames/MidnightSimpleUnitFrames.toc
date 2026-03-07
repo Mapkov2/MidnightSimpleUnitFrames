@@ -3,7 +3,7 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko 
 ## Category: Combat
-## Version: 2.54
+## Version: 2.6
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: Masque, LibSharedMedia-3.0, Clique
@@ -53,6 +53,7 @@ Core\MSUF_ChatAndTooltips.lua
 Core\MSUF_StatusIndicators.lua
 Core\MSUF_UnitframeCore.lua
 Core\MSUF_RangeFade.lua
+Core\MSUF_ColorsCore.lua
 
 Auras2\MSUF_A2_DB.lua
 Auras2\MSUF_A2_Colors.lua
@@ -70,7 +71,6 @@ Auras2\MSUF_A2_Render.lua
 Auras2\MSUF_A2_EditMode.lua
 Auras2\MSUF_A2_Events.lua
 
-MidnightSimpleUnitFrames_Colors.lua
 MidnightSimpleUnitFrames_Gameplay.lua
 MSUF_Search.lua
 MidnightSimpleUnitFrames_SlashMenu.lua
@@ -86,6 +86,7 @@ Core\MSUF_Borders.lua
 Core\MSUF_ClassPower.lua
 
 Options\MSUF_Options_Core.lua
+Options\MSUF_Options_Colors.lua
 Options\MSUF_Options_ClassPower.lua
 Options\MSUF_Options_ClassPower_QuickSetup.lua
 Options\MSUF_Options_Player.lua

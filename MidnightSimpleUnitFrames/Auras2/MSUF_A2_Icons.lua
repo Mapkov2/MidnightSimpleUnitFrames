@@ -89,6 +89,7 @@ local _wantDebuffHL     = false
 local _useBlizzardTimer = false  -- true = Blizzard C++ pass-through for countdown text
 local _useDispelBorders = false  -- dispel-type border coloring for debuffs
 local _clickThrough     = false  -- true = all auras non-interactive (mouse pass-through)
+local _showTooltip      = true   -- cached shared.showTooltip (for click-through + tooltip combo)
 
 --  Debuff dispel-type color lookup (Ã‚Â  la R41z0r / Blizzard) 
 -- Maps dispel index  Blizzard color object; used for both manual
@@ -167,6 +168,7 @@ local function RefreshSharedFlags(shared, gen)
     _useBlizzardTimer = (shared and shared.useBlizzardTimerText == true) or false
     _useDispelBorders = (shared and shared.useDebuffTypeBorders == true) or false
     _clickThrough     = (shared and shared.clickThroughAuras == true) or false
+    _showTooltip      = (shared and shared.showTooltip == true) or false
 end
 
 -- ---------------------------------------------------------------------------
@@ -296,6 +298,38 @@ end
 -- Icons are stored on container._msufIcons[index]
 -- Each icon is a Button with: .tex, .cooldown, .count, .border, .overlay
 
+-- Mouse interaction state helper (safe on 12.0+)
+-- 0 = normal (hover + clicks)
+-- 1 = tooltip only (hover on, clicks off)
+-- 2 = full click-through (hover off, clicks off)
+local function ApplyMouseState(icon, wantMS)
+    if not icon then return end
+    if icon._msufA2_mouseState == wantMS then return end
+    icon._msufA2_mouseState = wantMS
+
+    local wantHover = (wantMS ~= 2)
+    local wantClicks = (wantMS == 0)
+
+    if icon.SetMouseMotionEnabled then
+        icon:SetMouseMotionEnabled(wantHover)
+    end
+    if icon.SetMouseClickEnabled then
+        icon:SetMouseClickEnabled(wantClicks)
+    end
+
+    -- Backward-compatible fallback for older clients/widgets without the split API.
+    if (not icon.SetMouseMotionEnabled) or (not icon.SetMouseClickEnabled) then
+        icon:EnableMouse(wantHover or wantClicks)
+        if icon.RegisterForClicks then
+            if wantClicks then
+                icon:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            else
+                icon:RegisterForClicks()
+            end
+        end
+    end
+end
+
 local function CreateIcon(container, index)
     local icon = CreateFrame("Button", nil, container)
     icon:SetSize(26, 26)
@@ -305,8 +339,7 @@ countFrame:SetAllPoints(icon)
 countFrame:SetFrameLevel(icon:GetFrameLevel() + 10)
 icon.countFrame = countFrame
 
-    icon:EnableMouse(true)
-    icon:RegisterForClicks("RightButtonUp")
+    ApplyMouseState(icon, 0)
     icon._msufA2_container = container
 
     -- Texture
@@ -463,9 +496,10 @@ function Icons.HideUnused(container, fromIndex)
                 icon._msufAuraInstanceID = nil
                 -- Bug 1 fix: Clear stale commit + texture cache so recycled
                 -- icons always do a full CommitIcon on next AcquireIcon.
-                -- Without this, a reused icon can skip SetTexture if the
-                -- old _msufA2_lastTexAid happens to match the new aura's aid.
-                icon._msufA2_lastCommit = nil
+                -- PERF: Reuse the lastCommit table (avoid ~96B alloc on recycle).
+                -- Clearing .aid forces full re-apply in CommitIcon's diff gate.
+                local lc = icon._msufA2_lastCommit
+                if lc then lc.aid = nil end
                 icon._msufA2_lastTexAid = nil
             end
         end
@@ -627,6 +661,8 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
             aidMap[prevAid] = nil
         end
         icon._msufAuraInstanceID = nil
+        icon._msufA2_lastOwnHelpful = nil
+        icon._msufA2_lastDispelAid = nil
         if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
         return false
     end
@@ -661,6 +697,8 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         if icon._msufPrivateBorder then icon._msufPrivateBorder:Hide() end
         if icon._msufPrivateLock then icon._msufPrivateLock:Hide() end
         if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
+        icon._msufA2_lastOwnHelpful = nil
+        icon._msufA2_lastDispelAid = nil
         last = nil
         icon._msufA2_lastCommit = nil
     end
@@ -705,22 +743,31 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     -- 3. Stack count
     _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
 
-    -- 4. Own-aura highlight
-    _fast_ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
+    -- 4. Own-aura highlight (same effective state rarely changes across full commits)
+    local ownHelpfulKey = ((isOwn and 1) or 0) * 2 + ((isHelpful and 1) or 0)
+    if icon._msufA2_lastOwnHelpful ~= ownHelpfulKey then
+        icon._msufA2_lastOwnHelpful = ownHelpfulKey
+        _fast_ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
+    end
 
     -- 5. Dispel-type border (Magic/Curse/Poison/Disease colored)
-    _fast_ApplyDispelBorder(icon, unit, aura, isHelpful)
+    if icon._msufA2_lastDispelAid ~= aid then
+        icon._msufA2_lastDispelAid = aid
+        _fast_ApplyDispelBorder(icon, unit, aura, isHelpful)
+    end
 
     -- 6. (Masque overlay sync removed from hot path — handled once in AddButton)
 
-    -- 7. Click-through: diff-gated EnableMouse (PERF: only when state changes)
-    local wantMouse = not _clickThrough
-    if icon._msufA2_mouseOn ~= wantMouse then
-        icon._msufA2_mouseOn = wantMouse
-        icon:EnableMouse(wantMouse)
-    end
+    -- 7. Click-through + tooltip interaction (3-state, diff-gated)
+    -- 0 = normal (mouse on, no pass-through)
+    -- 1 = click-through but tooltips on (mouse on, all buttons pass-through)
+    -- 2 = full click-through (mouse off — no hover, no clicks)
+    local wantMS = _clickThrough and (_showTooltip and 1 or 2) or 0
+    ApplyMouseState(icon, wantMS)
 
-    icon:Show()
+    if not icon.IsShown or not icon:IsShown() then
+        icon:Show()
+    end
     return true
 end
 
@@ -758,6 +805,9 @@ local function ClearCooldownVisual(icon, cd)
     icon._msufA2_durationObj = nil
     cd._msufA2_durationObj = nil
     icon._msufA2_lastHadTimer = false
+    icon._msufA2_lastCdDurationObj = nil
+    icon._msufA2_lastCdAid = nil
+    icon._msufA2_lastCdShown = false
 end
 
 local function ApplyCooldownTextStyle(icon, cd, now, force)
@@ -875,10 +925,33 @@ function Icons._ApplyTimer(icon, unit, aid, shared, aura)
         local wantText = _showText and (icon._msufA2_hideCDNumbers ~= true)
         if CT then
             if wantText and hadTimer then
-                if CT.RegisterIcon then CT.RegisterIcon(icon) end
-                if CT.TouchIcon then CT.TouchIcon(icon) end
-            elseif CT.UnregisterIcon then
-                CT.UnregisterIcon(icon)
+                local wasRegistered = (icon._msufA2_cdMgrRegistered == true)
+                if (not wasRegistered) and CT.RegisterIcon then
+                    CT.RegisterIcon(icon)
+                    wasRegistered = (icon._msufA2_cdMgrRegistered == true)
+                end
+
+                local objChanged = (icon._msufA2_lastCdDurationObj ~= obj)
+                local aidChanged = (icon._msufA2_lastCdAid ~= aid)
+                local textStateChanged = (icon._msufA2_lastCdWantText ~= true)
+                local shownChanged = (icon._msufA2_lastCdShown ~= true)
+
+                if wasRegistered and CT.TouchIcon and (objChanged or aidChanged or textStateChanged or shownChanged) then
+                    CT.TouchIcon(icon)
+                end
+
+                icon._msufA2_lastCdDurationObj = obj
+                icon._msufA2_lastCdAid = aid
+                icon._msufA2_lastCdWantText = true
+                icon._msufA2_lastCdShown = true
+            else
+                icon._msufA2_lastCdWantText = false
+                icon._msufA2_lastCdShown = false
+                icon._msufA2_lastCdDurationObj = nil
+                icon._msufA2_lastCdAid = nil
+                if CT.UnregisterIcon then
+                    CT.UnregisterIcon(icon)
+                end
             end
         end
     else
@@ -944,7 +1017,21 @@ function Icons._RefreshTimer(icon, unit, aid, shared, aura)
     -- Text disabled: no reason to touch CT at all.
     if not _useBlizzardTimer and _showText then
         CT = CT or API.CooldownText
-        if CT and CT.TouchIcon then CT.TouchIcon(icon) end
+        local objChanged = (icon._msufA2_lastCdDurationObj ~= obj)
+        local aidChanged = (icon._msufA2_lastCdAid ~= aid)
+        local shownChanged = (icon._msufA2_lastCdShown ~= true)
+        if CT and CT.TouchIcon and (objChanged or aidChanged or shownChanged) then
+            CT.TouchIcon(icon)
+        end
+        icon._msufA2_lastCdDurationObj = obj
+        icon._msufA2_lastCdAid = aid
+        icon._msufA2_lastCdShown = true
+        icon._msufA2_lastCdWantText = true
+    else
+        icon._msufA2_lastCdWantText = false
+        icon._msufA2_lastCdShown = false
+        icon._msufA2_lastCdDurationObj = nil
+        icon._msufA2_lastCdAid = nil
     end
 end
 
@@ -1360,12 +1447,9 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
 
         icon:Show()
 
-        -- Click-through: apply same setting as live icons (diff-gated)
-        local wantMouse = not _clickThrough
-        if icon._msufA2_mouseOn ~= wantMouse then
-            icon._msufA2_mouseOn = wantMouse
-            icon:EnableMouse(wantMouse)
-        end
+        -- Click-through: apply same 3-state setting as live icons (diff-gated)
+        local wantMS = _clickThrough and (_showTooltip and 1 or 2) or 0
+        ApplyMouseState(icon, wantMS)
 
         -- Invalidate + resolve text config
         icon._msufA2_textCfgGen = nil
@@ -1531,12 +1615,9 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
 
             icon:Show()
 
-            -- Click-through (diff-gated)
-            local wantMouse = not _clickThrough
-            if icon._msufA2_mouseOn ~= wantMouse then
-                icon._msufA2_mouseOn = wantMouse
-                icon:EnableMouse(wantMouse)
-            end
+            -- Click-through (3-state, diff-gated)
+            local wantMS = _clickThrough and (_showTooltip and 1 or 2) or 0
+            ApplyMouseState(icon, wantMS)
 
             -- Position using growth direction
             icon:ClearAllPoints()
