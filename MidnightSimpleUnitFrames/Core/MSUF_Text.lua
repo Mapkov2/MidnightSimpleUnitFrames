@@ -486,7 +486,23 @@ function ns.Text.RenderPowerText(self)
         local rawHpSep = (useOverride and udb and udb.hpTextSeparator) or gPower.hpTextSeparator
         local powerSep = ns.Text._SepToken(rawPowerSep, rawHpSep)
 
-        ptc = { pMode = pMode, powerSep = powerSep, colorByType = colorByType }
+        local splitEnabled = false
+        if self.powerTextPct and _MSUF_PowerModeAllowsSplit(pMode) then
+            local splitOn = (useOverride and udb and udb.powerTextSpacerEnabled == true) or ((not useOverride) and gPower and gPower.powerTextSpacerEnabled == true)
+            if splitOn then
+                local splitX = (useOverride and udb and tonumber(udb.powerTextSpacerX)) or ((gPower and tonumber(gPower.powerTextSpacerX)) or 0)
+                splitX = tonumber(splitX) or 0
+                if splitX > 0 then
+                    if key and type(_G.MSUF_GetPowerSpacerMaxForUnitKey) == "function" then
+                        local maxP = tonumber(_G.MSUF_GetPowerSpacerMaxForUnitKey(key)) or 0
+                        if splitX > maxP then splitX = maxP end
+                    end
+                    splitEnabled = (splitX > 0)
+                end
+            end
+        end
+
+        ptc = { pMode = pMode, powerSep = powerSep, colorByType = colorByType, splitEnabled = splitEnabled }
         self._msufPwrTextConf = ptc
     end
 
@@ -589,7 +605,7 @@ function ns.Text.RenderPowerText(self)
     end
 
     local hasPct = (pctText ~= nil)
-    local splitAllowed = (self.powerTextPct ~= nil) and ns.Text._ShouldSplitPower(self, pMode, hasPct) or false
+    local splitAllowed = (self.powerTextPct ~= nil) and hasPct and (ptc and ptc.splitEnabled == true) or false
 
     local mainText, sideText = _MSUF_FormatPowerByMode(pMode, curText, maxText, pctText, powerSep, powerSep, splitAllowed)
 

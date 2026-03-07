@@ -163,14 +163,30 @@ end
 
 function MSUF_SetTextIfChanged(fs, text)
     if not fs then return end
-    -- PERF: Simplified hot path. FontString:SetText() handles nil→"", numbers, and
-    -- secret values natively via C-side. No Lua-side type() branching needed.
-    -- Secret-safe: no comparison on text value, just nil gate.
-    if text ~= nil then
-        fs:SetText(text)
-    else
-        fs:SetText("")
+    local v = text
+    if v == nil then v = "" end
+
+    -- Secret-safe diff gate: only compare/cache plain Lua values.
+    -- Secret values must pass straight through to C-side SetText().
+    local sv = _G and _G.issecretvalue
+    if sv and sv(v) == true then
+        fs._msufLastText = nil
+        fs:SetText(v)
+        return
     end
+
+    local tv = type(v)
+    if tv == "string" or tv == "number" or tv == "boolean" then
+        if fs._msufLastText == v then
+            return
+        end
+        fs._msufLastText = v
+        fs:SetText(v)
+        return
+    end
+
+    fs._msufLastText = nil
+    fs:SetText(v)
 end
 
 

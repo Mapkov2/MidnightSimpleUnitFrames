@@ -1222,22 +1222,32 @@ local function RenderUnit(entry)
     if skipDebuffs then
         -- Player edit mode: debuff layout already handled by preview path.
     elseif showDebuffs then
-        _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, debuffRowWrap)
+        local debuffLayoutStamp = tostring(debuffCount) .. '|' .. tostring(debuffIconSize) .. '|' .. tostring(spacing) .. '|' .. tostring(perRow) .. '|' .. tostring(debuffGrowth) .. '|' .. tostring(debuffRowWrap) .. '|' .. tostring(gen)
+        if entry._msufA2_lastDebuffLayoutStamp ~= debuffLayoutStamp then
+            entry._msufA2_lastDebuffLayoutStamp = debuffLayoutStamp
+            _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, debuffRowWrap, gen)
+        end
         if debuffCount ~= lastDebuffCount then
             _HideUnused(entry.debuffs, debuffCount + 1)
         end
     else
+        entry._msufA2_lastDebuffLayoutStamp = nil
         if lastDebuffCount > 0 then
             _HideUnused(entry.debuffs, 1)
         end
     end
 
     if showBuffs then
-        _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, buffRowWrap)
+        local buffLayoutStamp = tostring(buffCount) .. '|' .. tostring(buffIconSize) .. '|' .. tostring(spacing) .. '|' .. tostring(perRow) .. '|' .. tostring(buffGrowth) .. '|' .. tostring(buffRowWrap) .. '|' .. tostring(gen)
+        if entry._msufA2_lastBuffLayoutStamp ~= buffLayoutStamp then
+            entry._msufA2_lastBuffLayoutStamp = buffLayoutStamp
+            _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, buffRowWrap, gen)
+        end
         if buffCount ~= lastBuffCount then
             _HideUnused(entry.buffs, buffCount + 1)
         end
     else
+        entry._msufA2_lastBuffLayoutStamp = nil
         if lastBuffCount > 0 then
             _HideUnused(entry.buffs, 1)
         end
