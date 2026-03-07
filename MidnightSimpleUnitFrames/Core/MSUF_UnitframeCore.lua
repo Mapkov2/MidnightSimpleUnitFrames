@@ -139,6 +139,10 @@ local function UFCore_RefreshSettingsCache(reason)
     cache.classColorsRef = (db and type(db.classColors) == "table") and db.classColors or nil
     cache.npcColorsRef = (db and type(db.npcColors) == "table") and db.npcColors or nil
 
+    Core._settingsSerial = (Core._settingsSerial or 0) + 1
+    cache.settingsSerial = Core._settingsSerial
+    _G.MSUF_UFCORE_SETTINGS_SERIAL = Core._settingsSerial
+
     -- UFCore budgets
     cache.ufcoreFlushBudgetMs = UFCore_ClampNum(g and g.ufcoreFlushBudgetMs, 0.6, 0.25, 2.0)
 
@@ -218,6 +222,40 @@ local function UFCore_RefreshSettingsCache(reason)
     cache.unifiedBarR = UFCore_Clamp01(g and g.unifiedBarR, 0.10)
     cache.unifiedBarG = UFCore_Clamp01(g and g.unifiedBarG, 0.60)
     cache.unifiedBarB = UFCore_Clamp01(g and g.unifiedBarB, 0.90)
+
+    -- Static background-tint snapshot (used by main-file background visual apply).
+    cache.darkBgCustomColor = (g and g.darkBgCustomColor) and true or false
+    cache.darkBgBrightness = UFCore_Clamp01(g and g.darkBgBrightness, 1)
+    cache.barBgMatchHPColor = (g and g.barBgMatchHPColor) and true or false
+    cache.powerBarBgMatchHPColor = ((g and g.powerBarBgMatchHPColor) or (bars and bars.powerBarBgMatchBarColor)) and true or false
+    cache.anyBarBackgroundTracksHPColor = (cache.barBgMatchHPColor or cache.powerBarBgMatchHPColor) and true or false
+
+    local bgAlphaPct = type(bars and bars.barBackgroundAlpha) == "number" and bars.barBackgroundAlpha or 90
+    if bgAlphaPct < 0 then bgAlphaPct = 0 elseif bgAlphaPct > 100 then bgAlphaPct = 100 end
+    cache.barBackgroundAlpha = bgAlphaPct / 100
+
+    local bgR = UFCore_Clamp01(g and g.classBarBgR, 0)
+    local bgG = UFCore_Clamp01(g and g.classBarBgG, 0)
+    local bgB = UFCore_Clamp01(g and g.classBarBgB, 0)
+    if g and g.darkMode and not cache.darkBgCustomColor then
+        local br = cache.darkBgBrightness
+        bgR, bgG, bgB = bgR * br, bgG * br, bgB * br
+    end
+    cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA = bgR, bgG, bgB, 0.9
+
+    local pbgR, pbgG, pbgB = g and g.powerBarBgColorR, g and g.powerBarBgColorG, g and g.powerBarBgColorB
+    if type(pbgR) == "number" and type(pbgG) == "number" and type(pbgB) == "number" then
+        pbgR = UFCore_Clamp01(pbgR, 0)
+        pbgG = UFCore_Clamp01(pbgG, 0)
+        pbgB = UFCore_Clamp01(pbgB, 0)
+        if g and g.darkMode and not cache.darkBgCustomColor then
+            local br = cache.darkBgBrightness
+            pbgR, pbgG, pbgB = pbgR * br, pbgG * br, pbgB * br
+        end
+    else
+        pbgR, pbgG, pbgB = bgR, bgG, bgB
+    end
+    cache.powerBgTintR, cache.powerBgTintG, cache.powerBgTintB, cache.powerBgTintA = pbgR, pbgG, pbgB, 0.9
 
     -- Pet frame override color (only used in "class" bar mode)
     local pr, pg, pb = g and g.petFrameColorR, g and g.petFrameColorG, g and g.petFrameColorB
@@ -390,6 +428,24 @@ local function InitUnitFlags(f)
     local bi = (_G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(u))
     f._msufBossIndex = bi or nil
     f._msufUnitFlagsInited = true
+end
+
+local function UFCore_RefreshFrameInvariantFlags(f, cache)
+    if not f then return end
+    cache = cache or UFCore_GetSettingsCache()
+    local mode = (cache and cache.barMode) or "dark"
+
+    local staticHealthColor = false
+    if mode == "dark" or mode == "unified" then
+        staticHealthColor = true
+    elseif f._msufIsPlayer then
+        staticHealthColor = true
+    elseif f._msufIsPet and cache and cache.petFrameColorEnabled then
+        staticHealthColor = true
+    end
+
+    f._msufStaticHealthColor = staticHealthColor and true or false
+    f._msufAnyBgTracksHealthColor = (cache and cache.anyBarBackgroundTracksHPColor) and true or false
 end
 
 local function GetConfForUnit(unit)
@@ -768,11 +824,14 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
     -- Make sure the unit-type flags are up to date (pet, player, boss, etc.)
     InitUnitFlags(frame)
 
-    -- P4: invalidate identity cache on every color refresh trigger (unit swap / UNIT_FACTION).
-    -- _RefreshUnitIdentityCache will re-populate lazily on the next _UpdateIdentityColors call.
-    frame._msufCachedIsPlayer = nil
-
     local cache = UFCore_GetSettingsCache()
+
+    -- Only dynamic "class" frames need identity invalidation here.
+    -- Dark/unified modes and static class-colored frames (player, pet override) never
+    -- change color from UNIT_FACTION / UNIT_FLAGS during combat.
+    if (cache and cache.barMode == "class") and not frame._msufStaticHealthColor then
+        frame._msufCachedIsPlayer = nil
+    end
 
     -- Bar mode (authoritative): "dark" | "class" | "unified"
     local mode = (cache and cache.barMode) or "dark"
@@ -826,7 +885,9 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
     end
     local fnBg = _G.MSUF_ApplyBarBackgroundVisual
     if type(fnBg) == "function" and frame.bg then
-        fnBg(frame)
+        if frame._msufVisualQueuedUFCore or (cache and cache.anyBarBackgroundTracksHPColor) then
+            fnBg(frame)
+        end
     end
 end
 
@@ -1448,6 +1509,8 @@ local function RefreshUnitEvents(f, force)
     end
 
     local mask, conf = ComputeElementMask(f)
+    local cache = UFCore_GetSettingsCache()
+    UFCore_RefreshFrameInvariantFlags(f, cache)
     local last = f._msufElemMask or 0
     if not force and mask == last then
         return
@@ -2780,7 +2843,9 @@ local function FrameOnEvent(self, event, arg1, ...)
                     self._msufAbsorbDirty = true
                     self._msufHealAbsorbDirty = true
                 else -- "healthColorDirty"
-                    self._msufHealthColorDirty = true
+                    if not self._msufStaticHealthColor then
+                        self._msufHealthColorDirty = true
+                    end
                 end
             end
 
@@ -3195,4 +3260,8 @@ end
 -- Optional helper for options/profile systems: rebuild settings snapshot cache explicitly.
 function _G.MSUF_UFCore_RefreshSettingsCache(reason)
     UFCore_RefreshSettingsCache(reason or "MANUAL")
+end
+
+function _G.MSUF_UFCore_GetSettingsCache()
+    return UFCore_GetSettingsCache()
 end
