@@ -2020,6 +2020,7 @@ local function CP_UpdateValues_AuraSegmented(powerType, maxPower)
         baseR, baseG, baseB = 1, 1, 1
     end
     local bgA = tonumber(b.classPowerBgAlpha) or 0.3
+    local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
 
     if powerType == "SOUL_FRAGMENTS_VENG" then
         -- DH Vengeance: C_Spell.GetSpellCastCount → SECRET number in 12.0
