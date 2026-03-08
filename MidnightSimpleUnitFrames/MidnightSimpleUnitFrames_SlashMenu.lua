@@ -637,6 +637,76 @@ g.M:SetAllPoints(fillGroup.M)
 g.R:SetAllPoints(fillGroup.R)
 g:Hide()
 btn._msufNavActive3=g return g end
+local function MSUF_UseModernDropdowns()
+local g=MSUF_DB and MSUF_DB.general
+local mode=g and g.dropdownStyleMode
+if mode=="old"or mode=="blizzard"or mode=="legacy"then return false end
+return true end
+local function MSUF_EnsureNavWarmHoverOverlay(btn,fillGroup) if not(btn and btn.CreateTexture and fillGroup and fillGroup.L and fillGroup.M and fillGroup.R)
+then return nil,nil end
+if btn._msufNavWarmHover3 then local g=btn._msufNavWarmHover3 if g and g.L and g.L.SetAllPoints then g.L:SetAllPoints(fillGroup.L) end
+if g and g.M and g.M.SetAllPoints then g.M:SetAllPoints(fillGroup.M) end
+if g and g.R and g.R.SetAllPoints then g.R:SetAllPoints(fillGroup.R) end
+local sheen=btn._msufNavWarmSheen3 if sheen then sheen:ClearAllPoints()
+sheen:SetPoint("TOPLEFT",btn,"TOPLEFT",12,-2)
+sheen:SetPoint("TOPRIGHT",btn,"TOPRIGHT",-12,-2)
+sheen:SetHeight(1) end
+return g,sheen end
+local g={}
+g.L=btn:CreateTexture(nil,"ARTWORK",nil,4)
+g.M=btn:CreateTexture(nil,"ARTWORK",nil,4)
+g.R=btn:CreateTexture(nil,"ARTWORK",nil,4)
+g._msufSEParts={g.L,g.M,g.R}
+g.L:SetTexture(MSUF_SUPERELLIPSE_TEX)
+g.M:SetTexture(MSUF_SUPERELLIPSE_TEX)
+g.R:SetTexture(MSUF_SUPERELLIPSE_TEX)
+g.L:SetTexCoord(0.0,0.25,0.0,1.0)
+g.M:SetTexCoord(0.25,0.75,0.0,1.0)
+g.R:SetTexCoord(0.75,1.0,0.0,1.0)
+for i=1,#g._msufSEParts do local t=g._msufSEParts[i]
+if t and t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false)
+if t.SetTexelSnappingBias then t:SetTexelSnappingBias(0)
+end
+end
+end
+g.SetVertexColor=function(self,r,gg,b,a) for i=1,#self._msufSEParts do local t=self._msufSEParts[i]
+if t and t.SetVertexColor then t:SetVertexColor(r,gg,b,a)
+end
+end
+end
+g.Hide=function(self) for i=1,#self._msufSEParts do local t=self._msufSEParts[i]
+if t and t.Hide then t:Hide()
+end
+end
+end
+g.Show=function(self) for i=1,#self._msufSEParts do local t=self._msufSEParts[i]
+if t and t.Show then t:Show()
+end
+end
+end
+g.L:SetAllPoints(fillGroup.L)
+g.M:SetAllPoints(fillGroup.M)
+g.R:SetAllPoints(fillGroup.R)
+g:Hide()
+btn._msufNavWarmHover3=g
+local sheen=btn:CreateTexture(nil,"ARTWORK",nil,5)
+sheen:SetTexture("Interface/Buttons/WHITE8X8")
+sheen:SetPoint("TOPLEFT",btn,"TOPLEFT",12,-2)
+sheen:SetPoint("TOPRIGHT",btn,"TOPRIGHT",-12,-2)
+sheen:SetHeight(1)
+sheen:SetColorTexture(0.98,0.90,0.56,0.0)
+sheen:Hide()
+btn._msufNavWarmSheen3=sheen
+return g,sheen end
+local function MSUF_ApplyNavWarmHover(btn,fillAlpha,sheenAlpha)
+local g,sheen=MSUF_EnsureNavWarmHoverOverlay(btn,btn and btn._msufNavBG or nil)
+if g and g.SetVertexColor then g:SetVertexColor(0.96,0.86,0.42,fillAlpha or 0)
+if(fillAlpha or 0)>0 then g:Show() else g:Hide() end
+end
+if sheen and sheen.SetColorTexture then sheen:SetColorTexture(0.98,0.90,0.56,sheenAlpha or 0)
+if(sheenAlpha or 0)>0 then sheen:Show() else sheen:Hide() end
+end
+end
 MSUF_SkinButton=function(btn) if not btn then return end
 -- Opt-out: Options panels manage their own action buttons (Edit Mode / Copy / Import Cancel etc).
 if btn._msufNoSlashSkin or btn.__msufMidnightActionSkinned or btn.__msufMidnightTabSkinned then
@@ -897,8 +967,11 @@ pcall(btn.SetDisabledTexture,btn,nil)
 end
 local bg,border=MSUF_EnsureSuperellipseLayers(btn,2);
 local active=MSUF_EnsureNavActiveOverlay(btn,bg)
+local warm,warmSheen=MSUF_EnsureNavWarmHoverOverlay(btn,bg)
 if active and active.SetVertexColor then active:SetVertexColor(0.16,0.36,0.80,0.55)
 end
+if warm and warm.SetVertexColor then warm:SetVertexColor(0.96,0.86,0.42,0.0); warm:Hide() end
+if warmSheen and warmSheen.SetColorTexture then warmSheen:SetColorTexture(0.98,0.90,0.56,0.0); warmSheen:Hide() end
 if border and border.SetVertexColor then border:SetVertexColor(MSUF_PILL_EDGE_R,MSUF_PILL_EDGE_G,MSUF_PILL_EDGE_B,0.90)
 end
 if bg and bg.SetVertexColor then if isIndented then bg:SetVertexColor(0.09,0.10,0.12,0.82)
@@ -916,7 +989,7 @@ btn._msufApplyNavState=function(self,activeState,hovered) if self._msufNavActive
 else self._msufNavActive3:Hide()
 end
 end
-activeState=activeState and true or false hovered=hovered and true or false local fs2=self.GetFontString and self:GetFontString()
+activeState=activeState and true or false hovered=hovered and true or false local modern=MSUF_UseModernDropdowns() local fs2=self.GetFontString and self:GetFontString()
 if fs2 and fs2 .SetTextColor then if activeState then fs2:SetTextColor(0.92,0.96,1.00,1.00)
 else if isHeader then fs2:SetTextColor(0.86,0.92,1.00,0.92)
 else if isIndented then fs2:SetTextColor(0.80,0.88,1.00,0.92)
@@ -938,6 +1011,14 @@ else if hovered then self._msufNavBorder:SetVertexColor(0.22,0.45,0.90,0.95)
 else self._msufNavBorder:SetVertexColor(MSUF_PILL_EDGE_R,MSUF_PILL_EDGE_G,MSUF_PILL_EDGE_B,0.80)
 end
 end
+end
+if modern then if activeState then if hovered then MSUF_ApplyNavWarmHover(self,0.05,0.14)
+else MSUF_ApplyNavWarmHover(self,0.0,0.0)
+end
+elseif hovered then MSUF_ApplyNavWarmHover(self,0.14,0.28)
+else MSUF_ApplyNavWarmHover(self,0.0,0.0)
+end
+else MSUF_ApplyNavWarmHover(self,0.0,0.0)
 end
 end
 end
