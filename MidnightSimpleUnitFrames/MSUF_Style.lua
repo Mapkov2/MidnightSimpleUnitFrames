@@ -51,6 +51,25 @@ local function _MSUF_GetDB()
   if type(ns) == "table" and type(ns.MSUF_DB) == "table" then return ns.MSUF_DB end
    return nil
 end
+local function _MSUF_NormalizeDropdownStyleMode(mode)
+  if mode == "old" or mode == "blizzard" or mode == "legacy" then
+    return "old"
+  end
+  return "msuf"
+end
+local function _MSUF_CommitPendingDropdownStyleMode()
+  local db = _MSUF_GetDB()
+  local g = db and db.general or nil
+  if not g then return end
+  local pending = g.pendingDropdownStyleMode
+  if pending ~= nil then
+    g.dropdownStyleMode = _MSUF_NormalizeDropdownStyleMode(pending)
+    g.pendingDropdownStyleMode = nil
+  elseif g.dropdownStyleMode ~= nil then
+    g.dropdownStyleMode = _MSUF_NormalizeDropdownStyleMode(g.dropdownStyleMode)
+  end
+end
+_MSUF_CommitPendingDropdownStyleMode()
 function Style.IsEnabled()
   local db = _MSUF_GetDB()
   if db and db.general and db.general.styleEnabled ~= nil then
@@ -77,18 +96,7 @@ function Style.SetEnabled(enabled)
 local function _MSUF_GetDropdownStyleMode()
   local db = _MSUF_GetDB()
   local g = db and db.general or nil
-  if g and g.dropdownStyleModePending ~= nil then
-    local pending = g.dropdownStyleModePending
-    if pending == "blizzard" or pending == "legacy" then pending = "old" end
-    if pending ~= "old" then pending = "msuf" end
-    g.dropdownStyleMode = pending
-    g.dropdownStyleModePending = nil
-  end
-  local mode = g and g.dropdownStyleMode or nil
-  if mode == "old" or mode == "blizzard" or mode == "legacy" then
-    return "old"
-  end
-  return "msuf"
+  return _MSUF_NormalizeDropdownStyleMode(g and g.dropdownStyleMode or nil)
 end
 function Style.UseModernDropdowns()
   return _MSUF_GetDropdownStyleMode() ~= "old"
@@ -1538,6 +1546,7 @@ do
 
   function Style.ApplyPeelDropdownTemplate(drop, spec)
     if not drop then return nil end
+    drop.__msufMSUFDropdown = true
     if not Style.UseModernDropdowns() then
       return RevertPeelDropdownTemplate(drop)
     end
@@ -1634,6 +1643,7 @@ do
   Style.SkinUIDDropDownTinyBars = Style.ApplyPeelDropdownTemplate
   ns.MSUF_CreateStyledDropdown = function(name, parent, spec)
     local drop = CreateFrame("Frame", name, parent, "UIDropDownMenuTemplate")
+    drop.__msufMSUFDropdown = true
     if Style.UseModernDropdowns() then
       Style.ApplyPeelDropdownTemplate(drop, spec)
     else
@@ -1731,116 +1741,89 @@ do
   end
 
   local function SkinDropDownLists()
+    if not Style.UseModernDropdowns() then
+      return
+    end
+
+    local openOwner = _G.UIDROPDOWNMENU_OPEN_MENU
+    if not (openOwner and openOwner.__msufMSUFDropdown and openOwner.__msufPeelDropSkinned) then
+      return
+    end
+
     for level = 1, (_G.UIDROPDOWNMENU_MAXLEVELS or 2) do
       local list = _G["DropDownList" .. level]
-      if list then
-        local spec = DD_DEFAULT_SPEC
+      if list and list.IsShown and list:IsShown() then
+        local spec = openOwner._msufPeelSpec or DD_DEFAULT_SPEC
         local mb = _G["DropDownList" .. level .. "MenuBackdrop"]
         local bb = _G["DropDownList" .. level .. "Backdrop"]
-        if not Style.UseModernDropdowns() then
-          if list._msufPeelBackdrop and list._msufPeelBackdrop.Hide then list._msufPeelBackdrop:Hide() end
-          if mb then
-            if mb.SetAlpha then mb:SetAlpha(1) end
-            if mb.Show then mb:Show() end
-            if mb.NineSlice and mb.NineSlice.Show then mb.NineSlice:Show() end
-          end
-          if bb then
-            if bb.SetAlpha then bb:SetAlpha(1) end
-            if bb.Show then bb:Show() end
-          end
-          for i = 1, (_G.UIDROPDOWNMENU_MAXBUTTONS or 32) do
-            local b = _G["DropDownList" .. level .. "Button" .. i]
-            if b then
-              if b._msufPeelSel and b._msufPeelSel.Hide then b._msufPeelSel:Hide() end
-              local fs = _G[b:GetName() .. "NormalText"]
-              local hl = b.GetHighlightTexture and b:GetHighlightTexture() or nil
-              local check = _G[b:GetName() .. "Check"] or b.Check
-              local uncheck = _G[b:GetName() .. "UnCheck"] or b.UnCheck
-              -- IMPORTANT: preserve the CURRENT Blizzard-selected state for this open menu.
-              -- In old mode we want the exact 2.54/native behavior, not a synthetic restore.
-              -- ToggleDropDownMenu already rebuilt the list just before this hook runs.
-              local wantCheck = (check and check.IsShown and check:IsShown()) and true or false
-              local wantUncheck = (uncheck and uncheck.IsShown and uncheck:IsShown()) and true or false
-              if b._msufOrigHeight and b.SetHeight then b:SetHeight(b._msufOrigHeight) end
-              _MSUF_RestoreFontStringPoints(fs)
-              _MSUF_RestoreTexturePoints(hl)
-              if check then
-                if check.SetShown then check:SetShown(wantCheck)
-                elseif wantCheck and check.Show then check:Show()
-                elseif check.Hide then check:Hide() end
-              end
-              if uncheck then
-                if uncheck.SetShown then uncheck:SetShown(wantUncheck)
-                elseif wantUncheck and uncheck.Show then uncheck:Show()
-                elseif uncheck.Hide then uncheck:Hide() end
+
+        if not list._msufPeelBackdrop then
+          local skin = CreateFrame("Frame", nil, list, "BackdropTemplate")
+          skin:SetFrameLevel(math.max(0, (list.GetFrameLevel and list:GetFrameLevel() or 1) - 1))
+          skin:SetAllPoints(list)
+          skin:SetBackdrop({
+            bgFile = WHITE8X8,
+            edgeFile = WHITE8X8,
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+          })
+          list._msufPeelBackdrop = skin
+        end
+
+        list._msufPeelBackdrop:SetBackdropColor(spec.menuBgR, spec.menuBgG, spec.menuBgB, spec.menuBgA)
+        list._msufPeelBackdrop:SetBackdropBorderColor(spec.menuBorderR, spec.menuBorderG, spec.menuBorderB, spec.menuBorderA)
+        if list._msufPeelBackdrop.Show then list._msufPeelBackdrop:Show() end
+
+        if mb then
+          if mb.Hide then mb:Hide() end
+          if mb.SetAlpha then mb:SetAlpha(0) end
+          if mb.NineSlice and mb.NineSlice.Hide then mb.NineSlice:Hide() end
+        end
+        if bb then
+          if bb.Hide then bb:Hide() end
+          if bb.SetAlpha then bb:SetAlpha(0) end
+        end
+
+        for i = 1, (_G.UIDROPDOWNMENU_MAXBUTTONS or 32) do
+          local b = _G["DropDownList" .. level .. "Button" .. i]
+          if b then
+            if not b._msufPeelSel then
+              b._msufPeelSel = b:CreateTexture(nil, "BACKGROUND")
+              b._msufPeelSel:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -1)
+              b._msufPeelSel:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 1)
+            end
+            b._msufPeelSel:SetColorTexture(spec.menuSelectR, spec.menuSelectG, spec.menuSelectB, spec.menuSelectA)
+            local fs = _G[b:GetName() .. "NormalText"]
+            local hl = b.GetHighlightTexture and b:GetHighlightTexture() or nil
+            _MSUF_CaptureDropDownButtonState(b, fs, hl)
+            if fs then
+              ApplyReadableDropdownFont(fs, fs, DD_DEFAULT_SPEC)
+              fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA)
+              fs:ClearAllPoints()
+              fs:SetPoint("LEFT", b, "LEFT", 10, 0)
+              fs:SetPoint("RIGHT", b, "RIGHT", -10, 0)
+              fs:SetJustifyH("LEFT")
+            end
+            if b.SetHeight then b:SetHeight(20) end
+            if hl and hl.SetColorTexture then
+              hl:SetColorTexture(spec.menuHoverR, spec.menuHoverG, spec.menuHoverB, spec.menuHoverA)
+              if hl.SetPoint then
+                hl:ClearAllPoints()
+                hl:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -1)
+                hl:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 1)
               end
             end
-          end
-        else
-          if not list._msufPeelBackdrop then
-            local skin = CreateFrame("Frame", nil, list, "BackdropTemplate")
-            skin:SetFrameLevel(math.max(0, (list.GetFrameLevel and list:GetFrameLevel() or 1) - 1))
-            skin:SetAllPoints(list)
-            skin:SetBackdrop({
-              bgFile = WHITE8X8,
-              edgeFile = WHITE8X8,
-              edgeSize = 1,
-              insets = { left = 1, right = 1, top = 1, bottom = 1 },
-            })
-            list._msufPeelBackdrop = skin
-          end
-          list._msufPeelBackdrop:SetBackdropColor(spec.menuBgR, spec.menuBgG, spec.menuBgB, spec.menuBgA)
-          list._msufPeelBackdrop:SetBackdropBorderColor(spec.menuBorderR, spec.menuBorderG, spec.menuBorderB, spec.menuBorderA)
-          if mb then
-            if mb.Hide then mb:Hide() end
-            if mb.SetAlpha then mb:SetAlpha(0) end
-            if mb.NineSlice and mb.NineSlice.Hide then mb.NineSlice:Hide() end
-          end
-          if bb then
-            if bb.Hide then bb:Hide() end
-            if bb.SetAlpha then bb:SetAlpha(0) end
-          end
-          for i = 1, (_G.UIDROPDOWNMENU_MAXBUTTONS or 32) do
-            local b = _G["DropDownList" .. level .. "Button" .. i]
-            if b then
-              if not b._msufPeelSel then
-                b._msufPeelSel = b:CreateTexture(nil, "BACKGROUND")
-                b._msufPeelSel:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -1)
-                b._msufPeelSel:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 1)
-              end
-              b._msufPeelSel:SetColorTexture(spec.menuSelectR, spec.menuSelectG, spec.menuSelectB, spec.menuSelectA)
-              local fs = _G[b:GetName() .. "NormalText"]
-              local hl = b.GetHighlightTexture and b:GetHighlightTexture() or nil
-              _MSUF_CaptureDropDownButtonState(b, fs, hl)
-              if fs then
-                ApplyReadableDropdownFont(fs, fs, DD_DEFAULT_SPEC)
-                fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA)
-                fs:ClearAllPoints()
-                fs:SetPoint("LEFT", b, "LEFT", 10, 0)
-                fs:SetPoint("RIGHT", b, "RIGHT", -10, 0)
-                fs:SetJustifyH("LEFT")
-              end
-              if b.SetHeight then b:SetHeight(20) end
-              if hl and hl.SetColorTexture then
-                hl:SetColorTexture(spec.menuHoverR, spec.menuHoverG, spec.menuHoverB, spec.menuHoverA)
-                if hl.SetPoint then
-                  hl:ClearAllPoints()
-                  hl:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -1)
-                  hl:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 1)
-                end
-              end
-              local check = _G[b:GetName() .. "Check"] or b.Check
-              local uncheck = _G[b:GetName() .. "UnCheck"] or b.UnCheck
-              local checked = false
-              if check and check.IsShown and check:IsShown() then checked = true end
-              b._msufPeelSel:SetShown(checked)
-              if check and check.Hide then check:Hide() end
-              if uncheck and uncheck.Hide then uncheck:Hide() end
-              if b:IsEnabled() then
-                if fs then fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA) end
-              else
-                if fs then fs:SetTextColor(THEME.mutedR, THEME.mutedG, THEME.mutedB, 0.9) end
-              end
+            local check = _G[b:GetName() .. "Check"] or b.Check
+            local uncheck = _G[b:GetName() .. "UnCheck"] or b.UnCheck
+            local checked = false
+            if check and check.IsShown and check:IsShown() then checked = true end
+            b._msufPeelSel:SetShown(checked)
+            if check and check.Hide then check:Hide() end
+            if uncheck and uncheck.Hide then uncheck:Hide() end
+            if b:IsEnabled() then
+              if fs then fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA) end
+            else
+              if fs then fs:SetTextColor(THEME.mutedR, THEME.mutedG, THEME.mutedB, 0.9) end
             end
           end
         end
@@ -1855,39 +1838,69 @@ do
     _G.__MSUF_PEEL_DROPDOWN_HOOKS_INSTALLED = true
     if type(_G.UIDropDownMenu_SetText) == "function" then
       hooksecurefunc("UIDropDownMenu_SetText", function(drop, text)
-        if Style.UseModernDropdowns() then UpdatePeelDropdownText(drop, text) end
+        if not (Style.UseModernDropdowns() and drop and drop.__msufPeelDropSkinned) then return end
+        UpdatePeelDropdownText(drop, text)
       end)
     end
     if type(_G.UIDropDownMenu_SetWidth) == "function" then
       hooksecurefunc("UIDropDownMenu_SetWidth", function(drop, width)
-        if Style.UseModernDropdowns() then UpdatePeelDropdownWidth(drop, width) end
+        if not (Style.UseModernDropdowns() and drop and drop.__msufPeelDropSkinned) then return end
+        UpdatePeelDropdownWidth(drop, width)
       end)
     end
     if type(_G.UIDropDownMenu_SetSelectedValue) == "function" then
       hooksecurefunc("UIDropDownMenu_SetSelectedValue", function(drop)
-        if not Style.UseModernDropdowns() then return end
-        if C_Timer and C_Timer.After then C_Timer.After(0, function() if Style.UseModernDropdowns() then UpdatePeelDropdownText(drop) end end) else UpdatePeelDropdownText(drop) end
+        if not (Style.UseModernDropdowns() and drop and drop.__msufPeelDropSkinned) then return end
+        if C_Timer and C_Timer.After then
+          C_Timer.After(0, function()
+            if Style.UseModernDropdowns() and drop and drop.__msufPeelDropSkinned then
+              UpdatePeelDropdownText(drop)
+            end
+          end)
+        else
+          UpdatePeelDropdownText(drop)
+        end
       end)
     end
     if type(_G.UIDropDownMenu_SetSelectedName) == "function" then
       hooksecurefunc("UIDropDownMenu_SetSelectedName", function(drop)
-        if not Style.UseModernDropdowns() then return end
-        if C_Timer and C_Timer.After then C_Timer.After(0, function() if Style.UseModernDropdowns() then UpdatePeelDropdownText(drop) end end) else UpdatePeelDropdownText(drop) end
+        if not (Style.UseModernDropdowns() and drop and drop.__msufPeelDropSkinned) then return end
+        if C_Timer and C_Timer.After then
+          C_Timer.After(0, function()
+            if Style.UseModernDropdowns() and drop and drop.__msufPeelDropSkinned then
+              UpdatePeelDropdownText(drop)
+            end
+          end)
+        else
+          UpdatePeelDropdownText(drop)
+        end
       end)
     end
     if type(_G.UIDropDownMenu_EnableDropDown) == "function" then
       hooksecurefunc("UIDropDownMenu_EnableDropDown", function(drop)
-        if Style.UseModernDropdowns() then SyncPeelDropdownState(drop) end
+        if Style.UseModernDropdowns() and drop and drop.__msufPeelDropSkinned then
+          SyncPeelDropdownState(drop)
+        end
       end)
     end
     if type(_G.UIDropDownMenu_DisableDropDown) == "function" then
       hooksecurefunc("UIDropDownMenu_DisableDropDown", function(drop)
-        if Style.UseModernDropdowns() then SyncPeelDropdownState(drop) end
+        if Style.UseModernDropdowns() and drop and drop.__msufPeelDropSkinned then
+          SyncPeelDropdownState(drop)
+        end
       end)
     end
     if type(_G.ToggleDropDownMenu) == "function" then
-      hooksecurefunc("ToggleDropDownMenu", function()
-        if C_Timer and C_Timer.After then C_Timer.After(0, SkinDropDownLists) else SkinDropDownLists() end
+      hooksecurefunc("ToggleDropDownMenu", function(_, _, drop)
+        if not (Style.UseModernDropdowns() and drop and drop.__msufMSUFDropdown and drop.__msufPeelDropSkinned) then
+          return
+        end
+        local function Run()
+          if Style.UseModernDropdowns() and _G.UIDROPDOWNMENU_OPEN_MENU == drop then
+            SkinDropDownLists()
+          end
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, Run) else Run() end
       end)
     end
   end
@@ -1917,25 +1930,32 @@ do
   ns.MSUF_RefreshDropdownSkinMode = Style.RefreshDropdownSkinMode
   _G.MSUF_RefreshDropdownSkinMode = Style.RefreshDropdownSkinMode
 
+  function Style.QueueDropdownStyleMode(mode)
+    local normalized = _MSUF_NormalizeDropdownStyleMode(mode)
+    local db = _MSUF_GetDB()
+    if db and db.general then
+      db.general.pendingDropdownStyleMode = normalized
+    end
+    return normalized
+  end
+
   function Style.SetDropdownStyleMode(mode)
-    local normalized = (mode == "old" or mode == "blizzard" or mode == "legacy") and "old" or "msuf"
+    return Style.QueueDropdownStyleMode(mode)
+  end
+
+  function Style.ApplyDropdownStyleModeImmediate(mode)
+    local normalized = _MSUF_NormalizeDropdownStyleMode(mode)
     local db = _MSUF_GetDB()
     if db and db.general then
       db.general.dropdownStyleMode = normalized
+      db.general.pendingDropdownStyleMode = nil
     end
-    local win = rawget(_G, "MSUF_StandaloneOptionsWindow")
-    if win then
-      Style.RefreshDropdownSkinMode(win)
-    end
-    local flash = rawget(_G, "MSUF_FlashMenuFrame") or rawget(_G, "MSUF_DashboardFrame")
-    if flash then
-      Style.RefreshDropdownSkinMode(flash)
-    end
-    if type(Style.ScanAndSkinEditMode) == "function" then
-      Style.ScanAndSkinEditMode()
-    end
+    return normalized
   end
+
   _G.MSUF_SetDropdownStyleMode = function(mode) return Style.SetDropdownStyleMode(mode) end
+  _G.MSUF_QueueDropdownStyleMode = function(mode) return Style.QueueDropdownStyleMode(mode) end
+  _G.MSUF_ApplyDropdownStyleModeImmediate = function(mode) return Style.ApplyDropdownStyleModeImmediate(mode) end
 
   function Style.ApplyToFrame(root)
     if not Style.IsEnabled() or not root or not root.GetChildren then return end
@@ -2011,3 +2031,12 @@ do
   Style.InstallStandaloneOptionsAutoSkin()
 end
 
+
+
+local _msufDropdownModeBootstrap = CreateFrame("Frame")
+_msufDropdownModeBootstrap:RegisterEvent("ADDON_LOADED")
+_msufDropdownModeBootstrap:SetScript("OnEvent", function(self, _, arg1)
+  if arg1 ~= addonName then return end
+  _MSUF_CommitPendingDropdownStyleMode()
+  self:UnregisterEvent("ADDON_LOADED")
+end)

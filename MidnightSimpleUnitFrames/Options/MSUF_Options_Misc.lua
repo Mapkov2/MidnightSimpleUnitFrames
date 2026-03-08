@@ -40,6 +40,30 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         return MSUF_DB.general
     end
 
+    local function NormalizeDropdownStyleMode(mode)
+        if mode == "old" or mode == "blizzard" or mode == "legacy" then
+            return "old"
+        end
+        return "msuf"
+    end
+
+    local function EnsureDropdownStyleReloadPopup()
+        if not _G.StaticPopupDialogs then return end
+        if _G.StaticPopupDialogs["MSUF_RELOAD_DROPDOWN_STYLE"] then return end
+        _G.StaticPopupDialogs["MSUF_RELOAD_DROPDOWN_STYLE"] = {
+            text = "Dropdown style changes rebuild menu widgets. Reload the UI to apply the new style cleanly.\n\nReload now?",
+            button1 = "Reload",
+            button2 = "Later",
+            timeout = 0,
+            whileDead = 1,
+            hideOnEscape = 1,
+            preferredIndex = 3,
+            OnAccept = function()
+                if type(ReloadUI) == "function" then ReloadUI() end
+            end,
+        }
+    end
+
 local function EnsureTarget()
     local db = _G.MSUF_DB
     if not db then return {} end
@@ -78,36 +102,6 @@ end
         MSUF_DB = MSUF_DB or {}
         MSUF_DB.gameplay = MSUF_DB.gameplay or {}
         return MSUF_DB.gameplay
-    end
-
-    local function EnsureDropdownStyleReloadPopup()
-        if not _G.StaticPopupDialogs then return end
-        if _G.StaticPopupDialogs["MSUF_RELOAD_DROPDOWN_STYLE"] then return end
-
-        _G.StaticPopupDialogs["MSUF_RELOAD_DROPDOWN_STYLE"] = {
-            text = "Changing the dropdown style rebuilds menu widgets.\n\nReload now to apply the new style cleanly. Choose Later to keep your choice and apply it on the next reload.",
-            button1 = "Reload",
-            button2 = "Later",
-            timeout = 0,
-            whileDead = 1,
-            hideOnEscape = 1,
-            preferredIndex = 3,
-            OnAccept = function()
-                local g = EnsureGeneral()
-                local pending = g.dropdownStyleModePending
-                if pending ~= nil then
-                    if pending == "old" or pending == "blizzard" or pending == "legacy" then
-                        g.dropdownStyleMode = "old"
-                    else
-                        g.dropdownStyleMode = "msuf"
-                    end
-                    g.dropdownStyleModePending = nil
-                end
-                if type(ReloadUI) == "function" then
-                    ReloadUI()
-                end
-            end,
-        }
     end
 
 
@@ -768,7 +762,7 @@ end
     })
 
     local dropdownStyleLabel = UI:Label(rightPanel, "MSUF dropdown style", "TOPLEFT", targetSoundsCheck, 0, -28)
-    UI:MakeDropdown({
+    local dropdownStyleDrop = UI:MakeDropdown({
         name = "MSUF_MiscDropdownStyleDropdown",
         parent = rightPanel,
         anchor = dropdownStyleLabel,
@@ -781,32 +775,37 @@ end
         fallbackText = "New MSUF dropdowns",
         get = function()
             local g = EnsureGeneral()
-            local mode = g.dropdownStyleModePending
-            if mode == nil then
-                mode = g.dropdownStyleMode
+            local pending = g.pendingDropdownStyleMode
+            if pending ~= nil then
+                return NormalizeDropdownStyleMode(pending)
             end
-            if mode == "old" or mode == "blizzard" or mode == "legacy" then return "old" end
-            return "msuf"
+            return NormalizeDropdownStyleMode(g.dropdownStyleMode)
         end,
         set = function(v)
             local g = EnsureGeneral()
-            local active = g.dropdownStyleMode
-            if active == "blizzard" or active == "legacy" then active = "old" end
-            if active ~= "old" then active = "msuf" end
+            local requested = NormalizeDropdownStyleMode(v)
+            local effective = NormalizeDropdownStyleMode(g.dropdownStyleMode)
+            local pending = g.pendingDropdownStyleMode and NormalizeDropdownStyleMode(g.pendingDropdownStyleMode) or nil
+            if pending == requested then return end
+            if pending == nil and effective == requested then return end
 
-            local desired = (v == "old") and "old" or "msuf"
-            if desired == active then
-                g.dropdownStyleModePending = nil
-                return
+            g.pendingDropdownStyleMode = requested
+            if dropdownStyleDrop and dropdownStyleDrop:IsShown() then
+                UIDropDownMenu_SetSelectedValue(dropdownStyleDrop, requested)
+                UIDropDownMenu_SetText(dropdownStyleDrop, requested == "old" and "Old Blizzard dropdowns" or "New MSUF dropdowns")
             end
-
-            g.dropdownStyleModePending = desired
             EnsureDropdownStyleReloadPopup()
             if _G.StaticPopup_Show then
                 _G.StaticPopup_Show("MSUF_RELOAD_DROPDOWN_STYLE")
             end
         end,
     })
+    dropdownStyleDrop:SetScript("OnShow", function(selfDD)
+        local g = EnsureGeneral()
+        local mode = NormalizeDropdownStyleMode(g.pendingDropdownStyleMode ~= nil and g.pendingDropdownStyleMode or g.dropdownStyleMode)
+        UIDropDownMenu_SetSelectedValue(selfDD, mode)
+        UIDropDownMenu_SetText(selfDD, mode == "old" and "Old Blizzard dropdowns" or "New MSUF dropdowns")
+    end)
 
 
 

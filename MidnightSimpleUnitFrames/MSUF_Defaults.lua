@@ -192,6 +192,11 @@ if g.showMinimapIcon == nil then
 end
 if g.dropdownStyleMode == nil then
     g.dropdownStyleMode = "msuf"
+elseif g.dropdownStyleMode ~= "old" and g.dropdownStyleMode ~= "msuf" and g.dropdownStyleMode ~= "blizzard" and g.dropdownStyleMode ~= "legacy" then
+    g.dropdownStyleMode = "msuf"
+end
+if g.pendingDropdownStyleMode ~= nil and g.pendingDropdownStyleMode ~= "old" and g.pendingDropdownStyleMode ~= "msuf" and g.pendingDropdownStyleMode ~= "blizzard" and g.pendingDropdownStyleMode ~= "legacy" then
+    g.pendingDropdownStyleMode = nil
 end
 if type(g.minimapIconDB) ~= "table" then
     g.minimapIconDB = { hide = false, minimapPos = 220, radius = 80 }
