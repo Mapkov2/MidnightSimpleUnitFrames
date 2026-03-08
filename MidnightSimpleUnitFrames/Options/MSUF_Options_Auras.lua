@@ -497,7 +497,7 @@ local function MSUF_FixUIDropDown(dd, width)
     end
  end
 local function CreateDropdown(parent, label, x, y, getter, setter)
-    local dd = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(nil, parent) or CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate"))
     dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, y + 4)
     -- Keep this compact so it doesn't dominate the Auras 2.0 layout row.
     MSUF_FixUIDropDown(dd, 130)
@@ -545,7 +545,7 @@ local function CreateDropdown(parent, label, x, y, getter, setter)
      return dd
 end
 local function CreateLayoutDropdown(parent, x, y, getter, setter)
-    local dd = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(nil, parent) or CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate"))
     dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, y + 4)
     -- Keep Layout dropdown the same visual width as Growth.
     MSUF_FixUIDropDown(dd, 130)
@@ -595,7 +595,7 @@ end
 -- (DPad anchoring removed Ã¢â‚¬â€ auras can now be freely positioned via Edit Mode.)
 local function CreateRowWrapDropdown(parent, x, y, getter, setter, titleText)
     titleText = titleText or "Wrap rows"
-    local dd = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(nil, parent) or CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate"))
     dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, y + 4)
     MSUF_FixUIDropDown(dd, 130)
     local title = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -634,7 +634,7 @@ local function CreateRowWrapDropdown(parent, x, y, getter, setter, titleText)
      return dd
 end
 local function CreateStackAnchorDropdown(parent, x, y, getter, setter)
-    local dd = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(nil, parent) or CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate"))
     dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, y + 4)
     MSUF_FixUIDropDown(dd, 130)
     local title = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -1489,7 +1489,7 @@ do
     local editLbl = leftTop:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     editLbl:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 380, -36)
     editLbl:SetText(TR("Edit filters:"))
-    ddEditFilters = CreateFrame("Frame", "MSUF_Auras2_EditFiltersDropDown", leftTop, "UIDropDownMenuTemplate")
+    ddEditFilters = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_Auras2_EditFiltersDropDown", leftTop) or CreateFrame("Frame", "MSUF_Auras2_EditFiltersDropDown", leftTop, "UIDropDownMenuTemplate"))
     ddEditFilters:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 452, -42)
     MSUF_FixUIDropDown(ddEditFilters, 160)
     local labelForKey = {
@@ -2274,7 +2274,7 @@ end
             local sortH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             sortH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -176)
             sortH:SetText(TR("Sort order"))
-            local ddSort = CreateFrame("Frame", "MSUF_Auras2_SortOrderDropDown", advBox, "UIDropDownMenuTemplate")
+            local ddSort = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_Auras2_SortOrderDropDown", advBox) or CreateFrame("Frame", "MSUF_Auras2_SortOrderDropDown", advBox, "UIDropDownMenuTemplate"))
             ddSort:SetPoint("TOPLEFT", advBox, "TOPLEFT", 90, -182)
             MSUF_FixUIDropDown(ddSort, 220)
             local function SortGet()

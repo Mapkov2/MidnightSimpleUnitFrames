@@ -494,7 +494,7 @@ local function _CreateGrowthDropdown(parent, anchorTo, dy, onChanged)
     label:SetText("Growth:")
     label:SetTextColor(0.85, 0.85, 0.85, 1)
 
-    local dd = CreateFrame("Frame", "MSUF_ReminderGrowthDropdown", parent, "UIDropDownMenuTemplate")
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_ReminderGrowthDropdown", parent) or CreateFrame("Frame", "MSUF_ReminderGrowthDropdown", parent, "UIDropDownMenuTemplate"))
     dd:SetPoint("LEFT", label, "RIGHT", -8, -2)
     UIDropDownMenu_SetWidth(dd, 120)
 

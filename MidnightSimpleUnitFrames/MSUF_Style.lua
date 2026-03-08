@@ -74,9 +74,22 @@ function Style.SetEnabled(enabled)
     end
   end
  end
+local function _MSUF_GetDropdownStyleMode()
+  local db = _MSUF_GetDB()
+  local g = db and db.general or nil
+  local mode = g and g.dropdownStyleMode or nil
+  if mode == "old" or mode == "blizzard" or mode == "legacy" then
+    return "old"
+  end
+  return "msuf"
+end
+function Style.UseModernDropdowns()
+  return _MSUF_GetDropdownStyleMode() ~= "old"
+end
 -- public globals for UI (flash menu etc.)
 _G.MSUF_StyleIsEnabled = function()  return Style.IsEnabled() end
 _G.MSUF_SetStyleEnabled = function(v)  return Style.SetEnabled(v) end
+_G.MSUF_GetDropdownStyleMode = function() return _MSUF_GetDropdownStyleMode() end
 function Style.GetTheme()
    return THEME
 end
@@ -909,3 +922,965 @@ function Style.SkinUIDDropDownTinyBars(drop)
     if border.b and border.b.SetColorTexture then border.b:SetColorTexture(br, bgc, bb, ba) end
   end
 end
+
+
+-- ---------------------------------------------------------------------------
+-- PeelDamage-inspired options/menu skin.
+-- Behavior-preserving: keeps Blizzard/native widgets alive and only reskins them.
+-- Dropdowns use a shared spec-driven template helper so every dropdown gets the
+-- same field + popup treatment without rewriting each menu's selection logic.
+-- ---------------------------------------------------------------------------
+do
+  local _addon = (type(addonName) == "string" and addonName ~= "" and addonName) or "MidnightSimpleUnitFrames"
+  local _ADDON_PATH = "Interface/AddOns/" .. _addon .. "/"
+  local SE_TEX = _ADDON_PATH .. "Media/superellipse.tga"
+  local CHECK_HOLE_TEX = _ADDON_PATH .. "Media/msuf_check_superellipse_hole.tga"
+  local CHECK_TICK_TEX = _ADDON_PATH .. "Media/msuf_check_tick_bold.tga"
+
+  THEME.bgR, THEME.bgG, THEME.bgB, THEME.bgA = 0.03, 0.05, 0.12, 0.95
+  THEME.edgeR, THEME.edgeG, THEME.edgeB, THEME.edgeA = 0.10, 0.20, 0.45, 0.90
+  THEME.edgeThinR, THEME.edgeThinG, THEME.edgeThinB, THEME.edgeThinA = 0.10, 0.20, 0.45, 0.95
+  THEME.titleR, THEME.titleG, THEME.titleB, THEME.titleA = 0.75, 0.88, 1.00, 1.00
+  THEME.textR, THEME.textG, THEME.textB, THEME.textA = 0.86, 0.92, 1.00, 1.00
+  THEME.mutedR, THEME.mutedG, THEME.mutedB, THEME.mutedA = 0.69, 0.74, 0.80, 0.85
+  THEME.btnR, THEME.btnG, THEME.btnB, THEME.btnA = 0.07, 0.09, 0.14, 0.95
+  THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, THEME.btnHoverA = 0.30, 0.60, 1.00, 0.16
+  THEME.btnDownR, THEME.btnDownG, THEME.btnDownB, THEME.btnDownA = 0.30, 0.60, 1.00, 0.22
+  THEME.navHoverA = 0.14
+  THEME.navSelectedA = 0.24
+  THEME.navDownA = 0.20
+
+  local pillEdgeR = math.min(1, THEME.edgeR * 1.25)
+  local pillEdgeG = math.min(1, THEME.edgeG * 1.25)
+  local pillEdgeB = math.min(1, THEME.edgeB * 1.18)
+  local pillEdgeA = math.min(1, THEME.edgeA + 0.05)
+
+  local function CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
+    if not frame or not frame.CreateTexture then return nil, nil end
+    inset = inset or 1
+    fillLayer = fillLayer or "BACKGROUND"
+    borderLayer = borderLayer or "ARTWORK"
+    if frame[key .. "Fill"] and frame[key .. "Border"] then
+      return frame[key .. "Fill"], frame[key .. "Border"]
+    end
+
+    local h = (frame.GetHeight and frame:GetHeight()) or 22
+    local capW = math.max(4, math.floor(h * 0.5))
+
+    local fill = {}
+    fill.L = frame:CreateTexture(nil, fillLayer, nil, 0)
+    fill.M = frame:CreateTexture(nil, fillLayer, nil, 0)
+    fill.R = frame:CreateTexture(nil, fillLayer, nil, 0)
+    fill.L:SetTexture(SE_TEX); fill.L:SetTexCoord(0.0, 0.25, 0.0, 1.0)
+    fill.M:SetTexture(SE_TEX); fill.M:SetTexCoord(0.25, 0.75, 0.0, 1.0)
+    fill.R:SetTexture(SE_TEX); fill.R:SetTexCoord(0.75, 1.0, 0.0, 1.0)
+    fill.L:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
+    fill.L:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", inset, inset)
+    fill.L:SetWidth(capW)
+    fill.R:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -inset, -inset)
+    fill.R:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
+    fill.R:SetWidth(capW)
+    fill.M:SetPoint("TOPLEFT", fill.L, "TOPRIGHT")
+    fill.M:SetPoint("BOTTOMRIGHT", fill.R, "BOTTOMLEFT")
+    fill._parts = { fill.L, fill.M, fill.R }
+    fill.SetVertexColor = function(self, r, g, b, a)
+      for _, tex in ipairs(self._parts) do tex:SetVertexColor(r, g, b, a) end
+    end
+
+    local border = {}
+    border.L = frame:CreateTexture(nil, borderLayer, nil, -1)
+    border.M = frame:CreateTexture(nil, borderLayer, nil, -1)
+    border.R = frame:CreateTexture(nil, borderLayer, nil, -1)
+    border.L:SetTexture(SE_TEX); border.L:SetTexCoord(0.0, 0.25, 0.0, 1.0)
+    border.M:SetTexture(SE_TEX); border.M:SetTexCoord(0.25, 0.75, 0.0, 1.0)
+    border.R:SetTexture(SE_TEX); border.R:SetTexCoord(0.75, 1.0, 0.0, 1.0)
+    local bInset = math.max(0, inset - 1)
+    border.L:SetPoint("TOPLEFT", frame, "TOPLEFT", bInset, -bInset)
+    border.L:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", bInset, bInset)
+    border.L:SetWidth(capW + 1)
+    border.R:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -bInset, -bInset)
+    border.R:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -bInset, bInset)
+    border.R:SetWidth(capW + 1)
+    border.M:SetPoint("TOPLEFT", border.L, "TOPRIGHT")
+    border.M:SetPoint("BOTTOMRIGHT", border.R, "BOTTOMLEFT")
+    border._parts = { border.L, border.M, border.R }
+    border.SetVertexColor = function(self, r, g, b, a)
+      for _, tex in ipairs(self._parts) do tex:SetVertexColor(r, g, b, a) end
+    end
+
+    frame[key .. "Fill"] = fill
+    frame[key .. "Border"] = border
+    return fill, border
+  end
+
+  local function ApplyPillState(btn, fill, border, active)
+    if not btn or not fill or not border then return end
+    local enabled = true
+    if btn.IsEnabled then enabled = btn:IsEnabled() and true or false end
+    if not enabled then
+      fill:SetVertexColor(0.12, 0.14, 0.20, 0.55)
+      border:SetVertexColor(0.22, 0.26, 0.34, 0.45)
+      local fs = btn.GetFontString and btn:GetFontString() or btn.Text
+      if fs and fs.SetTextColor then fs:SetTextColor(0.50, 0.52, 0.58, 0.95) end
+      return
+    end
+
+    local fs = btn.GetFontString and btn:GetFontString() or btn.Text
+    if fs and fs.SetTextColor then fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA) end
+
+    if active then
+      fill:SetVertexColor(0.11, 0.18, 0.30, 0.98)
+      border:SetVertexColor(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, 0.95)
+      return
+    end
+
+    if btn._msufBtnIsDown then
+      fill:SetVertexColor(0.10, 0.15, 0.25, 0.98)
+      border:SetVertexColor(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, 0.85)
+    elseif btn.IsMouseOver and btn:IsMouseOver() then
+      fill:SetVertexColor(0.09, 0.13, 0.22, 0.98)
+      border:SetVertexColor(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, 1.0)
+    else
+      fill:SetVertexColor(THEME.btnR + 0.02, THEME.btnG + 0.02, THEME.btnB + 0.02, 0.96)
+      border:SetVertexColor(pillEdgeR, pillEdgeG, pillEdgeB, pillEdgeA)
+    end
+  end
+
+  local function InstallPillScripts(btn, fill, border, activeGetter)
+    if not btn or btn.__msufPeelPillHooked then return end
+    btn.__msufPeelPillHooked = true
+    local oldEnter = btn:GetScript("OnEnter")
+    local oldLeave = btn:GetScript("OnLeave")
+    local oldDown = btn:GetScript("OnMouseDown")
+    local oldUp = btn:GetScript("OnMouseUp")
+    btn:SetScript("OnEnter", function(self, ...)
+      if oldEnter then oldEnter(self, ...) end
+      ApplyPillState(self, fill, border, activeGetter and activeGetter(self))
+    end)
+    btn:SetScript("OnLeave", function(self, ...)
+      if oldLeave then oldLeave(self, ...) end
+      self._msufBtnIsDown = false
+      ApplyPillState(self, fill, border, activeGetter and activeGetter(self))
+    end)
+    btn:SetScript("OnMouseDown", function(self, ...)
+      if oldDown then oldDown(self, ...) end
+      self._msufBtnIsDown = true
+      ApplyPillState(self, fill, border, activeGetter and activeGetter(self))
+    end)
+    btn:SetScript("OnMouseUp", function(self, ...)
+      if oldUp then oldUp(self, ...) end
+      self._msufBtnIsDown = false
+      ApplyPillState(self, fill, border, activeGetter and activeGetter(self))
+    end)
+    if hooksecurefunc and not btn.__msufPeelEnableHook and btn.Enable and btn.Disable then
+      btn.__msufPeelEnableHook = true
+      hooksecurefunc(btn, "Enable", function(self)
+        ApplyPillState(self, fill, border, activeGetter and activeGetter(self))
+      end)
+      hooksecurefunc(btn, "Disable", function(self)
+        ApplyPillState(self, fill, border, activeGetter and activeGetter(self))
+      end)
+    end
+  end
+
+  function Style.ApplyBackdrop(frame, alphaOverride, thinBorder)
+    if not Style.IsEnabled() then return end
+    local b = EnsureBackdropFrame(frame)
+    if not b or not b.SetBackdrop then return end
+    local edgeSize = 1
+    b:SetBackdrop({
+      bgFile = WHITE8X8,
+      edgeFile = WHITE8X8,
+      edgeSize = edgeSize,
+      insets = { left = edgeSize, right = edgeSize, top = edgeSize, bottom = edgeSize },
+    })
+    b:SetBackdropColor(THEME.bgR, THEME.bgG, THEME.bgB, alphaOverride or THEME.bgA)
+    local er, eg, eb, ea = THEME.edgeThinR, THEME.edgeThinG, THEME.edgeThinB, THEME.edgeThinA
+    if not thinBorder then
+      er, eg, eb, ea = THEME.edgeR, THEME.edgeG, THEME.edgeB, THEME.edgeA
+    end
+    b:SetBackdropBorderColor(er, eg, eb, ea)
+    b:Show()
+  end
+
+  local function SkinButtonPeel(btn, opts)
+    if not btn then return end
+    if _MSUF_IsDropButton(btn) then
+      Style.SkinDropButton(btn, opts)
+      return
+    end
+    if _MSUF_IsIconButton(btn) then
+      if not btn.__msufPeelIconSkinned then
+        btn.__msufPeelIconSkinned = true
+        Style.ApplyBackdrop(btn, 0.0, true)
+        local bg = EnsureTex(btn, "_msufPeelIconBG", "BACKGROUND")
+        if bg and bg.SetColorTexture then bg:SetColorTexture(0.08, 0.10, 0.16, 0.96) end
+        local hov = EnsureTex(btn, "_msufPeelIconHover", "BORDER")
+        if hov and hov.SetColorTexture then
+          hov:SetColorTexture(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, 0.14)
+          hov:Hide()
+        end
+        _MSUF_InstallHoverDownScripts(btn, "_msufPeelIconHover", "_msufPeelIconHover", opts)
+      end
+      return
+    end
+    if not btn.__msufPeelButtonSkinned then
+      btn.__msufPeelButtonSkinned = true
+      local left = btn.Left or _MSUF_GetDropRegion(btn, "Left")
+      local middle = btn.Middle or _MSUF_GetDropRegion(btn, "Middle")
+      local right = btn.Right or _MSUF_GetDropRegion(btn, "Right")
+      if left and left.SetAlpha then left:SetAlpha(0) end
+      if middle and middle.SetAlpha then middle:SetAlpha(0) end
+      if right and right.SetAlpha then right:SetAlpha(0) end
+      local fill, border = CreateSuperellipseLayers(btn, "_msufPeelBtn", 1, "BACKGROUND", "BORDER")
+      btn._msufPeelFill = fill
+      btn._msufPeelBorder = border
+      InstallPillScripts(btn, fill, border, function() return false end)
+    end
+    ApplyPillState(btn, btn._msufPeelFill, btn._msufPeelBorder, false)
+  end
+
+  local function SkinNavButtonPeel(btn)
+    if not btn then return end
+    if not btn.__msufPeelNavSkinned then
+      btn.__msufPeelNavSkinned = true
+      Style.SkinButton(btn, { isNav = true })
+      btn._msufNavIsActive = btn._msufNavIsActive and true or false
+      InstallPillScripts(btn, btn._msufPeelFill, btn._msufPeelBorder, function(self)
+        return self._msufNavIsActive and true or false
+      end)
+      btn._msufSetActive = function(self, isActive)
+        self._msufNavIsActive = isActive and true or false
+        ApplyPillState(self, self._msufPeelFill, self._msufPeelBorder, self._msufNavIsActive)
+      end
+      btn._msufSetSelected = btn._msufSetActive
+    end
+    ApplyPillState(btn, btn._msufPeelFill, btn._msufPeelBorder, btn._msufNavIsActive)
+  end
+
+  local function SkinEditBoxPeel(eb)
+    if not eb or eb.__msufPeelEditSkinned then return end
+    eb.__msufPeelEditSkinned = true
+    Style.ApplyBackdrop(eb, 0.96, true)
+    local n = eb.GetName and eb:GetName() or nil
+    if n and _G then
+      for _, suffix in ipairs({ "Left", "Right", "Middle", "Mid" }) do
+        local tex = _G[n .. suffix]
+        if tex and tex.SetAlpha then tex:SetAlpha(0) end
+      end
+    end
+    local fs = eb.GetFontString and eb:GetFontString() or nil
+    if fs and fs.SetTextColor then fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA) end
+    eb:HookScript("OnEditFocusGained", function(self)
+      local bd = self._msufMidnightBackdrop
+      if bd and bd.SetBackdropBorderColor then
+        bd:SetBackdropBorderColor(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, 1)
+      end
+    end)
+    eb:HookScript("OnEditFocusLost", function(self)
+      local bd = self._msufMidnightBackdrop
+      if bd and bd.SetBackdropBorderColor then
+        bd:SetBackdropBorderColor(THEME.edgeThinR, THEME.edgeThinG, THEME.edgeThinB, THEME.edgeThinA)
+      end
+    end)
+  end
+
+  local function SkinSliderPeel(slider)
+    if not slider or slider.__msufPeelSliderSkinned then return end
+    slider.__msufPeelSliderSkinned = true
+    local name = slider.GetName and slider:GetName() or nil
+    local low = name and _G[name .. "Low"] or nil
+    local high = name and _G[name .. "High"] or nil
+    local text = name and _G[name .. "Text"] or nil
+    if low and low.SetTextColor then low:SetTextColor(THEME.textR, THEME.textG, THEME.textB, 0.85) end
+    if high and high.SetTextColor then high:SetTextColor(THEME.textR, THEME.textG, THEME.textB, 0.85) end
+    if text and text.SetTextColor then text:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA) end
+
+    if not slider._msufPeelTrack and slider.CreateTexture then
+      local track = slider:CreateTexture(nil, "BACKGROUND")
+      track:SetPoint("LEFT", slider, "LEFT", 0, 0)
+      track:SetPoint("RIGHT", slider, "RIGHT", 0, 0)
+      track:SetHeight(6)
+      track:SetColorTexture(0.07, 0.09, 0.14, 0.98)
+      slider._msufPeelTrack = track
+      local fill = slider:CreateTexture(nil, "ARTWORK")
+      fill:SetPoint("LEFT", slider, "LEFT", 0, 0)
+      fill:SetHeight(2)
+      fill:SetPoint("RIGHT", slider, "RIGHT", 0, 0)
+      fill:SetColorTexture(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, 0.55)
+      slider._msufPeelTrackFill = fill
+    end
+
+    local thumb = slider.GetThumbTexture and slider:GetThumbTexture() or nil
+    if thumb then
+      thumb:SetSize(14, 14)
+      if thumb.SetColorTexture then
+        thumb:SetColorTexture(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, 1)
+      elseif thumb.SetVertexColor then
+        thumb:SetVertexColor(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, 1)
+      end
+    end
+  end
+
+  local DD_DEFAULT_SPEC = {
+    width = 160,
+    height = 22,
+    leftInset = 15,
+    topInset = -1,
+    textLeft = 10,
+    textRight = 22,
+    arrowWidth = 18,
+    bgR = 0.06, bgG = 0.08, bgB = 0.14, bgA = 0.98,
+    borderR = pillEdgeR, borderG = pillEdgeG, borderB = pillEdgeB, borderA = 0.90,
+    accentR = THEME.btnHoverR, accentG = THEME.btnHoverG, accentB = THEME.btnHoverB, accentA = 0.55,
+    hoverR = 1.00, hoverG = 1.00, hoverB = 1.00, hoverA = 0.045,
+    downR = THEME.btnHoverR, downG = THEME.btnHoverG, downB = THEME.btnHoverB, downA = 0.10,
+    disabledA = 0.45,
+    arrowText = "v",
+    dividerA = 0.42,
+    shadowA = 0.20,
+    fontMinSize = 12,
+    fontSizeAdjust = 0.5,
+    textShadowA = 0.95,
+    menuBgR = 0.02, menuBgG = 0.03, menuBgB = 0.06, menuBgA = 0.985,
+    menuBorderR = pillEdgeR, menuBorderG = pillEdgeG, menuBorderB = pillEdgeB, menuBorderA = 1.00,
+    menuHoverR = 1.00, menuHoverG = 1.00, menuHoverB = 1.00, menuHoverA = 0.055,
+    menuSelectR = THEME.btnHoverR, menuSelectG = THEME.btnHoverG, menuSelectB = THEME.btnHoverB, menuSelectA = 0.22,
+  }
+
+  local function CopySpec(spec)
+    local out = {}
+    for k, v in pairs(DD_DEFAULT_SPEC) do out[k] = v end
+    if type(spec) == "table" then
+      for k, v in pairs(spec) do out[k] = v end
+    end
+    return out
+  end
+
+  local function IsDropdownFrame(frame)
+    if not frame then return false end
+    local n = frame.GetName and frame:GetName() or nil
+    return type(n) == "string" and (n:find("DropDown", 1, true) or n:find("Dropdown", 1, true))
+  end
+
+  local function GetNativeDropButton(drop)
+    return drop and (drop._msufNativeButton or drop.Button or _MSUF_GetDropRegion(drop, "Button")) or nil
+  end
+
+  local function GetNativeDropText(drop)
+    return drop and (drop._msufNativeText or drop.Text or _MSUF_GetDropRegion(drop, "Text")) or nil
+  end
+
+  local function GetDropdownDisplayText(drop)
+    local txt = GetNativeDropText(drop)
+    if txt and txt.GetText then
+      local v = txt:GetText()
+      if type(v) == "string" and v ~= "" then return v end
+    end
+    return " "
+  end
+
+  local function SyncPeelDropdownState(drop)
+    if not drop or not drop._msufPeelButton then return end
+    local spec = drop._msufPeelSpec or DD_DEFAULT_SPEC
+    local nativeBtn = GetNativeDropButton(drop)
+    local enabled = true
+    if nativeBtn and nativeBtn.IsEnabled then enabled = nativeBtn:IsEnabled() and true or false end
+
+    if drop._msufPeelButton.SetAlpha then drop._msufPeelButton:SetAlpha(enabled and 1 or spec.disabledA) end
+    if drop._msufPeelButton.EnableMouse then drop._msufPeelButton:EnableMouse(enabled) end
+
+    local fill = drop._msufPeelFill
+    local border = drop._msufPeelBorder
+    if fill and border then
+      if not enabled then
+        fill:SetVertexColor(0.12, 0.14, 0.20, 0.58)
+        border:SetVertexColor(0.22, 0.26, 0.34, 0.42)
+      elseif drop._msufPeelButton._msufBtnIsDown then
+        fill:SetVertexColor(0.10, 0.15, 0.25, 0.98)
+        border:SetVertexColor(spec.accentR, spec.accentG, spec.accentB, 0.90)
+      elseif drop._msufPeelButton.IsMouseOver and drop._msufPeelButton:IsMouseOver() then
+        fill:SetVertexColor(0.09, 0.13, 0.22, 0.98)
+        border:SetVertexColor(spec.accentR, spec.accentG, spec.accentB, 1.0)
+      else
+        fill:SetVertexColor(spec.bgR, spec.bgG, spec.bgB, spec.bgA)
+        border:SetVertexColor(spec.borderR, spec.borderG, spec.borderB, spec.borderA)
+      end
+    end
+
+    if drop._msufPeelShadow then
+      drop._msufPeelShadow:SetAlpha(enabled and spec.shadowA or 0.08)
+    end
+    if drop._msufPeelDivider then
+      drop._msufPeelDivider:SetAlpha(enabled and spec.dividerA or 0.16)
+    end
+    if drop._msufPeelText and drop._msufPeelText.SetTextColor then
+      if enabled then
+        drop._msufPeelText:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA)
+      else
+        drop._msufPeelText:SetTextColor(THEME.mutedR, THEME.mutedG, THEME.mutedB, 0.9)
+      end
+    end
+    if drop._msufPeelArrow and drop._msufPeelArrow.SetTextColor then
+      if enabled then
+        drop._msufPeelArrow:SetTextColor(THEME.mutedR, THEME.mutedG, THEME.mutedB, THEME.mutedA)
+      else
+        drop._msufPeelArrow:SetTextColor(THEME.mutedR, THEME.mutedG, THEME.mutedB, 0.45)
+      end
+    end
+  end
+
+  local function ApplyReadableDropdownFont(dst, src, spec)
+    if not dst then return end
+    spec = spec or DD_DEFAULT_SPEC
+
+    local fontObj = src and src.GetFontObject and src:GetFontObject() or nil
+    if fontObj and dst.SetFontObject then
+      dst:SetFontObject(fontObj)
+    else
+      dst:SetFontObject(GameFontHighlightSmall)
+    end
+
+    local fontPath, fontSize, fontFlags = src and src.GetFont and src:GetFont() or nil, nil, nil
+    if type(fontPath) == "string" then
+      local _, s, f = src:GetFont()
+      fontSize = tonumber(s)
+      fontFlags = f
+      if fontSize then
+        local adjusted = math.max(spec.fontMinSize or 12, math.floor(fontSize + (spec.fontSizeAdjust or 0.5) + 0.5))
+        dst:SetFont(fontPath, adjusted, fontFlags)
+      end
+    end
+
+    if dst.SetShadowColor then dst:SetShadowColor(0, 0, 0, spec.textShadowA or 0.95) end
+    if dst.SetShadowOffset then dst:SetShadowOffset(1, -1) end
+    if dst.SetSpacing then dst:SetSpacing(0) end
+    if dst.SetWordWrap then dst:SetWordWrap(false) end
+    if dst.SetMaxLines then dst:SetMaxLines(1) end
+    if dst.SetNonSpaceWrap then dst:SetNonSpaceWrap(false) end
+  end
+
+  local function UpdatePeelDropdownText(drop, explicitText)
+    if not drop or not drop._msufPeelText then return end
+    ApplyReadableDropdownFont(drop._msufPeelText, GetNativeDropText(drop), drop._msufPeelSpec)
+    drop._msufPeelText:SetText(explicitText or GetDropdownDisplayText(drop))
+    SyncPeelDropdownState(drop)
+  end
+
+  local function UpdatePeelDropdownWidth(drop, width)
+    if not drop then return end
+    local spec = drop._msufPeelSpec or DD_DEFAULT_SPEC
+    local w = tonumber(width) or tonumber(drop._msufButtonWidth) or tonumber(drop._msufPeelWidth) or spec.width
+    if w < 60 then w = 60 end
+    drop._msufPeelWidth = w
+    if drop._msufPeelButton and drop._msufPeelButton.SetWidth then
+      drop._msufPeelButton:SetWidth(w)
+    end
+    if drop._msufPeelFill and drop._msufPeelFill.L and drop._msufPeelFill.R and drop._msufPeelFill.M then
+      local capW = math.max(4, math.floor(((spec.height or 22) * 0.5) + 0.5))
+      drop._msufPeelFill.L:SetWidth(capW)
+      drop._msufPeelFill.R:SetWidth(capW)
+      drop._msufPeelBorder.L:SetWidth(capW + 1)
+      drop._msufPeelBorder.R:SetWidth(capW + 1)
+    end
+    if drop._msufPeelText then
+      drop._msufPeelText:ClearAllPoints()
+      drop._msufPeelText:SetPoint("LEFT", drop._msufPeelButton, "LEFT", spec.textLeft, 0)
+      drop._msufPeelText:SetPoint("RIGHT", drop._msufPeelButton, "RIGHT", -(spec.arrowWidth + 8), 0)
+    end
+    if drop._msufPeelArrow then
+      drop._msufPeelArrow:ClearAllPoints()
+      drop._msufPeelArrow:SetPoint("RIGHT", drop._msufPeelButton, "RIGHT", -8, -1)
+    end
+    if drop._msufPeelDivider then
+      drop._msufPeelDivider:ClearAllPoints()
+      drop._msufPeelDivider:SetPoint("TOPRIGHT", drop._msufPeelButton, "TOPRIGHT", -(spec.arrowWidth + 4), -4)
+      drop._msufPeelDivider:SetPoint("BOTTOMRIGHT", drop._msufPeelButton, "BOTTOMRIGHT", -(spec.arrowWidth + 4), 4)
+    end
+    if drop._msufPeelShadow then
+      drop._msufPeelShadow:ClearAllPoints()
+      drop._msufPeelShadow:SetPoint("TOPLEFT", drop._msufPeelButton, "TOPLEFT", 0, -1)
+      drop._msufPeelShadow:SetPoint("TOPRIGHT", drop._msufPeelButton, "TOPRIGHT", 0, -1)
+      drop._msufPeelShadow:SetHeight(1)
+    end
+  end
+
+  local function HideDefaultDropRegions(drop)
+    local left = drop.Left or _MSUF_GetDropRegion(drop, "Left")
+    local middle = drop.Middle or _MSUF_GetDropRegion(drop, "Middle")
+    local right = drop.Right or _MSUF_GetDropRegion(drop, "Right")
+    if left and left.SetAlpha then left:SetAlpha(0) end
+    if middle and middle.SetAlpha then middle:SetAlpha(0) end
+    if right and right.SetAlpha then right:SetAlpha(0) end
+    local txt = GetNativeDropText(drop)
+    if txt then
+      if txt.SetAlpha then txt:SetAlpha(0) end
+      if txt.Hide then txt:Hide() end
+    end
+    local btn = GetNativeDropButton(drop)
+    if btn then
+      local nt = btn.GetNormalTexture and btn:GetNormalTexture() or nil
+      local pt = btn.GetPushedTexture and btn:GetPushedTexture() or nil
+      local ht = btn.GetHighlightTexture and btn:GetHighlightTexture() or nil
+      if nt and nt.SetAlpha then nt:SetAlpha(0) end
+      if pt and pt.SetAlpha then pt:SetAlpha(0) end
+      if ht and ht.SetAlpha then ht:SetAlpha(0) end
+      if btn.SetAlpha then btn:SetAlpha(0.01) end
+    end
+  end
+
+  local function EnsureDropdownHooks(drop)
+    if not drop or drop.__msufPeelButtonHooks then return end
+    drop.__msufPeelButtonHooks = true
+    local nativeBtn = GetNativeDropButton(drop)
+    if nativeBtn and hooksecurefunc then
+      if nativeBtn.Enable then hooksecurefunc(nativeBtn, "Enable", function() SyncPeelDropdownState(drop) end) end
+      if nativeBtn.Disable then hooksecurefunc(nativeBtn, "Disable", function() SyncPeelDropdownState(drop) end) end
+      if nativeBtn.Show then hooksecurefunc(nativeBtn, "Show", function() SyncPeelDropdownState(drop) end) end
+      if nativeBtn.Hide then hooksecurefunc(nativeBtn, "Hide", function() SyncPeelDropdownState(drop) end) end
+    end
+  end
+
+  local function RestoreNativeDropRegions(drop)
+    local left = drop and (drop.Left or _MSUF_GetDropRegion(drop, "Left")) or nil
+    local middle = drop and (drop.Middle or _MSUF_GetDropRegion(drop, "Middle")) or nil
+    local right = drop and (drop.Right or _MSUF_GetDropRegion(drop, "Right")) or nil
+    if left and left.SetAlpha then left:SetAlpha(1) end
+    if middle and middle.SetAlpha then middle:SetAlpha(1) end
+    if right and right.SetAlpha then right:SetAlpha(1) end
+    local txt = GetNativeDropText(drop)
+    if txt then
+      if txt.SetAlpha then txt:SetAlpha(1) end
+      if txt.Show then txt:Show() end
+    end
+    local btn = GetNativeDropButton(drop)
+    if btn then
+      local nt = btn.GetNormalTexture and btn:GetNormalTexture() or nil
+      local pt = btn.GetPushedTexture and btn:GetPushedTexture() or nil
+      local ht = btn.GetHighlightTexture and btn:GetHighlightTexture() or nil
+      if nt and nt.SetAlpha then nt:SetAlpha(1) end
+      if pt and pt.SetAlpha then pt:SetAlpha(1) end
+      if ht and ht.SetAlpha then ht:SetAlpha(1) end
+      if btn.SetAlpha then btn:SetAlpha(1) end
+      if btn.EnableMouse then btn:EnableMouse(true) end
+      if btn.Show then btn:Show() end
+    end
+  end
+
+  local function RevertPeelDropdownTemplate(drop)
+    if not drop then return nil end
+    RestoreNativeDropRegions(drop)
+    if drop._msufPeelButton and drop._msufPeelButton.Hide then drop._msufPeelButton:Hide() end
+    if drop._msufPeelText and drop._msufPeelText.Hide then drop._msufPeelText:Hide() end
+    if drop._msufPeelArrow and drop._msufPeelArrow.Hide then drop._msufPeelArrow:Hide() end
+    if drop._msufPeelDivider and drop._msufPeelDivider.Hide then drop._msufPeelDivider:Hide() end
+    if drop._msufPeelShadow and drop._msufPeelShadow.Hide then drop._msufPeelShadow:Hide() end
+    drop.__msufPeelDropSkinned = nil
+    return drop
+  end
+
+  function Style.ApplyPeelDropdownTemplate(drop, spec)
+    if not drop then return nil end
+    if not Style.UseModernDropdowns() then
+      return RevertPeelDropdownTemplate(drop)
+    end
+    drop._msufPeelSpec = CopySpec(spec or drop._msufPeelSpec)
+    spec = drop._msufPeelSpec
+    if not drop._msufNativeButton then drop._msufNativeButton = GetNativeDropButton(drop) end
+    if not drop._msufNativeText then drop._msufNativeText = GetNativeDropText(drop) end
+    HideDefaultDropRegions(drop)
+
+    local btn = drop._msufPeelButton
+    if not btn then
+      btn = CreateFrame("Button", nil, drop)
+      btn:SetPoint("TOPLEFT", drop, "TOPLEFT", spec.leftInset, spec.topInset)
+      btn:SetHeight(spec.height)
+      btn:SetFrameLevel((drop.GetFrameLevel and drop:GetFrameLevel() or 1) + 5)
+      btn:RegisterForClicks("LeftButtonUp")
+      btn:SetHitRectInsets(0, 0, 0, 0)
+
+      local fill, border = CreateSuperellipseLayers(btn, "_msufDrop", 1, "ARTWORK", "ARTWORK")
+      fill:SetVertexColor(spec.bgR, spec.bgG, spec.bgB, spec.bgA)
+      border:SetVertexColor(spec.borderR, spec.borderG, spec.borderB, spec.borderA)
+
+      local shadow = btn:CreateTexture(nil, "BACKGROUND")
+      shadow:SetColorTexture(spec.accentR, spec.accentG, spec.accentB, spec.shadowA)
+      shadow:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, -1)
+      shadow:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 0, -1)
+      shadow:SetHeight(1)
+
+      local divider = btn:CreateTexture(nil, "ARTWORK")
+      divider:SetColorTexture(spec.borderR, spec.borderG, spec.borderB, spec.dividerA)
+      divider:SetWidth(1)
+
+      local hover = btn:CreateTexture(nil, "HIGHLIGHT")
+      hover:SetTexture(SE_TEX)
+      hover:SetTexCoord(0.25, 0.75, 0.0, 1.0)
+      hover:SetPoint("TOPLEFT", btn, "TOPLEFT", 9, -1)
+      hover:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -9, 1)
+      hover:SetVertexColor(spec.hoverR, spec.hoverG, spec.hoverB, spec.hoverA)
+
+      local arrow = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+      arrow:SetPoint("RIGHT", btn, "RIGHT", -8, -1)
+      arrow:SetText(spec.arrowText)
+      arrow:SetTextColor(THEME.mutedR, THEME.mutedG, THEME.mutedB, THEME.mutedA)
+
+      local textFS = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+      textFS:SetJustifyH("LEFT")
+      textFS:SetJustifyV("MIDDLE")
+      textFS:SetPoint("LEFT", btn, "LEFT", spec.textLeft, 0)
+      textFS:SetPoint("RIGHT", btn, "RIGHT", -(spec.arrowWidth + 8), 0)
+      ApplyReadableDropdownFont(textFS, drop._msufNativeText, spec)
+      textFS:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA)
+
+      btn:SetScript("OnMouseDown", function(self)
+        self._msufBtnIsDown = true
+        SyncPeelDropdownState(drop)
+      end)
+      btn:SetScript("OnMouseUp", function(self)
+        self._msufBtnIsDown = false
+        SyncPeelDropdownState(drop)
+      end)
+      btn:SetScript("OnEnter", function(self)
+        SyncPeelDropdownState(drop)
+      end)
+      btn:SetScript("OnLeave", function(self)
+        self._msufBtnIsDown = false
+        SyncPeelDropdownState(drop)
+      end)
+      btn:SetScript("OnClick", function(self)
+        local nativeBtn = GetNativeDropButton(drop)
+        if nativeBtn and nativeBtn.IsEnabled and not nativeBtn:IsEnabled() then return end
+        if type(ToggleDropDownMenu) == "function" then
+          ToggleDropDownMenu(1, nil, drop, self, 0, -1)
+        end
+      end)
+      drop._msufPeelButton = btn
+      drop._msufPeelFill = fill
+      drop._msufPeelBorder = border
+      drop._msufPeelShadow = shadow
+      drop._msufPeelDivider = divider
+      drop._msufPeelText = textFS
+      drop._msufPeelArrow = arrow
+    end
+
+    if btn.Show then btn:Show() end
+    if drop._msufPeelText and drop._msufPeelText.Show then drop._msufPeelText:Show() end
+    if drop._msufPeelArrow and drop._msufPeelArrow.Show then drop._msufPeelArrow:Show() end
+    if drop._msufPeelDivider and drop._msufPeelDivider.Show then drop._msufPeelDivider:Show() end
+    if drop._msufPeelShadow and drop._msufPeelShadow.Show then drop._msufPeelShadow:Show() end
+    btn:SetPoint("TOPLEFT", drop, "TOPLEFT", spec.leftInset, spec.topInset)
+    UpdatePeelDropdownWidth(drop, spec.width)
+    EnsureDropdownHooks(drop)
+    UpdatePeelDropdownText(drop)
+    SyncPeelDropdownState(drop)
+    drop.__msufPeelDropSkinned = true
+    return drop
+  end
+
+  Style.SkinUIDDropDownTinyBars = Style.ApplyPeelDropdownTemplate
+  ns.MSUF_CreateStyledDropdown = function(name, parent, spec)
+    local drop = CreateFrame("Frame", name, parent, "UIDropDownMenuTemplate")
+    if Style.UseModernDropdowns() then
+      Style.ApplyPeelDropdownTemplate(drop, spec)
+    end
+    return drop
+  end
+  _G.MSUF_CreateStyledDropdown = ns.MSUF_CreateStyledDropdown
+  ns.MSUF_PeelDropdownTemplate = Style.ApplyPeelDropdownTemplate
+  _G.MSUF_PeelDropdownTemplate = Style.ApplyPeelDropdownTemplate
+  ns.MSUF_PeelDropdownDefaults = DD_DEFAULT_SPEC
+  _G.MSUF_PeelDropdownDefaults = DD_DEFAULT_SPEC
+  ns.MSUF_RevertDropdownTemplate = RevertPeelDropdownTemplate
+  _G.MSUF_RevertDropdownTemplate = RevertPeelDropdownTemplate
+
+  local function SkinCheckButtonPeel(cb)
+    if not cb or cb.__msufPeelCheckSkinned then return end
+    cb.__msufPeelCheckSkinned = true
+    local check = (cb.GetCheckedTexture and cb:GetCheckedTexture())
+    if (not check) and cb.GetName and cb:GetName() and _G then
+      check = _G[cb:GetName() .. "Check"]
+    end
+    local normal = cb.GetNormalTexture and cb:GetNormalTexture() or nil
+    if normal and normal.SetAlpha then normal:SetAlpha(0) end
+    if not cb._msufPeelHole and cb.CreateTexture then
+      local hole = cb:CreateTexture(nil, "BACKGROUND")
+      hole:SetAllPoints(cb)
+      hole:SetTexture(CHECK_HOLE_TEX)
+      hole:SetVertexColor(0.12, 0.14, 0.20, 0.98)
+      cb._msufPeelHole = hole
+    end
+    if check and check.SetTexture then
+      check:SetTexture(CHECK_TICK_TEX)
+      if check.SetVertexColor then check:SetVertexColor(THEME.btnHoverR, THEME.btnHoverG, THEME.btnHoverB, 1) end
+      if check.SetSize then
+        local s = math.max(12, math.floor((((cb.GetHeight and cb:GetHeight()) or 24) * 0.72) + 0.5))
+        check:SetSize(s, s)
+      end
+    end
+    local label = cb.Text or (cb.GetFontString and cb:GetFontString()) or nil
+    if label and label.SetTextColor then label:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA) end
+  end
+
+  local function SkinDropDownLists()
+    for level = 1, (_G.UIDROPDOWNMENU_MAXLEVELS or 2) do
+      local list = _G["DropDownList" .. level]
+      if list then
+        local spec = DD_DEFAULT_SPEC
+        if not Style.UseModernDropdowns() then
+          if list._msufPeelBackdrop and list._msufPeelBackdrop.Hide then list._msufPeelBackdrop:Hide() end
+          local mb = _G["DropDownList" .. level .. "MenuBackdrop"]
+          local bb = _G["DropDownList" .. level .. "Backdrop"]
+          if mb then
+            if mb.SetAlpha then mb:SetAlpha(1) end
+            if mb.Show then mb:Show() end
+          end
+          if bb then
+            if bb.SetAlpha then bb:SetAlpha(1) end
+            if bb.Show then bb:Show() end
+          end
+          for i = 1, (_G.UIDROPDOWNMENU_MAXBUTTONS or 32) do
+            local b = _G["DropDownList" .. level .. "Button" .. i]
+            if b then
+              if b._msufPeelSel and b._msufPeelSel.Hide then b._msufPeelSel:Hide() end
+              local check = _G[b:GetName() .. "Check"] or b.Check
+              local uncheck = _G[b:GetName() .. "UnCheck"] or b.UnCheck
+              if check and check.Show then check:Show() end
+              if uncheck and uncheck.Show then uncheck:Show() end
+            end
+          end
+        else
+        if not list._msufPeelBackdrop then
+          local skin = CreateFrame("Frame", nil, list, "BackdropTemplate")
+          skin:SetFrameLevel(math.max(0, (list.GetFrameLevel and list:GetFrameLevel() or 1) - 1))
+          skin:SetAllPoints(list)
+          skin:SetBackdrop({
+            bgFile = WHITE8X8,
+            edgeFile = WHITE8X8,
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+          })
+          list._msufPeelBackdrop = skin
+        end
+        list._msufPeelBackdrop:SetBackdropColor(spec.menuBgR, spec.menuBgG, spec.menuBgB, spec.menuBgA)
+        list._msufPeelBackdrop:SetBackdropBorderColor(spec.menuBorderR, spec.menuBorderG, spec.menuBorderB, spec.menuBorderA)
+        local mb = _G["DropDownList" .. level .. "MenuBackdrop"]
+        local bb = _G["DropDownList" .. level .. "Backdrop"]
+        if mb then
+          if mb.Hide then mb:Hide() end
+          if mb.SetAlpha then mb:SetAlpha(0) end
+        end
+        if bb then
+          if bb.Hide then bb:Hide() end
+          if bb.SetAlpha then bb:SetAlpha(0) end
+        end
+        for i = 1, (_G.UIDROPDOWNMENU_MAXBUTTONS or 32) do
+          local b = _G["DropDownList" .. level .. "Button" .. i]
+          if b then
+            if not b._msufPeelSel then
+              b._msufPeelSel = b:CreateTexture(nil, "BACKGROUND")
+              b._msufPeelSel:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -1)
+              b._msufPeelSel:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 1)
+            end
+            b._msufPeelSel:SetColorTexture(spec.menuSelectR, spec.menuSelectG, spec.menuSelectB, spec.menuSelectA)
+            local fs = _G[b:GetName() .. "NormalText"]
+            if fs then
+              ApplyReadableDropdownFont(fs, fs, DD_DEFAULT_SPEC)
+              fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA)
+              fs:ClearAllPoints()
+              fs:SetPoint("LEFT", b, "LEFT", 10, 0)
+              fs:SetPoint("RIGHT", b, "RIGHT", -10, 0)
+              fs:SetJustifyH("LEFT")
+            end
+            if b.SetHeight then b:SetHeight(20) end
+            local hl = b:GetHighlightTexture()
+            if hl and hl.SetColorTexture then
+              hl:SetColorTexture(spec.menuHoverR, spec.menuHoverG, spec.menuHoverB, spec.menuHoverA)
+              if hl.SetPoint then
+                hl:ClearAllPoints()
+                hl:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -1)
+                hl:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 1)
+              end
+            end
+            local check = _G[b:GetName() .. "Check"] or b.Check
+            local uncheck = _G[b:GetName() .. "UnCheck"] or b.UnCheck
+            local checked = false
+            if check and check.IsShown and check:IsShown() then checked = true end
+            b._msufPeelSel:SetShown(checked)
+            if check and check.Hide then check:Hide() end
+            if uncheck and uncheck.Hide then uncheck:Hide() end
+            if b:IsEnabled() then
+              if fs then fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA) end
+            else
+              if fs then fs:SetTextColor(THEME.mutedR, THEME.mutedG, THEME.mutedB, 0.9) end
+            end
+          end
+        end
+        end
+      end
+    end
+  end
+  Style.ReskinDropdownLists = SkinDropDownLists
+  ns.MSUF_ReskinDropdownLists = SkinDropDownLists
+  _G.MSUF_ReskinDropdownLists = SkinDropDownLists
+
+  if hooksecurefunc and not _G.__MSUF_PEEL_DROPDOWN_HOOKS_INSTALLED then
+    _G.__MSUF_PEEL_DROPDOWN_HOOKS_INSTALLED = true
+    if type(_G.UIDropDownMenu_SetText) == "function" then
+      hooksecurefunc("UIDropDownMenu_SetText", function(drop, text)
+        if Style.UseModernDropdowns() then UpdatePeelDropdownText(drop, text) end
+      end)
+    end
+    if type(_G.UIDropDownMenu_SetWidth) == "function" then
+      hooksecurefunc("UIDropDownMenu_SetWidth", function(drop, width)
+        if Style.UseModernDropdowns() then UpdatePeelDropdownWidth(drop, width) end
+      end)
+    end
+    if type(_G.UIDropDownMenu_SetSelectedValue) == "function" then
+      hooksecurefunc("UIDropDownMenu_SetSelectedValue", function(drop)
+        if not Style.UseModernDropdowns() then return end
+        if C_Timer and C_Timer.After then C_Timer.After(0, function() if Style.UseModernDropdowns() then UpdatePeelDropdownText(drop) end end) else UpdatePeelDropdownText(drop) end
+      end)
+    end
+    if type(_G.UIDropDownMenu_SetSelectedName) == "function" then
+      hooksecurefunc("UIDropDownMenu_SetSelectedName", function(drop)
+        if not Style.UseModernDropdowns() then return end
+        if C_Timer and C_Timer.After then C_Timer.After(0, function() if Style.UseModernDropdowns() then UpdatePeelDropdownText(drop) end end) else UpdatePeelDropdownText(drop) end
+      end)
+    end
+    if type(_G.UIDropDownMenu_EnableDropDown) == "function" then
+      hooksecurefunc("UIDropDownMenu_EnableDropDown", function(drop)
+        if Style.UseModernDropdowns() then SyncPeelDropdownState(drop) end
+      end)
+    end
+    if type(_G.UIDropDownMenu_DisableDropDown) == "function" then
+      hooksecurefunc("UIDropDownMenu_DisableDropDown", function(drop)
+        if Style.UseModernDropdowns() then SyncPeelDropdownState(drop) end
+      end)
+    end
+    if type(_G.ToggleDropDownMenu) == "function" then
+      hooksecurefunc("ToggleDropDownMenu", function()
+        if C_Timer and C_Timer.After then C_Timer.After(0, SkinDropDownLists) else SkinDropDownLists() end
+      end)
+    end
+  end
+
+  function Style.RefreshDropdownSkinMode(root)
+    if root and root.GetChildren then
+      local function Walk(f)
+        if not f or not f.GetChildren then return end
+        for i = 1, select("#", f:GetChildren()) do
+          local child = select(i, f:GetChildren())
+          if child then
+            if IsDropdownFrame(child) then
+              if Style.UseModernDropdowns() then
+                Style.ApplyPeelDropdownTemplate(child)
+              else
+                RevertPeelDropdownTemplate(child)
+              end
+            end
+            Walk(child)
+          end
+        end
+      end
+      Walk(root)
+    end
+    SkinDropDownLists()
+  end
+  ns.MSUF_RefreshDropdownSkinMode = Style.RefreshDropdownSkinMode
+  _G.MSUF_RefreshDropdownSkinMode = Style.RefreshDropdownSkinMode
+
+  function Style.SetDropdownStyleMode(mode)
+    local normalized = (mode == "old" or mode == "blizzard" or mode == "legacy") and "old" or "msuf"
+    local db = _MSUF_GetDB()
+    if db and db.general then
+      db.general.dropdownStyleMode = normalized
+    end
+    local win = rawget(_G, "MSUF_StandaloneOptionsWindow")
+    if win then
+      Style.RefreshDropdownSkinMode(win)
+    end
+    local flash = rawget(_G, "MSUF_FlashMenuFrame") or rawget(_G, "MSUF_DashboardFrame")
+    if flash then
+      Style.RefreshDropdownSkinMode(flash)
+    end
+    if type(Style.ScanAndSkinEditMode) == "function" then
+      Style.ScanAndSkinEditMode()
+    end
+  end
+  _G.MSUF_SetDropdownStyleMode = function(mode) return Style.SetDropdownStyleMode(mode) end
+
+  function Style.ApplyToFrame(root)
+    if not Style.IsEnabled() or not root or not root.GetChildren then return end
+    local function Walk(f)
+      if not f or not f.GetChildren then return end
+      for i = 1, select("#", f:GetChildren()) do
+        local child = select(i, f:GetChildren())
+        if child then
+          if child.IsObjectType and child:IsObjectType("CheckButton") then
+            SkinCheckButtonPeel(child)
+          elseif child.IsObjectType and child:IsObjectType("Button") then
+            Style.SkinButton(child)
+          elseif child.IsObjectType and child:IsObjectType("EditBox") then
+            SkinEditBoxPeel(child)
+          elseif child.IsObjectType and child:IsObjectType("Slider") then
+            SkinSliderPeel(child)
+          end
+          if IsDropdownFrame(child) then
+            Style.ApplyPeelDropdownTemplate(child)
+          end
+          Walk(child)
+        end
+      end
+    end
+    Walk(root)
+  end
+
+  local function SkinStandaloneWindow()
+    local win = rawget(_G, "MSUF_StandaloneOptionsWindow")
+    if not win then return end
+    Style.ApplyBackdrop(win, 1.0)
+    if win._msufNavRail then Style.ApplyBackdrop(win._msufNavRail, 0.22) end
+    if win._msufMirrorHost then Style.ApplyToFrame(win._msufMirrorHost) end
+    if win._msufNavStack then Style.ApplyToFrame(win._msufNavStack) end
+    Style.ApplyToFrame(win)
+    if win._msufTitleFS then Style.SkinTitle(win._msufTitleFS) end
+    SkinDropDownLists()
+  end
+
+  function Style.InstallStandaloneOptionsAutoSkin()
+    if _G.__MSUF_PEEL_OPTIONS_SKIN_INSTALLED then return end
+    _G.__MSUF_PEEL_OPTIONS_SKIN_INSTALLED = true
+    local function RunSoon()
+      if C_Timer and C_Timer.After then
+        C_Timer.After(0, SkinStandaloneWindow)
+        C_Timer.After(0.05, SkinStandaloneWindow)
+      else
+        SkinStandaloneWindow()
+      end
+    end
+    if hooksecurefunc then
+      if type(_G.MSUF_ShowStandaloneOptionsWindow) == "function" then
+        hooksecurefunc("MSUF_ShowStandaloneOptionsWindow", RunSoon)
+      end
+      if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
+        hooksecurefunc("MSUF_OpenStandaloneOptionsWindow", RunSoon)
+      end
+      if type(_G.MSUF_SwitchMirrorPage) == "function" then
+        hooksecurefunc("MSUF_SwitchMirrorPage", RunSoon)
+      end
+    end
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("ADDON_LOADED")
+    f:SetScript("OnEvent", function(self, _, arg1)
+      if arg1 ~= _addon then return end
+      RunSoon()
+    end)
+    RunSoon()
+  end
+
+  ns.MSUF_ApplyPeelOptionsSkin = SkinStandaloneWindow
+  _G.MSUF_ApplyPeelOptionsSkin = SkinStandaloneWindow
+  Style.InstallStandaloneOptionsAutoSkin()
+end
+

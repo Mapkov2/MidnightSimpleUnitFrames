@@ -3952,7 +3952,7 @@ end)
 
 local function _MSUF_Dropdown(name, point, rel, relPoint, x, y, width, field)
     -- Simple UIDropDownMenu-based control (used sparingly in Gameplay to avoid heavy UI scaffolding).
-    local dd = CreateFrame("Frame", name, content, "UIDropDownMenuTemplate")
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(name, content) or CreateFrame("Frame", name, content, "UIDropDownMenuTemplate"))
     dd:SetPoint(point, rel, relPoint, x or 0, y or 0)
     if UIDropDownMenu_SetWidth then
         UIDropDownMenu_SetWidth(dd, width or 120)

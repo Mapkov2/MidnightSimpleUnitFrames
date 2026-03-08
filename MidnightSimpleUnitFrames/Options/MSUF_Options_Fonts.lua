@@ -150,7 +150,7 @@ end
     local function MakeDropdown(name, parent, width)
         local dd = _G[name]
         if not dd then
-            dd = CreateFrame("Frame", name, parent, "UIDropDownMenuTemplate")
+            dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(name, parent) or CreateFrame("Frame", name, parent, "UIDropDownMenuTemplate"))
             MSUF_ExpandDropdownClickArea(dd)
             UIDropDownMenu_SetWidth(dd, width or 180)
             dd._msufButtonWidth = width or 180

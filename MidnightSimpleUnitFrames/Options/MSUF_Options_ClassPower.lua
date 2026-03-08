@@ -530,7 +530,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpWidthModeLabel:SetJustifyH("LEFT")
     cpPanel._cpWidthModeLabel = cpWidthModeLabel
 
-    cpWidthModeDrop = CreateFrame("Frame", "MSUF_CPWidthModeDrop", cpPanel, "UIDropDownMenuTemplate")
+    cpWidthModeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_CPWidthModeDrop", cpPanel) or CreateFrame("Frame", "MSUF_CPWidthModeDrop", cpPanel, "UIDropDownMenuTemplate"))
     cpWidthModeDrop:SetPoint("LEFT", cpWidthModeLabel, "RIGHT", 4, -2)
     UIDropDownMenu_SetWidth(cpWidthModeDrop, 155)
     if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(cpWidthModeDrop) end
@@ -635,7 +635,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     dpbWidthModeLabel:SetJustifyH("LEFT")
     cpPanel._dpbWidthModeLabel = dpbWidthModeLabel
 
-    dpbWidthModeDrop = CreateFrame("Frame", "MSUF_DPBWidthModeDrop", cpPanel, "UIDropDownMenuTemplate")
+    dpbWidthModeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_DPBWidthModeDrop", cpPanel) or CreateFrame("Frame", "MSUF_DPBWidthModeDrop", cpPanel, "UIDropDownMenuTemplate"))
     dpbWidthModeDrop:SetPoint("LEFT", dpbWidthModeLabel, "RIGHT", 4, -2)
     UIDropDownMenu_SetWidth(dpbWidthModeDrop, 155)
     if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(dpbWidthModeDrop) end
@@ -678,7 +678,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     dpbFgLabel:SetTextColor(0.85, 0.85, 0.85)
     cpPanel._dpbFgLabel = dpbFgLabel
 
-    local dpbFgDrop = CreateFrame("Frame", "MSUF_DPBFgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
+    local dpbFgDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_DPBFgTextureDropdown", cpPanel) or CreateFrame("Frame", "MSUF_DPBFgTextureDropdown", cpPanel, "UIDropDownMenuTemplate"))
     dpbFgDrop:SetPoint("TOPLEFT", dpbFgLabel, "BOTTOMLEFT", -16, -2)
     UIDropDownMenu_SetWidth(dpbFgDrop, DPB_TEX_DROP_W)
     dpbFgDrop._msufTweakBarTexturePreview = true
@@ -692,7 +692,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     dpbBgLabel:SetTextColor(0.85, 0.85, 0.85)
     cpPanel._dpbBgLabel = dpbBgLabel
 
-    local dpbBgDrop = CreateFrame("Frame", "MSUF_DPBBgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
+    local dpbBgDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_DPBBgTextureDropdown", cpPanel) or CreateFrame("Frame", "MSUF_DPBBgTextureDropdown", cpPanel, "UIDropDownMenuTemplate"))
     dpbBgDrop:SetPoint("TOPLEFT", dpbBgLabel, "BOTTOMLEFT", -16, -2)
     UIDropDownMenu_SetWidth(dpbBgDrop, DPB_TEX_DROP_W)
     dpbBgDrop._msufTweakBarTexturePreview = true
@@ -966,7 +966,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpFgTexLabel:SetTextColor(0.85, 0.85, 0.85)
     cpPanel._cpFgTexLabel = cpFgTexLabel
 
-    local cpFgTexDrop = CreateFrame("Frame", "MSUF_CPFgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
+    local cpFgTexDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_CPFgTextureDropdown", cpPanel) or CreateFrame("Frame", "MSUF_CPFgTextureDropdown", cpPanel, "UIDropDownMenuTemplate"))
     cpFgTexDrop:SetPoint("TOPLEFT", cpFgTexLabel, "BOTTOMLEFT", -16, -2)
     if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(cpFgTexDrop) end
 
@@ -1030,7 +1030,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpBgTexLabel:SetTextColor(0.85, 0.85, 0.85)
     cpPanel._cpBgTexLabel = cpBgTexLabel
 
-    local cpBgTexDrop = CreateFrame("Frame", "MSUF_CPBgTextureDropdown", cpPanel, "UIDropDownMenuTemplate")
+    local cpBgTexDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_CPBgTextureDropdown", cpPanel) or CreateFrame("Frame", "MSUF_CPBgTextureDropdown", cpPanel, "UIDropDownMenuTemplate"))
     cpBgTexDrop:SetPoint("TOPLEFT", cpBgTexLabel, "BOTTOMLEFT", -16, -2)
     if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(cpBgTexDrop) end
 

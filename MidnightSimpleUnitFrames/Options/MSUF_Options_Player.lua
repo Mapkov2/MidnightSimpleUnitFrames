@@ -1268,7 +1268,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         panel[s.field] = CreateCheck(basicsBox, s.name, s.label, s.x, s.y)
     end
     -- Portrait dropdown under display toggles.
-    local dd = CreateFrame("Frame", "MSUF_UF_PortraitDropDown", basicsBox, "UIDropDownMenuTemplate")
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UF_PortraitDropDown", basicsBox) or CreateFrame("Frame", "MSUF_UF_PortraitDropDown", basicsBox, "UIDropDownMenuTemplate"))
     dd:SetPoint("TOPLEFT", basicsBox, "TOPLEFT", -6, -162)
     dd:Show() -- portrait dropdown (all unitframes)
     panel.playerPortraitDropDown = dd
@@ -1343,7 +1343,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local alphaLayerLabel = sizeBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     alphaLayerLabel:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", 12, -58)
     alphaLayerLabel:SetText(TR("Alpha sliders affect"))
-    local alphaLayerDD = CreateFrame("Frame", "MSUF_UF_AlphaLayerDropDown", sizeBox, "UIDropDownMenuTemplate")
+    local alphaLayerDD = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UF_AlphaLayerDropDown", sizeBox) or CreateFrame("Frame", "MSUF_UF_AlphaLayerDropDown", sizeBox, "UIDropDownMenuTemplate"))
     alphaLayerDD:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", -6, -70)
     alphaLayerDD:Show()
     panel.playerAlphaLayerDropDown = alphaLayerDD
@@ -1442,7 +1442,7 @@ local function FinalizeDashboardAlphaSlider(slider, width)
 panel.totShowInTargetCB = CreateCheck(textGroup, "MSUF_ToTInlineInTargetCB", "Show ToT text in Target frame", 12, -32)
 panel.totShowInTargetCB:Hide()
 -- Separator dropdown (no title) directly under the toggle.
-local totSepDD = CreateFrame("Frame", "MSUF_ToTInlineSeparatorDropDown", textGroup, "UIDropDownMenuTemplate")
+local totSepDD = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_ToTInlineSeparatorDropDown", textGroup) or CreateFrame("Frame", "MSUF_ToTInlineSeparatorDropDown", textGroup, "UIDropDownMenuTemplate"))
 -- Anchor to the toggle (not the box) so any future/reflowed layout changes can't "strand" the dropdown.
 -- UIDropDownMenuTemplate is left-shifted vs. CheckButtons, hence the -18 X offset.
 if panel.totShowInTargetCB then
@@ -1524,7 +1524,7 @@ end
 		panel.unitAnchorToLabel:SetText(TR("Anchor unit to"))
 		panel.unitAnchorToLabel:Hide()
 		if not panel.unitAnchorToDD then
-			local dd = CreateFrame("Frame", "MSUF_UnitAnchorToDropDown", textGroup, "UIDropDownMenuTemplate")
+			local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UnitAnchorToDropDown", textGroup) or CreateFrame("Frame", "MSUF_UnitAnchorToDropDown", textGroup, "UIDropDownMenuTemplate"))
 			panel.unitAnchorToDD = dd
 			if UIDropDownMenu_SetWidth then
 				UIDropDownMenu_SetWidth(dd, 180)
@@ -1676,7 +1676,7 @@ end
 				panel[field]:Hide()
 				return panel[field]
 			end
-			local dd = CreateFrame("Frame", globalName, parentOverride or textGroup, "UIDropDownMenuTemplate")
+			local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(globalName, parentOverride or textGroup) or CreateFrame("Frame", globalName, parentOverride or textGroup, "UIDropDownMenuTemplate"))
 			if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(dd, width) end
 			dd._msufDropWidth = width
 			if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(dd) end
@@ -1948,7 +1948,7 @@ end
             panel[labelKey]:Hide()
         end
         if not panel[dropKey] then
-            panel[dropKey] = CreateFrame("Frame", dropName, textGroup, "UIDropDownMenuTemplate")
+            panel[dropKey] = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(dropName, textGroup) or CreateFrame("Frame", dropName, textGroup, "UIDropDownMenuTemplate"))
             if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(panel[dropKey], 150) end
             panel[dropKey]._msufDropWidth = 150
             if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(panel[dropKey]) end
