@@ -2713,7 +2713,7 @@ local presetsCard=CreateCard(colR,"Presets",scaleCard,-12)
 presetsCard:SetPoint("BOTTOMLEFT",colR,"BOTTOMLEFT",0,0)
 presetsCard:SetPoint("BOTTOMRIGHT",colR,"BOTTOMRIGHT",0,0)
 local presetsTitle=presetsCard._msufTitle;
-local presetDrop=CreateFrame("Frame","MSUF_PresetDropdown",presetsCard,"UIDropDownMenuTemplate")
+local presetDrop=(_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_PresetDropdown", presetsCard) or CreateFrame("Frame", "MSUF_PresetDropdown", presetsCard, "UIDropDownMenuTemplate"))
 presetDrop:SetPoint("TOPLEFT",presetsTitle,"BOTTOMLEFT",-16,-4)
 UIDropDownMenu_SetWidth(presetDrop,220)
 UIDropDownMenu_SetText(presetDrop,presetsCard._msufSelectedPreset or"Select preset...")

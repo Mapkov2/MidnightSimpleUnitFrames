@@ -2634,7 +2634,7 @@ helpText:SetText(TR("Profiles are global. Each character selects one active prof
             row.label = profileGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             row.label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
             row.label:SetText(s.name)
-            row.drop = CreateFrame("Frame", "MSUF_ProfileSpecDrop" .. i, profileGroup, "UIDropDownMenuTemplate")
+            row.drop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_ProfileSpecDrop" .. i, profileGroup) or CreateFrame("Frame", "MSUF_ProfileSpecDrop" .. i, profileGroup, "UIDropDownMenuTemplate"))
             MSUF_ExpandDropdownClickArea(row.drop)
             row.drop:SetPoint("LEFT", row.label, "LEFT", 210, -2)
             UIDropDownMenu_SetWidth(row.drop, 180)
@@ -2710,7 +2710,7 @@ helpText:SetText(TR("Profiles are global. Each character selects one active prof
     newEditBox:SetSize(220, 20)
     newEditBox:SetAutoFocus(false)
     newEditBox:SetPoint("TOPLEFT", newLabel, "BOTTOMLEFT", 0, -4)
-    profileDrop = CreateFrame("Frame", "MSUF_ProfileDropdown", profileGroup, "UIDropDownMenuTemplate")
+    profileDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_ProfileDropdown", profileGroup) or CreateFrame("Frame", "MSUF_ProfileDropdown", profileGroup, "UIDropDownMenuTemplate"))
     MSUF_ExpandDropdownClickArea(profileDrop)
     profileDrop:SetPoint("TOPLEFT", existingLabel, "BOTTOMLEFT", -16, -4)
     local function MSUF_ProfileDropdown_Initialize(self, level)
@@ -3130,7 +3130,7 @@ if LSM then
     castbarTextureLabel = castbarEnemyGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     castbarTextureLabel:SetPoint("BOTTOMLEFT", castbarEnemyGroup, "BOTTOMLEFT", 16, 90)
     castbarTextureLabel:SetText(TR("Castbar texture (SharedMedia)"))
-    castbarTextureDrop = CreateFrame("Frame", "MSUF_CastbarTextureDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate")
+    castbarTextureDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_CastbarTextureDropdown", castbarEnemyGroup) or CreateFrame("Frame", "MSUF_CastbarTextureDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate"))
     MSUF_ExpandDropdownClickArea(castbarTextureDrop)
     castbarTextureDrop:SetPoint("TOPLEFT", castbarTextureLabel, "BOTTOMLEFT", -16, -4)
     UIDropDownMenu_SetWidth(castbarTextureDrop, 180)
@@ -3238,7 +3238,7 @@ end
          return cb
     end
     castbarUnifiedDirCheck = CB("MSUF_CastbarUnifiedDirectionCheck", "Always use fill direction for all casts", 16, 185, "castbarUnifiedDirection", "castbarFillDirection", function(cb)  cb:ClearAllPoints(); cb:SetPoint("BOTTOMLEFT", castbarFillDirLabel, "TOPLEFT", 0, 4)  end)
-    castbarFillDirDrop = CreateFrame("Frame", "MSUF_CastbarFillDirectionDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate")
+    castbarFillDirDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_CastbarFillDirectionDropdown", castbarEnemyGroup) or CreateFrame("Frame", "MSUF_CastbarFillDirectionDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate"))
     MSUF_ExpandDropdownClickArea(castbarFillDirDrop)
     castbarFillDirDrop:SetPoint("TOPLEFT", castbarFillDirLabel, "BOTTOMLEFT", -16, -4)
     local castbarFillDirOptions = {
@@ -3399,7 +3399,7 @@ empowerStageBlinkTimeSlider:SetScript("OnShow", function(self)
         if rightCol and not _G["MSUF_CastbarBackgroundTextureLabel"] then
 local bgLabel = rightCol:CreateFontString("MSUF_CastbarBackgroundTextureLabel", "ARTWORK", "GameFontNormal")
 bgLabel:SetText(TR("Castbar background texture"))
-local bgDrop = CreateFrame("Frame", "MSUF_CastbarBackgroundTextureDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate")
+local bgDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_CastbarBackgroundTextureDropdown", castbarEnemyGroup) or CreateFrame("Frame", "MSUF_CastbarBackgroundTextureDropdown", castbarEnemyGroup, "UIDropDownMenuTemplate"))
 MSUF_ExpandDropdownClickArea(bgDrop)
 UIDropDownMenu_SetWidth(bgDrop, 180)
 bgDrop._msufButtonWidth = 180
@@ -3839,7 +3839,7 @@ local _MSUF_BarScope_SyncUI         -- function()  (refresh all scope-aware cont
 absorbDisplayLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 absorbDisplayLabel:SetPoint("TOPLEFT", barsTitle, "BOTTOMLEFT", 0, -8)
 absorbDisplayLabel:SetText(TR("Absorb display"))
-absorbDisplayDrop = CreateFrame("Frame", "MSUF_AbsorbDisplayDrop", barGroup, "UIDropDownMenuTemplate")
+absorbDisplayDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_AbsorbDisplayDrop", barGroup) or CreateFrame("Frame", "MSUF_AbsorbDisplayDrop", barGroup, "UIDropDownMenuTemplate"))
 MSUF_ExpandDropdownClickArea(absorbDisplayDrop)
 absorbDisplayDrop:SetPoint("TOPLEFT", absorbDisplayLabel, "BOTTOMLEFT", -16, -4)
 UIDropDownMenu_SetWidth(absorbDisplayDrop, BAR_DROPDOWN_WIDTH)
@@ -3914,7 +3914,7 @@ MSUF_BindAbsorbDropdown(absorbDisplayDrop, absorbDisplayOptions, MSUF_GetAbsorbD
 absorbAnchorLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 absorbAnchorLabel:SetPoint("TOPLEFT", absorbDisplayDrop, "BOTTOMLEFT", 16, -8)
 absorbAnchorLabel:SetText(TR("Absorb bar anchoring"))
-absorbAnchorDrop = CreateFrame("Frame", "MSUF_AbsorbAnchorDrop", barGroup, "UIDropDownMenuTemplate")
+absorbAnchorDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_AbsorbAnchorDrop", barGroup) or CreateFrame("Frame", "MSUF_AbsorbAnchorDrop", barGroup, "UIDropDownMenuTemplate"))
 MSUF_ExpandDropdownClickArea(absorbAnchorDrop)
 absorbAnchorDrop:SetPoint("TOPLEFT", absorbAnchorLabel, "BOTTOMLEFT", -16, -4)
 UIDropDownMenu_SetWidth(absorbAnchorDrop, BAR_DROPDOWN_WIDTH)
@@ -3954,14 +3954,14 @@ MSUF_BindAbsorbDropdown(absorbAnchorDrop, absorbAnchorOptions, MSUF_GetAbsorbAnc
 absorbTextureLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 absorbTextureLabel:SetPoint("TOPLEFT", absorbAnchorDrop, "BOTTOMLEFT", 16, -8)
 absorbTextureLabel:SetText(TR("Absorb bar texture (SharedMedia)"))
-absorbBarTextureDrop = CreateFrame("Frame", "MSUF_AbsorbBarTextureDropdown", barGroup, "UIDropDownMenuTemplate")
+absorbBarTextureDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_AbsorbBarTextureDropdown", barGroup) or CreateFrame("Frame", "MSUF_AbsorbBarTextureDropdown", barGroup, "UIDropDownMenuTemplate"))
 MSUF_ExpandDropdownClickArea(absorbBarTextureDrop)
 absorbBarTextureDrop:SetPoint("TOPLEFT", absorbTextureLabel, "BOTTOMLEFT", -16, -4)
 UIDropDownMenu_SetWidth(absorbBarTextureDrop, BAR_DROPDOWN_WIDTH)
 absorbBarTextureDrop._msufButtonWidth = BAR_DROPDOWN_WIDTH
 absorbBarTextureDrop._msufTweakBarTexturePreview = true
 MSUF_MakeDropdownScrollable(absorbBarTextureDrop, 12)
-healAbsorbTextureDrop = CreateFrame("Frame", "MSUF_HealAbsorbBarTextureDropdown", barGroup, "UIDropDownMenuTemplate")
+healAbsorbTextureDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_HealAbsorbBarTextureDropdown", barGroup) or CreateFrame("Frame", "MSUF_HealAbsorbBarTextureDropdown", barGroup, "UIDropDownMenuTemplate"))
 MSUF_ExpandDropdownClickArea(healAbsorbTextureDrop)
 healAbsorbTextureDrop:SetPoint("TOPLEFT", absorbBarTextureDrop, "BOTTOMLEFT", 0, -8)
 UIDropDownMenu_SetWidth(healAbsorbTextureDrop, BAR_DROPDOWN_WIDTH)
@@ -4380,7 +4380,7 @@ gradientCheck = CreateLabeledCheckButton(
     hpPowerScopeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     hpPowerScopeLabel:SetPoint("TOPLEFT", powerBarBorderSizeLabel or powerBarBorderCheck or powerBarEmbedCheck or powerBarHeightLabel, "BOTTOMLEFT", 0, -16)
     hpPowerScopeLabel:SetText(TR("Bar settings"))
-    hpPowerScopeDrop = CreateFrame("Frame", "MSUF_HPTextScopeDropdown", barGroup, "UIDropDownMenuTemplate")
+    hpPowerScopeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_HPTextScopeDropdown", barGroup) or CreateFrame("Frame", "MSUF_HPTextScopeDropdown", barGroup, "UIDropDownMenuTemplate"))
     MSUF_ExpandDropdownClickArea(hpPowerScopeDrop)
     hpPowerScopeDrop:SetPoint("TOPLEFT", hpPowerScopeLabel, "BOTTOMLEFT", -16, -4)
     hpPowerScopeOptions = {
@@ -4495,7 +4495,7 @@ gradientCheck = CreateLabeledCheckButton(
     hpModeLabel:SetText(TR("Textmode HP / Power"))
     -- Make this header white (requested UX): the dropdown items remain normal.
     hpModeLabel:SetTextColor(1, 1, 1, 1)
-    hpModeDrop = CreateFrame("Frame", "MSUF_HPTextModeDropdown", barGroup, "UIDropDownMenuTemplate")
+    hpModeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_HPTextModeDropdown", barGroup) or CreateFrame("Frame", "MSUF_HPTextModeDropdown", barGroup, "UIDropDownMenuTemplate"))
     MSUF_ExpandDropdownClickArea(hpModeDrop)
     hpModeDrop:SetPoint("TOPLEFT", hpModeLabel, "BOTTOMLEFT", -16, -4)
     hpModeOptions = {
@@ -4563,7 +4563,7 @@ gradientCheck = CreateLabeledCheckButton(
 powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     powerModeLabel:SetPoint("TOPLEFT", hpModeLabel, "BOTTOMLEFT", 0, -16)
     powerModeLabel:SetText(TR("Power text mode"))
-    powerModeDrop = CreateFrame("Frame", "MSUF_PowerTextModeDropdown", barGroup, "UIDropDownMenuTemplate")
+    powerModeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_PowerTextModeDropdown", barGroup) or CreateFrame("Frame", "MSUF_PowerTextModeDropdown", barGroup, "UIDropDownMenuTemplate"))
     MSUF_ExpandDropdownClickArea(powerModeDrop)
     powerModeDrop:SetPoint("TOPLEFT", powerModeLabel, "BOTTOMLEFT", -16, -16)
     powerModeOptions = {
@@ -4647,7 +4647,7 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     -- Extra spacing from the header (prevents cramped look)
     hpSepLabel:SetPoint("TOPLEFT", sepHeader, "BOTTOMLEFT", 0, -10)
     hpSepLabel:SetText(TR("Health (HP)"))
-    hpSepDrop = CreateFrame("Frame", "MSUF_HPTextSeparatorDropdown", barGroup, "UIDropDownMenuTemplate")
+    hpSepDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_HPTextSeparatorDropdown", barGroup) or CreateFrame("Frame", "MSUF_HPTextSeparatorDropdown", barGroup, "UIDropDownMenuTemplate"))
     MSUF_ExpandDropdownClickArea(hpSepDrop)
     -- Both dropdowns sit slightly lower (5px) for nicer vertical balance.
     hpSepDrop:SetPoint("TOPLEFT", hpSepLabel, "BOTTOMLEFT", -16, -16)
@@ -4727,7 +4727,7 @@ powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     powerSepLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     powerSepLabel:SetPoint("LEFT", hpSepLabel, "RIGHT", 120, 0)
     powerSepLabel:SetText(TR("Power"))
-    powerSepDrop = CreateFrame("Frame", "MSUF_PowerTextSeparatorDropdown", barGroup, "UIDropDownMenuTemplate")
+    powerSepDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_PowerTextSeparatorDropdown", barGroup) or CreateFrame("Frame", "MSUF_PowerTextSeparatorDropdown", barGroup, "UIDropDownMenuTemplate"))
     MSUF_ExpandDropdownClickArea(powerSepDrop)
     powerSepDrop:SetPoint("TOPLEFT", powerSepLabel, "BOTTOMLEFT", -16, -16)
     UIDropDownMenu_SetWidth(powerSepDrop, 80)
@@ -5515,7 +5515,7 @@ local barTextureDrop
             barTextureLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             barTextureLabel:SetPoint("TOPLEFT", (absorbTexTestCB or healAbsorbTextureDrop or absorbBarTextureDrop or absorbAnchorDrop or absorbDisplayDrop), "BOTTOMLEFT", 16, -18)
             barTextureLabel:SetText(TR("Bar texture (SharedMedia)"))
-            barTextureDrop = CreateFrame("Frame", "MSUF_BarTextureDropdown", barGroup, "UIDropDownMenuTemplate")
+            barTextureDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_BarTextureDropdown", barGroup) or CreateFrame("Frame", "MSUF_BarTextureDropdown", barGroup, "UIDropDownMenuTemplate"))
             MSUF_ExpandDropdownClickArea(barTextureDrop)
             barTextureDrop:SetPoint("TOPLEFT", barTextureLabel, "BOTTOMLEFT", -16, -4)
             UIDropDownMenu_SetWidth(barTextureDrop, BAR_DROPDOWN_WIDTH)
@@ -5580,7 +5580,7 @@ local barTextureDrop
             barBgTextureLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             barBgTextureLabel:SetPoint("TOPLEFT", _G.MSUF_BarTexturePreview, "BOTTOMLEFT", -20, -40)
             barBgTextureLabel:SetText(TR("Bar background texture"))
-            barBgTextureDrop = CreateFrame("Frame", "MSUF_BarBackgroundTextureDropdown", barGroup, "UIDropDownMenuTemplate")
+            barBgTextureDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_BarBackgroundTextureDropdown", barGroup) or CreateFrame("Frame", "MSUF_BarBackgroundTextureDropdown", barGroup, "UIDropDownMenuTemplate"))
             MSUF_ExpandDropdownClickArea(barBgTextureDrop)
             barBgTextureDrop:SetPoint("TOPLEFT", barBgTextureLabel, "BOTTOMLEFT", -16, -4)
             UIDropDownMenu_SetWidth(barBgTextureDrop, BAR_DROPDOWN_WIDTH)
@@ -5681,7 +5681,7 @@ end
 
 -- Aggro border indicator: reuse outline border as a thick orange threat border (target/focus/boss).
 -- No extra header label; the dropdown itself is the control.
-local aggroOutlineDrop = CreateFrame("Frame", "MSUF_AggroOutlineDropdown", barGroup, "UIDropDownMenuTemplate")
+local aggroOutlineDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_AggroOutlineDropdown", barGroup) or CreateFrame("Frame", "MSUF_AggroOutlineDropdown", barGroup, "UIDropDownMenuTemplate"))
 MSUF_ExpandDropdownClickArea(aggroOutlineDrop)
 
 -- The UIDropDownMenuTemplate has extra left padding; keep the control comfortably inside the left panel.
@@ -5762,7 +5762,7 @@ end)
 
 
 -- Dispel border: light-blue outline border when the player can dispel something on the unit (RAID_PLAYER_DISPELLABLE).
-local dispelOutlineDrop = CreateFrame("Frame", "MSUF_DispelOutlineDropdown", barGroup, "UIDropDownMenuTemplate")
+local dispelOutlineDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_DispelOutlineDropdown", barGroup) or CreateFrame("Frame", "MSUF_DispelOutlineDropdown", barGroup, "UIDropDownMenuTemplate"))
 MSUF_ExpandDropdownClickArea(dispelOutlineDrop)
 dispelOutlineDrop:SetPoint("TOPLEFT", aggroOutlineDrop, "BOTTOMLEFT", 0, -18)
 UIDropDownMenu_SetWidth(dispelOutlineDrop, 170)
@@ -5833,7 +5833,7 @@ dispelTestCheck:SetScript("OnClick", function(self)
 end)
 
 -- Purge border: yellow outline border when the player can purge/spellsteal a buff on the unit.
-local purgeOutlineDrop = CreateFrame("Frame", "MSUF_PurgeOutlineDropdown", barGroup, "UIDropDownMenuTemplate")
+local purgeOutlineDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_PurgeOutlineDropdown", barGroup) or CreateFrame("Frame", "MSUF_PurgeOutlineDropdown", barGroup, "UIDropDownMenuTemplate"))
 MSUF_ExpandDropdownClickArea(purgeOutlineDrop)
 purgeOutlineDrop:SetPoint("TOPLEFT", dispelOutlineDrop, "BOTTOMLEFT", 0, -18)
 UIDropDownMenu_SetWidth(purgeOutlineDrop, 170)

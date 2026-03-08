@@ -3597,7 +3597,7 @@ local function MSUF_EM_UI_BuildCopyDropdown(pf, spec)
     pf[spec.labelField] = label
 
     local dropName = spec.name or ("$parent" .. (spec.dropField or "Drop"))
-    local drop = CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate")
+    local drop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(dropName, pf) or CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate"))
     drop:SetPoint("LEFT", label, "RIGHT", -2, -2)
     pf[spec.dropField] = drop
 
@@ -4473,7 +4473,7 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
 
             -- Generic dropdown builder (no separate label; prefix baked into dropdown text)
             local function _BuildAnchorDrop(prefix, parentAnchor, parentPoint, relPoint, ox, oy, dropName, pfDropKey, stateKey, defaultVal)
-                local drop = CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate")
+                local drop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(dropName, pf) or CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate"))
                 drop:SetPoint(parentPoint, parentAnchor, relPoint, ox, oy)
                 if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(drop, 88) end
                 if ns and ns.MSUF_ExpandDropdownClickArea then ns.MSUF_ExpandDropdownClickArea(drop) end

@@ -587,7 +587,7 @@ end
         { key = "unified", label = "Unified Color Mode (one color for all frames)" },
     }
 
-    S.barModeDrop = CreateFrame("Frame", "MSUF_Colors_BarModeDropdown", content, "UIDropDownMenuTemplate")
+    S.barModeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_Colors_BarModeDropdown", content) or CreateFrame("Frame", "MSUF_Colors_BarModeDropdown", content, "UIDropDownMenuTemplate"))
     S.barModeDrop:SetPoint("TOPLEFT", barModeLabel, "BOTTOMLEFT", -16, -4)
     UIDropDownMenu_SetWidth(S.barModeDrop, 240)
     MSUF_ExpandDropdownClickArea(S.barModeDrop)
@@ -2438,7 +2438,7 @@ powerSub:SetWidth(600)
 powerSub:SetJustifyH("LEFT")
 powerSub:SetText("Configure custom colors for power resources used by MSUF power bars.")
 
-local powerTypeDrop = CreateFrame("Frame", "MSUF_Colors_PowerTypeDropdown", content, "UIDropDownMenuTemplate")
+local powerTypeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_Colors_PowerTypeDropdown", content) or CreateFrame("Frame", "MSUF_Colors_PowerTypeDropdown", content, "UIDropDownMenuTemplate"))
 powerTypeDrop:SetPoint("TOPLEFT", powerSub, "BOTTOMLEFT", -16, -8)
 UIDropDownMenu_SetWidth(powerTypeDrop, 220)
 MSUF_ExpandDropdownClickArea(powerTypeDrop)
@@ -2593,7 +2593,7 @@ cpColSub:SetWidth(600)
 cpColSub:SetJustifyH("LEFT")
 cpColSub:SetText("Configure colors for secondary resource bars: Combo Points, Holy Power, Soul Shards, Chi, Runes, Arcane Charges, Essence, Soul Fragments (DH), Maelstrom (Enh/Ele), Stagger (BrM), Insanity (Shadow), Whirlwind (Fury), Tip of the Spear (SV), Ebon Might (Aug), Eclipse + Prediction (Balance).")
 
-local cpColTypeDrop = CreateFrame("Frame", "MSUF_Colors_ClassPowerTypeDropdown", content, "UIDropDownMenuTemplate")
+local cpColTypeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_Colors_ClassPowerTypeDropdown", content) or CreateFrame("Frame", "MSUF_Colors_ClassPowerTypeDropdown", content, "UIDropDownMenuTemplate"))
 cpColTypeDrop:SetPoint("TOPLEFT", cpColSub, "BOTTOMLEFT", -16, -8)
 UIDropDownMenu_SetWidth(cpColTypeDrop, 260)
 MSUF_ExpandDropdownClickArea(cpColTypeDrop)

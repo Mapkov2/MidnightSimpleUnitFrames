@@ -296,7 +296,7 @@ end
         local name = spec.name
         local dd = name and _G[name] or nil
         if not dd then
-            dd = CreateFrame("Frame", name, spec.parent, "UIDropDownMenuTemplate")
+            dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(name, spec.parent) or CreateFrame("Frame", name, spec.parent, "UIDropDownMenuTemplate"))
         end
         dd:SetParent(spec.parent)
         dd:ClearAllPoints()
