@@ -193,7 +193,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
 
     local profileDrop = UI.Dropdown({
         name = "MSUF_ProfileDropdown", parent = profileGroup,
-        anchor = existingLabel, x = 0, y = -4, width = 200,
+        anchor = existingLabel, x = -16, y = -4, width = 200,
         items = function()
             local profiles = type(MSUF_GetAllProfiles) == "function" and MSUF_GetAllProfiles() or { "Default" }
             local out = {}

@@ -653,7 +653,7 @@ function UI.Dropdown(spec)
     if spec.anchor then
         dd:ClearAllPoints()
         -- UIDropDownMenuTemplate has ~16px built-in left padding; compensate automatically
-        dd:SetPoint("TOPLEFT", spec.anchor, spec.anchorPoint or "BOTTOMLEFT", (spec.x or 0) - 16, spec.y or -4)
+        dd:SetPoint("TOPLEFT", spec.anchor, spec.anchorPoint or "BOTTOMLEFT", spec.x or 0, spec.y or -4)
     end
     -- Neuter Blizzard init (prevent ToggleDropDownMenu from firing)
     UIDropDownMenu_Initialize(dd, function() end)

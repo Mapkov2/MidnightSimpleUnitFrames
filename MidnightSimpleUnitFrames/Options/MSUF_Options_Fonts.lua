@@ -95,7 +95,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
     local fontDrop = UI.Dropdown({
         name = "MSUF_FontDropdown", parent = left,
-        anchor = secGlobal, x = 0, y = -8, width = 260, maxVisible = 12,
+        anchor = secGlobal, x = -16, y = -8, width = 260, maxVisible = 12,
         itemHeight = 22,
         items = function()
             if #fontChoices == 0 then RebuildFontChoices() end
@@ -344,7 +344,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
     shortenClipDrop = UI.Dropdown({
         name = "MSUF_ShortenNameClipSideDrop", parent = right,
-        anchor = shortenClipLabel, x = 0, y = -2, width = 200,
+        anchor = shortenClipLabel, x = -16, y = -2, width = 200,
         items = {
             { key = "LEFT",  label = "Keep end (show last letters)" },
             { key = "RIGHT", label = "Keep start (show first letters)" },
