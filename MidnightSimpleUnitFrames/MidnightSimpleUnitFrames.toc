@@ -86,6 +86,9 @@ Core\MSUF_Borders.lua
 Core\MSUF_ClassPower.lua
 
 Options\MSUF_Options_Core.lua
+Options\MSUF_Options_Bars.lua
+Options\MSUF_Options_Castbars.lua
+Options\MSUF_Options_Profiles.lua
 Options\MSUF_Options_Colors.lua
 Options\MSUF_Options_ClassPower.lua
 Options\MSUF_Options_ClassPower_QuickSetup.lua
