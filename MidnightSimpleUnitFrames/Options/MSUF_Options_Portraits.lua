@@ -22,11 +22,6 @@ local ALL_UNITS = { "player", "target", "focus", "targettarget", "pet", "boss" }
 local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
 
 -- ────────────────────────────────────────────────────────────
--- Color picker wrapper (self-contained)
--- ────────────────────────────────────────────────────────────
--- Color pickers removed — portrait colors are in the Colors panel
-
--- ────────────────────────────────────────────────────────────
 -- Widget helpers
 -- ────────────────────────────────────────────────────────────
 local StyleToggleText = (UI and UI.StyleToggleText) or function() end
@@ -55,8 +50,6 @@ local function MakeCheck(parent, name, label, x, y, tip)
     if tip then AttachTooltip(cb, label, tip) end
     return cb
 end
-
--- MakeColorSwatch removed — portrait colors are in the Colors panel
 
 local function MakeLabel(parent, text, x, y, template)
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormalSmall")
@@ -136,9 +129,6 @@ local DECO_KEYS = {
     "portraitBgEnabled", "portraitBgColorR", "portraitBgColorG", "portraitBgColorB", "portraitBgColorA",
     "portraitClassStyle", "portraitFillBorder",
 }
-
--- Export for runtime resolver
-ns._portraitDecoKeys = DECO_KEYS
 
 -- ════════════════════════════════════════════════════════════
 -- BUILD
