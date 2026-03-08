@@ -7,7 +7,7 @@ if _G then _G.MSUF_SLASHMENU_ONLY = true end
 -- ---------------------------------------------------------------------------
 -- Localization helper (keys are English UI strings; fallback = key)
 -- ---------------------------------------------------------------------------
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 local L = ns.L
 if not getmetatable(L) then
     setmetatable(L, { __index = function(t, k) return k end })
@@ -95,163 +95,108 @@ local MSUF_BarsApplyGradient -- forward decl; see MSUF_Options_Bars.lua (exports
 -- Gradient changes apply live (no reload required).
 -- Keep a no-op stub so any stale call-sites (older builds) don't nil-error.
 -- ---------------------------------------------------------------------------
-local function MSUF_Options_ShowGradientReloadPopup() end -- no-op stub (live apply, backward compat)
+-- (gradient reload popup removed: live-apply, no reload needed)
 -- ---------------------------------------------------------------------------
 -- Transition helpers (optional, graceful fallback to instant Show/Hide)
 -- ---------------------------------------------------------------------------
-local function _T() return ns.MSUF_Transitions end
+local _cachedTransitions = false  -- false = not yet resolved, nil = no module
 local function _TFadeIn(f, d)
-    local T = _T()
-    if T and T.FadeIn then T.FadeIn(f, d) else if f and f.Show then f:Show() end end
+    if _cachedTransitions == false then _cachedTransitions = ns.MSUF_Transitions or nil end
+    local T = _cachedTransitions
+    if T and T.FadeIn then T.FadeIn(f, d) elseif f and f.Show then f:Show() end
 end
 local TRANS_TAB = 0.10
-local function MSUF_ScheduleReloadRecommend()   end       -- no-op stub (backward compat)
+-- (reload recommend removed: all changes apply live)
 local castbarEnemyGroup, castbarTargetGroup, castbarFocusGroup, castbarBossGroup, castbarPlayerGroup
 local barGroupHost, barGroup, miscGroup, profileGroup
 -- ---------------------------------------------------------------------------
 -- Bars menu: scroll container (same UIPanelScrollFrameTemplate method as Auras/Gameplay/Colors)
 -- ---------------------------------------------------------------------------
-local function MSUF_BarsMenu_QueueScrollUpdate()
-    local host = barGroupHost
-    local scroll = (_G and _G.MSUF_BarsMenuScrollFrame) or (host and host._msufBarsScroll) or nil
-    local child  = (_G and _G.MSUF_BarsMenuScrollChild) or (host and host._msufBarsScrollChild) or nil
-    if not (scroll and child and child.SetHeight and child.GetTop and child.GetBottom) then return end
+-- ---------------------------------------------------------------------------
+-- Shared scroll height helpers (pre-created; zero allocation per call)
+-- ---------------------------------------------------------------------------
+local math_ceil = math.ceil
+local UIPanelScrollFrame_Update -- resolved once at first use
 
-    local anchor = _G and (_G.MSUF_BarsMenuPanelRight or _G.MSUF_BarsMenuPanelLeft) or nil
-    if not (anchor and anchor.GetBottom) then anchor = barGroup end
-    if not (anchor and anchor.GetBottom) then return end
-
-    if host then
-        if host._msufBarsScrollQueued then return end
-        host._msufBarsScrollQueued = true
-    end
-
-    local function run()
-        if host then host._msufBarsScrollQueued = false end
-        if not (scroll and child and anchor) then return end
-        local top = child:GetTop()
-        local bottom = anchor:GetBottom()
-        if not (top and bottom) then return end
-
-        local h = math.ceil((top - bottom) + 24)
-        if h < 500 then h = 500 end
-        child:SetHeight(h)
-
-        local w = scroll:GetWidth()
-        if w and w > 1 then child:SetWidth(w) end
-
-        if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
-        if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
-    end
-
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, run)
-    else
-        run()
-    end
+local function _ScrollFinalize(scroll, child, h, minH)
+    if h < minH then h = minH end
+    child:SetHeight(h)
+    local w = scroll:GetWidth()
+    if w and w > 1 then child:SetWidth(w) end
+    if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
+    if not UIPanelScrollFrame_Update then UIPanelScrollFrame_Update = _G.UIPanelScrollFrame_Update end
+    if UIPanelScrollFrame_Update then UIPanelScrollFrame_Update(scroll) end
 end
 
--- ---------------------------------------------------------------------------
--- Frames menu: scroll container (same pattern as Bars menu above)
--- ---------------------------------------------------------------------------
+-- Anchor-based height calc (Bars): measure from child top to anchor bottom
+local function _BarsScrollRun()
+    local host = barGroupHost
+    if not host then return end
+    host._msufBarsScrollQueued = false
+    local scroll = host._msufBarsScroll or _G.MSUF_BarsMenuScrollFrame
+    local child  = host._msufBarsScrollChild or _G.MSUF_BarsMenuScrollChild
+    if not (scroll and child) then return end
+    local anchor = _G.MSUF_BarsMenuPanelRight or _G.MSUF_BarsMenuPanelLeft or barGroup
+    if not (anchor and anchor.GetBottom) then return end
+    local top = child:GetTop()
+    local bottom = anchor:GetBottom()
+    if not (top and bottom) then return end
+    _ScrollFinalize(scroll, child, math_ceil((top - bottom) + 24), 500)
+end
+
+-- Children-scan height calc (Frames / Castbar): find lowest visible child
+local function _ChildrenScanScrollRun(host, scrollKey, childKey, contentKey)
+    if not host then return end
+    host[scrollKey .. "Queued"] = false
+    local scroll = host[scrollKey]
+    local child  = host[childKey]
+    if not (scroll and child) then return end
+    local top = child.GetTop and child:GetTop()
+    if not top then return end
+    local lowest = top
+    local content = host[contentKey]
+    if content and content.GetChildren then
+        local regions = { content:GetChildren() }
+        for i = 1, #regions do
+            local r = regions[i]
+            if r and r.IsShown and r:IsShown() and r.GetBottom then
+                local b = r:GetBottom()
+                if b and b < lowest then lowest = b end
+            end
+        end
+    end
+    _ScrollFinalize(scroll, child, math_ceil((top - lowest) + 32), 500)
+end
+
+local function _FramesScrollRun()
+    _ChildrenScanScrollRun(frameGroupHost, "_msufFramesScroll", "_msufFramesScrollChild", "_msufFramesContent")
+end
+local function _CastbarScrollRun()
+    _ChildrenScanScrollRun(castbarGroupHost, "_msufCastbarScroll", "_msufCastbarScrollChild", "_msufCastbarContent")
+end
+
+-- Queued updaters: one-shot C_Timer.After(0) with pending guard, zero allocation
+local function MSUF_BarsMenu_QueueScrollUpdate()
+    local host = barGroupHost
+    if not host then return end
+    if not (host._msufBarsScroll or _G.MSUF_BarsMenuScrollFrame) then return end
+    if host._msufBarsScrollQueued then return end
+    host._msufBarsScrollQueued = true
+    if C_Timer and C_Timer.After then C_Timer.After(0, _BarsScrollRun) else _BarsScrollRun() end
+end
 local function MSUF_FramesMenu_QueueScrollUpdate()
     local host = frameGroupHost
     if not host then return end
-    local scroll = host._msufFramesScroll
-    local child  = host._msufFramesScrollChild
-    if not (scroll and child and child.SetHeight) then return end
-
     if host._msufFramesScrollQueued then return end
     host._msufFramesScrollQueued = true
-
-    local function run()
-        host._msufFramesScrollQueued = false
-        if not (scroll and child) then return end
-
-        -- Measure from scroll child top to the lowest visible group box bottom.
-        local top = child.GetTop and child:GetTop()
-        if not top then return end
-
-        local lowest = top
-        local content = host._msufFramesContent
-        if content then
-            local regions = { content:GetChildren() }
-            for i = 1, #regions do
-                local r = regions[i]
-                if r and r.IsShown and r:IsShown() and r.GetBottom then
-                    local b = r:GetBottom()
-                    if b and b < lowest then lowest = b end
-                end
-            end
-        end
-
-        local h = math.ceil((top - lowest) + 32)
-        if h < 500 then h = 500 end
-        child:SetHeight(h)
-
-        local w = scroll:GetWidth()
-        if w and w > 1 then child:SetWidth(w) end
-
-        if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
-        if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
-    end
-
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, run)
-    else
-        run()
-    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, _FramesScrollRun) else _FramesScrollRun() end
 end
-
--- ---------------------------------------------------------------------------
--- Castbar menu: scroll container (same pattern as Frames/Bars menus)
--- ---------------------------------------------------------------------------
 local function MSUF_CastbarMenu_QueueScrollUpdate()
     local host = castbarGroupHost
     if not host then return end
-    local scroll = host._msufCastbarScroll
-    local child  = host._msufCastbarScrollChild
-    if not (scroll and child and child.SetHeight) then return end
-
     if host._msufCastbarScrollQueued then return end
     host._msufCastbarScrollQueued = true
-
-    local function run()
-        host._msufCastbarScrollQueued = false
-        if not (scroll and child) then return end
-
-        local top = child.GetTop and child:GetTop()
-        if not top then return end
-
-        local lowest = top
-        local content = host._msufCastbarContent
-        if content then
-            local regions = { content:GetChildren() }
-            for i = 1, #regions do
-                local r = regions[i]
-                if r and r.IsShown and r:IsShown() and r.GetBottom then
-                    local b = r:GetBottom()
-                    if b and b < lowest then lowest = b end
-                end
-            end
-        end
-
-        local h = math.ceil((top - lowest) + 32)
-        if h < 500 then h = 500 end
-        child:SetHeight(h)
-
-        local w = scroll:GetWidth()
-        if w and w > 1 then child:SetWidth(w) end
-
-        if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
-        if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
-    end
-
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, run)
-    else
-        run()
-    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, _CastbarScrollRun) else _CastbarScrollRun() end
 end
 
 -- SharedMedia helper (LSM is initialized in MSUF_Libs.lua)
@@ -303,14 +248,13 @@ local function MSUF_KillMenuPreviewBar(bar)
     bar.Show = function()   end
     bar.SetShown = function()   end
  end
--- Call into main/module font refresh (main chunk may keep this local; main exports MSUF_UpdateAllFonts)
+-- Call into main/module font refresh (cached on first successful resolve)
+local _cachedUpdateAllFonts = false  -- false = not yet resolved
 local function MSUF_CallUpdateAllFonts()
-    local fn
-    if _G then fn = _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts end
-    if (not fn) and ns and ns.MSUF_UpdateAllFonts then
-        fn = ns.MSUF_UpdateAllFonts
+    if _cachedUpdateAllFonts == false then
+        _cachedUpdateAllFonts = _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts or (ns and ns.MSUF_UpdateAllFonts) or nil
     end
-    if type(fn) == "function" then return fn() end
+    if _cachedUpdateAllFonts then return _cachedUpdateAllFonts() end
  end
 -- Local number parser (Options chunk cant rely on main-file locals)
 local function MSUF_GetNumber(text, default, minVal, maxVal)
@@ -330,11 +274,11 @@ function MSUF_RegisterOptionsCategoryLazy()
     if _G then _G.MSUF_SLASHMENU_ONLY = true end
     if not Settings or not Settings.RegisterCanvasLayoutCategory then  return end
     -- Root (AddOns list) panel: lightweight launcher with a single button.
-    local launcher = (_G and _G.MSUF_LauncherPanel) or CreateFrame("Frame")
+    local launcher = (_G.MSUF_LauncherPanel) or CreateFrame("Frame")
     if _G then _G.MSUF_LauncherPanel = launcher end
     launcher.name = "Midnight Simple Unit Frames"
     -- Register the main category now (cheap) so users can find MSUF in Blizzard Settings.
-    local rootCat = (_G and _G.MSUF_SettingsCategory) or nil
+    local rootCat = (_G.MSUF_SettingsCategory) or nil
     if not rootCat then
         local cat = Settings.RegisterCanvasLayoutCategory(launcher, launcher.name)
         Settings.RegisterAddOnCategory(cat)
@@ -347,19 +291,19 @@ function MSUF_RegisterOptionsCategoryLazy()
     local function MSUF_RunAfterCombat(fn)
         if InCombatLockdown and InCombatLockdown() then
             if _G then _G.MSUF_PendingOpenAfterCombat = fn end
-            local f = _G and _G.MSUF_CombatDeferFrame
+            local f = _G.MSUF_CombatDeferFrame
             if not f then
                 f = CreateFrame("Frame")
                 if _G then _G.MSUF_CombatDeferFrame = f end
                 f:RegisterEvent("PLAYER_REGEN_ENABLED")
                 f:SetScript("OnEvent", function(self)
-                    local pending = _G and _G.MSUF_PendingOpenAfterCombat
+                    local pending = _G.MSUF_PendingOpenAfterCombat
                     if pending then
                         _G.MSUF_PendingOpenAfterCombat = nil
                         pending()
                     end
                     -- Zero combat overhead: unregister when nothing is pending
-                    if not (_G and _G.MSUF_PendingOpenAfterCombat) then
+                    if not (_G.MSUF_PendingOpenAfterCombat) then
                         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
                         self:SetScript("OnEvent", nil)
                         if _G then _G.MSUF_CombatDeferFrame = nil end
@@ -445,7 +389,7 @@ function CreateOptionsPanel()
     -- Run all deferred inits from split-out Options files (idempotent; zero cost after first call).
     ns.MSUF_Options_EnsureLoaded()
     -- If the panel was already fully built, just refresh it.
-    if _G and _G.MSUF_OptionsPanel and _G.MSUF_OptionsPanel.__MSUF_FullBuilt then
+    if _G.MSUF_OptionsPanel and _G.MSUF_OptionsPanel.__MSUF_FullBuilt then
         local p = _G.MSUF_OptionsPanel
         if p.LoadFromDB then p:LoadFromDB() end
          return p
@@ -465,7 +409,7 @@ end
 local function MSUF_Options_RequestLayoutForKey(unitKey, reason, urgent)
     unitKey = MSUF_Options_NormalizeUnitKey(unitKey)
     if type(unitKey) ~= "string" then  return false end
-    local fn = _G and _G.MSUF_UFCore_RequestLayoutForUnit
+    local fn = _G.MSUF_UFCore_RequestLayoutForUnit
     if type(fn) == "function" then
         if urgent == nil then urgent = MSUF_Options_IsUrgentUnitKey(unitKey) end
         -- Signature is flexible (extra args are ignored safely).
@@ -483,9 +427,10 @@ local function MSUF_Options_RequestLayoutForKey(unitKey, reason, urgent)
     end
      return false
 end
+local _ALL_UNIT_KEYS = { "player", "target", "focus", "targettarget", "pet", "boss" }
 local function MSUF_Options_RequestLayoutAll(reason)
-    local keys = { "player", "target", "focus", "targettarget", "pet", "boss" }
-    for _, k in ipairs(keys) do
+    for i = 1, #_ALL_UNIT_KEYS do
+        local k = _ALL_UNIT_KEYS[i]
         MSUF_Options_RequestLayoutForKey(k, reason or "OPTIONS_ALL", MSUF_Options_IsUrgentUnitKey(k))
     end
  end
@@ -525,7 +470,7 @@ local function MSUF_UpdatePowerBarBorderSizeFromEdit(editBox)
         ApplyAllSettings()
     end
  end
-panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
+panel = (_G.MSUF_OptionsPanel) or CreateFrame("Frame")
     _G.MSUF_OptionsPanel = panel
     panel.name = "Midnight Simple Unit Frames"
     title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -547,7 +492,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
         ns.MSUF_MainSearchBox = searchBox
         ns.MSUF_SearchAnchor  = searchBox
     end
-    if (_G and _G.MSUF_SLASHMENU_ONLY) then
+    if (_G.MSUF_SLASHMENU_ONLY) then
         -- When hosted by the Slash Menu, do not render legacy header/search UI.
         if title and title.Hide then title:Hide() end
         if sub and sub.Hide then sub:Hide() end
@@ -723,7 +668,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     local UNIT_FRAME_KEYS = { player=true, target=true, targettarget=true, focus=true, pet=true, boss=true }
     local buttons = {}
     local editModeButton
-    local __MSUF_SLASH_ONLY = (_G and _G.MSUF_SLASHMENU_ONLY) and true or false
+    local __MSUF_SLASH_ONLY = (_G.MSUF_SLASHMENU_ONLY) and true or false
     local function GetLabelForKey(key)
         if key == "player" then
              return "Player"
@@ -754,43 +699,56 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
         end
          return key
     end
+    -- Tab→group lookup table (resolved once; eliminates if/elseif chain)
+    local _tabGroupMap = {
+        fonts       = fontGroup,
+        bars        = barGroupHost,
+        classpower  = classPowerGroupHost,
+        auras       = auraGroup,
+        castbar     = castbarGroupHost,
+        misc        = miscGroup,
+        profiles    = profileGroup,
+        -- "frames" / unit keys → frameGroupHost (default below)
+    }
+    local _activeVisibleGroup = nil
+    -- All group refs for first-call bulk hide
+    local _allGroups = { frameGroupHost, fontGroup, auraGroup, castbarGroupHost, barGroupHost, classPowerGroupHost, miscGroup, profileGroup }
+
     local function UpdateGroupVisibility()
-        -- Hide all instantly, then FadeIn the active group
-        frameGroupHost:Hide()
-        fontGroup:Hide()
-        auraGroup:Hide()
-        castbarGroupHost:Hide()
-        barGroupHost:Hide()
-        if classPowerGroupHost then classPowerGroupHost:Hide() end
-        miscGroup:Hide()
-        profileGroup:Hide()
-        if currentTabKey == "fonts" then
-            _TFadeIn(fontGroup, TRANS_TAB)
-        elseif currentTabKey == "bars" then
-            _TFadeIn(barGroupHost, TRANS_TAB)
-        elseif currentTabKey == "classpower" then
-            _TFadeIn(classPowerGroupHost, TRANS_TAB)
-        elseif currentTabKey == "auras" then
-            _TFadeIn(auraGroup, TRANS_TAB)
-        elseif currentTabKey == "castbar" then
-            -- Reset scroll to top when switching to castbar tab.
+        local newGroup = _tabGroupMap[currentTabKey] or frameGroupHost
+
+        if not _activeVisibleGroup then
+            -- First call: hide ALL groups (they're all visible after build)
+            for i = 1, #_allGroups do
+                local g = _allGroups[i]
+                if g and g ~= newGroup then g:Hide() end
+            end
+        elseif _activeVisibleGroup ~= newGroup then
+            -- Subsequent calls: only hide the previous one
+            _activeVisibleGroup:Hide()
+        end
+        _activeVisibleGroup = newGroup
+
+        -- Tab-specific pre-show: reset scroll to top on tab entry
+        if currentTabKey == "castbar" then
             local cbScroll = castbarGroupHost._msufCastbarScroll
             if cbScroll and cbScroll.SetVerticalScroll then
                 cbScroll:SetVerticalScroll(0)
             end
-            _TFadeIn(castbarGroupHost, TRANS_TAB)
-            MSUF_CastbarMenu_QueueScrollUpdate()
-        elseif currentTabKey == "misc" then
-            _TFadeIn(miscGroup, TRANS_TAB)
-        elseif currentTabKey == "profiles" then
-            _TFadeIn(profileGroup, TRANS_TAB)
-        else
-            -- Reset scroll to top when switching unit tabs.
+        elseif not _tabGroupMap[currentTabKey] then
+            -- Frames / unit tab
             local frScroll = frameGroupHost._msufFramesScroll
             if frScroll and frScroll.SetVerticalScroll then
                 frScroll:SetVerticalScroll(0)
             end
-            _TFadeIn(frameGroupHost, TRANS_TAB)
+        end
+
+        _TFadeIn(newGroup, TRANS_TAB)
+
+        -- Tab-specific post-show
+        if currentTabKey == "castbar" then
+            MSUF_CastbarMenu_QueueScrollUpdate()
+        elseif not _tabGroupMap[currentTabKey] then
             -- Player-only layout: hide the old right-column offset sliders and show the compact group.
             local isUnitFrame = (UNIT_FRAME_KEYS[currentKey] == true)
             if panel and panel.playerTextLayoutGroup then panel.playerTextLayoutGroup:SetShown(isUnitFrame) end
@@ -1510,7 +1468,6 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
     slider.editBox = eb
     eb:SetFontObject(GameFontHighlightSmall)
     eb:SetTextColor(1, 1, 1, 1)
-    slider.editBox = eb
     local function ApplyEditBoxValue()
         local txt = eb:GetText()
         local val = tonumber(txt)
@@ -1570,10 +1527,8 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
             value     = math.floor(value + 0.5)
             formatted = tostring(value)
         else
-            local precision  = 2
-            local multiplier = 10 ^ precision
-            value     = math.floor(value * multiplier + 0.5) / multiplier
-            formatted = string.format("%." .. precision .. "f", value)
+            value     = math.floor(value * 100 + 0.5) * 0.01
+            formatted = string.format("%.2f", value)
         end
         if self.editBox and not self.editBox:HasFocus() then
             local cur = self.editBox:GetText()
@@ -1582,7 +1537,6 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
         if self.onValueChanged then self.onValueChanged(self, value) end
         if self._msufUserChange then
             self._msufUserChange = nil
-            MSUF_ScheduleReloadRecommend()
         end
      end)
     MSUF_StyleSlider(slider)
@@ -1616,9 +1570,9 @@ function MSUF_SetSliderVisibility(slider, show)
 local function MSUF_SetLabeledSliderEnabled(slider, enabled)
     if not slider then  return end
     local name = (slider.GetName and slider:GetName())
-    local label = (name and _G and _G[name .. "Text"]) or slider.label or slider.Text or slider.text
-    local low  = (name and _G and _G[name .. "Low"])  or nil
-    local high = (name and _G and _G[name .. "High"]) or nil
+    local label = (name and _G[name .. "Text"]) or slider.label or slider.Text or slider.text
+    local low  = (name and _G[name .. "Low"])  or nil
+    local high = (name and _G[name .. "High"]) or nil
     local function SetBtnEnabled(btn, en)
         if not btn then  return end
         if btn.SetEnabled then btn:SetEnabled(en) end
@@ -1678,7 +1632,7 @@ MSUF_SetLabeledSliderValue = function(slider, value)
 local function MSUF_SetDropDownEnabled(dropdown, labelFS, enabled)
     if not dropdown then  return end
     local name = (dropdown.GetName and dropdown:GetName())
-    local ddText = (name and _G and _G[name .. "Text"]) or dropdown.Text
+    local ddText = (name and _G[name .. "Text"]) or dropdown.Text
     local function SetFSColor(fs, r, g, b)
         if fs and fs.SetTextColor then fs:SetTextColor(r, g, b) end
      end
@@ -1769,7 +1723,7 @@ end
 if _G and not _G.MSUF_Options_BindGeneralBoolCheck then
     function _G.MSUF_Options_BindGeneralBoolCheck(cb, dbKey, applyFn, syncFn, onShow)
         if not cb or type(dbKey) ~= "string" then  return end
-        if _G and _G.MSUF_Options_BindDBBoolCheck then
+        if _G.MSUF_Options_BindDBBoolCheck then
             return _G.MSUF_Options_BindDBBoolCheck(cb, "general." .. dbKey, applyFn, syncFn, onShow)
         end
      end
@@ -2274,50 +2228,56 @@ panel.infoTooltipDisableCheck = infoTooltipDisableCheck
         EnsureDB()
         g = MSUF_DB.general or {}
         bars = MSUF_DB.bars    or {}
-        anchorEdit = self.anchorEdit
-        anchorCheck = self.anchorCheck
-        fontDrop = self.fontDrop
-        fontColorDrop = self.fontColorDrop
-        nameFontSizeSlider = self.nameFontSizeSlider
-        hpFontSizeSlider = self.hpFontSizeSlider
-        powerFontSizeSlider = self.powerFontSizeSlider
-        fontSizeSlider = self.fontSizeSlider
-        boldCheck = self.boldCheck
-        nameClassColorCheck = self.nameClassColorCheck
-        npcNameRedCheck = self.npcNameRedCheck
-        shortenNamesCheck = self.shortenNamesCheck
-        textBackdropCheck = self.textBackdropCheck
-        highlightEnableCheck = self.highlightEnableCheck
-        highlightColorDrop = self.highlightColorDrop
-        castbarSpellNameFontSizeSlider = self.castbarSpellNameFontSizeSlider
-        castbarSpellNameFontSizeSlider = self.castbarSpellNameFontSizeSlider
-        castbarShakeIntensitySlider = self.castbarShakeIntensitySlider
-        gradientCheck = self.gradientCheck
-        powerGradientCheck = self.powerGradientCheck
-        gradientDirPad = self.gradientDirPad
-        targetPowerBarCheck = self.targetPowerBarCheck
-        bossPowerBarCheck = self.bossPowerBarCheck
-        playerPowerBarCheck = self.playerPowerBarCheck
-        focusPowerBarCheck = self.focusPowerBarCheck
-        powerBarHeightEdit = self.powerBarHeightEdit
-        hpModeDrop = self.hpModeDrop
-        barOutlineThicknessSlider = self.barOutlineThicknessSlider
-	        local aggroOutlineDrop = self.aggroOutlineDrop
-			local dispelOutlineDrop = self.dispelOutlineDrop
-        bossSpacingSlider = self.bossSpacingSlider
-	        if aggroOutlineDrop and aggroOutlineDrop._msufAggroOutlineOptions and aggroOutlineDrop._msufAggroOutlineGet then
-	            MSUF_SyncSimpleDropdown(aggroOutlineDrop, aggroOutlineDrop._msufAggroOutlineOptions, aggroOutlineDrop._msufAggroOutlineGet)
-				if self.aggroTestCheck then self.aggroTestCheck:SetChecked((_G and _G.MSUF_AggroBorderTestMode) and true or false) end
-	        end
-			if dispelOutlineDrop and dispelOutlineDrop._msufDispelOutlineOptions and dispelOutlineDrop._msufDispelOutlineGet then
-				MSUF_SyncSimpleDropdown(dispelOutlineDrop, dispelOutlineDrop._msufDispelOutlineOptions, dispelOutlineDrop._msufDispelOutlineGet)
-				if self.dispelTestCheck then self.dispelTestCheck:SetChecked((_G and _G.MSUF_DispelBorderTestMode) and true or false) end
-			end
-			local purgeOutlineDrop = self.purgeOutlineDrop
-			if purgeOutlineDrop and purgeOutlineDrop._msufPurgeOutlineOptions and purgeOutlineDrop._msufPurgeOutlineGet then
-				MSUF_SyncSimpleDropdown(purgeOutlineDrop, purgeOutlineDrop._msufPurgeOutlineOptions, purgeOutlineDrop._msufPurgeOutlineGet)
-			end
-			if self.purgeTestCheck then self.purgeTestCheck:SetChecked((_G and _G.MSUF_PurgeBorderTestMode) and true or false) end
+        -- Panel widget refs are stable after build; only resolve once.
+        if not self._msufUpvaluesCached then
+            self._msufUpvaluesCached = true
+            anchorEdit = self.anchorEdit
+            anchorCheck = self.anchorCheck
+            fontDrop = self.fontDrop
+            fontColorDrop = self.fontColorDrop
+            nameFontSizeSlider = self.nameFontSizeSlider
+            hpFontSizeSlider = self.hpFontSizeSlider
+            powerFontSizeSlider = self.powerFontSizeSlider
+            fontSizeSlider = self.fontSizeSlider
+            boldCheck = self.boldCheck
+            nameClassColorCheck = self.nameClassColorCheck
+            npcNameRedCheck = self.npcNameRedCheck
+            shortenNamesCheck = self.shortenNamesCheck
+            textBackdropCheck = self.textBackdropCheck
+            highlightEnableCheck = self.highlightEnableCheck
+            highlightColorDrop = self.highlightColorDrop
+            castbarSpellNameFontSizeSlider = self.castbarSpellNameFontSizeSlider
+            castbarShakeIntensitySlider = self.castbarShakeIntensitySlider
+            gradientCheck = self.gradientCheck
+            powerGradientCheck = self.powerGradientCheck
+            gradientDirPad = self.gradientDirPad
+            targetPowerBarCheck = self.targetPowerBarCheck
+            bossPowerBarCheck = self.bossPowerBarCheck
+            playerPowerBarCheck = self.playerPowerBarCheck
+            focusPowerBarCheck = self.focusPowerBarCheck
+            powerBarHeightEdit = self.powerBarHeightEdit
+            hpModeDrop = self.hpModeDrop
+            barOutlineThicknessSlider = self.barOutlineThicknessSlider
+            bossSpacingSlider = self.bossSpacingSlider
+        end
+        -- Sync aggro/dispel/purge dropdown states (reads directly from panel fields)
+        do
+            local aggroDD = self.aggroOutlineDrop
+            if aggroDD and aggroDD._msufAggroOutlineOptions and aggroDD._msufAggroOutlineGet then
+                MSUF_SyncSimpleDropdown(aggroDD, aggroDD._msufAggroOutlineOptions, aggroDD._msufAggroOutlineGet)
+                if self.aggroTestCheck then self.aggroTestCheck:SetChecked(_G.MSUF_AggroBorderTestMode and true or false) end
+            end
+            local dispelDD = self.dispelOutlineDrop
+            if dispelDD and dispelDD._msufDispelOutlineOptions and dispelDD._msufDispelOutlineGet then
+                MSUF_SyncSimpleDropdown(dispelDD, dispelDD._msufDispelOutlineOptions, dispelDD._msufDispelOutlineGet)
+                if self.dispelTestCheck then self.dispelTestCheck:SetChecked(_G.MSUF_DispelBorderTestMode and true or false) end
+            end
+            local purgeDD = self.purgeOutlineDrop
+            if purgeDD and purgeDD._msufPurgeOutlineOptions and purgeDD._msufPurgeOutlineGet then
+                MSUF_SyncSimpleDropdown(purgeDD, purgeDD._msufPurgeOutlineOptions, purgeDD._msufPurgeOutlineGet)
+            end
+            if self.purgeTestCheck then self.purgeTestCheck:SetChecked(_G.MSUF_PurgeBorderTestMode and true or false) end
+        end
 			-- Deferred hook: if slash menu window was created after panel build, hook it now.
 			do
 				local sw = _G.MSUF_StandaloneOptionsWindow
@@ -2463,12 +2423,12 @@ end
 SetCurrentKey("player")
 panel:LoadFromDB()
 MSUF_CallUpdateAllFonts()
-    if not (_G and _G.MSUF_SLASHMENU_ONLY) then
+    if not (_G.MSUF_SLASHMENU_ONLY) then
     -- Ensure root category exists (launcher). Never re-register the root against the heavy Legacy panel.
-    local rootCat = (_G and _G.MSUF_SettingsCategory) or MSUF_SettingsCategory
+    local rootCat = (_G.MSUF_SettingsCategory) or MSUF_SettingsCategory
     if not rootCat and Settings and Settings.RegisterCanvasLayoutCategory then
         -- Emergency fallback (should normally be created by MSUF_RegisterOptionsCategoryLazy)
-        local launcher = (_G and _G.MSUF_LauncherPanel) or CreateFrame("Frame")
+        local launcher = (_G.MSUF_LauncherPanel) or CreateFrame("Frame")
         if _G then _G.MSUF_LauncherPanel = launcher end
         launcher.name = "Midnight Simple Unit Frames"
         rootCat = Settings.RegisterCanvasLayoutCategory(launcher, launcher.name)
@@ -2479,7 +2439,7 @@ MSUF_CallUpdateAllFonts()
     if ns then ns.MSUF_MainCategory = rootCat end
     -- Ensure Legacy subcategory exists for this heavy panel.
     if Settings and Settings.RegisterCanvasLayoutSubcategory and rootCat then
-        if not (_G and _G.MSUF_LegacyCategory) then
+        if not (_G.MSUF_LegacyCategory) then
             local legacyCat = Settings.RegisterCanvasLayoutSubcategory(rootCat, panel, (panel.name or "Legacy"))
             Settings.RegisterAddOnCategory(legacyCat)
             if _G then _G.MSUF_LegacyCategory = legacyCat end

@@ -4,13 +4,13 @@
 -- Zero feature regression: same widgets, same DB keys, same behaviors.
 -- ---------------------------------------------------------------------------
 local addonName, addonNS = ...
-ns = (_G and _G.MSUF_NS) or addonNS or ns or {}
+ns = (_G.MSUF_NS) or addonNS or ns or {}
 if _G then _G.MSUF_NS = ns end
 
 -- ---------------------------------------------------------------------------
 -- Localization helper (keys are English UI strings; fallback = key)
 -- ---------------------------------------------------------------------------
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 local L = ns.L
 if not getmetatable(L) then
     setmetatable(L, { __index = function(t, k) return k end })
@@ -1555,7 +1555,7 @@ local function _MSUF_TextModeAllowsSpacer(mode)
     end
     local function _MSUF_GetSpacerMax(spec, unitKey)
         local mv = spec.maxDefault or 1000
-        local fn = spec.maxFuncName and _G and _G[spec.maxFuncName]
+        local fn = spec.maxFuncName and _G[spec.maxFuncName]
         if type(fn) == "function" then
             local ok, out = pcall(fn, unitKey)
             if ok and type(out) == "number" and out > 0 then mv = out end
@@ -1959,8 +1959,8 @@ local function _AggroOutline_Set(val)
         _G.MSUF_AggroOutline_ApplyEventRegistration()
     end
     -- Refresh outlines immediately (cheap).
-    local fn = _G and _G.MSUF_RefreshRareBarVisuals
-    local frames = _G and _G.MSUF_UnitFrames
+    local fn = _G.MSUF_RefreshRareBarVisuals
+    local frames = _G.MSUF_UnitFrames
     if type(fn) == "function" and frames then
         local t = frames.target
         if t and t.unit == "target" then fn(t) end
@@ -3100,7 +3100,7 @@ MSUF_BarsApplyGradient = function()
     -- Heavy-visual work is throttled; if we apply inside the throttle window and nothing else
     -- triggers a future update tick, gradients can appear to "only apply after /reload".
     local function ForceRepaintOnce()
-        local frames = _G and _G.MSUF_UnitFrames
+        local frames = _G.MSUF_UnitFrames
         if type(frames) ~= "table" then
             if ns and ns.MSUF_RefreshAllFrames then ns.MSUF_RefreshAllFrames() end
              return
@@ -3134,7 +3134,7 @@ MSUF_BarsApplyGradient = function()
         end
     end
  end
-if _G and _G.MSUF_Options_BindDBBoolCheck then
+if _G.MSUF_Options_BindDBBoolCheck then
     _G.MSUF_Options_BindDBBoolCheck(gradientCheck, "general.enableGradient", MSUF_BarsApplyGradient, MSUF_SyncBarsTabToggles)
     _G.MSUF_Options_BindDBBoolCheck(powerGradientCheck, "general.enablePowerGradient", MSUF_BarsApplyGradient, MSUF_SyncBarsTabToggles)
 end
@@ -3190,7 +3190,7 @@ do
         end
     end
 end
-    if _G and _G.MSUF_Options_BindDBBoolCheck then
+    if _G.MSUF_Options_BindDBBoolCheck then
         local function Bind(cb, path, apply)
             if cb then _G.MSUF_Options_BindDBBoolCheck(cb, path, apply or ApplyAllSettings, MSUF_SyncBarsTabToggles) end
          end
