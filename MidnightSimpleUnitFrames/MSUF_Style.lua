@@ -1930,6 +1930,168 @@ do
   ns.MSUF_RefreshDropdownSkinMode = Style.RefreshDropdownSkinMode
   _G.MSUF_RefreshDropdownSkinMode = Style.RefreshDropdownSkinMode
 
+
+  -- -------------------------------------------------------------------------
+  -- Old/native dropdown hardening
+  --   Goal: keep Blizzard old-mode behavior, but make MSUF-owned dropdown
+  --   selection commits deterministic and isolated from reused global list
+  --   frame state. This does not restyle Blizzard lists; it only wraps the
+  --   selection pipeline for MSUF-owned old-mode dropdowns.
+  -- -------------------------------------------------------------------------
+  local function _MSUF_IsProbablyOwnedDropdown(drop)
+    if not drop then return false end
+    if drop.__msufMSUFDropdown or drop.__msufDropdownHardening then return true end
+    local function HasMSUFName(frame)
+      local n = frame and frame.GetName and frame:GetName() or nil
+      return type(n) == "string" and (n:find("MSUF", 1, true) or n:find("MidnightSimpleUnitFrames", 1, true))
+    end
+    if HasMSUFName(drop) then return true end
+    local parent = drop
+    for _ = 1, 8 do
+      parent = parent and parent.GetParent and parent:GetParent() or nil
+      if not parent then break end
+      if HasMSUFName(parent) then return true end
+    end
+    return false
+  end
+
+  local function _MSUF_ShouldHardenOldDropdown(drop)
+    if Style.UseModernDropdowns() then return false end
+    return _MSUF_IsProbablyOwnedDropdown(drop)
+  end
+
+  local function _MSUF_CopyDropdownInfo(info)
+    local copy = {}
+    for k, v in pairs(info or {}) do
+      copy[k] = v
+    end
+    return copy
+  end
+
+  local function _MSUF_GetButtonLabelText(btn)
+    if not btn then return nil end
+    local fs = _G[btn:GetName() .. "NormalText"]
+    if fs and fs.GetText then
+      local t = fs:GetText()
+      if type(t) == "string" and t ~= "" then return t end
+    end
+    if btn.GetText then
+      local t = btn:GetText()
+      if type(t) == "string" and t ~= "" then return t end
+    end
+    return nil
+  end
+
+  local _msuf_unpack = table.unpack or unpack
+
+  local function _MSUF_ForceDropdownVisualCommit(drop, value, text)
+    if not drop or not _MSUF_ShouldHardenOldDropdown(drop) then return end
+    if value ~= nil and type(_G.UIDropDownMenu_SetSelectedValue) == "function" then
+      _G.UIDropDownMenu_SetSelectedValue(drop, value)
+    end
+    if text ~= nil and type(_G.UIDropDownMenu_SetText) == "function" then
+      _G.UIDropDownMenu_SetText(drop, text)
+    end
+  end
+
+  local function _MSUF_HardenedDropdownSelect(info, btn, arg1, arg2, checked)
+    local original = info and info._msufOrigFunc or nil
+    if type(original) ~= "function" then return end
+
+    local drop = (info and info._msufOwnerDropdown) or _G.UIDROPDOWNMENU_OPEN_MENU
+    if not _MSUF_ShouldHardenOldDropdown(drop) then
+      return original(btn, arg1, arg2, checked)
+    end
+
+    local value = (btn and btn.value) or (info and info.value) or arg1
+    local text = (info and info.text) or _MSUF_GetButtonLabelText(btn)
+    if text == "" then text = nil end
+
+    if drop then
+      if drop.__msufDropdownSelectInFlight then
+        return original(btn, arg1, arg2, checked)
+      end
+      drop.__msufDropdownSelectInFlight = true
+      drop.__msufLastSelectValue = value
+      drop.__msufLastSelectText = text
+    end
+
+    local results
+    local ok, err = xpcall(function()
+      results = { original(btn, arg1, arg2, checked) }
+    end, function(e)
+      return e
+    end)
+
+    if drop then
+      drop.__msufDropdownSelectInFlight = nil
+    end
+
+    _MSUF_ForceDropdownVisualCommit(drop, value, text)
+
+    local function Validate()
+      _MSUF_ForceDropdownVisualCommit(drop, value, text)
+    end
+    if C_Timer and C_Timer.After then
+      C_Timer.After(0, Validate)
+    else
+      Validate()
+    end
+
+    if not ok then
+      error(err, 0)
+    end
+    return _msuf_unpack(results or {})
+  end
+
+  if type(_G.UIDropDownMenu_Initialize) == "function" and type(_G.UIDropDownMenu_AddButton) == "function" and not _G.__MSUF_OLD_DROPDOWN_HARDENING_INSTALLED then
+    _G.__MSUF_OLD_DROPDOWN_HARDENING_INSTALLED = true
+
+    local _orig_UIDropDownMenu_Initialize = _G.UIDropDownMenu_Initialize
+    local _orig_UIDropDownMenu_AddButton = _G.UIDropDownMenu_AddButton
+
+    _G.UIDropDownMenu_Initialize = function(drop, initFunc, displayMode, level, menuList)
+      if not (_MSUF_ShouldHardenOldDropdown(drop) and type(initFunc) == "function") then
+        return _orig_UIDropDownMenu_Initialize(drop, initFunc, displayMode, level, menuList)
+      end
+
+      drop.__msufMSUFDropdown = true
+      drop.__msufDropdownHardening = true
+
+      local function WrappedInitialize(self, initLevel, initMenuList)
+        local prevAddButton = _G.UIDropDownMenu_AddButton
+        _G.UIDropDownMenu_AddButton = function(info, addLevel)
+          if not (_MSUF_ShouldHardenOldDropdown(drop) and type(info) == "table") then
+            return _orig_UIDropDownMenu_AddButton(info, addLevel)
+          end
+
+          local copy = _MSUF_CopyDropdownInfo(info)
+          copy._msufOwnerDropdown = drop
+          if type(copy.func) == "function" and not copy.hasArrow and not copy.notCheckable and not copy.isTitle then
+            copy._msufOrigFunc = copy.func
+            copy.func = function(btn, a1, a2, isChecked)
+              return _MSUF_HardenedDropdownSelect(copy, btn, a1, a2, isChecked)
+            end
+          end
+          return _orig_UIDropDownMenu_AddButton(copy, addLevel)
+        end
+
+        local ok, err = xpcall(function()
+          return initFunc(self, initLevel, initMenuList)
+        end, function(e)
+          return e
+        end)
+
+        _G.UIDropDownMenu_AddButton = prevAddButton
+        if not ok then
+          error(err, 0)
+        end
+      end
+
+      return _orig_UIDropDownMenu_Initialize(drop, WrappedInitialize, displayMode, level, menuList)
+    end
+  end
+
   function Style.QueueDropdownStyleMode(mode)
     local normalized = _MSUF_NormalizeDropdownStyleMode(mode)
     local db = _MSUF_GetDB()
