@@ -77,6 +77,13 @@ function Style.SetEnabled(enabled)
 local function _MSUF_GetDropdownStyleMode()
   local db = _MSUF_GetDB()
   local g = db and db.general or nil
+  if g and g.dropdownStyleModePending ~= nil then
+    local pending = g.dropdownStyleModePending
+    if pending == "blizzard" or pending == "legacy" then pending = "old" end
+    if pending ~= "old" then pending = "msuf" end
+    g.dropdownStyleMode = pending
+    g.dropdownStyleModePending = nil
+  end
   local mode = g and g.dropdownStyleMode or nil
   if mode == "old" or mode == "blizzard" or mode == "legacy" then
     return "old"

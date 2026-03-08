@@ -80,6 +80,36 @@ end
         return MSUF_DB.gameplay
     end
 
+    local function EnsureDropdownStyleReloadPopup()
+        if not _G.StaticPopupDialogs then return end
+        if _G.StaticPopupDialogs["MSUF_RELOAD_DROPDOWN_STYLE"] then return end
+
+        _G.StaticPopupDialogs["MSUF_RELOAD_DROPDOWN_STYLE"] = {
+            text = "Changing the dropdown style rebuilds menu widgets.\n\nReload now to apply the new style cleanly. Choose Later to keep your choice and apply it on the next reload.",
+            button1 = "Reload",
+            button2 = "Later",
+            timeout = 0,
+            whileDead = 1,
+            hideOnEscape = 1,
+            preferredIndex = 3,
+            OnAccept = function()
+                local g = EnsureGeneral()
+                local pending = g.dropdownStyleModePending
+                if pending ~= nil then
+                    if pending == "old" or pending == "blizzard" or pending == "legacy" then
+                        g.dropdownStyleMode = "old"
+                    else
+                        g.dropdownStyleMode = "msuf"
+                    end
+                    g.dropdownStyleModePending = nil
+                end
+                if type(ReloadUI) == "function" then
+                    ReloadUI()
+                end
+            end,
+        }
+    end
+
 
     -------------------------------------------------------------------------
     -- UI helpers (kept local to this file; no feature split)
@@ -751,16 +781,29 @@ end
         fallbackText = "New MSUF dropdowns",
         get = function()
             local g = EnsureGeneral()
-            local mode = g.dropdownStyleMode
+            local mode = g.dropdownStyleModePending
+            if mode == nil then
+                mode = g.dropdownStyleMode
+            end
             if mode == "old" or mode == "blizzard" or mode == "legacy" then return "old" end
             return "msuf"
         end,
         set = function(v)
             local g = EnsureGeneral()
-            local mode = (v == "old") and "old" or "msuf"
-            g.dropdownStyleMode = mode
-            if _G.MSUF_SetDropdownStyleMode then
-                _G.MSUF_SetDropdownStyleMode(mode)
+            local active = g.dropdownStyleMode
+            if active == "blizzard" or active == "legacy" then active = "old" end
+            if active ~= "old" then active = "msuf" end
+
+            local desired = (v == "old") and "old" or "msuf"
+            if desired == active then
+                g.dropdownStyleModePending = nil
+                return
+            end
+
+            g.dropdownStyleModePending = desired
+            EnsureDropdownStyleReloadPopup()
+            if _G.StaticPopup_Show then
+                _G.StaticPopup_Show("MSUF_RELOAD_DROPDOWN_STYLE")
             end
         end,
     })
