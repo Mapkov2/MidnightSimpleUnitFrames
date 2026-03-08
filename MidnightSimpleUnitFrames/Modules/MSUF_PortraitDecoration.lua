@@ -71,18 +71,23 @@ end
 local function EnsureDecor(f)
     local d = f._msufPortraitDecor
     if d then return d end
+
+    -- Background frame (below portrait)
     d = CreateFrame("Frame", nil, f)
     d:SetFrameStrata(f:GetFrameStrata())
-    -- Background
     d.bg = d:CreateTexture(nil, "BACKGROUND", nil, -1)
     d.bg:SetTexture(TEX_WHITE8); d.bg:Hide()
-    -- Border overlay frame
+
+    -- Portrait container frame (portrait texture gets reparented here for strata elevation)
+    -- This ensures portrait renders ABOVE HP bar, power bar, absorb bars, text, etc.
+    d.portraitContainer = CreateFrame("Frame", nil, f)
+    d.portraitContainer:SetFrameStrata(f:GetFrameStrata())
+
+    -- Border overlay frame (above portrait container)
     d.borderFrame = CreateFrame("Frame", nil, f)
     d.borderFrame:SetFrameStrata(f:GetFrameStrata())
-    -- Shaped border (ring TGA for circle/diamond)
     d.shapedBorder = d.borderFrame:CreateTexture(nil, "OVERLAY", nil, 3)
     d.shapedBorder:Hide()
-    -- Square border (4 edges)
     d.edgeT = d.borderFrame:CreateTexture(nil, "OVERLAY", nil, 3)
     d.edgeB = d.borderFrame:CreateTexture(nil, "OVERLAY", nil, 3)
     d.edgeL = d.borderFrame:CreateTexture(nil, "OVERLAY", nil, 3)
@@ -90,6 +95,7 @@ local function EnsureDecor(f)
     local edges = { d.edgeT, d.edgeB, d.edgeL, d.edgeR }
     for i = 1, 4 do edges[i]:SetTexture(TEX_WHITE8); edges[i]:Hide() end
     d._edges = edges
+
     f._msufPortraitDecor = d
     return d
 end
@@ -102,17 +108,17 @@ local function ComputeAndApplyLayout(f, conf, portrait)
     local mode = conf.portraitMode or "OFF"
     if mode ~= "LEFT" and mode ~= "RIGHT" then return end
 
+    local d = f._msufPortraitDecor
     local anchor = f.hpBar or f
     if f._msufPowerBarReserved then anchor = f end
 
-    -- Size: auto or override
+    -- Size
     local h = conf.height or (f.GetHeight and f:GetHeight()) or 30
     local autoSize = math_max(16, h - 4)
     local sizeOvr = tonumber(R(conf, "portraitSizeOverride", 0)) or 0
     local size = (sizeOvr > 0) and math_max(16, sizeOvr) or autoSize
 
-    -- Fill Border: portrait grows to fill the border area
-    -- (border stays outset, portrait enlarges by 2*thickness to match)
+    -- Fill Border: portrait grows to include border thickness
     local fillBorder = R(conf, "portraitFillBorder", false)
     local bStyle = R(conf, "portraitBorderStyle", "NONE")
     if fillBorder and bStyle ~= "NONE" then
@@ -123,24 +129,58 @@ local function ComputeAndApplyLayout(f, conf, portrait)
     local ox = tonumber(R(conf, "portraitOffsetX", 0)) or 0
     local oy = tonumber(R(conf, "portraitOffsetY", 0)) or 0
 
-    portrait:ClearAllPoints()
-    portrait:SetSize(size, size)
-    if mode == "LEFT" then
-        portrait:SetPoint("RIGHT", anchor, "LEFT", ox, oy)
-    else
-        portrait:SetPoint("LEFT", anchor, "RIGHT", ox, oy)
+    -- Frame level hierarchy: portrait renders ABOVE hp bar, absorb, power bar, text.
+    -- hpBar = base+1, absorbBar = base+3, textFrame = base+4
+    -- bg = base+5, portraitContainer = base+6, borderFrame = base+7
+    local baseLevel = f.hpBar and f.hpBar:GetFrameLevel() or (f:GetFrameLevel() + 1)
+    if d then
+        d:SetFrameLevel(baseLevel + 5)
+        if d.portraitContainer then d.portraitContainer:SetFrameLevel(baseLevel + 6) end
+        d.borderFrame:SetFrameLevel(baseLevel + 7)
     end
 
+    -- Reparent portrait texture into elevated container (strata fix)
+    if d and d.portraitContainer then
+        local pc = d.portraitContainer
+        if portrait.GetParent and portrait:GetParent() ~= pc then
+            portrait:SetParent(pc)
+        end
+        -- Position the container frame
+        pc:ClearAllPoints()
+        pc:SetSize(size, size)
+        if mode == "LEFT" then
+            pc:SetPoint("RIGHT", anchor, "LEFT", ox, oy)
+        else
+            pc:SetPoint("LEFT", anchor, "RIGHT", ox, oy)
+        end
+        pc:Show()
+        -- Portrait texture fills its container
+        portrait:ClearAllPoints()
+        portrait:SetAllPoints(pc)
+        portrait:SetDrawLayer("ARTWORK", 0)
+    else
+        -- Fallback before decor exists
+        portrait:ClearAllPoints()
+        portrait:SetSize(size, size)
+        if mode == "LEFT" then
+            portrait:SetPoint("RIGHT", anchor, "LEFT", ox, oy)
+        else
+            portrait:SetPoint("LEFT", anchor, "RIGHT", ox, oy)
+        end
+    end
+
+    -- 3D model follows container
     local model = rawget(f, "portraitModel")
     if model and model.IsShown and model:IsShown() then
         if model.SetSize then model:SetSize(size, size) end
+        local target = (d and d.portraitContainer) or portrait
         if model.ClearAllPoints then
             model:ClearAllPoints()
-            if model.SetAllPoints then
-                model:SetAllPoints(portrait)
-            elseif model.SetPoint then
-                model:SetPoint("CENTER", portrait, "CENTER", 0, 0)
-            end
+            if model.SetAllPoints then model:SetAllPoints(target)
+            elseif model.SetPoint then model:SetPoint("CENTER", target, "CENTER", 0, 0) end
+        end
+        if d and d.portraitContainer and model.SetFrameLevel then
+            model:SetFrameLevel(d.portraitContainer:GetFrameLevel() + 1)
         end
     end
 end
@@ -265,6 +305,7 @@ local function MSUF_ApplyPortraitDecoration(f, unit, conf, existsForPortrait)
         local d = f._msufPortraitDecor
         if d then
             d:Hide(); d.bg:Hide(); d.shapedBorder:Hide(); d.borderFrame:Hide()
+            if d.portraitContainer then d.portraitContainer:Hide() end
             for i = 1, 4 do d._edges[i]:Hide() end
         end
         return
@@ -272,14 +313,25 @@ local function MSUF_ApplyPortraitDecoration(f, unit, conf, existsForPortrait)
 
     if not existsForPortrait then
         local d = f._msufPortraitDecor
-        if d then d:Hide(); d.borderFrame:Hide() end
+        if d then d:Hide(); d.borderFrame:Hide(); if d.portraitContainer then d.portraitContainer:Hide() end end
         return
     end
 
     -- Stamp gate (single combined stamp)
+    -- CRITICAL: also force re-apply if portrait is not in our container.
+    -- The parent system (MSUF_Portraits.lua) may reposition portrait directly
+    -- after our hook, breaking our container layout. Detect and force re-apply.
+    local d_check = f._msufPortraitDecor
+    local needsReparent = false
+    if d_check and d_check.portraitContainer then
+        if portrait.GetParent and portrait:GetParent() ~= d_check.portraitContainer then
+            needsReparent = true
+        end
+    end
+
     local stamp = FullStamp(conf)
     local uStamp = unit or ""
-    if f._msufDecoStamp == stamp and f._msufDecoUnitStamp == uStamp then return end
+    if not needsReparent and f._msufDecoStamp == stamp and f._msufDecoUnitStamp == uStamp then return end
     f._msufDecoStamp = stamp
     f._msufDecoUnitStamp = uStamp
 
@@ -333,11 +385,96 @@ local function HookMaybeUpdate()
         if not f or not conf then return end
         if (conf.portraitMode or "OFF") == "OFF" then
             local d = f._msufPortraitDecor
-            if d then d:Hide(); d.borderFrame:Hide() end
+            if d then d:Hide(); d.borderFrame:Hide(); if d.portraitContainer then d.portraitContainer:Hide() end end
         end
     end)
 end
 HookMaybeUpdate()
+
+-- ────────────────────────────────────────────────────────────
+-- Login/Reload safety: force decoration after all frames are created.
+-- Parent portrait system may override our container positioning during
+-- initial frame setup. Delayed RefreshAll guarantees decoration is last.
+-- ────────────────────────────────────────────────────────────
+do
+    local loginFrame = CreateFrame("Frame")
+    loginFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    loginFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+    loginFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
+    loginFrame:RegisterEvent("UNIT_PET")
+    loginFrame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+    loginFrame:SetScript("OnEvent", function(self, event, arg1)
+        if event == "PLAYER_ENTERING_WORLD" then
+            -- Full refresh with delay (frames may not exist yet)
+            local function InvalidateAndRefresh()
+                local keys = { "player", "target", "focus", "pet", "targettarget" }
+                for _, k in ipairs(keys) do
+                    local f = _G["MSUF_" .. k]
+                    if f then f._msufDecoStamp = nil; f._msufDecoUnitStamp = nil end
+                end
+                for i = 1, 5 do
+                    local f = _G["MSUF_boss" .. i]
+                    if f then f._msufDecoStamp = nil; f._msufDecoUnitStamp = nil end
+                end
+                if type(_G.MSUF_PortraitDecoration_RefreshAll) == "function" then
+                    _G.MSUF_PortraitDecoration_RefreshAll()
+                end
+            end
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.1, InvalidateAndRefresh)
+                C_Timer.After(0.5, InvalidateAndRefresh)
+            end
+        elseif event == "PLAYER_TARGET_CHANGED" then
+            -- Invalidate target + targettarget so decoration re-applies with new unit
+            local f = _G.MSUF_target
+            if f then f._msufDecoStamp = nil; f._msufDecoUnitStamp = nil end
+            local tot = _G.MSUF_targettarget or _G.MSUF_tot
+            if tot then tot._msufDecoStamp = nil; tot._msufDecoUnitStamp = nil end
+            -- Small delay: portrait texture updates slightly after event
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    if type(_G.MSUF_PortraitDecoration_SyncUnit) == "function" then
+                        _G.MSUF_PortraitDecoration_SyncUnit("target")
+                        _G.MSUF_PortraitDecoration_SyncUnit("targettarget")
+                    end
+                end)
+            end
+        elseif event == "PLAYER_FOCUS_CHANGED" then
+            local f = _G.MSUF_focus
+            if f then f._msufDecoStamp = nil; f._msufDecoUnitStamp = nil end
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    if type(_G.MSUF_PortraitDecoration_SyncUnit) == "function" then
+                        _G.MSUF_PortraitDecoration_SyncUnit("focus")
+                    end
+                end)
+            end
+        elseif event == "UNIT_PET" then
+            local f = _G.MSUF_pet
+            if f then f._msufDecoStamp = nil; f._msufDecoUnitStamp = nil end
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    if type(_G.MSUF_PortraitDecoration_SyncUnit) == "function" then
+                        _G.MSUF_PortraitDecoration_SyncUnit("pet")
+                    end
+                end)
+            end
+        elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
+            -- Boss frames
+            for i = 1, 5 do
+                local f = _G["MSUF_boss" .. i]
+                if f then f._msufDecoStamp = nil; f._msufDecoUnitStamp = nil end
+            end
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    if type(_G.MSUF_PortraitDecoration_SyncUnit) == "function" then
+                        _G.MSUF_PortraitDecoration_SyncUnit("boss")
+                    end
+                end)
+            end
+        end
+    end)
+end
 
 -- ────────────────────────────────────────────────────────────
 -- Sync helpers

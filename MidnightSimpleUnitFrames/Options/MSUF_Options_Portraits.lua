@@ -195,6 +195,12 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
             U(uk)[key] = val
         else
             G()[key] = val
+            -- Propagate to all non-override per-unit configs so runtime
+            -- reads the correct value directly (no R() fallback needed).
+            for _, k in ipairs(ALL_UNITS) do
+                local u = U(k)
+                if not u.portraitDecoOverride then u[key] = val end
+            end
         end
     end
 
@@ -331,17 +337,8 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
             get = function() return ScopeGet("portraitClassStyle", "BLIZZARD") end,
             set = function(v)
                 ScopeSet("portraitClassStyle", v)
-                -- portraitClassStyle is read DIRECTLY by MSUF_Portraits.lua from per-unit conf,
-                -- not through our scope resolver. Must propagate to all non-override units.
-                local uk = GetUnitKey()
-                if not uk then
-                    -- Shared mode: write to all non-override per-unit configs
-                    for _, k in ipairs(ALL_UNITS) do
-                        local u = U(k)
-                        if not u.portraitDecoOverride then u.portraitClassStyle = v end
-                    end
-                end
                 LiveApply()
+                SyncScopeUI()
             end,
         })
     end
@@ -369,7 +366,10 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         if not on then ScopeSet("portraitSizeOverride", 0)
         else ScopeSet("portraitSizeOverride", floor(sizeSlider:GetValue() + 0.5))
         end
-        sizeSlider:SetAllEnabled(on); LiveApply()
+        sizeSlider:SetAllEnabled(on)
+        -- Force toggle text color update
+        if self._msufToggleUpdate then self._msufToggleUpdate() end
+        LiveApply()
     end)
     sizeSlider:SetScript("OnValueChanged", function(self, val)
         val = floor(val + 0.5)
@@ -397,6 +397,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         "Portrait fills the full border area instead of sitting inside it. Best with Circle/Diamond borders.")
     fillCheck:SetScript("OnClick", function(self)
         ScopeSet("portraitFillBorder", self:GetChecked() and true or false)
+        if self._msufToggleUpdate then self._msufToggleUpdate() end
         LiveApply()
     end)
 
@@ -425,17 +426,18 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     borderColorHint:SetTextColor(0.5, 0.5, 0.5)
 
     -- ═══ Background ═══
-    local bgBox = MakeGroupBox(content, "Background", 16, -425, 350, 100)
-    local bgCheck = MakeCheck(bgBox, "MSUF_PortraitBgCheck", "Show background behind portrait", 8, -26)
+    local bgBox = MakeGroupBox(content, "Background", 16, -425, 350, 130)
+    local bgCheck = MakeCheck(bgBox, "MSUF_PortraitBgCheck", "Show background", 8, -28)
     bgCheck:SetScript("OnClick", function(self)
         ScopeSet("portraitBgEnabled", self:GetChecked() and true or false)
+        if self._msufToggleUpdate then self._msufToggleUpdate() end
         LiveApply(); SyncScopeUI()
     end)
 
-    local bgColorHint = MakeLabel(bgBox, "Color: Colors panel", 12, -58)
+    local bgColorHint = MakeLabel(bgBox, "Color: Colors panel", 12, -62)
     bgColorHint:SetTextColor(0.5, 0.5, 0.5)
 
-    local bgOpSlider = MakeSliderWithEdit(bgBox, "MSUF_PortraitBgOpSlider", "Opacity", 110, -56, 0, 100, 5, 130)
+    local bgOpSlider = MakeSliderWithEdit(bgBox, "MSUF_PortraitBgOpSlider", "Opacity", 140, -56, 0, 100, 5, 160)
     bgOpSlider:SetScript("OnValueChanged", function(self, val)
         val = floor(val + 0.5)
         if self.editBox then self.editBox:SetText(val .. "%") end

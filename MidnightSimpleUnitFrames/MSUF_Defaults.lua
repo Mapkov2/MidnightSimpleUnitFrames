@@ -763,6 +763,17 @@ end
     if g.portraitBgColorA == nil then g.portraitBgColorA = 0.85 end
     if g.portraitClassStyle == nil then g.portraitClassStyle = "BLIZZARD" end
     if g.portraitFillBorder == nil then g.portraitFillBorder = false end
+    -- Portrait panel UI state (scope dropdown selection, shared render type)
+    if g._portraitScopeKey == nil then g._portraitScopeKey = "shared" end
+    -- Initialize _portraitSharedRender from player's actual render type (migration from old layout)
+    if g._portraitSharedRender == nil then
+        local pConf = MSUF_DB.player
+        if pConf and pConf.portraitRender then
+            g._portraitSharedRender = pConf.portraitRender
+        else
+            g._portraitSharedRender = "2D"
+        end
+    end
     -- Which unit's portrait settings are currently shown in the Portraits menu (UI state only).
     -- Moved from positional tabs to scope dropdown (Bars pattern).
     -- Which unit's HP spacer settings are currently shown/edited in the Bars menu.
@@ -1463,22 +1474,29 @@ local function fill(key, defaults)
         if u.alphaBGInCombat == nil then u.alphaBGInCombat = 1 end
         if u.alphaBGOutOfCombat == nil then u.alphaBGOutOfCombat = 1 end
         -- Portrait Decoration defaults (MSUF_PortraitDecoration.lua)
-        if u.portraitShape == nil then u.portraitShape = "SQUARE" end
-        if u.portraitSizeOverride == nil then u.portraitSizeOverride = 0 end
-        if u.portraitOffsetX == nil then u.portraitOffsetX = 0 end
-        if u.portraitOffsetY == nil then u.portraitOffsetY = 0 end
-        if u.portraitBorderStyle == nil then u.portraitBorderStyle = "NONE" end
-        if u.portraitBorderThickness == nil then u.portraitBorderThickness = 2 end
-        if u.portraitBorderColorR == nil then u.portraitBorderColorR = 1 end
-        if u.portraitBorderColorG == nil then u.portraitBorderColorG = 1 end
-        if u.portraitBorderColorB == nil then u.portraitBorderColorB = 1 end
-        if u.portraitBorderColorA == nil then u.portraitBorderColorA = 1 end
-        if u.portraitBgEnabled == nil then u.portraitBgEnabled = false end
-        if u.portraitBgColorR == nil then u.portraitBgColorR = 0.05 end
-        if u.portraitBgColorG == nil then u.portraitBgColorG = 0.05 end
-        if u.portraitBgColorB == nil then u.portraitBgColorB = 0.05 end
-        if u.portraitBgColorA == nil then u.portraitBgColorA = 0.85 end
-        if u.portraitFillBorder == nil then u.portraitFillBorder = false end
+        -- portraitRender: inherit from general._portraitSharedRender if not set (shared/per-unit sync)
+        if u.portraitRender == nil then
+            u.portraitRender = g._portraitSharedRender or "2D"
+        end
+        if u.portraitClassStyle == nil then
+            u.portraitClassStyle = g.portraitClassStyle or "BLIZZARD"
+        end
+        if u.portraitShape == nil then u.portraitShape = (g.portraitShape) or "SQUARE" end
+        if u.portraitSizeOverride == nil then u.portraitSizeOverride = (g.portraitSizeOverride) or 0 end
+        if u.portraitOffsetX == nil then u.portraitOffsetX = (g.portraitOffsetX) or 0 end
+        if u.portraitOffsetY == nil then u.portraitOffsetY = (g.portraitOffsetY) or 0 end
+        if u.portraitBorderStyle == nil then u.portraitBorderStyle = (g.portraitBorderStyle) or "NONE" end
+        if u.portraitBorderThickness == nil then u.portraitBorderThickness = (g.portraitBorderThickness) or 2 end
+        if u.portraitBorderColorR == nil then u.portraitBorderColorR = (g.portraitBorderColorR) or 1 end
+        if u.portraitBorderColorG == nil then u.portraitBorderColorG = (g.portraitBorderColorG) or 1 end
+        if u.portraitBorderColorB == nil then u.portraitBorderColorB = (g.portraitBorderColorB) or 1 end
+        if u.portraitBorderColorA == nil then u.portraitBorderColorA = (g.portraitBorderColorA) or 1 end
+        if u.portraitBgEnabled == nil then u.portraitBgEnabled = g.portraitBgEnabled or false end
+        if u.portraitBgColorR == nil then u.portraitBgColorR = (g.portraitBgColorR) or 0.05 end
+        if u.portraitBgColorG == nil then u.portraitBgColorG = (g.portraitBgColorG) or 0.05 end
+        if u.portraitBgColorB == nil then u.portraitBgColorB = (g.portraitBgColorB) or 0.05 end
+        if u.portraitBgColorA == nil then u.portraitBgColorA = (g.portraitBgColorA) or 0.85 end
+        if u.portraitFillBorder == nil then u.portraitFillBorder = g.portraitFillBorder or false end
     end
     MSUF_DB_LastHeavyRun = MSUF_DB
  end
