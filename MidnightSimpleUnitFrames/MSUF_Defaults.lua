@@ -190,6 +190,9 @@ end
 if g.showMinimapIcon == nil then
     g.showMinimapIcon = true
 end
+if g.dropdownStyleMode == nil then
+    g.dropdownStyleMode = "msuf"
+end
 if type(g.minimapIconDB) ~= "table" then
     g.minimapIconDB = { hide = false, minimapPos = 220, radius = 80 }
 else
