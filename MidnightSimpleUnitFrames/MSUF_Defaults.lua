@@ -745,6 +745,26 @@ end
     if g.hpPowerTextSelectedKey == nil then
         g.hpPowerTextSelectedKey = "shared"
     end
+    -- Portrait Decoration shared defaults (scope fallback for MSUF_Options_Portraits scope system)
+    if g.portraitShape == nil then g.portraitShape = "SQUARE" end
+    if g.portraitSizeOverride == nil then g.portraitSizeOverride = 0 end
+    if g.portraitOffsetX == nil then g.portraitOffsetX = 0 end
+    if g.portraitOffsetY == nil then g.portraitOffsetY = 0 end
+    if g.portraitBorderStyle == nil then g.portraitBorderStyle = "NONE" end
+    if g.portraitBorderThickness == nil then g.portraitBorderThickness = 2 end
+    if g.portraitBorderColorR == nil then g.portraitBorderColorR = 1 end
+    if g.portraitBorderColorG == nil then g.portraitBorderColorG = 1 end
+    if g.portraitBorderColorB == nil then g.portraitBorderColorB = 1 end
+    if g.portraitBorderColorA == nil then g.portraitBorderColorA = 1 end
+    if g.portraitBgEnabled == nil then g.portraitBgEnabled = false end
+    if g.portraitBgColorR == nil then g.portraitBgColorR = 0.05 end
+    if g.portraitBgColorG == nil then g.portraitBgColorG = 0.05 end
+    if g.portraitBgColorB == nil then g.portraitBgColorB = 0.05 end
+    if g.portraitBgColorA == nil then g.portraitBgColorA = 0.85 end
+    if g.portraitClassStyle == nil then g.portraitClassStyle = "BLIZZARD" end
+    if g.portraitFillBorder == nil then g.portraitFillBorder = false end
+    -- Which unit's portrait settings are currently shown in the Portraits menu (UI state only).
+    -- Moved from positional tabs to scope dropdown (Bars pattern).
     -- Which unit's HP spacer settings are currently shown/edited in the Bars menu.
     -- This is purely a UI selection state (does not change gameplay behavior).
     if g.hpSpacerSelectedUnitKey == nil then
@@ -1308,12 +1328,12 @@ local function fill(key, defaults)
         offsetX   = -256,
         offsetY   = -180,
         portraitMode = "LEFT",
+        portraitClassStyle = "BLIZZARD",
         showName  = false,
         showLevelIndicator = true,
         showHP    = true,
         showPower = true,
         showInterrupt = true,
-        portraitMode = "LEFT",
         -- Per-unitframe: reverse fill direction for HP + Power bars.
         -- (false = normal left->right fill)
         reverseFillBars = false,
@@ -1338,12 +1358,12 @@ local function fill(key, defaults)
         offsetX   = 320,
         offsetY   = -180,
         portraitMode = "RIGHT",
+        portraitClassStyle = "BLIZZARD",
         showName  = true,
         showLevelIndicator = true,
         showHP    = true,
         showPower = true,
         showInterrupt = true,
-        portraitMode = "RIGHT",
         -- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
     })
@@ -1356,12 +1376,12 @@ local function fill(key, defaults)
         offsetX   = -260,
         offsetY   = -300,
         portraitMode = "OFF",
+        portraitClassStyle = "BLIZZARD",
         showName  = true,
         showLevelIndicator = false,
         showHP    = true,
         showPower = false,
         showInterrupt = true,
-        portraitMode = "OFF",
         -- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
         -- Focus-only: optional relative anchor for positioning.
@@ -1442,6 +1462,23 @@ local function fill(key, defaults)
         if u.alphaFGOutOfCombat == nil then u.alphaFGOutOfCombat = 1 end
         if u.alphaBGInCombat == nil then u.alphaBGInCombat = 1 end
         if u.alphaBGOutOfCombat == nil then u.alphaBGOutOfCombat = 1 end
+        -- Portrait Decoration defaults (MSUF_PortraitDecoration.lua)
+        if u.portraitShape == nil then u.portraitShape = "SQUARE" end
+        if u.portraitSizeOverride == nil then u.portraitSizeOverride = 0 end
+        if u.portraitOffsetX == nil then u.portraitOffsetX = 0 end
+        if u.portraitOffsetY == nil then u.portraitOffsetY = 0 end
+        if u.portraitBorderStyle == nil then u.portraitBorderStyle = "NONE" end
+        if u.portraitBorderThickness == nil then u.portraitBorderThickness = 2 end
+        if u.portraitBorderColorR == nil then u.portraitBorderColorR = 1 end
+        if u.portraitBorderColorG == nil then u.portraitBorderColorG = 1 end
+        if u.portraitBorderColorB == nil then u.portraitBorderColorB = 1 end
+        if u.portraitBorderColorA == nil then u.portraitBorderColorA = 1 end
+        if u.portraitBgEnabled == nil then u.portraitBgEnabled = false end
+        if u.portraitBgColorR == nil then u.portraitBgColorR = 0.05 end
+        if u.portraitBgColorG == nil then u.portraitBgColorG = 0.05 end
+        if u.portraitBgColorB == nil then u.portraitBgColorB = 0.05 end
+        if u.portraitBgColorA == nil then u.portraitBgColorA = 0.85 end
+        if u.portraitFillBorder == nil then u.portraitFillBorder = false end
     end
     MSUF_DB_LastHeavyRun = MSUF_DB
  end
