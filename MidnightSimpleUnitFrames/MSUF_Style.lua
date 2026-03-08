@@ -1749,11 +1749,24 @@ do
               local hl = b.GetHighlightTexture and b:GetHighlightTexture() or nil
               local check = _G[b:GetName() .. "Check"] or b.Check
               local uncheck = _G[b:GetName() .. "UnCheck"] or b.UnCheck
+              -- IMPORTANT: preserve the CURRENT Blizzard-selected state for this open menu.
+              -- In old mode we want the exact 2.54/native behavior, not a synthetic restore.
+              -- ToggleDropDownMenu already rebuilt the list just before this hook runs.
+              local wantCheck = (check and check.IsShown and check:IsShown()) and true or false
+              local wantUncheck = (uncheck and uncheck.IsShown and uncheck:IsShown()) and true or false
               if b._msufOrigHeight and b.SetHeight then b:SetHeight(b._msufOrigHeight) end
               _MSUF_RestoreFontStringPoints(fs)
               _MSUF_RestoreTexturePoints(hl)
-              if check and check.Show then check:Show() end
-              if uncheck and uncheck.Show then uncheck:Show() end
+              if check then
+                if check.SetShown then check:SetShown(wantCheck)
+                elseif wantCheck and check.Show then check:Show()
+                elseif check.Hide then check:Hide() end
+              end
+              if uncheck then
+                if uncheck.SetShown then uncheck:SetShown(wantUncheck)
+                elseif wantUncheck and uncheck.Show then uncheck:Show()
+                elseif uncheck.Hide then uncheck:Hide() end
+              end
             end
           end
         else
