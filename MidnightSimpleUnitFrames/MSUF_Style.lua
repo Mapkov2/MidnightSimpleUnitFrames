@@ -1280,8 +1280,48 @@ do
     return " "
   end
 
+  local function SetPeelDropdownVisible(drop, shown)
+    if not drop then return end
+    local show = shown and true or false
+    local parts = {
+      drop._msufPeelButton,
+      drop._msufPeelText,
+      drop._msufPeelArrow,
+      drop._msufPeelDivider,
+      drop._msufPeelShadow,
+    }
+    for i = 1, #parts do
+      local obj = parts[i]
+      if obj then
+        if show then
+          if obj.Show then obj:Show() end
+        else
+          if obj.Hide then obj:Hide() end
+        end
+      end
+    end
+  end
+
+  local function IsDropdownEffectivelyShown(drop)
+    if not drop or not drop.IsShown or not drop:IsShown() then return false end
+    local nativeBtn = GetNativeDropButton(drop)
+    if nativeBtn and nativeBtn.IsShown and not nativeBtn:IsShown() then
+      return false
+    end
+    return true
+  end
+
   local function SyncPeelDropdownState(drop)
     if not drop or not drop._msufPeelButton then return end
+    if not Style.UseModernDropdowns() then
+      SetPeelDropdownVisible(drop, false)
+      return
+    end
+    local visible = IsDropdownEffectivelyShown(drop)
+    SetPeelDropdownVisible(drop, visible)
+    if not visible then
+      return
+    end
     local spec = drop._msufPeelSpec or DD_DEFAULT_SPEC
     local nativeBtn = GetNativeDropButton(drop)
     local enabled = true
@@ -1439,6 +1479,19 @@ do
       if nativeBtn.Show then hooksecurefunc(nativeBtn, "Show", function() SyncPeelDropdownState(drop) end) end
       if nativeBtn.Hide then hooksecurefunc(nativeBtn, "Hide", function() SyncPeelDropdownState(drop) end) end
     end
+    if drop.HookScript then
+      drop:HookScript("OnShow", function(self)
+        if Style.UseModernDropdowns() then
+          SyncPeelDropdownState(self)
+        else
+          SetPeelDropdownVisible(self, false)
+        end
+      end)
+      drop:HookScript("OnHide", function(self)
+        if self._msufPeelButton then self._msufPeelButton._msufBtnIsDown = false end
+        SetPeelDropdownVisible(self, false)
+      end)
+    end
   end
 
   local function RestoreNativeDropRegions(drop)
@@ -1469,12 +1522,9 @@ do
 
   local function RevertPeelDropdownTemplate(drop)
     if not drop then return nil end
+    if drop._msufPeelButton then drop._msufPeelButton._msufBtnIsDown = false end
+    SetPeelDropdownVisible(drop, false)
     RestoreNativeDropRegions(drop)
-    if drop._msufPeelButton and drop._msufPeelButton.Hide then drop._msufPeelButton:Hide() end
-    if drop._msufPeelText and drop._msufPeelText.Hide then drop._msufPeelText:Hide() end
-    if drop._msufPeelArrow and drop._msufPeelArrow.Hide then drop._msufPeelArrow:Hide() end
-    if drop._msufPeelDivider and drop._msufPeelDivider.Hide then drop._msufPeelDivider:Hide() end
-    if drop._msufPeelShadow and drop._msufPeelShadow.Hide then drop._msufPeelShadow:Hide() end
     drop.__msufPeelDropSkinned = nil
     return drop
   end
@@ -1564,11 +1614,7 @@ do
       drop._msufPeelArrow = arrow
     end
 
-    if btn.Show then btn:Show() end
-    if drop._msufPeelText and drop._msufPeelText.Show then drop._msufPeelText:Show() end
-    if drop._msufPeelArrow and drop._msufPeelArrow.Show then drop._msufPeelArrow:Show() end
-    if drop._msufPeelDivider and drop._msufPeelDivider.Show then drop._msufPeelDivider:Show() end
-    if drop._msufPeelShadow and drop._msufPeelShadow.Show then drop._msufPeelShadow:Show() end
+    SetPeelDropdownVisible(drop, IsDropdownEffectivelyShown(drop))
     btn:SetPoint("TOPLEFT", drop, "TOPLEFT", spec.leftInset, spec.topInset)
     UpdatePeelDropdownWidth(drop, spec.width)
     EnsureDropdownHooks(drop)
@@ -1583,6 +1629,8 @@ do
     local drop = CreateFrame("Frame", name, parent, "UIDropDownMenuTemplate")
     if Style.UseModernDropdowns() then
       Style.ApplyPeelDropdownTemplate(drop, spec)
+    else
+      RevertPeelDropdownTemplate(drop)
     end
     return drop
   end
@@ -1622,18 +1670,72 @@ do
     if label and label.SetTextColor then label:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA) end
   end
 
+  local function _MSUF_CaptureDropDownButtonState(button, textFS, hl)
+    if not button then return end
+    if button._msufOrigHeight == nil and button.GetHeight then
+      button._msufOrigHeight = button:GetHeight()
+    end
+    if textFS and not textFS._msufOrigDropPointsCaptured then
+      textFS._msufOrigDropPointsCaptured = true
+      textFS._msufOrigDropPoints = {}
+      local n = textFS.GetNumPoints and textFS:GetNumPoints() or 0
+      for i = 1, n do
+        local point, relTo, relPoint, xOfs, yOfs = textFS:GetPoint(i)
+        textFS._msufOrigDropPoints[i] = { point, relTo, relPoint, xOfs, yOfs }
+      end
+      textFS._msufOrigDropJustifyH = textFS.GetJustifyH and textFS:GetJustifyH() or nil
+    end
+    if hl and not hl._msufOrigDropPointsCaptured and hl.GetNumPoints then
+      hl._msufOrigDropPointsCaptured = true
+      hl._msufOrigDropPoints = {}
+      local n = hl:GetNumPoints() or 0
+      for i = 1, n do
+        local point, relTo, relPoint, xOfs, yOfs = hl:GetPoint(i)
+        hl._msufOrigDropPoints[i] = { point, relTo, relPoint, xOfs, yOfs }
+      end
+    end
+  end
+
+  local function _MSUF_RestoreFontStringPoints(fs)
+    if not fs or not fs._msufOrigDropPointsCaptured then return end
+    if fs.ClearAllPoints then fs:ClearAllPoints() end
+    local pts = fs._msufOrigDropPoints or {}
+    if #pts > 0 and fs.SetPoint then
+      for i = 1, #pts do
+        local p = pts[i]
+        fs:SetPoint(p[1], p[2], p[3], p[4], p[5])
+      end
+    end
+    if fs._msufOrigDropJustifyH and fs.SetJustifyH then
+      fs:SetJustifyH(fs._msufOrigDropJustifyH)
+    end
+  end
+
+  local function _MSUF_RestoreTexturePoints(tex)
+    if not tex or not tex._msufOrigDropPointsCaptured then return end
+    if tex.ClearAllPoints then tex:ClearAllPoints() end
+    local pts = tex._msufOrigDropPoints or {}
+    if #pts > 0 and tex.SetPoint then
+      for i = 1, #pts do
+        local p = pts[i]
+        tex:SetPoint(p[1], p[2], p[3], p[4], p[5])
+      end
+    end
+  end
+
   local function SkinDropDownLists()
     for level = 1, (_G.UIDROPDOWNMENU_MAXLEVELS or 2) do
       local list = _G["DropDownList" .. level]
       if list then
         local spec = DD_DEFAULT_SPEC
+        local mb = _G["DropDownList" .. level .. "MenuBackdrop"]
+        local bb = _G["DropDownList" .. level .. "Backdrop"]
         if not Style.UseModernDropdowns() then
           if list._msufPeelBackdrop and list._msufPeelBackdrop.Hide then list._msufPeelBackdrop:Hide() end
-          local mb = _G["DropDownList" .. level .. "MenuBackdrop"]
-          local bb = _G["DropDownList" .. level .. "Backdrop"]
           if mb then
             if mb.SetAlpha then mb:SetAlpha(1) end
             if mb.Show then mb:Show() end
+            if mb.NineSlice and mb.NineSlice.Show then mb.NineSlice:Show() end
           end
           if bb then
             if bb.SetAlpha then bb:SetAlpha(1) end
@@ -1643,79 +1745,84 @@ do
             local b = _G["DropDownList" .. level .. "Button" .. i]
             if b then
               if b._msufPeelSel and b._msufPeelSel.Hide then b._msufPeelSel:Hide() end
+              local fs = _G[b:GetName() .. "NormalText"]
+              local hl = b.GetHighlightTexture and b:GetHighlightTexture() or nil
               local check = _G[b:GetName() .. "Check"] or b.Check
               local uncheck = _G[b:GetName() .. "UnCheck"] or b.UnCheck
+              if b._msufOrigHeight and b.SetHeight then b:SetHeight(b._msufOrigHeight) end
+              _MSUF_RestoreFontStringPoints(fs)
+              _MSUF_RestoreTexturePoints(hl)
               if check and check.Show then check:Show() end
               if uncheck and uncheck.Show then uncheck:Show() end
             end
           end
         else
-        if not list._msufPeelBackdrop then
-          local skin = CreateFrame("Frame", nil, list, "BackdropTemplate")
-          skin:SetFrameLevel(math.max(0, (list.GetFrameLevel and list:GetFrameLevel() or 1) - 1))
-          skin:SetAllPoints(list)
-          skin:SetBackdrop({
-            bgFile = WHITE8X8,
-            edgeFile = WHITE8X8,
-            edgeSize = 1,
-            insets = { left = 1, right = 1, top = 1, bottom = 1 },
-          })
-          list._msufPeelBackdrop = skin
-        end
-        list._msufPeelBackdrop:SetBackdropColor(spec.menuBgR, spec.menuBgG, spec.menuBgB, spec.menuBgA)
-        list._msufPeelBackdrop:SetBackdropBorderColor(spec.menuBorderR, spec.menuBorderG, spec.menuBorderB, spec.menuBorderA)
-        local mb = _G["DropDownList" .. level .. "MenuBackdrop"]
-        local bb = _G["DropDownList" .. level .. "Backdrop"]
-        if mb then
-          if mb.Hide then mb:Hide() end
-          if mb.SetAlpha then mb:SetAlpha(0) end
-        end
-        if bb then
-          if bb.Hide then bb:Hide() end
-          if bb.SetAlpha then bb:SetAlpha(0) end
-        end
-        for i = 1, (_G.UIDROPDOWNMENU_MAXBUTTONS or 32) do
-          local b = _G["DropDownList" .. level .. "Button" .. i]
-          if b then
-            if not b._msufPeelSel then
-              b._msufPeelSel = b:CreateTexture(nil, "BACKGROUND")
-              b._msufPeelSel:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -1)
-              b._msufPeelSel:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 1)
-            end
-            b._msufPeelSel:SetColorTexture(spec.menuSelectR, spec.menuSelectG, spec.menuSelectB, spec.menuSelectA)
-            local fs = _G[b:GetName() .. "NormalText"]
-            if fs then
-              ApplyReadableDropdownFont(fs, fs, DD_DEFAULT_SPEC)
-              fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA)
-              fs:ClearAllPoints()
-              fs:SetPoint("LEFT", b, "LEFT", 10, 0)
-              fs:SetPoint("RIGHT", b, "RIGHT", -10, 0)
-              fs:SetJustifyH("LEFT")
-            end
-            if b.SetHeight then b:SetHeight(20) end
-            local hl = b:GetHighlightTexture()
-            if hl and hl.SetColorTexture then
-              hl:SetColorTexture(spec.menuHoverR, spec.menuHoverG, spec.menuHoverB, spec.menuHoverA)
-              if hl.SetPoint then
-                hl:ClearAllPoints()
-                hl:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -1)
-                hl:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 1)
+          if not list._msufPeelBackdrop then
+            local skin = CreateFrame("Frame", nil, list, "BackdropTemplate")
+            skin:SetFrameLevel(math.max(0, (list.GetFrameLevel and list:GetFrameLevel() or 1) - 1))
+            skin:SetAllPoints(list)
+            skin:SetBackdrop({
+              bgFile = WHITE8X8,
+              edgeFile = WHITE8X8,
+              edgeSize = 1,
+              insets = { left = 1, right = 1, top = 1, bottom = 1 },
+            })
+            list._msufPeelBackdrop = skin
+          end
+          list._msufPeelBackdrop:SetBackdropColor(spec.menuBgR, spec.menuBgG, spec.menuBgB, spec.menuBgA)
+          list._msufPeelBackdrop:SetBackdropBorderColor(spec.menuBorderR, spec.menuBorderG, spec.menuBorderB, spec.menuBorderA)
+          if mb then
+            if mb.Hide then mb:Hide() end
+            if mb.SetAlpha then mb:SetAlpha(0) end
+            if mb.NineSlice and mb.NineSlice.Hide then mb.NineSlice:Hide() end
+          end
+          if bb then
+            if bb.Hide then bb:Hide() end
+            if bb.SetAlpha then bb:SetAlpha(0) end
+          end
+          for i = 1, (_G.UIDROPDOWNMENU_MAXBUTTONS or 32) do
+            local b = _G["DropDownList" .. level .. "Button" .. i]
+            if b then
+              if not b._msufPeelSel then
+                b._msufPeelSel = b:CreateTexture(nil, "BACKGROUND")
+                b._msufPeelSel:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -1)
+                b._msufPeelSel:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 1)
+              end
+              b._msufPeelSel:SetColorTexture(spec.menuSelectR, spec.menuSelectG, spec.menuSelectB, spec.menuSelectA)
+              local fs = _G[b:GetName() .. "NormalText"]
+              local hl = b.GetHighlightTexture and b:GetHighlightTexture() or nil
+              _MSUF_CaptureDropDownButtonState(b, fs, hl)
+              if fs then
+                ApplyReadableDropdownFont(fs, fs, DD_DEFAULT_SPEC)
+                fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA)
+                fs:ClearAllPoints()
+                fs:SetPoint("LEFT", b, "LEFT", 10, 0)
+                fs:SetPoint("RIGHT", b, "RIGHT", -10, 0)
+                fs:SetJustifyH("LEFT")
+              end
+              if b.SetHeight then b:SetHeight(20) end
+              if hl and hl.SetColorTexture then
+                hl:SetColorTexture(spec.menuHoverR, spec.menuHoverG, spec.menuHoverB, spec.menuHoverA)
+                if hl.SetPoint then
+                  hl:ClearAllPoints()
+                  hl:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -1)
+                  hl:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 1)
+                end
+              end
+              local check = _G[b:GetName() .. "Check"] or b.Check
+              local uncheck = _G[b:GetName() .. "UnCheck"] or b.UnCheck
+              local checked = false
+              if check and check.IsShown and check:IsShown() then checked = true end
+              b._msufPeelSel:SetShown(checked)
+              if check and check.Hide then check:Hide() end
+              if uncheck and uncheck.Hide then uncheck:Hide() end
+              if b:IsEnabled() then
+                if fs then fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA) end
+              else
+                if fs then fs:SetTextColor(THEME.mutedR, THEME.mutedG, THEME.mutedB, 0.9) end
               end
             end
-            local check = _G[b:GetName() .. "Check"] or b.Check
-            local uncheck = _G[b:GetName() .. "UnCheck"] or b.UnCheck
-            local checked = false
-            if check and check.IsShown and check:IsShown() then checked = true end
-            b._msufPeelSel:SetShown(checked)
-            if check and check.Hide then check:Hide() end
-            if uncheck and uncheck.Hide then uncheck:Hide() end
-            if b:IsEnabled() then
-              if fs then fs:SetTextColor(THEME.textR, THEME.textG, THEME.textB, THEME.textA) end
-            else
-              if fs then fs:SetTextColor(THEME.mutedR, THEME.mutedG, THEME.mutedB, 0.9) end
-            end
           end
-        end
         end
       end
     end
