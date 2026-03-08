@@ -19,7 +19,7 @@ local CreateFrame = CreateFrame
 -- ============================================================================
 -- Localization (mirrors MSUF_Options_Core pattern)
 -- ============================================================================
-local ns = (_G and _G.MSUF_NS) or {}
+local ns = (_G.MSUF_NS) or {}
 local L = ns.L or {}
 if not getmetatable(L) then
     setmetatable(L, { __index = function(_, k) return k end })
@@ -44,7 +44,7 @@ local MSUF_ExpandDropdownClickArea = (ns and ns.MSUF_ExpandDropdownClickArea) or
 local function MSUF_GetCurrentGridStep()
     local MIN, MAX = 8, 64
     local step
-    local slider = _G and _G["MSUF_EditModeGridSlider"]
+    local slider = _G["MSUF_EditModeGridSlider"]
     if slider and slider.GetValue then
         step = slider:GetValue()
     elseif MSUF_DB and MSUF_DB.general and type(MSUF_DB.general.editModeGridStep) == "number" then
@@ -1191,27 +1191,27 @@ local function BuildClassPowerOptions(leftName, rightName)
     --   - Class color: open Colors page and jump to the Class Power color dropdown
     -- =================================================================
     local function _ToggleMSUFEditMode()
-        local st = _G and _G.MSUF_EditState
+        local st = _G.MSUF_EditState
         local isActive = (type(st) == "table" and st.active) and true or false
-        if type(_G and _G.MSUF_SetMSUFEditModeDirect) == "function" then
+        if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
             _G.MSUF_SetMSUFEditModeDirect(not isActive)
-        elseif type(_G and _G.MSUF_SetEditMode) == "function" then
+        elseif type(_G.MSUF_SetEditMode) == "function" then
             _G.MSUF_SetEditMode(not isActive)
         end
     end
 
     local function _OpenClassPowerClassColorDropdown()
-        if type(_G and _G.MSUF_OpenPage) == "function" then
+        if type(_G.MSUF_OpenPage) == "function" then
             _G.MSUF_OpenPage("colors")
         end
 
         local function JumpAndOpen()
-            local dd = _G and _G["MSUF_Colors_ClassPowerTypeDropdown"]
+            local dd = _G["MSUF_Colors_ClassPowerTypeDropdown"]
             if not dd then return end
 
             -- Scroll to dropdown (same math as Bars anchor helper, but for Colors)
-            local scroll = _G and _G["MSUF_ColorsScrollFrame"]
-            local child  = _G and _G["MSUF_ColorsScrollChild"]
+            local scroll = _G["MSUF_ColorsScrollFrame"]
+            local child  = _G["MSUF_ColorsScrollChild"]
             if scroll and child and scroll.SetVerticalScroll and child.GetTop and dd.GetTop then
                 local top  = child:GetTop()
                 local aTop = dd:GetTop()
@@ -1230,7 +1230,7 @@ local function BuildClassPowerOptions(leftName, rightName)
             end
         end
 
-        if _G and _G.C_Timer and _G.C_Timer.After then
+        if _G.C_Timer and _G.C_Timer.After then
             _G.C_Timer.After(0, JumpAndOpen)
         else
             JumpAndOpen()
@@ -1263,7 +1263,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
 	-- Match Options_Player action button styling (and prevent SlashMenu mirror skin from breaking click/hover).
 	editBtn._msufNoSlashSkin = true
-	if _G and _G.MSUF_SkinMidnightActionButton then
+	if _G.MSUF_SkinMidnightActionButton then
 		_G.MSUF_SkinMidnightActionButton(editBtn)
 	else
 		editBtn.__msufMidnightActionSkinned = true
@@ -1283,7 +1283,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     colorBtn:SetScript("OnClick", _OpenClassPowerClassColorDropdown)
 
 	colorBtn._msufNoSlashSkin = true
-	if _G and _G.MSUF_SkinMidnightActionButton then
+	if _G.MSUF_SkinMidnightActionButton then
 		_G.MSUF_SkinMidnightActionButton(colorBtn)
 	else
 		colorBtn.__msufMidnightActionSkinned = true
@@ -1446,7 +1446,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 end
 
 -- Search helper (additive): register the Class Resources root panel (built lazily).
-if _G and _G.MSUF_Search_RegisterRoots then
+if _G.MSUF_Search_RegisterRoots then
     _G.MSUF_Search_RegisterRoots({ "classpower" }, { "MSUF_ClassPowerOptionsPanel" }, "Class Resources")
 end
 

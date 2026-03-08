@@ -1,11 +1,11 @@
 local addonName, addonNS = ...
-local ns = (_G and _G.MSUF_NS) or addonNS or {}
+local ns = (_G.MSUF_NS) or addonNS or {}
 if _G then _G.MSUF_NS = ns end
 
 -- ---------------------------------------------------------------------------
 -- Localization helper (keys are English UI strings; fallback = key)
 -- ---------------------------------------------------------------------------
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 local L = ns.L
 if not getmetatable(L) then
     setmetatable(L, { __index = function(t, k) return k end })
@@ -29,7 +29,7 @@ local function MSUF_EnsureCastbars()
  end
 
 -- Search helper (additive): register the Frames tab root so slider labels are indexed.
-if _G and _G.MSUF_Search_RegisterRoots then
+if _G.MSUF_Search_RegisterRoots then
     _G.MSUF_Search_RegisterRoots({ "player","target","targettarget","focus","pet","boss" }, { "MSUF_FramesMenuScrollChild" }, "Frames")
 end
 -- Early tab guard helper
@@ -497,7 +497,7 @@ local function MSUF_BindPortraitDropdown(panel, fieldName, IsFramesTabFn, Ensure
         -- previously visible.
         local getKey = panel and panel._msufGetCurrentKey
         local key = (type(getKey) == "function") and getKey() or nil
-        local sync = _G and _G.MSUF_3DPortraits_SyncUnit
+        local sync = _G.MSUF_3DPortraits_SyncUnit
         if key and type(sync) == "function" then
             pcall(sync, key)
         end
@@ -991,7 +991,7 @@ local function ForceSliderEditBox(slider)
 local function MSUF_GetCurrentGridStep()
     local MIN, MAX = 8, 64
     local step
-    local slider = _G and _G["MSUF_EditModeGridSlider"]
+    local slider = _G["MSUF_EditModeGridSlider"]
     if slider and slider.GetValue then
         step = slider:GetValue()
     elseif MSUF_DB and MSUF_DB.general and type(MSUF_DB.general.editModeGridStep) == "number" then
@@ -2006,7 +2006,7 @@ end
         -- Action buttons must not be re-skinned by the SlashMenu mirror (otherwise they can become "hover-only").
         if panel[btnKey] then
             panel[btnKey]._msufNoSlashSkin = true
-            if _G and _G.MSUF_SkinMidnightActionButton then
+            if _G.MSUF_SkinMidnightActionButton then
                 _G.MSUF_SkinMidnightActionButton(panel[btnKey])
             else
                 panel[btnKey].__msufMidnightActionSkinned = true
@@ -2125,7 +2125,7 @@ end
         panel.petEditModeButton:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 12, 20)
         panel.petEditModeButton:SetText(TR("Edit Mode"))
         panel.petEditModeButton:SetScript("OnClick", function()
-            local fn = _G and _G.MSUF_SetMSUFEditModeDirect
+            local fn = _G.MSUF_SetMSUFEditModeDirect
             if type(fn) == "function" then
                 local active = _G.MSUF_UnitEditModeActive and true or false
                 local cur = _G.MSUF_CurrentEditUnitKey
@@ -2796,12 +2796,12 @@ end
         UIDropDownMenu_SetSelectedValue(panel.playerAlphaLayerDropDown, layerMode)
         UIDropDownMenu_SetText(panel.playerAlphaLayerDropDown, (layerMode == "background") and "Background" or "Foreground")
         -- Hard fallback: some dropdown skins won"t display the label unless we also set the FontString.
-        local _ddText = (_G and _G["MSUF_UF_AlphaLayerDropDownText"]) or (panel.playerAlphaLayerDropDown and panel.playerAlphaLayerDropDown.Text)
+        local _ddText = (_G["MSUF_UF_AlphaLayerDropDownText"]) or (panel.playerAlphaLayerDropDown and panel.playerAlphaLayerDropDown.Text)
         if _ddText and _ddText.SetText then
             _ddText:SetText((layerMode == "background") and "Background" or "Foreground")
         end
         -- Disable dropdown unless layered alpha is enabled, so users don't pick a mode that does nothing.
-        local btn = (_G and _G["MSUF_UF_AlphaLayerDropDownButton"]) or (panel.playerAlphaLayerDropDown and panel.playerAlphaLayerDropDown.Button)
+        local btn = (_G["MSUF_UF_AlphaLayerDropDownButton"]) or (panel.playerAlphaLayerDropDown and panel.playerAlphaLayerDropDown.Button)
         if btn and btn.Enable and btn.Disable then
             if excludeTP then btn:Enable() else btn:Disable() end
         end
@@ -2899,7 +2899,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
  end
 local function ApplyLayoutCurrent(reason)
     local key = CurrentKey()
-    local fn = _G and _G.MSUF_UFCore_RequestLayoutForUnit
+    local fn = _G.MSUF_UFCore_RequestLayoutForUnit
     if type(fn) == "function" then
         local urgent = (key == "target" or key == "targettarget" or key == "focus")
         pcall(fn, key, reason or "OPTIONS_LAYOUT", urgent)
@@ -2955,7 +2955,7 @@ local function MSUF_CallIndicatorRefresh(spec)
     -- Some indicator systems still have dedicated refresh helpers (e.g. leader/assist icon rebuild).
     local fnName = spec.refreshFnName
     if fnName then
-        local fn = _G and _G[fnName]
+        local fn = _G[fnName]
         if type(fn) == "function" then
             pcall(fn)
         end
@@ -4091,7 +4091,7 @@ MSUF_AlphaUI_RefreshSliders = function()
     MSUF_AlphaUI_SetSlider(panel.playerAlphaOutCombatSlider, aOut)
  end
 local function ApplyAlphaOnly()
-    local fn = (_G and _G.MSUF_RefreshAllUnitAlphas) or MSUF_RefreshAllUnitAlphas
+    local fn = (_G.MSUF_RefreshAllUnitAlphas) or MSUF_RefreshAllUnitAlphas
     if type(fn) == "function" then pcall(fn) end
  end
 -- Load Conditions checkboxes (per-unit hide rules)
@@ -4178,7 +4178,7 @@ if panel.playerAlphaExcludeTextPortraitCB then
         -- Toggle dropdown enabled state immediately
         local dd = panel.playerAlphaLayerDropDown
         if dd then
-            local btn = (_G and _G["MSUF_UF_AlphaLayerDropDownButton"]) or (dd and dd.Button)
+            local btn = (_G["MSUF_UF_AlphaLayerDropDownButton"]) or (dd and dd.Button)
             if btn and btn.Enable and btn.Disable then
                 if on then btn:Enable() else btn:Disable() end
             end
@@ -4204,7 +4204,7 @@ if panel.playerAlphaLayerDropDown and UIDropDownMenu_Initialize then
         if UIDropDownMenu_SetText then
             UIDropDownMenu_SetText(panel.playerAlphaLayerDropDown, (_curMode == "background") and "Background" or "Foreground")
         end
-        local _ddText = (_G and _G["MSUF_UF_AlphaLayerDropDownText"]) or (panel.playerAlphaLayerDropDown and panel.playerAlphaLayerDropDown.Text)
+        local _ddText = (_G["MSUF_UF_AlphaLayerDropDownText"]) or (panel.playerAlphaLayerDropDown and panel.playerAlphaLayerDropDown.Text)
         if _ddText and _ddText.SetText then
             _ddText:SetText((_curMode == "background") and "Background" or "Foreground")
         end
