@@ -28,7 +28,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
     -- -----------------------------------------------------------------
     -- Compat helpers (resolve from ctx / ns / _G; never assume globals)
     -- -----------------------------------------------------------------
-    local MSUF_BuildButtonRowList      = ctx and ctx.MSUF_BuildButtonRowList
+    local MSUF_BuildButtonRowList      = (ns and ns.MSUF_BuildButtonRowList) or (ctx and ctx.MSUF_BuildButtonRowList)
     local MSUF_ExpandDropdownClickArea = (ns and ns.MSUF_ExpandDropdownClickArea) or _G.MSUF_ExpandDropdownClickArea
     local MSUF_SkinMidnightActionButton = (ns and ns.MSUF_SkinMidnightActionButton) or _G.MSUF_SkinMidnightActionButton
     local MSUF_CallUpdateAllFonts      = _G.MSUF_CallUpdateAllFonts

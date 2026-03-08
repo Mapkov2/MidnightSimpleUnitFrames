@@ -85,6 +85,7 @@ Core\MSUF_LoadConditions.lua
 Core\MSUF_Borders.lua
 Core\MSUF_ClassPower.lua
 
+Options\MSUF_Options_Toolkit.lua
 Options\MSUF_Options_Core.lua
 Options\MSUF_Options_Bars.lua
 Options\MSUF_Options_Castbars.lua
