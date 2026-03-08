@@ -416,7 +416,7 @@ local DD_BORDER  = { 0.30, 0.30, 0.35, 0.80 }
 local DD_HOVER   = { 0.20, 0.20, 0.25, 1.00 }
 local DD_CHECK   = { 1.00, 0.82, 0.00 }
 local DD_TEXT    = { 0.90, 0.90, 0.90 }
-local DD_ITEM_H  = 20
+local DD_ITEM_H  = 22
 
 -- Singleton list frame
 local _listFrame, _listOwner, _listBackdrop
@@ -492,7 +492,14 @@ local function DD_ItemClick(self)
     if not (item and owner) then return end
     local spec = owner._ddSpec
     if spec and spec.set then spec.set(item.key, item) end
-    owner:SetValue(item.key)
+    if owner.SetValue then
+        owner:SetValue(item.key)
+    else
+        -- Auto-intercepted dropdown: update text via UIDropDownMenu API
+        owner._ddKey = item.key
+        if UIDropDownMenu_SetSelectedValue then pcall(UIDropDownMenu_SetSelectedValue, owner, item.key) end
+        if UIDropDownMenu_SetText then pcall(UIDropDownMenu_SetText, owner, item.label or tostring(item.key or "")) end
+    end
     DD_Close()
 end
 
@@ -520,7 +527,7 @@ local function DD_GetItem(index)
     icon:Hide()
     btn._icon = icon
     -- Label
-    local label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     label:SetPoint("LEFT", btn, "LEFT", 10, 0)
     label:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
     label:SetJustifyH("LEFT")
@@ -607,7 +614,7 @@ local function DD_Populate(owner)
         if item.fontObject then
             btn._label:SetFontObject(item.fontObject)
         elseif btn._fontOverridden then
-            btn._label:SetFontObject(GameFontHighlightSmall)
+            btn._label:SetFontObject(GameFontHighlight)
         end
         btn._fontOverridden = (item.fontObject ~= nil)
         btn._ddItem = item
@@ -902,3 +909,120 @@ ns.MSUF_StyleToggleText         = StyleToggleText
 ns.MSUF_StyleCheckmark          = StyleCheckmark
 _G.MSUF_StyleToggleText         = _G.MSUF_StyleToggleText or StyleToggleText
 _G.MSUF_StyleCheckmark          = _G.MSUF_StyleCheckmark or StyleCheckmark
+
+-- =====================================================================
+-- Auto-Intercept: Styled Dropdowns → Toolkit List
+--
+-- Any frame created by MSUF_CreateStyledDropdown (has ._msufPeelButton)
+-- that uses UIDropDownMenu_Initialize will automatically open the
+-- Toolkit's styled list instead of Blizzard's DropDownList1.
+--
+-- Zero changes needed in Player, Colors, Auras, Gameplay.
+-- =====================================================================
+do
+    -- Capture buffer for UIDropDownMenu_AddButton interception
+    local _captureActive = false
+    local _captureItems = {}
+    local _captureOwner = nil
+
+    -- Hook UIDropDownMenu_AddButton to capture items when we're intercepting
+    local _origAddButton = UIDropDownMenu_AddButton
+    if _origAddButton then
+        UIDropDownMenu_AddButton = function(info, level, ...)
+            if _captureActive and info then
+                -- Skip title/separator items
+                if not info.isTitle and not info.disabled then
+                    _captureItems[#_captureItems + 1] = {
+                        key    = info.value,
+                        label  = info.text or tostring(info.value or ""),
+                        icon   = info.icon,
+                        func   = info.func,
+                        arg1   = info.arg1,
+                        arg2   = info.arg2,
+                        checked = info.checked,
+                    }
+                end
+                return  -- don't add to Blizzard's list
+            end
+            return _origAddButton(info, level, ...)
+        end
+    end
+
+    -- Hook ToggleDropDownMenu to intercept styled dropdowns
+    local _origToggle = ToggleDropDownMenu
+    if _origToggle then
+        ToggleDropDownMenu = function(level, value, dropDown, anchorName, xOff, yOff, menuList, button, autoHide)
+            -- Only intercept level-1 opens on styled MSUF dropdowns
+            local dd = dropDown
+            if dd and dd._msufPeelButton and (level == 1 or level == nil) and dd.initialize then
+                -- Capture items from the init function
+                _captureActive = true
+                _captureItems = {}
+                _captureOwner = dd
+                pcall(dd.initialize, dd, 1)
+                _captureActive = false
+
+                if #_captureItems > 0 then
+                    -- Build spec for Toolkit list
+                    local curKey = nil
+                    for _, it in ipairs(_captureItems) do
+                        local ck = it.checked
+                        if type(ck) == "function" then
+                            if ck() then curKey = it.key; break end
+                        elseif ck then
+                            curKey = it.key; break
+                        end
+                    end
+
+                    -- Store a temporary spec
+                    dd._ddSpec = {
+                        items = _captureItems,
+                        get = function() return curKey end,
+                        set = function(v, item)
+                            -- Find and call the original func
+                            if item and item.func then
+                                -- Create a fake button with .value
+                                local fakeBtn = { value = v }
+                                pcall(item.func, fakeBtn, item.arg1, item.arg2)
+                            end
+                        end,
+                        width = dd._msufPeelButton and dd._msufPeelButton:GetWidth() or 200,
+                    }
+                    DD_Toggle(dd)
+                    return
+                end
+            end
+            -- Fallback to Blizzard's default
+            return _origToggle(level, value, dropDown, anchorName, xOff, yOff, menuList, button, autoHide)
+        end
+    end
+end
+
+-- Also export UI.BindExistingDropdown for explicit use (e.g. refactored Bars)
+function UI.BindExistingDropdown(dd, spec)
+    if not dd or not spec then return dd end
+    UIDropDownMenu_Initialize(dd, function() end)
+    local function OnSpecClick() DD_Toggle(dd) end
+    local peelBtn = dd._msufPeelButton
+    if peelBtn then peelBtn:SetScript("OnClick", OnSpecClick) end
+    local dname = dd.GetName and dd:GetName()
+    local nativeBtn = dd.Button or (dname and _G[dname .. "Button"])
+    if nativeBtn then nativeBtn:SetScript("OnClick", OnSpecClick) end
+    dd._ddSpec = spec; dd._ddKey = nil
+    function dd:SetValue(key)
+        self._ddKey = key; local label = tostring(key or "")
+        local items = self._ddSpec.items
+        if type(items) == "function" then items = items() end
+        if type(items) == "table" then for _, it in ipairs(items) do if it.key == key then label = it.label or label; break end end end
+        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self, key) end
+        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(self, label) end
+    end
+    function dd:GetValue() return self._ddKey end
+    function dd:Refresh()
+        local key = self._ddSpec.get and self._ddSpec.get() or nil; self:SetValue(key)
+        if _listOwner == self and _listFrame and _listFrame:IsShown() then DD_Populate(self) end
+    end
+    dd:HookScript("OnShow", function(self) self:Refresh() end)
+    dd:Refresh()
+    return dd
+end
