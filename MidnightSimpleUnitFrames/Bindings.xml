@@ -1,3 +1,5 @@
+
+-- Adds keybindings for MSUF options and edit mode in Blizzards Menu 
 <Bindings>
     <Binding name="MSUF_TOGGLE_OPTIONS"
              category="MSUF"
