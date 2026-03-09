@@ -1542,7 +1542,7 @@ end
 			panel.unitGlobalAnchorWarn:SetJustifyH("LEFT")
 			panel.unitGlobalAnchorWarn:SetTextColor(1, 0.82, 0.2)
 		end
-		panel.unitGlobalAnchorWarn:SetText(TR("Edit Mode custom anchor is global. Per-unit anchoring here overrides it for this unit."))
+		panel.unitGlobalAnchorWarn:SetText(TR(""))
 		panel.unitGlobalAnchorWarn:Hide()
 		for _, w in ipairs({
 			panel.unitAnchorToLabel,
