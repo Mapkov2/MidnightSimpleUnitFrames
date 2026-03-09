@@ -550,7 +550,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- Scope dropdown
     hpPowerScopeDrop = UI.Dropdown({
         name = "MSUF_HPTextScopeDropdown", parent = barGroup,
-        anchor = scopeLabel, anchorPoint = "TOPLEFT", x = 100, y = 2, width = 170,
+        anchor = scopeLabel, anchorPoint = "TOPLEFT", x = 115, y = 0, width = 170,
         items = hpPowerScopeOptions,
         get = function()
             EnsureDB(); return G().hpPowerTextSelectedKey or "shared"
@@ -716,7 +716,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     local powerSepDrop = UI.Dropdown({
         name = "MSUF_PowerTextSeparatorDropdown", parent = barGroup,
-        anchor = powerSepLabel, x = -16, y = -6, width = 120,
+        anchor = powerSepLabel, x = -26, y = -6, width = 120,
         items = textSepOptions,
         get = function()
             EnsureDB(); local g = G(); local uk = _MSUF_HPText_GetUnitKey()
