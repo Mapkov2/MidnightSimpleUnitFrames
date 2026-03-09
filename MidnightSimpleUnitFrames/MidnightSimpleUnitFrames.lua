@@ -3656,10 +3656,8 @@ local function _MSUF_ShouldRunStaticVisualPass(self, key, exists)
 end
 
 function UpdateSimpleUnitFrame(self)
-        -- Lazy-resolve split-module upvalues (Core/ files load after main)
-        if not _UF.Alpha then _UF.Alpha = _G.MSUF_ApplyUnitAlpha end
-        if not _UF.Portrait then _UF.Portrait = _G.MSUF_MaybeUpdatePortrait end
-        if not _UF.EditPrev then _UF.EditPrev = _G.MSUF_ApplyUnitframeEditPreview end
+        -- P0: _UF.Alpha / Portrait / EditPrev pre-resolved at PLAYER_LOGIN.
+        -- Zero per-call overhead (was: 3 branches + 3 _G hash lookups per frame update).
         local _flushSerial = _G.MSUF_UFCORE_FLUSH_SERIAL  -- cache once per call
 
         -- Hot path: prefer UFCore's settings snapshot (avoids repeated deep MSUF_DB traversals).
@@ -5591,6 +5589,15 @@ if type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then
     _G.MSUF_ApplyAllSettings_Immediate()
 else
     ApplyAllSettings()
+end
+-- P0: Pre-resolve split-module function refs for UpdateSimpleUnitFrame.
+-- After PLAYER_LOGIN all Core/ files have loaded. Eliminates 3 branches
+-- + 3 _G hash lookups per frame update (300-1500 branches/sec in combat).
+do
+    _UF.Alpha    = _G.MSUF_ApplyUnitAlpha              or _UF.Alpha
+    _UF.Portrait = _G.MSUF_MaybeUpdatePortrait          or _UF.Portrait
+    _UF.EditPrev = _G.MSUF_ApplyUnitframeEditPreview    or _UF.EditPrev
+    _UF.BossPrev = _G.MSUF_ApplyBossTestHpPreviewText   or _UF.BossPrev
 end
     if type(_G.MSUF_ReanchorTargetCastBar) == "function" then
         _G.MSUF_ReanchorTargetCastBar()
