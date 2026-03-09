@@ -55,9 +55,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         return box
     end
 
-    local left  = MakeBox("MSUF_FontsMenuPanelLeft", "Font Settings")
+    local left  = MakeBox("MSUF_FontsMenuPanelLeft", TR("Font Settings"))
     left:SetSize(320, 560); left:SetPoint("TOPLEFT", fontGroup, "TOPLEFT", 0, -110)
-    local right = MakeBox("MSUF_FontsMenuPanelRight", "Font color & style")
+    local right = MakeBox("MSUF_FontsMenuPanelRight", TR("Font color & style"))
     right:SetSize(320, 560); right:SetPoint("TOPLEFT", left, "TOPRIGHT", 14, 0)
 
     ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
     local sizeHelp = left:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     sizeHelp:SetJustifyH("LEFT"); sizeHelp:SetWidth(290)
-    sizeHelp:SetText("Global defaults. Frames inherit unless overridden in Unitframes > Text.")
+    sizeHelp:SetText(TR("Global defaults. Frames inherit unless overridden in Unitframes > Text."))
     sizeHelp:SetPoint("TOPLEFT", secSizes, "BOTTOMLEFT", 0, -4)
 
     -- Size slider factory (110px, compact labels)
@@ -160,10 +160,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
 
     local colGap = 30
-    local nameSizeSlider    = MakeSizeSlider("MSUF_NameFontSizeSlider", "Name", "nameFontSize", sizeHelp, 0, -30, 8, 32, 14)
-    local hpSizeSlider      = MakeSizeSlider("MSUF_HealthFontSizeSlider", "HP", "hpFontSize", sizeHelp, 110 + colGap, -30, 8, 32, 14)
-    local powerSizeSlider   = MakeSizeSlider("MSUF_PowerFontSizeSlider", "Power", "powerFontSize", nameSizeSlider, 0, -100, 8, 32, 14)
-    local castbarSizeSlider = MakeSizeSlider("MSUF_CastbarSpellNameFontSizeSlider", "Castbar", "castbarSpellNameFontSize", powerSizeSlider, 110 + colGap, 0, 0, 30, 0)
+    local nameSizeSlider    = MakeSizeSlider("MSUF_NameFontSizeSlider", TR("Name"), "nameFontSize", sizeHelp, 0, -30, 8, 32, 14)
+    local hpSizeSlider      = MakeSizeSlider("MSUF_HealthFontSizeSlider", TR("HP"), "hpFontSize", sizeHelp, 110 + colGap, -30, 8, 32, 14)
+    local powerSizeSlider   = MakeSizeSlider("MSUF_PowerFontSizeSlider", TR("Power"), "powerFontSize", nameSizeSlider, 0, -100, 8, 32, 14)
+    local castbarSizeSlider = MakeSizeSlider("MSUF_CastbarSpellNameFontSizeSlider", TR("Castbar"), "castbarSpellNameFontSize", powerSizeSlider, 110 + colGap, 0, 0, 30, 0)
     -- Fix castbar position: same row as Power
     castbarSizeSlider:ClearAllPoints()
     castbarSizeSlider:SetPoint("TOPLEFT", powerSizeSlider, "TOPRIGHT", colGap, 0)
@@ -195,7 +195,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     local function UpdateOverrideInfo()
         EnsureDB()
         local keys = { "player", "target", "targettarget", "focus", "pet", "boss" }
-        local pretty = { player = "Player", target = "Target", targettarget = "ToT", focus = "Focus", pet = "Pet", boss = "Boss" }
+        local pretty = { player = TR("Player"), target = TR("Target"), targettarget = TR("ToT"), focus = TR("Focus"), pet = TR("Pet"), boss = TR("Boss") }
         local function List(field)
             local out = {}
             for _, k in ipairs(keys) do
@@ -205,9 +205,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             return out
         end
         local function Fmt(list)
-            if #list == 0 then return "Overrides: -", nil end
-            if #list == 1 then return "Overrides: " .. list[1], list[1] end
-            return "Overrides: " .. list[1] .. " +" .. (#list - 1), table.concat(list, ", ")
+            if #list == 0 then return TR("Overrides: -"), nil end
+            if #list == 1 then return TR"Overrides: " .. list[1], list[1] end
+            return TR("Overrides: ") .. list[1] .. " +" .. (#list - 1), table.concat(list, ", ")
         end
         local s, f
         s, f = Fmt(List("nameFontSize"));  nameOvr:SetText(s);  nameOvr._fullList = f or ""
@@ -220,7 +220,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- Reset overrides button
     if not StaticPopupDialogs["MSUF_RESET_FONT_OVERRIDES"] then
         StaticPopupDialogs["MSUF_RESET_FONT_OVERRIDES"] = {
-            text = "Reset all font size overrides?\n\nThis clears per-unit overrides for Name/Health/Power AND per-castbar overrides for Cast Name/Time so everything inherits the global defaults.",
+            text = TR("Reset all font size overrides?\n\nThis clears per-unit overrides for Name/Health/Power AND per-castbar overrides for Cast Name/Time so everything inherits the global defaults."),
             button1 = YES, button2 = NO, whileDead = true, hideOnEscape = true, preferredIndex = 3,
             OnAccept = function()
                 EnsureDB()
@@ -346,8 +346,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         name = "MSUF_ShortenNameClipSideDrop", parent = right,
         anchor = shortenClipLabel, x = -16, y = -2, width = 200,
         items = {
-            { key = "LEFT",  label = "Keep end (show last letters)" },
-            { key = "RIGHT", label = "Keep start (show first letters)" },
+            { key = "LEFT",  label = TR("Keep end (show last letters)") },
+            { key = "RIGHT", label = TR("Keep start (show first letters)") },
         },
         get = function() return G().shortenNameClipSide or "LEFT" end,
         set = function(v)
@@ -392,10 +392,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         GameTooltip:SetText(TR("Name Shortening"))
         local side = G().shortenNameClipSide or "LEFT"
         if side == "RIGHT" then
-            GameTooltip:AddLine("Keep start: shows the first letters (clips the end).", 1, 1, 1, true)
+            GameTooltip:AddLine(TR("Keep start: shows the first letters (clips the end)."), 1, 1, 1, true)
         else
-            GameTooltip:AddLine("Keep end: shows the last letters (clips the beginning).", 1, 1, 1, true)
-            GameTooltip:AddLine("Reserved space protects the clipped edge (avoids overlaps).", 0.95, 0.95, 0.95, true)
+            GameTooltip:AddLine(TR("Keep end: shows the last letters (clips the beginning)."), 1, 1, 1, true)
+            GameTooltip:AddLine(TR("Reserved space protects the clipped edge (avoids overlaps)."), 0.95, 0.95, 0.95, true)
         end
         GameTooltip:Show()
     end)

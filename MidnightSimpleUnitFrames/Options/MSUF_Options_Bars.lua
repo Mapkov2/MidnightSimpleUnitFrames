@@ -121,9 +121,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     scopeLabel:SetPoint("LEFT", scopeHeader, "RIGHT", 12, 0); scopeLabel:SetText(TR("Configure settings for"))
 
     local hpPowerScopeOptions = {
-        { key = "shared", label = "Shared" }, { key = "player", label = "Player" },
-        { key = "target", label = "Target" }, { key = "targettarget", label = "Target of Target" },
-        { key = "focus", label = "Focus" }, { key = "pet", label = "Pet" }, { key = "boss", label = "Boss" },
+        { key = "shared", label = TR("Shared") }, { key = "player", label = TR("Player") },
+        { key = "target", label = TR("Target") }, { key = "targettarget", label = TR("Target of Target") },
+        { key = "focus", label = TR("Focus") }, { key = "pet", label = TR"Pet" }, { key = "boss", label = TR("Boss") },
     }
 
     -- Forward-declare scope functions
@@ -162,8 +162,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         name = "MSUF_AbsorbDisplayDrop", parent = barGroup,
         anchor = absorbLine, x = 0, y = -6, width = BAR_DD_W,
         items = {
-            { key = 1, label = "Absorb off" }, { key = 2, label = "Absorb bar" },
-            { key = 3, label = "Absorb bar + text" }, { key = 4, label = "Absorb text only" },
+            { key = 1, label = TR("Absorb off") }, { key = 2, label = TR("Absorb bar") },
+            { key = 3, label = TR("Absorb bar + text") }, { key = 4, label = TR("Absorb text only") },
         },
         get = function()
             local m = ScopeGet("absorbTextMode", nil)
@@ -184,9 +184,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         name = "MSUF_AbsorbAnchorDrop", parent = barGroup,
         anchor = absorbAnchorLabel, x = -16, y = -4, width = BAR_DD_W,
         items = {
-            { key = 1, label = "Anchor to left side" }, { key = 2, label = "Anchor to right side" },
-            { key = 3, label = "Follow HP bar" }, { key = 4, label = "Follow HP bar (overflow)" },
-            { key = 5, label = "Reverse from max" },
+            { key = 1, label = TR("Anchor to left side") }, { key = 2, label = TR("Anchor to right side") },
+            { key = 3, label = TR("Follow HP bar") }, { key = 4, label = TR("Follow HP bar (overflow)") },
+            { key = 5, label = TR("Reverse from max") },
         },
         get = function() return tonumber(ScopeGet("absorbAnchorMode", 2)) or 2 end,
         set = function(v) ScopeSet("absorbAnchorMode", v, ApplyAbsorbAnchor) end,
@@ -220,7 +220,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     })
 
     -- Absorb test mode checkbox
-    local absorbTexTestCB = CreateLabeledCheckButton("MSUF_AbsorbTextureTestModeCheck", "Test absorb textures", barGroup, 16, -1)
+    local absorbTexTestCB = CreateLabeledCheckButton("MSUF_AbsorbTextureTestModeCheck", TR("Test absorb textures"), barGroup, 16, -1)
     absorbTexTestCB:ClearAllPoints(); absorbTexTestCB:SetPoint("TOPLEFT", healAbsorbTextureDrop, "BOTTOMLEFT", 16, -8)
     absorbTexTestCB:SetScript("OnShow", function(self) self:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false) end)
     absorbTexTestCB:SetScript("OnClick", function(self)
@@ -232,7 +232,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end)
 
     -- Self-heal prediction checkbox (same row as test)
-    local selfHealPredCB = CreateLabeledCheckButton("MSUF_SelfHealPredictionCheck", "Heal prediction", barGroup, 16, -1)
+    local selfHealPredCB = CreateLabeledCheckButton("MSUF_SelfHealPredictionCheck", TR("Heal prediction"), barGroup, 16, -1)
     selfHealPredCB:ClearAllPoints(); selfHealPredCB:SetPoint("TOPLEFT", healAbsorbTextureDrop, "BOTTOMLEFT", 200, -8)
     selfHealPredCB:SetScript("OnShow", function(self) EnsureDB(); self:SetChecked(G().showSelfHealPrediction and true or false) end)
     selfHealPredCB:SetScript("OnClick", function(self) G().showSelfHealPrediction = self:GetChecked() and true or false; RefreshFrames() end)
@@ -316,13 +316,13 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     gradLine:SetPoint("TOPLEFT", gradHeader, "BOTTOMLEFT", -16, -4); gradLine:SetWidth(296)
     leftPanel.MSUF_SectionLine_Gradient = gradLine
 
-    local gradientCheck = CreateLabeledCheckButton("MSUF_GradientEnableCheck", "Enable HP bar gradient", barGroup, 16, -260)
+    local gradientCheck = CreateLabeledCheckButton("MSUF_GradientEnableCheck", TR("Enable HP bar gradient"), barGroup, 16, -260)
     gradientCheck:ClearAllPoints(); gradientCheck:SetPoint("TOPLEFT", gradLine, "BOTTOMLEFT", 16, -18)
 
-    local powerGradientCheck = CreateLabeledCheckButton("MSUF_PowerGradientEnableCheck", "Enable power bar gradient", barGroup, 16, -282)
+    local powerGradientCheck = CreateLabeledCheckButton("MSUF_PowerGradientEnableCheck", TR("Enable power bar gradient"), barGroup, 16, -282)
     powerGradientCheck:ClearAllPoints(); powerGradientCheck:SetPoint("TOPLEFT", gradientCheck, "BOTTOMLEFT", 0, -8)
 
-    local gradientStrengthSlider = CreateLabeledSlider("MSUF_GradientStrengthSlider", "Gradient strength", barGroup, 0, 1, 0.05, 16, -304)
+    local gradientStrengthSlider = CreateLabeledSlider("MSUF_GradientStrengthSlider", TR("Gradient strength"), barGroup, 0, 1, 0.05, 16, -304)
     gradientStrengthSlider:ClearAllPoints(); gradientStrengthSlider:SetPoint("TOPLEFT", powerGradientCheck, "BOTTOMLEFT", 0, -18)
     if gradientStrengthSlider.SetWidth then gradientStrengthSlider:SetWidth(260) end
 
@@ -346,7 +346,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     outlineLine:SetPoint("TOPLEFT", outlineHeader, "BOTTOMLEFT", -16, -4); outlineLine:SetWidth(296)
     leftPanel.MSUF_SectionLine_Outline = outlineLine
 
-    local barOutlineThicknessSlider = CreateLabeledSlider("MSUF_BarOutlineThicknessSlider", "Outline thickness", barGroup, 0, 6, 1, 16, -350)
+    local barOutlineThicknessSlider = CreateLabeledSlider("MSUF_BarOutlineThicknessSlider", TR("Outline thickness"), barGroup, 0, 6, 1, 16, -350)
     barOutlineThicknessSlider:ClearAllPoints(); barOutlineThicknessSlider:SetPoint("TOPLEFT", outlineLine, "BOTTOMLEFT", 16, -14); barOutlineThicknessSlider:SetWidth(280)
     do local n = barOutlineThicknessSlider:GetName(); local t = _G[n .. "Text"]; if t then t:SetText(""); t:Hide() end end
     barOutlineThicknessSlider.onValueChanged = function(_, v)
@@ -354,7 +354,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
     end
 
-    local highlightBorderThicknessSlider = CreateLabeledSlider("MSUF_HighlightBorderThicknessSlider", "Highlight border thickness", barGroup, 1, 6, 1, 16, -420)
+    local highlightBorderThicknessSlider = CreateLabeledSlider("MSUF_HighlightBorderThicknessSlider", TR("Highlight border thickness"), barGroup, 1, 6, 1, 16, -420)
     highlightBorderThicknessSlider.onValueChanged = function(_, v)
         G().highlightBorderThickness = v
         if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
@@ -411,15 +411,15 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
 
     -- Original anchoring: aggro → hlSlider(-16,-28), dispel → aggro(0,-12), purge → dispel(0,-12)
-    local aggroOutlineDrop, aggroTestCheck = MakeOutlineRow("MSUF_AggroOutlineDropdown", "aggroOutlineMode", "Aggro border on", "Aggro border off", highlightBorderThicknessSlider, -16, -56, 170, AggroApply)
+    local aggroOutlineDrop, aggroTestCheck = MakeOutlineRow("MSUF_AggroOutlineDropdown", "aggroOutlineMode", TR("Aggro border on"), TR("Aggro border off"), highlightBorderThicknessSlider, -16, -56, 170, AggroApply)
     aggroTestCheck.tooltipText = TR("Aggro border: Target, Focus, Boss frames")
     aggroTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetAggroBorderTestMode) == "function" then _G.MSUF_SetAggroBorderTestMode(self:GetChecked() and true or false) end end)
 
-    local dispelOutlineDrop, dispelTestCheck = MakeOutlineRow("MSUF_DispelOutlineDropdown", "dispelOutlineMode", "Dispel border on", "Dispel border off", aggroOutlineDrop, 0, -28, 170, DispelPurgeApply)
+    local dispelOutlineDrop, dispelTestCheck = MakeOutlineRow("MSUF_DispelOutlineDropdown", "dispelOutlineMode", TR("Dispel border on"), TR("Dispel border off"), aggroOutlineDrop, 0, -28, 170, DispelPurgeApply)
     dispelTestCheck.tooltipText = TR("Dispel border: Player, Target, Focus, Target of Target")
     dispelTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(self:GetChecked() and true or false) end end)
 
-    local purgeOutlineDrop, purgeTestCheck = MakeOutlineRow("MSUF_PurgeOutlineDropdown", "purgeOutlineMode", "Purge border on", "Purge border off", dispelOutlineDrop, 0, -28, 170, DispelPurgeApply)
+    local purgeOutlineDrop, purgeTestCheck = MakeOutlineRow("MSUF_PurgeOutlineDropdown", "purgeOutlineMode", TR("Purge border on"), TR("Purge border off"), dispelOutlineDrop, 0, -28, 170, DispelPurgeApply)
     purgeTestCheck.tooltipText = TR("Purge border: Target, Focus, Target of Target")
     purgeTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(self:GetChecked() and true or false) end end)
 
@@ -427,7 +427,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- LEFT PANEL: Highlight Priority Drag-and-Drop (preserved 1:1)
     -- =====================================================================
     local _PRIO_DEFAULTS = { "dispel", "aggro", "purge" }
-    local _PRIO_LABELS = { dispel = "Dispel", aggro = "Aggro", purge = "Purge" }
+    local _PRIO_LABELS = { dispel = TR("Dispel"), aggro = TR("Aggro"), purge = TR("Purge") }
     local _PRIO_ROW_H, _PRIO_ROW_GAP = 22, 4
     local _prioRows = {}
 
@@ -510,13 +510,13 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- =====================================================================
     -- RIGHT PANEL: Power Bar Settings
     -- =====================================================================
-    local targetPowerBarCheck = CreateLabeledCheckButton("MSUF_TargetPowerBarCheck", "Show power bar on target frame", barGroup, 260, -260)
+    local targetPowerBarCheck = CreateLabeledCheckButton("MSUF_TargetPowerBarCheck", TR("Show power bar on target frame"), barGroup, 260, -260)
     targetPowerBarCheck:ClearAllPoints(); targetPowerBarCheck:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 16, -50)
-    local bossPowerBarCheck = CreateLabeledCheckButton("MSUF_BossPowerBarCheck", "Show power bar on boss frames", barGroup, 260, -290)
+    local bossPowerBarCheck = CreateLabeledCheckButton("MSUF_BossPowerBarCheck", TR("Show power bar on boss frames"), barGroup, 260, -290)
     bossPowerBarCheck:ClearAllPoints(); bossPowerBarCheck:SetPoint("TOPLEFT", targetPowerBarCheck, "BOTTOMLEFT", 0, -10)
-    local playerPowerBarCheck = CreateLabeledCheckButton("MSUF_PlayerPowerBarCheck", "Show power bar on player frames", barGroup, 260, -320)
+    local playerPowerBarCheck = CreateLabeledCheckButton("MSUF_PlayerPowerBarCheck", TR("Show power bar on player frames"), barGroup, 260, -320)
     playerPowerBarCheck:ClearAllPoints(); playerPowerBarCheck:SetPoint("TOPLEFT", bossPowerBarCheck, "BOTTOMLEFT", 0, -10)
-    local focusPowerBarCheck = CreateLabeledCheckButton("MSUF_FocusPowerBarCheck", "Show power bar on focus", barGroup, 260, -350)
+    local focusPowerBarCheck = CreateLabeledCheckButton("MSUF_FocusPowerBarCheck", TR("Show power bar on focus"), barGroup, 260, -350)
     focusPowerBarCheck:ClearAllPoints(); focusPowerBarCheck:SetPoint("TOPLEFT", playerPowerBarCheck, "BOTTOMLEFT", 0, -10)
 
     local powerBarHeightLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -525,9 +525,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     powerBarHeightEdit:SetSize(40, 20); powerBarHeightEdit:SetAutoFocus(false); powerBarHeightEdit:SetPoint("LEFT", powerBarHeightLabel, "RIGHT", 10, 0)
     powerBarHeightEdit:SetTextInsets(4, 4, 2, 2)
 
-    local powerBarEmbedCheck = CreateLabeledCheckButton("MSUF_PowerBarEmbedCheck", "Embed power bar into health bar", barGroup, 260, -380)
+    local powerBarEmbedCheck = CreateLabeledCheckButton("MSUF_PowerBarEmbedCheck", TR("Embed power bar into health bar"), barGroup, 260, -380)
     powerBarEmbedCheck:ClearAllPoints(); powerBarEmbedCheck:SetPoint("TOPLEFT", powerBarHeightLabel, "BOTTOMLEFT", 0, -10)
-    local powerBarBorderCheck = CreateLabeledCheckButton("MSUF_PowerBarBorderCheck", "Show power bar border", barGroup, 260, -410)
+    local powerBarBorderCheck = CreateLabeledCheckButton("MSUF_PowerBarBorderCheck", TR("Show power bar border"), barGroup, 260, -410)
     powerBarBorderCheck:ClearAllPoints(); powerBarBorderCheck:SetPoint("TOPLEFT", powerBarEmbedCheck, "BOTTOMLEFT", 0, -10)
 
     local powerBarBorderSizeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -568,7 +568,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     hpPowerOverrideCheck.text = _G["MSUF_HPTextOverrideCheckText"]
     if hpPowerOverrideCheck.text then hpPowerOverrideCheck.text:SetText(TR("Override shared settings")) end
     UI.StyleToggleText(hpPowerOverrideCheck); UI.StyleCheckmark(hpPowerOverrideCheck)
-    UI.AttachTooltip(hpPowerOverrideCheck, "Per-unit override", "When unchecked, this unit inherits Shared settings.")
+    UI.AttachTooltip(hpPowerOverrideCheck, TR("Per-unit override"), TR("When unchecked, this unit inherits Shared settings."))
 
     -- Scope helper functions
     _MSUF_HPText_NormalizeScopeKey = function(v) if v == nil or v == "" or v == "shared" then return "shared" end; return v end
@@ -636,8 +636,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     rightPanel.MSUF_SectionLine_TextModes = textModesLine
 
     local hpModeOptions = {
-        { key = "FULL_ONLY", label = "Full value only" }, { key = "FULL_PLUS_PERCENT", label = "Full value + %" },
-        { key = "PERCENT_PLUS_FULL", label = "% + Full value" }, { key = "PERCENT_ONLY", label = "Only %" },
+        { key = "FULL_ONLY", label = TR("Full value only") }, { key = "FULL_PLUS_PERCENT", label = TR("Full value + %") },
+        { key = "PERCENT_PLUS_FULL", label = TR("% + Full value") }, { key = "PERCENT_ONLY", label = TR("Only %") },
     }
     local hpModeDrop = UI.Dropdown({
         name = "MSUF_HPTextModeDropdown", parent = barGroup,
@@ -664,9 +664,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
 
     local powerModeOptions = {
-        { key = "CURRENT", label = "Current" }, { key = "MAX", label = "Max" },
-        { key = "CURMAX", label = "Cur/Max" }, { key = "PERCENT", label = "Percent" },
-        { key = "CURPERCENT", label = "Cur + Percent" }, { key = "CURMAXPERCENT", label = "Cur/Max + Percent" },
+        { key = "CURRENT", label = TR("Current") }, { key = "MAX", label = TR("Max") },
+        { key = "CURMAX", label = TR("Cur/Max") }, { key = "PERCENT", label = TR("Percent") },
+        { key = "CURPERCENT", label = TR("Cur + Percent") }, { key = "CURMAXPERCENT", label = TR("Cur/Max + Percent") },
     }
     local powerModeDrop = UI.Dropdown({
         name = "MSUF_PowerTextModeDropdown", parent = barGroup,
@@ -747,7 +747,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local hpSpacerInfoButton = CreateFrame("Button", "MSUF_HPSpacerInfoButton", barGroup)
     hpSpacerInfoButton:SetSize(14, 14); hpSpacerInfoButton:SetPoint("LEFT", hpSpacerSelectedLabel, "RIGHT", 4, 0)
     hpSpacerInfoButton:CreateTexture(nil, "ARTWORK"):SetAllPoints(); hpSpacerInfoButton:GetRegions():SetTexture("Interface\\FriendsFrame\\InformationIcon")
-    UI.AttachTooltip(hpSpacerInfoButton, "Text Spacers", "Use the Bar settings scope dropdown to choose which unit these settings apply to.")
+    UI.AttachTooltip(hpSpacerInfoButton, TR("Text Spacers"), TR("Use the Bar settings scope dropdown to choose which unit these settings apply to."))
 
     local hpSpacerCheck = CreateFrame("CheckButton", "MSUF_HPTextSpacerCheck", barGroup, "UICheckButtonTemplate")
     hpSpacerCheck:SetPoint("TOPLEFT", hpSpacerSelectedLabel, "BOTTOMLEFT", 0, -4)
@@ -771,7 +771,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- Spacer system (scope-aware, dynamic ranges)
     local function _TextModeAllowsSpacer(m) return (m == "FULL_PLUS_PERCENT" or m == "PERCENT_PLUS_FULL" or m == "CURPERCENT" or m == "CURMAXPERCENT") end
     local function _NiceUnitKey(k)
-        local map = { player = "Player", target = "Target", focus = "Focus", targettarget = "ToT", pet = "Pet", boss = "Boss" }
+        local map = { player = TR("Player"), target = TR("Target"), focus = TR("Focus"), targettarget = TR("ToT"), pet = TR("Pet"), boss = TR("Boss") }
         return map[k] or tostring(k or "Player")
     end
 
@@ -818,7 +818,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
         local uk, u, isShared = _HPSpacer_GetDB()
         local unitOverride = not isShared and (u and u.hpPowerTextOverride == true)
-        hpSpacerSelectedLabel:SetText("Selected: " .. (isShared and "Shared" or _NiceUnitKey(uk)))
+        hpSpacerSelectedLabel:SetText(TR("Selected: ") .. (isShared and "Shared" or _NiceUnitKey(uk)))
 
         for _, spec in ipairs(SPACER_SPECS) do
             local cb, sl = spec.check, spec.slider

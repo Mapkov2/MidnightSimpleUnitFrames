@@ -33,9 +33,9 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     -------------------------------------------------------------------------
     local LEFT_W, RIGHT_W = 330, 330
 
-    local leftPanel = UI.Panel({ parent = miscGroup, title = "Updates", anchor = miscGroup, anchorPoint = "TOPLEFT", x = 0, y = -110, width = LEFT_W, height = 396 })
-    local rightPanel = UI.Panel({ parent = miscGroup, title = "Unit info panel", anchor = leftPanel, anchorPoint = "TOPLEFT", x = LEFT_W, y = 0, width = RIGHT_W, height = 396 })
-    local bottomPanel = UI.Panel({ parent = miscGroup, title = "Indicators", anchor = leftPanel, anchorPoint = "TOPLEFT", x = 0, y = -(396 + 16), width = LEFT_W + RIGHT_W, height = 180 })
+    local leftPanel = UI.Panel({ parent = miscGroup, title = TR("Updates"), anchor = miscGroup, anchorPoint = "TOPLEFT", x = 0, y = -110, width = LEFT_W, height = 396 })
+    local rightPanel = UI.Panel({ parent = miscGroup, title = TR("Unit info panel"), anchor = leftPanel, anchorPoint = "TOPLEFT", x = LEFT_W, y = 0, width = RIGHT_W, height = 396 })
+    local bottomPanel = UI.Panel({ parent = miscGroup, title = TR("Indicators"), anchor = leftPanel, anchorPoint = "TOPLEFT", x = 0, y = -(396 + 16), width = LEFT_W + RIGHT_W, height = 180 })
 
     local centerDivider = miscGroup:CreateTexture(nil, "ARTWORK")
     centerDivider:SetColorTexture(1, 1, 1, 0.10)
@@ -85,7 +85,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end
 
         local gap = 6
-        leftPanel._presetPerf = MakePresetBtn("Perf...", function()
+        leftPanel._presetPerf = MakePresetBtn(TR("Perf..."), function()
             G().miscUpdatesPreset = "perf"
             sliders.updateInterval:SetValue(0.12); sliders.castbarUpdate:SetValue(0.06)
             sliders.ufcoreBudget:SetValue(1.0); sliders.ufcoreUrgent:SetValue(6)
@@ -93,7 +93,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end)
         leftPanel._presetPerf:SetPoint("LEFT", row, "LEFT", 0, 0)
 
-        leftPanel._presetBal = MakePresetBtn("Balanced...", function()
+        leftPanel._presetBal = MakePresetBtn(TR("Balanced..."), function()
             G().miscUpdatesPreset = "balanced"
             sliders.updateInterval:SetValue(0.05); sliders.castbarUpdate:SetValue(0.02)
             sliders.ufcoreBudget:SetValue(2.0); sliders.ufcoreUrgent:SetValue(10)
@@ -101,7 +101,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end)
         leftPanel._presetBal:SetPoint("LEFT", leftPanel._presetPerf, "RIGHT", gap, 0)
 
-        leftPanel._presetAcc = MakePresetBtn("Accurate...", function()
+        leftPanel._presetAcc = MakePresetBtn(TR("Accurate..."), function()
             G().miscUpdatesPreset = "accurate"
             sliders.updateInterval:SetValue(0.01); sliders.castbarUpdate:SetValue(0.01)
             sliders.ufcoreBudget:SetValue(5.0); sliders.ufcoreUrgent:SetValue(50)
@@ -123,7 +123,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         lowText = "0.01", highText = "0.30",
         get = function() return G().frameUpdateInterval or _G.MSUF_FrameUpdateInterval or 0.05 end,
         set = function(v) G().frameUpdateInterval = v; _G.MSUF_FrameUpdateInterval = v end,
-        formatText = function(v) return string.format("Unit update interval: %.2f s", v) end,
+        formatText = function(v) return string.format(TR("Unit update interval: %.2f s"), v) end,
     })
 
     sliders.castbarUpdate = UI.Slider({
@@ -133,7 +133,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         lowText = "0.01", highText = "0.30",
         get = function() return G().castbarUpdateInterval or _G.MSUF_CastbarUpdateInterval or 0.02 end,
         set = function(v) G().castbarUpdateInterval = v; _G.MSUF_CastbarUpdateInterval = v end,
-        formatText = function(v) return string.format("Castbar update interval: %.2f s", v) end,
+        formatText = function(v) return string.format(TR("Castbar update interval: %.2f s"), v) end,
     })
 
     sliders.ufcoreBudget = UI.Slider({
@@ -143,7 +143,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         lowText = "0.5", highText = "5.0",
         get = function() return G().ufcoreFlushBudgetMs end,
         set = function(v) G().ufcoreFlushBudgetMs = v end,
-        formatText = function(v) return string.format("UFCore flush budget: %.1f ms", v) end,
+        formatText = function(v) return string.format(TR("UFCore flush budget: %.1f ms"), v) end,
     })
 
     sliders.ufcoreUrgent = UI.Slider({
@@ -153,7 +153,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         lowText = "1", highText = "50",
         get = function() return G().ufcoreUrgentMaxPerFlush end,
         set = function(v) G().ufcoreUrgentMaxPerFlush = math.floor((tonumber(v) or 10) + 0.5) end,
-        formatText = function(v) return string.format("UFCore urgent cap: %d", math.floor((tonumber(v) or 10) + 0.5)) end,
+        formatText = function(v) return string.format(TR("UFCore urgent cap: %d"), math.floor((tonumber(v) or 10) + 0.5)) end,
     })
 
     -------------------------------------------------------------------------
@@ -362,10 +362,10 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     -- Status indicator checkboxes (AFK/DND with confirm popup, Dead/Ghost direct)
     local step = 30
     local statusSpecs = {
-        { key = "showAFK",   label = L["Show AFK"],   confirm = true },
-        { key = "showDND",   label = L["Show DND"],   confirm = true },
-        { key = "showDead",  label = L["Show Dead"] },
-        { key = "showGhost", label = L["Show Ghost"] },
+        { key = "showAFK",   label = "Show AFK",   confirm = true },
+        { key = "showDND",   label = "Show DND",   confirm = true },
+        { key = "showDead",  label = "Show Dead" },
+        { key = "showGhost", label = "Show Ghost" },
     }
 
     bottomPanel._msufStatusCBs = {}

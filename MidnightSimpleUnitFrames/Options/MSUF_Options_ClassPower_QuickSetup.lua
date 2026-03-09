@@ -412,26 +412,26 @@ local function MakePopup(name, text)
 end
 
 MakePopup("MSUF_QUICKSETUP_CDM",
-    TR("Quick Setup applied!\n\n"
+    "Quick Setup applied!\n\n"
     .. "Class Power + Power Bar are now\n"
     .. "positioned above Essential Cooldowns.\n\n"
-    .. "Use Edit Mode for fine-tuning."))
+    .. "Use Edit Mode for fine-tuning.")
 
 MakePopup("MSUF_QUICKSETUP_CDM_NOCP",
-    TR("Quick Setup applied!\n\n"
+    "Quick Setup applied!\n\n"
     .. "Power Bar is positioned above\n"
     .. "Essential Cooldowns.\n\n"
     .. "Your spec has no class resource bar.\n"
     .. "If you respec, it will appear automatically.\n\n"
-    .. "Use Edit Mode for fine-tuning."))
+    .. "Use Edit Mode for fine-tuning.")
 
 MakePopup("MSUF_QUICKSETUP_NOCDM",
-    TR("Quick Setup applied!\n\n"
+    "Quick Setup applied!\n\n"
     .. "Class Power + Power Bar are detached\n"
     .. "and positioned at screen center.\n\n"
     .. "Essential Cooldowns not detected.\n"
     .. "Enable it for automatic anchoring.\n\n"
-    .. "Use Edit Mode for fine-tuning."))
+    .. "Use Edit Mode for fine-tuning.")
 
 -- ============================================================================
 -- Master action

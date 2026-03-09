@@ -103,22 +103,22 @@ end
 -- Data
 -- ────────────────────────────────────────────────────────────
 local SCOPE_ITEMS = {
-    { key = "shared", label = "Shared" },
-    { key = "player", label = "Player" }, { key = "target", label = "Target" },
-    { key = "focus",  label = "Focus" },  { key = "targettarget", label = "ToT" },
-    { key = "boss",   label = "Boss" },   { key = "pet", label = "Pet" },
+    { key = "shared", label = TR("Shared") },
+    { key = "player", label = TR("Player") }, { key = "target", label = TR("Target") },
+    { key = "focus",  label = TR("Focus") },  { key = "targettarget", label = TR("ToT") },
+    { key = "boss",   label = TR("Boss") },   { key = "pet", label = TR("Pet") },
 }
 local SHAPE_ITEMS = {
-    { key = "SQUARE", label = "Square" }, { key = "CIRCLE", label = "Circle" },
+    { key = "SQUARE", label = TR("Square") }, { key = "CIRCLE", label = TR("Circle") },
 }
 local BORDER_ITEMS = {
-    { key = "NONE", label = "None" }, { key = "SOLID", label = "Solid (White)" },
-    { key = "CLASS_COLOR", label = "Class Color" }, { key = "REACTION", label = "Reaction Color" },
-    { key = "CUSTOM", label = "Custom Color" },
+    { key = "NONE", label = "None" }, { key = "SOLID", label = TR("Solid (White)") },
+    { key = "CLASS_COLOR", label = TR("Class Color") }, { key = "REACTION", label = TR("Reaction Color") },
+    { key = "CUSTOM", label = TR("Custom Color") },
 }
 local RENDER_ITEMS = {
-    { key = "2D", label = "2D Portrait" }, { key = "3D", label = "3D Portrait" },
-    { key = "CLASS", label = "Class Icon" },
+    { key = "2D", label = TR("2D Portrait") }, { key = "3D", label = TR("3D Portrait") },
+    { key = "CLASS", label = TR("Class Icon") },
 }
 
 -- Keys inherited from general → per-unit when enabling override
@@ -217,7 +217,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
 
     -- ─── Title ───
     local titleFS = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    titleFS:SetPoint("TOPLEFT", 16, -16); titleFS:SetText("Portrait Settings")
+    titleFS:SetPoint("TOPLEFT", 16, -16); titleFS:SetText(TR("Portrait Settings"))
 
     -- ─── Scope Header ───
     local scopeLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -244,7 +244,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     local ocFS = overrideCheck.text or overrideCheck.Text or _G["MSUF_PortraitOverrideCheckText"]
     if ocFS then ocFS:SetText(TR("Override shared")); ocFS:SetFontObject("GameFontNormalSmall") end
     StyleToggleText(overrideCheck); StyleCheckmark(overrideCheck)
-    AttachTooltip(overrideCheck, "Per-unit override", "When unchecked, this unit inherits Shared settings.")
+    AttachTooltip(overrideCheck, TR("Per-unit override"), TR("When unchecked, this unit inherits Shared settings."))
 
     overrideCheck:SetScript("OnClick", function(self)
         local uk = GetUnitKey()
@@ -271,8 +271,8 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     content:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
 
     -- ═══ Render Type ═══
-    local renderBox = MakeGroupBox(content, "Portrait Type", 16, -4, 350, 55)
-    MakeLabel(renderBox, "Type", 12, -26)
+    local renderBox = MakeGroupBox(content, TR("Portrait Type"), 16, -4, 350, 55)
+    MakeLabel(renderBox, TR("Type"), 12, -26)
     local renderDrop
     if UI.Dropdown then
         renderDrop = UI.Dropdown({
@@ -310,11 +310,11 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     end
 
     -- ═══ Class Style (only CLASS render) ═══
-    local classBox = MakeGroupBox(content, "Class Portrait Style", 16, -67, 350, 55)
+    local classBox = MakeGroupBox(content, TR("Class Portrait Style"), 16, -67, 350, 55)
     local PM = ns.PortraitMedia
     local function ClassItems()
         local t = {}
-        local opts = (PM and PM.GetPackOptions and PM.GetPackOptions()) or {{ value = "BLIZZARD", text = "Blizzard Class Icon" }}
+        local opts = (PM and PM.GetPackOptions and PM.GetPackOptions()) or {{ value = "BLIZZARD", text = TR("Blizzard Class Icon") }}
         for _, o in ipairs(opts) do t[#t + 1] = { key = o.value, label = o.text } end
         return t
     end
@@ -334,8 +334,8 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     end
 
     -- ═══ Shape & Size ═══
-    local shapeBox = MakeGroupBox(content, "Shape & Size", 16, -130, 350, 185)
-    MakeLabel(shapeBox, "Shape", 12, -28)
+    local shapeBox = MakeGroupBox(content, TR("Shape & Size"), 16, -130, 350, 185)
+    MakeLabel(shapeBox, TR("Shape"), 12, -28)
     local shapeDrop
     if UI.Dropdown then
         shapeDrop = UI.Dropdown({
@@ -347,9 +347,9 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         })
     end
 
-    local sizeCheck = MakeCheck(shapeBox, "MSUF_PortraitSizeCheck", "Custom size", 8, -56,
-        "Override auto size (frame height minus 4px)")
-    local sizeSlider = MakeSliderWithEdit(shapeBox, "MSUF_PortraitSizeSlider", "Size (px)", 140, -50, 16, 80, 1, 160)
+    local sizeCheck = MakeCheck(shapeBox, "MSUF_PortraitSizeCheck", TR("Custom size"), 8, -56,
+        TR("Override auto size (frame height minus 4px)"))
+    local sizeSlider = MakeSliderWithEdit(shapeBox, "MSUF_PortraitSizeSlider", TR("Size (px)"), 140, -50, 16, 80, 1, 160)
 
     sizeCheck:SetScript("OnClick", function(self)
         local on = self:GetChecked() and true or false
@@ -367,8 +367,8 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         if sizeCheck:GetChecked() then ScopeSet("portraitSizeOverride", val); LiveApply() end
     end)
 
-    local oxSlider = MakeSliderWithEdit(shapeBox, "MSUF_PortraitOXSlider", "Offset X", 12, -105, -500, 500, 1, 130)
-    local oySlider = MakeSliderWithEdit(shapeBox, "MSUF_PortraitOYSlider", "Offset Y", 186, -105, -500, 500, 1, 130)
+    local oxSlider = MakeSliderWithEdit(shapeBox, "MSUF_PortraitOXSlider", TR("Offset X"), 12, -105, -500, 500, 1, 130)
+    local oySlider = MakeSliderWithEdit(shapeBox, "MSUF_PortraitOYSlider", TR("Offset Y"), 186, -105, -500, 500, 1, 130)
 
     oxSlider:SetScript("OnValueChanged", function(self, val)
         val = floor(val + 0.5)
@@ -383,8 +383,8 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
 
     -- Fill Border toggle (2D/3D only — stretches portrait to fill border bounds)
     local fillCheck = MakeCheck(shapeBox, "MSUF_PortraitFillBorderCheck",
-        "Stretch portrait into border", 8, -148,
-        "Portrait fills the full border area instead of sitting inside it. Best with Circle/Diamond borders.")
+        TR("Stretch portrait into border"), 8, -148,
+        TR("Portrait fills the full border area instead of sitting inside it. Best with Circle/Diamond borders."))
     fillCheck:SetScript("OnClick", function(self)
         ScopeSet("portraitFillBorder", self:GetChecked() and true or false)
         if self._msufToggleUpdate then self._msufToggleUpdate() end
@@ -392,8 +392,8 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     end)
 
     -- ═══ Border ═══
-    local borderBox = MakeGroupBox(content, "Border", 16, -295, 350, 120)
-    MakeLabel(borderBox, "Style", 12, -28)
+    local borderBox = MakeGroupBox(content, TR("Border"), 16, -295, 350, 120)
+    MakeLabel(borderBox, TR("Style"), 12, -28)
     local borderDrop
     if UI.Dropdown then
         borderDrop = UI.Dropdown({
@@ -405,29 +405,29 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         })
     end
 
-    local thickSlider = MakeSliderWithEdit(borderBox, "MSUF_PortraitThickSlider", "Thickness", 12, -68, 1, 6, 1, 160)
+    local thickSlider = MakeSliderWithEdit(borderBox, "MSUF_PortraitThickSlider", TR("Thickness"), 12, -68, 1, 6, 1, 160)
     thickSlider:SetScript("OnValueChanged", function(self, val)
         val = floor(val + 0.5)
         if self.editBox then self.editBox:SetText(tostring(val)) end
         ScopeSet("portraitBorderThickness", val); LiveApply()
     end)
 
-    local borderColorHint = MakeLabel(borderBox, "Color: Colors panel", 210, -58)
+    local borderColorHint = MakeLabel(borderBox, TR("Color: Colors panel"), 210, -58)
     borderColorHint:SetTextColor(0.5, 0.5, 0.5)
 
     -- ═══ Background ═══
-    local bgBox = MakeGroupBox(content, "Background", 16, -425, 350, 130)
-    local bgCheck = MakeCheck(bgBox, "MSUF_PortraitBgCheck", "Show background", 8, -28)
+    local bgBox = MakeGroupBox(content, TR("Background"), 16, -425, 350, 130)
+    local bgCheck = MakeCheck(bgBox, "MSUF_PortraitBgCheck", TR("Show background"), 8, -28)
     bgCheck:SetScript("OnClick", function(self)
         ScopeSet("portraitBgEnabled", self:GetChecked() and true or false)
         if self._msufToggleUpdate then self._msufToggleUpdate() end
         LiveApply(); SyncScopeUI()
     end)
 
-    local bgColorHint = MakeLabel(bgBox, "Color: Colors panel", 12, -62)
+    local bgColorHint = MakeLabel(bgBox, TR("Color: Colors panel"), 12, -62)
     bgColorHint:SetTextColor(0.5, 0.5, 0.5)
 
-    local bgOpSlider = MakeSliderWithEdit(bgBox, "MSUF_PortraitBgOpSlider", "Opacity", 140, -56, 0, 100, 5, 160)
+    local bgOpSlider = MakeSliderWithEdit(bgBox, "MSUF_PortraitBgOpSlider", TR("Opacity"), 140, -56, 0, 100, 5, 160)
     bgOpSlider:SetScript("OnValueChanged", function(self, val)
         val = floor(val + 0.5)
         if self.editBox then self.editBox:SetText(val .. "%") end

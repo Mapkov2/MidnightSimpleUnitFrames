@@ -2405,7 +2405,7 @@ local function MSUF_CreateGridFrame()
 
     local anchorNameLabel = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     anchorNameLabel:SetPoint("TOP", anchorCheck, "BOTTOM", 0, -6)
-    anchorNameLabel:SetText("Custom anchor (type name or pick visually)")
+    anchorNameLabel:SetText(L["Custom anchor (type name or pick visually)"])
 
     local anchorNameInput = CreateFrame("EditBox", "MSUF_EditModeAnchorNameInput", f, "InputBoxTemplate")
     anchorNameInput:SetSize(210, 20)
@@ -2421,14 +2421,14 @@ local function MSUF_CreateGridFrame()
     local anchorPickBtn = CreateFrame("Button", "MSUF_EditModeAnchorPickBtn", anchorBtnRow, "UIPanelButtonTemplate")
     anchorPickBtn:SetSize(70, 22)
     anchorPickBtn:SetPoint("LEFT", anchorBtnRow, "LEFT", 0, 0)
-    anchorPickBtn:SetText("Pick")
+    anchorPickBtn:SetText(L["Pick"])
     if type(MSUF_SkinButton) == "function" then MSUF_SkinButton(anchorPickBtn) end
 
     -- Clear button
     local anchorClearBtn = CreateFrame("Button", "MSUF_EditModeAnchorClearBtn", anchorBtnRow, "UIPanelButtonTemplate")
     anchorClearBtn:SetSize(46, 22)
     anchorClearBtn:SetPoint("LEFT", anchorPickBtn, "RIGHT", 4, 0)
-    anchorClearBtn:SetText("Clear")
+    anchorClearBtn:SetText(L["Clear"])
     if type(MSUF_SkinButton) == "function" then MSUF_SkinButton(anchorClearBtn) end
 
     MSUF_EM_EnsureDB()

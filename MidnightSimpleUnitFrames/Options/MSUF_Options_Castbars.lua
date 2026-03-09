@@ -140,8 +140,8 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         name = "MSUF_CastbarFillDirectionDropdown", parent = castbarEnemyGroup,
         anchor = fillDirLabel, x = -16, y = -4, width = 200,
         items = {
-            { key = "RTL", label = "Right to left (default)" },
-            { key = "LTR", label = "Left to right" },
+            { key = "RTL", label = TR("Right to left (default)") },
+            { key = "LTR", label = TR("Left to right") },
         },
         get = function() return G().castbarFillDirection or "RTL" end,
         set = function(v) G().castbarFillDirection = v; if _G.MSUF_UpdateCastbarFillDirection then _G.MSUF_UpdateCastbarFillDirection() end end,

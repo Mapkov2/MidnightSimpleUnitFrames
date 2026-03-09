@@ -1493,15 +1493,15 @@ do
         name = "MSUF_Auras2_EditFiltersDropDown", parent = leftTop,
         anchor = editLbl, anchorPoint = "TOPLEFT", x = 56, y = 8, width = 160,
         items = {
-            { key = "shared", label = "Shared" },
-            { key = "player", label = "Player" },
-            { key = "target", label = "Target" },
-            { key = "focus",  label = "Focus" },
-            { key = "boss1",  label = "Boss 1" },
-            { key = "boss2",  label = "Boss 2" },
-            { key = "boss3",  label = "Boss 3" },
-            { key = "boss4",  label = "Boss 4" },
-            { key = "boss5",  label = "Boss 5" },
+            { key = "shared", label = L["Shared"] },
+            { key = "player", label = L["Player"] },
+            { key = "target", label = L["Target"] },
+            { key = "focus",  label = L["Focus"] },
+            { key = "boss1",  label = L["Boss 1"] },
+            { key = "boss2",  label = L["Boss 2"] },
+            { key = "boss3",  label = L["Boss 3"] },
+            { key = "boss4",  label = L["Boss 4"] },
+            { key = "boss5",  label = L["Boss 5"] },
         },
         get = function() return GetEditingKey() end,
         set = function(key)
@@ -1516,8 +1516,8 @@ do
         MSUF_FixUIDropDown(ddEditFilters, 160)
     end
     local labelForKey = {
-        shared = "Shared", player = "Player", target = "Target", focus = "Focus",
-        boss1 = "Boss 1", boss2 = "Boss 2", boss3 = "Boss 3", boss4 = "Boss 4", boss5 = "Boss 5",
+        shared = L["Shared"], player = L["Player"], target = L["Target"], focus = L["Focus"],
+        boss1 = L["Boss 1"], boss2 = L["Boss 2"], boss3 = L["Boss 3"], boss4 = L["Boss 4"], boss5 = L["Boss 5"],
     }
     local function ApplyKey(key)
         panel.__msufAuras2_FilterEditKey = key
@@ -1528,7 +1528,7 @@ do
         end
         if panel and panel.OnRefresh then panel.OnRefresh() end
      end
-    cbOverrideFilters = CreateCheckbox(leftTop, "Override shared filters", 380, -70,
+    cbOverrideFilters = CreateCheckbox(leftTop, L["Override shared filters"], 380, -70,
         function()  return GetOverrideForEditing() end,
         function(v)  SetOverrideForEditing(v)  end,
         L["When off, this unit uses Shared filter settings. When on, it uses its own copy of the filters."])
@@ -1568,7 +1568,7 @@ panel.__msufA2_overrideWarn = overrideWarn
              return L["|cff9aa0a6No overrides active.|r"]
         end
         if n <= 2 then
-            return "|cffffffffOverrides:|r " .. table.concat(active, ", ")
+            return L["|cffffffffOverrides:|r "] .. table.concat(active, ", ")
         end
         -- Keep it short: show first two, then "+N"
         return ("|cffffffffOverrides:|r %s, %s |cff9aa0a6+%d|r"):format(active[1], active[2], (n - 2))
@@ -1692,8 +1692,8 @@ end
             { L["Show cooldown text"], 200, -300, A2_Settings, "showCooldownText", nil,
                 L["Shows the countdown numbers on aura icons. Disable to hide cooldown numbers (swipe can remain enabled)."],
                 "cbShowCooldownText" },
-            { "Click-through auras", 200, -324, A2_Settings, "clickThroughAuras", nil,
-                "Makes aura icons click-through so mouse clicks pass to the game world.\n\nWhen 'Show tooltip' is also enabled, hovering still shows aura tooltips.\nWhen 'Show tooltip' is off, icons are fully non-interactive.",
+            { L["Click-through auras"], 200, -324, A2_Settings, "clickThroughAuras", nil,
+                L["Makes aura icons click-through so mouse clicks pass to the game world.\n\nWhen 'Show tooltip' is also enabled, hovering still shows aura tooltips.\nWhen 'Show tooltip' is off, icons are fully non-interactive."],
                 "cbClickThrough" },
             { L["Show tooltip"], 12, -276, A2_Settings, "showTooltip", nil, nil, "cbShowTooltip" },
         }, displayCB)
@@ -1977,15 +1977,15 @@ end
 			A2_RequestCooldownTextRecolor()
 			A2_RequestApply()
          end
-        local safeSlider = CreateAuras2CompactSlider(timerBox, 'Safe (seconds)', 0, 600, 1, 12, -96, 220, GetSafe, SetSafe)
+        local safeSlider = CreateAuras2CompactSlider(timerBox, L['Safe (seconds)'], 0, 600, 1, 12, -96, 220, GetSafe, SetSafe)
         A2_Track("global", safeSlider)
         MSUF_StyleAuras2CompactSlider(safeSlider, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(safeSlider, 0, 600, 1, GetSafe)
-        local warnSlider = CreateAuras2CompactSlider(timerBox, 'Warning (<=)', 0, 30, 1, 260, -96, 200, GetWarn, SetWarn)
+        local warnSlider = CreateAuras2CompactSlider(timerBox, L['Warning (<=)'], 0, 30, 1, 260, -96, 200, GetWarn, SetWarn)
         A2_Track("global", warnSlider)
         MSUF_StyleAuras2CompactSlider(warnSlider, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(warnSlider, 0, 30, 1, GetWarn)
-        local urgSlider = CreateAuras2CompactSlider(timerBox, 'Urgent (<=)', 0, 15, 1, 486, -96, 200, GetUrg, SetUrg)
+        local urgSlider = CreateAuras2CompactSlider(timerBox, L['Urgent (<=)'], 0, 15, 1, 486, -96, 200, GetUrg, SetUrg)
         A2_Track("global", urgSlider)
         MSUF_StyleAuras2CompactSlider(urgSlider, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(urgSlider, 0, 15, 1, GetUrg)
@@ -2463,7 +2463,7 @@ end
         end
 
         -- Gating: enable/disable checkboxes based on editing key + override state
-        local _IGNORE_UNIT_LABELS = { shared = L["Shared (all units)"], player = "Player", target = "Target", focus = "Focus" }
+        local _IGNORE_UNIT_LABELS = { shared = L["Shared (all units)"], player = L["Player"], target = L["Target"], focus = L["Focus"] }
         local function UpdateIgnoreBoxState()
             local key = GetEditingKey()
             local isBoss = (key == "boss1" or key == "boss2" or key == "boss3" or key == "boss4" or key == "boss5")
@@ -2473,7 +2473,7 @@ end
             if isBoss then
                 ignEditLabel:SetText(L["|cff888888Not available for Boss frames|r"])
             else
-                ignEditLabel:SetText("Editing: |cffffd200" .. (_IGNORE_UNIT_LABELS[key] or key) .. "|r")
+                ignEditLabel:SetText(L["Editing: |cffffd200"] .. (_IGNORE_UNIT_LABELS[key] or key) .. "|r")
             end
 
             -- Override checkbox: show only for non-shared, non-boss
@@ -2622,8 +2622,8 @@ end
         local thrSliderName = thrSlider:GetName()
         local thrLow = _G[thrSliderName .. "Low"]
         local thrHigh = _G[thrSliderName .. "High"]
-        if thrLow then thrLow:SetText("0 (Off)") end
-        if thrHigh then thrHigh:SetText("10 min") end
+        if thrLow then thrLow:SetText(L["0 (Off)"]) end
+        if thrHigh then thrHigh:SetText(L["10 min"]) end
         A2_Track("global", thrSlider)
 
         -- Gate: disable per-buff checkboxes + slider when master toggle off

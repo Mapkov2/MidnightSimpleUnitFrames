@@ -2367,7 +2367,7 @@ navParent._msufNavStripe=stripe end
 local function MakeButton(label,w,onClick,isHeader,isChild) local b=UI_Button(navParent,tostring(label or""),w,btnH,"TOPLEFT",navParent,"TOPLEFT",0,0,onClick)
 MSUF_LeftJustifyButtonText(b,isChild and 10 or 12)
 MSUF_SkinNavButton(b,isHeader,isChild) return b end
-local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_misc",label="Miscellaneous"},{key="opt_colors",label="Colors"},{key="opt_portraits",label="Portraits"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
+local NAV={{type="leaf",key="home",label=L["Dashboard"]},{type="header",id="unitframes",label=L["Unit Frames"],defaultOpen=true,children={{key="uf_player",label=L["Player"]},{key="uf_target",label=L["Target"]},{key="uf_targettarget",label=L["Target of Target"]},{key="uf_focus",label=L["Focus"]},{key="uf_boss",label=L["Boss Frames"]},{key="uf_pet",label=L["Pet"]},}},{type="header",id="options",label=L["Options"],defaultOpen=true,children={{key="opt_bars",label=L["Bars"]},{key="opt_fonts",label=L["Fonts"]},{key="auras2",label=L["Auras 2.0"]},{key="opt_castbar",label=L["Castbar"]},{key="opt_misc",label=L["Miscellaneous"]},{key="opt_colors",label=L["Colors"]},{key="opt_portraits",label=L["Portraits"]},}},{type="leaf",key="classpower",label=L["Class Resources"]},{type="leaf",key="gameplay",label=L["Gameplay"]},{type="header",id="modules",label=L["Modules"],defaultOpen=false,children={{key="modules",label=L["Style"]},}},{type="leaf",key="profiles",label=L["Profiles"]},}
 local headerLabels={}
 for _,node in ipairs(NAV)
 do if node.type=="header"then headerLabels[node.id]=node.label end
@@ -2579,8 +2579,8 @@ homeHint:SetPoint("TOPLEFT",homeTitle,"BOTTOMLEFT",0,-2)
 homeHint:SetText(L["Quick tools & UI scale (same content as /msuf options)."])
 MSUF_SkinText(homeHint)
 local tipBox=CreateFrame("Frame",nil,home)
-tipBox:SetPoint("TOPLEFT",home,"TOPLEFT",12,-50)
-tipBox:SetPoint("TOPRIGHT",home,"TOPRIGHT",-12,-50)
+tipBox:SetPoint("TOPLEFT",home,"TOPLEFT",12,-44)
+tipBox:SetPoint("TOPRIGHT",home,"TOPRIGHT",-12,-44)
 tipBox:SetHeight(22)
 local tipLabel=tipBox:CreateFontString(nil,"OVERLAY","GameFontDisableSmall")
 tipLabel:SetPoint("TOPLEFT",tipBox,"TOPLEFT",0,0)

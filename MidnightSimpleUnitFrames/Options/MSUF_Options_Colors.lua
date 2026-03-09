@@ -508,7 +508,7 @@ end
         S.classBgMatchCheck.text = S.classBgMatchCheck:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         S.classBgMatchCheck.text:SetPoint("LEFT", S.classBgMatchCheck, "RIGHT", 2, 0)
     end
-    S.classBgMatchCheck.text:SetText("Match HP")
+    S.classBgMatchCheck.text:SetText(ns.L["Match HP"])
 
     local function UpdateClassBgMatchState()
         local match = GetBarBgMatchHP()
@@ -541,7 +541,7 @@ end
         F._darkBgCustomCheck.text = F._darkBgCustomCheck:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         F._darkBgCustomCheck.text:SetPoint("LEFT", F._darkBgCustomCheck, "RIGHT", 2, 0)
     end
-    F._darkBgCustomCheck.text:SetText("Custom color in Dark Mode")
+    F._darkBgCustomCheck.text:SetText(ns.L["Custom color in Dark Mode"])
 
     F.UpdateDarkBgCustomControls = function()
         EnsureDB()
@@ -645,7 +645,7 @@ end
     -- Unified bar color (only used when Bar mode == "unified")
     local unifiedLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     unifiedLabel:SetPoint("TOPLEFT", S.barModeDrop, "BOTTOMLEFT", 16, -18)
-    unifiedLabel:SetText("Unified bar color")
+    unifiedLabel:SetText(ns.L["Unified bar color"])
 
     local unifiedSwatch = CreateFrame("Button", "MSUF_Colors_UnifiedBarSwatch", content)
     unifiedSwatch:SetSize(240, 16)
@@ -1041,7 +1041,7 @@ end
     -- Right block: Bar Colors
     local barHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     barHeader:SetPoint("TOPLEFT", S.darkToneSlider, "BOTTOMLEFT", rightHeaderX, -48)
-    barHeader:SetText("Bar Colors")
+    barHeader:SetText(ns.L["Bar Colors"])
     F.CreateHeaderDividerAbove(barHeader)
 
     local barLabelX     = 0
@@ -1523,7 +1523,7 @@ end
 -- Castbar background color (right-click to reset)
 local castbarBgColorLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 castbarBgColorLabel:SetPoint("TOPLEFT", castbarBorderSwatch, "BOTTOMLEFT", 0, -18)
-castbarBgColorLabel:SetText("Castbar background color")
+castbarBgColorLabel:SetText(ns.L["Castbar background color"])
 
 local castbarBgSwatch = CreateFrame("Button", "MSUF_Colors_CastbarBgColorSwatch", content)
 castbarBgSwatch:SetSize(32, 16)
@@ -1769,7 +1769,7 @@ end
         S.highlightEnableCheck.text = S.highlightEnableCheck:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         S.highlightEnableCheck.text:SetPoint("LEFT", S.highlightEnableCheck, "RIGHT", 2, 0)
     end
-    S.highlightEnableCheck.text:SetText("Enable mouseover highlight")
+    S.highlightEnableCheck.text:SetText(ns.L["Enable mouseover highlight"])
 
     local highlightColorLabel
     local highlightColorSwatch
@@ -1809,7 +1809,7 @@ end
     -- Mouseover highlight color (Colorpicker)
     highlightColorLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     highlightColorLabel:SetPoint("TOPLEFT", S.highlightEnableCheck, "BOTTOMLEFT", 0, -12)
-    highlightColorLabel:SetText("Mouseover highlight color")
+    highlightColorLabel:SetText(ns.L["Mouseover highlight color"])
 
     highlightColorSwatch = CreateFrame("Button", "MSUF_Colors_HighlightColorSwatch", content)
     highlightColorSwatch:SetSize(32, 16)
@@ -2614,7 +2614,7 @@ cpColResetBtn:SetPoint("LEFT", cpColSwatch, "RIGHT", 10, 0)
 
 local cpColBgLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 cpColBgLabel:SetPoint("TOPLEFT", cpColTypeDrop, "BOTTOMLEFT", 16, -24)
-cpColBgLabel:SetText("Background")
+cpColBgLabel:SetText(ns.L["Background"])
 
 local cpColBgSwatch = CreateFrame("Button", "MSUF_Colors_ClassPowerBgColorSwatch", content)
 cpColBgSwatch:SetSize(32, 16)
@@ -2623,7 +2623,7 @@ local cpColBgTex = cpColBgSwatch:CreateTexture(nil, "ARTWORK")
 cpColBgTex:SetAllPoints()
 
 local cpColBgResetBtn = CreateFrame("Button", "MSUF_Colors_ClassPowerBgColorResetBtn", content, "UIPanelButtonTemplate")
-cpColBgResetBtn:SetText("Reset")
+cpColBgResetBtn:SetText(ns.L["Reset"])
 cpColBgResetBtn:SetSize(70, 18)
 cpColBgResetBtn:SetPoint("LEFT", cpColBgSwatch, "RIGHT", 10, 0)
 
@@ -2935,7 +2935,7 @@ S.lastControl = cpColBgResetBtn
 --------------------------------------------------
 local aurasHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 aurasHeader:SetPoint("TOPLEFT", cpColBgLabel, "BOTTOMLEFT", 0, -34)
-aurasHeader:SetText("Auras")
+aurasHeader:SetText(ns.L["Auras"])
 F.CreateHeaderDividerAbove(aurasHeader)
 
 local aurasSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -3307,19 +3307,19 @@ S.lastControl = auraCDUrgentSwatch
     --------------------------------------------------
     local portraitHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     portraitHeader:SetPoint("TOPLEFT", auraCDUrgentSwatch, "BOTTOMLEFT", 0, -44)
-    portraitHeader:SetText("Portrait colors")
+    portraitHeader:SetText(ns.L["Portrait colors"])
     F.CreateHeaderDividerAbove(portraitHeader)
 
     local portraitSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     portraitSub:SetPoint("TOPLEFT", portraitHeader, "BOTTOMLEFT", 0, -4)
     portraitSub:SetWidth(380)
     portraitSub:SetJustifyH("LEFT")
-    portraitSub:SetText("Custom border color (used when Border Style is set to Custom) and background color.")
+    portraitSub:SetText(ns.L["Custom border color (used when Border Style is set to Custom) and background color."])
 
     -- Portrait Border Color
     local pBorderLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     pBorderLabel:SetPoint("TOPLEFT", portraitSub, "BOTTOMLEFT", 0, -16)
-    pBorderLabel:SetText("Border custom color")
+    pBorderLabel:SetText(ns.L["Border custom color"])
 
     local pBorderSwatch = CreateFrame("Button", "MSUF_Colors_PortraitBorderSwatch", content)
     pBorderSwatch:SetSize(32, 16)
@@ -3357,7 +3357,7 @@ S.lastControl = auraCDUrgentSwatch
     -- Portrait Background Color
     local pBgLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     pBgLabel:SetPoint("TOPLEFT", pBorderSwatch, "BOTTOMLEFT", 0, -16)
-    pBgLabel:SetText("Background color")
+    pBgLabel:SetText(ns.L["Background color"])
 
     local pBgSwatch = CreateFrame("Button", "MSUF_Colors_PortraitBgSwatch", content)
     pBgSwatch:SetSize(32, 16)
@@ -3395,7 +3395,7 @@ S.lastControl = auraCDUrgentSwatch
     local pResetBtn = CreateFrame("Button", "MSUF_Colors_PortraitResetButton", content, "UIPanelButtonTemplate")
     pResetBtn:SetSize(160, 22)
     pResetBtn:SetPoint("TOPLEFT", pBgSwatch, "BOTTOMLEFT", 0, -12)
-    pResetBtn:SetText("Reset portrait colors")
+    pResetBtn:SetText(ns.L["Reset portrait colors"])
     pResetBtn:SetScript("OnClick", function()
         MSUF_ConfirmColorReset("portrait colors", function()
             EnsureDB()

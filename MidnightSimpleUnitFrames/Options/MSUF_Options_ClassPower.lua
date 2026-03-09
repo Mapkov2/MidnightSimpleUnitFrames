@@ -212,15 +212,15 @@ local function BuildClassPowerOptions(leftName, rightName)
         })
     end
 
-    local cpAnchorCDCheck = CPC("MSUF_ClassPowerAnchorCooldownCheck", "Anchor to Essential Cooldown", cpYOffsetRow.label, "classPowerAnchorToCooldown")
+    local cpAnchorCDCheck = CPC("MSUF_ClassPowerAnchorCooldownCheck", TR("Anchor to Essential Cooldown"), cpYOffsetRow.label, "classPowerAnchorToCooldown")
     cpAnchorCDCheck:ClearAllPoints(); cpAnchorCDCheck:SetPoint("TOPLEFT", cpYOffsetRow.label, "BOTTOMLEFT", 0, -12)
-    local cpChargedCheck = CPC("MSUF_ShowChargedCPCheck", "Show empowered combo points", cpAnchorCDCheck, "showChargedComboPoints")
-    local cpTextCheck = CPC("MSUF_ClassPowerTextCheck", "Show resource text", cpChargedCheck, "classPowerShowText")
-    local cpRuneTimeCheck = CPC("MSUF_RuneTimeTextCheck", "Show rune time (per rune)", cpTextCheck, "runeShowTimeText")
-    local cpFillReverseCheck = CPC("MSUF_ClassPowerReverseCheck", "Fill right-to-left", cpRuneTimeCheck, "classPowerFillReverse")
-    local cpEleMaelCheck = CPC("MSUF_ClassPowerEleMaelCheck", "Show Maelstrom bar (Elemental)", cpFillReverseCheck, "showEleMaelstrom")
-    local cpEbonMightCheck = CPC("MSUF_ClassPowerEbonMightCheck", "Show Ebon Might timer (Aug)", cpEleMaelCheck, "showEbonMight", true)
-    local cpPredictionCheck = CPC("MSUF_ClassPowerPredictionCheck", "Show resource prediction", cpEbonMightCheck, "classPowerShowPrediction", true)
+    local cpChargedCheck = CPC("MSUF_ShowChargedCPCheck", TR("Show empowered combo points"), cpAnchorCDCheck, "showChargedComboPoints")
+    local cpTextCheck = CPC("MSUF_ClassPowerTextCheck", TR("Show resource text"), cpChargedCheck, "classPowerShowText")
+    local cpRuneTimeCheck = CPC("MSUF_RuneTimeTextCheck", TR("Show rune time (per rune)"), cpTextCheck, "runeShowTimeText")
+    local cpFillReverseCheck = CPC("MSUF_ClassPowerReverseCheck", TR("Fill right-to-left"), cpRuneTimeCheck, "classPowerFillReverse")
+    local cpEleMaelCheck = CPC("MSUF_ClassPowerEleMaelCheck", TR("Show Maelstrom bar (Elemental)"), cpFillReverseCheck, "showEleMaelstrom")
+    local cpEbonMightCheck = CPC("MSUF_ClassPowerEbonMightCheck", TR("Show Ebon Might timer (Aug)"), cpEleMaelCheck, "showEbonMight", true)
+    local cpPredictionCheck = CPC("MSUF_ClassPowerPredictionCheck", TR("Show resource prediction"), cpEbonMightCheck, "classPowerShowPrediction", true)
 
     -- =====================================================================
     -- LEFT BOTTOM: Detached Power Bar
@@ -299,15 +299,15 @@ local function BuildClassPowerOptions(leftName, rightName)
     })
 
     -- Style sliders (right column)
-    local cpFontSizeRow    = MakeRow("MSUF_CPFontSize",    "Font size", cpPanel, 6, 32, 1, "classPowerFontSize",    cpColorCheck,          "TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpTextOffsetXRow = MakeRow("MSUF_CPTextOffsetX", "Text X",    cpPanel, -200, 200, 1, "classPowerTextOffsetX", cpFontSizeRow.label,  "TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpTextOffsetYRow = MakeRow("MSUF_CPTextOffsetY", "Text Y",    cpPanel, -200, 200, 1, "classPowerTextOffsetY", cpTextOffsetXRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpBgAlphaRow     = MakeRow("MSUF_CPBgAlpha",     "BG opacity",cpPanel, 0, 100, 1, "classPowerBgAlpha",     cpTextOffsetYRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpTickRow        = MakeRow("MSUF_CPTick",        "Separator", cpPanel, 0, 4, 1, "classPowerTickWidth",    cpBgAlphaRow.label,    "TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpOutlineRow     = MakeRow("MSUF_CPOutline",     "Outline",   cpPanel, 0, 4, 1, "classPowerOutline",      cpTickRow.label,       "TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpFilledAlphaRow = MakeRow("MSUF_CPFilledAlpha", "Filled %",  cpPanel, 0, 100, 5, "classPowerFilledAlpha", cpOutlineRow.label,    "TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpEmptyAlphaRow  = MakeRow("MSUF_CPEmptyAlpha",  "Empty %",   cpPanel, 0, 100, 5, "classPowerEmptyAlpha",  cpFilledAlphaRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpGapRow         = MakeRow("MSUF_CPGap",         "Pip gap",   cpPanel, 0, 8, 1, "classPowerGap",          cpEmptyAlphaRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpFontSizeRow    = MakeRow("MSUF_CPFontSize",    TR("Font size"), cpPanel, 6, 32, 1, "classPowerFontSize",    cpColorCheck,          "TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpTextOffsetXRow = MakeRow("MSUF_CPTextOffsetX", TR("Text X"),    cpPanel, -200, 200, 1, "classPowerTextOffsetX", cpFontSizeRow.label,  "TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpTextOffsetYRow = MakeRow("MSUF_CPTextOffsetY", TR("Text Y"),    cpPanel, -200, 200, 1, "classPowerTextOffsetY", cpTextOffsetXRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpBgAlphaRow     = MakeRow("MSUF_CPBgAlpha",     TR("BG opacity"),cpPanel, 0, 100, 1, "classPowerBgAlpha",     cpTextOffsetYRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpTickRow        = MakeRow("MSUF_CPTick",        TR("Separator"), cpPanel, 0, 4, 1, "classPowerTickWidth",    cpBgAlphaRow.label,    "TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpOutlineRow     = MakeRow("MSUF_CPOutline",     TR("Outline"),   cpPanel, 0, 4, 1, "classPowerOutline",      cpTickRow.label,       "TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpFilledAlphaRow = MakeRow("MSUF_CPFilledAlpha", TR("Filled %"),  cpPanel, 0, 100, 5, "classPowerFilledAlpha", cpOutlineRow.label,    "TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpEmptyAlphaRow  = MakeRow("MSUF_CPEmptyAlpha",  TR("Empty %"),   cpPanel, 0, 100, 5, "classPowerEmptyAlpha",  cpFilledAlphaRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpGapRow         = MakeRow("MSUF_CPGap",         TR("Pip gap"),   cpPanel, 0, 8, 1, "classPowerGap",          cpEmptyAlphaRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
 
     -- Auto-Hide subsection
     local ahLine = cpPanel:CreateTexture(nil, "ARTWORK"); ahLine:SetColorTexture(1, 1, 1, 0.12); ahLine:SetHeight(1)
@@ -326,9 +326,9 @@ local function BuildClassPowerOptions(leftName, rightName)
         })
     end
 
-    local cpHideOOCCheck   = RPC("MSUF_ClassPowerHideOOC",   "Hide out of combat", ahHeader, "classPowerHideOOC")
-    local cpHideFullCheck  = RPC("MSUF_ClassPowerHideFull",  "Hide when full",     cpHideOOCCheck, "classPowerHideWhenFull")
-    local cpHideEmptyCheck = RPC("MSUF_ClassPowerHideEmpty", "Hide when empty",    cpHideFullCheck, "classPowerHideWhenEmpty")
+    local cpHideOOCCheck   = RPC("MSUF_ClassPowerHideOOC",   TR("Hide out of combat"), ahHeader, "classPowerHideOOC")
+    local cpHideFullCheck  = RPC("MSUF_ClassPowerHideFull",  TR("Hide when full"),     cpHideOOCCheck, "classPowerHideWhenFull")
+    local cpHideEmptyCheck = RPC("MSUF_ClassPowerHideEmpty", TR("Hide when empty"),    cpHideFullCheck, "classPowerHideWhenEmpty")
 
     -- Texture dropdowns (right column)
     local CPTexRefresh = function() if type(_G.MSUF_ClassPower_RefreshTextures) == "function" then _G.MSUF_ClassPower_RefreshTextures() end end
@@ -356,8 +356,8 @@ local function BuildClassPowerOptions(leftName, rightName)
         set = function(v) B().showAltMana = v; CPRefresh() end,
     })
 
-    local amHeightRow = MakeRow("MSUF_AMHeight", "Height",   cpPanel, 2, 30, 1, "altManaHeight", amShowCheck, "TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local amOffsetRow = MakeRow("MSUF_AMOffset", "Y offset", cpPanel, -50, 50, 1, "altManaOffsetY", amHeightRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local amHeightRow = MakeRow("MSUF_AMHeight", TR("Height"),   cpPanel, 2, 30, 1, "altManaHeight", amShowCheck, "TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local amOffsetRow = MakeRow("MSUF_AMOffset", TR("Y offset"), cpPanel, -50, 50, 1, "altManaOffsetY", amHeightRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
 
     -- =====================================================================
     -- Quick action buttons

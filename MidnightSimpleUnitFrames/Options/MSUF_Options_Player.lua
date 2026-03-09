@@ -369,9 +369,9 @@ end
 -- Step 4C: Portrait + Alpha + BossSpacing in Specs/Loops
 -- ============================================================
 local MSUF_PORTRAIT_OPTIONS = {
-    { value = "OFF",   text = "Portrait Off" },
-    { value = "LEFT",  text = "Portrait Left" },
-    { value = "RIGHT", text = "Portrait Right" },
+    { value = "OFF",   text = L["Portrait Off"] },
+    { value = "LEFT",  text = L["Portrait Left"] },
+    { value = "RIGHT", text = L["Portrait Right"] },
 }
 -- Target-of-Target inline-in-Target separator dropdown (token stored in MSUF_DB.targettarget.totInlineSeparator).
 -- UI shows the raw token; runtime renders it with spaces around it (legacy: " | ").
@@ -407,9 +407,9 @@ local function MSUF_ToTInlineSepTokenText(v)
      return v
 end
 local function MSUF_PortraitModeText(mode)
-    if mode == "LEFT" then  return "Portrait Left" end
-    if mode == "RIGHT" then  return "Portrait Right" end
-     return "Portrait Off"
+    if mode == "LEFT" then  return L["Portrait Left"] end
+    if mode == "RIGHT" then  return L["Portrait Right"] end
+     return L["Portrait Off"]
 end
 -- Class portrait style helpers removed — managed by MSUF_Options_Portraits.lua
 local function MSUF_GetPortraitDropdownValue(conf)
@@ -1499,7 +1499,7 @@ end
 		end
 		panel.unitAnchorToDD:Hide()
 		if not panel.unitAnchorGroup then
-			local g = CreateGroupBox(frameGroup, "Anchoring", rightX, topY - _msufTextBaseH - 12, rightW, 118, texWhite, texWhite2)
+			local g = CreateGroupBox(frameGroup, TR("Anchoring"), rightX, topY - _msufTextBaseH - 12, rightW, 118, texWhite, texWhite2)
 			panel.unitAnchorGroup = g
 			local sub = g:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 			sub:SetPoint("TOPLEFT", g, "TOPLEFT", 10, -24)
@@ -2605,7 +2605,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
 			if v ~= "player" and v ~= "target" and v ~= "focus" and v ~= "pet" and v ~= "targettarget" then v = "GLOBAL" end
 			if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.unitAnchorToDD, v) end
 			if UIDropDownMenu_SetText then
-				local txt = (v == "player" and "Player frame") or (v == "target" and "Target frame") or (v == "focus" and "Focus frame") or (v == "pet" and "Pet frame") or (v == "targettarget" and "Target of Target frame") or "Free (global anchor)"
+				local txt = (v == "player" and L["Player frame"]) or (v == "target" and L["Target frame"]) or (v == "focus" and L["Focus frame"]) or (v == "pet" and L["Pet frame"]) or (v == "targettarget" and L["Target of Target frame"]) or L["Free (global anchor)"]
 				UIDropDownMenu_SetText(panel.unitAnchorToDD, txt)
 			end
 			if panel.unitCustomAnchorValueText and panel.unitCustomAnchorValueText.SetText then
@@ -3206,12 +3206,12 @@ local function _MSUF_AnchorToTextFor(v)
     return "Free (global anchor)"
 end
 local _MSUF_ANCHOR_TO_CHOICES = {
-    {"Free (global anchor)", "GLOBAL"},
-    {"Player frame", "player"},
-    {"Target frame", "target"},
-    {"Target of Target frame", "targettarget"},
-    {"Focus frame", "focus"},
-    {"Pet frame", "pet"},
+    {L["Free (global anchor)"], "GLOBAL"},
+    {L["Player frame"], "player"},
+    {L["Target frame"], "target"},
+    {L["Target of Target frame"], "targettarget"},
+    {L["Focus frame"], "focus"},
+    {L["Pet frame"], "pet"},
 }
 
 local function _MSUF_GetAnchorableCurrentKey()
@@ -4192,8 +4192,8 @@ if panel.playerAlphaLayerDropDown and UIDropDownMenu_Initialize then
              end
             UIDropDownMenu_AddButton(info, level)
          end
-        AddItem("foreground", "Foreground")
-        AddItem("background", "Background")
+        AddItem("foreground", L["Foreground"])
+        AddItem("background", L["Background"])
      end)
 end
 local function BindAlphaSlider(spec)
