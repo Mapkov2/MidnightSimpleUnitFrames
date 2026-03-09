@@ -13,6 +13,35 @@ local UI = ns.UI or {}
 local floor = math.floor
 local CreateFrame = CreateFrame
 
+local function ApplyReadableFont(fs, kind)
+    if not fs then return end
+    if kind == "header" then
+        fs:SetFontObject(GameFontNormalLarge)
+    elseif kind == "section" then
+        fs:SetFontObject(GameFontNormal)
+    elseif kind == "sub" then
+        fs:SetFontObject(GameFontHighlight)
+    else
+        fs:SetFontObject(GameFontNormal)
+    end
+end
+
+local function EnhanceCheck(cb)
+    if not cb then return cb end
+    if cb.Text then
+        cb.Text:SetFontObject(GameFontNormal)
+        if cb.Text.SetSpacing then cb.Text:SetSpacing(1) end
+    end
+    return cb
+end
+
+local function EnhanceDropdown(dd, width)
+    if not dd then return dd end
+    if width and dd.SetWidth then dd:SetWidth(width) end
+    if dd.Text then dd.Text:SetFontObject(GameFontNormal) end
+    return dd
+end
+
 -- ============================================================================
 -- Modifier-step support (Shift=x5, Ctrl=x10, Alt=grid)
 -- ============================================================================
@@ -39,18 +68,18 @@ local function B() if type(MSUF_DB) == "table" then MSUF_DB.bars = MSUF_DB.bars 
 local function CPRefresh() if type(_G.MSUF_ClassPower_Refresh) == "function" then _G.MSUF_ClassPower_Refresh() end end
 
 local function MakeRow(name, labelText, parent, minV, maxV, step, dbKey, anchor, anchorPt, oX, oY, sliderW, labelW, opts)
-    sliderW = sliderW or 150; labelW = labelW or 62; step = step or 1
+    sliderW = sliderW or 188; labelW = labelW or 88; step = step or 1
     opts = opts or {}
     local toDB = (type(opts.toDB) == "function") and opts.toDB or nil
     local fromDB = (type(opts.fromDB) == "function") and opts.fromDB or nil
     local row = {}
-    local lbl = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local lbl = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     lbl:SetPoint(anchorPt or "TOPLEFT", anchor, "BOTTOMLEFT", oX or 0, oY or -10)
-    lbl:SetText(TR(labelText)); lbl:SetTextColor(0.85, 0.85, 0.85); lbl:SetWidth(labelW); lbl:SetJustifyH("LEFT")
+    lbl:SetText(TR(labelText)); lbl:SetTextColor(0.88, 0.88, 0.88); lbl:SetWidth(labelW); lbl:SetJustifyH("LEFT"); ApplyReadableFont(lbl)
     row.label = lbl
 
     local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
-    s:SetPoint("LEFT", lbl, "RIGHT", 10, 0); s:SetSize(sliderW, 14)
+    s:SetPoint("LEFT", lbl, "RIGHT", 12, 0); s:SetSize(sliderW, 18)
     s:SetMinMaxValues(minV, maxV); s:SetValueStep(step); s:SetObeyStepOnDrag(true)
     if UI.StyleSlider then UI.StyleSlider(s) end
     local lo = _G[name .. "Low"]; if lo then lo:SetText("") end
@@ -59,18 +88,20 @@ local function MakeRow(name, labelText, parent, minV, maxV, step, dbKey, anchor,
     row.slider = s
 
     local eb = CreateFrame("EditBox", name .. "EB", parent, "InputBoxTemplate")
-    eb:SetSize(44, 18); eb:SetAutoFocus(false); eb:SetJustifyH("CENTER")
+    eb:SetSize(52, 22); eb:SetAutoFocus(false); eb:SetJustifyH("CENTER")
     eb:SetPoint("LEFT", s, "RIGHT", 6, 0)
-    eb:SetFontObject(GameFontHighlightSmall); eb:SetTextColor(1, 1, 1, 1)
+    eb:SetFontObject(GameFontNormal); eb:SetTextColor(1, 1, 1, 1)
     row.editBox = eb
 
     local minus = CreateFrame("Button", name .. "Minus", parent)
-    minus:SetPoint("LEFT", eb, "RIGHT", 3, 0)
-    if UI.StyleSmallButton then UI.StyleSmallButton(minus, false) else minus:SetSize(20, 20) end
+    minus:SetPoint("LEFT", eb, "RIGHT", 4, 0)
+    if UI.StyleSmallButton then UI.StyleSmallButton(minus, false) end
+    minus:SetSize(24, 22)
 
     local plus = CreateFrame("Button", name .. "Plus", parent)
-    plus:SetPoint("LEFT", minus, "RIGHT", 2, 0)
-    if UI.StyleSmallButton then UI.StyleSmallButton(plus, true) else plus:SetSize(20, 20) end
+    plus:SetPoint("LEFT", minus, "RIGHT", 3, 0)
+    if UI.StyleSmallButton then UI.StyleSmallButton(plus, true) end
+    plus:SetSize(24, 22)
 
     local function Clamp(v) v = tonumber(v); if not v then return nil end; v = floor(v + 0.5); if v < minV then v = minV elseif v > maxV then v = maxV end; return v end
 
@@ -84,7 +115,7 @@ local function MakeRow(name, labelText, parent, minV, maxV, step, dbKey, anchor,
     function row:SetEnabled(on)
         local a = on and 1.0 or 0.35
         s:SetAlpha(a); eb:SetAlpha(a); minus:SetAlpha(a); plus:SetAlpha(a)
-        if on then s:Enable(); eb:EnableMouse(true); minus:EnableMouse(true); plus:EnableMouse(true); lbl:SetTextColor(0.85, 0.85, 0.85)
+        if on then s:Enable(); eb:EnableMouse(true); minus:EnableMouse(true); plus:EnableMouse(true); lbl:SetTextColor(0.88, 0.88, 0.88)
         else s:Disable(); eb:EnableMouse(false); eb:ClearFocus(); minus:EnableMouse(false); plus:EnableMouse(false); lbl:SetTextColor(0.35, 0.35, 0.35) end
     end
 
@@ -120,14 +151,15 @@ end
 -- Texture dropdown with "follow" option
 -- ============================================================================
 local function MakeTexDrop(name, parent, anchor, oY, dbKey, followText, refreshFn)
-    local texLabel = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local texLabel = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     texLabel:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, oY or -14)
     texLabel:SetText(TR(followText and followText:gsub("^Use ", "") or "Texture"))
-    texLabel:SetTextColor(0.85, 0.85, 0.85)
+    texLabel:SetTextColor(0.88, 0.88, 0.88)
+    ApplyReadableFont(texLabel)
 
     local dd = UI.Dropdown({
         name = name, parent = parent,
-        anchor = texLabel, x = -16, y = -2, width = 180, maxVisible = 12,
+        anchor = texLabel, x = -16, y = -3, width = 220, maxVisible = 12,
         iconWidth = 80, iconHeight = 12,
         items = function() return UI.StatusBarTextureItems(followText) end,
         get = function() return B()[dbKey] or "" end,
@@ -137,6 +169,7 @@ local function MakeTexDrop(name, parent, anchor, oY, dbKey, followText, refreshF
         end,
     })
 
+    EnhanceDropdown(dd, 220)
     return texLabel, dd
 end
 
@@ -155,12 +188,14 @@ local function BuildClassPowerOptions(leftName, rightName)
     _built = true
 
     local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
-    local totalW = leftPanel:GetWidth() + rightPanel:GetWidth()
+    local EXTRA_RIGHT_W = 220 -- widened right border so value boxes +/- controls do not clip at panel edge
+    local totalW = leftPanel:GetWidth() + rightPanel:GetWidth() + EXTRA_RIGHT_W
     local colW = floor(totalW / 2)
-    local PAD_X, PAD_Y = 16, -12
-    local LINE_W = colW - 24
-    local L_LABEL_W, R_LABEL_W = 62, 70
-    local L_CHECK_TW, R_CHECK_TW = colW - 42, colW - 42
+    local PAD_X, PAD_Y = 20, -14
+    local LINE_W = colW - 28
+    local L_LABEL_W, R_LABEL_W = 88, 96
+    local L_CHECK_TW, R_CHECK_TW = colW - 54, colW - 54
+    local DD_W = 220
 
     -- Panel
     local cpPanel = CreateFrame("Frame", "MSUF_ClassPowerOptionsPanel", leftPanel:GetParent(), "BackdropTemplate")
@@ -173,31 +208,31 @@ local function BuildClassPowerOptions(leftName, rightName)
     -- LEFT COLUMN: Class Power — Position & Behavior
     -- =====================================================================
     local cpHeader = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    cpHeader:SetPoint("TOPLEFT", cpPanel, "TOPLEFT", PAD_X, PAD_Y); cpHeader:SetText(TR("Class Power")); cpHeader:SetTextColor(1, 1, 1)
+    cpHeader:SetPoint("TOPLEFT", cpPanel, "TOPLEFT", PAD_X, PAD_Y); cpHeader:SetText(TR("Class Power")); cpHeader:SetTextColor(1, 1, 1); ApplyReadableFont(cpHeader, "header")
     local cpSub = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     cpSub:SetPoint("TOPLEFT", cpHeader, "BOTTOMLEFT", 0, -2); cpSub:SetText(TR("Combo Points, Holy Power, Soul Shards, Chi, Essence, Runes"))
-    cpSub:SetTextColor(0.55, 0.55, 0.55); cpSub:SetWidth(colW - 32); cpSub:SetJustifyH("LEFT")
+    cpSub:SetTextColor(0.60, 0.60, 0.60); cpSub:SetWidth(colW - 36); cpSub:SetJustifyH("LEFT"); ApplyReadableFont(cpSub, "sub")
     local cpLine = cpPanel:CreateTexture(nil, "ARTWORK"); cpLine:SetColorTexture(1, 1, 1, 0.20); cpLine:SetHeight(1)
     cpLine:SetPoint("TOPLEFT", cpPanel, "TOPLEFT", 0, -54); cpLine:SetWidth(LINE_W)
 
-    local cpShowCheck = UI.Check({
+    local cpShowCheck = EnhanceCheck(UI.Check({
         name = "MSUF_ClassPowerShowCheck", parent = cpPanel,
         anchor = cpLine, x = PAD_X, y = -10, maxTextWidth = L_CHECK_TW,
         label = TR("Show class power"),
         get = function() return B().showClassPower ~= false end,
         set = function(v) B().showClassPower = v; CPRefresh() end,
-    })
+    }))
 
     local cpHeightRow = MakeRow("MSUF_CPHeight", "Height", cpPanel, 2, 30, 1, "classPowerHeight", cpShowCheck, "TOPLEFT", 0, -10, nil, L_LABEL_W)
 
     -- Width mode dropdown
     local cpWidthModeLabel = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     cpWidthModeLabel:SetPoint("TOPLEFT", cpHeightRow.label, "BOTTOMLEFT", 0, -10)
-    cpWidthModeLabel:SetText(TR("Match width")); cpWidthModeLabel:SetTextColor(0.85, 0.85, 0.85); cpWidthModeLabel:SetWidth(L_LABEL_W); cpWidthModeLabel:SetJustifyH("LEFT")
+    cpWidthModeLabel:SetText(TR("Match width")); cpWidthModeLabel:SetTextColor(0.88, 0.88, 0.88); cpWidthModeLabel:SetWidth(L_LABEL_W); cpWidthModeLabel:SetJustifyH("LEFT"); ApplyReadableFont(cpWidthModeLabel)
 
     local cpWidthModeDrop = UI.Dropdown({
         name = "MSUF_CPWidthModeDrop", parent = cpPanel,
-        anchor = cpWidthModeLabel, anchorPoint = "TOPLEFT", x = L_LABEL_W + 14, y = 2, width = 165,
+        anchor = cpWidthModeLabel, anchorPoint = "TOPLEFT", x = L_LABEL_W + 16, y = 2, width = DD_W,
         items = {
             { key = "player",        label = TR("Player frame") },
             { key = "cooldown",      label = TR("Essential Cooldowns") },
@@ -208,6 +243,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         get = function() return B().classPowerWidthMode or "player" end,
         set = function(v) B().classPowerWidthMode = v; CPRefresh() end,
     })
+    EnhanceDropdown(cpWidthModeDrop, DD_W)
 
     local cpWidthRow = MakeRow("MSUF_CPWidth", "Width", cpPanel, 30, 800, 1, "classPowerWidth", cpWidthModeLabel, "TOPLEFT", 0, -12, nil, L_LABEL_W)
     local cpXOffsetRow = MakeRow("MSUF_CPXOffset", "X offset", cpPanel, -1000, 1000, 1, "classPowerOffsetX", cpWidthRow.label, "TOPLEFT", 0, -10, nil, L_LABEL_W)
@@ -224,15 +260,15 @@ local function BuildClassPowerOptions(leftName, rightName)
         })
     end
 
-    local cpAnchorCDCheck = CPC("MSUF_ClassPowerAnchorCooldownCheck", "Anchor to Essential Cooldown", cpYOffsetRow.label, "classPowerAnchorToCooldown")
+    local cpAnchorCDCheck = EnhanceCheck(CPC("MSUF_ClassPowerAnchorCooldownCheck", "Anchor to Essential Cooldown", cpYOffsetRow.label, "classPowerAnchorToCooldown"))
     cpAnchorCDCheck:ClearAllPoints(); cpAnchorCDCheck:SetPoint("TOPLEFT", cpYOffsetRow.label, "BOTTOMLEFT", 0, -12)
-    local cpChargedCheck = CPC("MSUF_ShowChargedCPCheck", "Show empowered combo points", cpAnchorCDCheck, "showChargedComboPoints")
-    local cpTextCheck = CPC("MSUF_ClassPowerTextCheck", "Show resource text", cpChargedCheck, "classPowerShowText")
-    local cpRuneTimeCheck = CPC("MSUF_RuneTimeTextCheck", "Show rune time (per rune)", cpTextCheck, "runeShowTimeText")
-    local cpFillReverseCheck = CPC("MSUF_ClassPowerReverseCheck", "Fill right-to-left", cpRuneTimeCheck, "classPowerFillReverse")
-    local cpEleMaelCheck = CPC("MSUF_ClassPowerEleMaelCheck", "Show Maelstrom bar (Elemental)", cpFillReverseCheck, "showEleMaelstrom")
-    local cpEbonMightCheck = CPC("MSUF_ClassPowerEbonMightCheck", "Show Ebon Might timer (Aug)", cpEleMaelCheck, "showEbonMight", true)
-    local cpPredictionCheck = CPC("MSUF_ClassPowerPredictionCheck", "Show resource prediction", cpEbonMightCheck, "classPowerShowPrediction", true)
+    local cpChargedCheck = EnhanceCheck(CPC("MSUF_ShowChargedCPCheck", "Show empowered combo points", cpAnchorCDCheck, "showChargedComboPoints"))
+    local cpTextCheck = EnhanceCheck(CPC("MSUF_ClassPowerTextCheck", "Show resource text", cpChargedCheck, "classPowerShowText"))
+    local cpRuneTimeCheck = EnhanceCheck(CPC("MSUF_RuneTimeTextCheck", "Show rune time (per rune)", cpTextCheck, "runeShowTimeText"))
+    local cpFillReverseCheck = EnhanceCheck(CPC("MSUF_ClassPowerReverseCheck", "Fill right-to-left", cpRuneTimeCheck, "classPowerFillReverse"))
+    local cpEleMaelCheck = EnhanceCheck(CPC("MSUF_ClassPowerEleMaelCheck", "Show Maelstrom bar (Elemental)", cpFillReverseCheck, "showEleMaelstrom"))
+    local cpEbonMightCheck = EnhanceCheck(CPC("MSUF_ClassPowerEbonMightCheck", "Show Ebon Might timer (Aug)", cpEleMaelCheck, "showEbonMight", true))
+    local cpPredictionCheck = EnhanceCheck(CPC("MSUF_ClassPowerPredictionCheck", "Show resource prediction", cpEbonMightCheck, "classPowerShowPrediction", true))
 
     -- =====================================================================
     -- LEFT BOTTOM: Detached Power Bar
@@ -240,21 +276,21 @@ local function BuildClassPowerOptions(leftName, rightName)
     local dpbDiv = cpPanel:CreateTexture(nil, "ARTWORK"); dpbDiv:SetColorTexture(1, 1, 1, 0.12); dpbDiv:SetHeight(1)
     dpbDiv:SetPoint("TOPLEFT", cpPredictionCheck, "BOTTOMLEFT", -PAD_X, -10); dpbDiv:SetWidth(LINE_W)
     local dpbHeader = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    dpbHeader:SetPoint("TOPLEFT", dpbDiv, "BOTTOMLEFT", PAD_X, -8); dpbHeader:SetText(TR("Detached Power Bar")); dpbHeader:SetTextColor(1, 1, 1)
+    dpbHeader:SetPoint("TOPLEFT", dpbDiv, "BOTTOMLEFT", PAD_X, -8); dpbHeader:SetText(TR("Detached Power Bar")); dpbHeader:SetTextColor(1, 1, 1); ApplyReadableFont(dpbHeader, "section")
     cpPanel._dpbHeader = dpbHeader
     local dpbSub = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     dpbSub:SetPoint("TOPLEFT", dpbHeader, "BOTTOMLEFT", 0, -2); dpbSub:SetText(TR("Only applies when power bar is detached"))
-    dpbSub:SetTextColor(0.55, 0.55, 0.55); dpbSub:SetWidth(colW - 32); dpbSub:SetJustifyH("LEFT")
+    dpbSub:SetTextColor(0.60, 0.60, 0.60); dpbSub:SetWidth(colW - 36); dpbSub:SetJustifyH("LEFT"); ApplyReadableFont(dpbSub, "sub")
     cpPanel._dpbSub = dpbSub
 
     local dpbWidthModeLabel = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     dpbWidthModeLabel:SetPoint("TOPLEFT", dpbSub, "BOTTOMLEFT", 0, -8)
-    dpbWidthModeLabel:SetText(TR("Match width")); dpbWidthModeLabel:SetTextColor(0.85, 0.85, 0.85); dpbWidthModeLabel:SetWidth(L_LABEL_W); dpbWidthModeLabel:SetJustifyH("LEFT")
+    dpbWidthModeLabel:SetText(TR("Match width")); dpbWidthModeLabel:SetTextColor(0.88, 0.88, 0.88); dpbWidthModeLabel:SetWidth(L_LABEL_W); dpbWidthModeLabel:SetJustifyH("LEFT"); ApplyReadableFont(dpbWidthModeLabel)
     cpPanel._dpbWidthModeLabel = dpbWidthModeLabel
 
     local dpbWidthModeDrop = UI.Dropdown({
         name = "MSUF_DPBWidthModeDrop", parent = cpPanel,
-        anchor = dpbWidthModeLabel, anchorPoint = "TOPLEFT", x = L_LABEL_W + 14, y = 2, width = 165,
+        anchor = dpbWidthModeLabel, anchorPoint = "TOPLEFT", x = L_LABEL_W + 16, y = 2, width = DD_W,
         items = {
             { key = "manual",        label = TR("Manual") },
             { key = "cooldown",      label = TR("Essential Cooldowns") },
@@ -264,6 +300,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         get = function() return B().detachedPowerBarWidthMode or "manual" end,
         set = function(v) B().detachedPowerBarWidthMode = v ~= "manual" and v or nil; if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_All() end end,
     })
+    EnhanceDropdown(dpbWidthModeDrop, DD_W)
 
     local DPB_Refresh = function() if type(_G.MSUF_DetachedPowerBar_RefreshTextures) == "function" then _G.MSUF_DetachedPowerBar_RefreshTextures() end end
     local dpbFgLabel, dpbFgDrop = MakeTexDrop("MSUF_DPBFgTextureDropdown", cpPanel, dpbWidthModeLabel, -14, "detachedPowerBarTexture", TR("Use global bar texture"), DPB_Refresh)
@@ -295,20 +332,20 @@ local function BuildClassPowerOptions(leftName, rightName)
     -- RIGHT COLUMN: Style
     -- =====================================================================
     local styleHeader = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    styleHeader:SetPoint("TOPLEFT", cpPanel, "TOPLEFT", colW + PAD_X, PAD_Y); styleHeader:SetText(TR("Style")); styleHeader:SetTextColor(1, 1, 1)
+    styleHeader:SetPoint("TOPLEFT", cpPanel, "TOPLEFT", colW + PAD_X, PAD_Y); styleHeader:SetText(TR("Style")); styleHeader:SetTextColor(1, 1, 1); ApplyReadableFont(styleHeader, "header")
     local styleSub = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     styleSub:SetPoint("TOPLEFT", styleHeader, "BOTTOMLEFT", 0, -2); styleSub:SetText(TR("Colors, textures & visual tweaks"))
-    styleSub:SetTextColor(0.55, 0.55, 0.55); styleSub:SetWidth(colW - 32); styleSub:SetJustifyH("LEFT")
+    styleSub:SetTextColor(0.60, 0.60, 0.60); styleSub:SetWidth(colW - 36); styleSub:SetJustifyH("LEFT"); ApplyReadableFont(styleSub, "sub")
     local styleLine = cpPanel:CreateTexture(nil, "ARTWORK"); styleLine:SetColorTexture(1, 1, 1, 0.20); styleLine:SetHeight(1)
     styleLine:SetPoint("TOPLEFT", cpPanel, "TOPLEFT", colW, -54); styleLine:SetWidth(LINE_W)
 
-    local cpColorCheck = UI.Check({
+    local cpColorCheck = EnhanceCheck(UI.Check({
         name = "MSUF_ClassPowerColorCheck", parent = cpPanel,
         anchor = styleLine, x = PAD_X, y = -10, maxTextWidth = R_CHECK_TW,
         label = TR("Color by resource type"),
         get = function() return B().classPowerColorByType ~= false end,
         set = function(v) B().classPowerColorByType = v; CPRefresh() end,
-    })
+    }))
 
     local percentAlphaOpts = {
         toDB = function(v)
@@ -341,7 +378,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     local ahLine = cpPanel:CreateTexture(nil, "ARTWORK"); ahLine:SetColorTexture(1, 1, 1, 0.12); ahLine:SetHeight(1)
     ahLine:SetPoint("TOPLEFT", cpGapRow.label, "BOTTOMLEFT", -PAD_X, -10); ahLine:SetWidth(LINE_W)
     local ahHeader = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    ahHeader:SetPoint("TOPLEFT", ahLine, "BOTTOMLEFT", PAD_X, -6); ahHeader:SetText(TR("Auto-Hide")); ahHeader:SetTextColor(0.85, 0.85, 0.85)
+    ahHeader:SetPoint("TOPLEFT", ahLine, "BOTTOMLEFT", PAD_X, -6); ahHeader:SetText(TR("Auto-Hide")); ahHeader:SetTextColor(0.88, 0.88, 0.88); ApplyReadableFont(ahHeader, "section")
     cpPanel._ahHeader = ahHeader
 
     local function RPC(name, label, anchor, dbKey, defaultVal)
@@ -354,9 +391,9 @@ local function BuildClassPowerOptions(leftName, rightName)
         })
     end
 
-    local cpHideOOCCheck   = RPC("MSUF_ClassPowerHideOOC",   "Hide out of combat", ahHeader, "classPowerHideOOC")
-    local cpHideFullCheck  = RPC("MSUF_ClassPowerHideFull",  "Hide when full",     cpHideOOCCheck, "classPowerHideWhenFull")
-    local cpHideEmptyCheck = RPC("MSUF_ClassPowerHideEmpty", "Hide when empty",    cpHideFullCheck, "classPowerHideWhenEmpty")
+    local cpHideOOCCheck   = EnhanceCheck(RPC("MSUF_ClassPowerHideOOC",   "Hide out of combat", ahHeader, "classPowerHideOOC"))
+    local cpHideFullCheck  = EnhanceCheck(RPC("MSUF_ClassPowerHideFull",  "Hide when full",     cpHideOOCCheck, "classPowerHideWhenFull"))
+    local cpHideEmptyCheck = EnhanceCheck(RPC("MSUF_ClassPowerHideEmpty", "Hide when empty",    cpHideFullCheck, "classPowerHideWhenEmpty"))
 
     -- Texture dropdowns (right column)
     local CPTexRefresh = function() if type(_G.MSUF_ClassPower_RefreshTextures) == "function" then _G.MSUF_ClassPower_RefreshTextures() end end
@@ -371,18 +408,18 @@ local function BuildClassPowerOptions(leftName, rightName)
     local amDiv = cpPanel:CreateTexture(nil, "ARTWORK"); amDiv:SetColorTexture(1, 1, 1, 0.12); amDiv:SetHeight(1)
     amDiv:SetPoint("TOPLEFT", cpBgTexLabel, "BOTTOMLEFT", -PAD_X, -38); amDiv:SetWidth(LINE_W)
     local amHeader = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    amHeader:SetPoint("TOPLEFT", amDiv, "BOTTOMLEFT", PAD_X, -8); amHeader:SetText(TR("Alternative Mana Bar")); amHeader:SetTextColor(1, 1, 1)
+    amHeader:SetPoint("TOPLEFT", amDiv, "BOTTOMLEFT", PAD_X, -8); amHeader:SetText(TR("Alternative Mana Bar")); amHeader:SetTextColor(1, 1, 1); ApplyReadableFont(amHeader, "header")
     local amSub = cpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     amSub:SetPoint("TOPLEFT", amHeader, "BOTTOMLEFT", 0, -2); amSub:SetText(TR("Shadow, Ret, Ele, Enh, Balance, Feral, WW"))
-    amSub:SetTextColor(0.55, 0.55, 0.55); amSub:SetWidth(colW - 32); amSub:SetJustifyH("LEFT")
+    amSub:SetTextColor(0.60, 0.60, 0.60); amSub:SetWidth(colW - 36); amSub:SetJustifyH("LEFT"); ApplyReadableFont(amSub, "sub")
 
-    local amShowCheck = UI.Check({
+    local amShowCheck = EnhanceCheck(UI.Check({
         name = "MSUF_AltManaShowCheck", parent = cpPanel,
         anchor = amSub, x = 0, y = -6, maxTextWidth = R_CHECK_TW,
         label = TR("Show mana bar (dual resource)"),
         get = function() return B().showAltMana ~= false end,
         set = function(v) B().showAltMana = v; CPRefresh() end,
-    })
+    }))
 
     local amHeightRow = MakeRow("MSUF_AMHeight", "Height",   cpPanel, 2, 30, 1, "altManaHeight", amShowCheck, "TOPLEFT", 0, -10, nil, R_LABEL_W)
     local amOffsetRow = MakeRow("MSUF_AMOffset", "Y offset", cpPanel, -50, 50, 1, "altManaOffsetY", amHeightRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
@@ -395,7 +432,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     local Skin = _G.MSUF_SkinMidnightActionButton
     local editBtn = CreateFrame("Button", "MSUF_ClassPower_EditModeButton", cpPanel, "UIPanelButtonTemplate")
-    editBtn:SetSize(140, 22); editBtn:SetText(TR("Edit Mode")); editBtn:SetPoint("TOPLEFT", btnDiv, "BOTTOMLEFT", PAD_X, -10)
+    editBtn:SetSize(156, 24); editBtn:SetText(TR("Edit Mode")); editBtn:SetPoint("TOPLEFT", btnDiv, "BOTTOMLEFT", PAD_X, -10)
     editBtn._msufNoSlashSkin = true
     if Skin then Skin(editBtn) else editBtn.__msufMidnightActionSkinned = true end
     editBtn:SetScript("OnClick", function()
@@ -406,7 +443,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     end)
 
     local colorBtn = CreateFrame("Button", "MSUF_ClassPower_ClassColorButton", cpPanel, "UIPanelButtonTemplate")
-    colorBtn:SetSize(140, 22); colorBtn:SetText(TR("Class color")); colorBtn:SetPoint("LEFT", editBtn, "RIGHT", 12, 0)
+    colorBtn:SetSize(156, 24); colorBtn:SetText(TR("Class color")); colorBtn:SetPoint("LEFT", editBtn, "RIGHT", 12, 0)
     colorBtn._msufNoSlashSkin = true
     if Skin then Skin(colorBtn) else colorBtn.__msufMidnightActionSkinned = true end
     colorBtn:SetScript("OnClick", function()
@@ -468,7 +505,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
         -- Auto-hide header dim
         if cpPanel._ahHeader then
-            cpPanel._ahHeader:SetTextColor(cpOn and 0.85 or 0.35, cpOn and 0.85 or 0.35, cpOn and 0.85 or 0.35)
+            cpPanel._ahHeader:SetTextColor(cpOn and 0.88 or 0.35, cpOn and 0.88 or 0.35, cpOn and 0.88 or 0.35)
         end
     end
 
@@ -496,7 +533,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         local function Recalc()
             if not (editBtn.GetBottom and cpPanel.GetTop) then return end
             local h = math.ceil((cpPanel:GetTop() or 0) - (editBtn:GetBottom() or 0)) + 14
-            if h < 700 then h = 700 end
+            if h < 740 then h = 740 end
             cpPanel:SetHeight(h)
         end
         editBtn:HookScript("OnShow", Recalc)
