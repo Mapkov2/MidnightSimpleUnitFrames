@@ -353,6 +353,112 @@ function MSUF_EM_BuildCopyItems(list, srcValue, labelFn)
     return out
 end
 
+local MSUF_EM_DROPDOWN_LAYER_BOOST = 120
+local MSUF_EM_DROPDOWN_LAYER_STEP  = 12
+local MSUF_EM_DROPDOWN_BUTTON_STEP = 1
+
+local function MSUF_EM_ApplyListLayer(frame, strata, level)
+    if not frame then return end
+    if frame.SetFrameStrata then frame:SetFrameStrata(strata) end
+    if frame.SetFrameLevel then frame:SetFrameLevel(level) end
+end
+
+local function MSUF_EM_ApplyPopupDropdownListLayers(pf)
+    if not pf then return end
+
+    local maxLevels = _G.UIDROPDOWNMENU_MAXLEVELS or 2
+    local maxButtons = _G.UIDROPDOWNMENU_MAXBUTTONS or 32
+    local baseLevel = (pf.GetFrameLevel and pf:GetFrameLevel()) or 500
+    local strata = (pf.GetFrameStrata and pf:GetFrameStrata()) or "FULLSCREEN_DIALOG"
+
+    for level = 1, maxLevels do
+        local list = _G["DropDownList" .. level]
+        if list then
+            local listLevel = baseLevel + MSUF_EM_DROPDOWN_LAYER_BOOST + (level * MSUF_EM_DROPDOWN_LAYER_STEP)
+            MSUF_EM_ApplyListLayer(list, strata, listLevel)
+
+            local menuBackdrop = _G["DropDownList" .. level .. "MenuBackdrop"]
+            local backdrop = _G["DropDownList" .. level .. "Backdrop"]
+            MSUF_EM_ApplyListLayer(menuBackdrop, strata, listLevel - 2)
+            MSUF_EM_ApplyListLayer(backdrop, strata, listLevel - 1)
+
+            for i = 1, maxButtons do
+                local button = _G["DropDownList" .. level .. "Button" .. i]
+                if button then
+                    MSUF_EM_ApplyListLayer(button, strata, listLevel + (i * MSUF_EM_DROPDOWN_BUTTON_STEP))
+                end
+            end
+        end
+    end
+end
+
+local function MSUF_EM_GetPopupOwnerFromDropdown(drop)
+    if not drop then return nil end
+    local pf = drop.__msufEditPopupOwner
+    if pf then return pf end
+
+    local parent = drop.GetParent and drop:GetParent() or nil
+    while parent do
+        if parent.__msufEditPopupRoot then
+            return parent
+        end
+        parent = parent.GetParent and parent:GetParent() or nil
+    end
+
+    return nil
+end
+
+local function MSUF_EM_RelayerOpenDropdownFor(drop)
+    local pf = MSUF_EM_GetPopupOwnerFromDropdown(drop)
+    if not pf then return end
+    MSUF_EM_ApplyPopupDropdownListLayers(pf)
+end
+
+local function MSUF_EM_EnsurePopupDropdownLayerHooks()
+    if _G.__MSUF_EDITMODE_DROPDOWN_LAYER_HOOKS then return end
+    _G.__MSUF_EDITMODE_DROPDOWN_LAYER_HOOKS = true
+
+    if UIDropDownMenu_CreateFrames then
+        pcall(UIDropDownMenu_CreateFrames, _G.UIDROPDOWNMENU_MAXLEVELS or 2, 0)
+    end
+
+    if type(_G.ToggleDropDownMenu) == "function" then
+        hooksecurefunc("ToggleDropDownMenu", function(_, _, dropDownFrame)
+            if not (dropDownFrame and dropDownFrame.__msufEditPopupDropdown) then return end
+            local function run()
+                if _G.UIDROPDOWNMENU_OPEN_MENU == dropDownFrame then
+                    MSUF_EM_RelayerOpenDropdownFor(dropDownFrame)
+                end
+            end
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, run)
+            else
+                run()
+            end
+        end)
+    end
+
+    for level = 1, (_G.UIDROPDOWNMENU_MAXLEVELS or 2) do
+        local list = _G["DropDownList" .. level]
+        if list and list.HookScript and not list.__msufEditPopupListHooked then
+            list.__msufEditPopupListHooked = true
+            list:HookScript("OnShow", function()
+                local open = _G.UIDROPDOWNMENU_OPEN_MENU
+                if open and open.__msufEditPopupDropdown then
+                    MSUF_EM_RelayerOpenDropdownFor(open)
+                end
+            end)
+        end
+    end
+end
+
+local function MSUF_EM_RegisterPopupDropdown(drop, pf)
+    if not drop then return end
+    drop.__msufEditPopupDropdown = true
+    drop.__msufEditPopupOwner = pf or MSUF_EM_GetPopupOwnerFromDropdown(drop)
+    MSUF_EM_EnsurePopupDropdownLayerHooks()
+end
+
 function MSUF_EM_InitCopyDropdown(drop, placeholder, itemsProvider, onPick)
     if not drop or not UIDropDownMenu_Initialize or not UIDropDownMenu_CreateInfo or not UIDropDownMenu_AddButton then return end
     MSUF_EM_DropdownPreset(drop, 150, placeholder)
@@ -3531,8 +3637,8 @@ do
 
     UISpec.Unit = UISpec.Unit or {
         copyDropdowns = {
-            size = { labelField="copySizeLabel", dropField="copySizeDrop", text="Copy size settings to:", point="BOTTOMLEFT", x=15, y=66, width=170 },
-            text = { labelField="copyTextLabel", dropField="copyTextDrop", text="Copy text settings to:", point="BOTTOMLEFT", x=15, y=46, width=170 },
+            size = { labelField="copySizeLabel", dropField="copySizeDrop", text="Copy size settings to:", point="BOTTOMLEFT", x=15, y=66, width=170, nativeDropdown=true },
+            text = { labelField="copyTextLabel", dropField="copyTextDrop", text="Copy text settings to:", point="BOTTOMLEFT", x=15, y=46, width=170, nativeDropdown=true },
         },
         footer = {
             ok     = { field="okBtn",     name="$parentOK",     w=70,  h=22, point="BOTTOMRIGHT", rel="BOTTOMRIGHT", x=-10, y=10, text=OKAY },
@@ -3546,8 +3652,8 @@ do
 
     UISpec.Castbar = UISpec.Castbar or {
         copyDropdowns = {
-            size = { labelField="copySizeLabel", dropField="copySizeDrop", text="Copy size settings to:", point="BOTTOMLEFT", x=15, y=66, width=170 },
-            text = { labelField="copyTextLabel", dropField="copyTextDrop", text="Copy text settings to:", point="BOTTOMLEFT", x=15, y=46, width=170 },
+            size = { labelField="copySizeLabel", dropField="copySizeDrop", text="Copy size settings to:", point="BOTTOMLEFT", x=15, y=66, width=170, nativeDropdown=true },
+            text = { labelField="copyTextLabel", dropField="copyTextDrop", text="Copy text settings to:", point="BOTTOMLEFT", x=15, y=46, width=170, nativeDropdown=true },
         },
         footer = {
             ok     = { field="okBtn",     name="$parentOK",     w=70,  h=22, point="BOTTOMRIGHT", rel="BOTTOMRIGHT", x=-10, y=10, text=OKAY },
@@ -3560,7 +3666,7 @@ do
 
     UISpec.Auras2 = UISpec.Auras2 or {
         copyDropdowns = {
-            aura = { labelField="copyAuraLabel", dropField="copyAuraDrop", text="Copy settings to:", point="BOTTOMLEFT", x=15, y=64, width=170, ensureFrames=true },
+            aura = { labelField="copyAuraLabel", dropField="copyAuraDrop", text="Copy settings to:", point="BOTTOMLEFT", x=15, y=64, width=170, ensureFrames=true, nativeDropdown=true },
         },
         footer = {
             cancel = { field="cancelBtn", name="$parentCancel", w=120, h=22, point="BOTTOMLEFT",  rel="BOTTOMLEFT",  x=16,  y=16, text="Cancel" },
@@ -3597,8 +3703,14 @@ local function MSUF_EM_UI_BuildCopyDropdown(pf, spec)
     pf[spec.labelField] = label
 
     local dropName = spec.name or ("$parent" .. (spec.dropField or "Drop"))
-    local drop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(dropName, pf) or CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate"))
+    local drop
+    if spec.nativeDropdown ~= false then
+        drop = CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate")
+    else
+        drop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(dropName, pf) or CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate"))
+    end
     drop:SetPoint("LEFT", label, "RIGHT", -2, -2)
+    MSUF_EM_RegisterPopupDropdown(drop, pf)
     pf[spec.dropField] = drop
 
     if spec.width and UIDropDownMenu_SetWidth then
@@ -3963,6 +4075,7 @@ local function MSUF_InitEditPopupFrame(pf, opts)
     pf:SetFrameStrata(opts.strata or "FULLSCREEN_DIALOG")
     pf:SetFrameLevel(opts.level or 500)
     pf:SetClampedToScreen(true)
+    pf.__msufEditPopupRoot = true
 
     pf:SetMovable(true)
     pf:EnableMouse(true)
@@ -4473,8 +4586,9 @@ MSUF_EM_BuildNumericRows(pf, frameRows, frameHeader, "BOTTOMLEFT", 0, ApplyUnitP
 
             -- Generic dropdown builder (no separate label; prefix baked into dropdown text)
             local function _BuildAnchorDrop(prefix, parentAnchor, parentPoint, relPoint, ox, oy, dropName, pfDropKey, stateKey, defaultVal)
-                local drop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(dropName, pf) or CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate"))
+                local drop = CreateFrame("Frame", dropName, pf, "UIDropDownMenuTemplate")
                 drop:SetPoint(parentPoint, parentAnchor, relPoint, ox, oy)
+                MSUF_EM_RegisterPopupDropdown(drop, pf)
                 if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(drop, 88) end
                 if ns and ns.MSUF_ExpandDropdownClickArea then ns.MSUF_ExpandDropdownClickArea(drop) end
                 pf[pfDropKey] = drop
