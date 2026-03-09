@@ -1866,7 +1866,7 @@ if not cat then MSUF_SafeCall(_G and _G.MSUF_RegisterOptionsCategoryLazy)
 cat=MSUF_GetMainSettingsCategory()
 end
 return cat end
-local SETTINGS_PANEL_DEFS={colors={full="MSUF_RegisterColorsOptions_Full",fallback="MSUF_RegisterColorsOptions",globals={"MSUF_ColorsPanel","MSUF_ColorsOptionsPanel"},builtKey="__MSUF_ColorsBuilt",},auras2={full="MSUF_RegisterAurasOptions_Full",fallback="MSUF_RegisterAurasOptions",globals={"MSUF_AurasPanel","MSUF_AurasOptionsPanel"},builtKey="__MSUF_AurasBuilt",},gameplay={full="MSUF_RegisterGameplayOptions_Full",fallback="MSUF_RegisterGameplayOptions",globals={"MSUF_GameplayPanel","MSUF_GameplayOptionsPanel"},builtKey="__MSUF_GameplayBuilt",},}
+local SETTINGS_PANEL_DEFS={colors={full="MSUF_RegisterColorsOptions_Full",fallback="MSUF_RegisterColorsOptions",globals={"MSUF_ColorsPanel","MSUF_ColorsOptionsPanel"},builtKey="__MSUF_ColorsBuilt",},auras2={full="MSUF_RegisterAurasOptions_Full",fallback="MSUF_RegisterAurasOptions",globals={"MSUF_AurasPanel","MSUF_AurasOptionsPanel"},builtKey="__MSUF_AurasBuilt",},gameplay={full="MSUF_RegisterGameplayOptions_Full",fallback="MSUF_RegisterGameplayOptions",globals={"MSUF_GameplayPanel","MSUF_GameplayOptionsPanel"},builtKey="__MSUF_GameplayBuilt",},portraits={full="MSUF_RegisterPortraitsOptions_Full",fallback="MSUF_RegisterPortraitsOptions",globals={"MSUF_PortraitsPanel"},builtKey="__MSUF_PortraitsBuilt",},}
 local function MSUF_FindFirstGlobal(nameList) if not _G or type(nameList)~="table"then return nil end
 for i=1,#nameList do local k=nameList[i];
 local obj=_G[k]
@@ -1889,6 +1889,7 @@ MSUF_ShowHideForLazy(p,def.builtKey) return p end
 local function MSUF_EnsureColorsPanelBuilt() return MSUF_EnsureSubOptionsPanelBuilt("colors") end
 local function MSUF_EnsureAuras2PanelBuilt() return MSUF_EnsureSubOptionsPanelBuilt("auras2") end
 local function MSUF_EnsureGameplayPanelBuilt() return MSUF_EnsureSubOptionsPanelBuilt("gameplay") end
+local function MSUF_EnsurePortraitsPanelBuilt() return MSUF_EnsureSubOptionsPanelBuilt("portraits") end
 local function MSUF_EnsureModulesPanelBuilt() if _G.MSUF_ModulesMirrorPanel and _G.MSUF_ModulesMirrorPanel.__MSUF_ModulesBuilt then return _G.MSUF_ModulesMirrorPanel end
 local p=CreateFrame("Frame","MSUF_ModulesMirrorPanel",UIParent)
 _G.MSUF_ModulesMirrorPanel=p p.__MSUF_ModulesBuilt=true p.__MSUF_MirrorNoRestoreShow=true p:SetPoint("TOPLEFT",0,0)
@@ -2009,7 +2010,7 @@ if subkey and subkey~=""then MSUF_SelectCastbarSubPage(subkey)
 end
 end
 },profiles={title="MSUF Profiles",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("profiles") end
-},colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},classpower={title="MSUF Class Resources",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectClassResourcesPage},gameplay={title="MSUF Gameplay",build=MSUF_EnsureGameplayPanelBuilt},modules={title="MSUF Modules",build=MSUF_EnsureModulesPanelBuilt},
+},colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},portraits={title="MSUF Portraits",build=MSUF_EnsurePortraitsPanelBuilt},opt_portraits={title="MSUF Portraits",build=MSUF_EnsurePortraitsPanelBuilt},classpower={title="MSUF Class Resources",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectClassResourcesPage},gameplay={title="MSUF Gameplay",build=MSUF_EnsureGameplayPanelBuilt},modules={title="MSUF Modules",build=MSUF_EnsureModulesPanelBuilt},
 -- Search results virtual page (panel built lazily by MSUF_Search.lua)
 search={title="Search Results",nav="Search",build=function()
     local fn=ns and ns.MSUF_Search_EnsurePanel
@@ -2366,7 +2367,7 @@ navParent._msufNavStripe=stripe end
 local function MakeButton(label,w,onClick,isHeader,isChild) local b=UI_Button(navParent,tostring(label or""),w,btnH,"TOPLEFT",navParent,"TOPLEFT",0,0,onClick)
 MSUF_LeftJustifyButtonText(b,isChild and 10 or 12)
 MSUF_SkinNavButton(b,isHeader,isChild) return b end
-local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_misc",label="Miscellaneous"},{key="opt_colors",label="Colors"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
+local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_misc",label="Miscellaneous"},{key="opt_colors",label="Colors"},{key="opt_portraits",label="Portraits"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
 local headerLabels={}
 for _,node in ipairs(NAV)
 do if node.type=="header"then headerLabels[node.id]=node.label end

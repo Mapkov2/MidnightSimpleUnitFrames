@@ -138,7 +138,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
 
     local fillDirDrop = UI.Dropdown({
         name = "MSUF_CastbarFillDirectionDropdown", parent = castbarEnemyGroup,
-        anchor = fillDirLabel, x = 0, y = -4, width = 200,
+        anchor = fillDirLabel, x = -16, y = -4, width = 200,
         items = {
             { key = "RTL", label = "Right to left (default)" },
             { key = "LTR", label = "Left to right" },
@@ -222,7 +222,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
 
     local texDrop = UI.Dropdown({
         name = "MSUF_CastbarTextureDropdown", parent = castbarEnemyGroup,
-        anchor = texLabel, x = 0, y = -4, width = 200, maxVisible = 12,
+        anchor = texLabel, x = -16, y = -4, width = 200, maxVisible = 12,
         iconWidth = 80, iconHeight = 12,
         items = function() return UI.StatusBarTextureItems(nil) end,
         get = function() return G().castbarTexture or "Blizzard" end,
@@ -233,7 +233,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
 
     local bgDrop = UI.Dropdown({
         name = "MSUF_CastbarBackgroundTextureDropdown", parent = castbarEnemyGroup,
-        anchor = bgLabel, x = 0, y = -4, width = 200, maxVisible = 12,
+        anchor = bgLabel, x = -16, y = -4, width = 200, maxVisible = 12,
         iconWidth = 80, iconHeight = 12,
         items = function() return UI.StatusBarTextureItems(nil) end,
         get = function()

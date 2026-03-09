@@ -4,6 +4,7 @@
 local addonName, ns = ...
 local F = ns.Cache and ns.Cache.F or {}
 local type, tonumber = type, tonumber
+local PM = ns.PortraitMedia
 
 -- 3D Portrait integration: some setups create a separate model frame that sits on top of the legacy
 -- 2D Texture portrait. When "3D" is selected, ensure the 2D texture is not also shown.
@@ -101,6 +102,14 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
             MSUF_SetShown(portrait3D, false)
         end
     end
+    local classStyle = (conf and conf.portraitClassStyle) or "BLIZZARD"
+    if f._msufPortraitClassStyleStamp ~= classStyle then
+        f._msufPortraitClassStyleStamp = classStyle
+        if mode ~= "OFF" then
+            f._msufPortraitDirty = true
+            f._msufPortraitNextAt = 0
+        end
+    end
     if f._msufPortraitRenderStamp ~= render then
         f._msufPortraitRenderStamp = render
         if mode ~= "OFF" then
@@ -189,10 +198,11 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
                 if useClassIcon then
                     local u = existsForPortrait and unit or "player"
                     local class = (F.UnitClassBase and F.UnitClassBase(u)) or (F.UnitClass and select(2, F.UnitClass(u)))
-                    local coords = (class and _G.CLASS_ICON_TCOORDS and _G.CLASS_ICON_TCOORDS[class]) or nil
-                    if coords and portrait.SetTexture and portrait.SetTexCoord then
-                        portrait:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES")
-                        portrait:SetTexCoord(coords[1] or 0, coords[2] or 1, coords[3] or 0, coords[4] or 1)
+                    local style = (conf and conf.portraitClassStyle) or "BLIZZARD"
+                    local visual = PM and PM.ResolveClassPortrait and PM.ResolveClassPortrait(class, style) or nil
+                    if visual and portrait.SetTexture and portrait.SetTexCoord then
+                        portrait:SetTexture(visual.texture)
+                        portrait:SetTexCoord(visual.left or 0, visual.right or 1, visual.top or 0, visual.bottom or 1)
                     else
                         -- Fallback: render a normal portrait if we can't resolve class coords.
                         if portrait.SetTexCoord then

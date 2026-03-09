@@ -369,13 +369,9 @@ end
 -- Step 4C: Portrait + Alpha + BossSpacing in Specs/Loops
 -- ============================================================
 local MSUF_PORTRAIT_OPTIONS = {
-    { value = "OFF",      text = "Portrait Off" },
-    { value = "2D_LEFT",  text = "2D Portrait Left" },
-    { value = "2D_RIGHT", text = "2D Portrait Right" },
-    { value = "3D_LEFT",  text = "3D Portrait Left" },
-    { value = "3D_RIGHT", text = "3D Portrait Right" },
-    { value = "CLASS_LEFT",  text = "Class Icon Left (players)" },
-    { value = "CLASS_RIGHT", text = "Class Icon Right (players)" },
+    { value = "OFF",   text = "Portrait Off" },
+    { value = "LEFT",  text = "Portrait Left" },
+    { value = "RIGHT", text = "Portrait Right" },
 }
 -- Target-of-Target inline-in-Target separator dropdown (token stored in MSUF_DB.targettarget.totInlineSeparator).
 -- UI shows the raw token; runtime renders it with spaces around it (legacy: " | ").
@@ -411,67 +407,30 @@ local function MSUF_ToTInlineSepTokenText(v)
      return v
 end
 local function MSUF_PortraitModeText(mode)
-    if mode == "2D_LEFT" then  return "2D Portrait Left" end
-    if mode == "2D_RIGHT" then  return "2D Portrait Right" end
-    if mode == "3D_LEFT" then  return "3D Portrait Left" end
-    if mode == "3D_RIGHT" then  return "3D Portrait Right" end
-    if mode == "CLASS_LEFT" then  return "Class Icon Left (players)" end
-    if mode == "CLASS_RIGHT" then  return "Class Icon Right (players)" end
+    if mode == "LEFT" then  return "Portrait Left" end
+    if mode == "RIGHT" then  return "Portrait Right" end
      return "Portrait Off"
 end
+-- Class portrait style helpers removed — managed by MSUF_Options_Portraits.lua
 local function MSUF_GetPortraitDropdownValue(conf)
     if not conf then  return "OFF" end
     local pm = conf.portraitMode or "OFF"
-    if pm ~= "LEFT" and pm ~= "RIGHT" then
-         return "OFF"
+    if pm == "LEFT" or pm == "RIGHT" then
+         return pm
     end
-    local render = conf.portraitRender
-    if render == "CLASS" then
-        return (pm == "LEFT") and "CLASS_LEFT" or "CLASS_RIGHT"
-    end
-    if render == "3D" then
-        return (pm == "LEFT") and "3D_LEFT" or "3D_RIGHT"
-    end
-    -- Default to 2D for legacy profiles (portraitRender nil/unknown)
-    return (pm == "LEFT") and "2D_LEFT" or "2D_RIGHT"
+     return "OFF"
 end
 local function MSUF_ApplyPortraitChoice(conf, choice)
     if not conf then  return end
-    if choice == "OFF" then
-        conf.portraitMode = "OFF"
-         return
-    end
-    if choice == "2D_LEFT" then
+    -- Only sets portraitMode (anchor). portraitRender is managed by Portraits panel.
+    if choice == "LEFT" then
         conf.portraitMode = "LEFT"
-        conf.portraitRender = "2D"
          return
     end
-    if choice == "2D_RIGHT" then
+    if choice == "RIGHT" then
         conf.portraitMode = "RIGHT"
-        conf.portraitRender = "2D"
          return
     end
-    if choice == "3D_LEFT" then
-        conf.portraitMode = "LEFT"
-        conf.portraitRender = "3D"
-         return
-    end
-    if choice == "3D_RIGHT" then
-        conf.portraitMode = "RIGHT"
-        conf.portraitRender = "3D"
-         return
-    end
-    if choice == "CLASS_LEFT" then
-        conf.portraitMode = "LEFT"
-        conf.portraitRender = "CLASS"
-        return
-    end
-    if choice == "CLASS_RIGHT" then
-        conf.portraitMode = "RIGHT"
-        conf.portraitRender = "CLASS"
-        return
-    end
-    -- Fallback
     conf.portraitMode = "OFF"
  end
 local function MSUF_BindPortraitDropdown(panel, fieldName, IsFramesTabFn, EnsureKeyDBFn, ApplyFn)
@@ -642,7 +601,8 @@ local MSUF_COPY_BASIC_FIELDS = {
     "showPower",
     "reverseFillBars",
     "portraitMode",
-    "portraitRender",
+    -- Portrait decoration keys (portraitRender, portraitShape, portraitBorder*, portraitBg*, etc.)
+    -- are managed by the Portraits panel scope system. NOT copied here.
     "alphaInCombat",
     "alphaOutOfCombat",
     "alphaSync",
@@ -1247,7 +1207,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         end
      end
     -- Slightly taller: accommodates the per-unit reverse-fill toggle above the portrait dropdown.
-    local basicsH = 202
+    local basicsH = 206
     -- Slightly taller so the new Alpha dropdown + sliders never clip
     local sizeH = 245
     local bossExtraH = 60
@@ -1277,6 +1237,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     end
     dd._msufDropWidth = 170
     MSUF_ExpandDropdownClickArea(dd)
+    -- Class portrait style moved to dedicated Portraits panel.
     -- Left: Load Conditions (between Frame Basics and Unit Alpha)
     local loadCondH = 160
     local loadCondBox = CreateGroupBox(frameGroup, "Load Conditions", leftX, topY - basicsH - 12, leftW, loadCondH, texWhite, texWhite2)
@@ -2758,6 +2719,7 @@ end
         UIDropDownMenu_SetSelectedValue(panel.playerPortraitDropDown, mode)
         UIDropDownMenu_SetText(panel.playerPortraitDropDown, MSUF_PortraitModeText(mode))
     end
+    -- Class portrait style moved to Portraits panel.
     -- Load Conditions box: dynamic title per-unit + checkbox restore from DB.
     if panel.playerLoadCondBox and panel.playerLoadCondBox._msufTitleText then
         local k = currentKey
@@ -4017,6 +3979,7 @@ MSUF_RefreshLevelIndicatorFrames = function()
  end
     -- Portrait dropdown (all unitframes) [spec-driven]
     MSUF_BindPortraitDropdown(panel, "playerPortraitDropDown", IsFramesTab, EnsureKeyDB, ApplyCurrent)
+    -- portraitClassStyle binding moved to MSUF_Options_Portraits.lua
 -- Unit Alpha + Boss spacing sliders [spec-driven]
 -- Alpha slider target routing:
 -- Legacy keys: alphaInCombat / alphaOutOfCombat

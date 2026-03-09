@@ -3300,6 +3300,124 @@ F.UpdateAurasColorControls()
 S.lastControl = auraCDUrgentSwatch
 
     --------------------------------------------------
+    -- Portrait Colors
+    --------------------------------------------------
+    local portraitHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    portraitHeader:SetPoint("TOPLEFT", auraCDUrgentSwatch, "BOTTOMLEFT", 0, -44)
+    portraitHeader:SetText("Portrait colors")
+    F.CreateHeaderDividerAbove(portraitHeader)
+
+    local portraitSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    portraitSub:SetPoint("TOPLEFT", portraitHeader, "BOTTOMLEFT", 0, -4)
+    portraitSub:SetWidth(380)
+    portraitSub:SetJustifyH("LEFT")
+    portraitSub:SetText("Custom border color (used when Border Style is set to Custom) and background color.")
+
+    -- Portrait Border Color
+    local pBorderLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    pBorderLabel:SetPoint("TOPLEFT", portraitSub, "BOTTOMLEFT", 0, -16)
+    pBorderLabel:SetText("Border custom color")
+
+    local pBorderSwatch = CreateFrame("Button", "MSUF_Colors_PortraitBorderSwatch", content)
+    pBorderSwatch:SetSize(32, 16)
+    pBorderSwatch:SetPoint("TOPLEFT", pBorderLabel, "BOTTOMLEFT", 0, -6)
+    S.portraitBorderTex = pBorderSwatch:CreateTexture(nil, "ARTWORK")
+    S.portraitBorderTex:SetAllPoints()
+
+    pBorderSwatch:SetScript("OnClick", function()
+        EnsureDB()
+        local g = MSUF_DB.general
+        local r = g.portraitBorderColorR or 1
+        local gv = g.portraitBorderColorG or 1
+        local b = g.portraitBorderColorB or 1
+        OpenColorPicker(r, gv, b, function(nr, ng, nb)
+            g.portraitBorderColorR = nr
+            g.portraitBorderColorG = ng
+            g.portraitBorderColorB = nb
+            S.portraitBorderTex:SetColorTexture(nr, ng, nb)
+            -- Propagate to non-override units
+            for _, uk in ipairs({"player","target","focus","targettarget","pet","boss"}) do
+                MSUF_DB[uk] = MSUF_DB[uk] or {}
+                local u = MSUF_DB[uk]
+                if not u.portraitDecoOverride then
+                    u.portraitBorderColorR = nr
+                    u.portraitBorderColorG = ng
+                    u.portraitBorderColorB = nb
+                end
+            end
+            if type(_G.MSUF_PortraitDecoration_RefreshAll) == "function" then
+                _G.MSUF_PortraitDecoration_RefreshAll()
+            end
+        end)
+    end)
+
+    -- Portrait Background Color
+    local pBgLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    pBgLabel:SetPoint("TOPLEFT", pBorderSwatch, "BOTTOMLEFT", 0, -16)
+    pBgLabel:SetText("Background color")
+
+    local pBgSwatch = CreateFrame("Button", "MSUF_Colors_PortraitBgSwatch", content)
+    pBgSwatch:SetSize(32, 16)
+    pBgSwatch:SetPoint("TOPLEFT", pBgLabel, "BOTTOMLEFT", 0, -6)
+    S.portraitBgTex = pBgSwatch:CreateTexture(nil, "ARTWORK")
+    S.portraitBgTex:SetAllPoints()
+
+    pBgSwatch:SetScript("OnClick", function()
+        EnsureDB()
+        local g = MSUF_DB.general
+        local r = g.portraitBgColorR or 0.05
+        local gv = g.portraitBgColorG or 0.05
+        local b = g.portraitBgColorB or 0.05
+        OpenColorPicker(r, gv, b, function(nr, ng, nb)
+            g.portraitBgColorR = nr
+            g.portraitBgColorG = ng
+            g.portraitBgColorB = nb
+            S.portraitBgTex:SetColorTexture(nr, ng, nb)
+            for _, uk in ipairs({"player","target","focus","targettarget","pet","boss"}) do
+                MSUF_DB[uk] = MSUF_DB[uk] or {}
+                local u = MSUF_DB[uk]
+                if not u.portraitDecoOverride then
+                    u.portraitBgColorR = nr
+                    u.portraitBgColorG = ng
+                    u.portraitBgColorB = nb
+                end
+            end
+            if type(_G.MSUF_PortraitDecoration_RefreshAll) == "function" then
+                _G.MSUF_PortraitDecoration_RefreshAll()
+            end
+        end)
+    end)
+
+    -- Reset portrait colors
+    local pResetBtn = CreateFrame("Button", "MSUF_Colors_PortraitResetButton", content, "UIPanelButtonTemplate")
+    pResetBtn:SetSize(160, 22)
+    pResetBtn:SetPoint("TOPLEFT", pBgSwatch, "BOTTOMLEFT", 0, -12)
+    pResetBtn:SetText("Reset portrait colors")
+    pResetBtn:SetScript("OnClick", function()
+        MSUF_ConfirmColorReset("portrait colors", function()
+            EnsureDB()
+            local g = MSUF_DB.general
+            g.portraitBorderColorR = 1; g.portraitBorderColorG = 1; g.portraitBorderColorB = 1; g.portraitBorderColorA = 1
+            g.portraitBgColorR = 0.05; g.portraitBgColorG = 0.05; g.portraitBgColorB = 0.05; g.portraitBgColorA = 0.85
+            for _, uk in ipairs({"player","target","focus","targettarget","pet","boss"}) do
+                MSUF_DB[uk] = MSUF_DB[uk] or {}
+                local u = MSUF_DB[uk]
+                if not u.portraitDecoOverride then
+                    u.portraitBorderColorR = 1; u.portraitBorderColorG = 1; u.portraitBorderColorB = 1; u.portraitBorderColorA = 1
+                    u.portraitBgColorR = 0.05; u.portraitBgColorG = 0.05; u.portraitBgColorB = 0.05; u.portraitBgColorA = 0.85
+                end
+            end
+            S.portraitBorderTex:SetColorTexture(1, 1, 1)
+            S.portraitBgTex:SetColorTexture(0.05, 0.05, 0.05)
+            if type(_G.MSUF_PortraitDecoration_RefreshAll) == "function" then
+                _G.MSUF_PortraitDecoration_RefreshAll()
+            end
+        end)
+    end)
+
+    S.lastControl = pResetBtn
+
+    --------------------------------------------------
     -- F.Refresh function
     --------------------------------------------------
     F.Refresh = function()
@@ -3492,6 +3610,16 @@ end
                 local hr, hg, hb = F.GetHighlightColor()
                 S.highlightColorTex:SetColorTexture(hr, hg, hb)
             end
+        end
+
+        -- Portrait colors
+        if S.portraitBorderTex then
+            local g = MSUF_DB.general or {}
+            S.portraitBorderTex:SetColorTexture(g.portraitBorderColorR or 1, g.portraitBorderColorG or 1, g.portraitBorderColorB or 1)
+        end
+        if S.portraitBgTex then
+            local g = MSUF_DB.general or {}
+            S.portraitBgTex:SetColorTexture(g.portraitBgColorR or 0.05, g.portraitBgColorG or 0.05, g.portraitBgColorB or 0.05)
         end
 end
 
