@@ -38,8 +38,11 @@ end
 local function B() if type(MSUF_DB) == "table" then MSUF_DB.bars = MSUF_DB.bars or {}; return MSUF_DB.bars end; return {} end
 local function CPRefresh() if type(_G.MSUF_ClassPower_Refresh) == "function" then _G.MSUF_ClassPower_Refresh() end end
 
-local function MakeRow(name, labelText, parent, minV, maxV, step, dbKey, anchor, anchorPt, oX, oY, sliderW, labelW)
+local function MakeRow(name, labelText, parent, minV, maxV, step, dbKey, anchor, anchorPt, oX, oY, sliderW, labelW, opts)
     sliderW = sliderW or 150; labelW = labelW or 62; step = step or 1
+    opts = opts or {}
+    local toDB = (type(opts.toDB) == "function") and opts.toDB or nil
+    local fromDB = (type(opts.fromDB) == "function") and opts.fromDB or nil
     local row = {}
     local lbl = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     lbl:SetPoint(anchorPt or "TOPLEFT", anchor, "BOTTOMLEFT", oX or 0, oY or -10)
@@ -72,6 +75,12 @@ local function MakeRow(name, labelText, parent, minV, maxV, step, dbKey, anchor,
     local function Clamp(v) v = tonumber(v); if not v then return nil end; v = floor(v + 0.5); if v < minV then v = minV elseif v > maxV then v = maxV end; return v end
 
     function row:Set(val) val = Clamp(val) or minV; eb:SetText(tostring(val)); s:SetValue(val) end
+    function row:SetFromDB(val)
+        if fromDB then
+            val = fromDB(val)
+        end
+        row:Set(val)
+    end
     function row:SetEnabled(on)
         local a = on and 1.0 or 0.35
         s:SetAlpha(a); eb:SetAlpha(a); minus:SetAlpha(a); plus:SetAlpha(a)
@@ -81,7 +90,10 @@ local function MakeRow(name, labelText, parent, minV, maxV, step, dbKey, anchor,
 
     s:SetScript("OnValueChanged", function(_, val)
         val = Clamp(val) or minV; eb:SetText(tostring(val))
-        if dbKey then B()[dbKey] = val; CPRefresh() end
+        if dbKey then
+            B()[dbKey] = toDB and toDB(val) or val
+            CPRefresh()
+        end
     end)
 
     local function ApplyEB() local v = Clamp(eb:GetText()); if not v then eb:SetText(tostring(Clamp(s:GetValue()) or minV)); return end; eb:SetText(tostring(v)); s:SetValue(v) end
@@ -97,7 +109,7 @@ local function MakeRow(name, labelText, parent, minV, maxV, step, dbKey, anchor,
     if dbKey then
         s:HookScript("OnShow", function()
             local v = tonumber(B()[dbKey])
-            if v then row:Set(v) end
+            if v ~= nil then row:SetFromDB(v) end
         end)
     end
 
@@ -298,15 +310,31 @@ local function BuildClassPowerOptions(leftName, rightName)
         set = function(v) B().classPowerColorByType = v; CPRefresh() end,
     })
 
+    local percentAlphaOpts = {
+        toDB = function(v)
+            local n = tonumber(v) or 0
+            if n < 0 then n = 0 elseif n > 100 then n = 100 end
+            return n / 100
+        end,
+        fromDB = function(v)
+            local n = tonumber(v)
+            if n == nil then n = 0 end
+            if n <= 1 then
+                n = n * 100
+            end
+            return floor(n + 0.5)
+        end,
+    }
+
     -- Style sliders (right column)
     local cpFontSizeRow    = MakeRow("MSUF_CPFontSize",    "Font size", cpPanel, 6, 32, 1, "classPowerFontSize",    cpColorCheck,          "TOPLEFT", 0, -10, nil, R_LABEL_W)
     local cpTextOffsetXRow = MakeRow("MSUF_CPTextOffsetX", "Text X",    cpPanel, -200, 200, 1, "classPowerTextOffsetX", cpFontSizeRow.label,  "TOPLEFT", 0, -10, nil, R_LABEL_W)
     local cpTextOffsetYRow = MakeRow("MSUF_CPTextOffsetY", "Text Y",    cpPanel, -200, 200, 1, "classPowerTextOffsetY", cpTextOffsetXRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpBgAlphaRow     = MakeRow("MSUF_CPBgAlpha",     "BG opacity",cpPanel, 0, 100, 1, "classPowerBgAlpha",     cpTextOffsetYRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpBgAlphaRow     = MakeRow("MSUF_CPBgAlpha",     "BG opacity",cpPanel, 0, 100, 1, "classPowerBgAlpha",     cpTextOffsetYRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W, percentAlphaOpts)
     local cpTickRow        = MakeRow("MSUF_CPTick",        "Separator", cpPanel, 0, 4, 1, "classPowerTickWidth",    cpBgAlphaRow.label,    "TOPLEFT", 0, -10, nil, R_LABEL_W)
     local cpOutlineRow     = MakeRow("MSUF_CPOutline",     "Outline",   cpPanel, 0, 4, 1, "classPowerOutline",      cpTickRow.label,       "TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpFilledAlphaRow = MakeRow("MSUF_CPFilledAlpha", "Filled %",  cpPanel, 0, 100, 5, "classPowerFilledAlpha", cpOutlineRow.label,    "TOPLEFT", 0, -10, nil, R_LABEL_W)
-    local cpEmptyAlphaRow  = MakeRow("MSUF_CPEmptyAlpha",  "Empty %",   cpPanel, 0, 100, 5, "classPowerEmptyAlpha",  cpFilledAlphaRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpFilledAlphaRow = MakeRow("MSUF_CPFilledAlpha", "Filled %",  cpPanel, 0, 100, 5, "classPowerFilledAlpha", cpOutlineRow.label,    "TOPLEFT", 0, -10, nil, R_LABEL_W, percentAlphaOpts)
+    local cpEmptyAlphaRow  = MakeRow("MSUF_CPEmptyAlpha",  "Empty %",   cpPanel, 0, 100, 5, "classPowerEmptyAlpha",  cpFilledAlphaRow.label,"TOPLEFT", 0, -10, nil, R_LABEL_W, percentAlphaOpts)
     local cpGapRow         = MakeRow("MSUF_CPGap",         "Pip gap",   cpPanel, 0, 8, 1, "classPowerGap",          cpEmptyAlphaRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
 
     -- Auto-Hide subsection
@@ -413,11 +441,11 @@ local function BuildClassPowerOptions(leftName, rightName)
         cpFontSizeRow:Set(tonumber(b.classPowerFontSize) or 16)
         cpTextOffsetXRow:Set(tonumber(b.classPowerTextOffsetX) or 0)
         cpTextOffsetYRow:Set(tonumber(b.classPowerTextOffsetY) or 0)
-        cpBgAlphaRow:Set(floor((tonumber(b.classPowerBgAlpha) or 0.3) * 100 + 0.5))
+        cpBgAlphaRow:SetFromDB(b.classPowerBgAlpha)
         cpTickRow:Set(tonumber(b.classPowerTickWidth) or 1)
         cpOutlineRow:Set(tonumber(b.classPowerOutline) or 1)
-        cpFilledAlphaRow:Set(floor((tonumber(b.classPowerFilledAlpha) or 1.0) * 100 + 0.5))
-        cpEmptyAlphaRow:Set(floor((tonumber(b.classPowerEmptyAlpha) or 0.3) * 100 + 0.5))
+        cpFilledAlphaRow:SetFromDB(b.classPowerFilledAlpha)
+        cpEmptyAlphaRow:SetFromDB(b.classPowerEmptyAlpha)
         cpGapRow:Set(tonumber(b.classPowerGap) or 0)
         amHeightRow:Set(tonumber(b.altManaHeight) or 4)
         amOffsetRow:Set(tonumber(b.altManaOffsetY) or -2)
