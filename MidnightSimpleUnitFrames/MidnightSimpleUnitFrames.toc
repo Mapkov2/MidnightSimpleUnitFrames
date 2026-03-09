@@ -134,6 +134,7 @@ Options\MSUF_Options_Auras.lua
 Options\MSUF_Options_Fonts.lua
 Options\MSUF_Options_Misc.lua
 Options\MSUF_Options_Portraits.lua
+Options\MSUF_Options_Gameplay.lua
 
 # ═══════════════════════════════════════════════════════════════
 # MODULES
