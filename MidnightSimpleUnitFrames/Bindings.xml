@@ -1,0 +1,9 @@
+<Bindings>
+    <Binding name="MSUF_TOGGLE_OPTIONS" header="MSUF_HEADER">
+        MSUF_Keybind_ToggleOptions();
+    </Binding>
+
+    <Binding name="MSUF_TOGGLE_EDITMODE">
+        MSUF_Keybind_ToggleEditMode();
+    </Binding>
+</Bindings>
