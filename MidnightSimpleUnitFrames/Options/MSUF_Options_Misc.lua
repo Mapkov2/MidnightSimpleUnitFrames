@@ -190,7 +190,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
 
     UI.Dropdown({
         name = "MSUF_InfoTooltipPosDropdown", parent = rightPanel,
-        anchor = posLabel, x = 0, y = -4, width = 200,
+        anchor = posLabel, x = -16, y = -4, width = 200,
         items = {
             { key = "classic", label = "Blizzard Classic" },
             { key = "modern", label = "Modern (under cursor)" },

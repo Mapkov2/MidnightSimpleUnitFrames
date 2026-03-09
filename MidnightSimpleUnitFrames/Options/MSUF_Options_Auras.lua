@@ -1489,52 +1489,46 @@ do
     local editLbl = leftTop:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     editLbl:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 380, -36)
     editLbl:SetText(TR("Edit filters:"))
-    ddEditFilters = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_Auras2_EditFiltersDropDown", leftTop) or CreateFrame("Frame", "MSUF_Auras2_EditFiltersDropDown", leftTop, "UIDropDownMenuTemplate"))
-    ddEditFilters:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 452, -42)
-    MSUF_FixUIDropDown(ddEditFilters, 160)
+    ddEditFilters = ns.UI and ns.UI.Dropdown({
+        name = "MSUF_Auras2_EditFiltersDropDown", parent = leftTop,
+        anchor = editLbl, anchorPoint = "TOPLEFT", x = 56, y = 8, width = 160,
+        items = {
+            { key = "shared", label = "Shared" },
+            { key = "player", label = "Player" },
+            { key = "target", label = "Target" },
+            { key = "focus",  label = "Focus" },
+            { key = "boss1",  label = "Boss 1" },
+            { key = "boss2",  label = "Boss 2" },
+            { key = "boss3",  label = "Boss 3" },
+            { key = "boss4",  label = "Boss 4" },
+            { key = "boss5",  label = "Boss 5" },
+        },
+        get = function() return GetEditingKey() end,
+        set = function(key)
+            panel.__msufAuras2_FilterEditKey = key
+            if panel and panel.OnRefresh then panel.OnRefresh() end
+        end,
+    })
+    if not ddEditFilters then
+        -- Fallback if Toolkit not loaded
+        ddEditFilters = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_Auras2_EditFiltersDropDown", leftTop) or CreateFrame("Frame", "MSUF_Auras2_EditFiltersDropDown", leftTop, "UIDropDownMenuTemplate"))
+        ddEditFilters:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 452, -42)
+        MSUF_FixUIDropDown(ddEditFilters, 160)
+    end
     local labelForKey = {
-        shared = L["Shared"],
-        player = L["Player"],
-        target = L["Target"],
-        focus = L["Focus"],
-        boss1 = L["Boss 1"],
-        boss2 = L["Boss 2"],
-        boss3 = L["Boss 3"],
-        boss4 = L["Boss 4"],
-        boss5 = L["Boss 5"],
+        shared = "Shared", player = "Player", target = "Target", focus = "Focus",
+        boss1 = "Boss 1", boss2 = "Boss 2", boss3 = "Boss 3", boss4 = "Boss 4", boss5 = "Boss 5",
     }
     local function ApplyKey(key)
         panel.__msufAuras2_FilterEditKey = key
-        if ddEditFilters and labelForKey then
+        if ddEditFilters and ddEditFilters.SetValue then
+            ddEditFilters:SetValue(key)
+        elseif ddEditFilters and labelForKey then
             UIDropDownMenu_SetText(ddEditFilters, labelForKey[key] or "Shared")
         end
         if panel and panel.OnRefresh then panel.OnRefresh() end
      end
-    UIDropDownMenu_Initialize(ddEditFilters, function(self, level)
-        local function Add(text, key)
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = text
-            info.func = function()  ApplyKey(key); CloseDropDownMenus()  end
-            info.checked = function()  return GetEditingKey() == key end
-	            info.keepShownOnClick = false
-	            -- radio style (default): no isNotRadio
-            UIDropDownMenu_AddButton(info, level)
-         end
-        Add(L["Shared"], "shared")
-        Add(L["Player"], "player")
-        Add(L["Target"], "target")
-        Add(L["Focus"], "focus")
-        Add(L["Boss 1"], "boss1")
-        Add(L["Boss 2"], "boss2")
-        Add(L["Boss 3"], "boss3")
-        Add(L["Boss 4"], "boss4")
-        Add(L["Boss 5"], "boss5")
-     end)
-    ddEditFilters:SetScript("OnShow", function(self)
-        local key = GetEditingKey()
-        UIDropDownMenu_SetText(self, labelForKey[key] or "Shared")
-     end)
-    cbOverrideFilters = CreateCheckbox(leftTop, L["Override shared filters"], 380, -70,
+    cbOverrideFilters = CreateCheckbox(leftTop, "Override shared filters", 380, -70,
         function()  return GetOverrideForEditing() end,
         function(v)  SetOverrideForEditing(v)  end,
         L["When off, this unit uses Shared filter settings. When on, it uses its own copy of the filters."])
