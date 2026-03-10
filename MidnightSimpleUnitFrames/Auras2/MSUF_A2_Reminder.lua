@@ -2,7 +2,7 @@
 -- MSUF_A2_Reminder.lua  Buff Reminder — Ghost icons for missing/expiring buffs
 --
 -- Own container (entry.reminder) with independent X/Y offset + Edit Mode mover.
--- Edit Mode popup with X, Y, Size, Spacing, Growth direction.
+-- Edit Mode popup with X, Y, Size, and Spacing.
 --
 -- Default: all reminders ON (nil = enabled). User sets key = false to disable.
 -- Secret-safe: reads Cache._msufA2_sid, Cache.GetMinRemaining.
@@ -410,7 +410,7 @@ local function _ApplyAndRefresh()
 end
 
 -- =========================================================================
--- Edit Mode Popup — Position/Size/Spacing/Growth for reminder container
+-- Edit Mode Popup — Position/Size/Spacing for reminder container
 -- Matches existing MSUF popup visual style 1:1.
 -- =========================================================================
 local _popup = nil
@@ -480,82 +480,11 @@ local function _CreateNumericRow(parent, labelText, anchorTo, dy, onChanged)
     return { label = label, box = box, minus = minus, plus = plus }
 end
 
--- Growth direction dropdown builder
-local _GROWTH_OPTIONS = {
-    { value = "RIGHT", text = "Left to Right" },
-    { value = "LEFT",  text = "Right to Left" },
-    { value = "UP",    text = "Bottom to Top" },
-    { value = "DOWN",  text = "Top to Bottom" },
-}
-
-local function _GrowthText(value)
-    for _, opt in ipairs(_GROWTH_OPTIONS) do
-        if opt.value == value then
-            return opt.text
-        end
-    end
-    return _GROWTH_OPTIONS[1].text
-end
-
-local function _CreateGrowthDropdown(parent, anchorTo, dy, onChanged)
-    local label = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    label:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, dy or -8)
-    label:SetText("Growth:")
-    label:SetTextColor(0.85, 0.85, 0.85, 1)
-
-    local dd = CreateFrame("Frame", "MSUF_ReminderGrowthDropdown", parent, "UIDropDownMenuTemplate")
-    dd:SetPoint("LEFT", label, "RIGHT", -8, -2)
-    if type(_G.MSUF_EM_DropdownPreset) == "function" then
-        _G.MSUF_EM_DropdownPreset(dd, 120, _GrowthText("RIGHT"))
-    else
-        UIDropDownMenu_SetWidth(dd, 120)
-        if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(dd, "LEFT") end
-        UIDropDownMenu_SetText(dd, _GrowthText("RIGHT"))
-    end
-    local regDrop = _G.MSUF_EM_RegisterPopupDropdown
-    if type(regDrop) == "function" then
-        regDrop(dd, parent)
-    else
-        dd.__msufEditPopupDropdown = true
-        dd.__msufEditPopupOwner = parent
-    end
-    if type(_G.MSUF_ExpandDropdownClickArea) == "function" then
-        _G.MSUF_ExpandDropdownClickArea(dd)
-    end
-
-    dd._value = "RIGHT"
-
-    local function OnSelect(self)
-        local value = self and self.value or "RIGHT"
-        dd._value = value
-        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(dd, value) end
-        UIDropDownMenu_SetText(dd, _GrowthText(value))
-        if CloseDropDownMenus then CloseDropDownMenus() end
-        if onChanged then onChanged() end
-    end
-
-    UIDropDownMenu_Initialize(dd, function(self, level)
-        for _, opt in ipairs(_GROWTH_OPTIONS) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = opt.text
-            info.value = opt.value
-            info.func = OnSelect
-            info.keepShownOnClick = false
-            info.checked = function()
-                return dd._value == opt.value
-            end
-            UIDropDownMenu_AddButton(info, level)
-        end
-    end)
-
-    return { label = label, dropdown = dd }
-end
-
 local function _EnsurePopup()
     if _popup then return _popup end
 
     local pf = CreateFrame("Frame", "MSUF_ReminderPositionPopup", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-    pf:SetSize(300, 290)
+    pf:SetSize(300, 250)
     pf:SetPoint("CENTER", UIParent, "CENTER", 200, 0)
     pf:SetFrameStrata("FULLSCREEN_DIALOG")
     pf:SetFrameLevel(500)
@@ -608,8 +537,6 @@ local function _EnsurePopup()
             local oy = tonumber(pf._rowY and pf._rowY.box:GetText()) or 0
             local sz = tonumber(pf._rowSize and pf._rowSize.box:GetText()) or 22
             local sp = tonumber(pf._rowSpacing and pf._rowSpacing.box:GetText()) or 2
-            local gr = pf._growth and pf._growth.dropdown._value or "RIGHT"
-
             -- Clamp
             ox = max(-2000, min(2000, floor(ox + 0.5)))
             oy = max(-2000, min(2000, floor(oy + 0.5)))
@@ -620,8 +547,6 @@ local function _EnsurePopup()
             _WriteLayout("reminderOffsetY", oy)
             _WriteLayout("reminderIconSize", sz)
             _WriteLayout("reminderSpacing", sp)
-            _WriteLayout("reminderGrowth", gr)
-
             -- Also write to shared as defaults
             local _, shared = _GetDB()
             if shared then
@@ -629,7 +554,6 @@ local function _EnsurePopup()
                 shared.reminderOffsetY = oy
                 shared.reminderIconSize = sz
                 shared.reminderSpacing = sp
-                shared.reminderGrowth = gr
             end
 
             _ApplyAndRefresh()
@@ -642,9 +566,6 @@ local function _EnsurePopup()
     pf._rowY = _CreateNumericRow(pf, "Offset Y:", pf._rowX.label, -8, Apply)
     pf._rowSize = _CreateNumericRow(pf, "Icon Size:", pf._rowY.label, -8, Apply)
     pf._rowSpacing = _CreateNumericRow(pf, "Spacing:", pf._rowSize.label, -8, Apply)
-
-    -- Growth dropdown
-    pf._growth = _CreateGrowthDropdown(pf, pf._rowSpacing.label, -12, Apply)
 
     -- Step hint
     local stepHint = pf:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -674,11 +595,6 @@ function Reminder.SyncPopup()
     local oy = _ReadVal(shared, lay, "reminderOffsetY", 0)
     local sz = _ReadVal(shared, lay, "reminderIconSize", 22)
     local sp = _ReadVal(shared, lay, "reminderSpacing", 2)
-    local gr = nil
-    if lay and type(lay.reminderGrowth) == "string" then gr = lay.reminderGrowth end
-    if not gr and shared and type(shared.reminderGrowth) == "string" then gr = shared.reminderGrowth end
-    gr = gr or "RIGHT"
-
     local function setBox(row, v)
         if row and row.box and not row.box:HasFocus() then
             row.box:SetText(tostring(floor(v + 0.5)))
@@ -689,12 +605,6 @@ function Reminder.SyncPopup()
     setBox(_popup._rowSize, sz)
     setBox(_popup._rowSpacing, sp)
 
-    -- Sync dropdown
-    if _popup._growth and _popup._growth.dropdown then
-        _popup._growth.dropdown._value = gr
-        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(_popup._growth.dropdown, gr) end
-        UIDropDownMenu_SetText(_popup._growth.dropdown, _GrowthText(gr))
-    end
 end
 
 function Reminder.OpenPopup(parent)
