@@ -51,8 +51,8 @@ local T = {
     ["Bottom left"] = "左下",
     ["Bottom right"] = "右下",
     ["Center"] = "居中",
-    ["Left to player name"] = "玩家名称左",
-    ["Right to player name"] = "玩家名称右",
+    ["Left to player name"] = "名称左",
+    ["Right to player name"] = "名称右",
     ["Right to Left"] = "从右到左",
     ["Bottom to Top"] = "从下到上",
     ["Top to Bottom"] = "从上到下",
@@ -160,6 +160,7 @@ local T = {
     ["Boss"] = "首领",
     ["Pet"] = "宠物",
     ["Class Resources"] = "职业资源",
+    ["Portraits"] = "头像",
 
     ["Frame Basics"] = "框架基础",
     ["Enable this frame"] = "启用框架",
@@ -168,6 +169,8 @@ local T = {
     ["Show power text"] = "显示能量文本",
     ["Reverse fill (HP/Power)"] = "填充(生命/能量)",
     ["Portrait Off"]   = "关闭头像",
+    ["Portrait Left"]  = "头像左" ,
+    ["Portrait Right"] = "头像右",
     ["2D Portrait Left"] = "2D头像左" ,
     ["2D Portrait Right"] = "2D头像右",
     ["3D Portrait Left"] = "3D头像左" ,
@@ -188,7 +191,7 @@ local T = {
     ["Pet Alpha"]       = "宠物透明度",
     ["Sync both"]       = "同步两者",
     ["Keep text + portrait visible"] = "保持文本和头像可见",
-    ["Alpha sliders affect"] = "透明度滑块影响",
+    ["Alpha sliders affect"] = "前景与背景透明度",
     ["Foreground"]      = "前景"       ,
     ["Background"]      = "背景",
     ["Alpha in combat"] = "战斗中透明度",
@@ -196,23 +199,42 @@ local T = {
     ["Free (global anchor)"] = "自由 (全局锚点)",
     ["Player frame"] = "玩家框架",
     ["Target frame"] = "目标框架",
+    ["Focus frame"]  = "焦点框架",
+    ["Pet frame"] = "宠物框架",
+    ["Target of Target frame"] = "目标的目标框架",
     ["Anchor focus to"] = "焦点锚点" ,
-    ["Player Load Conditions"] = "玩家加载条件",
-    ["Target Load Conditions"] = "目标加载条件",
-    ["Focus Load Conditions"] = "焦点加载条件",
-    ["Pet Load Conditions"] = "宠物加载条件",
-    ["Boss Load Conditions"] = "首领加载条件",
-    ["ToT Load Conditions"] = "目标的目标加载条件",
+    ["Player Load Conditions"] = "玩家隐藏条件",
+    ["Target Load Conditions"] = "目标隐藏条件",
+    ["Focus Load Conditions"] = "焦点隐藏条件",
+    ["Pet Load Conditions"] = "宠物隐藏条件",
+    ["Boss Load Conditions"] = "首领隐藏条件",
+    ["ToT Load Conditions"] = "目标的目标隐藏条件",
     ["Mounted"] = "骑乘中",
     ["In vehicle"] = "载具中",
     ["Resting"] = "休息中",
-    ["Stealthed"] = "潜行",
+    ["Stealthed"] = "潜行中",
     ["In combat"] = "战斗中",
-    ["Out of combat"] = "脱离战斗",
-    ["Solo"] = "单刷",
-    ["In group"] = "组队",
+    ["Out of combat"] = "非战斗",
+    ["Solo"] = "单刷中",
+    ["In group"] = "组队中",
     ["In instance"] = "副本中",
+    ["Anchoring"]   = "锚点",
+    ["Pick any frame: click 'Pick with mouse', then hold CTRL + Left-Click on the target frame."] = "选择任何框架: 点击'使用鼠标选择', 然后按住CTRL + 左键点击目标框架.",
+    ["Custom anchor target (mouse picker)"]     = "自定义锚点目标 (鼠标选择器)",
+    ["Pick frame (CTRL+Click)"] = "选择框架 (CTRL+点击)",
+    ["Edit Mode custom anchor is global. Per-unit anchoring here overrides it for this unit."] = "编辑模式自定义锚点是全局的. 这里每个单位的锚点覆盖它.",
+    ["Anchor unit to"] = "锚点单位",
+    ["Current custom anchor: "] = "当前自定义锚点:" ,
+    ["Current custom anchor: none"] = "当前自定义锚点: 无" ,
 
+
+
+
+
+
+
+
+   
 
 
 
@@ -259,6 +281,9 @@ local T = {
     ["Combat"] = "战斗",
     ["Rez"] = "复活",
     ["Rested"] = "休息",
+    ["Combat icon"] = "战斗图标",
+    ["Rez icon"] = "复活图标",
+    ["Rested icon"] = "休息图标",
 
 
 
@@ -282,13 +307,15 @@ local T = {
     ["Anchor to right side"] = "锚定到右侧",
     ["Follow HP bar"] = "跟随生命条",
     ["Follow HP bar (overflow)"] = "跟随生命条 (溢出)",
-    ["Reverse from max"] = "反向从最大",
+    ["Reverse from max"] = "最大值反向",
 
     ["Anchor to healthbar edge (default)"] = "锚定到生命条边缘 (默认)",
     ["Anchor to inside padding (prevents clipping)"] = "锚定到内边距 (防止裁剪)",
     ["Absorb bar texture (SharedMedia)"] = "吸收条材质 (SharedMedia)",
     ["Test absorb textures"] = "测试吸收材质",
     ["Bar texture (SharedMedia)"] = "计量条材质 (SharedMedia)",
+    ["Heal-absorb texture"] = "治疗吸收材质",
+
     ["Gradient Options"] = "渐变选项",
     ["Border & Text Options"] = "边框 & 文本选项",
     ["Enable HP bar gradient"] = "启用生命条渐变",
@@ -337,7 +364,8 @@ local T = {
     ["Purge"]   = "净化",
     ["Bar settings"]    = "计量条设置",
     ['Override shared settings'] = '覆盖共享设置',
-    ['Per-unit override'] = '每个单位覆盖',
+    ['Per-unit override'] = '单位覆盖',
+    ["When unchecked, this unit inherits Shared settings."] = "取消勾选时, 这个单位继承共享设置.",
     ['When unchecked, this unit inherits Shared settings for text modes, absorb display, and spacers.'] = '取消勾选时, 这个单位继承共享设置中的文本模式、吸收显示和间距.',
     ['Changing any per-unit setting will auto-enable this override.']   = '更改任何每个单位的设置将自动启用此覆盖.',
     ["Current"]     = "当前",
@@ -351,6 +379,7 @@ local T = {
     ["% + Full value"]   = "% + 数值",
     ["Only %"]    = "仅百分比",
     ["Text Spacers"]    = "文本间距",
+    ["Use the Bar settings scope dropdown to choose which unit these settings apply to."]    = "使用计量条设置范围下拉菜单来选择这些设置应用于哪个单位.",
     ["Use the Bar settings scope dropdown (left panel, bottom) to choose which unit these settings apply to."] = "使用计量条设置范围下拉菜单 (左侧面板, 底部) 来选择这些设置应用于哪个单位.",
     ["When scope is set to 'Shared', settings apply globally. Select a unit and enable 'Override shared settings' to customize per unitframe."] = "当范围设置为 '共享' 时, 设置全局应用. 选择一个单位并启用 '覆盖共享设置' 以自定义每个框架.",
     ["Works only when the corresponding text mode is set to 'Full value + %' (or '% + Full value')."] = "仅当相应的文本模式设置为 '数值 + %' (或 '% + 数值') 时才有效.",
@@ -391,6 +420,8 @@ local T = {
     ["Show rune time (per rune)"]  = "显示符文时间 (每个符文)",
     ["Show Maelstrom bar (Elemental)"]  = "显示旋涡条 (元素)",
     ["Show Ebon Might timer (Aug)"]  = "显示黑檀之力计时器 (增辉)",
+    ["Show resource prediction"]    = "显示资源预测",
+
     ["Detached Power Bar"]  = "分离能量条",
     ["Only applies when power bar is detached"] = "仅当能量条分离时应用",
     ["Manual"]  = "手动",
@@ -399,7 +430,10 @@ local T = {
     ["Background texture"]  = "背景纹理",
     ["Colors, textures & visual tweaks"]    = "颜色、纹理和视觉调整",
     ["Color by resource type"]  = "按资源类型着色",
-    ["BG opacity"] = "背景透明度",
+    ["BG opacity"] = "背景透明",
+    ["Text X"]  = "文本X",
+    ["Text Y"]  = "文本Y",
+
     ["Separator"]   = "分隔符",
     ["Outline"] = "轮廓",
     ["Filled %"]  = "填充%",
@@ -461,7 +495,7 @@ local T = {
  --------------------------------------   
     ["Fonts"] = "字体",
     ["Font Settings"] = "字体设置",
-    ["Font color & style"] = "字体颜色 & 样式",
+    ["Font color & style"] = "字体颜色&样式",
     ["Global font"] = "全局字体",
     ["Text sizes"] = "文本大小",
     ["Global defaults. Frames inherit unless overridden in Unitframes > Text."] = "全局默认值. 框架继承除非在单位框架 > 文本中被覆盖.",
@@ -480,8 +514,12 @@ local T = {
     ["Name display"] = "名称显示",
     ["Shorten unit names (except Player)"] = "缩短单位名称 (除了玩家)",
     ["Truncation style"] = "截断样式",
-    ["Keep start (show first letters)"] = "保持开始 (显示第一个字母)",
-    ["Keep end (show last letters)"] = "保持结尾 (显示最后字母)",
+    ["Keep start (show first letters)"] = "保留首字",
+    ["Keep start: shows the first letters (clips the end)."]    = "保留首字: 显示首字 (截断末尾).",
+    ["Keep end (show last letters)"] = "保留尾字",
+    ["Keep end: shows the last letters (clips the beginning)."] = "保留尾字: 显示尾字 (截断开头).",
+    ["Reserved space protects the clipped edge (avoids overlaps)."] = "预留空间保护截断边缘 (避免重叠).",
+
     ["Max name length"] = "最大名称长度",
     ["Reserved space"] = "预留空间",
     ["Reset overrides"] = "重置覆盖",
@@ -531,6 +569,13 @@ local T = {
     ["Boss 4"] = "首领4",
     ["Boss 5"] = "首领5",
     ["Shared"]  = "共享",
+    ["Boss %s"] = "首领%s",
+
+    ["Editing: |cffffd200"] = "编辑: |cffffd200",
+    ["|cffffffffOverrides:|r "] = "|cffffffff覆盖:|r ",
+
+
+
 
     ["Show Buffs"] = "显示Buffs",
     ["Show Debuffs"]   = "显示Debuffs",
@@ -545,8 +590,14 @@ local T = {
     ['Shows stack/application counts (e.g. "2") on aura icons. Disable to hide stack numbers.'] = "在光环图标上显示堆叠/应用数量 (例如 \"2\"). 禁用以隐藏堆叠数字.",
     ["Show cooldown text"] =  "显示冷却文本",
     ["Shows the countdown numbers on aura icons. Disable to hide cooldown numbers (swipe can remain enabled)."] = "在光环图标上显示倒计时数字. 禁用以隐藏冷却数字 (扫过可以保持启用).",
-    ["Show tooltip"] = "显示鼠标提示",
     ["Click-through auras"] = "点击穿透光环",
+    ["Makes aura icons click-through so mouse clicks pass to the game world.\n\nWhen 'Show tooltip' is also enabled, hovering still shows aura tooltips.\nWhen 'Show tooltip' is off, icons are fully non-interactive."] = "使光环图标点击穿透, 以便鼠标点击传递到游戏世界.\n\n当同时启用 '显示提示' 时, 悬停仍然会显示光环工具提示.\n当关闭 '显示提示' 时, 图标完全不可交互.",
+
+    
+
+
+    ["Show tooltip"] = "显示鼠标提示",
+   
     ["Makes all aura icons non-interactive. Mouse clicks and tooltips pass through to the game world."] = "使所有光环图标变为不可交互. 鼠标点击和提示信息穿透到游戏世界.",
     ["Hide permanent buffs"] = "隐藏永久Buffs",
     ['Hides buffs with no duration. Debuffs are never hidden by this option.\n\nNote: Target/Focus APIs may still show permanent buffs during combat due to API limitations.'] = "隐藏无持续时间的Buffs. Debuffs不会被此选项隐藏.\n\n注意: 目标/焦点API在战斗中可能仍然显示永久Buffs, 由于API限制.",
@@ -604,6 +655,12 @@ local T = {
     ["Re-anchors Blizzard Private Auras to MSUF Boss frames."] = "将暴雪私有光环锚定到MSUF首领框架.",
     ["Max (Player)"] = "最大 (玩家)",
     ["Max (Focus/Boss)"] = "最大 (焦点/首领)",
+    ["0 (Off)"] = "0(关)",
+    ["10 min"] = "10分",
+
+
+
+
 
 ------BUFF REMINDERS----------------
     ["Buff Reminders"] = "Buff提醒",
@@ -726,6 +783,7 @@ local T = {
     ["Track interrupts on your Focus without showing the Focus castbar."] = "追踪您的焦点打断，但不显示焦点的施法条.",
     ["Show on Screen Preview"]  = "显示屏幕预览",
     ["Reset Position"] = "重置位置",
+    ["Text Size"]   = "文本大小",
 
 
 
@@ -797,22 +855,25 @@ local T = {
     ["Configure global colors such as the global font color, per-class bar colors, and NPC reaction colors."] = "配置全局颜色, 如全局字体颜色, 每个职业条颜色和NPC反应颜色.",
     ["Global font color"] = "全局字体颜色",
     ["Use font palette"] = "使用字体调色板",
-    ["Class bar colors"] = "职业条颜色",
+    ["Class bar colors"] = "职业计量条颜色",
     ["Choose an override bar color per class."] = "为每个职业选择覆盖条颜色.",
     ["Reset all class colors"] = "重置所有职业颜色",
-    ["Bar background tint"] = "条背景色调",
-    ["Tint applied to the bar background in *all* bar modes. (Dark Mode uses this tint too.)"] = "应用于*所有*条模式的条背景色调. (暗黑模式也使用此色调.)",
+    ["Bar background tint"] = "计量条背景色",
+    ["Tint applied to the bar background in *all* bar modes. (Dark Mode uses this tint too.)"] = "应用于所有模式（含暗黑模式）的计量条背景色.",
     ["Reset to black"] = "重置为黑色",
     ["Match HP"] = "匹配HP",
-    ["Bar appearance"] = "条外观",
-    ["Bar mode"] = "条模式"    ,
+    ["Bar appearance"] = "计量条外观",
+    ["Bar mode"] = "计量条模式"    ,
     ["Dark Mode (dark black bars)"] = "暗黑模式 (深黑色条)",
     ["Class Color Mode (color HP bars)"] = "职业颜色模式 (彩色HP条)",
-    ["Unified Color Mode (one color for all frames)"] = "统一颜色模式 (所有框架使用一种颜色)",
-    ["Unified bar color"] = "统一条颜色",
+    ["Unified Color Mode (one color for all frames)"] = "统一颜色模式 (所有框架统一颜色)",
+    ["Unified bar color"] = "统一计量条颜色",
     ["Reset to default"] = "重置为默认值",
     ["Dark mode bar color"] = "暗黑模式条颜色",
     ["Unitframe Colors"]    = "单位框架颜色",
+    ["Custom color in Dark Mode"] = "暗黑模式自定义颜色",
+    ["Bar Colors"]  = "计量条颜色"    ,
+
 
     ["Extra Color Options"] = "额外颜色选项",
     ["Friendly NPC Color"] = "友好NPC颜色",
@@ -842,6 +903,7 @@ local T = {
     ["Interrupt color (all castbars)"] = "打断颜色 (所有施法条)",
     ["Castbar text color"] = "施法条文本颜色",
     ["Castbar border color"] = "施法条边框颜色",
+    ["Castbar background color"] = "施法条背景颜色",
     ["Player castbar override"] = "玩家施法条覆盖",
     ["Optional: forces the Player castbar to use Class or Custom color during normal casts. Interrupt feedback still uses 'Interrupt color (all castbars)'."] = "可选: 正常施法时强制玩家施法条使用职业或自定义颜色. 打断反馈仍使用'打断颜色 (所有施法条)'.",
     ["Enable Player override"] = "启用玩家覆盖",
@@ -923,7 +985,66 @@ local T = {
     ["Ebon Might (Aug)"] = "黑檀之力 (增辉)",
     ["Resource Text"] = "资源文本",
 
-       
+    ["Portrait colors"] = "头像颜色",  
+    ["Custom border color (used when Border Style is set to Custom) and background color."] = "自定义边框与背景色(仅自定义边框样式生效).",
+    ["Border custom color"] = "自定义边框颜色",
+    ["Background color"] = "背景颜色",
+    ["Reset portrait colors"] = "重置头像颜色",
+-----------------Portraits--------
+    ["Portrait Settings"]   = "头像设置",
+
+    ["Square"]  = "方形",
+    ["Circle"]  = "圆形",
+    ["Solid (White)"]   = "实心 (白色)",
+    ["Class Color"] = "职业颜色",
+    ["Custom Color"]   = "自定义颜色",
+    ["Portrait Type"]   = "头像类型",
+    ["Type"]   = "类型",
+    ["Reaction Color"]  = "敌友颜色",
+    ["2D Portrait"]   = "2D头像",
+    ["3D Portrait"]   = "3D头像",
+    ["Class Icon"]   = "职业图标",
+    ["Configure for"]   = "配置",
+    ["Override shared"]   = "覆盖共享",
+    ["Per-unit override"]   = "单位覆盖",
+    ["When unchecked, this unit inherits Shared settings."] = "取消勾选时, 这个单位继承共享设置.",
+    ["Reset all overrides"]   = "重置所有覆盖",
+    ["Class Portrait Style"]    = "职业头像样式",
+    ["Blizzard Class Icon"]   = "暴雪职业图标",
+    ["Custom size"]   = "自定义大小",
+    ["Override auto size (frame height minus 4px)"]   = "覆盖自动大小 (高度 -4px)",
+    ["Size (px)"]   = "大小 (px)",
+    ["Stretch portrait into border"]   = "拉伸头像到边框",
+    ["Portrait fills the full border area instead of sitting inside it. Best with Circle/Diamond borders."]   = "头像填满边框而非嵌入内部，推荐用于圆形或菱形边框.",
+    ["Show background"]   = "显示背景",
+    ["Color: Colors panel"]   = "颜色: 颜色面板",
+    ["Opacity"]   = "透明度",
+    ["Border"]   = "边框",
+    ["Style"]   = "样式",
+    ["Thickness"]   = "粗细",
+    
+
+
+
+
+
+
+
+
+    ["Shape & Size"] = "形状与大小",
+    ["Shape"] = "形状",
+    ["Offset X"] = "X偏移",
+    ["Offset Y"] = "Y偏移",
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -938,13 +1059,15 @@ local T = {
     ["Timer size"] = "计时器大小",
     ["Lock position"] = "锁定位置",
     ["Schriftgröße"] = "字体大小",
-    ["px  (default 26)"] = "px (默认 26)",
+    ["px  (default 26)"] = "px(默认 26)",
     ["Anzeigetext"] = "显示文本",
-    ["Wird grün angezeigt. Default: SHADOWSTRIKE!"] = "将以绿色显示. 默认: SHADOWSTRIKE!",
+    ["Wird grün angezeigt. Default: SHADOWSTRIKE!"] = "将以绿色显示. 默认: 暗影突袭!",
     ["Shadow Dance Dauer (s)"] = "暗影舞步持续时间 (s)",
     ["Default 8.0 — +3s automatisch wenn First Dance voll ausläuft."] = "默认 8.0 — 当第一段暗影之舞完全结束时自动 +3秒.",
     ["Track Ancient Arts via Spell Activation Overlay"] = "通过法术激活覆盖追踪诡谋承袭",
     ["Shows |cff00ccffAA|r on proc. Event-driven — Sub Rogue has exactly one overlay."] = "触发时显示|cff00ccffAA|r.敏锐潜行者仅有一个覆盖层.",
+    ["Default green. Default: SHADOWSTRIKE!"]   = "默认绿色. 默认: 暗影突袭!",
+
 
 
 
@@ -956,7 +1079,11 @@ local T = {
     ["Leave text"] = "离开战斗文本",
     ["Text size"] = "文本大小",
     ["Lock position"] =    "锁定位置",
-    ["Duration (s)"] = "持续时间 (s)",
+    ["Duration (s)"] = "持续时间(s)",
+    ["Short"] = "短",
+    ["Long"] = "长",
+
+
 
     ["Class-specific toggles"] = "职业特定切换",
     ["Shaman: Totem tracker"] = "萨满: 图腾追踪器",
@@ -970,9 +1097,18 @@ local T = {
     ["Preview"] = "预览",
     ["Tip: Move the preview via mousedrag"] = "提示: 通过鼠标拖动移动预览",
     ["Icon size"] = "图标大小",
+    ["Small"] = "小",
+    ["Big"] = "大",
     ["Spacing"] = "间距",
+    ["Tight"] = "紧凑",
+    ["Wide"] = "宽松",
+
     ["X offset"] = "X 偏移",
+
     ["Y offset"] = "Y 偏移",
+    ["Down"] = "下",
+    ["Up"] = "上",
+
     ["Font size"] = "字体大小",
     ["Layout"] = "布局",
     ["Melee range spell (crosshair)"] = "近战范围法术 (十字准星)",
@@ -1001,21 +1137,27 @@ local T = {
     ["Track 'The First Dance' (6s after leaving combat)"] = "追踪'第一支舞'(离开战斗后6秒)",
 
     ["Rogue: Apex Alert (Shadowstrike! hint)"] = "潜行者: 顶点警报 (暗影突袭!提示)",
-    ["Shows |cff00ff00SHADOWSTRIKE!|r if Shadow Dance (185313) is active."] = "如果暗影舞步 (185313) 处于激活状态, 则显示 |cff00ff00SHADOWSTRIKE!|r.",
-    ["|cff00ff00SHADOWSTRIKE!|r User needs to check himself if shadow tech stacks are above 5."] = "|cff00ff00SHADOWSTRIKE!|r 用户需要检查自己暗影技术堆叠是否超过5.",
+    ["Shows |cff00ff00SHADOWSTRIKE!|r if Shadow Dance (185313) is active."] = "如果暗影舞步 (185313) 处于激活状态, 则显示 |cff00ff00暗影突袭!|r.",
+    ["|cff00ff00SHADOWSTRIKE!|r User needs to check himself if shadow tech stacks are above 5."] = "|cff00ff00暗影突袭!|r 用户需要检查自己暗影技术堆叠是否超过5.",
     ["Enable Apex Alert (Shadowstrike hint)"]   = "启用顶点警报 (暗影突袭提示)",
 
 
     ["Combat crosshair"] = "战斗十字准星",
-    ["Show green combat crosshair under player (in combat)"] = "在玩家下方显示绿色战斗十字准星定位玩家位置 (战斗中)",
+    ["Show green combat crosshair under player (in combat)"] = "战斗中在玩家脚下显示绿色战斗准星定位玩家位置",
     ["Crosshair: color by melee range to target (green=in range, red=out)"] = "十字准星: 按近战范围到目标着色 (绿色=范围内, 红色=范围外)",
     ["Uses the spell selected below."] = "使用下方选择的法术.",
     ["|cffff8800No melee range spell selected — Crosshair will not work.|r"] = "|cffff8800没有选择近战范围法术 — 十字准星将无法工作.|r",
+    ["|cffff8800No melee range spell selected â€” Crosshair will not work.|r"] = "|cffff8800没有选择近战范围法术 — 十字准星将无法工作.|r",
     ["Crosshair thickness"] = "十字准星粗细",
     ["Crosshair size"] = "十字准星大小",
     ["Cooldown Manager"] = "冷却管理器",
     ["Show cooldown manager bars as icons (temporarily disabled)"] = "将冷却管理器条显示为图标 (临时禁用)",
+    ["+Combat"] = "进入战斗",
+    ["-Combat"] = "离开战斗",
+    ["None"] = "无",
 
+
+    
     ["Party Interrupt Tracker"] = "小队打断追踪器",
     ["Party Interrupt Tracker\n\nThis is a BEST-GUESS tracker:\n• Detects PARTY interrupts via UNIT_SPELLCAST_SUCCEEDED.\n• Cooldowns are estimated from a static table (talents/resets may differ).\n• Some abilities/modifiers cannot be inspected reliably in 12.0.\n\nIf other party members also use MSUF, kicks are synced via addon messages to improve reliability.\n\nMythic+ only (party). Disabled in raid/open world."] = "小队打断追踪器\n\n这是一个最佳猜测追踪器:\n• 通过UNIT_SPELLCAST_SUCCEEDED检测小队打断.\n• 冷却时间从静态表估计 (天赋/重置可能不同).\n• 在12.0中, 一些能力/修饰符无法可靠地检查.\n\n如果其他小队成员也使用MSUF, 打断通过插件消息同步以提高可靠性.\n\n仅限大秘境(小队). 团队/开放世界禁用.",
     ["Enable party interrupt tracker"] = "启用小队打断追踪器",
@@ -1065,6 +1207,10 @@ local T = {
     ["Positioning"] =    "定位",
     ["Overlay"] =    "覆盖",
     ["Frames"] =    "框架",
+    ["Custom anchor (type name or pick visually)"] =    "自定义锚点 (输入名称或视觉选择)",
+    ["Pick"] =    "选择",
+    ["Clear"]    = "清除",
+
     ["Custom anchor frame name (/fstack)"] =    "自定义锚点框架名称 (/fstack)",
     ["Anchor Cooldownmanager"] =    "冷却管理器锚点",
     ["Current: "] =    "当前: ",
