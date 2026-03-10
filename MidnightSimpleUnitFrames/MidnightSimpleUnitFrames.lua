@@ -2326,6 +2326,30 @@ local function PositionUnitFrame(f, unit)
         MSUF_ApplyPoint(f, "CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
     end
  end
+local function MSUF_ForceReanchorAllUnitFrames_Once()
+    if _msuf_inCombat then return end
+    local uf = UnitFrames or _G.MSUF_UnitFrames or _G.UnitFrames
+    if type(uf) ~= "table" then return end
+
+    local ordered = {
+        "player",
+        "target",
+        "targettarget",
+        "focus",
+        "pet",
+        "boss1", "boss2", "boss3", "boss4", "boss5", "boss6", "boss7", "boss8",
+    }
+
+    for i = 1, #ordered do
+        local unit = ordered[i]
+        local frame = uf[unit]
+        if frame then
+            PositionUnitFrame(frame, unit)
+        end
+    end
+end
+_G.MSUF_ForceReanchorAllUnitFrames_Once = MSUF_ForceReanchorAllUnitFrames_Once
+
 local _MSUF_MeasureCache = {}
 local _MSUF_MeasureFS
 
@@ -5343,6 +5367,7 @@ end
     for i = 1, MSUF_MAX_BOSS_FRAMES do
         CreateSimpleUnitFrame("boss" .. i)
     end
+    MSUF_ForceReanchorAllUnitFrames_Once()
     if MSUF_ApplyUnitVisibilityDriver and UnitFrames then
         for i = 1, MSUF_MAX_BOSS_FRAMES do
             local bf = UnitFrames["boss" .. i]

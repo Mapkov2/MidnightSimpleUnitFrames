@@ -160,9 +160,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
 
     local colGap = 30
-    local nameSizeSlider    = MakeSizeSlider("MSUF_NameFontSizeSlider", "Name", "nameFontSize", sizeHelp, 0, -30, 8, 32, 14)
-    local hpSizeSlider      = MakeSizeSlider("MSUF_HealthFontSizeSlider", "HP", "hpFontSize", sizeHelp, 110 + colGap, -30, 8, 32, 14)
-    local powerSizeSlider   = MakeSizeSlider("MSUF_PowerFontSizeSlider", "Power", "powerFontSize", nameSizeSlider, 0, -100, 8, 32, 14)
+    local firstRowYOffset = -42
+    local secondRowYOffset = -118
+    local nameSizeSlider    = MakeSizeSlider("MSUF_NameFontSizeSlider", "Name", "nameFontSize", sizeHelp, 0, firstRowYOffset, 8, 32, 14)
+    local hpSizeSlider      = MakeSizeSlider("MSUF_HealthFontSizeSlider", "HP", "hpFontSize", sizeHelp, 110 + colGap, firstRowYOffset, 8, 32, 14)
+    local powerSizeSlider   = MakeSizeSlider("MSUF_PowerFontSizeSlider", "Power", "powerFontSize", nameSizeSlider, 0, secondRowYOffset, 8, 32, 14)
     local castbarSizeSlider = MakeSizeSlider("MSUF_CastbarSpellNameFontSizeSlider", "Castbar", "castbarSpellNameFontSize", powerSizeSlider, 110 + colGap, 0, 0, 30, 0)
     -- Fix castbar position: same row as Power
     castbarSizeSlider:ClearAllPoints()

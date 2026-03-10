@@ -3303,13 +3303,15 @@ S.lastControl = auraCDUrgentSwatch
     -- Portrait Colors
     --------------------------------------------------
     local portraitHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    portraitHeader:SetPoint("TOPLEFT", auraCDUrgentSwatch, "BOTTOMLEFT", 0, -44)
+    -- Keep Portrait colors aligned with the left content column like the other menu sections.
+    -- The old anchor used the right-column Aura cooldown control, which shifted the whole section right.
+    portraitHeader:SetPoint("TOPLEFT", auraStacksSwatch, "BOTTOMLEFT", 0, -44)
     portraitHeader:SetText("Portrait colors")
     F.CreateHeaderDividerAbove(portraitHeader)
 
     local portraitSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     portraitSub:SetPoint("TOPLEFT", portraitHeader, "BOTTOMLEFT", 0, -4)
-    portraitSub:SetWidth(380)
+    portraitSub:SetWidth(600)
     portraitSub:SetJustifyH("LEFT")
     portraitSub:SetText("Custom border color (used when Border Style is set to Custom) and background color.")
 
