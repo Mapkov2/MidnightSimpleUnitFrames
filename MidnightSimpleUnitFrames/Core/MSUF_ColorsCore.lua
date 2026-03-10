@@ -50,14 +50,23 @@ end
 -- Helper: apply visual updates
 ------------------------------------------------------
 local function PushVisualUpdates()
-    if ns.MSUF_UpdateAllFonts then
-        ns.MSUF_UpdateAllFonts()
+    local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or ns.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts
+    if type(fnFonts) == "function" then
+        fnFonts()
+    end
+    if type(_G.MSUF_RefreshAllIdentityColors) == "function" then
+        _G.MSUF_RefreshAllIdentityColors()
+    end
+    if type(_G.MSUF_RefreshAllPowerTextColors) == "function" then
+        _G.MSUF_RefreshAllPowerTextColors()
     end
     if ns.MSUF_ApplyGameplayVisuals then
         ns.MSUF_ApplyGameplayVisuals()
     end
     if ns.MSUF_RefreshAllFrames then
         ns.MSUF_RefreshAllFrames()
+    elseif type(_G.MSUF_RefreshAllFrames) == "function" then
+        _G.MSUF_RefreshAllFrames()
     end
 
     -- Sync highlight priority stripe colors when border colors change.

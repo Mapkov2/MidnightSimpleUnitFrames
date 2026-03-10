@@ -21,11 +21,38 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
 
     local function G() EnsureDB(); return MSUF_DB.general end
+    local RequestLayoutAll
     local function UpdateFonts()
         local fn = _G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts or (ns and ns.MSUF_UpdateAllFonts)
         if type(fn) == "function" then fn() end
     end
-    local function RequestLayoutAll(reason)
+    local function LiveSyncFontVisuals(opts)
+        opts = opts or {}
+        UpdateFonts()
+        if opts.layout then
+            RequestLayoutAll(opts.layout)
+        end
+        local refreshIdentity = opts.refreshIdentity
+        if refreshIdentity == nil then refreshIdentity = true end
+        if refreshIdentity and type(_G.MSUF_RefreshAllIdentityColors) == "function" then
+            _G.MSUF_RefreshAllIdentityColors()
+        end
+        local refreshPower = opts.refreshPower
+        if refreshPower == nil then refreshPower = true end
+        if refreshPower and type(_G.MSUF_RefreshAllPowerTextColors) == "function" then
+            _G.MSUF_RefreshAllPowerTextColors()
+        end
+        local refreshFrames = opts.refreshFrames
+        if refreshFrames == nil then refreshFrames = true end
+        if refreshFrames then
+            if ns and type(ns.MSUF_RefreshAllFrames) == "function" then
+                ns.MSUF_RefreshAllFrames()
+            elseif type(_G.MSUF_RefreshAllFrames) == "function" then
+                _G.MSUF_RefreshAllFrames()
+            end
+        end
+    end
+    RequestLayoutAll = function(reason)
         local fn = ns.MSUF_Options_RequestLayoutAll or _G.MSUF_Options_RequestLayoutAll
         if type(fn) == "function" then fn(reason); return end
         if type(_G.ApplyAllSettings) == "function" then pcall(_G.ApplyAllSettings) end
@@ -260,7 +287,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         anchor = secStyle, x = -2, y = -8, maxTextWidth = 278,
         label = TR("Use bold text (THICKOUTLINE)"),
         get = function() return G().boldText and true or false end,
-        set = function(v) G().boldText = v; UpdateFonts() end,
+        set = function(v)
+            G().boldText = v
+            LiveSyncFontVisuals({ layout = "FONT_STYLE" })
+        end,
     })
 
     local noOutlineCheck = UI.Check({
@@ -268,7 +298,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         anchor = boldCheck, x = 0, y = -10, maxTextWidth = 278,
         label = TR("Disable black outline around text"),
         get = function() return G().noOutline and true or false end,
-        set = function(v) G().noOutline = v; UpdateFonts() end,
+        set = function(v)
+            G().noOutline = v
+            LiveSyncFontVisuals({ layout = "FONT_STYLE" })
+        end,
     })
 
     local textBackdropCheck = UI.Check({
@@ -276,7 +309,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         anchor = noOutlineCheck, x = 0, y = -10, maxTextWidth = 278,
         label = TR("Add text shadow (backdrop)"),
         get = function() return G().textBackdrop and true or false end,
-        set = function(v) G().textBackdrop = v; UpdateFonts() end,
+        set = function(v)
+            G().textBackdrop = v
+            LiveSyncFontVisuals({ layout = "FONT_STYLE" })
+        end,
     })
 
     ---------------------------------------------------------------------------
@@ -292,7 +328,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         anchor = colorsLine, x = 14, y = -8, maxTextWidth = 278,
         label = TR("Color player names by class"),
         get = function() return G().nameClassColor and true or false end,
-        set = function(v) G().nameClassColor = v; if _G.MSUF_RefreshAllIdentityColors then _G.MSUF_RefreshAllIdentityColors() end end,
+        set = function(v)
+            G().nameClassColor = v
+            LiveSyncFontVisuals({ refreshPower = false, layout = "NAME_COLORS" })
+        end,
     })
 
     local npcNameRedCheck = UI.Check({
@@ -300,7 +339,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         anchor = nameClassColorCheck, x = 0, y = -10, maxTextWidth = 278,
         label = TR("Color NPC/boss names using NPC colors"),
         get = function() return G().npcNameRed and true or false end,
-        set = function(v) G().npcNameRed = v; if _G.MSUF_RefreshAllIdentityColors then _G.MSUF_RefreshAllIdentityColors() end end,
+        set = function(v)
+            G().npcNameRed = v
+            LiveSyncFontVisuals({ refreshPower = false, layout = "NAME_COLORS" })
+        end,
     })
 
     local powerColorCheck = UI.Check({
@@ -308,7 +350,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         anchor = npcNameRedCheck, x = 0, y = -10, maxTextWidth = 278,
         label = TR("Color power text by power type"),
         get = function() return G().colorPowerTextByType and true or false end,
-        set = function(v) G().colorPowerTextByType = v; if _G.MSUF_RefreshAllPowerTextColors then _G.MSUF_RefreshAllPowerTextColors() end; UpdateFonts() end,
+        set = function(v)
+            G().colorPowerTextByType = v
+            LiveSyncFontVisuals({ refreshIdentity = false, layout = "POWER_TEXT_COLOR" })
+        end,
     })
 
     ---------------------------------------------------------------------------
