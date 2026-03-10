@@ -844,6 +844,40 @@ local function A2_Settings()
     local _, s = GetAuras2DB()
      return s
 end
+local A2_REMINDER_GROWTH_OK = { RIGHT = true, LEFT = true, UP = true, DOWN = true }
+local function A2_NormalizeReminderGrowth(v)
+    if type(v) ~= "string" or not A2_REMINDER_GROWTH_OK[v] then
+        return "RIGHT"
+    end
+    return v
+end
+local function A2_GetReminderGrowthValue()
+    local a2, shared = GetAuras2DB()
+    if a2 and a2.perUnit and a2.perUnit.player then
+        local pu = a2.perUnit.player
+        if pu.overrideLayout == true and type(pu.layout) == "table" and type(pu.layout.reminderGrowth) == "string" then
+            return A2_NormalizeReminderGrowth(pu.layout.reminderGrowth)
+        end
+    end
+    if shared and type(shared.reminderGrowth) == "string" then
+        return A2_NormalizeReminderGrowth(shared.reminderGrowth)
+    end
+    return "RIGHT"
+end
+local function A2_SetReminderGrowthValue(v)
+    local a2, shared = GetAuras2DB()
+    if not a2 or not shared then return end
+    v = A2_NormalizeReminderGrowth(v)
+    shared.reminderGrowth = v
+    local pu = a2.perUnit and a2.perUnit.player
+    if pu and pu.overrideLayout == true then
+        pu.layout = (type(pu.layout) == "table") and pu.layout or {}
+        pu.layout.reminderGrowth = v
+    end
+    local api = ns and ns.MSUF_Auras2
+    local rm = api and api.Reminder
+    if rm and rm.MarkDirty then rm.MarkDirty() end
+end
 local function A2_FilterBuffs()
     local f = GetEditingFilters()
     return f and f.buffs
@@ -2518,7 +2552,7 @@ end
         remDesc:SetPoint("TOPLEFT", reminderBox, "TOPLEFT", 12, -28)
         remDesc:SetWidth(500)
         remDesc:SetJustifyH("LEFT")
-        remDesc:SetText("Ghost icons appear at the player frame when a buff is missing or about to expire. Position via Edit Mode mover.")
+        remDesc:SetText("Ghost icons appear at the player frame when a buff is missing or about to expire. Position via Edit Mode mover; configure Grow Direction here.")
 
         -- Master toggle
         local cbShowReminders = CreateCheckbox(reminderBox, "Enable Buff Reminders", 12, -50,
@@ -2626,6 +2660,15 @@ end
         if thrHigh then thrHigh:SetText("10 min") end
         A2_Track("global", thrSlider)
 
+        local reminderGrowthDD = CreateDropdown(reminderBox, "Grow Direction", 500, -222,
+            function()
+                return A2_GetReminderGrowthValue()
+            end,
+            function(v)
+                A2_SetReminderGrowthValue(v)
+            end)
+        A2_Track("global", reminderGrowthDD)
+
         -- Gate: disable per-buff checkboxes + slider when master toggle off
         local function UpdateReminderGating()
             local s = A2_Settings()
@@ -2640,6 +2683,7 @@ end
             else
                 thrSlider:Disable()
             end
+            A2_SetWidgetEnabled(reminderGrowthDD, enabled)
         end
 
         if cbShowReminders then
