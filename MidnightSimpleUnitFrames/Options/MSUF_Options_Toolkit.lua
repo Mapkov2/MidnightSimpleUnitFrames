@@ -253,28 +253,57 @@ end
 -- ---- 4e. Check (self-syncing) ----
 function UI.Check(spec)
     local cb = CreateFrame("CheckButton", spec.name, spec.parent, spec.template or "UICheckButtonTemplate")
+    cb:RegisterForClicks("AnyUp")
+    if cb.SetHitRectInsets then cb:SetHitRectInsets(0, -((spec.maxTextWidth or 220) + 8), 0, 0) end
     if spec.anchor then
         cb:SetPoint("TOPLEFT", spec.anchor, spec.anchorPoint or "BOTTOMLEFT", spec.x or 0, spec.y or -4)
     end
     -- Label
     local fs = cb.text or cb.Text
     if not fs and spec.name then fs = _G[spec.name .. "Text"] end
-    if fs and fs.SetText then fs:SetText(TR(spec.label or "")) end
+    if fs and fs.SetText then
+        fs:SetText(TR(spec.label or ""))
+        if fs.EnableMouse then fs:EnableMouse(false) end
+    end
     if spec.maxTextWidth and _G.MSUF_ClampCheckboxText then
         _G.MSUF_ClampCheckboxText(cb, spec.maxTextWidth)
     end
     -- Style
     StyleToggleText(cb)
     StyleCheckmark(cb)
-    -- Self-sync on Show
-    cb:SetScript("OnShow", function(self)
-        if spec.get then self:SetChecked(spec.get() and true or false) end
-    end)
-    -- Callback
-    cb:SetScript("OnClick", function(self)
+
+    local function SyncFromGetter(self)
+        if spec.get then
+            self:SetChecked(spec.get() and true or false)
+        end
+        if self._msufToggleUpdate then self._msufToggleUpdate() end
+    end
+
+    local function ApplyToDB(self)
+        if not spec.set then return end
         local v = self:GetChecked() and true or false
-        if spec.set then spec.set(v) end
+        spec.set(v)
+        if self._msufToggleUpdate then self._msufToggleUpdate() end
+    end
+
+    cb:SetScript("OnShow", function(self)
+        SyncFromGetter(self)
     end)
+
+    cb:SetScript("OnClick", function(self)
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if self and self.GetChecked then
+                    ApplyToDB(self)
+                    if spec.get then SyncFromGetter(self) end
+                end
+            end)
+        else
+            ApplyToDB(self)
+            if spec.get then SyncFromGetter(self) end
+        end
+    end)
+
     if spec.tooltip then AttachTooltip(cb, spec.tooltip) end
     -- Search registration
     if spec.name and spec.label and _G.MSUF_Search_RegisterSlider then
