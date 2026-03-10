@@ -488,21 +488,49 @@ local _GROWTH_OPTIONS = {
     { value = "DOWN",  text = "Top to Bottom" },
 }
 
+local function _GrowthText(value)
+    for _, opt in ipairs(_GROWTH_OPTIONS) do
+        if opt.value == value then
+            return opt.text
+        end
+    end
+    return _GROWTH_OPTIONS[1].text
+end
+
 local function _CreateGrowthDropdown(parent, anchorTo, dy, onChanged)
     local label = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     label:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, dy or -8)
     label:SetText("Growth:")
     label:SetTextColor(0.85, 0.85, 0.85, 1)
 
-    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_ReminderGrowthDropdown", parent) or CreateFrame("Frame", "MSUF_ReminderGrowthDropdown", parent, "UIDropDownMenuTemplate"))
+    local dd = CreateFrame("Frame", "MSUF_ReminderGrowthDropdown", parent, "UIDropDownMenuTemplate")
     dd:SetPoint("LEFT", label, "RIGHT", -8, -2)
-    UIDropDownMenu_SetWidth(dd, 120)
+    if type(_G.MSUF_EM_DropdownPreset) == "function" then
+        _G.MSUF_EM_DropdownPreset(dd, 120, _GrowthText("RIGHT"))
+    else
+        UIDropDownMenu_SetWidth(dd, 120)
+        if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(dd, "LEFT") end
+        UIDropDownMenu_SetText(dd, _GrowthText("RIGHT"))
+    end
+    local regDrop = _G.MSUF_EM_RegisterPopupDropdown
+    if type(regDrop) == "function" then
+        regDrop(dd, parent)
+    else
+        dd.__msufEditPopupDropdown = true
+        dd.__msufEditPopupOwner = parent
+    end
+    if type(_G.MSUF_ExpandDropdownClickArea) == "function" then
+        _G.MSUF_ExpandDropdownClickArea(dd)
+    end
 
     dd._value = "RIGHT"
 
-    local function OnSelect(self, arg1)
-        dd._value = arg1
-        UIDropDownMenu_SetText(dd, self:GetText())
+    local function OnSelect(self)
+        local value = self and self.value or "RIGHT"
+        dd._value = value
+        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(dd, value) end
+        UIDropDownMenu_SetText(dd, _GrowthText(value))
+        if CloseDropDownMenus then CloseDropDownMenus() end
         if onChanged then onChanged() end
     end
 
@@ -510,9 +538,12 @@ local function _CreateGrowthDropdown(parent, anchorTo, dy, onChanged)
         for _, opt in ipairs(_GROWTH_OPTIONS) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = opt.text
-            info.arg1 = opt.value
+            info.value = opt.value
             info.func = OnSelect
-            info.checked = (dd._value == opt.value)
+            info.keepShownOnClick = false
+            info.checked = function()
+                return dd._value == opt.value
+            end
             UIDropDownMenu_AddButton(info, level)
         end
     end)
@@ -661,12 +692,8 @@ function Reminder.SyncPopup()
     -- Sync dropdown
     if _popup._growth and _popup._growth.dropdown then
         _popup._growth.dropdown._value = gr
-        for _, opt in ipairs(_GROWTH_OPTIONS) do
-            if opt.value == gr then
-                UIDropDownMenu_SetText(_popup._growth.dropdown, opt.text)
-                break
-            end
-        end
+        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(_popup._growth.dropdown, gr) end
+        UIDropDownMenu_SetText(_popup._growth.dropdown, _GrowthText(gr))
     end
 end
 
