@@ -340,6 +340,7 @@ function MSUF_EM_DropdownPreset(drop, width, placeholder)
     if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(drop, "LEFT") end
     if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, placeholder or "") end
 end
+_G.MSUF_EM_DropdownPreset = MSUF_EM_DropdownPreset
 
 function MSUF_EM_BuildCopyItems(list, srcValue, labelFn)
     if not list then return nil end
@@ -458,6 +459,7 @@ local function MSUF_EM_RegisterPopupDropdown(drop, pf)
     drop.__msufEditPopupOwner = pf or MSUF_EM_GetPopupOwnerFromDropdown(drop)
     MSUF_EM_EnsurePopupDropdownLayerHooks()
 end
+_G.MSUF_EM_RegisterPopupDropdown = MSUF_EM_RegisterPopupDropdown
 
 function MSUF_EM_InitCopyDropdown(drop, placeholder, itemsProvider, onPick)
     if not drop or not UIDropDownMenu_Initialize or not UIDropDownMenu_CreateInfo or not UIDropDownMenu_AddButton then return end
