@@ -464,6 +464,80 @@ local function GetFrameConf(f)
     return conf
 end
 
+local function UFCore_InvalidateResolvedFrame(f)
+    if not f then return end
+    f._msufResolved = nil
+    f._msufResolvedStamp = nil
+end
+
+local function UFCore_BuildResolvedFrame(f, conf)
+    local cache = UFCore_GetSettingsCache()
+    local r = f._msufResolved or {}
+    f._msufResolved = r
+
+    local showName = (f.showName ~= false)
+    local showHPText = (f.showHPText ~= false)
+    local showPowerText = (f.showPowerText ~= false)
+    local showLevelIndicator = false
+    local portraitMode = "OFF"
+    local showToTInline = false
+
+    if conf then
+        showName = (conf.showName ~= false)
+        showHPText = (conf.showHP ~= false)
+        showPowerText = (conf.showPower ~= false)
+        showLevelIndicator = (conf.showLevelIndicator == true)
+        portraitMode = conf.portraitMode or "OFF"
+        showToTInline = (conf.showToTInTargetName == true)
+    end
+
+    local hasPowerBarWidget  = (f.targetPowerBar ~= nil) or (f.powerBar ~= nil)
+    local hasPowerTextWidget = (f.powerText ~= nil)
+    local showPowerBar = false
+    if hasPowerBarWidget then
+        if f._msufIsPlayer then
+            showPowerBar = not (cache and cache.showPlayerPowerBar == false)
+        elseif f._msufIsFocus then
+            showPowerBar = not (cache and cache.showFocusPowerBar == false)
+        elseif f._msufIsTarget then
+            showPowerBar = not (cache and cache.showTargetPowerBar == false)
+        elseif f.isBoss then
+            showPowerBar = not (cache and cache.showBossPowerBar == false)
+        else
+            showPowerBar = true
+        end
+    end
+
+    r.confRef = conf
+    r.settingsSerial = (cache and cache.settingsSerial) or 0
+    r.showName = showName and true or false
+    r.showHPText = showHPText and true or false
+    r.showPowerText = showPowerText and true or false
+    r.showLevelIndicator = showLevelIndicator and true or false
+    r.portraitMode = portraitMode
+    r.wantIdentity = (showName or showLevelIndicator) and true or false
+    r.wantPortrait = (portraitMode and portraitMode ~= "OFF" and f.portrait ~= nil) and true or false
+    r.wantIndicator = (f.leaderIcon or f.raidMarkerIcon or f.assistantIcon) and true or false
+    r.wantToTInline = (f._msufIsTarget and f.nameText and showToTInline) and true or false
+    r.hasPowerBarWidget = hasPowerBarWidget and true or false
+    r.hasPowerTextWidget = hasPowerTextWidget and true or false
+    r.showPowerBar = showPowerBar and true or false
+    return r
+end
+
+local function UFCore_GetResolvedFrame(f, conf)
+    if not f then return nil end
+    local cache = UFCore_GetSettingsCache()
+    local serial = (cache and cache.settingsSerial) or 0
+    local r = f._msufResolved
+    if r and f._msufResolvedStamp == serial and r.confRef == conf then
+        return r
+    end
+    r = UFCore_BuildResolvedFrame(f, conf)
+    f._msufResolvedStamp = serial
+    return r
+end
+
 -- ------------------------------------------------------------
 -- DB bootstrap (keep EnsureDB/Migration out of hot paths)
 -- ------------------------------------------------------------
@@ -519,6 +593,7 @@ function Core.InvalidateAllFrameConfigs()
             f._msufRawPwrC = nil
             f._msufRawPwrM = nil
             f._msufRawPwrP = nil
+            UFCore_InvalidateResolvedFrame(f)
         end
     end
 end
@@ -664,22 +739,17 @@ end
 
 local function UFCore_UpdateIdentityFast(frame, conf)
     if not frame then return false end
-    -- Boss test mode relies on the legacy renderer for fake labels.
     if frame.isBoss and _G.MSUF_BossTestMode then
         return false
     end
 
     local unit = frame.unit
     local exists = unit and UnitExists(unit)
+    local resolved = UFCore_GetResolvedFrame(frame, conf)
 
-    -- P4: refresh identity cache on every DIRTY_IDENTITY pass.
-    -- This is the only place UnitIsPlayer + UnitReaction are called for non-player frames.
     if exists then _RefreshUnitIdentityCache(frame) end
 
-    local showName = (frame.showName ~= false)
-    if conf and conf.showName ~= nil then
-        showName = (conf.showName ~= false)
-    end
+    local showName = (resolved and resolved.showName) or (frame.showName ~= false)
 
     if frame.nameText then
         if showName and exists then
@@ -691,10 +761,7 @@ local function UFCore_UpdateIdentityFast(frame, conf)
     end
 
     if frame.levelText then
-        local showLevel = false
-        if conf and conf.showLevelIndicator == true then
-            showLevel = exists and true or false
-        end
+        local showLevel = (resolved and resolved.showLevelIndicator and exists) and true or false
         if showLevel then
             local lvl = UnitLevel(unit) or 0
             if not lvl or lvl <= 0 then
@@ -708,11 +775,8 @@ local function UFCore_UpdateIdentityFast(frame, conf)
         _SetShown(frame.levelText, showLevel)
     end
 
-    -- Keep identity coloring in sync if either name OR level is visible.
-    if exists then
-        if (showName == true) or (conf and conf.showLevelIndicator == true) then
-            _UpdateIdentityColors(frame)
-        end
+    if exists and resolved and resolved.wantIdentity then
+        _UpdateIdentityColors(frame)
     end
 
     return true
@@ -1397,105 +1461,55 @@ local function ComputeElementMask(f)
         return 0, nil
     end
 
-    -- Prefer cachedConfig, but fall back to msufConfigKey if present.
     local conf = GetFrameConf(f)
-
-    -- Ensure per-unit flags are available for cheap per-unit gating below.
-    -- (No behavior change; flags are purely derived from f.unit.)
     InitUnitFlags(f)
+    local resolved = UFCore_GetResolvedFrame(f, conf)
 
--- Ensure widgets exist even on login/reload order edge-cases (e.g. Name Shortening already enabled).
-if conf and conf.showToTInTargetName and (not f._msufToTInlineText or not f._msufToTInlineSep) then
-    UFCore_EnsureToTInlineWidgets(f, conf)
-end
+    if conf and conf.showToTInTargetName and (not f._msufToTInlineText or not f._msufToTInlineSep) then
+        UFCore_EnsureToTInlineWidgets(f, conf)
+    end
 
-    -- Disabled frames don't need any unit events.
     if conf and conf.enabled == false then
         return 0, conf
     end
 
     local mask = 0
 
-    -- HEALTH: enabled when the HP bar and/or HP text is in use (or absorb overlays exist).
-    -- We avoid IsShown() here because visibility drivers can temporarily hide the frame.
     local wantHealth = true
-    if conf and conf.showHP == false and (f.showHPText == false) and (not f.absorbBar) and (not f.healAbsorbBar) then
+    if conf and conf.showHP == false and (resolved and resolved.showHPText == false) and (not f.absorbBar) and (not f.healAbsorbBar) then
         wantHealth = false
     end
     if wantHealth and (f.hpBar or f.absorbBar or f.healAbsorbBar) then
         mask = bor(mask, EL_HEALTH)
     end
 
-    -- POWER:
-    -- IMPORTANT: power BAR updates must not depend on the power TEXT toggle.
-    -- Some layouts keep the power bar enabled via MSUF_DB.bars.* while using conf.showPower only
-    -- as the "power text" toggle. If we disable EL_POWER when the text is off, we accidentally
-    -- unregister UNIT_POWER_* events and the bar appears "frozen" on target swaps.
-    local hasPowerBarWidget  = (f.targetPowerBar ~= nil) or (f.powerBar ~= nil)
-    local hasPowerTextWidget = (f.powerText ~= nil)
     local wantPower = false
-
-    -- If a power bar widget exists, enable POWER updates unless the per-unit power bar toggle
-    -- explicitly disables it in bars config.
-    if hasPowerBarWidget then
-        local cache = UFCore_GetSettingsCache()
-        local showForUnit = true
-
-        if cache then
-            if f._msufIsPlayer then
-                showForUnit = (cache.showPlayerPowerBar ~= false)
-            elseif f._msufIsFocus then
-                showForUnit = (cache.showFocusPowerBar ~= false)
-            elseif f._msufIsTarget then
-                showForUnit = (cache.showTargetPowerBar ~= false)
-            elseif f.isBoss then
-                showForUnit = (cache.showBossPowerBar ~= false)
-            end
-        end
-
-        if showForUnit then
-            wantPower = true
-        end
+    if resolved and resolved.hasPowerBarWidget and resolved.showPowerBar then
+        wantPower = true
     end
-
-    -- If we don't have a power bar, fall back to legacy behavior for "text-only" power widgets.
-    if (not wantPower) and hasPowerTextWidget then
-        wantPower = (f.showPowerText ~= false)
+    if (not wantPower) and resolved and resolved.hasPowerTextWidget then
+        wantPower = resolved.showPowerText
     end
-
     if wantPower then
         mask = bor(mask, EL_POWER)
     end
 
-    -- IDENTITY: name and/or level indicator.
-    local wantIdentity = false
-    if conf then
-        wantIdentity = (conf.showName ~= false) or (conf.showLevelIndicator == true)
-    else
-        wantIdentity = (f.showName ~= false)
-    end
-    if wantIdentity then
+    if resolved and resolved.wantIdentity then
         mask = bor(mask, EL_IDENTITY)
     end
 
-    -- INDICATORS: leader/assist + raid marker icons (driven by global events)
-    if (f.leaderIcon or f.raidMarkerIcon or f.assistantIcon) then
+    if resolved and resolved.wantIndicator then
         mask = bor(mask, EL_INDICATOR)
     end
 
-    -- ToT INLINE (Target name extension): only on target frame when enabled.
-    if f._msufIsTarget and f.nameText and UFCore_IsToTInlineEnabled() then
+    if resolved and resolved.wantToTInline then
         mask = bor(mask, EL_TOTINLINE)
     end
 
-    -- PORTRAIT: only if portrait mode is enabled.
-    local pm = conf and conf.portraitMode or "OFF"
-    if pm and pm ~= "OFF" and f.portrait then
+    if resolved and resolved.wantPortrait then
         mask = bor(mask, EL_PORTRAIT)
     end
 
-    -- STATUS: keep correctness for dead/offline/flags when the frame shows health or status text.
-    -- (We treat it as a separate element so it can be gated later if desired.)
     if (mask ~= 0) and (f.statusIndicatorText or f.statusIndicatorOverlayText or f.statusIndicatorOverlayFrame or f.hpBar) then
         mask = bor(mask, EL_STATUS)
     end
@@ -2876,6 +2890,7 @@ function Core.AttachFrame(f)
     UFCore_ResolveFastFns()
 
     InitUnitFlags(f)
+    UFCore_InvalidateResolvedFrame(f)
     FramesByUnit[f.unit] = f
 
     -- Ensure we start clean.
@@ -2988,6 +3003,7 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     f._msufRawPwrC = nil
     f._msufRawPwrM = nil
     f._msufRawPwrP = nil
+    UFCore_InvalidateResolvedFrame(f)
     RefreshUnitEvents(f, true)
 
     if alsoUpdate then
