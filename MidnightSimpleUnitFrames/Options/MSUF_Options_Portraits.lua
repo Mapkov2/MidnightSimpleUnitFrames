@@ -340,7 +340,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     if UI.Dropdown then
         shapeDrop = UI.Dropdown({
             name = "MSUF_PortraitShapeDD", parent = shapeBox,
-            anchor = shapeBox, anchorPoint = "TOPLEFT", x = 48, y = -20, width = 150,
+            anchor = shapeBox, anchorPoint = "TOPLEFT", x = 48, y = -20, width = 105,
             items = SHAPE_ITEMS,
             get = function() return ScopeGet("portraitShape", "SQUARE") end,
             set = function(v) ScopeSet("portraitShape", v); LiveApply() end,

@@ -138,6 +138,37 @@ local function MSUF_ConfirmColorReset(label, doReset)
     StaticPopup_Show(KEY)
 end
 
+local function MSUF_ShowBarModeReloadPopup(label)
+    if InCombatLockdown and InCombatLockdown() then
+        if type(MSUF_Print) == "function" then
+            MSUF_Print("Reload recommended (cannot show popup in combat).")
+        else
+            print("|cffffaa00MSUF:|r Reload recommended (cannot show popup in combat).")
+        end
+        return
+    end
+
+    local KEY = "MSUF_RELOAD_BAR_MODE"
+    local reason = tostring(label or "these changes")
+
+    if not StaticPopupDialogs[KEY] then
+        StaticPopupDialogs[KEY] = {
+            text = "MSUF recommends reloading the UI to ensure the selected bar mode applies everywhere.\n\nApply: %s\n\nReload now?",
+            button1 = RELOADUI,
+            button2 = LATER or CANCEL,
+            OnAccept = function()
+                if type(ReloadUI) == "function" then ReloadUI() end
+            end,
+            timeout = 0,
+            whileDead = 1,
+            hideOnEscape = 1,
+            preferredIndex = 3,
+        }
+    end
+
+    StaticPopup_Show(KEY, reason)
+end
+
 
 -- Helper: ColorPicker wrapper
 ------------------------------------------------------
@@ -630,6 +661,7 @@ end
                 if F.UpdateDarkBgCustomControls then F.UpdateDarkBgCustomControls() end
                 if F.UpdateUnifiedBarControls then F.UpdateUnifiedBarControls() end
                 PushVisualUpdates()
+                MSUF_ShowBarModeReloadPopup(opt.label)
             end
             info.checked = (opt.key == current)
             UIDropDownMenu_AddButton(info, level)

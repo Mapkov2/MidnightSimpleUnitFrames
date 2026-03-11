@@ -2224,6 +2224,19 @@ _G.MSUF_RefreshAllIdentityColors = function()
 local function _Iter_RefreshPowerColor(f)
     local S = _iterState
     if f and f.powerText and f.unit and F.UnitExists(f.unit) then
+        -- Force RenderPowerText to re-resolve config/color state on every manual
+        -- UI toggle flip. This is not a hot path; it only runs from the options UI.
+        f._msufPwrTextConf = nil
+        f._msufPTColorType = nil
+        f._msufPTColorTok = nil
+        f._msufPTColorByPower = nil
+        if f.powerText then
+            f.powerText._msufColorRev = nil
+        end
+        if f.powerTextPct then
+            f.powerTextPct._msufColorRev = nil
+        end
+
         if S.colorByType then
             if S.updatePowerFast then
                 S.updatePowerFast(f)
@@ -2232,11 +2245,9 @@ local function _Iter_RefreshPowerColor(f)
             local fr, fg, fb = S.fr, S.fg, S.fb
             if f.powerText.SetTextColor then
                 f.powerText:SetTextColor(fr, fg, fb, 1)
-                f.powerText._msufColorRev = nil
             end
             if f.powerTextPct and f.powerTextPct.SetTextColor then
                 f.powerTextPct:SetTextColor(fr, fg, fb, 1)
-                f.powerTextPct._msufColorRev = nil
             end
         end
     end
