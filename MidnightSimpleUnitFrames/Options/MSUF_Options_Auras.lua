@@ -1706,7 +1706,7 @@ end
     h3:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 12, -156)
     h3:SetText(TR("Display"))
     local TIP_SHOW_STACK = 'Shows stack/application counts (e.g. "2") on aura icons. Disable to hide stack numbers.'
-    local TIP_HIDE_PERMANENT = 'Hides buffs with no duration. Debuffs are never hidden by this option.\n\nNote: Target/Focus APIs may still show permanent buffs during combat due to API limitations.'
+    local TIP_HIDE_PERMANENT = 'Hides buffs with no duration. Only works out of combat!'
     do
         local displayCB = {}
         local TIP_SWIPE_STYLE = "When enabled, the cooldown swipe represents elapsed time (darkens as time is lost).\n\nTurn this OFF to keep the default cooldown-style swipe."
