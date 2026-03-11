@@ -72,6 +72,29 @@ local function A2_RequestCooldownTextRecolor()
         _G.MSUF_A2_ForceCooldownTextRecolor()
     end
  end
+local function A2_ShowHighlightReloadPopup()
+    if not _G then return end
+    _G.StaticPopupDialogs = _G.StaticPopupDialogs or {}
+    if not _G.StaticPopupDialogs["MSUF_A2_RELOAD_HIGHLIGHT_OWN_AURAS"] then
+        _G.StaticPopupDialogs["MSUF_A2_RELOAD_HIGHLIGHT_OWN_AURAS"] = {
+            text = "Changing own aura highlight settings requires a reload to fully apply. Reload UI now?",
+            button1 = ACCEPT,
+            button2 = CANCEL,
+            OnAccept = function()
+                if type(_G.ReloadUI) == "function" then
+                    _G.ReloadUI()
+                end
+            end,
+            timeout = 0,
+            whileDead = 1,
+            hideOnEscape = 1,
+            preferredIndex = _G.STATICPOPUP_NUMDIALOGS,
+        }
+    end
+    if type(_G.StaticPopup_Show) == "function" then
+        _G.StaticPopup_Show("MSUF_A2_RELOAD_HIGHLIGHT_OWN_AURAS")
+    end
+end
 -- Bridge into the Auras 2.0 core (MidnightSimpleUnitFrames_Auras.lua)
 local function _A2_API()
     return (ns and ns.MSUF_Auras2) or nil
@@ -1751,6 +1774,16 @@ end
                 if _oldShow then _oldShow(self) end
                 UpdateSwipeStyleEnabled()
              end)
+        end
+        for _, key in ipairs({ "cbHLOwnBuffs", "cbHLOwnDebuffs" }) do
+            local cb = displayCB[key]
+            if cb then
+                local _oldClick = cb:GetScript("OnClick")
+                cb:SetScript("OnClick", function(self)
+                    if _oldClick then _oldClick(self) end
+                    A2_ShowHighlightReloadPopup()
+                 end)
+            end
         end
     end
     -- Only-mine + permanent filters: stored in the per-unit filter table (via A2_FilterBuffs/Debuffs).
