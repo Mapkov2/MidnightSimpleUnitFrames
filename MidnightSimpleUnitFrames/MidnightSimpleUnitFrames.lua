@@ -2224,6 +2224,19 @@ _G.MSUF_RefreshAllIdentityColors = function()
 local function _Iter_RefreshPowerColor(f)
     local S = _iterState
     if f and f.powerText and f.unit and F.UnitExists(f.unit) then
+        -- Force RenderPowerText to re-resolve config/color state on every manual
+        -- UI toggle flip. This is not a hot path; it only runs from the options UI.
+        f._msufPwrTextConf = nil
+        f._msufPTColorType = nil
+        f._msufPTColorTok = nil
+        f._msufPTColorByPower = nil
+        if f.powerText then
+            f.powerText._msufColorRev = nil
+        end
+        if f.powerTextPct then
+            f.powerTextPct._msufColorRev = nil
+        end
+
         if S.colorByType then
             if S.updatePowerFast then
                 S.updatePowerFast(f)
@@ -2232,11 +2245,9 @@ local function _Iter_RefreshPowerColor(f)
             local fr, fg, fb = S.fr, S.fg, S.fb
             if f.powerText.SetTextColor then
                 f.powerText:SetTextColor(fr, fg, fb, 1)
-                f.powerText._msufColorRev = nil
             end
             if f.powerTextPct and f.powerTextPct.SetTextColor then
                 f.powerTextPct:SetTextColor(fr, fg, fb, 1)
-                f.powerTextPct._msufColorRev = nil
             end
         end
     end
@@ -3446,32 +3457,6 @@ local _UF = {
     TPASync    = nil,  -- forward decl: assigned after definition below
 }
 
-local function _MSUF_ResolveUnitFrameLateRefs()
-    if not _UF.Alpha then
-        _UF.Alpha = _G.MSUF_ApplyUnitAlpha or _UF.Alpha
-    end
-    if not _UF.Portrait then
-        _UF.Portrait = _G.MSUF_MaybeUpdatePortrait or _UF.Portrait
-    end
-    if not _UF.BossPrev then
-        _UF.BossPrev = _G.MSUF_ApplyBossTestHpPreviewText or _UF.BossPrev
-    end
-    return _UF
-end
-
-local function _MSUF_ApplyAlphaFast(self, key)
-    local fn = _UF.Alpha
-    if not fn then
-        _MSUF_ResolveUnitFrameLateRefs()
-        fn = _UF.Alpha
-    end
-    if fn then
-        fn(self, key)
-    elseif self and self.SetAlpha then
-        self:SetAlpha(1)
-    end
-end
-
 local function MSUF_SyncTargetPowerBar(self, unit, barsConf, isPlayer, isTarget, isFocus)
     if not self then  return false end
     MSUF_EnsureUnitFlags(self)
@@ -3790,7 +3775,7 @@ end
     if self.isBoss and MSUF_BossTestMode then
         if not _msuf_inCombat then
             self:Show()
-            _MSUF_ApplyAlphaFast(self, key)
+            _UF.Alpha(self, key)
     end
     if self.bg then
         MSUF_ApplyBarBackgroundVisual(self)
@@ -3878,7 +3863,7 @@ if not exists then
     self._msufNoUnitCleared = true
      return
 else
-    _MSUF_ApplyAlphaFast(self, key)
+    _UF.Alpha(self, key)
     self._msufNoUnitCleared = nil
     if _UF.Portrait then _UF.Portrait(self, unit, conf, exists) end
 end
@@ -3919,7 +3904,7 @@ end
     end
     -- IMPORTANT: layered alpha uses per-texture alpha, which visual steps reset.
     if conf and conf.alphaExcludeTextPortrait == true then
-        _MSUF_ApplyAlphaFast(self, key)
+        _UF.Alpha(self, key)
     end
     if _UF.TPASync then
         _UF.TPASync(self)
@@ -4081,52 +4066,6 @@ f:Hide()
         end
         return
     end
-    local function MSUF_GetFrameGeometryStamp(f, conf, unit)
-        local db = MSUF_DB or _G.MSUF_DB or {}
-        local g = db.general or {}
-        local b = db.bars or {}
-        local width = tonumber(conf and conf.width) or (f and f.GetWidth and f:GetWidth()) or 0
-        local height = tonumber(conf and conf.height) or (f and f.GetHeight and f:GetHeight()) or 0
-        local offsetX = tonumber(conf and conf.offsetX) or 0
-        local offsetY = tonumber(conf and conf.offsetY) or 0
-        local spacing = tonumber(conf and conf.spacing) or -36
-        local invertBossOrder = (conf and conf.invertBossOrder) and 1 or 0
-        local anchorToCooldown = (g.anchorToCooldown == true) and 1 or 0
-        local anchorFrameName = tostring((conf and conf.anchorFrameName) or "")
-        local anchorToUnitframe = tostring((conf and conf.anchorToUnitframe) or "")
-        local portraitMode = tostring((conf and conf.portraitMode) or "OFF")
-        local powerBarDetached = (conf and conf.powerBarDetached == true) and 1 or 0
-        local detachedW = tonumber(conf and conf.detachedPowerBarWidth) or 0
-        local detachedH = tonumber(conf and conf.detachedPowerBarHeight) or 0
-        local detachedX = tonumber(conf and conf.detachedPowerBarOffsetX) or 0
-        local detachedY = tonumber(conf and conf.detachedPowerBarOffsetY) or 0
-        local detachedAnchorToCP = (conf and conf.detachedPowerBarAnchorToClassPower == true) and 1 or 0
-        local embedPower = (b.embedPowerBarIntoHealth == true) and 1 or 0
-        local powerBarHeight = tonumber(b.powerBarHeight) or 3
-        local detachedWidthMode = tostring(b.detachedPowerBarWidthMode or "")
-        local showPowerBar = 0
-        if unit == "player" then
-            showPowerBar = (b.showPlayerPowerBar ~= false) and 1 or 0
-        elseif unit == "target" then
-            showPowerBar = (b.showTargetPowerBar ~= false) and 1 or 0
-        elseif unit == "focus" then
-            showPowerBar = (b.showFocusPowerBar ~= false) and 1 or 0
-        elseif type(unit) == "string" and string.sub(unit, 1, 4) == "boss" then
-            showPowerBar = (b.showBossPowerBar ~= false) and 1 or 0
-        end
-        return table.concat({
-            tostring(unit or ""),
-            tostring(width), tostring(height),
-            tostring(offsetX), tostring(offsetY),
-            tostring(spacing), tostring(invertBossOrder),
-            tostring(anchorToCooldown), anchorFrameName, anchorToUnitframe,
-            portraitMode,
-            tostring(powerBarDetached),
-            tostring(detachedW), tostring(detachedH), tostring(detachedX), tostring(detachedY), tostring(detachedAnchorToCP),
-            tostring(embedPower), tostring(powerBarHeight), tostring(showPowerBar), detachedWidthMode,
-        }, "|")
-    end
-
     local function applyToFrame(unit)
         local f = UnitFrames[unit]
         if not f then  return end
@@ -4140,15 +4079,10 @@ f:Hide()
         local w = tonumber(conf.width)  or (f.GetWidth and f:GetWidth())  or 275
         local h = tonumber(conf.height) or (f.GetHeight and f:GetHeight()) or 40
         conf.width, conf.height = w, h
-        local geometryStamp = MSUF_GetFrameGeometryStamp(f, conf, unit)
-        local geometryChanged = (f._msufGeometryStamp ~= geometryStamp)
-        if geometryChanged then
-            f._msufGeometryStamp = geometryStamp
-            f:SetSize(w, h)
-            if f.targetPowerBar then
-                MSUF_ApplyPowerBarEmbedLayout(f)
-            end
-        end
+        f:SetSize(w, h)
+        if f.targetPowerBar then
+            MSUF_ApplyPowerBarEmbedLayout(f)
+    end
         -- Live-apply per-unit reverse fill (HP/Power) when applying settings from Options.
         -- This used to require /reload because ApplyUnitKey is a layout-only path.
         ns.Bars._ApplyReverseFillBars(f, conf)
@@ -4169,12 +4103,10 @@ f:Hide()
                 f:Hide()
             end
     end
-        if geometryChanged then
-            PositionUnitFrame(f, unit)
-            if f.portrait then
-                MSUF_UpdateBossPortraitLayout(f, conf)
-            end
-        end
+        PositionUnitFrame(f, unit)
+        if f.portrait then
+            MSUF_UpdateBossPortraitLayout(f, conf)
+    end
         ApplyTextLayout(f, conf)
         MSUF_ClampNameWidth(f, conf)
         -- Do NOT force a legacy full update here.
@@ -4203,24 +4135,19 @@ function MSUF_MarkUnitFrameDirty(key)
     local st = _G.MSUF_UnitFrameApplyState
     st.dirty[key] = true
  end
-function MSUF_ApplyDirtyUnitFrames(suppressUFCoreNotify)
+function MSUF_ApplyDirtyUnitFrames()
     local st = _G.MSUF_UnitFrameApplyState
     if not st or not st.dirty then  return end
     if _msuf_inCombat then
         st.queued = true
          return
     end
-    local prevSuppress = _msufApplySuppressUFCoreNotify
-    if suppressUFCoreNotify then
-        _msufApplySuppressUFCoreNotify = true
-    end
     for key in pairs(st.dirty) do
         if MSUF_ApplyUnitFrameKey_Immediate then
             MSUF_ApplyUnitFrameKey_Immediate(key)
-        end
+    end
         st.dirty[key] = nil
     end
-    _msufApplySuppressUFCoreNotify = prevSuppress
     st.queued = false
  end
 function MSUF_OnRegenEnabled_ApplyDirty(event)
@@ -4239,8 +4166,6 @@ _G.MSUF_ApplyCommitState = _G.MSUF_ApplyCommitState or {
     castbars = false,
     tickers = false,
     bossPreview = false,
-    configAll = false,
-    configUnits = {},
 }
 local function MSUF_CommitApplyDirty_Scheduled()
     local st = _G.MSUF_ApplyCommitState
@@ -4271,16 +4196,12 @@ function ApplySettingsForKey(key)
     local st = _G.MSUF_ApplyCommitState
     if key == "boss" then
         st.bossPreview = true
-        st.configAll = true
-    else
-        st.configUnits[key] = true
     end
     MSUF_ScheduleApplyCommit()
  end
 function ApplyAllSettings()
     local st = _G.MSUF_ApplyCommitState
     if not st then  return end
-    st.configAll = true
     MSUF_MarkUnitFrameDirty("player")
     MSUF_MarkUnitFrameDirty("target")
     MSUF_MarkUnitFrameDirty("focus")
@@ -4366,21 +4287,10 @@ function MSUF_CommitApplyDirty()
         st.queued = true
         if type(MSUF_EventBus_Register) == "function" then
             MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT", MSUF_OnRegenEnabled_ApplyCommit)
-        end
+    end
          return
     end
-    local needsConfigBatch = st.configAll or (st.configUnits and next(st.configUnits) ~= nil)
-    MSUF_ApplyDirtyUnitFrames(needsConfigBatch)
-    if needsConfigBatch and type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
-        if st.configAll then
-            _G.MSUF_UFCore_NotifyConfigChanged(nil, false, true, "ApplyCommit:all")
-        else
-            for key in pairs(st.configUnits) do
-                _G.MSUF_UFCore_NotifyConfigChanged(key, false, true, "ApplyCommit:" .. tostring(key))
-            end
-        end
-    end
-    if st.fonts then
+        MSUF_ApplyDirtyUnitFrames()    if st.fonts then
         local fn = _G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts
         if type(fn) == "function" then
             local fk = st.fontKey
@@ -4432,12 +4342,6 @@ end
     st.castbars = false
     st.tickers = false
     st.bossPreview = false
-    st.configAll = false
-    if st.configUnits then
-        for k in pairs(st.configUnits) do
-            st.configUnits[k] = nil
-        end
-    end
     st.queued = false
     MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT")
  end
@@ -5717,17 +5621,19 @@ end
         MSUF_StopToTFallbackTicker()
     end
     end
--- P0: Pre-resolve split-module function refs for UpdateSimpleUnitFrame.
--- Do this BEFORE ApplyAllSettings so early UpdateSimpleUnitFrame calls in the login/apply flow
--- already see valid function refs.
-do
-    _MSUF_ResolveUnitFrameLateRefs()
-    _UF.EditPrev = _G.MSUF_ApplyUnitframeEditPreview    or _UF.EditPrev
-end
 if type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then
     _G.MSUF_ApplyAllSettings_Immediate()
 else
     ApplyAllSettings()
+end
+-- P0: Pre-resolve split-module function refs for UpdateSimpleUnitFrame.
+-- After PLAYER_LOGIN all Core/ files have loaded. Eliminates 3 branches
+-- + 3 _G hash lookups per frame update (300-1500 branches/sec in combat).
+do
+    _UF.Alpha    = _G.MSUF_ApplyUnitAlpha              or _UF.Alpha
+    _UF.Portrait = _G.MSUF_MaybeUpdatePortrait          or _UF.Portrait
+    _UF.EditPrev = _G.MSUF_ApplyUnitframeEditPreview    or _UF.EditPrev
+    _UF.BossPrev = _G.MSUF_ApplyBossTestHpPreviewText   or _UF.BossPrev
 end
     if type(_G.MSUF_ReanchorTargetCastBar) == "function" then
         _G.MSUF_ReanchorTargetCastBar()
