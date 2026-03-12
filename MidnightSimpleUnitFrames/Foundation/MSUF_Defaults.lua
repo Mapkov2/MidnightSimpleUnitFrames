@@ -2,6 +2,22 @@ local addonName, addonNS = ...
 local ns = (_G and _G.MSUF_NS) or addonNS or {}
 if _G then _G.MSUF_NS = ns end
 
+-- MSUF default class-resource colors
+-- Keep this tiny and global so:
+-- 1) class power fallback colors use the new defaults
+-- 2) reset-to-default in the Colors menu also lands on these defaults
+-- 3) no runtime overhead in hot paths (one-time table write at load)
+do
+    local pbc = _G and _G.PowerBarColor
+    if type(pbc) == "table" then
+        pbc.RUNES = pbc.RUNES or {}
+        pbc.RUNES.r, pbc.RUNES.g, pbc.RUNES.b = 128/255, 0, 17/255      -- #800011
+
+        pbc.SOUL_SHARDS = pbc.SOUL_SHARDS or {}
+        pbc.SOUL_SHARDS.r, pbc.SOUL_SHARDS.g, pbc.SOUL_SHARDS.b = 135/255, 136/255, 238/255 -- #8788EE
+    end
+end
+
 -- MSUF Defaults / DB initialization
 -- ---------------------------------------------------------------------------
 -- Factory default profile (MSUF2 compact string)
