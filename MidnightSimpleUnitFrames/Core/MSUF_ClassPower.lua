@@ -1937,6 +1937,9 @@ local function CP_UpdateValues_RuneCD(powerType, maxPower)
         baseR, baseG, baseB = 1, 1, 1
     end
     local bgA = tonumber(b.classPowerBgAlpha) or 0.3
+    -- Resolve once per refresh, outside the rune loop: same cold-path cost as
+    -- every other class power mode, zero extra hot-path overhead per rune.
+    local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
     local showRuneTime = (b.runeShowTime ~= false)
 
     local now = GetTime()
