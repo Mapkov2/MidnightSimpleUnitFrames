@@ -72,6 +72,29 @@ local function A2_RequestCooldownTextRecolor()
         _G.MSUF_A2_ForceCooldownTextRecolor()
     end
  end
+local function A2_ShowHighlightReloadPopup()
+    if not _G then return end
+    _G.StaticPopupDialogs = _G.StaticPopupDialogs or {}
+    if not _G.StaticPopupDialogs["MSUF_A2_RELOAD_HIGHLIGHT_OWN_AURAS"] then
+        _G.StaticPopupDialogs["MSUF_A2_RELOAD_HIGHLIGHT_OWN_AURAS"] = {
+            text = "Changing own aura highlight settings requires a reload to fully apply. Reload UI now?",
+            button1 = ACCEPT,
+            button2 = CANCEL,
+            OnAccept = function()
+                if type(_G.ReloadUI) == "function" then
+                    _G.ReloadUI()
+                end
+            end,
+            timeout = 0,
+            whileDead = 1,
+            hideOnEscape = 1,
+            preferredIndex = _G.STATICPOPUP_NUMDIALOGS,
+        }
+    end
+    if type(_G.StaticPopup_Show) == "function" then
+        _G.StaticPopup_Show("MSUF_A2_RELOAD_HIGHLIGHT_OWN_AURAS")
+    end
+end
 -- Bridge into the Auras 2.0 core (MidnightSimpleUnitFrames_Auras.lua)
 local function _A2_API()
     return (ns and ns.MSUF_Auras2) or nil
@@ -1706,7 +1729,7 @@ end
     h3:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 12, -156)
     h3:SetText(TR("Display"))
     local TIP_SHOW_STACK = 'Shows stack/application counts (e.g. "2") on aura icons. Disable to hide stack numbers.'
-    local TIP_HIDE_PERMANENT = 'Hides buffs with no duration. Debuffs are never hidden by this option.\n\nNote: Target/Focus APIs may still show permanent buffs during combat due to API limitations.'
+    local TIP_HIDE_PERMANENT = 'Hides buffs with no duration. Only works out of combat!'
     do
         local displayCB = {}
         local TIP_SWIPE_STYLE = "When enabled, the cooldown swipe represents elapsed time (darkens as time is lost).\n\nTurn this OFF to keep the default cooldown-style swipe."
@@ -1751,6 +1774,16 @@ end
                 if _oldShow then _oldShow(self) end
                 UpdateSwipeStyleEnabled()
              end)
+        end
+        for _, key in ipairs({ "cbHLOwnBuffs", "cbHLOwnDebuffs" }) do
+            local cb = displayCB[key]
+            if cb then
+                local _oldClick = cb:GetScript("OnClick")
+                cb:SetScript("OnClick", function(self)
+                    if _oldClick then _oldClick(self) end
+                    A2_ShowHighlightReloadPopup()
+                 end)
+            end
         end
     end
     -- Only-mine + permanent filters: stored in the per-unit filter table (via A2_FilterBuffs/Debuffs).
