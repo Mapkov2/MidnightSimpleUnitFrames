@@ -6,6 +6,12 @@ local F = ns.Cache and ns.Cache.F or {}
 local type, tonumber, select = type, tonumber, select
 local string_format = string.format
 
+-- PERF: Direct upvalues for power text hot path (avoids F.* table indirection).
+local UnitPower = UnitPower
+local UnitPowerMax = UnitPowerMax
+local UnitPowerType = UnitPowerType
+local UnitPowerPercent = UnitPowerPercent
+
 -- PERF: Resolve issecretvalue once at load. Must be before any function that
 -- uses it (ns.Text.Set, RenderHpMode, RenderPowerText).
 local _MSUF_issecret = _G.issecretvalue
@@ -497,28 +503,29 @@ function ns.Text.RenderPowerText(self)
     -- Fallback: fetch from C-API if no valid cache.
     -- 2 args only — matches MidnightRogueBars secret-safe pattern.
     if pType == nil then
-        pType = (F.UnitPowerType and F.UnitPowerType(unit)) or (UnitPowerType and UnitPowerType(unit))
+        pType = UnitPowerType and UnitPowerType(unit)
     end
     -- Ele Shaman: class power shows Maelstrom → main bar + text show Mana
     if self._msufIsPlayer and _G.MSUF_EleMaelstromActive then pType = 0 end
     if pType ~= nil then
         if curValue == nil then
-            curValue = (F.UnitPower and F.UnitPower(unit, pType)) or (UnitPower and UnitPower(unit, pType)) or nil
+            curValue = UnitPower and UnitPower(unit, pType)
         end
         if maxValue == nil then
-            maxValue = (F.UnitPowerMax and F.UnitPowerMax(unit, pType)) or (UnitPowerMax and UnitPowerMax(unit, pType)) or nil
+            maxValue = UnitPowerMax and UnitPowerMax(unit, pType)
         end
     else
-        curValue = (F.UnitPower and F.UnitPower(unit)) or (UnitPower and UnitPower(unit)) or nil
-        maxValue = (F.UnitPowerMax and F.UnitPowerMax(unit)) or (UnitPowerMax and UnitPowerMax(unit)) or nil
+        curValue = UnitPower and UnitPower(unit)
+        maxValue = UnitPowerMax and UnitPowerMax(unit)
     end
     -- Percent: pass-through UnitPowerPercent (more accurate than recomputing).
+    -- Secret-safe: == nil is a reference check (never taints). type() on API returns is forbidden.
     if powerPct == nil then
         local fn = _MSUF_UnitPowerPercent
         if fn then
             local curve = _MSUF_PwrScaleTo100 or true
             powerPct = fn(unit, pType, false, curve)
-            if type(powerPct) ~= "number" then powerPct = nil end
+            if powerPct == nil then powerPct = nil end  -- no-op, kept for clarity
         end
     end
 
@@ -687,16 +694,14 @@ end
     ns.Util.SetShown(txt, true)
  end
 function ns.Text.ApplyPowerTextColorByType(self, unit, enabled)
-    -- Secret-safe & pass-through: avoid extra comparisons/caching; just apply resolved color.
     if not enabled then  return end
     if not (self and self.powerText and UnitPowerType) then  return end
-    -- UnitPowerType existence is guarded above. Direct call (no FastCall overhead).
     local pType, pTok = UnitPowerType(unit)
     if pType == nil then  return end
-    -- Ele Shaman: class power shows Maelstrom → text color matches Mana
     if self._msufIsPlayer and _G.MSUF_EleMaelstromActive then pType = 0; pTok = "MANA" end
-    if type(MSUF_GetResolvedPowerColor) ~= "function" then  return end
-    local pr, pg, pb = MSUF_GetResolvedPowerColor(pType, pTok)
+    local fn = _G.MSUF_GetResolvedPowerColor
+    if not fn then  return end
+    local pr, pg, pb = fn(pType, pTok)
     if not pr then  return end
     self.powerText:SetTextColor(pr, pg, pb, 1)
     self._msufPTColorByPower = true

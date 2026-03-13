@@ -28,16 +28,24 @@ local CreateFrame, GetTime = CreateFrame, GetTime
 local Core = {}
 local _UFCORE_issecret = _G and _G.issecretvalue or nil
 
+-- Secret-safe: v == nil is a reference check (never taints).
+-- type() on API returns is forbidden by project secret-safe rules.
 local function UFCore_CanCompareNumber(v)
-    return type(v) == "number" and (not _UFCORE_issecret or not _UFCORE_issecret(v))
+    return v ~= nil and not (_UFCORE_issecret and _UFCORE_issecret(v))
 end
 
 local function UFCore_SamePowerSnapshot(f, pType, cur, mx)
     if not f or f._msufPowerVisCheckNeeded then return false end
     if f._msufCachedPType ~= pType then return false end
     local prevCur, prevMax = f._msufCachedPCur, f._msufCachedPMax
-    if not (UFCore_CanCompareNumber(cur) and UFCore_CanCompareNumber(mx) and UFCore_CanCompareNumber(prevCur) and UFCore_CanCompareNumber(prevMax)) then
-        return false
+    -- Inlined UFCore_CanCompareNumber ×4: nil check + batch issecretvalue.
+    -- Secret-safe: == nil is a reference check (never taints). issecretvalue is the only
+    -- safe observation of protected API returns per project rules.
+    if cur == nil or mx == nil or prevCur == nil or prevMax == nil then return false end
+    if _UFCORE_issecret then
+        if _UFCORE_issecret(cur) or _UFCORE_issecret(mx) or _UFCORE_issecret(prevCur) or _UFCORE_issecret(prevMax) then
+            return false
+        end
     end
     return (prevCur == cur and prevMax == mx)
 end
@@ -54,8 +62,11 @@ local function UFCore_SamePowerTextSnapshot(f, pType, cur, mx)
     if not f or f._msufPwrTextForce then return false end
     if f._msufLastPwrTextType ~= pType then return false end
     local prevCur, prevMax = f._msufLastPwrTextCur, f._msufLastPwrTextMax
-    if not (UFCore_CanCompareNumber(cur) and UFCore_CanCompareNumber(mx) and UFCore_CanCompareNumber(prevCur) and UFCore_CanCompareNumber(prevMax)) then
-        return false
+    if cur == nil or mx == nil or prevCur == nil or prevMax == nil then return false end
+    if _UFCORE_issecret then
+        if _UFCORE_issecret(cur) or _UFCORE_issecret(mx) or _UFCORE_issecret(prevCur) or _UFCORE_issecret(prevMax) then
+            return false
+        end
     end
     return (prevCur == cur and prevMax == mx)
 end
@@ -813,7 +824,10 @@ UFCore_GetClassBarColorFast = function(classToken)
     return r, g, b
 end
 
-local function UFCore_RefreshHealthBarColorFast(frame, conf)
+-- PERF: File-scope function ref caches (stable after init, avoids _G hash lookup per call).
+local _FN_ApplyHPGradient, _FN_ApplyBarBackgroundVisual
+
+local function UFCore_RefreshHealthBarColorFast(frame, conf, cacheOpt)
     if not frame or not frame.unit or not frame.hpBar then return end
     local unit = frame.unit
 
@@ -824,16 +838,13 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
     -- Make sure the unit-type flags are up to date (pet, player, boss, etc.)
     InitUnitFlags(frame)
 
-    local cache = UFCore_GetSettingsCache()
+    local cache = cacheOpt or UFCore_GetSettingsCache()
 
     -- Only dynamic "class" frames need identity invalidation here.
-    -- Dark/unified modes and static class-colored frames (player, pet override) never
-    -- change color from UNIT_FACTION / UNIT_FLAGS during combat.
     if (cache and cache.barMode == "class") and not frame._msufStaticHealthColor then
         frame._msufCachedIsPlayer = nil
     end
 
-    -- Bar mode (authoritative): "dark" | "class" | "unified"
     local mode = (cache and cache.barMode) or "dark"
 
     local barR, barG, barB
@@ -845,11 +856,8 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
         barR, barG, barB = cache.unifiedBarR, cache.unifiedBarG, cache.unifiedBarB
 
     else
-        -- mode == "class": players = class, NPCs = reaction
-        -- P4: read identity cache (avoids UnitIsPlayer + UnitReaction C calls here).
         local isPlayer = frame._msufCachedIsPlayer
         if isPlayer == nil then
-            -- cache cold (first color call before DIRTY_IDENTITY ran): populate now.
             _RefreshUnitIdentityCache(frame)
             isPlayer = frame._msufCachedIsPlayer
         end
@@ -860,13 +868,11 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
             barR, barG, barB = UFCore_GetNPCReactionColorFast(frame._msufCachedReactionKind or "enemy")
         end
 
-        -- Pet frame override (only when using Class mode)
         if frame._msufIsPet and cache and cache.petFrameColorEnabled then
             barR, barG, barB = cache.petFrameColorR, cache.petFrameColorG, cache.petFrameColorB
         end
     end
 
-    -- Cache to avoid redundant UI work.
     if frame._msufLastHPBarR == barR and frame._msufLastHPBarG == barG and frame._msufLastHPBarB == barB and frame._msufLastHPBarMode == mode then
         return
     end
@@ -874,19 +880,21 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
 
     frame.hpBar:SetStatusBarColor(barR or 0, barG or 1, barB or 0, 1)
 
-    -- Keep gradients/background in sync if present (cheap + stamp-gated in main code).
-    local fnGrad = _G.MSUF_ApplyHPGradient
-    if type(fnGrad) == "function" then
+    -- PERF: Resolve gradient + background functions once at file scope.
+    if not _FN_ApplyHPGradient then _FN_ApplyHPGradient = _G.MSUF_ApplyHPGradient end
+    local fnGrad = _FN_ApplyHPGradient
+    if fnGrad then
         if frame.hpGradients then
             fnGrad(frame)
         elseif frame.hpGradient then
             fnGrad(frame.hpGradient)
         end
     end
-    local fnBg = _G.MSUF_ApplyBarBackgroundVisual
-    if type(fnBg) == "function" and frame.bg then
+    if not _FN_ApplyBarBackgroundVisual then _FN_ApplyBarBackgroundVisual = _G.MSUF_ApplyBarBackgroundVisual end
+    local fnBg = _FN_ApplyBarBackgroundVisual
+    if fnBg and frame.bg then
         if frame._msufVisualQueuedUFCore or (cache and cache.anyBarBackgroundTracksHPColor) then
-            fnBg(frame)
+            fnBg(frame, cache)
         end
     end
 end
@@ -907,7 +915,7 @@ Elements.Health = {
     Update = function(f, conf)
         local fnH = FN_UpdateHealthFast
         if not fnH then return false end
-        local hp = select(1, fnH(f))
+        local hp = fnH(f)
         local fnTxt = FN_UpdateHpTextFast
         if fnTxt then fnTxt(f, hp) end
         -- Hard split: value updates every tick; visuals/layout only when requested.
@@ -1691,7 +1699,7 @@ local function MaybeCompactQueue(q)
         if q._scratch then wipe(q._scratch) end
         return
     end
-    if q.head <= 256 then return end
+    if q.head <= 512 then return end
     if q.head <= (q.tail * 0.5) then return end
 
     local old = q.t
@@ -2203,14 +2211,14 @@ local function PopFirst(q)
                     q.head = h
                     q.size = q.size - 1
                     -- PERF: Inline compaction early-exit (avoids function call per pop).
-                    -- MaybeCompactQueue only does work when head > 256 AND head > tail*0.5.
-                    if h > 256 then MaybeCompactQueue(q) end
+                    -- MaybeCompactQueue only does work when head > 512 AND head > tail*0.5.
+                    if h > 512 then MaybeCompactQueue(q) end
                     return v
                 end
             else
                 q.head = h
                 q.size = q.size - 1
-                if h > 256 then MaybeCompactQueue(q) end
+                if h > 512 then MaybeCompactQueue(q) end
                 return v
             end
         end
@@ -2277,12 +2285,12 @@ local function RunUpdate(f)
     if mask == DIRTY_HEALTH then
         local fnH = FN_UpdateHealthFast
         if fnH then
-            local hp = select(1, fnH(f))
+            local hp = fnH(f)
             local fnTxt = FN_UpdateHpTextFast
             if fnTxt then fnTxt(f, hp) end
             if f._msufVisualQueuedUFCore or f._msufHealthColorDirty then
                 f._msufHealthColorDirty = nil
-                UFCore_RefreshHealthBarColorFast(f)
+                UFCore_RefreshHealthBarColorFast(f, nil, Core._settingsCache)
             end
         end
         return
@@ -2544,18 +2552,24 @@ local function _HealthValueFast(f)
     if not bar then return end
     local hp = UnitHealth(f.unit)       -- upvalue (line 21), no F.table lookup
     bar:SetValue(hp)                    -- ALWAYS: direct widget call (~3μs, visually critical)
-    -- PERF: Text is budget-gated + rate-limited. If budget exceeded this frame,
-    -- skip text WITHOUT updating timestamp → fires again next frame automatically.
-    -- No stale values: just 1 frame delay (16ms) on a 100ms interval = invisible.
+    -- PERF: Text is budget-gated + rate-limited.
+    -- Inlined _RefreshFrameNow: FlushTask updates Core._frameNow every frame when combat
+    -- events fire (urgentQueue non-empty). ±16ms staleness is invisible for a 100ms interval.
+    -- Inlined _DirectTextAllowed: single serial check + counter (0 function calls).
     local fnTxt = FN_UpdateHpTextFast
     if fnTxt then
-        local now = _RefreshFrameNow()
+        local now = Core._frameNow
         if (now - (f._msufHpTxtAt or 0)) >= 0.10 then
-            if _DirectTextAllowed() then
+            local s = Core._frameNowSerial
+            if s ~= _directTextSerial then
+                _directTextSerial = s
+                _directTextCount = 0
+            end
+            if _directTextCount < _DIRECT_TEXT_MAX then
+                _directTextCount = _directTextCount + 1
                 f._msufHpTxtAt = now + (f._msufTextStagger or 0)
                 fnTxt(f, hp)
             end
-            -- else: budget exceeded → DON'T update timestamp → retry next frame
         end
     end
 end
@@ -2640,8 +2654,10 @@ do
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
-            if type(cur) ~= "number" then cur = 0 end
-            if type(mx)  ~= "number" then mx  = 100 end
+            -- Secret-safe: == nil is a reference check, never taints.
+            -- type() on API returns violates project secret-safe rules.
+            if cur == nil then cur = 0 end
+            if mx  == nil then mx  = 100 end
 
             if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
 
@@ -2668,8 +2684,8 @@ do
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
-            if type(cur) ~= "number" then cur = 0 end
-            if type(mx)  ~= "number" then mx  = 100 end
+            if cur == nil then cur = 0 end
+            if mx  == nil then mx  = 100 end
 
             if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
 
@@ -2693,8 +2709,8 @@ do
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
-            if type(cur) ~= "number" then cur = 0 end
-            if type(mx)  ~= "number" then mx  = 100 end
+            if cur == nil then cur = 0 end
+            if mx  == nil then mx  = 100 end
 
             if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
 
@@ -2718,8 +2734,8 @@ do
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
-            if type(cur) ~= "number" then cur = 0 end
-            if type(mx)  ~= "number" then mx  = 100 end
+            if cur == nil then cur = 0 end
+            if mx  == nil then mx  = 100 end
 
             if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
 

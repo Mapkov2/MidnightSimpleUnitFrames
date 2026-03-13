@@ -479,15 +479,15 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     if isPlayer and _G.MSUF_EleMaelstromActive then pType = 0; pTok = "MANA" end
     ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
     bar:SetScript("OnUpdate", nil)
-    -- Raw values, 2 args (MidnightRogueBars approach).
     local cur = UnitPower(unit, pType)
     local mx  = UnitPowerMax(unit, pType)
     if cur == nil then cur = 0 end
     if mx  == nil then mx  = 100 end
+    -- PERF: Use file-scope cached MSUF_SMOOTH_INTERPOLATION (already computed at line 733).
+    -- Eliminates per-call: Enum table lookup + 2 DB reads + boolean chain.
     local _interp = isPlayer
-        and not (MSUF_DB and MSUF_DB.bars and MSUF_DB.bars.smoothPowerBar == false)
-        and Enum and Enum.StatusBarInterpolation
-        and Enum.StatusBarInterpolation.ExponentialEaseOut or nil
+        and not (barsConf and barsConf.smoothPowerBar == false)
+        and MSUF_SMOOTH_INTERPOLATION or nil
     if _interp then
         bar:SetMinMaxValues(0, mx, _interp)
         bar:SetValue(cur, _interp)
@@ -643,9 +643,9 @@ local function MSUF_GetHealAbsorbOverlayColor()
     return _MSUF_GetOverlayColor(1.0, 0.4, 0.4, 0.7, "healAbsorbBarColorR", "healAbsorbBarColorG", "healAbsorbBarColorB")
 end
 local function MSUF_ApplyOverlayBarColorCached(bar, r, g, b, a)
-    if not bar or not bar.SetStatusBarColor then  return end
+    if not bar then  return end
     if bar.MSUF_overlayR == r and bar.MSUF_overlayG == g and bar.MSUF_overlayB == b and bar.MSUF_overlayA == a then return end
-    MSUF_SetStatusBarColor(bar, r, g, b, a)
+    if a ~= nil then bar:SetStatusBarColor(r, g, b, a) else bar:SetStatusBarColor(r, g, b) end
     bar.MSUF_overlayR, bar.MSUF_overlayG, bar.MSUF_overlayB, bar.MSUF_overlayA = r, g, b, a
  end
 local function MSUF_ApplyAbsorbOverlayColor(bar) local r, g, b, a = MSUF_GetAbsorbOverlayColor(); MSUF_ApplyOverlayBarColorCached(bar, r, g, b, a) end
@@ -995,15 +995,21 @@ end
 local function _MatchHPBarColor(frame, gen, cache)
     if not (frame.hpBar and frame.hpBar.GetStatusBarColor) then return nil end
     local fr, fg, fb = frame.hpBar:GetStatusBarColor()
-    if type(fr) ~= "number" or type(fg) ~= "number" or type(fb) ~= "number" then return nil end
+    -- Secret-safe: GetStatusBarColor can return secret values in WoW 12.0.
+    -- == nil is a reference check (safe). issecretvalue is the only safe observation.
+    if fr == nil then return nil end
+    if _MSUF_issecretvalue and (_MSUF_issecretvalue(fr) or _MSUF_issecretvalue(fg) or _MSUF_issecretvalue(fb)) then return nil end
     fr, fg, fb = _ApplyDarkBrightness(fr, fg, fb, gen, cache)
     return MSUF_Clamp01(fr), MSUF_Clamp01(fg), MSUF_Clamp01(fb)
 end
-function MSUF_ApplyBarBackgroundVisual(frame)
+function MSUF_ApplyBarBackgroundVisual(frame, cacheOpt)
     if not frame then return end
     local tex = MSUF_GetBarBackgroundTexture()
-    local getCache = _MSUF_ResolveGetCache()
-    local cache = getCache and getCache() or nil
+    local cache = cacheOpt
+    if not cache then
+        local getCache = _MSUF_ResolveGetCache()
+        cache = getCache and getCache() or nil
+    end
     local gen = (cache and cache.generalRef) or (MSUF_DB and MSUF_DB.general)
     local bars = (cache and cache.barsRef) or (MSUF_DB and MSUF_DB.bars)
     local r, gg, b, a
@@ -2429,12 +2435,13 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key, g_opt)
         elseif mode == "unified" then
             barR, barG, barB = (cache and cache.unifiedBarR) or 0.10, (cache and cache.unifiedBarG) or 0.60, (cache and cache.unifiedBarB) or 0.90
         else
+            -- PERF: Resolve fast class/NPC color functions once at file scope (stable after PLAYER_LOGIN).
             local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
             local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
             local isPlayerUnit = F.UnitIsPlayer(unit)
             if isPlayerUnit then
                 local _, class = F.UnitClass(unit)
-                if type(fastClass) == "function" then barR, barG, barB = fastClass(class) else barR, barG, barB = MSUF_GetClassBarColor(class) end
+                if fastClass then barR, barG, barB = fastClass(class) else barR, barG, barB = MSUF_GetClassBarColor(class) end
             else
                 local kind = "enemy"
                 if F.UnitIsDeadOrGhost(unit) then
@@ -2445,7 +2452,7 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key, g_opt)
                         kind = "friendly"
                     elseif reaction == 4 then kind = "neutral" end
                 end
-                if type(fastNPC) == "function" then barR, barG, barB = fastNPC(kind) else barR, barG, barB = MSUF_GetNPCReactionColor(kind) end
+                if fastNPC then barR, barG, barB = fastNPC(kind) else barR, barG, barB = MSUF_GetNPCReactionColor(kind) end
             end
             if self._msufIsPet and cache and cache.petFrameColorEnabled then barR, barG, barB = cache.petFrameColorR, cache.petFrameColorG, cache.petFrameColorB end
         end
@@ -2453,7 +2460,7 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key, g_opt)
         if self.hpGradients then
             ns.Bars._ApplyHPGradient(self)
         elseif self.hpGradient then ns.Bars._ApplyHPGradient(self.hpGradient) end
-        if self.bg then MSUF_ApplyBarBackgroundVisual(self) end
+        if self.bg then MSUF_ApplyBarBackgroundVisual(self, cache) end
         self._msufHeavyVisualApplied = true
         self._msufHeavyVisualSettingsSerial = _MSUF_GetUFCoreSettingsSerial()
     end
@@ -4088,25 +4095,19 @@ do
             frame = F.CreateFrame("Frame"),
         }
         bucket._onUpdate = function(_, elapsed)
-            elapsed = elapsed or 0
-            bucket.accum = (bucket.accum or 0) + elapsed
+            bucket.accum = bucket.accum + elapsed
             if bucket.accum < bucket.interval then  return end
             local tick = bucket.accum
             bucket.accum = 0
             for owner, tagMap in pairs(bucket.jobs) do
-                if owner and owner.GetObjectType then
-                    local visible = owner.IsVisible and owner:IsVisible()
-                    for _, job in pairs(tagMap) do
-                        if job then
-                            if job.allowHidden or visible then
-                                local cb = job.cb
-                                if cb then cb(owner, tick) end
-                            end
-                        end
+                local visible = owner:IsVisible()
+                for _, job in pairs(tagMap) do
+                    if job.allowHidden or visible then
+                        job.cb(owner, tick)
                     end
                 end
             end
-            if (bucket.jobCount or 0) == 0 then bucket.frame:SetScript("OnUpdate", nil); bucket.active = false end
+            if bucket.jobCount == 0 then bucket.frame:SetScript("OnUpdate", nil); bucket.active = false end
      end
         bucket.frame:SetScript("OnUpdate", bucket._onUpdate)
         bucket.active = true
