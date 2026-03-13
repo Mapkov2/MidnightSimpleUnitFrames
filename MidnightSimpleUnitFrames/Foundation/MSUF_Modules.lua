@@ -42,8 +42,7 @@ end
 -- Public: Register a module.
 -- key: unique string
 -- module: table with optional fields:
---   order (number), Init(), Enable(), Disable(), IsEnabled(),
---   RefreshSettings(self, source), Shutdown(self, reason)
+--   order (number), Init(), Enable(), Disable(), IsEnabled()
 function ns.MSUF_RegisterModule(key, module)
     if type(key) ~= "string" or key == "" then return end
     if type(module) ~= "table" then module = {} end
@@ -125,8 +124,6 @@ function ns.MSUF_ApplyModules()
         local m = ns.MSUF_Modules[i]
         if m then
             local desired = GetDesiredEnabled(m)
-            -- Phase 4: debug toggle override
-            if m.__msufDebugOff then desired = false end
             local current = not not m.__msufEnabled
 
             if desired and not current then
@@ -148,92 +145,8 @@ function ns.MSUF_Modules_InitAndApply()
     ns.MSUF_ApplyModules()
 end
 
--- Phase 4: RefreshSettings — broadcast settings change to all enabled modules.
--- Called on: Options apply, profile switch, font/texture change.
--- Each module's RefreshSettings receives the module table as self.
-function ns.MSUF_RefreshModuleSettings(source)
-    SortModulesIfNeeded()
-    for i = 1, #ns.MSUF_Modules do
-        local m = ns.MSUF_Modules[i]
-        if m and m.__msufEnabled and not m.__msufDebugOff then
-            local fn = m.RefreshSettings
-            if type(fn) == "function" then
-                SafeCall(fn, m, source)
-            end
-        end
-    end
-end
-
--- Phase 4: Shutdown — cleanup all modules (profile switch, addon unload).
--- Calls Shutdown on every module that has one, regardless of enabled state.
-function ns.MSUF_ShutdownModules(reason)
-    SortModulesIfNeeded()
-    for i = 1, #ns.MSUF_Modules do
-        local m = ns.MSUF_Modules[i]
-        if m then
-            local fn = m.Shutdown
-            if type(fn) == "function" then
-                SafeCall(fn, m, reason)
-            end
-            m.__msufEnabled = false
-        end
-    end
-    ns.__MSUF_ModulesApplied = false
-end
-
--- Phase 4: GetModule — quick lookup by key.
-function ns.MSUF_GetModule(key)
-    return ns.MSUF_ModulesByKey[key]
-end
-
--- Phase 4: Debug toggle — disable/enable a single module at runtime.
--- Usage: /msuf debug toggle <key>
--- Returns new state (true = enabled, false = disabled).
-function ns.MSUF_ToggleModule(key)
-    if type(key) ~= "string" then return nil end
-    local m = ns.MSUF_ModulesByKey[key]
-    if not m then return nil end
-
-    if m.__msufDebugOff then
-        -- Re-enable
-        m.__msufDebugOff = nil
-        if m.__msufEnabled and type(m.Enable) == "function" then
-            SafeCall(m.Enable, m)
-        end
-        if m.__msufEnabled and type(m.RefreshSettings) == "function" then
-            SafeCall(m.RefreshSettings, m, "debug_toggle")
-        end
-        return true
-    else
-        -- Disable
-        m.__msufDebugOff = true
-        if m.__msufEnabled and type(m.Disable) == "function" then
-            SafeCall(m.Disable, m)
-        end
-        return false
-    end
-end
-
--- Phase 4: List all registered module keys (for debug/slash commands).
-function ns.MSUF_ListModules()
-    SortModulesIfNeeded()
-    local out = {}
-    for i = 1, #ns.MSUF_Modules do
-        local m = ns.MSUF_Modules[i]
-        if m and m.key then
-            out[#out + 1] = m.key .. (m.__msufEnabled and " [ON]" or " [OFF]") .. (m.__msufDebugOff and " (debug-off)" or "")
-        end
-    end
-    return out
-end
-
 -- Optional globals (useful for debugging / slash commands / external modules)
 _G.MSUF_RegisterModule = ns.MSUF_RegisterModule
 _G.MSUF_InitModules = ns.MSUF_InitModules
 _G.MSUF_ApplyModules = ns.MSUF_ApplyModules
 _G.MSUF_Modules_InitAndApply = ns.MSUF_Modules_InitAndApply
-_G.MSUF_RefreshModuleSettings = ns.MSUF_RefreshModuleSettings
-_G.MSUF_ShutdownModules = ns.MSUF_ShutdownModules
-_G.MSUF_GetModule = ns.MSUF_GetModule
-_G.MSUF_ToggleModule = ns.MSUF_ToggleModule
-_G.MSUF_ListModules = ns.MSUF_ListModules

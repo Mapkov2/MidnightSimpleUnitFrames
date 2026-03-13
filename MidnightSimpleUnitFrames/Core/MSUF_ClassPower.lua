@@ -3332,6 +3332,20 @@ function _G.MSUF_ClassPower_ApplyFonts()
     CP_ApplyFont()
 end
 
+-- Query state (for options UI display)
+function _G.MSUF_ClassPower_GetState()
+    return {
+        classPowerVisible = CP.visible,
+        classPowerType    = CP.powerType,
+        classPowerMax     = CP.currentMax,
+        renderMode        = CP.renderMode,
+        isVehicle         = CP.isVehicle,
+        isAuraPower       = CP.isAuraPower,
+        altManaVisible    = AM.visible,
+        staggerVisible    = (CP.visible and CP.renderMode == MODE_STAGGER) or false,
+    }
+end
+
 -- Compatibility: hook bar texture change for live refresh.
 -- Options panels should call MSUF_ClassPower_Refresh() after DB changes.
 do
@@ -3371,40 +3385,5 @@ _G.MSUF_SmoothPowerBar_Apply = function()
     -- Refresh the cached flags in UFCore's DIRECT_APPLY hot path.
     if type(_G.MSUF_UFCore_RefreshSettingsCache) == "function" then
         _G.MSUF_UFCore_RefreshSettingsCache("SMOOTH_POWER")
-    end
-end
-
--- ============================================================================
--- Phase 4: Module Registration
--- ============================================================================
-do
-    local reg = _G.MSUF_RegisterModule
-    if type(reg) == "function" then
-        reg("ClassPower", {
-            order = 30,
-            IsEnabled = function()
-                if type(MSUF_DB) ~= "table" then return true end
-                local b = MSUF_DB.bars
-                return not b or b.showClassPower ~= false
-            end,
-            Init = function()
-                EnsureDefaults()
-            end,
-            Enable = function()
-                _CP_RefreshConfig()
-                FullRefresh()
-            end,
-            Disable = function() end,
-            RefreshSettings = function(_, source)
-                _cachedColorToken = nil
-                _cachedBgColorToken = nil
-                _CP_RefreshConfig()
-                FullRefresh()
-            end,
-            Shutdown = function()
-                _cachedColorToken = nil
-                _cachedBgColorToken = nil
-            end,
-        })
     end
 end

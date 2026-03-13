@@ -427,6 +427,140 @@ ns.MSUF_DeepCopy = MSUF_DeepCopy
 ns.MSUF_CaptureKeys = MSUF_CaptureKeys
 ns.MSUF_RestoreKeys = MSUF_RestoreKeys
 
+-- ============================================================================
+-- MSUF_CombatGate
+--
+-- Purpose:
+-- Defer combat-locked / secure / taint-sensitive operations until PLAYER_REGEN_ENABLED.
+--
+-- Design goals:
+--  - Zero overhead fast-path out of combat (just one InCombatLockdown() check).
+--  - Coalesce by key ("last call wins") to avoid spam and to keep perf stable.
+--  - No assumptions about the caller; works for StateDrivers, Secure attributes,
+--    Edit Mode binding ops, LoD loads, global UI scale apply, etc.
+--
+-- Usage:
+--  MSUF_CombatGate_Call("visibility:target", RegisterStateDriver, frame, "visibility", expr)
+--  MSUF_CombatGate_Call("lod:castbars", MSUF_EnsureAddonLoaded, "MidnightSimpleUnitFrames_Castbars")
+--  MSUF_CombatGate_Call(nil, function() ... end)  -- (use sparingly; key coalescing is better)
+-- ============================================================================
+
+_G.MSUF_CombatGate = _G.MSUF_CombatGate or {}
+
+function _G.MSUF_CombatGate_InCombat()
+    return InCombatLockdown and InCombatLockdown() or false
+end
+
+local function _MSUF_CombatGate_EnsureFrame(gate)
+    if gate._frame then return gate._frame end
+
+    local f = CreateFrame("Frame")
+    gate._frame = f
+    f:RegisterEvent("PLAYER_REGEN_ENABLED")
+    f:SetScript("OnEvent", function()
+        if _G.MSUF_CombatGate_Flush then
+            _G.MSUF_CombatGate_Flush()
+        end
+    end)
+    return f
+end
+
+function _G.MSUF_CombatGate_Call(key, fn, ...)
+    if type(fn) ~= "function" then return end
+
+    -- Fast-path: out of combat, just run.
+    if not (InCombatLockdown and InCombatLockdown()) then
+        return fn(...)
+    end
+
+    local gate = _G.MSUF_CombatGate
+    gate._pending = gate._pending or {}
+    gate._order = gate._order or {}
+
+    local k = key or fn
+    local entry = gate._pending[k]
+    if not entry then
+        entry = {}
+        gate._pending[k] = entry
+        gate._order[#gate._order + 1] = k
+    end
+
+    entry.fn = fn
+
+    -- Store args (last call wins).
+    local args = entry.args
+    if not args then
+        args = {}
+        entry.args = args
+        entry.maxN = 0
+    end
+
+    local n = select("#", ...)
+    entry.n = n
+
+    -- Save args without creating per-call tables.
+    for i = 1, n do
+        args[i] = select(i, ...)
+    end
+
+    -- Clear leftovers from previous larger arg lists.
+    local maxN = entry.maxN or 0
+    if n < maxN then
+        for i = n + 1, maxN do
+            args[i] = nil
+        end
+    end
+    entry.maxN = (n > maxN) and n or maxN
+
+    _MSUF_CombatGate_EnsureFrame(gate)
+end
+
+function _G.MSUF_CombatGate_Clear(key)
+    if key == nil then return end
+    local gate = _G.MSUF_CombatGate
+    local pending = gate and gate._pending
+    if not pending then return end
+    pending[key] = nil
+end
+
+function _G.MSUF_CombatGate_Flush()
+    -- Still in combat -> keep pending.
+    if InCombatLockdown and InCombatLockdown() then
+        return false
+    end
+
+    local gate = _G.MSUF_CombatGate
+    local pending = gate and gate._pending
+    local order = gate and gate._order
+    if not pending or not order or #order == 0 then
+        return true
+    end
+
+    -- Drain queue (preserve order of first enqueue; last args win per key).
+    for i = 1, #order do
+        local k = order[i]
+        local entry = pending[k]
+        if entry and entry.fn then
+            pending[k] = nil
+
+            local args = entry.args
+            local n = entry.n or 0
+
+            -- Call without pcall/xpcall to preserve normal error visibility.
+            -- (Flush runs out of combat; if it errors, we want a real stack.)
+            entry.fn(table.unpack(args or {}, 1, n))
+        end
+
+        order[i] = nil
+    end
+
+    return true
+end
+
+-- Convenience alias used by some modules (optional).
+_G.MSUF_CombatGate_CallSafe = _G.MSUF_CombatGate_Call
+
+
 do
     local UIParent = UIParent
     local GetPhysicalScreenSize = GetPhysicalScreenSize
@@ -495,8 +629,50 @@ do
         return RoundToGrid(v, step)
     end
 
+    function _G.MSUF_Pixel(frame)
+        return GetStepFor(frame)
+    end
+
     function _G.MSUF_Scale(v)
         return _G.MSUF_Snap(UIParent, v)
+    end
+
+    function _G.MSUF_SetOutside(obj, anchor, xOffset, yOffset, anchor2)
+        if not obj then return end
+        if not anchor and obj.GetParent then
+            anchor = obj:GetParent()
+        end
+        if not anchor then return end
+
+        xOffset = xOffset or 1
+        yOffset = yOffset or 1
+
+        local snap = _G.MSUF_Snap
+        local sx = (type(snap) == "function") and snap(anchor, xOffset) or xOffset
+        local sy = (type(snap) == "function") and snap(anchor, yOffset) or yOffset
+
+        obj:ClearAllPoints()
+        obj:SetPoint("TOPLEFT", anchor, "TOPLEFT", -sx, sy)
+        obj:SetPoint("BOTTOMRIGHT", anchor2 or anchor, "BOTTOMRIGHT", sx, -sy)
+    end
+
+    function _G.MSUF_SetInside(obj, anchor, xOffset, yOffset, anchor2)
+        if not obj then return end
+        if not anchor and obj.GetParent then
+            anchor = obj:GetParent()
+        end
+        if not anchor then return end
+
+        xOffset = xOffset or 1
+        yOffset = yOffset or 1
+
+        local snap = _G.MSUF_Snap
+        local sx = (type(snap) == "function") and snap(anchor, xOffset) or xOffset
+        local sy = (type(snap) == "function") and snap(anchor, yOffset) or yOffset
+
+        obj:ClearAllPoints()
+        obj:SetPoint("TOPLEFT", anchor, "TOPLEFT", sx, -sy)
+        obj:SetPoint("BOTTOMRIGHT", anchor2 or anchor, "BOTTOMRIGHT", -sx, sy)
     end
 
     function _G.MSUF_UpdatePixelPerfect()
