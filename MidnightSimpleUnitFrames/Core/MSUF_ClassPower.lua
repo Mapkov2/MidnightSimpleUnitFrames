@@ -2004,7 +2004,7 @@ local function CP_UpdateValues_RuneCD(powerType, maxPower)
             end
 
             bar:SetStatusBarColor(baseR, baseG, baseB, 1)
-            bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
+            if bar._bg then bar._bg:SetVertexColor(0, 0, 0, bgA) end
             bar:Show()
         end
     end
@@ -2186,28 +2186,32 @@ end
 local function CP_UpdateValues_AuraSingle(powerType, maxPower)
     -- maxPower is always 1 for this mode (single normalized bar)
     local cur = 0
+    local displayCur = 0
+    local inMeta = false
 
     if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
-        local inMeta = C_UnitAuras.GetPlayerAuraBySpellID(SPELL_VOID_METAMORPHOSIS)
+        inMeta = not not C_UnitAuras.GetPlayerAuraBySpellID(SPELL_VOID_METAMORPHOSIS)
         if inMeta then
             -- Void Metamorphosis: track Silence the Whispers
             local whispers = C_UnitAuras.GetPlayerAuraBySpellID(SPELL_SILENCE_THE_WHISPERS)
-            if whispers and whispers.applications then
+            if whispers and type(whispers.applications) == "number" then
+                displayCur = whispers.applications
                 local cost = (type(GetCollapsingStarCost) == "function") and GetCollapsingStarCost() or 1
                 if cost > 0 then
-                    cur = whispers.applications / cost
+                    cur = displayCur / cost
                 end
             end
         else
             -- Normal: track Dark Heart
             local darkHeart = C_UnitAuras.GetPlayerAuraBySpellID(SPELL_DARK_HEART)
-            if darkHeart and darkHeart.applications then
+            if darkHeart and type(darkHeart.applications) == "number" then
+                displayCur = darkHeart.applications
                 local maxApp = 1
                 if C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications then
                     maxApp = C_Spell.GetSpellMaxCumulativeAuraApplications(SPELL_DARK_HEART) or 1
                 end
                 if maxApp > 0 then
-                    cur = darkHeart.applications / maxApp
+                    cur = displayCur / maxApp
                 end
             end
         end
@@ -2221,22 +2225,20 @@ local function CP_UpdateValues_AuraSingle(powerType, maxPower)
 
     local r, g, bl
     if colorByType then
-        local inMeta = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
-            and C_UnitAuras.GetPlayerAuraBySpellID(SPELL_VOID_METAMORPHOSIS)
-        r, g, bl = ResolveDHColor(inMeta and true or false)
+        r, g, bl = ResolveDHColor(inMeta)
     else
         r, g, bl = 1, 1, 1
     end
 
     local bgA = tonumber(b.classPowerBgAlpha) or 0.3
-    local bgR, bgG, bgB = ResolveClassPowerBgColor((inMeta and true) and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS")
+    local bgR, bgG, bgB = ResolveClassPowerBgColor(inMeta and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS")
     local bar = CP.bars[1]
     if bar then
         bar:SetMinMaxValues(0, 1)
         bar:SetValue(cur)
         bar:SetAlpha(cur > 0.01 and _filledAlpha or _emptyAlpha)
         bar:SetStatusBarColor(r, g, bl, 1)
-        bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
+        if bar._bg then bar._bg:SetVertexColor(bgR, bgG, bgB, bgA) end
     end
 
     -- Hide bars 2+ (only 1 bar used)
@@ -2248,12 +2250,12 @@ local function CP_UpdateValues_AuraSingle(powerType, maxPower)
         if CP.ticks[i] then CP.ticks[i]:Hide() end
     end
 
-    -- Text: show as percentage
+    -- Text: show current absolute stack count (not percentage)
     local txt = CP.text
     if txt then
         local showText = b.classPowerShowText == true
-        if showText and cur > 0.01 then
-            txt:SetText(math_floor(cur * 100 + 0.5) .. "%")
+        if showText and displayCur > 0 then
+            txt:SetText(displayCur)
             txt:Show()
         else
             txt:Hide()
