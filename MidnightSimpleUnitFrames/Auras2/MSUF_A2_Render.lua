@@ -248,6 +248,7 @@ A2_STATE.aurasByUnit = (type(A2_STATE.aurasByUnit) == "table") and A2_STATE.aura
 local AurasByUnit = A2_STATE.aurasByUnit
 
 local _IS_BOSS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
+local _DIR_HASH = { LEFT=1, RIGHT=2, UP=3, DOWN=4 }
 
 -- Phase 8: pre-computed fallback names (eliminates string concat in hot path)
 local _FRAME_FALLBACK = {
@@ -1222,7 +1223,8 @@ local function RenderUnit(entry)
     if skipDebuffs then
         -- Player edit mode: debuff layout already handled by preview path.
     elseif showDebuffs then
-        local debuffLayoutStamp = tostring(debuffCount) .. '|' .. tostring(debuffIconSize) .. '|' .. tostring(spacing) .. '|' .. tostring(perRow) .. '|' .. tostring(debuffGrowth) .. '|' .. tostring(debuffRowWrap) .. '|' .. tostring(gen)
+        -- Numeric stamp: eliminates 13 string allocs per type per render call.
+        local debuffLayoutStamp = debuffCount * 100000007 + debuffIconSize * 10000019 + spacing * 100003 + perRow * 10007 + (_DIR_HASH[debuffGrowth] or 0) * 1009 + (_DIR_HASH[debuffRowWrap] or 0) * 101 + gen
         if entry._msufA2_lastDebuffLayoutStamp ~= debuffLayoutStamp then
             entry._msufA2_lastDebuffLayoutStamp = debuffLayoutStamp
             _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, debuffRowWrap, gen)
@@ -1238,7 +1240,7 @@ local function RenderUnit(entry)
     end
 
     if showBuffs then
-        local buffLayoutStamp = tostring(buffCount) .. '|' .. tostring(buffIconSize) .. '|' .. tostring(spacing) .. '|' .. tostring(perRow) .. '|' .. tostring(buffGrowth) .. '|' .. tostring(buffRowWrap) .. '|' .. tostring(gen)
+        local buffLayoutStamp = buffCount * 100000007 + buffIconSize * 10000019 + spacing * 100003 + perRow * 10007 + (_DIR_HASH[buffGrowth] or 0) * 1009 + (_DIR_HASH[buffRowWrap] or 0) * 101 + gen
         if entry._msufA2_lastBuffLayoutStamp ~= buffLayoutStamp then
             entry._msufA2_lastBuffLayoutStamp = buffLayoutStamp
             _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, buffRowWrap, gen)

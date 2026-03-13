@@ -693,7 +693,7 @@ _G.MSUF_RefreshPlayerPowerBar = function()
         pf._msufLastPwrC = nil       -- forces text re-render
         pf._msufLastPwrM = nil
         pf._msufLastPwrP = nil
-        pf._msufPwrTextConf = nil    -- forces config re-read (mode may differ)
+        pf._msufTextSpec = nil       -- forces config re-read (mode may differ)
     end
 end
 -- Player self-heal prediction (own incoming heals only).
@@ -1514,14 +1514,6 @@ local function GetConfigKeyForUnit(unit)
     end
      return nil
 end
-function _G.MSUF_GetHpSpacerSelectedUnitKey()
-    if not MSUF_DB then EnsureDB() end
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
-    local k = _G.MSUF_NormalizeTextLayoutUnitKey(g.hpSpacerSelectedUnitKey, "player")
-    g.hpSpacerSelectedUnitKey = k
-     return k
-end
 function _G.MSUF_SetHpSpacerSelectedUnitKey(unitKey, suppressUIRefresh)
     if not MSUF_DB then EnsureDB() end
     MSUF_DB.general = MSUF_DB.general or {}
@@ -2211,6 +2203,7 @@ local function MSUF_UpdateNameColor(frame)
         frame.levelText:SetTextColor(r, gCol, b, 1)
     end
  end
+ns.Text.UpdateNameColor = MSUF_UpdateNameColor
 local function _Iter_RefreshNameColor(f)
     if f and f.nameText and f.unit and F.UnitExists(f.unit) then
         MSUF_UpdateNameColor(f)
@@ -2226,7 +2219,7 @@ local function _Iter_RefreshPowerColor(f)
     if f and f.powerText and f.unit and F.UnitExists(f.unit) then
         -- Force RenderPowerText to re-resolve config/color state on every manual
         -- UI toggle flip. This is not a hot path; it only runs from the options UI.
-        f._msufPwrTextConf = nil
+        f._msufTextSpec = nil
         f._msufPTColorType = nil
         f._msufPTColorTok = nil
         f._msufPTColorByPower = nil
@@ -2531,21 +2524,32 @@ local function ApplyTextLayout(f, conf)
     local nY = ns.Util.Offset(conf.nameOffsetY, -4)
     local key = f.msufConfigKey
     if not key and f.unit and GetConfigKeyForUnit then key = GetConfigKeyForUnit(f.unit) end
-    local udb = (MSUF_DB and key and MSUF_DB[key]) or nil
-    local g = (MSUF_DB and MSUF_DB.general) or nil
-    local useOverride = (udb and udb.hpPowerTextOverride == true)
-    local hpMode = (useOverride and udb.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
-    local pMode  = (useOverride and udb.powerTextMode) or (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
-    -- Text anchors: per-unit  general  default RIGHT (no override gate; set per-unit via EditMode popup)
-    local hpAnchor    = (udb and udb.hpTextAnchor)    or (g and g.hpTextAnchor)    or "RIGHT"
-    local powerAnchor = (udb and udb.powerTextAnchor) or (g and g.powerTextAnchor) or "RIGHT"
-    local nameAnchor  = (udb and udb.nameTextAnchor)  or "LEFT"
+    -- Unified text spec: mode/anchor/override resolved once per config change.
+    local spec = ns.Text.EnsureSpec and ns.Text.EnsureSpec(f) or nil
+    local hpMode, pMode, hpAnchor, powerAnchor, nameAnchor, useOverride
+    if spec then
+        hpMode      = spec.hpMode
+        pMode       = spec.pMode
+        hpAnchor    = spec.hpAnchor
+        powerAnchor = spec.powerAnchor
+        nameAnchor  = spec.nameAnchor
+        useOverride = spec.useOverride
+    else
+        local udb = (MSUF_DB and key and MSUF_DB[key]) or nil
+        local g = (MSUF_DB and MSUF_DB.general) or nil
+        useOverride = (udb and udb.hpPowerTextOverride == true)
+        hpMode      = (useOverride and udb and udb.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
+        pMode       = (useOverride and udb and udb.powerTextMode) or (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
+        hpAnchor    = (udb and udb.hpTextAnchor) or (g and g.hpTextAnchor) or "RIGHT"
+        powerAnchor = (udb and udb.powerTextAnchor) or (g and g.powerTextAnchor) or "RIGHT"
+        nameAnchor  = (udb and udb.nameTextAnchor) or "LEFT"
+    end
     local hpPt, hpRelPt, hpDefX, hpJustify, hpSign       = MSUF_ResolveTextAnchor(hpAnchor, true)
     local pwrPt, pwrRelPt, pwrDefX, pwrJustify, pwrSign   = MSUF_ResolveTextAnchor(powerAnchor, false)
     local hpHasPct = (f[MSUF_TEXT_LAYOUT_HP.pct] ~= nil)
     local pHasPct  = (f[MSUF_TEXT_LAYOUT_PWR.pct] ~= nil)
-    -- Spacers inherit Shared unless per-unit override is enabled.
-    local spacerDB = useOverride and udb or nil
+    local spacerDB = (spec and spec.hpSpacerConf) or (useOverride and (MSUF_DB and key and MSUF_DB[key])) or nil
+    local g = (spec and spec.hpSpacerG) or (MSUF_DB and MSUF_DB.general) or nil
     local hpOn, hpEff = MSUF_TextLayout_GetSpacer(key, spacerDB, g, hpHasPct, MSUF_TEXT_LAYOUT_HP)
     local pOn,  pEff  = MSUF_TextLayout_GetSpacer(key, spacerDB, g, pHasPct,  MSUF_TEXT_LAYOUT_PWR)
     local hX = ns.Util.Offset(conf.hpOffsetX,    -4)
@@ -2556,9 +2560,8 @@ local function ApplyTextLayout(f, conf)
     if (not wUsed or wUsed == 0) and tf and tf.GetWidth then wUsed = tf:GetWidth() or 0 end
     if (not wUsed or wUsed == 0) and conf then wUsed = tonumber(conf.width) or wUsed end
     wUsed = tonumber(wUsed) or 0
-    -- Include detached power bar width in stamp ONLY when text-on-bar is active.
-    -- Avoids a C API GetWidth() call for every non-detached frame.
     local pbW = 0
+    local udb = (MSUF_DB and key and MSUF_DB[key]) or nil
     local _textOnBarActive = f._msufPowerBarDetached and f.targetPowerBar
         and udb and udb.detachedPowerBarTextOnBar == true
     if _textOnBarActive then
@@ -2653,6 +2656,7 @@ local function ApplyTextLayout(f, conf)
         MSUF_TextLayout_ApplyGroup(f, pwrTF, conf, MSUF_TEXT_LAYOUT_PWR, pMode,  pHasPct,  pOn,  pEff, pwrPt, pwrRelPt, pwrDefX, pwrJustify, pwrSign)
     end
  end
+ns.Text.ApplyLayout = ApplyTextLayout
 function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
     if not MSUF_DB then EnsureDB() end
     local k = _G.MSUF_NormalizeTextLayoutUnitKey(unitKey)
@@ -3061,6 +3065,7 @@ function MSUF_ClampNameWidth(f, conf)
     f.nameText:SetWidth(0)
     f._msufNameClipSideApplied = clipSide
  end
+ns.Text.ClampNameWidth = MSUF_ClampNameWidth
 local function MSUF_GetUnitLevelText(unit)
     if not unit or not UnitLevel then  return "" end
     local lvl = UnitLevel(unit)
@@ -3690,39 +3695,125 @@ local function _MSUF_ShouldRunStaticVisualPass(self, key, exists)
     return _MSUF_IsVisualLiveApplyContext() and (not _msuf_inCombat)
 end
 
-function UpdateSimpleUnitFrame(self)
-        -- P0: _UF.Alpha / Portrait / EditPrev pre-resolved at PLAYER_LOGIN.
-        -- Zero per-call overhead (was: 3 branches + 3 _G hash lookups per frame update).
-        local _flushSerial = _G.MSUF_UFCORE_FLUSH_SERIAL  -- cache once per call
-
-        -- Hot path: prefer UFCore's settings snapshot (avoids repeated deep MSUF_DB traversals).
-        local db, g, barsConf
-
-        local getCache = _MSUF_ResolveGetCache()
-
-        if getCache then
-            local cache = getCache()
-            if cache then
-                db = cache.dbRef or _G.MSUF_DB
-                g = cache.generalRef
-                barsConf = cache.barsRef
+-- Boss test preview: renders placeholder data for boss frames in Test Mode.
+-- Isolated from the live hot path — only reachable when isBoss and MSUF_BossTestMode.
+local function _MSUF_UFStep_BossPreview(self, unit, key, conf, barsConf)
+    if not _msuf_inCombat then
+        self:Show()
+        _UF.Alpha(self, key)
+    end
+    if self.bg then
+        MSUF_ApplyBarBackgroundVisual(self)
+    end
+    if self.targetPowerBar then
+        if (barsConf.showBossPowerBar == false) then
+            self.targetPowerBar:SetScript("OnUpdate", nil)
+            self.targetPowerBar:Hide()
+            MSUF_ResetBarZero(self.targetPowerBar, true)
+        else
+            self.targetPowerBar:SetMinMaxValues(0, 100)
+            MSUF_SetBarValue(self.targetPowerBar, 40, false)
+            self.targetPowerBar.MSUF_lastValue = 40
+            do
+                local tok = "MANA"
+                local pr, pg, pb = MSUF_GetPowerBarColor(nil, tok)
+                if not pr then pr, pg, pb = 0.6, 0.2, 1.0 end
+                self.targetPowerBar:SetStatusBarColor(pr, pg, pb)
+                ns.Bars.ApplyPowerGradientOnce(self)
             end
+            self.targetPowerBar:Show()
         end
-
-        if not db then
-            if not MSUF_DB then EnsureDB() end
-            db = MSUF_DB
+    end
+    ns.Text.ApplyBossTestName(self, unit)
+    ns.Text.ApplyBossTestLevel(self, conf)
+    if self.hpText then
+        local show = (self.showHPText ~= false)
+        if show then
+            _UF.BossPrev(self, conf)
+        else
+            MSUF_SetTextIfChanged(self.hpText, "")
+            ns.Text.ClearField(self, "hpTextPct")
         end
+        ns.Util.SetShown(self.hpText, show)
+    end
+    if self.powerText then
+        local showPower = self.showPowerText
+        if showPower == nil then showPower = true end
+        if showPower then
+            MSUF_SetTextIfChanged(self.powerText, "40 / 100")
+        else
+            MSUF_SetTextIfChanged(self.powerText, "")
+        end
+        ns.Util.SetShown(self.powerText, showPower)
+    end
+end
 
-        g = g or ((db and db.general) or {})
-        barsConf = barsConf or ((db and db.bars) or {})
+-- Presence guard: handles no-unit, boss-no-unit, edit-mode-preview states.
+-- When unit exists: applies Alpha + Portrait. Returns true → caller should return.
+local function _MSUF_UFStep_Presence(self, unit, key, conf, g, exists)
+    if self.isBoss then
+        if not exists then
+            if self._msufNoUnitCleared and (self.GetAlpha and self:GetAlpha() or 0) <= 0.01 then
+                return true
+            end
+            self:SetAlpha(0)
+            MSUF_ClearUnitFrameState(self, false)
+            if self.portrait then self.portrait:Hide() end
+            self._msufNoUnitCleared = true
+            return true
+        else
+            self._msufNoUnitCleared = nil
+        end
+    end
+    if not exists then
+        if MSUF_UnitEditModeActive and (not _msuf_inCombat) and unit ~= "player" and self and not self.isBoss then
+            if _UF.EditPrev then
+                _UF.EditPrev(self, key, conf, g)
+            else
+                if self.Show then self:Show() end
+            end
+            return true
+        end
+        if unit ~= "player" and (not MSUF_UnitEditModeActive) and self._msufNoUnitCleared and (self.GetAlpha and self:GetAlpha() or 0) <= 0.01 then
+            return true
+        end
+        if unit ~= "player" then
+            self:SetAlpha(0)
+        end
+        if self.portrait then self.portrait:Hide() end
+        MSUF_ClearUnitFrameState(self, true)
+        self._msufNoUnitCleared = true
+        return true
+    end
+    _UF.Alpha(self, key)
+    self._msufNoUnitCleared = nil
+    if _UF.Portrait then _UF.Portrait(self, unit, conf, exists) end
+    return false
+end
+
+function UpdateSimpleUnitFrame(self)
+    local _flushSerial = _G.MSUF_UFCORE_FLUSH_SERIAL
+    local db, g, barsConf
+    local getCache = _MSUF_ResolveGetCache()
+    if getCache then
+        local cache = getCache()
+        if cache then
+            db = cache.dbRef or _G.MSUF_DB
+            g = cache.generalRef
+            barsConf = cache.barsRef
+        end
+    end
+    if not db then
+        if not MSUF_DB then EnsureDB() end
+        db = MSUF_DB
+    end
+    g = g or ((db and db.general) or {})
+    barsConf = barsConf or ((db and db.bars) or {})
     local unit   = self.unit
     MSUF_EnsureUnitFlags(self)
     local isPlayer = self._msufIsPlayer
     local isTarget = self._msufIsTarget
     local isFocus  = self._msufIsFocus
-    local isPet    = self._msufIsPet
-    local isToT    = self._msufIsToT
     local unitValid = (type(unit) == "string" and unit ~= "") and true or false
     -- Cache UnitExists per UFCore flush (avoid repeated C-calls for same frame).
     local UnitExists = F.UnitExists
@@ -3748,138 +3839,46 @@ if ns.UF.HandleDisabledFrame(self, conf) then
      return
 end
 if conf then
-    local sn = (conf.showName  ~= false)
-    local sh = (conf.showHP    ~= false)
-    local sp = (conf.showPower ~= false)
-    self.showName      = sn
-    self.showHPText    = sh
-    self.showPowerText = sp
+    self.showName      = (conf.showName  ~= false)
+    self.showHPText    = (conf.showHP    ~= false)
+    self.showPowerText = (conf.showPower ~= false)
 end
-        if self.portrait then
-    if exists then
-        if not self._msufHadUnit then
-            self._msufHadUnit = true
-            self._msufPortraitDirty = true
-            self._msufPortraitNextAt = 0
-    end
-    else
-        if self._msufHadUnit then
-            self._msufHadUnit = nil
-            self._msufPortraitDirty = true
-            self._msufPortraitNextAt = 0
-    end
-    end
-end
-    ns.Bars._ApplyReverseFillBars(self, conf)
-    local didPowerBarSync = false
-    if self.isBoss and MSUF_BossTestMode then
-        if not _msuf_inCombat then
-            self:Show()
-            _UF.Alpha(self, key)
-    end
-    if self.bg then
-        MSUF_ApplyBarBackgroundVisual(self)
-    end
-               if self.targetPowerBar then
-            if (barsConf.showBossPowerBar == false) then
-                self.targetPowerBar:SetScript("OnUpdate", nil)
-                self.targetPowerBar:Hide()
-                MSUF_ResetBarZero(self.targetPowerBar, true)
-            else
-                self.targetPowerBar:SetMinMaxValues(0, 100)
-                MSUF_SetBarValue(self.targetPowerBar, 40, false)
-                self.targetPowerBar.MSUF_lastValue = 40
-                do
-                    local tok = "MANA"
-                    local pr, pg, pb = MSUF_GetPowerBarColor(nil, tok)
-                    if not pr then pr, pg, pb = 0.6, 0.2, 1.0 end
-                    self.targetPowerBar:SetStatusBarColor(pr, pg, pb)
-                    ns.Bars.ApplyPowerGradientOnce(self)
-                end
-                self.targetPowerBar:Show()
+    if self.portrait then
+        if exists then
+            if not self._msufHadUnit then
+                self._msufHadUnit = true
+                self._msufPortraitDirty = true
+                self._msufPortraitNextAt = 0
             end
-    end
-        ns.Text.ApplyBossTestName(self, unit)
-        ns.Text.ApplyBossTestLevel(self, conf)
-        if self.hpText then
-    local show = (self.showHPText ~= false)
-    if show then
-        _UF.BossPrev(self, conf)
-    else
-        MSUF_SetTextIfChanged(self.hpText, "")
-    ns.Text.ClearField(self, "hpTextPct")
-    end
-    ns.Util.SetShown(self.hpText, show)
-end
-if self.powerText then
-            local showPower = self.showPowerText
-            if showPower == nil then
-                showPower = true
-            end
-            if showPower then
-                MSUF_SetTextIfChanged(self.powerText, "40 / 100")
-            else
-                MSUF_SetTextIfChanged(self.powerText, "")
-            end
-            ns.Util.SetShown(self.powerText, showPower)
-    end
-         return
-    end
-if self.isBoss then
-    if not exists then
-        if self._msufNoUnitCleared and (self.GetAlpha and self:GetAlpha() or 0) <= 0.01 then
-             return
-    end
-        self:SetAlpha(0)
-        MSUF_ClearUnitFrameState(self, false)
-        if self.portrait then
-            self.portrait:Hide()
-    end
-        self._msufNoUnitCleared = true
-         return
-    else
-        self._msufNoUnitCleared = nil
-    end
-end
-if not exists then
-    -- In MSUF Edit Mode, keep a persistent placeholder for missing units
-    -- (so frames stay visible while editing, even when the unit doesn't exist).
-    if MSUF_UnitEditModeActive and (not _msuf_inCombat) and unit ~= "player" and self and not self.isBoss then
-        if _UF.EditPrev then
-            _UF.EditPrev(self, key, conf, g)
         else
-            if self.Show then self:Show() end
+            if self._msufHadUnit then
+                self._msufHadUnit = nil
+                self._msufPortraitDirty = true
+                self._msufPortraitNextAt = 0
+            end
         end
+    end
+    ns.Bars._ApplyReverseFillBars(self, conf)
+    -- Boss test preview: separate path, not live gameplay.
+    if self.isBoss and MSUF_BossTestMode then
+        _MSUF_UFStep_BossPreview(self, unit, key, conf, barsConf)
         return
     end
-    if unit ~= "player" and (not MSUF_UnitEditModeActive) and self._msufNoUnitCleared and (self.GetAlpha and self:GetAlpha() or 0) <= 0.01 then
-         return
+    -- Presence guard: no-unit, boss-no-unit, edit-preview; also applies Alpha + Portrait.
+    if _MSUF_UFStep_Presence(self, unit, key, conf, g, exists) then
+        return
     end
-    if unit ~= "player" then
-        self:SetAlpha(0)
-    end
-    if self.portrait then self.portrait:Hide() end
-    MSUF_ClearUnitFrameState(self, true)
-    self._msufNoUnitCleared = true
-     return
-else
-    _UF.Alpha(self, key)
-    self._msufNoUnitCleared = nil
-    if _UF.Portrait then _UF.Portrait(self, unit, conf, exists) end
-end
+    ----------------------------------------------------------------
+    -- Live pipeline (unit exists, not boss-test, not disabled)
+    ----------------------------------------------------------------
     local hp = MSUF_UFStep_BasicHealth(self, unit)
-    if MSUF_UFStep_SyncTargetPower(self, unit, barsConf, isPlayer, isTarget, isFocus) then
-        didPowerBarSync = true
-    end
-    local doStaticVisual = _MSUF_ShouldRunStaticVisualPass(self, key, exists)
-    if doStaticVisual then
+    local didPowerBarSync = MSUF_UFStep_SyncTargetPower(self, unit, barsConf, isPlayer, isTarget, isFocus)
+    if _MSUF_ShouldRunStaticVisualPass(self, key, exists) then
         MSUF_UFStep_NameLevelLeaderRaid(self, unit, conf, g)
         self._msufStaticVisualApplied = true
         self._msufStaticVisualSettingsSerial = _MSUF_GetUFCoreSettingsSerial()
     end
     MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
-    -- Rare/Heavy visuals are gated to reduce work in the frequent update path.
-    -- We still force a visual pass when the "bottom bar" (power vs health) changes.
     do
         local pb = self.targetPowerBar
         local pbDetached = self._msufPowerBarDetached
@@ -3887,7 +3886,7 @@ end
         local bottomIsPower = pbWanted and true or false
         if self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false) then
             self._msufNeedsBorderVisual = true
-    end
+        end
     end
     local doHeavy = true
     if ns.UF.ShouldRunHeavyVisual then
@@ -3902,7 +3901,6 @@ end
         self._msufHeavyVisualSettingsSerial = _MSUF_GetUFCoreSettingsSerial()
         self._msufHeavyVisualApplied = true
     end
-    -- IMPORTANT: layered alpha uses per-texture alpha, which visual steps reset.
     if conf and conf.alphaExcludeTextPortrait == true then
         _UF.Alpha(self, key)
     end
@@ -4645,48 +4643,6 @@ local function MSUF_UpdateAbsorbTextMode()
     end
  end
 MSUF_Export2("MSUF_UpdateAbsorbTextMode", MSUF_UpdateAbsorbTextMode, "MSUF_UpdateAbsorbTextMode")
-local function MSUF_NudgeUnitFrameOffset(unit, parent, deltaX, deltaY)
-    if not unit or not parent then  return end
-    if not MSUF_DB then EnsureDB() end
-    local key  = GetConfigKeyForUnit(unit)
-    local conf = key and MSUF_DB[key]
-    if not conf then  return end
-
-    local STEP = 1
-    deltaX = (deltaX or 0) * STEP
-    deltaY = (deltaY or 0) * STEP
-
-    -- MSUF Edit Mode: always MOVE with arrow keys (no sizing mode)
-    conf.offsetX = (conf.offsetX or 0) + deltaX
-    conf.offsetY = (conf.offsetY or 0) + deltaY
-
-    if key == "boss" then
-        for i = 1, MSUF_MAX_BOSS_FRAMES do
-            local bossUnit = "boss" .. i
-            local frame = UnitFrames and UnitFrames[bossUnit] or _G["MSUF_" .. bossUnit]
-            if frame then
-                PositionUnitFrame(frame, bossUnit)
-            end
-        end
-    else
-        PositionUnitFrame(parent, unit)
-    end
-
-    if MSUF_CurrentOptionsKey == key then
-        local xSlider = _G["MSUF_OffsetXSlider"]
-        local ySlider = _G["MSUF_OffsetYSlider"]
-        if xSlider and xSlider.SetValue then
-            xSlider:SetValue(conf.offsetX or 0)
-        end
-        if ySlider and ySlider.SetValue then
-            ySlider:SetValue(conf.offsetY or 0)
-        end
-    end
-
-    if MSUF_UpdateEditModeInfo then
-        MSUF_UpdateEditModeInfo()
-    end
-end
 local function MSUF_EnableUnitFrameDrag(f, unit)
     if not f or not unit then  return end
     f:EnableMouse(true)

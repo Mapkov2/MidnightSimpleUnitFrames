@@ -2091,13 +2091,6 @@ function _G.MSUF_QueueUnitframeUpdate(f, force)
     Core.MarkDirty(f, mask, true, force and "FORCE" or "LEGACY_QUEUE")
 end
 
-function _G.MSUF_ScheduleWarmupFrame(f)
-    if not f or f._msufWarmupQueuedUFCore then return end
-    f._msufWarmupQueuedUFCore = true
-    Enqueue(warmupQueue, f)
-    EnsureFlushEnabled()
-end
-
 function _G.MSUF_QueueUnitframeVisual(f)
     if not f or f._msufVisualQueuedUFCore then return end
     f._msufVisualQueuedUFCore = true
@@ -3242,17 +3235,6 @@ end
 function _G.MSUF_UFCore_AttachFrame(f)
     Core.AttachFrame(f)
 end
-function _G.MSUF_UFCore_RefreshUnitEvents(f, force)
-    RefreshUnitEvents(f, force)
-end
-function _G.MSUF_UFCore_InvalidateAllFrameConfigs()
-    Core.InvalidateAllFrameConfigs()
-end
-
-function _G.MSUF_UFCore_RefreshAllUnitEvents(force)
-    Core.RefreshAllUnitEvents(force)
-end
-
 function _G.MSUF_UFCore_NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
 end

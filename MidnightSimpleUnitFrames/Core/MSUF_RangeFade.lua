@@ -383,10 +383,6 @@ do
             RF.ignoreSpellIDs = DEFAULT_IGNORES
         end
     end
-
-    function _G.MSUF_RangeFade_GetState()
-        return RF.enabled, RF.inRangeAny, RF.alpha, RF.activeCount
-    end
 end
 
 
@@ -475,10 +471,6 @@ do
             UnwireTargetRangeFadeEvents()
         end
     end
-
-    function _G.MSUF_RangeFade_WireEvents()
-        return _G.MSUF_RangeFade_EvaluateActive(true)
-    end
 end
 
 
@@ -486,23 +478,6 @@ end
 function _G.MSUF_RangeFade_Rebuild()
     if type(_G.MSUF_RangeFade_RebuildSpells) == "function" then
         _G.MSUF_RangeFade_RebuildSpells()
-    end
-end
-
-function _G.MSUF_RangeFade_ApplyFromDB()
-    -- RangeFade has no direct DB->apply; consumer reads MSUF_DB live.
-    if type(_G.MSUF_RangeFade_EvaluateActive) == "function" then
-        _G.MSUF_RangeFade_EvaluateActive(true)
-    elseif type(_G.MSUF_RangeFade_ApplyCurrent) == "function" then
-        _G.MSUF_RangeFade_ApplyCurrent(true)
-    end
-end
-
-function _G.MSUF_RangeFade_ApplyNow()
-    if type(_G.MSUF_RangeFade_EvaluateActive) == "function" then
-        _G.MSUF_RangeFade_EvaluateActive(true)
-    elseif type(_G.MSUF_RangeFade_ApplyCurrent) == "function" then
-        _G.MSUF_RangeFade_ApplyCurrent(true)
     end
 end
 
