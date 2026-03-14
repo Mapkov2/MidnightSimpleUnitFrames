@@ -1749,34 +1749,15 @@ end
 
 local FlushEnabled = false
 
--- PERF: Frame-level time cache. Updated ONCE per OnUpdate (not per event).
--- Eliminates ~400 GetTime() C-calls/sec from _HealthValueFast + UNIT_POWER_UPDATE rate limiters.
--- Accuracy: ±1 render frame (16ms @ 60fps) — irrelevant for 100ms rate-limit intervals.
+-- PERF: Frame-level time cache. Updated ONCE per OnUpdate by FlushTask.
+-- Used by RunUpdate queue processing and _RefreshFrameNow(). 
+-- NOTE: DIRECT_APPLY text rate-limiters use GetTime() directly because
+-- FlushTask can be idle (DisableFlushIfIdle) while DIRECT_APPLY still fires.
 Core._frameNow = 0
--- Serial incremented by FlushTask each render frame. DIRECT_APPLY events use this to
--- detect when FlushTask is idle (no queued work) and fall back to one GetTime() per frame.
+-- Serial incremented by FlushTask each render frame. Used by RunUpdate
+-- diff-gates, text spec caching, and _RefreshFrameNow staleness detection.
 Core._frameNowSerial = 0
 local _localFrameSerial = -1
-
--- PERF: DIRECT_APPLY text budget. Caps how many text updates fire synchronously from
--- event handlers per render frame. Bar:SetValue always runs (cheap, visually critical).
--- Skipped texts DON'T update their timestamp → retry next frame automatically.
--- Cap=4 → max ~160μs text work per frame (vs uncapped ~320μs).
--- 60fps × 4 = 240 slots/sec for ~160 needed (8 frames × 10Hz × 2 types) = 50% headroom.
-local _directTextSerial = -1
-local _directTextCount = 0
-local _DIRECT_TEXT_MAX = 4   -- combined HP + Power text updates per frame
-
-local function _DirectTextAllowed()
-    local s = Core._frameNowSerial
-    if s ~= _directTextSerial then
-        _directTextSerial = s
-        _directTextCount = 0
-    end
-    if _directTextCount >= _DIRECT_TEXT_MAX then return false end
-    _directTextCount = _directTextCount + 1
-    return true
-end
 
 local function _RefreshFrameNow()
     local s = Core._frameNowSerial
@@ -2573,23 +2554,19 @@ local function _HealthValueFast(f)
     if not bar then return end
     local hp = UnitHealth(f.unit)       -- upvalue (line 21), no F.table lookup
     bar:SetValue(hp)                    -- ALWAYS: direct widget call (~3μs, visually critical)
-    -- PERF: Text is budget-gated + rate-limited. If budget exceeded this frame,
-    -- skip text WITHOUT updating timestamp → fires again next frame automatically.
-    -- No stale values: just 1 frame delay (16ms) on a 100ms interval = invisible.
+    -- Text rate-limited to 10Hz per unit (100ms interval). Skipped events are
+    -- not a problem: bar:SetValue already shows current HP, text catches up next pass.
     local fnTxt = FN_UpdateHpTextFast
     if fnTxt then
-        -- PERF P1: Use Core._frameNow directly (updated by FlushTask each render frame).
-        -- Saves _RefreshFrameNow() function call on ~90% of UNIT_HEALTH events that
-        -- fail the rate-limit check. ±16ms accuracy is irrelevant for a 100ms gate.
-        -- When FlushTask is idle: worst case text fires at ~116ms instead of 100ms = invisible.
-        local now = Core._frameNow
-        if now == 0 then now = GetTime(); Core._frameNow = now end
+        -- GetTime() required: Core._frameNow freezes when FlushTask is idle
+        -- (DisableFlushIfIdle hides the OnUpdate frame). DIRECT_APPLY events
+        -- bypass the queue, so FlushTask never restarts. One GetTime() per
+        -- UNIT_HEALTH event (~10-50/sec per unit) is negligible.
+        -- Rate-limiter alone caps at 10Hz per unit = sufficient budget.
+        local now = GetTime()
         if (now - (f._msufHpTxtAt or 0)) >= 0.10 then
-            if _DirectTextAllowed() then
-                f._msufHpTxtAt = now + (f._msufTextStagger or 0)
-                fnTxt(f, hp)
-            end
-            -- else: budget exceeded → DON'T update timestamp → retry next frame
+            f._msufHpTxtAt = now
+            fnTxt(f, hp)
         end
     end
 end
@@ -2650,7 +2627,7 @@ do
             local fnTxt = FN_UpdatePowerTextFast
             if not fnTxt then return end
             if budget then
-                local now = Core._frameNow
+                local now = GetTime()
                 if (now - (f._msufPwrTxtAt or 0)) < budget then return end
                 f._msufPwrTxtAt = now
             end
@@ -2686,9 +2663,8 @@ do
 
             UFCore_StorePowerSnapshot(f, pType, cur, mx)
 
-            -- Budget-gated text: direct table read (no function call).
-            -- Core._frameNow is updated by FlushTask every frame — precise enough
-            -- for a 33Hz/10Hz budget gate. Avoids _RefreshFrameNow() overhead.
+            -- Budget-gated text: GetTime() inside _MaybeUpdatePowerText ensures
+            -- correct rate-limiting even when FlushTask is idle (DIRECT_APPLY path).
             _MaybeUpdatePowerText(f, unit, pType, cur, mx, (f._msufIsPlayer and 0.03) or 0.10)
         end
 
