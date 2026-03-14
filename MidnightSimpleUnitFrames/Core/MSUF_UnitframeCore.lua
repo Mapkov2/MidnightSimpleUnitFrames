@@ -2578,7 +2578,12 @@ local function _HealthValueFast(f)
     -- No stale values: just 1 frame delay (16ms) on a 100ms interval = invisible.
     local fnTxt = FN_UpdateHpTextFast
     if fnTxt then
-        local now = _RefreshFrameNow()
+        -- PERF P1: Use Core._frameNow directly (updated by FlushTask each render frame).
+        -- Saves _RefreshFrameNow() function call on ~90% of UNIT_HEALTH events that
+        -- fail the rate-limit check. ±16ms accuracy is irrelevant for a 100ms gate.
+        -- When FlushTask is idle: worst case text fires at ~116ms instead of 100ms = invisible.
+        local now = Core._frameNow
+        if now == 0 then now = GetTime(); Core._frameNow = now end
         if (now - (f._msufHpTxtAt or 0)) >= 0.10 then
             if _DirectTextAllowed() then
                 f._msufHpTxtAt = now + (f._msufTextStagger or 0)
@@ -2669,8 +2674,10 @@ do
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
-            if type(cur) ~= "number" then cur = 0 end
-            if type(mx)  ~= "number" then mx  = 100 end
+            -- SECRET-SAFE: == nil is a reference check (no taint). Secret numbers
+            -- pass through to SetMinMaxValues/SetValue fine (widget handles internally).
+            if cur == nil then cur = 0 end
+            if mx  == nil then mx  = 100 end
 
             if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
 
@@ -2697,8 +2704,8 @@ do
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
-            if type(cur) ~= "number" then cur = 0 end
-            if type(mx)  ~= "number" then mx  = 100 end
+            if cur == nil then cur = 0 end
+            if mx  == nil then mx  = 100 end
 
             if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
 
@@ -2722,8 +2729,8 @@ do
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
-            if type(cur) ~= "number" then cur = 0 end
-            if type(mx)  ~= "number" then mx  = 100 end
+            if cur == nil then cur = 0 end
+            if mx  == nil then mx  = 100 end
 
             if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
 
@@ -2747,8 +2754,8 @@ do
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
-            if type(cur) ~= "number" then cur = 0 end
-            if type(mx)  ~= "number" then mx  = 100 end
+            if cur == nil then cur = 0 end
+            if mx  == nil then mx  = 100 end
 
             if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
 

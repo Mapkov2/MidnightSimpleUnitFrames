@@ -836,7 +836,7 @@ local function NeedsAltManaBar()
     end
     -- Must actually have a mana pool (Warriors, Rogues, DKs etc. have 0 max mana)
     local maxMana = UnitPowerMax("player", PT.Mana)
-    if NotSecret(maxMana) and type(maxMana) == "number" and maxMana <= 0 then
+    if NotSecret(maxMana) and maxMana ~= nil and maxMana <= 0 then
         return false
     end
     -- Non-secret primary + has mana pool → check class/spec heuristic
@@ -1355,7 +1355,7 @@ local function CP_CheckAutoHide(cur, maxP)
     -- Full: hide when all resources are at max
     if b.classPowerHideWhenFull and cur ~= nil and maxP ~= nil then
         -- Only check with non-secret values
-        if NotSecret(cur) and type(cur) == "number" and type(maxP) == "number" then
+        if NotSecret(cur) and cur ~= nil and maxP ~= nil then
             if cur >= maxP and maxP > 0 then
                 CP.container:SetAlpha(0)
                 return
@@ -1365,7 +1365,7 @@ local function CP_CheckAutoHide(cur, maxP)
 
     -- Empty: hide when zero resources
     if b.classPowerHideWhenEmpty and cur ~= nil then
-        if NotSecret(cur) and type(cur) == "number" then
+        if NotSecret(cur) and cur ~= nil then
             if cur <= 0 then
                 CP.container:SetAlpha(0)
                 return
@@ -1763,7 +1763,7 @@ local function CP_UpdateValues_Fractional(powerType, maxPower)
     local mod = UnitPowerDisplayMod and UnitPowerDisplayMod(powerType) or 1
     -- Secret-safe: UnitPowerDisplayMod can return secret in 12.0.
     -- If secret or invalid, fall back to 100 for Soul Shards (standard Blizzard mod).
-    if not NotSecret(mod) or type(mod) ~= "number" or mod <= 0 then
+    if not NotSecret(mod) or mod == nil or mod <= 0 then
         mod = 100
     end
     local fractional = rawCur / mod  -- e.g. 3.7
@@ -2548,8 +2548,10 @@ end
 local function CP_UpdateValues_Stagger(powerType, maxPower)
     local cur = UnitStagger and UnitStagger("player") or 0
     local mx  = UnitHealthMax("player") or 1
-    if type(cur) ~= "number" then cur = 0 end
-    if type(mx) ~= "number" or mx <= 0 then mx = 1 end
+    -- SECRET-SAFE: == nil is reference check (no taint). UnitHealthMax can return
+    -- secret numbers in 12.0 combat; type() on them causes taint.
+    if cur == nil then cur = 0 end
+    if mx  == nil then mx  = 1 end
 
     local bar = CP.bars[1]
     if not bar then return end
@@ -2560,16 +2562,21 @@ local function CP_UpdateValues_Stagger(powerType, maxPower)
     bar:Show()
 
     -- 3-color threshold (oUF pattern; colors configurable via Colors menu)
-    local perc = cur / mx
-    local tier
-    if perc >= STAGGER_RED_TRANSITION then tier = 3
-    elseif perc > STAGGER_YELLOW_TRANSITION then tier = 2
-    else tier = 1 end
+    -- SECRET-SAFE: Only do arithmetic/comparisons when both values are non-secret.
+    -- When secret: keep cached tier (visual stays stable, no taint).
+    if NotSecret(cur) and NotSecret(mx) then
+        if mx <= 0 then mx = 1 end
+        local perc = cur / mx
+        local tier
+        if perc >= STAGGER_RED_TRANSITION then tier = 3
+        elseif perc > STAGGER_YELLOW_TRANSITION then tier = 2
+        else tier = 1 end
 
-    if tier ~= _staggerCachedTier then
-        _staggerCachedTier = tier
-        local r, g, b = ResolveStaggerColor(tier)
-        bar:SetStatusBarColor(r, g, b, 1)
+        if tier ~= _staggerCachedTier then
+            _staggerCachedTier = tier
+            local r, g, b = ResolveStaggerColor(tier)
+            bar:SetStatusBarColor(r, g, b, 1)
+        end
     end
 
     local bgA = (_cpDB.bars and tonumber(_cpDB.bgAlpha)) or 0.3
@@ -2587,16 +2594,21 @@ local function CP_UpdateValues_Stagger(powerType, maxPower)
     end
 
     -- Text: show stagger amount in K (e.g. "12.3K") — more useful than %
+    -- SECRET-SAFE: Only format text when cur is non-secret (avoid arithmetic on secret).
     local txt = CP.text
     if txt then
         local showText = _cpDB.bars and (_cpDB.showText == true)
-        if showText then
+        if showText and NotSecret(cur) then
             if cur >= 1000 then
                 txt:SetFormattedText("%.1fK", cur / 1000)
             else
                 txt:SetFormattedText("%d", cur)
             end
             txt:Show()
+        elseif showText then
+            -- Secret value: show placeholder or hide
+            txt:SetText("")
+            txt:Hide()
         else
             txt:Hide()
         end
@@ -2705,8 +2717,10 @@ local function AM_UpdateValue()
     -- Raw values, 2 args only (like MidnightRogueBars).
     local cur = UnitPower("player", PT.Mana)
     local mx  = UnitPowerMax("player", PT.Mana)
-    if type(cur) ~= "number" then cur = 0 end
-    if type(mx)  ~= "number" then mx  = 100 end
+    -- SECRET-SAFE: == nil is reference check (no taint). Secret numbers pass
+    -- through to SetMinMaxValues/SetValue fine (widget handles internally).
+    if cur == nil then cur = 0 end
+    if mx  == nil then mx  = 100 end
 
     -- Smooth interpolation when enabled.
     local smoothOn = _cpDB.smooth
@@ -2876,7 +2890,7 @@ local function FullRefresh()
         else
             -- Standard / Fractional: UnitPowerMax
             maxP = UnitPowerMax("player", powerType)
-            if not NotSecret(maxP) or type(maxP) ~= "number" then
+            if not NotSecret(maxP) or maxP == nil then
                 -- Heuristic fallback (safe; most are 5-6)
                 if powerType == PT.Runes then maxP = 6
                 elseif powerType == PT.ComboPoints then maxP = 7

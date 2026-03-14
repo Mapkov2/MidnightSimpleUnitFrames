@@ -538,20 +538,20 @@ function _G.MSUF_RangeFade_InitPostLogin()
 
 	    _MSUF_RF_RegisterTargetConsumerOnce()
 
-	    if _G.MSUF_RangeFade_WireEvents then
-	        _G.MSUF_RangeFade_WireEvents()
-	    end
-
-	    local function _MSUF_RF_RebuildNow()
-	        if _G.MSUF_RangeFade_RebuildSpells then
-	            _G.MSUF_RangeFade_RebuildSpells()
-	        end
-	    end
-
+	    -- FIX: Wire SPELL_RANGE_CHECK_UPDATE event via EvaluateActive (which calls
+	    -- WireTargetRangeFadeEvents + RebuildSpells). The previous call to the
+	    -- non-existent _G.MSUF_RangeFade_WireEvents was a dead code path — events
+	    -- were never registered, so Blizzard's range updates were silently dropped.
+	    -- Deferred to next frame (same reason as old RebuildNow timer: avoids taint
+	    -- from frames created after RangeFade init).
 	    if C_Timer and C_Timer.After then
-	        C_Timer.After(0, _MSUF_RF_RebuildNow)
-	    else
-	        _MSUF_RF_RebuildNow()
+	        C_Timer.After(0, function()
+	            if _G.MSUF_RangeFade_EvaluateActive then
+	                _G.MSUF_RangeFade_EvaluateActive(true)
+	            end
+	        end)
+	    elseif _G.MSUF_RangeFade_EvaluateActive then
+	        _G.MSUF_RangeFade_EvaluateActive(true)
 	    end
 
 
