@@ -132,13 +132,12 @@ local function _MSUF_GetIncomingSelfHeals(unit)
     if calc and UnitGetDetailedHealPrediction then
         local data = UnitGetDetailedHealPrediction(unit, "player", calc)
         if data and type(data) == "table" then
-            -- Prefer the clamped amount if provided, so it never visually overflows missing health.
-            -- IMPORTANT (Midnight/Secret-safe): never use secret numbers in boolean context (no 'or' fallback).
+            -- Secret-safe: prefer clampedIncomingHealsFromHealer; == nil is a reference check.
             local v = data.clampedIncomingHealsFromHealer
-            if type(v) ~= "number" then
+            if v == nil then
                 v = data.incomingHealsFromHealer
             end
-            if type(v) == "number" then
+            if v ~= nil then
                 return v
             end
         end
@@ -146,7 +145,7 @@ local function _MSUF_GetIncomingSelfHeals(unit)
 
     if UnitGetIncomingHeals then
         local v = UnitGetIncomingHeals(unit, "player")
-        if type(v) == "number" then
+        if v ~= nil then
             return v
         end
     end
@@ -225,12 +224,15 @@ local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
         predBar:SetReverseFill(rev and true or false)
     end
 
-    -- Incoming heals (self only)pass-through to StatusBar API.
+    -- Incoming heals (self only) — pass-through to StatusBar API.
+    -- Secret-safe: inc comes from _MSUF_GetIncomingSelfHeals which returns 0 on nil.
+    -- maxHP from UnitHealthMax CAN be secret in 12.0. StatusBar:SetMinMaxValues
+    -- accepts secret numbers natively (no Lua arithmetic needed).
     local inc = _MSUF_GetIncomingSelfHeals(unit)
-    if type(inc) ~= "number" then
+    if inc == nil then
         inc = 0
     end
-    if type(maxHP) == "number" then
+    if maxHP ~= nil then
         predBar:SetMinMaxValues(0, maxHP)
     else
         predBar:SetMinMaxValues(0, 1)
@@ -559,10 +561,7 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
 
         local hpReverse = false
         if hpBar.GetReverseFill then
-            local ok, rf = pcall(hpBar.GetReverseFill, hpBar)
-            if ok and rf then
-                hpReverse = true
-            end
+            hpReverse = hpBar:GetReverseFill() and true or false
         end
 
         local w = nil

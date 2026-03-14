@@ -90,6 +90,7 @@ local _useBlizzardTimer = false  -- true = Blizzard C++ pass-through for countdo
 local _useDispelBorders = false  -- dispel-type border coloring for debuffs
 local _clickThrough     = false  -- true = all auras non-interactive (mouse pass-through)
 local _showTooltip      = true   -- cached shared.showTooltip (for click-through + tooltip combo)
+local _masqueEnabled    = false  -- cached shared.masqueEnabled (gates per-icon backdrop call)
 
 --  Debuff dispel-type color lookup (Ã‚Â  la R41z0r / Blizzard) 
 -- Maps dispel index  Blizzard color object; used for both manual
@@ -169,6 +170,7 @@ local function RefreshSharedFlags(shared, gen)
     _useDispelBorders = (shared and shared.useDebuffTypeBorders == true) or false
     _clickThrough     = (shared and shared.clickThroughAuras == true) or false
     _showTooltip      = (shared and shared.showTooltip == true) or false
+    _masqueEnabled    = (shared and shared.masqueEnabled == true) or false
 end
 
 -- ---------------------------------------------------------------------------
@@ -650,8 +652,8 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         RefreshSharedFlags(shared, gen)
     end
 
-    -- Masque: hide MSUF square backdrop behind non-square skins
-    ApplyMasqueBackdrop(icon, shared)
+    -- Masque: hide MSUF square backdrop behind non-square skins (skip entirely when off)
+    if _masqueEnabled then ApplyMasqueBackdrop(icon, shared) end
 
     if not aura then
         local container = icon._msufA2_container or icon:GetParent()

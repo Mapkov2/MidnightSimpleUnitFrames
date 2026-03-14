@@ -3300,3 +3300,70 @@ do
         f:SetScript("OnEvent", nil)
     end)
 end
+
+-- ============================================================================
+-- Phase 4: Module Registration
+-- Gameplay registers into the unified module lifecycle so that:
+--   - Profile switches broadcast RefreshSettings → all features re-apply
+--   - Debug toggle can disable/re-enable all gameplay features at runtime
+--   - Shutdown cleans up tickers + EventBus registrations on profile switch
+-- Internal feature toggles (combat timer, crosshair, etc.) remain unchanged.
+-- ============================================================================
+do
+    local reg = (ns and ns.MSUF_RegisterModule) or _G.MSUF_RegisterModule
+    if type(reg) == "function" then
+        reg("Gameplay", {
+            order = 50,
+            IsEnabled = function() return true end,
+            Init = function()
+                if type(EnsureGameplayDefaults) == "function" then
+                    EnsureGameplayDefaults()
+                end
+            end,
+            Enable = function()
+                if ns and ns.MSUF_RequestGameplayApply then
+                    ns.MSUF_RequestGameplayApply()
+                end
+            end,
+            Disable = function()
+                -- Stop combat timer ticker
+                if ns._MSUF_CombatTimerTicker then
+                    ns._MSUF_CombatTimerTicker:Cancel()
+                    ns._MSUF_CombatTimerTicker = nil
+                end
+                -- Unregister EventBus keys (idempotent)
+                local unreg = _G.MSUF_EventBus_Unregister
+                if type(unreg) == "function" then
+                    unreg("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_TIMER")
+                    unreg("PLAYER_REGEN_ENABLED",  "MSUF_COMBAT_TIMER")
+                    unreg("PLAYER_ENTERING_WORLD", "MSUF_COMBAT_TIMER")
+                    unreg("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_STATE")
+                    unreg("PLAYER_REGEN_ENABLED",  "MSUF_COMBAT_STATE")
+                    unreg("PLAYER_REGEN_ENABLED",  "MSUF_APEX_ALERT")
+                end
+            end,
+            RefreshSettings = function(_, source)
+                if ns and ns.MSUF_RequestGameplayApply then
+                    ns.MSUF_RequestGameplayApply()
+                end
+            end,
+            Shutdown = function(_, reason)
+                -- Stop all tickers
+                if ns._MSUF_CombatTimerTicker then
+                    ns._MSUF_CombatTimerTicker:Cancel()
+                    ns._MSUF_CombatTimerTicker = nil
+                end
+                -- Unregister all EventBus keys
+                local unreg = _G.MSUF_EventBus_Unregister
+                if type(unreg) == "function" then
+                    unreg("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_TIMER")
+                    unreg("PLAYER_REGEN_ENABLED",  "MSUF_COMBAT_TIMER")
+                    unreg("PLAYER_ENTERING_WORLD", "MSUF_COMBAT_TIMER")
+                    unreg("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_STATE")
+                    unreg("PLAYER_REGEN_ENABLED",  "MSUF_COMBAT_STATE")
+                    unreg("PLAYER_REGEN_ENABLED",  "MSUF_APEX_ALERT")
+                end
+            end,
+        })
+    end
+end
