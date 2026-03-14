@@ -665,6 +665,8 @@ local T = {
 ------BUFF REMINDERS----------------
     ["Buff Reminders"] = "Buff提醒",
     ["Ghost icons appear at the player frame when a buff is missing or about to expire. Position via Edit Mode mover."] = "当缺少Buff或即将过期时, 玩家框架上会显示半透明图标.可通过编辑模式移动器调整其位置.",
+    ["Ghost icons appear at the player frame when a buff is missing or about to expire. Position via Edit Mode mover; configure Grow Direction here."] = "当缺少Buff或即将过期时, 玩家框架上会显示半透明图标.可通过编辑模式移动器调整其位置;在此处配置增长方向.",
+    ["Grow Direction"] = "增长方向",
     ["Enable Buff Reminders"]   = "启用Buff提醒",
     ["Show ghost icons for missing buffs at the player frame."] = "在玩家框架上显示缺少Buff的半透明图标.",
     ["Power Word: Fortitude"]   = "真言术：韧",
