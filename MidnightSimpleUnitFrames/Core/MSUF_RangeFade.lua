@@ -53,7 +53,6 @@ do
     local UnitCanAttack = _G.UnitCanAttack
     local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
     local CheckInteractDistance = _G.CheckInteractDistance
-    local C_Timer_NewTicker = _G.C_Timer and _G.C_Timer.NewTicker
     local C_Timer_After = _G.C_Timer and _G.C_Timer.After
     local issecretvalue = _G.issecretvalue
 
@@ -93,7 +92,14 @@ do
     local _state = {}
     local _bossUnits = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 
-    local function ApplyMul(unit, confKey, conf, inRange)
+    -- Frame resolver: one canonical lookup per unit token.
+    -- Target lives at _G.MSUF_target. Focus/Boss live in MSUF_UnitFrames.
+    local function GetFrame(unit)
+        local frames = _G.MSUF_UnitFrames
+        return (frames and frames[unit]) or _G["MSUF_" .. unit]
+    end
+
+    local function ApplyMul(f, unit, confKey, conf, inRange)
         local prev = _state[unit]
         if inRange == prev then return end
         _state[unit] = inRange
@@ -105,8 +111,6 @@ do
             if a < 0 then a = 0 elseif a > 1 then a = 1 end
         end
         mulT[unit] = a
-        local frames = _G.MSUF_UnitFrames
-        local f = frames and frames[unit]
         if not f or (f.IsForbidden and f:IsForbidden()) then return end
         if f.IsShown and not f:IsShown() then return end
         local apply = _G.MSUF_ApplyUnitAlpha
@@ -120,8 +124,7 @@ do
         if type(mulT) ~= "table" then return end
         if mulT[unit] == 1 or mulT[unit] == nil then return end
         mulT[unit] = 1
-        local frames = _G.MSUF_UnitFrames
-        local f = frames and frames[unit]
+        local f = GetFrame(unit)
         if not f or (f.IsForbidden and f:IsForbidden()) then return end
         local apply = _G.MSUF_ApplyUnitAlpha
         if type(apply) == "function" then apply(f, confKey) end
@@ -201,7 +204,7 @@ do
         -- isInRange is NOT secret (per Unhalted). Direct test.
         if checksRange then
             local result = (isInRange == true or isInRange == 1) and true or false
-            ApplyMul("target", "target", conf, result)
+            ApplyMul(GetFrame("target"), "target", "target", conf, result)
         end
     end
 
@@ -210,7 +213,7 @@ do
         if arg1 and arg1 ~= "target" then return end
         local conf = TargetGetConf()
         if not conf then ClearMul("target", "target"); return end
-        ApplyMul("target", "target", conf, CheckFriendly("target"))
+        ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
     end
 
     local function EnsureTargetEvtFrame()
@@ -242,13 +245,13 @@ do
                 TargetRegisterSpell(spell)
             end
             -- Also do an immediate check
-            ApplyMul("target", "target", conf, CheckEnemy("target"))
+            ApplyMul(GetFrame("target"), "target", "target", conf, CheckEnemy("target"))
         else
             -- Friendly: UNIT_IN_RANGE_UPDATE (zero polling)
             TargetUnregisterSpell()
             _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
             _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
-            ApplyMul("target", "target", conf, CheckFriendly("target"))
+            ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
         end
     end
 
@@ -326,9 +329,9 @@ do
         local conf = TargetGetConf()
         if conf and UnitExists("target") then
             if _targetIsEnemy then
-                ApplyMul("target", "target", conf, CheckEnemy("target"))
+                ApplyMul(GetFrame("target"), "target", "target", conf, CheckEnemy("target"))
             else
-                ApplyMul("target", "target", conf, CheckFriendly("target"))
+                ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
             end
         end
     end
@@ -372,12 +375,24 @@ do
     end
 
     -- ══════════════════════════════════════════════════════════════
-    -- FOCUS/BOSS: Ticker + UNIT_IN_RANGE_UPDATE hybrid (v3)
+    -- ══════════════════════════════════════════════════════════════
+    -- FOCUS/BOSS: Smart-sleep ticker + event-driven friendly focus
+    --
+    -- Ticker lifecycle (SyncTicker):
+    --   RUNNING when: enemy focus OR boss range enabled → 0.75s combat / 3.0s OOC
+    --   SLEEPING when: only friendly focus (event-driven) → 0 CPU
+    --   STOPPED when: no focus + no boss enabled → 0 CPU
+    --
+    -- Friendly focus: UNIT_IN_RANGE_UPDATE (oUF approach, 0 polling always)
+    -- Unit swaps: immediate check via events, then SyncTicker re-evaluates
     -- ══════════════════════════════════════════════════════════════
     local _focusIsEnemy = false
     local _focusEvtFrame = nil
-    local _ticker, _tickRate = nil, 0
-    local _TICK_COMBAT, _TICK_OOC = 0.5, 2.0
+    local _ticker = nil
+    local _tickRate = 0
+    local _TICK_COMBAT = 0.75
+    local _TICK_OOC = 3.0
+    local C_Timer_NewTicker = _G.C_Timer and _G.C_Timer.NewTicker
 
     local function OnFocusFriendlyRange(_, event, arg1)
         if arg1 and arg1 ~= "focus" then return end
@@ -385,7 +400,7 @@ do
         local conf = db and db.focus
         if not conf or conf.rangeFadeEnabled ~= true then ClearMul("focus", "focus"); return end
         if _G.MSUF_UnitEditModeActive == true then ClearMul("focus", "focus"); return end
-        ApplyMul("focus", "focus", conf, CheckFriendly("focus"))
+        ApplyMul(GetFrame("focus"), "focus", "focus", conf, CheckFriendly("focus"))
     end
 
     local function EnsureFocusEvtFrame()
@@ -395,24 +410,23 @@ do
     end
 
     local function StopTicker()
-        if _ticker then _ticker:Cancel(); _ticker = nil end; _tickRate = 0
+        if _ticker then _ticker:Cancel(); _ticker = nil end
+        _tickRate = 0
     end
 
-    local function TickFn()
+    local function CheckEnemyUnits()
         local db = _G.MSUF_DB
         local editMode = (_G.MSUF_UnitEditModeActive == true)
 
-        -- Enemy focus (friendly is event-driven)
         if _focusIsEnemy then
             local conf = db and db.focus
             if conf and conf.rangeFadeEnabled == true and not editMode then
-                ApplyMul("focus", "focus", conf, CheckEnemy("focus"))
+                ApplyMul(GetFrame("focus"), "focus", "focus", conf, CheckEnemy("focus"))
             else
                 ClearMul("focus", "focus")
             end
         end
 
-        -- Boss 1-5
         local bossConf = db and db.boss
         local bossOK = (bossConf and bossConf.rangeFadeEnabled == true and not editMode)
         local frames = _G.MSUF_UnitFrames
@@ -421,7 +435,7 @@ do
             if bossOK then
                 local f = frames and frames[unit]
                 if f and f.IsShown and f:IsShown() and UnitExists(unit) then
-                    ApplyMul(unit, "boss", bossConf, CheckEnemy(unit))
+                    ApplyMul(f, unit, "boss", bossConf, CheckEnemy(unit))
                 else
                     if _state[unit] ~= nil then
                         _state[unit] = nil
@@ -435,14 +449,37 @@ do
         end
     end
 
+    local function DesiredRate()
+        return (_G.MSUF_InCombat == true) and _TICK_COMBAT or _TICK_OOC
+    end
+
     local function EnsureTicker(rate)
         if not C_Timer_NewTicker then return end
         if _ticker and _tickRate == rate then return end
-        StopTicker(); _tickRate = rate; _ticker = C_Timer_NewTicker(rate, TickFn)
+        StopTicker()
+        _tickRate = rate
+        _ticker = C_Timer_NewTicker(rate, CheckEnemyUnits)
     end
 
-    local function DesiredRate()
-        return (_G.MSUF_InCombat == true) and _TICK_COMBAT or _TICK_OOC
+    -- Smart-sleep: only run ticker when enemy units need polling.
+    -- Friendly focus = event-driven → no ticker needed.
+    local function NeedsPoll()
+        local db = _G.MSUF_DB
+        if _focusIsEnemy then
+            local conf = db and db.focus
+            if conf and conf.rangeFadeEnabled == true then return true end
+        end
+        local bossConf = db and db.boss
+        if bossConf and bossConf.rangeFadeEnabled == true then return true end
+        return false
+    end
+
+    local function SyncTicker()
+        if NeedsPoll() then
+            EnsureTicker(DesiredRate())
+        else
+            StopTicker()
+        end
     end
 
     local function RangeFadeFBWanted()
@@ -457,28 +494,29 @@ do
         _focusIsEnemy = (UnitCanAttack and UnitCanAttack("player", "focus")) and true or false
     end
 
-    -- FB event wiring
     local _fbWired = false
     local function WireFBEvents()
         if _fbWired then return end; _fbWired = true
         local ef = CreateFrame("Frame")
+        -- Combat toggle: start/stop ticker
         ef:RegisterEvent("PLAYER_REGEN_DISABLED")
         ef:RegisterEvent("PLAYER_REGEN_ENABLED")
+        -- Immediate-response events (no tick wait)
+        ef:RegisterEvent("PLAYER_FOCUS_CHANGED")
+        ef:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+        -- Rebuild triggers
         ef:RegisterEvent("SPELLS_CHANGED")
         ef:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
         ef:RegisterEvent("PLAYER_TALENT_UPDATE")
         ef:RegisterEvent("TRAIT_CONFIG_UPDATED")
         ef:RegisterEvent("PLAYER_ENTERING_WORLD")
-        ef:RegisterEvent("PLAYER_FOCUS_CHANGED")
-        ef:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
         ef:SetScript("OnEvent", function(_, event)
-            if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
-                if _ticker then EnsureTicker(DesiredRate()) end
-            elseif event == "SPELLS_CHANGED" or event == "PLAYER_ENTERING_WORLD"
-                or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
-                or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
-                RebuildPrimaries()
-                for k in pairs(_state) do _state[k] = nil end
+            if event == "PLAYER_REGEN_DISABLED" then
+                SyncTicker()
+                CheckEnemyUnits()
+            elseif event == "PLAYER_REGEN_ENABLED" then
+                SyncTicker()
+                CheckEnemyUnits()
             elseif event == "PLAYER_FOCUS_CHANGED" then
                 _state["focus"] = nil
                 ClassifyFocus()
@@ -489,8 +527,17 @@ do
                 else
                     if _focusEvtFrame then _focusEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE") end
                 end
+                SyncTicker()
+                if _focusIsEnemy then CheckEnemyUnits() end
             elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
                 for i = 1, 5 do _state[_bossUnits[i]] = nil end
+                CheckEnemyUnits()
+            elseif event == "SPELLS_CHANGED" or event == "PLAYER_ENTERING_WORLD"
+                or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
+                or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
+                RebuildPrimaries()
+                for k in pairs(_state) do _state[k] = nil end
+                CheckEnemyUnits()
             end
         end)
     end
@@ -514,20 +561,21 @@ do
             if force == true then for k in pairs(_state) do _state[k] = nil end end
             RebuildPrimaries()
             ClassifyFocus()
+            -- Friendly focus: event-driven
             if UnitExists and UnitExists("focus") and not _focusIsEnemy then
                 EnsureFocusEvtFrame()
                 _focusEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "focus")
                 OnFocusFriendlyRange(nil, "INIT", "focus")
             end
-            EnsureTicker(DesiredRate())
+            -- Ticker: only when enemy units need polling (smart-sleep)
+            SyncTicker()
+            CheckEnemyUnits()
             return
         end
-        if force == true or _ticker then
-            TickFn(); StopTicker()
-            if _focusEvtFrame then _focusEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE") end
-            ClearMul("focus", "focus")
-            for i = 1, 5 do ClearMul(_bossUnits[i], "boss") end
-        end
+        StopTicker()
+        if _focusEvtFrame then _focusEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE") end
+        ClearMul("focus", "focus")
+        for i = 1, 5 do ClearMul(_bossUnits[i], "boss") end
     end
 
     function _G.MSUF_RangeFadeFB_ApplyCurrent(force)
