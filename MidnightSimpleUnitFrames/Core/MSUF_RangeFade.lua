@@ -1,1103 +1,605 @@
 -- ============================================================================
--- MSUF RangeFade (12.0 / Midnight) - extracted from MidnightSimpleUnitFrames.lua
--- No behavior change; this file exists to reduce main file size.
+-- MSUF RangeFade v4 — Minimal C-API overhead
 --
--- Owns:
---   - _G.MSUF_RangeFadeMul + _G.MSUF_GetRangeFadeMul
---   - R41z0r-style event-driven RangeFade engine (Target)
---   - Focus/Boss (boss1-5) RangeFade module (event-driven, no ticker)
---   - _G.MSUF_RangeFade_InitPostLogin(): call once after unitframes exist
+-- Architecture:
+--   Target:
+--     Friendly: UNIT_IN_RANGE_UPDATE event → 1× UnitInRange (0 polling)
+--     Enemy:    1 spell registered with EnableSpellRangeCheck
+--               → SPELL_RANGE_CHECK_UPDATE fires only for THAT spell (1 event/change)
+--     Dead:     1 res spell registered → same mechanism
+--
+--   Focus:
+--     Friendly: UNIT_IN_RANGE_UPDATE event (0 polling)
+--     Enemy:    Ticker 0.5s combat / 2.0s OOC → 1× IsSpellInRange
+--
+--   Boss 1-5:
+--     Ticker (shared with enemy focus) → 1× IsSpellInRange per visible boss
+--     Only active during encounters.
+--
+-- Old R41z0r engine cost: 512 EnableSpellRangeCheck registrations → 100-500
+-- SPELL_RANGE_CHECK_UPDATE events/sec → EventBus dispatch per event
+--
+-- New cost: 1 EnableSpellRangeCheck registration → 1 event on actual change
+--
+-- Secret-safe: IsSpellInRange NOT secret (Unhalted). Only UnitInRange +
+--              CheckInteractDistance need issecretvalue guards.
 -- ============================================================================
 
 _G.MSUF_RangeFadeMul = _G.MSUF_RangeFadeMul or {}
 
--- Return a multiplier for layered/non-layered alpha paths.
--- Signature supports legacy callers: (key, unit, frame).
 function _G.MSUF_GetRangeFadeMul(key, unit, frame)
     local t = _G.MSUF_RangeFadeMul
     if not t then return 1 end
     local v = t[key]
-    if type(v) == "number" then
-        return v
-    end
+    if type(v) == "number" then return v end
     if unit then
         v = t[unit]
-        if type(v) == "number" then
-            return v
-        end
+        if type(v) == "number" then return v end
     end
     return 1
 end
 
 -- ============================================================================
--- R41z0r-style RangeFade Engine (event-driven, no polling, OFF = 0 overhead)
--- Public API:
---   MSUF_RangeFade_Register(getConfigFn, applyAlphaFn [, opts])
---   MSUF_RangeFade_OnEvent_SpellRangeUpdate(spellIdentifier, isInRange, checksRange)
---   MSUF_RangeFade_RebuildSpells()
---   MSUF_RangeFade_ApplyCurrent(force)
---   MSUF_RangeFade_Reset()
---   MSUF_RangeFade_Shutdown()
+-- Shared: Spell selection + secret helpers
 -- ============================================================================
-
 do
-    -- Fast locals
-    local tonumber = tonumber
-    local pairs   = pairs
-    local wipe    = wipe
-    local type    = type
+    local C_Spell = _G.C_Spell
+    local C_SpellBook = _G.C_SpellBook
+    local IsSpellInSpellBook = (C_SpellBook and C_SpellBook.IsSpellInSpellBook) or nil
+    local EnableSpellRangeCheck = (C_Spell and C_Spell.EnableSpellRangeCheck) or nil
+    local IsSpellInRange = (C_Spell and C_Spell.IsSpellInRange) or nil
+    local UnitExists = _G.UnitExists
+    local UnitInRange = _G.UnitInRange
+    local UnitCanAttack = _G.UnitCanAttack
+    local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
+    local CheckInteractDistance = _G.CheckInteractDistance
+    local C_Timer_After = _G.C_Timer and _G.C_Timer.After
+    local issecretvalue = _G.issecretvalue
 
-    -- Feature detection (hard gate)
-    local hasCSpell = (type(C_Spell) == "table")
-    local EnableSpellRangeCheck         = hasCSpell and C_Spell.EnableSpellRangeCheck or nil
-    local SpellHasRange                 = hasCSpell and C_Spell.SpellHasRange or nil
-    local GetSpellIDForSpellIdentifier  = hasCSpell and C_Spell.GetSpellIDForSpellIdentifier or nil
+    local playerClass = select(2, _G.UnitClass("player"))
 
-    local hasCSpellBook = (type(C_SpellBook) == "table")
-    local GetNumSkillLines           = hasCSpellBook and C_SpellBook.GetNumSpellBookSkillLines or nil
-    local GetSkillLineInfo           = hasCSpellBook and C_SpellBook.GetSpellBookSkillLineInfo or nil
-    local GetSpellBookItemInfo       = hasCSpellBook and C_SpellBook.GetSpellBookItemInfo or nil
-    local GetSpellBookItemSpellInfo  = hasCSpellBook and C_SpellBook.GetSpellBookItemSpellInfo or nil
-    local GetSpellBookItemType       = hasCSpellBook and C_SpellBook.GetSpellBookItemType or nil
-
-    -- SpellBook bank: prefer enum, fallback to the common string.
-    local SPELLBOOK_BOOKTYPE_SPELL =
-      (type(Enum) == "table" and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player) or "player"
-
-    local RF = {
-        getConfigFn  = nil,
-        applyAlphaFn = nil,
-
-        ignoreSpellIDs = nil,
-        maxTracked = 512,
-
-        enabled = false,
-        alpha = 0.5,
-        ignoreUnlimited = true,
-
-        activeSpells = {}, -- [spellID] = true
-        spellState   = {}, -- [spellID] = 1/0/nil
-        activeCount  = 0,
-        knownCount   = 0,
-        inRangeCount = 0,
-
-        inRangeAny = true,
-        lastAppliedAlpha = -1,
+    local ENEMY_SPELLS = {
+        DEATHKNIGHT={49576,47541}, DEMONHUNTER={185123,183752},
+        DRUID={8921,5176}, EVOKER={362969}, HUNTER={75,466930},
+        MAGE={116,133}, MONK={117952,115546}, PALADIN={20473,20271},
+        PRIEST={585,8092}, ROGUE={185565,36554}, SHAMAN={188196,8042},
+        WARLOCK={686,232670}, WARRIOR={355,100},
+    }
+    local RES_SPELLS = {
+        DEATHKNIGHT={61999}, DRUID={50769,20484}, EVOKER={361227},
+        MONK={115178}, PALADIN={7328,391054}, PRIEST={2006,212036},
+        SHAMAN={2008}, WARLOCK={20707},
     }
 
-    local DEFAULT_IGNORES = { [2096] = true } -- Mind Vision
+    local _pEnemy, _pRes = nil, nil
 
-    local function RF_ComputeDesiredAlpha()
-        if RF.inRangeAny then
-            return 1
-        end
-        return RF.alpha
-    end
-
-    local function RF_ApplyAlphaIfChanged(force)
-        local a = RF_ComputeDesiredAlpha()
-        if (not force) and (a == RF.lastAppliedAlpha) then
-            return
-        end
-        RF.lastAppliedAlpha = a
-        local fn = RF.applyAlphaFn
-        if fn then
-            fn(a, RF.enabled)
-        end
-    end
-
-    local function RF_RecomputeInRangeAny()
-        RF.inRangeAny = (RF.knownCount <= 0) or (RF.inRangeCount > 0)
-    end
-
-    local function RF_SetSpellState(spellID, newValue)
-        local oldValue = RF.spellState[spellID]
-        if oldValue == newValue then
-            return
-        end
-
-        if oldValue ~= nil then
-            RF.knownCount = RF.knownCount - 1
-            if oldValue == 1 then
-                RF.inRangeCount = RF.inRangeCount - 1
-            end
-        end
-
-        RF.spellState[spellID] = newValue
-
-        if newValue ~= nil then
-            RF.knownCount = RF.knownCount + 1
-            if newValue == 1 then
-                RF.inRangeCount = RF.inRangeCount + 1
-            end
-        end
-
-        if RF.knownCount < 0 then RF.knownCount = 0 end
-        if RF.inRangeCount < 0 then RF.inRangeCount = 0 end
-    end
-
-    local function RF_ResolveSpellID(spellIdentifier)
-        local id = tonumber(spellIdentifier)
-        if id then return id end
-        if GetSpellIDForSpellIdentifier then
-            local okId = GetSpellIDForSpellIdentifier(spellIdentifier)
-            if okId then return okId end
+    local function PickFirst(list)
+        if not list or not IsSpellInSpellBook then return nil end
+        for i = 1, #list do
+            if list[i] and IsSpellInSpellBook(list[i], nil, true) then return list[i] end
         end
         return nil
     end
 
-    local function RF_EnableSpell(spellID)
-        if RF.activeSpells[spellID] then return end
-        if RF.activeCount >= RF.maxTracked then return end
-        RF.activeSpells[spellID] = true
-        RF.activeCount = RF.activeCount + 1
+    local function RebuildPrimaries()
+        _pEnemy = PickFirst(ENEMY_SPELLS[playerClass])
+        _pRes   = PickFirst(RES_SPELLS[playerClass])
+    end
+
+    -- ══════════════════════════════════════════════════════════════
+    -- Shared: State cache + apply helpers
+    -- ══════════════════════════════════════════════════════════════
+    local _state = {}
+    local _bossUnits = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+
+    -- Frame resolver: one canonical lookup per unit token.
+    -- Target lives at _G.MSUF_target. Focus/Boss live in MSUF_UnitFrames.
+    local function GetFrame(unit)
+        local frames = _G.MSUF_UnitFrames
+        return (frames and frames[unit]) or _G["MSUF_" .. unit]
+    end
+
+    local function ApplyMul(f, unit, confKey, conf, inRange)
+        local prev = _state[unit]
+        if inRange == prev then return end
+        _state[unit] = inRange
+        local mulT = _G.MSUF_RangeFadeMul
+        if type(mulT) ~= "table" then mulT = {}; _G.MSUF_RangeFadeMul = mulT end
+        local a = 1
+        if inRange == false then
+            a = (conf and tonumber(conf.rangeFadeAlpha)) or 0.5
+            if a < 0 then a = 0 elseif a > 1 then a = 1 end
+        end
+        mulT[unit] = a
+        if not f or (f.IsForbidden and f:IsForbidden()) then return end
+        if f.IsShown and not f:IsShown() then return end
+        local apply = _G.MSUF_ApplyUnitAlpha
+        if type(apply) == "function" then apply(f, confKey) end
+    end
+
+    local function ClearMul(unit, confKey)
+        if _state[unit] == nil then return end
+        _state[unit] = nil
+        local mulT = _G.MSUF_RangeFadeMul
+        if type(mulT) ~= "table" then return end
+        if mulT[unit] == 1 or mulT[unit] == nil then return end
+        mulT[unit] = 1
+        local f = GetFrame(unit)
+        if not f or (f.IsForbidden and f:IsForbidden()) then return end
+        local apply = _G.MSUF_ApplyUnitAlpha
+        if type(apply) == "function" then apply(f, confKey) end
+    end
+
+    -- ══════════════════════════════════════════════════════════════
+    -- Shared: Inline range check (enemy/dead)
+    -- IsSpellInRange: NOT secret (Unhalted). Direct boolean test.
+    -- ══════════════════════════════════════════════════════════════
+    local function CheckEnemy(unit)
+        if not UnitExists(unit) then return nil end
+        if UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) then
+            if _pRes and IsSpellInRange then
+                local r = IsSpellInRange(_pRes, unit)
+                if r ~= nil then return r and true or false end
+            end
+            return nil
+        end
+        if _pEnemy and IsSpellInRange then
+            local r = IsSpellInRange(_pEnemy, unit)
+            if r ~= nil then return r and true or false end
+        end
+        if _G.MSUF_InCombat ~= true and CheckInteractDistance then
+            local ci = CheckInteractDistance(unit, 4)
+            if not issecretvalue or not issecretvalue(ci) then return ci end
+        end
+        return nil
+    end
+
+    -- Friendly range via UnitInRange (secret-guarded)
+    local function CheckFriendly(unit)
+        if not UnitExists(unit) then return nil end
+        if not UnitInRange then return nil end
+        local inR, checked = UnitInRange(unit)
+        if issecretvalue and (issecretvalue(checked) or issecretvalue(inR)) then
+            return true  -- secret → treat as in-range
+        end
+        if checked then return inR and true or false end
+        return true  -- not in group → treat as in-range
+    end
+
+    -- ══════════════════════════════════════════════════════════════
+    -- TARGET: Event-driven with 1 registered spell (replaces R41z0r)
+    -- ══════════════════════════════════════════════════════════════
+    local _targetRegisteredSpell = nil
+    local _targetIsEnemy = false
+    local _targetEvtFrame = nil
+
+    local function TargetGetConf()
+        local db = _G.MSUF_DB
+        local t = db and db.target
+        if not t or t.rangeFadeEnabled ~= true then return nil end
+        if _G.MSUF_UnitEditModeActive == true then return nil end
+        return t
+    end
+
+    local function TargetUnregisterSpell()
+        if _targetRegisteredSpell and EnableSpellRangeCheck then
+            EnableSpellRangeCheck(_targetRegisteredSpell, false)
+            _targetRegisteredSpell = nil
+        end
+    end
+
+    local function TargetRegisterSpell(spellID)
+        if not spellID or not EnableSpellRangeCheck then return end
+        if _targetRegisteredSpell == spellID then return end
+        TargetUnregisterSpell()
+        _targetRegisteredSpell = spellID
         EnableSpellRangeCheck(spellID, true)
     end
 
-    local function RF_DisableSpell(spellID)
-        if not RF.activeSpells[spellID] then return end
-        RF.activeSpells[spellID] = nil
-        RF.activeCount = RF.activeCount - 1
-        EnableSpellRangeCheck(spellID, false)
-        RF_SetSpellState(spellID, nil)
-    end
-
-    local function RF_DisableAllSpells()
-        for spellID in pairs(RF.activeSpells) do
-            EnableSpellRangeCheck(spellID, false)
+    -- SPELL_RANGE_CHECK_UPDATE handler: fires ONLY for our 1 registered spell
+    local function OnTargetSpellRange(event, spellIdentifier, isInRange, checksRange)
+        local conf = TargetGetConf()
+        if not conf then ClearMul("target", "target"); return end
+        if not UnitExists("target") then ClearMul("target", "target"); return end
+        -- isInRange is NOT secret (per Unhalted). Direct test.
+        if checksRange then
+            local result = (isInRange == true or isInRange == 1) and true or false
+            ApplyMul(GetFrame("target"), "target", "target", conf, result)
         end
-        wipe(RF.activeSpells)
-        wipe(RF.spellState)
-        RF.activeCount = 0
-        RF.knownCount = 0
-        RF.inRangeCount = 0
-        RF.inRangeAny = true
     end
 
-    local function RF_ShouldTrackSpell(spellID)
-        if not spellID then return false end
-        if RF.ignoreSpellIDs and RF.ignoreSpellIDs[spellID] then return false end
-        if (RF.ignoreUnlimited == true) and SpellHasRange then
-            local hasRange = SpellHasRange(spellID)
-            if hasRange ~= true then
-                return false
+    -- UNIT_IN_RANGE_UPDATE handler (friendly target)
+    local function OnTargetFriendlyRange(_, event, arg1)
+        if arg1 and arg1 ~= "target" then return end
+        local conf = TargetGetConf()
+        if not conf then ClearMul("target", "target"); return end
+        ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
+    end
+
+    local function EnsureTargetEvtFrame()
+        if _targetEvtFrame then return end
+        _targetEvtFrame = CreateFrame("Frame")
+    end
+
+    local function TargetClassifyAndWire()
+        local conf = TargetGetConf()
+        if not conf or not UnitExists("target") then
+            TargetUnregisterSpell()
+            ClearMul("target", "target")
+            if _targetEvtFrame then
+                _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
+                _targetEvtFrame:SetScript("OnEvent", nil)
             end
-        end
-        return true
-    end
-
-    local function RF_BuildWantedSpellSet(outWanted)
-        wipe(outWanted)
-
-        if (not hasCSpellBook) or (not GetNumSkillLines) or (not GetSkillLineInfo) or (not GetSpellBookItemInfo) then
-            return outWanted
-        end
-
-        local numLines = GetNumSkillLines()
-        if (not numLines) or (numLines <= 0) then
-            return outWanted
-        end
-
-        local tracked = 0
-        for lineIndex = 1, numLines do
-            local info = GetSkillLineInfo(lineIndex)
-            if info then
-                local offset =
-                    info.itemIndexOffset or info.itemIndexOffsetFromStart or info.itemIndexOffsetFromStartIndex
-                local numItems =
-                    info.numSpellBookItems or info.numSpellBookItemSlots or info.numSpellBookItemsInLine
-
-                if offset and numItems and numItems > 0 then
-                    local first = offset + 1
-                    local last  = offset + numItems
-
-                    for slot = first, last do
-                        local itemInfo = GetSpellBookItemInfo(slot, SPELLBOOK_BOOKTYPE_SPELL)
-                        if itemInfo then
-                            local isPassive = (itemInfo.isPassive == true)
-
-                            local itemType = itemInfo.itemType
-                            if GetSpellBookItemType and (itemType == nil) then
-                                itemType = GetSpellBookItemType(slot, SPELLBOOK_BOOKTYPE_SPELL)
-                            end
-
-                            local isSpellType = true
-                            if type(itemType) == "string" then
-                                if (itemType ~= "SPELL") and (itemType ~= "Spell") then
-                                    isSpellType = false
-                                end
-                            elseif (type(itemType) == "number")
-                                and (type(Enum) == "table")
-                                and Enum.SpellBookItemType
-                                and Enum.SpellBookItemType.Spell
-                            then
-                                isSpellType = (itemType == Enum.SpellBookItemType.Spell)
-                            end
-
-                            if (isSpellType == true) and (isPassive ~= true) then
-                                local spellID = itemInfo.spellID
-
-                                if (not spellID) and GetSpellBookItemSpellInfo then
-                                    local sp = GetSpellBookItemSpellInfo(slot, SPELLBOOK_BOOKTYPE_SPELL)
-                                    if sp then
-                                        spellID = sp.spellID or sp.actionID
-                                    end
-                                end
-
-                                if not spellID then
-                                    spellID = itemInfo.actionID
-                                end
-
-                                if spellID and RF_ShouldTrackSpell(spellID) then
-                                    if not outWanted[spellID] then
-                                        outWanted[spellID] = true
-                                        tracked = tracked + 1
-                                        if tracked >= RF.maxTracked then
-                                            return outWanted
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        return outWanted
-    end
-
-    local _wanted = {}
-
-    local function RF_SyncActiveToWanted()
-        for spellID in pairs(RF.activeSpells) do
-            if not _wanted[spellID] then
-                RF_DisableSpell(spellID)
-            end
-        end
-        for spellID in pairs(_wanted) do
-            if not RF.activeSpells[spellID] then
-                RF_EnableSpell(spellID)
-            end
-        end
-        RF_RecomputeInRangeAny()
-    end
-
-    function _G.MSUF_RangeFade_RebuildSpells()
-        if not EnableSpellRangeCheck then
-            RF.enabled = false
-            RF_DisableAllSpells()
-            RF_ApplyAlphaIfChanged(true)
-            return
-        end
-        local cfgFn = RF.getConfigFn
-        if not cfgFn then
-            RF.enabled = false
-            RF_DisableAllSpells()
-            RF_ApplyAlphaIfChanged(true)
             return
         end
 
-        local enabled, alpha, ignoreUnlimited = cfgFn()
-        RF.enabled = (enabled == true)
-        if type(alpha) == "number" then
-            RF.alpha = alpha
-        end
-        RF.ignoreUnlimited = (ignoreUnlimited == true)
+        EnsureTargetEvtFrame()
+        _targetIsEnemy = (UnitCanAttack and UnitCanAttack("player", "target")) and true or false
 
-        if RF.ignoreSpellIDs == nil then
-            RF.ignoreSpellIDs = DEFAULT_IGNORES
-        end
-
-        if RF.enabled ~= true then
-            RF_DisableAllSpells()
-            RF_ApplyAlphaIfChanged(true)
-            return
-        end
-
-        RF_BuildWantedSpellSet(_wanted)
-        RF_SyncActiveToWanted()
-        RF_ApplyAlphaIfChanged(true)
-    end
-
-    function _G.MSUF_RangeFade_OnEvent_SpellRangeUpdate(spellIdentifier, isInRange, checksRange)
-        if RF.enabled ~= true then return end
-
-        local spellID = RF_ResolveSpellID(spellIdentifier)
-        if not spellID then return end
-        if not RF.activeSpells[spellID] then return end
-        if RF.ignoreSpellIDs and RF.ignoreSpellIDs[spellID] then return end
-
-        if checksRange == true then
-            local v = ((isInRange == true) or (isInRange == 1)) and 1 or 0
-            RF_SetSpellState(spellID, v)
+        if _targetIsEnemy then
+            -- Enemy: register 1 spell for SPELL_RANGE_CHECK_UPDATE
+            _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
+            local spell = _pEnemy
+            if UnitIsDeadOrGhost and UnitIsDeadOrGhost("target") then spell = _pRes end
+            if spell then
+                TargetRegisterSpell(spell)
+            end
+            -- Also do an immediate check
+            ApplyMul(GetFrame("target"), "target", "target", conf, CheckEnemy("target"))
         else
-            RF_SetSpellState(spellID, nil)
-        end
-
-        RF_RecomputeInRangeAny()
-        RF_ApplyAlphaIfChanged(false)
-    end
-
-    function _G.MSUF_RangeFade_ApplyCurrent(force)
-        if RF.enabled ~= true then
-            RF.lastAppliedAlpha = -1
-            RF_ApplyAlphaIfChanged(true)
-            return
-        end
-        RF_ApplyAlphaIfChanged(force == true)
-    end
-
-    function _G.MSUF_RangeFade_Reset()
-        wipe(RF.spellState)
-        RF.knownCount = 0
-        RF.inRangeCount = 0
-        RF.inRangeAny = true
-        RF.lastAppliedAlpha = -1
-        RF_ApplyAlphaIfChanged(true)
-    end
-
-    function _G.MSUF_RangeFade_Shutdown()
-        RF.enabled = false
-        RF.getConfigFn = nil
-        RF.applyAlphaFn = nil
-        RF_DisableAllSpells()
-        RF.lastAppliedAlpha = -1
-        RF_ApplyAlphaIfChanged(true)
-    end
-
-    function _G.MSUF_RangeFade_Register(getConfigFn, applyAlphaFn, opts)
-        RF.getConfigFn  = getConfigFn
-        RF.applyAlphaFn = applyAlphaFn
-
-        if type(opts) == "table" then
-            if type(opts.maxTracked) == "number" and opts.maxTracked > 0 then
-                RF.maxTracked = opts.maxTracked
-            end
-            if type(opts.ignoreSpellIDs) == "table" then
-                opts.ignoreSpellIDs[2096] = true
-                RF.ignoreSpellIDs = opts.ignoreSpellIDs
-            end
-        end
-        if RF.ignoreSpellIDs == nil then
-            RF.ignoreSpellIDs = DEFAULT_IGNORES
-        end
-    end
-end
-
-
--- ============================================================================
--- Phase 2: Event Wiring (minimal & clean)
--- Uses MSUF_EventBus (no extra OnUpdate / no polling). Target-only integration
--- happens during PLAYER_LOGIN after target frame creation.
--- ============================================================================
-
-do
-    local wired = false
-
-    local function TargetRangeFadeWanted()
-        local db = _G.MSUF_DB
-        local t = db and db.target
-        return (t and t.rangeFadeEnabled == true) and true or false
-    end
-
-    local function TargetRangeFadeRebuild()
-        local fn = _G.MSUF_RangeFade_RebuildSpells
-        if fn then
-            fn()
+            -- Friendly: UNIT_IN_RANGE_UPDATE (zero polling)
+            TargetUnregisterSpell()
+            _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
+            _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
+            ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
         end
     end
 
-    local function TargetRangeFadeReset()
-        local reset = _G.MSUF_RangeFade_Reset
-        if reset then reset() end
-    end
+    -- ══════════════════════════════════════════════════════════════
+    -- Target: Global event wiring
+    -- ══════════════════════════════════════════════════════════════
+    local _targetWired = false
 
-    local function WireTargetRangeFadeEvents()
-        if wired then return true end
-        local reg = _G.MSUF_EventBus_Register
-        if type(reg) ~= "function" then
-            return false
-        end
-        wired = true
+    local function WireTargetEvents()
+        if _targetWired then return end; _targetWired = true
+        local bus = _G.MSUF_EventBus_Register
+        if type(bus) ~= "function" then return end
 
-        -- Hot path: fires only on range state changes (Blizzard-driven).
-        reg("SPELL_RANGE_CHECK_UPDATE", "MSUF_RANGEFADE", function(event, spellIdentifier, isInRange, checksRange)
-            local fn = _G.MSUF_RangeFade_OnEvent_SpellRangeUpdate
-            if fn then
-                fn(spellIdentifier, isInRange, checksRange)
+        -- 1 event for our 1 registered spell (was: 100-500 events for 512 spells)
+        bus("SPELL_RANGE_CHECK_UPDATE", "MSUF_RANGEFADE", function(event, spellIdentifier, isInRange, checksRange)
+            if _targetIsEnemy then
+                OnTargetSpellRange(event, spellIdentifier, isInRange, checksRange)
             end
         end)
 
-        -- Rare rebuild triggers (spellbook/spec/talent updates).
-        reg("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE", TargetRangeFadeRebuild)
-        reg("SPELLS_CHANGED", "MSUF_RANGEFADE", TargetRangeFadeRebuild)
-        reg("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE", TargetRangeFadeRebuild)
-        reg("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE", TargetRangeFadeRebuild)
-        reg("TRAIT_CONFIG_UPDATED", "MSUF_RANGEFADE", TargetRangeFadeRebuild)
-
-        -- Target swap: clear stale in-range state (fail-safe to in-range until updates arrive).
-        reg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", TargetRangeFadeReset)
-        return true
+        bus("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
+            _state["target"] = nil
+            TargetClassifyAndWire()
+        end)
+        bus("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE", function()
+            RebuildPrimaries()
+            _state["target"] = nil
+            TargetClassifyAndWire()
+        end)
+        bus("SPELLS_CHANGED", "MSUF_RANGEFADE", function()
+            RebuildPrimaries()
+            -- Re-register with potentially new primary spell
+            if _targetIsEnemy and _targetRegisteredSpell then
+                local spell = _pEnemy
+                if UnitIsDeadOrGhost and UnitExists("target") and UnitIsDeadOrGhost("target") then spell = _pRes end
+                if spell and spell ~= _targetRegisteredSpell then
+                    TargetRegisterSpell(spell)
+                end
+            end
+        end)
+        bus("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE", RebuildPrimaries)
+        bus("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE", RebuildPrimaries)
+        bus("TRAIT_CONFIG_UPDATED", "MSUF_RANGEFADE", RebuildPrimaries)
     end
 
-    local function UnwireTargetRangeFadeEvents()
-        if not wired then return end
-        wired = false
+    local function UnwireTargetEvents()
+        if not _targetWired then return end; _targetWired = false
         local unreg = _G.MSUF_EventBus_Unregister
-        if type(unreg) ~= "function" then
-            return
-        end
+        if type(unreg) ~= "function" then return end
         unreg("SPELL_RANGE_CHECK_UPDATE", "MSUF_RANGEFADE")
+        unreg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE")
         unreg("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE")
         unreg("SPELLS_CHANGED", "MSUF_RANGEFADE")
         unreg("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE")
         unreg("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE")
         unreg("TRAIT_CONFIG_UPDATED", "MSUF_RANGEFADE")
-        unreg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE")
+    end
+
+    -- Public target API (signatures preserved)
+    function _G.MSUF_RangeFade_Register(getConfigFn, applyAlphaFn, opts)
+        -- Legacy compat: getConfigFn/applyAlphaFn are no longer used.
+        -- Target now reads DB directly + uses ApplyMul.
+    end
+
+    function _G.MSUF_RangeFade_RebuildSpells()
+        RebuildPrimaries()
+        TargetClassifyAndWire()
+    end
+
+    function _G.MSUF_RangeFade_OnEvent_SpellRangeUpdate(spellIdentifier, isInRange, checksRange)
+        -- Handled internally via EventBus now
+    end
+
+    function _G.MSUF_RangeFade_ApplyCurrent(force)
+        local conf = TargetGetConf()
+        if conf and UnitExists("target") then
+            if _targetIsEnemy then
+                ApplyMul(GetFrame("target"), "target", "target", conf, CheckEnemy("target"))
+            else
+                ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
+            end
+        end
+    end
+
+    function _G.MSUF_RangeFade_Reset()
+        _state["target"] = nil
+        local mulT = _G.MSUF_RangeFadeMul
+        if type(mulT) == "table" then mulT.target = 1 end
+        -- Re-apply on next target event
+    end
+
+    function _G.MSUF_RangeFade_Shutdown()
+        TargetUnregisterSpell()
+        UnwireTargetEvents()
+        ClearMul("target", "target")
+        if _targetEvtFrame then
+            _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
+            _targetEvtFrame:SetScript("OnEvent", nil)
+        end
     end
 
     function _G.MSUF_RangeFade_EvaluateActive(force)
-        local want = TargetRangeFadeWanted()
+        local db = _G.MSUF_DB
+        local t = db and db.target
+        local want = (t and t.rangeFadeEnabled == true)
+        if _G.MSUF_UnitEditModeActive == true then want = false end
         if want then
-            if WireTargetRangeFadeEvents() then
-                TargetRangeFadeRebuild()
-            end
-            return
-        end
-
-        if force == true or wired then
-            TargetRangeFadeRebuild()
-            UnwireTargetRangeFadeEvents()
+            RebuildPrimaries()
+            WireTargetEvents()
+            TargetClassifyAndWire()
+        else
+            TargetUnregisterSpell()
+            UnwireTargetEvents()
+            ClearMul("target", "target")
         end
     end
-end
 
-
--- Backwards/compat helpers (some older callers expect these symbols)
-function _G.MSUF_RangeFade_Rebuild()
-    if type(_G.MSUF_RangeFade_RebuildSpells) == "function" then
+    -- Backwards compat
+    function _G.MSUF_RangeFade_Rebuild()
         _G.MSUF_RangeFade_RebuildSpells()
     end
-end
 
-
-function _G.MSUF_RangeFade_InitPostLogin()
-	-- RangeFade (target-only): defer init until AFTER all secure unitframes/headers exist.
-	-- This avoids "forbidden table" taint where frames created after RangeFade become restricted.
-	do
-	    local function _MSUF_RF_RegisterTargetConsumerOnce()
-	        if not (_G.MSUF_RangeFade_Register and _G.MSUF_RangeFade_RebuildSpells) then
-	            return
-	        end
-	        if _G.__MSUF_RangeFadeConsumer_Target == true then
-	            return
-	        end
-	        _G.__MSUF_RangeFadeConsumer_Target = true
-
-	        _G.MSUF_RangeFadeMul = _G.MSUF_RangeFadeMul or {}
-	        local mulT = _G.MSUF_RangeFadeMul
-
-	        local function GetConfig()
-	            local db = _G.MSUF_DB
-	            local t = db and db.target
-	            if not t or t.rangeFadeEnabled ~= true then
-	                return false, 0.5, true
-	            end
-	            if _G.MSUF_UnitEditModeActive == true then
-	                return false, 0.5, true
-	            end
-	            local a = t.rangeFadeAlpha
-	            if type(a) ~= "number" then a = 0.5 end
-	            if a < 0 then a = 0 elseif a > 1 then a = 1 end
-	            local ignoreUnlimited = (t.rangeFadeIgnoreUnlimited ~= false)
-	            return true, a, ignoreUnlimited
-	        end
-
-	        local function ApplyAlpha(desiredAlpha)
-	            local cur = mulT.target
-	            if type(cur) ~= "number" then cur = 1 end
-	            if type(desiredAlpha) ~= "number" then desiredAlpha = 1 end
-	            if cur == desiredAlpha then
-	                return
-	            end
-	            mulT.target = desiredAlpha
-
-	            local f = _G.MSUF_target
-	            if f and f.IsForbidden and f:IsForbidden() then
-	                return
-	            end
-	            local apply = _G.MSUF_ApplyUnitAlpha
-	            if f and type(apply) == "function" then
-	                apply(f, "target")
-	            end
-	        end
-
-	        _G.MSUF_RangeFade_Register(GetConfig, ApplyAlpha, nil)
-	    end
-
-	    _MSUF_RF_RegisterTargetConsumerOnce()
-
-	    if _G.MSUF_RangeFade_WireEvents then
-	        _G.MSUF_RangeFade_WireEvents()
-	    end
-
-	    local function _MSUF_RF_RebuildNow()
-	        if _G.MSUF_RangeFade_RebuildSpells then
-	            _G.MSUF_RangeFade_RebuildSpells()
-	        end
-	    end
-
-	    if C_Timer and C_Timer.After then
-	        C_Timer.After(0, _MSUF_RF_RebuildNow)
-	    else
-	        _MSUF_RF_RebuildNow()
-	    end
-
-
-	-- RangeFade (Focus/Boss 1-5): Unhalted-style spell checks (FRIENDLY/RES/ENEMY), event-driven, no ticker.
-	-- IMPORTANT: Target RangeFade remains handled by the R41z0r engine above and is left untouched.
-	-- This module updates on cooldown / focus / encounter events (like Unhalted) to avoid polling.
-	-- Secret-safe: never boolean-test secret values; only branch on NotSecretValue() outputs.
-	do
-	    if _G.__MSUF_RangeFadeFBInited ~= true then
-	        _G.__MSUF_RangeFadeFBInited = true
-
-	        local isRetail = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
-	        local issecretvalue = _G.issecretvalue
-	        -- Resolve secret-value checker once (called thousands of times per second).
-	        local _nsv_fn = (type(_G.NotSecretValue) == "function" and _G.NotSecretValue)
-	            or (type(issecretvalue) == "function" and function(v) return issecretvalue(v) == false end)
-	            or nil
-
-	        local function NotSecretValue(v)
-	            if _nsv_fn then return _nsv_fn(v) end
-	            return true
-	        end
-
-	        local wipe = _G.wipe or (table and table.wipe)
-	        if type(wipe) ~= "function" then
-	            wipe = nil
-	        end
-
-	        local C_SpellBook = _G.C_SpellBook
-	        local C_Spell = _G.C_Spell
-	        local IsSpellInSpellBook = (C_SpellBook and C_SpellBook.IsSpellInSpellBook) or nil
-	        local IsSpellInRange = (C_Spell and C_Spell.IsSpellInRange) or nil
-
-	        local UnitExists = _G.UnitExists
-	        local UnitInRange = _G.UnitInRange
-	        local UnitPhaseReason = _G.UnitPhaseReason
-	        local UnitIsPlayer = _G.UnitIsPlayer
-	        local UnitCanAttack = _G.UnitCanAttack
-	        local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
-	        local UnitIsUnit = _G.UnitIsUnit
-	        local UnitIsConnected = _G.UnitIsConnected
-	        local CheckInteractDistance = _G.CheckInteractDistance
-	        local InCombatLockdown = _G.InCombatLockdown
-
-	        local playerClass = select(2, _G.UnitClass("player"))
-
-	        -- Range spell data derived from LibRangeCheck-3.0 (MIT) via Unhalted UnitFrames.
-	        -- We only use it for Focus/Boss range fades (no ticker; event-driven).
-	        local RangeSpells = {
-	            ENEMY = {
-	                DEATHKNIGHT = { 49576, 47541 },
-	                DEMONHUNTER = { 185123, 183752, 204021 },
-	                DRUID = { 8921, 5176, 339, 6795, 33786, 22568 },
-	                EVOKER = { 362969 },
-	                HUNTER = { 75, 466930 },
-	                MAGE = { 116, 133, 44425, 44614, 118, 5019 },
-	                MONK = { 117952, 115546, 115078, 100780 },
-	                PALADIN = { 20473, 20271, 62124, 183218, 853, 35395 },
-	                PRIEST = { 585, 8092, 589, 5019 },
-	                ROGUE = { 185565, 36554, 185763, 2094, 921 },
-	                SHAMAN = { 188196, 8042, 117014, 370, 73899 },
-	                WARLOCK = { 686, 232670, 234153, 198590, 5782, 5019 },
-	                WARRIOR = { 355, 100, 5246 },
-	            },
-	            FRIENDLY = {
-	                DEATHKNIGHT = { 47541 },
-	                DEMONHUNTER = {},
-	                DRUID = { 8936, 774, 88423, 2782 },
-	                EVOKER = { 361469, 355913, 360823 },
-	                HUNTER = {},
-	                MAGE = { 1459, 475 },
-	                MONK = { 116670, 115450 },
-	                PALADIN = { 19750, 85673, 4987, 213644 },
-	                PRIEST = { 2061, 17, 21562, 527 },
-	                ROGUE = { 57934, 36554, 921 },
-	                SHAMAN = { 8004, 188070, 546 },
-	                WARRIOR = { 3411 },
-	                WARLOCK = { 20707, 5697 },
-	            },
-	            RESURRECT = {
-	                DEATHKNIGHT = { 61999 },
-	                DEMONHUNTER = {},
-	                DRUID = { 50769, 20484 },
-	                EVOKER = { 361227 },
-	                HUNTER = {},
-	                MAGE = {},
-	                MONK = { 115178 },
-	                PALADIN = { 7328, 391054 },
-	                PRIEST = { 2006, 212036 },
-	                ROGUE = {},
-	                SHAMAN = { 2008 },
-	                WARRIOR = {},
-	                WARLOCK = { 20707 },
-	            },
-	            PET = {
-	                DEATHKNIGHT = { 47541 },
-	                DEMONHUNTER = {},
-	                DRUID = {},
-	                EVOKER = {},
-	                HUNTER = { 136 },
-	                MAGE = {},
-	                MONK = {},
-	                PALADIN = {},
-	                PRIEST = {},
-	                ROGUE = {},
-	                SHAMAN = {},
-	                WARRIOR = {},
-	                WARLOCK = { 755 },
-	            },
-	        }
-
-	        local activeSpells = {
-	            enemy = {},
-	            friendly = {},
-	            resurrect = {},
-	            pet = {},
-	        }
-
-	        local function WipeTable(t)
-	            if not t then return end
-	            if type(wipe) == "function" then
-	                wipe(t)
-	                return
-	            end
-	            for k in pairs(t) do
-	                t[k] = nil
-	            end
-	        end
-
-	        local function UpdateActiveSpells()
-	            if not IsSpellInSpellBook or not playerClass then
-	                return
-	            end
-
-	            local function BuildList(dst, spellList)
-	                WipeTable(dst)
-	                if not spellList then return end
-	                for i = 1, #spellList do
-	                    local spellID = spellList[i]
-	                    if spellID and IsSpellInSpellBook(spellID, nil, true) then
-	                        dst[spellID] = true
-	                    end
-	                end
-	            end
-
-	            BuildList(activeSpells.enemy, RangeSpells.ENEMY[playerClass])
-	            BuildList(activeSpells.friendly, RangeSpells.FRIENDLY[playerClass])
-	            BuildList(activeSpells.resurrect, RangeSpells.RESURRECT[playerClass])
-	            BuildList(activeSpells.pet, RangeSpells.PET[playerClass])
-	        end
-
-	        local function AnySpellInList(t)
-	            if not t then return false end
-	            return (next(t) ~= nil)
-	        end
-
-	        -- Secret-safe boolean helpers: never branch on secret values.
-	        local function BoolIsTrue(v)
-	            if NotSecretValue(v) then
-	                return (v == true or v == 1)
-	            end
-	            return nil
-	        end
-
-	        local function BoolIsFalse(v)
-	            if NotSecretValue(v) then
-	                return (v == false or v == 0)
-	            end
-	            return nil
-	        end
-
-	        local function UnitExistsNS(unit)
-	            if not UnitExists then return true end
-	            local r = UnitExists(unit)
-	            if _nsv_fn then
-	                if _nsv_fn(r) then return (r == true) end
-	                return true
-	            end
-	            return (r == true)
-	        end
-
-	        local function AllowInteractCheck()
-	            -- P0: _G.MSUF_InCombat is always a plain bool — no secret-value guard needed.
-	            return (_G.MSUF_InCombat ~= true)
-	        end
-
-	        local function UnitSpellRange(unit, spells)
-	            if not IsSpellInRange or not unit or not spells then
-	                return nil
-	            end
-
-	            local anyChecked = false
-	            local anyOut = false
-	            local nsv = _nsv_fn  -- hoist for hot loop
-
-	            for spellID in pairs(spells) do
-	                local r = IsSpellInRange(spellID, unit)
-	                if not nsv or nsv(r) then
-	                    anyChecked = true
-	                    if r == true or r == 1 then
-	                        return true
-	                    end
-	                    if r ~= nil then
-	                        anyOut = true
-	                    end
-	                end
-	            end
-
-	            if anyOut then
-	                return false
-	            end
-
-	            if anyChecked then
-	                return nil
-	            end
-
-	            return nil
-	        end
-
-	        local function UnitInSpellsRange(unit, category)
-	            local spells = activeSpells[category]
-	            local inRange
-
-	            if AnySpellInList(spells) then
-	                inRange = UnitSpellRange(unit, spells)
-	            end
-
-	            -- Fallback to interact distance out of combat (helps when the player has no valid spells).
-	            if (inRange ~= true) and AllowInteractCheck() and CheckInteractDistance then
-	                local interact = CheckInteractDistance(unit, 4)
-	                if NotSecretValue(interact) then
-	                    return interact
-	                end
-	            end
-
-	            return inRange
-	        end
-
-	        local function FriendlyIsInRange(unit)
-	            if isRetail and UnitIsPlayer and UnitPhaseReason then
-	                local isp = UnitIsPlayer(unit)
-	                if BoolIsTrue(isp) == true then
-	                    local pr = UnitPhaseReason(unit)
-	                    if NotSecretValue(pr) and pr then
-	                        return false
-	                    end
-	                end
-	            end
-
-	            if isRetail and UnitInRange then
-	                local inR, checked = UnitInRange(unit)
-	                if BoolIsTrue(checked) == true then
-	                    if BoolIsFalse(inR) == true then
-	                        return false
-	                    end
-	                end
-	            end
-
-	            return UnitInSpellsRange(unit, "friendly")
-	        end
-
-	        local function ComputeInRange_Generic(unit)
-	            if not unit then return nil end
-	            if not UnitExistsNS(unit) then return nil end
-
-	            if UnitIsDeadOrGhost then
-	                local d = UnitIsDeadOrGhost(unit)
-	                if BoolIsTrue(d) == true then
-	                    return UnitInSpellsRange(unit, "resurrect")
-	                end
-	            end
-
-	            if UnitCanAttack then
-	                local ca = UnitCanAttack("player", unit)
-	                if BoolIsTrue(ca) == true then
-	                    return UnitInSpellsRange(unit, "enemy")
-	                end
-	            end
-
-	            if UnitIsUnit then
-	                local isPet = UnitIsUnit(unit, "pet")
-	                if BoolIsTrue(isPet) == true then
-	                    return UnitInSpellsRange(unit, "pet")
-	                end
-	            end
-
-	            if UnitIsConnected then
-	                local conn = UnitIsConnected(unit)
-	                if BoolIsTrue(conn) == true then
-	                    return FriendlyIsInRange(unit)
-	                end
-	                if BoolIsFalse(conn) == true then
-	                    return false
-	                end
-	            end
-
-	            -- Unknown/secret -> treat as in-range.
-	            return nil
-	        end
-
-	        local function ComputeInRange_Enemy(unit)
-	            if not unit then return nil end
-	            if not UnitExistsNS(unit) then return nil end
-
-	            if UnitIsDeadOrGhost then
-	                local d = UnitIsDeadOrGhost(unit)
-	                if BoolIsTrue(d) == true then
-	                    return UnitInSpellsRange(unit, "resurrect")
-	                end
-	            end
-
-	            return UnitInSpellsRange(unit, "enemy")
-	        end
-
-	        local function ClampAlpha(a)
-
-	            if type(a) ~= "number" then a = 0.5 end
-	            if a < 0 then a = 0 elseif a > 1 then a = 1 end
-	            return a
-	        end
-
-	        local function IsEnabled(conf)
-	            if not conf or conf.rangeFadeEnabled ~= true then
-	                return false
-	            end
-	            if _G.MSUF_UnitEditModeActive == true then
-	                return false
-	            end
-	            return true
-	        end
-
-	        local function ApplyUnitRangeFade(unit, confKey, conf, computeFn)
-	            local mulT = _G.MSUF_RangeFadeMul
-	            if type(mulT) ~= "table" then
-	                mulT = {}
-	                _G.MSUF_RangeFadeMul = mulT
-	            end
-
-	            local outAlpha = ClampAlpha(conf and conf.rangeFadeAlpha)
-
-	            local fnCompute = computeFn or ComputeInRange_Generic
-	            local inRange = fnCompute(unit)
-	            -- Treat unknown/uncheckable as in-range (same spirit as ignoreUnlimited).
-	            local desired = (inRange == false) and outAlpha or 1
-
-	            local cur = mulT[unit]
-	            if cur == desired then
-	                return
-	            end
-
-	            mulT[unit] = desired
-
-	            local frames = _G.MSUF_UnitFrames
-	            local f = frames and frames[unit]
-	            if not f then
-	                return
-	            end
-	            if f.IsForbidden and f:IsForbidden() then
-	                return
-	            end
-	            if f.IsShown and (not f:IsShown()) then
-	                return
-	            end
-
-	            local apply = _G.MSUF_ApplyUnitAlpha
-	            if type(apply) == "function" then
-	                apply(f, confKey)
-	            end
-	        end
-
-	        local function ClearUnitMul(unit, confKey)
-	            local mulT = _G.MSUF_RangeFadeMul
-	            if type(mulT) ~= "table" then return end
-	            if mulT[unit] == nil or mulT[unit] == 1 then
-	                return
-	            end
-	            mulT[unit] = 1
-
-	            local frames = _G.MSUF_UnitFrames
-	            local f = frames and frames[unit]
-	            if not f or (f.IsForbidden and f:IsForbidden()) then
-	                return
-	            end
-	            local apply = _G.MSUF_ApplyUnitAlpha
-	            if type(apply) == "function" then
-	                apply(f, confKey)
-	            end
-	        end
-
-	        local function UpdateFocus()
-	            local db = _G.MSUF_DB
-	            local conf = db and db.focus
-
-	            if not IsEnabled(conf) then
-	                ClearUnitMul("focus", "focus")
-	                return
-	            end
-
-	            ApplyUnitRangeFade("focus", "focus", conf, ComputeInRange_Generic)
-	        end
-
-	        -- Pre-cached boss unit strings (avoid "boss"..i concat in hot loop)
-	        local _bossUnits = { "boss1", "boss2", "boss3", "boss4", "boss5" }
-	        local _nBossUnits = #_bossUnits
-
-	        local function UpdateBosses()
-	            local db = _G.MSUF_DB
-	            local conf = db and db.boss
-
-	            if not IsEnabled(conf) then
-	                for i = 1, _nBossUnits do
-	                    ClearUnitMul(_bossUnits[i], "boss")
-	                end
-	                return
-	            end
-
-	            local frames = _G.MSUF_UnitFrames
-	            for i = 1, _nBossUnits do
-	                local unit = _bossUnits[i]
-	                -- Avoid extra work if unit/frame isn't up.
-	                local f = frames and frames[unit]
-	                if f and f.IsShown and f:IsShown() and UnitExistsNS(unit) then
-	                    ApplyUnitRangeFade(unit, "boss", conf, ComputeInRange_Enemy)
-	                else
-	                    -- ensure we don't keep a stale out-of-range mul when the boss frame disappears
-	                    local mulT = _G.MSUF_RangeFadeMul
-	                    if type(mulT) == "table" and mulT[unit] and mulT[unit] ~= 1 then
-	                        mulT[unit] = 1
-	                    end
-	                end
-	            end
-	        end
-
-	        local RangeFadeFBWanted
-
-        function _G.MSUF_RangeFadeFB_RebuildSpells()
-            if RangeFadeFBWanted() ~= true then
-                return
-            end
-            UpdateActiveSpells()
-        end
-
-        function _G.MSUF_RangeFadeFB_Reset()
-            local mulT = _G.MSUF_RangeFadeMul
-            if type(mulT) ~= "table" then return end
-            mulT.focus = 1
-            for i = 1, _nBossUnits do
-                mulT[_bossUnits[i]] = 1
+    -- ══════════════════════════════════════════════════════════════
+    -- ══════════════════════════════════════════════════════════════
+    -- FOCUS/BOSS: Smart-sleep ticker + event-driven friendly focus
+    --
+    -- Ticker lifecycle (SyncTicker):
+    --   RUNNING when: enemy focus OR boss range enabled → 0.75s combat / 3.0s OOC
+    --   SLEEPING when: only friendly focus (event-driven) → 0 CPU
+    --   STOPPED when: no focus + no boss enabled → 0 CPU
+    --
+    -- Friendly focus: UNIT_IN_RANGE_UPDATE (oUF approach, 0 polling always)
+    -- Unit swaps: immediate check via events, then SyncTicker re-evaluates
+    -- ══════════════════════════════════════════════════════════════
+    local _focusIsEnemy = false
+    local _focusEvtFrame = nil
+    local _ticker = nil
+    local _tickRate = 0
+    local _TICK_COMBAT = 0.75
+    local _TICK_OOC = 3.0
+    local C_Timer_NewTicker = _G.C_Timer and _G.C_Timer.NewTicker
+
+    local function OnFocusFriendlyRange(_, event, arg1)
+        if arg1 and arg1 ~= "focus" then return end
+        local db = _G.MSUF_DB
+        local conf = db and db.focus
+        if not conf or conf.rangeFadeEnabled ~= true then ClearMul("focus", "focus"); return end
+        if _G.MSUF_UnitEditModeActive == true then ClearMul("focus", "focus"); return end
+        ApplyMul(GetFrame("focus"), "focus", "focus", conf, CheckFriendly("focus"))
+    end
+
+    local function EnsureFocusEvtFrame()
+        if _focusEvtFrame then return end
+        _focusEvtFrame = CreateFrame("Frame")
+        _focusEvtFrame:SetScript("OnEvent", OnFocusFriendlyRange)
+    end
+
+    local function StopTicker()
+        if _ticker then _ticker:Cancel(); _ticker = nil end
+        _tickRate = 0
+    end
+
+    local function CheckEnemyUnits()
+        local db = _G.MSUF_DB
+        local editMode = (_G.MSUF_UnitEditModeActive == true)
+
+        if _focusIsEnemy then
+            local conf = db and db.focus
+            if conf and conf.rangeFadeEnabled == true and not editMode then
+                ApplyMul(GetFrame("focus"), "focus", "focus", conf, CheckEnemy("focus"))
+            else
+                ClearMul("focus", "focus")
             end
         end
 
+        local bossConf = db and db.boss
+        local bossOK = (bossConf and bossConf.rangeFadeEnabled == true and not editMode)
+        local frames = _G.MSUF_UnitFrames
+        for i = 1, 5 do
+            local unit = _bossUnits[i]
+            if bossOK then
+                local f = frames and frames[unit]
+                if f and f.IsShown and f:IsShown() and UnitExists(unit) then
+                    ApplyMul(f, unit, "boss", bossConf, CheckEnemy(unit))
+                else
+                    if _state[unit] ~= nil then
+                        _state[unit] = nil
+                        local mulT = _G.MSUF_RangeFadeMul
+                        if type(mulT) == "table" and mulT[unit] and mulT[unit] ~= 1 then mulT[unit] = 1 end
+                    end
+                end
+            else
+                ClearMul(unit, "boss")
+            end
+        end
+    end
+
+    local function DesiredRate()
+        return (_G.MSUF_InCombat == true) and _TICK_COMBAT or _TICK_OOC
+    end
+
+    local function EnsureTicker(rate)
+        if not C_Timer_NewTicker then return end
+        if _ticker and _tickRate == rate then return end
+        StopTicker()
+        _tickRate = rate
+        _ticker = C_Timer_NewTicker(rate, CheckEnemyUnits)
+    end
+
+    -- Smart-sleep: only run ticker when enemy units need polling.
+    -- Friendly focus = event-driven → no ticker needed.
+    local function NeedsPoll()
+        local db = _G.MSUF_DB
+        if _focusIsEnemy then
+            local conf = db and db.focus
+            if conf and conf.rangeFadeEnabled == true then return true end
+        end
+        local bossConf = db and db.boss
+        if bossConf and bossConf.rangeFadeEnabled == true then return true end
+        return false
+    end
+
+    local function SyncTicker()
+        if NeedsPoll() then
+            EnsureTicker(DesiredRate())
+        else
+            StopTicker()
+        end
+    end
+
+    local function RangeFadeFBWanted()
+        local db = _G.MSUF_DB
+        if db and db.focus and db.focus.rangeFadeEnabled == true then return true end
+        if db and db.boss  and db.boss.rangeFadeEnabled  == true then return true end
+        return false
+    end
+
+    local function ClassifyFocus()
+        if not UnitExists or not UnitExists("focus") then _focusIsEnemy = false; return end
+        _focusIsEnemy = (UnitCanAttack and UnitCanAttack("player", "focus")) and true or false
+    end
+
+    local _fbWired = false
+    local function WireFBEvents()
+        if _fbWired then return end; _fbWired = true
         local ef = CreateFrame("Frame")
-        local _rfEventsRegistered = false
-        local _rfThrottleAt = 0
-        local _RF_THROTTLE_INTERVAL = 0.2
-
-        local function RegisterFBEvents()
-            if _rfEventsRegistered then return end
-            _rfEventsRegistered = true
-            ef:RegisterEvent("PLAYER_ENTERING_WORLD")
-            ef:RegisterEvent("SPELLS_CHANGED")
-            ef:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-            ef:RegisterEvent("PLAYER_TALENT_UPDATE")
-            ef:RegisterEvent("TRAIT_CONFIG_UPDATED")
-            ef:RegisterEvent("PLAYER_FOCUS_CHANGED")
-            ef:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
-            ef:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-            ef:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
-        end
-
-        local function UnregisterFBEvents()
-            if not _rfEventsRegistered then return end
-            _rfEventsRegistered = false
-            ef:UnregisterEvent("PLAYER_ENTERING_WORLD")
-            ef:UnregisterEvent("SPELLS_CHANGED")
-            ef:UnregisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-            ef:UnregisterEvent("PLAYER_TALENT_UPDATE")
-            ef:UnregisterEvent("TRAIT_CONFIG_UPDATED")
-            ef:UnregisterEvent("PLAYER_FOCUS_CHANGED")
-            ef:UnregisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
-            ef:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
-            ef:UnregisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
-        end
-
-        function RangeFadeFBWanted()
-            local db = _G.MSUF_DB
-            local focus = db and db.focus
-            if focus and focus.rangeFadeEnabled == true then
-                return true
-            end
-            local boss = db and db.boss
-            if boss and boss.rangeFadeEnabled == true then
-                return true
-            end
-            return false
-        end
-
+        -- Combat toggle: start/stop ticker
+        ef:RegisterEvent("PLAYER_REGEN_DISABLED")
+        ef:RegisterEvent("PLAYER_REGEN_ENABLED")
+        -- Immediate-response events (no tick wait)
+        ef:RegisterEvent("PLAYER_FOCUS_CHANGED")
+        ef:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+        -- Rebuild triggers
+        ef:RegisterEvent("SPELLS_CHANGED")
+        ef:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+        ef:RegisterEvent("PLAYER_TALENT_UPDATE")
+        ef:RegisterEvent("TRAIT_CONFIG_UPDATED")
+        ef:RegisterEvent("PLAYER_ENTERING_WORLD")
         ef:SetScript("OnEvent", function(_, event)
-            if event == "SPELLS_CHANGED" or event == "PLAYER_ENTERING_WORLD" or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
-                UpdateActiveSpells()
-                -- P8: reset throttle on zone/login so first cooldown event always triggers a range check.
-                if event == "PLAYER_ENTERING_WORLD" then
-                    _rfThrottleAt = 0
+            if event == "PLAYER_REGEN_DISABLED" then
+                SyncTicker()
+                CheckEnemyUnits()
+            elseif event == "PLAYER_REGEN_ENABLED" then
+                SyncTicker()
+                CheckEnemyUnits()
+            elseif event == "PLAYER_FOCUS_CHANGED" then
+                _state["focus"] = nil
+                ClassifyFocus()
+                if UnitExists("focus") and not _focusIsEnemy then
+                    EnsureFocusEvtFrame()
+                    _focusEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "focus")
+                    OnFocusFriendlyRange(nil, event, "focus")
+                else
+                    if _focusEvtFrame then _focusEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE") end
                 end
+                SyncTicker()
+                if _focusIsEnemy then CheckEnemyUnits() end
+            elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
+                for i = 1, 5 do _state[_bossUnits[i]] = nil end
+                CheckEnemyUnits()
+            elseif event == "SPELLS_CHANGED" or event == "PLAYER_ENTERING_WORLD"
+                or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
+                or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
+                RebuildPrimaries()
+                for k in pairs(_state) do _state[k] = nil end
+                CheckEnemyUnits()
             end
-
-            -- Cooldown events: throttle to avoid 27-48 range checks/sec
-            if event == "SPELL_UPDATE_COOLDOWN" or event == "ACTIONBAR_UPDATE_COOLDOWN" then
-                local now = GetTime()
-                if now < _rfThrottleAt then return end
-                _rfThrottleAt = now + _RF_THROTTLE_INTERVAL
-            end
-
-            UpdateFocus()
-            UpdateBosses()
         end)
+    end
 
-        function _G.MSUF_RangeFadeFB_EvaluateActive(force)
-            local want = RangeFadeFBWanted()
+    function _G.MSUF_RangeFadeFB_RebuildSpells()
+        if RangeFadeFBWanted() ~= true then return end
+        RebuildPrimaries()
+    end
 
-            if want then
-                RegisterFBEvents()
-                if force == true then
-                    _rfThrottleAt = 0
+    function _G.MSUF_RangeFadeFB_Reset()
+        for k in pairs(_state) do _state[k] = nil end
+        local mulT = _G.MSUF_RangeFadeMul
+        if type(mulT) ~= "table" then return end
+        mulT.focus = 1
+        for i = 1, 5 do mulT[_bossUnits[i]] = 1 end
+    end
+
+    function _G.MSUF_RangeFadeFB_EvaluateActive(force)
+        if RangeFadeFBWanted() then
+            WireFBEvents()
+            if force == true then for k in pairs(_state) do _state[k] = nil end end
+            RebuildPrimaries()
+            ClassifyFocus()
+            -- Friendly focus: event-driven
+            if UnitExists and UnitExists("focus") and not _focusIsEnemy then
+                EnsureFocusEvtFrame()
+                _focusEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "focus")
+                OnFocusFriendlyRange(nil, "INIT", "focus")
+            end
+            -- Ticker: only when enemy units need polling (smart-sleep)
+            SyncTicker()
+            CheckEnemyUnits()
+            return
+        end
+        StopTicker()
+        if _focusEvtFrame then _focusEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE") end
+        ClearMul("focus", "focus")
+        for i = 1, 5 do ClearMul(_bossUnits[i], "boss") end
+    end
+
+    function _G.MSUF_RangeFadeFB_ApplyCurrent(force)
+        _G.MSUF_RangeFadeFB_EvaluateActive(force)
+    end
+
+    -- ══════════════════════════════════════════════════════════════
+    -- InitPostLogin: called once after unitframes exist
+    -- ══════════════════════════════════════════════════════════════
+    function _G.MSUF_RangeFade_InitPostLogin()
+        RebuildPrimaries()
+
+        -- Target: evaluate via EvaluateActive (wires events + registers 1 spell)
+        if C_Timer_After then
+            C_Timer_After(0, function()
+                if _G.MSUF_RangeFade_EvaluateActive then
+                    _G.MSUF_RangeFade_EvaluateActive(true)
                 end
-                UpdateActiveSpells()
-                UpdateFocus()
-                UpdateBosses()
-                return
-            end
-
-            if force == true or _rfEventsRegistered then
-                _rfThrottleAt = 0
-                UpdateFocus()
-                UpdateBosses()
-                UnregisterFBEvents()
-            end
+            end)
+        elseif _G.MSUF_RangeFade_EvaluateActive then
+            _G.MSUF_RangeFade_EvaluateActive(true)
         end
 
-        function _G.MSUF_RangeFadeFB_ApplyCurrent(force)
-            -- force kept for API symmetry; also wakes/sleeps driver based on DB state.
-            _G.MSUF_RangeFadeFB_EvaluateActive(force)
-        end
-
+        -- Focus/Boss: evaluate active
         _G.MSUF_RangeFadeFB_EvaluateActive(true)
-	    end
-	end
-	end
+    end
 end

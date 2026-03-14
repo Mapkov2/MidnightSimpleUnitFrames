@@ -297,19 +297,23 @@ local _MSUF_TextAbbrFn = _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.Abb
 
 local function _MSUF_TextifyValue(val)
     if val == nil then return nil end
-    -- Fast path: plain numbers (99%+ of calls) bypass secret handling entirely.
+    -- SECRET-SAFE: Check for secret values BEFORE type() — type() on secrets causes taint.
+    -- Secret numbers pass through to C-side abbreviator (handles internally).
+    if _MSUF_issecret and _MSUF_issecret(val) then
+        local abbr = _MSUF_TextAbbrFn
+        if abbr then
+            local txt = abbr(val)
+            if txt ~= nil then return txt end
+        end
+        return nil
+    end
+    -- Non-secret: safe to use type() and arithmetic.
     if type(val) == "number" then
         local abbr = _MSUF_TextAbbrFn
         if abbr then return abbr(val) end
         return tostring(val)
     end
     if type(val) == "string" then return val end
-    -- Secret / unknown type: pass to C-side abbreviator (secret-safe, no Lua arithmetic).
-    local abbr = _MSUF_TextAbbrFn
-    if abbr then
-        local txt = abbr(val)
-        if txt ~= nil then return txt end
-    end
     return nil
 end
 
