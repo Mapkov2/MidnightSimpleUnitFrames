@@ -319,17 +319,6 @@ function _G.MSUF_InstallGlobalScaleGate()
     end
 end
 
--- Convenience helper (optional): apply global scale safely even if gate isn't installed yet.
-function _G.MSUF_ApplyGlobalScale_IfSafe(scale, quiet)
-    if not _G.MSUF_GlobalScaleGateInstalled then
-        _G.MSUF_InstallGlobalScaleGate()
-    end
-
-    if type(_G.MSUF_SetGlobalUiScale) == "function" then
-        _G.MSUF_SetGlobalUiScale(scale, quiet)
-    end
-end
-
 -- Ensure gate is installed as early as possible (before any C_Timer.After(0) scale applies fire).
 if _G.C_Timer and _G.C_Timer.After then
     _G.C_Timer.After(0, function()
@@ -402,12 +391,4 @@ do
             end
         end
     end)
-end
-
-
--- -----------------------------------------------------------------------------
--- Range checking removed for maximum performance (user request).
--- Keep a stub so any legacy calls are harmless.
-function _G.MSUF_EnsureLibRangeCheck()
-    return nil
 end

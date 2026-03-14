@@ -271,7 +271,15 @@ MSUF_ApplyRareVisuals = function(self)
         if _G and _G.MSUF_AggroBorderTestMode then
             threat = true
         elseif UnitThreatSituation then
-            threat = (UnitThreatSituation("player", self.unit) == 3)
+            local raw = UnitThreatSituation("player", self.unit)
+            if raw ~= nil then
+                local iss = _G.issecretvalue
+                if iss and iss(raw) then
+                    threat = (self._msufAggroOutlineOn == true)
+                else
+                    threat = (raw == 3)
+                end
+            end
         end
     end
 

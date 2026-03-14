@@ -321,8 +321,17 @@ local function UFCore_UpdateAggroBorder(frame, unit)
         return
     end
 
-    local threat = UnitThreatSituation and UnitThreatSituation("player", unit) or nil
-    local on = (threat == 3) and true or false
+    local on = false
+    if UnitThreatSituation then
+        local raw = UnitThreatSituation("player", unit)
+        if raw == nil then
+            on = false
+        elseif _UFCORE_issecret and _UFCORE_issecret(raw) then
+            return  -- secret: keep last known state, don't thrash RefreshRareBarVisuals
+        else
+            on = (raw == 3) and true or false
+        end
+    end
 
     if frame._msufAggroOutlineOn == on then
         return
@@ -503,6 +512,11 @@ function Core.InvalidateAllFrameConfigs()
             f.cachedConfig = nil
             -- PERF: Invalidate per-frame combat hot-path caches (absorb text, HP/power text config, status config).
             f._msufCachedShowAbsorbText = nil
+            f._msufAbsorbTextDirty = true
+            f._msufCachedAbsorbText = nil
+            f._msufCachedAbsorbStyle = nil
+            f._msufFlushHP = nil
+            f._msufFlushMaxHP = nil
             f._msufPwrTextConf = nil
             f._msufHpTextConf = nil
             f._msufPwrPctCleared = nil
@@ -1803,11 +1817,15 @@ end
 
 local function EnsureFallbackDriver()
     local f = Core._fallbackFrame
-    if f then return f end
+    if f then
+        _G._MSUF_UFCore_FlushFrame = f
+        return f
+    end
     f = CreateFrame("Frame")
     f:Hide()
     f:SetScript("OnUpdate", UFCore_FlushTask)
     Core._fallbackFrame = f
+    _G._MSUF_UFCore_FlushFrame = f
     return f
 end
 
@@ -2160,8 +2178,12 @@ local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
     -- Unit swaps can change absorb/heal-absorb instantly; mark overlays dirty.
     f._msufAbsorbDirty = true
     f._msufHealAbsorbDirty = true
+    f._msufAbsorbTextDirty = true
     f._msufAbsorbInit = nil
     f._msufHealAbsorbInit = nil
+    -- Invalidate health diff-gate cache (new unit = new hp/maxHP).
+    f._msufFlushHP = nil
+    f._msufFlushMaxHP = nil
 
     local sd = Core._swapDeferCoalesce
     if not sd then return end
@@ -2837,11 +2859,13 @@ local function FrameOnEvent(self, event, arg1, ...)
             if dfk then
                 if dfk == "absorbDirty" then
                     self._msufAbsorbDirty = true
+                    self._msufAbsorbTextDirty = true
                 elseif dfk == "healAbsorbDirty" then
                     self._msufHealAbsorbDirty = true
                 elseif dfk == "bothAbsorbDirty" then
                     self._msufAbsorbDirty = true
                     self._msufHealAbsorbDirty = true
+                    self._msufAbsorbTextDirty = true
                 else -- "healthColorDirty"
                     if not self._msufStaticHealthColor then
                         self._msufHealthColorDirty = true
@@ -2894,6 +2918,10 @@ function Core.AttachFrame(f)
     -- Mark absorb overlays dirty so first health update initializes them.
     f._msufAbsorbDirty = true
     f._msufHealAbsorbDirty = true
+    f._msufAbsorbTextDirty = true
+    -- Invalidate health diff-gate cache (fresh frame).
+    f._msufFlushHP = nil
+    f._msufFlushMaxHP = nil
 
     f:SetScript("OnEvent", FrameOnEvent)
 
@@ -2917,8 +2945,11 @@ function Core.AttachFrame(f)
             -- If hidden, we may have missed absorb/heal-absorb events.
             self._msufAbsorbDirty = true
             self._msufHealAbsorbDirty = true
+            self._msufAbsorbTextDirty = true
             self._msufAbsorbInit = nil
             self._msufHealAbsorbInit = nil
+            self._msufFlushHP = nil
+            self._msufFlushMaxHP = nil
             self._msufPwrTextForce = true
             Core.MarkDirty(self, MASK_SHOW_REFRESH, true, "OnShow")
             DeferSwapWork(self.unit, "OnShow", true)
