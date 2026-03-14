@@ -4,6 +4,7 @@
 local addonName, ns = ...
 local F = ns.Cache and ns.Cache.F or {}
 local type, tonumber = type, tonumber
+local issecretvalue = _G.issecretvalue
 
 function _G.MSUF_GetDesiredUnitAlpha(key)
     if not MSUF_DB then EnsureDB() end
@@ -130,28 +131,38 @@ do
         end
     end
 end
-local function MSUF_Alpha_SetTextureAlpha(tex, a)
-    if tex and tex.SetAlpha and type(a) == "number" then
-        if a < 0 then a = 0 elseif a > 1 then a = 1 end
-        tex:SetAlpha(a)
-    end
- end
-local function MSUF_Alpha_SetStatusTextureAlpha(sb, a)
-    if not sb or not sb.GetStatusBarTexture then  return end
-    local t = sb:GetStatusBarTexture()
-    MSUF_Alpha_SetTextureAlpha(t, a)
- end
-local function MSUF_Alpha_SetGradientAlphaArray(grads, a)
-    if not grads or type(grads) ~= "table" then  return end
+-- ---------------------------------------------------------------------------
+-- Layered alpha helpers — public API stays intact, hot path is optimized below.
+-- ---------------------------------------------------------------------------
+local function _SetTexAlpha(tex, a)
+    if tex then tex:SetAlpha(a) end
+end
+
+local function _SetBarTexAlpha(sb, a)
+    if not sb then return end
+    local t = sb.GetStatusBarTexture and sb:GetStatusBarTexture()
+    if t then t:SetAlpha(a) end
+end
+
+local function _SetGradArrayAlpha(grads, a)
+    if not grads then return end
     for i = 1, #grads do
-        MSUF_Alpha_SetTextureAlpha(grads[i], a)
+        local g = grads[i]
+        if g then g:SetAlpha(a) end
     end
- end
-local function MSUF_Alpha_SetTextAlpha(fs, a)
-    if fs and fs.SetAlpha then
-        MSUF_Alpha_SetTextureAlpha(fs, a)
-    end
- end
+end
+
+local function MSUF_Alpha_ClearBaseCache(frame)
+    if not frame then return end
+    frame._msufAlphaBaseMode = nil
+    frame._msufAlphaBaseKey = nil
+    frame._msufAlphaBaseA = nil
+    frame._msufAlphaBaseFG = nil
+    frame._msufAlphaBaseBG = nil
+    frame._msufAlphaBaseLayerMode = nil
+    frame._msufAlphaRangeMul = nil
+end
+
 local function MSUF_Alpha_ResetLayered(frame)
     if not frame or not frame._msufAlphaLayeredMode then
          return
@@ -160,105 +171,107 @@ local function MSUF_Alpha_ResetLayered(frame)
     frame._msufAlphaLayeredMode = nil
     frame._msufAlphaLayerMode = nil
     frame._msufAlphaUnitAlpha = nil
+    frame._msufAlphaUnitAlphaFG = nil
+    frame._msufAlphaUnitAlphaBG = nil
+    frame._msufAlphaLastFG = nil
+    frame._msufAlphaLastBG = nil
     if frame.SetAlpha then
         frame:SetAlpha(unitAlpha)
     end
-    local one = 1
-    MSUF_Alpha_SetStatusTextureAlpha(frame.hpBar, one)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.targetPowerBar or frame.powerBar, one)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.absorbBar, one)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.healAbsorbBar, one)
-    MSUF_Alpha_SetTextureAlpha(frame.hpBarBG, one)
-    MSUF_Alpha_SetTextureAlpha(frame.powerBarBG, one)
-    MSUF_Alpha_SetTextureAlpha(frame.bg, one)
-    MSUF_Alpha_SetGradientAlphaArray(frame.hpGradients, one)
-    MSUF_Alpha_SetGradientAlphaArray(frame.powerGradients, one)
-    MSUF_Alpha_SetTextureAlpha(frame.portrait, one)
-    MSUF_Alpha_SetTextAlpha(frame.nameText, one)
-    MSUF_Alpha_SetTextAlpha(frame.hpText, one)
-    MSUF_Alpha_SetTextAlpha(frame.powerText, one)
- end
+    _SetBarTexAlpha(frame.hpBar, 1)
+    _SetBarTexAlpha(frame.targetPowerBar or frame.powerBar, 1)
+    _SetBarTexAlpha(frame.absorbBar, 1)
+    _SetBarTexAlpha(frame.healAbsorbBar, 1)
+    _SetTexAlpha(frame.hpBarBG, 1)
+    _SetTexAlpha(frame.powerBarBG, 1)
+    _SetTexAlpha(frame.bg, 1)
+    _SetGradArrayAlpha(frame.hpGradients, 1)
+    _SetGradArrayAlpha(frame.powerGradients, 1)
+    _SetTexAlpha(frame.portrait, 1)
+    local nt = frame.nameText;  if nt then nt:SetAlpha(1) end
+    local ht = frame.hpText;    if ht then ht:SetAlpha(1) end
+    local pt = frame.powerText; if pt then pt:SetAlpha(1) end
+end
+
 local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
-    if not frame then  return end
+    if not frame then return end
     if mode == true or mode == 1 or mode == "background" then
         mode = "background"
     else
         mode = "foreground"
     end
-    frame._msufAlphaLayeredMode = true
-    frame._msufAlphaLayerMode = mode
-    frame._msufAlphaUnitAlphaFG = alphaFG
-    frame._msufAlphaUnitAlphaBG = alphaBG
-    if frame.SetAlpha then
-        frame:SetAlpha(1)
-    end
+
     local fg = type(alphaFG) == "number" and alphaFG or 1
     local bg = type(alphaBG) == "number" and alphaBG or 1
     if fg < 0 then fg = 0 elseif fg > 1 then fg = 1 end
     if bg < 0 then bg = 0 elseif bg > 1 then bg = 1 end
-    MSUF_Alpha_SetTextureAlpha(frame.hpBarBG, bg)
-    MSUF_Alpha_SetTextureAlpha(frame.powerBarBG, bg)
-    MSUF_Alpha_SetTextureAlpha(frame.bg, bg)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.hpBar, fg)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.targetPowerBar or frame.powerBar, fg)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.absorbBar, fg)
-    MSUF_Alpha_SetStatusTextureAlpha(frame.healAbsorbBar, fg)
-    MSUF_Alpha_SetGradientAlphaArray(frame.hpGradients, fg)
-    MSUF_Alpha_SetGradientAlphaArray(frame.powerGradients, fg)
-    local one = 1
-    MSUF_Alpha_SetTextureAlpha(frame.portrait, one)
-    MSUF_Alpha_SetTextAlpha(frame.nameText, one)
-    MSUF_Alpha_SetTextAlpha(frame.hpText, one)
-    MSUF_Alpha_SetTextAlpha(frame.powerText, one)
- end
--- PERF: Cache layered alpha helper refs at file scope (called 5-20x/sec during combat).
--- All 6 functions are defined in this file above; _G refs are stable after load.
-local _cachedIsLayeredEnabled = nil
-local _cachedGetLayerMode = nil
-local _cachedGetAlphaIC = nil
-local _cachedGetAlphaOOC = nil
-local _cachedGetBgAlphaIC = nil
-local _cachedGetBgAlphaOOC = nil
-local _cachedGetDesiredAlpha = nil
-local _cachedGetRangeFadeMul = nil
-local _alphaFnsCached = false
 
-local function _CacheAlphaFns()
-    if _alphaFnsCached then return end
-    _cachedIsLayeredEnabled = _G.MSUF_Alpha_IsLayeredModeEnabled
-    _cachedGetLayerMode = _G.MSUF_Alpha_GetLayerMode
-    _cachedGetAlphaIC = _G.MSUF_Alpha_GetAlphaInCombat
-    _cachedGetAlphaOOC = _G.MSUF_Alpha_GetAlphaOOC
-    _cachedGetBgAlphaIC = _G.MSUF_Alpha_GetBgAlphaInCombat
-    _cachedGetBgAlphaOOC = _G.MSUF_Alpha_GetBgAlphaOOC
-    _cachedGetDesiredAlpha = _G.MSUF_GetDesiredUnitAlpha
-    _cachedGetRangeFadeMul = _G.MSUF_GetRangeFadeMul
-    _alphaFnsCached = true
+    if frame._msufAlphaLayeredMode and frame._msufAlphaLayerMode == mode then
+        local lastFG = frame._msufAlphaLastFG or 1
+        local lastBG = frame._msufAlphaLastBG or 1
+        local dfg = lastFG - fg; if dfg < 0 then dfg = -dfg end
+        local dbg = lastBG - bg; if dbg < 0 then dbg = -dbg end
+        if dfg <= 0.001 and dbg <= 0.001 then
+            return
+        end
+    end
+
+    frame._msufAlphaLayeredMode = true
+    frame._msufAlphaLayerMode = mode
+    frame._msufAlphaUnitAlphaFG = fg
+    frame._msufAlphaUnitAlphaBG = bg
+    frame._msufAlphaLastFG = fg
+    frame._msufAlphaLastBG = bg
+
+    if frame.SetAlpha then
+        local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
+        if cur == nil then
+            frame:SetAlpha(1)
+        else
+            local d = cur - 1
+            if d < 0 then d = -d end
+            if d > 0.001 then
+                frame:SetAlpha(1)
+            end
+        end
+    end
+
+    _SetTexAlpha(frame.hpBarBG, bg)
+    _SetTexAlpha(frame.powerBarBG, bg)
+    _SetTexAlpha(frame.bg, bg)
+    _SetBarTexAlpha(frame.hpBar, fg)
+    _SetBarTexAlpha(frame.targetPowerBar or frame.powerBar, fg)
+    _SetBarTexAlpha(frame.absorbBar, fg)
+    _SetBarTexAlpha(frame.healAbsorbBar, fg)
+    _SetGradArrayAlpha(frame.hpGradients, fg)
+    _SetGradArrayAlpha(frame.powerGradients, fg)
+    _SetTexAlpha(frame.portrait, 1)
+    local nt = frame.nameText;  if nt then nt:SetAlpha(1) end
+    local ht = frame.hpText;    if ht then ht:SetAlpha(1) end
+    local pt = frame.powerText; if pt then pt:SetAlpha(1) end
 end
 
+local _rfMulTable = _G.MSUF_RangeFadeMul
+
 function _G.MSUF_ApplyUnitAlpha(frame, key)
-    if not MSUF_DB then EnsureDB() end
-    if not frame or not frame.SetAlpha then  return end
-    -- PERF: Resolve function refs once (eliminates 6-8 _G hash lookups per call).
-    if not _alphaFnsCached then _CacheAlphaFns() end
-    local conf = (MSUF_DB and key) and MSUF_DB[key] or nil
-    if ns and ns.UF and ns.UF.IsDisabled and ns.UF.IsDisabled(conf) then  return end
+    local db = MSUF_DB
+    if not db then EnsureDB(); db = MSUF_DB end
+    if not frame or not frame.SetAlpha then return end
+    if not _rfMulTable then _rfMulTable = _G.MSUF_RangeFadeMul end
+
+    local conf = key and db[key] or nil
+    if ns and ns.UF and ns.UF.IsDisabled and ns.UF.IsDisabled(conf) then return end
+
     local isEditMode = (_G.MSUF_UnitEditModeActive == true)
     local isCombatLocked = (F.InCombatLockdown and F.InCombatLockdown()) and true or false
-    -- -----------------------------------------------------------------------
-    -- Load Conditions gate (secret-safe, zero overhead when unused).
-    -- conf.loadCondActive is a boolean flag maintained by Options UI.
-    -- When nil/false no function call is made → zero overhead per frame.
-    -- -----------------------------------------------------------------------
+
     if conf and conf.loadCondActive and (not isEditMode) then
         local _lcShouldHide = _G.MSUF_LoadCond_ShouldHide
         if type(_lcShouldHide) == "function" and _lcShouldHide(key) then
             if not frame._msufLoadCondHidden then
                 frame._msufLoadCondHidden = true
+                MSUF_Alpha_ClearBaseCache(frame)
                 frame:SetAlpha(0)
-                -- EnableMouse is protected on secure frames — defer during combat.
-                -- The existing PLAYER_REGEN_ENABLED → MSUF_RequestAlphaRefresh will
-                -- re-run this path with InCombatLockdown() == false and flush it.
                 if frame.EnableMouse and (not isCombatLocked) then
                     frame:EnableMouse(false)
                 end
@@ -266,85 +279,231 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
             return
         end
     end
-    -- Restore from load-condition hide (condition cleared or Edit Mode entered).
+
     if frame._msufLoadCondHidden then
         frame._msufLoadCondHidden = nil
         if frame.EnableMouse and (not isCombatLocked) then
             frame:EnableMouse(true)
         end
     end
+
     local unit = frame.unit or key
-    if not unit then  return end
-    -- Do not fade the local player by range; also keep existing "dead/disconnected" behavior.
-    if unit ~= "player" and (not UnitExists(unit)) then
-        frame:SetAlpha(1)
-         return
+    if not unit then return end
+
+    if unit ~= "player" then
+        if not UnitExists(unit) then
+            MSUF_Alpha_ClearBaseCache(frame)
+            if frame._msufAlphaLayeredMode then
+                MSUF_Alpha_ResetLayered(frame)
+            end
+            local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
+            if cur == nil then
+                frame:SetAlpha(1)
+            else
+                local d = cur - 1; if d < 0 then d = -d end
+                if d > 0.001 then frame:SetAlpha(1) end
+            end
+            return
+        end
+
+        if UnitIsDeadOrGhost(unit) then
+            MSUF_Alpha_ClearBaseCache(frame)
+            if frame._msufAlphaLayeredMode then
+                MSUF_Alpha_ResetLayered(frame)
+            end
+            local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
+            if cur == nil then
+                frame:SetAlpha(0.5)
+            else
+                local d = cur - 0.5; if d < 0 then d = -d end
+                if d > 0.001 then frame:SetAlpha(0.5) end
+            end
+            return
+        end
+
+        if UnitIsConnected then
+            local conn = UnitIsConnected(unit)
+            if not (issecretvalue and issecretvalue(conn)) and conn == false then
+                MSUF_Alpha_ClearBaseCache(frame)
+                if frame._msufAlphaLayeredMode then
+                    MSUF_Alpha_ResetLayered(frame)
+                end
+                local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
+                if cur == nil then
+                    frame:SetAlpha(0.5)
+                else
+                    local d = cur - 0.5; if d < 0 then d = -d end
+                    if d > 0.001 then frame:SetAlpha(0.5) end
+                end
+                return
+            end
+        end
     end
-    if unit ~= "player" and UnitIsDeadOrGhost(unit) then
-        frame:SetAlpha(0.5)
-         return
+
+    if not conf then
+        MSUF_Alpha_ClearBaseCache(frame)
+        if frame._msufAlphaLayeredMode then
+            MSUF_Alpha_ResetLayered(frame)
+        end
+        local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
+        if cur == nil then
+            frame:SetAlpha(1)
+        else
+            local d = cur - 1; if d < 0 then d = -d end
+            if d > 0.001 then frame:SetAlpha(1) end
+        end
+        return
     end
-    if unit ~= "player" and UnitIsConnected and (UnitIsConnected(unit) == false) then
-        frame:SetAlpha(0.5)
-         return
-    end
-    -- Layered alpha mode: foreground/background alphas (e.g. bars dim) without dimming text/portrait.
-    local layered = _cachedIsLayeredEnabled and _cachedIsLayeredEnabled(key)
-    if layered and frame._msufAlphaSupportsLayered then
-        local layerMode = _cachedGetLayerMode and _cachedGetLayerMode(key) or "fgbg"
+
+    if conf.alphaExcludeTextPortrait == true and frame._msufAlphaSupportsLayered then
         local inCombat = (_G.MSUF_InCombat == true)
-        local fgIn  = _cachedGetAlphaIC and _cachedGetAlphaIC(key) or 1
-        local fgOut = _cachedGetAlphaOOC and _cachedGetAlphaOOC(key) or 1
-        local bgIn  = _cachedGetBgAlphaIC and _cachedGetBgAlphaIC(key) or 1
-        local bgOut = _cachedGetBgAlphaOOC and _cachedGetBgAlphaOOC(key) or 1
+        local sync = conf.alphaSyncBoth
+        if sync == nil then sync = conf.alphaSync end
+
+        local fgIn  = tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1
+        local fgOut = sync and fgIn or (tonumber(conf.alphaFGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1)
+        local bgIn  = tonumber(conf.alphaBGInCombat) or tonumber(conf.alphaInCombat) or 1
+        local bgOut = sync and bgIn or (tonumber(conf.alphaBGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1)
         local alphaFG = inCombat and fgIn or fgOut
         local alphaBG = inCombat and bgIn or bgOut
-        -- Range-fade multiplier (Target/Focus). Defaults to 1.
-        local rm = _cachedGetRangeFadeMul
-        if type(rm) == "function" then
-            local m = rm(key, unit, frame)
-            if type(m) == "number" then
-                if m < 0 then m = 0 elseif m > 1 then m = 1 end
+
+        frame._msufAlphaBaseMode = "layered"
+        frame._msufAlphaBaseKey = key
+        frame._msufAlphaBaseA = nil
+        frame._msufAlphaBaseFG = alphaFG
+        frame._msufAlphaBaseBG = alphaBG
+        frame._msufAlphaBaseLayerMode = conf.alphaLayerMode
+        frame._msufAlphaRangeMul = 1
+
+        local rfT = _rfMulTable
+        if rfT then
+            local m = rfT[key] or rfT[unit]
+            if m and m < 1 then
+                if m < 0 then m = 0 end
+                frame._msufAlphaRangeMul = m
                 alphaFG = alphaFG * m
                 alphaBG = alphaBG * m
             end
         end
-        MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, layerMode)
-        -- Edit Mode preview floor: ensure frame remains visible + draggable.
-        if isEditMode and frame.GetAlpha and (frame:GetAlpha() or 0) < 0.35 then
+
+        MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, conf.alphaLayerMode)
+        if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
             frame:SetAlpha(0.35)
         end
-         return
+        return
     end
-    -- Non-layered alpha mode: apply one alpha to the frame.
-    local a = _cachedGetDesiredAlpha and _cachedGetDesiredAlpha(key) or 1
-    if type(a) ~= "number" then a = 1 end
+
+    local aIn = tonumber(conf.alphaInCombat) or 1
+    local aOut = tonumber(conf.alphaOutOfCombat) or 1
+    local sync = conf.alphaSyncBoth
+    if sync == nil then sync = conf.alphaSync end
+    if sync then aOut = aIn end
+    local a = (_G.MSUF_InCombat == true) and aIn or aOut
     if a < 0 then a = 0 elseif a > 1 then a = 1 end
-    -- Range-fade multiplier (Target/Focus). Defaults to 1.
-    local rm = _cachedGetRangeFadeMul
-    if type(rm) == "function" then
-        local m = rm(key, unit, frame)
-        if type(m) == "number" then
-            if m < 0 then m = 0 elseif m > 1 then m = 1 end
+
+    frame._msufAlphaBaseMode = "flat"
+    frame._msufAlphaBaseKey = key
+    frame._msufAlphaBaseA = a
+    frame._msufAlphaBaseFG = nil
+    frame._msufAlphaBaseBG = nil
+    frame._msufAlphaBaseLayerMode = nil
+    frame._msufAlphaRangeMul = 1
+
+    local rfT = _rfMulTable
+    if rfT then
+        local m = rfT[key] or rfT[unit]
+        if m and m < 1 then
+            if m < 0 then m = 0 end
+            frame._msufAlphaRangeMul = m
             a = a * m
         end
     end
+
     if frame._msufAlphaLayeredMode then
         MSUF_Alpha_ResetLayered(frame)
     end
-    if frame.GetAlpha then
-        local cur = frame:GetAlpha() or 1
-        if math.abs(cur - a) > 0.001 then
+
+    local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
+    if cur == nil then
+        frame:SetAlpha(a)
+    else
+        local d = cur - a; if d < 0 then d = -d end
+        if d > 0.001 then
             frame:SetAlpha(a)
         end
-    else
-        frame:SetAlpha(a)
     end
-    -- Edit Mode preview floor: ensure frame remains visible + draggable even at alpha=0.
+
     if isEditMode and a < 0.35 then
         frame:SetAlpha(0.35)
     end
- end
+end
+
+function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
+    if not frame or not frame.SetAlpha then return false end
+    if not MSUF_DB then EnsureDB() end
+    local conf = (MSUF_DB and key) and MSUF_DB[key] or nil
+    if ns and ns.UF and ns.UF.IsDisabled and ns.UF.IsDisabled(conf) then return false end
+    if _G.MSUF_UnitEditModeActive == true then return false end
+    local unit = frame.unit or key
+    if not unit then return false end
+
+    if conf and conf.loadCondActive then
+        local _lcShouldHide = _G.MSUF_LoadCond_ShouldHide
+        if type(_lcShouldHide) == "function" and _lcShouldHide(key) then
+            return false
+        end
+    end
+
+    if unit ~= "player" then
+        if not UnitExists(unit) then return false end
+        if UnitIsDeadOrGhost(unit) then return false end
+        if UnitIsConnected then
+            local conn = UnitIsConnected(unit)
+            if not (issecretvalue and issecretvalue(conn)) and conn == false then
+                return false
+            end
+        end
+    end
+
+    if frame._msufAlphaBaseKey ~= key then return false end
+
+    local m = tonumber(mul)
+    if type(m) ~= "number" then m = 1 end
+    if m < 0 then m = 0 elseif m > 1 then m = 1 end
+    frame._msufAlphaRangeMul = m
+
+    if frame._msufAlphaBaseMode == "layered" and frame._msufAlphaSupportsLayered then
+        local fg = frame._msufAlphaBaseFG
+        local bg = frame._msufAlphaBaseBG
+        local mode = frame._msufAlphaBaseLayerMode
+        if type(fg) ~= "number" or type(bg) ~= "number" or mode == nil then
+            return false
+        end
+        MSUF_Alpha_ApplyLayered(frame, fg * m, bg * m, mode)
+        return true
+    end
+
+    if frame._msufAlphaBaseMode == "flat" then
+        local a = frame._msufAlphaBaseA
+        if type(a) ~= "number" then return false end
+        a = a * m
+        if frame._msufAlphaLayeredMode then
+            MSUF_Alpha_ResetLayered(frame)
+        end
+        local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
+        if cur == nil then
+            frame:SetAlpha(a)
+        else
+            local d = cur - a; if d < 0 then d = -d end
+            if d > 0.001 then
+                frame:SetAlpha(a)
+            end
+        end
+        return true
+    end
+
+    return false
+end
 function _G.MSUF_RefreshAllUnitAlphas()
     EnsureDB()
     local UnitFrames = _G.MSUF_UnitFrames

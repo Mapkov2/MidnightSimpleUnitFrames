@@ -748,13 +748,10 @@ local function UFCore_UpdateStatusFast(frame, conf)
 end
 
 -- PERF: Lightweight threat-only update. UNIT_THREAT fires 5-20x/sec per boss in raids.
--- Full Elements.Status.Update runs StatusIndicatorForFrame (4-6 C-API) + _UpdateStatusIcons
--- (15+ DB reads, 3 C-API, symbol textures, anchoring) = 0.15-0.3ms per frame.
--- Threat only needs alpha + aggro border = ~0.01ms per frame.
+-- Threat changes do not imply range/combat/load-condition alpha changes, so avoid
+-- re-running the Alpha pipeline here. Threat only needs the aggro border.
 local function UFCore_UpdateThreatFast(frame)
     if not frame then return false end
-    if not FN_ApplyUnitAlpha then UFCore_ResolveFastFns() end
-    local fn = FN_ApplyUnitAlpha; if fn then fn(frame, frame.msufConfigKey) end
     if frame.aggroHighlightTex then
         UFCore_UpdateAggroBorder(frame, frame.unit)
     end
