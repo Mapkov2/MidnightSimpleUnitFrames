@@ -620,7 +620,7 @@ local function DD_Populate(owner)
         btn:ClearAllPoints()
         btn:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(i - 1) * itemH)
         btn:SetPoint("RIGHT", child, "RIGHT", 0, 0)
-        btn._sel:SetShown(item.key == curKey)
+        btn._sel:SetShown(item.key == curKey or item.overrideActive == true)
         -- Icon
         if item.icon then
             btn._icon:ClearAllPoints()

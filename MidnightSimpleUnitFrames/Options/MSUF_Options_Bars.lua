@@ -120,11 +120,19 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local scopeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     scopeLabel:SetPoint("LEFT", scopeHeader, "RIGHT", 12, 0); scopeLabel:SetText(TR("Configure settings for"))
 
-    local hpPowerScopeOptions = {
-        { key = "shared", label = "Shared" }, { key = "player", label = "Player" },
-        { key = "target", label = "Target" }, { key = "targettarget", label = "Target of Target" },
-        { key = "focus", label = "Focus" }, { key = "pet", label = "Pet" }, { key = "boss", label = "Boss" },
-    }
+    local hpPowerScopeOptions = function()
+        local db = MSUF_DB or {}
+        local function ovr(uk) local u = db[uk]; return u and u.hpPowerTextOverride == true end
+        return {
+            { key = "shared", label = "Shared" },
+            { key = "player", label = "Player", overrideActive = ovr("player") },
+            { key = "target", label = "Target", overrideActive = ovr("target") },
+            { key = "targettarget", label = "Target of Target", overrideActive = ovr("targettarget") },
+            { key = "focus", label = "Focus", overrideActive = ovr("focus") },
+            { key = "pet", label = "Pet", overrideActive = ovr("pet") },
+            { key = "boss", label = "Boss", overrideActive = ovr("boss") },
+        }
+    end
 
     -- Forward-declare scope functions
     local _MSUF_HPText_GetScopeKey, _MSUF_HPText_GetUnitKey, _MSUF_HPText_GetUnitDB

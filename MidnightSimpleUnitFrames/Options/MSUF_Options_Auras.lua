@@ -1549,17 +1549,21 @@ do
     ddEditFilters = ns.UI and ns.UI.Dropdown({
         name = "MSUF_Auras2_EditFiltersDropDown", parent = leftTop,
         anchor = editLbl, anchorPoint = "TOPLEFT", x = 56, y = 8, width = 160,
-        items = {
-            { key = "shared", label = "Shared" },
-            { key = "player", label = "Player" },
-            { key = "target", label = "Target" },
-            { key = "focus",  label = "Focus" },
-            { key = "boss1",  label = "Boss 1" },
-            { key = "boss2",  label = "Boss 2" },
-            { key = "boss3",  label = "Boss 3" },
-            { key = "boss4",  label = "Boss 4" },
-            { key = "boss5",  label = "Boss 5" },
-        },
+        items = function()
+            local a2 = A2_DB(); local pu = a2 and a2.perUnit
+            local function ovr(k) local u = pu and pu[k]; return u and (u.overrideFilters == true or u.overrideSharedLayout == true or u.overrideIgnore == true) end
+            return {
+                { key = "shared", label = "Shared" },
+                { key = "player", label = "Player", overrideActive = ovr("player") },
+                { key = "target", label = "Target", overrideActive = ovr("target") },
+                { key = "focus",  label = "Focus",  overrideActive = ovr("focus") },
+                { key = "boss1",  label = "Boss 1", overrideActive = ovr("boss1") },
+                { key = "boss2",  label = "Boss 2", overrideActive = ovr("boss2") },
+                { key = "boss3",  label = "Boss 3", overrideActive = ovr("boss3") },
+                { key = "boss4",  label = "Boss 4", overrideActive = ovr("boss4") },
+                { key = "boss5",  label = "Boss 5", overrideActive = ovr("boss5") },
+            }
+        end,
         get = function() return GetEditingKey() end,
         set = function(key)
             panel.__msufAuras2_FilterEditKey = key

@@ -102,12 +102,19 @@ end
 -- ────────────────────────────────────────────────────────────
 -- Data
 -- ────────────────────────────────────────────────────────────
-local SCOPE_ITEMS = {
-    { key = "shared", label = "Shared" },
-    { key = "player", label = "Player" }, { key = "target", label = "Target" },
-    { key = "focus",  label = "Focus" },  { key = "targettarget", label = "ToT" },
-    { key = "boss",   label = "Boss" },   { key = "pet", label = "Pet" },
-}
+local SCOPE_ITEMS = function()
+    local db = MSUF_DB or {}
+    local function ovr(uk) local u = db[uk]; return u and u.portraitDecoOverride == true end
+    return {
+        { key = "shared", label = "Shared" },
+        { key = "player", label = "Player", overrideActive = ovr("player") },
+        { key = "target", label = "Target", overrideActive = ovr("target") },
+        { key = "focus",  label = "Focus",  overrideActive = ovr("focus") },
+        { key = "targettarget", label = "ToT", overrideActive = ovr("targettarget") },
+        { key = "boss",   label = "Boss",   overrideActive = ovr("boss") },
+        { key = "pet",    label = "Pet",     overrideActive = ovr("pet") },
+    }
+end
 local SHAPE_ITEMS = {
     { key = "SQUARE", label = "Square" }, { key = "CIRCLE", label = "Circle" },
 }
