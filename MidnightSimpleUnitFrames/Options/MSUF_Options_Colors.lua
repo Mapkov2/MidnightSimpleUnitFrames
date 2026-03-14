@@ -3008,6 +3008,17 @@ auraResetBtn:SetSize(110, 22)
 auraResetBtn:SetPoint("LEFT", auraStacksSwatch, "RIGHT", 12, 0)
 auraResetBtn:SetText("Reset")
 
+-- Pandemic window color (left column, below Stack count)
+S.auraPanLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+S.auraPanLabel:SetPoint("TOPLEFT", auraStacksSwatch, "BOTTOMLEFT", 0, -12)
+S.auraPanLabel:SetText("Pandemic window color")
+
+S.auraPanSwatch = CreateFrame("Button", "MSUF_Colors_AuraPandemicSwatch", content)
+S.auraPanSwatch:SetSize(32, 16)
+S.auraPanSwatch:SetPoint("TOPLEFT", S.auraPanLabel, "BOTTOMLEFT", 0, -8)
+S.pandemicSwatchTex = S.auraPanSwatch:CreateTexture(nil, "ARTWORK")
+S.pandemicSwatchTex:SetAllPoints()
+
 
 
 -- Aura cooldown text colors (DurationObject step curve)
@@ -3113,6 +3124,25 @@ F.GetAurasCooldownTextUrgentColor = function()
     return (t[1] or 1.00), (t[2] or 0.55), (t[3] or 0.10)
 end
 
+F.GetPandemicColor = function()
+    EnsureDB()
+    local a2 = MSUF_DB and MSUF_DB.auras2
+    local sh = a2 and a2.shared
+    local r = (sh and type(sh.pandemicR) == "number") and sh.pandemicR or 0.0
+    local g = (sh and type(sh.pandemicG) == "number") and sh.pandemicG or 0.4
+    local b = (sh and type(sh.pandemicB) == "number") and sh.pandemicB or 1.0
+    return r, g, b
+end
+
+F.SetPandemicColor = function(r, g, b)
+    EnsureDB()
+    MSUF_DB.auras2 = MSUF_DB.auras2 or {}
+    MSUF_DB.auras2.shared = MSUF_DB.auras2.shared or {}
+    MSUF_DB.auras2.shared.pandemicR = r
+    MSUF_DB.auras2.shared.pandemicG = g
+    MSUF_DB.auras2.shared.pandemicB = b
+end
+
 F.PushAuras2ColorRefresh = function()
     if type(_G.MSUF_Auras2_RefreshAll) == "function" then
         _G.MSUF_Auras2_RefreshAll()
@@ -3142,6 +3172,10 @@ F.UpdateAurasColorControls = function()
     if auraCDSafeTex then auraCDSafeTex:SetColorTexture(cr, cg, cb) end
     if auraCDWarnTex then auraCDWarnTex:SetColorTexture(wr, wg, wb) end
     if auraCDUrgentTex then auraCDUrgentTex:SetColorTexture(ur, ug, ub) end
+    if S.pandemicSwatchTex then
+        local pr, pg, pb = F.GetPandemicColor()
+        S.pandemicSwatchTex:SetColorTexture(pr, pg, pb)
+    end
 
 
     -- Bucket-coloring master toggle: when disabled, only Safe should be configurable.
@@ -3259,6 +3293,21 @@ auraStacksSwatch:SetScript("OnMouseUp", function(self, button)
     end)
 end)
 
+S.auraPanSwatch:SetScript("OnMouseUp", function(self, button)
+    if button == "RightButton" then
+        F.SetPandemicColor(0.0, 0.4, 1.0)
+        F.UpdateAurasColorControls()
+        F.PushAuras2ColorRefresh()
+        return
+    end
+    local r, gCol, bCol = F.GetPandemicColor()
+    OpenColorPicker(r, gCol, bCol, function(nr, ng, nb)
+        F.SetPandemicColor(nr, ng, nb)
+        F.UpdateAurasColorControls()
+        F.PushAuras2ColorRefresh()
+    end)
+end)
+
 auraCDSafeSwatch:SetScript("OnMouseUp", function(self, button)
     if button == "RightButton" then
         F.SetAurasCooldownTextSafeColor(nil, nil, nil) -- reset to Global font color
@@ -3314,6 +3363,7 @@ auraResetBtn:SetScript("OnClick", function()
                 MSUF_DB.general.aurasOwnBuffHighlightColor = { 1.0, 0.85, 0.2 }
                 MSUF_DB.general.aurasOwnDebuffHighlightColor = { 1.0, 0.85, 0.2 }
                 MSUF_DB.general.aurasStackCountColor = { 1, 1, 1 }
+                F.SetPandemicColor(0.0, 0.4, 1.0)
                 MSUF_DB.general.aurasCooldownTextSafeColor = nil
                 MSUF_DB.general.aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 }
                 MSUF_DB.general.aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 }
@@ -3329,7 +3379,7 @@ auraResetBtn:SetScript("OnClick", function()
 F.UpdateAurasColorControls()
 
 -- Auras section is now the lowest control for dynamic height
-S.lastControl = auraCDUrgentSwatch
+S.lastControl = S.auraPanSwatch
 
     --------------------------------------------------
     -- Portrait Colors
@@ -3337,7 +3387,7 @@ S.lastControl = auraCDUrgentSwatch
     local portraitHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     -- Keep Portrait colors aligned with the left content column like the other menu sections.
     -- The old anchor used the right-column Aura cooldown control, which shifted the whole section right.
-    portraitHeader:SetPoint("TOPLEFT", auraStacksSwatch, "BOTTOMLEFT", 0, -44)
+    portraitHeader:SetPoint("TOPLEFT", S.auraPanSwatch, "BOTTOMLEFT", 0, -44)
     portraitHeader:SetText("Portrait colors")
     F.CreateHeaderDividerAbove(portraitHeader)
 
@@ -3654,6 +3704,12 @@ end
         if S.portraitBgTex then
             local g = MSUF_DB.general or {}
             S.portraitBgTex:SetColorTexture(g.portraitBgColorR or 0.05, g.portraitBgColorG or 0.05, g.portraitBgColorB or 0.05)
+        end
+
+        -- Pandemic window color
+        if S.pandemicSwatchTex and F.GetPandemicColor then
+            local pr, pg, pb = F.GetPandemicColor()
+            S.pandemicSwatchTex:SetColorTexture(pr, pg, pb)
         end
 end
 

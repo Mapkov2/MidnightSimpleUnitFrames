@@ -1151,6 +1151,8 @@ end
                 onlyMyBuffs = false,
                 onlyMyDebuffs = false,
                 masqueEnabled = false,
+                pandemicMode = "OFF",
+                pandemicR = 0.0, pandemicG = 0.4, pandemicB = 1.0,
 highlightOwnBuffs = false,
                 highlightOwnDebuffs = false,
 filters = {

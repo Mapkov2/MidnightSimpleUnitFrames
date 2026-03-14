@@ -792,7 +792,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     local leftTop = MakeBox(content, 720, 484)
     leftTop:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
     -- Timer / cooldown text color controls live here (breakpoints are added in later steps).
-    local timerBox = MakeBox(content, 720, 228)
+    local timerBox = MakeBox(content, 720, 300)
     timerBox:SetPoint("TOPLEFT", leftTop, "BOTTOMLEFT", 0, -14)
     -- Blizzard-rendered Private Auras (anchor controls)
     local privateBox = MakeBox(content, 720, 140)
@@ -2090,6 +2090,84 @@ end
          end
         timerBox._msufApplyTimerColorsEnabledState = ApplyTimerEnabledState
         ApplyTimerEnabledState()
+    end
+    -- Pandemic window mode dropdown (below timer sliders, full width)
+    do
+        local panDD = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(nil, timerBox) or CreateFrame("Frame", nil, timerBox, "UIDropDownMenuTemplate"))
+        panDD:SetPoint("TOPLEFT", timerBox, "TOPLEFT", 12 - 16, -178 + 4)
+        MSUF_FixUIDropDown(panDD, 130)
+        local panTitle = timerBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        panTitle:SetPoint("BOTTOMLEFT", panDD, "TOPLEFT", 16, 4)
+        panTitle:SetText("Pandemic window")
+        panDD.__MSUF_titleFS = panTitle
+        local panModes = {
+            { text = "Off",    value = "OFF" },
+            { text = "Border", value = "BORDER" },
+            { text = "Pulse",  value = "PULSE" },
+            { text = "Glow",   value = "GLOW" },
+        }
+        local panTextByValue = {}
+        for _, m in ipairs(panModes) do panTextByValue[m.value] = m.text end
+        local function GetPandemicMode()
+            local _, s = GetAuras2DB()
+            if not s then return "OFF" end
+            local v = s.pandemicMode
+            if v == true then return "PULSE" end
+            if not v or v == false then return "OFF" end
+            return v
+        end
+        local function SetPandemicMode(v)
+            local _, s = GetAuras2DB()
+            if not s then return end
+            s.pandemicMode = v
+            s.showPandemic = nil
+            A2_RequestApply()
+        end
+        local _panWarningShown = false
+        local function PanOnClick(self)
+            local prev = GetPandemicMode()
+            SetPandemicMode(self.value)
+            UIDropDownMenu_SetSelectedValue(panDD, self.value)
+            CloseDropDownMenus()
+            -- Show one-time warning when enabling pandemic
+            if prev == "OFF" and self.value ~= "OFF" and not _panWarningShown then
+                _panWarningShown = true
+                StaticPopupDialogs["MSUF_PANDEMIC_INFO"] = StaticPopupDialogs["MSUF_PANDEMIC_INFO"] or {
+                    text = "Pandemic window uses a fixed 30%% remaining-duration threshold for all auras.\n\n"
+                        .. "This is a best-effort indicator \226\128\148 it does not know individual spell pandemic rules. "
+                        .. "It applies to every buff and debuff equally.\n\n"
+                        .. "Color can be changed in the Colors panel.",
+                    button1 = "OK",
+                    timeout = 0,
+                    whileDead = true,
+                    hideOnEscape = true,
+                    preferredIndex = 3,
+                }
+                StaticPopup_Show("MSUF_PANDEMIC_INFO")
+            end
+        end
+        UIDropDownMenu_Initialize(panDD, function()
+            for _, m in ipairs(panModes) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = m.text
+                info.value = m.value
+                info.func = PanOnClick
+                info.keepShownOnClick = false
+                info.checked = function() return (GetPandemicMode() == m.value) end
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
+        panDD:SetScript("OnShow", function()
+            local v = GetPandemicMode()
+            UIDropDownMenu_SetSelectedValue(panDD, v)
+            UIDropDownMenu_SetText(panDD, panTextByValue[v] or "Off")
+        end)
+        A2_Track("global", panDD)
+
+        -- Inline hint
+        local panHint = timerBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        panHint:SetPoint("TOPLEFT", panDD, "BOTTOMLEFT", 16, -2)
+        panHint:SetText("Best-effort: fixed 30% threshold for all auras. Color: Colors panel.")
     end
     -- ------------------------------------------------------------
     -- ADVANCED (below): Include filters + Sort order

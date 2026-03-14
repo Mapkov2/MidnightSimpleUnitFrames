@@ -76,6 +76,7 @@ local _fast_RefreshTimer
 local _fast_ApplyStacks
 local _fast_ApplyOwnHighlight
 local _fast_ApplyDispelBorder
+local _fast_ApplyPandemic
 
 --  Cached shared.* flags (resolve once per configGen, not per icon) 
 local _sharedFlagsGen   = -1
@@ -91,6 +92,9 @@ local _useDispelBorders = false  -- dispel-type border coloring for debuffs
 local _clickThrough     = false  -- true = all auras non-interactive (mouse pass-through)
 local _showTooltip      = true   -- cached shared.showTooltip (for click-through + tooltip combo)
 local _masqueEnabled    = false  -- cached shared.masqueEnabled (gates per-icon backdrop call)
+local _showPandemic     = false  -- pandemic window active (any mode except OFF)
+local _pandemicMode     = 0      -- 0=OFF 1=BORDER 2=PULSE 3=GLOW
+local _panR, _panG, _panB = 0.0, 0.4, 1.0  -- cached pandemic color
 
 --  Debuff dispel-type color lookup (Ã‚Â  la R41z0r / Blizzard) 
 -- Maps dispel index  Blizzard color object; used for both manual
@@ -127,6 +131,25 @@ do
         return c
     end)
     _debuffColorCurve = ok and curve or nil
+end
+
+-- Pandemic window step-curve: returns 1 when ≤30% remaining, 0 otherwise.
+-- Secret-safe: EvaluateRemainingPercent + IsZero, zero value comparisons.
+local _pandemicCurve
+local _pandemicEvalBool  -- C_CurveUtil.EvaluateColorValueFromBoolean
+do
+    if C_CurveUtil and C_CurveUtil.CreateCurve
+       and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step then
+        local ok2, curve2 = pcall(function()
+            local c = C_CurveUtil.CreateCurve()
+            c:SetType(Enum.LuaCurveType.Step)
+            c:AddPoint(0, 1)    -- 0-30% remaining → 1 (in pandemic window)
+            c:AddPoint(0.3, 0)  -- 30%+ remaining  → 0
+            return c
+        end)
+        if ok2 and curve2 then _pandemicCurve = curve2 end
+    end
+    _pandemicEvalBool = C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean or nil
 end
 
 -- Manual fallback: dispelName string  r, g, b
@@ -171,6 +194,23 @@ local function RefreshSharedFlags(shared, gen)
     _clickThrough     = (shared and shared.clickThroughAuras == true) or false
     _showTooltip      = (shared and shared.showTooltip == true) or false
     _masqueEnabled    = (shared and shared.masqueEnabled == true) or false
+    -- Pandemic mode: "OFF"/"BORDER"/"PULSE"/"GLOW" → numeric (0/1/2/3)
+    -- Migration: old boolean showPandemic=true → PULSE
+    do
+        local pm = shared and shared.pandemicMode
+        if pm == nil and shared then pm = shared.showPandemic end -- migration
+        if pm == true then pm = "PULSE" end
+        if pm == "BORDER" then _pandemicMode = 1
+        elseif pm == "PULSE" then _pandemicMode = 2
+        elseif pm == "GLOW" then _pandemicMode = 3
+        else _pandemicMode = 0
+        end
+        _showPandemic = (_pandemicMode > 0) and (_pandemicCurve ~= nil)
+        -- Cache color
+        local pr = shared and shared.pandemicR; if type(pr) == "number" then _panR = pr end
+        local pg = shared and shared.pandemicG; if type(pg) == "number" then _panG = pg end
+        local pb = shared and shared.pandemicB; if type(pb) == "number" then _panB = pb end
+    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -392,6 +432,48 @@ icon.countFrame = countFrame
     dispelBdr:SetAllPoints(icon)
     dispelBdr:Hide()
     icon._msufDispelBorder = dispelBdr
+
+    -- Pandemic window border/glow (hidden by default)
+    -- Architecture: outer frame (alpha gate via SetAlpha(secret)) × inner child (visuals + animation).
+    -- Modes: BORDER (static border), PULSE (border + glow + throb), GLOW (soft glow + throb).
+    do
+        -- Outer: alpha gate (receives secret curve result)
+        local pf = CreateFrame("Frame", nil, icon)
+        pf:SetAllPoints(icon)
+        pf:SetFrameLevel(icon:GetFrameLevel() + 8)
+        pf:SetAlpha(0)
+        -- Inner: holds textures + animation
+        local inner = CreateFrame("Frame", nil, pf)
+        inner:SetAllPoints(pf)
+        -- Border texture (Blizzard debuff overlay, bright green)
+        local pt = inner:CreateTexture(nil, "OVERLAY", nil, 7)
+        pt:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
+        pt:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
+        pt:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
+        pt:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 1, -1)
+        pt:SetVertexColor(0.0, 0.4, 1.0, 1)
+        -- Soft outer glow (color texture, larger inset)
+        local pg = inner:CreateTexture(nil, "OVERLAY", nil, 6)
+        pg:SetPoint("TOPLEFT", icon, "TOPLEFT", -3, 3)
+        pg:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 3, -3)
+        pg:SetColorTexture(0.0, 0.4, 1.0, 0.35)
+        -- Alpha pulse animation on inner
+        local ag = inner:CreateAnimationGroup()
+        ag:SetLooping("BOUNCE")
+        local pulse = ag:CreateAnimation("Alpha")
+        pulse:SetFromAlpha(0.35)
+        pulse:SetToAlpha(1.0)
+        pulse:SetDuration(0.4)
+        pulse:SetSmoothing("IN_OUT")
+        -- Store refs for per-mode reconfiguration
+        pf._border = pt
+        pf._glow   = pg
+        pf._anim   = ag
+        pf._inner  = inner
+        pf:Hide()
+        icon._msufPandemic = pf
+        icon._msufPanLastMode = 0  -- tracks applied mode for diff-gate
+    end
 
     -- Background (subtle dark backdrop)
     local bg = icon:CreateTexture(nil, "BACKGROUND")
@@ -666,6 +748,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         icon._msufA2_lastOwnHelpful = nil
         icon._msufA2_lastDispelAid = nil
         if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
+        if icon._msufPandemic then icon._msufPandemic:Hide() end
         return false
     end
 
@@ -758,7 +841,8 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         _fast_ApplyDispelBorder(icon, unit, aura, isHelpful)
     end
 
-    -- 6. (Masque overlay sync removed from hot path — handled once in AddButton)
+    -- 6. Pandemic window pulsing border (secret-safe curve → Show/Hide)
+    if _showPandemic then _fast_ApplyPandemic(icon) end
 
     -- 7. Click-through + tooltip interaction (3-state, diff-gated)
     -- 0 = normal (mouse on, no pass-through)
@@ -810,6 +894,10 @@ local function ClearCooldownVisual(icon, cd)
     icon._msufA2_lastCdDurationObj = nil
     icon._msufA2_lastCdAid = nil
     icon._msufA2_lastCdShown = false
+
+    -- Pandemic: immediately hide pulsing border when timer clears.
+    local pan = icon._msufPandemic
+    if pan and pan:IsShown() then pan:SetAlpha(0); pan:Hide() end
 end
 
 local function ApplyCooldownTextStyle(icon, cd, now, force)
@@ -987,9 +1075,12 @@ function Icons._RefreshTimer(icon, unit, aid, shared, aura)
         return
     end
 
-    -- Both swipe and text disabled: nothing visual to update.
+    -- Both swipe and text disabled: nothing visual to update (except pandemic).
     if not _showSwipe and not _showText then
+        icon._msufA2_durationObj = obj
+        cd._msufA2_durationObj = obj
         icon._msufA2_lastHadTimer = true
+        if _showPandemic then _fast_ApplyPandemic(icon) end
         return
     end
 
@@ -1035,6 +1126,9 @@ function Icons._RefreshTimer(icon, unit, aid, shared, aura)
         icon._msufA2_lastCdDurationObj = nil
         icon._msufA2_lastCdAid = nil
     end
+
+    -- Pandemic: update when duration object refreshes.
+    if _showPandemic then _fast_ApplyPandemic(icon) end
 end
 
 -- --
@@ -1287,12 +1381,74 @@ function Icons._ApplyDispelBorder(icon, unit, aura, isHelpful)
     bdr:Show()
 end
 
+-- --
+-- Pandemic window pulsing border
+-- Secret-safe: uses EvaluateRemainingPercent (curve-based, no value comparisons).
+-- Called from CommitIcon, _RefreshTimer, and the 100ms pandemic ticker.
+-- --
+
+function Icons._ApplyPandemic(icon)
+    local pan = icon._msufPandemic
+    if not pan then return end
+
+    if not _showPandemic or not _pandemicCurve then
+        if pan:IsShown() then pan:SetAlpha(0); pan:Hide() end
+        icon._msufPanLastMode = 0
+        return
+    end
+
+    local obj = icon._msufA2_durationObj
+    if not obj then
+        if pan:IsShown() then pan:SetAlpha(0); pan:Hide() end
+        return
+    end
+
+    -- Mode reconfiguration (diff-gated: only when pandemicMode changes)
+    local mode = _pandemicMode
+    local modeColorKey = mode * 1000003 + _panR * 997 + _panG * 991 + _panB * 983
+    if icon._msufPanLastMode ~= modeColorKey then
+        icon._msufPanLastMode = modeColorKey
+        local border = pan._border
+        local glow   = pan._glow
+        local anim   = pan._anim
+        local inner  = pan._inner
+        -- Apply cached color to textures
+        if border then border:SetVertexColor(_panR, _panG, _panB, 1) end
+        if glow then glow:SetColorTexture(_panR, _panG, _panB, 0.35) end
+        if mode == 1 then         -- BORDER: static green border, no glow, no animation
+            if border then border:Show() end
+            if glow then glow:Hide() end
+            if anim and anim:IsPlaying() then anim:Stop() end
+            if inner then inner:SetAlpha(1) end
+        elseif mode == 2 then     -- PULSE: border + glow + throb animation
+            if border then border:Show() end
+            if glow then glow:Show() end
+            if anim and not anim:IsPlaying() then anim:Play() end
+        elseif mode == 3 then     -- GLOW: soft glow only + throb animation
+            if border then border:Hide() end
+            if glow then glow:Show() end
+            if anim and not anim:IsPlaying() then anim:Play() end
+        end
+    end
+
+    -- Alpha gate: secret-safe sink. 0 × childVisuals = invisible.
+    if not pan:IsShown() then pan:Show() end
+    local alpha
+    if _pandemicEvalBool and obj.IsZero then
+        alpha = _pandemicEvalBool(obj:IsZero(), 0, obj:EvaluateRemainingPercent(_pandemicCurve))
+    else
+        alpha = obj:EvaluateRemainingPercent(_pandemicCurve)
+    end
+    pan:SetAlpha(alpha)
+end
+
 -- Phase 8: bind file-scope locals (defined above) now that methods exist.
 _fast_ApplyTimer        = Icons._ApplyTimer
 _fast_RefreshTimer      = Icons._RefreshTimer
 _fast_ApplyStacks       = Icons._ApplyStacks
 _fast_ApplyOwnHighlight = Icons._ApplyOwnHighlight
 _fast_ApplyDispelBorder = Icons._ApplyDispelBorder
+_fast_ApplyPandemic     = Icons._ApplyPandemic
 
 -- --
 -- Refresh all assigned icons (fast path: timer + stacks only)
@@ -1681,6 +1837,74 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
         container:SetSize(math_max(1, (privCount * step) - spacing), math_max(1, privIconSize))
     end
     container:Show()
+end
+
+-- --
+-- Pandemic window ticker (100ms)
+-- Re-evaluates pandemic pulsing border for all visible icons so the glow
+-- appears as soon as the aura enters the ≤30% remaining window.
+-- Secret-safe: delegates to _ApplyPandemic (curve eval → Show/Hide only).
+-- --
+
+do
+    local _panTickWasActive = false
+    local function PandemicTick()
+        local state = API.state
+        local aby = state and state.aurasByUnit
+        if not aby then return end
+
+        -- Feature turned off: one cleanup pass then idle.
+        if not _showPandemic then
+            if _panTickWasActive then
+                _panTickWasActive = false
+                for _, entry in pairs(aby) do
+                    if entry then
+                        local pool, n, ic
+                        pool = entry.debuffs and entry.debuffs._msufIcons
+                        if pool then
+                            n = entry.debuffs._msufA2_activeN or #pool
+                            for i = 1, n do ic = pool[i]; if ic and ic._msufPandemic then ic._msufPandemic:Hide() end end
+                        end
+                        pool = entry.buffs and entry.buffs._msufIcons
+                        if pool then
+                            n = entry.buffs._msufA2_activeN or #pool
+                            for i = 1, n do ic = pool[i]; if ic and ic._msufPandemic then ic._msufPandemic:Hide() end end
+                        end
+                    end
+                end
+            end
+            return
+        end
+
+        _panTickWasActive = true
+        local _applyPan = Icons._ApplyPandemic
+        for _, entry in pairs(aby) do
+            if entry then
+                local pool, n, ic
+                pool = entry.debuffs and entry.debuffs._msufIcons
+                if pool then
+                    n = entry.debuffs._msufA2_activeN or #pool
+                    for i = 1, n do
+                        ic = pool[i]
+                        if ic and ic:IsShown() and ic._msufAuraInstanceID then _applyPan(ic) end
+                    end
+                end
+                pool = entry.buffs and entry.buffs._msufIcons
+                if pool then
+                    n = entry.buffs._msufA2_activeN or #pool
+                    for i = 1, n do
+                        ic = pool[i]
+                        if ic and ic:IsShown() and ic._msufAuraInstanceID then _applyPan(ic) end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Start ticker at load time; idles cheaply (one boolean check) when disabled.
+    if _pandemicCurve and C_Timer and C_Timer.NewTicker then
+        C_Timer.NewTicker(0.10, PandemicTick)
+    end
 end
 
 -- --
