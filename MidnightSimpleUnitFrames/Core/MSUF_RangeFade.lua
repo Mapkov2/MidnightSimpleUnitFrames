@@ -94,17 +94,14 @@ do
     local _fastApply
     local _applyAlpha
 
-    -- Phase 1 / Patch 2 performance lane:
-    -- Focus + Boss rangefade polling is disabled by default for the lite runtime.
-    -- Advanced opt-out: set MSUF_DB.general.perfLiteRangeFadeFB = false
-    -- to restore the legacy focus/boss runtime without changing the UI.
+    -- Focus/Boss rangefade must remain feature-complete by default.
+    -- The lite lifecycle is now explicit opt-in only via:
+    --   MSUF_DB.general.perfLiteRangeFadeFB = true
+    -- This avoids silent feature regression for focus/boss range checks.
     local function UseLiteFBRuntime()
         local db = _G.MSUF_DB
         local general = db and db.general
-        if general and general.perfLiteRangeFadeFB == false then
-            return false
-        end
-        return true
+        return (general and general.perfLiteRangeFadeFB == true) and true or false
     end
 
     -- Frame resolver: one canonical lookup per unit token.
@@ -454,17 +451,18 @@ do
     local _playerMoving = false
     local _TICK_COMBAT = 0.50
     local _TICK_OOC = 2.0
-    local _TICK_COMBAT_FOCUS = 0.22
-    local _TICK_COMBAT_BOSS = 0.18
-    local _TICK_MOVING_FOCUS = 0.14
-    local _TICK_MOVING_BOSS = 0.12
-    local _TICK_OOC_FOCUS = 0.60
-    local _TICK_OOC_BOSS = 0.35
-    local _TICK_BURST = 0.10
-    local _BURST_DURATION = 0.90
+    local _TICK_COMBAT_FOCUS = 0.14
+    local _TICK_COMBAT_BOSS = 0.12
+    local _TICK_MOVING_FOCUS = 0.10
+    local _TICK_MOVING_BOSS = 0.08
+    local _TICK_OOC_FOCUS = 0.35
+    local _TICK_OOC_BOSS = 0.22
+    local _TICK_BURST = 0.05
+    local _BURST_DURATION = 0.75
     local _burstSerial = 0
     local C_Timer_NewTicker = _G.C_Timer and _G.C_Timer.NewTicker
     local HasActiveEnemyFocusRangeUnit, HasActiveBossRangeUnit, NeedsPoll, RequestBurst
+    local _pollUnits, _pollConfKey, _pollCount = {}, {}, 0
 
     local function OnFocusFriendlyRange(_, event, arg1)
         if arg1 and arg1 ~= "focus" then return end
@@ -487,42 +485,61 @@ do
         _burstSerial = _burstSerial + 1
     end
 
-    local function CheckEnemyUnits()
-        local db = _G.MSUF_DB
-        local editMode = (_G.MSUF_UnitEditModeActive == true)
-        local changedAny = false
+    local function RebuildPollList()
+        _pollCount = 0
+        if _G.MSUF_UnitEditModeActive == true then return end
 
-        if _focusIsEnemy then
-            local conf = db and db.focus
-            if conf and conf.rangeFadeEnabled == true and not editMode then
-                if ApplyMul(GetFrame("focus"), "focus", "focus", conf, CheckEnemy("focus")) then
-                    changedAny = true
-                end
-            else
-                if ClearMul("focus", "focus") then
-                    changedAny = true
-                end
+        local db = _G.MSUF_DB
+        local focusConf = db and db.focus
+        if _focusIsEnemy and focusConf and focusConf.rangeFadeEnabled == true then
+            local f = GetFrame("focus")
+            if UnitExists and UnitExists("focus") and (not f or not f.IsShown or f:IsShown()) then
+                _pollCount = _pollCount + 1
+                _pollUnits[_pollCount] = "focus"
+                _pollConfKey[_pollCount] = "focus"
             end
         end
 
         local bossConf = db and db.boss
-        local bossOK = (bossConf and bossConf.rangeFadeEnabled == true and not editMode)
-        local frames = _G.MSUF_UnitFrames
-        for i = 1, 5 do
-            local unit = _bossUnits[i]
-            if bossOK then
+        if bossConf and bossConf.rangeFadeEnabled == true then
+            local frames = _G.MSUF_UnitFrames
+            for i = 1, 5 do
+                local unit = _bossUnits[i]
                 local f = frames and frames[unit]
                 if f and f.IsShown and f:IsShown() and UnitExists(unit) then
-                    if ApplyMul(f, unit, "boss", bossConf, CheckEnemy(unit)) then
-                        changedAny = true
-                    end
-                else
-                    if ClearMul(unit, "boss") then
-                        changedAny = true
-                    end
+                    _pollCount = _pollCount + 1
+                    _pollUnits[_pollCount] = unit
+                    _pollConfKey[_pollCount] = "boss"
+                end
+            end
+        end
+    end
+
+    local function CheckEnemyUnits()
+        if _pollCount <= 0 then
+            RebuildPollList()
+            if _pollCount <= 0 then
+                StopTicker()
+                return
+            end
+        end
+
+        local db = _G.MSUF_DB
+        local focusConf = db and db.focus
+        local bossConf = db and db.boss
+        local changedAny = false
+
+        for i = 1, _pollCount do
+            local unit = _pollUnits[i]
+            local confKey = _pollConfKey[i]
+            local conf = (confKey == "focus") and focusConf or bossConf
+            local f = GetFrame(unit)
+            if conf and f and (not f.IsShown or f:IsShown()) and UnitExists(unit) then
+                if ApplyMul(f, unit, confKey, conf, CheckEnemy(unit)) then
+                    changedAny = true
                 end
             else
-                if ClearMul(unit, "boss") then
+                if ClearMul(unit, confKey) then
                     changedAny = true
                 end
             end
@@ -531,7 +548,7 @@ do
         if changedAny and _tickRate > _TICK_BURST and C_Timer_After then
             C_Timer_After(0, function()
                 if NeedsPoll() then
-                    RequestBurst(0.35)
+                    RequestBurst(0.25)
                 end
             end)
         end
@@ -594,6 +611,7 @@ do
     -- Friendly focus = event-driven → no ticker needed.
     function NeedsPoll()
         if _G.MSUF_UnitEditModeActive == true then return false end
+        if _pollCount > 0 then return true end
         if HasActiveEnemyFocusRangeUnit() then return true end
         local db = _G.MSUF_DB
         local bossConf = db and db.boss
@@ -602,7 +620,8 @@ do
     end
 
     local function SyncTicker()
-        if NeedsPoll() then
+        RebuildPollList()
+        if _pollCount > 0 then
             EnsureTicker(DesiredRate())
         else
             StopTicker()
@@ -625,8 +644,14 @@ do
     end
 
     local function IsTrackedFBUnit(unit)
-        return unit == "focus" or unit == "boss1" or unit == "boss2"
-            or unit == "boss3" or unit == "boss4" or unit == "boss5"
+        local db = _G.MSUF_DB
+        local focusOn = db and db.focus and db.focus.rangeFadeEnabled == true and not UseLiteFBRuntime()
+        local bossOn  = db and db.boss  and db.boss.rangeFadeEnabled  == true and not UseLiteFBRuntime()
+        if unit == "focus" then return focusOn and true or false end
+        if unit == "boss1" or unit == "boss2" or unit == "boss3" or unit == "boss4" or unit == "boss5" then
+            return bossOn and true or false
+        end
+        return false
     end
 
     local function RangeFadeFBWanted()
@@ -642,29 +667,11 @@ do
         _focusIsEnemy = (UnitCanAttack and UnitCanAttack("player", "focus")) and true or false
     end
 
-    local _fbWired = false
-    local function WireFBEvents()
-        if _fbWired then return end; _fbWired = true
+    local _fbEvtFrame = nil
+    local _fbEvents = {}
+    local function EnsureFBEventFrame()
+        if _fbEvtFrame then return _fbEvtFrame end
         local ef = CreateFrame("Frame")
-        -- Combat toggle: start/stop ticker
-        ef:RegisterEvent("PLAYER_REGEN_DISABLED")
-        ef:RegisterEvent("PLAYER_REGEN_ENABLED")
-        -- Immediate-response events (no tick wait)
-        ef:RegisterEvent("PLAYER_FOCUS_CHANGED")
-        ef:RegisterEvent("PLAYER_STARTED_MOVING")
-        ef:RegisterEvent("PLAYER_STOPPED_MOVING")
-        ef:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
-        ef:RegisterEvent("UNIT_FLAGS")
-        ef:RegisterEvent("UNIT_CONNECTION")
-        ef:RegisterEvent("UNIT_PHASE")
-        ef:RegisterEvent("UNIT_TARGETABLE_CHANGED")
-        ef:RegisterEvent("UNIT_FACTION")
-        -- Rebuild triggers
-        ef:RegisterEvent("SPELLS_CHANGED")
-        ef:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-        ef:RegisterEvent("PLAYER_TALENT_UPDATE")
-        ef:RegisterEvent("TRAIT_CONFIG_UPDATED")
-        ef:RegisterEvent("PLAYER_ENTERING_WORLD")
         ef:SetScript("OnEvent", function(_, event, arg1)
             if event == "PLAYER_REGEN_DISABLED" then
                 if not NeedsPoll() and not _ticker then return end
@@ -763,6 +770,59 @@ do
                 end
             end
         end)
+        _fbEvtFrame = ef
+        return ef
+    end
+
+    local function SetFBEvent(event, want)
+        local ef = EnsureFBEventFrame()
+        if want then
+            if not _fbEvents[event] then
+                ef:RegisterEvent(event)
+                _fbEvents[event] = true
+            end
+        elseif _fbEvents[event] then
+            ef:UnregisterEvent(event)
+            _fbEvents[event] = nil
+        end
+    end
+
+    local function RefreshFBEventLifecycle()
+        local db = _G.MSUF_DB
+        local focusOn = db and db.focus and db.focus.rangeFadeEnabled == true and not UseLiteFBRuntime()
+        local bossOn  = db and db.boss  and db.boss.rangeFadeEnabled  == true and not UseLiteFBRuntime()
+
+        if not focusOn and not bossOn then
+            if _fbEvtFrame then
+                _fbEvtFrame:UnregisterAllEvents()
+            end
+            for k in pairs(_fbEvents) do _fbEvents[k] = nil end
+            return false, false
+        end
+
+        -- shared polling/reactivity events only when at least one FB feature is on
+        SetFBEvent("PLAYER_REGEN_DISABLED", true)
+        SetFBEvent("PLAYER_REGEN_ENABLED", true)
+        SetFBEvent("PLAYER_STARTED_MOVING", true)
+        SetFBEvent("PLAYER_STOPPED_MOVING", true)
+        SetFBEvent("SPELLS_CHANGED", true)
+        SetFBEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", true)
+        SetFBEvent("PLAYER_TALENT_UPDATE", true)
+        SetFBEvent("TRAIT_CONFIG_UPDATED", true)
+        SetFBEvent("PLAYER_ENTERING_WORLD", true)
+        SetFBEvent("UNIT_FLAGS", true)
+        SetFBEvent("UNIT_CONNECTION", true)
+        SetFBEvent("UNIT_PHASE", true)
+        SetFBEvent("UNIT_TARGETABLE_CHANGED", true)
+        SetFBEvent("UNIT_FACTION", true)
+
+        -- focus-only lifecycle
+        SetFBEvent("PLAYER_FOCUS_CHANGED", focusOn)
+
+        -- boss-only lifecycle
+        SetFBEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT", bossOn)
+
+        return focusOn, bossOn
     end
 
     function _G.MSUF_RangeFadeFB_RebuildSpells()
@@ -772,30 +832,43 @@ do
 
     function _G.MSUF_RangeFadeFB_Reset()
         for k in pairs(_state) do _state[k] = nil end
+        _pollCount = 0
         _mulT.focus = 1
         for i = 1, 5 do _mulT[_bossUnits[i]] = 1 end
     end
 
     function _G.MSUF_RangeFadeFB_EvaluateActive(force)
-        if RangeFadeFBWanted() then
-            WireFBEvents()
+        local focusOn, bossOn = RefreshFBEventLifecycle()
+        if focusOn or bossOn then
             if force == true then for k in pairs(_state) do _state[k] = nil end end
             RebuildPrimaries()
-            ClassifyFocus()
-            -- Friendly focus: event-driven
-            if UnitExists and UnitExists("focus") and not _focusIsEnemy then
-                EnsureFocusEvtFrame()
-                _focusEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "focus")
-                OnFocusFriendlyRange(nil, "INIT", "focus")
+            if focusOn then
+                ClassifyFocus()
+                -- Friendly focus: event-driven
+                if UnitExists and UnitExists("focus") and not _focusIsEnemy then
+                    EnsureFocusEvtFrame()
+                    _focusEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "focus")
+                    OnFocusFriendlyRange(nil, "INIT", "focus")
+                else
+                    if _focusEvtFrame then _focusEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE") end
+                end
+            else
+                _focusIsEnemy = false
+                if _focusEvtFrame then _focusEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE") end
+                ClearMul("focus", "focus")
+            end
+            if not bossOn then
+                for i = 1, 5 do ClearMul(_bossUnits[i], "boss") end
             end
             -- Ticker: only when enemy units need polling (smart-sleep)
             SyncTicker()
             CheckEnemyUnits()
             return
         end
-        -- Lite runtime default: fully shut down focus/boss rangefade lifecycle.
+        -- Fully shut down focus/boss rangefade lifecycle when both features are off.
         _playerMoving = false
         StopTicker()
+        _focusIsEnemy = false
         if _focusEvtFrame then _focusEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE") end
         ClearMul("focus", "focus")
         for i = 1, 5 do ClearMul(_bossUnits[i], "boss") end
