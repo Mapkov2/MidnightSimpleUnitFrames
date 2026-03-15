@@ -334,7 +334,16 @@ local function MSUF_MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
         return
     end
 
-    MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
+    -- Route through _G so MSUF_3DPortraits.lua's override (EnsureModel + 3D render)
+    -- is honoured.  The file-local MSUF_UpdatePortraitIfNeeded is 2D/CLASS only;
+    -- the 3D module replaces the global after this file loads (TOC: Portraits → 3DPortraits).
+    local pfn = _G.MSUF_UpdatePortraitIfNeeded or MSUF_UpdatePortraitIfNeeded
+    pfn(f, unit, conf, existsForPortrait)
+
+    -- Sync stamps: the 3D path does NOT touch them (only the local/2D path does).
+    -- Without this every subsequent call sees stale stamps → need=true → redundant work.
+    f._msufPortraitModeStamp   = mode
+    f._msufPortraitRenderStamp = render
 end
 
 -- Export so UFCore can use the same gating (and avoid repeated work on UNIT_MODEL_CHANGED spam).
