@@ -94,6 +94,19 @@ do
     local _fastApply
     local _applyAlpha
 
+    -- Phase 1 / Patch 2 performance lane:
+    -- Focus + Boss rangefade polling is disabled by default for the lite runtime.
+    -- Advanced opt-out: set MSUF_DB.general.perfLiteRangeFadeFB = false
+    -- to restore the legacy focus/boss runtime without changing the UI.
+    local function UseLiteFBRuntime()
+        local db = _G.MSUF_DB
+        local general = db and db.general
+        if general and general.perfLiteRangeFadeFB == false then
+            return false
+        end
+        return true
+    end
+
     -- Frame resolver: one canonical lookup per unit token.
     -- Target lives at _G.MSUF_target. Focus/Boss live in MSUF_UnitFrames.
     local function GetFrame(unit)
@@ -617,6 +630,7 @@ do
     end
 
     local function RangeFadeFBWanted()
+        if UseLiteFBRuntime() then return false end
         local db = _G.MSUF_DB
         if db and db.focus and db.focus.rangeFadeEnabled == true then return true end
         if db and db.boss  and db.boss.rangeFadeEnabled  == true then return true end
@@ -779,6 +793,7 @@ do
             CheckEnemyUnits()
             return
         end
+        -- Lite runtime default: fully shut down focus/boss rangefade lifecycle.
         _playerMoving = false
         StopTicker()
         if _focusEvtFrame then _focusEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE") end

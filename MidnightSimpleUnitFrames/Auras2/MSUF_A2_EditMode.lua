@@ -99,22 +99,23 @@ end
 
 local function ReadOffset(unitKey, shared, kind)
     local kx, ky = GetMoverKeyPair(kind)
-    local val = 0
 
     -- Check perUnit override first
     local a2 = _G.MSUF_DB and _G.MSUF_DB.auras2
     local pu = a2 and a2.perUnit and a2.perUnit[unitKey]
     local lay = pu and pu.overrideLayout == true and pu.layout
 
-    local ox, oy = 0, 0
-    if lay and type(lay[kx]) == "number" then ox = lay[kx] end
-    if lay and type(lay[ky]) == "number" then oy = lay[ky] end
+    local ox, oy
+    if lay then
+        if type(lay[kx]) == "number" then ox = lay[kx] end
+        if type(lay[ky]) == "number" then oy = lay[ky] end
+    end
 
-    -- Fallback to shared
-    if ox == 0 and shared and type(shared[kx]) == "number" then ox = shared[kx] end
-    if oy == 0 and shared and type(shared[ky]) == "number" then oy = shared[ky] end
+    -- Fallback to shared only when perUnit didn't provide the value
+    if ox == nil and shared and type(shared[kx]) == "number" then ox = shared[kx] end
+    if oy == nil and shared and type(shared[ky]) == "number" then oy = shared[ky] end
 
-    return ox, oy
+    return ox or 0, oy or 0
 end
 
 local function WriteOffset(a2, unitKey, kind, newX, newY)
@@ -537,8 +538,9 @@ local function OnEditModeChanged(active)
         local CT = API.CooldownText
         if CT and CT.UnregisterAll then CT.UnregisterAll() end
 
-        -- Refresh to clear preview state
-        if API.MarkAllDirty then API.MarkAllDirty(0) end
+        -- Bump configGen so UpdateAnchor re-runs with final saved offsets
+        -- (MarkAllDirty alone skips re-anchor when gen is unchanged)
+        if API.InvalidateDB then API.InvalidateDB() elseif API.MarkAllDirty then API.MarkAllDirty(0) end
     end
 end
 

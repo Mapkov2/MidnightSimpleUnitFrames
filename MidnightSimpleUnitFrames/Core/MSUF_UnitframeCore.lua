@@ -2575,11 +2575,82 @@ end
 local _HealthFullFast = Elements.Health and Elements.Health.Update
 
 local DIRECT_APPLY = {}
+local _IdentityFast
+local _StatusFast
+local _IndicatorFast
+local _RunIdentityDirect
+local _RunStatusDirect
 do
+    local _MaskIdentityHealth = bor(DIRTY_IDENTITY, DIRTY_HEALTH)
+    _IdentityFast = Elements.Identity and Elements.Identity.Update
+    _StatusFast = Elements.Status and Elements.Status.Update
+    _IndicatorFast = Elements.Indicators and Elements.Indicators.Update
+
+    function _RunIdentityDirect(f, fallbackMask, fallbackReason)
+        if not _IdentityFast then
+            Core.MarkDirty(f, fallbackMask or DIRTY_IDENTITY, nil, fallbackReason or "IDENTITY_DIRECT_MISSING")
+            return
+        end
+        local conf = GetFrameConf(f)
+        if not _IdentityFast(f, conf) then
+            Core.MarkDirty(f, fallbackMask or DIRTY_IDENTITY, nil, fallbackReason or "IDENTITY_DIRECT_FALLBACK")
+        end
+    end
+
+    function _RunStatusDirect(f, fallbackMask, fallbackReason)
+        if not _StatusFast then
+            Core.MarkDirty(f, fallbackMask or DIRTY_STATUS, nil, fallbackReason or "STATUS_DIRECT_MISSING")
+            return
+        end
+        local conf = GetFrameConf(f)
+        if not _StatusFast(f, conf) then
+            Core.MarkDirty(f, fallbackMask or DIRTY_STATUS, nil, fallbackReason or "STATUS_DIRECT_FALLBACK")
+        end
+    end
+
+    local function _RunFactionDirect(f)
+        local conf = GetFrameConf(f)
+        if _IdentityFast then
+            if not _IdentityFast(f, conf) then
+                Core.MarkDirty(f, _MaskIdentityHealth, nil, "UNIT_FACTION_DIRECT_FALLBACK")
+                return
+            end
+        else
+            Core.MarkDirty(f, _MaskIdentityHealth, nil, "UNIT_FACTION_DIRECT_MISSING")
+            return
+        end
+
+        if f._msufHealthColorDirty then
+            f._msufHealthColorDirty = nil
+            UFCore_RefreshHealthBarColorFast(f, conf)
+        end
+    end
+
     -- UNIT_HEALTH → value-only fast path (most frequent event).
     -- Eliminates: UnitExists check, SetMinMaxValues, type() guards,
     -- ns.Bars.ApplySpec dispatch, MSUF_SetBarValue wrapper.
     DIRECT_APPLY["UNIT_HEALTH"] = _HealthValueFast
+
+    -- Identity/status cheap lane: keep these out of the generic dirty queue.
+    -- Falls back to the normal UFCore path when legacy behavior is required
+    -- (e.g. boss test mode identity labels).
+    if _IdentityFast then
+        DIRECT_APPLY["UNIT_NAME_UPDATE"] = function(f)
+            _RunIdentityDirect(f, DIRTY_IDENTITY, "UNIT_NAME_UPDATE_DIRECT")
+        end
+        DIRECT_APPLY["UNIT_LEVEL"] = function(f)
+            _RunIdentityDirect(f, DIRTY_IDENTITY, "UNIT_LEVEL_DIRECT")
+        end
+        -- UNIT_FACTION is the cheap combined case: identity refresh + health color.
+        -- UNIT_FLAGS stays queued on purpose because it can flood at boss pull.
+        DIRECT_APPLY["UNIT_FACTION"] = _RunFactionDirect
+    end
+
+    if _StatusFast then
+        DIRECT_APPLY["UNIT_CONNECTION"] = function(f)
+            _RunStatusDirect(f, DIRTY_STATUS, "UNIT_CONNECTION_DIRECT")
+        end
+    end
 
     -- All other health events → full path (includes range + overlays).
     -- These fire 5-50x less often than UNIT_HEALTH, so the 7-hop chain is acceptable.
@@ -3114,6 +3185,18 @@ local function MarkPlayerStatusIf(flagKey, urgent, reason)
     end
 end
 
+local function DirectIndicatorUnit(unit)
+    if not unit then return end
+    local f = FramesByUnit[unit]
+    if not f or not f:IsVisible() then return end
+    local conf = GetFrameConf(f)
+    if _IndicatorFast then
+        _IndicatorFast(f, conf)
+    else
+        Core.MarkDirty(f, DIRTY_INDICATOR, false, "DIRECT_INDICATOR_FALLBACK")
+    end
+end
+
 Global:SetScript("OnEvent", function(_, event, arg1)
     if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
         -- Resolve hot-path fast helpers now that the main file has loaded.
@@ -3162,7 +3245,12 @@ Global:SetScript("OnEvent", function(_, event, arg1)
 
     if event == "PLAYER_FLAGS_CHANGED" then
         if arg1 == "player" then
-            MarkUnit("player", DIRTY_STATUS, true, event)
+            local pf = FramesByUnit["player"]
+            if pf and pf:IsVisible() and _StatusFast then
+                _RunStatusDirect(pf, DIRTY_STATUS, event)
+            else
+                MarkUnit("player", DIRTY_STATUS, true, event)
+            end
         end
         return
     end
@@ -3213,19 +3301,20 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "GROUP_ROSTER_UPDATE" or event == "PARTY_LEADER_CHANGED" then
-        -- Leader/assist icon may change on player/target/focus
-        MarkUnit("player", DIRTY_INDICATOR, false, event)
-        MarkUnit("target", DIRTY_INDICATOR, false, event)
-        MarkUnit("focus", DIRTY_INDICATOR, false, event)
+        -- Leader/assist icon may change on player/target/focus.
+        -- Cheap direct lane: avoid waking the UFCore flush driver for icon-only changes.
+        DirectIndicatorUnit("player")
+        DirectIndicatorUnit("target")
+        DirectIndicatorUnit("focus")
         return
     end
 
     if event == "RAID_TARGET_UPDATE" then
         -- Rare; only update raid marker visuals (no full frame updates required).
-        MarkUnit("player", DIRTY_INDICATOR, false, event)
-        MarkUnit("target", DIRTY_INDICATOR, false, event)
-        MarkUnit("focus", DIRTY_INDICATOR, false, event)
-        MarkUnit("targettarget", DIRTY_INDICATOR, false, event)
+        DirectIndicatorUnit("player")
+        DirectIndicatorUnit("target")
+        DirectIndicatorUnit("focus")
+        DirectIndicatorUnit("targettarget")
         return
     end
 end)

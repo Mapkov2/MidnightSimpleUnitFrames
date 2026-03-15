@@ -152,6 +152,61 @@ local function _SetGradArrayAlpha(grads, a)
     end
 end
 
+local function _AlphaClamp01(a)
+    if type(a) ~= "number" then return 1 end
+    if a < 0 then return 0 end
+    if a > 1 then return 1 end
+    return a
+end
+
+local function MSUF_Alpha_UseLiteRuntime()
+    local db = MSUF_DB
+    local general = db and db.general
+    if general and general.perfLiteAlpha == false then
+        return false
+    end
+    return true
+end
+
+local function MSUF_Alpha_SetFlat(frame, a)
+    local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
+    if cur == nil then
+        frame:SetAlpha(a)
+    else
+        local d = cur - a
+        if d < 0 then d = -d end
+        if d > 0.001 then
+            frame:SetAlpha(a)
+        end
+    end
+end
+
+local function MSUF_Alpha_GetStaticMode(frame, conf)
+    if not conf or conf.loadCondActive == true then return nil end
+    if conf.rangeFadeEnabled == true then return nil end
+
+    local sync = conf.alphaSyncBoth
+    if sync == nil then sync = conf.alphaSync end
+
+    if conf.alphaExcludeTextPortrait == true and frame._msufAlphaSupportsLayered then
+        local fgIn  = _AlphaClamp01(tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1)
+        local fgOut = sync and fgIn or _AlphaClamp01(tonumber(conf.alphaFGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1)
+        local bgIn  = _AlphaClamp01(tonumber(conf.alphaBGInCombat) or tonumber(conf.alphaInCombat) or 1)
+        local bgOut = sync and bgIn or _AlphaClamp01(tonumber(conf.alphaBGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1)
+        if fgIn == fgOut and bgIn == bgOut then
+            return "layered", fgIn, bgIn, conf.alphaLayerMode
+        end
+        return nil
+    end
+
+    local aIn = _AlphaClamp01(tonumber(conf.alphaInCombat) or 1)
+    local aOut = sync and aIn or _AlphaClamp01(tonumber(conf.alphaOutOfCombat) or 1)
+    if aIn == aOut then
+        return "flat", aIn
+    end
+    return nil
+end
+
 local function MSUF_Alpha_ClearBaseCache(frame)
     if not frame then return end
     frame._msufAlphaBaseMode = nil
@@ -296,13 +351,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
             if frame._msufAlphaLayeredMode then
                 MSUF_Alpha_ResetLayered(frame)
             end
-            local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
-            if cur == nil then
-                frame:SetAlpha(1)
-            else
-                local d = cur - 1; if d < 0 then d = -d end
-                if d > 0.001 then frame:SetAlpha(1) end
-            end
+            MSUF_Alpha_SetFlat(frame, 1)
             return
         end
 
@@ -311,13 +360,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
             if frame._msufAlphaLayeredMode then
                 MSUF_Alpha_ResetLayered(frame)
             end
-            local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
-            if cur == nil then
-                frame:SetAlpha(0.5)
-            else
-                local d = cur - 0.5; if d < 0 then d = -d end
-                if d > 0.001 then frame:SetAlpha(0.5) end
-            end
+            MSUF_Alpha_SetFlat(frame, 0.5)
             return
         end
 
@@ -328,13 +371,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
                 if frame._msufAlphaLayeredMode then
                     MSUF_Alpha_ResetLayered(frame)
                 end
-                local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
-                if cur == nil then
-                    frame:SetAlpha(0.5)
-                else
-                    local d = cur - 0.5; if d < 0 then d = -d end
-                    if d > 0.001 then frame:SetAlpha(0.5) end
-                end
+                MSUF_Alpha_SetFlat(frame, 0.5)
                 return
             end
         end
@@ -345,14 +382,41 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         if frame._msufAlphaLayeredMode then
             MSUF_Alpha_ResetLayered(frame)
         end
-        local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
-        if cur == nil then
-            frame:SetAlpha(1)
-        else
-            local d = cur - 1; if d < 0 then d = -d end
-            if d > 0.001 then frame:SetAlpha(1) end
-        end
+        MSUF_Alpha_SetFlat(frame, 1)
         return
+    end
+
+    if MSUF_Alpha_UseLiteRuntime() then
+        local staticMode, staticA, staticB, staticLayerMode = MSUF_Alpha_GetStaticMode(frame, conf)
+        if staticMode == "flat" then
+            frame._msufAlphaBaseMode = "flat"
+            frame._msufAlphaBaseKey = key
+            frame._msufAlphaBaseA = staticA
+            frame._msufAlphaBaseFG = nil
+            frame._msufAlphaBaseBG = nil
+            frame._msufAlphaBaseLayerMode = nil
+            frame._msufAlphaRangeMul = 1
+            if frame._msufAlphaLayeredMode then
+                MSUF_Alpha_ResetLayered(frame)
+            end
+            local applyA = staticA
+            if isEditMode and applyA < 0.35 then applyA = 0.35 end
+            MSUF_Alpha_SetFlat(frame, applyA)
+            return
+        elseif staticMode == "layered" then
+            frame._msufAlphaBaseMode = "layered"
+            frame._msufAlphaBaseKey = key
+            frame._msufAlphaBaseA = nil
+            frame._msufAlphaBaseFG = staticA
+            frame._msufAlphaBaseBG = staticB
+            frame._msufAlphaBaseLayerMode = staticLayerMode
+            frame._msufAlphaRangeMul = 1
+            MSUF_Alpha_ApplyLayered(frame, staticA, staticB, staticLayerMode)
+            if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
+                frame:SetAlpha(0.35)
+            end
+            return
+        end
     end
 
     if conf.alphaExcludeTextPortrait == true and frame._msufAlphaSupportsLayered then
@@ -423,15 +487,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         MSUF_Alpha_ResetLayered(frame)
     end
 
-    local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
-    if cur == nil then
-        frame:SetAlpha(a)
-    else
-        local d = cur - a; if d < 0 then d = -d end
-        if d > 0.001 then
-            frame:SetAlpha(a)
-        end
-    end
+    MSUF_Alpha_SetFlat(frame, a)
 
     if isEditMode and a < 0.35 then
         frame:SetAlpha(0.35)
@@ -490,15 +546,7 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
         if frame._msufAlphaLayeredMode then
             MSUF_Alpha_ResetLayered(frame)
         end
-        local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
-        if cur == nil then
-            frame:SetAlpha(a)
-        else
-            local d = cur - a; if d < 0 then d = -d end
-            if d > 0.001 then
-                frame:SetAlpha(a)
-            end
-        end
+        MSUF_Alpha_SetFlat(frame, a)
         return true
     end
 

@@ -2032,14 +2032,36 @@ function _G.MSUF_RequestUnitframeUpdate(frame, forceFull, wantLayout, reason, ur
         frame = _G["MSUF_" .. frame]
     end
     if not frame then  return end
-        local reqLayout = _G.MSUF_UFCore_RequestLayout
+
+    local reqLayout = _G.MSUF_UFCore_RequestLayout
+    local queueUF = _G.MSUF_QueueUnitframeUpdate
+    local g = (MSUF_DB and MSUF_DB.general) or nil
+    local directLite = (not g or g.perfLiteDirectUFReq ~= false)
+
+    -- Phase 1 / Patch 3:
+    -- Bypass the extra main-file next-frame coalescer and hand work directly to UFCore.
+    -- UFCore already dedupes dirty masks, coalesces layout, and owns the real flush lifecycle,
+    -- so keeping a second timer-based queue here just adds another wakeup/merge layer in combat.
+    if directLite then
+        if wantLayout and type(reqLayout) == "function" then
+            reqLayout(frame, reason or "MSUF_RequestUnitframeUpdate", urgentNow == true)
+        end
+        if type(queueUF) == "function" then
+            queueUF(frame, forceFull and true or false)
+        end
+        return
+    end
+
     if urgentNow == true then
-        if wantLayout then
+        if wantLayout and type(reqLayout) == "function" then
             reqLayout(frame, reason or "MSUF_RequestUnitframeUpdate", true)
+        end
+        if type(queueUF) == "function" then
+            queueUF(frame, forceFull and true or false)
+        end
+        return
     end
-        _G.MSUF_QueueUnitframeUpdate(frame, forceFull and true or false)
-         return
-    end
+
     local co = _G.__MSUF_UFREQ_CO
     if not co then
         co = {
@@ -2051,8 +2073,7 @@ function _G.MSUF_RequestUnitframeUpdate(frame, forceFull, wantLayout, reason, ur
         }
         _G.__MSUF_UFREQ_CO = co
     end
-    -- Fast dedupe: if this frame is already coalesced with equal/stronger flags,
-    -- avoid repeated table writes from event bursts (notably multi-boss encounters).
+    -- Legacy fallback coalescer: keep as an escape hatch only.
     if co.frames[frame] then
         if (not forceFull or co.force[frame]) and (not wantLayout or co.layout[frame]) then
             return

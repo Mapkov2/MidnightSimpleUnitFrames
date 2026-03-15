@@ -224,6 +224,13 @@ local function InvalidateDB()
     -- v4: Invalidate delta cache (config change affects filter results)
     local CM = API.Cache
     if CM and CM.InvalidateAll then CM.InvalidateAll() end
+    -- Wipe per-entry layout caches so UpdateAnchor re-positions containers
+    local aby = A2_STATE.aurasByUnit
+    if aby then
+        for _, entry in pairs(aby) do
+            if entry then entry._msufLayoutCache = nil end
+        end
+    end
     -- Schedule refresh
     if API.MarkAllDirty then API.MarkAllDirty(0) end
 end

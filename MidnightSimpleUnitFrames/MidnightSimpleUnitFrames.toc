@@ -116,6 +116,19 @@ Core\MSUF_Portraits.lua
 Core\MSUF_Alpha.lua
 Core\MSUF_LoadConditions.lua
 Core\MSUF_Borders.lua
+ClassPower\MSUF_CP_Constants.lua
+ClassPower\MSUF_CP_Profiles.lua
+ClassPower\Features\MSUF_CP_Balance.lua
+ClassPower\Features\MSUF_CP_Specials.lua
+ClassPower\Features\MSUF_CP_Runtime.lua
+ClassPower\Modes\MSUF_CP_Mode_Segmented.lua
+ClassPower\Modes\MSUF_CP_Mode_Fractional.lua
+ClassPower\Modes\MSUF_CP_Mode_Aura.lua
+ClassPower\Modes\MSUF_CP_Mode_Rune.lua
+ClassPower\Modes\MSUF_CP_Mode_Timer.lua
+ClassPower\Modes\MSUF_CP_Mode_Continuous.lua
+ClassPower\Modes\MSUF_CP_Mode_Stagger.lua
+ClassPower\Core\MSUF_CP_Presentation.lua
 Core\MSUF_ClassPower.lua
 
 # ═══════════════════════════════════════════════════════════════
