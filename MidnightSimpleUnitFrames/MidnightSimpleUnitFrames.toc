@@ -3,7 +3,7 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
-## Version: 3.03
+## Version: 3.1 Beta 
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: Masque, LibSharedMedia-3.0, Clique
@@ -128,7 +128,11 @@ ClassPower\Modes\MSUF_CP_Mode_Rune.lua
 ClassPower\Modes\MSUF_CP_Mode_Timer.lua
 ClassPower\Modes\MSUF_CP_Mode_Continuous.lua
 ClassPower\Modes\MSUF_CP_Mode_Stagger.lua
+ClassPower\Core\MSUF_CP_Build.lua
 ClassPower\Core\MSUF_CP_Presentation.lua
+ClassPower\Core\MSUF_CP_AltMana.lua
+ClassPower\Core\MSUF_CP_Layout.lua
+ClassPower\MSUF_CP_Controller.lua
 Core\MSUF_ClassPower.lua
 
 # ═══════════════════════════════════════════════════════════════

@@ -1,17 +1,30 @@
--- Phase 7 CP split: alt-mana helpers for class power core
-_G.MSUF_CP_CORE_BUILDERS = _G.MSUF_CP_CORE_BUILDERS or {}
+-- ============================================================================
+-- MSUF_CP_AltMana.lua
+-- Phase 7B: move AltMana helpers out of MSUF_ClassPower.lua with minimal risk.
+-- No CP value/layout/build flow moved here beyond the isolated AltMana block.
+-- ============================================================================
 
-_G.MSUF_CP_CORE_BUILDERS.ALTMANA = function(env)
-    local _cpDB = env._cpDB
-    local PT = env.PT
-    local CreateFrame = env.CreateFrame
-    local UnitPower = env.UnitPower
-    local UnitPowerMax = env.UnitPowerMax
-    local NotSecret = env.NotSecret
-    local ResolveClassPowerColor = env.ResolveClassPowerColor
+local builders = _G.MSUF_CP_CORE_BUILDERS
+if type(builders) ~= "table" then
+    builders = {}
+    _G.MSUF_CP_CORE_BUILDERS = builders
+end
 
-    local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization) or GetSpecialization
-    local _, PLAYER_CLASS = UnitClass("player")
+builders.ALT_MANA = function(E)
+    local AM = E.AM
+    local _cpDB = E._cpDB
+    local PT = E.PT
+    local PLAYER_CLASS = E.PLAYER_CLASS
+    local GetSpec = E.GetSpec
+    local NotSecret = E.NotSecret
+    local UnitPowerType = E.UnitPowerType
+    local UnitPower = E.UnitPower
+    local UnitPowerMax = E.UnitPowerMax
+    local Enum = E.Enum
+    local tonumber = E.tonumber or tonumber
+    local CreateFrame = E.CreateFrame
+    local ResolveClassPowerColor = E.ResolveClassPowerColor
+    local GetBarTexture = E.GetBarTexture
 
     local function NeedsAltManaBar()
         if _G.MSUF_EleMaelstromActive then return false end
@@ -20,7 +33,9 @@ _G.MSUF_CP_CORE_BUILDERS.ALTMANA = function(env)
             if pType == nil or pType == PT.Mana then return false end
         end
         local maxMana = UnitPowerMax("player", PT.Mana)
-        if NotSecret(maxMana) and maxMana ~= nil and maxMana <= 0 then return false end
+        if NotSecret(maxMana) and maxMana ~= nil and maxMana <= 0 then
+            return false
+        end
         if not NotSecret(pType) then
             local SPECS_NEED_ALT = {
                 PRIEST  = { [3] = true },
@@ -37,19 +52,20 @@ _G.MSUF_CP_CORE_BUILDERS.ALTMANA = function(env)
         return true
     end
 
-    local AM = { bar = nil, container = nil, bgTex = nil, visible = false }
-
     local function AM_Create(playerFrame)
         if AM.container then return end
+
         local c = CreateFrame("Frame", "MSUF_AltManaContainer", playerFrame)
         c:SetFrameLevel(playerFrame:GetFrameLevel() + 2)
         c:Hide()
         AM.container = c
+
         local bg = c:CreateTexture(nil, "BACKGROUND")
         bg:SetTexture("Interface\Buttons\WHITE8x8")
         bg:SetAllPoints(c)
         bg:SetVertexColor(0, 0, 0, 0.4)
         AM.bgTex = bg
+
         local border = CreateFrame("Frame", nil, c, "BackdropTemplate")
         border:SetPoint("TOPLEFT", c, "TOPLEFT", -1, 1)
         border:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 1, -1)
@@ -58,11 +74,11 @@ _G.MSUF_CP_CORE_BUILDERS.ALTMANA = function(env)
         border:SetBackdropBorderColor(0, 0, 0, 1)
         border:SetFrameLevel(c:GetFrameLevel() + 1)
         AM._border = border
-        local getTexture = _G.MSUF_GetBarTexture
+
         local bar = CreateFrame("StatusBar", nil, c)
         bar:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
         bar:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 0, 0)
-        bar:SetStatusBarTexture(getTexture and getTexture() or "Interface\Buttons\WHITE8x8")
+        bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\Buttons\WHITE8x8")
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(0)
         bar:SetFrameLevel(c:GetFrameLevel() + 1)
@@ -72,9 +88,11 @@ _G.MSUF_CP_CORE_BUILDERS.ALTMANA = function(env)
     local function AM_Layout(playerFrame)
         if not AM.container then return end
         local b = _cpDB.bars or {}
+
         local h = tonumber(b.altManaHeight) or 4
         if h < 2 then h = 2 elseif h > 30 then h = 30 end
         local oY = tonumber(b.altManaOffsetY) or -2
+
         AM.container:ClearAllPoints()
         AM.container:SetPoint("TOPLEFT",  playerFrame, "BOTTOMLEFT",   2, oY)
         AM.container:SetPoint("TOPRIGHT", playerFrame, "BOTTOMRIGHT", -2, oY)
@@ -87,19 +105,24 @@ _G.MSUF_CP_CORE_BUILDERS.ALTMANA = function(env)
         local r = tonumber(b.altManaColorR) or 0.0
         local g = tonumber(b.altManaColorG) or 0.0
         local bl = tonumber(b.altManaColorB) or 0.8
+
         local mr, mg, mb = ResolveClassPowerColor(PT.Mana)
         if mr then r, g, bl = mr, mg, mb end
+
         AM.bar:SetStatusBarColor(r, g, bl, 1)
     end
 
     local function AM_UpdateValue()
         if not AM.bar then return end
+
         local cur = UnitPower("player", PT.Mana)
         local mx  = UnitPowerMax("player", PT.Mana)
         if cur == nil then cur = 0 end
-        if mx == nil then mx = 100 end
+        if mx  == nil then mx  = 100 end
+
         local smoothOn = _cpDB.smooth
-        local interp = smoothOn and Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut or nil
+        local interp = smoothOn and Enum and Enum.StatusBarInterpolation
+            and Enum.StatusBarInterpolation.ExponentialEaseOut or nil
         if interp then
             AM.bar:SetMinMaxValues(0, mx, interp)
             AM.bar:SetValue(cur, interp)
@@ -111,13 +134,11 @@ _G.MSUF_CP_CORE_BUILDERS.ALTMANA = function(env)
 
     local function AM_RefreshTexture()
         if not AM.bar then return end
-        local getTexture = _G.MSUF_GetBarTexture
-        AM.bar:SetStatusBarTexture(getTexture and getTexture() or "Interface\Buttons\WHITE8x8")
+        AM.bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\Buttons\WHITE8x8")
     end
 
     return {
         NeedsAltManaBar = NeedsAltManaBar,
-        AM = AM,
         AM_Create = AM_Create,
         AM_Layout = AM_Layout,
         AM_ApplyColor = AM_ApplyColor,
