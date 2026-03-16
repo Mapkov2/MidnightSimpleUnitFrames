@@ -44,17 +44,6 @@ local function IsUnitEvent(event)
     return type(event) == "string" and event:sub(1, 5) == "UNIT_"
 end
 
--- One-time warning per event
-local warnedUnitEvents = {}
-
-local function WarnUnitEvent(event, key)
-    if warnedUnitEvents[event] then return end
-    warnedUnitEvents[event] = true
-    if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
-        _G.DEFAULT_CHAT_FRAME:AddMessage("|cffff5555MSUF: EventBus refused UNIT_* event|r "..tostring(event).." (key="..tostring(key).."). Register unit events directly on the frame (oUF-style).")
-    end
-end
-
 local bus = {
     safeCalls = false,
     -- handlers[event] = {
@@ -153,11 +142,8 @@ function bus:Register(event, key, fn, unitFilter, once)
     if type(key) ~= "string" or key == "" then return false end
     if type(fn) ~= "function" then return false end
 
-    -- Hard rule: no UNIT_* on the EventBus (Step 4)
-    if IsUnitEvent(event) then
-        WarnUnitEvent(event, key)
-        return false
-    end
+    -- Hard rule: no UNIT_* on the EventBus
+    if IsUnitEvent(event) then return false end
 
     local ev = _EnsureEventTable(event)
     local idx = ev.index[key]
