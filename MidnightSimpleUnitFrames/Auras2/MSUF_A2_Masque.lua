@@ -163,12 +163,13 @@ local function EnsureMasqueRegions(btn)
 
     local r = btn._msufMasqueRegions
     -- Map MSUF field names to Masque-expected keys
-    -- btn.tex = icon texture,  btn.cooldown = Cooldown frame,  btn.count = count FontString
+    -- Icon + Cooldown ONLY.  Count is managed exclusively by _ApplyStacks;
+    -- passing it to Masque lets ReSkin overwrite anchor/position, breaking
+    -- the user's stack-count anchor setting.
     r.Icon     = btn.tex
     r.Cooldown = btn.cooldown
-    r.Count    = btn.count
-    -- No Normal/Border: Masque only skins icon appearance + cooldown (like MSA).
-    -- MSUF's own dispel borders / highlight glows are unaffected.
+    r.Count    = nil   -- explicit nil: clear stale ref from recycled buttons
+    -- No Count/Normal/Border: Masque only skins icon appearance + cooldown.
  end
 
 local _lastReskinCount = -1  -- Count at last ReSkin; -1 forces initial reskin
