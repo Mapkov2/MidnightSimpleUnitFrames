@@ -925,8 +925,58 @@ end
 end
 
 
--- Pre-cached boss unit strings (avoid "boss"..i concatenation in loops)
+-- Pre-cached aura unit strings (avoid string concat in loops)
 local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+local _AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+
+local _dirtySeen = {}
+
+local function _ForEachDirtyUnit(includeResidualDisabled, fn)
+    if type(fn) ~= "function" then return end
+
+    local DB = API.DB
+    local c = DB and DB.cache
+    local ue = c and c.unitEnabled
+
+    local seen = _dirtySeen
+    for k in pairs(seen) do seen[k] = nil end
+
+    if ue then
+        for i = 1, #_AURA_UNITS do
+            local unit = _AURA_UNITS[i]
+            if ue[unit] == true then
+                seen[unit] = true
+                fn(unit)
+            end
+        end
+    else
+        for i = 1, #_AURA_UNITS do
+            local unit = _AURA_UNITS[i]
+            seen[unit] = true
+            fn(unit)
+        end
+    end
+
+    -- Disabled units can still need one cleanup render if they have attached state/icons.
+    if includeResidualDisabled then
+        for unit, entry in pairs(AurasByUnit) do
+            if entry and not seen[unit] then
+                fn(unit)
+            end
+        end
+    end
+end
+
+local _markDirtyDelay = 0
+local function _MarkDirtyEachUnit(unit)
+    MarkDirty(unit, _markDirtyDelay)
+end
+
+local _storeInvalidateEachUnit = nil
+local function _InvalidateStoreEachUnit(unit)
+    local f = _storeInvalidateEachUnit
+    if f then f(unit) end
+end
 
 -- Module binding flag (set once, reset only on hard reload)
 local _modulesBound = false
@@ -1105,58 +1155,41 @@ local function RenderUnit(entry)
         end
     end
 
-    local showTest = (shared.showInEditMode == true and isEditActive)
-
-    if showTest then
-        if entry.buffs then entry.buffs:Show() end
-        if entry.debuffs then entry.debuffs:Show() end
-        if entry.mixed then entry.mixed:Hide() end
-        -- Private auras are player-only; skip for target.
-        if entry.private and unit ~= "target" then entry.private:Show() end
-        entry._msufA2_previewActive = true
-    else
-        -- Leaving edit mode or previews disabled: ensure preview state is cleared.
-        if entry._msufA2_previewActive then
-            local Preview = API.Preview
-            if Preview and Preview.ClearPreviewsForEntry then
-                Preview.ClearPreviewsForEntry(entry)
-            else
-                entry._msufA2_previewActive = nil
+    local showTest = false
+    do
+        local Preview = API.Preview
+        local runPreview = Preview and Preview.RenderEntryPreview
+        if runPreview then
+            local pv = entry._previewCfg
+            if not pv then
+                pv = {}
+                entry._previewCfg = pv
             end
-            entry._msufA2_playerPreviewInit = nil
-        end
-    end
+            pv.maxBuffs = maxBuffs
+            pv.maxDebuffs = maxDebuffs
+            pv.stackCountAnchor = stackCountAnchor
+            pv.buffIconSize = buffIconSize
+            pv.debuffIconSize = debuffIconSize
+            pv.privateIconSize = privateIconSize
+            pv.spacing = spacing
+            pv.perRow = perRow
+            pv.buffGrowth = buffGrowth
+            pv.debuffGrowth = debuffGrowth
+            pv.privateGrowth = privateGrowth
+            pv.buffRowWrap = buffRowWrap
+            pv.debuffRowWrap = debuffRowWrap
 
-    -- Edit Mode preview: always show fake auras while active
-    -- Player always has a live frame, so skip buff previews and let real buffs render.
-    if showTest then
-        local isPlayer = (unit == "player")
-
-        if Icons.RenderPreviewIcons and not isPlayer then
-            -- Non-player units: full preview (buffs + debuffs)
-            local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, maxBuffs, maxDebuffs, stackCountAnchor)
-            local bSize = buffIconSize
-            local dSize = debuffIconSize
-            Icons.LayoutIcons(entry.buffs, bc or 0, bSize, spacing, perRow, buffGrowth, buffRowWrap)
-            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, debuffGrowth, debuffRowWrap)
-        elseif Icons.RenderPreviewIcons and isPlayer then
-            -- Player: debuff preview only (buffCap = 0), real buffs render below
-            local _, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, 0, maxDebuffs, stackCountAnchor)
-            local dSize = debuffIconSize
-            Icons.LayoutIcons(entry.debuffs, dc or 0, dSize, spacing, perRow, debuffGrowth, debuffRowWrap)
-        end
-
-        if Icons.RenderPreviewPrivateIcons and unit ~= "target" then
-            Icons.RenderPreviewPrivateIcons(entry, unit, shared, privateIconSize, spacing, stackCountAnchor, privateGrowth)
-        end
-
-        -- Non-player: done. Player: fall through to real aura path for buffs.
-        if not isPlayer then
-            return
-        end
-        -- Player: flag preview init so real buff path runs.
-        if not entry._msufA2_playerPreviewInit then
-            entry._msufA2_playerPreviewInit = true
+            local pvShow, stopLive = runPreview(entry, unit, shared, isEditActive, pv)
+            showTest = (pvShow == true)
+            if stopLive then
+                return
+            end
+        else
+            showTest = (shared.showInEditMode == true and isEditActive)
+            if not showTest and entry._msufA2_previewActive then
+                entry._msufA2_previewActive = nil
+                entry._msufA2_playerPreviewInit = nil
+            end
         end
     end
 
@@ -1368,12 +1401,9 @@ end
 
 
 local function MarkAllDirty(delay)
-    -- Always mark ALL units, not just enabled ones.
-    -- Disabled units need a render pass to hide their lingering icons.
-    MarkDirty("player", delay)
-    MarkDirty("target", delay)
-    MarkDirty("focus", delay)
-    for i = 1, 5 do MarkDirty(_BOSS_UNITS[i], delay) end
+    -- Mark enabled runtime units plus any attached disabled residual entries.
+    _markDirtyDelay = delay
+    _ForEachDirtyUnit(true, _MarkDirtyEachUnit)
 end
 
 local function RefreshAll()
@@ -1382,10 +1412,9 @@ local function RefreshAll()
 
     local Store = API.Store
     if Store and Store.InvalidateUnit then
-        Store.InvalidateUnit("player")
-        Store.InvalidateUnit("target")
-        Store.InvalidateUnit("focus")
-        for i = 1, 5 do Store.InvalidateUnit(_BOSS_UNITS[i]) end
+        _storeInvalidateEachUnit = Store.InvalidateUnit
+        _ForEachDirtyUnit(true, _InvalidateStoreEachUnit)
+        _storeInvalidateEachUnit = nil
     end
     -- v4: Invalidate cache (forces re-filter on next render)
     local CM = API.Cache

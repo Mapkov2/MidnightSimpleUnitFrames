@@ -6,6 +6,7 @@ local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
 local type = type
 local pairs = pairs
+local tonumber = tonumber
 
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
@@ -23,10 +24,42 @@ DB.cache = DB.cache or {
     enabled = false,
     showInEditMode = false,
     unitEnabled = {}, -- key -> bool (player/target/focus/boss1-5)
+    unitHasVisibleAuras = {}, -- key -> bool (per-unit buff/debuff cap+visibility)
 }
 
 -- Pre-cached boss unit strings
 local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+
+local _AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+
+local function _ResolveUnitAuraCaps(a2, shared, unit)
+    local showBuffs = (shared and shared.showBuffs == true)
+    local showDebuffs = (shared and shared.showDebuffs == true)
+
+    local maxBuffs = shared and shared.maxBuffs
+    local maxDebuffs = shared and shared.maxDebuffs
+
+    if type(maxBuffs) ~= "number" then
+        maxBuffs = shared and shared.maxIcons or 12
+    end
+    if type(maxDebuffs) ~= "number" then
+        maxDebuffs = shared and shared.maxIcons or 12
+    end
+
+    local pu = a2 and a2.perUnit and a2.perUnit[unit]
+    if pu and pu.overrideSharedLayout == true and type(pu.layoutShared) == "table" then
+        local ls = pu.layoutShared
+        if type(ls.maxBuffs) == "number" then maxBuffs = ls.maxBuffs end
+        if type(ls.maxDebuffs) == "number" then maxDebuffs = ls.maxDebuffs end
+    end
+
+    maxBuffs = tonumber(maxBuffs) or 0
+    maxDebuffs = tonumber(maxDebuffs) or 0
+
+    local hasBuffLane = showBuffs and maxBuffs > 0
+    local hasDebuffLane = showDebuffs and maxDebuffs > 0
+    return (hasBuffLane or hasDebuffLane) == true
+end
 
 local function _SetUnitEnabled(cache, a2)
     local ue = cache.unitEnabled
@@ -59,6 +92,9 @@ function DB.InvalidateCache()
     if c.unitEnabled then
         for k in pairs(c.unitEnabled) do c.unitEnabled[k] = nil end
     end
+    if c.unitHasVisibleAuras then
+        for k in pairs(c.unitHasVisibleAuras) do c.unitHasVisibleAuras[k] = nil end
+    end
  end
 
 function DB.RebuildCache(a2, shared)
@@ -77,16 +113,19 @@ function DB.RebuildCache(a2, shared)
 
     _SetUnitEnabled(c, a2)
 
-    -- Pre-compute: does the shared config allow any visible auras?
-    -- (Used by Events.ShouldProcessUnitEvent to skip UNIT_AURA quickly)
+    -- Pre-compute global + per-unit visible aura lanes.
+    -- Global flag is preserved for compatibility/hot fallback,
+    -- per-unit map enables tighter UNIT_AURA registration gates.
     local hasVisible = false
-    if shared.showBuffs == true then
-        local n = shared.maxBuffs
-        if type(n) == "number" and n > 0 then hasVisible = true end
-    end
-    if not hasVisible and shared.showDebuffs == true then
-        local n = shared.maxDebuffs
-        if type(n) == "number" and n > 0 then hasVisible = true end
+    local uv = c.unitHasVisibleAuras
+    if uv then
+        for k in pairs(uv) do uv[k] = nil end
+        for i = 1, #_AURA_UNITS do
+            local unit = _AURA_UNITS[i]
+            local unitVisible = _ResolveUnitAuraCaps(a2, shared, unit)
+            uv[unit] = unitVisible
+            if unitVisible then hasVisible = true end
+        end
     end
     c._unitHasVisibleAuras = hasVisible
 
