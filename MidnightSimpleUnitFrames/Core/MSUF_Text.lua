@@ -511,6 +511,10 @@ function ns.Text.RenderPowerText(self)
     end
     -- Ele Shaman: class power shows Maelstrom → main bar + text show Mana
     if self._msufIsPlayer and _G.MSUF_EleMaelstromActive then pType = 0 end
+    -- Aug Evoker: class power shows Ebon Might → main bar + text show Essence
+    if self._msufIsPlayer and _G.MSUF_AugEvokerActive then pType = 19 end
+    -- Shadow Priest: class power shows Insanity → main bar + text show Mana
+    if self._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0 end
     if pType ~= nil then
         if curValue == nil then
             curValue = UnitPower and UnitPower(unit, pType)
@@ -703,6 +707,8 @@ function ns.Text.ApplyPowerTextColorByType(self, unit, enabled)
     local pType, pTok = UnitPowerType(unit)
     if pType == nil then  return end
     if self._msufIsPlayer and _G.MSUF_EleMaelstromActive then pType = 0; pTok = "MANA" end
+    if self._msufIsPlayer and _G.MSUF_AugEvokerActive then pType = 19; pTok = "ESSENCE" end
+    if self._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0; pTok = "MANA" end
     local fn = _G.MSUF_GetResolvedPowerColor
     if not fn then  return end
     local pr, pg, pb = fn(pType, pTok)

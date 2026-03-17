@@ -268,7 +268,8 @@ local function BuildClassPowerOptions(leftName, rightName)
     local cpFillReverseCheck = EnhanceCheck(CPC("MSUF_ClassPowerReverseCheck", "Fill right-to-left", cpRuneTimeCheck, "classPowerFillReverse"))
     local cpEleMaelCheck = EnhanceCheck(CPC("MSUF_ClassPowerEleMaelCheck", "Show Maelstrom bar (Elemental)", cpFillReverseCheck, "showEleMaelstrom"))
     local cpEbonMightCheck = EnhanceCheck(CPC("MSUF_ClassPowerEbonMightCheck", "Show Ebon Might timer (Aug)", cpEleMaelCheck, "showEbonMight", true))
-    local cpPredictionCheck = EnhanceCheck(CPC("MSUF_ClassPowerPredictionCheck", "Show resource prediction", cpEbonMightCheck, "classPowerShowPrediction", true))
+    local cpShadowManaCheck = EnhanceCheck(CPC("MSUF_ClassPowerShadowManaCheck", "Show Insanity bar (Shadow)", cpEbonMightCheck, "showShadowMana"))
+    local cpPredictionCheck = EnhanceCheck(CPC("MSUF_ClassPowerPredictionCheck", "Show resource prediction", cpShadowManaCheck, "classPowerShowPrediction", true))
 
     -- =====================================================================
     -- LEFT BOTTOM: Detached Power Bar
@@ -516,7 +517,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     if dpbWidthModeDrop and dpbWidthModeDrop.Refresh then dpbWidthModeDrop:Refresh() end
     -- Force checkboxes to re-read DB (OnShow won't fire since parent is already visible)
     for _, cb in ipairs({ cpShowCheck, cpColorCheck, cpAnchorCDCheck, cpChargedCheck, cpTextCheck,
-        cpRuneTimeCheck, cpFillReverseCheck, cpEleMaelCheck, cpEbonMightCheck, cpPredictionCheck,
+        cpRuneTimeCheck, cpFillReverseCheck, cpEleMaelCheck, cpEbonMightCheck, cpShadowManaCheck, cpPredictionCheck,
         cpHideOOCCheck, cpHideFullCheck, cpHideEmptyCheck, amShowCheck }) do
         local handler = cb and cb:GetScript("OnShow")
         if handler then handler(cb) end

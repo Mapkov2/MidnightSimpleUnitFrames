@@ -2716,6 +2716,9 @@ do
             if pType == nil then return end
             -- Ele Shaman: class power shows Maelstrom → main bar shows Mana
             if f._msufIsPlayer and _G.MSUF_EleMaelstromActive then pType = 0 end
+            -- Aug Evoker: class power shows Ebon Might → main bar shows Essence
+            if f._msufIsPlayer and _G.MSUF_AugEvokerActive then pType = 19 end
+            if f._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0 end
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
@@ -2745,6 +2748,8 @@ do
             local pType = _UnitPowerType(unit)
             if pType == nil then return end
             if _G.MSUF_EleMaelstromActive then pType = 0 end
+            if f._msufIsPlayer and _G.MSUF_AugEvokerActive then pType = 19 end
+            if f._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0 end
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
@@ -2770,6 +2775,8 @@ do
             local pType = _UnitPowerType(unit)
             if pType == nil then return end
             if _G.MSUF_EleMaelstromActive then pType = 0 end
+            if f._msufIsPlayer and _G.MSUF_AugEvokerActive then pType = 19 end
+            if f._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0 end
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
@@ -2795,6 +2802,8 @@ do
             local pType = _UnitPowerType(unit)
             if pType == nil then return end
             if _G.MSUF_EleMaelstromActive then pType = 0 end
+            if f._msufIsPlayer and _G.MSUF_AugEvokerActive then pType = 19 end
+            if f._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0 end
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)

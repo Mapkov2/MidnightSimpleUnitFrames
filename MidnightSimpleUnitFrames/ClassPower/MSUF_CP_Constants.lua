@@ -31,6 +31,7 @@ K.CPK = {
         DH_VENGEANCE         = _G.SPEC_DEMONHUNTER_VENGEANCE or 2,
         HUNTER_SURVIVAL      = 3,
         EVOKER_AUG           = 3,
+        PRIEST_SHADOW        = 3,
     },
     SPELL = {
         DARK_HEART             = (Constants and Constants.UnitPowerSpellIDs and Constants.UnitPowerSpellIDs.DARK_HEART_SPELL_ID) or 1225789,

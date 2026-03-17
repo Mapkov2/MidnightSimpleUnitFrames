@@ -657,6 +657,17 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
         pType = 0   -- Enum.PowerType.Mana
         pTok  = "MANA"
     end
+    -- Aug Evoker: when Ebon Might is shown as class power, main bar shows Essence.
+    -- Mana moves to AltMana bar. Same flag pattern as Ele Shaman.
+    if isPlayer and _G.MSUF_AugEvokerActive then
+        pType = 19  -- Enum.PowerType.Essence
+        pTok  = "ESSENCE"
+    end
+    -- Shadow Priest: class power shows Insanity → main bar shows Mana.
+    if isPlayer and _G.MSUF_ShadowManaActive then
+        pType = 0   -- Enum.PowerType.Mana
+        pTok  = "MANA"
+    end
 
     ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
     bar:SetScript("OnUpdate", nil)
@@ -1204,10 +1215,12 @@ local function MSUF_GetPowerBarColor(powerType, powerToken)
     if not MSUF_DB then EnsureDB() end
     local g = MSUF_DB.general
     local ov = g and g.powerColorOverrides
-    if type(ov) ~= "table" then
-         return nil
+    local c = (type(ov) == "table") and ov[powerToken] or nil
+    -- Aug Evoker: Essence is in power bar but user may set color via Class Power colors
+    if type(c) ~= "table" and _G.MSUF_AugEvokerActive and powerToken == "ESSENCE" then
+        local cpOv = g and g.classPowerColorOverrides
+        c = (type(cpOv) == "table") and cpOv[powerToken] or nil
     end
-    local c = ov[powerToken]
     if type(c) ~= "table" then
          return nil
     end

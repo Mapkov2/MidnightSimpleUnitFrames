@@ -293,6 +293,8 @@ local function EnsureDefaults()
     if b.showEleMaelstrom     == nil then b.showEleMaelstrom     = false end
     -- Evoker Aug: Ebon Might timer bar (on by default)
     if b.showEbonMight        == nil then b.showEbonMight        = true  end
+    -- Shadow Priest: show Mana as main bar, Insanity as class resource (off by default)
+    if b.showShadowMana       == nil then b.showShadowMana       = false end
 
     -- Auto-hide: visibility conditions
     if b.classPowerHideOOC       == nil then b.classPowerHideOOC       = false end
@@ -403,8 +405,14 @@ local function GetClassPowerType()
         end
 
     elseif PLAYER_CLASS == "PRIEST" then
-        -- Shadow: Insanity is primary resource → already shown in main power bar.
-        -- No class power overlay needed (same pattern as Balance Druid Astral Power).
+        -- Shadow: when showShadowMana is ON, main bar shows Mana → Insanity as class resource
+        local spec = GetSpec and GetSpec()
+        if spec == CPK.SPEC.PRIEST_SHADOW then
+            local b = _cpDB.bars
+            if b and b.showShadowMana then
+                return PT.Insanity, CPK.MODE.CONTINUOUS, false
+            end
+        end
 
     elseif PLAYER_CLASS == "WARRIOR" then
         -- All Warrior specs use Whirlwind as class resource (Fury, Arms, Prot).
@@ -432,6 +440,8 @@ local function NeedsAltManaBar()
     if _G.MSUF_EleMaelstromActive then return false end
     -- Aug Evoker: main bar shows Essence → Mana needs AltMana bar
     if _G.MSUF_AugEvokerActive then return true end
+    -- Shadow Priest: main bar shows Mana → no AltMana needed
+    if _G.MSUF_ShadowManaActive then return false end
     local pType = UnitPowerType("player")
     -- pType == 0 = Mana primary → no alt bar needed
     if NotSecret(pType) then
@@ -1261,6 +1271,18 @@ local function FullRefresh()
         end
     end
 
+    -- Shadow Priest: when showShadowMana is ON, main power bar shows Mana
+    -- instead of Insanity. Insanity moves to CP class resource (CONTINUOUS).
+    local isShadowMana = (PLAYER_CLASS == "PRIEST" and GetSpec and GetSpec() == CPK.SPEC.PRIEST_SHADOW
+        and b.showShadowMana == true)
+    local shadowChanged = ((isShadowMana or false) ~= (_G.MSUF_ShadowManaActive == true))
+    _G.MSUF_ShadowManaActive = isShadowMana or false
+    if shadowChanged then
+        if type(_G.MSUF_RefreshPlayerPowerBar) == "function" then
+            _G.MSUF_RefreshPlayerPowerBar()
+        end
+    end
+
     if cpEnabled and powerType and renderMode ~= CPK.MODE.NONE then
         CP_Create(playerFrame)
 
@@ -1311,6 +1333,7 @@ local function FullRefresh()
         if maxP > CPConst.MAX_CLASS_POWER then maxP = CPConst.MAX_CLASS_POWER end
 
         CP_EnsureBars(playerFrame, maxP)
+        CP._outlineEdge = -1  -- force outline rebuild on mode/size changes
         CP_Layout(playerFrame, maxP, cpHeight)
         -- Cache layout params for lightweight CDM relayout (avoids FullRefresh)
         CP._pf = playerFrame
@@ -1349,6 +1372,8 @@ local function FullRefresh()
 
         CP.container:Show()
         CP.visible = true
+        -- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
+        if CP._outline then CP._outline:Show() end
 
     else
         -- Clean up rune/timer OnUpdate scripts when hiding
