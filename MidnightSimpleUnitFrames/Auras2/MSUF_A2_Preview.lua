@@ -170,6 +170,65 @@ if _G and type(_G.MSUF_Auras2_ClearAllPreviews) ~= "function" then
     _G.MSUF_Auras2_ClearAllPreviews = function()  return API.ClearAllPreviews() end
 end
 
+
+local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
+    if not entry or not unit or not shared then
+        return false, false
+    end
+
+    local showTest = (shared.showInEditMode == true and isEditActive == true)
+
+    if showTest then
+        if entry.buffs then entry.buffs:Show() end
+        if entry.debuffs then entry.debuffs:Show() end
+        if entry.mixed then entry.mixed:Hide() end
+        if entry.private and unit ~= "target" then entry.private:Show() end
+        entry._msufA2_previewActive = true
+    elseif entry._msufA2_previewActive then
+        if API.ClearPreviewsForEntry then
+            API.ClearPreviewsForEntry(entry)
+        else
+            entry._msufA2_previewActive = nil
+        end
+        entry._msufA2_playerPreviewInit = nil
+        return false, false
+    else
+        return false, false
+    end
+
+    local Icons = API.Icons or API.Apply
+    if not Icons then
+        return showTest, false
+    end
+
+    local isPlayer = (unit == "player")
+
+    if Icons.RenderPreviewIcons and not isPlayer then
+        local bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, cfg.maxBuffs, cfg.maxDebuffs, cfg.stackCountAnchor)
+        Icons.LayoutIcons(entry.buffs, bc or 0, cfg.buffIconSize, cfg.spacing, cfg.perRow, cfg.buffGrowth, cfg.buffRowWrap)
+        Icons.LayoutIcons(entry.debuffs, dc or 0, cfg.debuffIconSize, cfg.spacing, cfg.perRow, cfg.debuffGrowth, cfg.debuffRowWrap)
+    elseif Icons.RenderPreviewIcons and isPlayer then
+        local _, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, 0, cfg.maxDebuffs, cfg.stackCountAnchor)
+        Icons.LayoutIcons(entry.debuffs, dc or 0, cfg.debuffIconSize, cfg.spacing, cfg.perRow, cfg.debuffGrowth, cfg.debuffRowWrap)
+    end
+
+    if Icons.RenderPreviewPrivateIcons and unit ~= "target" then
+        Icons.RenderPreviewPrivateIcons(entry, unit, shared, cfg.privateIconSize, cfg.spacing, cfg.stackCountAnchor, cfg.privateGrowth)
+    end
+
+    if isPlayer then
+        if not entry._msufA2_playerPreviewInit then
+            entry._msufA2_playerPreviewInit = true
+        end
+        return showTest, false
+    end
+
+    return showTest, true
+end
+
+Preview.RenderEntryPreview = RenderEntryPreview
+API.RenderEntryPreview = API.RenderEntryPreview or RenderEntryPreview
+
 -- ------------------------------------------------------------
 -- Preview tickers (Edit Mode): cycle stacks + cooldowns
 -- ------------------------------------------------------------
@@ -240,6 +299,8 @@ local _tickApplyAnchorStyle = nil
 local _tickApplyOffsets = nil
 local _tickApplyCDOffsets = nil
 local _tickReg = nil
+local _tickFontPath = nil
+local _tickFontFlags = nil
 
 -- ------------------------------------------------------------
 -- Preview cooldown text: own FontString that responds to user's
@@ -277,11 +338,9 @@ local function EnsurePreviewCDText(icon)
     if fs then return fs end
 
     -- Parent to the icon frame (not the Cooldown widget which may reject CreateFontString).
-    local ok, result = pcall(function()
-        return icon:CreateFontString(nil, "OVERLAY")
-    end)
-    if not ok or not result then return nil end
-    fs = result
+    if not icon.CreateFontString then return nil end
+    fs = icon:CreateFontString(nil, "OVERLAY")
+    if not fs then return nil end
 
     -- Resolve global MSUF font if available; otherwise use default
     local fontPath = PREVIEW_CD_FONT
@@ -359,7 +418,7 @@ local function _PreviewCooldownIconFn(icon)
 
     -- Apply cooldown offsets from Icons module (invalidates caches, applies font family)
     if _tickApplyCDOffsets then
-        pcall(_tickApplyCDOffsets, icon, icon._msufUnit, _tickShared)
+        _tickApplyCDOffsets(icon, icon._msufUnit, _tickShared)
     end
 
     -- Update cooldown swirl visuals (duration object preferred; fallback to SetCooldown).
@@ -372,7 +431,7 @@ local function _PreviewCooldownIconFn(icon)
     end
 
     if _tickReg then
-        pcall(_tickReg, icon)
+        _tickReg(icon)
     end
 
     -- Preview-only cooldown text: create FontString and keep it synced
@@ -382,15 +441,8 @@ local function _PreviewCooldownIconFn(icon)
 
     local size, offX, offY = ResolvePreviewCDConfig(icon, _tickShared, _tickA2db)
 
-    -- Resolve global font (may change between ticks if user switches fonts)
-    local fontPath = PREVIEW_CD_FONT
-    local fontFlags = "OUTLINE"
-    local gfs = _G.MSUF_GetGlobalFontSettings
-    if type(gfs) == "function" then
-        local p, fl = gfs()
-        if type(p) == "string" and p ~= "" then fontPath = p end
-        if type(fl) == "string" then fontFlags = fl end
-    end
+    local fontPath = _tickFontPath or PREVIEW_CD_FONT
+    local fontFlags = _tickFontFlags or "OUTLINE"
 
     -- Apply font family + size (diff-gated)
     if icon._msufA2_pvCDSize ~= size or icon._msufA2_pvCDFont ~= fontPath then
@@ -428,7 +480,18 @@ local function PreviewTickCooldown()
     _tickApplyCDOffsets = A and A.ApplyCooldownTextOffsets
     _tickReg, _ = GetCooldownTextMgr()
 
-    pcall(ForEachPreviewIcon, _PreviewCooldownIconFn)
+    local fontPath = PREVIEW_CD_FONT
+    local fontFlags = "OUTLINE"
+    local gfs = _G.MSUF_GetGlobalFontSettings
+    if type(gfs) == "function" then
+        local p, fl = gfs()
+        if type(p) == "string" and p ~= "" then fontPath = p end
+        if type(fl) == "string" then fontFlags = fl end
+    end
+    _tickFontPath = fontPath
+    _tickFontFlags = fontFlags
+
+    ForEachPreviewIcon(_PreviewCooldownIconFn)
  end
 
 local function EnsureTicker(kind, need, interval, fn)

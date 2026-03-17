@@ -231,13 +231,19 @@ local function ShouldProcessUnitEvent(unit, forAuraEvent)
         return true
     end
 
-    -- UNIT_AURA: also require that at least one aura group has cap > 0.
-    -- Use pre-computed flag from DB.RebuildCache when available.
+    -- UNIT_AURA: require at least one visible aura lane for THIS unit.
+    -- Use per-unit precomputed cache when available.
+    local uv = c.unitHasVisibleAuras
+    if uv and uv[unit] ~= nil then
+        return uv[unit] == true
+    end
+
+    -- Compatibility fallback for older cache shape.
     if c._unitHasVisibleAuras ~= nil then
         return c._unitHasVisibleAuras == true
     end
 
-    -- Fallback: read shared directly
+    -- Last-resort fallback if cache is partially populated.
     local shared = c.shared
     if not shared then return false end
 
@@ -284,6 +290,56 @@ local function FindUnitFrame(unit)
     return name and _G[name] or nil
 end
 
+local function UnitNeedsAuraRuntime(unit, cache)
+    if not unit then return false end
+    local c = cache
+    local ue = c and c.unitEnabled
+    if not (ue and ue[unit] == true) then
+        return false
+    end
+
+    -- Standard buff/debuff lanes visible for this unit.
+    local uv = c and c.unitHasVisibleAuras
+    if uv and uv[unit] == true then
+        return true
+    end
+
+    -- Compatibility fallback for older cache shape.
+    if c and c._unitHasVisibleAuras == true then
+        return true
+    end
+
+    -- Player reminder lane depends on live aura cache even if buff/debuff caps are 0.
+    local shared = c and c.shared
+    if unit == "player" and shared and shared.showReminders ~= false then
+        return true
+    end
+
+    return false
+end
+
+-- Live-runtime render gate (MUF-style): do not schedule aura renders for hidden frames.
+-- Store deltas still update so OnShow can render the latest state immediately.
+local function ShouldScheduleLiveRender(unit)
+    if not unit then return false end
+
+    -- Edit Mode always renders (preview/movers must stay responsive).
+    if IsEditModeActive() then
+        return true
+    end
+
+    local frame = FindUnitFrame(unit)
+    if not frame then
+        return false
+    end
+
+    if frame.IsShown and frame:IsShown() ~= true then
+        return false
+    end
+
+    return true
+end
+
 -- ------------------------------------------------------------
 -- UNIT_AURA binding (helper frames)
 -- ------------------------------------------------------------
@@ -326,14 +382,14 @@ local function EnsureUnitAuraBinding(eventFrame)
     end
 
     local n = 0
-    if ue.player == true then n = n + 1; units[n] = "player" end
-    if ue.target == true then n = n + 1; units[n] = "target" end
-    if ue.focus == true then n = n + 1; units[n] = "focus" end
-    if ue.boss1 == true then n = n + 1; units[n] = "boss1" end
-    if ue.boss2 == true then n = n + 1; units[n] = "boss2" end
-    if ue.boss3 == true then n = n + 1; units[n] = "boss3" end
-    if ue.boss4 == true then n = n + 1; units[n] = "boss4" end
-    if ue.boss5 == true then n = n + 1; units[n] = "boss5" end
+    if UnitNeedsAuraRuntime("player", c) then n = n + 1; units[n] = "player" end
+    if UnitNeedsAuraRuntime("target", c) then n = n + 1; units[n] = "target" end
+    if UnitNeedsAuraRuntime("focus", c) then n = n + 1; units[n] = "focus" end
+    if UnitNeedsAuraRuntime("boss1", c) then n = n + 1; units[n] = "boss1" end
+    if UnitNeedsAuraRuntime("boss2", c) then n = n + 1; units[n] = "boss2" end
+    if UnitNeedsAuraRuntime("boss3", c) then n = n + 1; units[n] = "boss3" end
+    if UnitNeedsAuraRuntime("boss4", c) then n = n + 1; units[n] = "boss4" end
+    if UnitNeedsAuraRuntime("boss5", c) then n = n + 1; units[n] = "boss5" end
 
     local idx = 1
     local i = 1
@@ -797,9 +853,13 @@ end
     EnsureUnitAuraBinding(ef)
 
     -- Build desired core events based on enabled units
-    local needTarget = (ue and ue.target == true) or false
-    local needFocus  = (ue and ue.focus  == true) or false
-    local needBoss   = (ue and ((ue.boss1 == true) or (ue.boss2 == true) or (ue.boss3 == true) or (ue.boss4 == true) or (ue.boss5 == true))) or false
+    local needTarget = UnitNeedsAuraRuntime("target", c)
+    local needFocus  = UnitNeedsAuraRuntime("focus", c)
+    local needBoss   = UnitNeedsAuraRuntime("boss1", c)
+                    or UnitNeedsAuraRuntime("boss2", c)
+                    or UnitNeedsAuraRuntime("boss3", c)
+                    or UnitNeedsAuraRuntime("boss4", c)
+                    or UnitNeedsAuraRuntime("boss5", c)
 
     local desired = {
         PLAYER_LOGIN = "Core",
@@ -884,6 +944,12 @@ end
                 local onAura = _cachedOnUnitAura
                 if onAura then
                     onAura(unit, updateInfo)
+                end
+
+                -- Hard gate: hidden unit frames do not need live aura renders.
+                -- Avoids queue/flush churn while preserving correctness via Store + OnShow invalidation.
+                if not ShouldScheduleLiveRender(unit) then
+                    return
                 end
 
                 -- Target swap already scheduled a consolidated next-frame render.
