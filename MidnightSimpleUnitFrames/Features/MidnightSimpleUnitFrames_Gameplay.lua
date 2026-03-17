@@ -42,11 +42,17 @@ end
 
 -- Sub Rogue guard: Spec ID 261 = Subtlety Rogue
 local _SUB_ROGUE_SPEC_ID = 261
+local _isSubRogue = false
+
 local function MSUF_IsSubRogue()
     if not UnitClass then return false end
     local _, cls = UnitClass("player")
     if cls ~= "ROGUE" then return false end
     return MSUF_GetPlayerSpecID() == _SUB_ROGUE_SPEC_ID
+end
+
+local function _UpdateSubRogueCache()
+    _isSubRogue = MSUF_IsSubRogue()
 end
 
 ------------------------------------------------------
@@ -259,6 +265,7 @@ end
     if g.firstDanceIconSize == nil or g.firstDanceIconSize <= 0 then g.firstDanceIconSize = 40 end
     if g.firstDanceIconSize < 16 then g.firstDanceIconSize = 16
     elseif g.firstDanceIconSize > 96 then g.firstDanceIconSize = 96 end
+    if g.firstDanceShowReady == nil then g.firstDanceShowReady = true end
 
     -- Rogue: Apex Alert — Trickster "Shadowstrike!" hint
     -- Shadow Dance (185313) Cast + kein Overlay → SHADOWSTRIKE! Hinweis.
@@ -702,6 +709,7 @@ local FIRST_DANCE_WINDOW = 6
 local firstDanceActive = false
 local firstDanceEndTime = 0
 local firstDanceLastText = nil
+local firstDanceReady = false
 
 local _TickFirstDance  -- forward declaration (defined after StartFirstDanceWindow)
 
@@ -714,6 +722,57 @@ local function _StopFirstDanceTick()
     if firstDanceText then firstDanceText:SetText("") end
     if firstDanceCDText then firstDanceCDText:SetText("") end
     if firstDanceCooldown and firstDanceCooldown.SetCooldown then firstDanceCooldown:SetCooldown(0, 0) end
+end
+
+-- Hide the "ready" persistent indicator (called on Shadow Dance cast or feature disable)
+local function _HideFirstDanceReady()
+    firstDanceReady = false
+    if firstDanceFrame then firstDanceFrame:Hide() end
+    if firstDanceText then firstDanceText:SetText("") end
+    if firstDanceCDText then firstDanceCDText:SetText("") end
+    if firstDanceCooldown and firstDanceCooldown.SetCooldown then firstDanceCooldown:SetCooldown(0, 0) end
+end
+
+------------------------------------------------------
+-- Shadow Dance listener: hide ready icon on cast (185313)
+-- RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED","player") = zero dispatch cost for other units.
+-- Only registered while firstDanceReady == true.
+------------------------------------------------------
+local _SHADOW_DANCE_SPELL_ID = 185313
+local _fdShadowDanceFrame
+
+local function _UnregisterShadowDanceWatch()
+    if _fdShadowDanceFrame then
+        _fdShadowDanceFrame:UnregisterAllEvents()
+    end
+end
+
+local function _RegisterShadowDanceWatch()
+    if not _isSubRogue then return end
+    if not _fdShadowDanceFrame then
+        _fdShadowDanceFrame = CreateFrame("Frame")
+        _fdShadowDanceFrame:SetScript("OnEvent", function(_, _, _, _, spellID)
+            if spellID == _SHADOW_DANCE_SPELL_ID then
+                _UnregisterShadowDanceWatch()
+                _HideFirstDanceReady()
+                -- OOC Shadow Dance (e.g. supercharged combo points): restart 6s window
+                if not UnitAffectingCombat("player") then
+                    local gd = GetGameplayDBFast()
+                    if gd and gd.enableFirstDanceTimer and ns._MSUF_StartFirstDanceWindow then
+                        ns._MSUF_StartFirstDanceWindow()
+                    end
+                end
+            end
+        end)
+    end
+    _fdShadowDanceFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+end
+
+-- Wrap _HideFirstDanceReady to also unregister the watcher
+local _HideFirstDanceReady_Base = _HideFirstDanceReady
+_HideFirstDanceReady = function()
+    _UnregisterShadowDanceWatch()
+    _HideFirstDanceReady_Base()
 end
 
 -- Make the combat enter/leave text click-through while it is actively displayed
@@ -883,12 +942,79 @@ local function _ApplyFirstDanceDisplayMode()
         if firstDanceCooldown then firstDanceCooldown:Show() end
         if firstDanceCDText then firstDanceCDText:Show() end
         firstDanceFrame:SetSize(iconSz + 4, iconSz + 4)
+        -- Register with Masque if available (icon mode only)
+        if ns.MSUF_FirstDance_ApplyMasque then ns.MSUF_FirstDance_ApplyMasque() end
     else
         if firstDanceIcon then firstDanceIcon:Hide() end
         if firstDanceCooldown then firstDanceCooldown:Hide() end
         if firstDanceCDText then firstDanceCDText:Hide() end
         if firstDanceText then firstDanceText:Show() end
         firstDanceFrame:SetSize(220, 60)
+    end
+end
+
+------------------------------------------------------
+-- First Dance: Masque integration (optional, lightweight)
+-- Separate group "First Dance" under MSUF; uses A2's masqueEnabled flag.
+-- Only Icon + Cooldown passed — never Count (MSUF manages CDText).
+------------------------------------------------------
+do
+    local _fdMasqueGroup
+    local _fdMasqueRegistered = false
+
+    local function _FD_IsMasqueEnabled()
+        local a2db = MSUF_DB and MSUF_DB.auras2
+        local shared = a2db and a2db.shared
+        return shared and shared.masqueEnabled == true
+    end
+
+    local function _FD_EnsureMasqueGroup()
+        if _fdMasqueGroup then return _fdMasqueGroup end
+        if not LibStub then return nil end
+        local ok, lib = pcall(LibStub, "Masque", true)
+        if not ok or not lib then return nil end
+        local ok2, grp = pcall(lib.Group, lib, "Midnight Simple Unit Frames", "First Dance")
+        if not ok2 or not grp then return nil end
+        _fdMasqueGroup = grp
+        return grp
+    end
+
+    function ns.MSUF_FirstDance_ApplyMasque()
+        if not firstDanceFrame then return end
+
+        if not _FD_IsMasqueEnabled() then
+            if _fdMasqueRegistered and _fdMasqueGroup then
+                pcall(_fdMasqueGroup.RemoveButton, _fdMasqueGroup, firstDanceFrame)
+                _fdMasqueRegistered = false
+            end
+            return
+        end
+
+        local grp = _FD_EnsureMasqueGroup()
+        if not grp then return end
+
+        if _fdMasqueRegistered then return end
+
+        local regions = {
+            Icon     = firstDanceIcon,
+            Cooldown = firstDanceCooldown,
+        }
+        local ok = pcall(grp.AddButton, grp, firstDanceFrame, regions)
+        if ok then
+            _fdMasqueRegistered = true
+            -- Single ReSkin after registration
+            if grp.ReSkin then pcall(grp.ReSkin, grp) end
+            -- Keep CDText above Masque layers
+            if firstDanceCooldown and firstDanceCDText then
+                local base = firstDanceCooldown.GetFrameLevel and firstDanceCooldown:GetFrameLevel() or 0
+                local overlay = CreateFrame("Frame", nil, firstDanceCooldown)
+                overlay:SetAllPoints()
+                overlay:SetFrameLevel(base + 5)
+                firstDanceCDText:SetParent(overlay)
+                firstDanceCDText:ClearAllPoints()
+                firstDanceCDText:SetPoint("CENTER")
+            end
+        end
     end
 end
 
@@ -967,12 +1093,13 @@ local EnsureCombatStateText
 -- "The First Dance" helper
 ------------------------------------------------------
 local function StartFirstDanceWindow()
+    if not _isSubRogue then return end
     local g = GetGameplayDBFast()
 
     -- Feature off = make sure state is hard-reset and updater is off
     if not g or not g.enableFirstDanceTimer then
         _StopFirstDanceTick()
-        if firstDanceFrame then firstDanceFrame:Hide() end
+        _HideFirstDanceReady()
         return
     end
 
@@ -983,6 +1110,7 @@ local function StartFirstDanceWindow()
 
     firstDanceEndTime = GetTime() + FIRST_DANCE_WINDOW
     firstDanceActive = true
+    firstDanceReady = false
     firstDanceLastText = nil
 
     _ApplyFirstDanceFont()
@@ -1001,6 +1129,9 @@ local function StartFirstDanceWindow()
     end)
 
 end
+
+-- Export for deferred callback access (Shadow Dance OOC restart)
+ns._MSUF_StartFirstDanceWindow = StartFirstDanceWindow
 
 ------------------------------------------------------
 -- Combat state text (enter/leave combat)
@@ -1065,19 +1196,19 @@ EnsureCombatStateText = function()
         combatEventFrame = true  -- sentinel: frame replaced by EventBus (Phase 7B)
 MSUF_CombatState_OnEvent = function(event)
     local g = GetGameplayDBFast()
-    if not g or (not g.enableCombatStateText and not g.enableFirstDanceTimer) then
+    if not g or (not g.enableCombatStateText and not (g.enableFirstDanceTimer and _isSubRogue)) then
         if combatStateText then
             combatStateText:SetText("")
             combatStateText:Hide()
         end
         MSUF_CombatState_SetClickThrough(false)
         _StopFirstDanceTick()
-        if firstDanceFrame then firstDanceFrame:Hide() end
+        _HideFirstDanceReady()
         return
     end
 
     local wantState = (g.enableCombatStateText == true)
-    local wantDance = (g.enableFirstDanceTimer == true)
+    local wantDance = (g.enableFirstDanceTimer == true) and _isSubRogue
 
     local duration = g.combatStateDuration or 1.5
     if duration < 0.1 then
@@ -1085,9 +1216,14 @@ MSUF_CombatState_OnEvent = function(event)
     end
 
     if event == "PLAYER_REGEN_DISABLED" then
-        -- Enter combat: hide First Dance, show "+Combat" if wanted
+        -- Enter combat: stop countdown; ready icon persists until Shadow Dance
+        local wasActive = firstDanceActive
         _StopFirstDanceTick()
-        if firstDanceFrame then firstDanceFrame:Hide() end
+        if wasActive and not firstDanceReady then
+            -- Countdown was interrupted (6s not complete) → hide
+            if firstDanceFrame then firstDanceFrame:Hide() end
+        end
+        -- If firstDanceReady, the Shadow Dance watcher handles hide
 
         if not wantState then
             if combatStateText then
@@ -1122,10 +1258,10 @@ MSUF_CombatState_OnEvent = function(event)
         end
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-        -- Leave combat: start First Dance (own frame) + show "-Combat" if wanted
+        -- Leave combat: always start 6s First Dance countdown + show "-Combat" if wanted
         _StopFirstDanceTick()
 
-        if wantDance then
+        if wantDance and not firstDanceReady then
             StartFirstDanceWindow()
         end
 
@@ -1178,7 +1314,7 @@ _TickFirstDance = function()
     local gFD = GetGameplayDBFast()
     if not gFD or not gFD.enableFirstDanceTimer then
         _StopFirstDanceTick()
-        if firstDanceFrame then firstDanceFrame:Hide() end
+        _HideFirstDanceReady()
         return
     end
 
@@ -1191,11 +1327,27 @@ _TickFirstDance = function()
     local remaining = firstDanceEndTime - now
     if remaining <= 0 then
         _StopFirstDanceTick()
-        if firstDanceFrame then firstDanceFrame:Hide() end
 
         -- FirstDance lief voll durch → Apex-Fenster um 3s verlängern
         if ns.MSUF_ApexAlert_ExtendForFirstDance then
             ns.MSUF_ApexAlert_ExtendForFirstDance()
+        end
+
+        -- Show persistent "ready" indicator if enabled
+        if gFD.firstDanceShowReady then
+            firstDanceReady = true
+            _RegisterShadowDanceWatch()
+            local iconMode = (gFD.firstDanceShowIcon ~= false)
+            if iconMode then
+                if firstDanceCDText then firstDanceCDText:SetText("") end
+                if firstDanceCooldown and firstDanceCooldown.SetCooldown then firstDanceCooldown:SetCooldown(0, 0) end
+                if firstDanceIcon then firstDanceIcon:SetDesaturated(false) end
+            else
+                if firstDanceText then firstDanceText:SetText("First Dance!") end
+            end
+            -- Frame stays visible; hidden on Shadow Dance cast
+        else
+            if firstDanceFrame then firstDanceFrame:Hide() end
         end
         return
     end
@@ -2201,9 +2353,10 @@ end
 -- They make it safe to split this file later without changing behavior.
 ------------------------------------------------------
 local function MSUF_Gameplay_ApplyCombatStateText(g)
+    _UpdateSubRogueCache()
     local wantState = (g.enableCombatStateText == true)
     -- First Dance nur für Sub Rogue
-    local wantDance = (g.enableFirstDanceTimer == true) and MSUF_IsSubRogue()
+    local wantDance = (g.enableFirstDanceTimer == true) and _isSubRogue
 
     -- Combat State Text (enter/leave)
     if wantState then
@@ -2251,8 +2404,9 @@ local function MSUF_Gameplay_ApplyCombatStateText(g)
             MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_STATE", MSUF_CombatState_OnEvent)
         end
 
-        -- Preview while unlocked
-        if not g.lockFirstDance and firstDanceFrame then
+        -- Preview while unlocked; keep ready indicator when locked + ready
+        if not g.lockFirstDance and firstDanceFrame and not firstDanceActive and not firstDanceReady then
+            -- Unlocked, not counting, not ready → show preview
             local iconMode = (g.firstDanceShowIcon ~= false)
             if iconMode then
                 if firstDanceCDText then firstDanceCDText:SetText("6.0") end
@@ -2260,17 +2414,17 @@ local function MSUF_Gameplay_ApplyCombatStateText(g)
                 if firstDanceText then firstDanceText:SetText("First Dance: 6.0") end
             end
             firstDanceFrame:Show()
-        elseif firstDanceFrame then
+        elseif firstDanceFrame and not firstDanceActive and not firstDanceReady then
+            -- Locked, not counting, not ready → hide
             if firstDanceText then firstDanceText:SetText("") end
             if firstDanceCDText then firstDanceCDText:SetText("") end
             firstDanceFrame:Hide()
         end
+        -- If firstDanceActive or firstDanceReady, leave frame as-is (tick/ready manages it)
         _ApplyFirstDanceLockState()
     else
         _StopFirstDanceTick()
-        if firstDanceText then firstDanceText:SetText("") end
-        if firstDanceCDText then firstDanceCDText:SetText("") end
-        if firstDanceFrame then firstDanceFrame:Hide() end
+        _HideFirstDanceReady()
     end
 
     -- Unregister EventBus if both features off
@@ -3422,7 +3576,9 @@ do
     local _specChangeFrame = CreateFrame("Frame")
     _specChangeFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
     _specChangeFrame:RegisterEvent("PLAYER_LOGIN")
+    _specChangeFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     _specChangeFrame:SetScript("OnEvent", function()
+        _UpdateSubRogueCache()
         if ns and ns.MSUF_RequestGameplayApply then
             ns.MSUF_RequestGameplayApply()
         end
@@ -3480,6 +3636,8 @@ do
         if type(EnsureGameplayDefaults) == "function" then
             EnsureGameplayDefaults()
         end
+
+        _UpdateSubRogueCache()
 
         if ns and ns.MSUF_RequestGameplayApply then
             ns.MSUF_RequestGameplayApply()

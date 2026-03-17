@@ -1394,7 +1394,13 @@ _totemsLeftBottom = totemsDragHint
     )
     if not _isRogue then firstDanceIconSizeSlider:SetEnabled(false) end
 
-    local firstDanceOffsetXSlider = _MSUF_Slider("MSUF_Gameplay_FirstDanceOffsetXSlider", "TOPLEFT", firstDanceIconSizeSlider, "BOTTOMLEFT", 0, -12, 240, -800, 800, 1, "-800", "800", "X: 0",
+    local firstDanceReadyCheck = _MSUF_Check("MSUF_Gameplay_FirstDanceReadyCheck", "TOPLEFT", firstDanceIconSizeSlider, "BOTTOMLEFT", 0, -8,
+        "Keep visible when ready (hide on combat enter)",
+        "firstDanceShowReadyCheck", "firstDanceShowReady"
+    )
+    if not _isRogue then firstDanceReadyCheck:SetEnabled(false) end
+
+    local firstDanceOffsetXSlider = _MSUF_Slider("MSUF_Gameplay_FirstDanceOffsetXSlider", "TOPLEFT", firstDanceReadyCheck, "BOTTOMLEFT", 0, -12, 240, -800, 800, 1, "-800", "800", "X: 0",
         "firstDanceOffsetXSlider", "firstDanceOffsetX",
         function(v) return math.floor(v + 0.5) end,
         function(self, g, v)
@@ -1859,6 +1865,7 @@ _totemsLeftBottom = totemsDragHint
         "firstDanceClickThrough",
         "firstDanceShowIcon",
         "firstDanceIconSize",
+        "firstDanceShowReady",
 
         "enablePlayerTotems",
         "playerTotemsShowText",
@@ -1969,6 +1976,7 @@ _totemsLeftBottom = totemsDragHint
             {"lockFirstDanceCheck", "lockFirstDance"},
             {"firstDanceClickThroughCheck", "firstDanceClickThrough"},
             {"firstDanceShowIconCheck", "firstDanceShowIcon"},
+            {"firstDanceShowReadyCheck", "firstDanceShowReady"},
 
             {"playerTotemsCheck", "enablePlayerTotems"},
             {"playerTotemsShowTextCheck", "playerTotemsShowText"},
