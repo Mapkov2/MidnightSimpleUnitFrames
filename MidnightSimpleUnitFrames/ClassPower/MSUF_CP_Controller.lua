@@ -430,6 +430,8 @@ end
 local function NeedsAltManaBar()
     -- Ele Shaman: when Maelstrom is in class power, main bar shows Mana → no alt needed
     if _G.MSUF_EleMaelstromActive then return false end
+    -- Aug Evoker: main bar shows Essence → Mana needs AltMana bar
+    if _G.MSUF_AugEvokerActive then return true end
     local pType = UnitPowerType("player")
     -- pType == 0 = Mana primary → no alt bar needed
     if NotSecret(pType) then
@@ -1242,6 +1244,18 @@ local function FullRefresh()
     _G.MSUF_EleMaelstromActive = isEleShaman or false
     -- Force player power bar refresh so it immediately switches Mana ↔ Maelstrom
     if eleMaelChanged then
+        if type(_G.MSUF_RefreshPlayerPowerBar) == "function" then
+            _G.MSUF_RefreshPlayerPowerBar()
+        end
+    end
+
+    -- Aug Evoker: when Ebon Might is the CP class resource, main power bar shows Essence
+    -- instead of Mana. Mana moves to AltMana bar. Same pattern as Ele Shaman.
+    local isAugEvokerEB = (PLAYER_CLASS == "EVOKER" and GetSpec and GetSpec() == CPK.SPEC.EVOKER_AUG
+        and b.showEbonMight ~= false)
+    local augChanged = ((isAugEvokerEB or false) ~= (_G.MSUF_AugEvokerActive == true))
+    _G.MSUF_AugEvokerActive = isAugEvokerEB or false
+    if augChanged then
         if type(_G.MSUF_RefreshPlayerPowerBar) == "function" then
             _G.MSUF_RefreshPlayerPowerBar()
         end

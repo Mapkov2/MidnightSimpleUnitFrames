@@ -97,12 +97,14 @@ builders.LAYOUT = function(E)
                 local tpl = (BackdropTemplateMixin and "BackdropTemplate") or nil
                 local ol = CreateFrame("Frame", nil, CP.container, tpl)
                 ol:EnableMouse(false)
-                ol:SetFrameLevel(CP.container:GetFrameLevel() + 1)
                 CP._outline = ol
                 CP._outlineEdge = -1
             end
+            -- Frame level above bars (bars inherit container+1, outline must be higher)
+            CP._outline:SetFrameLevel(CP.container:GetFrameLevel() + 3)
             if CP._outlineEdge ~= edge then
-                CP._outline:SetBackdrop({ edgeFile = "Interface\Buttons\WHITE8x8", edgeSize = edge })
+                CP._outline:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edge })
+                CP._outline:SetBackdropColor(0, 0, 0, 0)
                 CP._outline:SetBackdropBorderColor(0, 0, 0, 1)
                 CP._outlineEdge = edge
             end

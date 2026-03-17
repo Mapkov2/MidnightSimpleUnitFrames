@@ -28,6 +28,7 @@ builders.ALT_MANA = function(E)
 
     local function NeedsAltManaBar()
         if _G.MSUF_EleMaelstromActive then return false end
+        if _G.MSUF_AugEvokerActive then return true end
         local pType = UnitPowerType("player")
         if NotSecret(pType) then
             if pType == nil or pType == PT.Mana then return false end
