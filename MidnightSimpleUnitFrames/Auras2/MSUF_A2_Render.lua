@@ -60,7 +60,12 @@ do
     f:RegisterEvent("PLAYER_REGEN_DISABLED")
     f:RegisterEvent("PLAYER_REGEN_ENABLED")
     f:SetScript("OnEvent", function(_, event)
-        _inCombat = (event == "PLAYER_REGEN_DISABLED")
+        local entering = (event == "PLAYER_REGEN_DISABLED")
+        _inCombat = entering
+        if not entering then
+            local fn = API._OnCombatLeave
+            if fn then fn() end
+        end
     end)
     if InCombatLockdown and InCombatLockdown() then _inCombat = true end
 end
@@ -1404,6 +1409,32 @@ local function MarkAllDirty(delay)
     -- Mark enabled runtime units plus any attached disabled residual entries.
     _markDirtyDelay = delay
     _ForEachDirtyUnit(true, _MarkDirtyEachUnit)
+end
+
+-- ---------------------------------------------------------------------------
+-- Combat-leave guard: tear down + rebuild all private aura anchors.
+-- Blizzard-rendered private auras can survive encounter cleanup if the engine
+-- fails to remove stale anchor state, leaving ghost icons stuck on frames.
+-- Forcing a PrivateClear → MarkAllDirty cycle on PLAYER_REGEN_ENABLED
+-- guarantees a clean slate; PrivateRebuild runs on the next RenderUnit pass
+-- because _lastPrivateGen was reset.
+-- ---------------------------------------------------------------------------
+API._OnCombatLeave = function()
+    for _, entry in pairs(AurasByUnit) do
+        if entry then
+            PrivateClear(entry)
+            entry._lastPrivateGen = nil
+        end
+    end
+    local Store = API.Store
+    if Store and Store.InvalidateUnit then
+        _storeInvalidateEachUnit = Store.InvalidateUnit
+        _ForEachDirtyUnit(true, _InvalidateStoreEachUnit)
+        _storeInvalidateEachUnit = nil
+    end
+    local CM = API.Cache
+    if CM and CM.InvalidateAll then CM.InvalidateAll() end
+    MarkAllDirty(0)
 end
 
 local function RefreshAll()
