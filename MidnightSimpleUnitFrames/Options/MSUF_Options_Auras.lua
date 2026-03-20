@@ -714,7 +714,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     end
     panel.__MSUF_AurasBuilt = true
     local title = CreateTitle(panel, "Midnight Simple Unit Frames - Auras 2.0")
-    CreateSubText(panel, title, "Auras 2.0: Target / Focus / Boss 1-5.\nDefaults show ALL buffs & debuffs. This menu controls a shared layout for these units.")
+    CreateSubText(panel, title, "Auras 2.0: Player / Target / Focus / Boss 1-5.\nDefaults show ALL buffs & debuffs. This menu controls a shared layout for these units.")
 	-- Top-right convenience button: enter/exit MSUF Edit Mode (MSUF frames only; no Blizzard frame taint).
 	local editBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 	editBtn:SetSize(140, 22)
@@ -793,7 +793,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     -- ================================================================
     -- Scope bar (persistent editing-scope indicator, always visible above all boxes)
     local scopeBar = CreateFrame("Frame", nil, content, BackdropTemplateMixin and "BackdropTemplate" or nil)
-    scopeBar:SetHeight(56)
+    scopeBar:SetHeight(82)
     scopeBar:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
     scopeBar:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, 0)
     scopeBar:SetBackdrop({
@@ -1253,14 +1253,14 @@ local function A2_AutoOverrideFiltersIfNeeded()
     if GetEditingKey() == "shared" then  return false end
     if GetOverrideForEditing() then  return false end
     SetOverrideForEditing(true)
-    A2_ShowOverrideWarn("Enabled Filter override for this unit (you edited a filter).")
+    A2_ShowOverrideWarn("Filters override enabled for this unit.")
      return true
 end
 local function A2_AutoOverrideCapsIfNeeded()
     if GetEditingKey() == "shared" then  return false end
     if GetOverrideCapsForEditing() then  return false end
     SetOverrideCapsForEditing(true)
-    A2_ShowOverrideWarn("Enabled Caps override for this unit (you edited caps/layout).")
+    A2_ShowOverrideWarn("Caps override enabled for this unit.")
      return true
 end
 local function A2_WrapCheckboxAutoOverride(cb, scope)
@@ -1624,12 +1624,41 @@ do
     local editLbl = scopeBar:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     editLbl:SetPoint("TOPLEFT", scopeBar, "TOPLEFT", 10, -10)
     editLbl:SetText(TR("Editing:"))
-    local SCOPE_KEYS = { "shared", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+    local SCOPE_KEYS = { "shared", "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
     local labelForKey = {
         shared = "Shared", player = "Player", target = "Target", focus = "Focus",
         boss1 = "Boss 1", boss2 = "Boss 2", boss3 = "Boss 3", boss4 = "Boss 4", boss5 = "Boss 5",
     }
+    local function GetUnitOverrideState(key)
+        if key == "shared" then return false, false end
+        local a2 = select(1, GetAuras2DB())
+        local u = a2 and a2.perUnit and a2.perUnit[key]
+        local overrideFilters = (type(u) == "table" and u.overrideFilters == true) and true or false
+        local overrideCaps = (type(u) == "table" and u.overrideSharedLayout == true) and true or false
+        return overrideFilters, overrideCaps
+    end
+    local function GetUnitHasOverride(key)
+        local overrideFilters, overrideCaps = GetUnitOverrideState(key)
+        return (overrideFilters or overrideCaps) and true or false
+    end
+    local function GetUnitOverrideTooltip(key)
+        local overrideFilters, overrideCaps = GetUnitOverrideState(key)
+        if overrideFilters and overrideCaps then return "Override active: this unit uses its own Filters and Caps." end
+        if overrideFilters then return "Override active: this unit uses its own Filters." end
+        if overrideCaps then return "Override active: this unit uses its own Caps." end
+        return "Uses Shared filters and caps."
+    end
     local scopeBtns = {}
+    local function RefreshScopeButtons()
+        for k, btn in pairs(scopeBtns) do
+            if btn and btn._msufApplyState then
+                btn:_msufApplyState(GetEditingKey() == k)
+            end
+        end
+        if panel and panel.__msufA2_UpdateOverrideSummary then
+            panel.__msufA2_UpdateOverrideSummary()
+        end
+    end
     local function ApplyKey(key)
         panel.__msufAuras2_FilterEditKey = key
         for k, btn in pairs(scopeBtns) do
@@ -1661,22 +1690,54 @@ do
             fs:SetPoint("CENTER", 0, 0)
             fs:SetText(labelForKey[bk] or bk)
             btn._msufLabel = fs
+
             btn._msufApplyState = function(self, active)
+                local hasOverride = GetUnitHasOverride(bk)
                 if active then
                     bg:SetColorTexture(0.12, 0.24, 0.50, 0.95)
-                    border:SetBackdropBorderColor(0.30, 0.55, 1.00, 0.80)
+                    if hasOverride then
+                        border:SetBackdropBorderColor(0.96, 0.80, 0.34, 0.98)
+                    else
+                        border:SetBackdropBorderColor(0.30, 0.55, 1.00, 0.80)
+                    end
                     fs:SetTextColor(0.90, 0.95, 1.00)
                 else
                     bg:SetColorTexture(0.08, 0.12, 0.22, 0.80)
-                    border:SetBackdropBorderColor(0.15, 0.30, 0.60, 0.50)
-                    fs:SetTextColor(0.50, 0.58, 0.72)
+                    if hasOverride then
+                        border:SetBackdropBorderColor(0.86, 0.72, 0.28, 0.80)
+                        fs:SetTextColor(0.88, 0.90, 0.96)
+                    else
+                        border:SetBackdropBorderColor(0.15, 0.30, 0.60, 0.50)
+                        fs:SetTextColor(0.50, 0.58, 0.72)
+                    end
                 end
             end
-            btn:SetScript("OnClick", function() ApplyKey(bk) end)
+            btn:SetScript("OnClick", function()
+                ApplyKey(bk)
+                RefreshScopeButtons()
+            end)
             btn:SetScript("OnEnter", function(self)
-                if self._msufBg then self._msufBg:SetColorTexture(0.10, 0.18, 0.36, 0.90) end
+                local isActive = (GetEditingKey() == bk)
+                local hasOverride = GetUnitHasOverride(bk)
+                if self._msufBg then
+                    self._msufBg:SetColorTexture(0.10, 0.18, 0.36, 0.90)
+                end
+                if self._msufBorder and hasOverride then
+                    self._msufBorder:SetBackdropBorderColor(0.98, 0.78, 0.28, isActive and 0.98 or 0.82)
+                end
+                if GameTooltip then
+                    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                    GameTooltip:SetText(labelForKey[bk] or bk, 1, 1, 1)
+                    if bk == "shared" then
+                        GameTooltip:AddLine("Shared baseline used by units without overrides.", 0.72, 0.78, 0.88, true)
+                    else
+                        GameTooltip:AddLine(GetUnitOverrideTooltip(bk), hasOverride and 0.95 or 0.72, hasOverride and 0.82 or 0.78, hasOverride and 0.30 or 0.88, true)
+                    end
+                    GameTooltip:Show()
+                end
             end)
             btn:SetScript("OnLeave", function(self)
+                if GameTooltip then GameTooltip:Hide() end
                 local isActive = (GetEditingKey() == bk)
                 if self._msufApplyState then self:_msufApplyState(isActive) end
             end)
@@ -1686,9 +1747,7 @@ do
         end
     end
     ddEditFilters = { SetValue = function(self, key)
-        for k, btn in pairs(scopeBtns) do
-            if btn and btn._msufApplyState then btn:_msufApplyState(k == key) end
-        end
+        RefreshScopeButtons()
     end }
     cbOverrideFilters = CreateCheckbox(scopeBar, "Override filters", 10, -32,
         function()  return GetOverrideForEditing() end,
@@ -1706,44 +1765,58 @@ do
     btnResetOverrides:SetText(TR("Reset"))
     -- Override status (compact, below scope bar)
     local overrideRow = CreateFrame("Frame", nil, scopeBar)
-    overrideRow:SetPoint("TOPLEFT", scopeBar, "BOTTOMLEFT", 10, 0)
-    overrideRow:SetSize(500, 14)
-    overrideRow:Hide()
+    overrideRow:SetPoint("BOTTOMLEFT", scopeBar, "BOTTOMLEFT", 10, 6)
+    overrideRow:SetPoint("BOTTOMRIGHT", scopeBar, "BOTTOMRIGHT", -10, 6)
+    overrideRow:SetHeight(28)
     local overrideInfo = overrideRow:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    overrideInfo:SetPoint("TOPLEFT", overrideRow, "TOPLEFT", 0, -1)
-    overrideInfo:SetWidth(480)
+    overrideInfo:SetPoint("TOPLEFT", overrideRow, "TOPLEFT", 0, 0)
+    overrideInfo:SetPoint("TOPRIGHT", overrideRow, "TOPRIGHT", 0, 0)
     overrideInfo:SetJustifyH("LEFT")
-local overrideWarn = scopeBar:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-overrideWarn:SetPoint("TOPLEFT", overrideRow, "BOTTOMLEFT", 0, -1)
-overrideWarn:SetWidth(480)
-overrideWarn:SetJustifyH("LEFT")
-overrideWarn:SetText(TR(""))
-overrideWarn:Hide()
-panel.__msufA2_overrideWarn = overrideWarn
+    overrideInfo:SetWordWrap(false)
+    local overrideWarn = overrideRow:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    overrideWarn:SetPoint("TOPLEFT", overrideInfo, "BOTTOMLEFT", 0, -1)
+    overrideWarn:SetPoint("TOPRIGHT", overrideRow, "TOPRIGHT", 0, 0)
+    overrideWarn:SetJustifyH("LEFT")
+    overrideWarn:SetWordWrap(false)
+    overrideWarn:SetText(TR(""))
+    overrideWarn:Hide()
+    panel.__msufA2_overrideWarn = overrideWarn
     local function BuildOverrideSummary(active)
         local n = #active
         if n == 0 then
-             return "|cff9aa0a6No overrides active.|r"
+             return "|cff9aa0a6No unit overrides active.|r"
         end
-        if n <= 2 then
-            return "|cffffffffOverrides:|r " .. table.concat(active, ", ")
+        if n <= 4 then
+            return "|cffffffffOverrides active:|r " .. table.concat(active, ", ")
         end
-        -- Keep it short: show first two, then "+N"
-        return ("|cffffffffOverrides:|r %s, %s |cff9aa0a6+%d|r"):format(active[1], active[2], (n - 2))
+        return ("|cffffffffOverrides active:|r %s, %s, %s, %s |cff9aa0a6+%d|r"):format(active[1], active[2], active[3], active[4], (n - 4))
     end
     local function UpdateOverrideSummary()
         local a2 = select(1, GetAuras2DB())
         local active = {}
+        local isSharedEditing = (GetEditingKey() == "shared")
         if a2 and type(a2.perUnit) == "table" then
             for i = 1, #overrideKeys do
                 local k = overrideKeys[i]
-                local u = a2.perUnit[k]
-                if u and (u.overrideFilters == true or u.overrideSharedLayout == true) then
+                if GetUnitHasOverride(k) then
                     active[#active + 1] = (labelForKey[k] or k)
                 end
             end
         end
         overrideInfo:SetText(BuildOverrideSummary(active))
+        if isSharedEditing then
+            overrideInfo:Show()
+        else
+            overrideInfo:Hide()
+        end
+        overrideWarn:ClearAllPoints()
+        if isSharedEditing then
+            overrideWarn:SetPoint("TOPLEFT", overrideInfo, "BOTTOMLEFT", 0, -1)
+            overrideWarn:SetPoint("TOPRIGHT", overrideRow, "TOPRIGHT", 0, 0)
+        else
+            overrideWarn:SetPoint("TOPLEFT", overrideRow, "TOPLEFT", 0, 0)
+            overrideWarn:SetPoint("TOPRIGHT", overrideRow, "TOPRIGHT", 0, 0)
+        end
         if #active == 0 then
             overrideInfo:SetFontObject(GameFontDisableSmall)
             btnResetOverrides:Disable()
@@ -1754,6 +1827,7 @@ panel.__msufA2_overrideWarn = overrideWarn
             btnResetOverrides:SetAlpha(1)
         end
      end
+    panel.__msufA2_UpdateOverrideSummary = UpdateOverrideSummary
     overrideRow:SetScript("OnShow", UpdateOverrideSummary)
     btnResetOverrides:SetScript("OnShow", UpdateOverrideSummary)
     btnResetOverrides:SetScript("OnClick", function()
@@ -2952,6 +3026,9 @@ end
         MSUF_Auras2_RefreshOptionsControls()
         UpdateAdvancedEnabled()
         ApplyOverrideUISafety()
+        if panel and panel.__msufA2_UpdateOverrideSummary then
+            panel.__msufA2_UpdateOverrideSummary()
+        end
         -- Sync ignore list box state (editing key + override gating)
         local fn = rawget(_G, "MSUF_A2_UpdateIgnoreBoxState")
         if type(fn) == "function" then pcall(fn) end
