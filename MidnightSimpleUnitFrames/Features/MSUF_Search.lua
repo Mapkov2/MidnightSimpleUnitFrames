@@ -18,8 +18,8 @@ local MAX_RESULTS_CAP   = 200
 local MAX_ROWS          = VISIBLE_ROWS
 local MIN_QUERY_LEN     = 2
 local DEBOUNCE_SEC      = 0.18
-local SEARCH_BOX_H      = 22
-local SEARCH_RESERVE_PX = SEARCH_BOX_H + 14
+local SEARCH_BOX_H      = 24
+local SEARCH_RESERVE_PX = SEARCH_BOX_H + 28
 local SCROLL_DELAY      = 0.18   -- seconds after page switch before scrolling
 local SCROLL_RETRY      = 0.40   -- second attempt if first GetTop() returns nil
 
@@ -1911,19 +1911,18 @@ local function MSUF_Search_InjectNavEditBox(navStack)
     local navRail = navStack:GetParent()
     if not navRail then return end
 
-    local sep = navRail:CreateTexture(nil,"ARTWORK")
-    sep:SetHeight(1)
-    sep:SetPoint("BOTTOMLEFT",navRail,"BOTTOMLEFT",8,SEARCH_RESERVE_PX+2)
-    sep:SetPoint("BOTTOMRIGHT",navRail,"BOTTOMRIGHT",-8,SEARCH_RESERVE_PX+2)
-    sep:SetColorTexture(0.25,0.45,0.80,0.28)
-
     local eb = CreateFrame("EditBox","MSUF_SearchEditBox",navRail,"InputBoxTemplate")
     eb:SetHeight(SEARCH_BOX_H)
-    eb:SetPoint("BOTTOMLEFT",navRail,"BOTTOMLEFT",8,8)
-    eb:SetPoint("BOTTOMRIGHT",navRail,"BOTTOMRIGHT",-8,8)
+    eb:SetPoint("TOPLEFT",navRail,"TOPLEFT",8,-(8))
+    eb:SetPoint("TOPRIGHT",navRail,"TOPRIGHT",-8,-(8))
     eb:SetAutoFocus(false); eb:SetMaxLetters(48)
     if eb.SetTextInsets then eb:SetTextInsets(6,6,0,0) end
 
+    local sep = navRail:CreateTexture(nil,"ARTWORK")
+    sep:SetHeight(1)
+    sep:SetPoint("TOPLEFT",eb,"BOTTOMLEFT",0,-6)
+    sep:SetPoint("TOPRIGHT",eb,"BOTTOMRIGHT",0,-6)
+    sep:SetColorTexture(0.25,0.45,0.80,0.28)
 
     local ph = navRail:CreateFontString(nil,"ARTWORK","GameFontDisableSmall")
     ph:SetPoint("LEFT",eb,"LEFT",6,0); ph:SetPoint("RIGHT",eb,"RIGHT",-6,0)
@@ -1932,11 +1931,12 @@ local function MSUF_Search_InjectNavEditBox(navStack)
     eb._msufPlaceholder = ph
 
     local PAD = 8
+    navStack._msufSearchReservePx = SEARCH_RESERVE_PX
     navStack:ClearAllPoints()
-    navStack:SetPoint("TOPLEFT",     navRail,"TOPLEFT",      PAD, -PAD)
-    navStack:SetPoint("TOPRIGHT",    navRail,"TOPRIGHT",    -PAD, -PAD)
-    navStack:SetPoint("BOTTOMLEFT",  navRail,"BOTTOMLEFT",   PAD,  PAD+SEARCH_RESERVE_PX)
-    navStack:SetPoint("BOTTOMRIGHT", navRail,"BOTTOMRIGHT", -PAD,  PAD+SEARCH_RESERVE_PX)
+    navStack:SetPoint("TOPLEFT",     navRail,"TOPLEFT",      PAD, -(PAD+SEARCH_RESERVE_PX))
+    navStack:SetPoint("TOPRIGHT",    navRail,"TOPRIGHT",    -PAD, -(PAD+SEARCH_RESERVE_PX))
+    navStack:SetPoint("BOTTOMLEFT",  navRail,"BOTTOMLEFT",   PAD,  PAD)
+    navStack:SetPoint("BOTTOMRIGHT", navRail,"BOTTOMRIGHT", -PAD,  PAD)
 
     local function UpdatePlaceholder()
         ph:SetShown(#(eb:GetText() or "") == 0)

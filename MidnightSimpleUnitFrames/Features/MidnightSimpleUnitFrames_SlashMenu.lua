@@ -978,8 +978,20 @@ if bg and bg.SetVertexColor then if isIndented then bg:SetVertexColor(0.09,0.10,
 else bg:SetVertexColor(0.09,0.10,0.12,0.92)
 end
 end
-btn._msufNavBorder=border btn._msufNavBG=bg local fs=btn.GetFontString and btn:GetFontString()
-if fs and fs.SetTextColor then if isHeader then fs:SetTextColor(0.86,0.92,1.00,0.92)
+btn._msufNavBorder=border btn._msufNavBG=bg
+local accentStripe=btn:CreateTexture(nil,"ARTWORK",nil,6)
+accentStripe:SetTexture("Interface/Buttons/WHITE8X8")
+accentStripe:SetWidth(2)
+accentStripe:SetPoint("TOPLEFT",btn,"TOPLEFT",1,-3)
+accentStripe:SetPoint("BOTTOMLEFT",btn,"BOTTOMLEFT",1,3)
+accentStripe:SetColorTexture(0.30,0.60,1.00,1.00)
+accentStripe:Hide()
+btn._msufNavAccentStripe=accentStripe
+local fs=btn.GetFontString and btn:GetFontString()
+if fs and fs.SetTextColor then if isHeader then fs:SetTextColor(0.55,0.62,0.78,0.88)
+if fs.GetFont and fs.SetFont then local fPath,fSize,fFlags=fs:GetFont()
+if fPath and fSize then fs:SetFont(fPath,math.max(8,fSize-1),(fFlags or "")..",") end
+end
 else if isIndented then fs:SetTextColor(0.80,0.88,1.00,0.92)
 else fs:SetTextColor(0.82,0.90,1.00,1.00)
 end
@@ -989,9 +1001,20 @@ btn._msufApplyNavState=function(self,activeState,hovered) if self._msufNavActive
 else self._msufNavActive3:Hide()
 end
 end
+if self._msufNavAccentStripe then if activeState then self._msufNavAccentStripe:Show()
+else self._msufNavAccentStripe:Hide()
+end
+end
+if self._msufNavIcon then local c=self._msufNavIconColor
+if c then if activeState then self._msufNavIcon:SetColorTexture(c[1],c[2],c[3],1.00)
+elseif hovered then self._msufNavIcon:SetColorTexture(c[1],c[2],c[3],0.85)
+else self._msufNavIcon:SetColorTexture(c[1],c[2],c[3],0.50)
+end
+end
+end
 activeState=activeState and true or false hovered=hovered and true or false local modern=MSUF_UseModernDropdowns() local fs2=self.GetFontString and self:GetFontString()
 if fs2 and fs2 .SetTextColor then if activeState then fs2:SetTextColor(0.92,0.96,1.00,1.00)
-else if isHeader then fs2:SetTextColor(0.86,0.92,1.00,0.92)
+else if isHeader then fs2:SetTextColor(0.55,0.62,0.78,0.88)
 else if isIndented then fs2:SetTextColor(0.80,0.88,1.00,0.92)
 else fs2:SetTextColor(0.82,0.90,1.00,1.00)
 end
@@ -2310,7 +2333,9 @@ S.mirror.currentKey="home"if S.mirror.homePanel then _TFadeIn(S.mirror.homePanel
 MSUF_UpdateHomePanel(S.mirror.homePanel)
 end
 MSUF_Standalone_UpdateTitle("home")
-MSUF_Standalone_UpdateNav("home") return end
+MSUF_Standalone_UpdateNav("home")
+do local _w=S and S.win if _w and _w._msufRefreshStatusBar then pcall(_w._msufRefreshStatusBar) end end
+return end
 if S.mirror.homePanel then _TCancel(S.mirror.homePanel)
 if S.mirror.homePanel.SetAlpha then S.mirror.homePanel:SetAlpha(1) end
 if S.mirror.homePanel.Hide then S.mirror.homePanel:Hide() end
@@ -2333,7 +2358,28 @@ if S.mirror.currentPanel and S.mirror.currentPanel ~= prevPanel then _TFadeIn(S.
 MSUF_Standalone_ApplySelection(key,subkey,isCastbarKey)
 MSUF_Standalone_AfterAttachFixups(key,isCastbarKey)
 MSUF_Standalone_UpdateTitle(key)
-MSUF_Standalone_UpdateNav(key) end
+MSUF_Standalone_UpdateNav(key)
+do local _w=S and S.win if _w and _w._msufRefreshStatusBar then pcall(_w._msufRefreshStatusBar) end end
+end
+local MSUF_NAV_ICON_COLORS={
+home={0.30,0.60,1.00},
+uf_player={0.40,0.78,0.98},uf_target={0.40,0.78,0.98},uf_targettarget={0.40,0.78,0.98},
+uf_focus={0.40,0.78,0.98},uf_boss={0.40,0.78,0.98},uf_pet={0.40,0.78,0.98},
+opt_bars={0.88,0.74,0.36},opt_fonts={0.88,0.74,0.36},auras2={0.88,0.74,0.36},
+opt_castbar={0.88,0.74,0.36},opt_misc={0.88,0.74,0.36},opt_colors={0.88,0.74,0.36},
+opt_portraits={0.88,0.74,0.36},
+classpower={0.35,0.82,0.50},gameplay={0.72,0.50,0.92},
+modules={0.40,0.80,0.75},profiles={0.90,0.62,0.30},
+}
+local function MSUF_AttachNavIcon(btn,navKey,isChild)
+if not(btn and btn.CreateTexture and navKey)then return end
+local c=MSUF_NAV_ICON_COLORS[navKey]
+if not c then return end
+local icon=btn:CreateTexture(nil,"ARTWORK",nil,3)
+icon:SetSize(6,6)
+icon:SetColorTexture(c[1],c[2],c[3],0.65)
+icon:SetPoint("LEFT",btn,"LEFT",isChild and 8 or 10,0)
+btn._msufNavIcon=icon btn._msufNavIconColor=c end
 local function MSUF_BuildMirrorNavButtons(navParent,btnW,btnH) if not navParent then return {} end
 btnH=btnH or 24 local padL=2;
 local padT=10;
@@ -2341,7 +2387,7 @@ local padB=8;
 local gap=8;
 local indent=10 local extraRight=42;
 local railW=navParent.GetWidth and navParent:GetWidth()
-or 150 btnW=btnW or math.max(110,railW-(padL*2)-extraRight)
+or 174 btnW=btnW or math.max(110,railW-(padL*2)-extraRight)
 local out={};
 local headers=navParent._msufTreeHeaders or{}
 navParent._msufTreeHeaders=headers local hasTitle=not navParent._msufSkipNavTitle;
@@ -2365,7 +2411,7 @@ stripe:SetWidth(3)
 stripe:Hide()
 navParent._msufNavStripe=stripe end
 local function MakeButton(label,w,onClick,isHeader,isChild) local b=UI_Button(navParent,tostring(label or""),w,btnH,"TOPLEFT",navParent,"TOPLEFT",0,0,onClick)
-MSUF_LeftJustifyButtonText(b,isChild and 10 or 12)
+MSUF_LeftJustifyButtonText(b,isHeader and 18 or(isChild and 22 or 24))
 MSUF_SkinNavButton(b,isHeader,isChild) return b end
 local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_misc",label="Miscellaneous"},{key="opt_colors",label="Colors"},{key="opt_portraits",label="Portraits"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
 local headerLabels={}
@@ -2376,20 +2422,29 @@ local created={}
 for _,node in ipairs(NAV)
 do if node.type=="leaf"then local b=MakeButton(node.label,btnW,function() MSUF_SwitchMirrorPage(node.key) end
 ,false,false)
+MSUF_AttachNavIcon(b,node.key,false)
 out[node.key]=b table.insert(created,{kind="leaf",btn=b})
 elseif node.type=="header"then headers[node.id]=(headers[node.id]~=nil)
 and headers[node.id]
-or node.defaultOpen local b=MakeButton("+ "..node.label,btnW,function() headers[node.id]=not headers[node.id]
+or node.defaultOpen local b=MakeButton(string.upper(node.label),btnW,function() headers[node.id]=not headers[node.id]
 if navParent._msufTreeReflow then navParent._msufTreeReflow()
 end
 end
 ,true,false)
+do local arrow=b:CreateTexture(nil,"OVERLAY")
+arrow:SetSize(10,10)
+arrow:SetPoint("LEFT",b,"LEFT",4,0)
+arrow:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+arrow:SetVertexColor(0.45,0.55,0.72)
+if node.defaultOpen then arrow:SetRotation(math.pi*0.5) end
+b._msufNavArrow=arrow end
 out["hdr_"..node.id]=b table.insert(created,{kind="header",id=node.id,btn=b})
 local kids={}
 for _,ch in ipairs(node.children or{})
 do local w=math.max(40,btnW-indent)
 local cb=MakeButton(ch.label,w,function() MSUF_SwitchMirrorPage(ch.key) end
 ,false,true)
+MSUF_AttachNavIcon(cb,ch.key,true)
 out[ch.key]=cb table.insert(kids,cb)
 table.insert(created,{kind="child",id=node.id,btn=cb})
 end
@@ -2409,7 +2464,9 @@ end
 Place(it.btn,0)
 elseif it.kind=="header"then local open=headers[it.id]
 local baseLabel=headerLabels[it.id]
-if baseLabel and it.btn.SetText then it.btn:SetText((open and"- "or"+ ")..baseLabel)
+if baseLabel and it.btn.SetText then it.btn:SetText(string.upper(baseLabel))
+end
+if it.btn._msufNavArrow then if open then it.btn._msufNavArrow:SetRotation(math.pi*0.5) else it.btn._msufNavArrow:SetRotation(0) end
 end
 if it.btn.Show then it.btn:Show()
 end
@@ -2540,7 +2597,7 @@ end
 S.content=content local navRail=CreateFrame("Frame",nil,content,"BackdropTemplate")
 navRail:SetPoint("TOPLEFT",content,"TOPLEFT",0,0)
 navRail:SetPoint("BOTTOMLEFT",content,"BOTTOMLEFT",0,0)
-navRail:SetWidth(150)
+navRail:SetWidth(174)
 MSUF_ApplyMidnightBackdrop(navRail,0.22)
 f._msufNavRail=navRail local host=CreateFrame("Frame",nil,content)
 host:SetPoint("TOPLEFT",navRail,"TOPRIGHT",8,0)
@@ -2548,25 +2605,75 @@ host:SetPoint("BOTTOMRIGHT",content,"BOTTOMRIGHT",0,0)
 host:SetScale(1.0)
 if host.SetClipsChildren then host:SetClipsChildren(false)
 end
-f._msufMirrorHost=host local clip=CreateFrame("Frame",nil,host)
-clip:SetPoint("TOPLEFT",host,"TOPLEFT",0,0)
+f._msufMirrorHost=host
+local statusBar=CreateFrame("Frame",nil,host,"BackdropTemplate")
+statusBar:SetHeight(22)
+statusBar:SetPoint("TOPLEFT",host,"TOPLEFT",0,0)
+statusBar:SetPoint("TOPRIGHT",host,"TOPRIGHT",0,0)
+MSUF_ApplyMidnightBackdrop(statusBar,0.18)
+local sbProfile=statusBar:CreateFontString(nil,"OVERLAY","GameFontDisableSmall")
+sbProfile:SetPoint("LEFT",statusBar,"LEFT",10,0)
+sbProfile:SetJustifyH("LEFT")
+MSUF_SkinMuted(sbProfile)
+local sbEdit=statusBar:CreateFontString(nil,"OVERLAY","GameFontDisableSmall")
+sbEdit:SetPoint("LEFT",sbProfile,"RIGHT",14,0)
+sbEdit:SetJustifyH("LEFT")
+MSUF_SkinMuted(sbEdit)
+local sbCombat=statusBar:CreateFontString(nil,"OVERLAY","GameFontDisableSmall")
+sbCombat:SetPoint("LEFT",sbEdit,"RIGHT",14,0)
+sbCombat:SetJustifyH("LEFT")
+MSUF_SkinMuted(sbCombat)
+local sbVersion=statusBar:CreateFontString(nil,"OVERLAY","GameFontDisableSmall")
+sbVersion:SetPoint("RIGHT",statusBar,"RIGHT",-10,0)
+sbVersion:SetJustifyH("RIGHT")
+sbVersion:SetAlpha(0.50)
+MSUF_SkinMuted(sbVersion)
+f._msufStatusBar=statusBar
+local function MSUF_RefreshStatusBar()
+if not f._msufStatusBar then return end
+local prof=(_G.MSUF_ActiveProfile)or"Default"
+sbProfile:SetText("|cff4a90d9Profile:|r |cffccd8e8"..tostring(prof).."|r  |cff3a4a66\194\183|r")
+local editOn=(type(MSUF_IsMSUFEditModeActive)=="function"and MSUF_IsMSUFEditModeActive())
+if editOn then sbEdit:SetText("|cff4ade80Edit: On|r  |cff3a4a66\194\183|r")
+else sbEdit:SetText("|cff5a6a88Edit: Off|r  |cff3a4a66\194\183|r")
+end
+local inCombat=(InCombatLockdown and InCombatLockdown())
+if inCombat then sbCombat:SetText("|cffef4444In Combat|r")
+else sbCombat:SetText("|cff22c55eOut of Combat|r")
+end
+local ver=_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames","Version")
+sbVersion:SetText(type(ver)=="string"and ver~=""and("v"..ver)or"")
+end
+f._msufRefreshStatusBar=MSUF_RefreshStatusBar
+statusBar:RegisterEvent("PLAYER_REGEN_DISABLED")
+statusBar:RegisterEvent("PLAYER_REGEN_ENABLED")
+statusBar:SetScript("OnEvent",function() if f and f:IsShown() then MSUF_RefreshStatusBar() end end)
+local clip=CreateFrame("Frame",nil,host)
+clip:SetPoint("TOPLEFT",statusBar,"BOTTOMLEFT",0,0)
 clip:SetPoint("BOTTOMRIGHT",host,"BOTTOMRIGHT",0,0)
 if clip.SetClipsChildren then clip:SetClipsChildren(true)
 end
 f._msufMirrorClipHost=clip local navStack=CreateFrame("Frame",nil,navRail)
 navStack._msufSkipNavTitle=true local railW=navRail.GetWidth and navRail:GetWidth()
-or 150 if navStack.SetWidth then navStack:SetWidth(math.max(80,railW-16))
+or 174 if navStack.SetWidth then navStack:SetWidth(math.max(80,railW-16))
 end
-f._msufNavStack=navStack f._msufNavButtons=MSUF_BuildMirrorNavButtons(navStack,130,22)
+f._msufNavStack=navStack f._msufNavButtons=MSUF_BuildMirrorNavButtons(navStack,154,22)
 do local pad=8 if navStack.ClearAllPoints then navStack:ClearAllPoints()
 end
-navStack:SetPoint("TOPLEFT",navRail,"TOPLEFT",pad,-pad)
-navStack:SetPoint("TOPRIGHT",navRail,"TOPRIGHT",-pad,-pad)
+local topInset=pad
+if navStack._msufSearchInjected then
+local reserve=tonumber(navStack._msufSearchReservePx) or 52
+if reserve<0 then reserve=0 end
+topInset=pad+reserve
+end
+navStack:SetPoint("TOPLEFT",navRail,"TOPLEFT",pad,-topInset)
+navStack:SetPoint("TOPRIGHT",navRail,"TOPRIGHT",-pad,-topInset)
 navStack:SetPoint("BOTTOMLEFT",navRail,"BOTTOMLEFT",pad,pad)
 navStack:SetPoint("BOTTOMRIGHT",navRail,"BOTTOMRIGHT",-pad,pad)
 end
 local home=CreateFrame("Frame",nil,host,"BackdropTemplate")
-home:SetAllPoints(host)
+home:SetPoint("TOPLEFT",statusBar,"BOTTOMLEFT",0,0)
+home:SetPoint("BOTTOMRIGHT",host,"BOTTOMRIGHT",0,0)
 MSUF_ApplyMidnightBackdrop(home,0.35)
 home:Hide()
 S.mirror.homePanel=home f._msufHomePanel=home MSUF_ApplyMidnightControlsToFrame(home)
@@ -2602,16 +2709,8 @@ home._msufTipLabel=tipLabel home._msufTipText=tipText home:SetScript("OnShow",fu
 )
 MSUF_ApplyFontBumpToFrame(home,MENU_FONT_BUMP)
 MSUF_ForceItalicFont(tipText)
-local statusLine=home:CreateFontString(nil,"OVERLAY","GameFontDisableSmall")
-statusLine:SetPoint("TOPLEFT",tipBox,"BOTTOMLEFT",0,-6)
-statusLine:SetPoint("TOPRIGHT",tipBox,"BOTTOMRIGHT",0,-6)
-statusLine:SetJustifyH("LEFT")
-statusLine:SetJustifyV("TOP")
-statusLine:SetAlpha(0.78)
-statusLine:SetText("")
-MSUF_SkinMuted(statusLine)
-home._msufStatusLine=statusLine local split=CreateFrame("Frame",nil,home)
-split:SetPoint("TOPLEFT",home,"TOPLEFT",12,-96)
+home._msufStatusLine=nil local split=CreateFrame("Frame",nil,home)
+split:SetPoint("TOPLEFT",home,"TOPLEFT",12,-76)
 split:SetPoint("BOTTOMRIGHT",home,"BOTTOMRIGHT",-12,14)
 local colGap=14;
 local colL=CreateFrame("Frame",nil,split)
@@ -2956,6 +3055,7 @@ end
 end
 if MSUF_PickSessionTip then MSUF_PickSessionTip()
 end
+if f._msufRefreshStatusBar then pcall(f._msufRefreshStatusBar) end
 local startKey=f._msufInitialKey or"home";
 local startSubKey=f._msufInitialSubKey;
 f._msufInitialKey=nil f._msufInitialSubKey=nil;
