@@ -655,6 +655,12 @@ end
     if font and sep.SetFont then
         sep:SetFont(font, size, flags)
         txt:SetFont(font, size, flags)
+        local sr, sg, sb, sa = targetFrame.nameText:GetShadowColor()
+        local sox, soy = targetFrame.nameText:GetShadowOffset()
+        sep:SetShadowColor(sr or 0, sg or 0, sb or 0, sa or 0)
+        sep:SetShadowOffset(sox or 0, soy or 0)
+        txt:SetShadowColor(sr or 0, sg or 0, sb or 0, sa or 0)
+        txt:SetShadowOffset(sox or 0, soy or 0)
     end
     -- Clamp ToT inline width (secret-safe, no string width math).
     local frameWidth = (targetFrame.GetWidth and targetFrame:GetWidth()) or 0

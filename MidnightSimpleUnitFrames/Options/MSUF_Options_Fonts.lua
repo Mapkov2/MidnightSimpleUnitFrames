@@ -1,23 +1,23 @@
 -- ---------------------------------------------------------------------------
--- MSUF_Options_Fonts.lua  (Phase 5: Rewrite using ns.UI.*)
+-- MSUF_Options_Fonts.lua  (Phase 6: Collapsible sections — Bars/Auras 2.0 style)
 --
 -- Font settings: global font, text sizes, style, colors, name shortening.
--- Boxed two-column layout preserved.
+-- Single-column full-width layout with collapsible sections.
 -- ---------------------------------------------------------------------------
 local addonName, ns = ...
 local TR = ns.TR
 local UI = ns.UI
 local EnsureDB = ns.EnsureDB
 local floor = math.floor
+local CreateFrame = CreateFrame
 
 function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     if not panel or not fontGroup then return end
     if fontGroup._msufBuilt then return end
     fontGroup._msufBuilt = true
 
-    -- Search registration
     if _G.MSUF_Search_RegisterRoots then
-        _G.MSUF_Search_RegisterRoots({ "fonts" }, { "MSUF_FontsMenuPanelLeft", "MSUF_FontsMenuPanelRight" }, "Fonts")
+        _G.MSUF_Search_RegisterRoots({ "fonts" }, { "MSUF_FontsScrollChild" }, "Fonts")
     end
 
     local function G() EnsureDB(); return MSUF_DB.general end
@@ -63,36 +63,97 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
 
     local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
+    local CONTENT_W = 650
 
-    ---------------------------------------------------------------------------
-    -- Boxed layout
-    ---------------------------------------------------------------------------
-    local function MakeBox(name, titleText)
-        local box = CreateFrame("Frame", name, fontGroup, "BackdropTemplate")
-        if box.SetBackdrop then
-            box:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, tile = true, tileSize = 16, edgeSize = 2, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
-            box:SetBackdropColor(0, 0, 0, 0.35); box:SetBackdropBorderColor(1, 1, 1, 0.25)
-        end
-        box:SetFrameLevel(fontGroup:GetFrameLevel() + 1)
-        box._title = box:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        box._title:SetPoint("TOPLEFT", box, "TOPLEFT", 14, -12); box._title:SetText(titleText)
-        box._line = box:CreateTexture(nil, "ARTWORK")
-        box._line:SetColorTexture(1, 1, 1, 0.18); box._line:SetHeight(1)
-        box._line:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -34); box._line:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -34)
-        return box
+    -- =====================================================================
+    -- MakeBox / MakeCollapsibleBox (Auras 2.0 / Bars pattern)
+    -- =====================================================================
+    local function MakeBox(parent, w, h)
+        local f = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        f:SetSize(w, h)
+        f:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+        f:SetBackdropColor(0, 0, 0, 0.35)
+        f:SetBackdropBorderColor(1, 1, 1, 0.08)
+        return f
     end
 
-    local left  = MakeBox("MSUF_FontsMenuPanelLeft", "Font Settings")
-    left:SetSize(320, 560); left:SetPoint("TOPLEFT", fontGroup, "TOPLEFT", 0, -110)
-    local right = MakeBox("MSUF_FontsMenuPanelRight", "Font color & style")
-    right:SetSize(320, 560); right:SetPoint("TOPLEFT", left, "TOPRIGHT", 14, 0)
+    local _allCollapsibles = {}
+    local MSUF_Fonts_UpdateContentHeight
 
-    ---------------------------------------------------------------------------
-    -- LEFT: Global font dropdown
-    ---------------------------------------------------------------------------
-    local secGlobal = UI.Label({ parent = left, text = TR("Global font"), font = "GameFontNormal", anchor = left, anchorPoint = "TOPLEFT", x = 14, y = -44 })
+    local function MakeCollapsibleBox(parent, anchorTo, w, expandedH, titleText, defaultOpen)
+        local box = MakeBox(parent, w, defaultOpen and expandedH or 28)
+        box:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, -6)
+        box._msufExpandedH = expandedH
+        box._msufCollapsed = not defaultOpen
+        local hdr = CreateFrame("Button", nil, box)
+        hdr:SetHeight(24)
+        hdr:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+        hdr:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
+        local chevron = hdr:CreateTexture(nil, "OVERLAY")
+        chevron:SetSize(12, 12)
+        chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
+        chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+        chevron:SetVertexColor(0.55, 0.65, 0.82)
+        if defaultOpen then chevron:SetRotation(math.pi * 0.5) else chevron:SetRotation(0) end
+        local title = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        title:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
+        title:SetText(titleText)
+        local hint = hdr:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hint:SetPoint("RIGHT", hdr, "RIGHT", -12, 0)
+        hint:SetText(defaultOpen and "" or "click to expand")
+        hint:SetTextColor(0.45, 0.52, 0.65)
+        local bodyHost = CreateFrame("Frame", nil, box)
+        bodyHost:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -28)
+        bodyHost:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
+        bodyHost:SetShown(defaultOpen)
+        if bodyHost.SetFrameLevel and box.GetFrameLevel then
+            bodyHost:SetFrameLevel((box:GetFrameLevel() or 0) + 5)
+        end
+        box._msufBody = bodyHost
+        hdr:SetScript("OnClick", function()
+            box._msufCollapsed = not box._msufCollapsed
+            bodyHost:SetShown(not box._msufCollapsed)
+            if box._msufCollapsed then
+                box:SetHeight(28)
+                chevron:SetRotation(0)
+                hint:SetText("click to expand")
+            else
+                box:SetHeight(box._msufExpandedH)
+                chevron:SetRotation(math.pi * 0.5)
+                hint:SetText("")
+            end
+            if MSUF_Fonts_UpdateContentHeight then pcall(MSUF_Fonts_UpdateContentHeight) end
+        end)
+        do
+            local hl = hdr:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.03)
+        end
+        _allCollapsibles[#_allCollapsibles + 1] = box
+        return box, bodyHost
+    end
 
-    -- Build SharedMedia font choices
+    -- =====================================================================
+    -- Scroll frame (same pattern as Frames/Bars/Castbar menus)
+    -- =====================================================================
+    local fontsScroll = CreateFrame("ScrollFrame", "MSUF_FontsMenuScrollFrame", fontGroup, "UIPanelScrollFrameTemplate")
+    fontsScroll:SetPoint("TOPLEFT", fontGroup, "TOPLEFT", 0, -110)
+    fontsScroll:SetPoint("BOTTOMRIGHT", fontGroup, "BOTTOMRIGHT", -36, 16)
+
+    local fontsScrollChild = CreateFrame("Frame", "MSUF_FontsScrollChild", fontsScroll)
+    fontsScrollChild:SetSize(CONTENT_W, 900)
+    fontsScroll:SetScrollChild(fontsScrollChild)
+
+    local content = fontsScrollChild
+
+    -- =====================================================================
+    -- SECTION 1: Global Font (default open)
+    -- =====================================================================
+    local anchorTop = CreateFrame("Frame", nil, content)
+    anchorTop:SetSize(CONTENT_W, 1)
+    anchorTop:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+
+    local fontBox, fontBody = MakeCollapsibleBox(content, anchorTop, CONTENT_W, 76, TR("Global Font"), true)
+
     local fontChoices = {}
     local function RebuildFontChoices()
         fontChoices = {}
@@ -121,8 +182,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     RebuildFontChoices()
 
     local fontDrop = UI.Dropdown({
-        name = "MSUF_FontDropdown", parent = left,
-        anchor = secGlobal, x = -16, y = -8, width = 260, maxVisible = 12,
+        name = "MSUF_FontDropdown", parent = fontBody,
+        anchor = fontBody, anchorPoint = "TOPLEFT", x = 14, y = -8, width = 300, maxVisible = 12,
         itemHeight = 22,
         items = function()
             if #fontChoices == 0 then RebuildFontChoices() end
@@ -145,20 +206,19 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end,
     })
 
-    ---------------------------------------------------------------------------
-    -- LEFT: Text sizes (2x2 grid with editbox + ±)
-    ---------------------------------------------------------------------------
-    local secSizes = UI.Label({ parent = left, text = TR("Text sizes"), font = "GameFontNormal", anchor = fontDrop, x = 14, y = -18 })
+    -- =====================================================================
+    -- SECTION 2: Text Sizes (default open)
+    -- =====================================================================
+    local sizeBox, sizeBody = MakeCollapsibleBox(content, fontBox, CONTENT_W, 300, TR("Text Sizes"), true)
 
-    local sizeHelp = left:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    sizeHelp:SetJustifyH("LEFT"); sizeHelp:SetWidth(290)
-    sizeHelp:SetText("Global defaults. Frames inherit unless overridden in Unitframes > Text.")
-    sizeHelp:SetPoint("TOPLEFT", secSizes, "BOTTOMLEFT", 0, -4)
+    local sizeHint = sizeBody:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    sizeHint:SetJustifyH("LEFT"); sizeHint:SetWidth(CONTENT_W - 40)
+    sizeHint:SetText("Global defaults. Frames inherit unless overridden in Unitframes > Text.")
+    sizeHint:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 16, -6)
 
-    -- Size slider factory (110px, compact labels)
     local function MakeSizeSlider(name, label, dbKey, anchor, ox, oy, min, max, default)
         local sl = UI.Slider({
-            name = name, parent = left,
+            name = name, parent = sizeBody,
             anchor = anchor, anchorPoint = "TOPLEFT", x = ox, y = oy,
             width = 110, min = min or 8, max = max or 32, step = 1, default = default or 14,
             get = function() return G()[dbKey] or default or 14 end,
@@ -172,7 +232,6 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             end,
             formatText = function() return label end,
         })
-        -- Compact: hide Low/High, resize editbox + buttons
         local n = sl:GetName()
         if n then
             local low = _G[n .. "Low"]; if low then low:Hide() end
@@ -187,17 +246,16 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
 
     local colGap = 30
-    local firstRowYOffset = -42
-    local secondRowYOffset = -118
-    local nameSizeSlider    = MakeSizeSlider("MSUF_NameFontSizeSlider", "Name", "nameFontSize", sizeHelp, 0, firstRowYOffset, 8, 32, 14)
-    local hpSizeSlider      = MakeSizeSlider("MSUF_HealthFontSizeSlider", "HP", "hpFontSize", sizeHelp, 110 + colGap, firstRowYOffset, 8, 32, 14)
-    local powerSizeSlider   = MakeSizeSlider("MSUF_PowerFontSizeSlider", "Power", "powerFontSize", nameSizeSlider, 0, secondRowYOffset, 8, 32, 14)
+    local firstRowY = -28
+    local secondRowY = -118
+    local nameSizeSlider    = MakeSizeSlider("MSUF_NameFontSizeSlider",    "Name",    "nameFontSize",              sizeHint, 0,             firstRowY,  8, 32, 14)
+    local hpSizeSlider      = MakeSizeSlider("MSUF_HealthFontSizeSlider",  "HP",      "hpFontSize",                sizeHint, 110 + colGap,  firstRowY,  8, 32, 14)
+    local powerSizeSlider   = MakeSizeSlider("MSUF_PowerFontSizeSlider",   "Power",   "powerFontSize",             nameSizeSlider, 0,        secondRowY, 8, 32, 14)
     local castbarSizeSlider = MakeSizeSlider("MSUF_CastbarSpellNameFontSizeSlider", "Castbar", "castbarSpellNameFontSize", powerSizeSlider, 110 + colGap, 0, 0, 30, 0)
-    -- Fix castbar position: same row as Power
     castbarSizeSlider:ClearAllPoints()
     castbarSizeSlider:SetPoint("TOPLEFT", powerSizeSlider, "TOPRIGHT", colGap, 0)
 
-    -- Override info (per-unit overrides indicator)
+    -- Override info
     local function MakeOverrideInfo(parent, key)
         local fs = parent:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         fs:SetWidth(120); fs:SetJustifyH("CENTER"); fs:SetText("")
@@ -214,9 +272,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         return fs
     end
 
-    local nameOvr  = MakeOverrideInfo(left, "nameOvr")
-    local hpOvr    = MakeOverrideInfo(left, "hpOvr")
-    local powerOvr = MakeOverrideInfo(left, "powerOvr")
+    local nameOvr  = MakeOverrideInfo(sizeBody, "nameOvr")
+    local hpOvr    = MakeOverrideInfo(sizeBody, "hpOvr")
+    local powerOvr = MakeOverrideInfo(sizeBody, "powerOvr")
     nameOvr:SetPoint("TOP", nameSizeSlider.editBox, "BOTTOM", 0, -2)
     hpOvr:SetPoint("TOP", hpSizeSlider.editBox, "BOTTOM", 0, -2)
     powerOvr:SetPoint("TOP", powerSizeSlider.editBox, "BOTTOM", 0, -2)
@@ -243,10 +301,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         s, f = Fmt(List("hpFontSize"));    hpOvr:SetText(s);    hpOvr._fullList = f or ""
         s, f = Fmt(List("powerFontSize")); powerOvr:SetText(s); powerOvr._fullList = f or ""
     end
-    left:HookScript("OnShow", function() UpdateOverrideInfo() end)
-    UpdateOverrideInfo()
 
-    -- Reset overrides button
+    -- Reset overrides
     if not StaticPopupDialogs["MSUF_RESET_FONT_OVERRIDES"] then
         StaticPopupDialogs["MSUF_RESET_FONT_OVERRIDES"] = {
             text = "Reset all font size overrides?\n\nThis clears per-unit overrides for Name/Health/Power AND per-castbar overrides for Cast Name/Time so everything inherits the global defaults.",
@@ -271,20 +327,20 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
 
     local resetBtn = UI.Button({
-        name = "MSUF_ResetFontOverridesBtn", parent = left,
+        name = "MSUF_ResetFontOverridesBtn", parent = sizeBody,
         text = TR("Reset overrides"), width = 280, height = 20,
         onClick = function() StaticPopup_Show("MSUF_RESET_FONT_OVERRIDES") end,
     })
-    resetBtn:ClearAllPoints(); resetBtn:SetPoint("BOTTOMLEFT", left, "BOTTOMLEFT", 14, 14)
+    resetBtn:ClearAllPoints(); resetBtn:SetPoint("TOPLEFT", powerSizeSlider, "BOTTOMLEFT", 0, -40)
 
-    ---------------------------------------------------------------------------
-    -- RIGHT: Text style
-    ---------------------------------------------------------------------------
-    local secStyle = UI.Label({ parent = right, text = TR("Text style"), font = "GameFontNormal", anchor = right, anchorPoint = "TOPLEFT", x = 14, y = -44 })
+    -- =====================================================================
+    -- SECTION 3: Text Style (default collapsed)
+    -- =====================================================================
+    local styleBox, styleBody = MakeCollapsibleBox(content, sizeBox, CONTENT_W, 148, TR("Text Style"), false)
 
     local boldCheck = UI.Check({
-        name = "MSUF_BoldTextCheck", parent = right,
-        anchor = secStyle, x = -2, y = -8, maxTextWidth = 278,
+        name = "MSUF_BoldTextCheck", parent = styleBody,
+        anchor = styleBody, anchorPoint = "TOPLEFT", x = 16, y = -8, maxTextWidth = 400,
         label = TR("Use bold text (THICKOUTLINE)"),
         get = function() return G().boldText and true or false end,
         set = function(v)
@@ -294,8 +350,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     })
 
     local noOutlineCheck = UI.Check({
-        name = "MSUF_NoOutlineCheck", parent = right,
-        anchor = boldCheck, x = 0, y = -10, maxTextWidth = 278,
+        name = "MSUF_NoOutlineCheck", parent = styleBody,
+        anchor = boldCheck, x = 0, y = -10, maxTextWidth = 400,
         label = TR("Disable black outline around text"),
         get = function() return G().noOutline and true or false end,
         set = function(v)
@@ -305,8 +361,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     })
 
     local textBackdropCheck = UI.Check({
-        name = "MSUF_TextBackdropCheck", parent = right,
-        anchor = noOutlineCheck, x = 0, y = -10, maxTextWidth = 278,
+        name = "MSUF_TextBackdropCheck", parent = styleBody,
+        anchor = noOutlineCheck, x = 0, y = -10, maxTextWidth = 400,
         label = TR("Add text shadow (backdrop)"),
         get = function() return G().textBackdrop and true or false end,
         set = function(v)
@@ -315,17 +371,14 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end,
     })
 
-    ---------------------------------------------------------------------------
-    -- RIGHT: Name colors
-    ---------------------------------------------------------------------------
-    local secColors = UI.Label({ parent = right, text = TR("Name colors"), font = "GameFontNormal", anchor = textBackdropCheck, x = 2, y = -18 })
-    local colorsLine = right:CreateTexture(nil, "ARTWORK")
-    colorsLine:SetColorTexture(1, 1, 1, 0.20); colorsLine:SetHeight(1)
-    colorsLine:SetPoint("TOPLEFT", secColors, "BOTTOMLEFT", -16, -4); colorsLine:SetWidth(286)
+    -- =====================================================================
+    -- SECTION 4: Name Colors (default collapsed)
+    -- =====================================================================
+    local colorsBox, colorsBody = MakeCollapsibleBox(content, styleBox, CONTENT_W, 148, TR("Name Colors"), false)
 
     local nameClassColorCheck = UI.Check({
-        name = "MSUF_NameClassColorCheck", parent = right,
-        anchor = colorsLine, x = 14, y = -8, maxTextWidth = 278,
+        name = "MSUF_NameClassColorCheck", parent = colorsBody,
+        anchor = colorsBody, anchorPoint = "TOPLEFT", x = 16, y = -8, maxTextWidth = 400,
         label = TR("Color player names by class"),
         get = function() return G().nameClassColor and true or false end,
         set = function(v)
@@ -335,8 +388,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     })
 
     local npcNameRedCheck = UI.Check({
-        name = "MSUF_NPCNameRedCheck", parent = right,
-        anchor = nameClassColorCheck, x = 0, y = -10, maxTextWidth = 278,
+        name = "MSUF_NPCNameRedCheck", parent = colorsBody,
+        anchor = nameClassColorCheck, x = 0, y = -10, maxTextWidth = 400,
         label = TR("Color NPC/boss names using NPC colors"),
         get = function() return G().npcNameRed and true or false end,
         set = function(v)
@@ -346,8 +399,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     })
 
     local powerColorCheck = UI.Check({
-        name = "MSUF_PowerTextColorByTypeCheck", parent = right,
-        anchor = npcNameRedCheck, x = 0, y = -10, maxTextWidth = 278,
+        name = "MSUF_PowerTextColorByTypeCheck", parent = colorsBody,
+        anchor = npcNameRedCheck, x = 0, y = -10, maxTextWidth = 400,
         label = TR("Color power text by power type"),
         get = function() return G().colorPowerTextByType and true or false end,
         set = function(v)
@@ -356,15 +409,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end,
     })
 
-    ---------------------------------------------------------------------------
-    -- RIGHT: Name display / shortening
-    ---------------------------------------------------------------------------
-    local secNames = UI.Label({ parent = right, text = TR("Name display"), font = "GameFontNormal", anchor = powerColorCheck, x = 2, y = -18 })
-    local namesLine = right:CreateTexture(nil, "ARTWORK")
-    namesLine:SetColorTexture(1, 1, 1, 0.20); namesLine:SetHeight(1)
-    namesLine:SetPoint("TOPLEFT", secNames, "BOTTOMLEFT", -16, -4); namesLine:SetWidth(286)
+    -- =====================================================================
+    -- SECTION 5: Name Display (default collapsed)
+    -- =====================================================================
+    local nameBox, nameBody = MakeCollapsibleBox(content, colorsBox, CONTENT_W, 280, TR("Name Display"), false)
 
-    -- Forward-declare for cross-widget enable/disable
     local shortenMaxSlider, shortenMaskSlider, shortenClipDrop
 
     local function SyncShortenEnabled()
@@ -375,8 +424,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
 
     local shortenCheck = UI.Check({
-        name = "MSUF_ShortenNamesCheck", parent = right,
-        anchor = namesLine, x = 14, y = -8, maxTextWidth = 278,
+        name = "MSUF_ShortenNamesCheck", parent = nameBody,
+        anchor = nameBody, anchorPoint = "TOPLEFT", x = 16, y = -8, maxTextWidth = 400,
         label = TR("Shorten unit names (except Player)"),
         get = function() EnsureDB(); return MSUF_DB.shortenNames and true or false end,
         set = function(v)
@@ -387,11 +436,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end,
     })
 
-    local shortenClipLabel = UI.Label({ parent = right, text = TR("Truncation style"), font = "GameFontNormal", anchor = shortenCheck, x = 16, y = -10 })
+    local shortenClipLabel = UI.Label({ parent = nameBody, text = TR("Truncation style"), font = "GameFontNormal", anchor = shortenCheck, x = 16, y = -10 })
 
     shortenClipDrop = UI.Dropdown({
-        name = "MSUF_ShortenNameClipSideDrop", parent = right,
-        anchor = shortenClipLabel, x = -16, y = -2, width = 200,
+        name = "MSUF_ShortenNameClipSideDrop", parent = nameBody,
+        anchor = shortenClipLabel, x = -16, y = -2, width = 240,
         items = {
             { key = "LEFT",  label = "Keep end (show last letters)" },
             { key = "RIGHT", label = "Keep start (show first letters)" },
@@ -404,8 +453,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     })
 
     shortenMaxSlider = UI.Slider({
-        name = "MSUF_ShortenNameMaxCharsSlider", parent = right, compact = true,
-        anchor = shortenClipDrop, x = 16, y = -12, width = 180,
+        name = "MSUF_ShortenNameMaxCharsSlider", parent = nameBody, compact = true,
+        anchor = shortenClipDrop, x = 16, y = -12, width = 200,
         label = TR("Max name length"), min = 6, max = 30, step = 1, default = 6,
         lowText = "6", highText = "30",
         get = function() return G().shortenNameMaxChars or 6 end,
@@ -416,8 +465,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     })
 
     shortenMaskSlider = UI.Slider({
-        name = "MSUF_ShortenNameFrontMaskSlider", parent = right, compact = true,
-        anchor = shortenMaxSlider, x = 0, y = -20, width = 180,
+        name = "MSUF_ShortenNameFrontMaskSlider", parent = nameBody, compact = true,
+        anchor = shortenMaxSlider, x = 0, y = -20, width = 200,
         label = TR("Reserved space"), min = 0, max = 40, step = 1, default = 8,
         lowText = "0", highText = "40",
         get = function() return G().shortenNameFrontMaskPx or 8 end,
@@ -427,8 +476,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end,
     })
 
-    -- Info button
-    local infoBtn = CreateFrame("Button", "MSUF_ShortenNameInfoButton", right)
+    local infoBtn = CreateFrame("Button", "MSUF_ShortenNameInfoButton", nameBody)
     infoBtn:SetSize(16, 16)
     infoBtn:SetNormalTexture("Interface\\FriendsFrame\\InformationIcon")
     infoBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
@@ -447,12 +495,46 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         GameTooltip:Show()
     end)
 
-    -- Initial enable/disable state
     SyncShortenEnabled()
 
-    ---------------------------------------------------------------------------
+    -- =====================================================================
+    -- Dynamic content height
+    -- =====================================================================
+    local _lastBox = nameBox
+    MSUF_Fonts_UpdateContentHeight = function()
+        if not (content and _lastBox and content.GetTop and _lastBox.GetBottom) then return end
+        local top = content:GetTop()
+        local bottom = _lastBox:GetBottom()
+        if not top or not bottom then return end
+        local h = (top - bottom) + 24
+        if h < 10 then h = 10 end
+        if content.__msufFonts_lastAutoH ~= h then
+            content.__msufFonts_lastAutoH = h
+            content:SetHeight(h)
+        end
+    end
+
+    -- =====================================================================
+    -- SyncAll (OnShow refresh)
+    -- =====================================================================
+    local function SyncAll()
+        UpdateOverrideInfo()
+        SyncShortenEnabled()
+        if MSUF_Fonts_UpdateContentHeight then pcall(MSUF_Fonts_UpdateContentHeight) end
+    end
+    SyncAll()
+    if fontGroup.HookScript then
+        fontGroup:HookScript("OnShow", SyncAll)
+        fontGroup:HookScript("OnSizeChanged", function()
+            if MSUF_Fonts_UpdateContentHeight then
+                C_Timer.After(0, MSUF_Fonts_UpdateContentHeight)
+            end
+        end)
+    end
+
+    -- =====================================================================
     -- Color list export (backward compat)
-    ---------------------------------------------------------------------------
+    -- =====================================================================
     local colorList = {
         { key="white",r=1,g=1,b=1,label="White" }, { key="black",r=0,g=0,b=0,label="Black" },
         { key="red",r=1,g=0,b=0,label="Red" }, { key="green",r=0,g=1,b=0,label="Green" },
@@ -466,9 +548,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     panel.__MSUF_COLOR_LIST = colorList
     _G.MSUF_COLOR_LIST = colorList
 
-    ---------------------------------------------------------------------------
+    -- =====================================================================
     -- Panel stores (Core compat)
-    ---------------------------------------------------------------------------
+    -- =====================================================================
     panel.__MSUF_FontChoices = fontChoices
     panel.__MSUF_RebuildFontChoices = RebuildFontChoices
     panel.fontDrop = fontDrop

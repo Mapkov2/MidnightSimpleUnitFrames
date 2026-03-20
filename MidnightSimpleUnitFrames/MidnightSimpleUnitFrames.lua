@@ -5580,8 +5580,16 @@ local function MSUF_EnsureTargetToTInlineFS(targetFrame)
         if font then
             sep:SetFont(font, size, flags)
             txt:SetFont(font, size, flags)
+            local sr, sg, sb, sa = nameFS:GetShadowColor()
+            local sox, soy = nameFS:GetShadowOffset()
+            sep:SetShadowColor(sr or 0, sg or 0, sb or 0, sa or 0)
+            sep:SetShadowOffset(sox or 0, soy or 0)
+            txt:SetShadowColor(sr or 0, sg or 0, sb or 0, sa or 0)
+            txt:SetShadowOffset(sox or 0, soy or 0)
             sep._msufFontRev = nil
             txt._msufFontRev = nil
+            sep._msufShadowOn = nil
+            txt._msufShadowOn = nil
         end
     end
     targetFrame._msufToTInlineSep = sep
