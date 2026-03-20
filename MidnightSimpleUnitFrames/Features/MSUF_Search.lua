@@ -19,7 +19,7 @@ local MAX_ROWS          = VISIBLE_ROWS
 local MIN_QUERY_LEN     = 2
 local DEBOUNCE_SEC      = 0.18
 local SEARCH_BOX_H      = 24
-local SEARCH_RESERVE_PX = SEARCH_BOX_H + 28
+local SEARCH_RESERVE_PX = SEARCH_BOX_H + 2
 local SCROLL_DELAY      = 0.18   -- seconds after page switch before scrolling
 local SCROLL_RETRY      = 0.40   -- second attempt if first GetTop() returns nil
 
@@ -1907,6 +1907,7 @@ local _lastPageKey   = nil
 local function MSUF_Search_InjectNavEditBox(navStack)
     if not navStack or navStack._msufSearchInjected then return end
     navStack._msufSearchInjected = true
+    navStack._msufSearchReservePx = SEARCH_RESERVE_PX
 
     local navRail = navStack:GetParent()
     if not navRail then return end
@@ -1920,8 +1921,8 @@ local function MSUF_Search_InjectNavEditBox(navStack)
 
     local sep = navRail:CreateTexture(nil,"ARTWORK")
     sep:SetHeight(1)
-    sep:SetPoint("TOPLEFT",eb,"BOTTOMLEFT",0,-6)
-    sep:SetPoint("TOPRIGHT",eb,"BOTTOMRIGHT",0,-6)
+    sep:SetPoint("TOPLEFT",eb,"BOTTOMLEFT",0,-4)
+    sep:SetPoint("TOPRIGHT",eb,"BOTTOMRIGHT",0,-4)
     sep:SetColorTexture(0.25,0.45,0.80,0.28)
 
     local ph = navRail:CreateFontString(nil,"ARTWORK","GameFontDisableSmall")
@@ -1931,7 +1932,6 @@ local function MSUF_Search_InjectNavEditBox(navStack)
     eb._msufPlaceholder = ph
 
     local PAD = 8
-    navStack._msufSearchReservePx = SEARCH_RESERVE_PX
     navStack:ClearAllPoints()
     navStack:SetPoint("TOPLEFT",     navRail,"TOPLEFT",      PAD, -(PAD+SEARCH_RESERVE_PX))
     navStack:SetPoint("TOPRIGHT",    navRail,"TOPRIGHT",    -PAD, -(PAD+SEARCH_RESERVE_PX))

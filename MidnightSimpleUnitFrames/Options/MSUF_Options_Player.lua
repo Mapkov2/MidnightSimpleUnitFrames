@@ -829,6 +829,74 @@ local function CreateGroupBox(parent, title, x, y, w, h, texWhite, texWhite2)
     box._msufDivider = divider
      return box
 end
+
+local function MakeCollapsibleGroupBox(parent, title, w, expandedH, defaultOpen, texWhite, texWhite2)
+    local box = CreateGroupBox(parent, title, 0, 0, w, (defaultOpen and expandedH) or 28, texWhite, texWhite2)
+    box:ClearAllPoints()
+    box._msufExpandedH = expandedH
+    box._msufCollapsedH = 28
+    box._msufCollapsed = not defaultOpen
+
+    local hdr = CreateFrame("Button", nil, box)
+    hdr:SetHeight(24)
+    hdr:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+    hdr:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
+
+    local chevron = hdr:CreateTexture(nil, "OVERLAY")
+    chevron:SetSize(12, 12)
+    chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
+    chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+    chevron:SetVertexColor(0.55, 0.65, 0.82)
+    chevron:SetRotation(defaultOpen and (math.pi * 0.5) or 0)
+
+    if box._msufTitleText then
+        box._msufTitleText:ClearAllPoints()
+        box._msufTitleText:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
+    end
+
+    local hint = hdr:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("RIGHT", hdr, "RIGHT", -12, 0)
+    hint:SetText(defaultOpen and "" or TR("click to expand"))
+    hint:SetTextColor(0.45, 0.52, 0.65)
+
+    if box._msufDivider then
+        box._msufDivider:ClearAllPoints()
+        box._msufDivider:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -28)
+        box._msufDivider:SetPoint("TOPRIGHT", box, "TOPRIGHT", -8, -28)
+    end
+
+    local body = CreateFrame("Frame", nil, box)
+    body:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -28)
+    body:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
+    body:SetShown(defaultOpen)
+    box._msufBody = body
+
+    local function ApplyState()
+        local open = not box._msufCollapsed
+        body:SetShown(open)
+        box:SetHeight(open and box._msufExpandedH or box._msufCollapsedH)
+        chevron:SetRotation(open and (math.pi * 0.5) or 0)
+        hint:SetText(open and "" or TR("click to expand"))
+        if type(box._msufOnCollapsedChanged) == "function" then
+            pcall(box._msufOnCollapsedChanged, box, box._msufCollapsed)
+        end
+    end
+
+    hdr:SetScript("OnClick", function()
+        box._msufCollapsed = not box._msufCollapsed
+        ApplyState()
+    end)
+    hdr:SetScript("OnEnter", function() end)
+    do
+        local hl = hdr:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.03)
+    end
+
+    box._msufApplyCollapseState = ApplyState
+    ApplyState()
+    return box, body
+end
 -- Expand the clickable area of a Blizzard UIDropDownMenu so the whole dropdown "box" is clickable,
 -- not just the small arrow button. We do this by expanding the Button hit-rect to the dropdown size.
 local function MSUF_ExpandDropdownClickArea(dropdown)
@@ -885,6 +953,27 @@ local function CreateCheck(parent, name, label, x, y, maxTextWidth)
     end
      return cb
 end
+
+local function MSUF_CheckboxLabelLeft(cb, text)
+    if not cb then return end
+    if cb.Text then
+        if text ~= nil then cb.Text:SetText(TR(text)) end
+        cb.Text:ClearAllPoints()
+        cb.Text:SetPoint("RIGHT", cb, "LEFT", -4, 0)
+        cb.Text:SetJustifyH("RIGHT")
+    end
+end
+
+local function MSUF_CheckboxLabelRight(cb, text)
+    if not cb then return end
+    if cb.Text then
+        if text ~= nil then cb.Text:SetText(TR(text)) end
+        cb.Text:ClearAllPoints()
+        cb.Text:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+        cb.Text:SetJustifyH("LEFT")
+    end
+end
+
 local function ResizeStepper(stepper, width, editWidth)
     if not stepper or not width then  return end
     stepper:SetWidth(width)
@@ -1034,12 +1123,14 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local CreateLabeledSlider = helpers.CreateLabeledSlider
     local texWhite = helpers.texWhite
     local texWhite2 = helpers.texWhite2
-    -- Layout constants (GOOD layout)
+    -- UX layout constants
     local leftX, topY = 8, -110
-    local leftW = 250
-    local gap = 16
+    local leftW = 320
+    local gap = 8
     local rightX = leftX + leftW + gap
-    local rightW = 410
+    local rightW = 328
+    local fullW = leftW + gap + rightW - 8
+    local sectionGap = 8
     -- Make slider track/line more visible (especially on dark MSUF panels)
     local function MSUF_EnhanceSliderTrack(slider)
         if not slider or slider._msufTrackEnhanced then  return end
@@ -1206,114 +1297,113 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             if slider.GetValue then UpdateFromValue(slider:GetValue(), true) end
         end
      end
-    -- Slightly taller: accommodates the per-unit reverse-fill toggle above the portrait dropdown.
-    local basicsH = 206
-    -- Slightly taller so the new Alpha dropdown + sliders never clip
-    local sizeH = 245
-    local bossExtraH = 60
+    -- Top row: Frame Basics + Castbar, then full-width sections underneath.
+    local basicsH = 132
+    local castbarBoxH = 132
+    local loadCondH = 124
+    local sizeH = 200
+    local bossExtraH = 0
     local sizeBossH = sizeH + bossExtraH
+    local _msufTextBaseH = 136
+    local _msufStatusBoxH = 188
+    panel._msufTextBaseH = _msufTextBaseH
+    panel._msufStatusBoxH = _msufStatusBoxH
     -- Left: Frame Basics
     local basicsBox = CreateGroupBox(frameGroup, "Frame Basics", leftX, topY, leftW, basicsH, texWhite, texWhite2)
     basicsBox:Hide()
     panel.playerBasicsBox = basicsBox
+    panel._msufBasicsH = basicsH
+    -- Top-right: Castbar
+    local castbarBox = CreateGroupBox(frameGroup, "Castbar", rightX, topY, rightW, castbarBoxH, texWhite, texWhite2)
+    castbarBox:Hide()
+    panel.playerCastbarBox = castbarBox
+    -- Full-width: Indicators
+    local textGroup = CreateGroupBox(frameGroup, "Indicators", leftX, topY - basicsH - sectionGap, fullW, _msufTextBaseH, texWhite, texWhite2)
+    textGroup:Hide()
+    panel.playerTextLayoutGroup = textGroup
+    panel._msufTextGroup = textGroup
+    -- Full-width: Status icons
+    local statusBox = CreateGroupBox(frameGroup, "Status icons", leftX, topY - basicsH - sectionGap - _msufTextBaseH - sectionGap, fullW, _msufStatusBoxH, texWhite, texWhite2)
+    statusBox:Hide()
+    panel._msufStatusIconsGroup = statusBox
+    -- Boss-only: own collapsible layout section (keeps spacing/order out of Indicators)
+    local bossLayoutH = 118
+    local bossLayoutBox, bossLayoutBody = MakeCollapsibleGroupBox(frameGroup, "Boss Layout", fullW, bossLayoutH, false, texWhite, texWhite2)
+    bossLayoutBox:Hide()
+    panel.playerBossLayoutBox = bossLayoutBox
+    panel.playerBossLayoutBody = bossLayoutBody
+    panel._msufBossLayoutH = bossLayoutH
+    -- Full-width: collapsible sections
+    local loadCondBox, loadCondBody = MakeCollapsibleGroupBox(frameGroup, "Load Conditions", fullW, loadCondH, false, texWhite, texWhite2)
+    loadCondBox:Hide()
+    panel.playerLoadCondBox = loadCondBox
+    panel.playerLoadCondBody = loadCondBody
+    local sizeBox, sizeBody = MakeCollapsibleGroupBox(frameGroup, "Transparency", fullW, sizeH, false, texWhite, texWhite2)
+    sizeBox:Hide()
+    panel.playerSizeBox = sizeBox
+    panel.playerSizeBody = sizeBody
+    local anchorGroup, anchorBody = MakeCollapsibleGroupBox(frameGroup, "Anchoring", fullW, 128, false, texWhite, texWhite2)
+    anchorGroup:Hide()
+    panel.unitAnchorGroup = anchorGroup
+    panel.unitAnchorBody = anchorBody
+    panel._msufLoadCondH = loadCondH
+    panel._msufSizeBaseH = sizeH
+    panel._msufSizeBossH = sizeBossH
     -- Enable/Disable + Display toggles (spec-driven; keep widget names)
     local BASIC_TOGGLES = {
-        { field = "playerEnableFrameCB", name = "MSUF_UF_EnableFrameCB", label = "Enable this frame", x = 12, y = -34 },
-        { field = "playerShowNameCB",    name = "MSUF_UF_ShowNameCB",   label = "Show name",         x = 12, y = -58 },
-        { field = "playerShowHPCB",      name = "MSUF_UF_ShowHPCB",     label = "Show HP text",      x = 12, y = -82 },
-        { field = "playerShowPowerCB",   name = "MSUF_UF_ShowPowerCB",  label = "Show power text",   x = 12, y = -106 },
-        { field = "playerReverseFillBarsCB", name = "MSUF_UF_ReverseFillBarsCB", label = "Reverse fill (HP/Power)", x = 12, y = -130 },
+        { field = "playerEnableFrameCB", name = "MSUF_UF_EnableFrameCB", label = "Enable", x = 0, y = 0 },
+        { field = "playerShowNameCB",    name = "MSUF_UF_ShowNameCB",   label = "Show name",       x = 12,  y = -34 },
+        { field = "playerShowHPCB",      name = "MSUF_UF_ShowHPCB",     label = "Show HP text",    x = 164, y = -34 },
+        { field = "playerShowPowerCB",   name = "MSUF_UF_ShowPowerCB",  label = "Show power text", x = 12,  y = -58 },
+        { field = "playerReverseFillBarsCB", name = "MSUF_UF_ReverseFillBarsCB", label = "Reverse fill", x = 164, y = -58 },
     }
     for _, s in ipairs(BASIC_TOGGLES) do
         panel[s.field] = CreateCheck(basicsBox, s.name, s.label, s.x, s.y)
     end
-    -- Portrait dropdown under display toggles.
+    if panel.playerEnableFrameCB then
+        panel.playerEnableFrameCB:ClearAllPoints()
+        panel.playerEnableFrameCB:SetPoint("TOPRIGHT", basicsBox, "TOPRIGHT", -12, -6)
+        if panel.playerEnableFrameCB.Text then
+            panel.playerEnableFrameCB.Text:SetText(TR("Enable"))
+            panel.playerEnableFrameCB.Text:ClearAllPoints()
+            panel.playerEnableFrameCB.Text:SetPoint("RIGHT", panel.playerEnableFrameCB, "LEFT", -4, 0)
+            panel.playerEnableFrameCB.Text:SetJustifyH("RIGHT")
+        end
+    end
+    local portraitLabel = basicsBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    portraitLabel:SetPoint("TOPLEFT", basicsBox, "TOPLEFT", 12, -88)
+    portraitLabel:SetText(TR("Portrait"))
+    panel.playerPortraitLabel = portraitLabel
     local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UF_PortraitDropDown", basicsBox) or CreateFrame("Frame", "MSUF_UF_PortraitDropDown", basicsBox, "UIDropDownMenuTemplate"))
-    dd:SetPoint("TOPLEFT", basicsBox, "TOPLEFT", -6, -162)
-    dd:Show() -- portrait dropdown (all unitframes)
+    dd:SetPoint("TOPLEFT", basicsBox, "TOPLEFT", -6, -100)
+    dd:Show()
     panel.playerPortraitDropDown = dd
     if UIDropDownMenu_SetWidth then
-        UIDropDownMenu_SetWidth(dd, 170)
+        UIDropDownMenu_SetWidth(dd, 190)
     end
-    dd._msufDropWidth = 170
+    dd._msufDropWidth = 190
     MSUF_ExpandDropdownClickArea(dd)
-    -- Class portrait style moved to dedicated Portraits panel.
-    -- Left: Load Conditions (between Frame Basics and Unit Alpha)
-    local loadCondH = 160
-    local loadCondBox = CreateGroupBox(frameGroup, "Load Conditions", leftX, topY - basicsH - 12, leftW, loadCondH, texWhite, texWhite2)
-    loadCondBox:Hide()
-    panel.playerLoadCondBox = loadCondBox
-    -- Two-column checkbox layout for compact display.
-    -- Left column: conditions that hide based on player activity state.
-    -- Right column: conditions that hide based on group/location state.
+    -- Load Conditions (3-column grid)
     local LOAD_COND_UI_SPECS = {
-        -- { panelField, dbField, label, x, y }
-        { "playerLoadCondMountedCB",    "loadCondHideMounted",      "Mounted",       12, -32 },
-        { "playerLoadCondVehicleCB",    "loadCondHideInVehicle",    "In vehicle",    12, -54 },
-        { "playerLoadCondRestingCB",    "loadCondHideResting",      "Resting",       12, -76 },
-        { "playerLoadCondStealthedCB",  "loadCondHideStealthed",    "Stealthed",     12, -98 },
-        { "playerLoadCondInCombatCB",   "loadCondHideInCombat",     "In combat",     12, -120 },
-        -- Right column
-        { "playerLoadCondOutCombatCB",  "loadCondHideOutOfCombat",  "Out of combat", 132, -32 },
-        { "playerLoadCondSoloCB",       "loadCondHideSolo",         "Solo",          132, -54 },
-        { "playerLoadCondInGroupCB",    "loadCondHideInGroup",      "In group",      132, -76 },
-        { "playerLoadCondInInstanceCB", "loadCondHideInInstance",   "In instance",   132, -98 },
+        { "playerLoadCondMountedCB",    "loadCondHideMounted",      "Mounted",       12,  -14 },
+        { "playerLoadCondOutCombatCB",  "loadCondHideOutOfCombat",  "Out of combat", 240, -14 },
+        { "playerLoadCondSoloCB",       "loadCondHideSolo",         "Solo",          458, -14 },
+        { "playerLoadCondVehicleCB",    "loadCondHideInVehicle",    "In vehicle",    12,  -38 },
+        { "playerLoadCondInGroupCB",    "loadCondHideInGroup",      "In group",      240, -38 },
+        { "playerLoadCondInInstanceCB", "loadCondHideInInstance",   "In instance",   458, -38 },
+        { "playerLoadCondRestingCB",    "loadCondHideResting",      "Resting",       12,  -62 },
+        { "playerLoadCondInCombatCB",   "loadCondHideInCombat",     "In combat",     240, -62 },
+        { "playerLoadCondStealthedCB",  "loadCondHideStealthed",    "Stealthed",     458, -62 },
     }
     panel._msufLoadCondSpecs = LOAD_COND_UI_SPECS
     for _, s in ipairs(LOAD_COND_UI_SPECS) do
-        panel[s[1]] = CreateCheck(loadCondBox, "MSUF_UF_" .. s[1], s[3], s[4], s[5])
+        panel[s[1]] = CreateCheck(loadCondBody, "MSUF_UF_" .. s[1], s[3], s[4], s[5])
     end
-    -- i18n: clamp checkbox text in tight two-column layout.
-    -- Left column (x=12) must not overflow into right column (x=132).
-    -- Right column (x=132) must not overflow the 250px-wide box.
     if _G.MSUF_ClampCheckboxText then
         for _, s in ipairs(LOAD_COND_UI_SPECS) do
             local cb = panel[s[1]]
-            local maxTW = (s[4] < 100) and 90 or 86
-            _G.MSUF_ClampCheckboxText(cb, maxTW)
+            _G.MSUF_ClampCheckboxText(cb, 170)
         end
-    end
-    -- Left: Unit Alpha (shifted down to accommodate Load Conditions box)
-    local sizeBox = CreateGroupBox(frameGroup, "Unit Alpha", leftX, topY - basicsH - 12 - loadCondH - 12, leftW, sizeH, texWhite, texWhite2)
-    sizeBox:Hide()
-    panel.playerSizeBox = sizeBox
-    -- Store base/boss heights for dynamic boss-only extension
-    panel._msufBasicsH = basicsH
-    panel._msufLoadCondH = loadCondH
-    panel._msufSizeBaseH = sizeH
-    panel._msufSizeBossH = sizeBossH
-    -- Unit Alpha controls (in/out of combat)
-    -- Top-right toggle: sync both sliders
-    local alphaSyncCB = CreateFrame("CheckButton", "MSUF_UF_AlphaSyncCB", sizeBox, "UICheckButtonTemplate")
-    alphaSyncCB:SetPoint("TOPRIGHT", sizeBox, "TOPRIGHT", -12, -6)
-    if alphaSyncCB.Text then
-        alphaSyncCB.Text:SetText(TR("Sync both"))
-        alphaSyncCB.Text:ClearAllPoints()
-        alphaSyncCB.Text:SetPoint("RIGHT", alphaSyncCB, "LEFT", -4, 0)
-        alphaSyncCB.Text:SetJustifyH("RIGHT")
-    end
-    panel.playerAlphaSyncCB = alphaSyncCB
-    -- New: Exclude Text/Portrait from Unit Alpha + choose alpha target layer (background/foreground)
-    local alphaExcludeCB = CreateFrame("CheckButton", "MSUF_UF_AlphaExcludeTextPortraitCB", sizeBox, "UICheckButtonTemplate")
-    alphaExcludeCB:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", 12, -25)
-    if alphaExcludeCB.Text then
-        alphaExcludeCB.Text:SetText(TR("Keep text + portrait visible"))
-    end
-    if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(alphaExcludeCB, 196) end
-    panel.playerAlphaExcludeTextPortraitCB = alphaExcludeCB
-    local alphaLayerLabel = sizeBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    alphaLayerLabel:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", 12, -58)
-    alphaLayerLabel:SetText(TR("Alpha sliders affect"))
-    local alphaLayerDD = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UF_AlphaLayerDropDown", sizeBox) or CreateFrame("Frame", "MSUF_UF_AlphaLayerDropDown", sizeBox, "UIDropDownMenuTemplate"))
-    alphaLayerDD:SetPoint("TOPLEFT", sizeBox, "TOPLEFT", -6, -70)
-    alphaLayerDD:Show()
-    panel.playerAlphaLayerDropDown = alphaLayerDD
-    if UIDropDownMenu_SetWidth then
-        UIDropDownMenu_SetWidth(alphaLayerDD, 170)
-    end
-    alphaLayerDD._msufDropWidth = 170
-    if MSUF_ExpandDropdownClickArea then
-        MSUF_ExpandDropdownClickArea(alphaLayerDD)
     end
     local function FinalizeCompactSlider(slider, width, opts)
         if not slider then  return end
@@ -1330,12 +1420,10 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
      end
 local function FinalizeDashboardAlphaSlider(slider, width)
     if not slider then  return end
-    -- Make it easier to grab.
-    slider:SetWidth(width or (leftW - 24))
+    slider:SetWidth(width or ((fullW * 0.5) - 40))
     if MSUF_EnhanceSliderTrack then
         MSUF_EnhanceSliderTrack(slider)
     end
-    -- Stepper row (editbox +/-) like the Dashboard sliders.
     local eb = slider.editBox
     local minus = slider.minusButton
     local plus  = slider.plusButton
@@ -1369,57 +1457,63 @@ local function FinalizeDashboardAlphaSlider(slider, width)
     if slider.SetHitRectInsets then
         slider:SetHitRectInsets(-6, -6, -14, -14)
     end
-    -- Ensure the thumb is visible immediately.
     local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
     if thumb then
         if thumb.SetAlpha then thumb:SetAlpha(1) end
         if thumb.Show then thumb:Show() end
     end
  end
-    -- Push sliders down a bit so the dropdown never overlaps/clips them
+    -- Transparency controls
+    local alphaSyncCB = CreateFrame("CheckButton", "MSUF_UF_AlphaSyncCB", sizeBody, "UICheckButtonTemplate")
+    alphaSyncCB:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 12, -12)
+    if alphaSyncCB.Text then alphaSyncCB.Text:SetText(TR("Sync both")) end
+    panel.playerAlphaSyncCB = alphaSyncCB
+    local alphaExcludeCB = CreateFrame("CheckButton", "MSUF_UF_AlphaExcludeTextPortraitCB", sizeBody, "UICheckButtonTemplate")
+    alphaExcludeCB:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 304, -12)
+    if alphaExcludeCB.Text then alphaExcludeCB.Text:SetText(TR("Keep text + portrait visible")) end
+    MSUF_CheckboxLabelLeft(alphaExcludeCB, "Keep text + portrait visible")
+    if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(alphaExcludeCB, 220) end
+    panel.playerAlphaExcludeTextPortraitCB = alphaExcludeCB
+    local alphaLayerLabel = sizeBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    alphaLayerLabel:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 12, -44)
+    alphaLayerLabel:SetText(TR("Sliders affect"))
+    local alphaLayerDD = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UF_AlphaLayerDropDown", sizeBody) or CreateFrame("Frame", "MSUF_UF_AlphaLayerDropDown", sizeBody, "UIDropDownMenuTemplate"))
+    alphaLayerDD:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", -6, -56)
+    alphaLayerDD:Show()
+    panel.playerAlphaLayerDropDown = alphaLayerDD
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(alphaLayerDD, 160) end
+    alphaLayerDD._msufDropWidth = 160
+    if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(alphaLayerDD) end
     local ALPHA_SPECS = {
-        { field = "playerAlphaInCombatSlider",  name = "MSUF_UF_AlphaInCombatSlider",  label = "Alpha in combat",      y = -118 },
-        { field = "playerAlphaOutCombatSlider", name = "MSUF_UF_AlphaOutCombatSlider", label = "Alpha out of combat", y = -178 },
+        { field = "playerAlphaInCombatSlider",  name = "MSUF_UF_AlphaInCombatSlider",  label = "Alpha in combat",      x = 12,  y = -98 },
+        { field = "playerAlphaOutCombatSlider", name = "MSUF_UF_AlphaOutCombatSlider", label = "Alpha out of combat", x = 334, y = -98 },
     }
     for _, s in ipairs(ALPHA_SPECS) do
-        panel[s.field] = CreateLabeledSlider(s.name, s.label, sizeBox, 0.00, 1.00, 0.05, 12, s.y)
-        FinalizeDashboardAlphaSlider(panel[s.field], (leftW - 24))
+        panel[s.field] = CreateLabeledSlider(s.name, s.label, sizeBody, 0.00, 1.00, 0.05, s.x, s.y)
+        FinalizeDashboardAlphaSlider(panel[s.field], 236)
     end
-    -- Right: Castbar group (Castbar + Indicator)
-    -- Keep this compact for ALL unit pages. Status Icons get their own box (player/target only).
-    local _msufTextBaseH = 390
-    panel._msufTextBaseH = _msufTextBaseH
-    local textGroup = CreateGroupBox(frameGroup, "Castbar", rightX, topY, rightW, _msufTextBaseH, texWhite, texWhite2)
-    textGroup:Hide()
-    panel.playerTextLayoutGroup = textGroup
-    panel._msufTextGroup = textGroup
-    -- Separate Status Icons box (player/target only; shown/hidden by LayoutIndicatorTemplate)
-    local _msufStatusBoxH = 300
-    panel._msufStatusBoxH = _msufStatusBoxH
-    local statusBox = CreateGroupBox(frameGroup, "Status icons", rightX, topY - _msufTextBaseH - 12, rightW, _msufStatusBoxH, texWhite, texWhite2)
-    statusBox:Hide()
-    panel._msufStatusIconsGroup = statusBox
 -- ToT-only utility: show Target-of-Target name inline in the Target frame name line.
-panel.totShowInTargetCB = CreateCheck(textGroup, "MSUF_ToTInlineInTargetCB", "Show ToT text in Target frame", 12, -32)
+panel.totShowInTargetCB = CreateCheck(castbarBox, "MSUF_ToTInlineInTargetCB", "Show ToT text in target frame", 12, -34)
+if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(panel.totShowInTargetCB, 230) end
 panel.totShowInTargetCB:Hide()
 -- Separator dropdown (no title) directly under the toggle.
-local totSepDD = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_ToTInlineSeparatorDropDown", textGroup) or CreateFrame("Frame", "MSUF_ToTInlineSeparatorDropDown", textGroup, "UIDropDownMenuTemplate"))
+local totSepDD = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_ToTInlineSeparatorDropDown", castbarBox) or CreateFrame("Frame", "MSUF_ToTInlineSeparatorDropDown", castbarBox, "UIDropDownMenuTemplate"))
 -- Anchor to the toggle (not the box) so any future/reflowed layout changes can't "strand" the dropdown.
 -- UIDropDownMenuTemplate is left-shifted vs. CheckButtons, hence the -18 X offset.
 if panel.totShowInTargetCB then
-    totSepDD:SetPoint("TOPLEFT", panel.totShowInTargetCB, "BOTTOMLEFT", -18, -6)
+    totSepDD:SetPoint("TOPLEFT", panel.totShowInTargetCB, "BOTTOMLEFT", -18, -8)
     if totSepDD.SetFrameLevel and panel.totShowInTargetCB.GetFrameLevel then
         totSepDD:SetFrameLevel((panel.totShowInTargetCB:GetFrameLevel() or 0) + 2)
     end
 else
-    totSepDD:SetPoint("TOPLEFT", textGroup, "TOPLEFT", -6, -52)
+    totSepDD:SetPoint("TOPLEFT", castbarBox, "TOPLEFT", -6, -58)
 end
 totSepDD:Hide()
 panel.totInlineSeparatorDD = totSepDD
 if UIDropDownMenu_SetWidth then
-    UIDropDownMenu_SetWidth(totSepDD, 170)
+    UIDropDownMenu_SetWidth(totSepDD, 156)
 end
-totSepDD._msufDropWidth = 170
+totSepDD._msufDropWidth = 156
 if MSUF_ExpandDropdownClickArea then
     MSUF_ExpandDropdownClickArea(totSepDD)
 end
@@ -1434,11 +1528,11 @@ end
     }
     for _, spec in ipairs(CASTBAR_UI_SPECS) do
         local key, cap = spec.key, spec.cap
-        panel[key .. "CastbarEnableCB"] = CreateCheck(textGroup, "MSUF_" .. cap .. "CastbarEnableCB", spec.enableText, 12, -34)
-        panel[key .. "CastbarShowIconCB"] = CreateCheck(textGroup, "MSUF_" .. cap .. "CastbarShowIconCB", "Icon", 230, -34)
-        panel[key .. "CastbarShowTextCB"] = CreateCheck(textGroup, "MSUF_" .. cap .. "CastbarShowTextCB", "Text", 300, -34)
-        panel[key .. "CastbarTimeCB"]   = CreateCheck(textGroup, "MSUF_" .. cap .. "CastbarTimeCB",   spec.timeText, 12, -58)
-        panel[key .. "CastbarInterruptCB"] = CreateCheck(textGroup, "MSUF_" .. cap .. "CastbarInterruptCB", "Show interrupt", 12, -82)
+        panel[key .. "CastbarEnableCB"] = CreateCheck(castbarBox, "MSUF_" .. cap .. "CastbarEnableCB", spec.enableText, 12, -34)
+        panel[key .. "CastbarShowIconCB"] = CreateCheck(castbarBox, "MSUF_" .. cap .. "CastbarShowIconCB", "Icon", 214, -34)
+        panel[key .. "CastbarShowTextCB"] = CreateCheck(castbarBox, "MSUF_" .. cap .. "CastbarShowTextCB", "Text", 276, -34)
+        panel[key .. "CastbarTimeCB"]   = CreateCheck(castbarBox, "MSUF_" .. cap .. "CastbarTimeCB",   spec.timeText, 12, -58)
+        panel[key .. "CastbarInterruptCB"] = CreateCheck(castbarBox, "MSUF_" .. cap .. "CastbarInterruptCB", "Show interrupt", 12, -82)
         if not spec.defaultVisible then
             if panel[key .. "CastbarEnableCB"] then panel[key .. "CastbarEnableCB"]:Hide() end
             if panel[key .. "CastbarShowIconCB"] then panel[key .. "CastbarShowIconCB"]:Hide() end
@@ -1458,24 +1552,23 @@ end
 		panel.playerLeaderIndicatorHeader:SetText(TR("Indicator"))
 		panel.playerLeaderIndicatorHeader:Hide()
 		-- Shared layout constants for the indicator template
-		local IND_COL_X          = 175
-		local IND_BASE_TOGGLE_Y  = -163
-		local IND_BASE_CTRL_Y    = -178
-		local IND_ROW_STEP       = -64  -- Y offsets are negative: going "down" means more negative.
-		local IND_DIVIDER_OFFSET = 23
+		local IND_COL_X          = 320
+		local IND_BASE_TOGGLE_Y  = -34
+		local IND_BASE_CTRL_Y    = -36
+		local IND_ROW_STEP       = -30
+		local IND_DIVIDER_OFFSET = 0
 		panel._msufIndicatorLayout = panel._msufIndicatorLayout or {}
 		panel._msufIndicatorLayout.colX          = IND_COL_X
 		panel._msufIndicatorLayout.leaderToggleY = IND_BASE_TOGGLE_Y
 		panel._msufIndicatorLayout.leaderCtrlY   = IND_BASE_CTRL_Y
 		panel._msufIndicatorLayout.rowStep       = IND_ROW_STEP
 		panel._msufIndicatorLayout.dividerOffset = IND_DIVIDER_OFFSET
-		-- Boss-only: spacing slider (shown only on boss pages by LayoutIndicatorTemplate)
-		local bossSpacingY = (IND_BASE_CTRL_Y + (2 * IND_ROW_STEP)) - 42
-		panel.playerBossSpacingSlider = panel.playerBossSpacingSlider or CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", textGroup, -200, 0, 1, 12, bossSpacingY)
-		FinalizeCompactSlider(panel.playerBossSpacingSlider, (rightW - 24))
+		-- Boss-only: own collapsible layout section instead of living inside Indicators
+		panel.playerBossSpacingSlider = panel.playerBossSpacingSlider or CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", bossLayoutBody, -200, 0, 1, 12, -14)
+		FinalizeCompactSlider(panel.playerBossSpacingSlider, (fullW - 24))
 		panel.playerBossSpacingSlider:Hide()
 		-- Boss-only: invert boss order toggle (boss 1 at bottom instead of top)
-		panel.playerInvertBossOrderCB = panel.playerInvertBossOrderCB or CreateCheck(textGroup, "MSUF_UF_InvertBossOrderCB", "Invert boss order", 12, bossSpacingY - 50)
+		panel.playerInvertBossOrderCB = panel.playerInvertBossOrderCB or CreateCheck(bossLayoutBody, "MSUF_UF_InvertBossOrderCB", "Invert boss order", 12, -52)
 		panel.playerInvertBossOrderCB:Hide()
 		-- Shared per-unit anchoring controls (player / target / ToT / focus / pet / boss).
 		if not panel.unitAnchorToLabel then
@@ -1553,15 +1646,15 @@ end
 			panel.unitCustomAnchorValueText,
 			panel.unitGlobalAnchorWarn,
 		}) do
-			if w and w.SetParent and panel.unitAnchorGroup and w:GetParent() ~= panel.unitAnchorGroup then
-				w:SetParent(panel.unitAnchorGroup)
+			if w and w.SetParent and panel.unitAnchorGroup and w:GetParent() ~= (panel.unitAnchorBody or panel.unitAnchorGroup) then
+				w:SetParent(panel.unitAnchorBody or panel.unitAnchorGroup)
 			end
 		end
 		-- Status icons (player/target only; lives in its own box)
 		local statusBox = panel._msufStatusIconsGroup
 		local STATUS_BASE_TOGGLE_Y = -34
-		local STATUS_BASE_CTRL_Y   = -49
-		local STATUS_ROW_STEP      = -64
+		local STATUS_BASE_CTRL_Y   = -36
+		local STATUS_ROW_STEP      = -30
 		panel.statusIconsHeader = panel.statusIconsHeader or (statusBox and statusBox:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
 		if panel.statusIconsHeader then
 			panel.statusIconsHeader:SetText(TR("Status icons"))
@@ -1688,9 +1781,7 @@ end
 				RestyleStepperButtonsNoBox(stepperX)
 				if MSUF_ApplyModifierStepper then MSUF_ApplyModifierStepper(stepperX, 1) end
 				if stepperX.label then
-					stepperX.label:Show()
-					stepperX.label:ClearAllPoints()
-					stepperX.label:SetPoint("BOTTOM", stepperX, "TOP", 0, 6)
+					stepperX.label:Hide()
 				end
 				stepperX:Hide()
 			end
@@ -1701,9 +1792,7 @@ end
 				RestyleStepperButtonsNoBox(stepperY)
 				if MSUF_ApplyModifierStepper then MSUF_ApplyModifierStepper(stepperY, 1) end
 				if stepperY.label then
-					stepperY.label:Show()
-					stepperY.label:ClearAllPoints()
-					stepperY.label:SetPoint("BOTTOM", stepperY, "TOP", 0, 6)
+					stepperY.label:Hide()
 				end
 				stepperY:Hide()
 			end
@@ -1978,11 +2067,10 @@ end
             panel[hintKey]:SetText(hintText)
             panel[hintKey]:Hide()
         end
-        -- Anchor inside scroll content (below the Unit Alpha box) so it scrolls with the layout.
-        local sizeBox = panel.playerSizeBox
-        if sizeBox then
+        local anchorBox = panel._msufBottomAnchor or panel.unitAnchorGroup or panel.playerSizeBox
+        if anchorBox then
             panel[dropKey]:ClearAllPoints()
-            panel[dropKey]:SetPoint("TOPLEFT", sizeBox, "BOTTOMLEFT", 44, -16)
+            panel[dropKey]:SetPoint("TOPLEFT", anchorBox, "BOTTOMLEFT", 44, -16)
             panel[labelKey]:ClearAllPoints()
             panel[labelKey]:SetPoint("LEFT", panel[dropKey], "LEFT", -40, 2)
             panel[btnKey]:ClearAllPoints()
@@ -2099,7 +2187,129 @@ end
          end)
         panel.petEditModeButton:Hide()
     end
+ 
+-- Shared reflow for the redesigned Frames tab layout.
+do
+    local function RelayoutCopyControls(anchorBox)
+        local specs = {
+            { prefix = "player", labelKey = "playerCopyToLabel", dropKey = "playerCopyToDrop", btnKey = "playerCopyToButton", hintKey = "playerCopyToHint" },
+            { prefix = "target", labelKey = "targetCopyToLabel", dropKey = "targetCopyToDrop", btnKey = "targetCopyToButton", hintKey = "targetCopyToHint" },
+            { prefix = "focus",  labelKey = "focusCopyToLabel",  dropKey = "focusCopyToDrop",  btnKey = "focusCopyToButton",  hintKey = "focusCopyToHint"  },
+            { prefix = "boss",   labelKey = "bossCopyToLabel",   dropKey = "bossCopyToDrop",   btnKey = "bossCopyToButton",   hintKey = "bossCopyToHint"   },
+            { prefix = "pet",    labelKey = "petCopyToLabel",    dropKey = "petCopyToDrop",    btnKey = "petCopyToButton",    hintKey = "petCopyToHint"    },
+            { prefix = "tot",    labelKey = "totCopyToLabel",    dropKey = "totCopyToDrop",    btnKey = "totCopyToButton",    hintKey = "totCopyToHint"    },
+        }
+        for i = 1, #specs do
+            local s = specs[i]
+            local drop = panel[s.dropKey]
+            local label = panel[s.labelKey]
+            local btn = panel[s.btnKey]
+            local hint = panel[s.hintKey]
+            if drop and anchorBox then
+                drop:ClearAllPoints()
+                drop:SetPoint("TOPLEFT", anchorBox, "BOTTOMLEFT", 44, -16)
+            end
+            if label and drop then
+                label:ClearAllPoints()
+                label:SetPoint("LEFT", drop, "LEFT", -40, 2)
+            end
+            if btn and drop then
+                btn:ClearAllPoints()
+                btn:SetPoint("LEFT", drop, "RIGHT", -14, 2)
+            end
+            if hint and drop then
+                hint:ClearAllPoints()
+                hint:SetPoint("TOPLEFT", drop, "BOTTOMLEFT", -32, -2)
+            end
+        end
+    end
+    local function RelayoutUnitBoxes(activeKey)
+        local isFramesTab = (panel._msufIsFramesTab and panel._msufIsFramesTab()) or true
+        local k = activeKey
+        if k == "tot" or k == "targetoftarget" then k = "targettarget" end
+        local showCastbarBox = isFramesTab and (k == "player" or k == "target" or k == "focus" or k == "boss" or k == "targettarget")
+        local showStatusBox = isFramesTab and (k == "player" or k == "target")
+        local showBossLayoutBox = isFramesTab and (k == "boss")
+        local showAnchorBox = isFramesTab and (k == "player" or k == "target" or k == "focus" or k == "boss" or k == "pet" or k == "targettarget")
+
+        if basicsBox then
+            basicsBox:ClearAllPoints()
+            basicsBox:SetPoint("TOPLEFT", frameGroup, "TOPLEFT", leftX, topY)
+        end
+        if castbarBox then
+            castbarBox:ClearAllPoints()
+            castbarBox:SetPoint("TOPLEFT", frameGroup, "TOPLEFT", rightX, topY)
+            castbarBox:SetShown(showCastbarBox)
+        end
+        if textGroup then
+            textGroup:ClearAllPoints()
+            textGroup:SetPoint("TOPLEFT", basicsBox, "BOTTOMLEFT", 0, -sectionGap)
+            textGroup:SetWidth(fullW)
+        end
+
+        local prev = textGroup
+        if statusBox then
+            statusBox:ClearAllPoints()
+            statusBox:SetPoint("TOPLEFT", textGroup, "BOTTOMLEFT", 0, -sectionGap)
+            statusBox:SetWidth(fullW)
+            statusBox:SetShown(showStatusBox)
+            if showStatusBox then
+                prev = statusBox
+            end
+        end
+        if bossLayoutBox then
+            bossLayoutBox:ClearAllPoints()
+            bossLayoutBox:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -sectionGap)
+            bossLayoutBox:SetWidth(fullW)
+            bossLayoutBox:SetShown(showBossLayoutBox)
+            if showBossLayoutBox then
+                prev = bossLayoutBox
+            end
+        end
+        if loadCondBox then
+            loadCondBox:ClearAllPoints()
+            loadCondBox:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -sectionGap)
+            loadCondBox:SetWidth(fullW)
+            prev = loadCondBox
+        end
+        if sizeBox then
+            sizeBox:ClearAllPoints()
+            sizeBox:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -sectionGap)
+            sizeBox:SetWidth(fullW)
+            prev = sizeBox
+        end
+        if anchorGroup then
+            anchorGroup:ClearAllPoints()
+            anchorGroup:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -sectionGap)
+            anchorGroup:SetWidth(fullW)
+            anchorGroup:SetShown(showAnchorBox)
+            if showAnchorBox then
+                prev = anchorGroup
+            end
+        end
+        panel._msufBottomAnchor = prev
+        RelayoutCopyControls(prev)
+        if panel._msufFramesScrollUpdate then
+            panel._msufFramesScrollUpdate()
+        end
+    end
+    panel._msufRelayoutUnitBoxes = RelayoutUnitBoxes
+    if loadCondBox then
+        loadCondBox._msufOnCollapsedChanged = function() RelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
+    end
+    if sizeBox then
+        sizeBox._msufOnCollapsedChanged = function() RelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
+    end
+    if bossLayoutBox then
+        bossLayoutBox._msufOnCollapsedChanged = function() RelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
+    end
+    if anchorGroup then
+        anchorGroup._msufOnCollapsedChanged = function() RelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
+    end
+    RelayoutUnitBoxes("player")
+end
      end
+
 -- APPLY FROM DB (called from Options Core)
 -- Reuse the Player indicator block layout as a template for other unitframe pages.
 -- Leader/Assist is only shown on Player + Target; Raid Marker + Level are available for all.
@@ -2141,6 +2351,7 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         end
         if panel.playerBossSpacingSlider then panel.playerBossSpacingSlider:Hide() end
         if panel.playerInvertBossOrderCB then panel.playerInvertBossOrderCB:Hide() end
+        if panel.playerBossLayoutBox then panel.playerBossLayoutBox:Hide() end
         -- Status icons (and Step-1 Combat row controls) must also be hard-hidden outside Frames tab
         if panel.statusIconsHeader then panel.statusIconsHeader:Hide() end
         if panel.statusCombatIconCB then panel.statusCombatIconCB:Hide() end
@@ -2167,39 +2378,26 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         SetShownByName("statusRestingSizeLabel", false)
          return
     end
-    -- Header: keep it present for all frames pages.
     if panel.playerLeaderIndicatorHeader then
-        panel.playerLeaderIndicatorHeader:Show()
-        panel.playerLeaderIndicatorHeader:SetJustifyH("LEFT")
+        panel.playerLeaderIndicatorHeader:Hide()
     end
-    local baseToggleY = l.leaderToggleY or -163
-    local baseCtrlY   = l.leaderCtrlY   or -178
-    local step        = l.rowStep       or -64
-    local dividerOffset = l.dividerOffset or 23
-    -- Pet tab has no Castbar section in this panel; move Indicator up to occupy that space.
-    -- This aligns the first indicator row roughly where other tabs place the Castbar controls.
-    if currentKey == "pet" then
-        baseToggleY = -34
-        baseCtrlY   = -49
-    end
+    local baseToggleY = l.leaderToggleY or -34
+    local baseCtrlY   = l.leaderCtrlY   or -36
+    local step        = l.rowStep       or -30
+    local isToTKey = (currentKey == "targettarget" or currentKey == "tot" or currentKey == "targetoftarget")
+    local indicatorContainer = container
+    local indicatorColX = (l.colX or 420)
     local function PlaceToggle(cb, y)
         if not cb then  return end
         cb:ClearAllPoints()
-        cb:SetPoint("TOPLEFT", container, "TOPLEFT", 12, y)
+        cb:SetPoint("TOPLEFT", indicatorContainer, "TOPLEFT", 12, y)
      end
     local function PlaceXStepper(stepper, y)
         if not stepper then  return end
         stepper:ClearAllPoints()
-        stepper:SetPoint("TOPLEFT", container, "TOPLEFT", l.colX or 175, y)
-     end
-    local function PlaceDivider(tex, toggleY)
-        if not tex then  return end
-        tex:ClearAllPoints()
-        tex:SetPoint("TOPLEFT", container, "TOPLEFT", 15, toggleY + dividerOffset)
-        tex:SetPoint("TOPRIGHT", container, "TOPRIGHT", -15, toggleY + dividerOffset)
+        stepper:SetPoint("TOPLEFT", indicatorContainer, "TOPLEFT", indicatorColX, y)
      end
     local row = 0
-    local firstDivider = nil
     for _, id in ipairs({ "leader", "raidmarker", "level" }) do
         local spec = _MSUF_INDICATOR_SPECS[id]
         if spec then
@@ -2208,27 +2406,32 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
             SetShownByName(spec.xStepper, show)
             SetShownByName(spec.yStepper, show)
             SetShownByName(spec.anchorDrop, show)
-            SetShownByName(spec.anchorLabel, show)
+            SetShownByName(spec.anchorLabel, false)
             SetShownByName(spec.sizeEdit, show)
-            SetShownByName(spec.sizeLabel, show)
-            SetShownByName(spec.divider, show)
+            SetShownByName(spec.sizeLabel, false)
+            SetShownByName(spec.divider, false)
             SetShownByName(spec.resetBtn, show)
             if show then
                 local toggleY = baseToggleY + (row * step)
                 local ctrlY   = baseCtrlY + (row * step)
                 PlaceToggle(panel[spec.showCB], toggleY)
                 PlaceXStepper(panel[spec.xStepper], ctrlY)
-                PlaceDivider(panel[spec.divider], toggleY)
-                if not firstDivider and spec.divider and panel[spec.divider] then
-                    firstDivider = panel[spec.divider]
+                if panel[spec.divider] then panel[spec.divider]:Hide() end
+                local reset = spec.resetBtn and panel[spec.resetBtn]
+                local sizeEdit = spec.sizeEdit and panel[spec.sizeEdit]
+                local anchorDrop = spec.anchorDrop and panel[spec.anchorDrop]
+                if reset then
+                    reset:ClearAllPoints()
+                    if sizeEdit then
+                        reset:SetPoint("LEFT", sizeEdit, "RIGHT", 6, -2)
+                    elseif anchorDrop then
+                        reset:SetPoint("LEFT", anchorDrop, "RIGHT", 6, 0)
+                    end
+                    reset:Show()
                 end
                 row = row + 1
             end
         end
-    end
-    if panel.playerLeaderIndicatorHeader and firstDivider then
-        panel.playerLeaderIndicatorHeader:ClearAllPoints()
-        panel.playerLeaderIndicatorHeader:SetPoint("LEFT", firstDivider, "LEFT", 0, 0)
     end
 	-- Shared per-unit anchoring controls.
 	local showUnitAnchorControls = (currentKey == "player" or currentKey == "target" or currentKey == "targettarget" or currentKey == "focus" or currentKey == "pet" or currentKey == "boss") and true or false
@@ -2241,59 +2444,29 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
 	if panel.unitCustomAnchorValueText then panel.unitCustomAnchorValueText:SetShown(showUnitAnchorControls) end
 	if panel.unitGlobalAnchorWarn then panel.unitGlobalAnchorWarn:SetShown(showUnitAnchorControls) end
 	if showUnitAnchorControls and panel.unitAnchorGroup then
-		local group = panel.unitAnchorGroup
-		local textBox = panel._msufTextGroup or container
-		local statusBox = panel._msufStatusIconsGroup
-		local anchorTopTarget = textBox
-		local anchorYOffset = -12
-		local boxH = 118
-		if currentKey == "player" or currentKey == "target" then
-			anchorTopTarget = statusBox or textBox
-			anchorYOffset = -12
-		elseif currentKey == "boss" then
-			anchorTopTarget = textBox
-			anchorYOffset = -12
-			boxH = 126
-		else
-			anchorTopTarget = textBox
-			anchorYOffset = -12
-		end
-		group:ClearAllPoints()
-		if anchorTopTarget then
-			group:SetPoint("TOPLEFT", anchorTopTarget, "BOTTOMLEFT", 0, anchorYOffset)
-			group:SetPoint("TOPRIGHT", anchorTopTarget, "BOTTOMRIGHT", 0, anchorYOffset)
-		else
-			group:SetPoint("TOPLEFT", container, "BOTTOMLEFT", 0, -12)
-			group:SetPoint("TOPRIGHT", container, "BOTTOMRIGHT", 0, -12)
-		end
-		group:SetHeight(boxH)
-		if group._msufSubText then
-			group._msufSubText:ClearAllPoints()
-			group._msufSubText:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -24)
-			group._msufSubText:SetPoint("TOPRIGHT", group, "TOPRIGHT", -10, -24)
-		end
+		local group = panel.unitAnchorBody or panel.unitAnchorGroup
 		if panel.unitAnchorToLabel then
 			panel.unitAnchorToLabel:ClearAllPoints()
-			panel.unitAnchorToLabel:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -46)
+			panel.unitAnchorToLabel:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -14)
 		end
 		if panel.unitAnchorToDD then
 			panel.unitAnchorToDD:ClearAllPoints()
-			panel.unitAnchorToDD:SetPoint("TOPLEFT", group, "TOPLEFT", 86, -38)
-			if panel.unitAnchorToDD.SetFrameLevel and group.GetFrameLevel then
-				panel.unitAnchorToDD:SetFrameLevel((group:GetFrameLevel() or 0) + 2)
+			panel.unitAnchorToDD:SetPoint("TOPLEFT", group, "TOPLEFT", 86, -6)
+			if panel.unitAnchorToDD.SetFrameLevel and panel.unitAnchorGroup.GetFrameLevel then
+				panel.unitAnchorToDD:SetFrameLevel((panel.unitAnchorGroup:GetFrameLevel() or 0) + 2)
 			end
 		end
 		if panel.unitCustomAnchorLabel then
 			panel.unitCustomAnchorLabel:ClearAllPoints()
-			panel.unitCustomAnchorLabel:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -72)
+			panel.unitCustomAnchorLabel:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -44)
 		end
 		if panel.unitCustomAnchorPickButton then
 			panel.unitCustomAnchorPickButton:ClearAllPoints()
-			panel.unitCustomAnchorPickButton:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -90)
+			panel.unitCustomAnchorPickButton:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -66)
 		end
 		if panel.unitCustomAnchorClearButton then
 			panel.unitCustomAnchorClearButton:ClearAllPoints()
-			panel.unitCustomAnchorClearButton:SetPoint("LEFT", panel.unitCustomAnchorPickButton, "RIGHT", 10, 0)
+			panel.unitCustomAnchorClearButton:SetPoint("LEFT", panel.unitCustomAnchorPickButton, "RIGHT", 8, 0)
 		end
 		if panel.unitCustomAnchorValueText then
 			panel.unitCustomAnchorValueText:ClearAllPoints()
@@ -2302,9 +2475,7 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
 			panel.unitCustomAnchorValueText:SetJustifyH("LEFT")
 		end
 		if panel.unitGlobalAnchorWarn then
-			panel.unitGlobalAnchorWarn:ClearAllPoints()
-			panel.unitGlobalAnchorWarn:SetPoint("TOPLEFT", panel.unitCustomAnchorPickButton, "BOTTOMLEFT", 0, -8)
-			panel.unitGlobalAnchorWarn:SetPoint("RIGHT", group, "RIGHT", -10, 0)
+			panel.unitGlobalAnchorWarn:Hide()
 		end
 	end
     -- Status icons live in their own box (player/target only).
@@ -2352,11 +2523,9 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         SetShownByName("statusIncomingResSymbolDrop", false)
         SetShownByName("statusIncomingResSymbolLabel", false)
     else
-        -- Within Status box: fixed layout (independent from Indicator rows)
         local baseToggleY = -34
-        local baseCtrlY   = -49
-        local step        = -64
-        local dividerOffset = l.dividerOffset or 23
+        local baseCtrlY   = -36
+        local step        = -30
         local function PlaceToggleIn(box, cb, y)
             if not cb then  return end
             cb:ClearAllPoints()
@@ -2365,91 +2534,66 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         local function PlaceXStepperIn(box, stepper, y)
             if not stepper then  return end
             stepper:ClearAllPoints()
-            stepper:SetPoint("TOPLEFT", box, "TOPLEFT", l.colX or 175, y)
-         end
-        local function PlaceDividerIn(box, tex, toggleY)
-            if not tex then  return end
-            tex:ClearAllPoints()
-            tex:SetPoint("TOPLEFT", box, "TOPLEFT", 15, toggleY + dividerOffset)
-            tex:SetPoint("TOPRIGHT", box, "TOPRIGHT", -15, toggleY + dividerOffset)
+            stepper:SetPoint("TOPLEFT", box, "TOPLEFT", l.colX or 420, y)
          end
         if panel.statusIconsHeader then
-            panel.statusIconsHeader:Hide() -- box title already says "Status icons"
+            panel.statusIconsHeader:Hide()
         end
-        -- Combat row
-        if panel.statusCombatIconCB then panel.statusCombatIconCB:Show() end
-        SetShownByName("statusCombatGroupDivider", true)
-        SetShownByName("statusCombatResetBtn", true)
-        SetShownByName("statusCombatOffsetXStepper", true)
-        SetShownByName("statusCombatOffsetYStepper", true)
-        SetShownByName("statusCombatAnchorDrop", true)
-        SetShownByName("statusCombatAnchorLabel", true)
-        SetShownByName("statusCombatSizeEdit", true)
-        SetShownByName("statusCombatSizeLabel", true)
-        SetShownByName("statusCombatSymbolDrop", true)
-        SetShownByName("statusCombatSymbolLabel", true)
-        PlaceToggleIn(statusBox, panel.statusCombatIconCB, baseToggleY + (0 * step))
-        PlaceXStepperIn(statusBox, panel.statusCombatOffsetXStepper, baseCtrlY + (0 * step))
-        PlaceDividerIn(statusBox, panel.statusCombatGroupDivider, baseToggleY + (0 * step))
-        -- Rested row (player only)
+        local function LayoutStatusRow(prefix, rowIndex, show)
+            local cb = panel[prefix .. "IconCB"]
+            local x = panel[prefix .. "OffsetXStepper"]
+            local y = panel[prefix .. "OffsetYStepper"]
+            local anchorDrop = panel[prefix .. "AnchorDrop"]
+            local sizeEdit = panel[prefix .. "SizeEdit"]
+            local reset = panel[prefix .. "ResetBtn"]
+            SetShownByName(prefix .. "GroupDivider", false)
+            SetShownByName(prefix .. "ResetBtn", show)
+            SetShownByName(prefix .. "OffsetXStepper", show)
+            SetShownByName(prefix .. "OffsetYStepper", show)
+            SetShownByName(prefix .. "AnchorDrop", show)
+            SetShownByName(prefix .. "AnchorLabel", false)
+            SetShownByName(prefix .. "SizeEdit", show)
+            SetShownByName(prefix .. "SizeLabel", false)
+            SetShownByName(prefix .. "SymbolDrop", show)
+            SetShownByName(prefix .. "SymbolLabel", false)
+            if cb then cb:SetShown(show) end
+            if not show then return end
+            local toggleY = baseToggleY + (rowIndex * step)
+            local ctrlY = baseCtrlY + (rowIndex * step)
+            PlaceToggleIn(statusBox, cb, toggleY)
+            PlaceXStepperIn(statusBox, x, ctrlY)
+            if panel[prefix .. "GroupDivider"] then panel[prefix .. "GroupDivider"]:Hide() end
+            if reset then
+                reset:ClearAllPoints()
+                if sizeEdit then
+                    reset:SetPoint("LEFT", sizeEdit, "RIGHT", 6, -2)
+                elseif anchorDrop then
+                    reset:SetPoint("LEFT", anchorDrop, "RIGHT", 6, 0)
+                end
+                reset:Show()
+            end
+        end
+
+        LayoutStatusRow("statusCombat", 0, true)
         local showResting = (currentKey == "player") and true or false
-        if panel.statusRestingIconCB then panel.statusRestingIconCB:SetShown(showResting) end
-        SetShownByName("statusRestingGroupDivider", showResting)
-        SetShownByName("statusRestingResetBtn", showResting)
-        SetShownByName("statusRestingOffsetXStepper", showResting)
-        SetShownByName("statusRestingOffsetYStepper", showResting)
-        SetShownByName("statusRestingAnchorDrop", showResting)
-        SetShownByName("statusRestingAnchorLabel", showResting)
-        SetShownByName("statusRestingSizeEdit", showResting)
-        SetShownByName("statusRestingSizeLabel", showResting)
-        SetShownByName("statusRestingSymbolDrop", showResting)
-        SetShownByName("statusRestingSymbolLabel", showResting)
-        if showResting then
-            PlaceToggleIn(statusBox, panel.statusRestingIconCB, baseToggleY + (1 * step))
-            PlaceXStepperIn(statusBox, panel.statusRestingOffsetXStepper, baseCtrlY + (1 * step))
-            PlaceDividerIn(statusBox, panel.statusRestingGroupDivider, baseToggleY + (1 * step))
-        end
-        -- Incoming Rez row
-        if panel.statusIncomingResIconCB then panel.statusIncomingResIconCB:Show() end
-        SetShownByName("statusIncomingResGroupDivider", true)
-        SetShownByName("statusIncomingResResetBtn", true)
-        SetShownByName("statusIncomingResOffsetXStepper", true)
-        SetShownByName("statusIncomingResOffsetYStepper", true)
-        SetShownByName("statusIncomingResAnchorDrop", true)
-        SetShownByName("statusIncomingResAnchorLabel", true)
-        SetShownByName("statusIncomingResSizeEdit", true)
-        SetShownByName("statusIncomingResSizeLabel", true)
-        SetShownByName("statusIncomingResSymbolDrop", true)
-        SetShownByName("statusIncomingResSymbolLabel", true)
-        PlaceToggleIn(statusBox, panel.statusIncomingResIconCB, baseToggleY + (2 * step))
-        PlaceXStepperIn(statusBox, panel.statusIncomingResOffsetXStepper, baseCtrlY + (2 * step))
-        PlaceDividerIn(statusBox, panel.statusIncomingResGroupDivider, baseToggleY + (2 * step))
-        -- Remaining status toggles (Test mode / Style)
-        if panel.statusIconsTestModeCB then
-            panel.statusIconsTestModeCB:Show()
-            PlaceToggleIn(statusBox, panel.statusIconsTestModeCB, baseToggleY + (3 * step) + 10)
-        end
-        if panel.statusIconsStyleCB then
-            panel.statusIconsStyleCB:Show()
-            panel.statusIconsStyleCB:ClearAllPoints()
-            panel.statusIconsStyleCB:SetPoint("TOPLEFT", statusBox, "TOPLEFT", 220, baseToggleY + (3 * step) + 10)
-        end
-        -- Icon pickers are currently layout-only storage (Step 4.6)
+        LayoutStatusRow("statusResting", 1, showResting)
+        LayoutStatusRow("statusIncomingRes", 2, true)
+
         local function HideIconPicker(label, drop)
             if label then label:Hide() end
             if drop  then drop:Hide() end
          end
-        local function PlaceIconPickerAt(label, drop, titleText, rel, xOff)
-            if not (label and drop and rel) then  return end
+        local function PlaceIconPickerAt(label, drop, titleText, anchorTo, xOff)
+            if not (label and drop and anchorTo) then  return end
             label:SetText(titleText)
             label:ClearAllPoints()
-            label:SetPoint("TOPLEFT", rel, "BOTTOMLEFT", 2 + (xOff or 0), -8)  -- moved up ~10px and slightly left
+            label:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 2 + (xOff or 0), -8)
             label:Show()
             drop:ClearAllPoints()
             drop:SetPoint("TOPLEFT", label, "BOTTOMLEFT", -12, -4)
             drop:Show()
          end
-        local baseRel = panel.statusIconsTestModeCB
+        local baseRel = panel.statusIncomingResIconCB or panel.statusCombatIconCB
         if baseRel then
             PlaceIconPickerAt(panel.statusCombatSymbolLabel, panel.statusCombatSymbolDrop, "Combat icon", baseRel, 0)
             PlaceIconPickerAt(panel.statusIncomingResSymbolLabel, panel.statusIncomingResSymbolDrop, "Rez icon", baseRel, 138)
@@ -2458,10 +2602,37 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
             else
                 HideIconPicker(panel.statusRestingSymbolLabel, panel.statusRestingSymbolDrop)
             end
+
+            local toggleAnchor = (showResting and panel.statusRestingSymbolDrop) or panel.statusIncomingResSymbolDrop or panel.statusCombatSymbolDrop
+            if panel.statusIconsTestModeCB then
+                panel.statusIconsTestModeCB:Show()
+                panel.statusIconsTestModeCB:ClearAllPoints()
+                if toggleAnchor then
+                    panel.statusIconsTestModeCB:SetPoint("LEFT", toggleAnchor, "RIGHT", 12, -2)
+                else
+                    panel.statusIconsTestModeCB:SetPoint("TOPLEFT", statusBox, "TOPLEFT", 520, -132)
+                end
+                MSUF_CheckboxLabelRight(panel.statusIconsTestModeCB, "Test mode")
+            end
+            if panel.statusIconsStyleCB then
+                panel.statusIconsStyleCB:Show()
+                panel.statusIconsStyleCB:ClearAllPoints()
+                if panel.statusIconsTestModeCB and panel.statusIconsTestModeCB:IsShown() then
+                    local styleAnchor = (panel.statusIconsTestModeCB.Text and panel.statusIconsTestModeCB.Text:IsShown()) and panel.statusIconsTestModeCB.Text or panel.statusIconsTestModeCB
+                    panel.statusIconsStyleCB:SetPoint("LEFT", styleAnchor, "RIGHT", 14, 0)
+                elseif toggleAnchor then
+                    panel.statusIconsStyleCB:SetPoint("LEFT", toggleAnchor, "RIGHT", 112, -2)
+                else
+                    panel.statusIconsStyleCB:SetPoint("TOPLEFT", statusBox, "TOPLEFT", 610, -132)
+                end
+                MSUF_CheckboxLabelRight(panel.statusIconsStyleCB, "Midnight style")
+            end
         else
             HideIconPicker(panel.statusCombatSymbolLabel, panel.statusCombatSymbolDrop)
             HideIconPicker(panel.statusIncomingResSymbolLabel, panel.statusIncomingResSymbolDrop)
             HideIconPicker(panel.statusRestingSymbolLabel, panel.statusRestingSymbolDrop)
+            if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:Hide() end
+            if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
         end
     end
 local isBossKey = false
@@ -2469,6 +2640,10 @@ local isBossKey = false
         if currentKey == "boss" or currentKey:match("^boss") then
             isBossKey = true
         end
+    end
+    local bossLayoutBody = panel.playerBossLayoutBody or panel.playerBossLayoutBox
+    if panel.playerBossLayoutBox then
+        panel.playerBossLayoutBox:SetShown(isBossKey and true or false)
     end
     if panel.playerBossSpacingSlider then
         local show = isBossKey and true or false
@@ -2485,20 +2660,18 @@ local isBossKey = false
             if high then high:SetShown(show) end
             if text then text:SetShown(show) end
         end
-        if show then
-            local ctrlY = baseCtrlY + (row * step)
+        if show and bossLayoutBody then
             panel.playerBossSpacingSlider:ClearAllPoints()
-            panel.playerBossSpacingSlider:SetPoint("TOPLEFT", container, "TOPLEFT", 12, ctrlY)
+            panel.playerBossSpacingSlider:SetPoint("TOPLEFT", bossLayoutBody, "TOPLEFT", 12, -14)
         end
     end
-    -- Invert boss order toggle (boss only, placed below spacing slider)
+    -- Invert boss order toggle (boss only, placed inside the Boss Layout section)
     if panel.playerInvertBossOrderCB then
         local show = isBossKey and true or false
         panel.playerInvertBossOrderCB:SetShown(show)
-        if show then
-            local ctrlY = baseCtrlY + (row * step) - 50
+        if show and bossLayoutBody then
             panel.playerInvertBossOrderCB:ClearAllPoints()
-            panel.playerInvertBossOrderCB:SetPoint("TOPLEFT", container, "TOPLEFT", 12, ctrlY)
+            panel.playerInvertBossOrderCB:SetPoint("TOPLEFT", bossLayoutBody, "TOPLEFT", 12, -52)
         end
     end
     -- Notify scroll container that content height may have changed.
@@ -2529,19 +2702,8 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     -- If the core is still in player-only mode, it will only show this UI for player.
     -- We still keep ApplyFromDB working for any key (multi-unit core).
     -- Basics
-    -- Unit Alpha: make the left box title reflect the selected unit (Player/Target/Focus/etc.).
     if panel.playerSizeBox and panel.playerSizeBox._msufTitleText then
-        local k = currentKey
-        if k == "tot" or k == "targetoftarget" then k = "targettarget" end
-        local titleMap = {
-            player = "Player Alpha",
-            target = "Target Alpha",
-            focus = "Focus Alpha",
-            pet = "Pet Alpha",
-            boss = "Boss Alpha",
-            targettarget = "Target of Target Alpha",
-        }
-        panel.playerSizeBox._msufTitleText:SetText(titleMap[k] or "Unit Alpha")
+        panel.playerSizeBox._msufTitleText:SetText("Transparency")
     end
     for _, s in ipairs(MSUF_BASIC_CB_SPECS) do
         local w = panel[s.w]
@@ -2564,6 +2726,17 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
             panel.totShowInTargetCB:SetChecked(conf.showToTInTargetName == true)
         end
         -- Separator dropdown directly under the toggle.
+        if panel.totShowInTargetCB and panel.playerCastbarBox and panel.totShowInTargetCB:GetParent() ~= panel.playerCastbarBox then
+            panel.totShowInTargetCB:SetParent(panel.playerCastbarBox)
+        end
+        if panel.totShowInTargetCB and panel.playerCastbarBox then
+            panel.totShowInTargetCB:ClearAllPoints()
+            panel.totShowInTargetCB:SetPoint("TOPLEFT", panel.playerCastbarBox, "TOPLEFT", 12, -34)
+            if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(panel.totShowInTargetCB, 230) end
+        end
+        if panel.totInlineSeparatorDD and panel.playerCastbarBox and panel.totInlineSeparatorDD:GetParent() ~= panel.playerCastbarBox then
+            panel.totInlineSeparatorDD:SetParent(panel.playerCastbarBox)
+        end
         if panel.totInlineSeparatorDD then
             local show = (isToTKey and isFramesTab)
             panel.totInlineSeparatorDD:SetShown(show)
@@ -2619,17 +2792,14 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
 		end
 	end
 	-- Title: Target of Target uses "Inline Text" (it is not a castbar).
-    -- Pet uses this box for indicator settings, so we hide the "Castbar" title there.
+    -- Pet uses this box for indicator settings, so we hide the title there.
     if panel.playerTextLayoutGroup and panel.playerTextLayoutGroup._msufTitleText then
         local t = panel.playerTextLayoutGroup._msufTitleText
         if isFramesTab and isPetKey then
             t:SetText(TR(""))
             t:Hide()
-        elseif isToTKey and isFramesTab then
-            t:SetText(TR("Inline Text"))
-            t:Show()
         else
-            t:SetText(TR("Castbar"))
+            t:SetText(TR("Indicators"))
             t:Show()
         end
     end
@@ -2712,6 +2882,45 @@ end
         MSUF_ApplyCheck(panel, spec.iconW, show, iconChecked)
         MSUF_ApplyCheck(panel, spec.textW, show, textChecked)
     end
+    if panel.playerCastbarBox then
+        panel.playerCastbarBox:SetShown(isFramesTab and (isPlayerKey or isTargetKey or isFocusKey or isBossKey or isToTKey))
+        if panel.playerCastbarBox._msufTitleText then
+            if isToTKey and isFramesTab then
+                panel.playerCastbarBox._msufTitleText:SetText(TR("Inline Text"))
+            else
+                panel.playerCastbarBox._msufTitleText:SetText(TR("Castbar"))
+            end
+        end
+    end
+    for _, key in ipairs({ "player", "target", "focus", "boss" }) do
+        local enable = panel[key .. "CastbarEnableCB"]
+        local icon   = panel[key .. "CastbarShowIconCB"]
+        local textCB = panel[key .. "CastbarShowTextCB"]
+        local timeCB = panel[key .. "CastbarTimeCB"]
+        local intCB  = panel[key .. "CastbarInterruptCB"]
+        if enable and enable:IsShown() then
+            enable:ClearAllPoints()
+            enable:SetPoint("TOPLEFT", panel.playerCastbarBox, "TOPLEFT", 12, -34)
+        end
+        if timeCB and timeCB:IsShown() then
+            timeCB:ClearAllPoints()
+            timeCB:SetPoint("TOPLEFT", panel.playerCastbarBox, "TOPLEFT", 12, -58)
+        end
+        if intCB and intCB:IsShown() then
+            intCB:ClearAllPoints()
+            intCB:SetPoint("TOPLEFT", panel.playerCastbarBox, "TOPLEFT", 12, -82)
+        end
+        if icon and icon:IsShown() then
+            icon:ClearAllPoints()
+            icon:SetPoint("TOPRIGHT", panel.playerCastbarBox, "TOPRIGHT", -112, -6)
+            MSUF_CheckboxLabelLeft(icon, "Icon")
+        end
+        if textCB and textCB:IsShown() then
+            textCB:ClearAllPoints()
+            textCB:SetPoint("TOPRIGHT", panel.playerCastbarBox, "TOPRIGHT", -36, -6)
+            MSUF_CheckboxLabelLeft(textCB, "Text")
+        end
+    end
 -- Portrait dropdown (all unitframes) [spec-driven]
     if panel.playerPortraitDropDown and UIDropDownMenu_SetSelectedValue and UIDropDownMenu_SetText then
         panel.playerPortraitDropDown:Show()
@@ -2720,19 +2929,8 @@ end
         UIDropDownMenu_SetText(panel.playerPortraitDropDown, MSUF_PortraitModeText(mode))
     end
     -- Class portrait style moved to Portraits panel.
-    -- Load Conditions box: dynamic title per-unit + checkbox restore from DB.
     if panel.playerLoadCondBox and panel.playerLoadCondBox._msufTitleText then
-        local k = currentKey
-        if k == "tot" or k == "targetoftarget" then k = "targettarget" end
-        local lcTitleMap = {
-            player = "Player Load Conditions",
-            target = "Target Load Conditions",
-            focus = "Focus Load Conditions",
-            pet = "Pet Load Conditions",
-            boss = "Boss Load Conditions",
-            targettarget = "ToT Load Conditions",
-        }
-        panel.playerLoadCondBox._msufTitleText:SetText(lcTitleMap[k] or "Load Conditions")
+        panel.playerLoadCondBox._msufTitleText:SetText("Load Conditions")
     end
     -- Restore load condition checkboxes from DB.
     local lcSpecs = panel._msufLoadCondSpecs
@@ -2783,11 +2981,15 @@ end
     MSUF_AlphaUI_SetSlider(panel.playerAlphaOutCombatSlider, aOut)
 -- Boss-only extension: grow the right-side box for boss-only controls (Boss spacing lives under Indicator now).
     local isBoss = (currentKey == "boss")
-    if panel.playerSizeBox and panel._msufSizeBaseH then
+    if panel.playerSizeBox and panel._msufSizeBaseH and not panel.playerSizeBox._msufCollapsed then
         panel.playerSizeBox:SetHeight(panel._msufSizeBaseH)
     end
     if panel.playerTextLayoutGroup and panel._msufTextBaseH then
-        panel.playerTextLayoutGroup:SetHeight(panel._msufTextBaseH)
+        local textH = panel._msufTextBaseH
+        if isToTKey then
+            textH = textH + 28
+        end
+        panel.playerTextLayoutGroup:SetHeight(textH)
     end
     -- Status icons box (player/target only)
     if panel._msufStatusIconsGroup and panel._msufStatusBoxH then
@@ -2817,6 +3019,9 @@ end
         if show then
             panel.playerInvertBossOrderCB:SetChecked((conf.invertBossOrder == true) and true or false)
         end
+    end
+    if panel._msufRelayoutUnitBoxes then
+        panel._msufRelayoutUnitBoxes(currentKey)
     end
     -- Copy settings button (Player menu)
     MSUF_BindAllCopyButtons(panel)

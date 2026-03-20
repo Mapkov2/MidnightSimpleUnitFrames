@@ -1006,9 +1006,9 @@ else self._msufNavAccentStripe:Hide()
 end
 end
 if self._msufNavIcon then local c=self._msufNavIconColor
-if c then if activeState then self._msufNavIcon:SetColorTexture(c[1],c[2],c[3],1.00)
-elseif hovered then self._msufNavIcon:SetColorTexture(c[1],c[2],c[3],0.85)
-else self._msufNavIcon:SetColorTexture(c[1],c[2],c[3],0.50)
+if c then if activeState then self._msufNavIcon:SetVertexColor(c[1],c[2],c[3],1.00)
+elseif hovered then self._msufNavIcon:SetVertexColor(c[1],c[2],c[3],0.85)
+else self._msufNavIcon:SetVertexColor(c[1],c[2],c[3],0.50)
 end
 end
 end
@@ -2361,6 +2361,16 @@ MSUF_Standalone_UpdateTitle(key)
 MSUF_Standalone_UpdateNav(key)
 do local _w=S and S.win if _w and _w._msufRefreshStatusBar then pcall(_w._msufRefreshStatusBar) end end
 end
+local MSUF_NAV_ICON_TEX="Interface/AddOns/"..tostring(addonName or"MidnightSimpleUnitFrames").."/Media/msuf_nav_icons"
+local MSUF_NAV_ICON_GRID={
+home={0,0},
+uf_player={1,0},uf_target={2,0},uf_targettarget={3,0},
+uf_focus={4,0},uf_boss={5,0},uf_pet={6,0},
+opt_bars={7,0},opt_fonts={0,1},auras2={1,1},
+opt_castbar={2,1},opt_misc={3,1},opt_colors={4,1},
+opt_portraits={5,1},classpower={6,1},gameplay={7,1},
+modules={0,2},profiles={1,2},
+}
 local MSUF_NAV_ICON_COLORS={
 home={0.30,0.60,1.00},
 uf_player={0.40,0.78,0.98},uf_target={0.40,0.78,0.98},uf_targettarget={0.40,0.78,0.98},
@@ -2373,16 +2383,20 @@ modules={0.40,0.80,0.75},profiles={0.90,0.62,0.30},
 }
 local function MSUF_AttachNavIcon(btn,navKey,isChild)
 if not(btn and btn.CreateTexture and navKey)then return end
+local g=MSUF_NAV_ICON_GRID[navKey]
 local c=MSUF_NAV_ICON_COLORS[navKey]
-if not c then return end
+if not(g and c)then return end
 local icon=btn:CreateTexture(nil,"ARTWORK",nil,3)
-icon:SetSize(6,6)
-icon:SetColorTexture(c[1],c[2],c[3],0.65)
+icon:SetSize(14,14)
+icon:SetTexture(MSUF_NAV_ICON_TEX)
+local col,row=g[1],g[2]
+icon:SetTexCoord(col/8,(col+1)/8,row/8,(row+1)/8)
+icon:SetVertexColor(c[1],c[2],c[3],0.65)
 icon:SetPoint("LEFT",btn,"LEFT",isChild and 8 or 10,0)
 btn._msufNavIcon=icon btn._msufNavIconColor=c end
 local function MSUF_BuildMirrorNavButtons(navParent,btnW,btnH) if not navParent then return {} end
 btnH=btnH or 24 local padL=2;
-local padT=10;
+local padT=(navParent and navParent._msufSearchInjected) and 2 or 10;
 local padB=8;
 local gap=8;
 local indent=10 local extraRight=42;
@@ -2658,50 +2672,45 @@ navStack._msufSkipNavTitle=true local railW=navRail.GetWidth and navRail:GetWidt
 or 174 if navStack.SetWidth then navStack:SetWidth(math.max(80,railW-16))
 end
 f._msufNavStack=navStack f._msufNavButtons=MSUF_BuildMirrorNavButtons(navStack,154,22)
-do local pad=8 if navStack.ClearAllPoints then navStack:ClearAllPoints()
+do local pad=8 local topReserve=(tonumber(navStack._msufSearchReservePx) or 0)
+if navStack.ClearAllPoints then navStack:ClearAllPoints()
 end
-local topInset=pad
-if navStack._msufSearchInjected then
-local reserve=tonumber(navStack._msufSearchReservePx) or 52
-if reserve<0 then reserve=0 end
-topInset=pad+reserve
-end
-navStack:SetPoint("TOPLEFT",navRail,"TOPLEFT",pad,-topInset)
-navStack:SetPoint("TOPRIGHT",navRail,"TOPRIGHT",-pad,-topInset)
+navStack:SetPoint("TOPLEFT",navRail,"TOPLEFT",pad,-(pad+topReserve))
+navStack:SetPoint("TOPRIGHT",navRail,"TOPRIGHT",-pad,-(pad+topReserve))
 navStack:SetPoint("BOTTOMLEFT",navRail,"BOTTOMLEFT",pad,pad)
 navStack:SetPoint("BOTTOMRIGHT",navRail,"BOTTOMRIGHT",-pad,pad)
 end
 local home=CreateFrame("Frame",nil,host,"BackdropTemplate")
 home:SetPoint("TOPLEFT",statusBar,"BOTTOMLEFT",0,0)
 home:SetPoint("BOTTOMRIGHT",host,"BOTTOMRIGHT",0,0)
-MSUF_ApplyMidnightBackdrop(home,0.35)
+MSUF_ApplyMidnightBackdrop(home,0.18)
 home:Hide()
 S.mirror.homePanel=home f._msufHomePanel=home MSUF_ApplyMidnightControlsToFrame(home)
 local homeTitle=home:CreateFontString(nil,"OVERLAY","GameFontNormalLarge")
-homeTitle:SetPoint("TOPLEFT",12,-10)
-homeTitle:SetText("Main Menu")
+homeTitle:SetPoint("TOPLEFT",12,-12)
+homeTitle:SetText("Dashboard")
 MSUF_SkinTitle(homeTitle)
 local homeHint=home:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
 homeHint:SetPoint("TOPLEFT",homeTitle,"BOTTOMLEFT",0,-2)
-homeHint:SetText("Quick tools & UI scale (same content as /msuf options).")
+homeHint:SetText("")
+homeHint:Hide()
 MSUF_SkinText(homeHint)
-local tipBox=CreateFrame("Frame",nil,home)
-tipBox:SetPoint("TOPLEFT",home,"TOPLEFT",12,-44)
+local tipBox=CreateFrame("Frame",nil,home,"BackdropTemplate")
+tipBox:SetPoint("TOPLEFT",homeTitle,"BOTTOMLEFT",0,-12)
 tipBox:SetPoint("TOPRIGHT",home,"TOPRIGHT",-12,-44)
-tipBox:SetHeight(22)
+tipBox:SetHeight(24)
+MSUF_ApplyMidnightBackdrop(tipBox,0.12)
 local tipLabel=tipBox:CreateFontString(nil,"OVERLAY","GameFontDisableSmall")
-tipLabel:SetPoint("TOPLEFT",tipBox,"TOPLEFT",0,0)
+tipLabel:SetPoint("LEFT",tipBox,"LEFT",10,0)
 tipLabel:SetJustifyH("LEFT")
-tipLabel:SetJustifyV("TOP")
-tipLabel:SetAlpha(0.82)
-tipLabel:SetText("Tip:")
-MSUF_SkinMuted(tipLabel)
+tipLabel:SetAlpha(0.92)
+tipLabel:SetText("Tip")
 local tipText=tipBox:CreateFontString(nil,"OVERLAY","GameFontDisableSmall")
-tipText:SetPoint("TOPLEFT",tipLabel,"TOPRIGHT",6,0)
-tipText:SetPoint("TOPRIGHT",tipBox,"TOPRIGHT",0,0)
+tipText:SetPoint("LEFT",tipLabel,"RIGHT",6,0)
+tipText:SetPoint("RIGHT",tipBox,"RIGHT",-10,0)
 tipText:SetJustifyH("LEFT")
-tipText:SetJustifyV("TOP")
-tipText:SetAlpha(0.82)
+tipText:SetJustifyV("MIDDLE")
+tipText:SetAlpha(0.88)
 tipText:SetText("")
 MSUF_SkinMuted(tipText)
 MSUF_ForceItalicFont(tipText)
@@ -2709,10 +2718,16 @@ home._msufTipLabel=tipLabel home._msufTipText=tipText home:SetScript("OnShow",fu
 )
 MSUF_ApplyFontBumpToFrame(home,MENU_FONT_BUMP)
 MSUF_ForceItalicFont(tipText)
-home._msufStatusLine=nil local split=CreateFrame("Frame",nil,home)
-split:SetPoint("TOPLEFT",home,"TOPLEFT",12,-76)
-split:SetPoint("BOTTOMRIGHT",home,"BOTTOMRIGHT",-12,14)
-local colGap=14;
+home._msufStatusLine=nil local actionRow=CreateFrame("Frame",nil,home)
+actionRow:SetPoint("TOPLEFT",tipBox,"BOTTOMLEFT",0,-12)
+actionRow:SetPoint("TOPRIGHT",tipBox,"BOTTOMRIGHT",0,-12)
+actionRow:SetHeight(34)
+local split=CreateFrame("Frame",nil,home)
+split:SetPoint("TOPLEFT",actionRow,"BOTTOMLEFT",0,-12)
+split:SetPoint("TOPRIGHT",actionRow,"BOTTOMRIGHT",0,-12)
+split:SetPoint("BOTTOMLEFT",home,"BOTTOMLEFT",12,96)
+split:SetPoint("BOTTOMRIGHT",home,"BOTTOMRIGHT",-12,96)
+local colGap=12;
 local colL=CreateFrame("Frame",nil,split)
 colL:SetPoint("TOPLEFT",split,"TOPLEFT",0,0)
 colL:SetPoint("BOTTOMLEFT",split,"BOTTOMLEFT",0,0)
@@ -2724,13 +2739,14 @@ colR:SetPoint("BOTTOMLEFT",split,"BOTTOM",(colGap/2),0)
 colR:SetPoint("TOPRIGHT",split,"TOPRIGHT",0,0)
 colR:SetPoint("BOTTOMRIGHT",split,"BOTTOMRIGHT",0,0)
 local function CreateCard(parent,titleText,anchorTo,yOff,skipTitle) local card=CreateFrame("Frame",nil,parent,"BackdropTemplate")
-if anchorTo then card:SetPoint("TOPLEFT",anchorTo,"BOTTOMLEFT",0,yOff or-12)
-card:SetPoint("TOPRIGHT",anchorTo,"BOTTOMRIGHT",0,yOff or-12)
+if anchorTo then card:SetPoint("TOPLEFT",anchorTo,"BOTTOMLEFT",0,yOff or-10)
+card:SetPoint("TOPRIGHT",anchorTo,"BOTTOMRIGHT",0,yOff or-10)
 else card:SetPoint("TOPLEFT",parent,"TOPLEFT",0,0)
 card:SetPoint("TOPRIGHT",parent,"TOPRIGHT",0,0)
 end
-MSUF_ApplyMidnightBackdrop(card,0.18)
-if not skipTitle then local title=UI_TextTL(card,"GameFontNormal",10,-8,titleText or"",MSUF_SkinTitle)
+MSUF_ApplyMidnightBackdrop(card,0.12)
+if card.SetBackdropBorderColor then pcall(card.SetBackdropBorderColor,card,0.16,0.30,0.58,0.55) end
+if not skipTitle then local title=UI_TextTL(card,"GameFontNormal",12,-10,titleText or"",MSUF_SkinTitle)
 card._msufTitle=title end
 return card end
 local function DashToggleEditMode() if type(_G.MSUF_SetMSUFEditModeDirect)=="function"then local st=_G.MSUF_EditState;
@@ -2766,269 +2782,82 @@ end
 ,}
 end
 StaticPopup_Show("MSUF_FACTORY_RESET_CONFIRM") end
-local quick=CreateCard(colL,"Quick Actions")
-quick:SetHeight(206)
-local bigW=410;
-local bigH=26;
-local LQ=MSUF_LayoutColumn(quick,12,-34,bigH,8);
-local qx1,qy1=LQ:Row(bigH,8);
-local bEdit=UI_BtnTL(quick,"Toggle Edit Mode",bigW,bigH,qx1,qy1,DashToggleEditMode,"Toggle Edit Mode","Enter MSUF Edit Mode to drag frames and adjust positions.",MSUF_SkinDashboardButton)
+local bigH=34
+local halfGap=12
+local bEdit=UI_Btn(actionRow,"Toggle Edit Mode",120,bigH,"TOPLEFT",actionRow,"TOPLEFT",0,0,DashToggleEditMode,"Toggle Edit Mode","Enter MSUF Edit Mode to drag frames and adjust positions.",MSUF_SkinDashboardButton)
 local win=_G and _G.MSUF_StandaloneOptionsWindow if win then win._msufDashEditBtn=bEdit end
-if bEdit and bEdit._msufSetSelected then bEdit:_msufSetSelected(MSUF_IsMSUFEditModeActive())
-end
+if bEdit and bEdit._msufSetSelected then bEdit:_msufSetSelected(MSUF_IsMSUFEditModeActive()) end
 MSUF_TryHookEditModeForDashboard()
-local qx2,qy2=LQ:Row(bigH,10);
-local bReset=UI_BtnTL(quick,"Reset Frame Positions",bigW,bigH,qx2,qy2,MSUF_ShowResetPositionsConfirm,"Reset Frame Positions","Resets MSUF frame positions + visibility to defaults (active profile).",MSUF_SkinDashboardButton);
-local smallH=22;
-local qx3,qy3=LQ:Row(smallH,0);
-local rowBtns=MSUF_BuildButtonRowTL(quick,qx3,qy3,{{text="Colors",w=160,h=smallH,gap=10,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("colors") end
-},{text="Gameplay",w=118,h=smallH,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("gameplay") end
-},},10)
-local bColors=rowBtns[1];
-local bGameplay=rowBtns[2];
-local profCard=CreateCard(colL,"Profile",quick,-12)
-profCard:SetHeight(92)
-local LP=MSUF_LayoutColumn(profCard,12,-34,18,6);
-local px,py=LP:Row(18,0);
-local profLabel=UI_TextTL(profCard,"GameFontHighlight",px,py,"Active profile:",MSUF_SkinText);
-local profValue=UI_Text(profCard,"GameFontHighlight","LEFT",profLabel,"RIGHT",8,0,((_G and _G.MSUF_ActiveProfile)
-or"Default"),MSUF_SkinTitle)
-home._msufProfileValue=profValue local bProfiles=UI_Btn(profCard,"Open Profiles",160,22,"TOPRIGHT",profCard,"TOPRIGHT",-12,-30,function() MSUF_SwitchMirrorPage("profiles") end
-,nil,nil,MSUF_SkinDashboardButton)
-do local DISCORD_URL="https://discord.gg/JQnhZXnTAK";
-local discordRow=CreateFrame("Frame",nil,profCard)
-discordRow:SetPoint("TOPLEFT",profCard,"TOPLEFT",12,-56)
-discordRow:SetPoint("TOPRIGHT",profCard,"TOPRIGHT",-12,-56)
-discordRow:SetHeight(20)
-local discordLabel=discordRow:CreateFontString(nil,"OVERLAY","GameFontHighlight")
-discordLabel:SetPoint("LEFT",discordRow,"LEFT",0,0)
-discordLabel:SetText("Discord:")
-MSUF_SkinText(discordLabel)
-local bDiscordSelect=UI_Btn(discordRow,"Select",72,18,"RIGHT",discordRow,"RIGHT",0,0,function() if discordRow._msufDiscordBox and discordRow._msufDiscordBox.SetFocus then discordRow._msufDiscordBox:SetFocus()
-if discordRow._msufDiscordBox.HighlightText then discordRow._msufDiscordBox:HighlightText()
-end
-end
-end
-,"Select","Click to select this text.",MSUF_SkinDashboardButton)
-local discordBox=CreateFrame("EditBox",nil,discordRow,"InputBoxTemplate")
-discordBox:SetAutoFocus(false)
-discordBox:SetHeight(18)
-discordBox:SetPoint("LEFT",discordLabel,"RIGHT",8,0)
-discordBox:SetPoint("RIGHT",bDiscordSelect,"LEFT",-8,0)
-discordBox:SetText(DISCORD_URL)
-discordBox:SetCursorPosition(0)
-if discordBox.SetTextColor then discordBox:SetTextColor(0.30,0.60,1.00)
-end
-if discordBox.SetScript then discordBox:SetScript("OnEditFocusGained",function(self) if self.HighlightText then self:HighlightText()
-end
-end
-)
-discordBox:SetScript("OnEscapePressed",function(self) if self.ClearFocus then self:ClearFocus()
-end
-if self.HighlightText then self:HighlightText(0,0)
-end
-end
-)
-discordBox:SetScript("OnEnterPressed",function(self) if self.ClearFocus then self:ClearFocus()
-end
-end
-)
-end
-discordRow._msufDiscordBox=discordBox end
-local adv=CreateCard(colL,"Advanced",profCard,-12)
-adv:SetPoint("BOTTOMLEFT",colL,"BOTTOMLEFT",0,0)
-adv:SetPoint("BOTTOMRIGHT",colL,"BOTTOMRIGHT",0,0)
-local advTitle=adv._msufTitle local advToggle=UI_Btn(adv,"Show",88,18,"TOPRIGHT",adv,"TOPRIGHT",-12,-8,function() end
-,nil,nil,MSUF_SkinDashboardButton)
-local advHint=adv:CreateFontString(nil,"OVERLAY","GameFontDisableSmall")
-advHint:SetPoint("TOPLEFT",adv,"TOPLEFT",12,-34)
-advHint:SetWidth(410)
-advHint:SetJustifyH("LEFT")
-advHint:SetJustifyV("TOP")
-advHint:SetAlpha(0.82)
-MSUF_SkinMuted(advHint)
-local advBody=CreateFrame("Frame",nil,adv)
-advBody:SetPoint("TOPLEFT",advHint,"BOTTOMLEFT",0,-8)
-advBody:SetPoint("TOPRIGHT",adv,"TOPRIGHT",-12,-58)
-advBody:SetPoint("BOTTOMLEFT",adv,"BOTTOMLEFT",12,12)
-advBody:SetPoint("BOTTOMRIGHT",adv,"BOTTOMRIGHT",-12,12)
-local cmds=advBody:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
-cmds:SetPoint("TOPLEFT",advBody,"TOPLEFT",0,0)
-cmds:SetJustifyH("LEFT")
-cmds:SetJustifyV("TOP")
-cmds:SetWidth(410)
-cmds:SetText(MSUF_JoinLines({"/msuf  - Open MSUF menu","/msuf options  - Open Options","/msuf colors  - Open Colors","/msuf gameplay  - Open Gameplay","/msuf reset  - Reset frame positions","/msuf fullreset  - Factory reset","/msuf absorb  - Toggle absorb in HP text","/msufprofile on/off/reset/show","/msuf help  - Print help in chat",}))
-MSUF_SkinText(cmds)
-local btnRow=CreateFrame("Frame",nil,advBody)
-btnRow:SetPoint("BOTTOMLEFT",advBody,"BOTTOMLEFT",0,0)
-btnRow:SetPoint("BOTTOMRIGHT",advBody,"BOTTOMRIGHT",0,0)
-btnRow:SetHeight(24)
-do local defs={{text="Print Help",w=120,h=20,onClick=function() if _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"]
-then pcall(_G.SlashCmdList["MIDNIGHTSUF"],"help")
-end
-end
-,},{text="Factory Reset",w=120,h=20,gap=8,onClick=function() MSUF_ShowFactoryResetConfirm() end
-,},}
-local prev for i,d in ipairs(defs)
-do local b if i==1 then b=UI_Btn(btnRow,d.text,d.w,d.h,"BOTTOMLEFT",btnRow,"BOTTOMLEFT",0,0,d.onClick,d.tipTitle,d.tipBody,MSUF_SkinDashboardButton)
-else b=UI_Btn(btnRow,d.text,d.w,d.h,"LEFT",prev,"RIGHT",d.gap or 8,0,d.onClick,d.tipTitle,d.tipBody,MSUF_SkinDashboardButton)
-end
-prev=b end
-end
-local function AdvApplyState(open) if open then advToggle:SetText("Hide")
-advHint:SetText("")
-advBody:Show()
-else advToggle:SetText("Show")
-advHint:SetText("Hidden. Click Show to reveal slash commands + power tools.")
-advBody:Hide()
-end
-end
-advToggle:SetScript("OnClick",function() S.mirror.dashAdvOpen=not S.mirror.dashAdvOpen;
-AdvApplyState(S.mirror.dashAdvOpen) end
-)
-AdvApplyState(S.mirror.dashAdvOpen==true)
-local scaleCard=CreateCard(colR,nil,nil,nil,true)
-scaleCard:SetHeight(300)
-S.mirror.homeToolsApi=MSUF_BuildTools(scaleCard,{compact=false,wide=true,xl=true,title="Scale & Layout",segmented=true,showValue=true})
-local presetsCard=CreateCard(colR,"Presets",scaleCard,-12)
+local bReset=UI_Btn(actionRow,"Reset Positions",120,bigH,"TOPRIGHT",actionRow,"TOPRIGHT",0,0,MSUF_ShowResetPositionsConfirm,"Reset Positions","Resets MSUF frame positions + visibility to defaults (active profile).",MSUF_SkinDashboardButton)
+
+local navCard=CreateCard(colL,"Quick Navigation")
+navCard:SetHeight(108)
+local navDesc=UI_TextTL(navCard,"GameFontDisableSmall",12,-30,"Jump into the most-used MSUF sections.",MSUF_SkinMuted)
+local navRow1=MSUF_BuildButtonRowTL(navCard,12,-56,{{text="Colors",w=140,h=22,gap=10,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("colors") end},{text="Gameplay",w=140,h=22,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("gameplay") end},},10)
+local navRow2=MSUF_BuildButtonRowTL(navCard,12,-84,{{text="Auras 2.0",w=140,h=22,gap=10,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("auras2") end},{text="Class Resources",w=140,h=22,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("classpower") end},},10)
+local bColors,bGameplay=navRow1[1],navRow1[2]
+local bAuras,bClass=navRow2[1],navRow2[2]
+
+local profileCard=CreateCard(colR,"Active Profile")
+profileCard:SetHeight(108)
+local bProfiles=UI_Btn(profileCard,"Manage",88,22,"TOPRIGHT",profileCard,"TOPRIGHT",-12,-26,function() MSUF_SwitchMirrorPage("profiles") end,nil,nil,MSUF_SkinDashboardButton)
+local profValue=UI_TextTL(profileCard,"GameFontNormalLarge",12,-42,((_G and _G.MSUF_ActiveProfile) or "Default"),MSUF_SkinTitle)
+home._msufProfileValue=profValue
+local profMeta=UI_TextTL(profileCard,"GameFontDisableSmall",12,-70,"Use the Profiles page for switching, export and import.",MSUF_SkinMuted)
+profMeta:SetWidth(260)
+profMeta:SetJustifyH("LEFT")
+
+local scaleCard=CreateCard(colL,"UI Scale",navCard,-10)
+scaleCard:SetPoint("BOTTOMLEFT",colL,"BOTTOMLEFT",0,0)
+scaleCard:SetPoint("BOTTOMRIGHT",colL,"BOTTOMRIGHT",0,0)
+local scaleDesc=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-30,"Quick access to global UI scale presets and MSUF frame scale.",MSUF_SkinMuted)
+local scaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-54,"Global UI Scale",MSUF_SkinText)
+local scaleRow=MSUF_BuildButtonRowTL(scaleCard,12,-78,{{text="1080",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080) MSUF_SetGlobalUiScale(UI_SCALE_1080,true) ReloadUI() end) end},{text="1440",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440) MSUF_SetGlobalUiScale(UI_SCALE_1440,true) ReloadUI() end) end},{text="4K",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("4k",UI_SCALE_4K) MSUF_SetGlobalUiScale(UI_SCALE_4K,true) ReloadUI() end) end},{text="Auto",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: Auto",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("auto",nil) MSUF_ResetGlobalUiScale(true) ReloadUI() end) end},},-1)
+local btn1080,btn1440,btn4k,btnAuto=scaleRow[1],scaleRow[2],scaleRow[3],scaleRow[4]
+local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-112,"MSUF Scale",MSUF_SkinText)
+local msufScaleCur=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-130,"Current: 1.00",MSUF_SkinMuted)
+local msufScaleSlider=CreateFrame("Slider","MSUF_DashboardMsufScaleSlider",scaleCard,"OptionsSliderTemplate")
+msufScaleSlider:ClearAllPoints()
+msufScaleSlider:SetPoint("TOPLEFT",msufScaleCur,"BOTTOMLEFT",0,-8)
+msufScaleSlider:SetPoint("RIGHT",scaleCard,"RIGHT",-26,0)
+msufScaleSlider:SetMinMaxValues(25,150)
+msufScaleSlider:SetValueStep(5)
+msufScaleSlider:SetObeyStepOnDrag(true)
+if msufScaleSlider.SetStepsPerPage then msufScaleSlider:SetStepsPerPage(1) end
+do local n=(msufScaleSlider.GetName and msufScaleSlider:GetName()) local t=(n and _G[n.."Text"]) or msufScaleSlider.Text if t then t:SetText("") t:Hide() end local low=(n and _G[n.."Low"]) or msufScaleSlider.Low if low then low:SetText("") low:Hide() end local high=(n and _G[n.."High"]) or msufScaleSlider.High if high then high:SetText("") high:Hide() end end
+msufScaleSlider:EnableMouseWheel(true)
+msufScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then return end local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100 v=v+(delta>0 and 5 or -5) if v<25 then v=25 elseif v>150 then v=150 end self:SetValue(v) end)
+msufScaleSlider:SetScript("OnValueChanged",function(self,value) if self.__msufSkip then return end local pct=math.floor((tonumber(value) or 100)/5+0.5)*5 if pct<25 then pct=25 elseif pct>150 then pct=150 end if pct~=value then self.__msufSkip=true self:SetValue(pct) self.__msufSkip=nil return end local scale=pct/100 MSUF_SetSavedMsufScale(scale) MSUF_ApplyMsufScale(scale) if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end end)
+if MSUF_AddTooltip then pcall(MSUF_AddTooltip,msufScaleSlider,"MSUF Scale","Scales only MSUF frames (unitframes + castbars). Use the mouse wheel for 5% steps.") end
+local function RefreshScaleCard() local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil local disabled=g and g.disableScaling local preset=g and g.globalUiScalePreset if btn1080 and btn1080._msufSetSelected then btn1080:_msufSetSelected((not disabled) and preset=="1080p") end if btn1440 and btn1440._msufSetSelected then btn1440:_msufSetSelected((not disabled) and preset=="1440p") end if btn4k and btn4k._msufSetSelected then btn4k:_msufSetSelected((not disabled) and preset=="4k") end if btnAuto and btnAuto._msufSetSelected then btnAuto:_msufSetSelected(disabled or preset=="auto" or preset==nil) end MSUF_SetEnabled(btn1080,not disabled) MSUF_SetEnabled(btn1440,not disabled) MSUF_SetEnabled(btn4k,not disabled) MSUF_SetEnabled(btnAuto,true) MSUF_SetEnabled(msufScaleSlider,not disabled) if msufScaleLabel and msufScaleLabel.SetAlpha then msufScaleLabel:SetAlpha(disabled and 0.55 or 1.0) end if msufScaleCur and msufScaleCur.SetAlpha then msufScaleCur:SetAlpha(disabled and 0.55 or 1.0) end local scale=clamp(MSUF_GetSavedMsufScale(),0.25,1.5) if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end if msufScaleSlider and msufScaleSlider.SetValue then msufScaleSlider.__msufSkip=true msufScaleSlider:SetValue(math.floor(scale*100+0.5)) msufScaleSlider.__msufSkip=nil end end
+home._msufRefreshScaleCard=RefreshScaleCard
+RefreshScaleCard()
+
+local presetsCard=CreateCard(colR,"Presets",profileCard,-10)
 presetsCard:SetPoint("BOTTOMLEFT",colR,"BOTTOMLEFT",0,0)
 presetsCard:SetPoint("BOTTOMRIGHT",colR,"BOTTOMRIGHT",0,0)
-local presetsTitle=presetsCard._msufTitle;
+local presetsTitle=presetsCard._msufTitle
+local presetDesc=UI_TextTL(presetsCard,"GameFontDisableSmall",12,-30,"Load a preset into your active profile.",MSUF_SkinMuted)
 local presetDrop=(_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_PresetDropdown", presetsCard) or CreateFrame("Frame", "MSUF_PresetDropdown", presetsCard, "UIDropDownMenuTemplate"))
-presetDrop:SetPoint("TOPLEFT",presetsTitle,"BOTTOMLEFT",-16,-4)
+presetDrop:SetPoint("TOPLEFT",presetsCard,"TOPLEFT",-4,-48)
 UIDropDownMenu_SetWidth(presetDrop,220)
-UIDropDownMenu_SetText(presetDrop,presetsCard._msufSelectedPreset or"Select preset...")
-UIDropDownMenu_Initialize(presetDrop,function(self,level) local names=MSUF_GetPresetNames()
-if not names or#names==0 then local info=UIDropDownMenu_CreateInfo();
-info.text="(no presets)"info.notCheckable=true;
-UIDropDownMenu_AddButton(info,level) return end
-for _,name in ipairs(names)
-do local pname=name local info=UIDropDownMenu_CreateInfo();
-info.text=pname info.checked=(presetsCard._msufSelectedPreset==pname);
-info.func=function() presetsCard._msufSelectedPreset=pname;
-UIDropDownMenu_SetText(presetDrop,pname) end
-UIDropDownMenu_AddButton(info,level)
-end
-end
-)
-do local names=MSUF_GetPresetNames()
-if(not presetsCard._msufSelectedPreset)
-and names and names[1]
-then presetsCard._msufSelectedPreset=names[1]
-UIDropDownMenu_SetText(presetDrop,names[1])
-end
-end
-local bLoadPreset=UI_Btn(presetsCard,"Load preset",240,24,"TOPLEFT",presetDrop,"BOTTOMLEFT",16,-6,function() local sel=presetsCard._msufSelectedPreset if not sel then MSUF_Print("Select a preset first.");
- return end
-MSUF_ShowPresetConfirm(sel) end
-,"Load preset","Applies the selected preset to your current active profile. This overwrites settings (export first if unsure).",MSUF_SkinDashboardButton)
-local presetHint=presetsCard:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-presetHint:SetPoint("TOPLEFT",bLoadPreset,"BOTTOMLEFT",0,-4)
-presetHint:SetText("Overwrites your current active profile settings.")
-MSUF_SkinMuted(presetHint)
-do local KO_FI_URL="https://ko-fi.com/midnightsimpleunitframes#linkModal";
-local PAYPAL_URL="https://www.paypal.com/ncp/payment/H3N2P87S53KBQ";
-local PATREON_URL="https://www.patreon.com/cw/MidnightSimpleUnitframes";
-local GITHUB_URL="https://github.com/Mapkov2/MidnightSimpleUnitFrames";
-local ICON_DIR="Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\";
-local supportLabel=presetsCard:CreateFontString(nil,"OVERLAY","GameFontNormal")
-supportLabel:SetPoint("BOTTOMLEFT",presetsCard,"BOTTOMLEFT",12,14)
-supportLabel:SetText("Support the MSUF Development:")
-supportLabel:SetTextColor(0.90,0.90,0.90)
-supportLabel:SetJustifyH("LEFT")
-supportLabel:SetJustifyV("MIDDLE")
-if MSUF_SkinMuted then pcall(MSUF_SkinMuted,supportLabel)
-end
-local row=CreateFrame("Frame",nil,presetsCard)
-row:SetHeight(24)
-row:SetWidth(150)
-row:SetPoint("BOTTOMRIGHT",presetsCard,"BOTTOMRIGHT",-12,12)
-local function CreateIcon(texFile,size,tooltipTitle,tooltipText,onClick) local b=CreateFrame("Button",nil,row)
-b:SetSize(size,size)
-local t=b:CreateTexture(nil,"ARTWORK")
-t:SetAllPoints()
-t:SetTexture(ICON_DIR..texFile)
-local hl=b:CreateTexture(nil,"HIGHLIGHT")
-hl:SetAllPoints()
-hl:SetColorTexture(1,1,1,0.10)
-b:SetScript("OnClick",onClick)
-if MSUF_AddTooltip then MSUF_AddTooltip(b,tooltipTitle,tooltipText)
-else b:SetScript("OnEnter",function(self) if not GameTooltip then return end
-GameTooltip:SetOwner(self,"ANCHOR_TOPLEFT");
-GameTooltip:AddLine(tooltipTitle or"",1,1,1)
-if tooltipText and tooltipText~=""then GameTooltip:AddLine(tooltipText,0.85,0.85,0.85,true)
-end
-GameTooltip:Show() end
-)
-b:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide()
-end
-end
-)
-end
-return b end
-local sz=22;
-local gap=7 local icons={{tex="Patreon.png",title="Patreon",tip="Click to copy the Patreon support link.",onClick=function() MSUF_ShowCopyLink("Patreon",PATREON_URL) end
-},{tex="PayPal.png",title="PayPal",tip="Click to copy the PayPal support link.",onClick=function() MSUF_ShowCopyLink("PayPal",PAYPAL_URL) end
-},{tex="Ko-Fi.png",title="Ko-fi",tip="Click to copy the Ko-fi link.",onClick=function() MSUF_ShowCopyLink("Ko-fi",KO_FI_URL) end
-},{tex="GitHub.png",title="GitHub",tip="Click to copy the GitHub repository link.",onClick=function() MSUF_ShowCopyLink("GitHub",GITHUB_URL) end
-},}
-local prev for _,d in ipairs(icons)
-do local b=CreateIcon(d.tex,sz,d.title,d.tip,d.onClick)
-if not prev then b:SetPoint("RIGHT",row,"RIGHT",0,0)
-else b:SetPoint("RIGHT",prev,"LEFT",-gap,0)
-end
-prev=b end
-end
-do
-    local aboutLine = presetsCard:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    aboutLine:SetPoint("BOTTOMLEFT", supportLabel, "TOPLEFT", 0, 4)
-    aboutLine:SetJustifyH("LEFT")
-    local aboutVer = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
-    local aboutStr = "by |cffccd0d9Mapko|r"
-    if type(aboutVer) == "string" and aboutVer ~= "" then
-        aboutStr = "v" .. aboutVer .. "  •  " .. aboutStr .. "  •  with help from |cffccd0d9R41z0r|r and the community"
-    end
-    aboutLine:SetText(aboutStr)
-    aboutLine:SetAlpha(0.65)
-    if MSUF_SkinMuted then pcall(MSUF_SkinMuted, aboutLine) end
-end
-local function MSUF_DashboardLayout() local wL=(colL and colL.GetWidth and colL:GetWidth())
-or 0;
-local wR=(colR and colR.GetWidth and colR:GetWidth())
-or 0 if wL<=0 or wR<=0 then return end
-local innerL=math.floor(wL-24);
-local innerR=math.floor(wR-24)
-if innerL<1 then innerL=1 end
-if innerR<1 then innerR=1 end
-if bEdit and bEdit.SetWidth then bEdit:SetWidth(innerL)
-end
-if bReset and bReset.SetWidth then bReset:SetWidth(innerL)
-end
-local gap=7;
-local each=math.floor((innerL-(gap*2))/3)
-if each<1 then each=1 end
-if bOptions and bOptions.SetWidth then bOptions:SetWidth(each)
-end
-if bColors and bColors.SetWidth then bColors:SetWidth(each)
-end
-if bGameplay and bGameplay.SetWidth then bGameplay:SetWidth(each)
-end
-if advHint and advHint.SetWidth then advHint:SetWidth(innerL)
-end
-if cmds and cmds.SetWidth then cmds:SetWidth(innerL)
-end
-local ddW=math.floor(innerR-18)
-if ddW>320 then ddW=320 end
-if ddW<1 then ddW=1 end
-if presetDrop and UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(presetDrop,ddW)
-end
-if bLoadPreset and bLoadPreset.SetWidth then bLoadPreset:SetWidth(math.max(1,math.min(innerR,ddW+20)))
-end
-if presetHint and presetHint.SetWidth then presetHint:SetWidth(innerR)
-end
-if S and S.mirror and S.mirror.homeToolsApi and S.mirror.homeToolsApi.Layout then pcall(S.mirror.homeToolsApi.Layout)
-end
-end
+UIDropDownMenu_SetText(presetDrop,presetsCard._msufSelectedPreset or "Select preset...")
+UIDropDownMenu_Initialize(presetDrop,function(self,level) local names=MSUF_GetPresetNames() if not names or #names==0 then local info=UIDropDownMenu_CreateInfo() info.text="(no presets)" info.notCheckable=true UIDropDownMenu_AddButton(info,level) return end for _,name in ipairs(names) do local pname=name local info=UIDropDownMenu_CreateInfo() info.text=pname info.checked=(presetsCard._msufSelectedPreset==pname) info.func=function() presetsCard._msufSelectedPreset=pname UIDropDownMenu_SetText(presetDrop,pname) end UIDropDownMenu_AddButton(info,level) end end)
+do local names=MSUF_GetPresetNames() if (not presetsCard._msufSelectedPreset) and names and names[1] then presetsCard._msufSelectedPreset=names[1] UIDropDownMenu_SetText(presetDrop,names[1]) end end
+local bLoadPreset=UI_Btn(presetsCard,"Browse Presets",220,22,"TOPLEFT",presetDrop,"BOTTOMLEFT",16,-2,function() local sel=presetsCard._msufSelectedPreset if not sel then MSUF_Print("Select a preset first.") return end MSUF_ShowPresetConfirm(sel) end,"Load preset","Applies the selected preset to your current active profile.",MSUF_SkinDashboardButton)
+local presetHint=UI_Text(presetsCard,"GameFontDisableSmall","TOPLEFT",bLoadPreset,"BOTTOMLEFT",0,-6,"Opens a confirmation before applying the preset.",MSUF_SkinMuted)
+presetHint:SetWidth(240)
+presetHint:SetJustifyH("LEFT")
+do local KO_FI_URL="https://ko-fi.com/midnightsimpleunitframes#linkModal"; local PAYPAL_URL="https://www.paypal.com/ncp/payment/H3N2P87S53KBQ"; local PATREON_URL="https://www.patreon.com/cw/MidnightSimpleUnitframes"; local GITHUB_URL="https://github.com/Mapkov2/MidnightSimpleUnitFrames"; local ICON_DIR="Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"; local supportLabel=presetsCard:CreateFontString(nil,"OVERLAY","GameFontDisableSmall") supportLabel:SetPoint("BOTTOMLEFT",presetsCard,"BOTTOMLEFT",12,12) supportLabel:SetJustifyH("LEFT") supportLabel:SetText("Support MSUF Development") supportLabel:SetAlpha(0.72) if MSUF_SkinMuted then pcall(MSUF_SkinMuted,supportLabel) end local aboutLine=presetsCard:CreateFontString(nil,"OVERLAY","GameFontDisableSmall") aboutLine:SetPoint("BOTTOMLEFT",supportLabel,"TOPLEFT",0,4) aboutLine:SetJustifyH("LEFT") local aboutVer=_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames","Version") local aboutStr="by |cffccd0d9Mapko|r" if type(aboutVer)=="string" and aboutVer~="" then aboutStr="v"..aboutVer.."  •  by |cffccd0d9Mapko|r  •  with help from |cffccd0d9R41z0r|r" end aboutLine:SetText(aboutStr) aboutLine:SetAlpha(0.65) if MSUF_SkinMuted then pcall(MSUF_SkinMuted,aboutLine) end local row=CreateFrame("Frame",nil,presetsCard) row:SetHeight(24) row:SetWidth(160) row:SetPoint("BOTTOMRIGHT",presetsCard,"BOTTOMRIGHT",-12,10) local function CreateIcon(texFile,size,tooltipTitle,tooltipText,onClick) local b=CreateFrame("Button",nil,row) b:SetSize(size,size) local t=b:CreateTexture(nil,"ARTWORK") t:SetAllPoints() t:SetTexture(ICON_DIR..texFile) local hl=b:CreateTexture(nil,"HIGHLIGHT") hl:SetAllPoints() hl:SetColorTexture(1,1,1,0.10) b:SetScript("OnClick",onClick) if MSUF_AddTooltip then MSUF_AddTooltip(b,tooltipTitle,tooltipText) else b:SetScript("OnEnter",function(self) if not GameTooltip then return end GameTooltip:SetOwner(self,"ANCHOR_TOPLEFT"); GameTooltip:AddLine(tooltipTitle or "",1,1,1) if tooltipText and tooltipText~="" then GameTooltip:AddLine(tooltipText,0.85,0.85,0.85,true) end GameTooltip:Show() end) b:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end) end return b end local sz=22 local gap=7 local icons={{tex="Patreon.png",title="Patreon",tip="Click to copy the Patreon support link.",onClick=function() MSUF_ShowCopyLink("Patreon",PATREON_URL) end},{tex="PayPal.png",title="PayPal",tip="Click to copy the PayPal support link.",onClick=function() MSUF_ShowCopyLink("PayPal",PAYPAL_URL) end},{tex="Ko-Fi.png",title="Ko-fi",tip="Click to copy the Ko-fi link.",onClick=function() MSUF_ShowCopyLink("Ko-fi",KO_FI_URL) end},{tex="GitHub.png",title="GitHub",tip="Click to copy the GitHub repository link.",onClick=function() MSUF_ShowCopyLink("GitHub",GITHUB_URL) end},} local prev for _,d in ipairs(icons) do local b=CreateIcon(d.tex,sz,d.title,d.tip,d.onClick) if not prev then b:SetPoint("RIGHT",row,"RIGHT",0,0) else b:SetPoint("RIGHT",prev,"LEFT",-gap,0) end prev=b end end
+
+local adv=CreateCard(home,"Advanced")
+adv:ClearAllPoints()
+adv:SetPoint("BOTTOMLEFT",home,"BOTTOMLEFT",12,14)
+adv:SetPoint("BOTTOMRIGHT",home,"BOTTOMRIGHT",-12,14)
+adv:SetHeight(66)
+local advHint=UI_TextTL(adv,"GameFontDisableSmall",12,-30,"Fast access to recovery and support tools.",MSUF_SkinMuted)
+local advRow=MSUF_BuildButtonRowTL(adv,12,-54,{{text="Print Help",w=100,h=22,gap=8,skinFn=MSUF_SkinDashboardButton,onClick=function() if _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"] then pcall(_G.SlashCmdList["MIDNIGHTSUF"],"help") end end},{text="Factory Reset",w=110,h=22,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowFactoryResetConfirm() end},{text="Profiles",w=100,h=22,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("profiles") end},{text="Discord",w=88,h=22,skinFn=MSUF_SkinDashboardButton,onClick=function() if type(MSUF_ShowCopyLink)=="function" then MSUF_ShowCopyLink("Discord","https://discord.gg/JQnhZXnTAK") end end},},8)
+local function MSUF_DashboardLayout() local rowW=(actionRow and actionRow.GetWidth and actionRow:GetWidth()) or 0 local wL=(colL and colL.GetWidth and colL:GetWidth()) or 0 local wR=(colR and colR.GetWidth and colR:GetWidth()) or 0 if rowW<=0 or wL<=0 or wR<=0 then return end local actionW=math.floor((rowW-halfGap)/2) if actionW<1 then actionW=1 end if bEdit and bEdit.SetWidth then bEdit:SetWidth(actionW) end if bReset and bReset.SetWidth then bReset:SetWidth(actionW) end local innerL=math.floor(wL-24) local innerR=math.floor(wR-24) if innerL<1 then innerL=1 end if innerR<1 then innerR=1 end local navW=math.floor((innerL-10)/2) if navW<96 then navW=96 end for _,btn in ipairs({bColors,bGameplay,bAuras,bClass}) do if btn and btn.SetWidth then btn:SetWidth(navW) end end if profMeta and profMeta.SetWidth then profMeta:SetWidth(innerR-110) end local ddW=math.floor(innerR-28) if ddW>300 then ddW=300 end if ddW<160 then ddW=160 end if presetDrop and UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(presetDrop,ddW) end if bLoadPreset and bLoadPreset.SetWidth then bLoadPreset:SetWidth(math.max(160,math.min(innerR-24,ddW+24))) end if presetHint and presetHint.SetWidth then presetHint:SetWidth(innerR-24) end if home and home._msufRefreshScaleCard then pcall(home._msufRefreshScaleCard) end end
 if not home.__MSUF_DashboardLayoutHooked then home.__MSUF_DashboardLayoutHooked=true if home.HookScript then home:HookScript("OnShow",function() if C_Timer and C_Timer.After then C_Timer.After(0,MSUF_DashboardLayout)
 else MSUF_DashboardLayout()
 end

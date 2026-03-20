@@ -785,8 +785,10 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
             if panel and panel.playerBasicsBox then
                 panel.playerBasicsBox:SetShown(isUnitFrame)
             end
+            if panel and panel.playerCastbarBox then panel.playerCastbarBox:SetShown(isUnitFrame) end
             if panel and panel.playerLoadCondBox then panel.playerLoadCondBox:SetShown(isUnitFrame) end
             if panel and panel.playerSizeBox then panel.playerSizeBox:SetShown(isUnitFrame) end
+            if panel and panel.unitAnchorGroup then panel.unitAnchorGroup:SetShown(isUnitFrame) end
             -- Recalculate scroll height after layout changes.
             MSUF_FramesMenu_QueueScrollUpdate()
         end
@@ -813,12 +815,11 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
                 or currentKey == "boss"
                 or currentKey == "pet"
             ) then
-                -- Place inside scroll content below the Unit Alpha box.
                 editModeButton:SetParent(frameGroup)
                 editModeButton:ClearAllPoints()
-                local sizeBox = panel and panel.playerSizeBox
-                if sizeBox then
-                    editModeButton:SetPoint("TOPLEFT", sizeBox, "BOTTOMLEFT", 8, -56)
+                local anchorBox = panel and (panel._msufBottomAnchor or panel.unitAnchorGroup or panel.playerSizeBox)
+                if anchorBox then
+                    editModeButton:SetPoint("TOPRIGHT", anchorBox, "BOTTOMRIGHT", 0, -18)
                 else
                     editModeButton:SetPoint("BOTTOMLEFT", frameGroup, "BOTTOMLEFT", 16, 16)
                 end
