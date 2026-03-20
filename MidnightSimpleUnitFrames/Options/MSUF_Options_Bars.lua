@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- MSUF_Options_Bars.lua  (Phase 3: Rewrite using ns.UI.*)
+-- MSUF_Options_Bars.lua  (Phase 4: A2-style scope bar + collapsible boxes)
 --
 -- Bar appearance: absorb display, textures, gradients, outlines,
 -- highlight borders (aggro/dispel/purge), priority reorder,
@@ -36,7 +36,6 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local BAR_DD_W = 260
     local ALL_UNITS = { "player", "target", "focus", "targettarget", "pet", "boss" }
 
-    -- Resolve helpers from ctx / _G (backward compat)
     local CreateLabeledCheckButton = ctx and ctx.CreateLabeledCheckButton
     local CreateLabeledSlider = (ctx and ctx.CreateLabeledSlider) or (ns and ns.MSUF_CreateLabeledSlider) or _G.CreateLabeledSlider
     local MSUF_SetLabeledSliderValue = (ctx and ctx.MSUF_SetLabeledSliderValue) or _G.MSUF_SetLabeledSliderValue
@@ -50,11 +49,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local MSUF_UpdatePowerBarBorderSizeFromEdit = (ctx and ctx.MSUF_UpdatePowerBarBorderSizeFromEdit) or _G.MSUF_UpdatePowerBarBorderSizeFromEdit or function() end
     if type(CreateLabeledCheckButton) ~= "function" then return end
 
-    -- Forward-declare scope refs (filled when scope system is created)
     local _Scope_GetUnitKey, _Scope_GetUnitDB, _Scope_EnableOverride, _Scope_SyncUI
 
     -- =====================================================================
-    -- Scope-aware get/set helpers (used by absorb + text mode dropdowns)
+    -- Scope-aware get/set helpers
     -- =====================================================================
     local function ScopeGet(generalKey, defaultVal)
         EnsureDB()
@@ -84,83 +82,353 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
 
     -- =====================================================================
-    -- PANEL CREATION (left + right columns)
+    -- Box helpers (A2 style)
     -- =====================================================================
-    local BARS_PANEL_H = 1170
-    local function SetupPanel(p)
-        p:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 0, right = 0, top = 0, bottom = 0 } })
-        p:SetBackdropColor(0, 0, 0, 0.20); p:SetBackdropBorderColor(1, 1, 1, 0.15)
+    local BOX_W = 650
+    local function MakeBox(parent, h)
+        local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        f:SetSize(BOX_W, h)
+        f:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+        f:SetBackdropColor(0, 0, 0, 0.35)
+        f:SetBackdropBorderColor(1, 1, 1, 0.08)
+        return f
     end
 
-    local leftPanel = CreateFrame("Frame", "MSUF_BarsMenuPanelLeft", barGroup, "BackdropTemplate")
-    leftPanel:SetSize(330, BARS_PANEL_H); leftPanel:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, -172); SetupPanel(leftPanel)
-    local rightPanel = CreateFrame("Frame", "MSUF_BarsMenuPanelRight", barGroup, "BackdropTemplate")
-    rightPanel:SetSize(320, BARS_PANEL_H); rightPanel:SetPoint("TOPLEFT", leftPanel, "TOPRIGHT", 0, 0); SetupPanel(rightPanel)
-
-    -- Panel headers
-    local leftHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    leftHeader:SetPoint("TOPLEFT", leftPanel, "TOPLEFT", 16, -12); leftHeader:SetText(TR("Bar appearance"))
-    local rightHeader = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    rightHeader:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 16, -12); rightHeader:SetText(TR("Power Bar Settings"))
-    _G.MSUF_BarsMenuRightHeader = rightHeader
-
-    -- Section helper (matches original Core: fixed 296px width, -16 offset from header)
-    local function MakeSectionLine(parent, anchor, oY)
-        local ln = parent:CreateTexture(nil, "ARTWORK"); ln:SetColorTexture(1, 1, 1, 0.20); ln:SetHeight(1)
-        ln:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -16, oY or -4); ln:SetWidth(296); return ln
+    local function MakeCollapsibleBox(parent, anchorTo, h, titleText, defaultOpen)
+        local box = MakeBox(parent, defaultOpen and h or 28)
+        box:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, -6)
+        box._msufExpandedH = h
+        box._msufCollapsed = not defaultOpen
+        local hdr = CreateFrame("Button", nil, box)
+        hdr:SetHeight(24); hdr:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0); hdr:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
+        local chevron = hdr:CreateTexture(nil, "OVERLAY")
+        chevron:SetSize(12, 12); chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
+        chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+        chevron:SetVertexColor(0.55, 0.65, 0.82)
+        if defaultOpen then chevron:SetRotation(math.pi * 0.5) else chevron:SetRotation(0) end
+        local title = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        title:SetPoint("LEFT", chevron, "RIGHT", 6, 0); title:SetText(TR(titleText))
+        local hint = hdr:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hint:SetPoint("RIGHT", hdr, "RIGHT", -12, 0)
+        hint:SetText(defaultOpen and "" or TR("click to expand")); hint:SetTextColor(0.45, 0.52, 0.65)
+        local bodyHost = CreateFrame("Frame", nil, box)
+        bodyHost:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -28); bodyHost:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
+        bodyHost:SetShown(defaultOpen)
+        if bodyHost.SetFrameLevel and box.GetFrameLevel then
+            bodyHost:SetFrameLevel((box:GetFrameLevel() or 0) + 5)
+        end
+        box._msufBody = bodyHost
+        box._msufTitle = title
+        do
+            local hl = hdr:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.03)
+        end
+        hdr:SetScript("OnClick", function()
+            box._msufCollapsed = not box._msufCollapsed
+            bodyHost:SetShown(not box._msufCollapsed)
+            if box._msufCollapsed then
+                box:SetHeight(28); chevron:SetRotation(0); hint:SetText(TR("click to expand"))
+            else
+                box:SetHeight(box._msufExpandedH); chevron:SetRotation(math.pi * 0.5); hint:SetText("")
+            end
+            MSUF_BarsMenu_QueueScrollUpdate()
+        end)
+        return box, bodyHost
     end
 
-    -- =====================================================================
-    -- BAR SCOPE (top of page, above panels)
-    -- =====================================================================
-    local scopeHeader = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    scopeHeader:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 16, -120); scopeHeader:SetText(TR("Bar scope"))
-    barGroup._msufBarScopeHeader = scopeHeader
-
-    local scopeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    scopeLabel:SetPoint("LEFT", scopeHeader, "RIGHT", 12, 0); scopeLabel:SetText(TR("Configure settings for"))
-
-    local hpPowerScopeOptions = function()
-        local db = MSUF_DB or {}
-        local function ovr(uk) local u = db[uk]; return u and u.hpPowerTextOverride == true end
-        return {
-            { key = "shared", label = "Shared" },
-            { key = "player", label = "Player", overrideActive = ovr("player") },
-            { key = "target", label = "Target", overrideActive = ovr("target") },
-            { key = "targettarget", label = "Target of Target", overrideActive = ovr("targettarget") },
-            { key = "focus", label = "Focus", overrideActive = ovr("focus") },
-            { key = "pet", label = "Pet", overrideActive = ovr("pet") },
-            { key = "boss", label = "Boss", overrideActive = ovr("boss") },
-        }
+    local function MakeSectionLabel(parent, anchor, text, oY)
+        local fs = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        fs:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, oY or 0)
+        fs:SetText(TR(text)); fs:SetTextColor(0.7, 0.75, 0.82, 0.6)
+        return fs
     end
 
     -- Forward-declare scope functions
     local _MSUF_HPText_GetScopeKey, _MSUF_HPText_GetUnitKey, _MSUF_HPText_GetUnitDB
     local _MSUF_HPText_NormalizeScopeKey, _MSUF_HPText_EnableOverride
     local _MSUF_SyncHpPowerTextScopeUI
-    local hpPowerScopeDrop, hpPowerOverrideCheck
+    local hpPowerOverrideCheck
 
     -- =====================================================================
-    -- LEFT PANEL: Absorb Display
+    -- SCOPE BAR (A2-style button strip)
     -- =====================================================================
-    local absorbHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    absorbHeader:SetPoint("TOPLEFT", leftHeader, "BOTTOMLEFT", 0, -18); absorbHeader:SetText(TR("Absorb Display"))
-    _G.MSUF_BarsMenuAbsorbHeader = absorbHeader
-    local absorbLine = MakeSectionLine(leftPanel, absorbHeader, -4)
+    local SCOPE_KEYS = { "shared", "player", "target", "targettarget", "focus", "pet", "boss" }
+    local SCOPE_LABELS = {
+        shared = "Shared", player = "Player", target = "Target",
+        targettarget = "ToT", focus = "Focus", pet = "Pet", boss = "Boss",
+    }
+
+    local scopeBar = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
+    scopeBar:SetHeight(72); scopeBar:SetWidth(BOX_W)
+    scopeBar:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, -120)
+    scopeBar:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    scopeBar:SetBackdropColor(0.04, 0.08, 0.18, 0.95)
+    scopeBar:SetBackdropBorderColor(0.12, 0.25, 0.50, 0.6)
+
+    local scopeEditLbl = scopeBar:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    scopeEditLbl:SetPoint("TOPLEFT", scopeBar, "TOPLEFT", 10, -10); scopeEditLbl:SetText(TR("Editing:"))
+
+    local scopeBtns = {}
+    local function GetScopeUnitHasOverride(key)
+        if key == "shared" then return false end
+        EnsureDB(); local u = MSUF_DB[key]
+        return (type(u) == "table" and u.hpPowerTextOverride == true)
+    end
+
+    local function RefreshScopeButtons()
+        local activeKey = G().hpPowerTextSelectedKey or "shared"
+        for k, btn in pairs(scopeBtns) do
+            if btn and btn._msufApplyState then btn:_msufApplyState(k == activeKey) end
+        end
+    end
+
+    local function ApplyScopeKey(key)
+        EnsureDB()
+        G().hpPowerTextSelectedKey = key
+        if key ~= "shared" then G().hpSpacerSelectedUnitKey = key end
+        RefreshScopeButtons()
+        if type(_MSUF_SyncHpPowerTextScopeUI) == "function" then _MSUF_SyncHpPowerTextScopeUI() end
+    end
+
+    do
+        local prevBtn
+        for _, k in ipairs(SCOPE_KEYS) do
+            local bk = k
+            local btn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
+            btn:SetSize(bk == "shared" and 56 or 48, 18)
+            if not prevBtn then
+                btn:SetPoint("LEFT", scopeEditLbl, "RIGHT", 8, 0)
+            else
+                btn:SetPoint("LEFT", prevBtn, "RIGHT", 2, 0)
+            end
+            local bg = btn:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0.08, 0.12, 0.22, 0.80)
+            btn._msufBg = bg
+            local border = CreateFrame("Frame", nil, btn, "BackdropTemplate")
+            border:SetAllPoints(); border:SetBackdrop({ edgeFile = TEX_W8, edgeSize = 1 })
+            border:SetBackdropBorderColor(0.15, 0.30, 0.60, 0.50)
+            btn._msufBorder = border
+            local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            fs:SetPoint("CENTER", 0, 0); fs:SetText(SCOPE_LABELS[bk] or bk)
+            btn._msufLabel = fs
+
+            btn._msufApplyState = function(self, active)
+                local hasOvr = GetScopeUnitHasOverride(bk)
+                if active then
+                    bg:SetColorTexture(0.12, 0.24, 0.50, 0.95)
+                    if hasOvr then border:SetBackdropBorderColor(0.96, 0.80, 0.34, 0.98)
+                    else border:SetBackdropBorderColor(0.30, 0.55, 1.00, 0.80) end
+                    fs:SetTextColor(0.90, 0.95, 1.00)
+                else
+                    bg:SetColorTexture(0.08, 0.12, 0.22, 0.80)
+                    if hasOvr then
+                        border:SetBackdropBorderColor(0.86, 0.72, 0.28, 0.80)
+                        fs:SetTextColor(0.88, 0.90, 0.96)
+                    else
+                        border:SetBackdropBorderColor(0.15, 0.30, 0.60, 0.50)
+                        fs:SetTextColor(0.50, 0.58, 0.72)
+                    end
+                end
+            end
+
+            btn:SetScript("OnClick", function() ApplyScopeKey(bk) end)
+            btn:SetScript("OnEnter", function(self)
+                if self._msufBg then self._msufBg:SetColorTexture(0.10, 0.18, 0.36, 0.90) end
+                if GameTooltip then
+                    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                    GameTooltip:SetText(SCOPE_LABELS[bk] or bk, 1, 1, 1)
+                    if bk == "shared" then
+                        GameTooltip:AddLine(TR("Shared baseline used by units without overrides."), 0.72, 0.78, 0.88, true)
+                    else
+                        local tip = GetScopeUnitHasOverride(bk) and TR("Override active: this unit uses its own HP/Power text settings.") or TR("Uses Shared settings.")
+                        GameTooltip:AddLine(tip, 0.72, 0.78, 0.88, true)
+                    end
+                    GameTooltip:Show()
+                end
+            end)
+            btn:SetScript("OnLeave", function(self)
+                if GameTooltip then GameTooltip:Hide() end
+                local isActive = (G().hpPowerTextSelectedKey or "shared") == bk
+                if self._msufApplyState then self:_msufApplyState(isActive) end
+            end)
+            btn:_msufApplyState(k == "shared")
+            scopeBtns[bk] = btn
+            prevBtn = btn
+        end
+    end
+
+    -- Override checkbox (row 2 of scope bar)
+    hpPowerOverrideCheck = CreateFrame("CheckButton", "MSUF_HPTextOverrideCheck", scopeBar, "UICheckButtonTemplate")
+    hpPowerOverrideCheck:SetPoint("TOPLEFT", scopeBar, "TOPLEFT", 10, -36)
+    hpPowerOverrideCheck.text = _G["MSUF_HPTextOverrideCheckText"]
+    if hpPowerOverrideCheck.text then hpPowerOverrideCheck.text:SetText(TR("Override shared settings")) end
+    UI.StyleToggleText(hpPowerOverrideCheck); UI.StyleCheckmark(hpPowerOverrideCheck)
+    UI.AttachTooltip(hpPowerOverrideCheck, "Per-unit override", "When unchecked, this unit inherits Shared settings.")
+
+    -- Override summary (shown when Shared selected)
+    local scopeOverrideInfo = scopeBar:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    scopeOverrideInfo:SetPoint("BOTTOMLEFT", scopeBar, "BOTTOMLEFT", 10, 8)
+    scopeOverrideInfo:SetJustifyH("LEFT"); scopeOverrideInfo:SetWordWrap(false)
+
+    -- Reset overrides button
+    local scopeResetBtn = CreateFrame("Button", "MSUF_HPTextResetOverridesBtn", scopeBar, "UIPanelButtonTemplate")
+    scopeResetBtn:SetSize(72, 18); scopeResetBtn:SetPoint("TOPRIGHT", scopeBar, "TOPRIGHT", -8, -36)
+    scopeResetBtn:SetText(TR("Reset")); scopeResetBtn:SetNormalFontObject("GameFontNormalSmall")
+
+    -- =====================================================================
+    -- Scope helper functions
+    -- =====================================================================
+    _MSUF_HPText_NormalizeScopeKey = function(v) if v == nil or v == "" or v == "shared" then return "shared" end; return v end
+    _MSUF_HPText_GetScopeKey = function() return _MSUF_HPText_NormalizeScopeKey(G().hpPowerTextSelectedKey) end
+    _MSUF_HPText_GetUnitKey = function()
+        local k = _MSUF_HPText_GetScopeKey(); if k == "shared" then return nil end; return k
+    end
+    _MSUF_HPText_GetUnitDB = function(unitKey) EnsureDB(); MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}; return MSUF_DB[unitKey] end
+    _MSUF_HPText_EnableOverride = function(unitKey)
+        local u = _MSUF_HPText_GetUnitDB(unitKey); if not u then return end
+        u.hpPowerTextOverride = true
+        local g = G()
+        if u.hpTextMode == nil then u.hpTextMode = g.hpTextMode end
+        if u.powerTextMode == nil then u.powerTextMode = g.powerTextMode end
+        if u.hpTextSeparator == nil then u.hpTextSeparator = g.hpTextSeparator end
+        if u.powerTextSeparator == nil then u.powerTextSeparator = g.powerTextSeparator end
+        if u.absorbTextMode == nil then u.absorbTextMode = g.absorbTextMode end
+        if u.absorbAnchorMode == nil then u.absorbAnchorMode = g.absorbAnchorMode end
+        if u.hpTextSpacerEnabled == nil then u.hpTextSpacerEnabled = g.hpTextSpacerEnabled end
+        if u.hpTextSpacerX == nil then u.hpTextSpacerX = g.hpTextSpacerX end
+        if u.powerTextSpacerEnabled == nil then u.powerTextSpacerEnabled = g.powerTextSpacerEnabled end
+        if u.powerTextSpacerX == nil then u.powerTextSpacerX = g.powerTextSpacerX end
+        if u.hpTextAnchor == nil then u.hpTextAnchor = g.hpTextAnchor end
+        if u.powerTextAnchor == nil then u.powerTextAnchor = g.powerTextAnchor end
+    end
+
+    _Scope_GetUnitKey = _MSUF_HPText_GetUnitKey
+    _Scope_GetUnitDB = _MSUF_HPText_GetUnitDB
+    _Scope_EnableOverride = _MSUF_HPText_EnableOverride
+
+    -- Override checkbox handler
+    hpPowerOverrideCheck:SetScript("OnClick", function(self)
+        local uk = _MSUF_HPText_GetUnitKey(); if not uk then self:SetChecked(false); return end
+        local u = _MSUF_HPText_GetUnitDB(uk); if not u then self:SetChecked(false); return end
+        if self:GetChecked() then _MSUF_HPText_EnableOverride(uk) else u.hpPowerTextOverride = false end
+        Apply(); ForceTextLayout(uk)
+        if _G.MSUF_UnitFrames then
+            if type(_G.MSUF_InvalidateAbsorbCache) == "function" then _G.MSUF_InvalidateAbsorbCache() end
+            for _, f in pairs(_G.MSUF_UnitFrames) do
+                if f and f.unit then
+                    f._msufAbsorbAnchorModeStamp = nil; f._msufAbsorbFollowActive = nil
+                    if type(_G.MSUF_ApplyAbsorbAnchorMode) == "function" then _G.MSUF_ApplyAbsorbAnchorMode(f) end
+                    if _G.UpdateSimpleUnitFrame then _G.UpdateSimpleUnitFrame(f) end
+                end
+            end
+        end
+        _MSUF_SyncHpPowerTextScopeUI()
+    end)
+
+    -- Reset overrides handler
+    scopeResetBtn:SetScript("OnClick", function()
+        EnsureDB(); local any = false
+        for _, uk in ipairs(ALL_UNITS) do local u = MSUF_DB[uk]; if u and u.hpPowerTextOverride then u.hpPowerTextOverride = false; any = true end end
+        if any then Apply(); for _, uk in ipairs(ALL_UNITS) do ForceTextLayout(uk) end; RefreshFrames() end
+        _MSUF_SyncHpPowerTextScopeUI()
+    end)
+    scopeResetBtn:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_NONE"); GameTooltip:ClearAllPoints()
+        GameTooltip:SetPoint("TOPLEFT", self, "TOPRIGHT", 12, 0)
+        GameTooltip:SetText(TR("Reset overrides"), 1, 1, 1)
+        GameTooltip:AddLine(TR("Turns off per-unit overrides for all units and reverts to Shared."), 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    scopeResetBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
+    -- =====================================================================
+    -- BOX 1: Textures & Gradient (default open)
+    -- =====================================================================
+    local box1, box1Body = MakeCollapsibleBox(barGroup, scopeBar, 200, "Textures & Gradient", true)
+
+    -- Left col: Bar textures
+    local texColLabel = MakeSectionLabel(box1Body, box1Body, "Bar textures (SharedMedia)", -6)
+    texColLabel:SetPoint("TOPLEFT", box1Body, "TOPLEFT", 14, -6)
+
+    local function ApplyBarTex()
+        if type(_G.MSUF_UpdateAllBarTextures_Immediate) == "function" then _G.MSUF_UpdateAllBarTextures_Immediate()
+        elseif type(_G.MSUF_UpdateAllBarTextures) == "function" then _G.MSUF_UpdateAllBarTextures()
+        else Apply() end
+    end
+    _G.MSUF_TryApplyBarTextureLive = ApplyBarTex
+
+    local barTextureDrop = UI.Dropdown({
+        name = "MSUF_BarTextureDropdown", parent = box1Body,
+        anchor = texColLabel, x = -14, y = -4, width = 280, maxVisible = 12,
+        iconWidth = 80, iconHeight = 12,
+        items = function() return UI.StatusBarTextureItems(nil) end,
+        get = function() return G().barTexture or "Blizzard" end,
+        set = function(v) G().barTexture = v; ApplyBarTex() end,
+    })
+
+    local barBgTexLabel = box1Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    barBgTexLabel:SetPoint("TOPLEFT", barTextureDrop, "BOTTOMLEFT", 14, -6)
+    barBgTexLabel:SetText(TR("Background texture")); barBgTexLabel:SetTextColor(0.75, 0.75, 0.75)
+
+    local barBgTextureDrop = UI.Dropdown({
+        name = "MSUF_BarBackgroundTextureDropdown", parent = box1Body,
+        anchor = barBgTexLabel, x = -14, y = -4, width = 280, maxVisible = 12,
+        iconWidth = 80, iconHeight = 12,
+        items = function() return UI.StatusBarTextureItems(TR("Use foreground texture")) end,
+        get = function() return G().barBackgroundTexture or "" end,
+        set = function(v) G().barBackgroundTexture = v; ApplyBarTex() end,
+    })
+
+    -- Right col: Gradient
+    local gradColLabel = box1Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    gradColLabel:SetPoint("TOPLEFT", box1Body, "TOPLEFT", 340, -6)
+    gradColLabel:SetText(TR("Gradient")); gradColLabel:SetTextColor(0.7, 0.75, 0.82, 0.6)
+
+    local gradientCheck = CreateLabeledCheckButton("MSUF_GradientEnableCheck", "HP bar gradient", box1Body, 16, -260)
+    gradientCheck:ClearAllPoints(); gradientCheck:SetPoint("TOPLEFT", gradColLabel, "BOTTOMLEFT", 0, -8)
+
+    local powerGradientCheck = CreateLabeledCheckButton("MSUF_PowerGradientEnableCheck", "Power bar gradient", box1Body, 16, -282)
+    powerGradientCheck:ClearAllPoints(); powerGradientCheck:SetPoint("TOPLEFT", gradientCheck, "BOTTOMLEFT", 0, -8)
+
+    local gradientStrengthSlider = CreateLabeledSlider("MSUF_GradientStrengthSlider", "Gradient strength", box1Body, 0, 1, 0.05, 16, -304)
+    gradientStrengthSlider:ClearAllPoints(); gradientStrengthSlider:SetPoint("TOPLEFT", powerGradientCheck, "BOTTOMLEFT", 0, -18)
+    if gradientStrengthSlider.SetWidth then gradientStrengthSlider:SetWidth(200) end
+
+    local gradientDirPad = MSUF_CreateGradientDirectionPad and MSUF_CreateGradientDirectionPad(box1Body) or nil
+    if gradientDirPad then
+        if gradientDirPad.SetParent then gradientDirPad:SetParent(box1Body) end
+        gradientDirPad:ClearAllPoints(); gradientDirPad:SetPoint("TOPLEFT", gradientCheck, "TOPLEFT", 218, -3); gradientDirPad:Show()
+    end
+
+    -- SharedMedia compat exports
+    _G.MSUF_InitStatusbarTextureDropdown = _G.MSUF_InitStatusbarTextureDropdown or function() end
+    _G.MSUF_SyncStatusbarTextureDropdown = _G.MSUF_SyncStatusbarTextureDropdown or function() end
+    if not _G.MSUF_ResolveStatusbarTextureKey then
+        _G.MSUF_ResolveStatusbarTextureKey = function(key)
+            if type(key) ~= "string" or key == "" then return nil end
+            local LSM = (ns and ns.LSM) or _G.MSUF_LSM
+            if LSM and type(LSM.Fetch) == "function" then
+                local ok, tex = pcall(LSM.Fetch, LSM, "statusbar", key, true)
+                if ok and type(tex) == "string" and tex ~= "" then return tex end
+            end
+            return nil
+        end
+    end
+
+    -- =====================================================================
+    -- BOX 2: Absorb Display (default open)
+    -- =====================================================================
+    local box2, box2Body = MakeCollapsibleBox(barGroup, box1, 210, "Absorb Display", true)
 
     local function ApplyAbsorb(mode)
         if type(_G.MSUF_UpdateAbsorbTextMode) == "function" then _G.MSUF_UpdateAbsorbTextMode(mode) end
         RefreshFrames()
     end
     local function ApplyAbsorbAnchor()
-        -- Invalidate resolver cache so _MSUF_ResolveAbsorbAnchor reads the new DB value.
         if type(_G.MSUF_InvalidateAbsorbCache) == "function" then _G.MSUF_InvalidateAbsorbCache() end
         if _G.MSUF_UnitFrames and type(_G.MSUF_ApplyAbsorbAnchorMode) == "function" then
             for _, f in pairs(_G.MSUF_UnitFrames) do
                 if f and f.unit then
-                    -- Clear stamp to force fresh layout pass (prevents diff-gate skip).
-                    f._msufAbsorbAnchorModeStamp = nil
-                    f._msufAbsorbFollowActive = nil
+                    f._msufAbsorbAnchorModeStamp = nil; f._msufAbsorbFollowActive = nil
                     _G.MSUF_ApplyAbsorbAnchorMode(f)
                     if _G.UpdateSimpleUnitFrame then _G.UpdateSimpleUnitFrame(f) end
                 end
@@ -174,9 +442,14 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if _G.MSUF_AbsorbTextureTestMode then RefreshFrames() end
     end
 
+    -- Left col: mode + anchor + test
+    local absorbModeLabel = box2Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    absorbModeLabel:SetPoint("TOPLEFT", box2Body, "TOPLEFT", 14, -6)
+    absorbModeLabel:SetText(TR("Display mode")); absorbModeLabel:SetTextColor(0.75, 0.75, 0.75)
+
     local absorbDisplayDrop = UI.Dropdown({
-        name = "MSUF_AbsorbDisplayDrop", parent = barGroup,
-        anchor = absorbLine, x = 0, y = -6, width = BAR_DD_W,
+        name = "MSUF_AbsorbDisplayDrop", parent = box2Body,
+        anchor = absorbModeLabel, x = -14, y = -4, width = 280,
         items = {
             { key = 1, label = "Absorb off" }, { key = 2, label = "Absorb bar" },
             { key = 3, label = "Absorb bar + text" }, { key = 4, label = "Absorb text only" },
@@ -192,13 +465,13 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         set = function(v) ScopeSet("absorbTextMode", v, ApplyAbsorb) end,
     })
 
-    local absorbAnchorLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    absorbAnchorLabel:SetPoint("TOPLEFT", absorbDisplayDrop, "BOTTOMLEFT", 16, -10)
-    absorbAnchorLabel:SetText(TR("Absorb bar anchoring"))
+    local absorbAnchorLabel = box2Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    absorbAnchorLabel:SetPoint("TOPLEFT", absorbDisplayDrop, "BOTTOMLEFT", 14, -8)
+    absorbAnchorLabel:SetText(TR("Absorb bar anchoring")); absorbAnchorLabel:SetTextColor(0.75, 0.75, 0.75)
 
     local absorbAnchorDrop = UI.Dropdown({
-        name = "MSUF_AbsorbAnchorDrop", parent = barGroup,
-        anchor = absorbAnchorLabel, x = -16, y = -4, width = BAR_DD_W,
+        name = "MSUF_AbsorbAnchorDrop", parent = box2Body,
+        anchor = absorbAnchorLabel, x = -14, y = -4, width = 280,
         items = {
             { key = 1, label = "Anchor to left side" }, { key = 2, label = "Anchor to right side" },
             { key = 3, label = "Follow HP bar" }, { key = 4, label = "Follow HP bar (overflow)" },
@@ -208,36 +481,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         set = function(v) ScopeSet("absorbAnchorMode", v, ApplyAbsorbAnchor) end,
     })
 
-    -- Absorb texture labels + dropdowns
-    local absorbTextureLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    absorbTextureLabel:SetPoint("TOPLEFT", absorbAnchorDrop, "BOTTOMLEFT", 16, -12)
-    absorbTextureLabel:SetText(TR("Absorb bar texture (SharedMedia)"))
-
-    local absorbBarTextureDrop = UI.Dropdown({
-        name = "MSUF_AbsorbBarTextureDropdown", parent = barGroup,
-        anchor = absorbTextureLabel, x = -16, y = -4, width = BAR_DD_W, maxVisible = 12,
-        iconWidth = 80, iconHeight = 12,
-        items = function() return UI.StatusBarTextureItems(TR("Use foreground texture")) end,
-        get = function() return G().absorbBarTexture or "" end,
-        set = function(v) G().absorbBarTexture = v; ApplyAbsorbTex(); Apply() end,
-    })
-
-    local healAbsorbLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    healAbsorbLabel:SetPoint("TOPLEFT", absorbBarTextureDrop, "BOTTOMLEFT", 16, -6)
-    healAbsorbLabel:SetText(TR("Heal-absorb texture")); healAbsorbLabel:SetTextColor(0.75, 0.75, 0.75)
-
-    local healAbsorbTextureDrop = UI.Dropdown({
-        name = "MSUF_HealAbsorbBarTextureDropdown", parent = barGroup,
-        anchor = healAbsorbLabel, x = -16, y = -4, width = BAR_DD_W, maxVisible = 12,
-        iconWidth = 80, iconHeight = 12,
-        items = function() return UI.StatusBarTextureItems(TR("Use foreground texture")) end,
-        get = function() return G().healAbsorbBarTexture or "" end,
-        set = function(v) G().healAbsorbBarTexture = v; ApplyAbsorbTex(); Apply() end,
-    })
-
-    -- Absorb test mode checkbox
-    local absorbTexTestCB = CreateLabeledCheckButton("MSUF_AbsorbTextureTestModeCheck", "Test absorb textures", barGroup, 16, -1)
-    absorbTexTestCB:ClearAllPoints(); absorbTexTestCB:SetPoint("TOPLEFT", healAbsorbTextureDrop, "BOTTOMLEFT", 16, -8)
+    local absorbTexTestCB = CreateLabeledCheckButton("MSUF_AbsorbTextureTestModeCheck", "Test absorb textures", box2Body, 16, -1)
+    absorbTexTestCB:ClearAllPoints(); absorbTexTestCB:SetPoint("TOPLEFT", absorbAnchorDrop, "BOTTOMLEFT", 14, -8)
     absorbTexTestCB:SetScript("OnShow", function(self) self:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false) end)
     absorbTexTestCB:SetScript("OnClick", function(self)
         _G.MSUF_AbsorbTextureTestMode = self:GetChecked() and true or false; RefreshFrames()
@@ -247,11 +492,37 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if _G.MSUF_AbsorbTextureTestMode then _G.MSUF_AbsorbTextureTestMode = false; self:SetChecked(false); RefreshFrames() end
     end)
 
-    -- Self-heal prediction checkbox (same row as test)
-    local selfHealPredCB = CreateLabeledCheckButton("MSUF_SelfHealPredictionCheck", "Heal prediction", barGroup, 16, -1)
-    selfHealPredCB:ClearAllPoints(); selfHealPredCB:SetPoint("TOPLEFT", healAbsorbTextureDrop, "BOTTOMLEFT", 200, -8)
+    local selfHealPredCB = CreateLabeledCheckButton("MSUF_SelfHealPredictionCheck", "Heal prediction", box2Body, 16, -1)
+    selfHealPredCB:ClearAllPoints(); selfHealPredCB:SetPoint("LEFT", absorbTexTestCB, "RIGHT", 140, 0)
     selfHealPredCB:SetScript("OnShow", function(self) EnsureDB(); self:SetChecked(G().showSelfHealPrediction and true or false) end)
     selfHealPredCB:SetScript("OnClick", function(self) G().showSelfHealPrediction = self:GetChecked() and true or false; RefreshFrames() end)
+
+    -- Right col: absorb textures (aligned with left col)
+    local absorbTextureLabel = box2Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    absorbTextureLabel:SetPoint("TOPLEFT", box2Body, "TOPLEFT", 340, -6)
+    absorbTextureLabel:SetText(TR("Absorb bar texture (SharedMedia)")); absorbTextureLabel:SetTextColor(0.75, 0.75, 0.75)
+
+    local absorbBarTextureDrop = UI.Dropdown({
+        name = "MSUF_AbsorbBarTextureDropdown", parent = box2Body,
+        anchor = absorbTextureLabel, x = -14, y = -4, width = 280, maxVisible = 12,
+        iconWidth = 80, iconHeight = 12,
+        items = function() return UI.StatusBarTextureItems(TR("Use foreground texture")) end,
+        get = function() return G().absorbBarTexture or "" end,
+        set = function(v) G().absorbBarTexture = v; ApplyAbsorbTex(); Apply() end,
+    })
+
+    local healAbsorbLabel = box2Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    healAbsorbLabel:SetPoint("TOPLEFT", absorbBarTextureDrop, "BOTTOMLEFT", 14, -8)
+    healAbsorbLabel:SetText(TR("Heal-absorb texture")); healAbsorbLabel:SetTextColor(0.75, 0.75, 0.75)
+
+    local healAbsorbTextureDrop = UI.Dropdown({
+        name = "MSUF_HealAbsorbBarTextureDropdown", parent = box2Body,
+        anchor = healAbsorbLabel, x = -14, y = -4, width = 280, maxVisible = 12,
+        iconWidth = 80, iconHeight = 12,
+        items = function() return UI.StatusBarTextureItems(TR("Use foreground texture")) end,
+        get = function() return G().healAbsorbBarTexture or "" end,
+        set = function(v) G().healAbsorbBarTexture = v; ApplyAbsorbTex(); Apply() end,
+    })
 
     -- Absorb bar UI enable/disable based on display mode
     local MSUF_RefreshAbsorbBarUIEnabled
@@ -271,137 +542,38 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     MSUF_RefreshAbsorbBarUIEnabled()
 
     -- =====================================================================
-    -- LEFT PANEL: Bar Textures (SharedMedia)
+    -- BOX 3: Outline & Highlight Border (default open)
     -- =====================================================================
-    local texHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    texHeader:SetPoint("TOPLEFT", absorbTexTestCB, "BOTTOMLEFT", 16, -18); texHeader:SetText(TR("Bar texture (SharedMedia)"))
-    _G.MSUF_BarsMenuTexturesHeader = texHeader
-    local texLine = MakeSectionLine(leftPanel, texHeader, -4)
+    local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 350, "Outline & Highlight Border", true)
 
-    local function ApplyBarTex()
-        if type(_G.MSUF_UpdateAllBarTextures_Immediate) == "function" then _G.MSUF_UpdateAllBarTextures_Immediate()
-        elseif type(_G.MSUF_UpdateAllBarTextures) == "function" then _G.MSUF_UpdateAllBarTextures()
-        else Apply() end
-    end
-    _G.MSUF_TryApplyBarTextureLive = ApplyBarTex
-
-    local barTextureDrop = UI.Dropdown({
-        name = "MSUF_BarTextureDropdown", parent = barGroup,
-        anchor = texLine, x = 0, y = -6, width = BAR_DD_W, maxVisible = 12,
-        iconWidth = 80, iconHeight = 12,
-        items = function() return UI.StatusBarTextureItems(nil) end,
-        get = function() return G().barTexture or "Blizzard" end,
-        set = function(v) G().barTexture = v; ApplyBarTex() end,
-    })
-
-    local barBgTexLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    barBgTexLabel:SetPoint("TOPLEFT", barTextureDrop, "BOTTOMLEFT", 16, -8)
-    barBgTexLabel:SetText(TR("Background texture")); barBgTexLabel:SetTextColor(0.75, 0.75, 0.75)
-
-    local barBgTextureDrop = UI.Dropdown({
-        name = "MSUF_BarBackgroundTextureDropdown", parent = barGroup,
-        anchor = barBgTexLabel, x = -16, y = -4, width = BAR_DD_W, maxVisible = 12,
-        iconWidth = 80, iconHeight = 12,
-        items = function() return UI.StatusBarTextureItems(TR("Use foreground texture")) end,
-        get = function() return G().barBackgroundTexture or "" end,
-        set = function(v) G().barBackgroundTexture = v; ApplyBarTex() end,
-    })
-
-    -- Expose texture dropdown init for ClassPower (backward compat)
-    _G.MSUF_InitStatusbarTextureDropdown = _G.MSUF_InitStatusbarTextureDropdown or function() end
-    _G.MSUF_SyncStatusbarTextureDropdown = _G.MSUF_SyncStatusbarTextureDropdown or function() end
-    if not _G.MSUF_ResolveStatusbarTextureKey then
-        _G.MSUF_ResolveStatusbarTextureKey = function(key)
-            if type(key) ~= "string" or key == "" then return nil end
-            local LSM = (ns and ns.LSM) or _G.MSUF_LSM
-            if LSM and type(LSM.Fetch) == "function" then
-                local ok, tex = pcall(LSM.Fetch, LSM, "statusbar", key, true)
-                if ok and type(tex) == "string" and tex ~= "" then return tex end
-            end
-            return nil
-        end
-    end
-
-    -- =====================================================================
-    -- LEFT PANEL: Gradient Options (layout matches original Core exactly)
-    -- =====================================================================
-    local gradHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    gradHeader:SetPoint("TOPLEFT", barBgTextureDrop, "BOTTOMLEFT", 16, -32); gradHeader:SetText(TR("Gradient Options"))
-    _G.MSUF_BarsMenuGradientHeader = gradHeader
-    local gradLine = leftPanel:CreateTexture(nil, "ARTWORK"); gradLine:SetColorTexture(1, 1, 1, 0.20); gradLine:SetHeight(1)
-    gradLine:SetPoint("TOPLEFT", gradHeader, "BOTTOMLEFT", -16, -4); gradLine:SetWidth(296)
-    leftPanel.MSUF_SectionLine_Gradient = gradLine
-
-    local gradientCheck = CreateLabeledCheckButton("MSUF_GradientEnableCheck", "Enable HP bar gradient", barGroup, 16, -260)
-    gradientCheck:ClearAllPoints(); gradientCheck:SetPoint("TOPLEFT", gradLine, "BOTTOMLEFT", 16, -18)
-
-    local powerGradientCheck = CreateLabeledCheckButton("MSUF_PowerGradientEnableCheck", "Enable power bar gradient", barGroup, 16, -282)
-    powerGradientCheck:ClearAllPoints(); powerGradientCheck:SetPoint("TOPLEFT", gradientCheck, "BOTTOMLEFT", 0, -8)
-
-    local gradientStrengthSlider = CreateLabeledSlider("MSUF_GradientStrengthSlider", "Gradient strength", barGroup, 0, 1, 0.05, 16, -304)
-    gradientStrengthSlider:ClearAllPoints(); gradientStrengthSlider:SetPoint("TOPLEFT", powerGradientCheck, "BOTTOMLEFT", 0, -18)
-    if gradientStrengthSlider.SetWidth then gradientStrengthSlider:SetWidth(260) end
-
-    local gradientDirPad = MSUF_CreateGradientDirectionPad and MSUF_CreateGradientDirectionPad(barGroup) or nil
-    if gradientDirPad then
-        gradientDirPad:ClearAllPoints(); gradientDirPad:SetPoint("TOPLEFT", gradientCheck, "TOPLEFT", 196, -3); gradientDirPad:Show()
-    end
-
-    -- =====================================================================
-    -- LEFT PANEL: Outline Thickness (layout matches original Core exactly)
-    -- =====================================================================
-    local outlineHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    leftPanel.MSUF_SectionHeader_Outline = outlineHeader
-    outlineHeader:SetText(TR("Outline thickness"))
-    if gradientDirPad then
-        outlineHeader:SetPoint("TOPLEFT", gradientDirPad, "BOTTOMLEFT", -196, -84)
-    else
-        outlineHeader:SetPoint("TOPLEFT", gradientCheck, "BOTTOMLEFT", 0, -84)
-    end
-    local outlineLine = leftPanel:CreateTexture(nil, "ARTWORK"); outlineLine:SetColorTexture(1, 1, 1, 0.20); outlineLine:SetHeight(1)
-    outlineLine:SetPoint("TOPLEFT", outlineHeader, "BOTTOMLEFT", -16, -4); outlineLine:SetWidth(296)
-    leftPanel.MSUF_SectionLine_Outline = outlineLine
-
-    local barOutlineThicknessSlider = CreateLabeledSlider("MSUF_BarOutlineThicknessSlider", "Outline thickness", barGroup, 0, 6, 1, 16, -350)
-    barOutlineThicknessSlider:ClearAllPoints(); barOutlineThicknessSlider:SetPoint("TOPLEFT", outlineLine, "BOTTOMLEFT", 16, -14); barOutlineThicknessSlider:SetWidth(280)
+    -- Left col: thickness sliders
+    local barOutlineThicknessSlider = CreateLabeledSlider("MSUF_BarOutlineThicknessSlider", "Outline thickness", box3Body, 0, 6, 1, 16, -350)
+    barOutlineThicknessSlider:ClearAllPoints(); barOutlineThicknessSlider:SetPoint("TOPLEFT", box3Body, "TOPLEFT", 14, -10)
+    barOutlineThicknessSlider:SetWidth(280)
     do local n = barOutlineThicknessSlider:GetName(); local t = _G[n .. "Text"]; if t then t:SetText(""); t:Hide() end end
     barOutlineThicknessSlider.onValueChanged = function(_, v)
         B().barOutlineThickness = v
         if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
     end
 
-    local highlightBorderThicknessSlider = CreateLabeledSlider("MSUF_HighlightBorderThicknessSlider", "Highlight border thickness", barGroup, 1, 6, 1, 16, -420)
+    local highlightBorderThicknessSlider = CreateLabeledSlider("MSUF_HighlightBorderThicknessSlider", "Highlight border thickness", box3Body, 1, 6, 1, 16, -420)
+    highlightBorderThicknessSlider:ClearAllPoints(); highlightBorderThicknessSlider:SetPoint("TOPLEFT", barOutlineThicknessSlider, "BOTTOMLEFT", 0, -60)
+    highlightBorderThicknessSlider:SetWidth(280)
     highlightBorderThicknessSlider.onValueChanged = function(_, v)
         G().highlightBorderThickness = v
         if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
     end
 
-    -- =====================================================================
-    -- LEFT PANEL: Highlight Border (layout matches original Core exactly)
-    -- =====================================================================
-    local highlightHeader = leftPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    leftPanel.MSUF_SectionHeader_Highlight = highlightHeader
-    highlightHeader:SetText(TR("Bar Highlight Border"))
-    highlightHeader:SetPoint("TOPLEFT", barOutlineThicknessSlider, "BOTTOMLEFT", 0, -62)
-    _G.MSUF_BarsMenuHighlightHeader = highlightHeader
-    local highlightLine = leftPanel:CreateTexture(nil, "ARTWORK"); highlightLine:SetColorTexture(1, 1, 1, 0.20); highlightLine:SetHeight(1)
-    highlightLine:SetPoint("TOPLEFT", highlightHeader, "BOTTOMLEFT", -16, -4); highlightLine:SetWidth(296)
-    leftPanel.MSUF_SectionLine_Highlight = highlightLine
-
-    highlightBorderThicknessSlider:ClearAllPoints()
-    highlightBorderThicknessSlider:SetPoint("TOPLEFT", highlightLine, "BOTTOMLEFT", 16, -18)
-    highlightBorderThicknessSlider:SetWidth(280)
-
-    -- Aggro/Dispel/Purge: layout matches original Core pixel-for-pixel
+    -- Right col: highlight borders + priority
     local function MakeOutlineRow(name, dbKey, labelOn, labelOff, anchor, oX, oY, w, applyFn)
         local dd = UI.Dropdown({
-            name = name, parent = barGroup,
+            name = name, parent = box3Body,
             anchor = anchor, anchorPoint = "TOPLEFT", x = oX, y = oY, width = w or 170,
             items = { { key = 0, label = TR(labelOff) }, { key = 1, label = TR(labelOn) } },
             get = function() return G()[dbKey] or 0 end,
             set = function(v) G()[dbKey] = v; if type(applyFn) == "function" then applyFn() end end,
         })
-        local cb = CreateFrame("CheckButton", name:gsub("Dropdown$", "") .. "TestCheck", barGroup, "ChatConfigCheckButtonTemplate")
+        local cb = CreateFrame("CheckButton", name:gsub("Dropdown$", "") .. "TestCheck", box3Body, "ChatConfigCheckButtonTemplate")
         cb:SetPoint("LEFT", dd, "RIGHT", 6, 0)
         cb.Text:SetText(TR("Test"))
         cb:HookScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetText(self.tooltipText or "", 1, 1, 1, 1, true); GameTooltip:Show() end)
@@ -426,8 +598,11 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
     end
 
-    -- Original anchoring: aggro → hlSlider(-16,-28), dispel → aggro(0,-12), purge → dispel(0,-12)
-    local aggroOutlineDrop, aggroTestCheck = MakeOutlineRow("MSUF_AggroOutlineDropdown", "aggroOutlineMode", "Aggro border on", "Aggro border off", highlightBorderThicknessSlider, -16, -56, 170, AggroApply)
+    local hlSectionLabel = box3Body:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    hlSectionLabel:SetPoint("TOPLEFT", box3Body, "TOPLEFT", 340, -2)
+    hlSectionLabel:SetText(TR("Highlight borders"))
+
+    local aggroOutlineDrop, aggroTestCheck = MakeOutlineRow("MSUF_AggroOutlineDropdown", "aggroOutlineMode", "Aggro border on", "Aggro border off", hlSectionLabel, -14, -14, 170, AggroApply)
     aggroTestCheck.tooltipText = TR("Aggro border: Target, Focus, Boss frames")
     aggroTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetAggroBorderTestMode) == "function" then _G.MSUF_SetAggroBorderTestMode(self:GetChecked() and true or false) end end)
 
@@ -439,20 +614,18 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     purgeTestCheck.tooltipText = TR("Purge border: Target, Focus, Target of Target")
     purgeTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(self:GetChecked() and true or false) end end)
 
-    -- =====================================================================
-    -- LEFT PANEL: Highlight Priority Drag-and-Drop (preserved 1:1)
-    -- =====================================================================
+    -- Priority drag-and-drop
     local _PRIO_DEFAULTS = { "dispel", "aggro", "purge" }
     local _PRIO_LABELS = { dispel = "Dispel", aggro = "Aggro", purge = "Purge" }
     local _PRIO_ROW_H, _PRIO_ROW_GAP = 22, 4
     local _prioRows = {}
 
-    local prioCheck = CreateFrame("CheckButton", "MSUF_HighlightPrioCheck", barGroup, "ChatConfigCheckButtonTemplate")
-    prioCheck:SetPoint("TOPLEFT", purgeOutlineDrop, "BOTTOMLEFT", 16, -20)
+    local prioCheck = CreateFrame("CheckButton", "MSUF_HighlightPrioCheck", box3Body, "ChatConfigCheckButtonTemplate")
+    prioCheck:SetPoint("TOPLEFT", purgeOutlineDrop, "BOTTOMLEFT", 14, -16)
     prioCheck.Text:SetText(TR("Custom highlight priority"))
     UI.AttachTooltip(prioCheck, TR("Custom highlight priority"), TR("Drag to reorder which highlight border takes priority when multiple are active."))
 
-    local prioContainer = CreateFrame("Frame", "MSUF_HighlightPrioContainer", barGroup)
+    local prioContainer = CreateFrame("Frame", "MSUF_HighlightPrioContainer", box3Body)
     prioContainer:SetSize(200, 78); prioContainer:SetPoint("TOPLEFT", prioCheck, "BOTTOMLEFT", -2, -4)
 
     local function _Prio_GetOrder()
@@ -524,148 +697,65 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     do local g = G(); prioCheck:SetChecked(g.highlightPrioEnabled == 1); _Prio_SetEnabled(g.highlightPrioEnabled == 1) end
 
     -- =====================================================================
-    -- RIGHT PANEL: Power Bar Settings
+    -- BOX 4: Power Bar Settings (default open)
     -- =====================================================================
-    local targetPowerBarCheck = CreateLabeledCheckButton("MSUF_TargetPowerBarCheck", "Show power bar on target frame", barGroup, 260, -260)
-    targetPowerBarCheck:ClearAllPoints(); targetPowerBarCheck:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 16, -50)
-    local bossPowerBarCheck = CreateLabeledCheckButton("MSUF_BossPowerBarCheck", "Show power bar on boss frames", barGroup, 260, -290)
-    bossPowerBarCheck:ClearAllPoints(); bossPowerBarCheck:SetPoint("TOPLEFT", targetPowerBarCheck, "BOTTOMLEFT", 0, -10)
-    local playerPowerBarCheck = CreateLabeledCheckButton("MSUF_PlayerPowerBarCheck", "Show power bar on player frames", barGroup, 260, -320)
-    playerPowerBarCheck:ClearAllPoints(); playerPowerBarCheck:SetPoint("TOPLEFT", bossPowerBarCheck, "BOTTOMLEFT", 0, -10)
-    local focusPowerBarCheck = CreateLabeledCheckButton("MSUF_FocusPowerBarCheck", "Show power bar on focus", barGroup, 260, -350)
-    focusPowerBarCheck:ClearAllPoints(); focusPowerBarCheck:SetPoint("TOPLEFT", playerPowerBarCheck, "BOTTOMLEFT", 0, -10)
+    local box4, box4Body = MakeCollapsibleBox(barGroup, box3, 230, "Power Bar Settings", true)
 
-    local powerBarHeightLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    powerBarHeightLabel:SetPoint("TOPLEFT", focusPowerBarCheck, "BOTTOMLEFT", 0, -18); powerBarHeightLabel:SetText(TR("Power bar height"))
-    local powerBarHeightEdit = CreateFrame("EditBox", "MSUF_PowerBarHeightEdit", barGroup, "InputBoxTemplate")
-    powerBarHeightEdit:SetSize(40, 20); powerBarHeightEdit:SetAutoFocus(false); powerBarHeightEdit:SetPoint("LEFT", powerBarHeightLabel, "RIGHT", 10, 0)
-    powerBarHeightEdit:SetTextInsets(4, 4, 2, 2)
+    local targetPowerBarCheck = CreateLabeledCheckButton("MSUF_TargetPowerBarCheck", "Target", box4Body, 260, -260)
+    targetPowerBarCheck:ClearAllPoints(); targetPowerBarCheck:SetPoint("TOPLEFT", box4Body, "TOPLEFT", 14, -8)
+    local bossPowerBarCheck = CreateLabeledCheckButton("MSUF_BossPowerBarCheck", "Boss", box4Body, 260, -290)
+    bossPowerBarCheck:ClearAllPoints(); bossPowerBarCheck:SetPoint("LEFT", targetPowerBarCheck, "RIGHT", 80, 0)
+    local playerPowerBarCheck = CreateLabeledCheckButton("MSUF_PlayerPowerBarCheck", "Player", box4Body, 260, -320)
+    playerPowerBarCheck:ClearAllPoints(); playerPowerBarCheck:SetPoint("LEFT", bossPowerBarCheck, "RIGHT", 80, 0)
+    local focusPowerBarCheck = CreateLabeledCheckButton("MSUF_FocusPowerBarCheck", "Focus", box4Body, 260, -350)
+    focusPowerBarCheck:ClearAllPoints(); focusPowerBarCheck:SetPoint("LEFT", playerPowerBarCheck, "RIGHT", 80, 0)
 
-    local powerBarEmbedCheck = CreateLabeledCheckButton("MSUF_PowerBarEmbedCheck", "Embed power bar into health bar", barGroup, 260, -380)
-    powerBarEmbedCheck:ClearAllPoints(); powerBarEmbedCheck:SetPoint("TOPLEFT", powerBarHeightLabel, "BOTTOMLEFT", 0, -10)
-    local powerBarBorderCheck = CreateLabeledCheckButton("MSUF_PowerBarBorderCheck", "Show power bar border", barGroup, 260, -410)
-    powerBarBorderCheck:ClearAllPoints(); powerBarBorderCheck:SetPoint("TOPLEFT", powerBarEmbedCheck, "BOTTOMLEFT", 0, -10)
+    local pbSep = box4Body:CreateTexture(nil, "ARTWORK"); pbSep:SetColorTexture(1, 1, 1, 0.06); pbSep:SetHeight(1)
+    pbSep:SetPoint("TOPLEFT", box4Body, "TOPLEFT", 14, -38); pbSep:SetWidth(BOX_W - 28)
 
-    local powerBarBorderSizeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    powerBarBorderSizeLabel:SetPoint("TOPLEFT", powerBarBorderCheck, "BOTTOMLEFT", 0, -10); powerBarBorderSizeLabel:SetText(TR("Border thickness"))
-    local powerBarBorderSizeEdit = CreateFrame("EditBox", "MSUF_PowerBarBorderSizeEdit", barGroup, "InputBoxTemplate")
-    powerBarBorderSizeEdit:SetSize(40, 20); powerBarBorderSizeEdit:SetAutoFocus(false); powerBarBorderSizeEdit:SetPoint("LEFT", powerBarBorderSizeLabel, "RIGHT", 10, 0)
-    powerBarBorderSizeEdit:SetTextInsets(4, 4, 2, 2)
-
-    -- EditBox handlers
-    for _, pair in ipairs({ { powerBarHeightEdit, MSUF_UpdatePowerBarHeightFromEdit }, { powerBarBorderSizeEdit, MSUF_UpdatePowerBarBorderSizeFromEdit } }) do
-        local eb, fn = pair[1], pair[2]
-        eb:SetScript("OnEnterPressed", function(self) fn(self); self:ClearFocus() end)
-        eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-        eb:SetScript("OnEditFocusLost", function(self) fn(self) end)
+    local powerBarHeightEdit = CreateLabeledSlider("MSUF_PowerBarHeightEdit", "Power bar height", box4Body, 1, 20, 1, 16, -60)
+    powerBarHeightEdit:ClearAllPoints(); powerBarHeightEdit:SetPoint("TOPLEFT", pbSep, "BOTTOMLEFT", 0, -14)
+    powerBarHeightEdit:SetWidth(260)
+    powerBarHeightEdit.onValueChanged = function(_, v)
+        v = floor(v + 0.5); if v < 1 then v = 1 elseif v > 20 then v = 20 end
+        B().powerBarHeight = v
+        if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_All() end
+        Apply()
     end
 
-    -- =====================================================================
-    -- RIGHT PANEL: HP/Power Scope System
-    -- =====================================================================
-    -- Scope dropdown
-    hpPowerScopeDrop = UI.Dropdown({
-        name = "MSUF_HPTextScopeDropdown", parent = barGroup,
-        anchor = scopeLabel, anchorPoint = "TOPLEFT", x = 115, y = 0, width = 170,
-        items = hpPowerScopeOptions,
-        get = function()
-            EnsureDB(); return G().hpPowerTextSelectedKey or "shared"
-        end,
-        set = function(v)
-            EnsureDB(); local k = v; if k ~= "shared" then G().hpSpacerSelectedUnitKey = k end
-            G().hpPowerTextSelectedKey = k
-            if type(_MSUF_SyncHpPowerTextScopeUI) == "function" then _MSUF_SyncHpPowerTextScopeUI() end
-        end,
-    })
-
-    -- Override checkbox
-    hpPowerOverrideCheck = CreateFrame("CheckButton", "MSUF_HPTextOverrideCheck", barGroup, "UICheckButtonTemplate")
-    hpPowerOverrideCheck:SetPoint("LEFT", hpPowerScopeDrop, "RIGHT", -10, 0)
-    hpPowerOverrideCheck.text = _G["MSUF_HPTextOverrideCheckText"]
-    if hpPowerOverrideCheck.text then hpPowerOverrideCheck.text:SetText(TR("Override shared settings")) end
-    UI.StyleToggleText(hpPowerOverrideCheck); UI.StyleCheckmark(hpPowerOverrideCheck)
-    UI.AttachTooltip(hpPowerOverrideCheck, "Per-unit override", "When unchecked, this unit inherits Shared settings.")
-
-    -- Scope helper functions
-    _MSUF_HPText_NormalizeScopeKey = function(v) if v == nil or v == "" or v == "shared" then return "shared" end; return v end
-    _MSUF_HPText_GetScopeKey = function() return _MSUF_HPText_NormalizeScopeKey(G().hpPowerTextSelectedKey) end
-    _MSUF_HPText_GetUnitKey = function()
-        local k = _MSUF_HPText_GetScopeKey(); if k == "shared" then return nil end; return k
-    end
-    _MSUF_HPText_GetUnitDB = function(unitKey) EnsureDB(); MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}; return MSUF_DB[unitKey] end
-    _MSUF_HPText_EnableOverride = function(unitKey)
-        local u = _MSUF_HPText_GetUnitDB(unitKey); if not u then return end
-        u.hpPowerTextOverride = true
-        local g = G()
-        if u.hpTextMode == nil then u.hpTextMode = g.hpTextMode end
-        if u.powerTextMode == nil then u.powerTextMode = g.powerTextMode end
-        if u.hpTextSeparator == nil then u.hpTextSeparator = g.hpTextSeparator end
-        if u.powerTextSeparator == nil then u.powerTextSeparator = g.powerTextSeparator end
-        if u.absorbTextMode == nil then u.absorbTextMode = g.absorbTextMode end
-        if u.absorbAnchorMode == nil then u.absorbAnchorMode = g.absorbAnchorMode end
-        if u.hpTextSpacerEnabled == nil then u.hpTextSpacerEnabled = g.hpTextSpacerEnabled end
-        if u.hpTextSpacerX == nil then u.hpTextSpacerX = g.hpTextSpacerX end
-        if u.powerTextSpacerEnabled == nil then u.powerTextSpacerEnabled = g.powerTextSpacerEnabled end
-        if u.powerTextSpacerX == nil then u.powerTextSpacerX = g.powerTextSpacerX end
-        if u.hpTextAnchor == nil then u.hpTextAnchor = g.hpTextAnchor end
-        if u.powerTextAnchor == nil then u.powerTextAnchor = g.powerTextAnchor end
+    local powerBarBorderSizeEdit = CreateLabeledSlider("MSUF_PowerBarBorderSizeEdit", "Border thickness", box4Body, 0, 6, 1, 16, -60)
+    powerBarBorderSizeEdit:ClearAllPoints(); powerBarBorderSizeEdit:SetPoint("TOPLEFT", pbSep, "BOTTOMLEFT", 340, -14)
+    powerBarBorderSizeEdit:SetWidth(260)
+    powerBarBorderSizeEdit.onValueChanged = function(_, v)
+        v = floor(v + 0.5); if v < 0 then v = 0 elseif v > 6 then v = 6 end
+        B().powerBarBorderThickness = v
+        if type(_G.MSUF_ApplyPowerBarBorder_All) == "function" then _G.MSUF_ApplyPowerBarBorder_All() else Apply() end
     end
 
-    -- Wire forward-declared scope refs
-    _Scope_GetUnitKey = _MSUF_HPText_GetUnitKey
-    _Scope_GetUnitDB = _MSUF_HPText_GetUnitDB
-    _Scope_EnableOverride = _MSUF_HPText_EnableOverride
+    local powerBarEmbedCheck = CreateLabeledCheckButton("MSUF_PowerBarEmbedCheck", "Embed into health bar", box4Body, 260, -380)
+    powerBarEmbedCheck:ClearAllPoints(); powerBarEmbedCheck:SetPoint("TOPLEFT", powerBarHeightEdit, "BOTTOMLEFT", 0, -20)
 
-    -- Override checkbox handler
-    hpPowerOverrideCheck:SetScript("OnClick", function(self)
-        local uk = _MSUF_HPText_GetUnitKey(); if not uk then self:SetChecked(false); return end
-        local u = _MSUF_HPText_GetUnitDB(uk); if not u then self:SetChecked(false); return end
-        if self:GetChecked() then _MSUF_HPText_EnableOverride(uk) else u.hpPowerTextOverride = false end
-        Apply(); ForceTextLayout(uk)
-        if _G.MSUF_UnitFrames then
-            if type(_G.MSUF_InvalidateAbsorbCache) == "function" then _G.MSUF_InvalidateAbsorbCache() end
-            for _, f in pairs(_G.MSUF_UnitFrames) do
-                if f and f.unit then
-                    f._msufAbsorbAnchorModeStamp = nil
-                    f._msufAbsorbFollowActive = nil
-                    if type(_G.MSUF_ApplyAbsorbAnchorMode) == "function" then _G.MSUF_ApplyAbsorbAnchorMode(f) end
-                    if _G.UpdateSimpleUnitFrame then _G.UpdateSimpleUnitFrame(f) end
-                end
-            end
-        end
-        _MSUF_SyncHpPowerTextScopeUI()
-    end)
+    local powerBarBorderCheck = CreateLabeledCheckButton("MSUF_PowerBarBorderCheck", "Power bar border", box4Body, 260, -410)
+    powerBarBorderCheck:ClearAllPoints(); powerBarBorderCheck:SetPoint("TOPLEFT", powerBarBorderSizeEdit, "BOTTOMLEFT", 0, -20)
 
-    -- Reset overrides button
-    local hpPowerResetBtn = CreateFrame("Button", "MSUF_HPTextResetOverridesBtn", barGroup, "UIPanelButtonTemplate")
-    hpPowerResetBtn:SetSize(140, 22); hpPowerResetBtn:SetPoint("TOPLEFT", hpPowerOverrideCheck, "TOPLEFT", 0, 2)
-    hpPowerResetBtn:SetText(TR("Reset all overrides")); hpPowerResetBtn:SetNormalFontObject("GameFontNormalSmall"); hpPowerResetBtn:Hide()
-    hpPowerResetBtn:SetScript("OnClick", function()
-        EnsureDB(); local any = false
-        for _, uk in ipairs(ALL_UNITS) do local u = MSUF_DB[uk]; if u and u.hpPowerTextOverride then u.hpPowerTextOverride = false; any = true end end
-        if any then Apply(); for _, uk in ipairs(ALL_UNITS) do ForceTextLayout(uk) end; RefreshFrames() end
-        _MSUF_SyncHpPowerTextScopeUI()
-    end)
+    -- Labels kept as refs for scope dimming (hidden, no text needed)
+    local powerBarHeightLabel = box4Body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    powerBarHeightLabel:SetPoint("TOPLEFT", box4Body, "TOPLEFT", 0, 0); powerBarHeightLabel:SetText(""); powerBarHeightLabel:Hide()
+    local powerBarBorderSizeLabel = box4Body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    powerBarBorderSizeLabel:SetPoint("TOPLEFT", box4Body, "TOPLEFT", 0, 0); powerBarBorderSizeLabel:SetText(""); powerBarBorderSizeLabel:Hide()
 
     -- =====================================================================
-    -- RIGHT PANEL: HP / Power Text Modes
+    -- BOX 5: HP / Power Text (default open)
     -- =====================================================================
-    local hpModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    hpModeLabel:SetPoint("TOPLEFT", powerBarBorderSizeLabel, "BOTTOMLEFT", 0, -28)
-    hpModeLabel:SetText(TR("Textmode HP / Power")); hpModeLabel:SetTextColor(1, 1, 1)
-
-    local textModesLine = rightPanel:CreateTexture(nil, "ARTWORK")
-    textModesLine:SetColorTexture(1, 1, 1, 0.20); textModesLine:SetHeight(1)
-    textModesLine:SetPoint("TOPLEFT", hpModeLabel, "BOTTOMLEFT", -16, -4); textModesLine:SetWidth(286)
-    rightPanel.MSUF_SectionLine_TextModes = textModesLine
+    local box5, box5Body = MakeCollapsibleBox(barGroup, box4, 200, "HP / Power Text", true)
 
     local hpModeOptions = {
         { key = "FULL_ONLY", label = "Full value only" }, { key = "FULL_PLUS_PERCENT", label = "Full value + %" },
         { key = "PERCENT_PLUS_FULL", label = "% + Full value" }, { key = "PERCENT_ONLY", label = "Only %" },
     }
     local hpModeDrop = UI.Dropdown({
-        name = "MSUF_HPTextModeDropdown", parent = barGroup,
-        anchor = textModesLine, x = 0, y = -6, width = BAR_DD_W,
+        name = "MSUF_HPTextModeDropdown", parent = box5Body,
+        anchor = box5Body, anchorPoint = "TOPLEFT", x = 0, y = -6, width = 280,
         items = hpModeOptions,
         get = function() return ScopeGet("hpTextMode", "FULL_PLUS_PERCENT") end,
         set = function(v)
@@ -675,9 +765,6 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             end)
         end,
     })
-
-    local powerModeLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    powerModeLabel:SetPoint("TOPLEFT", hpModeLabel, "BOTTOMLEFT", 0, -16); powerModeLabel:SetText(TR("Power text mode"))
 
     local function NormPowerMode(m)
         if type(_G.MSUF_NormalizePowerTextMode) == "function" then return _G.MSUF_NormalizePowerTextMode(m) end
@@ -693,8 +780,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         { key = "CURPERCENT", label = "Cur + Percent" }, { key = "CURMAXPERCENT", label = "Cur/Max + Percent" },
     }
     local powerModeDrop = UI.Dropdown({
-        name = "MSUF_PowerTextModeDropdown", parent = barGroup,
-        anchor = powerModeLabel, x = -16, y = -10, width = BAR_DD_W,
+        name = "MSUF_PowerTextModeDropdown", parent = box5Body,
+        anchor = box5Body, anchorPoint = "TOPLEFT", x = 326, y = -6, width = 280,
         items = powerModeOptions,
         get = function() return NormPowerMode(ScopeGet("powerTextMode", "CURPERCENT")) end,
         set = function(v)
@@ -705,12 +792,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end,
     })
 
-    -- =====================================================================
-    -- RIGHT PANEL: Text Separators
-    -- =====================================================================
-    local sepHeader = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    sepHeader:SetPoint("TOPLEFT", powerModeDrop, "BOTTOMLEFT", 16, -12); sepHeader:SetText(TR("Text Separators"))
-
+    -- Separators
     local textSepOptions = {
         { key = "", label = " " }, { key = "-", label = "-" }, { key = "/", label = "/" },
         { key = "\\", label = "\\" }, { key = "|", label = "|" }, { key = "<", label = "<" },
@@ -719,12 +801,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         { key = ":", label = ":" }, { key = "\194\187", label = "\194\187" }, { key = "\194\171", label = "\194\171" },
     }
 
-    local hpSepLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    hpSepLabel:SetPoint("TOPLEFT", sepHeader, "BOTTOMLEFT", 0, -10); hpSepLabel:SetText(TR("Health (HP)"))
+    local hpSepLabel = box5Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    hpSepLabel:SetPoint("TOPLEFT", hpModeDrop, "BOTTOMLEFT", 14, -10); hpSepLabel:SetText(TR("HP separator"))
 
     local hpSepDrop = UI.Dropdown({
-        name = "MSUF_HPTextSeparatorDropdown", parent = barGroup,
-        anchor = hpSepLabel, x = -16, y = -6, width = 120,
+        name = "MSUF_HPTextSeparatorDropdown", parent = box5Body,
+        anchor = hpSepLabel, x = -14, y = -6, width = 120,
         items = textSepOptions,
         get = function() return ScopeGet("hpTextSeparator", "") end,
         set = function(v)
@@ -735,12 +817,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end,
     })
 
-    local powerSepLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    powerSepLabel:SetPoint("LEFT", hpSepLabel, "RIGHT", 120, 0); powerSepLabel:SetText(TR("Power"))
+    local powerSepLabel = box5Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    powerSepLabel:SetPoint("TOPLEFT", powerModeDrop, "BOTTOMLEFT", 14, -10); powerSepLabel:SetText(TR("Power separator"))
 
     local powerSepDrop = UI.Dropdown({
-        name = "MSUF_PowerTextSeparatorDropdown", parent = barGroup,
-        anchor = powerSepLabel, x = -26, y = -6, width = 120,
+        name = "MSUF_PowerTextSeparatorDropdown", parent = box5Body,
+        anchor = powerSepLabel, x = -14, y = -6, width = 120,
         items = textSepOptions,
         get = function()
             EnsureDB(); local g = G(); local uk = _MSUF_HPText_GetUnitKey()
@@ -762,34 +844,36 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     })
 
     -- =====================================================================
-    -- RIGHT PANEL: HP / Power Spacers
+    -- BOX 6: Text Spacers (collapsible, default closed)
     -- =====================================================================
-    local hpSpacerSelectedLabel = barGroup:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    hpSpacerSelectedLabel:SetPoint("TOPLEFT", hpSepDrop, "BOTTOMLEFT", 16, -8)
+    local box6, box6Body = MakeCollapsibleBox(barGroup, box5, 290, "Text Spacers", false)
+
+    local hpSpacerSelectedLabel = box6Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    hpSpacerSelectedLabel:SetPoint("TOPLEFT", box6Body, "TOPLEFT", 14, -4)
     hpSpacerSelectedLabel:SetTextColor(1, 0.82, 0)
 
-    local hpSpacerInfoButton = CreateFrame("Button", "MSUF_HPSpacerInfoButton", barGroup)
+    local hpSpacerInfoButton = CreateFrame("Button", "MSUF_HPSpacerInfoButton", box6Body)
     hpSpacerInfoButton:SetSize(14, 14); hpSpacerInfoButton:SetPoint("LEFT", hpSpacerSelectedLabel, "RIGHT", 4, 0)
     hpSpacerInfoButton:CreateTexture(nil, "ARTWORK"):SetAllPoints(); hpSpacerInfoButton:GetRegions():SetTexture("Interface\\FriendsFrame\\InformationIcon")
-    UI.AttachTooltip(hpSpacerInfoButton, "Text Spacers", "Use the Bar settings scope dropdown to choose which unit these settings apply to.")
+    UI.AttachTooltip(hpSpacerInfoButton, "Text Spacers", "Use the scope buttons above to choose which unit these settings apply to.")
 
-    local hpSpacerCheck = CreateFrame("CheckButton", "MSUF_HPTextSpacerCheck", barGroup, "UICheckButtonTemplate")
+    local hpSpacerCheck = CreateFrame("CheckButton", "MSUF_HPTextSpacerCheck", box6Body, "UICheckButtonTemplate")
     hpSpacerCheck:SetPoint("TOPLEFT", hpSpacerSelectedLabel, "BOTTOMLEFT", 0, -4)
     hpSpacerCheck.text = _G["MSUF_HPTextSpacerCheckText"]; if hpSpacerCheck.text then hpSpacerCheck.text:SetText(TR("HP Spacer on/off")) end
     UI.StyleToggleText(hpSpacerCheck); UI.StyleCheckmark(hpSpacerCheck)
 
-    local hpSpacerSlider = CreateLabeledSlider("MSUF_HPTextSpacerSlider", "HP Spacer (X)", barGroup, 0, 1000, 1, 16, -200)
+    local hpSpacerSlider = CreateLabeledSlider("MSUF_HPTextSpacerSlider", "HP Spacer (X)", box6Body, 0, 1000, 1, 16, -200)
     hpSpacerSlider:ClearAllPoints(); hpSpacerSlider:SetPoint("TOPLEFT", hpSpacerCheck, "BOTTOMLEFT", 0, -30); hpSpacerSlider:SetWidth(260)
 
-    local powerSpacerHeader = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    local powerSpacerHeader = box6Body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     powerSpacerHeader:SetPoint("TOPLEFT", hpSpacerSlider, "BOTTOMLEFT", 0, -18)
 
-    local powerSpacerCheck = CreateFrame("CheckButton", "MSUF_PowerTextSpacerCheck", barGroup, "UICheckButtonTemplate")
+    local powerSpacerCheck = CreateFrame("CheckButton", "MSUF_PowerTextSpacerCheck", box6Body, "UICheckButtonTemplate")
     powerSpacerCheck:SetPoint("TOPLEFT", powerSpacerHeader, "BOTTOMLEFT", 0, -4)
     powerSpacerCheck.text = _G["MSUF_PowerTextSpacerCheckText"]; if powerSpacerCheck.text then powerSpacerCheck.text:SetText(TR("Power Spacer on/off")) end
     UI.StyleToggleText(powerSpacerCheck); UI.StyleCheckmark(powerSpacerCheck)
 
-    local powerSpacerSlider = CreateLabeledSlider("MSUF_PowerTextSpacerSlider", "Power Spacer (X)", barGroup, 0, 1000, 1, 16, -200)
+    local powerSpacerSlider = CreateLabeledSlider("MSUF_PowerTextSpacerSlider", "Power Spacer (X)", box6Body, 0, 1000, 1, 16, -200)
     powerSpacerSlider:ClearAllPoints(); powerSpacerSlider:SetPoint("TOPLEFT", powerSpacerCheck, "BOTTOMLEFT", 0, -18); powerSpacerSlider:SetWidth(260)
 
     -- Spacer system (scope-aware, dynamic ranges)
@@ -831,7 +915,6 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     local function _SyncSpacerControls()
         EnsureDB(); local g0 = G()
-        -- Seed Shared from Player
         do local p = MSUF_DB.player
             if p then
                 if g0.hpTextSpacerEnabled == nil and p.hpTextSpacerEnabled ~= nil then g0.hpTextSpacerEnabled = p.hpTextSpacerEnabled end
@@ -870,7 +953,6 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
     end
 
-    -- Spacer toggle/slider bindings
     local function _RequestTextLayoutForScope(uk, isShared, reason)
         if isShared then for _, k in ipairs(ALL_UNITS) do LayoutKey(k, reason); ForceTextLayout(k) end; return end
         LayoutKey(uk, reason); ForceTextLayout(uk)
@@ -902,28 +984,23 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     _G.MSUF_Options_RefreshHPSpacerControls = _SyncSpacerControls
 
     -- =====================================================================
-    -- RIGHT PANEL: Bar Animation + Text Accuracy
+    -- BOX 7: Bar Animation + Text Accuracy (collapsible, default closed)
     -- =====================================================================
-    local animHeader = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    animHeader:SetPoint("TOPLEFT", powerSpacerSlider, "BOTTOMLEFT", 0, -38)
-    animHeader:SetText(TR("Bar Animation + Text Accuracy")); animHeader:SetTextColor(1, 0.82, 0)
-    _G.MSUF_SmoothPowerHeader = animHeader
-    local animLine = barGroup:CreateTexture(nil, "ARTWORK"); animLine:SetColorTexture(1, 1, 1, 0.20); animLine:SetHeight(1)
-    animLine:SetPoint("TOPLEFT", animHeader, "BOTTOMLEFT", -16, -4); animLine:SetWidth(286)
+    local box7, box7Body = MakeCollapsibleBox(barGroup, box6, 110, "Bar Animation + Text Accuracy", false)
 
-    local smoothBarCheck = CreateFrame("CheckButton", "MSUF_SmoothPowerBarCheck", barGroup, "UICheckButtonTemplate")
-    smoothBarCheck:SetPoint("TOPLEFT", animLine, "BOTTOMLEFT", 16, -6)
+    local smoothBarCheck = CreateFrame("CheckButton", "MSUF_SmoothPowerBarCheck", box7Body, "UICheckButtonTemplate")
+    smoothBarCheck:SetPoint("TOPLEFT", box7Body, "TOPLEFT", 14, -6)
     smoothBarCheck.text = _G["MSUF_SmoothPowerBarCheckText"]; if smoothBarCheck.text then smoothBarCheck.text:SetText(TR("Smooth power bar")) end
     UI.StyleToggleText(smoothBarCheck); UI.StyleCheckmark(smoothBarCheck)
     do EnsureDB(); local v = B().smoothPowerBar; if v == nil then v = true end; smoothBarCheck:SetChecked(v) end
     smoothBarCheck:SetScript("OnClick", function(self) B().smoothPowerBar = self:GetChecked() and true or false
         if type(_G.MSUF_UFCore_RefreshSettingsCache) == "function" then _G.MSUF_UFCore_RefreshSettingsCache("SMOOTH_POWER") end end)
 
-    local smoothHint = barGroup:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local smoothHint = box7Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     smoothHint:SetPoint("TOPLEFT", smoothBarCheck, "BOTTOMLEFT", 0, -1)
     smoothHint:SetText(TR("C-side interpolation for fluid bar movement")); smoothHint:SetTextColor(0.45, 0.45, 0.45)
 
-    local rtTextCheck = CreateFrame("CheckButton", "MSUF_RealtimePowerTextCheck", barGroup, "UICheckButtonTemplate")
+    local rtTextCheck = CreateFrame("CheckButton", "MSUF_RealtimePowerTextCheck", box7Body, "UICheckButtonTemplate")
     rtTextCheck:SetPoint("TOPLEFT", smoothHint, "BOTTOMLEFT", 0, -6)
     rtTextCheck.text = _G["MSUF_RealtimePowerTextCheckText"]; if rtTextCheck.text then rtTextCheck.text:SetText(TR("Real-time power text")) end
     UI.StyleToggleText(rtTextCheck); UI.StyleCheckmark(rtTextCheck)
@@ -936,6 +1013,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- =====================================================================
     _MSUF_SyncHpPowerTextScopeUI = function()
         EnsureDB(); local uk = _MSUF_HPText_GetUnitKey()
+
+        -- Scope buttons
+        RefreshScopeButtons()
+
         -- Override checkbox
         if hpPowerOverrideCheck then
             if uk then
@@ -944,15 +1025,31 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                 hpPowerOverrideCheck:SetChecked(u and u.hpPowerTextOverride == true)
             else hpPowerOverrideCheck:Hide() end
         end
-        -- Reset button
-        local rb = _G["MSUF_HPTextResetOverridesBtn"]
-        if rb then
-            if uk then rb:Hide()
+
+        -- Reset button + override summary
+        if scopeResetBtn then
+            if uk then
+                scopeResetBtn:Hide()
+                scopeOverrideInfo:Hide()
             else
-                local any = false; for _, uK in ipairs(ALL_UNITS) do local u = MSUF_DB[uK]; if u and u.hpPowerTextOverride then any = true; break end end
-                rb:SetShown(any)
+                local active = {}
+                for _, uK in ipairs(ALL_UNITS) do
+                    local u = MSUF_DB[uK]; if u and u.hpPowerTextOverride then active[#active + 1] = _NiceUnitKey(uK) end
+                end
+                if #active > 0 then
+                    scopeOverrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(active, ", "))
+                    scopeOverrideInfo:SetFontObject(GameFontHighlightSmall)
+                    scopeOverrideInfo:Show()
+                    scopeResetBtn:Show(); scopeResetBtn:Enable(); scopeResetBtn:SetAlpha(1)
+                else
+                    scopeOverrideInfo:SetText("|cff9aa0a6No unit overrides active.|r")
+                    scopeOverrideInfo:SetFontObject(GameFontDisableSmall)
+                    scopeOverrideInfo:Show()
+                    scopeResetBtn:Show(); scopeResetBtn:Disable(); scopeResetBtn:SetAlpha(0.45)
+                end
             end
         end
+
         -- Refresh all scope-aware dropdowns
         if hpModeDrop and hpModeDrop.Refresh then hpModeDrop:Refresh() end
         if powerModeDrop and powerModeDrop.Refresh then powerModeDrop:Refresh() end
@@ -975,39 +1072,40 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if fs.SetTextColor then if ena then fs:SetTextColor(1, 1, 1) else fs:SetTextColor(0.35, 0.35, 0.35) end
             elseif fs.SetAlpha then fs:SetAlpha(dimAlpha) end end
 
-        -- Left panel dims
+        -- Box 1 dims (textures + gradient)
+        DimDrop("MSUF_BarTextureDropdown"); DimDrop("MSUF_BarBackgroundTextureDropdown")
+        DimLabel(texColLabel); DimLabel(barBgTexLabel)
+        DimCheck("MSUF_GradientEnableCheck"); DimCheck("MSUF_PowerGradientEnableCheck")
+        DimSlider("MSUF_GradientStrengthSlider"); DimFrame("MSUF_GradientDirectionPad")
+        DimLabel(gradColLabel)
+
+        -- Box 2 dims (absorb textures)
         DimDrop("MSUF_AbsorbBarTextureDropdown"); DimDrop("MSUF_HealAbsorbBarTextureDropdown")
         DimCheck("MSUF_AbsorbTextureTestModeCheck"); DimCheck("MSUF_SelfHealPredictionCheck")
-        DimLabel(absorbTextureLabel)
-        DimDrop("MSUF_BarTextureDropdown"); DimDrop("MSUF_BarBackgroundTextureDropdown")
-        DimLabel(texHeader)
-        DimCheck("MSUF_GradientEnableCheck"); DimCheck("MSUF_PowerGradientEnableCheck")
-        DimSlider("MSUF_GradientStrengthSlider"); DimFrame("MSUF_GradientDirectionPad"); DimLabel(gradHeader)
+        DimLabel(absorbTextureLabel); DimLabel(healAbsorbLabel)
+
+        -- Box 3 dims (outline + highlight)
         DimSlider("MSUF_BarOutlineThicknessSlider"); DimSlider("MSUF_HighlightBorderThicknessSlider")
         DimDrop("MSUF_AggroOutlineDropdown"); DimCheck("MSUF_AggroOutlineTestCheck")
         DimDrop("MSUF_DispelOutlineDropdown"); DimCheck("MSUF_DispelOutlineTestCheck")
         DimDrop("MSUF_PurgeOutlineDropdown"); DimCheck("MSUF_PurgeOutlineTestCheck")
         DimCheck("MSUF_HighlightPrioCheck"); DimFrame("MSUF_HighlightPrioContainer")
-        DimLabel(highlightHeader)
-        if leftPanel then
-            for _, k in ipairs({ "MSUF_SectionLine_Textures", "MSUF_SectionLine_Gradient", "MSUF_SectionLine_Highlight" }) do
-                if leftPanel[k] then leftPanel[k]:SetAlpha(dimAlpha) end
-            end
-            if leftPanel.MSUF_SectionHeader_Outline then DimLabel(leftPanel.MSUF_SectionHeader_Outline) end
-            if leftPanel.MSUF_SectionLine_Outline then leftPanel.MSUF_SectionLine_Outline:SetAlpha(dimAlpha) end
-        end
-        -- Right panel dims
+        DimLabel(hlSectionLabel)
+
+        -- Box 4 dims (power bar)
         DimCheck("MSUF_TargetPowerBarCheck"); DimCheck("MSUF_BossPowerBarCheck")
         DimCheck("MSUF_PlayerPowerBarCheck"); DimCheck("MSUF_FocusPowerBarCheck")
-        DimFrame("MSUF_PowerBarHeightEdit"); DimCheck("MSUF_PowerBarEmbedCheck")
-        DimCheck("MSUF_PowerBarBorderCheck"); DimFrame("MSUF_PowerBarBorderSizeEdit")
-        DimLabel(powerBarHeightLabel); DimLabel(powerBarBorderSizeLabel); DimLabel(rightHeader)
+        DimSlider("MSUF_PowerBarHeightEdit"); DimCheck("MSUF_PowerBarEmbedCheck")
+        DimCheck("MSUF_PowerBarBorderCheck"); DimSlider("MSUF_PowerBarBorderSizeEdit")
+        DimLabel(powerBarHeightLabel); DimLabel(powerBarBorderSizeLabel)
+
+        -- Box titles dim
+        if box1._msufTitle then DimLabel(box1._msufTitle) end
+        if box3._msufTitle then DimLabel(box3._msufTitle) end
+        if box4._msufTitle then DimLabel(box4._msufTitle) end
     end
 
-    -- Wire scope sync ref
     _Scope_SyncUI = _MSUF_SyncHpPowerTextScopeUI
-
-    -- Initial sync
     _MSUF_SyncHpPowerTextScopeUI()
 
     -- =====================================================================
@@ -1036,11 +1134,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
 
     -- =====================================================================
-    -- SyncAll (replaces SyncBarsTabToggles, called on OnShow)
+    -- SyncAll (called on OnShow)
     -- =====================================================================
     local function SyncAll()
         EnsureDB(); local g = G(); local b = B()
-        -- Gradient
         local hpGrad = (g.enableGradient ~= false); local powGrad = (g.enablePowerGradient ~= false)
         if gradientCheck then gradientCheck:SetChecked(hpGrad) end
         if powerGradientCheck then powerGradientCheck:SetChecked(powGrad) end
@@ -1053,17 +1150,13 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             MSUF_SetLabeledSliderValue(gradientStrengthSlider, v)
             MSUF_SetLabeledSliderEnabled(gradientStrengthSlider, hpGrad or powGrad)
         end
-        -- Outline
         if barOutlineThicknessSlider then local t = floor((tonumber(b.barOutlineThickness) or 1) + 0.5); if t < 0 then t = 0 elseif t > 6 then t = 6 end; MSUF_SetLabeledSliderValue(barOutlineThicknessSlider, t) end
         if highlightBorderThicknessSlider then local t = floor((tonumber(g.highlightBorderThickness) or 2) + 0.5); if t < 1 then t = 1 elseif t > 6 then t = 6 end; MSUF_SetLabeledSliderValue(highlightBorderThicknessSlider, t) end
-        -- Priority
         if _G.MSUF_PrioRows_Reinit then _G.MSUF_PrioRows_Reinit() end
-        -- Power bar checks
         local function SC(cb, v) if cb then cb:SetChecked(v and true or false); if cb.__msufToggleUpdate then cb.__msufToggleUpdate() end end end
         SC(targetPowerBarCheck, b.showTargetPowerBar); SC(bossPowerBarCheck, b.showBossPowerBar)
         SC(playerPowerBarCheck, b.showPlayerPowerBar); SC(focusPowerBarCheck, b.showFocusPowerBar)
         SC(powerBarEmbedCheck, b.embedPowerBarIntoHealth); SC(powerBarBorderCheck, b.powerBarBorderEnabled)
-        -- Power bar enable/disable
         local anyPB = not (b.showTargetPowerBar == false and b.showBossPowerBar == false and b.showPlayerPowerBar == false and b.showFocusPowerBar == false)
         local borderOn = b.powerBarBorderEnabled == true
         local function SetCtrl(c, on)
@@ -1072,22 +1165,28 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             else if c.Disable then c:Disable() end; if c.SetAlpha then c:SetAlpha(0.55) end end
         end
         if powerBarHeightLabel then powerBarHeightLabel:SetTextColor(anyPB and 1 or 0.35, anyPB and 1 or 0.35, anyPB and 1 or 0.35) end
-        SetCtrl(powerBarHeightEdit, anyPB); SetCtrl(powerBarEmbedCheck, anyPB); SetCtrl(powerBarBorderCheck, anyPB)
+        do
+            local h = floor((tonumber(b.powerBarHeight) or 6) + 0.5); if h < 1 then h = 1 elseif h > 20 then h = 20 end
+            MSUF_SetLabeledSliderValue(powerBarHeightEdit, h)
+            MSUF_SetLabeledSliderEnabled(powerBarHeightEdit, anyPB)
+        end
+        SetCtrl(powerBarEmbedCheck, anyPB); SetCtrl(powerBarBorderCheck, anyPB)
         if powerBarBorderSizeLabel then powerBarBorderSizeLabel:SetTextColor((anyPB and borderOn) and 1 or 0.35, (anyPB and borderOn) and 1 or 0.35, (anyPB and borderOn) and 1 or 0.35) end
-        SetCtrl(powerBarBorderSizeEdit, anyPB and borderOn)
-        -- Bar animation
+        do
+            local t = floor((tonumber(b.powerBarBorderThickness) or 1) + 0.5); if t < 0 then t = 0 elseif t > 6 then t = 6 end
+            MSUF_SetLabeledSliderValue(powerBarBorderSizeEdit, t)
+            MSUF_SetLabeledSliderEnabled(powerBarBorderSizeEdit, anyPB and borderOn)
+        end
         local smoothCB = _G["MSUF_SmoothPowerBarCheck"]; if smoothCB then local v = b.smoothPowerBar; if v == nil then v = true end; smoothCB:SetChecked(v) end
         local rtCB = _G["MSUF_RealtimePowerTextCheck"]; if rtCB then local v = b.realtimePowerText; if v == nil then v = true end; rtCB:SetChecked(v) end
-        -- Scope UI
         _MSUF_SyncHpPowerTextScopeUI()
-        -- Scroll
         MSUF_BarsMenu_QueueScrollUpdate()
     end
     SyncAll()
     if barGroup.HookScript then barGroup:HookScript("OnShow", SyncAll) end
 
     -- =====================================================================
-    -- DB bindings (gradient + power bar checks)
+    -- DB bindings
     -- =====================================================================
     if _G.MSUF_Options_BindDBBoolCheck then
         _G.MSUF_Options_BindDBBoolCheck(gradientCheck, "general.enableGradient", MSUF_BarsApplyGradient, SyncAll)
@@ -1104,7 +1203,6 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if type(_G.MSUF_ApplyPowerBarBorder_All) == "function" then _G.MSUF_ApplyPowerBarBorder_All() else Apply() end
         end)
     end
-    -- Gradient strength slider binding
     if gradientStrengthSlider then
         gradientStrengthSlider.onValueChanged = function(_, v) G().gradientStrength = v; MSUF_BarsApplyGradient() end
     end
@@ -1126,4 +1224,4 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     panel.purgeOutlineDrop = purgeOutlineDrop; panel.purgeTestCheck = purgeTestCheck
     panel.prioCheck = prioCheck
     if type(MSUF_BarsApplyGradient) == "function" then _G.MSUF_BarsApplyGradient = MSUF_BarsApplyGradient end
-end -- ns.MSUF_Options_Bars_Build
+end
