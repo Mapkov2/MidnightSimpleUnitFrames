@@ -793,9 +793,8 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     -- ================================================================
     -- Scope bar (persistent editing-scope indicator, always visible above all boxes)
     local scopeBar = CreateFrame("Frame", nil, content, BackdropTemplateMixin and "BackdropTemplate" or nil)
-    scopeBar:SetHeight(82)
+    scopeBar:SetSize(720, 82)
     scopeBar:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
-    scopeBar:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, 0)
     scopeBar:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -804,15 +803,9 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     })
     scopeBar:SetBackdropColor(0.04, 0.08, 0.18, 0.95)
     scopeBar:SetBackdropBorderColor(0.12, 0.25, 0.50, 0.6)
-    -- Master + Units box (compact)
+    -- Master + Units box (compact / always visible)
     local leftTop = MakeBox(content, 720, 148)
     leftTop:SetPoint("TOPLEFT", scopeBar, "BOTTOMLEFT", 0, -6)
-    -- Display box (checkboxes grouped by category)
-    local displayBox = MakeBox(content, 720, 230)
-    displayBox:SetPoint("TOPLEFT", leftTop, "BOTTOMLEFT", 0, -6)
-    -- Layout & Caps box (sliders + dropdowns)
-    local capsBox = MakeBox(content, 720, 266)
-    capsBox:SetPoint("TOPLEFT", displayBox, "BOTTOMLEFT", 0, -6)
     -- Collapsible helper
     local function MakeCollapsibleBox(parent, anchorTo, w, expandedH, titleText, defaultOpen)
         local box = MakeBox(parent, w, defaultOpen and expandedH or 28)
@@ -862,23 +855,30 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
         end
         return box, bodyHost
     end
+    -- Display + Layout are collapsible for a cleaner menu, but stay open by default.
+    local displayOuter, displayBody = MakeCollapsibleBox(content, leftTop, 720, 244, "Display", true)
+    local capsOuter, capsBody = MakeCollapsibleBox(content, displayOuter, 720, 266, "Layout & Caps", true)
     -- Timer / cooldown text color controls
-    local timerBox, timerBody = MakeCollapsibleBox(content, capsBox, 720, 248, "Timer Colors", false)
+    local timerBox, timerBody = MakeCollapsibleBox(content, capsOuter, 720, 248, "Timer Colors", false)
     -- Blizzard-rendered Private Auras (anchor controls)
     local privateBox, privateBody = MakeCollapsibleBox(content, timerBox, 720, 168, "Private Auras", false)
-    -- Advanced filters (stays open by default — frequently used)
-    local advBox = MakeBox(content, 720, 240)
-    advBox:SetPoint("TOPLEFT", privateBox, "BOTTOMLEFT", 0, -6)
+    -- Aura filtering / sorting (collapsible to match the rest of the menu)
+    local advOuter, advBody = MakeCollapsibleBox(content, privateBox, 720, 268, "Aura Filters & Sorting", false)
     -- Global Ignore List
-    local ignoreBox, ignoreBody = MakeCollapsibleBox(content, advBox, 720, 228, "Global Ignore List", false)
+    local ignoreBox, ignoreBody = MakeCollapsibleBox(content, advOuter, 720, 228, "Global Ignore List", false)
     -- Buff Reminders
     local reminderBox, reminderBody = MakeCollapsibleBox(content, ignoreBox, 720, 310, "Buff Reminders", false)
     -- Redirect existing code to create content inside body hosts (below the 28px header).
     -- Outer boxes stay in the anchor chain; body hosts receive all child controls.
     -- Save outer reminder box ref for content height calc (collapsible body hosts have no stable GetBottom).
+    local _displayBoxOuter = displayOuter
+    local _capsBoxOuter = capsOuter
     local _reminderBoxOuter = reminderBox
+    displayBox = displayBody or displayOuter
+    capsBox = capsBody or capsOuter
     timerBox = timerBody or timerBox
     privateBox = privateBody or privateBox
+    advBox = advBody or advOuter
     ignoreBox = ignoreBody or ignoreBox
     reminderBox = reminderBody or reminderBox
     -- Movement controls are handled via MSUF Edit Mode now (no placeholder section here).
@@ -1761,7 +1761,7 @@ do
     -- Reset button aligned to the right edge of the scope bar, second row
     local btnResetOverrides = CreateFrame("Button", nil, scopeBar, "UIPanelButtonTemplate")
     btnResetOverrides:SetSize(72, 18)
-    btnResetOverrides:SetPoint("TOPRIGHT", scopeBar, "TOPRIGHT", -8, -32)
+    btnResetOverrides:SetPoint("TOPRIGHT", scopeBar, "TOPRIGHT", -10, -32)
     btnResetOverrides:SetText(TR("Reset"))
     -- Override status (compact, below scope bar)
     local overrideRow = CreateFrame("Frame", nil, scopeBar)
@@ -1902,15 +1902,13 @@ end
     -- ================================================================
     -- DISPLAY (grouped: Buffs/Debuffs columns + Icons/Cooldown/Borders columns)
     -- ================================================================
-    local h3 = displayBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    h3:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 12, -10)
-    h3:SetText(TR("Display"))
-    -- Group headers: Buffs | Debuffs
+    -- Outer collapsible header already provides the section title.
+    -- Start the actual content higher so the box stays compact and balanced.
     local ghBuffs = displayBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    ghBuffs:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 14, -30)
+    ghBuffs:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 14, -12)
     ghBuffs:SetText("|cff6EB5FFBuffs|r")
     local ghDebuffs = displayBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    ghDebuffs:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 200, -30)
+    ghDebuffs:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 200, -12)
     ghDebuffs:SetText("|cff6EB5FFDebuffs|r")
     local TIP_SHOW_STACK = 'Shows stack/application counts (e.g. "2") on aura icons. Disable to hide stack numbers.'
     local TIP_HIDE_PERMANENT = 'Hides buffs with no duration. Only works out of combat!'
@@ -1918,40 +1916,40 @@ end
         local displayCB = {}
         local TIP_SWIPE_STYLE = "When enabled, the cooldown swipe represents elapsed time (darkens as time is lost).\n\nTurn this OFF to keep the default cooldown-style swipe."
         BuildBoolPathCheckboxes(displayBox, {
-            { "Show Buffs", 12, -46, A2_Settings, "showBuffs", nil, nil, "cbShowBuffs" },
-            { "Show Debuffs", 200, -46, A2_Settings, "showDebuffs", nil, nil, "cbShowDebuffs" },
-            { "Highlight own buffs", 12, -92, A2_Settings, "highlightOwnBuffs", nil,
+            { "Show Buffs", 12, -28, A2_Settings, "showBuffs", nil, nil, "cbShowBuffs" },
+            { "Show Debuffs", 200, -28, A2_Settings, "showDebuffs", nil, nil, "cbShowDebuffs" },
+            { "Highlight own buffs", 12, -74, A2_Settings, "highlightOwnBuffs", nil,
                 "Highlights your own buffs with a border color (visual only; does not filter).", "cbHLOwnBuffs" },
-            { "Highlight own debuffs", 200, -92, A2_Settings, "highlightOwnDebuffs", nil,
+            { "Highlight own debuffs", 200, -74, A2_Settings, "highlightOwnDebuffs", nil,
                 "Highlights your own debuffs with a border color (visual only; does not filter).", "cbHLOwnDebuffs" },
         }, displayCB)
         -- Group header: Icons | Cooldown | Borders
         local divider = displayBox:CreateTexture(nil, "ARTWORK")
         divider:SetHeight(1)
-        divider:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 12, -138)
-        divider:SetPoint("TOPRIGHT", displayBox, "TOPRIGHT", -12, -138)
+        divider:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 12, -120)
+        divider:SetPoint("TOPRIGHT", displayBox, "TOPRIGHT", -12, -120)
         divider:SetColorTexture(1, 1, 1, 0.06)
         local ghIcons = displayBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        ghIcons:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 14, -146)
+        ghIcons:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 14, -128)
         ghIcons:SetText("|cff6EB5FFIcons|r")
         local ghCooldown = displayBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        ghCooldown:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 200, -146)
+        ghCooldown:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 200, -128)
         ghCooldown:SetText("|cff6EB5FFCooldown|r")
         local ghBorders = displayBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        ghBorders:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 390, -146)
+        ghBorders:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 390, -128)
         ghBorders:SetText("|cff6EB5FFBorders|r")
         BuildBoolPathCheckboxes(displayBox, {
-            { "Show tooltip", 12, -162, A2_Settings, "showTooltip", nil, nil, "cbShowTooltip" },
-            { "Show cooldown swipe", 200, -162, A2_Settings, "showCooldownSwipe", nil, nil, "cbShowSwipe" },
-            { "Dispel-type borders", 390, -162, A2_Settings, "useDebuffTypeBorders", nil,
+            { "Show tooltip", 12, -144, A2_Settings, "showTooltip", nil, nil, "cbShowTooltip" },
+            { "Show cooldown swipe", 200, -144, A2_Settings, "showCooldownSwipe", nil, nil, "cbShowSwipe" },
+            { "Dispel-type borders", 390, -144, A2_Settings, "useDebuffTypeBorders", nil,
                 "Colors aura borders by debuff dispel type (Magic/Curse/Poison/Disease), similar to Blizzard private aura borders.",
                 "cbDispelTypeBorders" },
-            { "Show stack count", 12, -184, A2_Settings, "showStackCount", nil, TIP_SHOW_STACK, "cbShowStackCount" },
-            { "Swipe darkens on loss", 200, -184, A2_Settings, "cooldownSwipeDarkenOnLoss", nil, TIP_SWIPE_STYLE, "cbSwipeStyle" },
-            { "Click-through auras", 12, -206, A2_Settings, "clickThroughAuras", nil,
+            { "Show stack count", 12, -166, A2_Settings, "showStackCount", nil, TIP_SHOW_STACK, "cbShowStackCount" },
+            { "Swipe darkens on loss", 200, -166, A2_Settings, "cooldownSwipeDarkenOnLoss", nil, TIP_SWIPE_STYLE, "cbSwipeStyle" },
+            { "Click-through auras", 12, -188, A2_Settings, "clickThroughAuras", nil,
                 "Makes aura icons click-through so mouse clicks pass to the game world.\n\nWhen 'Show tooltip' is also enabled, hovering still shows aura tooltips.\nWhen 'Show tooltip' is off, icons are fully non-interactive.",
                 "cbClickThrough" },
-            { "Show cooldown text", 200, -206, A2_Settings, "showCooldownText", nil,
+            { "Show cooldown text", 200, -188, A2_Settings, "showCooldownText", nil,
                 "Shows the countdown numbers on aura icons. Disable to hide cooldown numbers (swipe can remain enabled).",
                 "cbShowCooldownText" },
         }, displayCB)
@@ -1991,9 +1989,9 @@ end
     do
         local filterCB = {}
         BuildBoolPathCheckboxes(displayBox, {
-            { "Only my buffs", 12, -68, A2_FilterBuffs, "onlyMine", nil, nil, "cbOnlyMyBuffs", SyncLegacySharedFromSharedFilters },
-            { "Only my debuffs", 200, -68, A2_FilterDebuffs, "onlyMine", nil, nil, "cbOnlyMyDebuffs", SyncLegacySharedFromSharedFilters },
-            { "Hide permanent buffs", 12, -114, GetEditingFilters, "hidePermanent", nil, TIP_HIDE_PERMANENT, "cbHidePermanent", SyncLegacySharedFromSharedFilters },
+            { "Only my buffs", 12, -50, A2_FilterBuffs, "onlyMine", nil, nil, "cbOnlyMyBuffs", SyncLegacySharedFromSharedFilters },
+            { "Only my debuffs", 200, -50, A2_FilterDebuffs, "onlyMine", nil, nil, "cbOnlyMyDebuffs", SyncLegacySharedFromSharedFilters },
+            { "Hide permanent buffs", 12, -96, GetEditingFilters, "hidePermanent", nil, TIP_HIDE_PERMANENT, "cbHidePermanent", SyncLegacySharedFromSharedFilters },
         }, filterCB)
         for _, key in ipairs({ "cbOnlyMyBuffs", "cbOnlyMyDebuffs", "cbHidePermanent" }) do
             local cb = filterCB[key]
@@ -2006,9 +2004,7 @@ end
     -- ================================================================
     -- LAYOUT & CAPS (capsBox): sliders + dropdowns in grid
     -- ================================================================
-    local capsTitle = capsBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    capsTitle:SetPoint("TOPLEFT", capsBox, "TOPLEFT", 12, -10)
-    capsTitle:SetText(TR("Layout & Caps"))
+    -- Outer collapsible header already provides the section title.
     local function MakeCapsNumberGS(key, default, legacyKey)
         local function get()
             local a2, shared = GetAuras2DB()
@@ -2047,23 +2043,23 @@ end
         SetSplitSpacingRaw(v)
      end
     -- Slider row 1: Max Buffs | Max Debuffs
-    local maxBuffsSlider = CreateAuras2CompactSlider(capsBox, "Max Buffs", 0, 40, 1, 12, -40, nil, GetMaxBuffs, function(v)  A2_AutoOverrideCapsIfNeeded(); SetMaxBuffs(v)  end)
+    local maxBuffsSlider = CreateAuras2CompactSlider(capsBox, "Max Buffs", 0, 40, 1, 12, -18, nil, GetMaxBuffs, function(v)  A2_AutoOverrideCapsIfNeeded(); SetMaxBuffs(v)  end)
     A2_Track("caps", maxBuffsSlider)
     maxBuffsSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(maxBuffsSlider, { leftTitle = true })
     AttachSliderValueBox(maxBuffsSlider, 0, 40, 1, GetMaxBuffs)
-    local maxDebuffsSlider = CreateAuras2CompactSlider(capsBox, "Max Debuffs", 0, 40, 1, 192, -40, nil, GetMaxDebuffs, function(v)  A2_AutoOverrideCapsIfNeeded(); SetMaxDebuffs(v)  end)
+    local maxDebuffsSlider = CreateAuras2CompactSlider(capsBox, "Max Debuffs", 0, 40, 1, 192, -18, nil, GetMaxDebuffs, function(v)  A2_AutoOverrideCapsIfNeeded(); SetMaxDebuffs(v)  end)
     A2_Track("caps", maxDebuffsSlider)
     maxDebuffsSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(maxDebuffsSlider, { leftTitle = true })
     AttachSliderValueBox(maxDebuffsSlider, 0, 40, 1, GetMaxDebuffs)
     -- Slider row 2: Icons per row | Block spacing
-    local perRowSlider = CreateAuras2CompactSlider(capsBox, "Icons per row", 4, 20, 1, 372, -40, nil, GetPerRow, function(v)  A2_AutoOverrideCapsIfNeeded(); SetPerRow(v)  end)
+    local perRowSlider = CreateAuras2CompactSlider(capsBox, "Icons per row", 4, 20, 1, 372, -18, nil, GetPerRow, function(v)  A2_AutoOverrideCapsIfNeeded(); SetPerRow(v)  end)
     A2_Track("caps", perRowSlider)
     perRowSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(perRowSlider, { leftTitle = true })
     AttachSliderValueBox(perRowSlider, 4, 20, 1, GetPerRow)
-    local splitSpacingSlider = CreateAuras2CompactSlider(capsBox, "Block spacing", 0, 40, 1, 546, -40, nil, GetSplitSpacing, function(v)  A2_AutoOverrideCapsIfNeeded(); SetSplitSpacing(v)  end)
+    local splitSpacingSlider = CreateAuras2CompactSlider(capsBox, "Block spacing", 0, 40, 1, 546, -18, nil, GetSplitSpacing, function(v)  A2_AutoOverrideCapsIfNeeded(); SetSplitSpacing(v)  end)
     A2_Track("caps", splitSpacingSlider)
     splitSpacingSlider.__MSUF_skipAutoRefresh = true
     MSUF_StyleAuras2CompactSlider(splitSpacingSlider, { leftTitle = true })
@@ -2113,12 +2109,12 @@ end
     -- Divider between sliders and dropdowns
     local capsDivider = capsBox:CreateTexture(nil, "ARTWORK")
     capsDivider:SetHeight(1)
-    capsDivider:SetPoint("TOPLEFT", capsBox, "TOPLEFT", 12, -98)
-    capsDivider:SetPoint("TOPRIGHT", capsBox, "TOPRIGHT", -12, -98)
+    capsDivider:SetPoint("TOPLEFT", capsBox, "TOPLEFT", 12, -76)
+    capsDivider:SetPoint("TOPRIGHT", capsBox, "TOPRIGHT", -12, -76)
     capsDivider:SetColorTexture(1, 1, 1, 0.06)
     -- Dropdown grid: 3 columns × 3 rows
     local DD_C1, DD_C2, DD_C3 = 12, 248, 484
-    local DD_R1, DD_R2, DD_R3 = -106, -148, -190
+    local DD_R1, DD_R2, DD_R3 = -84, -126, -168
     local layoutDD = CreateLayoutDropdown(capsBox, DD_C1, DD_R1,
         function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "layoutMode", "SEPARATE") end,
         function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "layoutMode", v)  end)
@@ -2354,11 +2350,11 @@ end
         panHint:SetText("Best-effort: fixed 30% threshold for all auras. Color: Colors panel.")
     end
     -- ------------------------------------------------------------
-    -- ADVANCED (below): Include filters + Sort order
+    -- AURA FILTERS & SORTING (below): Include filters + Sort order
     -- ------------------------------------------------------------
     local rTitle = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     rTitle:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -10)
-    rTitle:SetText(TR("Advanced"))
+    rTitle:SetText(TR("Aura Filters & Sorting"))
     local incH = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     incH:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -34)
     incH:SetText(TR("Include"))

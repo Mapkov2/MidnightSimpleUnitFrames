@@ -455,7 +455,7 @@ end
 
     local fontResetBtn = CreateFrame("Button", "MSUF_Colors_FontResetButton", content, "UIPanelButtonTemplate")
     fontResetBtn:SetSize(140, 22)
-    fontResetBtn:SetPoint("TOPLEFT", fontSwatch, "BOTTOMLEFT", 0, -8)
+    fontResetBtn:SetPoint("LEFT", fontSwatch, "RIGHT", 12, 0)
     fontResetBtn:SetText("Use font palette")
     fontResetBtn:SetScript("OnClick", function()
         MSUF_ConfirmColorReset("font palette", function()
@@ -2031,7 +2031,7 @@ end
 --------------------------------------------------
 -- Section 8: Gameplay
 --------------------------------------------------
-S.sec8Box, S.sec8Body = F.MakeCollapsibleSection(content, 310, "Gameplay", false)
+S.sec8Box, S.sec8Body = F.MakeCollapsibleSection(content, 360, "Gameplay", false)
 S.sec8Box:SetPoint("TOPLEFT", S.sec7Box, "BOTTOMLEFT", 0, -6)
 do local content = S.sec8Body
 

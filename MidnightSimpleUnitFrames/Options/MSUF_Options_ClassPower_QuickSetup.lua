@@ -144,7 +144,7 @@ end
 -- CDM detection helpers
 -- ============================================================================
 local function GetVisibleCDM()
-    local ecv = _G["EssentialCooldownViewer"]
+    local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
     if ecv and ecv.IsShown and ecv:IsShown()
        and ecv.GetHeight and ecv.GetCenter then
         local h = ecv:GetHeight()
