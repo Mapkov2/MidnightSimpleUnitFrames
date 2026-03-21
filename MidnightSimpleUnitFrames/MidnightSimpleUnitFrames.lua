@@ -2239,6 +2239,16 @@ local function MSUF_UpdateNameColor(frame)
     local nameClassColor = (cache and cache.nameClassColor) or (g and g.nameClassColor)
     local npcNameRed = (cache and cache.npcNameRed) or (g and g.npcNameRed)
 
+    -- Per-unit font override: read from unit config if fontOverride active
+    do
+        local ck = frame.msufConfigKey
+        local fc = ck and MSUF_DB and MSUF_DB[ck]
+        if fc and fc.fontOverride then
+            if fc.nameClassColor ~= nil then nameClassColor = fc.nameClassColor end
+            if fc.npcNameRed ~= nil then npcNameRed = fc.npcNameRed end
+        end
+    end
+
     local r, gCol, b
     if nameClassColor and frame.unit and F.UnitIsPlayer(frame.unit) then
         local _, classToken = F.UnitClass(frame.unit)
@@ -2309,7 +2319,17 @@ local function _Iter_RefreshPowerColor(f)
             f.powerTextPct._msufColorRev = nil
         end
 
-        if S.colorByType then
+        -- Per-unit font override: resolve colorByType per frame
+        local frameColorByType = S.colorByType
+        do
+            local ck = f.msufConfigKey
+            local fc = ck and MSUF_DB and MSUF_DB[ck]
+            if fc and fc.fontOverride and fc.colorPowerTextByType ~= nil then
+                frameColorByType = fc.colorPowerTextByType and true or false
+            end
+        end
+
+        if frameColorByType then
             if S.updatePowerFast then
                 S.updatePowerFast(f)
             end
@@ -2867,6 +2887,11 @@ function MSUF_ClampNameWidth(f, conf)
     end
     local shorten = (MSUF_DB and MSUF_DB.shortenNames) and true or false
     local unitKey = f and (f.unitKey or f.unit or f.msufConfigKey)
+    -- Per-unit font override: allow per-unit shorten toggle
+    local _fontConf = unitKey and MSUF_DB and MSUF_DB[unitKey]
+    if _fontConf and _fontConf.fontOverride and _fontConf.shortenNames ~= nil then
+        shorten = _fontConf.shortenNames and true or false
+    end
     if unitKey == "player" or unitKey == "Player" or unitKey == "PLAYER" then
         shorten = false
     end
@@ -2939,7 +2964,9 @@ function MSUF_ClampNameWidth(f, conf)
     if nameWidth < 40 then nameWidth = 40 end
     local maxChars = 16
     local g = MSUF_DB and MSUF_DB.general
-    if g and type(g.shortenNameMaxChars) == "number" then
+    if _fontConf and _fontConf.fontOverride and type(_fontConf.shortenNameMaxChars) == "number" then
+        maxChars = _fontConf.shortenNameMaxChars
+    elseif g and type(g.shortenNameMaxChars) == "number" then
         maxChars = g.shortenNameMaxChars
     end
     if maxChars < 4 then maxChars = 4 end
@@ -2955,7 +2982,12 @@ function MSUF_ClampNameWidth(f, conf)
     end
     end
     -- Name shortening mode (secret-safe).
-    local mode = (g and g.shortenNameClipSide) or "LEFT"
+    local mode
+    if _fontConf and _fontConf.fontOverride and _fontConf.shortenNameClipSide ~= nil then
+        mode = _fontConf.shortenNameClipSide
+    else
+        mode = (g and g.shortenNameClipSide) or "LEFT"
+    end
     if mode ~= "LEFT" and mode ~= "RIGHT" then
         mode = "LEFT"
     end
@@ -2963,7 +2995,9 @@ function MSUF_ClampNameWidth(f, conf)
     local clipSide = "LEFT"
     local maskPx = 0
     if not legacyEndClip then
-        if g and g.shortenNameFrontMaskPx ~= nil then
+        if _fontConf and _fontConf.fontOverride and _fontConf.shortenNameFrontMaskPx ~= nil then
+            maskPx = tonumber(_fontConf.shortenNameFrontMaskPx) or 0
+        elseif g and g.shortenNameFrontMaskPx ~= nil then
             maskPx = tonumber(g.shortenNameFrontMaskPx) or 0
     end
         maskPx = math.floor(maskPx + 0.5)
@@ -2971,7 +3005,9 @@ function MSUF_ClampNameWidth(f, conf)
         if maskPx > 80 then maskPx = 80 end
     end
     local showDots = true
-    if g and g.shortenNameShowDots ~= nil then
+    if _fontConf and _fontConf.fontOverride and _fontConf.shortenNameShowDots ~= nil then
+        showDots = (_fontConf.shortenNameShowDots and true or false)
+    elseif g and g.shortenNameShowDots ~= nil then
         showDots = (g.shortenNameShowDots and true or false)
     end
     if legacyEndClip then
@@ -3928,6 +3964,11 @@ end
                 self.targetPowerBar:Show()
             end
     end
+        -- Boss preview: invalidate diff-gates so font/shortening changes render immediately
+        self._msufClampStamp = nil
+        self._msufNameClipAnchorStamp = nil
+        self._msufNameClipTextStamp = nil
+        if self.nameText then self.nameText._msufLastSetT = nil end
         ns.Text.ApplyBossTestName(self, unit)
         ns.Text.ApplyBossTestLevel(self, conf)
         if self.hpText then
@@ -4480,13 +4521,14 @@ end
 -- 3. 3-stamp-layer collapsed to 2 (global + per-key)
 
 -- Module-local font state (populated once per UpdateAllFonts call, read by hoisted helpers)
+local _MSUF_FONT_FLAGS_CODE = { [""] = 0, OUTLINE = 1, THICKOUTLINE = 2 }
 local _fontState = {}
 
 local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
     if not fs then return end
     local S = _fontState
     -- Content-based: only call SetFont when path/flags (serial) or size actually changed
-    local rev = S.pathSerial + size * 1000003
+    local rev = S.pathSerial * 10 + (_MSUF_FONT_FLAGS_CODE[S.flags] or 1) + size * 10000030
     if fs._msufFontRev ~= rev then
         fs:SetFont(S.path, size, S.flags)
         fs._msufFontRev = rev
@@ -4525,6 +4567,27 @@ local function _MSUF_ApplyFontsToFrame(f)
     local nameSize  = (conf and conf.nameFontSize)  or S.globalNameSize
     local hpSize    = (conf and conf.hpFontSize)    or S.globalHPSize
     local powerSize = (conf and conf.powerFontSize) or S.globalPowSize
+
+    -- Per-unit font override: temporarily swap shared state for this frame
+    local _origFlags, _origShadow, _origCPT
+    if conf and conf.fontOverride then
+        local cNoOL = conf.noOutline
+        local cBold = conf.boldText
+        if cNoOL ~= nil or cBold ~= nil then
+            _origFlags = S.flags
+            if cNoOL then S.flags = ""
+            elseif cBold then S.flags = "THICKOUTLINE"
+            else S.flags = "OUTLINE" end
+        end
+        if conf.textBackdrop ~= nil then
+            _origShadow = S.useShadow
+            S.useShadow = conf.textBackdrop and true or false
+        end
+        if conf.colorPowerTextByType ~= nil then
+            _origCPT = S.colorPowerByType
+            S.colorPowerByType = conf.colorPowerTextByType and true or false
+        end
+    end
 
     if f.nameText then
         _MSUF_ApplyFontCached(f.nameText, nameSize, false, 0, 0, 0)
@@ -4566,6 +4629,11 @@ local function _MSUF_ApplyFontsToFrame(f)
     if f.powerText then
         _MSUF_ApplyFontCached(f.powerText, powerSize, pwSetColor, pCr, pCg, pCb)
     end
+
+    -- Restore shared state after per-unit override
+    if _origFlags then S.flags = _origFlags end
+    if _origShadow ~= nil then S.useShadow = _origShadow end
+    if _origCPT ~= nil then S.colorPowerByType = _origCPT end
 end
 
 local function UpdateAllFonts(onlyKey)
@@ -4628,6 +4696,17 @@ local function UpdateAllFonts(onlyKey)
     end
     if ns and ns.MSUF_ToTInline_RequestRefresh then
         ns.MSUF_ToTInline_RequestRefresh("FONTS")
+    end
+
+    -- Boss preview: synchronous full re-render so font/shortening changes are instant
+    if MSUF_BossTestMode and MSUF_UnitEditModeActive and (not _msuf_inCombat) then
+        local max = _G.MSUF_MAX_BOSS_FRAMES or 5
+        for i = 1, max do
+            local bf = UnitFrames["boss" .. i]
+            if bf and bf.isBoss then
+                UpdateSimpleUnitFrame(bf)
+            end
+        end
     end
 end
 MSUF_Export2("MSUF_UpdateAllFonts", UpdateAllFonts, "UpdateAllFonts")
