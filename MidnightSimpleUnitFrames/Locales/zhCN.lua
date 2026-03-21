@@ -38,7 +38,9 @@ local T = {
     ["OK"] = "确定",
     ["Undo"] = "撤销",
     ["All"] = "全部",
-
+    ["Default"] = "默认",
+    ["Tip"] = "提示",
+    
 
     ["Override"] = "覆盖",
     ["Overrides"] = "覆盖",
@@ -89,19 +91,35 @@ local T = {
     ["During development of MSUF Unhalted, R41z0r and other great addon developers helped out!"]  = "在MSUF Unhalted的开发过程中,R41z0r和其他伟大的插件开发人员提供了帮助!",
     ["Danders is a great Party/Raidframe addon and works really well with MSUF"]  = "Danders是一个很棒的团队/团队框架插件,与MSUF配合使用效果非常好",
     ["Community: If you like MSUF, share it with a friend — UI addons grow by word of mouth."]  = "社区: 如果您喜欢MSUF,请与朋友分享——UI插件是通过口碑传播的.",
-
+    ["Edit Mode function not found."]   = "编辑模式功能未找到.",    
+    ["Cannot reset while in combat."]  = "战斗中无法重置.",
+    ["Cannot factory reset while in combat."]  = "战斗中无法重置为默认.",
+  
+        
+------------profile----------
 
     ["Profile: "] = "配置文件: ",
     ["   •   Edit Mode: "] = "   •  编辑模式: ",
     ["In combat"] =    "战斗中",
     ["Out of combat"] = "非战斗中",
     ["Quick Actions"] = "快捷操作",
+    ["Quick Navigation"] = "快捷导航",
+    ["Jump into the most-used MSUF sections."] = "跳转到最常用的MSUF部分.",
     ["Toggle Edit Mode"] = "切换编辑模式",
     ["Enter MSUF Edit Mode to drag frames and adjust positions."] = "进入MSUF编辑模式以拖动框架和调整位置.",
     ["Reset Frame Positions"] = "重置框架位置",
+    ["Reset Positions"] = "重置位置",
     ["Resets MSUF frame positions + visibility to defaults (active profile)."] = "重置MSUF框架位置和可见性到默认值(当前配置文件).",
+    ["Reset MSUF frame positions now?\n\nThis resets MSUF frame positions + visibility to defaults for the ACTIVE profile."] = "立即重置MSUF框架位置?\n\n这将重置MSUF框架位置和可见性到默认值(当前配置文件).",
     ["Profile"] = "配置文件",
+    ["Reset profile"]       = "重置配置文件",
+    ["Delete profile"] = "删除配置文件",
+    ["Copy profile"]    = "复制配置文件",
+
+
+
     ["Active profile:"] = "当前配置文件:",
+    ["Active Profile"] = "当前配置文件",
     ["Open Profiles"] = "打开配置文件",
     ["Show"] = "显示",
     ["Hide"] = "隐藏",
@@ -109,8 +127,29 @@ local T = {
     ["Hidden. Click Show to reveal slash commands + power tools."] = "隐藏. 点击显示斜杠命令和电源工具.",
     ["Scale & Layout"] = "缩放 & 布局",
     ["Presets"] = "预设",
+    ["Load a preset into your active profile."] = "将预设加载到你的当前配置文件中.",
+    ["Select preset..."] = "选择预设...",
+    ["Browse Presets"] = "浏览预设",
+    ["Select a preset first."] = "先选择一个预设.",
+    ["Opens a confirmation before applying the preset."] = "应用预设前弹出确认提示.",
     ["Load preset"] = "加载预设",
     ["Applies the selected preset to your current active profile. This overwrites settings (export first if unsure)."] = "将选定的预设应用于您的当前活动配置文件. 这会覆盖设置(如果不确定,请先导出).",
+    ["Fast access to recovery and support tools."] = "快速访问恢复和支持工具.",
+    ["Manage"]  = "配置",
+    ["Use the Profiles page for switching, export and import."] = "使用配置文件页面进行切换,导出和导入.",
+    ["UI Scale"]    = "UI缩放",
+    ["Quick access to global UI scale presets and MSUF frame scale."] = "快速访问全局UI缩放预设和MSUF框架缩放.",
+    ["MSUF Scale"]  = "MSUF缩放",
+    ["Scales only MSUF frames (unitframes + castbars). Use the mouse wheel for 5% steps."] = "仅缩放MSUF框架(单位框体+施法条).滚动鼠标滚轮可按5%幅度调节.",
+    ["|cff4a90d9Profile:|r |cffccd8e8"] = "|cff4a90d9配置文件:|r |cffccd8e8",
+    ["|cff4ade80Edit: On|r  |cff3a4a66\194\183|r"] = "|cff4ade80编辑: 开|r  |cff3a4a66\194\183|r",
+    ["|cff5a6a88Edit: Off|r  |cff3a4a66\194\183|r"] = "|cff5a6a88编辑: 关|r  |cff3a4a66\194\183|r",
+    ["|cffef4444In Combat|r"] = "|cffef4444战斗中|r",
+    ["|cff22c55eOut of Combat|r"] = "|cff22c55e非战斗中|r",
+ 
+    
+
+
 
     ["Global UI Scale"] = "全局UI缩放",
     ["Global UI Scale: 1080"] = "全局UI缩放: 1080",
@@ -125,8 +164,8 @@ local T = {
     ["Stops enforcing MSUF global scale and restores your previous Blizzard UI scale."] = "停止强制MSUF全局缩放并恢复您以前的暴雪UI缩放.",
     ["Turns off all scaling MSUF applies (global UI scale + MSUF-only scale), then reloads your UI. Blizzard handles scaling."] = "关闭所有MSUF应用的缩放(全局UI缩放 + MSUF-only缩放),然后重新加载您的UI. 暴雪处理缩放.",
 
-
-
+    ["Current: 1.00"]   = "当前: 1.00",        
+    ["Current: %.2f"]   = "当前: %.2f",    
     ["Current: ..."] =     "当前: ...",
     ["Current: %.2f (%d%%)"] = "当前: %.2f (%d%%)",
 
@@ -161,11 +200,14 @@ local T = {
     ["Pet"] = "宠物",
     ["Class Resources"] = "职业资源",
     ["Portraits"] = "头像",
+    ["Portrait"]    = "头像",
+
 
     ["Frame Basics"] = "框架基础",
     ["Enable this frame"] = "启用框架",
     ["Show name"] =  "显示名称"       ,
     ["Show HP text"] = "显示生命文本",
+    ["Reverse fill"] = "反向填充",
     ["Show power text"] = "显示能量文本",
     ["Reverse fill (HP/Power)"] = "填充(生命/能量)",
     ["Portrait Off"]   = "关闭头像",
@@ -182,7 +224,7 @@ local T = {
 
 
 
-
+    ["Transparency"] = "透明度",    
     ["Player Alpha"]   = "玩家透明度",
     ["Target Alpha"]    = "目标透明度",
     ["Target of Target Alpha"] = "目标的目标透明度",
@@ -190,6 +232,7 @@ local T = {
     ["Boss Alpha"]      = "首领透明度",
     ["Pet Alpha"]       = "宠物透明度",
     ["Sync both"]       = "同步两者",
+    ["Sliders affect"] = "滑块影响范围",
     ["Keep text + portrait visible"] = "保持文本和头像可见",
     ["Alpha sliders affect"] = "前景与背景透明度",
     ["Foreground"]      = "前景"       ,
@@ -209,6 +252,7 @@ local T = {
     ["Pet Load Conditions"] = "宠物隐藏条件",
     ["Boss Load Conditions"] = "首领隐藏条件",
     ["ToT Load Conditions"] = "目标的目标隐藏条件",
+    ["Load Conditions"]     = "隐藏条件",  
     ["Mounted"] = "骑乘中",
     ["In vehicle"] = "载具中",
     ["Resting"] = "休息中",
@@ -226,6 +270,9 @@ local T = {
     ["Anchor unit to"] = "锚点单位",
     ["Current custom anchor: "] = "当前自定义锚点:" ,
     ["Current custom anchor: none"] = "当前自定义锚点: 无" ,
+    ["click to expand"] = "点击展开",
+    ["Tip: Hold SHIFT (5) / CTRL (10) / ALT (grid step) for bigger steps."] = "提示:按住SHIFT(5%)/CTRL(10%)/ALT(网格步长)以增大调整幅度.",
+   
 
 
 
@@ -237,7 +284,7 @@ local T = {
    
 
 
-
+---------Castbar-------------
     
 
 
@@ -265,7 +312,7 @@ local T = {
     ["Resets X/Y, Anchor and Size back to defaults."] = "重置X/Y, 锚点和大小回到默认值.",
     ["Anchor pet to"] = "宠物锚点",
 
-
+    ["Boss Layout"]     = "首领布局",   
     ["Boss spacing"] = "首领间距",
 
     ["Status icons"] = "状态图标",
@@ -276,20 +323,26 @@ local T = {
     ["Size"] = "大小",
     ["Icon"] = "图标",
     ["Test mode"] = "测试模式",
+    ["Midnight style"]  = "MSUF样式",
     ["Status icons test mode"] = "状态图标测试模式",
-    ["Use Midnight style icons"] = "使用Midnight风格图标",
+    ["Use Midnight style icons"] = "使用Midnight样式图标",
     ["Combat"] = "战斗",
     ["Rez"] = "复活",
     ["Rested"] = "休息",
     ["Combat icon"] = "战斗图标",
     ["Rez icon"] = "复活图标",
     ["Rested icon"] = "休息图标",
+    
+    
 
-
-
+-------------------------Bars-------------
 
     ["Options"] = "选项",
 
+    ["Override active: this unit uses its own HP/Power text settings."] = "覆盖已启用:此单位将使用其独立的生命值/能量值文本设置.",
+    ["Uses Shared settings."] = "使用共享设置.",
+    
+    
     ["Bars"] = "计量条",
     ["Bar scope"]   = "计量条范围",
     ["Configure settings for"]  = "配置设置",
@@ -298,6 +351,7 @@ local T = {
     ["Bar appearance"] = "计量条外观",
     ["Absorb display"] = "吸收显示",
     ["Absorb Display"] = "吸收显示",
+    ["Display mode"] = "显示模式",
     ["Absorb off"] = "关闭吸收",
     ["Absorb bar"] = "吸收条",
     ["Absorb bar + text"] = "吸收条 + 文本",
@@ -311,11 +365,16 @@ local T = {
 
     ["Anchor to healthbar edge (default)"] = "锚定到生命条边缘 (默认)",
     ["Anchor to inside padding (prevents clipping)"] = "锚定到内边距 (防止裁剪)",
+    ["Textures & Gradient"] = "材质 & 渐变",
+    ["Bar textures (SharedMedia)"] = "计量条材质 (SharedMedia)",
     ["Absorb bar texture (SharedMedia)"] = "吸收条材质 (SharedMedia)",
     ["Test absorb textures"] = "测试吸收材质",
     ["Bar texture (SharedMedia)"] = "计量条材质 (SharedMedia)",
     ["Heal-absorb texture"] = "治疗吸收材质",
-
+    ["Gradient"] = "渐变",
+    ["HP bar gradient"]     = "生命条渐变", 
+    ["Power bar gradient"] = "能量条渐变",
+    ["Gradient strength"] = "渐变强度",
     ["Gradient Options"] = "渐变选项",
     ["Border & Text Options"] = "边框 & 文本选项",
     ["Enable HP bar gradient"] = "启用生命条渐变",
@@ -332,10 +391,16 @@ local T = {
     ["Embed power bar into health bar"] = "能量条嵌入到生命条中",
     ["Show power bar border"] = "显示能量条边框",
     ["Border thickness"] = "边框厚度",
+    ["Embed into health bar"] = "嵌入生命条",
+    ["Power bar border"] = "能量条边框",
     ["Textmode HP / Power"] = "生命/能量 文本样式",
+    ["HP / Power Text"] = "生命/能量 文本",
     ["Text Separators"] = "文本分隔符",
+    ["HP separator"] = "生命分隔符",
+    ["Power separator"] = "能量分隔符",
     ["Health (HP)"] = "生命(HP)",
     ["Power"] = "能量",
+    ["Use the scope buttons above to choose which unit these settings apply to."] = "使用上方范围按钮选择要应用设置的单位.",
     ["Selected: Player"] = "已选中: 玩家",
     ["Click a MSUF unitframe (Player/Target/Focus/ToT/Pet/Boss) to choose which unit these spacer settings apply to."] = "点击一个MSUF框架 (玩家/目标/焦点/ToT/宠物/首领) 来选择这些间距设置应用于哪个单位.",
     ["Works only when the corresponding text mode is set to 'Full value + %' (or '% + Full value')."] = "仅当相应的文本模式设置为 '完整值 + %' (或 '% + 完整值') 时才有效.",
@@ -343,8 +408,10 @@ local T = {
     ["HP Spacer (X)"] = "生命间距 (X)",
     ["Power Spacer on/off"] = "能量间距 开/关",
     ["Power Spacer (X)"] = "能量间距 (X)",
+    ["Outline & Highlight Border"] = "轮廓 & 高亮边框",
     ["Bar Highlight Border"]  = "计量条高亮边框",
     ["Highlight border thickness"] = "高亮边框厚度",
+    ["Highlight borders"]   = "高亮边框",
     ["Aggro border off"] = "仇恨边框关闭",
     ["Aggro border on"] = "仇恨边框开启",
     ["Test"] = "测试",
@@ -400,6 +467,9 @@ local T = {
     ["When OFF: Text updates are budget-gated"]    = "关闭时: 文本更新由预算控制",
     ["(player 33Hz, others 10Hz) for lower CPU."]   = "(玩家33Hz, 其他10Hz) 以降低CPU.",
 
+
+
+
 --------ClassPower---------------
     ["Class Power"] = "职业能量",
     ["Combo Points, Holy Power, Soul Shards, Chi, Essence, Runes"] = "连击点, 神圣能量, 灵魂碎片, 真气, 精华, 符文",
@@ -420,6 +490,7 @@ local T = {
     ["Show rune time (per rune)"]  = "显示符文时间 (每个符文)",
     ["Show Maelstrom bar (Elemental)"]  = "显示旋涡条 (元素)",
     ["Show Ebon Might timer (Aug)"]  = "显示黑檀之力计时器 (增辉)",
+    ["Show Insanity bar (Shadow)"]  = "显示狂乱值(暗影)",
     ["Show resource prediction"]    = "显示资源预测",
 
     ["Detached Power Bar"]  = "分离能量条",
@@ -492,26 +563,31 @@ local T = {
 
 
 
- --------------------------------------   
+ ---------------fONTS-----------------------   
     ["Fonts"] = "字体",
     ["Font Settings"] = "字体设置",
     ["Font color & style"] = "字体颜色&样式",
     ["Global font"] = "全局字体",
+    ["Global Font"] = "全局字体",
     ["Text sizes"] = "文本大小",
+    ["Text Sizes"]  = "文本大小",
     ["Global defaults. Frames inherit unless overridden in Unitframes > Text."] = "全局默认值. 框架继承除非在单位框架 > 文本中被覆盖.",
     ["Name"]   = "名称",
     ["HP"]     = "生命",
     ["Power"]  = "能量",
     ["Castbar"] = "施法条",
     ["Text style"] = "文本样式",
+    ["Text Style"]  = "文本样式",
     ["Use bold text (THICKOUTLINE)"] = "使用粗体文本 (THICKOUTLINE)",
     ["Disable black outline around text"] = "禁用文本周围的黑色轮廓",
     ["Add text shadow (backdrop)"] = "添加文本阴影 (背景)",
     ["Name colors"] = "名称颜色",
+    ["Name Colors"] = "名称颜色",
     ["Color player names by class"] = "使用职业颜色显示玩家名称",
     ["Color NPC/boss names using NPC colors"] = "使用NPC颜色显示NPC/首领名称",
     ["Color power text by power type"] = "使用能量类型颜色显示能量文本",
     ["Name display"] = "名称显示",
+    ["Name Display"]    = "名称显示",
     ["Shorten unit names (except Player)"] = "缩短单位名称 (除了玩家)",
     ["Truncation style"] = "截断样式",
     ["Keep start (show first letters)"] = "保留首字",
@@ -527,10 +603,14 @@ local T = {
     ["Overrides: -"] = "覆盖: -",
     ["Overrides: "] = "覆盖: ",
     ["Heal prediction"] = "治疗预测",
+    
 
+
+
+--------AURAS 2.0
     ["Auras 2.0"] = "光环2.0",
     ["Midnight Simple Unit Frames - Auras 2.0"] = "Midnight Simple Unit Frames - 光环2.0",
-    ["Auras 2.0: Target / Focus / Boss 1-5.\nDefaults show ALL buffs & debuffs. This menu controls a shared layout for these units."] = "光环2.0: 目标 / 焦点 / 首领1-5.\n默认显示所有增益和减益. 此菜单控制这些单位的共享布局.",
+    ["Auras 2.0: Player / Target / Focus / Boss 1-5.\nDefaults show ALL buffs & debuffs. This menu controls a shared layout for these units."]  = "光环2.0: 玩家 / 目标 / 焦点 / 首领1-5.\n默认显示所有增益和减益. 此菜单控制这些单位的共享布局.",
     ["MSUF Edit Mode"] = "MSUF编辑模式",
     ["Exit MSUF Edit Mode"] = "退出MSUF编辑模式",
     ["MSUF Edit Mode"] = "MSUF编辑模式",
@@ -550,11 +630,20 @@ local T = {
     ["Skins Auras 2.0 icons with Masque (if installed).\n\nWarning: Highlight borders may look odd with some Masque skins."] = "使用Masque为光环2.0图标应用皮肤 (如果已安装).\n\n警告: 高亮边框可能与某些Masque皮肤显示不协调.",
     ["Masque is not loaded/ready. Enable/load the Masque addon, then /reload."] = "Masque未加载/未就绪. 请启用/加载Masque插件, 然后输入/reload.",
     ["Override shared filters"] =  "覆盖共享过滤器",
+    ["Override filters"]    = "覆盖过滤器",
     ["When off, this unit uses Shared filter settings. When on, it uses its own copy of the filters."] = "关闭时, 这个单位使用共享过滤器设置. 开启时, 它使用自己的过滤器的副本.",
     ["Override shared caps"] = "覆盖共享上限",
+    ["Override caps"]   = "覆盖上限",
     ["When off, this unit uses Shared caps (Max Buffs/Debuffs, Icons per row). When on, it uses its own caps."]    = "关闭时, 这个单位使用共享上限 (最大增益/负面, 每行图标). 开启时, 它使用自己的上限.",
     ["Reset overrides"] = "重置覆盖",
+    ["Unit override active: greyed options are Shared."]    = "单位覆盖已激活: 灰色选项为共享.",
+    ["Filter override active: greyed options are Shared."]  = "过滤器覆盖已激活: 灰色选项为共享.",
+    ["Caps override active: greyed options are Shared."]    = "上限覆盖已激活: 灰色选项为共享.",
     ["Turns off Override shared filters and caps for all units and reverts them to Shared."] = "为所有单位关闭覆盖共享过滤器和上限, 并将其还原为共享.",
+    ["Override active: this unit uses its own Filters and Caps."]       = "覆盖已启用:此单位将使用其独立的过滤器和上限设置.",
+    ["Override active: this unit uses its own Filters."]    =   "覆盖已启用: 此单位将使用其独立的过滤器设置.",
+    ["Override active: this unit uses its own Caps."]   = "覆盖已启用: 此单位将使用其独立的上限设置.",
+    ["Uses Shared filters and caps."] = "使用共享过滤器和上限.",
     ["Preview in Edit Mode"] = "在编辑模式中预览",
     ["When enabled, placeholder auras can be shown while MSUF Edit Mode is active."] = "启用时, MSUF编辑模式激活期间可显示占位符光环.",
     ["Units"] = "单位",
@@ -569,22 +658,29 @@ local T = {
     ["Boss 4"] = "首领4",
     ["Boss 5"] = "首领5",
     ["Shared"]  = "共享",
+    ["Shared baseline used by units without overrides."] = "共享基准, 用于没有覆盖的单位.",
     ["Boss %s"] = "首领%s",
+    ["|cff9aa0a6No unit overrides active.|r"]   = "|cff9aa0a6未激活任何单位覆盖.|r",
+    ["|cffffffffOverrides active:|r "] = "|cffffffff覆盖已激活:|r ",
+    ["|cffffffffOverrides active:|r %s, %s, %s, %s |cff9aa0a6+%d|r"] = "|cffffffff覆盖已激活:|r %s, %s, %s, %s |cff9aa0a6+%d|r",
+    
 
     ["Editing: |cffffd200"] = "编辑: |cffffd200",
     ["|cffffffffOverrides:|r "] = "|cffffffff覆盖:|r ",
+    ["Editing:"]    = "编辑: ",   
 
 
-
-
+    ["|cff6EB5FFIcons|r"]   = "|cff6EB5FF图标|r",
+    ["|cff6EB5FFCooldown|r"]    = "|cff6EB5FF冷却|r", 
+    ["|cff6EB5FFBorders|r"]     = "|cff6EB5FF边框|r",
     ["Show Buffs"] = "显示Buffs",
     ["Show Debuffs"]   = "显示Debuffs",
     ["Highlight own buffs"] =  "高亮自己的Buffs",
     ["Highlights your own buffs with a border color (visual only; does not filter)."] = "用边框颜色高亮自己的Buffs (仅视觉; 不过滤).",
     ["Highlight own debuffs"] = "高亮自己的Debuffs",
     ["Highlights your own debuffs with a border color (visual only; does not filter)."] = "用边框颜色高亮自己的Debuffs (仅视觉; 不过滤).",
-    ["Show cooldown swipe"] = "显示冷却扫过",
-    ["Swipe darkens on loss"] = "扫过丢失时变暗",
+    ["Show cooldown swipe"] = "显示冷却动画",
+    ["Swipe darkens on loss"] = "冷却结束变暗",
     ["When enabled, the cooldown swipe represents elapsed time (darkens as time is lost).\n\nTurn this OFF to keep the default cooldown-style swipe."] = "启用时, 冷却扫过表示已流逝的时间 (随时间流失而变暗).\n\n关闭此选项以保持默认的冷却样式扫过.",
     ["Show stack count"] = "显示堆叠数量",
     ['Shows stack/application counts (e.g. "2") on aura icons. Disable to hide stack numbers.'] = "在光环图标上显示堆叠/应用数量 (例如 \"2\"). 禁用以隐藏堆叠数字.",
@@ -605,6 +701,7 @@ local T = {
     ["Colors aura borders by debuff dispel type (Magic/Curse/Poison/Disease), similar to Blizzard private aura borders."] = "根据Debuff驱散类型 (魔法/诅咒/中毒/疾病) 着色光环边框, 类似于暴雪私有光环边框.",
     ["Only my buffs"]  = "仅自己的Buffs",
     ["Only my debuffs"] = "仅自己的Debuffs",
+    ["Layout & Caps"]   = "布局与限制",
     ["Max Buffs"] = "最大Buffs数量",
     ["Max Debuffs"] = "最大Debuffs数量",
     ["Block spacing"] = "块间距",
@@ -627,10 +724,25 @@ local T = {
     ['Urgent (<=)'] = "紧急 (<=)",
     ["Advanced"] = "高级",
     ["Include"] = "包含",
+    ["Timer Colors"] = "计时颜色",
     ['Use Blizzard timer text (max performance)'] = '使用暴雪计时文本 (最大性能)',
     ['When enabled, Blizzard handles countdown numbers natively in C++.\nDisables timer colors but eliminates all periodic timer CPU overhead.\nFont, size and position are still controlled by MSUF.'] = '启用时, 暴雪在C++中本地处理倒计时数字.\n禁用计时器颜色但消除了所有定期定时器的CPU开销.\n字体, 大小和位置仍由MSUF控制.',
     ['Color aura timers by remaining time'] = '按剩余时间着色光环计时器',
     ['When enabled, aura cooldown text uses Safe / Warning / Urgent colors based on remaining time.\nWhen disabled, aura cooldown text always uses the Safe color.']    = '启用时, 光环冷却文本根据剩余时间使用安全 / 警告 / 紧急颜色.\n禁用时, 光环冷却文本始终使用安全颜色.',
+    ["Pandemic window"] = "刷新提示",
+    ["Pulse"] = "脉冲",
+    ["Glow"] = "发光",
+    ["Pandemic window uses a fixed 30%% remaining-duration threshold for all auras.\n\n"]   = "刷新提示对所有光环使用固定的30%剩余持续时间阈值.\n\n",
+    ["This is a best-effort indicator \226\128\148 it does not know individual spell pandemic rules. "] = "此提示仅供参考 \226\128\148 不含特定技能的刷新机制.",
+    ["It applies to every buff and debuff equally.\n\n"]    = "此规则同等适用于所有增益和减益效果.\n\n", 
+    ["Color can be changed in the Colors panel."]   = "可在颜色面板中更改颜色.",
+    ["Pulse"] = "脉冲",
+    ["Glow"] = "发光", 
+    ["Best-effort: fixed 30% threshold for all auras. Color: Colors panel."]    = "最佳尝试: 所有光环的固定30%剩余持续时间阈值. 颜色: 颜色面板.",
+
+
+
+
 
     ["Include boss buffs"] =  "包含首领Buffs",
     ["Include boss debuffs"] =  "包含首领Debuffs",
@@ -696,7 +808,7 @@ local T = {
 
 
 
-
+--------Auras ----------------
 
 
 
@@ -765,6 +877,8 @@ local T = {
     ["Cooldowns"]    = "冷却",
     ["Hearthstone, Reincarnation cooldown auras."]    = "炉石, 复活冷却光环.",
     ["Growth:"]  = "增长:",
+    ["Override for this unit"]  = "覆盖此单位",
+    ["When off, this unit uses Shared ignore settings. When on, it uses its own copy."]  = "关闭时,此单位使用共享的忽略设置;开启,则使用专属的独立配置.",
 
 
 
@@ -992,6 +1106,12 @@ local T = {
     ["Border custom color"] = "自定义边框颜色",
     ["Background color"] = "背景颜色",
     ["Reset portrait colors"] = "重置头像颜色",
+
+    ["Pandemic window color"] = "刷新提示颜色",
+
+
+
+
 -----------------Portraits--------
     ["Portrait Settings"]   = "头像设置",
 
@@ -1130,6 +1250,9 @@ local T = {
     ["Used by: Crosshair color"]   = "用于: 十字准星颜色",
     ["Timer position (offset)"] = "计时器位置 (偏移)",
     ["Click-through (ALT to drag when unlocked)"]   = "点击穿透 (解锁时ALT拖动)",
+    ["Show as icon with cooldown swipe"]   = "显示为带冷却图标",
+    ["Icon: %d"]   = "图标: %d",
+    ["Keep visible when ready (hide on combat enter)"]   = "就绪时保持显示(进入战斗隐藏)",
 
 
     ["Reset Totem tracker layout"] = "重置图腾追踪器布局",
