@@ -124,8 +124,8 @@ local A2_SHARED_DEFAULTS = {
     growth="RIGHT", rowWrap="DOWN",
     offsetX=0, offsetY=6, buffOffsetY=30,
     stackTextSize=14, cooldownTextSize=14, bossEditTogether=true,
-    showPrivateAurasPlayer=true, showPrivateAurasFocus=true, showPrivateAurasBoss=true,
-    privateAuraMaxPlayer=4, privateAuraMaxOther=4,
+    showPrivateAurasPlayer=true,
+    privateAuraMaxPlayer=4,
     showSated=true, satedShowAtSeconds=0,
     ignoreCats={},
     showReminders=true,
@@ -171,7 +171,6 @@ local function EnsureDB()
     if s.maxDebuffs == nil then s.maxDebuffs = s.maxIcons or 12 end
     s.showPrivateAurasTarget = false
     s.privateAuraMaxPlayer = Clamp(s.privateAuraMaxPlayer, 4, 0, 12)
-    s.privateAuraMaxOther  = Clamp(s.privateAuraMaxOther,  4, 0, 12)
     s.satedShowAtSeconds   = Clamp(s.satedShowAtSeconds, 0, 0, 3600)
     -- Per-type growth: sanitize invalid values (nil = fall back to s.growth)
     if s.buffGrowth ~= nil and not A2_GROWTH_OK[s.buffGrowth] then s.buffGrowth = nil end
@@ -677,26 +676,22 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
     if not entry or not shared then return end
     local unit = entry.unit
 
-    local enabled = false
-    if unit == "player" then enabled = (shared.showPrivateAurasPlayer == true)
-    elseif unit == "focus" then enabled = (shared.showPrivateAurasFocus == true)
-    elseif _IS_BOSS[unit] then enabled = (shared.showPrivateAurasBoss == true)
-    end
-
-    if not enabled or not PrivateAurasSupported() then
+    -- 12.0.1: Private aura anchor APIs blocked in combat.
+    -- Player-only (focus/boss swaps mid-combat would require Add/Remove calls).
+    if unit ~= "player" or shared.showPrivateAurasPlayer ~= true or not PrivateAurasSupported() then
         PrivateClear(entry)
         return
     end
 
-    local maxN = (unit == "player") and (shared.privateAuraMaxPlayer or 4) or (shared.privateAuraMaxOther or 4)
+    -- Safety net: never call Add/RemovePrivateAuraAnchor in combat.
+    if _inCombat then return end
+
+    local maxN = shared.privateAuraMaxPlayer or 4
     maxN = Clamp(maxN, 4, 0, 12)
     if maxN == 0 then PrivateClear(entry); return end
 
-    -- Effective unit token (focusplayer if focus IS player)
-    local effectiveToken = unit
-    if unit ~= "player" and UnitIsUnit and UnitIsUnit(unit, "player") then
-        effectiveToken = "player"
-    end
+    -- unit is always "player" here (focus/boss removed in 12.0.1)
+    local effectiveToken = "player"
 
     -- Resolve growth direction
     privateGrowth = (privateGrowth and A2_GROWTH_OK[privateGrowth]) and privateGrowth or "RIGHT"

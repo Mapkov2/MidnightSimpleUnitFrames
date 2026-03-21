@@ -1692,19 +1692,13 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
         return fn(entry, unit, shared, privIconSize, spacing, stackCountAnchor, privateGrowth)
     end
 
-    -- Always show private aura previews in Edit Mode (no enabled-gate needed 
-    -- this function is only called from the preview path). Use configured max
-    -- counts so the user sees exactly how many slots they have allocated.
+    -- Private aura previews: player-only (12.0.1 combat restriction).
     local container = entry.private
     if not container then return end
+    if unit ~= "player" then container:Hide(); return end
 
-    local maxN = 4
-    if unit == "player" then
-        maxN = (shared and shared.privateAuraMaxPlayer) or 4
-    else
-        maxN = (shared and shared.privateAuraMaxOther) or 4
-    end
-    if maxN <= 0 then maxN = 4 end -- always show at least a few in preview
+    local maxN = (shared and shared.privateAuraMaxPlayer) or 4
+    if maxN <= 0 then maxN = 4 end
 
     -- Growth direction
     privateGrowth = privateGrowth or "RIGHT"
