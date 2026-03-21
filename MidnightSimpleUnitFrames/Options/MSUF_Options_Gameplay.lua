@@ -125,6 +125,58 @@ function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
 
     scrollFrame:SetScrollChild(content)
 
+    local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
+    local SEC_W = 640
+    local PAD_X = 16
+    local TR = ns.TR or function(v) return v end
+    local sectionParent = content
+    local allSections = {}
+
+    local function MakeCollapsibleSection(parent, anchorTo, w, expandedH, titleText, defaultOpen)
+        local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        box:SetSize(w, expandedH)
+        box:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, -6)
+        box:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 0, right = 0, top = 0, bottom = 0 } })
+        box:SetBackdropColor(0, 0, 0, 0.18)
+        box:SetBackdropBorderColor(1, 1, 1, 0.10)
+        box._msufExpandedH = expandedH
+        box._msufCollapsed = false
+        box._msufDefaultOpen = defaultOpen
+        local hdr = CreateFrame("Button", nil, box)
+        hdr:SetHeight(24)
+        hdr:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+        hdr:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
+        local chevron = hdr:CreateTexture(nil, "OVERLAY")
+        chevron:SetSize(12, 12)
+        chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
+        chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+        MSUF_ApplyCollapseVisual(chevron, nil, true)
+        local titleFS = hdr:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        titleFS:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
+        titleFS:SetText(titleText)
+        local hint = hdr:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hint:SetPoint("RIGHT", hdr, "RIGHT", -12, 0)
+        hint:SetText(""); hint:SetTextColor(0.45, 0.52, 0.65)
+        local body = CreateFrame("Frame", nil, box)
+        body:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -28)
+        body:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
+        body:Show()
+        box._msufBody = body
+        local function ApplyState()
+            local open = not box._msufCollapsed
+            body:SetShown(open)
+            box:SetHeight(open and box._msufExpandedH or 28)
+            MSUF_ApplyCollapseVisual(chevron, hint, open)
+            if type(box._msufOnToggle) == "function" then box._msufOnToggle() end
+        end
+        hdr:SetScript("OnClick", function() box._msufCollapsed = not box._msufCollapsed; ApplyState() end)
+        hdr:SetScript("OnEnter", function() end)
+        do local hl = hdr:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.03) end
+        box._msufApplyState = ApplyState
+        allSections[#allSections + 1] = box
+        return box, body
+    end
+
     local lastControl
 
     local function RequestApply()
@@ -652,24 +704,24 @@ end)
     -- NOTE: Keep layout pixel-identical by preserving all SetPoint offsets.
     ------------------------------------------------------
     local function _MSUF_Sep(topRef, yOff)
-        local t = content:CreateTexture(nil, "ARTWORK")
+        local t = sectionParent:CreateTexture(nil, "ARTWORK")
         t:SetColorTexture(1, 1, 1, 0.15)
         t:SetPoint("TOP", topRef, "BOTTOM", 0, yOff or -24)
-        t:SetPoint("LEFT", content, "LEFT", 20, 0)
-        t:SetPoint("RIGHT", content, "RIGHT", -20, 0)
+        t:SetPoint("LEFT", sectionParent, "LEFT", 20, 0)
+        t:SetPoint("RIGHT", sectionParent, "RIGHT", -20, 0)
         t:SetHeight(1)
         return t
     end
 
     local function _MSUF_Header(sep, text)
-        local fs = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        local fs = sectionParent:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         fs:SetPoint("TOPLEFT", sep, "BOTTOMLEFT", 0, -10)
         fs:SetText(text)
         return fs
     end
 
     local function _MSUF_Label(template, point, rel, relPoint, x, y, text, field)
-        local fs = content:CreateFontString(nil, "ARTWORK", template or "GameFontNormal")
+        local fs = sectionParent:CreateFontString(nil, "ARTWORK", template or "GameFontNormal")
         fs:SetPoint(point, rel, relPoint, x or 0, y or 0)
         fs:SetText(text or "")
         if field then panel[field] = fs end
@@ -677,7 +729,7 @@ end)
     end
 
     local function _MSUF_Check(name, point, rel, relPoint, x, y, text, field, key, after)
-        local cb = CreateFrame("CheckButton", name, content, "InterfaceOptionsCheckButtonTemplate")
+        local cb = CreateFrame("CheckButton", name, sectionParent, "InterfaceOptionsCheckButtonTemplate")
         cb:SetPoint(point, rel, relPoint, x or 0, y or 0)
         cb.Text:SetText(text or "")
         if field then panel[field] = cb end
@@ -686,7 +738,7 @@ end)
     end
 
     local function _MSUF_ColorSwatch(name, point, rel, relPoint, x, y, labelText, field, key, defaultRGB, after)
-        local btn = CreateFrame("Button", name, content, "BackdropTemplate")
+        local btn = CreateFrame("Button", name, sectionParent, "BackdropTemplate")
         btn:SetPoint(point, rel, relPoint, x or 0, y or 0)
         btn:SetSize(18, 18)
         btn:SetBackdrop({
@@ -703,7 +755,7 @@ end)
         sw:SetAllPoints()
         btn._msufSwatch = sw
 
-        local label = content:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        local label = sectionParent:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
         label:SetPoint("LEFT", btn, "RIGHT", 8, 0)
         label:SetText(labelText or "")
         btn._msufLabel = label
@@ -771,7 +823,7 @@ end)
     end
 
     local function _MSUF_Slider(name, point, rel, relPoint, x, y, width, lo, hi, step, lowText, highText, titleText, field, key, roundFunc, after, applyNow)
-        local sl = CreateFrame("Slider", name, content, "OptionsSliderTemplate")
+        local sl = CreateFrame("Slider", name, sectionParent, "OptionsSliderTemplate")
         sl:SetWidth(width or 220)
         sl:SetPoint(point, rel, relPoint, x or 0, y or 0)
         sl:SetMinMaxValues(lo, hi)
@@ -798,7 +850,7 @@ end)
     end
 
     local function _MSUF_EditBox(name, point, rel, relPoint, x, y, w, h, field)
-        local eb = CreateFrame("EditBox", name, content, "InputBoxTemplate")
+        local eb = CreateFrame("EditBox", name, sectionParent, "InputBoxTemplate")
         eb:SetSize(w or 220, h or 20)
         eb:SetAutoFocus(false)
         eb:SetPoint(point, rel, relPoint, x or 0, y or 0)
@@ -806,7 +858,7 @@ end)
         return eb
     end
     local function _MSUF_Button(name, point, rel, relPoint, x, y, w, h, text, field, onClick)
-        local b = CreateFrame("Button", name, content, "UIPanelButtonTemplate")
+        local b = CreateFrame("Button", name, sectionParent, "UIPanelButtonTemplate")
         b:SetSize(w or 60, h or 20)
         b:SetPoint(point, rel, relPoint, x or 0, y or 0)
         b:SetText(text or "")
@@ -819,7 +871,7 @@ end)
 
 local function _MSUF_Dropdown(name, point, rel, relPoint, x, y, width, field)
     -- Simple UIDropDownMenu-based control (used sparingly in Gameplay to avoid heavy UI scaffolding).
-    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(name, content) or CreateFrame("Frame", name, content, "UIDropDownMenuTemplate"))
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(name, sectionParent) or CreateFrame("Frame", name, sectionParent, "UIDropDownMenuTemplate"))
     dd:SetPoint(point, rel, relPoint, x or 0, y or 0)
     if UIDropDownMenu_SetWidth then
         UIDropDownMenu_SetWidth(dd, width or 120)
@@ -830,9 +882,16 @@ local function _MSUF_Dropdown(name, point, rel, relPoint, x, y, width, field)
     return dd
 end
 
-    -- Combat Timer header + separator
-    local combatSeparator = _MSUF_Sep(subText, -36)
-    local combatHeader = _MSUF_Header(combatSeparator, "Combat Timer")
+    -- ═══════════════════════════════════════════════════════════
+    -- Section 1: Combat Timer (default open)
+    -- ═══════════════════════════════════════════════════════════
+    local secCombatTimer, combatTimerBody = MakeCollapsibleSection(content, subText, SEC_W, 440, "Combat Timer", true)
+    sectionParent = combatTimerBody
+
+    local combatSeparator = combatTimerBody:CreateTexture(nil, "ARTWORK")
+    combatSeparator:SetSize(1, 1); combatSeparator:SetPoint("TOPLEFT", combatTimerBody, "TOPLEFT", 0, 0); combatSeparator:Hide()
+    local combatHeader = combatTimerBody:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    combatHeader:SetPoint("TOPLEFT", combatTimerBody, "TOPLEFT", PAD_X, -4); combatHeader:SetText(""); combatHeader:SetHeight(1)
 
     -- In-combat timer checkbox
     local combatTimerCheck = _MSUF_Check("MSUF_Gameplay_CombatTimerCheck", "TOPLEFT", combatHeader, "BOTTOMLEFT", 0, -8, "Enable in-combat timer", "combatTimerCheck", "enableCombatTimer")
@@ -994,9 +1053,16 @@ end
     )
     _MSUF_SliderTextRight("MSUF_Gameplay_CombatTimerOffsetYSlider")
 
-    -- Combat Enter/Leave header + separator
-    local combatStateSeparator = _MSUF_Sep(combatOffsetYSlider, -24)
-    local combatStateHeader = _MSUF_Header(combatStateSeparator, "Combat Enter/Leave")
+    -- ═══════════════════════════════════════════════════════════
+    -- Section 2: Combat Enter/Leave (collapsed)
+    -- ═══════════════════════════════════════════════════════════
+    local secCombatState, combatStateBody = MakeCollapsibleSection(content, secCombatTimer, SEC_W, 260, "Combat Enter/Leave", false)
+    sectionParent = combatStateBody
+
+    local combatStateSeparator = combatStateBody:CreateTexture(nil, "ARTWORK")
+    combatStateSeparator:SetSize(1, 1); combatStateSeparator:SetPoint("TOPLEFT", combatStateBody, "TOPLEFT", 0, 0); combatStateSeparator:Hide()
+    local combatStateHeader = combatStateBody:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    combatStateHeader:SetPoint("TOPLEFT", combatStateBody, "TOPLEFT", PAD_X, -4); combatStateHeader:SetText(""); combatStateHeader:SetHeight(1)
 
     -- Combat state text checkbox
     local combatStateCheck = _MSUF_Check("MSUF_Gameplay_CombatStateCheck", "TOPLEFT", combatStateHeader, "BOTTOMLEFT", 0, -8, "Show combat enter/leave text", "combatStateCheck", "enableCombatStateText")
@@ -1087,9 +1153,16 @@ end
         end
     end)
 
-    -- Class-specific toggles header + separator
-    local classSpecSeparator = _MSUF_Sep(combatStateSlider, -24)
-    local classSpecHeader = _MSUF_Header(classSpecSeparator, "Class-specific toggles")
+    -- ═══════════════════════════════════════════════════════════
+    -- Section 3: Class-specific toggles (collapsed)
+    -- ═══════════════════════════════════════════════════════════
+    local secClassSpec, classSpecBody = MakeCollapsibleSection(content, secCombatState, SEC_W, 360, "Class-specific toggles", false)
+    sectionParent = classSpecBody
+
+    local classSpecSeparator = classSpecBody:CreateTexture(nil, "ARTWORK")
+    classSpecSeparator:SetSize(1, 1); classSpecSeparator:SetPoint("TOPLEFT", classSpecBody, "TOPLEFT", 0, 0); classSpecSeparator:Hide()
+    local classSpecHeader = classSpecBody:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    classSpecHeader:SetPoint("TOPLEFT", classSpecBody, "TOPLEFT", PAD_X, -4); classSpecHeader:SetText(""); classSpecHeader:SetHeight(1)
 
     -- Shaman: Player Totem tracker (player-only)
     local _isShaman = false
@@ -1434,163 +1507,19 @@ _totemsLeftBottom = totemsDragHint
     if not _isRogue then firstDanceOffsetYSlider:SetEnabled(false) end
     _MSUF_SliderTextRight("MSUF_Gameplay_FirstDanceOffsetYSlider")
 
-    ------------------------------------------------------
-    -- Rogue: Apex Alert (Trickster – Shadowstrike! hint)
-    ------------------------------------------------------
-    local _apexUISep = content:CreateTexture(nil, "ARTWORK")
-    _apexUISep:SetColorTexture(1, 1, 1, 0.06)
-    _apexUISep:SetHeight(1)
-    _apexUISep:SetPoint("TOPLEFT", firstDanceOffsetYSlider, "BOTTOMLEFT", 0, -14)
-    _apexUISep:SetSize(560, 1)
+    lastControl = firstDanceOffsetYSlider
 
-    local apexTitle = _MSUF_Label("GameFontNormal", "TOPLEFT", _apexUISep, "BOTTOMLEFT", 0, -10,
-        "Rogue: Apex Alert (Shadowstrike! hint)", "apexAlertTitle")
-    local apexSub1 = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", apexTitle, "BOTTOMLEFT", 0, -2,
-        "Shows |cff00ff00SHADOWSTRIKE!|r if Shadow Dance (185313) is active.", "apexAlertSub1")
-    local apexSub2 = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", apexSub1, "BOTTOMLEFT", 0, -2,
-        "|cff00ff00SHADOWSTRIKE!|r User needs to check himself if shadow tech stacks are above 5.", "apexAlertSub2")
+    -- ═══════════════════════════════════════════════════════════
+    -- Section 4: Combat Crosshair (collapsed)
+    -- ═══════════════════════════════════════════════════════════
+    local _classSpecBottom = firstDanceOffsetYSlider
+    local secCrosshair, crosshairBody = MakeCollapsibleSection(content, secClassSpec, SEC_W, 520, "Combat Crosshair", false)
+    sectionParent = crosshairBody
 
-    local apexCheck = _MSUF_Check("MSUF_Gameplay_ApexAlertCheck", "TOPLEFT", apexSub2, "BOTTOMLEFT", 0, -8,
-        "Enable Apex Alert (Shadowstrike hint)", "apexAlertCheck", "enableApexAlert")
-    if not _isRogue then apexCheck:SetEnabled(false) end
-    panel.apexAlertCheck = apexCheck
-
-    local apexLock = _MSUF_Check("MSUF_Gameplay_ApexAlertLockCheck", "LEFT", apexCheck, "RIGHT", 220, 0,
-        "Lock position", "apexAlertLockCheck", "lockApexAlert",
-        function()
-            local g2 = EnsureGameplayDefaults()
-            local f = _G.MSUF_ApexAlertFrame
-            if f then f:EnableMouse(not (g2.lockApexAlert and true or false)) end
-            -- Preview sofort zeigen/verstecken je nach Lock-State
-            RequestApply()
-        end)
-    panel.apexAlertLockCheck = apexLock
-
-    -- Schriftgröße (EditBox, Zahl)
-    local apexFontLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", apexCheck, "BOTTOMLEFT", 0, -16,
-        "Schriftgröße", "apexFontSizeLabel")
-    local apexFontInput = _MSUF_EditBox("MSUF_Gameplay_ApexFontSizeInput",
-        "TOPLEFT", apexFontLabel, "BOTTOMLEFT", -4, -6, 60, 20, "apexFontSizeInput")
-    _MSUF_Label("GameFontDisableSmall", "LEFT", apexFontInput, "RIGHT", 8, 0,
-        "px  (default 26)", "apexFontSizeHint")
-    panel.apexFontSizeInput = apexFontInput
-    local function _CommitApexFont()
-        local g2 = EnsureGameplayDefaults()
-        local v = tonumber(apexFontInput:GetText()) or 26
-        if v < 6 then v = 6 end
-        if v > 128 then v = 128 end
-        g2.apexAlertFontSize = v
-        if ns and ns.MSUF_ApexAlert_ApplyFont then ns.MSUF_ApexAlert_ApplyFont() end
-    end
-    apexFontInput:SetScript("OnEnterPressed", function(self) self:ClearFocus(); _CommitApexFont(); RequestApply() end)
-    apexFontInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    apexFontInput:SetScript("OnEditFocusLost",  function() _CommitApexFont(); RequestApply() end)
-
-    -- Anzeigetext
-    local apexMsgLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", apexFontInput, "BOTTOMLEFT", 0, -14,
-        "Text", "apexMsgLabel")
-    local apexMsgInput = _MSUF_EditBox("MSUF_Gameplay_ApexMsgInput",
-        "TOPLEFT", apexMsgLabel, "BOTTOMLEFT", -4, -6, 220, 20, "apexMsgInput")
-    _MSUF_Label("GameFontDisableSmall", "TOPLEFT", apexMsgInput, "BOTTOMLEFT", 0, -2,
-        "Default green. Default: SHADOWSTRIKE!", "apexMsgHint")
-    panel.apexMsgInput = apexMsgInput
-    local function _CommitApexMsg()
-        local g2 = EnsureGameplayDefaults()
-        local v = apexMsgInput:GetText()
-        if not v or v == "" then v = "SHADOWSTRIKE!" end
-        g2.apexAlertMessage = v
-        -- Preview sofort aktualisieren wenn unlocked
-        local f = _G.MSUF_ApexAlertFrame
-        if f and not g2.lockApexAlert then
-            local ft = _G.MSUF_ApexAlertText
-            if ft then
-                ft:SetText("|cff00ff00" .. v .. "|r")
-                f:Show()
-            end
-        end
-    end
-    apexMsgInput:SetScript("OnEnterPressed", function(self) self:ClearFocus(); _CommitApexMsg(); RequestApply() end)
-    apexMsgInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    apexMsgInput:SetScript("OnEditFocusLost",  function() _CommitApexMsg(); RequestApply() end)
-
-    local apexOffsetXSlider = _MSUF_Slider("MSUF_Gameplay_ApexAlertOffsetXSlider",
-        "TOPLEFT", apexMsgInput, "BOTTOMLEFT", 0, -18,
-        240, -800, 800, 1, "-800", "800", "X: 0",
-        "apexAlertOffsetXSlider", "apexAlertOffsetX",
-        function(v) return math.floor(v + 0.5) end,
-        function(self, gdb, v)
-            local t = _G[self:GetName() .. "Text"]
-            if t then t:SetText(string_format("X: %d", v)) end
-            local f = _G.MSUF_ApexAlertFrame
-            if f then
-                f:ClearAllPoints()
-                f:SetPoint("CENTER", UIParent, "CENTER",
-                    tonumber(gdb.apexAlertOffsetX) or 0,
-                    tonumber(gdb.apexAlertOffsetY) or 60)
-            end
-        end,
-        false
-    )
-    _MSUF_SliderTextRight("MSUF_Gameplay_ApexAlertOffsetXSlider")
-    panel.apexAlertOffsetXSlider = apexOffsetXSlider
-
-    local apexOffsetYSlider = _MSUF_Slider("MSUF_Gameplay_ApexAlertOffsetYSlider",
-        "TOPLEFT", apexOffsetXSlider, "BOTTOMLEFT", 0, -12,
-        240, -800, 800, 1, "-800", "800", "Y: 60",
-        "apexAlertOffsetYSlider", "apexAlertOffsetY",
-        function(v) return math.floor(v + 0.5) end,
-        function(self, gdb, v)
-            local t = _G[self:GetName() .. "Text"]
-            if t then t:SetText(string_format("Y: %d", v)) end
-            local f = _G.MSUF_ApexAlertFrame
-            if f then
-                f:ClearAllPoints()
-                f:SetPoint("CENTER", UIParent, "CENTER",
-                    tonumber(gdb.apexAlertOffsetX) or 0,
-                    tonumber(gdb.apexAlertOffsetY) or 60)
-            end
-        end,
-        false
-    )
-    _MSUF_SliderTextRight("MSUF_Gameplay_ApexAlertOffsetYSlider")
-    panel.apexAlertOffsetYSlider = apexOffsetYSlider
-
-    -- Shadow Dance Fenster-Dauer (Kommazahl, z.B. 8.0)
-    local danceWinLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", apexOffsetYSlider, "BOTTOMLEFT", 0, -16,
-        "Shadow Dance Dauer (s)", "apexDanceWinLabel")
-    local danceWinInput = _MSUF_EditBox("MSUF_Gameplay_ApexDanceWinInput",
-        "TOPLEFT", danceWinLabel, "BOTTOMLEFT", -4, -6, 80, 20, "apexDanceWinInput")
-    _MSUF_Label("GameFontDisableSmall", "LEFT", danceWinInput, "RIGHT", 8, 0,
-        "Default 8.0 — +3s automatisch wenn First Dance voll ausläuft.", "apexDanceWinHint")
-    panel.apexDanceWinInput = danceWinInput
-    local function _CommitDanceWin()
-        local g2 = EnsureGameplayDefaults()
-        local raw = danceWinInput:GetText():gsub(",", ".")
-        local v = tonumber(raw) or 8.0
-        if v <= 0 then v = 8.0 end
-        g2.apexAlertDanceWindow = v
-    end
-    danceWinInput:SetScript("OnEnterPressed", function(self) self:ClearFocus(); _CommitDanceWin(); RequestApply() end)
-    danceWinInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    danceWinInput:SetScript("OnEditFocusLost",  function() _CommitDanceWin(); RequestApply() end)
-
-    -- Ancient Arts: track via Spell Activation Overlay (event-driven, no aura ID needed)
-    local aaCheck = _MSUF_Check("MSUF_Gameplay_ApexAAOverlayCheck",
-        "TOPLEFT", danceWinInput, "BOTTOMLEFT", 0, -14,
-        "Track Ancient Arts via Spell Activation Overlay",
-        "apexAAOverlayCheck", "apexAlertTrackOverlay")
-    _MSUF_Label("GameFontDisableSmall", "TOPLEFT", aaCheck, "BOTTOMLEFT", 24, -2,
-        "Shows |cff00ccffAA|r on proc. Event-driven — Sub Rogue has exactly one overlay.", "apexAAHint")
-    panel.apexAAOverlayCheck = aaCheck
-    if not _isRogue then aaCheck:SetEnabled(false) end
-
-    lastControl = aaCheck
-
-    -- Combat crosshair header + separator
-
-    local _classSpecBottom = aaCheck
-    local crosshairSeparator = _MSUF_Sep(_classSpecBottom, -20)
-    local crosshairHeader = _MSUF_Header(crosshairSeparator, "Combat crosshair")
+    local crosshairSeparator = crosshairBody:CreateTexture(nil, "ARTWORK")
+    crosshairSeparator:SetSize(1, 1); crosshairSeparator:SetPoint("TOPLEFT", crosshairBody, "TOPLEFT", 0, 0); crosshairSeparator:Hide()
+    local crosshairHeader = crosshairBody:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    crosshairHeader:SetPoint("TOPLEFT", crosshairBody, "TOPLEFT", PAD_X, -4); crosshairHeader:SetText(""); crosshairHeader:SetHeight(1)
 
     -- Generic combat crosshair (all classes)
     local combatCrosshairCheck = _MSUF_Check("MSUF_Gameplay_CombatCrosshairCheck", "TOPLEFT", crosshairHeader, "BOTTOMLEFT", 0, -8, "Show green combat crosshair under player (in combat)", "combatCrosshairCheck", "enableCombatCrosshair",
@@ -1649,11 +1578,27 @@ _totemsLeftBottom = totemsDragHint
         if panel.meleeSpellPerStorageHint then
             panel.meleeSpellPerStorageHint:Hide()
         end
+
+        -- Reparent melee widgets into crosshair body so they hide/show with the section
+        meleeSharedTitle:SetParent(sectionParent)
+        meleeSharedSubText:SetParent(sectionParent)
+        meleeLabel:SetParent(sectionParent)
+        meleeInput:SetParent(sectionParent)
+        meleeSelected:SetParent(sectionParent)
+        meleeUsedBy:SetParent(sectionParent)
+        if meleeSharedWarn then meleeSharedWarn:SetParent(sectionParent) end
+        if perClassCB then perClassCB:SetParent(sectionParent) end
+        if perSpecCB then perSpecCB:SetParent(sectionParent) end
+        if suggestionFrame then
+            suggestionFrame:SetParent(sectionParent)
+            suggestionFrame:SetFrameStrata("TOOLTIP")
+            suggestionFrame:SetToplevel(true)
+        end
     end
 
     -- Crosshair preview (in-menu)
     -- Shows a live preview of size/thickness and (optionally) the melee-range color mode.
-    local crosshairPreview = CreateFrame("Frame", "MSUF_Gameplay_CrosshairPreview", content, "BackdropTemplate")
+    local crosshairPreview = CreateFrame("Frame", "MSUF_Gameplay_CrosshairPreview", sectionParent, "BackdropTemplate")
     crosshairPreview:SetBackdrop({
         bgFile = "Interface/Tooltips/UI-Tooltip-Background",
         edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
@@ -1827,6 +1772,36 @@ _totemsLeftBottom = totemsDragHint
     -- No Cooldown Manager section (removed)
 
     lastControl = crosshairSizeSlider
+
+    -- Reset sectionParent back to content for any remaining widgets
+    sectionParent = content
+
+    -- ═══════════════════════════════════════════════════════════
+    -- Collapsible section height management
+    -- ═══════════════════════════════════════════════════════════
+    local function RecalcContentHeight()
+        local h = 80
+        for i = 1, #allSections do
+            h = h + (allSections[i]:GetHeight() or 28) + 6
+        end
+        if h < 400 then h = 400 end
+        content:SetHeight(h)
+    end
+
+    for i = 1, #allSections do
+        allSections[i]._msufOnToggle = RecalcContentHeight
+    end
+
+    -- Collapse non-default sections AFTER all widgets are built
+    for i = 1, #allSections do
+        local sec = allSections[i]
+        if not sec._msufDefaultOpen then
+            sec._msufCollapsed = true
+            sec._msufApplyState()
+        end
+    end
+
+    RecalcContentHeight()
     ------------------------------------------------------
     -- Panel scripts (refresh/okay/default)
     ------------------------------------------------------
@@ -1884,15 +1859,6 @@ _totemsLeftBottom = totemsDragHint
         "enableCombatCrosshairMeleeRangeColor",
         "crosshairThickness",
         "crosshairSize",
-
-        "enableApexAlert",
-        "apexAlertOffsetX",
-        "apexAlertOffsetY",
-        "apexAlertFontSize",
-        "apexAlertMessage",
-        "lockApexAlert",
-        "apexAlertTrackOverlay",
-        "apexAlertDanceWindow",
     }
 
     local function _MSUF_ResetGameplayToDefaults()
@@ -1984,10 +1950,6 @@ _totemsLeftBottom = totemsDragHint
 
             {"combatCrosshairCheck", "enableCombatCrosshair"},
             {"crosshairRangeColorCheck", "enableCombatCrosshairMeleeRangeColor"},
-
-            {"apexAlertCheck",        "enableApexAlert"},
-            {"apexAlertLockCheck",    "lockApexAlert"},
-            {"apexAAOverlayCheck",    "apexAlertTrackOverlay"},
 }
         for i = 1, #checks do
             local t = checks[i]
@@ -2011,9 +1973,6 @@ _totemsLeftBottom = totemsDragHint
             {"playerTotemsFontSizeSlider", "playerTotemsFontSize", 14},
             {"playerTotemsOffsetXSlider", "playerTotemsOffsetX", 0},
             {"playerTotemsOffsetYSlider", "playerTotemsOffsetY", -6},
-
-            {"apexAlertOffsetXSlider",  "apexAlertOffsetX",   0},
-            {"apexAlertOffsetYSlider",  "apexAlertOffsetY",   60},
         }
         for i = 1, #sliders do
             local t = sliders[i]
@@ -2121,19 +2080,6 @@ _totemsLeftBottom = totemsDragHint
             self.playerTotemsColorSwatch:MSUF_Refresh()
         end
 
-        -- Apex Alert input syncs
-        if self.apexFontSizeInput then
-            self.apexFontSizeInput:SetText(tostring(tonumber(g.apexAlertFontSize) or 26))
-        end
-        if self.apexMsgInput then
-            self.apexMsgInput:SetText(g.apexAlertMessage or "SHADOWSTRIKE!")
-        end
-        -- Dance window input sync
-        if self.apexDanceWinInput then
-            local dw = tonumber(g.apexAlertDanceWindow) or 8.0
-            self.apexDanceWinInput:SetText(string_format("%.1f", dw))
-        end
-
         -- Grey out dependent controls when their parent toggle is off
         if self.MSUF_UpdateGameplayDisabledStates then
             self:MSUF_UpdateGameplayDisabledStates()
@@ -2218,25 +2164,7 @@ end
     -- Dynamic content height
     ------------------------------------------------------
     local function UpdateContentHeight()
-        local minHeight = 400
-        if not lastControl then
-            content:SetHeight(minHeight)
-            return
-        end
-
-        local bottom = lastControl:GetBottom()
-        local top    = content:GetTop()
-        if not bottom or not top then
-            content:SetHeight(minHeight)
-            return
-        end
-
-        local padding = 40
-        local height  = top - bottom + padding
-        if height < minHeight then
-            height = minHeight
-        end
-        content:SetHeight(height)
+        RecalcContentHeight()
     end
 
     panel:SetScript("OnShow", function()
@@ -2244,7 +2172,7 @@ end
         if panel.refresh then
             panel:refresh()
         end
-        UpdateContentHeight()
+        RecalcContentHeight()
     end)
 
 -- Settings registration

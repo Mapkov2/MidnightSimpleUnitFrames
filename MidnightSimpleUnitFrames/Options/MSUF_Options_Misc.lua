@@ -2,7 +2,7 @@
 -- MSUF_Options_Misc.lua  (Phase 9: Accordion UX)
 --
 -- Miscellaneous options: 5 collapsible sections.
--- 1. Update Intervals   2. Unit Info Panel   3. Blizzard Frames
+-- 1. Update Intervals   2. Unitframe Tooltips   3. Blizzard Frames
 -- 4. Status Indicators  5. Range Fade
 -- ---------------------------------------------------------------------------
 local addonName, ns = ...
@@ -29,6 +29,33 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     local SECTION_W = 680
     local SECTION_COLLAPSED_H = 28
 
+    local scrollFrame = CreateFrame("ScrollFrame", "MSUF_MiscScrollFrame", miscGroup, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", miscGroup, "TOPLEFT", 0, 0)
+    scrollFrame:SetPoint("BOTTOMRIGHT", miscGroup, "BOTTOMRIGHT", -28, 0)
+    if scrollFrame.EnableMouseWheel then scrollFrame:EnableMouseWheel(true) end
+
+    local scrollChild = CreateFrame("Frame", "MSUF_MiscScrollChild", scrollFrame)
+    scrollChild:SetPoint("TOPLEFT", scrollFrame, "TOPLEFT", 0, 0)
+    scrollChild:SetSize(SECTION_W + 32, 1)
+    scrollFrame:SetScrollChild(scrollChild)
+
+    if scrollFrame.SetScript then
+        scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+            local step = 40
+            local current = self.GetVerticalScroll and self:GetVerticalScroll() or 0
+            local newValue = current - ((tonumber(delta) or 0) * step)
+            if newValue < 0 then newValue = 0 end
+            local maxScroll = 0
+            if self.GetVerticalScrollRange then
+                maxScroll = self:GetVerticalScrollRange() or 0
+            end
+            if newValue > maxScroll then newValue = maxScroll end
+            if self.SetVerticalScroll then self:SetVerticalScroll(newValue) end
+        end)
+    end
+
+    local RefreshMiscScrollLayout
+
     -- =====================================================================
     -- Collapsible section helper
     -- =====================================================================
@@ -54,8 +81,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         chevron:SetSize(12, 12)
         chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
         chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
-        chevron:SetVertexColor(0.55, 0.65, 0.82)
-        if defaultOpen then chevron:SetRotation(math_pi * 0.5) end
+        MSUF_ApplyCollapseVisual(chevron, nil, defaultOpen)
 
         local title = hdr:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         title:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
@@ -82,9 +108,10 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
             local open = not box._msufCollapsed
             body:SetShown(open)
             box:SetHeight(open and box._msufExpandedH or box._msufCollapsedH)
-            chevron:SetRotation(open and (math_pi * 0.5) or 0)
-            chevron:SetVertexColor(open and 0.83 or 0.55, open and 0.66 or 0.65, open and 0 or 0.82)
-            hint:SetText(open and "" or TR("click to expand"))
+            MSUF_ApplyCollapseVisual(chevron, hint, open)
+            if type(RefreshMiscScrollLayout) == "function" then
+                RefreshMiscScrollLayout()
+            end
         end
 
         hdr:SetScript("OnClick", function()
@@ -104,8 +131,8 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     -- =====================================================================
     -- Section 1: Update Intervals (default open)
     -- =====================================================================
-    local s1Box, s1Body = MakeCollapsibleSection(miscGroup, 340, "Update Intervals", true)
-    s1Box:SetPoint("TOPLEFT", miscGroup, "TOPLEFT", 16, -115)
+    local s1Box, s1Body = MakeCollapsibleSection(scrollChild, 340, "Update Intervals", true)
+    s1Box:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, -115)
 
     local sliders = {}
 
@@ -133,12 +160,12 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
 
     do
         local row = CreateFrame("Frame", nil, s1Body)
-        row:SetSize(270, 22)
+        row:SetSize(332, 22)
         row:SetPoint("TOPLEFT", s1Body, "TOPLEFT", 14, -6)
 
         local function MakePresetBtn(label, onClick)
             local b = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            b:SetSize(86, 20); b:SetText(label or "")
+            b:SetSize(104, 20); b:SetText(label or "")
             if _G.MSUF_SkinMidnightActionButton then
                 _G.MSUF_SkinMidnightActionButton(b, { textR = 1, textG = 0.85, textB = 0.1 })
             end
@@ -146,8 +173,8 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
             return b
         end
 
-        local gap = 6
-        presetPerf = MakePresetBtn("Perf...", function()
+        local gap = 8
+        presetPerf = MakePresetBtn("Performance", function()
             G().miscUpdatesPreset = "perf"
             sliders.updateInterval:SetValue(0.12); sliders.castbarUpdate:SetValue(0.06)
             sliders.ufcoreBudget:SetValue(1.0); sliders.ufcoreUrgent:SetValue(6)
@@ -155,7 +182,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end)
         presetPerf:SetPoint("LEFT", row, "LEFT", 0, 0)
 
-        presetBal = MakePresetBtn("Balanced...", function()
+        presetBal = MakePresetBtn("Balanced", function()
             G().miscUpdatesPreset = "balanced"
             sliders.updateInterval:SetValue(0.05); sliders.castbarUpdate:SetValue(0.02)
             sliders.ufcoreBudget:SetValue(2.0); sliders.ufcoreUrgent:SetValue(10)
@@ -163,7 +190,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end)
         presetBal:SetPoint("LEFT", presetPerf, "RIGHT", gap, 0)
 
-        presetAcc = MakePresetBtn("Accurate...", function()
+        presetAcc = MakePresetBtn("Accurate", function()
             G().miscUpdatesPreset = "accurate"
             sliders.updateInterval:SetValue(0.01); sliders.castbarUpdate:SetValue(0.01)
             sliders.ufcoreBudget:SetValue(5.0); sliders.ufcoreUrgent:SetValue(50)
@@ -232,20 +259,20 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     })
 
     -- =====================================================================
-    -- Section 2: Unit Info Panel
+    -- Section 2: Unitframe Tooltips
     -- =====================================================================
-    local s2Box, s2Body = MakeCollapsibleSection(miscGroup, 130, "Unit Info Panel", false)
+    local s2Box, s2Body = MakeCollapsibleSection(scrollChild, 130, "Unitframe Tooltips", false)
     s2Box:SetPoint("TOPLEFT", s1Box, "BOTTOMLEFT", 0, -6)
 
     local infoTooltipDisable = UI.Check({
         name = "MSUF_InfoTooltipDisableCheck", parent = s2Body,
         anchor = s2Body, anchorPoint = "TOPLEFT", x = 12, y = -6,
-        label = TR("Disable MSUF unit info panel tooltips"),
+        label = TR("Disable MSUF unitframe tooltips"),
         get = function() return G().disableUnitInfoTooltips and true or false end,
         set = function(v) G().disableUnitInfoTooltips = v end,
     })
 
-    local posLabel = UI.Label({ parent = s2Body, text = TR("MSUF unit info panel position"), anchor = infoTooltipDisable, y = -18 })
+    local posLabel = UI.Label({ parent = s2Body, text = TR("MSUF unitframe tooltip position"), anchor = infoTooltipDisable, y = -18 })
 
     UI.Dropdown({
         name = "MSUF_InfoTooltipPosDropdown", parent = s2Body,
@@ -261,7 +288,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     -- =====================================================================
     -- Section 3: Blizzard Frames
     -- =====================================================================
-    local s3Box, s3Body = MakeCollapsibleSection(miscGroup, 190, "Blizzard Frames", false)
+    local s3Box, s3Body = MakeCollapsibleSection(scrollChild, 190, "Blizzard Frames", false)
     s3Box:SetPoint("TOPLEFT", s2Box, "BOTTOMLEFT", 0, -6)
 
     local blizzUFDisable = UI.Check({
@@ -327,7 +354,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     -- =====================================================================
     -- Section 4: Status Indicators
     -- =====================================================================
-    local s4Box, s4Body = MakeCollapsibleSection(miscGroup, 170, "Status Indicators", false)
+    local s4Box, s4Body = MakeCollapsibleSection(scrollChild, 170, "Status Indicators", false)
     s4Box:SetPoint("TOPLEFT", s3Box, "BOTTOMLEFT", 0, -6)
 
     local function GetStatusDB()
@@ -398,7 +425,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     -- =====================================================================
     -- Section 5: Range Fade
     -- =====================================================================
-    local s5Box, s5Body = MakeCollapsibleSection(miscGroup, 150, "Range Fade", false)
+    local s5Box, s5Body = MakeCollapsibleSection(scrollChild, 150, "Range Fade", false)
     s5Box:SetPoint("TOPLEFT", s4Box, "BOTTOMLEFT", 0, -6)
 
     local rfTarget = UI.Check({
@@ -445,4 +472,27 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
             end
         end,
     })
+
+    RefreshMiscScrollLayout = function()
+        local contentH = 115
+            + (s1Box.GetHeight and s1Box:GetHeight() or 0)
+            + 6
+            + (s2Box.GetHeight and s2Box:GetHeight() or 0)
+            + 6
+            + (s3Box.GetHeight and s3Box:GetHeight() or 0)
+            + 6
+            + (s4Box.GetHeight and s4Box:GetHeight() or 0)
+            + 6
+            + (s5Box.GetHeight and s5Box:GetHeight() or 0)
+            + 24
+        if contentH < 1 then
+            contentH = 1
+        end
+        scrollChild:SetHeight(contentH)
+        if scrollFrame.UpdateScrollChildRect then
+            scrollFrame:UpdateScrollChildRect()
+        end
+    end
+
+    RefreshMiscScrollLayout()
 end

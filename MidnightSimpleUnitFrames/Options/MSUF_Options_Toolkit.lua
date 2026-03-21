@@ -169,6 +169,24 @@ end
 ns.UI = ns.UI or {}
 local UI = ns.UI
 
+-- ---- Collapsible header visuals ----
+UI.COLLAPSE_ARROW_CLOSED = UI.COLLAPSE_ARROW_CLOSED or { 1.00, 0.82, 0.00 }
+UI.COLLAPSE_ARROW_OPEN   = UI.COLLAPSE_ARROW_OPEN   or { 1.00, 0.55, 0.12 }
+
+function UI.ApplyCollapsibleHeaderState(chevron, hint, open)
+    if chevron then
+        chevron:SetRotation(open and (math.pi * 0.5) or 0)
+        local col = open and UI.COLLAPSE_ARROW_OPEN or UI.COLLAPSE_ARROW_CLOSED
+        chevron:SetVertexColor(col[1], col[2], col[3])
+    end
+    if hint and hint.SetText then
+        local tr = (type(ns) == "table" and type(ns.TR) == "function") and ns.TR or function(s) return s end
+        hint:SetText(open and "" or tr("click to expand"))
+    end
+end
+
+_G.MSUF_ApplyCollapseVisual = UI.ApplyCollapsibleHeaderState
+
 -- ---- 4a. Label ----
 function UI.Label(spec)
     local parent = spec.parent

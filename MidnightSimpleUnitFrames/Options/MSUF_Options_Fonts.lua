@@ -93,8 +93,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         chevron:SetSize(12, 12)
         chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
         chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
-        chevron:SetVertexColor(0.55, 0.65, 0.82)
-        if defaultOpen then chevron:SetRotation(math.pi * 0.5) else chevron:SetRotation(0) end
+        MSUF_ApplyCollapseVisual(chevron, nil, defaultOpen)
         local title = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         title:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
         title:SetText(titleText)
@@ -115,12 +114,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             bodyHost:SetShown(not box._msufCollapsed)
             if box._msufCollapsed then
                 box:SetHeight(28)
-                chevron:SetRotation(0)
-                hint:SetText("click to expand")
+                MSUF_ApplyCollapseVisual(chevron, hint, false)
             else
                 box:SetHeight(box._msufExpandedH)
-                chevron:SetRotation(math.pi * 0.5)
-                hint:SetText("")
+                MSUF_ApplyCollapseVisual(chevron, hint, true)
             end
             if MSUF_Fonts_UpdateContentHeight then pcall(MSUF_Fonts_UpdateContentHeight) end
         end)

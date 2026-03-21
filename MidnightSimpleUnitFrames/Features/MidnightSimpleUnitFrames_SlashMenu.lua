@@ -1705,12 +1705,13 @@ end)
 
 if MSUF_AddTooltip then pcall(MSUF_AddTooltip,msufScaleSlider,"MSUF Unitframe Scale","TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only MSUF frames (unitframes + castbars). Range 25%–150% (0.25–1.50). Drag or click to adjust. Applied immediately; in combat it applies after combat.") end
 
--- Slash menu scale slider (scales only the MSUF standalone options window)
+-- Slash menu scale (explicit Apply workflow for cleaner UX)
 local menuScaleLabel=UI_Text(parent,"GameFontHighlight","TOPLEFT",msufScaleSlider,"BOTTOMLEFT",0,-18,"MSUF Slash Menu Scale",MSUF_SkinText)
-local menuScaleCur=UI_Text(parent,"GameFontHighlightSmall","TOPLEFT",menuScaleLabel,"BOTTOMLEFT",0,-6,"Current: ...",MSUF_SkinText)
+local menuScaleCur=UI_Text(parent,"GameFontHighlightSmall","TOPLEFT",menuScaleLabel,"BOTTOMLEFT",0,-6,"Applied: ...",MSUF_SkinText)
+local menuScalePending=UI_Text(parent,"GameFontHighlightSmall","TOPLEFT",menuScaleCur,"BOTTOMLEFT",0,-4,"Selected: ...",MSUF_SkinText)
 local menuScaleSlider=CreateFrame("Slider","MSUF_Tools_SlashMenuScaleSlider",parent,"OptionsSliderTemplate")
 menuScaleSlider:ClearAllPoints()
-menuScaleSlider:SetPoint("TOP",menuScaleCur,"BOTTOM",0,-8)
+menuScaleSlider:SetPoint("TOP",menuScalePending,"BOTTOM",0,-8)
 menuScaleSlider:SetPoint("LEFT",parent,"LEFT",16,0)
 menuScaleSlider:SetPoint("RIGHT",parent,"RIGHT",-28,0)
 menuScaleSlider:SetMinMaxValues(25,150)
@@ -1728,11 +1729,31 @@ local high=(n and _G[n.."High"]) or menuScaleSlider.High
 if high then high:SetText(""); high:Hide() end
 end
 
-local function MSUF_UpdateSlashMenuScaleRow(scale)
-scale=tonumber(scale) or 1.0
-scale=clamp(scale,0.25,1.5)
-local pct=math.floor(scale*100+0.5)
-if menuScaleCur and menuScaleCur.SetText then menuScaleCur:SetText(string.format("Current: %.2f (%d%%)",scale,pct)) end
+local menuScaleApply,menuScaleRevert
+local function MSUF_GetPendingSlashMenuScale()
+local pending=(api and api.pendingSlashMenuScale)
+if pending==nil then pending=MSUF_GetSavedSlashMenuScale() end
+pending=tonumber(pending) or 1.0
+return clamp(pending,0.25,1.5)
+end
+local function MSUF_UpdateSlashMenuScaleRow(applied,pending)
+applied=clamp(tonumber(applied) or 1.0,0.25,1.5)
+pending=clamp(tonumber(pending) or applied,0.25,1.5)
+local appliedPct=math.floor(applied*100+0.5)
+local pendingPct=math.floor(pending*100+0.5)
+local changed=math.abs(applied-pending)>0.001
+if menuScaleCur and menuScaleCur.SetText then menuScaleCur:SetText(string.format("Applied: %.2f (%d%%)",applied,appliedPct)) end
+if menuScalePending and menuScalePending.SetText then
+if changed then menuScalePending:SetText(string.format("Selected: %.2f (%d%%)  |cffffd200Press Apply|r",pending,pendingPct))
+else menuScalePending:SetText(string.format("Selected: %.2f (%d%%)",pending,pendingPct)) end
+end
+local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+local disabled=g and g.disableScaling
+if menuScaleApply then
+MSUF_SetEnabled(menuScaleApply,(not disabled) and changed)
+if menuScaleApply._msufSetSelected then menuScaleApply:_msufSetSelected((not disabled) and changed) end
+end
+if menuScaleRevert then MSUF_SetEnabled(menuScaleRevert,(not disabled) and changed) end
 end
 
 menuScaleSlider:EnableMouseWheel(true)
@@ -1748,14 +1769,33 @@ if self.__msufSkip then return end
 local pct=MSUF_SnapMsufScalePct(value)
 if pct~=value then self.__msufSkip=true; self:SetValue(pct); self.__msufSkip=nil; return end
 local scale=pct/100
-MSUF_SetSavedSlashMenuScale(scale)
-MSUF_ApplySlashMenuScale(scale,{ignoreDisable=true})
-MSUF_UpdateSlashMenuScaleRow(scale)
+api.pendingSlashMenuScale=scale
+MSUF_UpdateSlashMenuScaleRow(MSUF_GetSavedSlashMenuScale(),scale)
 end)
 
-if MSUF_AddTooltip then pcall(MSUF_AddTooltip,menuScaleSlider,"MSUF Slash Menu Scale","TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only the MSUF Slash Menu window. Range 25%–150% (0.25–1.50). Drag or click to adjust. Applied immediately.") end
+local menuScaleRow=MSUF_BuildButtonRow(parent,menuScaleSlider,"TOPLEFT","BOTTOMLEFT",0,-10,{
+{text="Apply",w=104,h=18,skinFn=MSUF_SkinDashboardButton,tipTitle="Apply Slash Menu Scale",tipBody="Applies the selected scale to the standalone MSUF Slash Menu window.",onClick=function()
+local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+if g and g.disableScaling then return end
+local scale=MSUF_GetPendingSlashMenuScale()
+MSUF_SetSavedSlashMenuScale(scale)
+MSUF_ApplySlashMenuScale(scale,{ignoreDisable=true})
+api.pendingSlashMenuScale=nil
+if api.Refresh then api.Refresh() else MSUF_UpdateSlashMenuScaleRow(scale,scale) end
+end},
+{text="Revert",w=104,h=18,skinFn=MSUF_SkinDashboardButton,tipTitle="Revert Selection",tipBody="Restores the slider to the currently applied Slash Menu scale without changing anything live.",onClick=function()
+api.pendingSlashMenuScale=nil
+local sms=clamp(MSUF_GetSavedSlashMenuScale(),0.25,1.5)
+local smPct=MSUF_SnapMsufScalePct(sms*100)
+if menuScaleSlider and menuScaleSlider.SetValue then menuScaleSlider.__msufSkip=true; menuScaleSlider:SetValue(smPct); menuScaleSlider.__msufSkip=nil end
+MSUF_UpdateSlashMenuScaleRow(sms,sms)
+end},
+},8)
+menuScaleApply,menuScaleRevert=menuScaleRow and menuScaleRow[1],menuScaleRow and menuScaleRow[2]
 
-api.ui={title=title,globalCur=globalCur,btn1080=btn1080,btn1440=btn1440,btn4k=btn4k,btnAuto=btnAuto,msufReset=msufReset,msufOff=msufOff,msufScaleLabel=msufScaleLabel,msufScaleCur=msufScaleCur,msufScaleSlider=msufScaleSlider,menuScaleLabel=menuScaleLabel,menuScaleCur=menuScaleCur,menuScaleSlider=menuScaleSlider,}
+if MSUF_AddTooltip then pcall(MSUF_AddTooltip,menuScaleSlider,"MSUF Slash Menu Scale","TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only the MSUF Slash Menu window. Range 25%–150% (0.25–1.50). Drag or click to choose a value, then press Apply.") end
+
+api.ui={title=title,globalCur=globalCur,btn1080=btn1080,btn1440=btn1440,btn4k=btn4k,btnAuto=btnAuto,msufReset=msufReset,msufOff=msufOff,msufScaleLabel=msufScaleLabel,msufScaleCur=msufScaleCur,msufScaleSlider=msufScaleSlider,menuScaleLabel=menuScaleLabel,menuScaleCur=menuScaleCur,menuScalePending=menuScalePending,menuScaleSlider=menuScaleSlider,menuScaleApply=menuScaleApply,menuScaleRevert=menuScaleRevert,}
 
 function api.UpdateEnabledStates()
 local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
@@ -1768,10 +1808,13 @@ MSUF_SetEnabled(btnAuto,not disabled)
 MSUF_SetEnabled(msufReset,not disabled)
 MSUF_SetEnabled(msufScaleSlider,not disabled)
 MSUF_SetEnabled(menuScaleSlider,not disabled)
+MSUF_SetEnabled(menuScaleApply,not disabled)
+MSUF_SetEnabled(menuScaleRevert,not disabled)
 if msufScaleLabel and msufScaleLabel.SetAlpha then msufScaleLabel:SetAlpha(disabled and 0.55 or 1.0) end
 if msufScaleCur and msufScaleCur.SetAlpha then msufScaleCur:SetAlpha(disabled and 0.55 or 1.0) end
 if menuScaleLabel and menuScaleLabel.SetAlpha then menuScaleLabel:SetAlpha(disabled and 0.55 or 1.0) end
 if menuScaleCur and menuScaleCur.SetAlpha then menuScaleCur:SetAlpha(disabled and 0.55 or 1.0) end
+if menuScalePending and menuScalePending.SetAlpha then menuScalePending:SetAlpha(disabled and 0.55 or 1.0) end
 return disabled and true or false
 end
 
@@ -1820,13 +1863,18 @@ if msufScaleSlider and msufScaleSlider.SetValue then msufScaleSlider.__msufSkip=
 if math.abs(ms-scale)>0.001 then MSUF_SetSavedMsufScale(scale); MSUF_ApplyMsufScale(scale) end
 
 
--- Slash menu scale: show + apply
+-- Slash menu scale: show applied value + separate pending selection
 local sms=clamp(MSUF_GetSavedSlashMenuScale(),0.25,1.5)
 local smPct=MSUF_SnapMsufScalePct(sms*100)
 local smScale=smPct/100
-if disabled then smScale=1.0 smPct=100 end
-MSUF_UpdateSlashMenuScaleRow(smScale)
-if menuScaleSlider and menuScaleSlider.SetValue then menuScaleSlider.__msufSkip=true; menuScaleSlider:SetValue(smPct); menuScaleSlider.__msufSkip=nil end
+if disabled then smScale=1.0 smPct=100 api.pendingSlashMenuScale=nil end
+local pendingScale=api.pendingSlashMenuScale
+if pendingScale==nil then pendingScale=smScale end
+pendingScale=clamp(tonumber(pendingScale) or smScale,0.25,1.5)
+local pendingPct=MSUF_SnapMsufScalePct(pendingScale*100)
+pendingScale=pendingPct/100
+MSUF_UpdateSlashMenuScaleRow(smScale,pendingScale)
+if menuScaleSlider and menuScaleSlider.SetValue then menuScaleSlider.__msufSkip=true; menuScaleSlider:SetValue(pendingPct); menuScaleSlider.__msufSkip=nil end
 if not disabled and math.abs(sms-smScale)>0.001 then MSUF_SetSavedSlashMenuScale(smScale) end
 MSUF_ApplySlashMenuScale(smScale,{ignoreDisable=true})
 
@@ -2427,7 +2475,7 @@ navParent._msufNavStripe=stripe end
 local function MakeButton(label,w,onClick,isHeader,isChild) local b=UI_Button(navParent,tostring(label or""),w,btnH,"TOPLEFT",navParent,"TOPLEFT",0,0,onClick)
 MSUF_LeftJustifyButtonText(b,isHeader and 18 or(isChild and 22 or 24))
 MSUF_SkinNavButton(b,isHeader,isChild) return b end
-local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_misc",label="Miscellaneous"},{key="opt_colors",label="Colors"},{key="opt_portraits",label="Portraits"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
+local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_portraits",label="Portraits"},{key="opt_colors",label="Colors"},{key="opt_misc",label="Miscellaneous"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
 local headerLabels={}
 for _,node in ipairs(NAV)
 do if node.type=="header"then headerLabels[node.id]=node.label end
@@ -2810,11 +2858,11 @@ profMeta:SetJustifyH("LEFT")
 local scaleCard=CreateCard(colL,"UI Scale",navCard,-10)
 scaleCard:SetPoint("BOTTOMLEFT",colL,"BOTTOMLEFT",0,0)
 scaleCard:SetPoint("BOTTOMRIGHT",colL,"BOTTOMRIGHT",0,0)
-local scaleDesc=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-30,"Quick access to global UI scale presets and MSUF frame scale.",MSUF_SkinMuted)
+local scaleDesc=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-30,"Quick access to scaling.",MSUF_SkinMuted)
 local scaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-54,"Global UI Scale",MSUF_SkinText)
 local scaleRow=MSUF_BuildButtonRowTL(scaleCard,12,-78,{{text="1080",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080) MSUF_SetGlobalUiScale(UI_SCALE_1080,true) ReloadUI() end) end},{text="1440",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440) MSUF_SetGlobalUiScale(UI_SCALE_1440,true) ReloadUI() end) end},{text="4K",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("4k",UI_SCALE_4K) MSUF_SetGlobalUiScale(UI_SCALE_4K,true) ReloadUI() end) end},{text="Auto",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: Auto",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("auto",nil) MSUF_ResetGlobalUiScale(true) ReloadUI() end) end},},-1)
 local btn1080,btn1440,btn4k,btnAuto=scaleRow[1],scaleRow[2],scaleRow[3],scaleRow[4]
-local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-112,"MSUF Scale",MSUF_SkinText)
+local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-112,"MSUF Frame Scale",MSUF_SkinText)
 local msufScaleCur=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-130,"Current: 1.00",MSUF_SkinMuted)
 local msufScaleSlider=CreateFrame("Slider","MSUF_DashboardMsufScaleSlider",scaleCard,"OptionsSliderTemplate")
 msufScaleSlider:ClearAllPoints()
@@ -2828,8 +2876,54 @@ do local n=(msufScaleSlider.GetName and msufScaleSlider:GetName()) local t=(n an
 msufScaleSlider:EnableMouseWheel(true)
 msufScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then return end local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100 v=v+(delta>0 and 5 or -5) if v<25 then v=25 elseif v>150 then v=150 end self:SetValue(v) end)
 msufScaleSlider:SetScript("OnValueChanged",function(self,value) if self.__msufSkip then return end local pct=math.floor((tonumber(value) or 100)/5+0.5)*5 if pct<25 then pct=25 elseif pct>150 then pct=150 end if pct~=value then self.__msufSkip=true self:SetValue(pct) self.__msufSkip=nil return end local scale=pct/100 MSUF_SetSavedMsufScale(scale) MSUF_ApplyMsufScale(scale) if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end end)
-if MSUF_AddTooltip then pcall(MSUF_AddTooltip,msufScaleSlider,"MSUF Scale","Scales only MSUF frames (unitframes + castbars). Use the mouse wheel for 5% steps.") end
-local function RefreshScaleCard() local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil local disabled=g and g.disableScaling local preset=g and g.globalUiScalePreset if btn1080 and btn1080._msufSetSelected then btn1080:_msufSetSelected((not disabled) and preset=="1080p") end if btn1440 and btn1440._msufSetSelected then btn1440:_msufSetSelected((not disabled) and preset=="1440p") end if btn4k and btn4k._msufSetSelected then btn4k:_msufSetSelected((not disabled) and preset=="4k") end if btnAuto and btnAuto._msufSetSelected then btnAuto:_msufSetSelected(disabled or preset=="auto" or preset==nil) end MSUF_SetEnabled(btn1080,not disabled) MSUF_SetEnabled(btn1440,not disabled) MSUF_SetEnabled(btn4k,not disabled) MSUF_SetEnabled(btnAuto,true) MSUF_SetEnabled(msufScaleSlider,not disabled) if msufScaleLabel and msufScaleLabel.SetAlpha then msufScaleLabel:SetAlpha(disabled and 0.55 or 1.0) end if msufScaleCur and msufScaleCur.SetAlpha then msufScaleCur:SetAlpha(disabled and 0.55 or 1.0) end local scale=clamp(MSUF_GetSavedMsufScale(),0.25,1.5) if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end if msufScaleSlider and msufScaleSlider.SetValue then msufScaleSlider.__msufSkip=true msufScaleSlider:SetValue(math.floor(scale*100+0.5)) msufScaleSlider.__msufSkip=nil end end
+if MSUF_AddTooltip then pcall(MSUF_AddTooltip,msufScaleSlider,"MSUF Frame Scale","Scales only MSUF frames (unitframes + castbars). Use the mouse wheel for 5% steps.") end
+local menuScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-174,"MSUF Slash Menu Scale",MSUF_SkinText)
+local menuScaleApplied=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-192,"Applied: 1.00 (100%)",MSUF_SkinMuted)
+local menuScaleSelected=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-208,"Selected: 1.00 (100%)",MSUF_SkinMuted)
+local menuScaleSlider=CreateFrame("Slider","MSUF_DashboardSlashMenuScaleSlider",scaleCard,"OptionsSliderTemplate")
+menuScaleSlider:ClearAllPoints()
+menuScaleSlider:SetPoint("TOPLEFT",menuScaleSelected,"BOTTOMLEFT",0,-8)
+menuScaleSlider:SetPoint("RIGHT",scaleCard,"RIGHT",-26,0)
+menuScaleSlider:SetMinMaxValues(25,150)
+menuScaleSlider:SetValueStep(5)
+menuScaleSlider:SetObeyStepOnDrag(true)
+if menuScaleSlider.SetStepsPerPage then menuScaleSlider:SetStepsPerPage(1) end
+do local n=(menuScaleSlider.GetName and menuScaleSlider:GetName()) local t=(n and _G[n.."Text"]) or menuScaleSlider.Text if t then t:SetText("") t:Hide() end local low=(n and _G[n.."Low"]) or menuScaleSlider.Low if low then low:SetText("") low:Hide() end local high=(n and _G[n.."High"]) or menuScaleSlider.High if high then high:SetText("") high:Hide() end end
+menuScaleSlider:EnableMouseWheel(true)
+menuScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then return end local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100 v=v+(delta>0 and 5 or -5) if v<25 then v=25 elseif v>150 then v=150 end self:SetValue(v) end)
+local function SnapScalePct(value) local pct=math.floor((tonumber(value) or 100)/5+0.5)*5 if pct<25 then pct=25 elseif pct>150 then pct=150 end return pct end
+local function GetAppliedMenuScale(disabled) if disabled then return 1.0 end return clamp(MSUF_GetSavedSlashMenuScale(),0.25,1.5) end
+local function GetPendingMenuScale(disabled) local pending=scaleCard._msufPendingMenuScale if pending==nil then pending=GetAppliedMenuScale(disabled) end pending=tonumber(pending) or 1.0 return clamp(pending,0.25,1.5) end
+local bMenuApply,bMenuRevert
+local function RefreshMenuScaleControls(disabled)
+ local applied=GetAppliedMenuScale(disabled)
+ local pending=GetPendingMenuScale(disabled)
+ local changed=(math.abs(applied-pending)>0.001) and (not disabled)
+ if menuScaleApplied and menuScaleApplied.SetText then menuScaleApplied:SetText(string.format("Applied: %.2f (%d%%)",applied,math.floor(applied*100+0.5))) end
+ if menuScaleSelected and menuScaleSelected.SetText then
+  if changed then menuScaleSelected:SetText(string.format("Selected: %.2f (%d%%)  |cffffd200Press Apply|r",pending,math.floor(pending*100+0.5))) else menuScaleSelected:SetText(string.format("Selected: %.2f (%d%%)",pending,math.floor(pending*100+0.5))) end
+ end
+ if menuScaleSlider and menuScaleSlider.SetValue then menuScaleSlider.__msufSkip=true menuScaleSlider:SetValue(SnapScalePct(pending*100)) menuScaleSlider.__msufSkip=nil end
+ MSUF_SetEnabled(menuScaleSlider,not disabled)
+ MSUF_SetEnabled(bMenuApply,changed)
+ MSUF_SetEnabled(bMenuRevert,changed)
+ if bMenuApply and bMenuApply._msufSetSelected then bMenuApply:_msufSetSelected(changed) end
+ if menuScaleLabel and menuScaleLabel.SetAlpha then menuScaleLabel:SetAlpha(disabled and 0.55 or 1.0) end
+ if menuScaleApplied and menuScaleApplied.SetAlpha then menuScaleApplied:SetAlpha(disabled and 0.55 or 1.0) end
+ if menuScaleSelected and menuScaleSelected.SetAlpha then menuScaleSelected:SetAlpha(disabled and 0.55 or 1.0) end
+end
+menuScaleSlider:SetScript("OnValueChanged",function(self,value)
+ if self.__msufSkip then return end
+ local pct=SnapScalePct(value)
+ if pct~=value then self.__msufSkip=true self:SetValue(pct) self.__msufSkip=nil return end
+ scaleCard._msufPendingMenuScale=pct/100
+ local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+ RefreshMenuScaleControls(g and g.disableScaling)
+end)
+if MSUF_AddTooltip then pcall(MSUF_AddTooltip,menuScaleSlider,"MSUF Slash Menu Scale","Chooses the standalone Slash Menu scale. Drag or use the mouse wheel, then press Apply.") end
+local menuRow=MSUF_BuildButtonRowTL(scaleCard,12,-250,{{text="Apply",w=96,h=20,gap=8,skinFn=MSUF_SkinDashboardButton,onClick=function() local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil if g and g.disableScaling then return end local scale=GetPendingMenuScale(false) MSUF_SetSavedSlashMenuScale(scale) MSUF_ApplySlashMenuScale(scale,{ignoreDisable=true}) scaleCard._msufPendingMenuScale=nil RefreshMenuScaleControls(false) end},{text="Revert",w=96,h=20,skinFn=MSUF_SkinDashboardButton,onClick=function() scaleCard._msufPendingMenuScale=nil local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil RefreshMenuScaleControls(g and g.disableScaling) end},},8)
+bMenuApply,bMenuRevert=menuRow[1],menuRow[2]
+local function RefreshScaleCard() local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil local disabled=g and g.disableScaling local preset=g and g.globalUiScalePreset if btn1080 and btn1080._msufSetSelected then btn1080:_msufSetSelected((not disabled) and preset=="1080p") end if btn1440 and btn1440._msufSetSelected then btn1440:_msufSetSelected((not disabled) and preset=="1440p") end if btn4k and btn4k._msufSetSelected then btn4k:_msufSetSelected((not disabled) and preset=="4k") end if btnAuto and btnAuto._msufSetSelected then btnAuto:_msufSetSelected(disabled or preset=="auto" or preset==nil) end MSUF_SetEnabled(btn1080,not disabled) MSUF_SetEnabled(btn1440,not disabled) MSUF_SetEnabled(btn4k,not disabled) MSUF_SetEnabled(btnAuto,true) MSUF_SetEnabled(msufScaleSlider,not disabled) if msufScaleLabel and msufScaleLabel.SetAlpha then msufScaleLabel:SetAlpha(disabled and 0.55 or 1.0) end if msufScaleCur and msufScaleCur.SetAlpha then msufScaleCur:SetAlpha(disabled and 0.55 or 1.0) end local scale=clamp(MSUF_GetSavedMsufScale(),0.25,1.5) if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end if msufScaleSlider and msufScaleSlider.SetValue then msufScaleSlider.__msufSkip=true msufScaleSlider:SetValue(math.floor(scale*100+0.5)) msufScaleSlider.__msufSkip=nil end if disabled then scaleCard._msufPendingMenuScale=nil end RefreshMenuScaleControls(disabled) end
 home._msufRefreshScaleCard=RefreshScaleCard
 RefreshScaleCard()
 

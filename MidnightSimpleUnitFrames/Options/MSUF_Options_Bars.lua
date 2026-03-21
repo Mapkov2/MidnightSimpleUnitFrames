@@ -104,8 +104,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         local chevron = hdr:CreateTexture(nil, "OVERLAY")
         chevron:SetSize(12, 12); chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
         chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
-        chevron:SetVertexColor(0.55, 0.65, 0.82)
-        if defaultOpen then chevron:SetRotation(math.pi * 0.5) else chevron:SetRotation(0) end
+        MSUF_ApplyCollapseVisual(chevron, nil, defaultOpen)
         local title = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         title:SetPoint("LEFT", chevron, "RIGHT", 6, 0); title:SetText(TR(titleText))
         local hint = hdr:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -126,9 +125,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             box._msufCollapsed = not box._msufCollapsed
             bodyHost:SetShown(not box._msufCollapsed)
             if box._msufCollapsed then
-                box:SetHeight(28); chevron:SetRotation(0); hint:SetText(TR("click to expand"))
+                box:SetHeight(28); MSUF_ApplyCollapseVisual(chevron, hint, false)
             else
-                box:SetHeight(box._msufExpandedH); chevron:SetRotation(math.pi * 0.5); hint:SetText("")
+                box:SetHeight(box._msufExpandedH); MSUF_ApplyCollapseVisual(chevron, hint, true)
             end
             MSUF_BarsMenu_QueueScrollUpdate()
         end)
