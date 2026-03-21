@@ -1295,7 +1295,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             if slider.GetValue then UpdateFromValue(slider:GetValue(), true) end
         end
      end
-    -- Top row: Frame Basics + Castbar, then full-width sections underneath.
+    -- Stacked full-width collapsible groups for a cleaner Frames UX.
+    -- Frame Basics stays open by default; everything else starts collapsed.
     local basicsH = 132
     local castbarBoxH = 132
     local loadCondH = 124
@@ -1306,24 +1307,24 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local _msufStatusBoxH = 188
     panel._msufTextBaseH = _msufTextBaseH
     panel._msufStatusBoxH = _msufStatusBoxH
-    -- Left: Frame Basics
-    local basicsBox = CreateGroupBox(frameGroup, "Frame Basics", leftX, topY, leftW, basicsH, texWhite, texWhite2)
+    local basicsBox, basicsBody = MakeCollapsibleGroupBox(frameGroup, "Frame Basics", fullW, basicsH, true, texWhite, texWhite2)
     basicsBox:Hide()
     panel.playerBasicsBox = basicsBox
+    panel.playerBasicsBody = basicsBody
     panel._msufBasicsH = basicsH
-    -- Top-right: Castbar
-    local castbarBox = CreateGroupBox(frameGroup, "Castbar", rightX, topY, rightW, castbarBoxH, texWhite, texWhite2)
+    local castbarBox, castbarBody = MakeCollapsibleGroupBox(frameGroup, "Castbar", fullW, castbarBoxH, false, texWhite, texWhite2)
     castbarBox:Hide()
     panel.playerCastbarBox = castbarBox
-    -- Full-width: Indicators
-    local textGroup = CreateGroupBox(frameGroup, "Indicators", leftX, topY - basicsH - sectionGap, fullW, _msufTextBaseH, texWhite, texWhite2)
+    panel.playerCastbarBody = castbarBody
+    local textGroup, textBody = MakeCollapsibleGroupBox(frameGroup, "Indicators", fullW, _msufTextBaseH, false, texWhite, texWhite2)
     textGroup:Hide()
     panel.playerTextLayoutGroup = textGroup
-    panel._msufTextGroup = textGroup
-    -- Full-width: Status icons
-    local statusBox = CreateGroupBox(frameGroup, "Status icons", leftX, topY - basicsH - sectionGap - _msufTextBaseH - sectionGap, fullW, _msufStatusBoxH, texWhite, texWhite2)
+    panel.playerTextLayoutBody = textBody
+    panel._msufTextGroup = textBody
+    local statusBox, statusBody = MakeCollapsibleGroupBox(frameGroup, "Status icons", fullW, _msufStatusBoxH, false, texWhite, texWhite2)
     statusBox:Hide()
     panel._msufStatusIconsGroup = statusBox
+    panel._msufStatusIconsBody = statusBody
     -- Boss-only: own collapsible layout section (keeps spacing/order out of Indicators)
     local bossLayoutH = 118
     local bossLayoutBox, bossLayoutBody = MakeCollapsibleGroupBox(frameGroup, "Boss Layout", fullW, bossLayoutH, false, texWhite, texWhite2)
@@ -1356,11 +1357,11 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         { field = "playerReverseFillBarsCB", name = "MSUF_UF_ReverseFillBarsCB", label = "Reverse fill", x = 164, y = -58 },
     }
     for _, s in ipairs(BASIC_TOGGLES) do
-        panel[s.field] = CreateCheck(basicsBox, s.name, s.label, s.x, s.y)
+        panel[s.field] = CreateCheck(basicsBody, s.name, s.label, s.x, s.y + 28)
     end
     if panel.playerEnableFrameCB then
         panel.playerEnableFrameCB:ClearAllPoints()
-        panel.playerEnableFrameCB:SetPoint("TOPRIGHT", basicsBox, "TOPRIGHT", -12, -6)
+        panel.playerEnableFrameCB:SetPoint("TOPRIGHT", basicsBody, "TOPRIGHT", -12, -6)
         if panel.playerEnableFrameCB.Text then
             panel.playerEnableFrameCB.Text:SetText(TR("Enable"))
             panel.playerEnableFrameCB.Text:ClearAllPoints()
@@ -1368,12 +1369,12 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             panel.playerEnableFrameCB.Text:SetJustifyH("RIGHT")
         end
     end
-    local portraitLabel = basicsBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    portraitLabel:SetPoint("TOPLEFT", basicsBox, "TOPLEFT", 12, -88)
+    local portraitLabel = basicsBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    portraitLabel:SetPoint("TOPLEFT", basicsBody, "TOPLEFT", 12, -60)
     portraitLabel:SetText(TR("Portrait"))
     panel.playerPortraitLabel = portraitLabel
-    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UF_PortraitDropDown", basicsBox) or CreateFrame("Frame", "MSUF_UF_PortraitDropDown", basicsBox, "UIDropDownMenuTemplate"))
-    dd:SetPoint("TOPLEFT", basicsBox, "TOPLEFT", -6, -100)
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UF_PortraitDropDown", basicsBody) or CreateFrame("Frame", "MSUF_UF_PortraitDropDown", basicsBody, "UIDropDownMenuTemplate"))
+    dd:SetPoint("TOPLEFT", basicsBody, "TOPLEFT", -6, -72)
     dd:Show()
     panel.playerPortraitDropDown = dd
     if UIDropDownMenu_SetWidth then
@@ -1491,11 +1492,11 @@ local function FinalizeDashboardAlphaSlider(slider, width)
         FinalizeDashboardAlphaSlider(panel[s.field], 236)
     end
 -- ToT-only utility: show Target-of-Target name inline in the Target frame name line.
-panel.totShowInTargetCB = CreateCheck(castbarBox, "MSUF_ToTInlineInTargetCB", "Show ToT text in target frame", 12, -34)
+panel.totShowInTargetCB = CreateCheck(castbarBody, "MSUF_ToTInlineInTargetCB", "Show ToT text in target frame", 12, -6)
 if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(panel.totShowInTargetCB, 230) end
 panel.totShowInTargetCB:Hide()
 -- Separator dropdown (no title) directly under the toggle.
-local totSepDD = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_ToTInlineSeparatorDropDown", castbarBox) or CreateFrame("Frame", "MSUF_ToTInlineSeparatorDropDown", castbarBox, "UIDropDownMenuTemplate"))
+local totSepDD = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_ToTInlineSeparatorDropDown", castbarBody) or CreateFrame("Frame", "MSUF_ToTInlineSeparatorDropDown", castbarBody, "UIDropDownMenuTemplate"))
 -- Anchor to the toggle (not the box) so any future/reflowed layout changes can't "strand" the dropdown.
 -- UIDropDownMenuTemplate is left-shifted vs. CheckButtons, hence the -18 X offset.
 if panel.totShowInTargetCB then
@@ -1504,7 +1505,7 @@ if panel.totShowInTargetCB then
         totSepDD:SetFrameLevel((panel.totShowInTargetCB:GetFrameLevel() or 0) + 2)
     end
 else
-    totSepDD:SetPoint("TOPLEFT", castbarBox, "TOPLEFT", -6, -58)
+    totSepDD:SetPoint("TOPLEFT", castbarBody, "TOPLEFT", -6, -30)
 end
 totSepDD:Hide()
 panel.totInlineSeparatorDD = totSepDD
@@ -1526,11 +1527,11 @@ end
     }
     for _, spec in ipairs(CASTBAR_UI_SPECS) do
         local key, cap = spec.key, spec.cap
-        panel[key .. "CastbarEnableCB"] = CreateCheck(castbarBox, "MSUF_" .. cap .. "CastbarEnableCB", spec.enableText, 12, -34)
-        panel[key .. "CastbarShowIconCB"] = CreateCheck(castbarBox, "MSUF_" .. cap .. "CastbarShowIconCB", "Icon", 214, -34)
-        panel[key .. "CastbarShowTextCB"] = CreateCheck(castbarBox, "MSUF_" .. cap .. "CastbarShowTextCB", "Text", 276, -34)
-        panel[key .. "CastbarTimeCB"]   = CreateCheck(castbarBox, "MSUF_" .. cap .. "CastbarTimeCB",   spec.timeText, 12, -58)
-        panel[key .. "CastbarInterruptCB"] = CreateCheck(castbarBox, "MSUF_" .. cap .. "CastbarInterruptCB", "Show interrupt", 12, -82)
+        panel[key .. "CastbarEnableCB"] = CreateCheck(castbarBody, "MSUF_" .. cap .. "CastbarEnableCB", spec.enableText, 12, -6)
+        panel[key .. "CastbarShowIconCB"] = CreateCheck(castbarBody, "MSUF_" .. cap .. "CastbarShowIconCB", "Icon", 214, -6)
+        panel[key .. "CastbarShowTextCB"] = CreateCheck(castbarBody, "MSUF_" .. cap .. "CastbarShowTextCB", "Text", 276, -6)
+        panel[key .. "CastbarTimeCB"]   = CreateCheck(castbarBody, "MSUF_" .. cap .. "CastbarTimeCB",   spec.timeText, 12, -30)
+        panel[key .. "CastbarInterruptCB"] = CreateCheck(castbarBody, "MSUF_" .. cap .. "CastbarInterruptCB", "Show interrupt", 12, -54)
         if not spec.defaultVisible then
             if panel[key .. "CastbarEnableCB"] then panel[key .. "CastbarEnableCB"]:Hide() end
             if panel[key .. "CastbarShowIconCB"] then panel[key .. "CastbarShowIconCB"]:Hide() end
@@ -1545,14 +1546,14 @@ end
 		---------------------------------------------------------------------
 		-- Section title (anchored to first divider in LayoutIndicatorTemplate)
 		if not panel.playerLeaderIndicatorHeader then
-			panel.playerLeaderIndicatorHeader = textGroup:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+			panel.playerLeaderIndicatorHeader = textBody:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 		end
 		panel.playerLeaderIndicatorHeader:SetText(TR("Indicator"))
 		panel.playerLeaderIndicatorHeader:Hide()
 		-- Shared layout constants for the indicator template
 		local IND_COL_X          = 320
-		local IND_BASE_TOGGLE_Y  = -34
-		local IND_BASE_CTRL_Y    = -36
+		local IND_BASE_TOGGLE_Y  = -6
+		local IND_BASE_CTRL_Y    = -8
 		local IND_ROW_STEP       = -30
 		local IND_DIVIDER_OFFSET = 0
 		panel._msufIndicatorLayout = panel._msufIndicatorLayout or {}
@@ -1570,13 +1571,13 @@ end
 		panel.playerInvertBossOrderCB:Hide()
 		-- Shared per-unit anchoring controls (player / target / ToT / focus / pet / boss).
 		if not panel.unitAnchorToLabel then
-			panel.unitAnchorToLabel = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			panel.unitAnchorToLabel = textBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 			panel.unitAnchorToLabel:SetJustifyH("LEFT")
 		end
 		panel.unitAnchorToLabel:SetText(TR("Anchor unit to"))
 		panel.unitAnchorToLabel:Hide()
 		if not panel.unitAnchorToDD then
-			local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UnitAnchorToDropDown", textGroup) or CreateFrame("Frame", "MSUF_UnitAnchorToDropDown", textGroup, "UIDropDownMenuTemplate"))
+			local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UnitAnchorToDropDown", textBody) or CreateFrame("Frame", "MSUF_UnitAnchorToDropDown", textBody, "UIDropDownMenuTemplate"))
 			panel.unitAnchorToDD = dd
 			if UIDropDownMenu_SetWidth then
 				UIDropDownMenu_SetWidth(dd, 180)
@@ -1602,34 +1603,34 @@ end
 		end
 		panel.unitAnchorGroup:Hide()
 		if not panel.unitCustomAnchorLabel then
-			panel.unitCustomAnchorLabel = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			panel.unitCustomAnchorLabel = textBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 			panel.unitCustomAnchorLabel:SetJustifyH("LEFT")
 		end
 		panel.unitCustomAnchorLabel:SetText(TR("Custom anchor target (mouse picker)"))
 		panel.unitCustomAnchorLabel:Hide()
 		if not panel.unitCustomAnchorPickButton then
-			local b = CreateFrame("Button", nil, textGroup, "UIPanelButtonTemplate")
+			local b = CreateFrame("Button", nil, textBody, "UIPanelButtonTemplate")
 			panel.unitCustomAnchorPickButton = b
 			b:SetSize(170, 22)
 			b:SetText(TR("Pick frame (CTRL+Click)"))
 		end
 		panel.unitCustomAnchorPickButton:Hide()
 		if not panel.unitCustomAnchorClearButton then
-			local b = CreateFrame("Button", nil, textGroup, "UIPanelButtonTemplate")
+			local b = CreateFrame("Button", nil, textBody, "UIPanelButtonTemplate")
 			panel.unitCustomAnchorClearButton = b
 			b:SetSize(56, 22)
 			b:SetText(TR("Clear"))
 		end
 		panel.unitCustomAnchorClearButton:Hide()
 		if not panel.unitCustomAnchorValueText then
-			local fs = textGroup:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			local fs = textBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 			panel.unitCustomAnchorValueText = fs
 			fs:SetJustifyH("LEFT")
 			fs:SetTextColor(0.85, 0.85, 0.85)
 		end
 		panel.unitCustomAnchorValueText:Hide()
 		if not panel.unitGlobalAnchorWarn then
-			panel.unitGlobalAnchorWarn = textGroup:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			panel.unitGlobalAnchorWarn = textBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 			panel.unitGlobalAnchorWarn:SetJustifyH("LEFT")
 			panel.unitGlobalAnchorWarn:SetTextColor(1, 0.82, 0.2)
 		end
@@ -1650,19 +1651,20 @@ end
 		end
 		-- Status icons (player/target only; lives in its own box)
 		local statusBox = panel._msufStatusIconsGroup
-		local STATUS_BASE_TOGGLE_Y = -34
-		local STATUS_BASE_CTRL_Y   = -36
+		local statusBody = panel._msufStatusIconsBody or statusBox
+		local STATUS_BASE_TOGGLE_Y = -6
+		local STATUS_BASE_CTRL_Y   = -8
 		local STATUS_ROW_STEP      = -30
-		panel.statusIconsHeader = panel.statusIconsHeader or (statusBox and statusBox:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
+		panel.statusIconsHeader = panel.statusIconsHeader or (statusBody and statusBody:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
 		if panel.statusIconsHeader then
 			panel.statusIconsHeader:SetText(TR("Status icons"))
 			panel.statusIconsHeader:Hide()
 		end
-		panel.statusCombatIconCB = panel.statusCombatIconCB or CreateCheck(statusBox or textGroup, "MSUF_StatusCombatIconCB", "Combat", 12, STATUS_BASE_TOGGLE_Y + (0 * STATUS_ROW_STEP))
-		panel.statusRestingIconCB = panel.statusRestingIconCB or CreateCheck(statusBox or textGroup, "MSUF_StatusRestingIconCB", "Rested (player only)", 12, STATUS_BASE_TOGGLE_Y + (1 * STATUS_ROW_STEP))
-		panel.statusIncomingResIconCB = panel.statusIncomingResIconCB or CreateCheck(statusBox or textGroup, "MSUF_StatusIncomingResIconCB", "Incoming Rez", 12, STATUS_BASE_TOGGLE_Y + (2 * STATUS_ROW_STEP))
-		panel.statusIconsTestModeCB = panel.statusIconsTestModeCB or CreateCheck(statusBox or textGroup, "MSUF_StatusIconsTestModeCB", "Test mode", 12, STATUS_BASE_TOGGLE_Y + (3 * STATUS_ROW_STEP) + 10)
-		panel.statusIconsStyleCB = panel.statusIconsStyleCB or CreateCheck(statusBox or textGroup, "MSUF_StatusIconsStyleCB", "Use Midnight style icons", 12, STATUS_BASE_TOGGLE_Y + (3 * STATUS_ROW_STEP) - 12)
+		panel.statusCombatIconCB = panel.statusCombatIconCB or CreateCheck(statusBody or textBody, "MSUF_StatusCombatIconCB", "Combat", 12, STATUS_BASE_TOGGLE_Y + (0 * STATUS_ROW_STEP))
+		panel.statusRestingIconCB = panel.statusRestingIconCB or CreateCheck(statusBody or textBody, "MSUF_StatusRestingIconCB", "Rested (player only)", 12, STATUS_BASE_TOGGLE_Y + (1 * STATUS_ROW_STEP))
+		panel.statusIncomingResIconCB = panel.statusIncomingResIconCB or CreateCheck(statusBody or textBody, "MSUF_StatusIncomingResIconCB", "Incoming Rez", 12, STATUS_BASE_TOGGLE_Y + (2 * STATUS_ROW_STEP))
+		panel.statusIconsTestModeCB = panel.statusIconsTestModeCB or CreateCheck(statusBody or textBody, "MSUF_StatusIconsTestModeCB", "Test mode", 12, STATUS_BASE_TOGGLE_Y + (3 * STATUS_ROW_STEP) + 10)
+		panel.statusIconsStyleCB = panel.statusIconsStyleCB or CreateCheck(statusBody or textBody, "MSUF_StatusIconsStyleCB", "Use Midnight style icons", 12, STATUS_BASE_TOGGLE_Y + (3 * STATUS_ROW_STEP) - 12)
 		if panel.statusIconsStyleCB then panel.statusIconsStyleCB:Hide() end
 		if panel.statusCombatIconCB then panel.statusCombatIconCB:Hide() end
 		if panel.statusRestingIconCB then panel.statusRestingIconCB:Hide() end
@@ -1680,7 +1682,7 @@ end
 				panel[field]:Hide()
 				panel[field]:ClearAllPoints()
 			else
-				panel[field] = CreateFrame("Button", nil, parentOverride or textGroup, "UIPanelButtonTemplate")
+				panel[field] = CreateFrame("Button", nil, parentOverride or textBody, "UIPanelButtonTemplate")
 				panel[field]:SetSize(20, 20)
 				panel[field]:SetText(TR("R"))
 				local fs = panel[field].GetFontString and panel[field]:GetFontString()
@@ -1706,7 +1708,7 @@ end
 			elseif cb then
 				panel[field]:SetPoint("TOPLEFT", cb, "BOTTOMLEFT", 2, 2)
 			else
-				panel[field]:SetPoint("TOPLEFT", textGroup, "TOPLEFT", 12, IND_BASE_CTRL_Y + 2)
+				panel[field]:SetPoint("TOPLEFT", textBody, "TOPLEFT", 12, IND_BASE_CTRL_Y + 2)
 			end
 			panel[field]:Hide()
 			return panel[field]
@@ -1716,7 +1718,7 @@ end
 				panel[field]:Hide()
 				return panel[field]
 			end
-			local tex = (parentOverride or textGroup):CreateTexture(nil, "ARTWORK")
+			local tex = (parentOverride or textBody):CreateTexture(nil, "ARTWORK")
 			tex:SetHeight(1)
 			tex:SetColorTexture(1, 1, 1, 0.08)
 			tex:Hide()
@@ -1728,7 +1730,7 @@ end
 				panel[field]:Hide()
 				return panel[field]
 			end
-			local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(globalName, parentOverride or textGroup) or CreateFrame("Frame", globalName, parentOverride or textGroup, "UIDropDownMenuTemplate"))
+			local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(globalName, parentOverride or textBody) or CreateFrame("Frame", globalName, parentOverride or textBody, "UIDropDownMenuTemplate"))
 			if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(dd, width) end
 			dd._msufDropWidth = width
 			if MSUF_ExpandDropdownClickArea then MSUF_ExpandDropdownClickArea(dd) end
@@ -1743,7 +1745,7 @@ end
 				panel[field]:Hide()
 				return panel[field]
 			end
-			local fs = (parentOverride or textGroup):CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			local fs = (parentOverride or textBody):CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 			fs:SetText(text)
 			fs:Hide()
 			panel[field] = fs
@@ -1754,7 +1756,7 @@ end
 				panel[field]:Hide()
 				return panel[field]
 			end
-			local eb = CreateFrame("EditBox", globalName, parentOverride or textGroup, "InputBoxTemplate")
+			local eb = CreateFrame("EditBox", globalName, parentOverride or textBody, "InputBoxTemplate")
 			eb:SetAutoFocus(false)
 			eb:SetSize(46, 18)
 			eb:SetNumeric(true)
@@ -1773,7 +1775,7 @@ end
 			-- X stepper is anchored to container; everything else is relative to it
 			if stepperX then
 				stepperX:ClearAllPoints()
-				local anchorParent = (stepperX and stepperX.GetParent and stepperX:GetParent()) or textGroup
+				local anchorParent = (stepperX and stepperX.GetParent and stepperX:GetParent()) or textBody
 					stepperX:SetPoint("TOPLEFT", anchorParent, "TOPLEFT", colX, ctrlY)
 				ResizeStepper(stepperX, 46, 1)
 				RestyleStepperButtonsNoBox(stepperX)
@@ -1839,7 +1841,7 @@ end
 			-- Toggle
 			if spec.showCB and not panel[spec.showCB] then
 				local fallbackName = "MSUF_" .. (spec.showCB:gsub("^%l", string.upper))
-				panel[spec.showCB] = CreateCheck(textGroup, ui.cbName or fallbackName, ui.cbText or "Enable", 12,
+				panel[spec.showCB] = CreateCheck(textBody, ui.cbName or fallbackName, ui.cbText or "Enable", 12,
 					(IND_BASE_TOGGLE_Y + ((idx - 1) * IND_ROW_STEP)))
 			end
 			if spec.showCB and panel[spec.showCB] then
@@ -1851,11 +1853,11 @@ end
 			end
 			-- X/Y steppers
 			if spec.xStepper and not panel[spec.xStepper] then
-				panel[spec.xStepper] = CreateAxisStepper(ui.xName or ("MSUF_" .. spec.xStepper), "X", textGroup,
+				panel[spec.xStepper] = CreateAxisStepper(ui.xName or ("MSUF_" .. spec.xStepper), "X", textBody,
 					spec.xDefault or 0, 0, -200, 200, 1)
 			end
 			if spec.yStepper and not panel[spec.yStepper] then
-				panel[spec.yStepper] = CreateAxisStepper(ui.yName or ("MSUF_" .. spec.yStepper), "Y", textGroup,
+				panel[spec.yStepper] = CreateAxisStepper(ui.yName or ("MSUF_" .. spec.yStepper), "Y", textBody,
 					spec.yDefault or 0, 0, -200, 200, 1)
 			end
 			-- Anchor dropdown + label
@@ -1892,7 +1894,7 @@ end
 		local STATUS_ROW_SPECS = {
 			{
 				rowIndex = 0,
-				parent = panel._msufStatusIconsGroup,
+				parent = panel._msufStatusIconsBody or panel._msufStatusIconsGroup,
 				cbField = "statusCombatIconCB",
 				cbName  = "MSUF_StatusCombatIconCB",
 				cbText  = "Combat",
@@ -1906,7 +1908,7 @@ end
 			},
 			{
 				rowIndex = 1,
-				parent = panel._msufStatusIconsGroup,
+				parent = panel._msufStatusIconsBody or panel._msufStatusIconsGroup,
 				cbField = "statusRestingIconCB",
 				cbName  = "MSUF_StatusRestingIconCB",
 				cbText  = "Rested (player only)",
@@ -1920,7 +1922,7 @@ end
 			},
 			{
 				rowIndex = 2,
-				parent = panel._msufStatusIconsGroup,
+				parent = panel._msufStatusIconsBody or panel._msufStatusIconsGroup,
 				cbField = "statusIncomingResIconCB",
 				cbName  = "MSUF_StatusIncomingResIconCB",
 				cbText  = "Incoming Rez",
@@ -2233,22 +2235,28 @@ do
         if basicsBox then
             basicsBox:ClearAllPoints()
             basicsBox:SetPoint("TOPLEFT", frameGroup, "TOPLEFT", leftX, topY)
+            basicsBox:SetWidth(fullW)
         end
+        local prev = basicsBox
         if castbarBox then
             castbarBox:ClearAllPoints()
-            castbarBox:SetPoint("TOPLEFT", frameGroup, "TOPLEFT", rightX, topY)
+            castbarBox:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -sectionGap)
+            castbarBox:SetWidth(fullW)
             castbarBox:SetShown(showCastbarBox)
+            if showCastbarBox then
+                prev = castbarBox
+            end
         end
         if textGroup then
             textGroup:ClearAllPoints()
-            textGroup:SetPoint("TOPLEFT", basicsBox, "BOTTOMLEFT", 0, -sectionGap)
+            textGroup:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -sectionGap)
             textGroup:SetWidth(fullW)
+            prev = textGroup
         end
 
-        local prev = textGroup
         if statusBox then
             statusBox:ClearAllPoints()
-            statusBox:SetPoint("TOPLEFT", textGroup, "BOTTOMLEFT", 0, -sectionGap)
+            statusBox:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -sectionGap)
             statusBox:SetWidth(fullW)
             statusBox:SetShown(showStatusBox)
             if showStatusBox then
@@ -2292,6 +2300,18 @@ do
         end
     end
     panel._msufRelayoutUnitBoxes = RelayoutUnitBoxes
+    if basicsBox then
+        basicsBox._msufOnCollapsedChanged = function() RelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
+    end
+    if castbarBox then
+        castbarBox._msufOnCollapsedChanged = function() RelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
+    end
+    if textGroup then
+        textGroup._msufOnCollapsedChanged = function() RelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
+    end
+    if statusBox then
+        statusBox._msufOnCollapsedChanged = function() RelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
+    end
     if loadCondBox then
         loadCondBox._msufOnCollapsedChanged = function() RelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
     end
@@ -2700,6 +2720,22 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     -- If the core is still in player-only mode, it will only show this UI for player.
     -- We still keep ApplyFromDB working for any key (multi-unit core).
     -- Basics
+    if panel.playerBasicsBox then
+        panel.playerBasicsBox._msufExpandedH = panel._msufBasicsH or 132
+        if panel.playerBasicsBox._msufCollapsed and panel.playerBasicsBox._msufApplyCollapseState then
+            panel.playerBasicsBox._msufApplyCollapseState()
+        else
+            panel.playerBasicsBox:SetHeight(panel._msufBasicsH or 132)
+        end
+    end
+    if panel.playerCastbarBox then
+        panel.playerCastbarBox._msufExpandedH = 132
+        if panel.playerCastbarBox._msufCollapsed and panel.playerCastbarBox._msufApplyCollapseState then
+            panel.playerCastbarBox._msufApplyCollapseState()
+        else
+            panel.playerCastbarBox:SetHeight(132)
+        end
+    end
     if panel.playerSizeBox and panel.playerSizeBox._msufTitleText then
         panel.playerSizeBox._msufTitleText:SetText("Transparency")
     end
@@ -2724,16 +2760,16 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
             panel.totShowInTargetCB:SetChecked(conf.showToTInTargetName == true)
         end
         -- Separator dropdown directly under the toggle.
-        if panel.totShowInTargetCB and panel.playerCastbarBox and panel.totShowInTargetCB:GetParent() ~= panel.playerCastbarBox then
-            panel.totShowInTargetCB:SetParent(panel.playerCastbarBox)
+        if panel.totShowInTargetCB and panel.playerCastbarBody and panel.totShowInTargetCB:GetParent() ~= panel.playerCastbarBody then
+            panel.totShowInTargetCB:SetParent(panel.playerCastbarBody)
         end
-        if panel.totShowInTargetCB and panel.playerCastbarBox then
+        if panel.totShowInTargetCB and panel.playerCastbarBody then
             panel.totShowInTargetCB:ClearAllPoints()
-            panel.totShowInTargetCB:SetPoint("TOPLEFT", panel.playerCastbarBox, "TOPLEFT", 12, -34)
+            panel.totShowInTargetCB:SetPoint("TOPLEFT", panel.playerCastbarBody, "TOPLEFT", 12, -6)
             if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(panel.totShowInTargetCB, 230) end
         end
-        if panel.totInlineSeparatorDD and panel.playerCastbarBox and panel.totInlineSeparatorDD:GetParent() ~= panel.playerCastbarBox then
-            panel.totInlineSeparatorDD:SetParent(panel.playerCastbarBox)
+        if panel.totInlineSeparatorDD and panel.playerCastbarBody and panel.totInlineSeparatorDD:GetParent() ~= panel.playerCastbarBody then
+            panel.totInlineSeparatorDD:SetParent(panel.playerCastbarBody)
         end
         if panel.totInlineSeparatorDD then
             local show = (isToTKey and isFramesTab)
@@ -2898,24 +2934,24 @@ end
         local intCB  = panel[key .. "CastbarInterruptCB"]
         if enable and enable:IsShown() then
             enable:ClearAllPoints()
-            enable:SetPoint("TOPLEFT", panel.playerCastbarBox, "TOPLEFT", 12, -34)
+            enable:SetPoint("TOPLEFT", panel.playerCastbarBody or panel.playerCastbarBox, "TOPLEFT", 12, -6)
         end
         if timeCB and timeCB:IsShown() then
             timeCB:ClearAllPoints()
-            timeCB:SetPoint("TOPLEFT", panel.playerCastbarBox, "TOPLEFT", 12, -58)
+            timeCB:SetPoint("TOPLEFT", panel.playerCastbarBody or panel.playerCastbarBox, "TOPLEFT", 12, -30)
         end
         if intCB and intCB:IsShown() then
             intCB:ClearAllPoints()
-            intCB:SetPoint("TOPLEFT", panel.playerCastbarBox, "TOPLEFT", 12, -82)
+            intCB:SetPoint("TOPLEFT", panel.playerCastbarBody or panel.playerCastbarBox, "TOPLEFT", 12, -54)
         end
         if icon and icon:IsShown() then
             icon:ClearAllPoints()
-            icon:SetPoint("TOPRIGHT", panel.playerCastbarBox, "TOPRIGHT", -112, -6)
+            icon:SetPoint("TOPRIGHT", panel.playerCastbarBody or panel.playerCastbarBox, "TOPRIGHT", -112, -6)
             MSUF_CheckboxLabelLeft(icon, "Icon")
         end
         if textCB and textCB:IsShown() then
             textCB:ClearAllPoints()
-            textCB:SetPoint("TOPRIGHT", panel.playerCastbarBox, "TOPRIGHT", -36, -6)
+            textCB:SetPoint("TOPRIGHT", panel.playerCastbarBody or panel.playerCastbarBox, "TOPRIGHT", -36, -6)
             MSUF_CheckboxLabelLeft(textCB, "Text")
         end
     end
@@ -2987,11 +3023,21 @@ end
         if isToTKey then
             textH = textH + 28
         end
-        panel.playerTextLayoutGroup:SetHeight(textH)
+        panel.playerTextLayoutGroup._msufExpandedH = textH
+        if panel.playerTextLayoutGroup._msufCollapsed and panel.playerTextLayoutGroup._msufApplyCollapseState then
+            panel.playerTextLayoutGroup._msufApplyCollapseState()
+        else
+            panel.playerTextLayoutGroup:SetHeight(textH)
+        end
     end
     -- Status icons box (player/target only)
     if panel._msufStatusIconsGroup and panel._msufStatusBoxH then
-        panel._msufStatusIconsGroup:SetHeight(panel._msufStatusBoxH)
+        panel._msufStatusIconsGroup._msufExpandedH = panel._msufStatusBoxH
+        if panel._msufStatusIconsGroup._msufCollapsed and panel._msufStatusIconsGroup._msufApplyCollapseState then
+            panel._msufStatusIconsGroup._msufApplyCollapseState()
+        else
+            panel._msufStatusIconsGroup:SetHeight(panel._msufStatusBoxH)
+        end
         panel._msufStatusIconsGroup:SetShown((currentKey == "player" or currentKey == "target") and true or false)
     end
     -- Frame size
