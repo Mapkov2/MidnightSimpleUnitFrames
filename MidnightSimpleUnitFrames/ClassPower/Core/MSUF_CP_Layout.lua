@@ -37,7 +37,7 @@ builders.LAYOUT = function(E)
 
         local cdmName = CPConst.CDM_FRAMES[widthMode]
         if cdmName then
-            local cdmFrame = _G[cdmName]
+            local cdmFrame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
             if cdmFrame and cdmFrame.IsShown and cdmFrame:IsShown() then
                 local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
                 if type(cdmWidthFn) == "function" then
@@ -77,7 +77,7 @@ builders.LAYOUT = function(E)
         CP.container:ClearAllPoints()
         CP.container:SetSize(userW, h)
         if b.classPowerAnchorToCooldown == true then
-            local ecv = _G["EssentialCooldownViewer"]
+            local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
             if ecv and ecv.IsShown and ecv:IsShown() then
                 CP.container:SetPoint("TOP", ecv, "BOTTOM", oX, oY)
             else

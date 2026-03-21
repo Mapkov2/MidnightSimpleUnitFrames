@@ -1388,6 +1388,23 @@ local _DPB = {
         tracked_buffs = "BuffIconCooldownViewer",
     },
 }
+function _DPB.UseMSAEssentialBridge()
+    local g = MSUF_DB and MSUF_DB.general or nil
+    return not (g and g.disableMSAEssentialBridge == true)
+end
+
+function _G.MSUF_GetEffectiveCooldownFrame(frameName)
+    if frameName == "EssentialCooldownViewer" and _DPB.UseMSAEssentialBridge() then
+        local getter = _G and _G.MSWA_GetEssentialBridgeFrame
+        if type(getter) == "function" then
+            local bridge = getter()
+            if bridge and bridge ~= UIParent and bridge ~= WorldFrame and (not bridge.IsForbidden or not bridge:IsForbidden()) then
+                return bridge
+            end
+        end
+    end
+    return frameName and _G[frameName] or nil
+end
 function _DPB.ResolveFg()
     local b = MSUF_DB and MSUF_DB.bars or {}
     local key = b.detachedPowerBarTexture
@@ -2329,7 +2346,7 @@ local function MSUF_ResolveConfiguredAnchorFrame(key, conf, fallbackAnchor)
 
     local customName = conf.anchorFrameName
     if type(customName) == "string" and customName ~= "" then
-        local custom = _G and _G[customName]
+        local custom = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and customName == "EssentialCooldownViewer") and _G.MSUF_GetEffectiveCooldownFrame(customName) or (_G and _G[customName])
         if custom and custom ~= UIParent and custom ~= WorldFrame and (not custom.IsForbidden or not custom:IsForbidden()) then
             return custom
         end
@@ -2368,7 +2385,7 @@ local function PositionUnitFrame(f, unit)
     end
     if not conf then  return end
     local anchor = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame())
-    local ecv = _G["EssentialCooldownViewer"]
+    local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
     local _g = MSUF_DB and MSUF_DB.general
     if _g and _g.anchorToCooldown and ecv and anchor == ecv then
         local rule = MSUF_ECV_ANCHORS[key]
@@ -2415,6 +2432,44 @@ local function MSUF_ForceReanchorAllUnitFrames_Once()
     end
 end
 _G.MSUF_ForceReanchorAllUnitFrames_Once = MSUF_ForceReanchorAllUnitFrames_Once
+
+_G.MSUF_CDMBridgeDirty = false
+_G.MSUF_CDMBridgeFlushScheduled = false
+
+function _G.MSUF_FlushCDMBridgeRefresh()
+    _G.MSUF_CDMBridgeFlushScheduled = false
+    if not _G.MSUF_CDMBridgeDirty then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+    _G.MSUF_CDMBridgeDirty = false
+    if type(_G.MSUF_ClassPower_Refresh) == "function" then
+        _G.MSUF_ClassPower_Refresh()
+    end
+    if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
+        _G.MSUF_ApplyPowerBarEmbedLayout_All()
+    end
+    MSUF_ForceReanchorAllUnitFrames_Once()
+end
+
+function _G.MSUF_OnCDMExtensionChanged()
+    _G.MSUF_CDMBridgeDirty = true
+    if _G.MSUF_CDMBridgeFlushScheduled then return end
+    _G.MSUF_CDMBridgeFlushScheduled = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, _G.MSUF_FlushCDMBridgeRefresh)
+    else
+        _G.MSUF_FlushCDMBridgeRefresh()
+    end
+end
+
+if not _G.MSUF_CDMBridgeRegenFrame then
+    _G.MSUF_CDMBridgeRegenFrame = CreateFrame("Frame")
+    _G.MSUF_CDMBridgeRegenFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    _G.MSUF_CDMBridgeRegenFrame:SetScript("OnEvent", function()
+        if _G.MSUF_CDMBridgeDirty then
+            _G.MSUF_FlushCDMBridgeRefresh()
+        end
+    end)
+end
 
 local _MSUF_MeasureCache = {}
 local _MSUF_MeasureFS
@@ -4813,7 +4868,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         if not anchor or not anchor.GetCenter or not self.GetCenter then  return end
         local _g = MSUF_DB and MSUF_DB.general
         if _g and _g.anchorToCooldown then
-            local ecv = _G and _G["EssentialCooldownViewer"]
+            local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or (_G and _G["EssentialCooldownViewer"])
             if ecv and anchor == ecv then
                 local rule = MSUF_ECV_ANCHORS and MSUF_ECV_ANCHORS[key]
                 if rule then
@@ -5042,7 +5097,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
             local dpbWMode = b.detachedPowerBarWidthMode
             local cdmName = dpbWMode and _DPB.CDM[dpbWMode]
             if cdmName then
-                local cdm = _G[cdmName]
+                local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
                 -- Scale-compensated width (Sensei pattern): convert CDM coords → our bar coords
                 if cdm and cdm.IsShown and cdm:IsShown() then
                     local scaledW = _G.MSUF_CDM_GetScaledWidth and _G.MSUF_CDM_GetScaledWidth(cdm, pb)

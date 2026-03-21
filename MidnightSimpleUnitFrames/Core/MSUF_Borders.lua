@@ -4,6 +4,7 @@
 local addonName, ns = ...
 
 local F = ns.Cache and ns.Cache.F or {}
+F.CreateFrame = F.CreateFrame or CreateFrame
 local type, tonumber, ipairs, pairs = type, tonumber, ipairs, pairs
 local MSUF_TEX_WHITE8 = "Interface\\Buttons\\WHITE8x8"
 

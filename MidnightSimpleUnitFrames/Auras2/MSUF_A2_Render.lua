@@ -587,11 +587,90 @@ local function PrivateClear(entry)
     entry._privSpacing = nil
     entry._privMax = nil
     entry._privGrowth = nil
+    entry._privNormalizeQueued = nil
     local slots = entry._privateSlots
     if type(slots) == "table" then
         for i = 1, #slots do if slots[i] then slots[i]:Hide() end end
     end
     if entry.private then entry.private:Hide() end
+end
+
+local function PrivateRelaxTexSnap(tex)
+    if not tex then return end
+    if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
+    if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
+end
+
+local function NormalizePrivateSlot(slot, privateIconSize)
+    if not slot then return end
+    privateIconSize = math.floor((tonumber(privateIconSize) or 0) + 0.5)
+    if privateIconSize < 1 then privateIconSize = 1 end
+
+    if slot.GetWidth and slot.GetHeight then
+        local sw, sh = slot:GetWidth(), slot:GetHeight()
+        if sw ~= privateIconSize or sh ~= privateIconSize then
+            slot:SetSize(privateIconSize, privateIconSize)
+        end
+    else
+        slot:SetSize(privateIconSize, privateIconSize)
+    end
+
+    if slot.SetClipsChildren then slot:SetClipsChildren(true) end
+    if slot.SetClipsParents then slot:SetClipsParents(true) end
+    slot._msufPrivSize = privateIconSize
+
+    local child = select(1, slot:GetChildren())
+    if child then
+        child:ClearAllPoints()
+        child:SetAllPoints(slot)
+
+        if child.Icon then
+            child.Icon:ClearAllPoints()
+            child.Icon:SetAllPoints(child)
+            PrivateRelaxTexSnap(child.Icon)
+        end
+        if child.Border then
+            child.Border:ClearAllPoints()
+            child.Border:SetAllPoints(child)
+            PrivateRelaxTexSnap(child.Border)
+        end
+        if child.IconBorder then
+            child.IconBorder:ClearAllPoints()
+            child.IconBorder:SetAllPoints(child)
+            PrivateRelaxTexSnap(child.IconBorder)
+        end
+        if child.Cooldown then
+            child.Cooldown:ClearAllPoints()
+            child.Cooldown:SetAllPoints(child)
+        end
+    end
+end
+
+local function NormalizePrivateSlots(entry, privateIconSize)
+    if not entry then return end
+    local slots = entry._privateSlots
+    if type(slots) ~= "table" then return end
+    for i = 1, #slots do
+        local slot = slots[i]
+        if slot and slot:IsShown() then
+            NormalizePrivateSlot(slot, privateIconSize)
+        end
+    end
+end
+
+local function QueueNormalizePrivateSlots(entry, privateIconSize)
+    if not entry or entry._privNormalizeQueued then return end
+    entry._privNormalizeQueued = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if not entry then return end
+            entry._privNormalizeQueued = nil
+            NormalizePrivateSlots(entry, entry._privSize or privateIconSize)
+        end)
+    else
+        entry._privNormalizeQueued = nil
+        NormalizePrivateSlots(entry, privateIconSize)
+    end
 end
 
 local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
@@ -633,6 +712,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
        and type(entry._privateAnchorIDs) == "table"
     then
         if entry.private then entry.private:Show() end
+        NormalizePrivateSlots(entry, privateIconSize)
         return
     end
 
@@ -706,12 +786,20 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
             slot = CreateFrame("Frame", nil, entry.private)
             slot:SetFrameStrata("MEDIUM")
             slot:SetFrameLevel(60)
+            if slot.SetClipsChildren then slot:SetClipsChildren(true) end
+            if slot.SetClipsParents then slot:SetClipsParents(true) end
+            if not slot._msufPrivSizeHook then
+                slot._msufPrivSizeHook = true
+                slot:HookScript("OnSizeChanged", function(self)
+                    NormalizePrivateSlot(self, self._msufPrivSize or privateIconSize)
+                end)
+            end
             slots[i] = slot
         end
         slot:ClearAllPoints()
         local off = (i - 1) * step
         slot:SetPoint(anchor, entry.private, anchor, off * dx, off * dy)
-        slot:SetSize(privateIconSize, privateIconSize)
+        NormalizePrivateSlot(slot, privateIconSize)
         slot:Show()
 
         -- Update reused args
@@ -729,6 +817,9 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
             entry._privateAnchorIDs[#entry._privateAnchorIDs + 1] = anchorID
         end
     end
+
+    NormalizePrivateSlots(entry, privateIconSize)
+    QueueNormalizePrivateSlots(entry, privateIconSize)
 end
 
 
@@ -1141,11 +1232,12 @@ local function RenderUnit(entry)
     end
     entry.anchor:Show()
 
-    -- Private auras: only rebuild when config changes
-    if gen ~= entry._lastPrivateGen then
-        PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
-        entry._lastPrivateGen = gen
-    end
+    -- Private auras: run the internal diff-gated rebuild every render.
+    -- This keeps Blizzard private-aura anchors in sync with live size changes
+    -- (Edit Mode / per-unit overrides / focus->player token swaps) without
+    -- adding meaningful hot-path cost.
+    PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
+    entry._lastPrivateGen = gen
 
     -- Edit Mode: show/hide movers (skip entirely in combat) 
     if not _inCombat then
