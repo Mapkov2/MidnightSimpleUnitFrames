@@ -199,8 +199,7 @@ local function MakeCollapsibleSection(parent, anchorTo, w, expandedH, titleText,
     chevron:SetSize(12, 12)
     chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
     chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
-    chevron:SetVertexColor(0.55, 0.65, 0.82)
-    chevron:SetRotation(math.pi * 0.5)
+    MSUF_ApplyCollapseVisual(chevron, nil, true)
 
     local titleFS = hdr:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     titleFS:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
@@ -221,8 +220,7 @@ local function MakeCollapsibleSection(parent, anchorTo, w, expandedH, titleText,
         local open = not box._msufCollapsed
         body:SetShown(open)
         box:SetHeight(open and box._msufExpandedH or 28)
-        chevron:SetRotation(open and (math.pi * 0.5) or 0)
-        hint:SetText(open and "" or TR("click to expand"))
+        MSUF_ApplyCollapseVisual(chevron, hint, open)
         if type(box._msufOnToggle) == "function" then box._msufOnToggle() end
     end
 

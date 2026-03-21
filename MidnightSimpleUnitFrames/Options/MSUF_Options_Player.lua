@@ -846,8 +846,7 @@ local function MakeCollapsibleGroupBox(parent, title, w, expandedH, defaultOpen,
     chevron:SetSize(12, 12)
     chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
     chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
-    chevron:SetVertexColor(0.55, 0.65, 0.82)
-    chevron:SetRotation(defaultOpen and (math.pi * 0.5) or 0)
+    MSUF_ApplyCollapseVisual(chevron, nil, defaultOpen)
 
     if box._msufTitleText then
         box._msufTitleText:ClearAllPoints()
@@ -875,8 +874,7 @@ local function MakeCollapsibleGroupBox(parent, title, w, expandedH, defaultOpen,
         local open = not box._msufCollapsed
         body:SetShown(open)
         box:SetHeight(open and box._msufExpandedH or box._msufCollapsedH)
-        chevron:SetRotation(open and (math.pi * 0.5) or 0)
-        hint:SetText(open and "" or TR("click to expand"))
+        MSUF_ApplyCollapseVisual(chevron, hint, open)
         if type(box._msufOnCollapsedChanged) == "function" then
             pcall(box._msufOnCollapsedChanged, box, box._msufCollapsed)
         end

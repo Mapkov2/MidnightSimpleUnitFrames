@@ -54,8 +54,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         chevron:SetSize(12, 12)
         chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
         chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
-        chevron:SetVertexColor(0.55, 0.65, 0.82)
-        if defaultOpen then chevron:SetRotation(math_pi * 0.5) end
+        MSUF_ApplyCollapseVisual(chevron, nil, defaultOpen)
 
         local title = hdr:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         title:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
@@ -82,9 +81,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
             local open = not box._msufCollapsed
             body:SetShown(open)
             box:SetHeight(open and box._msufExpandedH or box._msufCollapsedH)
-            chevron:SetRotation(open and (math_pi * 0.5) or 0)
-            chevron:SetVertexColor(open and 0.83 or 0.55, open and 0.66 or 0.65, open and 0 or 0.82)
-            hint:SetText(open and "" or TR("click to expand"))
+            MSUF_ApplyCollapseVisual(chevron, hint, open)
         end
 
         hdr:SetScript("OnClick", function()

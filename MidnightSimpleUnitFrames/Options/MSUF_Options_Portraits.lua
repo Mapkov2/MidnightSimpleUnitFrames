@@ -109,8 +109,7 @@ local function MakeCollapsibleSection(parent, anchorTo, w, expandedH, titleText,
     chevron:SetSize(12, 12)
     chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
     chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
-    chevron:SetVertexColor(0.55, 0.65, 0.82)
-    chevron:SetRotation(math.pi * 0.5)
+    MSUF_ApplyCollapseVisual(chevron, nil, true)
 
     local titleFS = hdr:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     titleFS:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
@@ -131,8 +130,7 @@ local function MakeCollapsibleSection(parent, anchorTo, w, expandedH, titleText,
         local open = not box._msufCollapsed
         body:SetShown(open)
         box:SetHeight(open and box._msufExpandedH or 28)
-        chevron:SetRotation(open and (math.pi * 0.5) or 0)
-        hint:SetText(open and "" or TR("click to expand"))
+        MSUF_ApplyCollapseVisual(chevron, hint, open)
         if type(box._msufOnToggle) == "function" then box._msufOnToggle() end
     end
 
@@ -394,10 +392,47 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     overrideInfo:SetPoint("BOTTOMRIGHT", scopeBar, "BOTTOMRIGHT", -10, 6)
     overrideInfo:SetJustifyH("LEFT"); overrideInfo:SetWordWrap(false)
 
-    -- ─── Content (scrollable area anchor) ───
-    local content = CreateFrame("Frame", nil, panel)
-    content:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -108)
-    content:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
+    -- ─── Scrollable content area ───
+    local scrollFrame = CreateFrame("ScrollFrame", "MSUF_PortraitsScrollFrame", panel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -108)
+    scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 8)
+    scrollFrame:EnableMouseWheel(true)
+
+    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetSize(SEC_W + (PAD_X * 2), 200)
+    scrollChild:SetPoint("TOPLEFT", scrollFrame, "TOPLEFT", 0, 0)
+    scrollFrame:SetScrollChild(scrollChild)
+
+    local scrollBar = scrollFrame.ScrollBar or _G[scrollFrame:GetName() .. "ScrollBar"]
+    if scrollBar then
+        scrollBar:ClearAllPoints()
+        scrollBar:SetPoint("TOPLEFT", scrollFrame, "TOPRIGHT", 4, -16)
+        scrollBar:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMRIGHT", 4, 16)
+    end
+
+    scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        local sb = scrollBar or self.ScrollBar or _G[self:GetName() .. "ScrollBar"]
+        if not sb or not sb.GetValue or not sb.SetValue then return end
+        local minVal, maxVal = sb:GetMinMaxValues()
+        local nextVal = (sb:GetValue() or 0) - (delta * 36)
+        if nextVal < minVal then nextVal = minVal end
+        if nextVal > maxVal then nextVal = maxVal end
+        sb:SetValue(nextVal)
+    end)
+
+    local function RefreshScrollRange()
+        if scrollFrame and scrollFrame.UpdateScrollChildRect then
+            scrollFrame:UpdateScrollChildRect()
+        end
+        local sb = scrollBar or scrollFrame.ScrollBar or _G[scrollFrame:GetName() .. "ScrollBar"]
+        if sb and sb.GetValue and sb.SetValue then
+            local _, maxVal = sb:GetMinMaxValues()
+            local cur = sb:GetValue() or 0
+            if cur > maxVal then sb:SetValue(maxVal) end
+        end
+    end
+
+    local content = scrollChild
 
     local headerAnchor = CreateFrame("Frame", nil, content)
     headerAnchor:SetSize(SEC_W, 1)
@@ -620,10 +655,13 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     local function RecalcHeight()
         local h = 8
         for i = 1, #allSections do
-            h = h + (allSections[i]:GetHeight() or 28) + 6
+            if allSections[i]:IsShown() then
+                h = h + (allSections[i]:GetHeight() or 28) + 6
+            end
         end
         if h < 200 then h = 200 end
         content:SetHeight(h)
+        RefreshScrollRange()
     end
 
     for i = 1, #allSections do
@@ -738,7 +776,10 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         end
     end
 
-    panel:SetScript("OnShow", function() SyncScopeUI() end)
+    panel:SetScript("OnShow", function()
+        SyncScopeUI()
+        RefreshScrollRange()
+    end)
     SyncScopeUI()
 
     panel.__MSUF_PortraitsBuilt = true
