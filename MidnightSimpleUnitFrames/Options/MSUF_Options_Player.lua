@@ -2825,17 +2825,12 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
 			end
 		end
 	end
-	-- Title: Target of Target uses "Inline Text" (it is not a castbar).
-    -- Pet uses this box for indicator settings, so we hide the title there.
+	-- Title: this section is always the Indicators box.
+    -- Keep the title visible for Pet too, so the collapsible header stays consistent.
     if panel.playerTextLayoutGroup and panel.playerTextLayoutGroup._msufTitleText then
         local t = panel.playerTextLayoutGroup._msufTitleText
-        if isFramesTab and isPetKey then
-            t:SetText(TR(""))
-            t:Hide()
-        else
-            t:SetText(TR("Indicators"))
-            t:Show()
-        end
+        t:SetText(TR("Indicators"))
+        t:Show()
     end
     end
     -- Copy-to UI visibility (refactored)
