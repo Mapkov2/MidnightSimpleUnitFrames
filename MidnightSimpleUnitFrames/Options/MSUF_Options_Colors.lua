@@ -304,6 +304,84 @@ function ns.MSUF_RegisterColorsOptions_Full(parentCategory)
         return line
     end
 
+    --------------------------------------------------
+    -- Collapsible section helper (accordion UX)
+    --------------------------------------------------
+    local SECTION_W = 700
+    local SECTION_COLLAPSED_H = 28
+    local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
+    local math_pi = math.pi
+
+    F.MakeCollapsibleSection = function(parent, expandedH, titleText, defaultOpen)
+        local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        box:SetSize(SECTION_W, defaultOpen and expandedH or SECTION_COLLAPSED_H)
+        box:SetBackdrop({
+            bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        box:SetBackdropColor(0, 0, 0, 0.25)
+        box:SetBackdropBorderColor(0.35, 0.35, 0.35, 0.9)
+        box._msufExpandedH = expandedH
+        box._msufCollapsedH = SECTION_COLLAPSED_H
+        box._msufCollapsed = not defaultOpen
+
+        local hdr = CreateFrame("Button", nil, box)
+        hdr:SetHeight(24)
+        hdr:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+        hdr:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
+
+        local chevron = hdr:CreateTexture(nil, "OVERLAY")
+        chevron:SetSize(12, 12)
+        chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
+        chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+        chevron:SetVertexColor(0.55, 0.65, 0.82)
+        if defaultOpen then chevron:SetRotation(math_pi * 0.5) end
+
+        local title = hdr:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        title:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
+        title:SetText(titleText)
+
+        local hint = hdr:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hint:SetPoint("RIGHT", hdr, "RIGHT", -12, 0)
+        hint:SetText(defaultOpen and "" or "click to expand")
+        hint:SetTextColor(0.45, 0.52, 0.65)
+
+        local divider = box:CreateTexture(nil, "ARTWORK")
+        divider:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -28)
+        divider:SetPoint("TOPRIGHT", box, "TOPRIGHT", -8, -28)
+        divider:SetHeight(1)
+        divider:SetColorTexture(1, 1, 1, 0.08)
+
+        local body = CreateFrame("Frame", nil, box)
+        body:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -30)
+        body:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
+        body:SetShown(defaultOpen)
+        box._msufBody = body
+
+        local function ApplyState()
+            local open = not box._msufCollapsed
+            body:SetShown(open)
+            box:SetHeight(open and box._msufExpandedH or box._msufCollapsedH)
+            chevron:SetRotation(open and (math_pi * 0.5) or 0)
+            chevron:SetVertexColor(open and 0.83 or 0.55, open and 0.66 or 0.65, open and 0 or 0.82)
+            hint:SetText(open and "" or "click to expand")
+            if F.UpdateContentHeight then F.UpdateContentHeight() end
+        end
+
+        hdr:SetScript("OnClick", function()
+            box._msufCollapsed = not box._msufCollapsed
+            ApplyState()
+        end)
+        do
+            local hl = hdr:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints()
+            hl:SetColorTexture(1, 1, 1, 0.03)
+        end
+
+        box._msufApplyCollapseState = ApplyState
+        return box, body
+    end
+
 
 --------------------------------------------------
 -- Helper: toggle greyout (like main menu)
@@ -350,14 +428,15 @@ end
     subText:SetText("Configure global colors such as the global font color, per-class bar colors, and NPC reaction colors.")
 
     --------------------------------------------------
+    -- Section 1: Global Font Color
+    --------------------------------------------------
+    S.sec1Box, S.sec1Body = F.MakeCollapsibleSection(content, 100, "Global Font Color", false)
+    S.sec1Box:SetPoint("TOPLEFT", subText, "BOTTOMLEFT", 0, -16)
+    do local content = S.sec1Body
 
-    --------------------------------------------------
-    -- Global font color
-    --------------------------------------------------
     local fontLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    fontLabel:SetPoint("TOPLEFT", subText, "BOTTOMLEFT", 0, -24)
+    fontLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
     fontLabel:SetText("Global font color")
-    F.CreateHeaderDividerAbove(fontLabel)
 
     local fontSwatch = CreateFrame("Button", "MSUF_Colors_FontSwatchButton", content)
     fontSwatch:SetSize(32, 16)
@@ -386,16 +465,17 @@ end
         end)
     end)
 
+    end -- section 1
+
     --------------------------------------------------
-    -- Class bar colors (5 / 5 / 3, Klassennamen auf den Bars)
+    -- Section 2: Class Bar Colors
     --------------------------------------------------
-    local classHeader = content:CreateFontString("MSUF_Colors_ClassHeader", "ARTWORK", "GameFontNormal")
-    classHeader:SetPoint("TOPLEFT", fontResetBtn, "BOTTOMLEFT", 0, -32)
-    classHeader:SetText("Class bar colors")
-    F.CreateHeaderDividerAbove(classHeader)
+    S.sec2Box, S.sec2Body = F.MakeCollapsibleSection(content, 270, "Class Bar Colors", false)
+    S.sec2Box:SetPoint("TOPLEFT", S.sec1Box, "BOTTOMLEFT", 0, -6)
+    do local content = S.sec2Body
 
     local classSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    classSub:SetPoint("TOPLEFT", classHeader, "BOTTOMLEFT", 0, -4)
+    classSub:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
     classSub:SetWidth(600)
     classSub:SetJustifyH("LEFT")
     classSub:SetText("Choose an override bar color per class.")
@@ -487,16 +567,17 @@ end
         end)
     end)
 
+    end -- section 2
+
     --------------------------------------------------
-    -- Bar background tint (universal)
+    -- Section 3: Bar Background Tint
     --------------------------------------------------
-    local classBgHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    classBgHeader:SetPoint("TOPLEFT", resetClassBtn, "BOTTOMLEFT", 0, -32)
-    classBgHeader:SetText("Bar background tint")
-    F.CreateHeaderDividerAbove(classBgHeader)
+    S.sec3Box, S.sec3Body = F.MakeCollapsibleSection(content, 170, "Bar Background Tint", false)
+    S.sec3Box:SetPoint("TOPLEFT", S.sec2Box, "BOTTOMLEFT", 0, -6)
+    do local content = S.sec3Body
 
     local classBgSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    classBgSub:SetPoint("TOPLEFT", classBgHeader, "BOTTOMLEFT", 0, -4)
+    classBgSub:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
     classBgSub:SetWidth(600)
     classBgSub:SetJustifyH("LEFT")
     classBgSub:SetText("Tint applied to the bar background in *all* bar modes. (Dark Mode uses this tint too.)")
@@ -600,16 +681,17 @@ end
     F.UpdateDarkBgCustomControls()
 
 
+    end -- section 3
+
     --------------------------------------------------
-    -- Bar appearance (moved from Bars menu)
+    -- Section 4: Bar Appearance
     --------------------------------------------------
-    local barAppHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    barAppHeader:SetPoint("TOPLEFT", F._darkBgCustomCheck, "BOTTOMLEFT", 4, -22)
-    barAppHeader:SetText("Bar appearance")
-    F.CreateHeaderDividerAbove(barAppHeader)
+    S.sec4Box, S.sec4Body = F.MakeCollapsibleSection(content, 250, "Bar Appearance", false)
+    S.sec4Box:SetPoint("TOPLEFT", S.sec3Box, "BOTTOMLEFT", 0, -6)
+    do local content = S.sec4Body
 
     local barModeLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    barModeLabel:SetPoint("TOPLEFT", barAppHeader, "BOTTOMLEFT", 0, -10)
+    barModeLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
     barModeLabel:SetText("Bar mode")
 
     local barModeOptions = {
@@ -936,9 +1018,15 @@ if F.UpdateDarkBarControls then
     F.UpdateDarkBarControls()
 end
 
+    end -- section 4
+
     --------------------------------------------------
-    -- Unitframe Colors + Bar Colors (two-column layout)
+    -- Section 5: Unitframe & Bar Colors (two-column)
     --------------------------------------------------
+    S.sec5Box, S.sec5Body = F.MakeCollapsibleSection(content, 220, "Unitframe Colors", false)
+    S.sec5Box:SetPoint("TOPLEFT", S.sec4Box, "BOTTOMLEFT", 0, -6)
+    do local content = S.sec5Body
+
     local leftHeaderX   = 0
     local rightHeaderX  = 420
 
@@ -947,9 +1035,8 @@ end
 
     -- Left block: Unitframe Colors
     local unitHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    unitHeader:SetPoint("TOPLEFT", S.darkToneSlider, "BOTTOMLEFT", leftHeaderX, -48)
+    unitHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
     unitHeader:SetText("Unitframe Colors")
-    F.CreateHeaderDividerAbove(unitHeader)
 
     local unitLabelX    = 0
     local unitBarX      = 220
@@ -1066,20 +1153,66 @@ end
         end)
     end)
 
+    local unitResetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    unitResetBtn:SetSize(180, 22)
+    unitResetBtn:SetPoint("TOPLEFT", unitHeader, "BOTTOMLEFT", unitLabelX, startY - 5 * rowH - 4)
+    unitResetBtn:SetText("Reset Unitframe Colors")
+    unitResetBtn:SetScript("OnClick", function()
+        MSUF_ConfirmColorReset("unitframe", function()
+            if EnsureDB and MSUF_DB then
+                EnsureDB()
+                MSUF_DB.npcColors = nil
+                PushVisualUpdates()
+            end
+            if S.npcFriendlyTex then
+                local fr, fg, fb = GetNPCColor("friendly")
+                S.npcFriendlyTex:SetColorTexture(fr, fg, fb)
+            end
+            if S.npcNeutralTex then
+                local nr2, ng2, nb2 = GetNPCColor("neutral")
+                S.npcNeutralTex:SetColorTexture(nr2, ng2, nb2)
+            end
+            if S.npcEnemyTex then
+                local er, eg, eb = GetNPCColor("enemy")
+                S.npcEnemyTex:SetColorTexture(er, eg, eb)
+            end
+            if S.npcDeadTex then
+                local dr, dg, db = GetNPCColor("dead")
+                S.npcDeadTex:SetColorTexture(dr, dg, db)
+            end
+            if S.petFrameTex then
+                local pr, pg, pb = GetPetFrameColor()
+                S.petFrameTex:SetColorTexture(pr, pg, pb)
+            end
+        end)
+    end)
 
-    -- Right block: Bar Colors
-    local barHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    barHeader:SetPoint("TOPLEFT", S.darkToneSlider, "BOTTOMLEFT", rightHeaderX, -48)
-    barHeader:SetText("Bar Colors")
-    F.CreateHeaderDividerAbove(barHeader)
+
+    end -- section 5 (Unitframe Colors)
+
+    --------------------------------------------------
+    -- Section 5b: Bar Colors
+    --------------------------------------------------
+    S.sec5bBox, S.sec5bBody = F.MakeCollapsibleSection(content, 220, "Bar Colors", false)
+    S.sec5bBox:SetPoint("TOPLEFT", S.sec5Box, "BOTTOMLEFT", 0, -6)
+    do local content = S.sec5bBody
 
     local barLabelX     = 0
     local barSwatchX    = 210
     local barSwatchW    = 120
 
+    local rowH          = 22
+    local startY        = -8
+
+    -- Invisible anchor for bar color rows
+    local barHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    barHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 12, 0)
+    barHeader:SetText("")
+    barHeader:SetHeight(1)
+
     -- Absorb overlay
     local absorbLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    absorbLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY)
+    absorbLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 12 + barLabelX, startY)
     absorbLabel:SetJustifyH("LEFT")
     absorbLabel:SetText("Absorb Bar Color")
 
@@ -1308,17 +1441,15 @@ end
         end)
     end)
 
-    -- Reset (kept for 0-regression; affects both columns)
+    -- Reset bar colors only
     local npcResetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
     npcResetBtn:SetSize(160, 22)
-    npcResetBtn:SetPoint("TOPLEFT", petLabel, "BOTTOMLEFT", 0, -12)
-    npcResetBtn:SetText("Reset Extra Color")
+    npcResetBtn:SetPoint("TOPLEFT", purgeLabel, "BOTTOMLEFT", 0, -12)
+    npcResetBtn:SetText("Reset Bar Colors")
     npcResetBtn:SetScript("OnClick", function()
-        MSUF_ConfirmColorReset("unitframe + bar", function()
+        MSUF_ConfirmColorReset("bar colors", function()
                     if EnsureDB and MSUF_DB then
                         EnsureDB()
-                        MSUF_DB.npcColors = nil
-            
                         MSUF_DB.general = MSUF_DB.general or {}
                         local gen = MSUF_DB.general
                         gen.absorbBarColorR, gen.absorbBarColorG, gen.absorbBarColorB = nil, nil, nil
@@ -1335,26 +1466,6 @@ end
                         PushVisualUpdates()
                     end
             
-                    if S.npcFriendlyTex then
-                        local fr, fg, fb = GetNPCColor("friendly")
-                        S.npcFriendlyTex:SetColorTexture(fr, fg, fb)
-                    end
-                    if S.npcNeutralTex then
-                        local nr, ng, nb = GetNPCColor("neutral")
-                        S.npcNeutralTex:SetColorTexture(nr, ng, nb)
-                    end
-                    if S.npcEnemyTex then
-                        local er, eg, eb = GetNPCColor("enemy")
-                        S.npcEnemyTex:SetColorTexture(er, eg, eb)
-                    end
-                    if S.npcDeadTex then
-                        local dr, dg, db = GetNPCColor("dead")
-                        S.npcDeadTex:SetColorTexture(dr, dg, db)
-                    end
-                    if S.petFrameTex then
-                        local pr, pg, pb = GetPetFrameColor()
-                        S.petFrameTex:SetColorTexture(pr, pg, pb)
-                    end
                     local aTex = panel.__MSUF_ExtraColorAbsorbTex
                     if aTex then
                         aTex:SetColorTexture(GetAbsorbOverlayColor())
@@ -1376,6 +1487,10 @@ end
                     if agTex then
                         agTex:SetColorTexture(GetAggroBorderColor())
                     end
+                    local pgTex = panel.__MSUF_ExtraColorPurgeBorderTex
+                    if pgTex then
+                        pgTex:SetColorTexture(GetPurgeBorderColor())
+                    end
             
                     if panel.__MSUF_ExtraColorPowerBgMatchCheck then
                         panel.__MSUF_ExtraColorPowerBgMatchCheck:SetChecked(false)
@@ -1391,16 +1506,17 @@ end
 
     S.lastControl = npcResetBtn
 
+    end -- section 5b (Bar Colors)
+
     --------------------------------------------------
-    -- Castbar colors
+    -- Section 6: Castbar Colors
     --------------------------------------------------
-    local castbarHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    castbarHeader:SetPoint("TOPLEFT", npcResetBtn, "BOTTOMLEFT", 0, -32)
-    castbarHeader:SetText("Castbar colors")
-    F.CreateHeaderDividerAbove(castbarHeader)
+    S.sec6Box, S.sec6Body = F.MakeCollapsibleSection(content, 380, "Castbar Colors", false)
+    S.sec6Box:SetPoint("TOPLEFT", S.sec5bBox, "BOTTOMLEFT", 0, -6)
+    do local content = S.sec6Body
 
     local castbarSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    castbarSub:SetPoint("TOPLEFT", castbarHeader, "BOTTOMLEFT", 0, -4)
+    castbarSub:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
     castbarSub:SetWidth(600)
     castbarSub:SetJustifyH("LEFT")
     castbarSub:SetText("Configure colors for interruptible, non-interruptible and interrupt feedback castbars.")
@@ -1776,16 +1892,17 @@ end
     S.lastControl = resetCastbarColorsBtn
     
 
+    end -- section 6
+
     --------------------------------------------------
-    -- Mouseover highlight
+    -- Section 7: Mouseover Highlight
     --------------------------------------------------
-    local mouseoverHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    mouseoverHeader:SetPoint("TOPLEFT", modeLabel, "BOTTOMLEFT", 0, -64)
-    mouseoverHeader:SetText("Mouseover highlight")
-    F.CreateHeaderDividerAbove(mouseoverHeader)
+    S.sec7Box, S.sec7Body = F.MakeCollapsibleSection(content, 180, "Mouseover Highlight", false)
+    S.sec7Box:SetPoint("TOPLEFT", S.sec6Box, "BOTTOMLEFT", 0, -6)
+    do local content = S.sec7Body
 
     local mouseoverSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    mouseoverSub:SetPoint("TOPLEFT", mouseoverHeader, "BOTTOMLEFT", 0, -4)
+    mouseoverSub:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
     mouseoverSub:SetWidth(600)
     mouseoverSub:SetJustifyH("LEFT")
     mouseoverSub:SetText("Configure the mouseover highlight border that appears when you hover MSUF unitframes.")
@@ -1909,16 +2026,17 @@ end
     S.lastControl = highlightColorSwatch
 
 
+    end -- section 7
+
 --------------------------------------------------
--- Gameplay (Combat state text colors)
+-- Section 8: Gameplay
 --------------------------------------------------
-local gameplayHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-gameplayHeader:SetPoint("TOPLEFT", highlightColorSwatch, "BOTTOMLEFT", 0, -44)
-gameplayHeader:SetText("Gameplay")
-F.CreateHeaderDividerAbove(gameplayHeader)
+S.sec8Box, S.sec8Body = F.MakeCollapsibleSection(content, 310, "Gameplay", false)
+S.sec8Box:SetPoint("TOPLEFT", S.sec7Box, "BOTTOMLEFT", 0, -6)
+do local content = S.sec8Body
 
 local gameplaySub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-gameplaySub:SetPoint("TOPLEFT", gameplayHeader, "BOTTOMLEFT", 0, -4)
+gameplaySub:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
 gameplaySub:SetWidth(600)
 gameplaySub:SetJustifyH("LEFT")
 gameplaySub:SetText("Configure colors used by Gameplay overlays (Combat Timer, Combat Enter/Leave text, Crosshair range).")
@@ -2456,16 +2574,17 @@ F.UpdateGameplayTotemColorControls()
 S.lastControl = totemTextSwatch
 
 
+end -- section 8
+
 --------------------------------------------------
--- Power colors (Unitframe power bar)
+-- Section 9: Power Bar Colors
 --------------------------------------------------
-local powerHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-powerHeader:SetPoint("TOPLEFT", totemTextSwatch, "BOTTOMLEFT", 0, -44)
-powerHeader:SetText("Power bar colors")
-F.CreateHeaderDividerAbove(powerHeader)
+S.sec9Box, S.sec9Body = F.MakeCollapsibleSection(content, 100, "Power Bar Colors", false)
+S.sec9Box:SetPoint("TOPLEFT", S.sec8Box, "BOTTOMLEFT", 0, -6)
+do local content = S.sec9Body
 
 local powerSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-powerSub:SetPoint("TOPLEFT", powerHeader, "BOTTOMLEFT", 0, -4)
+powerSub:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
 powerSub:SetWidth(600)
 powerSub:SetJustifyH("LEFT")
 powerSub:SetText("Configure custom colors for power resources used by MSUF power bars.")
@@ -2611,16 +2730,17 @@ F.UpdatePowerColorControls()
 S.lastControl = powerColorResetBtn
 
 
+end -- section 9
+
 --------------------------------------------------
--- Class Power colors (Combo Points, Holy Power, etc.)
+-- Section 10: Class Power Colors
 --------------------------------------------------
-local cpColHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-cpColHeader:SetPoint("TOPLEFT", powerTypeDrop, "BOTTOMLEFT", 16, -34)
-cpColHeader:SetText("Class Power colors")
-F.CreateHeaderDividerAbove(cpColHeader)
+S.sec10Box, S.sec10Body = F.MakeCollapsibleSection(content, 200, "Class Power Colors", false)
+S.sec10Box:SetPoint("TOPLEFT", S.sec9Box, "BOTTOMLEFT", 0, -6)
+do local content = S.sec10Body
 
 local cpColSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-cpColSub:SetPoint("TOPLEFT", cpColHeader, "BOTTOMLEFT", 0, -4)
+cpColSub:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
 cpColSub:SetWidth(600)
 cpColSub:SetJustifyH("LEFT")
 cpColSub:SetText("Configure colors for secondary resource bars: Combo Points, Holy Power, Soul Shards, Chi, Runes, Arcane Charges, Essence, Soul Fragments (DH), Maelstrom (Enh/Ele), Stagger (BrM), Insanity (Shadow), Whirlwind (Fury), Tip of the Spear (SV), Ebon Might (Aug), Eclipse + Prediction (Balance).")
@@ -2959,16 +3079,17 @@ F.UpdateClassPowerColorControls()
 S.lastControl = cpColBgResetBtn
 
 
+end -- section 10
+
 --------------------------------------------------
--- Auras (Auras 2.0)
+-- Section 11: Auras
 --------------------------------------------------
-local aurasHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-aurasHeader:SetPoint("TOPLEFT", cpColBgLabel, "BOTTOMLEFT", 0, -34)
-aurasHeader:SetText("Auras")
-F.CreateHeaderDividerAbove(aurasHeader)
+S.sec11Box, S.sec11Body = F.MakeCollapsibleSection(content, 300, "Auras", false)
+S.sec11Box:SetPoint("TOPLEFT", S.sec10Box, "BOTTOMLEFT", 0, -6)
+do local content = S.sec11Body
 
 local aurasSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-aurasSub:SetPoint("TOPLEFT", aurasHeader, "BOTTOMLEFT", 0, -4)
+aurasSub:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
 aurasSub:SetWidth(600)
 aurasSub:SetJustifyH("LEFT")
 aurasSub:SetText("Configure colors used by Auras 2.0 (own highlight borders, advanced filter borders) and stack count text.")
@@ -3381,18 +3502,17 @@ F.UpdateAurasColorControls()
 -- Auras section is now the lowest control for dynamic height
 S.lastControl = S.auraPanSwatch
 
+    end -- section 11
+
     --------------------------------------------------
-    -- Portrait Colors
+    -- Section 12: Portrait Colors
     --------------------------------------------------
-    local portraitHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    -- Keep Portrait colors aligned with the left content column like the other menu sections.
-    -- The old anchor used the right-column Aura cooldown control, which shifted the whole section right.
-    portraitHeader:SetPoint("TOPLEFT", S.auraPanSwatch, "BOTTOMLEFT", 0, -44)
-    portraitHeader:SetText("Portrait colors")
-    F.CreateHeaderDividerAbove(portraitHeader)
+    S.sec12Box, S.sec12Body = F.MakeCollapsibleSection(content, 220, "Portrait Colors", false)
+    S.sec12Box:SetPoint("TOPLEFT", S.sec11Box, "BOTTOMLEFT", 0, -6)
+    do local content = S.sec12Body
 
     local portraitSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    portraitSub:SetPoint("TOPLEFT", portraitHeader, "BOTTOMLEFT", 0, -4)
+    portraitSub:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
     portraitSub:SetWidth(600)
     portraitSub:SetJustifyH("LEFT")
     portraitSub:SetText("Custom border color (used when Border Style is set to Custom) and background color.")
@@ -3500,6 +3620,11 @@ S.lastControl = S.auraPanSwatch
     end)
 
     S.lastControl = pResetBtn
+
+    end -- section 12
+
+    -- Update lastControl to the last section box for dynamic height
+    S.lastControl = S.sec12Box
 
     --------------------------------------------------
     -- F.Refresh function

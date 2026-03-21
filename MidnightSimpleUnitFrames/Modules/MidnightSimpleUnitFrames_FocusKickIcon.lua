@@ -1022,6 +1022,10 @@ function MSUF_InitFocusKickIconOptions()
     if FocusKickOptionsInitialized then
         return
     end
+    if _G.MSUF_FocusKickOptionsBuiltInCastbar then
+        FocusKickOptionsInitialized = true
+        return
+    end
 
     local focusGroup = _G["MSUF_CastbarFocusGroup"]
     if not focusGroup then
@@ -1419,6 +1423,13 @@ function MSUF_UpdateFocusKickIconOptions()
         FocusKick_UpdateMode()
     end
 end
+
+------------------------------------------------------
+-- Exports for castbar accordion UI (MSUF_Options_Castbars.lua)
+------------------------------------------------------
+_G.MSUF_FocusKick_SetPreviewEnabled = FocusKick_SetPreviewEnabled
+_G.MSUF_FocusKick_UpdateAppearance  = FocusKick_UpdateAppearance
+_G.MSUF_FocusKick_ApplyTimeTextFont = FocusKick_ApplyTimeTextFontNow
 
 ------------------------------------------------------
 -- Engine-driver API (used by Castbars/MSUF_FocusKick_StateDriver.lua)
