@@ -765,13 +765,17 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
     local wasTestMode = frame._msufAbsorbTestActive
     if absorbTestMode then frame._msufAbsorbTestActive = true end
     local absorbForce = absorbTestMode or wasTestMode
+    if absorbTestMode then
+        frame.hpBar:SetMinMaxValues(0, 100)
+        MSUF_SetBarValue(frame.hpBar, 60, false)
+    end
     if frame.absorbBar and (frame._msufAbsorbDirty or absorbForce) then
         frame._msufAbsorbDirty = false
-        ns.Bars._UpdateAbsorbBar(frame, unit, maxHP)
+        ns.Bars._UpdateAbsorbBar(frame, unit, absorbTestMode and 100 or maxHP)
     end
     if frame.healAbsorbBar and (frame._msufHealAbsorbDirty or absorbForce) then
         frame._msufHealAbsorbDirty = false
-        ns.Bars._UpdateHealAbsorbBar(frame, unit, maxHP)
+        ns.Bars._UpdateHealAbsorbBar(frame, unit, absorbTestMode and 100 or maxHP)
     end
     if wasTestMode and not absorbTestMode then frame._msufAbsorbTestActive = nil end
     if frame.selfHealPredBar then
@@ -895,12 +899,18 @@ local function MSUF_ApplyOverlayBarColorCached(bar, r, g, b, a)
     MSUF_SetStatusBarColor(bar, r, g, b, a)
     bar.MSUF_overlayR, bar.MSUF_overlayG, bar.MSUF_overlayB, bar.MSUF_overlayA = r, g, b, a
  end
-local function MSUF_ApplyAbsorbOverlayColor(bar)
+local function MSUF_ApplyAbsorbOverlayColor(bar, unit)
     local r, g, b, a = MSUF_GetAbsorbOverlayColor()
+    local resolve = ns.Bars._ResolveAbsorbOpacity
+    local op = resolve and resolve(unit) or 1
+    a = a * op
     MSUF_ApplyOverlayBarColorCached(bar, r, g, b, a)
  end
-local function MSUF_ApplyHealAbsorbOverlayColor(bar)
+local function MSUF_ApplyHealAbsorbOverlayColor(bar, unit)
     local r, g, b, a = MSUF_GetHealAbsorbOverlayColor()
+    local resolve = ns.Bars._ResolveHealAbsorbOpacity
+    local op = resolve and resolve(unit) or 1
+    a = a * op
     MSUF_ApplyOverlayBarColorCached(bar, r, g, b, a)
  end
 ns.Bars._ApplyAbsorbOverlayColor = MSUF_ApplyAbsorbOverlayColor
