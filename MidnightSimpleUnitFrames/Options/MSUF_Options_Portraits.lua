@@ -509,7 +509,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     -- =================================================================
     local TWO_COL_X = 430
     local HALF_SL_W = 220
-    local secShape, shapeBody = MakeCollapsibleSection(content, secType, SEC_W, 214, TR("Shape & Size"), true)
+    local secShape, shapeBody = MakeCollapsibleSection(content, secType, SEC_W, 250, TR("Shape & Size"), true)
 
     local shapeDrop
     if UI.Dropdown then
@@ -740,7 +740,11 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         end
 
         -- Fill Border toggle: only for 2D/3D
-        fillCheck:SetShown(render ~= "CLASS")
+        local showFill = (render ~= "CLASS")
+        fillCheck:SetShown(showFill)
+        if showFill then
+            fillCheck:SetChecked(ScopeGet("portraitFillBorder", false) and true or false)
+        end
 
         -- Size
         local sizeOvr = tonumber(ScopeGet("portraitSizeOverride", 0)) or 0

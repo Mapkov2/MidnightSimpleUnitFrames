@@ -2028,7 +2028,7 @@ end
 --------------------------------------------------
 -- Section 8: Gameplay
 --------------------------------------------------
-S.sec8Box, S.sec8Body = F.MakeCollapsibleSection(content, 360, "Gameplay", false)
+S.sec8Box, S.sec8Body = F.MakeCollapsibleSection(content, 395, "Gameplay", false)
 S.sec8Box:SetPoint("TOPLEFT", S.sec7Box, "BOTTOMLEFT", 0, -6)
 do local content = S.sec8Body
 

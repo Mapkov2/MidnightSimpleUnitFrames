@@ -54,10 +54,26 @@ Foundation\MSUF_EventBus.lua
 Foundation\MSUF_Widgets.lua
 
 # ═══════════════════════════════════════════════════════════════
-# EDIT MODE
+# EDIT MODE 2
 # ═══════════════════════════════════════════════════════════════
-EditMode\MSUF_EditMode.lua
-EditMode\MSUF_EM_UndoRedo.lua
+EditMode2\MSUF_EM2_Registry.lua
+EditMode2\MSUF_EM2_State.lua
+EditMode2\MSUF_EM2_Grid.lua
+EditMode2\MSUF_EM2_Snap.lua
+EditMode2\MSUF_EM2_Anchors.lua
+EditMode2\MSUF_EM2_Undo.lua
+EditMode2\MSUF_EM2_PopupFactory.lua
+EditMode2\MSUF_EM2_Ticker.lua
+EditMode2\MSUF_EM2_Movers.lua
+EditMode2\MSUF_EM2_Popups.lua
+EditMode2\MSUF_EM2_Popup_Unit.lua
+EditMode2\MSUF_EM2_Popup_Cast.lua
+EditMode2\MSUF_EM2_Popup_Aura.lua
+EditMode2\MSUF_EM2_Nudge.lua
+EditMode2\MSUF_EM2_HUD.lua
+EditMode2\MSUF_EM2_Elements.lua
+EditMode2\MSUF_EM2_Compat.lua
+EditMode2\MSUF_EM2_Init.lua
 
 # ═══════════════════════════════════════════════════════════════
 # CORE (pre-main)

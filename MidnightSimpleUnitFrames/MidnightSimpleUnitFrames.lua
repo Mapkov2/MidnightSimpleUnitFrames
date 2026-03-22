@@ -2000,6 +2000,9 @@ end
     if not forceShow and frame.isBoss and MSUF_BossTestMode then
         forceShow = true
     end
+    if not forceShow and not frame.isBoss and not frame._msufIsPlayer and _G.MSUF_PreviewTestMode then
+        forceShow = true
+    end
     if frame._msufVisibilityForced == (forceShow and true or false) then
          return
     end
@@ -3995,6 +3998,135 @@ if self.powerText then
     end
          return
     end
+-- ── Preview Test Mode (non-boss, non-player, no unit) ──────────────────
+-- Mirrors BossTestMode block above. Full control over bars/text/visibility.
+if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and not exists then
+    if not _msuf_inCombat then
+        self:Show()
+        _UF.Alpha(self, key)
+    end
+    if self.bg then
+        MSUF_ApplyBarBackgroundVisual(self)
+    end
+    -- HP bar: visible placeholder (class-colored or green, not black)
+    local hb = self.hpBar
+    if hb then
+        MSUF_SetBarMinMax(hb, 0, 1)
+        MSUF_SetBarValue(hb, 0.73, false)
+        if hb.SetStatusBarColor then hb:SetStatusBarColor(0.20, 0.80, 0.20, 1) end
+        if self.hpGradients then ns.Bars._ApplyHPGradient(self)
+        elseif self.hpGradient then ns.Bars._ApplyHPGradient(self.hpGradient) end
+    end
+    -- Power bar
+    local pb = self.targetPowerBar or self.powerBar
+    if pb then
+        local showPB = (conf and conf.showPower ~= false)
+        if showPB then
+            pb:SetMinMaxValues(0, 100)
+            MSUF_SetBarValue(pb, 52, false)
+            pb.MSUF_lastValue = 52
+            if pb.SetStatusBarColor then pb:SetStatusBarColor(0.20, 0.60, 1.00, 1) end
+            ns.Bars.ApplyPowerGradientOnce(self)
+            pb:Show()
+            if pb.bg and pb.bg.Show then pb.bg:Show() end
+        else
+            pb:Hide()
+        end
+    end
+    -- Ensure only one power bar visible (targetPowerBar vs powerBar)
+    if self.targetPowerBar and self.powerBar and self.powerBar ~= self.targetPowerBar then
+        if pb == self.targetPowerBar then
+            self.powerBar:Hide()
+        else
+            self.targetPowerBar:Hide()
+        end
+    end
+    -- Power bar border/separator line (reads config live)
+    if pb and type(_G.MSUF_ApplyPowerBarBorder) == "function" then
+        _G.MSUF_ApplyPowerBarBorder(pb)
+    end
+    -- Invalidate diff-gates (same as boss path)
+    self._msufClampStamp = nil
+    self._msufNameClipAnchorStamp = nil
+    self._msufNameClipTextStamp = nil
+    if self.nameText then self.nameText._msufLastSetT = nil end
+    -- Name text (respects showName toggle)
+    if self.nameText then
+        local showN = (self.showName ~= false)
+        if showN then
+            local label = self.msufConfigKey or unit or "unit"
+            if label == "targettarget" then label = "ToT" end
+            MSUF_SetTextIfChanged(self.nameText, string.upper(label))
+        else
+            MSUF_SetTextIfChanged(self.nameText, "")
+        end
+        ns.Util.SetShown(self.nameText, showN)
+    end
+    MSUF_UpdateNameColor(self)
+    -- Level text (showLevelIndicator is the actual config key)
+    if self.levelText then
+        local showLvl = (conf and conf.showLevelIndicator ~= false)
+        if showLvl then
+            MSUF_SetTextIfChanged(self.levelText, "70")
+        else
+            MSUF_SetTextIfChanged(self.levelText, "")
+        end
+        ns.Util.SetShown(self.levelText, showLvl)
+        if MSUF_ClampNameWidth then MSUF_ClampNameWidth(self, conf) end
+    end
+    -- HP text (respects showHP toggle)
+    if self.hpText then
+        local showHP = (self.showHPText ~= false)
+        if showHP then
+            MSUF_SetTextIfChanged(self.hpText, "73% 123.4k")
+        else
+            MSUF_SetTextIfChanged(self.hpText, "")
+            ns.Text.ClearField(self, "hpTextPct")
+        end
+        ns.Util.SetShown(self.hpText, showHP)
+    end
+    -- Power text (respects showPower toggle)
+    if self.powerText then
+        local showPwr = (self.showPowerText ~= false)
+        if showPwr then
+            MSUF_SetTextIfChanged(self.powerText, "52% 65")
+        else
+            MSUF_SetTextIfChanged(self.powerText, "")
+        end
+        ns.Util.SetShown(self.powerText, showPwr)
+    end
+    -- Leader icon (fake leader for preview)
+    if self.leaderIcon then
+        local showLeader = ns.Util.Enabled(conf, g, "showLeaderIcon", true)
+        -- Invalidate layout stamp so position/size re-applies from config
+        ns.Cache.ClearStamp(self, "LeaderIconLayout")
+        if _UF.LeaderIcon then _UF.LeaderIcon(self) end
+        -- Set texture + visibility AFTER layout (layout only does position/size)
+        if showLeader then
+            self.leaderIcon:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
+            self.leaderIcon:Show()
+        else
+            self.leaderIcon:Hide()
+        end
+    end
+    -- Raid marker icon (fake star marker for preview)
+    if self.raidMarkerIcon then
+        local showMarker = ns.Util.Enabled(conf, g, "showRaidMarker", true)
+        ns.Cache.ClearStamp(self, "RaidMarkerLayout")
+        if _UF.RaidMarker then _UF.RaidMarker(self) end
+        if showMarker then
+            if SetRaidTargetIconTexture then SetRaidTargetIconTexture(self.raidMarkerIcon, 1) end
+            self.raidMarkerIcon:Show()
+        else
+            self.raidMarkerIcon:Hide()
+        end
+    end
+    -- Status indicators (combat, rest, rez icons — live-apply config changes)
+    if type(MSUF_UpdateStatusIndicatorForFrame) == "function" then
+        MSUF_UpdateStatusIndicatorForFrame(self)
+    end
+    return
+end
 if self.isBoss then
     if not exists then
         if self._msufNoUnitCleared and (self.GetAlpha and self:GetAlpha() or 0) <= 0.01 then

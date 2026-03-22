@@ -176,13 +176,34 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
         return false, false
     end
 
+    -- Skip aura previews for pet and targettarget
+    if unit == "pet" or unit == "targettarget" then
+        if entry._msufA2_previewActive then
+            if API.ClearPreviewsForEntry then API.ClearPreviewsForEntry(entry)
+            else entry._msufA2_previewActive = nil end
+        end
+        return false, false
+    end
+
+    -- Skip aura previews for units that don't have auras enabled
+    local DB = API and API.DB
+    if DB and DB.UnitEnabledCached and DB.UnitEnabledCached(unit) ~= true then
+        if entry._msufA2_previewActive then
+            if API.ClearPreviewsForEntry then API.ClearPreviewsForEntry(entry)
+            else entry._msufA2_previewActive = nil end
+        end
+        return false, false
+    end
+
     local showTest = (shared.showInEditMode == true and isEditActive == true)
 
     if showTest then
         if entry.buffs then entry.buffs:Show() end
         if entry.debuffs then entry.debuffs:Show() end
         if entry.mixed then entry.mixed:Hide() end
-        if entry.private and unit ~= "target" then entry.private:Show() end
+        -- Private auras: only for player
+        if entry.private and unit == "player" then entry.private:Show()
+        elseif entry.private then entry.private:Hide() end
         entry._msufA2_previewActive = true
     elseif entry._msufA2_previewActive then
         if API.ClearPreviewsForEntry then
@@ -212,7 +233,7 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
         Icons.LayoutIcons(entry.debuffs, dc or 0, cfg.debuffIconSize, cfg.spacing, cfg.perRow, cfg.debuffGrowth, cfg.debuffRowWrap)
     end
 
-    if Icons.RenderPreviewPrivateIcons and unit ~= "target" then
+    if Icons.RenderPreviewPrivateIcons and unit == "player" then
         Icons.RenderPreviewPrivateIcons(entry, unit, shared, cfg.privateIconSize, cfg.spacing, cfg.stackCountAnchor, cfg.privateGrowth)
     end
 
