@@ -290,6 +290,8 @@ local function CreateMover(entry, unitKey, kind, labelText)
     mover:SetScript("OnMouseDown", function(self, button)
         -- Always track which group was last clicked for arrow-key nudging,
         -- even if drag is blocked (popup open, combat, etc.)
+        _G.MSUF_EM2_ActiveAuraGroup = kind
+        _G.MSUF_EM2_ActiveAuraUnit  = self._msufAuraUnitKey or unitKey
         local pf = _G.MSUF_Auras2PositionPopup
         if pf then
             pf._msufActiveNudgeGroup = kind
@@ -356,6 +358,8 @@ local function CreateMover(entry, unitKey, kind, labelText)
 
         -- Click without drag: open position popup
         -- Set nudge group BEFORE opening popup so arrow keys target the correct group.
+        _G.MSUF_EM2_ActiveAuraGroup = self._msufA2MoverKind or kind
+        _G.MSUF_EM2_ActiveAuraUnit  = self._msufAuraUnitKey or unitKey
         local pf = _G.MSUF_Auras2PositionPopup
         if pf then
             pf._msufActiveNudgeGroup = self._msufA2MoverKind or kind
@@ -529,6 +533,8 @@ local function OnEditModeChanged(active)
     else
         -- Hide all movers (incl. reminder mover)
         EM.HideAllMovers()
+        _G.MSUF_EM2_ActiveAuraGroup = nil
+        _G.MSUF_EM2_ActiveAuraUnit  = nil
 
         -- Close reminder position popup if open
         local Reminder = API.Reminder

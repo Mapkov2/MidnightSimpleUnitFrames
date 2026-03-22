@@ -193,6 +193,7 @@ local function OnUpdate(self, elapsed)
         if idleSyncAcc >= 0.2 then
             idleSyncAcc = 0
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+            if EM2.HUD and EM2.HUD.RefreshControls then EM2.HUD.RefreshControls() end
         end
     end
 end
