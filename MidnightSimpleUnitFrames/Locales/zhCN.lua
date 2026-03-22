@@ -29,6 +29,10 @@ local T = {
     ["Exit MSUF Edit Mode"] = "退出 MSUF 编辑模式",
     ["Profiles"] = "配置文件",
     ["Snap to grid"] = "吸附到网格",
+
+---===========================================================================
+---Global Strings  通用
+---===========================================================================
     ["On"] = "开",
     ["Off"] = "关",
     ["ON"]  = "开",
@@ -40,7 +44,8 @@ local T = {
     ["All"] = "全部",
     ["Default"] = "默认",
     ["Tip"] = "提示",
-    
+    ["Apply"] = "应用",
+    ["Revert"] = "还原",
 
     ["Override"] = "覆盖",
     ["Overrides"] = "覆盖",
@@ -66,16 +71,33 @@ local T = {
     ["Bottom Left"] = "左下",
     ["Bottom Right"] = "右下",
     ["Hold Shift"]  = "按住Shift",
+    ["W:"] = "宽:",
+    ["H:"]  = "高:",
+---==========================================================================
+---SlashMenu
+---==========================================================================
+    ["MSUF Menu"]   = "MSUF 菜单",
+    ["MSUF Player"] = "MSUF 玩家",
+    ["MSUF Target"] = "MSUF 目标",
+    ["MSUF Target of Target"]   = "MSUF 目标的目标",
+    ["MSUF Focus"] = "MSUF 焦点",
+    ["MSUF Boss Frames"] = "MSUF 首领框架",
+    ["MSUF Pet"] = "MSUF 宠物",
+    ["MSUF Bars"] = "MSUF 计量条",
+    ["MSUF Fonts"] = "MSUF 字体", 
+    ["MSUF Auras 2.0"]  = "MSUF 光环2.0",
+    ["MSUF Miscellaneous"] = "MSUF 杂项",
+    ["MSUF Colors"] = "MSUF 颜色",
+    ["MSUF Castbar"]    = "MSUF 施法条",
+    ["MSUF Class Resources"]    = "MSUF 职业资源",
+    ["MSUF Gameplay"] = "MSUF 游戏性",
+    ["MSUF Portraits"] = "MSUF 头像",
+    ["MSUF Modules"]    = "MSUF 模块",
+    ["MSUF Profiles"]   = "MSUF 配置文件",
+    ["Search Results"]  = "搜索结果",
+    ["Search"] = "搜索",
 
-
-
-
-    -- Add more as you go:
-    -- ["..."] = "...",
-    --SlashMenu
-    ["Main Menu"] = "主菜单",
-    ["Quick tools & UI scale (same content as /msuf options)."]  = "快速工具 & UI缩放(与 /msuf 选项相同).",
-    ["Tip:"] = "提示:",
+    
     ["Bigger steps: Hold |cff00ff00SHIFT|r while adjusting sliders to change values faster."]   = "更大的步骤: 调整滑块时按住|cff00ff00SHIFT|r以更快地更改值.",
     ["Fine tuning: Hold |cff00ff00CTRL|r while adjusting sliders for smaller steps."]  = "精细调整: 调整滑块时按住|cff00ff00CTRL|r以进行更小的步骤.",
     ["Quick reset: If something feels off, try |cff00ff00/msuf reset|r (frame positions)."]  = "快速重置: 如果感觉不对,请尝试|cff00ff00/msuf reset|r(框架位置).",
@@ -138,9 +160,11 @@ local T = {
     ["Manage"]  = "配置",
     ["Use the Profiles page for switching, export and import."] = "使用配置文件页面进行切换,导出和导入.",
     ["UI Scale"]    = "UI缩放",
-    ["Quick access to global UI scale presets and MSUF frame scale."] = "快速访问全局UI缩放预设和MSUF框架缩放.",
+    ["Quick access to scaling."] = "快速访问缩放.",
+
     ["MSUF Scale"]  = "MSUF缩放",
     ["Scales only MSUF frames (unitframes + castbars). Use the mouse wheel for 5% steps."] = "仅缩放MSUF框架(单位框体+施法条).滚动鼠标滚轮可按5%幅度调节.",
+
     ["|cff4a90d9Profile:|r |cffccd8e8"] = "|cff4a90d9配置文件:|r |cffccd8e8",
     ["|cff4ade80Edit: On|r  |cff3a4a66\194\183|r"] = "|cff4ade80编辑: 开|r  |cff3a4a66\194\183|r",
     ["|cff5a6a88Edit: Off|r  |cff3a4a66\194\183|r"] = "|cff5a6a88编辑: 关|r  |cff3a4a66\194\183|r",
@@ -163,7 +187,7 @@ local T = {
     ["Applies MSUF's global scale preset for 4K (2160p) setups (0.3556) and reloads your UI. Auto restores Blizzard scaling on reload."] = "应用MSUF的全局缩放预设,适应于4K(2160p)的设置(0.3556)并重新加载您的UI. 自动恢复暴雪的缩放在重载.",
     ["Stops enforcing MSUF global scale and restores your previous Blizzard UI scale."] = "停止强制MSUF全局缩放并恢复您以前的暴雪UI缩放.",
     ["Turns off all scaling MSUF applies (global UI scale + MSUF-only scale), then reloads your UI. Blizzard handles scaling."] = "关闭所有MSUF应用的缩放(全局UI缩放 + MSUF-only缩放),然后重新加载您的UI. 暴雪处理缩放.",
-
+    ["MSUF Frame Scale"]    = "MSUF框架缩放",
     ["Current: 1.00"]   = "当前: 1.00",        
     ["Current: %.2f"]   = "当前: %.2f",    
     ["Current: ..."] =     "当前: ...",
@@ -181,8 +205,12 @@ local T = {
     ["TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only MSUF frames (unitframes + castbars). Range 25%–150% (0.25–1.50). Drag or click to adjust. Applied immediately; in combat it applies after combat."] = "提示: 将鼠标悬停在此滑块上并使用鼠标滚轮以5%的步长更改缩放.\n\n仅MSUF框架(单位框架 + 施法条)的缩放. 范围25%-150%(0.25–1.50). 拖动或点击调整. 立即应用; 在战斗中,它会在战斗后应用.",
     ["MSUF Slash Menu Scale"] = "MSUF菜单缩放",
     ["TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only the MSUF Slash Menu window. Range 25%–150% (0.25–1.50). Drag or click to adjust. Applied immediately."] = "提示: 将鼠标悬停在此滑块上并使用鼠标滚轮以5%的步长更改缩放.\n\n仅MSUF菜单窗口的缩放. 范围25%-150%(0.25–1.50). 拖动或点击调整. 立即应用.",
-
-
+    ["Applied: 1.00 (100%)"] = "应用: 1.00 (100%)",
+    ["Applied: %.2f (%d%%)"] = "应用: %.2f (%d%%)",
+    ["Selected: 1.00 (100%)"] = "选择: 1.00 (100%)",
+    ["Selected: %.2f (%d%%)"]   = "选择: %.2f (%d%%)",
+    ["Selected: %.2f (%d%%)  |cffffd200Press Apply|r"] = "选择: %.2f (%d%%)  |cffffd200按应用|r",
+    ["Chooses the standalone Slash Menu scale. Drag or use the mouse wheel, then press Apply." ] = "选择独立的菜单缩放. 拖动或使用鼠标滚轮,然后按应用.",
 
 
 
@@ -202,6 +230,7 @@ local T = {
     ["Portraits"] = "头像",
     ["Portrait"]    = "头像",
 
+-----PLAYER------
 
     ["Frame Basics"] = "框架基础",
     ["Enable this frame"] = "启用框架",
@@ -704,7 +733,7 @@ local T = {
     ["Layout & Caps"]   = "布局与限制",
     ["Max Buffs"] = "最大Buffs数量",
     ["Max Debuffs"] = "最大Debuffs数量",
-    ["Block spacing"] = "块间距",
+    ["Block spacing"] = "间距",
     ["Controls how far Buff and Debuff blocks are pushed away from the unitframe when using split anchors."] = "控制使用分割锚点时, Buff和Debuff块与单位框架的距离.",
     ["Requires Layout: Separate rows."] = "需要布局: 分开行.",
     ["Icons per row"] = "每行图标数量" ,
@@ -743,7 +772,7 @@ local T = {
 
 
 
-
+    ["Aura Filters & Sorting"]  = "光环过滤与排序",
     ["Include boss buffs"] =  "包含首领Buffs",
     ["Include boss debuffs"] =  "包含首领Debuffs",
     ["Show Sated/Exhaustion"]   = "显示嗜血/英勇冷却" ,
@@ -852,7 +881,7 @@ local T = {
     [" Private"] = " 私人",
     ["Boss "] = "首领 ",
     ["Global Ignore List"]  = "全局忽略列表",
-    ["Shared (all units)"]  = "共享 (所有单位)",
+    ["Shared (all units)"]  = "共享(所有单位)",
     ["|cff888888Not available for Boss frames|r"]  = "|cff888888Boss框架不可用|r",
 
 
@@ -935,22 +964,25 @@ local T = {
     ["Stage blink time (sec)"] = "阶段闪烁时间 (秒)",
     ["Use opposite fill direction for target"] = "目标使用相反填充方向",
 
+--------------Misc----------------
 
     ["Miscellaneous"] = "杂项",
     ["Updates"] = "更新",
     ["Update Intervals"]    = "更新间隔",
     ["Unit info panel"] = "单位信息面板",
     ["Indicators"] = "指示器",
-    ["Perf..."] = "性能...",
-    ["Balanced..."] = "平衡...",
-    ["Accurate..."] = "精确...",
+    ["Performance"] = "性能",
+    ["Balanced"] = "平衡",
+    ["Accurate"] = "精确",
     ["Unit update interval: %.2f s"] = "单位更新间隔: %.2f 秒",
     ["Castbar update interval: %.2f s"] = "施法条更新间隔: %.2f 秒",
     ["UFCore flush budget: %.1f ms"] = "UFCore 清空预算: %.1f 毫秒",
     ["UFCore urgent cap: %d"] =  "UFCore 紧急上限: %d",
-    ["Unit Info Panel"]     = "单位信息面板",
-    ["Disable MSUF unit info panel tooltips"] = "禁用MSUF单位信息面板鼠标提示",
-    ["MSUF unit info panel position"] = "MSUF单位信息面板位置",
+    
+    ["Unitframe Tooltips"]  = "单位信息面板鼠标提示",
+    ["Disable MSUF unitframe tooltips"] = "禁用MSUF单位信息面板鼠标提示",
+    ["MSUF unitframe tooltip position"] = "MSUF单位信息面板鼠标提示位置",
+    
     ["Blizzard Classic"]    = "暴雪经典",
     ["Modern (under cursor)"]   = "现代(光标下方)",
     ["Blizzard Frames"] = "暴雪框架",
@@ -1163,7 +1195,7 @@ local T = {
     ["Border"]   = "边框",
     ["Style"]   = "样式",
     ["Thickness"]   = "粗细",
-    
+    ["Class style"]   = "职业样式",
 
 
 
@@ -1209,11 +1241,6 @@ local T = {
     ["Shows |cff00ccffAA|r on proc. Event-driven — Sub Rogue has exactly one overlay."] = "触发时显示|cff00ccffAA|r.敏锐潜行者仅有一个覆盖层.",
     ["Default green. Default: SHADOWSTRIKE!"]   = "默认绿色. 默认: 暗影突袭!",
 
-
-
-
-
-    
     ["Combat Enter/Leave"] = "战斗进入/离开",
     ["Show combat enter/leave text"] = "显示战斗进入/离开文本",
     ["Enter text"] = "进入战斗文本",
@@ -1226,7 +1253,7 @@ local T = {
 
 
 
-    ["Class-specific toggles"] = "职业特定切换",
+    ["Class-specific toggles"] = "职业专属设置",
     ["Shaman: Totem tracker"] = "萨满: 图腾追踪器",
     ["Player-only. Secret-safe in combat."] = "仅限玩家. 战斗中安全.",
     ["Note: Right-click to dismiss totems is protected by Blizzard (secure) and not supported yet."] = "注意: 右键点击以取消图腾受暴雪 (安全) 保护, 暂不支持.",
@@ -1243,13 +1270,11 @@ local T = {
     ["Spacing"] = "间距",
     ["Tight"] = "紧凑",
     ["Wide"] = "宽松",
-
     ["X offset"] = "X 偏移",
-
     ["Y offset"] = "Y 偏移",
     ["Down"] = "下",
     ["Up"] = "上",
-
+    
     ["Font size"] = "字体大小",
     ["Layout"] = "布局",
     ["Melee range spell (crosshair)"] = "近战范围法术 (十字准星)",
@@ -1287,6 +1312,7 @@ local T = {
 
 
     ["Combat crosshair"] = "战斗十字准星",
+    ["Combat Crosshair"]    = "战斗十字准星",
     ["Show green combat crosshair under player (in combat)"] = "战斗中在玩家脚下显示绿色战斗准星定位玩家位置",
     ["Crosshair: color by melee range to target (green=in range, red=out)"] = "十字准星: 按近战范围到目标着色 (绿色=范围内, 红色=范围外)",
     ["Uses the spell selected below."] = "使用下方选择的法术.",
@@ -1341,137 +1367,87 @@ local T = {
     ["Export"] = "导出",
     ["Legacy Import"] = "旧版导入",
 
+---==================================================================
+---------EditMode------
+---==================================================================
 
----------EditMode------,
+--------HUD----------
+    ["EDIT MODE"]   = "编辑模式",
+    ["Preview"] = "预览",
+    ["Show placeholder data on unitframes\nwithout real units (target, focus, etc.)"]  = "在无实际单位（如目标、焦点等）的单位框架上显示占位数据",
+    ["Auras"]   = "光环",
+    ["Toggle aura preview icons\nand aura mover boxes."]    = "切换光环预览图标和光环移动框.",    
+    ["Snap"]    = "对齐",
+    ["Snap frames to edges of\nother frames while dragging."]   = "拖动时将框架吸附到其他框架的边缘.",
+    ["CDM"]     = "冷却管理器",
+    ["Anchor all unitframes to the\nEssential Cooldown Manager."]   = "将所有单位框架锚定到\n重要技能冷却管理器.",
+    ["Anchor"]  = "锚点",
+    ["Pick any frame as global anchor\nfor all unitframes.\nOverrides CDM anchor."]   = "任选一个框架作为所有单位框架的全局锚点.\n此设置将覆盖冷却管理器锚点.",
+    ["Undo"]  = "撤销",
+    ["Undo last position change."]  = "撤销上次位置更改.",
+    ["Redo"]  = "重做",
+    ["Redo last undone change."]    = "重做上次撤销的更改.",
+    ["Grid "]   = "网格",
+    ["Grid step size.\nScroll to adjust."]  = "网格间距.\n滚动滚轮调节.",
+    ["BG "]  = "背景",
+    ["Background overlay opacity.\nScroll to adjust."]  = "背景透明度.\n滚动滚轮调节.",
+    ["Cancel All"]  = "全部取消",
+    ["Discard all changes and exit?"]   = "确定取消全部更改并退出编辑模式?",
+    ["Discard ALL changes made in Edit Mode\nand restore settings to the state\nbefore Edit Mode was opened."]  = "放弃在编辑模式下全部更改,\n并将设置恢复到打开编辑模式之前的状态?",
+    ["Exit"]    = "退出",
+    ["Lock positions and exit Edit Mode."]  = "锁定位置并退出编辑模式.",
+    
+--------Popup_Unit---------
+    ["Position & Size"] = "位置与大小",
+    ["Name"]    = "名称",
+    ["Show Name"]   = "显示名称",
+    ["HP"]  = "生命",
+    ["Show HP"]  = "显示生命",
+    ["Power"]   = "能量",
+    ["Show Power"]  = "显示能量",
+    ["Detached Power Bar"]  = "分离能量条",
+    ["Detach from frame"]   = "从框架分离",
+    ["Sync width to Resource Bar"]  = "同步宽度到能量条",
+    ["Anchor to Resource Bar"]  = "锚定到能量条",
+    ["Power text on bar"]   = "能量条文本",   
+    
+--------  Popup_Cast--------- 
+    [" Castbar"]    = " 施法条",
+    ["Spell Name"]  = "法术名称",
+    ["Duration"]    = "持续时间",
+    ["Size:"]   = "大小:",   
+    ["Show"]    = "显示",
+    ["Anchor to unitframe"] = "锚定到单位框架",
 
-    ["Editing: %s (X: %d, Y: %d)"] =    "编辑: %s (X: %d, Y: %d)",
-    ["Sizing: %s (W: %d, H: %d)"] =    "尺寸: %s (W: %d, H: %d)",
-    ["MODE: SIZE"] =    "模式: 尺寸",
-    ["MODE: POSITION"] =    "模式: 位置",
-    ["Positioning"] =    "定位",
-    ["Overlay"] =    "覆盖",
-    ["Frames"] =    "框架",
-    ["Custom anchor (type name or pick visually)"] =    "自定义锚点 (输入名称或视觉选择)",
-    ["Pick"] =    "选择",
-    ["Clear"]    = "清除",
-
-    ["Custom anchor frame name (/fstack)"] =    "自定义锚点框架名称 (/fstack)",
-    ["Anchor Cooldownmanager"] =    "冷却管理器锚点",
-    ["Current: "] =    "当前: ",
-    ["Edit Mode Background"] =     "编辑模式背景",
-    ["Grid Size (px)"] =    "网格大小(px)",
-    ["Arrows: OFF"] =    "箭头: 关闭",
-    ["Arrows: ON"] =    "箭头: 开启",
-    ["Edit Unit:"] =    "编辑单位:",
-    ["Aura Preview"] =     "光环预览",
-    ["Boss Preview"] =     "首领预览",
-    ["Cancel Changes"] =   "取消更改",
-    ["Reset Frame"] =    "重置框架",
-    ["Exit MSUF Edit Mode"] =    "退出MSUF编辑模式",
-    ["< Undo"] =    "< 撤销",
-    ["Undo last change"] =    "撤销上次更改",
-    ["Redo >"] =    "重做 >",
-    ["Redo last undone change"] =    "重做上次撤销的更改",
+--------  Popup_Aura---------
+    [" Auras"] = " 光环",  
+    ["Boss 1-5 edit together"]  = "首领1-5共同编辑", 
+    ["Text Overlays"]   = "文本覆盖", 
+    ["Stack size:"]  = "层数文本:",
+    ["CD size:"]    = "CD文本:",
+    ["Icon size:"]  = "图标大小:",
+    ["Preview (highlight)"]  = "预览(高亮)",
+    ["Buffs"]    = "增益",
+    ["Debuffs"]   = "负面",
 
 
+---------PopupFactory----------
+    ["Copy To"] = "复制到",
+    ["Select..."]   = "选择...",
 
-
------------popup----------,
-    ["MSUF Edit"]   = "MSUF 编辑",
-    ['MSUF Edit  '] = 'MSUF 编辑  ',
-    ["MSUF Edit  %s"] = 	"MSUF 编辑  %s",
-    ["MSUF Edit  Castbar"] = "MSUF 编辑  施法条",
-    ["MSUF Edit  %s Castbar"] = "MSUF 编辑  %s 施法条",
-    ['MSUF Edit – Target Aura'] = 'MSUF 编辑 – 目标光环',
-    ['MSUF Edit – '] = 'MSUF 编辑 – ',
-    ['MSUF Edit  Target Aura'] = 'MSUF 编辑 – 目标光环',
-
-    ["Editing: %s (X: %d, Y: %d)"] = "编辑: %s (X: %d, Y: %d)",
-    ['Player Aura'] = '玩家光环',
-    ['Target Aura'] = '目标光环',
-    ['Focus Aura'] = '焦点光环',
-    ['Boss %s Aura'] = '首领 %s 光环',
-    ['Boss Aura'] = '首领光环',
-    ['Aura'] = '光环',
-    ["Frame"] = "框架",
-    ['Frame'] = '框架',
-    ["Offset X:"] = "偏移X:",
-    ["Offset Y:"] = "偏移Y:",
-    ["Width:"] = "宽度:",
-    ["Height:"] = "高度:",
-    ["Text"] = "文本",
-    ["Name X:"] = "名称X:",
-    ["Name Y:"] = "名称Y:",
-    ["Name Size:"] = "名称大小:",
-    ["HP X:"] = "生命X:",
-    ["HP Y:"] = "生命Y:",
-    ["HP Size:"] = "生命大小:",
-    ["Override HP Size"] = "覆盖生命大小",
-    ["Power X:"] = "能量X:",
-    ["Power Y:"] = "能量Y:",
-    ["Power Size:"] = "能量大小:",
-    ["Override Power Size"] = "覆盖能量大小",
-    ["Spell X:"] = "法术X:",
-    ["Spell Y:"] = "法术Y:",
-    ["Spell Size:"] = "法术大小:",
-    ["Override Spell Name Size"] = "覆盖法术名称大小",
-    ["Icon X:"] = "图标X:",
-    ["Icon Y:"] = "图标Y:",
-    ["Icon Size:"] = "图标大小:",
-    ["Override Icon Size"] = "覆盖图标大小",
-    ["Time X:"] = "时间X:",
-    ["Time Y:"] = "时间Y:",
-    ["Time Size:"] = "时间大小:",
-    ["Override Time Size"] = "覆盖时间大小",
-    ["Spacing:"] = "间距:",
-    ['Boss 1-5 edit together'] = '首领1-5同时编辑',
-    ["Text size (Stacks):"] = "文本大小(堆叠):",
-    ["Stack text X:"] = "堆叠文本X:",
-    ["Stack text Y:"] = "堆叠文本Y:",
-    ["Text size (Cooldown):"] = "文本大小(冷却):",
-    ["Cooldown text X:"] = "冷却文本X:",
-    ["Cooldown text Y:"] = "冷却文本Y:",
-    ["Buffs / Debuffs"] = "增益/负面",
-    ["Buff offset X:"] = "增益偏移X:",
-    ["Buff offset Y:"] = "增益偏移Y:",
-    ["Buff icon size:"] = "增益图标大小:",
-    ["Debuff offset X:"] = "负面偏移X:",
-    ["Debuff offset Y:"] = "负面偏移Y:",
-    ["Debuff icon size:"] = "负面图标大小:",
-    ['Preview (highlight) private auras'] = '预览(高亮)私有光环',
-    ['Private Auras']   = '私有光环',
-    ["Private offset X:"] = "私人偏移X:",
-    ["Private offset Y:"] = "私人偏移Y:",
-    ["Private icon size:"] = "私人图标大小:",
-    ["Text Anchor"] = "文本锚点",
-    ["Right"]   = "右边",
-    ["Left"]     = "左边",
-   
-    ["Name: "] = "名称: ",
-    ["HP: "] = "生命: ",
-    ["Power: "] = "能量: ",
-    ["Power Bar"] = "能量条",
-    ["Detach from frame"] = "从框架分离",
-    ["Detach Power Bar"] = "分离能量条",
-    ["Separates the power bar from the unit frame so you can position and size it freely."] = "将能量条从单位框架分离，以便您可以自由定位和调整大小.",
-    ["Anchor to Boss unitframe"] = "锚定到首领单位框架",
-    ["Anchor to "]  = "锚定到 ",
-    [" unitframe"] = " 单位框架",
-    ["Sync width to Resource Bar"]  = "同步宽度到资源条",
-    ["Matches the detached power bar width to the Class Power bar (Combo Points, Soul Shards, etc.).\n\nThe Resource Bar becomes the width master.\nWidth field is locked while synced."]   = "将分离的能量条宽度与职业能量条(连击点, 灵魂碎片等)匹配.\n\n资源条成为宽度主控.\n同步时宽度字段被锁定.",
-    ["Anchor to Resource Bar"]  = "锚定到资源条",
-    ["Attaches the detached power bar to the Class Power bar.\n\nMoving the Class Power bar also moves the power bar.\nYou can still adjust X/Y offsets relative to the resource bar."]  = "将分离的能量条锚定到职业能量条.\n\n移动职业能量条也会移动能量条.\n您仍可调整相对于资源条的X/Y偏移.",
-    ["Power text on bar"]   = "能量条文本",
-    ["Moves the power text from the unit frame onto the detached power bar.\n\nText offset X/Y still works relative to the power bar."]  = "将能量条文本从单位框架移动到分离的能量条.\n\n文本偏移X/Y仍相对于能量条工作.",
+-----------Compat------------
+["Anchor Picker"]   = "锚点选择器",
+["Hover over any frame, then CTRL + Left-Click to anchor.  |  Right-Click or Escape to cancel."]    = "将鼠标悬停在任何框架上,然后使用 CTRL + 左键单击以锚定. | 按右键或 ESC 取消.",
+["Hover: no named frame found"] = "鼠标悬停提示:未检测到目标框架",
+["CTRL: not held"]  = "CTRL: 未按",
+["CTRL: held  —  click to anchor!"]  = "CTRL: 已按 — 点击以锚定!",
+["|cffff5555You must hold CTRL|r while left-clicking to confirm the anchor target."]    = "|cffff5555按住 CTRL|r 并左键点击以确认锚点目标.",
+["No named frame found under cursor. Try a different spot."]    = "未检测到鼠标下的框架. 尝试其他位置.",
 
 
 
 
-    ["Copy size settings to..."] = "复制大小设置到...",
-    ["Copy text settings to..."] = "复制文本设置到...",
-    ["Copy size settings to:"] = "复制大小设置到:",
-    ["Copy text settings to:"] = "复制文本设置到:",
-    ["Copy settings to:"] = "复制设置到:",
+
 }
 
 for k, v in pairs(T) do
