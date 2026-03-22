@@ -217,6 +217,7 @@ local function Build()
         onCopy = function(targetKey)
             local r = ReadCastbarSettings(pf.unit)
             if not r or not targetKey then return end
+            if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", targetKey) end
             WriteCastbarSettings(targetKey, r)
             if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
             if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
