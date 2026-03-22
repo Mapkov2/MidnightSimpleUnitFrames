@@ -1060,15 +1060,6 @@ local T = {
     ["Anchor"] = "锚点",
     ["Timer size"] = "计时器大小",
     ["Lock position"] = "锁定位置",
-    ["Schriftgröße"] = "字体大小",
-    ["px  (default 26)"] = "px(默认 26)",
-    ["Anzeigetext"] = "显示文本",
-    ["Wird grün angezeigt. Default: SHADOWSTRIKE!"] = "将以绿色显示. 默认: 暗影突袭!",
-    ["Shadow Dance Dauer (s)"] = "暗影舞步持续时间 (s)",
-    ["Default 8.0 — +3s automatisch wenn First Dance voll ausläuft."] = "默认 8.0 — 当第一段暗影之舞完全结束时自动 +3秒.",
-    ["Track Ancient Arts via Spell Activation Overlay"] = "通过法术激活覆盖追踪诡谋承袭",
-    ["Shows |cff00ccffAA|r on proc. Event-driven — Sub Rogue has exactly one overlay."] = "触发时显示|cff00ccffAA|r.敏锐潜行者仅有一个覆盖层.",
-    ["Default green. Default: SHADOWSTRIKE!"]   = "默认绿色. 默认: 暗影突袭!",
 
 
 
@@ -1137,11 +1128,6 @@ local T = {
     ["Rogue: First Dance tracker"] = "潜行者: 第一支舞追踪器",
     ["Optional helper. Shows a 6s timer after leaving combat."] = "可选助手. 在离开战斗后显示6秒计时器.",
     ["Track 'The First Dance' (6s after leaving combat)"] = "追踪'第一支舞'(离开战斗后6秒)",
-
-    ["Rogue: Apex Alert (Shadowstrike! hint)"] = "潜行者: 顶点警报 (暗影突袭!提示)",
-    ["Shows |cff00ff00SHADOWSTRIKE!|r if Shadow Dance (185313) is active."] = "如果暗影舞步 (185313) 处于激活状态, 则显示 |cff00ff00暗影突袭!|r.",
-    ["|cff00ff00SHADOWSTRIKE!|r User needs to check himself if shadow tech stacks are above 5."] = "|cff00ff00暗影突袭!|r 用户需要检查自己暗影技术堆叠是否超过5.",
-    ["Enable Apex Alert (Shadowstrike hint)"]   = "启用顶点警报 (暗影突袭提示)",
 
 
     ["Combat crosshair"] = "战斗十字准星",

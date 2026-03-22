@@ -15,6 +15,7 @@ local hudFrame, row2Frame
 local previewBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
+local helpBtn, tutorialPanel
 
 local R1_H    = 42
 local R2_H    = 34
@@ -100,6 +101,127 @@ local function LayoutCenter(anchor, items, gap, sepW)
 end
 
 -- =========================================================================
+-- Tutorial / Help Reference Panel (lazy init)
+-- =========================================================================
+local HELP_SECTIONS = {
+    {
+        title = "Drag & Move",
+        body  = "Left-click and drag any mover overlay to reposition a frame. "
+             .. "Hold |cff60a5ffShift|r while dragging to ignore snap and move freely.",
+    },
+    {
+        title = "Arrow Key Nudge",
+        body  = "Use arrow keys to nudge the selected frame by 1 pixel. "
+             .. "Hold |cff60a5ffShift|r for 10 px steps.",
+    },
+    {
+        title = "Right-Click Popup",
+        body  = "Right-click any mover to open its settings popup — "
+             .. "fine-tune X/Y position, size, and per-unit overrides.",
+    },
+    {
+        title = "Grid & Snap",
+        body  = "Toggle |cff60a5ffSnap|r in the HUD toolbar. Scroll over "
+             .. "|cff60a5ffGrid ##px|r to change step size. Frames snap to "
+             .. "edges of other frames while dragging.",
+    },
+    {
+        title = "Background Opacity",
+        body  = "Scroll over |cff60a5ffBG ##%|r to darken the game world. "
+             .. "Makes it easier to see frame positions and alignment.",
+    },
+    {
+        title = "Preview & Auras",
+        body  = "|cff60a5ffPreview|r fills empty unitframes with placeholder "
+             .. "data (health, power, names). |cff60a5ffAuras|r shows aura "
+             .. "icons and lets you reposition aura groups.",
+    },
+    {
+        title = "Undo / Cancel All",
+        body  = "|cff60a5ffUndo|r / |cff60a5ffRedo|r track every position "
+             .. "change. |cff60a5ffCancel All|r reverts everything to the "
+             .. "state before Edit Mode was opened.",
+    },
+}
+
+local PANEL_W     = 340
+local PANEL_PAD   = 16
+local SEC_GAP     = 6
+local TITLE_SZ    = 12
+local BODY_SZ     = 11
+local BODY_W      = PANEL_W - PANEL_PAD * 2
+local DIVIDER_H   = 1
+local HEADER_H    = 36
+local CLOSE_SZ    = 20
+
+local function EnsureTutorialPanel()
+    if tutorialPanel then return tutorialPanel end
+
+    local p = CreateFrame("Frame", "MSUF_EM2_TutorialPanel", UIParent, "BackdropTemplate")
+    p:SetFrameStrata("TOOLTIP"); p:SetFrameLevel(950)
+    p:SetWidth(PANEL_W)
+    p:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
+    p:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
+                    insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    p:SetBackdropColor(0.03, 0.05, 0.12, 0.97)
+    p:SetBackdropBorderColor(0.10, 0.20, 0.45, 0.90)
+    p:EnableMouse(true); p:Hide()
+
+    p:EnableKeyboard(true)
+    p:SetScript("OnKeyDown", function(self, k)
+        if k == "ESCAPE" then
+            self:SetPropagateKeyboardInput(false); self:Hide()
+        else
+            self:SetPropagateKeyboardInput(true)
+        end
+    end)
+
+    local hdr = MakeFS(p, 13, 0.75, 0.88, 1.00, 1)
+    hdr:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, -12)
+    hdr:SetText("Edit Mode — Quick Reference")
+
+    local closeBtn = CreateFrame("Button", nil, p)
+    closeBtn:SetSize(CLOSE_SZ, CLOSE_SZ)
+    closeBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", -8, -8)
+    local closeFS = MakeFS(closeBtn, 14, 0.55, 0.62, 0.78, 0.70)
+    closeFS:SetPoint("CENTER"); closeFS:SetText("x")
+    closeBtn:SetScript("OnEnter", function() closeFS:SetTextColor(1, 1, 1, 1) end)
+    closeBtn:SetScript("OnLeave", function() closeFS:SetTextColor(0.55, 0.62, 0.78, 0.70) end)
+    closeBtn:SetScript("OnClick", function() p:Hide() end)
+
+    local y = -(HEADER_H)
+
+    for i, sec in ipairs(HELP_SECTIONS) do
+        if i > 1 then
+            local div = p:CreateTexture(nil, "ARTWORK")
+            div:SetSize(BODY_W, DIVIDER_H)
+            div:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, y - SEC_GAP * 0.5)
+            div:SetColorTexture(0.10, 0.20, 0.45, 0.25)
+            y = y - SEC_GAP
+        end
+
+        local tFS = MakeFS(p, TITLE_SZ, 1.00, 0.82, 0.00, 1.00)
+        tFS:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, y)
+        tFS:SetText(sec.title)
+
+        y = y - (TITLE_SZ + 4)
+
+        local bFS = MakeFS(p, BODY_SZ, 0.78, 0.82, 0.90, 0.90)
+        bFS:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, y)
+        bFS:SetWidth(BODY_W); bFS:SetWordWrap(true); bFS:SetJustifyH("LEFT")
+        bFS:SetText(sec.body)
+
+        local bH = bFS:GetStringHeight() or 14
+        y = y - bH - SEC_GAP
+    end
+
+    p:SetHeight(-y + PANEL_PAD * 0.5)
+
+    tutorialPanel = p
+    return p
+end
+
+-- =========================================================================
 local function EnsureHUD()
     if hudFrame then return end
 
@@ -117,6 +239,25 @@ local function EnsureHUD()
     local title = MakeFS(hudFrame, 11, TH.titleR, TH.titleG, TH.titleB, 0.50)
     title:SetPoint("LEFT", hudFrame, "LEFT", 14, 0)
     title:SetText("EDIT MODE")
+
+    helpBtn = CreateFrame("Button", nil, hudFrame)
+    helpBtn:SetSize(24, 24)
+    helpBtn:SetPoint("LEFT", title, "RIGHT", 8, 0)
+    do
+        local ring = helpBtn:CreateTexture(nil, "BACKGROUND")
+        ring:SetSize(24, 24); ring:SetPoint("CENTER")
+        ring:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.18)
+        local qm = MakeFS(helpBtn, 13, TH.onR, TH.onG, TH.onB, 0.85)
+        qm:SetPoint("CENTER", 0, 0); qm:SetText("?")
+        helpBtn._qm = qm; helpBtn._ring = ring
+        local hl = helpBtn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.06)
+    end
+    helpBtn:SetScript("OnClick", function()
+        local panel = EnsureTutorialPanel()
+        if panel:IsShown() then panel:Hide() else panel:Show() end
+    end)
+    SetTip(helpBtn, "Quick reference for Edit Mode\ncontrols and shortcuts.")
 
     -- Right-side: Cancel All | Exit
     exitBtn = MakeBtn(hudFrame, "Exit", 48, BTN_H, 12, function()
@@ -343,6 +484,7 @@ end
 
 function HUD.Show() EnsureHUD(); HUD.RefreshControls(); hudFrame:Show(); if row2Frame then row2Frame:Show() end end
 function HUD.Hide()
+    if tutorialPanel then tutorialPanel:Hide() end
     local cf = _G["MSUF_EM2_CancelConfirm"]; if cf then cf:Hide() end
     if row2Frame then row2Frame:Hide() end; if hudFrame then hudFrame:Hide() end
 end
