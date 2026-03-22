@@ -1,6 +1,8 @@
 -- ============================================================================
 -- MSUF_CP_Mode_Aura.lua
 -- Phase 2 ClassPower split: aura-driven modes extracted from the core file.
+-- Secret-safe: C_UnitAuras fields (applications) and C_Spell returns can be
+-- secret in 12.0. All Lua-side comparisons/arithmetic guarded with NotSecret.
 -- ============================================================================
 
 _G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
@@ -15,6 +17,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
     local C_Spell = E.C_Spell
     local CPK = E.CPK
     local WW = E.WW
+    local NotSecret = E.NotSecret
     local ResolveClassPowerColor = E.ResolveClassPowerColor
     local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local ResolveMWAbove5Color = E.ResolveMWAbove5Color
@@ -46,7 +49,10 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
         local filledAlpha, emptyAlpha = E.GetFilledAlpha(), E.GetEmptyAlpha()
         if powerType == "SOUL_FRAGMENTS_VENG" then
             local getCastCount = C_Spell and C_Spell.GetSpellCastCount
-            local cur = getCastCount and getCastCount(CPK.SPELL.SOUL_CLEAVE) or 0
+            local rawCur = getCastCount and getCastCount(CPK.SPELL.SOUL_CLEAVE)
+            local cur = 0
+            local curSafe = (rawCur ~= nil and NotSecret(rawCur))
+            if curSafe then cur = tonumber(rawCur) or 0 end
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
@@ -60,14 +66,17 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
             local txt = CP.text
             if txt then
                 local showText = b.classPowerShowText == true
-                if showText then txt:SetFormattedText("%d / %d", cur, maxPower); txt:Show() else txt:Hide() end
+                if showText and curSafe then txt:SetFormattedText("%d / %d", cur, maxPower); txt:Show() else txt:Hide() end
             end
         else
             local cur = 0
             if powerType == "MAELSTROM_WEAPON" then
                 if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
                     local info = C_UnitAuras.GetPlayerAuraBySpellID(CPK.SPELL.MAELSTROM_WEAPON)
-                    if info and info.applications then cur = info.applications end
+                    if info then
+                        local apps = info.applications
+                        if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
+                    end
                 end
             elseif powerType == "WHIRLWIND" then
                 cur = WW.GetStacks()
@@ -110,18 +119,31 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
             inMeta = not not C_UnitAuras.GetPlayerAuraBySpellID(CPK.SPELL.VOID_METAMORPHOSIS)
             if inMeta then
                 local whispers = C_UnitAuras.GetPlayerAuraBySpellID(CPK.SPELL.SILENCE_THE_WHISPERS)
-                if whispers and type(whispers.applications) == "number" then
-                    displayCur = whispers.applications
-                    local cost = (type(GetCollapsingStarCost) == "function") and GetCollapsingStarCost() or 1
-                    if cost > 0 then cur = displayCur / cost end
+                if whispers then
+                    local apps = whispers.applications
+                    if apps ~= nil and NotSecret(apps) then
+                        displayCur = tonumber(apps) or 0
+                        local cost = 1
+                        if type(GetCollapsingStarCost) == "function" then
+                            local rawCost = GetCollapsingStarCost()
+                            if rawCost ~= nil and NotSecret(rawCost) then cost = tonumber(rawCost) or 1 end
+                        end
+                        if cost > 0 then cur = displayCur / cost end
+                    end
                 end
             else
                 local darkHeart = C_UnitAuras.GetPlayerAuraBySpellID(CPK.SPELL.DARK_HEART)
-                if darkHeart and type(darkHeart.applications) == "number" then
-                    displayCur = darkHeart.applications
-                    local maxApp = 1
-                    if C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications then maxApp = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.DARK_HEART) or 1 end
-                    if maxApp > 0 then cur = displayCur / maxApp end
+                if darkHeart then
+                    local apps = darkHeart.applications
+                    if apps ~= nil and NotSecret(apps) then
+                        displayCur = tonumber(apps) or 0
+                        local maxApp = 1
+                        if C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications then
+                            local rawMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.DARK_HEART)
+                            if rawMax ~= nil and NotSecret(rawMax) then maxApp = tonumber(rawMax) or 1 end
+                        end
+                        if maxApp > 0 then cur = displayCur / maxApp end
+                    end
                 end
             end
         end

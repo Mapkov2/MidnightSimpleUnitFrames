@@ -416,7 +416,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- =====================================================================
     -- BOX 2: Absorb Display (default open)
     -- =====================================================================
-    local box2, box2Body = MakeCollapsibleBox(barGroup, box1, 210, "Absorb Display", true)
+    local box2, box2Body = MakeCollapsibleBox(barGroup, box1, 280, "Absorb Display", true)
 
     local function ApplyAbsorb(mode)
         if type(_G.MSUF_UpdateAbsorbTextMode) == "function" then _G.MSUF_UpdateAbsorbTextMode(mode) end
@@ -439,6 +439,15 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         elseif type(_G.MSUF_UpdateAllUnitFrames) == "function" then _G.MSUF_UpdateAllUnitFrames()
         else RefreshFrames() end
         if _G.MSUF_AbsorbTextureTestMode then RefreshFrames() end
+    end
+    local function ApplyAbsorbOpacity()
+        if type(_G.MSUF_InvalidateAbsorbCache) == "function" then _G.MSUF_InvalidateAbsorbCache() end
+        if _G.MSUF_UnitFrames then
+            for _, f in pairs(_G.MSUF_UnitFrames) do
+                if f then f._msufAbsorbDirty = true; f._msufHealAbsorbDirty = true end
+            end
+        end
+        RefreshFrames()
     end
 
     -- Left col: mode + anchor + test
@@ -480,9 +489,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         set = function(v) ScopeSet("absorbAnchorMode", v, ApplyAbsorbAnchor) end,
     })
 
-    local absorbTexTestCB = CreateLabeledCheckButton("MSUF_AbsorbTextureTestModeCheck", "Test absorb textures", box2Body, 16, -1)
-    absorbTexTestCB:ClearAllPoints(); absorbTexTestCB:SetPoint("TOPLEFT", absorbAnchorDrop, "BOTTOMLEFT", 14, -8)
-    absorbTexTestCB:SetScript("OnShow", function(self) self:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false) end)
+    local absorbTexTestCB = CreateFrame("CheckButton", "MSUF_AbsorbTextureTestModeCheck", box2Body, "UICheckButtonTemplate")
+    absorbTexTestCB:SetPoint("TOPLEFT", absorbAnchorDrop, "BOTTOMLEFT", 14, -8)
+    absorbTexTestCB.text = _G["MSUF_AbsorbTextureTestModeCheckText"]
+    if absorbTexTestCB.text then absorbTexTestCB.text:SetText(TR("Test absorb textures")); absorbTexTestCB.text:SetTextColor(0.75, 0.75, 0.75) end
+    UI.StyleCheckmark(absorbTexTestCB)
+    absorbTexTestCB:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false)
     absorbTexTestCB:SetScript("OnClick", function(self)
         _G.MSUF_AbsorbTextureTestMode = self:GetChecked() and true or false; RefreshFrames()
     end)
@@ -491,9 +503,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if _G.MSUF_AbsorbTextureTestMode then _G.MSUF_AbsorbTextureTestMode = false; self:SetChecked(false); RefreshFrames() end
     end)
 
-    local selfHealPredCB = CreateLabeledCheckButton("MSUF_SelfHealPredictionCheck", "Heal prediction", box2Body, 16, -1)
-    selfHealPredCB:ClearAllPoints(); selfHealPredCB:SetPoint("LEFT", absorbTexTestCB, "RIGHT", 140, 0)
-    selfHealPredCB:SetScript("OnShow", function(self) EnsureDB(); self:SetChecked(G().showSelfHealPrediction and true or false) end)
+    local selfHealPredCB = CreateFrame("CheckButton", "MSUF_SelfHealPredictionCheck", box2Body, "UICheckButtonTemplate")
+    selfHealPredCB:SetPoint("LEFT", absorbTexTestCB, "RIGHT", 140, 0)
+    selfHealPredCB.text = _G["MSUF_SelfHealPredictionCheckText"]
+    if selfHealPredCB.text then selfHealPredCB.text:SetText(TR("Heal prediction")); selfHealPredCB.text:SetTextColor(0.75, 0.75, 0.75) end
+    UI.StyleCheckmark(selfHealPredCB)
+    do EnsureDB(); selfHealPredCB:SetChecked(G().showSelfHealPrediction and true or false) end
     selfHealPredCB:SetScript("OnClick", function(self) G().showSelfHealPrediction = self:GetChecked() and true or false; RefreshFrames() end)
 
     -- Right col: absorb textures (aligned with left col)
@@ -523,6 +538,16 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         set = function(v) G().healAbsorbBarTexture = v; ApplyAbsorbTex(); Apply() end,
     })
 
+    local absorbOpacitySlider = CreateLabeledSlider("MSUF_AbsorbBarOpacitySlider", "Absorb bar opacity", box2Body, 0, 1, 0.05, 16, -200)
+    absorbOpacitySlider:ClearAllPoints(); absorbOpacitySlider:SetPoint("TOPLEFT", absorbTexTestCB, "BOTTOMLEFT", 0, -6)
+    if absorbOpacitySlider.SetWidth then absorbOpacitySlider:SetWidth(280) end
+    absorbOpacitySlider.onValueChanged = function(_, v) ScopeSet("absorbBarOpacity", v, ApplyAbsorbOpacity) end
+
+    local healAbsorbOpacitySlider = CreateLabeledSlider("MSUF_HealAbsorbBarOpacitySlider", "Heal-absorb bar opacity", box2Body, 0, 1, 0.05, 16, -200)
+    healAbsorbOpacitySlider:ClearAllPoints(); healAbsorbOpacitySlider:SetPoint("TOPLEFT", absorbOpacitySlider, "TOPLEFT", 326, 0)
+    if healAbsorbOpacitySlider.SetWidth then healAbsorbOpacitySlider:SetWidth(280) end
+    healAbsorbOpacitySlider.onValueChanged = function(_, v) ScopeSet("healAbsorbBarOpacity", v, ApplyAbsorbOpacity) end
+
     -- Absorb bar UI enable/disable based on display mode
     local MSUF_RefreshAbsorbBarUIEnabled
     MSUF_RefreshAbsorbBarUIEnabled = function()
@@ -534,6 +559,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         MSUF_SetDropDownEnabled(absorbBarTextureDrop, nil, barEnabled)
         MSUF_SetDropDownEnabled(healAbsorbTextureDrop, nil, barEnabled)
         MSUF_SetCheckboxEnabled(absorbTexTestCB, barEnabled)
+        MSUF_SetLabeledSliderEnabled(absorbOpacitySlider, barEnabled)
+        MSUF_SetLabeledSliderEnabled(healAbsorbOpacitySlider, barEnabled)
         if not barEnabled and _G.MSUF_AbsorbTextureTestMode then
             _G.MSUF_AbsorbTextureTestMode = false; absorbTexTestCB:SetChecked(false); RefreshFrames()
         end
@@ -1063,13 +1090,21 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if powerSepDrop and powerSepDrop.Refresh then powerSepDrop:Refresh() end
         if absorbDisplayDrop and absorbDisplayDrop.Refresh then absorbDisplayDrop:Refresh() end
         if absorbAnchorDrop and absorbAnchorDrop.Refresh then absorbAnchorDrop:Refresh() end
+        if absorbOpacitySlider then local v = tonumber(ScopeGet("absorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(absorbOpacitySlider, v) end
+        if healAbsorbOpacitySlider then local v = tonumber(ScopeGet("healAbsorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(healAbsorbOpacitySlider, v) end
+        if absorbTexTestCB then absorbTexTestCB:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false) end
+        if selfHealPredCB then selfHealPredCB:SetChecked(G().showSelfHealPrediction and true or false) end
         if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
         _SyncSpacerControls()
 
         -- Scope dimming (global-only controls dim when per-unit scope active)
         local isUnit = (uk ~= nil); local ena = not isUnit; local dimAlpha = isUnit and 0.35 or 1
         local function DimDrop(n, lbl) MSUF_SetDropDownEnabled(_G[n], lbl, ena) end
-        local function DimCheck(n) MSUF_SetCheckboxEnabled(_G[n], ena) end
+        local function DimCheck(n)
+            local cb = _G[n]; if not cb then return end
+            MSUF_SetCheckboxEnabled(cb, ena)
+            if cb.EnableMouse then pcall(cb.EnableMouse, cb, ena) end
+        end
         local function DimSlider(n) MSUF_SetLabeledSliderEnabled(_G[n], ena) end
         local function DimFrame(n) local f = _G[n]; if not f then return end; if f.SetAlpha then f:SetAlpha(dimAlpha) end
             if ena then if f.Enable then pcall(f.Enable, f) end else if f.Disable then pcall(f.Disable, f) end end
@@ -1085,9 +1120,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         DimSlider("MSUF_GradientStrengthSlider"); DimFrame("MSUF_GradientDirectionPad")
         DimLabel(gradColLabel)
 
-        -- Box 2 dims (absorb textures)
+        -- Box 2 dims (absorb textures — global-only)
         DimDrop("MSUF_AbsorbBarTextureDropdown"); DimDrop("MSUF_HealAbsorbBarTextureDropdown")
-        DimCheck("MSUF_AbsorbTextureTestModeCheck"); DimCheck("MSUF_SelfHealPredictionCheck")
         DimLabel(absorbTextureLabel); DimLabel(healAbsorbLabel)
 
         -- Box 3 dims (outline + highlight)
@@ -1163,6 +1197,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         SC(targetPowerBarCheck, b.showTargetPowerBar); SC(bossPowerBarCheck, b.showBossPowerBar)
         SC(playerPowerBarCheck, b.showPlayerPowerBar); SC(focusPowerBarCheck, b.showFocusPowerBar)
         SC(powerBarEmbedCheck, b.embedPowerBarIntoHealth); SC(powerBarBorderCheck, b.powerBarBorderEnabled)
+        SC(absorbTexTestCB, _G.MSUF_AbsorbTextureTestMode)
+        SC(selfHealPredCB, g.showSelfHealPrediction)
         local anyPB = not (b.showTargetPowerBar == false and b.showBossPowerBar == false and b.showPlayerPowerBar == false and b.showFocusPowerBar == false)
         local borderOn = b.powerBarBorderEnabled == true
         local function SetCtrl(c, on)

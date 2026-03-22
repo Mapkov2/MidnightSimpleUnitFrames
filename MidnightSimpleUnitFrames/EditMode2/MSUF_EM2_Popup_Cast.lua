@@ -83,8 +83,8 @@ local function Sync()
     local lbl=(u=="player" and "Player") or (u=="target" and "Target") or (u=="focus" and "Focus") or (u=="boss" and "Boss") or u
     if pf._titleFS then pf._titleFS:SetText(lbl.." Castbar") end
     if u=="boss" then
-        S(pf.xBox,g.bossCastbarOffsetX or 0); S(pf.yBox,g.bossCastbarOffsetY or 0)
-        S(pf.wBox,g.bossCastbarWidth or 176); S(pf.hBox,g.bossCastbarHeight or 12)
+        S(pf.xBox,floor((g.bossCastbarOffsetX or 0)+0.5)); S(pf.yBox,floor((g.bossCastbarOffsetY or 0)+0.5))
+        S(pf.wBox,floor((g.bossCastbarWidth or 176)+0.5)); S(pf.hBox,floor((g.bossCastbarHeight or 12)+0.5))
         SC(pf.spellShowCB,g.showBossCastName~=false); SC(pf.iconShowCB,g.showBossCastIcon~=false); SC(pf.timeShowCB,g.showBossCastTime~=false)
         S(pf.spellXBox,g.bossCastTextOffsetX or 0); S(pf.spellYBox,g.bossCastTextOffsetY or 0)
         S(pf.spellSizeBox,g.bossCastSpellNameFontSize or g.fontSize or 14)
@@ -92,8 +92,8 @@ local function Sync()
         S(pf.timeSizeBox,g.bossCastTimeFontSize or g.fontSize or 14)
     else
         local pre=GP(u); if not pre then return end; local dx,dy=GD(u)
-        S(pf.xBox,g[pre.."OffsetX"] or dx); S(pf.yBox,g[pre.."OffsetY"] or dy)
-        S(pf.wBox,g[pre.."BarWidth"] or g.castbarGlobalWidth or 271); S(pf.hBox,g[pre.."BarHeight"] or g.castbarGlobalHeight or 18)
+        S(pf.xBox,floor((g[pre.."OffsetX"] or dx)+0.5)); S(pf.yBox,floor((g[pre.."OffsetY"] or dy)+0.5))
+        S(pf.wBox,floor((g[pre.."BarWidth"] or g.castbarGlobalWidth or 271)+0.5)); S(pf.hBox,floor((g[pre.."BarHeight"] or g.castbarGlobalHeight or 18)+0.5))
         SC(pf.spellShowCB,g[pre.."ShowSpellName"]~=false); SC(pf.iconShowCB,g[pre.."ShowIcon"]~=false)
         local stk=GST(u); SC(pf.timeShowCB,stk and g[stk]~=false)
         S(pf.spellXBox,g[pre.."TextOffsetX"] or 0); S(pf.spellYBox,g[pre.."TextOffsetY"] or 0)
@@ -217,6 +217,7 @@ local function Build()
         onCopy = function(targetKey)
             local r = ReadCastbarSettings(pf.unit)
             if not r or not targetKey then return end
+            if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", targetKey) end
             WriteCastbarSettings(targetKey, r)
             if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
             if type(ApplyAllSettings) == "function" then ApplyAllSettings() end

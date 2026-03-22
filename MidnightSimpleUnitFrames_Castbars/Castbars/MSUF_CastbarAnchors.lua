@@ -1,8 +1,13 @@
 -- Castbars/MSUF_CastbarAnchors.lua
 -- Pure layout logic (ClearAllPoints, SetPoint, SetSize) — no combat-path code.
 
-local MSUF_SetPointIfChanged = _G.MSUF_SetPointIfChanged or function(frame, ...)
-    if frame then frame:ClearAllPoints(); frame:SetPoint(...) end
+local floor = math.floor
+local MSUF_SetPointIfChanged = _G.MSUF_SetPointIfChanged or function(frame, p, rel, rp, x, y)
+    if not frame then return end
+    frame:ClearAllPoints()
+    if x then x = floor(x + 0.5) end
+    if y then y = floor(y + 0.5) end
+    frame:SetPoint(p, rel, rp, x, y)
 end
 local UnitFrames = _G.MSUF_UnitFrames
 
@@ -21,8 +26,8 @@ function MSUF_AttachBlizzardTargetFrame()
     end
 
     local g = MSUF_DB and MSUF_DB.general
-    local offsetX = g and g.castbarTargetOffsetX or 65
-    local offsetY = g and g.castbarTargetOffsetY or -15
+    local offsetX = floor((g and g.castbarTargetOffsetX or 65) + 0.5)
+    local offsetY = floor((g and g.castbarTargetOffsetY or -15) + 0.5)
 
     -- Dirty-only: don't ClearAllPoints/SetPoint unless it actually changed.
     MSUF_SetPointIfChanged(TargetFrame, "CENTER", msufTarget, "CENTER", offsetX, offsetY)
@@ -50,8 +55,8 @@ function MSUF_ReanchorTargetCastBar()
     end
 
     local msufTarget = UnitFrames and UnitFrames["target"]
-    local offsetX = g.castbarTargetOffsetX or 65
-    local offsetY = g.castbarTargetOffsetY or -15
+    local offsetX = floor((g.castbarTargetOffsetX or 65) + 0.5)
+    local offsetY = floor((g.castbarTargetOffsetY or -15) + 0.5)
 
     -- Anchor: either attach to unitframe or detach to UIParent
     if g.castbarTargetDetached then
@@ -142,8 +147,8 @@ function MSUF_ReanchorFocusCastBar()
 
     local msufFocus = UnitFrames and UnitFrames["focus"]
 
-    local offsetX = g.castbarFocusOffsetX or (g.castbarTargetOffsetX or 65)
-    local offsetY = g.castbarFocusOffsetY or (g.castbarTargetOffsetY or -15)
+    local offsetX = floor((g.castbarFocusOffsetX or (g.castbarTargetOffsetX or 65)) + 0.5)
+    local offsetY = floor((g.castbarFocusOffsetY or (g.castbarTargetOffsetY or -15)) + 0.5)
 
     -- Anchor: either attach to unitframe or detach to UIParent
     if g.castbarFocusDetached then
@@ -402,8 +407,8 @@ function MSUF_ReanchorPlayerCastBar()
         return
     end
 
-    local offsetX = g.castbarPlayerOffsetX or 0
-    local offsetY = g.castbarPlayerOffsetY or 5
+    local offsetX = floor((g.castbarPlayerOffsetX or 0) + 0.5)
+    local offsetY = floor((g.castbarPlayerOffsetY or 5) + 0.5)
 
     -- Dirty-only anchor
     if MSUF_SetPointIfChanged then

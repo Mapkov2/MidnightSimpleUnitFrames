@@ -585,10 +585,12 @@ end
     function frame:UpdateAnchor()
         EnsureDBSafe()
         local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-        local ox = tonumber(g.bossCastbarOffsetX) or 0
-        local oy = tonumber(g.bossCastbarOffsetY) or 0
+        local ox = math.floor((tonumber(g.bossCastbarOffsetX) or 0) + 0.5)
+        local oy = math.floor((tonumber(g.bossCastbarOffsetY) or 0) + 0.5)
         local forcedW = tonumber(g.bossCastbarWidth)
         local forcedH = tonumber(g.bossCastbarHeight)
+        if forcedW then forcedW = math.floor(forcedW + 0.5) end
+        if forcedH then forcedH = math.floor(forcedH + 0.5) end
 
         -- Height can always be overridden (even when width is auto-matched to the boss unitframe)
         if forcedH and forcedH > 4 then
@@ -1784,8 +1786,8 @@ local function MSUF_PositionBossCastbarPreview(f, index)
 
     EnsureDBSafe()
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-    local ox = tonumber(g.bossCastbarOffsetX) or 0
-    local oy = tonumber(g.bossCastbarOffsetY) or 0
+    local ox = math.floor((tonumber(g.bossCastbarOffsetX) or 0) + 0.5)
+    local oy = math.floor((tonumber(g.bossCastbarOffsetY) or 0) + 0.5)
 
     if g.bossCastbarDetached == true then
         -- Detached: anchor to UIParent CENTER, keep per-boss vertical stacking.

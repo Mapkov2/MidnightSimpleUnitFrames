@@ -159,6 +159,7 @@ local function Build()
             local db = _G.MSUF_DB; if not db then return end
             local srcKey = pf.unit; if not srcKey then return end
             local src = db[srcKey]; if not src then return end
+            if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("unit", targetKey) end
             local dst = db[targetKey]; if not dst then db[targetKey] = {}; dst = db[targetKey] end
             -- Copy all keys FROM current unit TO selected target (except position)
             for k, v in pairs(src) do

@@ -114,6 +114,47 @@ _G.MSUF_InvalidateAbsorbCache = _MSUF_InvalidateAbsorbCache
 ns.Bars._ResolveAbsorbDisplay = _MSUF_ResolveAbsorbDisplay
 ns.Bars._ResolveAbsorbAnchor  = _MSUF_ResolveAbsorbAnchor
 
+local function _MSUF_ResolveAbsorbOpacity(unit)
+    if not MSUF_DB then EnsureDB() end
+    if _absorbCacheDBRef ~= MSUF_DB then _MSUF_InvalidateAbsorbCache() end
+    local nk = _MSUF_NormalizeUnitKey(unit)
+    local ck = (nk or "_g") .. "_op"
+    local c = _absorbCache[ck]
+    if c then return c end
+    local g = MSUF_DB.general or {}
+    if nk then
+        local u = MSUF_DB[nk]
+        if u and u.hpPowerTextOverride == true and u.absorbBarOpacity ~= nil then
+            local v = tonumber(u.absorbBarOpacity) or 1
+            _absorbCache[ck] = v; return v
+        end
+    end
+    local v = tonumber(g.absorbBarOpacity) or 1
+    _absorbCache[ck] = v; return v
+end
+
+local function _MSUF_ResolveHealAbsorbOpacity(unit)
+    if not MSUF_DB then EnsureDB() end
+    if _absorbCacheDBRef ~= MSUF_DB then _MSUF_InvalidateAbsorbCache() end
+    local nk = _MSUF_NormalizeUnitKey(unit)
+    local ck = (nk or "_g") .. "_hop"
+    local c = _absorbCache[ck]
+    if c then return c end
+    local g = MSUF_DB.general or {}
+    if nk then
+        local u = MSUF_DB[nk]
+        if u and u.hpPowerTextOverride == true and u.healAbsorbBarOpacity ~= nil then
+            local v = tonumber(u.healAbsorbBarOpacity) or 1
+            _absorbCache[ck] = v; return v
+        end
+    end
+    local v = tonumber(g.healAbsorbBarOpacity) or 1
+    _absorbCache[ck] = v; return v
+end
+
+ns.Bars._ResolveAbsorbOpacity     = _MSUF_ResolveAbsorbOpacity
+ns.Bars._ResolveHealAbsorbOpacity = _MSUF_ResolveHealAbsorbOpacity
+
 -- ══════════════════════════════════════════════════════════════
 -- Self-heal prediction overlay
 -- ══════════════════════════════════════════════════════════════
@@ -432,10 +473,10 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
     local apply = _cachedApplyAbsorbAnchorMode
     if type(apply) == 'function' then apply(self) end
     if isHeal then
-        MSUF_ApplyHealAbsorbOverlayColor(bar)
+        MSUF_ApplyHealAbsorbOverlayColor(bar, unit)
     else
         if not MSUF_DB then EnsureDB() end
-        MSUF_ApplyAbsorbOverlayColor(bar)
+        MSUF_ApplyAbsorbOverlayColor(bar, unit)
         local enableBar = _MSUF_ResolveAbsorbDisplay(unit)
         if not enableBar then
             MSUF_ResetBarZero(bar, true)
@@ -443,9 +484,8 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
     end
     end
     if _G.MSUF_AbsorbTextureTestMode then
-        local max = maxHP or F.UnitHealthMax(unit) or 1
-        bar:SetMinMaxValues(0, max)
-        MSUF_SetBarValue(bar, max * (isHeal and 0.15 or 0.25))
+        bar:SetMinMaxValues(0, 100)
+        MSUF_SetBarValue(bar, isHeal and 15 or 25)
         bar:Show()
          return
     end

@@ -144,29 +144,30 @@ local function NudgeTarget(dx, dy)
 end
 
 function Nudge.Enable()
-    if owner then return end
-    owner = CreateFrame("Frame", "MSUF_EM2_NudgeOwner", UIParent)
-    owner:Hide()
-    owner.__msufPendingClear = false
-    owner:SetScript("OnEvent", function(self, event)
-        if event == "PLAYER_REGEN_ENABLED" and self.__msufPendingClear then
-            self.__msufPendingClear = false
-            if ClearOverrideBindings then ClearOverrideBindings(self) end
-            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-        end
-    end)
-
-    for _, dir in ipairs({"UP","DOWN","LEFT","RIGHT"}) do
-        local btnName = "MSUF_EM2_Nudge" .. dir
-        local btn = CreateFrame("Button", btnName, UIParent, "SecureActionButtonTemplate")
-        btn:SetSize(1, 1)
-        btn:Hide()
-        btn:SetScript("OnClick", function()
-            if dir == "UP"    then NudgeTarget(0, 1)
-            elseif dir == "DOWN"  then NudgeTarget(0, -1)
-            elseif dir == "LEFT"  then NudgeTarget(-1, 0)
-            elseif dir == "RIGHT" then NudgeTarget(1, 0) end
+    if not owner then
+        owner = CreateFrame("Frame", "MSUF_EM2_NudgeOwner", UIParent)
+        owner:Hide()
+        owner.__msufPendingClear = false
+        owner:SetScript("OnEvent", function(self, event)
+            if event == "PLAYER_REGEN_ENABLED" and self.__msufPendingClear then
+                self.__msufPendingClear = false
+                if ClearOverrideBindings then ClearOverrideBindings(self) end
+                self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            end
         end)
+
+        for _, dir in ipairs({"UP","DOWN","LEFT","RIGHT"}) do
+            local btnName = "MSUF_EM2_Nudge" .. dir
+            local btn = CreateFrame("Button", btnName, UIParent, "SecureActionButtonTemplate")
+            btn:SetSize(1, 1)
+            btn:Hide()
+            btn:SetScript("OnClick", function()
+                if dir == "UP"    then NudgeTarget(0, 1)
+                elseif dir == "DOWN"  then NudgeTarget(0, -1)
+                elseif dir == "LEFT"  then NudgeTarget(-1, 0)
+                elseif dir == "RIGHT" then NudgeTarget(1, 0) end
+            end)
+        end
     end
 
     if InCombatLockdown and InCombatLockdown() then
