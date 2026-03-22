@@ -131,7 +131,40 @@ local function EnsureHUD()
     rSep:SetPoint("RIGHT", exitBtn, "LEFT", -BTN_GAP, 0)
 
     cancelAllBtn = MakeBtn(hudFrame, "Cancel All", 78, BTN_H, 12, function()
-        if EM2.State and EM2.State.CancelAll then EM2.State.CancelAll() end
+        if not EM2.State or not EM2.State.CancelAll then return end
+        local cf = _G["MSUF_EM2_CancelConfirm"]
+        if cf then cf:Show(); return end
+        cf = CreateFrame("Frame", "MSUF_EM2_CancelConfirm", UIParent, "BackdropTemplate")
+        cf:SetSize(280, 100)
+        cf:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
+        cf:SetFrameStrata("TOOLTIP"); cf:SetFrameLevel(999)
+        cf:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
+        cf:SetBackdropColor(0.03, 0.05, 0.12, 0.97)
+        cf:SetBackdropBorderColor(0.90, 0.70, 0.30, 0.80)
+        cf:EnableMouse(true)
+        local msg = MakeFS(cf, 13, TH.textR, TH.textG, TH.textB, 1)
+        msg:SetPoint("TOP", cf, "TOP", 0, -18)
+        msg:SetText("Discard all changes and exit?")
+        local function ConfBtn(text, xOff, onClick)
+            local b = CreateFrame("Button", nil, cf)
+            b:SetSize(90, 28)
+            b:SetPoint("BOTTOM", cf, "BOTTOM", xOff, 14)
+            local bg = b:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0.09, 0.10, 0.14, 0.90)
+            local brd = CreateFrame("Frame", nil, b, "BackdropTemplate"); brd:SetAllPoints()
+            brd:SetFrameLevel(max(0, b:GetFrameLevel()-1))
+            brd:SetBackdrop({edgeFile=W8, edgeSize=1}); brd:SetBackdropBorderColor(0.10, 0.20, 0.42, 0.65)
+            local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1,1,1,0.06)
+            local fs = MakeFS(b, 12, TH.textR, TH.textG, TH.textB, 1); fs:SetPoint("CENTER"); fs:SetText(text)
+            b:SetScript("OnClick", onClick); return b
+        end
+        ConfBtn("Yes, discard", -54, function() cf:Hide(); EM2.State.CancelAll() end)
+        ConfBtn("No, keep", 54, function() cf:Hide() end)
+        cf:EnableKeyboard(true)
+        cf:SetScript("OnKeyDown", function(s, k)
+            if k == "ESCAPE" then s:SetPropagateKeyboardInput(false); cf:Hide()
+            else s:SetPropagateKeyboardInput(true) end
+        end)
+        cf:Show()
     end)
     cancelAllBtn:SetPoint("RIGHT", rSep, "LEFT", -BTN_GAP, 0)
     cancelAllBtn._label:SetTextColor(0.90, 0.70, 0.30, 0.90)
@@ -297,5 +330,8 @@ function HUD.RefreshControls()
 end
 
 function HUD.Show() EnsureHUD(); HUD.RefreshControls(); hudFrame:Show(); if row2Frame then row2Frame:Show() end end
-function HUD.Hide() if row2Frame then row2Frame:Hide() end; if hudFrame then hudFrame:Hide() end end
+function HUD.Hide()
+    local cf = _G["MSUF_EM2_CancelConfirm"]; if cf then cf:Hide() end
+    if row2Frame then row2Frame:Hide() end; if hudFrame then hudFrame:Hide() end
+end
 function HUD.IsShown() return hudFrame and hudFrame:IsShown() or false end
