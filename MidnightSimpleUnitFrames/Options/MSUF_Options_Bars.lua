@@ -543,6 +543,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- =====================================================================
     -- BOX 3: Outline & Highlight Border (default open)
     -- =====================================================================
+    local function _BumpBorderSerial()
+        if type(_G.MSUF_UFCore_RefreshSettingsCache) == "function" then _G.MSUF_UFCore_RefreshSettingsCache("BAR_OPTION") end
+    end
+
     local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 350, "Outline & Highlight Border", true)
 
     -- Left col: thickness sliders
@@ -551,7 +555,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     barOutlineThicknessSlider:SetWidth(280)
     do local n = barOutlineThicknessSlider:GetName(); local t = _G[n .. "Text"]; if t then t:SetText(""); t:Hide() end end
     barOutlineThicknessSlider.onValueChanged = function(_, v)
-        B().barOutlineThickness = v
+        B().barOutlineThickness = v; _BumpBorderSerial()
         if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
     end
 
@@ -559,7 +563,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     highlightBorderThicknessSlider:ClearAllPoints(); highlightBorderThicknessSlider:SetPoint("TOPLEFT", barOutlineThicknessSlider, "BOTTOMLEFT", 0, -60)
     highlightBorderThicknessSlider:SetWidth(280)
     highlightBorderThicknessSlider.onValueChanged = function(_, v)
-        G().highlightBorderThickness = v
+        G().highlightBorderThickness = v; _BumpBorderSerial()
         if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
     end
 
@@ -581,6 +585,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
 
     local function AggroApply()
+        _BumpBorderSerial()
         if type(_G.MSUF_AggroOutline_ApplyEventRegistration) == "function" then _G.MSUF_AggroOutline_ApplyEventRegistration() end
         local fn, frames = _G.MSUF_RefreshRareBarVisuals, _G.MSUF_UnitFrames
         if type(fn) == "function" and frames then
@@ -589,6 +594,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
     end
     local function DispelPurgeApply()
+        _BumpBorderSerial()
         if type(_G.MSUF_DispelOutline_ApplyEventRegistration) == "function" then _G.MSUF_DispelOutline_ApplyEventRegistration() end
         if type(_G.MSUF_RefreshDispelOutlineStates) == "function" then _G.MSUF_RefreshDispelOutlineStates(true); return end
         local fn, frames = _G.MSUF_RefreshRareBarVisuals, _G.MSUF_UnitFrames
@@ -641,6 +647,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         local sorted = {}; for i = 1, 3 do sorted[i] = _prioRows[i] end
         table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
         for i = 1, 3 do G().highlightPrioOrder[i] = sorted[i].key end
+        _BumpBorderSerial()
         if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() end
     end
     local function _Prio_SetEnabled(enabled)
