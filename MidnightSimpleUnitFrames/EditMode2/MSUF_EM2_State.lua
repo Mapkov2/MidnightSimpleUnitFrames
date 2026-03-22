@@ -113,23 +113,58 @@ end
 -- ---------------------------------------------------------------------------
 local SNAPSHOT_KEYS = {"player","target","focus","targettarget","pet","boss","general","auras2"}
 local _snapshot = nil
-local DeepCopy = _G.MSUF_DeepCopy
+
+local function GetDeepCopy()
+    return _G.MSUF_DeepCopy
+end
 
 local function SnapshotDB()
-    local db = _G.MSUF_DB; if not db or not DeepCopy then _snapshot = nil; return end
+    local dc = GetDeepCopy()
+    local db = _G.MSUF_DB; if not db or not dc then _snapshot = nil; return end
     _snapshot = {}
     for _, k in ipairs(SNAPSHOT_KEYS) do
-        if db[k] ~= nil then _snapshot[k] = DeepCopy(db[k]) end
+        if db[k] ~= nil then _snapshot[k] = dc(db[k]) end
+    end
+end
+
+local function InvalidateAllFrameCaches()
+    local uf = _G.MSUF_UnitFrames
+    if not uf then return end
+    for _, f in pairs(uf) do
+        if f.cachedConfig then f.cachedConfig = nil end
+    end
+end
+
+local function FlushPendingCommits()
+    local st = _G.MSUF_ApplyCommitState
+    if st then
+        st.pending = false
+        st.queued  = false
+        st.fonts   = false
+        st.fontKey = nil
+        st.bars    = false
+        st.castbars  = false
+        st.tickers   = false
+        st.bossPreview = false
+    end
+    local ufSt = _G.MSUF_UnitFrameApplyState
+    if ufSt then
+        if ufSt.dirty then
+            for k in pairs(ufSt.dirty) do ufSt.dirty[k] = nil end
+        end
+        ufSt.queued = false
     end
 end
 
 local function RestoreDB()
-    if not _snapshot or not DeepCopy then return end
-    local db = _G.MSUF_DB; if not db then return end
+    local dc = GetDeepCopy()
+    if not _snapshot or not dc then return false end
+    local db = _G.MSUF_DB; if not db then return false end
     for _, k in ipairs(SNAPSHOT_KEYS) do
-        if _snapshot[k] ~= nil then db[k] = DeepCopy(_snapshot[k]) end
+        if _snapshot[k] ~= nil then db[k] = dc(_snapshot[k]) end
     end
     _snapshot = nil
+    return true
 end
 
 -- ---------------------------------------------------------------------------
@@ -262,10 +297,17 @@ end
 function State.CancelAll()
     if not active then return end
 
-    RestoreDB()
-
-    -- Full teardown identical to Exit
+    -- Stop ticker FIRST so no OnUpdate can write offsets after restore.
     if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
+
+    -- Kill any pending async commits — they would re-apply dragged offsets
+    -- after we restore the snapshot, overwriting our restore.
+    FlushPendingCommits()
+
+    -- Restore DB to pre-edit-mode snapshot.
+    local restored = RestoreDB()
+
+    -- Teardown UI
     if EM2.Movers and EM2.Movers.Hide then EM2.Movers.Hide() end
     if EM2.HUD    and EM2.HUD.Hide    then EM2.HUD.Hide()    end
     if EM2.Grid   and EM2.Grid.Hide   then EM2.Grid.Hide()   end
@@ -278,14 +320,35 @@ function State.CancelAll()
     SyncLegacy()
 
     if type(_G.MSUF_EnableArrowKeyNudge) == "function" then _G.MSUF_EnableArrowKeyNudge(false) end
-    if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+
+    if restored then
+        -- Invalidate all frame config caches so the pipeline reads the
+        -- freshly restored DB tables, not stale references to the old
+        -- (dragged) config objects.
+        InvalidateAllFrameCaches()
+
+        -- Apply synchronously — the async path can silently drop when a
+        -- pending commit is already scheduled.
+        local applyImm = _G.MSUF_ApplyAllSettings_Immediate
+        if type(applyImm) == "function" then
+            applyImm()
+        elseif type(ApplyAllSettings) == "function" then
+            ApplyAllSettings()
+        end
+
+        -- Belt-and-suspenders: force SetPoint on every unit frame with
+        -- the restored offsetX/Y from the DB.
+        if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
+            _G.MSUF_ForceReanchorAllUnitFrames_Once()
+        end
+    else
+        -- Snapshot was unavailable — best-effort exit.
+        if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+    end
+
     _G.MSUF_UnitPreviewActive = false
     if type(_G.MSUF_SyncAllUnitPreviews) == "function" then _G.MSUF_SyncAllUnitPreviews() end
-    if type(_G.MSUF_UpdateAllFonts) == "function" then _G.MSUF_UpdateAllFonts() end
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then _G.MSUF_UpdateBossCastbarPreview() end
     if type(_G.MSUF_Auras2_RefreshAll) == "function" then _G.MSUF_Auras2_RefreshAll() end
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
 
     NotifyListeners()
 end
