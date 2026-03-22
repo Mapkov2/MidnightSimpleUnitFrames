@@ -2792,6 +2792,15 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
     local function ApplyForFrame(f)
         if not f then  return end
         f._msufTextLayoutStamp = nil
+        f._msufTextSpec = nil
+        f._msufLastH = nil
+        f._msufLastPctS = nil
+        f._msufLastPwrC = nil
+        f._msufLastPwrM = nil
+        f._msufLastPwrP = nil
+        f._msufRawPwrC = nil
+        f._msufRawPwrM = nil
+        f._msufRawPwrP = nil
         ns.Cache.ClearStamp(f, "TextLayout")
         local key = f.msufConfigKey
         if not key and f.unit then

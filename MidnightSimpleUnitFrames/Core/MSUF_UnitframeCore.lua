@@ -523,6 +523,7 @@ function Core.InvalidateAllFrameConfigs()
             f._msufHpTxtAt = nil
             f._msufStatusConf = nil
             f._msufStatusIconsConf = nil
+            f._msufTextSpec = nil
             -- PERF: Invalidate component-level diff caches (Text.lua fast-path guards)
             f._msufLastH = nil
             f._msufLastPctS = nil
@@ -3069,6 +3070,7 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     f._msufHpTxtAt = nil
     f._msufStatusConf = nil
     f._msufStatusIconsConf = nil
+    f._msufTextSpec = nil
     -- PERF: Invalidate component-level diff caches (Text.lua fast-path guards)
     f._msufLastH = nil
     f._msufLastPctS = nil
