@@ -1357,7 +1357,8 @@ local T = {
 ---------EditMode------
 ---==================================================================
 
---------HUD----------
+--------Popup_HUD----------
+    
     ["EDIT MODE"]   = "编辑模式",
     ["Preview"] = "预览",
     ["Show placeholder data on unitframes\nwithout real units (target, focus, etc.)"]  = "在无实际单位（如目标、焦点等）的单位框架上显示占位数据",
@@ -1382,7 +1383,36 @@ local T = {
     ["Discard ALL changes made in Edit Mode\nand restore settings to the state\nbefore Edit Mode was opened."]  = "放弃在编辑模式下全部更改,\n并将设置恢复到打开编辑模式之前的状态?",
     ["Exit"]    = "退出",
     ["Lock positions and exit Edit Mode."]  = "锁定位置并退出编辑模式.",
-    
+        ------------------------HELP--------------------------------------
+    ["? Help"]   = "? 帮助",
+    ["Drag & Move"]  = "拖动 & 移动",
+    ["Click Popup"] = "点击预览",
+    ["Arrow Key Nudge"] = "箭头键微调",
+    ["Grid & Snap"] = "网格 & 吸附",
+    ["Background Opacity"]      = "背景透明度",    
+    ["Preview & Auras"] = "预览 & 光环",
+    ["CDM & Anchor"]    = "冷却管理器 & 锚点",     
+    ["Copy Settings"]   = "复制设置",
+    ["Undo / Cancel All"]   = "撤销 / 全部取消",
+    ["Exit Edit Mode"]  = "退出编辑模式",
+    ["Left-click and drag any mover overlay to reposition a frame. Hold |cff60a5ffShift|r while dragging to ignore snap and move freely."]  = "左键拖动任何移动框架以重新定位框架. 按住 |cff60a5ffShift|r 键拖动时忽略吸附并自由移动.",
+    ["Use arrow keys to nudge the selected frame by 1 pixel. |cff60a5ffShift|r = 5 px, |cff60a5ffCtrl|r = 10 px, |cff60a5ffAlt|r = grid step."] = "使用箭头键将选定框架微调1像素. |cff60a5ffShift|r = 5 px, |cff60a5ffCtrl|r = 10 px, |cff60a5ffAlt|r = 网格步长.",
+    ["Left-click any mover to open its settings popup — fine-tune X/Y position, size, text anchors, and per-unit overrides."]   = "左键单击任何移动框架以打开其设置弹出框 — 细调X/Y位置、大小、文本锚点、和每个单位覆盖.",
+    ["Toggle |cff60a5ffSnap|r in the HUD toolbar. Scroll over |cff60a5ffGrid ##px|r to change step size. Frames snap to edges of other frames while dragging."] = "在 HUD 工具栏开启/关闭 |cff60a5ff吸附|r.将鼠标移至 |cff60a5ff网格 ##px|r 处滚动以调整步长.拖动框架时会自动吸附至其他框架边缘.",
+    ["Scroll over |cff60a5ffBG ##%|r to darken the game world. Makes it easier to see frame positions and alignment."]  = "鼠标悬停于 |cff60a5ff背景 ##%|r 并滚动滚轮以调暗游戏世界. 使它更易于查看框架位置和对齐.",
+    ["|cff60a5ffPreview|r fills empty unitframes with placeholder data (health, power, names). |cff60a5ffAuras|r shows aura icons and lets you reposition aura groups."]    = "|cff60a5ff预览|r 用占位数据填充空单位框架（生命、能量、名称）. |cff60a5ff光环|r 显示光环图标并允许您重新定位光环组.",    
+    ["|cff60a5ffUndo|r / |cff60a5ffRedo|r track every position change. |cff60a5ffCancel All|r reverts everything to the state before Edit Mode was opened."]    = "|cff60a5ff撤销|r / |cff60a5ff重做|r 跟踪每个位置更改. |cff60a5ff全部取消|r 将更改恢复到打开编辑模式之前的状态.", 
+    ["|cff60a5ffCDM|r anchors all unitframes to the Essential Cooldown Manager. |cff60a5ffAnchor|r lets you pick any visible frame as a global anchor point."]  = "|cff60a5ff冷却管理器|r 将所有单位框架锚定到重要技能冷却管理器. |cff60a5ff锚点|r 允许您选择任何可见框架作为全局锚点.",
+    ["Inside a popup, use |cff60a5ffCopy Settings|r to copy the current frame's size, text, and layout to another unit — without copying position."]    = "在弹出框中, 使用 |cff60a5ff复制设置|r 复制当前框架的大小、文本和布局到另一个单位 — 不复制位置.",
+    ["|cff60a5ffExit|r saves all changes and locks positions. You can also press |cff60a5ffEsc|r to leave Edit Mode."]      = "|cff60a5ff退出|r 保存所有更改并锁定位置. 也可以按 |cff60a5ffEsc|r 退出编辑模式.",
+    ["Edit Mode — Quick Reference"] = "编辑模式 — 快速参考",
+    ["Start Guided Tour"]   = "开始指引",
+    ["Next"]    = "下一步",
+    ["Back"]     = "返回",
+    ["Skip"]     = "跳过",
+    ["Done"]     = "完成",
+    ["Step %d of %d"] = "第 %d 步, 共 %d 步",
+    ["Quick reference and guided tour\nfor Edit Mode controls."]    = "快速参考和指引 — 编辑模式控制",
 --------Popup_Unit---------
     ["Position & Size"] = "位置与大小",
     ["Name"]    = "名称",
