@@ -283,8 +283,8 @@ else
                     snapDX = sCX - (self._snapStartCX or 0)
                     snapDY = sCY - (self._snapStartCY or 0)
                 end
-                g2[cfg.offsetXKey] = (self.dragStartOffsetX or 0) + snapDX
-                g2[cfg.offsetYKey] = (self.dragStartOffsetY or 0) + snapDY
+                g2[cfg.offsetXKey] = math.floor((self.dragStartOffsetX or 0) + snapDX + 0.5)
+                g2[cfg.offsetYKey] = math.floor((self.dragStartOffsetY or 0) + snapDY + 0.5)
 
                if kind == "boss" then
     local sx = _G["MSUF_CastbarBossXOffsetSlider"]
