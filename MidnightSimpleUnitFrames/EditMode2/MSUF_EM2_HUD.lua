@@ -262,6 +262,7 @@ local function EnsureHUD()
 
     undoBtn = MakeBtn(c2, "Undo", 52, BTN_H2, 11, function()
         if type(_G.MSUF_EM_UndoUndo) == "function" then _G.MSUF_EM_UndoUndo() end
+        HUD.RefreshControls()
     end)
     undoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.85)
     undoBtn._dot:Hide()
@@ -270,6 +271,7 @@ local function EnsureHUD()
 
     redoBtn = MakeBtn(c2, "Redo", 52, BTN_H2, 11, function()
         if type(_G.MSUF_EM_UndoRedo) == "function" then _G.MSUF_EM_UndoRedo() end
+        HUD.RefreshControls()
     end)
     redoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.85)
     redoBtn._dot:Hide()
@@ -326,6 +328,16 @@ function HUD.RefreshControls()
     if auraBtn then
         local db = _G.MSUF_DB; local a2 = db and db.auras2; local sh = a2 and a2.shared
         SetActive(auraBtn, sh and sh.showInEditMode and true or false)
+    end
+    local canUndo = EM2.Undo and EM2.Undo.CanUndo() or false
+    local canRedo = EM2.Undo and EM2.Undo.CanRedo() or false
+    if undoBtn and undoBtn._label then
+        if canUndo then undoBtn._label:SetTextColor(TH.textR, TH.textG, TH.textB, 1)
+        else undoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.35) end
+    end
+    if redoBtn and redoBtn._label then
+        if canRedo then redoBtn._label:SetTextColor(TH.textR, TH.textG, TH.textB, 1)
+        else redoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.35) end
     end
 end
 

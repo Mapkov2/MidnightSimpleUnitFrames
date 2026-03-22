@@ -30,6 +30,8 @@ function Popups.Open(key, anchorFrame)
     Popups.CloseAll()
 
     if pType == "unit" then
+        _G.MSUF_EM2_ActiveAuraGroup = nil
+        _G.MSUF_EM2_ActiveAuraUnit  = nil
         local unit = key
         if key:match("^boss%d") then unit = "boss" end
         local frame = cfg and cfg.getFrame and cfg.getFrame()
@@ -38,6 +40,8 @@ function Popups.Open(key, anchorFrame)
             if EM2.State then EM2.State.SetPopupOpen(true) end
         end
     elseif pType == "castbar" then
+        _G.MSUF_EM2_ActiveAuraGroup = nil
+        _G.MSUF_EM2_ActiveAuraUnit  = nil
         local unit = key
         if key:sub(1, 8) == "castbar_" then unit = key:sub(9) end
         local frame = cfg and cfg.getFrame and cfg.getFrame()

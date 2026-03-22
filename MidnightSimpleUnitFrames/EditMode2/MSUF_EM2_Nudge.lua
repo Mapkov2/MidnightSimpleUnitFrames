@@ -65,10 +65,17 @@ local function NudgeTarget(dx, dy)
         return
     end
 
-    -- Priority 2: open aura popup
-    if EM2.AuraPopup and EM2.AuraPopup.IsOpen() then
-        local auraPF = _G.MSUF_EM2_AuraPopup
-        local unitKey = auraPF and auraPF.unit
+    -- Priority 2: aura sub-group (individual buff/debuff/private)
+    local auraGroup = _G.MSUF_EM2_ActiveAuraGroup
+    local auraPopupOpen = EM2.AuraPopup and EM2.AuraPopup.IsOpen()
+    local a2PopupOpen = false
+    do local ap = _G.MSUF_Auras2PositionPopup; a2PopupOpen = ap and ap.IsShown and ap:IsShown() or false end
+    if auraGroup and (auraPopupOpen or a2PopupOpen) then
+        local unitKey = _G.MSUF_EM2_ActiveAuraUnit
+        if not unitKey then
+            local auraPF = _G.MSUF_EM2_AuraPopup
+            unitKey = auraPF and auraPF.unit
+        end
         if unitKey then
             local a2 = db.auras2
             if a2 then
@@ -83,19 +90,21 @@ local function NudgeTarget(dx, dy)
                 else
                     applyKeys = { unitKey }
                 end
-                local shared = a2.shared or {}
-                for _, k in ipairs(applyKeys) do
-                    a2.perUnit[k] = a2.perUnit[k] or {}
-                    local uc = a2.perUnit[k]
-                    uc.layout = uc.layout or {}
-                    uc.overrideLayout = true
-                    local lay = uc.layout
-                    for _, pair in ipairs({
-                        {"buffGroupOffsetX","buffGroupOffsetY"},
-                        {"debuffGroupOffsetX","debuffGroupOffsetY"},
-                        {"privateOffsetX","privateOffsetY"},
-                    }) do
-                        local kx, ky = pair[1], pair[2]
+                local GROUP_KEYS = {
+                    buff    = { "buffGroupOffsetX",   "buffGroupOffsetY"   },
+                    debuff  = { "debuffGroupOffsetX", "debuffGroupOffsetY" },
+                    private = { "privateOffsetX",     "privateOffsetY"     },
+                }
+                local pair = GROUP_KEYS[auraGroup]
+                if pair then
+                    local kx, ky = pair[1], pair[2]
+                    local shared = a2.shared or {}
+                    for _, k in ipairs(applyKeys) do
+                        a2.perUnit[k] = a2.perUnit[k] or {}
+                        local uc = a2.perUnit[k]
+                        uc.layout = uc.layout or {}
+                        uc.overrideLayout = true
+                        local lay = uc.layout
                         local cx = (lay[kx] ~= nil) and lay[kx] or (shared[kx] or 0)
                         local cy = (lay[ky] ~= nil) and lay[ky] or (shared[ky] or 0)
                         lay[kx] = floor(((tonumber(cx) or 0) + ndx) + 0.5)
@@ -107,7 +116,9 @@ local function NudgeTarget(dx, dy)
                 elseif type(_G.MSUF_Auras2_RefreshAll) == "function" then
                     _G.MSUF_Auras2_RefreshAll()
                 end
-                EM2.AuraPopup.Sync()
+                if auraPopupOpen and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
+                local syncFn = _G.MSUF_SyncAuras2PositionPopup
+                if type(syncFn) == "function" then syncFn(unitKey) end
             end
         end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
