@@ -49,8 +49,35 @@ local function Apply()
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
 end
 
+local BOSS_KEYS = {
+    "bossCastbarOffsetX","bossCastbarOffsetY","bossCastbarWidth","bossCastbarHeight",
+    "showBossCastName","showBossCastIcon","showBossCastTime",
+    "bossCastTextOffsetX","bossCastTextOffsetY",
+    "bossCastSpellNameFontSize","bossCastIconSize","bossCastTimeFontSize",
+    "bossCastbarDetached",
+}
+local function SnapshotCast(u)
+    local g=G(); if not g then return nil end; local snap={}
+    if u=="boss" then
+        for _,k in ipairs(BOSS_KEYS) do snap[k]=g[k] end
+    else
+        local pre=GP(u); if not pre then return nil end
+        local stk=GST(u)
+        local suffixes={"OffsetX","OffsetY","BarWidth","BarHeight","ShowSpellName","ShowIcon",
+            "TextOffsetX","TextOffsetY","SpellNameFontSize","IconSize","TimeFontSize","Detached"}
+        for _,s in ipairs(suffixes) do snap[pre..s]=g[pre..s] end
+        if stk then snap[stk]=g[stk] end
+    end
+    return snap
+end
+local function RestoreCast(snap)
+    if not snap then return end; local g=EG(); if not g then return end
+    for k,v in pairs(snap) do g[k]=v end
+end
+
 local function Sync()
     if not pf or not pf.unit then return end; local g=G(); local u=pf.unit
+    pf._castSnap = SnapshotCast(u)
     local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
     local function SC(c,v) if c and c.SetChecked then c:SetChecked(v and true or false) end end
     local lbl=(u=="player" and "Player") or (u=="target" and "Target") or (u=="focus" and "Focus") or (u=="boss" and "Boss") or u
@@ -200,9 +227,15 @@ local function Build()
 
     local ok,cancel = F.FooterButtons(pf)
     ok:SetScript("OnClick", function() Apply(); pf:Hide() end)
-    cancel:SetScript("OnClick", function() pf:Hide() end)
+    cancel:SetScript("OnClick", function()
+        RestoreCast(pf._castSnap)
+        if type(_G.MSUF_UpdateCastbarVisuals)=="function" then _G.MSUF_UpdateCastbarVisuals() end
+        if type(ApplyAllSettings)=="function" then ApplyAllSettings() end
+        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+        pf:Hide()
+    end)
     pf:EnableKeyboard(true)
-    pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); pf:Hide() else s:SetPropagateKeyboardInput(true) end end)
+    pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); cancel:Click() else s:SetPropagateKeyboardInput(true) end end)
     pf:UpdateScrollHeight(500)
     return pf
 end

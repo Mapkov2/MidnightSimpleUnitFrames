@@ -109,6 +109,30 @@ function State.SetPopupOpen(open)
 end
 
 -- ---------------------------------------------------------------------------
+-- Global snapshot for Cancel All (restore pre-edit-mode state)
+-- ---------------------------------------------------------------------------
+local SNAPSHOT_KEYS = {"player","target","focus","targettarget","pet","boss","general","auras2"}
+local _snapshot = nil
+local DeepCopy = _G.MSUF_DeepCopy
+
+local function SnapshotDB()
+    local db = _G.MSUF_DB; if not db or not DeepCopy then _snapshot = nil; return end
+    _snapshot = {}
+    for _, k in ipairs(SNAPSHOT_KEYS) do
+        if db[k] ~= nil then _snapshot[k] = DeepCopy(db[k]) end
+    end
+end
+
+local function RestoreDB()
+    if not _snapshot or not DeepCopy then return end
+    local db = _G.MSUF_DB; if not db then return end
+    for _, k in ipairs(SNAPSHOT_KEYS) do
+        if _snapshot[k] ~= nil then db[k] = DeepCopy(_snapshot[k]) end
+    end
+    _snapshot = nil
+end
+
+-- ---------------------------------------------------------------------------
 -- ENTER Edit Mode
 -- ---------------------------------------------------------------------------
 function State.Enter(key)
@@ -129,6 +153,8 @@ function State.Enter(key)
     active  = true
     unitKey = key or "player"
     SyncLegacy()
+
+    SnapshotDB()
 
     -- Clear undo history for new session
     if type(_G.MSUF_EM_UndoClear) == "function" then
@@ -227,6 +253,40 @@ function State.Exit(source)
     end
 
     -- Notify listeners
+    NotifyListeners()
+end
+
+-- ---------------------------------------------------------------------------
+-- CANCEL ALL — restore DB to pre-edit-mode state, then exit
+-- ---------------------------------------------------------------------------
+function State.CancelAll()
+    if not active then return end
+
+    RestoreDB()
+
+    -- Full teardown identical to Exit
+    if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
+    if EM2.Movers and EM2.Movers.Hide then EM2.Movers.Hide() end
+    if EM2.HUD    and EM2.HUD.Hide    then EM2.HUD.Hide()    end
+    if EM2.Grid   and EM2.Grid.Hide   then EM2.Grid.Hide()   end
+    if EM2.Popups and EM2.Popups.CloseAll then EM2.Popups.CloseAll() end
+
+    active  = false
+    unitKey = nil
+    _G.MSUF_BossTestMode = false
+    _G.MSUF_PreviewTestMode = false
+    SyncLegacy()
+
+    if type(_G.MSUF_EnableArrowKeyNudge) == "function" then _G.MSUF_EnableArrowKeyNudge(false) end
+    if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+    _G.MSUF_UnitPreviewActive = false
+    if type(_G.MSUF_SyncAllUnitPreviews) == "function" then _G.MSUF_SyncAllUnitPreviews() end
+    if type(_G.MSUF_UpdateAllFonts) == "function" then _G.MSUF_UpdateAllFonts() end
+    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
+    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then _G.MSUF_UpdateBossCastbarPreview() end
+    if type(_G.MSUF_Auras2_RefreshAll) == "function" then _G.MSUF_Auras2_RefreshAll() end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+
     NotifyListeners()
 end
 

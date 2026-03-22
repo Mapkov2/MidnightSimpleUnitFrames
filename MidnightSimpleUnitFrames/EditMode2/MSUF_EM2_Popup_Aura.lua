@@ -40,8 +40,43 @@ local function Apply()
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
 end
 
+local SHARED_SNAP_KEYS = {"bossEditTogether","highlightPrivateAuras"}
+local LAYOUT_KEYS = {
+    "spacing","stackTextSize","stackTextOffsetX","stackTextOffsetY",
+    "cooldownTextSize","cooldownTextOffsetX","cooldownTextOffsetY",
+    "buffGroupOffsetX","buffGroupOffsetY","buffGroupIconSize",
+    "debuffGroupOffsetX","debuffGroupOffsetY","debuffGroupIconSize",
+    "privateOffsetX","privateOffsetY","privateSize",
+}
+local function SnapshotAura(uk)
+    local a2=A2(); if not a2 then return nil end; local snap={shared={},units={}}
+    local sh=a2.shared or {}
+    for _,k in ipairs(SHARED_SNAP_KEYS) do snap.shared[k]=sh[k] end
+    local boss=IsBoss(uk)
+    local keys=(boss and sh.bossEditTogether~=false) and {"boss1","boss2","boss3","boss4","boss5"} or {uk}
+    for _,k in ipairs(keys) do
+        snap.units[k]={}
+        local pu=a2.perUnit and a2.perUnit[k]; local l=pu and pu.layout or {}
+        for _,lk in ipairs(LAYOUT_KEYS) do snap.units[k][lk]=l[lk] end
+        snap.units[k]._overrideLayout=pu and pu.overrideLayout
+    end
+    return snap
+end
+local function RestoreAura(snap)
+    if not snap then return end; local a2=A2(); if not a2 then return end
+    a2.shared=a2.shared or {}
+    for k,v in pairs(snap.shared) do a2.shared[k]=v end
+    a2.perUnit=a2.perUnit or {}
+    for uk,vals in pairs(snap.units) do
+        a2.perUnit[uk]=a2.perUnit[uk] or {}; local pu=a2.perUnit[uk]
+        pu.overrideLayout=vals._overrideLayout; pu.layout=pu.layout or {}
+        for _,lk in ipairs(LAYOUT_KEYS) do pu.layout[lk]=vals[lk] end
+    end
+end
+
 local function Sync()
     if not pf or not pf.unit then return end; local sh=Sh(); local uk=pf.unit; local ek=uk
+    pf._auraSnap = SnapshotAura(uk)
     if IsBoss(uk) and sh.bossEditTogether~=false then ek="boss1" end; local l=Lay(ek)
     local function V(lk,sk,d) return (l[lk]~=nil and l[lk]) or (sh[sk]~=nil and sh[sk]) or d end
     local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
@@ -100,9 +135,14 @@ local function Build()
 
     local ok,cancel = F.FooterButtons(pf)
     ok:SetScript("OnClick", function() Apply(); pf:Hide() end)
-    cancel:SetScript("OnClick", function() pf:Hide() end)
+    cancel:SetScript("OnClick", function()
+        RestoreAura(pf._auraSnap)
+        if type(_G.MSUF_Auras2_RefreshAll)=="function" then _G.MSUF_Auras2_RefreshAll() end
+        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+        pf:Hide()
+    end)
     pf:EnableKeyboard(true)
-    pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); pf:Hide() else s:SetPropagateKeyboardInput(true) end end)
+    pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); cancel:Click() else s:SetPropagateKeyboardInput(true) end end)
     pf:UpdateScrollHeight(700)
     return pf
 end

@@ -13,13 +13,13 @@ local floor, max, min = math.floor, math.max, math.min
 
 local hudFrame, row2Frame
 local previewBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
-local undoBtn, redoBtn, exitBtn
+local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
 
-local R1_H    = 36
-local R2_H    = 26
-local BTN_H   = 28
-local BTN_H2  = 22
+local R1_H    = 42
+local R2_H    = 34
+local BTN_H   = 32
+local BTN_H2  = 26
 local BTN_GAP = 5
 local SEP_W   = 16
 
@@ -118,7 +118,7 @@ local function EnsureHUD()
     title:SetPoint("LEFT", hudFrame, "LEFT", 14, 0)
     title:SetText("EDIT MODE")
 
-    -- Exit
+    -- Right-side: Cancel All | Exit
     exitBtn = MakeBtn(hudFrame, "Exit", 48, BTN_H, 12, function()
         if EM2.State then EM2.State.Exit("hud_exit") end
     end)
@@ -126,6 +126,50 @@ local function EnsureHUD()
     exitBtn._label:SetTextColor(TH.exitR, TH.exitG, TH.exitB, 1)
     exitBtn._dot:Hide()
     SetTip(exitBtn, "Lock positions and exit Edit Mode.")
+
+    local rSep = MakeSep(hudFrame, BTN_H)
+    rSep:SetPoint("RIGHT", exitBtn, "LEFT", -BTN_GAP, 0)
+
+    cancelAllBtn = MakeBtn(hudFrame, "Cancel All", 78, BTN_H, 12, function()
+        if not EM2.State or not EM2.State.CancelAll then return end
+        local cf = _G["MSUF_EM2_CancelConfirm"]
+        if cf then cf:Show(); return end
+        cf = CreateFrame("Frame", "MSUF_EM2_CancelConfirm", UIParent, "BackdropTemplate")
+        cf:SetSize(280, 100)
+        cf:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
+        cf:SetFrameStrata("TOOLTIP"); cf:SetFrameLevel(999)
+        cf:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
+        cf:SetBackdropColor(0.03, 0.05, 0.12, 0.97)
+        cf:SetBackdropBorderColor(0.90, 0.70, 0.30, 0.80)
+        cf:EnableMouse(true)
+        local msg = MakeFS(cf, 13, TH.textR, TH.textG, TH.textB, 1)
+        msg:SetPoint("TOP", cf, "TOP", 0, -18)
+        msg:SetText("Discard all changes and exit?")
+        local function ConfBtn(text, xOff, onClick)
+            local b = CreateFrame("Button", nil, cf)
+            b:SetSize(90, 28)
+            b:SetPoint("BOTTOM", cf, "BOTTOM", xOff, 14)
+            local bg = b:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0.09, 0.10, 0.14, 0.90)
+            local brd = CreateFrame("Frame", nil, b, "BackdropTemplate"); brd:SetAllPoints()
+            brd:SetFrameLevel(max(0, b:GetFrameLevel()-1))
+            brd:SetBackdrop({edgeFile=W8, edgeSize=1}); brd:SetBackdropBorderColor(0.10, 0.20, 0.42, 0.65)
+            local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1,1,1,0.06)
+            local fs = MakeFS(b, 12, TH.textR, TH.textG, TH.textB, 1); fs:SetPoint("CENTER"); fs:SetText(text)
+            b:SetScript("OnClick", onClick); return b
+        end
+        ConfBtn("Yes, discard", -54, function() cf:Hide(); EM2.State.CancelAll() end)
+        ConfBtn("No, keep", 54, function() cf:Hide() end)
+        cf:EnableKeyboard(true)
+        cf:SetScript("OnKeyDown", function(s, k)
+            if k == "ESCAPE" then s:SetPropagateKeyboardInput(false); cf:Hide()
+            else s:SetPropagateKeyboardInput(true) end
+        end)
+        cf:Show()
+    end)
+    cancelAllBtn:SetPoint("RIGHT", rSep, "LEFT", -BTN_GAP, 0)
+    cancelAllBtn._label:SetTextColor(0.90, 0.70, 0.30, 0.90)
+    cancelAllBtn._dot:Hide()
+    SetTip(cancelAllBtn, "Discard ALL changes made in Edit Mode\nand restore settings to the state\nbefore Edit Mode was opened.")
 
     -- Center toggles
     local c1 = CreateFrame("Frame", nil, hudFrame)
@@ -216,7 +260,7 @@ local function EnsureHUD()
     c2:SetSize(1, BTN_H2); c2:SetPoint("CENTER", row2Frame, "CENTER", 0, 0)
     local r2 = {}
 
-    undoBtn = MakeBtn(c2, "Undo", 42, BTN_H2, 10, function()
+    undoBtn = MakeBtn(c2, "Undo", 52, BTN_H2, 11, function()
         if type(_G.MSUF_EM_UndoUndo) == "function" then _G.MSUF_EM_UndoUndo() end
     end)
     undoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.85)
@@ -224,7 +268,7 @@ local function EnsureHUD()
     SetTip(undoBtn, "Undo last position change.")
     r2[#r2+1] = undoBtn
 
-    redoBtn = MakeBtn(c2, "Redo", 42, BTN_H2, 10, function()
+    redoBtn = MakeBtn(c2, "Redo", 52, BTN_H2, 11, function()
         if type(_G.MSUF_EM_UndoRedo) == "function" then _G.MSUF_EM_UndoRedo() end
     end)
     redoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.85)
@@ -236,8 +280,8 @@ local function EnsureHUD()
 
     do
         local f = CreateFrame("Frame", nil, c2)
-        f:SetSize(66, BTN_H2); f:EnableMouseWheel(true)
-        stepFS = MakeFS(f, 10, TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
+        f:SetSize(80, BTN_H2); f:EnableMouseWheel(true)
+        stepFS = MakeFS(f, 11, TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
         stepFS:SetPoint("CENTER")
         local hl = f:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1,1,1,0.04)
         f:SetScript("OnMouseWheel", function(_, d)
@@ -251,8 +295,8 @@ local function EnsureHUD()
 
     do
         local f = CreateFrame("Frame", nil, c2)
-        f:SetSize(58, BTN_H2); f:EnableMouseWheel(true)
-        alphaFS = MakeFS(f, 10, TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
+        f:SetSize(74, BTN_H2); f:EnableMouseWheel(true)
+        alphaFS = MakeFS(f, 11, TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
         alphaFS:SetPoint("CENTER")
         local hl = f:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1,1,1,0.04)
         f:SetScript("OnMouseWheel", function(_, d)
@@ -286,5 +330,8 @@ function HUD.RefreshControls()
 end
 
 function HUD.Show() EnsureHUD(); HUD.RefreshControls(); hudFrame:Show(); if row2Frame then row2Frame:Show() end end
-function HUD.Hide() if row2Frame then row2Frame:Hide() end; if hudFrame then hudFrame:Hide() end end
+function HUD.Hide()
+    local cf = _G["MSUF_EM2_CancelConfirm"]; if cf then cf:Hide() end
+    if row2Frame then row2Frame:Hide() end; if hudFrame then hudFrame:Hide() end
+end
 function HUD.IsShown() return hudFrame and hudFrame:IsShown() or false end
