@@ -29,7 +29,8 @@ local Core = {}
 local _UFCORE_issecret = _G and _G.issecretvalue or nil
 
 local function UFCore_CanCompareNumber(v)
-    return type(v) == "number" and (not _UFCORE_issecret or not _UFCORE_issecret(v))
+    if _UFCORE_issecret and _UFCORE_issecret(v) then return false end
+    return type(v) == "number"
 end
 
 local function UFCore_SamePowerSnapshot(f, pType, cur, mx)
