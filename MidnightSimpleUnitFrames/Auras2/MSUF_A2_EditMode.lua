@@ -325,6 +325,15 @@ local function CreateMover(entry, unitKey, kind, labelText)
         self._msufDragMoved = false
         self._msufDragging = true
 
+        local mL = self:GetLeft() or 0
+        local mR = self:GetRight() or 0
+        local mT = self:GetTop() or 0
+        local mB = self:GetBottom() or 0
+        self._msufSnapStartCX = (mL + mR) * 0.5
+        self._msufSnapStartCY = (mT + mB) * 0.5
+        self._msufSnapHW = (mR - mL) * 0.5
+        self._msufSnapHH = (mT - mB) * 0.5
+
         if not self._msufOnUpdate then
             self._msufOnUpdate = function(me)
                 local mx, my = GetCursorScaled()
@@ -337,6 +346,17 @@ local function CreateMover(entry, unitKey, kind, labelText)
                         return
                     end
                 end
+                local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+                if Snap and Snap.IsEnabled and Snap.IsEnabled() and Snap.Apply then
+                    Snap.HideGuides()
+                    local rawCX = (me._msufSnapStartCX or 0) + ddx
+                    local rawCY = (me._msufSnapStartCY or 0) + ddy
+                    local hw = me._msufSnapHW or 0
+                    local hh = me._msufSnapHH or 0
+                    local sCX, sCY = Snap.Apply(rawCX, rawCY, hw, hh, moverName)
+                    ddx = sCX - (me._msufSnapStartCX or 0)
+                    ddy = sCY - (me._msufSnapStartCY or 0)
+                end
                 ApplyDragDelta(me, ddx, ddy)
             end
         end
@@ -348,6 +368,8 @@ local function CreateMover(entry, unitKey, kind, labelText)
         self._msufDragging = false
         if self:GetScript("OnUpdate") then
             self:SetScript("OnUpdate", nil)
+            local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+            if Snap and Snap.HideGuides then Snap.HideGuides() end
             if self._msufDragMoved then
                 self._msufDragMoved = false
                 -- Invalidate DB so config cache updates with new offsets

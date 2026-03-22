@@ -824,6 +824,30 @@ function HUD.Show()
     EnsureHUD(); HUD.RefreshControls()
     hudFrame:Show(); if row2Frame then row2Frame:Show() end
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Play() end
+
+    local db = _G.MSUF_DB
+    print("|cff60a5ff[MSUF DEBUG]|r HUD.Show — db:", db and "OK" or "NIL")
+    if db then
+        db.general = db.general or {}
+        local seen = db.general.emTutorialSeen
+        print("|cff60a5ff[MSUF DEBUG]|r emTutorialSeen:", tostring(seen))
+        if not seen then
+            db.general.emTutorialSeen = true
+            print("|cff60a5ff[MSUF DEBUG]|r Scheduling tutorial in 0.3s")
+            C_Timer.After(0.3, function()
+                local shown = HUD.IsShown()
+                print("|cff60a5ff[MSUF DEBUG]|r Timer fired — HUD shown:", tostring(shown))
+                if shown then
+                    local panel = EnsureTutorialPanel()
+                    print("|cff60a5ff[MSUF DEBUG]|r Panel:", panel and "OK" or "NIL", "visible:", panel and tostring(panel:IsShown()) or "N/A")
+                    if panel and not panel:IsShown() then
+                        panel:Show()
+                        print("|cff60a5ff[MSUF DEBUG]|r Panel:Show() called")
+                    end
+                end
+            end)
+        end
+    end
 end
 
 function HUD.Hide()

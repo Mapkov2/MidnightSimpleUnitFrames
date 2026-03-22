@@ -200,6 +200,16 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
             self.dragStartOffsetX = g[cfg.offsetXKey] or defX
             self.dragStartOffsetY = g[cfg.offsetYKey] or defY
             self.dragMode = "MOVE"
+
+            local fs = self:GetEffectiveScale() or 1
+            local fL = self:GetLeft() or 0
+            local fR = self:GetRight() or 0
+            local fT = self:GetTop() or 0
+            local fB = self:GetBottom() or 0
+            self._snapStartCX = (fL + fR) * 0.5 * fs / uiScale
+            self._snapStartCY = (fT + fB) * 0.5 * fs / uiScale
+            self._snapHW = (fR - fL) * 0.5 * fs / uiScale
+            self._snapHH = (fT - fB) * 0.5 * fs / uiScale
         end
 
         self:SetScript("OnUpdate", function(self)
@@ -261,8 +271,20 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
                     end
                 end
 else
-                g2[cfg.offsetXKey] = (self.dragStartOffsetX or 0) + dx
-                g2[cfg.offsetYKey] = (self.dragStartOffsetY or 0) + dy
+                local snapDX, snapDY = dx, dy
+                local EM2Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+                if EM2Snap and EM2Snap.IsEnabled and EM2Snap.IsEnabled() and EM2Snap.Apply then
+                    EM2Snap.HideGuides()
+                    local rawCX = (self._snapStartCX or 0) + dx
+                    local rawCY = (self._snapStartCY or 0) + dy
+                    local hw = self._snapHW or 0
+                    local hh = self._snapHH or 0
+                    local sCX, sCY = EM2Snap.Apply(rawCX, rawCY, hw, hh, "castbar_" .. kind)
+                    snapDX = sCX - (self._snapStartCX or 0)
+                    snapDY = sCY - (self._snapStartCY or 0)
+                end
+                g2[cfg.offsetXKey] = (self.dragStartOffsetX or 0) + snapDX
+                g2[cfg.offsetYKey] = (self.dragStartOffsetY or 0) + snapDY
 
                if kind == "boss" then
     local sx = _G["MSUF_CastbarBossXOffsetSlider"]
@@ -298,6 +320,8 @@ end
         if self.isDragging then
             self.isDragging = false
             self:SetScript("OnUpdate", nil)
+            local EM2Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+            if EM2Snap and EM2Snap.HideGuides then EM2Snap.HideGuides() end
         end
 
         -- After any click/drag ends, ensure the preview fill animation runs.
