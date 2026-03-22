@@ -392,12 +392,14 @@ end
 
 function EM.EnsureMovers(entry, unit, shared, iconSize, spacing)
     if not entry or not unit then return end
+    -- Skip pet/ToT (no aura editing for these)
+    if unit == "pet" or unit == "targettarget" then return end
 
     local base = UnitLabel(unit)
     CreateMover(entry, unit, "buff",    base .. " Buffs")
     CreateMover(entry, unit, "debuff",  base .. " Debuffs")
-    -- Private auras are player-only; no mover for target.
-    if unit ~= "target" then
+    -- Private auras are player-only
+    if unit == "player" then
         CreateMover(entry, unit, "private", base .. " Private")
     end
     -- Mover positioning is handled by Render's UpdateAnchor after containers are placed
@@ -468,10 +470,13 @@ end
 
 function EM.ShowMovers(entry)
     if not entry then return end
+    -- Skip pet/ToT aura movers (not useful for editing)
+    local u = entry.unit
+    if u == "pet" or u == "targettarget" then return end
     if entry.editMoverBuff    then entry.editMoverBuff:Show()    end
     if entry.editMoverDebuff  then entry.editMoverDebuff:Show()  end
-    -- Private auras are player-only; skip mover for target.
-    if entry.editMoverPrivate and entry.unit ~= "target" then entry.editMoverPrivate:Show() end
+    -- Private auras are player-only
+    if entry.editMoverPrivate and u == "player" then entry.editMoverPrivate:Show() end
 end
 
 function EM.HideMovers(entry)
@@ -500,6 +505,8 @@ function EM.ShowAllMovers()
     local aby = GetAurasByUnit()
     if not aby then return end
     local _, shared = GetAuras2DB()
+    -- Respect the toggle: if showInEditMode is off, don't show movers
+    if shared and shared.showInEditMode == false then return end
     for _, entry in pairs(aby) do
         if entry and EM.AnyMoverExists(entry) then
             EM.ShowMovers(entry)
@@ -596,3 +603,7 @@ if not _registered then
         end)
     end
 end
+
+-- ── Global exports for EM2 HUD Aura toggle ──
+_G.MSUF_A2_HideAllEditMovers = function() EM.HideAllMovers() end
+_G.MSUF_A2_ShowAllEditMovers = function() EM.ShowAllMovers() end

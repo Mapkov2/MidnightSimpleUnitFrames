@@ -45,6 +45,7 @@ local GetShapeshiftFormID = GetShapeshiftFormID
 local GetRuneCooldown = GetRuneCooldown
 local InCombatLockdown = InCombatLockdown
 local GetTime = GetTime
+local GetPowerRegenForPowerType = GetPowerRegenForPowerType
 
 -- Aura API (12.0)
 local C_UnitAuras = C_UnitAuras
@@ -682,6 +683,7 @@ local CP = {
     tbCachedQ   = -1,      -- quantized percentage for skip-if-same
     tbOUA       = false,   -- true if timer-bar OnUpdate is active
     runeOUAAny  = false,   -- true if any rune bar currently has an OnUpdate
+    essenceOUAAny = false, -- true if Essence recharge pip has an OnUpdate
     powerToken  = nil,     -- cached POWER_TYPE_TOKENS[powerType] for hot event filters
     -- Spell Tracker state (Tip of the Spear only — Whirlwind uses WW module)
     spStacks    = 0,       -- current stack count
@@ -833,6 +835,7 @@ local CP_UpdateValues_Continuous
 local CP_UpdateValues_RuneCD
 local CP_UpdateValues_TimerBar
 local CP_UpdateValues_Stagger
+local CP_StopEssenceOnUpdates
 
 do
     local commonEnv = {
@@ -858,9 +861,11 @@ do
         GetFilledAlpha = function() return _filledAlpha end,
         GetEmptyAlpha = function() return _emptyAlpha end,
         GetChargedMap = function() return _chargedMap end,
+        GetPowerRegenForPowerType = GetPowerRegenForPowerType,
     }
     local segmented = CP_CallBuilder(CPModeBuilders.SEGMENTED, commonEnv)
     if segmented and type(segmented.Update) == "function" then CP_UpdateValues = segmented.Update end
+    if segmented and type(segmented.StopEssenceOnUpdates) == "function" then CP_StopEssenceOnUpdates = segmented.StopEssenceOnUpdates end
     local fractional = CP_CallBuilder(CPModeBuilders.FRACTIONAL, commonEnv)
     if fractional and type(fractional.Update) == "function" then CP_UpdateValues_Fractional = fractional.Update end
     local aura = CP_CallBuilder(CPModeBuilders.AURA, commonEnv)
@@ -964,6 +969,7 @@ end
 local function CP_SyncRuntimeOnUpdates(timerActive)
     if CP.renderMode == CPK.MODE.RUNE_CD then
         if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
+        if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         return
     end
 
@@ -973,6 +979,7 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
 
     if CP.renderMode == CPK.MODE.TIMER_BAR then
         if SetTimerBarOnUpdate then SetTimerBarOnUpdate(timerActive == true) end
+        if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
     else
         if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
     end
@@ -1361,6 +1368,9 @@ local function FullRefresh()
         if renderMode ~= CPK.MODE.TIMER_BAR and SetTimerBarOnUpdate then
             SetTimerBarOnUpdate(false)
         end
+        if (renderMode ~= CPK.MODE.SEGMENTED or powerType ~= PT.Essence) and CP_StopEssenceOnUpdates then
+            CP_StopEssenceOnUpdates()
+        end
 
         CP_ApplyFont()
 
@@ -1376,11 +1386,12 @@ local function FullRefresh()
         if CP._outline then CP._outline:Show() end
 
     else
-        -- Clean up rune/timer OnUpdate scripts when hiding
+        -- Clean up rune/timer/essence OnUpdate scripts when hiding
         if (CP.renderMode == CPK.MODE.RUNE_CD or CP.runeOUAAny) and CP_StopRuneOnUpdates then
             CP_StopRuneOnUpdates(true)
         end
         if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
+        if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         if CP.container then
             CP.container:Hide()
         end

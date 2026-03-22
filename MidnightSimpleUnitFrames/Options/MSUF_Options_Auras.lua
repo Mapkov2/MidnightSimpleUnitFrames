@@ -2458,23 +2458,14 @@ end
         BuildBoolPathCheckboxes(privateBox, {
             { "Show (Player)", 12, -40, A2_Settings, "showPrivateAurasPlayer", nil,
                 "Re-anchors Blizzard Private Auras to MSUF (no spell lists).", "cbPrivateShowP" },
-            { "Show (Focus)", 12, -68, A2_Settings, "showPrivateAurasFocus", nil,
-                "Re-anchors Blizzard Private Auras to MSUF Focus.", "cbPrivateShowF" },
-            { "Show (Boss)", 12, -96, A2_Settings, "showPrivateAurasBoss", nil,
-                "Re-anchors Blizzard Private Auras to MSUF Boss frames.", "cbPrivateShowB" },
         }, refs)
-        -- Track: these are Shared-scope controls (so per-unit overrides can grey them out correctly).
         if refs.cbPrivateShowP then A2_Track("global", refs.cbPrivateShowP) end
-        if refs.cbPrivateShowF then A2_Track("global", refs.cbPrivateShowF) end
-        if refs.cbPrivateShowB then A2_Track("global", refs.cbPrivateShowB) end
         local function SetWidgetEnabled(widget, enabled)
             if not widget then  return end
             enabled = not not enabled
-            -- Sliders (OptionsSliderTemplate) use Enable/Disable, not SetEnabled.
             if widget.Enable and widget.Disable then
                 if enabled then widget:Enable() else widget:Disable() end
                 if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.35) end
-                -- If we attached a numeric editbox to this slider, sync it too.
                 local vb = widget.__MSUF_valueBox
                 if vb and vb.SetEnabled then vb:SetEnabled(enabled) end
                 if vb and vb.SetAlpha then vb:SetAlpha(enabled and 1 or 0.35) end
@@ -2495,63 +2486,35 @@ end
             if v > 12 then v = 12 end
             s.privateAuraMaxPlayer = v
          end
-        local function GetPrivateMaxOther()
-            local s = A2_Settings()
-            return (s and s.privateAuraMaxOther) or 6
-        end
-        local function SetPrivateMaxOther(v)
-            local s = A2_Settings()
-            if not s then  return end
-            v = tonumber(v) or 0
-            if v < 0 then v = 0 end
-            if v > 12 then v = 12 end
-            s.privateAuraMaxOther = v
-         end
         local privateMaxPlayer = CreateAuras2CompactSlider(privateBox, "Max (Player)", 0, 12, 1, 340, -34, 150, GetPrivateMaxPlayer, SetPrivateMaxPlayer)
         MSUF_StyleAuras2CompactSlider(privateMaxPlayer, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(privateMaxPlayer, 0, 12, 1, GetPrivateMaxPlayer)
-        local privateMaxOther  = CreateAuras2CompactSlider(privateBox, "Max (Focus/Boss)", 0, 12, 1, 540, -34, 150, GetPrivateMaxOther, SetPrivateMaxOther)
-        MSUF_StyleAuras2CompactSlider(privateMaxOther, { hideMinMax = true, leftTitle = true })
-        AttachSliderValueBox(privateMaxOther, 0, 12, 1, GetPrivateMaxOther)
         if privateMaxPlayer then A2_Track("global", privateMaxPlayer) end
-        if privateMaxOther  then A2_Track("global", privateMaxOther) end
         local function UpdatePrivateAurasEnabled()
             local s = A2_Settings()
             local master = (s and s.privateAurasEnabled == true) or false
             local p = (master and s and s.showPrivateAurasPlayer == true) or false
-            local o = (master and s and (s.showPrivateAurasFocus == true or s.showPrivateAurasBoss == true)) or false
-            -- Master-gate the per-unit checkboxes.
             if refs.cbPrivateShowP then SetWidgetEnabled(refs.cbPrivateShowP, master) end
-            if refs.cbPrivateShowF then SetWidgetEnabled(refs.cbPrivateShowF, master) end
-            if refs.cbPrivateShowB then SetWidgetEnabled(refs.cbPrivateShowB, master) end
             if privateMaxPlayer then SetWidgetEnabled(privateMaxPlayer, p) end
-            if privateMaxOther  then SetWidgetEnabled(privateMaxOther, o) end
          end
         do
-            local keys = { "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB" }
-            for i = 1, #keys do
-                local cb = refs[keys[i]]
-                if cb then
-                    local old = cb:GetScript("OnClick")
-                    cb:SetScript("OnClick", function(self, ...)
-                        if old then pcall(old, self, ...) end
-                        UpdatePrivateAurasEnabled()
-                     end)
-                    cb:HookScript("OnShow", UpdatePrivateAurasEnabled)
-                end
+            local cb = refs.cbPrivateShowP
+            if cb then
+                local old = cb:GetScript("OnClick")
+                cb:SetScript("OnClick", function(self, ...)
+                    if old then pcall(old, self, ...) end
+                    UpdatePrivateAurasEnabled()
+                 end)
+                cb:HookScript("OnShow", UpdatePrivateAurasEnabled)
             end
             if btnPrivateEnable then
                 btnPrivateEnable:HookScript("OnShow", UpdatePrivateAurasEnabled)
                 btnPrivateEnable:HookScript("OnClick", function()
-                    -- CreateBoolToggleButtonPath already writes + requests apply.
                     UpdatePrivateAurasEnabled()
                  end)
             end
             if privateMaxPlayer then
                 privateMaxPlayer:HookScript("OnShow", UpdatePrivateAurasEnabled)
-            end
-            if privateMaxOther then
-                privateMaxOther:HookScript("OnShow", UpdatePrivateAurasEnabled)
             end
         end
         UpdatePrivateAurasEnabled()
@@ -2561,12 +2524,11 @@ end
                 if cb then advGate[#advGate + 1] = cb end
             end
          end
-        Track({ "cbBossBuffs", "cbBossDebuffs", "cbShowSated", "cbOnlyBoss", "cbOnlyImpBuffs", "cbOnlyImpDebuffs", "cbPrivateShowP", "cbPrivateShowF", "cbPrivateShowB" })
+        Track({ "cbBossBuffs", "cbBossDebuffs", "cbShowSated", "cbOnlyBoss", "cbOnlyImpBuffs", "cbOnlyImpDebuffs", "cbPrivateShowP" })
         if satedSlider then advGate[#advGate + 1] = satedSlider end
         -- Advanced gating should also affect the Private Auras master + sliders.
         if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end
         if privateMaxPlayer then advGate[#advGate + 1] = privateMaxPlayer end
-        if privateMaxOther  then advGate[#advGate + 1] = privateMaxOther end
         -- ------------------------------------------------------------
         -- Sort order dropdown (Blizzard Enum.AuraSortOrder)
         -- Stored in shared.sortOrder (caps level — per-unit overridable via layoutShared).

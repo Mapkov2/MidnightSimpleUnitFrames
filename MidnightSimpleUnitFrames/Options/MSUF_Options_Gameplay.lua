@@ -1509,6 +1509,13 @@ _totemsLeftBottom = totemsDragHint
 
     lastControl = firstDanceOffsetYSlider
 
+    do
+        local specH = 420
+        if _isShaman then specH = 980 end
+        secClassSpec._msufExpandedH = specH
+        if not secClassSpec._msufCollapsed then secClassSpec:SetHeight(specH) end
+    end
+
     -- ═══════════════════════════════════════════════════════════
     -- Section 4: Combat Crosshair (collapsed)
     -- ═══════════════════════════════════════════════════════════

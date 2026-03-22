@@ -381,6 +381,11 @@ function ns.Text.EnsureSpec(self)
             pSplitEnabled = (splitX > 0)
         end
     end
+    -- Per-unit font override: resolve colorPowerTextByType per frame
+    local _pColorByType = (g.colorPowerTextByType == true)
+    if udb and udb.fontOverride and udb.colorPowerTextByType ~= nil then
+        _pColorByType = (udb.colorPowerTextByType == true)
+    end
     spec = {
         hpMode = hpMode,
         hpSep = ns.Text._SepToken(hpSepRaw, nil),
@@ -388,7 +393,7 @@ function ns.Text.EnsureSpec(self)
         hpSpacerG = g,
         pMode = pMode,
         pSep = ns.Text._SepToken(rawPSep, rawHpSep),
-        pColorByType = (g.colorPowerTextByType == true),
+        pColorByType = _pColorByType,
         pSplitEnabled = pSplitEnabled,
         useOverride = useOverride,
         hpAnchor = (udb and udb.hpTextAnchor) or g.hpTextAnchor or "RIGHT",
@@ -761,14 +766,20 @@ function ns.Text.ApplyLevel(frame, unit, conf, overrideText, forceShow)
  end
 function ns.Text.ApplyBossTestName(frame, unit)
     if not frame then  return end
-    local txt = "Test Boss"
     local idx
     if type(unit) == "string" then
         idx = unit:match("boss(%d+)")
     end
-    if idx then
-        txt = "Test Boss " .. idx
-    end
+    local _bossPreviewNames = {
+        "Archimonde the Defiler",
+        "Yogg-Saron, Hope's End",
+        "Kael'thas Sunstrider",
+        "Illidan Stormrage",
+        "Kel'Thuzad",
+    }
+    local ni = tonumber(idx) or 1
+    if ni < 1 then ni = 1 end
+    local txt = _bossPreviewNames[((ni - 1) % #_bossPreviewNames) + 1]
     ns.Text.ApplyName(frame, unit, txt)
  end
 function ns.Text.ApplyBossTestLevel(frame, conf)
