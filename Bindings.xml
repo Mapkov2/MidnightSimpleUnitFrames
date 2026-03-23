@@ -1,0 +1,13 @@
+<Bindings>
+    <Binding name="MSUF_TOGGLE_OPTIONS"
+             category="Midnight Simple Unitframes (MSUF)"
+             >
+        MSUF_Keybind_ToggleOptions()
+    </Binding>
+
+    <Binding name="MSUF_TOGGLE_EDITMODE"
+             category="Midnight Simple Unitframes (MSUF)"
+             >
+        MSUF_Keybind_ToggleEditMode()
+    </Binding>
+</Bindings>

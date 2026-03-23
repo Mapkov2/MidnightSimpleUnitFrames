@@ -1,0 +1,10 @@
+-- MSUF Class Power bridge shim
+--
+-- The Class Power controller now lives in:
+--   ClassPower/MSUF_CP_Controller.lua
+--
+-- This file intentionally stays as a tiny compatibility bridge so the old
+-- Core/MSUF_ClassPower.lua path can remain in the addon structure without
+-- continuing to carry the full controller implementation.
+--
+-- Intentionally empty.

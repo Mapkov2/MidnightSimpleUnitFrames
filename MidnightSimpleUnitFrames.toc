@@ -1,0 +1,178 @@
+## Interface: 120000, 120001
+## Title: Midnight Simple Unit Frames
+## Notes: Lightweight unitframes with MSUF Edit Mode.
+## Author: Mapko
+## Category: Combat
+## Version: 3.51
+## SavedVariables: MSUF_DB, MSUF_GlobalDB
+## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
+## OptionalDeps: Masque, LibSharedMedia-3.0, Clique
+## X-Wago-ID: XKq9aoKy
+## X-Website: https://discord.gg/JQnhZXnTAK
+## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
+## AddonCompartmentFunc: MSUF_AddonCompartment_OnClick
+## AddonCompartmentFuncOnEnter: MSUF_AddonCompartment_OnEnter
+## AddonCompartmentFuncOnLeave: MSUF_AddonCompartment_OnLeave
+
+
+# ═══════════════════════════════════════════════════════════════
+# LIBS
+# ═══════════════════════════════════════════════════════════════
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+Foundation\MSUF_Libs.lua
+
+# ═══════════════════════════════════════════════════════════════
+# LOCALES
+# ═══════════════════════════════════════════════════════════════
+Locales\MSUF_Localization.lua
+Locales\enUS.lua
+Locales\enGB.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
+Locales\deDE.lua
+Locales\frFR.lua
+Locales\esES.lua
+Locales\esMX.lua
+Locales\itIT.lua
+Locales\koKR.lua
+Locales\ptBR.lua
+Locales\ruRU.lua
+
+# ═══════════════════════════════════════════════════════════════
+# FOUNDATION
+# ═══════════════════════════════════════════════════════════════
+Foundation\MSUF_Util.lua
+Foundation\MSUF_Transitions.lua
+Foundation\MSUF_Defaults.lua
+Foundation\MSUF_Profiles.lua
+Foundation\MSUF_Presets.lua
+Foundation\MSUF_Style.lua
+Foundation\MSUF_Modules.lua
+Foundation\MSUF_EventBus.lua
+Foundation\MSUF_Widgets.lua
+
+# ═══════════════════════════════════════════════════════════════
+# EDIT MODE 2
+# ═══════════════════════════════════════════════════════════════
+EditMode2\MSUF_EM2_Registry.lua
+EditMode2\MSUF_EM2_State.lua
+EditMode2\MSUF_EM2_Grid.lua
+EditMode2\MSUF_EM2_Snap.lua
+EditMode2\MSUF_EM2_Anchors.lua
+EditMode2\MSUF_EM2_Undo.lua
+EditMode2\MSUF_EM2_PopupFactory.lua
+EditMode2\MSUF_EM2_Ticker.lua
+EditMode2\MSUF_EM2_Movers.lua
+EditMode2\MSUF_EM2_Popups.lua
+EditMode2\MSUF_EM2_Popup_Unit.lua
+EditMode2\MSUF_EM2_Popup_Cast.lua
+EditMode2\MSUF_EM2_Popup_Aura.lua
+EditMode2\MSUF_EM2_Nudge.lua
+EditMode2\MSUF_EM2_HUD.lua
+EditMode2\MSUF_EM2_Elements.lua
+EditMode2\MSUF_EM2_Compat.lua
+EditMode2\MSUF_EM2_Init.lua
+
+# ═══════════════════════════════════════════════════════════════
+# CORE (pre-main)
+# ═══════════════════════════════════════════════════════════════
+Core\MSUF_Castbars_LoDStub.lua
+UI\MidnightSimpleUnitFrames_MinimapButton.lua
+UI\MSUF_AddonCompartment.lua
+Media\MSUF_Media.lua
+Core\MSUF_ProfileIO.lua
+Core\MSUF_ChatAndTooltips.lua
+Core\MSUF_StatusIndicators.lua
+Core\MSUF_UnitframeCore.lua
+Core\MSUF_RangeFade.lua
+Core\MSUF_ColorsCore.lua
+
+# ═══════════════════════════════════════════════════════════════
+# AURAS 2.0
+# ═══════════════════════════════════════════════════════════════
+Auras2\MSUF_A2_DB.lua
+Auras2\MSUF_A2_Colors.lua
+Auras2\MSUF_A2_Filters.lua
+Auras2\MSUF_A2_Public.lua
+Auras2\MSUF_A2_Units.lua
+Auras2\MSUF_A2_Masque.lua
+Auras2\MSUF_A2_Preview.lua
+Auras2\MSUF_A2_CooldownText.lua
+Auras2\MSUF_A2_Collect.lua
+Auras2\MSUF_A2_Cache.lua
+Auras2\MSUF_A2_Icons.lua
+Auras2\MSUF_A2_Reminder.lua
+Auras2\MSUF_A2_Render.lua
+Auras2\MSUF_A2_EditMode.lua
+Auras2\MSUF_A2_Events.lua
+
+# ═══════════════════════════════════════════════════════════════
+# FEATURES
+# ═══════════════════════════════════════════════════════════════
+Features\MidnightSimpleUnitFrames_Gameplay.lua
+Features\MSUF_Search.lua
+Features\MidnightSimpleUnitFrames_SlashMenu.lua
+Features\MSUF_VersionCheck.lua
+
+# ═══════════════════════════════════════════════════════════════
+# ★ BACKBONE
+# ═══════════════════════════════════════════════════════════════
+MidnightSimpleUnitFrames.lua
+
+# ═══════════════════════════════════════════════════════════════
+# CORE (post-main)
+# ═══════════════════════════════════════════════════════════════
+Core\MSUF_Text.lua
+Core\MSUF_Bars.lua
+Core\MSUF_Castbars.lua
+Core\MSUF_PortraitMedia.lua
+Core\MSUF_Portraits.lua
+Core\MSUF_Alpha.lua
+Core\MSUF_LoadConditions.lua
+Core\MSUF_Borders.lua
+ClassPower\MSUF_CP_Constants.lua
+ClassPower\MSUF_CP_Profiles.lua
+ClassPower\Features\MSUF_CP_Balance.lua
+ClassPower\Features\MSUF_CP_Specials.lua
+ClassPower\Features\MSUF_CP_Runtime.lua
+ClassPower\Modes\MSUF_CP_Mode_Segmented.lua
+ClassPower\Modes\MSUF_CP_Mode_Fractional.lua
+ClassPower\Modes\MSUF_CP_Mode_Aura.lua
+ClassPower\Modes\MSUF_CP_Mode_Rune.lua
+ClassPower\Modes\MSUF_CP_Mode_Timer.lua
+ClassPower\Modes\MSUF_CP_Mode_Continuous.lua
+ClassPower\Modes\MSUF_CP_Mode_Stagger.lua
+ClassPower\Core\MSUF_CP_Build.lua
+ClassPower\Core\MSUF_CP_Presentation.lua
+ClassPower\Core\MSUF_CP_AltMana.lua
+ClassPower\Core\MSUF_CP_Layout.lua
+ClassPower\MSUF_CP_Controller.lua
+Core\MSUF_ClassPower.lua
+
+# ═══════════════════════════════════════════════════════════════
+# OPTIONS
+# ═══════════════════════════════════════════════════════════════
+Options\MSUF_Options_Toolkit.lua
+Options\MSUF_Options_Core.lua
+Options\MSUF_Options_Bars.lua
+Options\MSUF_Options_Castbars.lua
+Options\MSUF_Options_Profiles.lua
+Options\MSUF_Options_Colors.lua
+Options\MSUF_Options_ClassPower.lua
+Options\MSUF_Options_ClassPower_QuickSetup.lua
+Options\MSUF_Options_Player.lua
+Options\MSUF_Options_Auras.lua
+Options\MSUF_Options_Fonts.lua
+Options\MSUF_Options_Misc.lua
+Options\MSUF_Options_Portraits.lua
+Options\MSUF_Options_Gameplay.lua
+
+# ═══════════════════════════════════════════════════════════════
+# MODULES
+# ═══════════════════════════════════════════════════════════════
+Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua
+Modules\MSUF_RoundedUnitframes.lua
+Modules\MSUF_3DPortraits.lua
+Modules\MSUF_PortraitDecoration.lua
