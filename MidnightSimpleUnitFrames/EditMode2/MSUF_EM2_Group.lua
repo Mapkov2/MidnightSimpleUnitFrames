@@ -128,6 +128,16 @@ local RAID_PREVIEW = {
     { name = "Rexxar", class = "HUNTER", role = "DAMAGER", hp = 0.79, power = 0.73 },
     { name = "Kael", class = "MAGE", role = "DAMAGER", hp = 0.42, power = 0.95 },
     { name = "Illidan", class = "DEMONHUNTER", role = "DAMAGER", hp = 0.61, power = 0.48 },
+    { name = "Muradin", class = "WARRIOR", role = "DAMAGER", hp = 0.76, power = 0.31 },
+    { name = "Maiev", class = "DEMONHUNTER", role = "DAMAGER", hp = 0.69, power = 0.67 },
+    { name = "Malfurion", class = "DRUID", role = "HEALER", hp = 0.93, power = 0.57 },
+    { name = "Uther", class = "PALADIN", role = "HEALER", hp = 0.87, power = 0.64 },
+    { name = "Baine", class = "WARRIOR", role = "TANK", hp = 0.84, power = 0.28 },
+    { name = "Lor'themar", class = "HUNTER", role = "DAMAGER", hp = 0.58, power = 0.79 },
+    { name = "Talanji", class = "PRIEST", role = "HEALER", hp = 0.91, power = 0.60 },
+    { name = "Genn", class = "ROGUE", role = "DAMAGER", hp = 0.65, power = 0.52 },
+    { name = "Alleria", class = "HUNTER", role = "DAMAGER", hp = 0.72, power = 0.86 },
+    { name = "Khadgar", class = "MAGE", role = "DAMAGER", hp = 0.83, power = 0.94 },
 }
 
 local function ApplyPreviewFrame(frame, data)
@@ -181,6 +191,7 @@ function _G.MSUF_Group_SyncPreview()
     if not _G.MSUF_GroupPreviewActive then
         if ns.Group and ns.Group.ScheduleRosterRebuild then ns.Group.ScheduleRosterRebuild() end
         if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
+        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
         return
     end
     if type(_G.MSUF_EnsureGroupFrames) == "function" then _G.MSUF_EnsureGroupFrames() end
@@ -205,18 +216,19 @@ function _G.MSUF_Group_SyncPreview()
             group.partyContainer:Show()
         end
     end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
 end
 
 local function RegisterAll()
     Reg.Register({
         key = "group_party", label = "Party", order = 70, popupType = "group", canResize = true, canNudge = true,
-        getFrame = function() return (ns.Group and (ns.Group.partyFrames and ns.Group.partyFrames[1] or ns.Group.partyContainer)) end,
+        getFrame = function() return (ns.Group and ns.Group.partyContainer) end,
         getConf = function() local g = GroupDB(); return g and g.party end,
         isEnabled = function() local g = GroupDB(); return g and g.enabled ~= false end,
     })
     Reg.Register({
         key = "group_raid", label = "Raid", order = 80, popupType = "group", canResize = true, canNudge = true,
-        getFrame = function() return (ns.Group and (ns.Group.raidFrames and ns.Group.raidFrames[1] or ns.Group.raidContainer)) end,
+        getFrame = function() return (ns.Group and ns.Group.raidContainer) end,
         getConf = function() local g = GroupDB(); return g and g.raid end,
         isEnabled = function() local g = GroupDB(); return g and g.enabled ~= false end,
     })

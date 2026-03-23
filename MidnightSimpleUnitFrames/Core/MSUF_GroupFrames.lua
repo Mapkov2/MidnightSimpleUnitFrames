@@ -339,12 +339,41 @@ local function ApplyFrameGeometry(frame, conf, shared)
     end
 end
 
+local function SetContainerBounds(container, used, conf)
+    if not container then return end
+    local width = conf.width or 90
+    local height = conf.height or 36
+    local spacing = conf.spacing or 2
+    local grow = conf.growthDirection or "DOWN"
+    local wrap = math.max(1, tonumber(conf.wrapAfter) or 5)
+
+    if used == nil or used < 1 then
+        container:SetSize(width, height)
+        return
+    end
+
+    local cols, rows
+    if grow == "LEFT" or grow == "RIGHT" then
+        cols = math.min(used, wrap)
+        rows = math.ceil(used / wrap)
+    else
+        rows = math.min(used, wrap)
+        cols = math.ceil(used / wrap)
+    end
+
+    local totalWidth = (cols * width) + (math.max(0, cols - 1) * spacing)
+    local totalHeight = (rows * height) + (math.max(0, rows - 1) * spacing)
+    container:SetSize(totalWidth, totalHeight)
+end
+
 local function LayoutPool(container, pool, used, conf)
     local width = conf.width or 90
     local height = conf.height or 36
     local spacing = conf.spacing or 2
     local grow = conf.growthDirection or "DOWN"
     local wrap = conf.wrapAfter or 5
+
+    SetContainerBounds(container, used, conf)
 
     local stepX, stepY, wrapX, wrapY = 0, 0, 0, 0
     if grow == "DOWN" then stepY = -(height + spacing); wrapX = width + spacing end
