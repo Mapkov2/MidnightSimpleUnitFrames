@@ -853,7 +853,8 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
         return box, bodyHost
     end
     -- Display + Layout are collapsible for a cleaner menu, but stay open by default.
-    local displayOuter, displayBody = MakeCollapsibleBox(content, leftTop, 720, 244, "Display", true)
+    local designerOuter, designerBody = MakeCollapsibleBox(content, leftTop, 720, 110, "Group Aura Designer", false)
+    local displayOuter, displayBody = MakeCollapsibleBox(content, designerOuter, 720, 244, "Display", true)
     local capsOuter, capsBody = MakeCollapsibleBox(content, displayOuter, 720, 266, "Layout & Caps", true)
     -- Timer / cooldown text color controls
     local timerBox, timerBody = MakeCollapsibleBox(content, capsOuter, 720, 248, "Timer Colors", false)
@@ -871,6 +872,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     local _displayBoxOuter = displayOuter
     local _capsBoxOuter = capsOuter
     local _reminderBoxOuter = reminderBox
+    designerBox = designerBody or designerOuter
     displayBox = displayBody or displayOuter
     capsBox = capsBody or capsOuter
     timerBox = timerBody or timerBox
@@ -943,6 +945,7 @@ local function A2_Settings()
      return s
 end
 local A2_REMINDER_GROWTH_OK = { RIGHT = true, LEFT = true, UP = true, DOWN = true }
+local GetOverrideLayoutForEditing, SetOverrideLayoutForEditing
 local function A2_NormalizeReminderGrowth(v)
     if type(v) ~= "string" or not A2_REMINDER_GROWTH_OK[v] then
         return "RIGHT"
@@ -961,6 +964,115 @@ local function A2_GetReminderGrowthValue()
         return A2_NormalizeReminderGrowth(shared.reminderGrowth)
     end
     return "RIGHT"
+end
+local A2_LAYOUT_SHARED_FIELDS = {
+    "offsetX", "offsetY",
+    "spacing",
+    "buffGroupOffsetX", "buffGroupOffsetY",
+    "debuffGroupOffsetX", "debuffGroupOffsetY",
+    "privateOffsetX", "privateOffsetY",
+    "reminderOffsetX", "reminderOffsetY",
+    "buffGroupIconSize", "debuffGroupIconSize", "privateSize", "reminderIconSize",
+    "stackTextSize", "stackTextOffsetX", "stackTextOffsetY",
+    "cooldownTextSize", "cooldownTextOffsetX", "cooldownTextOffsetY",
+    "reminderSpacing", "reminderGrowth",
+}
+local A2_DESIGNER_RESET_FIELDS = {
+    "offsetX", "offsetY", "spacing",
+    "buffGroupOffsetX", "buffGroupOffsetY",
+    "debuffGroupOffsetX", "debuffGroupOffsetY",
+    "privateOffsetX", "privateOffsetY",
+    "reminderOffsetX", "reminderOffsetY",
+    "buffGroupIconSize", "debuffGroupIconSize", "privateSize",
+    "reminderIconSize",
+    "stackTextSize", "stackTextOffsetX", "stackTextOffsetY",
+    "cooldownTextSize", "cooldownTextOffsetX", "cooldownTextOffsetY",
+    "reminderSpacing", "reminderGrowth",
+}
+local A2_DESIGNER_RESET_DEFAULTS = {
+    offsetX = 0, offsetY = 6,
+    spacing = 2,
+    reminderOffsetX = 0, reminderOffsetY = 0,
+    reminderIconSize = 22,
+    stackTextSize = 14,
+    cooldownTextSize = 14,
+    reminderSpacing = 2, reminderGrowth = "RIGHT",
+}
+GetOverrideLayoutForEditing = function()
+    local key = GetEditingKey()
+    if key == "shared" then return false end
+    local a2 = select(1, GetAuras2DB())
+    if not a2 or not a2.perUnit or not a2.perUnit[key] then return false end
+    return (a2.perUnit[key].overrideLayout == true)
+end
+SetOverrideLayoutForEditing = function(v)
+    local key = GetEditingKey()
+    if key == "shared" then return end
+    local a2, shared = GetAuras2DB()
+    if not a2 or not shared then return end
+    a2.perUnit = (type(a2.perUnit) == "table") and a2.perUnit or {}
+    if type(a2.perUnit[key]) ~= "table" then a2.perUnit[key] = {} end
+    local u = a2.perUnit[key]
+    if v == true then
+        u.overrideLayout = true
+        if type(u.layout) ~= "table" then u.layout = {} end
+        for i = 1, #A2_LAYOUT_SHARED_FIELDS do
+            local field = A2_LAYOUT_SHARED_FIELDS[i]
+            if u.layout[field] == nil and shared[field] ~= nil then
+                u.layout[field] = shared[field]
+            end
+        end
+    else
+        u.overrideLayout = false
+    end
+    A2_RequestApply()
+    C_Timer.After(0, function()
+        if panel and panel.OnRefresh then panel.OnRefresh() end
+    end)
+end
+local function A2_GetLayoutValue(key, fallback)
+    local a2, shared = GetAuras2DB()
+    if not shared then return fallback end
+    local editKey = GetEditingKey()
+    if editKey ~= "shared" and a2 and a2.perUnit then
+        local u = a2.perUnit[editKey]
+        if u and u.overrideLayout == true and type(u.layout) == "table" then
+            local v = u.layout[key]
+            if v ~= nil then return v end
+        end
+    end
+    local v = shared[key]
+    if v ~= nil then return v end
+    return fallback
+end
+local function A2_SetLayoutValue(key, value)
+    local a2, shared = GetAuras2DB()
+    if not a2 or not shared then return end
+    local editKey = GetEditingKey()
+    if editKey ~= "shared" then
+        if not GetOverrideLayoutForEditing() then
+            SetOverrideLayoutForEditing(true)
+        end
+        a2.perUnit = (type(a2.perUnit) == "table") and a2.perUnit or {}
+        if type(a2.perUnit[editKey]) ~= "table" then a2.perUnit[editKey] = {} end
+        local u = a2.perUnit[editKey]
+        u.overrideLayout = true
+        u.layout = (type(u.layout) == "table") and u.layout or {}
+        u.layout[key] = value
+    else
+        shared[key] = value
+    end
+    local api = ns and ns.MSUF_Auras2
+    local rm = api and api.Reminder
+    if rm and (key == "reminderOffsetX" or key == "reminderOffsetY" or key == "reminderIconSize" or key == "reminderSpacing" or key == "reminderGrowth") then
+        if rm.MarkDirty then rm.MarkDirty() end
+    end
+    A2_RequestApply()
+    C_Timer.After(0, function()
+        if panel and panel.__msufA2_RefreshDesignerPreview then
+            panel.__msufA2_RefreshDesignerPreview()
+        end
+    end)
 end
 local function A2_SetReminderGrowthValue(v)
     local a2, shared = GetAuras2DB()
@@ -1163,7 +1275,7 @@ local function BuildBoolPathCheckboxes(parent, entries, out)
 local function A2_EnsureTrackTables()
     if not panel then  return nil end
     if not panel.__msufA2_tracked then
-        panel.__msufA2_tracked = { global = {}, filters = {}, caps = {} }
+        panel.__msufA2_tracked = { global = {}, filters = {}, caps = {}, layout = {} }
     end
     return panel.__msufA2_tracked
 end
@@ -1221,6 +1333,7 @@ local function A2_RestoreAllScopes()
     A2_ApplyScopeState("global", true)
     A2_ApplyScopeState("filters", true)
     A2_ApplyScopeState("caps", true)
+    A2_ApplyScopeState("layout", true)
  end
 local function A2_ShowOverrideWarn(msg, holdSeconds)
     if not panel then  return end
@@ -1260,6 +1373,16 @@ local function A2_AutoOverrideCapsIfNeeded()
     A2_ShowOverrideWarn("Caps override enabled for this unit.")
      return true
 end
+local function A2_AutoOverrideLayoutIfNeeded()
+    if GetEditingKey() == "shared" then return false end
+    if GetOverrideLayoutForEditing and GetOverrideLayoutForEditing() then return false end
+    if SetOverrideLayoutForEditing then
+        SetOverrideLayoutForEditing(true)
+        A2_ShowOverrideWarn("Frame designer override enabled for this unit.")
+        return true
+    end
+    return false
+end
 local function A2_WrapCheckboxAutoOverride(cb, scope)
     if not cb or type(cb.GetScript) ~= "function" then  return end
     local old = cb:GetScript("OnClick")
@@ -1268,6 +1391,8 @@ local function A2_WrapCheckboxAutoOverride(cb, scope)
             A2_AutoOverrideFiltersIfNeeded()
         elseif scope == "caps" then
             A2_AutoOverrideCapsIfNeeded()
+        elseif scope == "layout" then
+            A2_AutoOverrideLayoutIfNeeded()
         end
         if old then return old(self, ...) end
      end)
@@ -1627,7 +1752,7 @@ do
         boss1 = "Boss 1", boss2 = "Boss 2", boss3 = "Boss 3", boss4 = "Boss 4", boss5 = "Boss 5",
     }
     local function GetUnitOverrideState(key)
-        if key == "shared" then return false, false end
+        if key == "shared" then return false, false, false end
         local a2 = select(1, GetAuras2DB())
         local u = a2 and a2.perUnit and a2.perUnit[key]
         local overrideFilters = (type(u) == "table" and u.overrideFilters == true) and true or false
@@ -1640,10 +1765,12 @@ do
     end
     local function GetUnitOverrideTooltip(key)
         local overrideFilters, overrideCaps = GetUnitOverrideState(key)
-        if overrideFilters and overrideCaps then return "Override active: this unit uses its own Filters and Caps." end
-        if overrideFilters then return "Override active: this unit uses its own Filters." end
-        if overrideCaps then return "Override active: this unit uses its own Caps." end
-        return "Uses Shared filters and caps."
+        local parts = {}
+        if overrideFilters then parts[#parts + 1] = "Filters" end
+        if overrideCaps then parts[#parts + 1] = "Caps" end
+        if #parts == 0 then return "Uses Shared filters and caps." end
+        if #parts == 1 then return "Override active: this unit uses its own " .. parts[1] .. "." end
+        return "Override active: this unit uses its own " .. table.concat(parts, ", ") .. "."
     end
     local scopeBtns = {}
     local function RefreshScopeButtons()
@@ -1839,6 +1966,8 @@ do
                 u.filters = nil -- revert to Shared
                 u.overrideSharedLayout = false
                 u.layoutShared = nil -- revert to Shared
+                u.overrideLayout = false
+                u.layout = nil -- revert to Shared designer
             end
         end
         A2_RequestApply()
@@ -1896,6 +2025,26 @@ end
     CreateBoolToggleButtonPath(leftTop, "Target", 108, -120, 90, 22, A2_DB, "showTarget", nil, nil, A2_RequestApply)
     CreateBoolToggleButtonPath(leftTop, "Focus", 204, -120, 90, 22, A2_DB, "showFocus", nil, nil, A2_RequestApply)
     CreateBoolToggleButtonPath(leftTop, "Boss 1-5", 300, -120, 96, 22, A2_DB, "showBoss", nil, nil, A2_RequestApply)
+
+    -- ================================================================
+    -- GROUP AURA DESIGNER NOTE
+    -- ================================================================
+    do
+        local noteTitle = designerBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        noteTitle:SetPoint("TOPLEFT", designerBox, "TOPLEFT", 12, -10)
+        noteTitle:SetText(TR("Group aura groups moved"))
+
+        local noteText = designerBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        noteText:SetPoint("TOPLEFT", noteTitle, "BOTTOMLEFT", 0, -6)
+        noteText:SetWidth(680)
+        noteText:SetJustifyH("LEFT")
+        noteText:SetText(TR("The aura designer is group-frame only. Configure party/raid aura groups in the Party Frames / Raid Frames menus, where spell groups can be edited specifically for group frame behavior (similar to VuhDo/Grid2 style grouping)."))
+
+        panel.__msufA2_RefreshDesignerPreview = function() end
+        panel.__msufA2_UpdateDesignerUnitState = function() end
+        if _G then _G.MSUF_A2_UpdateDesignerUnitState = panel.__msufA2_UpdateDesignerUnitState end
+    end
+
     -- ================================================================
     -- DISPLAY (grouped: Buffs/Debuffs columns + Icons/Cooldown/Borders columns)
     -- ================================================================
@@ -2984,6 +3133,9 @@ end
         if panel and panel.__msufA2_UpdateOverrideSummary then
             panel.__msufA2_UpdateOverrideSummary()
         end
+        -- Sync aura designer state (editing key + player-only widgets).
+        local fnDesigner = rawget(_G, "MSUF_A2_UpdateDesignerUnitState")
+        if type(fnDesigner) == "function" then pcall(fnDesigner) end
         -- Sync ignore list box state (editing key + override gating)
         local fn = rawget(_G, "MSUF_A2_UpdateIgnoreBoxState")
         if type(fn) == "function" then pcall(fn) end
