@@ -1961,6 +1961,7 @@ local function MSUF_EnsureColorsPanelBuilt() return MSUF_EnsureSubOptionsPanelBu
 local function MSUF_EnsureAuras2PanelBuilt() return MSUF_EnsureSubOptionsPanelBuilt("auras2") end
 local function MSUF_EnsureGameplayPanelBuilt() return MSUF_EnsureSubOptionsPanelBuilt("gameplay") end
 local function MSUF_EnsurePortraitsPanelBuilt() return MSUF_EnsureSubOptionsPanelBuilt("portraits") end
+local function MSUF_EnsureGroupOptionsPanelBuilt() if type(_G.MSUF_EnsureGroupOptionsPanelBuilt)=="function" then return _G.MSUF_EnsureGroupOptionsPanelBuilt() end return nil end
 local function MSUF_EnsureModulesPanelBuilt() if _G.MSUF_ModulesMirrorPanel and _G.MSUF_ModulesMirrorPanel.__MSUF_ModulesBuilt then return _G.MSUF_ModulesMirrorPanel end
 local p=CreateFrame("Frame","MSUF_ModulesMirrorPanel",UIParent)
 _G.MSUF_ModulesMirrorPanel=p p.__MSUF_ModulesBuilt=true p.__MSUF_MirrorNoRestoreShow=true p:SetPoint("TOPLEFT",0,0)
@@ -2071,6 +2072,8 @@ local MIRROR_PAGES={home={title="Midnight Simple Unitframes (Version 1.9b3)",nav
 },uf_focus={title="MSUF Focus",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("focus") end
 },uf_boss={title="MSUF Boss Frames",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("boss") end
 },uf_pet={title="MSUF Pet",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("pet") end
+},uf_group_party={title="MSUF Party Frames",build=MSUF_EnsureGroupOptionsPanelBuilt,select=function() if type(_G.MSUF_SelectGroupOptionsScope)=="function" then _G.MSUF_SelectGroupOptionsScope("party") end end
+},uf_group_raid={title="MSUF Raid Frames",build=MSUF_EnsureGroupOptionsPanelBuilt,select=function() if type(_G.MSUF_SelectGroupOptionsScope)=="function" then _G.MSUF_SelectGroupOptionsScope("raid") end end
 },opt_bars={title="MSUF Bars",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("bars") end
 },opt_fonts={title="MSUF Fonts",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("fonts") end
 },opt_auras={title="MSUF Auras",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("auras") end
@@ -2475,7 +2478,7 @@ navParent._msufNavStripe=stripe end
 local function MakeButton(label,w,onClick,isHeader,isChild) local b=UI_Button(navParent,tostring(label or""),w,btnH,"TOPLEFT",navParent,"TOPLEFT",0,0,onClick)
 MSUF_LeftJustifyButtonText(b,isHeader and 18 or(isChild and 22 or 24))
 MSUF_SkinNavButton(b,isHeader,isChild) return b end
-local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_portraits",label="Portraits"},{key="opt_colors",label="Colors"},{key="opt_misc",label="Miscellaneous"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
+local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},{key="uf_group_party",label="Party Frames"},{key="uf_group_raid",label="Raid Frames"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_portraits",label="Portraits"},{key="opt_colors",label="Colors"},{key="opt_misc",label="Miscellaneous"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
 local headerLabels={}
 for _,node in ipairs(NAV)
 do if node.type=="header"then headerLabels[node.id]=node.label end

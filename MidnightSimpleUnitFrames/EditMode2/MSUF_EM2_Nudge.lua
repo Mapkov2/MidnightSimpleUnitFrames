@@ -35,6 +35,40 @@ local function GetCastbarOffsetKeys(unit)
     return prefix .. "OffsetX", prefix .. "OffsetY"
 end
 
+local function NudgeGroup(scope, ndx, ndy)
+    local db = _G.MSUF_DB
+    local g = db and db.group
+    local conf = g and g[scope]
+    if not conf then return false end
+    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+        _G.MSUF_EM_UndoBeforeChange("group", scope, true)
+    end
+    local getFn = _G.MSUF_Group_GetOffsets
+    local setFn = _G.MSUF_Group_SetOffsets
+    local defaultY = (scope == "raid") and -400 or -200
+    local x, y
+    if type(getFn) == "function" then
+        x, y = getFn(conf, defaultY)
+    else
+        local anchor = conf.anchor or { "TOPLEFT", nil, "TOPLEFT", 20, defaultY }
+        x = tonumber(conf.offsetX) or tonumber(anchor[4]) or 0
+        y = tonumber(conf.offsetY) or tonumber(anchor[5]) or 0
+    end
+    x = floor((x + ndx) + 0.5)
+    y = floor((y + ndy) + 0.5)
+    if type(setFn) == "function" then setFn(conf, x, y, defaultY)
+    else
+        conf.offsetX, conf.offsetY = x, y
+        conf.anchor = conf.anchor or { "TOPLEFT", nil, "TOPLEFT", x, y }
+        conf.anchor[4], conf.anchor[5] = x, y
+    end
+    if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
+    if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
+    if EM2.GroupPopup and EM2.GroupPopup.IsOpen() then EM2.GroupPopup.Sync() end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    return true
+end
+
 local function NudgeTarget(dx, dy)
     if not EM2.State or not EM2.State.IsActive() then return end
     if InCombatLockdown and InCombatLockdown() then return end
@@ -125,8 +159,19 @@ local function NudgeTarget(dx, dy)
         return
     end
 
-    -- Priority 3: current unit frame
+    -- Priority 3: group popup / group mover selection
+    if EM2.GroupPopup and EM2.GroupPopup.IsOpen() then
+        local groupPF = _G.MSUF_EM2_GroupPopup
+        local scope = groupPF and groupPF.scope
+        if scope and NudgeGroup(scope, ndx, ndy) then return end
+    end
+
     local key = EM2.State.GetUnitKey() or "player"
+    if key == "group_party" or key == "group_raid" then
+        if NudgeGroup(key == "group_raid" and "raid" or "party", ndx, ndy) then return end
+    end
+
+    -- Priority 4: current unit frame
     local conf = db[key]
     if not conf then return end
     if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
