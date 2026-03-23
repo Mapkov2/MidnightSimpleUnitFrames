@@ -858,6 +858,7 @@ do
         ResolveMWAbove5Color = ResolveMWAbove5Color,
         CP_CheckAutoHide = CP_CheckAutoHide,
         WW = WW,
+        TIP = TIP,
         GetFilledAlpha = function() return _filledAlpha end,
         GetEmptyAlpha = function() return _emptyAlpha end,
         GetChargedMap = function() return _chargedMap end,

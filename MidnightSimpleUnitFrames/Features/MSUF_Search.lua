@@ -578,7 +578,7 @@ local INDEX = {
       keywords={"reserved space","reserved left","reserved unused","front mask","name reserved space"} },
     { label="Name Shortening section",
       hint="Fonts › Name Shortening", pageKey="opt_fonts",
-      keywords={"name shortening","shorten names","name abbreviation","name shortening section"} },
+      keywords={"name shortening","shorten names","name abbreviation","name shortening section","name display"} },
     { label="Font color presets: White / Black / Red / Green / Blue / Yellow / Cyan / Magenta / Orange / Purple / Pink / Turquoise / Grey / Brown / Gold",
       hint="Fonts", pageKey="opt_fonts",
       keywords={"font color","text color","colour","white","black","red","green","blue","yellow","cyan","magenta","orange","purple","pink","turquoise","grey","gray","brown","gold","schrift farbe","text colour","font palette","font color preset"} },

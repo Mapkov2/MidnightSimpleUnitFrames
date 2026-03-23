@@ -186,7 +186,7 @@ local function ResolveBorderColor(conf, unit)
         return 1, 1, 1, 1
     end
     if style == "REACTION" then
-        local reaction = UnitReaction and UnitReaction(unit, "player")
+        local reaction = tonumber(UnitReaction and UnitReaction(unit, "player"))
         if reaction then
             if reaction <= 2 then return 1, 0, 0, 1 end
             if reaction <= 4 then return 1, 0.6, 0, 1 end

@@ -305,9 +305,8 @@ local function _MSUF_GetClassificationState(unit)
     if c == "worldboss" then
          return "BOSS"
     end
-    -- Boss fallback: level -1 (common for bosses / many dungeon bosses)
-    local lvl = UnitLevel and UnitLevel(unit) or nil
-    if lvl == -1 then
+    local n = UnitLevel and tonumber(UnitLevel(unit)) or nil
+    if n == -1 then
          return "BOSS"
     end
     if c == "rareelite" then  return "RAREELITE" end

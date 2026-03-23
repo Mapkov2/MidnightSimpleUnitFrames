@@ -568,14 +568,34 @@ local function PrivateAurasSupported()
         and type(C_UnitAuras.RemovePrivateAuraAnchor) == "function"
 end
 
+local _pendingRemoveIDs
+
+local function _FlushPendingRemoveIDs()
+    local ids = _pendingRemoveIDs
+    if not ids then return end
+    _pendingRemoveIDs = nil
+    local removeFn = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnchor
+    if not removeFn then return end
+    for i = 1, #ids do
+        if ids[i] then removeFn(ids[i]) end
+    end
+end
+
 local function PrivateClear(entry)
     if not entry then return end
     local ids = entry._privateAnchorIDs
     if type(ids) == "table" and C_UnitAuras then
         local removeFn = C_UnitAuras.RemovePrivateAuraAnchor
         if removeFn then
-            for i = 1, #ids do
-                if ids[i] then removeFn(ids[i]) end
+            if _inCombat then
+                if not _pendingRemoveIDs then _pendingRemoveIDs = {} end
+                for i = 1, #ids do
+                    if ids[i] then _pendingRemoveIDs[#_pendingRemoveIDs + 1] = ids[i] end
+                end
+            else
+                for i = 1, #ids do
+                    if ids[i] then removeFn(ids[i]) end
+                end
             end
         end
     end
@@ -586,6 +606,7 @@ local function PrivateClear(entry)
     entry._privSpacing = nil
     entry._privMax = nil
     entry._privGrowth = nil
+    entry._privBorderScale = nil
     entry._privNormalizeQueued = nil
     local slots = entry._privateSlots
     if type(slots) == "table" then
@@ -614,8 +635,6 @@ local function NormalizePrivateSlot(slot, privateIconSize)
         slot:SetSize(privateIconSize, privateIconSize)
     end
 
-    if slot.SetClipsChildren then slot:SetClipsChildren(true) end
-    if slot.SetClipsParents then slot:SetClipsParents(true) end
     slot._msufPrivSize = privateIconSize
 
     local child = select(1, slot:GetChildren())
@@ -627,16 +646,6 @@ local function NormalizePrivateSlot(slot, privateIconSize)
             child.Icon:ClearAllPoints()
             child.Icon:SetAllPoints(child)
             PrivateRelaxTexSnap(child.Icon)
-        end
-        if child.Border then
-            child.Border:ClearAllPoints()
-            child.Border:SetAllPoints(child)
-            PrivateRelaxTexSnap(child.Border)
-        end
-        if child.IconBorder then
-            child.IconBorder:ClearAllPoints()
-            child.IconBorder:SetAllPoints(child)
-            PrivateRelaxTexSnap(child.IconBorder)
         end
         if child.Cooldown then
             child.Cooldown:ClearAllPoints()
@@ -693,6 +702,9 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
     -- unit is always "player" here (focus/boss removed in 12.0.1)
     local effectiveToken = "player"
 
+    local borderScale = tonumber(shared.privateAuraBorderScale)
+    if not borderScale or borderScale < 0 then borderScale = privateIconSize / 10 end
+
     -- Resolve growth direction
     privateGrowth = (privateGrowth and A2_GROWTH_OK[privateGrowth]) and privateGrowth or "RIGHT"
     local vertical = (privateGrowth == "UP" or privateGrowth == "DOWN")
@@ -704,6 +716,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
        and entry._privSpacing == spacing
        and entry._privMax == maxN
        and entry._privGrowth == privateGrowth
+       and entry._privBorderScale == borderScale
        and type(entry._privateAnchorIDs) == "table"
     then
         if entry.private then entry.private:Show() end
@@ -721,6 +734,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
     entry._privSpacing = spacing
     entry._privMax = maxN
     entry._privGrowth = privateGrowth
+    entry._privBorderScale = borderScale
 
     local slots = entry._privateSlots or {}
     entry._privateSlots = slots
@@ -766,6 +780,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
             iconInfo = {
                 iconWidth = privateIconSize,
                 iconHeight = privateIconSize,
+                borderScale = borderScale,
                 iconAnchor = {
                     point = "CENTER", relativeTo = nil, relativePoint = "CENTER",
                     offsetX = 0, offsetY = 0,
@@ -781,8 +796,6 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
             slot = CreateFrame("Frame", nil, entry.private)
             slot:SetFrameStrata("MEDIUM")
             slot:SetFrameLevel(60)
-            if slot.SetClipsChildren then slot:SetClipsChildren(true) end
-            if slot.SetClipsParents then slot:SetClipsParents(true) end
             if not slot._msufPrivSizeHook then
                 slot._msufPrivSizeHook = true
                 slot:HookScript("OnSizeChanged", function(self)
@@ -805,6 +818,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
         args.showCountdownNumbers = (shared.showCooldownText == true)
         args.iconInfo.iconWidth = privateIconSize
         args.iconInfo.iconHeight = privateIconSize
+        args.iconInfo.borderScale = borderScale
         args.iconInfo.iconAnchor.relativeTo = slot
 
         local ok, anchorID = true, C_UnitAuras.AddPrivateAuraAnchor(args)
@@ -1507,6 +1521,7 @@ end
 -- because _lastPrivateGen was reset.
 -- ---------------------------------------------------------------------------
 API._OnCombatLeave = function()
+    _FlushPendingRemoveIDs()
     for _, entry in pairs(AurasByUnit) do
         if entry then
             PrivateClear(entry)

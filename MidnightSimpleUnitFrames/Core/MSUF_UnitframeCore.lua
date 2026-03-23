@@ -624,8 +624,11 @@ local function _RefreshUnitIdentityCache(frame)
     if not frame._msufCachedIsPlayer then
         if UnitIsDeadOrGhost(unit) then
             frame._msufCachedReactionKind = "dead"
+        elseif frame._msufBossIndex then
+            frame._msufCachedReactionKind = "enemy"
         else
-            local r = UnitReaction and UnitReaction("player", unit) or nil
+            local raw = UnitReaction and UnitReaction("player", unit) or nil
+            local r = tonumber(raw)
             if r then
                 if r >= 5 then
                     frame._msufCachedReactionKind = "friendly"
@@ -711,11 +714,12 @@ local function UFCore_UpdateIdentityFast(frame, conf)
             showLevel = exists and true or false
         end
         if showLevel then
-            local lvl = UnitLevel(unit) or 0
-            if not lvl or lvl <= 0 then
+            local lvl = UnitLevel(unit)
+            local n = tonumber(lvl)
+            if not n or n <= 0 then
                 _SetText(frame.levelText, "??")
             else
-                _SetText(frame.levelText, tostring(lvl))
+                _SetText(frame.levelText, tostring(n))
             end
         else
             _SetText(frame.levelText, "")
@@ -841,6 +845,11 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
     -- Only dynamic "class" frames need identity invalidation here.
     -- Dark/unified modes and static class-colored frames (player, pet override) never
     -- change color from UNIT_FACTION / UNIT_FLAGS during combat.
+    -- Exception: pet/NPC alive↔dead transitions fire UNIT_FLAGS and must always
+    -- refresh the reaction cache so the bar stops showing "dead" grey.
+    if frame._msufHealthColorDirty and not frame._msufCachedIsPlayer then
+        frame._msufCachedReactionKind = nil
+    end
     if (cache and cache.barMode == "class") and not frame._msufStaticHealthColor then
         frame._msufCachedIsPlayer = nil
     end
@@ -1375,7 +1384,7 @@ function UFCore_UpdateToTInline(f)
                 if UnitIsDeadOrGhost and UnitIsDeadOrGhost("targettarget") then
                     r, g, b = UFCore_GetNPCReactionColorFast("dead")
                 else
-                    local reaction = UnitReaction and UnitReaction("player", "targettarget")
+                    local reaction = tonumber(UnitReaction and UnitReaction("player", "targettarget"))
                     if reaction then
                         if reaction >= 5 then
                             r, g, b = UFCore_GetNPCReactionColorFast("friendly")
@@ -3114,6 +3123,7 @@ Global:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
 Global:RegisterEvent("GROUP_ROSTER_UPDATE")
 Global:RegisterEvent("PARTY_LEADER_CHANGED")
 Global:RegisterEvent("RAID_TARGET_UPDATE")
+Global:RegisterEvent("UNIT_PET")
 
 local function MarkUnit(unit, mask, urgent, reason)
     local f = FramesByUnit[unit]
@@ -3326,6 +3336,17 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         DirectIndicatorUnit("target")
         DirectIndicatorUnit("focus")
         DirectIndicatorUnit("targettarget")
+        return
+    end
+
+    if event == "UNIT_PET" then
+        local pf = FramesByUnit["pet"]
+        if pf then
+            pf._msufCachedReactionKind = nil
+            pf._msufCachedIsPlayer = nil
+            pf._msufHealthColorDirty = true
+            Core.MarkDirty(pf, MASK_UNIT_SWAP, true, "UNIT_PET")
+        end
         return
     end
 end)

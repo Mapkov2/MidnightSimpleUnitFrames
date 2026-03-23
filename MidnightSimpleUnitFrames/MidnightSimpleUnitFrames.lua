@@ -39,6 +39,21 @@ local CreateFrame, GetTime = CreateFrame, GetTime
 -- P0: issecretvalue upvalue for event handlers (secret-safe unit filtering)
 local _MSUF_issecretvalue = _G.issecretvalue
 local _msuf_inCombat = false        -- P0: cached combat state (no C-call in hot paths)
+-- P0: Snapshot PowerBarColor at load time. Blizzard mutates entries during
+-- gameplay (Eclipse changes LUNAR_POWER color). MSUF reads the frozen snapshot
+-- so the power bar color stays stable. User overrides (Colors panel) checked first.
+do
+    local snap = {}
+    local pbc = PowerBarColor
+    if pbc then
+        for k, v in pairs(pbc) do
+            if type(v) == "table" and type(v.r) == "number" then
+                snap[k] = { r = v.r, g = v.g, b = v.b }
+            end
+        end
+    end
+    ns._PBCSnap = snap
+end
 -- P0: Single event frame maintains _msuf_inCombat + _G.MSUF_InCombat.
 -- All modules read _G.MSUF_InCombat instead of calling InCombatLockdown() in event handlers.
 -- Only ONE InCombatLockdown() C-call total: the sync on PLAYER_ENTERING_WORLD.
@@ -551,8 +566,19 @@ function ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
     if not bar then  return end
     local pr, pg, pb = MSUF_GetPowerBarColor(pType, pTok)
     if not pr then
-        local colPB = PowerBarColor[pType] or { r = 0.8, g = 0.8, b = 0.8 }
+        local snap = ns._PBCSnap
+        local colPB = (pTok and snap[pTok]) or snap[pType]
+        if not colPB then
+            colPB = PowerBarColor[pType] or { r = 0.8, g = 0.8, b = 0.8 }
+        end
         pr, pg, pb = colPB.r, colPB.g, colPB.b
+    end
+    local s = bar._msufPwrCS
+    if s then
+        if s[1] == pr and s[2] == pg and s[3] == pb then return end
+        s[1], s[2], s[3] = pr, pg, pb
+    else
+        bar._msufPwrCS = { pr, pg, pb }
     end
     bar:SetStatusBarColor(pr, pg, pb)
     ns.Bars.ApplyPowerGradientOnce(frame)
@@ -1036,12 +1062,13 @@ local MSUF_SMOOTH_INTERPOLATION = (type(Enum) == "table"
 -- This avoids secret-compare crashes entirely and removes tostring/tonumber churn from hotpaths.
 function MSUF_SetBarValue(bar, value, smooth)
     if not bar or value == nil then  return end
-    if type(value) == "string" then
-        local n = tonumber(value)
-        if type(n) ~= "number" then
-             return
-    end
-        value = n
+    local isv = _MSUF_issecretvalue
+    if not (isv and isv(value)) then
+        if type(value) == "string" then
+            local n = tonumber(value)
+            if type(n) ~= "number" then return end
+            value = n
+        end
     end
     if smooth and MSUF_SMOOTH_INTERPOLATION then
         bar:SetValue(value, MSUF_SMOOTH_INTERPOLATION)
@@ -1053,16 +1080,17 @@ function MSUF_SetBarMinMax(bar, minValue, maxValue)
     if not bar or minValue == nil or maxValue == nil then
          return
     end
-    if type(minValue) == "string" then
-        minValue = tonumber(minValue)
+    local isv = _MSUF_issecretvalue
+    local minSecret = isv and isv(minValue)
+    local maxSecret = isv and isv(maxValue)
+    if not minSecret then
+        if type(minValue) == "string" then minValue = tonumber(minValue) end
     end
-    if type(maxValue) == "string" then
-        maxValue = tonumber(maxValue)
+    if not maxSecret then
+        if type(maxValue) == "string" then maxValue = tonumber(maxValue) end
     end
-    if type(minValue) ~= "number" or type(maxValue) ~= "number" then
-         return
-    end
-    -- No caching/compare here either (secret-safe, no MSUF_FastCall).
+    if not minSecret and type(minValue) ~= "number" then return end
+    if not maxSecret and type(maxValue) ~= "number" then return end
     bar:SetMinMaxValues(minValue, maxValue)
  end
 MSUF_UnitEditModeActive = (MSUF_UnitEditModeActive == true)
@@ -1252,6 +1280,15 @@ local function MSUF_GetResolvedPowerColor(powerType, powerToken)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then
              return r, g, b
     end
+    end
+    local snap = ns._PBCSnap
+    if type(powerToken) == "string" and snap[powerToken] then
+        local c = snap[powerToken]
+        return c.r, c.g, c.b
+    end
+    if type(powerType) == "number" and snap[powerType] then
+        local c = snap[powerType]
+        return c.r, c.g, c.b
     end
     local pbc = _G.PowerBarColor
     if type(powerToken) == "string" and pbc and pbc[powerToken] then
@@ -2908,7 +2945,7 @@ function MSUF_ClampNameWidth(f, conf)
         f.nameText:SetNonSpaceWrap(false)
     end
     local shorten = (MSUF_DB and MSUF_DB.shortenNames) and true or false
-    local unitKey = f and (f.unitKey or f.unit or f.msufConfigKey)
+    local unitKey = f and (f.msufConfigKey or f._msufConfigKey or f.unitKey or f.unit)
     -- Per-unit font override: allow per-unit shorten toggle
     local _fontConf = unitKey and MSUF_DB and MSUF_DB[unitKey]
     if _fontConf and _fontConf.fontOverride and _fontConf.shortenNames ~= nil then
@@ -3232,14 +3269,11 @@ function MSUF_ClampNameWidth(f, conf)
 local function MSUF_GetUnitLevelText(unit)
     if not unit or not UnitLevel then  return "" end
     local lvl = UnitLevel(unit)
-    if not lvl then  return "" end
-    if lvl == -1 then
-         return "??"
-    end
-    if lvl <= 0 then
-         return ""
-    end
-    return tostring(lvl)
+    local n = tonumber(lvl)
+    if not n then return "" end
+    if n == -1 then return "??" end
+    if n <= 0 then return "" end
+    return tostring(n)
 end
 -- Export for legacy paths (some earlier helpers reference this as a global).
 -- Keeping this avoids blank/missing level text when a legacy full update runs.
@@ -3258,6 +3292,13 @@ end
 -- PERF: Cache abbreviation function at file scope (called 70-350x/sec).
 local _MSUF_AbbrNumFn = _G.ShortenNumber or _G.AbbreviateNumbers or _G.AbbreviateLargeNumbers
 local function MSUF_NumberToTextFast(v)
+    if v == nil then return nil end
+    local isv = _MSUF_issecretvalue
+    if isv and isv(v) then
+        local abbr = _MSUF_AbbrNumFn
+        if abbr then return abbr(v) end
+        return nil
+    end
     if type(v) ~= "number" then
          return nil
     end

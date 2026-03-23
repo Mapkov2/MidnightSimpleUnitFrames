@@ -644,9 +644,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     })
 
     -- =====================================================================
-    -- SECTION 5: Name Display (scope-aware, default collapsed)
+    -- SECTION 5: Name Shortening (scope-aware, default collapsed)
     -- =====================================================================
-    local nameBox, nameBody = MakeCollapsibleBox(content, colorsBox, CONTENT_W, 280, TR("Name Display"), false)
+    local nameBox, nameBody = MakeCollapsibleBox(content, colorsBox, CONTENT_W, 280, TR("Name Shortening"), false)
 
     local shortenMaxSlider, shortenMaskSlider, shortenClipDrop
 
@@ -798,7 +798,19 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         local dimAlpha = scopeDim and 0.40 or 1.0
         styleBox:SetAlpha(dimAlpha)
         colorsBox:SetAlpha(dimAlpha)
-        nameBox:SetAlpha(dimAlpha)
+
+        local isPlayer = (GetScopeKey() == "player")
+        if isPlayer then
+            nameBox:SetAlpha(0)
+            nameBox:SetHeight(1)
+            nameBox._msufHiddenForPlayer = true
+        else
+            if nameBox._msufHiddenForPlayer then
+                nameBox._msufHiddenForPlayer = nil
+                nameBox:SetHeight(280)
+            end
+            nameBox:SetAlpha(dimAlpha)
+        end
 
         if boldCheck and boldCheck.Refresh then boldCheck:Refresh() end
         if noOutlineCheck and noOutlineCheck.Refresh then noOutlineCheck:Refresh() end
