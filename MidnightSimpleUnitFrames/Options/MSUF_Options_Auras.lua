@@ -855,7 +855,11 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     -- Display + Layout are collapsible for a cleaner menu, but stay open by default.
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
     local designerOuter, designerBody = MakeCollapsibleBox(content, leftTop, 720, 468, "Frames • Aura Designer", true)
+=======
+    local designerOuter, designerBody = MakeCollapsibleBox(content, leftTop, 720, 110, "Group Aura Designer", false)
+>>>>>>> theirs
 =======
     local designerOuter, designerBody = MakeCollapsibleBox(content, leftTop, 720, 110, "Group Aura Designer", false)
 >>>>>>> theirs
@@ -1790,6 +1794,9 @@ do
         if overrideCaps then parts[#parts + 1] = "Caps" end
         if #parts == 0 then return "Uses Shared filters and caps." end
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -2055,6 +2062,7 @@ end
     CreateBoolToggleButtonPath(leftTop, "Boss 1-5", 300, -120, 96, 22, A2_DB, "showBoss", nil, nil, A2_RequestApply)
 
     -- ================================================================
+<<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
     -- FRAMES • AURA DESIGNER
@@ -2371,6 +2379,8 @@ end
 =======
 =======
 >>>>>>> theirs
+=======
+>>>>>>> theirs
     -- GROUP AURA DESIGNER NOTE
     -- ================================================================
     do
@@ -2388,6 +2398,9 @@ end
         panel.__msufA2_UpdateDesignerUnitState = function() end
         if _G then _G.MSUF_A2_UpdateDesignerUnitState = panel.__msufA2_UpdateDesignerUnitState end
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs

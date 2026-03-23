@@ -3,6 +3,7 @@ ns = ns or {}
 
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
 <<<<<<< HEAD
 local type = type
 local wipe = wipe
@@ -15,11 +16,14 @@ local InCombatLockdown = InCombatLockdown
 >>>>>>> theirs
 =======
 >>>>>>> theirs
+=======
+>>>>>>> theirs
 local function Shared()
     local db = _G.MSUF_DB and _G.MSUF_DB.group and _G.MSUF_DB.group.shared
     return db or {}
 end
 
+<<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< HEAD
@@ -78,6 +82,8 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
 =======
 =======
 >>>>>>> theirs
+=======
+>>>>>>> theirs
 local function ClearAnchors(frame)
     if not frame or not frame._privateAnchors or not C_UnitAuras or not C_UnitAuras.RemovePrivateAuraAnchor then return end
     for i = 1, #frame._privateAnchors do
@@ -101,6 +107,9 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
     frame._privateAnchors = frame._privateAnchors or {}
     local container = frame.privateAuraContainer
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -111,7 +120,10 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
     end
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
 
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
 =======
@@ -121,6 +133,7 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
 
     for i = 1, maxSlots do
         local slot = slots[i]
+<<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
         if not slot then
@@ -171,6 +184,8 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
 =======
 =======
 >>>>>>> theirs
+=======
+>>>>>>> theirs
         if not (slot and slot.SetPoint and slot.SetSize) then
             slot = CreateFrame("Frame", nil, container)
             slot:SetSize(18, 18)
@@ -181,6 +196,9 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
         if slot.Show then slot:Show() end
         frame._privateAnchors[i] = C_UnitAuras.AddPrivateAuraAnchor({
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -192,6 +210,7 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
             iconInfo = { iconWidth = 18, iconHeight = 18 },
         })
     end
+<<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< HEAD
@@ -206,6 +225,8 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
 =======
 =======
 >>>>>>> theirs
+=======
+>>>>>>> theirs
 
     for i = maxSlots + 1, #slots do
         local slot = slots[i]
@@ -214,6 +235,9 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
         end
     end
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs

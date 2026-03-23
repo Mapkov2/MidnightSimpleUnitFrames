@@ -130,7 +130,10 @@ end
 
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
 local function CountDesignerSpells(groups)
@@ -148,6 +151,9 @@ local function CountDesignerSpells(groups)
 end
 
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -175,7 +181,10 @@ end
 
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
 local function UpdateDesignerStatus(scope)
@@ -192,6 +201,9 @@ local function UpdateDesignerStatus(scope)
 end
 
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -242,6 +254,10 @@ function _G.MSUF_SelectGroupOptionsScope(scope)
     panel.designerEdit:SetText(DesignerTextForScope(currentScope))
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+=======
+    UpdateDesignerStatus(currentScope)
+>>>>>>> theirs
 =======
     UpdateDesignerStatus(currentScope)
 >>>>>>> theirs
@@ -328,7 +344,11 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     panel = CreateFrame("Frame", "MSUF_GroupOptionsPanel", UIParent)
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
     panel:SetSize(760, 760)
+=======
+    panel:SetSize(760, 840)
+>>>>>>> theirs
 =======
     panel:SetSize(760, 840)
 >>>>>>> theirs
@@ -426,11 +446,14 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
 
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
     MakeLabel(panel, "Aura Designer (Blizzard whitelist groups, 12.0 live via CompactRaidFrame cache)", 20, -630)
     local designerBG = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     designerBG:SetPoint("TOPLEFT", panel, "TOPLEFT", 20, -650)
     designerBG:SetSize(500, 82)
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
     MakeLabel(panel, "Aura Groups / Whitelist (group frames only)", 20, -630)
@@ -443,6 +466,9 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     designerBG:SetPoint("TOPLEFT", panel, "TOPLEFT", 20, -690)
     designerBG:SetSize(500, 128)
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -461,6 +487,7 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     applyBtn:SetSize(120, 24)
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
     applyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -650)
     applyBtn:SetText("Apply")
     applyBtn:SetScript("OnClick", Apply)
@@ -469,6 +496,8 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     copyBtn:SetSize(160, 24)
     copyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -682)
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
     applyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -690)
@@ -488,6 +517,9 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     copyBtn:SetSize(160, 24)
     copyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -754)
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -505,12 +537,15 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     local designerHint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
     designerHint:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -718)
     designerHint:SetWidth(190)
     designerHint:SetJustifyH("LEFT")
     designerHint:SetJustifyV("TOP")
     designerHint:SetText("Format:\nExternal=102342,6940,33206\nHaste=2825,32182,80353")
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
     designerHint:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -790)
@@ -525,6 +560,9 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     panel.designerStatus:SetJustifyH("LEFT")
     panel.designerStatus:SetText("")
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs

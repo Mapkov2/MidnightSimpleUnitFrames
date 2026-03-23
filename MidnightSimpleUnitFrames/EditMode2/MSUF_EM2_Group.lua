@@ -58,9 +58,12 @@ local function Apply()
     if pf.growthDrop and pf._growthValue then conf.growthDirection = pf._growthValue end
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
     if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
     if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
     if type(_G.MSUF_Group_SyncPreview) == "function" then
@@ -70,6 +73,9 @@ local function Apply()
         if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
     end
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
@@ -207,6 +213,10 @@ function _G.MSUF_Group_SyncPreview()
         if ns.Group and ns.Group.ScheduleRosterRebuild then ns.Group.ScheduleRosterRebuild() end
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+=======
+        if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
+>>>>>>> theirs
 =======
         if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
 >>>>>>> theirs

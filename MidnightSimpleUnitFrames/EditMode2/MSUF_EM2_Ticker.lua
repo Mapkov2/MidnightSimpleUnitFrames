@@ -280,9 +280,12 @@ function Ticker.EndDrag()
         if d.isGroup then
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
             if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
             if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
             if type(_G.MSUF_Group_SyncPreview) == "function" then
@@ -292,6 +295,9 @@ function Ticker.EndDrag()
                 if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
             end
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs

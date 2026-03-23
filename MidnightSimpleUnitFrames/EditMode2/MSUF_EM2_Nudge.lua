@@ -64,9 +64,12 @@ local function NudgeGroup(scope, ndx, ndy)
     end
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
     if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
     if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
     if type(_G.MSUF_Group_SyncPreview) == "function" then
@@ -76,6 +79,9 @@ local function NudgeGroup(scope, ndx, ndy)
         if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
     end
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs

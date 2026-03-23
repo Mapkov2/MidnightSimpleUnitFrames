@@ -66,6 +66,7 @@ local function RefreshUnit(unit)
             local r, g, b = 1, 1, 0
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
 <<<<<<< HEAD
             if threat >= 3 then
                 r, g, b = 1, 0.1, 0.1
@@ -75,6 +76,9 @@ local function RefreshUnit(unit)
 =======
             if threat >= 3 then r, g, b = 1, 0.1, 0.1 elseif threat == 2 then r, g, b = 1, 0.45, 0 end end
 >>>>>>> a9840c2c35bdbd4dac6e74093eb8213332edd006
+=======
+            if threat >= 3 then r, g, b = 1, 0.1, 0.1 elseif threat == 2 then r, g, b = 1, 0.45, 0 end end
+>>>>>>> theirs
 =======
             if threat >= 3 then r, g, b = 1, 0.1, 0.1 elseif threat == 2 then r, g, b = 1, 0.45, 0 end end
 >>>>>>> theirs
