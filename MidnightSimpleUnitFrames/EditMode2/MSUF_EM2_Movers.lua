@@ -111,6 +111,12 @@ local function CreateMover(key, cfg)
         self._dragging = true
         self._coordFS:Show()
 
+        if EM2.State then EM2.State.SetUnitKey(key) end
+        if EM2.HUD and EM2.HUD.RefreshUnitSelector then EM2.HUD.RefreshUnitSelector() end
+        if cfg and cfg.popupType == "group" and type(_G.MSUF_Group_SyncPreview) == "function" then
+            _G.MSUF_Group_SyncPreview()
+        end
+
         if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
             _G.MSUF_EM_UndoBeforeChange("unit", key)
         end

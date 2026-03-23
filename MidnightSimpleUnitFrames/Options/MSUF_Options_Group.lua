@@ -128,6 +128,23 @@ local function ParseDesignerText(text)
     return groups
 end
 
+<<<<<<< ours
+=======
+local function CountDesignerSpells(groups)
+    local total = 0
+    if type(groups) ~= "table" then return 0 end
+    for i = 1, #groups do
+        local entry = groups[i]
+        if type(entry) == "table" and type(entry.spells) == "table" then
+            for _ in pairs(entry.spells) do
+                total = total + 1
+            end
+        end
+    end
+    return total
+end
+
+>>>>>>> theirs
 local function DeepCopy(v)
     if type(v) ~= "table" then return v end
     local out = {}
@@ -150,6 +167,22 @@ local function SaveDesigner(scope, text)
     WriteGroupValue(scope, "aura", "designer", value)
 end
 
+<<<<<<< ours
+=======
+local function UpdateDesignerStatus(scope)
+    if not panel or not panel.designerStatus then return end
+    local designer = GetGroupValue(scope, "aura", "designer", nil)
+    local groups = type(designer) == "table" and designer.groups or nil
+    local groupCount = type(groups) == "table" and #groups or 0
+    local spellCount = CountDesignerSpells(groups)
+    if groupCount > 0 then
+        panel.designerStatus:SetText(("Configured groups: %d  •  Spell IDs: %d"):format(groupCount, spellCount))
+    else
+        panel.designerStatus:SetText("No aura groups configured yet. Add one group per line below.")
+    end
+end
+
+>>>>>>> theirs
 local function RefreshRuntime()
     if type(_G.MSUF_SyncBlizzardGroupFrames) == "function" then _G.MSUF_SyncBlizzardGroupFrames() end
     if type(_G.MSUF_EnsureGroupFrames) == "function" then _G.MSUF_EnsureGroupFrames() end
@@ -195,6 +228,10 @@ function _G.MSUF_SelectGroupOptionsScope(scope)
     panel.iconSizeBox:SetText(GetGroupValue(currentScope, "aura", "iconSize", 16))
     panel.excludeSatedCB:SetChecked(GetGroupValue(currentScope, "aura", "excludeSated", true) == true)
     panel.designerEdit:SetText(DesignerTextForScope(currentScope))
+<<<<<<< ours
+=======
+    UpdateDesignerStatus(currentScope)
+>>>>>>> theirs
 
     for key, btn in pairs(scopeButtons) do
         if btn._label then btn._label:SetTextColor(key == currentScope and 0.38 or 0.72, key == currentScope and 0.65 or 0.74, 1, 1) end
@@ -273,7 +310,11 @@ end
 function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     if panel then return panel end
     panel = CreateFrame("Frame", "MSUF_GroupOptionsPanel", UIParent)
+<<<<<<< ours
     panel:SetSize(760, 760)
+=======
+    panel:SetSize(760, 840)
+>>>>>>> theirs
     panel:Hide()
     panel.title = MakeLabel(panel, "Party Frames", 16, -16)
 
@@ -363,10 +404,22 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     panel.iconSizeBox = MakeBox(panel, 430, -554)
     panel.excludeSatedCB = MakeCheck(panel, "Exclude Sated / Exhaustion", 20, -590, Apply)
 
+<<<<<<< ours
     MakeLabel(panel, "Aura Designer (Blizzard whitelist groups, 12.0 live via CompactRaidFrame cache)", 20, -630)
     local designerBG = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     designerBG:SetPoint("TOPLEFT", panel, "TOPLEFT", 20, -650)
     designerBG:SetSize(500, 82)
+=======
+    MakeLabel(panel, "Aura Groups / Whitelist (group frames only)", 20, -630)
+    local designerDesc = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    designerDesc:SetPoint("TOPLEFT", panel, "TOPLEFT", 20, -648)
+    designerDesc:SetWidth(700)
+    designerDesc:SetJustifyH("LEFT")
+    designerDesc:SetText("Create spell groups like VuhDo/Grid2-style bouquet lists. One line = one group. Only the first matching aura from each group is shown once on the frame.")
+    local designerBG = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+    designerBG:SetPoint("TOPLEFT", panel, "TOPLEFT", 20, -690)
+    designerBG:SetSize(500, 128)
+>>>>>>> theirs
     designerBG:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
     designerBG:SetBackdropColor(0.05, 0.05, 0.05, 0.85)
     designerBG:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
@@ -380,6 +433,7 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
 
     local applyBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     applyBtn:SetSize(120, 24)
+<<<<<<< ours
     applyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -650)
     applyBtn:SetText("Apply")
     applyBtn:SetScript("OnClick", Apply)
@@ -387,6 +441,24 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     local copyBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     copyBtn:SetSize(160, 24)
     copyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -682)
+=======
+    applyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -690)
+    applyBtn:SetText("Apply")
+    applyBtn:SetScript("OnClick", Apply)
+
+    local resetDesignerBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    resetDesignerBtn:SetSize(120, 24)
+    resetDesignerBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -722)
+    resetDesignerBtn:SetText("Reset groups")
+    resetDesignerBtn:SetScript("OnClick", function()
+        panel.designerEdit:SetText("")
+        Apply()
+    end)
+
+    local copyBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    copyBtn:SetSize(160, 24)
+    copyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -754)
+>>>>>>> theirs
     copyBtn:SetText("Copy overrides to other")
     copyBtn:SetScript("OnClick", function()
         local g = GroupDB()
@@ -399,11 +471,25 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     end)
 
     local designerHint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+<<<<<<< ours
     designerHint:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -718)
     designerHint:SetWidth(190)
     designerHint:SetJustifyH("LEFT")
     designerHint:SetJustifyV("TOP")
     designerHint:SetText("Format:\nExternal=102342,6940,33206\nHaste=2825,32182,80353")
+=======
+    designerHint:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -790)
+    designerHint:SetWidth(190)
+    designerHint:SetJustifyH("LEFT")
+    designerHint:SetJustifyV("TOP")
+    designerHint:SetText("Format:\nExternal=102342,6940,33206\nHaste=2825,32182,80353\nDefensive=97462,6940")
+
+    panel.designerStatus = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    panel.designerStatus:SetPoint("TOPLEFT", designerBG, "BOTTOMLEFT", 0, -8)
+    panel.designerStatus:SetWidth(500)
+    panel.designerStatus:SetJustifyH("LEFT")
+    panel.designerStatus:SetText("")
+>>>>>>> theirs
 
     local function bindApply(editBox)
         editBox:SetScript("OnEnterPressed", function(self) self:ClearFocus(); Apply() end)

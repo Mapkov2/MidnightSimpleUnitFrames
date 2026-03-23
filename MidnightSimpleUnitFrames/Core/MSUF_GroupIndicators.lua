@@ -64,11 +64,19 @@ local function RefreshUnit(unit)
         local threat = UnitThreatSituation and UnitThreatSituation(unit)
         if threat ~= nil and not IsSecret(threat) and threat > 0 then
             local r, g, b = 1, 1, 0
+<<<<<<< ours
+<<<<<<< HEAD
             if threat >= 3 then
                 r, g, b = 1, 0.1, 0.1
             elseif threat == 2 then
                 r, g, b = 1, 0.45, 0
             end
+=======
+            if threat >= 3 then r, g, b = 1, 0.1, 0.1 elseif threat == 2 then r, g, b = 1, 0.45, 0 end end
+>>>>>>> a9840c2c35bdbd4dac6e74093eb8213332edd006
+=======
+            if threat >= 3 then r, g, b = 1, 0.1, 0.1 elseif threat == 2 then r, g, b = 1, 0.45, 0 end end
+>>>>>>> theirs
             frame.threatBorder:SetBackdropBorderColor(r, g, b, 0.95)
             frame.threatBorder:Show()
         else

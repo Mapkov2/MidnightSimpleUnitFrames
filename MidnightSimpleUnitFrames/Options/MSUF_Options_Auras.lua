@@ -853,7 +853,11 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
         return box, bodyHost
     end
     -- Display + Layout are collapsible for a cleaner menu, but stay open by default.
+<<<<<<< ours
     local designerOuter, designerBody = MakeCollapsibleBox(content, leftTop, 720, 468, "Frames • Aura Designer", true)
+=======
+    local designerOuter, designerBody = MakeCollapsibleBox(content, leftTop, 720, 110, "Group Aura Designer", false)
+>>>>>>> theirs
     local displayOuter, displayBody = MakeCollapsibleBox(content, designerOuter, 720, 244, "Display", true)
     local capsOuter, capsBody = MakeCollapsibleBox(content, displayOuter, 720, 266, "Layout & Caps", true)
     -- Timer / cooldown text color controls
@@ -1768,12 +1772,20 @@ do
         return (overrideFilters or overrideCaps or overrideLayout) and true or false
     end
     local function GetUnitOverrideTooltip(key)
+<<<<<<< ours
         local overrideFilters, overrideCaps, overrideLayout = GetUnitOverrideState(key)
         local parts = {}
         if overrideFilters then parts[#parts + 1] = "Filters" end
         if overrideCaps then parts[#parts + 1] = "Caps" end
         if overrideLayout then parts[#parts + 1] = "Frame Designer" end
         if #parts == 0 then return "Uses Shared filters, caps and frame designer." end
+=======
+        local overrideFilters, overrideCaps = GetUnitOverrideState(key)
+        local parts = {}
+        if overrideFilters then parts[#parts + 1] = "Filters" end
+        if overrideCaps then parts[#parts + 1] = "Caps" end
+        if #parts == 0 then return "Uses Shared filters and caps." end
+>>>>>>> theirs
         if #parts == 1 then return "Override active: this unit uses its own " .. parts[1] .. "." end
         return "Override active: this unit uses its own " .. table.concat(parts, ", ") .. "."
     end
@@ -2036,6 +2048,7 @@ end
     CreateBoolToggleButtonPath(leftTop, "Boss 1-5", 300, -120, 96, 22, A2_DB, "showBoss", nil, nil, A2_RequestApply)
 
     -- ================================================================
+<<<<<<< ours
     -- FRAMES • AURA DESIGNER
     -- ================================================================
     do
@@ -2347,6 +2360,24 @@ end
         panel.__msufA2_UpdateDesignerUnitState = UpdateDesignerUnitState
         if _G then _G.MSUF_A2_UpdateDesignerUnitState = UpdateDesignerUnitState end
         designerBox:SetScript("OnShow", UpdateDesignerUnitState)
+=======
+    -- GROUP AURA DESIGNER NOTE
+    -- ================================================================
+    do
+        local noteTitle = designerBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        noteTitle:SetPoint("TOPLEFT", designerBox, "TOPLEFT", 12, -10)
+        noteTitle:SetText(TR("Group aura groups moved"))
+
+        local noteText = designerBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        noteText:SetPoint("TOPLEFT", noteTitle, "BOTTOMLEFT", 0, -6)
+        noteText:SetWidth(680)
+        noteText:SetJustifyH("LEFT")
+        noteText:SetText(TR("The aura designer is group-frame only. Configure party/raid aura groups in the Party Frames / Raid Frames menus, where spell groups can be edited specifically for group frame behavior (similar to VuhDo/Grid2 style grouping)."))
+
+        panel.__msufA2_RefreshDesignerPreview = function() end
+        panel.__msufA2_UpdateDesignerUnitState = function() end
+        if _G then _G.MSUF_A2_UpdateDesignerUnitState = panel.__msufA2_UpdateDesignerUnitState end
+>>>>>>> theirs
     end
 
     -- ================================================================
