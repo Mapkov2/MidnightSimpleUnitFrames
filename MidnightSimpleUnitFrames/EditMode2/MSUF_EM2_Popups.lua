@@ -13,6 +13,7 @@ function Popups.CloseAll()
     if EM2.UnitPopup then EM2.UnitPopup.Close() end
     if EM2.CastPopup then EM2.CastPopup.Close() end
     if EM2.AuraPopup then EM2.AuraPopup.Close() end
+    if EM2.Group and EM2.Group.ClosePopup then EM2.Group.ClosePopup() end
     if EM2.State then EM2.State.SetPopupOpen(false) end
 end
 
@@ -51,6 +52,12 @@ function Popups.Open(key, anchorFrame)
         if key:sub(1, 5) == "aura_" then unit = key:sub(6) end
         local frame = cfg and cfg.getFrame and cfg.getFrame()
         if EM2.AuraPopup then EM2.AuraPopup.Open(unit, frame or anchorFrame) end
+    elseif pType == "group" then
+        local kind = (key == "group_raid") and "raid" or "party"
+        if EM2.Group and EM2.Group.OpenPopup then
+            EM2.Group.OpenPopup(kind)
+            if EM2.State then EM2.State.SetPopupOpen(true) end
+        end
     end
 end
 
@@ -58,5 +65,6 @@ function Popups.IsAnyOpen()
     return (EM2.UnitPopup and EM2.UnitPopup.IsOpen())
         or (EM2.CastPopup and EM2.CastPopup.IsOpen())
         or (EM2.AuraPopup and EM2.AuraPopup.IsOpen())
+        or (EM2.Group and EM2.Group.IsPopupOpen and EM2.Group.IsPopupOpen())
         or false
 end

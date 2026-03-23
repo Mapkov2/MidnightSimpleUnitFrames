@@ -150,6 +150,10 @@ ClassPower\Core\MSUF_CP_AltMana.lua
 ClassPower\Core\MSUF_CP_Layout.lua
 ClassPower\MSUF_CP_Controller.lua
 Core\MSUF_ClassPower.lua
+Core\MSUF_GroupRoster.lua
+Core\MSUF_GroupUpdate.lua
+Core\MSUF_GroupFrames.lua
+EditMode2\MSUF_EM2_Group.lua
 
 # ═══════════════════════════════════════════════════════════════
 # OPTIONS
@@ -165,6 +169,7 @@ Options\MSUF_Options_ClassPower_QuickSetup.lua
 Options\MSUF_Options_Player.lua
 Options\MSUF_Options_Auras.lua
 Options\MSUF_Options_Fonts.lua
+Options\MSUF_Options_Group.lua
 Options\MSUF_Options_Misc.lua
 Options\MSUF_Options_Portraits.lua
 Options\MSUF_Options_Gameplay.lua
