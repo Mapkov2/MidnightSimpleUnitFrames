@@ -21,6 +21,10 @@ local issecretvalue = _G.issecretvalue
 local owner = {}
 local hpCurve
 
+local function IsSecret(v)
+    return issecretvalue and issecretvalue(v) or false
+end
+
 local function Shared()
     local db = _G.MSUF_DB and _G.MSUF_DB.group and _G.MSUF_DB.group.shared
     return db or {}
@@ -48,6 +52,19 @@ local function GetFrame(unit)
     return Group.activeFrames and Group.activeFrames[unit]
 end
 
+local function SafeSetFontStringText(frame, widget, cacheKey, text)
+    if not widget then return end
+    if IsSecret(text) then
+        frame[cacheKey] = nil
+        widget:SetText(text)
+        return
+    end
+    if frame[cacheKey] ~= text then
+        frame[cacheKey] = text
+        widget:SetText(text or "")
+    end
+end
+
 local function SetRoleIcon(frame, role)
     if not frame or not frame.roleIcon then return end
     local atlas = (role == "TANK" and "roleicon-tank") or (role == "HEALER" and "roleicon-healer") or ((role == "DAMAGER" or role == "DPS") and "roleicon-dps") or nil
@@ -64,15 +81,13 @@ local function UpdateName(frame, unit)
     local scope = ScopeForFrame(frame, unit)
     local showName = _G.MSUF_Group_GetSetting and _G.MSUF_Group_GetSetting(scope, "font", "showName", true) or true
     if showName ~= true then
+        frame._lastName = nil
         frame.nameText:SetText("")
         frame.nameText:Hide()
         return
     end
     local name = UnitName(unit) or unit
-    if frame._lastName ~= name then
-        frame._lastName = name
-        frame.nameText:SetText(name)
-    end
+    SafeSetFontStringText(frame, frame.nameText, "_lastName", name)
     local _, class = UnitClass(unit)
     local cc = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
     if cc then
@@ -84,8 +99,11 @@ end
 local function UpdateHealth(frame, unit)
     if not frame or not frame.hpBar then return end
     EnsureCurve()
-    local pct = UnitHealthPercent(unit, true) or 0
-    if frame._lastHealthPct ~= pct then
+    local pct = UnitHealthPercent and UnitHealthPercent(unit, true) or 0
+    if IsSecret(pct) then
+        frame._lastHealthPct = nil
+        _G.MSUF_SetBarValue(frame.hpBar, pct, false)
+    elseif frame._lastHealthPct ~= pct then
         frame._lastHealthPct = pct
         _G.MSUF_SetBarValue(frame.hpBar, pct, false)
         local colorObj = hpCurve and UnitHealthPercent(unit, true, hpCurve)
@@ -99,7 +117,7 @@ local function UpdateHealth(frame, unit)
         local shared = Shared()
         local scope = ScopeForFrame(frame, unit)
         local showHPText = _G.MSUF_Group_GetSetting and _G.MSUF_Group_GetSetting(scope, "font", "showHPText", shared.showHPText == true) or (shared.showHPText == true)
-        if showHPText == true then
+        if showHPText == true and not IsSecret(pct) then
             local txt = string.format("%d%%", math.floor((pct * 100) + 0.5))
             if frame._lastHPText ~= txt then
                 frame._lastHPText = txt
@@ -155,8 +173,8 @@ local function UpdatePower(frame, unit, role)
     end
     local pct = UnitPowerPercent(unit, nil, false) or 0
     local pType = UnitPowerType(unit)
-    if frame._lastPowerPct == pct and frame._lastPowerType == pType and frame.powerBar:IsShown() then return end
-    frame._lastPowerPct = pct
+    if not IsSecret(pct) and frame._lastPowerPct == pct and frame._lastPowerType == pType and frame.powerBar:IsShown() then return end
+    frame._lastPowerPct = IsSecret(pct) and nil or pct
     frame._lastPowerType = pType
     local color = PowerBarColor and PowerBarColor[pType or 0]
     frame.powerBar:SetStatusBarColor((color and color.r) or 0, (color and color.g) or 0.55, (color and color.b) or 1)
@@ -167,9 +185,11 @@ end
 local function UpdateState(frame, unit)
     if not frame or not frame.stateText then return end
     local txt
-    if not UnitIsConnected(unit) then
+    local connected = UnitIsConnected and UnitIsConnected(unit)
+    local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)
+    if connected ~= nil and not IsSecret(connected) and connected ~= true then
         txt = "DC"
-    elseif UnitIsDeadOrGhost(unit) then
+    elseif dead ~= nil and not IsSecret(dead) and dead == true then
         txt = "DEAD"
     end
     if frame._lastStateText ~= txt then

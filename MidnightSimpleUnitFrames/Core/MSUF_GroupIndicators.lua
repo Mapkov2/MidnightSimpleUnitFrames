@@ -21,20 +21,25 @@ local function IsSecret(v)
     return issecretvalue and issecretvalue(v) or false
 end
 
+local function SafeBool(v)
+    if IsSecret(v) then return false end
+    return v == true
+end
+
 local function RefreshUnit(unit)
     local frame = Group.activeFrames and Group.activeFrames[unit]
     if not frame then return end
 
     if frame.resIcon then
         frame.resIcon:SetTexture("Interface\\RaidFrame\\Raid-Icon-Rez")
-        frame.resIcon:SetShown(UnitHasIncomingResurrection and UnitHasIncomingResurrection(unit) or false)
+        frame.resIcon:SetShown(SafeBool(UnitHasIncomingResurrection and UnitHasIncomingResurrection(unit)))
     end
 
     if frame.summonIcon then
         frame.summonIcon:SetTexture("Interface\\RaidFrame\\Raid-Icon-Summon")
         local shown = false
         if C_IncomingSummon and C_IncomingSummon.HasIncomingSummon then
-            shown = C_IncomingSummon.HasIncomingSummon(unit) and true or false
+            shown = SafeBool(C_IncomingSummon.HasIncomingSummon(unit))
         end
         frame.summonIcon:SetShown(shown)
     end
@@ -73,8 +78,9 @@ local function RefreshUnit(unit)
 
     if frame.afkText then
         local afk = UnitIsAFK and UnitIsAFK(unit)
-        frame.afkText:SetShown(afk and not (_G.MSUF_InCombat == true))
-        if afk then frame.afkText:SetText("AFK") end
+        local showAFK = SafeBool(afk) and not (_G.MSUF_InCombat == true)
+        frame.afkText:SetShown(showAFK)
+        if showAFK then frame.afkText:SetText("AFK") end
     end
 
     if frame.phasedIcon then

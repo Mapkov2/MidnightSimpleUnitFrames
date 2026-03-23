@@ -4,6 +4,7 @@ ns.Group = ns.Group or {}
 
 local Group = ns.Group
 local pairs = pairs
+local wipe = wipe
 local C_UnitAuras = C_UnitAuras
 local CreateFrame = CreateFrame
 local canaccessvalue = _G.canaccessvalue
@@ -17,6 +18,10 @@ local SATED = {
 local owner = {}
 local compactHooked = false
 local blizzCache = {}
+local designerLookupCache = {
+    party = { stamp = false, lookup = {} },
+    raid = { stamp = false, lookup = {} },
+}
 
 local function IsAccessible(v)
     if canaccessvalue then
@@ -44,7 +49,23 @@ end
 
 local function BuildDesignerLookup(scope)
     local designer = GetAuraSetting(scope, "designer", nil)
-    local lookup = {}
+    local slot = designerLookupCache[scope]
+    if not slot then
+        slot = { stamp = false, lookup = {} }
+        designerLookupCache[scope] = slot
+    end
+    local stamp = false
+    if type(designer) == "table" then
+        stamp = tostring(designer.text or "") .. "#" .. tostring(type(designer.groups) == "table" and #designer.groups or 0)
+    end
+    if slot.stamp == stamp then
+        return slot.lookup
+    end
+
+    local lookup = slot.lookup
+    wipe(lookup)
+    slot.stamp = stamp
+
     if type(designer) ~= "table" or type(designer.groups) ~= "table" then
         return lookup
     end
@@ -74,6 +95,11 @@ local function EnsureIcon(container, list, index)
 end
 
 local function LayoutIcons(container, list, maxCount, iconSize)
+    if container._msufLayoutIconSize == iconSize and container._msufLayoutMaxCount == maxCount then
+        return
+    end
+    container._msufLayoutIconSize = iconSize
+    container._msufLayoutMaxCount = maxCount
     container:SetSize((iconSize + 2) * maxCount, iconSize)
     for i = 1, maxCount do
         local icon = EnsureIcon(container, list, i)
