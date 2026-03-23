@@ -13,7 +13,7 @@ local W8    = "Interface/Buttons/WHITE8X8"
 local floor, max, min = math.floor, math.max, math.min
 
 local hudFrame, row2Frame
-local previewBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
+local previewBtn, groupBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
 local helpBtn, tutorialPanel, tourState
@@ -661,6 +661,13 @@ local function EnsureHUD()
     SetTip(previewBtn, "Show placeholder data on unitframes\nwithout real units (target, focus, etc.)")
     r1[#r1+1] = previewBtn
 
+    groupBtn = MakeBtn(c1, "Groups", 58, BTN_H, 12, function()
+        if EM2.Group and EM2.Group.TogglePreviewPopup then EM2.Group.TogglePreviewPopup() end
+        HUD.RefreshControls()
+    end)
+    SetTip(groupBtn, "Open party / raid test previews\nfor Midnight group frames.")
+    r1[#r1+1] = groupBtn
+
     auraBtn = MakeBtn(c1, "Auras", 52, BTN_H, 12, function()
         local db = _G.MSUF_DB; if not db then return end
         local a2 = db.auras2; if not a2 then return end
@@ -800,6 +807,10 @@ function HUD.RefreshControls()
     if stepFS and EM2.Grid then stepFS:SetText("Grid " .. floor(EM2.Grid.GetGridStep()) .. "px") end
     if snapToggle and EM2.Snap then SetActive(snapToggle, EM2.Snap.IsEnabled()) end
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
+    if groupBtn then
+        local mode = EM2.Group and EM2.Group.GetPreviewMode and EM2.Group.GetPreviewMode() or nil
+        SetActive(groupBtn, mode ~= nil)
+    end
     if cdmBtn then
         local db = _G.MSUF_DB
         SetActive(cdmBtn, db and db.general and db.general.anchorToCooldown and true or false)

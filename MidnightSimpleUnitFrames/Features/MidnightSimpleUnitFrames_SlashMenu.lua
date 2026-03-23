@@ -1961,6 +1961,10 @@ local function MSUF_EnsureColorsPanelBuilt() return MSUF_EnsureSubOptionsPanelBu
 local function MSUF_EnsureAuras2PanelBuilt() return MSUF_EnsureSubOptionsPanelBuilt("auras2") end
 local function MSUF_EnsureGameplayPanelBuilt() return MSUF_EnsureSubOptionsPanelBuilt("gameplay") end
 local function MSUF_EnsurePortraitsPanelBuilt() return MSUF_EnsureSubOptionsPanelBuilt("portraits") end
+local function MSUF_EnsureGroupPanelBuilt()
+local fn=_G and _G.MSUF_EnsureGroupOptionsPanelBuilt
+if type(fn)=="function"then return fn() end
+return nil end
 local function MSUF_EnsureModulesPanelBuilt() if _G.MSUF_ModulesMirrorPanel and _G.MSUF_ModulesMirrorPanel.__MSUF_ModulesBuilt then return _G.MSUF_ModulesMirrorPanel end
 local p=CreateFrame("Frame","MSUF_ModulesMirrorPanel",UIParent)
 _G.MSUF_ModulesMirrorPanel=p p.__MSUF_ModulesBuilt=true p.__MSUF_MirrorNoRestoreShow=true p:SetPoint("TOPLEFT",0,0)
@@ -2076,7 +2080,7 @@ local MIRROR_PAGES={home={title="Midnight Simple Unitframes (Version 1.9b3)",nav
 },opt_auras={title="MSUF Auras",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("auras") end
 },auras2={title="MSUF Auras 2.0",build=MSUF_EnsureAuras2PanelBuilt},opt_castbar={title="MSUF Castbar",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("castbar") end
 },opt_misc={title="MSUF Miscellaneous",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("misc") end
-},opt_colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},castbar={title="MSUF Castbar",build=MSUF_EnsureMainOptionsPanelBuilt,select=function(subkey) MSUF_SelectMainOptionsKey("castbar");
+},opt_groups={title="MSUF Group Frames",build=MSUF_EnsureGroupPanelBuilt},opt_colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},castbar={title="MSUF Castbar",build=MSUF_EnsureMainOptionsPanelBuilt,select=function(subkey) MSUF_SelectMainOptionsKey("castbar");
 if subkey and subkey~=""then MSUF_SelectCastbarSubPage(subkey)
 end
 end
@@ -2415,16 +2419,16 @@ home={0,0},
 uf_player={1,0},uf_target={2,0},uf_targettarget={3,0},
 uf_focus={4,0},uf_boss={5,0},uf_pet={6,0},
 opt_bars={7,0},opt_fonts={0,1},auras2={1,1},
-opt_castbar={2,1},opt_misc={3,1},opt_colors={4,1},
-opt_portraits={5,1},classpower={6,1},gameplay={7,1},
-modules={0,2},profiles={1,2},
+opt_castbar={2,1},opt_misc={3,1},opt_groups={4,1},opt_colors={5,1},
+opt_portraits={6,1},classpower={7,1},gameplay={0,2},
+modules={1,2},profiles={2,2},
 }
 local MSUF_NAV_ICON_COLORS={
 home={0.30,0.60,1.00},
 uf_player={0.40,0.78,0.98},uf_target={0.40,0.78,0.98},uf_targettarget={0.40,0.78,0.98},
 uf_focus={0.40,0.78,0.98},uf_boss={0.40,0.78,0.98},uf_pet={0.40,0.78,0.98},
 opt_bars={0.88,0.74,0.36},opt_fonts={0.88,0.74,0.36},auras2={0.88,0.74,0.36},
-opt_castbar={0.88,0.74,0.36},opt_misc={0.88,0.74,0.36},opt_colors={0.88,0.74,0.36},
+opt_castbar={0.88,0.74,0.36},opt_misc={0.88,0.74,0.36},opt_groups={0.88,0.74,0.36},opt_colors={0.88,0.74,0.36},
 opt_portraits={0.88,0.74,0.36},
 classpower={0.35,0.82,0.50},gameplay={0.72,0.50,0.92},
 modules={0.40,0.80,0.75},profiles={0.90,0.62,0.30},
@@ -2475,7 +2479,7 @@ navParent._msufNavStripe=stripe end
 local function MakeButton(label,w,onClick,isHeader,isChild) local b=UI_Button(navParent,tostring(label or""),w,btnH,"TOPLEFT",navParent,"TOPLEFT",0,0,onClick)
 MSUF_LeftJustifyButtonText(b,isHeader and 18 or(isChild and 22 or 24))
 MSUF_SkinNavButton(b,isHeader,isChild) return b end
-local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_portraits",label="Portraits"},{key="opt_colors",label="Colors"},{key="opt_misc",label="Miscellaneous"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
+local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_groups",label="Group Frames"},{key="opt_portraits",label="Portraits"},{key="opt_colors",label="Colors"},{key="opt_misc",label="Miscellaneous"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
 local headerLabels={}
 for _,node in ipairs(NAV)
 do if node.type=="header"then headerLabels[node.id]=node.label end
