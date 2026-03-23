@@ -71,6 +71,7 @@ EditMode2\MSUF_EM2_Popup_Cast.lua
 EditMode2\MSUF_EM2_Popup_Aura.lua
 EditMode2\MSUF_EM2_Nudge.lua
 EditMode2\MSUF_EM2_HUD.lua
+EditMode2\MSUF_EM2_Group.lua
 EditMode2\MSUF_EM2_Elements.lua
 EditMode2\MSUF_EM2_Compat.lua
 EditMode2\MSUF_EM2_Init.lua
@@ -132,6 +133,14 @@ Core\MSUF_Portraits.lua
 Core\MSUF_Alpha.lua
 Core\MSUF_LoadConditions.lua
 Core\MSUF_Borders.lua
+Core\MSUF_GroupRoster.lua
+Core\MSUF_GroupFrames.lua
+Core\MSUF_GroupUpdate.lua
+Core\MSUF_GroupAuras.lua
+Core\MSUF_GroupIndicators.lua
+Core\MSUF_GroupRange.lua
+Core\MSUF_GroupHide.lua
+Core\MSUF_GroupPrivateAuras.lua
 ClassPower\MSUF_CP_Constants.lua
 ClassPower\MSUF_CP_Profiles.lua
 ClassPower\Features\MSUF_CP_Balance.lua
@@ -168,6 +177,7 @@ Options\MSUF_Options_Fonts.lua
 Options\MSUF_Options_Misc.lua
 Options\MSUF_Options_Portraits.lua
 Options\MSUF_Options_Gameplay.lua
+Options\MSUF_Options_Group.lua
 
 # ═══════════════════════════════════════════════════════════════
 # MODULES

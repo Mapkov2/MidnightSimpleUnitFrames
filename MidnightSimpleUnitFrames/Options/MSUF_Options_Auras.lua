@@ -853,7 +853,8 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
         return box, bodyHost
     end
     -- Display + Layout are collapsible for a cleaner menu, but stay open by default.
-    local displayOuter, displayBody = MakeCollapsibleBox(content, leftTop, 720, 244, "Display", true)
+    local designerOuter, designerBody = MakeCollapsibleBox(content, leftTop, 720, 468, "Frames • Aura Designer", true)
+    local displayOuter, displayBody = MakeCollapsibleBox(content, designerOuter, 720, 244, "Display", true)
     local capsOuter, capsBody = MakeCollapsibleBox(content, displayOuter, 720, 266, "Layout & Caps", true)
     -- Timer / cooldown text color controls
     local timerBox, timerBody = MakeCollapsibleBox(content, capsOuter, 720, 248, "Timer Colors", false)
@@ -871,6 +872,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     local _displayBoxOuter = displayOuter
     local _capsBoxOuter = capsOuter
     local _reminderBoxOuter = reminderBox
+    designerBox = designerBody or designerOuter
     displayBox = displayBody or displayOuter
     capsBox = capsBody or capsOuter
     timerBox = timerBody or timerBox
@@ -943,6 +945,7 @@ local function A2_Settings()
      return s
 end
 local A2_REMINDER_GROWTH_OK = { RIGHT = true, LEFT = true, UP = true, DOWN = true }
+local GetOverrideLayoutForEditing, SetOverrideLayoutForEditing
 local function A2_NormalizeReminderGrowth(v)
     if type(v) ~= "string" or not A2_REMINDER_GROWTH_OK[v] then
         return "RIGHT"
@@ -961,6 +964,115 @@ local function A2_GetReminderGrowthValue()
         return A2_NormalizeReminderGrowth(shared.reminderGrowth)
     end
     return "RIGHT"
+end
+local A2_LAYOUT_SHARED_FIELDS = {
+    "offsetX", "offsetY",
+    "spacing",
+    "buffGroupOffsetX", "buffGroupOffsetY",
+    "debuffGroupOffsetX", "debuffGroupOffsetY",
+    "privateOffsetX", "privateOffsetY",
+    "reminderOffsetX", "reminderOffsetY",
+    "buffGroupIconSize", "debuffGroupIconSize", "privateSize", "reminderIconSize",
+    "stackTextSize", "stackTextOffsetX", "stackTextOffsetY",
+    "cooldownTextSize", "cooldownTextOffsetX", "cooldownTextOffsetY",
+    "reminderSpacing", "reminderGrowth",
+}
+local A2_DESIGNER_RESET_FIELDS = {
+    "offsetX", "offsetY", "spacing",
+    "buffGroupOffsetX", "buffGroupOffsetY",
+    "debuffGroupOffsetX", "debuffGroupOffsetY",
+    "privateOffsetX", "privateOffsetY",
+    "reminderOffsetX", "reminderOffsetY",
+    "buffGroupIconSize", "debuffGroupIconSize", "privateSize",
+    "reminderIconSize",
+    "stackTextSize", "stackTextOffsetX", "stackTextOffsetY",
+    "cooldownTextSize", "cooldownTextOffsetX", "cooldownTextOffsetY",
+    "reminderSpacing", "reminderGrowth",
+}
+local A2_DESIGNER_RESET_DEFAULTS = {
+    offsetX = 0, offsetY = 6,
+    spacing = 2,
+    reminderOffsetX = 0, reminderOffsetY = 0,
+    reminderIconSize = 22,
+    stackTextSize = 14,
+    cooldownTextSize = 14,
+    reminderSpacing = 2, reminderGrowth = "RIGHT",
+}
+GetOverrideLayoutForEditing = function()
+    local key = GetEditingKey()
+    if key == "shared" then return false end
+    local a2 = select(1, GetAuras2DB())
+    if not a2 or not a2.perUnit or not a2.perUnit[key] then return false end
+    return (a2.perUnit[key].overrideLayout == true)
+end
+SetOverrideLayoutForEditing = function(v)
+    local key = GetEditingKey()
+    if key == "shared" then return end
+    local a2, shared = GetAuras2DB()
+    if not a2 or not shared then return end
+    a2.perUnit = (type(a2.perUnit) == "table") and a2.perUnit or {}
+    if type(a2.perUnit[key]) ~= "table" then a2.perUnit[key] = {} end
+    local u = a2.perUnit[key]
+    if v == true then
+        u.overrideLayout = true
+        if type(u.layout) ~= "table" then u.layout = {} end
+        for i = 1, #A2_LAYOUT_SHARED_FIELDS do
+            local field = A2_LAYOUT_SHARED_FIELDS[i]
+            if u.layout[field] == nil and shared[field] ~= nil then
+                u.layout[field] = shared[field]
+            end
+        end
+    else
+        u.overrideLayout = false
+    end
+    A2_RequestApply()
+    C_Timer.After(0, function()
+        if panel and panel.OnRefresh then panel.OnRefresh() end
+    end)
+end
+local function A2_GetLayoutValue(key, fallback)
+    local a2, shared = GetAuras2DB()
+    if not shared then return fallback end
+    local editKey = GetEditingKey()
+    if editKey ~= "shared" and a2 and a2.perUnit then
+        local u = a2.perUnit[editKey]
+        if u and u.overrideLayout == true and type(u.layout) == "table" then
+            local v = u.layout[key]
+            if v ~= nil then return v end
+        end
+    end
+    local v = shared[key]
+    if v ~= nil then return v end
+    return fallback
+end
+local function A2_SetLayoutValue(key, value)
+    local a2, shared = GetAuras2DB()
+    if not a2 or not shared then return end
+    local editKey = GetEditingKey()
+    if editKey ~= "shared" then
+        if not GetOverrideLayoutForEditing() then
+            SetOverrideLayoutForEditing(true)
+        end
+        a2.perUnit = (type(a2.perUnit) == "table") and a2.perUnit or {}
+        if type(a2.perUnit[editKey]) ~= "table" then a2.perUnit[editKey] = {} end
+        local u = a2.perUnit[editKey]
+        u.overrideLayout = true
+        u.layout = (type(u.layout) == "table") and u.layout or {}
+        u.layout[key] = value
+    else
+        shared[key] = value
+    end
+    local api = ns and ns.MSUF_Auras2
+    local rm = api and api.Reminder
+    if rm and (key == "reminderOffsetX" or key == "reminderOffsetY" or key == "reminderIconSize" or key == "reminderSpacing" or key == "reminderGrowth") then
+        if rm.MarkDirty then rm.MarkDirty() end
+    end
+    A2_RequestApply()
+    C_Timer.After(0, function()
+        if panel and panel.__msufA2_RefreshDesignerPreview then
+            panel.__msufA2_RefreshDesignerPreview()
+        end
+    end)
 end
 local function A2_SetReminderGrowthValue(v)
     local a2, shared = GetAuras2DB()
@@ -1163,7 +1275,7 @@ local function BuildBoolPathCheckboxes(parent, entries, out)
 local function A2_EnsureTrackTables()
     if not panel then  return nil end
     if not panel.__msufA2_tracked then
-        panel.__msufA2_tracked = { global = {}, filters = {}, caps = {} }
+        panel.__msufA2_tracked = { global = {}, filters = {}, caps = {}, layout = {} }
     end
     return panel.__msufA2_tracked
 end
@@ -1221,6 +1333,7 @@ local function A2_RestoreAllScopes()
     A2_ApplyScopeState("global", true)
     A2_ApplyScopeState("filters", true)
     A2_ApplyScopeState("caps", true)
+    A2_ApplyScopeState("layout", true)
  end
 local function A2_ShowOverrideWarn(msg, holdSeconds)
     if not panel then  return end
@@ -1260,6 +1373,16 @@ local function A2_AutoOverrideCapsIfNeeded()
     A2_ShowOverrideWarn("Caps override enabled for this unit.")
      return true
 end
+local function A2_AutoOverrideLayoutIfNeeded()
+    if GetEditingKey() == "shared" then return false end
+    if GetOverrideLayoutForEditing and GetOverrideLayoutForEditing() then return false end
+    if SetOverrideLayoutForEditing then
+        SetOverrideLayoutForEditing(true)
+        A2_ShowOverrideWarn("Frame designer override enabled for this unit.")
+        return true
+    end
+    return false
+end
 local function A2_WrapCheckboxAutoOverride(cb, scope)
     if not cb or type(cb.GetScript) ~= "function" then  return end
     local old = cb:GetScript("OnClick")
@@ -1268,6 +1391,8 @@ local function A2_WrapCheckboxAutoOverride(cb, scope)
             A2_AutoOverrideFiltersIfNeeded()
         elseif scope == "caps" then
             A2_AutoOverrideCapsIfNeeded()
+        elseif scope == "layout" then
+            A2_AutoOverrideLayoutIfNeeded()
         end
         if old then return old(self, ...) end
      end)
@@ -1498,6 +1623,9 @@ local function UpdateAdvancedEnabled()
     if cbOverrideCaps then
         SetCheckboxEnabled(cbOverrideCaps, key ~= "shared")
     end
+    if cbOverrideLayout then
+        SetCheckboxEnabled(cbOverrideLayout, key ~= "shared")
+    end
  end
 -- ------------------------------------------------------------
     -- LEFT TOP: Auras 2.0 (minimal UX restructure)
@@ -1627,23 +1755,27 @@ do
         boss1 = "Boss 1", boss2 = "Boss 2", boss3 = "Boss 3", boss4 = "Boss 4", boss5 = "Boss 5",
     }
     local function GetUnitOverrideState(key)
-        if key == "shared" then return false, false end
+        if key == "shared" then return false, false, false end
         local a2 = select(1, GetAuras2DB())
         local u = a2 and a2.perUnit and a2.perUnit[key]
         local overrideFilters = (type(u) == "table" and u.overrideFilters == true) and true or false
         local overrideCaps = (type(u) == "table" and u.overrideSharedLayout == true) and true or false
-        return overrideFilters, overrideCaps
+        local overrideLayout = (type(u) == "table" and u.overrideLayout == true) and true or false
+        return overrideFilters, overrideCaps, overrideLayout
     end
     local function GetUnitHasOverride(key)
-        local overrideFilters, overrideCaps = GetUnitOverrideState(key)
-        return (overrideFilters or overrideCaps) and true or false
+        local overrideFilters, overrideCaps, overrideLayout = GetUnitOverrideState(key)
+        return (overrideFilters or overrideCaps or overrideLayout) and true or false
     end
     local function GetUnitOverrideTooltip(key)
-        local overrideFilters, overrideCaps = GetUnitOverrideState(key)
-        if overrideFilters and overrideCaps then return "Override active: this unit uses its own Filters and Caps." end
-        if overrideFilters then return "Override active: this unit uses its own Filters." end
-        if overrideCaps then return "Override active: this unit uses its own Caps." end
-        return "Uses Shared filters and caps."
+        local overrideFilters, overrideCaps, overrideLayout = GetUnitOverrideState(key)
+        local parts = {}
+        if overrideFilters then parts[#parts + 1] = "Filters" end
+        if overrideCaps then parts[#parts + 1] = "Caps" end
+        if overrideLayout then parts[#parts + 1] = "Frame Designer" end
+        if #parts == 0 then return "Uses Shared filters, caps and frame designer." end
+        if #parts == 1 then return "Override active: this unit uses its own " .. parts[1] .. "." end
+        return "Override active: this unit uses its own " .. table.concat(parts, ", ") .. "."
     end
     local scopeBtns = {}
     local function RefreshScopeButtons()
@@ -1754,6 +1886,10 @@ do
         function()  return GetOverrideCapsForEditing() end,
         function(v)  SetOverrideCapsForEditing(v)  end,
         "When off, this unit uses Shared caps (Max Buffs/Debuffs, Icons per row). When on, it uses its own caps.")
+    cbOverrideLayout = CreateCheckbox(scopeBar, "Override frame designer", 348, -32,
+        function() return GetOverrideLayoutForEditing and GetOverrideLayoutForEditing() end,
+        function(v) if SetOverrideLayoutForEditing then SetOverrideLayoutForEditing(v) end end,
+        "When off, this unit uses the Shared aura frame designer. When on, it stores its own aura anchor, group positions and text offsets.")
     local overrideKeys = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
     -- Reset button aligned to the right edge of the scope bar, second row
     local btnResetOverrides = CreateFrame("Button", nil, scopeBar, "UIPanelButtonTemplate")
@@ -1839,6 +1975,8 @@ do
                 u.filters = nil -- revert to Shared
                 u.overrideSharedLayout = false
                 u.layoutShared = nil -- revert to Shared
+                u.overrideLayout = false
+                u.layout = nil -- revert to Shared designer
             end
         end
         A2_RequestApply()
@@ -1852,7 +1990,7 @@ do
         GameTooltip:ClearAllPoints()
         GameTooltip:SetPoint("TOPLEFT", self, "TOPRIGHT", 12, 0)
         GameTooltip:SetText(TR("Reset overrides"), 1, 1, 1)
-        GameTooltip:AddLine("Turns off Override shared filters and caps for all units and reverts them to Shared.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Turns off Override shared filters, caps and frame designer for all units and reverts them to Shared.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
      end)
     btnResetOverrides:SetScript("OnLeave", function()
@@ -1896,6 +2034,321 @@ end
     CreateBoolToggleButtonPath(leftTop, "Target", 108, -120, 90, 22, A2_DB, "showTarget", nil, nil, A2_RequestApply)
     CreateBoolToggleButtonPath(leftTop, "Focus", 204, -120, 90, 22, A2_DB, "showFocus", nil, nil, A2_RequestApply)
     CreateBoolToggleButtonPath(leftTop, "Boss 1-5", 300, -120, 96, 22, A2_DB, "showBoss", nil, nil, A2_RequestApply)
+
+    -- ================================================================
+    -- FRAMES • AURA DESIGNER
+    -- ================================================================
+    do
+        local designerTitle = designerBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        designerTitle:SetPoint("TOPLEFT", designerBox, "TOPLEFT", 12, -10)
+        designerTitle:SetText(TR("Healer Aura Designer"))
+
+        local designerDesc = designerBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        designerDesc:SetPoint("TOPLEFT", designerTitle, "BOTTOMLEFT", 0, -4)
+        designerDesc:SetWidth(404)
+        designerDesc:SetJustifyH("LEFT")
+        designerDesc:SetText(TR("Fine-tune the real aura frame layout: main anchor, buff/debuff/private/reminder blocks, icon sizes, stack text and cooldown text. Use Shared for a baseline or enable a per-unit frame-designer override above."))
+
+        local designerNote = designerBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        designerNote:SetPoint("TOPLEFT", designerDesc, "BOTTOMLEFT", 0, -6)
+        designerNote:SetWidth(404)
+        designerNote:SetJustifyH("LEFT")
+        designerNote:SetText(TR("Tip: the preview updates live. For pixel-perfect drag placement, open MSUF Edit Mode and move the Buff / Debuff / Private / Reminder movers directly."))
+
+        local designerResetBtn = CreateFrame("Button", nil, designerBox, "UIPanelButtonTemplate")
+        designerResetBtn:SetSize(124, 20)
+        designerResetBtn:SetPoint("TOPLEFT", designerBox, "TOPLEFT", 12, -88)
+        designerResetBtn:SetText(TR("Reset This Designer"))
+        A2_Track("layout", designerResetBtn)
+
+        local designerPreview = CreateFrame("Frame", nil, designerBox, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        designerPreview:SetSize(250, 222)
+        designerPreview:SetPoint("TOPRIGHT", designerBox, "TOPRIGHT", -14, -12)
+        designerPreview:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        designerPreview:SetBackdropColor(0.02, 0.04, 0.08, 0.95)
+        designerPreview:SetBackdropBorderColor(0.14, 0.24, 0.42, 0.90)
+
+        local previewGrid = designerPreview:CreateTexture(nil, "BACKGROUND")
+        previewGrid:SetAllPoints()
+        previewGrid:SetColorTexture(1, 1, 1, 0.02)
+
+        local previewCaption = designerPreview:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        previewCaption:SetPoint("TOPLEFT", designerPreview, "TOPLEFT", 10, -8)
+        previewCaption:SetText(TR("Live preview"))
+
+        local previewUnit = CreateFrame("Frame", nil, designerPreview, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        previewUnit:SetSize(156, 44)
+        previewUnit:SetPoint("BOTTOM", designerPreview, "BOTTOM", 0, 28)
+        previewUnit:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        previewUnit:SetBackdropColor(0.08, 0.11, 0.16, 0.98)
+        previewUnit:SetBackdropBorderColor(0.25, 0.33, 0.48, 0.95)
+
+        local previewHealth = previewUnit:CreateTexture(nil, "ARTWORK")
+        previewHealth:SetPoint("TOPLEFT", previewUnit, "TOPLEFT", 3, -3)
+        previewHealth:SetPoint("BOTTOMRIGHT", previewUnit, "BOTTOMRIGHT", -3, 11)
+        previewHealth:SetColorTexture(0.11, 0.40, 0.18, 0.90)
+
+        local previewPower = previewUnit:CreateTexture(nil, "ARTWORK")
+        previewPower:SetPoint("BOTTOMLEFT", previewUnit, "BOTTOMLEFT", 3, 3)
+        previewPower:SetPoint("BOTTOMRIGHT", previewUnit, "BOTTOMRIGHT", -3, 3)
+        previewPower:SetHeight(7)
+        previewPower:SetColorTexture(0.09, 0.26, 0.64, 0.95)
+
+        local previewUnitText = previewUnit:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        previewUnitText:SetPoint("CENTER", previewUnit, "CENTER", 0, 4)
+        previewUnitText:SetText(TR("Unit Frame"))
+
+        local previewAnchor = CreateFrame("Frame", nil, designerPreview)
+        previewAnchor:SetSize(1, 1)
+        local previewAnchorDot = previewAnchor:CreateTexture(nil, "OVERLAY")
+        previewAnchorDot:SetSize(8, 8)
+        previewAnchorDot:SetPoint("CENTER", previewAnchor, "CENTER", 0, 0)
+        previewAnchorDot:SetColorTexture(1.00, 0.82, 0.22, 1.00)
+
+        local function CreatePreviewGroup(parent, label, r, g, b)
+            local box = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+            box:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                edgeSize = 1,
+                insets = { left = 1, right = 1, top = 1, bottom = 1 },
+            })
+            box:SetBackdropColor(r * 0.18, g * 0.18, b * 0.18, 0.95)
+            box:SetBackdropBorderColor(r, g, b, 0.95)
+            local title = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            title:SetPoint("TOPLEFT", box, "TOPLEFT", 4, -4)
+            title:SetText(label)
+            local icon = CreateFrame("Frame", nil, box, BackdropTemplateMixin and "BackdropTemplate" or nil)
+            icon:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 4, 4)
+            icon:SetSize(18, 18)
+            icon:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+            icon:SetBackdropColor(r * 0.38, g * 0.38, b * 0.38, 1)
+            icon:SetBackdropBorderColor(r, g, b, 1)
+            local stack = icon:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            stack:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 1, 0)
+            stack:SetText("3")
+            local cd = icon:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            cd:SetPoint("CENTER", icon, "CENTER", 0, 0)
+            cd:SetText("9")
+            box._title = title
+            box._icon = icon
+            box._stack = stack
+            box._cd = cd
+            return box
+        end
+
+        local previewBuffs = CreatePreviewGroup(designerPreview, TR("Buffs"), 0.26, 0.84, 0.38)
+        local previewDebuffs = CreatePreviewGroup(designerPreview, TR("Debuffs"), 0.90, 0.28, 0.28)
+        local previewPrivate = CreatePreviewGroup(designerPreview, TR("Private"), 0.20, 0.62, 1.00)
+        local previewReminder = CreatePreviewGroup(designerPreview, TR("Reminder"), 1.00, 0.78, 0.22)
+
+        local function PreviewScaleValue(v, scale, lo, hi)
+            v = tonumber(v) or 0
+            v = math.floor((v * scale) + 0.5)
+            if lo and v < lo then v = lo end
+            if hi and v > hi then v = hi end
+            return v
+        end
+        local function PreviewClusterSize(iconSize, spacing, count, growth)
+            local size = PreviewScaleValue(iconSize, 0.52, 12, 28)
+            local gap = PreviewScaleValue(spacing, 0.52, 1, 8)
+            local n = count or 4
+            local vertical = (growth == "UP" or growth == "DOWN")
+            local w, h
+            if vertical then
+                w = size + 8
+                h = (n * size) + ((n - 1) * gap) + 26
+            else
+                w = (n * size) + ((n - 1) * gap) + 8
+                h = size + 26
+            end
+            return w, h, size
+        end
+        local function UpdateDesignerPreview()
+            local key = GetEditingKey()
+            local label = ({ shared = "Shared baseline", player = "Player", target = "Target", focus = "Focus", boss1 = "Boss 1", boss2 = "Boss 2", boss3 = "Boss 3", boss4 = "Boss 4", boss5 = "Boss 5" })[key] or key
+            previewCaption:SetText(TR("Live preview") .. "  •  " .. label)
+
+            local perRow = tonumber(A2_GetCapsValue(key, "perRow", 12)) or 12
+            local maxBuffs = tonumber(A2_GetCapsValue(key, "maxBuffs", 12)) or 12
+            local maxDebuffs = tonumber(A2_GetCapsValue(key, "maxDebuffs", 12)) or 12
+            local buffGrowth = A2_GetCapsValue(key, "buffGrowth", A2_GetCapsValue(key, "growth", "RIGHT"))
+            local debuffGrowth = A2_GetCapsValue(key, "debuffGrowth", A2_GetCapsValue(key, "growth", "RIGHT"))
+            local privateGrowth = A2_GetCapsValue(key, "privateGrowth", A2_GetCapsValue(key, "growth", "RIGHT"))
+            local reminderGrowth = A2_GetReminderGrowthValue()
+            local spacing = A2_GetLayoutValue("spacing", 2)
+            local buffSize = A2_GetLayoutValue("buffGroupIconSize", A2_GetLayoutValue("iconSize", 26))
+            local debuffSize = A2_GetLayoutValue("debuffGroupIconSize", A2_GetLayoutValue("iconSize", 26))
+            local privateSize = A2_GetLayoutValue("privateSize", A2_GetLayoutValue("iconSize", 26))
+            local reminderSize = A2_GetLayoutValue("reminderIconSize", 22)
+            local stackSize = A2_GetLayoutValue("stackTextSize", 14)
+            local cdSize = A2_GetLayoutValue("cooldownTextSize", 14)
+
+            previewAnchor:ClearAllPoints()
+            previewAnchor:SetPoint("BOTTOMLEFT", previewUnit, "TOPLEFT", PreviewScaleValue(A2_GetLayoutValue("offsetX", 0), 0.28, -54, 54), PreviewScaleValue(A2_GetLayoutValue("offsetY", 6), 0.28, -30, 62))
+
+            local bw, bh, bIcon = PreviewClusterSize(buffSize, spacing, math.max(1, math.min(maxBuffs, math.min(perRow, 4))), buffGrowth)
+            previewBuffs:SetSize(bw, bh)
+            previewBuffs:ClearAllPoints()
+            previewBuffs:SetPoint("BOTTOMLEFT", previewAnchor, "BOTTOMLEFT", PreviewScaleValue(A2_GetLayoutValue("buffGroupOffsetX", 0), 0.35, -74, 74), PreviewScaleValue(A2_GetLayoutValue("buffGroupOffsetY", 0), 0.35, -40, 84))
+            previewBuffs._icon:SetSize(bIcon, bIcon)
+
+            local dw, dh, dIcon = PreviewClusterSize(debuffSize, spacing, math.max(1, math.min(maxDebuffs, math.min(perRow, 4))), debuffGrowth)
+            previewDebuffs:SetSize(dw, dh)
+            previewDebuffs:ClearAllPoints()
+            previewDebuffs:SetPoint("BOTTOMLEFT", previewAnchor, "BOTTOMLEFT", PreviewScaleValue(A2_GetLayoutValue("debuffGroupOffsetX", 0), 0.35, -74, 74), PreviewScaleValue(A2_GetLayoutValue("debuffGroupOffsetY", 0), 0.35, -40, 84))
+            previewDebuffs._icon:SetSize(dIcon, dIcon)
+
+            local pw, ph, pIcon = PreviewClusterSize(privateSize, spacing, 4, privateGrowth)
+            previewPrivate:SetSize(pw, ph)
+            previewPrivate:ClearAllPoints()
+            previewPrivate:SetPoint("BOTTOMLEFT", previewAnchor, "BOTTOMLEFT", PreviewScaleValue(A2_GetLayoutValue("privateOffsetX", 0), 0.35, -74, 74), PreviewScaleValue(A2_GetLayoutValue("privateOffsetY", 0), 0.35, -40, 84))
+            previewPrivate._icon:SetSize(pIcon, pIcon)
+
+            local rw, rh, rIcon = PreviewClusterSize(reminderSize, A2_GetLayoutValue("reminderSpacing", 2), 4, reminderGrowth)
+            previewReminder:SetSize(rw, rh)
+            previewReminder:ClearAllPoints()
+            previewReminder:SetPoint("BOTTOMLEFT", previewAnchor, "BOTTOMLEFT", PreviewScaleValue(A2_GetLayoutValue("reminderOffsetX", 0), 0.35, -74, 74), PreviewScaleValue(A2_GetLayoutValue("reminderOffsetY", 0), 0.35, -40, 84))
+            previewReminder._icon:SetSize(rIcon, rIcon)
+
+            for _, group in ipairs({ previewBuffs, previewDebuffs, previewPrivate, previewReminder }) do
+                local s = PreviewScaleValue(stackSize, 0.58, 8, 18)
+                local c = PreviewScaleValue(cdSize, 0.58, 8, 18)
+                group._stack:SetFont("Fonts\\FRIZQT__.TTF", s, "OUTLINE")
+                group._cd:SetFont("Fonts\\FRIZQT__.TTF", c, "OUTLINE")
+            end
+
+            local isPlayerLike = (key == "shared" or key == "player")
+            previewPrivate:SetShown(isPlayerLike)
+            previewReminder:SetShown(isPlayerLike)
+        end
+        panel.__msufA2_RefreshDesignerPreview = UpdateDesignerPreview
+        designerPreview:SetScript("OnShow", UpdateDesignerPreview)
+
+        designerResetBtn:SetScript("OnClick", function()
+            local key = GetEditingKey()
+            local a2, shared = GetAuras2DB()
+            if not a2 or not shared then return end
+            if key == "shared" then
+                for i = 1, #A2_DESIGNER_RESET_FIELDS do
+                    local field = A2_DESIGNER_RESET_FIELDS[i]
+                    shared[field] = A2_DESIGNER_RESET_DEFAULTS[field]
+                end
+            else
+                a2.perUnit = (type(a2.perUnit) == "table") and a2.perUnit or {}
+                local u = a2.perUnit[key]
+                if type(u) == "table" then
+                    u.overrideLayout = false
+                    u.layout = nil
+                end
+            end
+            A2_RequestApply()
+            C_Timer.After(0, function()
+                if panel and panel.OnRefresh then panel.OnRefresh() end
+            end)
+        end)
+        designerResetBtn:SetScript("OnEnter", function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_NONE")
+            GameTooltip:ClearAllPoints()
+            GameTooltip:SetPoint("TOPLEFT", self, "TOPRIGHT", 12, 0)
+            GameTooltip:SetText(TR("Reset This Designer"), 1, 1, 1)
+            if GetEditingKey() == "shared" then
+                GameTooltip:AddLine(TR("Reset the shared aura designer fields back to the built-in defaults."), 0.8, 0.8, 0.8, true)
+            else
+                GameTooltip:AddLine(TR("Clear the current unit's frame-designer override and fall back to Shared."), 0.8, 0.8, 0.8, true)
+            end
+            GameTooltip:Show()
+        end)
+        designerResetBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
+        local function MakeDesignerSlider(label, minV, maxV, step, x, y, key, fallback, tip)
+            local slider = CreateAuras2CompactSlider(designerBox, label, minV, maxV, step, x, y, 124,
+                function() return A2_GetLayoutValue(key, fallback) end,
+                function(v) A2_SetLayoutValue(key, v) end)
+            AttachSliderValueBox(slider, minV, maxV, step, function() return A2_GetLayoutValue(key, fallback) end)
+            MSUF_StyleAuras2CompactSlider(slider, { leftTitle = true, hideMinMax = true })
+            A2_Track("layout", slider)
+            A2_WrapCheckboxAutoOverride(slider, "layout")
+            if tip then
+                slider:SetScript("OnEnter", function(self)
+                    if not GameTooltip then return end
+                    GameTooltip:SetOwner(self, "ANCHOR_NONE")
+                    GameTooltip:ClearAllPoints()
+                    GameTooltip:SetPoint("TOPLEFT", self, "TOPRIGHT", 12, 0)
+                    GameTooltip:SetText(label, 1, 1, 1)
+                    GameTooltip:AddLine(tip, 0.8, 0.8, 0.8, true)
+                    GameTooltip:Show()
+                end)
+                slider:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+                if slider.__MSUF_valueBox then
+                    slider.__MSUF_valueBox:SetScript("OnEnter", slider:GetScript("OnEnter"))
+                    slider.__MSUF_valueBox:SetScript("OnLeave", slider:GetScript("OnLeave"))
+                end
+            end
+            return slider
+        end
+
+        MakeDesignerSlider("Anchor X", -200, 200, 1, 12, -132, "offsetX", 0, "Moves the main Auras2 anchor left/right relative to the frame.")
+        MakeDesignerSlider("Anchor Y", -200, 200, 1, 150, -132, "offsetY", 6, "Moves the main Auras2 anchor up/down relative to the frame.")
+        MakeDesignerSlider("Icon spacing", 0, 20, 1, 288, -132, "spacing", 2, "Shared spacing used between aura icons inside the group blocks.")
+
+        MakeDesignerSlider("Buff X", -200, 200, 1, 12, -198, "buffGroupOffsetX", 0, "Offset the buff block from the main aura anchor.")
+        MakeDesignerSlider("Buff Y", -200, 200, 1, 150, -198, "buffGroupOffsetY", 0, "Offset the buff block from the main aura anchor.")
+        MakeDesignerSlider("Buff size", 12, 64, 1, 288, -198, "buffGroupIconSize", A2_GetLayoutValue("iconSize", 26), "Override buff icon size for this profile.")
+
+        MakeDesignerSlider("Debuff X", -200, 200, 1, 12, -264, "debuffGroupOffsetX", 0, "Offset the debuff block from the main aura anchor.")
+        MakeDesignerSlider("Debuff Y", -200, 200, 1, 150, -264, "debuffGroupOffsetY", 0, "Offset the debuff block from the main aura anchor.")
+        MakeDesignerSlider("Debuff size", 12, 64, 1, 288, -264, "debuffGroupIconSize", A2_GetLayoutValue("iconSize", 26), "Override debuff icon size for this profile.")
+
+        local sPrivateX = MakeDesignerSlider("Private X", -200, 200, 1, 12, -330, "privateOffsetX", 0, "Offset the private aura block from the main aura anchor.")
+        local sPrivateY = MakeDesignerSlider("Private Y", -200, 200, 1, 150, -330, "privateOffsetY", 0, "Offset the private aura block from the main aura anchor.")
+        local sPrivateSize = MakeDesignerSlider("Private size", 12, 64, 1, 288, -330, "privateSize", A2_GetLayoutValue("iconSize", 26), "Override private aura icon size for this profile.")
+
+        local sReminderX = MakeDesignerSlider("Reminder X", -200, 200, 1, 12, -396, "reminderOffsetX", 0, "Offset the reminder block from the main aura anchor.")
+        local sReminderY = MakeDesignerSlider("Reminder Y", -200, 200, 1, 150, -396, "reminderOffsetY", 0, "Offset the reminder block from the main aura anchor.")
+        local sReminderSize = MakeDesignerSlider("Reminder size", 12, 64, 1, 288, -396, "reminderIconSize", 22, "Override reminder icon size for this profile.")
+
+        local reminderGrowthDD = CreateDropdown(designerBox, "Reminder Growth", 426, -402,
+            function() return A2_GetReminderGrowthValue() end,
+            function(v) A2_SetReminderGrowthValue(v) end)
+        A2_Track("layout", reminderGrowthDD)
+
+        MakeDesignerSlider("Stack size", 8, 32, 1, 426, -132, "stackTextSize", 14, "Controls stack count font size.")
+        MakeDesignerSlider("Stack X", -20, 20, 1, 564, -132, "stackTextOffsetX", 0, "Moves the stack-count text horizontally inside the icon.")
+        MakeDesignerSlider("Stack Y", -20, 20, 1, 426, -198, "stackTextOffsetY", 0, "Moves the stack-count text vertically inside the icon.")
+
+        MakeDesignerSlider("CD size", 8, 32, 1, 564, -198, "cooldownTextSize", 14, "Controls cooldown text font size.")
+        MakeDesignerSlider("CD X", -20, 20, 1, 426, -264, "cooldownTextOffsetX", 0, "Moves the cooldown text horizontally inside the icon.")
+        MakeDesignerSlider("CD Y", -20, 20, 1, 564, -264, "cooldownTextOffsetY", 0, "Moves the cooldown text vertically inside the icon.")
+
+        local sReminderSpacing = MakeDesignerSlider("Reminder gap", 0, 20, 1, 426, -330, "reminderSpacing", 2, "Spacing between reminder icons.")
+
+        local designerWidgetsPlayerOnly = { sPrivateX, sPrivateY, sPrivateSize, sReminderX, sReminderY, sReminderSize, sReminderSpacing, reminderGrowthDD }
+        local function UpdateDesignerUnitState()
+            local key = GetEditingKey()
+            local playerOnly = (key == "shared" or key == "player")
+            for i = 1, #designerWidgetsPlayerOnly do
+                A2_SetWidgetEnabled(designerWidgetsPlayerOnly[i], playerOnly)
+            end
+            designerResetBtn:SetText(key == "shared" and TR("Reset Shared") or TR("Reset This Designer"))
+            UpdateDesignerPreview()
+        end
+        panel.__msufA2_UpdateDesignerUnitState = UpdateDesignerUnitState
+        if _G then _G.MSUF_A2_UpdateDesignerUnitState = UpdateDesignerUnitState end
+        designerBox:SetScript("OnShow", UpdateDesignerUnitState)
+    end
+
     -- ================================================================
     -- DISPLAY (grouped: Buffs/Debuffs columns + Icons/Cooldown/Borders columns)
     -- ================================================================
@@ -2984,6 +3437,9 @@ end
         if panel and panel.__msufA2_UpdateOverrideSummary then
             panel.__msufA2_UpdateOverrideSummary()
         end
+        -- Sync aura designer state (editing key + player-only widgets).
+        local fnDesigner = rawget(_G, "MSUF_A2_UpdateDesignerUnitState")
+        if type(fnDesigner) == "function" then pcall(fnDesigner) end
         -- Sync ignore list box state (editing key + override gating)
         local fn = rawget(_G, "MSUF_A2_UpdateIgnoreBoxState")
         if type(fn) == "function" then pcall(fn) end
