@@ -59,6 +59,47 @@ local function ResolveAnchor(key, conf)
     return anchor
 end
 
+local function RectPointXY(l, r, t, b, p)
+    if p == "CENTER" then return (l + r) * 0.5, (t + b) * 0.5 end
+    local cx, cy = (l + r) * 0.5, (t + b) * 0.5
+    if p == "TOPLEFT" then return l, t end
+    if p == "TOP" then return cx, t end
+    if p == "TOPRIGHT" then return r, t end
+    if p == "LEFT" then return l, cy end
+    if p == "RIGHT" then return r, cy end
+    if p == "BOTTOMLEFT" then return l, b end
+    if p == "BOTTOM" then return cx, b end
+    if p == "BOTTOMRIGHT" then return r, b end
+    return (l + r) * 0.5, (t + b) * 0.5
+end
+
+local function ApplyGroupDragOffsets(d, moverLeft, moverRight, moverTop, moverBottom, uiScale)
+    local conf = d.conf
+    local anchor = conf and conf.anchor or nil
+    local point = anchor and anchor[1] or "TOPLEFT"
+    local relPoint = anchor and anchor[3] or point
+    local ax, ay = PointXY(d.anchor or UIParent, relPoint)
+    if not (ax and ay) then return end
+    local anchorScale = (d.anchor and d.anchor.GetEffectiveScale and d.anchor:GetEffectiveScale()) or 1
+    if anchorScale == 0 then anchorScale = 1 end
+    local fx, fy = RectPointXY(moverLeft, moverRight, moverTop, moverBottom, point)
+    if not (fx and fy) then return end
+    local offX = ((fx * uiScale) - (ax * anchorScale)) / anchorScale
+    local offY = ((fy * uiScale) - (ay * anchorScale)) / anchorScale
+    local setFn = _G.MSUF_Group_SetOffsets
+    if type(setFn) == "function" then
+        setFn(conf, round(offX), round(offY), d.groupDefaultY)
+    else
+        conf.anchor = conf.anchor or { point, nil, relPoint, 0, 0 }
+        conf.anchor[4], conf.anchor[5] = round(offX), round(offY)
+        conf.offsetX, conf.offsetY = conf.anchor[4], conf.anchor[5]
+    end
+    if d.bar and not InCombatLockdown() then
+        d.bar:ClearAllPoints()
+        d.bar:SetPoint(point, d.anchor or UIParent, relPoint, conf.anchor[4], conf.anchor[5])
+    end
+end
+
 local tickerFrame
 local activeDrag
 local idleSyncAcc = 0
@@ -97,49 +138,34 @@ local function OnUpdate(self, elapsed)
                 round(snapCY - d.screenH * 0.5)))
         end
 
-        -- ═══════════════════════════════════════════════════════════════
-        -- Position bar with CENTER — same code path as PositionUnitFrame
-        -- ═══════════════════════════════════════════════════════════════
-        -- snapCX/snapCY = desired bar center in UIParent screen coords.
-        -- Convert to anchor-relative offset (same math as _UpdateDBFromFrame).
-        -- Then SetPoint("CENTER", anchor, "CENTER", ...) — identical to pipeline.
-
         local bar = d.bar
-        if bar and not InCombatLockdown() then
+        if d.isGroup then
+            local moverLeft = snapCX - d.halfW
+            local moverRight = snapCX + d.halfW
+            local moverTop = snapCY + d.halfH
+            local moverBottom = snapCY - d.halfH
+            ApplyGroupDragOffsets(d, moverLeft, moverRight, moverTop, moverBottom, sc)
+        elseif bar and not InCombatLockdown() then
             local anchor = d.anchor
             local conf = d.conf
-
-            -- Compute where bar center IS in screen pixels after hypothetical move
-            -- snapCX/snapCY are in UIParent coords.
-            -- Bar center in screen pixels = snapCX * uiScale
-            -- We need: offset = (barCenter * barScale - anchorCenter * anchorScale) / anchorScale
-            -- Since we WANT barCenter at snapCX (UIParent coords), and UIParent coords = screen / uiScale:
-            -- barCenter_local = snapCX * (uiScale / barScale)
-            -- But simpler: just write offset then SetPoint with CENTER.
-
             local ax, ay = anchor:GetCenter()
             if ax and ay then
                 local as = anchor:GetEffectiveScale() or 1
                 local fs = bar:GetEffectiveScale() or 1
                 if as == 0 then as = 1 end; if fs == 0 then fs = 1 end
 
-                -- Desired bar center in absolute screen pixels
-                local barScreenCX = snapCX * sc  -- sc = UIParent:GetEffectiveScale()
+                local barScreenCX = snapCX * sc
                 local barScreenCY = snapCY * sc
-                -- Anchor center in absolute screen pixels
                 local ancScreenCX = ax * as
                 local ancScreenCY = ay * as
-                -- Offset in anchor's coord space
                 local offX = (barScreenCX - ancScreenCX) / as
                 local offY = (barScreenCY - ancScreenCY) / as
 
-                -- Boss spacing adjustment
                 if d.bossAdj then offY = offY - d.bossAdj end
 
                 conf.offsetX = round(offX)
                 conf.offsetY = round(offY)
 
-                -- Check ECV path
                 local db = _G.MSUF_DB
                 local _g = db and db.general
                 local ecvFn = _G.MSUF_GetEffectiveCooldownFrame
@@ -148,24 +174,15 @@ local function OnUpdate(self, elapsed)
                 local ecvRule = d.ecvRule
 
                 if _g and _g.anchorToCooldown and ecv and anchor == ecv and ecvRule then
-                    -- ECV path: PositionUnitFrame uses point-to-point
-                    -- We wrote center-to-center offset above, need to convert for ECV
                     local point, relPoint, baseX, extraY = ecvRule[1], ecvRule[2], ecvRule[3] or 0, ecvRule[4] or 0
-                    -- For ECV: gapY = offsetY, x = baseX + offsetX
-                    -- PositionUnitFrame: MSUF_ApplyPoint(f, point, ecv, relPoint, baseX + offsetX, offsetY + extraY)
-                    -- So we need to recompute offsetX/offsetY for ECV path
                     local ax2, ay2 = PointXY(ecv, relPoint)
-                    -- Desired bar point position
                     local fx2, fy2 = PointXY(bar, point)
-                    -- But bar hasn't moved yet... use target position instead
-                    -- Actually, just temporarily position with CENTER, read PointXY, then fix
                     pcall(function()
                         bar._msufDragActive = false
                         bar:ClearAllPoints()
                         bar:SetPoint("CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
                     end)
                     bar._msufDragActive = true
-                    -- Now read the ECV offsets
                     fx2, fy2 = PointXY(bar, point)
                     if ax2 and ay2 and fx2 and fy2 then
                         conf.offsetX = round((fx2 * fs - ax2 * as) / as - baseX)
@@ -176,7 +193,6 @@ local function OnUpdate(self, elapsed)
                         bar:SetPoint(point, ecv, relPoint, baseX + conf.offsetX, conf.offsetY + extraY)
                     end)
                 else
-                    -- Normal path: CENTER-to-CENTER (same as PositionUnitFrame line 2429)
                     pcall(function()
                         bar._msufDragActive = false
                         bar:ClearAllPoints()
@@ -241,6 +257,8 @@ function Ticker.BeginDrag(mover, key, cfg)
         screenW = UIParent:GetWidth(),
         screenH = UIParent:GetHeight(),
         bossAdj = bossAdj,
+        isGroup = cfg and cfg.popupType == "group",
+        groupDefaultY = (key == "group_raid") and -400 or -200,
     }
 end
 
@@ -259,15 +277,20 @@ function Ticker.EndDrag()
     local moved = abs(cx - d.startCX) > 0.5 or abs(cy - d.startCY) > 0.5
 
     if moved then
-        -- Offsets already written by OnUpdate. Just finalize pipeline.
-        if type(ApplySettingsForKey) == "function" then
-            ApplySettingsForKey(d.key)
+        if d.isGroup then
+            if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
+            if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
+            if EM2.GroupPopup and EM2.GroupPopup.IsOpen() then EM2.GroupPopup.Sync() end
+        else
+            if type(ApplySettingsForKey) == "function" then
+                ApplySettingsForKey(d.key)
+            end
+            if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
+            if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
         end
         C_Timer.After(0.06, function()
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
         end)
-        if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
-        if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
     end
 
     return moved

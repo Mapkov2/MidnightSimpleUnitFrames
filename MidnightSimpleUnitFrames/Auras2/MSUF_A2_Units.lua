@@ -43,17 +43,18 @@ if type(Units.BOSS) ~= "table" then
     Units.BOSS = t
 end
 
+if type(Units.GROUP_PARTY) ~= "table" then Units.GROUP_PARTY = { "party1", "party2", "party3", "party4" } end
+if type(Units.GROUP_RAID) ~= "table" then
+    local t = {}
+    for i = 1, 40 do t[i] = "raid" .. i end
+    Units.GROUP_RAID = t
+end
+
 if type(Units.ALL) ~= "table" then
     local t = {}
     local n = 0
-    for i = 1, #Units.BASE do
-        n = n + 1
-        t[n] = Units.BASE[i]
-    end
-    for i = 1, #Units.BOSS do
-        n = n + 1
-        t[n] = Units.BOSS[i]
-    end
+    for i = 1, #Units.BASE do n = n + 1; t[n] = Units.BASE[i] end
+    for i = 1, #Units.BOSS do n = n + 1; t[n] = Units.BOSS[i] end
     Units.ALL = t
 end
 
@@ -65,7 +66,7 @@ end
 
 function Units.ForEachAll(fn) 
     if type(fn) ~= "function" then  return end
-    local t = Units.ALL
+    local t = Units.GetAll()
     for i = 1, #t do
         fn(t[i])
     end
@@ -79,8 +80,39 @@ function Units.ForEachBoss(fn)
     end
  end
 
--- Optionally expose simple getter.
-function Units.GetAll() 
-    return Units.ALL
+local function AppendActiveGroupUnits(out)
+    local groupNS = ns and ns.Group
+    local roster = groupNS and groupNS.roster
+    if _G.MSUF_GroupPreviewActive and type(roster) == "table" and type(roster.units) == "table" then
+        for i = 1, #roster.units do
+            local unit = roster.units[i]
+            if unit then
+                out[#out + 1] = unit
+            end
+        end
+        return
+    end
+
+    local rosterUnits = groupNS and groupNS.rosterUnits
+    if type(rosterUnits) == "table" then
+        for i = 1, #Units.GROUP_PARTY do
+            local unit = Units.GROUP_PARTY[i]
+            if rosterUnits[unit] then out[#out + 1] = unit end
+        end
+        for i = 1, #Units.GROUP_RAID do
+            local unit = Units.GROUP_RAID[i]
+            if rosterUnits[unit] then out[#out + 1] = unit end
+        end
+    end
 end
 
+-- Optionally expose simple getter.
+function Units.GetAll() 
+    local out = {}
+    for i = 1, #Units.ALL do out[#out + 1] = Units.ALL[i] end
+    local db = _G.MSUF_DB and _G.MSUF_DB.group
+    if db and db.enabled ~= false then
+        AppendActiveGroupUnits(out)
+    end
+    return out
+end
