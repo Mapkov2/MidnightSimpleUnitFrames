@@ -13,7 +13,7 @@ local W8    = "Interface/Buttons/WHITE8X8"
 local floor, max, min = math.floor, math.max, math.min
 
 local hudFrame, row2Frame
-local previewBtn, auraBtn, groupBtn, snapToggle, cdmBtn, anchorBtn
+local previewBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
 local helpBtn, tutorialPanel, tourState
@@ -676,14 +676,6 @@ local function EnsureHUD()
     end)
     SetTip(auraBtn, "Toggle aura preview icons\nand aura mover boxes.")
     r1[#r1+1] = auraBtn
-
-    groupBtn = MakeBtn(c1, "Group", 54, BTN_H, 12, function()
-        _G.MSUF_GroupPreviewActive = not (_G.MSUF_GroupPreviewActive and true or false)
-        if type(_G.MSUF_Group_SyncPreview) == "function" then _G.MSUF_Group_SyncPreview() end
-        SetActive(groupBtn, _G.MSUF_GroupPreviewActive)
-    end)
-    SetTip(groupBtn, "Show party/raid preview frames\nwith placeholder data.")
-    r1[#r1+1] = groupBtn
 
     snapToggle = MakeBtn(c1, "Snap", 48, BTN_H, 12, function()
         if EM2.Snap then

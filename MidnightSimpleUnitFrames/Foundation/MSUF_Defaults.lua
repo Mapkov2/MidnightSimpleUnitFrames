@@ -1470,62 +1470,6 @@ local function fill(key, defaults)
     for k, v in pairs(textDefaults) do
         if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end
     end
-    MSUF_DB.group = MSUF_DB.group or {}
-    local group = MSUF_DB.group
-    if group.enabled == nil then group.enabled = true end
-    if group.hideBlizzard == nil then group.hideBlizzard = true end
-    group.shared = group.shared or {}
-    group.party = group.party or {}
-    group.raid = group.raid or {}
-
-    local shared = group.shared
-    if shared.showPowerBar == nil then shared.showPowerBar = "HEALER" end
-    if shared.powerBarHeight == nil then shared.powerBarHeight = 3 end
-    if shared.showName == nil then shared.showName = true end
-    if shared.showHPText == nil then shared.showHPText = false end
-    if shared.rangeFade == nil then shared.rangeFade = true end
-    if shared.rangeFadeAlpha == nil then shared.rangeFadeAlpha = 0.4 end
-    if shared.maxBuffs == nil then shared.maxBuffs = 3 end
-    if shared.maxDebuffs == nil then shared.maxDebuffs = 3 end
-    if shared.auraIconSize == nil then shared.auraIconSize = 16 end
-    if shared.excludeSated == nil then shared.excludeSated = true end
-    shared.bars = shared.bars or {}
-    shared.font = shared.font or {}
-    shared.aura = shared.aura or {}
-    if shared.bars.showPowerBar == nil then shared.bars.showPowerBar = shared.showPowerBar end
-    if shared.bars.powerBarHeight == nil then shared.bars.powerBarHeight = shared.powerBarHeight end
-    if shared.font.showName == nil then shared.font.showName = shared.showName end
-    if shared.font.showHPText == nil then shared.font.showHPText = shared.showHPText end
-    if shared.font.nameSize == nil then shared.font.nameSize = 11 end
-    if shared.font.hpSize == nil then shared.font.hpSize = 10 end
-    if shared.aura.maxBuffs == nil then shared.aura.maxBuffs = 3 end
-    if shared.aura.maxDebuffs == nil then shared.aura.maxDebuffs = 3 end
-    if shared.aura.iconSize == nil then shared.aura.iconSize = 16 end
-    if shared.aura.excludeSated == nil then shared.aura.excludeSated = true end
-    if shared.aura.mode == nil then shared.aura.mode = "BLIZZARD" end
-    shared.aura.designer = shared.aura.designer or { text = "", groups = {} }
-
-    local party = group.party
-    if party.width == nil then party.width = 90 end
-    if party.height == nil then party.height = 36 end
-    if party.anchor == nil then party.anchor = { "TOPLEFT", nil, "TOPLEFT", 20, -200 } end
-    if party.offsetX == nil then party.offsetX = tonumber(party.anchor[4]) or 20 end
-    if party.offsetY == nil then party.offsetY = tonumber(party.anchor[5]) or -200 end
-    if party.growthDirection == nil then party.growthDirection = "DOWN" end
-    if party.spacing == nil then party.spacing = 2 end
-    party.overrides = party.overrides or { bars = {}, font = {}, aura = {} }
-
-    local raid = group.raid
-    if raid.width == nil then raid.width = 72 end
-    if raid.height == nil then raid.height = 32 end
-    if raid.anchor == nil then raid.anchor = { "TOPLEFT", nil, "TOPLEFT", 20, -400 } end
-    if raid.offsetX == nil then raid.offsetX = tonumber(raid.anchor[4]) or 20 end
-    if raid.offsetY == nil then raid.offsetY = tonumber(raid.anchor[5]) or -400 end
-    if raid.growthDirection == nil then raid.growthDirection = "DOWN" end
-    if raid.spacing == nil then raid.spacing = 1 end
-    if raid.wrapAfter == nil then raid.wrapAfter = 5 end
-    raid.overrides = raid.overrides or { bars = {}, font = {}, aura = {} }
-
     for _, unitKey in ipairs({"player", "target", "targettarget", "focus", "pet", "boss"}) do
         MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
         local u = MSUF_DB[unitKey]

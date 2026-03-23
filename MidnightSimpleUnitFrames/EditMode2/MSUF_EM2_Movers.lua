@@ -26,11 +26,6 @@ end
 local movers = {}
 local moverParent
 
-local function IsGroupPreviewMover(key)
-    if key ~= "group_party" and key ~= "group_raid" then return false end
-    return _G.MSUF_GroupPreviewActive and true or false
-end
-
 local function SyncMoverToFrame(mover, frame)
     if not frame then return end
     local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
@@ -94,7 +89,7 @@ local function CreateMover(key, cfg)
 
     -- Hide label when preview is active (preview frame already shows unit name)
     function mover:UpdateLabelVisibility()
-        if (_G.MSUF_PreviewTestMode or IsGroupPreviewMover(self._barKey)) and not self._dragging then
+        if _G.MSUF_PreviewTestMode and not self._dragging then
             self._label:Hide()
             self._bg:SetColorTexture(0, 0, 0, 0)
             self._brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0.25)
@@ -110,12 +105,6 @@ local function CreateMover(key, cfg)
         if InCombatLockdown and InCombatLockdown() then return end
         self._dragging = true
         self._coordFS:Show()
-
-        if EM2.State then EM2.State.SetUnitKey(key) end
-        if EM2.HUD and EM2.HUD.RefreshUnitSelector then EM2.HUD.RefreshUnitSelector() end
-        if cfg and cfg.popupType == "group" and type(_G.MSUF_Group_SyncPreview) == "function" then
-            _G.MSUF_Group_SyncPreview()
-        end
 
         if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
             _G.MSUF_EM_UndoBeforeChange("unit", key)
