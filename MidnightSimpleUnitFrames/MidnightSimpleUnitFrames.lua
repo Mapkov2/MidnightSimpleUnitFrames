@@ -5993,6 +5993,9 @@ if type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then
 else
     ApplyAllSettings()
 end
+if _G and _G.MSUF_GroupFrames and type(_G.MSUF_GroupFrames.TryEnable) == "function" then
+    _G.MSUF_GroupFrames.TryEnable()
+end
 -- P0: Pre-resolve split-module function refs for UpdateSimpleUnitFrame.
 -- After PLAYER_LOGIN all Core/ files have loaded. Eliminates 3 branches
 -- + 3 _G hash lookups per frame update (300-1500 branches/sec in combat).
