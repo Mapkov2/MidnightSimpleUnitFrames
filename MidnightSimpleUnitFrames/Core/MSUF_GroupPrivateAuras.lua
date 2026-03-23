@@ -2,6 +2,7 @@ local addonName, ns = ...
 ns = ns or {}
 
 <<<<<<< ours
+<<<<<<< ours
 <<<<<<< HEAD
 local type = type
 local wipe = wipe
@@ -12,11 +13,14 @@ local InCombatLockdown = InCombatLockdown
 >>>>>>> a9840c2c35bdbd4dac6e74093eb8213332edd006
 =======
 >>>>>>> theirs
+=======
+>>>>>>> theirs
 local function Shared()
     local db = _G.MSUF_DB and _G.MSUF_DB.group and _G.MSUF_DB.group.shared
     return db or {}
 end
 
+<<<<<<< ours
 <<<<<<< ours
 <<<<<<< HEAD
 local function PrivateAurasSupported()
@@ -72,6 +76,8 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
     end
 
 =======
+=======
+>>>>>>> theirs
 local function ClearAnchors(frame)
     if not frame or not frame._privateAnchors or not C_UnitAuras or not C_UnitAuras.RemovePrivateAuraAnchor then return end
     for i = 1, #frame._privateAnchors do
@@ -94,6 +100,9 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
     end
     frame._privateAnchors = frame._privateAnchors or {}
     local container = frame.privateAuraContainer
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
     local slots = container._slots
     if type(slots) ~= "table" then
@@ -101,7 +110,10 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
         container._slots = slots
     end
 <<<<<<< ours
+<<<<<<< ours
 
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
     container:SetSize(maxSlots * 20, 18)
@@ -109,6 +121,7 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
 
     for i = 1, maxSlots do
         local slot = slots[i]
+<<<<<<< ours
 <<<<<<< ours
         if not slot then
             slot = CreateFrame("Frame", nil, container)
@@ -156,6 +169,8 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
         frame._privateAnchors[i] = C_UnitAuras.AddPrivateAuraAnchor({
 >>>>>>> a9840c2c35bdbd4dac6e74093eb8213332edd006
 =======
+=======
+>>>>>>> theirs
         if not (slot and slot.SetPoint and slot.SetSize) then
             slot = CreateFrame("Frame", nil, container)
             slot:SetSize(18, 18)
@@ -165,6 +180,9 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
         slot:SetPoint("LEFT", container, "LEFT", (i - 1) * 20, 0)
         if slot.Show then slot:Show() end
         frame._privateAnchors[i] = C_UnitAuras.AddPrivateAuraAnchor({
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
             unitToken = unit,
             auraIndex = i,
@@ -174,6 +192,7 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
             iconInfo = { iconWidth = 18, iconHeight = 18 },
         })
     end
+<<<<<<< ours
 <<<<<<< ours
 <<<<<<< HEAD
 
@@ -185,6 +204,8 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
 =======
 >>>>>>> a9840c2c35bdbd4dac6e74093eb8213332edd006
 =======
+=======
+>>>>>>> theirs
 
     for i = maxSlots + 1, #slots do
         local slot = slots[i]
@@ -192,5 +213,8 @@ function _G.MSUF_Group_OnAssignedUnit(frame, unit)
             slot:Hide()
         end
     end
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 end

@@ -854,7 +854,11 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     end
     -- Display + Layout are collapsible for a cleaner menu, but stay open by default.
 <<<<<<< ours
+<<<<<<< ours
     local designerOuter, designerBody = MakeCollapsibleBox(content, leftTop, 720, 468, "Frames • Aura Designer", true)
+=======
+    local designerOuter, designerBody = MakeCollapsibleBox(content, leftTop, 720, 110, "Group Aura Designer", false)
+>>>>>>> theirs
 =======
     local designerOuter, designerBody = MakeCollapsibleBox(content, leftTop, 720, 110, "Group Aura Designer", false)
 >>>>>>> theirs
@@ -1785,6 +1789,9 @@ do
         if overrideFilters then parts[#parts + 1] = "Filters" end
         if overrideCaps then parts[#parts + 1] = "Caps" end
         if #parts == 0 then return "Uses Shared filters and caps." end
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
         if #parts == 1 then return "Override active: this unit uses its own " .. parts[1] .. "." end
         return "Override active: this unit uses its own " .. table.concat(parts, ", ") .. "."
@@ -2048,6 +2055,7 @@ end
     CreateBoolToggleButtonPath(leftTop, "Boss 1-5", 300, -120, 96, 22, A2_DB, "showBoss", nil, nil, A2_RequestApply)
 
     -- ================================================================
+<<<<<<< ours
 <<<<<<< ours
     -- FRAMES • AURA DESIGNER
     -- ================================================================
@@ -2361,6 +2369,8 @@ end
         if _G then _G.MSUF_A2_UpdateDesignerUnitState = UpdateDesignerUnitState end
         designerBox:SetScript("OnShow", UpdateDesignerUnitState)
 =======
+=======
+>>>>>>> theirs
     -- GROUP AURA DESIGNER NOTE
     -- ================================================================
     do
@@ -2377,6 +2387,9 @@ end
         panel.__msufA2_RefreshDesignerPreview = function() end
         panel.__msufA2_UpdateDesignerUnitState = function() end
         if _G then _G.MSUF_A2_UpdateDesignerUnitState = panel.__msufA2_UpdateDesignerUnitState end
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
     end
 

@@ -129,7 +129,10 @@ local function ParseDesignerText(text)
 end
 
 <<<<<<< ours
+<<<<<<< ours
 =======
+=======
+>>>>>>> theirs
 local function CountDesignerSpells(groups)
     local total = 0
     if type(groups) ~= "table" then return 0 end
@@ -144,6 +147,9 @@ local function CountDesignerSpells(groups)
     return total
 end
 
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 local function DeepCopy(v)
     if type(v) ~= "table" then return v end
@@ -168,7 +174,10 @@ local function SaveDesigner(scope, text)
 end
 
 <<<<<<< ours
+<<<<<<< ours
 =======
+=======
+>>>>>>> theirs
 local function UpdateDesignerStatus(scope)
     if not panel or not panel.designerStatus then return end
     local designer = GetGroupValue(scope, "aura", "designer", nil)
@@ -182,6 +191,9 @@ local function UpdateDesignerStatus(scope)
     end
 end
 
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 local function RefreshRuntime()
     if type(_G.MSUF_SyncBlizzardGroupFrames) == "function" then _G.MSUF_SyncBlizzardGroupFrames() end
@@ -229,6 +241,10 @@ function _G.MSUF_SelectGroupOptionsScope(scope)
     panel.excludeSatedCB:SetChecked(GetGroupValue(currentScope, "aura", "excludeSated", true) == true)
     panel.designerEdit:SetText(DesignerTextForScope(currentScope))
 <<<<<<< ours
+<<<<<<< ours
+=======
+    UpdateDesignerStatus(currentScope)
+>>>>>>> theirs
 =======
     UpdateDesignerStatus(currentScope)
 >>>>>>> theirs
@@ -311,7 +327,11 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     if panel then return panel end
     panel = CreateFrame("Frame", "MSUF_GroupOptionsPanel", UIParent)
 <<<<<<< ours
+<<<<<<< ours
     panel:SetSize(760, 760)
+=======
+    panel:SetSize(760, 840)
+>>>>>>> theirs
 =======
     panel:SetSize(760, 840)
 >>>>>>> theirs
@@ -405,11 +425,14 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     panel.excludeSatedCB = MakeCheck(panel, "Exclude Sated / Exhaustion", 20, -590, Apply)
 
 <<<<<<< ours
+<<<<<<< ours
     MakeLabel(panel, "Aura Designer (Blizzard whitelist groups, 12.0 live via CompactRaidFrame cache)", 20, -630)
     local designerBG = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     designerBG:SetPoint("TOPLEFT", panel, "TOPLEFT", 20, -650)
     designerBG:SetSize(500, 82)
 =======
+=======
+>>>>>>> theirs
     MakeLabel(panel, "Aura Groups / Whitelist (group frames only)", 20, -630)
     local designerDesc = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     designerDesc:SetPoint("TOPLEFT", panel, "TOPLEFT", 20, -648)
@@ -419,6 +442,9 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     local designerBG = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     designerBG:SetPoint("TOPLEFT", panel, "TOPLEFT", 20, -690)
     designerBG:SetSize(500, 128)
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
     designerBG:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
     designerBG:SetBackdropColor(0.05, 0.05, 0.05, 0.85)
@@ -434,6 +460,7 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     local applyBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     applyBtn:SetSize(120, 24)
 <<<<<<< ours
+<<<<<<< ours
     applyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -650)
     applyBtn:SetText("Apply")
     applyBtn:SetScript("OnClick", Apply)
@@ -442,6 +469,8 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     copyBtn:SetSize(160, 24)
     copyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -682)
 =======
+=======
+>>>>>>> theirs
     applyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -690)
     applyBtn:SetText("Apply")
     applyBtn:SetScript("OnClick", Apply)
@@ -458,6 +487,9 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     local copyBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     copyBtn:SetSize(160, 24)
     copyBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -754)
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
     copyBtn:SetText("Copy overrides to other")
     copyBtn:SetScript("OnClick", function()
@@ -472,12 +504,15 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
 
     local designerHint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 <<<<<<< ours
+<<<<<<< ours
     designerHint:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -718)
     designerHint:SetWidth(190)
     designerHint:SetJustifyH("LEFT")
     designerHint:SetJustifyV("TOP")
     designerHint:SetText("Format:\nExternal=102342,6940,33206\nHaste=2825,32182,80353")
 =======
+=======
+>>>>>>> theirs
     designerHint:SetPoint("TOPLEFT", panel, "TOPLEFT", 540, -790)
     designerHint:SetWidth(190)
     designerHint:SetJustifyH("LEFT")
@@ -489,6 +524,9 @@ function _G.MSUF_EnsureGroupOptionsPanelBuilt()
     panel.designerStatus:SetWidth(500)
     panel.designerStatus:SetJustifyH("LEFT")
     panel.designerStatus:SetText("")
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 
     local function bindApply(editBox)

@@ -279,15 +279,21 @@ function Ticker.EndDrag()
     if moved then
         if d.isGroup then
 <<<<<<< ours
+<<<<<<< ours
             if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
             if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
 =======
+=======
+>>>>>>> theirs
             if type(_G.MSUF_Group_SyncPreview) == "function" then
                 _G.MSUF_Group_SyncPreview()
             else
                 if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
                 if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
             end
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
             if EM2.GroupPopup and EM2.GroupPopup.IsOpen() then EM2.GroupPopup.Sync() end
         else

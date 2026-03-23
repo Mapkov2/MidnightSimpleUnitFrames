@@ -57,15 +57,21 @@ local function Apply()
     if pf.wrapBox then conf.wrapAfter = num(pf.wrapBox, conf.wrapAfter or 5, 1, 10) end
     if pf.growthDrop and pf._growthValue then conf.growthDirection = pf._growthValue end
 <<<<<<< ours
+<<<<<<< ours
     if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
     if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
 =======
+=======
+>>>>>>> theirs
     if type(_G.MSUF_Group_SyncPreview) == "function" then
         _G.MSUF_Group_SyncPreview()
     else
         if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
         if type(_G.MSUF_Group_RefreshAll) == "function" then _G.MSUF_Group_RefreshAll() end
     end
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
 end
@@ -200,6 +206,10 @@ function _G.MSUF_Group_SyncPreview()
     if not _G.MSUF_GroupPreviewActive then
         if ns.Group and ns.Group.ScheduleRosterRebuild then ns.Group.ScheduleRosterRebuild() end
 <<<<<<< ours
+<<<<<<< ours
+=======
+        if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
+>>>>>>> theirs
 =======
         if type(_G.MSUF_LayoutGroupFrames) == "function" then _G.MSUF_LayoutGroupFrames() end
 >>>>>>> theirs
