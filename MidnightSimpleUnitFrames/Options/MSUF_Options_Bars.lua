@@ -54,12 +54,30 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- =====================================================================
     -- Scope-aware get/set helpers
     -- =====================================================================
+    -- GF helper: resolve GF override DB path
+    local function _GF_GetBarOverride(uk)
+        local db = _G.MSUF_DB; if not db then return nil, false end
+        local gf = db.groupframes; if type(gf) ~= "table" then return nil, false end
+        local sub = (uk == "gf_party") and gf.party or (uk == "gf_raid") and gf.raid or nil
+        if type(sub) ~= "table" then return nil, false end
+        return sub, (sub.overrideBars == true)
+    end
+
     local function ScopeGet(generalKey, defaultVal)
         EnsureDB()
         local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
         if uk then
-            local u = MSUF_DB[uk]
-            if u and u.hpPowerTextOverride == true and u[generalKey] ~= nil then return u[generalKey] end
+            -- GF scope: read from groupframes.party/raid.bars
+            if uk == "gf_party" or uk == "gf_raid" then
+                local sub, hasOvr = _GF_GetBarOverride(uk)
+                if sub and hasOvr then
+                    local ov = sub.bars
+                    if type(ov) == "table" and ov[generalKey] ~= nil then return ov[generalKey] end
+                end
+            else
+                local u = MSUF_DB[uk]
+                if u and u.hpPowerTextOverride == true and u[generalKey] ~= nil then return u[generalKey] end
+            end
         end
         local v = G()[generalKey]
         return v ~= nil and v or defaultVal
@@ -69,10 +87,20 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         EnsureDB()
         local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
         if uk then
-            local u = type(_Scope_GetUnitDB) == "function" and _Scope_GetUnitDB(uk)
-            if u then
-                if u.hpPowerTextOverride ~= true and type(_Scope_EnableOverride) == "function" then _Scope_EnableOverride(uk) end
-                u[generalKey] = val
+            -- GF scope: write to groupframes.party/raid.bars
+            if uk == "gf_party" or uk == "gf_raid" then
+                local sub = _GF_GetBarOverride(uk)
+                if sub then
+                    if sub.overrideBars ~= true then sub.overrideBars = true end
+                    if type(sub.bars) ~= "table" then sub.bars = {} end
+                    sub.bars[generalKey] = val
+                end
+            else
+                local u = type(_Scope_GetUnitDB) == "function" and _Scope_GetUnitDB(uk)
+                if u then
+                    if u.hpPowerTextOverride ~= true and type(_Scope_EnableOverride) == "function" then _Scope_EnableOverride(uk) end
+                    u[generalKey] = val
+                end
             end
         else
             G()[generalKey] = val
@@ -150,10 +178,11 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- =====================================================================
     -- SCOPE BAR (A2-style button strip)
     -- =====================================================================
-    local SCOPE_KEYS = { "shared", "player", "target", "targettarget", "focus", "pet", "boss" }
+    local SCOPE_KEYS = { "shared", "player", "target", "targettarget", "focus", "pet", "boss", "gf_party", "gf_raid" }
     local SCOPE_LABELS = {
         shared = "Shared", player = "Player", target = "Target",
         targettarget = "ToT", focus = "Focus", pet = "Pet", boss = "Boss",
+        gf_party = "GF Party", gf_raid = "GF Raid",
     }
 
     local scopeBar = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
@@ -169,7 +198,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local scopeBtns = {}
     local function GetScopeUnitHasOverride(key)
         if key == "shared" then return false end
-        EnsureDB(); local u = MSUF_DB[key]
+        EnsureDB()
+        if key == "gf_party" or key == "gf_raid" then
+            local _, hasOvr = _GF_GetBarOverride(key)
+            return hasOvr
+        end
+        local u = MSUF_DB[key]
         return (type(u) == "table" and u.hpPowerTextOverride == true)
     end
 
@@ -306,6 +340,18 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- Override checkbox handler
     hpPowerOverrideCheck:SetScript("OnClick", function(self)
         local uk = _MSUF_HPText_GetUnitKey(); if not uk then self:SetChecked(false); return end
+        -- GF override: toggle overrideBars on groupframes.party/raid
+        if uk == "gf_party" or uk == "gf_raid" then
+            local sub, _ = _GF_GetBarOverride(uk)
+            if sub then
+                sub.overrideBars = self:GetChecked() and true or false
+                if sub.overrideBars and type(sub.bars) ~= "table" then sub.bars = {} end
+            end
+            Apply(); RefreshFrames()
+            if type(_G.MSUF_GF_Refresh) == "function" then _G.MSUF_GF_Refresh() end
+            _MSUF_SyncHpPowerTextScopeUI()
+            return
+        end
         local u = _MSUF_HPText_GetUnitDB(uk); if not u then self:SetChecked(false); return end
         if self:GetChecked() then _MSUF_HPText_EnableOverride(uk) else u.hpPowerTextOverride = false end
         Apply(); ForceTextLayout(uk)
@@ -1053,9 +1099,14 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         -- Override checkbox
         if hpPowerOverrideCheck then
             if uk then
-                local u = _MSUF_HPText_GetUnitDB(uk)
                 hpPowerOverrideCheck:Show(); hpPowerOverrideCheck:Enable(); hpPowerOverrideCheck:SetAlpha(1)
-                hpPowerOverrideCheck:SetChecked(u and u.hpPowerTextOverride == true)
+                if uk == "gf_party" or uk == "gf_raid" then
+                    local _, hasOvr = _GF_GetBarOverride(uk)
+                    hpPowerOverrideCheck:SetChecked(hasOvr)
+                else
+                    local u = _MSUF_HPText_GetUnitDB(uk)
+                    hpPowerOverrideCheck:SetChecked(u and u.hpPowerTextOverride == true)
+                end
             else hpPowerOverrideCheck:Hide() end
         end
 

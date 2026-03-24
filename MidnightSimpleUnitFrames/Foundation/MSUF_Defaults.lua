@@ -1014,38 +1014,6 @@ for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
     end
     if conf.raidMarkerSize == nil then conf.raidMarkerSize = 14 end
 end
-if MSUF_DB.groupFrames == nil then
-    MSUF_DB.groupFrames = {}
-end
-for kind, defaults in pairs({
-    party = {
-        enabled = true, showInEditMode = true, point = "TOPLEFT", relPoint = "TOPLEFT",
-        offsetX = 420, offsetY = -260, width = 132, height = 28,
-        spacingX = 0, spacingY = 4, columns = 1, maxFrames = 5,
-        barOverride = false, barTexture = nil,
-        fontOverride = false, fontPath = nil, nameFontSize = 11,
-        colorOverride = false, useClassColors = true, darkMode = false,
-        colorR = 0.18, colorG = 0.55, colorB = 0.88,
-    },
-    raid = {
-        enabled = true, showInEditMode = true, point = "TOPLEFT", relPoint = "TOPLEFT",
-        offsetX = 420, offsetY = -24, width = 92, height = 22,
-        spacingX = 4, spacingY = 4, columns = 5, maxFrames = 40,
-        barOverride = false, barTexture = nil,
-        fontOverride = false, fontPath = nil, nameFontSize = 10,
-        colorOverride = false, useClassColors = true, darkMode = false,
-        colorR = 0.18, colorG = 0.55, colorB = 0.88,
-    },
-}) do
-    local conf = MSUF_DB.groupFrames[kind]
-    if type(conf) ~= "table" then
-        conf = {}
-        MSUF_DB.groupFrames[kind] = conf
-    end
-    for k, v in pairs(defaults) do
-        if conf[k] == nil then conf[k] = v end
-    end
-end
 if MSUF_DB.bars == nil then
         MSUF_DB.bars = {}
     end

@@ -2490,12 +2490,29 @@ end
         MSUF_StyleAuras2CompactSlider(privateMaxPlayer, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(privateMaxPlayer, 0, 12, 1, GetPrivateMaxPlayer)
         if privateMaxPlayer then A2_Track("global", privateMaxPlayer) end
+        local function GetPrivateBorderScale()
+            local s = A2_Settings()
+            return (s and s.privateAuraBorderScale) or 3
+        end
+        local function SetPrivateBorderScale(v)
+            local s = A2_Settings()
+            if not s then return end
+            v = tonumber(v) or 3
+            if v < 0 then v = 0 end
+            if v > 10 then v = 10 end
+            s.privateAuraBorderScale = v
+        end
+        local privateBorderScale = CreateAuras2CompactSlider(privateBox, "Border thickness", 0, 10, 0.5, 520, -34, 150, GetPrivateBorderScale, SetPrivateBorderScale)
+        MSUF_StyleAuras2CompactSlider(privateBorderScale, { hideMinMax = true, leftTitle = true })
+        AttachSliderValueBox(privateBorderScale, 0, 10, 0.5, GetPrivateBorderScale)
+        if privateBorderScale then A2_Track("global", privateBorderScale) end
         local function UpdatePrivateAurasEnabled()
             local s = A2_Settings()
             local master = (s and s.privateAurasEnabled == true) or false
             local p = (master and s and s.showPrivateAurasPlayer == true) or false
             if refs.cbPrivateShowP then SetWidgetEnabled(refs.cbPrivateShowP, master) end
             if privateMaxPlayer then SetWidgetEnabled(privateMaxPlayer, p) end
+            if privateBorderScale then SetWidgetEnabled(privateBorderScale, p) end
          end
         do
             local cb = refs.cbPrivateShowP
@@ -2529,6 +2546,7 @@ end
         -- Advanced gating should also affect the Private Auras master + sliders.
         if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end
         if privateMaxPlayer then advGate[#advGate + 1] = privateMaxPlayer end
+        if privateBorderScale then advGate[#advGate + 1] = privateBorderScale end
         -- ------------------------------------------------------------
         -- Sort order dropdown (Blizzard Enum.AuraSortOrder)
         -- Stored in shared.sortOrder (caps level — per-unit overridable via layoutShared).

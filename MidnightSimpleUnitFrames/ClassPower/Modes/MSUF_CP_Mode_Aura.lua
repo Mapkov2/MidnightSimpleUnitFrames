@@ -57,7 +57,13 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                 local bar = CP.bars[i]
                 if bar then
                     bar:SetMinMaxValues(i - 1, i)
-                    bar:SetValue(cur)
+                    if curSafe then
+                        bar:SetValue(cur)
+                    elseif rawCur ~= nil then
+                        bar:SetValue(rawCur)
+                    else
+                        bar:SetValue(0)
+                    end
                     bar:SetAlpha(filledAlpha)
                     bar:SetStatusBarColor(baseR, baseG, baseB, 1)
                     bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
@@ -81,8 +87,14 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
             elseif powerType == "WHIRLWIND" then
                 cur = WW.GetStacks()
             elseif powerType == "TIP_OF_THE_SPEAR" then
-                if CP.spExpires and GetTime() >= CP.spExpires then CP.spStacks = 0; CP.spExpires = nil end
-                cur = CP.spStacks
+                local tipAuraID = E.TIP and E.TIP.AURA_ID
+                if tipAuraID and C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+                    local info = C_UnitAuras.GetPlayerAuraBySpellID(tipAuraID)
+                    if info then
+                        local apps = info.applications
+                        if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
+                    end
+                end
             end
             local mwAbove5 = (powerType == "MAELSTROM_WEAPON" and cur > CPK.THRESH.MW_SPEND)
             local abR, abG, abB

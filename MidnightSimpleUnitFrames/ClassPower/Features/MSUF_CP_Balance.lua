@@ -175,7 +175,9 @@ local function _updateOverlay()
         _predTex:Hide()
         return
     end
-    local mx = UnitPowerMax("player", LUNAR_POWER) or 100
+    local rawMx = UnitPowerMax("player", LUNAR_POWER)
+    if not NotSecret(rawMx) then _predTex:Hide(); return end
+    local mx = tonumber(rawMx) or 100
     if mx <= 0 then mx = 100 end
     local predFrac = _predAmt / mx
     if predFrac > 1 then predFrac = 1 end
