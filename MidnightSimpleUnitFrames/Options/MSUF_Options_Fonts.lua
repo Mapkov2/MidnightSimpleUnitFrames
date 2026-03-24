@@ -400,8 +400,16 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             local u = MSUF_DB[k]
             if u then u.fontOverride = false end
         end
+        -- GF overrides
+        do
+            local sub = _GF_GetFontSub("gf_party")
+            if sub then sub.overrideFont = false end
+            sub = _GF_GetFontSub("gf_raid")
+            if sub then sub.overrideFont = false end
+        end
         InvalidateTextSpecs()
         LiveSyncFontVisuals({ layout = "FONT_OVERRIDE_RESET" })
+        if type(_G.MSUF_GF_Refresh) == "function" then _G.MSUF_GF_Refresh() end
         if SyncScopeUI then SyncScopeUI() end
     end)
 
@@ -827,6 +835,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             for _, k in ipairs(ALL_UNITS) do
                 if IsOverride(k) then parts[#parts + 1] = SCOPE_LABELS[k] or k end
             end
+            -- GF overrides
+            if IsOverride("gf_party") then parts[#parts + 1] = "GF Party" end
+            if IsOverride("gf_raid") then parts[#parts + 1] = "GF Raid" end
             if #parts > 0 then
                 scopeOverrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(parts, ", "))
                 scopeOverrideInfo:SetFontObject(GameFontHighlightSmall)

@@ -383,7 +383,15 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     scopeResetBtn:SetScript("OnClick", function()
         EnsureDB(); local any = false
         for _, uk in ipairs(ALL_UNITS) do local u = MSUF_DB[uk]; if u and u.hpPowerTextOverride then u.hpPowerTextOverride = false; any = true end end
+        -- GF overrides
+        do
+            local sub = _GF_GetBarOverride("gf_party")
+            if sub and sub.overrideBars then sub.overrideBars = false; any = true end
+            sub = _GF_GetBarOverride("gf_raid")
+            if sub and sub.overrideBars then sub.overrideBars = false; any = true end
+        end
         if any then Apply(); for _, uk in ipairs(ALL_UNITS) do ForceTextLayout(uk) end; RefreshFrames() end
+        if type(_G.MSUF_GF_Refresh) == "function" then _G.MSUF_GF_Refresh() end
         _MSUF_SyncHpPowerTextScopeUI()
     end)
     scopeResetBtn:SetScript("OnEnter", function(self)
@@ -1130,6 +1138,13 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                 local active = {}
                 for _, uK in ipairs(ALL_UNITS) do
                     local u = MSUF_DB[uK]; if u and u.hpPowerTextOverride then active[#active + 1] = _NiceUnitKey(uK) end
+                end
+                -- GF overrides
+                do
+                    local _, pOvr = _GF_GetBarOverride("gf_party")
+                    if pOvr then active[#active + 1] = "GF Party" end
+                    local _, rOvr = _GF_GetBarOverride("gf_raid")
+                    if rOvr then active[#active + 1] = "GF Raid" end
                 end
                 if #active > 0 then
                     scopeOverrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(active, ", "))

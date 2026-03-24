@@ -187,6 +187,35 @@ local function BuildSection(parent, mode)
         yOff = yOff - 50
     end
 
+    -- Range Fade section
+    do
+        yOff = yOff - 6
+        local rfHdr = section:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        rfHdr:SetPoint("TOPLEFT", section, "TOPLEFT", 10, yOff)
+        rfHdr:SetText("|cffffcc00Range Fade|r")
+        yOff = yOff - 4
+
+        MakeCheck(section, "Enable Range Fade", yOff,
+            function() return Conf().rangeFadeEnabled == true end,
+            function(v)
+                Conf().rangeFadeEnabled = v
+                if type(_G.MSUF_GF_RefreshAllEffects) == "function" then
+                    _G.MSUF_GF_RefreshAllEffects()
+                end
+            end)
+        yOff = yOff - 26
+
+        MakeSlider(section, "Out-of-range Alpha", 0, 100, 5, yOff,
+            function() return math_floor((Conf().rangeFadeAlpha or 0.40) * 100 + 0.5) end,
+            function(v)
+                Conf().rangeFadeAlpha = v / 100
+                if type(_G.MSUF_GF_RefreshAllEffects) == "function" then
+                    _G.MSUF_GF_RefreshAllEffects()
+                end
+            end)
+        yOff = yOff - 50
+    end
+
     -- Override section
     do
         yOff = yOff - 6

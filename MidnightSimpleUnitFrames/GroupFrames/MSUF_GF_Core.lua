@@ -44,17 +44,108 @@ local _initialized    = false
 local _eventsActive   = false
 local _blizzHidden    = false
 
--- Preview fake data
-local PREVIEW_NAMES  = { "Thrall", "Jaina", "Anduin", "Sylvanas" }
-local PREVIEW_HP     = { 0.85, 0.62, 0.93, 0.41 }
-local PREVIEW_POWER  = { 0.70, 0.45, 0.88, 0.33 }
-local PREVIEW_CLASS  = { "SHAMAN", "MAGE", "PRIEST", "HUNTER" }
-local PREVIEW_COLORS = {
-    SHAMAN  = { 0.00, 0.44, 0.87 },
-    MAGE    = { 0.25, 0.78, 0.92 },
-    PRIEST  = { 1.00, 1.00, 1.00 },
-    HUNTER  = { 0.67, 0.83, 0.45 },
+-- Preview fake data (20 units for raid, first 4 for party)
+local PREVIEW = {
+    { name = "Thrällbringer",    hp = 0.85, pwr = 0.70, cls = "SHAMAN",      pType = "MANA",   effect = nil,            hpDir = -1 },
+    { name = "Jaina Proudmoore", hp = 0.38, pwr = 0.45, cls = "MAGE",        pType = "MANA",   effect = "dispel_Magic", hpDir = 1 },
+    { name = "Anduin Wrynn",     hp = 0.93, pwr = 0.88, cls = "PRIEST",      pType = "MANA",   effect = nil,            hpDir = -1 },
+    { name = "Sylvanas",         hp = 0.17, pwr = 0.33, cls = "HUNTER",      pType = "FOCUS",  effect = "aggro",        hpDir = 1 },
+    { name = "Tirion",           hp = 0.72, pwr = 0.60, cls = "PALADIN",     pType = "MANA",   effect = nil,            hpDir = -1 },
+    { name = "Garrosh",          hp = 0.55, pwr = 0.80, cls = "WARRIOR",     pType = "RAGE",   effect = nil,            hpDir = 1 },
+    { name = "Valeera",          hp = 0.44, pwr = 0.90, cls = "ROGUE",       pType = "ENERGY", effect = nil,            hpDir = -1 },
+    { name = "Malfurion",        hp = 0.68, pwr = 0.55, cls = "DRUID",       pType = "MANA",   effect = nil,            hpDir = 1 },
+    { name = "Khadgar",          hp = 0.81, pwr = 0.30, cls = "MAGE",        pType = "MANA",   effect = nil,            hpDir = -1 },
+    { name = "Uther",            hp = 0.60, pwr = 0.75, cls = "PALADIN",     pType = "MANA",   effect = "dispel_Curse", hpDir = 1 },
+    { name = "Vol'jin",          hp = 0.33, pwr = 0.40, cls = "SHAMAN",      pType = "MANA",   effect = nil,            hpDir = 1 },
+    { name = "Illidan",          hp = 0.50, pwr = 0.65, cls = "DEMONHUNTER", pType = "FURY",   effect = nil,            hpDir = -1 },
+    { name = "Tyrande",          hp = 0.77, pwr = 0.50, cls = "PRIEST",      pType = "MANA",   effect = nil,            hpDir = 1 },
+    { name = "Chen Stormstout",  hp = 0.88, pwr = 0.85, cls = "MONK",        pType = "ENERGY", effect = nil,            hpDir = -1 },
+    { name = "Gul'dan",          hp = 0.25, pwr = 0.95, cls = "WARLOCK",     pType = "MANA",   effect = "aggro",        hpDir = 1 },
+    { name = "Rexxar",           hp = 0.62, pwr = 0.20, cls = "HUNTER",      pType = "FOCUS",  effect = nil,            hpDir = -1 },
+    { name = "Aggra",            hp = 0.90, pwr = 0.70, cls = "SHAMAN",      pType = "MANA",   effect = nil,            hpDir = 1 },
+    { name = "Chromie",          hp = 0.45, pwr = 0.60, cls = "MAGE",        pType = "MANA",   effect = nil,            hpDir = -1 },
+    { name = "Lothraxion",       hp = 0.70, pwr = 0.80, cls = "PALADIN",     pType = "MANA",   effect = "dispel_Poison",hpDir = 1 },
+    { name = "Saurfang",         hp = 0.15, pwr = 0.50, cls = "WARRIOR",     pType = "RAGE",   effect = "aggro",        hpDir = 1 },
 }
+local PREVIEW_CLASS_COLORS = {
+    SHAMAN      = { 0.00, 0.44, 0.87 }, MAGE    = { 0.25, 0.78, 0.92 },
+    PRIEST      = { 1.00, 1.00, 1.00 }, HUNTER  = { 0.67, 0.83, 0.45 },
+    WARRIOR     = { 0.78, 0.61, 0.43 }, PALADIN = { 0.96, 0.55, 0.73 },
+    ROGUE       = { 1.00, 0.96, 0.41 }, DRUID   = { 1.00, 0.49, 0.04 },
+    WARLOCK     = { 0.53, 0.53, 0.93 }, MONK    = { 0.00, 1.00, 0.60 },
+    DEMONHUNTER = { 0.64, 0.19, 0.79 }, DEATHKNIGHT = { 0.77, 0.12, 0.23 },
+    EVOKER      = { 0.20, 0.58, 0.50 },
+}
+local PREVIEW_POWER_COLORS = {
+    MANA = { 0.00, 0.44, 0.87 }, RAGE   = { 0.77, 0.12, 0.23 },
+    ENERGY = { 1.00, 1.00, 0.00 }, FOCUS = { 0.71, 0.43, 0.27 },
+    FURY = { 0.64, 0.19, 0.79 },
+}
+local PREVIEW_DISPEL_COLORS = {
+    dispel_Magic   = { 0.20, 0.60, 1.00 }, dispel_Curse   = { 0.60, 0.00, 1.00 },
+    dispel_Disease = { 0.60, 0.40, 0.00 }, dispel_Poison  = { 0.00, 0.60, 0.00 },
+}
+
+-- PERF: Hoisted backdrop spec (no table alloc in preview border creation)
+local GF_BORDER_BACKDROP = { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 2 }
+
+-- ═══════════════════════════════════════════════════════════════
+-- Animation State (file-scope, single ticker for all preview frames)
+-- ═══════════════════════════════════════════════════════════════
+local _animFrames = {}   -- { frame, dataIndex } pairs
+local _animTicker = nil
+local _animAcc    = 0
+local ANIM_RATE   = 0.05  -- 20 fps for smooth bars
+local ANIM_SPEED  = 0.08  -- HP change per tick
+
+local function AnimTick(_, elapsed)
+    _animAcc = _animAcc + elapsed
+    if _animAcc < ANIM_RATE then return end
+    _animAcc = 0
+
+    for k = 1, #_animFrames do
+        local entry = _animFrames[k]
+        local f = entry[1]
+        local di = entry[2]
+        if f and f:IsShown() and f._msufGFPreviewActive then
+            local data = PREVIEW[di]
+            if data then
+                -- Animate HP
+                local cur = f._msufGFAnimHP or data.hp
+                cur = cur + data.hpDir * ANIM_SPEED
+                if cur > 0.95 then cur = 0.95; data.hpDir = -1 end
+                if cur < 0.10 then cur = 0.10; data.hpDir = 1 end
+                f._msufGFAnimHP = cur
+
+                if f.hpBar then
+                    f.hpBar:SetValue(cur)
+                end
+                if f.hpText and f.hpText:IsShown() then
+                    f.hpText:SetText(math_floor(cur * 100 + 0.5) .. "%")
+                end
+            end
+        end
+    end
+end
+
+local function StartAnim()
+    if _animTicker then return end
+    _animTicker = CreateFrame("Frame")
+    _animAcc = 0
+    _animTicker:SetScript("OnUpdate", AnimTick)
+end
+
+local function StopAnim()
+    if _animTicker then
+        _animTicker:SetScript("OnUpdate", nil)
+        _animTicker = nil
+    end
+    for k = 1, #_animFrames do _animFrames[k] = nil end
+end
+
+local function RegisterAnimFrame(f, dataIndex)
+    _animFrames[#_animFrames + 1] = { f, dataIndex }
+end
 
 -- ═══════════════════════════════════════════════════════════════
 -- Forward declarations
@@ -108,54 +199,101 @@ end
 -- ═══════════════════════════════════════════════════════════════
 GF_ApplyPreviewData = function(f, index)
     if not f then return end
-    local i = ((index - 1) % 4) + 1
+    local i = ((index - 1) % #PREVIEW) + 1
+    local data = PREVIEW[i]
+    if not data then return end
 
-    local name = PREVIEW_NAMES[i] or ("Party" .. i)
-    local hp   = PREVIEW_HP[i] or 0.75
-    local pwr  = PREVIEW_POWER[i] or 0.50
-    local cls  = PREVIEW_CLASS[i] or "WARRIOR"
-    local clr  = PREVIEW_COLORS[cls] or { 0.8, 0.8, 0.8 }
+    local conf = (f._msufGFMode == "raid") and GF.GetRaidConf() or GF.GetPartyConf()
+    local clr  = PREVIEW_CLASS_COLORS[data.cls] or { 0.8, 0.8, 0.8 }
+    local pClr = PREVIEW_POWER_COLORS[data.pType] or PREVIEW_POWER_COLORS.MANA
 
-    -- HP bar
+    -- Store preview class bar color for ApplyBarColor "class" mode restore
+    f._msufGFPreviewBarR = clr[1]
+    f._msufGFPreviewBarG = clr[2]
+    f._msufGFPreviewBarB = clr[3]
+
+    -- ── Bar Texture (from override resolution) ──────────────
+    local barTex
+    if type(GF.ApplyBarTexture) == "function" then
+        GF.ApplyBarTexture(f)
+    end
+
+    -- ── HP Bar ──────────────────────────────────────────────
     if f.hpBar then
         f.hpBar:SetMinMaxValues(0, 1)
-        f.hpBar:SetValue(hp)
-        f.hpBar.MSUF_lastValue = hp
+        f.hpBar:SetValue(data.hp)
+        f.hpBar.MSUF_lastValue = data.hp
+        -- Color: use class color (matches main UF "class" bar mode)
         f.hpBar:SetStatusBarColor(clr[1], clr[2], clr[3], 1)
     end
 
-    -- Power bar
+    -- ── HP Bar Background ───────────────────────────────────
+    if type(GF.ApplyBarBackground) == "function" then
+        GF.ApplyBarBackground(f)
+    end
+
+    -- ── Power Bar ───────────────────────────────────────────
     if f.targetPowerBar then
-        local conf = GF.GetPartyConf()
         if conf and conf.showPower ~= false then
             f.targetPowerBar:SetMinMaxValues(0, 1)
-            f.targetPowerBar:SetValue(pwr)
-            f.targetPowerBar.MSUF_lastValue = pwr
-            f.targetPowerBar:SetStatusBarColor(0.0, 0.44, 0.87, 1)
+            f.targetPowerBar:SetValue(data.pwr)
+            f.targetPowerBar.MSUF_lastValue = data.pwr
+            f.targetPowerBar:SetStatusBarColor(pClr[1], pClr[2], pClr[3], 1)
+            f.targetPowerBar:SetHeight(conf.powerBarHeight or 3)
             f.targetPowerBar:Show()
         else
             f.targetPowerBar:Hide()
         end
     end
 
-    -- Name text
+    -- ── Font settings (from override resolution) ────────────
+    -- ApplyFonts handles: font path, size, bold, outline, text backdrop,
+    -- class coloring, shadow — all override-aware.
+    -- But for preview we need to set name text AFTER ApplyFonts.
+    if type(GF.ApplyFonts) == "function" then
+        -- Temporarily mark as not-preview so ApplyFonts doesn't skip color
+        f._msufGFPreviewActive = nil
+        GF.ApplyFonts(f)
+    end
+    f._msufGFPreviewActive = true
+
+    -- ── Name Text ───────────────────────────────────────────
     if f.nameText then
-        f.nameText:SetText(name)
-        f.nameText:SetTextColor(clr[1], clr[2], clr[3], 1)
-        local conf = GF.GetPartyConf()
-        if conf and conf.showName ~= false then
+        local showName = (conf and conf.showName ~= false)
+        if showName then
+            f.nameText:SetText(data.name)
+            -- Class color for preview names (if nameClassColor enabled)
+            local nameClassColor = GF.ResolveFont(conf, "nameClassColor")
+            if nameClassColor == nil then
+                local db = _G.MSUF_DB
+                local g = db and db.general
+                nameClassColor = g and g.nameClassColor
+            end
+            if nameClassColor then
+                f.nameText:SetTextColor(clr[1], clr[2], clr[3], 1)
+            end
             f.nameText:Show()
         else
+            f.nameText:SetText("")
             f.nameText:Hide()
         end
     end
 
-    -- HP text
+    -- ── Name Shortening ─────────────────────────────────────
+    -- Invalidate diff-gates so ClampNameWidth actually runs
+    f._msufClampStamp = nil
+    f._msufNameClipAnchorStamp = nil
+    f._msufNameClipTextStamp = nil
+    if type(MSUF_ClampNameWidth) == "function" then
+        local virtualConf = _G.MSUF_DB and _G.MSUF_DB[f.msufConfigKey]
+        MSUF_ClampNameWidth(f, virtualConf or conf)
+    end
+
+    -- ── HP Text ─────────────────────────────────────────────
     if f.hpText then
-        local conf = GF.GetPartyConf()
-        if conf and conf.showHP ~= false then
-            f.hpText:SetText(math_floor(hp * 100 + 0.5) .. "%")
-            f.hpText:SetTextColor(1, 1, 1, 0.9)
+        local showHP = (conf and conf.showHP ~= false)
+        if showHP then
+            f.hpText:SetText(math_floor(data.hp * 100 + 0.5) .. "%")
             f.hpText:Show()
         else
             f.hpText:SetText("")
@@ -163,17 +301,48 @@ GF_ApplyPreviewData = function(f, index)
         end
     end
 
-    -- Background
+    -- ── Background ──────────────────────────────────────────
     if f.bg then
         f.bg:SetVertexColor(0.08, 0.08, 0.12, 0.9)
     end
 
-    f._msufGFPreviewActive = true
+    -- ── Effect Borders (aggro / dispel preview) ─────────────
+    local effect = data.effect
+    if effect then
+        -- Reuse shared EnsureBorder from GF_Effects via GF namespace
+        local brd
+        if f._msufGFBorder then
+            brd = f._msufGFBorder
+        else
+            brd = CreateFrame("Frame", nil, f, "BackdropTemplate")
+            brd:SetAllPoints(f)
+            brd:SetFrameLevel(f:GetFrameLevel() + 10)
+            brd:SetBackdrop(GF_BORDER_BACKDROP)
+            f._msufGFBorder = brd
+        end
+
+        if effect == "aggro" then
+            brd:SetBackdropBorderColor(1.00, 0.40, 0.00, 0.90)
+        elseif PREVIEW_DISPEL_COLORS[effect] then
+            local dc = PREVIEW_DISPEL_COLORS[effect]
+            brd:SetBackdropBorderColor(dc[1], dc[2], dc[3], 0.85)
+        end
+        brd:Show()
+        f._msufGFEffectState = effect
+    else
+        -- Clear border if no effect
+        if f._msufGFBorder then
+            f._msufGFBorder:Hide()
+        end
+        f._msufGFEffectState = nil
+    end
 end
 
 GF_ClearPreviewData = function(f)
     if not f or not f._msufGFPreviewActive then return end
     f._msufGFPreviewActive = nil
+
+    -- Reset bars
     if f.hpBar then
         f.hpBar:SetValue(0)
         f.hpBar.MSUF_lastValue = 0
@@ -182,8 +351,22 @@ GF_ClearPreviewData = function(f)
         f.targetPowerBar:SetValue(0)
         f.targetPowerBar:Hide()
     end
+
+    -- Reset text
     if f.nameText then f.nameText:SetText("") end
     if f.hpText then f.hpText:SetText("") end
+
+    -- Reset border
+    if f._msufGFBorder then f._msufGFBorder:Hide() end
+    f._msufGFEffectState = nil
+    f._msufGFPreviewBarR = nil
+    f._msufGFPreviewBarG = nil
+    f._msufGFPreviewBarB = nil
+
+    -- Reset clamp caches
+    f._msufClampStamp = nil
+    f._msufNameClipAnchorStamp = nil
+    f._msufNameClipTextStamp = nil
 end
 
 -- ═══════════════════════════════════════════════════════════════
@@ -523,6 +706,10 @@ GF_ShowPartyFrames = function(numMembers, isPreview)
     local frames = GF_EnsurePartyFrames()
     GF_LayoutPartyFrames()
 
+    if isPreview then
+        -- Clear old anim entries and register new ones
+        for k = 1, #_animFrames do _animFrames[k] = nil end
+    end
     local showCount = isPreview and 4 or (numMembers - 1)
     for i = 1, 4 do
         local f = frames[i]
@@ -531,20 +718,23 @@ GF_ShowPartyFrames = function(numMembers, isPreview)
             f.cachedConfig = nil
             f:Show()
             if isPreview then
+                if type(GF.ApplyBarTexture) == "function" then GF.ApplyBarTexture(f) end
+                if type(GF.ApplyBarBackground) == "function" then GF.ApplyBarBackground(f) end
                 GF_ApplyPreviewData(f, i)
+                RegisterAnimFrame(f, i)
             else
                 GF_ClearPreviewData(f)
                 GF_MarkFrameDirty(f)
-            end
-            -- Apply font/bar/color overrides from DB
-            if type(GF.ApplyFrameVisuals) == "function" then
-                GF.ApplyFrameVisuals(f)
+                if type(GF.ApplyFrameVisuals) == "function" then
+                    GF.ApplyFrameVisuals(f)
+                end
             end
         else
             GF_ClearPreviewData(f)
             f:Hide()
         end
     end
+    if isPreview then StartAnim() end
 end
 
 GF_HidePartyFrames = function()
@@ -570,6 +760,137 @@ GF_HideRaidFrames = function()
 end
 
 -- ═══════════════════════════════════════════════════════════════
+-- Raid Preview (20 manual frames — SecureGroupHeader requires real units)
+-- ═══════════════════════════════════════════════════════════════
+local _raidPreviewFrames = {}
+local _raidPreviewCreated = false
+
+local function GF_CreateRaidPreviewFrame(index)
+    local name = "MSUF_GF_RaidPreview" .. index
+    local f = CreateFrame("Button", name, UIParent, "BackdropTemplate")
+    f._msufIsGroupFrame = true
+    f._msufGFMode    = "raid"
+    f._msufGFIndex   = index
+    f.msufConfigKey  = "gf_raid"
+    f:SetClampedToScreen(true)
+
+    local conf = GF.GetRaidConf()
+    f:SetSize(conf.width or 72, conf.height or 30)
+
+    do
+        local bg = f:CreateTexture(nil, "BACKGROUND")
+        bg:SetPoint("TOPLEFT", f, "TOPLEFT", 1, -1)
+        bg:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
+        bg:SetTexture("Interface\\Buttons\\WHITE8x8")
+        bg:SetVertexColor(0.08, 0.08, 0.12, 0.9)
+        f.bg = bg
+    end
+    do
+        local barTex = (type(_G.MSUF_GetBarTexture) == "function"
+            and _G.MSUF_GetBarTexture())
+            or "Interface\\TargetingFrame\\UI-StatusBar"
+        local hpBar = CreateFrame("StatusBar", nil, f)
+        hpBar:SetPoint("TOPLEFT", f, "TOPLEFT", 1, -1)
+        hpBar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
+        hpBar:SetStatusBarTexture(barTex)
+        hpBar:SetMinMaxValues(0, 1); hpBar:SetValue(0)
+        hpBar:SetFrameLevel(f:GetFrameLevel() + 1)
+        f.hpBar = hpBar
+        local hpBG = hpBar:CreateTexture(nil, "BACKGROUND")
+        hpBG:SetAllPoints(hpBar)
+        hpBG:SetTexture("Interface\\Buttons\\WHITE8x8")
+        hpBG:SetVertexColor(0, 0, 0, 0.9)
+        f.hpBarBG = hpBG
+        local pBar = CreateFrame("StatusBar", nil, f)
+        pBar:SetHeight(conf.powerBarHeight or 2)
+        pBar:SetPoint("TOPLEFT", hpBar, "BOTTOMLEFT", 0, 0)
+        pBar:SetPoint("TOPRIGHT", hpBar, "BOTTOMRIGHT", 0, 0)
+        pBar:SetStatusBarTexture(barTex)
+        pBar:SetMinMaxValues(0, 1); pBar:SetValue(0)
+        pBar:SetFrameLevel(hpBar:GetFrameLevel())
+        pBar:Hide()
+        f.targetPowerBar = pBar
+        local pBG = pBar:CreateTexture(nil, "BACKGROUND")
+        pBG:SetAllPoints(pBar)
+        pBG:SetTexture("Interface\\Buttons\\WHITE8x8")
+        pBG:SetVertexColor(0, 0, 0, 0.9)
+        f.powerBarBG = pBG
+    end
+    do
+        local textFrame = CreateFrame("Frame", nil, f)
+        textFrame:SetAllPoints()
+        textFrame:SetFrameLevel(f.hpBar:GetFrameLevel() + 3)
+        f.textFrame = textFrame
+        local nameText = textFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nameText:SetPoint("CENTER", textFrame, "CENTER", 0, 2)
+        nameText:SetJustifyH("CENTER"); nameText:SetWordWrap(false)
+        f.nameText = nameText
+        local hpText = textFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        hpText:SetPoint("BOTTOM", textFrame, "BOTTOM", 0, 1)
+        hpText:SetJustifyH("CENTER")
+        f.hpText = hpText
+    end
+    f:Hide()
+    return f
+end
+
+local function GF_EnsureRaidPreviewFrames()
+    if _raidPreviewCreated then return _raidPreviewFrames end
+    for i = 1, 20 do
+        _raidPreviewFrames[i] = GF_CreateRaidPreviewFrame(i)
+    end
+    _raidPreviewCreated = true
+    _G.MSUF_GF_RaidPreviewFrames = _raidPreviewFrames
+    return _raidPreviewFrames
+end
+
+local function GF_ShowRaidPreview()
+    if InCombatLockdown() then return end
+    GF_InjectDBConfigs()
+    local frames = GF_EnsureRaidPreviewFrames()
+    local conf   = GF.GetRaidConf()
+    local w      = conf.width or 72
+    local h      = conf.height or 30
+    local sp     = conf.spacing or 2
+    local upc    = conf.unitsPerColumn or 5
+    local mc     = conf.maxColumns or 8
+    local gs     = conf.groupSpacing or 4
+    local ax     = conf.offsetX or -300
+    local ay     = conf.offsetY or 100
+
+    StopAnim()
+    for k = 1, #_animFrames do _animFrames[k] = nil end
+
+    for i = 1, 20 do
+        local f = frames[i]
+        f:SetSize(w, h)
+        f:ClearAllPoints()
+        local col = math_floor((i - 1) / upc)
+        local row = (i - 1) % upc
+        if col < mc then
+            local fx = ax + col * (w + gs)
+            local fy = ay - row * (h + sp)
+            f:SetPoint("CENTER", UIParent, "CENTER", fx, fy)
+            f:Show()
+            if type(GF.ApplyBarTexture) == "function" then GF.ApplyBarTexture(f) end
+            if type(GF.ApplyBarBackground) == "function" then GF.ApplyBarBackground(f) end
+            GF_ApplyPreviewData(f, i)
+        else
+            f:Hide()
+        end
+    end
+    StartAnim()
+end
+
+local function GF_HideRaidPreview()
+    for i = 1, #_raidPreviewFrames do
+        local f = _raidPreviewFrames[i]
+        if f then GF_ClearPreviewData(f); f:Hide() end
+    end
+    StopAnim()
+end
+
+-- ═══════════════════════════════════════════════════════════════
 -- Mode + Roster
 -- ═══════════════════════════════════════════════════════════════
 GF_DetermineMode = function()
@@ -585,11 +906,11 @@ GF_OnRosterUpdate = function()
     local newMode = GF_DetermineMode()
     local numMembers = GetNumGroupMembers and GetNumGroupMembers() or 0
 
-    -- Preview: toggled by HUD "GF" button (MSUF_GF_PreviewActive)
-    -- Only when Edit Mode is also active
-    local editActive = (type(_G.MSUF_IsMSUFEditModeActive) == "function"
-        and _G.MSUF_IsMSUFEditModeActive())
-    local previewWanted = editActive and (_G.MSUF_GF_PreviewActive == true)
+    -- Preview: separate flags for party + raid
+    local editState = _G.MSUF_EditState
+    local editActive = (type(editState) == "table" and editState.active == true)
+    local partyPreview = editActive and (_G.MSUF_GF_PreviewPartyActive == true)
+    local raidPreview  = editActive and (_G.MSUF_GF_PreviewRaidActive == true)
 
     -- Blizzard frames
     if GF.ShouldHideBlizzardFrames() then
@@ -600,20 +921,39 @@ GF_OnRosterUpdate = function()
 
     if newMode == "party" then
         GF_HideRaidFrames()
+        GF_HideRaidPreview()
         GF_ShowPartyFrames(numMembers, false)
     elseif newMode == "raid" then
         GF_HidePartyFrames()
+        GF_HideRaidPreview()
         GF_ShowRaidFrames()
     else
-        -- Solo
-        if previewWanted and GF.IsEnabled() then
-            GF_HideRaidFrames()
-            if GF.IsPartyEnabled() then
-                GF_ShowPartyFrames(5, true)  -- preview mode: 4 frames with fake data
+        -- Solo: show preview frames if toggled in Edit Mode
+        if GF.IsEnabled() then
+            if partyPreview then
+                GF_HideRaidFrames()
+                GF_HideRaidPreview()
+                GF_ShowPartyFrames(5, true)
+                StartAnim()
+            else
+                GF_HidePartyFrames()
+            end
+            if raidPreview then
+                GF_ShowRaidPreview()
+            else
+                GF_HideRaidPreview()
+            end
+            if not partyPreview and not raidPreview then
+                GF_HidePartyFrames()
+                GF_HideRaidFrames()
+                GF_HideRaidPreview()
+                StopAnim()
             end
         else
             GF_HidePartyFrames()
             GF_HideRaidFrames()
+            GF_HideRaidPreview()
+            StopAnim()
         end
     end
 
@@ -678,6 +1018,13 @@ do
         self:UnregisterAllEvents()
         if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
             hooksecurefunc("MSUF_SetMSUFEditModeDirect", function()
+                local st = _G.MSUF_EditState
+                local entering = (type(st) == "table" and st.active == true)
+                if not entering then
+                    _G.MSUF_GF_PreviewPartyActive = nil
+                    _G.MSUF_GF_PreviewRaidActive  = nil
+                    StopAnim()
+                end
                 if not GF.IsEnabled() then return end
                 GF_RegisterEvents()
                 GF_OnRosterUpdate()
@@ -690,8 +1037,13 @@ end
 -- Public API
 -- ═══════════════════════════════════════════════════════════════
 function GF.Refresh()
+    GF.EnsureDB()
     GF_InjectDBConfigs()
     GF_InvalidateGFFrameCaches()
+    -- Ensure effect events are registered if GF was enabled after login
+    if GF.IsEnabled() and type(GF.RegisterEffectEvents) == "function" then
+        GF.RegisterEffectEvents()
+    end
     GF_OnRosterUpdate()
 end
 
@@ -723,3 +1075,8 @@ end
 _G.MSUF_GF = GF
 _G.MSUF_GF_Refresh  = GF.Refresh
 _G.MSUF_GF_Relayout = GF.Relayout
+_G.MSUF_GF_ReapplyPreview = function(f, idx)
+    if not f then return end
+    local i = ((idx - 1) % #PREVIEW) + 1
+    GF_ApplyPreviewData(f, i)
+end
