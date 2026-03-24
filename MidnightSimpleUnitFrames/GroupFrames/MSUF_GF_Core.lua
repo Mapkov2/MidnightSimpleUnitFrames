@@ -536,6 +536,10 @@ GF_ShowPartyFrames = function(numMembers, isPreview)
                 GF_ClearPreviewData(f)
                 GF_MarkFrameDirty(f)
             end
+            -- Apply font/bar/color overrides from DB
+            if type(GF.ApplyFrameVisuals) == "function" then
+                GF.ApplyFrameVisuals(f)
+            end
         else
             GF_ClearPreviewData(f)
             f:Hide()
@@ -701,7 +705,6 @@ function GF.Relayout()
     GF_InvalidateGFFrameCaches()
     if _currentMode == "party" then GF_LayoutPartyFrames()
     elseif _currentMode == "raid" then GF_LayoutRaidFrames() end
-    -- Re-dirty visible frames
     for i = 1, 4 do
         local f = _partyFrames[i]
         if f and f:IsShown() then
@@ -709,6 +712,9 @@ function GF.Relayout()
                 GF_ApplyPreviewData(f, i)
             else
                 GF_MarkFrameDirty(f)
+            end
+            if type(GF.ApplyFrameVisuals) == "function" then
+                GF.ApplyFrameVisuals(f)
             end
         end
     end

@@ -116,6 +116,7 @@ GroupFrames\MSUF_GF_Core.lua
 GroupFrames\MSUF_GF_Render.lua
 GroupFrames\MSUF_GF_EditMode.lua
 GroupFrames\MSUF_EM2_Popup_GF.lua
+GroupFrames\MSUF_GF_Effects.lua
 
 # ═══════════════════════════════════════════════════════════════
 # FEATURES

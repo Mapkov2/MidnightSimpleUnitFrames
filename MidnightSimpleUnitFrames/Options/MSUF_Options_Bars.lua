@@ -345,7 +345,18 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             local sub, _ = _GF_GetBarOverride(uk)
             if sub then
                 sub.overrideBars = self:GetChecked() and true or false
-                if sub.overrideBars and type(sub.bars) ~= "table" then sub.bars = {} end
+                if sub.overrideBars then
+                    if type(sub.bars) ~= "table" then sub.bars = {} end
+                    -- Seed scope-aware defaults from shared
+                    local g = G()
+                    local seedKeys = { "hpTextMode", "powerTextMode", "hpTextSeparator",
+                        "powerTextSeparator", "absorbTextMode", "absorbAnchorMode",
+                        "hpTextSpacerEnabled", "hpTextSpacerX", "powerTextSpacerEnabled",
+                        "powerTextSpacerX", "hpTextAnchor", "powerTextAnchor" }
+                    for _, sk in ipairs(seedKeys) do
+                        if sub.bars[sk] == nil then sub.bars[sk] = g[sk] end
+                    end
+                end
             end
             Apply(); RefreshFrames()
             if type(_G.MSUF_GF_Refresh) == "function" then _G.MSUF_GF_Refresh() end
