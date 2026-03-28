@@ -53,6 +53,9 @@ local sf=panel.ScrollFrame or panel.scrollFrame or panel.scroll or panel.Scroll 
 end
 end
 local S={win=nil,content=nil,scale={},mirror={host=nil,currentKey="home",currentPanel=nil,homePanel=nil,homeToolsApi=nil,tipText=nil,selectEpoch=0,},}
+local _msufIsAlpha do local _v=_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames","Version")
+_msufIsAlpha=(type(_v)=="string"and _v:lower():find("alpha")~=nil) end
+if _msufIsAlpha then StaticPopupDialogs["MSUF_ALPHA_DISCORD"]={text="|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",button1="Copy Discord Link",button2=CLOSE,timeout=0,whileDead=1,hideOnEscape=1,preferredIndex=3,OnAccept=function() if type(MSUF_ShowCopyLink)=="function"then MSUF_ShowCopyLink("Discord","https://discord.gg/JQnhZXnTAK") end end} end
 -- Transition helpers (populated after MSUF_Transitions loads; nil-safe fallback)
 local function _T() return ns.MSUF_Transitions end
 local function _TFadeIn(f,d,cb)  local t=_T() if t then t.FadeIn(f,d,cb)  elseif f and f.Show then f:Show() end end
@@ -3116,7 +3119,8 @@ if f._msufRefreshStatusBar then pcall(f._msufRefreshStatusBar) end
 local startKey=f._msufInitialKey or"home";
 local startSubKey=f._msufInitialSubKey;
 f._msufInitialKey=nil f._msufInitialSubKey=nil;
-S.mirror.currentKey=startKey MSUF_SwitchMirrorPage(startKey,startSubKey) end
+S.mirror.currentKey=startKey MSUF_SwitchMirrorPage(startKey,startSubKey)
+if _msufIsAlpha then StaticPopup_Show("MSUF_ALPHA_DISCORD") end end
 )
 f:SetScript("OnHide",function() MSUF_Standalone_SetCastbarTopButtonsHidden(false)
 if MSUF_SaveWindowGeometry then MSUF_SaveWindowGeometry(f,f._msufGeomKey or"full")
