@@ -151,25 +151,26 @@ local function ApplyFrameBorder(f, kind)
     local bg = f.barGroup
     if not bg then return end
 
-    local borderOn   = (conf.borderEnabled == true)
-    local borderSize = borderOn and math_max(1, tonumber(conf.borderSize) or 1) or 1
-
-    bg:SetBackdrop({
-        bgFile   = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = borderSize,
-        insets   = { left = 0, right = 0, top = 0, bottom = 0 },
-    })
+    bg:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
     bg:SetBackdropColor(
         conf.bgR or 0.1, conf.bgG or 0.1,
         conf.bgB or 0.1, conf.bgA or 0.85)
 
-    if borderOn then
-        bg:SetBackdropBorderColor(
-            conf.borderR or 0, conf.borderG or 0,
-            conf.borderB or 0, conf.borderA or 1)
-    else
-        bg:SetBackdropBorderColor(0, 0, 0, 0)
+    local bf = f._msufGFBorderFrame
+    if bf then
+        local borderOn   = (conf.borderEnabled == true)
+        local borderSize = borderOn and math_max(1, tonumber(conf.borderSize) or 1) or 1
+        if borderOn then
+            bf:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = borderSize })
+            bf:SetBackdropColor(0, 0, 0, 0)
+            bf:SetBackdropBorderColor(
+                conf.borderR or 0, conf.borderG or 0,
+                conf.borderB or 0, conf.borderA or 1)
+            bf:Show()
+        else
+            bf:SetBackdrop(nil)
+            bf:Hide()
+        end
     end
 end
 

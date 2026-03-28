@@ -452,7 +452,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 { key = "LEFT",  label = "Left"  },
             },
             get = function(k) return GF.Val(k, "growth") end,
-            set = function(k, v) GF.GetConf(k).growth = v; GF.RebuildAll() end,
+            set = function(k, v) GF.GetConf(k).growth = v; C_Timer.After(0, function() GF.RebuildAll() end) end,
         })
 
         local upcSl = SSlider({

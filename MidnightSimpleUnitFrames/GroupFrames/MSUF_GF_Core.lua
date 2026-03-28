@@ -89,24 +89,32 @@ local function BuildFrameHierarchy(f, kind)
     local powerH = conf.powerHeight or 6
     local inset  = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
 
-    -- barGroup (BackdropTemplate) — visual container
+    -- barGroup — visual container (bgFile-only, EQoL pattern)
+    -- Edge tiling on SetAllPoints frames causes TexCoord crash during
+    -- SecureGroupHeader reposition (0-dimension transient). Border on separate frame.
     local barGroup = CreateFrame("Frame", nil, f, "BackdropTemplate")
     barGroup:SetAllPoints(f)
     barGroup:EnableMouse(false)
     f.barGroup = barGroup
 
-    -- Background
-    barGroup:SetBackdrop({
-        bgFile   = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1,
-        insets   = { left = 0, right = 0, top = 0, bottom = 0 },
-    })
+    barGroup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
     barGroup:SetBackdropColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
+
+    -- Separate border frame (2-point anchored, never SetAllPoints)
+    local borderFrame = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
+    borderFrame:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, 0)
+    borderFrame:SetPoint("BOTTOMRIGHT", barGroup, "BOTTOMRIGHT", 0, 0)
+    borderFrame:SetFrameLevel(barGroup:GetFrameLevel() + 1)
+    borderFrame:EnableMouse(false)
+    f._msufGFBorderFrame = borderFrame
     if conf.borderEnabled then
-        barGroup:SetBackdropBorderColor(conf.borderR or 0, conf.borderG or 0, conf.borderB or 0, conf.borderA or 1)
+        local edgeSz = math_max(1, conf.borderSize or 1)
+        borderFrame:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edgeSz })
+        borderFrame:SetBackdropColor(0, 0, 0, 0)
+        borderFrame:SetBackdropBorderColor(conf.borderR or 0, conf.borderG or 0, conf.borderB or 0, conf.borderA or 1)
     else
-        barGroup:SetBackdropBorderColor(0, 0, 0, 0)
+        borderFrame:SetBackdrop(nil)
+        borderFrame:Hide()
     end
 
     -- Health StatusBar
@@ -309,7 +317,8 @@ local function BuildFrameHierarchy(f, kind)
 
     -- Unified highlight border (aggro/dispel/target — priority pipeline like main UF)
     local hlBorder = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
-    hlBorder:SetAllPoints(barGroup)
+    hlBorder:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, 0)
+    hlBorder:SetPoint("BOTTOMRIGHT", barGroup, "BOTTOMRIGHT", 0, 0)
     hlBorder:SetFrameLevel(barGroup:GetFrameLevel() + 3)
     hlBorder:EnableMouse(false)
     hlBorder:Hide()

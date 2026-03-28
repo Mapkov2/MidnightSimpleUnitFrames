@@ -58,6 +58,37 @@ local GetRaidRosterInfo = _G.GetRaidRosterInfo
 local strmatch         = string.match
 
 ------------------------------------------------------------------------
+-- Highlight value resolver: Bars hl* keys → old GF conf key fallback
+-- Bars system uses hlAggroEnabled, hlAggroColorR, etc.
+-- Old GF DB uses aggroEnabled, aggroR, etc.
+-- GetHighlightVal checks conf.hlOverride → general. If nil, we fall
+-- back to the old GF per-kind conf keys so existing configs still work.
+------------------------------------------------------------------------
+local _HL_FALLBACK = {
+    hlAggroEnabled  = "aggroEnabled",
+    hlAggroColorR   = "aggroR",
+    hlAggroColorG   = "aggroG",
+    hlAggroColorB   = "aggroB",
+    hlAggroMode     = "aggroMode",
+    hlDispelEnabled = "dispelEnabled",
+    hlTargetEnabled = "targetIndicator",
+    hlTargetColorR  = "targetR",
+    hlTargetColorG  = "targetG",
+    hlTargetColorB  = "targetB",
+}
+
+local function HLVal(kind, key)
+    local v = GF.GetHighlightVal(kind, key)
+    if v ~= nil then return v end
+    local fallback = _HL_FALLBACK[key]
+    if fallback then
+        local conf = GF.GetConf(kind)
+        if conf[fallback] ~= nil then return conf[fallback] end
+    end
+    return nil
+end
+
+------------------------------------------------------------------------
 -- Range check spells (Grid2 pattern — IsSpellInRange, NOT secret)
 ------------------------------------------------------------------------
 local _playerClass = select(2, UnitClass("player"))
@@ -305,14 +336,14 @@ local function UpdateAggro(f, unit)
     if not border then return end
 
     local testMode = _G.MSUF_AggroBorderTestMode
-    if (conf.aggroEnabled == false or not unit) and not testMode then
+    if (HLVal(kind, "hlAggroEnabled") == false or not unit) and not testMode then
         border:Hide(); return
     end
 
     local s -- threat level (nil/0-3)
     if not testMode then
         if not UnitExists(unit) then border:Hide(); return end
-        local aggroMode = conf.aggroMode or "ALL"
+        local aggroMode = HLVal(kind, "hlAggroMode") or "ALL"
         if aggroMode ~= "ALL" then
             local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
             if aggroMode == "HEALER_ONLY" and role ~= "HEALER" then border:Hide(); return end
@@ -324,15 +355,17 @@ local function UpdateAggro(f, unit)
         if not s or s < 1 then border:Hide(); return end
     end
 
-    local sz  = GF.GetHighlightVal(kind, "hlAggroSize") or 2
-    local ofs = GF.GetHighlightVal(kind, "hlAggroOffset") or 0
-    local tex = conf.aggroHighlightTexture
-    local lay = GF.GetHighlightVal(kind, "hlAggroLayer") or "DEFAULT"
+    local sz  = HLVal(kind, "hlAggroSize") or 2
+    local ofs = HLVal(kind, "hlAggroOffset") or 0
+    local tex = HLVal(kind, "hlAggroTexture")
+    local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
     local ar, ag, ab
     if testMode or (s and s >= 3) then
         ar, ag, ab = 1, 0, 0
     else
-        ar = conf.aggroR or 1; ag = conf.aggroG or 0.55; ab = conf.aggroB or 0
+        ar = HLVal(kind, "hlAggroColorR") or 1
+        ag = HLVal(kind, "hlAggroColorG") or 0.55
+        ab = HLVal(kind, "hlAggroColorB") or 0
     end
     _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, ar, ag, ab, 1)
     border:Show()
@@ -364,7 +397,7 @@ function GF._UpdateDispel(f, unit)
 
     local testMode = _G.MSUF_DispelBorderTestMode
 
-    if (conf.dispelEnabled == false or not unit) and not testMode then
+    if (HLVal(kind, "hlDispelEnabled") == false or not unit) and not testMode then
         f._msufGFDispelType = nil
         return
     end
@@ -400,10 +433,10 @@ function GF._UpdateDispel(f, unit)
             r, g, b = GetDispelColor(topDispel)
         end
         if r and border then
-            local sz  = GF.GetHighlightVal(kind, "hlAggroSize") or 2
-            local ofs = GF.GetHighlightVal(kind, "hlAggroOffset") or 0
-            local tex = conf.aggroHighlightTexture
-            local lay = GF.GetHighlightVal(kind, "hlAggroLayer") or "DEFAULT"
+            local sz  = HLVal(kind, "hlAggroSize") or 2
+            local ofs = HLVal(kind, "hlAggroOffset") or 0
+            local tex = HLVal(kind, "hlAggroTexture")
+            local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
             _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
             border:Show()
         end
@@ -421,19 +454,21 @@ local function UpdateTargetIndicator(f, unit)
     local border = f._msufGFTargetBorder
     if not border then return end
 
-    if conf.targetIndicator == false or not unit then
+    if HLVal(kind, "hlTargetEnabled") == false or not unit then
         border:Hide()
         return
     end
 
     local isTarget = UnitIsUnit and UnitIsUnit(unit, "target")
     if isTarget then
-        local edgeSz = GF.GetHighlightVal(kind, "hlTargetSize") or 2
-        local ofs    = GF.GetHighlightVal(kind, "hlTargetOffset") or 0
-        local tex    = conf.targetHighlightTexture
-        local lay    = GF.GetHighlightVal(kind, "hlTargetLayer") or "DEFAULT"
+        local edgeSz = HLVal(kind, "hlTargetSize") or 2
+        local ofs    = HLVal(kind, "hlTargetOffset") or 0
+        local tex    = HLVal(kind, "hlTargetTexture")
+        local lay    = HLVal(kind, "hlTargetLayer") or "DEFAULT"
         _applyHighlightBorderStyle(border, conf, edgeSz, ofs, tex, lay,
-            conf.targetR or 1, conf.targetG or 1, conf.targetB or 1, 1)
+            HLVal(kind, "hlTargetColorR") or 1,
+            HLVal(kind, "hlTargetColorG") or 1,
+            HLVal(kind, "hlTargetColorB") or 1, 1)
         border:Show()
     else
         border:Hide()
@@ -1141,12 +1176,12 @@ function GF.RegisterUnitEvents(f, unit)
     end
 
     -- Auras (dispel detection)
-    if conf.dispelEnabled ~= false then
+    if HLVal(kind, "hlDispelEnabled") ~= false then
         reg("UNIT_AURA")
     end
 
     -- Threat
-    if conf.aggroEnabled ~= false then
+    if HLVal(kind, "hlAggroEnabled") ~= false then
         reg("UNIT_THREAT_SITUATION_UPDATE")
         reg("UNIT_THREAT_LIST_UPDATE")
     end
@@ -1420,8 +1455,8 @@ end
 local function EnsureMouseoverHighlight(f)
     if not _GF_IsHighlightEnabled() then return nil end
     local kind = f._msufGFKind or "party"
-    local sz = math_max(1, tonumber(GF.GetHighlightVal(kind, "hlHoverSize")) or 1)
-    local ofs = tonumber(GF.GetHighlightVal(kind, "hlHoverOffset")) or 0
+    local sz = math_max(1, tonumber(HLVal(kind, "hlHoverSize")) or 1)
+    local ofs = tonumber(HLVal(kind, "hlHoverOffset")) or 0
     local r, g, b = _GF_GetHighlightColor()
     if f._msufGFHoverBorder then
         local hb = f._msufGFHoverBorder

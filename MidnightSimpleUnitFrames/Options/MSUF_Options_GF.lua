@@ -19,6 +19,19 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
 local SECTION_W = 680
 local SECTION_COLLAPSED_H = 28
 
+if not StaticPopupDialogs["MSUF_GF_GROWTH_RELOAD"] then
+    StaticPopupDialogs["MSUF_GF_GROWTH_RELOAD"] = {
+        text = "Growth direction changed. A UI reload is required to apply.\n\nReload now?",
+        button1 = "Reload",
+        button2 = "Later",
+        OnAccept = function() ReloadUI() end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+end
+
 ------------------------------------------------------------------------
 -- Color picker (same pattern as MSUF_Options_Colors.lua)
 ------------------------------------------------------------------------
@@ -389,7 +402,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 1: General (default open)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(520, "General", true)
+        local box, body = AddSection(600, "General", true)
 
         local enableChk = SCheck({
             name = "MSUF_GF_EnableCheck", parent = body,
@@ -442,22 +455,227 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return string.format("Spacing: %d", v) end,
         })
 
-        local growthDd = SDropdown({
-            name = "MSUF_GF_GrowthDropdown", parent = body,
-            anchor = spacingSl, x = -16, y = -16, width = 200,
-            items = {
-                { key = "DOWN",  label = "Down"  },
-                { key = "UP",    label = "Up"    },
-                { key = "RIGHT", label = "Right" },
-                { key = "LEFT",  label = "Left"  },
-            },
-            get = function(k) return GF.Val(k, "growth") end,
-            set = function(k, v) GF.GetConf(k).growth = v; GF.RebuildAll() end,
-        })
+        -- Growth direction: 4 visual preview buttons (reload required)
+        -- Shows mini-grid with numbered "1" on first unit + arrow showing direction.
+        local growthLabel = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        growthLabel:SetPoint("TOPLEFT", spacingSl, "BOTTOMLEFT", 0, -18)
+        growthLabel:SetText(TR("Growth Direction"))
+        growthLabel:SetTextColor(1, 0.82, 0)
+
+        local GROW_W, GROW_H = 64, 64
+        local GROW_GAP = 6
+        local GROW_DIRS = {
+            { key = "DOWN",  label = "Down",  dx = 0, dy = -1, arrow = "▼" },
+            { key = "UP",    label = "Up",    dx = 0, dy = 1,  arrow = "▲" },
+            { key = "RIGHT", label = "Right", dx = 1, dy = 0,  arrow = "►" },
+            { key = "LEFT",  label = "Left",  dx = -1, dy = 0, arrow = "◄" },
+        }
+        local growthBtns = {}
+        local growthContainer = CreateFrame("Frame", nil, body)
+        growthContainer:SetSize(4 * GROW_W + 3 * GROW_GAP, GROW_H + 16)
+        growthContainer:SetPoint("TOPLEFT", growthLabel, "BOTTOMLEFT", 0, -6)
+
+        local function DrawMiniPreview(btn, dx, dy, arrow, isRaid)
+            -- Clean up old elements
+            if btn._miniRects then
+                for _, r in ipairs(btn._miniRects) do r:Hide() end
+            end
+            btn._miniRects = btn._miniRects or {}
+            if btn._miniNums then
+                for _, fs in ipairs(btn._miniNums) do fs:Hide() end
+            end
+            btn._miniNums = btn._miniNums or {}
+
+            local cols, rows
+            if isRaid then
+                if dy ~= 0 then rows = 5; cols = 4
+                else rows = 4; cols = 5 end
+            else
+                if dy ~= 0 then rows = 5; cols = 1
+                else rows = 1; cols = 5 end
+            end
+
+            local pad = 4
+            local labelH = 14
+            local innerW = GROW_W - pad * 2
+            local innerH = GROW_H - pad - labelH
+            local gap = 1
+
+            local cellW = (innerW - (cols - 1) * gap) / cols
+            local cellH = (innerH - (rows - 1) * gap) / rows
+            if cellW < 2 then cellW = 2 end
+            if cellH < 2 then cellH = 2 end
+
+            local gridW = cols * cellW + (cols - 1) * gap
+            local gridH = rows * cellH + (rows - 1) * gap
+            local originX = pad + (innerW - gridW) / 2
+            local originY = -(pad + (innerH - gridH) / 2)
+
+            local count = cols * rows
+            local ri = 0
+
+            -- Build ordered position list matching growth direction
+            local positions = {}
+            if dy ~= 0 then
+                local rowStart, rowEnd, rowStep = 0, rows - 1, 1
+                if dy == 1 then rowStart, rowEnd, rowStep = rows - 1, 0, -1 end
+                for col = 0, cols - 1 do
+                    for row = rowStart, rowEnd, rowStep do
+                        positions[#positions + 1] = { col = col, row = row }
+                    end
+                end
+            else
+                local colStart, colEnd, colStep = 0, cols - 1, 1
+                if dx == -1 then colStart, colEnd, colStep = cols - 1, 0, -1 end
+                for row = 0, rows - 1 do
+                    for col = colStart, colEnd, colStep do
+                        positions[#positions + 1] = { col = col, row = row }
+                    end
+                end
+            end
+
+            for idx = 1, #positions do
+                ri = ri + 1
+                local pos = positions[idx]
+                local r = btn._miniRects[ri]
+                if not r then
+                    r = btn:CreateTexture(nil, "ARTWORK")
+                    btn._miniRects[ri] = r
+                end
+                r:SetSize(cellW, cellH)
+                r:ClearAllPoints()
+                r:SetPoint("TOPLEFT", btn, "TOPLEFT",
+                    originX + pos.col * (cellW + gap),
+                    originY - pos.row * (cellH + gap))
+
+                if idx == 1 then
+                    -- First unit: bright green-blue highlight
+                    r:SetColorTexture(0.2, 0.9, 0.6, 1.0)
+                elseif idx <= 3 then
+                    -- Next few: medium
+                    r:SetColorTexture(0.35, 0.65, 0.90, 0.85)
+                else
+                    -- Rest: progressively faded
+                    local alpha = 0.7 - (idx - 3) * (0.35 / count)
+                    if alpha < 0.2 then alpha = 0.2 end
+                    r:SetColorTexture(0.30, 0.50, 0.75, alpha)
+                end
+                r:Show()
+
+                -- Number on first unit
+                if idx == 1 then
+                    local fs = btn._miniNums[1]
+                    if not fs then
+                        fs = btn:CreateFontString(nil, "OVERLAY")
+                        fs:SetFont("Fonts\\FRIZQT__.TTF", 7, "OUTLINE")
+                        btn._miniNums[1] = fs
+                    end
+                    fs:ClearAllPoints()
+                    fs:SetPoint("CENTER", r, "CENTER", 0, 0)
+                    fs:SetText("1")
+                    fs:SetTextColor(0, 0, 0, 1)
+                    fs:Show()
+                end
+            end
+            for j = ri + 1, #btn._miniRects do btn._miniRects[j]:Hide() end
+
+            -- Arrow indicator showing direction
+            local arrowFs = btn._miniNums[2]
+            if not arrowFs then
+                arrowFs = btn:CreateFontString(nil, "OVERLAY")
+                arrowFs:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+                btn._miniNums[2] = arrowFs
+            end
+            arrowFs:ClearAllPoints()
+            arrowFs:SetText(arrow)
+            arrowFs:SetTextColor(0.9, 0.75, 0.3, 0.9)
+            -- Position arrow at the growth edge
+            if dy == -1 then
+                arrowFs:SetPoint("BOTTOM", btn, "BOTTOM", 0, labelH + 1)
+            elseif dy == 1 then
+                arrowFs:SetPoint("TOP", btn, "TOP", 0, -pad)
+            elseif dx == 1 then
+                arrowFs:SetPoint("RIGHT", btn, "RIGHT", -pad, labelH / 2)
+            elseif dx == -1 then
+                arrowFs:SetPoint("LEFT", btn, "LEFT", pad, labelH / 2)
+            end
+            arrowFs:Show()
+            for j = 3, #btn._miniNums do btn._miniNums[j]:Hide() end
+        end
+
+        local function RefreshGrowthButtons()
+            local cur = GF.Val(K(), "growth") or "DOWN"
+            local isRaid = (K() == "raid")
+            for _, info in ipairs(GROW_DIRS) do
+                local btn = growthBtns[info.key]
+                if btn then
+                    DrawMiniPreview(btn, info.dx, info.dy, info.arrow, isRaid)
+                    if info.key == cur then
+                        btn:SetBackdropBorderColor(0.3, 0.7, 1.0, 1)
+                        btn:SetBackdropColor(0.12, 0.18, 0.28, 1)
+                    else
+                        btn:SetBackdropBorderColor(0.25, 0.25, 0.30, 0.8)
+                        btn:SetBackdropColor(0.08, 0.08, 0.10, 1)
+                    end
+                end
+            end
+        end
+
+        for idx, info in ipairs(GROW_DIRS) do
+            local btn = CreateFrame("Button", nil, growthContainer, "BackdropTemplate")
+            btn:SetSize(GROW_W, GROW_H)
+            btn:SetPoint("TOPLEFT", growthContainer, "TOPLEFT", (idx - 1) * (GROW_W + GROW_GAP), 0)
+            btn:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                edgeSize = 1,
+            })
+            btn:SetBackdropColor(0.08, 0.08, 0.10, 1)
+            btn:SetBackdropBorderColor(0.25, 0.25, 0.30, 0.8)
+
+            local lbl = btn:CreateFontString(nil, "OVERLAY")
+            lbl:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
+            lbl:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
+            lbl:SetText(TR(info.label))
+            lbl:SetTextColor(0.8, 0.8, 0.8)
+
+            btn:SetScript("OnEnter", function(self)
+                self:SetBackdropColor(0.15, 0.20, 0.30, 1)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:AddLine(TR("Grow") .. " " .. TR(info.label), 1, 1, 1)
+                if info.dy == -1 then
+                    GameTooltip:AddLine(TR("Unit 1 at top, new units added below"), 0.7, 0.7, 0.7)
+                elseif info.dy == 1 then
+                    GameTooltip:AddLine(TR("Unit 1 at bottom, new units added above"), 0.7, 0.7, 0.7)
+                elseif info.dx == 1 then
+                    GameTooltip:AddLine(TR("Unit 1 at left, new units added right"), 0.7, 0.7, 0.7)
+                else
+                    GameTooltip:AddLine(TR("Unit 1 at right, new units added left"), 0.7, 0.7, 0.7)
+                end
+                GameTooltip:AddLine(TR("Requires reload to apply"), 0.9, 0.7, 0.3)
+                GameTooltip:Show()
+            end)
+            btn:SetScript("OnLeave", function(self)
+                GameTooltip:Hide()
+                RefreshGrowthButtons()
+            end)
+            btn:SetScript("OnClick", function()
+                local cur = GF.Val(K(), "growth") or "DOWN"
+                if info.key == cur then return end
+                GF.GetConf(K()).growth = info.key
+                RefreshGrowthButtons()
+                StaticPopup_Show("MSUF_GF_GROWTH_RELOAD")
+            end)
+
+            growthBtns[info.key] = btn
+        end
+
+        RefreshGrowthButtons()
+        _allRefreshFns[#_allRefreshFns + 1] = RefreshGrowthButtons
 
         local upcSl = SSlider({
             name = "MSUF_GF_UnitsPerColumnSlider", parent = body, compact = true,
-            anchor = growthDd, x = 16, y = -14,
+            anchor = growthContainer, x = 0, y = -14,
             min = 1, max = 40, step = 1, width = 270, default = 5,
             get = function(k) return GF.Val(k, "unitsPerColumn") end,
             set = function(k, v) GF.GetConf(k).unitsPerColumn = v; GF.RebuildAll() end,
@@ -1056,68 +1274,20 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 8: Indicators
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(500, "Indicators", false)
+        local box, body = AddSection(400, "Indicators", false)
 
-        local aggroChk = SCheck({
-            name = "MSUF_GF_AggroEnableCheck", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
-            label = TR("Aggro Border"),
-            get = function(k) return GF.Val(k, "aggroEnabled") end,
-            set = function(k, v) GF.GetConf(k).aggroEnabled = v; GF.RefreshVisuals() end,
-        })
+        -- Redirect: aggro/dispel/target are controlled from the Bars menu
+        local hlRedirect = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        hlRedirect:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -8)
+        hlRedirect:SetText(TR("Aggro / Dispel / Target Highlight"))
+        hlRedirect:SetTextColor(1, 0.82, 0)
 
-        local aggroLbl, aggroSwatch = MakeColorSwatch(body, aggroChk, "BOTTOMLEFT", 24, -8,
-            "Aggro Color",
-            function() return V("aggroR"), V("aggroG"), V("aggroB") end,
-            function(r, g, b)
-                local c = C(); c.aggroR = r; c.aggroG = g; c.aggroB = b
-                GF.RefreshVisuals()
-            end)
-        _allRefreshFns[#_allRefreshFns + 1] = function()
-            if aggroSwatch and aggroSwatch.Refresh and aggroSwatch:IsShown() then aggroSwatch:Refresh() end
-        end
-
-        local aggroModeDd = SDropdown({
-            name = "MSUF_GF_AggroModeDropdown", parent = body,
-            anchor = aggroLbl, x = 0, y = -8, width = 200,
-            items = {
-                { key = "ALL",         label = "All Roles"   },
-                { key = "HEALER_ONLY", label = "Healer Only" },
-                { key = "TANK_ONLY",   label = "Tank Only"   },
-            },
-            get = function(k) return GF.Val(k, "aggroMode") or "ALL" end,
-            set = function(k, v) GF.GetConf(k).aggroMode = v; GF.RefreshVisuals() end,
-        })
-
-        local dispelChk = SCheck({
-            name = "MSUF_GF_DispelEnableCheck", parent = body,
-            anchor = aggroModeDd, x = 16, y = -8,
-            label = TR("Dispel Border"),
-            get = function(k) return GF.Val(k, "dispelEnabled") end,
-            set = function(k, v) GF.GetConf(k).dispelEnabled = v; GF.RefreshVisuals() end,
-        })
-
-        local targetChk = SCheck({
-            name = "MSUF_GF_TargetIndicatorCheck", parent = body,
-            anchor = dispelChk, x = 0, y = -4,
-            label = TR("Target Indicator"),
-            get = function(k) return GF.Val(k, "targetIndicator") end,
-            set = function(k, v) GF.GetConf(k).targetIndicator = v; GF.RefreshVisuals() end,
-        })
-
-        local targetLbl = MakeColorSwatch(body, targetChk, "BOTTOMLEFT", 24, -8,
-            "Target Color",
-            function() return V("targetR"), V("targetG"), V("targetB") end,
-            function(r, g, b)
-                local c = C(); c.targetR = r; c.targetG = g; c.targetB = b
-                GF.RefreshVisuals()
-            end)
-
-        -- Hint: size/offset/layer moved to Bars menu
         local hlHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        hlHint:SetPoint("TOPLEFT", targetLbl, "BOTTOMLEFT", 0, -12)
-        hlHint:SetText(TR("Highlight size, offset, layer: Bars menu > Outline & Highlight Border"))
-        hlHint:SetTextColor(0.5, 0.55, 0.65)
+        hlHint:SetPoint("TOPLEFT", hlRedirect, "BOTTOMLEFT", 0, -6)
+        hlHint:SetText(TR("Controlled from: |cffffd200Bars|r > |cffffd200Outline & Highlight Border|r\nEnable/disable, colors, size, offset, priority — all in one place."))
+        hlHint:SetTextColor(0.6, 0.65, 0.75)
+        hlHint:SetWidth(400)
+        hlHint:SetJustifyH("LEFT")
 
         -- Group Number sub-group
         local gnSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")

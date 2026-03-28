@@ -1091,7 +1091,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Buffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("buff", L["Buffs"], 620, function(body, lastWidget, gk)
+    BuildAuraGroupSection("buff", L["Buffs"], 720, function(body, lastWidget, gk)
         return SDropdown({
             name = "MSUF_GF_BuffFilter", parent = body,
             anchor = lastWidget, x = -16, y = -6, width = 200,
@@ -1104,7 +1104,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Debuffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("debuff", L["Debuffs"], 620, function(body, lastWidget, gk)
+    BuildAuraGroupSection("debuff", L["Debuffs"], 720, function(body, lastWidget, gk)
         return SCheck({
             name = "MSUF_GF_DebuffDispelBorder", parent = body,
             anchor = lastWidget, x = 0, y = -6,
@@ -1117,7 +1117,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Externals
     ----------------------------------------------------------------
-    BuildAuraGroupSection("externals", L["Externals"], 580)
+    BuildAuraGroupSection("externals", L["Externals"], 680)
 
 
     ----------------------------------------------------------------
