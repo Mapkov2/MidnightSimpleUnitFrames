@@ -857,6 +857,26 @@ local function SetHealAbsorbOverlayColor(r, g, b)
     PushVisualUpdates()
 end
 
+local function GetHealPredictionColor()
+    local g = _general()
+    if g then
+        local ar, ag, ab = g.healPredColorR, g.healPredColorG, g.healPredColorB
+        if type(ar) == "number" and type(ag) == "number" and type(ab) == "number" then
+            return ar, ag, ab
+        end
+    end
+    return 0.0, 1.0, 0.4
+end
+
+local function SetHealPredictionColor(r, g, b)
+    local gen = _general()
+    if not gen then return end
+    gen.healPredColorR = r
+    gen.healPredColorG = g
+    gen.healPredColorB = b
+    PushVisualUpdates()
+end
+
 
 ------------------------------------------------------
 -- Helpers: Power bar background color
@@ -1027,11 +1047,13 @@ ns._colorsAPI = {
     GetPetFrameColor                = GetPetFrameColor,
     SetPetFrameColor                = SetPetFrameColor,
 
-    -- Absorb / Heal-Absorb
+    -- Absorb / Heal-Absorb / Heal Prediction
     GetAbsorbOverlayColor           = GetAbsorbOverlayColor,
     SetAbsorbOverlayColor           = SetAbsorbOverlayColor,
     GetHealAbsorbOverlayColor       = GetHealAbsorbOverlayColor,
     SetHealAbsorbOverlayColor       = SetHealAbsorbOverlayColor,
+    GetHealPredictionColor          = GetHealPredictionColor,
+    SetHealPredictionColor          = SetHealPredictionColor,
 
     -- Power bar bg
     GetPowerBarBackgroundColor      = GetPowerBarBackgroundColor,

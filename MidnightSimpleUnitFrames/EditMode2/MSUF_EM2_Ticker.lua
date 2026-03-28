@@ -98,91 +98,101 @@ local function OnUpdate(self, elapsed)
         end
 
         -- ═══════════════════════════════════════════════════════════════
-        -- Position bar with CENTER — same code path as PositionUnitFrame
+        -- Position bar with CENTER — same code path as PositionUnitFrame.
+        -- Group Frames use a stricter UIParent-center path so mouse release
+        -- matches the exact preview landing spot with no final snap drift.
         -- ═══════════════════════════════════════════════════════════════
-        -- snapCX/snapCY = desired bar center in UIParent screen coords.
-        -- Convert to anchor-relative offset (same math as _UpdateDBFromFrame).
-        -- Then SetPoint("CENTER", anchor, "CENTER", ...) — identical to pipeline.
 
         local bar = d.bar
         if bar and not InCombatLockdown() then
             local anchor = d.anchor
             local conf = d.conf
 
-            -- Compute where bar center IS in screen pixels after hypothetical move
-            -- snapCX/snapCY are in UIParent coords.
-            -- Bar center in screen pixels = snapCX * uiScale
-            -- We need: offset = (barCenter * barScale - anchorCenter * anchorScale) / anchorScale
-            -- Since we WANT barCenter at snapCX (UIParent coords), and UIParent coords = screen / uiScale:
-            -- barCenter_local = snapCX * (uiScale / barScale)
-            -- But simpler: just write offset then SetPoint with CENTER.
+            if d.isGroupFrame then
+                conf.offsetX = round(snapCX - d.screenW * 0.5)
+                conf.offsetY = round(snapCY - d.screenH * 0.5)
+                pcall(function()
+                    bar._msufDragActive = false
+                    bar:ClearAllPoints()
+                    bar:SetPoint("CENTER", UIParent, "CENTER", conf.offsetX, conf.offsetY)
+                end)
+                bar._msufDragActive = true
+            else
+                -- Compute where bar center IS in screen pixels after hypothetical move
+                -- snapCX/snapCY are in UIParent coords.
+                -- Bar center in screen pixels = snapCX * uiScale
+                -- We need: offset = (barCenter * barScale - anchorCenter * anchorScale) / anchorScale
+                -- Since we WANT barCenter at snapCX (UIParent coords), and UIParent coords = screen / uiScale:
+                -- barCenter_local = snapCX * (uiScale / barScale)
+                -- But simpler: just write offset then SetPoint with CENTER.
 
-            local ax, ay = anchor:GetCenter()
-            if ax and ay then
-                local as = anchor:GetEffectiveScale() or 1
-                local fs = bar:GetEffectiveScale() or 1
-                if as == 0 then as = 1 end; if fs == 0 then fs = 1 end
+                local ax, ay = anchor:GetCenter()
+                if ax and ay then
+                    local as = anchor:GetEffectiveScale() or 1
+                    local fs = bar:GetEffectiveScale() or 1
+                    if as == 0 then as = 1 end; if fs == 0 then fs = 1 end
 
-                -- Desired bar center in absolute screen pixels
-                local barScreenCX = snapCX * sc  -- sc = UIParent:GetEffectiveScale()
-                local barScreenCY = snapCY * sc
-                -- Anchor center in absolute screen pixels
-                local ancScreenCX = ax * as
-                local ancScreenCY = ay * as
-                -- Offset in anchor's coord space
-                local offX = (barScreenCX - ancScreenCX) / as
-                local offY = (barScreenCY - ancScreenCY) / as
+                    -- Desired bar center in absolute screen pixels
+                    local barScreenCX = snapCX * sc  -- sc = UIParent:GetEffectiveScale()
+                    local barScreenCY = snapCY * sc
+                    -- Anchor center in absolute screen pixels
+                    local ancScreenCX = ax * as
+                    local ancScreenCY = ay * as
+                    -- Offset in anchor's coord space
+                    local offX = (barScreenCX - ancScreenCX) / as
+                    local offY = (barScreenCY - ancScreenCY) / as
 
-                -- Boss spacing adjustment
-                if d.bossAdj then offY = offY - d.bossAdj end
+                    -- Boss spacing adjustment
+                    if d.bossAdj then offY = offY - d.bossAdj end
 
-                conf.offsetX = round(offX)
-                conf.offsetY = round(offY)
+                    conf.offsetX = round(offX)
+                    conf.offsetY = round(offY)
 
-                -- Check ECV path
-                local db = _G.MSUF_DB
-                local _g = db and db.general
-                local ecvFn = _G.MSUF_GetEffectiveCooldownFrame
-                local ecv = (type(ecvFn) == "function" and ecvFn("EssentialCooldownViewer"))
-                    or _G["EssentialCooldownViewer"]
-                local ecvRule = d.ecvRule
+                    -- Check ECV path
+                    local db = _G.MSUF_DB
+                    local _g = db and db.general
+                    local ecvFn = _G.MSUF_GetEffectiveCooldownFrame
+                    local ecv = (type(ecvFn) == "function" and ecvFn("EssentialCooldownViewer"))
+                        or _G["EssentialCooldownViewer"]
+                    local ecvRule = d.ecvRule
 
-                if _g and _g.anchorToCooldown and ecv and anchor == ecv and ecvRule then
-                    -- ECV path: PositionUnitFrame uses point-to-point
-                    -- We wrote center-to-center offset above, need to convert for ECV
-                    local point, relPoint, baseX, extraY = ecvRule[1], ecvRule[2], ecvRule[3] or 0, ecvRule[4] or 0
-                    -- For ECV: gapY = offsetY, x = baseX + offsetX
-                    -- PositionUnitFrame: MSUF_ApplyPoint(f, point, ecv, relPoint, baseX + offsetX, offsetY + extraY)
-                    -- So we need to recompute offsetX/offsetY for ECV path
-                    local ax2, ay2 = PointXY(ecv, relPoint)
-                    -- Desired bar point position
-                    local fx2, fy2 = PointXY(bar, point)
-                    -- But bar hasn't moved yet... use target position instead
-                    -- Actually, just temporarily position with CENTER, read PointXY, then fix
-                    pcall(function()
-                        bar._msufDragActive = false
-                        bar:ClearAllPoints()
-                        bar:SetPoint("CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
-                    end)
-                    bar._msufDragActive = true
-                    -- Now read the ECV offsets
-                    fx2, fy2 = PointXY(bar, point)
-                    if ax2 and ay2 and fx2 and fy2 then
-                        conf.offsetX = round((fx2 * fs - ax2 * as) / as - baseX)
-                        conf.offsetY = round((fy2 * fs - ay2 * as) / as - extraY)
+                    if _g and _g.anchorToCooldown and ecv and anchor == ecv and ecvRule then
+                        -- ECV path: PositionUnitFrame uses point-to-point
+                        -- We wrote center-to-center offset above, need to convert for ECV
+                        local point, relPoint, baseX, extraY = ecvRule[1], ecvRule[2], ecvRule[3] or 0, ecvRule[4] or 0
+                        -- For ECV: gapY = offsetY, x = baseX + offsetX
+                        -- PositionUnitFrame: MSUF_ApplyPoint(f, point, ecv, relPoint, baseX + offsetX, offsetY + extraY)
+                        -- So we need to recompute offsetX/offsetY for ECV path
+                        local ax2, ay2 = PointXY(ecv, relPoint)
+                        -- Desired bar point position
+                        local fx2, fy2 = PointXY(bar, point)
+                        -- But bar hasn't moved yet... use target position instead
+                        -- Actually, just temporarily position with CENTER, read PointXY, then fix
+                        pcall(function()
+                            bar._msufDragActive = false
+                            bar:ClearAllPoints()
+                            bar:SetPoint("CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
+                        end)
+                        bar._msufDragActive = true
+                        -- Now read the ECV offsets
+                        fx2, fy2 = PointXY(bar, point)
+                        if ax2 and ay2 and fx2 and fy2 then
+                            conf.offsetX = round((fx2 * fs - ax2 * as) / as - baseX)
+                            conf.offsetY = round((fy2 * fs - ay2 * as) / as - extraY)
+                        end
+                        pcall(function()
+                            bar:ClearAllPoints()
+                            bar:SetPoint(point, ecv, relPoint, baseX + conf.offsetX, conf.offsetY + extraY)
+                        end)
+                    else
+                        -- Normal path: CENTER-to-CENTER (same as PositionUnitFrame line 2429)
+                        pcall(function()
+                            bar._msufDragActive = false
+                            bar:ClearAllPoints()
+                            bar:SetPoint("CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
+                        end)
+                        bar._msufDragActive = true
                     end
-                    pcall(function()
-                        bar:ClearAllPoints()
-                        bar:SetPoint(point, ecv, relPoint, baseX + conf.offsetX, conf.offsetY + extraY)
-                    end)
-                else
-                    -- Normal path: CENTER-to-CENTER (same as PositionUnitFrame line 2429)
-                    pcall(function()
-                        bar._msufDragActive = false
-                        bar:ClearAllPoints()
-                        bar:SetPoint("CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
-                    end)
-                    bar._msufDragActive = true
                 end
             end
         end
@@ -225,22 +235,23 @@ function Ticker.BeginDrag(mover, key, cfg)
     end
 
     activeDrag = {
-        mover   = mover,
-        key     = key,
-        cfg     = cfg,
-        bar     = bar,
-        conf    = conf,
-        anchor  = anchor,
-        ecvRule = ECV_ANCHORS[key],
-        offX    = mCX - curX,
-        offY    = mCY - curY,
-        startCX = mCX,
-        startCY = mCY,
-        halfW   = (mR - mL) * 0.5,
-        halfH   = (mT - mB) * 0.5,
-        screenW = UIParent:GetWidth(),
-        screenH = UIParent:GetHeight(),
-        bossAdj = bossAdj,
+        mover        = mover,
+        key          = key,
+        cfg          = cfg,
+        bar          = bar,
+        conf         = conf,
+        anchor       = anchor,
+        ecvRule      = ECV_ANCHORS[key],
+        offX         = mCX - curX,
+        offY         = mCY - curY,
+        startCX      = mCX,
+        startCY      = mCY,
+        halfW        = (mR - mL) * 0.5,
+        halfH        = (mT - mB) * 0.5,
+        screenW      = UIParent:GetWidth(),
+        screenH      = UIParent:GetHeight(),
+        bossAdj      = bossAdj,
+        isGroupFrame = (key == "gf_party" or key == "gf_raid") or (bar and bar._msufIsGroupFrame == true) or false,
     }
 end
 
@@ -259,6 +270,18 @@ function Ticker.EndDrag()
     local moved = abs(cx - d.startCX) > 0.5 or abs(cy - d.startCY) > 0.5
 
     if moved then
+        if d.isGroupFrame and d.conf then
+            d.conf.offsetX = round(cx - d.screenW * 0.5)
+            d.conf.offsetY = round(cy - d.screenH * 0.5)
+            if d.bar and not InCombatLockdown() then
+                pcall(function()
+                    d.bar._msufDragActive = false
+                    d.bar:ClearAllPoints()
+                    d.bar:SetPoint("CENTER", UIParent, "CENTER", d.conf.offsetX, d.conf.offsetY)
+                end)
+                d.bar._msufDragActive = true
+            end
+        end
         -- Offsets already written by OnUpdate. Just finalize pipeline.
         if type(ApplySettingsForKey) == "function" then
             ApplySettingsForKey(d.key)

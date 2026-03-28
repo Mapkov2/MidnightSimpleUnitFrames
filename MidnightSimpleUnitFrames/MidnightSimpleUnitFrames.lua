@@ -2842,6 +2842,7 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
         f._msufTextSpec = nil
         f._msufLastH = nil
         f._msufLastPctS = nil
+        f._msufLastMaxS = nil
         f._msufLastPwrC = nil
         f._msufLastPwrM = nil
         f._msufLastPwrP = nil
@@ -3376,6 +3377,10 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
          return
     end
     local hpStr = MSUF_NumberToTextFast(hp)
+    -- Cache abbreviated max HP for extended text modes (MAX, CURMAX, DEFICIT, etc.)
+    local hpMax = UnitHealthMax(unit)
+    local hpMaxStr = MSUF_NumberToTextFast(hpMax)
+    self._msufCachedHpMaxStr = hpMaxStr
     local hpPct = MSUF_GetUnitHealthPercent(unit)
     local hasPct = (type(hpPct) == "number")
     local absorbText, absorbStyle = nil, nil
@@ -3427,15 +3432,17 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
         absorbText = self._msufCachedAbsorbText
         absorbStyle = self._msufCachedAbsorbStyle
     end
-    ns.Text.RenderHpMode(self, true, hpStr, hpPct, hasPct, conf, nil, absorbText, absorbStyle)
+    ns.Text.RenderHpMode(self, true, hpStr, hpPct, hasPct, conf, nil, absorbText, absorbStyle,
+        self._msufCachedHpMaxStr)
  end
 function _G.MSUF_ApplyBossTestHpPreviewText(self, conf)
     if not self or not self.hpText then  return end
     local show = (self.showHPText ~= false)
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local hpStr = MSUF_NumberToTextFast(750000)
+    local hpMaxStr = MSUF_NumberToTextFast(1000000)
     local hpPct = 75.0
-    ns.Text.RenderHpMode(self, show, hpStr, hpPct, true, conf, g)
+    ns.Text.RenderHpMode(self, show, hpStr, hpPct, true, conf, g, nil, nil, hpMaxStr)
  end
 function _G.MSUF_UFCore_UpdatePowerTextFast(self)
     return ns.Text.RenderPowerText(self)

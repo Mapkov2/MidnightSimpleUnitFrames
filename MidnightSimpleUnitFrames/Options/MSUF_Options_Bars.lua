@@ -54,30 +54,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- =====================================================================
     -- Scope-aware get/set helpers
     -- =====================================================================
-    -- GF helper: resolve GF override DB path
-    local function _GF_GetBarOverride(uk)
-        local db = _G.MSUF_DB; if not db then return nil, false end
-        local gf = db.groupframes; if type(gf) ~= "table" then return nil, false end
-        local sub = (uk == "gf_party") and gf.party or (uk == "gf_raid") and gf.raid or nil
-        if type(sub) ~= "table" then return nil, false end
-        return sub, (sub.overrideBars == true)
-    end
-
     local function ScopeGet(generalKey, defaultVal)
         EnsureDB()
         local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
         if uk then
-            -- GF scope: read from groupframes.party/raid.bars
-            if uk == "gf_party" or uk == "gf_raid" then
-                local sub, hasOvr = _GF_GetBarOverride(uk)
-                if sub and hasOvr then
-                    local ov = sub.bars
-                    if type(ov) == "table" and ov[generalKey] ~= nil then return ov[generalKey] end
-                end
-            else
-                local u = MSUF_DB[uk]
-                if u and u.hpPowerTextOverride == true and u[generalKey] ~= nil then return u[generalKey] end
-            end
+            local u = MSUF_DB[uk]
+            if u and u.hpPowerTextOverride == true and u[generalKey] ~= nil then return u[generalKey] end
         end
         local v = G()[generalKey]
         return v ~= nil and v or defaultVal
@@ -87,20 +69,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         EnsureDB()
         local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
         if uk then
-            -- GF scope: write to groupframes.party/raid.bars
-            if uk == "gf_party" or uk == "gf_raid" then
-                local sub = _GF_GetBarOverride(uk)
-                if sub then
-                    if sub.overrideBars ~= true then sub.overrideBars = true end
-                    if type(sub.bars) ~= "table" then sub.bars = {} end
-                    sub.bars[generalKey] = val
-                end
-            else
-                local u = type(_Scope_GetUnitDB) == "function" and _Scope_GetUnitDB(uk)
-                if u then
-                    if u.hpPowerTextOverride ~= true and type(_Scope_EnableOverride) == "function" then _Scope_EnableOverride(uk) end
-                    u[generalKey] = val
-                end
+            local u = type(_Scope_GetUnitDB) == "function" and _Scope_GetUnitDB(uk)
+            if u then
+                if u.hpPowerTextOverride ~= true and type(_Scope_EnableOverride) == "function" then _Scope_EnableOverride(uk) end
+                u[generalKey] = val
             end
         else
             G()[generalKey] = val
@@ -178,12 +150,15 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- =====================================================================
     -- SCOPE BAR (A2-style button strip)
     -- =====================================================================
-    local SCOPE_KEYS = { "shared", "player", "target", "targettarget", "focus", "pet", "boss", "gf_party", "gf_raid" }
+    local SCOPE_KEYS = { "shared", "player", "target", "targettarget", "focus", "pet", "boss", "party", "raid" }
     local SCOPE_LABELS = {
         shared = "Shared", player = "Player", target = "Target",
         targettarget = "ToT", focus = "Focus", pet = "Pet", boss = "Boss",
-        gf_party = "GF Party", gf_raid = "GF Raid",
+        party = "Party", raid = "Raid",
     }
+    local GF_SCOPE_KEYS = { party = "gf_party", raid = "gf_raid" }
+    local function IsGFScope(key) return GF_SCOPE_KEYS[key] ~= nil end
+    local function GetGFDBKey(key) return GF_SCOPE_KEYS[key] end
 
     local scopeBar = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
     scopeBar:SetHeight(72); scopeBar:SetWidth(BOX_W)
@@ -199,9 +174,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local function GetScopeUnitHasOverride(key)
         if key == "shared" then return false end
         EnsureDB()
-        if key == "gf_party" or key == "gf_raid" then
-            local _, hasOvr = _GF_GetBarOverride(key)
-            return hasOvr
+        local gfKey = GF_SCOPE_KEYS[key]
+        if gfKey then
+            local gf = MSUF_DB[gfKey]
+            return (type(gf) == "table" and gf.hlOverride == true)
         end
         local u = MSUF_DB[key]
         return (type(u) == "table" and u.hpPowerTextOverride == true)
@@ -220,6 +196,11 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if key ~= "shared" then G().hpSpacerSelectedUnitKey = key end
         RefreshScopeButtons()
         if type(_MSUF_SyncHpPowerTextScopeUI) == "function" then _MSUF_SyncHpPowerTextScopeUI() end
+        -- Switch GF preview to match scope (party vs raid)
+        if _barsGFPreviewOn and _BarsShowGFPreview then
+            if key == "party" or key == "raid" then _BarsShowGFPreview(key)
+            else _BarsShowGFPreview("party") end
+        end
     end
 
     do
@@ -230,6 +211,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             btn:SetSize(bk == "shared" and 56 or 48, 18)
             if not prevBtn then
                 btn:SetPoint("LEFT", scopeEditLbl, "RIGHT", 8, 0)
+            elseif bk == "party" then
+                -- Visual separator before GF scope buttons
+                btn:SetPoint("LEFT", prevBtn, "RIGHT", 10, 0)
             else
                 btn:SetPoint("LEFT", prevBtn, "RIGHT", 2, 0)
             end
@@ -270,6 +254,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                     GameTooltip:SetText(SCOPE_LABELS[bk] or bk, 1, 1, 1)
                     if bk == "shared" then
                         GameTooltip:AddLine(TR("Shared baseline used by units without overrides."), 0.72, 0.78, 0.88, true)
+                    elseif IsGFScope(bk) then
+                        local tip = GetScopeUnitHasOverride(bk) and TR("Override active: Group Frames use their own highlight settings.") or TR("Uses Shared highlight settings.")
+                        GameTooltip:AddLine(tip, 0.72, 0.78, 0.88, true)
+                        GameTooltip:AddLine(TR("Only Outline & Highlight Border applies to Group Frames."), 0.55, 0.60, 0.72, true)
                     else
                         local tip = GetScopeUnitHasOverride(bk) and TR("Override active: this unit uses its own HP/Power text settings.") or TR("Uses Shared settings.")
                         GameTooltip:AddLine(tip, 0.72, 0.78, 0.88, true)
@@ -320,6 +308,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         u.hpPowerTextOverride = true
         local g = G()
         if u.hpTextMode == nil then u.hpTextMode = g.hpTextMode end
+        if u.hpTextReverse == nil then u.hpTextReverse = g.hpTextReverse end
         if u.powerTextMode == nil then u.powerTextMode = g.powerTextMode end
         if u.hpTextSeparator == nil then u.hpTextSeparator = g.hpTextSeparator end
         if u.powerTextSeparator == nil then u.powerTextSeparator = g.powerTextSeparator end
@@ -339,32 +328,39 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     -- Override checkbox handler
     hpPowerOverrideCheck:SetScript("OnClick", function(self)
-        local uk = _MSUF_HPText_GetUnitKey(); if not uk then self:SetChecked(false); return end
-        -- GF override: toggle overrideBars on groupframes.party/raid
-        if uk == "gf_party" or uk == "gf_raid" then
-            local sub, _ = _GF_GetBarOverride(uk)
-            if sub then
-                sub.overrideBars = self:GetChecked() and true or false
-                if sub.overrideBars then
-                    if type(sub.bars) ~= "table" then sub.bars = {} end
-                    -- Seed scope-aware defaults from shared
-                    local g = G()
-                    local seedKeys = { "hpTextMode", "powerTextMode", "hpTextSeparator",
-                        "powerTextSeparator", "absorbTextMode", "absorbAnchorMode",
-                        "hpTextSpacerEnabled", "hpTextSpacerX", "powerTextSpacerEnabled",
-                        "powerTextSpacerX", "hpTextAnchor", "powerTextAnchor" }
-                    for _, sk in ipairs(seedKeys) do
-                        if sub.bars[sk] == nil then sub.bars[sk] = g[sk] end
-                    end
-                end
+        local scopeKey = _MSUF_HPText_GetScopeKey()
+        if scopeKey == "shared" then self:SetChecked(false); return end
+
+        -- GF scope: toggle hlOverride in gf_party/gf_raid
+        if IsGFScope(scopeKey) then
+            local gfKey = GetGFDBKey(scopeKey)
+            EnsureDB(); MSUF_DB[gfKey] = MSUF_DB[gfKey] or {}
+            local gf = MSUF_DB[gfKey]
+            if self:GetChecked() then
+                gf.hlOverride = true
+                HlSeedFromGeneral(gf)
+            else
+                gf.hlOverride = false
             end
-            Apply(); RefreshFrames()
-            if type(_G.MSUF_GF_Refresh) == "function" then _G.MSUF_GF_Refresh() end
+            local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+            if GF and GF.RefreshVisuals then GF.RefreshVisuals()
+            elseif GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_BORDER) end
             _MSUF_SyncHpPowerTextScopeUI()
             return
         end
+
+        -- Unit scope: toggle hlOverride + hpPowerTextOverride
+        local uk = _MSUF_HPText_GetUnitKey(); if not uk then self:SetChecked(false); return end
         local u = _MSUF_HPText_GetUnitDB(uk); if not u then self:SetChecked(false); return end
-        if self:GetChecked() then _MSUF_HPText_EnableOverride(uk) else u.hpPowerTextOverride = false end
+        if self:GetChecked() then
+            _MSUF_HPText_EnableOverride(uk)
+            u.hlOverride = true
+            HlSeedFromGeneral(u)
+        else
+            u.hpPowerTextOverride = false
+            u.hlOverride = false
+        end
+        _BumpBorderSerial()
         Apply(); ForceTextLayout(uk)
         if _G.MSUF_UnitFrames then
             if type(_G.MSUF_InvalidateAbsorbCache) == "function" then _G.MSUF_InvalidateAbsorbCache() end
@@ -382,16 +378,23 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- Reset overrides handler
     scopeResetBtn:SetScript("OnClick", function()
         EnsureDB(); local any = false
-        for _, uk in ipairs(ALL_UNITS) do local u = MSUF_DB[uk]; if u and u.hpPowerTextOverride then u.hpPowerTextOverride = false; any = true end end
-        -- GF overrides
-        do
-            local sub = _GF_GetBarOverride("gf_party")
-            if sub and sub.overrideBars then sub.overrideBars = false; any = true end
-            sub = _GF_GetBarOverride("gf_raid")
-            if sub and sub.overrideBars then sub.overrideBars = false; any = true end
+        for _, uk in ipairs(ALL_UNITS) do
+            local u = MSUF_DB[uk]
+            if u then
+                if u.hpPowerTextOverride then u.hpPowerTextOverride = false; any = true end
+                if u.hlOverride then u.hlOverride = false; any = true end
+            end
         end
-        if any then Apply(); for _, uk in ipairs(ALL_UNITS) do ForceTextLayout(uk) end; RefreshFrames() end
-        if type(_G.MSUF_GF_Refresh) == "function" then _G.MSUF_GF_Refresh() end
+        for _, gfKey in pairs(GF_SCOPE_KEYS) do
+            local gf = MSUF_DB[gfKey]
+            if type(gf) == "table" and gf.hlOverride then gf.hlOverride = false; any = true end
+        end
+        if any then
+            _BumpBorderSerial()
+            Apply(); for _, uk in ipairs(ALL_UNITS) do ForceTextLayout(uk) end; RefreshFrames()
+            local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+            if GF and GF.RefreshVisuals then GF.RefreshVisuals() end
+        end
         _MSUF_SyncHpPowerTextScopeUI()
     end)
     scopeResetBtn:SetScript("OnEnter", function(self)
@@ -639,7 +642,111 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if type(_G.MSUF_UFCore_RefreshSettingsCache) == "function" then _G.MSUF_UFCore_RefreshSettingsCache("BAR_OPTION") end
     end
 
-    local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 350, "Outline & Highlight Border", true)
+    --- Scope-aware DB target for highlight writes.
+    --- GF scope → gf_party/gf_raid, unit scope → MSUF_DB[unit], else → general.
+    local function HlDB()
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        local gfKey = GF_SCOPE_KEYS[scopeKey]
+        if gfKey then
+            EnsureDB(); MSUF_DB[gfKey] = MSUF_DB[gfKey] or {}
+            return MSUF_DB[gfKey]
+        end
+        if scopeKey ~= "shared" then
+            EnsureDB(); MSUF_DB[scopeKey] = MSUF_DB[scopeKey] or {}
+            return MSUF_DB[scopeKey]
+        end
+        return G()
+    end
+    local function HlGet(key, def)
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        local gfKey = GF_SCOPE_KEYS[scopeKey]
+        if gfKey then
+            EnsureDB()
+            local gf = MSUF_DB[gfKey]
+            if type(gf) == "table" and gf.hlOverride and gf[key] ~= nil then return gf[key] end
+        elseif scopeKey ~= "shared" then
+            EnsureDB()
+            local u = MSUF_DB[scopeKey]
+            if type(u) == "table" and u.hlOverride and u[key] ~= nil then return u[key] end
+        end
+        local gen = G()
+        if gen[key] ~= nil then return gen[key] end
+        return def
+    end
+    local function HlApply()
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        _BumpBorderSerial()
+        if IsGFScope(scopeKey) then
+            local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+            if GF and GF.RefreshVisuals then GF.RefreshVisuals()
+            elseif GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_BORDER or 0x10) end
+        else
+            if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
+            -- Shared scope: also refresh GF preview/live if active
+            local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+            if GF then
+                if GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_BORDER or 0x10) end
+            end
+        end
+    end
+    local function HlApplyGF()
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.RefreshVisuals then GF.RefreshVisuals()
+        elseif GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_BORDER or 0x10) end
+    end
+    local function IsCurrentScopeGF()
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        return IsGFScope(scopeKey)
+    end
+    local function IsCurrentScopeNonShared()
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        return scopeKey ~= "shared"
+    end
+    local function IsCurrentScopeOverrideActive()
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        if scopeKey == "shared" then return false end
+        local gfKey = GF_SCOPE_KEYS[scopeKey]
+        if gfKey then
+            local gf = MSUF_DB and MSUF_DB[gfKey]
+            return type(gf) == "table" and gf.hlOverride == true
+        end
+        local u = MSUF_DB and MSUF_DB[scopeKey]
+        return type(u) == "table" and u.hlOverride == true
+    end
+    --- Seed hl* values from general into scope DB when first enabling override.
+    local function HlSeedFromGeneral(db)
+        local gen = G()
+        local seeds = {
+            "hlAggroEnabled", "hlAggroSize", "hlAggroOffset", "hlAggroLayer", "hlAggroMode",
+            "hlAggroColorR", "hlAggroColorG", "hlAggroColorB",
+            "hlDispelEnabled", "hlDispelColorR", "hlDispelColorG", "hlDispelColorB",
+            "hlDispelColorMode",
+            "hlPurgeEnabled", "hlPurgeColorR", "hlPurgeColorG", "hlPurgeColorB",
+            "hlTargetEnabled", "hlTargetSize", "hlTargetOffset", "hlTargetLayer",
+            "hlTargetColorR", "hlTargetColorG", "hlTargetColorB",
+            "hlHoverSize", "hlHoverOffset",
+            "hlPrioEnabled", "hlPrioOrder",
+        }
+        for _, key in ipairs(seeds) do
+            if db[key] == nil then
+                local v = gen[key]
+                if v ~= nil then
+                    if type(v) == "table" then
+                        db[key] = {}; for i, e in ipairs(v) do db[key][i] = e end
+                    else
+                        db[key] = v
+                    end
+                end
+            end
+        end
+        -- Legacy fallbacks for first-time migration
+        if db.hlAggroSize == nil then db.hlAggroSize = gen.highlightBorderThickness or 2 end
+        if db.hlAggroEnabled == nil then db.hlAggroEnabled = (gen.aggroOutlineMode == 1) end
+        if db.hlDispelEnabled == nil then db.hlDispelEnabled = (gen.dispelOutlineMode == 1) end
+        if db.hlPurgeEnabled == nil then db.hlPurgeEnabled = (gen.purgeOutlineMode == 1) end
+    end
+
+    local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 480, "Outline & Highlight Border", true)
 
     -- Left col: thickness sliders
     local barOutlineThicknessSlider = CreateLabeledSlider("MSUF_BarOutlineThicknessSlider", "Outline thickness", box3Body, 0, 6, 1, 16, -350)
@@ -651,22 +758,42 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
     end
 
-    local highlightBorderThicknessSlider = CreateLabeledSlider("MSUF_HighlightBorderThicknessSlider", "Highlight border thickness", box3Body, 1, 6, 1, 16, -420)
+    local highlightBorderThicknessSlider = CreateLabeledSlider("MSUF_HighlightBorderThicknessSlider", "Highlight border thickness", box3Body, 1, 30, 1, 16, -420)
     highlightBorderThicknessSlider:ClearAllPoints(); highlightBorderThicknessSlider:SetPoint("TOPLEFT", barOutlineThicknessSlider, "BOTTOMLEFT", 0, -60)
     highlightBorderThicknessSlider:SetWidth(280)
     highlightBorderThicknessSlider.onValueChanged = function(_, v)
-        G().highlightBorderThickness = v; _BumpBorderSerial()
-        if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
+        local db = HlDB()
+        db.hlAggroSize = v
+        if not IsCurrentScopeNonShared() then db.highlightBorderThickness = v end
+        HlApply()
     end
 
     -- Right col: highlight borders + priority
-    local function MakeOutlineRow(name, dbKey, labelOn, labelOff, anchor, oX, oY, w, applyFn)
+    -- Prio defaults (declared early so dispel color mode dropdown closure can see them)
+    local _PRIO_3 = { "dispel", "aggro", "purge" }
+    local _PRIO_6 = { "magic", "curse", "disease", "poison", "bleed", "aggro", "purge" }
+
+    local function MakeOutlineRow(name, dbKey, hlKey, labelOn, labelOff, anchor, oX, oY, w, applyFn)
         local dd = UI.Dropdown({
             name = name, parent = box3Body,
             anchor = anchor, anchorPoint = "TOPLEFT", x = oX, y = oY, width = w or 170,
             items = { { key = 0, label = TR(labelOff) }, { key = 1, label = TR(labelOn) } },
-            get = function() return G()[dbKey] or 0 end,
-            set = function(v) G()[dbKey] = v; if type(applyFn) == "function" then applyFn() end end,
+            get = function()
+                if IsCurrentScopeNonShared() then
+                    return (HlGet(hlKey, false) and 1 or 0)
+                end
+                return G()[dbKey] or 0
+            end,
+            set = function(v)
+                if IsCurrentScopeNonShared() then
+                    HlDB()[hlKey] = (v == 1)
+                    HlApply()
+                else
+                    G()[dbKey] = v
+                    if hlKey then G()[hlKey] = (v == 1) end
+                    if type(applyFn) == "function" then applyFn() end
+                end
+            end,
         })
         local cb = CreateFrame("CheckButton", name:gsub("Dropdown$", "") .. "TestCheck", box3Body, "ChatConfigCheckButtonTemplate")
         cb:SetPoint("LEFT", dd, "RIGHT", 6, 0)
@@ -699,23 +826,110 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     hlSectionLabel:SetPoint("TOPLEFT", box3Body, "TOPLEFT", 340, -2)
     hlSectionLabel:SetText(TR("Highlight borders"))
 
-    local aggroOutlineDrop, aggroTestCheck = MakeOutlineRow("MSUF_AggroOutlineDropdown", "aggroOutlineMode", "Aggro border on", "Aggro border off", hlSectionLabel, -14, -14, 170, AggroApply)
-    aggroTestCheck.tooltipText = TR("Aggro border: Target, Focus, Boss frames")
+    local aggroOutlineDrop, aggroTestCheck = MakeOutlineRow("MSUF_AggroOutlineDropdown", "aggroOutlineMode", "hlAggroEnabled", "Aggro border on", "Aggro border off", hlSectionLabel, -14, -14, 170, AggroApply)
+    aggroTestCheck.tooltipText = TR("Aggro border: Target, Focus, Boss, Party, Raid frames")
     aggroTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetAggroBorderTestMode) == "function" then _G.MSUF_SetAggroBorderTestMode(self:GetChecked() and true or false) end end)
 
-    local dispelOutlineDrop, dispelTestCheck = MakeOutlineRow("MSUF_DispelOutlineDropdown", "dispelOutlineMode", "Dispel border on", "Dispel border off", aggroOutlineDrop, 0, -28, 170, DispelPurgeApply)
-    dispelTestCheck.tooltipText = TR("Dispel border: Player, Target, Focus, Target of Target")
+    local dispelOutlineDrop, dispelTestCheck = MakeOutlineRow("MSUF_DispelOutlineDropdown", "dispelOutlineMode", "hlDispelEnabled", "Dispel border on", "Dispel border off", aggroOutlineDrop, 0, -28, 170, DispelPurgeApply)
+    dispelTestCheck.tooltipText = TR("Dispel border: Player, Target, Focus, Target of Target, Party, Raid")
     dispelTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(self:GetChecked() and true or false) end end)
 
-    local purgeOutlineDrop, purgeTestCheck = MakeOutlineRow("MSUF_PurgeOutlineDropdown", "purgeOutlineMode", "Purge border on", "Purge border off", dispelOutlineDrop, 0, -28, 170, DispelPurgeApply)
+    -- Per-type test dropdown (visible next to Test checkbox)
+    _G.MSUF_DispelBorderTestType = _G.MSUF_DispelBorderTestType or "Magic"
+    local dispelTestTypeDrop = UI.Dropdown({
+        name = "MSUF_DispelTestTypeDropdown", parent = box3Body,
+        anchor = dispelTestCheck, anchorPoint = "RIGHT", x = 30, y = 10, width = 90,
+        items = {
+            { key = "Magic",   label = TR("Magic") },
+            { key = "Curse",   label = TR("Curse") },
+            { key = "Disease", label = TR("Disease") },
+            { key = "Poison",  label = TR("Poison") },
+            { key = "Bleed",   label = TR("Bleed") },
+        },
+        get = function() return _G.MSUF_DispelBorderTestType or "Magic" end,
+        set = function(v)
+            _G.MSUF_DispelBorderTestType = v
+            if _G.MSUF_DispelBorderTestMode then
+                if type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(true) end
+            end
+        end,
+    })
+    UI.AttachTooltip(_G["MSUF_DispelTestTypeDropdown"], TR("Preview type"),
+        TR("Which dispel type to preview when Test is checked.\nVisible difference only with 'Per debuff type' color mode."))
+
+    -- Dispel color mode: Single Color vs Per Debuff Type
+    local dispelColorModeDrop = UI.Dropdown({
+        name = "MSUF_DispelColorModeDropdown", parent = box3Body,
+        anchor = dispelOutlineDrop, anchorPoint = "TOPLEFT", x = 0, y = -28, width = 170,
+        items = {
+            { key = "SINGLE", label = TR("Single color") },
+            { key = "TYPE",   label = TR("Per debuff type") },
+        },
+        get = function() return HlGet("hlDispelColorMode", "SINGLE") end,
+        set = function(v)
+            local db = HlDB()
+            db.hlDispelColorMode = v
+            -- Always write to general: _ResolveDispelColor reads from general only
+            local gen = G()
+            gen.hlDispelColorMode = v
+            -- Reset prio order to defaults for new mode (row count changes)
+            local defs = (v == "TYPE") and _PRIO_6 or _PRIO_3
+            local order = {}; for i = 1, #defs do order[i] = defs[i] end
+            db.hlPrioOrder = order
+            if not IsCurrentScopeNonShared() then db.highlightPrioOrder = (v ~= "TYPE") and order or nil end
+            HlApply()
+            if _G.MSUF_PrioRows_Reinit then _G.MSUF_PrioRows_Reinit() end
+            if _G.MSUF_RefreshDispelTypeColorVisibility then _G.MSUF_RefreshDispelTypeColorVisibility() end
+            -- Re-trigger dispel test mode if active so preview updates to new color mode
+            if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+                _G.MSUF_SetDispelBorderTestMode(true)
+            end
+            MSUF_BarsMenu_QueueScrollUpdate()
+        end,
+    })
+    UI.AttachTooltip(_G["MSUF_DispelColorModeDropdown"], TR("Dispel color mode"),
+        TR("Single color: one color for all dispels (set in Colors menu).\nPer debuff type: Magic / Curse / Disease / Poison each get their own color (set in Colors menu)."))
+
+    local purgeOutlineDrop, purgeTestCheck = MakeOutlineRow("MSUF_PurgeOutlineDropdown", "purgeOutlineMode", "hlPurgeEnabled", "Purge border on", "Purge border off", dispelColorModeDrop, 0, -28, 170, DispelPurgeApply)
     purgeTestCheck.tooltipText = TR("Purge border: Target, Focus, Target of Target")
     purgeTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(self:GetChecked() and true or false) end end)
 
-    -- Priority drag-and-drop
-    local _PRIO_DEFAULTS = { "dispel", "aggro", "purge" }
-    local _PRIO_LABELS = { dispel = "Dispel", aggro = "Aggro", purge = "Purge" }
+    -- Clear test modes on panel hide so preview borders don't linger
+    aggroTestCheck:SetScript("OnHide", function(self)
+        if _G.MSUF_AggroBorderTestMode and type(_G.MSUF_SetAggroBorderTestMode) == "function" then
+            _G.MSUF_SetAggroBorderTestMode(false); self:SetChecked(false)
+        end
+    end)
+    dispelTestCheck:SetScript("OnHide", function(self)
+        if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+            _G.MSUF_SetDispelBorderTestMode(false); self:SetChecked(false)
+        end
+    end)
+    purgeTestCheck:SetScript("OnHide", function(self)
+        if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
+            _G.MSUF_SetPurgeBorderTestMode(false); self:SetChecked(false)
+        end
+    end)
+
+    -- Priority drag-and-drop (dynamic: 3 rows for SINGLE, 6 for TYPE)
+    local _PRIO_LABELS = {
+        dispel = "Dispel", aggro = "Aggro", purge = "Purge",
+        magic = "Magic", curse = "Curse", disease = "Disease", poison = "Poison", bleed = "Bleed",
+    }
+    local _PRIO_COLORS = {
+        dispel  = { 0.25, 0.75, 1.00 },
+        aggro   = { 1.00, 0.50, 0.00 },
+        purge   = { 1.00, 0.85, 0.00 },
+        magic   = { 0.20, 0.60, 1.00 },
+        curse   = { 0.60, 0.00, 1.00 },
+        disease = { 0.60, 0.40, 0.00 },
+        poison  = { 0.00, 0.60, 0.00 },
+        bleed   = { 0.80, 0.10, 0.10 },
+    }
     local _PRIO_ROW_H, _PRIO_ROW_GAP = 22, 4
+    local _PRIO_MAX = 7
     local _prioRows = {}
+    local _prioCount = 3
 
     local prioCheck = CreateFrame("CheckButton", "MSUF_HighlightPrioCheck", box3Body, "ChatConfigCheckButtonTemplate")
     prioCheck:SetPoint("TOPLEFT", purgeOutlineDrop, "BOTTOMLEFT", 14, -16)
@@ -723,30 +937,62 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     UI.AttachTooltip(prioCheck, TR("Custom highlight priority"), TR("Drag to reorder which highlight border takes priority when multiple are active."))
 
     local prioContainer = CreateFrame("Frame", "MSUF_HighlightPrioContainer", box3Body)
-    prioContainer:SetSize(200, 78); prioContainer:SetPoint("TOPLEFT", prioCheck, "BOTTOMLEFT", -2, -4)
+    prioContainer:SetSize(200, _PRIO_MAX * (_PRIO_ROW_H + _PRIO_ROW_GAP))
+    prioContainer:SetPoint("TOPLEFT", prioCheck, "BOTTOMLEFT", -2, -4)
 
+    local function _Prio_IsTypeMode()
+        return HlGet("hlDispelColorMode", "SINGLE") == "TYPE"
+    end
+    local function _Prio_GetDefaults()
+        return _Prio_IsTypeMode() and _PRIO_6 or _PRIO_3
+    end
     local function _Prio_GetOrder()
-        local g = MSUF_DB and MSUF_DB.general; local o = g and g.highlightPrioOrder
-        if type(o) == "table" and #o == 3 then return { o[1], o[2], o[3] } end
-        return { _PRIO_DEFAULTS[1], _PRIO_DEFAULTS[2], _PRIO_DEFAULTS[3] }
+        local defs = _Prio_GetDefaults()
+        local n = #defs
+        local o = HlGet("hlPrioOrder", nil)
+        if type(o) == "table" and #o == n then return o, n end
+        -- Fallback: try legacy
+        if not _Prio_IsTypeMode() then
+            local g = MSUF_DB and MSUF_DB.general
+            local og = g and g.highlightPrioOrder
+            if type(og) == "table" and #og == 3 then return og, 3 end
+        end
+        local out = {}; for i = 1, n do out[i] = defs[i] end
+        return out, n
     end
     local function _Prio_SlotY(s) return -((s - 1) * (_PRIO_ROW_H + _PRIO_ROW_GAP)) end
     local function _Prio_SnapAll()
-        for i = 1, 3 do local r = _prioRows[i]; r.frame:ClearAllPoints(); r.frame:SetPoint("TOPLEFT", prioContainer, "TOPLEFT", 0, _Prio_SlotY(r.slotIndex)) end
+        for i = 1, _prioCount do
+            local r = _prioRows[i]
+            r.frame:ClearAllPoints()
+            r.frame:SetPoint("TOPLEFT", prioContainer, "TOPLEFT", 0, _Prio_SlotY(r.slotIndex))
+            r.frame:Show()
+        end
+        for i = _prioCount + 1, _PRIO_MAX do
+            if _prioRows[i] then _prioRows[i].frame:Hide() end
+        end
+        prioContainer:SetHeight(_prioCount * (_PRIO_ROW_H + _PRIO_ROW_GAP))
     end
     local function _Prio_SaveOrder()
-        EnsureDB(); G().highlightPrioOrder = {}
-        local sorted = {}; for i = 1, 3 do sorted[i] = _prioRows[i] end
+        EnsureDB()
+        local order = {}
+        local sorted = {}; for i = 1, _prioCount do sorted[i] = _prioRows[i] end
         table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
-        for i = 1, 3 do G().highlightPrioOrder[i] = sorted[i].key end
-        _BumpBorderSerial()
-        if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() end
+        for i = 1, _prioCount do order[i] = sorted[i].key end
+        local db = HlDB()
+        db.hlPrioOrder = order
+        if not IsCurrentScopeNonShared() and _prioCount == 3 then db.highlightPrioOrder = order end
+        HlApply()
     end
     local function _Prio_SetEnabled(enabled)
-        for i = 1, 3 do _prioRows[i].frame:SetAlpha(enabled and 1 or 0.4); _prioRows[i].frame:EnableMouse(enabled) end
+        for i = 1, _prioCount do
+            _prioRows[i].frame:SetAlpha(enabled and 1 or 0.4)
+            _prioRows[i].frame:EnableMouse(enabled)
+        end
     end
 
-    for i = 1, 3 do
+    -- Create max rows upfront
+    for i = 1, _PRIO_MAX do
         local rf = CreateFrame("Frame", "MSUF_PrioRow" .. i, prioContainer, "BackdropTemplate")
         rf:SetSize(190, _PRIO_ROW_H); rf:SetMovable(true); rf:EnableMouse(true); rf:RegisterForDrag("LeftButton")
         rf:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
@@ -759,40 +1005,55 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             self:StopMovingOrSizing(); self:SetFrameStrata(prioContainer:GetFrameStrata())
             local _, selfY = self:GetCenter(); local contTop = prioContainer:GetTop()
             local bestSlot, bestDist = 1, math.huge
-            for s = 1, 3 do local dist = math.abs(selfY - (contTop + _Prio_SlotY(s) - _PRIO_ROW_H / 2)); if dist < bestDist then bestDist = dist; bestSlot = s end end
-            local myRow; for idx = 1, 3 do if _prioRows[idx].frame == self then myRow = _prioRows[idx]; break end end
+            for s = 1, _prioCount do
+                local dist = math.abs(selfY - (contTop + _Prio_SlotY(s) - _PRIO_ROW_H / 2))
+                if dist < bestDist then bestDist = dist; bestSlot = s end
+            end
+            local myRow; for idx = 1, _prioCount do if _prioRows[idx].frame == self then myRow = _prioRows[idx]; break end end
             if myRow and myRow.slotIndex ~= bestSlot then
-                for idx = 1, 3 do if _prioRows[idx].slotIndex == bestSlot then _prioRows[idx].slotIndex = myRow.slotIndex; break end end
+                for idx = 1, _prioCount do if _prioRows[idx].slotIndex == bestSlot then _prioRows[idx].slotIndex = myRow.slotIndex; break end end
                 myRow.slotIndex = bestSlot
             end
-            for idx = 1, 3 do _prioRows[idx].frame._numText:SetText(tostring(_prioRows[idx].slotIndex)) end
+            for idx = 1, _prioCount do _prioRows[idx].frame._numText:SetText(tostring(_prioRows[idx].slotIndex)) end
             _Prio_SnapAll(); _Prio_SaveOrder()
         end)
+        rf:Hide()
         _prioRows[i] = { frame = rf, key = "", slotIndex = i }
     end
 
     local function _Prio_InitRows()
-        local order = _Prio_GetOrder(); local g = G()
-        local dbColors = {
-            dispel = { g.dispelBorderColorR or 0.25, g.dispelBorderColorG or 0.75, g.dispelBorderColorB or 1 },
-            aggro = { g.aggroBorderColorR or 1, g.aggroBorderColorG or 0.5, g.aggroBorderColorB or 0 },
-            purge = { g.purgeBorderColorR or 1, g.purgeBorderColorG or 0.85, g.purgeBorderColorB or 0 },
-        }
-        for i = 1, 3 do
-            local key = order[i]; local col = dbColors[key] or { 1, 1, 1 }
+        local order, n = _Prio_GetOrder()
+        _prioCount = n
+        for i = 1, n do
+            local key = order[i]
+            local col = _PRIO_COLORS[key] or { 1, 1, 1 }
+            -- Override colors from DB if available
+            local gen = G()
+            if key == "aggro" then
+                col = { gen.hlAggroColorR or gen.aggroBorderColorR or col[1], gen.hlAggroColorG or gen.aggroBorderColorG or col[2], gen.hlAggroColorB or gen.aggroBorderColorB or col[3] }
+            elseif key == "purge" then
+                col = { gen.hlPurgeColorR or gen.purgeBorderColorR or col[1], gen.hlPurgeColorG or gen.purgeBorderColorG or col[2], gen.hlPurgeColorB or gen.purgeBorderColorB or col[3] }
+            elseif key == "dispel" then
+                col = { gen.hlDispelColorR or gen.dispelBorderColorR or col[1], gen.hlDispelColorG or gen.dispelBorderColorG or col[2], gen.hlDispelColorB or gen.dispelBorderColorB or col[3] }
+            end
             _prioRows[i].key = key; _prioRows[i].slotIndex = i
             _prioRows[i].frame._stripe:SetColorTexture(col[1], col[2], col[3], 1)
             _prioRows[i].frame._label:SetText(TR(_PRIO_LABELS[key] or key))
             _prioRows[i].frame._numText:SetText(tostring(i))
-        end; _Prio_SnapAll()
+        end
+        _Prio_SnapAll()
     end
     _Prio_InitRows()
-    _G.MSUF_PrioRows_Reinit = function() _Prio_InitRows(); _Prio_SetEnabled(G().highlightPrioEnabled == 1) end
+    _G.MSUF_PrioRows_Reinit = function() _Prio_InitRows(); _Prio_SetEnabled(HlGet("hlPrioEnabled", false) and true or false) end
 
     prioCheck:SetScript("OnClick", function(self)
-        G().highlightPrioEnabled = self:GetChecked() and 1 or 0; _Prio_SetEnabled(self:GetChecked()); _Prio_SaveOrder()
+        local on = self:GetChecked() and true or false
+        local db = HlDB()
+        db.hlPrioEnabled = on
+        if not IsCurrentScopeNonShared() then db.highlightPrioEnabled = on and 1 or 0 end
+        _Prio_SetEnabled(on); _Prio_SaveOrder()
     end)
-    do local g = G(); prioCheck:SetChecked(g.highlightPrioEnabled == 1); _Prio_SetEnabled(g.highlightPrioEnabled == 1) end
+    do local on = HlGet("hlPrioEnabled", false); prioCheck:SetChecked(on); _Prio_SetEnabled(on) end
 
     -- =====================================================================
     -- BOX 4: Power Bar Settings (default open)
@@ -845,17 +1106,36 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- =====================================================================
     -- BOX 5: HP / Power Text (default open)
     -- =====================================================================
-    local box5, box5Body = MakeCollapsibleBox(barGroup, box4, 200, "HP / Power Text", true)
+    local box5, box5Body = MakeCollapsibleBox(barGroup, box4, 240, "HP / Power Text", true)
 
     local hpModeOptions = {
-        { key = "FULL_ONLY", label = "Full value only" }, { key = "FULL_PLUS_PERCENT", label = "Full value + %" },
-        { key = "PERCENT_PLUS_FULL", label = "% + Full value" }, { key = "PERCENT_ONLY", label = "Only %" },
+        { key = "PERCENT",        label = "Percent"                  },
+        { key = "CURRENT",        label = "Current"                  },
+        { key = "MAX",            label = "Max"                      },
+        { key = "DEFICIT",        label = "Deficit"                  },
+        { key = "CURMAX",         label = "Current / Max"            },
+        { key = "CURPERCENT",     label = "Current / Percent"        },
+        { key = "CURMAXPERCENT",  label = "Current / Max / Percent"  },
+        { key = "MAXPERCENT",     label = "Max / Percent"            },
+        { key = "PERCENTCUR",     label = "Percent / Current"        },
+        { key = "PERCENTMAX",     label = "Percent / Max"            },
+        { key = "PERCENTCURMAX",  label = "Percent / Current / Max"  },
+        { key = "NONE",           label = "None"                     },
     }
+    local function NormHpMode(m)
+        if type(_G.MSUF_NormalizeHpTextMode) == "function" then return _G.MSUF_NormalizeHpTextMode(m) end
+        if m == nil then return "CURPERCENT" end
+        if m == "FULL_ONLY" then return "CURRENT" end
+        if m == "PERCENT_ONLY" then return "PERCENT" end
+        if m == "FULL_PLUS_PERCENT" then return "CURPERCENT" end
+        if m == "PERCENT_PLUS_FULL" then return "PERCENTCUR" end
+        return m
+    end
     local hpModeDrop = UI.Dropdown({
         name = "MSUF_HPTextModeDropdown", parent = box5Body,
         anchor = box5Body, anchorPoint = "TOPLEFT", x = 0, y = -6, width = 280,
         items = hpModeOptions,
-        get = function() return ScopeGet("hpTextMode", "FULL_PLUS_PERCENT") end,
+        get = function() return NormHpMode(ScopeGet("hpTextMode", "FULL_PLUS_PERCENT")) end,
         set = function(v)
             ScopeSet("hpTextMode", v, function()
                 Apply(); local uk = _MSUF_HPText_GetUnitKey()
@@ -890,6 +1170,36 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end,
     })
 
+    -- Reverse order toggle
+    local hpReverseCheck = CreateFrame("CheckButton", "MSUF_HPTextReverseCheck", box5Body, "UICheckButtonTemplate")
+    hpReverseCheck:SetPoint("TOPLEFT", hpModeDrop, "BOTTOMLEFT", 14, -6)
+    hpReverseCheck.text = _G["MSUF_HPTextReverseCheckText"]
+    if hpReverseCheck.text then hpReverseCheck.text:SetText(TR("Reverse Order")); hpReverseCheck.text:SetTextColor(0.75, 0.75, 0.75) end
+    UI.StyleCheckmark(hpReverseCheck)
+    do
+        local v = ScopeGet("hpTextReverse", false)
+        hpReverseCheck:SetChecked(v and true or false)
+    end
+    hpReverseCheck:SetScript("OnClick", function(self)
+        local val = self:GetChecked() and true or false
+        ScopeSet("hpTextReverse", val, function()
+            -- Invalidate text spec cache on all frames so EnsureSpec picks up new reverse
+            if _G.MSUF_UnitFrames then
+                for _, f in pairs(_G.MSUF_UnitFrames) do
+                    if f then
+                        f._msufTextSpec = nil
+                        f._msufLastH = nil
+                        f._msufLastPctS = nil
+                        f._msufLastMaxS = nil
+                    end
+                end
+            end
+            local uk = _MSUF_HPText_GetUnitKey()
+            if uk then ForceTextLayout(uk) else for _, k in ipairs(ALL_UNITS) do ForceTextLayout(k) end end
+            RefreshFrames()
+        end)
+    end)
+
     -- Separators
     local textSepOptions = {
         { key = "", label = " " }, { key = "-", label = "-" }, { key = "/", label = "/" },
@@ -900,7 +1210,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     }
 
     local hpSepLabel = box5Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    hpSepLabel:SetPoint("TOPLEFT", hpModeDrop, "BOTTOMLEFT", 14, -10); hpSepLabel:SetText(TR("HP separator"))
+    hpSepLabel:SetPoint("TOPLEFT", hpReverseCheck, "BOTTOMLEFT", 0, -10); hpSepLabel:SetText(TR("HP separator"))
 
     local hpSepDrop = UI.Dropdown({
         name = "MSUF_HPTextSeparatorDropdown", parent = box5Body,
@@ -975,7 +1285,15 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     powerSpacerSlider:ClearAllPoints(); powerSpacerSlider:SetPoint("TOPLEFT", powerSpacerCheck, "BOTTOMLEFT", 0, -18); powerSpacerSlider:SetWidth(260)
 
     -- Spacer system (scope-aware, dynamic ranges)
-    local function _TextModeAllowsSpacer(m) return (m == "FULL_PLUS_PERCENT" or m == "PERCENT_PLUS_FULL" or m == "CURPERCENT" or m == "CURMAXPERCENT") end
+    local function _TextModeAllowsSpacer(m)
+        local nm = m
+        if type(_G.MSUF_NormalizeHpTextMode) == "function" then nm = _G.MSUF_NormalizeHpTextMode(m) end
+        return (nm == "CURPERCENT" or nm == "PERCENTCUR"
+            or nm == "CURMAXPERCENT" or nm == "MAXPERCENT"
+            or nm == "PERCENTMAX" or nm == "PERCENTCURMAX"
+            or nm == "PERCENTMAXCUR"
+            or nm == "FULL_PLUS_PERCENT" or nm == "PERCENT_PLUS_FULL")
+    end
     local function _NiceUnitKey(k)
         local map = { player = "Player", target = "Target", focus = "Focus", targettarget = "ToT", pet = "Pet", boss = "Boss" }
         return map[k] or tostring(k or "Player")
@@ -1111,40 +1429,41 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- =====================================================================
     _MSUF_SyncHpPowerTextScopeUI = function()
         EnsureDB(); local uk = _MSUF_HPText_GetUnitKey()
+        local scopeKey = _MSUF_HPText_GetScopeKey()
+        local isGF = IsGFScope(scopeKey)
 
         -- Scope buttons
         RefreshScopeButtons()
 
         -- Override checkbox
         if hpPowerOverrideCheck then
-            if uk then
+            if scopeKey ~= "shared" then
                 hpPowerOverrideCheck:Show(); hpPowerOverrideCheck:Enable(); hpPowerOverrideCheck:SetAlpha(1)
-                if uk == "gf_party" or uk == "gf_raid" then
-                    local _, hasOvr = _GF_GetBarOverride(uk)
-                    hpPowerOverrideCheck:SetChecked(hasOvr)
+                if isGF then
+                    local gfKey = GetGFDBKey(scopeKey)
+                    local gf = MSUF_DB[gfKey]
+                    hpPowerOverrideCheck:SetChecked(type(gf) == "table" and gf.hlOverride == true)
                 else
-                    local u = _MSUF_HPText_GetUnitDB(uk)
-                    hpPowerOverrideCheck:SetChecked(u and u.hpPowerTextOverride == true)
+                    local u = uk and _MSUF_HPText_GetUnitDB(uk)
+                    hpPowerOverrideCheck:SetChecked(u and (u.hpPowerTextOverride == true or u.hlOverride == true))
                 end
             else hpPowerOverrideCheck:Hide() end
         end
 
         -- Reset button + override summary
         if scopeResetBtn then
-            if uk then
+            if scopeKey ~= "shared" then
                 scopeResetBtn:Hide()
                 scopeOverrideInfo:Hide()
             else
                 local active = {}
                 for _, uK in ipairs(ALL_UNITS) do
-                    local u = MSUF_DB[uK]; if u and u.hpPowerTextOverride then active[#active + 1] = _NiceUnitKey(uK) end
+                    local u = MSUF_DB[uK]
+                    if u and (u.hpPowerTextOverride or u.hlOverride) then active[#active + 1] = _NiceUnitKey(uK) end
                 end
-                -- GF overrides
-                do
-                    local _, pOvr = _GF_GetBarOverride("gf_party")
-                    if pOvr then active[#active + 1] = "GF Party" end
-                    local _, rOvr = _GF_GetBarOverride("gf_raid")
-                    if rOvr then active[#active + 1] = "GF Raid" end
+                for scopeName, gfKey in pairs(GF_SCOPE_KEYS) do
+                    local gf = MSUF_DB[gfKey]
+                    if type(gf) == "table" and gf.hlOverride then active[#active + 1] = SCOPE_LABELS[scopeName] or scopeName end
                 end
                 if #active > 0 then
                     scopeOverrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(active, ", "))
@@ -1160,35 +1479,60 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             end
         end
 
-        -- Refresh all scope-aware dropdowns
-        if hpModeDrop and hpModeDrop.Refresh then hpModeDrop:Refresh() end
-        if powerModeDrop and powerModeDrop.Refresh then powerModeDrop:Refresh() end
-        if hpSepDrop and hpSepDrop.Refresh then hpSepDrop:Refresh() end
-        if powerSepDrop and powerSepDrop.Refresh then powerSepDrop:Refresh() end
-        if absorbDisplayDrop and absorbDisplayDrop.Refresh then absorbDisplayDrop:Refresh() end
-        if absorbAnchorDrop and absorbAnchorDrop.Refresh then absorbAnchorDrop:Refresh() end
-        if absorbOpacitySlider then local v = tonumber(ScopeGet("absorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(absorbOpacitySlider, v) end
-        if healAbsorbOpacitySlider then local v = tonumber(ScopeGet("healAbsorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(healAbsorbOpacitySlider, v) end
-        if absorbTexTestCB then absorbTexTestCB:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false) end
-        if selfHealPredCB then selfHealPredCB:SetChecked(G().showSelfHealPrediction and true or false) end
-        if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
-        _SyncSpacerControls()
+        -- Refresh all scope-aware dropdowns (only for non-GF scopes)
+        if not isGF then
+            if hpModeDrop and hpModeDrop.Refresh then hpModeDrop:Refresh() end
+            if hpReverseCheck then hpReverseCheck:SetChecked(ScopeGet("hpTextReverse", false) and true or false) end
+            if powerModeDrop and powerModeDrop.Refresh then powerModeDrop:Refresh() end
+            if hpSepDrop and hpSepDrop.Refresh then hpSepDrop:Refresh() end
+            if powerSepDrop and powerSepDrop.Refresh then powerSepDrop:Refresh() end
+            if absorbDisplayDrop and absorbDisplayDrop.Refresh then absorbDisplayDrop:Refresh() end
+            if absorbAnchorDrop and absorbAnchorDrop.Refresh then absorbAnchorDrop:Refresh() end
+            if absorbOpacitySlider then local v = tonumber(ScopeGet("absorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(absorbOpacitySlider, v) end
+            if healAbsorbOpacitySlider then local v = tonumber(ScopeGet("healAbsorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(healAbsorbOpacitySlider, v) end
+            if absorbTexTestCB then absorbTexTestCB:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false) end
+            if selfHealPredCB then selfHealPredCB:SetChecked(G().showSelfHealPrediction and true or false) end
+            if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
+            _SyncSpacerControls()
+        end
 
-        -- Scope dimming (global-only controls dim when per-unit scope active)
-        local isUnit = (uk ~= nil); local ena = not isUnit; local dimAlpha = isUnit and 0.35 or 1
-        local function DimDrop(n, lbl) MSUF_SetDropDownEnabled(_G[n], lbl, ena) end
+        -- Highlight slider sync (scope-aware)
+        if highlightBorderThicknessSlider then
+            local v = floor((tonumber(HlGet("hlAggroSize", 2)) or 2) + 0.5)
+            if v < 1 then v = 1 elseif v > 30 then v = 30 end
+            MSUF_SetLabeledSliderValue(highlightBorderThicknessSlider, v)
+        end
+
+        -- Scope dimming
+        local isNonShared = (uk ~= nil) or isGF
+        local hlOverrideOn = IsCurrentScopeOverrideActive()
+        local hlControlsActive = (not isNonShared) or hlOverrideOn  -- highlight controls active when shared OR override on
+        local function DimDrop(n, lbl) MSUF_SetDropDownEnabled(_G[n], lbl, not isNonShared) end
         local function DimCheck(n)
             local cb = _G[n]; if not cb then return end
-            MSUF_SetCheckboxEnabled(cb, ena)
-            if cb.EnableMouse then pcall(cb.EnableMouse, cb, ena) end
+            MSUF_SetCheckboxEnabled(cb, not isNonShared)
+            if cb.EnableMouse then pcall(cb.EnableMouse, cb, not isNonShared) end
         end
-        local function DimSlider(n) MSUF_SetLabeledSliderEnabled(_G[n], ena) end
-        local function DimFrame(n) local f = _G[n]; if not f then return end; if f.SetAlpha then f:SetAlpha(dimAlpha) end
-            if ena then if f.Enable then pcall(f.Enable, f) end else if f.Disable then pcall(f.Disable, f) end end
-            if f.EnableMouse then pcall(f.EnableMouse, f, ena) end end
+        local function DimSlider(n) MSUF_SetLabeledSliderEnabled(_G[n], not isNonShared) end
+        local function DimFrame(n) local f = _G[n]; if not f then return end
+            f:SetAlpha(isNonShared and 0.35 or 1)
+            if not isNonShared then if f.Enable then pcall(f.Enable, f) end else if f.Disable then pcall(f.Disable, f) end end
+            if f.EnableMouse then pcall(f.EnableMouse, f, not isNonShared) end end
         local function DimLabel(fs) if not fs then return end
-            if fs.SetTextColor then if ena then fs:SetTextColor(1, 1, 1) else fs:SetTextColor(0.35, 0.35, 0.35) end
-            elseif fs.SetAlpha then fs:SetAlpha(dimAlpha) end end
+            if fs.SetTextColor then fs:SetTextColor(isNonShared and 0.35 or 1, isNonShared and 0.35 or 1, isNonShared and 0.35 or 1)
+            elseif fs.SetAlpha then fs:SetAlpha(isNonShared and 0.35 or 1) end end
+        -- Highlight-specific dim helpers
+        local function HlDimDrop(n, lbl) MSUF_SetDropDownEnabled(_G[n], lbl, hlControlsActive) end
+        local function HlDimCheck(n)
+            local cb = _G[n]; if not cb then return end
+            MSUF_SetCheckboxEnabled(cb, hlControlsActive)
+            if cb.EnableMouse then pcall(cb.EnableMouse, cb, hlControlsActive) end
+        end
+        local function HlDimSlider(n) MSUF_SetLabeledSliderEnabled(_G[n], hlControlsActive) end
+        local function HlDimFrame(n) local f = _G[n]; if not f then return end
+            f:SetAlpha(hlControlsActive and 1 or 0.35)
+            if hlControlsActive then if f.Enable then pcall(f.Enable, f) end else if f.Disable then pcall(f.Disable, f) end end
+            if f.EnableMouse then pcall(f.EnableMouse, f, hlControlsActive) end end
 
         -- Box 1 dims (textures + gradient)
         DimDrop("MSUF_BarTextureDropdown"); DimDrop("MSUF_BarBackgroundTextureDropdown")
@@ -1197,17 +1541,27 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         DimSlider("MSUF_GradientStrengthSlider"); DimFrame("MSUF_GradientDirectionPad")
         DimLabel(gradColLabel)
 
-        -- Box 2 dims (absorb textures — global-only)
+        -- Box 2 dims (absorb textures)
         DimDrop("MSUF_AbsorbBarTextureDropdown"); DimDrop("MSUF_HealAbsorbBarTextureDropdown")
         DimLabel(absorbTextureLabel); DimLabel(healAbsorbLabel)
 
-        -- Box 3 dims (outline + highlight)
-        DimSlider("MSUF_BarOutlineThicknessSlider"); DimSlider("MSUF_HighlightBorderThicknessSlider")
-        DimDrop("MSUF_AggroOutlineDropdown"); DimCheck("MSUF_AggroOutlineTestCheck")
-        DimDrop("MSUF_DispelOutlineDropdown"); DimCheck("MSUF_DispelOutlineTestCheck")
-        DimDrop("MSUF_PurgeOutlineDropdown"); DimCheck("MSUF_PurgeOutlineTestCheck")
-        DimCheck("MSUF_HighlightPrioCheck"); DimFrame("MSUF_HighlightPrioContainer")
-        DimLabel(hlSectionLabel)
+        -- Box 3: outline always dims for non-shared, highlight controls follow override state
+        MSUF_SetLabeledSliderEnabled(_G["MSUF_BarOutlineThicknessSlider"], not isNonShared)
+        HlDimSlider("MSUF_HighlightBorderThicknessSlider")
+        HlDimDrop("MSUF_AggroOutlineDropdown"); HlDimCheck("MSUF_AggroOutlineTestCheck")
+        HlDimDrop("MSUF_DispelOutlineDropdown"); HlDimCheck("MSUF_DispelOutlineTestCheck")
+        HlDimDrop("MSUF_DispelColorModeDropdown")
+        HlDimDrop("MSUF_PurgeOutlineDropdown"); HlDimCheck("MSUF_PurgeOutlineTestCheck")
+        HlDimCheck("MSUF_HighlightPrioCheck"); HlDimFrame("MSUF_HighlightPrioContainer")
+        if hlSectionLabel then
+            if hlControlsActive then hlSectionLabel:SetTextColor(1, 1, 1) else hlSectionLabel:SetTextColor(0.35, 0.35, 0.35) end
+        end
+        -- Refresh dropdowns when scope changes
+        if aggroOutlineDrop and aggroOutlineDrop.Refresh then aggroOutlineDrop:Refresh() end
+        if dispelOutlineDrop and dispelOutlineDrop.Refresh then dispelOutlineDrop:Refresh() end
+        if dispelColorModeDrop and dispelColorModeDrop.Refresh then dispelColorModeDrop:Refresh() end
+        if purgeOutlineDrop and purgeOutlineDrop.Refresh then purgeOutlineDrop:Refresh() end
+        if _G.MSUF_PrioRows_Reinit then _G.MSUF_PrioRows_Reinit() end
 
         -- Box 4 dims (power bar)
         DimCheck("MSUF_TargetPowerBarCheck"); DimCheck("MSUF_BossPowerBarCheck")
@@ -1218,7 +1572,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
         -- Box titles dim
         if box1._msufTitle then DimLabel(box1._msufTitle) end
-        if box3._msufTitle then DimLabel(box3._msufTitle) end
+        if box3._msufTitle then
+            if hlControlsActive then box3._msufTitle:SetTextColor(1, 1, 1) else DimLabel(box3._msufTitle) end
+        end
         if box4._msufTitle then DimLabel(box4._msufTitle) end
     end
 
@@ -1268,7 +1624,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             MSUF_SetLabeledSliderEnabled(gradientStrengthSlider, hpGrad or powGrad)
         end
         if barOutlineThicknessSlider then local t = floor((tonumber(b.barOutlineThickness) or 1) + 0.5); if t < 0 then t = 0 elseif t > 6 then t = 6 end; MSUF_SetLabeledSliderValue(barOutlineThicknessSlider, t) end
-        if highlightBorderThicknessSlider then local t = floor((tonumber(g.highlightBorderThickness) or 2) + 0.5); if t < 1 then t = 1 elseif t > 6 then t = 6 end; MSUF_SetLabeledSliderValue(highlightBorderThicknessSlider, t) end
+        if highlightBorderThicknessSlider then local t = floor((tonumber(HlGet("hlAggroSize", 2)) or 2) + 0.5); if t < 1 then t = 1 elseif t > 30 then t = 30 end; MSUF_SetLabeledSliderValue(highlightBorderThicknessSlider, t) end
         if _G.MSUF_PrioRows_Reinit then _G.MSUF_PrioRows_Reinit() end
         local function SC(cb, v) if cb then cb:SetChecked(v and true or false); if cb.__msufToggleUpdate then cb.__msufToggleUpdate() end end end
         SC(targetPowerBarCheck, b.showTargetPowerBar); SC(bossPowerBarCheck, b.showBossPowerBar)
@@ -1303,6 +1659,51 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
     SyncAll()
     if barGroup.HookScript then barGroup:HookScript("OnShow", SyncAll) end
+
+    -- GF party/raid preview: show when Bars menu opens so highlight borders are visible on group frames
+    local _barsGFPreviewOn = false
+    local _barsGFPreviewKind = nil
+    local function _BarsShowGFPreview(kind)
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if not GF or not GF.ShowPreview then return end
+        -- Don't override if GF Options already has a preview active
+        if GF._previewActive and (GF._previewActive.party or GF._previewActive.raid) and not _barsGFPreviewOn then return end
+        -- Only need preview when solo (real frames exist otherwise)
+        if kind == "raid" then
+            if IsInRaid and IsInRaid() then return end
+        else
+            kind = "party"
+            if IsInGroup and IsInGroup() then return end
+        end
+        -- Hide previous if switching kind
+        if _barsGFPreviewKind and _barsGFPreviewKind ~= kind and GF.HidePreview then
+            GF.HidePreview(_barsGFPreviewKind)
+        end
+        if not InCombatLockdown() and GF.headers then
+            if GF.headers.party then GF.headers.party:Hide() end
+            if GF.headers.raid  then GF.headers.raid:Hide()  end
+        end
+        GF.ShowPreview(kind, kind == "raid" and 10 or 4)
+        _barsGFPreviewKind = kind
+        _barsGFPreviewOn = true
+    end
+    barGroup:HookScript("OnShow", function()
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        if scopeKey == "party" or scopeKey == "raid" then
+            _BarsShowGFPreview(scopeKey)
+        else
+            _BarsShowGFPreview("party")
+        end
+    end)
+    barGroup:HookScript("OnHide", function()
+        if not _barsGFPreviewOn then return end
+        _barsGFPreviewOn = false
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if not GF then return end
+        if _barsGFPreviewKind and GF.HidePreview then GF.HidePreview(_barsGFPreviewKind) end
+        _barsGFPreviewKind = nil
+        if not InCombatLockdown() and GF.UpdateGroupVisibility then GF.UpdateGroupVisibility() end
+    end)
 
     -- =====================================================================
     -- DB bindings
@@ -1340,7 +1741,40 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     panel.highlightBorderThicknessSlider = highlightBorderThicknessSlider
     panel.aggroOutlineDrop = aggroOutlineDrop; panel.aggroTestCheck = aggroTestCheck
     panel.dispelOutlineDrop = dispelOutlineDrop; panel.dispelTestCheck = dispelTestCheck
+    panel.dispelColorModeDrop = dispelColorModeDrop; panel.dispelTestTypeDrop = dispelTestTypeDrop
     panel.purgeOutlineDrop = purgeOutlineDrop; panel.purgeTestCheck = purgeTestCheck
     panel.prioCheck = prioCheck
     if type(MSUF_BarsApplyGradient) == "function" then _G.MSUF_BarsApplyGradient = MSUF_BarsApplyGradient end
+
+    -- GF preview: show party/raid preview while Bars menu is visible (same logic as GF Options)
+    if barGroupHost and barGroupHost.HookScript then
+        barGroupHost:HookScript("OnShow", function()
+            local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+            if not GF or not GF.ShowPreview then return end
+            local inGroup = IsInGroup and IsInGroup()
+            local inRaid  = IsInRaid  and IsInRaid()
+            if inRaid then
+                -- In raid: show raid preview
+                GF.ShowPreview("raid", 10)
+            elseif inGroup then
+                -- In party: real frames visible, no preview needed
+            else
+                -- Solo: show party preview
+                if not InCombatLockdown() and GF.headers then
+                    if GF.headers.party then GF.headers.party:Hide() end
+                    if GF.headers.raid  then GF.headers.raid:Hide()  end
+                end
+                GF.ShowPreview("party", 4)
+            end
+        end)
+        barGroupHost:HookScript("OnHide", function()
+            local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+            if not GF or not GF.HidePreview then return end
+            GF.HidePreview("party")
+            GF.HidePreview("raid")
+            if not InCombatLockdown() and GF.UpdateGroupVisibility then
+                GF.UpdateGroupVisibility()
+            end
+        end)
+    end
 end

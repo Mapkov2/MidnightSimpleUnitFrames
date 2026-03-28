@@ -57,13 +57,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                 local bar = CP.bars[i]
                 if bar then
                     bar:SetMinMaxValues(i - 1, i)
-                    if curSafe then
-                        bar:SetValue(cur)
-                    elseif rawCur ~= nil then
-                        bar:SetValue(rawCur)
-                    else
-                        bar:SetValue(0)
-                    end
+                    bar:SetValue(cur)
                     bar:SetAlpha(filledAlpha)
                     bar:SetStatusBarColor(baseR, baseG, baseB, 1)
                     bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)

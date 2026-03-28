@@ -13,7 +13,6 @@ function Popups.CloseAll()
     if EM2.UnitPopup then EM2.UnitPopup.Close() end
     if EM2.CastPopup then EM2.CastPopup.Close() end
     if EM2.AuraPopup then EM2.AuraPopup.Close() end
-    -- GF popups
     if type(_G.MSUF_EM2_HideGFPopup) == "function" then
         _G.MSUF_EM2_HideGFPopup("party")
         _G.MSUF_EM2_HideGFPopup("raid")
@@ -26,7 +25,6 @@ function Popups.Open(key, anchorFrame)
     local pType = cfg and cfg.popupType
 
     if not pType then
-        -- Fallback: if key is a known unit, open unit popup
         if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "pet" or key:match("^boss%d") then
             pType = "unit"
         end
@@ -71,6 +69,6 @@ function Popups.IsAnyOpen()
     return (EM2.UnitPopup and EM2.UnitPopup.IsOpen())
         or (EM2.CastPopup and EM2.CastPopup.IsOpen())
         or (EM2.AuraPopup and EM2.AuraPopup.IsOpen())
-        or (_G.MSUF_EM2_GFPopupIsOpen and _G.MSUF_EM2_GFPopupIsOpen())
+        or (type(_G.MSUF_EM2_GFPopupIsOpen) == "function" and _G.MSUF_EM2_GFPopupIsOpen())
         or false
 end

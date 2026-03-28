@@ -3,7 +3,7 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
-## Version: 3.51
+## Version: 4.0 ALPHA VERSION 1
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: Masque, LibSharedMedia-3.0, Clique
@@ -109,16 +109,6 @@ Auras2\MSUF_A2_EditMode.lua
 Auras2\MSUF_A2_Events.lua
 
 # ═══════════════════════════════════════════════════════════════
-# GROUP FRAMES
-# ═══════════════════════════════════════════════════════════════
-GroupFrames\MSUF_GF_DB.lua
-GroupFrames\MSUF_GF_Core.lua
-GroupFrames\MSUF_GF_Render.lua
-GroupFrames\MSUF_GF_EditMode.lua
-GroupFrames\MSUF_EM2_Popup_GF.lua
-GroupFrames\MSUF_GF_Effects.lua
-
-# ═══════════════════════════════════════════════════════════════
 # FEATURES
 # ═══════════════════════════════════════════════════════════════
 Features\MidnightSimpleUnitFrames_Gameplay.lua
@@ -162,6 +152,22 @@ ClassPower\MSUF_CP_Controller.lua
 Core\MSUF_ClassPower.lua
 
 # ═══════════════════════════════════════════════════════════════
+# GROUP FRAMES
+# ═══════════════════════════════════════════════════════════════
+GroupFrames\MSUF_GF_DB.lua
+GroupFrames\MSUF_GF_Core.lua
+GroupFrames\MSUF_GF_Effects.lua
+GroupFrames\MSUF_GF_Render.lua
+GroupFrames\MSUF_GF_SpellIndicators_Data.lua
+GroupFrames\MSUF_GF_SpellIndicators.lua
+GroupFrames\MSUF_GF_PrivateAuras.lua
+GroupFrames\MSUF_GF_Auras.lua
+GroupFrames\MSUF_GF_HealerBuffs.lua
+GroupFrames\MSUF_GF_HealerBuffs_Editor.lua
+GroupFrames\MSUF_GF_EM2.lua
+GroupFrames\MSUF_GF_EM2_Popup.lua
+
+# ═══════════════════════════════════════════════════════════════
 # OPTIONS
 # ═══════════════════════════════════════════════════════════════
 Options\MSUF_Options_Toolkit.lua
@@ -179,6 +185,7 @@ Options\MSUF_Options_Misc.lua
 Options\MSUF_Options_Portraits.lua
 Options\MSUF_Options_Gameplay.lua
 Options\MSUF_Options_GF.lua
+Options\MSUF_Options_GF_Auras.lua
 
 # ═══════════════════════════════════════════════════════════════
 # MODULES

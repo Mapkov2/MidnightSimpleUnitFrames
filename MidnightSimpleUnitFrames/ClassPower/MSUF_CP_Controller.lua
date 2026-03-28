@@ -1078,7 +1078,6 @@ local function CP_GetModeEventProfile(renderMode, powerType, isAuraPower)
     profile.spellSucceeded = profile.warlockPred
         or (powerType == "TIP_OF_THE_SPEAR")
         or (powerType == "SOUL_FRAGMENTS_VENG")
-    profile.spellUpdateUses = (powerType == "SOUL_FRAGMENTS_VENG")
     profile.deadAlive = (powerType == "TIP_OF_THE_SPEAR")
     return profile
 end
@@ -1623,7 +1622,6 @@ CP_RefreshEventBindings = function()
     local wantPointCharge = CP.visible and profile.pointCharge == true
     local wantWarlockPred = CP.visible and profile.warlockPred == true
     local wantSpellSucceeded = CP.visible and profile.spellSucceeded == true
-    local wantSpellUpdateUses = CP.visible and profile.spellUpdateUses == true
     local wantDisplayPower = CP.visible or AM.visible
     local wantRegen = _autoHideActive and CP.visible
     local wantDeadAlive = CP.visible and profile.deadAlive == true
@@ -1641,7 +1639,6 @@ CP_RefreshEventBindings = function()
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", wantWarlockPred, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_INTERRUPTED", wantWarlockPred, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", wantSpellSucceeded, "player")
-    CP_SetEventBound(eventFrame, "SPELL_UPDATE_USES", wantSpellUpdateUses)
     CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", wantRegen)
     CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", wantRegen)
     CP_SetEventBound(eventFrame, "PLAYER_DEAD", wantDeadAlive)
@@ -1713,13 +1710,6 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     if event == "UNIT_MAXPOWER" then
         if arg1 == "player" then
             CP_HandleMaxPowerEvent(arg2)
-        end
-        return
-    end
-
-    if event == "SPELL_UPDATE_USES" then
-        if CP.visible and CP.powerType == "SOUL_FRAGMENTS_VENG" then
-            CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
         end
         return
     end

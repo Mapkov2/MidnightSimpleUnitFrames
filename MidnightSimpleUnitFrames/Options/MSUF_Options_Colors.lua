@@ -61,6 +61,8 @@ local GetAbsorbOverlayColor           = _API.GetAbsorbOverlayColor
 local SetAbsorbOverlayColor           = _API.SetAbsorbOverlayColor
 local GetHealAbsorbOverlayColor       = _API.GetHealAbsorbOverlayColor
 local SetHealAbsorbOverlayColor       = _API.SetHealAbsorbOverlayColor
+local GetHealPredictionColor          = _API.GetHealPredictionColor
+local SetHealPredictionColor          = _API.SetHealPredictionColor
 
 local GetPowerBarBackgroundColor      = _API.GetPowerBarBackgroundColor
 local SetPowerBarBackgroundColor      = _API.SetPowerBarBackgroundColor
@@ -1190,7 +1192,7 @@ end
     --------------------------------------------------
     -- Section 5b: Bar Colors
     --------------------------------------------------
-    S.sec5bBox, S.sec5bBody = F.MakeCollapsibleSection(content, 220, "Bar Colors", false)
+    S.sec5bBox, S.sec5bBody = F.MakeCollapsibleSection(content, 340, "Bar Colors", false)
     S.sec5bBox:SetPoint("TOPLEFT", S.sec5Box, "BOTTOMLEFT", 0, -6)
     do local content = S.sec5bBody
 
@@ -1253,16 +1255,39 @@ end
         end)
     end)
 
+    -- Heal Prediction overlay
+    local healPredLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    healPredLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 2 * rowH)
+    healPredLabel:SetJustifyH("LEFT")
+    healPredLabel:SetText("Heal Prediction Color")
+
+    local healPredSwatch = CreateFrame("Button", "MSUF_Colors_HealPredictionSwatch", content)
+    healPredSwatch:SetSize(barSwatchW, 16)
+    healPredSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 2 * rowH)
+
+    panel.__MSUF_ExtraColorHealPredTex = healPredSwatch:CreateTexture(nil, "ARTWORK")
+    panel.__MSUF_ExtraColorHealPredTex:SetAllPoints()
+    panel.__MSUF_ExtraColorHealPredTex:SetColorTexture(GetHealPredictionColor())
+
+    healPredSwatch:SetScript("OnClick", function()
+        local r, g, b = GetHealPredictionColor()
+        OpenColorPicker(r, g, b, function(nr, ng, nb)
+            SetHealPredictionColor(nr, ng, nb)
+            local tex = panel.__MSUF_ExtraColorHealPredTex
+            if tex then tex:SetColorTexture(nr, ng, nb) end
+        end)
+    end)
+
     -- Power bar background
     local powerBgLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    powerBgLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 2 * rowH)
+    powerBgLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 3 * rowH)
     powerBgLabel:SetJustifyH("LEFT")
     powerBgLabel:SetText("Power Bar Background Color")
 
     local powerBgSwatch = CreateFrame("Button", "MSUF_Colors_PowerBarBackgroundSwatch", content)
     panel.__MSUF_ExtraColorPowerBgSwatch = powerBgSwatch
     powerBgSwatch:SetSize(barSwatchW, 16)
-    powerBgSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 2 * rowH)
+    powerBgSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 3 * rowH)
 
     panel.__MSUF_ExtraColorPowerBgTex = powerBgSwatch:CreateTexture(nil, "ARTWORK")
     panel.__MSUF_ExtraColorPowerBgTex:SetAllPoints()
@@ -1314,13 +1339,13 @@ end
 
     -- Aggro border (outline indicator)
     local aggroLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    aggroLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 3 * rowH)
+    aggroLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 4 * rowH)
     aggroLabel:SetJustifyH("LEFT")
     aggroLabel:SetText("Aggro Border Color")
 
     local aggroSwatch = CreateFrame("Button", "MSUF_Colors_AggroBorderSwatch", content)
     aggroSwatch:SetSize(barSwatchW, 16)
-    aggroSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 3 * rowH)
+    aggroSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 4 * rowH)
 
     panel.__MSUF_ExtraColorAggroBorderTex = aggroSwatch:CreateTexture(nil, "ARTWORK")
     panel.__MSUF_ExtraColorAggroBorderTex:SetAllPoints()
@@ -1330,8 +1355,15 @@ end
         local r, g, b = GetAggroBorderColor()
         OpenColorPicker(r, g, b, function(nr, ng, nb)
             SetAggroBorderColor(nr, ng, nb)
+            -- Dual-write hl* key so unified system sees it immediately
+            if EnsureDB and MSUF_DB then EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+                local gen = MSUF_DB.general; gen.hlAggroColorR = nr; gen.hlAggroColorG = ng; gen.hlAggroColorB = nb
+            end
             local tex = panel.__MSUF_ExtraColorAggroBorderTex
             if tex then tex:SetColorTexture(nr, ng, nb) end
+            if _G.MSUF_AggroBorderTestMode and type(_G.MSUF_SetAggroBorderTestMode) == "function" then
+                _G.MSUF_SetAggroBorderTestMode(true)
+            end
         end)
     end)
 
@@ -1359,21 +1391,20 @@ end
         EnsureDB()
         MSUF_DB.general = MSUF_DB.general or {}
         local gen = MSUF_DB.general
-        gen.dispelBorderColorR = r
-        gen.dispelBorderColorG = g
-        gen.dispelBorderColorB = b
+        gen.dispelBorderColorR = r; gen.dispelBorderColorG = g; gen.dispelBorderColorB = b
+        gen.hlDispelColorR = r; gen.hlDispelColorG = g; gen.hlDispelColorB = b
         PushVisualUpdates()
     end
 
 -- Dispel border (outline indicator)
     local dispelLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    dispelLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 4 * rowH)
+    dispelLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 5 * rowH)
     dispelLabel:SetJustifyH("LEFT")
     dispelLabel:SetText("Dispel Border Color")
 
     local dispelSwatch = CreateFrame("Button", "MSUF_Colors_DispelBorderSwatch", content)
     dispelSwatch:SetSize(barSwatchW, 16)
-    dispelSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 4 * rowH)
+    dispelSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 5 * rowH)
 
     panel.__MSUF_ExtraColorDispelBorderTex = dispelSwatch:CreateTexture(nil, "ARTWORK")
     panel.__MSUF_ExtraColorDispelBorderTex:SetAllPoints()
@@ -1385,8 +1416,75 @@ end
             SetDispelBorderColor(nr, ng, nb)
             local tex = panel.__MSUF_ExtraColorDispelBorderTex
             if tex then tex:SetColorTexture(nr, ng, nb) end
+            if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+                _G.MSUF_SetDispelBorderTestMode(true)
+            end
         end)
     end)
+
+    -- Per-type dispel colors (visible when hlDispelColorMode == "TYPE")
+    local _dispelTypeRows = {}
+    local _DISPEL_TYPES = { "Magic", "Curse", "Disease", "Poison", "Bleed" }
+    local _DISPEL_TYPE_DEFS = _G.MSUF_DISPEL_TYPE_DEFAULTS or {
+        Magic = { 0.20, 0.60, 1.00 }, Curse = { 0.60, 0.00, 1.00 },
+        Disease = { 0.60, 0.40, 0.00 }, Poison = { 0.00, 0.60, 0.00 },
+        Bleed = { 0.80, 0.10, 0.10 },
+    }
+    for ti, typeName in ipairs(_DISPEL_TYPES) do
+        local rKey = "hlDispelType" .. typeName .. "R"
+        local gKey = "hlDispelType" .. typeName .. "G"
+        local bKey = "hlDispelType" .. typeName .. "B"
+        local def = _DISPEL_TYPE_DEFS[typeName] or { 1, 1, 1 }
+
+        local tLbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        tLbl:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX + 16, startY - (5 + ti) * rowH)
+        tLbl:SetJustifyH("LEFT"); tLbl:SetText(typeName)
+        tLbl:SetTextColor(0.78, 0.82, 0.90)
+
+        local tSwatch = CreateFrame("Button", "MSUF_Colors_DispelType" .. typeName .. "Swatch", content)
+        tSwatch:SetSize(barSwatchW, 16)
+        tSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - (5 + ti) * rowH)
+
+        local tTex = tSwatch:CreateTexture(nil, "ARTWORK"); tTex:SetAllPoints()
+        local function TypeGet()
+            if EnsureDB and MSUF_DB then EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+                local g = MSUF_DB.general
+                if type(g[rKey]) == "number" then return g[rKey], g[gKey] or 0, g[bKey] or 0 end
+            end
+            return def[1], def[2], def[3]
+        end
+        tTex:SetColorTexture(TypeGet())
+
+        tSwatch:SetScript("OnClick", function()
+            local cr, cg, cb = TypeGet()
+            OpenColorPicker(cr, cg, cb, function(nr, ng, nb)
+                if EnsureDB and MSUF_DB then EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+                    local g = MSUF_DB.general; g[rKey] = nr; g[gKey] = ng; g[bKey] = nb
+                    PushVisualUpdates()
+                end
+                tTex:SetColorTexture(nr, ng, nb)
+                -- Live-update test mode borders with new color
+                if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+                    _G.MSUF_SetDispelBorderTestMode(true)
+                end
+            end)
+        end)
+        _dispelTypeRows[ti] = { label = tLbl, swatch = tSwatch, tex = tTex, refresh = function() tTex:SetColorTexture(TypeGet()) end }
+    end
+
+    -- Show/hide per-type rows based on mode
+    local function RefreshDispelTypeVisibility()
+        local isType = false
+        if EnsureDB and MSUF_DB then EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+            isType = (MSUF_DB.general.hlDispelColorMode == "TYPE")
+        end
+        for _, row in ipairs(_dispelTypeRows) do
+            row.label:SetShown(isType); row.swatch:SetShown(isType)
+            if isType then row.refresh() end
+        end
+    end
+    RefreshDispelTypeVisibility()
+    _G.MSUF_RefreshDispelTypeColorVisibility = RefreshDispelTypeVisibility
 
 -- Purge border (outline indicator for purgeable/spellstealable buffs)
     local function GetPurgeBorderColor()
@@ -1410,20 +1508,19 @@ end
         EnsureDB()
         MSUF_DB.general = MSUF_DB.general or {}
         local gen = MSUF_DB.general
-        gen.purgeBorderColorR = r
-        gen.purgeBorderColorG = g
-        gen.purgeBorderColorB = b
+        gen.purgeBorderColorR = r; gen.purgeBorderColorG = g; gen.purgeBorderColorB = b
+        gen.hlPurgeColorR = r; gen.hlPurgeColorG = g; gen.hlPurgeColorB = b
         PushVisualUpdates()
     end
 
     local purgeLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    purgeLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 5 * rowH)
+    purgeLabel:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barLabelX, startY - 11 * rowH)
     purgeLabel:SetJustifyH("LEFT")
     purgeLabel:SetText("Purge Border Color")
 
     local purgeSwatch = CreateFrame("Button", "MSUF_Colors_PurgeBorderSwatch", content)
     purgeSwatch:SetSize(barSwatchW, 16)
-    purgeSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 5 * rowH)
+    purgeSwatch:SetPoint("TOPLEFT", barHeader, "BOTTOMLEFT", barSwatchX, startY - 11 * rowH)
 
     panel.__MSUF_ExtraColorPurgeBorderTex = purgeSwatch:CreateTexture(nil, "ARTWORK")
     panel.__MSUF_ExtraColorPurgeBorderTex:SetAllPoints()
@@ -1435,6 +1532,9 @@ end
             SetPurgeBorderColor(nr, ng, nb)
             local tex = panel.__MSUF_ExtraColorPurgeBorderTex
             if tex then tex:SetColorTexture(nr, ng, nb) end
+            if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
+                _G.MSUF_SetPurgeBorderTestMode(true)
+            end
         end)
     end)
 
@@ -1455,6 +1555,14 @@ end
                         gen.aggroBorderColorR, gen.aggroBorderColorG, gen.aggroBorderColorB = nil, nil, nil
                         gen.dispelBorderColorR, gen.dispelBorderColorG, gen.dispelBorderColorB = nil, nil, nil
                         gen.purgeBorderColorR, gen.purgeBorderColorG, gen.purgeBorderColorB = nil, nil, nil
+                        gen.hlAggroColorR, gen.hlAggroColorG, gen.hlAggroColorB = nil, nil, nil
+                        gen.hlDispelColorR, gen.hlDispelColorG, gen.hlDispelColorB = nil, nil, nil
+                        gen.hlPurgeColorR, gen.hlPurgeColorG, gen.hlPurgeColorB = nil, nil, nil
+                        gen.hlDispelTypeMagicR, gen.hlDispelTypeMagicG, gen.hlDispelTypeMagicB = nil, nil, nil
+                        gen.hlDispelTypeCurseR, gen.hlDispelTypeCurseG, gen.hlDispelTypeCurseB = nil, nil, nil
+                        gen.hlDispelTypeDiseaseR, gen.hlDispelTypeDiseaseG, gen.hlDispelTypeDiseaseB = nil, nil, nil
+                        gen.hlDispelTypePoisonR, gen.hlDispelTypePoisonG, gen.hlDispelTypePoisonB = nil, nil, nil
+                        gen.hlDispelTypeBleedR, gen.hlDispelTypeBleedG, gen.hlDispelTypeBleedB = nil, nil, nil
             
                         gen.powerBarBgMatchHPColor = nil
                         MSUF_DB.bars = MSUF_DB.bars or {}
@@ -1470,6 +1578,10 @@ end
                     local hTex = panel.__MSUF_ExtraColorHealAbsorbTex
                     if hTex then
                         hTex:SetColorTexture(GetHealAbsorbOverlayColor())
+                    end
+                    local hpTex = panel.__MSUF_ExtraColorHealPredTex
+                    if hpTex then
+                        hpTex:SetColorTexture(GetHealPredictionColor())
                     end
                     local pTex = panel.__MSUF_ExtraColorPowerBgTex
                     if pTex then
@@ -1488,6 +1600,7 @@ end
                     if pgTex then
                         pgTex:SetColorTexture(GetPurgeBorderColor())
                     end
+                    if _G.MSUF_RefreshDispelTypeColorVisibility then _G.MSUF_RefreshDispelTypeColorVisibility() end
             
                     if panel.__MSUF_ExtraColorPowerBgMatchCheck then
                         panel.__MSUF_ExtraColorPowerBgMatchCheck:SetChecked(false)

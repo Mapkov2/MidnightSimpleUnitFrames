@@ -13,7 +13,7 @@ local W8    = "Interface/Buttons/WHITE8X8"
 local floor, max, min = math.floor, math.max, math.min
 
 local hudFrame, row2Frame
-local previewBtn, auraBtn, gfPartyBtn, gfRaidBtn, snapToggle, cdmBtn, anchorBtn
+local previewBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
 local helpBtn, tutorialPanel, tourState
@@ -677,22 +677,6 @@ local function EnsureHUD()
     SetTip(auraBtn, "Toggle aura preview icons\nand aura mover boxes.")
     r1[#r1+1] = auraBtn
 
-    gfPartyBtn = MakeBtn(c1, "Party", 48, BTN_H, 12, function()
-        _G.MSUF_GF_PreviewPartyActive = not (_G.MSUF_GF_PreviewPartyActive and true or false)
-        SetActive(gfPartyBtn, _G.MSUF_GF_PreviewPartyActive)
-        if type(_G.MSUF_GF_Refresh) == "function" then _G.MSUF_GF_Refresh() end
-    end)
-    SetTip(gfPartyBtn, "Toggle Party Frames preview.\n4 frames with animated HP bars.")
-    r1[#r1+1] = gfPartyBtn
-
-    gfRaidBtn = MakeBtn(c1, "Raid", 42, BTN_H, 12, function()
-        _G.MSUF_GF_PreviewRaidActive = not (_G.MSUF_GF_PreviewRaidActive and true or false)
-        SetActive(gfRaidBtn, _G.MSUF_GF_PreviewRaidActive)
-        if type(_G.MSUF_GF_Refresh) == "function" then _G.MSUF_GF_Refresh() end
-    end)
-    SetTip(gfRaidBtn, "Toggle Raid Frames preview.\n20 frames in grid layout.")
-    r1[#r1+1] = gfRaidBtn
-
     snapToggle = MakeBtn(c1, "Snap", 48, BTN_H, 12, function()
         if EM2.Snap then
             local on = not EM2.Snap.IsEnabled()
@@ -816,8 +800,6 @@ function HUD.RefreshControls()
     if stepFS and EM2.Grid then stepFS:SetText("Grid " .. floor(EM2.Grid.GetGridStep()) .. "px") end
     if snapToggle and EM2.Snap then SetActive(snapToggle, EM2.Snap.IsEnabled()) end
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
-    if gfPartyBtn then SetActive(gfPartyBtn, _G.MSUF_GF_PreviewPartyActive and true or false) end
-    if gfRaidBtn then SetActive(gfRaidBtn, _G.MSUF_GF_PreviewRaidActive and true or false) end
     if cdmBtn then
         local db = _G.MSUF_DB
         SetActive(cdmBtn, db and db.general and db.general.anchorToCooldown and true or false)

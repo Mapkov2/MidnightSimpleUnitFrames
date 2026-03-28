@@ -81,37 +81,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if k == "shared" then return nil end
         return k
     end
-
-    -- GF font override helper
-    local function _GF_GetFontSub(uk)
-        local db = _G.MSUF_DB; if not db then return nil end
-        local gf = db.groupframes; if type(gf) ~= "table" then return nil end
-        if uk == "gf_party" then return type(gf.party) == "table" and gf.party or nil end
-        if uk == "gf_raid"  then return type(gf.raid)  == "table" and gf.raid  or nil end
-        return nil
-    end
-
-    local function IsOverride(uk)
-        if uk == "gf_party" or uk == "gf_raid" then
-            local sub = _GF_GetFontSub(uk)
-            return sub and (sub.overrideFont == true) or false
-        end
-        return U(uk).fontOverride == true
-    end
+    local function IsOverride(uk) return U(uk).fontOverride == true end
 
     local function EnableOverride(uk)
-        if uk == "gf_party" or uk == "gf_raid" then
-            local sub = _GF_GetFontSub(uk)
-            if sub then
-                sub.overrideFont = true
-                if type(sub.font) ~= "table" then sub.font = {} end
-                local g = G()
-                for _, k in ipairs(FONT_OVERRIDE_KEYS) do
-                    if sub.font[k] == nil then sub.font[k] = g[k] end
-                end
-            end
-            return
-        end
         local u = U(uk); local g = G()
         u.fontOverride = true
         for _, k in ipairs(FONT_OVERRIDE_KEYS) do
@@ -126,17 +98,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         local uk = GetUnitKey()
         if uk and IsOverride(uk) then
             local v
-            if uk == "gf_party" or uk == "gf_raid" then
-                local sub = _GF_GetFontSub(uk)
-                if sub and type(sub.font) == "table" then
-                    v = sub.font[rootKey or key]
-                end
+            if rootKey then
+                v = U(uk)[rootKey]
             else
-                if rootKey then
-                    v = U(uk)[rootKey]
-                else
-                    v = U(uk)[key]
-                end
+                v = U(uk)[key]
             end
             if v ~= nil then return v end
         end
@@ -152,18 +117,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         local uk = GetUnitKey()
         if uk then
             if not IsOverride(uk) then EnableOverride(uk) end
-            if uk == "gf_party" or uk == "gf_raid" then
-                local sub = _GF_GetFontSub(uk)
-                if sub then
-                    if type(sub.font) ~= "table" then sub.font = {} end
-                    sub.font[rootKey or key] = val
-                end
+            if rootKey then
+                U(uk)[rootKey] = val
             else
-                if rootKey then
-                    U(uk)[rootKey] = val
-                else
-                    U(uk)[key] = val
-                end
+                U(uk)[key] = val
             end
         else
             if rootKey then
@@ -261,11 +218,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- =====================================================================
     -- SCOPE BAR (A2-style button strip — above scroll area)
     -- =====================================================================
-    local SCOPE_KEYS = { "shared", "player", "target", "targettarget", "focus", "pet", "boss", "gf_party", "gf_raid" }
+    local SCOPE_KEYS = { "shared", "player", "target", "targettarget", "focus", "pet", "boss" }
     local SCOPE_LABELS = {
         shared = "Shared", player = "Player", target = "Target",
         targettarget = "ToT", focus = "Focus", pet = "Pet", boss = "Boss",
-        gf_party = "GF Party", gf_raid = "GF Raid",
     }
 
     local scopeBar = CreateFrame("Frame", nil, fontGroup, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -372,16 +328,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if self:GetChecked() then
             EnableOverride(uk)
         else
-            if uk == "gf_party" or uk == "gf_raid" then
-                local sub = _GF_GetFontSub(uk)
-                if sub then sub.overrideFont = false end
-            else
-                U(uk).fontOverride = false
-            end
+            U(uk).fontOverride = false
         end
         InvalidateTextSpecs()
         LiveSyncFontVisuals({ layout = "FONT_OVERRIDE" })
-        if type(_G.MSUF_GF_Refresh) == "function" then _G.MSUF_GF_Refresh() end
         if SyncScopeUI then SyncScopeUI() end
     end)
 
@@ -400,16 +350,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             local u = MSUF_DB[k]
             if u then u.fontOverride = false end
         end
-        -- GF overrides
-        do
-            local sub = _GF_GetFontSub("gf_party")
-            if sub then sub.overrideFont = false end
-            sub = _GF_GetFontSub("gf_raid")
-            if sub then sub.overrideFont = false end
-        end
         InvalidateTextSpecs()
         LiveSyncFontVisuals({ layout = "FONT_OVERRIDE_RESET" })
-        if type(_G.MSUF_GF_Refresh) == "function" then _G.MSUF_GF_Refresh() end
         if SyncScopeUI then SyncScopeUI() end
     end)
 
@@ -835,9 +777,6 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             for _, k in ipairs(ALL_UNITS) do
                 if IsOverride(k) then parts[#parts + 1] = SCOPE_LABELS[k] or k end
             end
-            -- GF overrides
-            if IsOverride("gf_party") then parts[#parts + 1] = "GF Party" end
-            if IsOverride("gf_raid") then parts[#parts + 1] = "GF Raid" end
             if #parts > 0 then
                 scopeOverrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(parts, ", "))
                 scopeOverrideInfo:SetFontObject(GameFontHighlightSmall)
