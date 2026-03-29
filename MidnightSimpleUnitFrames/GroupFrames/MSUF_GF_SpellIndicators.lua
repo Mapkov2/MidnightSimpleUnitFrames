@@ -494,6 +494,17 @@ end
 -- Reset / Apply frame effects
 ------------------------------------------------------------------------
 local function ResetFrameEffects(f)
+    -- Clear health bar color override → restore normal health color
+    if f._msufSIHealthColorR then
+        f._msufSIHealthColorR = nil
+        f._msufSIHealthColorG = nil
+        f._msufSIHealthColorB = nil
+        -- Re-apply normal health color immediately (don't wait for next UNIT_HEALTH)
+        if GF._ApplyHealthColor and f.health then
+            GF._ApplyHealthColor(f, f._msufGFKind or "party", f.unit)
+        end
+    end
+    -- Legacy tint overlay (hide if still exists from old config)
     if f._msufSIHealthTint then f._msufSIHealthTint:Hide() end
     if f._msufSIBorderOverlay then f._msufSIBorderOverlay:Hide() end
     if f._msufSIGlow then
@@ -515,11 +526,13 @@ local function ApplyFrameEffect(f, auraName, cfg, auraData)
     local c = cfg.color or {1, 1, 1, 1}
 
     if cfg.type == "healthtint" then
-        local tex = EnsureHealthTint(f)
-        if tex then
-            local a = cfg.alpha or c[4] or 0.15
-            tex:SetColorTexture(c[1], c[2], c[3], a)
-            tex:Show()
+        -- Full bar color override (not a tint overlay)
+        -- Sets _msufSIHealthColorR/G/B on frame → ApplyHealthColor in Effects respects it
+        if f.health then
+            f._msufSIHealthColorR = c[1]
+            f._msufSIHealthColorG = c[2]
+            f._msufSIHealthColorB = c[3]
+            f.health:SetStatusBarColor(c[1], c[2], c[3], 1)
         end
     elseif cfg.type == "border" then
         local overlay = EnsureBorderOverlay(f)

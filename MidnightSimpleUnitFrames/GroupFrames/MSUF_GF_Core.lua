@@ -611,7 +611,7 @@ function GF.UpdateButton(f, unit)
 
     ApplyHealthColor(f, kind, unit)
 
-    -- 3-slot health text (secret-safe)
+    -- 3-slot health text (secret-safe: unit passed for UnitHealthPercent)
     do
         local hp    = UnitHealth(unit)
         local hpMax = UnitHealthMax(unit)
@@ -621,17 +621,17 @@ function GF.UpdateButton(f, unit)
         local tc = conf.textCenter or "NONE"
         local tr = conf.textRight or "NONE"
         if f.textLeftFS then
-            local txt = GF.FormatHealthText(tl, hp, hpMax, delim, rev)
+            local txt = GF.FormatHealthText(tl, hp, hpMax, delim, rev, unit)
             f.textLeftFS:SetText(txt)
             if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end
         end
         if f.textCenterFS then
-            local txt = GF.FormatHealthText(tc, hp, hpMax, delim, rev)
+            local txt = GF.FormatHealthText(tc, hp, hpMax, delim, rev, unit)
             f.textCenterFS:SetText(txt)
             if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:Hide() end
         end
         if f.textRightFS then
-            local txt = GF.FormatHealthText(tr, hp, hpMax, delim, rev)
+            local txt = GF.FormatHealthText(tr, hp, hpMax, delim, rev, unit)
             f.textRightFS:SetText(txt)
             if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:Hide() end
         end
@@ -667,15 +667,15 @@ function GF.UpdateButton(f, unit)
                 local ptc = conf.powerTextCenter  or "NONE"
                 local ptr = conf.powerTextRight   or "NONE"
                 if f.powerTextLeftFS then
-                    f.powerTextLeftFS:SetText(GF.FormatPowerText(ptl, pw, pwMax, pDelim))
+                    f.powerTextLeftFS:SetText(GF.FormatPowerText(ptl, pw, pwMax, pDelim, unit))
                     if ptl ~= "NONE" then f.powerTextLeftFS:Show() else f.powerTextLeftFS:Hide() end
                 end
                 if f.powerTextCenterFS then
-                    f.powerTextCenterFS:SetText(GF.FormatPowerText(ptc, pw, pwMax, pDelim))
+                    f.powerTextCenterFS:SetText(GF.FormatPowerText(ptc, pw, pwMax, pDelim, unit))
                     if ptc ~= "NONE" then f.powerTextCenterFS:Show() else f.powerTextCenterFS:Hide() end
                 end
                 if f.powerTextRightFS then
-                    f.powerTextRightFS:SetText(GF.FormatPowerText(ptr, pw, pwMax, pDelim))
+                    f.powerTextRightFS:SetText(GF.FormatPowerText(ptr, pw, pwMax, pDelim, unit))
                     if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
                 end
             end
@@ -1197,6 +1197,15 @@ function GF.ApplyPreviewData(f, index, kind)
     -- Health prediction overlays (preview with fake values + global colors)
     local hpVal = math_floor(hpPct * 100)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    -- Per-GF absorb setting resolver (mirrors _GF_GetAbsorbSetting in Effects)
+    local gfKind = f._msufGFKind or "party"
+    local gfDbKey = (gfKind == "raid") and "gf_raid" or "gf_party"
+    local gfDb = _G.MSUF_DB and _G.MSUF_DB[gfDbKey]
+    local gfHasOvr = gfDb and gfDb.hlOverride
+    local function _pResolve(key)
+        if gfHasOvr and gfDb[key] ~= nil then return gfDb[key] end
+        return gen and gen[key]
+    end
     if f.incomingHealBar and conf.healPredEnabled ~= false then
         f.incomingHealBar:SetMinMaxValues(0, 100)
         f.incomingHealBar:SetValue(math_min(hpVal + 20, 100))
@@ -1209,26 +1218,50 @@ function GF.ApplyPreviewData(f, index, kind)
     elseif f.incomingHealBar then
         f.incomingHealBar:Hide()
     end
-    if f.absorbBar and conf.absorbEnabled ~= false then
+    -- Absorb enabled: absorbTextMode 2/3 = bar visible (per-GF → general)
+    local absorbBarVisible = true
+    do
+        local atm = tonumber(_pResolve("absorbTextMode"))
+        if atm then absorbBarVisible = (atm == 2 or atm == 3) end
+    end
+    -- Absorb anchoring: SetReverseFill from absorbAnchorMode (per-GF → general)
+    if absorbBarVisible then
+        local anchorMode = tonumber(_pResolve("absorbAnchorMode")) or 2
+        local absorbReverse, healReverse
+        if anchorMode == 1 then
+            absorbReverse = false; healReverse = true
+        elseif anchorMode == 5 then
+            local hpReverse = f.health and f.health.GetReverseFill and f.health:GetReverseFill()
+            absorbReverse = not hpReverse; healReverse = hpReverse and true or false
+        else
+            absorbReverse = true; healReverse = false
+        end
+        if f.absorbBar and f.absorbBar.SetReverseFill then f.absorbBar:SetReverseFill(absorbReverse and true or false) end
+        if f.healAbsorbBar and f.healAbsorbBar.SetReverseFill then f.healAbsorbBar:SetReverseFill(healReverse and true or false) end
+        if f.incomingHealBar and f.incomingHealBar.SetReverseFill then f.incomingHealBar:SetReverseFill(false) end
+    end
+    if f.absorbBar and absorbBarVisible then
         f.absorbBar:SetMinMaxValues(0, 100)
         f.absorbBar:SetValue(15 + index * 5)
         local r, g, b = 0.8, 0.9, 1.0
         if gen then
             r = gen.absorbBarColorR or r; g = gen.absorbBarColorG or g; b = gen.absorbBarColorB or b
         end
-        f.absorbBar:SetStatusBarColor(r, g, b, 0.6)
+        local a = tonumber(_pResolve("absorbBarOpacity")) or 0.6
+        f.absorbBar:SetStatusBarColor(r, g, b, a)
         f.absorbBar:Show()
     elseif f.absorbBar then
         f.absorbBar:Hide()
     end
-    if f.healAbsorbBar and conf.healAbsorbEnabled ~= false then
+    if f.healAbsorbBar and absorbBarVisible then
         f.healAbsorbBar:SetMinMaxValues(0, 100)
         f.healAbsorbBar:SetValue(math_min(8, hpVal))
         local r, g, b = 1.0, 0.4, 0.4
         if gen then
             r = gen.healAbsorbBarColorR or r; g = gen.healAbsorbBarColorG or g; b = gen.healAbsorbBarColorB or b
         end
-        f.healAbsorbBar:SetStatusBarColor(r, g, b, 0.7)
+        local a = tonumber(_pResolve("healAbsorbBarOpacity")) or 0.7
+        f.healAbsorbBar:SetStatusBarColor(r, g, b, a)
         f.healAbsorbBar:Show()
     elseif f.healAbsorbBar then
         f.healAbsorbBar:Hide()

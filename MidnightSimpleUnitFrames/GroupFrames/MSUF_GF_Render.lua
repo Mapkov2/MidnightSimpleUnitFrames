@@ -59,8 +59,9 @@ local function ScheduleFlush()
 end
 
 ------------------------------------------------------------------------
--- Apply: bar textures
+-- Apply: bar textures + gradient overlays
 ------------------------------------------------------------------------
+local ApplyGradient   -- forward decl (defined after ApplyBarTexture)
 local function ApplyBarTexture(f, kind)
     local tex   = GF.ResolveBarTexture(kind)
     local bgTex = GF.ResolveBarBgTexture(kind)
@@ -117,6 +118,111 @@ local function ApplyBarTexture(f, kind)
     if f.healAbsorbBar and f.healAbsorbBar.SetStatusBarTexture then
         f.healAbsorbBar:SetStatusBarTexture(healAbsorbTex)
     end
+
+    -- Gradient overlays (reads from MSUF_DB.general — same source as main UF)
+    ApplyGradient(f)
+end
+
+------------------------------------------------------------------------
+-- Gradient overlays: lazy-create + apply from MSUF_DB.general
+-- Mirrors main UF gradient system (4-directional, per-edge toggles)
+------------------------------------------------------------------------
+local function _GF_MakeGradTex(bar)
+    local t = bar:CreateTexture(nil, "OVERLAY")
+    t:SetTexture("Interface\\Buttons\\WHITE8x8")
+    t:SetBlendMode("BLEND")
+    t:Hide()
+    return t
+end
+
+local function _GF_EnsureGradients(bar)
+    if bar._msufGFGrads then return bar._msufGFGrads end
+    local g = {
+        left  = _GF_MakeGradTex(bar),
+        right = _GF_MakeGradTex(bar),
+        up    = _GF_MakeGradTex(bar),
+        down  = _GF_MakeGradTex(bar),
+    }
+    bar._msufGFGrads = g
+    return g
+end
+
+local function _GF_SetGrad(tex, orientation, a1, a2, strength)
+    if not tex then return end
+    if tex.SetGradientAlpha then
+        tex:SetGradientAlpha(orientation, 0, 0, 0, a1, 0, 0, 0, a2)
+    elseif tex.SetGradient then
+        local CreateColor = _G.CreateColor
+        if CreateColor then
+            tex:SetGradient(orientation, CreateColor(0, 0, 0, a1), CreateColor(0, 0, 0, a2))
+        else
+            tex:SetColorTexture(0, 0, 0, (a1 > a2) and a1 or a2)
+        end
+    end
+    if strength > 0 then tex:Show() else tex:Hide() end
+end
+
+local function _GF_ApplyGradientToBar(bar, gen, isPower)
+    if not bar then return end
+    local strength = gen.gradientStrength or 0.45
+    if isPower then
+        if gen.enablePowerGradient == false then strength = 0 end
+    else
+        if gen.enableGradient == false then strength = 0 end
+    end
+    local grads = _GF_EnsureGradients(bar)
+    if strength <= 0 then
+        for _, k in ipairs({"left","right","up","down"}) do if grads[k] then grads[k]:Hide() end end
+        return
+    end
+    -- Read per-edge toggles (same keys as main UF)
+    local left  = (gen.gradientDirLeft == true)
+    local right = (gen.gradientDirRight == true)
+    local up    = (gen.gradientDirUp == true)
+    local down  = (gen.gradientDirDown == true)
+    -- Legacy: migrate single gradientDirection
+    if not left and not right and not up and not down then
+        local dir = gen.gradientDirection
+        if dir == "LEFT" then left = true
+        elseif dir == "UP" then up = true
+        elseif dir == "DOWN" then down = true
+        else right = true end
+    end
+    -- Left
+    if left then
+        local t = grads.left; t:ClearAllPoints()
+        if right then t:SetPoint("TOPLEFT", bar); t:SetPoint("BOTTOMLEFT", bar); t:SetPoint("RIGHT", bar, "CENTER")
+        else t:SetAllPoints(bar) end
+        _GF_SetGrad(t, "HORIZONTAL", strength, 0, strength)
+    elseif grads.left then grads.left:Hide() end
+    -- Right
+    if right then
+        local t = grads.right; t:ClearAllPoints()
+        if left then t:SetPoint("TOPRIGHT", bar); t:SetPoint("BOTTOMRIGHT", bar); t:SetPoint("LEFT", bar, "CENTER")
+        else t:SetAllPoints(bar) end
+        _GF_SetGrad(t, "HORIZONTAL", 0, strength, strength)
+    elseif grads.right then grads.right:Hide() end
+    -- Up
+    if up then
+        local t = grads.up; t:ClearAllPoints()
+        if down then t:SetPoint("TOPLEFT", bar); t:SetPoint("TOPRIGHT", bar); t:SetPoint("BOTTOM", bar, "CENTER")
+        else t:SetAllPoints(bar) end
+        _GF_SetGrad(t, "VERTICAL", 0, strength, strength)
+    elseif grads.up then grads.up:Hide() end
+    -- Down
+    if down then
+        local t = grads.down; t:ClearAllPoints()
+        if up then t:SetPoint("BOTTOMLEFT", bar); t:SetPoint("BOTTOMRIGHT", bar); t:SetPoint("TOP", bar, "CENTER")
+        else t:SetAllPoints(bar) end
+        _GF_SetGrad(t, "VERTICAL", strength, 0, strength)
+    elseif grads.down then grads.down:Hide() end
+end
+
+ApplyGradient = function(f)
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if not gen then return end
+    if f.health then _GF_ApplyGradientToBar(f.health, gen, false) end
+    if f.power  then _GF_ApplyGradientToBar(f.power,  gen, true)  end
 end
 
 ------------------------------------------------------------------------
@@ -486,9 +592,21 @@ end
 -- Apply: health prediction overlay colors (from global MSUF_DB.general)
 -- Diff-gated per-bar to avoid redundant SetStatusBarColor calls.
 ------------------------------------------------------------------------
+------------------------------------------------------------------------
+-- Resolve an absorb/overlay setting: GF conf (if hlOverride) → general
+------------------------------------------------------------------------
+local function _GF_ResolveOverlaySetting(kind, key)
+    local dbKey = (kind == "raid") and "gf_raid" or "gf_party"
+    local db = _G.MSUF_DB and _G.MSUF_DB[dbKey]
+    if db and db.hlOverride and db[key] ~= nil then return db[key] end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    return gen and gen[key]
+end
+
 local function ApplyOverlayColors(f)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    -- Incoming heal (heal prediction)
+    local kind = f._msufGFKind or "party"
+    -- Incoming heal (heal prediction) — colors from general (shared)
     if f.incomingHealBar then
         local r = (gen and gen.healPredColorR) or 0.0
         local g = (gen and gen.healPredColorG) or 1.0
@@ -499,26 +617,33 @@ local function ApplyOverlayColors(f)
             f.incomingHealBar:SetStatusBarColor(r, g, b, a)
         end
     end
-    -- Absorb
+    -- Absorb (color from general, opacity per-GF override → general)
     if f.absorbBar then
         local r = (gen and gen.absorbBarColorR) or 0.8
         local g = (gen and gen.absorbBarColorG) or 0.9
         local b = (gen and gen.absorbBarColorB) or 1.0
-        local a = 0.6
-        if f._gfCAbR ~= r or f._gfCAbG ~= g or f._gfCAbB ~= b then
-            f._gfCAbR, f._gfCAbG, f._gfCAbB = r, g, b
+        local a = tonumber(_GF_ResolveOverlaySetting(kind, "absorbBarOpacity")) or 0.6
+        if f._gfCAbR ~= r or f._gfCAbG ~= g or f._gfCAbB ~= b or f._gfCAbA ~= a then
+            f._gfCAbR, f._gfCAbG, f._gfCAbB, f._gfCAbA = r, g, b, a
             f.absorbBar:SetStatusBarColor(r, g, b, a)
         end
     end
-    -- Heal absorb
+    -- Heal absorb (color from general, opacity per-GF override → general)
     if f.healAbsorbBar then
         local r = (gen and gen.healAbsorbBarColorR) or 1.0
         local g = (gen and gen.healAbsorbBarColorG) or 0.4
         local b = (gen and gen.healAbsorbBarColorB) or 0.4
-        local a = 0.7
-        if f._gfCHAbR ~= r or f._gfCHAbG ~= g or f._gfCHAbB ~= b then
-            f._gfCHAbR, f._gfCHAbG, f._gfCHAbB = r, g, b
+        local a = tonumber(_GF_ResolveOverlaySetting(kind, "healAbsorbBarOpacity")) or 0.7
+        if f._gfCHAbR ~= r or f._gfCHAbG ~= g or f._gfCHAbB ~= b or f._gfCHAbA ~= a then
+            f._gfCHAbR, f._gfCHAbG, f._gfCHAbB, f._gfCHAbA = r, g, b, a
             f.healAbsorbBar:SetStatusBarColor(r, g, b, a)
+        end
+    end
+    -- Absorb anchoring (per-GF override → general)
+    if GF._ApplyAbsorbAnchor then
+        local mode = tonumber(_GF_ResolveOverlaySetting(kind, "absorbAnchorMode")) or 2
+        if f._msufGFAbsorbAnchorStamp ~= mode then
+            GF._ApplyAbsorbAnchor(f)
         end
     end
 end

@@ -50,16 +50,25 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     if type(CreateLabeledCheckButton) ~= "function" then return end
 
     local _Scope_GetUnitKey, _Scope_GetUnitDB, _Scope_EnableOverride, _Scope_SyncUI
+    local _Scope_GetGFKey  -- returns "gf_party"/"gf_raid" DB key if in GF scope, else nil
 
     -- =====================================================================
     -- Scope-aware get/set helpers
     -- =====================================================================
     local function ScopeGet(generalKey, defaultVal)
         EnsureDB()
-        local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
-        if uk then
-            local u = MSUF_DB[uk]
-            if u and u.hpPowerTextOverride == true and u[generalKey] ~= nil then return u[generalKey] end
+        -- GF scope override (party/raid) — check FIRST (unitKey also returns "party"/"raid")
+        local gfKey = _Scope_GetGFKey and _Scope_GetGFKey()
+        if gfKey then
+            local gf = MSUF_DB[gfKey]
+            if gf and gf.hlOverride and gf[generalKey] ~= nil then return gf[generalKey] end
+        else
+            -- Per-unit override
+            local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
+            if uk then
+                local u = MSUF_DB[uk]
+                if u and u.hpPowerTextOverride == true and u[generalKey] ~= nil then return u[generalKey] end
+            end
         end
         local v = G()[generalKey]
         return v ~= nil and v or defaultVal
@@ -67,15 +76,28 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     local function ScopeSet(generalKey, val, applyFn)
         EnsureDB()
-        local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
-        if uk then
-            local u = type(_Scope_GetUnitDB) == "function" and _Scope_GetUnitDB(uk)
-            if u then
-                if u.hpPowerTextOverride ~= true and type(_Scope_EnableOverride) == "function" then _Scope_EnableOverride(uk) end
-                u[generalKey] = val
+        -- GF scope override (party/raid) — check FIRST (unitKey also returns "party"/"raid")
+        local gfKey = _Scope_GetGFKey and _Scope_GetGFKey()
+        if gfKey then
+            MSUF_DB[gfKey] = MSUF_DB[gfKey] or {}
+            local gf = MSUF_DB[gfKey]
+            if not gf.hlOverride then
+                gf.hlOverride = true
+                if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(gf) end
             end
+            gf[generalKey] = val
         else
-            G()[generalKey] = val
+            -- Per-unit override
+            local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
+            if uk then
+                local u = type(_Scope_GetUnitDB) == "function" and _Scope_GetUnitDB(uk)
+                if u then
+                    if u.hpPowerTextOverride ~= true and type(_Scope_EnableOverride) == "function" then _Scope_EnableOverride(uk) end
+                    u[generalKey] = val
+                end
+            else
+                G()[generalKey] = val
+            end
         end
         if type(applyFn) == "function" then pcall(applyFn, val) end
         if type(_Scope_SyncUI) == "function" then _Scope_SyncUI() end
@@ -314,6 +336,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if u.powerTextSeparator == nil then u.powerTextSeparator = g.powerTextSeparator end
         if u.absorbTextMode == nil then u.absorbTextMode = g.absorbTextMode end
         if u.absorbAnchorMode == nil then u.absorbAnchorMode = g.absorbAnchorMode end
+        if u.absorbBarOpacity == nil then u.absorbBarOpacity = g.absorbBarOpacity end
+        if u.healAbsorbBarOpacity == nil then u.healAbsorbBarOpacity = g.healAbsorbBarOpacity end
         if u.hpTextSpacerEnabled == nil then u.hpTextSpacerEnabled = g.hpTextSpacerEnabled end
         if u.hpTextSpacerX == nil then u.hpTextSpacerX = g.hpTextSpacerX end
         if u.powerTextSpacerEnabled == nil then u.powerTextSpacerEnabled = g.powerTextSpacerEnabled end
@@ -325,6 +349,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     _Scope_GetUnitKey = _MSUF_HPText_GetUnitKey
     _Scope_GetUnitDB = _MSUF_HPText_GetUnitDB
     _Scope_EnableOverride = _MSUF_HPText_EnableOverride
+    _Scope_GetGFKey = function()
+        local sk = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        return GF_SCOPE_KEYS[sk]   -- "gf_party" / "gf_raid" / nil
+    end
+
+    local HlSeedFromGeneral  -- forward decl (defined in highlight section below)
 
     -- Override checkbox handler
     hpPowerOverrideCheck:SetScript("OnClick", function(self)
@@ -420,6 +450,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if type(_G.MSUF_UpdateAllBarTextures_Immediate) == "function" then _G.MSUF_UpdateAllBarTextures_Immediate()
         elseif type(_G.MSUF_UpdateAllBarTextures) == "function" then _G.MSUF_UpdateAllBarTextures()
         else Apply() end
+        -- Refresh GF textures + gradient overlays
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_TEXTURE or 0x02) end
     end
     _G.MSUF_TryApplyBarTextureLive = ApplyBarTex
 
@@ -487,35 +520,51 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local box2, box2Body = MakeCollapsibleBox(barGroup, box1, 280, "Absorb Display", true)
 
     local function ApplyAbsorb(mode)
+        if type(_G.MSUF_InvalidateAbsorbCache) == "function" then _G.MSUF_InvalidateAbsorbCache() end
         if type(_G.MSUF_UpdateAbsorbTextMode) == "function" then _G.MSUF_UpdateAbsorbTextMode(mode) end
         RefreshFrames()
+        -- Refresh GF: synchronous full refresh (applies per-GF resolve + preview data)
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.RefreshVisuals then GF.RefreshVisuals()
+        elseif type(_G.MSUF_GF_RefreshOverlays) == "function" then _G.MSUF_GF_RefreshOverlays() end
     end
     local function ApplyAbsorbAnchor()
         if type(_G.MSUF_InvalidateAbsorbCache) == "function" then _G.MSUF_InvalidateAbsorbCache() end
         if _G.MSUF_UnitFrames and type(_G.MSUF_ApplyAbsorbAnchorMode) == "function" then
             for _, f in pairs(_G.MSUF_UnitFrames) do
-                if f and f.unit then
+                if f and f.unit and not f._msufIsGroupFrame then
                     f._msufAbsorbAnchorModeStamp = nil; f._msufAbsorbFollowActive = nil
                     _G.MSUF_ApplyAbsorbAnchorMode(f)
                     if _G.UpdateSimpleUnitFrame then _G.UpdateSimpleUnitFrame(f) end
                 end
             end
         end
+        -- Refresh GF: synchronous full refresh (per-GF anchor + overlay colors + preview)
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.RefreshVisuals then GF.RefreshVisuals()
+        elseif type(_G.MSUF_GF_RefreshOverlays) == "function" then _G.MSUF_GF_RefreshOverlays() end
     end
     local function ApplyAbsorbTex()
         if type(_G.MSUF_UpdateAbsorbBarTextures) == "function" then _G.MSUF_UpdateAbsorbBarTextures()
         elseif type(_G.MSUF_UpdateAllUnitFrames) == "function" then _G.MSUF_UpdateAllUnitFrames()
         else RefreshFrames() end
         if _G.MSUF_AbsorbTextureTestMode then RefreshFrames() end
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.RefreshVisuals then GF.RefreshVisuals()
+        elseif GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_TEXTURE or 0x02) end
     end
     local function ApplyAbsorbOpacity()
         if type(_G.MSUF_InvalidateAbsorbCache) == "function" then _G.MSUF_InvalidateAbsorbCache() end
         if _G.MSUF_UnitFrames then
             for _, f in pairs(_G.MSUF_UnitFrames) do
-                if f then f._msufAbsorbDirty = true; f._msufHealAbsorbDirty = true end
+                if f and not f._msufIsGroupFrame then f._msufAbsorbDirty = true; f._msufHealAbsorbDirty = true end
             end
         end
         RefreshFrames()
+        -- Refresh GF: synchronous full refresh (per-GF opacity + preview data)
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.RefreshVisuals then GF.RefreshVisuals()
+        elseif type(_G.MSUF_GF_RefreshOverlays) == "function" then _G.MSUF_GF_RefreshOverlays() end
     end
 
     -- Left col: mode + anchor + test
@@ -564,11 +613,17 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     UI.StyleCheckmark(absorbTexTestCB)
     absorbTexTestCB:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false)
     absorbTexTestCB:SetScript("OnClick", function(self)
-        _G.MSUF_AbsorbTextureTestMode = self:GetChecked() and true or false; RefreshFrames()
+        _G.MSUF_AbsorbTextureTestMode = self:GetChecked() and true or false
+        RefreshFrames()
+        if type(_G.MSUF_GF_RefreshOverlays) == "function" then _G.MSUF_GF_RefreshOverlays() end
     end)
     absorbTexTestCB:SetScript("OnHide", function(self)
         if barGroup:IsShown() then return end
-        if _G.MSUF_AbsorbTextureTestMode then _G.MSUF_AbsorbTextureTestMode = false; self:SetChecked(false); RefreshFrames() end
+        if _G.MSUF_AbsorbTextureTestMode then
+            _G.MSUF_AbsorbTextureTestMode = false; self:SetChecked(false)
+            RefreshFrames()
+            if type(_G.MSUF_GF_RefreshOverlays) == "function" then _G.MSUF_GF_RefreshOverlays() end
+        end
     end)
 
     local selfHealPredCB = CreateFrame("CheckButton", "MSUF_SelfHealPredictionCheck", box2Body, "UICheckButtonTemplate")
@@ -714,7 +769,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         return type(u) == "table" and u.hlOverride == true
     end
     --- Seed hl* values from general into scope DB when first enabling override.
-    local function HlSeedFromGeneral(db)
+    HlSeedFromGeneral = function(db)
         local gen = G()
         local seeds = {
             "hlAggroEnabled", "hlAggroSize", "hlAggroOffset", "hlAggroLayer", "hlAggroMode",
@@ -726,6 +781,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             "hlTargetColorR", "hlTargetColorG", "hlTargetColorB",
             "hlHoverSize", "hlHoverOffset",
             "hlPrioEnabled", "hlPrioOrder",
+            -- Absorb overlay keys
+            "absorbTextMode", "absorbAnchorMode",
+            "absorbBarOpacity", "healAbsorbBarOpacity",
         }
         for _, key in ipairs(seeds) do
             if db[key] == nil then
@@ -1479,22 +1537,24 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             end
         end
 
-        -- Refresh all scope-aware dropdowns (only for non-GF scopes)
+        -- Refresh scope-aware text dropdowns (non-GF only)
         if not isGF then
             if hpModeDrop and hpModeDrop.Refresh then hpModeDrop:Refresh() end
             if hpReverseCheck then hpReverseCheck:SetChecked(ScopeGet("hpTextReverse", false) and true or false) end
             if powerModeDrop and powerModeDrop.Refresh then powerModeDrop:Refresh() end
             if hpSepDrop and hpSepDrop.Refresh then hpSepDrop:Refresh() end
             if powerSepDrop and powerSepDrop.Refresh then powerSepDrop:Refresh() end
-            if absorbDisplayDrop and absorbDisplayDrop.Refresh then absorbDisplayDrop:Refresh() end
-            if absorbAnchorDrop and absorbAnchorDrop.Refresh then absorbAnchorDrop:Refresh() end
-            if absorbOpacitySlider then local v = tonumber(ScopeGet("absorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(absorbOpacitySlider, v) end
-            if healAbsorbOpacitySlider then local v = tonumber(ScopeGet("healAbsorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(healAbsorbOpacitySlider, v) end
-            if absorbTexTestCB then absorbTexTestCB:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false) end
             if selfHealPredCB then selfHealPredCB:SetChecked(G().showSelfHealPrediction and true or false) end
-            if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
             _SyncSpacerControls()
         end
+
+        -- Absorb controls: scope-aware, refresh for ALL scopes
+        if absorbDisplayDrop and absorbDisplayDrop.Refresh then absorbDisplayDrop:Refresh() end
+        if absorbAnchorDrop and absorbAnchorDrop.Refresh then absorbAnchorDrop:Refresh() end
+        if absorbOpacitySlider then local v = tonumber(ScopeGet("absorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(absorbOpacitySlider, v) end
+        if healAbsorbOpacitySlider then local v = tonumber(ScopeGet("healAbsorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(healAbsorbOpacitySlider, v) end
+        if absorbTexTestCB then absorbTexTestCB:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false) end
+        if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
 
         -- Highlight slider sync (scope-aware)
         if highlightBorderThicknessSlider then
@@ -1604,6 +1664,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
         Repaint()
         if C_Timer then C_Timer.After(0.08, Repaint) end
+        -- Refresh GF gradient overlays
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_TEXTURE or 0x02) end
     end
 
     -- =====================================================================

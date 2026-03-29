@@ -1535,39 +1535,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 11: Health Overlays
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(160, "Health Overlays", false)
-
-        local absorbChk = SCheck({
-            name = "MSUF_GF_AbsorbEnableCheck", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
-            label = TR("Absorb Overlay"),
-            get = function(k) return GF.Val(k, "absorbEnabled") end,
-            set = function(k, v)
-                GF.GetConf(k).absorbEnabled = v
-                for f in pairs(GF.frames) do
-                    if f.unit then GF.RegisterUnitEvents(f, f.unit) end
-                end
-                GF.RefreshVisuals()
-            end,
-        })
-
-        local healAbsorbChk = SCheck({
-            name = "MSUF_GF_HealAbsorbEnableCheck", parent = body,
-            anchor = absorbChk, x = 0, y = -4,
-            label = TR("Heal Absorb Overlay"),
-            get = function(k) return GF.Val(k, "healAbsorbEnabled") end,
-            set = function(k, v)
-                GF.GetConf(k).healAbsorbEnabled = v
-                for f in pairs(GF.frames) do
-                    if f.unit then GF.RegisterUnitEvents(f, f.unit) end
-                end
-                GF.RefreshVisuals()
-            end,
-        })
+        local box, body = AddSection(120, "Health Overlays", false)
 
         local healPredChk = SCheck({
             name = "MSUF_GF_HealPredEnableCheck", parent = body,
-            anchor = healAbsorbChk, x = 0, y = -4,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
             label = TR("Heal Prediction Overlay"),
             get = function(k) return GF.Val(k, "healPredEnabled") end,
             set = function(k, v)
@@ -1583,7 +1555,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         hint:SetPoint("TOPLEFT", healPredChk, "BOTTOMLEFT", 0, -10)
         hint:SetWidth(600)
         hint:SetJustifyH("LEFT")
-        hint:SetText(TR("Overlay colors: |cffffd200Colors|r menu.  Overlay textures: |cffffd200Bars|r menu > Absorb Display."))
+        hint:SetText(TR("Absorb overlays: controlled from |cffffd200Bars|r menu > Absorb Display (shared with unit frames).\nOverlay colors: |cffffd200Colors|r menu.  Overlay textures: |cffffd200Bars|r menu."))
         hint:SetTextColor(0.55, 0.60, 0.70)
     end
 

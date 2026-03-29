@@ -329,46 +329,109 @@ local function _applyHighlightBorderStyle(border, conf, edgeSz, ofs, texKey, lay
     end
 end
 
-local function UpdateAggro(f, unit)
+------------------------------------------------------------------------
+-- Unified highlight border refresh (single border, priority pipeline)
+-- Priority: Dispel > Aggro > Target
+-- Each per-feature update stores its state on the frame then calls this.
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+-- HLColor: read highlight COLORS always from MSUF_DB.general first
+-- (same source as main UF — Colors panel writes there).
+-- hlOverride only gates geometry (size/offset/layer) and enable flags,
+-- NOT colors — prevents stale-seeded color copies in gf_party/gf_raid.
+------------------------------------------------------------------------
+local function HLColor(key, fallback)
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen and gen[key] ~= nil then return gen[key] end
+    return fallback
+end
+
+local function _GF_RefreshBorder(f, unit)
+    local border = f._msufGFHighlightBorder
+    if not border then return end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
-    local border = f._msufGFAggroBorder
-    if not border then return end
+
+    -- Priority 1: Dispel
+    local dispelType = f._msufGFDispelType
+    if dispelType and HLVal(kind, "hlDispelEnabled") ~= false then
+        local resolve = _G.MSUF_ResolveDispelColor
+        local r, g, b
+        if type(resolve) == "function" then
+            r, g, b = resolve(dispelType)
+        else
+            r, g, b = GetDispelColor(dispelType)
+        end
+        if r then
+            local sz  = HLVal(kind, "hlAggroSize") or 2
+            local ofs = HLVal(kind, "hlAggroOffset") or 0
+            local tex = HLVal(kind, "hlAggroTexture")
+            local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
+            _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
+            border:Show()
+            return
+        end
+    end
+
+    -- Priority 2: Aggro — colors from general (tied to Colors panel)
+    local aggroLevel = f._msufGFAggroLevel
+    if aggroLevel and aggroLevel >= 1 and HLVal(kind, "hlAggroEnabled") ~= false then
+        local sz  = HLVal(kind, "hlAggroSize") or 2
+        local ofs = HLVal(kind, "hlAggroOffset") or 0
+        local tex = HLVal(kind, "hlAggroTexture")
+        local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
+        local ar = HLColor("hlAggroColorR", 1)
+        local ag = HLColor("hlAggroColorG", 0.55)
+        local ab = HLColor("hlAggroColorB", 0)
+        _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, ar, ag, ab, 1)
+        border:Show()
+        return
+    end
+
+    -- Priority 3: Target — colors from general (tied to Colors panel)
+    if f._msufGFIsTarget and HLVal(kind, "hlTargetEnabled") ~= false then
+        local sz  = HLVal(kind, "hlTargetSize") or 2
+        local ofs = HLVal(kind, "hlTargetOffset") or 0
+        local tex = HLVal(kind, "hlTargetTexture")
+        local lay = HLVal(kind, "hlTargetLayer") or "DEFAULT"
+        _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay,
+            HLColor("hlTargetColorR", 1),
+            HLColor("hlTargetColorG", 1),
+            HLColor("hlTargetColorB", 1), 1)
+        border:Show()
+        return
+    end
+
+    border:Hide()
+end
+
+local function UpdateAggro(f, unit)
+    local kind = f._msufGFKind or "party"
 
     local testMode = _G.MSUF_AggroBorderTestMode
     if (HLVal(kind, "hlAggroEnabled") == false or not unit) and not testMode then
-        border:Hide(); return
+        f._msufGFAggroLevel = nil
+        _GF_RefreshBorder(f, unit)
+        return
     end
 
-    local s -- threat level (nil/0-3)
     if not testMode then
-        if not UnitExists(unit) then border:Hide(); return end
+        if not UnitExists(unit) then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit); return end
         local aggroMode = HLVal(kind, "hlAggroMode") or "ALL"
         if aggroMode ~= "ALL" then
             local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
-            if aggroMode == "HEALER_ONLY" and role ~= "HEALER" then border:Hide(); return end
-            if aggroMode == "TANK_ONLY"   and role ~= "TANK"   then border:Hide(); return end
+            if aggroMode == "HEALER_ONLY" and role ~= "HEALER" then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit); return end
+            if aggroMode == "TANK_ONLY"   and role ~= "TANK"   then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit); return end
         end
         local status = UnitThreatSituation and UnitThreatSituation(unit)
-        if issecretvalue and issecretvalue(status) then border:Hide(); return end
-        s = tonumber(status)
-        if not s or s < 1 then border:Hide(); return end
-    end
-
-    local sz  = HLVal(kind, "hlAggroSize") or 2
-    local ofs = HLVal(kind, "hlAggroOffset") or 0
-    local tex = HLVal(kind, "hlAggroTexture")
-    local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
-    local ar, ag, ab
-    if testMode or (s and s >= 3) then
-        ar, ag, ab = 1, 0, 0
+        if issecretvalue and issecretvalue(status) then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit); return end
+        local s = tonumber(status)
+        if not s or s < 1 then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit); return end
+        f._msufGFAggroLevel = s
     else
-        ar = HLVal(kind, "hlAggroColorR") or 1
-        ag = HLVal(kind, "hlAggroColorG") or 0.55
-        ab = HLVal(kind, "hlAggroColorB") or 0
+        f._msufGFAggroLevel = 3  -- test mode: simulate max threat
     end
-    _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, ar, ag, ab, 1)
-    border:Show()
+    _GF_RefreshBorder(f, unit)
 end
 
 ------------------------------------------------------------------------
@@ -392,13 +455,12 @@ end
 
 function GF._UpdateDispel(f, unit)
     local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    local border = f._msufGFAggroBorder
 
     local testMode = _G.MSUF_DispelBorderTestMode
 
     if (HLVal(kind, "hlDispelEnabled") == false or not unit) and not testMode then
         f._msufGFDispelType = nil
+        _GF_RefreshBorder(f, unit)
         return
     end
 
@@ -406,16 +468,15 @@ function GF._UpdateDispel(f, unit)
     if not testMode then
         if not UnitExists(unit) then
             f._msufGFDispelType = nil
+            _GF_RefreshBorder(f, unit)
             return
         end
-        -- Scan for dispellable debuffs (hoisted callback, zero closure alloc)
         _scanTopDispel = nil
         if AuraUtil and AuraUtil.ForEachAura then
             AuraUtil.ForEachAura(unit, "HARMFUL|RAID", nil, _DispelScanCallback, true)
         end
         topDispel = _scanTopDispel
     else
-        -- Test mode: inject synthetic dispel type to preview the border
         topDispel = _G.MSUF_DispelBorderTestType or "Magic"
     end
 
@@ -424,25 +485,7 @@ function GF._UpdateDispel(f, unit)
 
     if topDispel == prevDispel and not testMode then return end
 
-    if topDispel then
-        local resolve = _G.MSUF_ResolveDispelColor
-        local r, g, b
-        if type(resolve) == "function" then
-            r, g, b = resolve(topDispel)
-        else
-            r, g, b = GetDispelColor(topDispel)
-        end
-        if r and border then
-            local sz  = HLVal(kind, "hlAggroSize") or 2
-            local ofs = HLVal(kind, "hlAggroOffset") or 0
-            local tex = HLVal(kind, "hlAggroTexture")
-            local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
-            _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
-            border:Show()
-        end
-    else
-        UpdateAggro(f, unit)
-    end
+    _GF_RefreshBorder(f, unit)
 end
 
 ------------------------------------------------------------------------
@@ -791,6 +834,11 @@ end
 ------------------------------------------------------------------------
 local function ApplyHealthColor(f, kind, unit)
     if not f.health then return end
+    -- Spell Indicator health color override: full bar recolor, skips all normal logic
+    if f._msufSIHealthColorR then
+        f.health:SetStatusBarColor(f._msufSIHealthColorR, f._msufSIHealthColorG, f._msufSIHealthColorB, 1)
+        return
+    end
     -- Global barMode override (same as Render.ApplyHealthColor)
     local getCache = _G.MSUF_UFCore_GetSettingsCache
     local cache = type(getCache) == "function" and getCache() or nil
@@ -930,20 +978,20 @@ local function dispatchHealth(f, unit)
         f.health:SetValue(hp)
     end
     ApplyHealthColor(f, kind, unit)
-    -- 3-slot health text
+    -- 3-slot health text (secret-safe: unit for UnitHealthPercent)
     local delim = conf.textDelimiter or " / "
     local rev = conf.hpTextReverse
     local tl = conf.textLeft  or "NONE"
     local tc = conf.textCenter or "NONE"
     local tr = conf.textRight or "NONE"
     if f.textLeftFS then
-        f.textLeftFS:SetText(GF.FormatHealthText(tl, hp, hpMax, delim, rev))
+        f.textLeftFS:SetText(GF.FormatHealthText(tl, hp, hpMax, delim, rev, unit))
     end
     if f.textCenterFS then
-        f.textCenterFS:SetText(GF.FormatHealthText(tc, hp, hpMax, delim, rev))
+        f.textCenterFS:SetText(GF.FormatHealthText(tc, hp, hpMax, delim, rev, unit))
     end
     if f.textRightFS then
-        f.textRightFS:SetText(GF.FormatHealthText(tr, hp, hpMax, delim, rev))
+        f.textRightFS:SetText(GF.FormatHealthText(tr, hp, hpMax, delim, rev, unit))
     end
     UpdateStatusText(f, unit)
     dispatchOverlays(f, unit)
@@ -954,6 +1002,73 @@ end
 -- All 12.0 secret-safe: raw API values passed to C-side SetValue/SetMinMaxValues.
 -- Show/hide: issecretvalue(val) → secret = Show (non-nil means has value).
 -- Colors read from global MSUF_DB.general (same keys as main UF overlays).
+--
+-- Absorb enable: read from MSUF_DB.general (tied to Bars menu).
+-- Heal prediction enable: read from GF conf (tied to GF Options menu).
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+-- Absorb settings resolver: reads from gf_party/gf_raid (if hlOverride),
+-- falls through to MSUF_DB.general (tied to Bars menu).
+------------------------------------------------------------------------
+local function _GF_GetAbsorbSetting(kind, key)
+    local dbKey = (kind == "raid") and "gf_raid" or "gf_party"
+    local db = _G.MSUF_DB and _G.MSUF_DB[dbKey]
+    if db and db.hlOverride and db[key] ~= nil then return db[key] end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen and gen[key] ~= nil then return gen[key] end
+    return nil
+end
+
+local function _GF_IsAbsorbEnabled(kind)
+    local mode = _GF_GetAbsorbSetting(kind, "absorbTextMode")
+    if mode then
+        mode = tonumber(mode)
+        if mode then return (mode == 2 or mode == 3) end
+    end
+    local v = _GF_GetAbsorbSetting(kind, "enableAbsorbBar")
+    if v ~= nil then return (v ~= false) end
+    return true
+end
+
+------------------------------------------------------------------------
+-- Absorb anchoring: apply SetReverseFill based on general.absorbAnchorMode
+-- Mode 1: left anchor (fill L→R)   absorbReverse=false
+-- Mode 2: right anchor (fill R→L)  absorbReverse=true  (DEFAULT)
+-- Mode 5: reverse from max         absorbReverse=true (normal HP bar)
+-- Mode 3/4: follow HP edge — simplified to mode 2 for GF
+------------------------------------------------------------------------
+local function _GF_ApplyAbsorbAnchor(f)
+    if not f or not f.health then return end
+    local kind = f._msufGFKind or "party"
+    local mode = tonumber(_GF_GetAbsorbSetting(kind, "absorbAnchorMode")) or 2
+
+    local absorbReverse, healReverse
+    if mode == 1 then
+        absorbReverse = false
+        healReverse   = true
+    elseif mode == 5 then
+        -- Reverse from max: absorb fills from HP max-edge backwards
+        local hpReverse = f.health.GetReverseFill and f.health:GetReverseFill()
+        absorbReverse = not hpReverse
+        healReverse   = hpReverse and true or false
+    else
+        -- Mode 2/3/4 → right anchor (default)
+        absorbReverse = true
+        healReverse   = false
+    end
+
+    if f.absorbBar and f.absorbBar.SetReverseFill then
+        f.absorbBar:SetReverseFill(absorbReverse and true or false)
+    end
+    if f.healAbsorbBar and f.healAbsorbBar.SetReverseFill then
+        f.healAbsorbBar:SetReverseFill(healReverse and true or false)
+    end
+    if f.incomingHealBar and f.incomingHealBar.SetReverseFill then
+        -- Incoming heal fills same direction as health bar
+        f.incomingHealBar:SetReverseFill(false)
+    end
+    f._msufGFAbsorbAnchorStamp = mode
+end
 ------------------------------------------------------------------------
 local function _GF_ReadOverlayColor(keyR, keyG, keyB, defR, defG, defB, defA)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
@@ -969,9 +1084,17 @@ end
 dispatchIncomingHeal = function(f, unit)
     local bar = f.incomingHealBar
     if not bar then return end
+    -- Test mode: fixed values (same as main UF preview)
+    if _G.MSUF_AbsorbTextureTestMode then
+        bar:SetMinMaxValues(0, 100)
+        bar:SetValue(20)
+        bar:Show()
+        return
+    end
     local conf = GF.GetConf(f._msufGFKind or "party")
     if conf.healPredEnabled == false then bar:Hide(); return end
     if not UnitGetIncomingHeals then bar:Hide(); return end
+    if not unit or not UnitExists(unit) then bar:Hide(); return end
     local hpMax = UnitHealthMax(unit)
     local val   = UnitGetIncomingHeals(unit)
     if val == nil then bar:Hide(); return end
@@ -998,9 +1121,17 @@ end
 dispatchAbsorb = function(f, unit)
     local bar = f.absorbBar
     if not bar then return end
-    local conf = GF.GetConf(f._msufGFKind or "party")
-    if conf.absorbEnabled == false then bar:Hide(); return end
+    -- Test mode: fixed values, no unit/secret dependency (same as main UF)
+    if _G.MSUF_AbsorbTextureTestMode then
+        bar:SetMinMaxValues(0, 100)
+        bar:SetValue(25)
+        bar:Show()
+        return
+    end
+    local kind = f._msufGFKind or "party"
+    if not _GF_IsAbsorbEnabled(kind) then bar:Hide(); return end
     if not UnitGetTotalAbsorbs then bar:Hide(); return end
+    if not unit or not UnitExists(unit) then bar:Hide(); return end
     local hpMax = UnitHealthMax(unit)
     local val   = UnitGetTotalAbsorbs(unit)
     if val == nil then bar:Hide(); return end
@@ -1016,9 +1147,17 @@ end
 dispatchHealAbsorb = function(f, unit)
     local bar = f.healAbsorbBar
     if not bar then return end
-    local conf = GF.GetConf(f._msufGFKind or "party")
-    if conf.healAbsorbEnabled == false then bar:Hide(); return end
+    -- Test mode: fixed values (same as main UF)
+    if _G.MSUF_AbsorbTextureTestMode then
+        bar:SetMinMaxValues(0, 100)
+        bar:SetValue(15)
+        bar:Show()
+        return
+    end
+    local kind = f._msufGFKind or "party"
+    if not _GF_IsAbsorbEnabled(kind) then bar:Hide(); return end
     if not UnitGetTotalHealAbsorbs then bar:Hide(); return end
+    if not unit or not UnitExists(unit) then bar:Hide(); return end
     local hpMax = UnitHealthMax(unit)
     local val   = UnitGetTotalHealAbsorbs(unit)
     if val == nil then bar:Hide(); return end
@@ -1061,19 +1200,20 @@ local function dispatchPower(f, unit)
     end
     f.power:Show()
     -- 3-slot power text
+    -- 3-slot power text (secret-safe: unit for UnitPowerPercent)
     if conf.showPower then
         local pDelim = conf.powerTextDelimiter or " / "
         local ptl = conf.powerTextLeft   or "NONE"
         local ptc = conf.powerTextCenter  or "NONE"
         local ptr = conf.powerTextRight   or "NONE"
         if f.powerTextLeftFS then
-            f.powerTextLeftFS:SetText(GF.FormatPowerText(ptl, pw, pwMax, pDelim))
+            f.powerTextLeftFS:SetText(GF.FormatPowerText(ptl, pw, pwMax, pDelim, unit))
         end
         if f.powerTextCenterFS then
-            f.powerTextCenterFS:SetText(GF.FormatPowerText(ptc, pw, pwMax, pDelim))
+            f.powerTextCenterFS:SetText(GF.FormatPowerText(ptc, pw, pwMax, pDelim, unit))
         end
         if f.powerTextRightFS then
-            f.powerTextRightFS:SetText(GF.FormatPowerText(ptr, pw, pwMax, pDelim))
+            f.powerTextRightFS:SetText(GF.FormatPowerText(ptr, pw, pwMax, pDelim, unit))
         end
     end
 end
@@ -1175,30 +1315,28 @@ function GF.RegisterUnitEvents(f, unit)
         reg("UNIT_IN_RANGE_UPDATE")
     end
 
-    -- Auras (dispel detection)
-    if HLVal(kind, "hlDispelEnabled") ~= false then
-        reg("UNIT_AURA")
-    end
+    -- Auras: always register — handlers gate on enabled state; avoids
+    -- stale-event class of bugs when settings change after login
+    reg("UNIT_AURA")
 
-    -- Threat
-    if HLVal(kind, "hlAggroEnabled") ~= false then
-        reg("UNIT_THREAT_SITUATION_UPDATE")
-        reg("UNIT_THREAT_LIST_UPDATE")
-    end
+    -- Threat: always register — UpdateAggro checks hlAggroEnabled internally
+    reg("UNIT_THREAT_SITUATION_UPDATE")
+    reg("UNIT_THREAT_LIST_UPDATE")
 
     -- Status icons
     reg("INCOMING_SUMMON_CHANGED")
     reg("INCOMING_RESURRECT_CHANGED")
     reg("UNIT_PHASE")
 
-    -- Health prediction overlays
-    if conf.healPredEnabled ~= false and UnitGetIncomingHeals then
+    -- Health prediction overlays: always register — handlers gate on enabled
+    -- state internally. Absorb reads from general (Bars), heal pred from GF conf.
+    if UnitGetIncomingHeals then
         reg("UNIT_HEAL_PREDICTION")
     end
-    if conf.absorbEnabled ~= false and UnitGetTotalAbsorbs then
+    if UnitGetTotalAbsorbs then
         reg("UNIT_ABSORB_AMOUNT_CHANGED")
     end
-    if conf.healAbsorbEnabled ~= false and UnitGetTotalHealAbsorbs then
+    if UnitGetTotalHealAbsorbs then
         reg("UNIT_HEAL_ABSORB_AMOUNT_CHANGED")
     end
 
@@ -1536,11 +1674,62 @@ end
 ------------------------------------------------------------------------
 -- Expose
 ------------------------------------------------------------------------
+--- Combined highlight refresh (aggro + dispel + target) — called by
+--- Borders.lua test mode buttons via _G.MSUF_GF_UpdateHighlight
+local function UpdateHighlight(f, unit)
+    unit = unit or f.unit
+    if not unit then return end
+    UpdateAggro(f, unit)
+    GF._UpdateDispel(f, unit)
+    UpdateTargetIndicator(f, unit)
+end
+
 _G.MSUF_GF_UpdateAll     = UpdateAll
 _G.MSUF_GF_UpdateAggro   = UpdateAggro
 _G.MSUF_GF_UpdateDispel   = GF._UpdateDispel
+_G.MSUF_GF_UpdateHighlight = UpdateHighlight
 _G.MSUF_GF_UpdateRange    = ApplyRangeFade
 _G.MSUF_GF_UpdateTarget   = UpdateTargetIndicator
 _G.MSUF_GF_UpdateStatus   = UpdateStatusText
 _G.MSUF_GF_UpdateGroupNum = UpdateGroupNumber
+
+--- Refresh overlay bars (absorb + heal absorb + incoming heal) on all GF frames.
+--- Called from Bars options when test mode or absorb settings change.
+_G.MSUF_GF_RefreshOverlays = function()
+    if not GF.frames then return end
+    local testMode = _G.MSUF_AbsorbTextureTestMode
+    for f in pairs(GF.frames) do
+        if f._msufIsGroupFrame then
+            _GF_ApplyAbsorbAnchor(f)
+            local u = f.unit
+            if u then
+                dispatchOverlays(f, u)
+            elseif testMode then
+                dispatchIncomingHeal(f, nil)
+                dispatchAbsorb(f, nil)
+                dispatchHealAbsorb(f, nil)
+            end
+        end
+    end
+    if GF._previewFrames then
+        for _, list in pairs(GF._previewFrames) do
+            for i = 1, #list do
+                local pf = list[i]
+                if pf then
+                    _GF_ApplyAbsorbAnchor(pf)
+                    local u = pf.unit or pf._msufGFPreviewUnit
+                    if u then
+                        dispatchOverlays(pf, u)
+                    elseif testMode then
+                        dispatchIncomingHeal(pf, nil)
+                        dispatchAbsorb(pf, nil)
+                        dispatchHealAbsorb(pf, nil)
+                    end
+                end
+            end
+        end
+    end
+end
+GF._ApplyHealthColor      = ApplyHealthColor
+GF._ApplyAbsorbAnchor     = _GF_ApplyAbsorbAnchor
 GF._ReadOverlayColor      = _GF_ReadOverlayColor
