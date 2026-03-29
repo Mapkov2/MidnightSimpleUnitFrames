@@ -792,107 +792,23 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Section 4: Text (Advanced — basics moved to Edit Mode popup)
+    -- Section 4: Text (Status Offsets)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(700, "Text (Advanced)", false)
+        local box, body = AddSection(200, "Text", false)
 
         -- Redirect hint
         local hintFS = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         hintFS:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -6)
-        hintFS:SetText(TR("Name, HP text, power text, font sizes and offsets\nare now in the Edit Mode popup.\nClick the Group Frame mover in Edit Mode."))
+        hintFS:SetText(TR("Name, HP text, power text and font sizes\nare in the Edit Mode popup.\nFont, outline, name color and max chars\nare in the Fonts menu."))
         hintFS:SetTextColor(0.55, 0.75, 1.0)
         hintFS:SetJustifyH("LEFT")
         hintFS:SetWordWrap(true)
         hintFS:SetWidth(600)
 
-        -- Name Color Mode
-        local nameColorDd = SDropdown({
-            name = "MSUF_GF_NameColorModeDropdown", parent = body,
-            anchor = hintFS, x = -4, y = -14, width = 200,
-            items = {
-                { key = "DEFAULT", label = "Default (Font Color)" },
-                { key = "CLASS",   label = "Class Color"          },
-                { key = "CUSTOM",  label = "Custom"               },
-            },
-            get = function(k) return GF.Val(k, "nameColorMode") or "DEFAULT" end,
-            set = function(k, v) GF.GetConf(k).nameColorMode = v; GF.MarkAllDirty(GF.DIRTY_FONT) end,
-        })
-
-        MakeColorSwatch(body, nameColorDd, "BOTTOMLEFT", 220, 6,
-            "Name Custom Color",
-            function() return V("nameColorR"), V("nameColorG"), V("nameColorB") end,
-            function(r, g, b)
-                local c = C()
-                c.nameColorR = r; c.nameColorG = g; c.nameColorB = b
-                GF.MarkAllDirty(GF.DIRTY_FONT)
-            end)
-
-        -- Name Max Chars
-        local nameMaxSl = SSlider({
-            name = "MSUF_GF_NameMaxCharsSlider", parent = body, compact = true,
-            anchor = nameColorDd, x = 16, y = -14,
-            min = 0, max = 30, step = 1, width = 270, default = 0,
-            get = function(k) return GF.Val(k, "nameMaxChars") end,
-            set = function(k, v) GF.GetConf(k).nameMaxChars = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return v == 0 and "Name Max Chars: Unlimited" or string.format("Name Max Chars: %d", v) end,
-        })
-
-        local nameNoEllipsisChk = SCheck({
-            name = "MSUF_GF_NameNoEllipsisCheck", parent = body,
-            anchor = nameMaxSl, x = 0, y = -6,
-            label = TR("No Ellipsis (truncate without ..)"),
-            get = function(k) return GF.Val(k, "nameNoEllipsis") end,
-            set = function(k, v) GF.GetConf(k).nameNoEllipsis = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-        })
-
-        -- Use Global Font Color
-        local globalFontChk = SCheck({
-            name = "MSUF_GF_UseGlobalFontColorCheck", parent = body,
-            anchor = nameNoEllipsisChk, x = 0, y = -10,
-            label = TR("Use Global Font Color (Colors menu)"),
-            get = function(k) return GF.Val(k, "useGlobalFontColor") ~= false end,
-            set = function(k, v) GF.GetConf(k).useGlobalFontColor = v; GF.RefreshFonts() end,
-        })
-
-        -- Font Family (LSM)
-        local fontFamilyDd = SDropdown({
-            name = "MSUF_GF_FontFamilyDropdown", parent = body,
-            anchor = globalFontChk, x = -16, y = -8, width = 240,
-            items = function()
-                local items = { { key = "", label = "(Global Default)" } }
-                local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-                if LSM then
-                    local list = LSM:List("font")
-                    for i = 1, #list do items[#items + 1] = { key = list[i], label = list[i] } end
-                end
-                return items
-            end,
-            get = function(k) return GF.Val(k, "fontKey") or "" end,
-            set = function(k, v) GF.GetConf(k).fontKey = v; GF.RefreshFonts() end,
-        })
-
-        -- Font Outline
-        local fontOutlineDd = SDropdown({
-            name = "MSUF_GF_FontOutlineDropdown", parent = body,
-            anchor = fontFamilyDd, x = 0, y = -6, width = 200,
-            items = {
-                { key = "",              label = "(Global Default)" },
-                { key = "NONE",          label = "None"             },
-                { key = "OUTLINE",       label = "Outline"          },
-                { key = "THICKOUTLINE",  label = "Thick Outline"    },
-            },
-            get = function(k) return GF.Val(k, "fontOutline") or "" end,
-            set = function(k, v)
-                local conf = GF.GetConf(k)
-                conf.fontOutline = (v == "") and nil or v
-                GF.RefreshFonts()
-            end,
-        })
-
-        -- Status Text Offsets (not in EM2 popup — status text is a special case)
+        -- Status Text Offsets
         local tOffSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        tOffSep:SetPoint("TOPLEFT", fontOutlineDd, "BOTTOMLEFT", 16, -14)
+        tOffSep:SetPoint("TOPLEFT", hintFS, "BOTTOMLEFT", 0, -12)
         tOffSep:SetText(TR("Status Text Offsets"))
         tOffSep:SetTextColor(1, 0.82, 0)
 

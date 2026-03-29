@@ -520,13 +520,34 @@ function GF.ResolveHighlightTexture(lsmKey)
 end
 
 --- Resolve font path (falls through to global MSUF font)
+--- Check if GF scope has font override active
+function GF.HasFontOverride(kind)
+    local conf = GF.GetConf(kind)
+    return conf.fontOverride == true
+end
+
 function GF.ResolveFontPath(kind)
     local conf = GF.GetConf(kind)
-    local key = conf.fontKey
-    if key and key ~= "" then
+    -- When override active: use GF-local fontKey
+    if conf.fontOverride then
+        local key = conf.fontKey
+        if key and key ~= "" then
+            local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+            if LSM then
+                local p = LSM:Fetch("font", key, true)
+                if p then return p end
+            end
+        end
+    end
+    -- Fallback: global font (shared with UF)
+    local db = _G.MSUF_DB
+    local gKey = db and db.general and db.general.fontKey
+    if gKey and gKey ~= "" then
+        local fn = _G.MSUF_GetFontPath or (ns and ns.MSUF_GetFontPath)
+        if type(fn) == "function" then return fn() end
         local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
         if LSM then
-            local p = LSM:Fetch("font", key, true)
+            local p = LSM:Fetch("font", gKey, true)
             if p then return p end
         end
     end
@@ -538,10 +559,20 @@ end
 --- Resolve font outline flags
 function GF.ResolveFontFlags(kind)
     local conf = GF.GetConf(kind)
-    local v = conf.fontOutline
-    if v ~= nil then
-        if v == "" or v == "NONE" then return "" end
-        if v == "OUTLINE" or v == "THICKOUTLINE" then return v end
+    -- When override active: use GF-local fontOutline
+    if conf.fontOverride then
+        local v = conf.fontOutline
+        if v ~= nil then
+            if v == "" or v == "NONE" then return "" end
+            if v == "OUTLINE" or v == "THICKOUTLINE" then return v end
+        end
+    end
+    -- Fallback: derive from global boldText / noOutline
+    local db = _G.MSUF_DB
+    local gen = db and db.general
+    if gen then
+        if gen.boldText then return "THICKOUTLINE" end
+        if gen.noOutline then return "" end
     end
     local fn = ns.Castbars and ns.Castbars._GetFontFlags
     if type(fn) == "function" then return fn() end
@@ -551,22 +582,44 @@ end
 --- Resolve font color (base color for non-name text)
 function GF.ResolveFontColor(kind)
     local conf = GF.GetConf(kind)
-    if conf.useGlobalFontColor ~= false then
-        local fn = ns.MSUF_GetConfiguredFontColor
-        if type(fn) == "function" then return fn() end
+    -- Override with local color only when override + useGlobalFontColor=false
+    if conf.fontOverride and conf.useGlobalFontColor == false then
+        if conf.fontR then
+            return conf.fontR, conf.fontG or 1, conf.fontB or 1
+        end
     end
-    if conf.fontR then
-        return conf.fontR, conf.fontG or 1, conf.fontB or 1
-    end
+    -- Fallback: global font color (shared with UF)
+    local fn = ns.MSUF_GetConfiguredFontColor
+    if type(fn) == "function" then return fn() end
     return 1, 1, 1
 end
 
 --- Resolve name text color (CLASS / CUSTOM / DEFAULT fallback to font color)
 function GF.ResolveNameColor(kind, classToken)
     local conf = GF.GetConf(kind)
-    local mode = conf.nameColorMode or "DEFAULT"
 
-    if mode == "CLASS" and classToken then
+    -- When override active: use GF-local nameColorMode
+    if conf.fontOverride then
+        local mode = conf.nameColorMode or "DEFAULT"
+        if mode == "CLASS" and classToken then
+            local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
+            if type(fastClass) == "function" then
+                local r, g, b = fastClass(nil, classToken)
+                if r then return r, g, b end
+            end
+            local cc = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
+            if cc then return cc.r, cc.g, cc.b end
+        end
+        if mode == "CUSTOM" then
+            return conf.nameColorR or 1, conf.nameColorG or 1, conf.nameColorB or 1
+        end
+        return GF.ResolveFontColor(kind)
+    end
+
+    -- No override: use global nameClassColor boolean (shared with UF)
+    local db = _G.MSUF_DB
+    local gen = db and db.general
+    if gen and gen.nameClassColor and classToken then
         local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
         if type(fastClass) == "function" then
             local r, g, b = fastClass(nil, classToken)
@@ -576,12 +629,19 @@ function GF.ResolveNameColor(kind, classToken)
         if cc then return cc.r, cc.g, cc.b end
     end
 
-    if mode == "CUSTOM" then
-        return conf.nameColorR or 1, conf.nameColorG or 1, conf.nameColorB or 1
-    end
-
     -- DEFAULT: use global font color
     return GF.ResolveFontColor(kind)
+end
+
+--- Resolve name truncation (respects fontOverride)
+--- Returns maxChars, noEllipsis
+function GF.ResolveNameTruncation(kind)
+    local conf = GF.GetConf(kind)
+    if conf.fontOverride then
+        return conf.nameMaxChars or 0, conf.nameNoEllipsis or false
+    end
+    -- No override: use defaults (unlimited)
+    return 0, false
 end
 
 ------------------------------------------------------------------------
