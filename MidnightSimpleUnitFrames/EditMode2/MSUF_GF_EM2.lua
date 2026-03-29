@@ -165,7 +165,6 @@ local function HidePreviewOnly()
 end
 
 local function EnterEditMode()
-    if _em2Active then return end
     _em2Active = true
     SyncAllContainers()
     HideHeaders()
@@ -173,7 +172,6 @@ local function EnterEditMode()
 end
 
 local function ExitEditMode()
-    if not _em2Active then return end
     local gf = ns.GF; if not gf then return end
     -- Kill state FIRST so pending C_Timer callbacks from RebuildAll
     -- see _em2Active=false and skip their ShowPreviewOnly() branch.
@@ -306,30 +304,11 @@ do
         self:UnregisterEvent("PLAYER_LOGIN")
         C_Timer.After(0.1, function()
             RegisterGF()
-
-            -- Primary hook: EM2 State listener (covers HUD Exit, CancelAll, combat exit)
-            if type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
-                _G.MSUF_RegisterAnyEditModeListener(function(active)
-                    if active then
-                        EnterEditMode()
-                        C_Timer.After(0.15, function()
-                            if not _em2Active then return end
-                            HideHeaders()
-                            if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-                        end)
-                    else
-                        ExitEditMode()
-                    end
-                end)
-            end
-
-            -- Legacy fallback: MSUF_SetMSUFEditModeDirect (slash menu, old code paths)
             if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
                 hooksecurefunc("MSUF_SetMSUFEditModeDirect", function(active)
                     if active then
                         EnterEditMode()
                         C_Timer.After(0.15, function()
-                            if not _em2Active then return end
                             HideHeaders()
                             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
                         end)

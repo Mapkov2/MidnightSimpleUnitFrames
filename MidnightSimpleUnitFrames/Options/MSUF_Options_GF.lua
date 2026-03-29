@@ -734,7 +734,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 3: Power Bar
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(560, "Power Bar", false)
+        local box, body = AddSection(280, "Power Bar", false)
 
         local phSl = SSlider({
             name = "MSUF_GF_PowerHeightSlider", parent = body, compact = true,
@@ -745,85 +745,24 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return v == 0 and "Power Bar: Hidden" or string.format("Power Bar Height: %d", v) end,
         })
 
-        local powTextChk = SCheck({
-            name = "MSUF_GF_ShowPowerTextCheck", parent = body,
-            anchor = phSl, x = 0, y = -14,
-            label = TR("Show Power Text"),
-            get = function(k) return GF.Val(k, "showPower") end,
-            set = function(k, v) GF.GetConf(k).showPower = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-        })
-
         local powSmoothChk = SCheck({
             name = "MSUF_GF_PowerSmoothFillCheck", parent = body,
-            anchor = powTextChk, x = 200, y = 0,
+            anchor = phSl, x = 0, y = -14,
             label = TR("Smooth Fill"),
             get = function(k) return GF.Val(k, "powerSmoothFill") end,
             set = function(k, v) GF.GetConf(k).powerSmoothFill = v end,
         })
 
-        -- Power 3-slot text
-        local ptSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        ptSep:SetPoint("TOPLEFT", powTextChk, "BOTTOMLEFT", 0, -10)
-        ptSep:SetText(TR("Power Text Slots"))
-        ptSep:SetTextColor(1, 0.82, 0)
-
-        local pModeItems = {}
-        for _, m in ipairs(GF.HEALTH_TEXT_MODES) do
-            pModeItems[#pModeItems + 1] = { key = m.key, label = m.label }
-        end
-
-        local ptlLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        ptlLbl:SetPoint("TOPLEFT", ptSep, "BOTTOMLEFT", 0, -6)
-        ptlLbl:SetText(TR("Left")); ptlLbl:SetTextColor(0.75, 0.75, 0.75)
-
-        local ptlDd = SDropdown({
-            name = "MSUF_GF_PowerTextLeftDropdown", parent = body,
-            anchor = ptlLbl, x = -12, y = -4, width = 180,
-            items = pModeItems,
-            get = function(k) return GF.Val(k, "powerTextLeft") or "NONE" end,
-            set = function(k, v) GF.GetConf(k).powerTextLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
-        })
-
-        local ptcLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        ptcLbl:SetPoint("TOPLEFT", ptlLbl, "TOPLEFT", 220, 0)
-        ptcLbl:SetText(TR("Center")); ptcLbl:SetTextColor(0.75, 0.75, 0.75)
-
-        local ptcDd = SDropdown({
-            name = "MSUF_GF_PowerTextCenterDropdown", parent = body,
-            anchor = ptcLbl, x = -12, y = -4, width = 180,
-            items = pModeItems,
-            get = function(k) return GF.Val(k, "powerTextCenter") or "NONE" end,
-            set = function(k, v) GF.GetConf(k).powerTextCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
-        })
-
-        local ptrLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        ptrLbl:SetPoint("TOPLEFT", ptcLbl, "TOPLEFT", 220, 0)
-        ptrLbl:SetText(TR("Right")); ptrLbl:SetTextColor(0.75, 0.75, 0.75)
-
-        SDropdown({
-            name = "MSUF_GF_PowerTextRightDropdown", parent = body,
-            anchor = ptrLbl, x = -12, y = -4, width = 180,
-            items = pModeItems,
-            get = function(k) return GF.Val(k, "powerTextRight") or "NONE" end,
-            set = function(k, v) GF.GetConf(k).powerTextRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
-        })
-
-        -- Delimiter
-        local pdLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        pdLbl:SetPoint("TOPLEFT", ptlDd, "BOTTOMLEFT", 12, -8)
-        pdLbl:SetText(TR("Delimiter")); pdLbl:SetTextColor(0.75, 0.75, 0.75)
-
-        local delimDd = SDropdown({
-            name = "MSUF_GF_PowerDelimiterDropdown", parent = body,
-            anchor = pdLbl, x = -12, y = -4, width = 180,
-            items = GF.DELIMITER_OPTIONS,
-            get = function(k) return GF.Val(k, "powerTextDelimiter") or " / " end,
-            set = function(k, v) GF.GetConf(k).powerTextDelimiter = v; GF.RefreshVisuals() end,
-        })
+        -- Hint: power text settings in Edit Mode popup
+        local ptHint = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        ptHint:SetPoint("TOPLEFT", powSmoothChk, "BOTTOMLEFT", 0, -10)
+        ptHint:SetText(TR("Power text modes, delimiter and font size\nare in the Edit Mode popup."))
+        ptHint:SetTextColor(0.55, 0.75, 1.0)
+        ptHint:SetJustifyH("LEFT")
 
         -- Power per-role visibility
         local roleSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        roleSep:SetPoint("TOPLEFT", delimDd, "BOTTOMLEFT", 12, -12)
+        roleSep:SetPoint("TOPLEFT", ptHint, "BOTTOMLEFT", 0, -12)
         roleSep:SetText(TR("Show Power for Roles"))
         roleSep:SetTextColor(1, 0.82, 0)
 
@@ -853,23 +792,24 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Section 4: Text
+    -- Section 4: Text (Advanced — basics moved to Edit Mode popup)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(1400, "Text", false)
+        local box, body = AddSection(700, "Text (Advanced)", false)
 
-        local nameChk = SCheck({
-            name = "MSUF_GF_ShowNameCheck", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
-            label = TR("Show Name"),
-            get = function(k) return GF.Val(k, "showName") ~= false end,
-            set = function(k, v) GF.GetConf(k).showName = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-        })
+        -- Redirect hint
+        local hintFS = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        hintFS:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -6)
+        hintFS:SetText(TR("Name, HP text, power text, font sizes and offsets\nare now in the Edit Mode popup.\nClick the Group Frame mover in Edit Mode."))
+        hintFS:SetTextColor(0.55, 0.75, 1.0)
+        hintFS:SetJustifyH("LEFT")
+        hintFS:SetWordWrap(true)
+        hintFS:SetWidth(600)
 
         -- Name Color Mode
         local nameColorDd = SDropdown({
             name = "MSUF_GF_NameColorModeDropdown", parent = body,
-            anchor = nameChk, x = -16, y = -6, width = 200,
+            anchor = hintFS, x = -4, y = -14, width = 200,
             items = {
                 { key = "DEFAULT", label = "Default (Font Color)" },
                 { key = "CLASS",   label = "Class Color"          },
@@ -879,7 +819,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).nameColorMode = v; GF.MarkAllDirty(GF.DIRTY_FONT) end,
         })
 
-        local nameColorSwatch = MakeColorSwatch(body, nameColorDd, "BOTTOMLEFT", 220, 6,
+        MakeColorSwatch(body, nameColorDd, "BOTTOMLEFT", 220, 6,
             "Name Custom Color",
             function() return V("nameColorR"), V("nameColorG"), V("nameColorB") end,
             function(r, g, b)
@@ -906,134 +846,19 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).nameNoEllipsis = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
         })
 
-        -- 3-Slot Health Text
-        local htSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        htSep:SetPoint("TOPLEFT", nameNoEllipsisChk, "BOTTOMLEFT", 0, -10)
-        htSep:SetText(TR("Health Text"))
-        htSep:SetTextColor(1, 0.82, 0)
-
-        local textModeItems = {}
-        for i = 1, #GF.HEALTH_TEXT_MODES do
-            textModeItems[i] = { key = GF.HEALTH_TEXT_MODES[i].key, label = GF.HEALTH_TEXT_MODES[i].label }
-        end
-
-        local tlLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        tlLbl:SetPoint("TOPLEFT", htSep, "BOTTOMLEFT", 0, -8)
-        tlLbl:SetText(TR("Left Slot"))
-        tlLbl:SetTextColor(0.7, 0.75, 0.8)
-
-        local textLeftDd = SDropdown({
-            name = "MSUF_GF_TextLeftDropdown", parent = body,
-            anchor = tlLbl, x = -16, y = -2, width = 220,
-            items = textModeItems,
-            get = function(k) return GF.Val(k, "textLeft") or "NONE" end,
-            set = function(k, v) GF.GetConf(k).textLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-        })
-
-        local tcLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        tcLbl:SetPoint("TOPLEFT", textLeftDd, "BOTTOMLEFT", 16, -6)
-        tcLbl:SetText(TR("Center Slot"))
-        tcLbl:SetTextColor(0.7, 0.75, 0.8)
-
-        local textCenterDd = SDropdown({
-            name = "MSUF_GF_TextCenterDropdown", parent = body,
-            anchor = tcLbl, x = -16, y = -2, width = 220,
-            items = textModeItems,
-            get = function(k) return GF.Val(k, "textCenter") or "NONE" end,
-            set = function(k, v) GF.GetConf(k).textCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-        })
-
-        local trLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        trLbl:SetPoint("TOPLEFT", textCenterDd, "BOTTOMLEFT", 16, -6)
-        trLbl:SetText(TR("Right Slot"))
-        trLbl:SetTextColor(0.7, 0.75, 0.8)
-
-        local textRightDd = SDropdown({
-            name = "MSUF_GF_TextRightDropdown", parent = body,
-            anchor = trLbl, x = -16, y = -2, width = 220,
-            items = textModeItems,
-            get = function(k) return GF.Val(k, "textRight") or "NONE" end,
-            set = function(k, v) GF.GetConf(k).textRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-        })
-
-        local delimLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        delimLbl:SetPoint("TOPLEFT", textRightDd, "BOTTOMLEFT", 16, -6)
-        delimLbl:SetText(TR("Delimiter"))
-        delimLbl:SetTextColor(0.7, 0.75, 0.8)
-
-        local delimiterDd = SDropdown({
-            name = "MSUF_GF_TextDelimiterDropdown", parent = body,
-            anchor = delimLbl, x = -16, y = -2, width = 200,
-            items = function()
-                local items = {}
-                for i = 1, #GF.DELIMITER_OPTIONS do
-                    items[i] = { key = GF.DELIMITER_OPTIONS[i].key, label = GF.DELIMITER_OPTIONS[i].label }
-                end
-                return items
-            end,
-            get = function(k) return GF.Val(k, "textDelimiter") or " / " end,
-            set = function(k, v) GF.GetConf(k).textDelimiter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-        })
-
-        local reverseChk = SCheck({
-            name = "MSUF_GF_HPTextReverseCheck", parent = body,
-            anchor = delimiterDd, x = 16, y = -6,
-            label = TR("Reverse Order"),
-            get = function(k) return GF.Val(k, "hpTextReverse") end,
-            set = function(k, v) GF.GetConf(k).hpTextReverse = v; GF.RefreshVisuals() end,
-        })
-
+        -- Use Global Font Color
         local globalFontChk = SCheck({
             name = "MSUF_GF_UseGlobalFontColorCheck", parent = body,
-            anchor = reverseChk, x = 0, y = -6,
+            anchor = nameNoEllipsisChk, x = 0, y = -10,
             label = TR("Use Global Font Color (Colors menu)"),
             get = function(k) return GF.Val(k, "useGlobalFontColor") ~= false end,
             set = function(k, v) GF.GetConf(k).useGlobalFontColor = v; GF.RefreshFonts() end,
         })
 
-        local anchorDd = SDropdown({
-            name = "MSUF_GF_NameAnchorDropdown", parent = body,
-            anchor = globalFontChk, x = -16, y = -8, width = 200,
-            items = {
-                { key = "LEFT",   label = "Left"   },
-                { key = "CENTER", label = "Center" },
-                { key = "RIGHT",  label = "Right"  },
-            },
-            get = function(k) return GF.Val(k, "nameAnchor") end,
-            set = function(k, v) GF.GetConf(k).nameAnchor = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-        })
-
-        local nameFontSl = SSlider({
-            name = "MSUF_GF_NameFontSizeSlider", parent = body, compact = true,
-            anchor = anchorDd, x = 16, y = -14,
-            min = 6, max = 24, step = 1, width = 270, default = 12,
-            get = function(k) return GF.Val(k, "nameFontSize") end,
-            set = function(k, v) GF.GetConf(k).nameFontSize = v; GF.RefreshFonts() end,
-            formatText = function(v) return string.format("Name Font Size: %d", v) end,
-        })
-
-        local hpFontSl = SSlider({
-            name = "MSUF_GF_HPFontSizeSlider", parent = body, compact = true,
-            anchor = nameFontSl, x = 0, y = -32,
-            min = 6, max = 24, step = 1, width = 270, default = 10,
-            get = function(k) return GF.Val(k, "hpFontSize") end,
-            set = function(k, v) GF.GetConf(k).hpFontSize = v; GF.RefreshFonts() end,
-            formatText = function(v) return string.format("HP Font Size: %d", v) end,
-        })
-
-        local powerFontSl = SSlider({
-            name = "MSUF_GF_PowerFontSizeSlider", parent = body, compact = true,
-            anchor = hpFontSl, x = 0, y = -32,
-            min = 6, max = 24, step = 1, width = 270, default = 9,
-            get = function(k) return GF.Val(k, "powerFontSize") end,
-            set = function(k, v) GF.GetConf(k).powerFontSize = v; GF.RefreshFonts() end,
-            formatText = function(v) return string.format("Power Font Size: %d", v) end,
-        })
-
         -- Font Family (LSM)
         local fontFamilyDd = SDropdown({
             name = "MSUF_GF_FontFamilyDropdown", parent = body,
-            anchor = powerFontSl, x = -16, y = -14, width = 240,
+            anchor = globalFontChk, x = -16, y = -8, width = 240,
             items = function()
                 local items = { { key = "", label = "(Global Default)" } }
                 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
@@ -1065,63 +890,15 @@ function _G.MSUF_EnsureGFPanelBuilt()
             end,
         })
 
-        -- Text Offsets sub-group
+        -- Status Text Offsets (not in EM2 popup — status text is a special case)
         local tOffSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         tOffSep:SetPoint("TOPLEFT", fontOutlineDd, "BOTTOMLEFT", 16, -14)
-        tOffSep:SetText(TR("Text Offsets"))
+        tOffSep:SetText(TR("Status Text Offsets"))
         tOffSep:SetTextColor(1, 0.82, 0)
 
-        local nameXSl = SSlider({
-            name = "MSUF_GF_NameOffsetXSlider", parent = body, compact = true,
-            anchor = tOffSep, x = 0, y = -8,
-            min = -100, max = 100, step = 1, width = 270, default = 0,
-            get = function(k) return GF.Val(k, "nameOffsetX") end,
-            set = function(k, v) GF.GetConf(k).nameOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return string.format("Name X: %d", v) end,
-        })
-        local nameYSl = SSlider({
-            name = "MSUF_GF_NameOffsetYSlider", parent = body, compact = true,
-            anchor = nameXSl, x = 0, y = -32,
-            min = -100, max = 100, step = 1, width = 270, default = 0,
-            get = function(k) return GF.Val(k, "nameOffsetY") end,
-            set = function(k, v) GF.GetConf(k).nameOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return string.format("Name Y: %d", v) end,
-        })
-        local hpXSl = SSlider({
-            name = "MSUF_GF_HPOffsetXSlider", parent = body, compact = true,
-            anchor = nameYSl, x = 0, y = -32,
-            min = -100, max = 100, step = 1, width = 270, default = 0,
-            get = function(k) return GF.Val(k, "hpOffsetX") end,
-            set = function(k, v) GF.GetConf(k).hpOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return string.format("HP Text X: %d", v) end,
-        })
-        local hpYSl = SSlider({
-            name = "MSUF_GF_HPOffsetYSlider", parent = body, compact = true,
-            anchor = hpXSl, x = 0, y = -32,
-            min = -100, max = 100, step = 1, width = 270, default = 0,
-            get = function(k) return GF.Val(k, "hpOffsetY") end,
-            set = function(k, v) GF.GetConf(k).hpOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return string.format("HP Text Y: %d", v) end,
-        })
-        local powXSl = SSlider({
-            name = "MSUF_GF_PowerOffsetXSlider", parent = body, compact = true,
-            anchor = hpYSl, x = 0, y = -32,
-            min = -100, max = 100, step = 1, width = 270, default = 0,
-            get = function(k) return GF.Val(k, "powerOffsetX") end,
-            set = function(k, v) GF.GetConf(k).powerOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return string.format("Power Text X: %d", v) end,
-        })
-        local powYSl = SSlider({
-            name = "MSUF_GF_PowerOffsetYSlider", parent = body, compact = true,
-            anchor = powXSl, x = 0, y = -32,
-            min = -100, max = 100, step = 1, width = 270, default = 0,
-            get = function(k) return GF.Val(k, "powerOffsetY") end,
-            set = function(k, v) GF.GetConf(k).powerOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return string.format("Power Text Y: %d", v) end,
-        })
         local statXSl = SSlider({
             name = "MSUF_GF_StatusOffsetXSlider", parent = body, compact = true,
-            anchor = powYSl, x = 0, y = -32,
+            anchor = tOffSep, x = 0, y = -8,
             min = -100, max = 100, step = 1, width = 270, default = 0,
             get = function(k) return GF.Val(k, "statusOffsetX") end,
             set = function(k, v) GF.GetConf(k).statusOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
