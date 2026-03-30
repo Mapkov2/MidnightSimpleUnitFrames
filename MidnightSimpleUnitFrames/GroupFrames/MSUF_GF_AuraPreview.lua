@@ -107,14 +107,14 @@ local HANDLE_COLORS = {
 }
 
 local STATUS_ICON_SPECS = {
-    { key = "roleIcon",      label = "Role",        sizeKey = "roleIconSize",      anchorKey = "roleIconAnchor",   xKey = "roleIconX",   yKey = "roleIconY",   defAnchor = "TOPLEFT",  defSize = 12, color = {0.23,0.43,0.65} },
-    { key = "leaderIcon",    label = "Leader",       sizeKey = "leaderIconSize",    anchorKey = "leaderIconAnchor", xKey = "leaderIconX", yKey = "leaderIconY", defAnchor = "TOPRIGHT", defSize = 12, color = {0.78,0.65,0.13} },
-    { key = "assistIcon",    label = "Assist",       sizeKey = "assistIconSize",    anchorKey = "assistIconAnchor", xKey = "assistIconX", yKey = "assistIconY", defAnchor = "TOPRIGHT", defSize = 12, color = {0.60,0.55,0.20} },
-    { key = "raidMarker",    label = "Marker",       sizeKey = "raidMarkerSize",    anchorKey = "raidMarkerAnchor", xKey = "raidMarkerX", yKey = "raidMarkerY", defAnchor = "CENTER",   defSize = 14, color = {0.80,0.27,0.27} },
-    { key = "readyCheckIcon",label = "Ready",        sizeKey = "readyCheckSize",    anchorKey = "readyCheckAnchor", xKey = "readyCheckX", yKey = "readyCheckY", defAnchor = "CENTER",   defSize = 16, color = {0.20,0.65,0.20} },
-    { key = "summonIcon",    label = "Summon",       sizeKey = "summonIconSize",    anchorKey = "summonAnchor",     xKey = "summonX",     yKey = "summonY",     defAnchor = "CENTER",   defSize = 16, color = {0.65,0.50,0.80} },
-    { key = "resurrectIcon", label = "Rez",          sizeKey = "resurrectIconSize", anchorKey = "resurrectAnchor",  xKey = "resurrectX",  yKey = "resurrectY",  defAnchor = "CENTER",   defSize = 16, color = {0.90,0.80,0.30} },
-    { key = "phaseIcon",     label = "Phase",        sizeKey = "phaseIconSize",     anchorKey = "phaseAnchor",      xKey = "phaseX",      yKey = "phaseY",      defAnchor = "TOPLEFT",  defSize = 14, color = {0.50,0.50,0.70} },
+    { key = "roleIcon",      label = "Role",        sizeKey = "roleIconSize",      anchorKey = "roleIconAnchor",   xKey = "roleIconX",   yKey = "roleIconY",   layerKey = "roleIconLayer",   defAnchor = "TOPLEFT",  defSize = 12 },
+    { key = "leaderIcon",    label = "Leader",       sizeKey = "leaderIconSize",    anchorKey = "leaderIconAnchor", xKey = "leaderIconX", yKey = "leaderIconY", layerKey = "leaderIconLayer", defAnchor = "TOPRIGHT", defSize = 12 },
+    { key = "assistIcon",    label = "Assist",       sizeKey = "assistIconSize",    anchorKey = "assistIconAnchor", xKey = "assistIconX", yKey = "assistIconY", layerKey = "assistIconLayer", defAnchor = "TOPRIGHT", defSize = 12 },
+    { key = "raidMarker",    label = "Marker",       sizeKey = "raidMarkerSize",    anchorKey = "raidMarkerAnchor", xKey = "raidMarkerX", yKey = "raidMarkerY", layerKey = "raidMarkerLayer", defAnchor = "CENTER",   defSize = 14 },
+    { key = "readyCheckIcon",label = "Ready",        sizeKey = "readyCheckSize",    anchorKey = "readyCheckAnchor", xKey = "readyCheckX", yKey = "readyCheckY", layerKey = "readyCheckLayer", defAnchor = "CENTER",   defSize = 16 },
+    { key = "summonIcon",    label = "Summon",       sizeKey = "summonIconSize",    anchorKey = "summonAnchor",     xKey = "summonX",     yKey = "summonY",     layerKey = "summonLayer",     defAnchor = "CENTER",   defSize = 16 },
+    { key = "resurrectIcon", label = "Rez",          sizeKey = "resurrectIconSize", anchorKey = "resurrectAnchor",  xKey = "resurrectX",  yKey = "resurrectY",  layerKey = "resurrectLayer",  defAnchor = "CENTER",   defSize = 16 },
+    { key = "phaseIcon",     label = "Phase",        sizeKey = "phaseIconSize",     anchorKey = "phaseAnchor",      xKey = "phaseX",      yKey = "phaseY",      layerKey = "phaseLayer",      defAnchor = "TOPLEFT",  defSize = 14 },
 }
 
 ------------------------------------------------------------------------
@@ -517,23 +517,26 @@ end
 ------------------------------------------------------------------------
 -- Build aura group handles (buff / debuff / externals)
 ------------------------------------------------------------------------
+local AURA_GRP_COLORS = {
+    buff      = { {0.23,0.42,0.23}, {0.23,0.35,0.29}, {0.29,0.48,0.23}, {0.20,0.40,0.20}, {0.25,0.45,0.25}, {0.22,0.38,0.22} },
+    debuff    = { {0.42,0.13,0.13}, {0.48,0.17,0.17}, {0.38,0.10,0.10}, {0.45,0.15,0.15}, {0.40,0.12,0.12}, {0.50,0.18,0.18} },
+    externals = { {0.10,0.35,0.23}, {0.17,0.42,0.29}, {0.12,0.38,0.25}, {0.15,0.40,0.27} },
+}
+
 local function BuildAuraGroupHandles(mockFrame)
     local GROUPS = {
-        { key = "buff",      section = "buffs",   defAnchor = "BOTTOMLEFT", defSize = 16, mockCount = 3, colors = {{0.23,0.42,0.23},{0.23,0.35,0.29},{0.29,0.48,0.23}} },
-        { key = "debuff",    section = "debuffs",  defAnchor = "TOPRIGHT",   defSize = 16, mockCount = 2, colors = {{0.42,0.13,0.13},{0.48,0.17,0.17}} },
-        { key = "externals", section = "ext",      defAnchor = "CENTER",     defSize = 22, mockCount = 2, colors = {{0.10,0.35,0.23},{0.17,0.42,0.29}} },
+        { key = "buff",      section = "buffs",   defAnchor = "BOTTOMLEFT", defSize = 16 },
+        { key = "debuff",    section = "debuffs",  defAnchor = "TOPRIGHT",   defSize = 16 },
+        { key = "externals", section = "ext",      defAnchor = "CENTER",     defSize = 22 },
     }
     for _, grp in ipairs(GROUPS) do
         local handle = CreateHandle(mockFrame, grp.key, grp.section,
-            grp.defSize * grp.mockCount + grp.mockCount, grp.defSize, grp.key)
+            grp.defSize, grp.defSize, grp.key)
         handle._label:SetPoint("BOTTOM", handle, "TOP", 0, 1)
         handle._label:SetText(grp.key:sub(1,1):upper() .. grp.key:sub(2))
-        for i = 1, grp.mockCount do
-            local c = grp.colors[i] or grp.colors[1]
-            AddMockIcon(handle, grp.defSize, c[1], c[2], c[3])
-        end
         handle._grpKey = grp.key
         handle._defAnchor = grp.defAnchor
+        handle._grpIcons = {}
         handle._onDragFinish = function(anchor, offX, offY)
             local sc = _mockFrame and _mockFrame._previewScale or 1
             local kind = _getKind and _getKind() or "party"
@@ -554,15 +557,13 @@ end
 ------------------------------------------------------------------------
 local function BuildStatusIconHandles(mockFrame)
     for _, spec in ipairs(STATUS_ICON_SPECS) do
-        local c = spec.color
         local handle = CreateHandle(mockFrame, spec.key, "sicons",
             spec.defSize, spec.defSize, "status")
         handle._label:SetPoint("BOTTOM", handle, "TOP", 0, 1)
         handle._label:SetText(spec.label)
         local t = handle:CreateTexture(nil, "ARTWORK")
-        t:SetSize(spec.defSize, spec.defSize)
-        t:SetPoint("CENTER", handle, "CENTER", 0, 0)
-        t:SetColorTexture(c[1], c[2], c[3], 1)
+        t:SetAllPoints(handle)
+        handle._statusTex = t
         handle._statusSpec = spec
         handle._onDragFinish = function(anchor, offX, offY)
             local sc = _mockFrame and _mockFrame._previewScale or 1
@@ -702,10 +703,6 @@ local function BuildPrivateAuraHandle(mockFrame)
     local handle = CreateHandle(mockFrame, "private", "priv", 16, 16, "private")
     handle._label:SetPoint("BOTTOM", handle, "TOP", 0, 1)
     handle._label:SetText("Private")
-    local t = handle:CreateTexture(nil, "ARTWORK")
-    t:SetSize(14, 14)
-    t:SetPoint("CENTER", handle, "CENTER", 0, 0)
-    t:SetColorTexture(0.20, 0.20, 0.25, 1)
     handle._onDragFinish = function(anchor, offX, offY)
         local sc = _mockFrame and _mockFrame._previewScale or 1
         local kind = _getKind and _getKind() or "party"
@@ -728,27 +725,66 @@ function GF.RefreshPreviewHandles()
     local conf = GF.GetConf(kind)
     local sc   = _mockFrame._previewScale or 1.6
 
-    -- Aura groups
+    -- Aura groups (dynamic icon count from config max)
     for _, grpKey in ipairs({"buff", "debuff", "externals"}) do
         local h = _handles[grpKey]
         if h then
             local ac = conf.auras and conf.auras[grpKey]
-            local anchor = (ac and ac.anchor) or h._defAnchor or "BOTTOMLEFT"
-            local offX   = floor(((ac and ac.x) or 0) * sc + 0.5)
-            local offY   = floor(((ac and ac.y) or 0) * sc + 0.5)
-            local sz     = floor(((ac and ac.size) or (grpKey == "externals" and 22 or 16)) * sc + 0.5)
-            local perRow = (ac and ac.perRow) or (grpKey == "externals" and 6 or 4)
-            local spacing = floor(((ac and ac.spacing) or 1) * sc + 0.5)
-            LayoutMockIcons(h, sz, spacing, perRow, anchor)
+            local anchor  = (ac and ac.anchor) or h._defAnchor or "BOTTOMLEFT"
+            local offX    = floor(((ac and ac.x) or 0) * sc + 0.5)
+            local offY    = floor(((ac and ac.y) or 0) * sc + 0.5)
+            local rawSz   = (ac and ac.size) or (grpKey == "externals" and 22 or 16)
+            local sz      = floor(rawSz * sc + 0.5)
+            local perRow  = (ac and ac.perRow) or (grpKey == "externals" and 6 or 4)
+            local rawSpc  = (ac and ac.spacing) or 1
+            local spacing = floor(rawSpc * sc + 0.5)
+            local maxIcons = (ac and ac.max) or (grpKey == "externals" and 2 or 6)
+            local en = not ac or ac.enabled ~= false
+
+            -- Ensure icon pool
+            local pool = h._grpIcons or {}
+            h._grpIcons = pool
+            local colors = AURA_GRP_COLORS[grpKey] or AURA_GRP_COLORS.buff
+
+            for i = 1, maxIcons do
+                local ic = pool[i]
+                if not ic then
+                    ic = h:CreateTexture(nil, "ARTWORK")
+                    pool[i] = ic
+                end
+                local c = colors[((i - 1) % #colors) + 1]
+                ic:SetColorTexture(c[1], c[2], c[3], 1)
+                ic:SetSize(sz, sz)
+                ic:Show()
+            end
+            for i = maxIcons + 1, #pool do
+                pool[i]:Hide()
+            end
+
+            -- Layout grid
+            local cols = min(perRow, maxIcons)
+            local rows = max(1, floor((maxIcons - 1) / cols) + 1)
+            local totalW = cols * sz + max(0, cols - 1) * spacing
+            local totalH = rows * sz + max(0, rows - 1) * spacing
+            h:SetSize(max(6, totalW), max(6, totalH))
+            for i = 1, maxIcons do
+                local ic = pool[i]
+                local col = (i - 1) % cols
+                local row = floor((i - 1) / cols)
+                ic:ClearAllPoints()
+                ic:SetPoint("TOPLEFT", h, "TOPLEFT",
+                    col * (sz + spacing), -(row * (sz + spacing)))
+            end
+
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
-            local en = not ac or ac.enabled ~= false
             h:SetShown(en)
             UpdateCoordDisplay(nil)
         end
     end
 
-    -- Status icons
+    -- Status icons (real textures from icon style, layer = z-order)
+    local baseLvl = _mockFrame:GetFrameLevel() + 1
     for _, spec in ipairs(STATUS_ICON_SPECS) do
         local h = _statusHandles[spec.key]
         if h then
@@ -756,11 +792,44 @@ function GF.RefreshPreviewHandles()
             local offX   = floor(((conf[spec.xKey]) or 0) * sc + 0.5)
             local offY   = floor(((conf[spec.yKey]) or 0) * sc + 0.5)
             local sz     = floor(((conf[spec.sizeKey]) or spec.defSize) * sc + 0.5)
+            local layer  = (conf[spec.layerKey]) or 1
             h:SetSize(max(6, sz), max(6, sz))
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
+            h:SetFrameLevel(baseLvl + layer)
             local en = conf[spec.key] ~= false
             h:SetShown(en)
+
+            -- Apply real texture
+            local tex = h._statusTex
+            if tex then
+                local sKey = spec.key
+                local l, r, t, b = 0, 1, 0, 1
+                local path
+                if sKey == "roleIcon" and GF.GetRoleTexture then
+                    path, l, r, t, b = GF.GetRoleTexture(kind, "HEALER")
+                elseif sKey == "leaderIcon" and GF.GetLeaderTexture then
+                    path, l, r, t, b = GF.GetLeaderTexture(kind)
+                elseif sKey == "assistIcon" and GF.GetAssistTexture then
+                    path, l, r, t, b = GF.GetAssistTexture(kind)
+                elseif sKey == "raidMarker" then
+                    path = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
+                    l, r, t, b = 0, 0.25, 0, 0.25 -- star marker
+                elseif sKey == "readyCheckIcon" then
+                    path = "Interface\\RaidFrame\\ReadyCheck-Ready"
+                elseif sKey == "summonIcon" then
+                    path = "Interface\\RaidFrame\\Raid-Icon-SummonPending"
+                elseif sKey == "resurrectIcon" then
+                    path = "Interface\\RaidFrame\\Raid-Icon-Rez"
+                elseif sKey == "phaseIcon" then
+                    path = "Interface\\TargetingFrame\\UI-PhasingIcon"
+                end
+                if path then
+                    tex:SetTexture(path)
+                    tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
+                    tex:SetVertexColor(1, 1, 1, 1)
+                end
+            end
         end
     end
 
@@ -772,8 +841,31 @@ function GF.RefreshPreviewHandles()
             local anchor = pa.anchor or "BOTTOM"
             local offX = floor(((pa.x) or 0) * sc + 0.5)
             local offY = floor(((pa.y) or 0) * sc + 0.5)
+            local paSz = floor(((pa.size) or 16) * sc + 0.5)
+            local paMax = (pa.max) or 3
+            local totalW = max(6, paSz * paMax + (paMax - 1) * 2)
+            h:SetSize(totalW, max(6, paSz))
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
+            -- Rebuild mock icons for private auras
+            if not h._paIcons then
+                h._paIcons = {}
+            end
+            for pi = 1, paMax do
+                local pic = h._paIcons[pi]
+                if not pic then
+                    pic = h:CreateTexture(nil, "ARTWORK")
+                    h._paIcons[pi] = pic
+                end
+                pic:SetSize(paSz, paSz)
+                pic:ClearAllPoints()
+                pic:SetPoint("TOPLEFT", h, "TOPLEFT", (pi - 1) * (paSz + 2), 0)
+                pic:SetColorTexture(0.20, 0.20, 0.25, 1)
+                pic:Show()
+            end
+            for pi = paMax + 1, #h._paIcons do
+                h._paIcons[pi]:Hide()
+            end
             h:SetShown(pa.enabled ~= false)
         end
     end
@@ -906,6 +998,23 @@ end
 function GF.PreviewScopeChanged()
     _classIdx = 1
     GF.RefreshPreviewBox()
+end
+
+------------------------------------------------------------------------
+-- Select a status icon handle by key (called from Options dropdown)
+-- Does NOT open section — assumes sicons is already open
+------------------------------------------------------------------------
+function GF._PreviewSelectStatusIcon(iconKey)
+    if not iconKey then return end
+    local h = _statusHandles[iconKey]
+    if not h then return end
+    -- Select without triggering section open
+    if _selected and _selected ~= h and _selected._selBorder then
+        _selected._selBorder:Hide()
+    end
+    _selected = h
+    if h._selBorder then h._selBorder:Show() end
+    UpdateCoordDisplay("sicons", iconKey, nil, nil)
 end
 
 ------------------------------------------------------------------------

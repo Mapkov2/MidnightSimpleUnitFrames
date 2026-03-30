@@ -83,6 +83,7 @@ local function MakeSliderWithEdit(parent, name, label, x, y, minV, maxV, step, w
         if ena then self:Enable(); self:SetAlpha(1) else self:Disable(); self:SetAlpha(0.4) end
         eb:SetEnabled(ena); mi:SetEnabled(ena); pl:SetEnabled(ena)
     end
+    if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(s) end
     return s
 end
 

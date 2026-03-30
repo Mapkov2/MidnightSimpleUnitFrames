@@ -181,6 +181,15 @@ local PARTY_DEFAULTS = {
     phaseAnchor       = "TOPLEFT",
     phaseX            = 0,
     phaseY            = 0,
+    -- Status icon layers (draw order: higher = on top)
+    roleIconLayer     = 1,
+    leaderIconLayer   = 2,
+    assistIconLayer   = 2,
+    raidMarkerLayer   = 3,
+    readyCheckLayer   = 4,
+    summonLayer       = 4,
+    resurrectLayer    = 4,
+    phaseLayer        = 3,
     -- Text offsets
     nameOffsetX       = 0,
     nameOffsetY       = 0,

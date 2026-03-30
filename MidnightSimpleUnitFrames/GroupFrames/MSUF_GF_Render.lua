@@ -762,6 +762,8 @@ function GF.RefreshVisuals()
             end
         end
     end
+    -- Options panel preview (drag-to-position mock frame)
+    if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
 end
 
 ------------------------------------------------------------------------

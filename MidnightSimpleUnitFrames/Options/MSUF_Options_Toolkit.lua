@@ -82,8 +82,10 @@ local function StyleSlider(slider)
     slider._msufStyled = true
     slider:SetHeight(SLIDER_THUMB_SIZE)
 
-    -- Hide default OptionsSliderTemplate visuals BUT keep the thumb
+    -- Get thumb FIRST, skip it in the hide loop
     local thumb = slider:GetThumbTexture()
+
+    -- Hide all template background/border textures EXCEPT thumb
     local _regions = { slider:GetRegions() }
     for i = 1, #_regions do
         local region = _regions[i]
@@ -92,7 +94,7 @@ local function StyleSlider(slider)
             region:Hide()
         end
     end
-    -- Hide Low/High min-max labels but keep the main Text (value/format label)
+    -- Hide Low/High labels
     local sName = slider.GetName and slider:GetName()
     if sName then
         local low  = _G[sName .. "Low"]
@@ -103,7 +105,7 @@ local function StyleSlider(slider)
     if slider.Low  then slider.Low:SetAlpha(0);  slider.Low:Hide()  end
     if slider.High then slider.High:SetAlpha(0); slider.High:Hide() end
 
-    -- Custom track (thin dark bar, centered)
+    -- Custom track
     local track = slider:CreateTexture(nil, "BACKGROUND", nil, -1)
     track:SetHeight(SLIDER_TRACK_H)
     track:SetPoint("LEFT", slider, "LEFT", 0, 0)
@@ -111,23 +113,28 @@ local function StyleSlider(slider)
     track:SetColorTexture(SLIDER_BG_R, SLIDER_BG_G, SLIDER_BG_B, 1)
     slider._msufTrack = track
 
-    -- Fill bar (colored portion left of thumb)
+    -- Fill bar
     local fill = slider:CreateTexture(nil, "BACKGROUND", nil, 0)
     fill:SetHeight(SLIDER_TRACK_H)
     fill:SetPoint("LEFT", track, "LEFT", 0, 0)
     fill:SetColorTexture(SLIDER_FILL_R, SLIDER_FILL_G, SLIDER_FILL_B, 1)
     slider._msufFill = fill
 
-    -- Custom thumb (round blue circle TGA) — must Show explicitly
-    if thumb then
+    -- Thumb: replace entirely via SetThumbTexture (bulletproof — WoW cannot reset)
+    if slider.SetThumbTexture then
+        slider:SetThumbTexture(SLIDER_THUMB_TEX)
+        local thumb2 = slider:GetThumbTexture()
+        if thumb2 then
+            thumb2:SetVertexColor(SLIDER_THUMB_R, SLIDER_THUMB_G, SLIDER_THUMB_B, 1)
+            thumb2:SetSize(SLIDER_THUMB_SIZE, SLIDER_THUMB_SIZE)
+        end
+    elseif thumb then
         thumb:SetTexture(SLIDER_THUMB_TEX)
         thumb:SetVertexColor(SLIDER_THUMB_R, SLIDER_THUMB_G, SLIDER_THUMB_B, 1)
         thumb:SetSize(SLIDER_THUMB_SIZE, SLIDER_THUMB_SIZE)
-        thumb:SetAlpha(1)
-        thumb:Show()
     end
 
-    -- Update fill width on value change
+    -- Fill width sync
     local function UpdateFill(self)
         local lo, hi = self:GetMinMaxValues()
         local range = hi - lo
@@ -144,7 +151,7 @@ local function StyleSlider(slider)
     slider:HookScript("OnShow",         function(self) UpdateFill(self) end)
     slider:HookScript("OnSizeChanged",  function(self) UpdateFill(self) end)
 
-    -- Hover: brighten track
+    -- Hover
     slider:HookScript("OnEnter", function(self)
         if self._msufTrack then self._msufTrack:SetColorTexture(0.16, 0.16, 0.20, 1) end
     end)

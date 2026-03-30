@@ -1245,6 +1245,7 @@ editModeButton:SetScript("OnClick", function()
         end
      end)
     local function MSUF_StyleSlider(slider)
+        if ns.MSUF_StyleSlider then return ns.MSUF_StyleSlider(slider) end
         if not slider or slider.MSUFStyled then  return end
         slider.MSUFStyled = true
         slider:SetHeight(14)

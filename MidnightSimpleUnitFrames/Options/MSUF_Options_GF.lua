@@ -391,8 +391,12 @@ function _G.MSUF_EnsureGFPanelBuilt()
         spec.set = function(v) origSet(K(), v) end
         local cb = UI.Check(spec)
         cb._msufSpec = spec
+        function cb:Refresh()
+            if spec.get then self:SetChecked(spec.get() and true or false) end
+            if self._msufToggleUpdate then self._msufToggleUpdate() end
+        end
         _allRefreshFns[#_allRefreshFns + 1] = function()
-            if cb:IsShown() and spec.get then cb:SetChecked(spec.get() and true or false) end
+            if cb:IsShown() then cb:Refresh() end
         end
         return cb
     end
@@ -404,13 +408,14 @@ function _G.MSUF_EnsureGFPanelBuilt()
         spec.set = function(v) origSet(K(), v) end
         local sl = UI.Slider(spec)
         if sl then
-            _allRefreshFns[#_allRefreshFns + 1] = function()
-                if sl:IsShown() and spec.get then
+            function sl:Refresh()
+                if spec.get then
                     local v = spec.get()
-                    if type(v) == "number" and sl.SetValueClean then
-                        sl:SetValueClean(v)
-                    end
+                    if type(v) == "number" and self.SetValueClean then self:SetValueClean(v) end
                 end
+            end
+            _allRefreshFns[#_allRefreshFns + 1] = function()
+                if sl:IsShown() then sl:Refresh() end
             end
         end
         return sl
@@ -1116,14 +1121,14 @@ function _G.MSUF_EnsureGFPanelBuilt()
     ----------------------------------------------------------------
     do
         local ICON_SPECS_UI = {
-            { label = "Role Icon",   enKey = "roleIcon",      sizeKey = "roleIconSize",      anchorKey = "roleIconAnchor",    xKey = "roleIconX",    yKey = "roleIconY",    defSize = 12 },
-            { label = "Leader",      enKey = "leaderIcon",     sizeKey = "leaderIconSize",    anchorKey = "leaderIconAnchor",  xKey = "leaderIconX",  yKey = "leaderIconY",  defSize = 12 },
-            { label = "Assist",      enKey = "assistIcon",     sizeKey = "assistIconSize",    anchorKey = "assistIconAnchor",  xKey = "assistIconX",  yKey = "assistIconY",  defSize = 12 },
-            { label = "Raid Marker", enKey = "raidMarker",     sizeKey = "raidMarkerSize",    anchorKey = "raidMarkerAnchor",  xKey = "raidMarkerX",  yKey = "raidMarkerY",  defSize = 14 },
-            { label = "Ready Check", enKey = "readyCheckIcon", sizeKey = "readyCheckSize",    anchorKey = "readyCheckAnchor",  xKey = "readyCheckX",  yKey = "readyCheckY",  defSize = 16 },
-            { label = "Summon",      enKey = "summonIcon",     sizeKey = "summonIconSize",    anchorKey = "summonAnchor",      xKey = "summonX",      yKey = "summonY",      defSize = 16 },
-            { label = "Resurrect",   enKey = "resurrectIcon",  sizeKey = "resurrectIconSize", anchorKey = "resurrectAnchor",   xKey = "resurrectX",   yKey = "resurrectY",   defSize = 16 },
-            { label = "Phase",       enKey = "phaseIcon",      sizeKey = "phaseIconSize",     anchorKey = "phaseAnchor",       xKey = "phaseX",       yKey = "phaseY",       defSize = 14 },
+            { label = "Role Icon",   enKey = "roleIcon",      sizeKey = "roleIconSize",      anchorKey = "roleIconAnchor",    xKey = "roleIconX",    yKey = "roleIconY",    layerKey = "roleIconLayer",      defSize = 12 },
+            { label = "Leader",      enKey = "leaderIcon",     sizeKey = "leaderIconSize",    anchorKey = "leaderIconAnchor",  xKey = "leaderIconX",  yKey = "leaderIconY",  layerKey = "leaderIconLayer",    defSize = 12 },
+            { label = "Assist",      enKey = "assistIcon",     sizeKey = "assistIconSize",    anchorKey = "assistIconAnchor",  xKey = "assistIconX",  yKey = "assistIconY",  layerKey = "assistIconLayer",    defSize = 12 },
+            { label = "Raid Marker", enKey = "raidMarker",     sizeKey = "raidMarkerSize",    anchorKey = "raidMarkerAnchor",  xKey = "raidMarkerX",  yKey = "raidMarkerY",  layerKey = "raidMarkerLayer",    defSize = 14 },
+            { label = "Ready Check", enKey = "readyCheckIcon", sizeKey = "readyCheckSize",    anchorKey = "readyCheckAnchor",  xKey = "readyCheckX",  yKey = "readyCheckY",  layerKey = "readyCheckLayer",    defSize = 16 },
+            { label = "Summon",      enKey = "summonIcon",     sizeKey = "summonIconSize",    anchorKey = "summonAnchor",      xKey = "summonX",      yKey = "summonY",      layerKey = "summonLayer",        defSize = 16 },
+            { label = "Resurrect",   enKey = "resurrectIcon",  sizeKey = "resurrectIconSize", anchorKey = "resurrectAnchor",   xKey = "resurrectX",   yKey = "resurrectY",   layerKey = "resurrectLayer",     defSize = 16 },
+            { label = "Phase",       enKey = "phaseIcon",      sizeKey = "phaseIconSize",     anchorKey = "phaseAnchor",       xKey = "phaseX",       yKey = "phaseY",       layerKey = "phaseLayer",         defSize = 14 },
         }
         local ANCHOR_ITEMS = {
             { key = "TOPLEFT",     label = "Top Left"     },
@@ -1137,7 +1142,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             { key = "RIGHT",       label = "Right"        },
         }
 
-        local box, body = AddSection(390, "Status Icons", false, "sicons")
+        local box, body = AddSection(440, "Status Icons", false, "sicons")
 
         -- Icon Style dropdown
         local styleDd = SDropdown({
@@ -1182,6 +1187,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v)
                 _selectedIdx = tonumber(v) or 1
                 if refreshIconControls then refreshIconControls() end
+                GF.RefreshVisuals()
+                local spec = ICON_SPECS_UI[_selectedIdx]
+                if spec and GF._PreviewSelectStatusIcon then
+                    GF._PreviewSelectStatusIcon(spec.enKey)
+                end
             end,
         })
 
@@ -1193,7 +1203,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.enKey) end,
             set = function(k, v)
                 local s = ICON_SPECS_UI[_selectedIdx]
-                if s then GF.GetConf(k)[s.enKey] = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end
+                if s then GF.GetConf(k)[s.enKey] = v; GF.RefreshVisuals() end
             end,
         })
 
@@ -1205,7 +1215,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.sizeKey) or 12 end,
             set = function(k, v)
                 local s = ICON_SPECS_UI[_selectedIdx]
-                if s then GF.GetConf(k)[s.sizeKey] = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end
+                if s then GF.GetConf(k)[s.sizeKey] = v; GF.RefreshVisuals() end
             end,
             formatText = function(v) return string.format("Size: %d", v) end,
         })
@@ -1218,7 +1228,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.anchorKey) or "CENTER" end,
             set = function(k, v)
                 local s = ICON_SPECS_UI[_selectedIdx]
-                if s then GF.GetConf(k)[s.anchorKey] = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end
+                if s then GF.GetConf(k)[s.anchorKey] = v; GF.RefreshVisuals() end
             end,
         })
 
@@ -1230,7 +1240,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.xKey) or 0 end,
             set = function(k, v)
                 local s = ICON_SPECS_UI[_selectedIdx]
-                if s then GF.GetConf(k)[s.xKey] = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end
+                if s then GF.GetConf(k)[s.xKey] = v; GF.RefreshVisuals() end
             end,
             formatText = function(v) return string.format("X Offset: %d", v) end,
         })
@@ -1243,9 +1253,22 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.yKey) or 0 end,
             set = function(k, v)
                 local s = ICON_SPECS_UI[_selectedIdx]
-                if s then GF.GetConf(k)[s.yKey] = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end
+                if s then GF.GetConf(k)[s.yKey] = v; GF.RefreshVisuals() end
             end,
             formatText = function(v) return string.format("Y Offset: %d", v) end,
+        })
+
+        -- Layer (draw order, higher = on top)
+        local layerSl = SSlider({
+            name = "MSUF_GF_SI_LayerSlider", parent = body, compact = true,
+            anchor = ySl, x = 0, y = -32,
+            min = 1, max = 8, step = 1, width = 270, default = 1,
+            get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.layerKey) or 1 end,
+            set = function(k, v)
+                local s = ICON_SPECS_UI[_selectedIdx]
+                if s then GF.GetConf(k)[s.layerKey] = v; GF.RefreshVisuals() end
+            end,
+            formatText = function(v) return string.format("Layer: %d (higher = on top)", v) end,
         })
 
         -- Refresh all controls when selector changes
@@ -1255,6 +1278,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             if anchorDd and anchorDd.Refresh then anchorDd:Refresh() end
             if xSl and xSl.Refresh then xSl:Refresh() end
             if ySl and ySl.Refresh then ySl:Refresh() end
+            if layerSl and layerSl.Refresh then layerSl:Refresh() end
         end
 
         -- Also refresh on scope switch

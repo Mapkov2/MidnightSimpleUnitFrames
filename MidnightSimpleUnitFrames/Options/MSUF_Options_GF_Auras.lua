@@ -204,6 +204,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             sl:SetValue(v)
             valFS:SetText(tostring(math_floor(v + 0.5)))
         end
+        if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(sl) end
         row._ctrl = sl
         return row
     end
