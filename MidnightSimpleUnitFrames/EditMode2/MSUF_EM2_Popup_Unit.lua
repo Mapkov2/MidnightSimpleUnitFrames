@@ -35,7 +35,7 @@ local function Apply()
     conf.powerOffsetX=San(pf.powerXBox and tonumber(pf.powerXBox:GetText()),0); conf.powerOffsetY=San(pf.powerYBox and tonumber(pf.powerYBox:GetText()),0)
     if pf._msufPowerAnchorVal then conf.powerTextAnchor=pf._msufPowerAnchorVal end
     if pf.powerSizeBox then local sz=tonumber(pf.powerSizeBox:GetText()); if sz then conf.powerFontSize=floor(max(6,min(48,sz))+0.5) end end
-    if pf.detachCB and pf.unit=="player" then
+    if pf.detachCB and (pf.unit=="player" or pf.unit=="target" or pf.unit=="focus") then
         conf.powerBarDetached=pf.detachCB:GetChecked() and true or false
         if conf.powerBarDetached then
             local dw=pf.dpbWBox and tonumber(pf.dpbWBox:GetText()); if dw then conf.detachedPowerBarWidth=floor(max(20,min(800,dw))+0.5) end
@@ -48,9 +48,13 @@ local function Apply()
         end
     end
     if type(_G.MSUF_UpdateAllFonts)=="function" then _G.MSUF_UpdateAllFonts() end
-    if type(ApplySettingsForKey)=="function" then ApplySettingsForKey(key)
-    elseif type(ApplyAllSettings)=="function" then ApplyAllSettings() end
+    local md=_G.MSUF_UFCore_MarkDirty; if type(md)=="function" and pf.parent then md(pf.parent, nil, true, "EM2:UnitPopup")
+    elseif type(_G.UpdateSimpleUnitFrame)=="function" and pf.parent then _G.UpdateSimpleUnitFrame(pf.parent) end
     if type(_G.MSUF_ForceTextLayoutForUnitKey)=="function" then _G.MSUF_ForceTextLayoutForUnitKey(key) end
+    -- Clear PBEmbedLayout stamp so width/height changes are re-applied
+    if pf.parent then
+        local cs=_G.MSUF_NS and _G.MSUF_NS.Cache; if cs and cs.ClearStamp then cs.ClearStamp(pf.parent, "PBEmbedLayout") end
+    end
     if type(_G.MSUF_ApplyPowerBarEmbedLayout)=="function" and pf.parent then _G.MSUF_ApplyPowerBarEmbedLayout(pf.parent) end
     if pf._refreshVisibility then pf._refreshVisibility() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
@@ -181,8 +185,12 @@ local function Build()
     -- Visibility refresh
     pf._refreshVisibility = function()
         local u = pf.unit
-        local canDetach = (u == "player")
+        local canDetach = (u == "player" or u == "target" or u == "focus")
+        local isPlayer = (u == "player")
         dC:SetShown(canDetach)
+        -- Sync/Anchor to Resource Bar: only meaningful for player
+        if pf.syncCPCB then pf.syncCPCB:SetShown(isPlayer) end
+        if pf.anchorCPCB then pf.anchorCPCB:SetShown(isPlayer) end
         -- Recalc scroll
         C_Timer.After(0, function()
             local t = pf._scrollChild and pf._scrollChild:GetTop()
