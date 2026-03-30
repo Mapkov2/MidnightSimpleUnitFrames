@@ -342,7 +342,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     local cpAnchorCDCheck    = BehCheck("MSUF_ClassPowerAnchorCooldownCheck", "Anchor to Essential Cooldown",  "classPowerAnchorToCooldown",  1, 1)
     local cpChargedCheck     = BehCheck("MSUF_ShowChargedCPCheck",            "Show empowered combo points",   "showChargedComboPoints",      1, 2)
     local cpTextCheck        = BehCheck("MSUF_ClassPowerTextCheck",           "Show resource text",            "classPowerShowText",          1, 3)
-    local cpRuneTimeCheck    = BehCheck("MSUF_RuneTimeTextCheck",             "Show rune time (per rune)",     "runeShowTimeText",            1, 4)
+    local cpRuneTimeCheck    = BehCheck("MSUF_RuneTimeTextCheck",             "Show rune time (per rune)",     "runeShowTime",            1, 4)
     local cpFillReverseCheck = BehCheck("MSUF_ClassPowerReverseCheck",        "Fill right-to-left",            "classPowerFillReverse",       1, 5)
 
     local cpEleMaelCheck     = BehCheck("MSUF_ClassPowerEleMaelCheck",        "Show Maelstrom bar (Ele)",      "showEleMaelstrom",            2, 1)
