@@ -5372,16 +5372,20 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
                 anchorToCP = true
             end
             -- CDM width sync (global setting overrides manual width)
-            local dpbWMode = b.detachedPowerBarWidthMode
-            local cdmName = dpbWMode and _DPB.CDM[dpbWMode]
-            if cdmName then
-                local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
-                -- Scale-compensated width (Sensei pattern): convert CDM coords → our bar coords
-                if cdm and cdm.IsShown and cdm:IsShown() then
-                    local scaledW = _G.MSUF_CDM_GetScaledWidth and _G.MSUF_CDM_GetScaledWidth(cdm, pb)
-                    if scaledW and scaledW >= 30 then dW = scaledW end
+            -- Per-unit sync flag takes precedence: when explicitly OFF, keep manual width.
+            -- CDM override only meaningful for player (target/focus have no class resources).
+            if unit == 'player' and conf.detachedPowerBarSyncClassPower ~= false then
+                local dpbWMode = b.detachedPowerBarWidthMode
+                local cdmName = dpbWMode and _DPB.CDM[dpbWMode]
+                if cdmName then
+                    local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
+                    -- Scale-compensated width (Sensei pattern): convert CDM coords → our bar coords
+                    if cdm and cdm.IsShown and cdm:IsShown() then
+                        local scaledW = _G.MSUF_CDM_GetScaledWidth and _G.MSUF_CDM_GetScaledWidth(cdm, pb)
+                        if scaledW and scaledW >= 30 then dW = scaledW end
+                    end
+                    -- If CDM hidden/unavailable, keep manual dW (from DB or frame width)
                 end
-                -- If CDM hidden/unavailable, keep manual dW (from DB or frame width)
             end
         end
     end

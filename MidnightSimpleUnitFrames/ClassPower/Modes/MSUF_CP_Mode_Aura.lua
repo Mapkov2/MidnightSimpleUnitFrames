@@ -50,14 +50,12 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
         if powerType == "SOUL_FRAGMENTS_VENG" then
             local getCastCount = C_Spell and C_Spell.GetSpellCastCount
             local rawCur = getCastCount and getCastCount(CPK.SPELL.SOUL_CLEAVE)
-            local cur = 0
-            local curSafe = (rawCur ~= nil and NotSecret(rawCur))
-            if curSafe then cur = tonumber(rawCur) or 0 end
+            if rawCur == nil then rawCur = 0 end
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
                     bar:SetMinMaxValues(i - 1, i)
-                    bar:SetValue(cur)
+                    bar:SetValue(rawCur)
                     bar:SetAlpha(filledAlpha)
                     bar:SetStatusBarColor(baseR, baseG, baseB, 1)
                     bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
@@ -66,7 +64,16 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
             local txt = CP.text
             if txt then
                 local showText = b.classPowerShowText == true
-                if showText and curSafe then txt:SetFormattedText("%d / %d", cur, maxPower); txt:Show() else txt:Hide() end
+                if showText then
+                    if NotSecret(rawCur) then
+                        txt:SetFormattedText("%d / %d", tonumber(rawCur) or 0, maxPower)
+                    else
+                        txt:SetText(rawCur)
+                    end
+                    txt:Show()
+                else
+                    txt:Hide()
+                end
             end
         else
             local cur = 0
@@ -84,6 +91,15 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                 local tipAuraID = E.TIP and E.TIP.AURA_ID
                 if tipAuraID and C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
                     local info = C_UnitAuras.GetPlayerAuraBySpellID(tipAuraID)
+                    if info then
+                        local apps = info.applications
+                        if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
+                    end
+                end
+            elseif powerType == "ICICLES" then
+                local icicleID = CPK.SPELL and CPK.SPELL.ICICLES
+                if icicleID and C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+                    local info = C_UnitAuras.GetPlayerAuraBySpellID(icicleID)
                     if info then
                         local apps = info.applications
                         if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
