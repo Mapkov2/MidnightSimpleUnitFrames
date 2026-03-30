@@ -89,6 +89,15 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                         if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
                     end
                 end
+            elseif powerType == "ICICLES" then
+                local icicleID = CPK.SPELL and CPK.SPELL.ICICLES
+                if icicleID and C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+                    local info = C_UnitAuras.GetPlayerAuraBySpellID(icicleID)
+                    if info then
+                        local apps = info.applications
+                        if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
+                    end
+                end
             end
             local mwAbove5 = (powerType == "MAELSTROM_WEAPON" and cur > CPK.THRESH.MW_SPEND)
             local abR, abG, abB

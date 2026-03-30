@@ -22,6 +22,7 @@ K.CPK = {
     SPEC = {
         DH_DEVOURER          = _G.SPEC_DEMONHUNTER_DEVOURER or 3,
         MAGE_ARCANE          = _G.SPEC_MAGE_ARCANE or 1,
+        MAGE_FROST           = 3,
         MONK_WINDWALKER      = _G.SPEC_MONK_WINDWALKER or 3,
         MONK_BREWMASTER      = _G.SPEC_MONK_BREWMASTER or 1,
         SHAMAN_ENHANCEMENT   = 2,
@@ -39,6 +40,7 @@ K.CPK = {
         VOID_METAMORPHOSIS     = (Constants and Constants.UnitPowerSpellIDs and Constants.UnitPowerSpellIDs.VOID_METAMORPHOSIS_SPELL_ID) or 1217607,
         MAELSTROM_WEAPON       = 344179,
         MAELSTROM_WEAPON_TALENT = 187880,
+        ICICLES                = 205473,
         NATURES_BALANCE        = 406890,
         SOLAR_ECLIPSE          = 1233346,
         LUNAR_ECLIPSE          = 1233272,
@@ -87,6 +89,11 @@ K.WL_SHARD_DELTAS = {
     [1] = { [686] = 1 },
     [2] = { [686] = 1, [264178] = 2 },
     [3] = { [29722] = 0.2, [116858] = -2.0 },
+}
+
+K.ICICLES = {
+    AURA_ID    = 205473,
+    MAX_STACKS = 5,
 }
 
 K.TIP = {
