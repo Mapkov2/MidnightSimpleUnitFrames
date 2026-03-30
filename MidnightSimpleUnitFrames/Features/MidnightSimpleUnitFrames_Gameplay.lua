@@ -772,6 +772,7 @@ local function MSUF_CombatState_SetClickThrough(active)
     if active then
         combatStateFrame._msufClickThroughActive = true
         combatStateFrame:EnableMouse(false)
+        combatStateFrame:Show()
         return
     end
 
@@ -779,10 +780,16 @@ local function MSUF_CombatState_SetClickThrough(active)
     local g = GetGameplayDBFast()
     -- Only allow mouse interaction when unlocked AND text is actually visible.
     -- Otherwise the invisible 220x60 frame at DIALOG strata steals clicks.
+    -- FIX: Also hide the frame entirely when text is not visible — EnableMouse(false)
+    -- alone does NOT prevent DIALOG-strata frames from blocking clicks in all cases.
     if g and not g.lockCombatState and combatStateText and combatStateText:IsShown() then
         combatStateFrame:EnableMouse(true)
+        combatStateFrame:Show()
     else
         combatStateFrame:EnableMouse(false)
+        if not combatStateText or not combatStateText:IsShown() then
+            combatStateFrame:Hide()
+        end
     end
 end
 
@@ -2358,9 +2365,13 @@ local function MSUF_Gameplay_ApplyCombatStateText(g)
             combatStateText:SetTextColor(er, eg, eb, 1)
             combatStateText:SetText(enterText)
             combatStateText:Show()
+            -- Parent must be visible for child FontString to render
+            combatStateFrame:Show()
+            combatStateFrame:EnableMouse(true)
         elseif combatStateText then
             combatStateText:SetText("")
             combatStateText:Hide()
+            combatStateFrame:Hide()
         end
     else
         if combatStateText then
