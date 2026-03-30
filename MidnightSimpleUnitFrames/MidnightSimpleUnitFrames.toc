@@ -166,6 +166,7 @@ GroupFrames\MSUF_GF_HealerBuffs.lua
 GroupFrames\MSUF_GF_HealerBuffs_Editor.lua
 GroupFrames\MSUF_GF_EM2.lua
 GroupFrames\MSUF_GF_EM2_Popup.lua
+GroupFrames\MSUF_GF_AuraPreview.lua
 
 # ═══════════════════════════════════════════════════════════════
 # OPTIONS

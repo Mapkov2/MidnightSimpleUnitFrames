@@ -179,6 +179,38 @@ function _G.MSUF_EnsureGFPanelBuilt()
     local RefreshScrollLayout
 
     ----------------------------------------------------------------
+    -- Preview box (drag-to-position mock frame)
+    ----------------------------------------------------------------
+    local _previewBox
+    local _sectionLookup = {} -- [sectionKey] = boxFrame
+
+    ----------------------------------------------------------------
+    -- Radio-section: only one section open at a time
+    ----------------------------------------------------------------
+    local sections = {}
+
+    local function CollapseAllExcept(keepBox)
+        for i = 1, #sections do
+            local b = sections[i]
+            if b ~= keepBox and not b._msufCollapsed then
+                b._msufCollapsed = true
+                if b._msufApplyCollapseState then b._msufApplyCollapseState() end
+            end
+        end
+    end
+
+    local function OpenSectionByKey(sectionKey)
+        if not sectionKey then return end
+        local box = _sectionLookup[sectionKey]
+        if not box then return end
+        CollapseAllExcept(box)
+        if box._msufCollapsed then
+            box._msufCollapsed = false
+            if box._msufApplyCollapseState then box._msufApplyCollapseState() end
+        end
+    end
+
+    ----------------------------------------------------------------
     -- Collapsible section helper
     ----------------------------------------------------------------
     local function MakeCollapsibleSection(parent, expandedH, titleText, defaultOpen)
@@ -227,6 +259,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
         body:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
         body:SetShown(defaultOpen)
         box._msufBody = body
+        box._msufChevron = chevron
+        box._msufHint = hint
 
         local function ApplyState()
             local open = not box._msufCollapsed
@@ -239,7 +273,12 @@ function _G.MSUF_EnsureGFPanelBuilt()
         end
 
         hdr:SetScript("OnClick", function()
-            box._msufCollapsed = not box._msufCollapsed
+            if box._msufCollapsed then
+                CollapseAllExcept(box)
+                box._msufCollapsed = false
+            else
+                box._msufCollapsed = true
+            end
             ApplyState()
         end)
         do
@@ -316,6 +355,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         RefreshAllWidgets()
         HideAllPreviews()
         ShowPreviewIfNeeded(kind)
+        if GF.PreviewScopeChanged then GF.PreviewScopeChanged() end
     end
 
     do
@@ -391,18 +431,27 @@ function _G.MSUF_EnsureGFPanelBuilt()
     ----------------------------------------------------------------
     -- All sections stacked below scopeBar
     ----------------------------------------------------------------
-    local sections = {}
-    local function AddSection(expandedH, title, defaultOpen)
+    local function AddSection(expandedH, title, defaultOpen, sectionKey)
         local box, body = MakeCollapsibleSection(scrollChild, expandedH, title, defaultOpen)
         sections[#sections + 1] = box
+        if sectionKey then _sectionLookup[sectionKey] = box end
         return box, body
+    end
+
+    ----------------------------------------------------------------
+    -- Preview box: drag-to-position mock frame (top of panel)
+    ----------------------------------------------------------------
+    if GF.CreatePreviewBox then
+        _previewBox = GF.CreatePreviewBox(scrollChild, K, function(sectionKey)
+            OpenSectionByKey(sectionKey)
+        end)
     end
 
     ----------------------------------------------------------------
     -- Section 1: General (default open)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(600, "General", true)
+        local box, body = AddSection(600, "General", false, "general")
 
         local enableChk = SCheck({
             name = "MSUF_GF_EnableCheck", parent = body,
@@ -720,7 +769,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 2: Health Colors (info only — controlled by global Colors menu)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(60, "Health Colors", false)
+        local box, body = AddSection(60, "Health Colors", false, "hcolor")
 
         local hint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         hint:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -8)
@@ -734,7 +783,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 3: Power Bar
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(280, "Power Bar", false)
+        local box, body = AddSection(280, "Power Bar", false, "power")
 
         local phSl = SSlider({
             name = "MSUF_GF_PowerHeightSlider", parent = body, compact = true,
@@ -795,7 +844,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 4: Text (Status Offsets)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(200, "Text", false)
+        local box, body = AddSection(200, "Text", false, "text")
 
         -- Redirect hint
         local hintFS = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -835,7 +884,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 5: Bars
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(170, "Bars", false)
+        local box, body = AddSection(170, "Bars", false, "bars")
 
         local fgLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         fgLbl:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -10)
@@ -882,7 +931,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 6: Border & Background
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(280, "Border & Background", false)
+        local box, body = AddSection(280, "Border & Background", false, "border")
 
         local enChk = SCheck({
             name = "MSUF_GF_BorderEnableCheck", parent = body,
@@ -934,7 +983,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 7: Range Fade
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(160, "Range Fade", false)
+        local box, body = AddSection(160, "Range Fade", false, "range")
 
         local enChk = SCheck({
             name = "MSUF_GF_RangeFadeEnableCheck", parent = body,
@@ -967,7 +1016,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 8: Indicators
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(400, "Indicators", false)
+        local box, body = AddSection(400, "Indicators", false, "indicators")
 
         -- Redirect: aggro/dispel/target are controlled from the Bars menu
         local hlRedirect = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1088,7 +1137,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             { key = "RIGHT",       label = "Right"        },
         }
 
-        local box, body = AddSection(390, "Status Icons", false)
+        local box, body = AddSection(390, "Status Icons", false, "sicons")
 
         -- Icon Style dropdown
         local styleDd = SDropdown({
@@ -1228,7 +1277,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 11: Health Overlays
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(120, "Health Overlays", false)
+        local box, body = AddSection(120, "Health Overlays", false, "overlay")
 
         local healPredChk = SCheck({
             name = "MSUF_GF_HealPredEnableCheck", parent = body,
@@ -1256,7 +1305,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 12: Tooltip
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(140, "Tooltip", false)
+        local box, body = AddSection(140, "Tooltip", false, "tooltip")
 
         local _modifierDd -- forward ref for show/hide toggle
 
@@ -1306,6 +1355,13 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
     RefreshScrollLayout = function()
         local y = -52  -- below scope bar
+        if _previewBox then
+            _previewBox:ClearAllPoints()
+            _previewBox:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, y)
+            _previewBox:SetWidth(SECTION_W)
+            if GF.ResizePreviewContainer then GF.ResizePreviewContainer() end
+            y = y - (_previewBox:GetHeight() or 200) - SECTION_GAP
+        end
         for i = 1, #sections do
             local box = sections[i]
             box:ClearAllPoints()
@@ -1322,6 +1378,9 @@ function _G.MSUF_EnsureGFPanelBuilt()
     _panel:SetScript("OnShow", function()
         ShowPreviewIfNeeded(_activeKind)
         RefreshAllWidgets()
+        if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+        if GF.ResizePreviewContainer then GF.ResizePreviewContainer() end
+        RefreshScrollLayout()
     end)
     _panel:SetScript("OnHide", function()
         HideAllPreviews()

@@ -119,150 +119,228 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end
 
     ----------------------------------------------------------------
-    -- Build one aura group section (Buffs / Debuffs / Externals)
+    -- Compact row layout helpers (mockup-style: label left, control right)
     ----------------------------------------------------------------
+    local ROW_H    = 26
+    local ROW_PAD  = 8
+    local ROW_W    = 640
+    local SL_W     = 180
+    local DD_W     = 130
+
+    local _auraRefreshFns = {}
+
+    local function RowFrame(parent, prevRow, topOfs)
+        local r = CreateFrame("Frame", nil, parent)
+        r:SetSize(ROW_W, ROW_H)
+        if prevRow then
+            r:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, -(topOfs or 0))
+        else
+            r:SetPoint("TOPLEFT", parent, "TOPLEFT", ROW_PAD, -(topOfs or 6))
+        end
+        return r
+    end
+
+    local function RowLabel(row, text)
+        local fs = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        fs:SetPoint("LEFT", row, "LEFT", 4, 0)
+        fs:SetText(text)
+        fs:SetTextColor(0.85, 0.85, 0.90, 1)
+        return fs
+    end
+
+    local function RowCheck(parent, prevRow, label, gk, key, topOfs)
+        local row = RowFrame(parent, prevRow, topOfs)
+        local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        cb:SetSize(22, 22)
+        cb:SetPoint("LEFT", row, "LEFT", 2, 0)
+        -- Label on the checkbox's built-in text (MSUF style)
+        local fs = cb.text or cb.Text
+        if fs and fs.SetText then
+            fs:SetText(label or "")
+            if fs.SetFontObject then fs:SetFontObject("GameFontHighlightSmall") end
+        end
+        cb:SetChecked(AV(gk, key) ~= false)
+        cb:SetScript("OnClick", function(self)
+            AW(gk, key, self:GetChecked() and true or false)
+            if self._msufToggleUpdate then self._msufToggleUpdate() end
+        end)
+        -- Apply MSUF style AFTER SetScript (HookScript adds to chain)
+        if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
+        if _G.MSUF_StyleToggleText then _G.MSUF_StyleToggleText(cb) end
+        if cb._msufToggleUpdate then cb._msufToggleUpdate() end
+        _auraRefreshFns[#_auraRefreshFns + 1] = function()
+            cb:SetChecked(AV(gk, key) ~= false)
+            if cb._msufToggleUpdate then cb._msufToggleUpdate() end
+        end
+        row._ctrl = cb
+        return row
+    end
+
+    local function RowSlider(parent, prevRow, label, gk, key, lo, hi, step, def, topOfs)
+        local row = RowFrame(parent, prevRow, topOfs)
+        RowLabel(row, label)
+        local valFS = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        valFS:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        valFS:SetJustifyH("RIGHT")
+        local sl = CreateFrame("Slider", nil, row, "OptionsSliderTemplate")
+        sl:SetSize(SL_W, 14)
+        sl:SetPoint("RIGHT", valFS, "LEFT", -8, 0)
+        sl:SetMinMaxValues(lo, hi)
+        sl:SetValueStep(step)
+        sl:SetObeyStepOnDrag(true)
+        sl:SetValue(AV(gk, key) or def)
+        -- Hide default slider text
+        if sl.Text then sl.Text:SetText("") end
+        if sl.Low  then sl.Low:SetText("")  end
+        if sl.High then sl.High:SetText("") end
+        valFS:SetText(tostring(math_floor((AV(gk, key) or def) + 0.5)))
+        sl:SetScript("OnValueChanged", function(self, v)
+            v = math_floor(v + 0.5)
+            valFS:SetText(tostring(v))
+            AW(gk, key, v)
+        end)
+        _auraRefreshFns[#_auraRefreshFns + 1] = function()
+            local v = AV(gk, key) or def
+            sl:SetValue(v)
+            valFS:SetText(tostring(math_floor(v + 0.5)))
+        end
+        row._ctrl = sl
+        return row
+    end
+
+    local function RowDropdown(parent, prevRow, label, gk, key, items, def, topOfs)
+        local row = RowFrame(parent, prevRow, topOfs)
+        RowLabel(row, label)
+        local btn = CreateFrame("Button", nil, row, "BackdropTemplate")
+        btn:SetSize(DD_W, 20)
+        btn:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        btn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        btn:SetBackdropColor(0.10, 0.14, 0.22, 1)
+        btn:SetBackdropBorderColor(0.20, 0.30, 0.50, 0.7)
+        local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        fs:SetTextColor(0.40, 0.67, 0.93, 1)
+        local function RefreshLabel()
+            local cur = AV(gk, key) or def
+            for _, item in ipairs(items) do
+                if item.key == cur then fs:SetText(item.label or item.key); return end
+            end
+            fs:SetText(tostring(cur))
+        end
+        RefreshLabel()
+        -- Simple click-cycle through items
+        btn:SetScript("OnClick", function()
+            local cur = AV(gk, key) or def
+            local idx = 1
+            for i, item in ipairs(items) do
+                if item.key == cur then idx = i; break end
+            end
+            idx = (idx % #items) + 1
+            AW(gk, key, items[idx].key)
+            RefreshLabel()
+        end)
+        btn:SetScript("OnEnter", function(self)
+            self:SetBackdropBorderColor(0.35, 0.50, 0.75, 1)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(label, 1, 1, 1)
+            for _, item in ipairs(items) do
+                local cur = AV(gk, key) or def
+                local pre = item.key == cur and "|cff66aaee> " or "  "
+                GameTooltip:AddLine(pre .. (item.label or item.key), 0.8, 0.8, 0.8)
+            end
+            GameTooltip:AddLine(" ", 0.5, 0.5, 0.5)
+            GameTooltip:AddLine("Click to cycle", 0.5, 0.5, 0.6)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function(self)
+            self:SetBackdropBorderColor(0.20, 0.30, 0.50, 0.7)
+            GameTooltip:Hide()
+        end)
+        _auraRefreshFns[#_auraRefreshFns + 1] = RefreshLabel
+        row._ctrl = btn
+        return row
+    end
+
+    local function RowValue(parent, prevRow, label, getFn, topOfs)
+        local row = RowFrame(parent, prevRow, topOfs)
+        RowLabel(row, label)
+        local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        fs:SetJustifyH("RIGHT")
+        fs:SetTextColor(0.75, 0.75, 0.82, 1)
+        local function Refresh() fs:SetText(tostring(getFn() or "0 / 0")) end
+        Refresh()
+        _auraRefreshFns[#_auraRefreshFns + 1] = Refresh
+        return row
+    end
+
+    local function RowDivider(parent, prevRow, topOfs)
+        local row = CreateFrame("Frame", nil, parent)
+        row:SetSize(ROW_W, 1)
+        if prevRow then
+            row:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, -(topOfs or 8))
+        else
+            row:SetPoint("TOPLEFT", parent, "TOPLEFT", ROW_PAD, -(topOfs or 8))
+        end
+        local t = row:CreateTexture(nil, "ARTWORK")
+        t:SetAllPoints()
+        t:SetColorTexture(0.30, 0.30, 0.35, 0.5)
+        return row
+    end
+
+    local function RowSubLabel(parent, prevRow, text, topOfs)
+        local row = CreateFrame("Frame", nil, parent)
+        row:SetSize(ROW_W, 18)
+        if prevRow then
+            row:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, -(topOfs or 6))
+        else
+            row:SetPoint("TOPLEFT", parent, "TOPLEFT", ROW_PAD, -(topOfs or 6))
+        end
+        local fs = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        fs:SetPoint("LEFT", row, "LEFT", 4, 0)
+        fs:SetText(text)
+        fs:SetTextColor(1, 0.82, 0, 1)
+        return row
+    end
+
+    ----------------------------------------------------------------
+    -- Build one aura group section (Buffs / Debuffs / Externals)
+    -- Compact row layout matching mockup design
+    ----------------------------------------------------------------
+    local _AURA_SEC_KEY = { buff = "buffs", debuff = "debuffs", externals = "ext" }
+
     local function BuildAuraGroupSection(groupKey, title, expandedH, extraWidgets)
-        local box, body = AddSection(expandedH, title, false)
+        local box, body = AddSection(expandedH, title, false, _AURA_SEC_KEY[groupKey])
+        local gk = groupKey
 
-        local enChk = SCheck({
-            name = "MSUF_GF_" .. groupKey .. "Enable", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
-            label = L["Enable"],
-            get = function(k) return AV(groupKey, "enabled") ~= false end,
-            set = function(k, v) AW(groupKey, "enabled", v and true or false) end,
-        })
+        -- Row chain
+        local r
+        r = RowCheck(body, nil, L["Enable"], gk, "enabled", 6)
+        r = RowDropdown(body, r, L["Anchor"], gk, "anchor", ANCHOR9, "BOTTOMLEFT")
+        r = RowDropdown(body, r, L["Growth"], gk, "growth", GROWTH8, "RIGHTDOWN")
+        r = RowValue(body, r, L["Offset X / Y"], function()
+            return tostring(AV(gk, "x") or 0) .. " / " .. tostring(AV(gk, "y") or 0)
+        end)
 
-        local lastWidget = enChk
+        r = RowDivider(body, r)
+        r = RowSlider(body, r, L["Icon size"], gk, "size", 8, 60, 1, 20, 4)
+        r = RowSlider(body, r, L["Per row"], gk, "perRow", 1, 16, 1, 4)
+        r = RowSlider(body, r, L["Max icons"], gk, "max", 1, 20, 1, 6)
+        r = RowSlider(body, r, L["Spacing"], gk, "spacing", 0, 10, 1, 1)
+
         if extraWidgets then
-            lastWidget = extraWidgets(body, lastWidget, groupKey) or lastWidget
+            r = extraWidgets(body, r, gk) or r
         end
 
-        local anchorDd = SDropdown({
-            name = "MSUF_GF_" .. groupKey .. "Anchor", parent = body,
-            anchor = lastWidget, x = -16, y = -10, width = 160,
-            items = ANCHOR9,
-            get = function(k) return AV(groupKey, "anchor") or "BOTTOMLEFT" end,
-            set = function(k, v) AW(groupKey, "anchor", v) end,
-        })
+        r = RowDivider(body, r)
+        r = RowSubLabel(body, r, L["Cooldown Text"])
+        r = RowCheck(body, r, L["Show Cooldown Text"], gk, "showCooldown", 0)
+        r = RowSlider(body, r, L["Font size"], gk, "cooldownSize", 6, 24, 1, 8)
+        r = RowDropdown(body, r, L["Anchor"], gk, "cooldownAnchor", ANCHOR9, "CENTER")
 
-        local growthDd = SDropdown({
-            name = "MSUF_GF_" .. groupKey .. "Growth", parent = body,
-            anchor = anchorDd, x = 0, y = -4, width = 160,
-            items = GROWTH8,
-            get = function(k) return AV(groupKey, "growth") or "RIGHTDOWN" end,
-            set = function(k, v) AW(groupKey, "growth", v) end,
-        })
-
-        local xSl = SSlider({
-            name = "MSUF_GF_" .. groupKey .. "X", parent = body, compact = true,
-            anchor = growthDd, x = 16, y = -10,
-            min = -200, max = 200, step = 1, width = 200, default = 0,
-            get = function(k) return AV(groupKey, "x") or 0 end,
-            set = function(k, v) AW(groupKey, "x", v) end,
-            formatText = function(v) return string.format("X: %d", v) end,
-        })
-
-        local ySl = SSlider({
-            name = "MSUF_GF_" .. groupKey .. "Y", parent = body, compact = true,
-            anchor = xSl, x = 0, y = -32,
-            min = -200, max = 200, step = 1, width = 200, default = 0,
-            get = function(k) return AV(groupKey, "y") or 0 end,
-            set = function(k, v) AW(groupKey, "y", v) end,
-            formatText = function(v) return string.format("Y: %d", v) end,
-        })
-
-        local sizeSl = SSlider({
-            name = "MSUF_GF_" .. groupKey .. "Size", parent = body, compact = true,
-            anchor = ySl, x = 0, y = -32,
-            min = 8, max = 60, step = 1, width = 200, default = 20,
-            get = function(k) return AV(groupKey, "size") or 20 end,
-            set = function(k, v) AW(groupKey, "size", v) end,
-            formatText = function(v) return string.format(L["Icon Size: %d"], v) end,
-        })
-
-        local perRowSl = SSlider({
-            name = "MSUF_GF_" .. groupKey .. "PerRow", parent = body, compact = true,
-            anchor = sizeSl, x = 0, y = -32,
-            min = 1, max = 16, step = 1, width = 200, default = 4,
-            get = function(k) return AV(groupKey, "perRow") or 4 end,
-            set = function(k, v) AW(groupKey, "perRow", v) end,
-            formatText = function(v) return string.format(L["Per Row: %d"], v) end,
-        })
-
-        local maxSl = SSlider({
-            name = "MSUF_GF_" .. groupKey .. "Max", parent = body, compact = true,
-            anchor = perRowSl, x = 0, y = -32,
-            min = 1, max = 20, step = 1, width = 200, default = 6,
-            get = function(k) return AV(groupKey, "max") or 6 end,
-            set = function(k, v) AW(groupKey, "max", v) end,
-            formatText = function(v) return string.format(L["Max: %d"], v) end,
-        })
-
-        local spaceSl = SSlider({
-            name = "MSUF_GF_" .. groupKey .. "Spacing", parent = body, compact = true,
-            anchor = maxSl, x = 0, y = -32,
-            min = 0, max = 10, step = 1, width = 200, default = 1,
-            get = function(k) return AV(groupKey, "spacing") or 1 end,
-            set = function(k, v) AW(groupKey, "spacing", v) end,
-            formatText = function(v) return string.format(L["Spacing: %d"], v) end,
-        })
-
-        -- Divider
-        local divider = body:CreateTexture(nil, "ARTWORK")
-        divider:SetHeight(1)
-        divider:SetColorTexture(0.3, 0.3, 0.3, 0.4)
-        divider:SetPoint("TOPLEFT", spaceSl, "BOTTOMLEFT", 0, -12)
-        divider:SetPoint("RIGHT", body, "RIGHT", -16, 0)
-
-        local cdLabel = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        cdLabel:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -8)
-        cdLabel:SetText(L["Cooldown Text"])
-        cdLabel:SetTextColor(1, 0.82, 0)
-
-        local cdChk = SCheck({
-            name = "MSUF_GF_" .. groupKey .. "CdEnable", parent = body,
-            anchor = cdLabel, x = 0, y = -6,
-            label = L["Show Cooldown Text"],
-            get = function(k) return AV(groupKey, "showCooldown") ~= false end,
-            set = function(k, v) AW(groupKey, "showCooldown", v) end,
-        })
-
-        local cdAnchorDd = SDropdown({
-            name = "MSUF_GF_" .. groupKey .. "CdAnchor", parent = body,
-            anchor = cdChk, x = -16, y = -6, width = 140,
-            items = ANCHOR9,
-            get = function(k) return AV(groupKey, "cooldownAnchor") or "CENTER" end,
-            set = function(k, v) AW(groupKey, "cooldownAnchor", v) end,
-        })
-
-        local cdSizeSl = SSlider({
-            name = "MSUF_GF_" .. groupKey .. "CdSize", parent = body, compact = true,
-            anchor = cdAnchorDd, x = 16, y = -6,
-            min = 6, max = 24, step = 1, width = 160, default = 8,
-            get = function(k) return AV(groupKey, "cooldownSize") or 8 end,
-            set = function(k, v) AW(groupKey, "cooldownSize", v) end,
-            formatText = function(v) return string.format(L["CD Size: %d"], v) end,
-        })
-
-        -- Divider 2
-        local divider2 = body:CreateTexture(nil, "ARTWORK")
-        divider2:SetHeight(1)
-        divider2:SetColorTexture(0.3, 0.3, 0.3, 0.4)
-        divider2:SetPoint("TOPLEFT", cdSizeSl, "BOTTOMLEFT", 0, -12)
-        divider2:SetPoint("RIGHT", body, "RIGHT", -16, 0)
-
-        local stackLabel = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        stackLabel:SetPoint("TOPLEFT", divider2, "BOTTOMLEFT", 0, -8)
-        stackLabel:SetText(L["Stack Count"])
-        stackLabel:SetTextColor(1, 0.82, 0)
-
-        SCheck({
-            name = "MSUF_GF_" .. groupKey .. "StackEnable", parent = body,
-            anchor = stackLabel, x = 0, y = -6,
-            label = L["Show Stack Count"],
-            get = function(k) return AV(groupKey, "showStacks") ~= false end,
-            set = function(k, v) AW(groupKey, "showStacks", v) end,
-        })
+        r = RowDivider(body, r)
+        r = RowSubLabel(body, r, L["Stack Count"])
+        r = RowCheck(body, r, L["Show Stack Count"], gk, "showStacks", 0)
 
         return box, body
     end
@@ -271,7 +349,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Spell Indicators (default open)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(640, L["Spell Indicators"], true)
+        local box, body = AddSection(640, L["Spell Indicators"], false, "si")
 
         SCheck({
             name = "MSUF_GF_SIEnable", parent = body,
@@ -1091,40 +1169,33 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Buffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("buff", L["Buffs"], 720, function(body, lastWidget, gk)
-        return SDropdown({
-            name = "MSUF_GF_BuffFilter", parent = body,
-            anchor = lastWidget, x = -16, y = -6, width = 200,
-            items = FILTER_MODES,
-            get = function(k) return AV(gk, "filterMode") or "RAID_PLAYER" end,
-            set = function(k, v) AW(gk, "filterMode", v) end,
-        })
+    BuildAuraGroupSection("buff", L["Buffs"], 500, function(body, prevRow, gk)
+        return RowDropdown(body, prevRow, L["Filter"], gk, "filterMode", FILTER_MODES, "RAID_PLAYER")
     end)
 
     ----------------------------------------------------------------
     -- Section: Debuffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("debuff", L["Debuffs"], 720, function(body, lastWidget, gk)
-        return SCheck({
-            name = "MSUF_GF_DebuffDispelBorder", parent = body,
-            anchor = lastWidget, x = 0, y = -6,
-            label = L["Show Dispel Type Border"],
-            get = function(k) return AV(gk, "showDispelBorder") ~= false end,
-            set = function(k, v) AW(gk, "showDispelBorder", v) end,
-        })
+    BuildAuraGroupSection("debuff", L["Debuffs"], 500, function(body, prevRow, gk)
+        return RowCheck(body, prevRow, L["Show Dispel Type Border"], gk, "showDispelBorder")
     end)
 
     ----------------------------------------------------------------
     -- Section: Externals
     ----------------------------------------------------------------
-    BuildAuraGroupSection("externals", L["Externals"], 680)
+    BuildAuraGroupSection("externals", L["Externals"], 480)
+
+    -- Register all compact row refresh functions
+    for i = 1, #_auraRefreshFns do
+        refreshFns[#refreshFns + 1] = _auraRefreshFns[i]
+    end
 
 
     ----------------------------------------------------------------
     -- Section: Private Auras
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(480, L["Private Auras"], false)
+        local box, body = AddSection(480, L["Private Auras"], false, "priv")
 
         SCheck({
             name = "MSUF_GF_PAEnable", parent = body,
