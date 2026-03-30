@@ -50,14 +50,14 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
         if powerType == "SOUL_FRAGMENTS_VENG" then
             local getCastCount = C_Spell and C_Spell.GetSpellCastCount
             local rawCur = getCastCount and getCastCount(CPK.SPELL.SOUL_CLEAVE)
-            local cur = 0
-            local curSafe = (rawCur ~= nil and NotSecret(rawCur))
-            if curSafe then cur = tonumber(rawCur) or 0 end
+            -- SECRET-SAFE: rawCur may be secret in 12.0.
+            -- Pass raw value to C-side SetValue (handles secrets internally).
+            -- Only tonumber for text display after NotSecret guard.
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
                     bar:SetMinMaxValues(i - 1, i)
-                    bar:SetValue(cur)
+                    bar:SetValue(rawCur or 0)
                     bar:SetAlpha(filledAlpha)
                     bar:SetStatusBarColor(baseR, baseG, baseB, 1)
                     bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
@@ -66,7 +66,8 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
             local txt = CP.text
             if txt then
                 local showText = b.classPowerShowText == true
-                if showText and curSafe then txt:SetFormattedText("%d / %d", cur, maxPower); txt:Show() else txt:Hide() end
+                local curSafe = (rawCur ~= nil and NotSecret(rawCur))
+                if showText and curSafe then txt:SetFormattedText("%d / %d", tonumber(rawCur) or 0, maxPower); txt:Show() else txt:Hide() end
             end
         else
             local cur = 0
