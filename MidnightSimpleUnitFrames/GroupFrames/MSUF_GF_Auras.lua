@@ -104,8 +104,37 @@ local DISPEL_COLORS = {
 }
 
 ------------------------------------------------------------------------
--- Icon creation (zero-alloc pool pattern)
+-- Icon creation (global recycler pool — avoids CreateFrame in steady-state)
 ------------------------------------------------------------------------
+local _iconRecycler = {}
+local _iconRecyclerN = 0
+local _ICON_RECYCLE_MAX = 32
+
+local function AcquireAuraIcon(parent, size)
+    if _iconRecyclerN > 0 then
+        local icon = _iconRecycler[_iconRecyclerN]
+        _iconRecycler[_iconRecyclerN] = nil
+        _iconRecyclerN = _iconRecyclerN - 1
+        icon:SetParent(parent)
+        icon:SetSize(size, size)
+        icon:SetBackdropBorderColor(0, 0, 0, 1)
+        if icon.texture then icon.texture:SetTexCoord(0, 1, 0, 1); icon.texture:SetDesaturated(false) end
+        if icon.cooldown then icon.cooldown:Clear() end
+        if icon.count then icon.count:SetText(""); icon.count:Hide() end
+        return icon
+    end
+    return nil
+end
+
+local function RecycleAuraIcon(icon)
+    if not icon or _iconRecyclerN >= _ICON_RECYCLE_MAX then return false end
+    icon:Hide()
+    icon:ClearAllPoints()
+    _iconRecyclerN = _iconRecyclerN + 1
+    _iconRecycler[_iconRecyclerN] = icon
+    return true
+end
+
 local function CreateAuraIcon(parent, size)
     local icon = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     icon:SetSize(size, size)
@@ -155,7 +184,7 @@ local function EnsurePool(f, groupKey, count, size, parent)
     local pool = f[poolKey]
     for i = 1, count do
         if not pool[i] then
-            pool[i] = CreateAuraIcon(parent, size)
+            pool[i] = AcquireAuraIcon(parent, size) or CreateAuraIcon(parent, size)
         end
         local ic = pool[i]
         ic:SetSize(size, size)
@@ -184,7 +213,6 @@ local function EnsureContainer(f, groupKey)
         local parent = f.statusIconLayer or f.barGroup or f
         cont = CreateFrame("Frame", nil, parent)
         cont:EnableMouse(false)
-        cont:SetFrameLevel(parent:GetFrameLevel() + 4)
         f[cKey] = cont
     end
     return cont
@@ -332,6 +360,11 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     container:ClearAllPoints()
     container:SetPoint(anchor, parent, anchor, gcfg.x or 0, gcfg.y or 0)
     container:SetSize(1, 1) -- auto-sized by icon positions
+    local wantLvl = parent:GetFrameLevel() + (gcfg.layer or 5)
+    if container._msufCachedLvl ~= wantLvl then
+        container._msufCachedLvl = wantLvl
+        container:SetFrameLevel(wantLvl)
+    end
     container:Show()
 
     local pool = EnsurePool(f, groupKey, maxIcons, iconSize, container)
@@ -478,6 +511,9 @@ do
             container:ClearAllPoints()
             container:SetPoint(anchor, parent, anchor, buffCfg.x or 0, buffCfg.y or 0)
             container:SetSize(1, 1)
+            do local wl = parent:GetFrameLevel() + (buffCfg.layer or 5)
+                if container._msufCachedLvl ~= wl then container._msufCachedLvl = wl; container:SetFrameLevel(wl) end
+            end
             container:Show()
             local pool = EnsurePool(f, "buff", maxShow, size, container)
             for i = 1, maxShow do
@@ -511,6 +547,9 @@ do
             container:ClearAllPoints()
             container:SetPoint(anchor, parent, anchor, debCfg.x or 0, debCfg.y or 0)
             container:SetSize(1, 1)
+            do local wl = parent:GetFrameLevel() + (debCfg.layer or 6)
+                if container._msufCachedLvl ~= wl then container._msufCachedLvl = wl; container:SetFrameLevel(wl) end
+            end
             container:Show()
             local pool = EnsurePool(f, "debuff", maxShow, size, container)
             for i = 1, maxShow do
@@ -552,6 +591,9 @@ do
             container:ClearAllPoints()
             container:SetPoint(anchor, parent, anchor, extCfg.x or 0, extCfg.y or 0)
             container:SetSize(1, 1)
+            do local wl = parent:GetFrameLevel() + (extCfg.layer or 7)
+                if container._msufCachedLvl ~= wl then container._msufCachedLvl = wl; container:SetFrameLevel(wl) end
+            end
             container:Show()
             local pool = EnsurePool(f, "externals", maxShow, size, container)
             for i = 1, maxShow do

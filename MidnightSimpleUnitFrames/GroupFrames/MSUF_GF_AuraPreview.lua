@@ -663,6 +663,7 @@ function GF.RebuildSIHandles()
             h._siTex:SetSize(ssz, ssz)
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
+            h:SetFrameLevel(_mockFrame:GetFrameLevel() + (siCfg.layer or 9))
             h:Show()
 
             -- Drag writes to per-spell config (unscaled)
@@ -778,6 +779,7 @@ function GF.RefreshPreviewHandles()
 
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
+            h:SetFrameLevel(_mockFrame:GetFrameLevel() + (ac and ac.layer or (grpKey == "buff" and 5 or (grpKey == "debuff" and 6 or 7))))
             h:SetShown(en)
             UpdateCoordDisplay(nil)
         end
@@ -847,7 +849,7 @@ function GF.RefreshPreviewHandles()
             h:SetSize(totalW, max(6, paSz))
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
-            -- Rebuild mock icons for private auras
+            h:SetFrameLevel(_mockFrame:GetFrameLevel() + (pa.layer or 8))
             if not h._paIcons then
                 h._paIcons = {}
             end

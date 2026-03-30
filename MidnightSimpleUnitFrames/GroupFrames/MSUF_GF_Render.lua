@@ -311,14 +311,20 @@ local function ApplyFonts(f, kind)
     local hpSize     = conf.hpFontSize    or 10
     local powSize    = conf.powerFontSize or 9
 
-    -- Skip redundant SetFont (path+size compare)
+    -- Diff-gate: skip SetTextColor when font color unchanged
+    local colorChanged = (f._msufGFCachedFR ~= fr or f._msufGFCachedFG ~= fg or f._msufGFCachedFB ~= fb)
+    if colorChanged then
+        f._msufGFCachedFR, f._msufGFCachedFG, f._msufGFCachedFB = fr, fg, fb
+    end
+
+    -- Skip redundant SetFont (path+size compare) + SetTextColor (color compare)
     local function set(fs, size, r, g, b, a)
         if not fs then return end
         local curP, curS = fs:GetFont()
         if curP ~= fontPath or curS ~= size then
             fs:SetFont(fontPath, size, fontFlags)
         end
-        if r then fs:SetTextColor(r, g, b, a or 1) end
+        if r and colorChanged then fs:SetTextColor(r, g, b, a or 1) end
         fs:SetShadowOffset(0, 0)
     end
 
@@ -560,20 +566,21 @@ end
 -- Apply: icon layout (spec-driven)
 ------------------------------------------------------------------------
 local ICON_SPECS = {
-    { field="roleIcon",      enKey="roleIcon",      sizeKey="roleIconSize",      anchorKey="roleIconAnchor",    xKey="roleIconX",    yKey="roleIconY",    defAnchor="TOPLEFT",    defSize=12 },
-    { field="leaderIcon",    enKey="leaderIcon",     sizeKey="leaderIconSize",    anchorKey="leaderIconAnchor",  xKey="leaderIconX",  yKey="leaderIconY",  defAnchor="TOPRIGHT",   defSize=12 },
-    { field="assistIcon",    enKey="assistIcon",     sizeKey="assistIconSize",    anchorKey="assistIconAnchor",  xKey="assistIconX",  yKey="assistIconY",  defAnchor="TOPRIGHT",   defSize=12 },
-    { field="raidIcon",      enKey="raidMarker",     sizeKey="raidMarkerSize",    anchorKey="raidMarkerAnchor",  xKey="raidMarkerX",  yKey="raidMarkerY",  defAnchor="CENTER",     defSize=14 },
-    { field="readyCheckIcon",enKey="readyCheckIcon", sizeKey="readyCheckSize",    anchorKey="readyCheckAnchor",  xKey="readyCheckX",  yKey="readyCheckY",  defAnchor="CENTER",     defSize=16 },
-    { field="summonIcon",    enKey="summonIcon",     sizeKey="summonIconSize",    anchorKey="summonAnchor",      xKey="summonX",      yKey="summonY",      defAnchor="CENTER",     defSize=16 },
-    { field="resurrectIcon", enKey="resurrectIcon",  sizeKey="resurrectIconSize", anchorKey="resurrectAnchor",   xKey="resurrectX",   yKey="resurrectY",   defAnchor="CENTER",     defSize=16 },
-    { field="phaseIcon",     enKey="phaseIcon",      sizeKey="phaseIconSize",     anchorKey="phaseAnchor",       xKey="phaseX",       yKey="phaseY",       defAnchor="TOPLEFT",    defSize=14 },
+    { field="roleIcon",      enKey="roleIcon",      sizeKey="roleIconSize",      anchorKey="roleIconAnchor",    xKey="roleIconX",    yKey="roleIconY",    layerKey="roleIconLayer",    defAnchor="TOPLEFT",    defSize=12, defLayer=1 },
+    { field="leaderIcon",    enKey="leaderIcon",     sizeKey="leaderIconSize",    anchorKey="leaderIconAnchor",  xKey="leaderIconX",  yKey="leaderIconY",  layerKey="leaderIconLayer",  defAnchor="TOPRIGHT",   defSize=12, defLayer=2 },
+    { field="assistIcon",    enKey="assistIcon",     sizeKey="assistIconSize",    anchorKey="assistIconAnchor",  xKey="assistIconX",  yKey="assistIconY",  layerKey="assistIconLayer",  defAnchor="TOPRIGHT",   defSize=12, defLayer=2 },
+    { field="raidIcon",      enKey="raidMarker",     sizeKey="raidMarkerSize",    anchorKey="raidMarkerAnchor",  xKey="raidMarkerX",  yKey="raidMarkerY",  layerKey="raidMarkerLayer",  defAnchor="CENTER",     defSize=14, defLayer=3 },
+    { field="readyCheckIcon",enKey="readyCheckIcon", sizeKey="readyCheckSize",    anchorKey="readyCheckAnchor",  xKey="readyCheckX",  yKey="readyCheckY",  layerKey="readyCheckLayer",  defAnchor="CENTER",     defSize=16, defLayer=4 },
+    { field="summonIcon",    enKey="summonIcon",     sizeKey="summonIconSize",    anchorKey="summonAnchor",      xKey="summonX",      yKey="summonY",      layerKey="summonLayer",      defAnchor="CENTER",     defSize=16, defLayer=4 },
+    { field="resurrectIcon", enKey="resurrectIcon",  sizeKey="resurrectIconSize", anchorKey="resurrectAnchor",   xKey="resurrectX",   yKey="resurrectY",   layerKey="resurrectLayer",   defAnchor="CENTER",     defSize=16, defLayer=4 },
+    { field="phaseIcon",     enKey="phaseIcon",      sizeKey="phaseIconSize",     anchorKey="phaseAnchor",       xKey="phaseX",       yKey="phaseY",       layerKey="phaseLayer",       defAnchor="TOPLEFT",    defSize=14, defLayer=3 },
 }
 GF.ICON_SPECS = ICON_SPECS
 
 local function ApplyIconLayout(f, kind)
     local conf   = GF.GetConf(kind)
     local anchor = f.statusIconLayer or f.barGroup or f
+    local baseLvl = anchor:GetFrameLevel()
 
     for i = 1, #ICON_SPECS do
         local s = ICON_SPECS[i]
@@ -584,6 +591,9 @@ local function ApplyIconLayout(f, kind)
             icon:SetSize(sz, sz)
             local pt = conf[s.anchorKey] or s.defAnchor
             icon:SetPoint(pt, anchor, pt, conf[s.xKey] or 0, conf[s.yKey] or 0)
+            if icon.SetFrameLevel then
+                icon:SetFrameLevel(baseLvl + (conf[s.layerKey] or s.defLayer))
+            end
         end
     end
 end

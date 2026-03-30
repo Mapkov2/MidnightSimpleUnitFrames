@@ -122,7 +122,7 @@ function GF.ApplyPrivateAuras(f, unit)
 
     -- Read from nested privateAuras table (migrated) or flat keys (legacy)
     local pa = conf.privateAuras
-    local paEnabled, paMax, paSize, paAnchor, paX, paY, paCountdown, paDirection, paNumbers
+    local paEnabled, paMax, paSize, paAnchor, paX, paY, paCountdown, paDirection, paNumbers, paLayer
     if pa and pa.enabled ~= nil then
         paEnabled   = pa.enabled
         paMax       = pa.max or 4
@@ -133,6 +133,7 @@ function GF.ApplyPrivateAuras(f, unit)
         paY         = pa.y or 0
         paCountdown = pa.showCountdown ~= false
         paNumbers   = pa.showNumbers == true
+        paLayer     = pa.layer or 8
     else
         paEnabled   = conf.privateAurasEnabled
         paMax       = conf.privateAuraMax or 4
@@ -143,6 +144,7 @@ function GF.ApplyPrivateAuras(f, unit)
         paY         = conf.privateAuraY or 0
         paCountdown = conf.privateAuraCountdown ~= false
         paNumbers   = false
+        paLayer     = 8
     end
 
     -- Feature disabled or API unavailable → clear
@@ -204,7 +206,7 @@ function GF.ApplyPrivateAuras(f, unit)
         container:SetSize(totalPrimary, iconSz)
     end
     container:SetPoint(pt, parent, pt, ox, oy)
-    container:SetFrameLevel(parent:GetFrameLevel() + 6)
+    container:SetFrameLevel(parent:GetFrameLevel() + paLayer)
     container:Show()
 
     -- Store diff keys
@@ -370,7 +372,7 @@ function GF.PreviewPrivateAuras(f, kind)
     if isVert then container:SetSize(iconSz, totalP)
     else container:SetSize(totalP, iconSz) end
     container:SetPoint(pt, parent, pt, ox, oy)
-    container:SetFrameLevel(parent:GetFrameLevel() + 6)
+    container:SetFrameLevel(parent:GetFrameLevel() + (pa.layer or 8))
     container:Show()
 
     local step = iconSz + spacing

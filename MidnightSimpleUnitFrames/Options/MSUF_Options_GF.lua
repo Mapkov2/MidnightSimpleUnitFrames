@@ -292,7 +292,60 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Scope tabs (Party / Raid)
+    -- Copy All Settings utility (used by scope bar button)
+    ----------------------------------------------------------------
+    local function _GFDeepCopy(src)
+        if type(src) ~= "table" then return src end
+        local dst = {}
+        for k, v in pairs(src) do dst[k] = _GFDeepCopy(v) end
+        return dst
+    end
+
+    local _COPY_EXCLUDE = {
+        offsetX = true, offsetY = true, point = true,
+        positionMode = true, _hlMigrated = true,
+    }
+
+    local function _GFDoCopyAll(srcKind, dstKind)
+        local srcConf = GF.GetConf(srcKind)
+        local dstConf = GF.GetConf(dstKind)
+        if not srcConf or not dstConf then return end
+        for k, v in pairs(srcConf) do
+            if not _COPY_EXCLUDE[k] then
+                if type(v) == "table" then
+                    dstConf[k] = _GFDeepCopy(v)
+                else
+                    dstConf[k] = v
+                end
+            end
+        end
+        if GF.RebuildAll then GF.RebuildAll() end
+        GF.RefreshVisuals()
+        RefreshAllWidgets()
+        if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+        if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
+    end
+
+    if not StaticPopupDialogs["MSUF_COPY_GF_SETTINGS"] then
+        StaticPopupDialogs["MSUF_COPY_GF_SETTINGS"] = {
+            text = "MSUF: Copy ALL Group Frame settings from %s to %s?\nPosition will not be changed.",
+            button1 = "Copy",
+            button2 = "Cancel",
+            OnAccept = function(self, data)
+                if data and data.src and data.dst then
+                    _GFDoCopyAll(data.src, data.dst)
+                    print("|cff00ff00MSUF:|r Copied " .. data.src .. " settings to " .. data.dst .. ".")
+                end
+            end,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+    end
+
+    ----------------------------------------------------------------
+    -- Scope tabs (Party / Raid) + Copy button
     ----------------------------------------------------------------
     local scopeBar = CreateFrame("Frame", nil, scrollChild, "BackdropTemplate")
     scopeBar:SetSize(SECTION_W, 32)
@@ -378,6 +431,50 @@ function _G.MSUF_EnsureGFPanelBuilt()
             scopeBtns[kind] = btn
             prevBtn = btn
         end
+    end
+    -- Copy button (right side of scope bar, label changes with scope)
+    local copyBtn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
+    copyBtn:SetSize(110, 20)
+    copyBtn:SetPoint("RIGHT", scopeBar, "RIGHT", -8, 0)
+    copyBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    copyBtn:SetBackdropColor(0.12, 0.18, 0.30, 0.9)
+    copyBtn:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
+    local copyFS = copyBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    copyFS:SetPoint("CENTER")
+    copyFS:SetTextColor(0.65, 0.78, 0.95)
+    copyBtn:SetFontString(copyFS)
+    copyBtn:SetScript("OnClick", function()
+        local src = _activeKind
+        local dst = (src == "party") and "raid" or "party"
+        local srcLabel = (src == "party") and "Party" or "Raid"
+        local dstLabel = (dst == "party") and "Party" or "Raid"
+        StaticPopup_Show("MSUF_COPY_GF_SETTINGS", srcLabel, dstLabel, { src = src, dst = dst })
+    end)
+    copyBtn:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(0.18, 0.28, 0.45, 1)
+        self:SetBackdropBorderColor(0.35, 0.55, 0.80, 1)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+        GameTooltip:SetText("Copy Settings", 1, 1, 1)
+        GameTooltip:AddLine("Copies ALL settings (size, colors, fonts,\nborders, text, icons, auras) except position.", 0.7, 0.7, 0.8, true)
+        GameTooltip:Show()
+    end)
+    copyBtn:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(0.12, 0.18, 0.30, 0.9)
+        self:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
+        GameTooltip:Hide()
+    end)
+
+    local function RefreshCopyBtn()
+        local dst = (_activeKind == "party") and "Raid" or "Party"
+        copyFS:SetText("Copy \226\134\146 " .. dst)
+    end
+    RefreshCopyBtn()
+
+    -- Patch RefreshScopeBtns to also refresh copy button
+    local _origRefreshScope = RefreshScopeBtns
+    RefreshScopeBtns = function()
+        _origRefreshScope()
+        RefreshCopyBtn()
     end
     RefreshScopeBtns()
 

@@ -113,7 +113,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     local function SIC()
         local conf = GF.GetConf(K())
         if not conf.spellIndicators then
-            conf.spellIndicators = { enabled = false, spec = "auto", specs = {} }
+            conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9 }
         end
         return conf.spellIndicators
     end
@@ -204,7 +204,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             sl:SetValue(v)
             valFS:SetText(tostring(math_floor(v + 0.5)))
         end
-        if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(sl) end
+        local _styleSl = _G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
+        if _styleSl then _styleSl(sl) end
         row._ctrl = sl
         return row
     end
@@ -328,6 +329,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         r = RowSlider(body, r, L["Per row"], gk, "perRow", 1, 16, 1, 4)
         r = RowSlider(body, r, L["Max icons"], gk, "max", 1, 20, 1, 6)
         r = RowSlider(body, r, L["Spacing"], gk, "spacing", 0, 10, 1, 1)
+        r = RowSlider(body, r, L["Layer (Z-Order)"], gk, "layer", 1, 15, 1,
+            gk == "buff" and 5 or (gk == "debuff" and 6 or 7))
 
         if extraWidgets then
             r = extraWidgets(body, r, gk) or r
@@ -361,6 +364,15 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 SIC().enabled = v and true or false
                 GF.RefreshVisuals()
             end,
+        })
+
+        local siLayerSl = SSlider({
+            name = "MSUF_GF_SILayer", parent = body, compact = true,
+            anchor = body, anchorPoint = "TOPLEFT", x = 240, y = -6,
+            min = 1, max = 15, step = 1, width = 160, default = 9,
+            get = function(k) return SIC().layer or 9 end,
+            set = function(k, v) SIC().layer = v; GF.RefreshVisuals() end,
+            formatText = function(v) return string.format(L["Layer: %d"], v) end,
         })
 
         -- Forward declarations
@@ -1170,21 +1182,21 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Buffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("buff", L["Buffs"], 500, function(body, prevRow, gk)
+    BuildAuraGroupSection("buff", L["Buffs"], 530, function(body, prevRow, gk)
         return RowDropdown(body, prevRow, L["Filter"], gk, "filterMode", FILTER_MODES, "RAID_PLAYER")
     end)
 
     ----------------------------------------------------------------
     -- Section: Debuffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("debuff", L["Debuffs"], 500, function(body, prevRow, gk)
+    BuildAuraGroupSection("debuff", L["Debuffs"], 530, function(body, prevRow, gk)
         return RowCheck(body, prevRow, L["Show Dispel Type Border"], gk, "showDispelBorder")
     end)
 
     ----------------------------------------------------------------
     -- Section: Externals
     ----------------------------------------------------------------
-    BuildAuraGroupSection("externals", L["Externals"], 480)
+    BuildAuraGroupSection("externals", L["Externals"], 510)
 
     -- Register all compact row refresh functions
     for i = 1, #_auraRefreshFns do
@@ -1196,7 +1208,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Private Auras
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(480, L["Private Auras"], false, "priv")
+        local box, body = AddSection(520, L["Private Auras"], false, "priv")
 
         SCheck({
             name = "MSUF_GF_PAEnable", parent = body,
@@ -1258,9 +1270,18 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             formatText = function(v) return string.format("Y: %d", v) end,
         })
 
+        local paLayerSl = SSlider({
+            name = "MSUF_GF_PALayer", parent = body, compact = true,
+            anchor = paYSl, x = 0, y = -32,
+            min = 1, max = 15, step = 1, width = 200, default = 8,
+            get = function(k) return PA().layer or 8 end,
+            set = function(k, v) PA().layer = v; GF.RefreshVisuals() end,
+            formatText = function(v) return string.format(L["Layer: %d"], v) end,
+        })
+
         SCheck({
             name = "MSUF_GF_PACd", parent = body,
-            anchor = paYSl, x = 0, y = -12,
+            anchor = paLayerSl, x = 0, y = -12,
             label = L["Show Countdown Frame"],
             get = function(k) return PA().showCountdown ~= false end,
             set = function(k, v) PA().showCountdown = v; GF.RefreshVisuals() end,

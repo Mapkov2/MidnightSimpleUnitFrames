@@ -267,7 +267,7 @@ local function CreatePlacedBar(parent, w, h)
     return f
 end
 
-local function GetOrCreatePlaced(f, auraName, itype, size, parent, barWidth)
+local function GetOrCreatePlaced(f, auraName, itype, size, parent, barWidth, layer)
     f._msufSIPlaced = f._msufSIPlaced or {}
     local ind = f._msufSIPlaced[auraName]
     if not ind or ind._siType ~= itype then
@@ -289,7 +289,7 @@ local function GetOrCreatePlaced(f, auraName, itype, size, parent, barWidth)
     end
     if ind:GetParent() ~= parent then ind:SetParent(parent) end
     if parent.GetFrameLevel then
-        ind:SetFrameLevel(parent:GetFrameLevel() + 6)
+        ind:SetFrameLevel(parent:GetFrameLevel() + (layer or 9))
     end
     return ind
 end
@@ -316,7 +316,7 @@ end
 ------------------------------------------------------------------------
 -- Apply one placed indicator
 ------------------------------------------------------------------------
-local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, isPreview, scale)
+local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, isPreview, scale, layer)
     if not cfg then return end
     local itype  = cfg.type or "icon"
     local size   = cfg.size or 18
@@ -330,7 +330,7 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
         barWidth = barWidth * scale
         if barWidth < 8 then barWidth = 8 end
     end
-    local ind = GetOrCreatePlaced(f, auraName, itype, size, parent, barWidth)
+    local ind = GetOrCreatePlaced(f, auraName, itype, size, parent, barWidth, layer)
 
     ind:ClearAllPoints()
     ind:SetPoint(anchor, parent, anchor, cfg.x or 0, cfg.y or 0)
@@ -495,12 +495,14 @@ end
 ------------------------------------------------------------------------
 local function ResetFrameEffects(f)
     -- Clear health bar color override → restore normal health color
-    if f._msufSIHealthColorR then
-        f._msufSIHealthColorR = nil
-        f._msufSIHealthColorG = nil
-        f._msufSIHealthColorB = nil
-        -- Re-apply normal health color immediately (don't wait for next UNIT_HEALTH)
-        if GF._ApplyHealthColor and f.health then
+    local hadHealthTint = f._msufSIHealthColorR
+    f._msufSIHealthColorR = nil
+    f._msufSIHealthColorG = nil
+    f._msufSIHealthColorB = nil
+    if hadHealthTint then
+        -- Invalidate diff-gate stamp so ApplyHealthColor re-applies unconditionally
+        f._msufGFHCStamp = nil
+        if GF._ApplyHealthColor and f.health and f.unit then
             GF._ApplyHealthColor(f, f._msufGFKind or "party", f.unit)
         end
     end
@@ -517,7 +519,21 @@ local function ResetFrameEffects(f)
     end
     if f._msufSINameColorActive and f.nameText then
         f._msufSINameColorActive = nil
-        f.nameText:SetTextColor(1, 1, 1, 1)
+        -- Restore configured name color (CLASS/CUSTOM/DEFAULT — not hardcoded white)
+        local kind = f._msufGFKind or "party"
+        local unit = f.unit
+        local classToken
+        if unit and UnitClass then
+            local _, ct = UnitClass(unit)
+            classToken = ct
+        end
+        if GF.ResolveNameColor then
+            local nr, ng, nb = GF.ResolveNameColor(kind, classToken)
+            f.nameText:SetTextColor(nr or 1, ng or 1, nb or 1, 1)
+        else
+            local fr, fg, fb = GF.ResolveFontColor(kind)
+            f.nameText:SetTextColor(fr or 1, fg or 1, fb or 1, 1)
+        end
     end
 end
 
@@ -594,14 +610,14 @@ local _multiProcessed = {}
 ------------------------------------------------------------------------
 -- Core update iteration (shared logic for single/multi)
 ------------------------------------------------------------------------
-local function IterateSpecConfig(f, unit, specKey, specCfg, parent, scale, bestByType, dedup, processed)
+local function IterateSpecConfig(f, unit, specKey, specCfg, parent, scale, bestByType, dedup, processed, siLayer)
     for auraName, auraCfg in pairs(specCfg) do
         if type(auraCfg) == "table" and auraCfg.enabled ~= false then
             if not processed or not processed[auraName] then
                 if processed then processed[auraName] = true end
                 local auraData = _scanResults[auraName]
                 if auraCfg.placed then
-                    ApplyPlaced(f, unit, auraName, auraCfg.placed, auraData, parent, specKey, false, scale)
+                    ApplyPlaced(f, unit, auraName, auraCfg.placed, auraData, parent, specKey, false, scale, siLayer)
                 end
                 if auraData and auraData.auraInstanceID and (auraCfg.placed or auraCfg.frame) then
                     dedup[auraData.auraInstanceID] = true
@@ -646,6 +662,7 @@ function GF.UpdateSpellIndicators(f, unit)
     for k in pairs(dedup) do dedup[k] = nil end
 
     local bestByType = {}
+    local siLayer = siCfg.layer or 9
 
     if specKey == "multi" then
         for k in pairs(_multiProcessed) do _multiProcessed[k] = nil end
@@ -654,14 +671,14 @@ function GF.UpdateSpellIndicators(f, unit)
             for sk in pairs(ms) do
                 local specCfg = EnsureSpecConfig(siCfg, sk)
                 if specCfg then
-                    IterateSpecConfig(f, unit, sk, specCfg, parent, scale, bestByType, dedup, _multiProcessed)
+                    IterateSpecConfig(f, unit, sk, specCfg, parent, scale, bestByType, dedup, _multiProcessed, siLayer)
                 end
             end
         end
     else
         local specCfg = EnsureSpecConfig(siCfg, specKey)
         if not specCfg then GF.HideSpellIndicators(f); return end
-        IterateSpecConfig(f, unit, specKey, specCfg, parent, scale, bestByType, dedup, nil)
+        IterateSpecConfig(f, unit, specKey, specCfg, parent, scale, bestByType, dedup, nil, siLayer)
     end
 
     for _, fx in pairs(bestByType) do
@@ -720,6 +737,7 @@ function GF.PreviewSpellIndicators(f, kind, classToken, specIdx)
 
     local parent = f.barGroup or f
     ResetFrameEffects(f)
+    local siLayer = siCfg.layer or 9
 
     if specKey == "multi" then
         local ms = siCfg.multiSpecs
@@ -735,7 +753,7 @@ function GF.PreviewSpellIndicators(f, kind, classToken, specIdx)
                         _multiProcessed[auraName] = true
                         idx = idx + 1
                         local mock = (idx % 2 == 1) and { icon = SI.GetAuraIcon(sk, auraName), auraInstanceID = nil, applications = 0 } or nil
-                        if auraCfg.placed then ApplyPlaced(f, nil, auraName, auraCfg.placed, mock, parent, sk, true) end
+                        if auraCfg.placed then ApplyPlaced(f, nil, auraName, auraCfg.placed, mock, parent, sk, true, nil, siLayer) end
                         if auraCfg.frame and auraCfg.frame.type and mock then
                             local ft = auraCfg.frame.type
                             local prio = auraCfg.frame.priority or 5
@@ -761,7 +779,7 @@ function GF.PreviewSpellIndicators(f, kind, classToken, specIdx)
         if type(auraCfg) == "table" and auraCfg.enabled ~= false then
             idx = idx + 1
             local mock = (idx % 2 == 1) and { icon = SI.GetAuraIcon(specKey, auraName), auraInstanceID = nil, applications = 0 } or nil
-            if auraCfg.placed then ApplyPlaced(f, nil, auraName, auraCfg.placed, mock, parent, specKey, true) end
+            if auraCfg.placed then ApplyPlaced(f, nil, auraName, auraCfg.placed, mock, parent, specKey, true, nil, siLayer) end
             if auraCfg.frame and auraCfg.frame.type and mock then
                 local ft = auraCfg.frame.type
                 local prio = auraCfg.frame.priority or 5
@@ -844,6 +862,7 @@ local function MakeBuffDefaults()
     return {
         enabled = true, anchor = "BOTTOMRIGHT", growth = "LEFTUP",
         x = 0, y = 0, size = 22, perRow = 4, max = 6, spacing = 1,
+        layer = 5,
         filterMode = "RAID_PLAYER",
         showCooldown = true, cooldownAnchor = "CENTER",
         cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
@@ -855,6 +874,7 @@ local function MakeDebuffDefaults()
     return {
         enabled = true, anchor = "TOPLEFT", growth = "RIGHTDOWN",
         x = 0, y = 0, size = 20, perRow = 3, max = 6, spacing = 1,
+        layer = 6,
         showDispelBorder = true,
         showCooldown = true, cooldownAnchor = "CENTER",
         cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
@@ -866,6 +886,7 @@ local function MakeExternalsDefaults()
     return {
         enabled = false, anchor = "CENTER", growth = "RIGHTDOWN",
         x = 0, y = 0, size = 28, perRow = 3, max = 2, spacing = 1,
+        layer = 7,
         showCooldown = true, cooldownAnchor = "CENTER",
         cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 10, cooldownOutline = "OUTLINE",
         showStacks = false, stackAnchor = "BOTTOMRIGHT",
@@ -876,6 +897,7 @@ local function MakePrivateAuraDefaults()
     return {
         enabled = true, max = 4, size = 20, anchor = "TOPRIGHT",
         direction = "LEFT", spacing = 1, x = 0, y = 0,
+        layer = 8,
         showCountdown = true, showNumbers = false,
         showDispelType = false, showDuration = false,
         durationAnchor = "BOTTOM", durationOffsetX = 0, durationOffsetY = -1,
@@ -926,7 +948,7 @@ function GF.MigrateAuraConfig(conf, isRaid)
         conf.privateAuraX = nil; conf.privateAuraY = nil; conf.privateAuraCountdown = nil
     end
     if not conf.privateAuras then conf.privateAuras = MakePrivateAuraDefaults() end
-    if not conf.spellIndicators then conf.spellIndicators = { enabled = false, spec = "auto", specs = {} } end
+    if not conf.spellIndicators then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9 } end
 end
 end -- do block
 

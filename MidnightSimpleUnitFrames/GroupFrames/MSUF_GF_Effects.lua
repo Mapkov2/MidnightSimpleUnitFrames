@@ -407,29 +407,48 @@ end
 
 local function UpdateAggro(f, unit)
     local kind = f._msufGFKind or "party"
+    local prevLevel = f._msufGFAggroLevel
 
     local testMode = _G.MSUF_AggroBorderTestMode
     if (HLVal(kind, "hlAggroEnabled") == false or not unit) and not testMode then
-        f._msufGFAggroLevel = nil
-        _GF_RefreshBorder(f, unit)
+        if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
         return
     end
 
     if not testMode then
-        if not UnitExists(unit) then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit); return end
+        if not UnitExists(unit) then
+            if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+            return
+        end
         local aggroMode = HLVal(kind, "hlAggroMode") or "ALL"
         if aggroMode ~= "ALL" then
             local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
-            if aggroMode == "HEALER_ONLY" and role ~= "HEALER" then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit); return end
-            if aggroMode == "TANK_ONLY"   and role ~= "TANK"   then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit); return end
+            if aggroMode == "HEALER_ONLY" and role ~= "HEALER" then
+                if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+                return
+            end
+            if aggroMode == "TANK_ONLY" and role ~= "TANK" then
+                if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+                return
+            end
         end
         local status = UnitThreatSituation and UnitThreatSituation(unit)
-        if issecretvalue and issecretvalue(status) then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit); return end
+        if issecretvalue and issecretvalue(status) then
+            -- Secret: can't diff-gate, but only refresh if we had aggro before
+            if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+            return
+        end
         local s = tonumber(status)
-        if not s or s < 1 then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit); return end
+        if not s or s < 1 then
+            if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+            return
+        end
+        -- Diff-gate: only refresh border when threat level actually changes
+        if s == prevLevel then return end
         f._msufGFAggroLevel = s
     else
-        f._msufGFAggroLevel = 3  -- test mode: simulate max threat
+        if prevLevel == 3 then return end -- test mode: already at max
+        f._msufGFAggroLevel = 3
     end
     _GF_RefreshBorder(f, unit)
 end
@@ -837,6 +856,7 @@ local function ApplyHealthColor(f, kind, unit)
     -- Spell Indicator health color override: full bar recolor, skips all normal logic
     if f._msufSIHealthColorR then
         f.health:SetStatusBarColor(f._msufSIHealthColorR, f._msufSIHealthColorG, f._msufSIHealthColorB, 1)
+        f._msufGFHCStamp = nil
         return
     end
     -- Global barMode override (same as Render.ApplyHealthColor)
@@ -844,11 +864,21 @@ local function ApplyHealthColor(f, kind, unit)
     local cache = type(getCache) == "function" and getCache() or nil
     local globalMode = cache and cache.barMode
     if globalMode == "dark" then
-        f.health:SetStatusBarColor(cache.darkBarR or 0, cache.darkBarG or 0, cache.darkBarB or 0, 1)
+        local r, g, b = cache.darkBarR or 0, cache.darkBarG or 0, cache.darkBarB or 0
+        local stamp = "dark"
+        if f._msufGFHCStamp ~= stamp then
+            f._msufGFHCStamp = stamp
+            f.health:SetStatusBarColor(r, g, b, 1)
+        end
         return
     end
     if globalMode == "unified" then
-        f.health:SetStatusBarColor(cache.unifiedBarR or 0.10, cache.unifiedBarG or 0.60, cache.unifiedBarB or 0.90, 1)
+        local r, g, b = cache.unifiedBarR or 0.10, cache.unifiedBarG or 0.60, cache.unifiedBarB or 0.90
+        local stamp = "unified"
+        if f._msufGFHCStamp ~= stamp then
+            f._msufGFHCStamp = stamp
+            f.health:SetStatusBarColor(r, g, b, 1)
+        end
         return
     end
     local conf = GF.GetConf(kind)
@@ -856,6 +886,9 @@ local function ApplyHealthColor(f, kind, unit)
     if mode == "CLASS" and unit then
         local _, cls = UnitClass(unit)
         if cls then
+            -- Diff-gate: class token unchanged → skip SetStatusBarColor
+            if f._msufGFHCStamp == cls then return end
+            f._msufGFHCStamp = cls
             local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
             if type(fastClass) == "function" then
                 local r, g, b = fastClass(cls)
@@ -866,6 +899,7 @@ local function ApplyHealthColor(f, kind, unit)
         end
     end
     if mode == "GRADIENT" and unit then
+        f._msufGFHCStamp = nil -- gradient changes every tick
         local hp = UnitHealth(unit)
         local hpMax = UnitHealthMax(unit)
         if issecretvalue and (issecretvalue(hp) or issecretvalue(hpMax)) then
@@ -883,10 +917,14 @@ local function ApplyHealthColor(f, kind, unit)
         end
         return
     end
-    f.health:SetStatusBarColor(
-        conf.healthCustomR or 0.2,
-        conf.healthCustomG or 0.8,
-        conf.healthCustomB or 0.2, 1)
+    local stamp = "custom"
+    if f._msufGFHCStamp ~= stamp then
+        f._msufGFHCStamp = stamp
+        f.health:SetStatusBarColor(
+            conf.healthCustomR or 0.2,
+            conf.healthCustomG or 0.8,
+            conf.healthCustomB or 0.2, 1)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -1538,20 +1576,36 @@ do
             end
         end)
 
+        local _rangeFrameList = {}
+        local _rangeIdx = 0
+
         _tickerFrame:SetScript("OnUpdate", function(self, dt)
             _elapsed = _elapsed + dt
-            local interval = _inCombat and 1 or 3
+            local interval = _inCombat and 0.25 or 1
             if _elapsed < interval then return end
             _elapsed = 0
 
-            local hasAny = false
-            for f in pairs(GF.frames) do
-                if f.unit and UnitExists(f.unit) then
-                    hasAny = true
+            -- Rebuild frame list lazily when frames table changes
+            local n = 0
+            for f in pairs(GF.frames) do n = n + 1 end
+            if n ~= #_rangeFrameList then
+                local idx = 0
+                for f in pairs(GF.frames) do idx = idx + 1; _rangeFrameList[idx] = f end
+                for i = idx + 1, #_rangeFrameList do _rangeFrameList[i] = nil end
+            end
+
+            if n == 0 then self:Hide(); return end
+
+            -- Stagger: max 10 frames per tick, round-robin
+            local batch = n <= 10 and n or 10
+            for _ = 1, batch do
+                _rangeIdx = _rangeIdx + 1
+                if _rangeIdx > n then _rangeIdx = 1 end
+                local f = _rangeFrameList[_rangeIdx]
+                if f and f.unit and UnitExists(f.unit) then
                     ApplyRangeFade(f, f.unit)
                 end
             end
-            if not hasAny then self:Hide() end -- sleep when no frames
         end)
 
         -- Wake ticker when frames appear
@@ -1623,11 +1677,17 @@ end
 ------------------------------------------------------------------------
 -- Tooltip + Highlight hooks
 ------------------------------------------------------------------------
+local _tooltipPending -- C_Timer handle for deferred tooltip
+local _tooltipTarget  -- frame awaiting tooltip
+
 local function OnEnter(f)
     -- Mouseover highlight
     local hb = EnsureMouseoverHighlight(f)
     if hb then hb:Show() end
-    -- Tooltip
+    -- Cancel any pending tooltip for a different frame
+    if _tooltipPending then _tooltipPending:Cancel(); _tooltipPending = nil end
+    _tooltipTarget = f
+    -- Tooltip (throttled 150ms)
     if not f.unit or not UnitExists(f.unit) then return end
     local conf = GF.GetConf(f._msufGFKind or "party")
     local mode = conf.tooltipMode or "ALWAYS"
@@ -1639,14 +1699,22 @@ local function OnEnter(f)
         if mod == "CTRL"  and not IsControlKeyDown()  then return end
         if mod == "SHIFT" and not IsShiftKeyDown()    then return end
     end
-    if _G.GameTooltip and not _G.GameTooltip:IsForbidden() then
-        _G.GameTooltip:SetOwner(f, "ANCHOR_RIGHT")
-        _G.GameTooltip:SetUnit(f.unit)
-        _G.GameTooltip:Show()
-    end
+    _tooltipPending = C_Timer.NewTimer(0.15, function()
+        _tooltipPending = nil
+        if _tooltipTarget ~= f then return end
+        if not f.unit or not UnitExists(f.unit) then return end
+        if _G.GameTooltip and not _G.GameTooltip:IsForbidden() then
+            _G.GameTooltip:SetOwner(f, "ANCHOR_RIGHT")
+            _G.GameTooltip:SetUnit(f.unit)
+            _G.GameTooltip:Show()
+        end
+    end)
 end
 
 local function OnLeave(f)
+    -- Cancel pending tooltip
+    if _tooltipPending then _tooltipPending:Cancel(); _tooltipPending = nil end
+    _tooltipTarget = nil
     -- Hide highlight
     if f._msufGFHoverBorder then f._msufGFHoverBorder:Hide() end
     -- Hide tooltip
