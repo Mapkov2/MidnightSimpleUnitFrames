@@ -2807,6 +2807,7 @@ local CP_TOKEN_OPTIONS = {
     -- ── Spell Trackers ──
     { token = "WHIRLWIND",      label = "Whirlwind (Fury)" },
     { token = "TIP_OF_THE_SPEAR", label = "Tip of the Spear (SV)" },
+    { token = "ICICLES",        label = "Icicles (Frost Mage)" },
     -- ── Timer Bar ──
     { token = "EBON_MIGHT",     label = "Ebon Might (Aug)" },
     -- ── Text ──
@@ -2924,6 +2925,8 @@ F.GetDefaultClassPowerColor = function(token)
     if token == "WHIRLWIND" then return 0.20, 0.80, 0.20 end
     -- Hunter SV: Tip of the Spear (MCR default — lime-green)
     if token == "TIP_OF_THE_SPEAR" then return 0.60, 0.80, 0.20 end
+    -- Mage Frost: Icicles (MCR default — ice blue)
+    if token == "ICICLES" then return 0.50, 0.80, 1.00 end
     -- Evoker Aug: Ebon Might (MCR default — teal)
     if token == "EBON_MIGHT" then return 0.40, 0.80, 0.60 end
     -- Look up in PowerBarColor
