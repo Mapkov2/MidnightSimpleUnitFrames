@@ -515,17 +515,27 @@ local function BuildClassPowerOptions(leftName, rightName)
     colorBtn._msufNoSlashSkin = true
     if Skin then Skin(colorBtn) else colorBtn.__msufMidnightActionSkinned = true end
     colorBtn:SetScript("OnClick", function()
-        if type(_G.MSUF_OpenPage) == "function" then _G.MSUF_OpenPage("colors") end
-        if C_Timer and C_Timer.After then C_Timer.After(0, function()
+        if type(_G.MSUF_SwitchMirrorPage) == "function" then _G.MSUF_SwitchMirrorPage("opt_colors")
+        elseif type(_G.MSUF_OpenPage) == "function" then _G.MSUF_OpenPage("opt_colors") end
+        if not (C_Timer and C_Timer.After) then return end
+        local function DoScroll()
             local dd = _G["MSUF_Colors_ClassPowerTypeDropdown"]
             if not dd then return end
-            local scroll = _G["MSUF_ColorsScrollFrame"]; local child = _G["MSUF_ColorsScrollChild"]
-            if scroll and child and scroll.SetVerticalScroll and child.GetTop and dd.GetTop then
-                local off = ((child:GetTop() or 0) - (dd:GetTop() or 0)) - 12; if off < 0 then off = 0 end
-                scroll:SetVerticalScroll(off)
+            local body = dd:GetParent()
+            local box = body and body:GetParent()
+            if box and box._msufCollapsed then
+                box._msufCollapsed = false
+                if box._msufApplyState then box._msufApplyState() end
             end
-            if _G.ToggleDropDownMenu then pcall(_G.ToggleDropDownMenu, 1, nil, dd, dd, 0, 0) end
-        end) end
+            local target = box or dd
+            local scroll = _G["MSUF_ColorsScrollFrame"]; local child = _G["MSUF_ColorsScrollChild"]
+            if scroll and child and scroll.SetVerticalScroll and target.GetTop and child.GetTop then
+                local off = ((child:GetTop() or 0) - (target:GetTop() or 0)) - 12; if off < 0 then off = 0 end
+                scroll:SetVerticalScroll(off)
+                if _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+            end
+        end
+        C_Timer.After(0.1, function() DoScroll(); C_Timer.After(0.05, DoScroll) end)
     end)
 
     -- =================================================================
