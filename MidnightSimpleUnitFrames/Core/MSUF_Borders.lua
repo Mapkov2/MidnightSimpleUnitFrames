@@ -277,8 +277,17 @@ MSUF_ApplyRareVisuals = function(self)
 
     local cfg = _RefreshBorderSettingsCache()
 
+    -- Per-unit scope-aware config read (same hpPowerTextOverride flag as Bars scope system)
+    local unitScope = self.isBoss and "boss" or self.unit
+    local unitDB = unitScope and MSUF_DB and MSUF_DB[unitScope]
+    local hasOverride = unitDB and unitDB.hpPowerTextOverride == true
+    local function _ScopeVal(key, cfgVal)
+        if hasOverride and unitDB[key] ~= nil then return unitDB[key] end
+        return cfgVal
+    end
+
     -- Aggro state detection (target/focus/boss only).
-    local wantAggro = MSUF_IsAggroOutlineUnit(self.unit) and ((cfg.aggroOutlineMode == 1) or (_G and _G.MSUF_AggroBorderTestMode))
+    local wantAggro = MSUF_IsAggroOutlineUnit(self.unit) and ((_ScopeVal("aggroOutlineMode", cfg.aggroOutlineMode) == 1) or (_G and _G.MSUF_AggroBorderTestMode))
     local threat = false
     if wantAggro then
         if _G and _G.MSUF_AggroBorderTestMode then
@@ -304,7 +313,7 @@ MSUF_ApplyRareVisuals = function(self)
     local dispel = false
     do
         local test = (_G and _G.MSUF_DispelBorderTestMode) and true or false
-        local wantDispel = (cfg.dispelOutlineMode == 1) or test
+        local wantDispel = (_ScopeVal("dispelOutlineMode", cfg.dispelOutlineMode) == 1) or test
         if wantDispel then
             local u = self.unit
             if u == "player" or u == "target" or u == "focus" or u == "targettarget" then
@@ -317,10 +326,10 @@ MSUF_ApplyRareVisuals = function(self)
     local purge = false
     do
         local test = (_G and _G.MSUF_PurgeBorderTestMode) and true or false
-        local wantPurge = (cfg.purgeOutlineMode == 1) or test
+        local wantPurge = (_ScopeVal("purgeOutlineMode", cfg.purgeOutlineMode) == 1) or test
         if wantPurge then
             local u = self.unit
-            if u == "target" or u == "focus" or u == "targettarget" then
+            if u == "target" or u == "focus" or u == "targettarget" or self.isBoss then
                 purge = test or (self._msufPurgeOutlineOn == true)
             end
         end
@@ -330,7 +339,7 @@ MSUF_ApplyRareVisuals = function(self)
     local bossTarget = false
     do
         local test = (_G and _G.MSUF_BossTargetBorderTestMode) and true or false
-        local wantBT = (cfg.bossTargetOutlineMode == 1) or test
+        local wantBT = (_ScopeVal("bossTargetOutlineMode", cfg.bossTargetOutlineMode) == 1) or test
         if wantBT and self.isBoss then
             bossTarget = test or (self._msufBossTargetHLOn == true)
         end
@@ -340,10 +349,22 @@ MSUF_ApplyRareVisuals = function(self)
     -- Apply the normal black outline.
     MSUF_ApplyBarOutline(self, baseThickness, self._msufBarOutline)
 
-    -- Resolve highlight priority: Dispel > Aggro > Purge > BossTarget (default), or custom order.
+    -- Per-unit priority override (reuses unitDB/hasOverride from above)
     local hlKey = 0
-    if cfg.highlightPrioEnabled and type(cfg.highlightPrioOrder) == "table" then
-        for _, kind in ipairs(cfg.highlightPrioOrder) do
+    local usePrio, useOrder
+    if hasOverride then
+        -- Per-unit override active: read from unit DB
+        local uEnabled = (unitDB.highlightPrioEnabled == 1)
+        local uOrder = unitDB.highlightPrioOrder
+        if uEnabled and type(uOrder) == "table" then
+            usePrio = true; useOrder = uOrder
+        end
+    end
+    if not usePrio and cfg.highlightPrioEnabled and type(cfg.highlightPrioOrder) == "table" then
+        usePrio = true; useOrder = cfg.highlightPrioOrder
+    end
+    if usePrio then
+        for _, kind in ipairs(useOrder) do
             if kind == "dispel" and dispel then hlKey = 2; break
             elseif kind == "aggro" and threat then hlKey = 1; break
             elseif kind == "purge" and purge then hlKey = 3; break
@@ -359,7 +380,7 @@ MSUF_ApplyRareVisuals = function(self)
     if hlKey == 1 then hlR, hlG, hlB = aggroR, aggroG, aggroB
     elseif hlKey == 2 then hlR, hlG, hlB = dispelR, dispelG, dispelB
     elseif hlKey == 3 then hlR, hlG, hlB = purgeR, purgeG, purgeB
-    elseif hlKey == 4 then hlR, hlG, hlB = bossTargetR, bossTargetG, bossTargetB
+    elseif hlKey == 4 then hlR, hlG, hlB = bossTargetR or 1, bossTargetG or 0.82, bossTargetB or 0
     end
 
     -- Apply (or hide) the highlight overlay.
@@ -486,6 +507,14 @@ _G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(acti
                 end
             end
             -- Refresh overlay so highlight priority system picks up the change.
+            if type(fn) == "function" then fn(uf) end
+        end
+    end
+    -- Boss frames (reuse same sentinel logic)
+    for i = 1, 5 do
+        local u = "boss" .. i
+        local uf = frames[u]
+        if uf and uf.unit == u then
             if type(fn) == "function" then fn(uf) end
         end
     end
@@ -748,11 +777,21 @@ do
         UpdateUnit("target", true)
         UpdateUnit("focus", true)
         UpdateUnit("targettarget", true)
+        for i = 1, 5 do UpdateUnit("boss" .. i, true) end
+    end
+
+    local function _IsPurgeDispelUnit(unit)
+        if unit == "player" or unit == "target" or unit == "focus" or unit == "targettarget" then return true end
+        if type(unit) == "string" and unit:sub(1, 4) == "boss" then
+            local n = tonumber(unit:sub(5))
+            if n and n >= 1 and n <= 5 then return true end
+        end
+        return false
     end
 
     f:SetScript("OnEvent", function(_, event, unit)
         if event == "UNIT_AURA" then
-            if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
+            if not _IsPurgeDispelUnit(unit) then return end
             local g = MSUF_DB and MSUF_DB.general
             if not (g and (g.dispelOutlineMode == 1 or g.purgeOutlineMode == 1)) then return end
             UpdateUnit(unit, false)
@@ -774,11 +813,9 @@ do
             if not f:IsEventRegistered("PLAYER_ENTERING_WORLD") then
                 f:RegisterEvent("PLAYER_ENTERING_WORLD")
             end
-            if f.RegisterUnitEvent then
-                if not f:IsEventRegistered("UNIT_AURA") then
-                    f:RegisterUnitEvent("UNIT_AURA", "player", "target", "focus", "targettarget")
-                end
-            elseif not f:IsEventRegistered("UNIT_AURA") then
+            -- Use global UNIT_AURA (not RegisterUnitEvent) because we track 9 units
+            -- (player + target + focus + targettarget + boss1-5). Filter in OnEvent handler.
+            if not f:IsEventRegistered("UNIT_AURA") then
                 f:RegisterEvent("UNIT_AURA")
             end
             MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()
@@ -787,6 +824,9 @@ do
             end)
             MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE", function()
                 UpdateUnit("focus", true)
+            end)
+            MSUF_EventBus_Register("INSTANCE_ENCOUNTER_ENGAGE_UNIT", "MSUF_DISPEL_OUTLINE", function()
+                for i = 1, 5 do UpdateUnit("boss" .. i, true) end
             end)
         else
             if f:IsEventRegistered("PLAYER_ENTERING_WORLD") then
@@ -798,6 +838,7 @@ do
             if type(MSUF_EventBus_Unregister) == "function" then
                 MSUF_EventBus_Unregister("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE")
                 MSUF_EventBus_Unregister("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE")
+                MSUF_EventBus_Unregister("INSTANCE_ENCOUNTER_ENGAGE_UNIT", "MSUF_DISPEL_OUTLINE")
             end
         end
     end

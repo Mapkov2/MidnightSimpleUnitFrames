@@ -3160,9 +3160,9 @@ local function _UFCore_FlushBossEngage()
             QueueUnit(unit, false, _bossEngageMask, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
         end
     end
-    -- Boss Target Highlight: re-evaluate after boss frames appear/disappear
+    -- Boss Target Highlight: re-evaluate after boss frames appear/disappear (pcall-safe)
     local fn = _G.MSUF_UpdateBossTargetHighlight
-    if type(fn) == "function" then fn() end
+    if type(fn) == "function" then pcall(fn) end
 end
 local function _UFCore_ScheduleBossEngage()
     if _bossEngageQueued then return end
@@ -3394,10 +3394,12 @@ local function UFCore_UpdateBossTargetHighlight()
                 end
             end
 
-            if frame._msufBossTargetHLOn ~= isTarget then
+            -- Diff-gate: nil == false for this comparison (avoid spurious RefreshRare on empty boss frames)
+            local prev = frame._msufBossTargetHLOn or false
+            if prev ~= isTarget then
                 frame._msufBossTargetHLOn = isTarget
-                -- Trigger border priority re-evaluation
-                if type(fn) == "function" then fn(frame) end
+                -- Trigger border priority re-evaluation (pcall-safe)
+                if type(fn) == "function" then pcall(fn, frame) end
             end
         end
     end
@@ -3416,8 +3418,12 @@ do
             QueueUnit("targettarget", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
             DeferSwapWork("target", "PLAYER_TARGET_CHANGED", true, false)
             DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", false, false)
-            -- Boss Target Highlight: update which boss frame shows the target border
-            UFCore_UpdateBossTargetHighlight()
+            -- Boss Target Highlight: update which boss frame shows the target border (pcall-safe)
+            local okBTH, errBTH = pcall(UFCore_UpdateBossTargetHighlight)
+            if not okBTH and type(errBTH) == "string" then
+                -- Debug: print to chat if something goes wrong (should never happen)
+                local p = print; if p then p("|cffff4444MSUF BTH error:|r " .. errBTH) end
+            end
         end)
 
         busReg("PLAYER_FOCUS_CHANGED", "MSUF_UFCORE", function()
