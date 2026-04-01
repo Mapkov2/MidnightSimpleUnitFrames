@@ -1651,6 +1651,7 @@ msufReset,msufOff=row and row[1],row and row[2]
 local msufScaleLabel=UI_Text(parent,"GameFontHighlight","TOPLEFT",(msufReset or (row and row[1]) or (btn1080 or globalCur)),"BOTTOMLEFT",10,-12,"MSUF Unitframe Scale",MSUF_SkinText)
 local msufScaleCur=UI_Text(parent,"GameFontHighlightSmall","TOPLEFT",msufScaleLabel,"BOTTOMLEFT",0,-6,"Current: ...",MSUF_SkinText)
 local msufScaleSlider=CreateFrame("Slider","MSUF_Tools_MsufScaleSlider",parent,"OptionsSliderTemplate")
+do local fn=(_G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider)); if fn then fn(msufScaleSlider) end end
 msufScaleSlider:ClearAllPoints()
 -- Anchor within the box so the thumb never clips.
 msufScaleSlider:SetPoint("TOP",msufScaleCur,"BOTTOM",0,-8)
@@ -1710,6 +1711,7 @@ local menuScaleLabel=UI_Text(parent,"GameFontHighlight","TOPLEFT",msufScaleSlide
 local menuScaleCur=UI_Text(parent,"GameFontHighlightSmall","TOPLEFT",menuScaleLabel,"BOTTOMLEFT",0,-6,"Applied: ...",MSUF_SkinText)
 local menuScalePending=UI_Text(parent,"GameFontHighlightSmall","TOPLEFT",menuScaleCur,"BOTTOMLEFT",0,-4,"Selected: ...",MSUF_SkinText)
 local menuScaleSlider=CreateFrame("Slider","MSUF_Tools_SlashMenuScaleSlider",parent,"OptionsSliderTemplate")
+do local fn=(_G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider)); if fn then fn(menuScaleSlider) end end
 menuScaleSlider:ClearAllPoints()
 menuScaleSlider:SetPoint("TOP",menuScalePending,"BOTTOM",0,-8)
 menuScaleSlider:SetPoint("LEFT",parent,"LEFT",16,0)
@@ -2865,6 +2867,7 @@ local btn1080,btn1440,btn4k,btnAuto=scaleRow[1],scaleRow[2],scaleRow[3],scaleRow
 local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-112,"MSUF Frame Scale",MSUF_SkinText)
 local msufScaleCur=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-130,"Current: 1.00",MSUF_SkinMuted)
 local msufScaleSlider=CreateFrame("Slider","MSUF_DashboardMsufScaleSlider",scaleCard,"OptionsSliderTemplate")
+do local fn=(_G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider)); if fn then fn(msufScaleSlider) end end
 msufScaleSlider:ClearAllPoints()
 msufScaleSlider:SetPoint("TOPLEFT",msufScaleCur,"BOTTOMLEFT",0,-8)
 msufScaleSlider:SetPoint("RIGHT",scaleCard,"RIGHT",-26,0)
@@ -2881,6 +2884,7 @@ local menuScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-174,"MSUF Slash
 local menuScaleApplied=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-192,"Applied: 1.00 (100%)",MSUF_SkinMuted)
 local menuScaleSelected=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-208,"Selected: 1.00 (100%)",MSUF_SkinMuted)
 local menuScaleSlider=CreateFrame("Slider","MSUF_DashboardSlashMenuScaleSlider",scaleCard,"OptionsSliderTemplate")
+do local fn=(_G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider)); if fn then fn(menuScaleSlider) end end
 menuScaleSlider:ClearAllPoints()
 menuScaleSlider:SetPoint("TOPLEFT",menuScaleSelected,"BOTTOMLEFT",0,-8)
 menuScaleSlider:SetPoint("RIGHT",scaleCard,"RIGHT",-26,0)

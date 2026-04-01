@@ -180,6 +180,17 @@ local function UFCore_RefreshSettingsCache(reason)
     if not ag and g and g.enableAggroHighlight == true then ag = "border" end -- legacy migrate
     cache.aggroIndicatorMode = ag or "off"
 
+    -- Boss Target Highlight
+    cache.bossTargetHLEnabled = (g and g.bossTargetHighlightEnabled ~= false) and true or false
+    local btc = g and g.bossTargetHighlightColor
+    if type(btc) == "table" then
+        cache.bossTargetHLR = btc[1] or 1
+        cache.bossTargetHLG = btc[2] or 0.82
+        cache.bossTargetHLB = btc[3] or 0
+    else
+        cache.bossTargetHLR, cache.bossTargetHLG, cache.bossTargetHLB = 1, 0.82, 0
+    end
+
     -- Smooth power bar + real-time text (hot-path upvalues).
     -- Default ON (true) when not explicitly set. Matches MidnightRogueBars behavior.
     local prevEither = (_smoothPowerBar or _realtimePowerText)
@@ -3149,6 +3160,9 @@ local function _UFCore_FlushBossEngage()
             QueueUnit(unit, false, _bossEngageMask, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
         end
     end
+    -- Boss Target Highlight: re-evaluate after boss frames appear/disappear
+    local fn = _G.MSUF_UpdateBossTargetHighlight
+    if type(fn) == "function" then fn() end
 end
 local function _UFCore_ScheduleBossEngage()
     if _bossEngageQueued then return end
@@ -3351,6 +3365,115 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 end)
 
+-- ---------------------------------------------------------------------------
+-- Boss Target Highlight: show a colored border on the boss frame the player
+-- currently has targeted.  Secret-safe: UnitIsUnit returns a plain boolean
+-- (both inputs are string tokens), but we guard with issecretvalue anyway.
+-- Diff-gated per frame via _msufBossTargetHLOn to avoid redundant frame ops.
+-- ---------------------------------------------------------------------------
+local _BTH_issecret = _UFCORE_issecret
+local _BTH_UnitIsUnit = UnitIsUnit
+local _BTH_UnitExists = UnitExists
+local _BTH_MSUF_TEX_WHITE8 = "Interface\\Buttons\\WHITE8x8"
+local _BTH_BackdropTemplate = (BackdropTemplateMixin and "BackdropTemplate") or nil
+
+local function _BTH_EnsureOverlay(frame)
+    local ov = frame._msufBossTargetHL
+    if ov then return ov end
+    ov = F.CreateFrame("Frame", nil, frame, _BTH_BackdropTemplate)
+    ov:EnableMouse(false)
+    ov:SetFrameStrata(frame:GetFrameStrata())
+    local lvl = frame:GetFrameLevel() + 5
+    if frame.hpBar and frame.hpBar.GetFrameLevel then
+        lvl = frame.hpBar:GetFrameLevel() + 5
+    end
+    ov:SetFrameLevel(lvl)
+    ov:SetBackdrop({ edgeFile = _BTH_MSUF_TEX_WHITE8, edgeSize = 2 })
+    ov:Hide()
+    frame._msufBossTargetHL = ov
+    frame._msufBossTargetHLOn = false
+    frame._msufBossTargetHLColorStamp = -1
+    return ov
+end
+
+local function _BTH_AnchorOverlay(ov, frame)
+    ov:ClearAllPoints()
+    local hb = frame.hpBar
+    local pb = frame.targetPowerBar
+    local pbDetached = frame._msufPowerBarDetached
+    local bottom = frame
+    if hb then
+        ov:SetPoint("TOPLEFT", hb, "TOPLEFT", -2, 2)
+        if pb and not pbDetached and pb.IsShown and pb:IsShown() then
+            bottom = pb
+        elseif hb then
+            bottom = hb
+        end
+        ov:SetPoint("BOTTOMRIGHT", bottom, "BOTTOMRIGHT", 2, -2)
+    else
+        ov:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        ov:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    end
+end
+
+local function UFCore_UpdateBossTargetHighlight()
+    local cache = UFCore_GetSettingsCache()
+    local enabled = cache and cache.bossTargetHLEnabled
+    local uf = _G.MSUF_UnitFrames
+    if not uf then return end
+
+    for i = 1, 5 do
+        local bossUnit = "boss" .. i
+        local frame = uf[bossUnit]
+        if frame then
+            if not enabled then
+                -- Feature disabled: hide any active overlay
+                if frame._msufBossTargetHLOn then
+                    frame._msufBossTargetHLOn = false
+                    if frame._msufBossTargetHL then frame._msufBossTargetHL:Hide() end
+                end
+            else
+                local isTarget = false
+                if _BTH_UnitExists(bossUnit) then
+                    local result = _BTH_UnitIsUnit("target", bossUnit)
+                    -- Secret-safety guard
+                    if _BTH_issecret and _BTH_issecret(result) then
+                        -- Secret: keep last known state, don't thrash
+                        -- (UnitIsUnit shouldn't return secret, but guard anyway)
+                    elseif result then
+                        isTarget = true
+                    end
+                end
+
+                if frame._msufBossTargetHLOn ~= isTarget then
+                    frame._msufBossTargetHLOn = isTarget
+                    if isTarget then
+                        local ov = _BTH_EnsureOverlay(frame)
+                        -- Update color (diff-gated by stamp)
+                        local cr, cg, cb = cache.bossTargetHLR, cache.bossTargetHLG, cache.bossTargetHLB
+                        local stamp = math_floor((cr or 1) * 1000) * 1000000
+                                    + math_floor((cg or 1) * 1000) * 1000
+                                    + math_floor((cb or 1) * 1000)
+                        if frame._msufBossTargetHLColorStamp ~= stamp then
+                            frame._msufBossTargetHLColorStamp = stamp
+                            ov:SetBackdropBorderColor(cr, cg, cb, 1)
+                        end
+                        _BTH_AnchorOverlay(ov, frame)
+                        ov:Show()
+                    else
+                        if frame._msufBossTargetHL then
+                            frame._msufBossTargetHL:Hide()
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Export for Options/profile refresh
+_G.MSUF_UpdateBossTargetHighlight = UFCore_UpdateBossTargetHighlight
+
 -- Phase 1 Fan-out: route PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED through EventBus
 -- so all modules (UFCore, Auras, RangeFade, etc.) share ONE engine-level registration.
 do
@@ -3361,6 +3484,8 @@ do
             QueueUnit("targettarget", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
             DeferSwapWork("target", "PLAYER_TARGET_CHANGED", true, false)
             DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", false, false)
+            -- Boss Target Highlight: update which boss frame shows the target border
+            UFCore_UpdateBossTargetHighlight()
         end)
 
         busReg("PLAYER_FOCUS_CHANGED", "MSUF_UFCORE", function()

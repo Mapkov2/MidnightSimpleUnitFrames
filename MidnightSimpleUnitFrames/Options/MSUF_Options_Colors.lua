@@ -1894,7 +1894,7 @@ end
     --------------------------------------------------
     -- Section 7: Mouseover Highlight
     --------------------------------------------------
-    S.sec7Box, S.sec7Body = F.MakeCollapsibleSection(content, 180, "Mouseover Highlight", false)
+    S.sec7Box, S.sec7Body = F.MakeCollapsibleSection(content, 280, "Mouseover Highlight", false)
     S.sec7Box:SetPoint("TOPLEFT", S.sec6Box, "BOTTOMLEFT", 0, -6)
     do local content = S.sec7Body
 
@@ -2021,6 +2021,57 @@ end
 
     -- Mouseover highlight is now the lowest control for dynamic height
     S.lastControl = highlightColorSwatch
+
+    -- Boss Target Highlight color (separate from mouseover highlight)
+    local bthDivider = content:CreateTexture(nil, "ARTWORK")
+    bthDivider:SetHeight(1)
+    bthDivider:SetPoint("TOPLEFT", highlightColorSwatch, "BOTTOMLEFT", 0, -14)
+    bthDivider:SetPoint("RIGHT", content, "RIGHT", -12, 0)
+    bthDivider:SetColorTexture(0.25, 0.25, 0.25, 0.6)
+
+    local bthLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    bthLabel:SetPoint("TOPLEFT", bthDivider, "BOTTOMLEFT", 0, -10)
+    bthLabel:SetText("Boss target highlight color")
+
+    local bthSwatch = CreateFrame("Button", "MSUF_Colors_BossTargetHLSwatch", content)
+    bthSwatch:SetSize(32, 16)
+    bthSwatch:SetPoint("TOPLEFT", bthLabel, "BOTTOMLEFT", 0, -8)
+
+    S.bthColorTex = bthSwatch:CreateTexture(nil, "ARTWORK")
+    S.bthColorTex:SetAllPoints()
+
+    F.GetBossTargetHLColor = function()
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        local c = MSUF_DB.general.bossTargetHighlightColor
+        if type(c) == "table" and c[1] and c[2] and c[3] then
+            return c[1], c[2], c[3]
+        end
+        return 1, 0.82, 0
+    end
+
+    F.SetBossTargetHLColor = function(r, g, b)
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        MSUF_DB.general.bossTargetHighlightColor = { r, g, b }
+        if S.bthColorTex then S.bthColorTex:SetColorTexture(r, g, b) end
+        if _G.MSUF_UFCore_RefreshSettingsCache then _G.MSUF_UFCore_RefreshSettingsCache("BTH_COLOR") end
+        if _G.MSUF_UpdateBossTargetHighlight then _G.MSUF_UpdateBossTargetHighlight() end
+    end
+
+    bthSwatch:SetScript("OnClick", function()
+        local r, g, b = F.GetBossTargetHLColor()
+        OpenColorPicker(r, g, b, function(nr, ng, nb)
+            F.SetBossTargetHLColor(nr, ng, nb)
+        end)
+    end)
+
+    do
+        local r, g, b = F.GetBossTargetHLColor()
+        S.bthColorTex:SetColorTexture(r, g, b)
+    end
+
+    S.lastControl = bthSwatch
 
 
     end -- section 7

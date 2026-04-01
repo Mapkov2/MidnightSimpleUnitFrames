@@ -389,6 +389,9 @@ local function CreateSlider(parent, label, minV, maxV, step, x, y, getter, sette
     s:SetScript("OnShow", function(self)
         self:SetValue(getter() or minV)
      end)
+    -- Apply new slider style (blue thumb + fill bar)
+    local styleFn = ns.MSUF_StyleSlider or _G.MSUF_StyleSlider
+    if styleFn then styleFn(s) end
      return s
 end
 -- Compact slider variant used in the Auras 2.0 box.

@@ -83,6 +83,9 @@ local function MakeSliderWithEdit(parent, name, label, x, y, minV, maxV, step, w
         if ena then self:Enable(); self:SetAlpha(1) else self:Disable(); self:SetAlpha(0.4) end
         eb:SetEnabled(ena); mi:SetEnabled(ena); pl:SetEnabled(ena)
     end
+    -- Apply new slider style (blue thumb + fill bar)
+    local styleFn = ns.MSUF_StyleSlider or _G.MSUF_StyleSlider
+    if styleFn then styleFn(s) end
     return s
 end
 
