@@ -574,7 +574,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if type(_G.MSUF_UFCore_RefreshSettingsCache) == "function" then _G.MSUF_UFCore_RefreshSettingsCache("BAR_OPTION") end
     end
 
-    local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 350, "Outline & Highlight Border", true)
+    local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 406, "Outline & Highlight Border", true)
 
     -- Left col: thickness sliders
     local barOutlineThicknessSlider = CreateLabeledSlider("MSUF_BarOutlineThicknessSlider", "Outline thickness", box3Body, 0, 6, 1, 16, -350)
@@ -646,42 +646,55 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     purgeTestCheck.tooltipText = TR("Purge border: Target, Focus, Target of Target")
     purgeTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(self:GetChecked() and true or false) end end)
 
+    local function BossTargetApply()
+        _BumpBorderSerial()
+        local fn, frames = _G.MSUF_RefreshRareBarVisuals, _G.MSUF_UnitFrames
+        if type(fn) == "function" and frames then
+            for i = 1, 5 do local b = frames["boss" .. i]; if b then fn(b) end end
+        end
+    end
+    local bossTargetOutlineDrop, bossTargetTestCheck = MakeOutlineRow("MSUF_BossTargetOutlineDropdown", "bossTargetOutlineMode", "Boss target border on", "Boss target border off", purgeOutlineDrop, 0, -28, 170, BossTargetApply)
+    bossTargetTestCheck.tooltipText = TR("Boss target border: highlights the boss frame you are targeting")
+    bossTargetTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetBossTargetBorderTestMode) == "function" then _G.MSUF_SetBossTargetBorderTestMode(self:GetChecked() and true or false) end end)
+
     -- Priority drag-and-drop
-    local _PRIO_DEFAULTS = { "dispel", "aggro", "purge" }
-    local _PRIO_LABELS = { dispel = "Dispel", aggro = "Aggro", purge = "Purge" }
+    local _PRIO_DEFAULTS = { "dispel", "aggro", "purge", "bossTarget" }
+    local _PRIO_LABELS = { dispel = "Dispel", aggro = "Aggro", purge = "Purge", bossTarget = "Boss Target" }
     local _PRIO_ROW_H, _PRIO_ROW_GAP = 22, 4
     local _prioRows = {}
 
     local prioCheck = CreateFrame("CheckButton", "MSUF_HighlightPrioCheck", box3Body, "ChatConfigCheckButtonTemplate")
-    prioCheck:SetPoint("TOPLEFT", purgeOutlineDrop, "BOTTOMLEFT", 14, -16)
+    prioCheck:SetPoint("TOPLEFT", bossTargetOutlineDrop, "BOTTOMLEFT", 14, -16)
     prioCheck.Text:SetText(TR("Custom highlight priority"))
     UI.AttachTooltip(prioCheck, TR("Custom highlight priority"), TR("Drag to reorder which highlight border takes priority when multiple are active."))
 
     local prioContainer = CreateFrame("Frame", "MSUF_HighlightPrioContainer", box3Body)
-    prioContainer:SetSize(200, 78); prioContainer:SetPoint("TOPLEFT", prioCheck, "BOTTOMLEFT", -2, -4)
+    prioContainer:SetSize(200, 104); prioContainer:SetPoint("TOPLEFT", prioCheck, "BOTTOMLEFT", -2, -4)
 
     local function _Prio_GetOrder()
         local g = MSUF_DB and MSUF_DB.general; local o = g and g.highlightPrioOrder
-        if type(o) == "table" and #o == 3 then return { o[1], o[2], o[3] } end
-        return { _PRIO_DEFAULTS[1], _PRIO_DEFAULTS[2], _PRIO_DEFAULTS[3] }
+        if type(o) == "table" and #o >= 4 then return { o[1], o[2], o[3], o[4] } end
+        -- Migrate: old 3-entry orders get bossTarget appended
+        if type(o) == "table" and #o == 3 then return { o[1], o[2], o[3], "bossTarget" } end
+        return { _PRIO_DEFAULTS[1], _PRIO_DEFAULTS[2], _PRIO_DEFAULTS[3], _PRIO_DEFAULTS[4] }
     end
     local function _Prio_SlotY(s) return -((s - 1) * (_PRIO_ROW_H + _PRIO_ROW_GAP)) end
     local function _Prio_SnapAll()
-        for i = 1, 3 do local r = _prioRows[i]; r.frame:ClearAllPoints(); r.frame:SetPoint("TOPLEFT", prioContainer, "TOPLEFT", 0, _Prio_SlotY(r.slotIndex)) end
+        for i = 1, 4 do local r = _prioRows[i]; r.frame:ClearAllPoints(); r.frame:SetPoint("TOPLEFT", prioContainer, "TOPLEFT", 0, _Prio_SlotY(r.slotIndex)) end
     end
     local function _Prio_SaveOrder()
         EnsureDB(); G().highlightPrioOrder = {}
-        local sorted = {}; for i = 1, 3 do sorted[i] = _prioRows[i] end
+        local sorted = {}; for i = 1, 4 do sorted[i] = _prioRows[i] end
         table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
-        for i = 1, 3 do G().highlightPrioOrder[i] = sorted[i].key end
+        for i = 1, 4 do G().highlightPrioOrder[i] = sorted[i].key end
         _BumpBorderSerial()
         if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() end
     end
     local function _Prio_SetEnabled(enabled)
-        for i = 1, 3 do _prioRows[i].frame:SetAlpha(enabled and 1 or 0.4); _prioRows[i].frame:EnableMouse(enabled) end
+        for i = 1, 4 do _prioRows[i].frame:SetAlpha(enabled and 1 or 0.4); _prioRows[i].frame:EnableMouse(enabled) end
     end
 
-    for i = 1, 3 do
+    for i = 1, 4 do
         local rf = CreateFrame("Frame", "MSUF_PrioRow" .. i, prioContainer, "BackdropTemplate")
         rf:SetSize(190, _PRIO_ROW_H); rf:SetMovable(true); rf:EnableMouse(true); rf:RegisterForDrag("LeftButton")
         rf:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
@@ -694,13 +707,13 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             self:StopMovingOrSizing(); self:SetFrameStrata(prioContainer:GetFrameStrata())
             local _, selfY = self:GetCenter(); local contTop = prioContainer:GetTop()
             local bestSlot, bestDist = 1, math.huge
-            for s = 1, 3 do local dist = math.abs(selfY - (contTop + _Prio_SlotY(s) - _PRIO_ROW_H / 2)); if dist < bestDist then bestDist = dist; bestSlot = s end end
-            local myRow; for idx = 1, 3 do if _prioRows[idx].frame == self then myRow = _prioRows[idx]; break end end
+            for s = 1, 4 do local dist = math.abs(selfY - (contTop + _Prio_SlotY(s) - _PRIO_ROW_H / 2)); if dist < bestDist then bestDist = dist; bestSlot = s end end
+            local myRow; for idx = 1, 4 do if _prioRows[idx].frame == self then myRow = _prioRows[idx]; break end end
             if myRow and myRow.slotIndex ~= bestSlot then
-                for idx = 1, 3 do if _prioRows[idx].slotIndex == bestSlot then _prioRows[idx].slotIndex = myRow.slotIndex; break end end
+                for idx = 1, 4 do if _prioRows[idx].slotIndex == bestSlot then _prioRows[idx].slotIndex = myRow.slotIndex; break end end
                 myRow.slotIndex = bestSlot
             end
-            for idx = 1, 3 do _prioRows[idx].frame._numText:SetText(tostring(_prioRows[idx].slotIndex)) end
+            for idx = 1, 4 do _prioRows[idx].frame._numText:SetText(tostring(_prioRows[idx].slotIndex)) end
             _Prio_SnapAll(); _Prio_SaveOrder()
         end)
         _prioRows[i] = { frame = rf, key = "", slotIndex = i }
@@ -708,12 +721,14 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     local function _Prio_InitRows()
         local order = _Prio_GetOrder(); local g = G()
+        local btc = g.bossTargetHighlightColor
         local dbColors = {
             dispel = { g.dispelBorderColorR or 0.25, g.dispelBorderColorG or 0.75, g.dispelBorderColorB or 1 },
             aggro = { g.aggroBorderColorR or 1, g.aggroBorderColorG or 0.5, g.aggroBorderColorB or 0 },
             purge = { g.purgeBorderColorR or 1, g.purgeBorderColorG or 0.85, g.purgeBorderColorB or 0 },
+            bossTarget = (type(btc) == "table") and { btc[1] or 1, btc[2] or 0.82, btc[3] or 0 } or { 1, 0.82, 0 },
         }
-        for i = 1, 3 do
+        for i = 1, 4 do
             local key = order[i]; local col = dbColors[key] or { 1, 1, 1 }
             _prioRows[i].key = key; _prioRows[i].slotIndex = i
             _prioRows[i].frame._stripe:SetColorTexture(col[1], col[2], col[3], 1)

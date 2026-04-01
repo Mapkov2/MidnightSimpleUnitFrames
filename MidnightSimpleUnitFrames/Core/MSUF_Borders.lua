@@ -33,7 +33,10 @@ local function _RefreshBorderSettingsCache()
     _borderCfg.highlightBorderThickness = tonumber(g and g.highlightBorderThickness) or 2
     if _borderCfg.highlightBorderThickness < 1 then _borderCfg.highlightBorderThickness = 1 end
     _borderCfg.highlightPrioEnabled = (g and g.highlightPrioEnabled == 1) and true or false
-    _borderCfg.highlightPrioOrder = (g and type(g.highlightPrioOrder) == "table") and g.highlightPrioOrder or nil
+    local rawOrder = (g and type(g.highlightPrioOrder) == "table") and g.highlightPrioOrder or nil
+    -- Migrate: old 3-entry orders get bossTarget appended
+    if rawOrder and #rawOrder == 3 then rawOrder[4] = "bossTarget" end
+    _borderCfg.highlightPrioOrder = rawOrder
     _borderCfg.aggroR  = _Clamp01(g and g.aggroBorderColorR,  1.00)
     _borderCfg.aggroG  = _Clamp01(g and g.aggroBorderColorG,  0.50)
     _borderCfg.aggroB  = _Clamp01(g and g.aggroBorderColorB,  0.00)
@@ -43,6 +46,15 @@ local function _RefreshBorderSettingsCache()
     _borderCfg.purgeR  = _Clamp01(g and g.purgeBorderColorR,  1.00)
     _borderCfg.purgeG  = _Clamp01(g and g.purgeBorderColorG,  0.85)
     _borderCfg.purgeB  = _Clamp01(g and g.purgeBorderColorB,  0.00)
+    _borderCfg.bossTargetOutlineMode = (g and g.bossTargetOutlineMode) or 0
+    local btc = g and g.bossTargetHighlightColor
+    if type(btc) == "table" then
+        _borderCfg.bossTargetR = _Clamp01(btc[1], 1.00)
+        _borderCfg.bossTargetG = _Clamp01(btc[2], 0.82)
+        _borderCfg.bossTargetB = _Clamp01(btc[3], 0.00)
+    else
+        _borderCfg.bossTargetR, _borderCfg.bossTargetG, _borderCfg.bossTargetB = 1.00, 0.82, 0.00
+    end
     return _borderCfg
 end
 
@@ -314,20 +326,32 @@ MSUF_ApplyRareVisuals = function(self)
         end
     end
 
+    -- Boss target state detection (boss frames only).
+    local bossTarget = false
+    do
+        local test = (_G and _G.MSUF_BossTargetBorderTestMode) and true or false
+        local wantBT = (cfg.bossTargetOutlineMode == 1) or test
+        if wantBT and self.isBoss then
+            bossTarget = test or (self._msufBossTargetHLOn == true)
+        end
+    end
+    local bossTargetR, bossTargetG, bossTargetB = cfg.bossTargetR, cfg.bossTargetG, cfg.bossTargetB
+
     -- Apply the normal black outline.
     MSUF_ApplyBarOutline(self, baseThickness, self._msufBarOutline)
 
-    -- Resolve highlight priority: Dispel > Aggro > Purge (default), or custom order.
+    -- Resolve highlight priority: Dispel > Aggro > Purge > BossTarget (default), or custom order.
     local hlKey = 0
     if cfg.highlightPrioEnabled and type(cfg.highlightPrioOrder) == "table" then
         for _, kind in ipairs(cfg.highlightPrioOrder) do
             if kind == "dispel" and dispel then hlKey = 2; break
             elseif kind == "aggro" and threat then hlKey = 1; break
             elseif kind == "purge" and purge then hlKey = 3; break
+            elseif kind == "bossTarget" and bossTarget then hlKey = 4; break
             end
         end
     else
-        hlKey = (dispel and 2) or (threat and 1) or (purge and 3) or 0
+        hlKey = (dispel and 2) or (threat and 1) or (purge and 3) or (bossTarget and 4) or 0
     end
 
     -- Resolve color for the active highlight key.
@@ -335,6 +359,7 @@ MSUF_ApplyRareVisuals = function(self)
     if hlKey == 1 then hlR, hlG, hlB = aggroR, aggroG, aggroB
     elseif hlKey == 2 then hlR, hlG, hlB = dispelR, dispelG, dispelB
     elseif hlKey == 3 then hlR, hlG, hlB = purgeR, purgeG, purgeB
+    elseif hlKey == 4 then hlR, hlG, hlB = bossTargetR, bossTargetG, bossTargetB
     end
 
     -- Apply (or hide) the highlight overlay.
@@ -463,6 +488,18 @@ _G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(acti
             -- Refresh overlay so highlight priority system picks up the change.
             if type(fn) == "function" then fn(uf) end
         end
+    end
+end
+
+-- Options-only: Test mode to force the boss target border on boss frames.
+_G.MSUF_SetBossTargetBorderTestMode = _G.MSUF_SetBossTargetBorderTestMode or function(active)
+    _G.MSUF_BossTargetBorderTestMode = active and true or false
+    local fn = _G.MSUF_RefreshRareBarVisuals
+    local frames = _G.MSUF_UnitFrames
+    if type(fn) ~= "function" or not frames then return end
+    for i = 1, 5 do
+        local b = frames["boss" .. i]
+        if b and b.unit == ("boss" .. i) then fn(b) end
     end
 end
 

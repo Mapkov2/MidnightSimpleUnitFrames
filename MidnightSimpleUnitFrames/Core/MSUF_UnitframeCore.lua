@@ -3366,106 +3366,38 @@ Global:SetScript("OnEvent", function(_, event, arg1)
 end)
 
 -- ---------------------------------------------------------------------------
--- Boss Target Highlight: show a colored border on the boss frame the player
--- currently has targeted.  Secret-safe: UnitIsUnit returns a plain boolean
--- (both inputs are string tokens), but we guard with issecretvalue anyway.
--- Diff-gated per frame via _msufBossTargetHLOn to avoid redundant frame ops.
+-- Boss Target Highlight: set _msufBossTargetHLOn flag on boss frames so the
+-- Borders.lua priority system can render the highlight overlay.
+-- Secret-safe: UnitIsUnit takes string tokens only; guard result anyway.
+-- Diff-gated per frame to avoid redundant RefreshRareBarVisuals calls.
 -- ---------------------------------------------------------------------------
 local _BTH_issecret = _UFCORE_issecret
 local _BTH_UnitIsUnit = UnitIsUnit
 local _BTH_UnitExists = UnitExists
-local _BTH_MSUF_TEX_WHITE8 = "Interface\\Buttons\\WHITE8x8"
-local _BTH_BackdropTemplate = (BackdropTemplateMixin and "BackdropTemplate") or nil
-
-local function _BTH_EnsureOverlay(frame)
-    local ov = frame._msufBossTargetHL
-    if ov then return ov end
-    ov = CreateFrame("Frame", nil, frame, _BTH_BackdropTemplate)
-    ov:EnableMouse(false)
-    ov:SetFrameStrata(frame:GetFrameStrata())
-    local lvl = frame:GetFrameLevel() + 5
-    if frame.hpBar and frame.hpBar.GetFrameLevel then
-        lvl = frame.hpBar:GetFrameLevel() + 5
-    end
-    ov:SetFrameLevel(lvl)
-    ov:SetBackdrop({ edgeFile = _BTH_MSUF_TEX_WHITE8, edgeSize = 2 })
-    ov:Hide()
-    frame._msufBossTargetHL = ov
-    frame._msufBossTargetHLOn = false
-    frame._msufBossTargetHLColorStamp = -1
-    return ov
-end
-
-local function _BTH_AnchorOverlay(ov, frame)
-    ov:ClearAllPoints()
-    local hb = frame.hpBar
-    local pb = frame.targetPowerBar
-    local pbDetached = frame._msufPowerBarDetached
-    local bottom = frame
-    if hb then
-        ov:SetPoint("TOPLEFT", hb, "TOPLEFT", -2, 2)
-        if pb and not pbDetached and pb.IsShown and pb:IsShown() then
-            bottom = pb
-        elseif hb then
-            bottom = hb
-        end
-        ov:SetPoint("BOTTOMRIGHT", bottom, "BOTTOMRIGHT", 2, -2)
-    else
-        ov:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-        ov:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-    end
-end
 
 local function UFCore_UpdateBossTargetHighlight()
-    local cache = UFCore_GetSettingsCache()
-    local enabled = cache and cache.bossTargetHLEnabled
     local uf = _G.MSUF_UnitFrames
     if not uf then return end
+    local fn = _G.MSUF_RefreshRareBarVisuals
 
     for i = 1, 5 do
         local bossUnit = "boss" .. i
         local frame = uf[bossUnit]
         if frame then
-            if not enabled then
-                -- Feature disabled: hide any active overlay
-                if frame._msufBossTargetHLOn then
-                    frame._msufBossTargetHLOn = false
-                    if frame._msufBossTargetHL then frame._msufBossTargetHL:Hide() end
+            local isTarget = false
+            if _BTH_UnitExists(bossUnit) then
+                local result = _BTH_UnitIsUnit("target", bossUnit)
+                if _BTH_issecret and _BTH_issecret(result) then
+                    -- secret: keep last known state
+                elseif result then
+                    isTarget = true
                 end
-            else
-                local isTarget = false
-                if _BTH_UnitExists(bossUnit) then
-                    local result = _BTH_UnitIsUnit("target", bossUnit)
-                    -- Secret-safety guard
-                    if _BTH_issecret and _BTH_issecret(result) then
-                        -- Secret: keep last known state, don't thrash
-                        -- (UnitIsUnit shouldn't return secret, but guard anyway)
-                    elseif result then
-                        isTarget = true
-                    end
-                end
+            end
 
-                if frame._msufBossTargetHLOn ~= isTarget then
-                    frame._msufBossTargetHLOn = isTarget
-                    if isTarget then
-                        local ov = _BTH_EnsureOverlay(frame)
-                        -- Update color (diff-gated by stamp)
-                        local cr, cg, cb = cache.bossTargetHLR, cache.bossTargetHLG, cache.bossTargetHLB
-                        local stamp = math_floor((cr or 1) * 1000) * 1000000
-                                    + math_floor((cg or 1) * 1000) * 1000
-                                    + math_floor((cb or 1) * 1000)
-                        if frame._msufBossTargetHLColorStamp ~= stamp then
-                            frame._msufBossTargetHLColorStamp = stamp
-                            ov:SetBackdropBorderColor(cr, cg, cb, 1)
-                        end
-                        _BTH_AnchorOverlay(ov, frame)
-                        ov:Show()
-                    else
-                        if frame._msufBossTargetHL then
-                            frame._msufBossTargetHL:Hide()
-                        end
-                    end
-                end
+            if frame._msufBossTargetHLOn ~= isTarget then
+                frame._msufBossTargetHLOn = isTarget
+                -- Trigger border priority re-evaluation
+                if type(fn) == "function" then fn(frame) end
             end
         end
     end

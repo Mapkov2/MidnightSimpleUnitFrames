@@ -2289,9 +2289,13 @@ end
             if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
                 _G.MSUF_SetPurgeBorderTestMode(false)
             end
+            if type(_G.MSUF_SetBossTargetBorderTestMode) == "function" then
+                _G.MSUF_SetBossTargetBorderTestMode(false)
+            end
             if panel.aggroTestCheck then panel.aggroTestCheck:SetChecked(false) end
             if panel.dispelTestCheck then panel.dispelTestCheck:SetChecked(false) end
             if panel.purgeTestCheck then panel.purgeTestCheck:SetChecked(false) end
+            if panel.bossTargetTestCheck then panel.bossTargetTestCheck:SetChecked(false) end
         end
         -- Standalone slash menu window (/msuf)
         local slashWin = _G.MSUF_StandaloneOptionsWindow
