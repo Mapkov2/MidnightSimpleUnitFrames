@@ -3380,7 +3380,7 @@ local _BTH_BackdropTemplate = (BackdropTemplateMixin and "BackdropTemplate") or 
 local function _BTH_EnsureOverlay(frame)
     local ov = frame._msufBossTargetHL
     if ov then return ov end
-    ov = F.CreateFrame("Frame", nil, frame, _BTH_BackdropTemplate)
+    ov = CreateFrame("Frame", nil, frame, _BTH_BackdropTemplate)
     ov:EnableMouse(false)
     ov:SetFrameStrata(frame:GetFrameStrata())
     local lvl = frame:GetFrameLevel() + 5
