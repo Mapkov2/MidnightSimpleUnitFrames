@@ -433,6 +433,14 @@ end
     if g.statusIndicators == nil then
         g.statusIndicators = {}
     end
+
+    -- Boss Target Highlight: colored border on the boss unitframe you currently target
+    if g.bossTargetHighlightEnabled == nil then
+        g.bossTargetHighlightEnabled = true
+    end
+    if type(g.bossTargetHighlightColor) ~= "table" then
+        g.bossTargetHighlightColor = { 1, 0.82, 0 }   -- gold
+    end
     local si = g.statusIndicators
     if si.showAFK == nil then si.showAFK = false end
     if si.showDND == nil then si.showDND = false end

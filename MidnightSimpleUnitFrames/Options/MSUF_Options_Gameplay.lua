@@ -837,6 +837,9 @@ end)
 
         if field then panel[field] = sl end
         if key then BindSlider(sl, key, roundFunc, after, applyNow) end
+        -- Apply new slider style (blue thumb + fill bar)
+        local styleFn = ns.MSUF_StyleSlider or _G.MSUF_StyleSlider
+        if styleFn then styleFn(sl) end
         return sl
     end
 

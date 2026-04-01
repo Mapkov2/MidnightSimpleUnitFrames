@@ -70,26 +70,102 @@ end
 -- ============================================================
 -- 3. Style Functions
 -- ============================================================
+local SLIDER_TRACK_H    = 3
+local SLIDER_THUMB_SIZE = 16
+local SLIDER_BG_R, SLIDER_BG_G, SLIDER_BG_B = 0.10, 0.10, 0.14
+local SLIDER_FILL_R, SLIDER_FILL_G, SLIDER_FILL_B = 0.27, 0.53, 0.80
+local SLIDER_THUMB_R, SLIDER_THUMB_G, SLIDER_THUMB_B = 0.35, 0.62, 0.92
+local SLIDER_THUMB_TEX = "Interface/AddOns/" .. ADDON .. "/Media/msuf_slider_thumb.tga"
+
 local function StyleSlider(slider)
     if not slider or slider._msufStyled then return end
     slider._msufStyled = true
-    slider:SetHeight(14)
-    local track = slider:CreateTexture(nil, "BACKGROUND")
-    slider._msufTrack = track
-    track:SetColorTexture(0.06, 0.06, 0.06, 1)
-    track:SetPoint("TOPLEFT", slider, "TOPLEFT", 0, -3)
-    track:SetPoint("BOTTOMRIGHT", slider, "BOTTOMRIGHT", 0, 3)
+    slider:SetHeight(SLIDER_THUMB_SIZE)
+
+    -- Get thumb FIRST, skip it in the hide loop
     local thumb = slider:GetThumbTexture()
-    if thumb then
-        thumb:SetTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-        thumb:SetSize(10, 18)
+
+    -- Hide all template background/border textures EXCEPT thumb
+    local _regions = { slider:GetRegions() }
+    for i = 1, #_regions do
+        local region = _regions[i]
+        if region and region ~= thumb and region.IsObjectType and region:IsObjectType("Texture") then
+            region:SetAlpha(0)
+            region:Hide()
+        end
     end
+    -- Hide Low/High labels
+    local sName = slider.GetName and slider:GetName()
+    if sName then
+        local low  = _G[sName .. "Low"]
+        local high = _G[sName .. "High"]
+        if low  then low:SetAlpha(0);  low:Hide()  end
+        if high then high:SetAlpha(0); high:Hide() end
+    end
+    if slider.Low  then slider.Low:SetAlpha(0);  slider.Low:Hide()  end
+    if slider.High then slider.High:SetAlpha(0); slider.High:Hide() end
+
+    -- Custom track (dark 3px bar)
+    local track = slider:CreateTexture(nil, "BACKGROUND", nil, -1)
+    track:SetHeight(SLIDER_TRACK_H)
+    track:SetPoint("LEFT", slider, "LEFT", 0, 0)
+    track:SetPoint("RIGHT", slider, "RIGHT", 0, 0)
+    track:SetColorTexture(SLIDER_BG_R, SLIDER_BG_G, SLIDER_BG_B, 1)
+    slider._msufTrack = track
+
+    -- Fill bar (blue, left of thumb)
+    local fill = slider:CreateTexture(nil, "BACKGROUND", nil, 0)
+    fill:SetHeight(SLIDER_TRACK_H)
+    fill:SetPoint("LEFT", track, "LEFT", 0, 0)
+    fill:SetColorTexture(SLIDER_FILL_R, SLIDER_FILL_G, SLIDER_FILL_B, 1)
+    slider._msufFill = fill
+
+    -- Thumb: replace entirely via SetThumbTexture (bulletproof — WoW cannot reset)
+    if slider.SetThumbTexture then
+        slider:SetThumbTexture(SLIDER_THUMB_TEX)
+        local thumb2 = slider:GetThumbTexture()
+        if thumb2 then
+            thumb2:SetVertexColor(SLIDER_THUMB_R, SLIDER_THUMB_G, SLIDER_THUMB_B, 1)
+            thumb2:SetSize(SLIDER_THUMB_SIZE, SLIDER_THUMB_SIZE)
+        end
+    elseif thumb then
+        thumb:SetTexture(SLIDER_THUMB_TEX)
+        thumb:SetVertexColor(SLIDER_THUMB_R, SLIDER_THUMB_G, SLIDER_THUMB_B, 1)
+        thumb:SetSize(SLIDER_THUMB_SIZE, SLIDER_THUMB_SIZE)
+    end
+
+    -- Fill width sync
+    local function UpdateFill(self)
+        local lo, hi = self:GetMinMaxValues()
+        local range = hi - lo
+        if range <= 0 then
+            fill:SetWidth(1)
+            return
+        end
+        local pct = (self:GetValue() - lo) / range
+        local w = self:GetWidth() * pct
+        if w < 1 then w = 1 end
+        fill:SetWidth(w)
+    end
+    slider:HookScript("OnValueChanged", function(self) UpdateFill(self) end)
+    slider:HookScript("OnShow",         function(self) UpdateFill(self) end)
+    slider:HookScript("OnSizeChanged",  function(self) UpdateFill(self) end)
+
+    -- Hover: brighten track
     slider:HookScript("OnEnter", function(self)
-        if self._msufTrack then self._msufTrack:SetColorTexture(0.20, 0.20, 0.20, 1) end
+        if self._msufTrack then self._msufTrack:SetColorTexture(0.16, 0.16, 0.20, 1) end
     end)
     slider:HookScript("OnLeave", function(self)
-        if self._msufTrack then self._msufTrack:SetColorTexture(0.06, 0.06, 0.06, 1) end
+        if self._msufTrack then self._msufTrack:SetColorTexture(SLIDER_BG_R, SLIDER_BG_G, SLIDER_BG_B, 1) end
     end)
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if slider:IsShown() then UpdateFill(slider) end
+        end)
+    else
+        UpdateFill(slider)
+    end
 end
 
 local function StyleSmallButton(button, isPlus)

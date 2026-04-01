@@ -1326,7 +1326,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     panel._msufStatusIconsGroup = statusBox
     panel._msufStatusIconsBody = statusBody
     -- Boss-only: own collapsible layout section (keeps spacing/order out of Indicators)
-    local bossLayoutH = 118
+    local bossLayoutH = 152
     local bossLayoutBox, bossLayoutBody = MakeCollapsibleGroupBox(frameGroup, "Boss Layout", fullW, bossLayoutH, false, texWhite, texWhite2)
     bossLayoutBox:Hide()
     panel.playerBossLayoutBox = bossLayoutBox
@@ -1569,6 +1569,9 @@ end
 		-- Boss-only: invert boss order toggle (boss 1 at bottom instead of top)
 		panel.playerInvertBossOrderCB = panel.playerInvertBossOrderCB or CreateCheck(bossLayoutBody, "MSUF_UF_InvertBossOrderCB", "Invert boss order", 12, -52)
 		panel.playerInvertBossOrderCB:Hide()
+		-- Boss target highlight: show colored border on the boss frame you currently target
+		panel.playerBossTargetHLCB = panel.playerBossTargetHLCB or CreateCheck(bossLayoutBody, "MSUF_UF_BossTargetHLCB", "Highlight targeted boss frame", 12, -86)
+		panel.playerBossTargetHLCB:Hide()
 		-- Shared per-unit anchoring controls (player / target / ToT / focus / pet / boss).
 		if not panel.unitAnchorToLabel then
 			panel.unitAnchorToLabel = textBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -2369,6 +2372,7 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         end
         if panel.playerBossSpacingSlider then panel.playerBossSpacingSlider:Hide() end
         if panel.playerInvertBossOrderCB then panel.playerInvertBossOrderCB:Hide() end
+        if panel.playerBossTargetHLCB then panel.playerBossTargetHLCB:Hide() end
         if panel.playerBossLayoutBox then panel.playerBossLayoutBox:Hide() end
         -- Status icons (and Step-1 Combat row controls) must also be hard-hidden outside Frames tab
         if panel.statusIconsHeader then panel.statusIconsHeader:Hide() end
@@ -2690,6 +2694,15 @@ local isBossKey = false
         if show and bossLayoutBody then
             panel.playerInvertBossOrderCB:ClearAllPoints()
             panel.playerInvertBossOrderCB:SetPoint("TOPLEFT", bossLayoutBody, "TOPLEFT", 12, -52)
+        end
+    end
+    -- Boss target highlight toggle (boss only)
+    if panel.playerBossTargetHLCB then
+        local show = isBossKey and true or false
+        panel.playerBossTargetHLCB:SetShown(show)
+        if show and bossLayoutBody then
+            panel.playerBossTargetHLCB:ClearAllPoints()
+            panel.playerBossTargetHLCB:SetPoint("TOPLEFT", bossLayoutBody, "TOPLEFT", 12, -86)
         end
     end
     -- Notify scroll container that content height may have changed.
@@ -3057,6 +3070,14 @@ end
         panel.playerInvertBossOrderCB:SetShown(show)
         if show then
             panel.playerInvertBossOrderCB:SetChecked((conf.invertBossOrder == true) and true or false)
+        end
+    end
+    -- Boss Target Highlight (boss only, reads from general)
+    if panel.playerBossTargetHLCB then
+        local show = (currentKey == "boss")
+        panel.playerBossTargetHLCB:SetShown(show)
+        if show then
+            panel.playerBossTargetHLCB:SetChecked((g.bossTargetHighlightEnabled ~= false) and true or false)
         end
     end
     if panel._msufRelayoutUnitBoxes then
@@ -4495,6 +4516,16 @@ if panel.playerInvertBossOrderCB then
         local conf = EnsureKeyDB()
         conf.invertBossOrder = self:GetChecked() and true or false
         ApplyCurrent()
+     end)
+end
+-- Boss target highlight toggle (boss key only, writes to general)
+if panel.playerBossTargetHLCB then
+    panel.playerBossTargetHLCB:SetScript("OnClick", function(self)
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        MSUF_DB.general.bossTargetHighlightEnabled = self:GetChecked() and true or false
+        if _G.MSUF_UFCore_RefreshSettingsCache then _G.MSUF_UFCore_RefreshSettingsCache("BOSS_TARGET_HL") end
+        if _G.MSUF_UpdateBossTargetHighlight then _G.MSUF_UpdateBossTargetHighlight() end
      end)
 end
 -- Copy settings button (Player menu)
