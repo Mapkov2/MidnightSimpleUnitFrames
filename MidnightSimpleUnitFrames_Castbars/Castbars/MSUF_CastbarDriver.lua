@@ -9,6 +9,51 @@ local addonName, ns = ...
 -- Safe: parent addon loads first due to ## Dependencies, FastCall is always available.
 local MSUF_FastCall = MSUF_FastCall or function(...) return pcall(...) end
 
+-- ─── Safety OnUpdate for target/focus castbars ────────────────────
+-- Catches stuck bars when events don't fire (unit death mid-cast,
+-- duration reaching 0 without STOP event). 4Hz gated, zero hot-path cost.
+-- Secret-safe: UnitExists/UnitIsDeadOrGhost return plain booleans.
+local _DriverNow = GetTime
+local _driverFloor = math.floor
+
+local function MSUF_Driver_SafetyOnUpdate(self, elapsed)
+    if not self or not self.unit or not self:IsShown() then return end
+    if self.interrupted then return end
+
+    local now = _DriverNow()
+    local nextCheck = self._msufSafetyNext or 0
+    if now < nextCheck then return end
+    self._msufSafetyNext = now + 0.25
+
+    -- Unit gone or dead → stop immediately.
+    local u = self.unit
+    if not UnitExists(u) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(u)) then
+        self:SetScript("OnUpdate", nil)
+        _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
+        return
+    end
+
+    -- Remaining time exhausted → stop after 2 consecutive zero checks.
+    local endT = self._msufPlainEndTime
+    if endT then
+        local rem = endT - now
+        if rem <= 0 then
+            self._msufZeroCount = (self._msufZeroCount or 0) + 1
+            if self._msufZeroCount >= 2 then
+                self._msufZeroCount = nil
+                self:SetScript("OnUpdate", nil)
+                if self.SetSucceeded then
+                    self:SetSucceeded()
+                else
+                    _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
+                end
+            end
+        else
+            self._msufZeroCount = nil
+        end
+    end
+end
+
 -- Shared interrupt feedback hold duration (seconds). Keep boss/target/focus consistent.
 _G.MSUF_INTERRUPT_FEEDBACK_DURATION = _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5
 
@@ -366,6 +411,20 @@ local function CreateCastBar(name, unit)
                 MSUF_Driver_SetActiveIdentity(self, st); self:Cast(st)
             end
         end
+
+        -- Death recheck: UnitIsDeadOrGhost can lag one frame behind the lethal UNIT_HEALTH.
+        self._msufDeathRecheckCB = function()
+            self._msufDeathRecheckPending = nil
+            if not self:IsShown() or self.interrupted then return end
+            local u = self.unit
+            if u and (not UnitExists(u) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(u))) then
+                self:SetScript("OnUpdate", nil)
+                MSUF_Driver_CancelStopConfirm(self)
+                MSUF_Driver_CancelStartRetry(self)
+                MSUF__HidePlayerChannelHasteStripes(self)
+                _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
+            end
+        end
     end
 
     local function MSUF_Driver_BumpCastToken(self)
@@ -427,17 +486,23 @@ frame:SetScript("OnEvent", function(self, event, arg1, ...)
             return
         end
 
-        -- Death/despawn detection: if the unit dies mid-cast, hide immediately.
-        -- UnitIsDeadOrGhost/UnitExists return plain booleans (secret-safe).
-        -- Cheapest possible path: one boolean check, no comparisons on secret values.
+        -- Death detection: immediate check + deferred recheck.
         if event == "UNIT_HEALTH" then
             if self:IsShown() and not self.interrupted then
                 local u = self.unit
                 if u and (not UnitExists(u) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(u))) then
+                    self:SetScript("OnUpdate", nil)
                     MSUF_Driver_CancelStopConfirm(self)
                     MSUF_Driver_CancelStartRetry(self)
                     MSUF__HidePlayerChannelHasteStripes(self)
                     _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
+                    return
+                end
+                -- Deferred recheck: death flag may not be set yet on the lethal-hit frame.
+                if not self._msufDeathRecheckPending then
+                    _EnsureDriverCallbacks(self)
+                    self._msufDeathRecheckPending = true
+                    C_Timer.After(0.1, self._msufDeathRecheckCB)
                 end
             end
             return
@@ -726,7 +791,14 @@ self.MSUF_timerDriven = okTimer and true or false
             end
 
             self:Show()
+            -- Safety net: 4Hz existence + remaining=0 check catches stuck bars.
+            if self.unit ~= "player" then
+                self._msufZeroCount = nil
+                self._msufSafetyNext = 0
+                self:SetScript("OnUpdate", MSUF_Driver_SafetyOnUpdate)
+            end
         else
+self:SetScript("OnUpdate", nil)
 if self.hideTimer and self.hideTimer.Cancel then
     self.hideTimer:Cancel()
 end
@@ -857,7 +929,7 @@ end
     frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit)
     frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
 
-    -- Death/despawn detection: UnitIsDeadOrGhost returns plain boolean (secret-safe).
+    -- Death detection: UnitIsDeadOrGhost returns plain boolean (secret-safe).
     if unit ~= "player" then
         frame:RegisterUnitEvent("UNIT_HEALTH", unit)
     end
