@@ -574,7 +574,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if type(_G.MSUF_UFCore_RefreshSettingsCache) == "function" then _G.MSUF_UFCore_RefreshSettingsCache("BAR_OPTION") end
     end
 
-    local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 350, "Outline & Highlight Border", true)
+    local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 560, "Outline & Highlight Border", true)
 
     -- Left col: thickness sliders
     local barOutlineThicknessSlider = CreateLabeledSlider("MSUF_BarOutlineThicknessSlider", "Outline thickness", box3Body, 0, 6, 1, 16, -350)
@@ -600,8 +600,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             name = name, parent = box3Body,
             anchor = anchor, anchorPoint = "TOPLEFT", x = oX, y = oY, width = w or 170,
             items = { { key = 0, label = TR(labelOff) }, { key = 1, label = TR(labelOn) } },
-            get = function() return G()[dbKey] or 0 end,
-            set = function(v) G()[dbKey] = v; if type(applyFn) == "function" then applyFn() end end,
+            get = function() return ScopeGet(dbKey, 0) end,
+            set = function(v) ScopeSet(dbKey, v, applyFn) end,
         })
         local cb = CreateFrame("CheckButton", name:gsub("Dropdown$", "") .. "TestCheck", box3Body, "ChatConfigCheckButtonTemplate")
         cb:SetPoint("LEFT", dd, "RIGHT", 6, 0)
@@ -646,42 +646,56 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     purgeTestCheck.tooltipText = TR("Purge border: Target, Focus, Target of Target")
     purgeTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(self:GetChecked() and true or false) end end)
 
-    -- Priority drag-and-drop
-    local _PRIO_DEFAULTS = { "dispel", "aggro", "purge" }
-    local _PRIO_LABELS = { dispel = "Dispel", aggro = "Aggro", purge = "Purge" }
+    local function BossTargetApply()
+        _BumpBorderSerial()
+        local fn, frames = _G.MSUF_RefreshRareBarVisuals, _G.MSUF_UnitFrames
+        if type(fn) == "function" and frames then
+            for i = 1, 5 do local b = frames["boss" .. i]; if b then fn(b) end end
+        end
+    end
+    local bossTargetOutlineDrop, bossTargetTestCheck = MakeOutlineRow("MSUF_BossTargetOutlineDropdown", "bossTargetOutlineMode", "Boss target border on", "Boss target border off", purgeOutlineDrop, 0, -28, 170, BossTargetApply)
+    bossTargetTestCheck.tooltipText = TR("Boss target border: highlights the boss frame you are targeting")
+    bossTargetTestCheck:SetScript("OnClick", function(self) if type(_G.MSUF_SetBossTargetBorderTestMode) == "function" then _G.MSUF_SetBossTargetBorderTestMode(self:GetChecked() and true or false) end end)
+
+    -- Priority drag-and-drop — scope-aware via ScopeGet/ScopeSet (follows Override shared settings)
+    local _PRIO_DEFAULTS = { "dispel", "aggro", "purge", "bossTarget" }
+    local _PRIO_LABELS = { dispel = "Dispel", aggro = "Aggro", purge = "Purge", bossTarget = "Boss Target" }
     local _PRIO_ROW_H, _PRIO_ROW_GAP = 22, 4
     local _prioRows = {}
 
     local prioCheck = CreateFrame("CheckButton", "MSUF_HighlightPrioCheck", box3Body, "ChatConfigCheckButtonTemplate")
-    prioCheck:SetPoint("TOPLEFT", purgeOutlineDrop, "BOTTOMLEFT", 14, -16)
+    prioCheck:SetPoint("TOPLEFT", bossTargetOutlineDrop, "BOTTOMLEFT", 14, -16)
     prioCheck.Text:SetText(TR("Custom highlight priority"))
-    UI.AttachTooltip(prioCheck, TR("Custom highlight priority"), TR("Drag to reorder which highlight border takes priority when multiple are active."))
+    UI.AttachTooltip(prioCheck, TR("Custom highlight priority"), TR("Drag to reorder which highlight border takes priority when multiple are active. Uses the current scope (Override shared settings)."))
 
     local prioContainer = CreateFrame("Frame", "MSUF_HighlightPrioContainer", box3Body)
-    prioContainer:SetSize(200, 78); prioContainer:SetPoint("TOPLEFT", prioCheck, "BOTTOMLEFT", -2, -4)
+    prioContainer:SetSize(200, 104); prioContainer:SetPoint("TOPLEFT", prioCheck, "BOTTOMLEFT", -2, -4)
 
     local function _Prio_GetOrder()
-        local g = MSUF_DB and MSUF_DB.general; local o = g and g.highlightPrioOrder
-        if type(o) == "table" and #o == 3 then return { o[1], o[2], o[3] } end
-        return { _PRIO_DEFAULTS[1], _PRIO_DEFAULTS[2], _PRIO_DEFAULTS[3] }
+        local o = ScopeGet("highlightPrioOrder", nil)
+        if type(o) == "table" and #o >= 4 then return { o[1], o[2], o[3], o[4] } end
+        if type(o) == "table" and #o == 3 then return { o[1], o[2], o[3], "bossTarget" } end
+        return { _PRIO_DEFAULTS[1], _PRIO_DEFAULTS[2], _PRIO_DEFAULTS[3], _PRIO_DEFAULTS[4] }
     end
     local function _Prio_SlotY(s) return -((s - 1) * (_PRIO_ROW_H + _PRIO_ROW_GAP)) end
     local function _Prio_SnapAll()
-        for i = 1, 3 do local r = _prioRows[i]; r.frame:ClearAllPoints(); r.frame:SetPoint("TOPLEFT", prioContainer, "TOPLEFT", 0, _Prio_SlotY(r.slotIndex)) end
+        for i = 1, 4 do local r = _prioRows[i]; r.frame:ClearAllPoints(); r.frame:SetPoint("TOPLEFT", prioContainer, "TOPLEFT", 0, _Prio_SlotY(r.slotIndex)) end
     end
     local function _Prio_SaveOrder()
-        EnsureDB(); G().highlightPrioOrder = {}
-        local sorted = {}; for i = 1, 3 do sorted[i] = _prioRows[i] end
+        local newOrder = {}
+        local sorted = {}; for i = 1, 4 do sorted[i] = _prioRows[i] end
         table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
-        for i = 1, 3 do G().highlightPrioOrder[i] = sorted[i].key end
-        _BumpBorderSerial()
-        if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() end
+        for i = 1, 4 do newOrder[i] = sorted[i].key end
+        ScopeSet("highlightPrioOrder", newOrder, function()
+            _BumpBorderSerial()
+            if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() end
+        end)
     end
     local function _Prio_SetEnabled(enabled)
-        for i = 1, 3 do _prioRows[i].frame:SetAlpha(enabled and 1 or 0.4); _prioRows[i].frame:EnableMouse(enabled) end
+        for i = 1, 4 do _prioRows[i].frame:SetAlpha(enabled and 1 or 0.4); _prioRows[i].frame:EnableMouse(enabled) end
     end
 
-    for i = 1, 3 do
+    for i = 1, 4 do
         local rf = CreateFrame("Frame", "MSUF_PrioRow" .. i, prioContainer, "BackdropTemplate")
         rf:SetSize(190, _PRIO_ROW_H); rf:SetMovable(true); rf:EnableMouse(true); rf:RegisterForDrag("LeftButton")
         rf:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
@@ -694,13 +708,13 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             self:StopMovingOrSizing(); self:SetFrameStrata(prioContainer:GetFrameStrata())
             local _, selfY = self:GetCenter(); local contTop = prioContainer:GetTop()
             local bestSlot, bestDist = 1, math.huge
-            for s = 1, 3 do local dist = math.abs(selfY - (contTop + _Prio_SlotY(s) - _PRIO_ROW_H / 2)); if dist < bestDist then bestDist = dist; bestSlot = s end end
-            local myRow; for idx = 1, 3 do if _prioRows[idx].frame == self then myRow = _prioRows[idx]; break end end
+            for s = 1, 4 do local dist = math.abs(selfY - (contTop + _Prio_SlotY(s) - _PRIO_ROW_H / 2)); if dist < bestDist then bestDist = dist; bestSlot = s end end
+            local myRow; for idx = 1, 4 do if _prioRows[idx].frame == self then myRow = _prioRows[idx]; break end end
             if myRow and myRow.slotIndex ~= bestSlot then
-                for idx = 1, 3 do if _prioRows[idx].slotIndex == bestSlot then _prioRows[idx].slotIndex = myRow.slotIndex; break end end
+                for idx = 1, 4 do if _prioRows[idx].slotIndex == bestSlot then _prioRows[idx].slotIndex = myRow.slotIndex; break end end
                 myRow.slotIndex = bestSlot
             end
-            for idx = 1, 3 do _prioRows[idx].frame._numText:SetText(tostring(_prioRows[idx].slotIndex)) end
+            for idx = 1, 4 do _prioRows[idx].frame._numText:SetText(tostring(_prioRows[idx].slotIndex)) end
             _Prio_SnapAll(); _Prio_SaveOrder()
         end)
         _prioRows[i] = { frame = rf, key = "", slotIndex = i }
@@ -708,12 +722,14 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     local function _Prio_InitRows()
         local order = _Prio_GetOrder(); local g = G()
+        local btc = g.bossTargetHighlightColor
         local dbColors = {
             dispel = { g.dispelBorderColorR or 0.25, g.dispelBorderColorG or 0.75, g.dispelBorderColorB or 1 },
             aggro = { g.aggroBorderColorR or 1, g.aggroBorderColorG or 0.5, g.aggroBorderColorB or 0 },
             purge = { g.purgeBorderColorR or 1, g.purgeBorderColorG or 0.85, g.purgeBorderColorB or 0 },
+            bossTarget = (type(btc) == "table") and { btc[1] or 1, btc[2] or 0.82, btc[3] or 0 } or { 1, 0.82, 0 },
         }
-        for i = 1, 3 do
+        for i = 1, 4 do
             local key = order[i]; local col = dbColors[key] or { 1, 1, 1 }
             _prioRows[i].key = key; _prioRows[i].slotIndex = i
             _prioRows[i].frame._stripe:SetColorTexture(col[1], col[2], col[3], 1)
@@ -722,12 +738,21 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end; _Prio_SnapAll()
     end
     _Prio_InitRows()
-    _G.MSUF_PrioRows_Reinit = function() _Prio_InitRows(); _Prio_SetEnabled(G().highlightPrioEnabled == 1) end
+    _G.MSUF_PrioRows_Reinit = function()
+        _Prio_InitRows()
+        local en = ScopeGet("highlightPrioEnabled", 0)
+        prioCheck:SetChecked(en == 1)
+        _Prio_SetEnabled(en == 1)
+    end
 
     prioCheck:SetScript("OnClick", function(self)
-        G().highlightPrioEnabled = self:GetChecked() and 1 or 0; _Prio_SetEnabled(self:GetChecked()); _Prio_SaveOrder()
+        ScopeSet("highlightPrioEnabled", self:GetChecked() and 1 or 0, function()
+            _Prio_SetEnabled(self:GetChecked())
+            _BumpBorderSerial()
+            if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then _G.MSUF_ApplyBarOutlineThickness_All() end
+        end)
     end)
-    do local g = G(); prioCheck:SetChecked(g.highlightPrioEnabled == 1); _Prio_SetEnabled(g.highlightPrioEnabled == 1) end
+    do local en = ScopeGet("highlightPrioEnabled", 0); prioCheck:SetChecked(en == 1); _Prio_SetEnabled(en == 1) end
 
     -- =====================================================================
     -- BOX 4: Power Bar Settings (default open)
@@ -1126,11 +1151,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
         -- Box 3 dims (outline + highlight)
         DimSlider("MSUF_BarOutlineThicknessSlider"); DimSlider("MSUF_HighlightBorderThicknessSlider")
-        DimDrop("MSUF_AggroOutlineDropdown"); DimCheck("MSUF_AggroOutlineTestCheck")
-        DimDrop("MSUF_DispelOutlineDropdown"); DimCheck("MSUF_DispelOutlineTestCheck")
-        DimDrop("MSUF_PurgeOutlineDropdown"); DimCheck("MSUF_PurgeOutlineTestCheck")
-        DimCheck("MSUF_HighlightPrioCheck"); DimFrame("MSUF_HighlightPrioContainer")
-        DimLabel(hlSectionLabel)
+        -- Box 3: highlight borders + priority are now scope-aware (ScopeGet/ScopeSet) — no dimming needed
+        -- Refresh their dropdowns when scope changes
+        if aggroOutlineDrop and aggroOutlineDrop.Refresh then aggroOutlineDrop:Refresh() end
+        if dispelOutlineDrop and dispelOutlineDrop.Refresh then dispelOutlineDrop:Refresh() end
+        if purgeOutlineDrop and purgeOutlineDrop.Refresh then purgeOutlineDrop:Refresh() end
+        if bossTargetOutlineDrop and bossTargetOutlineDrop.Refresh then bossTargetOutlineDrop:Refresh() end
 
         -- Box 4 dims (power bar)
         DimCheck("MSUF_TargetPowerBarCheck"); DimCheck("MSUF_BossPowerBarCheck")
@@ -1143,6 +1169,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if box1._msufTitle then DimLabel(box1._msufTitle) end
         if box3._msufTitle then DimLabel(box3._msufTitle) end
         if box4._msufTitle then DimLabel(box4._msufTitle) end
+
+        -- Refresh priority rows when scope changes (ScopeGet reads from new scope)
+        local prioReinit = _G.MSUF_PrioRows_Reinit
+        if type(prioReinit) == "function" then prioReinit() end
     end
 
     _Scope_SyncUI = _MSUF_SyncHpPowerTextScopeUI
@@ -1264,6 +1294,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     panel.aggroOutlineDrop = aggroOutlineDrop; panel.aggroTestCheck = aggroTestCheck
     panel.dispelOutlineDrop = dispelOutlineDrop; panel.dispelTestCheck = dispelTestCheck
     panel.purgeOutlineDrop = purgeOutlineDrop; panel.purgeTestCheck = purgeTestCheck
+    panel.bossTargetOutlineDrop = bossTargetOutlineDrop; panel.bossTargetTestCheck = bossTargetTestCheck
     panel.prioCheck = prioCheck
     if type(MSUF_BarsApplyGradient) == "function" then _G.MSUF_BarsApplyGradient = MSUF_BarsApplyGradient end
 end

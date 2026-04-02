@@ -4523,7 +4523,9 @@ if panel.playerBossTargetHLCB then
     panel.playerBossTargetHLCB:SetScript("OnClick", function(self)
         EnsureDB()
         MSUF_DB.general = MSUF_DB.general or {}
-        MSUF_DB.general.bossTargetHighlightEnabled = self:GetChecked() and true or false
+        local on = self:GetChecked() and true or false
+        MSUF_DB.general.bossTargetHighlightEnabled = on
+        MSUF_DB.general.bossTargetOutlineMode = on and 1 or 0
         if _G.MSUF_UFCore_RefreshSettingsCache then _G.MSUF_UFCore_RefreshSettingsCache("BOSS_TARGET_HL") end
         if _G.MSUF_UpdateBossTargetHighlight then _G.MSUF_UpdateBossTargetHighlight() end
      end)
