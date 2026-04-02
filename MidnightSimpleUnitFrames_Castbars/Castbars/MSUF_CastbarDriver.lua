@@ -427,6 +427,22 @@ frame:SetScript("OnEvent", function(self, event, arg1, ...)
             return
         end
 
+        -- Death/despawn detection: if the unit dies mid-cast, hide immediately.
+        -- UnitIsDeadOrGhost/UnitExists return plain booleans (secret-safe).
+        -- Cheapest possible path: one boolean check, no comparisons on secret values.
+        if event == "UNIT_HEALTH" then
+            if self:IsShown() and not self.interrupted then
+                local u = self.unit
+                if u and (not UnitExists(u) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(u))) then
+                    MSUF_Driver_CancelStopConfirm(self)
+                    MSUF_Driver_CancelStartRetry(self)
+                    MSUF__HidePlayerChannelHasteStripes(self)
+                    _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
+                end
+            end
+            return
+        end
+
 -- Empower handling:
 --   Player: keep full empower pipeline (stages/lines) via MSUF_wantsEmpower.
 --   Non-player (target/focus/boss): NEVER enter empower pipeline. Treat EMPOWER_* as normal CAST events and use duration objects only.
@@ -840,6 +856,11 @@ end
     frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit)
     frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit)
     frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
+
+    -- Death/despawn detection: UnitIsDeadOrGhost returns plain boolean (secret-safe).
+    if unit ~= "player" then
+        frame:RegisterUnitEvent("UNIT_HEALTH", unit)
+    end
 
     if unit == "target" or unit == "focus" then
         frame:RegisterEvent("PLAYER_" .. unit:upper() .. "_CHANGED")
