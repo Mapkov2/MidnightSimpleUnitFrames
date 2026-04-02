@@ -1717,7 +1717,10 @@ local function OnEvent(self, event, ...)
             GF._pendingBlizzardDisable = nil
             GF.DisableBlizzardFrames()
         end
-        if GF._pendingRebuild then
+        -- Force rebuild if headers don't exist (mid-combat /reload recovery)
+        local needRebuild = GF._pendingRebuild
+        if not GF.headers.party and not GF.headers.raid then needRebuild = true end
+        if needRebuild then
             GF._pendingRebuild = nil
             GF.RebuildAll()
         end

@@ -210,10 +210,8 @@ local PARTY_DEFAULTS = {
     alphaFGOutOfCombat   = 1,
     alphaBGInCombat      = 1,
     alphaBGOutOfCombat   = 1,
-    -- Health prediction overlays (colors from global Colors menu)
-    absorbEnabled         = true,
-    healAbsorbEnabled     = true,
-    healPredEnabled       = true,
+    -- Health prediction overlays: NO defaults here — falls through to global Bars settings
+    -- (absorbEnabled, healAbsorbEnabled, healPredEnabled are resolved at runtime)
     -- Tooltip
     tooltipMode           = "ALWAYS",  -- ALWAYS / OOC / MODIFIER / NEVER
     tooltipModifier       = "ALT",     -- ALT / CTRL / SHIFT
@@ -455,6 +453,30 @@ function GF.EnsureDB()
     if GF.MigrateAuraConfig then
         GF.MigrateAuraConfig(db.gf_party, false)
         GF.MigrateAuraConfig(db.gf_raid, true)
+    end
+    -- Ensure spell filter fields exist on each aura sub-group
+    for _, conf in pairs({db.gf_party, db.gf_raid}) do
+        -- Migrate: remove legacy absorb/heal defaults that blocked global override
+        if conf.absorbEnabled == true and not conf._absorbMigrated then
+            conf.absorbEnabled = nil
+            conf._absorbMigrated = true
+        end
+        if conf.healAbsorbEnabled == true and not conf._absorbMigrated then
+            conf.healAbsorbEnabled = nil
+        end
+        if conf.healPredEnabled == true and not conf._healPredMigrated then
+            conf.healPredEnabled = nil
+            conf._healPredMigrated = true
+        end
+        if type(conf.auras) == "table" then
+            for _, gk in pairs({"buff", "debuff", "externals"}) do
+                local g = conf.auras[gk]
+                if type(g) == "table" then
+                    if g.spellFilter == nil then g.spellFilter = "NONE" end
+                    if type(g.spellList) ~= "table" then g.spellList = {} end
+                end
+            end
+        end
     end
     -- Update cached conf references
     GF.InvalidateConfCache()

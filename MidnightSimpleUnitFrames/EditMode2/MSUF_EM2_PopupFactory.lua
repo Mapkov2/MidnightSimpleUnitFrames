@@ -440,6 +440,113 @@ function Factory.EnableStepper(box, m, p, on)
 end
 function Factory.EnableLabel(l, on) if l then l:SetAlpha(on and 1 or 0.25) end end
 
+-- =========================================================================
+-- SelectRow: "Label:  [ Current Value ▾ ]"   (popup menu, not cycle-click)
+-- =========================================================================
+function Factory.SelectRow(pf, body, card, opts)
+    local selectKey = opts.selectKey
+    local stateKey  = opts.stateKey
+    local items     = opts.items or {}
+    local cb        = opts.onChanged
+    local anchorTo  = opts.anchorTo
+
+    local row = CreateFrame("Frame", nil, body)
+    row:SetHeight(ROW_H)
+    if anchorTo then row:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, (opts.yOff or -ROW_GAP))
+    else row:SetPoint("TOPLEFT", body, "TOPLEFT", 0, 0) end
+    row:SetPoint("RIGHT", body, "RIGHT", 0, 0)
+
+    local label = FS(row, 11, C.muted)
+    label:SetPoint("LEFT", 0, 0); label:SetText(opts.label or "Select:")
+
+    local btnW = opts.width or 140
+    local btn = CreateFrame("Button", nil, row, "BackdropTemplate")
+    btn:SetSize(btnW, BOX_H)
+    btn:SetPoint("LEFT", label, "RIGHT", 6, 0)
+    btn:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1 })
+    btn:SetBackdropColor(unpack(C.inputBg)); btn:SetBackdropBorderColor(unpack(C.inputEdge))
+    local hl = btn:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints()
+    hl:SetColorTexture(C.stepHover[1], C.stepHover[2], C.stepHover[3], C.stepHover[4])
+    local btnFS = FS(btn, 10, C.white); btnFS:SetPoint("CENTER")
+
+    -- Popup menu frame (lazy-built, reused)
+    local menu = CreateFrame("Frame", nil, UIParent)
+    menu:SetFrameStrata("TOOLTIP"); menu:SetFrameLevel(960)
+    menu:SetClampedToScreen(true); menu:EnableMouse(true); menu:Hide()
+    local menuBg = menu:CreateTexture(nil, "BACKGROUND"); menuBg:SetAllPoints()
+    menuBg:SetColorTexture(C.panelBg[1], C.panelBg[2], C.panelBg[3], 0.97)
+    local menuBrd = CreateFrame("Frame", nil, menu, "BackdropTemplate"); menuBrd:SetAllPoints()
+    menuBrd:SetFrameLevel(max(0, menu:GetFrameLevel() - 1))
+    menuBrd:SetBackdrop({ edgeFile=W8, edgeSize=1 }); menuBrd:SetBackdropBorderColor(unpack(C.panelEdge))
+
+    local function ResolveItems()
+        if type(items) == "function" then return items() end
+        return items
+    end
+
+    local _builtBtns
+    local function BuildMenu()
+        if _builtBtns then
+            for _, old in ipairs(_builtBtns) do old:Hide() end
+        end
+        local list = ResolveItems()
+        _builtBtns = {}
+        local itemH = 20
+        local menuW = (opts.menuWidth or btnW) + 20
+        menu:SetSize(menuW, #list * itemH + 6)
+        for i, src in ipairs(list) do
+            local it = CreateFrame("Button", nil, menu)
+            it:SetSize(menuW - 4, itemH)
+            it:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(3 + (i - 1) * itemH))
+            local iBg = it:CreateTexture(nil, "BACKGROUND"); iBg:SetAllPoints()
+            iBg:SetColorTexture(0, 0, 0, 0)
+            local iFS = FS(it, 10, C.white); iFS:SetPoint("LEFT", 8, 0)
+            iFS:SetText(src.label or src.key)
+            it:SetScript("OnEnter", function() iBg:SetColorTexture(0.10, 0.20, 0.45, 0.25) end)
+            it:SetScript("OnLeave", function() iBg:SetColorTexture(0, 0, 0, 0) end)
+            it:SetScript("OnClick", function()
+                menu:Hide()
+                if stateKey then pf[stateKey] = src.key end
+                btnFS:SetText(src.label or src.key)
+                if cb then cb() end
+            end)
+            _builtBtns[i] = it
+        end
+    end
+
+    function btn:SetValue(key)
+        if stateKey then pf[stateKey] = key end
+        local list = ResolveItems()
+        for _, src in ipairs(list) do
+            if src.key == key then btnFS:SetText(src.label or src.key); return end
+        end
+        btnFS:SetText(tostring(key or ""))
+    end
+    function btn:GetValue() return stateKey and pf[stateKey] end
+
+    btn:SetScript("OnClick", function()
+        if menu:IsShown() then menu:Hide(); return end
+        BuildMenu()
+        menu:ClearAllPoints()
+        menu:SetPoint("TOP", btn, "BOTTOM", 0, -2)
+        menu:Show()
+    end)
+
+    menu:SetScript("OnUpdate", function(self)
+        if not self:IsShown() then return end
+        if btn:IsMouseOver() or self:IsMouseOver() then
+            self._closeTimer = nil
+        else
+            if not self._closeTimer then self._closeTimer = GetTime() + 0.4
+            elseif GetTime() >= self._closeTimer then self:Hide() end
+        end
+    end)
+
+    if selectKey then pf[selectKey] = btn end
+    card._rowCount = card._rowCount + 1; card._rows[card._rowCount] = row
+    return row
+end
+
 -- ── Copy Settings Dropdown ──────────────────────────────────────────────
 -- Creates a "Copy From" dropdown button in a popup.
 -- opts.sources = { {key="player", label="Player"}, ... }

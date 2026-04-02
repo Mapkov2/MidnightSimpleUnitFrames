@@ -35,6 +35,7 @@ local GetRaidTargetIndex = _G.GetRaidTargetIndex
 local GetReadyCheckStatus = _G.GetReadyCheckStatus
 local C_IncomingSummon = _G.C_IncomingSummon
 local C_Timer = _G.C_Timer
+local GetTime = _G.GetTime
 local AuraUtil = _G.AuraUtil
 local CreateFrame = _G.CreateFrame
 local IsSpellInRange = _G.C_Spell and _G.C_Spell.IsSpellInRange
@@ -185,8 +186,6 @@ local _GF_RefreshBorder
 ------------------------------------------------------------------------
 -- UNIT_AURA: inline per-frame dispatch (no coalescing)
 ------------------------------------------------------------------------
-local _dispConfCache = {}  -- [kind] = { aurasOn, conf } — invalidated by GetConf
-
 local function dispatchAura(f, unit, updateInfo)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
@@ -194,7 +193,6 @@ local function dispatchAura(f, unit, updateInfo)
     local aurasOn = auras and auras.enabled ~= false
 
     if not aurasOn then
-        -- Auras disabled: only rescan dispel on add/remove (not DoT/HoT tick updates)
         if conf.dispelEnabled ~= false and GF._playerCanDispel then
             if not updateInfo or updateInfo.isFullUpdate
                or (updateInfo.addedAuras and #updateInfo.addedAuras > 0)
@@ -205,32 +203,92 @@ local function dispatchAura(f, unit, updateInfo)
         return
     end
 
-    -- Quick path for update-only events (most common: DoT/HoT ticks, buff refreshes)
-    -- No auras added/removed → displayed icons unchanged → only refresh cooldown/stacks
-    if updateInfo and not updateInfo.isFullUpdate
-       and (not updateInfo.addedAuras or #updateInfo.addedAuras == 0)
-       and (not updateInfo.removedAuraInstanceIDs or #updateInfo.removedAuraInstanceIDs == 0) then
-        local upd = updateInfo.updatedAuraInstanceIDs
-        if not upd or #upd == 0 then return end
-        -- Direct icon refresh: aid→icon map, skip full UpdateFrameAuras pipeline
-        local displayed = f._msufDisplayedAuraIDs
-        if displayed and GF.RefreshAuraIcon then
-            local refreshed = false
-            for ui = 1, #upd do
-                local icon = displayed[upd[ui]]
-                if icon then
-                    GF.RefreshAuraIcon(icon, unit, upd[ui])
-                    refreshed = true
-                end
+    -- Check if ANY sub-group is actually enabled (avoid full pipeline when all off)
+    local anyGroupOn = (auras.debuff and auras.debuff.enabled ~= false)
+                    or (auras.buff and auras.buff.enabled ~= false)
+                    or (auras.externals and auras.externals and auras.externals.enabled)
+    if not anyGroupOn then
+        -- Master ON but all sub-groups OFF: only standalone dispel if needed
+        if conf.dispelEnabled ~= false and GF._playerCanDispel then
+            if not updateInfo or updateInfo.isFullUpdate
+               or (updateInfo.addedAuras and #updateInfo.addedAuras > 0)
+               or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0) then
+                GF._UpdateDispel(f, unit)
             end
-            -- If we refreshed at least one icon, we're done (no full rescan needed)
-            -- If no displayed icons were updated, skip entirely
-            return
         end
-        -- Fallback: no displayed map yet → full pipeline
+        return
     end
 
-    -- Full aura processing (add/remove/fullUpdate): UpdateFrameAuras + merged dispel
+    -- Full rescan required
+    if not updateInfo or updateInfo.isFullUpdate then
+        -- Throttle fullUpdate when out of combat (Blizzard fires these periodically)
+        if updateInfo and updateInfo.isFullUpdate and not InCombatLockdown() then
+            local now = GetTime()
+            local last = f._msufGFLastFullAura
+            if last and (now - last) < 0.5 then return end
+            f._msufGFLastFullAura = now
+        end
+        -- fall through to full pipeline below
+    else
+        local added   = updateInfo.addedAuras
+        local removed = updateInfo.removedAuraInstanceIDs
+        local updated = updateInfo.updatedAuraInstanceIDs
+        local hasAdd = added and #added > 0
+        local hasRem = removed and #removed > 0
+        local hasUpd = updated and #updated > 0
+
+        -- Nothing relevant at all
+        if not hasAdd and not hasRem and not hasUpd then return end
+
+        local displayed = f._msufDisplayedAuraIDs
+
+        -- Update-only: direct icon refresh (16µs vs 115µs)
+        if not hasAdd and not hasRem and hasUpd then
+            if displayed and GF.RefreshAuraIcon then
+                for ui = 1, #updated do
+                    local icon = displayed[updated[ui]]
+                    if icon then
+                        GF.RefreshAuraIcon(icon, unit, updated[ui])
+                    end
+                end
+                return
+            end
+        end
+
+        -- Remove-only: skip if none of the removed auras were displayed
+        if hasRem and not hasAdd then
+            if displayed then
+                local anyDisplayed = false
+                for ri = 1, #removed do
+                    if displayed[removed[ri]] then anyDisplayed = true; break end
+                end
+                if not anyDisplayed then
+                    -- Removed auras weren't visible — also handle updates if present
+                    if hasUpd and GF.RefreshAuraIcon then
+                        for ui = 1, #updated do
+                            local icon = displayed[updated[ui]]
+                            if icon then GF.RefreshAuraIcon(icon, unit, updated[ui]) end
+                        end
+                    end
+                    return
+                end
+            end
+        end
+
+        -- Add or displayed-remove: fall through to full pipeline
+    end
+
+    -- Out-of-combat rate limit: max 2 full rescans/s per frame (idle optimization)
+    -- In combat: unlimited (instant debuff detection)
+    if not InCombatLockdown() then
+        local now = GetTime()
+        if f._msufGFLastFullAura and (now - f._msufGFLastFullAura) < 0.5 then
+            return
+        end
+        f._msufGFLastFullAura = now
+    end
+
+    -- Full aura processing (add/remove/fullUpdate)
     if GF.UpdateFrameAuras then
         GF.UpdateFrameAuras(f, unit)
         local mergedDispel = f._msufGFMergedDispel
@@ -1156,6 +1214,10 @@ local function _GF_GetAbsorbSetting(kind, key)
 end
 
 local function _GF_IsAbsorbEnabled(kind)
+    -- Check GF-local setting first (absorbEnabled in gf_party/gf_raid)
+    local conf = GF.GetConf(kind)
+    if conf.absorbEnabled ~= nil then return conf.absorbEnabled ~= false end
+    -- Fall through to general bar settings
     local mode = _GF_GetAbsorbSetting(kind, "absorbTextMode")
     if mode then
         mode = tonumber(mode)
@@ -1228,7 +1290,12 @@ dispatchIncomingHeal = function(f, unit)
         return
     end
     local conf = GF.GetConf(f._msufGFKind or "party")
-    if conf.healPredEnabled == false then bar:Hide(); return end
+    local hpEnabled = conf.healPredEnabled
+    if hpEnabled == nil then
+        local gen = _G.MSUF_DB and _G.MSUF_DB.general
+        hpEnabled = not gen or gen.enableHealPrediction ~= false
+    end
+    if hpEnabled == false then bar:Hide(); return end
     if not UnitGetIncomingHeals then bar:Hide(); return end
     if not unit or not UnitExists(unit) then bar:Hide(); return end
     local hpMax = UnitHealthMax(unit)
@@ -1291,7 +1358,8 @@ dispatchHealAbsorb = function(f, unit)
         return
     end
     local kind = f._msufGFKind or "party"
-    if not _GF_IsAbsorbEnabled(kind) then bar:Hide(); return end
+    local conf = GF.GetConf(kind)
+    if conf.healAbsorbEnabled == false then bar:Hide(); return end
     if not UnitGetTotalHealAbsorbs then bar:Hide(); return end
     if not unit or not UnitExists(unit) then bar:Hide(); return end
     local hpMax = UnitHealthMax(unit)

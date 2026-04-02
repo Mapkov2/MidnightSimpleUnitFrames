@@ -78,6 +78,16 @@ local function _SetUnitEnabled(cache, a2)
     for i = 1, 5 do
         ue[_BOSS_UNITS[i]] = showBoss
     end
+
+    -- Group frame unit toggles (Phase 7)
+    local showParty = (a2.showParty == true)
+    for i = 1, 4 do
+        ue["party" .. i] = showParty
+    end
+    local showRaid = (a2.showRaid == true)
+    for i = 1, 40 do
+        ue["raid" .. i] = showRaid
+    end
  end
 
 function DB.InvalidateCache()
@@ -189,5 +199,7 @@ function DB.AnyUnitEnabledCached()
         or (ue.boss3 == true)
         or (ue.boss4 == true)
         or (ue.boss5 == true)
+        or (ue.party1 == true)
+        or (ue.raid1 == true)
 end
 

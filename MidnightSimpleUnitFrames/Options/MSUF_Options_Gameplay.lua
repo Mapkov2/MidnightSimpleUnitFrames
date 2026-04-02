@@ -837,6 +837,7 @@ end)
 
         if field then panel[field] = sl end
         if key then BindSlider(sl, key, roundFunc, after, applyNow) end
+        if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(sl) end
         return sl
     end
 

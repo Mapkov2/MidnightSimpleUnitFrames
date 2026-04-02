@@ -362,6 +362,78 @@ end
 local _externalsIDs = {}
 
 ------------------------------------------------------------------------
+-- Spell blacklist/whitelist filter (secret-safe)
+-- gcfg.spellFilter = "NONE" | "BLACKLIST" | "WHITELIST"
+-- gcfg.spellList = { [spellId] = true, ... }
+-- Returns true if aura should be SKIPPED (filtered out)
+------------------------------------------------------------------------
+local function _IsSpellFiltered(aura, spellFilter, spellList)
+    if not spellList then return false end
+    local sid = aura.spellId
+    if sid == nil then return false end
+    if issecretvalue and issecretvalue(sid) then return false end
+    if spellFilter == 1 then -- BLACKLIST
+        return spellList[sid] == true
+    else -- spellFilter == 2, WHITELIST
+        return not spellList[sid]
+    end
+end
+
+------------------------------------------------------------------------
+-- Predefined spell catalogue (for Options UI quick-add)
+-- Categories: EXHAUSTION, MISC, PALADIN, PRIEST, TANK, CROWD_CONTROL
+------------------------------------------------------------------------
+GF.SPELL_FILTER_MODES = { "NONE", "BLACKLIST", "WHITELIST" }
+
+-- Debuff catalogue (spells that appear as HARMFUL on group frames)
+GF.SPELL_CATALOGUE_DEBUFF = {
+    { id = 57723,  name = "Exhaustion",             cat = "EXHAUSTION" },
+    { id = 57724,  name = "Sated",                  cat = "EXHAUSTION" },
+    { id = 95809,  name = "Insanity",               cat = "EXHAUSTION" },
+    { id = 80354,  name = "Temporal Displacement",   cat = "EXHAUSTION" },
+    { id = 390435, name = "Exhaustion (Fury)",       cat = "EXHAUSTION" },
+    { id = 25771,  name = "Forbearance",             cat = "CLASS" },
+    { id = 6788,   name = "Weakened Soul",           cat = "CLASS" },
+    { id = 15007,  name = "Resurrection Sickness",   cat = "MISC" },
+    { id = 26013,  name = "Deserter",                cat = "MISC" },
+}
+
+-- Buff catalogue (spells that appear as HELPFUL on group frames)
+GF.SPELL_CATALOGUE_BUFF = {
+    { id = 36032,  name = "Arcane Charges",          cat = "CLASS" },
+    { id = 1459,   name = "Arcane Intellect",        cat = "RAID_BUFF" },
+    { id = 21562,  name = "Power Word: Fortitude",   cat = "RAID_BUFF" },
+    { id = 6673,   name = "Battle Shout",            cat = "RAID_BUFF" },
+    { id = 1126,   name = "Mark of the Wild",        cat = "RAID_BUFF" },
+}
+
+-- Legacy combined reference
+GF.SPELL_CATALOGUE = GF.SPELL_CATALOGUE_DEBUFF
+
+-- Quick-apply: add all spells in a category to a spellList
+function GF.ApplySpellCatalogueCategory(spellList, category, enable)
+    if type(spellList) ~= "table" then return end
+    for _, entry in pairs(GF.SPELL_CATALOGUE) do
+        if entry.cat == category then
+            if enable then
+                spellList[entry.id] = true
+            else
+                spellList[entry.id] = nil
+            end
+        end
+    end
+end
+
+-- Quick-apply: add a default blacklist preset (DPS-friendly)
+function GF.ApplyDPSBlacklistPreset(gcfg)
+    if type(gcfg) ~= "table" then return end
+    gcfg.spellFilter = "BLACKLIST"
+    if type(gcfg.spellList) ~= "table" then gcfg.spellList = {} end
+    GF.ApplySpellCatalogueCategory(gcfg.spellList, "EXHAUSTION", true)
+    GF.ApplySpellCatalogueCategory(gcfg.spellList, "MISC", true)
+end
+
+------------------------------------------------------------------------
 -- Scan + render one aura group
 ------------------------------------------------------------------------
 ------------------------------------------------------------------------
@@ -432,6 +504,13 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local step = iconSize + spacing
     local topDispel = nil
 
+    -- Pre-resolve spell filter (0=none, 1=blacklist, 2=whitelist)
+    local spellFilter = 0
+    local spellList
+    local sf = gcfg.spellFilter
+    if sf == "BLACKLIST" or sf == 1 then spellFilter = 1; spellList = gcfg.spellList
+    elseif sf == "WHITELIST" or sf == 2 then spellFilter = 2; spellList = gcfg.spellList end
+
     for i = 2, slotCount do
         if shown >= maxIcons and (not isHarmful or topDispel) then break end
         local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
@@ -441,7 +520,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                or (dedupIDs and aid and dedupIDs[aid]) then
                 -- skip (claimed by externals or SpellIndicators)
             else
-                -- Merged dispel: check during harmful scan
+                -- Merged dispel: check during harmful scan (BEFORE spell filter — dispel ignores blacklist)
                 if isHarmful and not topDispel then
                     local dn = aura.dispelName
                     if dn ~= nil and not (issecretvalue and issecretvalue(dn)) and dn ~= "" then
@@ -454,7 +533,10 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                     end
                 end
 
-                if shown >= maxIcons then
+                -- Spell filter: blacklist/whitelist (skip AFTER dispel check)
+                if spellFilter ~= 0 and _IsSpellFiltered(aura, spellFilter, spellList) then
+                    -- filtered out — don't display icon but dispel was already checked above
+                elseif shown >= maxIcons then
                     -- Past icon limit — only scanning for dispel
                 else
                     shown = shown + 1

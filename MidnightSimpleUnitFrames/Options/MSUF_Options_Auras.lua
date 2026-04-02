@@ -389,6 +389,7 @@ local function CreateSlider(parent, label, minV, maxV, step, x, y, getter, sette
     s:SetScript("OnShow", function(self)
         self:SetValue(getter() or minV)
      end)
+     if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(s) end
      return s
 end
 -- Compact slider variant used in the Auras 2.0 box.

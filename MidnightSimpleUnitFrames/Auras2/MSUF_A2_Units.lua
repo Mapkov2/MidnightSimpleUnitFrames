@@ -43,6 +43,20 @@ if type(Units.BOSS) ~= "table" then
     Units.BOSS = t
 end
 
+-- Party unit tokens (SecureGroupHeader assigns party1-party4)
+if type(Units.PARTY) ~= "table" then
+    Units.PARTY = { "party1", "party2", "party3", "party4" }
+end
+Units.PARTY_MAX = 4
+
+-- Raid unit tokens (raid1-raid40)
+if type(Units.RAID) ~= "table" then
+    local t = {}
+    for i = 1, 40 do t[i] = "raid" .. i end
+    Units.RAID = t
+end
+Units.RAID_MAX = 40
+
 if type(Units.ALL) ~= "table" then
     local t = {}
     local n = 0
@@ -61,6 +75,22 @@ end
 function Units.IsBoss(unit) 
     if type(unit) ~= "string" then  return false end
     return unit:sub(1, 4) == "boss"
+end
+
+function Units.IsParty(unit)
+    if type(unit) ~= "string" then return false end
+    return unit:sub(1, 5) == "party"
+end
+
+function Units.IsRaid(unit)
+    if type(unit) ~= "string" then return false end
+    return unit:sub(1, 4) == "raid"
+end
+
+function Units.IsGroupUnit(unit)
+    if type(unit) ~= "string" then return false end
+    local p = unit:sub(1, 5)
+    return p == "party" or unit:sub(1, 4) == "raid"
 end
 
 function Units.ForEachAll(fn) 

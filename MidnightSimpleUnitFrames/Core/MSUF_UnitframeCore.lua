@@ -180,6 +180,17 @@ local function UFCore_RefreshSettingsCache(reason)
     if not ag and g and g.enableAggroHighlight == true then ag = "border" end -- legacy migrate
     cache.aggroIndicatorMode = ag or "off"
 
+    -- Boss Target Highlight
+    cache.bossTargetHLEnabled = (g and g.bossTargetHighlightEnabled ~= false) and true or false
+    local btc = g and g.bossTargetHighlightColor
+    if type(btc) == "table" then
+        cache.bossTargetHLR = btc[1] or 1
+        cache.bossTargetHLG = btc[2] or 0.82
+        cache.bossTargetHLB = btc[3] or 0
+    else
+        cache.bossTargetHLR, cache.bossTargetHLG, cache.bossTargetHLB = 1, 0.82, 0
+    end
+
     -- Smooth power bar + real-time text (hot-path upvalues).
     -- Default ON (true) when not explicitly set. Matches MidnightRogueBars behavior.
     local prevEither = (_smoothPowerBar or _realtimePowerText)
@@ -3149,6 +3160,9 @@ local function _UFCore_FlushBossEngage()
             QueueUnit(unit, false, _bossEngageMask, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
         end
     end
+    -- Boss Target Highlight: re-evaluate after boss frames appear/disappear
+    local fn = _G.MSUF_UpdateBossTargetHighlight
+    if type(fn) == "function" then fn() end
 end
 local function _UFCore_ScheduleBossEngage()
     if _bossEngageQueued then return end
@@ -3351,6 +3365,47 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 end)
 
+-- ---------------------------------------------------------------------------
+-- Boss Target Highlight: set _msufBossTargetHLOn flag on boss frames so the
+-- Borders.lua priority system can render the highlight overlay.
+-- Secret-safe: UnitIsUnit takes string tokens only; guard result anyway.
+-- Diff-gated per frame to avoid redundant RefreshRareBarVisuals calls.
+-- ---------------------------------------------------------------------------
+local _BTH_issecret = _UFCORE_issecret
+local _BTH_UnitIsUnit = UnitIsUnit
+local _BTH_UnitExists = UnitExists
+
+local function UFCore_UpdateBossTargetHighlight()
+    local uf = _G.MSUF_UnitFrames
+    if not uf then return end
+    local fn = _G.MSUF_RefreshRareBarVisuals
+
+    for i = 1, 5 do
+        local bossUnit = "boss" .. i
+        local frame = uf[bossUnit]
+        if frame then
+            local isTarget = false
+            if _BTH_UnitExists(bossUnit) then
+                local result = _BTH_UnitIsUnit("target", bossUnit)
+                if _BTH_issecret and _BTH_issecret(result) then
+                    -- secret: keep last known state
+                elseif result then
+                    isTarget = true
+                end
+            end
+
+            local prev = frame._msufBossTargetHLOn or false
+            if prev ~= isTarget then
+                frame._msufBossTargetHLOn = isTarget
+                if type(fn) == "function" then fn(frame) end
+            end
+        end
+    end
+end
+
+-- Export for Options/profile refresh
+_G.MSUF_UpdateBossTargetHighlight = UFCore_UpdateBossTargetHighlight
+
 -- Phase 1 Fan-out: route PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED through EventBus
 -- so all modules (UFCore, Auras, RangeFade, etc.) share ONE engine-level registration.
 do
@@ -3361,6 +3416,8 @@ do
             QueueUnit("targettarget", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
             DeferSwapWork("target", "PLAYER_TARGET_CHANGED", true, false)
             DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", false, false)
+            -- Boss Target Highlight: update which boss frame shows the target border
+            UFCore_UpdateBossTargetHighlight()
         end)
 
         busReg("PLAYER_FOCUS_CHANGED", "MSUF_UFCORE", function()

@@ -1245,6 +1245,7 @@ editModeButton:SetScript("OnClick", function()
         end
      end)
     local function MSUF_StyleSlider(slider)
+        if ns.MSUF_StyleSlider then return ns.MSUF_StyleSlider(slider) end
         if not slider or slider.MSUFStyled then  return end
         slider.MSUFStyled = true
         slider:SetHeight(14)
@@ -2305,9 +2306,13 @@ end
             if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
                 _G.MSUF_SetPurgeBorderTestMode(false)
             end
+            if type(_G.MSUF_SetBossTargetBorderTestMode) == "function" then
+                _G.MSUF_SetBossTargetBorderTestMode(false)
+            end
             if panel.aggroTestCheck then panel.aggroTestCheck:SetChecked(false) end
             if panel.dispelTestCheck then panel.dispelTestCheck:SetChecked(false) end
             if panel.purgeTestCheck then panel.purgeTestCheck:SetChecked(false) end
+            if panel.bossTargetTestCheck then panel.bossTargetTestCheck:SetChecked(false) end
         end
         -- Standalone slash menu window (/msuf)
         local slashWin = _G.MSUF_StandaloneOptionsWindow

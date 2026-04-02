@@ -112,7 +112,7 @@ API.ForceSetEditModeActive = ForceSetEditModeActive
 local MSUF_DB
 
 -- DB defaults (copied from original Render  must stay identical for migration compat)
-local A2_AURAS2_DEFAULTS = { enabled=true, showTarget=true, showFocus=true, showBoss=true, showPlayer=false }
+local A2_AURAS2_DEFAULTS = { enabled=true, showTarget=true, showFocus=true, showBoss=true, showPlayer=false, showParty=false, showRaid=false }
 local A2_SHARED_DEFAULTS = {
     showBuffs=true, showDebuffs=true, showTooltip=true,
     showCooldownSwipe=true, showCooldownText=true, cooldownSwipeDarkenOnLoss=false,
@@ -259,6 +259,8 @@ A2_STATE.aurasByUnit = (type(A2_STATE.aurasByUnit) == "table") and A2_STATE.aura
 local AurasByUnit = A2_STATE.aurasByUnit
 
 local _IS_BOSS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
+local _IS_PARTY = { party1=true, party2=true, party3=true, party4=true }
+local _IS_RAID = {}; for i = 1, 40 do _IS_RAID["raid" .. i] = true end
 local _DIR_HASH = { LEFT=1, RIGHT=2, UP=3, DOWN=4 }
 
 -- Phase 8: pre-computed fallback names (eliminates string concat in hot path)
@@ -266,6 +268,7 @@ local _FRAME_FALLBACK = {
     player = "MSUF_player", target = "MSUF_target", focus = "MSUF_focus",
     boss1 = "MSUF_boss1", boss2 = "MSUF_boss2", boss3 = "MSUF_boss3",
     boss4 = "MSUF_boss4", boss5 = "MSUF_boss5",
+    -- Party/raid frames resolve via MSUF_UnitFrames (registered by GF_Core)
 }
 
 local function FindUnitFrame(unit)
@@ -283,6 +286,8 @@ local function UnitEnabled(a2, unit)
     if unit == "target" then return a2.showTarget == true end
     if unit == "focus" then return a2.showFocus == true end
     if _IS_BOSS[unit] then return a2.showBoss == true end
+    if _IS_PARTY[unit] then return a2.showParty == true end
+    if _IS_RAID[unit] then return a2.showRaid == true end
     return false
 end
 

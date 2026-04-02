@@ -361,6 +361,7 @@ local function GetClassPowerType()
     elseif PLAYER_CLASS == "MAGE" then
         local spec = GetSpec and GetSpec()
         if spec == CPK.SPEC.MAGE_ARCANE then return PT.ArcaneCharges, CPK.MODE.SEGMENTED, false end
+        if spec == CPK.SPEC.MAGE_FROST then return "ICICLES", CPK.MODE.AURA_SEGMENTED, true end
 
     elseif PLAYER_CLASS == "MONK" then
         local spec = GetSpec and GetSpec()
@@ -1323,6 +1324,8 @@ local function FullRefresh()
                 CP.spStacks = 0
                 CP.spExpires = nil
                 CP.spCachedQ = -1
+            elseif powerType == "ICICLES" then
+                maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
             else
                 maxP = 10
             end

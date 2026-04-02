@@ -64,6 +64,11 @@ local FILTER_MODES = {
     { key = "RAID_IN_COMBAT", label = L["Raid in Combat + Player"] },
     { key = "ALL_PLAYER",     label = L["All Player"]              },
 }
+local SPELL_FILTER_MODES = {
+    { key = "NONE",      label = L["No Filter"]  },
+    { key = "BLACKLIST", label = L["Blacklist"]   },
+    { key = "WHITELIST", label = L["Whitelist"]   },
+}
 local DIRECTION4 = {
     { key = "LEFT",   label = L["Left"]   },
     { key = "RIGHT",  label = L["Right"]  },
@@ -303,6 +308,119 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         fs:SetText(text)
         fs:SetTextColor(1, 0.82, 0, 1)
         return row
+    end
+
+    ----------------------------------------------------------------
+    -- Spell Filter section builder (shared by Buffs + Debuffs)
+    -- Adds: filter mode dropdown, catalogue checkboxes, custom ID input
+    ----------------------------------------------------------------
+    local function BuildSpellFilterWidgets(body, prevRow, gk)
+        local r = RowDivider(body, prevRow)
+        r = RowSubLabel(body, r, L["Spell Filter"])
+        r = RowDropdown(body, r, L["Filter Mode"], gk, "spellFilter", SPELL_FILTER_MODES, "NONE")
+
+        -- Use correct catalogue per group type
+        local catalogue = (gk == "buff") and (GF.SPELL_CATALOGUE_BUFF)
+                        or (gk == "debuff") and (GF.SPELL_CATALOGUE_DEBUFF)
+                        or nil
+        if catalogue and #catalogue > 0 then
+            local lastCat = nil
+            for _, entry in ipairs(catalogue) do
+                if entry.cat ~= lastCat then
+                    lastCat = entry.cat
+                    local catRow = RowFrame(body, r, 4)
+                    local catFs = catRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                    catFs:SetPoint("LEFT", catRow, "LEFT", 20, 0)
+                    catFs:SetText("|cff88bbdd" .. (entry.cat or "Other") .. "|r")
+                    r = catRow
+                end
+                local spellRow = RowFrame(body, r, 0)
+                local cb = CreateFrame("CheckButton", nil, spellRow, "UICheckButtonTemplate")
+                cb:SetSize(20, 20)
+                cb:SetPoint("LEFT", spellRow, "LEFT", 28, 0)
+                local fs = cb.text or cb.Text
+                if fs and fs.SetText then
+                    fs:SetText(entry.name or ("Spell " .. entry.id))
+                    if fs.SetFontObject then fs:SetFontObject("GameFontHighlightSmall") end
+                end
+                local sid = entry.id
+                cb:SetChecked((AG(gk).spellList or {})[sid] == true)
+                cb:SetScript("OnClick", function(self)
+                    local g = AG(gk)
+                    if type(g.spellList) ~= "table" then g.spellList = {} end
+                    if self:GetChecked() then g.spellList[sid] = true else g.spellList[sid] = nil end
+                    GF.RefreshVisuals()
+                end)
+                if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
+                _auraRefreshFns[#_auraRefreshFns + 1] = function()
+                    cb:SetChecked((AG(gk).spellList or {})[sid] == true)
+                end
+                r = spellRow
+            end
+        end
+
+        -- Custom SpellID input + DPS Preset
+        local addRow = RowFrame(body, r, 4)
+        local addLabel = addRow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        addLabel:SetPoint("LEFT", addRow, "LEFT", 28, 0)
+        addLabel:SetText(L["Add SpellID:"])
+        addLabel:SetTextColor(0.7, 0.7, 0.7, 1)
+        local eb = CreateFrame("EditBox", nil, addRow, "BackdropTemplate")
+        eb:SetSize(80, 20)
+        eb:SetPoint("LEFT", addLabel, "RIGHT", 6, 0)
+        eb:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        eb:SetBackdropColor(0.08, 0.10, 0.16, 1)
+        eb:SetBackdropBorderColor(0.20, 0.30, 0.50, 0.7)
+        eb:SetFontObject("GameFontHighlightSmall")
+        eb:SetAutoFocus(false)
+        eb:SetNumeric(true)
+        eb:SetMaxLetters(8)
+        eb:SetScript("OnEnterPressed", function(self)
+            local sid = tonumber(self:GetText())
+            if sid and sid > 0 then
+                local g = AG(gk)
+                if type(g.spellList) ~= "table" then g.spellList = {} end
+                g.spellList[sid] = true
+                GF.RefreshVisuals()
+                self:SetText("")
+                self:ClearFocus()
+            end
+        end)
+        eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+        if gk == "debuff" then
+            local presetBtn = CreateFrame("Button", nil, addRow, "BackdropTemplate")
+            presetBtn:SetSize(90, 20)
+            presetBtn:SetPoint("LEFT", eb, "RIGHT", 8, 0)
+            presetBtn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+            presetBtn:SetBackdropColor(0.12, 0.18, 0.30, 1)
+            presetBtn:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.8)
+            local pFs = presetBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            pFs:SetPoint("CENTER")
+            pFs:SetText(L["DPS Preset"])
+            pFs:SetTextColor(0.5, 0.75, 1, 1)
+            presetBtn:SetScript("OnClick", function()
+                if GF.ApplyDPSBlacklistPreset then
+                    GF.ApplyDPSBlacklistPreset(AG(gk))
+                    GF.RefreshVisuals()
+                    for _, fn in ipairs(_auraRefreshFns) do fn() end
+                end
+            end)
+            presetBtn:SetScript("OnEnter", function(self)
+                self:SetBackdropBorderColor(0.40, 0.60, 0.90, 1)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:AddLine("DPS Preset", 1, 1, 1)
+                GameTooltip:AddLine("Blacklists: Exhaustion, Sated,", 0.7, 0.7, 0.7)
+                GameTooltip:AddLine("Res Sickness, Deserter", 0.7, 0.7, 0.7)
+                GameTooltip:Show()
+            end)
+            presetBtn:SetScript("OnLeave", function(self)
+                self:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.8)
+                GameTooltip:Hide()
+            end)
+        end
+
+        return addRow
     end
 
     ----------------------------------------------------------------
@@ -1182,15 +1300,19 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Buffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("buff", L["Buffs"], 530, function(body, prevRow, gk)
-        return RowDropdown(body, prevRow, L["Filter"], gk, "filterMode", FILTER_MODES, "RAID_PLAYER")
+    BuildAuraGroupSection("buff", L["Buffs"], 860, function(body, prevRow, gk)
+        local r = RowDropdown(body, prevRow, L["Filter"], gk, "filterMode", FILTER_MODES, "RAID_PLAYER")
+        r = BuildSpellFilterWidgets(body, r, gk)
+        return r
     end)
 
     ----------------------------------------------------------------
     -- Section: Debuffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("debuff", L["Debuffs"], 530, function(body, prevRow, gk)
-        return RowCheck(body, prevRow, L["Show Dispel Type Border"], gk, "showDispelBorder")
+    BuildAuraGroupSection("debuff", L["Debuffs"], 1000, function(body, prevRow, gk)
+        local r = RowCheck(body, prevRow, L["Show Dispel Type Border"], gk, "showDispelBorder")
+        r = BuildSpellFilterWidgets(body, r, gk)
+        return r
     end)
 
     ----------------------------------------------------------------
