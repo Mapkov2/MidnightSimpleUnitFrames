@@ -1,0 +1,1503 @@
+-- MSUF_Options_GF.lua — Group Frames Options Panel (Phase 6)
+-- Accordion UX, Party/Raid scope tabs, ns.UI.* toolkit, preview management.
+-- Midnight 12.0 secret-safe, zero combat overhead.
+local _, ns = ...
+ns = ns or (_G and _G.MSUF_NS) or {}
+if _G then _G.MSUF_NS = ns end
+
+local GF
+local UI
+local TR = ns.TR or function(v) return v end
+local CreateFrame = CreateFrame
+local ColorPickerFrame = ColorPickerFrame
+local UIDropDownMenu_SetWidth = UIDropDownMenu_SetWidth
+local type = type
+local pairs = pairs
+local ipairs = ipairs
+
+local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
+local SECTION_W = 680
+local SECTION_COLLAPSED_H = 28
+
+------------------------------------------------------------------------
+-- Color picker (same pattern as MSUF_Options_Colors.lua)
+------------------------------------------------------------------------
+local function OpenColorPicker(r, g, b, callback)
+    if not ColorPickerFrame or type(callback) ~= "function" then return end
+    local sR, sG, sB = tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1
+    if ColorPickerFrame.SetupColorPickerAndShow then
+        ColorPickerFrame:SetupColorPickerAndShow({
+            r = sR, g = sG, b = sB, opacity = 1, hasOpacity = false,
+            swatchFunc = function()
+                local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+                callback(nr, ng, nb)
+            end,
+            cancelFunc = function(prev)
+                if type(prev) == "table" then
+                    callback(prev.r or sR, prev.g or sG, prev.b or sB)
+                else callback(sR, sG, sB) end
+            end,
+            previousValues = { r = sR, g = sG, b = sB, opacity = 1 },
+        })
+    else
+        local function onChange() local nr, ng, nb = ColorPickerFrame:GetColorRGB(); callback(nr, ng, nb) end
+        ColorPickerFrame.func = onChange
+        ColorPickerFrame.cancelFunc = function(prev)
+            if type(prev) == "table" then callback(prev.r or sR, prev.g or sG, prev.b or sB)
+            else callback(sR, sG, sB) end
+        end
+        ColorPickerFrame.previousValues = { r = sR, g = sG, b = sB }
+        ColorPickerFrame.hasOpacity = false
+        ColorPickerFrame:SetColorRGB(sR, sG, sB)
+        ColorPickerFrame:Show()
+    end
+end
+
+------------------------------------------------------------------------
+-- Color swatch helper
+------------------------------------------------------------------------
+local function MakeColorSwatch(parent, anchor, anchorPt, ox, oy, label, getColors, onSet)
+    local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    lbl:SetPoint("TOPLEFT", anchor, anchorPt or "BOTTOMLEFT", ox, oy)
+    lbl:SetText(TR(label))
+
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(32, 16)
+    btn:SetPoint("LEFT", lbl, "RIGHT", 8, 0)
+    local tex = btn:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints()
+    btn._swatchTex = tex
+
+    local function Refresh()
+        local r, g, b = getColors()
+        tex:SetColorTexture(r or 1, g or 1, b or 1)
+    end
+    btn:SetScript("OnShow", function() Refresh() end)
+    btn:SetScript("OnClick", function()
+        local r, g, b = getColors()
+        OpenColorPicker(r, g, b, function(nr, ng, nb)
+            onSet(nr, ng, nb)
+            Refresh()
+        end)
+    end)
+    btn.Refresh = Refresh
+    Refresh()
+    return lbl, btn
+end
+
+------------------------------------------------------------------------
+-- Panel builder
+------------------------------------------------------------------------
+local _panel
+local _built = false
+
+function _G.MSUF_EnsureGFPanelBuilt()
+    if _panel then return _panel end
+
+    -- Resolve lazily (GF files load before Options, but after SlashMenu parse)
+    GF = ns.GF
+    UI = ns.UI
+    TR = ns.TR or TR
+    if not GF then return nil end
+
+    _panel = CreateFrame("Frame", "MSUF_GFOptionsPanel", UIParent)
+    _panel:SetSize(640, 800)
+    _panel:Hide()
+
+    local _activeKind = "party"
+    local _allRefreshFns = {}
+
+    local function K() return _activeKind end
+    local function C() return GF.GetConf(K()) end
+    local function V(key) return GF.Val(K(), key) end
+    local function W(key, val, refreshFn)
+        local conf = GF.GetConf(K())
+        conf[key] = val
+        if type(refreshFn) == "function" then refreshFn()
+        else GF.RefreshVisuals() end
+    end
+
+    local function RefreshAllWidgets()
+        for i = 1, #_allRefreshFns do
+            local fn = _allRefreshFns[i]
+            if type(fn) == "function" then fn() end
+        end
+    end
+
+    -- Track widgets that need scope-refresh
+    local function TrackRefresh(widget)
+        if widget and widget.Refresh then
+            _allRefreshFns[#_allRefreshFns + 1] = function() if widget:IsShown() then widget:Refresh() end end
+        end
+    end
+    local function TrackCheckbox(cb)
+        if cb and cb.SetChecked and cb.GetChecked then
+            _allRefreshFns[#_allRefreshFns + 1] = function()
+                if not cb:IsShown() then return end
+                local spec = cb._msufSpec
+                if spec and spec.get then cb:SetChecked(spec.get() and true or false) end
+            end
+        end
+    end
+
+    -- Scroll frame
+    local scrollFrame = CreateFrame("ScrollFrame", "MSUF_GFScrollFrame", _panel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", _panel, "TOPLEFT", 0, 0)
+    scrollFrame:SetPoint("BOTTOMRIGHT", _panel, "BOTTOMRIGHT", -28, 0)
+    if scrollFrame.EnableMouseWheel then scrollFrame:EnableMouseWheel(true) end
+
+    local scrollChild = CreateFrame("Frame", "MSUF_GFScrollChild", scrollFrame)
+    scrollChild:SetPoint("TOPLEFT", scrollFrame, "TOPLEFT", 0, 0)
+    scrollChild:SetSize(SECTION_W + 32, 1)
+    scrollFrame:SetScrollChild(scrollChild)
+
+    if scrollFrame.SetScript then
+        scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+            local step = 40
+            local cur = self.GetVerticalScroll and self:GetVerticalScroll() or 0
+            local v = cur - ((tonumber(delta) or 0) * step)
+            if v < 0 then v = 0 end
+            local mx = self.GetVerticalScrollRange and self:GetVerticalScrollRange() or 0
+            if v > mx then v = mx end
+            if self.SetVerticalScroll then self:SetVerticalScroll(v) end
+        end)
+    end
+
+    local RefreshScrollLayout
+
+    ----------------------------------------------------------------
+    -- Collapsible section helper
+    ----------------------------------------------------------------
+    local function MakeCollapsibleSection(parent, expandedH, titleText, defaultOpen)
+        local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        box:SetSize(SECTION_W, defaultOpen and expandedH or SECTION_COLLAPSED_H)
+        box:SetBackdrop({
+            bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        box:SetBackdropColor(0, 0, 0, 0.25)
+        box:SetBackdropBorderColor(0.35, 0.35, 0.35, 0.9)
+        box._msufExpandedH = expandedH
+        box._msufCollapsedH = SECTION_COLLAPSED_H
+        box._msufCollapsed = not defaultOpen
+
+        local hdr = CreateFrame("Button", nil, box)
+        hdr:SetHeight(24)
+        hdr:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+        hdr:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
+
+        local chevron = hdr:CreateTexture(nil, "OVERLAY")
+        chevron:SetSize(12, 12)
+        chevron:SetPoint("LEFT", hdr, "LEFT", 12, 0)
+        chevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+        if _G.MSUF_ApplyCollapseVisual then
+            _G.MSUF_ApplyCollapseVisual(chevron, nil, defaultOpen)
+        end
+
+        local title = hdr:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        title:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
+        title:SetText(TR(titleText))
+
+        local hint = hdr:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hint:SetPoint("RIGHT", hdr, "RIGHT", -12, 0)
+        hint:SetText(defaultOpen and "" or TR("click to expand"))
+        hint:SetTextColor(0.45, 0.52, 0.65)
+
+        local divider = box:CreateTexture(nil, "ARTWORK")
+        divider:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -28)
+        divider:SetPoint("TOPRIGHT", box, "TOPRIGHT", -8, -28)
+        divider:SetHeight(1)
+        divider:SetColorTexture(1, 1, 1, 0.08)
+
+        local body = CreateFrame("Frame", nil, box)
+        body:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -30)
+        body:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
+        body:SetShown(defaultOpen)
+        box._msufBody = body
+
+        local function ApplyState()
+            local open = not box._msufCollapsed
+            body:SetShown(open)
+            box:SetHeight(open and box._msufExpandedH or box._msufCollapsedH)
+            if _G.MSUF_ApplyCollapseVisual then
+                _G.MSUF_ApplyCollapseVisual(chevron, hint, open)
+            end
+            if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
+        end
+
+        hdr:SetScript("OnClick", function()
+            box._msufCollapsed = not box._msufCollapsed
+            ApplyState()
+        end)
+        do
+            local hl = hdr:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints()
+            hl:SetColorTexture(1, 1, 1, 0.03)
+        end
+
+        box._msufApplyCollapseState = ApplyState
+        return box, body
+    end
+
+    ----------------------------------------------------------------
+    -- Scope tabs (Party / Raid)
+    ----------------------------------------------------------------
+    local scopeBar = CreateFrame("Frame", nil, scrollChild, "BackdropTemplate")
+    scopeBar:SetSize(SECTION_W, 32)
+    scopeBar:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, -10)
+    scopeBar:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    scopeBar:SetBackdropColor(0.04, 0.08, 0.18, 0.95)
+    scopeBar:SetBackdropBorderColor(0.12, 0.25, 0.50, 0.6)
+
+    local scopeLbl = scopeBar:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    scopeLbl:SetPoint("LEFT", scopeBar, "LEFT", 10, 0)
+    scopeLbl:SetText(TR("Editing:"))
+
+    local scopeBtns = {}
+    local function RefreshScopeBtns()
+        for kind, btn in pairs(scopeBtns) do
+            local active = (kind == _activeKind)
+            local fs = btn:GetFontString()
+            if active then
+                btn:SetBackdropColor(0.15, 0.35, 0.65, 0.9)
+                if fs then fs:SetTextColor(1, 0.82, 0) end
+            else
+                btn:SetBackdropColor(0.08, 0.12, 0.22, 0.7)
+                if fs then fs:SetTextColor(0.6, 0.65, 0.7) end
+            end
+        end
+    end
+
+    -- Preview only when no real group exists for the active scope
+    local function NeedsPreview(kind)
+        if kind == "raid" then
+            return not (IsInRaid and IsInRaid())
+        end
+        -- party: preview only when solo (no real party members)
+        return not (IsInGroup and IsInGroup())
+    end
+
+    local function ShowPreviewIfNeeded(kind)
+        if NeedsPreview(kind) then
+            -- Hide SecureGroupHeaders to prevent doubling with preview frames
+            if not InCombatLockdown() and GF.headers then
+                if GF.headers.party then GF.headers.party:Hide() end
+                if GF.headers.raid  then GF.headers.raid:Hide()  end
+            end
+            GF.ShowPreview(kind, kind == "raid" and 10 or 4)
+        end
+    end
+
+    local function HideAllPreviews()
+        GF.HidePreview("party")
+        GF.HidePreview("raid")
+        -- Restore headers
+        if not InCombatLockdown() and GF.UpdateGroupVisibility then
+            GF.UpdateGroupVisibility()
+        end
+    end
+
+    local function SwitchScope(kind)
+        _activeKind = kind
+        RefreshScopeBtns()
+        RefreshAllWidgets()
+        HideAllPreviews()
+        ShowPreviewIfNeeded(kind)
+    end
+
+    do
+        local prevBtn
+        for _, info in ipairs({ { "party", "Party" }, { "raid", "Raid" } }) do
+            local kind, label = info[1], info[2]
+            local btn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
+            btn:SetSize(56, 20)
+            btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+            btn:SetBackdropBorderColor(0.2, 0.35, 0.55, 0.5)
+            local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            fs:SetPoint("CENTER"); fs:SetText(TR(label))
+            btn:SetFontString(fs)
+            if not prevBtn then
+                btn:SetPoint("LEFT", scopeLbl, "RIGHT", 8, 0)
+            else
+                btn:SetPoint("LEFT", prevBtn, "RIGHT", 2, 0)
+            end
+            btn:SetScript("OnClick", function() SwitchScope(kind) end)
+            scopeBtns[kind] = btn
+            prevBtn = btn
+        end
+    end
+    RefreshScopeBtns()
+
+    ----------------------------------------------------------------
+    -- Helper: UI.Check with scope awareness
+    ----------------------------------------------------------------
+    local function SCheck(spec)
+        local origGet = spec.get
+        local origSet = spec.set
+        spec.get = function() return origGet(K()) end
+        spec.set = function(v) origSet(K(), v) end
+        local cb = UI.Check(spec)
+        cb._msufSpec = spec
+        _allRefreshFns[#_allRefreshFns + 1] = function()
+            if cb:IsShown() and spec.get then cb:SetChecked(spec.get() and true or false) end
+        end
+        return cb
+    end
+
+    local function SSlider(spec)
+        local origGet = spec.get
+        local origSet = spec.set
+        spec.get = function() return origGet(K()) end
+        spec.set = function(v) origSet(K(), v) end
+        local sl = UI.Slider(spec)
+        if sl then
+            _allRefreshFns[#_allRefreshFns + 1] = function()
+                if sl:IsShown() and spec.get then
+                    local v = spec.get()
+                    if type(v) == "number" and sl.SetValueClean then
+                        sl:SetValueClean(v)
+                    end
+                end
+            end
+        end
+        return sl
+    end
+
+    local function SDropdown(spec)
+        local origGet = spec.get
+        local origSet = spec.set
+        spec.get = function() return origGet(K()) end
+        spec.set = function(v) origSet(K(), v) end
+        local dd = UI.Dropdown(spec)
+        if dd and dd.Refresh then
+            _allRefreshFns[#_allRefreshFns + 1] = function() if dd:IsShown() then dd:Refresh() end end
+        end
+        return dd
+    end
+
+    ----------------------------------------------------------------
+    -- All sections stacked below scopeBar
+    ----------------------------------------------------------------
+    local sections = {}
+    local function AddSection(expandedH, title, defaultOpen)
+        local box, body = MakeCollapsibleSection(scrollChild, expandedH, title, defaultOpen)
+        sections[#sections + 1] = box
+        return box, body
+    end
+
+    ----------------------------------------------------------------
+    -- Section 1: General (default open)
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(520, "General", true)
+
+        local enableChk = SCheck({
+            name = "MSUF_GF_EnableCheck", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Enable"),
+            get = function(k) return GF.Val(k, "enabled") end,
+            set = function(k, v) GF.GetConf(k).enabled = v; GF.RebuildAll() end,
+        })
+
+        local showPlayerChk = SCheck({
+            name = "MSUF_GF_ShowPlayerCheck", parent = body,
+            anchor = enableChk, x = 0, y = -4,
+            label = TR("Show Player in Group"),
+            get = function(k) return GF.Val(k, "showPlayer") end,
+            set = function(k, v) GF.GetConf(k).showPlayer = v; GF.RebuildAll() end,
+        })
+
+        local showSoloChk = SCheck({
+            name = "MSUF_GF_ShowSoloCheck", parent = body,
+            anchor = showPlayerChk, x = 0, y = -4,
+            label = TR("Show when Solo"),
+            get = function(k) return GF.Val(k, "showSolo") end,
+            set = function(k, v) GF.GetConf(k).showSolo = v; GF.RebuildAll() end,
+        })
+
+        local widthSl = SSlider({
+            name = "MSUF_GF_WidthSlider", parent = body, compact = true,
+            anchor = showSoloChk, x = 0, y = -18,
+            min = 40, max = 300, step = 1, width = 270, default = 120,
+            get = function(k) return GF.Val(k, "width") end,
+            set = function(k, v) GF.GetConf(k).width = v; GF.RebuildAll() end,
+            formatText = function(v) return string.format("Width: %d", v) end,
+        })
+
+        local heightSl = SSlider({
+            name = "MSUF_GF_HeightSlider", parent = body, compact = true,
+            anchor = widthSl, x = 0, y = -32,
+            min = 16, max = 120, step = 1, width = 270, default = 40,
+            get = function(k) return GF.Val(k, "height") end,
+            set = function(k, v) GF.GetConf(k).height = v; GF.RebuildAll() end,
+            formatText = function(v) return string.format("Height: %d", v) end,
+        })
+
+        local spacingSl = SSlider({
+            name = "MSUF_GF_SpacingSlider", parent = body, compact = true,
+            anchor = heightSl, x = 0, y = -32,
+            min = 0, max = 20, step = 1, width = 270, default = 1,
+            get = function(k) return GF.Val(k, "spacing") end,
+            set = function(k, v) GF.GetConf(k).spacing = v; GF.RebuildAll() end,
+            formatText = function(v) return string.format("Spacing: %d", v) end,
+        })
+
+        local growthDd = SDropdown({
+            name = "MSUF_GF_GrowthDropdown", parent = body,
+            anchor = spacingSl, x = -16, y = -16, width = 200,
+            items = {
+                { key = "DOWN",  label = "Down"  },
+                { key = "UP",    label = "Up"    },
+                { key = "RIGHT", label = "Right" },
+                { key = "LEFT",  label = "Left"  },
+            },
+            get = function(k) return GF.Val(k, "growth") end,
+            set = function(k, v) GF.GetConf(k).growth = v; C_Timer.After(0, function() GF.RebuildAll() end) end,
+        })
+
+        local upcSl = SSlider({
+            name = "MSUF_GF_UnitsPerColumnSlider", parent = body, compact = true,
+            anchor = growthDd, x = 16, y = -14,
+            min = 1, max = 40, step = 1, width = 270, default = 5,
+            get = function(k) return GF.Val(k, "unitsPerColumn") end,
+            set = function(k, v) GF.GetConf(k).unitsPerColumn = v; GF.RebuildAll() end,
+            formatText = function(v) return string.format("Units per Column: %d", v) end,
+        })
+
+        local maxColSl = SSlider({
+            name = "MSUF_GF_MaxColumnsSlider", parent = body, compact = true,
+            anchor = upcSl, x = 0, y = -32,
+            min = 1, max = 8, step = 1, width = 270, default = 8,
+            get = function(k) return GF.Val(k, "maxColumns") end,
+            set = function(k, v) GF.GetConf(k).maxColumns = v; GF.RebuildAll() end,
+            formatText = function(v) return string.format("Max Columns: %d", v) end,
+        })
+
+        local reverseFillChk = SCheck({
+            name = "MSUF_GF_ReverseFillCheck", parent = body,
+            anchor = maxColSl, x = 0, y = -14,
+            label = TR("Reverse Fill"),
+            get = function(k) return GF.Val(k, "reverseFill") end,
+            set = function(k, v) GF.GetConf(k).reverseFill = v; GF.RefreshVisuals() end,
+        })
+
+        local smoothChk = SCheck({
+            name = "MSUF_GF_SmoothFillCheck", parent = body,
+            anchor = reverseFillChk, x = 0, y = -4,
+            label = TR("Smooth Health Fill"),
+            get = function(k) return GF.Val(k, "smoothFill") ~= false end,
+            set = function(k, v) GF.GetConf(k).smoothFill = v end,
+        })
+
+        SCheck({
+            name = "MSUF_GF_HideInClientSceneCheck", parent = body,
+            anchor = smoothChk, x = 0, y = -4,
+            label = TR("Hide in Barber Shop / Dressing Room"),
+            get = function(k) return GF.Val(k, "hideInClientScene") ~= false end,
+            set = function(k, v) GF.GetConf(k).hideInClientScene = v end,
+        })
+    end
+
+    ----------------------------------------------------------------
+    -- Section 2: Health Colors (info only — controlled by global Colors menu)
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(60, "Health Colors", false)
+
+        local hint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hint:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -8)
+        hint:SetWidth(640)
+        hint:SetJustifyH("LEFT")
+        hint:SetText(TR("Health bar colors follow the global |cffffd200Colors|r menu (Dark Mode, Class Colors, Unified)."))
+        hint:SetTextColor(0.55, 0.60, 0.70)
+    end
+
+    ----------------------------------------------------------------
+    -- Section 3: Power Bar
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(560, "Power Bar", false)
+
+        local phSl = SSlider({
+            name = "MSUF_GF_PowerHeightSlider", parent = body, compact = true,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -10,
+            min = 0, max = 30, step = 1, width = 270, default = 6,
+            get = function(k) return GF.Val(k, "powerHeight") end,
+            set = function(k, v) GF.GetConf(k).powerHeight = v; GF.RefreshGeometry() end,
+            formatText = function(v) return v == 0 and "Power Bar: Hidden" or string.format("Power Bar Height: %d", v) end,
+        })
+
+        local powTextChk = SCheck({
+            name = "MSUF_GF_ShowPowerTextCheck", parent = body,
+            anchor = phSl, x = 0, y = -14,
+            label = TR("Show Power Text"),
+            get = function(k) return GF.Val(k, "showPower") end,
+            set = function(k, v) GF.GetConf(k).showPower = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+        })
+
+        local powSmoothChk = SCheck({
+            name = "MSUF_GF_PowerSmoothFillCheck", parent = body,
+            anchor = powTextChk, x = 200, y = 0,
+            label = TR("Smooth Fill"),
+            get = function(k) return GF.Val(k, "powerSmoothFill") end,
+            set = function(k, v) GF.GetConf(k).powerSmoothFill = v end,
+        })
+
+        -- Power 3-slot text
+        local ptSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ptSep:SetPoint("TOPLEFT", powTextChk, "BOTTOMLEFT", 0, -10)
+        ptSep:SetText(TR("Power Text Slots"))
+        ptSep:SetTextColor(1, 0.82, 0)
+
+        local pModeItems = {}
+        for _, m in ipairs(GF.HEALTH_TEXT_MODES) do
+            pModeItems[#pModeItems + 1] = { key = m.key, label = m.label }
+        end
+
+        local ptlLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        ptlLbl:SetPoint("TOPLEFT", ptSep, "BOTTOMLEFT", 0, -6)
+        ptlLbl:SetText(TR("Left")); ptlLbl:SetTextColor(0.75, 0.75, 0.75)
+
+        local ptlDd = SDropdown({
+            name = "MSUF_GF_PowerTextLeftDropdown", parent = body,
+            anchor = ptlLbl, x = -12, y = -4, width = 180,
+            items = pModeItems,
+            get = function(k) return GF.Val(k, "powerTextLeft") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).powerTextLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+
+        local ptcLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        ptcLbl:SetPoint("TOPLEFT", ptlLbl, "TOPLEFT", 220, 0)
+        ptcLbl:SetText(TR("Center")); ptcLbl:SetTextColor(0.75, 0.75, 0.75)
+
+        local ptcDd = SDropdown({
+            name = "MSUF_GF_PowerTextCenterDropdown", parent = body,
+            anchor = ptcLbl, x = -12, y = -4, width = 180,
+            items = pModeItems,
+            get = function(k) return GF.Val(k, "powerTextCenter") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).powerTextCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+
+        local ptrLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        ptrLbl:SetPoint("TOPLEFT", ptcLbl, "TOPLEFT", 220, 0)
+        ptrLbl:SetText(TR("Right")); ptrLbl:SetTextColor(0.75, 0.75, 0.75)
+
+        SDropdown({
+            name = "MSUF_GF_PowerTextRightDropdown", parent = body,
+            anchor = ptrLbl, x = -12, y = -4, width = 180,
+            items = pModeItems,
+            get = function(k) return GF.Val(k, "powerTextRight") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).powerTextRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+
+        -- Delimiter
+        local pdLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        pdLbl:SetPoint("TOPLEFT", ptlDd, "BOTTOMLEFT", 12, -8)
+        pdLbl:SetText(TR("Delimiter")); pdLbl:SetTextColor(0.75, 0.75, 0.75)
+
+        local delimDd = SDropdown({
+            name = "MSUF_GF_PowerDelimiterDropdown", parent = body,
+            anchor = pdLbl, x = -12, y = -4, width = 180,
+            items = GF.DELIMITER_OPTIONS,
+            get = function(k) return GF.Val(k, "powerTextDelimiter") or " / " end,
+            set = function(k, v) GF.GetConf(k).powerTextDelimiter = v; GF.RefreshVisuals() end,
+        })
+
+        -- Power per-role visibility
+        local roleSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        roleSep:SetPoint("TOPLEFT", delimDd, "BOTTOMLEFT", 12, -12)
+        roleSep:SetText(TR("Show Power for Roles"))
+        roleSep:SetTextColor(1, 0.82, 0)
+
+        local tankChk = SCheck({
+            name = "MSUF_GF_PowerShowTankCheck", parent = body,
+            anchor = roleSep, anchorPoint = "BOTTOMLEFT", x = 0, y = -4,
+            label = TR("Tank"),
+            get = function(k) return GF.Val(k, "powerShowTank") ~= false end,
+            set = function(k, v) GF.GetConf(k).powerShowTank = v; GF.RefreshVisuals() end,
+        })
+
+        local healerChk = SCheck({
+            name = "MSUF_GF_PowerShowHealerCheck", parent = body,
+            anchor = tankChk, x = 0, y = -4,
+            label = TR("Healer"),
+            get = function(k) return GF.Val(k, "powerShowHealer") ~= false end,
+            set = function(k, v) GF.GetConf(k).powerShowHealer = v; GF.RefreshVisuals() end,
+        })
+
+        SCheck({
+            name = "MSUF_GF_PowerShowDamagerCheck", parent = body,
+            anchor = healerChk, x = 0, y = -4,
+            label = TR("DPS"),
+            get = function(k) return GF.Val(k, "powerShowDamager") end,
+            set = function(k, v) GF.GetConf(k).powerShowDamager = v; GF.RefreshVisuals() end,
+        })
+    end
+
+    ----------------------------------------------------------------
+    -- Section 4: Text
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(1400, "Text", false)
+
+        local nameChk = SCheck({
+            name = "MSUF_GF_ShowNameCheck", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Show Name"),
+            get = function(k) return GF.Val(k, "showName") ~= false end,
+            set = function(k, v) GF.GetConf(k).showName = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+        })
+
+        -- Name Color Mode
+        local nameColorDd = SDropdown({
+            name = "MSUF_GF_NameColorModeDropdown", parent = body,
+            anchor = nameChk, x = -16, y = -6, width = 200,
+            items = {
+                { key = "DEFAULT", label = "Default (Font Color)" },
+                { key = "CLASS",   label = "Class Color"          },
+                { key = "CUSTOM",  label = "Custom"               },
+            },
+            get = function(k) return GF.Val(k, "nameColorMode") or "DEFAULT" end,
+            set = function(k, v) GF.GetConf(k).nameColorMode = v; GF.MarkAllDirty(GF.DIRTY_FONT) end,
+        })
+
+        local nameColorSwatch = MakeColorSwatch(body, nameColorDd, "BOTTOMLEFT", 220, 6,
+            "Name Custom Color",
+            function() return V("nameColorR"), V("nameColorG"), V("nameColorB") end,
+            function(r, g, b)
+                local c = C()
+                c.nameColorR = r; c.nameColorG = g; c.nameColorB = b
+                GF.MarkAllDirty(GF.DIRTY_FONT)
+            end)
+
+        -- Name Max Chars
+        local nameMaxSl = SSlider({
+            name = "MSUF_GF_NameMaxCharsSlider", parent = body, compact = true,
+            anchor = nameColorDd, x = 16, y = -14,
+            min = 0, max = 30, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "nameMaxChars") end,
+            set = function(k, v) GF.GetConf(k).nameMaxChars = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return v == 0 and "Name Max Chars: Unlimited" or string.format("Name Max Chars: %d", v) end,
+        })
+
+        local nameNoEllipsisChk = SCheck({
+            name = "MSUF_GF_NameNoEllipsisCheck", parent = body,
+            anchor = nameMaxSl, x = 0, y = -6,
+            label = TR("No Ellipsis (truncate without ..)"),
+            get = function(k) return GF.Val(k, "nameNoEllipsis") end,
+            set = function(k, v) GF.GetConf(k).nameNoEllipsis = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+        })
+
+        -- 3-Slot Health Text
+        local htSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        htSep:SetPoint("TOPLEFT", nameNoEllipsisChk, "BOTTOMLEFT", 0, -10)
+        htSep:SetText(TR("Health Text"))
+        htSep:SetTextColor(1, 0.82, 0)
+
+        local textModeItems = {}
+        for i = 1, #GF.HEALTH_TEXT_MODES do
+            textModeItems[i] = { key = GF.HEALTH_TEXT_MODES[i].key, label = GF.HEALTH_TEXT_MODES[i].label }
+        end
+
+        local tlLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        tlLbl:SetPoint("TOPLEFT", htSep, "BOTTOMLEFT", 0, -8)
+        tlLbl:SetText(TR("Left Slot"))
+        tlLbl:SetTextColor(0.7, 0.75, 0.8)
+
+        local textLeftDd = SDropdown({
+            name = "MSUF_GF_TextLeftDropdown", parent = body,
+            anchor = tlLbl, x = -16, y = -2, width = 220,
+            items = textModeItems,
+            get = function(k) return GF.Val(k, "textLeft") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).textLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+        })
+
+        local tcLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        tcLbl:SetPoint("TOPLEFT", textLeftDd, "BOTTOMLEFT", 16, -6)
+        tcLbl:SetText(TR("Center Slot"))
+        tcLbl:SetTextColor(0.7, 0.75, 0.8)
+
+        local textCenterDd = SDropdown({
+            name = "MSUF_GF_TextCenterDropdown", parent = body,
+            anchor = tcLbl, x = -16, y = -2, width = 220,
+            items = textModeItems,
+            get = function(k) return GF.Val(k, "textCenter") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).textCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+        })
+
+        local trLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        trLbl:SetPoint("TOPLEFT", textCenterDd, "BOTTOMLEFT", 16, -6)
+        trLbl:SetText(TR("Right Slot"))
+        trLbl:SetTextColor(0.7, 0.75, 0.8)
+
+        local textRightDd = SDropdown({
+            name = "MSUF_GF_TextRightDropdown", parent = body,
+            anchor = trLbl, x = -16, y = -2, width = 220,
+            items = textModeItems,
+            get = function(k) return GF.Val(k, "textRight") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).textRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+        })
+
+        local delimLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        delimLbl:SetPoint("TOPLEFT", textRightDd, "BOTTOMLEFT", 16, -6)
+        delimLbl:SetText(TR("Delimiter"))
+        delimLbl:SetTextColor(0.7, 0.75, 0.8)
+
+        local delimiterDd = SDropdown({
+            name = "MSUF_GF_TextDelimiterDropdown", parent = body,
+            anchor = delimLbl, x = -16, y = -2, width = 200,
+            items = function()
+                local items = {}
+                for i = 1, #GF.DELIMITER_OPTIONS do
+                    items[i] = { key = GF.DELIMITER_OPTIONS[i].key, label = GF.DELIMITER_OPTIONS[i].label }
+                end
+                return items
+            end,
+            get = function(k) return GF.Val(k, "textDelimiter") or " / " end,
+            set = function(k, v) GF.GetConf(k).textDelimiter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+        })
+
+        local reverseChk = SCheck({
+            name = "MSUF_GF_HPTextReverseCheck", parent = body,
+            anchor = delimiterDd, x = 16, y = -6,
+            label = TR("Reverse Order"),
+            get = function(k) return GF.Val(k, "hpTextReverse") end,
+            set = function(k, v) GF.GetConf(k).hpTextReverse = v; GF.RefreshVisuals() end,
+        })
+
+        local globalFontChk = SCheck({
+            name = "MSUF_GF_UseGlobalFontColorCheck", parent = body,
+            anchor = reverseChk, x = 0, y = -6,
+            label = TR("Use Global Font Color (Colors menu)"),
+            get = function(k) return GF.Val(k, "useGlobalFontColor") ~= false end,
+            set = function(k, v) GF.GetConf(k).useGlobalFontColor = v; GF.RefreshFonts() end,
+        })
+
+        local anchorDd = SDropdown({
+            name = "MSUF_GF_NameAnchorDropdown", parent = body,
+            anchor = globalFontChk, x = -16, y = -8, width = 200,
+            items = {
+                { key = "LEFT",   label = "Left"   },
+                { key = "CENTER", label = "Center" },
+                { key = "RIGHT",  label = "Right"  },
+            },
+            get = function(k) return GF.Val(k, "nameAnchor") end,
+            set = function(k, v) GF.GetConf(k).nameAnchor = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+        })
+
+        local nameFontSl = SSlider({
+            name = "MSUF_GF_NameFontSizeSlider", parent = body, compact = true,
+            anchor = anchorDd, x = 16, y = -14,
+            min = 6, max = 24, step = 1, width = 270, default = 12,
+            get = function(k) return GF.Val(k, "nameFontSize") end,
+            set = function(k, v) GF.GetConf(k).nameFontSize = v; GF.RefreshFonts() end,
+            formatText = function(v) return string.format("Name Font Size: %d", v) end,
+        })
+
+        local hpFontSl = SSlider({
+            name = "MSUF_GF_HPFontSizeSlider", parent = body, compact = true,
+            anchor = nameFontSl, x = 0, y = -32,
+            min = 6, max = 24, step = 1, width = 270, default = 10,
+            get = function(k) return GF.Val(k, "hpFontSize") end,
+            set = function(k, v) GF.GetConf(k).hpFontSize = v; GF.RefreshFonts() end,
+            formatText = function(v) return string.format("HP Font Size: %d", v) end,
+        })
+
+        local powerFontSl = SSlider({
+            name = "MSUF_GF_PowerFontSizeSlider", parent = body, compact = true,
+            anchor = hpFontSl, x = 0, y = -32,
+            min = 6, max = 24, step = 1, width = 270, default = 9,
+            get = function(k) return GF.Val(k, "powerFontSize") end,
+            set = function(k, v) GF.GetConf(k).powerFontSize = v; GF.RefreshFonts() end,
+            formatText = function(v) return string.format("Power Font Size: %d", v) end,
+        })
+
+        -- Font Family (LSM)
+        local fontFamilyDd = SDropdown({
+            name = "MSUF_GF_FontFamilyDropdown", parent = body,
+            anchor = powerFontSl, x = -16, y = -14, width = 240,
+            items = function()
+                local items = { { key = "", label = "(Global Default)" } }
+                local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+                if LSM then
+                    local list = LSM:List("font")
+                    for i = 1, #list do items[#items + 1] = { key = list[i], label = list[i] } end
+                end
+                return items
+            end,
+            get = function(k) return GF.Val(k, "fontKey") or "" end,
+            set = function(k, v) GF.GetConf(k).fontKey = v; GF.RefreshFonts() end,
+        })
+
+        -- Font Outline
+        local fontOutlineDd = SDropdown({
+            name = "MSUF_GF_FontOutlineDropdown", parent = body,
+            anchor = fontFamilyDd, x = 0, y = -6, width = 200,
+            items = {
+                { key = "",              label = "(Global Default)" },
+                { key = "NONE",          label = "None"             },
+                { key = "OUTLINE",       label = "Outline"          },
+                { key = "THICKOUTLINE",  label = "Thick Outline"    },
+            },
+            get = function(k) return GF.Val(k, "fontOutline") or "" end,
+            set = function(k, v)
+                local conf = GF.GetConf(k)
+                conf.fontOutline = (v == "") and nil or v
+                GF.RefreshFonts()
+            end,
+        })
+
+        -- Text Offsets sub-group
+        local tOffSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tOffSep:SetPoint("TOPLEFT", fontOutlineDd, "BOTTOMLEFT", 16, -14)
+        tOffSep:SetText(TR("Text Offsets"))
+        tOffSep:SetTextColor(1, 0.82, 0)
+
+        local nameXSl = SSlider({
+            name = "MSUF_GF_NameOffsetXSlider", parent = body, compact = true,
+            anchor = tOffSep, x = 0, y = -8,
+            min = -100, max = 100, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "nameOffsetX") end,
+            set = function(k, v) GF.GetConf(k).nameOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Name X: %d", v) end,
+        })
+        local nameYSl = SSlider({
+            name = "MSUF_GF_NameOffsetYSlider", parent = body, compact = true,
+            anchor = nameXSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "nameOffsetY") end,
+            set = function(k, v) GF.GetConf(k).nameOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Name Y: %d", v) end,
+        })
+        local hpXSl = SSlider({
+            name = "MSUF_GF_HPOffsetXSlider", parent = body, compact = true,
+            anchor = nameYSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "hpOffsetX") end,
+            set = function(k, v) GF.GetConf(k).hpOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("HP Text X: %d", v) end,
+        })
+        local hpYSl = SSlider({
+            name = "MSUF_GF_HPOffsetYSlider", parent = body, compact = true,
+            anchor = hpXSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "hpOffsetY") end,
+            set = function(k, v) GF.GetConf(k).hpOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("HP Text Y: %d", v) end,
+        })
+        local powXSl = SSlider({
+            name = "MSUF_GF_PowerOffsetXSlider", parent = body, compact = true,
+            anchor = hpYSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "powerOffsetX") end,
+            set = function(k, v) GF.GetConf(k).powerOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Power Text X: %d", v) end,
+        })
+        local powYSl = SSlider({
+            name = "MSUF_GF_PowerOffsetYSlider", parent = body, compact = true,
+            anchor = powXSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "powerOffsetY") end,
+            set = function(k, v) GF.GetConf(k).powerOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Power Text Y: %d", v) end,
+        })
+        local statXSl = SSlider({
+            name = "MSUF_GF_StatusOffsetXSlider", parent = body, compact = true,
+            anchor = powYSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "statusOffsetX") end,
+            set = function(k, v) GF.GetConf(k).statusOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Status Text X: %d", v) end,
+        })
+        SSlider({
+            name = "MSUF_GF_StatusOffsetYSlider", parent = body, compact = true,
+            anchor = statXSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "statusOffsetY") end,
+            set = function(k, v) GF.GetConf(k).statusOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Status Text Y: %d", v) end,
+        })
+
+    end
+
+    ----------------------------------------------------------------
+    -- Section 5: Bars
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(170, "Bars", false)
+
+        local fgLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fgLbl:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -10)
+        fgLbl:SetText(TR("Foreground Texture"))
+
+        local fgDd = SDropdown({
+            name = "MSUF_GF_BarTextureDropdown", parent = body,
+            anchor = fgLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 240,
+            items = function()
+                local items = { { key = "", label = "(Global Default)" } }
+                local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+                if LSM then
+                    local list = LSM:List("statusbar")
+                    for i = 1, #list do items[#items + 1] = { key = list[i], label = list[i] } end
+                end
+                return items
+            end,
+            get = function(k) return GF.Val(k, "barTexture") or "" end,
+            set = function(k, v) GF.GetConf(k).barTexture = v; GF.RefreshTextures() end,
+        })
+
+        local bgLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        bgLbl:SetPoint("TOPLEFT", fgDd, "BOTTOMLEFT", 16, -10)
+        bgLbl:SetText(TR("Background Texture"))
+
+        SDropdown({
+            name = "MSUF_GF_BarBackgroundTextureDropdown", parent = body,
+            anchor = bgLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 240,
+            items = function()
+                local items = { { key = "", label = "(Global Default)" } }
+                local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+                if LSM then
+                    local list = LSM:List("statusbar")
+                    for i = 1, #list do items[#items + 1] = { key = list[i], label = list[i] } end
+                end
+                return items
+            end,
+            get = function(k) return GF.Val(k, "barBgTexture") or "" end,
+            set = function(k, v) GF.GetConf(k).barBgTexture = v; GF.RefreshTextures() end,
+        })
+    end
+
+    ----------------------------------------------------------------
+    -- Section 6: Border & Background
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(280, "Border & Background", false)
+
+        local enChk = SCheck({
+            name = "MSUF_GF_BorderEnableCheck", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Enable Border"),
+            get = function(k) return GF.Val(k, "borderEnabled") end,
+            set = function(k, v) GF.GetConf(k).borderEnabled = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
+        })
+
+        local sizeSl = SSlider({
+            name = "MSUF_GF_BorderSizeSlider", parent = body, compact = true,
+            anchor = enChk, x = 0, y = -14,
+            min = 1, max = 4, step = 1, width = 270, default = 1,
+            get = function(k) return GF.Val(k, "borderSize") end,
+            set = function(k, v) GF.GetConf(k).borderSize = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
+            formatText = function(v) return string.format("Border Size: %d", v) end,
+        })
+
+        local borderLbl = MakeColorSwatch(body, sizeSl, "BOTTOMLEFT", 0, -16,
+            "Border Color",
+            function() return V("borderR"), V("borderG"), V("borderB") end,
+            function(r, g, b)
+                local c = C(); c.borderR = r; c.borderG = g; c.borderB = b
+                GF.MarkAllDirty(GF.DIRTY_BORDER)
+            end)
+
+        local bgLbl, bgSwatch = MakeColorSwatch(body, borderLbl, "BOTTOMLEFT", 0, -16,
+            "Background Color",
+            function() return V("bgR"), V("bgG"), V("bgB") end,
+            function(r, g, b)
+                local c = C(); c.bgR = r; c.bgG = g; c.bgB = b
+                GF.MarkAllDirty(GF.DIRTY_BORDER)
+            end)
+        _allRefreshFns[#_allRefreshFns + 1] = function()
+            if bgSwatch and bgSwatch.Refresh and bgSwatch:IsShown() then bgSwatch:Refresh() end
+        end
+
+        SSlider({
+            name = "MSUF_GF_BgAlphaSlider", parent = body, compact = true,
+            anchor = bgLbl, x = 0, y = -20,
+            min = 0, max = 1, step = 0.05, width = 270, default = 0.85,
+            get = function(k) return GF.Val(k, "bgA") end,
+            set = function(k, v) GF.GetConf(k).bgA = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
+            formatText = function(v) return string.format("Background Alpha: %.0f%%", v * 100) end,
+        })
+    end
+
+    ----------------------------------------------------------------
+    -- Section 7: Range Fade
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(160, "Range Fade", false)
+
+        local enChk = SCheck({
+            name = "MSUF_GF_RangeFadeEnableCheck", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Enable Range Fade"),
+            get = function(k) return GF.Val(k, "rangeFadeEnabled") end,
+            set = function(k, v) GF.GetConf(k).rangeFadeEnabled = v; GF.RefreshVisuals() end,
+        })
+
+        local fadeSl = SSlider({
+            name = "MSUF_GF_FadeAlphaSlider", parent = body, compact = true,
+            anchor = enChk, x = 0, y = -14,
+            min = 0, max = 1, step = 0.05, width = 270, default = 0.4,
+            get = function(k) return GF.Val(k, "rangeFadeAlpha") end,
+            set = function(k, v) GF.GetConf(k).rangeFadeAlpha = v end,
+            formatText = function(v) return string.format("Out of Range Alpha: %.0f%%", v * 100) end,
+        })
+
+        SSlider({
+            name = "MSUF_GF_OfflineAlphaSlider", parent = body, compact = true,
+            anchor = fadeSl, x = 0, y = -32,
+            min = 0, max = 1, step = 0.05, width = 270, default = 0.5,
+            get = function(k) return GF.Val(k, "offlineAlpha") end,
+            set = function(k, v) GF.GetConf(k).offlineAlpha = v end,
+            formatText = function(v) return string.format("Offline Alpha: %.0f%%", v * 100) end,
+        })
+    end
+
+    ----------------------------------------------------------------
+    -- Section 8: Indicators
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(500, "Indicators", false)
+
+        local aggroChk = SCheck({
+            name = "MSUF_GF_AggroEnableCheck", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Aggro Border"),
+            get = function(k) return GF.Val(k, "aggroEnabled") end,
+            set = function(k, v) GF.GetConf(k).aggroEnabled = v; GF.RefreshVisuals() end,
+        })
+
+        local aggroLbl, aggroSwatch = MakeColorSwatch(body, aggroChk, "BOTTOMLEFT", 24, -8,
+            "Aggro Color",
+            function() return V("aggroR"), V("aggroG"), V("aggroB") end,
+            function(r, g, b)
+                local c = C(); c.aggroR = r; c.aggroG = g; c.aggroB = b
+                GF.RefreshVisuals()
+            end)
+        _allRefreshFns[#_allRefreshFns + 1] = function()
+            if aggroSwatch and aggroSwatch.Refresh and aggroSwatch:IsShown() then aggroSwatch:Refresh() end
+        end
+
+        local aggroModeDd = SDropdown({
+            name = "MSUF_GF_AggroModeDropdown", parent = body,
+            anchor = aggroLbl, x = 0, y = -8, width = 200,
+            items = {
+                { key = "ALL",         label = "All Roles"   },
+                { key = "HEALER_ONLY", label = "Healer Only" },
+                { key = "TANK_ONLY",   label = "Tank Only"   },
+            },
+            get = function(k) return GF.Val(k, "aggroMode") or "ALL" end,
+            set = function(k, v) GF.GetConf(k).aggroMode = v; GF.RefreshVisuals() end,
+        })
+
+        local dispelChk = SCheck({
+            name = "MSUF_GF_DispelEnableCheck", parent = body,
+            anchor = aggroModeDd, x = 16, y = -8,
+            label = TR("Dispel Border"),
+            get = function(k) return GF.Val(k, "dispelEnabled") end,
+            set = function(k, v) GF.GetConf(k).dispelEnabled = v; GF.RefreshVisuals() end,
+        })
+
+        local targetChk = SCheck({
+            name = "MSUF_GF_TargetIndicatorCheck", parent = body,
+            anchor = dispelChk, x = 0, y = -4,
+            label = TR("Target Indicator"),
+            get = function(k) return GF.Val(k, "targetIndicator") end,
+            set = function(k, v) GF.GetConf(k).targetIndicator = v; GF.RefreshVisuals() end,
+        })
+
+        local targetLbl = MakeColorSwatch(body, targetChk, "BOTTOMLEFT", 24, -8,
+            "Target Color",
+            function() return V("targetR"), V("targetG"), V("targetB") end,
+            function(r, g, b)
+                local c = C(); c.targetR = r; c.targetG = g; c.targetB = b
+                GF.RefreshVisuals()
+            end)
+
+        -- Hint: size/offset/layer moved to Bars menu
+        local hlHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hlHint:SetPoint("TOPLEFT", targetLbl, "BOTTOMLEFT", 0, -12)
+        hlHint:SetText(TR("Highlight size, offset, layer: Bars menu > Outline & Highlight Border"))
+        hlHint:SetTextColor(0.5, 0.55, 0.65)
+
+        -- Group Number sub-group
+        local gnSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        gnSep:SetPoint("TOPLEFT", hlHint, "BOTTOMLEFT", 0, -16)
+        gnSep:SetText(TR("Group Number"))
+        gnSep:SetTextColor(1, 0.82, 0)
+
+        local gnChk = SCheck({
+            name = "MSUF_GF_ShowGroupNumberCheck", parent = body,
+            anchor = gnSep, x = 0, y = -6,
+            label = TR("Show Group Number"),
+            get = function(k) return GF.Val(k, "showGroupNumber") end,
+            set = function(k, v) GF.GetConf(k).showGroupNumber = v; GF.RefreshVisuals() end,
+        })
+
+        local gnSizeSl = SSlider({
+            name = "MSUF_GF_GroupNumberSizeSlider", parent = body, compact = true,
+            anchor = gnChk, x = 0, y = -10,
+            min = 6, max = 24, step = 1, width = 200, default = 10,
+            get = function(k) return GF.Val(k, "groupNumberSize") end,
+            set = function(k, v) GF.GetConf(k).groupNumberSize = v; GF.RefreshFonts() end,
+            formatText = function(v) return string.format("Size: %d", v) end,
+        })
+
+        local gnAnchorDd = SDropdown({
+            name = "MSUF_GF_GroupNumberAnchorDropdown", parent = body,
+            anchor = gnSizeSl, x = -16, y = -10, width = 160,
+            items = {
+                { key = "TOPLEFT",     label = "Top Left"     },
+                { key = "TOPRIGHT",    label = "Top Right"    },
+                { key = "BOTTOMLEFT",  label = "Bottom Left"  },
+                { key = "BOTTOMRIGHT", label = "Bottom Right" },
+                { key = "CENTER",      label = "Center"       },
+            },
+            get = function(k) return GF.Val(k, "groupNumberAnchor") end,
+            set = function(k, v) GF.GetConf(k).groupNumberAnchor = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+        })
+
+        local gnXSl = SSlider({
+            name = "MSUF_GF_GroupNumberXSlider", parent = body, compact = true,
+            anchor = gnAnchorDd, x = 16, y = -10,
+            min = -100, max = 100, step = 1, width = 200, default = -2,
+            get = function(k) return GF.Val(k, "groupNumberX") end,
+            set = function(k, v) GF.GetConf(k).groupNumberX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("X Offset: %d", v) end,
+        })
+
+        local gnYSl = SSlider({
+            name = "MSUF_GF_GroupNumberYSlider", parent = body, compact = true,
+            anchor = gnXSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 200, default = 2,
+            get = function(k) return GF.Val(k, "groupNumberY") end,
+            set = function(k, v) GF.GetConf(k).groupNumberY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Y Offset: %d", v) end,
+        })
+
+        -- Hover Highlight sub-group (enable + color from global Colors menu)
+        local hoverSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        hoverSep:SetPoint("TOPLEFT", gnYSl, "BOTTOMLEFT", 0, -16)
+        hoverSep:SetText(TR("Hover Highlight"))
+        hoverSep:SetTextColor(1, 0.82, 0)
+
+        local hoverHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hoverHint:SetPoint("TOPLEFT", hoverSep, "BOTTOMLEFT", 0, -4)
+        hoverHint:SetText(TR("Enable + color: Colors menu > Mouseover Highlight | Size/offset also in Bars menu"))
+        hoverHint:SetTextColor(0.5, 0.55, 0.65)
+
+        SSlider({
+            name = "MSUF_GF_HoverHighlightSizeSlider", parent = body, compact = true,
+            anchor = hoverHint, x = 0, y = -8,
+            min = 1, max = 6, step = 1, width = 200, default = 1,
+            get = function(k) return tonumber(GF.GetHighlightVal(k, "hlHoverSize")) or 1 end,
+            set = function(k, v)
+                GF.GetConf(k).hlHoverSize = v
+                GF.GetConf(k).hlOverride = true
+            end,
+            formatText = function(v) return string.format("Border Thickness: %d", v) end,
+        })
+    end
+
+    ----------------------------------------------------------------
+    -- Section 8b: Status Icons (Selector pattern: dropdown picks icon,
+    -- one set of controls updates to show that icon's config)
+    ----------------------------------------------------------------
+    do
+        local ICON_SPECS_UI = {
+            { label = "Role Icon",   enKey = "roleIcon",      sizeKey = "roleIconSize",      anchorKey = "roleIconAnchor",    xKey = "roleIconX",    yKey = "roleIconY",    defSize = 12 },
+            { label = "Leader",      enKey = "leaderIcon",     sizeKey = "leaderIconSize",    anchorKey = "leaderIconAnchor",  xKey = "leaderIconX",  yKey = "leaderIconY",  defSize = 12 },
+            { label = "Assist",      enKey = "assistIcon",     sizeKey = "assistIconSize",    anchorKey = "assistIconAnchor",  xKey = "assistIconX",  yKey = "assistIconY",  defSize = 12 },
+            { label = "Raid Marker", enKey = "raidMarker",     sizeKey = "raidMarkerSize",    anchorKey = "raidMarkerAnchor",  xKey = "raidMarkerX",  yKey = "raidMarkerY",  defSize = 14 },
+            { label = "Ready Check", enKey = "readyCheckIcon", sizeKey = "readyCheckSize",    anchorKey = "readyCheckAnchor",  xKey = "readyCheckX",  yKey = "readyCheckY",  defSize = 16 },
+            { label = "Summon",      enKey = "summonIcon",     sizeKey = "summonIconSize",    anchorKey = "summonAnchor",      xKey = "summonX",      yKey = "summonY",      defSize = 16 },
+            { label = "Resurrect",   enKey = "resurrectIcon",  sizeKey = "resurrectIconSize", anchorKey = "resurrectAnchor",   xKey = "resurrectX",   yKey = "resurrectY",   defSize = 16 },
+            { label = "Phase",       enKey = "phaseIcon",      sizeKey = "phaseIconSize",     anchorKey = "phaseAnchor",       xKey = "phaseX",       yKey = "phaseY",       defSize = 14 },
+        }
+        local ANCHOR_ITEMS = {
+            { key = "TOPLEFT",     label = "Top Left"     },
+            { key = "TOPRIGHT",    label = "Top Right"    },
+            { key = "BOTTOMLEFT",  label = "Bottom Left"  },
+            { key = "BOTTOMRIGHT", label = "Bottom Right" },
+            { key = "CENTER",      label = "Center"       },
+            { key = "TOP",         label = "Top"          },
+            { key = "BOTTOM",      label = "Bottom"       },
+            { key = "LEFT",        label = "Left"         },
+            { key = "RIGHT",       label = "Right"        },
+        }
+
+        local box, body = AddSection(390, "Status Icons", false)
+
+        -- Icon Style dropdown
+        local styleDd = SDropdown({
+            name = "MSUF_GF_SI_StyleDropdown", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = -4, y = -6, width = 240,
+            items = GF.ICON_STYLE_ITEMS,
+            get = function(k) return GF.Val(k, "iconStyle") or "BLIZZARD" end,
+            set = function(k, v)
+                GF.GetConf(k).iconStyle = v
+                GF.RefreshVisuals()
+            end,
+        })
+
+        local midnightChk = SCheck({
+            name = "MSUF_GF_SI_MidnightCheck", parent = body,
+            anchor = styleDd, x = 16, y = -6,
+            label = TR("Use Midnight Style"),
+            get = function(k) return GF.Val(k, "useMidnightIcons") end,
+            set = function(k, v)
+                GF.GetConf(k).useMidnightIcons = v
+                GF.RefreshVisuals()
+            end,
+        })
+
+        local _selectedIdx = 1
+
+        -- Build selector dropdown items
+        local selectorItems = {}
+        for i = 1, #ICON_SPECS_UI do
+            selectorItems[i] = { key = tostring(i), label = ICON_SPECS_UI[i].label }
+        end
+
+        -- Forward-declare refresh
+        local refreshIconControls
+
+        -- Selector dropdown
+        local selectorDd = SDropdown({
+            name = "MSUF_GF_SI_SelectorDropdown", parent = body,
+            anchor = midnightChk, x = -16, y = -8, width = 240,
+            items = selectorItems,
+            get = function() return tostring(_selectedIdx) end,
+            set = function(k, v)
+                _selectedIdx = tonumber(v) or 1
+                if refreshIconControls then refreshIconControls() end
+            end,
+        })
+
+        -- Enable checkbox
+        local enChk = SCheck({
+            name = "MSUF_GF_SI_EnableCheck", parent = body,
+            anchor = selectorDd, x = 16, y = -8,
+            label = TR("Enabled"),
+            get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.enKey) end,
+            set = function(k, v)
+                local s = ICON_SPECS_UI[_selectedIdx]
+                if s then GF.GetConf(k)[s.enKey] = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end
+            end,
+        })
+
+        -- Size slider
+        local sizeSl = SSlider({
+            name = "MSUF_GF_SI_SizeSlider", parent = body, compact = true,
+            anchor = enChk, x = 0, y = -10,
+            min = 6, max = 40, step = 1, width = 270, default = 12,
+            get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.sizeKey) or 12 end,
+            set = function(k, v)
+                local s = ICON_SPECS_UI[_selectedIdx]
+                if s then GF.GetConf(k)[s.sizeKey] = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end
+            end,
+            formatText = function(v) return string.format("Size: %d", v) end,
+        })
+
+        -- Anchor dropdown
+        local anchorDd = SDropdown({
+            name = "MSUF_GF_SI_AnchorDropdown", parent = body,
+            anchor = sizeSl, x = -16, y = -10, width = 200,
+            items = ANCHOR_ITEMS,
+            get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.anchorKey) or "CENTER" end,
+            set = function(k, v)
+                local s = ICON_SPECS_UI[_selectedIdx]
+                if s then GF.GetConf(k)[s.anchorKey] = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end
+            end,
+        })
+
+        -- X Offset
+        local xSl = SSlider({
+            name = "MSUF_GF_SI_XSlider", parent = body, compact = true,
+            anchor = anchorDd, x = 16, y = -10,
+            min = -100, max = 100, step = 1, width = 270, default = 0,
+            get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.xKey) or 0 end,
+            set = function(k, v)
+                local s = ICON_SPECS_UI[_selectedIdx]
+                if s then GF.GetConf(k)[s.xKey] = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end
+            end,
+            formatText = function(v) return string.format("X Offset: %d", v) end,
+        })
+
+        -- Y Offset
+        local ySl = SSlider({
+            name = "MSUF_GF_SI_YSlider", parent = body, compact = true,
+            anchor = xSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 270, default = 0,
+            get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.yKey) or 0 end,
+            set = function(k, v)
+                local s = ICON_SPECS_UI[_selectedIdx]
+                if s then GF.GetConf(k)[s.yKey] = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end
+            end,
+            formatText = function(v) return string.format("Y Offset: %d", v) end,
+        })
+
+        -- Refresh all controls when selector changes
+        refreshIconControls = function()
+            if enChk and enChk.Refresh then enChk:Refresh() end
+            if sizeSl and sizeSl.Refresh then sizeSl:Refresh() end
+            if anchorDd and anchorDd.Refresh then anchorDd:Refresh() end
+            if xSl and xSl.Refresh then xSl:Refresh() end
+            if ySl and ySl.Refresh then ySl:Refresh() end
+        end
+
+        -- Also refresh on scope switch
+        _allRefreshFns[#_allRefreshFns + 1] = function()
+            if refreshIconControls then refreshIconControls() end
+            if midnightChk and midnightChk.Refresh then midnightChk:Refresh() end
+            if styleDd and styleDd.Refresh then styleDd:Refresh() end
+        end
+    end
+
+    ----------------------------------------------------------------
+    -- Sections 9-10: Buffs, Debuffs, Externals, Private Auras, Spell Indicators
+    -- (delegated to MSUF_Options_GF_Auras.lua)
+    ----------------------------------------------------------------
+    if GF.BuildAuraOptionsSections then
+        GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, TrackRefresh, MakeColorSwatch, OpenColorPicker, _allRefreshFns)
+    end
+
+    ----------------------------------------------------------------
+    -- Section 11: Health Overlays
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(160, "Health Overlays", false)
+
+        local absorbChk = SCheck({
+            name = "MSUF_GF_AbsorbEnableCheck", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Absorb Overlay"),
+            get = function(k) return GF.Val(k, "absorbEnabled") end,
+            set = function(k, v)
+                GF.GetConf(k).absorbEnabled = v
+                for f in pairs(GF.frames) do
+                    if f.unit then GF.RegisterUnitEvents(f, f.unit) end
+                end
+                GF.RefreshVisuals()
+            end,
+        })
+
+        local healAbsorbChk = SCheck({
+            name = "MSUF_GF_HealAbsorbEnableCheck", parent = body,
+            anchor = absorbChk, x = 0, y = -4,
+            label = TR("Heal Absorb Overlay"),
+            get = function(k) return GF.Val(k, "healAbsorbEnabled") end,
+            set = function(k, v)
+                GF.GetConf(k).healAbsorbEnabled = v
+                for f in pairs(GF.frames) do
+                    if f.unit then GF.RegisterUnitEvents(f, f.unit) end
+                end
+                GF.RefreshVisuals()
+            end,
+        })
+
+        local healPredChk = SCheck({
+            name = "MSUF_GF_HealPredEnableCheck", parent = body,
+            anchor = healAbsorbChk, x = 0, y = -4,
+            label = TR("Heal Prediction Overlay"),
+            get = function(k) return GF.Val(k, "healPredEnabled") end,
+            set = function(k, v)
+                GF.GetConf(k).healPredEnabled = v
+                for f in pairs(GF.frames) do
+                    if f.unit then GF.RegisterUnitEvents(f, f.unit) end
+                end
+                GF.RefreshVisuals()
+            end,
+        })
+
+        local hint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hint:SetPoint("TOPLEFT", healPredChk, "BOTTOMLEFT", 0, -10)
+        hint:SetWidth(600)
+        hint:SetJustifyH("LEFT")
+        hint:SetText(TR("Overlay colors: |cffffd200Colors|r menu.  Overlay textures: |cffffd200Bars|r menu > Absorb Display."))
+        hint:SetTextColor(0.55, 0.60, 0.70)
+    end
+
+    ----------------------------------------------------------------
+    -- Section 12: Tooltip
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(140, "Tooltip", false)
+
+        local _modifierDd -- forward ref for show/hide toggle
+
+        local modeDd = SDropdown({
+            name = "MSUF_GF_TooltipModeDropdown", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = -4, y = -6, width = 200,
+            items = {
+                { key = "ALWAYS",   label = "Always"        },
+                { key = "OOC",      label = "Out of Combat" },
+                { key = "MODIFIER", label = "Modifier Key"  },
+                { key = "NEVER",    label = "Never"         },
+            },
+            get = function(k) return GF.Val(k, "tooltipMode") end,
+            set = function(k, v)
+                GF.GetConf(k).tooltipMode = v
+                if _modifierDd then
+                    if v == "MODIFIER" then _modifierDd:Show() else _modifierDd:Hide() end
+                end
+            end,
+        })
+
+        _modifierDd = SDropdown({
+            name = "MSUF_GF_TooltipModifierDropdown", parent = body,
+            anchor = modeDd, x = 0, y = -6, width = 160,
+            items = {
+                { key = "ALT",   label = "Alt"   },
+                { key = "CTRL",  label = "Ctrl"  },
+                { key = "SHIFT", label = "Shift" },
+            },
+            get = function(k) return GF.Val(k, "tooltipModifier") end,
+            set = function(k, v) GF.GetConf(k).tooltipModifier = v end,
+        })
+
+        -- Sync modifier dropdown visibility on scope switch
+        _allRefreshFns[#_allRefreshFns + 1] = function()
+            if _modifierDd then
+                local mode = GF.Val(K(), "tooltipMode")
+                if mode == "MODIFIER" then _modifierDd:Show() else _modifierDd:Hide() end
+            end
+        end
+    end
+
+    ----------------------------------------------------------------
+    -- Layout: stack sections vertically
+    ----------------------------------------------------------------
+    local SECTION_GAP = 6
+
+    RefreshScrollLayout = function()
+        local y = -52  -- below scope bar
+        for i = 1, #sections do
+            local box = sections[i]
+            box:ClearAllPoints()
+            box:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, y)
+            y = y - box:GetHeight() - SECTION_GAP
+        end
+        scrollChild:SetHeight(math.abs(y) + 40)
+    end
+    RefreshScrollLayout()
+
+    ----------------------------------------------------------------
+    -- Preview management
+    ----------------------------------------------------------------
+    _panel:SetScript("OnShow", function()
+        ShowPreviewIfNeeded(_activeKind)
+        RefreshAllWidgets()
+    end)
+    _panel:SetScript("OnHide", function()
+        HideAllPreviews()
+    end)
+
+    ----------------------------------------------------------------
+    -- Search registration
+    ----------------------------------------------------------------
+    if _G.MSUF_Search_RegisterRoots then
+        _G.MSUF_Search_RegisterRoots({ "groupframes" }, scrollChild, "Group Frames")
+    end
+
+    return _panel
+end
