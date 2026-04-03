@@ -186,11 +186,40 @@ local _GF_RefreshBorder
 ------------------------------------------------------------------------
 -- UNIT_AURA: inline per-frame dispatch (no coalescing)
 ------------------------------------------------------------------------
+local function SpellIndicatorsNeedRefresh(f, updateInfo)
+    if not updateInfo or updateInfo.isFullUpdate then return true end
+
+    local added = updateInfo.addedAuras
+    if added and #added > 0 then return true end
+
+    local tracked = f and f._msufSIDedupIDs
+    if not tracked then return false end
+
+    local updated = updateInfo.updatedAuraInstanceIDs
+    if updated then
+        for i = 1, #updated do
+            if tracked[updated[i]] then return true end
+        end
+    end
+
+    local removed = updateInfo.removedAuraInstanceIDs
+    if removed then
+        for i = 1, #removed do
+            if tracked[removed[i]] then return true end
+        end
+    end
+
+    return false
+end
+
 local function dispatchAura(f, unit, updateInfo)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     local auras = conf and conf.auras
     local aurasOn = auras and auras.enabled ~= false
+    local siCfg = conf and conf.spellIndicators
+    local siOn = siCfg and siCfg.enabled == true
+    local siRefresh = siOn and SpellIndicatorsNeedRefresh(f, updateInfo) or false
 
     if not aurasOn then
         if conf.dispelEnabled ~= false and GF._playerCanDispel then
@@ -199,6 +228,9 @@ local function dispatchAura(f, unit, updateInfo)
                or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0) then
                 GF._UpdateDispel(f, unit)
             end
+        end
+        if siRefresh and GF.UpdateSpellIndicators then
+            GF.UpdateSpellIndicators(f, unit)
         end
         return
     end
@@ -216,6 +248,9 @@ local function dispatchAura(f, unit, updateInfo)
                 GF._UpdateDispel(f, unit)
             end
         end
+        if siRefresh and GF.UpdateSpellIndicators then
+            GF.UpdateSpellIndicators(f, unit)
+        end
         return
     end
 
@@ -225,7 +260,12 @@ local function dispatchAura(f, unit, updateInfo)
         if updateInfo and updateInfo.isFullUpdate and not InCombatLockdown() then
             local now = GetTime()
             local last = f._msufGFLastFullAura
-            if last and (now - last) < 0.5 then return end
+            if last and (now - last) < 0.5 then
+                if siRefresh and GF.UpdateSpellIndicators then
+                    GF.UpdateSpellIndicators(f, unit)
+                end
+                return
+            end
             f._msufGFLastFullAura = now
         end
         -- fall through to full pipeline below
@@ -238,7 +278,12 @@ local function dispatchAura(f, unit, updateInfo)
         local hasUpd = updated and #updated > 0
 
         -- Nothing relevant at all
-        if not hasAdd and not hasRem and not hasUpd then return end
+        if not hasAdd and not hasRem and not hasUpd then
+            if siRefresh and GF.UpdateSpellIndicators then
+                GF.UpdateSpellIndicators(f, unit)
+            end
+            return
+        end
 
         local displayed = f._msufDisplayedAuraIDs
 
@@ -250,6 +295,9 @@ local function dispatchAura(f, unit, updateInfo)
                     if icon then
                         GF.RefreshAuraIcon(icon, unit, updated[ui])
                     end
+                end
+                if siRefresh and GF.UpdateSpellIndicators then
+                    GF.UpdateSpellIndicators(f, unit)
                 end
                 return
             end
@@ -270,6 +318,9 @@ local function dispatchAura(f, unit, updateInfo)
                             if icon then GF.RefreshAuraIcon(icon, unit, updated[ui]) end
                         end
                     end
+                    if siRefresh and GF.UpdateSpellIndicators then
+                        GF.UpdateSpellIndicators(f, unit)
+                    end
                     return
                 end
             end
@@ -283,6 +334,9 @@ local function dispatchAura(f, unit, updateInfo)
     if not InCombatLockdown() then
         local now = GetTime()
         if f._msufGFLastFullAura and (now - f._msufGFLastFullAura) < 0.5 then
+            if siRefresh and GF.UpdateSpellIndicators then
+                GF.UpdateSpellIndicators(f, unit)
+            end
             return
         end
         f._msufGFLastFullAura = now
@@ -299,6 +353,9 @@ local function dispatchAura(f, unit, updateInfo)
         end
     else
         GF._UpdateDispel(f, unit)
+    end
+    if siOn and GF.UpdateSpellIndicators then
+        GF.UpdateSpellIndicators(f, unit)
     end
 end
 
@@ -1103,6 +1160,9 @@ local function UpdateAll(f, unit)
     local _auras = _conf and _conf.auras
     local _aurasOn = _auras and _auras.enabled ~= false
 
+    local _siCfg = _conf and _conf.spellIndicators
+    local _siOn = _siCfg and _siCfg.enabled == true
+
     if _aurasOn and GF.UpdateFrameAuras then
         GF.UpdateFrameAuras(f, unit)
         local mergedDispel = f._msufGFMergedDispel
@@ -1111,11 +1171,13 @@ local function UpdateAll(f, unit)
             f._msufGFDispelType = mergedDispel
             _GF_RefreshBorder(f, unit)
         end
-        if GF.UpdateSpellIndicators then GF.UpdateSpellIndicators(f, unit) end
     else
         -- Auras disabled: hide pools once, standalone dispel only
         if GF.UpdateFrameAuras then GF.UpdateFrameAuras(f, unit) end -- cached HidePool
         GF._UpdateDispel(f, unit)
+    end
+    if GF.UpdateSpellIndicators then
+        if _siOn then GF.UpdateSpellIndicators(f, unit) else GF.HideSpellIndicators(f) end
     end
     UpdateTargetIndicator(f, unit)
     UpdateStatusText(f, unit)
