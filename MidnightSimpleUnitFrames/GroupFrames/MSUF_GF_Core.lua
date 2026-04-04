@@ -813,6 +813,10 @@ local function ScanHeaderChildren(header, kind)
         end
         i = i + 1
     end
+    -- After measuring delta, reposition header to correct for timing (delta not available at initial SetPoint)
+    if not inCombat and GF.SyncHeaderPosition then
+        GF.SyncHeaderPosition(kind)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -856,10 +860,21 @@ local function GetPreviewShownCount(kind)
     return n
 end
 
+--- Fixed reference count for positioning: deterministic regardless of live party size.
+--- Used by PositionHeaderFromGridCenter, EM2 SyncContainer, and ShowPreview.
+function GF.GetPositionCount(kind)
+    local conf = GF.GetConf(kind)
+    local upc = conf.unitsPerColumn or 5
+    if kind == "raid" then
+        return upc * (conf.maxColumns or 8)
+    end
+    return upc
+end
+
 local function PositionHeaderFromGridCenter(kind, header, countOverride)
     if not header then return end
     local conf = GF.GetConf(kind)
-    local count = countOverride or GetLiveCount(kind)
+    local count = countOverride or GF.GetPositionCount(kind)
     local dx, dy = GF.GetGridMetrics(kind, count)
     local cx, cy = conf.offsetX, conf.offsetY
     if cx == nil or cy == nil then
@@ -1508,15 +1523,17 @@ function GF.ShowPreview(kind, count)
     if container:GetParent() ~= parent then container:SetParent(parent) end
 
     -- Position container identically to PositionHeaderFromGridCenter
-    local dx, dy = GF.GetGridMetrics(kind, count)
+    -- Use GetPositionCount (not preview count) for consistent positioning
+    local posCount = GF.GetPositionCount(kind)
+    local posDx, posDy, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
     local cx, cy = conf.offsetX, conf.offsetY
     if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
-    container:SetSize(math_max(totalW, 1), math_max(totalH, 1))
+    container:SetSize(math_max(posTotalW, 1), math_max(posTotalH, 1))
     container:ClearAllPoints()
     if anchorParent then
         container:SetPoint("CENTER", parent, "CENTER", 0, 0)
     else
-        container:SetPoint(conf.point or "CENTER", parent, conf.point or "CENTER", cx - dx, cy - dy)
+        container:SetPoint(conf.point or "CENTER", parent, conf.point or "CENTER", cx - posDx, cy - posDy)
     end
     container:Show()
 
@@ -1614,16 +1631,17 @@ function GF.RefreshPreviewLayout(kind)
     -- Update container position (same as PositionHeaderFromGridCenter)
     local container = GF._previewContainer and GF._previewContainer[kind]
     if container then
-        local dx, dy = GF.GetGridMetrics(kind, count)
+        local posCount = GF.GetPositionCount(kind)
+        local posDx, posDy, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
         local cx, cy = conf.offsetX, conf.offsetY
         if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
         local anchorParent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
-        container:SetSize(math_max(totalW, 1), math_max(totalH, 1))
+        container:SetSize(math_max(posTotalW, 1), math_max(posTotalH, 1))
         container:ClearAllPoints()
         if anchorParent then
             container:SetPoint("CENTER", anchorParent, "CENTER", 0, 0)
         else
-            container:SetPoint(conf.point or "CENTER", UIParent, conf.point or "CENTER", cx - dx, cy - dy)
+            container:SetPoint(conf.point or "CENTER", UIParent, conf.point or "CENTER", cx - posDx, cy - posDy)
         end
     end
 

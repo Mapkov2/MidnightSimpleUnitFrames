@@ -88,7 +88,8 @@ local function SyncContainer(kind)
         return
     end
 
-    local count = GetPreviewCount(kind)
+    -- Use fixed reference count (same as PositionHeaderFromGridCenter)
+    local count = gf.GetPositionCount and gf.GetPositionCount(kind) or GetPreviewCount(kind)
     local _, _, totalW, totalH = gf.GetGridMetrics(kind, count)
     local cx = conf.offsetX
     local cy = conf.offsetY
