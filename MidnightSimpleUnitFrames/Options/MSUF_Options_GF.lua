@@ -868,6 +868,147 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
+    -- Section 1b: Anchoring
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(220, "Anchoring", false, "anchor")
+
+        local GF_ANCHOR_CHOICES = {
+            { key = "FREE",         label = TR("Free (UIParent)") },
+            { key = "player",       label = TR("Player Frame") },
+            { key = "target",       label = TR("Target Frame") },
+            { key = "targettarget", label = TR("Target of Target") },
+            { key = "focus",        label = TR("Focus Frame") },
+            { key = "pet",          label = TR("Pet Frame") },
+        }
+
+        local GF_ANCHOR_POINTS = {
+            { key = "TOPLEFT",     label = "TOPLEFT" },
+            { key = "TOP",         label = "TOP" },
+            { key = "TOPRIGHT",    label = "TOPRIGHT" },
+            { key = "LEFT",        label = "LEFT" },
+            { key = "CENTER",      label = "CENTER" },
+            { key = "RIGHT",       label = "RIGHT" },
+            { key = "BOTTOMLEFT",  label = "BOTTOMLEFT" },
+            { key = "BOTTOM",      label = "BOTTOM" },
+            { key = "BOTTOMRIGHT", label = "BOTTOMRIGHT" },
+        }
+
+        local anchorToLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        anchorToLbl:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -8)
+        anchorToLbl:SetText(TR("Anchor To"))
+
+        local anchorToDd = SDropdown({
+            name = "MSUF_GF_AnchorToDropdown", parent = body,
+            anchor = anchorToLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 200,
+            items = GF_ANCHOR_CHOICES,
+            get = function(k) return GF.GetConf(k).anchorToFrame or "FREE" end,
+            set = function(k, v)
+                GF.GetConf(k).anchorToFrame = (v == "FREE") and nil or v
+                GF.RebuildAll()
+            end,
+        })
+
+        local anchorPtLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        anchorPtLbl:SetPoint("TOPLEFT", anchorToLbl, "TOPLEFT", 240, 0)
+        anchorPtLbl:SetText(TR("Anchor Point"))
+
+        SDropdown({
+            name = "MSUF_GF_AnchorPointDropdown", parent = body,
+            anchor = anchorPtLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 160,
+            items = GF_ANCHOR_POINTS,
+            get = function(k) return GF.GetConf(k).anchorPoint or "CENTER" end,
+            set = function(k, v)
+                GF.GetConf(k).anchorPoint = v
+                GF.RebuildAll()
+            end,
+        })
+
+        -- Custom frame name input + Picker + Clear
+        local customLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        customLbl:SetPoint("TOPLEFT", anchorToDd, "BOTTOMLEFT", 16, -8)
+        customLbl:SetText(TR("Custom Anchor Frame"))
+        customLbl:SetTextColor(0.55, 0.65, 0.80)
+
+        local customBox = CreateFrame("EditBox", "MSUF_GF_AnchorCustomBox", body, "InputBoxTemplate")
+        customBox:SetSize(200, 22)
+        customBox:SetPoint("TOPLEFT", customLbl, "BOTTOMLEFT", 4, -4)
+        customBox:SetAutoFocus(false)
+        customBox:SetMaxLetters(100)
+        customBox:SetScript("OnEnterPressed", function(self)
+            local conf = GF.GetConf(K())
+            local val = self:GetText()
+            if val == "" then
+                conf.anchorToFrame = nil
+            else
+                conf.anchorToFrame = val
+            end
+            self:ClearFocus()
+            GF.RebuildAll()
+        end)
+        customBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+        local pickBtn = CreateFrame("Button", nil, body, "BackdropTemplate")
+        pickBtn:SetSize(50, 22)
+        pickBtn:SetPoint("LEFT", customBox, "RIGHT", 6, 0)
+        pickBtn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        pickBtn:SetBackdropColor(0.15, 0.35, 0.55, 0.9)
+        pickBtn:SetBackdropBorderColor(0.25, 0.45, 0.70, 0.8)
+        local pickFS = pickBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        pickFS:SetPoint("CENTER")
+        pickFS:SetText(TR("Pick"))
+        pickFS:SetTextColor(0.85, 0.92, 1.0)
+        pickBtn:SetScript("OnEnter", function(self)
+            self:SetBackdropColor(0.25, 0.45, 0.70, 1)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(TR("Click, then click on any frame on screen to anchor to it."))
+            GameTooltip:Show()
+        end)
+        pickBtn:SetScript("OnLeave", function(self)
+            self:SetBackdropColor(0.15, 0.35, 0.55, 0.9)
+            GameTooltip:Hide()
+        end)
+        pickBtn:SetScript("OnClick", function()
+            local ov = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker() or nil
+            if not ov then return end
+            ov._onPick = function(frameName)
+                local conf = GF.GetConf(K())
+                conf.anchorToFrame = frameName
+                customBox:SetText(frameName or "")
+                GF.RebuildAll()
+            end
+            ov:Show()
+        end)
+
+        local clearBtn = CreateFrame("Button", nil, body, "BackdropTemplate")
+        clearBtn:SetSize(50, 22)
+        clearBtn:SetPoint("LEFT", pickBtn, "RIGHT", 4, 0)
+        clearBtn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        clearBtn:SetBackdropColor(0.35, 0.15, 0.15, 0.9)
+        clearBtn:SetBackdropBorderColor(0.55, 0.25, 0.25, 0.8)
+        local clearFS = clearBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        clearFS:SetPoint("CENTER")
+        clearFS:SetText(TR("Clear"))
+        clearFS:SetTextColor(1.0, 0.75, 0.75)
+        clearBtn:SetScript("OnEnter", function(self) self:SetBackdropColor(0.50, 0.20, 0.20, 1) end)
+        clearBtn:SetScript("OnLeave", function(self) self:SetBackdropColor(0.35, 0.15, 0.15, 0.9) end)
+        clearBtn:SetScript("OnClick", function()
+            local conf = GF.GetConf(K())
+            conf.anchorToFrame = nil
+            customBox:SetText("")
+            GF.RebuildAll()
+        end)
+
+        _allRefreshFns[#_allRefreshFns + 1] = function()
+            local conf = GF.GetConf(K())
+            local atv = conf.anchorToFrame or ""
+            local isStd = (atv == "" or atv == "FREE" or atv == "player" or atv == "target"
+                or atv == "targettarget" or atv == "focus" or atv == "pet")
+            customBox:SetText(isStd and "" or atv)
+        end
+    end
+
+    ----------------------------------------------------------------
     -- Section 2: Health Colors (GF-independent bar mode)
     ----------------------------------------------------------------
     do

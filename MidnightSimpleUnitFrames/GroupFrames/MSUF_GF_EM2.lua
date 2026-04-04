@@ -99,7 +99,9 @@ local function SyncContainer(kind)
 
     container:SetSize(math_max(totalW, 1), math_max(totalH, 1))
     container:ClearAllPoints()
-    container:SetPoint("CENTER", UIParent, "CENTER", cx, cy)
+    local anchorFrame = (gf.ResolveAnchorFrame and gf.ResolveAnchorFrame(kind)) or UIParent
+    local pt = conf.anchorPoint or conf.point or "CENTER"
+    container:SetPoint(pt, anchorFrame, pt, cx, cy)
     container:Show()
 end
 

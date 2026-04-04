@@ -861,7 +861,6 @@ local function GetPreviewShownCount(kind)
 end
 
 --- Fixed reference count for positioning: deterministic regardless of live party size.
---- Used by PositionHeaderFromGridCenter, EM2 SyncContainer, and ShowPreview.
 function GF.GetPositionCount(kind)
     local conf = GF.GetConf(kind)
     local upc = conf.unitsPerColumn or 5
@@ -869,6 +868,29 @@ function GF.GetPositionCount(kind)
         return upc * (conf.maxColumns or 8)
     end
     return upc
+end
+
+------------------------------------------------------------------------
+-- Anchor frame resolution (same pattern as UF MSUF_ResolveConfiguredAnchorFrame)
+------------------------------------------------------------------------
+function GF.ResolveAnchorFrame(kind)
+    local conf = GF.GetConf(kind)
+    local atv = conf.anchorToFrame
+    if type(atv) == "string" and atv ~= "" and atv ~= "FREE" then
+        -- Unit frame anchoring
+        local uf = _G.MSUF_UnitFrames or _G.UnitFrames
+        local rel = uf and uf[atv]
+        if not rel then rel = _G["MSUF_" .. atv] end
+        if rel and rel ~= UIParent and rel ~= WorldFrame and (not rel.IsForbidden or not rel:IsForbidden()) then
+            return rel
+        end
+        -- Custom frame name
+        local custom = _G[atv]
+        if custom and custom ~= UIParent and custom ~= WorldFrame and (not custom.IsForbidden or not custom:IsForbidden()) then
+            return custom
+        end
+    end
+    return UIParent
 end
 
 local function PositionHeaderFromGridCenter(kind, header, countOverride)
@@ -880,8 +902,10 @@ local function PositionHeaderFromGridCenter(kind, header, countOverride)
     if cx == nil or cy == nil then
         cx, cy = GetDefaultCenter(kind)
     end
+    local anchorFrame = GF.ResolveAnchorFrame(kind)
+    local pt = conf.anchorPoint or conf.point or "CENTER"
     header:ClearAllPoints()
-    header:SetPoint(conf.point or "CENTER", UIParent, conf.point or "CENTER", cx - dx, cy - dy)
+    header:SetPoint(pt, anchorFrame, pt, cx - dx, cy - dy)
 end
 
 function GF.SyncHeaderPosition(kind, countOverride)
@@ -1533,7 +1557,9 @@ function GF.ShowPreview(kind, count)
     if anchorParent then
         container:SetPoint("CENTER", parent, "CENTER", 0, 0)
     else
-        container:SetPoint(conf.point or "CENTER", parent, conf.point or "CENTER", cx - posDx, cy - posDy)
+        local af = GF.ResolveAnchorFrame(kind)
+        local pt = conf.anchorPoint or conf.point or "CENTER"
+        container:SetPoint(pt, af, pt, cx - posDx, cy - posDy)
     end
     container:Show()
 
@@ -1641,7 +1667,9 @@ function GF.RefreshPreviewLayout(kind)
         if anchorParent then
             container:SetPoint("CENTER", anchorParent, "CENTER", 0, 0)
         else
-            container:SetPoint(conf.point or "CENTER", UIParent, conf.point or "CENTER", cx - posDx, cy - posDy)
+            local af = GF.ResolveAnchorFrame(kind)
+            local pt = conf.anchorPoint or conf.point or "CENTER"
+            container:SetPoint(pt, af, pt, cx - posDx, cy - posDy)
         end
     end
 
