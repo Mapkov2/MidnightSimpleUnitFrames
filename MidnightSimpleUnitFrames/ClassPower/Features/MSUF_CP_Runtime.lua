@@ -69,6 +69,8 @@ builders.RUNTIME = function(env)
                 maxP = WW.MAX_STACKS
             elseif powerType == "TIP_OF_THE_SPEAR" then
                 maxP = TIP.MAX_STACKS
+            elseif powerType == "ICICLES" then
+                maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
             else
                 maxP = 10
             end
