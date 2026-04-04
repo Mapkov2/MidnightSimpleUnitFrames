@@ -498,6 +498,13 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         local RefreshMultiSpecChecks
         local expandedSpell
 
+        local function ClearSIHighlight()
+            if GF._highlightedSI then
+                GF._highlightedSI = nil
+                GF.RefreshVisuals()
+            end
+        end
+
         -- Spec dropdown (auto-detect + multi-spec + all supported specs)
         local specItems = {
             { key = "auto",  label = L["Auto-Detect"] },
@@ -632,6 +639,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         HideAllSpellPanels = function()
             for _, panel in pairs(spellPanels) do panel:Hide() end
+            ClearSIHighlight()
         end
 
         local function BuildSpellPanel(auraName, specKey, parentTile)
@@ -696,7 +704,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             local closeTex = closeBtn:CreateTexture(nil, "ARTWORK")
             closeTex:SetAllPoints()
             closeTex:SetTexture("Interface\\Buttons\\UI-StopButton")
-            closeBtn:SetScript("OnClick", function() expandedSpell = nil; panel:Hide() end)
+            closeBtn:SetScript("OnClick", function() expandedSpell = nil; ClearSIHighlight(); panel:Hide() end)
 
             -- Arrow buttons for tile reorder (kept as keyboard-friendly fallback)
             local function MakeArrowBtn(par, direction, anchorFrame, anchorPoint, xOff)
@@ -1275,6 +1283,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                                     return
                                 end
                                 expandedSpell = auraName
+                                GF._highlightedSI = auraName
+                                GF.RefreshVisuals()
                                 local panel = BuildSpellPanel(auraName, specKey, self)
                                 panel:ClearAllPoints()
                                 local totalRows = math_ceil(specTileCount / TILES_PER_ROW)

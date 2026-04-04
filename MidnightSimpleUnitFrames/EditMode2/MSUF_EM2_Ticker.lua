@@ -109,13 +109,25 @@ local function OnUpdate(self, elapsed)
             local conf = d.conf
 
             if d.isGroupFrame then
-                conf.offsetX = round(snapCX - d.screenW * 0.5)
-                conf.offsetY = round(snapCY - d.screenH * 0.5)
-                pcall(function()
-                    bar._msufDragActive = false
-                    bar:ClearAllPoints()
-                    bar:SetPoint("CENTER", UIParent, "CENTER", conf.offsetX, conf.offsetY)
-                end)
+                local bw = bar:GetWidth() or 0
+                local bh = bar:GetHeight() or 0
+                if conf.positionMode == "TOPLEFT_V2" then
+                    conf.offsetX = round(snapCX - d.screenW * 0.5 - bw * 0.5)
+                    conf.offsetY = round(snapCY - d.screenH * 0.5 + bh * 0.5)
+                    pcall(function()
+                        bar._msufDragActive = false
+                        bar:ClearAllPoints()
+                        bar:SetPoint("TOPLEFT", UIParent, "CENTER", conf.offsetX, conf.offsetY)
+                    end)
+                else
+                    conf.offsetX = round(snapCX - d.screenW * 0.5)
+                    conf.offsetY = round(snapCY - d.screenH * 0.5)
+                    pcall(function()
+                        bar._msufDragActive = false
+                        bar:ClearAllPoints()
+                        bar:SetPoint("CENTER", UIParent, "CENTER", conf.offsetX, conf.offsetY)
+                    end)
+                end
                 bar._msufDragActive = true
             else
                 -- Compute where bar center IS in screen pixels after hypothetical move

@@ -447,6 +447,36 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
     else
         ind:Hide()
     end
+
+    -- Highlight: yellow pulsing border when this SI is selected in the editor
+    local GF = ns.GF
+    local isHL = GF and GF._highlightedSI == auraName
+    if isHL and ind:IsShown() then
+        if not ind._msufSIHighlight then
+            local hl = CreateFrame("Frame", nil, ind, "BackdropTemplate")
+            hl:SetPoint("TOPLEFT", ind, "TOPLEFT", -2, 2)
+            hl:SetPoint("BOTTOMRIGHT", ind, "BOTTOMRIGHT", 2, -2)
+            hl:SetFrameLevel(ind:GetFrameLevel() + 10)
+            hl:EnableMouse(false)
+            hl:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 2 })
+            hl:SetBackdropColor(0, 0, 0, 0)
+            hl:SetBackdropBorderColor(1, 0.82, 0, 1)
+            local ag = hl:CreateAnimationGroup()
+            ag:SetLooping("BOUNCE")
+            local anim = ag:CreateAnimation("Alpha")
+            anim:SetFromAlpha(1.0)
+            anim:SetToAlpha(0.25)
+            anim:SetDuration(0.5)
+            anim:SetSmoothing("IN_OUT")
+            hl._animGroup = ag
+            ind._msufSIHighlight = hl
+        end
+        ind._msufSIHighlight:Show()
+        if ind._msufSIHighlight._animGroup then ind._msufSIHighlight._animGroup:Play() end
+    elseif ind._msufSIHighlight then
+        if ind._msufSIHighlight._animGroup then ind._msufSIHighlight._animGroup:Stop() end
+        ind._msufSIHighlight:Hide()
+    end
 end
 
 ------------------------------------------------------------------------
