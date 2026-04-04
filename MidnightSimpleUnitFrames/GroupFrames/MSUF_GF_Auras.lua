@@ -339,11 +339,74 @@ local function ApplyDispelBorder(ic, unit, auraInstanceID, dispelName, isHarmful
 end
 
 ------------------------------------------------------------------------
--- Apply cooldown text config (anchor/offset/size/outline)
+-- Cached global font resolution (same pattern as A2_Icons.ResolveGlobalFont)
 ------------------------------------------------------------------------
-local function ConfigureCooldownText(cd, showCd)
+local _gfCdFontPath, _gfCdFontFlags
+local function ResolveGlobalFont()
+    if _gfCdFontPath then return _gfCdFontPath, _gfCdFontFlags end
+    local gfs = _G.MSUF_GetGlobalFontSettings
+    if type(gfs) == "function" then
+        local p, fl = gfs()
+        if type(p) == "string" then _gfCdFontPath = p end
+        if type(fl) == "string" then _gfCdFontFlags = fl end
+    end
+    if not _gfCdFontPath then
+        _gfCdFontPath = GF.ResolveFontPath and GF.ResolveFontPath() or "Fonts\\FRIZQT__.TTF"
+        _gfCdFontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags() or "OUTLINE"
+    end
+    return _gfCdFontPath, _gfCdFontFlags
+end
+
+--- Invalidate cached font (called by font options changes)
+function GF.InvalidateCdFont()
+    _gfCdFontPath = nil
+    _gfCdFontFlags = nil
+end
+
+------------------------------------------------------------------------
+-- Apply cooldown text font (A2 proven pattern: diff-gated, global font,
+-- configurable size, lazy FontString discovery via CT module)
+------------------------------------------------------------------------
+local function ApplyCooldownFont(ic, gcfg)
+    local cd = ic and ic.cooldown
     if not cd then return end
+    local showCd = gcfg and gcfg.showCooldown ~= false
     cd:SetHideCountdownNumbers(not showCd)
+    if not showCd then return end
+
+    -- Discover FontString (A2 pattern: use CT module if available, else EnumerateRegions)
+    local fs = cd._msufCooldownFontString
+    if fs == false then fs = nil end
+    if not fs then
+        local A2 = ns.MSUF_Auras2
+        local CT = A2 and A2.CooldownText
+        local getfs = CT and CT.GetCooldownFontString
+        if type(getfs) == "function" then
+            fs = getfs(ic, GetTime())
+        end
+        if not fs and cd.EnumerateRegions then
+            for region in cd:EnumerateRegions() do
+                if region and region.GetObjectType and region:GetObjectType() == "FontString" then
+                    fs = region; break
+                end
+            end
+        end
+        if fs then cd._msufCooldownFontString = fs end
+    end
+    if not fs then return end
+
+    local size = gcfg.cooldownSize or 8
+    local gFont, gFlags = ResolveGlobalFont()
+    local wantFlags = gcfg.cooldownOutline or gFlags or "OUTLINE"
+
+    -- Diff-gate: skip redundant SetFont (same pattern as A2_Icons line 938)
+    if cd._msufGFCdTextSize ~= size or cd._msufGFCdFontPath ~= gFont then
+        if gFont and fs.SetFont then
+            fs:SetFont(gFont, size, wantFlags)
+        end
+        cd._msufGFCdTextSize = size
+        cd._msufGFCdFontPath = gFont
+    end
 end
 
 ------------------------------------------------------------------------
@@ -564,6 +627,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                                     cd:SetHideCountdownNumbers(wantHide)
                                 end
                             end
+                            ApplyCooldownFont(ic, gcfg)
                             ApplyStacks(ic, unit, aid, aura.applications, showStk, gcfg)
 
                             if isHarmful then

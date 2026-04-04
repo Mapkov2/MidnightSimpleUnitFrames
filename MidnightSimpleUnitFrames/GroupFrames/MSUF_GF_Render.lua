@@ -827,6 +827,7 @@ end
 
 function GF.RefreshFonts()
     GF.MarkAllDirty(DIRTY_FONT)
+    if GF.InvalidateCdFont then GF.InvalidateCdFont() end
 end
 
 function GF.RefreshColors()

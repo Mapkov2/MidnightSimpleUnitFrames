@@ -347,12 +347,51 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
             ind.texture:Show()
             if ind.cooldown then
                 local aid = auraData.auraInstanceID
+                local showCdText = cfg.showCooldown ~= false
+                ind.cooldown:SetHideCountdownNumbers(not showCdText)
                 if aid and unit and C_UnitAuras and C_UnitAuras.GetAuraDuration then
                     local obj = C_UnitAuras.GetAuraDuration(unit, aid)
                     if obj and ind.cooldown.SetCooldownFromDurationObject then
                         ind.cooldown:SetCooldownFromDurationObject(obj)
-                        ind.cooldown:SetHideCountdownNumbers(false)
                         ind._msufA2_cdDurationObj = obj
+                        -- Apply global font + configured size (A2 pattern, only when text shown)
+                        if showCdText then
+                            local cdFS = ind.cooldown._msufCooldownFontString
+                            if cdFS == false then cdFS = nil end
+                            if not cdFS then
+                                local A2 = ns.MSUF_Auras2
+                                local CT = A2 and A2.CooldownText
+                                local getfs = CT and CT.GetCooldownFontString
+                                if type(getfs) == "function" then
+                                    cdFS = getfs(ind, GetTime())
+                                end
+                                if not cdFS and ind.cooldown.EnumerateRegions then
+                                    for region in ind.cooldown:EnumerateRegions() do
+                                        if region and region.GetObjectType and region:GetObjectType() == "FontString" then
+                                            cdFS = region; break
+                                        end
+                                    end
+                                end
+                                if cdFS then ind.cooldown._msufCooldownFontString = cdFS end
+                            end
+                            if cdFS and cdFS.SetFont then
+                                local cdSize = cfg.cooldownSize or 8
+                                local gfs = _G.MSUF_GetGlobalFontSettings
+                                local fp, ff
+                                if type(gfs) == "function" then fp, ff = gfs() end
+                                if not fp then
+                                    local GF = ns.GF
+                                    fp = GF and GF.ResolveFontPath and GF.ResolveFontPath() or "Fonts\\FRIZQT__.TTF"
+                                    ff = GF and GF.ResolveFontFlags and GF.ResolveFontFlags() or "OUTLINE"
+                                end
+                                local wantFlags = cfg.cooldownOutline or ff or "OUTLINE"
+                                if ind.cooldown._msufGFCdTextSize ~= cdSize or ind.cooldown._msufGFCdFontPath ~= fp then
+                                    cdFS:SetFont(fp, cdSize, wantFlags)
+                                    ind.cooldown._msufGFCdTextSize = cdSize
+                                    ind.cooldown._msufGFCdFontPath = fp
+                                end
+                            end
+                        end
                         local A2 = ns.MSUF_Auras2
                         local CT = A2 and A2.CooldownText
                         if CT then

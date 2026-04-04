@@ -343,6 +343,10 @@ local function dispatchAura(f, unit, updateInfo)
     end
 
     -- Full aura processing (add/remove/fullUpdate)
+    -- SI runs first: populates dedup IDs before buff scan
+    if siOn and GF.UpdateSpellIndicators then
+        GF.UpdateSpellIndicators(f, unit)
+    end
     if GF.UpdateFrameAuras then
         GF.UpdateFrameAuras(f, unit)
         local mergedDispel = f._msufGFMergedDispel
@@ -353,9 +357,6 @@ local function dispatchAura(f, unit, updateInfo)
         end
     else
         GF._UpdateDispel(f, unit)
-    end
-    if siOn and GF.UpdateSpellIndicators then
-        GF.UpdateSpellIndicators(f, unit)
     end
 end
 
@@ -1180,6 +1181,11 @@ local function UpdateAll(f, unit)
     local _siCfg = _conf and _conf.spellIndicators
     local _siOn = _siCfg and _siCfg.enabled == true
 
+    -- SI runs FIRST: populates f._msufSIDedupIDs so buff scan can exclude dupes
+    if GF.UpdateSpellIndicators then
+        if _siOn then GF.UpdateSpellIndicators(f, unit) else GF.HideSpellIndicators(f) end
+    end
+
     if _aurasOn and GF.UpdateFrameAuras then
         GF.UpdateFrameAuras(f, unit)
         local mergedDispel = f._msufGFMergedDispel
@@ -1192,9 +1198,6 @@ local function UpdateAll(f, unit)
         -- Auras disabled: hide pools once, standalone dispel only
         if GF.UpdateFrameAuras then GF.UpdateFrameAuras(f, unit) end -- cached HidePool
         GF._UpdateDispel(f, unit)
-    end
-    if GF.UpdateSpellIndicators then
-        if _siOn then GF.UpdateSpellIndicators(f, unit) else GF.HideSpellIndicators(f) end
     end
     UpdateTargetIndicator(f, unit)
     UpdateStatusText(f, unit)

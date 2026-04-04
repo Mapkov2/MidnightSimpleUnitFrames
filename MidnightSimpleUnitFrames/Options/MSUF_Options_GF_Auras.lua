@@ -638,7 +638,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             if spellPanels[auraName] then return spellPanels[auraName] end
 
             local panel = CreateFrame("Frame", nil, body, "BackdropTemplate")
-            panel:SetSize(580, 260)
+            panel:SetSize(580, 300)
             panel:SetBackdrop({
                 bgFile = "Interface\\Buttons\\WHITE8x8",
                 edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -807,12 +807,29 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             panel._refreshBarW = RefreshBarW
             RefreshBarW()
 
-            SCheck({
+            local missingChk = SCheck({
                 name = "MSUF_GF_SI_" .. auraName .. "_Missing", parent = panel,
                 anchor = ySl, x = 0, y = -12,
                 label = L["Show when missing"],
                 get = function(k) return PlacedCfg().missing == true end,
                 set = function(k, v) PlacedCfg().missing = v and true or false; GF.RefreshVisuals() end,
+            })
+
+            SCheck({
+                name = "MSUF_GF_SI_" .. auraName .. "_ShowCD", parent = panel,
+                anchor = missingChk, x = 0, y = -4,
+                label = L["Show Cooldown Text"],
+                get = function(k) return PlacedCfg().showCooldown ~= false end,
+                set = function(k, v) PlacedCfg().showCooldown = v and true or false; GF.RefreshVisuals() end,
+            })
+
+            SSlider({
+                name = "MSUF_GF_SI_" .. auraName .. "_CDSize", parent = panel, compact = true,
+                anchor = missingChk, x = 140, y = -4,
+                min = 6, max = 24, step = 1, width = 120, default = 8,
+                get = function(k) return PlacedCfg().cooldownSize or 8 end,
+                set = function(k, v) PlacedCfg().cooldownSize = v; GF.RefreshVisuals() end,
+                formatText = function(v) return string.format(L["CD Size: %d"], v) end,
             })
 
             -- Right column: Frame Effect
