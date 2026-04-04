@@ -433,10 +433,20 @@ local function ApplyRangeFade(f, unit)
     end
     if connected == false then
         local offA = conf.offlineAlpha or 0.5
+        local offDelay = conf.hideOfflineDelay or 0
+        if offDelay > 0 then
+            if InCombatLockdown() then
+                -- IC: binary hide, zero overhead (no timer, no polling)
+                offA = 0
+            else
+                -- OOC: timed hide after X seconds
+                if not f._msufGFOfflineSince then f._msufGFOfflineSince = GetTime() end
+                if (GetTime() - f._msufGFOfflineSince) >= offDelay then offA = 0 end
+            end
+        end
         f._msufGFLastRange = false
         if not _rfMul then _rfMul = _G.MSUF_RangeFadeMul end
         if _rfMul then _rfMul[unit] = offA end
-        -- Try MSUF alpha pipeline
         local fast = _G.MSUF_ApplyRangeFadeAlphaFast
         if type(fast) == "function" and fast(f, f.msufConfigKey, offA) then
             if MaybeWakeRangeRecoveryTicker then MaybeWakeRangeRecoveryTicker() end
@@ -446,6 +456,8 @@ local function ApplyRangeFade(f, unit)
         if MaybeWakeRangeRecoveryTicker then MaybeWakeRangeRecoveryTicker() end
         return
     end
+    -- Came back online: clear offline timestamp
+    f._msufGFOfflineSince = nil
 
     local inRange = CheckRange(f, unit)
     if inRange == nil then return end -- no change possible
@@ -1296,10 +1308,8 @@ local function _GF_GetAbsorbSetting(kind, key)
 end
 
 local function _GF_IsAbsorbEnabled(kind)
-    -- Check GF-local setting first (absorbEnabled in gf_party/gf_raid)
-    local conf = GF.GetConf(kind)
-    if conf.absorbEnabled ~= nil then return conf.absorbEnabled ~= false end
-    -- Fall through to general bar settings
+    -- All absorb settings resolve through _GF_GetAbsorbSetting which respects hlOverride.
+    -- Without hlOverride, GF falls through to general (Bars menu shared scope).
     local mode = _GF_GetAbsorbSetting(kind, "absorbTextMode")
     if mode then
         mode = tonumber(mode)
@@ -1414,12 +1424,15 @@ dispatchAbsorb = function(f, unit)
         return
     end
     local kind = f._msufGFKind or "party"
-    if not _GF_IsAbsorbEnabled(kind) then bar:Hide(); return end
-    if not UnitGetTotalAbsorbs then bar:Hide(); return end
-    if not unit or not UnitExists(unit) then bar:Hide(); return end
+    if not _GF_IsAbsorbEnabled(kind) then
+        bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide()
+        return
+    end
+    if not UnitGetTotalAbsorbs then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
+    if not unit or not UnitExists(unit) then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
     local hpMax = UnitHealthMax(unit)
     local val   = UnitGetTotalAbsorbs(unit)
-    if val == nil then bar:Hide(); return end
+    if val == nil then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
     bar:SetMinMaxValues(0, hpMax)
     bar:SetValue(val)
     if issecretvalue and issecretvalue(val) then
@@ -1441,12 +1454,15 @@ dispatchHealAbsorb = function(f, unit)
     end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
-    if conf.healAbsorbEnabled == false then bar:Hide(); return end
-    if not UnitGetTotalHealAbsorbs then bar:Hide(); return end
-    if not unit or not UnitExists(unit) then bar:Hide(); return end
+    if conf.healAbsorbEnabled == false or not _GF_IsAbsorbEnabled(kind) then
+        bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide()
+        return
+    end
+    if not UnitGetTotalHealAbsorbs then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
+    if not unit or not UnitExists(unit) then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
     local hpMax = UnitHealthMax(unit)
     local val   = UnitGetTotalHealAbsorbs(unit)
-    if val == nil then bar:Hide(); return end
+    if val == nil then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
     bar:SetMinMaxValues(0, hpMax)
     bar:SetValue(val)
     if issecretvalue and issecretvalue(val) then
@@ -1814,19 +1830,21 @@ end
 
 ------------------------------------------------------------------------
 -- OOR recovery ticker
--- UNIT_IN_RANGE_UPDATE can miss the "back in range" transition on some
--- clients/setups for party/raid units. To stay accurate without broad
--- polling, only units currently marked OOR are revalidated on a tiny
--- shared ticker. This keeps the hot path event-driven and wakes polling
--- only when there is actually something to recover.
+-- UNIT_IN_RANGE_UPDATE can miss transitions (phasing, summoning, zone
+-- changes). Two modes:
+-- 1) Fast poll (0.2s IC, 0.5s OOC): frames currently OOR or unknown
+-- 2) Slow sweep (3s OOC only): ALL frames to catch phase/zone transitions
 ------------------------------------------------------------------------
 do
     local _recoveryFrame
     local _elapsed = 0
+    local _sweepElapsed = 0
     local _inCombat = false
 
     local function FrameNeedsRecoveryPoll(f)
-        if not (f and f.unit and f._msufGFLastRange == false) then return false end
+        -- Poll OOR frames AND unknown-state frames (new units)
+        if not (f and f.unit) then return false end
+        if f._msufGFLastRange == true then return false end -- already in range
         if not UnitExists(f.unit) then return false end
 
         local conf = GF.GetConf(f._msufGFKind or "party")
@@ -1834,18 +1852,23 @@ do
 
         local connected = UnitIsConnected(f.unit)
         if issecretvalue and issecretvalue(connected) then connected = true end
-        if connected == false then return false end
-
-        if UnitPhaseReason and UnitPhaseReason(f.unit) then return false end
-        if UnitIsDeadOrGhost and UnitIsDeadOrGhost(f.unit) then return false end
+        if connected == false then
+            -- OOC only: keep polling if hide-offline delay not yet elapsed
+            if not _inCombat and f._msufGFOfflineSince then
+                local delay = conf.hideOfflineDelay or 0
+                if delay > 0 and (GetTime() - f._msufGFOfflineSince) < delay then
+                    return true
+                end
+            end
+            return false
+        end
+        -- NOTE: do NOT skip phased units — we need to detect un-phase transitions
         return true
     end
 
-    local function HasRecoveryWork()
+    local function HasAnyGFFrames()
         for f in pairs(GF.frames) do
-            if FrameNeedsRecoveryPoll(f) then
-                return true
-            end
+            if f.unit then return true end
         end
         return false
     end
@@ -1857,30 +1880,64 @@ do
         _recoveryFrame:Hide()
         _recoveryFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
         _recoveryFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        _recoveryFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+        _recoveryFrame:RegisterEvent("UNIT_FLAGS")
+        -- Infrequent zone events (fire once per load, not per-unit)
+        _recoveryFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+        _recoveryFrame:RegisterEvent("LOADING_SCREEN_DISABLED")
         _recoveryFrame:SetScript("OnEvent", function(self, event)
             if event == "PLAYER_REGEN_DISABLED" then
                 _inCombat = true
-            else
+            elseif event == "PLAYER_REGEN_ENABLED" then
                 _inCombat = false
+                _sweepElapsed = 99 -- force immediate sweep after combat
+                self:Show()
+            else
+                -- Roster/zone change: wake ticker, force one sweep
+                _elapsed = 0
+                _sweepElapsed = 99
+                self:Show()
             end
         end)
         _recoveryFrame:SetScript("OnUpdate", function(self, dt)
             _elapsed = _elapsed + dt
-            local interval = _inCombat and 0.20 or 0.50
-            if _elapsed < interval then return end
-            _elapsed = 0
 
-            local hasWork = false
-            for f in pairs(GF.frames) do
-                if FrameNeedsRecoveryPoll(f) then
-                    hasWork = true
-                    ApplyRangeFade(f, f.unit)
+            -- Fast poll: OOR / unknown-state frames (only those needing recovery)
+            local fastInterval = _inCombat and 0.20 or 0.50
+            if _elapsed >= fastInterval then
+                _elapsed = 0
+                local anyNeedsRecovery = false
+                for f in pairs(GF.frames) do
+                    if FrameNeedsRecoveryPoll(f) then
+                        anyNeedsRecovery = true
+                        ApplyRangeFade(f, f.unit)
+                    end
+                end
+                -- Nothing to poll and no pending sweep → sleep
+                if not anyNeedsRecovery and _sweepElapsed <= 0 then
+                    self:Hide()
+                    return
                 end
             end
 
-            if not hasWork then
-                self:Hide()
+            -- Slow sweep: ALL frames (OOC only, every 3s)
+            if not _inCombat then
+                _sweepElapsed = _sweepElapsed + dt
+                if _sweepElapsed >= 3 then
+                    _sweepElapsed = 0
+                    for f in pairs(GF.frames) do
+                        if f.unit and UnitExists(f.unit) then
+                            local conf = GF.GetConf(f._msufGFKind or "party")
+                            if conf and conf.rangeFadeEnabled ~= false then
+                                ApplyRangeFade(f, f.unit)
+                            end
+                        end
+                    end
+                end
             end
+
+            -- Sleep if no GF frames at all
+            if not HasAnyGFFrames() then self:Hide() end
         end)
         return _recoveryFrame
     end
@@ -1889,11 +1946,9 @@ do
         if _rangeNeedsTicker then return end
         local frame = EnsureRecoveryFrame()
         if not frame then return end
-        if HasRecoveryWork() then
+        if HasAnyGFFrames() then
             _elapsed = 0
             frame:Show()
-        else
-            frame:Hide()
         end
     end
 end

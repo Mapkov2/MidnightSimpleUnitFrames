@@ -69,6 +69,11 @@ local function PushVisualUpdates()
         _G.MSUF_RefreshAllFrames()
     end
 
+    -- Sync GF overlay colors (absorb/heal prediction) after color change.
+    if type(_G.MSUF_GF_MarkAllDirty) == "function" then
+        _G.MSUF_GF_MarkAllDirty(0x08) -- DIRTY_COLOR
+    end
+
     -- Sync highlight priority stripe colors when border colors change.
     local reinit = _G.MSUF_PrioRows_Reinit
     if type(reinit) == "function" then reinit() end

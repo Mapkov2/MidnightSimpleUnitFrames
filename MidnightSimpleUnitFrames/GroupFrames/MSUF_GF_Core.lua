@@ -689,14 +689,18 @@ function GF.UpdateButton(f, unit)
     end
 
     -- Role icon
-    if f.roleIcon and conf.roleIcon ~= false then
-        local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
-        if role and role ~= "NONE" then
-            local tex, l, r, t, b = GF.GetRoleTexture(kind, role)
-            if tex then
-                f.roleIcon:SetTexture(tex)
-                f.roleIcon:SetTexCoord(l, r, t, b)
-                f.roleIcon:Show()
+    if f.roleIcon then
+        if conf.roleIcon ~= false then
+            local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
+            if role and role ~= "NONE" then
+                local tex, l, r, t, b = GF.GetRoleTexture(kind, role)
+                if tex then
+                    f.roleIcon:SetTexture(tex)
+                    f.roleIcon:SetTexCoord(l, r, t, b)
+                    f.roleIcon:Show()
+                else
+                    f.roleIcon:Hide()
+                end
             else
                 f.roleIcon:Hide()
             end
@@ -706,38 +710,50 @@ function GF.UpdateButton(f, unit)
     end
 
     -- Raid target marker
-    if f.raidIcon and conf.raidMarker ~= false then
-        local idx = GetRaidTargetIndex(unit)
-        if idx then
-            SetRaidTargetIconTexture(f.raidIcon, idx)
-            f.raidIcon:Show()
+    if f.raidIcon then
+        if conf.raidMarker ~= false then
+            local idx = GetRaidTargetIndex(unit)
+            if idx then
+                SetRaidTargetIconTexture(f.raidIcon, idx)
+                f.raidIcon:Show()
+            else
+                f.raidIcon:Hide()
+            end
         else
             f.raidIcon:Hide()
         end
     end
 
     -- Leader icon (crown only, no assist)
-    if f.leaderIcon and conf.leaderIcon ~= false then
-        local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
-        if isLeader then
-            local tex, l, r, t, b = GF.GetLeaderTexture(kind)
-            f.leaderIcon:SetTexture(tex)
-            f.leaderIcon:SetTexCoord(l, r, t, b)
-            f.leaderIcon:Show()
+    if f.leaderIcon then
+        if conf.leaderIcon ~= false then
+            local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
+            if isLeader then
+                local tex, l, r, t, b = GF.GetLeaderTexture(kind)
+                f.leaderIcon:SetTexture(tex)
+                f.leaderIcon:SetTexCoord(l, r, t, b)
+                f.leaderIcon:Show()
+            else
+                f.leaderIcon:Hide()
+            end
         else
             f.leaderIcon:Hide()
         end
     end
 
     -- Assist icon (separate, shield only)
-    if f.assistIcon and conf.assistIcon ~= false then
-        local isAssist = UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
-        local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
-        if isAssist and not isLeader then
-            local tex, l, r, t, b = GF.GetAssistTexture(kind)
-            f.assistIcon:SetTexture(tex)
-            f.assistIcon:SetTexCoord(l, r, t, b)
-            f.assistIcon:Show()
+    if f.assistIcon then
+        if conf.assistIcon ~= false then
+            local isAssist = UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
+            local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
+            if isAssist and not isLeader then
+                local tex, l, r, t, b = GF.GetAssistTexture(kind)
+                f.assistIcon:SetTexture(tex)
+                f.assistIcon:SetTexCoord(l, r, t, b)
+                f.assistIcon:Show()
+            else
+                f.assistIcon:Hide()
+            end
         else
             f.assistIcon:Hide()
         end
@@ -759,61 +775,64 @@ local function ScanHeaderChildren(header, kind)
     local conf = GF.GetConf(kind)
     local w = conf.width  or (kind == "raid" and 80 or 120)
     local h = conf.height or (kind == "raid" and 32 or 40)
-    local i = 1
-    while true do
-        local child = header:GetAttribute("child" .. i)
-        if not child then break end
-        if not child._msufGFBuilt then
-            if inCombat then
-                -- Defer init to after combat
-                GF._pendingRebuild = true
-                break
-            end
-            GF_InitButton(child, kind)
-        end
-        -- Resize to current config (only out of combat, only if size changed)
-        if not inCombat then
-            if child._msufGFCachedW ~= w or child._msufGFCachedH ~= h then
-                child._msufGFCachedW = w
-                child._msufGFCachedH = h
-                child:SetSize(w, h)
-                if child.barGroup then child.barGroup:SetSize(w, h) end
-            end
-        end
 
-        if i == 1 and header.GetCenter and child.GetCenter then
-            local hx, hy = header:GetCenter()
-            local cx, cy = child:GetCenter()
-            if hx and hy and cx and cy then
-                local hs = (header.GetEffectiveScale and header:GetEffectiveScale()) or 1
-                local cs = (child.GetEffectiveScale and child:GetEffectiveScale()) or 1
-                if hs == 0 then hs = 1 end
-                if cs == 0 then cs = 1 end
-                GF._measuredFirstCenterDelta = GF._measuredFirstCenterDelta or {}
-                GF._measuredFirstCenterDelta[kind] = {
-                    x = (cx * cs - hx * hs) / hs,
-                    y = (cy * cs - hy * hs) / hs,
-                }
+    -- GetChildren() is more reliable than GetAttribute("child"..i) for SecureGroupHeader
+    local children = { header:GetChildren() }
+    local firstMeasured = false
+    for ci = 1, #children do
+        local child = children[ci]
+        -- Skip non-button children (anchor frames, etc.)
+        if child and child.GetAttribute and child:GetAttribute("unit") ~= nil then
+            if not child._msufGFBuilt then
+                if inCombat then
+                    GF._pendingRebuild = true
+                    break
+                end
+                GF_InitButton(child, kind)
             end
-        end
+            -- Resize to current config (only out of combat, only if size changed)
+            if not inCombat then
+                if child._msufGFCachedW ~= w or child._msufGFCachedH ~= h then
+                    child._msufGFCachedW = w
+                    child._msufGFCachedH = h
+                    child:SetSize(w, h)
+                    if child.barGroup then child.barGroup:SetSize(w, h) end
+                end
+            end
 
-        local unit = child:GetAttribute("unit") or child.unit
-        if unit then
-            child.unit = unit
-            local p = unit:sub(1, 5)
-            if p == "party" or unit:sub(1, 4) == "raid" then
-                _G.MSUF_UnitFrames[unit] = child
+            if not firstMeasured and header.GetCenter and child.GetCenter then
+                firstMeasured = true
+                local hx, hy = header:GetCenter()
+                local cx, cy = child:GetCenter()
+                if hx and hy and cx and cy then
+                    local hs = (header.GetEffectiveScale and header:GetEffectiveScale()) or 1
+                    local cs = (child.GetEffectiveScale and child:GetEffectiveScale()) or 1
+                    if hs == 0 then hs = 1 end
+                    if cs == 0 then cs = 1 end
+                    GF._measuredFirstCenterDelta = GF._measuredFirstCenterDelta or {}
+                    GF._measuredFirstCenterDelta[kind] = {
+                        x = (cx * cs - hx * hs) / hs,
+                        y = (cy * cs - hy * hs) / hs,
+                    }
+                end
             end
-            -- Only re-register and update when unit assignment actually changes
-            if child._msufGFRegisteredUnit ~= unit then
-                child._msufGFRegisteredUnit = unit
-                GF.UpdateButton(child, unit)
-                GF.RegisterUnitEvents(child, unit)
+
+            local unit = child:GetAttribute("unit") or child.unit
+            if unit then
+                child.unit = unit
+                local p = unit:sub(1, 5)
+                if p == "party" or unit:sub(1, 4) == "raid" then
+                    _G.MSUF_UnitFrames[unit] = child
+                end
+                if child._msufGFRegisteredUnit ~= unit then
+                    child._msufGFRegisteredUnit = unit
+                    GF.UpdateButton(child, unit)
+                    GF.RegisterUnitEvents(child, unit)
+                end
             end
         end
-        i = i + 1
     end
-    -- After measuring delta, reposition header to correct for timing (delta not available at initial SetPoint)
+    -- After measuring delta, reposition header
     if not inCombat and GF.SyncHeaderPosition then
         GF.SyncHeaderPosition(kind)
     end
@@ -982,15 +1001,19 @@ local function SetupPartyHeader()
     end
 
     -- initialConfigFunction: size + attributes ONLY (no RegisterForClicks!)
-    local wStr = ("%.1f"):format(w)
-    local hStr = ("%.1f"):format(h)
-    header:SetAttribute("initialConfigFunction", ([[
-        self:SetWidth(%s)
-        self:SetHeight(%s)
+    -- Sizes read dynamically from header attributes so re-setup picks up changes
+    header:SetAttribute("_msufWidth", w)
+    header:SetAttribute("_msufHeight", h)
+    header:SetAttribute("initialConfigFunction", [[
+        local hdr = self:GetParent()
+        local w = hdr:GetAttribute('_msufWidth') or 120
+        local h = hdr:GetAttribute('_msufHeight') or 40
+        self:SetWidth(w)
+        self:SetHeight(h)
         self:SetAttribute('*type1', 'target')
         self:SetAttribute('*type2', 'togglemenu')
         RegisterUnitWatch(self)
-    ]]):format(wStr, hStr))
+    ]])
 
     -- Position (stored offset = grid center)
     PositionHeaderFromGridCenter("party", header)
@@ -1041,6 +1064,24 @@ local function SetupRaidHeader()
     header:SetAttribute("template", "SecureUnitButtonTemplate")
     header:SetAttribute("sortMethod", "INDEX")
     header:SetAttribute("sortDir", "ASC")
+    -- Group filter: which raid groups to display (1-8)
+    local gf = conf.groupFilter
+    if type(gf) == "string" and gf ~= "" then
+        -- Legacy string format "1,2,3,4" → pass directly
+        header:SetAttribute("groupFilter", gf)
+    elseif type(gf) == "table" then
+        local parts = {}
+        for i = 1, 8 do
+            if gf[i] ~= false then parts[#parts + 1] = tostring(i) end
+        end
+        if #parts > 0 and #parts < 8 then
+            header:SetAttribute("groupFilter", table.concat(parts, ","))
+        else
+            header:SetAttribute("groupFilter", nil)
+        end
+    else
+        header:SetAttribute("groupFilter", nil)
+    end
     -- No groupBy — pure grid: wraps at unitsPerColumn, fills up to maxColumns
 
     -- Growth
@@ -1071,15 +1112,18 @@ local function SetupRaidHeader()
         header:SetAttribute("columnSpacing", spacing)
     end
 
-    local wStr = ("%.1f"):format(w)
-    local hStr = ("%.1f"):format(h)
-    header:SetAttribute("initialConfigFunction", ([[
-        self:SetWidth(%s)
-        self:SetHeight(%s)
+    header:SetAttribute("_msufWidth", w)
+    header:SetAttribute("_msufHeight", h)
+    header:SetAttribute("initialConfigFunction", [[
+        local hdr = self:GetParent()
+        local w = hdr:GetAttribute('_msufWidth') or 80
+        local h = hdr:GetAttribute('_msufHeight') or 32
+        self:SetWidth(w)
+        self:SetHeight(h)
         self:SetAttribute('*type1', 'target')
         self:SetAttribute('*type2', 'togglemenu')
         RegisterUnitWatch(self)
-    ]]):format(wStr, hStr))
+    ]])
 
     PositionHeaderFromGridCenter("raid", header)
 
@@ -1257,23 +1301,34 @@ function GF.ApplyPreviewData(f, index, kind)
         if gfHasOvr and gfDb[key] ~= nil then return gfDb[key] end
         return gen and gen[key]
     end
-    if f.incomingHealBar and conf.healPredEnabled ~= false then
-        f.incomingHealBar:SetMinMaxValues(0, 100)
-        f.incomingHealBar:SetValue(math_min(hpVal + 20, 100))
-        local r, g, b = 0.0, 1.0, 0.4
-        if gen then
-            r = gen.healPredColorR or r; g = gen.healPredColorG or g; b = gen.healPredColorB or b
+    if f.incomingHealBar then
+        local hpEnabled = conf.healPredEnabled
+        if hpEnabled == nil then hpEnabled = not gen or gen.enableHealPrediction ~= false end
+        if hpEnabled ~= false then
+            f.incomingHealBar:SetMinMaxValues(0, 100)
+            f.incomingHealBar:SetValue(math_min(hpVal + 20, 100))
+            local r, g, b = 0.0, 1.0, 0.4
+            if gen then
+                if type(gen.healPredColorR) == "number" then r = gen.healPredColorR end
+                if type(gen.healPredColorG) == "number" then g = gen.healPredColorG end
+                if type(gen.healPredColorB) == "number" then b = gen.healPredColorB end
+            end
+            f.incomingHealBar:SetStatusBarColor(r, g, b, 0.45)
+            f.incomingHealBar:Show()
+        else
+            f.incomingHealBar:Hide()
         end
-        f.incomingHealBar:SetStatusBarColor(r, g, b, 0.45)
-        f.incomingHealBar:Show()
-    elseif f.incomingHealBar then
-        f.incomingHealBar:Hide()
     end
-    -- Absorb enabled: absorbTextMode 2/3 = bar visible (per-GF → general)
-    local absorbBarVisible = true
+    -- Absorb enabled: mirrors _GF_IsAbsorbEnabled — hlOverride-aware
+    local absorbBarVisible
     do
         local atm = tonumber(_pResolve("absorbTextMode"))
-        if atm then absorbBarVisible = (atm == 2 or atm == 3) end
+        if atm then
+            absorbBarVisible = (atm == 2 or atm == 3)
+        else
+            local eab = _pResolve("enableAbsorbBar")
+            if eab ~= nil then absorbBarVisible = (eab ~= false) else absorbBarVisible = true end
+        end
     end
     -- Absorb anchoring: SetReverseFill from absorbAnchorMode (per-GF → general)
     if absorbBarVisible then
@@ -1296,7 +1351,9 @@ function GF.ApplyPreviewData(f, index, kind)
         f.absorbBar:SetValue(15 + index * 5)
         local r, g, b = 0.8, 0.9, 1.0
         if gen then
-            r = gen.absorbBarColorR or r; g = gen.absorbBarColorG or g; b = gen.absorbBarColorB or b
+            if type(gen.absorbBarColorR) == "number" then r = gen.absorbBarColorR end
+            if type(gen.absorbBarColorG) == "number" then g = gen.absorbBarColorG end
+            if type(gen.absorbBarColorB) == "number" then b = gen.absorbBarColorB end
         end
         local a = tonumber(_pResolve("absorbBarOpacity")) or 0.6
         f.absorbBar:SetStatusBarColor(r, g, b, a)
@@ -1304,12 +1361,16 @@ function GF.ApplyPreviewData(f, index, kind)
     elseif f.absorbBar then
         f.absorbBar:Hide()
     end
-    if f.healAbsorbBar and absorbBarVisible then
+    -- Heal absorb: own enabled check (separate from absorb bar)
+    local healAbsorbVisible = absorbBarVisible and conf.healAbsorbEnabled ~= false
+    if f.healAbsorbBar and healAbsorbVisible then
         f.healAbsorbBar:SetMinMaxValues(0, 100)
         f.healAbsorbBar:SetValue(math_min(8, hpVal))
         local r, g, b = 1.0, 0.4, 0.4
         if gen then
-            r = gen.healAbsorbBarColorR or r; g = gen.healAbsorbBarColorG or g; b = gen.healAbsorbBarColorB or b
+            if type(gen.healAbsorbBarColorR) == "number" then r = gen.healAbsorbBarColorR end
+            if type(gen.healAbsorbBarColorG) == "number" then g = gen.healAbsorbBarColorG end
+            if type(gen.healAbsorbBarColorB) == "number" then b = gen.healAbsorbBarColorB end
         end
         local a = tonumber(_pResolve("healAbsorbBarOpacity")) or 0.7
         f.healAbsorbBar:SetStatusBarColor(r, g, b, a)
@@ -1348,12 +1409,18 @@ function GF.ApplyPreviewData(f, index, kind)
     end
 
     -- Role icon
-    if f.roleIcon and conf.roleIcon ~= false then
-        local tex, l, r, t, b = GF.GetRoleTexture(kind, role)
-        if tex then
-            f.roleIcon:SetTexture(tex)
-            f.roleIcon:SetTexCoord(l, r, t, b)
-            f.roleIcon:Show()
+    if f.roleIcon then
+        if conf.roleIcon ~= false then
+            local tex, l, r, t, b = GF.GetRoleTexture(kind, role)
+            if tex then
+                f.roleIcon:SetTexture(tex)
+                f.roleIcon:SetTexCoord(l, r, t, b)
+                f.roleIcon:Show()
+            else
+                f.roleIcon:Hide()
+            end
+        else
+            f.roleIcon:Hide()
         end
     end
 
@@ -1549,7 +1616,7 @@ function GF.ShowPreview(kind, count)
     -- Position container identically to PositionHeaderFromGridCenter
     -- Use GetPositionCount (not preview count) for consistent positioning
     local posCount = GF.GetPositionCount(kind)
-    local posDx, posDy, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
+    local _, _, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
     local cx, cy = conf.offsetX, conf.offsetY
     if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
     container:SetSize(math_max(posTotalW, 1), math_max(posTotalH, 1))
@@ -1558,8 +1625,8 @@ function GF.ShowPreview(kind, count)
         container:SetPoint("CENTER", parent, "CENTER", 0, 0)
     else
         local af = GF.ResolveAnchorFrame(kind)
-        local pt = conf.anchorPoint or conf.point or "CENTER"
-        container:SetPoint(pt, af, pt, cx - posDx, cy - posDy)
+        -- (cx, cy) is grid center → anchor container CENTER there directly
+        container:SetPoint("CENTER", af, "CENTER", cx, cy)
     end
     container:Show()
 
@@ -1596,22 +1663,18 @@ function GF.ShowPreview(kind, count)
         f:SetSize(w, h)
         f:ClearAllPoints()
 
-        -- Replicate SecureGroupHeader child layout
+        -- Replicate SecureGroupHeader child layout (corner-anchored)
         local row = (i - 1) % upc
         local col = math_floor((i - 1) / upc)
 
         if growth == "DOWN" then
-            local colOff = col * (w + spacing)
-            f:SetPoint("TOP", container, "TOP", colOff, -row * (h + spacing))
+            f:SetPoint("TOPLEFT", container, "TOPLEFT", col * (w + spacing), -row * (h + spacing))
         elseif growth == "UP" then
-            local colOff = col * (w + spacing)
-            f:SetPoint("BOTTOM", container, "BOTTOM", colOff, row * (h + spacing))
+            f:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", col * (w + spacing), row * (h + spacing))
         elseif growth == "RIGHT" then
-            local colOff = col * (h + spacing)
-            f:SetPoint("LEFT", container, "LEFT", row * (w + spacing), -colOff)
+            f:SetPoint("TOPLEFT", container, "TOPLEFT", row * (w + spacing), -col * (h + spacing))
         elseif growth == "LEFT" then
-            local colOff = col * (h + spacing)
-            f:SetPoint("RIGHT", container, "RIGHT", -row * (w + spacing), -colOff)
+            f:SetPoint("TOPRIGHT", container, "TOPRIGHT", -row * (w + spacing), -col * (h + spacing))
         end
 
         GF.ApplyPreviewData(f, i, kind)
@@ -1654,11 +1717,11 @@ function GF.RefreshPreviewLayout(kind)
     local conf = GF.GetConf(kind)
     local _, _, totalW, totalH, w, h, spacing, growth, upc = GF.GetGridMetrics(kind, count)
 
-    -- Update container position (same as PositionHeaderFromGridCenter)
+    -- Update container position (grid center = stored offset)
     local container = GF._previewContainer and GF._previewContainer[kind]
     if container then
         local posCount = GF.GetPositionCount(kind)
-        local posDx, posDy, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
+        local _, _, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
         local cx, cy = conf.offsetX, conf.offsetY
         if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
         local anchorParent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
@@ -1668,8 +1731,7 @@ function GF.RefreshPreviewLayout(kind)
             container:SetPoint("CENTER", anchorParent, "CENTER", 0, 0)
         else
             local af = GF.ResolveAnchorFrame(kind)
-            local pt = conf.anchorPoint or conf.point or "CENTER"
-            container:SetPoint(pt, af, pt, cx - posDx, cy - posDy)
+            container:SetPoint("CENTER", af, "CENTER", cx, cy)
         end
     end
 
@@ -1682,14 +1744,15 @@ function GF.RefreshPreviewLayout(kind)
             f:ClearAllPoints()
             local row = (i - 1) % upc
             local col = math_floor((i - 1) / upc)
+            local c = container or UIParent
             if growth == "DOWN" then
-                f:SetPoint("TOP", container or UIParent, "TOP", col * (w + spacing), -row * (h + spacing))
+                f:SetPoint("TOPLEFT", c, "TOPLEFT", col * (w + spacing), -row * (h + spacing))
             elseif growth == "UP" then
-                f:SetPoint("BOTTOM", container or UIParent, "BOTTOM", col * (w + spacing), row * (h + spacing))
+                f:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", col * (w + spacing), row * (h + spacing))
             elseif growth == "RIGHT" then
-                f:SetPoint("LEFT", container or UIParent, "LEFT", row * (w + spacing), -col * (h + spacing))
+                f:SetPoint("TOPLEFT", c, "TOPLEFT", row * (w + spacing), -col * (h + spacing))
             elseif growth == "LEFT" then
-                f:SetPoint("RIGHT", container or UIParent, "RIGHT", -row * (w + spacing), -col * (h + spacing))
+                f:SetPoint("TOPRIGHT", c, "TOPRIGHT", -row * (w + spacing), -col * (h + spacing))
             end
         end
     end
@@ -1746,12 +1809,12 @@ function GF.RebuildAll()
         for _, kind in pairs({"party", "raid"}) do
             local hdr = GF.headers[kind]
             if hdr then
-                local ci = 1
-                while true do
-                    local ch = hdr:GetAttribute("child" .. ci)
-                    if not ch then break end
-                    ch._msufGFRegisteredUnit = nil
-                    ci = ci + 1
+                local kids = { hdr:GetChildren() }
+                for ci = 1, #kids do
+                    local ch = kids[ci]
+                    if ch and ch._msufGFBuilt then
+                        ch._msufGFRegisteredUnit = nil
+                    end
                 end
                 ScanHeaderChildren(hdr, kind)
             end
@@ -1861,10 +1924,17 @@ GF._eventFrame = ef
 ------------------------------------------------------------------------
 -- Global exports
 ------------------------------------------------------------------------
+--- Convenience refresh (called by EM2 popup Apply — syncs text/font/layout)
+function GF.Refresh()
+    if GF.MarkAllDirty then GF.MarkAllDirty(0x3F) end -- DIRTY_ALL
+    if GF.RefreshVisuals then GF.RefreshVisuals() end
+end
+
 _G.MSUF_GF_ShowPreview      = GF.ShowPreview
 _G.MSUF_GF_HidePreview      = GF.HidePreview
 _G.MSUF_GF_RebuildAll        = GF.RebuildAll
 _G.MSUF_GF_RefreshAll        = GF.RefreshAll
+_G.MSUF_GF_Refresh           = GF.Refresh
 _G.MSUF_GF_RefreshPreviewLayout = GF.RefreshPreviewLayout
 _G.MSUF_GF_DisableBlizzard   = GF.DisableBlizzardFrames
 _G.MSUF_GF_RestoreBlizzard   = GF.RestoreBlizzardFrames

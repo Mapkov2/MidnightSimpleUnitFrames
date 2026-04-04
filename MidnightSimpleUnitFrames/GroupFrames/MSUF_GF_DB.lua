@@ -203,6 +203,9 @@ local PARTY_DEFAULTS = {
     powerOffsetY      = 0,
     statusOffsetX     = 0,
     statusOffsetY     = 0,
+    -- Text layer (frame level relative to bar)
+    textLayer         = 5,
+    powerTextLayer    = 2,
     -- Alpha pipeline (matches main UF alpha fields)
     alphaInCombat        = 1,
     alphaOutOfCombat     = 1,
@@ -467,6 +470,12 @@ function GF.EnsureDB()
         if conf.healPredEnabled == true and not conf._healPredMigrated then
             conf.healPredEnabled = nil
             conf._healPredMigrated = true
+        end
+        -- Remove absorb keys that shadow general when hlOverride is off
+        if not conf.hlOverride then
+            conf.absorbEnabled = nil
+            conf.absorbTextMode = nil
+            conf.enableAbsorbBar = nil
         end
         if type(conf.auras) == "table" then
             for _, gk in pairs({"buff", "debuff", "externals"}) do

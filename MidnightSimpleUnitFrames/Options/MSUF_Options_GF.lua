@@ -199,6 +199,18 @@ function _G.MSUF_EnsureGFPanelBuilt()
         end
     end
 
+    --- Find which section is open and tell the mock preview to focus on it
+    local function _UpdatePreviewFocus()
+        local openKey = nil
+        for key, box in pairs(_sectionLookup) do
+            if box and not box._msufCollapsed then
+                openKey = key
+                break
+            end
+        end
+        if GF.SetPreviewFocus then GF.SetPreviewFocus(openKey) end
+    end
+
     local function OpenSectionByKey(sectionKey)
         if not sectionKey then return end
         local box = _sectionLookup[sectionKey]
@@ -280,6 +292,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 box._msufCollapsed = true
             end
             ApplyState()
+            _UpdatePreviewFocus()
         end)
         do
             local hl = hdr:CreateTexture(nil, "HIGHLIGHT")
@@ -598,7 +611,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 1: General (default open)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(600, "General", false, "general")
+        local box, body = AddSection(680, "General", false, "general")
 
         local enableChk = SCheck({
             name = "MSUF_GF_EnableCheck", parent = body,
@@ -887,9 +900,95 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return string.format("Max Columns: %d", v) end,
         })
 
+        -- Group Filter (raid only): 8 compact toggles in a row
+        local _gfRow = CreateFrame("Frame", nil, body)
+        _gfRow:SetSize(500, 36)
+        _gfRow:SetPoint("TOPLEFT", maxColSl, "BOTTOMLEFT", 0, -14)
+        do
+            local lbl = _gfRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            lbl:SetPoint("TOPLEFT", _gfRow, "TOPLEFT", 0, 0)
+            lbl:SetText(TR("Show Groups:")); lbl:SetTextColor(1, 0.82, 0)
+        end
+
+        --- Migrate legacy string "1,2,3,4" → table {[1]=true,...,[8]=false}
+        local function EnsureGroupFilterTable(conf)
+            local gf = conf.groupFilter
+            if type(gf) == "string" then
+                local tbl = {}
+                for i = 1, 8 do tbl[i] = false end
+                for num in gf:gmatch("%d+") do
+                    local n = tonumber(num)
+                    if n and n >= 1 and n <= 8 then tbl[n] = true end
+                end
+                conf.groupFilter = tbl
+                return tbl
+            end
+            if type(gf) ~= "table" then conf.groupFilter = nil end
+            return conf.groupFilter
+        end
+
+        local W8 = "Interface\\Buttons\\WHITE8x8"
+        local _gfChecks = {}
+        for gi = 1, 8 do
+            local btn = CreateFrame("Button", nil, _gfRow, "BackdropTemplate")
+            btn:SetSize(30, 18)
+            btn:SetPoint("TOPLEFT", _gfRow, "TOPLEFT", (gi - 1) * 34, -14)
+            btn:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+            btn._checked = true
+            local fs = btn:CreateFontString(nil, "OVERLAY")
+            fs:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+            fs:SetPoint("CENTER"); fs:SetText(tostring(gi))
+            btn._fs = fs
+            local function UpdateVisual(b)
+                if b._checked then
+                    b:SetBackdropColor(0.15, 0.35, 0.55, 1)
+                    b:SetBackdropBorderColor(0.3, 0.55, 0.8, 1)
+                    b._fs:SetTextColor(1, 1, 1)
+                else
+                    b:SetBackdropColor(0.08, 0.08, 0.10, 1)
+                    b:SetBackdropBorderColor(0.2, 0.2, 0.25, 1)
+                    b._fs:SetTextColor(0.35, 0.35, 0.40)
+                end
+            end
+            local idx = gi
+            btn:SetScript("OnClick", function(self)
+                self._checked = not self._checked
+                UpdateVisual(self)
+                local k = K()
+                local conf = GF.GetConf(k)
+                EnsureGroupFilterTable(conf)
+                if not conf.groupFilter then conf.groupFilter = {} end
+                conf.groupFilter[idx] = self._checked
+                GF.RebuildAll()
+            end)
+            btn:SetScript("OnEnter", function(self)
+                self:SetBackdropBorderColor(0.5, 0.7, 1, 1)
+            end)
+            btn:SetScript("OnLeave", function(self) UpdateVisual(self) end)
+            UpdateVisual(btn)
+            _gfChecks[gi] = btn
+        end
+        -- Sync group filter toggles on scope change
+        local function SyncGroupFilter()
+            local k = K()
+            local isRaid = (k == "raid")
+            _gfRow:SetShown(isRaid)
+            if isRaid then
+                local conf = GF.GetConf(k)
+                local gf = EnsureGroupFilterTable(conf)
+                for gi = 1, 8 do
+                    _gfChecks[gi]._checked = (not gf or gf[gi] ~= false)
+                    local uv = _gfChecks[gi]:GetScript("OnLeave")
+                    if uv then uv(_gfChecks[gi]) end
+                end
+            end
+        end
+        _allRefreshFns[#_allRefreshFns + 1] = SyncGroupFilter
+        SyncGroupFilter()
+
         local reverseFillChk = SCheck({
             name = "MSUF_GF_ReverseFillCheck", parent = body,
-            anchor = maxColSl, x = 0, y = -14,
+            anchor = _gfRow, x = 0, y = -4,
             label = TR("Reverse Fill"),
             get = function(k) return GF.Val(k, "reverseFill") end,
             set = function(k, v) GF.GetConf(k).reverseFill = v; GF.RefreshVisuals() end,
@@ -903,12 +1002,21 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).smoothFill = v end,
         })
 
-        SCheck({
+        local hideClientChk = SCheck({
             name = "MSUF_GF_HideInClientSceneCheck", parent = body,
             anchor = smoothChk, x = 0, y = -4,
             label = TR("Hide in Barber Shop / Dressing Room"),
             get = function(k) return GF.Val(k, "hideInClientScene") ~= false end,
             set = function(k, v) GF.GetConf(k).hideInClientScene = v end,
+        })
+
+        SSlider({
+            name = "MSUF_GF_HideOfflineSlider", parent = body, compact = true,
+            anchor = hideClientChk, x = 0, y = -4,
+            min = 0, max = 120, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "hideOfflineDelay") or 0 end,
+            set = function(k, v) GF.GetConf(k).hideOfflineDelay = v; GF.RefreshVisuals() end,
+            formatText = function(v) return v == 0 and TR("Hide Offline: Off") or string.format(TR("Hide Offline: %ds"), v) end,
         })
     end
 
@@ -1217,41 +1325,259 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Section 4: Text (Status Offsets)
+    -- Section 4: Text
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(200, "Text", false, "text")
+        local box, body = AddSection(620, "Text", false, "text")
 
-        -- Redirect hint
+        local COL_W = 310
+
+        -- Redirect hint (full width)
         local hintFS = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         hintFS:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -6)
-        hintFS:SetText(TR("Name, HP text, power text and font sizes\nare in the Edit Mode popup.\nFont, outline, name color and max chars\nare in the Fonts menu."))
-        hintFS:SetTextColor(0.55, 0.75, 1.0)
-        hintFS:SetJustifyH("LEFT")
-        hintFS:SetWordWrap(true)
-        hintFS:SetWidth(600)
+        hintFS:SetText(TR("Font, outline, name color and max chars are in the |cffffd200Fonts|r menu."))
+        hintFS:SetTextColor(0.55, 0.75, 1.0); hintFS:SetJustifyH("LEFT"); hintFS:SetWordWrap(true); hintFS:SetWidth(600)
 
-        -- Status Text Offsets
-        local tOffSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        tOffSep:SetPoint("TOPLEFT", hintFS, "BOTTOMLEFT", 0, -12)
-        tOffSep:SetText(TR("Status Text Offsets"))
-        tOffSep:SetTextColor(1, 0.82, 0)
+        -- Two column anchors
+        local colL = CreateFrame("Frame", nil, body); colL:SetSize(COL_W, 1)
+        colL:SetPoint("TOPLEFT", hintFS, "BOTTOMLEFT", 0, -8)
+        local colR = CreateFrame("Frame", nil, body); colR:SetSize(COL_W, 1)
+        colR:SetPoint("TOPLEFT", colL, "TOPRIGHT", 20, 0)
 
-        local statXSl = SSlider({
-            name = "MSUF_GF_StatusOffsetXSlider", parent = body, compact = true,
-            anchor = tOffSep, x = 0, y = -8,
-            min = -100, max = 100, step = 1, width = 270, default = 0,
-            get = function(k) return GF.Val(k, "statusOffsetX") end,
-            set = function(k, v) GF.GetConf(k).statusOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return string.format("Status Text X: %d", v) end,
+        -- Shared mode items (used by HP + Power dropdowns)
+        local TEXT_MODES = function()
+            return GF.HEALTH_TEXT_MODES or {
+                { key = "NONE", label = TR("None") }, { key = "PERCENT", label = "%" },
+                { key = "CURRENT", label = TR("Current") }, { key = "DEFICIT", label = TR("Deficit") },
+                { key = "CURMAX", label = TR("Cur / Max") }, { key = "CURPERCENT", label = TR("Cur / %") },
+            }
+        end
+        local DELIM_ITEMS = function()
+            return GF.DELIMITER_OPTIONS or {
+                { key = " / ", label = "/" }, { key = " - ", label = "-" }, { key = " ", label = TR("Space") },
+            }
+        end
+
+        -- ════════════════════════════════════════════════
+        -- LEFT COLUMN: Name + Status/Layer
+        -- ════════════════════════════════════════════════
+
+        -- ── Name ──
+        local nameSep = colL:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nameSep:SetPoint("TOPLEFT", colL, "TOPLEFT", 0, 0)
+        nameSep:SetText(TR("Name")); nameSep:SetTextColor(1, 0.82, 0)
+
+        local nameShowChk = SCheck({
+            name = "MSUF_GF_NameShowCheck", parent = colL,
+            anchor = nameSep, x = 0, y = -4,
+            label = TR("Show Name"),
+            get = function(k) return GF.Val(k, "showName") end,
+            set = function(k, v) GF.GetConf(k).showName = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+
+        local nameSizeSl = SSlider({
+            name = "MSUF_GF_NameFontSizeSlider", parent = colL, compact = true,
+            anchor = nameShowChk, x = 0, y = -4,
+            min = 6, max = 48, step = 1, width = 180, default = 12,
+            get = function(k) return GF.Val(k, "nameFontSize") end,
+            set = function(k, v) GF.GetConf(k).nameFontSize = v; GF.RefreshFonts(); GF.RefreshVisuals() end,
+            formatText = function(v) return string.format("Size: %d", v) end,
+        })
+
+        local nameAnchorDd = SDropdown({
+            name = "MSUF_GF_NameAnchorDropdown", parent = colL,
+            anchor = nameSizeSl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 180,
+            items = { { key = "LEFT", label = TR("Left") }, { key = "CENTER", label = TR("Center") }, { key = "RIGHT", label = TR("Right") } },
+            get = function(k) return GF.Val(k, "nameAnchor") or "LEFT" end,
+            set = function(k, v) GF.GetConf(k).nameAnchor = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+
+        local nameXSl = SSlider({
+            name = "MSUF_GF_NameOffsetXSlider", parent = colL, compact = true,
+            anchor = nameAnchorDd, x = 16, y = -4,
+            min = -100, max = 100, step = 1, width = 180, default = 0,
+            get = function(k) return GF.Val(k, "nameOffsetX") end,
+            set = function(k, v) GF.GetConf(k).nameOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("X: %d", v) end,
+        })
+        local nameYSl = SSlider({
+            name = "MSUF_GF_NameOffsetYSlider", parent = colL, compact = true,
+            anchor = nameXSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 180, default = 0,
+            get = function(k) return GF.Val(k, "nameOffsetY") end,
+            set = function(k, v) GF.GetConf(k).nameOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Y: %d", v) end,
+        })
+
+        -- ── Power Text ── (left column, below Name)
+        local powSep = colL:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        powSep:SetPoint("TOPLEFT", nameYSl, "BOTTOMLEFT", 0, -20)
+        powSep:SetText(TR("Power Text")); powSep:SetTextColor(1, 0.82, 0)
+
+        local powShowChk = SCheck({
+            name = "MSUF_GF_PowerShowCheck", parent = colL,
+            anchor = powSep, x = 0, y = -4,
+            label = TR("Show Power Text"),
+            get = function(k) return GF.Val(k, "showPower") end,
+            set = function(k, v) GF.GetConf(k).showPower = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+
+        local powCenterDd = SDropdown({
+            name = "MSUF_GF_PowerTextCenterDropdown", parent = colL,
+            anchor = powShowChk, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 180,
+            items = TEXT_MODES,
+            get = function(k) return GF.Val(k, "powerTextCenter") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).powerTextCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+        do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            lbl:SetPoint("BOTTOMLEFT", powCenterDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Center")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+
+        local powSizeSl = SSlider({
+            name = "MSUF_GF_PowerFontSizeSlider", parent = colL, compact = true,
+            anchor = powCenterDd, x = 16, y = -4,
+            min = 6, max = 48, step = 1, width = 180, default = 9,
+            get = function(k) return GF.Val(k, "powerFontSize") end,
+            set = function(k, v) GF.GetConf(k).powerFontSize = v; GF.RefreshFonts(); GF.RefreshVisuals() end,
+            formatText = function(v) return string.format("Size: %d", v) end,
+        })
+
+        local powXSl = SSlider({
+            name = "MSUF_GF_PowerOffsetXSlider", parent = colL, compact = true,
+            anchor = powSizeSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 180, default = 0,
+            get = function(k) return GF.Val(k, "powerOffsetX") end,
+            set = function(k, v) GF.GetConf(k).powerOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("X: %d", v) end,
         })
         SSlider({
-            name = "MSUF_GF_StatusOffsetYSlider", parent = body, compact = true,
+            name = "MSUF_GF_PowerOffsetYSlider", parent = colL, compact = true,
+            anchor = powXSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 180, default = 0,
+            get = function(k) return GF.Val(k, "powerOffsetY") end,
+            set = function(k, v) GF.GetConf(k).powerOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Y: %d", v) end,
+        })
+
+        -- ════════════════════════════════════════════════
+        -- RIGHT COLUMN: HP Text + Status/Layer
+        -- ════════════════════════════════════════════════
+
+        -- ── HP Text ──
+        local hpSep = colR:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        hpSep:SetPoint("TOPLEFT", colR, "TOPLEFT", 0, 0)
+        hpSep:SetText(TR("HP Text")); hpSep:SetTextColor(1, 0.82, 0)
+
+        local hpLeftDd = SDropdown({
+            name = "MSUF_GF_TextLeftDropdown", parent = colR,
+            anchor = hpSep, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 180,
+            items = TEXT_MODES,
+            get = function(k) return GF.Val(k, "textLeft") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).textLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+        do local lbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            lbl:SetPoint("BOTTOMLEFT", hpLeftDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Left")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+
+        local hpCenterDd = SDropdown({
+            name = "MSUF_GF_TextCenterDropdown", parent = colR,
+            anchor = hpLeftDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -4, width = 180,
+            items = TEXT_MODES,
+            get = function(k) return GF.Val(k, "textCenter") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).textCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+        do local lbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            lbl:SetPoint("BOTTOMLEFT", hpCenterDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Center")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+
+        local hpRightDd = SDropdown({
+            name = "MSUF_GF_TextRightDropdown", parent = colR,
+            anchor = hpCenterDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -4, width = 180,
+            items = TEXT_MODES,
+            get = function(k) return GF.Val(k, "textRight") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).textRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+        do local lbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            lbl:SetPoint("BOTTOMLEFT", hpRightDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Right")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+
+        local hpDelimDd = SDropdown({
+            name = "MSUF_GF_HPDelimDropdown", parent = colR,
+            anchor = hpRightDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -4, width = 180,
+            items = DELIM_ITEMS,
+            get = function(k) return GF.Val(k, "textDelimiter") or " / " end,
+            set = function(k, v) GF.GetConf(k).textDelimiter = v; GF.RefreshVisuals() end,
+        })
+        do local lbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            lbl:SetPoint("BOTTOMLEFT", hpDelimDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Delimiter")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+
+        local hpReverseCB = SCheck({
+            name = "MSUF_GF_HPReverseCheck", parent = colR,
+            anchor = hpDelimDd, x = 16, y = -4,
+            label = TR("Reverse Order"),
+            get = function(k) return GF.Val(k, "hpTextReverse") end,
+            set = function(k, v) GF.GetConf(k).hpTextReverse = v; GF.RefreshVisuals() end,
+        })
+
+        local hpSizeSl = SSlider({
+            name = "MSUF_GF_HPFontSizeSlider", parent = colR, compact = true,
+            anchor = hpReverseCB, x = 0, y = -4,
+            min = 6, max = 48, step = 1, width = 180, default = 10,
+            get = function(k) return GF.Val(k, "hpFontSize") end,
+            set = function(k, v) GF.GetConf(k).hpFontSize = v; GF.RefreshFonts(); GF.RefreshVisuals() end,
+            formatText = function(v) return string.format("Size: %d", v) end,
+        })
+
+        local hpXSl = SSlider({
+            name = "MSUF_GF_HPOffsetXSlider", parent = colR, compact = true,
+            anchor = hpSizeSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 180, default = 0,
+            get = function(k) return GF.Val(k, "hpOffsetX") end,
+            set = function(k, v) GF.GetConf(k).hpOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("X: %d", v) end,
+        })
+        SSlider({
+            name = "MSUF_GF_HPOffsetYSlider", parent = colR, compact = true,
+            anchor = hpXSl, x = 0, y = -32,
+            min = -100, max = 100, step = 1, width = 180, default = 0,
+            get = function(k) return GF.Val(k, "hpOffsetY") end,
+            set = function(k, v) GF.GetConf(k).hpOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Y: %d", v) end,
+        })
+
+        -- ── Status + Layer ── (right column, below HP)
+        local tOffSep = colR:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tOffSep:SetPoint("TOPLEFT", hpXSl, "BOTTOMLEFT", 0, -20)
+        tOffSep:SetText(TR("Status & Layer")); tOffSep:SetTextColor(1, 0.82, 0)
+
+        local statXSl = SSlider({
+            name = "MSUF_GF_StatusOffsetXSlider", parent = colR, compact = true,
+            anchor = tOffSep, x = 0, y = -8,
+            min = -100, max = 100, step = 1, width = 180, default = 0,
+            get = function(k) return GF.Val(k, "statusOffsetX") end,
+            set = function(k, v) GF.GetConf(k).statusOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Status X: %d", v) end,
+        })
+        SSlider({
+            name = "MSUF_GF_StatusOffsetYSlider", parent = colR, compact = true,
             anchor = statXSl, x = 0, y = -32,
-            min = -100, max = 100, step = 1, width = 270, default = 0,
+            min = -100, max = 100, step = 1, width = 180, default = 0,
             get = function(k) return GF.Val(k, "statusOffsetY") end,
             set = function(k, v) GF.GetConf(k).statusOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return string.format("Status Text Y: %d", v) end,
+            formatText = function(v) return string.format("Status Y: %d", v) end,
+        })
+
+        local hpLaySl = SSlider({
+            name = "MSUF_GF_TextLayerSlider", parent = colR, compact = true,
+            anchor = statXSl, x = 0, y = -32,
+            min = 1, max = 12, step = 1, width = 180, default = 5,
+            get = function(k) return GF.Val(k, "textLayer") end,
+            set = function(k, v) GF.GetConf(k).textLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("HP Layer: %d", v) end,
+        })
+        SSlider({
+            name = "MSUF_GF_PowerTextLayerSlider", parent = colR, compact = true,
+            anchor = hpLaySl, x = 0, y = -32,
+            min = 1, max = 12, step = 1, width = 180, default = 2,
+            get = function(k) return GF.Val(k, "powerTextLayer") end,
+            set = function(k, v) GF.GetConf(k).powerTextLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Power Layer: %d", v) end,
         })
 
     end

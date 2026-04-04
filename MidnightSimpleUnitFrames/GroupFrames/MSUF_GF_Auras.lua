@@ -512,6 +512,15 @@ local function GetDynamicScale(conf)
     return 0.70
 end
 
+--- Preview variant: uses configured capacity instead of live group size
+local function GetPreviewDynamicScale(conf, kind)
+    if not conf or not conf.auras or not conf.auras.dynamicScale then return 1 end
+    local n = GF.GetPositionCount and GF.GetPositionCount(kind) or 0
+    if n <= 15 then return 1 end
+    if n <= 25 then return 0.85 end
+    return 0.70
+end
+
 ------------------------------------------------------------------------
 -- Main render: one aura group
 ------------------------------------------------------------------------
@@ -837,11 +846,15 @@ do
         end
 
         local parent = f.statusIconLayer or f.barGroup or f
+        -- Apply dynamic scale based on configured capacity (mirrors live GetDynamicScale)
+        local dynScale = GetPreviewDynamicScale(conf, kind)
 
         -- Buffs
         local buffCfg = auras.buff
         if buffCfg and buffCfg.enabled ~= false then
-            local size = buffCfg.size or 20
+            local rawSize = buffCfg.size or 20
+            local size = rawSize
+            if dynScale ~= 1 then size = math_max(8, math_floor(rawSize * dynScale + 0.5)) end
             local anchor = buffCfg.anchor or "BOTTOMLEFT"
             local growth = buffCfg.growth or "RIGHTDOWN"
             local spacing = buffCfg.spacing or 1
@@ -877,7 +890,9 @@ do
         -- Debuffs
         local debCfg = auras.debuff
         if debCfg and debCfg.enabled ~= false then
-            local size = debCfg.size or 20
+            local rawSize = debCfg.size or 20
+            local size = rawSize
+            if dynScale ~= 1 then size = math_max(8, math_floor(rawSize * dynScale + 0.5)) end
             local anchor = debCfg.anchor or "TOPLEFT"
             local growth = debCfg.growth or "RIGHTDOWN"
             local spacing = debCfg.spacing or 1
@@ -921,7 +936,9 @@ do
         -- Externals
         local extCfg = auras.externals
         if extCfg and extCfg.enabled and index == 1 then
-            local size = extCfg.size or 28
+            local rawSize = extCfg.size or 28
+            local size = rawSize
+            if dynScale ~= 1 then size = math_max(8, math_floor(rawSize * dynScale + 0.5)) end
             local anchor = extCfg.anchor or "CENTER"
             local growth = extCfg.growth or "RIGHTDOWN"
             local spacing = extCfg.spacing or 1
@@ -958,4 +975,5 @@ end
 
 ------------------------------------------------------------------------
 GF.GetDynamicScale = GetDynamicScale
+GF.GetPreviewDynamicScale = GetPreviewDynamicScale
 _G.MSUF_GF_UpdateFrameAuras = GF.UpdateFrameAuras

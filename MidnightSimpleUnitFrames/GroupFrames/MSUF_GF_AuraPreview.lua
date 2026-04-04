@@ -353,26 +353,42 @@ local function BuildMockFrame(parent)
         f._powerBg = powerBg
     end
 
+    -- Text overlay layer (above health/absorb bars so text is visible)
+    local textLayer = CreateFrame("Frame", nil, f)
+    textLayer:SetAllPoints(health)
+    textLayer:SetFrameLevel(health:GetFrameLevel() + 5)
+    f._textLayer = textLayer
+
     -- Name text
-    local nameFS = f:CreateFontString(nil, "OVERLAY")
+    local nameFS = textLayer:CreateFontString(nil, "OVERLAY")
     nameFS:SetFont(GF.ResolveFontPath(kind), conf.nameFontSize or 12, GF.ResolveFontFlags(kind))
     nameFS:SetPoint("LEFT", health, "LEFT", 6, 0)
     nameFS:SetText(PREVIEW_NAMES[_classIdx] or "Thrall")
+    nameFS:SetShadowColor(0, 0, 0, 1)
+    nameFS:SetShadowOffset(1, -1)
     f._nameFS = nameFS
 
     -- HP text
-    local hpFS = f:CreateFontString(nil, "OVERLAY")
+    local hpFS = textLayer:CreateFontString(nil, "OVERLAY")
     hpFS:SetFont(GF.ResolveFontPath(kind), conf.hpFontSize or 10, GF.ResolveFontFlags(kind))
     hpFS:SetPoint("RIGHT", health, "RIGHT", -6, 0)
     hpFS:SetText("72%")
+    hpFS:SetShadowColor(0, 0, 0, 1)
+    hpFS:SetShadowOffset(1, -1)
     f._hpFS = hpFS
 
     -- Power text
     if powerH > 0 and f._power then
-        local powFS = f:CreateFontString(nil, "OVERLAY")
+        local powLayer = CreateFrame("Frame", nil, f)
+        powLayer:SetAllPoints(f._power)
+        powLayer:SetFrameLevel(f._power:GetFrameLevel() + 2)
+        f._powerTextLayer = powLayer
+        local powFS = powLayer:CreateFontString(nil, "OVERLAY")
         powFS:SetFont(GF.ResolveFontPath(kind), conf.powerFontSize or 9, GF.ResolveFontFlags(kind))
         powFS:SetPoint("CENTER", f._power, "CENTER", 0, 0)
         powFS:SetText("3,240")
+        powFS:SetShadowColor(0, 0, 0, 1)
+        powFS:SetShadowOffset(1, -1)
         local fr, fg, fb = GF.ResolveFontColor(kind)
         powFS:SetTextColor(fr, fg, fb, 0.9)
         f._powerFS = powFS
@@ -469,24 +485,62 @@ function GF.RefreshPreviewBox()
         end
     end
 
-    -- Overlay colors from general
+    -- Overlay colors + visibility from config (mirrors _GF_IsAbsorbEnabled)
     do
         local gen = _G.MSUF_DB and _G.MSUF_DB.general
-        if m._healPred then
-            m._healPred:SetStatusBarColor(
-                (gen and gen.healPredColorR) or 0,
-                (gen and gen.healPredColorG) or 1,
-                (gen and gen.healPredColorB) or 0.4, 0.45)
+        local gfDbKey = (kind == "raid") and "gf_raid" or "gf_party"
+        local gfDb = _G.MSUF_DB and _G.MSUF_DB[gfDbKey]
+        local function resolve(key)
+            if gfDb and gfDb.hlOverride and gfDb[key] ~= nil then return gfDb[key] end
+            return gen and gen[key]
         end
+
+        -- Heal prediction
+        if m._healPred then
+            local hpEn = conf.healPredEnabled
+            if hpEn == nil then hpEn = not gen or gen.enableHealPrediction ~= false end
+            if hpEn ~= false then
+                local r, g, b = 0, 1, 0.4
+                if gen then
+                    if type(gen.healPredColorR) == "number" then r = gen.healPredColorR end
+                    if type(gen.healPredColorG) == "number" then g = gen.healPredColorG end
+                    if type(gen.healPredColorB) == "number" then b = gen.healPredColorB end
+                end
+                m._healPred:SetStatusBarColor(r, g, b, 0.45)
+                m._healPred:SetWidth(max(1, w * 0.12))
+                m._healPred:Show()
+            else
+                m._healPred:Hide()
+            end
+        end
+
+        -- Absorb
         if m._absorb then
-            m._absorb:SetStatusBarColor(
-                (gen and gen.absorbBarColorR) or 0.55,
-                (gen and gen.absorbBarColorG) or 0.70,
-                (gen and gen.absorbBarColorB) or 1.0, 0.5)
+            local absOn = true
+            local atm = tonumber(resolve("absorbTextMode"))
+            if atm then absOn = (atm == 2 or atm == 3)
+            else
+                local eab = resolve("enableAbsorbBar")
+                if eab ~= nil then absOn = (eab ~= false) end
+            end
+            if absOn then
+                local r, g, b = 0.55, 0.70, 1.0
+                if gen then
+                    if type(gen.absorbBarColorR) == "number" then r = gen.absorbBarColorR end
+                    if type(gen.absorbBarColorG) == "number" then g = gen.absorbBarColorG end
+                    if type(gen.absorbBarColorB) == "number" then b = gen.absorbBarColorB end
+                end
+                local a = tonumber(resolve("absorbBarOpacity")) or 0.5
+                m._absorb:SetStatusBarColor(r, g, b, a)
+                m._absorb:SetWidth(max(1, w * 0.08))
+                m._absorb:Show()
+            else
+                m._absorb:Hide()
+            end
         end
     end
 
-    -- Font + text colors
+    -- Font + text colors + positioning (mirrors ApplyTextLayout, scaled)
     do
         local fp    = GF.ResolveFontPath(kind)
         local ff    = GF.ResolveFontFlags(kind)
@@ -495,18 +549,89 @@ function GF.RefreshPreviewBox()
         local nr, ng, nb = GF.ResolveNameColor(kind, cls)
         local sc = m._previewScale or 1.6
 
+        -- Update text layer level from config
+        if m._textLayer and m._health then
+            local tl2 = conf.textLayer or 5
+            m._textLayer:SetFrameLevel(m._health:GetFrameLevel() + tl2)
+        end
+
         if m._nameFS then
             m._nameFS:SetFont(fp, floor((conf.nameFontSize or 12) * sc + 0.5), ff)
             m._nameFS:SetTextColor(nr or fr, ng or fg, nb or fb, 1)
             m._nameFS:SetText(PREVIEW_NAMES[_classIdx] or "Thrall")
+            -- Position from config (anchor + offset, scaled)
+            m._nameFS:ClearAllPoints()
+            local nAnch = conf.nameAnchor or "LEFT"
+            local nox = floor((conf.nameOffsetX or 0) * sc + 0.5)
+            local noy = floor((conf.nameOffsetY or 0) * sc + 0.5)
+            local pad = floor(3 * sc + 0.5)
+            if nAnch == "CENTER" then
+                m._nameFS:SetPoint("LEFT", m._health, "LEFT", pad + nox, noy)
+                m._nameFS:SetPoint("RIGHT", m._health, "RIGHT", -pad + nox, noy)
+                m._nameFS:SetJustifyH("CENTER")
+            elseif nAnch == "RIGHT" then
+                m._nameFS:SetPoint("LEFT", m._health, "LEFT", pad + nox, noy)
+                m._nameFS:SetPoint("RIGHT", m._health, "RIGHT", -pad + nox, noy)
+                m._nameFS:SetJustifyH("RIGHT")
+            else
+                m._nameFS:SetPoint("LEFT", m._health, "LEFT", pad + nox, noy)
+                m._nameFS:SetJustifyH("LEFT")
+            end
+            m._nameFS:SetShown(conf.showName ~= false)
         end
         if m._hpFS then
-            m._hpFS:SetFont(fp, floor((conf.hpFontSize or 10) * sc + 0.5), ff)
-            m._hpFS:SetTextColor(fr, fg, fb, 0.9)
+            -- Show HP text only when at least one slot is active
+            local tl = conf.textLeft or "NONE"
+            local tc = conf.textCenter or "NONE"
+            local tr = conf.textRight or "NONE"
+            local hpActive = (tl ~= "NONE" or tc ~= "NONE" or tr ~= "NONE")
+            if hpActive then
+                m._hpFS:SetFont(fp, floor((conf.hpFontSize or 10) * sc + 0.5), ff)
+                m._hpFS:SetTextColor(fr, fg, fb, 0.9)
+                m._hpFS:SetShadowColor(0, 0, 0, 1); m._hpFS:SetShadowOffset(1, -1)
+                m._hpFS:ClearAllPoints()
+                local hox = floor((conf.hpOffsetX or 0) * sc + 0.5)
+                local hoy = floor((conf.hpOffsetY or 0) * sc + 0.5)
+                local hPad = floor(6 * sc + 0.5)
+                -- Position based on which slot is active (prefer center, then right, then left)
+                if tc ~= "NONE" then
+                    m._hpFS:SetPoint("CENTER", m._health, "CENTER", hox, hoy)
+                    m._hpFS:SetJustifyH("CENTER")
+                elseif tr ~= "NONE" then
+                    m._hpFS:SetPoint("RIGHT", m._health, "RIGHT", -hPad + hox, hoy)
+                    m._hpFS:SetJustifyH("RIGHT")
+                else
+                    m._hpFS:SetPoint("LEFT", m._health, "LEFT", hPad + hox, hoy)
+                    m._hpFS:SetJustifyH("LEFT")
+                end
+                m._hpFS:Show()
+            else
+                m._hpFS:Hide()
+            end
         end
-        if m._powerFS then
+        -- Power text: create on demand if power bar appeared
+        if m._power and powerH > 0 then
+            if not m._powerTextLayer then
+                local ptl = CreateFrame("Frame", nil, m)
+                ptl:SetAllPoints(m._power)
+                ptl:SetFrameLevel(m._power:GetFrameLevel() + 2)
+                m._powerTextLayer = ptl
+            end
+            if not m._powerFS then
+                m._powerFS = m._powerTextLayer:CreateFontString(nil, "OVERLAY")
+                m._powerFS:SetText("3,240")
+            end
+            local ptl2 = conf.powerTextLayer or 2
+            m._powerTextLayer:SetFrameLevel(m._power:GetFrameLevel() + ptl2)
             m._powerFS:SetFont(fp, floor((conf.powerFontSize or 9) * sc + 0.5), ff)
             m._powerFS:SetTextColor(fr, fg, fb, 0.9)
+            m._powerFS:ClearAllPoints()
+            local pox = floor((conf.powerOffsetX or 0) * sc + 0.5)
+            local poy = floor((conf.powerOffsetY or 0) * sc + 0.5)
+            m._powerFS:SetPoint("CENTER", m._power, "CENTER", pox, poy)
+            m._powerFS:SetShown(conf.showPower and true or false)
+        elseif m._powerFS then
+            m._powerFS:Hide()
         end
     end
 
@@ -725,6 +850,8 @@ function GF.RefreshPreviewHandles()
     local kind = _getKind()
     local conf = GF.GetConf(kind)
     local sc   = _mockFrame._previewScale or 1.6
+    -- Dynamic content scale: simulates icon shrink for large raids (mirrors live GetDynamicScale)
+    local dynScale = GF.GetPreviewDynamicScale and GF.GetPreviewDynamicScale(conf, kind) or 1
 
     -- Aura groups (dynamic icon count from config max)
     for _, grpKey in ipairs({"buff", "debuff", "externals"}) do
@@ -735,6 +862,7 @@ function GF.RefreshPreviewHandles()
             local offX    = floor(((ac and ac.x) or 0) * sc + 0.5)
             local offY    = floor(((ac and ac.y) or 0) * sc + 0.5)
             local rawSz   = (ac and ac.size) or (grpKey == "externals" and 22 or 16)
+            if dynScale ~= 1 then rawSz = max(8, floor(rawSz * dynScale + 0.5)) end
             local sz      = floor(rawSz * sc + 0.5)
             local perRow  = (ac and ac.perRow) or (grpKey == "externals" and 6 or 4)
             local rawSpc  = (ac and ac.spacing) or 1
@@ -874,6 +1002,59 @@ function GF.RefreshPreviewHandles()
 
     -- SI handles
     GF.RebuildSIHandles()
+
+    -- Section-aware focus: dim/hide elements not relevant to the active Options section
+    local focus = GF._previewFocus
+    local showText   = not focus or focus == "text" or focus == "overlay"
+    local showAuras  = not focus or focus == "indicators" or focus == "sicons"
+    local showSIcons = not focus or focus == "sicons"
+    local showSI     = not focus or focus == "indicators"
+    local showPriv   = not focus or focus == "indicators"
+
+    -- Text layer visibility
+    if _mockFrame._textLayer then _mockFrame._textLayer:SetShown(showText) end
+    if _mockFrame._powerTextLayer then _mockFrame._powerTextLayer:SetShown(showText) end
+
+    -- Aura group handles
+    for _, grpKey in ipairs({"buff", "debuff", "externals"}) do
+        local h = _handles[grpKey]
+        if h and h:IsShown() then
+            h:SetAlpha(showAuras and 1 or 0.15)
+        end
+    end
+
+    -- Status icon handles
+    for _, spec in ipairs(STATUS_ICON_SPECS) do
+        local h = _statusHandles[spec.key]
+        if h and h:IsShown() then
+            h:SetAlpha(showSIcons and 1 or 0.15)
+        end
+    end
+
+    -- SI handles
+    if _siHandles then
+        for _, h in pairs(_siHandles) do
+            if h and h:IsShown() then
+                h:SetAlpha(showSI and 1 or 0.15)
+            end
+        end
+    end
+
+    -- Private aura handle
+    local privH = _handles.private
+    if privH and privH:IsShown() then
+        privH:SetAlpha(showPriv and 1 or 0.15)
+    end
+end
+
+------------------------------------------------------------------------
+-- Section-aware preview focus
+-- Called by Options panel when accordion sections expand/collapse.
+-- focus = sectionKey ("text", "sicons", "indicators", "overlay", etc.) or nil (show all)
+------------------------------------------------------------------------
+function GF.SetPreviewFocus(focus)
+    GF._previewFocus = focus
+    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
 end
 
 ------------------------------------------------------------------------

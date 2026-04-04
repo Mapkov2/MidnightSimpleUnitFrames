@@ -501,9 +501,11 @@ local function ApplyTextLayout(f, kind)
         f.nameText:ClearAllPoints()
         local anchor = conf.nameAnchor or "LEFT"
         if anchor == "CENTER" then
-            f.nameText:SetPoint("CENTER", f.health, "CENTER", nox, noy)
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", 3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -3 + nox, noy)
             f.nameText:SetJustifyH("CENTER")
         elseif anchor == "RIGHT" then
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", 3 + nox, noy)
             f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -3 + nox, noy)
             f.nameText:SetJustifyH("RIGHT")
         else
@@ -589,6 +591,26 @@ local function ApplyTextLayout(f, kind)
             f.groupNumberText:Hide()
         end
     end
+
+    -- Text layer (frame level above health bar)
+    if f.healthTextLayer and f.health then
+        local hLvl = f.health:GetFrameLevel()
+        local tl2 = conf.textLayer or 5
+        local want = hLvl + tl2
+        if f._msufGFCachedTxtLvl ~= want then
+            f._msufGFCachedTxtLvl = want
+            f.healthTextLayer:SetFrameLevel(want)
+        end
+    end
+    if f.powerTextLayer and f.power then
+        local pLvl = f.power:GetFrameLevel()
+        local ptl2 = conf.powerTextLayer or 2
+        local want = pLvl + ptl2
+        if f._msufGFCachedPTxtLvl ~= want then
+            f._msufGFCachedPTxtLvl = want
+            f.powerTextLayer:SetFrameLevel(want)
+        end
+    end
 end
 
 ------------------------------------------------------------------------
@@ -652,9 +674,12 @@ local function ApplyOverlayColors(f)
     local kind = f._msufGFKind or "party"
     -- Incoming heal (heal prediction) — colors from general (shared)
     if f.incomingHealBar then
-        local r = (gen and gen.healPredColorR) or 0.0
-        local g = (gen and gen.healPredColorG) or 1.0
-        local b = (gen and gen.healPredColorB) or 0.4
+        local r, g, b = 0.0, 1.0, 0.4
+        if gen then
+            if type(gen.healPredColorR) == "number" then r = gen.healPredColorR end
+            if type(gen.healPredColorG) == "number" then g = gen.healPredColorG end
+            if type(gen.healPredColorB) == "number" then b = gen.healPredColorB end
+        end
         local a = 0.45
         if f._gfCIHR ~= r or f._gfCIHG ~= g or f._gfCIHB ~= b then
             f._gfCIHR, f._gfCIHG, f._gfCIHB = r, g, b
@@ -663,9 +688,12 @@ local function ApplyOverlayColors(f)
     end
     -- Absorb (color from general, opacity per-GF override → general)
     if f.absorbBar then
-        local r = (gen and gen.absorbBarColorR) or 0.8
-        local g = (gen and gen.absorbBarColorG) or 0.9
-        local b = (gen and gen.absorbBarColorB) or 1.0
+        local r, g, b = 0.8, 0.9, 1.0
+        if gen then
+            if type(gen.absorbBarColorR) == "number" then r = gen.absorbBarColorR end
+            if type(gen.absorbBarColorG) == "number" then g = gen.absorbBarColorG end
+            if type(gen.absorbBarColorB) == "number" then b = gen.absorbBarColorB end
+        end
         local a = tonumber(_GF_ResolveOverlaySetting(kind, "absorbBarOpacity")) or 0.6
         if f._gfCAbR ~= r or f._gfCAbG ~= g or f._gfCAbB ~= b or f._gfCAbA ~= a then
             f._gfCAbR, f._gfCAbG, f._gfCAbB, f._gfCAbA = r, g, b, a
@@ -674,9 +702,12 @@ local function ApplyOverlayColors(f)
     end
     -- Heal absorb (color from general, opacity per-GF override → general)
     if f.healAbsorbBar then
-        local r = (gen and gen.healAbsorbBarColorR) or 1.0
-        local g = (gen and gen.healAbsorbBarColorG) or 0.4
-        local b = (gen and gen.healAbsorbBarColorB) or 0.4
+        local r, g, b = 1.0, 0.4, 0.4
+        if gen then
+            if type(gen.healAbsorbBarColorR) == "number" then r = gen.healAbsorbBarColorR end
+            if type(gen.healAbsorbBarColorG) == "number" then g = gen.healAbsorbBarColorG end
+            if type(gen.healAbsorbBarColorB) == "number" then b = gen.healAbsorbBarColorB end
+        end
         local a = tonumber(_GF_ResolveOverlaySetting(kind, "healAbsorbBarOpacity")) or 0.7
         if f._gfCHAbR ~= r or f._gfCHAbG ~= g or f._gfCHAbB ~= b or f._gfCHAbA ~= a then
             f._gfCHAbR, f._gfCHAbG, f._gfCHAbB, f._gfCHAbA = r, g, b, a
@@ -734,8 +765,10 @@ function GF._FlushDirty()
         local fn = _G.MSUF_GF_UpdateAll
         if type(fn) == "function" then _cachedUpdateAll = fn end
     end
+    local anyFlushed = false
     for f, bits in pairs(_dirtyFrames) do
         _dirtyFrames[f] = nil
+        anyFlushed = true
         ApplyVisuals(f, bits)
         if f._msufGFPreviewActive then
             -- Re-apply preview data (ApplyVisuals stomps colors/text)
@@ -748,6 +781,8 @@ function GF._FlushDirty()
             if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
         end
     end
+    -- Sync Options panel mock frame (AuraPreview) when any frame was flushed
+    if anyFlushed and GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
 end
 
 ------------------------------------------------------------------------
