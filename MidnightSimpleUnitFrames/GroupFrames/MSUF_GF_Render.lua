@@ -398,29 +398,53 @@ local function ResolveClassColor(cls)
 end
 
 ------------------------------------------------------------------------
--- Apply: health color (respects global Colors menu)
--- Global barMode (dark/unified) overrides all GF-local modes.
+-- Apply: health color (GF-independent barMode, then global fallback)
 ------------------------------------------------------------------------
 local function ApplyHealthColor(f, kind, unit)
     if not f.health then return end
 
-    -- Global barMode override: dark/unified apply to ALL GF frames
-    local getCache = _G.MSUF_UFCore_GetSettingsCache
-    local cache = type(getCache) == "function" and getCache() or nil
-    local globalMode = cache and cache.barMode
-
-    if globalMode == "dark" then
-        f.health:SetStatusBarColor(cache.darkBarR or 0, cache.darkBarG or 0, cache.darkBarB or 0, 1)
-        return
-    end
-    if globalMode == "unified" then
-        f.health:SetStatusBarColor(cache.unifiedBarR or 0.10, cache.unifiedBarG or 0.60, cache.unifiedBarB or 0.90, 1)
+    -- Spell Indicator health color override takes precedence
+    if f._msufSIHealthColorR then
+        f.health:SetStatusBarColor(f._msufSIHealthColorR, f._msufSIHealthColorG or 0, f._msufSIHealthColorB or 0, 1)
         return
     end
 
-    -- GF-local color mode
     local conf = GF.GetConf(kind)
-    local mode = conf.healthColorMode or "CLASS"
+    local gfMode = conf.gfBarMode  -- nil/"GLOBAL" = follow UF
+
+    -- Resolve effective mode
+    local mode
+    if gfMode and gfMode ~= "GLOBAL" then
+        mode = gfMode
+    else
+        local getCache = _G.MSUF_UFCore_GetSettingsCache
+        local cache = type(getCache) == "function" and getCache() or nil
+        local globalMode = cache and cache.barMode
+        if globalMode == "dark" or globalMode == "unified" then
+            mode = globalMode
+        else
+            mode = conf.healthColorMode or "CLASS"
+        end
+    end
+
+    if mode == "dark" then
+        local getCache = _G.MSUF_UFCore_GetSettingsCache
+        local cache = type(getCache) == "function" and getCache() or nil
+        local r = conf.gfDarkR or (cache and cache.darkBarR) or 0
+        local g = conf.gfDarkG or (cache and cache.darkBarG) or 0
+        local b = conf.gfDarkB or (cache and cache.darkBarB) or 0
+        f.health:SetStatusBarColor(r, g, b, 1)
+        return
+    end
+    if mode == "unified" then
+        local getCache = _G.MSUF_UFCore_GetSettingsCache
+        local cache = type(getCache) == "function" and getCache() or nil
+        local r = conf.gfUnifiedR or (cache and cache.unifiedBarR) or 0.10
+        local g = conf.gfUnifiedG or (cache and cache.unifiedBarG) or 0.60
+        local b = conf.gfUnifiedB or (cache and cache.unifiedBarB) or 0.90
+        f.health:SetStatusBarColor(r, g, b, 1)
+        return
+    end
 
     -- Resolve class token (live unit or preview)
     local cls
@@ -596,8 +620,13 @@ local function ApplyIconLayout(f, kind)
             icon:SetSize(sz, sz)
             local pt = conf[s.anchorKey] or s.defAnchor
             icon:SetPoint(pt, anchor, pt, conf[s.xKey] or 0, conf[s.yKey] or 0)
-            if icon.SetFrameLevel then
-                icon:SetFrameLevel(baseLvl + (conf[s.layerKey] or s.defLayer))
+            local layer = conf[s.layerKey] or s.defLayer
+            if icon.SetDrawLayer then
+                local sub = layer
+                if sub > 7 then sub = 7 elseif sub < -8 then sub = -8 end
+                icon:SetDrawLayer("OVERLAY", sub)
+            elseif icon.SetFrameLevel then
+                icon:SetFrameLevel(baseLvl + layer)
             end
         end
     end

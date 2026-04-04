@@ -389,7 +389,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 if GF.headers.party then GF.headers.party:Hide() end
                 if GF.headers.raid  then GF.headers.raid:Hide()  end
             end
-            GF.ShowPreview(kind, kind == "raid" and 10 or 4)
+            GF.ShowPreview(kind, kind == "raid" and 10 or 5)
         end
     end
 
@@ -868,17 +868,105 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Section 2: Health Colors (info only — controlled by global Colors menu)
+    -- Section 2: Health Colors (GF-independent bar mode)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(60, "Health Colors", false, "hcolor")
+        local box, body = AddSection(200, "Health Colors", false, "hcolor")
 
-        local hint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        hint:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -8)
-        hint:SetWidth(640)
-        hint:SetJustifyH("LEFT")
-        hint:SetText(TR("Health bar colors follow the global |cffffd200Colors|r menu (Dark Mode, Class Colors, Unified)."))
-        hint:SetTextColor(0.55, 0.60, 0.70)
+        local modeLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        modeLbl:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -8)
+        modeLbl:SetText(TR("Bar Color Mode"))
+
+        local GF_BAR_MODES = {
+            { key = "GLOBAL",   label = TR("Follow Global (Colors menu)") },
+            { key = "CLASS",    label = TR("Class Color") },
+            { key = "dark",     label = TR("Dark Mode") },
+            { key = "unified",  label = TR("Unified Color") },
+            { key = "GRADIENT", label = TR("Health Gradient") },
+            { key = "CUSTOM",   label = TR("Custom Color") },
+        }
+
+        local gfColorSwatch, gfColorHint
+        local function RefreshColorControls()
+            if not gfColorSwatch then return end
+            local conf = GF.GetConf(K())
+            local m = conf.gfBarMode
+            if m == "dark" or m == "unified" or m == "CUSTOM" then
+                gfColorSwatch:Show()
+                local r, g, b
+                if m == "dark" then
+                    r = conf.gfDarkR or 0; g = conf.gfDarkG or 0; b = conf.gfDarkB or 0
+                elseif m == "unified" then
+                    r = conf.gfUnifiedR or 0.10; g = conf.gfUnifiedG or 0.60; b = conf.gfUnifiedB or 0.90
+                else
+                    r = conf.healthCustomR or 0.2; g = conf.healthCustomG or 0.8; b = conf.healthCustomB or 0.2
+                end
+                local tex = gfColorSwatch._tex
+                if tex then tex:SetColorTexture(r, g, b) end
+            else
+                gfColorSwatch:Hide()
+            end
+            if gfColorHint then
+                if not m or m == "GLOBAL" then
+                    gfColorHint:SetText(TR("Health bar colors follow the global |cffffd200Colors|r menu."))
+                    gfColorHint:Show()
+                else
+                    gfColorHint:Hide()
+                end
+            end
+        end
+
+        local gfModeDd = SDropdown({
+            name = "MSUF_GF_BarModeDropdown", parent = body,
+            anchor = modeLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 260,
+            items = GF_BAR_MODES,
+            get = function(k) return GF.GetConf(k).gfBarMode or "GLOBAL" end,
+            set = function(k, v)
+                local conf = GF.GetConf(k)
+                conf.gfBarMode = (v == "GLOBAL") and nil or v
+                if v == "CLASS" or v == "GRADIENT" then
+                    conf.healthColorMode = v
+                end
+                GF.RefreshVisuals()
+                RefreshColorControls()
+            end,
+        })
+
+        gfColorSwatch = MakeColorSwatch(body,
+            gfModeDd, "BOTTOMLEFT", 16, -12, TR("Bar Color"),
+            function()
+                local conf = GF.GetConf(K())
+                local m = conf.gfBarMode
+                if m == "dark" then
+                    return conf.gfDarkR or 0, conf.gfDarkG or 0, conf.gfDarkB or 0
+                elseif m == "unified" then
+                    return conf.gfUnifiedR or 0.10, conf.gfUnifiedG or 0.60, conf.gfUnifiedB or 0.90
+                else
+                    return conf.healthCustomR or 0.2, conf.healthCustomG or 0.8, conf.healthCustomB or 0.2
+                end
+            end,
+            function(r, g, b)
+                local conf = GF.GetConf(K())
+                local m = conf.gfBarMode
+                if m == "dark" then
+                    conf.gfDarkR = r; conf.gfDarkG = g; conf.gfDarkB = b
+                elseif m == "unified" then
+                    conf.gfUnifiedR = r; conf.gfUnifiedG = g; conf.gfUnifiedB = b
+                else
+                    conf.healthCustomR = r; conf.healthCustomG = g; conf.healthCustomB = b
+                end
+                GF.RefreshVisuals()
+            end
+        )
+
+        gfColorHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        gfColorHint:SetPoint("TOPLEFT", gfModeDd, "BOTTOMLEFT", 16, -8)
+        gfColorHint:SetWidth(600)
+        gfColorHint:SetJustifyH("LEFT")
+        gfColorHint:SetTextColor(0.55, 0.60, 0.70)
+
+        _allRefreshFns[#_allRefreshFns + 1] = RefreshColorControls
+        RefreshColorControls()
     end
 
     ----------------------------------------------------------------

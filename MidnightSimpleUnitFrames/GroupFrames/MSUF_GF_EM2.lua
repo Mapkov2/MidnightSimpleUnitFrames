@@ -58,7 +58,7 @@ local function GetPreviewCount(kind)
         end
         if n > 0 then return n end
     end
-    return (kind == "raid") and 10 or 4
+    return (kind == "raid") and 10 or 5
 end
 
 ------------------------------------------------------------------------
@@ -139,7 +139,7 @@ local function ShowPreviewOnly()
 
     if PartyEnabled() then
         gf.SetPreviewAnchor("party", EnsureContainer("party"))
-        gf.ShowPreview("party", 4)
+        gf.ShowPreview("party", 5)
     end
     if RaidEnabled() then
         gf.SetPreviewAnchor("raid", EnsureContainer("raid"))

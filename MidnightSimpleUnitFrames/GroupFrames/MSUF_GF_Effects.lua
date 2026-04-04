@@ -1020,22 +1020,38 @@ local function UpdatePhaseIcon(f, unit)
 end
 
 ------------------------------------------------------------------------
--- Health color (respects global barMode: dark/unified/class)
+-- Health color (GF-independent barMode, then global fallback)
 ------------------------------------------------------------------------
 local function ApplyHealthColor(f, kind, unit)
     if not f.health then return end
-    -- Spell Indicator health color override: full bar recolor, skips all normal logic
     if f._msufSIHealthColorR then
         f.health:SetStatusBarColor(f._msufSIHealthColorR, f._msufSIHealthColorG, f._msufSIHealthColorB, 1)
         f._msufGFHCStamp = nil
         return
     end
-    -- Global barMode override (same as Render.ApplyHealthColor)
-    local getCache = _G.MSUF_UFCore_GetSettingsCache
-    local cache = type(getCache) == "function" and getCache() or nil
-    local globalMode = cache and cache.barMode
-    if globalMode == "dark" then
-        local r, g, b = cache.darkBarR or 0, cache.darkBarG or 0, cache.darkBarB or 0
+    local conf = GF.GetConf(kind)
+    local gfMode = conf.gfBarMode
+
+    local mode
+    if gfMode and gfMode ~= "GLOBAL" then
+        mode = gfMode
+    else
+        local getCache = _G.MSUF_UFCore_GetSettingsCache
+        local cache = type(getCache) == "function" and getCache() or nil
+        local globalMode = cache and cache.barMode
+        if globalMode == "dark" or globalMode == "unified" then
+            mode = globalMode
+        else
+            mode = conf.healthColorMode or "CLASS"
+        end
+    end
+
+    if mode == "dark" then
+        local getCache = _G.MSUF_UFCore_GetSettingsCache
+        local cache = type(getCache) == "function" and getCache() or nil
+        local r = conf.gfDarkR or (cache and cache.darkBarR) or 0
+        local g = conf.gfDarkG or (cache and cache.darkBarG) or 0
+        local b = conf.gfDarkB or (cache and cache.darkBarB) or 0
         local stamp = "dark"
         if f._msufGFHCStamp ~= stamp then
             f._msufGFHCStamp = stamp
@@ -1043,8 +1059,12 @@ local function ApplyHealthColor(f, kind, unit)
         end
         return
     end
-    if globalMode == "unified" then
-        local r, g, b = cache.unifiedBarR or 0.10, cache.unifiedBarG or 0.60, cache.unifiedBarB or 0.90
+    if mode == "unified" then
+        local getCache = _G.MSUF_UFCore_GetSettingsCache
+        local cache = type(getCache) == "function" and getCache() or nil
+        local r = conf.gfUnifiedR or (cache and cache.unifiedBarR) or 0.10
+        local g = conf.gfUnifiedG or (cache and cache.unifiedBarG) or 0.60
+        local b = conf.gfUnifiedB or (cache and cache.unifiedBarB) or 0.90
         local stamp = "unified"
         if f._msufGFHCStamp ~= stamp then
             f._msufGFHCStamp = stamp
@@ -1052,12 +1072,9 @@ local function ApplyHealthColor(f, kind, unit)
         end
         return
     end
-    local conf = GF.GetConf(kind)
-    local mode = conf.healthColorMode or "CLASS"
     if mode == "CLASS" and unit then
         local _, cls = UnitClass(unit)
         if cls then
-            -- Diff-gate: class token unchanged → skip SetStatusBarColor
             if f._msufGFHCStamp == cls then return end
             f._msufGFHCStamp = cls
             local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
@@ -1070,7 +1087,7 @@ local function ApplyHealthColor(f, kind, unit)
         end
     end
     if mode == "GRADIENT" and unit then
-        f._msufGFHCStamp = nil -- gradient changes every tick
+        f._msufGFHCStamp = nil
         local hp = UnitHealth(unit)
         local hpMax = UnitHealthMax(unit)
         if issecretvalue and (issecretvalue(hp) or issecretvalue(hpMax)) then

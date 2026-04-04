@@ -842,7 +842,7 @@ local function GetLiveCount(kind)
     if conf.showSolo and conf.showPlayer ~= false then
         return 1
     end
-    return 4
+    return 5
 end
 
 local function GetPreviewShownCount(kind)
@@ -1136,24 +1136,40 @@ function GF.ApplyPreviewData(f, index, kind)
         f.nameText:SetTextColor(nr, ng, nb, 1)
     end
 
-    -- Health bar value + color (self-contained, respects global barMode)
+    -- Health bar value + color (respects GF-independent barMode)
     if f.health then
         f.health:SetMinMaxValues(0, 100)
         f.health:SetValue(math_floor(hpPct * 100))
-        -- Resolve health color: global barMode takes priority
-        local getCache = _G.MSUF_UFCore_GetSettingsCache
-        local cache = type(getCache) == "function" and getCache() or nil
-        local gm = cache and cache.barMode
-        if gm == "dark" then
-            f.health:SetStatusBarColor(cache.darkBarR or 0, cache.darkBarG or 0, cache.darkBarB or 0, 1)
-        elseif gm == "unified" then
-            f.health:SetStatusBarColor(cache.unifiedBarR or 0.10, cache.unifiedBarG or 0.60, cache.unifiedBarB or 0.90, 1)
+        local gfMode = conf.gfBarMode
+        local mode
+        if gfMode and gfMode ~= "GLOBAL" then
+            mode = gfMode
+        else
+            local getCache = _G.MSUF_UFCore_GetSettingsCache
+            local cache = type(getCache) == "function" and getCache() or nil
+            local gm = cache and cache.barMode
+            if gm == "dark" or gm == "unified" then mode = gm
+            else mode = conf.healthColorMode or "CLASS" end
+        end
+        if mode == "dark" then
+            local getCache = _G.MSUF_UFCore_GetSettingsCache
+            local cache = type(getCache) == "function" and getCache() or nil
+            f.health:SetStatusBarColor(conf.gfDarkR or (cache and cache.darkBarR) or 0, conf.gfDarkG or (cache and cache.darkBarG) or 0, conf.gfDarkB or (cache and cache.darkBarB) or 0, 1)
+        elseif mode == "unified" then
+            local getCache = _G.MSUF_UFCore_GetSettingsCache
+            local cache = type(getCache) == "function" and getCache() or nil
+            f.health:SetStatusBarColor(conf.gfUnifiedR or (cache and cache.unifiedBarR) or 0.10, conf.gfUnifiedG or (cache and cache.unifiedBarG) or 0.60, conf.gfUnifiedB or (cache and cache.unifiedBarB) or 0.90, 1)
+        elseif mode == "GRADIENT" then
+            local r = hpPct > 0.5 and (1 - (hpPct - 0.5) * 2) or 1
+            local g = hpPct > 0.5 and 1 or (hpPct * 2)
+            f.health:SetStatusBarColor(r, g, 0, 1)
+        elseif mode == "CUSTOM" then
+            f.health:SetStatusBarColor(conf.healthCustomR or 0.2, conf.healthCustomG or 0.8, conf.healthCustomB or 0.2, 1)
         else
             local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
             if type(fastClass) == "function" then
                 local cr, cg, cb = fastClass(cls)
-                if cr then
-                    f.health:SetStatusBarColor(cr, cg, cb, 1)
+                if cr then f.health:SetStatusBarColor(cr, cg, cb, 1)
                 else
                     local cc = cls and RAID_CLASS_COLORS and RAID_CLASS_COLORS[cls]
                     if cc then f.health:SetStatusBarColor(cc.r, cc.g, cc.b, 1)
@@ -1468,33 +1484,60 @@ end
 
 function GF.ShowPreview(kind, count)
     kind = kind or "party"
-    count = count or (kind == "raid" and 20 or 4)
+    count = count or (kind == "raid" and 20 or 5)
     local conf = GF.GetConf(kind)
-    local dx, dy, _, _, w, h, spacing, growth, upc, _, firstDX, firstDY = GF.GetGridMetrics(kind, count)
+    local _, _, totalW, totalH, w, h, spacing, growth, upc = GF.GetGridMetrics(kind, count)
     local key = kind
 
     GF._previewActive[key] = true
 
-    -- Ensure preview frames
     if not GF._previewFrames[key] then GF._previewFrames[key] = {} end
     local frames = GF._previewFrames[key]
 
-    local centerX = conf.offsetX
-    local centerY = conf.offsetY
-    if centerX == nil or centerY == nil then
-        centerX, centerY = GetDefaultCenter(kind)
-    end
-    local originX = centerX - dx
-    local originY = centerY - dy
-    local baseX = originX + firstDX
-    local baseY = originY + firstDY
+    -- Container at same position as real header
     local anchorParent = GF._previewAnchorFrame and GF._previewAnchorFrame[key]
     local parent = anchorParent or UIParent
+
+    if not GF._previewContainer then GF._previewContainer = {} end
+    local container = GF._previewContainer[key]
+    if not container then
+        container = CreateFrame("Frame", "MSUF_GFPreviewContainer_" .. key, parent)
+        container:EnableMouse(false)
+        GF._previewContainer[key] = container
+    end
+    if container:GetParent() ~= parent then container:SetParent(parent) end
+
+    -- Position container identically to PositionHeaderFromGridCenter
+    local dx, dy = GF.GetGridMetrics(kind, count)
+    local cx, cy = conf.offsetX, conf.offsetY
+    if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
+    container:SetSize(math_max(totalW, 1), math_max(totalH, 1))
+    container:ClearAllPoints()
+    if anchorParent then
+        container:SetPoint("CENTER", parent, "CENTER", 0, 0)
+    else
+        container:SetPoint(conf.point or "CENTER", parent, conf.point or "CENTER", cx - dx, cy - dy)
+    end
+    container:Show()
+
+    -- Resolve anchor point + offsets (same as SetupPartyHeader / SetupRaidHeader)
+    local anchorPt, xOff, yOff, colAnchor
+    if growth == "DOWN" then
+        anchorPt = "TOP"; xOff = 0; yOff = -spacing; colAnchor = "LEFT"
+    elseif growth == "UP" then
+        anchorPt = "BOTTOM"; xOff = 0; yOff = spacing; colAnchor = "LEFT"
+    elseif growth == "RIGHT" then
+        anchorPt = "LEFT"; xOff = spacing; yOff = 0; colAnchor = "TOP"
+    elseif growth == "LEFT" then
+        anchorPt = "RIGHT"; xOff = -spacing; yOff = 0; colAnchor = "TOP"
+    else
+        anchorPt = "TOP"; xOff = 0; yOff = -spacing; colAnchor = "LEFT"
+    end
 
     for i = 1, count do
         local f = frames[i]
         if not f then
-            f = CreateFrame("Button", "MSUF_GFPreview_" .. key .. "_" .. i, parent, "BackdropTemplate")
+            f = CreateFrame("Button", "MSUF_GFPreview_" .. key .. "_" .. i, container, "BackdropTemplate")
             f:SetSize(w, h)
             f._msufGFKind = kind
             f._msufIsGroupFrame = true
@@ -1504,22 +1547,33 @@ function GF.ShowPreview(kind, count)
             LayoutText(f, kind)
             LayoutIcons(f, kind)
             frames[i] = f
-        elseif f:GetParent() ~= parent then
-            f:SetParent(parent)
         end
+        if f:GetParent() ~= container then f:SetParent(container) end
 
         f:SetSize(w, h)
         f:ClearAllPoints()
-        local px, py = GridPosition(baseX, baseY, i, w, h, spacing, growth, upc)
-        if anchorParent then
-            f:SetPoint("CENTER", parent, "CENTER", px - centerX, py - centerY)
-        else
-            f:SetPoint("CENTER", parent, "CENTER", px, py)
+
+        -- Replicate SecureGroupHeader child layout
+        local row = (i - 1) % upc
+        local col = math_floor((i - 1) / upc)
+
+        if growth == "DOWN" then
+            local colOff = col * (w + spacing)
+            f:SetPoint("TOP", container, "TOP", colOff, -row * (h + spacing))
+        elseif growth == "UP" then
+            local colOff = col * (w + spacing)
+            f:SetPoint("BOTTOM", container, "BOTTOM", colOff, row * (h + spacing))
+        elseif growth == "RIGHT" then
+            local colOff = col * (h + spacing)
+            f:SetPoint("LEFT", container, "LEFT", row * (w + spacing), -colOff)
+        elseif growth == "LEFT" then
+            local colOff = col * (h + spacing)
+            f:SetPoint("RIGHT", container, "RIGHT", -row * (w + spacing), -colOff)
         end
+
         GF.ApplyPreviewData(f, i, kind)
     end
 
-    -- Hide excess frames
     for i = count + 1, #frames do
         if frames[i] then
             GF.ClearPreviewData(frames[i])
@@ -1532,13 +1586,16 @@ function GF.HidePreview(kind)
     kind = kind or "party"
     GF._previewActive[kind] = nil
     local frames = GF._previewFrames[kind]
-    if not frames then return end
-    for i = 1, #frames do
-        if frames[i] then
-            GF.ClearPreviewData(frames[i])
-            frames[i]:Hide()
+    if frames then
+        for i = 1, #frames do
+            if frames[i] then
+                GF.ClearPreviewData(frames[i])
+                frames[i]:Hide()
+            end
         end
     end
+    local container = GF._previewContainer and GF._previewContainer[kind]
+    if container then container:Hide() end
 end
 
 ------------------------------------------------------------------------
@@ -1552,33 +1609,41 @@ function GF.RefreshPreviewLayout(kind)
     if not frames then return end
     local count = GetPreviewShownCount(kind)
     local conf = GF.GetConf(kind)
-    local dx, dy, _, _, w, h, spacing, growth, upc, _, firstDX, firstDY = GF.GetGridMetrics(kind, count)
-    local centerX = conf.offsetX
-    local centerY = conf.offsetY
-    if centerX == nil or centerY == nil then
-        centerX, centerY = GetDefaultCenter(kind)
+    local _, _, totalW, totalH, w, h, spacing, growth, upc = GF.GetGridMetrics(kind, count)
+
+    -- Update container position (same as PositionHeaderFromGridCenter)
+    local container = GF._previewContainer and GF._previewContainer[kind]
+    if container then
+        local dx, dy = GF.GetGridMetrics(kind, count)
+        local cx, cy = conf.offsetX, conf.offsetY
+        if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
+        local anchorParent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
+        container:SetSize(math_max(totalW, 1), math_max(totalH, 1))
+        container:ClearAllPoints()
+        if anchorParent then
+            container:SetPoint("CENTER", anchorParent, "CENTER", 0, 0)
+        else
+            container:SetPoint(conf.point or "CENTER", UIParent, conf.point or "CENTER", cx - dx, cy - dy)
+        end
     end
-    local originX = centerX - dx
-    local originY = centerY - dy
-    local baseX = originX + firstDX
-    local baseY = originY + firstDY
-    local anchorParent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
-    local parent = anchorParent or UIParent
 
     for i = 1, #frames do
         local f = frames[i]
         if f and f:IsShown() then
-            if f:GetParent() ~= parent then
-                f:SetParent(parent)
-            end
+            if container and f:GetParent() ~= container then f:SetParent(container) end
             f:SetSize(w, h)
             if f.barGroup then f.barGroup:SetSize(w, h) end
             f:ClearAllPoints()
-            local px, py = GridPosition(baseX, baseY, i, w, h, spacing, growth, upc)
-            if anchorParent then
-                f:SetPoint("CENTER", parent, "CENTER", px - centerX, py - centerY)
-            else
-                f:SetPoint("CENTER", parent, "CENTER", px, py)
+            local row = (i - 1) % upc
+            local col = math_floor((i - 1) / upc)
+            if growth == "DOWN" then
+                f:SetPoint("TOP", container or UIParent, "TOP", col * (w + spacing), -row * (h + spacing))
+            elseif growth == "UP" then
+                f:SetPoint("BOTTOM", container or UIParent, "BOTTOM", col * (w + spacing), row * (h + spacing))
+            elseif growth == "RIGHT" then
+                f:SetPoint("LEFT", container or UIParent, "LEFT", row * (w + spacing), -col * (h + spacing))
+            elseif growth == "LEFT" then
+                f:SetPoint("RIGHT", container or UIParent, "RIGHT", -row * (w + spacing), -col * (h + spacing))
             end
         end
     end

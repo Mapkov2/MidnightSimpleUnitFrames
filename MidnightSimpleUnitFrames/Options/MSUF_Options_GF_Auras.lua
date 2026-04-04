@@ -1316,9 +1316,9 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end)
 
     ----------------------------------------------------------------
-    -- Section: Externals
+    -- Section: Defensives
     ----------------------------------------------------------------
-    BuildAuraGroupSection("externals", L["Externals"], 510)
+    BuildAuraGroupSection("externals", L["Defensives"], 510)
 
     -- Register all compact row refresh functions
     for i = 1, #_auraRefreshFns do

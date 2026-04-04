@@ -239,7 +239,7 @@ local PARTY_DEFAULTS = {
     -- Power smooth fill
     powerSmoothFill       = false,
     -- Auras (Phase 4, stubs)
-    aurasEnabled      = false,
+    aurasEnabled      = true,
     auraMaxIcons      = 4,
     auraIconSize      = 20,
     -- Private Auras
@@ -312,7 +312,7 @@ function GF.GetGridMetrics(kind, count)
     local upc = conf.unitsPerColumn or 5
 
     count = tonumber(count) or 0
-    if count < 1 then count = (kind == "raid" and 10 or 4) end
+    if count < 1 then count = (kind == "raid" and 10 or 5) end
 
     local numCols = math_ceil(count / upc)
     if numCols < 1 then numCols = 1 end
@@ -366,7 +366,7 @@ local function GetMigrationCount(kind, conf)
     if conf.showSolo and conf.showPlayer ~= false then
         return 1
     end
-    return 4
+    return 5
 end
 
 local function MigrateGroupPositionToGridCenter(conf, kind)
@@ -475,6 +475,19 @@ function GF.EnsureDB()
                     if g.spellFilter == nil then g.spellFilter = "NONE" end
                     if type(g.spellList) ~= "table" then g.spellList = {} end
                 end
+            end
+        end
+    end
+    -- Migration v2: force-enable auras + defensives (showstopper fix)
+    for _, conf in pairs({db.gf_party, db.gf_raid}) do
+        if type(conf.auras) == "table" and not conf._auraMigV2 then
+            conf._auraMigV2 = true
+            if conf.auras.enabled == false or conf.auras.enabled == nil then
+                conf.auras.enabled = true
+            end
+            local ext = conf.auras.externals
+            if type(ext) == "table" and not ext.enabled then
+                ext.enabled = true
             end
         end
     end

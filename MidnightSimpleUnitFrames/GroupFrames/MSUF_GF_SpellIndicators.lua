@@ -351,11 +351,18 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
                     local obj = C_UnitAuras.GetAuraDuration(unit, aid)
                     if obj and ind.cooldown.SetCooldownFromDurationObject then
                         ind.cooldown:SetCooldownFromDurationObject(obj)
+                        ind.cooldown:SetHideCountdownNumbers(false)
                         ind._msufA2_cdDurationObj = obj
                         local A2 = ns.MSUF_Auras2
                         local CT = A2 and A2.CooldownText
-                        if CT and CT.RegisterIcon and ind._msufA2_cdMgrRegistered ~= true then
-                            CT.RegisterIcon(ind)
+                        if CT then
+                            if CT.RegisterIcon then
+                                if ind._msufA2_cdMgrRegistered ~= true then
+                                    CT.RegisterIcon(ind)
+                                elseif CT.TouchIcon then
+                                    CT.TouchIcon(ind)
+                                end
+                            end
                         end
                     else
                         ind.cooldown:Clear()
@@ -889,7 +896,7 @@ local function MakeDebuffDefaults()
 end
 local function MakeExternalsDefaults()
     return {
-        enabled = false, anchor = "CENTER", growth = "RIGHTDOWN",
+        enabled = true, anchor = "CENTER", growth = "RIGHTDOWN",
         x = 0, y = 0, size = 28, perRow = 3, max = 2, spacing = 1,
         layer = 7,
         showCooldown = true, cooldownAnchor = "CENTER",
