@@ -140,6 +140,8 @@ function ns.MSUF_ApplyModules()
     end
 
     ns.__MSUF_ModulesApplied = true
+    -- Notify RoundedUF module (replaces former hooksecurefunc).
+    local fnR = _G.MSUF_RoundedUF_OnModulesApplied; if fnR then fnR() end
 end
 
 -- Convenience: one-shot at startup.

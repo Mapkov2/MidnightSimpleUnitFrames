@@ -1003,6 +1003,111 @@ function GF.RefreshPreviewHandles()
     -- SI handles
     GF.RebuildSIHandles()
 
+    -- Corner Indicator preview dots
+    -- All 5 slots always visible: active = filled color, inactive = dim outline
+    do
+        local CI_SPECS = {
+            { key = "TL", anchor = "TOPLEFT",     ox =  2, oy = -2 },
+            { key = "TR", anchor = "TOPRIGHT",    ox = -2, oy = -2 },
+            { key = "BL", anchor = "BOTTOMLEFT",  ox =  2, oy =  2 },
+            { key = "BR", anchor = "BOTTOMRIGHT", ox = -2, oy =  2 },
+            { key = "C",  anchor = "CENTER",      ox =  0, oy =  0 },
+        }
+        local CI_CAT_COLORS = {
+            dispel  = { 0.25, 0.75, 1.00 },
+            boss    = { 1.00, 0.15, 0.15 },
+            missing = { 0.80, 0.80, 0.80 },
+        }
+        local CI_CAT_LABELS = {
+            dispel  = "D",
+            boss    = "B",
+            missing = "M",
+        }
+
+        if not _mockFrame._ciDots then _mockFrame._ciDots = {} end
+        local dots = _mockFrame._ciDots
+        local ciRawSz = conf.ciSize or 8
+        local ciSz = max(8, floor(ciRawSz * sc + 0.5))
+        local ciEnabled = conf.ciEnabled ~= false
+        local bdTbl = { bgFile = "Interface\\Buttons\\WHITE8x8",
+                        edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
+
+        for _, spec in ipairs(CI_SPECS) do
+            -- Lazy-create as Frame with backdrop (not just a texture)
+            local dot = dots[spec.key]
+            if not dot then
+                dot = CreateFrame("Frame", nil, _mockFrame, BackdropTemplateMixin and "BackdropTemplate" or nil)
+                dot:EnableMouse(false)
+                dots[spec.key] = dot
+
+                -- Fill texture
+                dot._ciFill = dot:CreateTexture(nil, "ARTWORK")
+                dot._ciFill:SetAllPoints(dot)
+
+                -- Label (slot initial or category letter)
+                dot._ciLabel = dot:CreateFontString(nil, "OVERLAY")
+                dot._ciLabel:SetPoint("CENTER", dot, "CENTER", 0, 0)
+                dot._ciLabel:SetShadowColor(0, 0, 0, 1)
+                dot._ciLabel:SetShadowOffset(1, -1)
+            end
+
+            local dbKey = "ciSlot" .. spec.key
+            local cat = conf[dbKey] or "none"
+            local c = CI_CAT_COLORS[cat]
+            local isActive = ciEnabled and cat ~= "none" and c
+
+            -- Size + position
+            dot:SetSize(ciSz, ciSz)
+            dot:ClearAllPoints()
+            dot:SetPoint(spec.anchor, _mockFrame, spec.anchor,
+                floor(spec.ox * sc + 0.5), floor(spec.oy * sc + 0.5))
+            dot:SetFrameLevel(_mockFrame:GetFrameLevel() + 10)
+
+            -- Backdrop border
+            if dot.SetBackdrop then
+                dot:SetBackdrop(bdTbl)
+            end
+
+            -- Font size scales with dot
+            local fSz = max(6, floor(ciSz * 0.65 + 0.5))
+            local fp = GF.ResolveFontPath and GF.ResolveFontPath() or "Fonts\\FRIZQT__.TTF"
+            dot._ciLabel:SetFont(fp, fSz, "OUTLINE")
+
+            if isActive then
+                -- Active: filled with category color + bright border
+                dot._ciFill:SetColorTexture(c[1], c[2], c[3], conf.ciAlpha or 1.0)
+                dot._ciFill:Show()
+                if dot.SetBackdropColor then
+                    dot:SetBackdropColor(c[1], c[2], c[3], conf.ciAlpha or 1.0)
+                end
+                if dot.SetBackdropBorderColor then
+                    dot:SetBackdropBorderColor(0, 0, 0, 1)
+                end
+                dot._ciLabel:SetText(CI_CAT_LABELS[cat] or "")
+                dot._ciLabel:SetTextColor(1, 1, 1, 0.95)
+                dot._ciLabel:Show()
+                dot:Show()
+            elseif ciEnabled then
+                -- Inactive: dim outline placeholder showing slot position
+                dot._ciFill:SetColorTexture(0.15, 0.15, 0.18, 0.5)
+                dot._ciFill:Show()
+                if dot.SetBackdropColor then
+                    dot:SetBackdropColor(0.15, 0.15, 0.18, 0.5)
+                end
+                if dot.SetBackdropBorderColor then
+                    dot:SetBackdropBorderColor(0.35, 0.35, 0.40, 0.6)
+                end
+                dot._ciLabel:SetText(spec.key)
+                dot._ciLabel:SetTextColor(0.5, 0.5, 0.55, 0.7)
+                dot._ciLabel:Show()
+                dot:Show()
+            else
+                -- CI disabled entirely
+                dot:Hide()
+            end
+        end
+    end
+
     -- Section-aware focus: dim/hide elements not relevant to the active Options section
     local focus = GF._previewFocus
     local showText   = not focus or focus == "text" or focus == "overlay"
@@ -1010,6 +1115,7 @@ function GF.RefreshPreviewHandles()
     local showSIcons = not focus or focus == "sicons"
     local showSI     = not focus or focus == "indicators"
     local showPriv   = not focus or focus == "indicators"
+    local showCI     = not focus or focus == "ci"
 
     -- Text layer visibility
     if _mockFrame._textLayer then _mockFrame._textLayer:SetShown(showText) end
@@ -1044,6 +1150,15 @@ function GF.RefreshPreviewHandles()
     local privH = _handles.private
     if privH and privH:IsShown() then
         privH:SetAlpha(showPriv and 1 or 0.15)
+    end
+
+    -- Corner Indicator preview dots
+    if _mockFrame._ciDots then
+        for _, dot in pairs(_mockFrame._ciDots) do
+            if dot and type(dot.IsShown) == "function" and dot:IsShown() then
+                dot:SetAlpha(showCI and 1 or 0.10)
+            end
+        end
     end
 end
 

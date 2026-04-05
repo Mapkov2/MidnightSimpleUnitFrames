@@ -24,19 +24,6 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
     local Update
     local SetOnUpdate
 
-    local function TimerBarOnUpdate_Tick(self, dt)
-        if not CP.visible or CP.renderMode ~= CPK.MODE.TIMER_BAR then
-            SetOnUpdate(false)
-            return
-        end
-        _tbElapsed = _tbElapsed + dt
-        if _tbElapsed < 0.05 then return end
-        _tbElapsed = 0
-        if not Update(CP.powerType, CP.currentMax) then
-            SetOnUpdate(false)
-        end
-    end
-
     Update = function(powerType, maxPower)
         local getAura = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
         local aura = getAura and getAura(EBON.SPELL_ID)
@@ -100,23 +87,35 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
         return active
     end
 
+    -- Central RuntimeTick: called by controller's single OnUpdate frame.
+    -- Throttled to ~20fps (0.05s) to avoid unnecessary timer text churn.
+    local function RuntimeTick(elapsed)
+        if not CP.visible or CP.renderMode ~= CPK.MODE.TIMER_BAR then return end
+        _tbElapsed = _tbElapsed + elapsed
+        if _tbElapsed < 0.05 then return end
+        _tbElapsed = 0
+        if not Update(CP.powerType, CP.currentMax) then
+            -- Timer expired — flag cleared; controller will stop tick next sync.
+            CP.tbOUA = false
+        end
+    end
+
+    -- Flag-only management (no SetScript — controller owns the tick).
     SetOnUpdate = function(on)
-        if not CP.container then return end
         if on and CP.renderMode ~= CPK.MODE.TIMER_BAR then
             on = false
         end
-        if on and not CP.tbOUA then
+        if on then
             CP.tbOUA = true
             _tbElapsed = 0
-            CP.container:SetScript("OnUpdate", TimerBarOnUpdate_Tick)
-        elseif not on and CP.tbOUA then
+        else
             CP.tbOUA = false
-            CP.container:SetScript("OnUpdate", nil)
         end
     end
 
     return {
         Update = Update,
         SetOnUpdate = SetOnUpdate,
+        RuntimeTick = RuntimeTick,
     }
 end

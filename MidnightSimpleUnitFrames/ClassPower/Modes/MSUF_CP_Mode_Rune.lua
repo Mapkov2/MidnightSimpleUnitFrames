@@ -1,6 +1,7 @@
 -- ============================================================================
 -- MSUF_CP_Mode_Rune.lua
--- Phase 3 ClassPower split: DK rune mode extracted from the core file.
+-- DK rune mode. Unified CP tick: exports RuntimeTick for central controller.
+-- No per-bar OnUpdate scripts — controller drives a single OnUpdate frame.
 -- ============================================================================
 
 _G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
@@ -19,7 +20,8 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
     local GetFilledAlpha = E.GetFilledAlpha
     local GetEmptyAlpha = E.GetEmptyAlpha
 
-    local function RuneBarOnUpdate(bar, elapsed)
+    -- Per-bar tick logic (called from central RuntimeTick, not per-bar OnUpdate).
+    local function RuneBarTick(bar, elapsed)
         local dur = (bar._runeDuration or 0) + elapsed
         bar._runeDuration = dur
         bar:SetValue(dur)
@@ -44,16 +46,24 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
         end
     end
 
-    local function SetRuneBarOnUpdate(bar, on)
+    -- Central RuntimeTick: called by controller's single OnUpdate frame.
+    -- Iterates all active rune bars in one pass.
+    local function RuntimeTick(elapsed)
+        for i = 1, CP.maxBars do
+            local bar = CP.bars[i]
+            if bar and bar._runeOUA then
+                RuneBarTick(bar, elapsed)
+            end
+        end
+    end
+
+    -- Flag-only management (no SetScript — controller owns the tick).
+    local function SetRuneBarActive(bar, on)
         if not bar then return end
         if on then
-            if bar._runeOUA then return end
             bar._runeOUA = true
-            bar:SetScript("OnUpdate", RuneBarOnUpdate)
         else
-            if not bar._runeOUA then return end
             bar._runeOUA = false
-            bar:SetScript("OnUpdate", nil)
         end
     end
 
@@ -62,7 +72,7 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
         for i = 1, CP.maxBars do
             local bar = CP.bars[i]
             if bar then
-                SetRuneBarOnUpdate(bar, false)
+                bar._runeOUA = false
                 bar._runeDuration = nil
                 bar._runeTotalDuration = nil
                 bar._runeTextQ = -1
@@ -112,7 +122,7 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
                 if runeReady then
                     bar:SetMinMaxValues(0, 1)
                     bar:SetValue(1)
-                    SetRuneBarOnUpdate(bar, false)
+                    SetRuneBarActive(bar, false)
                     bar._runeDuration = nil
                     bar:SetAlpha(filledAlpha)
                     bar._runeTotalDuration = nil
@@ -127,7 +137,7 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
                     bar._runeTextQ = -1
                     bar:SetMinMaxValues(0, duration)
                     bar:SetValue(bar._runeDuration)
-                    SetRuneBarOnUpdate(bar, true)
+                    SetRuneBarActive(bar, true)
                     activeRuneOUA = activeRuneOUA + 1
                     bar:SetAlpha(filledAlpha)
                     if showRuneTime and bar._runeText then
@@ -149,7 +159,7 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
                 else
                     bar:SetMinMaxValues(0, 1)
                     bar:SetValue(0)
-                    SetRuneBarOnUpdate(bar, false)
+                    SetRuneBarActive(bar, false)
                     bar._runeDuration = nil
                     bar._runeTotalDuration = nil
                     bar._runeShowTime = showRuneTime
@@ -183,5 +193,6 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
     return {
         Update = Update,
         StopOnUpdates = StopOnUpdates,
+        RuntimeTick = RuntimeTick,
     }
 end

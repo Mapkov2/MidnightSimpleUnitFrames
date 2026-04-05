@@ -253,6 +253,15 @@ local PARTY_DEFAULTS = {
     privateAuraX           = 0,
     privateAuraY           = 0,
     privateAuraCountdown   = true,
+    -- Corner Indicators
+    ciEnabled         = true,
+    ciSize            = 8,
+    ciAlpha           = 1.0,
+    ciSlotTL          = "dispel",
+    ciSlotTR          = "boss",
+    ciSlotBL          = "none",
+    ciSlotBR          = "none",
+    ciSlotC           = "none",
     -- Grid layout
     unitsPerColumn    = 5,
     maxColumns        = 1,

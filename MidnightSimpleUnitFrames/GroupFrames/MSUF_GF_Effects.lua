@@ -184,8 +184,13 @@ local ROLE_COORDS = {
 local _GF_RefreshBorder
 
 ------------------------------------------------------------------------
--- UNIT_AURA: inline per-frame dispatch (no coalescing)
+-- UNIT_AURA: per-frame dispatch with burst-dedup (A2 P2 pattern)
+-- Fast-paths (update-only 16µs, remove-only-not-displayed) still fire
+-- instantly. Full pipeline is gated: first event runs immediately,
+-- subsequent same-frame events within 20ms are skipped.
+-- Zero steady-state alloc: clear-callback allocated once per frame.
 ------------------------------------------------------------------------
+local _After0 = C_Timer and C_Timer.After
 local function SpellIndicatorsNeedRefresh(f, updateInfo)
     if not updateInfo or updateInfo.isFullUpdate then return true end
 
@@ -232,6 +237,9 @@ local function dispatchAura(f, unit, updateInfo)
         if siRefresh and GF.UpdateSpellIndicators then
             GF.UpdateSpellIndicators(f, unit)
         end
+        if GF.UpdateCornerIndicators then
+            GF.UpdateCornerIndicators(f, unit)
+        end
         return
     end
 
@@ -250,6 +258,9 @@ local function dispatchAura(f, unit, updateInfo)
         end
         if siRefresh and GF.UpdateSpellIndicators then
             GF.UpdateSpellIndicators(f, unit)
+        end
+        if GF.UpdateCornerIndicators then
+            GF.UpdateCornerIndicators(f, unit)
         end
         return
     end
@@ -321,6 +332,10 @@ local function dispatchAura(f, unit, updateInfo)
                     if siRefresh and GF.UpdateSpellIndicators then
                         GF.UpdateSpellIndicators(f, unit)
                     end
+                    -- Corner Indicators: removal may clear a dispel/boss dot
+                    if GF.UpdateCornerIndicators then
+                        GF.UpdateCornerIndicators(f, unit)
+                    end
                     return
                 end
             end
@@ -342,6 +357,27 @@ local function dispatchAura(f, unit, updateInfo)
         f._msufGFLastFullAura = now
     end
 
+    -- ════════════════════════════════════════════════════════════════
+    -- P1: In-combat burst-dedup (A2 P2 pattern)
+    -- First event runs the full pipeline immediately (zero latency).
+    -- Subsequent events for the SAME frame within 20ms are skipped.
+    -- Saves N-1 full pipeline runs per AoE burst (N=simultaneous aura
+    -- changes per unit). Clear-callback allocated once per frame.
+    -- ════════════════════════════════════════════════════════════════
+    if f._msufGFFullPending then return end
+    f._msufGFFullPending = true
+    if _After0 then
+        local cb = f._msufGFPendClearCB
+        if not cb then
+            local frame = f
+            cb = function() frame._msufGFFullPending = nil end
+            f._msufGFPendClearCB = cb
+        end
+        _After0(0.02, cb)
+    else
+        f._msufGFFullPending = nil   -- fallback: no timer → no dedup
+    end
+
     -- Full aura processing (add/remove/fullUpdate)
     -- SI runs first: populates dedup IDs before buff scan
     if siOn and GF.UpdateSpellIndicators then
@@ -357,6 +393,11 @@ local function dispatchAura(f, unit, updateInfo)
         end
     else
         GF._UpdateDispel(f, unit)
+    end
+
+    -- Corner Indicators (dispel dots, boss debuff dots, missing buff dots)
+    if GF.UpdateCornerIndicators then
+        GF.UpdateCornerIndicators(f, unit)
     end
 end
 
@@ -1601,6 +1642,8 @@ end
 ------------------------------------------------------------------------
 function GF.RegisterUnitEvents(f, unit)
     if not (f and unit) then return end
+    -- P1: Clear burst-dedup flag so first event for new unit runs immediately
+    f._msufGFFullPending = nil
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
 

@@ -31,6 +31,7 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
     local _essRate       = 0
     local _essActiveBar  = nil
 
+    -- Essence smooth recharge — tick logic (called from central controller tick).
     local function EssenceBarOnUpdate(bar)
         local start = bar._essStart
         local rate  = bar._essRate
@@ -45,16 +46,20 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         bar:SetValue(progress)
     end
 
+    -- Central RuntimeTick: called by controller's single OnUpdate frame.
+    local function RuntimeTick(elapsed)
+        if _essActiveBar and _essActiveBar._essOUA then
+            EssenceBarOnUpdate(_essActiveBar)
+        end
+    end
+
+    -- Flag-only management (no SetScript — controller owns the tick).
     local function SetEssenceOnUpdate(bar, on)
         if not bar then return end
         if on then
-            if bar._essOUA then return end
             bar._essOUA = true
-            bar:SetScript("OnUpdate", EssenceBarOnUpdate)
         else
-            if not bar._essOUA then return end
             bar._essOUA = false
-            bar:SetScript("OnUpdate", nil)
             bar._essStart = nil
             bar._essRate  = nil
         end
@@ -236,5 +241,5 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         end
         CP_CheckAutoHide(cur, maxPower)
     end
-    return { Update = Update, StopEssenceOnUpdates = StopEssenceOnUpdates }
+    return { Update = Update, StopEssenceOnUpdates = StopEssenceOnUpdates, RuntimeTick = RuntimeTick }
 end

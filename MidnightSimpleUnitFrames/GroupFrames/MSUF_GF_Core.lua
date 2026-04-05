@@ -499,6 +499,7 @@ local function GF_InitButton(f, kind)
     ApplyFonts(f, kind)
     LayoutText(f, kind)
     LayoutIcons(f, kind)
+    if GF.LayoutCornerIndicators then GF.LayoutCornerIndicators(f, kind) end
 
     -- Size hook
     if not f._msufGFSizeHooked then
@@ -506,6 +507,7 @@ local function GF_InitButton(f, kind)
         f:HookScript("OnSizeChanged", function(btn)
             LayoutText(btn, btn._msufGFKind or "party")
             LayoutIcons(btn, btn._msufGFKind or "party")
+            if GF.LayoutCornerIndicators then GF.LayoutCornerIndicators(btn, btn._msufGFKind or "party") end
         end)
     end
 
@@ -1656,6 +1658,7 @@ function GF.ShowPreview(kind, count)
             ApplyFonts(f, kind)
             LayoutText(f, kind)
             LayoutIcons(f, kind)
+            if GF.LayoutCornerIndicators then GF.LayoutCornerIndicators(f, kind) end
             frames[i] = f
         end
         if f:GetParent() ~= container then f:SetParent(container) end

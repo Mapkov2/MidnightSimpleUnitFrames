@@ -368,31 +368,19 @@ local function HookOnce()
     if ns.__msufRoundedUF_Hooked then return end
     ns.__msufRoundedUF_Hooked = true
 
-    if type(_G.hooksecurefunc) == "function" then
-        if type(_G.MSUF_UpdateAllBarTextures) == "function" then
-            _G.hooksecurefunc("MSUF_UpdateAllBarTextures", function()
-                if IsEnabled() then ApplyAll() end
-            end)
-        end
-        if type(_G.MSUF_UpdateAllUnitframesNow) == "function" then
-            _G.hooksecurefunc("MSUF_UpdateAllUnitframesNow", function()
-                if IsEnabled() then ApplyAll() end
-            end)
-        end
-        if type(_G.MSUF_ApplyModules) == "function" then
-            _G.hooksecurefunc("MSUF_ApplyModules", function()
-                -- Allows this module to work even if it wasn't registered due to load order.
-                ApplyAll()
-            end)
-        end
-
-        -- Keep square unitframe outlines hidden while the module is enabled.
-        if SUPPRESS_NATIVE_OUTLINE and type(_G.MSUF_RefreshRareBarVisuals) == "function" then
-            _G.hooksecurefunc("MSUF_RefreshRareBarVisuals", function(frame)
-                if frame and IsEnabled() then
-                    SuppressNativeOutlineNow(frame)
-                end
-            end)
+    -- Export callbacks for direct notification (replaces hooksecurefunc hooks).
+    -- Source functions call these directly — zero hook overhead.
+    _G.MSUF_RoundedUF_OnApplyAll = function()
+        if IsEnabled() then ApplyAll() end
+    end
+    _G.MSUF_RoundedUF_OnModulesApplied = function()
+        ApplyAll() -- always (load-order safety)
+    end
+    if SUPPRESS_NATIVE_OUTLINE then
+        _G.MSUF_RoundedUF_OnRareVisualsRefreshed = function(frame)
+            if frame and IsEnabled() then
+                SuppressNativeOutlineNow(frame)
+            end
         end
     end
 end

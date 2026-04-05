@@ -403,31 +403,32 @@ function _G.MSUF_3DPortraits_SyncUnit(unitKey)
 end
 
 -- ------------------------------------------------------------
--- Safety net: if portraitMode is OFF, ensure a previously-visible 3D model
--- doesn't linger even if the core doesn't call MSUF_UpdatePortraitIfNeeded.
+-- Portrait visibility sync (called from MSUF_UFStep_HeavyVisual)
+-- Replaces former hooksecurefunc("UpdateSimpleUnitFrame") hook.
+-- Now only runs in the cold/visual path instead of every frame update.
 -- ------------------------------------------------------------
-if type(hooksecurefunc) == "function" and type(_G.UpdateSimpleUnitFrame) == "function" then
-    hooksecurefunc("UpdateSimpleUnitFrame", function(f)
-        local conf = LookupConfForFrame(f)
-        if type(conf) ~= "table" then return end
-        if IsPortraitModeActive(conf) then
-            if Want3D(conf) then
-                local tex = f and f.portrait
-                if tex and tex.Hide then tex:Hide() end
-                local m = f and rawget(f, "portraitModel")
-                if m and m.Show then m:Show() end
-            else
-                local m = f and rawget(f, "portraitModel")
-                if m and m.Hide then m:Hide() end
-            end
-            return
+local function _3DP_SyncVisibility(f)
+    if not f then return end
+    local conf = LookupConfForFrame(f)
+    if type(conf) ~= "table" then return end
+    if IsPortraitModeActive(conf) then
+        if Want3D(conf) then
+            local tex = f.portrait
+            if tex and tex.Hide then tex:Hide() end
+            local m = rawget(f, "portraitModel")
+            if m and m.Show then m:Show() end
+        else
+            local m = rawget(f, "portraitModel")
+            if m and m.Hide then m:Hide() end
         end
-        -- OFF: hard hide both.
-        if f and f.portrait and f.portrait.Hide then f.portrait:Hide() end
-        local m = f and rawget(f, "portraitModel")
-        if m and m.Hide then m:Hide() end
-    end)
+        return
+    end
+    -- OFF: hard hide both.
+    if f.portrait and f.portrait.Hide then f.portrait:Hide() end
+    local m = rawget(f, "portraitModel")
+    if m and m.Hide then m:Hide() end
 end
+_G.MSUF_3DPortraits_SyncVisibility = _3DP_SyncVisibility
 
 -- ------------------------------------------------------------
 -- Optional debug helper

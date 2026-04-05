@@ -361,7 +361,6 @@ local function GetClassPowerType()
     elseif PLAYER_CLASS == "MAGE" then
         local spec = GetSpec and GetSpec()
         if spec == CPK.SPEC.MAGE_ARCANE then return PT.ArcaneCharges, CPK.MODE.SEGMENTED, false end
-        if spec == CPK.SPEC.MAGE_FROST then return "ICICLES", CPK.MODE.AURA_SEGMENTED, true end
 
     elseif PLAYER_CLASS == "MONK" then
         local spec = GetSpec and GetSpec()
@@ -837,6 +836,7 @@ local CP_UpdateValues_RuneCD
 local CP_UpdateValues_TimerBar
 local CP_UpdateValues_Stagger
 local CP_StopEssenceOnUpdates
+local _essenceRuntimeTick
 
 do
     local commonEnv = {
@@ -868,6 +868,7 @@ do
     local segmented = CP_CallBuilder(CPModeBuilders.SEGMENTED, commonEnv)
     if segmented and type(segmented.Update) == "function" then CP_UpdateValues = segmented.Update end
     if segmented and type(segmented.StopEssenceOnUpdates) == "function" then CP_StopEssenceOnUpdates = segmented.StopEssenceOnUpdates end
+    if segmented and type(segmented.RuntimeTick) == "function" then _essenceRuntimeTick = segmented.RuntimeTick end
     local fractional = CP_CallBuilder(CPModeBuilders.FRACTIONAL, commonEnv)
     if fractional and type(fractional.Update) == "function" then CP_UpdateValues_Fractional = fractional.Update end
     local aura = CP_CallBuilder(CPModeBuilders.AURA, commonEnv)
@@ -928,13 +929,43 @@ _G.MSUF_CDM_GetScaledWidth = CDM_GetScaledWidth
 
 -- ============================================================================
 -- CPK.MODE.RUNE_CD / CPK.MODE.TIMER_BAR
+-- ============================================================================
 -- Phase 3 CP split: rune + timer mode runners now live in
 -- ClassPower/Modes/MSUF_CP_Mode_Rune.lua and MSUF_CP_Mode_Timer.lua.
--- The core keeps only light orchestration wrappers so runtime behavior stays
--- identical while the main chunk gets smaller and safer.
+-- Unified CP tick: single OnUpdate frame drives all mode animations.
 -- ============================================================================
 local CP_StopRuneOnUpdates
 local SetTimerBarOnUpdate
+
+-- Central CP runtime tick (unified driver for Rune/Essence/Timer animations).
+local _cpTickFrame
+local _cpTickActive = false
+local _cpTickFn = nil
+
+local function CP_CentralTickOnUpdate(_, elapsed)
+    if _cpTickFn then _cpTickFn(elapsed) end
+end
+
+local function CP_StartCentralTick(tickFn)
+    _cpTickFn = tickFn
+    if not _cpTickActive then
+        if not _cpTickFrame then _cpTickFrame = CreateFrame("Frame") end
+        _cpTickFrame:SetScript("OnUpdate", CP_CentralTickOnUpdate)
+        _cpTickActive = true
+    elseif _cpTickFn ~= tickFn then
+        -- Mode switch mid-tick: just swap function, no SetScript churn.
+    end
+end
+
+local function CP_StopCentralTick()
+    if not _cpTickActive then return end
+    _cpTickFn = nil
+    _cpTickFrame:SetScript("OnUpdate", nil)
+    _cpTickActive = false
+end
+
+local _runeRuntimeTick
+local _timerRuntimeTick
 
 do
     local commonEnv = {
@@ -959,31 +990,53 @@ do
     if rune then
         if type(rune.Update) == "function" then CP_UpdateValues_RuneCD = rune.Update end
         if type(rune.StopOnUpdates) == "function" then CP_StopRuneOnUpdates = rune.StopOnUpdates end
+        if type(rune.RuntimeTick) == "function" then _runeRuntimeTick = rune.RuntimeTick end
     end
 
     local timer = CP_CallBuilder(CPModeBuilders.TIMER, commonEnv)
     if timer then
         if type(timer.Update) == "function" then CP_UpdateValues_TimerBar = timer.Update end
         if type(timer.SetOnUpdate) == "function" then SetTimerBarOnUpdate = timer.SetOnUpdate end
+        if type(timer.RuntimeTick) == "function" then _timerRuntimeTick = timer.RuntimeTick end
     end
 end
 
 local function CP_SyncRuntimeOnUpdates(timerActive)
-    if CP.renderMode == CPK.MODE.RUNE_CD then
-        if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
+    local mode = CP.renderMode
+
+    -- Determine active tick function based on current mode + animation state.
+    if mode == CPK.MODE.RUNE_CD then
+        -- Rune mode: stop others, tick runes if any active.
         if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
+        if CP.runeOUAAny and _runeRuntimeTick then
+            CP_StartCentralTick(_runeRuntimeTick)
+        else
+            CP_StopCentralTick()
+        end
         return
     end
 
+    -- Not rune mode: stop rune animations.
     if CP.runeOUAAny and CP_StopRuneOnUpdates then
         CP_StopRuneOnUpdates(false)
     end
 
-    if CP.renderMode == CPK.MODE.TIMER_BAR then
-        if SetTimerBarOnUpdate then SetTimerBarOnUpdate(timerActive == true) end
+    if mode == CPK.MODE.TIMER_BAR then
         if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
+        if SetTimerBarOnUpdate then SetTimerBarOnUpdate(timerActive == true) end
+        if timerActive and _timerRuntimeTick then
+            CP_StartCentralTick(_timerRuntimeTick)
+        else
+            CP_StopCentralTick()
+        end
     else
         if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
+        -- SEGMENTED mode: essence may tick.
+        if CP.essenceOUAAny and _essenceRuntimeTick then
+            CP_StartCentralTick(_essenceRuntimeTick)
+        else
+            CP_StopCentralTick()
+        end
     end
 end
 
@@ -1324,8 +1377,6 @@ local function FullRefresh()
                 CP.spStacks = 0
                 CP.spExpires = nil
                 CP.spCachedQ = -1
-            elseif powerType == "ICICLES" then
-                maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
             else
                 maxP = 10
             end
@@ -1396,6 +1447,7 @@ local function FullRefresh()
         end
         if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
         if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
+        CP_StopCentralTick()
         if CP.container then
             CP.container:Hide()
         end

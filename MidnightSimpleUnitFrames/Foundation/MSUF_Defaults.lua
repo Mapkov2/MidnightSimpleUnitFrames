@@ -368,10 +368,29 @@ end
     else -- unified
         g.darkMode = false
         g.useClassColors = false
+    end
+    -- NPC Color Mode: "reaction" (classic friendly/neutral/enemy) or "type" (boss/miniboss/caster/melee/regular).
+    -- When "type", enemy NPC health bars in barMode "class" show classification-based colors.
+    if g.npcColorMode == nil then
+        g.npcColorMode = "reaction"
+    end
+    if g.npcColorMode ~= "reaction" and g.npcColorMode ~= "type" then
+        g.npcColorMode = "reaction"
+    end
+    if g.npcTypeColorBar == nil then
+        g.npcTypeColorBar = true
+    end
+    if g.npcTypeColorText == nil then
+        g.npcTypeColorText = true
+    end
+    -- Per-unit NPC Type enable (nil/true = on, false = off)
+    if g.npcTypeTarget == nil then g.npcTypeTarget = true end
+    if g.npcTypeFocus  == nil then g.npcTypeFocus  = true end
+    if g.npcTypeBoss   == nil then g.npcTypeBoss   = true end
+    if g.npcTypeToT    == nil then g.npcTypeToT    = true end
         if type(g.unifiedBarR) ~= "number" then g.unifiedBarR = 0.10 end
         if type(g.unifiedBarG) ~= "number" then g.unifiedBarG = 0.60 end
         if type(g.unifiedBarB) ~= "number" then g.unifiedBarB = 0.90 end
-    end
     if g.useBarBorder == nil then
         g.useBarBorder = true
     end

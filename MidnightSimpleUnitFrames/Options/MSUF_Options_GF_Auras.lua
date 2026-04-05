@@ -1454,6 +1454,167 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end
 
     ----------------------------------------------------------------
+    -- Section: Corner Indicators
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(320, L["Corner Indicators"] or "Corner Indicators", false, "ci")
+
+        -- Helper: read/write directly from conf (not auras sub-table)
+        local function CIV(key)
+            local conf = GF.GetConf(K())
+            return conf and conf[key]
+        end
+        local function CIW(key, val)
+            local conf = GF.GetConf(K())
+            if conf then conf[key] = val end
+            GF.RefreshVisuals()
+        end
+
+        -- Enable toggle
+        local enChk = SCheck({
+            name = "MSUF_GF_CIEnable", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = L["Enable"] or "Enable",
+            get = function() return CIV("ciEnabled") ~= false end,
+            set = function(_, v) CIW("ciEnabled", v and true or false) end,
+        })
+
+        -- Slot category items
+        local CI_CATS = GF.CI_CATEGORIES or {
+            { key = "none",    label = "None"        },
+            { key = "dispel",  label = "Dispellable"  },
+            { key = "boss",    label = "Boss Debuff"   },
+            { key = "missing", label = "Missing Buff"  },
+            { key = "custom",  label = "Custom Spell"  },
+        }
+
+        -- Slot labels for display
+        local SLOT_LABELS = {
+            TL = L["Top Left"]     or "Top Left",
+            TR = L["Top Right"]    or "Top Right",
+            BL = L["Bottom Left"]  or "Bottom Left",
+            BR = L["Bottom Right"] or "Bottom Right",
+            C  = L["Center"]       or "Center",
+        }
+
+        -- Build 5 slot dropdowns
+        local prevRow = nil
+        for idx, sk in ipairs(GF.CI_SLOT_KEYS or {"TL","TR","BL","BR","C"}) do
+            local dbKey = "ciSlot" .. sk
+            local row = RowFrame(body, prevRow, idx == 1 and 36 or 2)
+            RowLabel(row, SLOT_LABELS[sk] or sk)
+            local btn = CreateFrame("Button", nil, row, "BackdropTemplate")
+            btn:SetSize(DD_W, 20)
+            btn:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+            btn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+            btn:SetBackdropColor(0.10, 0.14, 0.22, 1)
+            btn:SetBackdropBorderColor(0.20, 0.30, 0.50, 0.7)
+            local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
+            fs:SetTextColor(0.40, 0.67, 0.93, 1)
+            local function RefreshDD()
+                local cur = CIV(dbKey) or "none"
+                for _, item in ipairs(CI_CATS) do
+                    if item.key == cur then fs:SetText(item.label or item.key); return end
+                end
+                fs:SetText(tostring(cur))
+            end
+            RefreshDD()
+            btn:SetScript("OnClick", function()
+                local cur = CIV(dbKey) or "none"
+                local nextIdx = 1
+                for ci, item in ipairs(CI_CATS) do
+                    if item.key == cur then nextIdx = ci + 1; break end
+                end
+                if nextIdx > #CI_CATS then nextIdx = 1 end
+                CIW(dbKey, CI_CATS[nextIdx].key)
+                RefreshDD()
+            end)
+            _auraRefreshFns[#_auraRefreshFns + 1] = RefreshDD
+            prevRow = row
+        end
+
+        -- Size slider
+        do
+            local row = RowFrame(body, prevRow, 6)
+            RowLabel(row, L["Icon Size: %d"] and string.format(L["Icon Size: %d"], 8) or "Size")
+            local valFS = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            valFS:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+            valFS:SetJustifyH("RIGHT")
+            local sl = CreateFrame("Slider", nil, row, "OptionsSliderTemplate")
+            sl:SetSize(SL_W, 14)
+            sl:SetPoint("RIGHT", valFS, "LEFT", -8, 0)
+            sl:SetMinMaxValues(4, 20)
+            sl:SetValueStep(1)
+            sl:SetObeyStepOnDrag(true)
+            sl:SetValue(CIV("ciSize") or 8)
+            if sl.Text then sl.Text:SetText("") end
+            if sl.Low  then sl.Low:SetText("")  end
+            if sl.High then sl.High:SetText("") end
+            valFS:SetText(tostring(math_floor((CIV("ciSize") or 8) + 0.5)))
+            sl:SetScript("OnValueChanged", function(self, v)
+                v = math_floor(v + 0.5)
+                valFS:SetText(tostring(v))
+                CIW("ciSize", v)
+            end)
+            _auraRefreshFns[#_auraRefreshFns + 1] = function()
+                local v = CIV("ciSize") or 8
+                sl:SetValue(v)
+                valFS:SetText(tostring(math_floor(v + 0.5)))
+            end
+            local _styleSl = _G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
+            if _styleSl then _styleSl(sl) end
+            prevRow = row
+        end
+
+        -- Alpha slider
+        do
+            local row = RowFrame(body, prevRow, 2)
+            RowLabel(row, "Alpha")
+            local valFS = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            valFS:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+            valFS:SetJustifyH("RIGHT")
+            local sl = CreateFrame("Slider", nil, row, "OptionsSliderTemplate")
+            sl:SetSize(SL_W, 14)
+            sl:SetPoint("RIGHT", valFS, "LEFT", -8, 0)
+            sl:SetMinMaxValues(10, 100)
+            sl:SetValueStep(5)
+            sl:SetObeyStepOnDrag(true)
+            local cur = math_floor(((CIV("ciAlpha") or 1.0) * 100) + 0.5)
+            sl:SetValue(cur)
+            if sl.Text then sl.Text:SetText("") end
+            if sl.Low  then sl.Low:SetText("")  end
+            if sl.High then sl.High:SetText("") end
+            valFS:SetText(tostring(cur) .. "%")
+            sl:SetScript("OnValueChanged", function(self, v)
+                v = math_floor(v + 0.5)
+                valFS:SetText(tostring(v) .. "%")
+                CIW("ciAlpha", v / 100)
+            end)
+            _auraRefreshFns[#_auraRefreshFns + 1] = function()
+                local v = math_floor(((CIV("ciAlpha") or 1.0) * 100) + 0.5)
+                sl:SetValue(v)
+                valFS:SetText(tostring(v) .. "%")
+            end
+            local _styleSl = _G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
+            if _styleSl then _styleSl(sl) end
+            prevRow = row
+        end
+
+        -- Class buff info label
+        do
+            local buffName = GF.CI_CLASS_BUFF_NAME
+            local infoFS = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            infoFS:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 6, -8)
+            if buffName then
+                infoFS:SetText("|cff888888" .. (L["Missing Class Buff tracks:"] or "Missing Class Buff tracks:") .. " |cffaaddff" .. buffName)
+            else
+                infoFS:SetText("|cff666666" .. (L["Your class has no raid-wide buff to track."] or "Your class has no raid-wide buff to track."))
+            end
+        end
+    end
+
+    ----------------------------------------------------------------
     -- Aura Utilities (copy + dynamic scale + import/export)
     ----------------------------------------------------------------
     do
@@ -1492,6 +1653,11 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             if srcConf.auras then dstConf.auras = DeepCopy(srcConf.auras) end
             if srcConf.privateAuras then dstConf.privateAuras = DeepCopy(srcConf.privateAuras) end
             if srcConf.spellIndicators then dstConf.spellIndicators = DeepCopy(srcConf.spellIndicators) end
+            -- Corner Indicators
+            for _, ck in ipairs({"ciEnabled","ciSize","ciAlpha",
+                "ciSlotTL","ciSlotTR","ciSlotBL","ciSlotBR","ciSlotC"}) do
+                if srcConf[ck] ~= nil then dstConf[ck] = srcConf[ck] end
+            end
             GF.RefreshVisuals()
         end
 
