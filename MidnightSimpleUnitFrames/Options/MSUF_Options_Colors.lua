@@ -257,6 +257,16 @@ function ns.MSUF_RegisterColorsOptions_Full(parentCategory)
     local ResetAllClassColors         = _api.ResetAllClassColors
     local ResetClassBarBgColor        = _api.ResetClassBarBgColor
     local ResetAllNPCColors           = _api.ResetAllNPCColors
+    local GetNPCColorMode             = _api.GetNPCColorMode
+    local SetNPCColorMode             = _api.SetNPCColorMode
+    local GetNPCTypeColorBar          = _api.GetNPCTypeColorBar
+    local SetNPCTypeColorBar          = _api.SetNPCTypeColorBar
+    local GetNPCTypeColorText         = _api.GetNPCTypeColorText
+    local SetNPCTypeColorText         = _api.SetNPCTypeColorText
+    local ResetNPCTypeColors          = _api.ResetNPCTypeColors
+    local NPC_TYPE_UNITS              = _api.NPC_TYPE_UNITS
+    local GetNPCTypePerUnit           = _api.GetNPCTypePerUnit
+    local SetNPCTypePerUnit           = _api.SetNPCTypePerUnit
 
     local scrollFrame = CreateFrame("ScrollFrame", "MSUF_ColorsScrollFrame", panel, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
@@ -1188,10 +1198,159 @@ end
     end -- section 5 (Unitframe Colors)
 
     --------------------------------------------------
+    -- Section 5t: NPC Type Colors
+    --------------------------------------------------
+    S.sec5tBox, S.sec5tBody = F.MakeCollapsibleSection(content, 380, "NPC Type Colors", false)
+    S.sec5tBox:SetPoint("TOPLEFT", S.sec5Box, "BOTTOMLEFT", 0, -6)
+    do local content = S.sec5tBody
+
+    local rowH     = 22
+    local startY   = -8
+    local labelX   = 0
+    local swatchX  = 220
+    local swatchW  = 120
+
+    -- Master enable toggle
+    local enableCB = CreateFrame("CheckButton", "MSUF_Colors_NPCTypeEnableCB", content, "UICheckButtonTemplate")
+    enableCB:SetPoint("TOPLEFT", content, "TOPLEFT", 8, -4)
+    local enableText = enableCB:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    enableText:SetPoint("LEFT", enableCB, "RIGHT", 2, 0)
+    enableText:SetText("Enable NPC Type Colors (Boss / Caster / Melee ...)")
+    enableCB:SetChecked(GetNPCColorMode() == "type")
+
+    -- Sub-toggle: Color HP bar
+    local barCB = CreateFrame("CheckButton", "MSUF_Colors_NPCTypeColorBarCB", content, "UICheckButtonTemplate")
+    barCB:SetPoint("TOPLEFT", enableCB, "BOTTOMLEFT", 16, 2)
+    local barText = barCB:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    barText:SetPoint("LEFT", barCB, "RIGHT", 2, 0)
+    barText:SetText("Color HP bar (Class Color mode only)")
+    barCB:SetChecked(GetNPCTypeColorBar())
+    barCB:SetScript("OnClick", function(btn) SetNPCTypeColorBar(btn:GetChecked()) end)
+
+    -- Sub-toggle: Color name text
+    local textCB = CreateFrame("CheckButton", "MSUF_Colors_NPCTypeColorTextCB", content, "UICheckButtonTemplate")
+    textCB:SetPoint("TOPLEFT", barCB, "BOTTOMLEFT", 0, 2)
+    local textTxt = textCB:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    textTxt:SetPoint("LEFT", textCB, "RIGHT", 2, 0)
+    textTxt:SetText("Color name text")
+    textCB:SetChecked(GetNPCTypeColorText())
+    textCB:SetScript("OnClick", function(btn) SetNPCTypeColorText(btn:GetChecked()) end)
+
+    -- Apply-to label
+    local applyLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    applyLabel:SetPoint("TOPLEFT", textCB, "BOTTOMLEFT", 0, -4)
+    applyLabel:SetText("Apply to:")
+
+    -- Per-unit checkboxes (2-column layout)
+    local perUnitCBs = {}
+    for i, info in ipairs(NPC_TYPE_UNITS) do
+        local cb = CreateFrame("CheckButton", "MSUF_Colors_NPCTypeUnit_" .. info.key, content, "UICheckButtonTemplate")
+        local col = ((i - 1) % 2)   -- 0 or 1
+        local row = math.floor((i - 1) / 2) -- 0, 1, ...
+        cb:SetPoint("TOPLEFT", applyLabel, "BOTTOMLEFT", 16 + col * 180, -2 - row * 22)
+        local txt = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        txt:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+        txt:SetText(info.label)
+        cb:SetChecked(GetNPCTypePerUnit(info.key))
+        cb:SetScript("OnClick", function(btn) SetNPCTypePerUnit(info.key, btn:GetChecked()) end)
+        perUnitCBs[#perUnitCBs + 1] = cb
+    end
+
+    -- Info label
+    local infoText = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    infoText:SetPoint("TOPLEFT", applyLabel, "BOTTOMLEFT", 0, -48)
+    infoText:SetWidth(520)
+    infoText:SetJustifyH("LEFT")
+    infoText:SetText("HP bar coloring requires Class Color bar mode. Active in 5-man dungeons only. Name text works in all bar modes.")
+
+    -- Anchor for swatch rows
+    local header = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    header:SetPoint("TOPLEFT", infoText, "BOTTOMLEFT", -4, -8)
+    header:SetText("")
+    header:SetHeight(1)
+
+    local NPC_TYPE_SWATCHES = {
+        { key = "npcBoss",     label = "Boss",     row = 0 },
+        { key = "npcMiniboss", label = "Miniboss / Lieutenant", row = 1 },
+        { key = "npcCaster",   label = "Caster",   row = 2 },
+        { key = "npcMelee",    label = "Melee",    row = 3 },
+        { key = "npcRegular",  label = "Regular",  row = 4 },
+    }
+
+    for _, info in ipairs(NPC_TYPE_SWATCHES) do
+        local lbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        lbl:SetPoint("TOPLEFT", header, "BOTTOMLEFT", labelX, startY - info.row * rowH)
+        lbl:SetJustifyH("LEFT")
+        lbl:SetText(info.label)
+
+        local sw = CreateFrame("Button", "MSUF_Colors_NPCType_" .. info.key, content)
+        sw:SetSize(swatchW, 16)
+        sw:SetPoint("TOPLEFT", header, "BOTTOMLEFT", swatchX, startY - info.row * rowH)
+
+        local tex = sw:CreateTexture(nil, "ARTWORK")
+        tex:SetAllPoints()
+        local cr, cg, cb = GetNPCColor(info.key)
+        tex:SetColorTexture(cr, cg, cb)
+
+        S["npcType_" .. info.key .. "_tex"] = tex
+
+        sw:SetScript("OnClick", function()
+            local r, g, b = GetNPCColor(info.key)
+            OpenColorPicker(r, g, b, function(nr, ng, nb)
+                SetNPCColor(info.key, nr, ng, nb)
+                tex:SetColorTexture(nr, ng, nb)
+            end)
+        end)
+    end
+
+    -- Grey out swatches + sub-toggles when master is disabled
+    local function UpdateNPCTypeEnabled()
+        local enabled = enableCB:GetChecked()
+        for _, info in ipairs(NPC_TYPE_SWATCHES) do
+            local sw = _G["MSUF_Colors_NPCType_" .. info.key]
+            if sw then
+                sw:EnableMouse(enabled)
+                sw:SetAlpha(enabled and 1 or 0.35)
+            end
+        end
+        barCB:EnableMouse(enabled);   barCB:SetAlpha(enabled and 1 or 0.5)
+        textCB:EnableMouse(enabled);  textCB:SetAlpha(enabled and 1 or 0.5)
+        for _, cb in ipairs(perUnitCBs) do
+            cb:EnableMouse(enabled); cb:SetAlpha(enabled and 1 or 0.5)
+        end
+    end
+
+    enableCB:SetScript("OnClick", function(btn)
+        SetNPCColorMode(btn:GetChecked() and "type" or "reaction")
+        UpdateNPCTypeEnabled()
+    end)
+    UpdateNPCTypeEnabled()
+
+    -- Reset button
+    local resetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    resetBtn:SetSize(180, 22)
+    resetBtn:SetPoint("TOPLEFT", header, "BOTTOMLEFT", labelX, startY - #NPC_TYPE_SWATCHES * rowH - 4)
+    resetBtn:SetText("Reset NPC Type Colors")
+    resetBtn:SetScript("OnClick", function()
+        MSUF_ConfirmColorReset("NPC type colors", function()
+            ResetNPCTypeColors()
+            for _, info in ipairs(NPC_TYPE_SWATCHES) do
+                local t = S["npcType_" .. info.key .. "_tex"]
+                if t then
+                    local r, g, b = GetNPCColor(info.key)
+                    t:SetColorTexture(r, g, b)
+                end
+            end
+        end)
+    end)
+
+    end -- section 5t (NPC Type Colors)
+
+    --------------------------------------------------
     -- Section 5b: Bar Colors
     --------------------------------------------------
     S.sec5bBox, S.sec5bBody = F.MakeCollapsibleSection(content, 220, "Bar Colors", false)
-    S.sec5bBox:SetPoint("TOPLEFT", S.sec5Box, "BOTTOMLEFT", 0, -6)
+    S.sec5bBox:SetPoint("TOPLEFT", S.sec5tBox, "BOTTOMLEFT", 0, -6)
     do local content = S.sec5bBody
 
     local barLabelX     = 0

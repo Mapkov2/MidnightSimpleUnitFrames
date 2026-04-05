@@ -3761,6 +3761,37 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key, g_opt)
                         kind = "neutral"
                     end
                 end
+                -- NPC Type override: self-contained classification
+                if kind == "enemy" and cache and cache.npcColorMode == "type" and cache.npcTypeColorBar
+                   and _G.MSUF_NpcTypeInstanceActive then
+                    -- Per-unit gate
+                    local unitOK = true
+                    if key == "target" then unitOK = cache.npcTypeTarget
+                    elseif key == "focus" then unitOK = cache.npcTypeFocus
+                    elseif key == "targettarget" then unitOK = cache.npcTypeToT
+                    elseif key and key:sub(1,4) == "boss" then unitOK = cache.npcTypeBoss
+                    end
+                    if unitOK then
+                    local cls = UnitClassification(unit)
+                    if cls == "worldboss" or cls == "boss" then
+                        kind = "npcBoss"
+                    elseif cls == "elite" or cls == "rareelite" then
+                        local lvl = UnitEffectiveLevel and UnitEffectiveLevel(unit) or 0
+                        if lvl == -1 then
+                            kind = "npcBoss"
+                        elseif UnitIsLieutenant and UnitIsLieutenant(unit) then
+                            kind = "npcMiniboss"
+                        else
+                            local uc = UnitClassBase and UnitClassBase(unit)
+                            kind = (uc == "PALADIN") and "npcCaster" or "npcMelee"
+                        end
+                    elseif cls == "rare" then
+                        kind = "npcMiniboss"
+                    else
+                        kind = "npcRegular"
+                    end
+                    end -- unitOK
+                end
                 if type(fastNPC) == "function" then
                     barR, barG, barB = fastNPC(kind)
                 else
