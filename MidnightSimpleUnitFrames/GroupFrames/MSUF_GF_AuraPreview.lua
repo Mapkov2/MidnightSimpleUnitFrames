@@ -193,7 +193,14 @@ do
         local rx = max(0, min(1, (hCX - mL) / mW))
         local ry = max(0, min(1, (mT - hCY) / mH))
 
-        local anchor = ResolveAnchor(rx, ry)
+        -- If handle has a fixed anchor from config, keep it; otherwise resolve from position
+        local anchor
+        if self._getCurrentAnchor then
+            anchor = self._getCurrentAnchor()
+        end
+        if not anchor then
+            anchor = ResolveAnchor(rx, ry)
+        end
         local offX, offY = CalcOffset(self, _mockFrame, anchor)
 
         self:ClearAllPoints()
@@ -673,6 +680,12 @@ local function BuildAuraGroupHandles(mockFrame)
             conf.auras[grp.key].y = floor(offY / sc + 0.5)
             GF.RefreshVisuals()
         end
+        handle._getCurrentAnchor = function()
+            local kind = _getKind and _getKind() or "party"
+            local conf = GF.GetConf(kind)
+            local ac = conf.auras and conf.auras[grp.key]
+            return ac and ac.anchor or grp.defAnchor
+        end
         _handles[grp.key] = handle
     end
 end
@@ -698,6 +711,11 @@ local function BuildStatusIconHandles(mockFrame)
             conf[spec.xKey] = floor(offX / sc + 0.5)
             conf[spec.yKey] = floor(offY / sc + 0.5)
             GF.RefreshVisuals()
+        end
+        handle._getCurrentAnchor = function()
+            local kind = _getKind and _getKind() or "party"
+            local conf = GF.GetConf(kind)
+            return conf[spec.anchorKey] or spec.defAnchor
         end
         _statusHandles[spec.key] = handle
     end
@@ -818,6 +836,15 @@ function GF.RebuildSIHandles()
                 entry.placed.y = floor(oy / dsc + 0.5)
                 GF.RefreshVisuals()
             end
+            h._getCurrentAnchor = function()
+                local k = _getKind and _getKind() or "party"
+                local c = GF.GetConf(k)
+                local si = c.spellIndicators
+                local sp = si and si.specs and si.specs[capturedSpec]
+                local e = sp and sp[capturedSpell]
+                local p = e and e.placed
+                return p and p.anchor
+            end
         end
     end
 end
@@ -838,6 +865,12 @@ local function BuildPrivateAuraHandle(mockFrame)
         conf.privateAuras.x = floor(offX / sc + 0.5)
         conf.privateAuras.y = floor(offY / sc + 0.5)
         GF.RefreshVisuals()
+    end
+    handle._getCurrentAnchor = function()
+        local kind = _getKind and _getKind() or "party"
+        local conf = GF.GetConf(kind)
+        local pa = conf.privateAuras
+        return pa and pa.anchor or "BOTTOM"
     end
     _handles.private = handle
 end
@@ -1340,6 +1373,7 @@ do
             if _box and _box:IsShown() then
                 GF.RefreshPreviewBox()
                 GF.ResizePreviewContainer()
+                if GF._RefreshOptionWidgets then GF._RefreshOptionWidgets() end
             end
         end
     end

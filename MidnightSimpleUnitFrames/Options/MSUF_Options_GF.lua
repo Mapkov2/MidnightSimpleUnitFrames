@@ -136,6 +136,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             if type(fn) == "function" then fn() end
         end
     end
+    GF._RefreshOptionWidgets = RefreshAllWidgets
 
     -- Track widgets that need scope-refresh
     local function TrackRefresh(widget)

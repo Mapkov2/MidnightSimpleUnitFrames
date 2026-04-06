@@ -23,6 +23,7 @@ local math_min      = math.min
 local math_max      = math.max
 local math_ceil     = math.ceil
 local math_floor    = math.floor
+local GameTooltip   = _G.GameTooltip
 
 ------------------------------------------------------------------------
 -- Class-based dispel detection (set once at load)
@@ -169,7 +170,27 @@ end
 local function CreateAuraIcon(parent, size)
     local icon = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     icon:SetSize(size, size)
-    icon:EnableMouse(false)
+
+    -- Tooltip: hover only, clicks pass through to unit frame beneath
+    if icon.SetMouseMotionEnabled then
+        icon:SetMouseMotionEnabled(true)
+        icon:SetMouseClickEnabled(false)
+    else
+        icon:EnableMouse(true)
+    end
+    icon:SetScript("OnEnter", function(self)
+        local unit = self._msufUnit
+        local aid  = self._msufAuraID
+        if not unit or not aid then return end
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+        if GameTooltip.SetUnitAuraByAuraInstanceID then
+            GameTooltip:SetUnitAuraByAuraInstanceID(unit, aid, self._msufFilter or "HELPFUL")
+        end
+        GameTooltip:Show()
+    end)
+    icon:SetScript("OnLeave", function(self)
+        if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
 
     -- Icon texture — NO SetTexCoord (EQoL pattern: secret icons render via C-side)
     local tex = icon:CreateTexture(nil, "ARTWORK")
@@ -642,6 +663,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                         else
                             -- ══ DIFFERENT AURA OR FIRST SHOW ══
                             ic._msufAuraID = aid
+                            ic._msufUnit   = unit
+                            ic._msufFilter = filter
                             ic._msufBorderBlack = nil
 
                             ic.texture:SetTexture(aura.icon or "")
@@ -696,6 +719,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
             ic._msufPosIdx = nil
             ic._msufBorderBlack = nil
             ic._msufAuraID = nil
+            ic._msufUnit = nil
+            ic._msufFilter = nil
         end
     end
     return shown, topDispel
