@@ -23,8 +23,26 @@ local max           = math.max
 local min           = math.min
 
 local L  = ns.L or setmetatable({}, { __index = function(_, k) return k end })
+local GameTooltip = _G.GameTooltip
 local SI = GF.SpellIndicators or (_G.MSUF_GF_SpellIndicators)
 local W8 = "Interface\\Buttons\\WHITE8x8"
+
+------------------------------------------------------------------------
+-- Health text sample strings for preview (per text-mode key)
+------------------------------------------------------------------------
+local HP_SAMPLES = {
+    NONE = "", PERCENT = "72%", CURRENT = "148.2k", MAX = "205.8k",
+    DEFICIT = "-57.6k", CURMAX = "148.2k / 205.8k",
+    CURPERCENT = "148.2k 72%", CURMAXPERCENT = "148k/205k 72%",
+    MAXPERCENT = "205.8k 72%", PERCENTCUR = "72% 148.2k",
+    PERCENTMAX = "72% 205.8k", PERCENTCURMAX = "72% 148k/205k",
+}
+
+------------------------------------------------------------------------
+-- Visibility toggles state (cold-path, UI only)
+------------------------------------------------------------------------
+local _visToggles = { buff = true, debuff = true, externals = true,
+    status = true, si = true, private = true, rdebuffs = true }
 
 ------------------------------------------------------------------------
 -- Anchor fraction table: x from left (0-1), y from bottom (0-1)
@@ -104,6 +122,7 @@ local HANDLE_COLORS = {
     si        = { 0.69, 0.50, 0.88 },
     status    = { 0.80, 0.67, 0.20 },
     private   = { 0.50, 0.50, 0.50 },
+    rdebuffs  = { 0.95, 0.35, 0.20 },
 }
 
 local STATUS_ICON_SPECS = {
@@ -140,6 +159,17 @@ local function SelectHandle(handle)
             _onSectionOpen(handle._sectionKey)
         end
     end
+    -- Dim non-selected handles
+    local dimAlpha = handle and 0.35 or 1
+    for _, h in pairs(_handles) do
+        if h ~= handle then h:SetAlpha(dimAlpha) else h:SetAlpha(1) end
+    end
+    for _, h in pairs(_statusHandles) do
+        if h ~= handle then h:SetAlpha(dimAlpha) else h:SetAlpha(1) end
+    end
+    for _, h in pairs(_siHandles) do
+        if h ~= handle then h:SetAlpha(dimAlpha) else h:SetAlpha(1) end
+    end
 end
 
 ------------------------------------------------------------------------
@@ -174,6 +204,10 @@ do
         _dragOffX = (self:GetLeft() or 0) - cx / s
         _dragOffY = (self:GetTop()  or 0) - cy / s
         self:SetFrameStrata("TOOLTIP")
+        -- Show snap guides
+        if _mockFrame and _mockFrame._snapLines then
+            for i = 1, 6 do _mockFrame._snapLines[i]:Show() end
+        end
     end
 
     local function DragStop(self, btn)
@@ -181,6 +215,10 @@ do
         _dragging   = false
         _dragHandle = nil
         self:SetFrameStrata(_dragOrigStrata)
+        -- Hide snap guides
+        if _mockFrame and _mockFrame._snapLines then
+            for i = 1, 6 do _mockFrame._snapLines[i]:Hide() end
+        end
         if not _mockFrame then return end
 
         local mL = _mockFrame:GetLeft()  or 0
@@ -246,6 +284,27 @@ local function CreateHandle(parent, key, sectionKey, w, h, colorKey)
     f._label = lbl
 
     GF._PreviewMakeDraggable(f)
+
+    -- Handle tooltip (shows anchor/offset/section)
+    f:HookScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(self._cfgKey or "?", 1, 1, 1)
+            if self._getCurrentAnchor then
+                local anc = self._getCurrentAnchor() or "?"
+                GameTooltip:AddLine("Anchor: " .. anc, 0.7, 0.7, 0.7)
+            end
+            if self._sectionKey then
+                GameTooltip:AddLine("Section: " .. self._sectionKey, 0.5, 0.5, 0.6)
+            end
+            GameTooltip:AddLine("Drag to reposition", 0.4, 0.4, 0.5)
+            GameTooltip:Show()
+        end
+    end)
+    f:HookScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+
     return f
 end
 
@@ -403,6 +462,60 @@ local function BuildMockFrame(parent)
 
     _mockFrame = f
     f._previewScale = scale
+
+    -- Corner indicator dots are lazy-created in RefreshPreviewHandles (BackdropTemplate frames)
+
+    -- Anchor reference dots (9 anchor positions, subtle guides)
+    do
+        local ANCHOR9_LIST = {
+            "TOPLEFT","TOP","TOPRIGHT","LEFT","CENTER","RIGHT",
+            "BOTTOMLEFT","BOTTOM","BOTTOMRIGHT",
+        }
+        f._anchorDots = {}
+        for _, pt in ipairs(ANCHOR9_LIST) do
+            local dot = f:CreateTexture(nil, "OVERLAY", nil, 1)
+            dot:SetSize(3, 3)
+            dot:SetColorTexture(0.5, 0.5, 0.7, 0.4)
+            dot:SetPoint(pt, f, pt,
+                pt:find("LEFT") and 1 or (pt:find("RIGHT") and -1 or 0),
+                pt:find("TOP") and -1 or (pt:find("BOTTOM") and 1 or 0))
+            f._anchorDots[pt] = dot
+        end
+    end
+
+    -- Target / aggro highlight border (glow overlay)
+    do
+        local hl = CreateFrame("Frame", nil, f)
+        hl:SetPoint("TOPLEFT", f, "TOPLEFT", -2, 2)
+        hl:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 2, -2)
+        hl:SetFrameLevel(f:GetFrameLevel() + 15)
+        local edges = {}
+        for i = 1, 4 do
+            edges[i] = hl:CreateTexture(nil, "OVERLAY")
+            edges[i]:SetColorTexture(1, 0.4, 0, 0.6)
+        end
+        edges[1]:SetPoint("TOPLEFT"); edges[1]:SetPoint("TOPRIGHT"); edges[1]:SetHeight(2)
+        edges[2]:SetPoint("BOTTOMLEFT"); edges[2]:SetPoint("BOTTOMRIGHT"); edges[2]:SetHeight(2)
+        edges[3]:SetPoint("TOPLEFT"); edges[3]:SetPoint("BOTTOMLEFT"); edges[3]:SetWidth(2)
+        edges[4]:SetPoint("TOPRIGHT"); edges[4]:SetPoint("BOTTOMRIGHT"); edges[4]:SetWidth(2)
+        f._hlBorder = hl
+        f._hlEdges = edges
+        hl:Hide()
+    end
+
+    -- Snap guide lines (horizontal + vertical at each anchor axis, shown during drag)
+    do
+        f._snapLines = {}
+        for i = 1, 6 do
+            local line = f:CreateTexture(nil, "OVERLAY", nil, 2)
+            line:SetColorTexture(0.35, 0.55, 0.85, 0.3)
+            line:Hide()
+            f._snapLines[i] = line
+        end
+        -- Lines 1-3: horizontal at top/center/bottom
+        -- Lines 4-6: vertical at left/center/right
+    end
+
     return f
 end
 
@@ -593,6 +706,9 @@ function GF.RefreshPreviewBox()
             local tr = conf.textRight or "NONE"
             local hpActive = (tl ~= "NONE" or tc ~= "NONE" or tr ~= "NONE")
             if hpActive then
+                -- Pick sample text from the first active slot
+                local activeMode = tc ~= "NONE" and tc or (tr ~= "NONE" and tr or tl)
+                m._hpFS:SetText(HP_SAMPLES[activeMode] or "72%")
                 m._hpFS:SetFont(fp, floor((conf.hpFontSize or 10) * sc + 0.5), ff)
                 m._hpFS:SetTextColor(fr, fg, fb, 0.9)
                 m._hpFS:SetShadowColor(0, 0, 0, 1); m._hpFS:SetShadowOffset(1, -1)
@@ -640,6 +756,48 @@ function GF.RefreshPreviewBox()
         elseif m._powerFS then
             m._powerFS:Hide()
         end
+    end
+
+    -- Corner indicators are refreshed in RefreshPreviewHandles (lazy-created BackdropTemplate frames)
+
+    -- Target/aggro highlight border
+    if m._hlBorder then
+        local hlEn = conf.targetHighlight ~= false or conf.aggroHighlight ~= false
+        if hlEn then
+            local r, g, b = 1, 0.4, 0
+            if conf.aggroHighlight ~= false then
+                r, g, b = 1, 0.2, 0.1  -- aggro red-orange
+            elseif conf.targetHighlight ~= false then
+                r, g, b = 1, 1, 1      -- target white
+            end
+            if m._hlEdges then
+                for i = 1, 4 do m._hlEdges[i]:SetColorTexture(r, g, b, 0.6) end
+            end
+            m._hlBorder:Show()
+        else
+            m._hlBorder:Hide()
+        end
+    end
+
+    -- Position snap guide lines (3 horizontal + 3 vertical at anchor axes)
+    if m._snapLines then
+        local mW = m:GetWidth() or 1
+        local mH = m:GetHeight() or 1
+        local lines = m._snapLines
+        -- Horizontal: top, center, bottom
+        lines[1]:ClearAllPoints(); lines[1]:SetPoint("TOPLEFT", m, "TOPLEFT", 0, 0)
+        lines[1]:SetSize(mW, 1)
+        lines[2]:ClearAllPoints(); lines[2]:SetPoint("LEFT", m, "LEFT", 0, 0)
+        lines[2]:SetSize(mW, 1)
+        lines[3]:ClearAllPoints(); lines[3]:SetPoint("BOTTOMLEFT", m, "BOTTOMLEFT", 0, 0)
+        lines[3]:SetSize(mW, 1)
+        -- Vertical: left, center, right
+        lines[4]:ClearAllPoints(); lines[4]:SetPoint("TOPLEFT", m, "TOPLEFT", 0, 0)
+        lines[4]:SetSize(1, mH)
+        lines[5]:ClearAllPoints(); lines[5]:SetPoint("TOP", m, "TOP", 0, 0)
+        lines[5]:SetSize(1, mH)
+        lines[6]:ClearAllPoints(); lines[6]:SetPoint("TOPRIGHT", m, "TOPRIGHT", 0, 0)
+        lines[6]:SetSize(1, mH)
     end
 
     -- Refresh handle positions from config
@@ -807,7 +965,7 @@ function GF.RebuildSIHandles()
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
             h:SetFrameLevel(_mockFrame:GetFrameLevel() + (siCfg.layer or 9))
-            h:Show()
+            h:SetShown(_visToggles.si ~= false)
 
             -- Drag writes to per-spell config (unscaled)
             local capturedSpec = specKey
@@ -876,6 +1034,53 @@ local function BuildPrivateAuraHandle(mockFrame)
 end
 
 ------------------------------------------------------------------------
+-- Build raid debuff preview handle (single large icon)
+------------------------------------------------------------------------
+local function BuildRaidDebuffHandle(mockFrame)
+    local handle = CreateHandle(mockFrame, "rdebuffs", "rdebuffs", 28, 28, "rdebuffs")
+    handle._label:SetPoint("BOTTOM", handle, "TOP", 0, 1)
+    handle._label:SetText("RaidDB")
+
+    -- Mock icon texture (skull-like preview)
+    local tex = handle:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints(handle)
+    tex:SetColorTexture(0.55, 0.12, 0.12, 1)
+    handle._rdTex = tex
+
+    -- Border overlay
+    local border = handle:CreateTexture(nil, "OVERLAY")
+    border:SetPoint("TOPLEFT", handle, "TOPLEFT", -1, 1)
+    border:SetPoint("BOTTOMRIGHT", handle, "BOTTOMRIGHT", 1, -1)
+    border:SetColorTexture(0.8, 0, 0, 0.6)
+    handle._rdBorder = border
+
+    -- "!" label to indicate priority debuff
+    local icon = handle:CreateFontString(nil, "OVERLAY")
+    icon:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
+    icon:SetPoint("CENTER")
+    icon:SetText("!")
+    icon:SetTextColor(1, 0.9, 0.2, 1)
+
+    handle._onDragFinish = function(anchor, offX, offY)
+        local sc = _mockFrame and _mockFrame._previewScale or 1
+        local kind = _getKind and _getKind() or "party"
+        local conf = GF.GetConf(kind)
+        if not conf.raidDebuffs then conf.raidDebuffs = {} end
+        conf.raidDebuffs.anchor = anchor
+        conf.raidDebuffs.x = floor(offX / sc + 0.5)
+        conf.raidDebuffs.y = floor(offY / sc + 0.5)
+        GF.RefreshVisuals()
+    end
+    handle._getCurrentAnchor = function()
+        local kind = _getKind and _getKind() or "party"
+        local conf = GF.GetConf(kind)
+        local rd = conf.raidDebuffs
+        return rd and rd.anchor or "CENTER"
+    end
+    _handles.rdebuffs = handle
+end
+
+------------------------------------------------------------------------
 -- Refresh all handle positions from config
 ------------------------------------------------------------------------
 function GF.RefreshPreviewHandles()
@@ -941,7 +1146,7 @@ function GF.RefreshPreviewHandles()
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
             h:SetFrameLevel(_mockFrame:GetFrameLevel() + (ac and ac.layer or (grpKey == "buff" and 5 or (grpKey == "debuff" and 6 or 7))))
-            h:SetShown(en)
+            h:SetShown(en and _visToggles[grpKey] ~= false)
             UpdateCoordDisplay(nil)
         end
     end
@@ -961,7 +1166,7 @@ function GF.RefreshPreviewHandles()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
             h:SetFrameLevel(baseLvl + layer)
             local en = conf[spec.key] ~= false
-            h:SetShown(en)
+            h:SetShown(en and _visToggles.status ~= false)
 
             -- Apply real texture
             local tex = h._statusTex
@@ -1029,7 +1234,25 @@ function GF.RefreshPreviewHandles()
             for pi = paMax + 1, #h._paIcons do
                 h._paIcons[pi]:Hide()
             end
-            h:SetShown(pa.enabled ~= false)
+            h:SetShown(pa.enabled ~= false and _visToggles.private ~= false)
+        end
+    end
+
+    -- Raid Debuffs handle
+    do
+        local h = _handles.rdebuffs
+        if h then
+            local rd = conf.raidDebuffs or {}
+            local anchor = rd.anchor or "CENTER"
+            local offX = floor(((rd.x) or 0) * sc + 0.5)
+            local offY = floor(((rd.y) or 0) * sc + 0.5)
+            local sz = floor(((rd.size) or 28) * sc + 0.5)
+            h:SetSize(max(6, sz), max(6, sz))
+            if h._rdTex then h._rdTex:SetPoint("TOPLEFT", h, "TOPLEFT", 1, -1); h._rdTex:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", -1, 1) end
+            h:ClearAllPoints()
+            h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
+            h:SetFrameLevel(_mockFrame:GetFrameLevel() + (rd.layer or 12))
+            h:SetShown(rd.enabled == true and _visToggles.rdebuffs ~= false)
         end
     end
 
@@ -1212,85 +1435,230 @@ end
 -- onSectionOpenFn: function(sectionKey) to auto-open accordion
 -- Returns: the container frame (for anchoring sections below)
 ------------------------------------------------------------------------
+
 function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     if _box then return _box end
     _getKind       = getKindFn
     _onSectionOpen = onSectionOpenFn
 
+    local sideW = 62
+
     -- Outer container
     local container = CreateFrame("Frame", "MSUF_GFPreviewContainer", parent, "BackdropTemplate")
-    container:SetSize(680, 260)
+    container:SetSize(680, 280)
     container:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
     container:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
         insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-    container:SetBackdropColor(0.06, 0.06, 0.08, 1)
-    container:SetBackdropBorderColor(0.18, 0.18, 0.22, 1)
+    container:SetBackdropColor(0.04, 0.04, 0.055, 1)
+    container:SetBackdropBorderColor(0.10, 0.10, 0.14, 0.7)
     _box = container
 
-    -- Header
-    local hdr = container:CreateFontString(nil, "OVERLAY")
-    hdr:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
-    hdr:SetPoint("TOPLEFT", container, "TOPLEFT", 10, -6)
-    hdr:SetText("FRAME PREVIEW \194\183 click element to configure \194\183 drag to reposition")
-    hdr:SetTextColor(0.45, 0.45, 0.55, 1)
+    -- Top accent line (thin colored stripe)
+    local accent = container:CreateTexture(nil, "ARTWORK", nil, 2)
+    accent:SetHeight(1)
+    accent:SetPoint("TOPLEFT", container, "TOPLEFT", 1, -1)
+    accent:SetPoint("TOPRIGHT", container, "TOPRIGHT", -1, -1)
+    accent:SetColorTexture(0.25, 0.45, 0.75, 0.35)
 
-    -- Class rotate button
-    local classBtn = CreateFrame("Button", nil, container, "BackdropTemplate")
-    classBtn:SetSize(60, 16)
-    classBtn:SetPoint("TOPRIGHT", container, "TOPRIGHT", -70, -4)
-    classBtn:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
-    classBtn:SetBackdropColor(0.12, 0.12, 0.16, 1)
-    classBtn:SetBackdropBorderColor(0.25, 0.25, 0.30, 1)
-    do
-        local cfs = classBtn:CreateFontString(nil, "OVERLAY")
-        cfs:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
-        cfs:SetPoint("CENTER", classBtn, "CENTER", 0, 0)
-        cfs:SetText("\226\134\187 Class")
-        cfs:SetTextColor(0.7, 0.7, 0.7, 1)
+    -- Header bar (elevated surface)
+    local headerBar = CreateFrame("Frame", nil, container, "BackdropTemplate")
+    headerBar:SetHeight(22)
+    headerBar:SetPoint("TOPLEFT", container, "TOPLEFT", 1, -2)
+    headerBar:SetPoint("TOPRIGHT", container, "TOPRIGHT", -1, -2)
+    headerBar:SetBackdrop({ bgFile = W8 })
+    headerBar:SetBackdropColor(0.065, 0.065, 0.085, 1)
+
+    local hdr = headerBar:CreateFontString(nil, "OVERLAY")
+    hdr:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+    hdr:SetPoint("LEFT", headerBar, "LEFT", 10, 0)
+    hdr:SetText("PREVIEW")
+    hdr:SetTextColor(0.55, 0.60, 0.72, 0.8)
+
+    local hint = headerBar:CreateFontString(nil, "OVERLAY")
+    hint:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+    hint:SetPoint("LEFT", hdr, "RIGHT", 8, 0)
+    hint:SetText("click to configure \194\183 drag to move")
+    hint:SetTextColor(0.32, 0.32, 0.40, 0.5)
+
+    -- Header separator
+    local sep = container:CreateTexture(nil, "ARTWORK", nil, 1)
+    sep:SetHeight(1)
+    sep:SetPoint("TOPLEFT", headerBar, "BOTTOMLEFT", 0, 0)
+    sep:SetPoint("TOPRIGHT", headerBar, "BOTTOMRIGHT", 0, 0)
+    sep:SetColorTexture(0.12, 0.12, 0.16, 0.5)
+
+    -- Styled header button helper
+    local function MakeHeaderBtn(label, w)
+        local btn = CreateFrame("Button", nil, headerBar, "BackdropTemplate")
+        btn:SetSize(w, 16)
+        btn:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+        btn:SetBackdropColor(0.10, 0.11, 0.15, 0.8)
+        btn:SetBackdropBorderColor(0.16, 0.16, 0.22, 0.5)
+        local fs = btn:CreateFontString(nil, "OVERLAY")
+        fs:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+        fs:SetPoint("CENTER")
+        fs:SetText(label)
+        fs:SetTextColor(0.50, 0.55, 0.65, 0.85)
+        btn:SetScript("OnEnter", function(self)
+            self:SetBackdropColor(0.14, 0.15, 0.20, 1)
+            self:SetBackdropBorderColor(0.25, 0.35, 0.55, 0.7)
+            fs:SetTextColor(0.65, 0.72, 0.85, 1)
+        end)
+        btn:SetScript("OnLeave", function(self)
+            self:SetBackdropColor(0.10, 0.11, 0.15, 0.8)
+            self:SetBackdropBorderColor(0.16, 0.16, 0.22, 0.5)
+            fs:SetTextColor(0.50, 0.55, 0.65, 0.85)
+        end)
+        return btn
     end
+
+    local classBtn = MakeHeaderBtn("\226\134\187 Class", 52)
+    classBtn:SetPoint("RIGHT", headerBar, "RIGHT", -56, 0)
     classBtn:SetScript("OnClick", function()
         _classIdx = (_classIdx % #PREVIEW_CLASSES) + 1
         GF.RefreshPreviewBox()
     end)
-    classBtn:SetScript("OnEnter", function(self)
-        self:SetBackdropBorderColor(0.4, 0.4, 0.5, 1)
-    end)
-    classBtn:SetScript("OnLeave", function(self)
-        self:SetBackdropBorderColor(0.25, 0.25, 0.30, 1)
-    end)
 
-    -- Reset button
-    local resetBtn = CreateFrame("Button", nil, container, "BackdropTemplate")
-    resetBtn:SetSize(46, 16)
-    resetBtn:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -4)
-    resetBtn:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
-    resetBtn:SetBackdropColor(0.12, 0.12, 0.16, 1)
-    resetBtn:SetBackdropBorderColor(0.25, 0.25, 0.30, 1)
-    do
-        local rfs = resetBtn:CreateFontString(nil, "OVERLAY")
-        rfs:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
-        rfs:SetPoint("CENTER", resetBtn, "CENTER", 0, 0)
-        rfs:SetText("Reset")
-        rfs:SetTextColor(0.7, 0.7, 0.7, 1)
-    end
+    local resetBtn = MakeHeaderBtn("Reset", 42)
+    resetBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
     resetBtn:SetScript("OnClick", function()
         GF.RefreshPreviewHandles()
     end)
-    resetBtn:SetScript("OnEnter", function(self)
-        self:SetBackdropBorderColor(0.4, 0.4, 0.5, 1)
-    end)
-    resetBtn:SetScript("OnLeave", function(self)
-        self:SetBackdropBorderColor(0.25, 0.25, 0.30, 1)
-    end)
 
-    -- Preview area (black background)
+    -- Preview canvas (dark recessed surface)
     local area = CreateFrame("Frame", nil, container, "BackdropTemplate")
-    area:SetPoint("TOPLEFT", container, "TOPLEFT", 4, -24)
-    area:SetPoint("TOPRIGHT", container, "TOPRIGHT", -4, -24)
-    area:SetHeight(210)
-    area:SetBackdrop({ bgFile = W8 })
-    area:SetBackdropColor(0.02, 0.02, 0.04, 1)
+    area:SetPoint("TOPLEFT", container, "TOPLEFT", 4, -26)
+    area:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -(sideW + 8), 22)
+    area:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    area:SetBackdropColor(0.015, 0.015, 0.025, 1)
+    area:SetBackdropBorderColor(0.08, 0.08, 0.11, 0.5)
     container._area = area
+
+    -- Inner vignette overlays for depth
+    do
+        local topFade = area:CreateTexture(nil, "ARTWORK", nil, 1)
+        topFade:SetHeight(20)
+        topFade:SetPoint("TOPLEFT", area, "TOPLEFT", 1, -1)
+        topFade:SetPoint("TOPRIGHT", area, "TOPRIGHT", -1, -1)
+        topFade:SetColorTexture(0, 0, 0, 1)
+        topFade:SetGradient("VERTICAL", CreateColor(0, 0, 0, 0), CreateColor(0, 0, 0, 0.25))
+
+        local botFade = area:CreateTexture(nil, "ARTWORK", nil, 1)
+        botFade:SetHeight(15)
+        botFade:SetPoint("BOTTOMLEFT", area, "BOTTOMLEFT", 1, 1)
+        botFade:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -1, 1)
+        botFade:SetColorTexture(0, 0, 0, 1)
+        botFade:SetGradient("VERTICAL", CreateColor(0, 0, 0, 0.3), CreateColor(0, 0, 0, 0))
+    end
+
+    -- Sidebar: layer visibility toggles
+    do
+        local sidebar = CreateFrame("Frame", nil, container, "BackdropTemplate")
+        sidebar:SetPoint("TOPLEFT", area, "TOPRIGHT", 4, 0)
+        sidebar:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -4, 22)
+        sidebar:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+        sidebar:SetBackdropColor(0.04, 0.04, 0.055, 0.8)
+        sidebar:SetBackdropBorderColor(0.08, 0.08, 0.11, 0.4)
+
+        local sHdr = sidebar:CreateFontString(nil, "OVERLAY")
+        sHdr:SetFont("Fonts\\FRIZQT__.TTF", 7, "")
+        sHdr:SetPoint("TOP", sidebar, "TOP", 0, -4)
+        sHdr:SetText("LAYERS")
+        sHdr:SetTextColor(0.35, 0.38, 0.48, 0.6)
+
+        local VIS_BTNS = {
+            { key="buff",      label="Buffs",   color={0.40,0.82,0.40} },
+            { key="debuff",    label="Debuffs", color={0.92,0.32,0.32} },
+            { key="externals", label="Extern",  color={0.25,0.70,0.55} },
+            { key="status",    label="Status",  color={0.85,0.70,0.25} },
+            { key="si",        label="Spells",  color={0.72,0.52,0.90} },
+            { key="private",   label="Private", color={0.55,0.55,0.60} },
+            { key="rdebuffs",  label="RaidDB",  color={0.95,0.35,0.20} },
+        }
+        local btnH, gap, topPad = 20, 1, 16
+        for i, spec in ipairs(VIS_BTNS) do
+            local btn = CreateFrame("Button", nil, sidebar)
+            btn:SetSize(sideW - 6, btnH)
+            btn:SetPoint("TOP", sidebar, "TOP", 0, -(topPad + (i-1) * (btnH + gap)))
+            btn:EnableMouse(true)
+            local c = spec.color
+
+            local bg = btn:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            btn._bg = bg
+
+            local bar = btn:CreateTexture(nil, "ARTWORK")
+            bar:SetSize(2, btnH - 4)
+            bar:SetPoint("LEFT", btn, "LEFT", 2, 0)
+            btn._bar = bar
+
+            local fs = btn:CreateFontString(nil, "OVERLAY")
+            fs:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+            fs:SetPoint("LEFT", bar, "RIGHT", 5, 0)
+            fs:SetText(spec.label)
+            btn._fs = fs
+
+            local function RefreshBtn()
+                local on = _visToggles[spec.key]
+                if on then
+                    bg:SetColorTexture(c[1]*0.12, c[2]*0.12, c[3]*0.12, 0.6)
+                    bar:SetColorTexture(c[1], c[2], c[3], 0.85)
+                    fs:SetTextColor(0.75, 0.78, 0.85, 0.95)
+                else
+                    bg:SetColorTexture(0.04, 0.04, 0.05, 0.3)
+                    bar:SetColorTexture(0.18, 0.18, 0.22, 0.3)
+                    fs:SetTextColor(0.30, 0.30, 0.35, 0.45)
+                end
+            end
+            btn._refresh = RefreshBtn
+            RefreshBtn()
+
+            btn:SetScript("OnClick", function()
+                _visToggles[spec.key] = not _visToggles[spec.key]
+                RefreshBtn()
+                local on = _visToggles[spec.key]
+                if spec.key == "buff" or spec.key == "debuff" or spec.key == "externals" then
+                    local h = _handles[spec.key]
+                    if h then h:SetShown(on) end
+                elseif spec.key == "status" then
+                    for _, sh in pairs(_statusHandles) do sh:SetShown(on) end
+                elseif spec.key == "si" then
+                    for _, sh in pairs(_siHandles) do sh:SetShown(on) end
+                elseif spec.key == "private" then
+                    local h = _handles.private
+                    if h then h:SetShown(on) end
+                elseif spec.key == "rdebuffs" then
+                    local h = _handles.rdebuffs
+                    if h then h:SetShown(on) end
+                end
+            end)
+            btn:SetScript("OnEnter", function(self)
+                if _visToggles[spec.key] then
+                    bg:SetColorTexture(c[1]*0.18, c[2]*0.18, c[3]*0.18, 0.8)
+                else
+                    bg:SetColorTexture(0.08, 0.08, 0.10, 0.5)
+                end
+                fs:SetTextColor(0.85, 0.88, 0.95, 1)
+            end)
+            btn:SetScript("OnLeave", function() RefreshBtn() end)
+        end
+    end
+
+    -- Bottom status bar
+    local statusBar = CreateFrame("Frame", nil, container, "BackdropTemplate")
+    statusBar:SetHeight(18)
+    statusBar:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", 1, 1)
+    statusBar:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -1, 1)
+    statusBar:SetBackdrop({ bgFile = W8 })
+    statusBar:SetBackdropColor(0.055, 0.055, 0.07, 1)
+
+    local sepBot = container:CreateTexture(nil, "ARTWORK", nil, 1)
+    sepBot:SetHeight(1)
+    sepBot:SetPoint("BOTTOMLEFT", statusBar, "TOPLEFT", 0, 0)
+    sepBot:SetPoint("BOTTOMRIGHT", statusBar, "TOPRIGHT", 0, 0)
+    sepBot:SetColorTexture(0.10, 0.10, 0.14, 0.4)
 
     -- Build mock frame inside area
     BuildMockFrame(area)
@@ -1308,12 +1676,13 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     BuildAuraGroupHandles(_mockFrame)
     BuildStatusIconHandles(_mockFrame)
     BuildPrivateAuraHandle(_mockFrame)
+    BuildRaidDebuffHandle(_mockFrame)
 
-    -- Coord display
-    local coord = container:CreateFontString(nil, "OVERLAY")
-    coord:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-    coord:SetPoint("BOTTOM", container, "BOTTOM", 0, 4)
-    coord:SetTextColor(0.45, 0.45, 0.55, 1)
+    -- Coord display (in status bar)
+    local coord = statusBar:CreateFontString(nil, "OVERLAY")
+    coord:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+    coord:SetPoint("LEFT", statusBar, "LEFT", 10, 0)
+    coord:SetTextColor(0.38, 0.40, 0.50, 0.6)
     coord:SetText("Click a handle to select \194\183 drag to reposition")
     _coordLabel = coord
 
@@ -1354,12 +1723,11 @@ end
 function GF.ResizePreviewContainer()
     if not _box or not _mockFrame then return end
     local mH = _mockFrame:GetHeight() or 130
-    local totalH = mH + 90  -- header(24) + padding(40) + coord(16) + margin(10)
+    local sideMinH = 7 * 24   -- 7 toggle buttons
+    local areaH = max(mH + 50, sideMinH)
+    local totalH = areaH + 44  -- header(24) + coord(20)
     totalH = max(200, totalH)
     _box:SetHeight(totalH)
-    if _box._area then
-        _box._area:SetHeight(mH + 50)
-    end
 end
 
 ------------------------------------------------------------------------

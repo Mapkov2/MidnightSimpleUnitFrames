@@ -228,6 +228,32 @@ local PARTY_DEFAULTS = {
     reverseFill           = false,
     -- Smooth fill
     smoothFill            = true,
+    -- Cutaway health (red fadeout showing health loss)
+    cutawayEnabled        = true,
+    cutawayFadeTime       = 0.4,   -- seconds before cutaway fades
+    cutawayColorR         = 0.70,
+    cutawayColorG         = 0.10,
+    cutawayColorB         = 0.10,
+    cutawayColorA         = 0.75,
+    -- Focus highlight (separate glow when unit is focus)
+    hlFocusEnabled        = true,
+    hlFocusColorR         = 0.50,
+    hlFocusColorG         = 0.50,
+    hlFocusColorB         = 1.00,
+    hlFocusSize           = 2,
+    hlFocusOffset         = 0,
+    -- Raid Debuffs (single large priority debuff icon)
+    raidDebuffs           = {
+        enabled           = false,
+        size              = 28,
+        anchor            = "CENTER",
+        x                 = 0,
+        y                 = 0,
+        layer             = 12,
+        showTimer         = true,
+        timerSize         = 10,
+        onlyDispellable   = false,
+    },
     -- Hide in client scene (barber/dressing room)
     hideInClientScene     = true,
     -- Power per-role visibility

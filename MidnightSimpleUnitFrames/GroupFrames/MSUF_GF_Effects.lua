@@ -399,6 +399,11 @@ local function dispatchAura(f, unit, updateInfo)
     if GF.UpdateCornerIndicators then
         GF.UpdateCornerIndicators(f, unit)
     end
+
+    -- Raid Debuffs (priority single large debuff icon)
+    if GF.UpdateRaidDebuff then
+        GF.UpdateRaidDebuff(f, unit)
+    end
 end
 
 
@@ -617,6 +622,20 @@ _GF_RefreshBorder = function(f, unit)
             HLColor("hlTargetColorR", 1),
             HLColor("hlTargetColorG", 1),
             HLColor("hlTargetColorB", 1), 1)
+        border:Show()
+        return
+    end
+
+    -- Priority 4: Focus — colors from GF config (GF-specific, read conf directly)
+    if f._msufGFIsFocus and conf.hlFocusEnabled ~= false then
+        local sz  = conf.hlFocusSize or 2
+        local ofs = conf.hlFocusOffset or 0
+        local tex = conf.hlFocusTexture
+        local lay = conf.hlFocusLayer or "DEFAULT"
+        _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay,
+            conf.hlFocusColorR or 0.5,
+            conf.hlFocusColorG or 0.5,
+            conf.hlFocusColorB or 1.0, 1)
         border:Show()
         return
     end
@@ -1286,6 +1305,37 @@ local function dispatchHealth(f, unit)
     else
         f.health:SetValue(hp)
     end
+
+    -- Cutaway health: delayed bar update shows health loss as red fadeout
+    -- Secret-safe: never compare values, only delay the SetValue call
+    local cw = f._msufCutaway
+    if cw and conf.cutawayEnabled ~= false then
+        cw:SetMinMaxValues(0, hpMax)
+        cw:SetStatusBarColor(
+            conf.cutawayColorR or 0.70, conf.cutawayColorG or 0.10,
+            conf.cutawayColorB or 0.10, conf.cutawayColorA or 0.75)
+        if not cw:IsShown() then cw:Show() end
+        -- Cancel pending timer
+        if f._msufCutawayTimer then
+            f._msufCutawayTimer:Cancel()
+            f._msufCutawayTimer = nil
+        end
+        -- Delay cutaway bar update so it shows the gap
+        local fadeTime = conf.cutawayFadeTime or 0.4
+        local capturedUnit = unit
+        f._msufCutawayTimer = C_Timer.NewTimer(fadeTime, function()
+            f._msufCutawayTimer = nil
+            if cw and f.health and UnitExists(capturedUnit) then
+                local curHp = UnitHealth(capturedUnit)
+                local curMax = UnitHealthMax(capturedUnit)
+                cw:SetMinMaxValues(0, curMax)
+                cw:SetValue(curHp)
+            end
+        end)
+    elseif cw and cw:IsShown() then
+        cw:Hide()
+    end
+
     ApplyHealthColor(f, kind, unit)
     -- 3-slot health text (secret-safe: unit for UnitHealthPercent)
     -- Diff-gate: only call SetText when formatted string actually changes
@@ -1732,6 +1782,7 @@ local _globalFrame = CreateFrame("Frame")
 
 -- Track current target frame for O(1) TARGET_CHANGED updates
 local _gfTargetFrame = nil -- the frame whose unit was last "target"
+local _gfFocusFrame  = nil -- the frame whose unit was last "focus"
 
 -- PLAYER_TARGET_CHANGED: update target indicator on old + new target only
 -- READY_CHECK / READY_CHECK_FINISHED: update ready check icons
@@ -1754,6 +1805,26 @@ local function OnGlobalEvent(self, event, ...)
                 UpdateTargetIndicator(f, f.unit)
                 _GF_RefreshBorder(f, f.unit)
                 break
+            end
+        end
+
+    elseif event == "PLAYER_FOCUS_CHANGED" then
+        -- Clear old focus frame
+        local oldFocus = _gfFocusFrame
+        _gfFocusFrame = nil
+        if oldFocus and oldFocus.unit then
+            oldFocus._msufGFIsFocus = nil
+            _GF_RefreshBorder(oldFocus, oldFocus.unit)
+        end
+        -- Find new focus frame
+        if UnitExists("focus") then
+            for f in pairs(GF.frames) do
+                if f.unit and UnitExists(f.unit) and UnitIsUnit(f.unit, "focus") then
+                    f._msufGFIsFocus = true
+                    _gfFocusFrame = f
+                    _GF_RefreshBorder(f, f.unit)
+                    break
+                end
             end
         end
 
@@ -1782,6 +1853,7 @@ local function OnGlobalEvent(self, event, ...)
         -- (name, role, leader, markers, status, health color, group number)
         -- Range/aura/threat/overlays arrive via their own unit events
         _gfTargetFrame = nil -- invalidate target cache (units may swap)
+        _gfFocusFrame  = nil -- invalidate focus cache
         for f in pairs(GF.frames) do
             local u = f.unit
             if u and UnitExists(u) then
@@ -1796,6 +1868,10 @@ local function OnGlobalEvent(self, event, ...)
                 if UnitIsUnit(u, "target") then
                     f._msufGFIsTarget = true
                     _gfTargetFrame = f
+                end
+                if UnitExists("focus") and UnitIsUnit(u, "focus") then
+                    f._msufGFIsFocus = true
+                    _gfFocusFrame = f
                 end
                 UpdateTargetIndicator(f, u)
             end
@@ -1824,6 +1900,7 @@ local function OnGlobalEvent(self, event, ...)
 end
 
 _globalFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+_globalFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
 _globalFrame:RegisterEvent("READY_CHECK")
 _globalFrame:RegisterEvent("READY_CHECK_CONFIRM")
 _globalFrame:RegisterEvent("READY_CHECK_FINISHED")

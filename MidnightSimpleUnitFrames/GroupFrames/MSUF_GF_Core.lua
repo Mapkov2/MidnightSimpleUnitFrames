@@ -134,6 +134,21 @@ local function BuildFrameHierarchy(f, kind)
     healthBg:SetVertexColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
     f.healthBg = healthBg
 
+    -- Cutaway health bar (shows health loss as red fadeout, behind health bar)
+    local cutaway = CreateFrame("StatusBar", nil, barGroup)
+    cutaway:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+    cutaway:SetMinMaxValues(0, 1)
+    cutaway:SetValue(1)
+    cutaway:SetAllPoints(health)
+    cutaway:SetFrameLevel(health:GetFrameLevel())
+    cutaway:SetStatusBarColor(
+        conf.cutawayColorR or 0.70, conf.cutawayColorG or 0.10,
+        conf.cutawayColorB or 0.10, conf.cutawayColorA or 0.75)
+    cutaway:Hide()
+    f._msufCutaway = cutaway
+    -- Health bar draws ON TOP of cutaway (raise its draw layer)
+    health:SetFrameLevel(health:GetFrameLevel() + 1)
+
     -- Health prediction overlays (children of health, below text layer)
     local hLvl = health:GetFrameLevel()
 

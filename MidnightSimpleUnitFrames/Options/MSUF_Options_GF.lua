@@ -1719,7 +1719,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 8: Indicators
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(400, "Indicators", false, "indicators")
+        local box, body = AddSection(580, "Indicators", false, "indicators")
 
         -- Redirect: aggro/dispel/target are controlled from the Bars menu
         local hlRedirect = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1811,6 +1811,47 @@ function _G.MSUF_EnsureGFPanelBuilt()
             end,
             formatText = function(v) return string.format("Border Thickness: %d", v) end,
         })
+
+        -- Focus Highlight sub-group
+        local focusSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        focusSep:SetPoint("TOPLEFT", hoverHint, "BOTTOMLEFT", 0, -56)
+        focusSep:SetText(TR("Focus Highlight"))
+        focusSep:SetTextColor(1, 0.82, 0)
+
+        local focusChk = SCheck({
+            name = "MSUF_GF_FocusHighlightEnableCheck", parent = body,
+            anchor = focusSep, x = 0, y = -6,
+            label = TR("Enable Focus Glow"),
+            get = function(k) return GF.Val(k, "hlFocusEnabled") end,
+            set = function(k, v) GF.GetConf(k).hlFocusEnabled = v; GF.RefreshVisuals() end,
+        })
+
+        local focusHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        focusHint:SetPoint("TOPLEFT", focusChk, "BOTTOMLEFT", 0, -4)
+        focusHint:SetWidth(400)
+        focusHint:SetJustifyH("LEFT")
+        focusHint:SetText(TR("Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus."))
+        focusHint:SetTextColor(0.5, 0.55, 0.65)
+
+        local focusSzSl = SSlider({
+            name = "MSUF_GF_FocusHighlightSizeSlider", parent = body, compact = true,
+            anchor = focusHint, x = 0, y = -8,
+            min = 1, max = 6, step = 1, width = 200, default = 2,
+            get = function(k) return GF.Val(k, "hlFocusSize") end,
+            set = function(k, v) GF.GetConf(k).hlFocusSize = v; GF.RefreshVisuals() end,
+            formatText = function(v) return string.format("Border Thickness: %d", v) end,
+        })
+
+        MakeColorSwatch(body, focusSzSl, "BOTTOMLEFT", 0, -16,
+            "Focus Glow Color",
+            function()
+                return V("hlFocusColorR") or 0.5, V("hlFocusColorG") or 0.5, V("hlFocusColorB") or 1.0
+            end,
+            function(r, g, b)
+                local c = C()
+                c.hlFocusColorR = r; c.hlFocusColorG = g; c.hlFocusColorB = b
+                GF.RefreshVisuals()
+            end)
     end
 
     ----------------------------------------------------------------
@@ -2021,6 +2062,48 @@ function _G.MSUF_EnsureGFPanelBuilt()
         hint:SetJustifyH("LEFT")
         hint:SetText(TR("Absorb overlays: controlled from |cffffd200Bars|r menu > Absorb Display (shared with unit frames).\nOverlay colors: |cffffd200Colors|r menu.  Overlay textures: |cffffd200Bars|r menu."))
         hint:SetTextColor(0.55, 0.60, 0.70)
+    end
+
+    ----------------------------------------------------------------
+    -- Section: Cutaway Health
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(200, "Cutaway Health", false, "cutaway")
+
+        local enChk = SCheck({
+            name = "MSUF_GF_CutawayEnableCheck", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Enable Cutaway Health"),
+            get = function(k) return GF.Val(k, "cutawayEnabled") end,
+            set = function(k, v) GF.GetConf(k).cutawayEnabled = v; GF.RefreshVisuals() end,
+        })
+
+        local hintCW = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hintCW:SetPoint("TOPLEFT", enChk, "BOTTOMLEFT", 0, -4)
+        hintCW:SetWidth(500)
+        hintCW:SetJustifyH("LEFT")
+        hintCW:SetText(TR("Shows a red fadeout behind the health bar when health drops, visualizing health loss."))
+        hintCW:SetTextColor(0.55, 0.60, 0.70)
+
+        local fadeSl = SSlider({
+            name = "MSUF_GF_CutawayFadeSlider", parent = body, compact = true,
+            anchor = hintCW, x = 0, y = -12,
+            min = 0.1, max = 1.5, step = 0.05, width = 270, default = 0.4,
+            get = function(k) return GF.Val(k, "cutawayFadeTime") end,
+            set = function(k, v) GF.GetConf(k).cutawayFadeTime = v end,
+            formatText = function(v) return string.format("Fade Time: %.2fs", v) end,
+        })
+
+        MakeColorSwatch(body, fadeSl, "BOTTOMLEFT", 0, -16,
+            "Cutaway Color",
+            function()
+                return V("cutawayColorR") or 0.7, V("cutawayColorG") or 0.1, V("cutawayColorB") or 0.1
+            end,
+            function(r, g, b)
+                local c = C()
+                c.cutawayColorR = r; c.cutawayColorG = g; c.cutawayColorB = b
+                GF.RefreshVisuals()
+            end)
     end
 
     ----------------------------------------------------------------
