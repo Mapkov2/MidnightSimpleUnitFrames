@@ -382,10 +382,13 @@ do
             end
         end)
 
-        bus("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
-            _state["target"] = nil
-            TargetClassifyAndWire()
-        end)
+        do
+            local _qRF
+            local function _flushRF() _qRF = nil; _state["target"] = nil; TargetClassifyAndWire() end
+            bus("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
+                if not _qRF then _qRF = true; C_Timer.After(0, _flushRF) end
+            end)
+        end
         bus("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE", function()
             RebuildPrimaries()
             _state["target"] = nil

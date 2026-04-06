@@ -72,6 +72,7 @@ local _cachedOnUnitAura   -- API.Store.OnUnitAura
 local _cachedInvalidUnit  -- API.Store.InvalidateUnit
 local _cachedIsEditFn     -- API.IsEditModeActive
 local _refsBound = false
+local ShouldHandleSwapRender
 
 local function BindCachedRefs()
     _cachedReqUnit     = API.RequestUnit
@@ -120,6 +121,13 @@ local function HandlePlayerTargetChanged()
     end
     _unitAuraPending["target"] = nil   -- P2: clear dedup so next UNIT_AURA is accepted
 
+    -- OFF / hidden runtime = no immediate render work on target swaps.
+    -- Keep Store invalidation so the newest target state is ready for the next live render / OnShow.
+    if not ShouldHandleSwapRender("target") then
+        Events._targetSwapQueued = nil
+        return
+    end
+
     -- Coalesce target swap to one next-frame aura refresh.
     -- UNIT_AURA bursts arriving this frame still update Store deltas, then piggyback this flush.
     if Events._targetSwapQueued then
@@ -141,6 +149,9 @@ local function HandlePlayerFocusChanged()
         _cachedInvalidUnit("focus")
     end
     _unitAuraPending["focus"] = nil    -- P2: clear dedup so next UNIT_AURA is accepted
+    if not ShouldHandleSwapRender("focus") then
+        return
+    end
     MarkDirty("focus", 0)
 end
 
@@ -337,6 +348,13 @@ local function ShouldScheduleLiveRender(unit)
         return false
     end
 
+    return true
+end
+
+ShouldHandleSwapRender = function(unit)
+    if not unit then return false end
+    if not ShouldProcessUnitEvent(unit, true) then return false end
+    if not ShouldScheduleLiveRender(unit) then return false end
     return true
 end
 

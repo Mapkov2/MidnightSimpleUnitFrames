@@ -2195,6 +2195,13 @@ local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
     f._msufFlushHP = nil
     f._msufFlushMaxHP = nil
 
+    if wantPortrait then
+        local conf = GetFrameConf(f)
+        if not conf or (conf.portraitMode or "OFF") == "OFF" then
+            wantPortrait = false
+        end
+    end
+
     local sd = Core._swapDeferCoalesce
     if not sd then return end
 
@@ -2219,6 +2226,32 @@ local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
 
     sd.queued = true
     After0(0, _SwapDeferFlush)
+end
+
+local function UFCore_FrameWantsUnitSwap(unit)
+    local f = unit and FramesByUnit[unit]
+    if not f then return false end
+    if f.IsVisible and f:IsVisible() then return true end
+    if f.MSUF_AllowHiddenEvents then return true end
+    return false
+end
+
+local function UFCore_ShouldProcessTargetTargetSwap()
+    if UFCore_IsToTInlineEnabled and UFCore_IsToTInlineEnabled() then
+        return true
+    end
+    return UFCore_FrameWantsUnitSwap("targettarget")
+end
+
+Core._swapEventCoalesce = Core._swapEventCoalesce or {
+    suppressToTUnitTarget = false,
+}
+
+local function _UFCore_ClearSwapEventCoalesce()
+    local sc = Core._swapEventCoalesce
+    if sc then
+        sc.suppressToTUnitTarget = false
+    end
 end
 
 -- ------------------------------------------------------------
@@ -3313,9 +3346,13 @@ Global:SetScript("OnEvent", function(_, event, arg1)
                 Core.MarkDirty(tf, DIRTY_TOTINLINE, true, event)
             end
         end
-        -- If the ToT unitframe exists/attached, keep it responsive too.
-        QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
-        DeferSwapWork("targettarget", event, false, false)
+        -- PLAYER_TARGET_CHANGED already queued the ToT swap this frame.
+        -- Skip the duplicate UNIT_TARGET-driven unitframe refresh on click-target swaps.
+        local sc = Core._swapEventCoalesce
+        if not (sc and sc.suppressToTUnitTarget) and UFCore_ShouldProcessTargetTargetSwap() then
+            QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
+            DeferSwapWork("targettarget", event, false, false)
+        end
         return
     end
 
@@ -3380,9 +3417,22 @@ do
     if type(busReg) == "function" then
         busReg("PLAYER_TARGET_CHANGED", "MSUF_UFCORE", function()
             QueueUnit("target", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
-            QueueUnit("targettarget", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
             DeferSwapWork("target", "PLAYER_TARGET_CHANGED", true, false)
-            DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", false, false)
+
+            if UFCore_ShouldProcessTargetTargetSwap() then
+                QueueUnit("targettarget", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
+                DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", false, false)
+
+                local sc = Core._swapEventCoalesce
+                if sc then
+                    sc.suppressToTUnitTarget = true
+                    if After0 then
+                        After0(0, _UFCore_ClearSwapEventCoalesce)
+                    else
+                        sc.suppressToTUnitTarget = false
+                    end
+                end
+            end
         end)
 
         busReg("PLAYER_FOCUS_CHANGED", "MSUF_UFCORE", function()

@@ -501,12 +501,17 @@ do
             if not ef:IsEventRegistered("UNIT_THREAT_LIST_UPDATE") then
                 ef:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
             end
-            MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE", function()
-                RefreshAggroForUnit("target")
-            end)
-            MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE", function()
-                RefreshAggroForUnit("focus")
-            end)
+            do
+                local _qTgt, _qFoc
+                local function _flushTgt() _qTgt = nil; RefreshAggroForUnit("target") end
+                local function _flushFoc() _qFoc = nil; RefreshAggroForUnit("focus") end
+                MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE", function()
+                    if not _qTgt then _qTgt = true; C_Timer.After(0, _flushTgt) end
+                end)
+                MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE", function()
+                    if not _qFoc then _qFoc = true; C_Timer.After(0, _flushFoc) end
+                end)
+            end
         else
             if ef:IsEventRegistered("UNIT_THREAT_SITUATION_UPDATE") then
                 ef:UnregisterEvent("UNIT_THREAT_SITUATION_UPDATE")
@@ -748,13 +753,17 @@ do
             elseif not f:IsEventRegistered("UNIT_AURA") then
                 f:RegisterEvent("UNIT_AURA")
             end
-            MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()
-                UpdateUnit("target", true)
-                UpdateUnit("targettarget", true)
-            end)
-            MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE", function()
-                UpdateUnit("focus", true)
-            end)
+            do
+                local _qDTgt, _qDFoc
+                local function _flushDTgt() _qDTgt = nil; UpdateUnit("target", true); UpdateUnit("targettarget", true) end
+                local function _flushDFoc() _qDFoc = nil; UpdateUnit("focus", true) end
+                MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()
+                    if not _qDTgt then _qDTgt = true; C_Timer.After(0, _flushDTgt) end
+                end)
+                MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE", function()
+                    if not _qDFoc then _qDFoc = true; C_Timer.After(0, _flushDFoc) end
+                end)
+            end
         else
             if f:IsEventRegistered("PLAYER_ENTERING_WORLD") then
                 f:UnregisterEvent("PLAYER_ENTERING_WORLD")

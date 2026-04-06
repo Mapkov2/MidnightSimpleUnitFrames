@@ -2441,6 +2441,13 @@ _G.MSUF_GF_UpdateTarget   = UpdateTargetIndicator
 _G.MSUF_GF_UpdateStatus   = UpdateStatusText
 _G.MSUF_GF_UpdateGroupNum = UpdateGroupNumber
 
+-- Exports for Perfy profiling (target-click spike diagnosis)
+_G.MSUF_GF_QuickBorderUpdate   = _GF_QuickBorderUpdate
+_G.MSUF_GF_RefreshBorder        = _GF_RefreshBorder
+_G.MSUF_GF_ApplyHLBorderStyle   = _applyHighlightBorderStyle
+_G.MSUF_GF_BuildFrameCache      = GF.BuildFrameCache
+_G.MSUF_GF_GlobalEventFrame     = _globalFrame
+
 --- Refresh overlay bars (absorb + heal absorb + incoming heal) on all GF frames.
 --- Called from Bars options when test mode or absorb settings change.
 _G.MSUF_GF_RefreshOverlays = function()
