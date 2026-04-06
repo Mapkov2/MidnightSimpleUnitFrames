@@ -8,6 +8,9 @@ local MAX_BOSS = _G.MSUF_MAX_BOSS_FRAMES or 5
 -- Forward declarations
 local BossCastbar_Start
 local BossCastbar_Stop
+local BossCastbar_OnUpdate
+local Boss_RegisterWithBestDriver
+local Boss_UnregisterBestDriver
 
 -- Keep boss interrupt feedback duration consistent with the core castbar driver (Target/Focus/etc).
 -- IMPORTANT: This is NOT the end-of-cast hide grace. This is the "Interrupted" feedback hold time.
@@ -242,6 +245,7 @@ local function CreateBossCastbarFrame(unit)
     frame.MSUF_isNotInterruptiblePlain = false
     frame.isNotInterruptible = false
     frame.MSUF_timerDriven = true
+    frame._msufIsBossCastbar = true
 
 
     -- default size; will be resized to match MSUF boss frame width during UpdateAnchor()
@@ -778,13 +782,7 @@ local function BossCastbar_ShowInterruptFeedback(frame, label)
     __st.durationObj = nil
     __st.holdUntil = MSUF_Now() + grace
 
-    if frame.SetScript then
-        frame:SetScript("OnUpdate", nil)
-    end
-
-    if type(_G.MSUF_UnregisterCastbar) == "function" then
-        _G.MSUF_UnregisterCastbar(frame)
-    end
+    Boss_UnregisterBestDriver(frame)
 
     local txt = label or "Interrupted"
 
@@ -842,7 +840,39 @@ end
 -- (e.g. "remaining > 0") because duration values can be secret in Midnight.
 local _floor = math.floor
 
-local function BossCastbar_OnUpdate(self, elapsed)
+local function Boss_HasCentralManager()
+    local m = _G.MSUF_CastbarManager
+    return (m and m.active and type(_G.MSUF_RegisterCastbar) == "function") and true or false
+end
+
+local function Boss_SetFallbackOnUpdate(frame, enabled)
+    if not (frame and frame.SetScript) then return end
+    if enabled then
+        frame:SetScript("OnUpdate", BossCastbar_OnUpdate)
+    else
+        frame:SetScript("OnUpdate", nil)
+    end
+end
+
+Boss_RegisterWithBestDriver = function(frame)
+    if not frame then return end
+    if Boss_HasCentralManager() then
+        Boss_SetFallbackOnUpdate(frame, false)
+        _G.MSUF_RegisterCastbar(frame)
+    else
+        Boss_SetFallbackOnUpdate(frame, true)
+    end
+end
+
+Boss_UnregisterBestDriver = function(frame)
+    if not frame then return end
+    Boss_SetFallbackOnUpdate(frame, false)
+    if type(_G.MSUF_UnregisterCastbar) == "function" then
+        _G.MSUF_UnregisterCastbar(frame)
+    end
+end
+
+BossCastbar_OnUpdate = function(self, elapsed)
     if not self or not self.unit or not self:IsShown() then return end
 
     -- PERF: Gate UnitExists/Dead check at ~4Hz instead of every frame.
@@ -1041,23 +1071,16 @@ BossCastbar_Start = function(frame)
                     SafeCall(_G.MSUF_LayoutEmpowerTicks, frame)
                 end
 
-                if frame.SetScript then
-                    -- Empower bars are driven by CastbarManager (fast tick interval).
-                    frame:SetScript("OnUpdate", nil)
-                end
-
                 frame.castText:SetText(castName or "")
                 if frame.icon then frame.icon:SetTexture(castTex or nil) end
 
                 frame:UpdateColorForInterruptible()
                 frame:Show()
 
-                if type(_G.MSUF_RegisterCastbar) == "function" then
-                    -- Force manager to re-evaluate tick rate (empower wants ~0.03).
-                    frame._msufTickInterval = nil
-                    frame._msufHeavyIn = nil
-                    _G.MSUF_RegisterCastbar(frame)
-                end
+                -- Force the driver to re-evaluate tick rate (empower wants ~0.03).
+                frame._msufTickInterval = nil
+                frame._msufHeavyIn = nil
+                Boss_RegisterWithBestDriver(frame)
                 return
             else
                 -- Stage data not yet available; retry briefly a few times.
@@ -1145,19 +1168,13 @@ BossCastbar_Start = function(frame)
                 SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev and true or false)
             end
         end
--- OnUpdate always active: existence + remaining=0 safety net.
-        if frame.SetScript then
-            frame:SetScript("OnUpdate", BossCastbar_OnUpdate)
-        end
         frame.castText:SetText(castName or "")
         if frame.icon then frame.icon:SetTexture(castTex or nil) end
 
         frame:UpdateColorForInterruptible()
         frame:Show()
 
-        if type(_G.MSUF_RegisterCastbar) == "function" then
-            _G.MSUF_RegisterCastbar(frame)
-        end
+        Boss_RegisterWithBestDriver(frame)
         return
     end
 
@@ -1213,19 +1230,13 @@ BossCastbar_Start = function(frame)
                 SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev and true or false)
             end
         end
--- OnUpdate always active: existence + remaining=0 safety net.
-        if frame.SetScript then
-            frame:SetScript("OnUpdate", BossCastbar_OnUpdate)
-        end
         frame.castText:SetText(chanName or "")
         if frame.icon then frame.icon:SetTexture(chanTex or nil) end
 
         frame:UpdateColorForInterruptible()
         frame:Show()
 
-        if type(_G.MSUF_RegisterCastbar) == "function" then
-            _G.MSUF_RegisterCastbar(frame)
-        end
+        Boss_RegisterWithBestDriver(frame)
         return
     end
 
@@ -1941,3 +1952,6 @@ loader:SetScript("OnEvent", function(_, _, loadedName)
     if loadedName ~= addonName then return end
     C_Timer.After(0, InitBossCastbars)
 end)
+
+
+_G.MSUF_BossCastbar_Stop = BossCastbar_Stop

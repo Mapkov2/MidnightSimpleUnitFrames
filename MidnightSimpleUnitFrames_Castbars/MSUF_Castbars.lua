@@ -544,7 +544,30 @@ do
         local frame = next(active)
         while frame do
             local nextFrame = next(active, frame)
+            local skipFrame = false
 
+            -- Boss safety migrated here from per-frame OnUpdate:
+            -- keep despawn/death checks at 4Hz inside the shared manager so boss bars do not
+            -- run a second full-frame OnUpdate in parallel with the manager.
+            if frame._msufIsBossCastbar then
+                local nxtBossCheck = frame._msufBossExistNext
+                if (not nxtBossCheck) or (_monoClock >= nxtBossCheck) then
+                    frame._msufBossExistNext = _monoClock + 0.25
+                    local u = frame.unit
+                    if u and ((type(UnitExists) == "function" and not UnitExists(u))
+                        or (type(UnitIsDeadOrGhost) == "function" and UnitIsDeadOrGhost(u))) then
+                        if type(_G.MSUF_BossCastbar_Stop) == "function" then
+                            _G.MSUF_BossCastbar_Stop(frame)
+                        else
+                            if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(frame) end
+                            if frame.Hide then frame:Hide() end
+                        end
+                        skipFrame = true
+                    end
+                end
+            end
+
+            if not skipFrame then
             -- oUF-style fast path: remaining -= elapsed, inline dedup, single-flag gate.
             -- _msufFastText guarantees: timeText exists, castTime enabled, NOT gcd, NOT empower.
             local rem = frame._msufRemaining
@@ -610,6 +633,8 @@ do
                     if fn then fn(frame, elapsed, nil, _monoClock) end
                 end
                 frame._msufHeavyIn = cd
+            end
+
             end
 
             frame = nextFrame
