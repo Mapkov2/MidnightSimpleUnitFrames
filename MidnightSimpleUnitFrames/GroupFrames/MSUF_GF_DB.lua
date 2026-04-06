@@ -782,6 +782,23 @@ local function _GF_GetGlobalTextOpt(key, fallback)
     return fallback
 end
 
+-- Module-level cache for hot-path text formatting options
+-- Avoids 3 table lookups per _GF_GetGlobalTextOpt call (9+ calls per UNIT_HEALTH)
+local _cachedHidePct
+local _cachedUseShort
+local function _GF_GetHidePct()
+    if _cachedHidePct == nil then _cachedHidePct = _GF_GetGlobalTextOpt("hidePercentSymbol", false) and true or false end
+    return _cachedHidePct
+end
+local function _GF_GetUseShort()
+    if _cachedUseShort == nil then _cachedUseShort = _GF_GetGlobalTextOpt("useShortNumbers", true) and true or false end
+    return _cachedUseShort
+end
+function GF.InvalidateTextFormatCache()
+    _cachedHidePct = nil
+    _cachedUseShort = nil
+end
+
 ------------------------------------------------------------------------
 -- Unified abbreviator (handles secret + non-secret)
 -- Secret:     AbbreviateNumbers → secret string (C-side, no Lua arith)
@@ -791,7 +808,7 @@ local function _GF_Abbrev(val)
     if val == nil then return "0" end
     local iss = _GF_issecretvalue
     local isSecret = iss and iss(val)
-    local useShort = _GF_GetGlobalTextOpt("useShortNumbers", true)
+    local useShort = _GF_GetUseShort()
     if isSecret then
         -- Secret: must use C-side abbreviator; no type()/tonumber()/arithmetic
         local fn = useShort and (_GF_AbbrShort or _GF_AbbrFallback)
@@ -917,7 +934,7 @@ function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit)
     if reverse then mode = REVERSE_HP_MAP[mode] or mode end
 
     local delim = delimiter or " / "
-    local hidePct = _GF_GetGlobalTextOpt("hidePercentSymbol", false)
+    local hidePct = _GF_GetHidePct()
     local pctSuffix = hidePct and "" or "%"
 
     -- Abbreviate cur/max (secret-safe: C-side abbreviators)
@@ -977,7 +994,7 @@ function GF.FormatPowerText(mode, pw, pwMax, delimiter, unit)
     if not mode or mode == "NONE" then return "" end
 
     local delim = delimiter or " / "
-    local hidePct = _GF_GetGlobalTextOpt("hidePercentSymbol", false)
+    local hidePct = _GF_GetHidePct()
     local pctSuffix = hidePct and "" or "%"
 
     -- Abbreviate cur/max (secret-safe)

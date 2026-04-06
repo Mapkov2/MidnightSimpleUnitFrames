@@ -753,6 +753,8 @@ local function ApplyVisuals(f, bits)
         ApplyTextLayout(f, kind)
         ApplyIconLayout(f, kind)
     end
+    -- Rebuild hot-path settings cache (eliminates GF.GetConf from combat events)
+    if GF.BuildFrameCache then GF.BuildFrameCache(f) end
 end
 
 ------------------------------------------------------------------------

@@ -61,6 +61,8 @@ local UnitInRange      = _G.UnitInRange
 local UnitIsGhost      = _G.UnitIsGhost
 local GetRaidRosterInfo = _G.GetRaidRosterInfo
 local strmatch         = string.match
+local _smoothInterp    = _G.Enum and _G.Enum.StatusBarInterpolation
+                         and _G.Enum.StatusBarInterpolation.ExponentialEaseOut
 
 ------------------------------------------------------------------------
 -- Highlight value resolver: Bars hl* keys → old GF conf key fallback
@@ -220,6 +222,7 @@ end
 local function dispatchAura(f, unit, updateInfo)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
+    local c = f._c
     local auras = conf and conf.auras
     local aurasOn = auras and auras.enabled ~= false
     local siCfg = conf and conf.spellIndicators
@@ -237,8 +240,11 @@ local function dispatchAura(f, unit, updateInfo)
         if siRefresh and GF.UpdateSpellIndicators then
             GF.UpdateSpellIndicators(f, unit)
         end
-        if GF.UpdateCornerIndicators then
+        if GF.UpdateCornerIndicators and (not c or c.ciEn) then
             GF.UpdateCornerIndicators(f, unit)
+        end
+        if GF.UpdateRaidDebuff and (not c or c.rdEn) then
+            GF.UpdateRaidDebuff(f, unit)
         end
         return
     end
@@ -259,7 +265,7 @@ local function dispatchAura(f, unit, updateInfo)
         if siRefresh and GF.UpdateSpellIndicators then
             GF.UpdateSpellIndicators(f, unit)
         end
-        if GF.UpdateCornerIndicators then
+        if GF.UpdateCornerIndicators and (not c or c.ciEn) then
             GF.UpdateCornerIndicators(f, unit)
         end
         return
@@ -333,7 +339,7 @@ local function dispatchAura(f, unit, updateInfo)
                         GF.UpdateSpellIndicators(f, unit)
                     end
                     -- Corner Indicators: removal may clear a dispel/boss dot
-                    if GF.UpdateCornerIndicators then
+                    if GF.UpdateCornerIndicators and (not c or c.ciEn) then
                         GF.UpdateCornerIndicators(f, unit)
                     end
                     return
@@ -395,13 +401,13 @@ local function dispatchAura(f, unit, updateInfo)
         GF._UpdateDispel(f, unit)
     end
 
-    -- Corner Indicators (dispel dots, boss debuff dots, missing buff dots)
-    if GF.UpdateCornerIndicators then
+    -- Corner Indicators (only when enabled)
+    if GF.UpdateCornerIndicators and (not c or c.ciEn) then
         GF.UpdateCornerIndicators(f, unit)
     end
 
-    -- Raid Debuffs (priority single large debuff icon)
-    if GF.UpdateRaidDebuff then
+    -- Raid Debuffs (only when enabled)
+    if GF.UpdateRaidDebuff and (not c or c.rdEn) then
         GF.UpdateRaidDebuff(f, unit)
     end
 end
@@ -463,6 +469,10 @@ local function CheckRange(f, unit)
 end
 
 local function ApplyRangeFade(f, unit)
+    local c = f._c
+    if c and not c.rfEn then
+        return
+    end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if conf.rangeFadeEnabled == false then
@@ -533,31 +543,40 @@ local _hlBdTable  = { edgeFile = nil, edgeSize = 1, insets = _hlBdInsets }
 local function _applyHighlightBorderStyle(border, conf, edgeSz, ofs, texKey, layer, r, g, b, a)
     edgeSz = math_max(1, edgeSz or 2)
     ofs = tonumber(ofs) or 0
-    _hlBdTable.edgeFile = GF.ResolveHighlightTexture(texKey)
-    _hlBdTable.edgeSize = edgeSz
-    border:SetBackdrop(_hlBdTable)
-    border:SetBackdropColor(0, 0, 0, 0)
+    local edgeFile = GF.ResolveHighlightTexture(texKey)
+
+    -- Diff-gate SetBackdrop: only call when texture/size actually changed
+    -- SetBackdrop re-creates 9 internal textures every call (~0.25ms)
+    if border._msufHLEdge ~= edgeFile or border._msufHLEdgeSz ~= edgeSz then
+        border._msufHLEdge   = edgeFile
+        border._msufHLEdgeSz = edgeSz
+        _hlBdTable.edgeFile = edgeFile
+        _hlBdTable.edgeSize = edgeSz
+        border:SetBackdrop(_hlBdTable)
+        border:SetBackdropColor(0, 0, 0, 0)
+    end
     border:SetBackdropBorderColor(r or 1, g or 1, b or 1, a or 1)
-    border:ClearAllPoints()
-    border:SetPoint("TOPLEFT", -ofs, ofs)
-    border:SetPoint("BOTTOMRIGHT", ofs, -ofs)
+
+    -- Diff-gate anchor offset
+    if border._msufHLOfs ~= ofs then
+        border._msufHLOfs = ofs
+        border:ClearAllPoints()
+        border:SetPoint("TOPLEFT", -ofs, ofs)
+        border:SetPoint("BOTTOMRIGHT", ofs, -ofs)
+    end
+
     -- Layer: ABOVE_BORDER = higher FrameLevel
     local anchor = border:GetParent()
     if anchor then
         local baseLvl = anchor:GetFrameLevel()
-        if layer == "ABOVE_BORDER" then
-            border:SetFrameLevel(baseLvl + 8)
-        else
-            border:SetFrameLevel(baseLvl + 3)
+        local wantLvl = (layer == "ABOVE_BORDER") and (baseLvl + 8) or (baseLvl + 3)
+        if border._msufHLLvl ~= wantLvl then
+            border._msufHLLvl = wantLvl
+            border:SetFrameLevel(wantLvl)
         end
     end
 end
 
-------------------------------------------------------------------------
--- Unified highlight border refresh (single border, priority pipeline)
--- Priority: Dispel > Aggro > Target
--- Each per-feature update stores its state on the frame then calls this.
-------------------------------------------------------------------------
 ------------------------------------------------------------------------
 -- HLColor: read highlight COLORS always from MSUF_DB.general first
 -- (same source as main UF — Colors panel writes there).
@@ -568,6 +587,203 @@ local function HLColor(key, fallback)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if gen and gen[key] ~= nil then return gen[key] end
     return fallback
+end
+
+------------------------------------------------------------------------
+-- Per-frame settings cache (cold-path build, hot-path read)
+-- Eliminates GF.GetConf + key reads from every UNIT_HEALTH/POWER event.
+-- Rebuilt on ApplyVisuals (dirty flush) and RefreshVisuals.
+------------------------------------------------------------------------
+function GF.BuildFrameCache(f)
+    local kind = f._msufGFKind or "party"
+    local conf = GF.GetConf(kind)
+    local c = f._c
+    if not c then c = {}; f._c = c end
+
+    -- Smooth fill (pre-resolved interpolation enum)
+    c.smooth    = conf.smoothFill ~= false and _smoothInterp or nil
+    c.powSmooth = conf.powerSmoothFill and _smoothInterp or nil
+
+    -- Health text slots
+    c.tl    = conf.textLeft    or "NONE"
+    c.tc    = conf.textCenter  or "NONE"
+    c.tr    = conf.textRight   or "NONE"
+    c.tlOn  = c.tl ~= "NONE"
+    c.tcOn  = c.tc ~= "NONE"
+    c.trOn  = c.tr ~= "NONE"
+    c.delim = conf.textDelimiter or " / "
+    c.rev   = conf.hpTextReverse
+
+    -- Cutaway
+    c.cwEn   = conf.cutawayEnabled ~= false
+    c.cwFade = conf.cutawayFadeTime or 0.4
+    c.cwR    = conf.cutawayColorR or 0.70
+    c.cwG    = conf.cutawayColorG or 0.10
+    c.cwB    = conf.cutawayColorB or 0.10
+    c.cwA    = conf.cutawayColorA or 0.75
+
+    -- Health color mode (pre-resolve full chain)
+    local gfMode = conf.gfBarMode
+    local getCache = _G.MSUF_UFCore_GetSettingsCache
+    local gc = type(getCache) == "function" and getCache() or nil
+    if gfMode and gfMode ~= "GLOBAL" then
+        c.hcMode = gfMode
+    elseif gc and (gc.barMode == "dark" or gc.barMode == "unified") then
+        c.hcMode = gc.barMode
+    else
+        c.hcMode = conf.healthColorMode or "CLASS"
+    end
+    c.darkR     = conf.gfDarkR or (gc and gc.darkBarR) or 0
+    c.darkG     = conf.gfDarkG or (gc and gc.darkBarG) or 0
+    c.darkB     = conf.gfDarkB or (gc and gc.darkBarB) or 0
+    c.unifiedR  = conf.gfUnifiedR or (gc and gc.unifiedBarR) or 0.10
+    c.unifiedG  = conf.gfUnifiedG or (gc and gc.unifiedBarG) or 0.60
+    c.unifiedB  = conf.gfUnifiedB or (gc and gc.unifiedBarB) or 0.90
+    c.customR   = conf.healthCustomR or 0.2
+    c.customG   = conf.healthCustomG or 0.8
+    c.customB   = conf.healthCustomB or 0.2
+    c.classFn   = _G.MSUF_UFCore_GetClassBarColorFast
+
+    -- Power
+    c.powH      = conf.powerHeight or 6
+    c.showPow   = conf.showPower
+    c.ptl       = conf.powerTextLeft   or "NONE"
+    c.ptc       = conf.powerTextCenter or "NONE"
+    c.ptr       = conf.powerTextRight  or "NONE"
+    c.ptlOn     = c.ptl ~= "NONE"
+    c.ptcOn     = c.ptc ~= "NONE"
+    c.ptrOn     = c.ptr ~= "NONE"
+    c.pDelim    = conf.powerTextDelimiter or " / "
+    c.powTank   = conf.powerShowTank   ~= false
+    c.powHealer = conf.powerShowHealer ~= false
+    c.powDPS    = conf.powerShowDamager ~= false
+
+    -- Range fade
+    c.rfEn    = conf.rangeFadeEnabled ~= false
+    c.rfAlpha = conf.rangeFadeAlpha or 0.4
+    c.offAlpha = conf.offlineAlpha or 0.5
+
+    -- Highlight border (pre-resolve HLVal)
+    c.aggroEn   = HLVal(kind, "hlAggroEnabled") ~= false
+    c.aggroMode = HLVal(kind, "hlAggroMode") or "ALL"
+    c.dispelEn  = HLVal(kind, "hlDispelEnabled") ~= false
+    c.targetEn  = HLVal(kind, "hlTargetEnabled") ~= false
+    c.focusEn   = conf.hlFocusEnabled ~= false
+
+    -- Target color (pre-resolve HLColor)
+    c.tgtR = HLColor("hlTargetColorR", 1)
+    c.tgtG = HLColor("hlTargetColorG", 1)
+    c.tgtB = HLColor("hlTargetColorB", 1)
+
+    -- Focus color
+    c.focR = conf.hlFocusColorR or 0.5
+    c.focG = conf.hlFocusColorG or 0.5
+    c.focB = conf.hlFocusColorB or 1.0
+
+    -- Aura dispatch
+    c.dispelScan = conf.dispelEnabled ~= false
+    c.siEn       = conf.spellIndicators and conf.spellIndicators.enabled == true
+    local auras  = conf.auras
+    c.aurasOn    = auras and auras.enabled ~= false
+    c.anyAuraGrp = c.aurasOn and (
+                   (auras.debuff and auras.debuff.enabled ~= false) or
+                   (auras.buff and auras.buff.enabled ~= false) or
+                   (auras.externals and auras.externals.enabled))
+
+    -- Corner indicators
+    c.ciEn = conf.ciEnabled ~= false
+
+    -- Raid debuffs
+    local rd = conf.raidDebuffs
+    c.rdEn = rd and rd.enabled == true
+
+    -- Heal prediction
+    c.healPredEn = conf.healPredEnabled ~= false
+
+    -- Status icons (gate event registration)
+    c.summonEn = conf.summonIcon ~= false
+    c.resEn    = conf.resurrectIcon ~= false
+    c.phaseEn  = conf.phaseIcon ~= false
+
+    -- Composite: does anything need UNIT_AURA?
+    c.needAura = c.anyAuraGrp or c.ciEn or c.rdEn
+                 or (c.dispelScan and GF._playerCanDispel)
+                 or c.siEn
+
+    -- Composite: does anything need UNIT_THREAT?
+    c.needThreat = c.aggroEn
+
+    -- Private auras
+    local pa = conf.privateAuras
+    c.paEn = pa and pa.enabled ~= false
+
+    -- Invalidate module-level text format cache (hidePercentSymbol, useShortNumbers)
+    if GF.InvalidateTextFormatCache then GF.InvalidateTextFormatCache() end
+end
+
+------------------------------------------------------------------------
+-- Lightweight border activation (NO SetBackdrop — color + show/hide only)
+-- Called from PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED
+-- Full _GF_RefreshBorder is only needed when dispel/aggro state changes
+-- or on config refresh (RefreshVisuals)
+------------------------------------------------------------------------
+local function _GF_QuickBorderUpdate(f)
+    local border = f._msufGFHighlightBorder
+    if not border then return end
+    local c = f._c
+    if not c then GF.BuildFrameCache(f); c = f._c end
+
+    -- Priority 1: Dispel (already active from UNIT_AURA)
+    if f._msufGFDispelType and c.dispelEn then
+        return
+    end
+
+    -- Priority 2: Aggro (already active from UNIT_THREAT)
+    if f._msufGFAggroLevel and f._msufGFAggroLevel >= 1 and c.aggroEn then
+        return
+    end
+
+    -- Priority 3: Target
+    if f._msufGFIsTarget and c.targetEn then
+        if border._msufHLActivePrio ~= 3 then
+            border._msufHLActivePrio = 3
+            local kind = f._msufGFKind or "party"
+            local conf = GF.GetConf(kind)
+            _applyHighlightBorderStyle(border, conf,
+                HLVal(kind, "hlTargetSize") or 2,
+                HLVal(kind, "hlTargetOffset") or 0,
+                HLVal(kind, "hlTargetTexture"),
+                HLVal(kind, "hlTargetLayer") or "DEFAULT",
+                c.tgtR, c.tgtG, c.tgtB, 1)
+        else
+            border:SetBackdropBorderColor(c.tgtR, c.tgtG, c.tgtB, 1)
+        end
+        if not border:IsShown() then border:Show() end
+        return
+    end
+
+    -- Priority 4: Focus
+    if f._msufGFIsFocus and c.focusEn then
+        if border._msufHLActivePrio ~= 4 then
+            border._msufHLActivePrio = 4
+            local kind = f._msufGFKind or "party"
+            local conf = GF.GetConf(kind)
+            _applyHighlightBorderStyle(border, conf,
+                conf.hlFocusSize or 2,
+                conf.hlFocusOffset or 0,
+                conf.hlFocusTexture,
+                conf.hlFocusLayer or "DEFAULT",
+                c.focR, c.focG, c.focB, 1)
+        else
+            border:SetBackdropBorderColor(c.focR, c.focG, c.focB, 1)
+        end
+        if not border:IsShown() then border:Show() end
+        return
+    end
+
+    -- Nothing active
+    border._msufHLActivePrio = nil
+    if border:IsShown() then border:Hide() end
 end
 
 _GF_RefreshBorder = function(f, unit)
@@ -592,6 +808,7 @@ _GF_RefreshBorder = function(f, unit)
             local tex = HLVal(kind, "hlAggroTexture")
             local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
             _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
+            border._msufHLActivePrio = 1
             border:Show()
             return
         end
@@ -608,6 +825,7 @@ _GF_RefreshBorder = function(f, unit)
         local ag = HLColor("hlAggroColorG", 0.55)
         local ab = HLColor("hlAggroColorB", 0)
         _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, ar, ag, ab, 1)
+        border._msufHLActivePrio = 2
         border:Show()
         return
     end
@@ -622,6 +840,7 @@ _GF_RefreshBorder = function(f, unit)
             HLColor("hlTargetColorR", 1),
             HLColor("hlTargetColorG", 1),
             HLColor("hlTargetColorB", 1), 1)
+        border._msufHLActivePrio = 3
         border:Show()
         return
     end
@@ -636,10 +855,12 @@ _GF_RefreshBorder = function(f, unit)
             conf.hlFocusColorR or 0.5,
             conf.hlFocusColorG or 0.5,
             conf.hlFocusColorB or 1.0, 1)
+        border._msufHLActivePrio = 4
         border:Show()
         return
     end
 
+    border._msufHLActivePrio = nil
     border:Hide()
 end
 
@@ -1102,57 +1323,33 @@ local function ApplyHealthColor(f, kind, unit)
         f._msufGFHCStamp = nil
         return
     end
-    local conf = GF.GetConf(kind)
-    local gfMode = conf.gfBarMode
-
-    local mode
-    if gfMode and gfMode ~= "GLOBAL" then
-        mode = gfMode
-    else
-        local getCache = _G.MSUF_UFCore_GetSettingsCache
-        local cache = type(getCache) == "function" and getCache() or nil
-        local globalMode = cache and cache.barMode
-        if globalMode == "dark" or globalMode == "unified" then
-            mode = globalMode
-        else
-            mode = conf.healthColorMode or "CLASS"
-        end
-    end
+    local c = f._c
+    if not c then GF.BuildFrameCache(f); c = f._c end
+    local mode = c.hcMode
 
     if mode == "dark" then
-        local getCache = _G.MSUF_UFCore_GetSettingsCache
-        local cache = type(getCache) == "function" and getCache() or nil
-        local r = conf.gfDarkR or (cache and cache.darkBarR) or 0
-        local g = conf.gfDarkG or (cache and cache.darkBarG) or 0
-        local b = conf.gfDarkB or (cache and cache.darkBarB) or 0
-        local stamp = "dark"
-        if f._msufGFHCStamp ~= stamp then
-            f._msufGFHCStamp = stamp
-            f.health:SetStatusBarColor(r, g, b, 1)
+        if f._msufGFHCStamp ~= "dark" then
+            f._msufGFHCStamp = "dark"
+            f.health:SetStatusBarColor(c.darkR, c.darkG, c.darkB, 1)
         end
         return
     end
     if mode == "unified" then
-        local getCache = _G.MSUF_UFCore_GetSettingsCache
-        local cache = type(getCache) == "function" and getCache() or nil
-        local r = conf.gfUnifiedR or (cache and cache.unifiedBarR) or 0.10
-        local g = conf.gfUnifiedG or (cache and cache.unifiedBarG) or 0.60
-        local b = conf.gfUnifiedB or (cache and cache.unifiedBarB) or 0.90
-        local stamp = "unified"
-        if f._msufGFHCStamp ~= stamp then
-            f._msufGFHCStamp = stamp
-            f.health:SetStatusBarColor(r, g, b, 1)
+        if f._msufGFHCStamp ~= "unified" then
+            f._msufGFHCStamp = "unified"
+            f.health:SetStatusBarColor(c.unifiedR, c.unifiedG, c.unifiedB, 1)
         end
         return
     end
     if mode == "CLASS" and unit then
-        local _, cls = UnitClass(unit)
+        local cls = f._msufGFClass
+        if not cls then local _; _, cls = UnitClass(unit); f._msufGFClass = cls end
         if cls then
             if f._msufGFHCStamp == cls then return end
             f._msufGFHCStamp = cls
-            local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
-            if type(fastClass) == "function" then
-                local r, g, b = fastClass(cls)
+            local fn = c.classFn
+            if type(fn) == "function" then
+                local r, g, b = fn(cls)
                 if r then f.health:SetStatusBarColor(r, g, b, 1); return end
             end
             local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[cls]
@@ -1178,13 +1375,9 @@ local function ApplyHealthColor(f, kind, unit)
         end
         return
     end
-    local stamp = "custom"
-    if f._msufGFHCStamp ~= stamp then
-        f._msufGFHCStamp = stamp
-        f.health:SetStatusBarColor(
-            conf.healthCustomR or 0.2,
-            conf.healthCustomG or 0.8,
-            conf.healthCustomB or 0.2, 1)
+    if f._msufGFHCStamp ~= "custom" then
+        f._msufGFHCStamp = "custom"
+        f.health:SetStatusBarColor(c.customR, c.customG, c.customB, 1)
     end
 end
 
@@ -1241,24 +1434,18 @@ end
 local dispatchOverlays, dispatchIncomingHeal, dispatchAbsorb, dispatchHealAbsorb
 local function UpdateAll(f, unit)
     if not f or not unit then return end
-    GF.UpdateButton(f, unit)       -- name, HP, power, role, marker, leader (Phase 1)
-    ApplyRangeFade(f, unit)
-    UpdateAggro(f, unit)
-    -- Auras: only full pipeline when auras enabled; otherwise standalone dispel
-    local _kind = f._msufGFKind or "party"
-    local _conf = GF.GetConf(_kind)
-    local _auras = _conf and _conf.auras
-    local _aurasOn = _auras and _auras.enabled ~= false
+    local c = f._c
+    if not c then GF.BuildFrameCache(f); c = f._c end
+    GF.UpdateButton(f, unit)
+    if c.rfEn then ApplyRangeFade(f, unit) end
+    if c.needThreat then UpdateAggro(f, unit) end
 
-    local _siCfg = _conf and _conf.spellIndicators
-    local _siOn = _siCfg and _siCfg.enabled == true
-
-    -- SI runs FIRST: populates f._msufSIDedupIDs so buff scan can exclude dupes
+    local _siOn = c.siEn
     if GF.UpdateSpellIndicators then
         if _siOn then GF.UpdateSpellIndicators(f, unit) else GF.HideSpellIndicators(f) end
     end
 
-    if _aurasOn and GF.UpdateFrameAuras then
+    if c.anyAuraGrp and GF.UpdateFrameAuras then
         GF.UpdateFrameAuras(f, unit)
         local mergedDispel = f._msufGFMergedDispel
         local prevDispel = f._msufGFDispelType
@@ -1267,21 +1454,22 @@ local function UpdateAll(f, unit)
             _GF_RefreshBorder(f, unit)
         end
     else
-        -- Auras disabled: hide pools once, standalone dispel only
-        if GF.UpdateFrameAuras then GF.UpdateFrameAuras(f, unit) end -- cached HidePool
-        GF._UpdateDispel(f, unit)
+        if GF.UpdateFrameAuras then GF.UpdateFrameAuras(f, unit) end
+        if c.dispelScan and GF._playerCanDispel then GF._UpdateDispel(f, unit) end
     end
     UpdateTargetIndicator(f, unit)
     UpdateStatusText(f, unit)
-    dispatchOverlays(f, unit)
+    if c.healPredEn then dispatchOverlays(f, unit) end
     UpdateRoleIcon(f, unit)
     UpdateRaidMarker(f, unit)
     UpdateLeaderIcon(f, unit)
-    UpdateSummonIcon(f, unit)
-    UpdateResurrectIcon(f, unit)
-    UpdatePhaseIcon(f, unit)
+    if c.summonEn then UpdateSummonIcon(f, unit) end
+    if c.resEn then UpdateResurrectIcon(f, unit) end
+    if c.phaseEn then UpdatePhaseIcon(f, unit) end
     UpdateGroupNumber(f, unit)
-    if GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, unit) end
+    if c.ciEn and GF.UpdateCornerIndicators then GF.UpdateCornerIndicators(f, unit) end
+    if c.rdEn and GF.UpdateRaidDebuff then GF.UpdateRaidDebuff(f, unit) end
+    if c.paEn and GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, unit) end
 end
 
 ------------------------------------------------------------------------
@@ -1292,87 +1480,75 @@ local function dispatchHealth(f, unit)
     local hp    = UnitHealth(unit)
     local hpMax = UnitHealthMax(unit)
     f.health:SetMinMaxValues(0, hpMax)
-    -- Smooth fill (conditional: conf.smoothFill controls it)
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    if conf.smoothFill ~= false then
-        local interpolation = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
-        if interpolation then
-            f.health:SetValue(hp, interpolation)
-        else
-            f.health:SetValue(hp)
-        end
+    local c = f._c
+    if not c then GF.BuildFrameCache(f); c = f._c end
+    -- Smooth fill (pre-resolved interpolation enum from cache)
+    if c.smooth then
+        f.health:SetValue(hp, c.smooth)
     else
         f.health:SetValue(hp)
     end
 
-    -- Cutaway health: delayed bar update shows health loss as red fadeout
-    -- Secret-safe: never compare values, only delay the SetValue call
+    -- Cutaway health (config from cache)
     local cw = f._msufCutaway
-    if cw and conf.cutawayEnabled ~= false then
+    if cw and c.cwEn then
         cw:SetMinMaxValues(0, hpMax)
-        cw:SetStatusBarColor(
-            conf.cutawayColorR or 0.70, conf.cutawayColorG or 0.10,
-            conf.cutawayColorB or 0.10, conf.cutawayColorA or 0.75)
+        -- Diff-gate color (only changes on config rebuild)
+        if cw._cwStampR ~= c.cwR or cw._cwStampG ~= c.cwG or cw._cwStampB ~= c.cwB then
+            cw._cwStampR, cw._cwStampG, cw._cwStampB = c.cwR, c.cwG, c.cwB
+            cw:SetStatusBarColor(c.cwR, c.cwG, c.cwB, c.cwA)
+        end
         if not cw:IsShown() then cw:Show() end
-        -- Cancel pending timer
         if f._msufCutawayTimer then
             f._msufCutawayTimer:Cancel()
             f._msufCutawayTimer = nil
         end
-        -- Delay cutaway bar update so it shows the gap
-        local fadeTime = conf.cutawayFadeTime or 0.4
-        local capturedUnit = unit
-        f._msufCutawayTimer = C_Timer.NewTimer(fadeTime, function()
-            f._msufCutawayTimer = nil
-            if cw and f.health and UnitExists(capturedUnit) then
-                local curHp = UnitHealth(capturedUnit)
-                local curMax = UnitHealthMax(capturedUnit)
-                cw:SetMinMaxValues(0, curMax)
-                cw:SetValue(curHp)
+        -- Reusable callback (zero closure allocation per UNIT_HEALTH)
+        if not f._msufCutawayFn then
+            f._msufCutawayFn = function()
+                f._msufCutawayTimer = nil
+                local cw2 = f._msufCutaway
+                if cw2 and f.health and f.unit and UnitExists(f.unit) then
+                    local curHp = UnitHealth(f.unit)
+                    local curMax = UnitHealthMax(f.unit)
+                    cw2:SetMinMaxValues(0, curMax)
+                    cw2:SetValue(curHp)
+                end
             end
-        end)
+        end
+        f._msufCutawayTimer = C_Timer.NewTimer(c.cwFade, f._msufCutawayFn)
     elseif cw and cw:IsShown() then
         cw:Hide()
     end
 
-    ApplyHealthColor(f, kind, unit)
-    -- 3-slot health text (secret-safe: unit for UnitHealthPercent)
-    -- Diff-gate: only call SetText when formatted string actually changes
-    -- Secret-safe: secret strings cannot be compared with ~= in 12.0
-    local delim = conf.textDelimiter or " / "
-    local rev = conf.hpTextReverse
-    local tl = conf.textLeft  or "NONE"
-    local tc = conf.textCenter or "NONE"
-    local tr = conf.textRight or "NONE"
+    ApplyHealthColor(f, f._msufGFKind or "party", unit)
+    -- 3-slot health text (pre-resolved active flags from cache)
     local iss = issecretvalue
-    if f.textLeftFS and tl ~= "NONE" then
-        local s = GF.FormatHealthText(tl, hp, hpMax, delim, rev, unit)
-        local c = f._msufGFCachedTL
-        if (iss and (iss(s) or (c ~= nil and iss(c)))) or c ~= s then
+    if f.textLeftFS and c.tlOn then
+        local s = GF.FormatHealthText(c.tl, hp, hpMax, c.delim, c.rev, unit)
+        local cv = f._msufGFCachedTL
+        if (iss and (iss(s) or (cv ~= nil and iss(cv)))) or cv ~= s then
             f._msufGFCachedTL = (iss and iss(s)) and nil or s
             f.textLeftFS:SetText(s)
         end
     end
-    if f.textCenterFS and tc ~= "NONE" then
-        local s = GF.FormatHealthText(tc, hp, hpMax, delim, rev, unit)
-        local c = f._msufGFCachedTC
-        if (iss and (iss(s) or (c ~= nil and iss(c)))) or c ~= s then
+    if f.textCenterFS and c.tcOn then
+        local s = GF.FormatHealthText(c.tc, hp, hpMax, c.delim, c.rev, unit)
+        local cv = f._msufGFCachedTC
+        if (iss and (iss(s) or (cv ~= nil and iss(cv)))) or cv ~= s then
             f._msufGFCachedTC = (iss and iss(s)) and nil or s
             f.textCenterFS:SetText(s)
         end
     end
-    if f.textRightFS and tr ~= "NONE" then
-        local s = GF.FormatHealthText(tr, hp, hpMax, delim, rev, unit)
-        local c = f._msufGFCachedTR
-        if (iss and (iss(s) or (c ~= nil and iss(c)))) or c ~= s then
+    if f.textRightFS and c.trOn then
+        local s = GF.FormatHealthText(c.tr, hp, hpMax, c.delim, c.rev, unit)
+        local cv = f._msufGFCachedTR
+        if (iss and (iss(s) or (cv ~= nil and iss(cv)))) or cv ~= s then
             f._msufGFCachedTR = (iss and iss(s)) and nil or s
             f.textRightFS:SetText(s)
         end
     end
-    -- Status: always check (internal diff-gate returns immediately if state unchanged)
     UpdateStatusText(f, unit)
-    -- Heal prediction clips to missing HP — must sync when HP changes
     dispatchIncomingHeal(f, unit)
 end
 
@@ -1571,56 +1747,47 @@ end
 
 local function dispatchPower(f, unit)
     if not f.power then return end
-    local conf = GF.GetConf(f._msufGFKind or "party")
-    if (conf.powerHeight or 6) <= 0 then return end
-    -- Per-role visibility
+    local c = f._c
+    if not c then GF.BuildFrameCache(f); c = f._c end
+    if c.powH <= 0 then return end
+    -- Per-role visibility (cached flags)
     local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
-    if role == "TANK" and conf.powerShowTank == false then
-        f.power:Hide(); return
-    elseif role == "HEALER" and conf.powerShowHealer == false then
-        f.power:Hide(); return
-    elseif role == "DAMAGER" and conf.powerShowDamager == false then
-        f.power:Hide(); return
+    if role == "TANK" and not c.powTank then f.power:Hide(); return
+    elseif role == "HEALER" and not c.powHealer then f.power:Hide(); return
+    elseif role == "DAMAGER" and not c.powDPS then f.power:Hide(); return
     end
     local pw    = UnitPower(unit)
     local pwMax = UnitPowerMax(unit)
     f.power:SetMinMaxValues(0, pwMax)
-    if conf.powerSmoothFill then
-        local interp = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
-        if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end
+    if c.powSmooth then
+        f.power:SetValue(pw, c.powSmooth)
     else
         f.power:SetValue(pw)
     end
     f.power:Show()
-    -- 3-slot power text (secret-safe: unit for UnitPowerPercent)
-    -- Diff-gate: only SetText when formatted string changes
-    -- Secret-safe: secret strings cannot be compared with ~= in 12.0
-    if conf.showPower then
-        local pDelim = conf.powerTextDelimiter or " / "
-        local ptl = conf.powerTextLeft   or "NONE"
-        local ptc = conf.powerTextCenter  or "NONE"
-        local ptr = conf.powerTextRight   or "NONE"
+    -- 3-slot power text (pre-resolved active flags from cache)
+    if c.showPow then
         local iss = issecretvalue
-        if f.powerTextLeftFS and ptl ~= "NONE" then
-            local s = GF.FormatPowerText(ptl, pw, pwMax, pDelim, unit)
-            local c = f._msufGFCachedPTL
-            if (iss and (iss(s) or (c ~= nil and iss(c)))) or c ~= s then
+        if f.powerTextLeftFS and c.ptlOn then
+            local s = GF.FormatPowerText(c.ptl, pw, pwMax, c.pDelim, unit)
+            local cv = f._msufGFCachedPTL
+            if (iss and (iss(s) or (cv ~= nil and iss(cv)))) or cv ~= s then
                 f._msufGFCachedPTL = (iss and iss(s)) and nil or s
                 f.powerTextLeftFS:SetText(s)
             end
         end
-        if f.powerTextCenterFS and ptc ~= "NONE" then
-            local s = GF.FormatPowerText(ptc, pw, pwMax, pDelim, unit)
-            local c = f._msufGFCachedPTC
-            if (iss and (iss(s) or (c ~= nil and iss(c)))) or c ~= s then
+        if f.powerTextCenterFS and c.ptcOn then
+            local s = GF.FormatPowerText(c.ptc, pw, pwMax, c.pDelim, unit)
+            local cv = f._msufGFCachedPTC
+            if (iss and (iss(s) or (cv ~= nil and iss(cv)))) or cv ~= s then
                 f._msufGFCachedPTC = (iss and iss(s)) and nil or s
                 f.powerTextCenterFS:SetText(s)
             end
         end
-        if f.powerTextRightFS and ptr ~= "NONE" then
-            local s = GF.FormatPowerText(ptr, pw, pwMax, pDelim, unit)
-            local c = f._msufGFCachedPTR
-            if (iss and (iss(s) or (c ~= nil and iss(c)))) or c ~= s then
+        if f.powerTextRightFS and c.ptrOn then
+            local s = GF.FormatPowerText(c.ptr, pw, pwMax, c.pDelim, unit)
+            local cv = f._msufGFCachedPTR
+            if (iss and (iss(s) or (cv ~= nil and iss(cv)))) or cv ~= s then
                 f._msufGFCachedPTR = (iss and iss(s)) and nil or s
                 f.powerTextRightFS:SetText(s)
             end
@@ -1644,8 +1811,9 @@ local function dispatchName(f, unit)
                 name = GF.TruncateName(name, maxC, conf.nameNoEllipsis)
             end
             f.nameText:SetText(name)
-            -- Apply name color
+            -- Cache class token (avoids C API call in ApplyHealthColor hot path)
             local _, classToken = UnitClass(unit)
+            f._msufGFClass = classToken
             local nr, ng, nb = GF.ResolveNameColor(kind, classToken)
             f.nameText:SetTextColor(nr, ng, nb, 1)
         end
@@ -1692,10 +1860,12 @@ end
 ------------------------------------------------------------------------
 function GF.RegisterUnitEvents(f, unit)
     if not (f and unit) then return end
-    -- P1: Clear burst-dedup flag so first event for new unit runs immediately
     f._msufGFFullPending = nil
     local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
+
+    -- Ensure cache exists
+    if not f._c then GF.BuildFrameCache(f) end
+    local c = f._c
 
     -- Clear previous registrations
     if f._msufGFRegEv then
@@ -1710,56 +1880,48 @@ function GF.RegisterUnitEvents(f, unit)
         f._msufGFRegEv[ev] = true
     end
 
-    -- Core events
+    -- Core events (always needed)
     reg("UNIT_HEALTH")
     reg("UNIT_MAXHEALTH")
     reg("UNIT_CONNECTION")
     reg("UNIT_NAME_UPDATE")
     reg("UNIT_FLAGS")
 
-    -- Power
-    if (conf.powerHeight or 6) > 0 then
+    -- Power: only when power bar has height
+    if c.powH > 0 then
         reg("UNIT_POWER_UPDATE")
         reg("UNIT_MAXPOWER")
         reg("UNIT_DISPLAYPOWER")
     end
 
-    -- Range
-    if conf.rangeFadeEnabled ~= false then
+    -- Range: only when range fade enabled
+    if c.rfEn then
         reg("UNIT_IN_RANGE_UPDATE")
     end
 
-    -- Auras/Dispel: only register UNIT_AURA when at least one consumer needs it
-    local _auCfg = conf.auras
-    local needAura = (_auCfg and _auCfg.enabled ~= false)
-                  or (conf.dispelEnabled ~= false and GF._playerCanDispel)
-                  or (conf.spellIndicators and conf.spellIndicators.enabled)
-    if needAura then
+    -- Auras: only when ANY aura consumer is active
+    if c.needAura then
         reg("UNIT_AURA")
     end
 
-    -- Threat: always register — UpdateAggro checks hlAggroEnabled internally
-    reg("UNIT_THREAT_SITUATION_UPDATE")
-    reg("UNIT_THREAT_LIST_UPDATE")
-
-    -- Status icons
-    reg("INCOMING_SUMMON_CHANGED")
-    reg("INCOMING_RESURRECT_CHANGED")
-    reg("UNIT_PHASE")
-
-    -- Health prediction overlays: always register — handlers gate on enabled
-    -- state internally. Absorb reads from general (Bars), heal pred from GF conf.
-    if UnitGetIncomingHeals then
-        reg("UNIT_HEAL_PREDICTION")
-    end
-    if UnitGetTotalAbsorbs then
-        reg("UNIT_ABSORB_AMOUNT_CHANGED")
-    end
-    if UnitGetTotalHealAbsorbs then
-        reg("UNIT_HEAL_ABSORB_AMOUNT_CHANGED")
+    -- Threat: only when aggro highlight is enabled
+    if c.needThreat then
+        reg("UNIT_THREAT_SITUATION_UPDATE")
+        reg("UNIT_THREAT_LIST_UPDATE")
     end
 
-    -- Set OnEvent handler
+    -- Status icons: only when each icon is enabled
+    if c.summonEn then reg("INCOMING_SUMMON_CHANGED") end
+    if c.resEn then reg("INCOMING_RESURRECT_CHANGED") end
+    if c.phaseEn then reg("UNIT_PHASE") end
+
+    -- Heal prediction: only when enabled
+    if c.healPredEn then
+        if UnitGetIncomingHeals then reg("UNIT_HEAL_PREDICTION") end
+        if UnitGetTotalAbsorbs then reg("UNIT_ABSORB_AMOUNT_CHANGED") end
+        if UnitGetTotalHealAbsorbs then reg("UNIT_HEAL_ABSORB_AMOUNT_CHANGED") end
+    end
+
     f:SetScript("OnEvent", GF_OnEvent)
 end
 
@@ -1789,40 +1951,36 @@ local _gfFocusFrame  = nil -- the frame whose unit was last "focus"
 -- RAID_TARGET_UPDATE: update raid markers
 local function OnGlobalEvent(self, event, ...)
     if event == "PLAYER_TARGET_CHANGED" then
-        -- Clear old target frame
+        -- Lightweight: only toggle flag + color/show/hide (NO SetBackdrop)
         local oldTarget = _gfTargetFrame
         _gfTargetFrame = nil
         if oldTarget and oldTarget.unit then
             oldTarget._msufGFIsTarget = nil
-            UpdateTargetIndicator(oldTarget, oldTarget.unit)
-            _GF_RefreshBorder(oldTarget, oldTarget.unit)
+            _GF_QuickBorderUpdate(oldTarget)
         end
-        -- Find new target frame (iterate once)
         for f in pairs(GF.frames) do
             if f.unit and UnitExists(f.unit) and UnitIsUnit(f.unit, "target") then
                 f._msufGFIsTarget = true
                 _gfTargetFrame = f
-                UpdateTargetIndicator(f, f.unit)
-                _GF_RefreshBorder(f, f.unit)
+                _GF_QuickBorderUpdate(f)
                 break
             end
         end
 
     elseif event == "PLAYER_FOCUS_CHANGED" then
-        -- Clear old focus frame
+        -- Lightweight: only toggle flag + color/show/hide (NO SetBackdrop)
         local oldFocus = _gfFocusFrame
         _gfFocusFrame = nil
         if oldFocus and oldFocus.unit then
             oldFocus._msufGFIsFocus = nil
-            _GF_RefreshBorder(oldFocus, oldFocus.unit)
+            _GF_QuickBorderUpdate(oldFocus)
         end
-        -- Find new focus frame
         if UnitExists("focus") then
             for f in pairs(GF.frames) do
                 if f.unit and UnitExists(f.unit) and UnitIsUnit(f.unit, "focus") then
                     f._msufGFIsFocus = true
                     _gfFocusFrame = f
-                    _GF_RefreshBorder(f, f.unit)
+                    _GF_QuickBorderUpdate(f)
                     break
                 end
             end
