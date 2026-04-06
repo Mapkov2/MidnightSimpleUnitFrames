@@ -91,6 +91,12 @@ local DEFAULT_NPC_COLORS = {
     neutral  = { 1, 1, 0 },
     enemy    = { 0.85, 0.10, 0.10 },
     dead     = { 0.4, 0.4, 0.4 },
+    -- NPC Type Colors (npcColorMode == "type") — Platynator defaults
+    npcBoss      = { 0.74, 0.11, 0.00 },   -- #bc1c00 dark red
+    npcMiniboss  = { 0.56, 0.00, 0.74 },   -- #9000bc purple
+    npcCaster    = { 0.00, 0.45, 0.74 },   -- #0074bc blue
+    npcMelee     = { 0.99, 0.99, 0.99 },   -- #fcfcfc white (Platynator default)
+    npcRegular   = { 0.70, 0.56, 0.33 },   -- #b28e55 tan
 }
 
 local function UFCore_Clamp01(v, def)
@@ -115,6 +121,10 @@ local _ufcoreDebugDirty = false
 -- Eliminates UFCore_GetSettingsCache() from Flush and FlushTask hot paths.
 local _ufcoreFlushBudgetMs = 0.35  -- PERF: Hard-cap per-flush spike. Target: combined MSUF < 800μs/frame.
 local _ufcoreUrgentMax = 10
+
+-- NPC Type Colors: only active in 5-man instances (party).
+-- Updated on PLAYER_ENTERING_WORLD / ZONE_CHANGED_NEW_AREA.
+local _npcTypeInstanceActive = false
 
 -- ── Smooth power bar + real-time text (MidnightRogueBars-style) ──
 -- _smoothPowerBar:    ExponentialEaseOut on StatusBar (fluid animation).
@@ -180,6 +190,17 @@ local function UFCore_RefreshSettingsCache(reason)
     if not ag and g and g.enableAggroHighlight == true then ag = "border" end -- legacy migrate
     cache.aggroIndicatorMode = ag or "off"
 
+    -- Boss Target Highlight
+    cache.bossTargetHLEnabled = (g and g.bossTargetHighlightEnabled ~= false) and true or false
+    local btc = g and g.bossTargetHighlightColor
+    if type(btc) == "table" then
+        cache.bossTargetHLR = btc[1] or 1
+        cache.bossTargetHLG = btc[2] or 0.82
+        cache.bossTargetHLB = btc[3] or 0
+    else
+        cache.bossTargetHLR, cache.bossTargetHLG, cache.bossTargetHLB = 1, 0.82, 0
+    end
+
     -- Smooth power bar + real-time text (hot-path upvalues).
     -- Default ON (true) when not explicitly set. Matches MidnightRogueBars behavior.
     local prevEither = (_smoothPowerBar or _realtimePowerText)
@@ -202,6 +223,20 @@ local function UFCore_RefreshSettingsCache(reason)
         mode = (g and g.useClassColors and "class") or (g and g.darkMode and "dark") or "dark"
     end
     cache.barMode = mode
+
+    -- NPC Color Mode: "reaction" (default) or "type" (classification-based)
+    -- Force "reaction" outside 5-man instances → zero overhead in raids/solo.
+    local npcCM = g and g.npcColorMode or nil
+    if npcCM ~= "type" then npcCM = "reaction" end
+    if not _npcTypeInstanceActive then npcCM = "reaction" end
+    cache.npcColorMode = npcCM
+    cache.npcTypeColorBar  = (npcCM == "type") and (g and g.npcTypeColorBar ~= false) and true or false
+    cache.npcTypeColorText = (npcCM == "type") and (g and g.npcTypeColorText ~= false) and true or false
+    -- Per-unit NPC type enable (only evaluated when npcColorMode == "type")
+    cache.npcTypeTarget = (g and g.npcTypeTarget ~= false) and true or false
+    cache.npcTypeFocus  = (g and g.npcTypeFocus  ~= false) and true or false
+    cache.npcTypeBoss   = (g and g.npcTypeBoss   ~= false) and true or false
+    cache.npcTypeToT    = (g and g.npcTypeToT    ~= false) and true or false
 
     -- Dark bar color
     local darkR, darkG, darkB = 0, 0, 0
@@ -618,9 +653,11 @@ local function _RefreshUnitIdentityCache(frame)
     if not unit or not UnitExists(unit) then
         frame._msufCachedIsPlayer     = false
         frame._msufCachedReactionKind = "enemy"
+        frame._msufNpcTypeColored     = nil
         return
     end
     frame._msufCachedIsPlayer = (UnitIsPlayer(unit) and true) or false
+    frame._msufNpcTypeColored = nil
     if not frame._msufCachedIsPlayer then
         if UnitIsDeadOrGhost(unit) then
             frame._msufCachedReactionKind = "dead"
@@ -641,6 +678,50 @@ local function _RefreshUnitIdentityCache(frame)
                 frame._msufCachedReactionKind = "enemy"
             end
         end
+
+        -- NPC Type override: replace "enemy" with classification-based key.
+        -- Gated by cache.npcColorMode which is forced to "reaction" outside 5-man.
+        -- All APIs return plain values — secret-safe in 12.0 Midnight.
+        local kind = frame._msufCachedReactionKind
+        if kind == "enemy" or (kind == nil) then
+            local cache = UFCore_GetSettingsCache()
+            if cache and cache.npcColorMode == "type" then
+                -- Per-unit gate: check if this frame type has NPC type enabled
+                local unitAllowed = true
+                if frame._msufIsTarget then unitAllowed = cache.npcTypeTarget
+                elseif frame._msufIsFocus then unitAllowed = cache.npcTypeFocus
+                elseif frame._msufBossIndex then unitAllowed = cache.npcTypeBoss
+                elseif frame._msufIsToT then unitAllowed = cache.npcTypeToT
+                end
+                if unitAllowed then
+                local cls = UnitClassification(unit)
+                if cls == "worldboss" or cls == "boss" then
+                    frame._msufCachedReactionKind = "npcBoss"
+                elseif cls == "elite" or cls == "rareelite" then
+                    -- Dungeon bosses return "elite" but have skull level (-1).
+                    -- UnitEffectiveLevel returns a plain number — safe in 12.0.
+                    local level = UnitEffectiveLevel and UnitEffectiveLevel(unit) or 0
+                    if level == -1 then
+                        frame._msufCachedReactionKind = "npcBoss"
+                    elseif UnitIsLieutenant and UnitIsLieutenant(unit) then
+                        frame._msufCachedReactionKind = "npcMiniboss"
+                    else
+                        local uclass = UnitClassBase and UnitClassBase(unit)
+                        if uclass == "PALADIN" then
+                            frame._msufCachedReactionKind = "npcCaster"
+                        else
+                            frame._msufCachedReactionKind = "npcMelee"
+                        end
+                    end
+                elseif cls == "rare" then
+                    frame._msufCachedReactionKind = "npcMiniboss"
+                else -- "normal", "trivial", "minus"
+                    frame._msufCachedReactionKind = "npcRegular"
+                end
+                frame._msufNpcTypeColored = true
+                end -- unitAllowed
+            end
+        end
     end
 end
 
@@ -654,6 +735,7 @@ local function _UpdateIdentityColors(frame)
     -- P4: read identity cache (set once per DIRTY_IDENTITY, not per UNIT_HEALTH).
     local isPlayer = frame._msufCachedIsPlayer
     if isPlayer == nil then
+        -- cold start: populate cache now (first Identity update)
         _RefreshUnitIdentityCache(frame)
         isPlayer = frame._msufCachedIsPlayer
     end
@@ -685,7 +767,13 @@ local function _UpdateIdentityColors(frame)
         end
 
     elseif wantNpcRed and unit and UnitExists(unit) and not isPlayer then
-        r, g, b = UFCore_GetNPCReactionColorFast(frame._msufCachedReactionKind or "enemy")
+        local kind = frame._msufCachedReactionKind or "enemy"
+        -- If NPC type coloring is active but text toggle is off, fall back to "enemy"
+        local cache = Core._settingsCache
+        if frame._msufNpcTypeColored and not (cache and cache.npcTypeColorText) then
+            kind = "enemy"
+        end
+        r, g, b = UFCore_GetNPCReactionColorFast(kind)
     end
 
     if r == nil then
@@ -867,9 +955,11 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
     -- refresh the reaction cache so the bar stops showing "dead" grey.
     if frame._msufHealthColorDirty and not frame._msufCachedIsPlayer then
         frame._msufCachedReactionKind = nil
+        frame._msufNpcTypeColored = nil
     end
-    if (cache and cache.barMode == "class") and not frame._msufStaticHealthColor then
+    if not frame._msufStaticHealthColor then
         frame._msufCachedIsPlayer = nil
+        frame._msufNpcTypeColored = nil
     end
 
     -- Bar mode (authoritative): "dark" | "class" | "unified"
@@ -896,7 +986,12 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
             local _, classToken = UnitClass(unit)
             barR, barG, barB = UFCore_GetClassBarColorFast(classToken)
         else
-            barR, barG, barB = UFCore_GetNPCReactionColorFast(frame._msufCachedReactionKind or "enemy")
+            local kind = frame._msufCachedReactionKind or "enemy"
+            -- If NPC type coloring is active but bar toggle is off, fall back to "enemy"
+            if frame._msufNpcTypeColored and not cache.npcTypeColorBar then
+                kind = "enemy"
+            end
+            barR, barG, barB = UFCore_GetNPCReactionColorFast(kind)
         end
 
         -- Pet frame override (only when using Class mode)
@@ -1064,30 +1159,8 @@ Elements.Portrait = {
         "UNIT_PORTRAIT_UPDATE",
         "UNIT_MODEL_CHANGED",
     },
-    Enable = function(f, conf)
-        -- Force fresh update on re-enable.
-        if f then
-            f._msufPortraitDirty = true
-            f._msufPortraitNextAt = 0
-            f._msufPortraitModeStamp = nil
-            f._msufPortraitRenderStamp = nil
-        end
-    end,
-    Disable = function(f)
-        if not f then return end
-        -- Hide 2D portrait texture.
-        local tex = f.portrait
-        if tex and tex.Hide then tex:Hide() end
-        -- Hide 3D model (created by MSUF_3DPortraits module).
-        local m = rawget(f, "portraitModel")
-        if m and m.Hide then m:Hide() end
-        -- Clear stamps so re-enable triggers a fresh update.
-        f._msufPortraitModeStamp = nil
-        f._msufPortraitRenderStamp = nil
-        f._msufPortraitLayoutModeStamp = nil
-        f._msufPortraitLayoutHStamp = nil
-        f._msufPortraitDirty = true
-    end,
+    Enable = function(f, conf) end,
+    Disable = function(f) end,
     Update = function(f, conf)
         local fn = _G.MSUF_MaybeUpdatePortrait or _G.MSUF_UpdatePortraitIfNeeded
         -- PERF: NEVER return false. Returning false triggers legacyFallback → full
@@ -2941,6 +3014,7 @@ local EVENT_DIRTY_FLAGS = {
     UNIT_MAXHEALTHMODIFIER           = "bothAbsorbDirty",
     UNIT_FACTION                     = "healthColorDirty",
     UNIT_FLAGS                       = "healthColorDirty",
+    UNIT_CLASSIFICATION_CHANGED      = "healthColorDirty",
 }
 
 -- PERF P0: Merge DIRECT_APPLY + EVENT_DIRTY_FLAGS into UNIT_EVENT_MAP entries.
@@ -3156,6 +3230,7 @@ _G.MSUF_UFCore_HasToTInlineDriver = true
 
 Global:RegisterEvent("PLAYER_LOGIN")
 Global:RegisterEvent("PLAYER_ENTERING_WORLD")
+Global:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
 -- Player-only globals (do not register per unitframe)
 Global:RegisterEvent("PLAYER_FLAGS_CHANGED")
@@ -3198,6 +3273,9 @@ local function _UFCore_FlushBossEngage()
             QueueUnit(unit, false, _bossEngageMask, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
         end
     end
+    -- Boss Target Highlight: re-evaluate after boss frames appear/disappear (pcall-safe)
+    local fn = _G.MSUF_UpdateBossTargetHighlight
+    if type(fn) == "function" then pcall(fn) end
 end
 local function _UFCore_ScheduleBossEngage()
     if _bossEngageQueued then return end
@@ -3269,6 +3347,11 @@ end
 
 Global:SetScript("OnEvent", function(_, event, arg1)
     if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+        -- NPC Type instance gate: update on zone change
+        local _, instanceType = GetInstanceInfo()
+        _npcTypeInstanceActive = (instanceType == "party")
+        _G.MSUF_NpcTypeInstanceActive = _npcTypeInstanceActive
+
         -- Resolve hot-path fast helpers now that the main file has loaded.
         UFCore_ResolveFastFns()
 
@@ -3290,6 +3373,15 @@ Global:SetScript("OnEvent", function(_, event, arg1)
 
             Core.MarkDirty(f, DIRTY_FULL, true, event)
         end
+        return
+    end
+
+    if event == "ZONE_CHANGED_NEW_AREA" then
+        local _, instanceType = GetInstanceInfo()
+        _npcTypeInstanceActive = (instanceType == "party")
+        _G.MSUF_NpcTypeInstanceActive = _npcTypeInstanceActive
+        -- Refresh cache so npcColorMode toggles between "type" and "reaction"
+        UFCore_RefreshSettingsCache("ZONE_NPC_TYPE")
         return
     end
 
@@ -3400,6 +3492,49 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 end)
 
+-- ---------------------------------------------------------------------------
+-- Boss Target Highlight: set _msufBossTargetHLOn flag on boss frames so the
+-- Borders.lua priority system can render the highlight overlay.
+-- Secret-safe: UnitIsUnit takes string tokens only; guard result anyway.
+-- Diff-gated per frame to avoid redundant RefreshRareBarVisuals calls.
+-- ---------------------------------------------------------------------------
+local _BTH_issecret = _UFCORE_issecret
+local _BTH_UnitIsUnit = UnitIsUnit
+local _BTH_UnitExists = UnitExists
+
+local function UFCore_UpdateBossTargetHighlight()
+    local uf = _G.MSUF_UnitFrames
+    if not uf then return end
+    local fn = _G.MSUF_RefreshRareBarVisuals
+
+    for i = 1, 5 do
+        local bossUnit = "boss" .. i
+        local frame = uf[bossUnit]
+        if frame then
+            local isTarget = false
+            if _BTH_UnitExists(bossUnit) then
+                local result = _BTH_UnitIsUnit("target", bossUnit)
+                if _BTH_issecret and _BTH_issecret(result) then
+                    -- secret: keep last known state
+                elseif result then
+                    isTarget = true
+                end
+            end
+
+            -- Diff-gate: nil == false for this comparison (avoid spurious RefreshRare on empty boss frames)
+            local prev = frame._msufBossTargetHLOn or false
+            if prev ~= isTarget then
+                frame._msufBossTargetHLOn = isTarget
+                -- Trigger border priority re-evaluation (pcall-safe)
+                if type(fn) == "function" then pcall(fn, frame) end
+            end
+        end
+    end
+end
+
+-- Export for Options/profile refresh
+_G.MSUF_UpdateBossTargetHighlight = UFCore_UpdateBossTargetHighlight
+
 -- Phase 1 Fan-out: route PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED through EventBus
 -- so all modules (UFCore, Auras, RangeFade, etc.) share ONE engine-level registration.
 do
@@ -3408,12 +3543,30 @@ do
         busReg("PLAYER_TARGET_CHANGED", "MSUF_UFCORE", function()
             QueueUnit("target", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
             QueueUnit("targettarget", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
+            -- Force health color refresh on swap (only when NPC type is active in a 5-man)
+            if _npcTypeInstanceActive then
+                local tf = FramesByUnit["target"]
+                if tf then tf._msufHealthColorDirty = true end
+                local ttf = FramesByUnit["targettarget"]
+                if ttf then ttf._msufHealthColorDirty = true end
+            end
             DeferSwapWork("target", "PLAYER_TARGET_CHANGED", true, false)
             DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", false, false)
+            -- Boss Target Highlight: update which boss frame shows the target border (pcall-safe)
+            local okBTH, errBTH = pcall(UFCore_UpdateBossTargetHighlight)
+            if not okBTH and type(errBTH) == "string" then
+                -- Debug: print to chat if something goes wrong (should never happen)
+                local p = print; if p then p("|cffff4444MSUF BTH error:|r " .. errBTH) end
+            end
         end)
 
         busReg("PLAYER_FOCUS_CHANGED", "MSUF_UFCORE", function()
             QueueUnit("focus", true, MASK_UNIT_SWAP, "PLAYER_FOCUS_CHANGED")
+            -- Force health color refresh on swap (only when NPC type is active)
+            if _npcTypeInstanceActive then
+                local ff = FramesByUnit["focus"]
+                if ff then ff._msufHealthColorDirty = true end
+            end
             DeferSwapWork("focus", "PLAYER_FOCUS_CHANGED", true, false)
         end)
     end
@@ -3445,4 +3598,16 @@ end
 
 function _G.MSUF_UFCore_GetSettingsCache()
     return UFCore_GetSettingsCache()
+end
+
+_G.MSUF_UFCore_GetNPCReactionColorFast = UFCore_GetNPCReactionColorFast
+_G.MSUF_UFCore_GetClassBarColorFast    = UFCore_GetClassBarColorFast
+
+-- NPC Type instance gate (plain global boolean — zero-cost read from main file)
+_G.MSUF_NpcTypeInstanceActive = false
+
+-- Exported for the heavy-visual path in MidnightSimpleUnitFrames.lua
+-- so it can refresh the NPC type cache before applying bar colors.
+function _G.MSUF_UFCore_RefreshIdentityCache(frame)
+    if frame then _RefreshUnitIdentityCache(frame) end
 end

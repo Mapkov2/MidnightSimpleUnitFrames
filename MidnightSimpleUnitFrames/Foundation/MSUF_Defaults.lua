@@ -681,6 +681,16 @@ end
 if g.castbarShowGlow == nil then
     g.castbarShowGlow = false
 end
+if g.castbarShowSpark == nil then
+    g.castbarShowSpark = false
+end
+if g.castbarSparkOverflow == nil then
+    g.castbarSparkOverflow = true
+end
+-- Player castbar width matching: nil = manual, "essential" = CDM essential row, "utility" = CDM utility bar
+if g.castbarPlayerMatchWidth == nil then
+    g.castbarPlayerMatchWidth = nil
+end
 -- Aura highlight colors (used by Auras 2.0 highlight pipeline)
 if g.aurasOwnBuffHighlightColor == nil then
     g.aurasOwnBuffHighlightColor = { ["1"] = 1, ["2"] = 0.85, ["3"] = 0.2 }

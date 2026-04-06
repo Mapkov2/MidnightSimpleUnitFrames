@@ -2844,6 +2844,7 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
         f._msufTextSpec = nil
         f._msufLastH = nil
         f._msufLastPctS = nil
+        f._msufLastMaxS = nil
         f._msufLastPwrC = nil
         f._msufLastPwrM = nil
         f._msufLastPwrP = nil
@@ -3378,6 +3379,10 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
          return
     end
     local hpStr = MSUF_NumberToTextFast(hp)
+    -- Cache abbreviated max HP for extended text modes (MAX, CURMAX, DEFICIT, etc.)
+    local hpMax = UnitHealthMax(unit)
+    local hpMaxStr = MSUF_NumberToTextFast(hpMax)
+    self._msufCachedHpMaxStr = hpMaxStr
     local hpPct = MSUF_GetUnitHealthPercent(unit)
     local hasPct = (type(hpPct) == "number")
     local absorbText, absorbStyle = nil, nil
@@ -3429,15 +3434,17 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
         absorbText = self._msufCachedAbsorbText
         absorbStyle = self._msufCachedAbsorbStyle
     end
-    ns.Text.RenderHpMode(self, true, hpStr, hpPct, hasPct, conf, nil, absorbText, absorbStyle)
+    ns.Text.RenderHpMode(self, true, hpStr, hpPct, hasPct, conf, nil, absorbText, absorbStyle,
+        self._msufCachedHpMaxStr)
  end
 function _G.MSUF_ApplyBossTestHpPreviewText(self, conf)
     if not self or not self.hpText then  return end
     local show = (self.showHPText ~= false)
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local hpStr = MSUF_NumberToTextFast(750000)
+    local hpMaxStr = MSUF_NumberToTextFast(1000000)
     local hpPct = 75.0
-    ns.Text.RenderHpMode(self, show, hpStr, hpPct, true, conf, g)
+    ns.Text.RenderHpMode(self, show, hpStr, hpPct, true, conf, g, nil, nil, hpMaxStr)
  end
 function _G.MSUF_UFCore_UpdatePowerTextFast(self)
     return ns.Text.RenderPowerText(self)
@@ -3475,11 +3482,6 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
     if type(_G.MSUF_ApplyUnitAlpha) == "function" then
         _G.MSUF_ApplyUnitAlpha(self, key or self.unit)
     end
-
-    -- Preview stamp: skip full bar/text rebuild if settings haven't changed.
-    local serial = _MSUF_GetUFCoreSettingsSerial()
-    if self._msufEditPreviewStamp == serial then return end
-    self._msufEditPreviewStamp = serial
 
     -- Clear any sticky state from previously shown units.
     MSUF_ClearUnitFrameState(self, true)
@@ -3761,6 +3763,37 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key, g_opt)
                         kind = "neutral"
                     end
                 end
+                -- NPC Type override: self-contained classification
+                if kind == "enemy" and cache and cache.npcColorMode == "type" and cache.npcTypeColorBar
+                   and _G.MSUF_NpcTypeInstanceActive then
+                    -- Per-unit gate
+                    local unitOK = true
+                    if key == "target" then unitOK = cache.npcTypeTarget
+                    elseif key == "focus" then unitOK = cache.npcTypeFocus
+                    elseif key == "targettarget" then unitOK = cache.npcTypeToT
+                    elseif key and key:sub(1,4) == "boss" then unitOK = cache.npcTypeBoss
+                    end
+                    if unitOK then
+                    local cls = UnitClassification(unit)
+                    if cls == "worldboss" or cls == "boss" then
+                        kind = "npcBoss"
+                    elseif cls == "elite" or cls == "rareelite" then
+                        local lvl = UnitEffectiveLevel and UnitEffectiveLevel(unit) or 0
+                        if lvl == -1 then
+                            kind = "npcBoss"
+                        elseif UnitIsLieutenant and UnitIsLieutenant(unit) then
+                            kind = "npcMiniboss"
+                        else
+                            local uc = UnitClassBase and UnitClassBase(unit)
+                            kind = (uc == "PALADIN") and "npcCaster" or "npcMelee"
+                        end
+                    elseif cls == "rare" then
+                        kind = "npcMiniboss"
+                    else
+                        kind = "npcRegular"
+                    end
+                    end -- unitOK
+                end
                 if type(fastNPC) == "function" then
                     barR, barG, barB = fastNPC(kind)
                 else
@@ -3780,10 +3813,6 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key, g_opt)
         if self.bg then
             MSUF_ApplyBarBackgroundVisual(self)
         end
-        -- 3D Portrait visibility sync (replaces former hooksecurefunc on UpdateSimpleUnitFrame).
-        -- Only runs in cold/visual path, not every frame update.
-        local fn3dp = _G.MSUF_3DPortraits_SyncVisibility
-        if fn3dp then fn3dp(self) end
         self._msufHeavyVisualApplied = true
         self._msufHeavyVisualSettingsSerial = _MSUF_GetUFCoreSettingsSerial()
     end
@@ -3929,189 +3958,6 @@ local function _MSUF_ShouldRunStaticVisualPass(self, key, exists)
     return _MSUF_IsVisualLiveApplyContext() and (not _msuf_inCombat)
 end
 
--- =========================================================================
--- Preview Renderers (extracted from UpdateSimpleUnitFrame for maintainability)
--- These are COLD PATH only — never run in combat.
--- Wrapped in do..end to avoid file-scope local pressure (200 limit).
--- =========================================================================
-do
-
-local function _RenderBossTestPreview(self, key, conf, g, barsConf)
-    if not _msuf_inCombat then
-        self:Show()
-        _UF.Alpha(self, key)
-    end
-    -- Preview stamp: skip full bar/text rebuild if settings haven't changed.
-    local serial = _MSUF_GetUFCoreSettingsSerial()
-    if self._msufBossPreviewStamp == serial then return end
-    self._msufBossPreviewStamp = serial
-    if self.bg then
-        MSUF_ApplyBarBackgroundVisual(self)
-    end
-    if self.targetPowerBar then
-        if (barsConf.showBossPowerBar == false) then
-            self.targetPowerBar:SetScript("OnUpdate", nil)
-            self.targetPowerBar:Hide()
-            MSUF_ResetBarZero(self.targetPowerBar, true)
-        else
-            self.targetPowerBar:SetMinMaxValues(0, 100)
-            MSUF_SetBarValue(self.targetPowerBar, 40, false)
-            self.targetPowerBar.MSUF_lastValue = 40
-            do
-                local tok = "MANA"
-                local pr, pg, pb = MSUF_GetPowerBarColor(nil, tok)
-                if not pr then pr, pg, pb = 0.6, 0.2, 1.0 end
-                self.targetPowerBar:SetStatusBarColor(pr, pg, pb)
-                ns.Bars.ApplyPowerGradientOnce(self)
-            end
-            self.targetPowerBar:Show()
-        end
-    end
-    self._msufClampStamp = nil
-    self._msufNameClipAnchorStamp = nil
-    self._msufNameClipTextStamp = nil
-    if self.nameText then self.nameText._msufLastSetT = nil end
-    ns.Text.ApplyBossTestName(self, self.unit)
-    ns.Text.ApplyBossTestLevel(self, conf)
-    if self.hpText then
-        local show = (self.showHPText ~= false)
-        if show then
-            _UF.BossPrev(self, conf)
-        else
-            MSUF_SetTextIfChanged(self.hpText, "")
-            ns.Text.ClearField(self, "hpTextPct")
-        end
-        ns.Util.SetShown(self.hpText, show)
-    end
-    if self.powerText then
-        local showPower = self.showPowerText
-        if showPower == nil then showPower = true end
-        if showPower then
-            MSUF_SetTextIfChanged(self.powerText, "40 / 100")
-        else
-            MSUF_SetTextIfChanged(self.powerText, "")
-        end
-        ns.Util.SetShown(self.powerText, showPower)
-    end
-end
-
-local function _RenderPreviewTestMode(self, key, conf, g, barsConf, unit)
-    if not _msuf_inCombat then
-        self:Show()
-        _UF.Alpha(self, key)
-    end
-    -- Preview stamp: skip full bar/text rebuild if settings haven't changed.
-    local serial = _MSUF_GetUFCoreSettingsSerial()
-    if self._msufPreviewTestStamp == serial then return end
-    self._msufPreviewTestStamp = serial
-    if self.bg then
-        MSUF_ApplyBarBackgroundVisual(self)
-    end
-    local hb = self.hpBar
-    if hb then
-        MSUF_SetBarMinMax(hb, 0, 1)
-        MSUF_SetBarValue(hb, 0.73, false)
-        if hb.SetStatusBarColor then hb:SetStatusBarColor(0.20, 0.80, 0.20, 1) end
-        if self.hpGradients then ns.Bars._ApplyHPGradient(self)
-        elseif self.hpGradient then ns.Bars._ApplyHPGradient(self.hpGradient) end
-    end
-    local pb = self.targetPowerBar or self.powerBar
-    if pb then
-        local showPB = (conf and conf.showPower ~= false)
-        if showPB then
-            pb:SetMinMaxValues(0, 100)
-            MSUF_SetBarValue(pb, 52, false)
-            pb.MSUF_lastValue = 52
-            if pb.SetStatusBarColor then pb:SetStatusBarColor(0.20, 0.60, 1.00, 1) end
-            ns.Bars.ApplyPowerGradientOnce(self)
-            pb:Show()
-            if pb.bg and pb.bg.Show then pb.bg:Show() end
-        else
-            pb:Hide()
-        end
-    end
-    if self.targetPowerBar and self.powerBar and self.powerBar ~= self.targetPowerBar then
-        if pb == self.targetPowerBar then self.powerBar:Hide() else self.targetPowerBar:Hide() end
-    end
-    if pb and type(_G.MSUF_ApplyPowerBarBorder) == "function" then
-        _G.MSUF_ApplyPowerBarBorder(pb)
-    end
-    self._msufClampStamp = nil
-    self._msufNameClipAnchorStamp = nil
-    self._msufNameClipTextStamp = nil
-    if self.nameText then self.nameText._msufLastSetT = nil end
-    if self.nameText then
-        local showN = (self.showName ~= false)
-        if showN then
-            local label = self.msufConfigKey or unit or "unit"
-            if label == "targettarget" then label = "ToT" end
-            MSUF_SetTextIfChanged(self.nameText, string.upper(label))
-        else
-            MSUF_SetTextIfChanged(self.nameText, "")
-        end
-        ns.Util.SetShown(self.nameText, showN)
-    end
-    MSUF_UpdateNameColor(self)
-    if self.levelText then
-        local showLvl = (conf and conf.showLevelIndicator ~= false)
-        if showLvl then
-            MSUF_SetTextIfChanged(self.levelText, "70")
-        else
-            MSUF_SetTextIfChanged(self.levelText, "")
-        end
-        ns.Util.SetShown(self.levelText, showLvl)
-        if MSUF_ClampNameWidth then MSUF_ClampNameWidth(self, conf) end
-    end
-    if self.hpText then
-        local showHP = (self.showHPText ~= false)
-        if showHP then
-            MSUF_SetTextIfChanged(self.hpText, "73% 123.4k")
-        else
-            MSUF_SetTextIfChanged(self.hpText, "")
-            ns.Text.ClearField(self, "hpTextPct")
-        end
-        ns.Util.SetShown(self.hpText, showHP)
-    end
-    if self.powerText then
-        local showPwr = (self.showPowerText ~= false)
-        if showPwr then
-            MSUF_SetTextIfChanged(self.powerText, "52% 65")
-        else
-            MSUF_SetTextIfChanged(self.powerText, "")
-        end
-        ns.Util.SetShown(self.powerText, showPwr)
-    end
-    if self.leaderIcon then
-        local showLeader = ns.Util.Enabled(conf, g, "showLeaderIcon", true)
-        ns.Cache.ClearStamp(self, "LeaderIconLayout")
-        if _UF.LeaderIcon then _UF.LeaderIcon(self) end
-        if showLeader then
-            self.leaderIcon:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
-            self.leaderIcon:Show()
-        else
-            self.leaderIcon:Hide()
-        end
-    end
-    if self.raidMarkerIcon then
-        local showMarker = ns.Util.Enabled(conf, g, "showRaidMarker", true)
-        ns.Cache.ClearStamp(self, "RaidMarkerLayout")
-        if _UF.RaidMarker then _UF.RaidMarker(self) end
-        if showMarker then
-            if SetRaidTargetIconTexture then SetRaidTargetIconTexture(self.raidMarkerIcon, 1) end
-            self.raidMarkerIcon:Show()
-        else
-            self.raidMarkerIcon:Hide()
-        end
-    end
-    if type(MSUF_UpdateStatusIndicatorForFrame) == "function" then
-        MSUF_UpdateStatusIndicatorForFrame(self)
-    end
-end
-
-_G.MSUF_RenderBossTestPreview = _RenderBossTestPreview
-_G.MSUF_RenderPreviewTestMode = _RenderPreviewTestMode
-end -- do (preview renderers)
-
 function UpdateSimpleUnitFrame(self)
         -- P0: _UF.Alpha / Portrait / EditPrev pre-resolved at PLAYER_LOGIN.
         -- Zero per-call overhead (was: 3 branches + 3 _G hash lookups per frame update).
@@ -4195,13 +4041,192 @@ end
     ns.Bars._ApplyReverseFillBars(self, conf)
     local didPowerBarSync = false
     if self.isBoss and MSUF_BossTestMode then
-        _G.MSUF_RenderBossTestPreview(self, key, conf, g, barsConf)
-        return
+        if not _msuf_inCombat then
+            self:Show()
+            _UF.Alpha(self, key)
     end
-    if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and not exists then
-        _G.MSUF_RenderPreviewTestMode(self, key, conf, g, barsConf, unit)
-        return
+    if self.bg then
+        MSUF_ApplyBarBackgroundVisual(self)
     end
+               if self.targetPowerBar then
+            if (barsConf.showBossPowerBar == false) then
+                self.targetPowerBar:SetScript("OnUpdate", nil)
+                self.targetPowerBar:Hide()
+                MSUF_ResetBarZero(self.targetPowerBar, true)
+            else
+                self.targetPowerBar:SetMinMaxValues(0, 100)
+                MSUF_SetBarValue(self.targetPowerBar, 40, false)
+                self.targetPowerBar.MSUF_lastValue = 40
+                do
+                    local tok = "MANA"
+                    local pr, pg, pb = MSUF_GetPowerBarColor(nil, tok)
+                    if not pr then pr, pg, pb = 0.6, 0.2, 1.0 end
+                    self.targetPowerBar:SetStatusBarColor(pr, pg, pb)
+                    ns.Bars.ApplyPowerGradientOnce(self)
+                end
+                self.targetPowerBar:Show()
+            end
+    end
+        -- Boss preview: invalidate diff-gates so font/shortening changes render immediately
+        self._msufClampStamp = nil
+        self._msufNameClipAnchorStamp = nil
+        self._msufNameClipTextStamp = nil
+        if self.nameText then self.nameText._msufLastSetT = nil end
+        ns.Text.ApplyBossTestName(self, unit)
+        ns.Text.ApplyBossTestLevel(self, conf)
+        if self.hpText then
+    local show = (self.showHPText ~= false)
+    if show then
+        _UF.BossPrev(self, conf)
+    else
+        MSUF_SetTextIfChanged(self.hpText, "")
+    ns.Text.ClearField(self, "hpTextPct")
+    end
+    ns.Util.SetShown(self.hpText, show)
+end
+if self.powerText then
+            local showPower = self.showPowerText
+            if showPower == nil then
+                showPower = true
+            end
+            if showPower then
+                MSUF_SetTextIfChanged(self.powerText, "40 / 100")
+            else
+                MSUF_SetTextIfChanged(self.powerText, "")
+            end
+            ns.Util.SetShown(self.powerText, showPower)
+    end
+         return
+    end
+-- ── Preview Test Mode (non-boss, non-player, no unit) ──────────────────
+-- Mirrors BossTestMode block above. Full control over bars/text/visibility.
+if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and not exists then
+    if not _msuf_inCombat then
+        self:Show()
+        _UF.Alpha(self, key)
+    end
+    if self.bg then
+        MSUF_ApplyBarBackgroundVisual(self)
+    end
+    -- HP bar: visible placeholder (class-colored or green, not black)
+    local hb = self.hpBar
+    if hb then
+        MSUF_SetBarMinMax(hb, 0, 1)
+        MSUF_SetBarValue(hb, 0.73, false)
+        if hb.SetStatusBarColor then hb:SetStatusBarColor(0.20, 0.80, 0.20, 1) end
+        if self.hpGradients then ns.Bars._ApplyHPGradient(self)
+        elseif self.hpGradient then ns.Bars._ApplyHPGradient(self.hpGradient) end
+    end
+    -- Power bar
+    local pb = self.targetPowerBar or self.powerBar
+    if pb then
+        local showPB = (conf and conf.showPower ~= false)
+        if showPB then
+            pb:SetMinMaxValues(0, 100)
+            MSUF_SetBarValue(pb, 52, false)
+            pb.MSUF_lastValue = 52
+            if pb.SetStatusBarColor then pb:SetStatusBarColor(0.20, 0.60, 1.00, 1) end
+            ns.Bars.ApplyPowerGradientOnce(self)
+            pb:Show()
+            if pb.bg and pb.bg.Show then pb.bg:Show() end
+        else
+            pb:Hide()
+        end
+    end
+    -- Ensure only one power bar visible (targetPowerBar vs powerBar)
+    if self.targetPowerBar and self.powerBar and self.powerBar ~= self.targetPowerBar then
+        if pb == self.targetPowerBar then
+            self.powerBar:Hide()
+        else
+            self.targetPowerBar:Hide()
+        end
+    end
+    -- Power bar border/separator line (reads config live)
+    if pb and type(_G.MSUF_ApplyPowerBarBorder) == "function" then
+        _G.MSUF_ApplyPowerBarBorder(pb)
+    end
+    -- Invalidate diff-gates (same as boss path)
+    self._msufClampStamp = nil
+    self._msufNameClipAnchorStamp = nil
+    self._msufNameClipTextStamp = nil
+    if self.nameText then self.nameText._msufLastSetT = nil end
+    -- Name text (respects showName toggle)
+    if self.nameText then
+        local showN = (self.showName ~= false)
+        if showN then
+            local label = self.msufConfigKey or unit or "unit"
+            if label == "targettarget" then label = "ToT" end
+            MSUF_SetTextIfChanged(self.nameText, string.upper(label))
+        else
+            MSUF_SetTextIfChanged(self.nameText, "")
+        end
+        ns.Util.SetShown(self.nameText, showN)
+    end
+    MSUF_UpdateNameColor(self)
+    -- Level text (showLevelIndicator is the actual config key)
+    if self.levelText then
+        local showLvl = (conf and conf.showLevelIndicator ~= false)
+        if showLvl then
+            MSUF_SetTextIfChanged(self.levelText, "70")
+        else
+            MSUF_SetTextIfChanged(self.levelText, "")
+        end
+        ns.Util.SetShown(self.levelText, showLvl)
+        if MSUF_ClampNameWidth then MSUF_ClampNameWidth(self, conf) end
+    end
+    -- HP text (respects showHP toggle)
+    if self.hpText then
+        local showHP = (self.showHPText ~= false)
+        if showHP then
+            MSUF_SetTextIfChanged(self.hpText, "73% 123.4k")
+        else
+            MSUF_SetTextIfChanged(self.hpText, "")
+            ns.Text.ClearField(self, "hpTextPct")
+        end
+        ns.Util.SetShown(self.hpText, showHP)
+    end
+    -- Power text (respects showPower toggle)
+    if self.powerText then
+        local showPwr = (self.showPowerText ~= false)
+        if showPwr then
+            MSUF_SetTextIfChanged(self.powerText, "52% 65")
+        else
+            MSUF_SetTextIfChanged(self.powerText, "")
+        end
+        ns.Util.SetShown(self.powerText, showPwr)
+    end
+    -- Leader icon (fake leader for preview)
+    if self.leaderIcon then
+        local showLeader = ns.Util.Enabled(conf, g, "showLeaderIcon", true)
+        -- Invalidate layout stamp so position/size re-applies from config
+        ns.Cache.ClearStamp(self, "LeaderIconLayout")
+        if _UF.LeaderIcon then _UF.LeaderIcon(self) end
+        -- Set texture + visibility AFTER layout (layout only does position/size)
+        if showLeader then
+            self.leaderIcon:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
+            self.leaderIcon:Show()
+        else
+            self.leaderIcon:Hide()
+        end
+    end
+    -- Raid marker icon (fake star marker for preview)
+    if self.raidMarkerIcon then
+        local showMarker = ns.Util.Enabled(conf, g, "showRaidMarker", true)
+        ns.Cache.ClearStamp(self, "RaidMarkerLayout")
+        if _UF.RaidMarker then _UF.RaidMarker(self) end
+        if showMarker then
+            if SetRaidTargetIconTexture then SetRaidTargetIconTexture(self.raidMarkerIcon, 1) end
+            self.raidMarkerIcon:Show()
+        else
+            self.raidMarkerIcon:Hide()
+        end
+    end
+    -- Status indicators (combat, rest, rez icons — live-apply config changes)
+    if type(MSUF_UpdateStatusIndicatorForFrame) == "function" then
+        MSUF_UpdateStatusIndicatorForFrame(self)
+    end
+    return
+end
 if self.isBoss then
     if not exists then
         if self._msufNoUnitCleared and (self.GetAlpha and self:GetAlpha() or 0) <= 0.01 then
@@ -4302,9 +4327,6 @@ do
     local function MSUF_TPA_Snap(anchorName, target)
         local a = MSUF_TPA_GetOrCreate(anchorName)
         if not a or not a.ClearAllPoints or not a.SetPoint then  return end
-        -- Skip if target hasn't changed (avoids redundant ClearAllPoints + SetPoint C-API calls).
-        if a._msufTPATarget == target and target ~= nil then return end
-        a._msufTPATarget = target
         a:ClearAllPoints()
         a:SetPoint("CENTER", target or UIParent, "CENTER", 0, 0)
      end
@@ -5003,8 +5025,6 @@ local function UpdateAllBarTextures()
     elseif type(MSUF_UpdateCastbarTextures) == "function" then
         MSUF_UpdateCastbarTextures()
     end
-    -- Notify RoundedUF module (replaces former hooksecurefunc).
-    local fnR = _G.MSUF_RoundedUF_OnApplyAll; if fnR then fnR() end
  end
 local function UpdateAbsorbBarTextures()
     local texAbs  = MSUF_GetAbsorbBarTexture()
@@ -5254,16 +5274,24 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         _DisableClicks(self)
         self:StartMoving()
         self._msufDragAccum = 0
-        self:SetScript("OnUpdate", function(s, elapsed)
-            if not s._msufDragActive then
-                s:SetScript("OnUpdate", nil)
-                return
-            end
-            s._msufDragAccum = (s._msufDragAccum or 0) + (elapsed or 0)
-            if s._msufDragAccum < 0.02 then return end
-            s._msufDragAccum = 0
-            _UpdateDBFromFrame(s, s._msufDragKey, s._msufDragConf)
-        end)
+            _G.MSUF_UnregisterBucketUpdate(self, "EditDrag")
+        if _G.MSUF_RegisterBucketUpdate then
+            _G.MSUF_RegisterBucketUpdate(self, 0.02, function(s, dt)
+                if not s._msufDragActive then  return end
+                _UpdateDBFromFrame(s, s._msufDragKey, s._msufDragConf)
+             end, "EditDrag")
+        else
+            self:SetScript("OnUpdate", function(s, elapsed)
+                if not s._msufDragActive then
+                    s:SetScript("OnUpdate", nil)
+                     return
+                end
+                s._msufDragAccum = (s._msufDragAccum or 0) + (elapsed or 0)
+                if s._msufDragAccum < 0.02 then  return end
+                s._msufDragAccum = 0
+                _UpdateDBFromFrame(s, s._msufDragKey, s._msufDragConf)
+             end)
+    end
      end)
     f:SetScript("OnDragStop", function(self, button)
         if not self._msufDragActive then  return end
@@ -5273,6 +5301,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         self._msufDragActive = false
         self._msufDragKey = nil
         self._msufDragConf = nil
+            _G.MSUF_UnregisterBucketUpdate(self, "EditDrag")
         self:SetScript("OnUpdate", nil)
         _RestoreClicks(self)
         if key and conf then
@@ -5376,16 +5405,20 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
                 anchorToCP = true
             end
             -- CDM width sync (global setting overrides manual width)
-            local dpbWMode = b.detachedPowerBarWidthMode
-            local cdmName = dpbWMode and _DPB.CDM[dpbWMode]
-            if cdmName then
-                local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
-                -- Scale-compensated width (Sensei pattern): convert CDM coords → our bar coords
-                if cdm and cdm.IsShown and cdm:IsShown() then
-                    local scaledW = _G.MSUF_CDM_GetScaledWidth and _G.MSUF_CDM_GetScaledWidth(cdm, pb)
-                    if scaledW and scaledW >= 30 then dW = scaledW end
+            -- Per-unit sync flag takes precedence: when explicitly OFF, keep manual width.
+            -- CDM override only meaningful for player (target/focus have no class resources).
+            if unit == 'player' and conf.detachedPowerBarSyncClassPower ~= false then
+                local dpbWMode = b.detachedPowerBarWidthMode
+                local cdmName = dpbWMode and _DPB.CDM[dpbWMode]
+                if cdmName then
+                    local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
+                    -- Scale-compensated width (Sensei pattern): convert CDM coords → our bar coords
+                    if cdm and cdm.IsShown and cdm:IsShown() then
+                        local scaledW = _G.MSUF_CDM_GetScaledWidth and _G.MSUF_CDM_GetScaledWidth(cdm, pb)
+                        if scaledW and scaledW >= 30 then dW = scaledW end
+                    end
+                    -- If CDM hidden/unavailable, keep manual dW (from DB or frame width)
                 end
-                -- If CDM hidden/unavailable, keep manual dW (from DB or frame width)
             end
         end
     end
@@ -6167,7 +6200,114 @@ end
         print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89|r |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")
     end
  end, nil, true)
--- BucketUpdate system removed (was only used for drag, now inlined in drag handler)
+do
+    if not _G.MSUF__BucketUpdateManager then
+        _G.MSUF__BucketUpdateManager = {
+            buckets = {},
+        }
+    end
+    local M = _G.MSUF__BucketUpdateManager
+    local function _GetBucket(interval)
+        local key = tostring(interval or 0)
+        local bucket = M.buckets[key]
+        if bucket then  return bucket end
+        bucket = {
+            interval = interval or 0,
+            accum = 0,
+            jobCount = 0,
+            jobs = {},   -- [ownerFrame] = { [tag] = job }
+            frame = F.CreateFrame("Frame"),
+        }
+        bucket._onUpdate = function(_, elapsed)
+            elapsed = elapsed or 0
+            bucket.accum = (bucket.accum or 0) + elapsed
+            if bucket.accum < bucket.interval then  return end
+            local tick = bucket.accum
+            bucket.accum = 0
+            for owner, tagMap in pairs(bucket.jobs) do
+                if owner and owner.GetObjectType then
+                    local visible = owner.IsVisible and owner:IsVisible()
+                    for _, job in pairs(tagMap) do
+                        if job then
+                            if job.allowHidden or visible then
+                                local cb = job.cb
+                                if cb then
+                                    cb(owner, tick)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            if (bucket.jobCount or 0) == 0 then
+                bucket.frame:SetScript("OnUpdate", nil)
+                bucket.active = false
+            end
+     end
+        bucket.frame:SetScript("OnUpdate", bucket._onUpdate)
+        bucket.active = true
+        M.buckets[key] = bucket
+         return bucket
+    end
+    _G.MSUF_RegisterBucketUpdate = function(owner, interval, cb, tag, allowHidden)
+        if not owner or not cb then  return end
+        interval = tonumber(interval) or 0
+        if interval <= 0 then interval = 0.02 end
+        tag = tag or "_"
+        local bucket = _GetBucket(interval)
+        if not bucket.active then
+            bucket.accum = 0
+            bucket.frame:SetScript("OnUpdate", bucket._onUpdate)
+            bucket.active = true
+    end
+        local tagMap = bucket.jobs[owner]
+        if not tagMap then
+            tagMap = {}
+            bucket.jobs[owner] = tagMap
+        end
+        if not tagMap[tag] then
+            bucket.jobCount = (bucket.jobCount or 0) + 1
+        end
+        tagMap[tag] = {
+            cb = cb,
+            allowHidden = allowHidden and true or false,
+        }
+        owner._msufBucketJobs = owner._msufBucketJobs or {}
+        owner._msufBucketJobs[tag] = interval
+        if not bucket.frame:GetScript("OnUpdate") then
+            bucket.accum = 0
+            bucket.frame:SetScript("OnUpdate", bucket._onUpdate)
+            bucket.active = true
+    end
+     end
+    _G.MSUF_UnregisterBucketUpdate = function(owner, tag)
+        if not owner then  return end
+        tag = tag or "_"
+        local jobs = owner._msufBucketJobs
+        local interval = jobs and jobs[tag]
+        if not interval then  return end
+        local bucket = M.buckets[tostring(interval)]
+        if bucket and bucket.jobs and bucket.jobs[owner] then
+            local tagMap = bucket.jobs[owner]
+            if tagMap and tagMap[tag] then
+                tagMap[tag] = nil
+                bucket.jobCount = (bucket.jobCount or 1) - 1
+                if bucket.jobCount < 0 then bucket.jobCount = 0 end
+                if not next(tagMap) then
+                    bucket.jobs[owner] = nil
+                end
+                if bucket.jobCount == 0 then
+                    bucket.frame:SetScript("OnUpdate", nil)
+                    bucket.active = false
+                end
+            end
+    end
+        jobs[tag] = nil
+        if not next(jobs) then
+            owner._msufBucketJobs = nil
+    end
+     end
+end
 do
     ns.Util.EnsureUnitFlags  = ns.Util.EnsureUnitFlags  or MSUF_EnsureUnitFlags
     ns.Util.IsTargetLikeFrame= ns.Util.IsTargetLikeFrame or MSUF_IsTargetLikeFrame

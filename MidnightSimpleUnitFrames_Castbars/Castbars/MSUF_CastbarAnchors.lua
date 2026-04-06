@@ -312,15 +312,76 @@ function _G.MSUF_ApplyPlayerCastbarIconLayout(bar, g, topInset, bottomInset)
 
         statusBar._msufPCLayoutKey = layoutKey
     end
+
+    -- Explicit StatusBar sizing: point-anchoring alone can leave the bar in a
+    -- "border-only" state until the next frame. Force immediate size so the
+    -- fill/background spans the full new width (fixes black bar on CDM sync).
+    local bw = (bar.GetWidth and bar:GetWidth()) or 0
+    if bw <= 0 then bw = 250 end
+    local desiredW
+    if showIconLocal and icon and (not iconDetached) then
+        desiredW = bw - (iconSizeLocal + 1)
+    else
+        desiredW = bw
+    end
+    if desiredW < 1 then desiredW = 1 end
+
+    local desiredH = (height or 18) - 2
+    if desiredH < 1 then desiredH = 1 end
+
+    if statusBar._msufPCSbW ~= desiredW then
+        statusBar:SetWidth(desiredW)
+        statusBar._msufPCSbW = desiredW
+    end
+    if statusBar._msufPCSbH ~= desiredH then
+        statusBar:SetHeight(desiredH)
+        statusBar._msufPCSbH = desiredH
+    end
+
+    local bg = bar.backgroundBar
+    if bg and bg.SetAllPoints then
+        bg:ClearAllPoints()
+        bg:SetAllPoints(statusBar)
+    end
 end
 
 -- ============================================================
 -- Player castbar sizing: always follow castbar size keys (NOT unitframe width).
 -- Also keep the player preview frame in perfect sync with the real bar.
 -- ============================================================
-local function MSUF_GetPlayerCastbarDesiredSize(g, fallbackW, fallbackH)
+local function MSUF_GetPlayerCastbarDesiredSize(g, bar, fallbackW, fallbackH)
     local w = g and tonumber(g.castbarPlayerBarWidth) or nil
     local h = g and tonumber(g.castbarPlayerBarHeight) or nil
+
+    -- Width sync to CooldownManager Essential/Utility viewer (scale-compensated)
+    if g then
+        local matchSrc = g.castbarPlayerMatchWidth
+        if matchSrc == "essential" or matchSrc == "utility" then
+            local getScaled = _G.MSUF_CDM_GetScaledWidth
+            if type(getScaled) == "function" then
+                local ww
+                -- 1) CDM anchor container (exact calculated content width)
+                local containerKey = (matchSrc == "utility")
+                    and "UtilityCooldownViewer_AnchorContainer"
+                    or  "EssentialCooldownViewer_CDM_Container"
+                local container = _G[containerKey]
+                if container then
+                    ww = getScaled(container, bar)
+                end
+                -- 2) Blizzard viewer frame fallback
+                if not ww or ww <= 0 then
+                    local viewerKey = (matchSrc == "utility") and "UtilityCooldownViewer" or "EssentialCooldownViewer"
+                    local viewer = _G[viewerKey]
+                    if viewer then
+                        ww = getScaled(viewer, bar)
+                    end
+                end
+                if ww and ww > 0 then
+                    w = ww
+                end
+            end
+        end
+    end
 
     if not w or w <= 0 then
         w = g and tonumber(g.castbarGlobalWidth) or nil
@@ -367,6 +428,35 @@ local function MSUF_ApplyPlayerCastbarSizeAndLayout(bar, g, w, h)
         for _, tick in pairs(bar.empowerStageTicks) do
             if tick and tick.SetHeight then
                 tick:SetHeight(bh)
+            end
+        end
+    end
+
+    -- Spark (leading-edge highlight) — lazy-create if absent
+    if bar.statusBar then
+        local showSpark = g and g.castbarShowSpark == true
+        local sparkTex = bar.spark
+        if showSpark and not sparkTex then
+            sparkTex = bar.statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
+            sparkTex:SetTexture(4417031)
+            sparkTex:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
+            sparkTex:SetDesaturated(true)
+            sparkTex:SetVertexColor(1, 1, 1, 1)
+            sparkTex:SetBlendMode("ADD")
+            bar.spark = sparkTex
+        end
+        if sparkTex then
+            sparkTex:SetShown(showSpark)
+            if showSpark then
+                local barH = bar:GetHeight() or h or 18
+                local overflow = (g and g.castbarSparkOverflow ~= false)
+                local sparkH = overflow and math.max(4, barH * 2.1) or barH
+                sparkTex:SetSize(16, sparkH)
+                local fillTex = bar.statusBar:GetStatusBarTexture()
+                if fillTex then
+                    sparkTex:ClearAllPoints()
+                    sparkTex:SetPoint("CENTER", fillTex, "RIGHT", 0, 0)
+                end
             end
         end
     end
@@ -426,7 +516,7 @@ function MSUF_ReanchorPlayerCastBar()
         end
     end
 
-    local w, h = MSUF_GetPlayerCastbarDesiredSize(g, 250, 18)
+    local w, h = MSUF_GetPlayerCastbarDesiredSize(g, MSUF_PlayerCastbar, 250, 18)
     MSUF_ApplyPlayerCastbarSizeAndLayout(MSUF_PlayerCastbar, g, w, h)
 
     -- Cast-time text offsets + visibility

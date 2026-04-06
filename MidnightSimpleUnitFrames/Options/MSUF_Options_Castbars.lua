@@ -263,7 +263,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     -- =====================================================================
     -- Section 3: Textures & Outline
     -- =====================================================================
-    local s3Box, s3Body = MakeCollapsibleSection(castbarEnemyGroup, 185, "Textures & Outline", false)
+    local s3Box, s3Body = MakeCollapsibleSection(castbarEnemyGroup, 310, "Textures & Outline", false)
     s3Box:SetPoint("TOPLEFT", s2Box, "BOTTOMLEFT", 0, -6)
 
     local function ApplyTextures()
@@ -329,6 +329,45 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         label = TR("Show latency indicator"),
         get = function() return G().castbarShowLatency ~= false end,
         set = function(v) G().castbarShowLatency = v; Apply("castbarLatency") end,
+    })
+
+    local sparkCheck = UI.Check({
+        name = "MSUF_CastbarSparkCheck", parent = s3Body,
+        anchor = latencyCheck, x = 0, y = -6,
+        label = TR("Show spark (leading edge highlight)"),
+        get = function() return G().castbarShowSpark == true end,
+        set = function(v) G().castbarShowSpark = v; ApplyTextures() end,
+    })
+
+    local sparkOverflowCheck = UI.Check({
+        name = "MSUF_CastbarSparkOverflowCheck", parent = s3Body,
+        anchor = sparkCheck, x = 18, y = -6,
+        label = TR("Spark extends beyond bar"),
+        get = function() return G().castbarSparkOverflow ~= false end,
+        set = function(v) G().castbarSparkOverflow = v; ApplyTextures() end,
+    })
+
+    local matchLabel = UI.Label({ parent = s3Body, text = TR("Player castbar width source"), anchor = sparkOverflowCheck, y = -12 })
+
+    local matchDrop = UI.Dropdown({
+        name = "MSUF_CastbarPlayerMatchWidthDropdown", parent = s3Body,
+        anchor = matchLabel, x = -16, y = -4, width = 260,
+        items = {
+            { key = "manual",    label = "Manual (per-unit width)" },
+            { key = "essential", label = "Essential Cooldown Row" },
+            { key = "utility",   label = "Utility Cooldown Bar" },
+        },
+        get = function()
+            local v = G().castbarPlayerMatchWidth
+            if v == "essential" or v == "utility" then return v end
+            return "manual"
+        end,
+        set = function(v)
+            if v == "manual" then v = nil end
+            G().castbarPlayerMatchWidth = v
+            ApplyTextures()
+            if type(_G.MSUF_ReanchorPlayerCastBar) == "function" then _G.MSUF_ReanchorPlayerCastBar() end
+        end,
     })
 
     -- =====================================================================
