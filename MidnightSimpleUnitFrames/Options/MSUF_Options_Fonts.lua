@@ -51,6 +51,12 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 _G.MSUF_RefreshAllFrames()
             end
         end
+        -- Live-apply to Group Frames (shared settings propagate)
+        local gf = ns and ns.GF
+        if gf then
+            if type(gf.RefreshFonts) == "function" then gf.RefreshFonts() end
+            if type(gf.MarkAllDirty) == "function" then gf.MarkAllDirty((gf.DIRTY_FONT or 4) + (gf.DIRTY_LAYOUT or 32)) end
+        end
     end
     RequestLayoutAll = function(reason)
         local fn = ns.MSUF_Options_RequestLayoutAll or _G.MSUF_Options_RequestLayoutAll
@@ -218,10 +224,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- =====================================================================
     -- SCOPE BAR (A2-style button strip — above scroll area)
     -- =====================================================================
-    local SCOPE_KEYS = { "shared", "player", "target", "targettarget", "focus", "pet", "boss" }
+    local SCOPE_KEYS = { "shared", "player", "target", "targettarget", "focus", "pet", "boss", "gf_party", "gf_raid" }
     local SCOPE_LABELS = {
         shared = "Shared", player = "Player", target = "Target",
         targettarget = "ToT", focus = "Focus", pet = "Pet", boss = "Boss",
+        gf_party = "Party", gf_raid = "Raid",
     }
 
     local scopeBar = CreateFrame("Frame", nil, fontGroup, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -243,12 +250,26 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end
     end
 
+    local _isGFScope -- forward decl
+    local IsGFScope, GFApplyFont, GFApplyLayout -- forward decls for closures
     do
         local prevBtn
         for i, k in ipairs(SCOPE_KEYS) do
             local bk = k
+            local isGF = (bk == "gf_party" or bk == "gf_raid")
+
+            -- Separator dot before Party
+            if bk == "gf_party" and prevBtn then
+                local sep = scopeBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                sep:SetPoint("LEFT", prevBtn, "RIGHT", 4, 0)
+                sep:SetText("|cff3a5a90·|r")
+                local sepAnchor = CreateFrame("Frame", nil, scopeBar)
+                sepAnchor:SetSize(10, 18); sepAnchor:SetPoint("LEFT", sep, "RIGHT", 0, 0)
+                prevBtn = sepAnchor
+            end
+
             local btn = CreateFrame("Button", nil, scopeBar, BackdropTemplateMixin and "BackdropTemplate" or nil)
-            btn:SetSize(i == 1 and 56 or 48, 18)
+            btn:SetSize(i == 1 and 56 or 44, 18)
             if not prevBtn then
                 btn:SetPoint("LEFT", scopeEditLbl, "RIGHT", 8, 0)
             else
@@ -265,11 +286,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             btn._msufLabel = fs
 
             btn._msufApplyState = function(self, active)
-                local hasOvr = (bk ~= "shared") and IsOverride(bk)
+                local hasOvr = (not isGF) and (bk ~= "shared") and IsOverride(bk)
                 if active then
-                    bg:SetColorTexture(0.12, 0.24, 0.50, 0.95)
+                    bg:SetColorTexture(isGF and 0.10 or 0.12, isGF and 0.20 or 0.24, isGF and 0.40 or 0.50, 0.95)
                     if hasOvr then border:SetBackdropBorderColor(0.96, 0.80, 0.34, 0.98)
-                    else border:SetBackdropBorderColor(0.30, 0.55, 1.00, 0.80) end
+                    else border:SetBackdropBorderColor(isGF and 0.25 or 0.30, isGF and 0.50 or 0.55, isGF and 0.90 or 1.00, 0.80) end
                     fs:SetTextColor(0.90, 0.95, 1.00)
                 else
                     bg:SetColorTexture(0.08, 0.12, 0.22, 0.80)
@@ -295,6 +316,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                     GameTooltip:SetText(SCOPE_LABELS[bk] or bk, 1, 1, 1)
                     if bk == "shared" then
                         GameTooltip:AddLine(TR("Shared baseline used by units without overrides."), 0.72, 0.78, 0.88, true)
+                    elseif isGF then
+                        GameTooltip:AddLine(TR("Group Frame font settings (separate from unit frame overrides)."), 0.72, 0.78, 0.88, true)
                     else
                         local hasOvr = IsOverride(bk)
                         GameTooltip:AddLine(hasOvr and TR("Override active: this unit uses its own font settings.") or TR("Uses Shared settings."), 0.72, 0.78, 0.88, true)
@@ -325,13 +348,20 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     overrideCheck:SetScript("OnClick", function(self)
         local uk = GetUnitKey()
         if not uk then self:SetChecked(false); return end
+        local gfScope = IsGFScope()
         if self:GetChecked() then
-            EnableOverride(uk)
+            if gfScope then
+                -- GF: just set flag (GF config already has its own values)
+                U(uk).fontOverride = true
+            else
+                EnableOverride(uk)
+            end
         else
             U(uk).fontOverride = false
         end
         InvalidateTextSpecs()
         LiveSyncFontVisuals({ layout = "FONT_OVERRIDE" })
+        if gfScope then GFApplyFont(); GFApplyLayout() end
         if SyncScopeUI then SyncScopeUI() end
     end)
 
@@ -350,10 +380,66 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             local u = MSUF_DB[k]
             if u then u.fontOverride = false end
         end
+        -- Reset GF overrides too
+        if MSUF_DB.gf_party then MSUF_DB.gf_party.fontOverride = false end
+        if MSUF_DB.gf_raid  then MSUF_DB.gf_raid.fontOverride  = false end
         InvalidateTextSpecs()
         LiveSyncFontVisuals({ layout = "FONT_OVERRIDE_RESET" })
+        local gf = ns and ns.GF
+        if gf and type(gf.RefreshFonts) == "function" then gf.RefreshFonts() end
         if SyncScopeUI then SyncScopeUI() end
     end)
+
+    -- =====================================================================
+    -- GF scope helpers (Party / Raid)
+    -- =====================================================================
+    IsGFScope = function()
+        local k = GetScopeKey()
+        return k == "gf_party" or k == "gf_raid"
+    end
+    _isGFScope = IsGFScope
+    local function GFKind()
+        return (GetScopeKey() == "gf_raid") and "raid" or "party"
+    end
+    local function GFConf()
+        local gf = ns and ns.GF; return gf and gf.GetConf(GFKind())
+    end
+    local function GFVal(key)
+        local gf = ns and ns.GF; return gf and gf.Val(GFKind(), key)
+    end
+    GFApplyFont = function()
+        local gf = ns and ns.GF
+        if gf and type(gf.RefreshFonts) == "function" then gf.RefreshFonts() end
+    end
+    GFApplyLayout = function()
+        local gf = ns and ns.GF
+        if gf and type(gf.MarkAllDirty) == "function" then gf.MarkAllDirty((gf.DIRTY_LAYOUT or 32) + (gf.DIRTY_FONT or 4)) end
+    end
+    local function GFColorPicker(r, g, b, callback)
+        if not ColorPickerFrame or type(callback) ~= "function" then return end
+        local sR, sG, sB = tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1
+        if ColorPickerFrame.SetupColorPickerAndShow then
+            ColorPickerFrame:SetupColorPickerAndShow({
+                r = sR, g = sG, b = sB, opacity = 1, hasOpacity = false,
+                swatchFunc = function() local nr, ng, nb = ColorPickerFrame:GetColorRGB(); callback(nr, ng, nb) end,
+                cancelFunc = function(prev) if type(prev) == "table" then callback(prev.r or sR, prev.g or sG, prev.b or sB) else callback(sR, sG, sB) end end,
+                previousValues = { r = sR, g = sG, b = sB, opacity = 1 },
+            })
+        else
+            ColorPickerFrame.func = function() local nr, ng, nb = ColorPickerFrame:GetColorRGB(); callback(nr, ng, nb) end
+            ColorPickerFrame.cancelFunc = function(prev) if type(prev) == "table" then callback(prev.r or sR, prev.g or sG, prev.b or sB) else callback(sR, sG, sB) end end
+            ColorPickerFrame.previousValues = { r = sR, g = sG, b = sB }; ColorPickerFrame.hasOpacity = false
+            ColorPickerFrame:SetColorRGB(sR, sG, sB); ColorPickerFrame:Show()
+        end
+    end
+    -- Tracks all GF widget refresh functions
+    local _gfRefreshFns = {}
+    local function GFSyncAll()
+        for i = 1, #_gfRefreshFns do
+            local fn = _gfRefreshFns[i]
+            if type(fn) == "function" then fn() end
+        end
+    end
 
     -- =====================================================================
     -- Scroll frame (below scope bar)
@@ -428,6 +514,29 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             if C_Timer and C_Timer.After then C_Timer.After(0, UpdateFonts) end
         end,
     })
+
+    -- GF font dropdown (same position, shown only for GF scopes)
+    local gfFontDrop = UI.Dropdown({
+        name = "MSUF_GF_FontDrop", parent = fontBody,
+        anchor = fontBody, anchorPoint = "TOPLEFT", x = 14, y = -8, width = 300,
+        items = function()
+            local items = { { key = "", label = "(Global Default)" } }
+            local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+            if LSM then
+                local list = LSM:List("font")
+                for i = 1, #list do items[#items + 1] = { key = list[i], label = list[i] } end
+            end
+            return items
+        end,
+        get = function() return GFVal("fontKey") or "" end,
+        set = function(v) local c = GFConf(); if c then c.fontKey = v end; GFApplyFont() end,
+    })
+    gfFontDrop:Hide()
+    _gfRefreshFns[#_gfRefreshFns + 1] = function() if gfFontDrop and gfFontDrop.Refresh then gfFontDrop:Refresh() end end
+
+    -- Widget visibility tracking
+    local _ufOnlyWidgets = { fontDrop }
+    local _gfOnlyWidgets = { gfFontDrop }
 
     -- =====================================================================
     -- SECTION 2: Text Sizes (default open) — NOT scope-affected
@@ -601,47 +710,162 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             LiveSyncFontVisuals({ layout = "FONT_STYLE" })
         end,
     })
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = boldCheck
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = noOutlineCheck
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = textBackdropCheck
+
+    -- GF: Font Outline dropdown + Use Global Font Color
+    local gfOutlineLbl = styleBody:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    gfOutlineLbl:SetPoint("TOPLEFT", styleBody, "TOPLEFT", 16, -8); gfOutlineLbl:SetText(TR("Font Outline")); gfOutlineLbl:Hide()
+    local gfOutlineDrop = UI.Dropdown({
+        name = "MSUF_GF_Style_OutlineDrop", parent = styleBody,
+        anchor = gfOutlineLbl, x = -16, y = -2, width = 200,
+        items = {
+            { key = "",              label = "(Global Default)" },
+            { key = "NONE",          label = "None"             },
+            { key = "OUTLINE",       label = "Outline"          },
+            { key = "THICKOUTLINE",  label = "Thick Outline"    },
+        },
+        get = function() return GFVal("fontOutline") or "" end,
+        set = function(v) local c = GFConf(); if c then c.fontOutline = (v == "") and nil or v end; GFApplyFont() end,
+    })
+    gfOutlineDrop:Hide()
+    local gfGlobalColorChk = UI.Check({
+        name = "MSUF_GF_Style_GlobalColor", parent = styleBody,
+        anchor = gfOutlineDrop, x = 16, y = -10, maxTextWidth = 400,
+        label = TR("Use Global Font Color (Colors menu)"),
+        get = function() return GFVal("useGlobalFontColor") ~= false end,
+        set = function(v) local c = GFConf(); if c then c.useGlobalFontColor = v end; GFApplyFont() end,
+    })
+    gfGlobalColorChk:Hide()
+    _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfOutlineLbl
+    _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfOutlineDrop
+    _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfGlobalColorChk
+    _gfRefreshFns[#_gfRefreshFns + 1] = function()
+        if gfOutlineDrop and gfOutlineDrop.Refresh then gfOutlineDrop:Refresh() end
+        if gfGlobalColorChk and gfGlobalColorChk.Refresh then gfGlobalColorChk:Refresh() end
+    end
 
     -- =====================================================================
     -- SECTION 4: Name Colors (scope-aware, default collapsed)
     -- =====================================================================
-    local colorsBox, colorsBody = MakeCollapsibleBox(content, styleBox, CONTENT_W, 148, TR("Name Colors"), false)
+    local colorsBox, colorsBody = MakeCollapsibleBox(content, styleBox, CONTENT_W, 220, TR("Name & Power Colors"), false)
 
-    local nameClassColorCheck = UI.Check({
-        name = "MSUF_NameClassColorCheck", parent = colorsBody,
-        anchor = colorsBody, anchorPoint = "TOPLEFT", x = 16, y = -8, maxTextWidth = 400,
-        label = TR("Color player names by class"),
-        get = function() return ScopeGet("nameClassColor", false) and true or false end,
+    -- ── UF: Name Color ──
+    local ufNameColorLbl = UI.Label({ parent = colorsBody, text = TR("Player Name Color"),
+        font = "GameFontNormal", anchor = colorsBody, anchorPoint = "TOPLEFT", x = 16, y = -8 })
+
+    local nameClassColorDrop = UI.Dropdown({
+        name = "MSUF_NameClassColorDrop", parent = colorsBody,
+        anchor = ufNameColorLbl, x = -16, y = -2, width = 220,
+        items = {
+            { key = "DEFAULT", label = "Default (Font Color)" },
+            { key = "CLASS",   label = "Class Color"          },
+        },
+        get = function()
+            return ScopeGet("nameClassColor", false) and "CLASS" or "DEFAULT"
+        end,
         set = function(v)
-            ScopeSet("nameClassColor", v)
+            ScopeSet("nameClassColor", v == "CLASS")
             InvalidateTextSpecs()
             LiveSyncFontVisuals({ refreshPower = false, layout = "NAME_COLORS" })
         end,
     })
 
-    local npcNameRedCheck = UI.Check({
-        name = "MSUF_NPCNameRedCheck", parent = colorsBody,
-        anchor = nameClassColorCheck, x = 0, y = -10, maxTextWidth = 400,
-        label = TR("Color NPC/boss names using NPC colors"),
-        get = function() return ScopeGet("npcNameRed", false) and true or false end,
+    -- ── UF: NPC Name Color ──
+    local ufNpcColorLbl = UI.Label({ parent = colorsBody, text = TR("NPC / Boss Name Color"),
+        font = "GameFontNormal", anchor = nameClassColorDrop, x = 16, y = -10 })
+
+    local npcNameRedDrop = UI.Dropdown({
+        name = "MSUF_NPCNameRedDrop", parent = colorsBody,
+        anchor = ufNpcColorLbl, x = -16, y = -2, width = 220,
+        items = {
+            { key = "DEFAULT", label = "Default (Font Color)" },
+            { key = "NPC",     label = "NPC / Reaction Color"  },
+        },
+        get = function()
+            return ScopeGet("npcNameRed", false) and "NPC" or "DEFAULT"
+        end,
         set = function(v)
-            ScopeSet("npcNameRed", v)
+            ScopeSet("npcNameRed", v == "NPC")
             InvalidateTextSpecs()
             LiveSyncFontVisuals({ refreshPower = false, layout = "NAME_COLORS" })
         end,
     })
 
-    local powerColorCheck = UI.Check({
-        name = "MSUF_PowerTextColorByTypeCheck", parent = colorsBody,
-        anchor = npcNameRedCheck, x = 0, y = -10, maxTextWidth = 400,
-        label = TR("Color power text by power type"),
-        get = function() return ScopeGet("colorPowerTextByType", false) and true or false end,
+    -- ── UF: Power Text Color ──
+    local ufPowerColorLbl = UI.Label({ parent = colorsBody, text = TR("Power Text Color"),
+        font = "GameFontNormal", anchor = npcNameRedDrop, x = 16, y = -10 })
+
+    local powerColorDrop = UI.Dropdown({
+        name = "MSUF_PowerTextColorDrop", parent = colorsBody,
+        anchor = ufPowerColorLbl, x = -16, y = -2, width = 220,
+        items = {
+            { key = "DEFAULT",  label = "Default (Font Color)"  },
+            { key = "RESOURCE", label = "By Power Type (Mana, Rage, ...)" },
+        },
+        get = function()
+            return ScopeGet("colorPowerTextByType", false) and "RESOURCE" or "DEFAULT"
+        end,
         set = function(v)
-            ScopeSet("colorPowerTextByType", v)
+            ScopeSet("colorPowerTextByType", v == "RESOURCE")
             InvalidateTextSpecs()
             LiveSyncFontVisuals({ refreshIdentity = false, layout = "POWER_TEXT_COLOR" })
         end,
     })
+
+    -- Track UF color widgets
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = ufNameColorLbl
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = nameClassColorDrop
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = ufNpcColorLbl
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = npcNameRedDrop
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = ufPowerColorLbl
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = powerColorDrop
+
+    -- backward compat refs (panel stores used by Options_Core)
+    local nameClassColorCheck = nameClassColorDrop
+    local npcNameRedCheck     = npcNameRedDrop
+    local powerColorCheck     = powerColorDrop
+
+    -- ── GF: Name Color Mode + Custom Swatch ──
+    local gfNameColorLbl = colorsBody:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    gfNameColorLbl:SetPoint("TOPLEFT", colorsBody, "TOPLEFT", 16, -8); gfNameColorLbl:SetText(TR("Name Color")); gfNameColorLbl:Hide()
+    local gfNameColorDrop = UI.Dropdown({
+        name = "MSUF_GF_Colors_NameColorDrop", parent = colorsBody,
+        anchor = gfNameColorLbl, x = -16, y = -2, width = 200,
+        items = {
+            { key = "DEFAULT", label = "Default (Font Color)" },
+            { key = "CLASS",   label = "Class Color"          },
+            { key = "CUSTOM",  label = "Custom"               },
+        },
+        get = function() return GFVal("nameColorMode") or "DEFAULT" end,
+        set = function(v) local c = GFConf(); if c then c.nameColorMode = v end; GFApplyFont() end,
+    })
+    gfNameColorDrop:Hide()
+    local gfSwatchLbl = colorsBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    gfSwatchLbl:SetPoint("LEFT", gfNameColorDrop, "RIGHT", 16, 0); gfSwatchLbl:SetText(TR("Custom")); gfSwatchLbl:Hide()
+    local gfSwatchBtn = CreateFrame("Button", nil, colorsBody)
+    gfSwatchBtn:SetSize(32, 16); gfSwatchBtn:SetPoint("LEFT", gfSwatchLbl, "RIGHT", 6, 0); gfSwatchBtn:Hide()
+    local gfSwatchTex = gfSwatchBtn:CreateTexture(nil, "ARTWORK"); gfSwatchTex:SetAllPoints()
+    local function GFRefreshSwatch()
+        gfSwatchTex:SetColorTexture(GFVal("nameColorR") or 1, GFVal("nameColorG") or 1, GFVal("nameColorB") or 1)
+    end
+    gfSwatchBtn:SetScript("OnShow", GFRefreshSwatch)
+    gfSwatchBtn:SetScript("OnClick", function()
+        GFColorPicker(GFVal("nameColorR") or 1, GFVal("nameColorG") or 1, GFVal("nameColorB") or 1, function(nr, ng, nb)
+            local c = GFConf(); if not c then return end
+            c.nameColorR = nr; c.nameColorG = ng; c.nameColorB = nb; GFApplyFont(); GFRefreshSwatch()
+        end)
+    end)
+    GFRefreshSwatch()
+    _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfNameColorLbl
+    _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfNameColorDrop
+    _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfSwatchLbl
+    _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfSwatchBtn
+    _gfRefreshFns[#_gfRefreshFns + 1] = function()
+        if gfNameColorDrop and gfNameColorDrop.Refresh then gfNameColorDrop:Refresh() end
+        GFRefreshSwatch()
+    end
 
     -- =====================================================================
     -- SECTION 5: Name Shortening (scope-aware, default collapsed)
@@ -740,6 +964,43 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
     SyncShortenEnabled()
 
+    -- GF: nameMaxChars + nameNoEllipsis (shown only for GF scopes in this section)
+    local gfMaxCharsLbl = nameBody:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    gfMaxCharsLbl:SetPoint("TOPLEFT", nameBody, "TOPLEFT", 16, -8)
+    gfMaxCharsLbl:SetText(TR("Group Frame Name Truncation"))
+    gfMaxCharsLbl:Hide()
+    local gfMaxCharsSlider = UI.Slider({
+        name = "MSUF_GF_Shorten_MaxChars", parent = nameBody, compact = true,
+        anchor = gfMaxCharsLbl, x = 0, y = -8, width = 270,
+        label = TR("Name Max Chars"), min = 0, max = 30, step = 1, default = 0,
+        lowText = "0", highText = "30",
+        get = function() return GFVal("nameMaxChars") or 0 end,
+        set = function(v) local c = GFConf(); if c then c.nameMaxChars = floor(v + 0.5) end; GFApplyLayout() end,
+        formatText = function(v) return v == 0 and "Max Chars: Unlimited" or string.format("Max Chars: %d", v) end,
+    })
+    gfMaxCharsSlider:Hide()
+    local gfNoEllipsis = UI.Check({
+        name = "MSUF_GF_Shorten_NoEllipsis", parent = nameBody,
+        anchor = gfMaxCharsSlider, x = 0, y = -6, maxTextWidth = 400,
+        label = TR("No Ellipsis (truncate without ..)"),
+        get = function() return GFVal("nameNoEllipsis") and true or false end,
+        set = function(v) local c = GFConf(); if c then c.nameNoEllipsis = v end; GFApplyLayout() end,
+    })
+    gfNoEllipsis:Hide()
+    _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfMaxCharsLbl
+    _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfMaxCharsSlider
+    _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfNoEllipsis
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = shortenCheck
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = shortenClipLabel
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = shortenClipDrop
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = shortenMaxSlider
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = shortenMaskSlider
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = infoBtn
+    _gfRefreshFns[#_gfRefreshFns + 1] = function()
+        if gfMaxCharsSlider and gfMaxCharsSlider.Refresh then gfMaxCharsSlider:Refresh() end
+        if gfNoEllipsis and gfNoEllipsis.Refresh then gfNoEllipsis:Refresh() end
+    end
+
     -- =====================================================================
     -- Dynamic content height
     -- =====================================================================
@@ -766,24 +1027,42 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
         local uk = GetUnitKey()
         local isShared = (uk == nil)
+        local gfScope = IsGFScope()
         local isOvr = (uk ~= nil) and IsOverride(uk)
 
+        -- Override checkbox: any non-Shared scope (UF + GF)
         overrideCheck:SetShown(not isShared)
         overrideCheck:SetChecked(isOvr)
 
-        -- Override summary + reset: visible only on Shared (Bars/Auras/Portraits pattern)
+        -- Toggle UF-only vs GF-only widgets
+        for _, w in ipairs(_ufOnlyWidgets) do
+            if w and w.SetShown then w:SetShown(not gfScope)
+            elseif w and w.Show then if gfScope then w:Hide() else w:Show() end end
+        end
+        for _, w in ipairs(_gfOnlyWidgets) do
+            if w and w.SetShown then w:SetShown(gfScope)
+            elseif w and w.Show then if gfScope then w:Show() else w:Hide() end end
+        end
+
+        -- Text Sizes: UF only (GF sizes are in EM2 popup)
+        sizeBox:SetShown(not gfScope)
+
+        -- Override summary + reset: visible only on Shared
         if isShared then
             local parts = {}
             for _, k in ipairs(ALL_UNITS) do
                 if IsOverride(k) then parts[#parts + 1] = SCOPE_LABELS[k] or k end
             end
+            -- Include GF overrides in summary
+            if IsOverride("gf_party") then parts[#parts + 1] = "Party" end
+            if IsOverride("gf_raid")  then parts[#parts + 1] = "Raid" end
             if #parts > 0 then
                 scopeOverrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(parts, ", "))
                 scopeOverrideInfo:SetFontObject(GameFontHighlightSmall)
                 scopeOverrideInfo:Show()
                 scopeResetBtn:Show(); scopeResetBtn:Enable(); scopeResetBtn:SetAlpha(1)
             else
-                scopeOverrideInfo:SetText("|cff9aa0a6No unit overrides active.|r")
+                scopeOverrideInfo:SetText("|cff9aa0a6No overrides active.|r")
                 scopeOverrideInfo:SetFontObject(GameFontDisableSmall)
                 scopeOverrideInfo:Show()
                 scopeResetBtn:Show(); scopeResetBtn:Disable(); scopeResetBtn:SetAlpha(0.45)
@@ -793,12 +1072,13 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             scopeResetBtn:Hide()
         end
 
-        -- Dim scope-aware sections when per-unit selected without override
+        -- Dim sections when any non-Shared scope without override
         local scopeDim = (not isShared and not isOvr)
         local dimAlpha = scopeDim and 0.40 or 1.0
         styleBox:SetAlpha(dimAlpha)
         colorsBox:SetAlpha(dimAlpha)
 
+        -- Name Shortening: hide for Player scope, dim for non-override
         local isPlayer = (GetScopeKey() == "player")
         if isPlayer then
             nameBox:SetAlpha(0)
@@ -812,19 +1092,24 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             nameBox:SetAlpha(dimAlpha)
         end
 
-        if boldCheck and boldCheck.Refresh then boldCheck:Refresh() end
-        if noOutlineCheck and noOutlineCheck.Refresh then noOutlineCheck:Refresh() end
-        if textBackdropCheck and textBackdropCheck.Refresh then textBackdropCheck:Refresh() end
-        if nameClassColorCheck and nameClassColorCheck.Refresh then nameClassColorCheck:Refresh() end
-        if npcNameRedCheck and npcNameRedCheck.Refresh then npcNameRedCheck:Refresh() end
-        if powerColorCheck and powerColorCheck.Refresh then powerColorCheck:Refresh() end
-        if shortenCheck and shortenCheck.Refresh then shortenCheck:Refresh() end
-        if shortenClipDrop and shortenClipDrop.Refresh then shortenClipDrop:Refresh() end
-        if shortenMaxSlider and shortenMaxSlider.Refresh then shortenMaxSlider:Refresh() end
-        if shortenMaskSlider and shortenMaskSlider.Refresh then shortenMaskSlider:Refresh() end
+        -- Refresh all widgets for current scope
+        if not gfScope then
+            if boldCheck and boldCheck.Refresh then boldCheck:Refresh() end
+            if noOutlineCheck and noOutlineCheck.Refresh then noOutlineCheck:Refresh() end
+            if textBackdropCheck and textBackdropCheck.Refresh then textBackdropCheck:Refresh() end
+            if nameClassColorCheck and nameClassColorCheck.Refresh then nameClassColorCheck:Refresh() end
+            if npcNameRedCheck and npcNameRedCheck.Refresh then npcNameRedCheck:Refresh() end
+            if powerColorCheck and powerColorCheck.Refresh then powerColorCheck:Refresh() end
+            if shortenCheck and shortenCheck.Refresh then shortenCheck:Refresh() end
+            if shortenClipDrop and shortenClipDrop.Refresh then shortenClipDrop:Refresh() end
+            if shortenMaxSlider and shortenMaxSlider.Refresh then shortenMaxSlider:Refresh() end
+            if shortenMaskSlider and shortenMaskSlider.Refresh then shortenMaskSlider:Refresh() end
+            SyncShortenEnabled()
+            UpdateSizeOverrideInfo()
+        else
+            GFSyncAll()
+        end
 
-        SyncShortenEnabled()
-        UpdateSizeOverrideInfo()
         if MSUF_Fonts_UpdateContentHeight then pcall(MSUF_Fonts_UpdateContentHeight) end
     end
 
