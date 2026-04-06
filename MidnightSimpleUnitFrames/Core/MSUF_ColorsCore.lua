@@ -742,6 +742,12 @@ local NPC_DEFAULT_COLORS = {
     neutral  = { 1, 1, 0 },
     enemy    = { 1, 0, 0 },
     dead     = { 0.4, 0.4, 0.4 },
+    -- NPC Type Colors — Platynator defaults
+    npcBoss      = { 0.74, 0.11, 0.00 },   -- #bc1c00
+    npcMiniboss  = { 0.56, 0.00, 0.74 },   -- #9000bc
+    npcCaster    = { 0.00, 0.45, 0.74 },   -- #0074bc
+    npcMelee     = { 0.99, 0.99, 0.99 },   -- #fcfcfc
+    npcRegular   = { 0.70, 0.56, 0.33 },   -- #b28e55
 }
 local NPC_FALLBACK = { 1, 1, 1 }
 
@@ -778,6 +784,106 @@ end
 local function ResetAllNPCColors()
     if not MSUF_DB then return end
     MSUF_DB.npcColors = nil
+    PushVisualUpdates()
+end
+
+
+------------------------------------------------------
+-- Helpers: NPC Color Mode ("reaction" / "type")
+------------------------------------------------------
+local function GetNPCColorMode()
+    local g = _general()
+    if g then
+        local m = g.npcColorMode
+        if m == "type" then return "type" end
+    end
+    return "reaction"
+end
+
+local function SetNPCColorMode(mode)
+    local g = _general()
+    if not g then return end
+    if mode ~= "type" then mode = "reaction" end
+    g.npcColorMode = mode
+    -- Invalidate settings cache + refresh invariant flags on ALL frames
+    -- (nil unitKey → refreshes all; true → marks dirty for visual update).
+    if type(_G.MSUF_NotifyConfigChanged) == "function" then
+        _G.MSUF_NotifyConfigChanged(nil, true, true, "npcColorMode")
+    end
+    PushVisualUpdates()
+end
+
+------------------------------------------------------
+-- Helpers: NPC Type sub-toggles (bar / text)
+------------------------------------------------------
+local function GetNPCTypeColorBar()
+    local g = _general()
+    return not (g and g.npcTypeColorBar == false)
+end
+
+local function SetNPCTypeColorBar(enabled)
+    local g = _general()
+    if not g then return end
+    g.npcTypeColorBar = enabled and true or false
+    if type(_G.MSUF_NotifyConfigChanged) == "function" then
+        _G.MSUF_NotifyConfigChanged(nil, true, true, "npcTypeColorBar")
+    end
+    PushVisualUpdates()
+end
+
+local function GetNPCTypeColorText()
+    local g = _general()
+    return not (g and g.npcTypeColorText == false)
+end
+
+local function SetNPCTypeColorText(enabled)
+    local g = _general()
+    if not g then return end
+    g.npcTypeColorText = enabled and true or false
+    if type(_G.MSUF_NotifyConfigChanged) == "function" then
+        _G.MSUF_NotifyConfigChanged(nil, true, true, "npcTypeColorText")
+    end
+    PushVisualUpdates()
+end
+
+------------------------------------------------------
+-- Helpers: NPC Type per-unit toggles
+------------------------------------------------------
+local NPC_TYPE_UNITS = {
+    { key = "npcTypeTarget", label = "Target" },
+    { key = "npcTypeFocus",  label = "Focus" },
+    { key = "npcTypeBoss",   label = "Boss" },
+    { key = "npcTypeToT",    label = "Target of Target" },
+}
+
+local function GetNPCTypePerUnit(unitKey)
+    local g = _general()
+    return not (g and g[unitKey] == false)
+end
+
+local function SetNPCTypePerUnit(unitKey, enabled)
+    local g = _general()
+    if not g then return end
+    g[unitKey] = enabled and true or false
+    if type(_G.MSUF_NotifyConfigChanged) == "function" then
+        _G.MSUF_NotifyConfigChanged(nil, true, true, unitKey)
+    end
+    PushVisualUpdates()
+end
+
+------------------------------------------------------
+-- Helpers: Reset NPC Type Colors only (keeps reaction colors)
+------------------------------------------------------
+local NPC_TYPE_KEYS = { "npcBoss", "npcMiniboss", "npcCaster", "npcMelee", "npcRegular" }
+
+local function ResetNPCTypeColors()
+    if not MSUF_DB then return end
+    local nc = MSUF_DB.npcColors
+    if nc then
+        for _, k in ipairs(NPC_TYPE_KEYS) do
+            nc[k] = nil
+        end
+    end
     PushVisualUpdates()
 end
 
@@ -1022,6 +1128,21 @@ ns._colorsAPI = {
     GetNPCColor                     = GetNPCColor,
     SetNPCColor                     = SetNPCColor,
     ResetAllNPCColors               = ResetAllNPCColors,
+
+    -- NPC Color Mode
+    GetNPCColorMode                 = GetNPCColorMode,
+    SetNPCColorMode                 = SetNPCColorMode,
+    GetNPCTypeColorBar              = GetNPCTypeColorBar,
+    SetNPCTypeColorBar              = SetNPCTypeColorBar,
+    GetNPCTypeColorText             = GetNPCTypeColorText,
+    SetNPCTypeColorText             = SetNPCTypeColorText,
+    ResetNPCTypeColors              = ResetNPCTypeColors,
+    NPC_TYPE_KEYS                   = NPC_TYPE_KEYS,
+
+    -- NPC Type per-unit
+    NPC_TYPE_UNITS                  = NPC_TYPE_UNITS,
+    GetNPCTypePerUnit               = GetNPCTypePerUnit,
+    SetNPCTypePerUnit               = SetNPCTypePerUnit,
 
     -- Pet
     GetPetFrameColor                = GetPetFrameColor,
