@@ -119,70 +119,27 @@ function ns.Text._SepToken(raw, fallback)
     end
     return " " .. sep .. " "
 end
-local function _HpModeAllowsSplit(hpMode)
-    return hpMode == "CURPERCENT" or hpMode == "PERCENTCUR"
-        or hpMode == "CURMAXPERCENT" or hpMode == "MAXPERCENT"
-        or hpMode == "PERCENTMAX" or hpMode == "PERCENTCURMAX"
-        or hpMode == "PERCENTMAXCUR"
-        -- Legacy tokens (pre-normalization)
-        or hpMode == "FULL_PLUS_PERCENT" or hpMode == "PERCENT_PLUS_FULL"
-end
 function ns.Text._ShouldSplitHP(self, conf, g, hpMode)
     if not self or not self.hpTextPct then  return false end
-    if not _HpModeAllowsSplit(hpMode) then  return false end
+    if hpMode ~= "FULL_PLUS_PERCENT" and hpMode ~= "PERCENT_PLUS_FULL" then  return false end
     local on = (conf and conf.hpTextSpacerEnabled == true) or (not conf and g and g.hpTextSpacerEnabled == true)
     if not on then  return false end
     local x = (conf and tonumber(conf.hpTextSpacerX)) or (g and tonumber(g.hpTextSpacerX)) or 0
     x = tonumber(x) or 0
     return (x > 0)
 end
--- HP mode format dispatcher. Supports extended EQoL modes + reversed variants.
--- reverse is handled upstream by swapping the mode in EnsureSpec.
-local function _MSUF_FormatHpByMode(mode, h, hpPctStr, sep, hpMaxStr, deficitStr)
-    if mode == "NONE" then
-        return ""
-    elseif mode == "CURRENT" or mode == "FULL_ONLY" then
+-- HP mode format dispatcher. Mirrors _MSUF_FormatPowerByMode pattern.
+-- Returns mainText. hpPctStr may be nil (secret percent → caller handles).
+local function _MSUF_FormatHpByMode(mode, h, hpPctStr, sep)
+    if mode == "FULL_ONLY" then
         return h
-    elseif mode == "MAX" then
-        return hpMaxStr or h
-    elseif mode == "PERCENT" or mode == "PERCENT_ONLY" then
+    elseif mode == "PERCENT_ONLY" then
         return hpPctStr or h
-    elseif mode == "DEFICIT" then
-        return deficitStr or ""
-    elseif mode == "CURMAX" then
-        if hpMaxStr then return h .. sep .. hpMaxStr end
-        return h
-    elseif mode == "MAXCUR" then
-        if hpMaxStr then return hpMaxStr .. sep .. h end
-        return h
-    elseif mode == "CURPERCENT" or mode == "FULL_PLUS_PERCENT" then
-        if hpPctStr then return h .. sep .. hpPctStr end
-        return h
-    elseif mode == "PERCENTCUR" or mode == "PERCENT_PLUS_FULL" then
+    elseif mode == "PERCENT_PLUS_FULL" then
         if hpPctStr then return hpPctStr .. sep .. h end
         return h
-    elseif mode == "CURMAXPERCENT" then
-        local main = hpMaxStr and (h .. sep .. hpMaxStr) or h
-        if hpPctStr then return main .. sep .. hpPctStr end
-        return main
-    elseif mode == "PERCENTMAXCUR" then
-        if hpPctStr and hpMaxStr then return hpPctStr .. sep .. hpMaxStr .. sep .. h end
-        if hpPctStr then return hpPctStr .. sep .. h end
-        return h
-    elseif mode == "MAXPERCENT" then
-        local m = hpMaxStr or h
-        if hpPctStr then return m .. sep .. hpPctStr end
-        return m
-    elseif mode == "PERCENTMAX" then
-        local m = hpMaxStr or h
-        if hpPctStr then return hpPctStr .. sep .. m end
-        return m
-    elseif mode == "PERCENTCURMAX" then
-        local tail = hpMaxStr and (h .. sep .. hpMaxStr) or h
-        if hpPctStr then return hpPctStr .. sep .. tail end
-        return tail
     end
-    -- Default: CURPERCENT
+    -- FULL_PLUS_PERCENT (default)
     if hpPctStr then return h .. sep .. hpPctStr end
     return h
 end
@@ -193,121 +150,59 @@ local function _MSUF_AppendAbsorb(text, absorbText, absorbStyle)
     return text .. " " .. absorbText
 end
 -- Secret-percent fallback (rare: <0.1% of calls). Uses C-side SetFormattedText.
-local function _MSUF_SetHpSecret(fs, mode, h, hpPct, sep, absorbText, absorbStyle, hpMaxStr)
-    local genDb = _G.MSUF_DB and _G.MSUF_DB.general
-    local pctFmt = (genDb and genDb.hidePercentSymbol == true) and "%.1f" or "%.1f%%"
-    if mode == "NONE" then
-        ns.Text.Set(fs, "", false); return
-    elseif mode == "CURRENT" or mode == "FULL_ONLY" then
+local function _MSUF_SetHpSecret(fs, mode, h, hpPct, sep, absorbText, absorbStyle)
+    if mode == "FULL_ONLY" then
         ns.Text.Set(fs, _MSUF_AppendAbsorb(h, absorbText, absorbStyle), true)
-    elseif mode == "MAX" then
-        ns.Text.Set(fs, _MSUF_AppendAbsorb(hpMaxStr or h, absorbText, absorbStyle), true)
-    elseif mode == "PERCENT" or mode == "PERCENT_ONLY" then
+    elseif mode == "PERCENT_ONLY" then
         if absorbText then
             local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, pctFmt .. sfx, hpPct, absorbText)
+            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sfx, hpPct, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, pctFmt, hpPct)
+            ns.Text.SetFormatted(fs, true, "%.1f%%", hpPct)
         end
-    elseif mode == "DEFICIT" then
-        ns.Text.Set(fs, _MSUF_AppendAbsorb("", absorbText, absorbStyle), true)
-    elseif mode == "CURMAX" then
-        ns.Text.Set(fs, _MSUF_AppendAbsorb(h .. sep .. (hpMaxStr or ""), absorbText, absorbStyle), true)
-    elseif mode == "MAXCUR" then
-        ns.Text.Set(fs, _MSUF_AppendAbsorb((hpMaxStr or "") .. sep .. h, absorbText, absorbStyle), true)
-    elseif mode == "PERCENTCUR" or mode == "PERCENT_PLUS_FULL" then
+    elseif mode == "PERCENT_PLUS_FULL" then
         if absorbText then
             local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, pctFmt .. sep .. "%s" .. sfx, hpPct, h, absorbText)
+            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sep .. "%s" .. sfx, hpPct, h, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, pctFmt .. sep .. "%s", hpPct, h)
-        end
-    elseif mode == "CURMAXPERCENT" then
-        local main = h .. sep .. (hpMaxStr or "")
-        if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. pctFmt .. sfx, main, hpPct, absorbText)
-        else
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. pctFmt, main, hpPct)
-        end
-    elseif mode == "PERCENTMAXCUR" then
-        local tail = (hpMaxStr or "") .. sep .. h
-        if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, pctFmt .. sep .. "%s" .. sfx, hpPct, tail, absorbText)
-        else
-            ns.Text.SetFormatted(fs, true, pctFmt .. sep .. "%s", hpPct, tail)
-        end
-    elseif mode == "MAXPERCENT" then
-        local m = hpMaxStr or h
-        if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. pctFmt .. sfx, m, hpPct, absorbText)
-        else
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. pctFmt, m, hpPct)
-        end
-    elseif mode == "PERCENTMAX" then
-        local m = hpMaxStr or h
-        if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, pctFmt .. sep .. "%s" .. sfx, hpPct, m, absorbText)
-        else
-            ns.Text.SetFormatted(fs, true, pctFmt .. sep .. "%s", hpPct, m)
-        end
-    elseif mode == "PERCENTCURMAX" then
-        local tail = h .. sep .. (hpMaxStr or "")
-        if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, pctFmt .. sep .. "%s" .. sfx, hpPct, tail, absorbText)
-        else
-            ns.Text.SetFormatted(fs, true, pctFmt .. sep .. "%s", hpPct, tail)
+            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sep .. "%s", hpPct, h)
         end
     else
-        -- Default: CURPERCENT
         if absorbText then
             local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. pctFmt .. sfx, h, hpPct, absorbText)
+            ns.Text.SetFormatted(fs, true, "%s" .. sep .. "%.1f%%" .. sfx, h, hpPct, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. pctFmt, h, hpPct)
+            ns.Text.SetFormatted(fs, true, "%s" .. sep .. "%.1f%%", h, hpPct)
         end
     end
 end
 -- Pre-build common percent strings (0%-100% integer AND 0.0%-100.0% with one decimal)
 -- to avoid per-frame string allocations. Integer cache for power text, decimal cache for HP text.
 local _MSUF_PCT_CACHE = {}
-local _MSUF_PCT_CACHE_NOPCT = {}
-for _pci = 0, 100 do
-    _MSUF_PCT_CACHE[_pci] = tostring(_pci) .. "%"
-    _MSUF_PCT_CACHE_NOPCT[_pci] = tostring(_pci)
-end
+for _pci = 0, 100 do _MSUF_PCT_CACHE[_pci] = tostring(_pci) .. "%" end
 -- Decimal cache: keyed by 10x value (e.g. 753 = "75.3%"). Covers 0.0 to 100.0.
 local _MSUF_PCT_CACHE_1D = {}
-local _MSUF_PCT_CACHE_1D_NOPCT = {}
 for _pci10 = 0, 1000 do
     local whole = math.floor(_pci10 / 10)
     local frac = _pci10 - (whole * 10)
     _MSUF_PCT_CACHE_1D[_pci10] = tostring(whole) .. "." .. tostring(frac) .. "%"
-    _MSUF_PCT_CACHE_1D_NOPCT[_pci10] = tostring(whole) .. "." .. tostring(frac)
 end
 -- PERF: Fast percent-to-string using pre-built cache. Eliminates C-side format calls.
 -- Returns cached "75.3%" string for values 0.0-100.0; falls back to format for out-of-range.
 -- SECRET-SAFE: Must bail on secret numbers before any arithmetic.
--- Respects MSUF_DB.general.hidePercentSymbol.
 local _string_format = string.format
 local _pct1d_issecret = _G.issecretvalue  -- resolve once; nil if API absent
 local function _MSUF_PctToStr1D(pct)
     if pct == nil then return nil end
     if _pct1d_issecret and _pct1d_issecret(pct) then return nil end
     if type(pct) ~= "number" then return nil end
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    local hidePct = gen and gen.hidePercentSymbol == true
     local key = math.floor(pct * 10 + 0.5)
     if key >= 0 and key <= 1000 then
-        return hidePct and _MSUF_PCT_CACHE_1D_NOPCT[key] or _MSUF_PCT_CACHE_1D[key]
+        return _MSUF_PCT_CACHE_1D[key]
     end
-    return hidePct and _string_format("%.1f", pct) or _string_format("%.1f%%", pct)
+    return _string_format("%.1f%%", pct)
 end
-function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbText, absorbStyle, hpMaxStr)
+function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbText, absorbStyle)
     if not self or not self.hpText then  return end
     if not show then
         ns.Text.Set(self.hpText, "", false)
@@ -323,28 +218,6 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
 
     -- Pre-compute percent string (nil for secret values → SetFormattedText fallback)
     local hpPctStr = hasPct and _MSUF_PctToStr1D(hpPct) or nil
-
-    -- Compute deficit string for DEFICIT mode (secret-safe)
-    local deficitStr
-    if hpMode == "DEFICIT" and self.unit then
-        local curHP = _G.UnitHealth and _G.UnitHealth(self.unit)
-        local maxHP = _G.UnitHealthMax and _G.UnitHealthMax(self.unit)
-        if curHP ~= nil and maxHP ~= nil then
-            if _MSUF_issecret and (_MSUF_issecret(curHP) or _MSUF_issecret(maxHP)) then
-                deficitStr = ""
-            else
-                local cN = tonumber(curHP) or 0
-                local mN = tonumber(maxHP) or 0
-                local def = mN - cN
-                if def <= 0 then
-                    deficitStr = ""
-                else
-                    local abbr = _MSUF_TextAbbrFn
-                    deficitStr = "-" .. (abbr and abbr(def) or tostring(def))
-                end
-            end
-        end
-    end
 
     -- Split path: HP in main FontString, percent in side FontString
     local split = hasPct and ns.Text._ShouldSplitHP(self, spec.hpSpacerConf, spec.hpSpacerG, hpMode) or false
@@ -365,12 +238,6 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     -- Single FontString path
     ns.Text.ClearField(self, "hpTextPct")
 
-    -- NONE mode: clear text
-    if hpMode == "NONE" then
-        ns.Text.Set(hpText, "", false)
-        return
-    end
-
     -- No percent available: just HP value (+ optional absorb)
     if not hasPct then
         ns.Text.Set(hpText, _MSUF_AppendAbsorb(h, absorbText, absorbStyle), true)
@@ -380,17 +247,16 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     -- Secret percent fallback (rare: UnitHealthPercent returned secret)
     if not hpPctStr then
         self._msufLastH = nil
-        _MSUF_SetHpSecret(hpText, hpMode, h, hpPct, sep, absorbText, absorbStyle, hpMaxStr)
+        _MSUF_SetHpSecret(hpText, hpMode, h, hpPct, sep, absorbText, absorbStyle)
         return
     end
 
     -- Fast path: diff guard → format → absorb → Set
-    if not absorbText and not _MSUF_IsSecret(h) and h == self._msufLastH and hpPctStr == self._msufLastPctS and hpMaxStr == self._msufLastMaxS then return end
+    if not absorbText and not _MSUF_IsSecret(h) and h == self._msufLastH and hpPctStr == self._msufLastPctS then return end
     if _MSUF_IsSecret(h) or absorbText then self._msufLastH = nil else self._msufLastH = h end
     self._msufLastPctS = hpPctStr
-    self._msufLastMaxS = hpMaxStr
 
-    local mainText = _MSUF_FormatHpByMode(hpMode, h, hpPctStr, sep, hpMaxStr, deficitStr)
+    local mainText = _MSUF_FormatHpByMode(hpMode, h, hpPctStr, sep)
     ns.Text.Set(hpText, _MSUF_AppendAbsorb(mainText, absorbText, absorbStyle), true)
  end
 -- PERF: Cache function refs + constants at file scope (called 50-200x/sec in combat).
@@ -426,34 +292,6 @@ function ns.Text.NormalizePowerTextMode(mode)
 end
 _G.MSUF_NormalizePowerTextMode = _G.MSUF_NormalizePowerTextMode or ns.Text.NormalizePowerTextMode
 
---- Normalize legacy HP text modes to EQoL-style tokens.
-function ns.Text.NormalizeHpTextMode(mode)
-    if mode == nil then return "CURPERCENT" end
-    if mode == "FULL_ONLY" then return "CURRENT" end
-    if mode == "PERCENT_ONLY" then return "PERCENT" end
-    if mode == "FULL_PLUS_PERCENT" then return "CURPERCENT" end
-    if mode == "PERCENT_PLUS_FULL" then return "PERCENTCUR" end
-    return mode
-end
-_G.MSUF_NormalizeHpTextMode = ns.Text.NormalizeHpTextMode
-
---- Swap HP text mode to its reversed counterpart.
--- Called when hpTextReverse is enabled. Single-value modes stay unchanged.
-local REVERSE_HP_MAP = {
-    CURPERCENT     = "PERCENTCUR",
-    PERCENTCUR     = "CURPERCENT",
-    CURMAX         = "MAXCUR",
-    MAXCUR         = "CURMAX",
-    CURMAXPERCENT  = "PERCENTMAXCUR",
-    PERCENTMAXCUR  = "CURMAXPERCENT",
-    MAXPERCENT     = "PERCENTMAX",
-    PERCENTMAX     = "MAXPERCENT",
-    PERCENTCURMAX  = "CURMAXPERCENT",
-}
-function ns.Text._ReverseHpMode(mode)
-    return REVERSE_HP_MAP[mode] or mode
-end
-
 -- PERF: Cache abbreviation function at file scope (called 100-400x/sec across all units).
 local _MSUF_TextAbbrFn = _G.AbbreviateLargeNumbers or _G.ShortenNumber or _G.AbbreviateNumbers
 
@@ -486,11 +324,7 @@ local function _MSUF_TextifyPercent(percentValue)
         local CSU = _G.C_StringUtil
         if CSU and CSU.RoundToNearestString then
             local txt = CSU.RoundToNearestString(percentValue, 0.01)
-            if txt ~= nil then
-                local genDb2 = _G.MSUF_DB and _G.MSUF_DB.general
-                if genDb2 and genDb2.hidePercentSymbol == true then return tostring(txt) end
-                return tostring(txt) .. "%"
-            end
+            if txt ~= nil then return tostring(txt) .. "%" end
         end
         return nil
     end
@@ -498,11 +332,6 @@ local function _MSUF_TextifyPercent(percentValue)
     local pv = tonumber(percentValue)
     if not pv then return nil end
     local pctInt = math.floor(pv + 0.5)
-    local genDb = _G.MSUF_DB and _G.MSUF_DB.general
-    local hidePct = genDb and genDb.hidePercentSymbol == true
-    if hidePct then
-        return _MSUF_PCT_CACHE_NOPCT[pctInt] or tostring(pctInt)
-    end
     return _MSUF_PCT_CACHE[pctInt] or (tostring(pctInt) .. "%")
 end
 
@@ -523,10 +352,7 @@ function ns.Text.EnsureSpec(self)
     local useOverride = (udb and udb.hpPowerTextOverride == true)
     local eff = useOverride and (self.cachedConfig or udb) or nil
     -- HP
-    local hpMode = ns.Text.NormalizeHpTextMode((useOverride and eff and eff.hpTextMode) or g.hpTextMode or "FULL_PLUS_PERCENT")
-    -- Reverse: swap mode to its mirror (CURPERCENT↔PERCENTCUR etc.)
-    local hpReverse = (useOverride and eff and eff.hpTextReverse == true) or (not useOverride and g.hpTextReverse == true) or false
-    if hpReverse then hpMode = ns.Text._ReverseHpMode(hpMode) end
+    local hpMode = (useOverride and eff and eff.hpTextMode) or g.hpTextMode or "FULL_PLUS_PERCENT"
     local hpSepRaw = (useOverride and eff and eff.hpTextSeparator) or g.hpTextSeparator
     -- Power
     local rawPMode = (useOverride and eff and eff.powerTextMode) or g.powerTextMode
