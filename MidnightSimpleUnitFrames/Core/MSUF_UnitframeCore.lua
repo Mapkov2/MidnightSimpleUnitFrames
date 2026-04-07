@@ -728,7 +728,6 @@ end
 local function _UpdateIdentityColors(frame)
     if not frame or not frame.nameText then return end
 
-    local cache = UFCore_GetSettingsCache()
     local unit = frame.unit
 
     local r, g, b
@@ -741,16 +740,37 @@ local function _UpdateIdentityColors(frame)
         isPlayer = frame._msufCachedIsPlayer
     end
 
-    if cache and cache.nameClassColor and isPlayer then
+    -- Read name color flags directly from DB (settings cache can be stale after
+    -- options-UI toggles because its validity is keyed on table-reference identity,
+    -- which doesn't change when a field within general is mutated).
+    local db = MSUF_DB
+    local gen = db and db.general
+    local wantClassColor = gen and gen.nameClassColor
+    local wantNpcRed     = gen and gen.npcNameRed
+
+    -- Per-unit font override (target/focus/etc. may override shared values).
+    local key = frame.msufConfigKey
+    if key then
+        local uconf = db and db[key]
+        if uconf and uconf.fontOverride then
+            local ov = uconf.nameClassColor
+            if ov ~= nil then wantClassColor = ov end
+            local on = uconf.npcNameRed
+            if on ~= nil then wantNpcRed = on end
+        end
+    end
+
+    if wantClassColor and isPlayer then
         local _, classToken = UnitClass(unit)
         if classToken then
             r, g, b = UFCore_GetClassBarColorFast(classToken)
         end
 
-    elseif cache and cache.npcNameRed and unit and UnitExists(unit) and not isPlayer then
+    elseif wantNpcRed and unit and UnitExists(unit) and not isPlayer then
         local kind = frame._msufCachedReactionKind or "enemy"
         -- If NPC type coloring is active but text toggle is off, fall back to "enemy"
-        if frame._msufNpcTypeColored and not cache.npcTypeColorText then
+        local cache = Core._settingsCache
+        if frame._msufNpcTypeColored and not (cache and cache.npcTypeColorText) then
             kind = "enemy"
         end
         r, g, b = UFCore_GetNPCReactionColorFast(kind)
@@ -1468,8 +1488,17 @@ function UFCore_UpdateToTInline(f)
         local r, g, b = 1, 1, 1
         if not inEdit then
             if UnitIsPlayer and UnitIsPlayer("targettarget") then
-                local cache = UFCore_GetSettingsCache()
-                if cache and cache.nameClassColor then
+                local gen = MSUF_DB and MSUF_DB.general
+                local wantClass = gen and gen.nameClassColor
+                local tkey = f.msufConfigKey
+                if tkey then
+                    local uconf = MSUF_DB and MSUF_DB[tkey]
+                    if uconf and uconf.fontOverride then
+                        local ov = uconf.nameClassColor
+                        if ov ~= nil then wantClass = ov end
+                    end
+                end
+                if wantClass then
                     local _, classToken = UnitClass("targettarget")
                     r, g, b = UFCore_GetClassBarColorFast(classToken)
                 end
@@ -3570,6 +3599,9 @@ end
 function _G.MSUF_UFCore_GetSettingsCache()
     return UFCore_GetSettingsCache()
 end
+
+_G.MSUF_UFCore_GetNPCReactionColorFast = UFCore_GetNPCReactionColorFast
+_G.MSUF_UFCore_GetClassBarColorFast    = UFCore_GetClassBarColorFast
 
 -- NPC Type instance gate (plain global boolean — zero-cost read from main file)
 _G.MSUF_NpcTypeInstanceActive = false

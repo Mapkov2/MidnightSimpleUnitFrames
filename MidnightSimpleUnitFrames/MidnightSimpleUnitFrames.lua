@@ -2286,8 +2286,10 @@ local function MSUF_UpdateNameColor(frame)
         g = (MSUF_DB and MSUF_DB.general) or nil
     end
 
-    local nameClassColor = (cache and cache.nameClassColor) or (g and g.nameClassColor)
-    local npcNameRed = (cache and cache.npcNameRed) or (g and g.npcNameRed)
+    -- Read name color flags from DB directly (settings cache can be stale after
+    -- options-UI toggles; its validity is keyed on table-reference identity).
+    local nameClassColor = g and g.nameClassColor
+    local npcNameRed = g and g.npcNameRed
 
     -- Per-unit font override: read from unit config if fontOverride active
     do

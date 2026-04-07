@@ -681,6 +681,15 @@ end
         local useClass = false
         local g = MSUF_DB and MSUF_DB.general
         if g and g.nameClassColor then useClass = true end
+        -- Per-unit font override (e.g. Target tab "Override shared settings")
+        local tkey = targetFrame and targetFrame.msufConfigKey
+        if tkey then
+            local uconf = MSUF_DB and MSUF_DB[tkey]
+            if uconf and uconf.fontOverride then
+                local ov = uconf.nameClassColor
+                if ov ~= nil then useClass = ov end
+            end
+        end
         if useClass then
             local _, classToken = F.UnitClass("targettarget")
             r, gCol, b = MSUF_GetClassBarColor(classToken)
