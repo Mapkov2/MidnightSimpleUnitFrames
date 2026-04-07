@@ -50,14 +50,22 @@ end
 -- Helper: apply visual updates
 ------------------------------------------------------
 local function PushVisualUpdates()
+    -- Invalidate settings cache so color tint fields (powerBgTint, barBgTint,
+    -- aggro/dispel/purge, etc.) are re-read from DB before frames refresh.
+    -- Zero combat overhead: PushVisualUpdates is only called from option setters,
+    -- never from event handlers or combat hot paths.
+    if _G.MSUF_UFCore_RefreshSettingsCache then
+        _G.MSUF_UFCore_RefreshSettingsCache("COLOR_CHANGE")
+    end
+
     local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or ns.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts
     if type(fnFonts) == "function" then
         fnFonts()
     end
-    if type(_G.MSUF_RefreshAllIdentityColors) == "function" then
+    if _G.MSUF_RefreshAllIdentityColors then
         _G.MSUF_RefreshAllIdentityColors()
     end
-    if type(_G.MSUF_RefreshAllPowerTextColors) == "function" then
+    if _G.MSUF_RefreshAllPowerTextColors then
         _G.MSUF_RefreshAllPowerTextColors()
     end
     if ns.MSUF_ApplyGameplayVisuals then
@@ -65,7 +73,7 @@ local function PushVisualUpdates()
     end
     if ns.MSUF_RefreshAllFrames then
         ns.MSUF_RefreshAllFrames()
-    elseif type(_G.MSUF_RefreshAllFrames) == "function" then
+    elseif _G.MSUF_RefreshAllFrames then
         _G.MSUF_RefreshAllFrames()
     end
 
@@ -88,7 +96,6 @@ local function PushVisualUpdates()
     end
 end
 
-
 ------------------------------------------------------
 -- Helper: ensure mouseover highlight border stays bound to its unitframe
 -- (Prevents "floating highlight box" when the unitframe moves/hides.)
@@ -101,7 +108,6 @@ local function MSUF_GetHighlightObject(frame)
         or frame.MSUF_highlight
         or frame.highlight
 end
-
 
 local function MSUF_FixHighlightForFrame(frame)
     local hb = MSUF_GetHighlightObject(frame)
@@ -155,7 +161,6 @@ local function MSUF_FixHighlightForFrame(frame)
             end
         end
     end
-
 
     -- NOTE (Midnight secret-values): Do NOT use GetBottom()/GetTop() math here.
     -- We anchor to the power bar frame directly instead of computing screen-space extents.
@@ -240,9 +245,7 @@ do
 
         local function run()
             scheduled = false
-            if not (ns and ns.MSUF_FixMouseoverHighlightBindings) then
-                return
-            end
+            if not (ns and ns.MSUF_FixMouseoverHighlightBindings) then return end
 
             ns.MSUF_FixMouseoverHighlightBindings()
 
@@ -269,7 +272,6 @@ if _G.C_Timer and _G.C_Timer.After then
         end
     end)
 end
-
 
 ------------------------------------------------------
 -- Helpers: Global font color
@@ -310,7 +312,6 @@ local function ResetGlobalFontToPalette()
 
     PushVisualUpdates()
 end
-
 
 ------------------------------------------------------
 -- Helpers: Castbar text color (custom RGB; falls back to Global font color)
@@ -357,7 +358,6 @@ local function ResetCastbarTextColorToGlobal()
     PushVisualUpdates()
 end
 
-
 ------------------------------------------------------
 -- Helpers: Castbar border color (Outline)
 ------------------------------------------------------
@@ -400,7 +400,6 @@ local function ResetCastbarBorderColor()
     end
 end
 
-
 ------------------------------------------------------
 -- Helpers: Castbar background color
 -- DB keys: MSUF_DB.general.castbarBgR/G/B/A
@@ -434,7 +433,7 @@ local function SetCastbarBackgroundColor(r, g, b, a)
     gen.castbarBgA = a or 1
 
     -- Live-apply to all active castbar frames (same pattern as SetCastbarBorderColor)
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+    if _G.MSUF_UpdateCastbarVisuals then
         _G.MSUF_UpdateCastbarVisuals()
     end
 end
@@ -448,11 +447,10 @@ local function ResetCastbarBackgroundColor()
     g.castbarBgB = nil
     g.castbarBgA = nil
 
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+    if _G.MSUF_UpdateCastbarVisuals then
         _G.MSUF_UpdateCastbarVisuals()
     end
 end
-
 
 ------------------------------------------------------
 -- Helpers: Interruptible cast color
@@ -489,7 +487,6 @@ local function SetInterruptibleCastColor(r, g, b)
 
     PushVisualUpdates()
 end
-
 
 ------------------------------------------------------
 -- Helpers: Non-interruptible cast color
@@ -535,7 +532,6 @@ local function SetNonInterruptibleCastColor(r, g, b)
     PushVisualUpdates()
 end
 
-
 ------------------------------------------------------
 -- Helpers: Interrupt feedback color
 ------------------------------------------------------
@@ -577,7 +573,6 @@ local function SetInterruptFeedbackCastColor(r, g, b)
 
     PushVisualUpdates()
 end
-
 
 ------------------------------------------------------
 -- Helpers: Player castbar override
@@ -626,7 +621,6 @@ local function SetPlayerCastbarOverrideColor(r, g, b)
     gen.playerCastbarOverrideB = b or 1
     PushVisualUpdates()
 end
-
 
 ------------------------------------------------------
 -- Helpers: Class bar colors
@@ -684,7 +678,6 @@ local function ResetAllClassColors()
     PushVisualUpdates()
 end
 
-
 ------------------------------------------------------
 -- Helpers: Class Color bar background
 ------------------------------------------------------
@@ -716,7 +709,6 @@ local function ResetClassBarBgColor()
     SetClassBarBgColor(0, 0, 0)
 end
 
-
 ------------------------------------------------------
 -- Helpers: Bar background match HP color
 ------------------------------------------------------
@@ -731,7 +723,6 @@ local function SetBarBgMatchHP(v)
     g.barBgMatchHPColor = v and true or false
     PushVisualUpdates()
 end
-
 
 ------------------------------------------------------
 -- Helpers: NPC reaction colors
@@ -787,7 +778,6 @@ local function ResetAllNPCColors()
     PushVisualUpdates()
 end
 
-
 ------------------------------------------------------
 -- Helpers: NPC Color Mode ("reaction" / "type")
 ------------------------------------------------------
@@ -807,7 +797,7 @@ local function SetNPCColorMode(mode)
     g.npcColorMode = mode
     -- Invalidate settings cache + refresh invariant flags on ALL frames
     -- (nil unitKey → refreshes all; true → marks dirty for visual update).
-    if type(_G.MSUF_NotifyConfigChanged) == "function" then
+    if _G.MSUF_NotifyConfigChanged then
         _G.MSUF_NotifyConfigChanged(nil, true, true, "npcColorMode")
     end
     PushVisualUpdates()
@@ -825,7 +815,7 @@ local function SetNPCTypeColorBar(enabled)
     local g = _general()
     if not g then return end
     g.npcTypeColorBar = enabled and true or false
-    if type(_G.MSUF_NotifyConfigChanged) == "function" then
+    if _G.MSUF_NotifyConfigChanged then
         _G.MSUF_NotifyConfigChanged(nil, true, true, "npcTypeColorBar")
     end
     PushVisualUpdates()
@@ -840,7 +830,7 @@ local function SetNPCTypeColorText(enabled)
     local g = _general()
     if not g then return end
     g.npcTypeColorText = enabled and true or false
-    if type(_G.MSUF_NotifyConfigChanged) == "function" then
+    if _G.MSUF_NotifyConfigChanged then
         _G.MSUF_NotifyConfigChanged(nil, true, true, "npcTypeColorText")
     end
     PushVisualUpdates()
@@ -865,7 +855,7 @@ local function SetNPCTypePerUnit(unitKey, enabled)
     local g = _general()
     if not g then return end
     g[unitKey] = enabled and true or false
-    if type(_G.MSUF_NotifyConfigChanged) == "function" then
+    if _G.MSUF_NotifyConfigChanged then
         _G.MSUF_NotifyConfigChanged(nil, true, true, unitKey)
     end
     PushVisualUpdates()
@@ -886,7 +876,6 @@ local function ResetNPCTypeColors()
     end
     PushVisualUpdates()
 end
-
 
 ------------------------------------------------------
 -- Helpers: Pet frame bar color
@@ -918,7 +907,6 @@ local function SetPetFrameColor(r, g, b)
     gen.petFrameColorB = b
     PushVisualUpdates()
 end
-
 
 ------------------------------------------------------
 -- Helpers: Absorb / Heal-Absorb overlay colors
@@ -963,7 +951,6 @@ local function SetHealAbsorbOverlayColor(r, g, b)
     PushVisualUpdates()
 end
 
-
 ------------------------------------------------------
 -- Helpers: Power bar background color
 ------------------------------------------------------
@@ -1004,7 +991,6 @@ local function SetPowerBarBackgroundColor(r, g, b)
     PushVisualUpdates()
 end
 
-
 ------------------------------------------------------
 -- Helpers: Aggro border color
 ------------------------------------------------------
@@ -1029,7 +1015,6 @@ local function SetAggroBorderColor(r, g, b)
     gen.aggroBorderColorB = b
     PushVisualUpdates()
 end
-
 
 ------------------------------------------------------
 -- Helpers: Power bar background match HP
@@ -1063,7 +1048,6 @@ local function SetPowerBarBackgroundMatchHP(enabled)
 
     PushVisualUpdates()
 end
-
 
 ------------------------------------------------------
 -- Export API table for MSUF_Options_Colors.lua
