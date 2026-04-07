@@ -263,7 +263,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     -- =====================================================================
     -- Section 3: Textures & Outline
     -- =====================================================================
-    local s3Box, s3Body = MakeCollapsibleSection(castbarEnemyGroup, 185, "Textures & Outline", false)
+    local s3Box, s3Body = MakeCollapsibleSection(castbarEnemyGroup, 310, "Textures & Outline", false)
     s3Box:SetPoint("TOPLEFT", s2Box, "BOTTOMLEFT", 0, -6)
 
     local function ApplyTextures()
@@ -329,6 +329,45 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         label = TR("Show latency indicator"),
         get = function() return G().castbarShowLatency ~= false end,
         set = function(v) G().castbarShowLatency = v; Apply("castbarLatency") end,
+    })
+
+    local sparkCheck = UI.Check({
+        name = "MSUF_CastbarSparkCheck", parent = s3Body,
+        anchor = latencyCheck, x = 0, y = -6,
+        label = TR("Show spark (leading edge highlight)"),
+        get = function() return G().castbarShowSpark == true end,
+        set = function(v) G().castbarShowSpark = v; ApplyTextures() end,
+    })
+
+    local sparkOverflowCheck = UI.Check({
+        name = "MSUF_CastbarSparkOverflowCheck", parent = s3Body,
+        anchor = sparkCheck, x = 18, y = -6,
+        label = TR("Spark extends beyond bar"),
+        get = function() return G().castbarSparkOverflow ~= false end,
+        set = function(v) G().castbarSparkOverflow = v; ApplyTextures() end,
+    })
+
+    local matchLabel = UI.Label({ parent = s3Body, text = TR("Player castbar width source"), anchor = sparkOverflowCheck, y = -12 })
+
+    local matchDrop = UI.Dropdown({
+        name = "MSUF_CastbarPlayerMatchWidthDropdown", parent = s3Body,
+        anchor = matchLabel, x = -16, y = -4, width = 260,
+        items = {
+            { key = "manual",    label = "Manual (per-unit width)" },
+            { key = "essential", label = "Essential Cooldown Row" },
+            { key = "utility",   label = "Utility Cooldown Bar" },
+        },
+        get = function()
+            local v = G().castbarPlayerMatchWidth
+            if v == "essential" or v == "utility" then return v end
+            return "manual"
+        end,
+        set = function(v)
+            if v == "manual" then v = nil end
+            G().castbarPlayerMatchWidth = v
+            ApplyTextures()
+            if type(_G.MSUF_ReanchorPlayerCastBar) == "function" then _G.MSUF_ReanchorPlayerCastBar() end
+        end,
     })
 
     -- =====================================================================
@@ -493,10 +532,12 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     fkDesc:SetTextColor(0.55, 0.55, 0.55)
 
     local fkPreviewCheck = UI.Check({
-        name = "MSUF_FocusKickPreviewCheck", parent = s6Body,
+        name = "MSUF_FocusKickPreviewCheckInline", parent = s6Body,
         anchor = fkDesc, anchorPoint = "BOTTOMLEFT", x = -20, y = -6,
         label = TR("Show on-screen preview"),
-        get = function() return false end,
+        get = function()
+            return (type(_G.MSUF_FocusKick_IsPreviewEnabled) == "function") and _G.MSUF_FocusKick_IsPreviewEnabled() or false
+        end,
         set = function(v)
             if _fkSyncing then return end
             if type(_G.MSUF_FocusKick_SetPreviewEnabled) == "function" then
@@ -589,11 +630,89 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     _G.MSUF_FocusKickOptionsBuiltInCastbar = true
 
     -- =====================================================================
+    -- Section 7: Interrupt Ready Indicator
+    -- =====================================================================
+    local s7Box, s7Body = MakeCollapsibleSection(castbarEnemyGroup, 240, "Interrupt Ready Indicator", false)
+    s7Box:SetPoint("TOPLEFT", s6Box, "BOTTOMLEFT", 0, -6)
+
+    local function KickApply()
+        Apply("castbarVisuals")
+        if type(_G.MSUF_UpdateCastbarVisuals) == "function" then pcall(_G.MSUF_UpdateCastbarVisuals) end
+    end
+
+    local kickDesc = s7Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    kickDesc:SetPoint("TOPLEFT", s7Body, "TOPLEFT", 12, -6)
+    kickDesc:SetWidth(600)
+    kickDesc:SetJustifyH("LEFT")
+    kickDesc:SetText(TR("Shows a colored indicator on castbars when your interrupt is ready (green) or on cooldown (red). Only visible during interruptible casts."))
+
+    local kickTargetCheck = UI.Check({
+        name = "MSUF_KickReadyTargetCheck", parent = s7Body,
+        anchor = kickDesc, x = 0, y = -10,
+        label = TR("Show on Target castbar"),
+        get = function() return G().kickReadyShowTarget == true end,
+        set = function(v) G().kickReadyShowTarget = v; KickApply() end,
+    })
+
+    local kickFocusCheck = UI.Check({
+        name = "MSUF_KickReadyFocusCheck", parent = s7Body,
+        anchor = kickTargetCheck, x = 0, y = -6,
+        label = TR("Show on Focus castbar"),
+        get = function() return G().kickReadyShowFocus == true end,
+        set = function(v) G().kickReadyShowFocus = v; KickApply() end,
+    })
+
+    local kickBossCheck = UI.Check({
+        name = "MSUF_KickReadyBossCheck", parent = s7Body,
+        anchor = kickFocusCheck, x = 0, y = -6,
+        label = TR("Show on Boss castbars"),
+        get = function() return G().kickReadyShowBoss == true end,
+        set = function(v) G().kickReadyShowBoss = v; KickApply() end,
+    })
+
+    local kickSizeSlider = UI.Slider({
+        name = "MSUF_KickReadySizeSlider", parent = s7Body,
+        anchor = s7Body, anchorPoint = "TOPLEFT", x = 370, y = -30, width = 260, compact = true,
+        label = TR("Indicator size"), min = 4, max = 24, step = 1, default = 8,
+        get = function() return G().kickReadySize or 8 end,
+        set = function(v) G().kickReadySize = v; KickApply() end,
+    })
+
+    local kickAnchorDrop = UI.Dropdown({
+        name = "MSUF_KickReadyAnchorDropdown", parent = s7Body,
+        anchor = kickSizeSlider, x = 0, y = -12, width = 260,
+        items = {
+            { key = "RIGHT",  label = "Right" },
+            { key = "LEFT",   label = "Left" },
+            { key = "TOP",    label = "Top" },
+            { key = "BOTTOM", label = "Bottom" },
+        },
+        get = function() return G().kickReadyAnchor or "RIGHT" end,
+        set = function(v) G().kickReadyAnchor = v; KickApply() end,
+    })
+
+    local kickOffXSlider = UI.Slider({
+        name = "MSUF_KickReadyOffsetXSlider", parent = s7Body,
+        anchor = kickAnchorDrop, x = 0, y = -12, width = 260, compact = true,
+        label = TR("X offset"), min = -50, max = 50, step = 1, default = 4,
+        get = function() return G().kickReadyOffsetX or 4 end,
+        set = function(v) G().kickReadyOffsetX = v; KickApply() end,
+    })
+
+    local kickOffYSlider = UI.Slider({
+        name = "MSUF_KickReadyOffsetYSlider", parent = s7Body,
+        anchor = kickOffXSlider, x = 0, y = -36, width = 260, compact = true,
+        label = TR("Y offset"), min = -50, max = 50, step = 1, default = 0,
+        get = function() return G().kickReadyOffsetY or 0 end,
+        set = function(v) G().kickReadyOffsetY = v; KickApply() end,
+    })
+
+    -- =====================================================================
     -- Bottom anchor (for Edit Mode button placement from Options_Core)
     -- =====================================================================
     local bottomAnchor = CreateFrame("Frame", "MSUF_CastbarMenuPanel", castbarEnemyGroup)
     bottomAnchor:SetSize(SECTION_W, 1)
-    bottomAnchor:SetPoint("TOPLEFT", s6Box, "BOTTOMLEFT", 0, -4)
+    bottomAnchor:SetPoint("TOPLEFT", s7Box, "BOTTOMLEFT", 0, -4)
 
     -- =====================================================================
     -- SyncAll (called on OnShow)

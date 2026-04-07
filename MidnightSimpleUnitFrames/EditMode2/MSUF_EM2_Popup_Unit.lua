@@ -48,8 +48,15 @@ local function Apply()
         end
     end
     if type(_G.MSUF_UpdateAllFonts)=="function" then _G.MSUF_UpdateAllFonts() end
+    -- Direct SetSize: MarkDirty/UpdateSimpleUnitFrame only handles health/power/text,
+    -- not frame dimensions. Apply width/height immediately.
+    if pf.parent and conf.width and conf.height then
+        pf.parent:SetSize(conf.width, conf.height)
+    end
     local md=_G.MSUF_UFCore_MarkDirty; if type(md)=="function" and pf.parent then md(pf.parent, nil, true, "EM2:UnitPopup")
     elseif type(_G.UpdateSimpleUnitFrame)=="function" and pf.parent then _G.UpdateSimpleUnitFrame(pf.parent) end
+    -- Full layout re-apply (power bar embed, text anchors, borders, etc.)
+    if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(key) end
     if type(_G.MSUF_ForceTextLayoutForUnitKey)=="function" then _G.MSUF_ForceTextLayoutForUnitKey(key) end
     -- Clear PBEmbedLayout stamp so width/height changes are re-applied
     if pf.parent then

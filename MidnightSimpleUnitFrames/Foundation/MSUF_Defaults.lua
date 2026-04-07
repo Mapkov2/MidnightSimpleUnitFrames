@@ -681,6 +681,26 @@ end
 if g.castbarShowGlow == nil then
     g.castbarShowGlow = false
 end
+if g.castbarShowSpark == nil then
+    g.castbarShowSpark = false
+end
+if g.castbarSparkOverflow == nil then
+    g.castbarSparkOverflow = true
+end
+-- Player castbar width matching: nil = manual, "essential" = CDM essential row, "utility" = CDM utility bar
+if g.castbarPlayerMatchWidth == nil then
+    g.castbarPlayerMatchWidth = nil
+end
+-- Interrupt Ready Indicator
+if g.kickReadyShowTarget == nil then g.kickReadyShowTarget = false end
+if g.kickReadyShowFocus  == nil then g.kickReadyShowFocus  = false end
+if g.kickReadyShowBoss   == nil then g.kickReadyShowBoss   = false end
+if g.kickReadySize       == nil then g.kickReadySize       = 8 end
+if g.kickReadyAnchor     == nil then g.kickReadyAnchor     = "RIGHT" end
+if g.kickReadyOffsetX    == nil then g.kickReadyOffsetX    = 4 end
+if g.kickReadyOffsetY    == nil then g.kickReadyOffsetY    = 0 end
+if g.kickReadyColor      == nil then g.kickReadyColor      = { ["1"] = 0, ["2"] = 1, ["3"] = 0 } end
+if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] = 0, ["3"] = 0 } end
 -- Aura highlight colors (used by Auras 2.0 highlight pipeline)
 if g.aurasOwnBuffHighlightColor == nil then
     g.aurasOwnBuffHighlightColor = { ["1"] = 1, ["2"] = 0.85, ["3"] = 0.2 }

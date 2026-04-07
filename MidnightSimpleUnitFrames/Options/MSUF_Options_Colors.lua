@@ -1667,7 +1667,7 @@ end
     --------------------------------------------------
     -- Section 6: Castbar Colors
     --------------------------------------------------
-    S.sec6Box, S.sec6Body = F.MakeCollapsibleSection(content, 380, "Castbar Colors", false)
+    S.sec6Box, S.sec6Body = F.MakeCollapsibleSection(content, 460, "Castbar Colors", false)
     S.sec6Box:SetPoint("TOPLEFT", S.sec5bBox, "BOTTOMLEFT", 0, -6)
     do local content = S.sec6Body
 
@@ -2046,7 +2046,64 @@ end
     end)
 
     S.lastControl = resetCastbarColorsBtn
-    
+
+    --------------------------------------------------
+    -- Kick Ready Indicator Colors
+    --------------------------------------------------
+    local kickReadyDivider = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    kickReadyDivider:SetPoint("TOPLEFT", resetCastbarColorsBtn, "BOTTOMLEFT", 0, -16)
+    kickReadyDivider:SetText("Interrupt Ready Indicator")
+
+    local kickReadyLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    kickReadyLabel:SetPoint("TOPLEFT", kickReadyDivider, "BOTTOMLEFT", 0, -10)
+    kickReadyLabel:SetText("Ready color (kick available)")
+
+    local kickReadySwatch = CreateFrame("Button", "MSUF_Colors_KickReadySwatch", content)
+    kickReadySwatch:SetSize(32, 16)
+    kickReadySwatch:SetPoint("TOPLEFT", kickReadyLabel, "BOTTOMLEFT", 0, -4)
+    local kickReadyTex = kickReadySwatch:CreateTexture(nil, "ARTWORK")
+    kickReadyTex:SetAllPoints()
+
+    local function GetKickColor(key, dr, dg, db)
+        EnsureDB()
+        local g = MSUF_DB and MSUF_DB.general
+        local c = g and g[key]
+        if c then return tonumber(c["1"]) or dr, tonumber(c["2"]) or dg, tonumber(c["3"]) or db end
+        return dr, dg, db
+    end
+
+    kickReadySwatch:SetScript("OnClick", function()
+        local r, g, b = GetKickColor("kickReadyColor", 0, 1, 0)
+        OpenColorPicker(r, g, b, function(nr, ng, nb)
+            EnsureDB()
+            MSUF_DB.general.kickReadyColor = { ["1"] = nr, ["2"] = ng, ["3"] = nb }
+            kickReadyTex:SetColorTexture(nr, ng, nb)
+            if PushVisualUpdates then PushVisualUpdates() end
+        end)
+    end)
+    do local r, g, b = GetKickColor("kickReadyColor", 0, 1, 0); kickReadyTex:SetColorTexture(r, g, b) end
+
+    local kickNotReadyLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    kickNotReadyLabel:SetPoint("TOPLEFT", kickReadyLabel, "BOTTOMLEFT", 0, -28)
+    kickNotReadyLabel:SetText("Not ready color (kick on cooldown)")
+
+    local kickNotReadySwatch = CreateFrame("Button", "MSUF_Colors_KickNotReadySwatch", content)
+    kickNotReadySwatch:SetSize(32, 16)
+    kickNotReadySwatch:SetPoint("TOPLEFT", kickNotReadyLabel, "BOTTOMLEFT", 0, -4)
+    local kickNotReadyTex = kickNotReadySwatch:CreateTexture(nil, "ARTWORK")
+    kickNotReadyTex:SetAllPoints()
+
+    kickNotReadySwatch:SetScript("OnClick", function()
+        local r, g, b = GetKickColor("kickNotReadyColor", 1, 0, 0)
+        OpenColorPicker(r, g, b, function(nr, ng, nb)
+            EnsureDB()
+            MSUF_DB.general.kickNotReadyColor = { ["1"] = nr, ["2"] = ng, ["3"] = nb }
+            kickNotReadyTex:SetColorTexture(nr, ng, nb)
+            if PushVisualUpdates then PushVisualUpdates() end
+        end)
+    end)
+    do local r, g, b = GetKickColor("kickNotReadyColor", 1, 0, 0); kickNotReadyTex:SetColorTexture(r, g, b) end
+
 
     end -- section 6
 

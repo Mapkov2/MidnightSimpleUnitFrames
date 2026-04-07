@@ -86,6 +86,25 @@ function _G.MSUF_BuildCastbarFrameElements(self)
     self.timeText = timeText
 
     if _G.MSUF_ApplyCastbarOutline then _G.MSUF_ApplyCastbarOutline(self, true) end
+
+    -- Spark: leading-edge highlight (anchored to fill texture RIGHT edge)
+    local spark = statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
+    spark:SetTexture(4417031)
+    spark:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
+    spark:SetDesaturated(true)
+    spark:SetVertexColor(1, 1, 1, 1)
+    spark:SetSize(16, height * 2.1)
+    spark:SetBlendMode("ADD")
+    do
+        local ft = statusBar:GetStatusBarTexture()
+        if ft then
+            spark:SetPoint("CENTER", ft, "RIGHT", 0, 0)
+        else
+            spark:SetPoint("CENTER", statusBar, "LEFT", 0, 0)
+        end
+    end
+    spark:Hide()
+    self.spark = spark
 end
 
 function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
@@ -221,6 +240,25 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
     end
 
     if _G.MSUF_ApplyCastbarOutline then _G.MSUF_ApplyCastbarOutline(f, true) end
+
+    -- Spark: leading-edge highlight (preview frame)
+    local sparkPrev = statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
+    sparkPrev:SetTexture(4417031)
+    sparkPrev:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
+    sparkPrev:SetDesaturated(true)
+    sparkPrev:SetVertexColor(1, 1, 1, 1)
+    sparkPrev:SetSize(16, sbH * 2.1)
+    sparkPrev:SetBlendMode("ADD")
+    do
+        local ft2 = statusBar:GetStatusBarTexture()
+        if ft2 then
+            sparkPrev:SetPoint("CENTER", ft2, "RIGHT", 0, 0)
+        else
+            sparkPrev:SetPoint("CENTER", statusBar, "LEFT", 0, 0)
+        end
+    end
+    sparkPrev:Hide()
+    f.spark = sparkPrev
 
 
     return f
