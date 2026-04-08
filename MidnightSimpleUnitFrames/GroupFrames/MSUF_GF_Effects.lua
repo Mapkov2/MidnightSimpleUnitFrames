@@ -250,6 +250,27 @@ local function GetDispelColor(dispelName)
 end
 
 ------------------------------------------------------------------------
+-- ResolveDispelColor: respects hlDispelColorMode from Bars menu.
+-- SINGLE mode → flat color from hlDispelColorR/G/B (Colors panel).
+-- TYPE mode   → per-debuff-type color (Magic=blue, Curse=purple, etc.).
+------------------------------------------------------------------------
+local function ResolveDispelColor(dispelName)
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local mode = gen and gen.hlDispelColorMode or "SINGLE"
+    if mode == "TYPE" then
+        return GetDispelColor(dispelName)
+    end
+    -- SINGLE: read flat color from general (Colors panel writes here)
+    if gen then
+        local r = gen.hlDispelColorR or gen.dispelBorderColorR
+        local g = gen.hlDispelColorG or gen.dispelBorderColorG
+        local b = gen.hlDispelColorB or gen.dispelBorderColorB
+        if r then return r, g, b end
+    end
+    return 0.25, 0.75, 1.00
+end
+
+------------------------------------------------------------------------
 -- Status icon textures
 ------------------------------------------------------------------------
 local ICON_TEX = {
@@ -844,10 +865,9 @@ local function _GF_QuickBorderUpdate(f)
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
 
-    -- Priority 1: Dispel (already active from UNIT_AURA)
+    -- Dispel/Aggro are always higher priority than Target/Focus.
+    -- If either is active, skip target/focus update (full _GF_RefreshBorder handles their order).
     if f._msufGFDispelType and c.dispelEn then return end
-
-    -- Priority 2: Aggro (already active from UNIT_THREAT)
     if f._msufGFAggroLevel and f._msufGFAggroLevel >= 1 and c.aggroEn then return end
 
     -- Priority 3: Target
@@ -899,71 +919,89 @@ _GF_RefreshBorder = function(f, unit)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
 
-    -- Priority 1: Dispel
+    -- Resolve active states
     local dispelType = f._msufGFDispelType
-    if dispelType and HLVal(kind, "hlDispelEnabled") ~= false then
-        local resolve = _G.MSUF_ResolveDispelColor
-        local r, g, b
-        if type(resolve) == "function" then
-            r, g, b = resolve(dispelType)
-        else
-            r, g, b = GetDispelColor(dispelType)
+    local hasDispel  = dispelType and HLVal(kind, "hlDispelEnabled") ~= false
+    local aggroLevel = f._msufGFAggroLevel
+    local hasAggro   = aggroLevel and aggroLevel >= 1 and HLVal(kind, "hlAggroEnabled") ~= false
+
+    -- Shared geometry for dispel/aggro/purge (all use Aggro size keys)
+    local sz  = HLVal(kind, "hlAggroSize") or 2
+    local ofs = HLVal(kind, "hlAggroOffset") or 0
+    local tex = HLVal(kind, "hlAggroTexture")
+    local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
+
+    -- Configurable priority: read hlPrioOrder from Bars menu (general DB).
+    -- Maps "dispel"/"magic"/"curse"/etc → dispel, "aggro" → aggro.
+    -- Purge/bossTarget are UF-only, skip for GF.
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local prioEnabled = gen and gen.highlightPrioEnabled
+    local prioOrder   = prioEnabled and gen.highlightPrioOrder
+
+    if type(prioOrder) == "table" then
+        for _, pk in ipairs(prioOrder) do
+            if pk == "dispel" or pk == "magic" or pk == "curse"
+            or pk == "disease" or pk == "poison" or pk == "bleed" then
+                if hasDispel then
+                    local r, g, b = ResolveDispelColor(dispelType)
+                    if r then
+                        _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
+                        border._msufHLActivePrio = 1; border:Show()
+                        return
+                    end
+                end
+            elseif pk == "aggro" then
+                if hasAggro then
+                    _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay,
+                        HLColor("hlAggroColorR", 1), HLColor("hlAggroColorG", 0.55), HLColor("hlAggroColorB", 0), 1)
+                    border._msufHLActivePrio = 2; border:Show()
+                    return
+                end
+            end
         end
-        if r then
-            local sz  = HLVal(kind, "hlAggroSize") or 2
-            local ofs = HLVal(kind, "hlAggroOffset") or 0
-            local tex = HLVal(kind, "hlAggroTexture")
-            local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
-            _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
-            border._msufHLActivePrio = 1
-            border:Show()
+    else
+        -- Default: Dispel > Aggro
+        if hasDispel then
+            local r, g, b = ResolveDispelColor(dispelType)
+            if r then
+                _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
+                border._msufHLActivePrio = 1; border:Show()
+                return
+            end
+        end
+        if hasAggro then
+            _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay,
+                HLColor("hlAggroColorR", 1), HLColor("hlAggroColorG", 0.55), HLColor("hlAggroColorB", 0), 1)
+            border._msufHLActivePrio = 2; border:Show()
             return
         end
     end
 
-    -- Priority 2: Aggro — colors from general (tied to Colors panel)
-    local aggroLevel = f._msufGFAggroLevel
-    if aggroLevel and aggroLevel >= 1 and HLVal(kind, "hlAggroEnabled") ~= false then
-        local sz  = HLVal(kind, "hlAggroSize") or 2
-        local ofs = HLVal(kind, "hlAggroOffset") or 0
-        local tex = HLVal(kind, "hlAggroTexture")
-        local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
-        local ar = HLColor("hlAggroColorR", 1)
-        local ag = HLColor("hlAggroColorG", 0.55)
-        local ab = HLColor("hlAggroColorB", 0)
-        _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, ar, ag, ab, 1)
-        border._msufHLActivePrio = 2
-        border:Show()
-        return
-    end
-
-    -- Priority 3: Target — colors from general (tied to Colors panel)
+    -- After configurable prio: Target (GF-specific, always after dispel/aggro)
     if f._msufGFIsTarget and HLVal(kind, "hlTargetEnabled") ~= false then
-        local sz  = HLVal(kind, "hlTargetSize") or 2
-        local ofs = HLVal(kind, "hlTargetOffset") or 0
-        local tex = HLVal(kind, "hlTargetTexture")
-        local lay = HLVal(kind, "hlTargetLayer") or "DEFAULT"
-        _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay,
+        _applyHighlightBorderStyle(border, conf,
+            HLVal(kind, "hlTargetSize") or 2,
+            HLVal(kind, "hlTargetOffset") or 0,
+            HLVal(kind, "hlTargetTexture"),
+            HLVal(kind, "hlTargetLayer") or "DEFAULT",
             HLColor("hlTargetColorR", 1),
             HLColor("hlTargetColorG", 1),
             HLColor("hlTargetColorB", 1), 1)
-        border._msufHLActivePrio = 3
-        border:Show()
+        border._msufHLActivePrio = 3; border:Show()
         return
     end
 
-    -- Priority 4: Focus — colors from GF config (GF-specific, read conf directly)
+    -- Focus (GF-specific, lowest priority)
     if f._msufGFIsFocus and conf.hlFocusEnabled ~= false then
-        local sz  = conf.hlFocusSize or 2
-        local ofs = conf.hlFocusOffset or 0
-        local tex = conf.hlFocusTexture
-        local lay = conf.hlFocusLayer or "DEFAULT"
-        _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay,
+        _applyHighlightBorderStyle(border, conf,
+            conf.hlFocusSize or 2,
+            conf.hlFocusOffset or 0,
+            conf.hlFocusTexture,
+            conf.hlFocusLayer or "DEFAULT",
             conf.hlFocusColorR or 0.5,
             conf.hlFocusColorG or 0.5,
             conf.hlFocusColorB or 1.0, 1)
-        border._msufHLActivePrio = 4
-        border:Show()
+        border._msufHLActivePrio = 4; border:Show()
         return
     end
 

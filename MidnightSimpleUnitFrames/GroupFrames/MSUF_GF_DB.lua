@@ -299,6 +299,11 @@ local PARTY_DEFAULTS = {
     -- Grid layout
     unitsPerColumn    = 5,
     maxColumns        = 1,
+    -- Role sort
+    sortByRole        = false,
+    roleOrder         = "TANK,HEALER,DAMAGER",
+    separateMeleeRanged = false,
+    playerFirstInRole   = false,
 }
 
 local RAID_DEFAULTS = {}
@@ -331,8 +336,6 @@ do
     RAID_DEFAULTS.powerShowTank    = true
     RAID_DEFAULTS.powerShowHealer  = true
     RAID_DEFAULTS.powerShowDamager = false
-    RAID_DEFAULTS.sortByRole       = false
-    RAID_DEFAULTS.roleOrder        = "TANK,HEALER,DAMAGER"
 end
 
 GF.PARTY_DEFAULTS = PARTY_DEFAULTS

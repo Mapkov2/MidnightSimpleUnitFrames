@@ -526,6 +526,119 @@ local ROLE_COORDS = {
     DAMAGER = { 20/64, 39/64, 22/64, 41/64 },
 }
 
+------------------------------------------------------------------------
+-- Melee/Ranged spec classification (EQoL pattern)
+------------------------------------------------------------------------
+local MELEE_SPECS = {
+    [250]=true,[251]=true,[252]=true,  -- DK
+    [577]=true,[581]=true,             -- DH
+    [103]=true,[104]=true,             -- Druid Feral/Guardian
+    [1473]=true,                       -- Evoker Aug
+    [255]=true,                        -- Hunter Survival
+    [268]=true,[269]=true,             -- Monk BM/WW
+    [66]=true,[70]=true,               -- Paladin Prot/Ret
+    [259]=true,[260]=true,[261]=true,  -- Rogue
+    [263]=true,                        -- Shaman Enh
+    [71]=true,[72]=true,[73]=true,     -- Warrior
+}
+local MELEE_CLASSES = {
+    WARRIOR=true, ROGUE=true, DEATHKNIGHT=true,
+    DEMONHUNTER=true, MONK=true, PALADIN=true,
+}
+
+local function GetDpsRangeRole(unit, classToken)
+    local specId
+    if GetInspectSpecialization and UnitIsUnit and UnitIsUnit(unit, "player") then
+        specId = GetSpecialization and GetSpecialization()
+        if specId then
+            local id = GetSpecializationInfo and GetSpecializationInfo(specId)
+            specId = id
+        end
+    end
+    if specId and MELEE_SPECS[specId] then return "MELEE" end
+    if specId and specId > 0 then return "RANGED" end
+    if classToken and MELEE_CLASSES[classToken] then return "MELEE" end
+    return "RANGED"
+end
+
+------------------------------------------------------------------------
+-- NAMELIST sort builder: role → playerFirst → class → name
+-- Used when separateMeleeRanged=true (native groupBy can't split DPS).
+------------------------------------------------------------------------
+local function BuildSortNameList(kind)
+    local conf = GF.GetConf(kind)
+    if not conf.sortByRole then return nil end
+
+    local separate = conf.separateMeleeRanged == true
+    local playerFirst = conf.playerFirstInRole == true
+
+    -- Parse role order string → priority map
+    local roleStr = conf.roleOrder or "TANK,HEALER,DAMAGER"
+    local rolePrio = {}
+    local idx = 0
+    for tok in roleStr:gmatch("[^,]+") do
+        idx = idx + 1
+        rolePrio[tok] = idx
+        -- Expand DAMAGER → MELEE + RANGED if separate and token is DAMAGER
+        if separate and tok == "DAMAGER" then
+            rolePrio["MELEE"] = idx
+            rolePrio["RANGED"] = idx + 0.5
+        end
+    end
+    if separate and not rolePrio["MELEE"] then rolePrio["MELEE"] = 90 end
+    if separate and not rolePrio["RANGED"] then rolePrio["RANGED"] = 91 end
+
+    -- Gather group members
+    local entries = {}
+    local function addUnit(unit)
+        if not (unit and UnitExists(unit)) then return end
+        local name, realm = UnitName(unit)
+        if not name or name == "" then return end
+        if realm and realm ~= "" then name = name .. "-" .. realm end
+        local _, classToken = UnitClass(unit)
+        local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or "DAMAGER"
+        if role == "NONE" then role = "DAMAGER" end
+        local sortRole = role
+        if separate and role == "DAMAGER" then
+            sortRole = GetDpsRangeRole(unit, classToken)
+        end
+        entries[#entries + 1] = {
+            name = name,
+            sortRole = sortRole,
+            class = classToken or "",
+            isPlayer = UnitIsUnit(unit, "player"),
+        }
+    end
+
+    if kind == "party" then
+        if conf.showPlayer then addUnit("player") end
+        for i = 1, 4 do addUnit("party" .. i) end
+    else
+        local num = GetNumGroupMembers and GetNumGroupMembers() or 0
+        for i = 1, num do addUnit("raid" .. i) end
+    end
+
+    -- Sort: role priority → playerFirst → class → name
+    table.sort(entries, function(a, b)
+        local rA = rolePrio[a.sortRole] or 999
+        local rB = rolePrio[b.sortRole] or 999
+        if rA ~= rB then return rA < rB end
+        if playerFirst and a.isPlayer ~= b.isPlayer then return a.isPlayer == true end
+        if a.class ~= b.class then return a.class < b.class end
+        return a.name < b.name
+    end)
+
+    local names = {}
+    local seen = {}
+    for _, e in ipairs(entries) do
+        if not seen[e.name] then
+            seen[e.name] = true
+            names[#names + 1] = e.name
+        end
+    end
+    return #names > 0 and table.concat(names, ",") or nil
+end
+
 local function LayoutIcons(f, kind)
     local conf = GF.GetConf(kind)
     local anchor = f.statusIconLayer or f.barGroup or f
@@ -1128,8 +1241,30 @@ local function SetupPartyHeader()
     _GF_SetAttrIfChanged(header, "maxColumns", conf.maxColumns or 1)
     _GF_SetAttrIfChanged(header, "unitsPerColumn", conf.unitsPerColumn or 5)
     _GF_SetAttrIfChanged(header, "template", "SecureUnitButtonTemplate")
-    _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
     _GF_SetAttrIfChanged(header, "sortDir", "ASC")
+
+    -- Role sort
+    if conf.sortByRole then
+        if conf.separateMeleeRanged then
+            -- NAMELIST: full control (melee/ranged split, playerFirst, class order)
+            local nameList = BuildSortNameList("party")
+            _GF_SetAttrIfChanged(header, "sortMethod", "NAMELIST")
+            _GF_SetAttrIfChanged(header, "nameList", nameList)
+            _GF_SetAttrIfChanged(header, "groupBy", nil)
+            _GF_SetAttrIfChanged(header, "groupingOrder", nil)
+        else
+            -- Native ASSIGNEDROLE (most performant, no nameList rebuild)
+            _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+            _GF_SetAttrIfChanged(header, "nameList", nil)
+            _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
+            _GF_SetAttrIfChanged(header, "groupingOrder", conf.roleOrder or "TANK,HEALER,DAMAGER")
+        end
+    else
+        _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+        _GF_SetAttrIfChanged(header, "nameList", nil)
+        _GF_SetAttrIfChanged(header, "groupBy", nil)
+        _GF_SetAttrIfChanged(header, "groupingOrder", nil)
+    end
 
     -- Growth direction → point/xOffset/yOffset
     -- SecureGroupHeader already accounts for child width/height; offsets are spacing only.
@@ -1246,12 +1381,10 @@ local function SetupRaidHeader()
     _GF_SetAttrIfChanged(header, "maxColumns", maxColumns)
     _GF_SetAttrIfChanged(header, "unitsPerColumn", unitsPerColumn)
     _GF_SetAttrIfChanged(header, "template", "SecureUnitButtonTemplate")
-    _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
     _GF_SetAttrIfChanged(header, "sortDir", "ASC")
     -- Group filter: which raid groups to display (1-8)
     local gf = conf.groupFilter
     if type(gf) == "string" and gf ~= "" then
-        -- Legacy string format "1,2,3,4" → pass directly
         _GF_SetAttrIfChanged(header, "groupFilter", gf)
     elseif type(gf) == "table" then
         local parts = {}
@@ -1266,11 +1399,23 @@ local function SetupRaidHeader()
     else
         _GF_SetAttrIfChanged(header, "groupFilter", nil)
     end
-    -- Role sort: groupBy ASSIGNEDROLE with configurable role order
+    -- Role sort
     if conf.sortByRole then
-        _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
-        _GF_SetAttrIfChanged(header, "groupingOrder", conf.roleOrder or "TANK,HEALER,DAMAGER")
+        if conf.separateMeleeRanged then
+            local nameList = BuildSortNameList("raid")
+            _GF_SetAttrIfChanged(header, "sortMethod", "NAMELIST")
+            _GF_SetAttrIfChanged(header, "nameList", nameList)
+            _GF_SetAttrIfChanged(header, "groupBy", nil)
+            _GF_SetAttrIfChanged(header, "groupingOrder", nil)
+        else
+            _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+            _GF_SetAttrIfChanged(header, "nameList", nil)
+            _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
+            _GF_SetAttrIfChanged(header, "groupingOrder", conf.roleOrder or "TANK,HEALER,DAMAGER")
+        end
     else
+        _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+        _GF_SetAttrIfChanged(header, "nameList", nil)
         _GF_SetAttrIfChanged(header, "groupBy", nil)
         _GF_SetAttrIfChanged(header, "groupingOrder", nil)
     end
