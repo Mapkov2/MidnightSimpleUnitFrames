@@ -261,6 +261,7 @@ local PARTY_DEFAULTS = {
         showTimer         = true,
         timerSize         = 10,
         onlyDispellable   = false,
+        colorBorderByType = true,
     },
     -- Hide in client scene (barber/dressing room)
     hideInClientScene     = true,

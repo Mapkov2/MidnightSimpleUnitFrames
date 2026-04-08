@@ -2464,6 +2464,8 @@ _G.MSUF_GF_UpdateRange    = ApplyRangeFade
 _G.MSUF_GF_UpdateTarget   = UpdateTargetIndicator
 _G.MSUF_GF_UpdateStatus   = UpdateStatusText
 _G.MSUF_GF_UpdateGroupNum = UpdateGroupNumber
+GF.GetDispelColor     = GetDispelColor
+GF.ResolveDispelColor = ResolveDispelColor
 
 -- Exports for Perfy profiling (target-click spike diagnosis)
 _G.MSUF_GF_QuickBorderUpdate   = _GF_QuickBorderUpdate

@@ -1374,7 +1374,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             return conf.raidDebuffs
         end
 
-        local box, body = AddSection(380, L["Raid Debuffs"] or "Raid Debuffs", false, "rdebuffs")
+        local box, body = AddSection(405, L["Raid Debuffs"] or "Raid Debuffs", false, "rdebuffs")
 
         SCheck({
             name = "MSUF_GF_RDEnable", parent = body,
@@ -1458,6 +1458,14 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             label = L["Only Dispellable"] or "Only Dispellable",
             get = function(k) return RD().onlyDispellable == true end,
             set = function(k, v) RD().onlyDispellable = v; GF.RefreshVisuals() end,
+        })
+
+        SCheck({
+            name = "MSUF_GF_RDColorByType", parent = body,
+            anchor = rdTimerSzSl, x = -16, y = -32,
+            label = L["Color Border by Dispel Type"] or "Color Border by Dispel Type",
+            get = function(k) return RD().colorBorderByType ~= false end,
+            set = function(k, v) RD().colorBorderByType = v; GF.RefreshVisuals() end,
         })
 
         refreshFns[#refreshFns + 1] = function()

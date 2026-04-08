@@ -283,17 +283,18 @@ function GF.UpdateRaidDebuff(f, unit)
         rd:SetScript("OnUpdate", nil)
     end
 
-    -- Dispel-type border color
+    -- Dispel-type border color (shared colors from GF_Effects)
     local dn = bestAura.dispelName
-    if not (issecretvalue and issecretvalue(dn)) and dn then
-        local dc = C_UnitAuras.GetAuraDispelTypeColor and C_UnitAuras.GetAuraDispelTypeColor(dn)
-        if dc then
-            rd:SetBackdropBorderColor(dc.r or 0.8, dc.g or 0, dc.b or 0, 1)
+    if rdConf.colorBorderByType ~= false
+       and not (issecretvalue and issecretvalue(dn)) and dn then
+        local r, g, b = GF.GetDispelColor(dn)
+        if r then
+            rd:SetBackdropBorderColor(r, g, b, 1)
         else
             rd:SetBackdropBorderColor(0.8, 0, 0, 1)
         end
     else
-        rd:SetBackdropBorderColor(0.8, 0, 0, 1)
+        rd:SetBackdropBorderColor(0, 0, 0, 1)
     end
 
     rd:Show()
