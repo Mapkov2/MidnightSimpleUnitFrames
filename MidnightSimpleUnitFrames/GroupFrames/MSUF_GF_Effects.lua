@@ -601,13 +601,17 @@ end
 
 local function ApplyRangeFade(f, unit, inRange)
     local c = f._c
-    if c and not c.rfEn then return end
+    if c and not c.rfEn then
+        f._msufGFLastRange = true
+        return
+    end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     local fadeAlpha = conf.rangeFadeAlpha or 0.4
 
     -- Disabled → full alpha
     if conf.rangeFadeEnabled == false then
+        f._msufGFLastRange = true
         if f.SetAlpha then f:SetAlpha(1) end
         return
     end
@@ -615,6 +619,7 @@ local function ApplyRangeFade(f, unit, inRange)
     -- Solo guard (EQoL: IsInGroup + IsInRaid)
     if IsInGroup and IsInRaid then
         if not IsInGroup() and not IsInRaid() then
+            f._msufGFLastRange = true
             if f.SetAlpha then f:SetAlpha(1) end
             return
         end
@@ -623,6 +628,7 @@ local function ApplyRangeFade(f, unit, inRange)
     -- Offline (EQoL: UnsecretBool on UnitIsConnected)
     local connected = unit and UnitIsConnected and _UnsecretBool(UnitIsConnected(unit)) or nil
     if connected == false then
+        f._msufGFLastRange = false
         local offA = conf.offlineAlpha or fadeAlpha
         if f.SetAlpha then f:SetAlpha(offA) end
         return
@@ -632,6 +638,11 @@ local function ApplyRangeFade(f, unit, inRange)
     if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end
 
     if type(inRange) ~= "nil" then
+        -- Track range state for HealthFade interaction (unsecret only)
+        local plain = _UnsecretBool(inRange)
+        if plain ~= nil then
+            f._msufGFLastRange = plain
+        end
         if f.SetAlphaFromBoolean then
             f:SetAlphaFromBoolean(inRange, 1, fadeAlpha)
         end
