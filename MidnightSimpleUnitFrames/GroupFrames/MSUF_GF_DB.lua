@@ -3,8 +3,8 @@
 --           smooth fill toggle, hideInClientScene, target/aggro upgrades
 -- Midnight 12.0 secret-safe, zero combat overhead
 local _, ns = ...
-ns = ns or (_G and _G.MSUF_NS) or {}
-if _G then _G.MSUF_NS = ns end
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
 
 ns.GF = ns.GF or {}
 local GF = ns.GF
@@ -72,6 +72,10 @@ local PARTY_DEFAULTS = {
     growth            = "DOWN",    -- DOWN / UP / RIGHT / LEFT
     showPlayer        = true,
     showSolo          = false,
+    -- Pet frames (compact health bar below owner)
+    showPets          = true,
+    -- Masque skin for aura icons (requires Masque addon)
+    masqueEnabled     = false,
     powerHeight       = 6,
     -- Position (CENTER-native, same as EM2 movers)
     point             = "CENTER",
@@ -235,6 +239,10 @@ local PARTY_DEFAULTS = {
     cutawayColorG         = 0.10,
     cutawayColorB         = 0.10,
     cutawayColorA         = 0.75,
+    -- Health fade (dim frames above HP threshold — healer focus)
+    healthFadeEnabled     = false,
+    healthFadeThreshold   = 95,    -- % HP above which frame is dimmed
+    healthFadeAlpha       = 0.45,  -- alpha when above threshold
     -- Focus highlight (separate glow when unit is focus)
     hlFocusEnabled        = true,
     hlFocusColorR         = 0.50,
@@ -408,7 +416,7 @@ local function GetMigrationCount(kind, conf)
 end
 
 local function MigrateGroupPositionToGridCenter(conf, kind)
-    if type(conf) ~= "table" then return end
+    if not conf then return end
     if conf.positionMode == "GRID_CENTER_V1" then return end
     local dx, dy = GF.GetGridMetrics(kind, GetMigrationCount(kind, conf))
     conf.offsetX = (conf.offsetX or (kind == "raid" and -500 or -400)) + dx
@@ -420,7 +428,7 @@ end
 -- Migration: showHP boolean → 3-slot text
 ------------------------------------------------------------------------
 local function MigrateShowHPTo3Slot(conf)
-    if type(conf) ~= "table" then return end
+    if not conf then return end
     -- Only migrate if old showHP exists and no 3-slot keys set yet
     if conf.showHP ~= nil and conf.textCenter == nil and conf.textLeft == nil and conf.textRight == nil then
         if conf.showHP then
@@ -439,7 +447,7 @@ end
 -- Migration: GF-local highlight keys → unified hl* with hlOverride
 ------------------------------------------------------------------------
 local function MigrateHighlightToUnified(conf)
-    if type(conf) ~= "table" then return end
+    if not conf then return end
     if conf._hlMigrated then return end
     -- Migrate old GF-local geometry keys to hlOverride scope
     local hadCustom = false
@@ -707,7 +715,7 @@ function GF.ResolveNameColor(kind, classToken)
         if mode == "CLASS" and classToken then
             local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
             if type(fastClass) == "function" then
-                local r, g, b = fastClass(nil, classToken)
+                local r, g, b = fastClass(classToken)
                 if r then return r, g, b end
             end
             local cc = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
@@ -725,7 +733,7 @@ function GF.ResolveNameColor(kind, classToken)
     if gen and gen.nameClassColor and classToken then
         local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
         if type(fastClass) == "function" then
-            local r, g, b = fastClass(nil, classToken)
+            local r, g, b = fastClass(classToken)
             if r then return r, g, b end
         end
         local cc = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
@@ -1118,3 +1126,343 @@ _G.MSUF_GF_GetConf     = GF.GetConf
 _G.MSUF_GF_Val         = GF.Val
 _G.MSUF_GF_GetHighlightVal = GF.GetHighlightVal
 _G.MSUF_GF_InvalidateConfCache = GF.InvalidateConfCache
+
+------------------------------------------------------------------------
+-- Role Presets: cutting-edge configs per role/healer spec.
+-- Applied via GF.ApplyPreset(kind, presetKey).
+-- Each preset is a partial config overlay — unset keys keep current value.
+------------------------------------------------------------------------
+GF.PRESETS = {}
+
+-- ══════════════════════════════════════════════════════════════════════
+-- DPS: Minimal, zero clutter. You need to see: who's alive, who's in
+-- range, dispellable debuffs (if you can). Nothing else.
+-- ══════════════════════════════════════════════════════════════════════
+GF.PRESETS.DPS = {
+    label = "|cffff4444DPS|r",
+    desc  = "Ultra-compact, name only. No HP text, no power bar. Boss/dispel debuffs only.",
+    conf  = {
+        width = 80, height = 28, spacing = 1,
+        showName = true, nameFontSize = 10, nameAnchor = "CENTER",
+        nameMaxChars = 6, nameNoEllipsis = true,
+        textLeft = "NONE", textCenter = "NONE", textRight = "NONE",
+        hpFontSize = 10,
+        showPower = false,
+        powerBarEnabled = false, powerHeight = 0,
+        rangeFadeEnabled = true, rangeFadeAlpha = 0.35,
+        aggroEnabled = true,
+        dispelEnabled = true,
+        targetIndicator = true,
+        roleIcon = false,
+        raidMarker = true, raidMarkerSize = 12,
+        ciEnabled = true, ciAlpha = 0.9,
+        auras = {
+            enabled = true,
+            buff   = { enabled = false },
+            debuff = {
+                enabled = true, maxIcons = 3, iconSize = 16, spacing = 1,
+                anchor = "RIGHT", x = 2, y = 0, growth = "RIGHT",
+                showCooldown = true, showStacks = true,
+                spellFilter = "BLACKLIST",
+                spellList = {
+                    [57723] = true, [57724] = true, [80354] = true, -- Exhaustion variants
+                    [264689] = true, -- Fatigued
+                    [25771] = true,  -- Forbearance
+                    [6788] = true,   -- Weakened Soul
+                },
+            },
+            externals = { enabled = false },
+        },
+        spellIndicators = { enabled = false },
+        raidDebuffs = { enabled = true, size = 24, anchor = "CENTER", x = 0, y = 0 },
+    },
+}
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Tank: Aware of everything. See healer mana, aggro, all debuffs,
+-- defensives on co-tank, raid markers.
+-- ══════════════════════════════════════════════════════════════════════
+GF.PRESETS.TANK = {
+    label = "|cff5599ffTank|r",
+    desc  = "Full awareness: power bars, aggro highlight, debuffs, externals, deficit HP.",
+    conf  = {
+        width = 110, height = 40, spacing = 2,
+        showName = true, nameFontSize = 11, nameAnchor = "LEFT",
+        nameMaxChars = 8, nameNoEllipsis = true,
+        textLeft = "NONE", textCenter = "DEFICIT", textRight = "NONE",
+        hpFontSize = 10,
+        showPower = false,
+        powerBarEnabled = true, powerHeight = 4,
+        rangeFadeEnabled = true, rangeFadeAlpha = 0.30,
+        aggroEnabled = true,
+        dispelEnabled = true,
+        targetIndicator = true,
+        roleIcon = true, roleIconSize = 10, roleIconAnchor = "BOTTOMLEFT",
+        raidMarker = true, raidMarkerSize = 14,
+        ciEnabled = true, ciAlpha = 0.9,
+        auras = {
+            enabled = true,
+            buff = { enabled = false },
+            debuff = {
+                enabled = true, maxIcons = 4, iconSize = 18, spacing = 1,
+                anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
+                showCooldown = true, showStacks = true,
+                spellFilter = "BLACKLIST",
+                spellList = {
+                    [57723] = true, [57724] = true, [80354] = true,
+                    [264689] = true,
+                },
+            },
+            externals = {
+                enabled = true, maxIcons = 2, iconSize = 20, spacing = 1,
+                anchor = "LEFT", x = -2, y = 0, growth = "LEFT",
+            },
+        },
+        spellIndicators = { enabled = false },
+        raidDebuffs = { enabled = true, size = 26, anchor = "CENTER", x = 0, y = 0 },
+    },
+}
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Healer Base: Shared foundation for all healer presets.
+-- Large frames, deficit HP, power bar, full debuff + externals.
+-- ══════════════════════════════════════════════════════════════════════
+local _HEALER_BASE = {
+    width = 120, height = 44, spacing = 2,
+    showName = true, nameFontSize = 11, nameAnchor = "LEFT",
+    nameMaxChars = 8, nameNoEllipsis = true,
+    textLeft = "NONE", textCenter = "DEFICIT", textRight = "NONE",
+    hpFontSize = 11,
+    showPower = false,
+    powerBarEnabled = true, powerHeight = 4,
+    rangeFadeEnabled = true, rangeFadeAlpha = 0.30,
+    aggroEnabled = true,
+    dispelEnabled = true,
+    targetIndicator = true,
+    roleIcon = true, roleIconSize = 10, roleIconAnchor = "BOTTOMLEFT",
+    raidMarker = true, raidMarkerSize = 14,
+    ciEnabled = true, ciAlpha = 0.9,
+    auras = {
+        enabled = true,
+        debuff = {
+            enabled = true, maxIcons = 3, iconSize = 18, spacing = 1,
+            anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
+            showCooldown = true, showStacks = true,
+            spellFilter = "BLACKLIST",
+            spellList = {
+                [57723] = true, [57724] = true, [80354] = true,
+                [264689] = true, [25771] = true,
+            },
+        },
+        externals = {
+            enabled = true, maxIcons = 2, iconSize = 20, spacing = 1,
+            anchor = "BOTTOMRIGHT", x = 2, y = -2, growth = "RIGHT",
+        },
+        buff = { enabled = false },
+    },
+    raidDebuffs = { enabled = true, size = 26, anchor = "CENTER", x = 0, y = 0 },
+}
+
+local function _MergePreset(base, override)
+    local merged = {}
+    for k, v in pairs(base) do
+        merged[k] = (type(v) == "table") and GF._DeepCopyTable(v) or v
+    end
+    for k, v in pairs(override) do
+        if type(v) == "table" and type(merged[k]) == "table" then
+            for sk, sv in pairs(v) do merged[k][sk] = (type(sv) == "table") and GF._DeepCopyTable(sv) or sv end
+        else
+            merged[k] = (type(v) == "table") and GF._DeepCopyTable(v) or v
+        end
+    end
+    return merged
+end
+
+-- Deep copy utility (exported for presets + copy system)
+function GF._DeepCopyTable(src)
+    if type(src) ~= "table" then return src end
+    local dst = {}
+    for k, v in pairs(src) do dst[k] = GF._DeepCopyTable(v) end
+    return dst
+end
+
+-- ── Holy Priest ──────────────────────────────────────────────────────
+GF.PRESETS.HOLY_PRIEST = {
+    label = "|cffffffffHoly Priest|r",
+    desc  = "Renew + PoM tracking, Magic/Disease dispel corner, deficit HP, Fortitude missing.",
+    conf  = _MergePreset(_HEALER_BASE, {
+        spellIndicators = { enabled = true },
+    }),
+}
+
+-- ── Discipline Priest ────────────────────────────────────────────────
+GF.PRESETS.DISC_PRIEST = {
+    label = "|cffffffffDisc Priest|r",
+    desc  = "Atonement + PW:S tracking, absorb overlay, Magic/Disease dispel.",
+    conf  = _MergePreset(_HEALER_BASE, {
+        spellIndicators = { enabled = true },
+        auras = {
+            enabled = true,
+            buff = { enabled = true, maxIcons = 1, iconSize = 14, anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
+                     filterMode = "RAID_PLAYER" },
+        },
+    }),
+}
+
+-- ── Restoration Druid ────────────────────────────────────────────────
+GF.PRESETS.RESTO_DRUID = {
+    label = "|cffff7d0aResto Druid|r",
+    desc  = "HoT tracking (Rejuv, Lifebloom, WG, Regrowth). Mark of the Wild missing corner.",
+    conf  = _MergePreset(_HEALER_BASE, {
+        spellIndicators = { enabled = true },
+        auras = {
+            enabled = true,
+            buff = { enabled = true, maxIcons = 3, iconSize = 14, anchor = "BOTTOMLEFT", x = 0, y = -2, growth = "RIGHT",
+                     filterMode = "RAID_PLAYER" },
+        },
+    }),
+}
+
+-- ── Restoration Shaman ───────────────────────────────────────────────
+GF.PRESETS.RESTO_SHAMAN = {
+    label = "|cff0070deResto Shaman|r",
+    desc  = "Riptide + Earth Shield tracking, Magic/Curse dispel corner.",
+    conf  = _MergePreset(_HEALER_BASE, {
+        spellIndicators = { enabled = true },
+    }),
+}
+
+-- ── Holy Paladin ─────────────────────────────────────────────────────
+GF.PRESETS.HOLY_PALADIN = {
+    label = "|cfff58cbaHoly Paladin|r",
+    desc  = "Beacon tracking, Magic/Disease/Poison dispel. BoP + Sac externals.",
+    conf  = _MergePreset(_HEALER_BASE, {
+        spellIndicators = { enabled = true },
+        auras = {
+            enabled = true,
+            externals = { enabled = true, maxIcons = 3, iconSize = 20 },
+        },
+    }),
+}
+
+-- ── Mistweaver Monk ──────────────────────────────────────────────────
+GF.PRESETS.MISTWEAVER = {
+    label = "|cff00ff96Mistweaver|r",
+    desc  = "Renewing Mist + Enveloping Mist tracking. Magic/Disease dispel.",
+    conf  = _MergePreset(_HEALER_BASE, {
+        spellIndicators = { enabled = true },
+    }),
+}
+
+-- ── Preservation Evoker ──────────────────────────────────────────────
+GF.PRESETS.PRES_EVOKER = {
+    label = "|cff33937fPres Evoker|r",
+    desc  = "Echo + Reversion tracking. Magic/Poison dispel.",
+    conf  = _MergePreset(_HEALER_BASE, {
+        spellIndicators = { enabled = true },
+    }),
+}
+
+-- ── Augmentation Evoker ──────────────────────────────────────────────
+GF.PRESETS.AUG_EVOKER = {
+    label = "|cff33937fAug Evoker|r",
+    desc  = "Prescience + Ebon Might tracking. Buff focus, minimal debuffs.",
+    conf  = _MergePreset(_HEALER_BASE, {
+        width = 100, height = 36,
+        textCenter = "PERCENT",
+        spellIndicators = { enabled = true },
+        auras = {
+            enabled = true,
+            buff = { enabled = true, maxIcons = 2, iconSize = 16, anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
+                     filterMode = "RAID_PLAYER" },
+            externals = { enabled = false },
+        },
+    }),
+}
+
+-- Ordered preset list for UI
+GF.PRESET_ORDER = {
+    "DPS", "TANK",
+    "HOLY_PRIEST", "DISC_PRIEST",
+    "RESTO_DRUID", "RESTO_SHAMAN",
+    "HOLY_PALADIN", "MISTWEAVER",
+    "PRES_EVOKER", "AUG_EVOKER",
+}
+
+------------------------------------------------------------------------
+-- Scope overrides: Party = spacious (5 players), Raid = compact (10-40).
+-- Base conf targets raid. Party overrides make frames larger.
+------------------------------------------------------------------------
+GF.PRESETS.DPS.party = {
+    width = 110, height = 36, spacing = 2,
+    nameFontSize = 12, nameMaxChars = 10, nameAnchor = "LEFT",
+    textCenter = "PERCENT", hpFontSize = 11,
+    roleIcon = true, roleIconSize = 10,
+}
+
+GF.PRESETS.TANK.party = {
+    width = 140, height = 48, spacing = 3,
+    nameFontSize = 12, nameMaxChars = 12, hpFontSize = 11,
+    powerHeight = 5,
+}
+
+-- Healer party overrides (shared)
+local _HEALER_PARTY = {
+    width = 150, height = 52, spacing = 3,
+    nameFontSize = 13, nameMaxChars = 12, hpFontSize = 12,
+    powerHeight = 5,
+}
+GF.PRESETS.HOLY_PRIEST.party   = _HEALER_PARTY
+GF.PRESETS.DISC_PRIEST.party   = _HEALER_PARTY
+GF.PRESETS.RESTO_DRUID.party   = _HEALER_PARTY
+GF.PRESETS.RESTO_SHAMAN.party  = _HEALER_PARTY
+GF.PRESETS.HOLY_PALADIN.party  = _HEALER_PARTY
+GF.PRESETS.MISTWEAVER.party    = _HEALER_PARTY
+GF.PRESETS.PRES_EVOKER.party   = _HEALER_PARTY
+
+GF.PRESETS.AUG_EVOKER.party = {
+    width = 130, height = 42, spacing = 3,
+    nameFontSize = 12, nameMaxChars = 10, hpFontSize = 11,
+}
+
+------------------------------------------------------------------------
+-- Apply preset to a scope (party/raid)
+-- Applies base conf, then scope-specific overrides (raid = smaller).
+------------------------------------------------------------------------
+function GF.ApplyPreset(kind, presetKey)
+    local preset = GF.PRESETS[presetKey]
+    if not preset or not preset.conf then return false end
+    local conf = GF.GetConf(kind)
+    if not conf then return false end
+
+    -- Position is preserved (never overwritten by presets)
+    local px, py, pp = conf.offsetX, conf.offsetY, conf.point
+
+    -- Apply base config
+    for k, v in pairs(preset.conf) do
+        if type(v) == "table" then
+            conf[k] = GF._DeepCopyTable(v)
+        else
+            conf[k] = v
+        end
+    end
+
+    -- Apply scope-specific overrides (raid = compact, party = spacious)
+    local scopeOvr = (kind == "raid") and preset.raid or preset.party
+    if scopeOvr then
+        for k, v in pairs(scopeOvr) do
+            if type(v) == "table" then
+                conf[k] = GF._DeepCopyTable(v)
+            else
+                conf[k] = v
+            end
+        end
+    end
+
+    -- Restore position
+    conf.offsetX, conf.offsetY, conf.point = px, py, pp
+
+    if GF.RebuildAll then GF.RebuildAll() end
+    GF.RefreshVisuals()
+    return true
+end

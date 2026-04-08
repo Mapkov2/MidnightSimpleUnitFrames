@@ -102,7 +102,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
             return type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled()
         end,
         set = function(v)
-            if type(_G.MSUF_SetSpecAutoSwitchEnabled) == "function" then _G.MSUF_SetSpecAutoSwitchEnabled(v) end
+            if _G.MSUF_SetSpecAutoSwitchEnabled then _G.MSUF_SetSpecAutoSwitchEnabled(v) end
         end,
     })
 
@@ -154,7 +154,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
                     return cur or "None"
                 end,
                 set = function(v)
-                    if type(_G.MSUF_SetSpecProfile) == "function" then
+                    if _G.MSUF_SetSpecProfile then
                         _G.MSUF_SetSpecProfile(s.id, v ~= "None" and v or nil)
                     end
                 end,
@@ -308,7 +308,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
                 if type(Importer) ~= "function" then print("|cffff0000MSUF:|r Import failed: importer missing."); return end
                 Importer(str)
                 if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
-                if type(_G.MSUF_CallUpdateAllFonts) == "function" then _G.MSUF_CallUpdateAllFonts() end
+                if _G.MSUF_CallUpdateAllFonts then _G.MSUF_CallUpdateAllFonts() end
                 if panel.LoadFromDB then panel:LoadFromDB() end
                 if panel.UpdateProfileUI then panel:UpdateProfileUI(MSUF_ActiveProfile) end
                 importPopup:Hide()

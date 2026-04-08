@@ -1,29 +1,21 @@
--- ============================================================================
 -- MSUF RangeFade v4 — Minimal C-API overhead
---
 -- Architecture:
 --   Target:
 --     Friendly: UNIT_IN_RANGE_UPDATE event → 1× UnitInRange (0 polling)
 --     Enemy:    1 spell registered with EnableSpellRangeCheck
 --               → SPELL_RANGE_CHECK_UPDATE fires only for THAT spell (1 event/change)
 --     Dead:     1 res spell registered → same mechanism
---
 --   Focus:
 --     Friendly: UNIT_IN_RANGE_UPDATE event (0 polling)
 --     Enemy:    Ticker 0.5s combat / 2.0s OOC → 1× IsSpellInRange
---
 --   Boss 1-5:
 --     Ticker (shared with enemy focus) → 1× IsSpellInRange per visible boss
 --     Only active during encounters.
---
 -- Old R41z0r engine cost: 512 EnableSpellRangeCheck registrations → 100-500
 -- SPELL_RANGE_CHECK_UPDATE events/sec → EventBus dispatch per event
---
 -- New cost: 1 EnableSpellRangeCheck registration → 1 event on actual change
---
 -- Secret-safe: IsSpellInRange NOT secret (Unhalted). Only UnitInRange +
 --              CheckInteractDistance need issecretvalue guards.
--- ============================================================================
 
 _G.MSUF_RangeFadeMul = _G.MSUF_RangeFadeMul or {}
 local _rfMul = _G.MSUF_RangeFadeMul
@@ -38,9 +30,7 @@ function _G.MSUF_GetRangeFadeMul(key, unit, frame)
     return 1
 end
 
--- ============================================================================
 -- Shared: Spell selection + secret helpers
--- ============================================================================
 do
     local C_Spell = _G.C_Spell
     local C_SpellBook = _G.C_SpellBook
@@ -382,10 +372,13 @@ do
             end
         end)
 
-        bus("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
-            _state["target"] = nil
-            TargetClassifyAndWire()
-        end)
+        do
+            local _qRF
+            local function _flushRF() _qRF = nil; _state["target"] = nil; TargetClassifyAndWire() end
+            bus("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
+                if not _qRF then _qRF = true; C_Timer.After(0, _flushRF) end
+            end)
+        end
         bus("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE", function()
             RebuildPrimaries()
             _state["target"] = nil
@@ -522,12 +515,10 @@ do
     -- ══════════════════════════════════════════════════════════════
     -- ══════════════════════════════════════════════════════════════
     -- FOCUS/BOSS: Smart-sleep ticker + event-driven friendly focus
-    --
     -- Ticker lifecycle (SyncTicker):
     --   RUNNING when: enemy focus OR boss range enabled → 0.50s combat / 2.0s OOC
     --   SLEEPING when: only friendly focus (event-driven) → 0 CPU
     --   STOPPED when: no focus + no boss enabled → 0 CPU
-    --
     -- Friendly focus: UNIT_IN_RANGE_UPDATE (oUF approach, 0 polling always)
     -- Unit swaps: immediate check via events, then SyncTicker re-evaluates
     -- Burst mode: 0.20s for a short window after focus/boss state changes

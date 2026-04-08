@@ -76,7 +76,6 @@ if not _MSUF_Clamp then
     _G._MSUF_Clamp = _MSUF_Clamp
 end
 
-
 local _MSUF_RoundInt = _G._MSUF_RoundInt
 if not _MSUF_RoundInt then
     _MSUF_RoundInt = function(v)
@@ -102,9 +101,7 @@ do
     local _applyPending = false
 
     function ns.MSUF_RequestGameplayApply()
-        if _applyPending then
-            return
-        end
+        if _applyPending then return end
         _applyPending = true
 
         if C_Timer_After then
@@ -150,7 +147,7 @@ local LSM           = LibStub and LibStub("LibSharedMedia-3.0", true)
 local gameplayDBCache
 
 local function EnsureGameplayDefaults()
-    if type(MSUF_DB) ~= "table" then
+    if not MSUF_DB then
         MSUF_DB = {}
     end
     if type(MSUF_DB.gameplay) ~= "table" then
@@ -191,7 +188,6 @@ local function EnsureGameplayDefaults()
     if g.combatTimerClickThrough == nil then
         g.combatTimerClickThrough = true
     end
-
 
     -- Anchor target for the combat timer (none/player/target/focus)
     if g.combatTimerAnchor == nil then
@@ -344,7 +340,6 @@ end
         g.playerTotemsTextColor = { 1, 1, 1 }
     end
 
-
     -- One-time tip popup flag
     if g.shownGameplayColorsTip == nil then
         g.shownGameplayColorsTip = false
@@ -389,9 +384,7 @@ do
 
     function ns.MSUF_MaybeShowGameplayColorsTip()
         local g = EnsureGameplayDefaults()
-        if g and g.shownGameplayColorsTip then
-            return
-        end
+        if g and g.shownGameplayColorsTip then return end
         if EnsureDialog() and _G.StaticPopup_Show then
             -- Mark as shown before showing so we never spam, even if the dialog is dismissed instantly.
             if g then
@@ -503,9 +496,7 @@ local function MSUF_ApplyCombatStateDynamicColor()
         EnsureCombatStateText()
     end
 
-    if not combatStateText then
-        return
-    end
+    if not combatStateText then return end
     local g = GetGameplayDBFast()
     local er, eg, eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
 
@@ -543,7 +534,7 @@ local MSUF_RequestCrosshairRangeRefresh
 local EnsureFirstDanceTaskRegistered
 -- Resolve the spell ID used for crosshair melee-range checks, with robust fallbacks.
 local function MSUF_ResolveCrosshairRangeSpellIDFromGameplay(g)
-    if type(g) ~= "table" then return 0 end
+    if not g then return 0 end
 
     local spellID = tonumber(g.crosshairRangeSpellID) or 0
     if spellID <= 0 then
@@ -620,9 +611,7 @@ local lastTimerText = ""
 
 -- Shared combat timer tick (used by UpdateManager + immediate event refresh)
 local function MSUF_Gameplay_TickCombatTimer()
-    if not combatTimerText then
-        return
-    end
+    if not combatTimerText then return end
 
     local gNow = GetGameplayDBFast()
     if not gNow or not gNow.enableCombatTimer then
@@ -765,9 +754,7 @@ end
 -- so it never steals clicks / focus (e.g. targeting) while flashing on screen.
 -- When cleared, mouse is restored based on the lock setting AND text visibility.
 local function MSUF_CombatState_SetClickThrough(active)
-    if not combatStateFrame then
-        return
-    end
+    if not combatStateFrame then return end
 
     if active then
         combatStateFrame._msufClickThroughActive = true
@@ -857,7 +844,7 @@ local function EnsureFirstDanceFrame()
                 db.firstDanceOffsetY = _MSUF_RoundInt(y - uy)
             end
         end
-        local p = _G and _G.MSUF_GameplayPanel
+        local p = _G.MSUF_GameplayPanel
         if p and p.MSUF_SyncFirstDanceOffsetSliders then
             p:MSUF_SyncFirstDanceOffsetSliders()
         end
@@ -1043,9 +1030,7 @@ end
 
 local function ApplyFontToCounter()
     -- If nothing exists yet, nothing to do
-    if not combatTimerText and not combatStateText and not firstDanceText then
-        return
-    end
+    if not combatTimerText and not combatStateText and not firstDanceText then return end
     -- Combat timer font (uses its own override)
     if combatTimerText then
         local path, flags, r, g, b, size, useShadow = GetGameplayFontSettings("timer")
@@ -1130,9 +1115,7 @@ ns._MSUF_StartFirstDanceWindow = StartFirstDanceWindow
 -- Combat state text (enter/leave combat)
 ------------------------------------------------------
 EnsureCombatStateText = function()
-    if combatStateText then
-        return
-    end
+    if combatStateText then return end
 
     local g = GetGameplayDBFast()
 
@@ -1147,9 +1130,7 @@ EnsureCombatStateText = function()
 
         combatStateFrame:SetScript("OnDragStart", function(self)
             local gd = EnsureGameplayDefaults()
-            if gd.lockCombatState then
-                return
-            end
+            if gd.lockCombatState then return end
             self:StartMoving()
         end)
 
@@ -1300,9 +1281,7 @@ end
 -- "First Dance" countdown tick
 ------------------------------------------------------
 _TickFirstDance = function()
-    if not firstDanceActive then
-        return
-    end
+    if not firstDanceActive then return end
 
     local gFD = GetGameplayDBFast()
     if not gFD or not gFD.enableFirstDanceTimer then
@@ -1408,9 +1387,7 @@ end
 -- Self Highlight / nameplates are active; otherwise we fall back to
 -- the classic screen-center position.
 local function MSUF_AnchorCombatCrosshair()
-    if not combatCrosshairFrame then
-        return
-    end
+    if not combatCrosshairFrame then return end
 
     -- Default: Bildschirmmitte (altes Verhalten)
     local parent   = UIParent
@@ -1665,7 +1642,7 @@ end
 
 local function _MSUF_GetUnitFrameForAnchor(key)
     if not key or key == "" then return nil end
-    local list = _G and _G.MSUF_UnitFrames
+    local list = _G.MSUF_UnitFrames
     if list and list[key] then
         return list[key]
     end
@@ -1691,17 +1668,12 @@ local function _MSUF_GetCombatTimerAnchorFrame(g)
     return UIParent
 end
 
-
 local function MSUF_Gameplay_ApplyCombatTimerAnchor(g)
-    if not combatFrame then
-        return
-    end
+    if not combatFrame then return end
 
     -- If the user is currently dragging the timer, do NOT re-anchor it.
     -- Re-anchoring mid-drag makes movement feel jittery (the frame fights the mouse).
-    if combatFrame._msufDragging then
-        return
-    end
+    if combatFrame._msufDragging then return end
 
     g = g or EnsureGameplayDefaults()
     local anchor = _MSUF_GetCombatTimerAnchorFrame(g)
@@ -1746,16 +1718,12 @@ local function CreateCombatTimerFrame()
 
     combatFrame:SetScript("OnDragStart", function(self)
         local gd = EnsureGameplayDefaults()
-        if gd.lockCombatTimer then
-            return
-        end
+        if gd.lockCombatTimer then return end
 
         -- Safety: if click-through is enabled, dragging is only allowed while ALT is held.
         -- (Prevents accidental drags when the frame is temporarily interactive.)
         if gd.combatTimerClickThrough ~= false then
-            if not (IsAltKeyDown and IsAltKeyDown()) then
-                return
-            end
+            if not (IsAltKeyDown and IsAltKeyDown()) then return end
         end
 
         self._msufDragging = true
@@ -1787,7 +1755,7 @@ local function CreateCombatTimerFrame()
         end
 
         -- Live-sync offset sliders in the Gameplay panel (if open).
-        local p = _G and _G.MSUF_GameplayPanel
+        local p = _G.MSUF_GameplayPanel
         if p and p.MSUF_SyncCombatTimerOffsetSliders then
             p:MSUF_SyncCombatTimerOffsetSliders()
         end
@@ -1805,7 +1773,6 @@ local function CreateCombatTimerFrame()
 
     -- Apply initial lock state
     ApplyLockState()
-
 
     -- Modifier listener: keep timer click-through unless ALT is held (when unlocked).
     if not ns._MSUF_CombatTimerModifierFrame then
@@ -1857,12 +1824,8 @@ local MSUF_MeleeSpellCacheBuilding = false
 local MSUF_MeleeSpellCachePending = false
 
 local function MSUF_BuildMeleeSpellCache()
-    if MSUF_MeleeSpellCacheBuilt then
-        return
-    end
-    if MSUF_MeleeSpellCacheBuilding then
-        return
-    end
+    if MSUF_MeleeSpellCacheBuilt then return end
+    if MSUF_MeleeSpellCacheBuilding then return end
 
     -- Never build suggestions in combat: defer until we leave combat to avoid stutters in raids.
     if _G.MSUF_InCombat then
@@ -2094,9 +2057,7 @@ local function MSUF_GetOverrideSpellID(spellID)
 end
 
 local function MSUF_SetEnabledMeleeRangeCheck(spellID)
-    if not (C_Spell and C_Spell.EnableSpellRangeCheck) then
-        return
-    end
+    if not (C_Spell and C_Spell.EnableSpellRangeCheck) then return end
 
     spellID = tonumber(spellID) or 0
     local overrideID = 0
@@ -2104,9 +2065,7 @@ local function MSUF_SetEnabledMeleeRangeCheck(spellID)
         overrideID = MSUF_GetOverrideSpellID(spellID)
     end
 
-    if spellID == MSUF_LastEnabledMeleeRangeSpellID and overrideID == MSUF_LastEnabledMeleeRangeSpellID_Override then
-        return
-    end
+    if spellID == MSUF_LastEnabledMeleeRangeSpellID and overrideID == MSUF_LastEnabledMeleeRangeSpellID_Override then return end
 
     local function Disable(id)
         if id and id > 0 then
@@ -2250,9 +2209,7 @@ end
 -- Update combat crosshair color based on melee range to current target.
 -- Uses the shared melee spell ID.
 MSUF_UpdateCombatCrosshairRangeColor = function()
-    if not combatCrosshairFrame or not combatCrosshairFrame.horiz or not combatCrosshairFrame.vert then
-        return
-    end
+    if not combatCrosshairFrame or not combatCrosshairFrame.horiz or not combatCrosshairFrame.vert then return end
 
     -- Prefer cached flags (synced in EnsureCombatCrosshair / Apply), but remain robust if called early.
     local enabled = combatCrosshairFrame._msufCrosshairEnabled
@@ -2267,9 +2224,7 @@ MSUF_UpdateCombatCrosshairRangeColor = function()
         spellID = combatCrosshairFrame._msufRangeSpellID or 0
     end
 
-    if not enabled then
-        return
-    end
+    if not enabled then return end
 
     local desiredMode
     local desiredInRange = nil
@@ -2547,11 +2502,9 @@ do
 ------------------------------------------------------
 
 local function _ApplyTotemsAnchorOnly(g, offX, offY)
-    if not totemsFrame then
-        return
-    end
+    if not totemsFrame then return end
 
-    local playerFrame = _G and _G.MSUF_player
+    local playerFrame = _G.MSUF_player
 
     local anchorFrom = (g and type(g.playerTotemsAnchorFrom) == "string" and g.playerTotemsAnchorFrom ~= "") and g.playerTotemsAnchorFrom or "TOPLEFT"
     local anchorTo = (g and type(g.playerTotemsAnchorTo) == "string" and g.playerTotemsAnchorTo ~= "") and g.playerTotemsAnchorTo or "BOTTOMLEFT"
@@ -2569,13 +2522,9 @@ local function _ApplyTotemsAnchorOnly(g, offX, offY)
 end
 
 local function _SetTotemsDragEnabled(on)
-    if not totemsFrame then
-        return
-    end
+    if not totemsFrame then return end
     local ov = totemsFrame._msufDragOverlay
-    if not ov then
-        return
-    end
+    if not ov then return end
 
     if on then
         ov:Show()
@@ -2700,7 +2649,7 @@ if not totemsFrame._msufDragOverlay then
 
                 _ApplyTotemsAnchorOnly(g, offX, offY)
 
-                local opt = _G and _G.MSUF_GameplayPanel
+                local opt = _G.MSUF_GameplayPanel
                 if opt and opt.MSUF_SyncTotemOffsetSliders then
                     opt:MSUF_SyncTotemOffsetSliders()
                 end
@@ -2713,7 +2662,7 @@ if not totemsFrame._msufDragOverlay then
         self._msufDragging = nil
         self:SetScript("OnUpdate", nil)
 
-        local opt = _G and _G.MSUF_GameplayPanel
+        local opt = _G.MSUF_GameplayPanel
         if opt and opt.MSUF_SyncTotemOffsetSliders then
             opt:MSUF_SyncTotemOffsetSliders()
         end
@@ -2772,7 +2721,7 @@ totemsFrame:Hide()
 
     local function _ApplyTotemsLayout(g)
         local f = _EnsureTotemsFrame()
-        local playerFrame = _G and _G.MSUF_player
+        local playerFrame = _G.MSUF_player
 
         f:ClearAllPoints()
 
@@ -3014,13 +2963,9 @@ end
 
 local function _TickTotemText()
     local g = GetGameplayDBFast()
-    if not g or not g.enablePlayerTotems or not g.playerTotemsShowText then
-        return
-    end
+    if not g or not g.enablePlayerTotems or not g.playerTotemsShowText then return end
 
-    if not totemsFrame or not totemsFrame:IsShown() then
-        return
-    end
+    if not totemsFrame or not totemsFrame:IsShown() then return end
 
     local anyFast = false
     local anyMed = false
@@ -3105,9 +3050,7 @@ end
     end
 
     local function _EnsureTotemEvents()
-        if totemEventFrame then
-            return
-        end
+        if totemEventFrame then return end
 
         totemEventFrame = CreateFrame("Frame", "MSUF_PlayerTotemsEventFrame", UIParent)
         totemEventFrame:SetScript("OnEvent", function()
@@ -3143,10 +3086,6 @@ end
     end
 
 end
-
-
-
-
 
 -- Feature tables (single-file modules) for readability and safer future refactors
 local GameplayFeatures = {

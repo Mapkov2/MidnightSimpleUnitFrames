@@ -542,7 +542,6 @@ function ns.Text.RenderPowerText(self)
         end
     end
 
-
     -- PERF P0: Raw-value diff guard. Skip ALL textification + string work when
     -- raw power values are unchanged (most frequent case: energy/mana hasn't
     -- ticked between events). Saves 3× AbbreviateLargeNumbers + 1× FormatPercent
@@ -580,9 +579,7 @@ function ns.Text.RenderPowerText(self)
     local _secretMax = _MSUF_IsSecret(maxText)
     local _secretPct = _MSUF_IsSecret(pctText)
     if not _secretCur and not _secretMax and not _secretPct then
-        if curText == self._msufLastPwrC and maxText == self._msufLastPwrM and pctText == self._msufLastPwrP then
-            return
-        end
+        if curText == self._msufLastPwrC and maxText == self._msufLastPwrM and pctText == self._msufLastPwrP then return end
         self._msufLastPwrC = curText
         self._msufLastPwrM = maxText
         self._msufLastPwrP = pctText

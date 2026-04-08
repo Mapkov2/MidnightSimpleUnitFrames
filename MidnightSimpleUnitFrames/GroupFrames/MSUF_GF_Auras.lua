@@ -4,8 +4,8 @@
 -- Externals use BIG_DEFENSIVE filter; buff scan excludes externals IDs to prevent dupes.
 -- Midnight 12.0 secret-safe, zero combat overhead, zero-alloc icon pools.
 local _, ns = ...
-ns = ns or (_G and _G.MSUF_NS) or {}
-if _G then _G.MSUF_NS = ns end
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
 
 local GF = ns.GF
 if not GF then return end
@@ -235,9 +235,13 @@ local function EnsurePool(f, groupKey, count, size, parent)
     f[poolKey] = f[poolKey] or {}
     local pool = f[poolKey]
     local pLvl = parent.GetFrameLevel and (parent:GetFrameLevel() + 2) or nil
+    local masqueAdd = GF.Masque and GF.Masque.AddButton
     for i = 1, count do
         if not pool[i] then
             pool[i] = AcquireAuraIcon(parent, size) or CreateAuraIcon(parent, size)
+            pool[i]._msufGFOwner = f
+            -- Register new icon with Masque (if enabled)
+            if masqueAdd then masqueAdd(pool[i]) end
         end
         local ic = pool[i]
         -- Diff-gate: skip SetSize when size unchanged
@@ -352,7 +356,7 @@ local function ApplyDispelBorder(ic, unit, auraInstanceID, dispelName, isHarmful
     end
     ic._msufBorderBlack = nil -- clear diff-gate flag (non-black border)
     -- Plain dispelName lookup (non-secret only)
-    if dispelName ~= nil and not (issecretvalue and issecretvalue(dispelName)) then
+    if not (issecretvalue and issecretvalue(dispelName)) and dispelName ~= nil then
         local c = DISPEL_COLORS[dispelName]
         if c then ic:SetBackdropBorderColor(c[1], c[2], c[3], 1); return end
     end
@@ -497,7 +501,7 @@ GF.SPELL_CATALOGUE = GF.SPELL_CATALOGUE_DEBUFF
 
 -- Quick-apply: add all spells in a category to a spellList
 function GF.ApplySpellCatalogueCategory(spellList, category, enable)
-    if type(spellList) ~= "table" then return end
+    if not spellList then return end
     for _, entry in pairs(GF.SPELL_CATALOGUE) do
         if entry.cat == category then
             if enable then
@@ -511,7 +515,7 @@ end
 
 -- Quick-apply: add a default blacklist preset (DPS-friendly)
 function GF.ApplyDPSBlacklistPreset(gcfg)
-    if type(gcfg) ~= "table" then return end
+    if not gcfg then return end
     gcfg.spellFilter = "BLACKLIST"
     if type(gcfg.spellList) ~= "table" then gcfg.spellList = {} end
     GF.ApplySpellCatalogueCategory(gcfg.spellList, "EXHAUSTION", true)
@@ -636,11 +640,11 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                 -- Merged dispel: check during harmful scan (BEFORE spell filter — dispel ignores blacklist)
                 if isHarmful and not topDispel then
                     local dn = aura.dispelName
-                    if dn ~= nil and not (issecretvalue and issecretvalue(dn)) and dn ~= "" then
+                    if not (issecretvalue and issecretvalue(dn)) and dn ~= nil and dn ~= "" then
                         topDispel = dn
                     else
                         local ir = aura.isRaid
-                        if ir ~= nil and not (issecretvalue and issecretvalue(ir)) and ir then
+                        if not (issecretvalue and issecretvalue(ir)) and ir then
                             topDispel = "Bleed"
                         end
                     end
@@ -753,9 +757,7 @@ function GF.UpdateFrameAuras(f, unit)
         HidePool(f[POOL_KEYS.externals], 1)
         return
     end
-    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not C_UnitAuras.GetAuraDataBySlot then
-        return
-    end
+    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not C_UnitAuras.GetAuraDataBySlot then return end
 
     local parent = f.statusIconLayer or f.barGroup or f
     local scale = GetDynamicScale(conf)
@@ -796,11 +798,11 @@ function GF.UpdateFrameAuras(f, unit)
                 local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
                 if aura then
                     local dn = aura.dispelName
-                    if dn ~= nil and not (issecretvalue and issecretvalue(dn)) and dn ~= "" then
+                    if not (issecretvalue and issecretvalue(dn)) and dn ~= nil and dn ~= "" then
                         mergedDispel = dn; break
                     end
                     local ir = aura.isRaid
-                    if ir ~= nil and not (issecretvalue and issecretvalue(ir)) and ir then
+                    if not (issecretvalue and issecretvalue(ir)) and ir then
                         mergedDispel = "Bleed"; break
                     end
                 end

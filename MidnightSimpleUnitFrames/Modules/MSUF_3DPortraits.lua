@@ -1,10 +1,8 @@
 -- MSUF_3DPortraits.lua
 -- Drop-in module: per-frame 2D vs 3D portraits (exclusive) + Portrait OFF.
---
 -- Per-frame DB contract:
 --   conf.portraitMode   = 'OFF' | 'LEFT' | 'RIGHT'
 --   conf.portraitRender = nil | '2D' | '3D'   (nil defaults to 2D)
---
 -- Exclusivity:
 --   * If 3D is selected => hide 2D texture.
 --   * If 2D is selected => hide 3D model.
@@ -13,18 +11,16 @@
 local _G = _G
 
 -- Idempotent load guard (this file may be loaded twice in some packagers).
-if _G and _G.MSUF_3DPortraits_Loaded then
+if _G.MSUF_3DPortraits_Loaded then
     return
 end
 
 local ADDON = 'MSUF_3DPortraits'
 
 -- Capture any existing MSUF portrait updater (may be nil in some builds).
-local ORIG_UpdatePortraitIfNeeded = _G and _G.MSUF_UpdatePortraitIfNeeded
+local ORIG_UpdatePortraitIfNeeded = _G.MSUF_UpdatePortraitIfNeeded
 
--- ------------------------------------------------------------
 -- Helpers
--- ------------------------------------------------------------
 local function SafeCall(obj, method, ...)
     local fn = obj and obj[method]
     if type(fn) == 'function' then
@@ -50,9 +46,7 @@ local function Want2D(conf)
     return (conf.portraitRender ~= '3D')
 end
 
--- ------------------------------------------------------------
 -- Model creation + layout mirroring
--- ------------------------------------------------------------
 local function EnsureModel(f)
     if not f then return nil end
     local m = rawget(f, 'portraitModel')
@@ -119,9 +113,7 @@ local function ApplyModelLayoutIfNeeded(f, conf)
     end
 end
 
--- ------------------------------------------------------------
 -- Budgeted updates (local, mirrors MSUF logic)
--- ------------------------------------------------------------
 local PORTRAIT_MIN_INTERVAL = 0.06
 local BUDGET_USED = false
 local BUDGET_RESET_SCHEDULED = false
@@ -141,9 +133,7 @@ local function ResetBudgetNextFrame()
     end
 end
 
--- ------------------------------------------------------------
 -- 2D fallback (exclusive)
--- ------------------------------------------------------------
 local function UpdatePortrait2D(f, unit, conf, existsForPortrait)
     if not (f and conf) then return end
 
@@ -198,9 +188,7 @@ local function UpdatePortrait2D(f, unit, conf, existsForPortrait)
     if tex.Show then tex:Show() end
 end
 
--- ------------------------------------------------------------
 -- 3D updater (exclusive)
--- ------------------------------------------------------------
 local function UpdatePortrait3D(f, unit, conf, existsForPortrait)
     if not (f and conf) then return end
 
@@ -244,9 +232,7 @@ local function UpdatePortrait3D(f, unit, conf, existsForPortrait)
     if m and m.Show then m:Show() end
 end
 
--- ------------------------------------------------------------
 -- Global entrypoint used by UFCore (must exist)
--- ------------------------------------------------------------
 _G.MSUF_UpdatePortraitIfNeeded = function(f, unit, conf, existsForPortrait)
     -- Mark portrait textures for SetPortraitTexture hook (boss edit mode placeholders)
     local tex = f and f.portrait
@@ -261,9 +247,7 @@ _G.MSUF_UpdatePortraitIfNeeded = function(f, unit, conf, existsForPortrait)
     return UpdatePortrait2D(f, unit, conf, existsForPortrait)
 end
 
--- ------------------------------------------------------------
 -- Keep 3D models aligned when MSUF updates portrait layout
--- ------------------------------------------------------------
 if type(hooksecurefunc) == 'function' and type(_G.MSUF_UpdateBossPortraitLayout) == 'function' then
     hooksecurefunc('MSUF_UpdateBossPortraitLayout', function(f, conf)
         if not (f and conf) then return end
@@ -280,9 +264,7 @@ if type(hooksecurefunc) == 'function' and type(_G.MSUF_UpdateBossPortraitLayout)
     end)
 end
 
--- ------------------------------------------------------------
 -- Boss Edit Mode placeholder compatibility
--- ------------------------------------------------------------
 -- MSUF_EditMode may call SetPortraitTexture(frame.portrait, 'player') for boss previews.
 -- We convert THAT call into a 3D model only when that frame is actually configured for 3D
 -- AND portraitMode is not OFF.
@@ -328,9 +310,7 @@ local function Hook_SetPortraitTexture()
         if not f then return end
 
         local conf = LookupConfForFrame(f)
-        if not Want3D(conf) then
-            return
-        end
+        if not Want3D(conf) then return end
 
         -- If portraitMode is active and 3D is selected: convert.
         local m = EnsureModel(f)
@@ -349,9 +329,7 @@ end
 
 Hook_SetPortraitTexture()
 
--- ------------------------------------------------------------
 -- Immediate sync helper (called from Options dropdown)
--- ------------------------------------------------------------
 local function GetFramesForUnitKey(key)
     if key == "tot" then key = "targettarget" end
     if key == "boss" then
@@ -373,11 +351,11 @@ end
 function _G.MSUF_3DPortraits_SyncUnit(unitKey)
     if type(unitKey) ~= "string" or unitKey == "" then return end
     local db = _G.MSUF_DB
-    if type(db) ~= "table" then return end
+    if not db then return end
 
     local conf = (unitKey == "boss") and db.boss or db[unitKey]
     if unitKey == "tot" then conf = db.targettarget or db.tot end
-    if type(conf) ~= "table" then return end
+    if not conf then return end
 
     local frames = GetFramesForUnitKey(unitKey)
     for i = 1, #frames do
@@ -402,15 +380,13 @@ function _G.MSUF_3DPortraits_SyncUnit(unitKey)
     end
 end
 
--- ------------------------------------------------------------
 -- Portrait visibility sync (called from MSUF_UFStep_HeavyVisual)
 -- Replaces former hooksecurefunc("UpdateSimpleUnitFrame") hook.
 -- Now only runs in the cold/visual path instead of every frame update.
--- ------------------------------------------------------------
 local function _3DP_SyncVisibility(f)
     if not f then return end
     local conf = LookupConfForFrame(f)
-    if type(conf) ~= "table" then return end
+    if not conf then return end
     if IsPortraitModeActive(conf) then
         if Want3D(conf) then
             local tex = f.portrait
@@ -430,9 +406,7 @@ local function _3DP_SyncVisibility(f)
 end
 _G.MSUF_3DPortraits_SyncVisibility = _3DP_SyncVisibility
 
--- ------------------------------------------------------------
 -- Optional debug helper
--- ------------------------------------------------------------
 _G.MSUF_3DPortraits_ForceRefresh = function()
     local keys = { 'player', 'target', 'focus', 'pet', 'targettarget' }
     for _, k in ipairs(keys) do

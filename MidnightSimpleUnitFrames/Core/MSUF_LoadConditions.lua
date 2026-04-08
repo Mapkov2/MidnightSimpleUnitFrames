@@ -5,9 +5,7 @@
 -- Loads AFTER MSUF_Alpha.lua in the TOC.
 local addonName, ns = ...
 
--- ---------------------------------------------------------------------------
 -- Upvalue hot-path API (avoid global lookup on every evaluation)
--- ---------------------------------------------------------------------------
 local type          = type
 local IsMounted     = IsMounted
 local IsResting     = IsResting
@@ -20,10 +18,8 @@ local GetNumGroupMembers = GetNumGroupMembers
 local InCombatLockdown   = InCombatLockdown
 local pairs = pairs
 
--- ---------------------------------------------------------------------------
 -- DB field names (per-unit, all false by default → never hide)
 -- These are simple booleans stored directly in MSUF_DB[key].
--- ---------------------------------------------------------------------------
 local LOAD_COND_FIELDS = {
     "loadCondHideMounted",
     "loadCondHideInVehicle",
@@ -37,9 +33,7 @@ local LOAD_COND_FIELDS = {
 }
 _G.MSUF_LOAD_COND_FIELDS = LOAD_COND_FIELDS
 
--- ---------------------------------------------------------------------------
 -- Cached player state — updated ONLY on events, never polled.
--- ---------------------------------------------------------------------------
 local _state = {
     mounted   = false,
     vehicle   = false,
@@ -94,11 +88,9 @@ local function _RefreshAll()
     _RefreshInstance()
 end
 
--- ---------------------------------------------------------------------------
 -- Core evaluator: returns true if the frame for `key` should be hidden.
 -- Zero allocation, zero secret-value access, pure boolean logic.
 -- IMPORTANT: Only called when conf.loadCondActive == true (Alpha hook gate).
--- ---------------------------------------------------------------------------
 local function MSUF_LoadCond_ShouldHide(key)
     if not key then return false end
     -- Edit Mode bypass: never hide frames while user is positioning/dragging.
@@ -128,11 +120,9 @@ local function MSUF_LoadCond_ShouldHide(key)
 end
 _G.MSUF_LoadCond_ShouldHide = MSUF_LoadCond_ShouldHide
 
--- ---------------------------------------------------------------------------
 -- loadCondActive flag: set to true when ANY condition is checked for a unit,
 -- false/nil when all unchecked.  The Alpha hook reads this single boolean
 -- BEFORE calling ShouldHide → zero function-call overhead when unused.
--- ---------------------------------------------------------------------------
 local function MSUF_LoadCond_RecomputeActive(conf)
     if not conf then return end
     local active = (conf.loadCondHideMounted == true)
@@ -148,11 +138,9 @@ local function MSUF_LoadCond_RecomputeActive(conf)
 end
 _G.MSUF_LoadCond_RecomputeActive = MSUF_LoadCond_RecomputeActive
 
--- ---------------------------------------------------------------------------
 -- Apply visibility to all unitframes.  Called when any tracked state changes.
 -- Integrates with the existing alpha refresh cycle (MSUF_RefreshAllUnitAlphas).
 -- The actual hide/show is handled by the hook in MSUF_ApplyUnitAlpha.
--- ---------------------------------------------------------------------------
 local _pendingRefresh = false
 local function _ScheduleRefresh()
     if _pendingRefresh then return end
@@ -170,9 +158,7 @@ local function _ScheduleRefresh()
     end
 end
 
--- ---------------------------------------------------------------------------
 -- Event handler — maps events to minimal state refreshes, then triggers apply.
--- ---------------------------------------------------------------------------
 local _eventHandlers = {
     PLAYER_MOUNT_DISPLAY_CHANGED = function() _RefreshMounted();  _ScheduleRefresh() end,
     UNIT_ENTERED_VEHICLE         = function() _RefreshVehicle();  _ScheduleRefresh() end,
@@ -185,9 +171,7 @@ local _eventHandlers = {
     PLAYER_ENTERING_WORLD        = function() _RefreshAll();      _ScheduleRefresh() end,
 }
 
--- ---------------------------------------------------------------------------
 -- Boot: create the event frame, register all events, snapshot initial state.
--- ---------------------------------------------------------------------------
 local eventFrame = CreateFrame("Frame", "MSUF_LoadCondEventFrame")
 for ev in pairs(_eventHandlers) do
     eventFrame:RegisterEvent(ev)
@@ -200,11 +184,9 @@ end)
 -- Initial state snapshot (safe even before login because APIs return defaults).
 _RefreshAll()
 
--- ---------------------------------------------------------------------------
 -- Boot-time loadCondActive recompute: ensures the fast-path flag is correct
 -- even after profile import/load where the flag might not have been set.
 -- Runs once on PLAYER_ENTERING_WORLD after MSUF_DB is guaranteed to exist.
--- ---------------------------------------------------------------------------
 do
     local _bootDone = false
     local _UNIT_KEYS = { "player", "target", "focus", "pet", "boss", "targettarget" }
@@ -216,7 +198,7 @@ do
         self:UnregisterAllEvents()
         self:SetScript("OnEvent", nil)
         local db = _G.MSUF_DB
-        if type(db) ~= "table" then return end
+        if not db then return end
         for i = 1, #_UNIT_KEYS do
             local conf = db[_UNIT_KEYS[i]]
             if type(conf) == "table" then
@@ -233,13 +215,11 @@ _G.MSUF_LoadCond_RefreshAll = function()
     _ScheduleRefresh()
 end
 
--- ---------------------------------------------------------------------------
 -- Edit Mode exit hook: post-hook MSUF_RefreshAllUnitVisibilityDrivers.
 -- When forceShow transitions to false (Edit Mode deactivation), schedule an
 -- alpha refresh so load conditions apply immediately without waiting for the
 -- next event.  This is a one-time hook installed at boot — zero runtime cost
 -- when Edit Mode is not in use.
--- ---------------------------------------------------------------------------
 do
     local _hooked = false
     local _origVisDriverFn = nil

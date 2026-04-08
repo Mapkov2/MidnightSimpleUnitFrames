@@ -3,8 +3,8 @@
 -- Secret aura classifications. Zero runtime cost (cold-path only).
 -- Midnight 12.0
 local _, ns = ...
-ns = ns or (_G and _G.MSUF_NS) or {}
-if _G then _G.MSUF_NS = ns end
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
 
 local GF = ns.GF
 if not GF then return end

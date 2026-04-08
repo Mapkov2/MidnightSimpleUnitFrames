@@ -219,9 +219,7 @@ local function MSUF_Alpha_ClearBaseCache(frame)
 end
 
 local function MSUF_Alpha_ResetLayered(frame)
-    if not frame or not frame._msufAlphaLayeredMode then
-         return
-    end
+    if not frame or not frame._msufAlphaLayeredMode then return end
     local unitAlpha = frame._msufAlphaUnitAlpha or 1
     frame._msufAlphaLayeredMode = nil
     frame._msufAlphaLayerMode = nil
@@ -266,9 +264,7 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
         local lastBG = frame._msufAlphaLastBG or 1
         local dfg = lastFG - fg; if dfg < 0 then dfg = -dfg end
         local dbg = lastBG - bg; if dbg < 0 then dbg = -dbg end
-        if dfg <= 0.001 and dbg <= 0.001 then
-            return
-        end
+        if dfg <= 0.001 and dbg <= 0.001 then return end
     end
 
     frame._msufAlphaLayeredMode = true

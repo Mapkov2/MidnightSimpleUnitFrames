@@ -1,9 +1,6 @@
--- ---------------------------------------------------------------------------
 -- MSUF_Options_Fonts.lua  (Phase 7: Per-unit scope system — Bars/Portraits pattern)
---
 -- Font settings: global font, text sizes, text style, name colors, name display.
 -- Scope bar: Shared + per-unit overrides (fontOverride flag).
--- ---------------------------------------------------------------------------
 local addonName, ns = ...
 local TR = ns.TR
 local UI = ns.UI
@@ -17,7 +14,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     fontGroup._msufBuilt = true
 
     if _G.MSUF_Search_RegisterRoots then
-        _G.MSUF_Search_RegisterRoots({ "fonts" }, { "MSUF_FontsScrollChild" }, "Fonts")
+        _G.MSUF_Search_RegisterRoots(
+            { "fonts", "opt_fonts", "font size", "font family", "outline",
+              "bold", "text size", "name size" },
+            { "MSUF_FontsScrollChild" }, "Fonts"
+        )
     end
 
     local function G() EnsureDB(); return MSUF_DB.general end
@@ -47,7 +48,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if refreshFrames then
             if ns and type(ns.MSUF_RefreshAllFrames) == "function" then
                 ns.MSUF_RefreshAllFrames()
-            elseif type(_G.MSUF_RefreshAllFrames) == "function" then
+            elseif _G.MSUF_RefreshAllFrames then
                 _G.MSUF_RefreshAllFrames()
             end
         end
@@ -78,9 +79,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         "shortenNameMaxChars", "shortenNameClipSide", "shortenNameFrontMaskPx", "shortenNameShowDots",
     }
 
-    -- =====================================================================
     -- Scope system (Bars / Portraits pattern)
-    -- =====================================================================
     local function GetScopeKey() return G()._fontScopeKey or "shared" end
     local function GetUnitKey()
         local k = GetScopeKey()
@@ -141,7 +140,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
     local function InvalidateTextSpecs()
         local frames = _G.MSUF_UnitFrames
-        if type(frames) ~= "table" then return end
+        if not frames then return end
         for _, f in pairs(frames) do
             if f then
                 f._msufTextSpec = nil
@@ -156,9 +155,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end
     end
 
-    -- =====================================================================
     -- Box helpers (A2/Bars pattern)
-    -- =====================================================================
     local function MakeBox(parent, w, h)
         local f = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
         f:SetSize(w, h)
@@ -221,9 +218,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         return box, bodyHost
     end
 
-    -- =====================================================================
     -- SCOPE BAR (A2-style button strip — above scroll area)
-    -- =====================================================================
     local SCOPE_KEYS = { "shared", "player", "target", "targettarget", "focus", "pet", "boss", "gf_party", "gf_raid" }
     local SCOPE_LABELS = {
         shared = "Shared", player = "Player", target = "Target",
@@ -390,9 +385,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if SyncScopeUI then SyncScopeUI() end
     end)
 
-    -- =====================================================================
     -- GF scope helpers (Party / Raid)
-    -- =====================================================================
     IsGFScope = function()
         local k = GetScopeKey()
         return k == "gf_party" or k == "gf_raid"
@@ -441,9 +434,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end
     end
 
-    -- =====================================================================
     -- Scroll frame (below scope bar)
-    -- =====================================================================
     local fontsScroll = CreateFrame("ScrollFrame", "MSUF_FontsMenuScrollFrame", fontGroup, "UIPanelScrollFrameTemplate")
     fontsScroll:SetPoint("TOPLEFT", fontGroup, "TOPLEFT", 0, -186)
     fontsScroll:SetPoint("BOTTOMRIGHT", fontGroup, "BOTTOMRIGHT", -36, 16)
@@ -454,9 +445,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
     local content = fontsScrollChild
 
-    -- =====================================================================
     -- SECTION 1: Global Font (default open) — NOT scope-affected
-    -- =====================================================================
     local anchorTop = CreateFrame("Frame", nil, content)
     anchorTop:SetSize(CONTENT_W, 1)
     anchorTop:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
@@ -538,16 +527,14 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     local _ufOnlyWidgets = { fontDrop }
     local _gfOnlyWidgets = { gfFontDrop }
 
-    -- =====================================================================
     -- SECTION 2: Text Sizes (default open) — NOT scope-affected
-    -- =====================================================================
     local sizeBox, sizeBody = MakeCollapsibleBox(content, fontBox, CONTENT_W, 300, TR("Text Sizes"), true)
 
     local UpdateSizeOverrideInfo
 
     do local sizeHint = sizeBody:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     sizeHint:SetJustifyH("LEFT"); sizeHint:SetWidth(CONTENT_W - 40)
-    sizeHint:SetText("Global defaults. Frames inherit unless overridden in Unitframes > Text.")
+    sizeHint:SetText("Global defaults for all frames including Group Frames. Per-unit overrides available in Unit Frames > Text.")
     sizeHint:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 16, -6)
 
     local function MakeSizeSlider(name, label, dbKey, anchor, ox, oy, min, max, default)
@@ -561,7 +548,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 UpdateFonts()
                 if dbKey == "castbarSpellNameFontSize" then
                     EnsureCastbars()
-                    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
+                    if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
                 end
             end,
             formatText = function() return label end,
@@ -652,7 +639,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 end
                 gg.bossCastSpellNameFontSize = nil; gg.bossCastTimeFontSize = nil
                 UpdateFonts(); EnsureCastbars()
-                if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
+                if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
                 UpdateSizeOverrideInfo()
             end,
         }
@@ -670,9 +657,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     panel.castbarSpellNameFontSizeSlider = castbarSizeSlider
     end -- do block for sizeBody locals
 
-    -- =====================================================================
     -- SECTION 3: Text Style (scope-aware, default collapsed)
-    -- =====================================================================
     local styleBox, styleBody = MakeCollapsibleBox(content, sizeBox, CONTENT_W, 148, TR("Text Style"), false)
 
     local boldCheck = UI.Check({
@@ -746,9 +731,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if gfGlobalColorChk and gfGlobalColorChk.Refresh then gfGlobalColorChk:Refresh() end
     end
 
-    -- =====================================================================
     -- SECTION 4: Name Colors (scope-aware, default collapsed)
-    -- =====================================================================
     local colorsBox, colorsBody = MakeCollapsibleBox(content, styleBox, CONTENT_W, 220, TR("Name & Power Colors"), false)
 
     -- ── UF: Name Color ──
@@ -867,9 +850,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         GFRefreshSwatch()
     end
 
-    -- =====================================================================
     -- SECTION 5: Name Shortening (scope-aware, default collapsed)
-    -- =====================================================================
     local nameBox, nameBody = MakeCollapsibleBox(content, colorsBox, CONTENT_W, 280, TR("Name Shortening"), false)
 
     local shortenMaxSlider, shortenMaskSlider, shortenClipDrop
@@ -1001,9 +982,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if gfNoEllipsis and gfNoEllipsis.Refresh then gfNoEllipsis:Refresh() end
     end
 
-    -- =====================================================================
     -- Dynamic content height
-    -- =====================================================================
     local _lastBox = nameBox
     MSUF_Fonts_UpdateContentHeight = function()
         if not (content and _lastBox and content.GetTop and _lastBox.GetBottom) then return end
@@ -1018,9 +997,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end
     end
 
-    -- =====================================================================
     -- SyncScopeUI — refresh all widgets to current scope
-    -- =====================================================================
     SyncScopeUI = function()
         EnsureDB()
         RefreshScopeButtons()
@@ -1113,9 +1090,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if MSUF_Fonts_UpdateContentHeight then pcall(MSUF_Fonts_UpdateContentHeight) end
     end
 
-    -- =====================================================================
     -- SyncAll (OnShow refresh)
-    -- =====================================================================
     local function SyncAll()
         if SyncScopeUI then SyncScopeUI() end
     end
@@ -1129,9 +1104,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end)
     end
 
-    -- =====================================================================
     -- Color list export (backward compat)
-    -- =====================================================================
     local colorList = {
         { key="white",r=1,g=1,b=1,label="White" }, { key="black",r=0,g=0,b=0,label="Black" },
         { key="red",r=1,g=0,b=0,label="Red" }, { key="green",r=0,g=1,b=0,label="Green" },
@@ -1145,9 +1118,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     panel.__MSUF_COLOR_LIST = colorList
     _G.MSUF_COLOR_LIST = colorList
 
-    -- =====================================================================
     -- Panel stores (Core compat)
-    -- =====================================================================
     panel.__MSUF_FontChoices = fontChoices
     panel.__MSUF_RebuildFontChoices = RebuildFontChoices
     panel.fontDrop = fontDrop

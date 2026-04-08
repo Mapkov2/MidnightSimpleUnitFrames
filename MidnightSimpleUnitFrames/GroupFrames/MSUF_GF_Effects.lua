@@ -3,8 +3,8 @@
 -- borders, status icons, AFK/DND text, UNIT_AURA coalescing
 -- Midnight 12.0 secret-safe, zero combat overhead
 local _, ns = ...
-ns = ns or (_G and _G.MSUF_NS) or {}
-if _G then _G.MSUF_NS = ns end
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
 
 local GF = ns.GF
 if not GF then return end
@@ -120,9 +120,16 @@ do
         WARRIOR     = function() return nil end,
         DEMONHUNTER = function() return nil end,
     }
-    local getter = spells[_playerClass]
-    if getter then _rangeFriendlySpell = getter() end
-    _rangeNeedsTicker = (_rangeFriendlySpell == nil)
+    local _spellGetter = spells[_playerClass]
+
+    -- Exported: re-resolve on SPELLS_CHANGED, spec change, instance entry.
+    -- Called from recovery ticker OnEvent + PLAYER_LOGIN.
+    function GF._RebuildRangeSpell()
+        local old = _rangeFriendlySpell
+        _rangeFriendlySpell = _spellGetter and _spellGetter() or nil
+        _rangeNeedsTicker = (_rangeFriendlySpell == nil)
+    end
+    GF._RebuildRangeSpell()  -- initial resolve at file load
 end
 
 ------------------------------------------------------------------------
@@ -193,6 +200,20 @@ local _GF_RefreshBorder
 -- Zero steady-state alloc: clear-callback allocated once per frame.
 ------------------------------------------------------------------------
 local _After0 = C_Timer and C_Timer.After
+
+------------------------------------------------------------------------
+-- PERF: Global per-frame budget for full aura scans.
+-- AoE heal/damage → 20 UNIT_AURA events in same frame → 20 × 138µs = 2.8ms spike.
+-- Budget limits full scans to 8 per frame. Excess deferred to next frame via C_Timer.After(0).
+-- Max spike capped to 8 × 138µs ≈ 1.1ms.
+------------------------------------------------------------------------
+local _GF_AURA_BUDGET_MAX = 8
+local _gfAuraBudget = 0
+local _gfAuraDirtyPending = false
+local _gfAuraBudgetFrame = 0  -- GetTime of last budget reset
+
+-- Forward-declared; assigned after dispatchAura is defined.
+local _gfFlushDirtyAuras
 local function SpellIndicatorsNeedRefresh(f, updateInfo)
     if not updateInfo or updateInfo.isFullUpdate then return true end
 
@@ -384,6 +405,27 @@ local function dispatchAura(f, unit, updateInfo)
         f._msufGFFullPending = nil   -- fallback: no timer → no dedup
     end
 
+    -- ════════════════════════════════════════════════════════════════
+    -- P2: Global per-frame budget (AoE spike limiter)
+    -- AoE events fire 20+ UNIT_AURA for different units in one frame.
+    -- Each full scan costs ~138µs. 20 × 138µs = 2.8ms spike.
+    -- Budget caps to 8 scans/frame → max ~1.1ms. Rest deferred.
+    -- ════════════════════════════════════════════════════════════════
+    _gfAuraBudget = _gfAuraBudget + 1
+    local now = GetTime()
+    if now ~= _gfAuraBudgetFrame then
+        _gfAuraBudgetFrame = now
+        _gfAuraBudget = 1
+    end
+    if _gfAuraBudget > _GF_AURA_BUDGET_MAX then
+        f._msufGFAuraDirty = true
+        if not _gfAuraDirtyPending and _After0 then
+            _gfAuraDirtyPending = true
+            _After0(0, _gfFlushDirtyAuras)
+        end
+        return
+    end
+
     -- Full aura processing (add/remove/fullUpdate)
     -- SI runs first: populates dedup IDs before buff scan
     if siOn and GF.UpdateSpellIndicators then
@@ -412,6 +454,23 @@ local function dispatchAura(f, unit, updateInfo)
     end
 end
 
+------------------------------------------------------------------------
+-- Deferred aura flush: processes frames that exceeded the per-frame budget.
+-- Fires via C_Timer.After(0) → runs at the start of the next frame.
+------------------------------------------------------------------------
+_gfFlushDirtyAuras = function()
+    _gfAuraBudget = 0
+    _gfAuraDirtyPending = false
+    for f in pairs(GF.frames) do
+        if f._msufGFAuraDirty then
+            f._msufGFAuraDirty = nil
+            local u = f.unit
+            if u and UnitExists(u) then
+                dispatchAura(f, u, nil)
+            end
+        end
+    end
+end
 
 ------------------------------------------------------------------------
 -- Range check (IsSpellInRange primary, Grid2 chain)
@@ -446,13 +505,13 @@ local function CheckRange(f, unit)
             -- keep previous state
             return f._msufGFLastRange
         end
-        if checked ~= nil then
-            checked = NormalizeRangeResult(checked)
-            if checked == true then
-                return NormalizeRangeResult(inRange)
-            end
+        -- checked==true means the result is reliable (party/raid member)
+        -- checked==false/nil means NOT reliable — keep previous state
+        if checked == true then
+            return (inRange == true) and true or false
         end
-        if inRange ~= nil then return NormalizeRangeResult(inRange) end
+        -- checked is false/nil: UnitInRange is not reliable for this unit
+        -- (e.g., cross-realm, non-party). Fall through to interact distance.
     end
 
     -- Last resort: CheckInteractDistance 28yd (Warrior/DH)
@@ -470,9 +529,7 @@ end
 
 local function ApplyRangeFade(f, unit)
     local c = f._c
-    if c and not c.rfEn then
-        return
-    end
+    if c and not c.rfEn then return end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if conf.rangeFadeEnabled == false then
@@ -663,6 +720,11 @@ function GF.BuildFrameCache(f)
     c.rfAlpha = conf.rangeFadeAlpha or 0.4
     c.offAlpha = conf.offlineAlpha or 0.5
 
+    -- Health fade (curve-based HP threshold dimming)
+    c.hfEn     = conf.healthFadeEnabled == true
+    c.hfAlpha  = conf.healthFadeAlpha or 0.45
+    c.hfThresh = conf.healthFadeThreshold or 95
+
     -- Highlight border (pre-resolve HLVal)
     c.aggroEn   = HLVal(kind, "hlAggroEnabled") ~= false
     c.aggroMode = HLVal(kind, "hlAggroMode") or "ALL"
@@ -734,14 +796,10 @@ local function _GF_QuickBorderUpdate(f)
     if not c then GF.BuildFrameCache(f); c = f._c end
 
     -- Priority 1: Dispel (already active from UNIT_AURA)
-    if f._msufGFDispelType and c.dispelEn then
-        return
-    end
+    if f._msufGFDispelType and c.dispelEn then return end
 
     -- Priority 2: Aggro (already active from UNIT_THREAT)
-    if f._msufGFAggroLevel and f._msufGFAggroLevel >= 1 and c.aggroEn then
-        return
-    end
+    if f._msufGFAggroLevel and f._msufGFAggroLevel >= 1 and c.aggroEn then return end
 
     -- Priority 3: Target
     if f._msufGFIsTarget and c.targetEn then
@@ -924,7 +982,8 @@ local function _DispelScanCallback(auraData)
         _scanTopDispel = dispelName
         return true
     end
-    if auraData.isRaid then
+    local ir = auraData.isRaid
+    if not (issecretvalue and issecretvalue(ir)) and ir then
         _scanTopDispel = "Bleed"
         return true
     end
@@ -1550,6 +1609,11 @@ local function dispatchHealth(f, unit)
     end
     UpdateStatusText(f, unit)
     dispatchIncomingHeal(f, unit)
+
+    -- Health fade: dim frame when HP above threshold (healer focus feature)
+    if c.hfEn and GF.ApplyHealthFade then
+        GF.ApplyHealthFade(f, unit)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -1923,6 +1987,9 @@ function GF.RegisterUnitEvents(f, unit)
     end
 
     f:SetScript("OnEvent", GF_OnEvent)
+
+    -- Pet frame: attach if enabled
+    if GF.AttachPetFrame then GF.AttachPetFrame(f) end
 end
 
 function GF.UnregisterUnitEvents(f)
@@ -1935,6 +2002,7 @@ function GF.UnregisterUnitEvents(f)
     end
     f:SetScript("OnEvent", nil)
     if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
+    if GF.DetachPetFrame then GF.DetachPetFrame(f) end
 end
 
 ------------------------------------------------------------------------
@@ -1945,6 +2013,36 @@ local _globalFrame = CreateFrame("Frame")
 -- Track current target frame for O(1) TARGET_CHANGED updates
 local _gfTargetFrame = nil -- the frame whose unit was last "target"
 local _gfFocusFrame  = nil -- the frame whose unit was last "focus"
+
+-- PERF: Coalesced GROUP_ROSTER_UPDATE flush (one iteration per burst instead of N).
+local _gfRosterPending = false
+local function _gfRosterFlush()
+    _gfRosterPending = false
+    _gfTargetFrame = nil
+    _gfFocusFrame  = nil
+    for f in pairs(GF.frames) do
+        local u = f.unit
+        if u and UnitExists(u) then
+            dispatchName(f, u)
+            ApplyHealthColor(f, f._msufGFKind or "party", u)
+            ApplyPowerColor(f, u)
+            UpdateStatusText(f, u)
+            UpdateRoleIcon(f, u)
+            UpdateRaidMarker(f, u)
+            UpdateLeaderIcon(f, u)
+            UpdateGroupNumber(f, u)
+            if UnitIsUnit(u, "target") then
+                f._msufGFIsTarget = true
+                _gfTargetFrame = f
+            end
+            if UnitExists("focus") and UnitIsUnit(u, "focus") then
+                f._msufGFIsFocus = true
+                _gfFocusFrame = f
+            end
+            UpdateTargetIndicator(f, u)
+        end
+    end
+end
 
 -- PLAYER_TARGET_CHANGED: update target indicator on old + new target only
 -- READY_CHECK / READY_CHECK_FINISHED: update ready check icons
@@ -2007,31 +2105,18 @@ local function OnGlobalEvent(self, event, ...)
         end
 
     elseif event == "GROUP_ROSTER_UPDATE" then
-        -- Lightweight refresh: only update roster-dependent data
-        -- (name, role, leader, markers, status, health color, group number)
-        -- Range/aura/threat/overlays arrive via their own unit events
-        _gfTargetFrame = nil -- invalidate target cache (units may swap)
-        _gfFocusFrame  = nil -- invalidate focus cache
-        for f in pairs(GF.frames) do
-            local u = f.unit
-            if u and UnitExists(u) then
-                dispatchName(f, u)
-                ApplyHealthColor(f, f._msufGFKind or "party", u)
-                ApplyPowerColor(f, u)
-                UpdateStatusText(f, u)
-                UpdateRoleIcon(f, u)
-                UpdateRaidMarker(f, u)
-                UpdateLeaderIcon(f, u)
-                UpdateGroupNumber(f, u)
-                if UnitIsUnit(u, "target") then
-                    f._msufGFIsTarget = true
-                    _gfTargetFrame = f
-                end
-                if UnitExists("focus") and UnitIsUnit(u, "focus") then
-                    f._msufGFIsFocus = true
-                    _gfFocusFrame = f
-                end
-                UpdateTargetIndicator(f, u)
+        -- PERF: Coalesce roster updates. At a world boss, GROUP_ROSTER_UPDATE
+        -- fires 0.5/sec with 672µs P50 per call (iterates all 40 GF frames × 10 functions).
+        -- Multiple updates can fire in the same frame (join + promote + type change).
+        -- Coalescing to next-frame eliminates burst spikes in the Blizzard profiler.
+        if not _gfRosterPending then
+            _gfRosterPending = true
+            _gfTargetFrame = nil
+            _gfFocusFrame  = nil
+            if _After0 then
+                _After0(0, _gfRosterFlush)
+            else
+                _gfRosterFlush()
             end
         end
     elseif event == "BARBER_SHOP_OPEN" then
@@ -2160,6 +2245,9 @@ do
         _recoveryFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
         _recoveryFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
         _recoveryFrame:RegisterEvent("UNIT_FLAGS")
+        _recoveryFrame:RegisterEvent("SPELLS_CHANGED")
+        _recoveryFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+        _recoveryFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         -- Infrequent zone events (fire once per load, not per-unit)
         _recoveryFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
         _recoveryFrame:RegisterEvent("LOADING_SCREEN_DISABLED")
@@ -2169,6 +2257,13 @@ do
             elseif event == "PLAYER_REGEN_ENABLED" then
                 _inCombat = false
                 _sweepElapsed = 99 -- force immediate sweep after combat
+                self:Show()
+            elseif event == "SPELLS_CHANGED"
+                or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
+                or event == "PLAYER_ENTERING_WORLD" then
+                -- Re-resolve range spell (may have changed on spec/instance)
+                if GF._RebuildRangeSpell then GF._RebuildRangeSpell() end
+                _sweepElapsed = 99 -- force sweep to re-check all frames
                 self:Show()
             else
                 -- Roster/zone change: wake ticker, force one sweep
@@ -2198,17 +2293,18 @@ do
                 end
             end
 
-            -- Slow sweep: ALL frames (OOC only, every 3s)
-            if not _inCombat then
-                _sweepElapsed = _sweepElapsed + dt
-                if _sweepElapsed >= 3 then
-                    _sweepElapsed = 0
-                    for f in pairs(GF.frames) do
-                        if f.unit and UnitExists(f.unit) then
-                            local conf = GF.GetConf(f._msufGFKind or "party")
-                            if conf and conf.rangeFadeEnabled ~= false then
-                                ApplyRangeFade(f, f.unit)
-                            end
+            -- Full sweep: ALL frames (catches missed UNIT_IN_RANGE_UPDATE transitions)
+            -- IC: every 2s (catches in-range→OOR that event missed)
+            -- OOC: every 3s (existing behavior)
+            local sweepInterval = _inCombat and 2 or 3
+            _sweepElapsed = _sweepElapsed + dt
+            if _sweepElapsed >= sweepInterval then
+                _sweepElapsed = 0
+                for f in pairs(GF.frames) do
+                    if f.unit and UnitExists(f.unit) then
+                        local conf = GF.GetConf(f._msufGFKind or "party")
+                        if conf and conf.rangeFadeEnabled ~= false then
+                            ApplyRangeFade(f, f.unit)
                         end
                     end
                 end
@@ -2243,11 +2339,20 @@ do
 
         _tickerFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
         _tickerFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        _tickerFrame:RegisterEvent("SPELLS_CHANGED")
+        _tickerFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+        _tickerFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         _tickerFrame:SetScript("OnEvent", function(self, event)
             if event == "PLAYER_REGEN_DISABLED" then
                 _inCombat = true
-            else
+            elseif event == "PLAYER_REGEN_ENABLED" then
                 _inCombat = false
+            elseif event == "SPELLS_CHANGED"
+                or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
+                or event == "PLAYER_ENTERING_WORLD" then
+                if GF._RebuildRangeSpell then GF._RebuildRangeSpell() end
+                _rangeListDirty = true
+                self:Show()
             end
         end)
 
@@ -2306,10 +2411,10 @@ local function _GF_GetHighlightColor()
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if gen then
         local c = gen.highlightColor
-        if type(c) == "table" and c[1] then return c[1], c[2] or 1, c[3] or 1 end
+        if c and c[1] then return c[1], c[2] or 1, c[3] or 1 end
         if type(c) == "string" then
             local colors = (ns and ns.MSUF_FONT_COLORS) or _G.MSUF_FONT_COLORS
-            if type(colors) == "table" and colors[c] then
+            if colors and colors[c] then
                 local cc = colors[c]
                 return cc[1], cc[2], cc[3]
             end

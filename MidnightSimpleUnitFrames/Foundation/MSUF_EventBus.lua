@@ -1,20 +1,16 @@
 -- MSUF_EventBus.lua
 -- Midnight Simple Unit Frames (MSUF)
 -- Step 4: Global Fanout ONLY
---
 -- Design rules:
 --   * This bus is for GLOBAL events only (roster, raid markers, CVARs, login/combat state, etc.).
 --   * Unitframes MUST NOT register UNIT_* events through the bus.
 --   * Handlers should set Dirty Bits / schedule work, never do heavy rendering here.
---
 -- Backwards-compatible API:
 --   MSUF_EventBus_Register(event, key, fn, unitFilter, once)
 --   MSUF_EventBus_Unregister(event, key)
---
 -- Notes:
 --   * unitFilter is ignored (and UNIT_* registrations are rejected) by design.
 --   * safeCalls: if true, handler invocations are protected (pcall). Defaults to false for speed.
---
 -- Perf notes:
 --   * Hot path avoids pairs() over handler maps. Each event stores handlers in a dense numeric array.
 --   * Unregister during dispatch is supported: handlers are marked dead and compacted after dispatch.
@@ -22,11 +18,9 @@
 local addonName, ns = ...
 ns = ns or {}
 
--- =========================================================================
 -- PERF LOCALS (core runtime)
 --  - Reduce global table lookups in high-frequency event/render paths.
 --  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
 local type, tostring = type, tostring
 local pairs = pairs
 local InCombatLockdown = InCombatLockdown
@@ -59,7 +53,6 @@ local bus = {
 
 -- Dispatch strategy (hot path): avoid per-handler branching and keep pcall
 -- completely off the fast path unless explicitly enabled for debugging.
---
 -- Note: Don't inline pcall behind a flag check inside the per-handler loop.
 -- Even when safeCalls is false, that check still costs in event storms.
 
@@ -112,9 +105,7 @@ local function MaybeUnregisterEvent(event)
     end
 
     -- Don't unregister mid-dispatch; defer to the dispatcher epilogue.
-    if (ev.dispatchDepth or 0) > 0 then
-        return
-    end
+    if (ev.dispatchDepth or 0) > 0 then return end
 
     if ev.dirty then
         _Ev_Compact(ev)
@@ -265,9 +256,7 @@ local function _PrintSafeCallErrorOnce(event, key, err)
         bus._errOnce = eo
     end
     local gate = tostring(event) .. "|" .. tostring(key)
-    if eo[gate] then
-        return
-    end
+    if eo[gate] then return end
     eo[gate] = true
 
     local msg = "|cffff5555MSUF EventBus handler error|r in '" .. tostring(event) .. "' (key=" .. tostring(key) .. "): " .. tostring(err)

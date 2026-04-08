@@ -1,10 +1,7 @@
--- ---------------------------------------------------------------------------
 -- MSUF_Options_Misc.lua  (Phase 9: Accordion UX)
---
 -- Miscellaneous options: 5 collapsible sections.
 -- 1. Update Intervals   2. Unitframe Tooltips   3. Blizzard Frames
 -- 4. Status Indicators  5. Range Fade
--- ---------------------------------------------------------------------------
 local addonName, ns = ...
 local TR = ns.TR
 local UI = ns.UI
@@ -15,7 +12,11 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     miscGroup._msufBuilt = true
 
     if _G.MSUF_Search_RegisterRoots then
-        _G.MSUF_Search_RegisterRoots({ "misc" }, miscGroup, "Miscellaneous")
+        _G.MSUF_Search_RegisterRoots(
+            { "misc", "opt_misc", "update interval", "tooltip", "blizzard frames",
+              "status indicator", "range fade", "throttle" },
+            miscGroup, "Miscellaneous"
+        )
     end
 
     local function G() ns.EnsureDB(); return MSUF_DB.general end
@@ -56,9 +57,19 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
 
     local RefreshMiscScrollLayout
 
-    -- =====================================================================
+    -- Section tracking for accordion
+    local _miscSections = {}
+    local function CollapseAllExcept(keepBox)
+        for i = 1, #_miscSections do
+            local b = _miscSections[i]
+            if b and b ~= keepBox and not b._msufCollapsed then
+                b._msufCollapsed = true
+                if b._msufApplyCollapseState then b._msufApplyCollapseState() end
+            end
+        end
+    end
+
     -- Collapsible section helper
-    -- =====================================================================
     local function MakeCollapsibleSection(parent, expandedH, titleText, defaultOpen)
         local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
         box:SetSize(SECTION_W, defaultOpen and expandedH or SECTION_COLLAPSED_H)
@@ -115,7 +126,12 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end
 
         hdr:SetScript("OnClick", function()
-            box._msufCollapsed = not box._msufCollapsed
+            if box._msufCollapsed then
+                CollapseAllExcept(box)
+                box._msufCollapsed = false
+            else
+                box._msufCollapsed = true
+            end
             ApplyState()
         end)
         do
@@ -125,12 +141,11 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end
 
         box._msufApplyCollapseState = ApplyState
+        _miscSections[#_miscSections + 1] = box
         return box, body
     end
 
-    -- =====================================================================
     -- Section 1: Update Intervals (default open)
-    -- =====================================================================
     local s1Box, s1Body = MakeCollapsibleSection(scrollChild, 340, "Update Intervals", true)
     s1Box:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, -115)
 
@@ -258,9 +273,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         set = function(v) G().versionCheckEnabled = v end,
     })
 
-    -- =====================================================================
     -- Section 2: Unitframe Tooltips
-    -- =====================================================================
     local s2Box, s2Body = MakeCollapsibleSection(scrollChild, 130, "Unitframe Tooltips", false)
     s2Box:SetPoint("TOPLEFT", s1Box, "BOTTOMLEFT", 0, -6)
 
@@ -285,9 +298,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         set = function(v) G().unitInfoTooltipStyle = v end,
     })
 
-    -- =====================================================================
     -- Section 3: Blizzard Frames
-    -- =====================================================================
     local s3Box, s3Body = MakeCollapsibleSection(scrollChild, 190, "Blizzard Frames", false)
     s3Box:SetPoint("TOPLEFT", s2Box, "BOTTOMLEFT", 0, -6)
 
@@ -351,9 +362,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end,
     })
 
-    -- =====================================================================
     -- Section 4: Status Indicators
-    -- =====================================================================
     local s4Box, s4Body = MakeCollapsibleSection(scrollChild, 170, "Status Indicators", false)
     s4Box:SetPoint("TOPLEFT", s3Box, "BOTTOMLEFT", 0, -6)
 
@@ -422,9 +431,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         statusCBs[i] = cb
     end
 
-    -- =====================================================================
     -- Section 5: Range Fade
-    -- =====================================================================
     local s5Box, s5Body = MakeCollapsibleSection(scrollChild, 150, "Range Fade", false)
     s5Box:SetPoint("TOPLEFT", s4Box, "BOTTOMLEFT", 0, -6)
 
@@ -495,4 +502,12 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     end
 
     RefreshMiscScrollLayout()
+
+    -- Upgrade to smart accordion
+    if _G.MSUF_UpgradeAccordion then
+        _G.MSUF_UpgradeAccordion(
+            { s1Box, s2Box, s3Box, s4Box, s5Box },
+            RefreshMiscScrollLayout, "misc", scrollChild
+        )
+    end
 end

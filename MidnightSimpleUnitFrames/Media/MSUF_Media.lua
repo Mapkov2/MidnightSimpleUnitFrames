@@ -7,9 +7,7 @@ if not LSM or type(LSM.Register) ~= "function" then return end
 
 local base = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 
--- -----------------------------------------------------------------------------
 -- Fonts (if present)
--- -----------------------------------------------------------------------------
 -- These are safe no-ops if the files are missing (LSM will still register, but user won't pick them).
 -- Font registration is also done in MSUF_Libs.lua in a load-order-safe way; keeping this here is harmless.
 
@@ -18,9 +16,7 @@ pcall(LSM.Register, LSM, "font", "Expressway (MSUF)", base .. "Fonts\\Expressway
 pcall(LSM.Register, LSM, "font", "INTER",             base .. "Fonts\\Inter.ttf")
 pcall(LSM.Register, LSM, "font", "Inter (MSUF)",      base .. "Fonts\\Inter.ttf")
 
--- -----------------------------------------------------------------------------
 -- Bar / Castbar textures (Media/Bars)
--- -----------------------------------------------------------------------------
 -- IMPORTANT: We intentionally do NOT register the old "MSUF Flat"/"MSUF Smooth" entries anymore,
 -- because those pointed at non-existent files (Media/Statusbar/Flat.tga / Smooth.tga) and created
 -- invalid dropdown items that cannot be selected.
@@ -38,14 +34,12 @@ Reg("MSUF Smooth",     "MSUF_Smooth.tga")
 Reg("MSUF Smooth v2",  "Smoothv2.tga")
 Reg("MSUF Smoother",   "smoother.tga")
 
--- -----------------------------------------------------------------------------
 -- DB migration: eliminate broken legacy selections
--- -----------------------------------------------------------------------------
 local function TryMigrate()
     local db = _G.MSUF_DB
-    if type(db) ~= "table" then return false end
+    if not db then return false end
     local g = db.general
-    if type(g) ~= "table" then return false end
+    if not g then return false end
 
     local changed = false
     -- Migrate old Midnight texture names to new MSUF names (renaming only)

@@ -1,9 +1,96 @@
--- ============================================================================
+-- MSUF_EM2_Core.lua — Registry + State + Undo + Init (consolidated)
+
+-- MSUF_EM2_Registry.lua
+
+-- MSUF_EM2_Registry.lua
+-- Element registration API for Edit Mode 2.
+-- Every moveable element (unit frame, castbar, aura group, class power)
+-- registers here. EditMode core iterates the registry — never hardcoded lists.
+local addonName, ns = ...
+
+_G.MSUF_EM2 = _G.MSUF_EM2 or {}
+local EM2 = _G.MSUF_EM2
+
+local Registry = {}
+EM2.Registry = Registry
+
+local elements = {}
+local order    = {}
+local dirty    = true
+
+-- Register a moveable element.
+-- cfg fields:
+--   key        (string)   unique identifier ("player", "castbar_player", "aura_target", …)
+--   label      (string)   display name for mover overlay
+--   order      (number)   sort priority (lower = earlier)
+--   getFrame   (function) → frame   returns the live frame reference
+--   getConf    (function) → table   returns the DB config table for this element
+--   popupType  (string)   "unit" | "castbar" | "aura" | "classpower" | "custom" | nil
+--   isEnabled  (function) → bool    whether element exists and should show a mover
+--   canResize  (bool)     whether mover allows resize handles
+--   canNudge   (bool)     whether arrow keys can move this element (default true)
+--   onEnter    (function) optional callback when edit mode enters
+--   onExit     (function) optional callback when edit mode exits
+function Registry.Register(cfg)
+    if not cfg or not cfg.key then return end
+    elements[cfg.key] = cfg
+    dirty = true
+end
+
+function Registry.Unregister(key)
+    if not key then return end
+    elements[key] = nil
+    dirty = true
+end
+
+function Registry.Get(key)
+    return elements[key]
+end
+
+function Registry.All()
+    return elements
+end
+
+-- Sorted key list. Rebuilt lazily when dirty.
+function Registry.Order()
+    if not dirty then return order end
+    local n = 0
+    for k in pairs(elements) do
+        n = n + 1
+        order[n] = k
+    end
+    for i = n + 1, #order do order[i] = nil end
+    table.sort(order, function(a, b)
+        local oa = elements[a].order or 1000
+        local ob = elements[b].order or 1000
+        if oa ~= ob then return oa < ob end
+        return a < b
+    end)
+    dirty = false
+    return order
+end
+
+function Registry.Count()
+    local n = 0
+    for _ in pairs(elements) do n = n + 1 end
+    return n
+end
+
+-- Iterate in order: fn(key, cfg)
+function Registry.ForEach(fn)
+    local keys = Registry.Order()
+    for i = 1, #keys do
+        local k = keys[i]
+        fn(k, elements[k])
+    end
+end
+
+-- MSUF_EM2_State.lua
+
 -- MSUF_EM2_State.lua
 -- State machine for Edit Mode 2.
 -- Manages: enter/exit lifecycle, combat lockdown, AnyEditMode listeners,
 -- boss preview, Blizzard EM sync, and keeps all legacy globals in sync.
--- ============================================================================
 local addonName, ns = ...
 
 local EM2 = _G.MSUF_EM2
@@ -12,16 +99,12 @@ if not EM2 then return end
 local State = {}
 EM2.State = State
 
--- ---------------------------------------------------------------------------
 -- Internal state
--- ---------------------------------------------------------------------------
 local active      = false
 local unitKey     = nil
 local combatFrame = nil
 
--- ---------------------------------------------------------------------------
 -- Legacy global sync (contract with 30+ external files)
--- ---------------------------------------------------------------------------
 local function SyncLegacy()
     _G.MSUF_UnitEditModeActive = active
     _G.MSUF_CurrentEditUnitKey = unitKey
@@ -32,9 +115,7 @@ local function SyncLegacy()
     end
 end
 
--- ---------------------------------------------------------------------------
 -- Ensure MSUF_EditState table exists (other files rawget it)
--- ---------------------------------------------------------------------------
 if not _G.MSUF_EditState then
     _G.MSUF_EditState = {
         active              = false,
@@ -45,9 +126,7 @@ if not _G.MSUF_EditState then
     }
 end
 
--- ---------------------------------------------------------------------------
 -- AnyEditMode listener notifications
--- ---------------------------------------------------------------------------
 if not _G.MSUF_AnyEditModeListeners then
     _G.MSUF_AnyEditModeListeners = {}
 end
@@ -77,9 +156,7 @@ local function NotifyListeners()
     end
 end
 
--- ---------------------------------------------------------------------------
 -- DB access (always live, never cached)
--- ---------------------------------------------------------------------------
 local function DB()
     return _G.MSUF_DB
 end
@@ -91,10 +168,7 @@ local function EnsureDB()
     if ns and type(ns.EnsureDB) == "function" then ns.EnsureDB(); return _G.MSUF_DB ~= nil end
     return false
 end
-
--- ---------------------------------------------------------------------------
 -- Public read-only accessors
--- ---------------------------------------------------------------------------
 function State.IsActive()      return active end
 function State.GetUnitKey()    return unitKey end
 
@@ -108,9 +182,7 @@ function State.SetPopupOpen(open)
     if st then st.popupOpen = open and true or false end
 end
 
--- ---------------------------------------------------------------------------
 -- Global snapshot for Cancel All (restore pre-edit-mode state)
--- ---------------------------------------------------------------------------
 local SNAPSHOT_KEYS = {"player","target","focus","targettarget","pet","boss","general","auras2"}
 local _snapshot = nil
 
@@ -167,9 +239,7 @@ local function RestoreDB()
     return true
 end
 
--- ---------------------------------------------------------------------------
 -- ENTER Edit Mode
--- ---------------------------------------------------------------------------
 function State.Enter(key)
     if active then
         -- Already active: just switch unit
@@ -192,17 +262,17 @@ function State.Enter(key)
     SnapshotDB()
 
     -- Clear undo history for new session
-    if type(_G.MSUF_EM_UndoClear) == "function" then
+    if _G.MSUF_EM_UndoClear then
         _G.MSUF_EM_UndoClear()
     end
 
     -- Refresh Auras2
-    if type(_G.MSUF_Auras2_RefreshAll) == "function" then
+    if _G.MSUF_Auras2_RefreshAll then
         _G.MSUF_Auras2_RefreshAll()
     end
 
     -- Arrow key nudge
-    if type(_G.MSUF_EnableArrowKeyNudge) == "function" then
+    if _G.MSUF_EnableArrowKeyNudge then
         _G.MSUF_EnableArrowKeyNudge(true)
     end
 
@@ -215,7 +285,7 @@ function State.Enter(key)
     _G.MSUF_UnitPreviewActive = true
     C_Timer.After(0.1, function()
         if not (EM2.State and EM2.State.IsActive()) then return end
-        if type(_G.MSUF_SyncAllUnitPreviews) == "function" then
+        if _G.MSUF_SyncAllUnitPreviews then
             _G.MSUF_SyncAllUnitPreviews()
         end
     end)
@@ -237,9 +307,7 @@ function State.Enter(key)
     if EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
 end
 
--- ---------------------------------------------------------------------------
 -- EXIT Edit Mode
--- ---------------------------------------------------------------------------
 function State.Exit(source)
     if not active then return end
 
@@ -264,7 +332,7 @@ function State.Exit(source)
     SyncLegacy()
 
     -- Arrow keys off
-    if type(_G.MSUF_EnableArrowKeyNudge) == "function" then
+    if _G.MSUF_EnableArrowKeyNudge then
         _G.MSUF_EnableArrowKeyNudge(false)
     end
 
@@ -275,15 +343,15 @@ function State.Exit(source)
 
     -- Preview: disable all previews, restore visibility
     _G.MSUF_UnitPreviewActive = false
-    if type(_G.MSUF_SyncAllUnitPreviews) == "function" then
+    if _G.MSUF_SyncAllUnitPreviews then
         _G.MSUF_SyncAllUnitPreviews()
     end
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+    if _G.MSUF_UpdateBossCastbarPreview then
         _G.MSUF_UpdateBossCastbarPreview()
     end
 
     -- Refresh Auras2
-    if type(_G.MSUF_Auras2_RefreshAll) == "function" then
+    if _G.MSUF_Auras2_RefreshAll then
         _G.MSUF_Auras2_RefreshAll()
     end
 
@@ -291,9 +359,7 @@ function State.Exit(source)
     NotifyListeners()
 end
 
--- ---------------------------------------------------------------------------
 -- CANCEL ALL — restore DB to pre-edit-mode state, then exit
--- ---------------------------------------------------------------------------
 function State.CancelAll()
     if not active then return end
 
@@ -319,7 +385,7 @@ function State.CancelAll()
     _G.MSUF_PreviewTestMode = false
     SyncLegacy()
 
-    if type(_G.MSUF_EnableArrowKeyNudge) == "function" then _G.MSUF_EnableArrowKeyNudge(false) end
+    if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(false) end
 
     if restored then
         -- Invalidate all frame config caches so the pipeline reads the
@@ -338,7 +404,7 @@ function State.CancelAll()
 
         -- Belt-and-suspenders: force SetPoint on every unit frame with
         -- the restored offsetX/Y from the DB.
-        if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
+        if _G.MSUF_ForceReanchorAllUnitFrames_Once then
             _G.MSUF_ForceReanchorAllUnitFrames_Once()
         end
     else
@@ -347,16 +413,14 @@ function State.CancelAll()
     end
 
     _G.MSUF_UnitPreviewActive = false
-    if type(_G.MSUF_SyncAllUnitPreviews) == "function" then _G.MSUF_SyncAllUnitPreviews() end
-    if type(_G.MSUF_Auras2_RefreshAll) == "function" then _G.MSUF_Auras2_RefreshAll() end
+    if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
+    if _G.MSUF_Auras2_RefreshAll then _G.MSUF_Auras2_RefreshAll() end
 
     NotifyListeners()
 end
 
--- ---------------------------------------------------------------------------
 -- Combat guard: auto-exit on PLAYER_REGEN_DISABLED
 -- Installed at LOAD time (not lazy) so it's always active.
--- ---------------------------------------------------------------------------
 function State.EnsureCombatListener()
     if combatFrame then return end
     combatFrame = CreateFrame("Frame")
@@ -370,10 +434,159 @@ end
 -- Install immediately at file load
 State.EnsureCombatListener()
 
--- ---------------------------------------------------------------------------
 -- Stub: called when unit selection changes while already active
--- ---------------------------------------------------------------------------
 function EM2.OnUnitChanged(key)
     if EM2.HUD    and EM2.HUD.RefreshUnitSelector then EM2.HUD.RefreshUnitSelector() end
     if EM2.Movers and EM2.Movers.RefreshSelection then EM2.Movers.RefreshSelection(key) end
 end
+
+-- MSUF_EM2_Undo.lua
+
+-- MSUF_EM2_Undo.lua
+-- Undo/redo for Edit Mode 2.
+-- Captures DB snapshots before changes, restores on undo.
+local addonName, ns = ...
+local EM2 = _G.MSUF_EM2
+if not EM2 then return end
+
+local Undo = {}
+EM2.Undo = Undo
+
+local undoStack = {}
+local redoStack = {}
+local MAX_UNDO = 30
+local debounceKey = nil
+local debounceTime = 0
+local DEBOUNCE_SEC = 0.5
+
+local function DeepCopy(src)
+    if type(src) ~= "table" then return src end
+    local dst = {}
+    for k, v in pairs(src) do dst[k] = DeepCopy(v) end
+    return dst
+end
+
+local function DeepRestore(dst, src)
+    for k in pairs(dst) do
+        if src[k] == nil then dst[k] = nil end
+    end
+    for k, v in pairs(src) do
+        if type(v) == "table" then
+            if type(dst[k]) ~= "table" then dst[k] = {} end
+            DeepRestore(dst[k], v)
+        else
+            dst[k] = v
+        end
+    end
+end
+
+local function CaptureState(category, key)
+    local db = _G.MSUF_DB
+    if not db then return nil end
+    local snap = { category = category, key = key }
+    if category == "unit" then
+        snap.data = DeepCopy(db[key] or {})
+    elseif category == "castbar" then
+        snap.data = DeepCopy(db.general or {})
+    elseif category == "aura" then
+        snap.data = DeepCopy(db.auras2 or {})
+    end
+    return snap
+end
+
+local function RestoreState(snap)
+    if not snap then return end
+    _G.MSUF__UndoRestoring = true
+    local db = _G.MSUF_DB
+    if not db then _G.MSUF__UndoRestoring = false; return end
+
+    if snap.category == "unit" then
+        db[snap.key] = db[snap.key] or {}
+        DeepRestore(db[snap.key], snap.data)
+        if type(ApplySettingsForKey) == "function" then ApplySettingsForKey(snap.key) end
+    elseif snap.category == "castbar" then
+        db.general = db.general or {}
+        DeepRestore(db.general, snap.data)
+        if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
+        if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+    elseif snap.category == "aura" then
+        db.auras2 = db.auras2 or {}
+        DeepRestore(db.auras2, snap.data)
+        if _G.MSUF_Auras2_RefreshAll then _G.MSUF_Auras2_RefreshAll() end
+    end
+
+    if _G.MSUF_UpdateAllFonts then _G.MSUF_UpdateAllFonts() end
+
+    -- Sync popups
+    if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
+    if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
+    if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+
+    _G.MSUF__UndoRestoring = false
+end
+
+function Undo.BeforeChange(category, key, debounce)
+    if _G.MSUF__UndoRestoring then return end
+    if debounce then
+        local now = GetTime()
+        local dk = (category or "") .. ":" .. (key or "")
+        if dk == debounceKey and (now - debounceTime) < DEBOUNCE_SEC then return end
+        debounceKey = dk
+        debounceTime = now
+    end
+    local snap = CaptureState(category, key)
+    if not snap then return end
+    undoStack[#undoStack + 1] = snap
+    if #undoStack > MAX_UNDO then table.remove(undoStack, 1) end
+    -- Clear redo on new action
+    for i = 1, #redoStack do redoStack[i] = nil end
+end
+
+function Undo.DoUndo()
+    if #undoStack == 0 then return end
+    local snap = undoStack[#undoStack]
+    undoStack[#undoStack] = nil
+    local current = CaptureState(snap.category, snap.key)
+    if current then redoStack[#redoStack + 1] = current end
+    RestoreState(snap)
+end
+
+function Undo.DoRedo()
+    if #redoStack == 0 then return end
+    local snap = redoStack[#redoStack]
+    redoStack[#redoStack] = nil
+    local current = CaptureState(snap.category, snap.key)
+    if current then undoStack[#undoStack + 1] = current end
+    RestoreState(snap)
+end
+
+function Undo.Clear()
+    for i = 1, #undoStack do undoStack[i] = nil end
+    for i = 1, #redoStack do redoStack[i] = nil end
+    debounceKey = nil
+end
+
+function Undo.CanUndo() return #undoStack > 0 end
+function Undo.CanRedo() return #redoStack > 0 end
+
+-- Legacy globals
+_G.MSUF_EM_UndoBeforeChange = function(category, key, debounce) Undo.BeforeChange(category, key, debounce) end
+_G.MSUF_EM_UndoClear = function() Undo.Clear() end
+_G.MSUF_EM_UndoUndo = function() Undo.DoUndo() end
+_G.MSUF_EM_UndoRedo = function() Undo.DoRedo() end
+
+-- MSUF_EM2_Init.lua
+
+-- MSUF_EM2_Init.lua
+-- Loads last. Compat.lua already provides all legacy globals.
+-- This file ensures combat listener and exposes version tag.
+local addonName, ns = ...
+local EM2 = _G.MSUF_EM2
+if not EM2 then return end
+
+if EM2.State and EM2.State.EnsureCombatListener then
+    EM2.State.EnsureCombatListener()
+end
+
+EM2.VERSION = "2.0.0"

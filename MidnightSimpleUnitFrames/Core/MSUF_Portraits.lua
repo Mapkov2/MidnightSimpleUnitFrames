@@ -330,9 +330,7 @@ local function MSUF_MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
         need = true
     end
 
-    if not need then
-        return
-    end
+    if not need then return end
 
     -- Route through _G so MSUF_3DPortraits.lua's override (EnsureModel + 3D render)
     -- is honoured.  The file-local MSUF_UpdatePortraitIfNeeded is 2D/CLASS only;

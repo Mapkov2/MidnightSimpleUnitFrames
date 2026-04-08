@@ -6,8 +6,8 @@
 -- Multi-spec tracking, zero combat overhead.
 -- Midnight 12.0 secret-safe.
 local _, ns = ...
-ns = ns or (_G and _G.MSUF_NS) or {}
-if _G then _G.MSUF_NS = ns end
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
 
 local GF = ns.GF
 if not GF then return end
@@ -691,7 +691,7 @@ local _multiProcessed = {}
 ------------------------------------------------------------------------
 local function IterateSpecConfig(f, unit, specKey, specCfg, parent, scale, bestByType, dedup, processed, siLayer)
     for auraName, auraCfg in pairs(specCfg) do
-        if type(auraCfg) == "table" and auraCfg.enabled ~= false then
+        if auraCfg and auraCfg.enabled ~= false then
             if not processed or not processed[auraName] then
                 if processed then processed[auraName] = true end
                 local auraData = _scanResults[auraName]
@@ -830,7 +830,7 @@ function GF.PreviewSpellIndicators(f, kind, classToken, specIdx)
             local specCfg = EnsureSpecConfig(siCfg, sk)
             if specCfg then
                 for auraName, auraCfg in pairs(specCfg) do
-                    if type(auraCfg) == "table" and auraCfg.enabled ~= false and not _multiProcessed[auraName] then
+                    if auraCfg and auraCfg.enabled ~= false and not _multiProcessed[auraName] then
                         _multiProcessed[auraName] = true
                         idx = idx + 1
                         local mock = (idx % 2 == 1) and { icon = SI.GetAuraIcon(sk, auraName), auraInstanceID = nil, applications = 0 } or nil
@@ -857,7 +857,7 @@ function GF.PreviewSpellIndicators(f, kind, classToken, specIdx)
     local idx = 0
     local bestByType = {}
     for auraName, auraCfg in pairs(specCfg) do
-        if type(auraCfg) == "table" and auraCfg.enabled ~= false then
+        if auraCfg and auraCfg.enabled ~= false then
             idx = idx + 1
             local mock = (idx % 2 == 1) and { icon = SI.GetAuraIcon(specKey, auraName), auraInstanceID = nil, applications = 0 } or nil
             if auraCfg.placed then ApplyPlaced(f, nil, auraName, auraCfg.placed, mock, parent, specKey, true, nil, siLayer) end

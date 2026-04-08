@@ -4,23 +4,15 @@
 local addonName, ns = ...
 ns = ns or {}
 
--- ---------------------------------------------------------------------------
--- Localization helper (keys are English UI strings; fallback = key)
--- ---------------------------------------------------------------------------
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
-local L = ns.L
-if not getmetatable(L) then
-    setmetatable(L, { __index = function(t, k) return k end })
+-- Localization: prefer Toolkit's ns.TR; fallback to inline definition
+local TR = ns.TR
+if not TR then
+    ns.L = ns.L or (_G.MSUF_L) or {}
+    if not getmetatable(ns.L) then setmetatable(ns.L, { __index = function(_, k) return k end }) end
+    local L, isEn = ns.L, (ns and ns.LOCALE) == "enUS"
+    TR = function(v) if type(v) ~= "string" then return v end; if isEn then return v end; return L[v] or v end
 end
-local isEn = (ns and ns.LOCALE) == "enUS"
-local function TR(v)
-    if type(v) ~= "string" then return v end
-    if isEn then return v end
-    return L[v] or v
-end
--- ------------------------------------------------------------
 -- Single-apply pipeline (Options -> coalesced -> Runtime apply)
--- ------------------------------------------------------------
 local __A2_applyPending = false
 local function A2_DoApply()
     -- Prefer the namespaced API if present (reddit-clean)
@@ -81,7 +73,7 @@ local function A2_ShowHighlightReloadPopup()
             button1 = ACCEPT,
             button2 = CANCEL,
             OnAccept = function()
-                if type(_G.ReloadUI) == "function" then
+                if _G.ReloadUI then
                     _G.ReloadUI()
                 end
             end,
@@ -91,7 +83,7 @@ local function A2_ShowHighlightReloadPopup()
             preferredIndex = _G.STATICPOPUP_NUMDIALOGS,
         }
     end
-    if type(_G.StaticPopup_Show) == "function" then
+    if _G.StaticPopup_Show then
         _G.StaticPopup_Show("MSUF_A2_RELOAD_HIGHLIGHT_OWN_AURAS")
     end
 end
@@ -101,11 +93,11 @@ local function _A2_API()
 end
 -- Keep the old helper names used throughout this UI file so the moved code stays mostly unchanged.
 local function GetAuras2DB()
-    local api = _A2_API()
-    if api and type(api.GetDB) == "function" then
-        return api.GetDB()
-    end
-     return nil, nil
+    local api = ns and ns.MSUF_Auras2
+    if api and api.GetDB then return api.GetDB() end
+    if not _G.MSUF_DB then if type(EnsureDB) == "function" then EnsureDB() end end
+    local a2 = _G.MSUF_DB and _G.MSUF_DB.auras2
+    return a2, a2 and a2.shared
 end
 local function EnsureDB()
     local api = _A2_API()
@@ -114,11 +106,10 @@ local function EnsureDB()
     end
  end
 local function IsEditModeActive()
-    local api = _A2_API()
-    if api and type(api.IsEditModeActive) == "function" then
-        return api.IsEditModeActive() and true or false
-    end
-     return false
+    local api = ns and ns.MSUF_Auras2
+    if api and api.IsEditModeActive then return api.IsEditModeActive() end
+    local st = rawget(_G, "MSUF_EditState")
+    return (st and st.active == true) or (rawget(_G, "MSUF_UnitEditModeActive") == true)
 end
 local function MSUF_A2_IsMasqueAddonLoaded()
     local api = _A2_API()
@@ -145,7 +136,6 @@ local function MSUF_A2_EnsureMasqueGroup()
      return false
 end
 -- Standalone Settings panel (like Colors / Gameplay)
--- ------------------------------------------------------------
 local function CreateTitle(panel, text)
     local t = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     t:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -16)
@@ -173,9 +163,7 @@ local function MakeBox(parent, w, h)
     f:SetBackdropBorderColor(1, 1, 1, 0.08)
      return f
 end
--- ------------------------------------------------------------
 -- Checkbox styling (match the rest of MSUF menus)
--- ------------------------------------------------------------
 local function MSUF_ApplyMenuCheckboxStyle(cb)
     if not cb or cb.__MSUF_menuStyled then  return end
     cb.__MSUF_menuStyled = true
@@ -615,7 +603,6 @@ local function CreateLayoutDropdown(parent, x, y, getter, setter)
 	 end)
      return dd
 end
--- ------------------------------------------------------------
 -- (DPad anchoring removed Ã¢â‚¬â€ auras can now be freely positioned via Edit Mode.)
 local function CreateRowWrapDropdown(parent, x, y, getter, setter, titleText)
     titleText = titleText or "Wrap rows"
@@ -709,13 +696,13 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     local panel = _G.MSUF_AurasPanel
     if not panel then
         panel = CreateFrame("Frame", "MSUF_AurasPanel", UIParent)
-        panel.name = "Auras 2.0"
+        panel.name = "Unit Auras"
         _G.MSUF_AurasPanel = panel
         _G.MSUF_AurasOptionsPanel = panel
     end
     panel.__MSUF_AurasBuilt = true
-    local title = CreateTitle(panel, "Midnight Simple Unit Frames - Auras 2.0")
-    CreateSubText(panel, title, "Auras 2.0: Player / Target / Focus / Boss 1-5.\nDefaults show ALL buffs & debuffs. This menu controls a shared layout for these units.")
+    local title = CreateTitle(panel, "Midnight Simple Unit Frames - Unit Auras")
+    CreateSubText(panel, title, "Controls aura display on Player, Target, Focus, Boss and Pet frames.\nGroup Frame auras (Party/Raid) are configured separately under Group Frames > Auras.")
 	-- Top-right convenience button: enter/exit MSUF Edit Mode (MSUF frames only; no Blizzard frame taint).
 	local editBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 	editBtn:SetSize(140, 22)
@@ -748,7 +735,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
 			 return
 		end
 		local isActive = MSUF_Auras2_IsEditModeActive()
-		if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
+		if _G.MSUF_SetMSUFEditModeDirect then
 			_G.MSUF_SetMSUFEditModeDirect(not isActive)
 			-- State may flip on the next tick; update label after.
 			if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
@@ -781,7 +768,6 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     -- first OnShow / category selection. Legacy UIPanelScrollFrameTemplate can end up with a
     -- zero-sized scroll area on the first open, so you see only the title/subtext and have to
     -- click away/back to trigger a layout pass.
-    --
     -- We hook OnSizeChanged and perform a one-shot refresh once the panel has a real size.
     -- This is the most reliable fix for the "must click twice" problem.
     panel.__msufAuras2_LastSizedW = panel.__msufAuras2_LastSizedW or 0
@@ -789,9 +775,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     -- The new Blizzard Settings canvas sometimes fails to fully layout/update legacy scroll frames
     -- and control OnShow scripts on the very first open. Users then have to click away/back.
     -- We provide a single, shared refresh path that Settings can call on selection.
-    -- ================================================================
     -- UX REDESIGN: Scope bar + split boxes + collapsible sections
-    -- ================================================================
     -- Scope bar (persistent editing-scope indicator, always visible above all boxes)
     local scopeBar = CreateFrame("Frame", nil, content, BackdropTemplateMixin and "BackdropTemplate" or nil)
     scopeBar:SetSize(720, 82)
@@ -899,7 +883,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
 local advGate = {} -- checkboxes gated by 'Enable filters'
 local ddEditFilters, cbOverrideFilters, cbOverrideCaps
 local function DeepCopy(src)
-    if type(src) ~= "table" then  return src end
+    if not src then  return src end
     if type(CopyTable) == "function" then
         return CopyTable(src)
     end
@@ -911,8 +895,8 @@ local function DeepCopy(src)
 end
 
 -- Search helper (additive): Auras 2.0 options live on their own named panel.
-if _G and _G.MSUF_Search_RegisterRoots then
-    _G.MSUF_Search_RegisterRoots({ "auras" }, { "MSUF_AurasPanel" }, "Auras")
+if _G.MSUF_Search_RegisterRoots then
+    _G.MSUF_Search_RegisterRoots({ "auras", "auras2" }, { "MSUF_AurasPanel" }, "Unit Auras")
 end
 local function GetEditingKey()
     local k = panel.__msufAuras2_FilterEditKey
@@ -933,9 +917,7 @@ local function GetEditingFilters()
     end
      return sf
 end
--- ------------------------------------------------------------
 -- Options UI helpers (reduce getter/setter boilerplate)
--- ------------------------------------------------------------
 local function A2_DB()
     return select(1, GetAuras2DB())
 end
@@ -1156,11 +1138,9 @@ local function BuildBoolPathCheckboxes(parent, entries, out)
         end
     end
  end
--- ------------------------------------------------------------
 -- Auras 2: Override UI safety (Auras 2 menu only)
 -- When editing a Unit and any Override is enabled, grey-out options that are still Shared (global / non-overridden scopes).
 -- Also supports "auto-override" for Filters/Caps when the user edits a Shared-scope control while a Unit is selected.
--- ------------------------------------------------------------
 local function A2_EnsureTrackTables()
     if not panel then  return nil end
     if not panel.__msufA2_tracked then
@@ -1500,19 +1480,17 @@ local function UpdateAdvancedEnabled()
         SetCheckboxEnabled(cbOverrideCaps, key ~= "shared")
     end
  end
--- ------------------------------------------------------------
     -- LEFT TOP: Auras 2.0 (minimal UX restructure)
-    -- ------------------------------------------------------------
     local h1 = leftTop:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     h1:SetPoint("TOPLEFT", leftTop, "TOPLEFT", 12, -10)
-    h1:SetText(TR("Auras 2.0"))
+    h1:SetText(TR("Unit Auras"))
     -- Master toggles (top cluster)
-    CreateBoolCheckboxPath(leftTop, "Enable Auras 2.0", 12, -34, A2_DB, "enabled", nil,
+    CreateBoolCheckboxPath(leftTop, "Enable Unit Auras", 12, -34, A2_DB, "enabled", nil,
         "Master toggle. When off, no auras are shown for Target/Focus/Boss.",
         function(on)
             if not on then
                 -- Immediately hide all aura frames when disabling.
-                if type(_G.MSUF_A2_HardDisableAll) == "function" then
+                if _G.MSUF_A2_HardDisableAll then
                     _G.MSUF_A2_HardDisableAll()
                 end
             end
@@ -1532,7 +1510,7 @@ local function UpdateAdvancedEnabled()
             local _, s = GetAuras2DB()
             if s then s.masqueEnabled = (v == true) end
          end,
-        "Skins Auras 2.0 icons with Masque (if installed).\n\nWarning: Highlight borders may look odd with some Masque skins.")
+        "Skins Unit Aura icons with Masque (if installed).\n\nWarning: Highlight borders may look odd with some Masque skins.")
     A2_Track("global", cbMasque)
 
     -- Optional: suppress Masque skin border/backdrop so icons stay borderless.
@@ -1542,7 +1520,7 @@ local function UpdateAdvancedEnabled()
             local _, s = GetAuras2DB()
             if s then s.masqueHideBorder = (v == true) end
          end,
-        "Hides Masque skin border/backdrop for Auras 2.0 icons (keeps icon + cooldown styling).")
+        "Hides Masque skin border/backdrop for Unit Aura icons (keeps icon + cooldown styling).")
     A2_Track("global", cbMasqueHideBorder)
     local cbMasqueDefaultTip = cbMasque.tooltipText
     local function MSUF_A2_IsMasqueReadyForToggle()
@@ -1631,8 +1609,8 @@ do
         if key == "shared" then return false, false end
         local a2 = select(1, GetAuras2DB())
         local u = a2 and a2.perUnit and a2.perUnit[key]
-        local overrideFilters = (type(u) == "table" and u.overrideFilters == true) and true or false
-        local overrideCaps = (type(u) == "table" and u.overrideSharedLayout == true) and true or false
+        local overrideFilters = (u and u.overrideFilters == true) and true or false
+        local overrideCaps = (u and u.overrideSharedLayout == true) and true or false
         return overrideFilters, overrideCaps
     end
     local function GetUnitHasOverride(key)
@@ -1867,10 +1845,10 @@ end
             if s then
                 s.showInEditMode = (v == true)
             end
-            if type(_G.MSUF_Auras2_UpdateEditModePoll) == "function" then
+            if _G.MSUF_Auras2_UpdateEditModePoll then
                 _G.MSUF_Auras2_UpdateEditModePoll()
             end
-            if type(_G.MSUF_Auras2_OnAnyEditModeChanged) == "function" then
+            if _G.MSUF_Auras2_OnAnyEditModeChanged then
                 _G.MSUF_Auras2_OnAnyEditModeChanged(IsEditModeActive())
             end
          end,
@@ -1897,9 +1875,7 @@ end
     CreateBoolToggleButtonPath(leftTop, "Target", 108, -120, 90, 22, A2_DB, "showTarget", nil, nil, A2_RequestApply)
     CreateBoolToggleButtonPath(leftTop, "Focus", 204, -120, 90, 22, A2_DB, "showFocus", nil, nil, A2_RequestApply)
     CreateBoolToggleButtonPath(leftTop, "Boss 1-5", 300, -120, 96, 22, A2_DB, "showBoss", nil, nil, A2_RequestApply)
-    -- ================================================================
     -- DISPLAY (grouped: Buffs/Debuffs columns + Icons/Cooldown/Borders columns)
-    -- ================================================================
     -- Outer collapsible header already provides the section title.
     -- Start the actual content higher so the box stays compact and balanced.
     local ghBuffs = displayBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
@@ -1999,9 +1975,7 @@ end
             end
         end
     end
-    -- ================================================================
     -- LAYOUT & CAPS (capsBox): sliders + dropdowns in grid
-    -- ================================================================
     -- Outer collapsible header already provides the section title.
     local function MakeCapsNumberGS(key, default, legacyKey)
         local function get()
@@ -2146,9 +2120,7 @@ end
     capsBox._msufA2_OnLayoutModeChanged = function()
         if capsBox._msufA2_ApplySplitSpacingEnabledState then capsBox._msufA2_ApplySplitSpacingEnabledState() end
      end
-    -- ------------------------------------------------------------
     -- TIMER COLORS (middle): global master toggle
-    -- ------------------------------------------------------------
     do
         local function GetGeneral()
             EnsureDB()
@@ -2347,9 +2319,7 @@ end
         panHint:SetPoint("TOPLEFT", panDD, "BOTTOMLEFT", 16, -2)
         panHint:SetText("Best-effort: fixed 30% threshold for all auras. Color: Colors panel.")
     end
-    -- ------------------------------------------------------------
     -- AURA FILTERS & SORTING (below): Include filters + Sort order
-    -- ------------------------------------------------------------
     local rTitle = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     rTitle:SetPoint("TOPLEFT", advBox, "TOPLEFT", 12, -10)
     rTitle:SetText(TR("Aura Filters & Sorting"))
@@ -2441,10 +2411,8 @@ do
         end
     end
 end
-        -- ------------------------------------------------------------
         -- Private Auras (Blizzard-rendered): dedicated section + master toggle
         -- NOTE: Target private auras are intentionally NOT supported (user request).
-        -- ------------------------------------------------------------
         -- Private Auras live in their own box between "Timer colors" and "Advanced" (see layout above).
         local btnPrivateEnable = CreateBoolToggleButtonPath(
             privateBox,
@@ -2548,12 +2516,10 @@ end
         if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end
         if privateMaxPlayer then advGate[#advGate + 1] = privateMaxPlayer end
         if privateBorderScale then advGate[#advGate + 1] = privateBorderScale end
-        -- ------------------------------------------------------------
         -- Sort order dropdown (Blizzard Enum.AuraSortOrder)
         -- Stored in shared.sortOrder (caps level — per-unit overridable via layoutShared).
         -- Passed to C_UnitAuras.GetAuraSlots as 4th arg — sorting happens in C code (zero Lua cost).
         -- Secret-safe: plain numeric config, never compared with secret data.
-        -- ------------------------------------------------------------
         do
             local SORT_ITEMS = {
                 { text = TR("Unsorted (default)"), value = 0 },
@@ -2620,11 +2586,9 @@ end
     end
     UpdateAdvancedEnabled()
 
-    -- ================================================================
     -- GLOBAL IGNORE LIST — predefined category toggles (shared / per-unit)
     -- Follows the same editing-key dropdown as filters (Shared/Player/Target/Focus).
     -- Boss frames excluded from ignore list (makes no sense for boss auras).
-    -- ================================================================
     do
         -- Editing label (follows the top dropdown: Shared / Player / Target / Focus)
         local ignEditLabel = ignoreBox:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -2806,9 +2770,7 @@ end
         UpdateIgnoreBoxState()
     end
 
-    -- ================================================================
     -- BUFF REMINDERS — per-buff toggles + expiry threshold slider
-    -- ================================================================
     do
         local remDesc = reminderBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         remDesc:SetPoint("TOPLEFT", reminderBox, "TOPLEFT", 12, -6)
@@ -3060,7 +3022,7 @@ end
      end)
     -- Register as sub-category under the main MSUF panel
     -- NOTE: Slash-menu-only mode must NOT register any Blizzard settings / interface options categories.
-    if not (_G and _G.MSUF_SLASHMENU_ONLY) then
+    if not (_G.MSUF_SLASHMENU_ONLY) then
         if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
             local sub = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
             if sub and Settings.RegisterAddOnCategory then
@@ -3068,7 +3030,7 @@ end
             end
             panel.__MSUF_SettingsRegistered = true
             ns.MSUF_AurasCategory = sub
-            if _G then _G.MSUF_AurasCategory = sub end
+            _G.MSUF_AurasCategory = sub
         elseif InterfaceOptions_AddCategory then
             -- Legacy fallback (older clients)
             panel.parent = "Midnight Simple Unit Frames"
@@ -3080,7 +3042,7 @@ end
 -- Public registration entrypoint (mirrors Colors / Gameplay pattern)
 function ns.MSUF_RegisterAurasOptions(parentCategory)
     -- Slash-menu-only: build the panel for mirroring, but do NOT register it in Blizzard Settings.
-    if _G and _G.MSUF_SLASHMENU_ONLY then
+    if _G.MSUF_SLASHMENU_ONLY then
         if type(ns.MSUF_RegisterAurasOptions_Full) == "function" then
             return ns.MSUF_RegisterAurasOptions_Full(nil)
         end

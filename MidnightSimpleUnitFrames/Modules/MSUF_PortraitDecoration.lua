@@ -431,10 +431,10 @@ end
 
 function _G.MSUF_PortraitDecoration_SyncUnit(unitKey)
     if type(unitKey) ~= "string" or unitKey == "" then return end
-    local db = _G.MSUF_DB; if type(db) ~= "table" then return end
+    local db = _G.MSUF_DB; if not db then return end
     local conf = (unitKey == "boss") and db.boss or db[unitKey]
     if unitKey == "tot" then conf = db.targettarget or db.tot end
-    if type(conf) ~= "table" then return end
+    if not conf then return end
     local frames = GetFramesForUnitKey(unitKey)
     for i = 1, #frames do
         local f = frames[i]

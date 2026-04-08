@@ -56,24 +56,11 @@ Foundation\MSUF_Widgets.lua
 # ═══════════════════════════════════════════════════════════════
 # EDIT MODE 2
 # ═══════════════════════════════════════════════════════════════
-EditMode2\MSUF_EM2_Registry.lua
-EditMode2\MSUF_EM2_State.lua
-EditMode2\MSUF_EM2_Grid.lua
-EditMode2\MSUF_EM2_Snap.lua
-EditMode2\MSUF_EM2_Anchors.lua
-EditMode2\MSUF_EM2_Undo.lua
-EditMode2\MSUF_EM2_PopupFactory.lua
-EditMode2\MSUF_EM2_Ticker.lua
+EditMode2\MSUF_EM2_Core.lua
+EditMode2\MSUF_EM2_Layout.lua
 EditMode2\MSUF_EM2_Movers.lua
 EditMode2\MSUF_EM2_Popups.lua
-EditMode2\MSUF_EM2_Popup_Unit.lua
-EditMode2\MSUF_EM2_Popup_Cast.lua
-EditMode2\MSUF_EM2_Popup_Aura.lua
-EditMode2\MSUF_EM2_Nudge.lua
 EditMode2\MSUF_EM2_HUD.lua
-EditMode2\MSUF_EM2_Elements.lua
-EditMode2\MSUF_EM2_Compat.lua
-EditMode2\MSUF_EM2_Init.lua
 
 # ═══════════════════════════════════════════════════════════════
 # CORE (pre-main)
@@ -88,25 +75,17 @@ Core\MSUF_StatusIndicators.lua
 Core\MSUF_UnitframeCore.lua
 Core\MSUF_RangeFade.lua
 Core\MSUF_ColorsCore.lua
+Foundation\MSUF_BlizzKill.lua
 
 # ═══════════════════════════════════════════════════════════════
 # AURAS 2.0
 # ═══════════════════════════════════════════════════════════════
 Auras2\MSUF_A2_DB.lua
-Auras2\MSUF_A2_Colors.lua
-Auras2\MSUF_A2_Filters.lua
-Auras2\MSUF_A2_Public.lua
-Auras2\MSUF_A2_Units.lua
-Auras2\MSUF_A2_Masque.lua
-Auras2\MSUF_A2_Preview.lua
-Auras2\MSUF_A2_CooldownText.lua
-Auras2\MSUF_A2_Collect.lua
-Auras2\MSUF_A2_Cache.lua
-Auras2\MSUF_A2_Icons.lua
+Auras2\MSUF_A2_Core.lua
 Auras2\MSUF_A2_Reminder.lua
 Auras2\MSUF_A2_Render.lua
-Auras2\MSUF_A2_EditMode.lua
 Auras2\MSUF_A2_Events.lua
+Auras2\MSUF_A2_EditMode.lua
 
 # ═══════════════════════════════════════════════════════════════
 # FEATURES
@@ -133,21 +112,8 @@ Core\MSUF_Alpha.lua
 Core\MSUF_LoadConditions.lua
 Core\MSUF_Borders.lua
 ClassPower\MSUF_CP_Constants.lua
-ClassPower\MSUF_CP_Profiles.lua
-ClassPower\Features\MSUF_CP_Balance.lua
-ClassPower\Features\MSUF_CP_Specials.lua
-ClassPower\Features\MSUF_CP_Runtime.lua
-ClassPower\Modes\MSUF_CP_Mode_Segmented.lua
-ClassPower\Modes\MSUF_CP_Mode_Fractional.lua
-ClassPower\Modes\MSUF_CP_Mode_Aura.lua
-ClassPower\Modes\MSUF_CP_Mode_Rune.lua
-ClassPower\Modes\MSUF_CP_Mode_Timer.lua
-ClassPower\Modes\MSUF_CP_Mode_Continuous.lua
-ClassPower\Modes\MSUF_CP_Mode_Stagger.lua
-ClassPower\Core\MSUF_CP_Build.lua
-ClassPower\Core\MSUF_CP_Presentation.lua
-ClassPower\Core\MSUF_CP_AltMana.lua
-ClassPower\Core\MSUF_CP_Layout.lua
+ClassPower\MSUF_CP_Modes.lua
+ClassPower\MSUF_CP_Core.lua
 ClassPower\MSUF_CP_Controller.lua
 Core\MSUF_ClassPower.lua
 
@@ -167,8 +133,8 @@ GroupFrames\MSUF_GF_RaidDebuffs.lua
 GroupFrames\MSUF_GF_HealerBuffs.lua
 GroupFrames\MSUF_GF_HealerBuffs_Editor.lua
 GroupFrames\MSUF_GF_EM2.lua
-GroupFrames\MSUF_GF_EM2_Popup.lua
 GroupFrames\MSUF_GF_AuraPreview.lua
+GroupFrames\MSUF_GF_Masque.lua
 
 # ═══════════════════════════════════════════════════════════════
 # OPTIONS

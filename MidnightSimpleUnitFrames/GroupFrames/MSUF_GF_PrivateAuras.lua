@@ -105,7 +105,7 @@ end
 
 local function NormalizeAllSlots(f, sz)
     local slots = f._gfPrivSlots
-    if type(slots) ~= "table" then return end
+    if not slots then return end
     for i = 1, #slots do
         local s = slots[i]
         if s and s:IsShown() then NormalizeSlot(s, sz) end

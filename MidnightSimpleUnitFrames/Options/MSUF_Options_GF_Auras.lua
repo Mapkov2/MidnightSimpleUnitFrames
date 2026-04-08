@@ -4,8 +4,8 @@
 -- Features: drag-to-sort tiles, multi-spec, glow/pulse types, import/export, L["..."] localized.
 -- Midnight 12.0, cold-path only.
 local _, ns = ...
-ns = ns or (_G and _G.MSUF_NS) or {}
-if _G then _G.MSUF_NS = ns end
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
 
 local GF = ns.GF
 local UI = ns.UI
@@ -1465,7 +1465,6 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         end
     end
 
-
     ----------------------------------------------------------------
     -- Section: Private Auras
     ----------------------------------------------------------------
@@ -1728,13 +1727,42 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end
 
     ----------------------------------------------------------------
+    -- Masque (requires Masque addon)
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(100, L["Masque"] or "Masque", false, "masque")
+
+        local masqueChk = SCheck({
+            name = "MSUF_GF_MasqueEnabled", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = L["Enable Masque Skin"] or "Enable Masque Skin",
+            get = function(k)
+                local conf = GF.GetConf(K())
+                return conf and conf.masqueEnabled == true
+            end,
+            set = function(k, v)
+                local conf = GF.GetConf(K())
+                if conf then conf.masqueEnabled = v and true or false end
+                if v then
+                    if GF.Masque and GF.Masque.ReskinAllIcons then GF.Masque.ReskinAllIcons() end
+                end
+                GF.RefreshVisuals()
+            end,
+        })
+
+        local infoFS = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        infoFS:SetPoint("TOPLEFT", masqueChk, "BOTTOMLEFT", 6, -4)
+        infoFS:SetText("|cff888888" .. (L["Applies to Buffs, Debuffs & Externals icons.\nCount text is managed by MSUF (not Masque)."] or "Applies to Buffs, Debuffs & Externals icons.\nCount text is managed by MSUF (not Masque)."))
+    end
+
+    ----------------------------------------------------------------
     -- Aura Utilities (copy + dynamic scale + import/export)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(220, L["Aura Utilities"], false)
+        local box, body = AddSection(260, L["Aura Utilities"], false, "autil")
 
         -- Dynamic content scale
-        SCheck({
+        local dynScaleChk = SCheck({
             name = "MSUF_GF_AuraDynScale", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
             label = L["Auto-shrink icons in large raids (16+)"],
@@ -1753,7 +1781,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         -- Deep copy utility
         local function DeepCopy(src)
-            if type(src) ~= "table" then return src end
+            if not src then return src end
             local dst = {}
             for k, v in pairs(src) do dst[k] = DeepCopy(v) end
             return dst
@@ -1775,7 +1803,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         end
 
         local copyLbl = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        copyLbl:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -36)
+        copyLbl:SetPoint("TOPLEFT", dynScaleChk, "BOTTOMLEFT", 6, -8)
         copyLbl:SetText(L["Copy All Aura Settings"])
         copyLbl:SetTextColor(1, 0.82, 0)
 

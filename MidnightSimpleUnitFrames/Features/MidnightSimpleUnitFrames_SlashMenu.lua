@@ -15,7 +15,7 @@
 
 local addonName,ns=...;
 ns=ns or {}
-local L=ns.L or (_G and _G.MSUF_L)
+local L=ns.L or (_G.MSUF_L)
 if not L then L={}
 setmetatable(L,{__index=function(t,k)
 return k end})
@@ -78,10 +78,10 @@ end
 end
 if S and S.mirror and S.mirror.homeToolsApi and S.mirror.homeToolsApi.Refresh then pcall(S.mirror.homeToolsApi.Refresh)
 end
-local win=_G and _G.MSUF_StandaloneOptionsWindow;
+local win=_G.MSUF_StandaloneOptionsWindow;
 local b=win and win._msufDashEditBtn if b and b._msufSetSelected and type(MSUF_IsMSUFEditModeActive)=="function"then b:_msufSetSelected(MSUF_IsMSUFEditModeActive())
 end
-local prof=(_G and _G.MSUF_ActiveProfile)
+local prof=(_G.MSUF_ActiveProfile)
 or"Default"if panel._msufProfileValue and panel._msufProfileValue.SetText then panel._msufProfileValue:SetText(prof)
 end
 if panel._msufStatusLine and panel._msufStatusLine.SetText then local edit=(type(MSUF_IsMSUFEditModeActive)=="function"and MSUF_IsMSUFEditModeActive())
@@ -440,7 +440,7 @@ end
 if type(MSUF_DB)~="table"then print("|cffff3333MSUF:|r DB not ready (MSUF_DB missing).") return end
 local importStr=preset._msufImportString or preset._msufImport if type(importStr)=="string"then local okPrefix,prefix=pcall(string.match,importStr,"^%s*(MSUF%d+):")
 if okPrefix and(prefix=="MSUF2"or prefix=="MSUF3")
-then local imp=_G and _G.MSUF_ImportFromString if type(imp)=="function"then pcall(imp,importStr)
+then local imp=_G.MSUF_ImportFromString if type(imp)=="function"then pcall(imp,importStr)
 if type(ApplyAllSettings)=="function"then pcall(ApplyAllSettings)
 end
 if type(UpdateAllFonts)=="function"then pcall(UpdateAllFonts)
@@ -1410,7 +1410,7 @@ then return end
 scale=tonumber(scale)
 if not scale then return end
 scale=clamp(scale,0.25,1.5)
-local win=_G and _G.MSUF_StandaloneOptionsWindow
+local win=_G.MSUF_StandaloneOptionsWindow
 if win and win.SetScale then pcall(win.SetScale,win,scale)
 end
 end
@@ -1594,15 +1594,15 @@ C_Timer.After(1.0,function() MSUF_EnforceUIParentScale(want) end
 end
 end
 end
-local function MSUF_IsMSUFEditModeActive() local st=_G and _G.MSUF_EditState if type(st)=="table"and st.active~=nil then return st.active and true or false end
+local function MSUF_IsMSUFEditModeActive() local st=_G.MSUF_EditState if type(st)=="table"and st.active~=nil then return st.active and true or false end
 if _G and type(_G.MSUF_IsEditModeActive)=="function"then local ok,res=pcall(_G.MSUF_IsEditModeActive)
 if ok then return res and true or false end
 end
-if _G and _G.MSUF_EDITMODE_ACTIVE~=nil then return _G.MSUF_EDITMODE_ACTIVE and true or false end
+if _G.MSUF_EDITMODE_ACTIVE~=nil then return _G.MSUF_EDITMODE_ACTIVE and true or false end
 return false end
-local function MSUF_TryHookEditModeForDashboard() if _G and _G.__MSUF_DashEditHooked then return end
+local function MSUF_TryHookEditModeForDashboard() if _G.__MSUF_DashEditHooked then return end
 if not hooksecurefunc then return end
-if _G and type(_G.MSUF_SetMSUFEditModeDirect)=="function"then hooksecurefunc("MSUF_SetMSUFEditModeDirect",function(active) local win=_G and _G.MSUF_StandaloneOptionsWindow;
+if _G and type(_G.MSUF_SetMSUFEditModeDirect)=="function"then hooksecurefunc("MSUF_SetMSUFEditModeDirect",function(active) local win=_G.MSUF_StandaloneOptionsWindow;
 local b=win and win._msufDashEditBtn if b and b._msufSetSelected then b:_msufSetSelected(active)
 end
 end
@@ -1639,7 +1639,7 @@ local btn1080,btn1440,btn4k,btnAuto
 local presetRow=MSUF_BuildButtonRow(parent,globalCur,"TOPLEFT","BOTTOMLEFT",0,-8,{
 {text="1080",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1080",tipBody="Applies MSUF's global scale preset for 1080p-like setups and reloads your UI. Auto restores Blizzard scaling on reload.",onClick=function()
 MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function()
-if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
 end
 MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080)
 MSUF_SetGlobalUiScale(UI_SCALE_1080,true)
@@ -1648,7 +1648,7 @@ end)
 end},
 {text="1440",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1440",tipBody="Applies MSUF's global scale preset for 1440p-like setups and reloads your UI. Auto restores Blizzard scaling on reload.",onClick=function()
 MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function()
-if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
 end
 MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440)
 MSUF_SetGlobalUiScale(UI_SCALE_1440,true)
@@ -1657,7 +1657,7 @@ end)
 end},
 {text="4K",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 4K",tipBody="Applies MSUF's global scale preset for 4K (2160p) setups (0.3556) and reloads your UI. Auto restores Blizzard scaling on reload.",onClick=function()
 MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function()
-if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
 end
 MSUF_SaveGlobalPreset("4k",UI_SCALE_4K)
 MSUF_SetGlobalUiScale(UI_SCALE_4K,true)
@@ -1666,7 +1666,7 @@ end)
 end},
 {text="Auto",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: Auto",tipBody="Stops enforcing MSUF global scale and restores your previous Blizzard UI scale.",onClick=function()
 MSUF_ShowReloadConfirm("Global UI Scale: Auto",function()
-if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
 end
 MSUF_SaveGlobalPreset("auto",nil)
 MSUF_ResetGlobalUiScale(true)
@@ -1683,7 +1683,7 @@ local row=MSUF_BuildButtonRow(parent,btn1080 or globalCur,"TOPLEFT","BOTTOMLEFT"
 {text="Reset",w=resetW,h=18,skinFn=MSUF_SkinDashboardButton,tipTitle="Reset UI Scale",tipBody="Resets the global UI scale back to 100% (1.0) and marks it as Custom preset.",onClick=function()
 do local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
 or nil if g then g.disableScaling=false end
-if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
 end
 end
 MSUF_SaveGlobalPreset("custom",1.0)
@@ -1696,14 +1696,14 @@ local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
 or nil
 local isDisabled=g and g.disableScaling
 if isDisabled then
-if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
 else if g then g.disableScaling=false end end
 MSUF_ApplySlashMenuScale(MSUF_GetSavedSlashMenuScale(),{ignoreDisable=true})
 if api.Refresh then api.Refresh()
 end
 return
 end
-if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(true,false)
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(true,false)
 MSUF_SetSavedSlashMenuScale(1.0)
 MSUF_ApplySlashMenuScale(1.0,{ignoreDisable=true})
 else
@@ -1937,7 +1937,6 @@ MSUF_UpdateMsufScaleRow(scale)
 if msufScaleSlider and msufScaleSlider.SetValue then msufScaleSlider.__msufSkip=true; msufScaleSlider:SetValue(pct); msufScaleSlider.__msufSkip=nil end
 if math.abs(ms-scale)>0.001 then MSUF_SetSavedMsufScale(scale); MSUF_ApplyMsufScale(scale) end
 
-
 -- Slash menu scale: show applied value + separate pending selection
 local sms=clamp(MSUF_GetSavedSlashMenuScale(),0.25,1.5)
 local smPct=MSUF_SnapMsufScalePct(sms*100)
@@ -2001,14 +2000,14 @@ panel:Hide()
 end
 end
 local function MSUF_EnsureMainOptionsPanelBuilt() MSUF_SafeCall(EnsureDB)
-MSUF_SafeCall(_G and _G.MSUF_RegisterOptionsCategoryLazy)
-MSUF_SafeCall(_G and _G.CreateOptionsPanel)
-local p=_G and _G.MSUF_OptionsPanel if not p then return nil end
+MSUF_SafeCall(_G.MSUF_RegisterOptionsCategoryLazy)
+MSUF_SafeCall(_G.CreateOptionsPanel)
+local p=_G.MSUF_OptionsPanel if not p then return nil end
 MSUF_ShowHideForLazy(p,"__MSUF_FullBuilt") return p end
-local function MSUF_GetMainSettingsCategory() return (_G and _G.MSUF_SettingsCategory)
+local function MSUF_GetMainSettingsCategory() return (_G.MSUF_SettingsCategory)
 or(ns and ns.MSUF_MainCategory) end
 local function MSUF_EnsureMainSettingsCategory() local cat=MSUF_GetMainSettingsCategory()
-if not cat then MSUF_SafeCall(_G and _G.MSUF_RegisterOptionsCategoryLazy)
+if not cat then MSUF_SafeCall(_G.MSUF_RegisterOptionsCategoryLazy)
 cat=MSUF_GetMainSettingsCategory()
 end
 return cat end
@@ -2094,7 +2093,7 @@ rb:SetScript("OnShow",function() rb:SetChecked(GetRoundedEnabled()) end
 )
 rb:SetScript("OnClick",function(self) SetRoundedEnabled(self:GetChecked()) end
 ) return p end
-local function MSUF_SelectMainOptionsKey(key) local p=_G and _G.MSUF_OptionsPanel if not p then return end
+local function MSUF_SelectMainOptionsKey(key) local p=_G.MSUF_OptionsPanel if not p then return end
 if type(MSUF_GetTabButtonHelpers)~="function"then return end
 local _,setKey=MSUF_GetTabButtonHelpers(p)
 if type(setKey)=="function"then setKey(key)
@@ -2103,8 +2102,8 @@ end
 end
 end
 local function MSUF_ScrollBarsToAnchor(anchorFrame)
-    local scroll = _G and _G.MSUF_BarsMenuScrollFrame
-    local child  = _G and _G.MSUF_BarsMenuScrollChild
+    local scroll = _G.MSUF_BarsMenuScrollFrame
+    local child  = _G.MSUF_BarsMenuScrollChild
     if not (scroll and child and anchorFrame and anchorFrame.GetTop and child.GetTop) then return end
     local top = child:GetTop()
     local aTop = anchorFrame:GetTop()
@@ -2113,19 +2112,19 @@ local function MSUF_ScrollBarsToAnchor(anchorFrame)
     if off < 0 then off = 0 end
     if scroll.SetVerticalScroll then scroll:SetVerticalScroll(off) end
     if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
-    if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+    if _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
 end
 local function MSUF_SelectClassResourcesPage()
     -- Dedicated "Class Resources" tab (no Bars content).
     MSUF_SelectMainOptionsKey("classpower")
-    if type(_G and _G.MSUF_EnsureClassPowerMenuBuilt) == "function" then
+    if type(_G.MSUF_EnsureClassPowerMenuBuilt) == "function" then
         pcall(_G.MSUF_EnsureClassPowerMenuBuilt)
     end
 end
-local function MSUF_SelectCastbarSubPage(unitKey) if type(_G and _G.MSUF_SetActiveCastbarSubPage)=="function"then pcall(_G.MSUF_SetActiveCastbarSubPage,unitKey)
+local function MSUF_SelectCastbarSubPage(unitKey) if type(_G.MSUF_SetActiveCastbarSubPage)=="function"then pcall(_G.MSUF_SetActiveCastbarSubPage,unitKey)
 elseif type(MSUF_SetActiveCastbarSubPage)=="function"then pcall(MSUF_SetActiveCastbarSubPage,unitKey)
 end
-local p=_G and _G.MSUF_OptionsPanel if p and p.LoadFromDB then pcall(p.LoadFromDB,p)
+local p=_G.MSUF_OptionsPanel if p and p.LoadFromDB then pcall(p.LoadFromDB,p)
 end
 end
 local function MSUF_MirrorSelectMain(subkey) if not subkey then return end
@@ -2149,14 +2148,14 @@ local MIRROR_PAGES={home={title="Midnight Simple Unitframes (Version 1.9b3)",nav
 },opt_bars={title="MSUF Bars",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("bars") end
 },opt_fonts={title="MSUF Fonts",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("fonts") end
 },opt_auras={title="MSUF Auras",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("auras") end
-},auras2={title="MSUF Auras 2.0",build=MSUF_EnsureAuras2PanelBuilt},opt_castbar={title="MSUF Castbar",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("castbar") end
+},auras2={title="MSUF Unit Auras",build=MSUF_EnsureAuras2PanelBuilt},opt_castbar={title="MSUF Castbar",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("castbar") end
 },opt_misc={title="MSUF Miscellaneous",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("misc") end
 },opt_colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},castbar={title="MSUF Castbar",build=MSUF_EnsureMainOptionsPanelBuilt,select=function(subkey) MSUF_SelectMainOptionsKey("castbar");
 if subkey and subkey~=""then MSUF_SelectCastbarSubPage(subkey)
 end
 end
 },profiles={title="MSUF Profiles",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("profiles") end
-},colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},portraits={title="MSUF Portraits",build=MSUF_EnsurePortraitsPanelBuilt},opt_portraits={title="MSUF Portraits",build=MSUF_EnsurePortraitsPanelBuilt},classpower={title="MSUF Class Resources",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectClassResourcesPage},gameplay={title="MSUF Gameplay",build=MSUF_EnsureGameplayPanelBuilt},modules={title="MSUF Modules",build=MSUF_EnsureModulesPanelBuilt},groupframes={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end},
+},colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},portraits={title="MSUF Portraits",build=MSUF_EnsurePortraitsPanelBuilt},opt_portraits={title="MSUF Portraits",build=MSUF_EnsurePortraitsPanelBuilt},classpower={title="MSUF Class Resources",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectClassResourcesPage},gameplay={title="MSUF Gameplay",build=MSUF_EnsureGameplayPanelBuilt},modules={title="MSUF Modules",build=MSUF_EnsureModulesPanelBuilt},groupframes={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function(sub) if sub and _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab(sub) end end},gf_layout={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("frame") end end},gf_bars={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("health") end end},gf_auras={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("auras") end end},gf_indicators={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("indicators") end end},
 -- Search results virtual page (panel built lazily by MSUF_Search.lua)
 search={title="Search Results",nav="Search",build=function()
     local fn=ns and ns.MSUF_Search_EnsurePanel
@@ -2292,7 +2291,7 @@ if panel.SetParent then pcall(panel.SetParent,panel,parent)
 end
 if panel.ClearAllPoints then pcall(panel.ClearAllPoints,panel)
 end
-if panel.SetPoint then local cropY=0 if panel==(_G and _G.MSUF_OptionsPanel)
+if panel.SetPoint then local cropY=0 if panel==(_G.MSUF_OptionsPanel)
 then local deep=(type(activeKey)=="string"and activeKey~="main")
 and true or false cropY=deep and MSUF_MIRROR_DEEPLINK_CROP_Y or MSUF_MIRROR_MAIN_CROP_Y MSUF_MirrorSetHeaderHidden(panel,true)
 end
@@ -2316,7 +2315,7 @@ end
 MSUF_ApplyWhiteTextToFrame(panel)
 MSUF_ApplyFontBumpToFrame(panel,MIRRORED_PANEL_FONT_BUMP)
 MSUF_ApplyMidnightControlsToFrame(panel) end
-local function MSUF_Standalone_SetCastbarTopButtonsHidden(hidden) local panel=_G and _G.MSUF_OptionsPanel;
+local function MSUF_Standalone_SetCastbarTopButtonsHidden(hidden) local panel=_G.MSUF_OptionsPanel;
 local editBtn=_G and _G["MSUF_CastbarEditModeButton"];
 local focusBtn=_G and _G["MSUF_CastbarFocusButton"]
 local function Capture(btn) if not btn or btn.__msufStandaloneAnchorBackup then return end
@@ -2476,7 +2475,7 @@ if S.mirror.currentPanel then local _p=S.mirror.currentPanel MSUF_DetachMirrored
 S.mirror.currentPanel=nil if _p and _p.Hide then pcall(_p.Hide,_p) end end
 S.mirror.currentKey=key S.mirror.currentPanel=MSUF_Standalone_AttachMirrorPanel(key)
 -- Track current key on the window frame so MSUF_Search.lua can read it
-do local _w=_G and _G.MSUF_StandaloneOptionsWindow if _w then _w._msufCurrentKey=key end end
+do local _w=_G.MSUF_StandaloneOptionsWindow if _w then _w._msufCurrentKey=key end end
 if S.mirror.currentPanel and S.mirror.currentPanel ~= prevPanel then _TFadeIn(S.mirror.currentPanel,TRANS_PAGE) end
 MSUF_Standalone_ApplySelection(key,subkey,isCastbarKey)
 MSUF_Standalone_AfterAttachFixups(key,isCastbarKey)
@@ -2491,7 +2490,7 @@ uf_player={1,0},uf_target={2,0},uf_targettarget={3,0},
 uf_focus={4,0},uf_boss={5,0},uf_pet={6,0},
 opt_bars={7,0},opt_fonts={0,1},auras2={1,1},
 opt_castbar={2,1},opt_misc={3,1},opt_colors={4,1},
-opt_portraits={5,1},classpower={6,1},gameplay={7,1},groupframes={0,2},
+opt_portraits={5,1},classpower={6,1},gameplay={7,1},groupframes={0,2},gf_layout={0,2},gf_bars={0,2},gf_auras={0,2},gf_indicators={0,2},
 modules={1,2},profiles={2,2},
 }
 local MSUF_NAV_ICON_COLORS={
@@ -2501,7 +2500,7 @@ uf_focus={0.40,0.78,0.98},uf_boss={0.40,0.78,0.98},uf_pet={0.40,0.78,0.98},
 opt_bars={0.88,0.74,0.36},opt_fonts={0.88,0.74,0.36},auras2={0.88,0.74,0.36},
 opt_castbar={0.88,0.74,0.36},opt_misc={0.88,0.74,0.36},opt_colors={0.88,0.74,0.36},
 opt_portraits={0.88,0.74,0.36},
-classpower={0.35,0.82,0.50},gameplay={0.72,0.50,0.92},groupframes={0.45,0.75,0.88},
+classpower={0.35,0.82,0.50},gameplay={0.72,0.50,0.92},groupframes={0.45,0.75,0.88},gf_layout={0.45,0.75,0.88},gf_bars={0.45,0.75,0.88},gf_auras={0.45,0.75,0.88},gf_indicators={0.45,0.75,0.88},
 modules={0.40,0.80,0.75},profiles={0.90,0.62,0.30},
 }
 local function MSUF_AttachNavIcon(btn,navKey,isChild)
@@ -2550,7 +2549,7 @@ navParent._msufNavStripe=stripe end
 local function MakeButton(label,w,onClick,isHeader,isChild) local b=UI_Button(navParent,tostring(label or""),w,btnH,"TOPLEFT",navParent,"TOPLEFT",0,0,onClick)
 MSUF_LeftJustifyButtonText(b,isHeader and 18 or(isChild and 22 or 24))
 MSUF_SkinNavButton(b,isHeader,isChild) return b end
-local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="options",label="Options",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Auras 2.0"},{key="opt_castbar",label="Castbar"},{key="opt_portraits",label="Portraits"},{key="opt_colors",label="Colors"},{key="opt_misc",label="Miscellaneous"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="leaf",key="groupframes",label="Group Frames"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
+local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="groupframes",label="Group Frames",defaultOpen=true,children={{key="gf_layout",label="Layout"},{key="gf_bars",label="Health & Text"},{key="gf_auras",label="Buffs & Debuffs"},{key="gf_indicators",label="Indicators"},}},{type="header",id="options",label="Global Style",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Unit Auras"},{key="opt_castbar",label="Castbar"},{key="opt_portraits",label="Portraits"},{key="opt_colors",label="Colors"},{key="opt_misc",label="Miscellaneous"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
 local headerLabels={}
 for _,node in ipairs(NAV)
 do if node.type=="header"then headerLabels[node.id]=node.label end
@@ -2939,7 +2938,7 @@ StaticPopup_Show("MSUF_FACTORY_RESET_CONFIRM") end
 local bigH=34
 local halfGap=12
 local bEdit=UI_Btn(actionRow,"Toggle Edit Mode",120,bigH,"TOPLEFT",actionRow,"TOPLEFT",0,0,DashToggleEditMode,"Toggle Edit Mode","Enter MSUF Edit Mode to drag frames and adjust positions.",MSUF_SkinPrimaryButton)
-local win=_G and _G.MSUF_StandaloneOptionsWindow if win then win._msufDashEditBtn=bEdit end
+local win=_G.MSUF_StandaloneOptionsWindow if win then win._msufDashEditBtn=bEdit end
 if bEdit and bEdit._msufSetSelected then bEdit:_msufSetSelected(MSUF_IsMSUFEditModeActive()) end
 MSUF_TryHookEditModeForDashboard()
 local bReset=UI_Btn(actionRow,"Reset Positions",120,bigH,"TOPRIGHT",actionRow,"TOPRIGHT",0,0,MSUF_ShowResetPositionsConfirm,"Reset Positions","Resets MSUF frame positions + visibility to defaults (active profile).",MSUF_SkinDangerButton)
@@ -2948,14 +2947,14 @@ local navCard=CreateCard(colL,"Quick Navigation")
 navCard:SetHeight(108)
 local navDesc=UI_TextTL(navCard,"GameFontDisableSmall",12,-30,"Jump into the most-used MSUF sections.",MSUF_SkinMuted)
 local navRow1=MSUF_BuildButtonRowTL(navCard,12,-56,{{text="Colors",w=140,h=22,gap=10,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("colors") end},{text="Gameplay",w=140,h=22,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("gameplay") end},},10)
-local navRow2=MSUF_BuildButtonRowTL(navCard,12,-84,{{text="Auras 2.0",w=140,h=22,gap=10,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("auras2") end},{text="Class Resources",w=140,h=22,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("classpower") end},},10)
+local navRow2=MSUF_BuildButtonRowTL(navCard,12,-84,{{text="Unit Auras",w=140,h=22,gap=10,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("auras2") end},{text="Class Resources",w=140,h=22,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_SwitchMirrorPage("classpower") end},},10)
 local bColors,bGameplay=navRow1[1],navRow1[2]
 local bAuras,bClass=navRow2[1],navRow2[2]
 
 local profileCard=CreateCard(colR,"Active Profile")
 profileCard:SetHeight(108)
 local bProfiles=UI_Btn(profileCard,"Manage",88,22,"TOPRIGHT",profileCard,"TOPRIGHT",-12,-26,function() MSUF_SwitchMirrorPage("profiles") end,nil,nil,MSUF_SkinDashboardButton)
-local profValue=UI_TextTL(profileCard,"GameFontNormalLarge",12,-42,((_G and _G.MSUF_ActiveProfile) or "Default"),MSUF_SkinTitle)
+local profValue=UI_TextTL(profileCard,"GameFontNormalLarge",12,-42,((_G.MSUF_ActiveProfile) or "Default"),MSUF_SkinTitle)
 home._msufProfileValue=profValue
 local profMeta=UI_TextTL(profileCard,"GameFontDisableSmall",12,-70,"Use the Profiles page for switching, export and import.",MSUF_SkinMuted)
 profMeta:SetWidth(260)
@@ -2966,7 +2965,7 @@ scaleCard:SetPoint("BOTTOMLEFT",colL,"BOTTOMLEFT",0,0)
 scaleCard:SetPoint("BOTTOMRIGHT",colL,"BOTTOMRIGHT",0,0)
 local scaleDesc=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-30,"Quick access to scaling.",MSUF_SkinMuted)
 local scaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-54,"Global UI Scale",MSUF_SkinText)
-local scaleRow=MSUF_BuildButtonRowTL(scaleCard,12,-78,{{text="1080",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080) MSUF_SetGlobalUiScale(UI_SCALE_1080,true) ReloadUI() end) end},{text="1440",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440) MSUF_SetGlobalUiScale(UI_SCALE_1440,true) ReloadUI() end) end},{text="4K",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("4k",UI_SCALE_4K) MSUF_SetGlobalUiScale(UI_SCALE_4K,true) ReloadUI() end) end},{text="Auto",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: Auto",function() if _G and _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("auto",nil) MSUF_ResetGlobalUiScale(true) ReloadUI() end) end},},-1)
+local scaleRow=MSUF_BuildButtonRowTL(scaleCard,12,-78,{{text="1080",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080) MSUF_SetGlobalUiScale(UI_SCALE_1080,true) ReloadUI() end) end},{text="1440",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440) MSUF_SetGlobalUiScale(UI_SCALE_1440,true) ReloadUI() end) end},{text="4K",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("4k",UI_SCALE_4K) MSUF_SetGlobalUiScale(UI_SCALE_4K,true) ReloadUI() end) end},{text="Auto",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: Auto",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("auto",nil) MSUF_ResetGlobalUiScale(true) ReloadUI() end) end},},-1)
 local btn1080,btn1440,btn4k,btnAuto=scaleRow[1],scaleRow[2],scaleRow[3],scaleRow[4]
 local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-112,"MSUF Frame Scale",MSUF_SkinText)
 local msufScaleCur=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-130,"Current: 1.00",MSUF_SkinMuted)
@@ -3180,7 +3179,7 @@ and(not panel)
 then MSUF_ShowOptionsWindow("home") return false end
 MSUF_ShowOptionsWindow(key,subkey) return true end
 MSUF_ShowOptionsWindow("home") return false end
-_G.MSUF_OpenOptionsMenu=function() if _G and _G.MSUF_OpenPage then _G.MSUF_OpenPage("home")
+_G.MSUF_OpenOptionsMenu=function() if _G.MSUF_OpenPage then _G.MSUF_OpenPage("home")
 else MSUF_ShowOptionsWindow("home")
 end
 end

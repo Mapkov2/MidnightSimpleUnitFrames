@@ -1,8 +1,6 @@
--- ============================================================================
 -- MSUF_Search.lua  v5
 -- Every label indexed. Portrait fully covered. Click scrolls to exact widget.
 -- Secret-safe: INDEX is static strings only, zero live API calls at query time.
--- ============================================================================
 local addonName, ns = ...
 ns = ns or {}
 
@@ -23,11 +21,9 @@ local SEARCH_RESERVE_PX = SEARCH_BOX_H + 2
 local SCROLL_DELAY      = 0.18   -- seconds after page switch before scrolling
 local SCROLL_RETRY      = 0.40   -- second attempt if first GetTop() returns nil
 
--- ---------------------------------------------------------------------------
 -- Menu-active + cancelable timers (v19)
 -- Goal: when the Standalone Slash Menu is hidden, we cancel ALL pending timers
 -- so profiler shows 0.0 overhead outside the menu.
--- ---------------------------------------------------------------------------
 local _menuActive = true
 local _tDebounce = nil
 local _tScroll   = nil
@@ -56,9 +52,7 @@ local function _StartTimer(sec, fn)
     return nil
 end
 
--- ---------------------------------------------------------------------------
 -- SCROLL_MAP — which named ScrollFrame+ScrollChild serve each pageKey
--- ---------------------------------------------------------------------------
 local SCROLL_MAP = {
     uf_player       = { sf="MSUF_FramesMenuScrollFrame",     sc="MSUF_FramesMenuScrollChild"     },
     uf_target       = { sf="MSUF_FramesMenuScrollFrame",     sc="MSUF_FramesMenuScrollChild"     },
@@ -76,19 +70,14 @@ local SCROLL_MAP = {
     opt_misc        = { sf="MSUF_MiscScrollFrame",           sc="MSUF_MiscScrollChild"           },
 }
 
--- ---------------------------------------------------------------------------
 -- HighlightWidget — removed (v19). Kept as a no-op for 0 regression / 0 overhead.
--- ---------------------------------------------------------------------------
 local function HighlightWidget(_anchor)
     -- no-op
 end
 
--- ---------------------------------------------------------------------------
 -- ScrollToWidget — resolves globals AFTER the page has shown.
 -- Returns true on success so the caller can skip the retry.
--- ---------------------------------------------------------------------------
 -- Returns true on success so the caller can skip the retry.
--- ---------------------------------------------------------------------------
 local function ScrollToWidget(pageKey, anchor)
     if not anchor then return true end
     local sm = SCROLL_MAP[pageKey]
@@ -107,14 +96,12 @@ local function ScrollToWidget(pageKey, anchor)
     return true
 end
 
--- ---------------------------------------------------------------------------
 -- INDEX
 -- label    : exact UI text the user recognises
 -- hint     : breadcrumb shown in result row
 -- pageKey  : MIRROR_PAGES key
 -- anchor   : optional _G widget name — page will scroll to it on click
 -- keywords : synonyms, typos, natural language, acronyms (all lowercase)
--- ---------------------------------------------------------------------------
 local INDEX = {
     { label="MSUF Edit Mode (öffnen / enter / move frames)",
       hint="Dashboard", pageKey="home",anchor="MSUF_EditModeButton",
@@ -552,7 +539,7 @@ local INDEX = {
     { label="Bar Highlight Border — drag to reorder priority (Aggro / Dispel / Purge / Boss Target)",
       hint="Bars › Borders", pageKey="opt_bars",anchor="MSUF_HighlightPrioContainer",
       keywords={"bar highlight border","border priority","highlight priority","drag reorder","aggro dispel purge priority","custom highlight priority","left-click drag priority","highlight order","boss target priority"} },
-    { label="Open Auras 2.0 (shortcut from Bars panel)",
+    { label="Open Unit Auras (shortcut from Bars panel)",
       hint="Bars", pageKey="opt_bars",
       keywords={"open auras","auras 2.0","go to auras","auras button","open auras 2.0"} },
     { label="Border & Text Options section",
@@ -588,200 +575,200 @@ local INDEX = {
     { label="Font color presets: White / Black / Red / Green / Blue / Yellow / Cyan / Magenta / Orange / Purple / Pink / Turquoise / Grey / Brown / Gold",
       hint="Fonts", pageKey="opt_fonts",
       keywords={"font color","text color","colour","white","black","red","green","blue","yellow","cyan","magenta","orange","purple","pink","turquoise","grey","gray","brown","gold","schrift farbe","text colour","font palette","font color preset"} },
-    { label="Auras 2.0 — main panel",
-      hint="Auras 2.0", pageKey="auras2",
+    { label="Unit Auras — main panel",
+      hint="Unit Auras", pageKey="auras2",
       keywords={"auras 2.0","auras","buffs","debuffs","buff icons","aura panel","open auras","auras2"} },
-    { label="Enable Auras 2.0",
-      hint="Auras 2.0", pageKey="auras2",
+    { label="Enable Unit Auras",
+      hint="Unit Auras", pageKey="auras2",
       keywords={"enable auras","turn on auras","aura enable","auras on off"} },
     { label="Enable filters",
-      hint="Auras 2.0", pageKey="auras2",
+      hint="Unit Auras", pageKey="auras2",
       keywords={"enable filters","filter on","aura filter","activate filter","filtering"} },
     { label="Enable Masque skinning",
-      hint="Auras 2.0", pageKey="auras2",
+      hint="Unit Auras", pageKey="auras2",
       keywords={"masque skinning","masque enable","masque support","use masque","icon skin masque"} },
     { label="Hide Masque borders",
-      hint="Auras 2.0", pageKey="auras2",
+      hint="Unit Auras", pageKey="auras2",
       keywords={"hide masque borders","masque no border","masque border off","remove masque border"} },
     { label="Override shared filters (per unit)",
-      hint="Auras 2.0", pageKey="auras2",
+      hint="Unit Auras", pageKey="auras2",
       keywords={"override shared filters","filter override","per unit filter","unit filter override"} },
     { label="Override shared caps (per unit)",
-      hint="Auras 2.0", pageKey="auras2",
+      hint="Unit Auras", pageKey="auras2",
       keywords={"override shared caps","cap override","per unit caps","unit caps override"} },
     { label="Preview in Edit Mode",
-      hint="Auras 2.0", pageKey="auras2",
+      hint="Unit Auras", pageKey="auras2",
       keywords={"preview edit mode","aura preview","buff preview","show auras edit mode","test auras edit"} },
     { label="Show Buffs",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"show buffs","display buffs","enable buffs","helpful auras","positive auras","buff display"} },
     { label="Show Debuffs",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"show debuffs","display debuffs","enable debuffs","harmful auras","negative auras","debuff display"} },
     { label="Only my buffs",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"only my buffs","mine buffs","own buffs","self buffs","player cast only","just mine buffs"} },
     { label="Only my debuffs",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"only my debuffs","mine debuffs","own debuffs","self debuffs","just mine debuffs"} },
     { label="Highlight own buffs",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"highlight own buffs","own buff border","mark own buffs","my buff highlight"} },
     { label="Highlight own debuffs",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"highlight own debuffs","own debuff border","mark own debuffs","my debuff highlight"} },
     { label="Dispel-type borders (on debuffs)",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"dispel-type borders","debuff type border","magic curse poison disease border","dispel color border","debuff border type"} },
     { label="Show cooldown swipe (spiral animation)",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"cooldown swipe","swipe animation","spiral aura","sweep","radial cooldown","show cooldown swipe"} },
     { label="Swipe darkens on loss",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"swipe darkens","darker on loss","swipe dark","cooldown swipe dark","darken swipe"} },
     { label="Show stack count",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"show stack count","stack count","stacks","buff stacks","charge count","charges display"} },
     { label="Show cooldown text (timer on icons)",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"show cooldown text","cooldown numbers","timer on icons","duration text","omnicc","aura timer","cd text aura","buff timer","remaining text"} },
     { label="Show tooltip (hover over icons)",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"show tooltip","aura tooltip","buff tooltip","hover tooltip","icon tooltip","mouse tooltip"} },
     { label="Click-through auras",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"click-through auras","clickthrough","mouse passthrough","click through","aura click through"} },
     { label="Hide permanent buffs",
-      hint="Auras 2.0 › Display", pageKey="auras2",
+      hint="Unit Auras › Display", pageKey="auras2",
       keywords={"hide permanent buffs","permanent buff","infinite duration","no permanent","hide infinite"} },
     { label="Layout — Single row / Separate rows",
-      hint="Auras 2.0 › Layout", pageKey="auras2",
+      hint="Unit Auras › Layout", pageKey="auras2",
       keywords={"layout","single row","separate rows","aura layout","one row","buff row","debuff row"} },
     { label="Buff Growth (Grow Right / Grow Left / Vertical Down / Vertical Up)",
-      hint="Auras 2.0 › Layout", pageKey="auras2",
+      hint="Unit Auras › Layout", pageKey="auras2",
       keywords={"buff growth","grow right","grow left","vertical down","vertical up","buff direction","expand direction","buff expand"} },
     { label="Debuff Growth direction",
-      hint="Auras 2.0 › Layout", pageKey="auras2",
+      hint="Unit Auras › Layout", pageKey="auras2",
       keywords={"debuff growth","debuff direction","debuff expand","grow direction debuff"} },
     { label="Buff wrap rows",
-      hint="Auras 2.0 › Layout", pageKey="auras2",
+      hint="Unit Auras › Layout", pageKey="auras2",
       keywords={"buff wrap rows","buff overflow","buff second row","wrap buffs","buff row wrap"} },
     { label="Debuff wrap rows",
-      hint="Auras 2.0 › Layout", pageKey="auras2",
+      hint="Unit Auras › Layout", pageKey="auras2",
       keywords={"debuff wrap rows","debuff overflow","debuff second row","wrap debuffs"} },
     { label="Icons per row",
-      hint="Auras 2.0 › Layout", pageKey="auras2",
+      hint="Unit Auras › Layout", pageKey="auras2",
       keywords={"icons per row","icons row","aura columns","per row","how many per row","row count"} },
     { label="Max Buffs (cap)",
-      hint="Auras 2.0 › Layout", pageKey="auras2",
+      hint="Unit Auras › Layout", pageKey="auras2",
       keywords={"max buffs","buff cap","maximum buffs","buff limit","how many buffs","buff count max"} },
     { label="Max Debuffs (cap)",
-      hint="Auras 2.0 › Layout", pageKey="auras2",
+      hint="Unit Auras › Layout", pageKey="auras2",
       keywords={"max debuffs","debuff cap","maximum debuffs","debuff limit","debuff count max"} },
     { label="Stack Anchor (Top Left / Top Right / Bottom Left / Bottom Right)",
-      hint="Auras 2.0 › Layout", pageKey="auras2",
+      hint="Unit Auras › Layout", pageKey="auras2",
       keywords={"stack anchor","where stack","anchor stack","top left","top right","bottom left","bottom right","stack position","second row anchor"} },
     { label="Block spacing (gap between icons)",
-      hint="Auras 2.0 › Layout", pageKey="auras2",
+      hint="Unit Auras › Layout", pageKey="auras2",
       keywords={"block spacing","icon gap","buff spacing","space between auras","icon spacing","padding"} },
     { label="Sort order (Unsorted / Default / Big Defensive / Expiration / Name)",
-      hint="Auras 2.0 › Sort", pageKey="auras2",anchor="MSUF_Auras2_SortOrderDropDown",
+      hint="Unit Auras › Sort", pageKey="auras2",anchor="MSUF_Auras2_SortOrderDropDown",
       keywords={"sort order","sort auras","buff sort","unsorted","default sort","big defensive","expiration sort","expiration only","name alphabetical","name only","aura order","sort by"} },
     { label="Edit filters (per unit)",
-      hint="Auras 2.0 › Advanced", pageKey="auras2",anchor="MSUF_Auras2_EditFiltersDropDown",
+      hint="Unit Auras › Advanced", pageKey="auras2",anchor="MSUF_Auras2_EditFiltersDropDown",
       keywords={"edit filters","filter editor","per unit filter","custom filter","unit filter","whitelist","blacklist","advanced filter","filter auras"} },
     { label="Units — which units show auras",
-      hint="Auras 2.0 › Units", pageKey="auras2",
+      hint="Unit Auras › Units", pageKey="auras2",
       keywords={"aura units","which units aura","player auras","target auras","focus auras","boss auras","unit aura list","aura on unit"} },
     { label="Include boss buffs",
-      hint="Auras 2.0 › Advanced", pageKey="auras2",
+      hint="Unit Auras › Advanced", pageKey="auras2",
       keywords={"include boss buffs","boss buffs","show boss buffs","include boss"} },
     { label="Include boss debuffs",
-      hint="Auras 2.0 › Advanced", pageKey="auras2",
+      hint="Unit Auras › Advanced", pageKey="auras2",
       keywords={"include boss debuffs","boss debuffs","show boss debuffs"} },
     { label="Show Sated / Bloodlust / Exhaustion / Temporal Displacement",
-      hint="Auras 2.0 › Advanced", pageKey="auras2",
+      hint="Unit Auras › Advanced", pageKey="auras2",
       keywords={"sated","exhaustion","bloodlust","heroism","temporal displacement","lust","bl","time warp","ancient hysteria","hide lust","sated debuff","show sated","bloodlust filter"} },
     { label="Only show boss auras",
-      hint="Auras 2.0 › Advanced", pageKey="auras2",
+      hint="Unit Auras › Advanced", pageKey="auras2",
       keywords={"only boss auras","boss only auras","boss filter auras","show only boss"} },
     { label="Only show IMPORTANT buffs",
-      hint="Auras 2.0 › Advanced", pageKey="auras2",
+      hint="Unit Auras › Advanced", pageKey="auras2",
       keywords={"only important buffs","important only buffs","major buffs","important buffs filter"} },
     { label="Only show IMPORTANT debuffs",
-      hint="Auras 2.0 › Advanced", pageKey="auras2",
+      hint="Unit Auras › Advanced", pageKey="auras2",
       keywords={"only important debuffs","important only debuffs","major debuffs","important debuffs filter"} },
     { label="Private Auras — Enable / Show Player / Focus / Boss",
-      hint="Auras 2.0 › Private Auras", pageKey="auras2",
+      hint="Unit Auras › Private Auras", pageKey="auras2",
       keywords={"private auras","blizzard private","private aura enable","show private player","show private focus","show private boss","private anchor"} },
     { label="Private Auras — Max (Player) / Max (Focus/Boss)",
-      hint="Auras 2.0 › Private Auras", pageKey="auras2",
+      hint="Unit Auras › Private Auras", pageKey="auras2",
       keywords={"private max","max player private","max focus private","max boss private","private aura limit"} },
     { label="Global Ignore List — Raid Buffs",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"global ignore list raid buffs","global ignore list","ignore list","raid buffs","raid buffs","flask food","well fed","ignore raid buffs","buff suppress"} },
     { label="Global Ignore List — Blessing of the Bronze",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"global ignore list blessing of the bronze","global ignore list","ignore list","blessing of the bronze","blessing of the bronze","bronze blessing","evoker buff bronze","ignore bronze"} },
     { label="Global Ignore List — Healer HoTs",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"global ignore list healer hots","global ignore list","ignore list","healer hots","healer hots","renew","rejuvenation","regrowth","hots ignore","heal over time ignore"} },
     { label="Global Ignore List — Rogue Poisons",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"global ignore list rogue poisons","global ignore list","ignore list","rogue poisons","rogue poisons","lethal poison","non-lethal poison","ignore poison","rogue poison ignore"} },
     { label="Global Ignore List — Shaman Imbuements",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"global ignore list shaman imbuements","global ignore list","ignore list","shaman imbuements","shaman imbuements","flametongue","windfury","imbue","shaman weapon buff"} },
     { label="Global Ignore List — Deserter",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"global ignore list deserter","global ignore list","ignore list","deserter","deserter","battleground leave","bg deserter","ignore deserter"} },
     { label="Global Ignore List — Skyriding",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"global ignore list skyriding","global ignore list","ignore list","skyriding","skyriding","vigor","skyriding buff","sky riding","ignore skyriding"} },
     { label="Global Ignore List — Long-term Self Buffs",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"global ignore list long-term self buffs","global ignore list","ignore list","long-term self buffs","long-term self buffs","long term buff","permanent self buff","ignore long-term"} },
     { label="Global Ignore List — Resource-like Auras",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"global ignore list resource-like auras","global ignore list","ignore list","resource-like auras","resource-like auras","resource aura","ignore resource","resource like"} },
     { label="Global Ignore List — Cooldowns",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"global ignore list cooldowns","global ignore list","ignore list","cooldowns","cooldowns ignore","ignore cooldowns","cd ignore","hide cooldowns"} },
     { label="Override for this unit (Ignore List)",
-      hint="Auras 2.0 › Global Ignore List", pageKey="auras2",
+      hint="Unit Auras › Global Ignore List", pageKey="auras2",
       keywords={"override for this unit","ignore list override","unit override ignore","local ignore"} },
     { label="Buff Reminder — Power Word: Fortitude",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"buff reminder power word: fortitude","buff reminder","missing buff reminder","remind power word: fortitude","buff missing","power word: fortitude","pw:f","fort","fortitude","priest stamina","fortitude buff","power word fortitude","pw fortitude","pfort"} },
     { label="Buff Reminder — Arcane Intellect",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"buff reminder arcane intellect","buff reminder","missing buff reminder","remind arcane intellect","buff missing","arcane intellect","arcane intellect","ai buff","mage intellect","intellect buff","arcane int"} },
     { label="Buff Reminder — Mark of the Wild",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"buff reminder mark of the wild","buff reminder","missing buff reminder","remind mark of the wild","buff missing","mark of the wild","mark of the wild","motw","druid buff","mark wild","wild mark","nature resist buff","stats buff","motw reminder"} },
     { label="Buff Reminder — Battle Shout",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"buff reminder battle shout","buff reminder","missing buff reminder","remind battle shout","buff missing","battle shout","battle shout","battleshout","warrior buff","attack power buff","bs buff"} },
     { label="Buff Reminder — Skyfury",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"buff reminder skyfury","buff reminder","missing buff reminder","remind skyfury","buff missing","skyfury","skyfury","sky fury","shaman crit buff","crit buff"} },
     { label="Buff Reminder — Source of Magic",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"buff reminder source of magic","buff reminder","missing buff reminder","remind source of magic","buff missing","source of magic","source of magic","som","mana regen buff","healer mana buff","source magic"} },
     { label="Buff Reminder — Blessing of the Bronze",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"buff reminder blessing of the bronze","buff reminder","missing buff reminder","remind blessing of the bronze","buff missing","blessing of the bronze","blessing of the bronze","bronze blessing","bronze buff","evoker bronze"} },
     { label="Buff Reminder — Lethal Poison (Rogue)",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"buff reminder lethal poison (rogue)","buff reminder","missing buff reminder","remind lethal poison (rogue)","buff missing","lethal poison (rogue)","lethal poison","lethal poison rogue","weapon poison lethal","rogue lethal"} },
     { label="Buff Reminder — Non-Lethal Poison (Rogue)",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"buff reminder non-lethal poison (rogue)","buff reminder","missing buff reminder","remind non-lethal poison (rogue)","buff missing","non-lethal poison (rogue)","non-lethal poison","non lethal","crippling poison","rogue utility poison","non lethal rogue"} },
     { label="Enable Buff Reminders",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"enable buff reminders","buff reminder enable","missing buff","ghost icon","rebuff","pre-buff","remind buff","buff alert","reminder system"} },
     { label="Expiry Warning — show reminder when buff expires within X seconds",
-      hint="Auras 2.0 › Buff Reminders", pageKey="auras2",
+      hint="Unit Auras › Buff Reminders", pageKey="auras2",
       keywords={"expiry warning","buff expiry","expire warning","about to expire","expiry threshold","buffer timer warning","buff warning","running out","0 only when missing"} },
     { label="Class Power — enable class resource bar (Combo Points, Holy Power, Soul Shards, Chi, Essence, Runes)",
       hint="Class Resources", pageKey="classpower",anchor="MSUF_ClassPowerShowCheck",
@@ -1214,13 +1201,9 @@ local INDEX = {
       keywords={"rounded style module","round corners module","style rounded","circle frame style"} },
 }
 
-
-
--- ---------------------------------------------------------------------------
 -- SearchModule integration (Options_Core.lua calls ns.MSUF_InitSearchModule(...))
 -- We store the passed group roots so AUTO_INDEX can cover Fonts/Misc/Profiles/etc
 -- without crawling the whole panel and generating dead/ambiguous routes.
--- ---------------------------------------------------------------------------
 local _searchCtx = nil
 if not ns.__MSUF_Search_HookedInit then
     ns.__MSUF_Search_HookedInit = true
@@ -1232,14 +1215,11 @@ if not ns.__MSUF_Search_HookedInit then
         end
     end
 end
--- ---------------------------------------------------------------------------
 -- AUTO INDEX (UI crawl) — covers ALL labels in Options panels (including hidden sliders)
 -- Built on-demand when the user first searches (menu-only). Zero combat overhead.
---
 -- Key point: Frames/Core sliders do not exist until CreateOptionsPanel() has built
 -- the main options UI. Auras2 may build earlier; therefore we force-build Options
 -- panels once (out of combat) and then crawl named roots (ScrollChild frames).
--- ---------------------------------------------------------------------------
 
 local _AUTO_INDEX      = nil
 local _AUTO_BUILT      = false
@@ -1397,9 +1377,7 @@ local function _ScanRoot(out, seen, rootFrame, context, routeOverride, onlyShown
         if depth > 40 then return end
         if f.IsForbidden and f:IsForbidden() then return end
 
-        if onlyShown and f.IsShown and not f:IsShown() then
-            return
-        end
+        if onlyShown and f.IsShown and not f:IsShown() then return end
 
         -- Regions (FontStrings are here — critical for slider labels!)
         if f.GetRegions then
@@ -1453,7 +1431,7 @@ end
 -- To route correctly we must index the Frames tab once per unit selection and stamp pageKey explicitly.
 -- We do this in a hidden pass (panel alpha=0, mouse disabled) so the user sees no flicker.
 local function _ScanFramesPerUnit(out, seen)
-    local root = _G and _G.MSUF_FramesMenuScrollChild
+    local root = _G.MSUF_FramesMenuScrollChild
     if not root then return end
 
     if not _searchCtx or type(_searchCtx.setCurrentKey) ~= "function" then
@@ -1462,7 +1440,7 @@ local function _ScanFramesPerUnit(out, seen)
         return
     end
 
-    local panel = (_searchCtx and _searchCtx.panel) or (_G and _G.MSUF_OptionsPanel)
+    local panel = (_searchCtx and _searchCtx.panel) or (_G.MSUF_OptionsPanel)
     if not panel then
         _ScanRoot(out, seen, root, "frames")
         return
@@ -1517,22 +1495,20 @@ local function _BuildAutoIndex()
         return
     end
 
-    if not _EnsureOptionsPanelsBuiltForSearch() then
-        return
-    end
+    if not _EnsureOptionsPanelsBuiltForSearch() then return end
 
     local out  = {}
     local seen = {}
 
     -- Primary named roots created by CreateOptionsPanel()
     _ScanFramesPerUnit(out, seen)
-    _ScanRoot(out, seen, _G and _G.MSUF_CastbarMenuScrollChild,  "castbar")
-    _ScanRoot(out, seen, _G and _G.MSUF_BarsMenuScrollChild,     "bars")
-    _ScanRoot(out, seen, _G and _G.MSUF_ClassPowerMenuScrollChild,"classpower")
+    _ScanRoot(out, seen, _G.MSUF_CastbarMenuScrollChild,  "castbar")
+    _ScanRoot(out, seen, _G.MSUF_BarsMenuScrollChild,     "bars")
+    _ScanRoot(out, seen, _G.MSUF_ClassPowerMenuScrollChild,"classpower")
 
     -- Optional panels (only if present)
-    _ScanRoot(out, seen, _G and _G.MSUF_ColorsScrollChild,       "colors")
-    _ScanRoot(out, seen, _G and _G.MSUF_GameplayScrollChild,     "gameplay")
+    _ScanRoot(out, seen, _G.MSUF_ColorsScrollChild,       "colors")
+    _ScanRoot(out, seen, _G.MSUF_GameplayScrollChild,     "gameplay")
 
     -- Extra groups from Options_Core (Fonts/Auras/Misc/Profiles).
 if _searchCtx then
@@ -1542,30 +1518,22 @@ if _searchCtx then
     _ScanRoot(out, seen, _searchCtx.profileGroup, "profiles")
 else
     -- Fallback safety net if SearchModule ctx wasn't provided yet.
-    _ScanRoot(out, seen, _G and _G.MSUF_OptionsPanel, "main")
+    _ScanRoot(out, seen, _G.MSUF_OptionsPanel, "main")
 end
-
 
     _AUTO_INDEX = out
     _AUTO_BUILT = true
 end
 
-
--- ---------------------------------------------------------------------------
 -- Query — pure Lua, no API calls, no comparisons on live values
--- ---------------------------------------------------------------------------
--- ---------------------------------------------------------------------------
 -- Query — splits on whitespace, ALL tokens must match somewhere in the entry.
 -- Single-token queries work as before (substring in label/hint/keyword).
 -- Multi-word queries (e.g. "mark of the wild") require every token to be
 -- found in the combined searchable text of the entry → zero false negatives.
 -- Secret-safe: no C-API values touched, pure string operations only.
--- ---------------------------------------------------------------------------
--- ---------------------------------------------------------------------------
 -- Query — fast substring-token match + scoring (no fuzzy flash, no timers)
 -- - Penalizes generic "Options" hits so Bars/Fonts/Castbar pages rank above.
 -- - Returns (topResults, totalMatchCount)
--- ---------------------------------------------------------------------------
 local function _NormalizeQuery(q)
     q = lower(q or "")
     q = q:gsub("[%p%c]+", " ")
@@ -1714,12 +1682,8 @@ local function Query(text)
     return out, total
 end
 
-
-
--- ---------------------------------------------------------------------------
 -- Search Results Panel
 
--- ---------------------------------------------------------------------------
 local _panel    = nil
 local _rows     = {}
 local _subtitle = nil
@@ -1885,9 +1849,9 @@ end
 -- Navigate to page, scroll to anchor (highlight flash removed).
 local _scrollEpoch = 0
 _NavigateAndScroll = function(pageKey, anchor, subkey)
-    if type(_G.MSUF_SwitchMirrorPage) == "function" then
+    if _G.MSUF_SwitchMirrorPage then
         _G.MSUF_SwitchMirrorPage(pageKey, subkey)
-    elseif type(_G.MSUF_OpenPage) == "function" then
+    elseif _G.MSUF_OpenPage then
         _G.MSUF_OpenPage(pageKey, subkey)
     end
     if not anchor then return end
@@ -1947,9 +1911,7 @@ local function MSUF_Search_EnsurePanel()
     return _BuildPanel()
 end
 
--- ---------------------------------------------------------------------------
 -- EditBox Injection — BOTTOM of navRail, navStack BOTTOM raised, no clip
--- ---------------------------------------------------------------------------
 local _debounceEpoch = 0
 local _lastPageKey   = nil
 
@@ -1995,7 +1957,7 @@ local function MSUF_Search_InjectNavEditBox(navStack)
         queryText = queryText or ""
         if #queryText < MIN_QUERY_LEN then
             if _lastPageKey and _lastPageKey ~= "search" then
-                if type(_G.MSUF_SwitchMirrorPage) == "function" then
+                if _G.MSUF_SwitchMirrorPage then
                     _G.MSUF_SwitchMirrorPage(_lastPageKey)
                 end
                 _lastPageKey = nil
@@ -2007,7 +1969,7 @@ local function MSUF_Search_InjectNavEditBox(navStack)
             local curKey = win and win._msufCurrentKey
             _lastPageKey = (type(curKey)=="string" and curKey~="search") and curKey or "home"
         end
-        if type(_G.MSUF_SwitchMirrorPage) == "function" then
+        if _G.MSUF_SwitchMirrorPage then
             _G.MSUF_SwitchMirrorPage("search")
         end
         local p = _BuildPanel()
@@ -2038,7 +2000,6 @@ if win and win.HookScript and not win.__msufSearchZeroOverhead then
     win:HookScript("OnHide", OnMenuHide)
 end
 
-
     eb:SetScript("OnTextChanged", function(self, userInput)
         if not userInput then return end
         if not _menuActive then return end
@@ -2060,7 +2021,7 @@ end
         self:SetText(""); self:ClearFocus(); UpdatePlaceholder()
         _debounceEpoch = _debounceEpoch + 1
         if _lastPageKey and _lastPageKey ~= "search" then
-            if type(_G.MSUF_SwitchMirrorPage) == "function" then
+            if _G.MSUF_SwitchMirrorPage then
                 _G.MSUF_SwitchMirrorPage(_lastPageKey)
             end
             _lastPageKey = nil
@@ -2077,8 +2038,6 @@ end
     UpdatePlaceholder()
 end
 
--- ---------------------------------------------------------------------------
 -- Exports
--- ---------------------------------------------------------------------------
 ns.MSUF_Search_EnsurePanel      = MSUF_Search_EnsurePanel
 ns.MSUF_Search_InjectNavEditBox = MSUF_Search_InjectNavEditBox

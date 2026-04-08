@@ -8,11 +8,9 @@ local _, addon = ...
 
 addon = addon or {}
 
--- =========================================================================
 -- PERF LOCALS (core runtime)
 --  - Reduce global table lookups in high-frequency event/render paths.
 --  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
 local type, tostring, tonumber, select = type, tostring, tonumber, select
 local pairs, ipairs, next = pairs, ipairs, next
 local math_min, math_max, math_floor = math.min, math.max, math.floor
@@ -26,7 +24,7 @@ local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
 
 local Core = {}
-local _UFCORE_issecret = _G and _G.issecretvalue or nil
+local _UFCORE_issecret = _G.issecretvalue or nil
 
 local function UFCore_CanCompareNumber(v)
     return type(v) == "number" and (not _UFCORE_issecret or not _UFCORE_issecret(v))
@@ -79,11 +77,9 @@ end
 -- Forward decl (used by settings cache + helpers below the definition).
 local UFCore_EnsureDBOnce
 
--- ------------------------------------------------------------
 -- Settings snapshot cache (UFCore budgets + color/config fast path)
 --  - Rebuilt on login/entering world and on NotifyConfigChanged().
 --  - Safe to call lazily; never touches secure/secret values.
--- ------------------------------------------------------------
 Core._settingsCache = Core._settingsCache or { valid = false }
 
 local DEFAULT_NPC_COLORS = {
@@ -163,8 +159,6 @@ local function UFCore_RefreshSettingsCache(reason)
     cache.ufcoreUrgentMaxPerFlush = urgentMax
 
     -- Name coloring switches (identity fast path)
-    cache.nameClassColor = (g and g.nameClassColor) and true or false
-    cache.npcNameRed = (g and g.npcNameRed) and true or false
 
     -- Debug flag: record last dirty reason/mask on frames (hotpath uses cache to avoid DB reads).
     cache.ufcoreDebugDirty = (g and g.ufcoreDebugDirty) and true or false
@@ -191,14 +185,9 @@ local function UFCore_RefreshSettingsCache(reason)
     cache.aggroIndicatorMode = ag or "off"
 
     -- Boss Target Highlight
-    cache.bossTargetHLEnabled = (g and g.bossTargetHighlightEnabled ~= false) and true or false
     local btc = g and g.bossTargetHighlightColor
     if type(btc) == "table" then
-        cache.bossTargetHLR = btc[1] or 1
-        cache.bossTargetHLG = btc[2] or 0.82
-        cache.bossTargetHLB = btc[3] or 0
     else
-        cache.bossTargetHLR, cache.bossTargetHLG, cache.bossTargetHLB = 1, 0.82, 0
     end
 
     -- Smooth power bar + real-time text (hot-path upvalues).
@@ -324,16 +313,13 @@ local function UFCore_RefreshSettingsCache(reason)
     cache._lastReason = reason
 end
 
--- ---------------------------------------------------------------------------
 -- Aggro indicator (Target/Focus/Boss): re-use the existing HP outline border
 -- as an aggro warning (orange). Event-driven via UNIT_THREAT_*.
---
 -- Behavior:
 --  - If Outline border is enabled (Bars->Outline), that same border turns orange
 --    while you have aggro on the unit, otherwise it stays black.
 --  - If Outline border is disabled, we temporarily show a thick (1px) outline
 --    ONLY while you have aggro.
--- ---------------------------------------------------------------------------
 
 local function UFCore_UpdateAggroBorder(frame, unit)
     if not frame then return end
@@ -368,9 +354,7 @@ local function UFCore_UpdateAggroBorder(frame, unit)
         end
     end
 
-    if frame._msufAggroOutlineOn == on then
-        return
-    end
+    if frame._msufAggroOutlineOn == on then return end
     frame._msufAggroOutlineOn = on
 
     if _G.MSUF_RefreshRareBarVisuals then
@@ -405,10 +389,8 @@ addon.MSUF_UnitframeCore = Core
 -- Deferred layout application (combat safety)
 Core._layoutDeferredSet = Core._layoutDeferredSet or {}
 
--- ------------------------------------------------------------
 -- Locals (perf + clarity; behavior-preserving) — additional APIs
 -- (core builtins already localized at file top)
--- ------------------------------------------------------------
 local debugprofilestop = debugprofilestop
 local UnitName = UnitName
 local UnitLevel = UnitLevel
@@ -430,9 +412,7 @@ local bnot = (bit and bit.bnot) or (bit32 and bit32.bnot)
 
 if not (bor and band and bnot) then error("MSUF_UnitframeCore: missing bitops") end
 
--- ------------------------------------------------------------
 -- Dirty flags (future: element updates)
--- ------------------------------------------------------------
 
 local DIRTY_FULL      = 0xFFFFFFFF
 local DIRTY_HEALTH    = 0x00000001
@@ -454,9 +434,7 @@ local MASK_UNIT_SWAP = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_STAT
 -- This matches the "no layout in runtime" goal while preventing stale displays after being hidden.
 local MASK_SHOW_REFRESH = MASK_UNIT_SWAP
 
--- ------------------------------------------------------------
 -- Frame registry
--- ------------------------------------------------------------
 
 local FramesByUnit = {}
 
@@ -508,9 +486,7 @@ local function GetFrameConf(f)
     return conf
 end
 
--- ------------------------------------------------------------
 -- DB bootstrap (keep EnsureDB/Migration out of hot paths)
--- ------------------------------------------------------------
 
 UFCore_EnsureDBOnce = function()
     local db = _G.MSUF_DB
@@ -551,6 +527,7 @@ function Core.InvalidateAllFrameConfigs()
             f._msufCachedAbsorbText = nil
             f._msufCachedAbsorbStyle = nil
             f._msufFlushHP = nil
+            f._msufDirectHP = nil
             f._msufFlushMaxHP = nil
             f._msufPwrTextConf = nil
             f._msufHpTextConf = nil
@@ -573,9 +550,7 @@ function Core.InvalidateAllFrameConfigs()
     end
 end
 
--- ------------------------------------------------------------
 -- Element enablement (oUF-like: only register events for enabled elements)
--- ------------------------------------------------------------
 
 local EL_HEALTH    = 0x00000001
 local EL_POWER     = 0x00000002
@@ -585,7 +560,6 @@ local EL_STATUS    = 0x00000010
 local EL_TOTINLINE = 0x00000020
 local EL_INDICATOR = 0x00000040
 
--- ------------------------------------------------------------
 -- Elements (oUF-style contracts, minimal)
 --  - Enable/Disable: element lifecycle (event needs handled elsewhere)
 --  - Update: does the smallest possible work for that element
@@ -593,7 +567,6 @@ local EL_INDICATOR = 0x00000040
 --  - Health/Power use existing fast helpers if present.
 --  - Portrait uses MSUF_UpdatePortraitIfNeeded (layout is stamp-gated).
 --  - Identity/Status currently fall back to the legacy full update for correctness.
--- ------------------------------------------------------------
 
 local Elements = {}
 local UFCore_GetTargetToTInlineConf -- forward decl (used by ToTInline before its definition)
@@ -869,14 +842,11 @@ local function UFCore_UpdateThreatFast(frame)
     return true
 end
 
--- ---------------------------------------------------------------------------
 -- UFCore: fast health bar color refresh (fixes "unit colors not updating" after
 -- spike fix removed legacy full UpdateSimpleUnitFrame() on target/focus swaps).
---
 -- Why needed: MSUF_UFCore_UpdateHealthFast() updates min/max + value, but does
 -- NOT set hpBar:SetStatusBarColor(). That is normally done in the main file's
 -- heavy-visual pass, which we no longer run on every unit swap.
--- ---------------------------------------------------------------------------
 
 UFCore_GetNPCReactionColorFast = function(kind)
     local cache = UFCore_GetSettingsCache()
@@ -939,9 +909,7 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
     if not frame or not frame.unit or not frame.hpBar then return end
     local unit = frame.unit
 
-    if not UnitExists(unit) then
-        return
-    end
+    if not UnitExists(unit) then return end
 
     -- Make sure the unit-type flags are up to date (pet, player, boss, etc.)
     InitUnitFlags(frame)
@@ -1001,9 +969,7 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
     end
 
     -- Cache to avoid redundant UI work.
-    if frame._msufLastHPBarR == barR and frame._msufLastHPBarG == barG and frame._msufLastHPBarB == barB and frame._msufLastHPBarMode == mode then
-        return
-    end
+    if frame._msufLastHPBarR == barR and frame._msufLastHPBarG == barG and frame._msufLastHPBarB == barB and frame._msufLastHPBarMode == mode then return end
     frame._msufLastHPBarR, frame._msufLastHPBarG, frame._msufLastHPBarB, frame._msufLastHPBarMode = barR, barG, barB, mode
 
     frame.hpBar:SetStatusBarColor(barR or 0, barG or 1, barB or 0, 1)
@@ -1089,7 +1055,7 @@ Elements.Power = {
         if bar then
             bar:SetScript("OnUpdate", nil)
             bar:SetMinMaxValues(0, 1)
-            if type(_G.MSUF_SetBarValue) == "function" then
+            if _G.MSUF_SetBarValue then
                 _G.MSUF_SetBarValue(bar, 0, false)
             else
                 bar:SetValue(0)
@@ -1174,7 +1140,6 @@ Elements.Portrait = {
 
         -- Performance: ignore UNIT_PORTRAIT_UPDATE / UNIT_MODEL_CHANGED spam for frames that should behave
         -- as "static" or only update once per unit swap.
-        --
         -- Player + Boss: static portraits (only touch when explicitly dirty or settings/layout changed).
         -- Target/Focus: update portrait texture only once per swap (handled via GUID change in the main UF update path).
         if (unit == "player" or unit == "target" or unit == "focus" or f.isBoss) and (not f._msufPortraitDirty) then
@@ -1210,7 +1175,6 @@ Elements.Status = {
     -- UNIT_FLAGS can flood at boss pull (many units flip combat flags at once).
     -- Never allow UNIT_FLAGS to bypass the normal UFCore flush queue, even for
     -- target/focus/ToT which otherwise default-promote to urgent.
-    --
     -- This preserves gameplay correctness (status updates still happen), but
     -- prevents large spikes by forcing coalescing + budgeted flush.
     eventUrgentOverrides = {
@@ -1647,17 +1611,13 @@ end
 end
 
 local function RefreshUnitEvents(f, force)
-    if not f or not f.unit or not f.RegisterUnitEvent then
-        return
-    end
+    if not f or not f.unit or not f.RegisterUnitEvent then return end
 
     local mask, conf = ComputeElementMask(f)
     local cache = UFCore_GetSettingsCache()
     UFCore_RefreshFrameInvariantFlags(f, cache)
     local last = f._msufElemMask or 0
-    if not force and mask == last then
-        return
-    end
+    if not force and mask == last then return end
 
 -- Element lifecycle hooks (Enable/Disable) on transitions.
 -- (Currently mostly a structure point; events are gated below via `desired`.)
@@ -1746,9 +1706,7 @@ end
     end
 end
 
--- ------------------------------------------------------------
 -- Queue / flush (coalesced)
--- ------------------------------------------------------------
 
 local function NewQueue(withSet)
     return { t = {}, head = 1, tail = 0, size = 0, set = withSet and {} or nil }
@@ -1879,7 +1837,7 @@ end
 local FlushEnabled = false
 
 -- PERF: Frame-level time cache. Updated ONCE per OnUpdate by FlushTask.
--- Used by RunUpdate queue processing and _RefreshFrameNow(). 
+-- Used by RunUpdate queue processing and _RefreshFrameNow().
 -- NOTE: DIRECT_APPLY text rate-limiters use GetTime() directly because
 -- FlushTask can be idle (DisableFlushIfIdle) while DIRECT_APPLY still fires.
 Core._frameNow = 0
@@ -1951,9 +1909,7 @@ local function EnsureFlushEnabled()
 end
 
 local function DisableFlushIfIdle()
-    if urgentQueue.size > 0 or normalQueue.size > 0 or warmupQueue.size > 0 or visualQueue.size > 0 then
-        return
-    end
+    if urgentQueue.size > 0 or normalQueue.size > 0 or warmupQueue.size > 0 or visualQueue.size > 0 then return end
     FlushEnabled = false
     if Core._fallbackFrame then
         Core._fallbackFrame:Hide()
@@ -1969,9 +1925,7 @@ end
 local function PromoteQueuedToUrgent(f)
     if not f then return end
     -- If it's already in urgentQueue, do nothing.
-    if QueueContains(urgentQueue, f) then
-        return
-    end
+    if QueueContains(urgentQueue, f) then return end
     -- Remove from normalQueue if present (tombstone, no shifting).
     QueueRemove(normalQueue, f)
     Enqueue(urgentQueue, f)
@@ -2003,11 +1957,9 @@ local function QueueFrame(f, urgent)
     EnsureFlushEnabled()
 end
 
--- ------------------------------------------------------------
 -- Public API (Step 1: one flush path)
 --   External code should only call Core.MarkDirty (or the global wrapper)
 --   and NEVER call UpdateSimpleUnitFrame directly.
--- ------------------------------------------------------------
 
 function Core.MarkDirty(f, mask, urgent, reason)
     if not f then return end
@@ -2063,7 +2015,6 @@ function Core.MarkDirty(f, mask, urgent, reason)
     end
 end
 
--- ------------------------------------------------------------
 -- Step 3: "No layout in runtime"
 --  - All ClearAllPoints/SetPoint/SetWidth/SetFont/etc should happen ONLY via this path:
 --      * Options Apply
@@ -2071,7 +2022,6 @@ end
 --      * Portrait mode changes
 --      * hpTextSpacer changes
 --  - Runtime unit events (health/power/name/flags) must remain layout-free.
--- ------------------------------------------------------------
 
 function UFCore_EnsureToTInlineWidgets(f, conf)
     if not conf or not conf.showToTInTargetName then return end
@@ -2293,6 +2243,7 @@ local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
     f._msufHealAbsorbInit = nil
     -- Invalidate health diff-gate cache (new unit = new hp/maxHP).
     f._msufFlushHP = nil
+    f._msufDirectHP = nil
     f._msufFlushMaxHP = nil
 
     local sd = Core._swapDeferCoalesce
@@ -2308,22 +2259,16 @@ local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
     sd.why = why or sd.why
 
     -- Only schedule one next-frame flush.
-    if f._msufSwapDeferPending then
-        return
-    end
+    if f._msufSwapDeferPending then return end
     f._msufSwapDeferPending = true
 
-    if sd.queued then
-        return
-    end
+    if sd.queued then return end
 
     sd.queued = true
     After0(0, _SwapDeferFlush)
 end
 
--- ------------------------------------------------------------
 -- Flush
--- ------------------------------------------------------------
 
 local function PopFirst(q)
     if not q or q.size == 0 then return nil end
@@ -2446,17 +2391,13 @@ local function RunUpdate(f)
             Core._layoutDeferredSet[f] = true
             f._msufDirtyMask = bor(f._msufDirtyMask or 0, DIRTY_LAYOUT)
             mask = band(mask, bnot(DIRTY_LAYOUT))
-            if mask == 0 then
-                return
-            end
+            if mask == 0 then return end
         else
             local conf = GetFrameConf(f)
             Core.ApplyLayout(f, conf, f._msufLayoutWhy or "DIRTY_LAYOUT")
             f._msufLayoutWhy = nil
             mask = band(mask, bnot(DIRTY_LAYOUT))
-            if mask == 0 then
-                return
-            end
+            if mask == 0 then return end
         end
     end
 
@@ -2489,9 +2430,7 @@ local function RunUpdate(f)
             return
         end
         mask = band(mask, bnot(DIRTY_VISUAL))
-        if mask == 0 then
-            return
-        end
+        if mask == 0 then return end
     end
 
         if mask ~= 0 and band(mask, bnot(APPLY_MASK)) == 0 then
@@ -2610,9 +2549,7 @@ function Core.Flush(budgetMs)
     DisableFlushIfIdle()
 end
 
--- ------------------------------------------------------------
 -- Unitframe event routing
--- ------------------------------------------------------------
 
 local UNIT_EVENT_MAP = {}
 do
@@ -2657,11 +2594,9 @@ do
     UNIT_EVENT_MAP.UNIT_THREAT_SITUATION_UPDATE = { mask = DIRTY_THREAT }
 end
 
--- ============================================================================
 -- Phase 6: Direct-Apply — flattened hot-path for Health / Power.
 -- These skip the queue entirely and update in the SAME frame as the event.
 -- UNIT_FACTION (Health+Identity) and UNIT_FLAGS (Health+Status) stay on the queue.
---
 -- ARCHITECTURE vs oUF:
 -- oUF runs Color + Absorb + HealPrediction + PredictionSize on EVERY UNIT_HEALTH.
 -- MSUF splits the path:
@@ -2670,28 +2605,32 @@ end
 --   _HealthFullFast   — UNIT_MAXHEALTH, absorb, heal-prediction, maxHP-modifier
 --                       Full chain: SetMinMaxValues + value + absorb dirty + text.
 -- Color updates are NEVER on this path (dirty-flag gated in Elements.Health.Update).
--- ============================================================================
 
 -- _HealthValueFast: absolute minimum for UNIT_HEALTH.
 -- Call chain: FrameOnEvent → _HealthValueFast (1 hop, vs 7 hops before).
 -- No UnitExists check: unit events guarantee the unit exists.
--- No type() checks: UnitHealth always returns a number.
 -- No SetMinMaxValues: maxHP doesn't change on UNIT_HEALTH.
 -- No absorb overlay: absorb amount doesn't change on UNIT_HEALTH.
+-- PERF: Diff-gated — skip SetValue + text when HP hasn't changed (idle regen).
+-- Secret-safe: issecretvalue guard before any Lua-side comparison.
 local function _HealthValueFast(f)
     local bar = f.hpBar
     if not bar then return end
     local hp = UnitHealth(f.unit)       -- upvalue (line 21), no F.table lookup
-    bar:SetValue(hp)                    -- ALWAYS: direct widget call (~3μs, visually critical)
+    -- Diff-gate: skip when HP unchanged (idle regen fires UNIT_HEALTH at full HP).
+    -- Saves ~36µs per call (SetValue + GetTime + text pipeline).
+    local prev = f._msufDirectHP
+    if prev ~= nil then
+        if not (_UFCORE_issecret and (_UFCORE_issecret(hp) or _UFCORE_issecret(prev))) then
+            if hp == prev then return end
+        end
+    end
+    f._msufDirectHP = hp
+    bar:SetValue(hp)                    -- direct widget call (~3μs, visually critical)
     -- Text rate-limited to 10Hz per unit (100ms interval). Skipped events are
     -- not a problem: bar:SetValue already shows current HP, text catches up next pass.
     local fnTxt = FN_UpdateHpTextFast
     if fnTxt then
-        -- GetTime() required: Core._frameNow freezes when FlushTask is idle
-        -- (DisableFlushIfIdle hides the OnUpdate frame). DIRECT_APPLY events
-        -- bypass the queue, so FlushTask never restarts. One GetTime() per
-        -- UNIT_HEALTH event (~10-50/sec per unit) is negligible.
-        -- Rate-limiter alone caps at 10Hz per unit = sufficient budget.
         local now = GetTime()
         if (now - (f._msufHpTxtAt or 0)) >= 0.10 then
             f._msufHpTxtAt = now
@@ -2798,17 +2737,13 @@ do
     if powerFn then
         -- ──────────────────────────────────────────────────────────────
         -- Power fast-path — MidnightRogueBars EnergyBar approach.
-        --
         -- Two independent settings (cached upvalues):
-        --
         --   _smoothPowerBar (bars.smoothPowerBar):
         --     ON:  ExponentialEaseOut on SetMinMaxValues + SetValue
         --     OFF: Instant snap (no interpolation)
-        --
         --   _realtimePowerText (bars.realtimePowerText):
         --     ON:  Text updated every event (like MidnightRogueBars)
         --     OFF: Budget-gated (player 33Hz, others 10Hz)
-        --
         -- UNIT_POWER_FREQUENT is registered for smooth sub-tick updates.
         -- ──────────────────────────────────────────────────────────────
         local _UnitPower     = UnitPower
@@ -2821,7 +2756,7 @@ do
         -- PERF: Pre-resolve UnitPowerPercent + ScaleTo100 for RenderPowerText cache.
         -- Caching pPct here eliminates 1 UnitPowerPercent C-API call per text update.
         local _PwrPctFn = UnitPowerPercent
-        local _PwrScale = (type(CurveConstants) == "table" and CurveConstants.ScaleTo100) or true
+        local _PwrScale = (CurveConstants and CurveConstants.ScaleTo100) or true
 
         local function _MaybeUpdatePowerText(f, unit, pType, cur, mx, budget)
             local fnTxt = FN_UpdatePowerTextFast
@@ -2837,51 +2772,28 @@ do
             fnTxt(f)
         end
 
-        -- ── Handler A: Both OFF — zero added overhead vs original MSUF ──
-        -- No interpolation, budget-gated text. No function calls for time check.
-        local function _PowerOff(f)
+        -- ── Unified power handler (parameterized by interp + textBudget upvalues) ──
+        -- Replaces 4 near-identical handlers. Two upvalues are swapped by
+        -- _PowerSwapHandler() when settings change — zero branches in the hot path.
+        -- Secret-safe: == nil is a reference check; secret numbers pass through
+        -- to SetMinMaxValues/SetValue which handle them natively.
+        local _pwrInterp = nil      -- nil = snap, _Interp = ExponentialEaseOut
+        local _pwrTxtBudget = 0.10  -- nil = realtime, number = rate-limited
+
+        local function _PowerCore(f)
             local bar = f.targetPowerBar or f.powerBar
             if not bar then return end
 
             local unit = f.unit
             local pType = _UnitPowerType(unit)
             if pType == nil then return end
-            -- Ele Shaman: class power shows Maelstrom → main bar shows Mana
-            if f._msufIsPlayer and _G.MSUF_EleMaelstromActive then pType = 0 end
-            -- Aug Evoker: class power shows Ebon Might → main bar shows Essence
-            if f._msufIsPlayer and _G.MSUF_AugEvokerActive then pType = 19 end
-            if f._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0 end
-
-            local cur = _UnitPower(unit, pType)
-            local mx  = _UnitPowerMax(unit, pType)
-            -- SECRET-SAFE: == nil is a reference check (no taint). Secret numbers
-            -- pass through to SetMinMaxValues/SetValue fine (widget handles internally).
-            if cur == nil then cur = 0 end
-            if mx  == nil then mx  = 100 end
-
-            if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
-
-            bar:SetMinMaxValues(0, mx)
-            bar:SetValue(cur)
-
-            UFCore_StorePowerSnapshot(f, pType, cur, mx)
-
-            -- Budget-gated text: GetTime() inside _MaybeUpdatePowerText ensures
-            -- correct rate-limiting even when FlushTask is idle (DIRECT_APPLY path).
-            _MaybeUpdatePowerText(f, unit, pType, cur, mx, (f._msufIsPlayer and 0.03) or 0.10)
-        end
-
-        -- ── Handler B: Smooth ON, text OFF — ExponentialEaseOut + budget text ──
-        local function _PowerSmooth(f)
-            local bar = f.targetPowerBar or f.powerBar
-            if not bar then return end
-
-            local unit = f.unit
-            local pType = _UnitPowerType(unit)
-            if pType == nil then return end
-            if _G.MSUF_EleMaelstromActive then pType = 0 end
-            if f._msufIsPlayer and _G.MSUF_AugEvokerActive then pType = 19 end
-            if f._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0 end
+            -- Ele Shaman / Aug Evoker / Shadow Priest: class power swap
+            if f._msufIsPlayer then
+                if _G.MSUF_EleMaelstromActive then pType = 0
+                elseif _G.MSUF_AugEvokerActive then pType = 19
+                elseif _G.MSUF_ShadowManaActive then pType = 0
+                end
+            end
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
@@ -2890,25 +2802,29 @@ do
 
             if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
 
-            bar:SetMinMaxValues(0, mx, _Interp)
-            bar:SetValue(cur, _Interp)
+            local interp = _pwrInterp
+            if interp then
+                bar:SetMinMaxValues(0, mx, interp)
+                bar:SetValue(cur, interp)
+            else
+                bar:SetMinMaxValues(0, mx)
+                bar:SetValue(cur)
+            end
 
             UFCore_StorePowerSnapshot(f, pType, cur, mx)
 
-            _MaybeUpdatePowerText(f, unit, pType, cur, mx, (f._msufIsPlayer and 0.03) or 0.10)
+            _MaybeUpdatePowerText(f, unit, pType, cur, mx, _pwrTxtBudget)
         end
 
-        -- ── Handler C: Realtime text ON — no interpolation, text every event ──
-        local function _PowerRTText(f)
+        -- Non-player handler: always snap, always budget-gated text.
+        -- Separate function avoids reading the player upvalues on target/focus/boss.
+        local function _PowerNonPlayer(f)
             local bar = f.targetPowerBar or f.powerBar
             if not bar then return end
 
             local unit = f.unit
             local pType = _UnitPowerType(unit)
             if pType == nil then return end
-            if _G.MSUF_EleMaelstromActive then pType = 0 end
-            if f._msufIsPlayer and _G.MSUF_AugEvokerActive then pType = 19 end
-            if f._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0 end
 
             local cur = _UnitPower(unit, pType)
             local mx  = _UnitPowerMax(unit, pType)
@@ -2922,68 +2838,35 @@ do
 
             UFCore_StorePowerSnapshot(f, pType, cur, mx)
 
-            _MaybeUpdatePowerText(f, unit, pType, cur, mx, nil)
+            _MaybeUpdatePowerText(f, unit, pType, cur, mx, 0.10)
         end
-
-        -- ── Handler D: Both ON — full MidnightRogueBars (hyper-accurate) ──
-        local function _PowerFull(f)
-            local bar = f.targetPowerBar or f.powerBar
-            if not bar then return end
-
-            local unit = f.unit
-            local pType = _UnitPowerType(unit)
-            if pType == nil then return end
-            if _G.MSUF_EleMaelstromActive then pType = 0 end
-            if f._msufIsPlayer and _G.MSUF_AugEvokerActive then pType = 19 end
-            if f._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0 end
-
-            local cur = _UnitPower(unit, pType)
-            local mx  = _UnitPowerMax(unit, pType)
-            if cur == nil then cur = 0 end
-            if mx  == nil then mx  = 100 end
-
-            if UFCore_SamePowerSnapshot(f, pType, cur, mx) then return end
-
-            bar:SetMinMaxValues(0, mx, _Interp)
-            bar:SetValue(cur, _Interp)
-
-            UFCore_StorePowerSnapshot(f, pType, cur, mx)
-
-            _MaybeUpdatePowerText(f, unit, pType, cur, mx, nil)
-        end
-
-        -- Pre-defined no-op (avoids closure allocation on every swap).
-        local _PowerNoop = function() end
 
         -- ── Pick handler based on settings (called by RefreshSettingsCache) ──
-        -- Player frame: selected handler based on toggles.
-        -- Non-player frames (target/focus/boss): ALWAYS _PowerOff.
-        -- One boolean read per event — negligible vs the 5 C API calls that follow.
-        local _playerPowerFn = _PowerOff
-
+        -- Swaps two upvalues instead of picking from 4 function refs.
+        -- Player frame: _PowerCore reads _pwrInterp + _pwrTxtBudget.
+        -- Non-player frames: always _PowerNonPlayer (snap + budget).
         local function _PowerSwapHandler()
             local s = _smoothPowerBar and (_Interp ~= nil)
             local r = _realtimePowerText
-            if     s and r     then _playerPowerFn = _PowerFull
-            elseif s and not r then _playerPowerFn = _PowerSmooth
-            elseif not s and r then _playerPowerFn = _PowerRTText
-            else                    _playerPowerFn = _PowerOff
-            end
+            _pwrInterp = s and _Interp or nil
+            _pwrTxtBudget = r and nil or ((true) and 0.03 or 0.10)
+            -- Player budget: 0.03 (33Hz) when budget-gated, nil when realtime
+            _pwrTxtBudget = r and nil or 0.03
         end
 
         -- UNIT_POWER_UPDATE: fires for ALL frames (player + target + focus + boss).
-        -- Dispatch: player → selected handler, everyone else → _PowerOff.
+        -- Dispatch: player → _PowerCore (reads upvalues), everyone else → _PowerNonPlayer.
         DIRECT_APPLY["UNIT_POWER_UPDATE"] = function(f)
             if f._msufIsPlayer then
-                return _playerPowerFn(f)
+                return _PowerCore(f)
             end
-            return _PowerOff(f)
+            return _PowerNonPlayer(f)
         end
 
         -- UNIT_POWER_FREQUENT: only registered on player frame (Layer 1 gate).
-        -- So this handler ONLY ever fires for player. Direct to selected handler.
+        -- So this handler ONLY ever fires for player. Direct to _PowerCore.
         DIRECT_APPLY["UNIT_POWER_FREQUENT"] = function(f)
-            return _playerPowerFn(f)
+            return _PowerCore(f)
         end
 
         -- Wire initial handler + expose swap for settings cache.
@@ -3038,9 +2921,7 @@ local BYTE_U = 85  -- string.byte("U")
 local function FrameOnEvent(self, event, arg1, ...)
     -- oUF-like: skip hidden frames (free win).
     -- Frames can opt out (e.g. previews) by setting self.MSUF_AllowHiddenEvents = true.
-    if not self:IsVisible() and not self.MSUF_AllowHiddenEvents then
-        return
-    end
+    if not self:IsVisible() and not self.MSUF_AllowHiddenEvents then return end
 
     -- Unit events: only react to our unit.
     -- PERF P0: Single lookup carries mask + dirty flags + direct handler (merged).
@@ -3114,6 +2995,7 @@ function Core.AttachFrame(f)
     f._msufAbsorbTextDirty = true
     -- Invalidate health diff-gate cache (fresh frame).
     f._msufFlushHP = nil
+    f._msufDirectHP = nil
     f._msufFlushMaxHP = nil
 
     f:SetScript("OnEvent", FrameOnEvent)
@@ -3142,6 +3024,7 @@ function Core.AttachFrame(f)
             self._msufAbsorbInit = nil
             self._msufHealAbsorbInit = nil
             self._msufFlushHP = nil
+            self._msufDirectHP = nil
             self._msufFlushMaxHP = nil
             self._msufPwrTextForce = true
             Core.MarkDirty(self, MASK_SHOW_REFRESH, true, "OnShow")
@@ -3220,9 +3103,7 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     end
 end
 
--- ------------------------------------------------------------
 -- Global driver (one frame; avoid duplicating global events per unitframe)
--- ------------------------------------------------------------
 
 local Global = CreateFrame("Frame")
 Core._globalDriver = Global
@@ -3290,7 +3171,6 @@ end
 -- Step 4: Explicit Request-Update API boundary (global).
 -- Modules should request unitframe updates through this function instead of reaching into internals.
 -- This keeps all scheduling/dirty-masking centralized and makes future perf work safer.
---
 -- Signature:
 --   MSUF_RequestUnitUpdate(unitOrUnits, mask, urgent, reason)
 --     unitOrUnits: "player"/"target"/... OR { "player","target",... } OR nil (=> all known frames)
@@ -3492,12 +3372,10 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 end)
 
--- ---------------------------------------------------------------------------
 -- Boss Target Highlight: set _msufBossTargetHLOn flag on boss frames so the
 -- Borders.lua priority system can render the highlight overlay.
 -- Secret-safe: UnitIsUnit takes string tokens only; guard result anyway.
 -- Diff-gated per frame to avoid redundant RefreshRareBarVisuals calls.
--- ---------------------------------------------------------------------------
 local _BTH_issecret = _UFCORE_issecret
 local _BTH_UnitIsUnit = UnitIsUnit
 local _BTH_UnitExists = UnitExists

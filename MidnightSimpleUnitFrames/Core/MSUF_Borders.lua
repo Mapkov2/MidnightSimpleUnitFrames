@@ -67,7 +67,7 @@ local function _Iter_ResetBorderOnScale(uf)
     if uf and uf.unit then
         uf._msufBarBorderStamp = nil
         uf._msufBarOutlineEdgeSize = -1
-        if type(_G.MSUF_QueueUnitframeVisual) == "function" then
+        if _G.MSUF_QueueUnitframeVisual then
             _G.MSUF_QueueUnitframeVisual(uf)
         end
     end
@@ -266,10 +266,10 @@ MSUF_ApplyRareVisuals = function(self)
     local cfg = _RefreshBorderSettingsCache()
 
     -- Aggro state detection (target/focus/boss only).
-    local wantAggro = MSUF_IsAggroOutlineUnit(self.unit) and ((cfg.aggroOutlineMode == 1) or (_G and _G.MSUF_AggroBorderTestMode))
+    local wantAggro = MSUF_IsAggroOutlineUnit(self.unit) and ((cfg.aggroOutlineMode == 1) or (_G.MSUF_AggroBorderTestMode))
     local threat = false
     if wantAggro then
-        if _G and _G.MSUF_AggroBorderTestMode then
+        if _G.MSUF_AggroBorderTestMode then
             threat = true
         elseif UnitThreatSituation then
             local raw = UnitThreatSituation("player", self.unit)
@@ -291,7 +291,7 @@ MSUF_ApplyRareVisuals = function(self)
     -- Dispel state detection.
     local dispel = false
     do
-        local test = (_G and _G.MSUF_DispelBorderTestMode) and true or false
+        local test = (_G.MSUF_DispelBorderTestMode) and true or false
         local wantDispel = (cfg.dispelOutlineMode == 1) or test
         if wantDispel then
             local u = self.unit
@@ -304,7 +304,7 @@ MSUF_ApplyRareVisuals = function(self)
     -- Purge state detection.
     local purge = false
     do
-        local test = (_G and _G.MSUF_PurgeBorderTestMode) and true or false
+        local test = (_G.MSUF_PurgeBorderTestMode) and true or false
         local wantPurge = (cfg.purgeOutlineMode == 1) or test
         if wantPurge then
             local u = self.unit
@@ -470,17 +470,16 @@ _G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(acti
     end
 end
 
-
 -- Aggro outline event driver (event-only, no OnUpdate)
 do
     local function RefreshAggroForUnit(u)
         local g = MSUF_DB and MSUF_DB.general
         if not (g and g.aggroOutlineMode == 1) then return end
         if not u or not MSUF_IsAggroOutlineUnit(u) then return end
-        local frames = _G and _G.MSUF_UnitFrames
+        local frames = _G.MSUF_UnitFrames
         local uf = frames and frames[u]
         if not uf or uf.unit ~= u then return end
-        local fn = _G and _G.MSUF_RefreshRareBarVisuals
+        local fn = _G.MSUF_RefreshRareBarVisuals
         if type(fn) == "function" then fn(uf) end
     end
 
@@ -529,7 +528,6 @@ do
     _G.MSUF_AggroOutline_ApplyEventRegistration = ApplyAggroOutlineEventRegistration
     ApplyAggroOutlineEventRegistration()
 end
-
 
 -- Dispel / Purge border event driver: refresh the rare outline when dispellable debuffs
 -- or purgeable buffs appear/disappear.
@@ -709,7 +707,7 @@ do
         end
 
         if changed then
-            if type(_G.MSUF_RefreshRareBarVisuals) == "function" then
+            if _G.MSUF_RefreshRareBarVisuals then
                 _G.MSUF_RefreshRareBarVisuals(uf)
             end
         end
@@ -787,7 +785,7 @@ do
     f:RegisterEvent("UI_SCALE_CHANGED")
     f:RegisterEvent("DISPLAY_SIZE_CHANGED")
     f:SetScript("OnEvent", function()
-        if type(_G.MSUF_UpdatePixelPerfect) == "function" then
+        if _G.MSUF_UpdatePixelPerfect then
             _G.MSUF_UpdatePixelPerfect()
     end
         if MSUF_BarBorderCache then

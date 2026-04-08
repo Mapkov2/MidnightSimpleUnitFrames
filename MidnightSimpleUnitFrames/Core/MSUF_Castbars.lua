@@ -100,13 +100,13 @@ function MSUF_ApplyCastbarUnitAndSync(unitKey)
     if not unitKey then  return end
     if not MSUF_DB then EnsureDB() end
     if MSUF_IsBossCastbarUnit(unitKey) then
-        if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+        if _G.MSUF_ApplyBossCastbarPositionSetting then
             _G.MSUF_ApplyBossCastbarPositionSetting()
     end
-        if type(_G.MSUF_ApplyBossCastbarTimeSetting) == "function" then
+        if _G.MSUF_ApplyBossCastbarTimeSetting then
             _G.MSUF_ApplyBossCastbarTimeSetting()
     end
-        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+        if _G.MSUF_UpdateBossCastbarPreview then
             _G.MSUF_UpdateBossCastbarPreview()
     end
         if type(MSUF_SyncCastbarPositionPopup) == "function" then
@@ -517,13 +517,9 @@ end
 -- Castbar preview toggle
 -- ══════════════════════════════════════════════════════════════
 local function MSUF_InitPlayerCastbarPreviewToggle()
-    if not MSUF_DB or not MSUF_DB.general then
-         return
-    end
+    if not MSUF_DB or not MSUF_DB.general then return end
     local playerGroup = _G["MSUF_CastbarPlayerGroup"]
-    if not playerGroup then
-         return
-    end
+    if not playerGroup then return end
     local castbarGroup = playerGroup:GetParent() or playerGroup
     local anchorParent = castbarGroup
     local function MSUF_GetLastCastbarSubTabButton()
@@ -602,7 +598,7 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
         local g = MSUF_DB.general or {}
         local wasActive = g.castbarPlayerPreviewEnabled and true or false
         if wasActive then
-            local bf = _G and _G.MSUF_BossCastbarPreview
+            local bf = _G.MSUF_BossCastbarPreview
             if bf and bf.GetWidth and bf.GetHeight then
                 g.bossCastbarWidth  = math.floor((bf:GetWidth()  or (tonumber(g.bossCastbarWidth)  or 240)) + 0.5)
                 g.bossCastbarHeight = math.floor((bf:GetHeight() or (tonumber(g.bossCastbarHeight) or 18)) + 0.5)
@@ -614,10 +610,10 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
             if type(MSUF_SyncBossCastbarSliders) == "function" then
                 MSUF_SyncBossCastbarSliders()
             end
-            if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+            if _G.MSUF_ApplyBossCastbarPositionSetting then
                 _G.MSUF_ApplyBossCastbarPositionSetting()
             end
-            if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            if _G.MSUF_UpdateBossCastbarPreview then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
     end
@@ -631,20 +627,20 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
             MSUF_UpdatePlayerCastbarPreview()
     end
         if g.castbarPlayerPreviewEnabled then
-            if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+            if _G.MSUF_ApplyBossCastbarPositionSetting then
                 _G.MSUF_ApplyBossCastbarPositionSetting()
             end
-            if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            if _G.MSUF_UpdateBossCastbarPreview then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
-            if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
+            if _G.MSUF_SetupBossCastbarPreviewEditMode then
                 _G.MSUF_SetupBossCastbarPreviewEditMode()
             end
             C_Timer.After(0, function()
-                    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+                    if _G.MSUF_UpdateBossCastbarPreview then
                         _G.MSUF_UpdateBossCastbarPreview()
                     end
-                    if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
+                    if _G.MSUF_SetupBossCastbarPreviewEditMode then
                         _G.MSUF_SetupBossCastbarPreviewEditMode()
                     end
                  end)
@@ -820,6 +816,10 @@ MSUF_BumpCastbarStyleRevision()
                 end
             end
         end
+        -- Kick ready indicator
+        if _G.MSUF_KickReady_ApplyLayout then
+            _G.MSUF_KickReady_ApplyLayout(frame)
+        end
         local cfg2 = cfg or {}
         local showNameLocal = showName
         local effectiveSizeLocal = effectiveSize
@@ -867,7 +867,7 @@ MSUF_BumpCastbarStyleRevision()
     if type(_G.MSUF_UpdateBossCastbarPreview) == "function" and not _G.MSUF_BossPreviewRefreshLock then
         _G.MSUF_BossPreviewRefreshLock = true
         _G.MSUF_UpdateBossCastbarPreview()
-        if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
+        if _G.MSUF_SetupBossCastbarPreviewEditMode then
             _G.MSUF_SetupBossCastbarPreviewEditMode()
     end
         _G.MSUF_BossPreviewRefreshLock = false

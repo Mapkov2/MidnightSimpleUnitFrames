@@ -203,7 +203,6 @@ local function _MSUF_HideSelfHealPredBar(frame)
     bar._msufSelfHealPredAnchorRev = nil
 end
 
-
 local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
     local g = MSUF_DB and MSUF_DB.general
     if not g or not g.showSelfHealPrediction then
@@ -590,14 +589,10 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
         end
 
         -- Mode 3/4: follow current HP edge.
-        if not hpBar or not hpBar.GetStatusBarTexture then
-            return
-        end
+        if not hpBar or not hpBar.GetStatusBarTexture then return end
 
         local hpTex = hpBar:GetStatusBarTexture()
-        if not hpTex then
-            return
-        end
+        if not hpTex then return end
 
         local hpReverse = false
         if hpBar.GetReverseFill then

@@ -2,8 +2,8 @@
 -- Accordion UX, Party/Raid scope tabs, ns.UI.* toolkit, preview management.
 -- Midnight 12.0 secret-safe, zero combat overhead.
 local _, ns = ...
-ns = ns or (_G and _G.MSUF_NS) or {}
-if _G then _G.MSUF_NS = ns end
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
 
 local GF
 local UI
@@ -193,7 +193,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     local function CollapseAllExcept(keepBox)
         for i = 1, #sections do
             local b = sections[i]
-            if b ~= keepBox and not b._msufCollapsed then
+            if b and not b._msufIsDivider and b ~= keepBox and not b._msufCollapsed then
                 b._msufCollapsed = true
                 if b._msufApplyCollapseState then b._msufApplyCollapseState() end
             end
@@ -274,6 +274,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
         box._msufBody = body
         box._msufChevron = chevron
         box._msufHint = hint
+        box._msufTitleFS = title
+        box._msufBaseTitle = titleText
 
         local function ApplyState()
             local open = not box._msufCollapsed
@@ -306,12 +308,13 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Copy All Settings utility (used by scope bar button)
+    -- Copy Settings: selective category copy (Party ↔ Raid)
     ----------------------------------------------------------------
     local function _GFDeepCopy(src)
+        if not src then return src end
         if type(src) ~= "table" then return src end
         local dst = {}
-        for k, v in pairs(src) do dst[k] = _GFDeepCopy(v) end
+        for k, v in pairs(src) do dst[k] = (type(v) == "table") and _GFDeepCopy(v) or v end
         return dst
     end
 
@@ -320,19 +323,91 @@ function _G.MSUF_EnsureGFPanelBuilt()
         positionMode = true, _hlMigrated = true,
     }
 
-    local function _GFDoCopyAll(srcKind, dstKind)
+    -- Category groups: key → list of config keys to copy
+    local _COPY_CATEGORIES = {
+        { key = "general",    label = "General (size, spacing, growth)",
+          keys = { "enabled", "showPlayer", "showSolo", "width", "height", "spacing",
+                   "growthDirection", "headerSpacing", "groupBy", "groupingOrder",
+                   "groupFilter", "raidSortMode" } },
+        { key = "health",     label = "Health & Bars",
+          keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB",
+                   "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB",
+                   "barTexture", "powerBarTexture", "powerBarHeight", "powerBarEnabled",
+                   "showPower", "powerTextCenter", "powerFontSize", "powerOffsetX", "powerOffsetY",
+                   "powerTextLayer", "cutawayEnabled", "cutawayColorR", "cutawayColorG",
+                   "cutawayColorB", "cutawayColorA", "cutawayDuration", "cutawayFadeTime",
+                   "healPredEnabled", "healPredAlpha", "absorbEnabled", "absorbAlpha" } },
+        { key = "text",       label = "Text & Name",
+          keys = { "showName", "nameFontSize", "nameAnchor", "nameOffsetX", "nameOffsetY",
+                   "nameColorMode", "nameColorR", "nameColorG", "nameColorB",
+                   "nameMaxChars", "nameNoEllipsis",
+                   "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter",
+                   "hpTextReverse", "hpOffsetX", "hpOffsetY", "textLayer",
+                   "statusOffsetX", "statusOffsetY" } },
+        { key = "font",       label = "Font Override",
+          keys = { "fontOverride", "fontKey", "fontOutline", "useGlobalFontColor",
+                   "fontR", "fontG", "fontB" } },
+        { key = "border",     label = "Border & Background",
+          keys = { "bgColorR", "bgColorG", "bgColorB", "bgColorA",
+                   "borderColorR", "borderColorG", "borderColorB", "borderColorA",
+                   "borderSize", "borderTexture" } },
+        { key = "range",      label = "Range Fade",
+          keys = { "rangeFadeEnabled", "rangeFadeAlpha", "offlineAlpha", "hideOfflineDelay" } },
+        { key = "indicators", label = "Indicators & Status Icons",
+          prefix = { "si_", "statusIcon", "indicator" } },
+        { key = "auras",      label = "Auras (Buffs/Debuffs/Defensives)",
+          tables = { "auras" } },
+        { key = "highlight",  label = "Highlight & Aggro",
+          prefix = { "hl", "dispel" } },
+        { key = "features",   label = "Corner/Raid/Spell/Private",
+          tables = { "raidDebuffs", "spellIndicators", "privateAuras" },
+          keys = { "ciEnabled", "ciAlpha" },
+          prefix = { "ci" } },
+    }
+
+    -- Default: all categories ON
+    local _copyToggles = {}
+    for _, cat in ipairs(_COPY_CATEGORIES) do _copyToggles[cat.key] = true end
+
+    local function _GFDoCopySelective(srcKind, dstKind)
         local srcConf = GF.GetConf(srcKind)
         local dstConf = GF.GetConf(dstKind)
         if not srcConf or not dstConf then return end
-        for k, v in pairs(srcConf) do
-            if not _COPY_EXCLUDE[k] then
-                if type(v) == "table" then
-                    dstConf[k] = _GFDeepCopy(v)
-                else
-                    dstConf[k] = v
+
+        -- Build set of keys to copy based on active toggles
+        local allowKeys = {}
+        local allowPrefixes = {}
+        local allowTables = {}
+        for _, cat in ipairs(_COPY_CATEGORIES) do
+            if _copyToggles[cat.key] then
+                if cat.keys then
+                    for _, k in ipairs(cat.keys) do allowKeys[k] = true end
+                end
+                if cat.prefix then
+                    for _, p in ipairs(cat.prefix) do allowPrefixes[#allowPrefixes + 1] = p end
+                end
+                if cat.tables then
+                    for _, t in ipairs(cat.tables) do allowTables[t] = true end
                 end
             end
         end
+
+        for k, v in pairs(srcConf) do
+            if _COPY_EXCLUDE[k] then
+                -- skip position keys
+            elseif allowKeys[k] or allowTables[k] then
+                dstConf[k] = (type(v) == "table") and _GFDeepCopy(v) or v
+            else
+                -- Check prefix match
+                for _, p in ipairs(allowPrefixes) do
+                    if k:sub(1, #p) == p then
+                        dstConf[k] = (type(v) == "table") and _GFDeepCopy(v) or v
+                        break
+                    end
+                end
+            end
+        end
+
         if GF.RebuildAll then GF.RebuildAll() end
         GF.RefreshVisuals()
         RefreshAllWidgets()
@@ -340,22 +415,102 @@ function _G.MSUF_EnsureGFPanelBuilt()
         if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
     end
 
-    if not StaticPopupDialogs["MSUF_COPY_GF_SETTINGS"] then
-        StaticPopupDialogs["MSUF_COPY_GF_SETTINGS"] = {
-            text = "MSUF: Copy ALL Group Frame settings from %s to %s?\nPosition will not be changed.",
-            button1 = "Copy",
-            button2 = "Cancel",
-            OnAccept = function(self, data)
-                if data and data.src and data.dst then
-                    _GFDoCopyAll(data.src, data.dst)
-                    print("|cff00ff00MSUF:|r Copied " .. data.src .. " settings to " .. data.dst .. ".")
+    -- Copy popup panel (replaces StaticPopup)
+    local _copyPopup
+    local function ShowCopyPopup(anchorFrame)
+        if _copyPopup and _copyPopup:IsShown() then _copyPopup:Hide(); return end
+        if not _copyPopup then
+            local pop = CreateFrame("Frame", nil, anchorFrame, "BackdropTemplate")
+            pop:SetSize(280, 30 + #_COPY_CATEGORIES * 22 + 36)
+            pop:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
+                insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+            pop:SetBackdropColor(0.06, 0.10, 0.20, 0.97)
+            pop:SetBackdropBorderColor(0.30, 0.45, 0.70, 0.9)
+            pop:SetFrameStrata("DIALOG")
+            pop:SetFrameLevel(100)
+            pop:EnableMouse(true)
+
+            local title = pop:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            title:SetPoint("TOP", pop, "TOP", 0, -8)
+            pop._titleFS = title
+
+            local y = -26
+            pop._checks = {}
+            for i, cat in ipairs(_COPY_CATEGORIES) do
+                local cb = CreateFrame("CheckButton", nil, pop, "UICheckButtonTemplate")
+                cb:SetSize(20, 20)
+                cb:SetPoint("TOPLEFT", pop, "TOPLEFT", 10, y)
+                cb:SetChecked(_copyToggles[cat.key])
+                cb:SetScript("OnClick", function(self)
+                    _copyToggles[cat.key] = self:GetChecked() and true or false
+                end)
+                if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
+                local fs = cb.text or cb.Text
+                if fs then fs:SetText(cat.label); fs:SetFontObject("GameFontHighlightSmall") end
+                pop._checks[i] = cb
+                y = y - 22
+            end
+
+            -- Select All / None
+            local allBtn = CreateFrame("Button", nil, pop, "BackdropTemplate")
+            allBtn:SetSize(50, 18)
+            allBtn:SetPoint("BOTTOMLEFT", pop, "BOTTOMLEFT", 10, 8)
+            allBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+            allBtn:SetBackdropColor(0.10, 0.16, 0.28, 1)
+            allBtn:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
+            local allFs = allBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            allFs:SetPoint("CENTER"); allFs:SetText("All")
+            allBtn:SetScript("OnClick", function()
+                for j, cat in ipairs(_COPY_CATEGORIES) do
+                    _copyToggles[cat.key] = true; pop._checks[j]:SetChecked(true)
                 end
-            end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-        }
+            end)
+
+            local noneBtn = CreateFrame("Button", nil, pop, "BackdropTemplate")
+            noneBtn:SetSize(50, 18)
+            noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 4, 0)
+            noneBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+            noneBtn:SetBackdropColor(0.10, 0.16, 0.28, 1)
+            noneBtn:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
+            local noneFs = noneBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            noneFs:SetPoint("CENTER"); noneFs:SetText("None")
+            noneBtn:SetScript("OnClick", function()
+                for j, cat in ipairs(_COPY_CATEGORIES) do
+                    _copyToggles[cat.key] = false; pop._checks[j]:SetChecked(false)
+                end
+            end)
+
+            -- Copy button
+            local goBtn = CreateFrame("Button", nil, pop, "BackdropTemplate")
+            goBtn:SetSize(80, 18)
+            goBtn:SetPoint("BOTTOMRIGHT", pop, "BOTTOMRIGHT", -10, 8)
+            goBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+            goBtn:SetBackdropColor(0.15, 0.30, 0.18, 1)
+            goBtn:SetBackdropBorderColor(0.30, 0.60, 0.35, 0.9)
+            local goFs = goBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            goFs:SetPoint("CENTER"); goFs:SetText("|cff44ee55Copy|r")
+            goBtn:SetScript("OnClick", function()
+                local src = _activeKind
+                local dst = (src == "party") and "raid" or "party"
+                _GFDoCopySelective(src, dst)
+                pop:Hide()
+                local srcL = (src == "party") and "Party" or "Raid"
+                local dstL = (dst == "party") and "Party" or "Raid"
+                print("|cff00ff00MSUF:|r Copied selected settings from " .. srcL .. " to " .. dstL .. ".")
+            end)
+
+            _copyPopup = pop
+        end
+
+        local src = _activeKind
+        local dst = (src == "party") and "Raid" or "Party"
+        _copyPopup._titleFS:SetText("Copy to " .. dst)
+        for i, cat in ipairs(_COPY_CATEGORIES) do
+            _copyPopup._checks[i]:SetChecked(_copyToggles[cat.key])
+        end
+        _copyPopup:ClearAllPoints()
+        _copyPopup:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT", 0, -2)
+        _copyPopup:Show()
     end
 
     ----------------------------------------------------------------
@@ -458,18 +613,14 @@ function _G.MSUF_EnsureGFPanelBuilt()
     copyFS:SetTextColor(0.65, 0.78, 0.95)
     copyBtn:SetFontString(copyFS)
     copyBtn:SetScript("OnClick", function()
-        local src = _activeKind
-        local dst = (src == "party") and "raid" or "party"
-        local srcLabel = (src == "party") and "Party" or "Raid"
-        local dstLabel = (dst == "party") and "Party" or "Raid"
-        StaticPopup_Show("MSUF_COPY_GF_SETTINGS", srcLabel, dstLabel, { src = src, dst = dst })
+        ShowCopyPopup(copyBtn)
     end)
     copyBtn:SetScript("OnEnter", function(self)
         self:SetBackdropColor(0.18, 0.28, 0.45, 1)
         self:SetBackdropBorderColor(0.35, 0.55, 0.80, 1)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
         GameTooltip:SetText("Copy Settings", 1, 1, 1)
-        GameTooltip:AddLine("Copies ALL settings (size, colors, fonts,\nborders, text, icons, auras) except position.", 0.7, 0.7, 0.8, true)
+        GameTooltip:AddLine("Select which categories to copy\nbetween Party and Raid settings.", 0.7, 0.7, 0.8, true)
         GameTooltip:Show()
     end)
     copyBtn:SetScript("OnLeave", function(self)
@@ -480,7 +631,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
     local function RefreshCopyBtn()
         local dst = (_activeKind == "party") and "Raid" or "Party"
-        copyFS:SetText("Copy \226\134\146 " .. dst)
+        copyFS:SetText("Copy > " .. dst)
     end
     RefreshCopyBtn()
 
@@ -491,6 +642,207 @@ function _G.MSUF_EnsureGFPanelBuilt()
         RefreshCopyBtn()
     end
     RefreshScopeBtns()
+
+    ----------------------------------------------------------------
+    -- Category filtering (driven by sidebar, no in-panel tab bar)
+    ----------------------------------------------------------------
+    local _activeTab = "frame"
+
+    -- Forward declarations for preview state (used by SwitchTab)
+    local _previewCollapsed = false
+    local RefreshPreviewToggle
+    local _scopeHintFS
+
+    local _TAB_DEFS = {
+        { key = "frame",      keys = { "general", "border", "anchor", "tooltip" } },
+        { key = "health",     keys = { "hcolor", "bars", "power", "text", "effects", "range" } },
+        { key = "auras",      keys = { "buffs", "debuffs", "ext", "rdebuffs", "priv", "masque", "autil" } },
+        { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
+    }
+    -- Reverse lookup: sectionKey → tabKey
+    local _secToTab = {}
+    for _, tab in ipairs(_TAB_DEFS) do
+        for _, sk in ipairs(tab.keys) do _secToTab[sk] = tab.key end
+    end
+
+    -- (#4) Section memory: remember last open section per tab
+    local _tabLastSection = {}
+
+    -- (#3) Preview relevance per tab
+    local _tabWantsPreview = { frame = true, health = true, auras = false, indicators = false }
+
+    local function SwitchTab(tabKey)
+        -- Save current open section before switching
+        if _activeTab then
+            for i = 1, #sections do
+                local box = sections[i]
+                if box and not box._msufIsDivider and not box._msufCollapsed then
+                    local sk = box._msufSecKey
+                    if sk and _secToTab[sk] == _activeTab then
+                        _tabLastSection[_activeTab] = sk
+                        break
+                    end
+                end
+            end
+        end
+
+        _activeTab = tabKey
+
+        -- Show/hide sections for this tab
+        for i = 1, #sections do
+            local box = sections[i]
+            if box and not box._msufIsDivider then
+                local sk = box._msufSecKey
+                box:SetShown(sk and _secToTab[sk] == tabKey or false)
+            elseif box and box._msufIsDivider then
+                box:SetShown(false)
+            end
+        end
+
+        -- (#1 + #4) Restore remembered section, or auto-open first
+        local restored = false
+        local lastSk = _tabLastSection[tabKey]
+        if lastSk then
+            local lastBox = _sectionLookup[lastSk]
+            if lastBox and not lastBox._msufIsDivider then
+                CollapseAllExcept(lastBox)
+                lastBox._msufCollapsed = false
+                if lastBox._msufApplyCollapseState then lastBox._msufApplyCollapseState() end
+                restored = true
+            end
+        end
+        if not restored then
+            -- Auto-open first visible section
+            for i = 1, #sections do
+                local box = sections[i]
+                if box and not box._msufIsDivider and box:IsShown() then
+                    CollapseAllExcept(box)
+                    box._msufCollapsed = false
+                    if box._msufApplyCollapseState then box._msufApplyCollapseState() end
+                    break
+                end
+            end
+        end
+
+        -- (#3) Auto-collapse preview on irrelevant pages
+        if _tabWantsPreview[tabKey] == false and not _previewCollapsed then
+            _previewCollapsed = true
+            if type(RefreshPreviewToggle) == "function" then RefreshPreviewToggle() end
+        elseif _tabWantsPreview[tabKey] and _previewCollapsed then
+            _previewCollapsed = false
+            if type(RefreshPreviewToggle) == "function" then RefreshPreviewToggle() end
+        end
+
+        -- (#5) Update scope context hint
+        if _scopeHintFS then
+            local TAB_LABELS = { frame = "layout", health = "health & text", auras = "buffs & debuffs", indicators = "indicators" }
+            local scopeLabel = (_activeKind == "party") and "Party" or "Raid"
+            _scopeHintFS:SetText("|cff666680Editing " .. scopeLabel .. " " .. (TAB_LABELS[tabKey] or tabKey) .. "|r")
+        end
+
+        _UpdatePreviewFocus()
+        if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
+    end
+
+    ----------------------------------------------------------------
+    -- (#5) Scope context hint (below scope bar)
+    ----------------------------------------------------------------
+    _scopeHintFS = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    _scopeHintFS:SetPoint("TOPLEFT", scopeBar, "BOTTOMLEFT", 4, -4)
+    _scopeHintFS:SetText("|cff666680Editing Party layout|r")
+
+    -- Patch SwitchScope to also update hint
+    local _origSwitchScope = SwitchScope
+    SwitchScope = function(kind)
+        _origSwitchScope(kind)
+        if _scopeHintFS then
+            local TAB_LABELS = { frame = "layout", health = "health & text", auras = "buffs & debuffs", indicators = "indicators" }
+            local scopeLabel = (kind == "party") and "Party" or "Raid"
+            _scopeHintFS:SetText("|cff666680Editing " .. scopeLabel .. " " .. (TAB_LABELS[_activeTab] or _activeTab) .. "|r")
+        end
+    end
+
+    ----------------------------------------------------------------
+    -- (#2) Quick Preset button on scope bar
+    ----------------------------------------------------------------
+    local _qpIdx = 1
+    local _qpKeys = GF.PRESET_ORDER or {}
+    if #_qpKeys > 0 then
+        local qpBtn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
+        qpBtn:SetSize(72, 20)
+        qpBtn:SetPoint("RIGHT", copyBtn, "LEFT", -6, 0)
+        qpBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+        qpBtn:SetBackdropColor(0.18, 0.14, 0.28, 0.9)
+        qpBtn:SetBackdropBorderColor(0.35, 0.28, 0.55, 0.7)
+        local qpFS = qpBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        qpFS:SetPoint("CENTER"); qpFS:SetText("Presets")
+        qpFS:SetTextColor(0.75, 0.65, 0.95)
+        qpBtn:SetScript("OnClick", function()
+            -- Cycle and apply
+            _qpIdx = (_qpIdx % #_qpKeys) + 1
+            local pk = _qpKeys[_qpIdx]
+            if pk and GF.ApplyPreset then
+                GF.ApplyPreset(K(), pk)
+                RefreshAllWidgets()
+                if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+                if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
+                local p = GF.PRESETS and GF.PRESETS[pk]
+                print("|cff00ff00MSUF:|r Applied preset: " .. (p and p.label or pk))
+            end
+        end)
+        qpBtn:SetScript("OnEnter", function(self)
+            self:SetBackdropColor(0.25, 0.20, 0.38, 1)
+            self:SetBackdropBorderColor(0.45, 0.38, 0.70, 1)
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetText("Quick Presets", 1, 1, 1)
+            local pk = _qpKeys[(_qpIdx % #_qpKeys) + 1]
+            local p = pk and GF.PRESETS and GF.PRESETS[pk]
+            GameTooltip:AddLine("Click to cycle & apply role presets.\nNext: " .. (p and p.label or "?"), 0.7, 0.7, 0.8, true)
+            GameTooltip:Show()
+        end)
+        qpBtn:SetScript("OnLeave", function(self)
+            self:SetBackdropColor(0.18, 0.14, 0.28, 0.9)
+            self:SetBackdropBorderColor(0.35, 0.28, 0.55, 0.7)
+            GameTooltip:Hide()
+        end)
+    end
+
+    ----------------------------------------------------------------
+    -- Preview collapse toggle
+    ----------------------------------------------------------------
+    local _previewToggle = CreateFrame("Button", nil, scrollChild)
+    _previewToggle:SetSize(SECTION_W, 18)
+    local _pvChevron = _previewToggle:CreateTexture(nil, "OVERLAY")
+    _pvChevron:SetSize(10, 10)
+    _pvChevron:SetPoint("LEFT", _previewToggle, "LEFT", 4, 0)
+    _pvChevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+    local _pvLabel = _previewToggle:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    _pvLabel:SetPoint("LEFT", _pvChevron, "RIGHT", 4, 0)
+    _pvLabel:SetTextColor(0.55, 0.65, 0.85)
+    local _pvLine = _previewToggle:CreateTexture(nil, "ARTWORK")
+    _pvLine:SetPoint("LEFT", _pvLabel, "RIGHT", 8, 0)
+    _pvLine:SetPoint("RIGHT", _previewToggle, "RIGHT", -4, 0)
+    _pvLine:SetHeight(1)
+    _pvLine:SetColorTexture(0.35, 0.45, 0.65, 0.3)
+
+    RefreshPreviewToggle = function()
+        if _previewCollapsed then
+            _pvLabel:SetText(TR("Show Preview"))
+            _pvChevron:SetRotation(0)
+            if _previewBox then _previewBox:Hide() end
+        else
+            _pvLabel:SetText(TR("Hide Preview"))
+            _pvChevron:SetRotation(math.pi / 2)
+            if _previewBox then _previewBox:Show() end
+        end
+        if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
+    end
+    _previewToggle:SetScript("OnClick", function()
+        _previewCollapsed = not _previewCollapsed
+        RefreshPreviewToggle()
+    end)
+    RefreshPreviewToggle()
 
     ----------------------------------------------------------------
     -- Helper: UI.Check with scope awareness
@@ -595,8 +947,26 @@ function _G.MSUF_EnsureGFPanelBuilt()
     local function AddSection(expandedH, title, defaultOpen, sectionKey)
         local box, body = MakeCollapsibleSection(scrollChild, expandedH, title, defaultOpen)
         sections[#sections + 1] = box
+        box._msufSecKey = sectionKey or ("_auto_" .. #sections)
         if sectionKey then _sectionLookup[sectionKey] = box end
         return box, body
+    end
+
+    -- Category divider: non-collapsible label between section groups
+    local function MakeCategoryDivider(titleText)
+        local div = CreateFrame("Frame", nil, scrollChild)
+        div:SetSize(SECTION_W, 22)
+        local label = div:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        label:SetPoint("LEFT", div, "LEFT", 4, 0)
+        label:SetText(titleText)
+        label:SetTextColor(0.55, 0.65, 0.85, 1)
+        local line = div:CreateTexture(nil, "ARTWORK")
+        line:SetPoint("LEFT", label, "RIGHT", 8, 0)
+        line:SetPoint("RIGHT", div, "RIGHT", -4, 0)
+        line:SetHeight(1)
+        line:SetColorTexture(0.35, 0.45, 0.65, 0.5)
+        div._msufIsDivider = true
+        return div
     end
 
     ----------------------------------------------------------------
@@ -612,11 +982,88 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 1: General (default open)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(680, "General", false, "general")
+        local box, body = AddSection(760, "General", false, "general")
+
+        -- ── Role Preset selector ──
+        local presetLabel = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        presetLabel:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -6)
+        presetLabel:SetText(TR("Role Preset")); presetLabel:SetTextColor(1, 0.82, 0)
+
+        local _presetIdx = 1
+        local _presetKeys = GF.PRESET_ORDER or {}
+        local presetBtn = CreateFrame("Button", nil, body, "BackdropTemplate")
+        presetBtn:SetSize(200, 22)
+        presetBtn:SetPoint("TOPLEFT", presetLabel, "BOTTOMLEFT", 0, -4)
+        presetBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+        presetBtn:SetBackdropColor(0.10, 0.14, 0.22, 1)
+        presetBtn:SetBackdropBorderColor(0.20, 0.30, 0.50, 0.7)
+        local presetFS = presetBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        presetFS:SetPoint("CENTER"); presetFS:SetTextColor(0.55, 0.78, 1)
+
+        local function RefreshPresetLabel()
+            local pk = _presetKeys[_presetIdx]
+            local p = pk and GF.PRESETS and GF.PRESETS[pk]
+            presetFS:SetText(p and p.label or "None")
+        end
+        RefreshPresetLabel()
+
+        presetBtn:SetScript("OnClick", function()
+            _presetIdx = (_presetIdx % #_presetKeys) + 1
+            RefreshPresetLabel()
+        end)
+        presetBtn:SetScript("OnEnter", function(self)
+            self:SetBackdropBorderColor(0.35, 0.50, 0.75, 1)
+            local pk = _presetKeys[_presetIdx]
+            local p = pk and GF.PRESETS and GF.PRESETS[pk]
+            if p then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(p.label or pk, 1, 1, 1)
+                GameTooltip:AddLine(p.desc or "", 0.7, 0.8, 0.9, true)
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Click to cycle presets", 0.5, 0.5, 0.6)
+                GameTooltip:Show()
+            end
+        end)
+        presetBtn:SetScript("OnLeave", function(self)
+            self:SetBackdropBorderColor(0.20, 0.30, 0.50, 0.7)
+            GameTooltip:Hide()
+        end)
+
+        local applyPresetBtn = CreateFrame("Button", nil, body, "BackdropTemplate")
+        applyPresetBtn:SetSize(60, 22)
+        applyPresetBtn:SetPoint("LEFT", presetBtn, "RIGHT", 6, 0)
+        applyPresetBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+        applyPresetBtn:SetBackdropColor(0.15, 0.30, 0.18, 1)
+        applyPresetBtn:SetBackdropBorderColor(0.30, 0.60, 0.35, 0.9)
+        local applyFS = applyPresetBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        applyFS:SetPoint("CENTER"); applyFS:SetText("|cff44ee55Apply|r")
+        applyPresetBtn:SetScript("OnClick", function()
+            local pk = _presetKeys[_presetIdx]
+            if pk and GF.ApplyPreset then
+                GF.ApplyPreset(K(), pk)
+                RefreshAllWidgets()
+                if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+                if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
+                print("|cff00ff00MSUF:|r Applied preset: " .. (GF.PRESETS[pk].label or pk))
+            end
+        end)
+        applyPresetBtn:SetScript("OnEnter", function(self)
+            self:SetBackdropColor(0.20, 0.40, 0.25, 1)
+        end)
+        applyPresetBtn:SetScript("OnLeave", function(self)
+            self:SetBackdropColor(0.15, 0.30, 0.18, 1)
+        end)
+
+        -- Divider below preset
+        local presetDiv = body:CreateTexture(nil, "ARTWORK")
+        presetDiv:SetPoint("TOPLEFT", presetBtn, "BOTTOMLEFT", 0, -8)
+        presetDiv:SetPoint("RIGHT", body, "RIGHT", -12, 0)
+        presetDiv:SetHeight(1)
+        presetDiv:SetColorTexture(1, 1, 1, 0.08)
 
         local enableChk = SCheck({
             name = "MSUF_GF_EnableCheck", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            anchor = presetDiv, anchorPoint = "TOPLEFT", x = 0, y = -6,
             label = TR("Enable"),
             get = function(k) return GF.Val(k, "enabled") end,
             set = function(k, v) GF.GetConf(k).enabled = v; GF.RebuildAll() end,
@@ -638,9 +1085,20 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).showSolo = v; GF.RebuildAll() end,
         })
 
+        local showPetsChk = SCheck({
+            name = "MSUF_GF_ShowPetsCheck", parent = body,
+            anchor = showSoloChk, x = 0, y = -4,
+            label = TR("Show Pet Frames"),
+            get = function(k) return GF.Val(k, "showPets") end,
+            set = function(k, v)
+                GF.GetConf(k).showPets = v
+                if GF.RefreshAllPets then GF.RefreshAllPets() end
+            end,
+        })
+
         local widthSl = SSlider({
             name = "MSUF_GF_WidthSlider", parent = body, compact = true,
-            anchor = showSoloChk, x = 0, y = -18,
+            anchor = showPetsChk, x = 0, y = -18,
             min = 40, max = 300, step = 1, width = 270, default = 120,
             get = function(k) return GF.Val(k, "width") end,
             set = function(k, v) GF.GetConf(k).width = v; GF.RebuildAll() end,
@@ -1173,7 +1631,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         modeLbl:SetText(TR("Bar Color Mode"))
 
         local GF_BAR_MODES = {
-            { key = "GLOBAL",   label = TR("Follow Global (Colors menu)") },
+            { key = "GLOBAL",   label = TR("Follow Global Style") },
             { key = "CLASS",    label = TR("Class Color") },
             { key = "dark",     label = TR("Dark Mode") },
             { key = "unified",  label = TR("Unified Color") },
@@ -1183,9 +1641,17 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local gfColorSwatch, gfColorHint
         local function RefreshColorControls()
-            if not gfColorSwatch then return end
+            -- Dynamic title badge
             local conf = GF.GetConf(K())
             local m = conf.gfBarMode
+            if box._msufTitleFS then
+                if not m or m == "GLOBAL" then
+                    box._msufTitleFS:SetText(TR("Health Colors") .. "  |cff888888(Global)|r")
+                else
+                    box._msufTitleFS:SetText(TR("Health Colors") .. "  |cff88aacc(Custom)|r")
+                end
+            end
+            if not gfColorSwatch then return end
             if m == "dark" or m == "unified" or m == "CUSTOM" then
                 gfColorSwatch:Show()
                 local r, g, b
@@ -1203,7 +1669,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             end
             if gfColorHint then
                 if not m or m == "GLOBAL" then
-                    gfColorHint:SetText(TR("Health bar colors follow the global |cffffd200Colors|r menu."))
+                    gfColorHint:SetText(TR("Health bar colors follow |cffffd200Global Style > Colors|r."))
                     gfColorHint:Show()
                 else
                     gfColorHint:Hide()
@@ -1336,7 +1802,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         -- Redirect hint (full width)
         local hintFS = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         hintFS:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -6)
-        hintFS:SetText(TR("Font, outline, name color and max chars are in the |cffffd200Fonts|r menu."))
+        hintFS:SetText(TR("Font, outline and color are controlled globally in |cffffd200Global Style > Fonts|r."))
         hintFS:SetTextColor(0.55, 0.75, 1.0); hintFS:SetJustifyH("LEFT"); hintFS:SetWordWrap(true); hintFS:SetWidth(600)
 
         -- Two column anchors
@@ -1450,7 +1916,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).powerOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
             formatText = function(v) return string.format("X: %d", v) end,
         })
-        SSlider({
+        local powYSl = SSlider({
             name = "MSUF_GF_PowerOffsetYSlider", parent = colL, compact = true,
             anchor = powXSl, x = 0, y = -32,
             min = -100, max = 100, step = 1, width = 180, default = 0,
@@ -1533,7 +1999,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).hpOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
             formatText = function(v) return string.format("X: %d", v) end,
         })
-        SSlider({
+        local hpYSl = SSlider({
             name = "MSUF_GF_HPOffsetYSlider", parent = colR, compact = true,
             anchor = hpXSl, x = 0, y = -32,
             min = -100, max = 100, step = 1, width = 180, default = 0,
@@ -1544,7 +2010,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         -- ── Status + Layer ── (right column, below HP)
         local tOffSep = colR:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        tOffSep:SetPoint("TOPLEFT", hpXSl, "BOTTOMLEFT", 0, -20)
+        tOffSep:SetPoint("TOPLEFT", hpYSl, "BOTTOMLEFT", 0, -20)
         tOffSep:SetText(TR("Status & Layer")); tOffSep:SetTextColor(1, 0.82, 0)
 
         local statXSl = SSlider({
@@ -1555,7 +2021,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).statusOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
             formatText = function(v) return string.format("Status X: %d", v) end,
         })
-        SSlider({
+        local statYSl = SSlider({
             name = "MSUF_GF_StatusOffsetYSlider", parent = colR, compact = true,
             anchor = statXSl, x = 0, y = -32,
             min = -100, max = 100, step = 1, width = 180, default = 0,
@@ -1566,7 +2032,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local hpLaySl = SSlider({
             name = "MSUF_GF_TextLayerSlider", parent = colR, compact = true,
-            anchor = statXSl, x = 0, y = -32,
+            anchor = statYSl, x = 0, y = -32,
             min = 1, max = 12, step = 1, width = 180, default = 5,
             get = function(k) return GF.Val(k, "textLayer") end,
             set = function(k, v) GF.GetConf(k).textLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
@@ -1589,6 +2055,9 @@ function _G.MSUF_EnsureGFPanelBuilt()
     do
         local box, body = AddSection(170, "Bars", false, "bars")
 
+        -- Forward declare for set callbacks
+        local RefreshBarsTitle
+
         local fgLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         fgLbl:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -10)
         fgLbl:SetText(TR("Foreground Texture"))
@@ -1597,7 +2066,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             name = "MSUF_GF_BarTextureDropdown", parent = body,
             anchor = fgLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 240,
             items = function()
-                local items = { { key = "", label = "(Global Default)" } }
+                local items = { { key = "", label = "(Follow Global Style)" } }
                 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
                 if LSM then
                     local list = LSM:List("statusbar")
@@ -1606,7 +2075,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 return items
             end,
             get = function(k) return GF.Val(k, "barTexture") or "" end,
-            set = function(k, v) GF.GetConf(k).barTexture = v; GF.RefreshTextures() end,
+            set = function(k, v)
+                GF.GetConf(k).barTexture = (v ~= "" and v) or nil
+                GF.RefreshTextures()
+                if RefreshBarsTitle then RefreshBarsTitle() end
+            end,
         })
 
         local bgLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1617,7 +2090,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             name = "MSUF_GF_BarBackgroundTextureDropdown", parent = body,
             anchor = bgLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 240,
             items = function()
-                local items = { { key = "", label = "(Global Default)" } }
+                local items = { { key = "", label = "(Follow Global Style)" } }
                 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
                 if LSM then
                     local list = LSM:List("statusbar")
@@ -1626,8 +2099,28 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 return items
             end,
             get = function(k) return GF.Val(k, "barBgTexture") or "" end,
-            set = function(k, v) GF.GetConf(k).barBgTexture = v; GF.RefreshTextures() end,
+            set = function(k, v)
+                GF.GetConf(k).barBgTexture = (v ~= "" and v) or nil
+                GF.RefreshTextures()
+                if RefreshBarsTitle then RefreshBarsTitle() end
+            end,
         })
+
+        -- Dynamic title badge
+        RefreshBarsTitle = function()
+            if not box._msufTitleFS then return end
+            local conf = GF.GetConf(K())
+            local fg = conf.barTexture
+            local bg = conf.barBgTexture
+            local isGlobal = (not fg or fg == "") and (not bg or bg == "")
+            if isGlobal then
+                box._msufTitleFS:SetText(TR("Bars") .. "  |cff888888(Global)|r")
+            else
+                box._msufTitleFS:SetText(TR("Bars") .. "  |cff88aacc(Custom)|r")
+            end
+        end
+        _allRefreshFns[#_allRefreshFns + 1] = RefreshBarsTitle
+        RefreshBarsTitle()
     end
 
     ----------------------------------------------------------------
@@ -1729,7 +2222,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local hlHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         hlHint:SetPoint("TOPLEFT", hlRedirect, "BOTTOMLEFT", 0, -6)
-        hlHint:SetText(TR("Controlled from: |cffffd200Bars|r > |cffffd200Outline & Highlight Border|r\nEnable/disable, colors, size, offset, priority — all in one place."))
+        hlHint:SetText(TR("Controlled from: |cffffd200Global Style > Bars|r > |cffffd200Outline & Highlight Border|r\nEnable/disable, colors, size, offset, priority — all in one place."))
         hlHint:SetTextColor(0.6, 0.65, 0.75)
         hlHint:SetWidth(400)
         hlHint:SetJustifyH("LEFT")
@@ -1797,7 +2290,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local hoverHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         hoverHint:SetPoint("TOPLEFT", hoverSep, "BOTTOMLEFT", 0, -4)
-        hoverHint:SetText(TR("Enable + color: Colors menu > Mouseover Highlight | Size/offset also in Bars menu"))
+        hoverHint:SetText(TR("Enable + color: |cffffd200Global Style > Colors|r > Mouseover Highlight"))
         hoverHint:SetTextColor(0.5, 0.55, 0.65)
 
         SSlider({
@@ -2037,14 +2530,19 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Section 11: Health Overlays
+    -- Section: Effects (Heal Prediction + Cutaway Health)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(120, "Health Overlays", false, "overlay")
+        local box, body = AddSection(280, "Effects", false, "effects")
+
+        -- ── Heal Prediction ──
+        local hpSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        hpSep:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -6)
+        hpSep:SetText(TR("Heal Prediction")); hpSep:SetTextColor(1, 0.82, 0)
 
         local healPredChk = SCheck({
             name = "MSUF_GF_HealPredEnableCheck", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            anchor = hpSep, x = 0, y = -4,
             label = TR("Heal Prediction Overlay"),
             get = function(k) return GF.Val(k, "healPredEnabled") end,
             set = function(k, v)
@@ -2056,23 +2554,21 @@ function _G.MSUF_EnsureGFPanelBuilt()
             end,
         })
 
-        local hint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        hint:SetPoint("TOPLEFT", healPredChk, "BOTTOMLEFT", 0, -10)
-        hint:SetWidth(600)
-        hint:SetJustifyH("LEFT")
-        hint:SetText(TR("Absorb overlays: controlled from |cffffd200Bars|r menu > Absorb Display (shared with unit frames).\nOverlay colors: |cffffd200Colors|r menu.  Overlay textures: |cffffd200Bars|r menu."))
-        hint:SetTextColor(0.55, 0.60, 0.70)
-    end
+        local hpHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hpHint:SetPoint("TOPLEFT", healPredChk, "BOTTOMLEFT", 0, -6)
+        hpHint:SetWidth(600)
+        hpHint:SetJustifyH("LEFT")
+        hpHint:SetText(TR("Group Frames Heal Prediction — shows incoming heals as a lighter overlay on each member's health bar.\nAbsorb overlays and their colors/textures are shared with |cffffd200Global Style > Bars|r and |cffffd200Colors|r."))
+        hpHint:SetTextColor(0.55, 0.60, 0.70)
 
-    ----------------------------------------------------------------
-    -- Section: Cutaway Health
-    ----------------------------------------------------------------
-    do
-        local box, body = AddSection(200, "Cutaway Health", false, "cutaway")
+        -- ── Cutaway Health ──
+        local cwSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        cwSep:SetPoint("TOPLEFT", hpHint, "BOTTOMLEFT", 0, -14)
+        cwSep:SetText(TR("Cutaway Health")); cwSep:SetTextColor(1, 0.82, 0)
 
         local enChk = SCheck({
             name = "MSUF_GF_CutawayEnableCheck", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            anchor = cwSep, x = 0, y = -4,
             label = TR("Enable Cutaway Health"),
             get = function(k) return GF.Val(k, "cutawayEnabled") end,
             set = function(k, v) GF.GetConf(k).cutawayEnabled = v; GF.RefreshVisuals() end,
@@ -2154,27 +2650,82 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Layout: stack sections vertically
+    -- Reorder sections into logical groups (tabs replace dividers)
     ----------------------------------------------------------------
+    do
+        -- Desired order within each tab
+        local ORDER = {
+            { key = "frame",      keys = { "general", "border", "anchor", "tooltip" } },
+            { key = "health",     keys = { "hcolor", "bars", "power", "text", "effects", "range" } },
+            { key = "auras",      keys = { "buffs", "debuffs", "ext", "rdebuffs", "priv", "masque", "autil" } },
+            { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
+        }
+
+        local byKey = {}
+        for i = 1, #sections do
+            local k = sections[i]._msufSecKey
+            if k then byKey[k] = sections[i] end
+        end
+
+        local ordered = {}
+        local placed = {}
+        for _, group in ipairs(ORDER) do
+            for _, k in ipairs(group.keys) do
+                if byKey[k] then
+                    ordered[#ordered + 1] = byKey[k]
+                    placed[byKey[k]] = true
+                end
+            end
+        end
+        -- Append any sections not in ORDER (safety net)
+        for i = 1, #sections do
+            if not placed[sections[i]] then
+                ordered[#ordered + 1] = sections[i]
+            end
+        end
+        for i = 1, math.max(#sections, #ordered) do
+            sections[i] = ordered[i]
+        end
+    end
     local SECTION_GAP = 6
 
     RefreshScrollLayout = function()
-        local y = -52  -- below scope bar
+        local y = -66  -- below scope bar + context hint
+
+        -- Preview toggle
+        _previewToggle:ClearAllPoints()
+        _previewToggle:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, y)
+        y = y - 18 - 2
+
+        -- Preview box (collapsible)
         if _previewBox then
-            _previewBox:ClearAllPoints()
-            _previewBox:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, y)
-            _previewBox:SetWidth(SECTION_W)
-            if GF.ResizePreviewContainer then GF.ResizePreviewContainer() end
-            y = y - (_previewBox:GetHeight() or 200) - SECTION_GAP
+            if _previewCollapsed then
+                _previewBox:Hide()
+            else
+                _previewBox:ClearAllPoints()
+                _previewBox:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, y)
+                _previewBox:SetWidth(SECTION_W)
+                _previewBox:Show()
+                if GF.ResizePreviewContainer then GF.ResizePreviewContainer() end
+                y = y - (_previewBox:GetHeight() or 200) - SECTION_GAP
+            end
         end
+
+        -- Sections (only visible ones — tab-filtered)
         for i = 1, #sections do
             local box = sections[i]
-            box:ClearAllPoints()
-            box:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, y)
-            y = y - box:GetHeight() - SECTION_GAP
+            if box and box:IsShown() then
+                box:ClearAllPoints()
+                box:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, y)
+                y = y - box:GetHeight() - SECTION_GAP
+            end
         end
         scrollChild:SetHeight(math.abs(y) + 40)
     end
+
+    -- Initialize: activate default tab + layout
+    SwitchTab(_activeTab)
+    _G.MSUF_GF_SwitchTab = SwitchTab
     RefreshScrollLayout()
 
     ----------------------------------------------------------------
@@ -2195,7 +2746,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Search registration
     ----------------------------------------------------------------
     if _G.MSUF_Search_RegisterRoots then
-        _G.MSUF_Search_RegisterRoots({ "groupframes" }, scrollChild, "Group Frames")
+        _G.MSUF_Search_RegisterRoots(
+            { "groupframes", "gf_layout", "gf_bars", "gf_auras", "gf_indicators",
+              "party", "raid", "group", "heal prediction", "buffs", "debuffs" },
+            scrollChild, "Group Frames"
+        )
     end
 
     return _panel

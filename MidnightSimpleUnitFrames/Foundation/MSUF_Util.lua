@@ -1,11 +1,9 @@
 local addonName, ns = ...
 ns = ns or {}
 
--- =========================================================================
 -- PERF LOCALS (core runtime)
 --  - Reduce global table lookups in high-frequency event/render paths.
 --  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
 local type, tostring, tonumber, select = type, tostring, tonumber, select
 local pairs, ipairs, next = pairs, ipairs, next
 local math_min, math_max, math_floor = math.min, math.max, math.floor
@@ -18,15 +16,11 @@ local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
 local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
 
--- ---------------------------------------------------------------------------
 -- Boss unit token helpers (perf)
---
 -- Avoid pattern matching (string:match) in hot paths. Pattern matching is
 -- noticeably heavier than simple substring/tonumber checks.
---
 -- Returns bossIndex (number) if u is "bossN" (N>=1), otherwise nil.
 -- NOTE: Keep global names stable so call-sites across files can use them.
--- ---------------------------------------------------------------------------
 if type(_G.MSUF_GetBossIndexFromToken) ~= "function" then
     function _G.MSUF_GetBossIndexFromToken(u)
         if type(u) ~= "string" then
@@ -58,7 +52,6 @@ ns.MSUF_Util = ns.MSUF_Util or {}
 local U = ns.MSUF_Util
 _G.MSUF_Util = U
 
--- ---------------------------------------------------------------------------
 -- Atlas helper used by status/state indicator icons.
 -- Some call-sites use a global helper name; provide it here as a safe fallback
 -- so indicator modules can remain self-contained without load-order fragility.
@@ -115,9 +108,7 @@ function MSUF_CaptureKeys(src, keys)
 end
 
 function MSUF_RestoreKeys(dst, snap)
-    if type(dst) ~= "table" or type(snap) ~= "table" then
-        return
-    end
+    if type(dst) ~= "table" or type(snap) ~= "table" then return end
     for k, v in pairs(snap) do
         dst[k] = v -- assigning nil removes the key (restores defaults)
     end
@@ -168,7 +159,7 @@ function MSUF_SetTextIfChanged(fs, text)
 
     -- Secret-safe diff gate: only compare/cache plain Lua values.
     -- Secret values must pass straight through to C-side SetText().
-    local sv = _G and _G.issecretvalue
+    local sv = _G.issecretvalue
     if sv and sv(v) == true then
         fs._msufLastText = nil
         fs:SetText(v)
@@ -177,9 +168,7 @@ function MSUF_SetTextIfChanged(fs, text)
 
     local tv = type(v)
     if tv == "string" or tv == "number" or tv == "boolean" then
-        if fs._msufLastText == v then
-            return
-        end
+        if fs._msufLastText == v then return end
         fs._msufLastText = v
         fs:SetText(v)
         return
@@ -188,7 +177,6 @@ function MSUF_SetTextIfChanged(fs, text)
     fs._msufLastText = nil
     fs:SetText(v)
 end
-
 
 function MSUF_SetCastTimeText(frame, seconds)
     local fs = frame and frame.timeText
@@ -213,7 +201,6 @@ function MSUF_SetCastTimeText(frame, seconds)
         MSUF_SetTextIfChanged(fs, string.format("%.1f", n))
     end
 end
-
 
 function MSUF_SetFormattedTextIfChanged(fs, fmt, ...)
     if not fs then return end
@@ -255,12 +242,9 @@ function MSUF_SetTimeTextTenth(fs, seconds)
     end
 end
 
--- ---------------------------------------------------------------------------
 -- Stamp cache (performance)
---
 -- Avoid re-applying expensive UI state (SetFont/SetPoint/SetColor/etc.) when
 -- the inputs are unchanged.
---
 -- Secret-safe rules:
 -- - Only compares primitive Lua types (number/string/boolean/nil).
 -- - Any non-primitive value is treated as "changed" to avoid secret-value
@@ -332,8 +316,6 @@ function MSUF_StampChanged(obj, stampKey, ...)
     end
     return false
 end
-
-
 
 function MSUF_SetAlphaIfChanged(f, a)
     if not f or not f.SetAlpha or a == nil then return end
@@ -510,10 +492,8 @@ do
     end
 end
 
--- =============================================================
 -- Phase 2: Global helpers relocated from MSUF_UpdateManager.lua
 -- (These must load before any consumer; MSUF_Util.lua is in TOC slot 2.)
--- =============================================================
 
 -- Fast-path replacement for protected calls.
 -- Intentionally does NOT catch errors (for maximum performance).
@@ -531,7 +511,7 @@ end
 if not _G.MSUF_IsInAnyEditMode then
     function _G.MSUF_IsInAnyEditMode()
         local st = rawget(_G, "MSUF_EditState")
-        if type(st) == "table" and st.active == true then
+        if st and st.active == true then
              return true
         end
         if rawget(_G, "MSUF_UnitEditModeActive") == true then
@@ -540,7 +520,6 @@ if not _G.MSUF_IsInAnyEditMode then
          return false
     end
 end
-
 
 -- Global helper: restore UIPanelButtonTemplate pieces if another skin/hide pass removed them.
 -- This is defensive and safe to call repeatedly; it only touches obvious regions (Left/Middle/Right/Normal/Font).
@@ -577,9 +556,7 @@ if not _G.MSUF_ForceShowUIPanelButtonPieces then
     end
 end
 
--- =========================================================================
 -- Keybinding support (Bindings.xml auto-discovered by WoW, NOT in TOC)
--- =========================================================================
 BINDING_HEADER_MSUF_HEADER = "Midnight Simple Unit Frames"
 BINDING_NAME_MSUF_TOGGLE_OPTIONS = "Toggle MSUF Options"
 BINDING_NAME_MSUF_TOGGLE_EDITMODE = "Toggle MSUF Edit Mode"
@@ -588,7 +565,7 @@ function MSUF_Keybind_ToggleOptions()
     if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
         local win = _G.MSUF_StandaloneOptionsWindow
         if win and win.IsShown and win:IsShown() then
-            if type(_G.MSUF_HideStandaloneOptionsWindow) == "function" then
+            if _G.MSUF_HideStandaloneOptionsWindow then
                 _G.MSUF_HideStandaloneOptionsWindow()
             elseif win.Hide then
                 win:Hide()
@@ -603,7 +580,7 @@ function MSUF_Keybind_ToggleEditMode()
     if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
         local st = _G.MSUF_EditState
         local nextActive = true
-        if type(st) == "table" and st.active ~= nil then
+        if st and st.active ~= nil then
             nextActive = not st.active
         end
         pcall(_G.MSUF_SetMSUFEditModeDirect, nextActive, nil)
@@ -612,16 +589,12 @@ function MSUF_Keybind_ToggleEditMode()
     end
 end
 
--- =========================================================================
 -- i18n UI helpers — prevent text overflow in translated locales.
---
 -- Checkbox text in narrow columns can overflow when German/Spanish/French
 -- strings are longer than English. These helpers clamp the FontString
 -- width so text truncates instead of overlapping adjacent UI elements.
---
 -- Usage:  MSUF_ClampCheckboxText(cb, maxPixelWidth)
 --         MSUF_AutoSizeButton(btn, minWidth, padding)
--- =========================================================================
 
 --- Clamp a checkbox's label FontString to a max pixel width.
 --- Disables word-wrap so long translations truncate cleanly.

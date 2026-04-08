@@ -2,8 +2,8 @@
 -- Phase 1: Party + Raid frame creation with EQoL-pattern hierarchy
 -- Midnight 12.0 secret-safe, zero combat overhead
 local _, ns = ...
-ns = ns or (_G and _G.MSUF_NS) or {}
-if _G then _G.MSUF_NS = ns end
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
 
 local GF = ns.GF or {}
 ns.GF = GF

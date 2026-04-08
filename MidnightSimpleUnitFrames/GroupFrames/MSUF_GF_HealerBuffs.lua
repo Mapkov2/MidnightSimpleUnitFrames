@@ -2,8 +2,8 @@
 -- Per-spec spell families, compilation, aura matching, icon/bar indicators.
 -- Midnight 12.0 secret-safe, zero combat overhead.
 local _, ns = ...
-ns = ns or (_G and _G.MSUF_NS) or {}
-if _G then _G.MSUF_NS = ns end
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
 
 local GF = ns.GF
 if not GF then return end

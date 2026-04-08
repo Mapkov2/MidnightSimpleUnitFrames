@@ -3,8 +3,8 @@
 -- Priority: dispellable > raid-flagged > duration-based > fallback.
 -- Midnight 12.0 secret-safe, zero combat overhead when disabled.
 local _, ns = ...
-ns = ns or (_G and _G.MSUF_NS) or {}
-if _G then _G.MSUF_NS = ns end
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
 
 local GF = ns.GF
 if not GF then return end
@@ -19,6 +19,15 @@ local math_max        = math.max
 
 local GameTooltip     = _G.GameTooltip
 
+-- Pre-allocated slot buffer for GetAuraSlots (zero table alloc per scan)
+local _rdSlotBuf = {}
+local function _rdCaptureSlots(...)
+    local n = select("#", ...)
+    for i = 1, n do _rdSlotBuf[i] = select(i, ...) end
+    for i = n + 1, #_rdSlotBuf do _rdSlotBuf[i] = nil end
+    return n
+end
+
 ------------------------------------------------------------------------
 -- Priority scoring (higher = more important)
 -- Returns a plain number — never touches secret fields unsafely
@@ -29,7 +38,7 @@ local function ScoreAura(aura)
 
     -- Dispellable debuffs are high priority
     local dn = aura.dispelName
-    if dn and not (issecretvalue and issecretvalue(dn)) then
+    if not (issecretvalue and issecretvalue(dn)) and dn then
         if dn == "Magic" or dn == "Curse" or dn == "Poison" or dn == "Disease" then
             score = score + 100
         end
@@ -37,13 +46,13 @@ local function ScoreAura(aura)
 
     -- Raid-flagged debuffs (isRaid) are very high priority
     local ir = aura.isRaid
-    if ir and not (issecretvalue and issecretvalue(ir)) and ir then
+    if not (issecretvalue and issecretvalue(ir)) and ir then
         score = score + 200
     end
 
     -- Boss debuffs (from boss units) get bonus
     local src = aura.sourceUnit
-    if src and not (issecretvalue and issecretvalue(src)) then
+    if not (issecretvalue and issecretvalue(src)) and src then
         if src == "boss1" or src == "boss2" or src == "boss3" or src == "boss4" or src == "boss5" then
             score = score + 150
         end
@@ -51,7 +60,7 @@ local function ScoreAura(aura)
 
     -- Short duration = more urgent
     local dur = aura.duration
-    if dur and not (issecretvalue and issecretvalue(dur)) then
+    if not (issecretvalue and issecretvalue(dur)) and dur then
         if dur > 0 and dur <= 10 then
             score = score + 50
         elseif dur > 0 and dur <= 30 then
@@ -196,9 +205,10 @@ function GF.UpdateRaidDebuff(f, unit)
     local bestAID   = nil
     local filter = rdConf.onlyDispellable and "HARMFUL|RAID" or "HARMFUL"
 
-    local slots = { C_UnitAuras.GetAuraSlots(unit, filter) }
-    for i = 2, #slots do
-        local slot = slots[i]
+    -- Pre-allocated slot buffer (zero GC per call)
+    local slotCount = _rdCaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter))
+    for i = 2, slotCount do
+        local slot = _rdSlotBuf[i]
         local aura = C_UnitAuras.GetAuraDataBySlot(unit, slot)
         if aura then
             local aid = aura.auraInstanceID
@@ -222,7 +232,7 @@ function GF.UpdateRaidDebuff(f, unit)
 
     -- Apply icon (secret-safe: icon field may be secret for other players' auras)
     local icon = bestAura.icon
-    if icon and not (issecretvalue and issecretvalue(icon)) then
+    if not (issecretvalue and issecretvalue(icon)) and icon then
         rd._icon:SetTexture(icon)
     else
         rd._icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
@@ -241,11 +251,12 @@ function GF.UpdateRaidDebuff(f, unit)
     rd._rdUnit   = unit
     rd._rdAuraID = bestAID
 
-    -- Cooldown swipe (secret-safe: duration object)
+    -- Cooldown swipe (secret-safe: duration/expiration may be secret)
     local dur = bestAura.duration
     local exp = bestAura.expirationTime
-    if dur and exp and not (issecretvalue and issecretvalue(dur))
-       and not (issecretvalue and issecretvalue(exp)) and dur > 0 then
+    if not (issecretvalue and issecretvalue(dur))
+       and not (issecretvalue and issecretvalue(exp))
+       and dur and exp and dur > 0 then
         rd._cooldown:SetCooldown(exp - dur, dur)
         rd._rdExpires = exp
     else
@@ -255,7 +266,7 @@ function GF.UpdateRaidDebuff(f, unit)
 
     -- Stack count
     local apps = bestAura.applications
-    if apps and not (issecretvalue and issecretvalue(apps)) and apps > 1 then
+    if not (issecretvalue and issecretvalue(apps)) and apps and apps > 1 then
         rd._count:SetText(apps)
         rd._count:Show()
     else
@@ -274,7 +285,7 @@ function GF.UpdateRaidDebuff(f, unit)
 
     -- Dispel-type border color
     local dn = bestAura.dispelName
-    if dn and not (issecretvalue and issecretvalue(dn)) then
+    if not (issecretvalue and issecretvalue(dn)) and dn then
         local dc = C_UnitAuras.GetAuraDispelTypeColor and C_UnitAuras.GetAuraDispelTypeColor(dn)
         if dc then
             rd:SetBackdropBorderColor(dc.r or 0.8, dc.g or 0, dc.b or 0, 1)

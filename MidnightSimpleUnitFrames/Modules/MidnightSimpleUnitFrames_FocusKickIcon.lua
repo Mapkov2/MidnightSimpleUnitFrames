@@ -33,7 +33,6 @@ local FocusKickOptionsInitialized = false
 -- Forward-declared here so early helpers (font/apply) can access the same locals.
 ------------------------------------------------------
 
-
 ------------------------------------------------------
 -- DB defaults
 ------------------------------------------------------
@@ -198,7 +197,6 @@ local function FocusKick_CreateFrame()
     icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     FocusKickFrame.icon = icon
 
-
     -- Cast time text (optional)
     local timeText = FocusKickFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     timeText:SetPoint("BOTTOM", FocusKickFrame, "BOTTOM", 0, 2)
@@ -238,9 +236,7 @@ end
 -- Interrupt feedback: red flash + small shake
 ------------------------------------------------------
 local function FocusKick_PlayInterruptFeedback()
-    if not FocusKickFrame or not FocusKickFrame.icon then
-        return
-    end
+    if not FocusKickFrame or not FocusKickFrame.icon then return end
 
     -- Flash red
     FocusKickFrame.icon:SetDesaturated(false)
@@ -264,9 +260,7 @@ local function FocusKick_PlayInterruptFeedback()
 
     -- Small shake
     FocusKick_EnsureDB()
-    if not MSUF_DB or not MSUF_DB.general or not C_Timer_After then
-        return
-    end
+    if not MSUF_DB or not MSUF_DB.general or not C_Timer_After then return end
     local g = MSUF_DB.general
 
     local offset      = 6
@@ -275,9 +269,7 @@ local function FocusKick_PlayInterruptFeedback()
     local i           = 0
 
     local function Step()
-        if not FocusKickFrame or not FocusKickFrame:IsShown() then
-            return
-        end
+        if not FocusKickFrame or not FocusKickFrame:IsShown() then return end
 
         i = i + 1
         local dir = (i % 2 == 0) and -1 or 1
@@ -321,7 +313,6 @@ local function FocusKick_AttachHooks()
     -- The castbar is permanently hidden (alpha 0) by FocusKick_EnsureInitialized
     -- when the feature is enabled. No hooks needed.
 end
-
 
 ------------------------------------------------------
 -- Focus cast watcher (works even if FocusCastBar isn't shown / hasn't updated yet)
@@ -465,14 +456,26 @@ local function FocusKick_UpdateFromUnit()
         FocusKickFrame.icon:SetTexture(texture)
     end
 
-    -- Interruptible state intentionally ignored (secret-safe). Always render icon normally.
+    -- Kick ready coloring (legacy path — mirrors state driver path)
     if FocusKickFrame.icon then
-        if FocusKickFrame.icon.SetDesaturated then
+        if _G.MSUF_KickReady_Init then _G.MSUF_KickReady_Init() end
+        local canKick = false
+        local isNI = false
+        -- notInterruptible from UnitCastingInfo/UnitChannelInfo is potentially secret —
+        -- avoid testing it directly; fall back to castbar frame's event-driven boolean.
+        local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
+        if bar and bar.isNotInterruptible then isNI = true end
+        if not isNI then
+            canKick = (type(_G.MSUF_KickReady_IsReady) == "function") and _G.MSUF_KickReady_IsReady() or false
+        end
+        if canKick then
             FocusKickFrame.icon:SetDesaturated(false)
+            FocusKickFrame.icon:SetVertexColor(0.2, 1, 0.2)
+        else
+            FocusKickFrame.icon:SetDesaturated(isNI)
+            FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
         end
-        if FocusKickFrame.icon.SetVertexColor then
-            FocusKickFrame.icon:SetVertexColor(1, 1, 1)
-        end
+        FocusKickFrame._msufLastCastState = { active = true, isNotInterruptible = isNI }
     end
 
 FocusKickFrame:Show()
@@ -535,7 +538,6 @@ local function FocusKick_StopWatcher()
     end
 end
 
-
 ------------------------------------------------------
 -- Enable / disable mode
 ------------------------------------------------------
@@ -545,9 +547,7 @@ local function FocusKick_UpdateMode()
     -- If the Castbar Engine driver is active, keep this module UI-only.
     -- The driver will call MSUF_FocusKick_ApplyCastState().
     if _G.MSUF_FocusKickUseEngineDriver then
-        if not MSUF_DB or not MSUF_DB.general then
-            return
-        end
+        if not MSUF_DB or not MSUF_DB.general then return end
 
         local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
 
@@ -561,7 +561,7 @@ local function FocusKick_UpdateMode()
             end
 
             FocusKick_EnsureTimeUpdater()
-            if type(_G.MSUF_FocusKickDriver_ForceUpdate) == "function" then
+            if _G.MSUF_FocusKickDriver_ForceUpdate then
                 _G.MSUF_FocusKickDriver_ForceUpdate()
             end
         else
@@ -584,9 +584,7 @@ local function FocusKick_UpdateMode()
 
     FocusKick_AttachHooks()
 
-    if not MSUF_DB or not MSUF_DB.general then
-        return
-    end
+    if not MSUF_DB or not MSUF_DB.general then return end
     local g = MSUF_DB.general
 
     local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
@@ -672,7 +670,7 @@ local FocusKickPreviewMinX, FocusKickPreviewMaxX = -500, 500
 local FocusKickPreviewMinY, FocusKickPreviewMaxY = -500, 500
 
 local function FocusKick_PrintSystem(msg)
-    if type(UIErrorsFrame) == "table" and UIErrorsFrame.AddMessage then
+    if UIErrorsFrame and UIErrorsFrame.AddMessage then
         UIErrorsFrame:AddMessage(msg, 1, 0.2, 0.2, 1)
         return
     end
@@ -931,11 +929,8 @@ MSUF_FocusKick_SyncPreviewFromDB = function(panel)
     end
 end
 
-
 function MSUF_InitFocusKickIconOptions()
-    if FocusKickOptionsInitialized then
-        return
-    end
+    if FocusKickOptionsInitialized then return end
     if _G.MSUF_FocusKickOptionsBuiltInCastbar then
         FocusKickOptionsInitialized = true
         return
@@ -1278,8 +1273,6 @@ local resetBtn = CreateFrame("Button", "MSUF_FocusKickResetPositionButton", pane
         end
     end
 
-
-
     local function SyncFromDB()
         if MSUF_FocusKick_SyncPreviewFromDB then
             MSUF_FocusKick_SyncPreviewFromDB(panel)
@@ -1342,6 +1335,7 @@ end
 -- Exports for castbar accordion UI (MSUF_Options_Castbars.lua)
 ------------------------------------------------------
 _G.MSUF_FocusKick_SetPreviewEnabled = FocusKick_SetPreviewEnabled
+_G.MSUF_FocusKick_IsPreviewEnabled  = function() return FocusKickPreviewEnabled end
 _G.MSUF_FocusKick_UpdateAppearance  = FocusKick_UpdateAppearance
 _G.MSUF_FocusKick_ApplyTimeTextFont = FocusKick_ApplyTimeTextFontNow
 
@@ -1378,22 +1372,26 @@ function _G.MSUF_FocusKick_ApplyCastState(state)
         FocusKickFrame.icon:SetTexture(state.icon)
     end
 
+    -- Kick ready coloring: green = interruptible + kick ready, red = can't kick
     if FocusKickFrame.icon then
-        if state.isNotInterruptible then
-            if FocusKickFrame.icon.SetDesaturated then
-                FocusKickFrame.icon:SetDesaturated(true)
-            end
-            if FocusKickFrame.icon.SetVertexColor then
-                FocusKickFrame.icon:SetVertexColor(0.8, 0.8, 0.8)
-            end
-        else
-            if FocusKickFrame.icon.SetDesaturated then
-                FocusKickFrame.icon:SetDesaturated(false)
-            end
-            if FocusKickFrame.icon.SetVertexColor then
-                FocusKickFrame.icon:SetVertexColor(1, 1, 1)
-            end
+        -- Ensure kick cooldown monitor is running
+        if _G.MSUF_KickReady_Init then _G.MSUF_KickReady_Init() end
+
+        local canKick = false
+        if not state.isNotInterruptible then
+            canKick = (type(_G.MSUF_KickReady_IsReady) == "function") and _G.MSUF_KickReady_IsReady() or false
         end
+
+        if canKick then
+            if FocusKickFrame.icon.SetDesaturated then FocusKickFrame.icon:SetDesaturated(false) end
+            if FocusKickFrame.icon.SetVertexColor then FocusKickFrame.icon:SetVertexColor(0.2, 1, 0.2) end
+        else
+            if FocusKickFrame.icon.SetDesaturated then FocusKickFrame.icon:SetDesaturated(state.isNotInterruptible and true or false) end
+            if FocusKickFrame.icon.SetVertexColor then FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2) end
+        end
+
+        -- Cache state for cooldown-driven refresh
+        FocusKickFrame._msufLastCastState = state
     end
 
     FocusKickFrame:Show()
@@ -1407,4 +1405,25 @@ function _G.MSUF_FocusKick_PlayInterruptFeedback()
     if not FocusKick_IsEnabled() then return end
     FocusKick_EnsureInitialized(true)
     FocusKick_PlayInterruptFeedback()
+end
+
+-- Refresh kick-ready coloring when cooldown state changes mid-cast
+function _G.MSUF_FocusKick_RefreshKickReady()
+    if not FocusKickFrame or not FocusKickFrame:IsShown() then return end
+    local state = FocusKickFrame._msufLastCastState
+    if not state or not state.active then return end
+    if not FocusKickFrame.icon then return end
+
+    local canKick = false
+    if not state.isNotInterruptible then
+        canKick = (type(_G.MSUF_KickReady_IsReady) == "function") and _G.MSUF_KickReady_IsReady() or false
+    end
+
+    if canKick then
+        FocusKickFrame.icon:SetDesaturated(false)
+        FocusKickFrame.icon:SetVertexColor(0.2, 1, 0.2)
+    else
+        FocusKickFrame.icon:SetDesaturated(state.isNotInterruptible and true or false)
+        FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
+    end
 end
