@@ -1222,3 +1222,130 @@ function _G.MSUF_CB_ResetStateOnStop(frame, reasonOrState, opts)
     -- INTERRUPTED: do not apply colors here (interrupt/SSoT handles it).
     -- Text/Show/Hold timer remain in the caller (SetInterrupted), matching the old code.
 end
+
+-- ============================================================================
+-- Interrupt Ready Indicator  (event-driven, zero OnUpdate)
+-- ============================================================================
+do
+    local INTERRUPT_SPELLS = {
+        DEATHKNIGHT = 47528,  DEMONHUNTER = 183752, DRUID   = 106839,
+        EVOKER      = 351338, HUNTER      = 147362,  MAGE    = 2139,
+        MONK        = 116705, PALADIN     = 96231,   PRIEST  = 15487,
+        ROGUE       = 1766,   SHAMAN      = 57994,   WARLOCK = 119910,
+        WARRIOR     = 6552,
+    }
+
+    local _kickID, _kickReady, _monFrame = nil, false, nil
+
+    local function DetectKick()
+        local _, cls = UnitClass("player")
+        _kickID = cls and INTERRUPT_SPELLS[cls] or nil
+    end
+
+    local function CheckCooldown()
+        if not _kickID then DetectKick() end
+        if not _kickID then _kickReady = false; return end
+        if C_Spell and C_Spell.GetSpellCooldown then
+            local info = C_Spell.GetSpellCooldown(_kickID)
+            -- info.duration / info.startTime are secret in Midnight — use plain boolean isActive
+            if info then
+                _kickReady = (not info.isActive)
+            else
+                _kickReady = true
+            end
+        else
+            _kickReady = false
+        end
+    end
+
+    local function GetDBColor(key, dr, dg, db)
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        local c = g and g[key]
+        if c then return tonumber(c["1"]) or dr, tonumber(c["2"]) or dg, tonumber(c["3"]) or db end
+        return dr, dg, db
+    end
+
+    local function UnitKeyForFrame(frame)
+        if frame == (_G.MSUF_TargetCastbar or _G.TargetCastBar) then return "Target" end
+        if frame == (_G.MSUF_FocusCastbar  or _G.FocusCastBar)  then return "Focus"  end
+        for i = 1, (_G.MSUF_MAX_BOSS_FRAMES or 5) do
+            if frame == _G["MSUF_boss" .. i .. "CastBar"] then return "Boss" end
+        end
+        return nil
+    end
+
+    function _G.MSUF_KickReady_Update(frame)
+        if not frame then return end
+        local ind = frame._msufKickInd
+        if not ind then return end
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        if not g then ind:Hide(); return end
+        local uk = UnitKeyForFrame(frame)
+        if not uk or g["kickReadyShow" .. uk] ~= true then ind:Hide(); return end
+        if not frame:IsShown() then ind:Hide(); return end
+        if frame.isNotInterruptible then ind:Hide(); return end
+        local r, gr, b
+        if _kickReady then
+            r, gr, b = GetDBColor("kickReadyColor", 0, 1, 0)
+        else
+            r, gr, b = GetDBColor("kickNotReadyColor", 1, 0, 0)
+        end
+        ind:SetColorTexture(r, gr, b)
+        ind:Show()
+    end
+
+    local function UpdateAll()
+        local list = { _G.MSUF_TargetCastbar or _G.TargetCastBar, _G.MSUF_FocusCastbar or _G.FocusCastBar }
+        for i = 1, (_G.MSUF_MAX_BOSS_FRAMES or 5) do list[#list+1] = _G["MSUF_boss"..i.."CastBar"] end
+        for _, f in ipairs(list) do
+            if f and f._msufKickInd then _G.MSUF_KickReady_Update(f) end
+        end
+        -- Refresh FocusKick icon coloring
+        if type(_G.MSUF_FocusKick_RefreshKickReady) == "function" then
+            _G.MSUF_FocusKick_RefreshKickReady()
+        end
+    end
+
+    local function EnsureMonitor()
+        if _monFrame then return end
+        _monFrame = CreateFrame("Frame")
+        _monFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+        _monFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+        _monFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
+        _monFrame:SetScript("OnEvent", function(_, ev)
+            if ev ~= "SPELL_UPDATE_COOLDOWN" then _kickID = nil end
+            CheckCooldown()
+            UpdateAll()
+        end)
+        CheckCooldown()
+    end
+
+    function _G.MSUF_KickReady_IsReady()
+        return _kickReady
+    end
+
+    function _G.MSUF_KickReady_Init()
+        EnsureMonitor()
+    end
+
+    function _G.MSUF_KickReady_ApplyLayout(frame)
+        if not frame or not frame.statusBar then return end
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        if not g then return end
+        EnsureMonitor()
+        local ind = frame._msufKickInd
+        if not ind then
+            ind = frame.statusBar:CreateTexture(nil, "OVERLAY", nil, 7)
+            ind:Hide()
+            frame._msufKickInd = ind
+        end
+        local sz = tonumber(g.kickReadySize) or 8
+        ind:SetSize(sz, sz)
+        local anc = g.kickReadyAnchor or "RIGHT"
+        local ox  = tonumber(g.kickReadyOffsetX) or 4
+        local oy  = tonumber(g.kickReadyOffsetY) or 0
+        ind:ClearAllPoints()
+        ind:SetPoint(anc, frame.statusBar, anc, ox, oy)
+        _G.MSUF_KickReady_Update(frame)
+    end
+end

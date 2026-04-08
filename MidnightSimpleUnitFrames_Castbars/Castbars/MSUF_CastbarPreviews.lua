@@ -1350,7 +1350,7 @@ end
         MSUF_PositionPlayerCastbarPreview()
         playerPreview:Show()
         -- Keep player preview size synced to edit-mode size keys
-        local w, h = MSUF_GetPlayerCastbarDesiredSize(g, 250, 18)
+        local w, h = MSUF_GetPlayerCastbarDesiredSize(g, MSUF_PlayerCastbarPreview, 250, 18)
         MSUF_ApplyPlayerCastbarSizeAndLayout(playerPreview, g, w, h)
 
     end

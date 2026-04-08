@@ -511,6 +511,39 @@ if self.statusBar and self.statusBar.SetReverseFill then
     SafeCall(self.statusBar.SetReverseFill, self.statusBar, rf and true or false)
 end
 
+-- Spark (leading-edge highlight) — lazy-create if absent
+if self.statusBar then
+    local showSpark = g.castbarShowSpark == true
+    local sparkTex = self.spark
+    if showSpark and not sparkTex then
+        sparkTex = self.statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
+        sparkTex:SetTexture(4417031)
+        sparkTex:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
+        sparkTex:SetDesaturated(true)
+        sparkTex:SetVertexColor(1, 1, 1, 1)
+        sparkTex:SetBlendMode("ADD")
+        self.spark = sparkTex
+    end
+    if sparkTex then
+        sparkTex:SetShown(showSpark)
+        if showSpark then
+            local overflow = (g.castbarSparkOverflow ~= false)
+            local sparkH = overflow and math.max(4, h * 2.1) or h
+            sparkTex:SetSize(16, sparkH)
+            local fillTex = self.statusBar:GetStatusBarTexture()
+            if fillTex then
+                sparkTex:ClearAllPoints()
+                sparkTex:SetPoint("CENTER", fillTex, "RIGHT", 0, 0)
+            end
+        end
+    end
+end
+
+-- Kick ready indicator
+if type(_G.MSUF_KickReady_ApplyLayout) == "function" then
+    _G.MSUF_KickReady_ApplyLayout(self)
+end
+
     end
 
 	-- Interruptible color: mirror MSUF main logic so the Colors menu applies automatically.

@@ -719,14 +719,17 @@ MSUF_BumpCastbarStyleRevision()
         if cfg then
             local gw = tonumber(cfg.castbarGlobalWidth)
             local gh = tonumber(cfg.castbarGlobalHeight)
-            if gw and gw > 0 then width = gw; frame:SetWidth(width) end
-            if gh and gh > 0 then height = gh; frame:SetHeight(gh) end
             unitKey = MSUF_GetCastbarUnitFromFrame(frame)
+            local skipWidth = (unitKey == "player" and cfg.castbarPlayerMatchWidth)
+            if gw and gw > 0 and not skipWidth then width = gw; frame:SetWidth(width) end
+            if gh and gh > 0 then height = gh; frame:SetHeight(gh) end
             prefix = unitKey and MSUF_GetCastbarPrefix(unitKey) or nil
             if prefix then
                 local bw = tonumber(cfg[prefix .. "BarWidth"])
                 local bh = tonumber(cfg[prefix .. "BarHeight"])
-                if bw and bw > 0 then width = bw; frame:SetWidth(width) end
+                -- Skip width override for player when CDM width matching is active
+                local skipWidth = (unitKey == "player" and cfg.castbarPlayerMatchWidth)
+                if bw and bw > 0 and not skipWidth then width = bw; frame:SetWidth(width) end
                 if bh and bh > 0 then height = bh; frame:SetHeight(bh) end
             end
     end
@@ -790,6 +793,37 @@ MSUF_BumpCastbarStyleRevision()
                 backgroundBar:SetAllPoints(statusBar)
             end
     end
+        -- Spark (leading-edge highlight) — lazy-create if absent
+        do
+            local showSpark = cfg and cfg.castbarShowSpark == true
+            local sparkTex = frame.spark
+            if showSpark and not sparkTex then
+                sparkTex = statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
+                sparkTex:SetTexture(4417031)
+                sparkTex:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
+                sparkTex:SetDesaturated(true)
+                sparkTex:SetVertexColor(1, 1, 1, 1)
+                sparkTex:SetBlendMode("ADD")
+                frame.spark = sparkTex
+            end
+            if sparkTex then
+                sparkTex:SetShown(showSpark)
+                if showSpark then
+                    local overflow = (cfg and cfg.castbarSparkOverflow ~= false)
+                    local sparkH = overflow and math.max(4, height * 2.1) or height
+                    sparkTex:SetSize(16, sparkH)
+                    local fillTex = statusBar:GetStatusBarTexture()
+                    if fillTex then
+                        sparkTex:ClearAllPoints()
+                        sparkTex:SetPoint("CENTER", fillTex, "RIGHT", 0, 0)
+                    end
+                end
+            end
+        end
+        -- Kick ready indicator
+        if type(_G.MSUF_KickReady_ApplyLayout) == "function" then
+            _G.MSUF_KickReady_ApplyLayout(frame)
+        end
         local cfg2 = cfg or {}
         local showNameLocal = showName
         local effectiveSizeLocal = effectiveSize
