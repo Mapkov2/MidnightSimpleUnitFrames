@@ -328,7 +328,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         { key = "general",    label = "General (size, spacing, growth)",
           keys = { "enabled", "showPlayer", "showSolo", "width", "height", "spacing",
                    "growthDirection", "headerSpacing", "groupBy", "groupingOrder",
-                   "groupFilter", "raidSortMode" } },
+                   "groupFilter", "raidSortMode", "sortByRole", "roleOrder" } },
         { key = "health",     label = "Health & Bars",
           keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB",
                    "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB",
@@ -982,7 +982,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 1: General (default open)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(760, "General", false, "general")
+        local box, body = AddSection(860, "General", false, "general")
 
         -- ── Role Preset selector ──
         local presetLabel = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1445,9 +1445,192 @@ function _G.MSUF_EnsureGFPanelBuilt()
         _allRefreshFns[#_allRefreshFns + 1] = SyncGroupFilter
         SyncGroupFilter()
 
+        ----------------------------------------------------------------
+        -- Role Sort (raid only): drag-to-reorder role priority
+        ----------------------------------------------------------------
+        local _roleSortWrap = CreateFrame("Frame", nil, body)
+        _roleSortWrap:SetPoint("TOPLEFT", _gfRow, "BOTTOMLEFT", 0, -2)
+        _roleSortWrap:SetSize(300, 0.001)  -- collapsed when party
+        do
+            local ROLE_DEFS = {
+                { key = "TANK",    label = "Tank",   r = 0.30, g = 0.55, b = 0.85 },
+                { key = "HEALER",  label = "Healer", r = 0.20, g = 0.72, b = 0.35 },
+                { key = "DAMAGER", label = "DPS",    r = 0.82, g = 0.30, b = 0.30 },
+            }
+            local ROLE_LOOKUP = {}
+            for i, rd in ipairs(ROLE_DEFS) do ROLE_LOOKUP[rd.key] = i end
+            local ROW_H, ROW_GAP = 22, 4
+            local ROW_W = 200
+            local W8 = "Interface\\Buttons\\WHITE8x8"
+
+            -- Enable checkbox
+            local roleSortChk = SCheck({
+                name = "MSUF_GF_SortByRoleCheck", parent = _roleSortWrap,
+                anchor = _roleSortWrap, anchorPoint = "TOPLEFT", x = 0, y = -4,
+                label = TR("Sort by Role"),
+                get = function(k) return GF.Val(k, "sortByRole") end,
+                set = function(k, v) GF.GetConf(k).sortByRole = v; GF.RebuildAll() end,
+            })
+
+            -- Container for the 3 drag rows
+            local roleContainer = CreateFrame("Frame", nil, _roleSortWrap)
+            roleContainer:SetSize(ROW_W, 3 * (ROW_H + ROW_GAP))
+            roleContainer:SetPoint("TOPLEFT", roleSortChk, "BOTTOMLEFT", -2, -4)
+
+            local _roleRows = {}
+
+            -- Slot Y position
+            local function SlotY(s) return -((s - 1) * (ROW_H + ROW_GAP)) end
+
+            -- Snap all rows to their slot positions
+            local function SnapAll()
+                for i = 1, 3 do
+                    local r = _roleRows[i]
+                    r.frame:ClearAllPoints()
+                    r.frame:SetPoint("TOPLEFT", roleContainer, "TOPLEFT", 0, SlotY(r.slotIndex))
+                    r.frame._numText:SetText(tostring(r.slotIndex))
+                end
+            end
+
+            -- Save order to DB
+            local function SaveOrder()
+                local sorted = {}
+                for i = 1, 3 do sorted[i] = _roleRows[i] end
+                table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
+                local parts = {}
+                for i = 1, 3 do parts[i] = sorted[i].key end
+                local k = K()
+                GF.GetConf(k).roleOrder = table.concat(parts, ",")
+                GF.RebuildAll()
+            end
+
+            -- Create 3 rows (1:1 Bars highlight priority pattern)
+            for i = 1, 3 do
+                local rd = ROLE_DEFS[i]
+                local rf = CreateFrame("Frame", "MSUF_GF_RoleSortRow" .. i, roleContainer, "BackdropTemplate")
+                rf:SetSize(ROW_W, ROW_H)
+                rf:SetMovable(true); rf:EnableMouse(true); rf:RegisterForDrag("LeftButton")
+                rf:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+                rf:SetBackdropColor(0.12, 0.12, 0.12, 0.85)
+                rf:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.6)
+
+                -- Color stripe (left edge)
+                local stripe = rf:CreateTexture(nil, "ARTWORK")
+                stripe:SetSize(4, ROW_H - 2)
+                stripe:SetPoint("LEFT", rf, "LEFT", 2, 0)
+                stripe:SetColorTexture(rd.r, rd.g, rd.b, 1)
+
+                -- Label
+                local label = rf:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+                label:SetPoint("LEFT", stripe, "RIGHT", 6, 0)
+                label:SetText(rd.label)
+
+                -- Priority number (right side)
+                local num = rf:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+                num:SetPoint("RIGHT", rf, "RIGHT", -8, 0)
+                num:SetTextColor(0.5, 0.5, 0.5)
+                num:SetText(tostring(i))
+                rf._numText = num
+
+                -- Drag: StartMoving / StopMovingOrSizing (proven Bars pattern)
+                rf:SetScript("OnDragStart", function(self)
+                    GameTooltip:Hide()
+                    self:StartMoving()
+                    self:SetFrameStrata("TOOLTIP")
+                end)
+                rf:SetScript("OnDragStop", function(self)
+                    self:StopMovingOrSizing()
+                    self:SetFrameStrata(roleContainer:GetFrameStrata())
+                    local _, selfY = self:GetCenter()
+                    local contTop = roleContainer:GetTop()
+                    local bestSlot, bestDist = 1, math.huge
+                    for s = 1, 3 do
+                        local dist = math.abs(selfY - (contTop + SlotY(s) - ROW_H / 2))
+                        if dist < bestDist then bestDist = dist; bestSlot = s end
+                    end
+                    local myRow
+                    for idx = 1, 3 do
+                        if _roleRows[idx].frame == self then myRow = _roleRows[idx]; break end
+                    end
+                    if myRow and myRow.slotIndex ~= bestSlot then
+                        for idx = 1, 3 do
+                            if _roleRows[idx].slotIndex == bestSlot then
+                                _roleRows[idx].slotIndex = myRow.slotIndex; break
+                            end
+                        end
+                        myRow.slotIndex = bestSlot
+                    end
+                    SnapAll()
+                    SaveOrder()
+                end)
+
+                _roleRows[i] = { frame = rf, key = rd.key, slotIndex = i }
+            end
+
+            -- Parse DB order string → assign slotIndex
+            local function InitFromDB()
+                local k = K()
+                local conf = GF.GetConf(k)
+                local str = conf.roleOrder or "TANK,HEALER,DAMAGER"
+                local slot = 0
+                local assigned = {}
+                for tok in str:gmatch("[^,]+") do
+                    slot = slot + 1
+                    local ri = ROLE_LOOKUP[tok]
+                    if ri and not assigned[ri] then
+                        _roleRows[ri].slotIndex = slot
+                        assigned[ri] = true
+                    end
+                end
+                -- Fill any missing
+                for i = 1, 3 do
+                    if not assigned[i] then
+                        slot = slot + 1
+                        _roleRows[i].slotIndex = slot
+                    end
+                end
+                SnapAll()
+            end
+
+            -- Enable/disable row interaction
+            local function SetRowsEnabled(enabled)
+                for i = 1, 3 do
+                    _roleRows[i].frame:SetAlpha(enabled and 1 or 0.4)
+                    _roleRows[i].frame:EnableMouse(enabled)
+                end
+            end
+
+            -- Sync: visibility (raid-only) + load order + toggle rows
+            local function SyncRoleSort()
+                local k = K()
+                local isRaid = (k == "raid")
+                _roleSortWrap:SetShown(isRaid)
+                if isRaid then
+                    local conf = GF.GetConf(k)
+                    local enabled = conf.sortByRole and true or false
+                    InitFromDB()
+                    roleContainer:SetShown(enabled)
+                    SetRowsEnabled(enabled)
+                    if enabled then
+                        _roleSortWrap:SetHeight(3 * (ROW_H + ROW_GAP) + 34)
+                    else
+                        _roleSortWrap:SetHeight(24)
+                    end
+                else
+                    _roleSortWrap:SetHeight(0.001)
+                end
+            end
+            _allRefreshFns[#_allRefreshFns + 1] = SyncRoleSort
+            SyncRoleSort()
+            -- Hook checkbox toggle → show/hide rows
+            roleSortChk:HookScript("OnClick", function()
+                C_Timer.After(0, function() SyncRoleSort() end)
+            end)
+        end
+
         local reverseFillChk = SCheck({
             name = "MSUF_GF_ReverseFillCheck", parent = body,
-            anchor = _gfRow, x = 0, y = -4,
+            anchor = _roleSortWrap, x = 0, y = -4,
             label = TR("Reverse Fill"),
             get = function(k) return GF.Val(k, "reverseFill") end,
             set = function(k, v) GF.GetConf(k).reverseFill = v; GF.RefreshVisuals() end,

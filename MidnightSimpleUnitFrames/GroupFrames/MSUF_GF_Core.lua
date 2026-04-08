@@ -59,6 +59,55 @@ local function GetHiddenParent()
 end
 
 ------------------------------------------------------------------------
+-- RetireHeader: aggressively clean up an old header + children.
+-- Reparents everything to hidden parent → zero render/CPU cost.
+-- WoW never GCs frames, but this removes them from the render pipeline.
+------------------------------------------------------------------------
+local function RetireHeader(header)
+    if not header then return end
+    header:Hide()
+    local hp = GetHiddenParent()
+    local kids = { header:GetChildren() }
+    for i = 1, #kids do
+        local ch = kids[i]
+        if ch then
+            -- Deregister from GF tracking
+            if GF.frames then GF.frames[ch] = nil end
+            if ch.unit and _G.MSUF_UnitFrames then
+                _G.MSUF_UnitFrames[ch.unit] = nil
+            end
+            -- Strip event handlers (zero combat overhead)
+            ch:UnregisterAllEvents()
+            if ch.SetScript then
+                ch:SetScript("OnEvent", nil)
+                ch:SetScript("OnUpdate", nil)
+            end
+            -- Hide all sub-frames
+            if ch.barGroup then ch.barGroup:Hide() end
+            if ch.health then ch.health:Hide() end
+            if ch.power then ch.power:Hide() end
+            if ch._msufGFBorderFrame then ch._msufGFBorderFrame:Hide() end
+            if ch._msufGFHighlightBorder then ch._msufGFHighlightBorder:Hide() end
+            if ch._msufGFNameText then ch._msufGFNameText:Hide() end
+            if ch._msufGFStatusText then ch._msufGFStatusText:Hide() end
+            -- Minimize + hide + reparent to hidden frame
+            ch:Hide()
+            ch:ClearAllPoints()
+            ch:SetSize(0.001, 0.001)
+            ch:SetParent(hp)
+            -- Clear references to allow Lua-side GC of tables
+            ch._c = nil
+            ch._msufGFBuilt = nil
+            ch._msufGFRegisteredUnit = nil
+        end
+    end
+    -- Reparent header itself to hidden frame
+    header:ClearAllPoints()
+    header:SetSize(0.001, 0.001)
+    header:SetParent(hp)
+end
+
+------------------------------------------------------------------------
 -- State
 ------------------------------------------------------------------------
 GF.headers     = GF.headers or {}     -- party/raid SecureGroupHeaders
@@ -1038,14 +1087,7 @@ local function SetupPartyHeader()
     -- Fresh header on zone-change (fixes C-side layout bug).
     -- Normal rebuilds (settings, roster, /reload) reuse existing header.
     if header and GF._forceRecreateHeaders then
-        header:Hide()
-        local kids = { header:GetChildren() }
-        for _, ch in ipairs(kids) do
-            if ch and GF.frames then GF.frames[ch] = nil end
-            if ch and ch.unit and _G.MSUF_UnitFrames then
-                _G.MSUF_UnitFrames[ch.unit] = nil
-            end
-        end
+        RetireHeader(header)
         header = nil
         GF.headers.party = nil
     end
@@ -1166,14 +1208,7 @@ local function SetupRaidHeader()
     local header = GF.headers.raid
 
     if header and GF._forceRecreateHeaders then
-        header:Hide()
-        local kids = { header:GetChildren() }
-        for _, ch in ipairs(kids) do
-            if ch and GF.frames then GF.frames[ch] = nil end
-            if ch and ch.unit and _G.MSUF_UnitFrames then
-                _G.MSUF_UnitFrames[ch.unit] = nil
-            end
-        end
+        RetireHeader(header)
         header = nil
         GF.headers.raid = nil
     end
@@ -1231,7 +1266,14 @@ local function SetupRaidHeader()
     else
         _GF_SetAttrIfChanged(header, "groupFilter", nil)
     end
-    -- No groupBy — pure grid: wraps at unitsPerColumn, fills up to maxColumns
+    -- Role sort: groupBy ASSIGNEDROLE with configurable role order
+    if conf.sortByRole then
+        _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
+        _GF_SetAttrIfChanged(header, "groupingOrder", conf.roleOrder or "TANK,HEALER,DAMAGER")
+    else
+        _GF_SetAttrIfChanged(header, "groupBy", nil)
+        _GF_SetAttrIfChanged(header, "groupingOrder", nil)
+    end
 
     -- Growth
     local colGrowth = "DOWN"

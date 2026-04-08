@@ -569,8 +569,8 @@ end
 -- Range fade (1:1 EQoL pattern)
 -- Secret-safe: NEVER compare/type()/conditional on inRange.
 -- Pass raw value to SetAlphaFromBoolean (C-side accepts secrets).
+-- 1:1 EQoL GF:UpdateRange pattern — NO extra UnitPhaseReason/UnitIsVisible.
 ------------------------------------------------------------------------
-local _rfMul = _G.MSUF_RangeFadeMul
 
 -- EQoL UnsecretBool equivalent
 local function _UnsecretBool(value)
@@ -585,6 +585,7 @@ local function ApplyRangeFade(f, unit, inRange)
     local conf = GF.GetConf(kind)
     local fadeAlpha = conf.rangeFadeAlpha or 0.4
 
+    -- Disabled → full alpha
     if conf.rangeFadeEnabled == false then
         if f.SetAlpha then f:SetAlpha(1) end
         return
@@ -592,9 +593,7 @@ local function ApplyRangeFade(f, unit, inRange)
 
     -- Solo guard (EQoL: IsInGroup + IsInRaid)
     if IsInGroup and IsInRaid then
-        local inGroup = IsInGroup()
-        local inRaid  = IsInRaid()
-        if not inGroup and not inRaid then
+        if not IsInGroup() and not IsInRaid() then
             if f.SetAlpha then f:SetAlpha(1) end
             return
         end
@@ -603,45 +602,17 @@ local function ApplyRangeFade(f, unit, inRange)
     -- Offline (EQoL: UnsecretBool on UnitIsConnected)
     local connected = unit and UnitIsConnected and _UnsecretBool(UnitIsConnected(unit)) or nil
     if connected == false then
-        local offA = conf.offlineAlpha or 0.5
-        if not _rfMul then _rfMul = _G.MSUF_RangeFadeMul end
-        if _rfMul then _rfMul[unit] = offA end
-        local fast = _G.MSUF_ApplyRangeFadeAlphaFast
-        if type(fast) == "function" and fast(f, f.msufConfigKey, offA) then return end
+        local offA = conf.offlineAlpha or fadeAlpha
         if f.SetAlpha then f:SetAlpha(offA) end
         return
     end
 
-    -- Different phase/instance: treat as out of range
-    if UnitPhaseReason then
-        local reason = UnitPhaseReason(unit)
-        if reason and not (issecretvalue and issecretvalue(reason)) then
-            if f.SetAlphaFromBoolean then
-                f:SetAlphaFromBoolean(false, 1, fadeAlpha)
-            elseif f.SetAlpha then
-                f:SetAlpha(fadeAlpha)
-            end
-            if not _rfMul then _rfMul = _G.MSUF_RangeFadeMul end
-            if _rfMul then _rfMul[unit] = fadeAlpha end
-            return
-        end
-    end
-
-    -- EQoL exact pattern (line 8424): just take first return value.
-    -- SetAlphaFromBoolean handles secret values natively.
-    -- Do NOT inspect the 'checked' second return — it's secret in 12.0.
+    -- EQoL exact pattern (line 8424)
     if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end
 
     if type(inRange) ~= "nil" then
         if f.SetAlphaFromBoolean then
             f:SetAlphaFromBoolean(inRange, 1, fadeAlpha)
-        end
-        if not _rfMul then _rfMul = _G.MSUF_RangeFadeMul end
-        if _rfMul then
-            local plain = _UnsecretBool(inRange)
-            if plain ~= nil then
-                _rfMul[unit] = plain and 1 or fadeAlpha
-            end
         end
     end
 end
