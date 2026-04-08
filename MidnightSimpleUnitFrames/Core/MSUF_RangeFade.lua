@@ -401,9 +401,12 @@ do
                 TargetClassifyAndWire()
             end
         end)
-        bus("SPELLS_CHANGED", "MSUF_RANGEFADE", function()
+        -- SPELLS_CHANGED coalescing: can fire 800+/sec in combat.
+        -- Defer to next frame to process once regardless of fire count.
+        local _tgtSpellsDirty = false
+        local function _FlushTargetSpellsChanged()
+            _tgtSpellsDirty = false
             RebuildPrimaries()
-            -- Re-register with potentially new primary spell and/or dead-state spell.
             if _targetIsEnemy and UnitExists("target") then
                 local spell = _pEnemy
                 if UnitIsDeadOrGhost and UnitIsDeadOrGhost("target") then spell = _pRes end
@@ -411,6 +414,11 @@ do
                     TargetRegisterSpell(spell)
                 end
             end
+        end
+        bus("SPELLS_CHANGED", "MSUF_RANGEFADE", function()
+            if _tgtSpellsDirty then return end
+            _tgtSpellsDirty = true
+            if C_Timer_After then C_Timer_After(0, _FlushTargetSpellsChanged) else _FlushTargetSpellsChanged() end
         end)
         bus("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE", function()
             RebuildPrimaries()
@@ -748,6 +756,7 @@ do
 
     local _fbEvtFrame = nil
     local _fbEvents = {}
+    local _fbSpellsDirty = false
     local function EnsureFBEventFrame()
         if _fbEvtFrame then return _fbEvtFrame end
         local ef = CreateFrame("Frame")
@@ -832,9 +841,10 @@ do
                 elseif unit ~= "focus" then
                     ClearMul(unit, "boss")
                 end
-            elseif event == "SPELLS_CHANGED" or event == "PLAYER_ENTERING_WORLD"
-                or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
-                or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
+            elseif event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
+                or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED"
+                or event == "PLAYER_ENTERING_WORLD" then
+                -- Rare events: process immediately
                 if event == "PLAYER_ENTERING_WORLD" then
                     _playerMoving = false
                 end
@@ -846,6 +856,29 @@ do
                         RequestBurst(0.80)
                     end
                     CheckEnemyUnits()
+                end
+            elseif event == "SPELLS_CHANGED" then
+                -- SPELLS_CHANGED coalescing: can fire 800+/sec in combat.
+                -- Defer to next frame to process once.
+                if not _fbSpellsDirty then
+                    _fbSpellsDirty = true
+                    if C_Timer_After then
+                        C_Timer_After(0, function()
+                            _fbSpellsDirty = false
+                            RebuildPrimaries()
+                            for k in pairs(_state) do _state[k] = nil end
+                            SyncTicker()
+                            if NeedsPoll() or _ticker then
+                                if NeedsPoll() then RequestBurst(0.80) end
+                                CheckEnemyUnits()
+                            end
+                        end)
+                    else
+                        _fbSpellsDirty = false
+                        RebuildPrimaries()
+                        for k in pairs(_state) do _state[k] = nil end
+                        SyncTicker()
+                    end
                 end
             end
         end)

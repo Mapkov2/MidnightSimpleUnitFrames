@@ -84,6 +84,9 @@ local function BuildFrameHierarchy(f, kind)
     if f._msufGFBuilt then return end
     f._msufGFBuilt = true
 
+    -- Clear any inherited backdrop from SecureUnitButtonTemplate
+    if f.SetBackdrop then pcall(f.SetBackdrop, f, nil) end
+
     local conf = GF.GetConf(kind)
     local w = conf.width  or 120
     local h = conf.height or 40
@@ -807,13 +810,56 @@ local function ScanHeaderChildren(header, kind)
                 end
                 GF_InitButton(child, kind)
             end
-            -- Resize to current config (only out of combat, only if size changed)
+            -- Force size on every scan (no diff-gate).
+            -- Use SetWidth + SetHeight separately (SetSize can be ignored when
+            -- SecureGroupHeader has set conflicting anchor points on children).
             if not inCombat then
-                if child._msufGFCachedW ~= w or child._msufGFCachedH ~= h then
-                    child._msufGFCachedW = w
-                    child._msufGFCachedH = h
-                    child:SetSize(w, h)
-                    if child.barGroup then child.barGroup:SetSize(w, h) end
+                child:SetWidth(w)
+                child:SetHeight(h)
+
+                -- Clear any backdrop on child frame itself
+                -- (SecureUnitButtonTemplate may inherit BackdropTemplate in WoW 12.0)
+                if child.SetBackdrop then
+                    pcall(child.SetBackdrop, child, nil)
+                end
+
+                -- Re-anchor barGroup + force backdrop re-render
+                if child.barGroup then
+                    child.barGroup:ClearAllPoints()
+                    child.barGroup:SetAllPoints(child)
+                end
+
+                -- borderFrame
+                if child._msufGFBorderFrame then
+                    child._msufGFBorderFrame:ClearAllPoints()
+                    child._msufGFBorderFrame:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", 0, 0)
+                    child._msufGFBorderFrame:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", 0, 0)
+                end
+
+                -- highlightBorder
+                if child._msufGFHighlightBorder then
+                    local hofs = child._msufGFHighlightBorder._msufHLOfs or 0
+                    child._msufGFHighlightBorder:ClearAllPoints()
+                    child._msufGFHighlightBorder:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", -hofs, hofs)
+                    child._msufGFHighlightBorder:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", hofs, -hofs)
+                end
+
+                -- health bar
+                local conf = GF.GetConf(kind)
+                local inset = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
+                local powerH = conf.powerHeight or 6
+                if child.health then
+                    child.health:ClearAllPoints()
+                    child.health:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", inset, -inset)
+                    child.health:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", -inset, powerH > 0 and (powerH + inset) or inset)
+                end
+
+                -- power bar
+                if child.power then
+                    child.power:ClearAllPoints()
+                    child.power:SetPoint("BOTTOMLEFT", child.barGroup or child, "BOTTOMLEFT", inset, inset)
+                    child.power:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", -inset, inset)
+                    child.power:SetHeight(powerH)
                 end
             end
 
@@ -967,9 +1013,16 @@ local function _GF_SetAttrIfChanged(header, key, value)
     return true
 end
 
+-- Invalidate cache: forces ALL attributes to be re-applied on next setup.
+-- Called after zone change when SecureGroupHeader may have lost internal state.
+local function _GF_InvalidateAttrCache(header)
+    if header then header._msufAttrCache = nil end
+end
+
 ------------------------------------------------------------------------
 -- Party header setup
 ------------------------------------------------------------------------
+local _initCfgNonce = 0
 local function SetupPartyHeader()
     if InCombatLockdown() then
         GF._pendingPartyRefresh = true
@@ -982,12 +1035,43 @@ local function SetupPartyHeader()
     local parent = _G.PetBattleFrameHider or UIParent
     local header = GF.headers.party
 
+    -- Fresh header on zone-change (fixes C-side layout bug).
+    -- Normal rebuilds (settings, roster, /reload) reuse existing header.
+    if header and GF._forceRecreateHeaders then
+        header:Hide()
+        local kids = { header:GetChildren() }
+        for _, ch in ipairs(kids) do
+            if ch and GF.frames then GF.frames[ch] = nil end
+            if ch and ch.unit and _G.MSUF_UnitFrames then
+                _G.MSUF_UnitFrames[ch.unit] = nil
+            end
+        end
+        header = nil
+        GF.headers.party = nil
+    end
+
     if not header then
-        header = CreateFrame("Frame", "MSUF_GFPartyHeader", parent, "SecureGroupHeaderTemplate")
+        GF._partyHeaderSerial = (GF._partyHeaderSerial or 0) + 1
+        local headerName = "MSUF_GFPartyHeader" .. GF._partyHeaderSerial
+        header = CreateFrame("Frame", headerName, parent, "SecureGroupHeaderTemplate")
         header._msufGFKind = "party"
         header:SetClampedToScreen(true)
+        header:Hide()
+        header:HookScript("OnShow", function(self)
+            if not InCombatLockdown() then
+                local n = (self:GetAttribute("_msufLayoutNonce") or 0) + 1
+                self:SetAttribute("_msufLayoutNonce", n)
+            end
+        end)
         GF.headers.party = header
     end
+
+    -- CRITICAL: Hide header BEFORE setting attributes.
+    -- Each SetAttribute triggers SecureGroupHeader's internal re-layout.
+    -- If the header is visible, intermediate layouts render with wrong
+    -- child sizes/positions that can persist visually (zone-change bug).
+    -- Setting all attributes while hidden ensures ONE clean layout on Show().
+    header:Hide()
 
     -- Attributes (combat-lockdown safe: we checked above)
     local w = conf.width  or 120
@@ -1033,25 +1117,32 @@ local function SetupPartyHeader()
         _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
     end
 
-    -- initialConfigFunction: size + attributes ONLY (no RegisterForClicks!)
-    -- Sizes read dynamically from header attributes so re-setup picks up changes
-    _GF_SetAttrIfChanged(header, "_msufWidth", w)
-    _GF_SetAttrIfChanged(header, "_msufHeight", h)
-    header:SetAttribute("initialConfigFunction", [[
-        local hdr = self:GetParent()
-        local w = hdr:GetAttribute('_msufWidth') or 120
-        local h = hdr:GetAttribute('_msufHeight') or 40
-        self:SetWidth(w)
-        self:SetHeight(h)
+    -- initialConfigFunction: bake size VALUES into string (EQoL pattern).
+    -- When size changes, the string changes → SecureGroupHeader re-runs on all children.
+    -- Nonce forces SecureGroupHeader to re-run initialConfigFunction on ALL
+    -- existing children (not just new ones). Fixes zone-change size bug.
+    _initCfgNonce = _initCfgNonce + 1
+    local initCfg = string.format([[
+        self:ClearAllPoints()
+        self:SetWidth(%.3f)
+        self:SetHeight(%.3f)
         self:SetAttribute('*type1', 'target')
         self:SetAttribute('*type2', 'togglemenu')
         RegisterUnitWatch(self)
-    ]])
+        -- nonce %d
+    ]], w, h, _initCfgNonce)
+    header:SetAttribute("initialConfigFunction", initCfg)
 
     -- Position (stored offset = grid center)
     PositionHeaderFromGridCenter("party", header)
 
     header:Show()
+
+    -- EQoL pattern: nudge SecureGroupHeader's internal layout engine
+    -- by setting a dummy attribute. Forces complete child re-positioning
+    -- even when real attributes haven't changed (zone-change fix).
+    local nonce = (header:GetAttribute("_msufLayoutNonce") or 0) + 1
+    header:SetAttribute("_msufLayoutNonce", nonce)
 
     -- Deferred child scan (children created async after Show)
     C_Timer.After(0, function()
@@ -1074,10 +1165,32 @@ local function SetupRaidHeader()
     local parent = _G.PetBattleFrameHider or UIParent
     local header = GF.headers.raid
 
+    if header and GF._forceRecreateHeaders then
+        header:Hide()
+        local kids = { header:GetChildren() }
+        for _, ch in ipairs(kids) do
+            if ch and GF.frames then GF.frames[ch] = nil end
+            if ch and ch.unit and _G.MSUF_UnitFrames then
+                _G.MSUF_UnitFrames[ch.unit] = nil
+            end
+        end
+        header = nil
+        GF.headers.raid = nil
+    end
+
     if not header then
-        header = CreateFrame("Frame", "MSUF_GFRaidHeader", parent, "SecureGroupHeaderTemplate")
+        GF._raidHeaderSerial = (GF._raidHeaderSerial or 0) + 1
+        local headerName = "MSUF_GFRaidHeader" .. GF._raidHeaderSerial
+        header = CreateFrame("Frame", headerName, parent, "SecureGroupHeaderTemplate")
         header._msufGFKind = "raid"
         header:SetClampedToScreen(true)
+        header:Hide()
+        header:HookScript("OnShow", function(self)
+            if not InCombatLockdown() then
+                local n = (self:GetAttribute("_msufLayoutNonce") or 0) + 1
+                self:SetAttribute("_msufLayoutNonce", n)
+            end
+        end)
         GF.headers.raid = header
     end
 
@@ -1087,6 +1200,9 @@ local function SetupRaidHeader()
     local growth = conf.growth or "DOWN"
     local unitsPerColumn = conf.unitsPerColumn or 5
     local maxColumns = conf.maxColumns or 8
+
+    -- CRITICAL: Hide before attributes (see SetupPartyHeader comment)
+    header:Hide()
 
     _GF_SetAttrIfChanged(header, "showParty", false)
     _GF_SetAttrIfChanged(header, "showRaid", true)
@@ -1145,22 +1261,27 @@ local function SetupRaidHeader()
         _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
     end
 
-    _GF_SetAttrIfChanged(header, "_msufWidth", w)
-    _GF_SetAttrIfChanged(header, "_msufHeight", h)
-    header:SetAttribute("initialConfigFunction", [[
-        local hdr = self:GetParent()
-        local w = hdr:GetAttribute('_msufWidth') or 80
-        local h = hdr:GetAttribute('_msufHeight') or 32
-        self:SetWidth(w)
-        self:SetHeight(h)
+    -- Nonce forces SecureGroupHeader to re-run initialConfigFunction on ALL
+    -- existing children (not just new ones). Fixes zone-change size bug.
+    _initCfgNonce = _initCfgNonce + 1
+    local initCfg = string.format([[
+        self:ClearAllPoints()
+        self:SetWidth(%.3f)
+        self:SetHeight(%.3f)
         self:SetAttribute('*type1', 'target')
         self:SetAttribute('*type2', 'togglemenu')
         RegisterUnitWatch(self)
-    ]])
+        -- nonce %d
+    ]], w, h, _initCfgNonce)
+    header:SetAttribute("initialConfigFunction", initCfg)
 
     PositionHeaderFromGridCenter("raid", header)
 
     header:Show()
+
+    -- EQoL pattern: nudge layout (see SetupPartyHeader comment)
+    local nonce = (header:GetAttribute("_msufLayoutNonce") or 0) + 1
+    header:SetAttribute("_msufLayoutNonce", nonce)
 
     C_Timer.After(0, function()
         ScanHeaderChildren(header, "raid")
@@ -1877,6 +1998,11 @@ function GF.UpdateGroupVisibility()
             C_Timer.After(0, function()
                 if GF.headers.party then ScanHeaderChildren(GF.headers.party, "party") end
             end)
+            C_Timer.After(0.5, function()
+                if GF.headers.party and not InCombatLockdown() then
+                    ScanHeaderChildren(GF.headers.party, "party")
+                end
+            end)
         else
             GF.headers.party:Hide()
         end
@@ -1889,6 +2015,11 @@ function GF.UpdateGroupVisibility()
             GF.headers.raid:Show()
             C_Timer.After(0, function()
                 if GF.headers.raid then ScanHeaderChildren(GF.headers.raid, "raid") end
+            end)
+            C_Timer.After(0.5, function()
+                if GF.headers.raid and not InCombatLockdown() then
+                    ScanHeaderChildren(GF.headers.raid, "raid")
+                end
             end)
         else
             GF.headers.raid:Hide()
@@ -1937,12 +2068,40 @@ local function OnEvent(self, event, ...)
             GF.UpdateGroupVisibility()
         end
 
+        -- EQoL pattern: refresh range fade on combat end.
+        -- UNIT_IN_RANGE_UPDATE fires less frequently OOC;
+        -- sweep all frames to ensure correct alpha after combat.
+        C_Timer.After(0.1, function()
+            local updateRange = _G.MSUF_GF_UpdateRange
+            if not updateRange then return end
+            for f, kind in pairs(GF.frames) do
+                if f.unit and f:IsVisible() then
+                    updateRange(f, f.unit)
+                end
+            end
+        end)
+
     elseif event == "PLAYER_ENTERING_WORLD" then
+        local isLogin, isReload = ...
         GF.EnsureDB()
         local partyConf = GF.GetConf("party")
         local raidConf  = GF.GetConf("raid")
         if partyConf.enabled or raidConf.enabled then
-            C_Timer.After(0.5, function() GF.RebuildAll() end)
+            -- Only recreate headers on actual zone transitions (not /reload).
+            -- /reload creates everything fresh anyway, no C-side state bug.
+            if not isLogin and not isReload then
+                GF._forceRecreateHeaders = true
+            end
+            if GF._zoneFixTicker then
+                GF._zoneFixTicker:Cancel()
+                GF._zoneFixTicker = nil
+            end
+            C_Timer.After(0.3, function()
+                if not InCombatLockdown() then
+                    GF.RebuildAll()
+                    GF._forceRecreateHeaders = nil
+                end
+            end)
         end
     end
 end
@@ -1997,4 +2156,58 @@ do
             end
         end
     end)
+end
+
+-- Debug: /run MSUF_GF_DebugSizes()
+function _G.MSUF_GF_DebugSizes()
+    local GF = _G.MSUF_NS and _G.MSUF_NS.GF or {}
+    local header = GF.headers and GF.headers["party"]
+    if not header then print("No party header"); return end
+    local children = { header:GetChildren() }
+    for ci = 1, #children do
+        local child = children[ci]
+        if child and child.GetAttribute and child:GetAttribute("unit") then
+            local unit = child:GetAttribute("unit") or "?"
+            local cw, ch = child:GetSize()
+            -- Enumerate ALL child frames and regions
+            local subFrames = { child:GetChildren() }
+            local subRegions = { child:GetRegions() }
+            print(("[%d] %s sz=%.0fx%.0f children=%d regions=%d"):format(ci, unit, cw, ch, #subFrames, #subRegions))
+            for si, sf in ipairs(subFrames) do
+                local sw, sh = sf:GetSize()
+                local shown = sf:IsShown()
+                local np = sf:GetNumPoints()
+                local name = sf:GetName() or sf:GetObjectType()
+                -- check if it extends beyond parent
+                local sl, st, sb, sr = sf:GetLeft(), sf:GetTop(), sf:GetBottom(), sf:GetRight()
+                local cl, ct, cb, cr = child:GetLeft(), child:GetTop(), child:GetBottom(), child:GetRight()
+                local extends = ""
+                if sl and cl and sr and cr and st and ct and sb and cb then
+                    if sl < cl - 1 or sr > cr + 1 or st > ct + 1 or sb < cb - 1 then
+                        extends = " *** EXTENDS OUTSIDE ***"
+                    end
+                end
+                if shown then
+                    print(("  F[%d] %s sz=%.0fx%.0f pts=%d%s"):format(si, name, sw, sh, np, extends))
+                end
+            end
+            for si, sr in ipairs(subRegions) do
+                local sw, sh = 0, 0
+                if sr.GetSize then sw, sh = sr:GetSize() end
+                local shown = sr:IsShown()
+                local ot = sr:GetObjectType()
+                local sl, st, sb, sright = sr:GetLeft(), sr:GetTop(), sr:GetBottom(), sr:GetRight()
+                local cl, ct, cb, cr = child:GetLeft(), child:GetTop(), child:GetBottom(), child:GetRight()
+                local extends = ""
+                if sl and cl and sright and cr and st and ct and sb and cb then
+                    if sl < cl - 1 or sright > cr + 1 or st > ct + 1 or sb < cb - 1 then
+                        extends = " *** EXTENDS ***"
+                    end
+                end
+                if shown and extends ~= "" then
+                    print(("  R[%d] %s sz=%.0fx%.0f%s"):format(si, ot, sw, sh, extends))
+                end
+            end
+        end
+    end
 end

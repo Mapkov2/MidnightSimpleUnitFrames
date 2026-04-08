@@ -612,17 +612,30 @@ local function ApplyRangeFade(f, unit, inRange)
         return
     end
 
-    -- Fallback: UnitInRange when no event payload (EQoL line 8424)
+    -- Different phase/instance: treat as out of range
+    if UnitPhaseReason then
+        local reason = UnitPhaseReason(unit)
+        if reason and not (issecretvalue and issecretvalue(reason)) then
+            if f.SetAlphaFromBoolean then
+                f:SetAlphaFromBoolean(false, 1, fadeAlpha)
+            elseif f.SetAlpha then
+                f:SetAlpha(fadeAlpha)
+            end
+            if not _rfMul then _rfMul = _G.MSUF_RangeFadeMul end
+            if _rfMul then _rfMul[unit] = fadeAlpha end
+            return
+        end
+    end
+
+    -- EQoL exact pattern (line 8424): just take first return value.
+    -- SetAlphaFromBoolean handles secret values natively.
+    -- Do NOT inspect the 'checked' second return — it's secret in 12.0.
     if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end
 
-    -- EQoL line 8425-8427: type() guard + SetAlphaFromBoolean
-    -- type() is safe on secrets (returns string, no taint).
-    -- SetAlphaFromBoolean is C-side, accepts secret booleans natively.
     if type(inRange) ~= "nil" then
         if f.SetAlphaFromBoolean then
             f:SetAlphaFromBoolean(inRange, 1, fadeAlpha)
         end
-        -- Update shared multiplier (only non-secret values)
         if not _rfMul then _rfMul = _G.MSUF_RangeFadeMul end
         if _rfMul then
             local plain = _UnsecretBool(inRange)
@@ -2268,6 +2281,13 @@ local function OnGlobalEvent(self, event, ...)
                 header:SetAlpha(1)
             end
         end
+
+    elseif event == "PLAYER_FLAGS_CHANGED" then
+        for f in pairs(GF.frames) do
+            if f.unit and UnitExists(f.unit) then
+                UpdateStatusText(f, f.unit)
+            end
+        end
     end
 end
 
@@ -2281,6 +2301,7 @@ _globalFrame:RegisterEvent("PARTY_LEADER_CHANGED")
 _globalFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 _globalFrame:RegisterEvent("BARBER_SHOP_OPEN")
 _globalFrame:RegisterEvent("BARBER_SHOP_CLOSE")
+_globalFrame:RegisterEvent("PLAYER_FLAGS_CHANGED")
 _globalFrame:SetScript("OnEvent", OnGlobalEvent)
 
 ------------------------------------------------------------------------
@@ -2395,11 +2416,10 @@ if type(_origInit) == "function" then
         -- Add tooltip scripts
         f:SetScript("OnEnter", OnEnter)
         f:SetScript("OnLeave", OnLeave)
-        -- Init alpha pipeline for range fade
-        local applyAlpha = _G.MSUF_ApplyUnitAlpha
-        if type(applyAlpha) == "function" then
-            applyAlpha(f, f.msufConfigKey)
-        end
+        -- GF frames do NOT use the main Alpha module.
+        -- Range fade is handled exclusively by ApplyRangeFade → SetAlphaFromBoolean.
+        -- The Alpha module (MSUF_ApplyUnitAlpha) would override SetAlphaFromBoolean
+        -- with SetAlpha(1), killing the range fade.
     end
 end
 

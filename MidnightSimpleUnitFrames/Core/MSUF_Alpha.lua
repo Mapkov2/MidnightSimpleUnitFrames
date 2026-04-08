@@ -309,6 +309,9 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
     local db = MSUF_DB
     if not db then EnsureDB(); db = MSUF_DB end
     if not frame or not frame.SetAlpha then return end
+    -- GF frames handle alpha exclusively via SetAlphaFromBoolean (range fade).
+    -- Calling SetAlpha here would override the secret-based range alpha.
+    if frame._msufIsGroupFrame then return end
     if not _rfMulTable then _rfMulTable = _G.MSUF_RangeFadeMul end
 
     local conf = key and db[key] or nil
