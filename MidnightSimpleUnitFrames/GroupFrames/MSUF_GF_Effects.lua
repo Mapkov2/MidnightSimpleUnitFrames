@@ -47,6 +47,8 @@ local SetRaidTargetIconTexture = _G.SetRaidTargetIconTexture
 local UnitGetTotalAbsorbs     = _G.UnitGetTotalAbsorbs
 local UnitGetIncomingHeals    = _G.UnitGetIncomingHeals
 local UnitGetTotalHealAbsorbs = _G.UnitGetTotalHealAbsorbs
+local CreateUnitHealPredictionCalculator = _G.CreateUnitHealPredictionCalculator
+local UnitGetDetailedHealPrediction      = _G.UnitGetDetailedHealPrediction
 local math_floor = math.floor
 local math_max   = math.max
 local pairs = pairs
@@ -58,11 +60,103 @@ local IsControlKeyDown = _G.IsControlKeyDown
 local IsShiftKeyDown   = _G.IsShiftKeyDown
 local UnitInRaid       = _G.UnitInRaid
 local UnitInRange      = _G.UnitInRange
+local IsInGroup        = _G.IsInGroup
+local IsInRaid         = _G.IsInRaid
 local UnitIsGhost      = _G.UnitIsGhost
 local GetRaidRosterInfo = _G.GetRaidRosterInfo
 local strmatch         = string.match
 local _smoothInterp    = _G.Enum and _G.Enum.StatusBarInterpolation
                          and _G.Enum.StatusBarInterpolation.ExponentialEaseOut
+
+-- Forward declarations (defined later in file)
+local _GF_IsAbsorbEnabled
+
+------------------------------------------------------------------------
+-- HealPredictionCalculator: 1 API call replaces separate
+-- UnitHealth + UnitHealthMax + UnitGetIncomingHeals + UnitGetTotalAbsorbs
+-- + UnitGetTotalHealAbsorbs.  Per-frame, lazily created.
+------------------------------------------------------------------------
+local _calcUnsupported
+local function _GF_EnsureCalc(f)
+    if _calcUnsupported then return nil end
+    if f._msufHPCalc then return f._msufHPCalc end
+    if not (CreateUnitHealPredictionCalculator and UnitGetDetailedHealPrediction) then
+        _calcUnsupported = true
+        return nil
+    end
+    local calc = CreateUnitHealPredictionCalculator()
+    if not calc then _calcUnsupported = true; return nil end
+    if calc.SetIncomingHealOverflowPercent then calc:SetIncomingHealOverflowPercent(1) end
+    f._msufHPCalc = calc
+    return calc
+end
+
+------------------------------------------------------------------------
+-- Pixel-snapped SetValue: skip SetValue when the filled pixel count
+-- hasn't changed.  Avoids redundant C-API calls in 40-man raids where
+-- small HP ticks don't move a pixel boundary.
+------------------------------------------------------------------------
+local function _GF_PixelSnappedSetValue(bar, value, smooth, forceImmediate)
+    if not (bar and bar.SetValue) or value == nil then return end
+    if issecretvalue and issecretvalue(value) then
+        bar._msufSnapPx = nil
+        if smooth and not forceImmediate then
+            bar:SetValue(value, _smoothInterp or nil)
+        else
+            bar:SetValue(value)
+        end
+        return
+    end
+    local minV, maxV = 0, 1
+    if bar.GetMinMaxValues then
+        minV, maxV = bar:GetMinMaxValues()
+    end
+    if issecretvalue and (issecretvalue(minV) or issecretvalue(maxV)) then
+        bar._msufSnapPx = nil
+        bar:SetValue(value)
+        return
+    end
+    minV = tonumber(minV) or 0
+    maxV = tonumber(maxV) or minV
+    local range = maxV - minV
+    if range <= 0 then
+        bar:SetValue(value)
+        return
+    end
+    local orient = bar.GetOrientation and bar:GetOrientation()
+    local axisLen = (orient == "VERTICAL")
+        and (bar.GetHeight and bar:GetHeight() or 0)
+        or  (bar.GetWidth  and bar:GetWidth()  or 0)
+    if issecretvalue and issecretvalue(axisLen) then
+        bar._msufSnapPx = nil
+        bar:SetValue(value)
+        return
+    end
+    axisLen = tonumber(axisLen) or 0
+    if axisLen <= 0 then bar:SetValue(value); return end
+    local scale = (bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
+    if scale <= 0 then scale = 1 end
+    local axisPx = math_floor(axisLen * scale + 0.5)
+    if axisPx <= 0 then bar:SetValue(value); return end
+    local v = tonumber(value) or 0
+    if v < minV then v = minV end
+    if v > maxV then v = maxV end
+    local norm = (v - minV) / range
+    local filledPx = math_floor(norm * axisPx + 0.5)
+    if filledPx < 0 then filledPx = 0 end
+    if filledPx > axisPx then filledPx = axisPx end
+    if not forceImmediate and bar._msufSnapPx == filledPx and bar._msufSnapAxis == axisPx then
+        return
+    end
+    bar._msufSnapPx   = filledPx
+    bar._msufSnapAxis = axisPx
+    local snapped = minV + (filledPx / axisPx) * range
+    if smooth and not forceImmediate and _smoothInterp then
+        bar:SetValue(snapped, _smoothInterp)
+    else
+        bar:SetValue(snapped)
+    end
+end
 
 ------------------------------------------------------------------------
 -- Highlight value resolver: Bars hl* keys → old GF conf key fallback
@@ -471,125 +565,72 @@ _gfFlushDirtyAuras = function()
         end
     end
 end
-
 ------------------------------------------------------------------------
--- Range check (IsSpellInRange primary, Grid2 chain)
+-- Range fade (1:1 EQoL pattern)
+-- Secret-safe: NEVER compare/type()/conditional on inRange.
+-- Pass raw value to SetAlphaFromBoolean (C-side accepts secrets).
 ------------------------------------------------------------------------
 local _rfMul = _G.MSUF_RangeFadeMul
-local MaybeWakeRangeRecoveryTicker
 
-local function NormalizeRangeResult(v)
-    if v == nil then return nil end
-    if v == true or v == 1 then return true end
-    if v == false or v == 0 then return false end
-    return v and true or false
+-- EQoL UnsecretBool equivalent
+local function _UnsecretBool(value)
+    if issecretvalue and issecretvalue(value) then return nil end
+    return value
 end
 
-local function CheckRange(f, unit)
-    if not unit then return nil end
-    if UnitIsUnit(unit, "player") then return true end
-    if UnitPhaseReason and UnitPhaseReason(unit) then return false end
-    if UnitIsDeadOrGhost(unit) then return true end -- show dead at full alpha
-
-    -- Primary: IsSpellInRange (NOT secret, 1 C-call)
-    -- WoW can return 1/0 here, not only true/false.
-    if _rangeFriendlySpell and IsSpellInRange then
-        local result = NormalizeRangeResult(IsSpellInRange(_rangeFriendlySpell, unit))
-        if result ~= nil then return result end
-    end
-
-    -- Fallback: UnitInRange (can return secret in 12.0, guard it)
-    if UnitInRange then
-        local inRange, checked = UnitInRange(unit)
-        if issecretvalue and (issecretvalue(inRange) or issecretvalue(checked)) then
-            -- keep previous state
-            return f._msufGFLastRange
-        end
-        -- checked==true means the result is reliable (party/raid member)
-        -- checked==false/nil means NOT reliable — keep previous state
-        if checked == true then
-            return (inRange == true) and true or false
-        end
-        -- checked is false/nil: UnitInRange is not reliable for this unit
-        -- (e.g., cross-realm, non-party). Fall through to interact distance.
-    end
-
-    -- Last resort: CheckInteractDistance 28yd (Warrior/DH)
-    if CheckInteractDistance and not InCombatLockdown() then
-        local ok = CheckInteractDistance(unit, 4)
-        if issecretvalue and ok ~= nil and issecretvalue(ok) then
-            return f._msufGFLastRange -- secret: keep previous
-        end
-        ok = NormalizeRangeResult(ok)
-        if ok ~= nil then return ok end
-    end
-
-    return f._msufGFLastRange -- keep previous if all fail
-end
-
-local function ApplyRangeFade(f, unit)
+local function ApplyRangeFade(f, unit, inRange)
     local c = f._c
     if c and not c.rfEn then return end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
+    local fadeAlpha = conf.rangeFadeAlpha or 0.4
+
     if conf.rangeFadeEnabled == false then
-        f._msufGFLastRange = true
         if f.SetAlpha then f:SetAlpha(1) end
-        if MaybeWakeRangeRecoveryTicker then MaybeWakeRangeRecoveryTicker() end
         return
     end
 
-    -- Offline check (secret-safe)
-    local connected = UnitIsConnected(unit)
-    if issecretvalue and issecretvalue(connected) then
-        connected = true -- assume connected if secret
+    -- Solo guard (EQoL: IsInGroup + IsInRaid)
+    if IsInGroup and IsInRaid then
+        local inGroup = IsInGroup()
+        local inRaid  = IsInRaid()
+        if not inGroup and not inRaid then
+            if f.SetAlpha then f:SetAlpha(1) end
+            return
+        end
     end
+
+    -- Offline (EQoL: UnsecretBool on UnitIsConnected)
+    local connected = unit and UnitIsConnected and _UnsecretBool(UnitIsConnected(unit)) or nil
     if connected == false then
         local offA = conf.offlineAlpha or 0.5
-        local offDelay = conf.hideOfflineDelay or 0
-        if offDelay > 0 then
-            if InCombatLockdown() then
-                -- IC: binary hide, zero overhead (no timer, no polling)
-                offA = 0
-            else
-                -- OOC: timed hide after X seconds
-                if not f._msufGFOfflineSince then f._msufGFOfflineSince = GetTime() end
-                if (GetTime() - f._msufGFOfflineSince) >= offDelay then offA = 0 end
-            end
-        end
-        f._msufGFLastRange = false
         if not _rfMul then _rfMul = _G.MSUF_RangeFadeMul end
         if _rfMul then _rfMul[unit] = offA end
         local fast = _G.MSUF_ApplyRangeFadeAlphaFast
-        if type(fast) == "function" and fast(f, f.msufConfigKey, offA) then
-            if MaybeWakeRangeRecoveryTicker then MaybeWakeRangeRecoveryTicker() end
-            return
-        end
+        if type(fast) == "function" and fast(f, f.msufConfigKey, offA) then return end
         if f.SetAlpha then f:SetAlpha(offA) end
-        if MaybeWakeRangeRecoveryTicker then MaybeWakeRangeRecoveryTicker() end
         return
     end
-    -- Came back online: clear offline timestamp
-    f._msufGFOfflineSince = nil
 
-    local inRange = CheckRange(f, unit)
-    if inRange == nil then return end -- no change possible
+    -- Fallback: UnitInRange when no event payload (EQoL line 8424)
+    if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end
 
-    local prev = f._msufGFLastRange
-    f._msufGFLastRange = inRange
-
-    local mul = inRange and 1 or (conf.rangeFadeAlpha or 0.4)
-    if not _rfMul then _rfMul = _G.MSUF_RangeFadeMul end
-    if _rfMul then _rfMul[unit] = mul end
-
-    if MaybeWakeRangeRecoveryTicker then MaybeWakeRangeRecoveryTicker() end
-
-    -- Only update visual if state changed
-    if inRange == prev then return end
-
-    local fast = _G.MSUF_ApplyRangeFadeAlphaFast
-    if type(fast) == "function" and fast(f, f.msufConfigKey, mul) then return end
-    if f.SetAlpha then f:SetAlpha(mul) end
+    -- EQoL line 8425-8427: type() guard + SetAlphaFromBoolean
+    -- type() is safe on secrets (returns string, no taint).
+    -- SetAlphaFromBoolean is C-side, accepts secret booleans natively.
+    if type(inRange) ~= "nil" then
+        if f.SetAlphaFromBoolean then
+            f:SetAlphaFromBoolean(inRange, 1, fadeAlpha)
+        end
+        -- Update shared multiplier (only non-secret values)
+        if not _rfMul then _rfMul = _G.MSUF_RangeFadeMul end
+        if _rfMul then
+            local plain = _UnsecretBool(inRange)
+            if plain ~= nil then
+                _rfMul[unit] = plain and 1 or fadeAlpha
+            end
+        end
+    end
 end
 
 ------------------------------------------------------------------------
@@ -762,6 +803,12 @@ function GF.BuildFrameCache(f)
     -- Heal prediction
     c.healPredEn = conf.healPredEnabled ~= false
 
+    -- Absorb: independently gated from heal prediction
+    c.absorbEn = _GF_IsAbsorbEnabled(kind)
+
+    -- Name display
+    c.nameEn = conf.showName ~= false
+
     -- Status icons (gate event registration)
     c.summonEn = conf.summonIcon ~= false
     c.resEn    = conf.resurrectIcon ~= false
@@ -778,6 +825,24 @@ function GF.BuildFrameCache(f)
     -- Private auras
     local pa = conf.privateAuras
     c.paEn = pa and pa.enabled ~= false
+
+    -- Event bitmask: drives diff-gated RegisterUnitEvents
+    local evBits = 0
+    if c.nameEn     then evBits = evBits + 1    end
+    if c.powH > 0   then evBits = evBits + 2    end
+    if c.rfEn       then evBits = evBits + 4    end
+    if c.needAura   then evBits = evBits + 8    end
+    if c.needThreat then evBits = evBits + 16   end
+    if c.summonEn   then evBits = evBits + 32   end
+    if c.resEn      then evBits = evBits + 64   end
+    if c.phaseEn    then evBits = evBits + 128  end
+    if c.healPredEn then evBits = evBits + 256  end
+    if c.absorbEn   then evBits = evBits + 512  end
+    local prevBits = c._evBits
+    c._evBits = evBits
+    if prevBits ~= nil and prevBits ~= evBits and f.unit and f._msufGFRegEv then
+        GF.RegisterUnitEvents(f, f.unit)
+    end
 
     -- Invalidate module-level text format cache (hidePercentSymbol, useShortNumbers)
     if GF.InvalidateTextFormatCache then GF.InvalidateTextFormatCache() end
@@ -1416,11 +1481,13 @@ local function ApplyHealthColor(f, kind, unit)
         end
     end
     if mode == "GRADIENT" and unit then
-        f._msufGFHCStamp = nil
         local hp = UnitHealth(unit)
         local hpMax = UnitHealthMax(unit)
         if issecretvalue and (issecretvalue(hp) or issecretvalue(hpMax)) then
-            f.health:SetStatusBarColor(0.2, 0.8, 0.2, 1)
+            if f._msufGFHCStamp ~= "grad_secret" then
+                f._msufGFHCStamp = "grad_secret"
+                f.health:SetStatusBarColor(0.2, 0.8, 0.2, 1)
+            end
             return
         end
         local hpN, hpMaxN = tonumber(hp), tonumber(hpMax)
@@ -1428,9 +1495,19 @@ local function ApplyHealthColor(f, kind, unit)
             local pct = hpN / hpMaxN
             local r = pct > 0.5 and (1 - (pct - 0.5) * 2) or 1
             local g = pct > 0.5 and 1 or (pct * 2)
-            f.health:SetStatusBarColor(r, g, 0, 1)
+            -- Diff-gate: quantize to 1/256 to avoid sub-pixel color churn
+            local rQ = math_floor(r * 255 + 0.5)
+            local gQ = math_floor(g * 255 + 0.5)
+            if f._msufGFGradRQ ~= rQ or f._msufGFGradGQ ~= gQ then
+                f._msufGFGradRQ = rQ
+                f._msufGFGradGQ = gQ
+                f.health:SetStatusBarColor(r, g, 0, 1)
+            end
         else
-            f.health:SetStatusBarColor(0.2, 0.8, 0.2, 1)
+            if f._msufGFHCStamp ~= "grad_default" then
+                f._msufGFHCStamp = "grad_default"
+                f.health:SetStatusBarColor(0.2, 0.8, 0.2, 1)
+            end
         end
         return
     end
@@ -1491,6 +1568,7 @@ end
 -- Full update for a single frame (called on unit assignment + events)
 ------------------------------------------------------------------------
 local dispatchOverlays, dispatchIncomingHeal, dispatchAbsorb, dispatchHealAbsorb
+local _GF_DispatchOverlaysFromCalc
 local function UpdateAll(f, unit)
     if not f or not unit then return end
     local c = f._c
@@ -1536,17 +1614,23 @@ end
 ------------------------------------------------------------------------
 local function dispatchHealth(f, unit)
     if not f.health then return end
-    local hp    = UnitHealth(unit)
-    local hpMax = UnitHealthMax(unit)
-    f.health:SetMinMaxValues(0, hpMax)
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
-    -- Smooth fill (pre-resolved interpolation enum from cache)
-    if c.smooth then
-        f.health:SetValue(hp, c.smooth)
+
+    -- HealPredictionCalculator: 1 C-API call replaces 5 separate calls
+    local calc = _GF_EnsureCalc(f)
+    local hp, hpMax
+    if calc then
+        UnitGetDetailedHealPrediction(unit, "player", calc)
+        hp    = calc:GetCurrentHealth()
+        hpMax = calc:GetMaximumHealth()
     else
-        f.health:SetValue(hp)
+        hp    = UnitHealth(unit)
+        hpMax = UnitHealthMax(unit)
     end
+
+    f.health:SetMinMaxValues(0, hpMax)
+    _GF_PixelSnappedSetValue(f.health, hp, c.smooth)
 
     -- Cutaway health (config from cache)
     local cw = f._msufCutaway
@@ -1568,8 +1652,16 @@ local function dispatchHealth(f, unit)
                 f._msufCutawayTimer = nil
                 local cw2 = f._msufCutaway
                 if cw2 and f.health and f.unit and UnitExists(f.unit) then
-                    local curHp = UnitHealth(f.unit)
-                    local curMax = UnitHealthMax(f.unit)
+                    local calc2 = _GF_EnsureCalc(f)
+                    local curHp, curMax
+                    if calc2 then
+                        UnitGetDetailedHealPrediction(f.unit, "player", calc2)
+                        curHp  = calc2:GetCurrentHealth()
+                        curMax = calc2:GetMaximumHealth()
+                    else
+                        curHp  = UnitHealth(f.unit)
+                        curMax = UnitHealthMax(f.unit)
+                    end
                     cw2:SetMinMaxValues(0, curMax)
                     cw2:SetValue(curHp)
                 end
@@ -1608,7 +1700,9 @@ local function dispatchHealth(f, unit)
         end
     end
     UpdateStatusText(f, unit)
-    dispatchIncomingHeal(f, unit)
+
+    -- Overlays: use calculator data (already fetched above)
+    _GF_DispatchOverlaysFromCalc(f, unit, calc, hp, hpMax)
 
     -- Health fade: dim frame when HP above threshold (healer focus feature)
     if c.hfEn and GF.ApplyHealthFade then
@@ -1638,7 +1732,7 @@ local function _GF_GetAbsorbSetting(kind, key)
     return nil
 end
 
-local function _GF_IsAbsorbEnabled(kind)
+_GF_IsAbsorbEnabled = function(kind)
     -- All absorb settings resolve through _GF_GetAbsorbSetting which respects hlOverride.
     -- Without hlOverride, GF falls through to general (Bars menu shared scope).
     local mode = _GF_GetAbsorbSetting(kind, "absorbTextMode")
@@ -1702,7 +1796,7 @@ local function _GF_ReadOverlayColor(keyR, keyG, keyB, defR, defG, defB, defA)
     return defR, defG, defB, defA
 end
 
-dispatchIncomingHeal = function(f, unit)
+dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
     local bar = f.incomingHealBar
     if not bar then return end
     -- Test mode: fixed values (same as main UF preview)
@@ -1719,10 +1813,16 @@ dispatchIncomingHeal = function(f, unit)
         hpEnabled = not gen or gen.enableHealPrediction ~= false
     end
     if hpEnabled == false then bar:Hide(); return end
-    if not UnitGetIncomingHeals then bar:Hide(); return end
     if not unit or not UnitExists(unit) then bar:Hide(); return end
-    local hpMax = UnitHealthMax(unit)
-    local val   = UnitGetIncomingHeals(unit)
+    if not hpMax then
+        hpMax = (calc and calc.GetMaximumHealth) and calc:GetMaximumHealth() or UnitHealthMax(unit)
+    end
+    local val
+    if calc and calc.GetIncomingHeals then
+        val = calc:GetIncomingHeals()
+    elseif UnitGetIncomingHeals then
+        val = UnitGetIncomingHeals(unit)
+    end
     if val == nil then bar:Hide(); return end
     local valSecret = issecretvalue and issecretvalue(val)
     if not valSecret then
@@ -1730,7 +1830,9 @@ dispatchIncomingHeal = function(f, unit)
         if n <= 0 then bar:Hide(); return end
         local hpMaxSecret = issecretvalue and issecretvalue(hpMax)
         if not hpMaxSecret then
-            local hp = UnitHealth(unit)
+            if not hp then
+                hp = (calc and calc.GetCurrentHealth) and calc:GetCurrentHealth() or UnitHealth(unit)
+            end
             local hpSecret = issecretvalue and issecretvalue(hp)
             if not hpSecret then
                 local missing = (tonumber(hpMax) or 0) - (tonumber(hp) or 0)
@@ -1740,11 +1842,11 @@ dispatchIncomingHeal = function(f, unit)
         end
     end
     bar:SetMinMaxValues(0, hpMax)
-    bar:SetValue(val)
+    _GF_PixelSnappedSetValue(bar, val)
     bar:Show()
 end
 
-dispatchAbsorb = function(f, unit)
+dispatchAbsorb = function(f, unit, calc, hpMax)
     local bar = f.absorbBar
     if not bar then return end
     -- Test mode: fixed values, no unit/secret dependency (same as main UF)
@@ -1759,13 +1861,19 @@ dispatchAbsorb = function(f, unit)
         bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide()
         return
     end
-    if not UnitGetTotalAbsorbs then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
     if not unit or not UnitExists(unit) then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
-    local hpMax = UnitHealthMax(unit)
-    local val   = UnitGetTotalAbsorbs(unit)
+    if not hpMax then
+        hpMax = (calc and calc.GetMaximumHealth) and calc:GetMaximumHealth() or UnitHealthMax(unit)
+    end
+    local val
+    if calc and calc.GetTotalDamageAbsorbs then
+        val = calc:GetTotalDamageAbsorbs()
+    elseif UnitGetTotalAbsorbs then
+        val = UnitGetTotalAbsorbs(unit)
+    end
     if val == nil then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
     bar:SetMinMaxValues(0, hpMax)
-    bar:SetValue(val)
+    _GF_PixelSnappedSetValue(bar, val)
     if issecretvalue and issecretvalue(val) then
         bar:Show()
     else
@@ -1773,7 +1881,7 @@ dispatchAbsorb = function(f, unit)
     end
 end
 
-dispatchHealAbsorb = function(f, unit)
+dispatchHealAbsorb = function(f, unit, calc, hpMax)
     local bar = f.healAbsorbBar
     if not bar then return end
     -- Test mode: fixed values (same as main UF)
@@ -1789,13 +1897,19 @@ dispatchHealAbsorb = function(f, unit)
         bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide()
         return
     end
-    if not UnitGetTotalHealAbsorbs then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
     if not unit or not UnitExists(unit) then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
-    local hpMax = UnitHealthMax(unit)
-    local val   = UnitGetTotalHealAbsorbs(unit)
+    if not hpMax then
+        hpMax = (calc and calc.GetMaximumHealth) and calc:GetMaximumHealth() or UnitHealthMax(unit)
+    end
+    local val
+    if calc and calc.GetTotalHealAbsorbs then
+        val = calc:GetTotalHealAbsorbs()
+    elseif UnitGetTotalHealAbsorbs then
+        val = UnitGetTotalHealAbsorbs(unit)
+    end
     if val == nil then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
     bar:SetMinMaxValues(0, hpMax)
-    bar:SetValue(val)
+    _GF_PixelSnappedSetValue(bar, val)
     if issecretvalue and issecretvalue(val) then
         bar:Show()
     else
@@ -1803,10 +1917,18 @@ dispatchHealAbsorb = function(f, unit)
     end
 end
 
+_GF_DispatchOverlaysFromCalc = function(f, unit, calc, hp, hpMax)
+    dispatchIncomingHeal(f, unit, calc, hp, hpMax)
+    dispatchAbsorb(f, unit, calc, hpMax)
+    dispatchHealAbsorb(f, unit, calc, hpMax)
+end
+
 dispatchOverlays = function(f, unit)
-    dispatchIncomingHeal(f, unit)
-    dispatchAbsorb(f, unit)
-    dispatchHealAbsorb(f, unit)
+    local calc = _GF_EnsureCalc(f)
+    if calc and unit and UnitExists(unit) then
+        UnitGetDetailedHealPrediction(unit, "player", calc)
+    end
+    _GF_DispatchOverlaysFromCalc(f, unit, calc)
 end
 
 local function dispatchPower(f, unit)
@@ -1823,11 +1945,7 @@ local function dispatchPower(f, unit)
     local pw    = UnitPower(unit)
     local pwMax = UnitPowerMax(unit)
     f.power:SetMinMaxValues(0, pwMax)
-    if c.powSmooth then
-        f.power:SetValue(pw, c.powSmooth)
-    else
-        f.power:SetValue(pw)
-    end
+    _GF_PixelSnappedSetValue(f.power, pw, c.powSmooth)
     f.power:Show()
     -- 3-slot power text (pre-resolved active flags from cache)
     if c.showPow then
@@ -1887,16 +2005,25 @@ end
 local UNIT_DISPATCH = {
     UNIT_HEALTH                       = dispatchHealth,
     UNIT_MAXHEALTH                    = dispatchHealth,
-    UNIT_HEAL_PREDICTION              = function(f, u) dispatchIncomingHeal(f, u) end,
-    UNIT_ABSORB_AMOUNT_CHANGED        = function(f, u) dispatchAbsorb(f, u) end,
-    UNIT_HEAL_ABSORB_AMOUNT_CHANGED   = function(f, u) dispatchHealAbsorb(f, u) end,
+    UNIT_HEAL_PREDICTION              = function(f, u)
+        local calc = _GF_EnsureCalc(f)
+        if calc then dispatchHealth(f, u) else dispatchIncomingHeal(f, u) end
+    end,
+    UNIT_ABSORB_AMOUNT_CHANGED        = function(f, u)
+        local calc = _GF_EnsureCalc(f)
+        if calc then dispatchHealth(f, u) else dispatchAbsorb(f, u) end
+    end,
+    UNIT_HEAL_ABSORB_AMOUNT_CHANGED   = function(f, u)
+        local calc = _GF_EnsureCalc(f)
+        if calc then dispatchHealth(f, u) else dispatchHealAbsorb(f, u) end
+    end,
     UNIT_POWER_UPDATE                 = dispatchPower,
     UNIT_MAXPOWER                     = dispatchPower,
     UNIT_DISPLAYPOWER                 = dispatchDisplayPower,
     UNIT_NAME_UPDATE                  = dispatchName,
     UNIT_CONNECTION                   = function(f, u) UpdateStatusText(f, u); ApplyRangeFade(f, u) end,
     UNIT_FLAGS                        = function(f, u) UpdateStatusText(f, u); UpdateRoleIcon(f, u); UpdateLeaderIcon(f, u) end,
-    UNIT_IN_RANGE_UPDATE              = function(f, u) ApplyRangeFade(f, u) end,
+    UNIT_IN_RANGE_UPDATE              = function(f, u, inRange) ApplyRangeFade(f, u, inRange) end,
     UNIT_AURA                         = function(f, u, updateInfo)
         dispatchAura(f, u, updateInfo)
     end,
@@ -1925,70 +2052,72 @@ end
 function GF.RegisterUnitEvents(f, unit)
     if not (f and unit) then return end
     f._msufGFFullPending = nil
-    local kind = f._msufGFKind or "party"
 
-    -- Ensure cache exists
     if not f._c then GF.BuildFrameCache(f) end
     local c = f._c
 
-    -- Clear previous registrations
+    -- Diff-gate: skip if same unit and same event bitmask
+    local evBits = c._evBits or 0
+    if f._msufGFRegUnit == unit and f._msufGFRegBits == evBits and f._msufGFRegEv then
+        return
+    end
+    f._msufGFRegUnit = unit
+    f._msufGFRegBits = evBits
+
     if f._msufGFRegEv then
         for ev in pairs(f._msufGFRegEv) do
             if f.UnregisterEvent then f:UnregisterEvent(ev) end
         end
     end
-    f._msufGFRegEv = {}
+    local regTbl = {}
+    f._msufGFRegEv = regTbl
 
-    local function reg(ev)
-        f:RegisterUnitEvent(ev, unit)
-        f._msufGFRegEv[ev] = true
+    f:RegisterUnitEvent("UNIT_HEALTH", unit);        regTbl["UNIT_HEALTH"] = true
+    f:RegisterUnitEvent("UNIT_MAXHEALTH", unit);     regTbl["UNIT_MAXHEALTH"] = true
+    f:RegisterUnitEvent("UNIT_CONNECTION", unit);     regTbl["UNIT_CONNECTION"] = true
+    f:RegisterUnitEvent("UNIT_FLAGS", unit);          regTbl["UNIT_FLAGS"] = true
+
+    if c.nameEn then
+        f:RegisterUnitEvent("UNIT_NAME_UPDATE", unit); regTbl["UNIT_NAME_UPDATE"] = true
     end
-
-    -- Core events (always needed)
-    reg("UNIT_HEALTH")
-    reg("UNIT_MAXHEALTH")
-    reg("UNIT_CONNECTION")
-    reg("UNIT_NAME_UPDATE")
-    reg("UNIT_FLAGS")
-
-    -- Power: only when power bar has height
     if c.powH > 0 then
-        reg("UNIT_POWER_UPDATE")
-        reg("UNIT_MAXPOWER")
-        reg("UNIT_DISPLAYPOWER")
+        f:RegisterUnitEvent("UNIT_POWER_UPDATE", unit);  regTbl["UNIT_POWER_UPDATE"] = true
+        f:RegisterUnitEvent("UNIT_MAXPOWER", unit);      regTbl["UNIT_MAXPOWER"] = true
+        f:RegisterUnitEvent("UNIT_DISPLAYPOWER", unit);  regTbl["UNIT_DISPLAYPOWER"] = true
     end
-
-    -- Range: only when range fade enabled
     if c.rfEn then
-        reg("UNIT_IN_RANGE_UPDATE")
+        f:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", unit); regTbl["UNIT_IN_RANGE_UPDATE"] = true
     end
-
-    -- Auras: only when ANY aura consumer is active
     if c.needAura then
-        reg("UNIT_AURA")
+        f:RegisterUnitEvent("UNIT_AURA", unit); regTbl["UNIT_AURA"] = true
     end
-
-    -- Threat: only when aggro highlight is enabled
     if c.needThreat then
-        reg("UNIT_THREAT_SITUATION_UPDATE")
-        reg("UNIT_THREAT_LIST_UPDATE")
+        f:RegisterUnitEvent("UNIT_THREAT_SITUATION_UPDATE", unit); regTbl["UNIT_THREAT_SITUATION_UPDATE"] = true
+        f:RegisterUnitEvent("UNIT_THREAT_LIST_UPDATE", unit);      regTbl["UNIT_THREAT_LIST_UPDATE"] = true
     end
-
-    -- Status icons: only when each icon is enabled
-    if c.summonEn then reg("INCOMING_SUMMON_CHANGED") end
-    if c.resEn then reg("INCOMING_RESURRECT_CHANGED") end
-    if c.phaseEn then reg("UNIT_PHASE") end
-
-    -- Heal prediction: only when enabled
+    if c.summonEn then
+        f:RegisterUnitEvent("INCOMING_SUMMON_CHANGED", unit); regTbl["INCOMING_SUMMON_CHANGED"] = true
+    end
+    if c.resEn then
+        f:RegisterUnitEvent("INCOMING_RESURRECT_CHANGED", unit); regTbl["INCOMING_RESURRECT_CHANGED"] = true
+    end
+    if c.phaseEn then
+        f:RegisterUnitEvent("UNIT_PHASE", unit); regTbl["UNIT_PHASE"] = true
+    end
     if c.healPredEn then
-        if UnitGetIncomingHeals then reg("UNIT_HEAL_PREDICTION") end
-        if UnitGetTotalAbsorbs then reg("UNIT_ABSORB_AMOUNT_CHANGED") end
-        if UnitGetTotalHealAbsorbs then reg("UNIT_HEAL_ABSORB_AMOUNT_CHANGED") end
+        f:RegisterUnitEvent("UNIT_HEAL_PREDICTION", unit); regTbl["UNIT_HEAL_PREDICTION"] = true
+    end
+    if c.absorbEn then
+        if UnitGetTotalAbsorbs then
+            f:RegisterUnitEvent("UNIT_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_ABSORB_AMOUNT_CHANGED"] = true
+        end
+        if UnitGetTotalHealAbsorbs then
+            f:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"] = true
+        end
     end
 
     f:SetScript("OnEvent", GF_OnEvent)
 
-    -- Pet frame: attach if enabled
     if GF.AttachPetFrame then GF.AttachPetFrame(f) end
 end
 
@@ -2153,256 +2282,6 @@ _globalFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 _globalFrame:RegisterEvent("BARBER_SHOP_OPEN")
 _globalFrame:RegisterEvent("BARBER_SHOP_CLOSE")
 _globalFrame:SetScript("OnEvent", OnGlobalEvent)
-
-------------------------------------------------------------------------
--- AFK / DND / Status OOC poll
--- UNIT_FLAGS may miss AFK transitions on distant raid members.
--- Low-frequency OOC ticker catches any missed status changes.
--- Skipped entirely in combat (AFK can't start in combat).
-------------------------------------------------------------------------
-do
-    local _statusFrame = CreateFrame("Frame")
-    local _statusElapsed = 0
-    local _statusInCombat = false
-    _statusFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-    _statusFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    _statusFrame:SetScript("OnEvent", function(self, event)
-        _statusInCombat = (event == "PLAYER_REGEN_DISABLED")
-    end)
-    _statusFrame:SetScript("OnUpdate", function(self, dt)
-        if _statusInCombat then return end
-        _statusElapsed = _statusElapsed + dt
-        if _statusElapsed < 3 then return end
-        _statusElapsed = 0
-        local hasWork = false
-        for f in pairs(GF.frames) do
-            if f.unit and UnitExists(f.unit) then
-                hasWork = true
-                UpdateStatusText(f, f.unit)
-            end
-        end
-        if not hasWork then self:Hide() end
-    end)
-    -- Wake ticker when frames appear
-    local _origRegUEStatus = GF.RegisterUnitEvents
-    GF.RegisterUnitEvents = function(f, unit)
-        _origRegUEStatus(f, unit)
-        _statusFrame:Show()
-    end
-end
-
-------------------------------------------------------------------------
--- OOR recovery ticker
--- UNIT_IN_RANGE_UPDATE can miss transitions (phasing, summoning, zone
--- changes). Two modes:
--- 1) Fast poll (0.2s IC, 0.5s OOC): frames currently OOR or unknown
--- 2) Slow sweep (3s OOC only): ALL frames to catch phase/zone transitions
-------------------------------------------------------------------------
-do
-    local _recoveryFrame
-    local _elapsed = 0
-    local _sweepElapsed = 0
-    local _inCombat = false
-
-    local function FrameNeedsRecoveryPoll(f)
-        -- Poll OOR frames AND unknown-state frames (new units)
-        if not (f and f.unit) then return false end
-        if f._msufGFLastRange == true then return false end -- already in range
-        if not UnitExists(f.unit) then return false end
-
-        local conf = GF.GetConf(f._msufGFKind or "party")
-        if not conf or conf.rangeFadeEnabled == false then return false end
-
-        local connected = UnitIsConnected(f.unit)
-        if issecretvalue and issecretvalue(connected) then connected = true end
-        if connected == false then
-            -- OOC only: keep polling if hide-offline delay not yet elapsed
-            if not _inCombat and f._msufGFOfflineSince then
-                local delay = conf.hideOfflineDelay or 0
-                if delay > 0 and (GetTime() - f._msufGFOfflineSince) < delay then
-                    return true
-                end
-            end
-            return false
-        end
-        -- NOTE: do NOT skip phased units — we need to detect un-phase transitions
-        return true
-    end
-
-    local function HasAnyGFFrames()
-        for f in pairs(GF.frames) do
-            if f.unit then return true end
-        end
-        return false
-    end
-
-    local function EnsureRecoveryFrame()
-        if _rangeNeedsTicker then return nil end
-        if _recoveryFrame then return _recoveryFrame end
-        _recoveryFrame = CreateFrame("Frame")
-        _recoveryFrame:Hide()
-        _recoveryFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-        _recoveryFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-        _recoveryFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
-        _recoveryFrame:RegisterEvent("UNIT_FLAGS")
-        _recoveryFrame:RegisterEvent("SPELLS_CHANGED")
-        _recoveryFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-        _recoveryFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        -- Infrequent zone events (fire once per load, not per-unit)
-        _recoveryFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-        _recoveryFrame:RegisterEvent("LOADING_SCREEN_DISABLED")
-        _recoveryFrame:SetScript("OnEvent", function(self, event)
-            if event == "PLAYER_REGEN_DISABLED" then
-                _inCombat = true
-            elseif event == "PLAYER_REGEN_ENABLED" then
-                _inCombat = false
-                _sweepElapsed = 99 -- force immediate sweep after combat
-                self:Show()
-            elseif event == "SPELLS_CHANGED"
-                or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
-                or event == "PLAYER_ENTERING_WORLD" then
-                -- Re-resolve range spell (may have changed on spec/instance)
-                if GF._RebuildRangeSpell then GF._RebuildRangeSpell() end
-                _sweepElapsed = 99 -- force sweep to re-check all frames
-                self:Show()
-            else
-                -- Roster/zone change: wake ticker, force one sweep
-                _elapsed = 0
-                _sweepElapsed = 99
-                self:Show()
-            end
-        end)
-        _recoveryFrame:SetScript("OnUpdate", function(self, dt)
-            _elapsed = _elapsed + dt
-
-            -- Fast poll: OOR / unknown-state frames (only those needing recovery)
-            local fastInterval = _inCombat and 0.20 or 0.50
-            if _elapsed >= fastInterval then
-                _elapsed = 0
-                local anyNeedsRecovery = false
-                for f in pairs(GF.frames) do
-                    if FrameNeedsRecoveryPoll(f) then
-                        anyNeedsRecovery = true
-                        ApplyRangeFade(f, f.unit)
-                    end
-                end
-                -- Nothing to poll and no pending sweep → sleep
-                if not anyNeedsRecovery and _sweepElapsed <= 0 then
-                    self:Hide()
-                    return
-                end
-            end
-
-            -- Full sweep: ALL frames (catches missed UNIT_IN_RANGE_UPDATE transitions)
-            -- IC: every 2s (catches in-range→OOR that event missed)
-            -- OOC: every 3s (existing behavior)
-            local sweepInterval = _inCombat and 2 or 3
-            _sweepElapsed = _sweepElapsed + dt
-            if _sweepElapsed >= sweepInterval then
-                _sweepElapsed = 0
-                for f in pairs(GF.frames) do
-                    if f.unit and UnitExists(f.unit) then
-                        local conf = GF.GetConf(f._msufGFKind or "party")
-                        if conf and conf.rangeFadeEnabled ~= false then
-                            ApplyRangeFade(f, f.unit)
-                        end
-                    end
-                end
-            end
-
-            -- Sleep if no GF frames at all
-            if not HasAnyGFFrames() then self:Hide() end
-        end)
-        return _recoveryFrame
-    end
-
-    MaybeWakeRangeRecoveryTicker = function()
-        if _rangeNeedsTicker then return end
-        local frame = EnsureRecoveryFrame()
-        if not frame then return end
-        if HasAnyGFFrames() then
-            _elapsed = 0
-            frame:Show()
-        end
-    end
-end
-
-------------------------------------------------------------------------
--- Range ticker (for classes without friendly spell: Warrior, DH, Hunter)
--- 1s combat, 3s OOC — only runs when GF frames exist
-------------------------------------------------------------------------
-do
-    if _rangeNeedsTicker then
-        local _tickerFrame = CreateFrame("Frame")
-        local _elapsed = 0
-        local _inCombat = false
-
-        _tickerFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-        _tickerFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-        _tickerFrame:RegisterEvent("SPELLS_CHANGED")
-        _tickerFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-        _tickerFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        _tickerFrame:SetScript("OnEvent", function(self, event)
-            if event == "PLAYER_REGEN_DISABLED" then
-                _inCombat = true
-            elseif event == "PLAYER_REGEN_ENABLED" then
-                _inCombat = false
-            elseif event == "SPELLS_CHANGED"
-                or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
-                or event == "PLAYER_ENTERING_WORLD" then
-                if GF._RebuildRangeSpell then GF._RebuildRangeSpell() end
-                _rangeListDirty = true
-                self:Show()
-            end
-        end)
-
-        local _rangeFrameList = {}
-        local _rangeIdx = 0
-        local _rangeListDirty = true -- rebuild on next tick
-
-        -- Hook frame registry changes to mark list dirty
-        local _origRegUE = GF.RegisterUnitEvents
-        GF.RegisterUnitEvents = function(f, unit)
-            _origRegUE(f, unit)
-            _rangeListDirty = true
-            _tickerFrame:Show()
-        end
-        local _origUnregUE = GF.UnregisterUnitEvents
-        GF.UnregisterUnitEvents = function(f)
-            _origUnregUE(f)
-            _rangeListDirty = true
-        end
-
-        _tickerFrame:SetScript("OnUpdate", function(self, dt)
-            _elapsed = _elapsed + dt
-            local interval = _inCombat and 0.25 or 1
-            if _elapsed < interval then return end
-            _elapsed = 0
-
-            -- Rebuild frame list only when dirty
-            if _rangeListDirty then
-                _rangeListDirty = false
-                local idx = 0
-                for f in pairs(GF.frames) do idx = idx + 1; _rangeFrameList[idx] = f end
-                for i = idx + 1, #_rangeFrameList do _rangeFrameList[i] = nil end
-            end
-
-            local n = #_rangeFrameList
-            if n == 0 then self:Hide(); return end
-
-            -- Stagger: max 10 frames per tick, round-robin
-            local batch = n <= 10 and n or 10
-            for _ = 1, batch do
-                _rangeIdx = _rangeIdx + 1
-                if _rangeIdx > n then _rangeIdx = 1 end
-                local f = _rangeFrameList[_rangeIdx]
-                if f and f.unit and UnitExists(f.unit) then
-                    ApplyRangeFade(f, f.unit)
-                end
-            end
-        end)
-    end
-end
 
 ------------------------------------------------------------------------
 -- Mouseover highlight
@@ -2593,3 +2472,12 @@ end
 GF._ApplyHealthColor      = ApplyHealthColor
 GF._ApplyAbsorbAnchor     = _GF_ApplyAbsorbAnchor
 GF._ReadOverlayColor      = _GF_ReadOverlayColor
+
+-- Perfy idle-diagnosis exports (zero cost when Perfy absent)
+_G.MSUF_GF_DispatchHealth  = dispatchHealth
+_G.MSUF_GF_DispatchPower   = dispatchPower
+_G.MSUF_GF_DispatchAura    = dispatchAura
+_G.MSUF_GF_DispatchOverlays = dispatchOverlays
+_G.MSUF_GF_ApplyPowerColor = ApplyPowerColor
+_G.MSUF_GF_OnEvent         = GF_OnEvent
+_G.MSUF_GF_PixelSnap       = _GF_PixelSnappedSetValue

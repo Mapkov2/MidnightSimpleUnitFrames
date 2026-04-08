@@ -2966,6 +2966,7 @@ local function FrameOnEvent(self, event, arg1, ...)
         Core.MarkDirty(self, MASK_UNIT_EVENT_FALLBACK, nil, event)
     end
 end
+_G._MSUF_UFCore_FrameOnEvent = FrameOnEvent
 
 function Core.AttachFrame(f)
     if not f or not f.unit then return end
@@ -3123,7 +3124,7 @@ Global:RegisterEvent("UPDATE_EXHAUSTION")
 -- Phase 1: PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED moved to EventBus (below)
 Global:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
 Global:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
-Global:RegisterEvent("UNIT_TARGET")
+Global:RegisterUnitEvent("UNIT_TARGET", "target")
 Global:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
 Global:RegisterEvent("GROUP_ROSTER_UPDATE")
 Global:RegisterEvent("PARTY_LEADER_CHANGED")
@@ -3304,32 +3305,33 @@ Global:SetScript("OnEvent", function(_, event, arg1)
 
     -- Phase 1: PLAYER_TARGET_CHANGED handled via EventBus (see bottom of file)
 
-    if event == "UNIT_TARGET" and arg1 == "target" then
-        -- Target-of-target changes: refresh ToT inline (independent of the ToT unitframe).
-        if UFCore_IsToTInlineEnabled() then
+    if event == "UNIT_TARGET" then
+        -- RegisterUnitEvent("UNIT_TARGET", "target") guarantees arg1 == "target".
+        -- Early exit: skip all work if neither ToT inline nor ToT frame is active.
+        local totInline = UFCore_IsToTInlineEnabled()
+        local totFrame  = FramesByUnit["targettarget"]
+        if not totInline and not totFrame then return end
+
+        if totInline then
             local tf = FramesByUnit["target"]
             if tf then
                 Core.MarkDirty(tf, DIRTY_TOTINLINE, true, event)
             end
         end
-        -- If the ToT unitframe exists/attached, keep it responsive too.
-        QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
-        DeferSwapWork("targettarget", event, false, false)
+        if totFrame then
+            QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
+            DeferSwapWork("targettarget", event, false, false)
+        end
         return
     end
 
     -- Phase 1: PLAYER_FOCUS_CHANGED handled via EventBus (see bottom of file)
 
     if event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
-        -- PERF: Direct-apply threat (like UNIT_HEALTH). Skips MarkDirty + Enqueue + Flush dispatch.
-        -- Threat only needs alpha + aggro border (~3μs), queuing adds ~10-15μs overhead per frame.
-        if arg1 == "target" or arg1 == "focus"
-            or arg1 == "boss1" or arg1 == "boss2" or arg1 == "boss3"
-            or arg1 == "boss4" or arg1 == "boss5" then
-            local f = FramesByUnit[arg1]
-            if f and f:IsVisible() then
-                UFCore_UpdateThreatFast(f)
-            end
+        -- PERF: Direct-apply threat. Hash lookup replaces 7-way string compare.
+        local f = FramesByUnit[arg1]
+        if f and f:IsVisible() then
+            UFCore_UpdateThreatFast(f)
         end
         return
     end

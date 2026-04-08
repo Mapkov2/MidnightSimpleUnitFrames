@@ -1206,6 +1206,12 @@ local function RefreshSharedFlags(shared, gen)
         else _pandemicMode = 0
         end
         _showPandemic = (_pandemicMode > 0) and (_pandemicCurve ~= nil)
+        -- Start/stop pandemic ticker based on feature state (zero idle overhead when off)
+        if _showPandemic then
+            if API._StartPandemicTicker then API._StartPandemicTicker() end
+        else
+            if API._StopPandemicTicker then API._StopPandemicTicker() end
+        end
         -- Cache color
         local pr = shared and shared.pandemicR; if type(pr) == "number" then _panR = pr end
         local pg = shared and shared.pandemicG; if type(pg) == "number" then _panG = pg end
@@ -2608,10 +2614,25 @@ do
         end
     end
 
-    -- Start ticker at load time; idles cheaply (one boolean check) when disabled.
-    if _pandemicCurve and C_Timer and C_Timer.NewTicker then
-        C_Timer.NewTicker(0.10, PandemicTick)
+    -- Demand-driven ticker: only runs when pandemic display is active.
+    -- Zero idle overhead when _showPandemic is false (default).
+    local _pandemicTicker
+    local function _StartPandemicTicker()
+        if _pandemicTicker then return end
+        if not (C_Timer and C_Timer.NewTicker) then return end
+        _pandemicTicker = C_Timer.NewTicker(0.10, PandemicTick)
     end
+    local function _StopPandemicTicker()
+        if not _pandemicTicker then return end
+        _pandemicTicker:Cancel()
+        _pandemicTicker = nil
+        -- One cleanup pass
+        PandemicTick()
+    end
+    -- Export for RefreshSharedFlags
+    API._StartPandemicTicker = _StartPandemicTicker
+    API._StopPandemicTicker  = _StopPandemicTicker
+    if _showPandemic then _StartPandemicTicker() end
 end
 
 -- Backward-compatible exports into API.Apply

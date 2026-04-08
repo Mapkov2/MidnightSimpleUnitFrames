@@ -184,6 +184,16 @@ local function FocusKick_CreateFrame()
     FocusKickFrame:SetFrameLevel(50)
     FocusKickFrame:Hide()
 
+    -- Zero idle cost: stop OnUpdate when frame hides
+    FocusKickFrame:HookScript("OnHide", function(self)
+        self:SetScript("OnUpdate", nil)
+        self.MSUF_timeUpdater = nil
+        self.MSUF_timeAccum = nil
+        if _G.MSUF_UpdateManager and _G.MSUF_UpdateManager.Unregister then
+            _G.MSUF_UpdateManager:Unregister("FocusKick_TimeText")
+        end
+    end)
+
     -- Background
     local bg = FocusKickFrame:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
@@ -344,24 +354,12 @@ local function FocusKick_UpdateTimeText()
         return
     end
 
-    local ok, txt = MSUF_FastCall(function() return src.timeText:GetText() end)
-    if ok then
-        -- IMPORTANT: Never compare or format the returned text (it can be a secret value).
-        -- Just pass it through to our FontString.
-        MSUF_FastCall(FocusKickFrame.timeText.SetText, FocusKickFrame.timeText, txt)
-        local okA, a = MSUF_FastCall(function() return src.timeText:GetAlpha() end)
-        if okA then
-            local okSetAlpha = MSUF_FastCall(FocusKickFrame.timeText.SetAlpha, FocusKickFrame.timeText, a)
-            if not okSetAlpha then
-                FocusKickFrame.timeText:SetAlpha(1)
-            end
-        else
-            FocusKickFrame.timeText:SetAlpha(1)
-        end
-    else
-        FocusKickFrame.timeText:SetText("")
-        FocusKickFrame.timeText:SetAlpha(0)
-    end
+    -- Direct calls: GetText/SetText/GetAlpha/SetAlpha are not secret-restricted.
+    -- No pcall (MSUF_FastCall) overhead needed here.
+    local txt = src.timeText:GetText()
+    FocusKickFrame.timeText:SetText(txt or "")
+    local a = src.timeText:GetAlpha()
+    FocusKickFrame.timeText:SetAlpha(a or 1)
 end
 local function FocusKick_EnsureTimeUpdater()
     if not FocusKickFrame then return end
@@ -377,7 +375,12 @@ local function FocusKick_EnsureTimeUpdater()
     else
         -- Fallback: local OnUpdate if UpdateManager isn't available
         FocusKickFrame:SetScript("OnUpdate", function(self, elapsed)
-            if not self:IsShown() then return end
+            -- Zero idle cost: stop immediately if hidden or no focus unit
+            if not self:IsShown() then
+                self:SetScript("OnUpdate", nil)
+                self.MSUF_timeUpdater = nil
+                return
+            end
             self.MSUF_timeAccum = (self.MSUF_timeAccum or 0) + (elapsed or 0)
             if self.MSUF_timeAccum < 0.05 then return end
             self.MSUF_timeAccum = 0

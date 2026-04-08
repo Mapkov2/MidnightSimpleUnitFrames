@@ -952,6 +952,22 @@ function GF.SyncHeaderPosition(kind, countOverride)
 end
 
 ------------------------------------------------------------------------
+-- SetAttribute diff-cache: skip SetAttribute when value unchanged.
+-- SecureGroupHeader re-creates internal child layout on SetAttribute;
+-- skipping identical values avoids expensive reflows.
+------------------------------------------------------------------------
+local _NIL_TOKEN = {} -- sentinel for nil values in cache
+local function _GF_SetAttrIfChanged(header, key, value)
+    local cache = header._msufAttrCache
+    if not cache then cache = {}; header._msufAttrCache = cache end
+    local norm = (value == nil) and _NIL_TOKEN or value
+    if cache[key] == norm then return false end
+    header:SetAttribute(key, value)
+    cache[key] = norm
+    return true
+end
+
+------------------------------------------------------------------------
 -- Party header setup
 ------------------------------------------------------------------------
 local function SetupPartyHeader()
@@ -979,48 +995,48 @@ local function SetupPartyHeader()
     local spacing = conf.spacing or 1
     local growth = conf.growth or "DOWN"
 
-    header:SetAttribute("showParty", true)
-    header:SetAttribute("showRaid", false)
-    header:SetAttribute("showPlayer", conf.showPlayer and true or false)
-    header:SetAttribute("showSolo", conf.showSolo and true or false)
-    header:SetAttribute("maxColumns", conf.maxColumns or 1)
-    header:SetAttribute("unitsPerColumn", conf.unitsPerColumn or 5)
-    header:SetAttribute("template", "SecureUnitButtonTemplate")
-    header:SetAttribute("sortMethod", "INDEX")
-    header:SetAttribute("sortDir", "ASC")
+    _GF_SetAttrIfChanged(header, "showParty", true)
+    _GF_SetAttrIfChanged(header, "showRaid", false)
+    _GF_SetAttrIfChanged(header, "showPlayer", conf.showPlayer and true or false)
+    _GF_SetAttrIfChanged(header, "showSolo", conf.showSolo and true or false)
+    _GF_SetAttrIfChanged(header, "maxColumns", conf.maxColumns or 1)
+    _GF_SetAttrIfChanged(header, "unitsPerColumn", conf.unitsPerColumn or 5)
+    _GF_SetAttrIfChanged(header, "template", "SecureUnitButtonTemplate")
+    _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+    _GF_SetAttrIfChanged(header, "sortDir", "ASC")
 
     -- Growth direction → point/xOffset/yOffset
     -- SecureGroupHeader already accounts for child width/height; offsets are spacing only.
     if growth == "DOWN" then
-        header:SetAttribute("point", "TOP")
-        header:SetAttribute("xOffset", 0)
-        header:SetAttribute("yOffset", -spacing)
-        header:SetAttribute("columnAnchorPoint", "LEFT")
-        header:SetAttribute("columnSpacing", spacing)
+        _GF_SetAttrIfChanged(header, "point", "TOP")
+        _GF_SetAttrIfChanged(header, "xOffset", 0)
+        _GF_SetAttrIfChanged(header, "yOffset", -spacing)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "LEFT")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
     elseif growth == "UP" then
-        header:SetAttribute("point", "BOTTOM")
-        header:SetAttribute("xOffset", 0)
-        header:SetAttribute("yOffset", spacing)
-        header:SetAttribute("columnAnchorPoint", "LEFT")
-        header:SetAttribute("columnSpacing", spacing)
+        _GF_SetAttrIfChanged(header, "point", "BOTTOM")
+        _GF_SetAttrIfChanged(header, "xOffset", 0)
+        _GF_SetAttrIfChanged(header, "yOffset", spacing)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "LEFT")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
     elseif growth == "RIGHT" then
-        header:SetAttribute("point", "LEFT")
-        header:SetAttribute("xOffset", spacing)
-        header:SetAttribute("yOffset", 0)
-        header:SetAttribute("columnAnchorPoint", "TOP")
-        header:SetAttribute("columnSpacing", spacing)
+        _GF_SetAttrIfChanged(header, "point", "LEFT")
+        _GF_SetAttrIfChanged(header, "xOffset", spacing)
+        _GF_SetAttrIfChanged(header, "yOffset", 0)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "TOP")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
     elseif growth == "LEFT" then
-        header:SetAttribute("point", "RIGHT")
-        header:SetAttribute("xOffset", -spacing)
-        header:SetAttribute("yOffset", 0)
-        header:SetAttribute("columnAnchorPoint", "TOP")
-        header:SetAttribute("columnSpacing", spacing)
+        _GF_SetAttrIfChanged(header, "point", "RIGHT")
+        _GF_SetAttrIfChanged(header, "xOffset", -spacing)
+        _GF_SetAttrIfChanged(header, "yOffset", 0)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "TOP")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
     end
 
     -- initialConfigFunction: size + attributes ONLY (no RegisterForClicks!)
     -- Sizes read dynamically from header attributes so re-setup picks up changes
-    header:SetAttribute("_msufWidth", w)
-    header:SetAttribute("_msufHeight", h)
+    _GF_SetAttrIfChanged(header, "_msufWidth", w)
+    _GF_SetAttrIfChanged(header, "_msufHeight", h)
     header:SetAttribute("initialConfigFunction", [[
         local hdr = self:GetParent()
         local w = hdr:GetAttribute('_msufWidth') or 120
@@ -1072,65 +1088,65 @@ local function SetupRaidHeader()
     local unitsPerColumn = conf.unitsPerColumn or 5
     local maxColumns = conf.maxColumns or 8
 
-    header:SetAttribute("showParty", false)
-    header:SetAttribute("showRaid", true)
-    header:SetAttribute("showPlayer", true)
-    header:SetAttribute("showSolo", false)
-    header:SetAttribute("maxColumns", maxColumns)
-    header:SetAttribute("unitsPerColumn", unitsPerColumn)
-    header:SetAttribute("template", "SecureUnitButtonTemplate")
-    header:SetAttribute("sortMethod", "INDEX")
-    header:SetAttribute("sortDir", "ASC")
+    _GF_SetAttrIfChanged(header, "showParty", false)
+    _GF_SetAttrIfChanged(header, "showRaid", true)
+    _GF_SetAttrIfChanged(header, "showPlayer", true)
+    _GF_SetAttrIfChanged(header, "showSolo", false)
+    _GF_SetAttrIfChanged(header, "maxColumns", maxColumns)
+    _GF_SetAttrIfChanged(header, "unitsPerColumn", unitsPerColumn)
+    _GF_SetAttrIfChanged(header, "template", "SecureUnitButtonTemplate")
+    _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+    _GF_SetAttrIfChanged(header, "sortDir", "ASC")
     -- Group filter: which raid groups to display (1-8)
     local gf = conf.groupFilter
     if type(gf) == "string" and gf ~= "" then
         -- Legacy string format "1,2,3,4" → pass directly
-        header:SetAttribute("groupFilter", gf)
+        _GF_SetAttrIfChanged(header, "groupFilter", gf)
     elseif type(gf) == "table" then
         local parts = {}
         for i = 1, 8 do
             if gf[i] ~= false then parts[#parts + 1] = tostring(i) end
         end
         if #parts > 0 and #parts < 8 then
-            header:SetAttribute("groupFilter", table.concat(parts, ","))
+            _GF_SetAttrIfChanged(header, "groupFilter", table.concat(parts, ","))
         else
-            header:SetAttribute("groupFilter", nil)
+            _GF_SetAttrIfChanged(header, "groupFilter", nil)
         end
     else
-        header:SetAttribute("groupFilter", nil)
+        _GF_SetAttrIfChanged(header, "groupFilter", nil)
     end
     -- No groupBy — pure grid: wraps at unitsPerColumn, fills up to maxColumns
 
     -- Growth
     local colGrowth = "DOWN"
     if growth == "DOWN" then
-        header:SetAttribute("point", "TOP")
-        header:SetAttribute("xOffset", 0)
-        header:SetAttribute("yOffset", -spacing)
-        header:SetAttribute("columnAnchorPoint", "LEFT")
-        header:SetAttribute("columnSpacing", spacing)
+        _GF_SetAttrIfChanged(header, "point", "TOP")
+        _GF_SetAttrIfChanged(header, "xOffset", 0)
+        _GF_SetAttrIfChanged(header, "yOffset", -spacing)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "LEFT")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
     elseif growth == "UP" then
-        header:SetAttribute("point", "BOTTOM")
-        header:SetAttribute("xOffset", 0)
-        header:SetAttribute("yOffset", spacing)
-        header:SetAttribute("columnAnchorPoint", "LEFT")
-        header:SetAttribute("columnSpacing", spacing)
+        _GF_SetAttrIfChanged(header, "point", "BOTTOM")
+        _GF_SetAttrIfChanged(header, "xOffset", 0)
+        _GF_SetAttrIfChanged(header, "yOffset", spacing)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "LEFT")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
     elseif growth == "RIGHT" then
-        header:SetAttribute("point", "LEFT")
-        header:SetAttribute("xOffset", spacing)
-        header:SetAttribute("yOffset", 0)
-        header:SetAttribute("columnAnchorPoint", "TOP")
-        header:SetAttribute("columnSpacing", spacing)
+        _GF_SetAttrIfChanged(header, "point", "LEFT")
+        _GF_SetAttrIfChanged(header, "xOffset", spacing)
+        _GF_SetAttrIfChanged(header, "yOffset", 0)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "TOP")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
     elseif growth == "LEFT" then
-        header:SetAttribute("point", "RIGHT")
-        header:SetAttribute("xOffset", -spacing)
-        header:SetAttribute("yOffset", 0)
-        header:SetAttribute("columnAnchorPoint", "TOP")
-        header:SetAttribute("columnSpacing", spacing)
+        _GF_SetAttrIfChanged(header, "point", "RIGHT")
+        _GF_SetAttrIfChanged(header, "xOffset", -spacing)
+        _GF_SetAttrIfChanged(header, "yOffset", 0)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "TOP")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
     end
 
-    header:SetAttribute("_msufWidth", w)
-    header:SetAttribute("_msufHeight", h)
+    _GF_SetAttrIfChanged(header, "_msufWidth", w)
+    _GF_SetAttrIfChanged(header, "_msufHeight", h)
     header:SetAttribute("initialConfigFunction", [[
         local hdr = self:GetParent()
         local w = hdr:GetAttribute('_msufWidth') or 80
@@ -1959,6 +1975,10 @@ _G.MSUF_GF_RestoreBlizzard   = GF.RestoreBlizzardFrames
 _G.MSUF_GF_UpdateButton      = GF.UpdateButton
 _G.MSUF_GF_InitButton        = GF_InitButton
 _G.MSUF_GF_UpdateGroupVisibility = GF.UpdateGroupVisibility
+
+-- Perfy idle-diagnosis exports
+_G.MSUF_GF_ScanHeaderChildren = ScanHeaderChildren
+_G.MSUF_GF_CoreEventFrame     = ef
 
 ------------------------------------------------------------------------
 -- Profile-swap re-init: hook MSUF_SwitchProfile → EnsureDB + RebuildAll

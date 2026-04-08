@@ -5754,12 +5754,9 @@ do
         if _G.MSUF_SwapRecolorDriver then return _G.MSUF_SwapRecolorDriver end
         local d = CreateFrame("Frame", "MSUF_SwapRecolorDriver", UIParent)
         d._msufSwapRecolorQueued = false
-        -- TARGET/FOCUS via EventBus, keep UNIT_TARGET on frame
-        d:RegisterEvent("UNIT_TARGET")
+        -- TARGET/FOCUS via EventBus, keep UNIT_TARGET on frame (filtered to "target" only)
+        d:RegisterUnitEvent("UNIT_TARGET", "target")
         d:SetScript("OnEvent", function(self, event, arg1)
-            if event == "UNIT_TARGET" then
-                if arg1 ~= "target" then return end -- ToT updates from target only
-            end
             _MSUF_SwapRecolor_Schedule(self)
         end)
         _G.MSUF_SwapRecolorDriver = d

@@ -169,8 +169,9 @@ local function MSUF_Alpha_UseLiteRuntime()
 end
 
 local function MSUF_Alpha_SetFlat(frame, a)
-    local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
-    if cur == nil then
+    local cur = frame.GetAlpha and frame:GetAlpha() or nil
+    -- Secret-safe: GetAlpha can return secret after SetAlphaFromBoolean
+    if cur == nil or (_G.issecretvalue and _G.issecretvalue(cur)) then
         frame:SetAlpha(a)
     else
         local d = cur - a
@@ -275,8 +276,8 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
     frame._msufAlphaLastBG = bg
 
     if frame.SetAlpha then
-        local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
-        if cur == nil then
+        local cur = frame.GetAlpha and frame:GetAlpha() or nil
+        if cur == nil or (_G.issecretvalue and _G.issecretvalue(cur)) then
             frame:SetAlpha(1)
         else
             local d = cur - 1
@@ -408,7 +409,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
             frame._msufAlphaBaseLayerMode = staticLayerMode
             frame._msufAlphaRangeMul = 1
             MSUF_Alpha_ApplyLayered(frame, staticA, staticB, staticLayerMode)
-            if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
+            if isEditMode and not (_G.issecretvalue and _G.issecretvalue(frame:GetAlpha())) and (frame:GetAlpha() or 0) < 0.35 then
                 frame:SetAlpha(0.35)
             end
             return
@@ -447,7 +448,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         end
 
         MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, conf.alphaLayerMode)
-        if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
+        if isEditMode and not (_G.issecretvalue and _G.issecretvalue(frame:GetAlpha())) and (frame:GetAlpha() or 0) < 0.35 then
             frame:SetAlpha(0.35)
         end
         return
