@@ -31,12 +31,12 @@ local GetSpellTexture_fn = GetSpellTexture
 
 local function _GetIcon(spellId)
     if C_Spell_GetSpellTexture then
-        local ok, tex = pcall(C_Spell_GetSpellTexture, spellId)
-        if ok and tex then return tex end
+        local tex = C_Spell_GetSpellTexture(spellId)
+        if tex then return tex end
     end
     if GetSpellTexture_fn then
-        local ok, tex = pcall(GetSpellTexture_fn, spellId)
-        if ok and tex then return tex end
+        local tex = GetSpellTexture_fn(spellId)
+        if tex then return tex end
     end
     return 134400
 end

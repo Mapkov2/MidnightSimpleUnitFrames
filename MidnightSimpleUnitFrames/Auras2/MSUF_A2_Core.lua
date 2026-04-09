@@ -1142,7 +1142,7 @@ do
             local c = C_CurveUtil.CreateCurve()
             c:SetType(Enum.LuaCurveType.Step)
             c:AddPoint(0, 1)    -- 0-30% remaining → 1 (in pandemic window)
-            c:AddPoint(0.3, 0)  -- 30%+ remaining  → 0
+            c:AddPoint(0.3, 0)  -- 30%+ remaining  → 0 -- This shozuld be defined by user 
             return c
         end)
         if ok2 and curve2 then _pandemicCurve = curve2 end

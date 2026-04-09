@@ -534,8 +534,8 @@ if not _G.MSUF_ForceShowUIPanelButtonPieces then
 
         local function ShowTex(t)
             if not t then return end
-            if t.SetAlpha then pcall(t.SetAlpha, t, 1) end
-            if t.Show then pcall(t.Show, t) end
+            if t.SetAlpha then t:SetAlpha(1) end
+            if t.Show then t:Show() end
         end
 
         ShowTex(left)
@@ -547,12 +547,12 @@ if not _G.MSUF_ForceShowUIPanelButtonPieces then
 
         local fs = (btn.GetFontString and btn:GetFontString()) or btn.Text or nil
         if fs then
-            if fs.SetAlpha then pcall(fs.SetAlpha, fs, 1) end
-            if fs.SetDrawLayer then pcall(fs.SetDrawLayer, fs, "OVERLAY", 7) end
-            if fs.Show then pcall(fs.Show, fs) end
+            if fs.SetAlpha then fs:SetAlpha(1) end
+            if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", 7) end
+            if fs.Show then fs:Show() end
         end
 
-        if btn.SetAlpha then pcall(btn.SetAlpha, btn, 1) end
+        if btn.SetAlpha then btn:SetAlpha(1) end
     end
 end
 

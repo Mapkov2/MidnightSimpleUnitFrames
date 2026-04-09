@@ -5001,8 +5001,8 @@ local function _CreateSelfHealPredBar(f, hpBar)
     bar:Hide()
     f.selfHealPredBar = bar
     if hpBar and hpBar.GetReverseFill and bar.SetReverseFill then
-        local okRF, rf = pcall(hpBar.GetReverseFill, hpBar)
-        if okRF and rf ~= nil then pcall(bar.SetReverseFill, bar, rf and true or false) end
+        local rf = hpBar:GetReverseFill()
+        if rf ~= nil then bar:SetReverseFill(rf and true or false) end
     end
 end
 
