@@ -821,6 +821,7 @@ function GF.BuildFrameCache(f)
 
     -- Absorb: independently gated from heal prediction
     c.absorbEn = _GF_IsAbsorbEnabled(kind)
+    c.healAbsorbEn = conf.healAbsorbEnabled ~= false
 
     -- Name display
     c.nameEn = conf.showName ~= false
@@ -854,6 +855,7 @@ function GF.BuildFrameCache(f)
     if c.phaseEn    then evBits = evBits + 128  end
     if c.healPredEn then evBits = evBits + 256  end
     if c.absorbEn   then evBits = evBits + 512  end
+    if c.healAbsorbEn and not c.absorbEn then evBits = evBits + 1024 end
     local prevBits = c._evBits
     c._evBits = evBits
     if prevBits ~= nil and prevBits ~= evBits and f.unit and f._msufGFRegEv then
@@ -1926,7 +1928,7 @@ dispatchHealAbsorb = function(f, unit, calc, hpMax)
     end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
-    if conf.healAbsorbEnabled == false or not _GF_IsAbsorbEnabled(kind) then
+    if conf.healAbsorbEnabled == false then
         bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide()
         return
     end
@@ -2144,6 +2146,11 @@ function GF.RegisterUnitEvents(f, unit)
         if UnitGetTotalAbsorbs then
             f:RegisterUnitEvent("UNIT_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_ABSORB_AMOUNT_CHANGED"] = true
         end
+        if UnitGetTotalHealAbsorbs then
+            f:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"] = true
+        end
+    elseif c.healAbsorbEn then
+        -- Heal absorb enabled independently of shield absorb bar
         if UnitGetTotalHealAbsorbs then
             f:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"] = true
         end

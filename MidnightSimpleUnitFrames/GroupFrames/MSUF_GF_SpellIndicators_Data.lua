@@ -86,6 +86,7 @@ SI.SpellIDs = {
         BeaconOfLight   = 53563,
         BeaconOfFaith   = 156910,
         EternalFlame    = 156322,
+        Dawnlight       = 431381,
     },
 }
 
@@ -244,6 +245,7 @@ SI.TrackableAuras = {
         { name = "BeaconOfLight",        display = "Beacon of Light",       color = {1.00, 0.93, 0.47} },
         { name = "BeaconOfFaith",        display = "Beacon of Faith",       color = {1.00, 0.84, 0.28} },
         { name = "EternalFlame",         display = "Eternal Flame",         color = {1.00, 0.60, 0.28} },
+        { name = "Dawnlight",            display = "Dawnlight",             color = {1.00, 0.85, 0.40} },
         { name = "BlessingOfProtection", display = "Blessing of Protection", color = {0.94, 0.82, 0.31}, secret = true },
         { name = "BlessingOfSacrifice",  display = "Blessing of Sacrifice",  color = {0.94, 0.50, 0.50}, secret = true },
     },
@@ -303,6 +305,7 @@ SI.SpecDefaults = {
         BeaconOfLight = { placed = { type = "icon", anchor = "TOPLEFT", x = 1, y = -1, size = 20 } },
         BeaconOfFaith = { placed = { type = "icon", anchor = "TOPRIGHT", x = -1, y = -1, size = 20 } },
         EternalFlame  = { placed = { type = "icon", anchor = "BOTTOMLEFT", x = 1, y = 1, size = 16 } },
+        Dawnlight     = { placed = { type = "square", anchor = "BOTTOM", x = 0, y = 3, size = 6 } },
         BlessingOfProtection = { frame = { type = "border", color = {0.94, 0.82, 0.31, 1}, priority = 1 } },
     },
 }

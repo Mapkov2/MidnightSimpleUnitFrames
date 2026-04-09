@@ -1672,7 +1672,7 @@ function GF.ApplyPreviewData(f, index, kind)
         end
     end
     -- Absorb anchoring: SetReverseFill from absorbAnchorMode (per-GF → general)
-    if absorbBarVisible then
+    if absorbBarVisible or (f.healAbsorbBar and conf.healAbsorbEnabled ~= false) then
         local anchorMode = tonumber(_pResolve("absorbAnchorMode")) or 2
         local absorbReverse, healReverse
         if anchorMode == 1 then
@@ -1702,8 +1702,8 @@ function GF.ApplyPreviewData(f, index, kind)
     elseif f.absorbBar then
         f.absorbBar:Hide()
     end
-    -- Heal absorb: own enabled check (separate from absorb bar)
-    local healAbsorbVisible = absorbBarVisible and conf.healAbsorbEnabled ~= false
+    -- Heal absorb: independent enabled check (NOT gated on absorb bar)
+    local healAbsorbVisible = conf.healAbsorbEnabled ~= false
     if f.healAbsorbBar and healAbsorbVisible then
         f.healAbsorbBar:SetMinMaxValues(0, 100)
         f.healAbsorbBar:SetValue(math_min(8, hpVal))

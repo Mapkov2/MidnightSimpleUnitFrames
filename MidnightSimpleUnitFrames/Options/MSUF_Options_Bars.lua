@@ -828,14 +828,14 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             anchor = anchor, anchorPoint = "TOPLEFT", x = oX, y = oY, width = w or 170,
             items = { { key = 0, label = TR(labelOff) }, { key = 1, label = TR(labelOn) } },
             get = function()
-                if IsCurrentScopeNonShared() then
+                if IsCurrentScopeNonShared() and hlKey then
                     return (HlGet(hlKey, false) and 1 or 0)
                 end
                 return G()[dbKey] or 0
             end,
             set = function(v)
                 if IsCurrentScopeNonShared() then
-                    HlDB()[hlKey] = (v == 1)
+                    if hlKey then HlDB()[hlKey] = (v == 1) end
                     HlApply()
                 else
                     G()[dbKey] = v

@@ -77,20 +77,46 @@ local function QuerySlots(unit, filter, maxCount)
 end
 
 ------------------------------------------------------------------------
--- Filter strings
+-- Filter strings (Blizzard C_UnitAuras.GetAuraSlots filter tokens)
+-- Buff display modes matching Grid2's Midnight 12.0 filter categories:
 ------------------------------------------------------------------------
 local FILTERS = {
+    -- Legacy (kept for backward compat)
     HELPFUL_RAID_PLAYER       = "HELPFUL|INCLUDE_NAME_PLATE_ONLY|RAID|PLAYER",
     HELPFUL_RAID_COMBAT       = "HELPFUL|INCLUDE_NAME_PLATE_ONLY|RAID_IN_COMBAT|PLAYER",
     HELPFUL_ALL_PLAYER        = "HELPFUL|INCLUDE_NAME_PLATE_ONLY|PLAYER",
-    HARMFUL                   = "HARMFUL|INCLUDE_NAME_PLATE_ONLY",
+
+    -- Expanded buff filters (Grid2 parity)
+    HELPFUL_ALL               = "HELPFUL",
+    HELPFUL_PLAYER            = "HELPFUL|PLAYER",
+    HELPFUL_RAID              = "HELPFUL|RAID",
+    HELPFUL_RAID_PLAYER_NP    = "HELPFUL|INCLUDE_NAME_PLATE_ONLY|RAID|PLAYER",
+    HELPFUL_CLASS             = "HELPFUL|RAID",
     BIG_DEFENSIVE             = "HELPFUL|BIG_DEFENSIVE",
+
+    -- Debuff filters
+    HARMFUL                   = "HARMFUL|INCLUDE_NAME_PLATE_ONLY",
+    HARMFUL_ALL               = "HARMFUL",
+    HARMFUL_RAID              = "HARMFUL|RAID",
+    HARMFUL_PLAYER            = "HARMFUL|PLAYER",
+    HARMFUL_NOT_PLAYER        = "HARMFUL|INCLUDE_NAME_PLATE_ONLY",  -- post-filter excludes player
 }
 
 local function ResolveBuffFilter(filterMode)
     if filterMode == "RAID_IN_COMBAT" then return FILTERS.HELPFUL_RAID_COMBAT end
-    if filterMode == "ALL_PLAYER" then return FILTERS.HELPFUL_ALL_PLAYER end
-    return FILTERS.HELPFUL_RAID_PLAYER
+    if filterMode == "ALL_PLAYER"     then return FILTERS.HELPFUL_ALL_PLAYER end
+    if filterMode == "ALL"            then return FILTERS.HELPFUL_ALL end
+    if filterMode == "PLAYER"         then return FILTERS.HELPFUL_PLAYER end
+    if filterMode == "RAID"           then return FILTERS.HELPFUL_RAID end
+    return FILTERS.HELPFUL_RAID_PLAYER  -- default: RAID_PLAYER
+end
+
+local function ResolveDebuffFilter(filterMode)
+    if filterMode == "ALL"            then return FILTERS.HARMFUL_ALL, false end
+    if filterMode == "RAID"           then return FILTERS.HARMFUL_RAID, false end
+    if filterMode == "PLAYER"         then return FILTERS.HARMFUL_PLAYER, false end
+    if filterMode == "NOT_PLAYER"     then return FILTERS.HARMFUL_ALL, true end  -- post-filter
+    return FILTERS.HARMFUL, false  -- default
 end
 
 ------------------------------------------------------------------------
@@ -105,6 +131,9 @@ local GROWTH_TABLE = {
     DOWNLEFT  = { px =  0, py = -1, sx = -1, sy =  0 },
     UPRIGHT   = { px =  0, py =  1, sx =  1, sy =  0 },
     UPLEFT    = { px =  0, py =  1, sx = -1, sy =  0 },
+    -- Centered: icons grow outward from center along primary axis
+    CENTER_H  = { px = 1, py = 0, sx = 0, sy = -1, centered = true },
+    CENTER_V  = { px = 0, py = -1, sx = 1, sy = 0, centered = true },
 }
 
 local function GetGrowthVectors(growth)
@@ -151,7 +180,7 @@ local function AcquireAuraIcon(parent, size)
         icon:SetSize(size, size)
         icon:SetBackdropBorderColor(0, 0, 0, 1)
         if icon.texture then icon.texture:SetTexCoord(0, 1, 0, 1); icon.texture:SetDesaturated(false) end
-        if icon.cooldown then icon.cooldown:Clear() end
+        if icon.cooldown then icon.cooldown:Clear(); if icon.cooldown.SetDrawBling then icon.cooldown:SetDrawBling(false) end end
         if icon.count then icon.count:SetText(""); icon.count:Hide() end
         return icon
     end
@@ -203,7 +232,11 @@ local function CreateAuraIcon(parent, size)
     cd:SetDrawSwipe(true)
     cd:SetReverse(true)
     cd:SetHideCountdownNumbers(true)
+    -- Prevent end-of-cooldown bling/flash (common source of unwanted blinking)
+    if cd.SetDrawBling then cd:SetDrawBling(false) end
     icon.cooldown = cd
+    -- Guard: GF icons must never carry A2 own-highlight overlays
+    icon._msufOwnGlow = false  -- sentinel: _ApplyOwnHighlight exits on falsy
 
     -- Overlay above cooldown for count (EQoL pattern: prevents CD frame hiding count)
     local overlay = CreateFrame("Frame", nil, icon)
@@ -569,7 +602,7 @@ end
 ------------------------------------------------------------------------
 -- Main render: one aura group
 ------------------------------------------------------------------------
-local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, dedupIDs, scale)
+local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, dedupIDs, scale, excludePlayer)
     if not gcfg or gcfg.enabled == false then
         HidePool(f[POOL_KEYS[groupKey]], 1)
         return 0, nil
@@ -587,20 +620,23 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local showDisp = gcfg.showDispelBorder ~= false
 
     local gv = GetGrowthVectors(growth)
+    local isCentered = gv.centered
     local container = EnsureContainer(f, groupKey)
 
     -- Diff-gate container position: only re-anchor when config changes
     local cx = gcfg.x or 0
     local cy = gcfg.y or 0
+    -- Centered growth anchors container at CENTER (override user anchor)
+    local effAnchor = isCentered and "CENTER" or anchor
     local wantLvl = parent:GetFrameLevel() + (gcfg.layer or 5)
-    if container._msufAnchor ~= anchor or container._msufAnchorX ~= cx
+    if container._msufAnchor ~= effAnchor or container._msufAnchorX ~= cx
        or container._msufAnchorY ~= cy or container._msufAnchorParent ~= parent then
-        container._msufAnchor = anchor
+        container._msufAnchor = effAnchor
         container._msufAnchorX = cx
         container._msufAnchorY = cy
         container._msufAnchorParent = parent
         container:ClearAllPoints()
-        container:SetPoint(anchor, parent, anchor, cx, cy)
+        container:SetPoint(effAnchor, parent, effAnchor, cx, cy)
         container:SetSize(1, 1)
     end
     if container._msufCachedLvl ~= wantLvl then
@@ -650,9 +686,20 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                     end
                 end
 
-                -- Spell filter: blacklist/whitelist (skip AFTER dispel check)
-                if spellFilter ~= 0 and _IsSpellFiltered(aura, spellFilter, spellList) then
-                    -- filtered out — don't display icon but dispel was already checked above
+                -- Spell filter + NOT_PLAYER post-filter (skip AFTER dispel check)
+                local _skip = false
+                if excludePlayer then
+                    local fromP = aura.isFromPlayerOrPlayerPet
+                    if not (issecretvalue and issecretvalue(fromP)) and fromP then
+                        _skip = true
+                    end
+                end
+                if not _skip and spellFilter ~= 0 and _IsSpellFiltered(aura, spellFilter, spellList) then
+                    _skip = true
+                end
+
+                if _skip then
+                    -- filtered — dispel was already checked above
                 elseif shown >= maxIcons then
                     -- Past icon limit — only scanning for dispel
                 else
@@ -693,7 +740,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                                 ic:SetBackdropBorderColor(0, 0, 0, 1)
                             end
 
-                            if ic._msufPosIdx ~= shown then
+                            -- Position: deferred for centered growth, immediate otherwise
+                            if not isCentered and ic._msufPosIdx ~= shown then
                                 ic._msufPosIdx = shown
                                 ic:ClearAllPoints()
                                 local col = (shown - 1) % perRow
@@ -713,6 +761,34 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                 end -- shown >= maxIcons
             end
         end
+    end
+
+    -- Centered growth: reposition only when shown count changes (diff-gated)
+    if isCentered and shown > 0 then
+        local prevCenterN = container._msufCenterN
+        if prevCenterN ~= shown then
+            container._msufCenterN = shown
+            local isH = (gv.px ~= 0)  -- horizontal primary axis
+            local totalPrimary = shown * iconSize + (shown - 1) * spacing
+            local halfOfs = totalPrimary * 0.5
+            for idx = 1, shown do
+                local ic = pool[idx]
+                if ic then
+                    ic._msufPosIdx = nil
+                    ic:ClearAllPoints()
+                    local col = idx - 1
+                    if isH then
+                        local ox = col * step - halfOfs
+                        ic:SetPoint("CENTER", container, "CENTER", ox + iconSize * 0.5, 0)
+                    else
+                        local oy = -(col * step - halfOfs)
+                        ic:SetPoint("CENTER", container, "CENTER", 0, oy - iconSize * 0.5)
+                    end
+                end
+            end
+        end
+    elseif isCentered then
+        container._msufCenterN = 0
     end
 
     -- Clear diff-gate flags on hidden icons
@@ -782,7 +858,8 @@ function GF.UpdateFrameAuras(f, unit)
     local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false
 
     if debOn then
-        local n, md = RenderGroup(f, unit, "debuff", debCfg, FILTERS.HARMFUL, true, parent, nil, scale)
+        local debFilter, debExcludePlayer = ResolveDebuffFilter(debCfg.filterMode)
+        local n, md = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale, debExcludePlayer)
         mergedDispel = md
         if n > 0 then anyShown = true end
         f._msufGFDebHidden = nil

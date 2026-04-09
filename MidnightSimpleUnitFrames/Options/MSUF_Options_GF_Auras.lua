@@ -45,6 +45,8 @@ local GROWTH8 = {
     { key = "DOWNLEFT",  label = L["Down -> Left"]  },
     { key = "UPRIGHT",   label = L["Up -> Right"]   },
     { key = "UPLEFT",    label = L["Up -> Left"]    },
+    { key = "CENTER_H",  label = L["Center (Horizontal)"] },
+    { key = "CENTER_V",  label = L["Center (Vertical)"]   },
 }
 local OUTLINE_ITEMS = {
     { key = "NONE",              label = L["None"]              },
@@ -60,9 +62,19 @@ local STACK_ANCHOR5 = {
     { key = "CENTER",      label = L["Center"]        },
 }
 local FILTER_MODES = {
-    { key = "RAID_PLAYER",    label = L["Raid + Player"]           },
-    { key = "RAID_IN_COMBAT", label = L["Raid in Combat + Player"] },
-    { key = "ALL_PLAYER",     label = L["All Player"]              },
+    { key = "RAID_PLAYER",    label = L["Raid + Player"]              },
+    { key = "RAID_IN_COMBAT", label = L["Raid in Combat + Player"]    },
+    { key = "ALL_PLAYER",     label = L["All Player"]                 },
+    { key = "ALL",            label = L["All Buffs"]                  },
+    { key = "PLAYER",         label = L["Only My Buffs"]              },
+    { key = "RAID",           label = L["Raid Flagged"]               },
+}
+local DEBUFF_FILTER_MODES = {
+    { key = "DEFAULT",        label = L["Default"]                    },
+    { key = "ALL",            label = L["All Debuffs"]                },
+    { key = "RAID",           label = L["Boss / Raid Only"]           },
+    { key = "PLAYER",         label = L["Only My Debuffs"]            },
+    { key = "NOT_PLAYER",     label = L["Exclude My Debuffs"]         },
 }
 local SPELL_FILTER_MODES = {
     { key = "NONE",      label = L["No Filter"]  },
@@ -1337,7 +1349,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Debuffs
     ----------------------------------------------------------------
     BuildAuraGroupSection("debuff", L["Debuffs"], 1000, function(body, prevRow, gk)
-        local r = RowCheck(body, prevRow, L["Show Dispel Type Border"], gk, "showDispelBorder")
+        local r = RowDropdown(body, prevRow, L["Display Filter"], gk, "filterMode", DEBUFF_FILTER_MODES, "DEFAULT")
+        r = RowCheck(body, r, L["Show Dispel Type Border"], gk, "showDispelBorder")
         r = BuildSpellFilterWidgets(body, r, gk)
         return r
     end)
