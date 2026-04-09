@@ -2197,6 +2197,8 @@ end
 MSUF_RequestCrosshairRangeRefresh = function()
     if not ns then return end
     if ns._MSUF_CrosshairRangeRefreshPending then return end
+    -- PERF: Don't schedule if crosshair isn't shown (out of combat / disabled)
+    if not combatCrosshairFrame or not combatCrosshairFrame:IsShown() then return end
     ns._MSUF_CrosshairRangeRefreshPending = true
 
     if C_Timer_After then

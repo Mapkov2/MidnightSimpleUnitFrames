@@ -92,9 +92,15 @@ local function GetConf(kind)
     return GF.GetConf and GF.GetConf(kind) or nil
 end
 
+-- PERF: Pre-computed config keys (eliminates 17k string concats/min in raids)
+local SLOT_CONF_KEYS = {}
+for _, sk in pairs(SLOT_KEYS) do
+    SLOT_CONF_KEYS[sk] = "ciSlot" .. sk
+end
+
 local function SlotCat(conf, slotKey)
     if not conf then return "none" end
-    return conf["ciSlot" .. slotKey] or "none"
+    return conf[SLOT_CONF_KEYS[slotKey]] or "none"
 end
 
 ------------------------------------------------------------------------

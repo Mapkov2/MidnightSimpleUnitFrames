@@ -1,3 +1,4 @@
+--[[Perfy has instrumented this file]] local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough; Perfy_Trace(Perfy_GetTime(), "Enter", "(main chunk) MSUF_GF_HealthFade.lua");
 -- MSUF_GF_HealthFade.lua — Curve-based health threshold fade
 -- Dims GF frames when HP is above a configurable threshold.
 -- Healers see who needs healing: low HP = full alpha, high HP = dimmed.
@@ -42,6 +43,7 @@ end
 local _curveCache = {}
 
 local function BuildCurve(threshold, belowAlpha, aboveAlpha)
+    Perfy_Trace(Perfy_GetTime(), "Enter", "BuildCurve MSUF_GF_HealthFade.lua:44");
     local key = threshold .. "_" .. belowAlpha .. "_" .. aboveAlpha
     local cached = _curveCache[key]
     if cached then return cached end
@@ -60,12 +62,15 @@ local function BuildCurve(threshold, belowAlpha, aboveAlpha)
     curve:AddPoint(1, above)
 
     _curveCache[key] = curve
+    Perfy_Trace(Perfy_GetTime(), "Leave", "BuildCurve MSUF_GF_HealthFade.lua:44");
     return curve
 end
 
 --- Invalidate curve cache (call when options change).
 function GF.InvalidateHealthFadeCurve()
+    Perfy_Trace(Perfy_GetTime(), "Enter", "GF.InvalidateHealthFadeCurve MSUF_GF_HealthFade.lua:67");
     for k in pairs(_curveCache) do _curveCache[k] = nil end
+Perfy_Trace(Perfy_GetTime(), "Leave", "GF.InvalidateHealthFadeCurve MSUF_GF_HealthFade.lua:67");
 end
 
 ------------------------------------------------------------------------
@@ -74,6 +79,7 @@ end
 -- Returns true if fade alpha was applied (caller should skip normal alpha).
 ------------------------------------------------------------------------
 function GF.ApplyHealthFade(f, unit)
+    Perfy_Trace(Perfy_GetTime(), "Enter", "GF.ApplyHealthFade MSUF_GF_HealthFade.lua:76");
     if not f or not unit then return false end
 
     -- Early exit: check cached config flag (set by BuildFrameCache)
@@ -105,6 +111,7 @@ function GF.ApplyHealthFade(f, unit)
     -- Apply directly — no diff-gate needed (SetAlpha is cheap, already gated internally)
     f:SetAlpha(alpha)
     f._msufGFHealthFadeActive = true
+    Perfy_Trace(Perfy_GetTime(), "Leave", "GF.ApplyHealthFade MSUF_GF_HealthFade.lua:76");
     return true
 end
 
@@ -112,8 +119,12 @@ end
 -- Clear health fade state (unit despawn / feature disabled).
 ------------------------------------------------------------------------
 function GF.ClearHealthFade(f)
+    Perfy_Trace(Perfy_GetTime(), "Enter", "GF.ClearHealthFade MSUF_GF_HealthFade.lua:114");
     if f and f._msufGFHealthFadeActive then
         f._msufGFHealthFadeActive = nil
         f:SetAlpha(1)
     end
+Perfy_Trace(Perfy_GetTime(), "Leave", "GF.ClearHealthFade MSUF_GF_HealthFade.lua:114");
 end
+
+Perfy_Trace(Perfy_GetTime(), "Leave", "(main chunk) MSUF_GF_HealthFade.lua");

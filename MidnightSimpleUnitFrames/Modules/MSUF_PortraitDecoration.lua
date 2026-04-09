@@ -393,6 +393,18 @@ do
     ev:RegisterEvent("UNIT_PET")
     ev:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
     ev:SetScript("OnEvent", function(self, event)
+        -- PERF: Skip ALL portrait work when portraits are OFF for all units.
+        -- This saves InvalidateByKey + SyncUnitSafe + HideAllDecor per target click.
+        local db = _G.MSUF_DB
+        if db then
+            local allOff = true
+            for _, k in ipairs({"player","target","focus","pet","targettarget","boss"}) do
+                local c = db[k]
+                if c and (c.portraitMode or "OFF") ~= "OFF" then allOff = false; break end
+            end
+            if allOff then return end
+        end
+
         if event == "PLAYER_ENTERING_WORLD" then
             if C_Timer and C_Timer.After then
                 C_Timer.After(0.1, function() InvalidateAll(); if _G.MSUF_PortraitDecoration_RefreshAll then _G.MSUF_PortraitDecoration_RefreshAll() end end)

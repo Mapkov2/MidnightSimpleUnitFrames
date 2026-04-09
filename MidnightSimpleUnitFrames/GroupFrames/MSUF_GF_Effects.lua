@@ -365,6 +365,12 @@ local function dispatchAura(f, unit, updateInfo)
     local siOn = siCfg and siCfg.enabled == true
     local siRefresh = siOn and SpellIndicatorsNeedRefresh(f, updateInfo) or false
 
+    -- PERF: CornerIndicators only care about aura add/remove, not duration/stack
+    -- updates. Skip CI when the event is a pure update (saves ~300ms/min in raids).
+    local ciRelevant = not updateInfo or updateInfo.isFullUpdate
+        or (updateInfo.addedAuras and #updateInfo.addedAuras > 0)
+        or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0)
+
     if not aurasOn then
         if conf.dispelEnabled ~= false and GF._playerCanDispel then
             if not updateInfo or updateInfo.isFullUpdate
@@ -376,7 +382,7 @@ local function dispatchAura(f, unit, updateInfo)
         if siRefresh and GF.UpdateSpellIndicators then
             GF.UpdateSpellIndicators(f, unit)
         end
-        if GF.UpdateCornerIndicators and (not c or c.ciEn) then
+        if ciRelevant and GF.UpdateCornerIndicators and (not c or c.ciEn) then
             GF.UpdateCornerIndicators(f, unit)
         end
         if GF.UpdateRaidDebuff and (not c or c.rdEn) then
@@ -401,7 +407,7 @@ local function dispatchAura(f, unit, updateInfo)
         if siRefresh and GF.UpdateSpellIndicators then
             GF.UpdateSpellIndicators(f, unit)
         end
-        if GF.UpdateCornerIndicators and (not c or c.ciEn) then
+        if ciRelevant and GF.UpdateCornerIndicators and (not c or c.ciEn) then
             GF.UpdateCornerIndicators(f, unit)
         end
         return

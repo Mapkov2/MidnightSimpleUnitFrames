@@ -27,17 +27,22 @@ local MSUF_ResetBarZero                = ns.Bars._ResetBarZero
 
 -- Per-unit absorb setting resolver.
 -- Checks MSUF_DB[unitKey] for override, falls back to MSUF_DB.general.
+-- PERF: Result cache — pure function, same input always gives same output.
+-- Eliminates 8× GetBossIndexFromToken lookups per target click.
+local _normalizeCache = {}
 local function _MSUF_NormalizeUnitKey(unit)
     if not unit then return nil end
-    if unit == "tot" then return "targettarget" end
-    -- P0: Use file-scope cache; re-resolve if nil (load-order defense)
+    local cached = _normalizeCache[unit]
+    if cached then return cached end
+    if unit == "tot" then _normalizeCache[unit] = "targettarget"; return "targettarget" end
     local bossFn = _MSUF_GetBossIndexFromToken
     if not bossFn then
         bossFn = _G.MSUF_GetBossIndexFromToken
         if bossFn then _MSUF_GetBossIndexFromToken = bossFn end
     end
-    if bossFn and bossFn(unit) then return "boss" end
-    return unit
+    local result = (bossFn and bossFn(unit)) and "boss" or unit
+    _normalizeCache[unit] = result
+    return result
 end
 
 -- Absorb display/anchor resolver cache (invalidated on DB reference change).

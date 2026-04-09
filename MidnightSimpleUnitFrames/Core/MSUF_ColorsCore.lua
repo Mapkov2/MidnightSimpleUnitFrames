@@ -47,13 +47,16 @@ local function _general()
 end
 
 ------------------------------------------------------
--- Helper: apply visual updates
+-- Helper: apply visual updates (COALESCED)
+-- Color picker drag can fire 30+ times/sec. Without coalescing,
+-- each drag fires UpdateAllFonts + RefreshAllFrames + ... per tick.
+-- We batch into a single C_Timer.After(0) flush.
 ------------------------------------------------------
-local function PushVisualUpdates()
+local _pushPending = false
+local function _PushVisualUpdates_Flush()
+    _pushPending = false
     -- Invalidate settings cache so color tint fields (powerBgTint, barBgTint,
     -- aggro/dispel/purge, etc.) are re-read from DB before frames refresh.
-    -- Zero combat overhead: PushVisualUpdates is only called from option setters,
-    -- never from event handlers or combat hot paths.
     if _G.MSUF_UFCore_RefreshSettingsCache then
         _G.MSUF_UFCore_RefreshSettingsCache("COLOR_CHANGE")
     end
@@ -88,11 +91,20 @@ local function PushVisualUpdates()
     end
 
     -- Safety: keep mouseover highlight bound to the correct unitframe.
-    -- Throttled (coalesces rapid UI changes into 1 pass).
     if ns.MSUF_ScheduleMouseoverHighlightFix then
         ns.MSUF_ScheduleMouseoverHighlightFix()
     elseif ns.MSUF_FixMouseoverHighlightBindings then
         ns.MSUF_FixMouseoverHighlightBindings()
+    end
+end
+
+local function PushVisualUpdates()
+    if _pushPending then return end
+    _pushPending = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, _PushVisualUpdates_Flush)
+    else
+        _PushVisualUpdates_Flush()
     end
 end
 

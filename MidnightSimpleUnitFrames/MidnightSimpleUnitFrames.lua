@@ -5704,18 +5704,29 @@ do
         MSUF_UFStep_HeavyVisual(frame, unit, key)
     end
 
+    -- PERF: Track which units actually need recolor (avoid recoloring all 3 on every change)
+    local _swapDirtyTarget, _swapDirtyToT, _swapDirtyFocus = false, false, false
+
     local function _MSUF_SwapRecolor_Do()
-        local f = _G.MSUF_target
-        if f and f.unit == "target" then
-            _G.MSUF_ForceReapplyHPBarColor(f, "target")
+        local dt, dtt, df = _swapDirtyTarget, _swapDirtyToT, _swapDirtyFocus
+        _swapDirtyTarget, _swapDirtyToT, _swapDirtyFocus = false, false, false
+        if dt then
+            local f = _G.MSUF_target
+            if f and f.unit == "target" then
+                _G.MSUF_ForceReapplyHPBarColor(f, "target")
+            end
         end
-        local tot = _G.MSUF_targettarget
-        if tot and tot.unit == "targettarget" then
-            _G.MSUF_ForceReapplyHPBarColor(tot, "targettarget")
+        if dtt then
+            local tot = _G.MSUF_targettarget
+            if tot and tot.unit == "targettarget" then
+                _G.MSUF_ForceReapplyHPBarColor(tot, "targettarget")
+            end
         end
-        local fo = _G.MSUF_focus
-        if fo and fo.unit == "focus" then
-            _G.MSUF_ForceReapplyHPBarColor(fo, "focus")
+        if df then
+            local fo = _G.MSUF_focus
+            if fo and fo.unit == "focus" then
+                _G.MSUF_ForceReapplyHPBarColor(fo, "focus")
+            end
         end
     end
 
@@ -5742,10 +5753,13 @@ do
     end
 
     local function _MSUF_SwapRecolor_OnTargetChanged()
+        _swapDirtyTarget = true
+        _swapDirtyToT = true
         local d = _G.MSUF_SwapRecolorDriver
         if d then _MSUF_SwapRecolor_Schedule(d) end
     end
     local function _MSUF_SwapRecolor_OnFocusChanged()
+        _swapDirtyFocus = true
         local d = _G.MSUF_SwapRecolorDriver
         if d then _MSUF_SwapRecolor_Schedule(d) end
     end
@@ -5757,6 +5771,7 @@ do
         -- TARGET/FOCUS via EventBus, keep UNIT_TARGET on frame (filtered to "target" only)
         d:RegisterUnitEvent("UNIT_TARGET", "target")
         d:SetScript("OnEvent", function(self, event, arg1)
+            _swapDirtyToT = true
             _MSUF_SwapRecolor_Schedule(self)
         end)
         _G.MSUF_SwapRecolorDriver = d

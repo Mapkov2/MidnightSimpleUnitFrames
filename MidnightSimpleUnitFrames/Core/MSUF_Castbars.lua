@@ -445,27 +445,34 @@ function MSUF_UpdateCastbarFillDirection()
      end
     MSUF_ForMainCastbars(Apply)
  end
+-- PERF: Result cache — key→texture mapping never changes during runtime.
+local _resolveTexCache = {}
 function MSUF_ResolveStatusbarTextureKey(key)
-    local defaultTex = "Interface\\TargetingFrame\\UI-StatusBar"
+    if type(key) ~= "string" or key == "" then
+        return "Interface\\TargetingFrame\\UI-StatusBar"
+    end
+    local cached = _resolveTexCache[key]
+    if cached then return cached end
+
+    local result
     local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
-    if type(builtins) == "table" and type(key) == "string" then
+    if type(builtins) == "table" then
         local t = builtins[key]
         if type(t) == "string" and t ~= "" then
-             return t
+            result = t
+        end
     end
-    end
-    if type(key) == "string" then
+    if not result then
         if key:find("\\") or key:find("/") then
-             return key
+            result = key
+        elseif LSM and type(LSM.Fetch) == "function" then
+            local tex = LSM:Fetch("statusbar", key, true)
+            if tex then result = tex end
+        end
     end
-    end
-    if LSM and type(LSM.Fetch) == "function" and type(key) == "string" and key ~= "" then
-        local tex = LSM:Fetch("statusbar", key, true)
-        if tex then
-             return tex
-    end
-    end
-     return defaultTex
+    result = result or "Interface\\TargetingFrame\\UI-StatusBar"
+    _resolveTexCache[key] = result
+    return result
 end
 _G.MSUF_ResolveStatusbarTextureKey = MSUF_ResolveStatusbarTextureKey
 _G.MSUF_BUILTIN_BAR_TEXTURES = _G.MSUF_BUILTIN_BAR_TEXTURES or {

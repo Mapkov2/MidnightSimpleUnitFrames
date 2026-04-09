@@ -295,6 +295,26 @@ do
             return
         end
 
+        -- PERF: Fast-path for party/raid members (the common case when clicking GF).
+        -- UnitInRange returns (inRange, checked); checked==true means party/raid member.
+        -- Skips: UnitCanAttack, UnitIsDeadOrGhost, spell registration, ticker setup.
+        if UnitInRange then
+            local inR, checked = UnitInRange("target")
+            if not issecretvalue or not issecretvalue(checked) then
+                if checked == true then
+                    _targetIsEnemy = false
+                    _targetDeadState = false
+                    TargetUnregisterSpell()
+                    StopTargetFriendlyTicker()
+                    EnsureTargetEvtFrame()
+                    _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
+                    _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
+                    ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
+                    return
+                end
+            end
+        end
+
         EnsureTargetEvtFrame()
         _targetIsEnemy = (UnitCanAttack and UnitCanAttack("player", "target")) and true or false
         _targetDeadState = (UnitIsDeadOrGhost and UnitIsDeadOrGhost("target")) and true or false

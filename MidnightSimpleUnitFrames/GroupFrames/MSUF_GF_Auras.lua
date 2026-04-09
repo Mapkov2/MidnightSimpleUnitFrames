@@ -267,23 +267,29 @@ local function EnsurePool(f, groupKey, count, size, parent)
     local poolKey = POOL_KEYS[groupKey]
     f[poolKey] = f[poolKey] or {}
     local pool = f[poolKey]
+    -- PERF: Skip loop when pool already matches (count/size/parent unchanged)
+    if pool._msufPoolOK and pool._msufPoolN == count
+       and pool._msufPoolSz == size and pool._msufPoolP == parent then
+        return pool
+    end
+    pool._msufPoolN  = count
+    pool._msufPoolSz = size
+    pool._msufPoolP  = parent
+    pool._msufPoolOK = true
     local pLvl = parent.GetFrameLevel and (parent:GetFrameLevel() + 2) or nil
     local masqueAdd = GF.Masque and GF.Masque.AddButton
     for i = 1, count do
         if not pool[i] then
             pool[i] = AcquireAuraIcon(parent, size) or CreateAuraIcon(parent, size)
             pool[i]._msufGFOwner = f
-            -- Register new icon with Masque (if enabled)
             if masqueAdd then masqueAdd(pool[i]) end
         end
         local ic = pool[i]
-        -- Diff-gate: skip SetSize when size unchanged
         if ic._msufCachedSz ~= size then
             ic._msufCachedSz = size
             ic:SetSize(size, size)
         end
         if ic:GetParent() ~= parent then ic:SetParent(parent) end
-        -- Diff-gate: skip SetFrameLevel when unchanged
         if pLvl and ic._msufCachedFLvl ~= pLvl then
             ic._msufCachedFLvl = pLvl
             ic:SetFrameLevel(pLvl)

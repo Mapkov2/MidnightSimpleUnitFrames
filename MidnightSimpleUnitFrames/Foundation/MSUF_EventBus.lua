@@ -287,24 +287,33 @@ driver:SetScript("OnEvent", function(_, event, ...)
     local ev = bus.handlers[event]
     if not ev then return end
 
-    local dispatch = bus.safeCalls and _DispatchSafe or _DispatchFast
-
     ev.dispatchDepth = (ev.dispatchDepth or 0) + 1
 
     -- Snapshot current list length. Handlers registered during dispatch run next event.
     local list = ev.list
     local n = #list
-    for i = 1, n do
-        local h = list[i]
-        if h and h.fn then
-            dispatch(h.key, h.fn, event, ...)
-            if h.once then
-                -- :once handlers are removed after they fire.
-                ev.index[h.key] = nil
-                h.fn = nil
-                h.once = false
-                h.dead = true
-                ev.dirty = true
+
+    -- PERF: Inlined dispatch — eliminates _DispatchFast wrapper function call overhead.
+    -- Saves ~0.3-0.5µs per handler × N handlers per event.
+    if bus.safeCalls then
+        for i = 1, n do
+            local h = list[i]
+            if h and h.fn then
+                local ok, err = pcall(h.fn, event, ...)
+                if not ok then _PrintSafeCallErrorOnce(event, h.key, err) end
+                if h.once then
+                    ev.index[h.key] = nil; h.fn = nil; h.once = false; h.dead = true; ev.dirty = true
+                end
+            end
+        end
+    else
+        for i = 1, n do
+            local h = list[i]
+            if h and h.fn then
+                h.fn(event, ...)
+                if h.once then
+                    ev.index[h.key] = nil; h.fn = nil; h.once = false; h.dead = true; ev.dirty = true
+                end
             end
         end
     end

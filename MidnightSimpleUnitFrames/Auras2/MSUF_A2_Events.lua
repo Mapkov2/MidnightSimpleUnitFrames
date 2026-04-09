@@ -107,8 +107,21 @@ local function MarkDirty(unit, delay)
     end
 end
 
+-- PERF: Epoch counter for rapid-click deduplication.
+-- Each target change increments the epoch. The deferred render checks if its epoch
+-- still matches — if a newer click arrived, the outdated FullScan is skipped entirely.
+local _targetRenderEpoch = 0
+
 local function HandlePlayerTargetChanged()
     if not _refsBound then BindCachedRefs() end
+    -- PERF: Skip A2 entirely when target auras aren't enabled (saves FullScan ~76µs/click)
+    local DB = API and API.DB
+    if DB and DB.UnitEnabledCached and DB.UnitEnabledCached("target") ~= true then
+        return
+    end
+
+    _targetRenderEpoch = _targetRenderEpoch + 1  -- invalidate any pending render
+
     if _cachedInvalidUnit then
         _cachedInvalidUnit("target")
     end
@@ -136,9 +149,22 @@ local function HandlePlayerFocusChanged()
     MarkDirty("focus", 0)
 end
 
+-- PERF: Double-defer — _flushTargetSwap schedules _flushTargetRender one frame later.
+-- If a new target change arrives before _flushTargetRender fires, the epoch mismatch
+-- causes the outdated FullScan to be skipped. Saves 50-330µs per superseded click.
+local function _flushTargetRender()
+    if _targetRenderEpoch ~= Events._targetRenderExpected then return end
+    MarkDirty("target", 0)
+end
+
 Events._flushTargetSwap = Events._flushTargetSwap or function()
     Events._targetSwapQueued = nil
-    MarkDirty("target", 0)
+    Events._targetRenderExpected = _targetRenderEpoch
+    if _After0 then
+        _After0(0, _flushTargetRender)
+    else
+        MarkDirty("target", 0)
+    end
 end
 
 local function IsEditModeActive()

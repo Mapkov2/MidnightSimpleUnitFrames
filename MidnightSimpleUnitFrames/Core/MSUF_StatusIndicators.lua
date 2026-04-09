@@ -212,45 +212,60 @@ local function _MSUF_StopPulseAnim(tex)
  end
 local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight, wantsPulse)
     if not tex or not tex.SetTexture then  return end
-    -- Capture default texture/atlas so selecting DEFAULT later restores the original icon.
-    if tex._msufDefaultTexture == nil and tex.GetTexture then
-        tex._msufDefaultTexture = tex:GetTexture()
-    end
-    if tex._msufDefaultAtlas == nil and tex.GetAtlas then
-        local a = tex:GetAtlas()
-        if a then tex._msufDefaultAtlas = a end
-    end
-    -- Capture default texcoords so we can restore them when the user selects DEFAULT again.
-    if tex._msufDefaultTexCoord == nil and tex.GetTexCoord then
-        local ulx, uly, llx, lly, urx, ury, lrx, lry = tex:GetTexCoord()
-        tex._msufDefaultTexCoord = { ulx, uly, llx, lly, urx, ury, lrx, lry }
-    end
+
     local path = _MSUF_BuildStatusIconSymbolTexturePath(symbolKey, useMidnight)
+
     if not path then
-        tex._msufSymbolStamp = nil
-        -- Restore original texture/atlas when returning to DEFAULT.
-        if tex._msufDefaultAtlas and tex.SetAtlas then
-            tex:SetAtlas(tex._msufDefaultAtlas)
-        elseif tex._msufDefaultTexture then
-            tex:SetTexture(tex._msufDefaultTexture)
+        if tex._msufSymbolStamp then
+            tex._msufSymbolStamp = nil
+            -- Restore original texture/atlas when returning to DEFAULT.
+            if tex._msufDefaultAtlas and tex.SetAtlas then
+                tex:SetAtlas(tex._msufDefaultAtlas)
+            elseif tex._msufDefaultTexture then
+                tex:SetTexture(tex._msufDefaultTexture)
+            end
+            local tc = tex._msufDefaultTexCoord
+            if tc and tex.SetTexCoord then
+                tex:SetTexCoord(tc[1], tc[2], tc[3], tc[4], tc[5], tc[6], tc[7], tc[8])
+            end
+            _MSUF_StopPulseAnim(tex)
         end
-        -- Restore original texcoords when returning to DEFAULT.
-        local tc = tex._msufDefaultTexCoord
-        if tc and tex.SetTexCoord then
-            tex:SetTexCoord(tc[1], tc[2], tc[3], tc[4], tc[5], tc[6], tc[7], tc[8])
-        end
-        _MSUF_StopPulseAnim(tex)
-         return
+        return
     end
+
+    -- PERF: Stamp-first early exit — skip all work when texture hasn't changed
     local stamp = path
-    if tex._msufSymbolStamp ~= stamp then
-        tex:SetTexture(path)
-        tex._msufSymbolStamp = stamp
-        -- Ensure the symbol TGAs are not cropped.
-        if tex.SetTexCoord then
-            tex:SetTexCoord(0, 1, 0, 1)
+    if tex._msufSymbolStamp == stamp then
+        -- Only check pulse state
+        if wantsPulse then
+            local ag = _MSUF_EnsurePulseAnim(tex)
+            if ag and ag.Play and (not ag:IsPlaying()) then ag:Play() end
+        else
+            _MSUF_StopPulseAnim(tex)
+        end
+        return
+    end
+
+    -- Lazy capture defaults (once per texture, not every call)
+    if not tex._msufDefaultsCaptured then
+        tex._msufDefaultsCaptured = true
+        if tex.GetTexture then tex._msufDefaultTexture = tex:GetTexture() end
+        if tex.GetAtlas then
+            local a = tex:GetAtlas()
+            if a then tex._msufDefaultAtlas = a end
+        end
+        if tex.GetTexCoord then
+            local ulx, uly, llx, lly, urx, ury, lrx, lry = tex:GetTexCoord()
+            tex._msufDefaultTexCoord = { ulx, uly, llx, lly, urx, ury, lrx, lry }
         end
     end
+
+    tex:SetTexture(path)
+    tex._msufSymbolStamp = stamp
+    if tex.SetTexCoord then
+        tex:SetTexCoord(0, 1, 0, 1)
+    end
+
     if wantsPulse then
         local ag = _MSUF_EnsurePulseAnim(tex)
         if ag and ag.Play and (not ag:IsPlaying()) then
@@ -259,7 +274,7 @@ local function _MSUF_ApplyStatusIconSymbolTexture(tex, symbolKey, useMidnight, w
     else
         _MSUF_StopPulseAnim(tex)
     end
- end
+end
 local function _MSUF_AnchorCorner(tex, frame, corner, xOff, yOff)
     if not tex or not frame then  return end
     corner = corner or "TOPLEFT"

@@ -1247,6 +1247,18 @@ local function RenderUnit(entry)
 
     local showTest = false
     do
+        -- PERF: Skip preview entirely in combat (isEditActive is always false)
+        if not isEditActive then
+            if entry._msufA2_previewActive then
+                local Preview = API.Preview
+                if Preview and Preview.ClearPreviewsForEntry then
+                    Preview.ClearPreviewsForEntry(entry)
+                else
+                    entry._msufA2_previewActive = nil
+                end
+                entry._msufA2_playerPreviewInit = nil
+            end
+        else
         local Preview = API.Preview
         local runPreview = Preview and Preview.RenderEntryPreview
         if runPreview then
@@ -1279,6 +1291,7 @@ local function RenderUnit(entry)
                 entry._msufA2_playerPreviewInit = nil
             end
         end
+    end
     end
 
     if not unitExists then

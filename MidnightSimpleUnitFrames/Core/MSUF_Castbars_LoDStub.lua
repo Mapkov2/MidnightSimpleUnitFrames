@@ -29,9 +29,15 @@ local function _EnsureDB()
     end
 end
 
+-- PERF: Cache general ref — invalidated only when MSUF_DB itself changes.
+local _cachedGeneral, _cachedGeneralDB
 local function _GetGeneral()
-    _EnsureDB()
-    return (MSUF_DB and MSUF_DB.general) or {}
+    local db = MSUF_DB
+    if not db then _EnsureDB(); db = MSUF_DB end
+    if _cachedGeneralDB == db and _cachedGeneral then return _cachedGeneral end
+    _cachedGeneralDB = db
+    _cachedGeneral = (db and db.general) or {}
+    return _cachedGeneral
 end
 ---------------------------------------------------------------------
 -- Blizzard castbar ownership handshake (stub-level)
@@ -349,7 +355,7 @@ if type(_G.MSUF_ReanchorTargetCastBar) ~= "function" then
         local function _CallReal()
             local fn = rawget(_G, "MSUF_UpdateBossCastbarPreview")
             if type(fn) == "function" and fn ~= wrapper then
-                pcall(fn)
+                fn()
             end
             _G.MSUF__BossPreviewStubGuard = false
         end

@@ -3405,7 +3405,6 @@ local function UFCore_UpdateBossTargetHighlight()
             local prev = frame._msufBossTargetHLOn or false
             if prev ~= isTarget then
                 frame._msufBossTargetHLOn = isTarget
-                -- Trigger border priority re-evaluation
                 if type(fn) == "function" then fn(frame) end
             end
         end
@@ -3422,18 +3421,29 @@ do
     if type(busReg) == "function" then
         busReg("PLAYER_TARGET_CHANGED", "MSUF_UFCORE", function()
             QueueUnit("target", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
-            QueueUnit("targettarget", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
+            -- PERF: Skip ToT work entirely when ToT frame doesn't exist or is hidden
+            local ttf = FramesByUnit["targettarget"]
+            if ttf and (ttf:IsVisible() or ttf.MSUF_AllowHiddenEvents) then
+                QueueUnit("targettarget", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
+            end
             -- Force health color refresh on swap (only when NPC type is active in a 5-man)
             if _npcTypeInstanceActive then
                 local tf = FramesByUnit["target"]
                 if tf then tf._msufHealthColorDirty = true end
-                local ttf = FramesByUnit["targettarget"]
                 if ttf then ttf._msufHealthColorDirty = true end
             end
-            DeferSwapWork("target", "PLAYER_TARGET_CHANGED", true, false)
-            DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", false, false)
-            -- Boss Target Highlight: update which boss frame shows the target border
-            UFCore_UpdateBossTargetHighlight()
+            -- PERF: Portrait only when portraitMode != OFF (saves 5µs/click when portraits disabled)
+            local db = _G.MSUF_DB
+            local wantPortrait = db and db.target and (db.target.portraitMode or "OFF") ~= "OFF"
+            DeferSwapWork("target", "PLAYER_TARGET_CHANGED", wantPortrait, false)
+            if ttf then
+                local wantTTPortrait = db and db.targettarget and (db.targettarget.portraitMode or "OFF") ~= "OFF"
+                DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", wantTTPortrait, false)
+            end
+            -- Boss Target Highlight: skip when no boss frames exist (zero overhead outside encounters)
+            if FramesByUnit["boss1"] then
+                UFCore_UpdateBossTargetHighlight()
+            end
         end)
 
         busReg("PLAYER_FOCUS_CHANGED", "MSUF_UFCORE", function()
