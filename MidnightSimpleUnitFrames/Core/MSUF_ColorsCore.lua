@@ -52,7 +52,15 @@ end
 -- each drag fires UpdateAllFonts + RefreshAllFrames + ... per tick.
 -- We batch into a single C_Timer.After(0) flush.
 ------------------------------------------------------
-local function PushVisualUpdates()
+local _pushPending = false
+local function _PushVisualUpdates_Flush()
+    _pushPending = false
+    -- Invalidate settings cache so color tint fields (powerBgTint, barBgTint,
+    -- aggro/dispel/purge, etc.) are re-read from DB before frames refresh.
+    if _G.MSUF_UFCore_RefreshSettingsCache then
+        _G.MSUF_UFCore_RefreshSettingsCache("COLOR_CHANGE")
+    end
+
     local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or ns.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts
     if type(fnFonts) == "function" then
         fnFonts()
@@ -90,6 +98,15 @@ local function PushVisualUpdates()
     end
 end
 
+local function PushVisualUpdates()
+    if _pushPending then return end
+    _pushPending = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, _PushVisualUpdates_Flush)
+    else
+        _PushVisualUpdates_Flush()
+    end
+end
 
 ------------------------------------------------------
 -- Helper: ensure mouseover highlight border stays bound to its unitframe
