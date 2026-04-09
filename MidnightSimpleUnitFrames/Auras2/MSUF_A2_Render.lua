@@ -1676,6 +1676,11 @@ _G.MSUF_Auras2_RefreshUnit = function(unit) return API.RefreshUnit(unit) end
 _G.MSUF_A2_RequestUnit = function(unit, delay) return API.RequestUnit(unit, delay) end
 _G.MSUF_A2_HardDisableAll = function() return API.HardDisableAll() end
 _G.MSUF_UpdateTargetAuras = function() MarkDirty("target") end
+-- Range fade propagation: returns the top-level aura anchor for a unit (or nil).
+_G.MSUF_A2_GetUnitAnchor = function(unit)
+    local entry = AurasByUnit[unit]
+    return entry and entry.anchor or nil
+end
 
 
 -- Init: prime DB + kick off events

@@ -328,7 +328,9 @@ end
 local function ClassifyPlayer(unit, aid, isHelpful)
     if not _isFiltered then return false end
     local filter = isHelpful and HELPFUL_PLAYER or HARMFUL_PLAYER
-    return (_isFiltered(unit, aid, filter) == false)
+    local r = _isFiltered(unit, aid, filter)
+    if issecretvalue and issecretvalue(r) then return false end
+    return (r == false)
 end
 
 -- =========================================================================

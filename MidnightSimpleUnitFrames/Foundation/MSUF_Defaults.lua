@@ -1521,6 +1521,9 @@ local function fill(key, defaults)
     for k, v in pairs(textDefaults) do
         if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end
     end
+    -- Range fade: also fade castbar / auras when boss is out of range (off by default).
+    if MSUF_DB.boss.rangeFadeCastbar == nil then MSUF_DB.boss.rangeFadeCastbar = false end
+    if MSUF_DB.boss.rangeFadeAuras   == nil then MSUF_DB.boss.rangeFadeAuras   = false end
     for _, unitKey in ipairs({"player", "target", "targettarget", "focus", "pet", "boss"}) do
         MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
         local u = MSUF_DB[unitKey]
