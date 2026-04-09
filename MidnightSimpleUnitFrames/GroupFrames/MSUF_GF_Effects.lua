@@ -1025,7 +1025,7 @@ _GF_RefreshBorder = function(f, unit)
     end
 
     border._msufHLActivePrio = nil
-    border:Hide()
+    if border:IsShown() then border:Hide() end
 end
 
 local function UpdateAggro(f, unit)
@@ -1077,8 +1077,35 @@ local function UpdateAggro(f, unit)
 end
 
 ------------------------------------------------------------------------
--- Dispel border (AuraUtil.ForEachAura "HARMFUL|RAID")
+-- Dispel border (zero-alloc direct C_UnitAuras slot scan)
+-- Replaces AuraUtil.ForEachAura which allocates a table internally
+-- every call ({C_UnitAuras.GetAuraSlots(...)}).
+-- Module-level vararg scanner: zero closure, zero table per call.
 ------------------------------------------------------------------------
+local _dispelScanUnit  -- module-level state for vararg scanner
+local C_UnitAuras_GetAuraSlots    = C_UnitAuras and C_UnitAuras.GetAuraSlots
+local C_UnitAuras_GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
+
+local function _DispelScanSlots(cont, ...)
+    local GetData = C_UnitAuras_GetAuraDataBySlot
+    local u = _dispelScanUnit
+    local iss = issecretvalue
+    for i = 1, select("#", ...) do
+        local slot = select(i, ...)
+        local data = GetData(u, slot)
+        if data then
+            local dn = data.dispelName
+            if not (iss and iss(dn)) then
+                if dn and dn ~= "" then return dn end
+                local ir = data.isRaid
+                if not (iss and iss(ir)) and ir then return "Bleed" end
+            end
+        end
+    end
+    return nil
+end
+
+-- Legacy fallback (pre-C_UnitAuras clients)
 local _scanTopDispel
 local function _DispelScanCallback(auraData)
     if not auraData then return true end
@@ -1102,23 +1129,32 @@ function GF._UpdateDispel(f, unit)
     local testMode = _G.MSUF_DispelBorderTestMode
 
     if (HLVal(kind, "hlDispelEnabled") == false or not unit) and not testMode then
-        f._msufGFDispelType = nil
-        _GF_RefreshBorder(f, unit)
+        if f._msufGFDispelType then
+            f._msufGFDispelType = nil
+            _GF_RefreshBorder(f, unit)
+        end
         return
     end
 
     local topDispel = nil
     if not testMode then
         if not UnitExists(unit) then
-            f._msufGFDispelType = nil
-            _GF_RefreshBorder(f, unit)
+            if f._msufGFDispelType then
+                f._msufGFDispelType = nil
+                _GF_RefreshBorder(f, unit)
+            end
             return
         end
-        _scanTopDispel = nil
-        if AuraUtil and AuraUtil.ForEachAura then
+        -- Zero-alloc direct slot scan (avoids ForEachAura's internal table)
+        if C_UnitAuras_GetAuraSlots and C_UnitAuras_GetAuraDataBySlot then
+            _dispelScanUnit = unit
+            topDispel = _DispelScanSlots(C_UnitAuras_GetAuraSlots(unit, "HARMFUL"))
+            _dispelScanUnit = nil
+        elseif AuraUtil and AuraUtil.ForEachAura then
+            _scanTopDispel = nil
             AuraUtil.ForEachAura(unit, "HARMFUL|RAID", nil, _DispelScanCallback, true)
+            topDispel = _scanTopDispel
         end
-        topDispel = _scanTopDispel
     else
         topDispel = _G.MSUF_DispelBorderTestType or "Magic"
     end
@@ -1282,7 +1318,7 @@ local function UpdateRoleIcon(f, unit)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if conf.roleIcon == false or not unit or not UnitExists(unit) then
-        f.roleIcon:Hide()
+        if f.roleIcon:IsShown() then f.roleIcon:Hide() end
         return
     end
     local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
@@ -1291,12 +1327,12 @@ local function UpdateRoleIcon(f, unit)
         if tex then
             f.roleIcon:SetTexture(tex)
             f.roleIcon:SetTexCoord(l, r, t, b)
-            f.roleIcon:Show()
+            if not f.roleIcon:IsShown() then f.roleIcon:Show() end
         else
-            f.roleIcon:Hide()
+            if f.roleIcon:IsShown() then f.roleIcon:Hide() end
         end
     else
-        f.roleIcon:Hide()
+        if f.roleIcon:IsShown() then f.roleIcon:Hide() end
     end
 end
 
@@ -1308,15 +1344,15 @@ local function UpdateRaidMarker(f, unit)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if conf.raidMarker == false or not unit or not UnitExists(unit) then
-        f.raidIcon:Hide()
+        if f.raidIcon:IsShown() then f.raidIcon:Hide() end
         return
     end
     local idx = GetRaidTargetIndex(unit)
     if idx then
         SetRaidTargetIconTexture(f.raidIcon, idx)
-        f.raidIcon:Show()
+        if not f.raidIcon:IsShown() then f.raidIcon:Show() end
     else
-        f.raidIcon:Hide()
+        if f.raidIcon:IsShown() then f.raidIcon:Hide() end
     end
 end
 
@@ -1329,23 +1365,23 @@ local function UpdateLeaderIcon(f, unit)
     -- Leader icon
     if f.leaderIcon then
         if conf.leaderIcon == false or not unit or not UnitExists(unit) then
-            f.leaderIcon:Hide()
+            if f.leaderIcon:IsShown() then f.leaderIcon:Hide() end
         else
             local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
             if isLeader then
                 local tex, l, r, t, b = GF.GetLeaderTexture(kind)
                 f.leaderIcon:SetTexture(tex)
                 f.leaderIcon:SetTexCoord(l, r, t, b)
-                f.leaderIcon:Show()
+                if not f.leaderIcon:IsShown() then f.leaderIcon:Show() end
             else
-                f.leaderIcon:Hide()
+                if f.leaderIcon:IsShown() then f.leaderIcon:Hide() end
             end
         end
     end
     -- Assist icon (separate from leader)
     if f.assistIcon then
         if conf.assistIcon == false or not unit or not UnitExists(unit) then
-            f.assistIcon:Hide()
+            if f.assistIcon:IsShown() then f.assistIcon:Hide() end
         else
             local isAssist = UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
             -- Only show assist if not also leader (avoid double-icon)
@@ -1354,9 +1390,9 @@ local function UpdateLeaderIcon(f, unit)
                 local tex, l, r, t, b = GF.GetAssistTexture(kind)
                 f.assistIcon:SetTexture(tex)
                 f.assistIcon:SetTexCoord(l, r, t, b)
-                f.assistIcon:Show()
+                if not f.assistIcon:IsShown() then f.assistIcon:Show() end
             else
-                f.assistIcon:Hide()
+                if f.assistIcon:IsShown() then f.assistIcon:Hide() end
             end
         end
     end
@@ -1658,6 +1694,10 @@ local function dispatchHealth(f, unit)
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
 
+    -- Render-frame stamp: dedup UNIT_HEAL_PREDICTION / UNIT_ABSORB that
+    -- fire in the same frame as UNIT_HEALTH (AoE healing burst).
+    f._msufGFHealthTick = GetTime()
+
     -- HealPredictionCalculator: 1 C-API call replaces 5 separate calls
     local calc = _GF_EnsureCalc(f)
     local hp, hpMax
@@ -1844,7 +1884,7 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
     if _G.MSUF_AbsorbTextureTestMode then
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(20)
-        bar:Show()
+        if not bar:IsShown() then bar:Show() end
         return
     end
     local conf = GF.GetConf(f._msufGFKind or "party")
@@ -1853,8 +1893,8 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
         local gen = _G.MSUF_DB and _G.MSUF_DB.general
         hpEnabled = not gen or gen.enableHealPrediction ~= false
     end
-    if hpEnabled == false then bar:Hide(); return end
-    if not unit or not UnitExists(unit) then bar:Hide(); return end
+    if hpEnabled == false then if bar:IsShown() then bar:Hide() end; return end
+    if not unit or not UnitExists(unit) then if bar:IsShown() then bar:Hide() end; return end
     if not hpMax then
         hpMax = (calc and calc.GetMaximumHealth) and calc:GetMaximumHealth() or UnitHealthMax(unit)
     end
@@ -1864,11 +1904,11 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
     elseif UnitGetIncomingHeals then
         val = UnitGetIncomingHeals(unit)
     end
-    if val == nil then bar:Hide(); return end
+    if val == nil then if bar:IsShown() then bar:Hide() end; return end
     local valSecret = issecretvalue and issecretvalue(val)
     if not valSecret then
         local n = tonumber(val) or 0
-        if n <= 0 then bar:Hide(); return end
+        if n <= 0 then if bar:IsShown() then bar:Hide() end; return end
         local hpMaxSecret = issecretvalue and issecretvalue(hpMax)
         if not hpMaxSecret then
             if not hp then
@@ -1884,7 +1924,7 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
     end
     bar:SetMinMaxValues(0, hpMax)
     _GF_PixelSnappedSetValue(bar, val)
-    bar:Show()
+    if not bar:IsShown() then bar:Show() end
 end
 
 dispatchAbsorb = function(f, unit, calc, hpMax)
@@ -1894,15 +1934,15 @@ dispatchAbsorb = function(f, unit, calc, hpMax)
     if _G.MSUF_AbsorbTextureTestMode then
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(25)
-        bar:Show()
+        if not bar:IsShown() then bar:Show() end
         return
     end
     local kind = f._msufGFKind or "party"
     if not _GF_IsAbsorbEnabled(kind) then
-        bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide()
+        bar:SetMinMaxValues(0, 1); bar:SetValue(0); if bar:IsShown() then bar:Hide() end
         return
     end
-    if not unit or not UnitExists(unit) then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
+    if not unit or not UnitExists(unit) then bar:SetMinMaxValues(0, 1); bar:SetValue(0); if bar:IsShown() then bar:Hide() end; return end
     if not hpMax then
         hpMax = (calc and calc.GetMaximumHealth) and calc:GetMaximumHealth() or UnitHealthMax(unit)
     end
@@ -1912,13 +1952,15 @@ dispatchAbsorb = function(f, unit, calc, hpMax)
     elseif UnitGetTotalAbsorbs then
         val = UnitGetTotalAbsorbs(unit)
     end
-    if val == nil then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
+    if val == nil then bar:SetMinMaxValues(0, 1); bar:SetValue(0); if bar:IsShown() then bar:Hide() end; return end
     bar:SetMinMaxValues(0, hpMax)
     _GF_PixelSnappedSetValue(bar, val)
     if issecretvalue and issecretvalue(val) then
-        bar:Show()
+        if not bar:IsShown() then bar:Show() end
     else
-        if (tonumber(val) or 0) > 0 then bar:Show() else bar:Hide() end
+        local want = (tonumber(val) or 0) > 0
+        if want and not bar:IsShown() then bar:Show()
+        elseif not want and bar:IsShown() then bar:Hide() end
     end
 end
 
@@ -1929,16 +1971,16 @@ dispatchHealAbsorb = function(f, unit, calc, hpMax)
     if _G.MSUF_AbsorbTextureTestMode then
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(15)
-        bar:Show()
+        if not bar:IsShown() then bar:Show() end
         return
     end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if conf.healAbsorbEnabled == false then
-        bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide()
+        bar:SetMinMaxValues(0, 1); bar:SetValue(0); if bar:IsShown() then bar:Hide() end
         return
     end
-    if not unit or not UnitExists(unit) then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
+    if not unit or not UnitExists(unit) then bar:SetMinMaxValues(0, 1); bar:SetValue(0); if bar:IsShown() then bar:Hide() end; return end
     if not hpMax then
         hpMax = (calc and calc.GetMaximumHealth) and calc:GetMaximumHealth() or UnitHealthMax(unit)
     end
@@ -1948,13 +1990,15 @@ dispatchHealAbsorb = function(f, unit, calc, hpMax)
     elseif UnitGetTotalHealAbsorbs then
         val = UnitGetTotalHealAbsorbs(unit)
     end
-    if val == nil then bar:SetMinMaxValues(0, 1); bar:SetValue(0); bar:Hide(); return end
+    if val == nil then bar:SetMinMaxValues(0, 1); bar:SetValue(0); if bar:IsShown() then bar:Hide() end; return end
     bar:SetMinMaxValues(0, hpMax)
     _GF_PixelSnappedSetValue(bar, val)
     if issecretvalue and issecretvalue(val) then
-        bar:Show()
+        if not bar:IsShown() then bar:Show() end
     else
-        if (tonumber(val) or 0) > 0 then bar:Show() else bar:Hide() end
+        local want = (tonumber(val) or 0) > 0
+        if want and not bar:IsShown() then bar:Show()
+        elseif not want and bar:IsShown() then bar:Hide() end
     end
 end
 
@@ -1979,15 +2023,15 @@ local function dispatchPower(f, unit)
     if c.powH <= 0 then return end
     -- Per-role visibility (cached flags)
     local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
-    if role == "TANK" and not c.powTank then f.power:Hide(); return
-    elseif role == "HEALER" and not c.powHealer then f.power:Hide(); return
-    elseif role == "DAMAGER" and not c.powDPS then f.power:Hide(); return
+    if role == "TANK" and not c.powTank then if f.power:IsShown() then f.power:Hide() end; return
+    elseif role == "HEALER" and not c.powHealer then if f.power:IsShown() then f.power:Hide() end; return
+    elseif role == "DAMAGER" and not c.powDPS then if f.power:IsShown() then f.power:Hide() end; return
     end
     local pw    = UnitPower(unit)
     local pwMax = UnitPowerMax(unit)
     f.power:SetMinMaxValues(0, pwMax)
     _GF_PixelSnappedSetValue(f.power, pw, c.powSmooth)
-    f.power:Show()
+    if not f.power:IsShown() then f.power:Show() end
     -- 3-slot power text (pre-resolved active flags from cache)
     if c.showPow then
         local iss = issecretvalue
@@ -2048,15 +2092,25 @@ local UNIT_DISPATCH = {
     UNIT_MAXHEALTH                    = dispatchHealth,
     UNIT_HEAL_PREDICTION              = function(f, u)
         local calc = _GF_EnsureCalc(f)
-        if calc then dispatchHealth(f, u) else dispatchIncomingHeal(f, u) end
+        if calc then
+            -- Skip if dispatchHealth already ran this render frame (UNIT_HEALTH fired first)
+            if f._msufGFHealthTick == GetTime() then return end
+            dispatchHealth(f, u)
+        else dispatchIncomingHeal(f, u) end
     end,
     UNIT_ABSORB_AMOUNT_CHANGED        = function(f, u)
         local calc = _GF_EnsureCalc(f)
-        if calc then dispatchHealth(f, u) else dispatchAbsorb(f, u) end
+        if calc then
+            if f._msufGFHealthTick == GetTime() then return end
+            dispatchHealth(f, u)
+        else dispatchAbsorb(f, u) end
     end,
     UNIT_HEAL_ABSORB_AMOUNT_CHANGED   = function(f, u)
         local calc = _GF_EnsureCalc(f)
-        if calc then dispatchHealth(f, u) else dispatchHealAbsorb(f, u) end
+        if calc then
+            if f._msufGFHealthTick == GetTime() then return end
+            dispatchHealth(f, u)
+        else dispatchHealAbsorb(f, u) end
     end,
     UNIT_POWER_UPDATE                 = dispatchPower,
     UNIT_MAXPOWER                     = dispatchPower,

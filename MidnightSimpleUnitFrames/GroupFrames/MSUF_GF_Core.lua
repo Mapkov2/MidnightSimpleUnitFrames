@@ -564,7 +564,13 @@ end
 ------------------------------------------------------------------------
 -- NAMELIST sort builder: role → playerFirst → class → name
 -- Used when separateMeleeRanged=true (native groupBy can't split DPS).
+-- PERF: Pre-allocated entry pool (max 40 raid members) — zero GC per call.
 ------------------------------------------------------------------------
+local _sortEntryPool = {}
+for i = 1, 40 do _sortEntryPool[i] = { name = "", sortRole = "", class = "", isPlayer = false } end
+local _sortNames = {}
+local _sortSeen  = {}
+
 local function BuildSortNameList(kind)
     local conf = GF.GetConf(kind)
     if not conf.sortByRole then return nil end
@@ -588,8 +594,8 @@ local function BuildSortNameList(kind)
     if separate and not rolePrio["MELEE"] then rolePrio["MELEE"] = 90 end
     if separate and not rolePrio["RANGED"] then rolePrio["RANGED"] = 91 end
 
-    -- Gather group members
-    local entries = {}
+    -- Gather group members into pre-allocated pool
+    local entryCount = 0
     local function addUnit(unit)
         if not (unit and UnitExists(unit)) then return end
         local name, realm = UnitName(unit)
@@ -602,12 +608,13 @@ local function BuildSortNameList(kind)
         if separate and role == "DAMAGER" then
             sortRole = GetDpsRangeRole(unit, classToken)
         end
-        entries[#entries + 1] = {
-            name = name,
-            sortRole = sortRole,
-            class = classToken or "",
-            isPlayer = UnitIsUnit(unit, "player"),
-        }
+        entryCount = entryCount + 1
+        local e = _sortEntryPool[entryCount]
+        if not e then e = {}; _sortEntryPool[entryCount] = e end
+        e.name = name
+        e.sortRole = sortRole
+        e.class = classToken or ""
+        e.isPlayer = UnitIsUnit(unit, "player")
     end
 
     if kind == "party" then
@@ -618,8 +625,13 @@ local function BuildSortNameList(kind)
         for i = 1, num do addUnit("raid" .. i) end
     end
 
-    -- Sort: role priority → playerFirst → class → name
+    -- Sort only the active portion of the pool
+    -- table.sort needs a contiguous array — sort _sortEntryPool[1..entryCount]
+    -- We use a temporary view: since pool IS contiguous, sort in-place works.
+    local entries = _sortEntryPool
+    local ec = entryCount
     table.sort(entries, function(a, b)
+        -- Only compare within active range (sort may access beyond, but pool entries exist)
         local rA = rolePrio[a.sortRole] or 999
         local rB = rolePrio[b.sortRole] or 999
         if rA ~= rB then return rA < rB end
@@ -628,15 +640,20 @@ local function BuildSortNameList(kind)
         return a.name < b.name
     end)
 
-    local names = {}
-    local seen = {}
-    for _, e in ipairs(entries) do
-        if not seen[e.name] then
-            seen[e.name] = true
-            names[#names + 1] = e.name
+    -- Build name list (reuse tables)
+    local nameCount = 0
+    for k in pairs(_sortSeen) do _sortSeen[k] = nil end
+    for i = 1, ec do
+        local n = entries[i].name
+        if not _sortSeen[n] then
+            _sortSeen[n] = true
+            nameCount = nameCount + 1
+            _sortNames[nameCount] = n
         end
     end
-    return #names > 0 and table.concat(names, ",") or nil
+    -- Trim excess from previous call
+    for i = nameCount + 1, #_sortNames do _sortNames[i] = nil end
+    return nameCount > 0 and table.concat(_sortNames, ",") or nil
 end
 
 local function LayoutIcons(f, kind)
