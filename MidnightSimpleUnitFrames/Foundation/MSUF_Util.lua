@@ -114,27 +114,6 @@ function MSUF_RestoreKeys(dst, snap)
     end
 end
 
-function MSUF_ClampAlpha(a, default)
-    a = tonumber(a) or default or 1
-    if a < 0 then
-        a = 0
-    elseif a > 1 then
-        a = 1
-    end
-    return a
-end
-
-function MSUF_ClampScale(s, default, maxValue)
-    s = tonumber(s) or default or 1
-    if s <= 0 then
-        s = default or 1
-    end
-    if maxValue and s > maxValue then
-        s = maxValue
-    end
-    return s
-end
-
 function MSUF_GetNumber(v, default, minValue, maxValue)
     local n = tonumber(v) or default
     if minValue and n < minValue then
@@ -200,121 +179,6 @@ function MSUF_SetCastTimeText(frame, seconds)
     else
         MSUF_SetTextIfChanged(fs, string.format("%.1f", n))
     end
-end
-
-function MSUF_SetFormattedTextIfChanged(fs, fmt, ...)
-    if not fs then return end
-    if fmt == nil then
-        MSUF_SetTextIfChanged(fs, "")
-        return
-    end
-    -- Prefer the C-side formatter when available (faster + more secret-safe).
-    if fs.SetFormattedText then
-        fs:SetFormattedText(fmt, ...)
-    else
-        MSUF_SetTextIfChanged(fs, string.format(fmt, ...))
-    end
-end
-
-function MSUF_SetTimeTextTenth(fs, seconds)
-    if not fs then return end
-
-    if type(seconds) == "nil" then
-        MSUF_SetTextIfChanged(fs, "")
-        fs.MSUF_lastTimeTenth = nil
-        return
-    end
-
-    -- Midnight/Beta "secret value" safety:
-    -- Avoid arithmetic directly on potentially secret values.
-    local n = tonumber(seconds)
-    if type(n) ~= "number" then
-        MSUF_SetTextIfChanged(fs, "")
-        fs.MSUF_lastTimeTenth = nil
-        return
-    end
-
-    -- Round to tenths (0.1s) to match display.
-    local tenths = math.floor(n * 10 + 0.5)
-    if fs.MSUF_lastTimeTenth ~= tenths then
-        fs.MSUF_lastTimeTenth = tenths
-        MSUF_SetTextIfChanged(fs, string.format("%.1f", tenths / 10))
-    end
-end
-
--- Stamp cache (performance)
--- Avoid re-applying expensive UI state (SetFont/SetPoint/SetColor/etc.) when
--- the inputs are unchanged.
--- Secret-safe rules:
--- - Only compares primitive Lua types (number/string/boolean/nil).
--- - Any non-primitive value is treated as "changed" to avoid secret-value
---   equality errors.
--- - Stores the last tuple in a reusable table on the target object.
-
-local function _MSUF_IsStampPrimitive(v)
-    local t = type(v)
-    return (t == "number" or t == "string" or t == "boolean" or t == "nil")
-end
-
-function MSUF_StampChanged(obj, stampKey, ...)
-    if not obj or not stampKey then
-        return true
-    end
-    local cacheKey = "_msufStamp_" .. stampKey
-    local prev = obj[cacheKey]
-    if not prev then
-        prev = {}
-        obj[cacheKey] = prev
-        -- store
-        local n = select('#', ...)
-        prev._n = n
-        for i = 1, n do
-            local v = select(i, ...)
-            if not _MSUF_IsStampPrimitive(v) then
-                -- unknown type => always "changed"; do not cache
-                prev._n = 0
-                return true
-            end
-            prev[i] = v
-        end
-        return true
-    end
-
-    local n = select('#', ...)
-    if prev._n ~= n then
-        prev._n = n
-        for i = 1, n do
-            local v = select(i, ...)
-            if not _MSUF_IsStampPrimitive(v) then
-                prev._n = 0
-                return true
-            end
-            prev[i] = v
-        end
-        return true
-    end
-
-    -- compare
-    for i = 1, n do
-        local v = select(i, ...)
-        if not _MSUF_IsStampPrimitive(v) then
-            prev._n = 0
-            return true
-        end
-        if prev[i] ~= v then
-            -- update cached tuple
-            for j = i, n do
-                local vv = select(j, ...)
-                if not _MSUF_IsStampPrimitive(vv) then
-                    prev._n = 0
-                    return true
-                end
-                prev[j] = vv
-            end
-            return true
-        end
-    end
-    return false
 end
 
 function MSUF_SetAlphaIfChanged(f, a)
@@ -389,13 +253,9 @@ U.DeepCopy = MSUF_DeepCopy
 U.CaptureKeys = MSUF_CaptureKeys
 U.RestoreKeys = MSUF_RestoreKeys
 U.Clamp = MSUF_Clamp
-U.ClampAlpha = MSUF_ClampAlpha
-U.ClampScale = MSUF_ClampScale
 U.GetNumber = MSUF_GetNumber
 U.SetTextIfChanged = MSUF_SetTextIfChanged
-U.SetFormattedTextIfChanged = MSUF_SetFormattedTextIfChanged
 U.SetCastTimeText = MSUF_SetCastTimeText
-U.SetTimeTextTenth = MSUF_SetTimeTextTenth
 U.SetAlphaIfChanged = MSUF_SetAlphaIfChanged
 U.SetWidthIfChanged = MSUF_SetWidthIfChanged
 U.SetHeightIfChanged = MSUF_SetHeightIfChanged
@@ -594,7 +454,6 @@ end
 -- strings are longer than English. These helpers clamp the FontString
 -- width so text truncates instead of overlapping adjacent UI elements.
 -- Usage:  MSUF_ClampCheckboxText(cb, maxPixelWidth)
---         MSUF_AutoSizeButton(btn, minWidth, padding)
 
 --- Clamp a checkbox's label FontString to a max pixel width.
 --- Disables word-wrap so long translations truncate cleanly.
@@ -613,16 +472,3 @@ function MSUF_ClampCheckboxText(cb, maxWidth)
 end
 _G.MSUF_ClampCheckboxText = MSUF_ClampCheckboxText
 
---- Auto-size a button to fit its current text content.
---- Width = max(minWidth, textWidth + padding).
-function MSUF_AutoSizeButton(btn, minWidth, padding)
-    if not btn then return end
-    minWidth = minWidth or 120
-    padding  = padding  or 24
-    local fs = btn.GetFontString and btn:GetFontString()
-    local tw = (fs and fs.GetStringWidth and fs:GetStringWidth()) or 0
-    local w = tw + padding
-    if w < minWidth then w = minWidth end
-    btn:SetWidth(w)
-end
-_G.MSUF_AutoSizeButton = MSUF_AutoSizeButton

@@ -5,7 +5,6 @@ local addonName, ns = ...
 local F = ns.Cache and ns.Cache.F or {}
 local type, tonumber = type, tonumber
 local issecretvalue = _G.issecretvalue
-
 function _G.MSUF_GetDesiredUnitAlpha(key)
     if not MSUF_DB then EnsureDB() end
     local conf = key and MSUF_DB and MSUF_DB[key]

@@ -316,23 +316,6 @@ local function _MSUF_GetClassificationState(unit)
     if c == "elite"    then  return "ELITE"    end
      return nil
 end
-local function _MSUF_GetDefaultClassificationSymbolKey(state)
-    -- Default symbol keys for the new classification family.
-    -- Step 5 will provide the actual Media/Symbols/Classification/*.tga assets.
-    if state == "BOSS" then
-         return "classification_boss"
-    end
-    if state == "RAREELITE" then
-         return "classification_rareelite"
-    end
-    if state == "RARE" then
-         return "classification_rare"
-    end
-    if state == "ELITE" then
-         return "classification_elite"
-    end
-     return nil
-end
 local function _MSUF_GetClassificationLabel(state)
     if state == "BOSS" then
          return "BOSS"

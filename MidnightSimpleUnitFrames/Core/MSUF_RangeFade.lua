@@ -20,15 +20,6 @@
 _G.MSUF_RangeFadeMul = _G.MSUF_RangeFadeMul or {}
 local _rfMul = _G.MSUF_RangeFadeMul
 
-function _G.MSUF_GetRangeFadeMul(key, unit, frame)
-    local v = _rfMul[key]
-    if v ~= nil then return v end
-    if unit then
-        v = _rfMul[unit]
-        if v ~= nil then return v end
-    end
-    return 1
-end
 
 -- Shared: Spell selection + secret helpers
 do
@@ -110,31 +101,6 @@ do
         return (frames and frames[unit]) or _G["MSUF_" .. unit]
     end
 
-    -- ── Boss range fade: propagate alpha to castbar / aura children ──
-    local _isBossUnit = { boss1=1, boss2=2, boss3=3, boss4=4, boss5=5 }
-
-    local function PropagateBossChildren(unit, a)
-        local idx = _isBossUnit[unit]
-        if not idx then return end
-        local db = _G.MSUF_DB
-        local bossConf = db and db.boss
-        if not bossConf then return end
-        -- Castbar
-        if bossConf.rangeFadeCastbar == true then
-            local bars = _G.MSUF_BossCastbars
-            local cb = bars and bars[idx]
-            if cb and cb.SetAlpha then cb:SetAlpha(a) end
-        end
-        -- Auras
-        if bossConf.rangeFadeAuras == true then
-            local getAnchor = _G.MSUF_A2_GetUnitAnchor
-            if type(getAnchor) == "function" then
-                local anchor = getAnchor(unit)
-                if anchor and anchor.SetAlpha then anchor:SetAlpha(a) end
-            end
-        end
-    end
-
     local function ApplyMul(f, unit, confKey, conf, inRange)
         local prev = _state[unit]
         if inRange == prev then return false end
@@ -145,7 +111,6 @@ do
             if a < 0 then a = 0 elseif a > 1 then a = 1 end
         end
         _mulT[unit] = a
-        PropagateBossChildren(unit, a)
         if not f or (f.IsForbidden and f:IsForbidden()) then return true end
         if f.IsShown and not f:IsShown() then return true end
         if not _fastApply then _fastApply = _G.MSUF_ApplyRangeFadeAlphaFast end
@@ -163,7 +128,6 @@ do
         if not hadState and not hadMul then return false end
         _state[unit] = nil
         _mulT[unit] = 1
-        PropagateBossChildren(unit, 1)
         local f = GetFrame(unit)
         if not f or (f.IsForbidden and f:IsForbidden()) then return true end
         if f.IsShown and not f:IsShown() then return true end

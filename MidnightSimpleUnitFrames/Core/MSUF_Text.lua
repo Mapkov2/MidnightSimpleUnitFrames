@@ -404,29 +404,6 @@ function ns.Text.EnsureSpec(self)
     return spec
 end
 
-function ns.Text._ShouldSplitPower(self, pMode, hasPct)
-    if not self or not hasPct or not self.powerTextPct then  return false end
-    if not _MSUF_PowerModeAllowsSplit(pMode) then  return false end
-    if not MSUF_DB then
-        if type(EnsureDB) == "function" then EnsureDB() end
-    end
-    local key = self.msufConfigKey
-    local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
-    local gen = (MSUF_DB and MSUF_DB.general) or nil
-    -- Spacers inherit Shared unless per-unit override is enabled.
-    local useOverride = (udb and udb.hpPowerTextOverride == true)
-    local on = (useOverride and udb and udb.powerTextSpacerEnabled == true) or ((not useOverride) and gen and gen.powerTextSpacerEnabled == true)
-    if not on then  return false end
-    local x = (useOverride and udb and tonumber(udb.powerTextSpacerX)) or ((gen and tonumber(gen.powerTextSpacerX)) or 0)
-    x = tonumber(x) or 0
-    if x <= 0 then  return false end
-    if key and type(_G.MSUF_GetPowerSpacerMaxForUnitKey) == "function" then
-        local maxP = tonumber(_G.MSUF_GetPowerSpacerMaxForUnitKey(key)) or 0
-        if x < 0 then x = 0 end
-        if x > maxP then x = maxP end
-    end
-    return (x > 0)
-end
 
 local function _MSUF_FormatPowerByMode(mode, curText, maxText, pctText, joinPrimary, joinSecondary, splitAllowed)
     joinPrimary = joinPrimary or " "
