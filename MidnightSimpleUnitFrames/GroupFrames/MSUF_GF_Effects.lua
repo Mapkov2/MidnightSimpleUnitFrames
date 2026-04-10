@@ -13,6 +13,9 @@ local issecretvalue = _G.issecretvalue
 local InCombatLockdown = _G.InCombatLockdown
 local UnitExists = _G.UnitExists
 local UnitIsConnected = _G.UnitIsConnected
+
+-- LibCustomGlow for dispel glow
+local LCG = LibStub and LibStub("LibCustomGlow-1.0", true)
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local UnitIsAFK = _G.UnitIsAFK
 local UnitIsDND = _G.UnitIsDND
@@ -268,6 +271,41 @@ local function ResolveDispelColor(dispelName)
         if r then return r, g, b end
     end
     return 0.25, 0.75, 1.00
+end
+
+------------------------------------------------------------------------
+-- Dispel glow helpers (GF) — zero-alloc color table reuse
+------------------------------------------------------------------------
+local _gfGlowColor = { 0, 0, 0, 1 }
+
+local function _GF_StartDispelGlow(f, r, g, b)
+    if not LCG then return end
+    local kind = f._msufGFKind or "party"
+    if not HLVal(kind, "hlDispelGlowEnabled") then return end
+    local anchor = f._msufGFHighlightBorder or f
+    _gfGlowColor[1], _gfGlowColor[2], _gfGlowColor[3] = r, g, b
+    local style = HLVal(kind, "hlDispelGlowStyle") or "PIXEL"
+    local lines = tonumber(HLVal(kind, "hlDispelGlowLines")) or 8
+    local freq  = tonumber(HLVal(kind, "hlDispelGlowFrequency")) or 0.25
+    local thick = tonumber(HLVal(kind, "hlDispelGlowThickness")) or 2
+    if style == "AUTOCAST" then
+        LCG.AutoCastGlow_Start(anchor, _gfGlowColor, lines, freq, nil, nil, nil, "msufDispel")
+    elseif style == "PROC" then
+        LCG.ProcGlow_Start(anchor, { color = _gfGlowColor, key = "msufDispel" })
+    else
+        LCG.PixelGlow_Start(anchor, _gfGlowColor, lines, freq, nil, thick, nil, nil, nil, "msufDispel")
+    end
+    f._msufGFDispelGlowActive = true
+end
+
+local function _GF_StopDispelGlow(f)
+    if not f._msufGFDispelGlowActive then return end
+    f._msufGFDispelGlowActive = nil
+    if not LCG then return end
+    local anchor = f._msufGFHighlightBorder or f
+    LCG.PixelGlow_Stop(anchor, "msufDispel")
+    LCG.AutoCastGlow_Stop(anchor, "msufDispel")
+    LCG.ProcGlow_Stop(anchor, "msufDispel")
 end
 
 ------------------------------------------------------------------------
@@ -659,20 +697,20 @@ end
 -- Aggro border (secret-safe UnitThreatSituation)
 ------------------------------------------------------------------------
 local _hlBdInsets = { left = 0, right = 0, top = 0, bottom = 0 }
-local _hlBdTable  = { edgeFile = nil, edgeSize = 1, insets = _hlBdInsets }
 local function _applyHighlightBorderStyle(border, conf, edgeSz, ofs, texKey, layer, r, g, b, a)
     edgeSz = math_max(1, edgeSz or 2)
     ofs = tonumber(ofs) or 0
     local edgeFile = GF.ResolveHighlightTexture(texKey)
 
-    -- Diff-gate SetBackdrop: only call when texture/size actually changed
-    -- SetBackdrop re-creates 9 internal textures every call (~0.25ms)
+    -- IMPORTANT:
+    -- GF highlight live-apply must materialize a NEW backdrop description when
+    -- edge texture/size changes. Reusing one shared table can leave existing
+    -- Backdrop frames visually stale even though our Lua-side cache changed.
+    -- UF does not have this issue because it creates a fresh literal table.
     if border._msufHLEdge ~= edgeFile or border._msufHLEdgeSz ~= edgeSz then
         border._msufHLEdge   = edgeFile
         border._msufHLEdgeSz = edgeSz
-        _hlBdTable.edgeFile = edgeFile
-        _hlBdTable.edgeSize = edgeSz
-        border:SetBackdrop(_hlBdTable)
+        border:SetBackdrop({ edgeFile = edgeFile, edgeSize = edgeSz, insets = _hlBdInsets })
         border:SetBackdropColor(0, 0, 0, 0)
     end
     border:SetBackdropBorderColor(r or 1, g or 1, b or 1, a or 1)
@@ -966,6 +1004,7 @@ _GF_RefreshBorder = function(f, unit)
                     if r then
                         _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
                         border._msufHLActivePrio = 1; border:Show()
+                        _GF_StartDispelGlow(f, r, g, b)
                         return
                     end
                 end
@@ -974,6 +1013,7 @@ _GF_RefreshBorder = function(f, unit)
                     _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay,
                         HLColor("hlAggroColorR", 1), HLColor("hlAggroColorG", 0.55), HLColor("hlAggroColorB", 0), 1)
                     border._msufHLActivePrio = 2; border:Show()
+                    _GF_StopDispelGlow(f)
                     return
                 end
             end
@@ -985,6 +1025,7 @@ _GF_RefreshBorder = function(f, unit)
             if r then
                 _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
                 border._msufHLActivePrio = 1; border:Show()
+                _GF_StartDispelGlow(f, r, g, b)
                 return
             end
         end
@@ -992,6 +1033,7 @@ _GF_RefreshBorder = function(f, unit)
             _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay,
                 HLColor("hlAggroColorR", 1), HLColor("hlAggroColorG", 0.55), HLColor("hlAggroColorB", 0), 1)
             border._msufHLActivePrio = 2; border:Show()
+            _GF_StopDispelGlow(f)
             return
         end
     end
@@ -1007,6 +1049,7 @@ _GF_RefreshBorder = function(f, unit)
             HLColor("hlTargetColorG", 1),
             HLColor("hlTargetColorB", 1), 1)
         border._msufHLActivePrio = 3; border:Show()
+        _GF_StopDispelGlow(f)
         return
     end
 
@@ -1021,11 +1064,13 @@ _GF_RefreshBorder = function(f, unit)
             conf.hlFocusColorG or 0.5,
             conf.hlFocusColorB or 1.0, 1)
         border._msufHLActivePrio = 4; border:Show()
+        _GF_StopDispelGlow(f)
         return
     end
 
     border._msufHLActivePrio = nil
     if border:IsShown() then border:Hide() end
+    _GF_StopDispelGlow(f)
 end
 
 local function UpdateAggro(f, unit)
@@ -1033,6 +1078,15 @@ local function UpdateAggro(f, unit)
     local prevLevel = f._msufGFAggroLevel
 
     local testMode = _G.MSUF_AggroBorderTestMode
+    -- Scope filtering
+    if testMode then
+        local testScope = _G.MSUF_AggroBorderTestScope or "shared"
+        if testScope ~= "shared" then
+            local scopeKind = (testScope == "party" or testScope == "gf_party") and "party"
+                or (testScope == "raid" or testScope == "gf_raid") and "raid" or nil
+            if scopeKind ~= kind then testMode = false end
+        end
+    end
     if (HLVal(kind, "hlAggroEnabled") == false or not unit) and not testMode then
         if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
         return
@@ -1070,11 +1124,11 @@ local function UpdateAggro(f, unit)
         if s == prevLevel then return end
         f._msufGFAggroLevel = s
     else
-        if prevLevel == 3 then return end -- test mode: already at max
         f._msufGFAggroLevel = 3
     end
     _GF_RefreshBorder(f, unit)
 end
+GF._UpdateAggro = UpdateAggro
 
 ------------------------------------------------------------------------
 -- Dispel border (zero-alloc direct C_UnitAuras slot scan)
@@ -1127,6 +1181,15 @@ function GF._UpdateDispel(f, unit)
     local kind = f._msufGFKind or "party"
 
     local testMode = _G.MSUF_DispelBorderTestMode
+    -- Scope filtering: if test scope doesn't match this frame's kind, ignore test mode
+    if testMode then
+        local testScope = _G.MSUF_DispelBorderTestScope or "shared"
+        if testScope ~= "shared" then
+            local scopeKind = (testScope == "party" or testScope == "gf_party") and "party"
+                or (testScope == "raid" or testScope == "gf_raid") and "raid" or nil
+            if scopeKind ~= kind then testMode = false end
+        end
+    end
 
     if (HLVal(kind, "hlDispelEnabled") == false or not unit) and not testMode then
         if f._msufGFDispelType then

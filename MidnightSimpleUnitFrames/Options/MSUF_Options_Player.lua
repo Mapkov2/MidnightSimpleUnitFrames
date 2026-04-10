@@ -742,6 +742,38 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local basicsBox, basicsBody = MkCollapsible(frameGroup, "Frame Basics", fullW, basicsH, true)
     basicsBox:Hide(); panel.playerBasicsBox = basicsBox; panel.playerBasicsBody = basicsBody; panel._msufBasicsH = basicsH
 
+    -- Power Bar section
+    local powerBarBox, powerBarBody = MkCollapsible(frameGroup, "Power Bar", fullW, 160, false)
+    powerBarBox:Hide(); panel.playerPowerBarBox = powerBarBox; panel.playerPowerBarBody = powerBarBody
+    do
+        local pbShowCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarShowCB", "Show power bar", 12, -6)
+        panel.playerPowerBarShowCB = pbShowCB
+
+        local pbHeightSlider = CreateFrame("Slider", "MSUF_UF_PowerBarHeightSlider", powerBarBody, "OptionsSliderTemplate")
+        pbHeightSlider:SetPoint("TOPLEFT", powerBarBody, "TOPLEFT", 14, -44)
+        pbHeightSlider:SetMinMaxValues(1, 20); pbHeightSlider:SetValueStep(1); pbHeightSlider:SetObeyStepOnDrag(true)
+        pbHeightSlider:SetWidth(200)
+        local pbhText = _G["MSUF_UF_PowerBarHeightSliderText"]; if pbhText then pbhText:SetText("Height") end
+        local pbhLow = _G["MSUF_UF_PowerBarHeightSliderLow"]; if pbhLow then pbhLow:SetText("1") end
+        local pbhHigh = _G["MSUF_UF_PowerBarHeightSliderHigh"]; if pbhHigh then pbhHigh:SetText("20") end
+        panel.playerPowerBarHeightSlider = pbHeightSlider
+
+        local pbEmbedCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarEmbedCB", "Embed into health bar", 12, -80)
+        panel.playerPowerBarEmbedCB = pbEmbedCB
+
+        local pbBorderCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarBorderCB", "Power bar border", 300, -6)
+        panel.playerPowerBarBorderCB = pbBorderCB
+
+        local pbBorderSlider = CreateFrame("Slider", "MSUF_UF_PowerBarBorderSlider", powerBarBody, "OptionsSliderTemplate")
+        pbBorderSlider:SetPoint("TOPLEFT", powerBarBody, "TOPLEFT", 300, -44)
+        pbBorderSlider:SetMinMaxValues(0, 6); pbBorderSlider:SetValueStep(1); pbBorderSlider:SetObeyStepOnDrag(true)
+        pbBorderSlider:SetWidth(200)
+        local pbbText = _G["MSUF_UF_PowerBarBorderSliderText"]; if pbbText then pbbText:SetText("Border thickness") end
+        local pbbLow = _G["MSUF_UF_PowerBarBorderSliderLow"]; if pbbLow then pbbLow:SetText("0") end
+        local pbbHigh = _G["MSUF_UF_PowerBarBorderSliderHigh"]; if pbbHigh then pbbHigh:SetText("6") end
+        panel.playerPowerBarBorderSlider = pbBorderSlider
+    end
+
     local castbarBox, castbarBody = MkCollapsible(frameGroup, "Castbar", fullW, castbarBoxH, false)
     castbarBox:Hide(); panel.playerCastbarBox = castbarBox; panel.playerCastbarBody = castbarBody
 
@@ -1143,6 +1175,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
                 box:ClearAllPoints(); box:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -sectionGap); box:SetWidth(fullW); box:SetShown(show)
                 if show then prev = box end
             end
+            local showPB = (k == "player" or k == "target" or k == "focus" or k == "boss")
+            Chain(powerBarBox, showPB)
             Chain(castbarBox, showCB)
             Chain(textGroup, true)
             Chain(statusBox, showSt)
@@ -1155,7 +1189,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             if panel._msufFramesScrollUpdate then panel._msufFramesScrollUpdate() end
         end
         panel._msufRelayoutUnitBoxes = Relayout
-        for _, box in ipairs({ basicsBox, castbarBox, textGroup, statusBox, loadCondBox, sizeBox, bossLayoutBox, anchorGroup }) do
+        for _, box in ipairs({ basicsBox, powerBarBox, castbarBox, textGroup, statusBox, loadCondBox, sizeBox, bossLayoutBox, anchorGroup }) do
             if box then box._msufOnCollapsedChanged = function() Relayout(panel._msufLastApplyKey or "player") end end
         end
         Relayout("player")
@@ -1399,6 +1433,29 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     }
     for _, s in ipairs(BASIC_EVALS) do
         local w = panel[s[1]]; if w and w.SetChecked then w:SetChecked(s[2](conf)) end
+    end
+
+    -- Power Bar sync
+    do
+        MSUF_DB.bars = MSUF_DB.bars or {}
+        local b = MSUF_DB.bars
+        local showKey = isPlayer and "showPlayerPowerBar" or isTarget and "showTargetPowerBar"
+            or isFocus and "showFocusPowerBar" or isBoss and "showBossPowerBar" or nil
+        local showPB = (isPlayer or isTarget or isFocus or isBoss)
+        if panel.playerPowerBarBox then panel.playerPowerBarBox:SetShown(showPB and isFrames) end
+        if panel.playerPowerBarShowCB and showKey then
+            panel.playerPowerBarShowCB:SetChecked(b[showKey] ~= false)
+        end
+        if panel.playerPowerBarHeightSlider then
+            local h = tonumber(b.powerBarHeight) or 6; if h < 1 then h = 1 elseif h > 20 then h = 20 end
+            panel.playerPowerBarHeightSlider:SetValue(h)
+        end
+        if panel.playerPowerBarEmbedCB then panel.playerPowerBarEmbedCB:SetChecked(b.embedPowerBarIntoHealth == true) end
+        if panel.playerPowerBarBorderCB then panel.playerPowerBarBorderCB:SetChecked(b.powerBarBorderEnabled == true) end
+        if panel.playerPowerBarBorderSlider then
+            local t = tonumber(b.powerBarBorderThickness) or 1; if t < 0 then t = 0 elseif t > 6 then t = 6 end
+            panel.playerPowerBarBorderSlider:SetValue(t)
+        end
     end
 
     -- ToT inline
@@ -1693,6 +1750,44 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             w:SetScript("OnClick", function(self) if not IsFramesTab() then return end
                 local c = EnsureKeyDB(); c[pair[2]] = self:GetChecked() and true or false; ApplyCurrent()
                 if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup(CurrentKey(), c) end end)
+        end
+    end
+
+    -- Power Bar controls
+    do
+        local PB_KEY_MAP = { player = "showPlayerPowerBar", target = "showTargetPowerBar",
+            focus = "showFocusPowerBar", boss = "showBossPowerBar" }
+        local function PBApply()
+            if _G.MSUF_ApplyPowerBarEmbedLayout_All then _G.MSUF_ApplyPowerBarEmbedLayout_All() end
+            if _G.MSUF_ApplyPowerBarBorder_All then _G.MSUF_ApplyPowerBarBorder_All() end
+            ApplyCurrent()
+        end
+        local function PBBars() EnsureDB(); MSUF_DB.bars = MSUF_DB.bars or {}; return MSUF_DB.bars end
+        if panel.playerPowerBarShowCB then
+            panel.playerPowerBarShowCB:SetScript("OnClick", function(self)
+                local k = CanonKey(CurrentKey()); local bk = PB_KEY_MAP[k]; if not bk then return end
+                PBBars()[bk] = self:GetChecked() and true or false; PBApply()
+            end)
+        end
+        if panel.playerPowerBarHeightSlider then
+            panel.playerPowerBarHeightSlider:SetScript("OnValueChanged", function(self, v)
+                v = math.floor(v + 0.5); PBBars().powerBarHeight = v; PBApply()
+            end)
+        end
+        if panel.playerPowerBarEmbedCB then
+            panel.playerPowerBarEmbedCB:SetScript("OnClick", function(self)
+                PBBars().embedPowerBarIntoHealth = self:GetChecked() and true or false; PBApply()
+            end)
+        end
+        if panel.playerPowerBarBorderCB then
+            panel.playerPowerBarBorderCB:SetScript("OnClick", function(self)
+                PBBars().powerBarBorderEnabled = self:GetChecked() and true or false; PBApply()
+            end)
+        end
+        if panel.playerPowerBarBorderSlider then
+            panel.playerPowerBarBorderSlider:SetScript("OnValueChanged", function(self, v)
+                v = math.floor(v + 0.5); PBBars().powerBarBorderThickness = v; PBApply()
+            end)
         end
     end
 

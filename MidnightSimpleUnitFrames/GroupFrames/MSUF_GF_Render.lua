@@ -268,18 +268,14 @@ local function ApplyFrameBorder(f, kind)
 
     local bf = f._msufGFBorderFrame
     if bf then
-        local borderOn   = (conf.borderEnabled == true)
-        local borderSize = borderOn and math_max(1, tonumber(conf.borderSize) or 1) or 1
-        if borderOn then
+        local borderSize = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2
+        if borderSize > 0 then
             _borderBd.edgeSize = borderSize
             bf:SetBackdrop(_borderBd)
             bf:SetBackdropColor(0, 0, 0, 0)
-            bf:SetBackdropBorderColor(
-                conf.borderR or 0, conf.borderG or 0,
-                conf.borderB or 0, conf.borderA or 1)
+            bf:SetBackdropBorderColor(0, 0, 0, 1)
             bf:Show()
         else
-            bf:SetBackdrop(nil)
             bf:Hide()
         end
     end
@@ -353,7 +349,7 @@ end
 local function ApplyGeometry(f, kind)
     local conf   = GF.GetConf(kind)
     local powerH = conf.powerHeight or 6
-    local inset  = ((conf.borderEnabled == true) and math_max(1, tonumber(conf.borderSize) or 1)) or 1
+    local inset  = math_max(0, (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2)
 
     if f.health then
         f.health:ClearAllPoints()

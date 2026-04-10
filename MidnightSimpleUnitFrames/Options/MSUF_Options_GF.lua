@@ -348,10 +348,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
         { key = "font",       label = "Font Override",
           keys = { "fontOverride", "fontKey", "fontOutline", "useGlobalFontColor",
                    "fontR", "fontG", "fontB" } },
-        { key = "border",     label = "Border & Background",
-          keys = { "bgColorR", "bgColorG", "bgColorB", "bgColorA",
-                   "borderColorR", "borderColorG", "borderColorB", "borderColorA",
-                   "borderSize", "borderTexture" } },
+        { key = "border",     label = "Background",
+          keys = { "bgColorR", "bgColorG", "bgColorB", "bgColorA" } },
         { key = "range",      label = "Range Fade",
           keys = { "rangeFadeEnabled", "rangeFadeAlpha", "offlineAlpha", "hideOfflineDelay" } },
         { key = "indicators", label = "Indicators & Status Icons",
@@ -2316,37 +2314,19 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Section 6: Border & Background
+    -- Section 6: Background
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(280, "Border & Background", false, "border")
+        local box, body = AddSection(180, "Background", false, "border")
 
-        local enChk = SCheck({
-            name = "MSUF_GF_BorderEnableCheck", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
-            label = TR("Enable Border"),
-            get = function(k) return GF.Val(k, "borderEnabled") end,
-            set = function(k, v) GF.GetConf(k).borderEnabled = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
-        })
+        -- Hint: outline border is controlled in Bars menu
+        local hint = body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        hint:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -8)
+        hint:SetWidth(270); hint:SetJustifyH("LEFT")
+        hint:SetText(TR("Outline border thickness is configured in\nGlobal Style > Bars > Outline & Highlight Border."))
+        hint:SetTextColor(0.6, 0.75, 1.0)
 
-        local sizeSl = SSlider({
-            name = "MSUF_GF_BorderSizeSlider", parent = body, compact = true,
-            anchor = enChk, x = 0, y = -14,
-            min = 1, max = 4, step = 1, width = 270, default = 1,
-            get = function(k) return GF.Val(k, "borderSize") end,
-            set = function(k, v) GF.GetConf(k).borderSize = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
-            formatText = function(v) return string.format("Border Size: %d", v) end,
-        })
-
-        local borderLbl = MakeColorSwatch(body, sizeSl, "BOTTOMLEFT", 0, -16,
-            "Border Color",
-            function() return V("borderR"), V("borderG"), V("borderB") end,
-            function(r, g, b)
-                local c = C(); c.borderR = r; c.borderG = g; c.borderB = b
-                GF.MarkAllDirty(GF.DIRTY_BORDER)
-            end)
-
-        local bgLbl, bgSwatch = MakeColorSwatch(body, borderLbl, "BOTTOMLEFT", 0, -16,
+        local bgLbl, bgSwatch = MakeColorSwatch(body, hint, "BOTTOMLEFT", 0, -12,
             "Background Color",
             function() return V("bgR"), V("bgG"), V("bgB") end,
             function(r, g, b)

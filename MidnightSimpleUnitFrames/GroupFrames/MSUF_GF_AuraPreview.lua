@@ -353,7 +353,8 @@ local function BuildMockFrame(parent)
     local w = max(PREVIEW_MIN_W, floor(rawW * scale + 0.5))
     local h = max(PREVIEW_MIN_H, floor(rawH * scale + 0.5))
     local powerH = floor((conf.powerHeight or 6) * scale + 0.5)
-    local inset = 1
+    local insetBase = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 1
+    local inset = max(0, floor(insetBase * scale + 0.5))
 
     local f = CreateFrame("Frame", "MSUF_GFPreviewMock", parent, "BackdropTemplate")
     f:SetSize(w, h)
@@ -762,15 +763,39 @@ function GF.RefreshPreviewBox()
 
     -- Target/aggro highlight border
     if m._hlBorder then
-        local hlEn = conf.targetHighlight ~= false or conf.aggroHighlight ~= false
+        local gen = _G.MSUF_DB and _G.MSUF_DB.general
+        local gfDbKey = (kind == "raid") and "gf_raid" or "gf_party"
+        local gfDb = _G.MSUF_DB and _G.MSUF_DB[gfDbKey]
+        local function resolveHL(key, fallback)
+            if gfDb and gfDb.hlOverride and gfDb[key] ~= nil then return gfDb[key] end
+            if gen and gen[key] ~= nil then return gen[key] end
+            return fallback
+        end
+
+        local aggroEn  = resolveHL("hlAggroEnabled",  conf.aggroHighlight)
+        local targetEn = resolveHL("hlTargetEnabled", conf.targetHighlight)
+        local hlEn = (aggroEn ~= false) or (targetEn ~= false)
         if hlEn then
+            local sz  = max(1, tonumber(resolveHL("hlAggroSize", (gen and gen.highlightBorderThickness) or 2)) or 2)
+            local ofs = tonumber(resolveHL("hlAggroOffset", 0)) or 0
             local r, g, b = 1, 0.4, 0
-            if conf.aggroHighlight ~= false then
-                r, g, b = 1, 0.2, 0.1  -- aggro red-orange
-            elseif conf.targetHighlight ~= false then
-                r, g, b = 1, 1, 1      -- target white
+            if aggroEn ~= false then
+                r = tonumber(resolveHL("hlAggroColorR", 1.0)) or 1.0
+                g = tonumber(resolveHL("hlAggroColorG", 0.2)) or 0.2
+                b = tonumber(resolveHL("hlAggroColorB", 0.1)) or 0.1
+            elseif targetEn ~= false then
+                r = tonumber(resolveHL("hlTargetColorR", 1.0)) or 1.0
+                g = tonumber(resolveHL("hlTargetColorG", 1.0)) or 1.0
+                b = tonumber(resolveHL("hlTargetColorB", 1.0)) or 1.0
             end
+            m._hlBorder:ClearAllPoints()
+            m._hlBorder:SetPoint("TOPLEFT", m, "TOPLEFT", -ofs, ofs)
+            m._hlBorder:SetPoint("BOTTOMRIGHT", m, "BOTTOMRIGHT", ofs, -ofs)
             if m._hlEdges then
+                m._hlEdges[1]:SetHeight(sz)
+                m._hlEdges[2]:SetHeight(sz)
+                m._hlEdges[3]:SetWidth(sz)
+                m._hlEdges[4]:SetWidth(sz)
                 for i = 1, 4 do m._hlEdges[i]:SetColorTexture(r, g, b, 0.6) end
             end
             m._hlBorder:Show()

@@ -16,6 +16,39 @@ local MSUF_EventBus_Register = _G.MSUF_EventBus_Register
 local MSUF_EventBus_Unregister = _G.MSUF_EventBus_Unregister
 
 local _borderCfg = { serial = -1 }
+
+-- LibCustomGlow for dispel glow effect
+local LCG = LibStub and LibStub("LibCustomGlow-1.0", true)
+
+------------------------------------------------------------------------
+-- Dispel glow helpers (UF) — zero-alloc color table reuse
+------------------------------------------------------------------------
+local _glowColorTbl = { 0, 0, 0, 1 }
+
+local function _StartDispelGlow(frame, r, g, b, cfg)
+    if not LCG then return end
+    local anchor = frame._msufHighlightOutline or frame
+    _glowColorTbl[1], _glowColorTbl[2], _glowColorTbl[3] = r, g, b
+    local style = cfg.dispelGlowStyle
+    if style == "AUTOCAST" then
+        LCG.AutoCastGlow_Start(anchor, _glowColorTbl, cfg.dispelGlowLines, cfg.dispelGlowFreq, nil, nil, nil, "msufDispel")
+    elseif style == "PROC" then
+        LCG.ProcGlow_Start(anchor, { color = _glowColorTbl, key = "msufDispel" })
+    else -- PIXEL default
+        LCG.PixelGlow_Start(anchor, _glowColorTbl, cfg.dispelGlowLines, cfg.dispelGlowFreq, nil, cfg.dispelGlowThick, nil, nil, nil, "msufDispel")
+    end
+    frame._msufDispelGlowActive = true
+end
+
+local function _StopDispelGlow(frame)
+    if not frame._msufDispelGlowActive then return end
+    frame._msufDispelGlowActive = nil
+    if not LCG then return end
+    local anchor = frame._msufHighlightOutline or frame
+    LCG.PixelGlow_Stop(anchor, "msufDispel")
+    LCG.AutoCastGlow_Stop(anchor, "msufDispel")
+    LCG.ProcGlow_Stop(anchor, "msufDispel")
+end
 local function _Clamp01(v, def)
     if type(v) ~= "number" then return def end
     if v < 0 then return 0 elseif v > 1 then return 1 end
@@ -43,6 +76,12 @@ local function _RefreshBorderSettingsCache()
     _borderCfg.purgeR  = _Clamp01(g and g.purgeBorderColorR,  1.00)
     _borderCfg.purgeG  = _Clamp01(g and g.purgeBorderColorG,  0.85)
     _borderCfg.purgeB  = _Clamp01(g and g.purgeBorderColorB,  0.00)
+    -- Dispel glow settings
+    _borderCfg.dispelGlowEnabled = (g and g.hlDispelGlowEnabled) and true or false
+    _borderCfg.dispelGlowStyle   = (g and g.hlDispelGlowStyle) or "PIXEL"
+    _borderCfg.dispelGlowLines   = tonumber(g and g.hlDispelGlowLines) or 8
+    _borderCfg.dispelGlowFreq    = tonumber(g and g.hlDispelGlowFrequency) or 0.25
+    _borderCfg.dispelGlowThick   = tonumber(g and g.hlDispelGlowThickness) or 2
     return _borderCfg
 end
 
@@ -50,9 +89,13 @@ local _borderIterState = {}
 
 local function _Iter_SyncBorderStamps(uf)
     if not uf or not uf.unit then return end
-    local S = _borderIterState
-    uf._msufBarBorderStamp = S.stamp
-    uf._msufBarOutlineThickness = S.thickness
+    local thickness, stamp = 0, 0
+    local get = MSUF_GetDesiredBarBorderThicknessAndStamp
+    if type(get) == "function" then
+        thickness, stamp = get(uf)
+    end
+    uf._msufBarBorderStamp = stamp
+    uf._msufBarOutlineThickness = thickness
     uf._msufBarOutlineEdgeSize = -1
     uf._msufHighlightEdgeSize = -1
     uf._msufHighlightColorKey = -1
@@ -60,7 +103,8 @@ local function _Iter_SyncBorderStamps(uf)
     local pb = uf.targetPowerBar
     local pbDetached = uf._msufPowerBarDetached
     uf._msufBarOutlineBottomIsPower = (pb and not pbDetached and pb.IsShown and pb:IsShown()) and true or false
-    if S.apply then S.apply(uf) end
+    local apply = _G.MSUF_RefreshRareBarVisuals
+    if type(apply) == "function" then apply(uf) end
 end
 
 local function _Iter_ResetBorderOnScale(uf)
@@ -194,6 +238,13 @@ end
 local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
     local hlFrame = self._msufHighlightOutline
 
+    -- Glow management: start on dispel (hlKey==2), stop otherwise
+    if hlKey == 2 and cfg.dispelGlowEnabled then
+        _StartDispelGlow(self, hlR, hlG, hlB, cfg)
+    else
+        _StopDispelGlow(self)
+    end
+
     if hlKey == 0 then
         if hlFrame then hlFrame:Hide() end
         self._msufHighlightColorKey = 0
@@ -231,6 +282,7 @@ local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
         hlFrame:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = hlEdge })
         self._msufHighlightEdgeSize = hlEdge
         self._msufHighlightColorKey = -1  -- force recolor
+        self._msufHighlightBottomIsPower = nil  -- force re-anchor with new offset
     end
 
     if self._msufHighlightColorKey ~= hlKey then
@@ -259,7 +311,7 @@ MSUF_ApplyRareVisuals = function(self)
     end
     local baseThickness = 0
     if type(MSUF_GetDesiredBarBorderThicknessAndStamp) == "function" then
-        baseThickness = select(1, MSUF_GetDesiredBarBorderThicknessAndStamp())
+        baseThickness = select(1, MSUF_GetDesiredBarBorderThicknessAndStamp(self))
     end
     baseThickness = tonumber(baseThickness) or 0
 
@@ -292,6 +344,18 @@ MSUF_ApplyRareVisuals = function(self)
     local dispel = false
     do
         local test = (_G.MSUF_DispelBorderTestMode) and true or false
+        -- Scope filtering for test mode
+        if test then
+            local testScope = _G.MSUF_DispelBorderTestScope or "shared"
+            if testScope ~= "shared" then
+                local u = self.unit
+                if testScope == "party" or testScope == "raid" or testScope == "gf_party" or testScope == "gf_raid" then
+                    test = false  -- GF scope: don't show on UF
+                elseif u ~= testScope then
+                    test = false  -- Different UF: don't show
+                end
+            end
+        end
         local wantDispel = (cfg.dispelOutlineMode == 1) or test
         if wantDispel then
             local u = self.unit
@@ -356,52 +420,103 @@ _G.MSUF_ApplyBarOutlineThickness_All = _G.MSUF_ApplyBarOutlineThickness_All or f
     if MSUF_BarBorderCache then
         MSUF_BarBorderCache.stamp = nil
         MSUF_BarBorderCache.thickness = 0
+        if type(MSUF_BarBorderCache.byScope) == "table" then
+            for k in pairs(MSUF_BarBorderCache.byScope) do
+                MSUF_BarBorderCache.byScope[k] = nil
+            end
+        end
     end
-
-    local get = MSUF_GetDesiredBarBorderThicknessAndStamp
-    local thickness, stamp = 0, 0
-    if type(get) == "function" then
-        thickness, stamp = get()
-    end
-
-    local apply = _G.MSUF_RefreshRareBarVisuals
-    _borderIterState.stamp = stamp
-    _borderIterState.thickness = thickness
-    _borderIterState.apply = apply
     MSUF_ForEachUnitFrame(_Iter_SyncBorderStamps)
 end
 
-_G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(active)
+_G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(active, scope)
     _G.MSUF_AggroBorderTestMode = active and true or false
+    _G.MSUF_AggroBorderTestScope = scope or "shared"
+    local testScope = _G.MSUF_AggroBorderTestScope
+    local isShared = (testScope == "shared")
+    local isGF = (testScope == "party" or testScope == "raid" or testScope == "gf_party" or testScope == "gf_raid")
+
     local fn = _G.MSUF_RefreshRareBarVisuals
     local frames = _G.MSUF_UnitFrames
-    if type(fn) ~= "function" or not frames then return end
-    local t = frames.target
-    if t and t.unit == "target" then fn(t) end
-    local f = frames.focus
-    if f and f.unit == "focus" then fn(f) end
-    for i = 1, 5 do
-        local b = frames["boss" .. i]
-        if b and b.unit == ("boss" .. i) then fn(b) end
+    if type(fn) == "function" and frames then
+        if isShared then
+            local t = frames.target; if t and t.unit == "target" then fn(t) end
+            local f = frames.focus; if f and f.unit == "focus" then fn(f) end
+            for i = 1, 5 do local b = frames["boss" .. i]; if b and b.unit == ("boss" .. i) then fn(b) end end
+        elseif not isGF then
+            local uf = frames[testScope]; if uf and uf.unit == testScope then fn(uf) end
+        end
+    end
+    -- Also refresh Group Frames
+    local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+    if GF and GF._UpdateAggro and GF.frames then
+        for gf in pairs(GF.frames) do
+            if not active then
+                gf._msufGFAggroLevel = nil
+                local border = gf._msufGFHighlightBorder
+                if border and border:IsShown() and not gf._msufGFDispelType then
+                    border._msufHLActivePrio = nil; border:Hide()
+                end
+            end
+            GF._UpdateAggro(gf, gf.unit)
+        end
     end
 end
 
 -- Options-only: Test mode to force the dispel border on while the Settings panel is open.
 -- This does NOT change the DB or aura filters; it only affects the outline highlight rendering.
-_G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(active)
+-- scope: "shared" = all frames, "player"/"target"/etc = that UF only, "party"/"raid" = GF only
+_G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(active, scope)
     _G.MSUF_DispelBorderTestMode = active and true or false
+    _G.MSUF_DispelBorderTestScope = scope or "shared"
+    local testScope = _G.MSUF_DispelBorderTestScope
+    local isShared = (testScope == "shared")
+    local isGF = (testScope == "party" or testScope == "raid" or testScope == "gf_party" or testScope == "gf_raid")
+
+    -- UF frames: only refresh if shared or matching UF scope
     local fn = _G.MSUF_RefreshRareBarVisuals
     local frames = _G.MSUF_UnitFrames
-    if type(fn) ~= "function" or not frames then return end
+    if type(fn) == "function" and frames then
+        local ufUnits = isShared and { "player", "target", "focus", "targettarget" } or (not isGF and { testScope } or {})
+        for _, u in ipairs(ufUnits) do
+            local uf = frames[u]; if uf and uf.unit == u then fn(uf) end
+        end
+    end
+    -- Also force-clear UF glow when turning off
+    if not active and frames then
+        for _, uf in pairs(frames) do
+            if uf then _StopDispelGlow(uf) end
+        end
+    end
 
-    local p = frames.player
-    if p and p.unit == "player" then fn(p) end
-    local t = frames.target
-    if t and t.unit == "target" then fn(t) end
-    local f = frames.focus
-    if f and f.unit == "focus" then fn(f) end
-    local tt = frames.targettarget
-    if tt and tt.unit == "targettarget" then fn(tt) end
+    -- GF frames: only refresh if shared or matching GF scope
+    local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+    if GF and GF._UpdateDispel and GF.frames then
+        for gf in pairs(GF.frames) do
+            local kind = gf._msufGFKind or "party"
+            local matchScope = isShared or isGF
+            -- When turning OFF: always clean up ALL GF frames
+            if not active then
+                gf._msufGFDispelType = nil
+                if gf._msufGFDispelGlowActive then
+                    gf._msufGFDispelGlowActive = nil
+                    if LCG then
+                        local anchor = gf._msufGFHighlightBorder or gf
+                        LCG.PixelGlow_Stop(anchor, "msufDispel")
+                        LCG.AutoCastGlow_Stop(anchor, "msufDispel")
+                        LCG.ProcGlow_Stop(anchor, "msufDispel")
+                    end
+                end
+                local border = gf._msufGFHighlightBorder
+                if border and border:IsShown() and not gf._msufGFAggroLevel then
+                    border._msufHLActivePrio = nil; border:Hide()
+                end
+                GF._UpdateDispel(gf, gf.unit)
+            elseif matchScope then
+                GF._UpdateDispel(gf, gf.unit)
+            end
+        end
+    end
 end
 
 -- Options-only: Test mode to force the purge border on while the Settings panel is open.

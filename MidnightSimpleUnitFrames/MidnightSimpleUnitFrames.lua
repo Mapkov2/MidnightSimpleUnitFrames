@@ -745,17 +745,44 @@ end
 
 -- ns.Text core rendering moved to MSUF_Text.lua
 
-local MSUF_BarBorderCache = { stamp = nil, thickness = 0 }
+local MSUF_BarBorderCache = { stamp = nil, thickness = 0, byScope = {} }
+local MSUF_BarBorderScopeIds = {
+    shared = 0, player = 1, target = 2, focus = 3,
+    targettarget = 4, pet = 5, boss = 6, party = 7, raid = 8,
+}
 local function MSUF_GetBarBorderStyleId(style)
     if style == "THICK" then  return 2 end
     if style == "SHADOW" then  return 3 end
     if style == "GLOW" then  return 4 end
      return 1 -- THIN/default
 end
-local function MSUF_GetDesiredBarBorderThicknessAndStamp()
+local function MSUF_NormalizeBarBorderScope(frameOrUnit)
+    local unit = frameOrUnit
+    if type(frameOrUnit) == "table" then unit = frameOrUnit.unit end
+    if type(unit) ~= "string" or unit == "" then return "shared" end
+    if unit == "boss" or unit:sub(1, 4) == "boss" then return "boss" end
+    return unit
+end
+local function MSUF_GetScopedBarBorderThicknessDB(scopeKey)
+    if scopeKey == "shared" or not MSUF_DB then return nil end
+    local db = MSUF_DB[scopeKey]
+    if type(db) == "table" and db.hlOverride and db.barOutlineThickness ~= nil then
+        return db
+    end
+    return nil
+end
+local function MSUF_GetDesiredBarBorderThicknessAndStamp(frameOrUnit)
+    local scopeKey = MSUF_NormalizeBarBorderScope(frameOrUnit)
+    local scopeCache = MSUF_BarBorderCache.byScope
+    if type(scopeCache) ~= "table" then
+        scopeCache = {}
+        MSUF_BarBorderCache.byScope = scopeCache
+    end
+
     local barsDB = MSUF_DB and MSUF_DB.bars
     local gDB    = MSUF_DB and MSUF_DB.general
-    local raw = barsDB and barsDB.barOutlineThickness
+    local scopedDB = MSUF_GetScopedBarBorderThicknessDB(scopeKey)
+    local raw = (scopedDB and scopedDB.barOutlineThickness) or (barsDB and barsDB.barOutlineThickness)
     local rawNum = (type(raw) == "number") and raw or tonumber(raw)
     local rawToken = rawNum and math_floor(rawNum * 10 + 0.5) or -999
     local useBit = 1
@@ -765,8 +792,12 @@ local function MSUF_GetDesiredBarBorderThicknessAndStamp()
         if barsDB.showBarBorder == false then showToken = 0 else showToken = 2 end
     end
     local styleId = MSUF_GetBarBorderStyleId(gDB and gDB.barBorderStyle)
-    local stamp = rawToken * 10000 + useBit * 1000 + showToken * 10 + styleId
-    if MSUF_BarBorderCache.stamp ~= stamp then
+    local scopeId = MSUF_BarBorderScopeIds[scopeKey] or 99
+    local scopeBit = scopedDB and 1 or 0
+    local stamp = scopeId * 10000000 + scopeBit * 1000000 + rawToken * 10000 + useBit * 1000 + showToken * 10 + styleId
+
+    local cache = scopeCache[scopeKey]
+    if not cache or cache.stamp ~= stamp then
         local thickness = rawNum
         if type(thickness) ~= "number" then
             local enabled = (useBit == 1)
@@ -780,15 +811,21 @@ local function MSUF_GetDesiredBarBorderThicknessAndStamp()
                 local style = (gDB and gDB.barBorderStyle) or "THIN"
                 thickness = map[style] or 1
             end
-    end
+        end
         thickness = tonumber(thickness) or 0
         thickness = math_floor(thickness + 0.5)
         if thickness < 0 then thickness = 0 end
         if thickness > 6 then thickness = 6 end
-        MSUF_BarBorderCache.stamp = stamp
-        MSUF_BarBorderCache.thickness = thickness
+        cache = cache or {}
+        cache.stamp = stamp
+        cache.thickness = thickness
+        scopeCache[scopeKey] = cache
+        if scopeKey == "shared" then
+            MSUF_BarBorderCache.stamp = stamp
+            MSUF_BarBorderCache.thickness = thickness
+        end
     end
-    return MSUF_BarBorderCache.thickness, MSUF_BarBorderCache.stamp
+    return cache.thickness, cache.stamp
 end
 _G.MSUF_BarBorderCache = MSUF_BarBorderCache
 _G.MSUF_GetDesiredBarBorderThicknessAndStamp = MSUF_GetDesiredBarBorderThicknessAndStamp
@@ -3131,7 +3168,7 @@ local function MSUF_UFStep_Border(self)
             if self.border then
                 self.border:Hide()
             end
-            local thickness, stamp = MSUF_GetDesiredBarBorderThicknessAndStamp()
+            local thickness, stamp = MSUF_GetDesiredBarBorderThicknessAndStamp(self)
             local pb = self.targetPowerBar
             local pbDetached = self._msufPowerBarDetached
             local bottomIsPower = (pb and not pbDetached and pb.IsShown and pb:IsShown()) and true or false

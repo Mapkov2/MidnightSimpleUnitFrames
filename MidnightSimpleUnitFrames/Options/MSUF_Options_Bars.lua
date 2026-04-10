@@ -58,11 +58,11 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             local gf = MSUF_DB[gfKey]
             if gf and gf.hlOverride and gf[generalKey] ~= nil then return gf[generalKey] end
         else
-            -- Per-unit override
+            -- Per-unit override (unified hlOverride flag)
             local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
             if uk then
                 local u = MSUF_DB[uk]
-                if u and u.hpPowerTextOverride == true and u[generalKey] ~= nil then return u[generalKey] end
+                if u and u.hlOverride and u[generalKey] ~= nil then return u[generalKey] end
             end
         end
         local v = G()[generalKey]
@@ -82,16 +82,67 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             end
             gf[generalKey] = val
         else
-            -- Per-unit override
+            -- Per-unit override (unified hlOverride flag)
             local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
             if uk then
                 local u = type(_Scope_GetUnitDB) == "function" and _Scope_GetUnitDB(uk)
                 if u then
-                    if u.hpPowerTextOverride ~= true and type(_Scope_EnableOverride) == "function" then _Scope_EnableOverride(uk) end
+                    if not u.hlOverride then
+                        u.hlOverride = true
+                        if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(u) end
+                    end
                     u[generalKey] = val
                 end
             else
                 G()[generalKey] = val
+            end
+        end
+        if type(applyFn) == "function" then pcall(applyFn, val) end
+        if type(_Scope_SyncUI) == "function" then _Scope_SyncUI() end
+    end
+
+    local function ScopeGetBars(barsKey, defaultVal)
+        EnsureDB()
+        local gfKey = _Scope_GetGFKey and _Scope_GetGFKey()
+        if gfKey then
+            local gf = MSUF_DB[gfKey]
+            if gf and gf.hlOverride and gf[barsKey] ~= nil then return gf[barsKey] end
+        else
+            local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
+            if uk then
+                local u = MSUF_DB[uk]
+                if u and u.hlOverride and u[barsKey] ~= nil then return u[barsKey] end
+            end
+        end
+        local b = B()
+        local v = b and b[barsKey]
+        return v ~= nil and v or defaultVal
+    end
+
+    local function ScopeSetBars(barsKey, val, applyFn)
+        EnsureDB()
+        local gfKey = _Scope_GetGFKey and _Scope_GetGFKey()
+        if gfKey then
+            MSUF_DB[gfKey] = MSUF_DB[gfKey] or {}
+            local gf = MSUF_DB[gfKey]
+            if not gf.hlOverride then
+                gf.hlOverride = true
+                if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(gf) end
+            end
+            gf[barsKey] = val
+        else
+            local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
+            if uk then
+                local u = type(_Scope_GetUnitDB) == "function" and _Scope_GetUnitDB(uk)
+                if u then
+                    if not u.hlOverride then
+                        u.hlOverride = true
+                        if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(u) end
+                    end
+                    u[barsKey] = val
+                end
+            else
+                B()[barsKey] = val
             end
         end
         if type(applyFn) == "function" then pcall(applyFn, val) end
@@ -193,7 +244,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             return (gf and gf.hlOverride == true)
         end
         local u = MSUF_DB[key]
-        return (u and u.hpPowerTextOverride == true)
+        return (u and u.hlOverride == true)
     end
 
     local function RefreshScopeButtons()
@@ -316,7 +367,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     _MSUF_HPText_GetUnitDB = function(unitKey) EnsureDB(); MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}; return MSUF_DB[unitKey] end
     _MSUF_HPText_EnableOverride = function(unitKey)
         local u = _MSUF_HPText_GetUnitDB(unitKey); if not u then return end
-        u.hpPowerTextOverride = true
+        u.hlOverride = true
         local g = G()
         if u.hpTextMode == nil then u.hpTextMode = g.hpTextMode end
         if u.hpTextReverse == nil then u.hpTextReverse = g.hpTextReverse end
@@ -362,13 +413,14 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                 gf.hlOverride = false
             end
             local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+            if GF and GF.InvalidateConfCache then GF.InvalidateConfCache() end
             if GF and GF.RefreshVisuals then GF.RefreshVisuals()
             elseif GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_BORDER) end
-            _MSUF_SyncHpPowerTextScopeUI()
+            if _MSUF_SyncHpPowerTextScopeUI then _MSUF_SyncHpPowerTextScopeUI() end
             return
         end
 
-        -- Unit scope: toggle hlOverride + hpPowerTextOverride
+        -- Unit scope: toggle hlOverride
         local uk = _MSUF_HPText_GetUnitKey(); if not uk then self:SetChecked(false); return end
         local u = _MSUF_HPText_GetUnitDB(uk); if not u then self:SetChecked(false); return end
         if self:GetChecked() then
@@ -376,7 +428,6 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             u.hlOverride = true
             HlSeedFromGeneral(u)
         else
-            u.hpPowerTextOverride = false
             u.hlOverride = false
         end
         _BumpBorderSerial()
@@ -391,7 +442,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                 end
             end
         end
-        _MSUF_SyncHpPowerTextScopeUI()
+        if _MSUF_SyncHpPowerTextScopeUI then _MSUF_SyncHpPowerTextScopeUI() end
     end)
 
     -- Reset overrides handler
@@ -400,7 +451,6 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         for _, uk in ipairs(ALL_UNITS) do
             local u = MSUF_DB[uk]
             if u then
-                if u.hpPowerTextOverride then u.hpPowerTextOverride = false; any = true end
                 if u.hlOverride then u.hlOverride = false; any = true end
             end
         end
@@ -414,7 +464,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             local GF = _G.MSUF_NS and _G.MSUF_NS.GF
             if GF and GF.RefreshVisuals then GF.RefreshVisuals() end
         end
-        _MSUF_SyncHpPowerTextScopeUI()
+        if _MSUF_SyncHpPowerTextScopeUI then _MSUF_SyncHpPowerTextScopeUI() end
     end)
     scopeResetBtn:SetScript("OnEnter", function(self)
         if not GameTooltip then return end
@@ -456,8 +506,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         anchor = texColLabel, x = -14, y = -4, width = 280, maxVisible = 12,
         iconWidth = 80, iconHeight = 12,
         items = function() return UI.StatusBarTextureItems(nil) end,
-        get = function() return G().barTexture or "Blizzard" end,
-        set = function(v) G().barTexture = v; ApplyBarTex() end,
+        get = function() return ScopeGet("barTexture", "Blizzard") end,
+        set = function(v) ScopeSet("barTexture", v, ApplyBarTex) end,
     })
 
     local barBgTexLabel = box1Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -469,8 +519,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         anchor = barBgTexLabel, x = -14, y = -4, width = 280, maxVisible = 12,
         iconWidth = 80, iconHeight = 12,
         items = function() return UI.StatusBarTextureItems(TR("Use foreground texture")) end,
-        get = function() return G().barBackgroundTexture or "" end,
-        set = function(v) G().barBackgroundTexture = v; ApplyBarTex() end,
+        get = function() return ScopeGet("barBackgroundTexture", "") end,
+        set = function(v) ScopeSet("barBackgroundTexture", v, ApplyBarTex) end,
     })
 
     -- Right col: Gradient
@@ -624,8 +674,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     selfHealPredCB.text = _G["MSUF_SelfHealPredictionCheckText"]
     if selfHealPredCB.text then selfHealPredCB.text:SetText(TR("Heal prediction")); selfHealPredCB.text:SetTextColor(0.75, 0.75, 0.75) end
     UI.StyleCheckmark(selfHealPredCB)
-    do EnsureDB(); selfHealPredCB:SetChecked(G().showSelfHealPrediction and true or false) end
-    selfHealPredCB:SetScript("OnClick", function(self) G().showSelfHealPrediction = self:GetChecked() and true or false; RefreshFrames() end)
+    do EnsureDB(); selfHealPredCB:SetChecked(ScopeGet("showSelfHealPrediction", false) and true or false) end
+    selfHealPredCB:SetScript("OnClick", function(self) ScopeSet("showSelfHealPrediction", self:GetChecked() and true or false, RefreshFrames) end)
 
     -- Right col: absorb textures (aligned with left col)
     local absorbTextureLabel = box2Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -637,8 +687,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         anchor = absorbTextureLabel, x = -14, y = -4, width = 280, maxVisible = 12,
         iconWidth = 80, iconHeight = 12,
         items = function() return UI.StatusBarTextureItems(TR("Use foreground texture")) end,
-        get = function() return G().absorbBarTexture or "" end,
-        set = function(v) G().absorbBarTexture = v; ApplyAbsorbTex(); Apply() end,
+        get = function() return ScopeGet("absorbBarTexture", "") end,
+        set = function(v) ScopeSet("absorbBarTexture", v, function() ApplyAbsorbTex(); Apply() end) end,
     })
 
     local healAbsorbLabel = box2Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -650,8 +700,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         anchor = healAbsorbLabel, x = -14, y = -4, width = 280, maxVisible = 12,
         iconWidth = 80, iconHeight = 12,
         items = function() return UI.StatusBarTextureItems(TR("Use foreground texture")) end,
-        get = function() return G().healAbsorbBarTexture or "" end,
-        set = function(v) G().healAbsorbBarTexture = v; ApplyAbsorbTex(); Apply() end,
+        get = function() return ScopeGet("healAbsorbBarTexture", "") end,
+        set = function(v) ScopeSet("healAbsorbBarTexture", v, function() ApplyAbsorbTex(); Apply() end) end,
     })
 
     local absorbOpacitySlider = CreateLabeledSlider("MSUF_AbsorbBarOpacitySlider", "Absorb bar opacity", box2Body, 0, 1, 0.05, 16, -200)
@@ -722,23 +772,22 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local function HlApply()
         local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
         _BumpBorderSerial()
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.InvalidateConfCache then GF.InvalidateConfCache() end
         if IsGFScope(scopeKey) then
-            local GF = _G.MSUF_NS and _G.MSUF_NS.GF
             if GF and GF.RefreshVisuals then GF.RefreshVisuals()
             elseif GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_BORDER or 0x10) end
         else
             if _G.MSUF_ApplyBarOutlineThickness_All then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
-            -- Shared scope: also refresh GF preview/live if active
-            local GF = _G.MSUF_NS and _G.MSUF_NS.GF
-            if GF then
-                if GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_BORDER or 0x10) end
-            end
+            if GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_BORDER or 0x10) end
         end
     end
     local function HlApplyGF()
         local GF = _G.MSUF_NS and _G.MSUF_NS.GF
-        if GF and GF.RefreshVisuals then GF.RefreshVisuals()
-        elseif GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_BORDER or 0x10) end
+        if not GF then return end
+        if GF.InvalidateConfCache then GF.InvalidateConfCache() end
+        if GF.RefreshVisuals then GF.RefreshVisuals()
+        elseif GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_BORDER or 0x10) end
     end
     local function IsCurrentScopeGF()
         local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
@@ -763,18 +812,35 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     HlSeedFromGeneral = function(db)
         local gen = G()
         local seeds = {
+            -- Box 1: Textures & Gradient
+            "barTexture", "barBackgroundTexture",
+            "gradientEnabled", "powerGradientEnabled", "gradientStrength",
+            "gradientDirection",
+            -- Box 2: Absorb Display
+            "absorbTextMode", "absorbAnchorMode",
+            "absorbBarOpacity", "healAbsorbBarOpacity",
+            "absorbBarTexture", "healAbsorbBarTexture",
+            "showSelfHealPrediction",
+            -- Box 3: Highlight borders
             "hlAggroEnabled", "hlAggroSize", "hlAggroOffset", "hlAggroLayer", "hlAggroMode",
             "hlAggroColorR", "hlAggroColorG", "hlAggroColorB",
             "hlDispelEnabled", "hlDispelColorR", "hlDispelColorG", "hlDispelColorB",
             "hlDispelColorMode",
+            "hlDispelGlowEnabled", "hlDispelGlowStyle", "hlDispelGlowLines",
+            "hlDispelGlowFrequency", "hlDispelGlowThickness",
             "hlPurgeEnabled", "hlPurgeColorR", "hlPurgeColorG", "hlPurgeColorB",
             "hlTargetEnabled", "hlTargetSize", "hlTargetOffset", "hlTargetLayer",
             "hlTargetColorR", "hlTargetColorG", "hlTargetColorB",
             "hlHoverSize", "hlHoverOffset",
             "hlPrioEnabled", "hlPrioOrder",
-            -- Absorb overlay keys
-            "absorbTextMode", "absorbAnchorMode",
-            "absorbBarOpacity", "healAbsorbBarOpacity",
+            -- Box 5/6: HP / Power Text
+            "hpTextMode", "powerTextMode", "hpTextReverse",
+            "hpTextSeparator", "powerTextSeparator",
+            "hpTextSpacerEnabled", "hpTextSpacerX",
+            "powerTextSpacerEnabled", "powerTextSpacerX",
+            "hpTextAnchor", "powerTextAnchor",
+            -- Box 7: Animation
+            "smoothPowerBar", "realtimePowerText",
         }
         for _, key in ipairs(seeds) do
             if db[key] == nil then
@@ -790,12 +856,13 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
         -- Legacy fallbacks for first-time migration
         if db.hlAggroSize == nil then db.hlAggroSize = gen.highlightBorderThickness or 2 end
+        if db.barOutlineThickness == nil then db.barOutlineThickness = B().barOutlineThickness end
         if db.hlAggroEnabled == nil then db.hlAggroEnabled = (gen.aggroOutlineMode == 1) end
         if db.hlDispelEnabled == nil then db.hlDispelEnabled = (gen.dispelOutlineMode == 1) end
         if db.hlPurgeEnabled == nil then db.hlPurgeEnabled = (gen.purgeOutlineMode == 1) end
     end
 
-    local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 480, "Outline & Highlight Border", true)
+    local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 740, "Outline & Highlight Border", true)
 
     -- Left col: thickness sliders
     local barOutlineThicknessSlider = CreateLabeledSlider("MSUF_BarOutlineThicknessSlider", "Outline thickness", box3Body, 0, 6, 1, 16, -350)
@@ -803,18 +870,46 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     barOutlineThicknessSlider:SetWidth(280)
     do local n = barOutlineThicknessSlider:GetName(); local t = _G[n .. "Text"]; if t then t:SetText(""); t:Hide() end end
     barOutlineThicknessSlider.onValueChanged = function(_, v)
-        B().barOutlineThickness = v; _BumpBorderSerial()
+        v = floor(v + 0.5); if v < 0 then v = 0 elseif v > 6 then v = 6 end
+        ScopeSetBars("barOutlineThickness", v); _BumpBorderSerial()
         if _G.MSUF_ApplyBarOutlineThickness_All then _G.MSUF_ApplyBarOutlineThickness_All() else Apply() end
+        -- Also refresh GF (unified: outline thickness controls GF frame border too)
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF then
+            if GF.InvalidateConfCache then GF.InvalidateConfCache() end
+            if GF.RefreshVisuals then GF.RefreshVisuals() end
+        end
     end
 
     local highlightBorderThicknessSlider = CreateLabeledSlider("MSUF_HighlightBorderThicknessSlider", "Highlight border thickness", box3Body, 1, 30, 1, 16, -420)
     highlightBorderThicknessSlider:ClearAllPoints(); highlightBorderThicknessSlider:SetPoint("TOPLEFT", barOutlineThicknessSlider, "BOTTOMLEFT", 0, -60)
     highlightBorderThicknessSlider:SetWidth(280)
     highlightBorderThicknessSlider.onValueChanged = function(_, v)
-        local db = HlDB()
-        db.hlAggroSize = v
-        if not IsCurrentScopeNonShared() then db.highlightBorderThickness = v end
-        HlApply()
+        v = floor(v + 0.5); if v < 1 then v = 1 elseif v > 30 then v = 30 end
+        EnsureDB()
+        MSUF_DB.general.highlightBorderThickness = v
+        MSUF_DB.general.hlAggroSize = v
+        local scopeDB = HlDB(); if scopeDB then scopeDB.hlAggroSize = v end
+        if MSUF_DB.gf_party then MSUF_DB.gf_party.hlAggroSize = v end
+        if MSUF_DB.gf_raid then MSUF_DB.gf_raid.hlAggroSize = v end
+        -- UF refresh
+        _BumpBorderSerial()
+        if _G.MSUF_ApplyBarOutlineThickness_All then _G.MSUF_ApplyBarOutlineThickness_All() end
+        -- GF refresh: invalidate cache + re-render every visible highlight border
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        local rfb = _G.MSUF_GF_RefreshBorder
+        if GF and rfb and GF.frames then
+            if GF.InvalidateConfCache then GF.InvalidateConfCache() end
+            for gf in pairs(GF.frames) do
+                local hb = gf._msufGFHighlightBorder
+                if hb then
+                    hb._msufHLEdgeSz = nil
+                    hb._msufHLEdge = nil
+                    hb._msufHLOfs = nil
+                    rfb(gf, gf.unit)
+                end
+            end
+        end
     end
 
     -- Right col: highlight borders + priority
@@ -860,15 +955,17 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if frames.target then fn(frames.target) end; if frames.focus then fn(frames.focus) end
             for i = 1, 5 do local b = frames["boss" .. i]; if b then fn(b) end end
         end
+        HlApplyGF()
     end
     local function DispelPurgeApply()
         _BumpBorderSerial()
         if _G.MSUF_DispelOutline_ApplyEventRegistration then _G.MSUF_DispelOutline_ApplyEventRegistration() end
-        if _G.MSUF_RefreshDispelOutlineStates then _G.MSUF_RefreshDispelOutlineStates(true); return end
+        if _G.MSUF_RefreshDispelOutlineStates then _G.MSUF_RefreshDispelOutlineStates(true) end
         local fn, frames = _G.MSUF_RefreshRareBarVisuals, _G.MSUF_UnitFrames
         if type(fn) == "function" and frames then
             for _, k in ipairs({ "player", "target", "focus", "targettarget" }) do if frames[k] then fn(frames[k]) end end
         end
+        HlApplyGF()
     end
 
     local hlSectionLabel = box3Body:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -877,11 +974,17 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     local aggroOutlineDrop, aggroTestCheck = MakeOutlineRow("MSUF_AggroOutlineDropdown", "aggroOutlineMode", "hlAggroEnabled", "Aggro border on", "Aggro border off", hlSectionLabel, -14, -14, 170, AggroApply)
     aggroTestCheck.tooltipText = TR("Aggro border: Target, Focus, Boss, Party, Raid frames")
-    aggroTestCheck:SetScript("OnClick", function(self) if _G.MSUF_SetAggroBorderTestMode then _G.MSUF_SetAggroBorderTestMode(self:GetChecked() and true or false) end end)
+    aggroTestCheck:SetScript("OnClick", function(self)
+        local scope = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        if _G.MSUF_SetAggroBorderTestMode then _G.MSUF_SetAggroBorderTestMode(self:GetChecked() and true or false, scope) end
+    end)
 
     local dispelOutlineDrop, dispelTestCheck = MakeOutlineRow("MSUF_DispelOutlineDropdown", "dispelOutlineMode", "hlDispelEnabled", "Dispel border on", "Dispel border off", aggroOutlineDrop, 0, -28, 170, DispelPurgeApply)
     dispelTestCheck.tooltipText = TR("Dispel border: Player, Target, Focus, Target of Target, Party, Raid")
-    dispelTestCheck:SetScript("OnClick", function(self) if _G.MSUF_SetDispelBorderTestMode then _G.MSUF_SetDispelBorderTestMode(self:GetChecked() and true or false) end end)
+    dispelTestCheck:SetScript("OnClick", function(self)
+        local scope = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        if _G.MSUF_SetDispelBorderTestMode then _G.MSUF_SetDispelBorderTestMode(self:GetChecked() and true or false, scope) end
+    end)
 
     -- Per-type test dropdown (visible next to Test checkbox)
     _G.MSUF_DispelBorderTestType = _G.MSUF_DispelBorderTestType or "Magic"
@@ -899,7 +1002,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         set = function(v)
             _G.MSUF_DispelBorderTestType = v
             if _G.MSUF_DispelBorderTestMode then
-                if _G.MSUF_SetDispelBorderTestMode then _G.MSUF_SetDispelBorderTestMode(true) end
+                local scope = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+                if _G.MSUF_SetDispelBorderTestMode then _G.MSUF_SetDispelBorderTestMode(true, scope) end
             end
         end,
     })
@@ -931,7 +1035,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if _G.MSUF_RefreshDispelTypeColorVisibility then _G.MSUF_RefreshDispelTypeColorVisibility() end
             -- Re-trigger dispel test mode if active so preview updates to new color mode
             if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
-                _G.MSUF_SetDispelBorderTestMode(true)
+                local scope = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+                _G.MSUF_SetDispelBorderTestMode(true, scope)
             end
             MSUF_BarsMenu_QueueScrollUpdate()
         end,
@@ -939,7 +1044,79 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     UI.AttachTooltip(_G["MSUF_DispelColorModeDropdown"], TR("Dispel color mode"),
         TR("Single color: one color for all dispels (set in Colors menu).\nPer debuff type: Magic / Curse / Disease / Poison each get their own color (set in Colors menu)."))
 
-    local purgeOutlineDrop, purgeTestCheck = MakeOutlineRow("MSUF_PurgeOutlineDropdown", "purgeOutlineMode", "hlPurgeEnabled", "Purge border on", "Purge border off", dispelColorModeDrop, 0, -28, 170, DispelPurgeApply)
+    -- Helper: apply glow change + re-trigger test mode if active
+    local function GlowApply()
+        HlApply(); HlApplyGF()
+        if _G.MSUF_DispelBorderTestMode and _G.MSUF_SetDispelBorderTestMode then
+            local scope = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+            _G.MSUF_SetDispelBorderTestMode(true, scope)
+        end
+    end
+
+    -- Dispel glow toggle
+    local dispelGlowCheck = CreateFrame("CheckButton", "MSUF_DispelGlowCheck", box3Body, "ChatConfigCheckButtonTemplate")
+    dispelGlowCheck:SetPoint("TOPLEFT", dispelColorModeDrop, "BOTTOMLEFT", 14, -8)
+    dispelGlowCheck.Text:SetText(TR("Dispel glow effect"))
+    dispelGlowCheck:SetChecked(HlGet("hlDispelGlowEnabled", false) and true or false)
+    dispelGlowCheck:SetScript("OnClick", function(self)
+        local v = self:GetChecked() and true or false
+        HlDB().hlDispelGlowEnabled = v
+        G().hlDispelGlowEnabled = v
+        GlowApply()
+    end)
+    UI.AttachTooltip(dispelGlowCheck, TR("Dispel glow"),
+        TR("Adds an animated glow overlay to the dispel border highlight.\nUses LibCustomGlow. Color follows the dispel border color."))
+
+    -- Glow style dropdown
+    local dispelGlowStyleDrop = UI.Dropdown({
+        name = "MSUF_DispelGlowStyleDropdown", parent = box3Body,
+        anchor = dispelGlowCheck, anchorPoint = "BOTTOMLEFT", x = -14, y = -6, width = 170,
+        items = {
+            { key = "PIXEL",    label = "Pixel" },
+            { key = "AUTOCAST", label = "AutoCast" },
+            { key = "PROC",     label = "Proc" },
+        },
+        get = function() return HlGet("hlDispelGlowStyle", "PIXEL") end,
+        set = function(v)
+            HlDB().hlDispelGlowStyle = v
+            G().hlDispelGlowStyle = v
+            GlowApply()
+        end,
+    })
+    UI.AttachTooltip(_G["MSUF_DispelGlowStyleDropdown"], TR("Glow style"),
+        TR("Pixel: animated dots around the border.\nAutoCast: spinning sparkle particles.\nProc: spell activation overlay."))
+
+    -- Glow lines slider
+    local dispelGlowLinesSlider = CreateLabeledSlider("MSUF_DispelGlowLinesSlider", "Glow lines / particles", box3Body, 2, 16, 1, 16, -350)
+    dispelGlowLinesSlider:ClearAllPoints(); dispelGlowLinesSlider:SetPoint("TOPLEFT", dispelGlowStyleDrop, "BOTTOMLEFT", 0, -8)
+    if dispelGlowLinesSlider.SetWidth then dispelGlowLinesSlider:SetWidth(170) end
+    dispelGlowLinesSlider.onValueChanged = function(_, v)
+        HlDB().hlDispelGlowLines = v
+        G().hlDispelGlowLines = v
+        GlowApply()
+    end
+
+    -- Glow frequency slider
+    local dispelGlowFreqSlider = CreateLabeledSlider("MSUF_DispelGlowFreqSlider", "Glow speed", box3Body, 0.05, 1.0, 0.05, 16, -350)
+    dispelGlowFreqSlider:ClearAllPoints(); dispelGlowFreqSlider:SetPoint("TOPLEFT", dispelGlowLinesSlider, "TOPLEFT", 0, -70)
+    if dispelGlowFreqSlider.SetWidth then dispelGlowFreqSlider:SetWidth(170) end
+    dispelGlowFreqSlider.onValueChanged = function(_, v)
+        HlDB().hlDispelGlowFrequency = v
+        G().hlDispelGlowFrequency = v
+        GlowApply()
+    end
+
+    -- Glow thickness slider (Pixel only)
+    local dispelGlowThickSlider = CreateLabeledSlider("MSUF_DispelGlowThickSlider", "Glow thickness (Pixel)", box3Body, 1, 5, 1, 16, -350)
+    dispelGlowThickSlider:ClearAllPoints(); dispelGlowThickSlider:SetPoint("TOPLEFT", dispelGlowFreqSlider, "TOPLEFT", 0, -70)
+    if dispelGlowThickSlider.SetWidth then dispelGlowThickSlider:SetWidth(170) end
+    dispelGlowThickSlider.onValueChanged = function(_, v)
+        HlDB().hlDispelGlowThickness = v
+        G().hlDispelGlowThickness = v
+        GlowApply()
+    end
+
+    local purgeOutlineDrop, purgeTestCheck = MakeOutlineRow("MSUF_PurgeOutlineDropdown", "purgeOutlineMode", "hlPurgeEnabled", "Purge border on", "Purge border off", dispelGlowThickSlider, 0, -70, 170, DispelPurgeApply)
     purgeTestCheck.tooltipText = TR("Purge border: Target, Focus, Target of Target, Boss")
     purgeTestCheck:SetScript("OnClick", function(self) if _G.MSUF_SetPurgeBorderTestMode then _G.MSUF_SetPurgeBorderTestMode(self:GetChecked() and true or false) end end)
 
@@ -1125,54 +1302,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end)
     do local on = HlGet("hlPrioEnabled", false); prioCheck:SetChecked(on); _Prio_SetEnabled(on) end
 
-    -- BOX 4: Power Bar Settings (default open)
-    local box4, box4Body = MakeCollapsibleBox(barGroup, box3, 230, "Power Bar Settings", true)
-
-    local targetPowerBarCheck = CreateLabeledCheckButton("MSUF_TargetPowerBarCheck", "Target", box4Body, 260, -260)
-    targetPowerBarCheck:ClearAllPoints(); targetPowerBarCheck:SetPoint("TOPLEFT", box4Body, "TOPLEFT", 14, -8)
-    local bossPowerBarCheck = CreateLabeledCheckButton("MSUF_BossPowerBarCheck", "Boss", box4Body, 260, -290)
-    bossPowerBarCheck:ClearAllPoints(); bossPowerBarCheck:SetPoint("LEFT", targetPowerBarCheck, "RIGHT", 80, 0)
-    local playerPowerBarCheck = CreateLabeledCheckButton("MSUF_PlayerPowerBarCheck", "Player", box4Body, 260, -320)
-    playerPowerBarCheck:ClearAllPoints(); playerPowerBarCheck:SetPoint("LEFT", bossPowerBarCheck, "RIGHT", 80, 0)
-    local focusPowerBarCheck = CreateLabeledCheckButton("MSUF_FocusPowerBarCheck", "Focus", box4Body, 260, -350)
-    focusPowerBarCheck:ClearAllPoints(); focusPowerBarCheck:SetPoint("LEFT", playerPowerBarCheck, "RIGHT", 80, 0)
-
-    local pbSep = box4Body:CreateTexture(nil, "ARTWORK"); pbSep:SetColorTexture(1, 1, 1, 0.06); pbSep:SetHeight(1)
-    pbSep:SetPoint("TOPLEFT", box4Body, "TOPLEFT", 14, -38); pbSep:SetWidth(BOX_W - 28)
-
-    local powerBarHeightEdit = CreateLabeledSlider("MSUF_PowerBarHeightEdit", "Power bar height", box4Body, 1, 20, 1, 16, -60)
-    powerBarHeightEdit:ClearAllPoints(); powerBarHeightEdit:SetPoint("TOPLEFT", pbSep, "BOTTOMLEFT", 0, -14)
-    powerBarHeightEdit:SetWidth(260)
-    powerBarHeightEdit.onValueChanged = function(_, v)
-        v = floor(v + 0.5); if v < 1 then v = 1 elseif v > 20 then v = 20 end
-        B().powerBarHeight = v
-        if _G.MSUF_ApplyPowerBarEmbedLayout_All then _G.MSUF_ApplyPowerBarEmbedLayout_All() end
-        Apply()
-    end
-
-    local powerBarBorderSizeEdit = CreateLabeledSlider("MSUF_PowerBarBorderSizeEdit", "Border thickness", box4Body, 0, 6, 1, 16, -60)
-    powerBarBorderSizeEdit:ClearAllPoints(); powerBarBorderSizeEdit:SetPoint("TOPLEFT", pbSep, "BOTTOMLEFT", 340, -14)
-    powerBarBorderSizeEdit:SetWidth(260)
-    powerBarBorderSizeEdit.onValueChanged = function(_, v)
-        v = floor(v + 0.5); if v < 0 then v = 0 elseif v > 6 then v = 6 end
-        B().powerBarBorderThickness = v
-        if _G.MSUF_ApplyPowerBarBorder_All then _G.MSUF_ApplyPowerBarBorder_All() else Apply() end
-    end
-
-    local powerBarEmbedCheck = CreateLabeledCheckButton("MSUF_PowerBarEmbedCheck", "Embed into health bar", box4Body, 260, -380)
-    powerBarEmbedCheck:ClearAllPoints(); powerBarEmbedCheck:SetPoint("TOPLEFT", powerBarHeightEdit, "BOTTOMLEFT", 0, -20)
-
-    local powerBarBorderCheck = CreateLabeledCheckButton("MSUF_PowerBarBorderCheck", "Power bar border", box4Body, 260, -410)
-    powerBarBorderCheck:ClearAllPoints(); powerBarBorderCheck:SetPoint("TOPLEFT", powerBarBorderSizeEdit, "BOTTOMLEFT", 0, -20)
-
-    -- Labels kept as refs for scope dimming (hidden, no text needed)
-    local powerBarHeightLabel = box4Body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    powerBarHeightLabel:SetPoint("TOPLEFT", box4Body, "TOPLEFT", 0, 0); powerBarHeightLabel:SetText(""); powerBarHeightLabel:Hide()
-    local powerBarBorderSizeLabel = box4Body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    powerBarBorderSizeLabel:SetPoint("TOPLEFT", box4Body, "TOPLEFT", 0, 0); powerBarBorderSizeLabel:SetText(""); powerBarBorderSizeLabel:Hide()
-
     -- BOX 5: HP / Power Text (default open)
-    local box5, box5Body = MakeCollapsibleBox(barGroup, box4, 240, "HP / Power Text", true)
+    local box5, box5Body = MakeCollapsibleBox(barGroup, box3, 240, "HP / Power Text", true)
 
     local hpModeOptions = {
         { key = "PERCENT",        label = "Percent"                  },
@@ -1302,7 +1433,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             EnsureDB(); local g = G(); local uk = _MSUF_HPText_GetUnitKey()
             if uk then
                 local u = _MSUF_HPText_GetUnitDB(uk)
-                if u and u.hpPowerTextOverride then
+                if u and u.hlOverride then
                     if u.powerTextSeparator ~= nil then return u.powerTextSeparator end
                     if u.hpTextSeparator ~= nil then return u.hpTextSeparator end
                 end
@@ -1384,7 +1515,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local function _GetEffSpacerMode(uk, spec, g0)
         if not uk then return (g0 and g0[spec.modeKey]) or "FULL_PLUS_PERCENT" end
         local u0 = MSUF_DB[uk]
-        return (u0 and u0.hpPowerTextOverride and u0[spec.modeKey]) or (g0 and g0[spec.modeKey]) or "FULL_PLUS_PERCENT"
+        return (u0 and u0.hlOverride and u0[spec.modeKey]) or (g0 and g0[spec.modeKey]) or "FULL_PLUS_PERCENT"
     end
     local function _GetSpacerMax(spec, uk)
         local mv = spec.maxDefault or 1000
@@ -1404,7 +1535,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             end
         end
         local uk, u, isShared = _HPSpacer_GetDB()
-        local unitOverride = not isShared and (u and u.hpPowerTextOverride == true)
+        local unitOverride = not isShared and (u and u.hlOverride == true)
         hpSpacerSelectedLabel:SetText("Selected: " .. (isShared and "Shared" or _NiceUnitKey(uk)))
 
         for _, spec in ipairs(SPACER_SPECS) do
@@ -1441,7 +1572,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if spec.check then
             spec.check:SetScript("OnClick", function(self)
                 EnsureDB(); local uk2, db, isS = _HPSpacer_GetDB(); local g2 = G()
-                local canEdit = isS or (db and db.hpPowerTextOverride)
+                local canEdit = isS or (db and db.hlOverride)
                 if not canEdit or not _TextModeAllowsSpacer(_GetEffSpacerMode(uk2, spec, g2)) then _SyncSpacerControls(); return end
                 (isS and g2 or db)[spec.enabledKey] = self:GetChecked() and true or false
                 _SyncSpacerControls(); _RequestTextLayoutForScope(uk2, isS, "SPACER_TOGGLE")
@@ -1450,7 +1581,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if spec.slider then
             spec.slider.onValueChanged = function(self, value)
                 EnsureDB(); local uk2, db, isS = _HPSpacer_GetDB(); local g2 = G()
-                local canEdit = isS or (db and db.hpPowerTextOverride)
+                local canEdit = isS or (db and db.hlOverride)
                 if not canEdit or not _TextModeAllowsSpacer(_GetEffSpacerMode(uk2, spec, g2)) then _SyncSpacerControls(); return end
                 local maxV = _GetSpacerMax(spec, isS and "player" or uk2)
                 local v = tonumber(value) or 0; if v < 0 then v = 0 end; if v > maxV then v = maxV end
@@ -1462,6 +1593,14 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
     _SyncSpacerControls()
     _G.MSUF_Options_RefreshHPSpacerControls = _SyncSpacerControls
+
+    -- GF hint (shown when Party/Raid scope, replaces Box 5/6)
+    local gfTextHint = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    gfTextHint:SetPoint("TOPLEFT", box3, "BOTTOMLEFT", 14, -12)
+    gfTextHint:SetWidth(600); gfTextHint:SetJustifyH("LEFT")
+    gfTextHint:SetText(TR("HP / Power Text and Text Spacers for Group Frames are configured in\nGroup Frames > Health & Text."))
+    gfTextHint:SetTextColor(0.6, 0.75, 1.0)
+    gfTextHint:Hide()
 
     -- BOX 7: Bar Animation + Text Accuracy (collapsible, default closed)
     local box7, box7Body = MakeCollapsibleBox(barGroup, box6, 110, "Bar Animation + Text Accuracy", false)
@@ -1486,6 +1625,32 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     rtTextCheck:SetScript("OnClick", function(self) B().realtimePowerText = self:GetChecked() and true or false
         if _G.MSUF_UFCore_RefreshSettingsCache then _G.MSUF_UFCore_RefreshSettingsCache("REALTIME_TEXT") end end)
 
+    -- Collect label/control refs into table to stay under 60-upvalue limit
+    local _C = {
+        texColLabel = texColLabel, barBgTexLabel = barBgTexLabel, gradColLabel = gradColLabel,
+        absorbModeLabel = absorbModeLabel, absorbTextureLabel = absorbTextureLabel, healAbsorbLabel = healAbsorbLabel,
+        hlSectionLabel = hlSectionLabel,
+        barTextureDrop = barTextureDrop, barBgTextureDrop = barBgTextureDrop,
+        absorbDisplayDrop = absorbDisplayDrop, absorbAnchorDrop = absorbAnchorDrop,
+        absorbOpacitySlider = absorbOpacitySlider, healAbsorbOpacitySlider = healAbsorbOpacitySlider,
+        selfHealPredCB = selfHealPredCB,
+        aggroOutlineDrop = aggroOutlineDrop, dispelOutlineDrop = dispelOutlineDrop,
+        dispelColorModeDrop = dispelColorModeDrop, dispelGlowStyleDrop = dispelGlowStyleDrop,
+        dispelGlowCheck = dispelGlowCheck,
+        dispelGlowLinesSlider = dispelGlowLinesSlider, dispelGlowFreqSlider = dispelGlowFreqSlider,
+        dispelGlowThickSlider = dispelGlowThickSlider,
+        purgeOutlineDrop = purgeOutlineDrop,
+        highlightBorderThicknessSlider = highlightBorderThicknessSlider,
+        gradientStrengthSlider = gradientStrengthSlider,
+        hpModeDrop = hpModeDrop, powerModeDrop = powerModeDrop,
+        hpSepDrop = hpSepDrop, powerSepDrop = powerSepDrop,
+        hpReverseCheck = hpReverseCheck,
+        hpPowerOverrideCheck = hpPowerOverrideCheck,
+        scopeOverrideInfo = scopeOverrideInfo, scopeResetBtn = scopeResetBtn,
+        box1 = box1, box2 = box2, box3 = box3,
+        box5 = box5, box6 = box6, box7 = box7, gfTextHint = gfTextHint,
+    }
+
     -- Scope UI Sync (_MSUF_SyncHpPowerTextScopeUI)
     _MSUF_SyncHpPowerTextScopeUI = function()
         EnsureDB(); local uk = _MSUF_HPText_GetUnitKey()
@@ -1496,74 +1661,101 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         RefreshScopeButtons()
 
         -- Override checkbox
-        if hpPowerOverrideCheck then
+        if _C.hpPowerOverrideCheck then
             if scopeKey ~= "shared" then
-                hpPowerOverrideCheck:Show(); hpPowerOverrideCheck:Enable(); hpPowerOverrideCheck:SetAlpha(1)
+                _C.hpPowerOverrideCheck:Show(); _C.hpPowerOverrideCheck:Enable(); _C.hpPowerOverrideCheck:SetAlpha(1)
                 if isGF then
                     local gfKey = GetGFDBKey(scopeKey)
                     local gf = MSUF_DB[gfKey]
-                    hpPowerOverrideCheck:SetChecked(gf and gf.hlOverride == true)
+                    _C.hpPowerOverrideCheck:SetChecked(gf and gf.hlOverride == true)
                 else
                     local u = uk and _MSUF_HPText_GetUnitDB(uk)
-                    hpPowerOverrideCheck:SetChecked(u and (u.hpPowerTextOverride == true or u.hlOverride == true))
+                    _C.hpPowerOverrideCheck:SetChecked(u and u.hlOverride == true)
                 end
-            else hpPowerOverrideCheck:Hide() end
+            else _C.hpPowerOverrideCheck:Hide() end
         end
 
         -- Reset button + override summary
-        if scopeResetBtn then
+        if _C.scopeResetBtn then
             if scopeKey ~= "shared" then
-                scopeResetBtn:Hide()
-                scopeOverrideInfo:Hide()
+                _C.scopeResetBtn:Hide()
+                _C.scopeOverrideInfo:Hide()
             else
                 local active = {}
                 for _, uK in ipairs(ALL_UNITS) do
                     local u = MSUF_DB[uK]
-                    if u and (u.hpPowerTextOverride or u.hlOverride) then active[#active + 1] = _NiceUnitKey(uK) end
+                    if u and u.hlOverride then active[#active + 1] = _NiceUnitKey(uK) end
                 end
                 for scopeName, gfKey in pairs(GF_SCOPE_KEYS) do
                     local gf = MSUF_DB[gfKey]
                     if gf and gf.hlOverride then active[#active + 1] = SCOPE_LABELS[scopeName] or scopeName end
                 end
                 if #active > 0 then
-                    scopeOverrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(active, ", "))
-                    scopeOverrideInfo:SetFontObject(GameFontHighlightSmall)
-                    scopeOverrideInfo:Show()
-                    scopeResetBtn:Show(); scopeResetBtn:Enable(); scopeResetBtn:SetAlpha(1)
+                    _C.scopeOverrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(active, ", "))
+                    _C.scopeOverrideInfo:SetFontObject(GameFontHighlightSmall)
+                    _C.scopeOverrideInfo:Show()
+                    _C.scopeResetBtn:Show(); _C.scopeResetBtn:Enable(); _C.scopeResetBtn:SetAlpha(1)
                 else
-                    scopeOverrideInfo:SetText("|cff9aa0a6No unit overrides active.|r")
-                    scopeOverrideInfo:SetFontObject(GameFontDisableSmall)
-                    scopeOverrideInfo:Show()
-                    scopeResetBtn:Show(); scopeResetBtn:Disable(); scopeResetBtn:SetAlpha(0.45)
+                    _C.scopeOverrideInfo:SetText("|cff9aa0a6No unit overrides active.|r")
+                    _C.scopeOverrideInfo:SetFontObject(GameFontDisableSmall)
+                    _C.scopeOverrideInfo:Show()
+                    _C.scopeResetBtn:Show(); _C.scopeResetBtn:Disable(); _C.scopeResetBtn:SetAlpha(0.45)
                 end
+            end
+        end
+
+        -- Box 5/6: HP / Power Text — hide for GF scopes, show hint instead
+        if _C.box5 then _C.box5:SetShown(not isGF) end
+        if _C.box6 then _C.box6:SetShown(not isGF) end
+        if _C.gfTextHint then _C.gfTextHint:SetShown(isGF) end
+        -- Re-anchor box7 when box5/6 are hidden
+        if _C.box7 then
+            _C.box7:ClearAllPoints()
+            if isGF then
+                _C.box7:SetPoint("TOPLEFT", _C.gfTextHint or _C.box3, "BOTTOMLEFT", 0, -12)
+            else
+                _C.box7:SetPoint("TOPLEFT", _C.box6, "BOTTOMLEFT", 0, -4)
             end
         end
 
         -- Refresh scope-aware text dropdowns (non-GF only)
         if not isGF then
-            if hpModeDrop and hpModeDrop.Refresh then hpModeDrop:Refresh() end
-            if hpReverseCheck then hpReverseCheck:SetChecked(ScopeGet("hpTextReverse", false) and true or false) end
-            if powerModeDrop and powerModeDrop.Refresh then powerModeDrop:Refresh() end
-            if hpSepDrop and hpSepDrop.Refresh then hpSepDrop:Refresh() end
-            if powerSepDrop and powerSepDrop.Refresh then powerSepDrop:Refresh() end
-            if selfHealPredCB then selfHealPredCB:SetChecked(G().showSelfHealPrediction and true or false) end
+            if _C.hpModeDrop and _C.hpModeDrop.Refresh then _C.hpModeDrop:Refresh() end
+            if _C.hpReverseCheck then _C.hpReverseCheck:SetChecked(ScopeGet("hpTextReverse", false) and true or false) end
+            if _C.powerModeDrop and _C.powerModeDrop.Refresh then _C.powerModeDrop:Refresh() end
+            if _C.hpSepDrop and _C.hpSepDrop.Refresh then _C.hpSepDrop:Refresh() end
+            if _C.powerSepDrop and _C.powerSepDrop.Refresh then _C.powerSepDrop:Refresh() end
+            if _C.selfHealPredCB then _C.selfHealPredCB:SetChecked(ScopeGet("showSelfHealPrediction", false) and true or false) end
             _SyncSpacerControls()
         end
 
         -- Absorb controls: scope-aware, refresh for ALL scopes
-        if absorbDisplayDrop and absorbDisplayDrop.Refresh then absorbDisplayDrop:Refresh() end
-        if absorbAnchorDrop and absorbAnchorDrop.Refresh then absorbAnchorDrop:Refresh() end
-        if absorbOpacitySlider then local v = tonumber(ScopeGet("absorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(absorbOpacitySlider, v) end
-        if healAbsorbOpacitySlider then local v = tonumber(ScopeGet("healAbsorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(healAbsorbOpacitySlider, v) end
+        if _C.absorbDisplayDrop and _C.absorbDisplayDrop.Refresh then _C.absorbDisplayDrop:Refresh() end
+        if _C.absorbAnchorDrop and _C.absorbAnchorDrop.Refresh then _C.absorbAnchorDrop:Refresh() end
+        if _C.absorbOpacitySlider then local v = tonumber(ScopeGet("absorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(_C.absorbOpacitySlider, v) end
+        if _C.healAbsorbOpacitySlider then local v = tonumber(ScopeGet("healAbsorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(_C.healAbsorbOpacitySlider, v) end
         if absorbTexTestCB then absorbTexTestCB:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false) end
         if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
 
         -- Highlight slider sync (scope-aware)
-        if highlightBorderThicknessSlider then
-            local v = floor((tonumber(HlGet("hlAggroSize", 2)) or 2) + 0.5)
-            if v < 1 then v = 1 elseif v > 30 then v = 30 end
-            MSUF_SetLabeledSliderValue(highlightBorderThicknessSlider, v)
+        if _C.barOutlineThicknessSlider then
+            local t = floor((tonumber(ScopeGetBars("barOutlineThickness", tonumber(B().barOutlineThickness) or 1)) or 1) + 0.5)
+            if t < 0 then t = 0 elseif t > 6 then t = 6 end
+            MSUF_SetLabeledSliderValue(_C.barOutlineThicknessSlider, t)
         end
+
+        if _C.highlightBorderThicknessSlider then
+            local v = tonumber(HlGet("hlAggroSize", nil)) or tonumber(G().highlightBorderThickness) or 2
+            v = floor(v + 0.5); if v < 1 then v = 1 elseif v > 30 then v = 30 end
+            MSUF_SetLabeledSliderValue(_C.highlightBorderThicknessSlider, v)
+        end
+
+        -- Glow controls sync
+        if _C.dispelGlowCheck then _C.dispelGlowCheck:SetChecked(HlGet("hlDispelGlowEnabled", false) and true or false) end
+        if _C.dispelGlowStyleDrop and _C.dispelGlowStyleDrop.Refresh then _C.dispelGlowStyleDrop:Refresh() end
+        if _C.dispelGlowLinesSlider then MSUF_SetLabeledSliderValue(_C.dispelGlowLinesSlider, tonumber(HlGet("hlDispelGlowLines", 8)) or 8) end
+        if _C.dispelGlowFreqSlider then MSUF_SetLabeledSliderValue(_C.dispelGlowFreqSlider, tonumber(HlGet("hlDispelGlowFrequency", 0.25)) or 0.25) end
+        if _C.dispelGlowThickSlider then MSUF_SetLabeledSliderValue(_C.dispelGlowThickSlider, tonumber(HlGet("hlDispelGlowThickness", 2)) or 2) end
 
         -- Scope dimming
         local isNonShared = (uk ~= nil) or isGF
@@ -1596,48 +1788,66 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if hlControlsActive then if f.Enable then pcall(f.Enable, f) end else if f.Disable then pcall(f.Disable, f) end end
             if f.EnableMouse then pcall(f.EnableMouse, f, hlControlsActive) end end
 
-        -- Box 1 dims (textures + gradient)
-        DimDrop("MSUF_BarTextureDropdown"); DimDrop("MSUF_BarBackgroundTextureDropdown")
-        DimLabel(texColLabel); DimLabel(barBgTexLabel)
-        DimCheck("MSUF_GradientEnableCheck"); DimCheck("MSUF_PowerGradientEnableCheck")
-        DimSlider("MSUF_GradientStrengthSlider"); DimFrame("MSUF_GradientDirectionPad")
-        DimLabel(gradColLabel)
+        -- Box 1 dims (textures + gradient) — scope-aware
+        HlDimDrop("MSUF_BarTextureDropdown"); HlDimDrop("MSUF_BarBackgroundTextureDropdown")
+        if _C.texColLabel then DimLabel(_C.texColLabel) end; if _C.barBgTexLabel then DimLabel(_C.barBgTexLabel) end
+        HlDimCheck("MSUF_GradientEnableCheck"); HlDimCheck("MSUF_PowerGradientEnableCheck")
+        HlDimSlider("MSUF_GradientStrengthSlider"); HlDimFrame("MSUF_GradientDirectionPad")
+        if _C.gradColLabel then DimLabel(_C.gradColLabel) end
 
-        -- Box 2 dims (absorb textures)
-        DimDrop("MSUF_AbsorbBarTextureDropdown"); DimDrop("MSUF_HealAbsorbBarTextureDropdown")
-        DimLabel(absorbTextureLabel); DimLabel(healAbsorbLabel)
+        -- Box 2 dims (absorb display) — scope-aware
+        HlDimDrop("MSUF_AbsorbDisplayDrop"); HlDimDrop("MSUF_AbsorbAnchorDrop")
+        HlDimDrop("MSUF_AbsorbBarTextureDropdown"); HlDimDrop("MSUF_HealAbsorbBarTextureDropdown")
+        HlDimCheck("MSUF_AbsorbTextureTestModeCheck"); HlDimCheck("MSUF_SelfHealPredictionCheck")
+        HlDimSlider("MSUF_AbsorbBarOpacitySlider"); HlDimSlider("MSUF_HealAbsorbBarOpacitySlider")
+        if _C.absorbTextureLabel then DimLabel(_C.absorbTextureLabel) end
+        if _C.healAbsorbLabel then DimLabel(_C.healAbsorbLabel) end
+        if _C.absorbModeLabel then DimLabel(_C.absorbModeLabel) end
 
-        -- Box 3: outline always dims for non-shared, highlight controls follow override state
-        MSUF_SetLabeledSliderEnabled(_G["MSUF_BarOutlineThicknessSlider"], not isNonShared)
+        -- Box 3: all controls follow hlControlsActive
+        HlDimSlider("MSUF_BarOutlineThicknessSlider")
         HlDimSlider("MSUF_HighlightBorderThicknessSlider")
         HlDimDrop("MSUF_AggroOutlineDropdown"); HlDimCheck("MSUF_AggroOutlineTestCheck")
         HlDimDrop("MSUF_DispelOutlineDropdown"); HlDimCheck("MSUF_DispelOutlineTestCheck")
         HlDimDrop("MSUF_DispelColorModeDropdown")
+        HlDimCheck("MSUF_DispelGlowCheck")
+        HlDimDrop("MSUF_DispelGlowStyleDropdown")
+        HlDimSlider("MSUF_DispelGlowLinesSlider")
+        HlDimSlider("MSUF_DispelGlowFreqSlider")
+        HlDimSlider("MSUF_DispelGlowThickSlider")
         HlDimDrop("MSUF_PurgeOutlineDropdown"); HlDimCheck("MSUF_PurgeOutlineTestCheck")
         HlDimCheck("MSUF_HighlightPrioCheck"); HlDimFrame("MSUF_HighlightPrioContainer")
-        if hlSectionLabel then
-            if hlControlsActive then hlSectionLabel:SetTextColor(1, 1, 1) else hlSectionLabel:SetTextColor(0.35, 0.35, 0.35) end
+        if _C.hlSectionLabel then
+            if hlControlsActive then _C.hlSectionLabel:SetTextColor(1, 1, 1) else _C.hlSectionLabel:SetTextColor(0.35, 0.35, 0.35) end
         end
         -- Refresh dropdowns when scope changes
-        if aggroOutlineDrop and aggroOutlineDrop.Refresh then aggroOutlineDrop:Refresh() end
-        if dispelOutlineDrop and dispelOutlineDrop.Refresh then dispelOutlineDrop:Refresh() end
-        if dispelColorModeDrop and dispelColorModeDrop.Refresh then dispelColorModeDrop:Refresh() end
-        if purgeOutlineDrop and purgeOutlineDrop.Refresh then purgeOutlineDrop:Refresh() end
+        -- Box 1
+        if _C.barTextureDrop and _C.barTextureDrop.Refresh then _C.barTextureDrop:Refresh() end
+        if _C.barBgTextureDrop and _C.barBgTextureDrop.Refresh then _C.barBgTextureDrop:Refresh() end
+        -- Box 2
+        if _C.selfHealPredCB then _C.selfHealPredCB:SetChecked(ScopeGet("showSelfHealPrediction", false) and true or false) end
+        -- Box 3
+        if _C.aggroOutlineDrop and _C.aggroOutlineDrop.Refresh then _C.aggroOutlineDrop:Refresh() end
+        if _C.dispelOutlineDrop and _C.dispelOutlineDrop.Refresh then _C.dispelOutlineDrop:Refresh() end
+        if _C.dispelColorModeDrop and _C.dispelColorModeDrop.Refresh then _C.dispelColorModeDrop:Refresh() end
+        if _C.dispelGlowStyleDrop and _C.dispelGlowStyleDrop.Refresh then _C.dispelGlowStyleDrop:Refresh() end
+        if _C.purgeOutlineDrop and _C.purgeOutlineDrop.Refresh then _C.purgeOutlineDrop:Refresh() end
         if _G.MSUF_PrioRows_Reinit then _G.MSUF_PrioRows_Reinit() end
 
-        -- Box 4 dims (power bar)
-        DimCheck("MSUF_TargetPowerBarCheck"); DimCheck("MSUF_BossPowerBarCheck")
-        DimCheck("MSUF_PlayerPowerBarCheck"); DimCheck("MSUF_FocusPowerBarCheck")
-        DimSlider("MSUF_PowerBarHeightEdit"); DimCheck("MSUF_PowerBarEmbedCheck")
-        DimCheck("MSUF_PowerBarBorderCheck"); DimSlider("MSUF_PowerBarBorderSizeEdit")
-        DimLabel(powerBarHeightLabel); DimLabel(powerBarBorderSizeLabel)
-
         -- Box titles dim
-        if box1._msufTitle then DimLabel(box1._msufTitle) end
-        if box3._msufTitle then
-            if hlControlsActive then box3._msufTitle:SetTextColor(1, 1, 1) else DimLabel(box3._msufTitle) end
+        local function TitleDim(box)
+            if not box or not box._msufTitle then return end
+            if hlControlsActive then box._msufTitle:SetTextColor(1, 1, 1) else DimLabel(box._msufTitle) end
         end
-        if box4._msufTitle then DimLabel(box4._msufTitle) end
+        TitleDim(_C.box1); TitleDim(_C.box2); TitleDim(_C.box3)
+
+        -- Re-trigger active test modes with current scope (prevents scope bleed)
+        if _G.MSUF_DispelBorderTestMode and _G.MSUF_SetDispelBorderTestMode then
+            _G.MSUF_SetDispelBorderTestMode(true, scopeKey)
+        end
+        if _G.MSUF_AggroBorderTestMode and _G.MSUF_SetAggroBorderTestMode then
+            _G.MSUF_SetAggroBorderTestMode(true, scopeKey)
+        end
     end
 
     _Scope_SyncUI = _MSUF_SyncHpPowerTextScopeUI
@@ -1672,6 +1882,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- SyncAll (called on OnShow)
     local function SyncAll()
         EnsureDB(); local g = G(); local b = B()
+        -- Ensure hlAggroSize exists in general (migrate from legacy key)
+        if g.hlAggroSize == nil and g.highlightBorderThickness ~= nil then g.hlAggroSize = g.highlightBorderThickness end
         local hpGrad = (g.enableGradient ~= false); local powGrad = (g.enablePowerGradient ~= false)
         if gradientCheck then gradientCheck:SetChecked(hpGrad) end
         if powerGradientCheck then powerGradientCheck:SetChecked(powGrad) end
@@ -1684,35 +1896,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             MSUF_SetLabeledSliderValue(gradientStrengthSlider, v)
             MSUF_SetLabeledSliderEnabled(gradientStrengthSlider, hpGrad or powGrad)
         end
-        if barOutlineThicknessSlider then local t = floor((tonumber(b.barOutlineThickness) or 1) + 0.5); if t < 0 then t = 0 elseif t > 6 then t = 6 end; MSUF_SetLabeledSliderValue(barOutlineThicknessSlider, t) end
-        if highlightBorderThicknessSlider then local t = floor((tonumber(HlGet("hlAggroSize", 2)) or 2) + 0.5); if t < 1 then t = 1 elseif t > 30 then t = 30 end; MSUF_SetLabeledSliderValue(highlightBorderThicknessSlider, t) end
+        if barOutlineThicknessSlider then local t = floor((tonumber(ScopeGetBars("barOutlineThickness", tonumber(b.barOutlineThickness) or 1)) or 1) + 0.5); if t < 0 then t = 0 elseif t > 6 then t = 6 end; MSUF_SetLabeledSliderValue(barOutlineThicknessSlider, t) end
+        if highlightBorderThicknessSlider then local t = tonumber(HlGet("hlAggroSize", nil)) or tonumber(G().highlightBorderThickness) or 2; t = floor(t + 0.5); if t < 1 then t = 1 elseif t > 30 then t = 30 end; MSUF_SetLabeledSliderValue(highlightBorderThicknessSlider, t) end
         if _G.MSUF_PrioRows_Reinit then _G.MSUF_PrioRows_Reinit() end
         local function SC(cb, v) if cb then cb:SetChecked(v and true or false); if cb.__msufToggleUpdate then cb.__msufToggleUpdate() end end end
-        SC(targetPowerBarCheck, b.showTargetPowerBar); SC(bossPowerBarCheck, b.showBossPowerBar)
-        SC(playerPowerBarCheck, b.showPlayerPowerBar); SC(focusPowerBarCheck, b.showFocusPowerBar)
-        SC(powerBarEmbedCheck, b.embedPowerBarIntoHealth); SC(powerBarBorderCheck, b.powerBarBorderEnabled)
         SC(absorbTexTestCB, _G.MSUF_AbsorbTextureTestMode)
-        SC(selfHealPredCB, g.showSelfHealPrediction)
-        local anyPB = not (b.showTargetPowerBar == false and b.showBossPowerBar == false and b.showPlayerPowerBar == false and b.showFocusPowerBar == false)
-        local borderOn = b.powerBarBorderEnabled == true
-        local function SetCtrl(c, on)
-            if not c then return end
-            if on then if c.Enable then c:Enable() end; if c.SetAlpha then c:SetAlpha(1) end
-            else if c.Disable then c:Disable() end; if c.SetAlpha then c:SetAlpha(0.55) end end
-        end
-        if powerBarHeightLabel then powerBarHeightLabel:SetTextColor(anyPB and 1 or 0.35, anyPB and 1 or 0.35, anyPB and 1 or 0.35) end
-        do
-            local h = floor((tonumber(b.powerBarHeight) or 6) + 0.5); if h < 1 then h = 1 elseif h > 20 then h = 20 end
-            MSUF_SetLabeledSliderValue(powerBarHeightEdit, h)
-            MSUF_SetLabeledSliderEnabled(powerBarHeightEdit, anyPB)
-        end
-        SetCtrl(powerBarEmbedCheck, anyPB); SetCtrl(powerBarBorderCheck, anyPB)
-        if powerBarBorderSizeLabel then powerBarBorderSizeLabel:SetTextColor((anyPB and borderOn) and 1 or 0.35, (anyPB and borderOn) and 1 or 0.35, (anyPB and borderOn) and 1 or 0.35) end
-        do
-            local t = floor((tonumber(b.powerBarBorderThickness) or 1) + 0.5); if t < 0 then t = 0 elseif t > 6 then t = 6 end
-            MSUF_SetLabeledSliderValue(powerBarBorderSizeEdit, t)
-            MSUF_SetLabeledSliderEnabled(powerBarBorderSizeEdit, anyPB and borderOn)
-        end
+        SC(_C.selfHealPredCB, ScopeGet("showSelfHealPrediction", false))
         local smoothCB = _G["MSUF_SmoothPowerBarCheck"]; if smoothCB then local v = b.smoothPowerBar; if v == nil then v = true end; smoothCB:SetChecked(v) end
         local rtCB = _G["MSUF_RealtimePowerTextCheck"]; if rtCB then local v = b.realtimePowerText; if v == nil then v = true end; rtCB:SetChecked(v) end
         _MSUF_SyncHpPowerTextScopeUI()
@@ -1771,28 +1960,14 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         _G.MSUF_Options_BindDBBoolCheck(gradientCheck, "general.enableGradient", MSUF_BarsApplyGradient, SyncAll)
         _G.MSUF_Options_BindDBBoolCheck(powerGradientCheck, "general.enablePowerGradient", MSUF_BarsApplyGradient, SyncAll)
         local function Bind(cb, path, apply) if cb then _G.MSUF_Options_BindDBBoolCheck(cb, path, apply or Apply, SyncAll) end end
-        Bind(targetPowerBarCheck, "bars.showTargetPowerBar")
-        Bind(bossPowerBarCheck, "bars.showBossPowerBar")
-        Bind(playerPowerBarCheck, "bars.showPlayerPowerBar")
-        Bind(focusPowerBarCheck, "bars.showFocusPowerBar")
-        Bind(powerBarEmbedCheck, "bars.embedPowerBarIntoHealth", function()
-            if _G.MSUF_ApplyPowerBarEmbedLayout_All then _G.MSUF_ApplyPowerBarEmbedLayout_All() end; Apply()
-        end)
-        Bind(powerBarBorderCheck, "bars.powerBarBorderEnabled", function()
-            if _G.MSUF_ApplyPowerBarBorder_All then _G.MSUF_ApplyPowerBarBorder_All() else Apply() end
-        end)
     end
     if gradientStrengthSlider then
-        gradientStrengthSlider.onValueChanged = function(_, v) G().gradientStrength = v; MSUF_BarsApplyGradient() end
+        gradientStrengthSlider.onValueChanged = function(_, v) ScopeSet("gradientStrength", v, MSUF_BarsApplyGradient) end
     end
 
     -- Panel stores (Core compat)
     panel.gradientCheck = gradientCheck; panel.powerGradientCheck = powerGradientCheck
     panel.gradientDirPad = gradientDirPad or _G["MSUF_GradientDirectionPad"]
-    panel.targetPowerBarCheck = targetPowerBarCheck; panel.bossPowerBarCheck = bossPowerBarCheck
-    panel.playerPowerBarCheck = playerPowerBarCheck; panel.focusPowerBarCheck = focusPowerBarCheck
-    panel.powerBarHeightEdit = powerBarHeightEdit; panel.powerBarEmbedCheck = powerBarEmbedCheck
-    panel.powerBarBorderCheck = powerBarBorderCheck; panel.powerBarBorderSizeEdit = powerBarBorderSizeEdit
     panel.hpModeDrop = hpModeDrop; panel.barTextureDrop = barTextureDrop
     panel.barOutlineThicknessSlider = barOutlineThicknessSlider
     panel.highlightBorderThicknessSlider = highlightBorderThicknessSlider

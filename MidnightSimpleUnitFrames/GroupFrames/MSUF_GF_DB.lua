@@ -599,6 +599,24 @@ function GF.GetHighlightVal(kind, key)
     return nil
 end
 
+--- Resolve outline thickness with scope override support.
+--- GF-local (gf_party/gf_raid) can override bars.barOutlineThickness via hlOverride=true.
+function GF.GetBarOutlineThickness(kind)
+    local conf = GF.GetConf(kind)
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local raw = nil
+    if conf and conf.hlOverride and conf.barOutlineThickness ~= nil then
+        raw = conf.barOutlineThickness
+    elseif bars then
+        raw = bars.barOutlineThickness
+    end
+    local t = tonumber(raw)
+    if type(t) ~= "number" then t = 2 end
+    t = math_floor(t + 0.5)
+    if t < 0 then t = 0 elseif t > 6 then t = 6 end
+    return t
+end
+
 --- Resolve bar texture path (falls through to global MSUF bar texture)
 function GF.ResolveBarTexture(kind)
     local conf = GF.GetConf(kind)

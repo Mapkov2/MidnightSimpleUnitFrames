@@ -2567,7 +2567,7 @@ local function _UFCore_ScheduleBossEngage()
     if _bossEngageQueued then return end
     _bossEngageQueued = true
     if After0 then
-        After0(0, _UFCore_FlushBossEngage)
+        After0(_UFCore_FlushBossEngage)
     else
         _UFCore_FlushBossEngage()
     end
