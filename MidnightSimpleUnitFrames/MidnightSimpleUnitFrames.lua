@@ -521,18 +521,6 @@ local function MSUF_ClearText(fs, hide)
     fs:SetText("")
     if hide then fs:Hide() end
  end
-function ns.Bars.HidePowerBarOnly(bar)
-    if not bar then  return true end
-    bar:SetScript("OnUpdate", nil)
-    bar:Hide()
-     return true
-end
-function ns.Bars.HideAndResetPowerBar(bar)
-    if not bar then  return end
-    bar:SetScript("OnUpdate", nil)
-    bar:Hide()
-    MSUF_ResetBarZero(bar, true)
- end
 function ns.Bars.ApplyPowerGradientOnce(frame)
     if not frame then  return end
     if frame.powerGradients then
@@ -951,47 +939,6 @@ local MSUF_BORDER_BACKDROPS = {
     GLOW  = { edgeFile = MSUF_TEX_WHITE8, edgeSize = 8 },
 }
 local MSUF_BORDER_DEFAULT = MSUF_BORDER_BACKDROPS.THIN
--- NOTE: floor/max/min/format already aliased as math_floor/math_max/math_min/string_format (line 28-29).
--- Use those consistently throughout. No separate aliases needed (saves 4 locals).
-local MSUF_Transactions = {}  -- scopeKey -> { snapshot=table, restore=function|nil, active=true }
-function MSUF_BeginTransaction(scopeKey, snapshot, restoreFunc)
-    if not scopeKey then return end
-    MSUF_Transactions[scopeKey] = {
-        snapshot = MSUF_DeepCopy(snapshot) or {},
-        restore = restoreFunc,
-        active = true,
-    }
- end
-function MSUF_HasTransaction(scopeKey)
-    local t = scopeKey and MSUF_Transactions[scopeKey]
-    return not not (t and t.active and t.snapshot)
-end
-function MSUF_GetTransactionSnapshot(scopeKey)
-    local t = scopeKey and MSUF_Transactions[scopeKey]
-    return t and t.snapshot
-end
-function MSUF_CommitTransaction(scopeKey)
-    if not scopeKey then return end
-    MSUF_Transactions[scopeKey] = nil
- end
-function MSUF_RollbackTransaction(scopeKey)
-    if not scopeKey then return end
-    local t = MSUF_Transactions[scopeKey]
-    if not (t and t.active) then return end
-    if type(t.restore) == "function" then
-        local ok, err = MSUF_FastCall(t.restore, MSUF_DeepCopy(t.snapshot))
-        if not ok then
-            if type(print) == "function" then
-                print("MSUF: rollback failed for scope", scopeKey, err)
-            end
-    end
-    end
-    return t.snapshot
-end
-ns.MSUF_DeepCopy = MSUF_DeepCopy
-ns.MSUF_CaptureKeys = MSUF_CaptureKeys
-ns.MSUF_RestoreKeys = MSUF_RestoreKeys
-ns.MSUF_Transactions = MSUF_Transactions
 local MSUF_SMOOTH_INTERPOLATION = (type(Enum) == "table"
     and Enum.StatusBarInterpolation
     and Enum.StatusBarInterpolation.ExponentialEaseOut) or nil
@@ -1499,14 +1446,6 @@ local function GetConfigKeyForUnit(unit)
     end
      return nil
 end
-function _G.MSUF_GetHpSpacerSelectedUnitKey()
-    if not MSUF_DB then EnsureDB() end
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
-    local k = _G.MSUF_NormalizeTextLayoutUnitKey(g.hpSpacerSelectedUnitKey, "player")
-    g.hpSpacerSelectedUnitKey = k
-     return k
-end
 function _G.MSUF_SetHpSpacerSelectedUnitKey(unitKey, suppressUIRefresh)
     if not MSUF_DB then EnsureDB() end
     MSUF_DB.general = MSUF_DB.general or {}
@@ -1972,17 +1911,6 @@ function _G.MSUF_FlushCDMBridgeRefresh()
         _G.MSUF_ApplyPowerBarEmbedLayout_All()
     end
     MSUF_ForceReanchorAllUnitFrames_Once()
-end
-
-function _G.MSUF_OnCDMExtensionChanged()
-    _G.MSUF_CDMBridgeDirty = true
-    if _G.MSUF_CDMBridgeFlushScheduled then return end
-    _G.MSUF_CDMBridgeFlushScheduled = true
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, _G.MSUF_FlushCDMBridgeRefresh)
-    else
-        _G.MSUF_FlushCDMBridgeRefresh()
-    end
 end
 
 if not _G.MSUF_CDMBridgeRegenFrame then
