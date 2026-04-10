@@ -985,7 +985,7 @@ Elements.Health = {
     Update = function(f, conf)
         local fnH = FN_UpdateHealthFast
         if not fnH then return false end
-        local hp = select(1, fnH(f))
+        local hp = select(1, fnH(f, f.unit))
         local fnTxt = FN_UpdateHpTextFast
         if fnTxt then fnTxt(f, hp) end
         -- Hard split: value updates every tick; visuals/layout only when requested.

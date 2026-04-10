@@ -178,6 +178,9 @@ local function _MSUF_EnsureCalc(frame)
     return calc
 end
 
+-- Forward declaration (defined after _MSUF_HealthCalcUpdate)
+local _MSUF_UpdateSelfHealPrediction
+
 -- Unified health+absorb+prediction update using C-side calculator.
 -- Called on UNIT_MAXHEALTH, UNIT_ABSORB_AMOUNT_CHANGED, UNIT_HEAL_ABSORB_AMOUNT_CHANGED,
 -- UNIT_HEAL_PREDICTION, UNIT_MAXHEALTHMODIFIER — NOT on UNIT_HEALTH (lean path).
@@ -265,7 +268,7 @@ local function _MSUF_HideSelfHealPredBar(frame)
     bar._msufSelfHealPredAnchorRev = nil
 end
 
-local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp, calc)
+_MSUF_UpdateSelfHealPrediction = function(frame, unit, maxHP, hp, calc)
     local g = MSUF_DB and MSUF_DB.general
     if not g or not g.showSelfHealPrediction then
         _MSUF_HideSelfHealPredBar(frame)
