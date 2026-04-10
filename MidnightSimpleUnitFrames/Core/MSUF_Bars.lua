@@ -204,13 +204,25 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
         hpBar:SetMinMaxValues(0, maxHP)
         hpBar:SetValue(hp)
 
-        -- Absorb bar (damage absorbs)
-        if frame.absorbBar then
+        -- PERF: Apply absorb anchor mode ONCE for all overlay bars (was called per-bar)
+        if (frame.absorbBar or frame.healAbsorbBar) and _cachedApplyAbsorbAnchorMode then
             if not _cachedApplyAbsorbAnchorMode then
                 _cachedApplyAbsorbAnchorMode = _G.MSUF_ApplyAbsorbAnchorMode
             end
             if _cachedApplyAbsorbAnchorMode then _cachedApplyAbsorbAnchorMode(frame) end
-            MSUF_ApplyAbsorbOverlayColor(frame.absorbBar, unit)
+        end
+
+        -- Absorb bar (damage absorbs)
+        if frame.absorbBar then
+            -- PERF: Overlay colors only change on config change — skip when gen matches
+            local gen = _G.MSUF_UFCORE_SETTINGS_SERIAL or 0
+            if frame._msufOverlayColorGen ~= gen then
+                frame._msufOverlayColorGen = gen
+                MSUF_ApplyAbsorbOverlayColor(frame.absorbBar, unit)
+                if frame.healAbsorbBar then
+                    MSUF_ApplyHealAbsorbOverlayColor(frame.healAbsorbBar, unit)
+                end
+            end
             local enableBar = _MSUF_ResolveAbsorbDisplay(unit)
             if enableBar then
                 local absorbAmt = calc:GetDamageAbsorbs()
@@ -224,8 +236,6 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
 
         -- Heal absorb bar
         if frame.healAbsorbBar then
-            if _cachedApplyAbsorbAnchorMode then _cachedApplyAbsorbAnchorMode(frame) end
-            MSUF_ApplyHealAbsorbOverlayColor(frame.healAbsorbBar, unit)
             local healAbsorbAmt = calc:GetHealAbsorbs()
             frame.healAbsorbBar:SetMinMaxValues(0, maxHP)
             frame.healAbsorbBar:SetValue(healAbsorbAmt)

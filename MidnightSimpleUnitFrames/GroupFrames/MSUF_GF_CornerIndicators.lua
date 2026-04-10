@@ -243,38 +243,37 @@ function GF.UpdateCornerIndicators(f, unit)
     if not f or not unit then return end
 
     -- PERF: Rate-limit to max 5Hz per frame.
-    -- CornerIndicators show dispel/boss/missing states which change at most ~1/sec.
-    -- In 40-man combat, UNIT_AURA fires 107×/sec total across all frames.
-    -- Without rate-limit: 107 UpdateCornerIndicators calls/sec × 9µs = 1.84ms/sec.
-    -- With 5Hz cap: ~20 calls/sec × 9µs = 0.18ms/sec (90% reduction).
     local now = GetTime()
     local lastCI = f._msufCILastAt or 0
-    if (now - lastCI) < 0.20 then return end  -- 200ms = 5Hz
+    if (now - lastCI) < 0.20 then return end
     f._msufCILastAt = now
+
+    -- PERF: use pre-computed slot categories from f._c (BuildFrameCache)
+    local c = f._c
+    if not c or not c.ciEn then
+        if f._msufCI then
+            for i = 1, 5 do
+                local dot = f._msufCI[SLOT_KEYS[i]]
+                if dot then dot:Hide() end
+            end
+        end
+        return
+    end
 
     local kind = f._msufGFKind or "party"
     local conf = GetConf(kind)
-    if not conf or conf.ciEnabled == false then
-        if f._msufCI then
-            for _, sk in pairs(SLOT_KEYS) do
-                local dot = f._msufCI[sk]
-                if dot then dot:Hide() end
-            end
-        end
-        return
-    end
 
     if not UnitExists(unit) then
         if f._msufCI then
-            for _, sk in pairs(SLOT_KEYS) do
-                local dot = f._msufCI[sk]
+            for i = 1, 5 do
+                local dot = f._msufCI[SLOT_KEYS[i]]
                 if dot then dot:Hide() end
             end
         end
         return
     end
 
-    local alpha = conf.ciAlpha or 1.0
+    local alpha = conf and conf.ciAlpha or 1.0
 
     -- Each category scanned at most once per update
     local _dispelDone, _bossDone, _missingDone = false, false, false
@@ -282,13 +281,16 @@ function GF.UpdateCornerIndicators(f, unit)
     local _bossShow,   _bossR,   _bossG,   _bossB
     local _missingShow, _missingR, _missingG, _missingB
 
-    -- PERF: Diff-gate cache per frame. Stores previous (show, r, g, b) per slot.
-    -- Skip SetColorTexture/Show/Hide when output is identical.
+    -- PERF: Diff-gate cache per frame.
     local cache = f._msufCICache
     if not cache then cache = {}; f._msufCICache = cache end
 
-    for _, sk in pairs(SLOT_KEYS) do
-        local cat = SlotCat(conf, sk)
+    -- PERF: unrolled loop with pre-computed slot categories from c.ciSlot*
+    -- Eliminates SlotCat function calls (was 63K calls/session)
+    local CI_SLOTS = { c.ciSlotTL, c.ciSlotTR, c.ciSlotBL, c.ciSlotBR, c.ciSlotC }
+    for i = 1, 5 do
+        local sk = SLOT_KEYS[i]
+        local cat = CI_SLOTS[i]
         if cat == "none" then
             if cache[sk] then
                 cache[sk] = nil

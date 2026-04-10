@@ -207,7 +207,21 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     if not show then
         ns.Text.Set(self.hpText, "", false)
         ns.Text.ClearField(self, "hpTextPct")
+        self._msufLastRenderPct = nil
         return
+    end
+
+    -- PERF: Early diff-gate on percent (non-secret from UnitHealthPercent).
+    -- When percent hasn't changed and no absorb text, output is identical → skip.
+    -- SECRET-SAFE: hpPct CAN be secret in 12.0 — only diff-gate plain numbers.
+    if hasPct and not absorbText then
+        local iss = _MSUF_issecret
+        if not (iss and iss(hpPct)) then
+            if self._msufLastRenderPct == hpPct then return end
+            self._msufLastRenderPct = hpPct
+        else
+            self._msufLastRenderPct = nil
+        end
     end
 
     local spec = ns.Text.EnsureSpec(self)

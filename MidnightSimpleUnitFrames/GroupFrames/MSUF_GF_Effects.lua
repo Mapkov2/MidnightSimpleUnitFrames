@@ -126,20 +126,34 @@ local function _GF_PixelSnappedSetValue(bar, value, smooth, forceImmediate)
         bar:SetValue(value)
         return
     end
-    local orient = bar.GetOrientation and bar:GetOrientation()
-    local axisLen = (orient == "VERTICAL")
-        and (bar.GetHeight and bar:GetHeight() or 0)
-        or  (bar.GetWidth  and bar:GetWidth()  or 0)
-    if issecretvalue and issecretvalue(axisLen) then
-        bar._msufSnapPx = nil
-        bar:SetValue(value)
-        return
+    -- PERF: cache axisPx per bar (only changes on resize/reparent)
+    -- Eliminates GetOrientation + GetWidth/GetHeight + GetEffectiveScale per call
+    local axisPx = bar._msufCachedAxisPx
+    if not axisPx then
+        local orient = bar.GetOrientation and bar:GetOrientation()
+        local axisLen = (orient == "VERTICAL")
+            and (bar.GetHeight and bar:GetHeight() or 0)
+            or  (bar.GetWidth  and bar:GetWidth()  or 0)
+        if issecretvalue and issecretvalue(axisLen) then
+            bar._msufSnapPx = nil
+            bar:SetValue(value)
+            return
+        end
+        axisLen = tonumber(axisLen) or 0
+        if axisLen <= 0 then bar:SetValue(value); return end
+        local scale = (bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
+        if scale <= 0 then scale = 1 end
+        axisPx = math_floor(axisLen * scale + 0.5)
+        bar._msufCachedAxisPx = axisPx
+        -- Hook OnSizeChanged to invalidate cache
+        if not bar._msufSnapHooked then
+            bar._msufSnapHooked = true
+            bar:HookScript("OnSizeChanged", function(self)
+                self._msufCachedAxisPx = nil
+                self._msufSnapPx = nil
+            end)
+        end
     end
-    axisLen = tonumber(axisLen) or 0
-    if axisLen <= 0 then bar:SetValue(value); return end
-    local scale = (bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
-    if scale <= 0 then scale = 1 end
-    local axisPx = math_floor(axisLen * scale + 0.5)
     if axisPx <= 0 then bar:SetValue(value); return end
     local v = tonumber(value) or 0
     if v < minV then v = minV end
@@ -394,14 +408,12 @@ local function SpellIndicatorsNeedRefresh(f, updateInfo)
 end
 
 local function dispatchAura(f, unit, updateInfo)
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
     local c = f._c
-    local auras = conf and conf.auras
-    local aurasOn = auras and auras.enabled ~= false
-    local siCfg = conf and conf.spellIndicators
-    local siOn = siCfg and siCfg.enabled == true
-    local siRefresh = siOn and SpellIndicatorsNeedRefresh(f, updateInfo) or false
+    if not c then return end
+    local kind = f._msufGFKind or "party"
+    -- PERF: use pre-cached flags from BuildFrameCache (was GF.GetConf per event)
+    local aurasOn = c.anyAuraGrp
+    local siRefresh = c.siEn and SpellIndicatorsNeedRefresh(f, updateInfo) or false
 
     -- PERF: CornerIndicators only care about aura add/remove, not duration/stack
     -- updates. Skip CI when the event is a pure update (saves ~300ms/min in raids).
@@ -410,7 +422,7 @@ local function dispatchAura(f, unit, updateInfo)
         or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0)
 
     if not aurasOn then
-        if conf.dispelEnabled ~= false and GF._playerCanDispel then
+        if c.dispelScan and GF._playerCanDispel then
             if not updateInfo or updateInfo.isFullUpdate
                or (updateInfo.addedAuras and #updateInfo.addedAuras > 0)
                or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0) then
@@ -420,36 +432,16 @@ local function dispatchAura(f, unit, updateInfo)
         if siRefresh and GF.UpdateSpellIndicators then
             GF.UpdateSpellIndicators(f, unit)
         end
-        if ciRelevant and GF.UpdateCornerIndicators and (not c or c.ciEn) then
+        if ciRelevant and GF.UpdateCornerIndicators and c.ciEn then
             GF.UpdateCornerIndicators(f, unit)
         end
-        if GF.UpdateRaidDebuff and (not c or c.rdEn) then
+        if GF.UpdateRaidDebuff and c.rdEn then
             GF.UpdateRaidDebuff(f, unit)
         end
         return
     end
 
-    -- Check if ANY sub-group is actually enabled (avoid full pipeline when all off)
-    local anyGroupOn = (auras.debuff and auras.debuff.enabled ~= false)
-                    or (auras.buff and auras.buff.enabled ~= false)
-                    or (auras.externals and auras.externals and auras.externals.enabled)
-    if not anyGroupOn then
-        -- Master ON but all sub-groups OFF: only standalone dispel if needed
-        if conf.dispelEnabled ~= false and GF._playerCanDispel then
-            if not updateInfo or updateInfo.isFullUpdate
-               or (updateInfo.addedAuras and #updateInfo.addedAuras > 0)
-               or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0) then
-                GF._UpdateDispel(f, unit)
-            end
-        end
-        if siRefresh and GF.UpdateSpellIndicators then
-            GF.UpdateSpellIndicators(f, unit)
-        end
-        if ciRelevant and GF.UpdateCornerIndicators and (not c or c.ciEn) then
-            GF.UpdateCornerIndicators(f, unit)
-        end
-        return
-    end
+    -- c.anyAuraGrp already includes sub-group enabled check, no need for second pass
 
     -- Full rescan required
     if not updateInfo or updateInfo.isFullUpdate then
@@ -519,7 +511,7 @@ local function dispatchAura(f, unit, updateInfo)
                         GF.UpdateSpellIndicators(f, unit)
                     end
                     -- Corner Indicators: removal may clear a dispel/boss dot
-                    if GF.UpdateCornerIndicators and (not c or c.ciEn) then
+                    if GF.UpdateCornerIndicators and c.ciEn then
                         GF.UpdateCornerIndicators(f, unit)
                     end
                     return
@@ -603,12 +595,12 @@ local function dispatchAura(f, unit, updateInfo)
     end
 
     -- Corner Indicators (only when enabled)
-    if GF.UpdateCornerIndicators and (not c or c.ciEn) then
+    if GF.UpdateCornerIndicators and c.ciEn then
         GF.UpdateCornerIndicators(f, unit)
     end
 
     -- Raid Debuffs (only when enabled)
-    if GF.UpdateRaidDebuff and (not c or c.rdEn) then
+    if GF.UpdateRaidDebuff and c.rdEn then
         GF.UpdateRaidDebuff(f, unit)
     end
 end
@@ -844,7 +836,7 @@ function GF.BuildFrameCache(f)
     c.focB = conf.hlFocusColorB or 1.0
 
     -- Aura dispatch
-    c.dispelScan = conf.dispelEnabled ~= false
+    c.dispelScan = c.dispelScan
     c.siEn       = conf.spellIndicators and conf.spellIndicators.enabled == true
     local auras  = conf.auras
     c.aurasOn    = auras and auras.enabled ~= false
@@ -855,13 +847,24 @@ function GF.BuildFrameCache(f)
 
     -- Corner indicators
     c.ciEn = conf.ciEnabled ~= false
+    -- PERF: Pre-compute slot→category map (eliminates 63K SlotCat calls/session)
+    c.ciSlotTL = (conf.ciSlotTL or "none")
+    c.ciSlotTR = (conf.ciSlotTR or "none")
+    c.ciSlotBL = (conf.ciSlotBL or "none")
+    c.ciSlotBR = (conf.ciSlotBR or "none")
+    c.ciSlotC  = (conf.ciSlotC  or "none")
 
     -- Raid debuffs
     local rd = conf.raidDebuffs
     c.rdEn = rd and rd.enabled == true
 
-    -- Heal prediction
-    c.healPredEn = conf.healPredEnabled ~= false
+    -- Heal prediction (resolve full fallthrough: conf → general → default true)
+    local hpEn = conf.healPredEnabled
+    if hpEn == nil then
+        local gen = _G.MSUF_DB and _G.MSUF_DB.general
+        hpEn = not gen or gen.enableHealPrediction ~= false
+    end
+    c.healPredEn = hpEn
 
     -- Absorb: independently gated from heal prediction
     c.absorbEn = _GF_IsAbsorbEnabled(kind)
@@ -1761,8 +1764,9 @@ local function dispatchHealth(f, unit)
     -- fire in the same frame as UNIT_HEALTH (AoE healing burst).
     f._msufGFHealthTick = GetTime()
 
-    -- HealPredictionCalculator: 1 C-API call replaces 5 separate calls
-    local calc = _GF_EnsureCalc(f)
+    -- PERF: Inlined _GF_EnsureCalc fast path (99% of calls hit the cache)
+    local calc = f._msufHPCalc
+    if not calc and not _calcUnsupported then calc = _GF_EnsureCalc(f) end
     local hp, hpMax
     if calc then
         UnitGetDetailedHealPrediction(unit, "player", calc)
@@ -1950,13 +1954,9 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
         if not bar:IsShown() then bar:Show() end
         return
     end
-    local conf = GF.GetConf(f._msufGFKind or "party")
-    local hpEnabled = conf.healPredEnabled
-    if hpEnabled == nil then
-        local gen = _G.MSUF_DB and _G.MSUF_DB.general
-        hpEnabled = not gen or gen.enableHealPrediction ~= false
-    end
-    if hpEnabled == false then if bar:IsShown() then bar:Hide() end; return end
+    -- PERF: use pre-cached healPredEn from BuildFrameCache (was GF.GetConf + DB read per call)
+    local c = f._c
+    if c and c.healPredEn == false then if bar:IsShown() then bar:Hide() end; return end
     if not unit or not UnitExists(unit) then if bar:IsShown() then bar:Hide() end; return end
     if not hpMax then
         hpMax = (calc and calc.GetMaximumHealth) and calc:GetMaximumHealth() or UnitHealthMax(unit)
@@ -2000,8 +2000,9 @@ dispatchAbsorb = function(f, unit, calc, hpMax)
         if not bar:IsShown() then bar:Show() end
         return
     end
-    local kind = f._msufGFKind or "party"
-    if not _GF_IsAbsorbEnabled(kind) then
+    -- PERF: use pre-cached absorbEn from BuildFrameCache (was _GF_IsAbsorbEnabled per call)
+    local c = f._c
+    if not (c and c.absorbEn) then
         bar:SetMinMaxValues(0, 1); bar:SetValue(0); if bar:IsShown() then bar:Hide() end
         return
     end
@@ -2030,16 +2031,15 @@ end
 dispatchHealAbsorb = function(f, unit, calc, hpMax)
     local bar = f.healAbsorbBar
     if not bar then return end
-    -- Test mode: fixed values (same as main UF)
     if _G.MSUF_AbsorbTextureTestMode then
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(15)
         if not bar:IsShown() then bar:Show() end
         return
     end
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    if conf.healAbsorbEnabled == false then
+    -- PERF: use pre-cached healAbsorbEn from BuildFrameCache (was GF.GetConf per call)
+    local c = f._c
+    if c and c.healAbsorbEn == false then
         bar:SetMinMaxValues(0, 1); bar:SetValue(0); if bar:IsShown() then bar:Hide() end
         return
     end
@@ -2154,22 +2154,24 @@ local UNIT_DISPATCH = {
     UNIT_HEALTH                       = dispatchHealth,
     UNIT_MAXHEALTH                    = dispatchHealth,
     UNIT_HEAL_PREDICTION              = function(f, u)
-        local calc = _GF_EnsureCalc(f)
+        local calc = f._msufHPCalc
+        if not calc and not _calcUnsupported then calc = _GF_EnsureCalc(f) end
         if calc then
-            -- Skip if dispatchHealth already ran this render frame (UNIT_HEALTH fired first)
             if f._msufGFHealthTick == GetTime() then return end
             dispatchHealth(f, u)
         else dispatchIncomingHeal(f, u) end
     end,
     UNIT_ABSORB_AMOUNT_CHANGED        = function(f, u)
-        local calc = _GF_EnsureCalc(f)
+        local calc = f._msufHPCalc
+        if not calc and not _calcUnsupported then calc = _GF_EnsureCalc(f) end
         if calc then
             if f._msufGFHealthTick == GetTime() then return end
             dispatchHealth(f, u)
         else dispatchAbsorb(f, u) end
     end,
     UNIT_HEAL_ABSORB_AMOUNT_CHANGED   = function(f, u)
-        local calc = _GF_EnsureCalc(f)
+        local calc = f._msufHPCalc
+        if not calc and not _calcUnsupported then calc = _GF_EnsureCalc(f) end
         if calc then
             if f._msufGFHealthTick == GetTime() then return end
             dispatchHealth(f, u)
@@ -2194,14 +2196,24 @@ local UNIT_DISPATCH = {
 
 ------------------------------------------------------------------------
 -- Per-frame OnEvent handler
+-- PERF: if/elseif for top-3 events (UNIT_HEALTH, UNIT_AURA, UNIT_POWER_UPDATE)
+-- skips hash lookup for ~80% of all events.
 ------------------------------------------------------------------------
 local function GF_OnEvent(self, event, unit, ...)
     local u = self.unit
     if not u then return end
     if unit and unit ~= u then return end
 
-    local fn = UNIT_DISPATCH[event]
-    if fn then fn(self, u, ...) end
+    if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
+        dispatchHealth(self, u)
+    elseif event == "UNIT_AURA" then
+        dispatchAura(self, u, ...)
+    elseif event == "UNIT_POWER_UPDATE" or event == "UNIT_MAXPOWER" then
+        dispatchPower(self, u)
+    else
+        local fn = UNIT_DISPATCH[event]
+        if fn then fn(self, u, ...) end
+    end
 end
 
 ------------------------------------------------------------------------

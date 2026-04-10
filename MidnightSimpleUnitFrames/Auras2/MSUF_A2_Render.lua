@@ -362,6 +362,7 @@ local function ScheduleFlush(delay)
 end
 
 -- MarkDirty (public entry point for scheduling unit updates)
+-- PERF: Inlined DirtyAdd + ScheduleFlush — was 3 function calls, now 0.
 
 local function MarkDirty(unit, delay)
     if not unit then return end
@@ -374,10 +375,30 @@ local function MarkDirty(unit, delay)
         return
     end
 
-    DirtyAdd(unit)
+    -- Inlined DirtyAdd
+    DirtyMark[unit] = DirtyGen
+    DirtyCount = DirtyCount + 1
+    DirtyList[DirtyCount] = unit
+    if _isFlushing then _dirtyWhileFlushing = true end
+
+    -- Inlined ScheduleFlush
     if not delay or delay < 0 then delay = 0 end
     FlushScheduled = true
-    ScheduleFlush(delay)
+    if _flushDriverActive then
+        if delay == 0 then
+            _flushNextAt = 0
+        else
+            local at = GetTime() + delay
+            if not _flushNextAt or at < _flushNextAt then
+                _flushNextAt = at
+            end
+        end
+    else
+        _flushNextAt = (delay == 0) and 0 or (GetTime() + delay)
+        _flushDriverActive = true
+        _flushDriver:Show()
+        _flushDriver:SetScript("OnUpdate", FlushDriverOnUpdate)
+    end
 end
 
 -- EnsureAttached: create per-unit anchor + container frames
@@ -1325,13 +1346,23 @@ local function RenderUnit(entry)
     debuffCount = (showDebuffs and not skipDebuffs) and nD or 0
 
     -- CommitIcon: debuffs
+    -- PERF: Inlined AcquireIcon fast path — pool[i] hit skips function call.
+    -- Full AcquireIcon only for pool miss (icon creation, rare after warmup).
     if debuffCount > 0 then
         local list = entry._debuffList
         local container = entry.debuffs
+        local pool = container._msufIcons
+        if not pool then pool = {}; container._msufIcons = pool end
+        if debuffCount > (container._msufA2_activeN or 0) then container._msufA2_activeN = debuffCount end
         for i = 1, debuffCount do
             local aura = list[i]
             if aura then
-                local icon = _AcquireIcon(container, i)
+                local icon = pool[i]
+                if icon then
+                    if not icon:IsShown() then icon:Show() end
+                else
+                    icon = _AcquireIcon(container, i)
+                end
                 _CommitIcon(icon, unit, aura, shared, false, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
             end
         end
@@ -1341,10 +1372,18 @@ local function RenderUnit(entry)
     if buffCount > 0 then
         local list = entry._buffList
         local container = entry.buffs
+        local pool = container._msufIcons
+        if not pool then pool = {}; container._msufIcons = pool end
+        if buffCount > (container._msufA2_activeN or 0) then container._msufA2_activeN = buffCount end
         for i = 1, buffCount do
             local aura = list[i]
             if aura then
-                local icon = _AcquireIcon(container, i)
+                local icon = pool[i]
+                if icon then
+                    if not icon:IsShown() then icon:Show() end
+                else
+                    icon = _AcquireIcon(container, i)
+                end
                 _CommitIcon(icon, unit, aura, shared, true, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
             end
         end
