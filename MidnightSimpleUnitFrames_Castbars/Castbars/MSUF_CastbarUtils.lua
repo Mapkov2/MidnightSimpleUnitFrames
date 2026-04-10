@@ -943,21 +943,6 @@ function _G.MSUF_CB_ApplyTexts(frame, state, castText, timeText)
     end
 end
 
-function _G.MSUF_CB_ApplyFillAndTime(frame, state, ...)
-    if not frame then return end
-    if type(_G.MSUF_Castbar_ApplyActiveDuration) == "function" and state ~= nil then
-        -- Pass-through to the existing shared apply helper (no behavior changes here).
-        return _G.MSUF_Castbar_ApplyActiveDuration(frame, state, ...)
-    end
-end
-
-function _G.MSUF_CB_ApplyEmpowerTicks(frame, state, ...)
-    -- Forward to the existing empower tick renderer (SSoT lives there).
-    if type(_G.MSUF_LayoutEmpowerTicks) == "function" then
-        return _G.MSUF_LayoutEmpowerTicks(frame, ...)
-    end
-end
-
 
 -- =====================================================================
 -- Cluster A: Canonical ClearEmpowerState  single definition for all files.
