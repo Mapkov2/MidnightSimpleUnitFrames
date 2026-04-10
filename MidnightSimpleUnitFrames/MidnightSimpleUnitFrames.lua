@@ -512,7 +512,7 @@ end
 local function MSUF_ResetBarZero(bar, hide)
     if not bar then  return end
     bar:SetMinMaxValues(0, 1)
-    MSUF_SetBarValue(bar, 0, false)
+    bar:SetValue(0)
     bar.MSUF_lastValue = 0
     if hide then bar:Hide() end
  end
@@ -587,65 +587,30 @@ function ns.Bars.SetOverlayBarTexture(bar, texGetter)
     end
  end
 -- Patch Q2: Bars spec-driven Apply (Health/Power/Absorb/HealAbsorb + Reset/Hide)
+-- 12.0: ApplySpec dispatcher eliminated. Callers use ns.Bars.Spec.* directly.
 ns.Bars.Spec = ns.Bars.Spec or {}
--- PERF: Cache health/power spec functions at file scope (called 50-250x/sec in combat).
--- These are static after init; eliminates ns→Bars→Spec→[key] table chain from hot path.
--- Secret-safe: no value comparisons, pure function reference caching.
-local _cachedHealthSpec = nil
-local _cachedPowerPctSpec = nil
-
-function ns.Bars.ApplySpec(frame, unit, key, ...)
-    if key == "health" then
-        local fn = _cachedHealthSpec
-        if not fn then
-            fn = ns.Bars.Spec and ns.Bars.Spec.health
-            _cachedHealthSpec = fn
-        end
-        if fn then return fn(frame, unit, ...) end
-        return nil
-    end
-    if key == "power_pct" then
-        local fn = _cachedPowerPctSpec
-        if not fn then
-            fn = ns.Bars.Spec and ns.Bars.Spec.power_pct
-            _cachedPowerPctSpec = fn
-        end
-        if fn then return fn(frame, unit, ...) end
-        return nil
-    end
-    -- Cold path: other spec keys (rare / non-combat)
-    local fn = ns.Bars.Spec and ns.Bars.Spec[key]
-    if not fn then  return nil end
-    return fn(frame, unit, ...)
-end
 ns.Bars.Spec.health = ns.Bars.Spec.health or function(frame, unit)
     if not frame or not unit or not frame.hpBar then  return nil, nil, false end
     if not (F.UnitExists and F.UnitExists(unit)) then
         ns.Bars.ResetHealthAndOverlays(frame, true)
-        frame._msufFlushHP = nil
-        frame._msufFlushMaxHP = nil
          return 0, 1, false
     end
+    -- 12.0: Unified calculator update — one C-side call for health + absorbs + prediction.
+    -- Test mode path still uses legacy ApplyHealthBars for faked values.
+    if _G.MSUF_AbsorbTextureTestMode then
+        local maxHP = (F.UnitHealthMax and F.UnitHealthMax(unit)) or 1
+        local hp = (F.UnitHealth and F.UnitHealth(unit)) or 0
+        ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
+        return hp, maxHP, true
+    end
+    local calcFn = ns.Bars.HealthCalcUpdate
+    if calcFn then
+        local hp, maxHP = calcFn(frame, unit)
+        return hp, maxHP, true
+    end
+    -- Fallback: pre-12.0 path
     local maxHP = (F.UnitHealthMax and F.UnitHealthMax(unit)) or 1
     local hp = (F.UnitHealth and F.UnitHealth(unit)) or 0
-    -- PERF: Diff-gate — skip SetMinMaxValues + SetBarValue + absorb chain when hp/maxHP
-    -- haven't changed since last pass. Check dirty flags FIRST (cheapest gate) to avoid
-    -- 4x issecretvalue calls when absorb/heal-absorb events already require a full apply.
-    -- Secret-safe: issecretvalue guard before any Lua-side == comparison.
-    local prevHP, prevMax = frame._msufFlushHP, frame._msufFlushMaxHP
-    if prevHP ~= nil and prevMax ~= nil
-        and not frame._msufAbsorbDirty and not frame._msufHealAbsorbDirty
-        and not frame._msufSelfHealDirty
-        and not _G.MSUF_AbsorbTextureTestMode then
-        local iss = _G.issecretvalue
-        if not (iss and (iss(hp) or iss(maxHP) or iss(prevHP) or iss(prevMax))) then
-            if hp == prevHP and maxHP == prevMax then
-                return hp, maxHP, true
-            end
-        end
-    end
-    frame._msufFlushHP = hp
-    frame._msufFlushMaxHP = maxHP
     ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
      return hp, maxHP, true
 end
@@ -727,14 +692,6 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     bar:Show()
      return true
 end
-ns.Bars.Spec.power_abs = ns.Bars.Spec.power_abs or function(frame, unit)
-    if not frame or not unit then  return end
-    local bar = frame.targetPowerBar
-    if not bar then  return end
-    local barsConf = (MSUF_DB and MSUF_DB.bars) or {}
-    MSUF_EnsureUnitFlags(frame)
-    _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, frame.isBoss, frame._msufIsPlayer, frame._msufIsTarget, frame._msufIsFocus, false)
- end
 ns.Bars.Spec.power_pct = ns.Bars.Spec.power_pct or function(frame, unit, barsConf, isBoss, isPlayer, isTarget, isFocus)
     local bar = frame and frame.targetPowerBar
     if not (frame and unit and bar) then  return false end
@@ -750,7 +707,6 @@ _G.MSUF_RefreshPlayerPowerBar = function()
         MSUF_EnsureUnitFlags(pf)
         _MSUF_Bars_SyncPower(pf, pf.targetPowerBar, "player", barsConf, false, true, false, false, false)
         -- Invalidate power text caches so text + color update immediately
-        pf._msufCachedPSerial = nil  -- forces C-API re-fetch in RenderPowerText
         pf._msufPTColorType = nil    -- forces color re-apply
         pf._msufLastPwrC = nil       -- forces text re-render
         pf._msufLastPwrM = nil
@@ -776,41 +732,26 @@ function ns.Bars.ResetHealthAndOverlays(frame, clearAbsorbs)
  end
 function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
     if not frame or not unit or not frame.hpBar then  return nil, nil end
-    if maxHP == nil and F.UnitHealthMax then
-        maxHP = F.UnitHealthMax(unit)
-    end
-    if type(maxHP) == "number" then
-        frame.hpBar:SetMinMaxValues(0, maxHP)
-    end
-    if hp == nil and F.UnitHealth then
-        hp = F.UnitHealth(unit)
-    end
-    if type(hp) == "number" then
-        MSUF_SetBarValue(frame.hpBar, hp)
-    end
-    -- Absorb overlays: only update when marked dirty (absorb/maxHP events),
-    -- not on every UNIT_HEALTH. Dirty flags set by FrameOnEvent + OnShow + AttachFrame.
-    -- Exception: test mode needs unconditional updates (on→show fakes, off→clear fakes).
+    -- 12.0: maxHP/hp may be secret values. SetMinMaxValues/SetValue handle them C-side.
+    if maxHP == nil and F.UnitHealthMax then maxHP = F.UnitHealthMax(unit) end
+    if hp == nil and F.UnitHealth then hp = F.UnitHealth(unit) end
+    if maxHP ~= nil then frame.hpBar:SetMinMaxValues(0, maxHP) end
+    if hp ~= nil then frame.hpBar:SetValue(hp) end
+    -- Test mode: show faked absorb values.
     local absorbTestMode = _G.MSUF_AbsorbTextureTestMode
     local wasTestMode = frame._msufAbsorbTestActive
-    if absorbTestMode then frame._msufAbsorbTestActive = true end
-    local absorbForce = absorbTestMode or wasTestMode
     if absorbTestMode then
+        frame._msufAbsorbTestActive = true
         frame.hpBar:SetMinMaxValues(0, 100)
-        MSUF_SetBarValue(frame.hpBar, 60, false)
+        frame.hpBar:SetValue(60)
     end
-    if frame.absorbBar and (frame._msufAbsorbDirty or absorbForce) then
-        frame._msufAbsorbDirty = false
+    if frame.absorbBar and (absorbTestMode or wasTestMode) then
         ns.Bars._UpdateAbsorbBar(frame, unit, absorbTestMode and 100 or maxHP)
     end
-    if frame.healAbsorbBar and (frame._msufHealAbsorbDirty or absorbForce) then
-        frame._msufHealAbsorbDirty = false
+    if frame.healAbsorbBar and (absorbTestMode or wasTestMode) then
         ns.Bars._UpdateHealAbsorbBar(frame, unit, absorbTestMode and 100 or maxHP)
     end
     if wasTestMode and not absorbTestMode then frame._msufAbsorbTestActive = nil end
-    if frame.selfHealPredBar then
-        if ns.Bars._UpdateSelfHealPrediction then ns.Bars._UpdateSelfHealPrediction(frame, unit, maxHP, hp) end
-    end
      return hp, maxHP
 end
 
@@ -887,7 +828,7 @@ local function MSUF_CreateOverlayStatusBar(parent, baseBar, frameLevel, r, g, b,
     bar:SetAllPoints(baseBar)
     bar:SetStatusBarTexture(MSUF_GetBarTexture())
     bar:SetMinMaxValues(0, 1)
-    MSUF_SetBarValue(bar, 0, false)
+    bar:SetValue(0)
     bar.MSUF_lastValue = 0
     if frameLevel then
         bar:SetFrameLevel(frameLevel)
@@ -1056,37 +997,10 @@ local MSUF_SMOOTH_INTERPOLATION = (type(Enum) == "table"
     and Enum.StatusBarInterpolation.ExponentialEaseOut) or nil
 -- Performance/Secret-safe (no MSUF_FastCall): NEVER compare (numbers can be "secret"). Always apply the value.
 -- This avoids secret-compare crashes entirely and removes tostring/tonumber churn from hotpaths.
-function MSUF_SetBarValue(bar, value, smooth)
-    if not bar or value == nil then  return end
-    local isv = _MSUF_issecretvalue
-    if not (isv and isv(value)) then
-        if type(value) == "string" then
-            local n = tonumber(value)
-            if type(n) ~= "number" then return end
-            value = n
-        end
-    end
-    if smooth and MSUF_SMOOTH_INTERPOLATION then
-        bar:SetValue(value, MSUF_SMOOTH_INTERPOLATION)
-    else
-        bar:SetValue(value)
-    end
- end
-function MSUF_SetBarMinMax(bar, minValue, maxValue)
-    if not bar or minValue == nil or maxValue == nil then return end
-    local isv = _MSUF_issecretvalue
-    local minSecret = isv and isv(minValue)
-    local maxSecret = isv and isv(maxValue)
-    if not minSecret then
-        if type(minValue) == "string" then minValue = tonumber(minValue) end
-    end
-    if not maxSecret then
-        if type(maxValue) == "string" then maxValue = tonumber(maxValue) end
-    end
-    if not minSecret and type(minValue) ~= "number" then return end
-    if not maxSecret and type(maxValue) ~= "number" then return end
-    bar:SetMinMaxValues(minValue, maxValue)
- end
+-- 12.0: bar:SetValue handles secrets natively. Thin compat wrapper.
+function MSUF_SetBarValue(bar, value) if bar and value ~= nil then bar:SetValue(value) end end
+-- 12.0: bar:SetMinMaxValues handles secrets natively. Thin compat wrapper.
+function MSUF_SetBarMinMax(bar, minValue, maxValue) if bar then bar:SetMinMaxValues(minValue, maxValue) end end
 MSUF_UnitEditModeActive = (MSUF_UnitEditModeActive == true)
 MSUF_CurrentOptionsKey = MSUF_CurrentOptionsKey
 MSUF_CurrentEditUnitKey = MSUF_CurrentEditUnitKey
@@ -2898,15 +2812,14 @@ f._msufRaidMarkerLayoutStamp = 1
     local point, relPoint = ns.Icons._layout.Resolve(anchor, true)
     ns.Icons._layout.Apply(f.raidMarkerIcon, f, size, point, relPoint, ox, oy)
  end
--- PERF: Bypass ns.Bars.ApplySpec dispatcher (1 function call + 1 string compare saved per update).
--- At 933 health updates/s in BG, this eliminates ~0.2ms/sec of dispatch overhead.
+-- 12.0: UFCore now resolves directly to ns.Bars.HealthCalcUpdate. Thin compat wrapper.
 local _cachedSpecHealth = nil
 function _G.MSUF_UFCore_UpdateHealthFast(self)
-    if not self then  return nil, nil, false end
-    local fn = _cachedSpecHealth
-    if not fn then fn = ns.Bars.Spec and ns.Bars.Spec.health; _cachedSpecHealth = fn end
-    if fn then return fn(self, self.unit) end
-    return nil, nil, false
+    if not self then return nil, nil, false end
+    local fn = _cachedSpecHealth or ns.Bars.HealthCalcUpdate or (ns.Bars.Spec and ns.Bars.Spec.health)
+    if not fn then return nil, nil, false end
+    _cachedSpecHealth = fn
+    return fn(self, self.unit)
 end
 function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
     if not self or not self.unit or not self.hpText then  return end
@@ -2994,7 +2907,7 @@ function _G.MSUF_UFCore_UpdatePowerBarFast(self)
     -- Raw UnitPower/UnitPowerMax + ExponentialEaseOut (MidnightRogueBars approach).
     MSUF_EnsureUnitFlags(self)
     local barsConf = (MSUF_DB and MSUF_DB.bars) or {}
-    ns.Bars.ApplySpec(self, self.unit, "power_pct", barsConf, self.isBoss, self._msufIsPlayer, self._msufIsTarget, self._msufIsFocus)
+    ns.Bars.Spec.power_pct(self, self.unit, barsConf, self.isBoss, self._msufIsPlayer, self._msufIsTarget, self._msufIsFocus)
  end
 local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
     ns.Bars.ResetHealthAndOverlays(self, clearAbsorbs)
@@ -3034,7 +2947,7 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
     local hb = self.hpBar
     if hb then
         MSUF_SetBarMinMax(hb, 0, 1)
-        MSUF_SetBarValue(hb, fakeHp, false)
+        hb:SetValue(fakeHp)
 
         -- Use the configured dark tone (defaults to black) for a consistent placeholder.
         local darkR, darkG, darkB = 0, 0, 0
@@ -3065,7 +2978,7 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
     if pb then
         if pb.Show then pb:Show() end
         MSUF_SetBarMinMax(pb, 0, 1)
-        MSUF_SetBarValue(pb, fakePower, false)
+        pb:SetValue(fakePower)
         if pb.SetStatusBarColor then
             -- Simple, readable "mana-like" placeholder.
             pb:SetStatusBarColor(0.20, 0.60, 1.00, 1)
@@ -3233,14 +3146,14 @@ local _UF = {
 local function MSUF_SyncTargetPowerBar(self, unit, barsConf, isPlayer, isTarget, isFocus)
     if not self then  return false end
     MSUF_EnsureUnitFlags(self)
-    return ns.Bars.ApplySpec(self, unit, "power_pct", barsConf, self.isBoss, isPlayer, isTarget, isFocus) and true or false
+    return ns.Bars.Spec.power_pct(self, unit, barsConf, self.isBoss, isPlayer, isTarget, isFocus) and true or false
 end
 local function MSUF_UFStep_BasicHealth(self, unit)
     local hp = ns.Bars.ApplyHealthBars(self, unit)
      return hp
 end
 local function MSUF_UFStep_HeavyVisual(self, unit, key, g_opt)
-    local doHeavyVisual = true
+    -- Rate-limit: 0.15s between heavy visual passes (options live-apply safety).
     local forceHeavy = false
     local tokenFlags = _G.MSUF_UnitTokenChanged
     if tokenFlags and key and tokenFlags[key] then
@@ -3250,108 +3163,29 @@ local function MSUF_UFStep_HeavyVisual(self, unit, key, g_opt)
     local now = F.GetTime()
     if not forceHeavy then
         local nextAt = self._msufHeavyVisualNextAt or 0
-        if now < nextAt then
-            doHeavyVisual = false
-        else
-            self._msufHeavyVisualNextAt = now + 0.15 -- menu/edit live-apply safety only
-        end
+        if now < nextAt then return end
+        self._msufHeavyVisualNextAt = now + 0.15
     else
         self._msufHeavyVisualNextAt = now
     end
-    if doHeavyVisual then
-        local getCache = _MSUF_ResolveGetCache()
-        local cache = getCache and getCache() or nil
-
-        local mode = (cache and cache.barMode) or nil
-        if mode ~= "dark" and mode ~= "class" and mode ~= "unified" then
-            local g = g_opt or ((MSUF_DB and MSUF_DB.general) or {})
-            mode = g.barMode
-            if mode ~= "dark" and mode ~= "class" and mode ~= "unified" then
-                mode = (g.useClassColors and "class") or (g.darkMode and "dark") or "dark"
-            end
-        end
-
-        local barR, barG, barB
-        if mode == "dark" then
-            barR, barG, barB = (cache and cache.darkBarR) or 0, (cache and cache.darkBarG) or 0, (cache and cache.darkBarB) or 0
-        elseif mode == "unified" then
-            barR, barG, barB = (cache and cache.unifiedBarR) or 0.10, (cache and cache.unifiedBarG) or 0.60, (cache and cache.unifiedBarB) or 0.90
-        else
-            local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
-            local fastNPC = _G.MSUF_UFCore_GetNPCReactionColorFast
-            local isPlayerUnit = F.UnitIsPlayer(unit)
-            if isPlayerUnit then
-                local _, class = F.UnitClass(unit)
-                if type(fastClass) == "function" then
-                    barR, barG, barB = fastClass(class)
-                else
-                    barR, barG, barB = MSUF_GetClassBarColor(class)
-                end
-            else
-                local kind = "enemy"
-                if F.UnitIsDeadOrGhost(unit) then
-                    kind = "dead"
-                else
-                    local reaction = F.UnitReaction("player", unit)
-                    if reaction and reaction >= 5 then
-                        kind = "friendly"
-                    elseif reaction == 4 then
-                        kind = "neutral"
-                    end
-                end
-                -- NPC Type override: self-contained classification
-                if kind == "enemy" and cache and cache.npcColorMode == "type" and cache.npcTypeColorBar
-                   and _G.MSUF_NpcTypeInstanceActive then
-                    -- Per-unit gate
-                    local unitOK = true
-                    if key == "target" then unitOK = cache.npcTypeTarget
-                    elseif key == "focus" then unitOK = cache.npcTypeFocus
-                    elseif key == "targettarget" then unitOK = cache.npcTypeToT
-                    elseif key and key:sub(1,4) == "boss" then unitOK = cache.npcTypeBoss
-                    end
-                    if unitOK then
-                    local cls = UnitClassification(unit)
-                    if cls == "worldboss" or cls == "boss" then
-                        kind = "npcBoss"
-                    elseif cls == "elite" or cls == "rareelite" then
-                        local lvl = UnitEffectiveLevel and UnitEffectiveLevel(unit) or 0
-                        if lvl == -1 then
-                            kind = "npcBoss"
-                        elseif UnitIsLieutenant and UnitIsLieutenant(unit) then
-                            kind = "npcMiniboss"
-                        else
-                            local uc = UnitClassBase and UnitClassBase(unit)
-                            kind = (uc == "PALADIN") and "npcCaster" or "npcMelee"
-                        end
-                    elseif cls == "rare" then
-                        kind = "npcMiniboss"
-                    else
-                        kind = "npcRegular"
-                    end
-                    end -- unitOK
-                end
-                if type(fastNPC) == "function" then
-                    barR, barG, barB = fastNPC(kind)
-                else
-                    barR, barG, barB = MSUF_GetNPCReactionColor(kind)
-                end
-            end
-            if self._msufIsPet and cache and cache.petFrameColorEnabled then
-                barR, barG, barB = cache.petFrameColorR, cache.petFrameColorG, cache.petFrameColorB
-            end
-        end
-        self.hpBar:SetStatusBarColor(barR, barG, barB, 1)
-        if self.hpGradients then
-            ns.Bars._ApplyHPGradient(self)
-        elseif self.hpGradient then
-            ns.Bars._ApplyHPGradient(self.hpGradient)
-        end
-        if self.bg then
-            MSUF_ApplyBarBackgroundVisual(self)
-        end
-        self._msufHeavyVisualApplied = true
-        self._msufHeavyVisualSettingsSerial = _MSUF_GetUFCoreSettingsSerial()
+    -- Delegate bar-mode color resolution to UFCore (dark/class/unified + NPC type).
+    local fn = _G.MSUF_UFCore_RefreshHealthBarColor
+    if fn then
+        -- Clear diff-gate so color always re-applies on options change.
+        self._msufLastHPBarR = nil
+        fn(self)
     end
+    -- Gradients + bar background (not exported to _G, call via ns.Bars directly).
+    if self.hpGradients then
+        ns.Bars._ApplyHPGradient(self)
+    elseif self.hpGradient then
+        ns.Bars._ApplyHPGradient(self.hpGradient)
+    end
+    if self.bg then
+        MSUF_ApplyBarBackgroundVisual(self)
+    end
+    self._msufHeavyVisualApplied = true
+    self._msufHeavyVisualSettingsSerial = _MSUF_GetUFCoreSettingsSerial()
 end
 local function MSUF_UFStep_SyncTargetPower(self, unit, barsConf, isPlayer, isTarget, isFocus)
   local pb = self.targetPowerBar or self.powerBar
@@ -3591,7 +3425,7 @@ end
                 MSUF_ResetBarZero(self.targetPowerBar, true)
             else
                 self.targetPowerBar:SetMinMaxValues(0, 100)
-                MSUF_SetBarValue(self.targetPowerBar, 40, false)
+                self.targetPowerBar:SetValue(40)
                 self.targetPowerBar.MSUF_lastValue = 40
                 do
                     local tok = "MANA"
@@ -3648,7 +3482,7 @@ if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and no
     local hb = self.hpBar
     if hb then
         MSUF_SetBarMinMax(hb, 0, 1)
-        MSUF_SetBarValue(hb, 0.73, false)
+        hb:SetValue(0.73)
         if hb.SetStatusBarColor then hb:SetStatusBarColor(0.20, 0.80, 0.20, 1) end
         if self.hpGradients then ns.Bars._ApplyHPGradient(self)
         elseif self.hpGradient then ns.Bars._ApplyHPGradient(self.hpGradient) end
@@ -3659,7 +3493,7 @@ if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and no
         local showPB = (conf and conf.showPower ~= false)
         if showPB then
             pb:SetMinMaxValues(0, 100)
-            MSUF_SetBarValue(pb, 52, false)
+            pb:SetValue(52)
             pb.MSUF_lastValue = 52
             if pb.SetStatusBarColor then pb:SetStatusBarColor(0.20, 0.60, 1.00, 1) end
             ns.Bars.ApplyPowerGradientOnce(self)
@@ -4994,7 +4828,7 @@ local function _CreateSelfHealPredBar(f, hpBar)
     local bar = _G.CreateFrame("StatusBar", nil, clip)
     bar:SetStatusBarTexture(MSUF_GetBarTexture())
     bar:SetMinMaxValues(0, 1)
-    MSUF_SetBarValue(bar, 0, false)
+    bar:SetValue(0)
     bar.MSUF_lastValue = 0
     bar:SetFrameLevel(clip:GetFrameLevel())
     bar:SetStatusBarColor(0.0, 1.0, 0.4, 0.35)
@@ -5073,7 +4907,7 @@ local function CreateSimpleUnitFrame(unit)
     hpBar:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -2); hpBar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
     hpBar:SetStatusBarTexture(MSUF_GetBarTexture())
     hpBar:SetMinMaxValues(0, 1)
-    MSUF_SetBarValue(hpBar, 0, false); hpBar.MSUF_lastValue = 0
+    hpBar:SetValue(0); hpBar.MSUF_lastValue = 0
     hpBar:SetFrameLevel(f:GetFrameLevel() + 1)
     local bgTex = ns.UF.MakeTex(f, "hpBarBG", "hpBar", "BACKGROUND"); bgTex:SetAllPoints(hpBar)
     MSUF_ApplyBarBackgroundVisual(f)
@@ -5103,7 +4937,7 @@ local function CreateSimpleUnitFrame(unit)
         pBar:SetHeight(h)
         pBar:SetPoint("TOPLEFT",  hpBar, "BOTTOMLEFT",  0, 0); pBar:SetPoint("TOPRIGHT", hpBar, "BOTTOMRIGHT", 0, 0)
         pBar:SetMinMaxValues(0, 1)
-        MSUF_SetBarValue(pBar, 0, false); pBar.MSUF_lastValue = 0
+        pBar:SetValue(0); pBar.MSUF_lastValue = 0
         pBar:SetFrameLevel(hpBar:GetFrameLevel())
         local pbg = ns.UF.MakeTex(f, "powerBarBG", "targetPowerBar", "BACKGROUND"); pbg:SetAllPoints(pBar)
         MSUF_ApplyBarBackgroundVisual(f)

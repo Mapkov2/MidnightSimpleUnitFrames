@@ -161,6 +161,5 @@ Options\MSUF_Options_GF_Auras.lua
 # ═══════════════════════════════════════════════════════════════
 Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua
 Modules\MSUF_RoundedUnitframes.lua
-Modules\MSUF_3DPortraits.lua
 Modules\MSUF_PortraitDecoration.lua
 

@@ -1,136 +1,142 @@
--- Core/MSUF_Portraits.lua  Portrait system (3D portraits + boss portrait layout)
--- Extracted from MidnightSimpleUnitFrames.lua (Phase 2 file split)
+-- Core/MSUF_Portraits.lua — Unified 2D/3D/Class portrait system
+-- Merged from MSUF_Portraits.lua + MSUF_3DPortraits.lua (zero feature regression).
 -- Loads AFTER MidnightSimpleUnitFrames.lua in the TOC.
 local addonName, ns = ...
 local F = ns.Cache and ns.Cache.F or {}
-local type, tonumber = type, tonumber
+local type, tonumber, rawget = type, tonumber, rawget
 local PM = ns.PortraitMedia
 
--- 3D Portrait integration: some setups create a separate model frame that sits on top of the legacy
--- 2D Texture portrait. When "3D" is selected, ensure the 2D texture is not also shown.
--- We support common field names without scanning tables in hot paths.
-local function MSUF_Find3DPortraitFrame(f)
-    if not f then return nil end
-    return f.portrait3D
-        or f.portrait3d
-        or f.portraitModel
-        or f.portraitModelFrame
-        or f.portrait3DModel
-        or f.portrait3DFrame
-        or f.modelPortrait
-        or f.model3D
+-- ── Helpers ──
+local function SafeCall(obj, method, ...)
+    local fn = obj and obj[method]
+    if type(fn) == "function" then return fn(obj, ...) end
 end
 
-local function MSUF_SetShown(obj, shown)
+local function SetShown(obj, shown)
     if not obj then return end
-    if shown then
-        if obj.Show then obj:Show() end
+    if shown then if obj.Show then obj:Show() end
+    else if obj.Hide then obj:Hide() end end
+end
+
+local function IsPortraitModeActive(conf)
+    if type(conf) ~= "table" then return false end
+    local pm = conf.portraitMode
+    return (pm == "LEFT" or pm == "RIGHT")
+end
+
+-- ── 3D Model creation ──
+local function EnsureModel(f)
+    if not f then return nil end
+    local m = rawget(f, "portraitModel")
+    if m and m.SetUnit then return m end
+    m = CreateFrame("PlayerModel", nil, f)
+    m:Hide()
+    m:EnableMouse(false)
+    local baseLevel = (f.hpBar and f.hpBar.GetFrameLevel and f.hpBar:GetFrameLevel())
+        or (f.GetFrameLevel and f:GetFrameLevel()) or 0
+    m:SetFrameLevel(baseLevel + 5)
+    SafeCall(m, "SetPortraitZoom", 1)
+    SafeCall(m, "SetCamDistanceScale", 1)
+    SafeCall(m, "SetRotation", 0)
+    f.portraitModel = m
+    return m
+end
+
+-- ── Layout ──
+local function ApplyPortraitLayout(f, conf, widget)
+    if not (f and conf and widget) then return end
+    local mode = conf.portraitMode or "OFF"
+    local h = conf.height or (f.GetHeight and f:GetHeight()) or 30
+    local size = math.max(16, (tonumber(h) or 30) - 4)
+    widget:ClearAllPoints()
+    widget:SetSize(size, size)
+    local anchor = f.hpBar or f
+    if f._msufPowerBarReserved then anchor = f end
+    if mode == "LEFT" then
+        widget:SetPoint("RIGHT", anchor, "LEFT", 0, 0)
+        widget:Show()
+    elseif mode == "RIGHT" then
+        widget:SetPoint("LEFT", anchor, "RIGHT", 0, 0)
+        widget:Show()
     else
-        if obj.Hide then obj:Hide() end
+        widget:Hide()
     end
 end
 
 function MSUF_UpdateBossPortraitLayout(f, conf)
-    if not f or not f.portrait or not conf then  return end
-    local mode = conf.portraitMode or "OFF"
-    local h = conf.height or (f.GetHeight and f:GetHeight()) or 30
-    local size = math.max(16, h - 4)
-    local portrait = f.portrait
-    portrait:ClearAllPoints()
-    portrait:SetSize(size, size)
-    local anchor = f.hpBar or f
-    if f._msufPowerBarReserved then
-        anchor = f
-    end
-    if mode == "LEFT" then
-        portrait:SetPoint("RIGHT", anchor, "LEFT", 0, 0)
-        portrait:Show()
-    elseif mode == "RIGHT" then
-        portrait:SetPoint("LEFT", anchor, "RIGHT", 0, 0)
-        portrait:Show()
-    else
-        portrait:Hide()
-    end
- end
-local MSUF_PORTRAIT_MIN_INTERVAL = 0.06 -- seconds; small enough to feel instant
-local MSUF_PORTRAIT_BUDGET_USED = false
-local MSUF_PORTRAIT_BUDGET_RESET_SCHEDULED = false
-local function MSUF_ResetPortraitBudgetNextFrame()
-    if MSUF_PORTRAIT_BUDGET_RESET_SCHEDULED then  return end
-    MSUF_PORTRAIT_BUDGET_RESET_SCHEDULED = true
-    C_Timer.After(0, function()
-        MSUF_PORTRAIT_BUDGET_USED = false
-        MSUF_PORTRAIT_BUDGET_RESET_SCHEDULED = false
-     end)
- end
-local function MSUF_ApplyPortraitLayoutIfNeeded(f, conf)
-    if not f or not conf then  return end
-    local portrait = f.portrait
-    if not portrait then  return end
+    if not f or not f.portrait or not conf then return end
+    ApplyPortraitLayout(f, conf, f.portrait)
+end
+
+local function ApplyPortraitLayoutIfNeeded(f, conf)
+    if not f or not conf or not f.portrait then return end
     local mode = conf.portraitMode or "OFF"
     local h = conf.height or (f.GetHeight and f:GetHeight()) or 30
     if ns.Cache.StampChanged(f, "PortraitLayout", mode, h) then
-        f._msufPortraitLayoutStamp = 1
-        MSUF_UpdateBossPortraitLayout(f, conf)
+        ApplyPortraitLayout(f, conf, f.portrait)
     end
- end
-local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
-    if not f or not f.portrait or not conf then  return end
+end
+
+local function ApplyModelLayoutIfNeeded(f, conf)
+    local m = rawget(f, "portraitModel")
+    if not (m and m.SetUnit) then return end
     local mode = conf.portraitMode or "OFF"
+    local h = conf.height or (f.GetHeight and f:GetHeight()) or 30
+    local stamp = tostring(mode) .. "|" .. tostring(h)
+    if f._msufPortraitModelLayoutStamp ~= stamp then
+        f._msufPortraitModelLayoutStamp = stamp
+        ApplyPortraitLayout(f, conf, m)
+    end
+end
+
+-- ── Budget (one portrait render per frame) ──
+local PORTRAIT_MIN_INTERVAL = 0.06
+local _budgetUsed = false
+local _budgetResetScheduled = false
+
+local function ResetBudgetNextFrame()
+    if _budgetResetScheduled then return end
+    _budgetResetScheduled = true
+    C_Timer.After(0, function()
+        _budgetUsed = false
+        _budgetResetScheduled = false
+    end)
+end
+
+-- ── Core update function (2D / 3D / CLASS / OFF) ──
+local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
+    if not f or not f.portrait or not conf then return end
+
+    local mode = conf.portraitMode or "OFF"
+    local render = conf.portraitRender
+    if render ~= "3D" and render ~= "CLASS" then render = "2D" end
 
     local portrait = f.portrait
-    local portrait3D = nil
+    local model = rawget(f, "portraitModel")
 
-    -- Render mode: "2D" (default/legacy), "3D" (external module), "CLASS" (class icon).
-    local render = conf.portraitRender
-    if render ~= "3D" and render ~= "CLASS" then
-        render = "2D"
-    end
-
-    -- If 3D is selected, try to resolve the external model frame once.
-    -- (Only used on portrait refresh paths; not per UF update.)
-    if render == "3D" then
-        portrait3D = MSUF_Find3DPortraitFrame(f)
-        -- If we can't find a model frame, fall back to 2D so users don't lose portraits.
-        if not portrait3D then
-            render = "2D"
-        end
-    else
-        -- Switching away from 3D: ensure any external model is hidden.
-        portrait3D = MSUF_Find3DPortraitFrame(f)
-        if portrait3D then
-            MSUF_SetShown(portrait3D, false)
-        end
-    end
-    local classStyle = (conf and conf.portraitClassStyle) or "BLIZZARD"
+    -- Track render/mode changes
+    local classStyle = conf.portraitClassStyle or "BLIZZARD"
     if f._msufPortraitClassStyleStamp ~= classStyle then
         f._msufPortraitClassStyleStamp = classStyle
-        if mode ~= "OFF" then
-            f._msufPortraitDirty = true
-            f._msufPortraitNextAt = 0
-        end
+        if mode ~= "OFF" then f._msufPortraitDirty = true; f._msufPortraitNextAt = 0 end
     end
     if f._msufPortraitRenderStamp ~= render then
         f._msufPortraitRenderStamp = render
-        if mode ~= "OFF" then
-            f._msufPortraitDirty = true
-            f._msufPortraitNextAt = 0
-        end
+        if mode ~= "OFF" then f._msufPortraitDirty = true; f._msufPortraitNextAt = 0 end
     end
     if f._msufPortraitModeStamp ~= mode then
         f._msufPortraitModeStamp = mode
-        if mode ~= "OFF" then
-            f._msufPortraitDirty = true
-            f._msufPortraitNextAt = 0
+        if mode ~= "OFF" then f._msufPortraitDirty = true; f._msufPortraitNextAt = 0 end
     end
-    end
+
+    -- OFF: hide everything
     if mode == "OFF" then
-        if portrait and portrait.Hide then portrait:Hide() end
-        if portrait3D then MSUF_SetShown(portrait3D, false) end
+        SetShown(portrait, false)
+        SetShown(model, false)
         return
     end
-    -- In Edit Mode (or Boss Test Mode), show a placeholder portrait even if the unit doesn't exist,
-    -- so users can position/size it reliably.
+
+    -- Preview support (Edit Mode / Boss Test)
     local allowPreview = false
     if not existsForPortrait then
         local inCombat = (F.InCombatLockdown and F.InCombatLockdown()) and true or false
@@ -139,75 +145,70 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
         end
     end
     if not existsForPortrait and not allowPreview then
-        if portrait and portrait.Hide then portrait:Hide() end
-        if portrait3D then MSUF_SetShown(portrait3D, false) end
+        SetShown(portrait, false)
+        SetShown(model, false)
         return
     end
-    MSUF_ApplyPortraitLayoutIfNeeded(f, conf)
 
-    -- 3D portraits: hide the 2D texture so it doesn't show behind the model.
-    -- Keep the 2D texture positioned/sized (layout above) so the 3D model can mirror it.
-    if render == "3D" and portrait3D then
+    -- Layout
+    ApplyPortraitLayoutIfNeeded(f, conf)
+
+    -- ── 3D path ──
+    if render == "3D" then
+        -- Hide 2D texture
         if portrait then
-            -- Clear texture to avoid any bleed-through during frame-level changes.
             if portrait.SetTexture then portrait:SetTexture(nil) end
-            if portrait.Hide then portrait:Hide() end
+            SetShown(portrait, false)
         end
-
-        -- Mirror layout to the model if possible.
-        if portrait3D.ClearAllPoints then portrait3D:ClearAllPoints() end
-        if portrait3D.SetAllPoints and portrait then
-            portrait3D:SetAllPoints(portrait)
-        elseif portrait3D.SetPoint and portrait then
-            portrait3D:SetPoint("CENTER", portrait, "CENTER", 0, 0)
-            if portrait3D.SetSize and portrait.GetSize then
-                local w, h = portrait:GetSize()
-                portrait3D:SetSize(w or 0, h or 0)
+        local m = EnsureModel(f)
+        ApplyModelLayoutIfNeeded(f, conf)
+        if f._msufPortraitDirty then
+            local now = (F.GetTime and F.GetTime()) or 0
+            local nextAt = tonumber(f._msufPortraitNextAt) or 0
+            if (now >= nextAt) and not _budgetUsed then
+                SafeCall(m, "ClearModel")
+                local u = existsForPortrait and unit or "player"
+                SafeCall(m, "SetUnit", u)
+                SafeCall(m, "SetPortraitZoom", 1)
+                SafeCall(m, "SetCamDistanceScale", 1)
+                SafeCall(m, "SetRotation", 0)
+                f._msufPortraitDirty = nil
+                f._msufPortraitNextAt = now + PORTRAIT_MIN_INTERVAL
+                _budgetUsed = true
+                ResetBudgetNextFrame()
+            else
+                ResetBudgetNextFrame()
             end
         end
-        if portrait3D.SetFrameLevel and portrait and portrait.GetFrameLevel then
-            portrait3D:SetFrameLevel((portrait:GetFrameLevel() or 0) + 5)
-        end
-
-        -- Feed a unit for preview if the external model supports it.
-        if portrait3D.SetUnit then
-            local u = existsForPortrait and unit or "player"
-            portrait3D:SetUnit(u)
-        end
-
-        MSUF_SetShown(portrait3D, true)
-        f._msufPortraitDirty = nil
-        f._msufPortraitNextAt = ((F.GetTime and F.GetTime()) or 0) + MSUF_PORTRAIT_MIN_INTERVAL
+        SetShown(m, true)
         return
     end
+
+    -- ── 2D / CLASS path ──
+    -- Hide 3D model
+    SetShown(model, false)
+
     if f._msufPortraitDirty then
         local now = (F.GetTime and F.GetTime()) or 0
         local nextAt = tonumber(f._msufPortraitNextAt) or 0
-        if (now >= nextAt) and (not MSUF_PORTRAIT_BUDGET_USED) then
+        if (now >= nextAt) and not _budgetUsed then
             if render == "CLASS" then
-                -- Important: only render class icon for *player* units.
-                -- Boss/NPC targets can still return a class token via UnitClass(), but should keep their 2D portrait.
                 local useClassIcon = false
                 if not existsForPortrait then
-                    -- EditMode/BossTest placeholder: show player's class icon.
                     useClassIcon = true
                 elseif F.UnitIsPlayer and (F.UnitIsPlayer(unit) == true) then
                     useClassIcon = true
                 end
-
                 if useClassIcon then
                     local u = existsForPortrait and unit or "player"
                     local class = (F.UnitClassBase and F.UnitClassBase(u)) or (F.UnitClass and select(2, F.UnitClass(u)))
-                    local style = (conf and conf.portraitClassStyle) or "BLIZZARD"
+                    local style = conf.portraitClassStyle or "BLIZZARD"
                     local visual = PM and PM.ResolveClassPortrait and PM.ResolveClassPortrait(class, style) or nil
                     if visual and portrait.SetTexture and portrait.SetTexCoord then
                         portrait:SetTexture(visual.texture)
                         portrait:SetTexCoord(visual.left or 0, visual.right or 1, visual.top or 0, visual.bottom or 1)
                     else
-                        -- Fallback: render a normal portrait if we can't resolve class coords.
-                        if portrait.SetTexCoord then
-                            portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-                        end
+                        if portrait.SetTexCoord then portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
                         if existsForPortrait and SetPortraitTexture then
                             SetPortraitTexture(portrait, unit)
                         elseif portrait.SetTexture then
@@ -215,10 +216,7 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
                         end
                     end
                 else
-                    -- NPC/Boss: keep normal 2D portrait even when "Class Icon" render is selected.
-                    if portrait.SetTexCoord then
-                        portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-                    end
+                    if portrait.SetTexCoord then portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
                     if existsForPortrait and SetPortraitTexture then
                         SetPortraitTexture(portrait, unit)
                     elseif portrait.SetTexture then
@@ -226,10 +224,8 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
                     end
                 end
             else
-                -- 2D (and legacy 3D fallback): standard portrait texture with a small crop.
-                if portrait.SetTexCoord then
-                    portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-                end
+                -- 2D: standard portrait texture
+                if portrait.SetTexCoord then portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
                 if existsForPortrait and SetPortraitTexture then
                     SetPortraitTexture(portrait, unit)
                 elseif portrait.SetTexture then
@@ -237,68 +233,47 @@ local function MSUF_UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
                 end
             end
             f._msufPortraitDirty = nil
-            f._msufPortraitNextAt = now + MSUF_PORTRAIT_MIN_INTERVAL
-            MSUF_PORTRAIT_BUDGET_USED = true
-            MSUF_ResetPortraitBudgetNextFrame()
+            f._msufPortraitNextAt = now + PORTRAIT_MIN_INTERVAL
+            _budgetUsed = true
+            ResetBudgetNextFrame()
         else
             if not f._msufPortraitRetryScheduled and C_Timer and C_Timer.After then
                 f._msufPortraitRetryScheduled = true
                 local delay = 0
-                if now < nextAt then
-                    delay = nextAt - now
-                    if delay < 0 then delay = 0 end
-                end
+                if now < nextAt then delay = nextAt - now; if delay < 0 then delay = 0 end end
                 C_Timer.After(delay, function()
-                    if not f then  return end
+                    if not f then return end
                     f._msufPortraitRetryScheduled = nil
-                    if not f._msufPortraitDirty then  return end
+                    if not f._msufPortraitDirty then return end
                     ns.UF.RequestUpdate(f, false, false, "PortraitRetry")
-                 end)
+                end)
             end
-            MSUF_ResetPortraitBudgetNextFrame()
+            ResetBudgetNextFrame()
+        end
     end
-    end
-    f.portrait:Show()
- end
+    portrait:Show()
+end
 
--- Export for UFCore's spec-driven Portrait element (avoids forcing full legacy updates on portrait events).
-_G.MSUF_UpdatePortraitIfNeeded = MSUF_UpdatePortraitIfNeeded
+_G.MSUF_UpdatePortraitIfNeeded = UpdatePortraitIfNeeded
 
--- Hot-path gate: portraits should not be touched every UF update. We only re-render when:
---  - portrait settings (mode/render) change
---  - portrait layout (height) changes
---  - the unit identity changes (target/focus)
---  - the frame is explicitly marked dirty (e.g. unit appeared/disappeared)
-local function MSUF_MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
-    if not f or not f.portrait or not conf then  return end
+-- ── Stamp-gated wrapper (hot-path gate) ──
+local function MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
+    if not f or not f.portrait or not conf then return end
 
     local mode = conf.portraitMode or "OFF"
     local render = conf.portraitRender
-    if render ~= "3D" and render ~= "CLASS" then
-        render = "2D"
-    end
+    if render ~= "3D" and render ~= "CLASS" then render = "2D" end
 
-    -- Fast OFF gate (still guarantees a hide if something left it shown).
-    if mode == "OFF" and f._msufPortraitModeStamp == "OFF" and (not f._msufPortraitDirty) then
-        local p = f.portrait
-        local m = MSUF_Find3DPortraitFrame(f)
-        if p and p.IsShown and p:IsShown() then
-            p:Hide()
-        end
-        if m and m.IsShown and m:IsShown() then
-            m:Hide()
-        end
+    -- Fast OFF gate
+    if mode == "OFF" and f._msufPortraitModeStamp == "OFF" and not f._msufPortraitDirty then
+        SetShown(f.portrait, false)
+        SetShown(rawget(f, "portraitModel"), false)
         return
     end
 
     local need = false
+    if f._msufPortraitModeStamp ~= mode or f._msufPortraitRenderStamp ~= render then need = true end
 
-    -- Settings change
-    if f._msufPortraitModeStamp ~= mode or f._msufPortraitRenderStamp ~= render then
-        need = true
-    end
-
-    -- Layout change (height impacts portrait size/anchor)
     local h = tonumber(conf.height) or (f.GetHeight and f:GetHeight()) or 0
     if f._msufPortraitLayoutModeStamp ~= mode or f._msufPortraitLayoutHStamp ~= h then
         f._msufPortraitLayoutModeStamp = mode
@@ -306,16 +281,9 @@ local function MSUF_MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
         need = true
     end
 
-    -- Identity-based gate: only re-render once per unit swap (GUID change).
-    -- This avoids repeated portrait work during UNIT_MODEL_CHANGED / UNIT_PORTRAIT_UPDATE spam,
-    -- while still updating correctly when the underlying unit token points to a new unit.
-    local doGuidGate = false
-    if unit == "target" or unit == "focus" or unit == "targettarget" then
-        doGuidGate = true
-    elseif unit ~= "player" and type(unit) == "string" and unit:sub(1, 4) == "boss" then
-        doGuidGate = true
-    end
-
+    -- GUID-based gate for target/focus/boss (only re-render on unit swap)
+    local doGuidGate = (unit == "target" or unit == "focus" or unit == "targettarget")
+        or (unit ~= "player" and type(unit) == "string" and unit:sub(1, 4) == "boss")
     if existsForPortrait and doGuidGate then
         local guid = (F.UnitGUID and F.UnitGUID(unit)) or nil
         if guid ~= f._msufPortraitLastGuid then
@@ -326,24 +294,132 @@ local function MSUF_MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
         end
     end
 
-    if f._msufPortraitDirty then
-        need = true
-    end
-
+    if f._msufPortraitDirty then need = true end
     if not need then return end
 
-    -- Route through _G so MSUF_3DPortraits.lua's override (EnsureModel + 3D render)
-    -- is honoured.  The file-local MSUF_UpdatePortraitIfNeeded is 2D/CLASS only;
-    -- the 3D module replaces the global after this file loads (TOC: Portraits → 3DPortraits).
-    local pfn = _G.MSUF_UpdatePortraitIfNeeded or MSUF_UpdatePortraitIfNeeded
-    pfn(f, unit, conf, existsForPortrait)
-
-    -- Sync stamps: the 3D path does NOT touch them (only the local/2D path does).
-    -- Without this every subsequent call sees stale stamps → need=true → redundant work.
-    f._msufPortraitModeStamp   = mode
+    UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
+    f._msufPortraitModeStamp = mode
     f._msufPortraitRenderStamp = render
 end
 
--- Export so UFCore can use the same gating (and avoid repeated work on UNIT_MODEL_CHANGED spam).
-_G.MSUF_MaybeUpdatePortrait = MSUF_MaybeUpdatePortrait
--- then multiplies by maxChars to get a clip width. Never measures secret unit names. to get a clip width. Never measures secret unit names.
+_G.MSUF_MaybeUpdatePortrait = MaybeUpdatePortrait
+
+-- ── SetPortraitTexture hook (boss edit mode 3D compat) ──
+if type(hooksecurefunc) == "function" and type(SetPortraitTexture) == "function" then
+    local function LookupConfForFrame(f)
+        local db = _G.MSUF_DB
+        if type(db) ~= "table" then return nil end
+        if f.isBoss then return db.boss end
+        local key = f.unitKey or f.msufConfigKey or f.unit
+        return key and db[key] or nil
+    end
+
+    hooksecurefunc("SetPortraitTexture", function(tex, unit)
+        if not tex then return end
+        local f = tex.__MSUF_PortraitOwner
+        if not f and tex.GetParent then
+            local p = tex:GetParent()
+            if p and (p.portrait == tex) then f = p; tex.__MSUF_PortraitOwner = p end
+        end
+        if not f then return end
+        local conf = LookupConfForFrame(f)
+        if not conf or conf.portraitRender ~= "3D" or not IsPortraitModeActive(conf) then return end
+        local m = EnsureModel(f)
+        ApplyModelLayoutIfNeeded(f, conf)
+        SafeCall(m, "ClearModel")
+        SafeCall(m, "SetUnit", unit)
+        SafeCall(m, "SetPortraitZoom", 1)
+        SafeCall(m, "SetCamDistanceScale", 1)
+        SafeCall(m, "SetRotation", 0)
+        SetShown(tex, false)
+        SetShown(m, true)
+    end)
+end
+
+-- ── Boss layout hook (keep 3D model in sync) ──
+if type(hooksecurefunc) == "function" then
+    hooksecurefunc("MSUF_UpdateBossPortraitLayout", function(f, conf)
+        if not (f and conf) then return end
+        if conf.portraitRender == "3D" and IsPortraitModeActive(conf) then
+            local m = rawget(f, "portraitModel")
+            if m and m.SetUnit then
+                f._msufPortraitModelLayoutStamp = nil
+                ApplyModelLayoutIfNeeded(f, conf)
+            end
+        else
+            SetShown(rawget(f, "portraitModel"), false)
+        end
+    end)
+end
+
+-- ── Sync helpers (called from Options) ──
+local function GetFramesForUnitKey(key)
+    if key == "tot" then key = "targettarget" end
+    if key == "boss" then
+        local t = {}
+        for i = 1, 5 do
+            local f = _G["MSUF_boss" .. i]
+            if f then t[#t + 1] = f end
+        end
+        return t
+    end
+    local f = _G["MSUF_" .. tostring(key)]
+    if not f and key == "targettarget" then f = _G.MSUF_targettarget or _G.MSUF_tot end
+    return f and { f } or {}
+end
+
+function _G.MSUF_3DPortraits_SyncUnit(unitKey)
+    if type(unitKey) ~= "string" or unitKey == "" then return end
+    local db = _G.MSUF_DB
+    if not db then return end
+    local conf = (unitKey == "boss") and db.boss or db[unitKey]
+    if unitKey == "tot" then conf = db.targettarget or db.tot end
+    if not conf then return end
+    local frames = GetFramesForUnitKey(unitKey)
+    for i = 1, #frames do
+        local f = frames[i]
+        if f then
+            f._msufPortraitDirty = true
+            f._msufPortraitNextAt = 0
+            if not IsPortraitModeActive(conf) then
+                SetShown(f.portrait, false)
+                SetShown(rawget(f, "portraitModel"), false)
+            else
+                UpdatePortraitIfNeeded(f, f.unit or unitKey, conf, UnitExists and UnitExists(f.unit or unitKey) or true)
+            end
+        end
+    end
+end
+
+-- Visibility sync (called from visual apply path)
+function _G.MSUF_3DPortraits_SyncVisibility(f)
+    if not f then return end
+    local db = _G.MSUF_DB
+    local conf = db and (f.isBoss and db.boss or db[f.unitKey or f.msufConfigKey or f.unit])
+    if not conf then return end
+    if IsPortraitModeActive(conf) then
+        if conf.portraitRender == "3D" then
+            SetShown(f.portrait, false)
+            SetShown(rawget(f, "portraitModel"), true)
+        else
+            SetShown(rawget(f, "portraitModel"), false)
+        end
+    else
+        SetShown(f.portrait, false)
+        SetShown(rawget(f, "portraitModel"), false)
+    end
+end
+
+_G.MSUF_3DPortraits_ForceRefresh = function()
+    local keys = { "player", "target", "focus", "pet", "targettarget" }
+    for _, k in ipairs(keys) do
+        local f = _G["MSUF_" .. k]
+        if f then f._msufPortraitDirty = true; f._msufPortraitNextAt = 0 end
+    end
+    for i = 1, 5 do
+        local f = _G["MSUF_boss" .. i]
+        if f then f._msufPortraitDirty = true; f._msufPortraitNextAt = 0 end
+    end
+end
+
+_G.MSUF_3DPortraits_Loaded = true
