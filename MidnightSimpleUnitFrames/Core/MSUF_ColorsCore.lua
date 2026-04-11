@@ -160,8 +160,8 @@ local function MSUF_FixHighlightForFrame(frame)
         for i = 1, #children do
             local c = children[i]
             if c and c.IsShown and c.GetObjectType and c.IsObjectType then
-                local okName, cname = MSUF_FastCall(c.GetName, c)
-                if okName and type(cname) == "string" then
+                local cname = c.GetName and c:GetName()
+                if type(cname) == "string" then
                     local lc = cname:lower()
                     if lc:find("power") or lc:find("mana") or lc:find("resource") then
                         if c:IsShown() and (c:IsObjectType("StatusBar") or c:IsObjectType("Frame")) then
@@ -219,8 +219,8 @@ function ns.MSUF_FixMouseoverHighlightBindings()
     if _G.EnumerateFrames then
         local f = _G.EnumerateFrames()
         while f do
-            local okName, name = MSUF_FastCall(f.GetName, f)
-            if okName and type(name) == "string" and name:match("^MSUF_") then
+            local name = f.GetName and f:GetName()
+            if type(name) == "string" and name:match("^MSUF_") then
                 if MSUF_GetHighlightObject(f) then
                     MSUF_FixHighlightForFrame(f)
                 end
@@ -235,8 +235,8 @@ function ns.MSUF_FixMouseoverHighlightBindings()
         local tv = type(v)
         if v and v ~= _G and (tv == "table" or tv == "userdata") then
             if type(v.GetName) == "function" and type(v.GetObjectType) == "function" then
-                local okName, name = MSUF_FastCall(v.GetName, v)
-                if okName and type(name) == "string" and name:match("^MSUF_") then
+                local name = v:GetName()
+                if type(name) == "string" and name:match("^MSUF_") then
                     if MSUF_GetHighlightObject(v) then
                         MSUF_FixHighlightForFrame(v)
                     end

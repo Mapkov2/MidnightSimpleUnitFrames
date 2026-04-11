@@ -102,14 +102,10 @@ local function FocusKick_ApplyTimeTextFontNow()
     local size     = FocusKick_GetDesiredTextSize(g)
 
     if FocusKickFrame and FocusKickFrame.timeText then
-        MSUF_FastCall(function()
-            FocusKickFrame.timeText:SetFont(fontPath, size, flags)
-        end)
+        FocusKickFrame.timeText:SetFont(fontPath, size, flags)
     end
     if FocusKickPreviewFrame and FocusKickPreviewFrame.timeText then
-        MSUF_FastCall(function()
-            FocusKickPreviewFrame.timeText:SetFont(fontPath, size, flags)
-        end)
+        FocusKickPreviewFrame.timeText:SetFont(fontPath, size, flags)
         FocusKickPreviewFrame.timeText:SetAlpha(1)
     end
 end
@@ -146,15 +142,11 @@ local function FocusKick_UpdateAppearance()
         local fontPath = (type(MSUF_GetFontPath) == "function") and MSUF_GetFontPath() or (STANDARD_TEXT_FONT or "Fonts\FRIZQT__.TTF")
         local flags    = (type(MSUF_GetFontFlags) == "function") and MSUF_GetFontFlags() or "OUTLINE"
         local size = FocusKick_GetDesiredTextSize(g)
-        MSUF_FastCall(function()
-            FocusKickFrame.timeText:SetFont(fontPath, size, flags)
-        end)
+        FocusKickFrame.timeText:SetFont(fontPath, size, flags)
 
         -- Apply the same font to on-screen preview text (if present)
         if FocusKickPreviewFrame and FocusKickPreviewFrame.timeText then
-            MSUF_FastCall(function()
-                FocusKickPreviewFrame.timeText:SetFont(fontPath, size, flags)
-            end)
+            FocusKickPreviewFrame.timeText:SetFont(fontPath, size, flags)
             FocusKickPreviewFrame.timeText:SetAlpha(1)
             if type(MSUF_GetConfiguredFontColor) == "function" then
                 local pr,pg,pb = MSUF_GetConfiguredFontColor()
@@ -411,13 +403,14 @@ local function FocusKick_UpdateFromUnit()
     local isChannel = false
     local name, text, texture, startTimeMS, endTimeMS, isTradeSkill, castID, spellID
 
-    local ok, a,b,c,d,e,f,g,h,i = MSUF_FastCall(UnitChannelInfo, "focus")
-    if ok and a then
+    local a,b,c,d,e,f,g,h,i
+    if UnitChannelInfo then a,b,c,d,e,f,g,h,i = UnitChannelInfo("focus") end
+    if a then
         isChannel = true
         name, text, texture, startTimeMS, endTimeMS, isTradeSkill, castID, _, spellID = a,b,c,d,e,f,g,h,i
     else
-        ok, a,b,c,d,e,f,g,h,i = MSUF_FastCall(UnitCastingInfo, "focus")
-        if ok and a then
+        if UnitCastingInfo then a,b,c,d,e,f,g,h,i = UnitCastingInfo("focus") end
+        if a then
             name, text, texture, startTimeMS, endTimeMS, isTradeSkill, castID, _, spellID = a,b,c,d,e,f,g,h,i
         else
             -- No cast/channel on focus
@@ -433,8 +426,8 @@ local function FocusKick_UpdateFromUnit()
     -- Cache end time (seconds) for cheap updates
     FocusKickFrame.MSUF_castEnd = nil
     if endTimeMS ~= nil then
-        local okEnd, endSec = MSUF_FastCall(function() return (endTimeMS / 1000) end)
-        if okEnd and type(endSec) == "number" then
+        local endSec = endTimeMS / 1000
+        if type(endSec) == "number" then
             FocusKickFrame.MSUF_castEnd = endSec
         end
     end
@@ -442,11 +435,11 @@ local function FocusKick_UpdateFromUnit()
     -- Cache duration object if available (helps with "snappy end" / secret-safe)
     FocusKickFrame.MSUF_durObj = nil
     if isChannel and UnitChannelDuration then
-        local okD, obj = MSUF_FastCall(UnitChannelDuration, "focus")
-        if okD and obj then FocusKickFrame.MSUF_durObj = obj end
+        local obj = UnitChannelDuration("focus")
+        if obj then FocusKickFrame.MSUF_durObj = obj end
     elseif (not isChannel) and UnitCastingDuration then
-        local okD, obj = MSUF_FastCall(UnitCastingDuration, "focus")
-        if okD and obj then FocusKickFrame.MSUF_durObj = obj end
+        local obj = UnitCastingDuration("focus")
+        if obj then FocusKickFrame.MSUF_durObj = obj end
     end
 
     -- Icon texture: prefer UnitCastingInfo/UnitChannelInfo texture, fall back to FocusCastBar icon if needed

@@ -2795,10 +2795,15 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
          return
     end
     local hpStr = MSUF_NumberToTextFast(hp)
-    -- Cache abbreviated max HP for extended text modes (MAX, CURMAX, DEFICIT, etc.)
-    local hpMax = UnitHealthMax(unit)
-    local hpMaxStr = MSUF_NumberToTextFast(hpMax)
-    self._msufCachedHpMaxStr = hpMaxStr
+    -- PERF: Cache hpMax + hpMaxStr — hpMax only changes on UNIT_MAXHEALTH (~0.5/s)
+    -- but UNIT_HEALTH fires 10-50×/s. Saves UnitHealthMax + NumberToTextFast per tick.
+    -- _msufAbsorbTextDirty is already set on UNIT_MAXHEALTH by FrameOnEvent.
+    local hpMaxStr = self._msufCachedHpMaxStr
+    if not hpMaxStr or self._msufAbsorbTextDirty then
+        local hpMax = UnitHealthMax(unit)
+        hpMaxStr = MSUF_NumberToTextFast(hpMax)
+        self._msufCachedHpMaxStr = hpMaxStr
+    end
     local hpPct = MSUF_GetUnitHealthPercent(unit)
     local hasPct = (type(hpPct) == "number")
     local absorbText, absorbStyle = nil, nil
@@ -3711,9 +3716,9 @@ do
             if not api then  return false end
             local fn = api.AddAnchors
             if type(fn) ~= "function" then  return false end
-            local ok = MSUF_FastCall(fn, api, addOnName, addToTypes, anchorTable)
+            local ok = true; fn(api, addOnName, addToTypes, anchorTable)
             if ok then  return true end
-            ok = MSUF_FastCall(fn, addOnName, addToTypes, anchorTable)
+            fn(addOnName, addToTypes, anchorTable)
             return ok and true or false
     end
             _G.MSUF_TPA_EnsureAllAnchors()
@@ -3988,10 +3993,10 @@ _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or funct
     local fnCBVis = _G.MSUF_UpdateCastbarVisuals_Immediate or _G.MSUF_UpdateCastbarVisuals
     if type(fnCBVis) == "function" then fnCBVis() end
     if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
-        MSUF_FastCall(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit)
+        _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
     end
     if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-        MSUF_FastCall(_G.MSUF_UpdateBossCastbarPreview)
+        _G.MSUF_UpdateBossCastbarPreview()
     end
     if _G.MSUF_EnsureStatusIndicatorTicker then
         _G.MSUF_EnsureStatusIndicatorTicker()
@@ -4043,20 +4048,20 @@ function MSUF_CommitApplyDirty()
     end
     if st.bossPreview then
         if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
-            MSUF_FastCall(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit)
+            _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
     end
         -- Reanchor boss castbar position BEFORE updating the preview.
         -- Without this, boss castbar previews lose their anchor when boss
         -- frames reposition (e.g. spacing slider) and disappear.
         if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
-            MSUF_FastCall(_G.MSUF_ApplyBossCastbarPositionSetting)
+            _G.MSUF_ApplyBossCastbarPositionSetting()
         end
         if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-            MSUF_FastCall(_G.MSUF_UpdateBossCastbarPreview)
+            _G.MSUF_UpdateBossCastbarPreview()
     end
         -- Keep the castbar position popup synced if it is currently open.
         if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
-            MSUF_FastCall(_G.MSUF_SyncCastbarPositionPopup, "boss")
+            _G.MSUF_SyncCastbarPositionPopup("boss")
         end
     end
     if st.tickers then
@@ -4246,7 +4251,7 @@ local function UpdateAllFonts(onlyKey)
         ns.MSUF_ApplyGameplayFontFromGlobal()
     end
     if type(MSCB_ApplyFontsFromMSUF) == "function" then
-        MSUF_FastCall(MSCB_ApplyFontsFromMSUF)
+        MSCB_ApplyFontsFromMSUF()
     end
     if _G.MSUF_Auras2_ApplyFontsFromGlobal then
         _G.MSUF_Auras2_ApplyFontsFromGlobal()

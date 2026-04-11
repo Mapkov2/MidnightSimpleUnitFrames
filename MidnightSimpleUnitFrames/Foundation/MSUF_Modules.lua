@@ -17,11 +17,7 @@ ns.__MSUF_ModulesApplied = ns.__MSUF_ModulesApplied or false
 
 local function SafeCall(fn, ...)
     if type(fn) ~= "function" then return false end
-    -- Prefer the project's fast-call helper if present (login-time only, but keeps consistency)
-    if _G and type(_G.MSUF_FastCall) == "function" then
-        return _G.MSUF_FastCall(fn, ...)
-    end
-    return pcall(fn, ...)
+    return true, fn(...)
 end
 
 local function SortModulesIfNeeded()

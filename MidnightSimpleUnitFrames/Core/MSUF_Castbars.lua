@@ -440,7 +440,7 @@ function MSUF_UpdateCastbarFillDirection()
             end
                 MSUF_RefreshCastbarStyleCache(frame)
             local rf = MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
-            MSUF_FastCall(frame.statusBar.SetReverseFill, frame.statusBar, rf and true or false)
+            if frame.statusBar and frame.statusBar.SetReverseFill then frame.statusBar:SetReverseFill(rf and true or false) end
     end
      end
     MSUF_ForMainCastbars(Apply)

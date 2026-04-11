@@ -2049,8 +2049,8 @@ local function MSUF_GetOverrideSpellID(spellID)
     if not (C_Spell and C_Spell.GetOverrideSpell) then
         return 0
     end
-    local ok, overrideID = MSUF_FastCall(C_Spell.GetOverrideSpell, spellID)
-    if ok and type(overrideID) == "number" and overrideID > 0 and overrideID ~= spellID then
+    local overrideID = C_Spell.GetOverrideSpell(spellID)
+    if type(overrideID) == "number" and overrideID > 0 and overrideID ~= spellID then
         return overrideID
     end
     return 0
@@ -2069,13 +2069,13 @@ local function MSUF_SetEnabledMeleeRangeCheck(spellID)
 
     local function Disable(id)
         if id and id > 0 then
-            MSUF_FastCall(C_Spell.EnableSpellRangeCheck, id, false)
+            C_Spell.EnableSpellRangeCheck(id, false)
         end
     end
 
     local function Enable(id)
         if id and id > 0 then
-            MSUF_FastCall(C_Spell.EnableSpellRangeCheck, id, true)
+            C_Spell.EnableSpellRangeCheck(id, true)
         end
     end
 
