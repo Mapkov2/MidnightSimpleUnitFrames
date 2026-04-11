@@ -306,22 +306,21 @@ end
 
 -- Live-runtime render gate (MUF-style): do not schedule aura renders for hidden frames.
 -- Store deltas still update so OnShow can render the latest state immediately.
+-- PERF REWRITE: Inlined IsEditModeActive + FindUnitFrame (was 2 function calls per event)
 local function ShouldScheduleLiveRender(unit)
     if not unit then return false end
 
-    -- Edit Mode always renders (preview/movers must stay responsive).
-    if IsEditModeActive() then
+    -- Inlined IsEditModeActive (was a function call delegating to Render module)
+    local st = rawget(_G, "MSUF_EditState")
+    if (st and st.active == true) or rawget(_G, "MSUF_UnitEditModeActive") == true then
         return true
     end
 
-    local frame = FindUnitFrame(unit)
-    if not frame then
-        return false
-    end
-
-    if frame.IsShown and frame:IsShown() ~= true then
-        return false
-    end
+    -- Inlined FindUnitFrame (was a function call doing table lookup)
+    local uf = _G.MSUF_UnitFrames
+    local frame = uf and uf[unit]
+    if not frame then return false end
+    if frame.IsShown and not frame:IsShown() then return false end
 
     return true
 end

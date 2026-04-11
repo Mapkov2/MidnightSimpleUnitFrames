@@ -224,7 +224,8 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
         end
     end
 
-    local spec = ns.Text.EnsureSpec(self)
+    -- PERF: Inlined EnsureSpec fast path
+    local spec = self._msufTextSpec or ns.Text.EnsureSpec(self)
     local hpMode = spec.hpMode
     local sep = spec.hpSep
     local hpText = self.hpText
@@ -480,7 +481,8 @@ function ns.Text.RenderPowerText(self)
         return
     end
 
-    local spec = ns.Text.EnsureSpec(self)
+    -- PERF: Inlined EnsureSpec fast path
+    local spec = self._msufTextSpec or ns.Text.EnsureSpec(self)
     local pMode = spec.pMode
     local powerSep = spec.pSep
     local colorByType = spec.pColorByType

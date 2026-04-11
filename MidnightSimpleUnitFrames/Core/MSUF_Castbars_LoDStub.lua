@@ -240,16 +240,30 @@ end
 -- Keeping them here prevents nil-access during early load, and allows the stub
 -- to decide whether to load the LoD addon.
 if not _G.MSUF_IsCastbarEnabledForUnit then
+    -- PERF: Cache enabled state per unit — invalidated when MSUF_DB changes.
+    -- Eliminates _GetGeneral + table lookup on every call (43/s per unit).
+    local _cbEnabledCache = {}
+    local _cbEnabledDBRef = nil
     function _G.MSUF_IsCastbarEnabledForUnit(unit)
-        local g = _GetGeneral()
-        if unit == "player" then
-            return g.enablePlayerCastbar ~= false
-        elseif unit == "target" then
-            return g.enableTargetCastbar ~= false
-        elseif unit == "focus" then
-            return g.enableFocusCastbar ~= false
+        if _cbEnabledDBRef ~= MSUF_DB then
+            _cbEnabledDBRef = MSUF_DB
+            _cbEnabledCache = {}
         end
-        return true
+        local cached = _cbEnabledCache[unit]
+        if cached ~= nil then return cached end
+        local g = _GetGeneral()
+        local result
+        if unit == "player" then
+            result = g.enablePlayerCastbar ~= false
+        elseif unit == "target" then
+            result = g.enableTargetCastbar ~= false
+        elseif unit == "focus" then
+            result = g.enableFocusCastbar ~= false
+        else
+            result = true
+        end
+        _cbEnabledCache[unit] = result
+        return result
     end
 end
 

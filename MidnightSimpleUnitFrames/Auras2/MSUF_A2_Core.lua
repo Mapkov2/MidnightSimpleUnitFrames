@@ -414,7 +414,9 @@ end
 function Cache.FullScan(unit)
     if not _apisBound then BindAPIs() end
     if not _getSlots or not _getBySlot then return end
-    local s = EnsureUnit(unit)
+    -- PERF: Inlined EnsureUnit
+    local s = _units[unit]
+    if not s then s = { all = {}, epoch = 0, changed = true }; _units[unit] = s end
     -- P7: release all cached aura tables back to pool before wiping.
     for _, entry in next, s.all do _AuraRelease(entry) end
     wipe(s.all)
@@ -457,7 +459,9 @@ function Cache.OnUnitAura(unit, updateInfo)
         return
     end
 
-    local s = EnsureUnit(unit)
+    -- PERF: Inlined EnsureUnit (after warmup, always hits cache)
+    local s = _units[unit]
+    if not s then s = { all = {}, epoch = 0, changed = true }; _units[unit] = s end
 
     local any = false
 
