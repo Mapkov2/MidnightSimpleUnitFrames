@@ -626,12 +626,16 @@ local function BuildSortNameList(kind)
     end
 
     -- Sort only the active portion of the pool
-    -- table.sort needs a contiguous array — sort _sortEntryPool[1..entryCount]
-    -- We use a temporary view: since pool IS contiguous, sort in-place works.
+    -- table.sort sorts entries[1..#entries] (all 40 pre-allocated slots).
+    -- Neutralize stale entries beyond entryCount so they always sort to the end
+    -- and never contaminate the first ec positions after sort.
     local entries = _sortEntryPool
     local ec = entryCount
+    for i = ec + 1, #entries do
+        local e = entries[i]
+        if e then e.name = ""; e.sortRole = "\255"; e.class = "\255"; e.isPlayer = false end
+    end
     table.sort(entries, function(a, b)
-        -- Only compare within active range (sort may access beyond, but pool entries exist)
         local rA = rolePrio[a.sortRole] or 999
         local rB = rolePrio[b.sortRole] or 999
         if rA ~= rB then return rA < rB end
