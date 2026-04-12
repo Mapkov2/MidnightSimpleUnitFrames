@@ -4269,7 +4269,9 @@ local function UpdateAllFonts(onlyKey)
         for i = 1, max do
             local bf = UnitFrames["boss" .. i]
             if bf and bf.isBoss then
-                UpdateSimpleUnitFrame(bf)
+                if _G.MSUF_QueueUnitframeUpdate then
+                    _G.MSUF_QueueUnitframeUpdate(bf, true)
+                end
             end
         end
     end
@@ -5281,7 +5283,7 @@ do
 end
         if not _G.MSUF_UFCore_HasToTInlineDriver then
         local f = F.CreateFrame("Frame")
-        f:RegisterEvent("PLAYER_TARGET_CHANGED")
+        -- PLAYER_TARGET_CHANGED removed: consolidated in UFCore handler
         if f.RegisterUnitEvent then
             f:RegisterUnitEvent("UNIT_TARGET", "target")
             f:RegisterUnitEvent("UNIT_HEALTH", "targettarget")
@@ -5321,6 +5323,15 @@ end
                 _G.MSUF_UpdateTargetToTInlineNow()
      end
         f._msufPending = false
+        -- Export for consolidated TARGET_CHANGED handler in UFCore
+        _G.MSUF_ToT_OnTargetChanged = function()
+            MSUF_MarkToTDirty()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, MSUF_ToTFlushScheduled)
+            else
+                MSUF_TryUpdateToT(false)
+            end
+        end
         f:SetScript("OnEvent", function(self, event, unit)
             if unit and unit ~= "target" and unit ~= "targettarget" then
                  return

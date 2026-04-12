@@ -857,12 +857,9 @@ end
     local busReg = _G.MSUF_EventBus_Register
     local busUnreg = _G.MSUF_EventBus_Unregister
     if type(busReg) == "function" and type(busUnreg) == "function" then
-        if needTarget then
-            busReg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS", HandlePlayerTargetChanged)
-        else
-            busUnreg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS")
-        end
-
+        -- TARGET_CHANGED: exported for consolidated handler in UFCore
+        _G.MSUF_A2_OnTargetChanged = needTarget and HandlePlayerTargetChanged or nil
+        -- Keep EventBus for FOCUS (less critical path)
         if needFocus then
             busReg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS", HandlePlayerFocusChanged)
         else

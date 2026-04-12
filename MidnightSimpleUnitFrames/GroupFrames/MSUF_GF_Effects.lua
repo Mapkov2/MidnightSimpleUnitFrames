@@ -126,12 +126,15 @@ local function _BuildTextFn(mode, abbrFn, delim, pctFmt)
         return function(fs, _, hp, hm) fs:SetText(abbrFn(hm) .. delim .. abbrFn(hp)) end
     end
 
+    -- Combined percent modes: use SetFormattedText to avoid Lua arithmetic on
+    -- secret UnitHealthPercent return. C-side formatting handles secrets safely.
     if mode == "CURPERCENT" then
         if _ftHpPct then
+            local fmt = "%s" .. delim .. pctFmt
             return function(fs, unit, hp)
                 local p = _ftHpPct(unit, true, _ftScale100)
                 if p then
-                    fs:SetText(abbrFn(hp) .. delim .. math_floor(p + 0.5) .. (pctFmt == "%d%%" and "%" or ""))
+                    fs:SetFormattedText(fmt, abbrFn(hp), p)
                 else
                     fs:SetText(abbrFn(hp))
                 end
@@ -141,10 +144,11 @@ local function _BuildTextFn(mode, abbrFn, delim, pctFmt)
     end
     if mode == "PERCENTCUR" then
         if _ftHpPct then
+            local fmt = pctFmt .. delim .. "%s"
             return function(fs, unit, hp)
                 local p = _ftHpPct(unit, true, _ftScale100)
                 if p then
-                    fs:SetText(math_floor(p + 0.5) .. (pctFmt == "%d%%" and "%" or "") .. delim .. abbrFn(hp))
+                    fs:SetFormattedText(fmt, p, abbrFn(hp))
                 else
                     fs:SetText(abbrFn(hp))
                 end
@@ -155,10 +159,11 @@ local function _BuildTextFn(mode, abbrFn, delim, pctFmt)
 
     if mode == "CURMAXPERCENT" then
         if _ftHpPct then
+            local fmt = "%s" .. delim .. "%s " .. pctFmt
             return function(fs, unit, hp, hm)
                 local p = _ftHpPct(unit, true, _ftScale100)
                 if p then
-                    fs:SetText(abbrFn(hp) .. delim .. abbrFn(hm) .. " " .. math_floor(p + 0.5) .. (pctFmt == "%d%%" and "%" or ""))
+                    fs:SetFormattedText(fmt, abbrFn(hp), abbrFn(hm), p)
                 else
                     fs:SetText(abbrFn(hp) .. delim .. abbrFn(hm))
                 end
@@ -168,10 +173,11 @@ local function _BuildTextFn(mode, abbrFn, delim, pctFmt)
     end
     if mode == "PERCENTMAXCUR" then
         if _ftHpPct then
+            local fmt = pctFmt .. " %s" .. delim .. "%s"
             return function(fs, unit, hp, hm)
                 local p = _ftHpPct(unit, true, _ftScale100)
                 if p then
-                    fs:SetText(math_floor(p + 0.5) .. (pctFmt == "%d%%" and "%" or "") .. " " .. abbrFn(hm) .. delim .. abbrFn(hp))
+                    fs:SetFormattedText(fmt, p, abbrFn(hm), abbrFn(hp))
                 else
                     fs:SetText(abbrFn(hm) .. delim .. abbrFn(hp))
                 end
@@ -182,10 +188,11 @@ local function _BuildTextFn(mode, abbrFn, delim, pctFmt)
 
     if mode == "MAXPERCENT" then
         if _ftHpPct then
+            local fmt = "%s" .. delim .. pctFmt
             return function(fs, unit, _, hm)
                 local p = _ftHpPct(unit, true, _ftScale100)
                 if p then
-                    fs:SetText(abbrFn(hm) .. delim .. math_floor(p + 0.5) .. (pctFmt == "%d%%" and "%" or ""))
+                    fs:SetFormattedText(fmt, abbrFn(hm), p)
                 else
                     fs:SetText(abbrFn(hm))
                 end
@@ -195,10 +202,11 @@ local function _BuildTextFn(mode, abbrFn, delim, pctFmt)
     end
     if mode == "PERCENTMAX" then
         if _ftHpPct then
+            local fmt = pctFmt .. delim .. "%s"
             return function(fs, unit, _, hm)
                 local p = _ftHpPct(unit, true, _ftScale100)
                 if p then
-                    fs:SetText(math_floor(p + 0.5) .. (pctFmt == "%d%%" and "%" or "") .. delim .. abbrFn(hm))
+                    fs:SetFormattedText(fmt, p, abbrFn(hm))
                 else
                     fs:SetText(abbrFn(hm))
                 end
@@ -2015,6 +2023,7 @@ end
 ------------------------------------------------------------------------
 
 -- ════════════════════════════════════════════════════════════════════════
+-- oUF-STYLE EVENT SPLIT: Each event only does what changed.
 --
 -- UNIT_HEALTH (10-50/s):      Bar + Text only. NO calculator, NO overlays.
 -- UNIT_MAXHEALTH (~0.5/s):    Full chain (calc + bar + overlays + text).
@@ -2702,6 +2711,18 @@ function GF.RegisterUnitEvents(f, unit)
     f._msufGFRegUnit = unit
     f._msufGFRegBits = evBits
 
+    -- O(1) unit→frame map for PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED
+    local umap = GF._unitMap
+    if not umap then umap = {}; GF._unitMap = umap end
+    umap[unit] = f
+    -- GUID→frame map (rebuilt on roster change, used for O(1) target scan)
+    local guid = UnitGUID and UnitGUID(unit)
+    if guid and not (issecretvalue and issecretvalue(guid)) then
+        local gmap = GF._guidMap
+        if not gmap then gmap = {}; GF._guidMap = gmap end
+        gmap[guid] = f
+    end
+
     if f._msufGFRegEv then
         for ev in pairs(f._msufGFRegEv) do
             if f.UnregisterEvent then f:UnregisterEvent(ev) end
@@ -2792,9 +2813,16 @@ local function _gfRosterFlush()
     _gfRosterPending = false
     _gfTargetFrame = nil
     _gfFocusFrame  = nil
+    -- Rebuild GUID→frame map (GUIDs change on roster change)
+    local gmap = GF._guidMap
+    if gmap then wipe(gmap) else gmap = {}; GF._guidMap = gmap end
     for f in pairs(GF.frames) do
         local u = f.unit
         if u and UnitExists(u) then
+            local guid = UnitGUID and UnitGUID(u)
+            if guid and not (issecretvalue and issecretvalue(guid)) then
+                gmap[guid] = f
+            end
             dispatchName(f, u)
             ApplyHealthColor(f, f._msufGFKind or "party", u)
             ApplyPowerColor(f, u)
@@ -2816,43 +2844,44 @@ local function _gfRosterFlush()
     end
 end
 
--- PLAYER_TARGET_CHANGED: update target indicator on old + new target only
+-- Exported for consolidated PLAYER_TARGET_CHANGED handler in UFCore
+_G.MSUF_GF_OnTargetChanged = function()
+    local oldTarget = _gfTargetFrame
+    _gfTargetFrame = nil
+    if oldTarget and oldTarget.unit then
+        oldTarget._msufGFIsTarget = nil
+        _GF_QuickBorderUpdate(oldTarget)
+    end
+    local tGUID = UnitGUID and UnitGUID("target")
+    if tGUID and not (issecretvalue and issecretvalue(tGUID)) then
+        local gmap = GF._guidMap
+        local f = gmap and gmap[tGUID]
+        if f and f.unit then
+            f._msufGFIsTarget = true
+            _gfTargetFrame = f
+            _GF_QuickBorderUpdate(f)
+        end
+    end
+end
+
 -- READY_CHECK / READY_CHECK_FINISHED: update ready check icons
 -- RAID_TARGET_UPDATE: update raid markers
 local function OnGlobalEvent(self, event, ...)
-    if event == "PLAYER_TARGET_CHANGED" then
-        -- Lightweight: only toggle flag + color/show/hide (NO SetBackdrop)
-        local oldTarget = _gfTargetFrame
-        _gfTargetFrame = nil
-        if oldTarget and oldTarget.unit then
-            oldTarget._msufGFIsTarget = nil
-            _GF_QuickBorderUpdate(oldTarget)
-        end
-        for f in pairs(GF.frames) do
-            if f.unit and UnitExists(f.unit) and UnitIsUnit(f.unit, "target") then
-                f._msufGFIsTarget = true
-                _gfTargetFrame = f
-                _GF_QuickBorderUpdate(f)
-                break
-            end
-        end
-
-    elseif event == "PLAYER_FOCUS_CHANGED" then
-        -- Lightweight: only toggle flag + color/show/hide (NO SetBackdrop)
+    if event == "PLAYER_FOCUS_CHANGED" then
         local oldFocus = _gfFocusFrame
         _gfFocusFrame = nil
         if oldFocus and oldFocus.unit then
             oldFocus._msufGFIsFocus = nil
             _GF_QuickBorderUpdate(oldFocus)
         end
-        if UnitExists("focus") then
-            for f in pairs(GF.frames) do
-                if f.unit and UnitExists(f.unit) and UnitIsUnit(f.unit, "focus") then
-                    f._msufGFIsFocus = true
-                    _gfFocusFrame = f
-                    _GF_QuickBorderUpdate(f)
-                    break
-                end
+        local fGUID = UnitGUID and UnitExists("focus") and UnitGUID("focus")
+        if fGUID and not (issecretvalue and issecretvalue(fGUID)) then
+            local gmap = GF._guidMap
+            local f = gmap and gmap[fGUID]
+            if f and f.unit then
+                f._msufGFIsFocus = true
+                _gfFocusFrame = f
+                _GF_QuickBorderUpdate(f)
             end
         end
 
@@ -2921,7 +2950,6 @@ local function OnGlobalEvent(self, event, ...)
     end
 end
 
-_globalFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 _globalFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
 _globalFrame:RegisterEvent("READY_CHECK")
 _globalFrame:RegisterEvent("READY_CHECK_CONFIRM")
@@ -2959,29 +2987,27 @@ local function _GF_IsHighlightEnabled()
     return true
 end
 
+local _hoverBdCache = { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
+
 local function EnsureMouseoverHighlight(f)
     if not _GF_IsHighlightEnabled() then return nil end
+    local hb = f._msufGFHoverBorder
+    if hb then
+        -- Already exists: just return it. Style is set at creation + config change.
+        return hb
+    end
     local kind = f._msufGFKind or "party"
     local sz = math_max(1, tonumber(HLVal(kind, "hlHoverSize")) or 1)
     local ofs = tonumber(HLVal(kind, "hlHoverOffset")) or 0
     local r, g, b = _GF_GetHighlightColor()
-    if f._msufGFHoverBorder then
-        local hb = f._msufGFHoverBorder
-        hb:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = sz })
-        hb:SetBackdropBorderColor(r, g, b, 0.7)
-        hb:SetBackdropColor(0, 0, 0, 0)
-        hb:ClearAllPoints()
-        hb:SetPoint("TOPLEFT", -ofs, ofs)
-        hb:SetPoint("BOTTOMRIGHT", ofs, -ofs)
-        return hb
-    end
     local anchor = f.barGroup or f
-    local hb = CreateFrame("Frame", nil, anchor, "BackdropTemplate")
+    hb = CreateFrame("Frame", nil, anchor, "BackdropTemplate")
     hb:SetPoint("TOPLEFT", -ofs, ofs)
     hb:SetPoint("BOTTOMRIGHT", ofs, -ofs)
     hb:SetFrameLevel(anchor:GetFrameLevel() + 6)
     hb:EnableMouse(false)
-    hb:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = sz })
+    _hoverBdCache.edgeSize = sz
+    hb:SetBackdrop(_hoverBdCache)
     hb:SetBackdropBorderColor(r, g, b, 0.7)
     hb:SetBackdropColor(0, 0, 0, 0)
     hb:Hide()

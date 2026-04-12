@@ -95,6 +95,7 @@ local _npcTypeInstanceActive = false
 local _smoothPowerBar    = true
 local _realtimePowerText = true
 
+
 -- Eliminates cache table lookups in RefreshHealthBarColorFast hot path.
 local _ufcBarMode   = "dark"  -- "dark" | "class" | "unified"
 local _ufcDarkR, _ufcDarkG, _ufcDarkB       = 0, 0, 0
@@ -391,7 +392,6 @@ if not (bor and band and bnot) then error("MSUF_UnitframeCore: missing bitops") 
 
 -- Dirty flags (future: element updates)
 
-local DIRTY_FULL      = 0xFFFFFFFF
 local DIRTY_HEALTH    = 0x00000001
 local DIRTY_POWER     = 0x00000002
 local DIRTY_IDENTITY  = 0x00000004
@@ -401,8 +401,15 @@ local DIRTY_INDICATOR = 0x00000020
 local DIRTY_TOTINLINE = 0x00000040
 
 local DIRTY_LAYOUT   = 0x00000080
-local DIRTY_VISUAL   = 0x00000100  -- forces a one-shot legacy pass for bar color/gradients/background on unit swaps
-local DIRTY_THREAT   = 0x00000200  -- PERF: lightweight threat-only path (alpha + aggro border, NO status text/icons)
+local DIRTY_VISUAL   = 0x00000100
+local DIRTY_THREAT   = 0x00000200
+local DIRTY_INIT     = 0x00000400  -- init-level: show flags, bar bg, reverse fill, event sync
+
+-- MASK_ALL: replaces legacy DIRTY_FULL (0xFFFFFFFF). All known bits, no overflow.
+-- RunUpdate dispatches each bit individually — never falls through to a monster function.
+local MASK_ALL = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_PORTRAIT,
+    DIRTY_STATUS, DIRTY_INDICATOR, DIRTY_TOTINLINE, DIRTY_LAYOUT, DIRTY_VISUAL,
+    DIRTY_THREAT, DIRTY_INIT)
 
 local MASK_UNIT_EVENT_FALLBACK = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_STATUS, DIRTY_PORTRAIT, DIRTY_INDICATOR, DIRTY_TOTINLINE)
 local MASK_UNIT_SWAP = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_STATUS, DIRTY_INDICATOR, DIRTY_TOTINLINE)
@@ -1765,7 +1772,7 @@ end
 -- ── MarkDirty: public API ──
 function Core.MarkDirty(f, mask, urgent, reason)
     if not f then return end
-    mask = mask or DIRTY_FULL
+    mask = mask or MASK_UNIT_SWAP
     f._msufDirtyMask = bor(f._msufDirtyMask or 0, mask)
 
     if _ufcoreDebugDirty then
@@ -1815,12 +1822,21 @@ end
 
 function _G.MSUF_QueueUnitframeUpdate(f, force)
     if not f then return end
-    Core.MarkDirty(f, DIRTY_FULL, force, "QueueUpdate")
+    -- Runtime refresh: element dispatch only. No DIRTY_INIT (no event re-sync,
+    -- no bar background rebuild). Init-level work only via AttachFrame / options.
+    Core.MarkDirty(f, MASK_UNIT_SWAP, force, "QueueUpdate")
+end
+
+-- Init-level: called ONLY from AttachFrame and options apply.
+-- Includes DIRTY_INIT for config flags, bar background, event sync.
+function _G.MSUF_QueueUnitframeInit(f, force)
+    if not f then return end
+    Core.MarkDirty(f, MASK_ALL, force, "QueueInit")
 end
 
 function _G.MSUF_ScheduleWarmupFrame(f)
     if not f then return end
-    Core.MarkDirty(f, DIRTY_FULL, false, "Warmup")
+    Core.MarkDirty(f, bor(MASK_UNIT_SWAP, DIRTY_VISUAL), false, "Warmup")
 end
 
 function _G.MSUF_QueueUnitframeVisual(f)
@@ -1917,6 +1933,11 @@ local function _SwapDeferFlush()
     for f in pairs(sd.frames) do
         f._msufSwapDeferPending = nil
 
+        -- Deferred elements from split MASK_UNIT_SWAP (power, status, indicators, ToTInline)
+        -- These were removed from the instant QueueUnit to reduce click-frame spike.
+        Core.MarkDirty(f, bor(DIRTY_POWER, DIRTY_STATUS, DIRTY_INDICATOR, DIRTY_TOTINLINE),
+            false, sd.why or "SwapDefer:Deferred")
+
         if sd.portrait[f] then
             f._msufPortraitDirty = true
             f._msufPortraitNextAt = 0
@@ -1982,11 +2003,14 @@ local function _HealthValueFast(f)
     if not bar then return end
     local hp = UnitHealth(f.unit)
     bar:SetValue(hp)
+    -- PHASE 2: Text throttle via frame serial instead of GetTime()
+    -- Core._frameNowSerial increments once per OnUpdate frame (~60/s).
+    -- Costs 0μs vs GetTime()'s ~0.5μs. Equivalent to ~16ms throttle.
     local fnTxt = FN_UpdateHpTextFast
     if fnTxt then
-        local now = GetTime()
-        if (now - (f._msufHpTxtAt or 0)) >= 0.10 then
-            f._msufHpTxtAt = now
+        local serial = Core._frameNowSerial or 0
+        if f._msufHpTxtSerial ~= serial then
+            f._msufHpTxtSerial = serial
             fnTxt(f, hp)
         end
     end
@@ -1994,6 +2018,76 @@ end
 
 -- UNIT_MAXHEALTH / absorb / heal-prediction → full health chain via Elements.Health.Update
 local _HealthFullFast = Elements.Health and Elements.Health.Update
+
+------------------------------------------------------------------------
+-- Each event updates ONLY the bar that changed, not the full chain.
+-- Calculator must be refreshed (1 C-call) but only the relevant getter
+-- is read + SetValue'd. Saves ~15μs vs full chain per event.
+------------------------------------------------------------------------
+
+-- UNIT_ABSORB_AMOUNT_CHANGED: only absorb bar
+local function _AbsorbValueFast(f)
+    local ab = f.absorbBar
+    if not ab then return end
+    local calc = f._msufHealthCalc
+    if not calc then
+        -- No calculator: fall back to full chain
+        if _HealthFullFast then _HealthFullFast(f) end
+        return
+    end
+    local unit = f.unit
+    if not unit then return end
+    UnitGetDetailedHealPrediction(unit, "player", calc)
+    local maxHP = calc:GetMaximumHealth()
+    local absAmt = calc:GetDamageAbsorbs()  -- 2nd return (clamped) is secret, must not leak
+    ab:SetMinMaxValues(0, maxHP)
+    ab:SetValue(absAmt)
+    local bar = f.hpBar
+    local hp = calc:GetCurrentHealth()
+    if bar then bar:SetValue(hp) end
+end
+
+-- UNIT_HEAL_ABSORB_AMOUNT_CHANGED: only heal absorb bar
+local function _HealAbsorbValueFast(f)
+    local hab = f.healAbsorbBar
+    if not hab then return end
+    local calc = f._msufHealthCalc
+    if not calc then
+        if _HealthFullFast then _HealthFullFast(f) end
+        return
+    end
+    local unit = f.unit
+    if not unit then return end
+    UnitGetDetailedHealPrediction(unit, "player", calc)
+    local maxHP = calc:GetMaximumHealth()
+    hab:SetMinMaxValues(0, maxHP)
+    local habAmt = calc:GetHealAbsorbs()
+    hab:SetValue(habAmt)
+    local bar = f.hpBar
+    local hp = calc:GetCurrentHealth()
+    if bar then bar:SetValue(hp) end
+end
+
+-- UNIT_HEAL_PREDICTION: only self-heal prediction bar
+local function _HealPredValueFast(f)
+    local spb = f.selfHealPredBar
+    if not spb then return end
+    local calc = f._msufHealthCalc
+    if not calc then
+        if _HealthFullFast then _HealthFullFast(f) end
+        return
+    end
+    local unit = f.unit
+    if not unit then return end
+    UnitGetDetailedHealPrediction(unit, "player", calc)
+    local maxHP = calc:GetMaximumHealth()
+    local hp = calc:GetCurrentHealth()
+    -- Delegate to existing self-heal prediction function
+    local fn = _G.MSUF_UpdateSelfHealPrediction
+    if fn then fn(f, unit, maxHP, hp, calc) end
+    local bar = f.hpBar
+    if bar then bar:SetValue(hp) end
+end
 
 -- Power: direct C-side SetMinMaxValues/SetValue, rate-limited text.
 do
@@ -2159,12 +2253,26 @@ local function FrameOnEvent(self, event, arg1, ...)
         return
     end
 
-    -- ── Health full chain (1-10/sec: maxHP, absorbs, prediction) ──
-    if event == "UNIT_MAXHEALTH" or event == "UNIT_ABSORB_AMOUNT_CHANGED"
-        or event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" or event == "UNIT_HEAL_PREDICTION"
-        or event == "UNIT_MAXHEALTHMODIFIER" then
+    -- ── Health full chain: UNIT_MAXHEALTH (rare: ~0.5/s) ──
+    if event == "UNIT_MAXHEALTH" or event == "UNIT_MAXHEALTHMODIFIER" then
         self._msufAbsorbTextDirty = true
         if _HealthFullFast then _HealthFullFast(self) end
+        return
+    end
+
+    -- ── Phase 3: Lean sub-paths for overlay events (1-5/s each) ──
+    if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
+        self._msufAbsorbTextDirty = true
+        _AbsorbValueFast(self)
+        return
+    end
+    if event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
+        self._msufAbsorbTextDirty = true
+        _HealAbsorbValueFast(self)
+        return
+    end
+    if event == "UNIT_HEAL_PREDICTION" then
+        _HealPredValueFast(self)
         return
     end
 
@@ -2258,6 +2366,25 @@ local function RunUpdate(f)
         end
     end
 
+    -- ── DIRTY_INIT: first in dispatch (sets flags for subsequent elements) ──
+    if band(mask, DIRTY_INIT) ~= 0 then
+        conf = conf or GetFrameConf(f)
+        if conf then
+            f.showName      = (conf.showName  ~= false)
+            f.showHPText    = (conf.showHP    ~= false)
+            f.showPowerText = (conf.showPower ~= false)
+        end
+        f._msufHealthColorDirty = true
+        f._msufVisualQueuedUFCore = true
+        local fnBg = _G.MSUF_ApplyBarBackgroundVisual
+        if fnBg then fnBg(f) end
+        local fnRev = _G.MSUF_ApplyReverseFillBars
+        if fnRev then fnRev(f, conf) end
+        RefreshUnitEvents(f, false)
+        mask = band(mask, bnot(DIRTY_INIT))
+        if mask == 0 then return end
+    end
+
     -- ── Visual (rare bar visuals) ──
     if band(mask, DIRTY_VISUAL) ~= 0 then
         local fn = _G.MSUF_RefreshRareBarVisuals or _G.MSUF_ApplyRareVisuals
@@ -2331,24 +2458,6 @@ local function RunUpdate(f)
         if mask == 0 then return end
     end
 
-    -- Any remaining bits (DIRTY_FULL from init/options): legacy full update.
-    -- Sets showHPText/showName/showPowerText flags, bar colors, power bar setup.
-    -- Only fires on DIRTY_FULL (AttachFrame, options apply) — never in combat hot-path.
-    if mask ~= 0 then
-        local upd = _G.UpdateSimpleUnitFrame
-        if upd then
-            upd(f)
-            -- Sync events + ToTInline after full update.
-            RefreshUnitEvents(f, false)
-        else
-            -- Fallback: at least refresh identity + health if legacy not loaded yet.
-            conf = conf or GetFrameConf(f)
-            if _IdentityFast then _IdentityFast(f, conf) end
-            if _HealthFullFast then _HealthFullFast(f) end
-            if _StatusFast then _StatusFast(f, conf) end
-        end
-    end
-
     -- ToTInline sync after unit swap.
     if f._msufIsTarget and UFCore_IsToTInlineEnabled() then
         UFCore_UpdateToTInline(f)
@@ -2370,8 +2479,9 @@ local function UFCore_FlushTask()
     while _queueSize > 0 do
         RunUpdate(_DequeueFrame())
         processed = processed + 1
-        if endAt and debugprofilestop() > endAt then break end
-        if processed >= _ufcoreUrgentMax and _queueSize > 0 then break end
+        if processed >= _ufcoreUrgentMax then break end
+        -- PERF: Check time budget every 4th frame only (saves ~0.75μs/call × 3/4 iterations)
+        if endAt and processed % 4 == 0 and debugprofilestop() > endAt then break end
     end
 
     if frameStart then
@@ -2448,19 +2558,15 @@ function Core.AttachFrame(f)
     if not f._msufUFCoreShowHooked and f.HookScript then
         f._msufUFCoreShowHooked = true
         f:HookScript("OnShow", function(self)
-            -- If hidden, we may have missed absorb text events.
             self._msufAbsorbTextDirty = true
-            self._msufAbsorbInit = nil
-            self._msufHealAbsorbInit = nil
-            Core.MarkDirty(self, MASK_SHOW_REFRESH, true, "OnShow")
-            DeferSwapWork(self.unit, "OnShow", true)
+            Core.MarkDirty(self, MASK_SHOW_REFRESH, false, "OnShow")
         end)
     end
     -- Apply initial layout stamps once.
     Core.RequestLayout(f, "AttachFrame")
 
-    -- First draw is queued (coalesced).
-    _G.MSUF_QueueUnitframeUpdate(f, true)
+    -- First draw is queued (coalesced) — includes DIRTY_INIT for config flags + event sync.
+    _G.MSUF_QueueUnitframeInit(f, true)
 end
 
 -- Public wrappers (used by main/options when config toggles change)
@@ -2491,7 +2597,7 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
         if alsoUpdate then
             for _, f in pairs(FramesByUnit) do
                 if f then
-                    Core.MarkDirty(f, DIRTY_FULL, (urgent ~= false), reason)
+                    Core.MarkDirty(f, MASK_ALL, (urgent ~= false), reason)
                 end
             end
         end
@@ -2524,7 +2630,7 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     RefreshUnitEvents(f, true)
 
     if alsoUpdate then
-        Core.MarkDirty(f, DIRTY_FULL, (urgent ~= false), reason)
+        Core.MarkDirty(f, MASK_ALL, (urgent ~= false), reason)
     end
 end
 
@@ -2545,7 +2651,8 @@ Global:RegisterEvent("PLAYER_REGEN_ENABLED")
 Global:RegisterEvent("PLAYER_UPDATE_RESTING")
 Global:RegisterEvent("UPDATE_EXHAUSTION")
 
--- Phase 1: PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED moved to EventBus (below)
+-- Consolidated: PLAYER_TARGET_CHANGED on ONE frame, direct calls to all modules
+Global:RegisterEvent("PLAYER_TARGET_CHANGED")
 Global:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
 Global:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
 Global:RegisterUnitEvent("UNIT_TARGET", "target")
@@ -2558,11 +2665,11 @@ Global:RegisterEvent("UNIT_PET")
 local function MarkUnit(unit, mask, urgent, reason)
     local f = FramesByUnit[unit]
     if not f then return end
-    Core.MarkDirty(f, mask or DIRTY_FULL, urgent, reason or "GLOBAL")
+    Core.MarkDirty(f, mask or MASK_UNIT_SWAP, urgent, reason or "GLOBAL")
 end
 
 local function QueueUnit(unit, urgent, mask, reason)
-    MarkUnit(unit, mask or DIRTY_FULL, urgent, reason or "GLOBAL")
+    MarkUnit(unit, mask or MASK_UNIT_SWAP, urgent, reason or "GLOBAL")
 end
 
 -- Coalesced boss engage refresh (INSTANCE_ENCOUNTER_ENGAGE_UNIT can burst on pull).
@@ -2599,11 +2706,11 @@ end
 -- Signature:
 --   MSUF_RequestUnitUpdate(unitOrUnits, mask, urgent, reason)
 --     unitOrUnits: "player"/"target"/... OR { "player","target",... } OR nil (=> all known frames)
---     mask: dirty mask (defaults DIRTY_FULL)
+--     mask: dirty mask (defaults MASK_ALL)
 --     urgent: boolean
 --     reason: string
 _G.MSUF_RequestUnitUpdate = _G.MSUF_RequestUnitUpdate or function(unitOrUnits, mask, urgent, reason)
-    local m = mask or DIRTY_FULL
+    local m = mask or MASK_UNIT_SWAP
     local u = (urgent == true) and true or false
     local r = reason or "REQ"
 
@@ -2676,7 +2783,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
                 Core.MarkDirty(f, DIRTY_TOTINLINE, true, "BOOT_TOTINLINE")
             end
 
-            Core.MarkDirty(f, DIRTY_FULL, true, event)
+            Core.MarkDirty(f, MASK_ALL, true, event)
         end
         return
     end
@@ -2727,7 +2834,81 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         return
     end
 
-    -- Phase 1: PLAYER_TARGET_CHANGED handled via EventBus (see bottom of file)
+    -- ═══════════════════════════════════════════════════════════════════
+    -- CONSOLIDATED PLAYER_TARGET_CHANGED: oUF-style naked click path.
+    -- Synchron: 4 C-calls (bar value + color + name). ~30μs total.
+    -- Deferred: EVERYTHING else via After(0) → element dispatch.
+    -- ═══════════════════════════════════════════════════════════════════
+    if event == "PLAYER_TARGET_CHANGED" then
+        -- 1. UFCore: naked C-calls for immediate visual feedback
+        local tf = FramesByUnit["target"]
+        if tf and tf:IsVisible() then
+            local unit = tf.unit or "target"
+            local bar = tf.hpBar
+            if bar then
+                bar:SetMinMaxValues(0, UnitHealthMax(unit))
+                bar:SetValue(UnitHealth(unit))
+                -- Resolve bar color from cached mode (zero table alloc)
+                local mode = _ufcBarMode
+                if mode == "dark" then
+                    bar:SetStatusBarColor(_ufcDarkR, _ufcDarkG, _ufcDarkB, 1)
+                elseif mode == "unified" then
+                    bar:SetStatusBarColor(_ufcUnifiedR, _ufcUnifiedG, _ufcUnifiedB, 1)
+                else
+                    local _, ct = UnitClass(unit)
+                    local r, g, b = UFCore_GetClassBarColorFast(ct)
+                    bar:SetStatusBarColor(r or 0, g or 1, b or 0, 1)
+                end
+            end
+            if tf.nameText then tf.nameText:SetText(UnitName(unit) or "") end
+            -- Queue full refresh for next frame (absorbs, text, power, status, etc.)
+            Core.MarkDirty(tf, MASK_UNIT_SWAP, false, "TARGET_SWAP_DEFERRED")
+        end
+        -- ToT: same naked path
+        local ttf = FramesByUnit["targettarget"]
+        if ttf and (ttf:IsVisible() or ttf.MSUF_AllowHiddenEvents) then
+            local unit2 = ttf.unit or "targettarget"
+            local bar2 = ttf.hpBar
+            if bar2 and UnitExists(unit2) then
+                bar2:SetMinMaxValues(0, UnitHealthMax(unit2))
+                bar2:SetValue(UnitHealth(unit2))
+                local mode = _ufcBarMode
+                if mode == "dark" then
+                    bar2:SetStatusBarColor(_ufcDarkR, _ufcDarkG, _ufcDarkB, 1)
+                elseif mode == "unified" then
+                    bar2:SetStatusBarColor(_ufcUnifiedR, _ufcUnifiedG, _ufcUnifiedB, 1)
+                else
+                    local _, ct2 = UnitClass(unit2)
+                    local r, g, b = UFCore_GetClassBarColorFast(ct2)
+                    bar2:SetStatusBarColor(r or 0, g or 1, b or 0, 1)
+                end
+            end
+            if ttf.nameText and UnitExists(unit2) then ttf.nameText:SetText(UnitName(unit2) or "") end
+            Core.MarkDirty(ttf, MASK_UNIT_SWAP, false, "TARGET_SWAP_DEFERRED")
+        end
+        -- Deferred: portrait, visual, absorb cache invalidation
+        DeferSwapWork("target", "PLAYER_TARGET_CHANGED", false, false)
+        if ttf then DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", false, false) end
+        -- Boss target highlight (deferred — not visible on click frame)
+        if FramesByUnit["boss1"] then
+            local bthFn = _G.MSUF_UpdateBossTargetHighlight
+            if bthFn then After0(bthFn) end
+        end
+
+        -- 2. GF: O(1) GUID-map target highlight (border Show/Hide only)
+        local fn = _G.MSUF_GF_OnTargetChanged
+        if fn then fn() end
+
+        -- 3-7: All deferred (already use After(0) internally)
+        fn = _G.MSUF_A2_OnTargetChanged;           if fn then fn() end
+        fn = _G.MSUF_AggroOutline_OnTargetChanged;  if fn then fn() end
+        fn = _G.MSUF_DispelOutline_OnTargetChanged; if fn then fn() end
+        fn = _G.MSUF_RangeFade_OnTargetChanged;     if fn then fn() end
+        fn = _G.MSUF_Portrait_OnTargetChanged;       if fn then fn() end
+        fn = _G.MSUF_ToT_OnTargetChanged;            if fn then fn() end
+
+        return
+    end
 
     if event == "UNIT_TARGET" then
         -- RegisterUnitEvent("UNIT_TARGET", "target") guarantees arg1 == "target".
@@ -2838,46 +3019,34 @@ end
 -- Export for Options/profile refresh
 _G.MSUF_UpdateBossTargetHighlight = UFCore_UpdateBossTargetHighlight
 
--- Phase 1 Fan-out: route PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED through EventBus
--- so all modules (UFCore, Auras, RangeFade, etc.) share ONE engine-level registration.
+-- PLAYER_TARGET_CHANGED: consolidated in Global OnEvent above (ONE C→Lua entry).
+-- PLAYER_FOCUS_CHANGED: still via EventBus (less critical path).
 do
     local busReg = _G.MSUF_EventBus_Register
     if type(busReg) == "function" then
-        busReg("PLAYER_TARGET_CHANGED", "MSUF_UFCORE", function()
-            QueueUnit("target", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
-            -- PERF: Skip ToT work entirely when ToT frame doesn't exist or is hidden
-            local ttf = FramesByUnit["targettarget"]
-            if ttf and (ttf:IsVisible() or ttf.MSUF_AllowHiddenEvents) then
-                QueueUnit("targettarget", true, MASK_UNIT_SWAP, "PLAYER_TARGET_CHANGED")
-            end
-            -- Force health color refresh on swap (only when NPC type is active in a 5-man)
-            if _npcTypeInstanceActive then
-                local tf = FramesByUnit["target"]
-                if tf then tf._msufHealthColorDirty = true end
-                if ttf then ttf._msufHealthColorDirty = true end
-            end
-            -- PERF: Portrait only when portraitMode != OFF (saves 5µs/click when portraits disabled)
-            local db = _G.MSUF_DB
-            local wantPortrait = db and db.target and (db.target.portraitMode or "OFF") ~= "OFF"
-            DeferSwapWork("target", "PLAYER_TARGET_CHANGED", wantPortrait, false)
-            if ttf then
-                local wantTTPortrait = db and db.targettarget and (db.targettarget.portraitMode or "OFF") ~= "OFF"
-                DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", wantTTPortrait, false)
-            end
-            -- Boss Target Highlight: skip when no boss frames exist (zero overhead outside encounters)
-            if FramesByUnit["boss1"] then
-                UFCore_UpdateBossTargetHighlight()
-            end
-        end)
-
         busReg("PLAYER_FOCUS_CHANGED", "MSUF_UFCORE", function()
-            QueueUnit("focus", true, MASK_UNIT_SWAP, "PLAYER_FOCUS_CHANGED")
-            -- Force health color refresh on swap (only when NPC type is active)
-            if _npcTypeInstanceActive then
-                local ff = FramesByUnit["focus"]
-                if ff then ff._msufHealthColorDirty = true end
+            local ff = FramesByUnit["focus"]
+            if ff and ff:IsVisible() then
+                local unit = ff.unit or "focus"
+                local bar = ff.hpBar
+                if bar then
+                    bar:SetMinMaxValues(0, UnitHealthMax(unit))
+                    bar:SetValue(UnitHealth(unit))
+                    local mode = _ufcBarMode
+                    if mode == "dark" then
+                        bar:SetStatusBarColor(_ufcDarkR, _ufcDarkG, _ufcDarkB, 1)
+                    elseif mode == "unified" then
+                        bar:SetStatusBarColor(_ufcUnifiedR, _ufcUnifiedG, _ufcUnifiedB, 1)
+                    else
+                        local _, ct = UnitClass(unit)
+                        local r, g, b = UFCore_GetClassBarColorFast(ct)
+                        bar:SetStatusBarColor(r or 0, g or 1, b or 0, 1)
+                    end
+                end
+                if ff.nameText then ff.nameText:SetText(UnitName(unit) or "") end
+                Core.MarkDirty(ff, MASK_UNIT_SWAP, false, "FOCUS_SWAP_DEFERRED")
             end
-            DeferSwapWork("focus", "PLAYER_FOCUS_CHANGED", true, false)
+            DeferSwapWork("focus", "PLAYER_FOCUS_CHANGED", false, false)
         end)
     end
 end
