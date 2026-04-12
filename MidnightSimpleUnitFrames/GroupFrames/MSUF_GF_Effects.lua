@@ -824,8 +824,11 @@ local function dispatchAura(f, unit, updateInfo)
         GF.UpdateFrameAuras(f, unit)
         local mergedDispel = f._msufGFMergedDispel
         local prevDispel = f._msufGFDispelType
-        if mergedDispel ~= prevDispel then
+        local dispelAid = f._msufGFDispelAuraID
+        local prevAid = f._msufGFPrevDispelAuraID
+        if mergedDispel ~= prevDispel or dispelAid ~= prevAid then
             f._msufGFDispelType = mergedDispel
+            f._msufGFPrevDispelAuraID = dispelAid
             _GF_RefreshBorder(f, unit)
         end
     else
