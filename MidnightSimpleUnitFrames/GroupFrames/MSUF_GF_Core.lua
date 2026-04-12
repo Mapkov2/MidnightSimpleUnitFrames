@@ -807,6 +807,7 @@ function GF.UpdateButton(f, unit)
         local hpMax = UnitHealthMax(unit)
         f.health:SetMinMaxValues(0, hpMax)
         f.health:SetValue(hp)
+        f._msufGFCachedHpMax = hpMax
     end
 
     ApplyHealthColor(f, kind, unit)
@@ -852,6 +853,16 @@ function GF.UpdateButton(f, unit)
             local pw    = UnitPower(unit)
             local pwMax = UnitPowerMax(unit)
             f.power:SetMinMaxValues(0, pwMax)
+            f._msufGFCachedPwMax = pwMax
+            -- Cache role visibility for power lean path
+            local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
+            if role then
+                f._msufGFPowRoleHidden = (role == "TANK" and conf.powerShowTank == false)
+                    or (role == "HEALER" and conf.powerShowHealer == false)
+                    or (role == "DAMAGER" and conf.powerShowDamager == false) or false
+            else
+                f._msufGFPowRoleHidden = false
+            end
             if conf.powerSmoothFill then
                 local interp = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
                 if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end

@@ -192,7 +192,12 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
         return 0, 1
     end
 
-    local calc = _MSUF_EnsureCalc(frame)
+    -- PERF C++ DELEGATION: Inlined _MSUF_EnsureCalc fast path
+    local calc = frame._msufHealthCalc
+    if not calc and CreateUnitHealPredictionCalculator then
+        calc = CreateUnitHealPredictionCalculator()
+        frame._msufHealthCalc = calc
+    end
     local hpBar = frame.hpBar
 
     if calc and UnitGetDetailedHealPrediction then
@@ -204,27 +209,34 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
         hpBar:SetMinMaxValues(0, maxHP)
         hpBar:SetValue(hp)
 
-        -- PERF: Apply absorb anchor mode ONCE for all overlay bars (was called per-bar)
-        if (frame.absorbBar or frame.healAbsorbBar) and _cachedApplyAbsorbAnchorMode then
-            if not _cachedApplyAbsorbAnchorMode then
-                _cachedApplyAbsorbAnchorMode = _G.MSUF_ApplyAbsorbAnchorMode
+        -- PERF: Single config-dirty stamp replaces 3 separate cache checks.
+        -- AbsorbAnchorMode + OverlayColors + AbsorbEnabled all only change
+        -- on config change (SETTINGS_SERIAL increment). One number compare
+        -- gates all three instead of 3 separate conditionals per update.
+        local gen = _G.MSUF_UFCORE_SETTINGS_SERIAL or 0
+        if frame._msufBarConfigGen ~= gen then
+            frame._msufBarConfigGen = gen
+            -- Anchor mode (has internal diff-gate via stamp)
+            if frame.absorbBar or frame.healAbsorbBar then
+                if not _cachedApplyAbsorbAnchorMode then
+                    _cachedApplyAbsorbAnchorMode = _G.MSUF_ApplyAbsorbAnchorMode
+                end
+                if _cachedApplyAbsorbAnchorMode then _cachedApplyAbsorbAnchorMode(frame) end
             end
-            if _cachedApplyAbsorbAnchorMode then _cachedApplyAbsorbAnchorMode(frame) end
+            -- Overlay colors
+            if frame.absorbBar then
+                MSUF_ApplyAbsorbOverlayColor(frame.absorbBar, unit)
+            end
+            if frame.healAbsorbBar then
+                MSUF_ApplyHealAbsorbOverlayColor(frame.healAbsorbBar, unit)
+            end
+            -- Absorb enabled state
+            frame._msufAbsorbEnCached = frame.absorbBar and _MSUF_ResolveAbsorbDisplay(unit) or false
         end
 
         -- Absorb bar (damage absorbs)
         if frame.absorbBar then
-            -- PERF: Overlay colors only change on config change — skip when gen matches
-            local gen = _G.MSUF_UFCORE_SETTINGS_SERIAL or 0
-            if frame._msufOverlayColorGen ~= gen then
-                frame._msufOverlayColorGen = gen
-                MSUF_ApplyAbsorbOverlayColor(frame.absorbBar, unit)
-                if frame.healAbsorbBar then
-                    MSUF_ApplyHealAbsorbOverlayColor(frame.healAbsorbBar, unit)
-                end
-            end
-            local enableBar = _MSUF_ResolveAbsorbDisplay(unit)
-            if enableBar then
+            if frame._msufAbsorbEnCached then
                 local absorbAmt = calc:GetDamageAbsorbs()
                 frame.absorbBar:SetMinMaxValues(0, maxHP)
                 frame.absorbBar:SetValue(absorbAmt)
@@ -234,7 +246,7 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
             end
         end
 
-        -- Heal absorb bar
+        -- Heal absorb bar — direct C++ SetValue
         if frame.healAbsorbBar then
             local healAbsorbAmt = calc:GetHealAbsorbs()
             frame.healAbsorbBar:SetMinMaxValues(0, maxHP)

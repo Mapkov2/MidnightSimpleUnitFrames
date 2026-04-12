@@ -1163,7 +1163,7 @@ local _showStacks       = false
 local _IS_BOSS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local _wantBuffHL       = false
 local _wantDebuffHL     = false
-local _useBlizzardTimer = false  -- true = Blizzard C++ pass-through for countdown text
+local _useBlizzardTimer = true   -- PERF C++ DELEGATION: Blizzard native countdown text (default)
 local _useDispelBorders = false  -- dispel-type border coloring for debuffs
 local _clickThrough     = false  -- true = all auras non-interactive (mouse pass-through)
 local _showTooltip      = true   -- cached shared.showTooltip (for click-through + tooltip combo)
@@ -1265,7 +1265,9 @@ local function RefreshSharedFlags(shared, gen)
     _showStacks   = (shared and shared.showStackCount ~= false) -- default true
     _wantBuffHL   = (shared and shared.highlightOwnBuffs == true) or false
     _wantDebuffHL = (shared and shared.highlightOwnDebuffs == true) or false
-    _useBlizzardTimer = (shared and shared.useBlizzardTimerText == true) or false
+    -- PERF C++ DELEGATION: Default to Blizzard native countdown text.
+    -- Only fall back to Lua CooldownText manager if user explicitly disables it.
+    _useBlizzardTimer = not (shared and shared.useBlizzardTimerText == false)
     _useDispelBorders = (shared and shared.useDebuffTypeBorders == true) or false
     _clickThrough     = (shared and shared.clickThroughAuras == true) or false
     _showTooltip      = (shared and shared.showTooltip == true) or false

@@ -39,6 +39,36 @@ local DISPEL_R = { Magic = 0.25, Curse = 0.60, Poison = 0.00, Disease = 0.60, Bl
 local DISPEL_G = { Magic = 0.75, Curse = 0.00, Poison = 0.60, Disease = 0.40, Bleed = 0.00 }
 local DISPEL_B = { Magic = 1.00, Curse = 1.00, Poison = 0.00, Disease = 0.00, Bleed = 0.00 }
 
+-- PERF C++ DELEGATION: Dispel color resolved entirely in C++ via ColorCurve.
+-- Eliminates Lua table lookups + issecretvalue guard on dispelName.
+local _dispelColorCurve
+local _hasDispelColorAPI = (type(_G.C_UnitAuras) == "table"
+    and type(_G.C_UnitAuras.GetAuraDispelTypeColor) == "function"
+    and type(_G.C_CurveUtil) == "table"
+    and type(_G.C_CurveUtil.CreateColorCurve) == "function")
+if _hasDispelColorAPI then
+    _dispelColorCurve = _G.C_CurveUtil.CreateColorCurve()
+    if _dispelColorCurve.SetType then
+        _dispelColorCurve:SetType(_G.Enum and _G.Enum.LuaCurveType and _G.Enum.LuaCurveType.Step or 0)
+    end
+    -- Map DispelType enum → colors (same as DISPEL_R/G/B tables)
+    local DT = _G.oUF and _G.oUF.Enum and _G.oUF.Enum.DispelType
+        or (_G.Enum and _G.Enum.DispelType)
+    if DT and _dispelColorCurve.AddPoint then
+        if DT.Magic   then _dispelColorCurve:AddPoint(DT.Magic,   CreateColor(0.25, 0.75, 1.00, 1)) end
+        if DT.Curse   then _dispelColorCurve:AddPoint(DT.Curse,   CreateColor(0.60, 0.00, 1.00, 1)) end
+        if DT.Poison  then _dispelColorCurve:AddPoint(DT.Poison,  CreateColor(0.00, 0.60, 0.00, 1)) end
+        if DT.Disease  then _dispelColorCurve:AddPoint(DT.Disease, CreateColor(0.60, 0.40, 0.00, 1)) end
+        if DT.Bleed   then _dispelColorCurve:AddPoint(DT.Bleed,   CreateColor(0.80, 0.00, 0.00, 1)) end
+    else
+        _hasDispelColorAPI = false
+        _dispelColorCurve = nil
+    end
+end
+-- C API for C++-based dispel scan (GetAuraDataByIndex is cheaper than GetAuraSlots+GetAuraDataBySlot)
+local _getAuraByIndex = _G.C_UnitAuras and _G.C_UnitAuras.GetAuraDataByIndex
+local _getDispelColor = _hasDispelColorAPI and _G.C_UnitAuras.GetAuraDispelTypeColor
+
 ------------------------------------------------------------------------
 -- Auto class buff detection (resolved once at load — zero runtime cost)
 ------------------------------------------------------------------------
@@ -171,20 +201,33 @@ function GF.UpdateCornerIndicators(f, unit)
     local bossShow, bossR, bossG, bossB = false, 0, 0, 0
     local missingShow, missingR, missingG, missingB = false, 0, 0, 0
 
-    -- DISPEL scan (inlined ScanDispel + ResolveDispel)
-    if needScan % 2 >= 1 and _hasSlotAPI then
-        local _, slot1 = _getSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1, nil)
-        if slot1 then
-            dispelShow = true
-            dispelR, dispelG, dispelB = 0.25, 0.75, 1.00
-            if _hasDataAPI then
-                local data = _getBySlot(unit, slot1)
-                if data then
-                    local dn = data.dispelName
-                    if not (issecretvalue and issecretvalue(dn)) and dn and dn ~= "" then
-                        dispelR = DISPEL_R[dn] or 0.25
-                        dispelG = DISPEL_G[dn] or 0.75
-                        dispelB = DISPEL_B[dn] or 1.00
+    -- DISPEL scan — C++ path when available (1 API call vs 3 + Lua tables)
+    if needScan % 2 >= 1 then
+        if _getDispelColor and _dispelColorCurve then
+            -- C++ DELEGATION: GetAuraDataByIndex → GetAuraDispelTypeColor
+            local bestAura = _getAuraByIndex and _getAuraByIndex(unit, 1, "HARMFUL|RAID_PLAYER_DISPELLABLE")
+            if bestAura and bestAura.auraInstanceID then
+                local color = _getDispelColor(unit, bestAura.auraInstanceID, _dispelColorCurve)
+                if color then
+                    dispelShow = true
+                    dispelR, dispelG, dispelB = color:GetRGB()
+                end
+            end
+        elseif _hasSlotAPI then
+            -- Fallback: Lua-side dispel color (pre-12.0 or API missing)
+            local _, slot1 = _getSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1, nil)
+            if slot1 then
+                dispelShow = true
+                dispelR, dispelG, dispelB = 0.25, 0.75, 1.00
+                if _hasDataAPI then
+                    local data = _getBySlot(unit, slot1)
+                    if data then
+                        local dn = data.dispelName
+                        if not (issecretvalue and issecretvalue(dn)) and dn and dn ~= "" then
+                            dispelR = DISPEL_R[dn] or 0.25
+                            dispelG = DISPEL_G[dn] or 0.75
+                            dispelB = DISPEL_B[dn] or 1.00
+                        end
                     end
                 end
             end

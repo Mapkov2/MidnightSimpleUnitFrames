@@ -95,6 +95,12 @@ local _npcTypeInstanceActive = false
 local _smoothPowerBar    = true
 local _realtimePowerText = true
 
+-- Eliminates cache table lookups in RefreshHealthBarColorFast hot path.
+local _ufcBarMode   = "dark"  -- "dark" | "class" | "unified"
+local _ufcDarkR, _ufcDarkG, _ufcDarkB       = 0, 0, 0
+local _ufcUnifiedR, _ufcUnifiedG, _ufcUnifiedB = 0.10, 0.60, 0.90
+local _ufcNpcTypeColorBar = false
+
 local function UFCore_RefreshSettingsCache(reason)
     local cache = Core._settingsCache or {}
     Core._settingsCache = cache
@@ -211,6 +217,12 @@ local function UFCore_RefreshSettingsCache(reason)
     cache.unifiedBarR = UFCore_Clamp01(g and g.unifiedBarR, 0.10)
     cache.unifiedBarG = UFCore_Clamp01(g and g.unifiedBarG, 0.60)
     cache.unifiedBarB = UFCore_Clamp01(g and g.unifiedBarB, 0.90)
+
+    -- Phase 7: Sync file-scope locals (read by RefreshHealthBarColorFast without cache lookup)
+    _ufcBarMode   = mode
+    _ufcDarkR, _ufcDarkG, _ufcDarkB          = darkR, darkG, darkB
+    _ufcUnifiedR, _ufcUnifiedG, _ufcUnifiedB = cache.unifiedBarR, cache.unifiedBarG, cache.unifiedBarB
+    _ufcNpcTypeColorBar = cache.npcTypeColorBar
 
     -- Static background-tint snapshot (used by main-file background visual apply).
     cache.darkBgCustomColor = (g and g.darkBgCustomColor) and true or false
@@ -908,16 +920,16 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
         frame._msufNpcTypeColored = nil
     end
 
-    -- Bar mode (authoritative): "dark" | "class" | "unified"
-    local mode = (cache and cache.barMode) or "dark"
+    -- Bar mode (authoritative): read from file-scope local (synced in RefreshSettingsCache)
+    local mode = _ufcBarMode
 
     local barR, barG, barB
 
     if mode == "dark" then
-        barR, barG, barB = cache.darkBarR, cache.darkBarG, cache.darkBarB
+        barR, barG, barB = _ufcDarkR, _ufcDarkG, _ufcDarkB
 
     elseif mode == "unified" then
-        barR, barG, barB = cache.unifiedBarR, cache.unifiedBarG, cache.unifiedBarB
+        barR, barG, barB = _ufcUnifiedR, _ufcUnifiedG, _ufcUnifiedB
 
     else
         -- mode == "class": players = class, NPCs = reaction
@@ -934,7 +946,7 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
         else
             local kind = frame._msufCachedReactionKind or "enemy"
             -- If NPC type coloring is active but bar toggle is off, fall back to "enemy"
-            if frame._msufNpcTypeColored and not cache.npcTypeColorBar then
+            if frame._msufNpcTypeColored and not _ufcNpcTypeColorBar then
                 kind = "enemy"
             end
             barR, barG, barB = UFCore_GetNPCReactionColorFast(kind)
@@ -1291,6 +1303,17 @@ local function UFCore_WantEvent(f, conf, desired, unsupported, ev)
     if ev == "UNIT_POWER_FREQUENT" then
         if not (_smoothPowerBar or _realtimePowerText) then return end
         if not f._msufIsPlayer then return end
+    end
+    -- Phase 6: Conditional absorb/prediction event registration.
+    -- These events only fire when the feature is enabled.
+    -- Saves ~3 event dispatches/sec per frame when absorb/healpred is disabled.
+    if ev == "UNIT_ABSORB_AMOUNT_CHANGED" or ev == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
+        local g = MSUF_DB and MSUF_DB.general
+        if g and g.enableAbsorbBar == false then return end
+    end
+    if ev == "UNIT_HEAL_PREDICTION" then
+        local g = MSUF_DB and MSUF_DB.general
+        if g and g.showSelfHealPrediction == false then return end
     end
     desired[ev] = true
 end
@@ -2117,13 +2140,10 @@ local BYTE_U = string.byte("U")
 
 local function FrameOnEvent(self, event, arg1, ...)
     if not self:IsVisible() and not self.MSUF_AllowHiddenEvents then return end
-    if arg1 ~= self.unit then
-        -- Fallback: unknown non-unit events
-        if event:byte(1) == BYTE_U and event:byte(5) == 95 then return end
-        return
-    end
 
     -- ── Hot path: Health (10-50/sec per unit) ──
+    -- PERF: RegisterUnitEvent guarantees arg1==self.unit for UNIT_ events.
+    -- Skip redundant string comparison on the hottest events.
     if event == "UNIT_HEALTH" then
         _HealthValueFast(self)
         return
