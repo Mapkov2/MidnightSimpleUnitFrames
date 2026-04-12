@@ -2356,10 +2356,19 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return string.format("HP Bar Foreground: %.0f%%", v * 100) end,
         })
 
+        -- Text ignores foreground opacity (stays full alpha when bar is transparent)
+        SCheck({
+            name = "MSUF_GF_HpTextIgnoreAlpha", parent = body,
+            anchor = bgLbl, anchorPoint = "TOPLEFT", x = 0, y = -86,
+            label = TR("Text ignores HP opacity"),
+            get = function(k) return GF.Val(k, "hpTextIgnoreAlpha") ~= false end,
+            set = function(k, v) GF.GetConf(k).hpTextIgnoreAlpha = v; GF.MarkAllDirty(GF.DIRTY_COLOR) end,
+        })
+
         -- Health Background Opacity (missing-HP area tint, affects behind-bar icon visibility)
         SSlider({
             name = "MSUF_GF_HpBgAlphaSlider", parent = body, compact = true,
-            anchor = bgLbl, x = 0, y = -92,
+            anchor = bgLbl, x = 0, y = -112,
             min = 0, max = 1, step = 0.05, width = 270, default = 0.85,
             get = function(k) return GF.Val(k, "hpBgAlpha") or GF.Val(k, "bgA") or 0.85 end,
             set = function(k, v) GF.GetConf(k).hpBgAlpha = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,

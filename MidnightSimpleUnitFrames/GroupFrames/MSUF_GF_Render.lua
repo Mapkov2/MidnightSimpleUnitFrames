@@ -227,8 +227,19 @@ end
 
 ------------------------------------------------------------------------
 -- Apply: bar background tint (missing-health / missing-power background)
--- hpBgAlpha: separate alpha for healthBg (behind-bar icons show through)
--- Falls back to bgA when hpBgAlpha is not set.
+--
+-- Behind-Bar Z-Order Fix:
+-- Original healthBg is a texture on health (level N+1). Behind-bar icons
+-- at level N are invisible beneath it. Fix: when ANY aura group uses
+-- behind-bar, hide original healthBg and create a replacement texture
+-- on barGroup at ARTWORK sublevel -7 (below icons but above barGroup bg).
+-- Icons then sit between replacement-bg and health fill.
+--
+-- Z-Order (behind-bar active):
+--   barGroup backdrop   (N, BG)       → dark frame bg
+--   replacement-bg      (N, ART, -7)  → health area tint (configurable alpha)
+--   aura icon frames    (N+1)         → icons visible above tint
+--   health fill         (N+1, ART)    → HP bar covers icons where HP present
 ------------------------------------------------------------------------
 local function ApplyBackgroundTint(f, kind)
     local conf = GF.GetConf(kind)
@@ -236,17 +247,53 @@ local function ApplyBackgroundTint(f, kind)
     local g = conf.bgG or 0.1
     local b = conf.bgB or 0.1
     local a = conf.bgA or 0.85
-    -- Health background: separate alpha for behind-bar icon visibility
     local hpBgA = conf.hpBgAlpha or a
 
-    if f.healthBg then
-        if f._msufGFCachedHBgR ~= r or f._msufGFCachedHBgG ~= g or f._msufGFCachedHBgB ~= b or f._msufGFCachedHBgA ~= hpBgA then
-            f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = r, g, b, hpBgA
-            f.healthBg:SetVertexColor(r, g, b, hpBgA)
+    -- Detect if any aura group uses behind-bar
+    local auras = conf.auras
+    local anyBehindBar = false
+    if auras then
+        local bu, de, ex = auras.buff, auras.debuff, auras.externals
+        if (bu and bu.behindBar) or (de and de.behindBar) or (ex and ex.behindBar) then
+            anyBehindBar = true
         end
     end
+
+    if anyBehindBar and f.health and f.barGroup then
+        -- Hide original healthBg (stuck at health's level, covers icons)
+        if f.healthBg then f.healthBg:Hide() end
+        -- Lazy-create replacement bg texture on barGroup (lower level)
+        if not f._msufBehindBarBg then
+            f._msufBehindBarBg = f.barGroup:CreateTexture(nil, "ARTWORK", nil, -7)
+        end
+        local bbBg = f._msufBehindBarBg
+        bbBg:SetAllPoints(f.health)
+        bbBg:SetTexture(GF.ResolveBarBgTexture(kind))
+        if f._msufBBgR ~= r or f._msufBBgG ~= g or f._msufBBgB ~= b or f._msufBBgA ~= hpBgA then
+            f._msufBBgR, f._msufBBgG, f._msufBBgB, f._msufBBgA = r, g, b, hpBgA
+            bbBg:SetVertexColor(r, g, b, hpBgA)
+        end
+        bbBg:Show()
+        f._msufBehindBarActive = true
+    else
+        -- Restore original healthBg
+        if f._msufBehindBarActive then
+            if f.healthBg then f.healthBg:Show() end
+            if f._msufBehindBarBg then f._msufBehindBarBg:Hide() end
+            f._msufBehindBarActive = nil
+        end
+        if f.healthBg then
+            if f._msufGFCachedHBgR ~= r or f._msufGFCachedHBgG ~= g
+               or f._msufGFCachedHBgB ~= b or f._msufGFCachedHBgA ~= hpBgA then
+                f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = r, g, b, hpBgA
+                f.healthBg:SetVertexColor(r, g, b, hpBgA)
+            end
+        end
+    end
+
     if f.powerBg then
-        if f._msufGFCachedPBgR ~= r or f._msufGFCachedPBgG ~= g or f._msufGFCachedPBgB ~= b or f._msufGFCachedPBgA ~= a then
+        if f._msufGFCachedPBgR ~= r or f._msufGFCachedPBgG ~= g
+           or f._msufGFCachedPBgB ~= b or f._msufGFCachedPBgA ~= a then
             f._msufGFCachedPBgR, f._msufGFCachedPBgG, f._msufGFCachedPBgB, f._msufGFCachedPBgA = r, g, b, a
             f.powerBg:SetVertexColor(r, g, b, a)
         end
@@ -491,7 +538,9 @@ end
 
 ------------------------------------------------------------------------
 -- Apply: health bar foreground alpha (for behind-bar icon visibility)
--- Separate from color — called after ApplyHealthColor in render dispatch.
+-- Uses health:SetAlpha for the bar fill.
+-- When textIgnoreAlpha is on, re-parents healthTextLayer to statusIconLayer
+-- so text stays at full opacity (escapes health alpha inheritance).
 ------------------------------------------------------------------------
 local function ApplyHealthBarAlpha(f, kind)
     if not f.health then return end
@@ -500,6 +549,25 @@ local function ApplyHealthBarAlpha(f, kind)
     if f._msufCachedHpBarAlpha ~= fgA then
         f._msufCachedHpBarAlpha = fgA
         f.health:SetAlpha(fgA)
+    end
+    -- Text layer: escape alpha inheritance when toggle is on
+    local txtLayer = f.healthTextLayer
+    if not txtLayer then return end
+    local wantEscape = (conf.hpTextIgnoreAlpha ~= false) and (fgA < 1)
+    local escaped = txtLayer._msufAlphaEscaped
+    if wantEscape and not escaped then
+        -- Re-parent to statusIconLayer (above everything, unaffected by health alpha)
+        local safeParent = f.statusIconLayer or f.barGroup or f
+        txtLayer:SetParent(safeParent)
+        txtLayer:SetAllPoints(f.health)
+        txtLayer:SetFrameLevel(f.health:GetFrameLevel() + 5)
+        txtLayer._msufAlphaEscaped = true
+    elseif not wantEscape and escaped then
+        -- Restore: parent back to health
+        txtLayer:SetParent(f.health)
+        txtLayer:SetAllPoints(f.health)
+        txtLayer:SetFrameLevel(f.health:GetFrameLevel() + 5)
+        txtLayer._msufAlphaEscaped = nil
     end
 end
 

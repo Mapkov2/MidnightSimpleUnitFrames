@@ -488,18 +488,39 @@ end
 -- SINGLE mode → flat color from hlDispelColorR/G/B (Colors panel).
 -- TYPE mode   → per-debuff-type color (Magic=blue, Curse=purple, etc.).
 ------------------------------------------------------------------------
-local function ResolveDispelColor(dispelName)
+local function ResolveDispelColor(dispelName, f)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local mode = gen and gen.hlDispelColorMode or "SINGLE"
-    if mode == "TYPE" then
-        return GetDispelColor(dispelName)
+    if mode == "SINGLE" then
+        if gen then
+            local r = gen.hlDispelColorR or gen.dispelBorderColorR
+            local g = gen.hlDispelColorG or gen.dispelBorderColorG
+            local b = gen.hlDispelColorB or gen.dispelBorderColorB
+            if r then return r, g, b end
+        end
+        return 0.25, 0.75, 1.00
     end
-    -- SINGLE: read flat color from general (Colors panel writes here)
-    if gen then
-        local r = gen.hlDispelColorR or gen.dispelBorderColorR
-        local g = gen.hlDispelColorG or gen.dispelBorderColorG
-        local b = gen.hlDispelColorB or gen.dispelBorderColorB
-        if r then return r, g, b end
+    -- TYPE mode: per-debuff-type color
+    -- "DISPELLABLE" from C-side detection → resolve via GetAuraDispelTypeColor
+    if dispelName == "DISPELLABLE" and f then
+        local CUA = _G.C_UnitAuras
+        local unit = f.unit
+        local aid = f._msufGFDispelAuraID
+        if CUA and unit and aid and CUA.GetAuraDispelTypeColor then
+            local curve = GF._sharedDispelColorCurve
+            if curve then
+                local color = CUA.GetAuraDispelTypeColor(unit, aid, curve)
+                if color then
+                    if color.GetRGB then return color:GetRGB() end
+                    if color.r then return color.r, color.g, color.b end
+                end
+            end
+        end
+        return 0.25, 0.75, 1.00  -- fallback magic blue
+    end
+    -- String dispel name — legacy lookup
+    if type(dispelName) == "string" then
+        return GetDispelColor(dispelName)
     end
     return 0.25, 0.75, 1.00
 end
@@ -1226,7 +1247,7 @@ _GF_RefreshBorder = function(f, unit)
             if pk == "dispel" or pk == "magic" or pk == "curse"
             or pk == "disease" or pk == "poison" or pk == "bleed" then
                 if hasDispel then
-                    local r, g, b = ResolveDispelColor(dispelType)
+                    local r, g, b = ResolveDispelColor(dispelType, f)
                     if r then
                         _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
                         border._msufHLActivePrio = 1; border:Show()
@@ -1247,7 +1268,7 @@ _GF_RefreshBorder = function(f, unit)
     else
         -- Default: Dispel > Aggro
         if hasDispel then
-            local r, g, b = ResolveDispelColor(dispelType)
+            local r, g, b = ResolveDispelColor(dispelType, f)
             if r then
                 _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
                 border._msufHLActivePrio = 1; border:Show()

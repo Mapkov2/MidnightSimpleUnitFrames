@@ -110,10 +110,44 @@ local function GetGrowthVectors(growth)
 end
 
 ------------------------------------------------------------------------
--- Dispel type border colors
+-- Dispel type border colors — C-side ColorCurve (secret-safe)
+-- GetAuraDispelTypeColor works on secret auras — no dispelName read needed.
+-- IsAuraFilteredOutByInstanceID with RAID_PLAYER_DISPELLABLE checks dispellability.
 ------------------------------------------------------------------------
+local _dispelColorCurve
+local _getDispelColor
+local _isFilteredOut
+do
+    local CUA = _G.C_UnitAuras
+    local CCU = _G.C_CurveUtil
+    if CUA and type(CUA.GetAuraDispelTypeColor) == "function"
+       and CCU and type(CCU.CreateColorCurve) == "function" then
+        _dispelColorCurve = CCU.CreateColorCurve()
+        if _dispelColorCurve.SetType then
+            _dispelColorCurve:SetType(_G.Enum and _G.Enum.LuaCurveType and _G.Enum.LuaCurveType.Step or 0)
+        end
+        local DT = _G.Enum and _G.Enum.DispelType
+        if DT and _dispelColorCurve.AddPoint then
+            if DT.Magic   then _dispelColorCurve:AddPoint(DT.Magic,   CreateColor(0.25, 0.75, 1.00, 1)) end
+            if DT.Curse   then _dispelColorCurve:AddPoint(DT.Curse,   CreateColor(0.60, 0.00, 1.00, 1)) end
+            if DT.Poison  then _dispelColorCurve:AddPoint(DT.Poison,  CreateColor(0.00, 0.60, 0.00, 1)) end
+            if DT.Disease then _dispelColorCurve:AddPoint(DT.Disease, CreateColor(0.60, 0.40, 0.00, 1)) end
+            if DT.Bleed   then _dispelColorCurve:AddPoint(DT.Bleed,   CreateColor(0.80, 0.00, 0.00, 1)) end
+        end
+        _getDispelColor = CUA.GetAuraDispelTypeColor
+    end
+    if CUA and type(CUA.IsAuraFilteredOutByInstanceID) == "function" then
+        _isFilteredOut = CUA.IsAuraFilteredOutByInstanceID
+    end
+end
+local _DISPEL_FILTER = "HARMFUL|RAID_PLAYER_DISPELLABLE"
+
+-- Export shared ColorCurve for Effects.lua ResolveDispelColor
+GF._sharedDispelColorCurve = _dispelColorCurve
+
+-- Legacy fallback colors (used only when C-side API unavailable)
 local DISPEL_COLORS = {
-    Magic   = { 0.20, 0.60, 1.00 },
+    Magic   = { 0.25, 0.75, 1.00 },
     Curse   = { 0.60, 0.00, 1.00 },
     Disease = { 0.60, 0.40, 0.00 },
     Poison  = { 0.00, 0.60, 0.00 },
@@ -353,6 +387,8 @@ end
 
 ------------------------------------------------------------------------
 -- Apply dispel-type border (debuffs only)
+-- Uses C-side GetAuraDispelTypeColor (secret-safe, works on all auras).
+-- Falls back to dispelName for legacy compat when C-side API unavailable.
 ------------------------------------------------------------------------
 local function ApplyDispelBorder(ic, unit, auraInstanceID, dispelName, isHarmful, showDispel)
     if not isHarmful or not showDispel then
@@ -362,13 +398,23 @@ local function ApplyDispelBorder(ic, unit, auraInstanceID, dispelName, isHarmful
         end
         return
     end
-    ic._msufBorderBlack = nil -- clear diff-gate flag (non-black border)
-    -- Plain dispelName lookup (non-secret only)
+    ic._msufBorderBlack = nil
+    -- C-side dispel color (secret-safe, works on all debuffs)
+    if _getDispelColor and _dispelColorCurve and auraInstanceID then
+        local color = _getDispelColor(unit, auraInstanceID, _dispelColorCurve)
+        if color then
+            local r, g, b
+            if color.GetRGB then r, g, b = color:GetRGB()
+            elseif color.r then r, g, b = color.r, color.g, color.b end
+            if r then ic:SetBackdropBorderColor(r, g, b, 1); return end
+        end
+    end
+    -- Legacy fallback: plain dispelName (non-secret only)
     if not (issecretvalue and issecretvalue(dispelName)) and dispelName ~= nil then
         local c = DISPEL_COLORS[dispelName]
         if c then ic:SetBackdropBorderColor(c[1], c[2], c[3], 1); return end
     end
-    -- Default red for unknown/secret debuffs
+    -- Default red for unknown debuffs
     ic:SetBackdropBorderColor(0.8, 0, 0, 1)
 end
 
@@ -546,7 +592,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local wantParent, wantLvl
     if behindBar then
         wantParent = f.barGroup or f
-        wantLvl = wantParent:GetFrameLevel()
+        -- health - 1: above replacement-bg (on barGroup), below health fill
+        wantLvl = f.health:GetFrameLevel() - 1
     else
         wantParent = parent
         wantLvl = parent:GetFrameLevel() + (gcfg.layer or 5)
@@ -629,15 +676,21 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                or (dedupIDs and aid and dedupIDs[aid]) then
                 -- skip (claimed by externals or SpellIndicators)
             else
-                -- Merged dispel: check during harmful scan (BEFORE spell filter — dispel ignores blacklist)
-                if isHarmful and not topDispel then
-                    local dn = aura.dispelName
-                    if not (issecretvalue and issecretvalue(dn)) and dn ~= nil and dn ~= "" then
-                        topDispel = dn
+                -- Merged dispel: C-side check (secret-safe, BEFORE spell filter)
+                if isHarmful and not topDispel and aid then
+                    if _isFilteredOut then
+                        local filtered = _isFilteredOut(unit, aid, _DISPEL_FILTER)
+                        if filtered == false then
+                            -- Store "DISPELLABLE" + auraID for border system
+                            topDispel = "DISPELLABLE"
+                            f._msufGFDispelAuraID = aid
+                        end
                     else
-                        local ir = aura.isRaid
-                        if not (issecretvalue and issecretvalue(ir)) and ir then
-                            topDispel = "Bleed"
+                        -- Legacy fallback: plain dispelName
+                        local dn = aura.dispelName
+                        if not (issecretvalue and issecretvalue(dn)) and dn ~= nil and dn ~= "" then
+                            topDispel = dn
+                            f._msufGFDispelAuraID = aid
                         end
                     end
                 end
@@ -825,18 +878,28 @@ function GF.UpdateFrameAuras(f, unit)
             HidePool(f[POOL_KEYS.debuff], 1)
         end
         -- Lightweight dispel scan ONLY when class can dispel AND dispel enabled
+        -- Uses C-side RAID_PLAYER_DISPELLABLE filter (secret-safe)
         if dispelNeeded then
-            local slots, sc = QuerySlots(unit, "HARMFUL", 12)
-            for i = 2, sc do
-                local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
-                if aura then
-                    local dn = aura.dispelName
-                    if not (issecretvalue and issecretvalue(dn)) and dn ~= nil and dn ~= "" then
-                        mergedDispel = dn; break
+            if _isFilteredOut then
+                local slots, sc = QuerySlots(unit, _DISPEL_FILTER, 4)
+                if sc >= 2 then
+                    local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[2])
+                    if aura and aura.auraInstanceID then
+                        mergedDispel = "DISPELLABLE"
+                        f._msufGFDispelAuraID = aura.auraInstanceID
                     end
-                    local ir = aura.isRaid
-                    if not (issecretvalue and issecretvalue(ir)) and ir then
-                        mergedDispel = "Bleed"; break
+                end
+            else
+                local slots, sc = QuerySlots(unit, "HARMFUL", 12)
+                for i = 2, sc do
+                    local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
+                    if aura then
+                        local dn = aura.dispelName
+                        if not (issecretvalue and issecretvalue(dn)) and dn ~= nil and dn ~= "" then
+                            mergedDispel = dn
+                            f._msufGFDispelAuraID = aura.auraInstanceID
+                            break
+                        end
                     end
                 end
             end
@@ -924,7 +987,7 @@ do
         end
         local wantLvl
         if behindBar then
-            wantLvl = (f.barGroup or f):GetFrameLevel()
+            wantLvl = f.health:GetFrameLevel() - 1
         else
             wantLvl = normalParent:GetFrameLevel() + (gcfg.layer or 5)
         end
