@@ -1262,6 +1262,15 @@ local function SetupPartyHeader()
     local spacing = conf.spacing or 1
     local growth = conf.growth or "DOWN"
 
+    -- Frame scaling (scales entire frame proportionally)
+    if GF.ApplyFrameScale then GF.ApplyFrameScale("party") end
+    local fScale = conf._resolvedFrameScale or 1
+    if fScale ~= 1 then
+        w = math_floor(w * fScale + 0.5)
+        h = math_floor(h * fScale + 0.5)
+        spacing = math_max(1, math_floor(spacing * fScale + 0.5))
+    end
+
     _GF_SetAttrIfChanged(header, "showParty", true)
     _GF_SetAttrIfChanged(header, "showRaid", false)
     _GF_SetAttrIfChanged(header, "showPlayer", conf.showPlayer and true or false)
@@ -1399,6 +1408,15 @@ local function SetupRaidHeader()
     local unitsPerColumn = conf.unitsPerColumn or 5
     local maxColumns = conf.maxColumns or 8
 
+    -- Frame scaling (scales entire frame proportionally)
+    if GF.ApplyFrameScale then GF.ApplyFrameScale("raid") end
+    local fScale = conf._resolvedFrameScale or 1
+    if fScale ~= 1 then
+        w = math_floor(w * fScale + 0.5)
+        h = math_floor(h * fScale + 0.5)
+        spacing = math_max(1, math_floor(spacing * fScale + 0.5))
+    end
+
     -- CRITICAL: Hide before attributes (see SetupPartyHeader comment)
     header:Hide()
 
@@ -1427,8 +1445,14 @@ local function SetupRaidHeader()
     else
         _GF_SetAttrIfChanged(header, "groupFilter", nil)
     end
-    -- Role sort
-    if conf.sortByRole then
+    -- Sort mode: INDEX / ROLE / GROUP / GROUP_ROLE / NAME
+    -- Migration: sortByRole boolean → sortMode string
+    local sortMode = conf.sortMode
+    if not sortMode then
+        sortMode = conf.sortByRole and "ROLE" or "INDEX"
+    end
+
+    if sortMode == "ROLE" then
         if conf.separateMeleeRanged then
             local nameList = BuildSortNameList("raid")
             _GF_SetAttrIfChanged(header, "sortMethod", "NAMELIST")
@@ -1441,7 +1465,27 @@ local function SetupRaidHeader()
             _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
             _GF_SetAttrIfChanged(header, "groupingOrder", conf.roleOrder or "TANK,HEALER,DAMAGER")
         end
+    elseif sortMode == "GROUP" then
+        -- Group by raid group number (1-8), index within each
+        _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+        _GF_SetAttrIfChanged(header, "nameList", nil)
+        _GF_SetAttrIfChanged(header, "groupBy", "GROUP")
+        _GF_SetAttrIfChanged(header, "groupingOrder", "1,2,3,4,5,6,7,8")
+    elseif sortMode == "GROUP_ROLE" then
+        -- Group by raid group, then by role within each group
+        _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+        _GF_SetAttrIfChanged(header, "nameList", nil)
+        _GF_SetAttrIfChanged(header, "groupBy", "GROUP")
+        _GF_SetAttrIfChanged(header, "groupingOrder", "1,2,3,4,5,6,7,8")
+        -- Note: within-group role sorting requires Blizzard's native prioritization
+        -- which sorts TANK > HEALER > DAMAGER within each group automatically
+    elseif sortMode == "NAME" then
+        _GF_SetAttrIfChanged(header, "sortMethod", "NAME")
+        _GF_SetAttrIfChanged(header, "nameList", nil)
+        _GF_SetAttrIfChanged(header, "groupBy", nil)
+        _GF_SetAttrIfChanged(header, "groupingOrder", nil)
     else
+        -- INDEX (default): flat, no grouping
         _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
         _GF_SetAttrIfChanged(header, "nameList", nil)
         _GF_SetAttrIfChanged(header, "groupBy", nil)
@@ -2258,6 +2302,36 @@ local function OnEvent(self, event, ...)
         -- Switch party/raid visibility + rescan children
         GF.UpdateGroupVisibility()
 
+        -- Refresh sort order when role-sorting with NAMELIST is active
+        -- (SecureGroupHeader auto-sorts for native groupBy modes,
+        -- but NAMELIST sort needs manual refresh on roster changes)
+        local needSortRefresh = false
+        local partyConf = GF.GetConf("party")
+        local raidConf  = GF.GetConf("raid")
+        if partyConf.separateMeleeRanged and partyConf.sortByRole then
+            needSortRefresh = true
+        end
+        local raidSort = raidConf.sortMode or (raidConf.sortByRole and "ROLE" or "INDEX")
+        if raidConf.separateMeleeRanged and raidSort == "ROLE" then
+            needSortRefresh = true
+        end
+        if needSortRefresh then
+            if InCombatLockdown() then
+                GF._pendingRebuild = true
+            else
+                C_Timer.After(0.2, function()
+                    if not InCombatLockdown() then
+                        GF.RebuildAll()
+                    else
+                        GF._pendingRebuild = true
+                    end
+                end)
+            end
+        end
+
+        -- Invalidate group size cache (dynamic aura scale)
+        if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
+
     elseif event == "PLAYER_REGEN_ENABLED" then
         if GF._pendingPartyRefresh then
             GF._pendingPartyRefresh = nil
@@ -2313,6 +2387,10 @@ local function OnEvent(self, event, ...)
             end
             C_Timer.After(0.3, function()
                 if not InCombatLockdown() then
+                    -- Auto-switch raid layout per situation (Mythic/Normal/OpenWorld)
+                    if GF.AutoSwitchRaidLayout then
+                        GF.AutoSwitchRaidLayout()
+                    end
                     GF.RebuildAll()
                     GF._forceRecreateHeaders = nil
                 end

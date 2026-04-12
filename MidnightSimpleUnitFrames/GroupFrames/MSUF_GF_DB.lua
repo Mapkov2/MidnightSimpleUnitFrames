@@ -628,6 +628,137 @@ function GF.GetDefault(kind, key)
     return PARTY_DEFAULTS[key]
 end
 
+------------------------------------------------------------------------
+-- Raid Layout Situations
+-- Stores per-situation geometry overrides (Mythic / Normal-HC / Open World).
+-- On situation change: save current → load target → RebuildAll.
+-- Auto-detect via difficultyID on PLAYER_ENTERING_WORLD.
+------------------------------------------------------------------------
+local LAYOUT_GEO_KEYS = {
+    "width", "height", "spacing", "growth",
+    "unitsPerColumn", "maxColumns",
+    "point", "anchorPoint", "offsetX", "offsetY",
+}
+
+local RAID_LAYOUT_SITUATIONS = {
+    { key = "manual",    label = "Manual (no auto-switch)" },
+    { key = "mythic",    label = "Mythic Raid / M+" },
+    { key = "normal",    label = "Normal / Heroic Raid" },
+    { key = "openworld", label = "Open World / Party" },
+}
+GF.RAID_LAYOUT_SITUATIONS = RAID_LAYOUT_SITUATIONS
+
+--- Save current geometry to a situation slot
+function GF.SaveRaidLayout(conf, situationKey)
+    if not conf then return end
+    if type(conf.raidLayouts) ~= "table" then conf.raidLayouts = {} end
+    local slot = conf.raidLayouts[situationKey]
+    if not slot then slot = {}; conf.raidLayouts[situationKey] = slot end
+    for _, k in ipairs(LAYOUT_GEO_KEYS) do
+        slot[k] = conf[k]
+    end
+end
+
+--- Load geometry from a situation slot onto the main conf
+function GF.LoadRaidLayout(conf, situationKey)
+    if not conf then return end
+    local layouts = conf.raidLayouts
+    if type(layouts) ~= "table" then return end
+    local slot = layouts[situationKey]
+    if type(slot) ~= "table" then return end
+    for _, k in ipairs(LAYOUT_GEO_KEYS) do
+        if slot[k] ~= nil then conf[k] = slot[k] end
+    end
+end
+
+--- Switch active situation: save current → load new → rebuild
+function GF.SwitchRaidLayout(situationKey)
+    local conf = GF.GetConf("raid")
+    if not conf then return end
+    local prev = conf._activeRaidLayout
+    if prev and prev ~= situationKey then
+        GF.SaveRaidLayout(conf, prev)
+    end
+    conf._activeRaidLayout = situationKey
+    GF.LoadRaidLayout(conf, situationKey)
+    GF.InvalidateConfCache()
+    if GF.RebuildAll then GF.RebuildAll() end
+end
+
+--- Detect situation from instance difficulty
+function GF.DetectRaidSituation()
+    local _, _, difficultyID = GetInstanceInfo()
+    if not difficultyID or difficultyID == 0 then return "openworld" end
+    -- Mythic Raid = 16, Mythic+ = 8, Mythic Dungeon = 23
+    if difficultyID == 16 or difficultyID == 8 or difficultyID == 23 then
+        return "mythic"
+    end
+    -- Normal Raid = 14, Heroic Raid = 15, LFR = 17
+    if difficultyID == 14 or difficultyID == 15 or difficultyID == 17 then
+        return "normal"
+    end
+    -- Normal Dungeon = 1, Heroic Dungeon = 2, Timewalking = 24/33
+    if difficultyID == 1 or difficultyID == 2 or difficultyID == 24 or difficultyID == 33 then
+        return "normal"
+    end
+    return "openworld"
+end
+
+--- Auto-switch handler (called on PLAYER_ENTERING_WORLD)
+function GF.AutoSwitchRaidLayout()
+    local conf = GF.GetConf("raid")
+    if not conf then return end
+    local mode = conf.raidLayoutMode or "manual"
+    if mode ~= "auto" then return end
+    local situation = GF.DetectRaidSituation()
+    if situation ~= conf._activeRaidLayout then
+        GF.SwitchRaidLayout(situation)
+    end
+end
+
+------------------------------------------------------------------------
+-- Group Frame Scaling
+-- Scales entire frame (geometry + fonts + icons) based on group size.
+-- Mode: "off" / "auto" / "manual"
+-- Auto thresholds: 1-15 = 100%, 16-25 = 85%, 26-40 = 70%
+-- Manual: user-defined 50-150%
+-- Stored as conf._resolvedFrameScale (set during SetupHeader, read by Render)
+------------------------------------------------------------------------
+local SCALE_AUTO_DEFAULTS = {
+    { max = 10, scale = 100 },  -- 1-10 players
+    { max = 20, scale = 85  },  -- 11-20 players
+    { max = 25, scale = 80  },  -- 21-25 players
+    -- 26+ uses scaleOver25
+}
+local SCALE_OVER25_DEFAULT = 70
+
+function GF.ResolveFrameScale(kind)
+    local conf = GF.GetConf(kind)
+    if not conf then return 1 end
+    local mode = conf.frameScaleMode or "off"
+    if mode == "off" then return 1 end
+    if mode == "manual" then
+        return (conf.frameScaleManual or 100) / 100
+    end
+    -- Auto: configurable breakpoints
+    local n = GetNumGroupMembers and GetNumGroupMembers() or 0
+    local s10  = conf.scaleAt10  or SCALE_AUTO_DEFAULTS[1].scale
+    local s20  = conf.scaleAt20  or SCALE_AUTO_DEFAULTS[2].scale
+    local s25  = conf.scaleAt25  or SCALE_AUTO_DEFAULTS[3].scale
+    local s26  = conf.scaleOver25 or SCALE_OVER25_DEFAULT
+    if n <= 10 then return s10 / 100 end
+    if n <= 20 then return s20 / 100 end
+    if n <= 25 then return s25 / 100 end
+    return s26 / 100
+end
+
+--- Apply resolved scale to conf cache (called before header setup)
+function GF.ApplyFrameScale(kind)
+    local conf = GF.GetConf(kind)
+    if not conf then return end
+    conf._resolvedFrameScale = GF.ResolveFrameScale(kind)
+end
+
 --- Resolve a config value with fallback to default
 function GF.Val(kind, key)
     local conf = GF.GetConf(kind)
@@ -1051,9 +1182,26 @@ end
 --- Truncate name string (UTF-8 aware when possible)
 function GF.TruncateName(name, maxChars, noEllipsis)
     if not name or maxChars == nil or maxChars <= 0 then return name end
-    local len = string.len(name)
-    if len <= maxChars then return name end
-    local truncated = string.sub(name, 1, maxChars)
+    -- UTF-8 safe: count characters, not bytes
+    -- Each UTF-8 char starts with a byte that's NOT a continuation byte (10xxxxxx)
+    local charCount = 0
+    local bytePos = 1
+    local nameLen = #name
+    while bytePos <= nameLen and charCount < maxChars do
+        charCount = charCount + 1
+        local b = string.byte(name, bytePos)
+        if b < 128 then
+            bytePos = bytePos + 1       -- ASCII: 1 byte
+        elseif b < 224 then
+            bytePos = bytePos + 2       -- 2-byte (Cyrillic, Latin Extended)
+        elseif b < 240 then
+            bytePos = bytePos + 3       -- 3-byte (CJK, etc.)
+        else
+            bytePos = bytePos + 4       -- 4-byte (Emoji, rare)
+        end
+    end
+    if bytePos > nameLen then return name end  -- name fits
+    local truncated = string.sub(name, 1, bytePos - 1)
     if noEllipsis then return truncated end
     return truncated .. ".."
 end

@@ -653,7 +653,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     local _scopeHintFS
 
     local _TAB_DEFS = {
-        { key = "frame",      keys = { "general", "border", "anchor", "tooltip" } },
+        { key = "frame",      keys = { "general", "layout", "sorting", "scaling", "border", "anchor", "tooltip" } },
         { key = "health",     keys = { "hcolor", "bars", "power", "text", "effects", "range" } },
         { key = "auras",      keys = { "buffs", "debuffs", "ext", "rdebuffs", "priv", "masque", "autil" } },
         { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
@@ -981,7 +981,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 1: General (default open)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(940, "General", false, "general")
+        local box, body = AddSection(420, "General", false, "general")
 
         -- ── Role Preset selector ──
         local presetLabel = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1095,9 +1095,102 @@ function _G.MSUF_EnsureGFPanelBuilt()
             end,
         })
 
+        -- Misc options (anchored directly after Show Pets)
+        local reverseFillChk = SCheck({
+            name = "MSUF_GF_ReverseFillCheck", parent = body,
+            anchor = showPetsChk, x = 0, y = -8,
+            label = TR("Reverse Fill"),
+            get = function(k) return GF.Val(k, "reverseFill") end,
+            set = function(k, v) GF.GetConf(k).reverseFill = v; GF.RefreshVisuals() end,
+        })
+
+        local smoothChk = SCheck({
+            name = "MSUF_GF_SmoothFillCheck", parent = body,
+            anchor = reverseFillChk, x = 0, y = -4,
+            label = TR("Smooth Health Fill"),
+            get = function(k) return GF.Val(k, "smoothFill") ~= false end,
+            set = function(k, v) GF.GetConf(k).smoothFill = v end,
+        })
+
+        local hideClientChk = SCheck({
+            name = "MSUF_GF_HideInClientSceneCheck", parent = body,
+            anchor = smoothChk, x = 0, y = -4,
+            label = TR("Hide in Barber Shop / Dressing Room"),
+            get = function(k) return GF.Val(k, "hideInClientScene") ~= false end,
+            set = function(k, v) GF.GetConf(k).hideInClientScene = v end,
+        })
+
+        SSlider({
+            name = "MSUF_GF_HideOfflineSlider", parent = body, compact = true,
+            anchor = hideClientChk, x = 0, y = -4,
+            min = 0, max = 120, step = 1, width = 270, default = 0,
+            get = function(k) return GF.Val(k, "hideOfflineDelay") or 0 end,
+            set = function(k, v) GF.GetConf(k).hideOfflineDelay = v; GF.RefreshVisuals() end,
+            formatText = function(v) return v == 0 and TR("Hide Offline: Off") or string.format(TR("Hide Offline: %ds"), v) end,
+        })
+    end
+
+    ----------------------------------------------------------------
+    -- Section 1a: Layout (Raid Layout Situation + geometry)
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(680, "Layout", false, "layout")
+
+        -- ── Raid Layout Situation ──
+        local _raidLayoutItems = {}
+        for _, sit in ipairs(GF.RAID_LAYOUT_SITUATIONS or {}) do
+            _raidLayoutItems[#_raidLayoutItems + 1] = { key = sit.key, label = TR(sit.label) }
+        end
+
+        local raidLayoutLbl = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        raidLayoutLbl:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -8)
+        raidLayoutLbl:SetText(TR("Raid Layout Situation")); raidLayoutLbl:SetTextColor(1, 0.82, 0)
+
+        local raidLayoutAutoChk = SCheck({
+            name = "MSUF_GF_RaidLayoutAuto", parent = body,
+            anchor = raidLayoutLbl, anchorPoint = "TOPLEFT", x = 0, y = -14,
+            label = TR("Auto-switch on zone change"),
+            get = function(k)
+                local conf = GF.GetConf(k)
+                return conf and conf.raidLayoutMode == "auto"
+            end,
+            set = function(k, v)
+                local conf = GF.GetConf(k)
+                if conf then
+                    conf.raidLayoutMode = v and "auto" or "manual"
+                    if v and GF.AutoSwitchRaidLayout then
+                        GF.AutoSwitchRaidLayout()
+                    end
+                end
+            end,
+        })
+
+        local raidLayoutDd
+        if #_raidLayoutItems > 0 then
+            raidLayoutDd = SDropdown({
+                name = "MSUF_GF_RaidLayoutDropdown", parent = body,
+                anchor = raidLayoutAutoChk, x = 0, y = -4, width = 220,
+                items = _raidLayoutItems,
+                get = function(k)
+                    local conf = GF.GetConf(k)
+                    return conf and conf._activeRaidLayout or "manual"
+                end,
+                set = function(k, v)
+                    if GF.SwitchRaidLayout then GF.SwitchRaidLayout(v) end
+                end,
+            })
+        end
+
+        local raidLayoutHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        raidLayoutHint:SetPoint("TOPLEFT", raidLayoutDd or raidLayoutAutoChk, "BOTTOMLEFT", 4, -4)
+        raidLayoutHint:SetText(TR("Width, Height, Spacing, Columns, Growth saved per situation.\nSwitch to edit each layout. Auto detects Mythic/Normal/World."))
+        raidLayoutHint:SetTextColor(0.5, 0.5, 0.6)
+        raidLayoutHint:SetWidth(350)
+        raidLayoutHint:SetJustifyH("LEFT")
+
         local widthSl = SSlider({
             name = "MSUF_GF_WidthSlider", parent = body, compact = true,
-            anchor = showPetsChk, x = 0, y = -18,
+            anchor = raidLayoutHint, x = 0, y = -10,
             min = 40, max = 300, step = 1, width = 270, default = 120,
             get = function(k) return GF.Val(k, "width") end,
             set = function(k, v) GF.GetConf(k).width = v; GF.RebuildAll() end,
@@ -1443,12 +1536,51 @@ function _G.MSUF_EnsureGFPanelBuilt()
         end
         _allRefreshFns[#_allRefreshFns + 1] = SyncGroupFilter
         SyncGroupFilter()
+    end
+
+    ----------------------------------------------------------------
+    -- Section 1a2: Sorting (Sort Mode + Role Sort)
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(380, "Sorting", false, "sorting")
 
         ----------------------------------------------------------------
-        -- Role Sort: drag-to-reorder role priority
+        -- Sort Mode dropdown (raid only: INDEX / ROLE / GROUP / GROUP_ROLE / NAME)
+        ----------------------------------------------------------------
+        local _sortModeItems = {
+            { key = "INDEX",      label = TR("Index (Default)") },
+            { key = "ROLE",       label = TR("By Role") },
+            { key = "GROUP",      label = TR("By Raid Group") },
+            { key = "GROUP_ROLE", label = TR("Group + Role") },
+            { key = "NAME",       label = TR("Alphabetical") },
+        }
+        local sortModeDd = SDropdown({
+            name = "MSUF_GF_SortModeDropdown", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -8, width = 200,
+            items = _sortModeItems,
+            get = function(k)
+                local conf = GF.GetConf(k)
+                if conf.sortMode then return conf.sortMode end
+                return conf.sortByRole and "ROLE" or "INDEX"
+            end,
+            set = function(k, v)
+                local conf = GF.GetConf(k)
+                conf.sortMode = v
+                -- Backward compat: keep sortByRole in sync
+                conf.sortByRole = (v == "ROLE")
+                GF.RebuildAll()
+            end,
+        })
+        local sortModeLbl = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        sortModeLbl:SetPoint("LEFT", sortModeDd, "RIGHT", 8, 0)
+        sortModeLbl:SetText(TR("Sort Mode"))
+        sortModeLbl:SetTextColor(0.7, 0.7, 0.7)
+
+        ----------------------------------------------------------------
+        -- Role Sort: drag-to-reorder role priority (visible when ROLE mode)
         ----------------------------------------------------------------
         local _roleSortWrap = CreateFrame("Frame", nil, body)
-        _roleSortWrap:SetPoint("TOPLEFT", _gfRow, "BOTTOMLEFT", 0, -2)
+        _roleSortWrap:SetPoint("TOPLEFT", sortModeDd, "BOTTOMLEFT", 0, -2)
         _roleSortWrap:SetSize(300, 24)
         do
             local ALL_ROLES = {
@@ -1468,13 +1600,23 @@ function _G.MSUF_EnsureGFPanelBuilt()
             local _roleRows = {}
             local _activeCount = 3
 
-            -- Enable checkbox
+            -- Enable checkbox (legacy — syncs with Sort Mode dropdown)
             local roleSortChk = SCheck({
                 name = "MSUF_GF_SortByRoleCheck", parent = _roleSortWrap,
                 anchor = _roleSortWrap, anchorPoint = "TOPLEFT", x = 0, y = -4,
                 label = TR("Sort by Role"),
-                get = function(k) return GF.Val(k, "sortByRole") end,
-                set = function(k, v) GF.GetConf(k).sortByRole = v; GF.RebuildAll() end,
+                get = function(k)
+                    local conf = GF.GetConf(k)
+                    local sm = conf.sortMode
+                    if sm then return sm == "ROLE" end
+                    return GF.Val(k, "sortByRole")
+                end,
+                set = function(k, v)
+                    local conf = GF.GetConf(k)
+                    conf.sortByRole = v
+                    conf.sortMode = v and "ROLE" or "INDEX"
+                    GF.RebuildAll()
+                end,
             })
 
             local meleeChk = SCheck({
@@ -1633,40 +1775,6 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 C_Timer.After(0, function() SyncRoleSort() end)
             end)
         end
-
-
-        local reverseFillChk = SCheck({
-            name = "MSUF_GF_ReverseFillCheck", parent = body,
-            anchor = _roleSortWrap, x = 0, y = -4,
-            label = TR("Reverse Fill"),
-            get = function(k) return GF.Val(k, "reverseFill") end,
-            set = function(k, v) GF.GetConf(k).reverseFill = v; GF.RefreshVisuals() end,
-        })
-
-        local smoothChk = SCheck({
-            name = "MSUF_GF_SmoothFillCheck", parent = body,
-            anchor = reverseFillChk, x = 0, y = -4,
-            label = TR("Smooth Health Fill"),
-            get = function(k) return GF.Val(k, "smoothFill") ~= false end,
-            set = function(k, v) GF.GetConf(k).smoothFill = v end,
-        })
-
-        local hideClientChk = SCheck({
-            name = "MSUF_GF_HideInClientSceneCheck", parent = body,
-            anchor = smoothChk, x = 0, y = -4,
-            label = TR("Hide in Barber Shop / Dressing Room"),
-            get = function(k) return GF.Val(k, "hideInClientScene") ~= false end,
-            set = function(k, v) GF.GetConf(k).hideInClientScene = v end,
-        })
-
-        SSlider({
-            name = "MSUF_GF_HideOfflineSlider", parent = body, compact = true,
-            anchor = hideClientChk, x = 0, y = -4,
-            min = 0, max = 120, step = 1, width = 270, default = 0,
-            get = function(k) return GF.Val(k, "hideOfflineDelay") or 0 end,
-            set = function(k, v) GF.GetConf(k).hideOfflineDelay = v; GF.RefreshVisuals() end,
-            formatText = function(v) return v == 0 and TR("Hide Offline: Off") or string.format(TR("Hide Offline: %ds"), v) end,
-        })
     end
 
     ----------------------------------------------------------------
@@ -1808,6 +1916,87 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 or atv == "targettarget" or atv == "focus" or atv == "pet")
             customBox:SetText(isStd and "" or atv)
         end
+    end
+
+    ----------------------------------------------------------------
+    -- Section 1c: Frame Scaling
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(340, "Frame Scaling", false, "scaling")
+
+        local _scaleItems = {
+            { key = "off",    label = TR("Off (100%)") },
+            { key = "auto",   label = TR("Auto (by group size)") },
+            { key = "manual", label = TR("Manual") },
+        }
+        local scaleDd = SDropdown({
+            name = "MSUF_GF_FrameScaleMode", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -8, width = 220,
+            items = _scaleItems,
+            get = function(k) return GF.Val(k, "frameScaleMode") or "off" end,
+            set = function(k, v)
+                GF.GetConf(k).frameScaleMode = v
+                GF.RebuildAll()
+            end,
+        })
+        local scaleDdLbl = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        scaleDdLbl:SetPoint("LEFT", scaleDd, "RIGHT", 8, 0)
+        scaleDdLbl:SetText(TR("Scale Mode")); scaleDdLbl:SetTextColor(0.7, 0.7, 0.7)
+
+        -- Manual slider
+        local scaleManualSl = SSlider({
+            name = "MSUF_GF_FrameScaleManual", parent = body, compact = true,
+            anchor = scaleDd, x = 0, y = -6,
+            min = 50, max = 150, step = 5, width = 220, default = 100,
+            get = function(k) return GF.Val(k, "frameScaleManual") or 100 end,
+            set = function(k, v) GF.GetConf(k).frameScaleManual = v; GF.RebuildAll() end,
+            formatText = function(v) return string.format("Manual Scale: %d%%", v) end,
+        })
+
+        -- Auto breakpoint sliders
+        local autoLbl = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        autoLbl:SetPoint("TOPLEFT", scaleManualSl, "BOTTOMLEFT", 0, -10)
+        autoLbl:SetText(TR("Auto Breakpoints")); autoLbl:SetTextColor(1, 0.82, 0)
+
+        local s10Sl = SSlider({
+            name = "MSUF_GF_ScaleAt10", parent = body, compact = true,
+            anchor = autoLbl, x = 0, y = -6,
+            min = 50, max = 100, step = 5, width = 220, default = 100,
+            get = function(k) return GF.Val(k, "scaleAt10") or 100 end,
+            set = function(k, v) GF.GetConf(k).scaleAt10 = v; GF.RebuildAll() end,
+            formatText = function(v) return string.format("1-10 players: %d%%", v) end,
+        })
+        local s20Sl = SSlider({
+            name = "MSUF_GF_ScaleAt20", parent = body, compact = true,
+            anchor = s10Sl, x = 0, y = -30,
+            min = 50, max = 100, step = 5, width = 220, default = 85,
+            get = function(k) return GF.Val(k, "scaleAt20") or 85 end,
+            set = function(k, v) GF.GetConf(k).scaleAt20 = v; GF.RebuildAll() end,
+            formatText = function(v) return string.format("11-20 players: %d%%", v) end,
+        })
+        local s25Sl = SSlider({
+            name = "MSUF_GF_ScaleAt25", parent = body, compact = true,
+            anchor = s20Sl, x = 0, y = -30,
+            min = 50, max = 100, step = 5, width = 220, default = 80,
+            get = function(k) return GF.Val(k, "scaleAt25") or 80 end,
+            set = function(k, v) GF.GetConf(k).scaleAt25 = v; GF.RebuildAll() end,
+            formatText = function(v) return string.format("21-25 players: %d%%", v) end,
+        })
+        local s26Sl = SSlider({
+            name = "MSUF_GF_ScaleOver25", parent = body, compact = true,
+            anchor = s25Sl, x = 0, y = -30,
+            min = 50, max = 100, step = 5, width = 220, default = 70,
+            get = function(k) return GF.Val(k, "scaleOver25") or 70 end,
+            set = function(k, v) GF.GetConf(k).scaleOver25 = v; GF.RebuildAll() end,
+            formatText = function(v) return string.format("26+ players: %d%%", v) end,
+        })
+
+        local scaleHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        scaleHint:SetPoint("TOPLEFT", s26Sl, "BOTTOMLEFT", 4, -6)
+        scaleHint:SetText(TR("Scales frame size, fonts, and icons proportionally.\nBuff/debuff positions stay relative to their anchors."))
+        scaleHint:SetTextColor(0.5, 0.5, 0.6)
+        scaleHint:SetWidth(320)
+        scaleHint:SetJustifyH("LEFT")
     end
 
     ----------------------------------------------------------------
@@ -2317,7 +2506,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 6: Background
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(180, "Background", false, "border")
+        local box, body = AddSection(280, "Background", false, "border")
 
         -- Hint: outline border is controlled in Bars menu
         local hint = body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -2856,7 +3045,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     do
         -- Desired order within each tab
         local ORDER = {
-            { key = "frame",      keys = { "general", "border", "anchor", "tooltip" } },
+            { key = "frame",      keys = { "general", "layout", "sorting", "scaling", "border", "anchor", "tooltip" } },
             { key = "health",     keys = { "hcolor", "bars", "power", "text", "effects", "range" } },
             { key = "auras",      keys = { "buffs", "debuffs", "ext", "rdebuffs", "priv", "masque", "autil" } },
             { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },

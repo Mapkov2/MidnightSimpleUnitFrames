@@ -661,9 +661,32 @@ local function dispatchAura(f, unit, updateInfo)
 
     if not aurasOn then
         if c.dispelScan and GF._playerCanDispel then
-            if not updateInfo or updateInfo.isFullUpdate
-               or (updateInfo.addedAuras and #updateInfo.addedAuras > 0)
-               or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0) then
+            -- EQoL dirty-flag: only rescan when dispel state may have changed
+            local needDispelScan = false
+            if not updateInfo or updateInfo.isFullUpdate then
+                needDispelScan = true
+            else
+                local added = updateInfo.addedAuras
+                if added and #added > 0 then needDispelScan = true end
+                if not needDispelScan then
+                    local removed = updateInfo.removedAuraInstanceIDs
+                    if removed and #removed > 0 then
+                        local trackedAid = f._msufGFDispelAuraID
+                        if not trackedAid then
+                            -- No tracked dispel — new removals might reveal nothing, but
+                            -- added check above covers new dispels. Skip.
+                        else
+                            -- Check if OUR tracked dispel aura was removed
+                            for ri = 1, #removed do
+                                if removed[ri] == trackedAid then
+                                    needDispelScan = true; break
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            if needDispelScan then
                 GF._UpdateDispel(f, unit)
             end
         end
@@ -1083,7 +1106,7 @@ function GF.BuildFrameCache(f)
     c.focB = conf.hlFocusColorB or 1.0
 
     -- Aura dispatch
-    c.dispelScan = c.dispelScan
+    c.dispelScan = conf.dispelEnabled ~= false
     c.siEn       = conf.spellIndicators and conf.spellIndicators.enabled == true
     local auras  = conf.auras
     c.aurasOn    = auras and auras.enabled ~= false
@@ -1389,24 +1412,23 @@ GF._UpdateAggro = UpdateAggro
 local _dispelScanUnit  -- module-level state for vararg scanner
 local C_UnitAuras_GetAuraSlots    = C_UnitAuras and C_UnitAuras.GetAuraSlots
 local C_UnitAuras_GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
+local C_UnitAuras_IsAuraFilteredOut = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
+local _DISPEL_SCAN_FILTER = "HARMFUL|RAID_PLAYER_DISPELLABLE"
 
 local function _DispelScanSlots(cont, ...)
     local GetData = C_UnitAuras_GetAuraDataBySlot
     local u = _dispelScanUnit
     local iss = issecretvalue
+    -- C-side: use RAID_PLAYER_DISPELLABLE filter directly
+    -- If we got slots from that filter, the first slot IS dispellable
     for i = 1, select("#", ...) do
         local slot = select(i, ...)
         local data = GetData(u, slot)
-        if data then
-            local dn = data.dispelName
-            if not (iss and iss(dn)) then
-                if dn and dn ~= "" then return dn end
-                local ir = data.isRaid
-                if not (iss and iss(ir)) and ir then return "Bleed" end
-            end
+        if data and data.auraInstanceID then
+            return "DISPELLABLE", data.auraInstanceID
         end
     end
-    return nil
+    return nil, nil
 end
 
 -- Legacy fallback (pre-C_UnitAuras clients)
@@ -1417,11 +1439,6 @@ local function _DispelScanCallback(auraData)
     if issecretvalue and issecretvalue(dispelName) then return false end
     if dispelName and dispelName ~= "" then
         _scanTopDispel = dispelName
-        return true
-    end
-    local ir = auraData.isRaid
-    if not (issecretvalue and issecretvalue(ir)) and ir then
-        _scanTopDispel = "Bleed"
         return true
     end
     return false
@@ -1444,24 +1461,27 @@ function GF._UpdateDispel(f, unit)
     if (HLVal(kind, "hlDispelEnabled") == false or not unit) and not testMode then
         if f._msufGFDispelType then
             f._msufGFDispelType = nil
+            f._msufGFDispelAuraID = nil
             _GF_RefreshBorder(f, unit)
         end
         return
     end
 
     local topDispel = nil
+    local topAid = nil
     if not testMode then
         if not UnitExists(unit) then
             if f._msufGFDispelType then
                 f._msufGFDispelType = nil
+                f._msufGFDispelAuraID = nil
                 _GF_RefreshBorder(f, unit)
             end
             return
         end
-        -- Zero-alloc direct slot scan (avoids ForEachAura's internal table)
+        -- C-side: query dispellable debuffs directly (secret-safe)
         if C_UnitAuras_GetAuraSlots and C_UnitAuras_GetAuraDataBySlot then
             _dispelScanUnit = unit
-            topDispel = _DispelScanSlots(C_UnitAuras_GetAuraSlots(unit, "HARMFUL"))
+            topDispel, topAid = _DispelScanSlots(C_UnitAuras_GetAuraSlots(unit, _DISPEL_SCAN_FILTER))
             _dispelScanUnit = nil
         elseif AuraUtil and AuraUtil.ForEachAura then
             _scanTopDispel = nil
@@ -1473,9 +1493,12 @@ function GF._UpdateDispel(f, unit)
     end
 
     local prevDispel = f._msufGFDispelType
+    local prevAid = f._msufGFPrevDispelAuraID
     f._msufGFDispelType = topDispel
+    f._msufGFDispelAuraID = topAid
+    f._msufGFPrevDispelAuraID = topAid
 
-    if topDispel == prevDispel and not testMode then return end
+    if topDispel == prevDispel and topAid == prevAid and not testMode then return end
 
     _GF_RefreshBorder(f, unit)
 end
@@ -2395,25 +2418,119 @@ end
 -- Absorb anchoring: apply SetReverseFill based on general.absorbAnchorMode
 -- Mode 1: left anchor (fill L→R)   absorbReverse=false
 -- Mode 2: right anchor (fill R→L)  absorbReverse=true  (DEFAULT)
+-- Mode 3: follow HP edge (clipped to bar)
+-- Mode 4: follow HP edge + overflow (extends beyond bar)
 -- Mode 5: reverse from max         absorbReverse=true (normal HP bar)
--- Mode 3/4: follow HP edge — simplified to mode 2 for GF
 ------------------------------------------------------------------------
 local function _GF_ApplyAbsorbAnchor(f)
     if not f or not f.health then return end
     local kind = f._msufGFKind or "party"
     local mode = tonumber(_GF_GetAbsorbSetting(kind, "absorbAnchorMode")) or 2
 
+    local hpBar = f.health
+    local hpReverse = hpBar.GetReverseFill and hpBar:GetReverseFill() and true or false
+
+    -- Mode 3/4: follow current HP edge
+    if mode == 3 or mode == 4 then
+        local hpTex = hpBar:GetStatusBarTexture()
+        if not hpTex then mode = 2 -- fallback
+        else
+            local w = hpBar:GetWidth()
+            if f._msufGFAbsorbAnchorStamp == mode and f._msufGFAbsorbFollowActive
+               and f._msufGFAbsorbFollowRF == hpReverse and f._msufGFAbsorbFollowW == w then
+                return
+            end
+            f._msufGFAbsorbAnchorStamp = mode
+            f._msufGFAbsorbFollowActive = true
+            f._msufGFAbsorbFollowRF = hpReverse
+            f._msufGFAbsorbFollowW = w
+
+            local isOverflow = (mode == 4)
+
+            -- Clip frame (mode 3 only — prevents absorb extending beyond bar)
+            local clip = f._msufAbsorbFollowClip
+            if not clip then
+                clip = CreateFrame("Frame", nil, hpBar)
+                clip:SetAllPoints(hpBar)
+                if clip.SetClipsChildren then clip:SetClipsChildren(true) end
+                f._msufAbsorbFollowClip = clip
+            else
+                clip:ClearAllPoints()
+                clip:SetAllPoints(hpBar)
+            end
+            clip:SetFrameLevel(hpBar:GetFrameLevel() + 2)
+            clip:Show()
+
+            -- Absorb: outward from HP edge (same direction as HP fill)
+            if f.absorbBar then
+                local absorbParent = isOverflow and (f.barGroup or f) or clip
+                if f.absorbBar:GetParent() ~= absorbParent then
+                    f.absorbBar:SetParent(absorbParent)
+                end
+                f.absorbBar:ClearAllPoints()
+                if hpReverse then
+                    f.absorbBar:SetPoint("TOPRIGHT", hpTex, "TOPLEFT", 0, 0)
+                    f.absorbBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMLEFT", 0, 0)
+                    f.absorbBar:SetReverseFill(true)
+                else
+                    f.absorbBar:SetPoint("TOPLEFT", hpTex, "TOPRIGHT", 0, 0)
+                    f.absorbBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
+                    f.absorbBar:SetReverseFill(false)
+                end
+                if w and w > 0 then f.absorbBar:SetWidth(w) end
+                f.absorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 2)
+            end
+
+            -- HealAbsorb: inward from HP edge (opposite direction)
+            if f.healAbsorbBar then
+                if f.healAbsorbBar:GetParent() ~= clip then
+                    f.healAbsorbBar:SetParent(clip)
+                end
+                f.healAbsorbBar:ClearAllPoints()
+                if hpReverse then
+                    f.healAbsorbBar:SetPoint("TOPLEFT", hpTex, "TOPLEFT", 0, 0)
+                    f.healAbsorbBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMLEFT", 0, 0)
+                    f.healAbsorbBar:SetReverseFill(false)
+                else
+                    f.healAbsorbBar:SetPoint("TOPRIGHT", hpTex, "TOPRIGHT", 0, 0)
+                    f.healAbsorbBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMRIGHT", 0, 0)
+                    f.healAbsorbBar:SetReverseFill(true)
+                end
+                if w and w > 0 then f.healAbsorbBar:SetWidth(w) end
+                f.healAbsorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 3)
+            end
+            return
+        end
+    end
+
+    -- Mode 1/2/5: full overlay (restore from mode 3/4 if needed)
+    if f._msufGFAbsorbFollowActive then
+        f._msufGFAbsorbFollowActive = nil
+        if f._msufAbsorbFollowClip then f._msufAbsorbFollowClip:Hide() end
+        -- Re-parent absorb bars back to health
+        if f.absorbBar then
+            f.absorbBar:SetParent(hpBar)
+            f.absorbBar:ClearAllPoints()
+            f.absorbBar:SetAllPoints(hpBar)
+            f.absorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 2)
+        end
+        if f.healAbsorbBar then
+            f.healAbsorbBar:SetParent(hpBar)
+            f.healAbsorbBar:ClearAllPoints()
+            f.healAbsorbBar:SetAllPoints(hpBar)
+            f.healAbsorbBar:SetFrameLevel(hpBar:GetFrameLevel() + 3)
+        end
+    end
+
     local absorbReverse, healReverse
     if mode == 1 then
         absorbReverse = false
         healReverse   = true
     elseif mode == 5 then
-        -- Reverse from max: absorb fills from HP max-edge backwards
-        local hpReverse = f.health.GetReverseFill and f.health:GetReverseFill()
         absorbReverse = not hpReverse
         healReverse   = hpReverse and true or false
     else
-        -- Mode 2/3/4 → right anchor (default)
+        -- Mode 2: right anchor (default)
         absorbReverse = true
         healReverse   = false
     end
@@ -2425,7 +2542,6 @@ local function _GF_ApplyAbsorbAnchor(f)
         f.healAbsorbBar:SetReverseFill(healReverse and true or false)
     end
     if f.incomingHealBar and f.incomingHealBar.SetReverseFill then
-        -- Incoming heal fills same direction as health bar
         f.incomingHealBar:SetReverseFill(false)
     end
     f._msufGFAbsorbAnchorStamp = mode

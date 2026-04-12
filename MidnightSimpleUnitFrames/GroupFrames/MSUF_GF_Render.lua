@@ -22,6 +22,7 @@ local pairs = pairs
 local type = type
 local tonumber = tonumber
 local math_max = math.max
+local math_floor = math.floor
 
 ------------------------------------------------------------------------
 -- Dirty bits (bitmask, combinable via bor)
@@ -359,9 +360,14 @@ local function ApplyFonts(f, kind)
     local fontPath   = GF.ResolveFontPath(kind)
     local fontFlags  = GF.ResolveFontFlags(kind)
     local fr, fg, fb = GF.ResolveFontColor(kind)
-    local nameSize   = conf.nameFontSize  or 12
-    local hpSize     = conf.hpFontSize    or 10
-    local powSize    = conf.powerFontSize or 9
+    local fScale     = conf._resolvedFrameScale or 1
+    local nameSize   = (conf.nameFontSize  or 12) * fScale
+    local hpSize     = (conf.hpFontSize    or 10) * fScale
+    local powSize    = (conf.powerFontSize or 9)  * fScale
+    -- Floor font sizes (min 6px for readability)
+    nameSize = math_max(6, math_floor(nameSize + 0.5))
+    hpSize   = math_max(6, math_floor(hpSize + 0.5))
+    powSize  = math_max(6, math_floor(powSize + 0.5))
 
     -- Diff-gate: skip SetTextColor when font color unchanged
     local colorChanged = (f._msufGFCachedFR ~= fr or f._msufGFCachedFG ~= fg or f._msufGFCachedFB ~= fb)
@@ -390,6 +396,7 @@ local function ApplyFonts(f, kind)
     set(f.powerTextRightFS,      powSize,      fr, fg, fb, 0.9)
     if f.groupNumberText then
         local gnSize = conf.groupNumberSize or 10
+        if fScale ~= 1 then gnSize = math_max(6, math_floor(gnSize * fScale + 0.5)) end
         set(f.groupNumberText, gnSize, fr, fg, fb, 0.7)
     end
 end
@@ -714,6 +721,7 @@ local function ApplyIconLayout(f, kind)
     local conf   = GF.GetConf(kind)
     local anchor = f.statusIconLayer or f.barGroup or f
     local baseLvl = anchor:GetFrameLevel()
+    local fScale = conf._resolvedFrameScale or 1
 
     for i = 1, #ICON_SPECS do
         local s = ICON_SPECS[i]
@@ -721,6 +729,7 @@ local function ApplyIconLayout(f, kind)
         if icon then
             icon:ClearAllPoints()
             local sz = conf[s.sizeKey] or s.defSize
+            if fScale ~= 1 then sz = math_max(4, math_floor(sz * fScale + 0.5)) end
             icon:SetSize(sz, sz)
             local pt = conf[s.anchorKey] or s.defAnchor
             icon:SetPoint(pt, anchor, pt, conf[s.xKey] or 0, conf[s.yKey] or 0)

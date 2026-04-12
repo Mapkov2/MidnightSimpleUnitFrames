@@ -1328,7 +1328,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Buffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("buff", L["Buffs"], 860, function(body, prevRow, gk)
+    BuildAuraGroupSection("buff", L["Buffs"], 1300, function(body, prevRow, gk)
         local r = BuildSpellFilterWidgets(body, prevRow, gk)
         return r
     end)
@@ -1336,7 +1336,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Debuffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("debuff", L["Debuffs"], 1000, function(body, prevRow, gk)
+    BuildAuraGroupSection("debuff", L["Debuffs"], 1440, function(body, prevRow, gk)
         local r = RowCheck(body, prevRow, L["Show Dispel Type Border"], gk, "showDispelBorder")
         r = BuildSpellFilterWidgets(body, r, gk)
         return r
@@ -1345,7 +1345,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Defensives
     ----------------------------------------------------------------
-    BuildAuraGroupSection("externals", L["Defensives"], 510)
+    BuildAuraGroupSection("externals", L["Defensives"], 700)
 
     -- Register all compact row refresh functions
     for i = 1, #_auraRefreshFns do

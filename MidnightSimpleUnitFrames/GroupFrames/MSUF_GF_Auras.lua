@@ -231,7 +231,7 @@ local function CreateAuraIcon(parent, size)
 
     local cd = CreateFrame("Cooldown", nil, icon, "CooldownFrameTemplate")
     cd:SetAllPoints(icon)
-    cd:SetDrawEdge(true)
+    cd:SetDrawEdge(false)
     cd:SetDrawSwipe(true)
     cd:SetReverse(true)
     cd:SetHideCountdownNumbers(true)
