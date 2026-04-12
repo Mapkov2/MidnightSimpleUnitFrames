@@ -796,7 +796,7 @@ local function dispatchAura(f, unit, updateInfo)
 
     -- Full aura processing (add/remove/fullUpdate)
     -- SI runs first: populates dedup IDs before buff scan
-    if siOn and GF.UpdateSpellIndicators then
+    if c.siEn and GF.UpdateSpellIndicators then
         GF.UpdateSpellIndicators(f, unit)
     end
     if GF.UpdateFrameAuras then

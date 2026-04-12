@@ -2345,6 +2345,26 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).bgA = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
             formatText = function(v) return string.format("Background Alpha: %.0f%%", v * 100) end,
         })
+
+        -- Health Bar Foreground Opacity (how transparent the HP fill is)
+        local hpFgSl = SSlider({
+            name = "MSUF_GF_HpBarAlphaSlider", parent = body, compact = true,
+            anchor = bgLbl, x = 0, y = -56,
+            min = 0.3, max = 1, step = 0.05, width = 270, default = 1,
+            get = function(k) return GF.Val(k, "hpBarAlpha") or 1 end,
+            set = function(k, v) GF.GetConf(k).hpBarAlpha = v; GF.MarkAllDirty(GF.DIRTY_COLOR) end,
+            formatText = function(v) return string.format("HP Bar Foreground: %.0f%%", v * 100) end,
+        })
+
+        -- Health Background Opacity (missing-HP area tint, affects behind-bar icon visibility)
+        SSlider({
+            name = "MSUF_GF_HpBgAlphaSlider", parent = body, compact = true,
+            anchor = bgLbl, x = 0, y = -92,
+            min = 0, max = 1, step = 0.05, width = 270, default = 0.85,
+            get = function(k) return GF.Val(k, "hpBgAlpha") or GF.Val(k, "bgA") or 0.85 end,
+            set = function(k, v) GF.GetConf(k).hpBgAlpha = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
+            formatText = function(v) return string.format("HP Background: %.0f%%", v * 100) end,
+        })
     end
 
     ----------------------------------------------------------------

@@ -530,8 +530,57 @@ function GF.EnsureDB()
             for _, gk in pairs({"buff", "debuff", "externals"}) do
                 local g = conf.auras[gk]
                 if type(g) == "table" then
-                    if g.spellFilter == nil then g.spellFilter = "NONE" end
-                    if type(g.spellList) ~= "table" then g.spellList = {} end
+                    -- Migrate v3: old spellFilter/spellList → new filterToken/blacklistCats
+                    if not g._filterMigV3 then
+                        g._filterMigV3 = true
+                        -- Convert old filterMode → new filterToken
+                        if g.filterMode and not g.filterToken then
+                            local fm = g.filterMode
+                            if fm == "RAID_PLAYER" or fm == "RAID_IN_COMBAT" or fm == "ALL_PLAYER" then
+                                g.filterToken = (gk == "debuff") and "ALL" or "RAID"
+                            elseif fm == "ALL" or fm == "PLAYER" or fm == "RAID" then
+                                g.filterToken = fm
+                            elseif fm == "NOT_PLAYER" then
+                                g.filterToken = "ALL"
+                            end
+                        end
+                        -- Convert old spellFilter+spellList → blacklistCats
+                        if g.spellFilter == "BLACKLIST" and type(g.spellList) == "table" then
+                            if not g.blacklistCats then g.blacklistCats = {} end
+                            -- Check if old spellList contained Sated spells
+                            if g.spellList[57723] or g.spellList[57724] or g.spellList[80354] then
+                                g.blacklistCats.SATED = true
+                            end
+                            if g.spellList[26013] or g.spellList[71041] then
+                                g.blacklistCats.DESERTER = true
+                            end
+                        end
+                        -- Clean up legacy keys
+                        g.spellFilter = nil
+                        g.spellList   = nil
+                        g.filterMode  = nil
+                    end
+                    -- Ensure new keys exist with defaults
+                    if g.filterToken == nil then
+                        g.filterToken = (gk == "debuff") and "ALL" or "RAID"
+                    end
+                    if type(g.blacklistCats) ~= "table" then
+                        -- Apply sensible defaults from AuraFilter module
+                        local AF = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+                        if AF then
+                            local defs = (gk == "buff") and AF.DEFAULT_BLACKLIST_BUFF
+                                      or (gk == "debuff") and AF.DEFAULT_BLACKLIST_DEBUFF
+                                      or nil
+                            if defs then
+                                g.blacklistCats = {}
+                                for k, v in pairs(defs) do g.blacklistCats[k] = v end
+                            else
+                                g.blacklistCats = {}
+                            end
+                        else
+                            g.blacklistCats = {}
+                        end
+                    end
                 end
             end
         end
@@ -1187,12 +1236,11 @@ GF.PRESETS.DPS = {
                 enabled = true, maxIcons = 3, iconSize = 16, spacing = 1,
                 anchor = "RIGHT", x = 2, y = 0, growth = "RIGHT",
                 showCooldown = true, showStacks = true,
-                spellFilter = "BLACKLIST",
-                spellList = {
-                    [57723] = true, [57724] = true, [80354] = true, -- Exhaustion variants
-                    [264689] = true, -- Fatigued
-                    [25771] = true,  -- Forbearance
-                    [6788] = true,   -- Weakened Soul
+                filterToken = "ALL",
+                blacklistCats = {
+                    SATED = true, DESERTER = true, SKYRIDING = true,
+                    COOLDOWNS = true, ROGUE_POISONS = true,
+                    SHAMAN_IMBUE = true, SELF_BUFFS = true,
                 },
             },
             externals = { enabled = false },
@@ -1231,10 +1279,10 @@ GF.PRESETS.TANK = {
                 enabled = true, maxIcons = 4, iconSize = 18, spacing = 1,
                 anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
                 showCooldown = true, showStacks = true,
-                spellFilter = "BLACKLIST",
-                spellList = {
-                    [57723] = true, [57724] = true, [80354] = true,
-                    [264689] = true,
+                filterToken = "ALL",
+                blacklistCats = {
+                    SATED = true, SKYRIDING = true, COOLDOWNS = true,
+                    DESERTER = true,
                 },
             },
             externals = {
@@ -1272,10 +1320,10 @@ local _HEALER_BASE = {
             enabled = true, maxIcons = 3, iconSize = 18, spacing = 1,
             anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
             showCooldown = true, showStacks = true,
-            spellFilter = "BLACKLIST",
-            spellList = {
-                [57723] = true, [57724] = true, [80354] = true,
-                [264689] = true, [25771] = true,
+            filterToken = "ALL",
+            blacklistCats = {
+                SATED = true, SKYRIDING = true, COOLDOWNS = true,
+                DESERTER = true,
             },
         },
         externals = {

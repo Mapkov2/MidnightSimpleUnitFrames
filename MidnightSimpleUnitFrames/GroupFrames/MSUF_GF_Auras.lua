@@ -77,46 +77,15 @@ local function QuerySlots(unit, filter, maxCount)
 end
 
 ------------------------------------------------------------------------
--- Filter strings (Blizzard C_UnitAuras.GetAuraSlots filter tokens)
--- Buff display modes matching Grid2's Midnight 12.0 filter categories:
+-- 2-Tier Filter Engine (via MSUF_GF_AuraFilter.lua)
+-- Tier 1: Blizzard API tokens (GetAuraSlots filter string)
+-- Tier 2: Declassified spell blacklist (categorized, user-toggleable)
 ------------------------------------------------------------------------
-local FILTERS = {
-    -- Legacy (kept for backward compat)
-    HELPFUL_RAID_PLAYER       = "HELPFUL|INCLUDE_NAME_PLATE_ONLY|RAID|PLAYER",
-    HELPFUL_RAID_COMBAT       = "HELPFUL|INCLUDE_NAME_PLATE_ONLY|RAID_IN_COMBAT|PLAYER",
-    HELPFUL_ALL_PLAYER        = "HELPFUL|INCLUDE_NAME_PLATE_ONLY|PLAYER",
-
-    -- Expanded buff filters (Grid2 parity)
-    HELPFUL_ALL               = "HELPFUL",
-    HELPFUL_PLAYER            = "HELPFUL|PLAYER",
-    HELPFUL_RAID              = "HELPFUL|RAID",
-    HELPFUL_RAID_PLAYER_NP    = "HELPFUL|INCLUDE_NAME_PLATE_ONLY|RAID|PLAYER",
-    HELPFUL_CLASS             = "HELPFUL|RAID",
-    BIG_DEFENSIVE             = "HELPFUL|BIG_DEFENSIVE",
-
-    -- Debuff filters
-    HARMFUL                   = "HARMFUL|INCLUDE_NAME_PLATE_ONLY",
-    HARMFUL_ALL               = "HARMFUL",
-    HARMFUL_RAID              = "HARMFUL|RAID",
-    HARMFUL_PLAYER            = "HARMFUL|PLAYER",
-    HARMFUL_NOT_PLAYER        = "HARMFUL|INCLUDE_NAME_PLATE_ONLY",  -- post-filter excludes player
-}
-
-local function ResolveBuffFilter(filterMode)
-    if filterMode == "RAID_IN_COMBAT" then return FILTERS.HELPFUL_RAID_COMBAT end
-    if filterMode == "ALL_PLAYER"     then return FILTERS.HELPFUL_ALL_PLAYER end
-    if filterMode == "ALL"            then return FILTERS.HELPFUL_ALL end
-    if filterMode == "PLAYER"         then return FILTERS.HELPFUL_PLAYER end
-    if filterMode == "RAID"           then return FILTERS.HELPFUL_RAID end
-    return FILTERS.HELPFUL_RAID_PLAYER  -- default: RAID_PLAYER
-end
-
-local function ResolveDebuffFilter(filterMode)
-    if filterMode == "ALL"            then return FILTERS.HARMFUL_ALL, false end
-    if filterMode == "RAID"           then return FILTERS.HARMFUL_RAID, false end
-    if filterMode == "PLAYER"         then return FILTERS.HARMFUL_PLAYER, false end
-    if filterMode == "NOT_PLAYER"     then return FILTERS.HARMFUL_ALL, true end  -- post-filter
-    return FILTERS.HARMFUL, false  -- default
+local _AF  -- deferred AuraFilter reference (resolved at first use)
+local function AF()
+    if _AF then return _AF end
+    _AF = GF.AuraFilter or (_G.MSUF_GF_AuraFilter)
+    return _AF
 end
 
 ------------------------------------------------------------------------
@@ -490,76 +459,12 @@ end
 local _externalsIDs = {}
 
 ------------------------------------------------------------------------
--- Spell blacklist/whitelist filter (secret-safe)
--- gcfg.spellFilter = "NONE" | "BLACKLIST" | "WHITELIST"
--- gcfg.spellList = { [spellId] = true, ... }
--- Returns true if aura should be SKIPPED (filtered out)
+-- Tier 2 filter: decoded spellId blacklist check
+-- Uses AuraFilter.DecodeSpellId + AuraFilter.IsBlacklisted
+-- Secret spellIds (decoded=0) pass through — only declassified spells
+-- can be filtered. This is correct for 12.0.
 ------------------------------------------------------------------------
-local function _IsSpellFiltered(aura, spellFilter, spellList)
-    if not spellList then return false end
-    local sid = aura.spellId
-    if sid == nil then return false end
-    if issecretvalue and issecretvalue(sid) then return false end
-    if spellFilter == 1 then -- BLACKLIST
-        return spellList[sid] == true
-    else -- spellFilter == 2, WHITELIST
-        return not spellList[sid]
-    end
-end
-
-------------------------------------------------------------------------
--- Predefined spell catalogue (for Options UI quick-add)
--- Categories: EXHAUSTION, MISC, PALADIN, PRIEST, TANK, CROWD_CONTROL
-------------------------------------------------------------------------
-GF.SPELL_FILTER_MODES = { "NONE", "BLACKLIST", "WHITELIST" }
-
--- Debuff catalogue (spells that appear as HARMFUL on group frames)
-GF.SPELL_CATALOGUE_DEBUFF = {
-    { id = 57723,  name = "Exhaustion",             cat = "EXHAUSTION" },
-    { id = 57724,  name = "Sated",                  cat = "EXHAUSTION" },
-    { id = 95809,  name = "Insanity",               cat = "EXHAUSTION" },
-    { id = 80354,  name = "Temporal Displacement",   cat = "EXHAUSTION" },
-    { id = 390435, name = "Exhaustion (Fury)",       cat = "EXHAUSTION" },
-    { id = 25771,  name = "Forbearance",             cat = "CLASS" },
-    { id = 6788,   name = "Weakened Soul",           cat = "CLASS" },
-    { id = 15007,  name = "Resurrection Sickness",   cat = "MISC" },
-    { id = 26013,  name = "Deserter",                cat = "MISC" },
-}
-
--- Buff catalogue (spells that appear as HELPFUL on group frames)
-GF.SPELL_CATALOGUE_BUFF = {
-    { id = 36032,  name = "Arcane Charges",          cat = "CLASS" },
-    { id = 1459,   name = "Arcane Intellect",        cat = "RAID_BUFF" },
-    { id = 21562,  name = "Power Word: Fortitude",   cat = "RAID_BUFF" },
-    { id = 6673,   name = "Battle Shout",            cat = "RAID_BUFF" },
-    { id = 1126,   name = "Mark of the Wild",        cat = "RAID_BUFF" },
-}
-
--- Legacy combined reference
-GF.SPELL_CATALOGUE = GF.SPELL_CATALOGUE_DEBUFF
-
--- Quick-apply: add all spells in a category to a spellList
-function GF.ApplySpellCatalogueCategory(spellList, category, enable)
-    if not spellList then return end
-    for _, entry in pairs(GF.SPELL_CATALOGUE) do
-        if entry.cat == category then
-            if enable then
-                spellList[entry.id] = true
-            else
-                spellList[entry.id] = nil
-            end
-        end
-    end
-end
-
--- Quick-apply: add a default blacklist preset (DPS-friendly)
-function GF.ApplyDPSBlacklistPreset(gcfg)
-    if not gcfg then return end
-    gcfg.spellFilter = "BLACKLIST"
-    if type(gcfg.spellList) ~= "table" then gcfg.spellList = {} end
-    GF.ApplySpellCatalogueCategory(gcfg.spellList, "EXHAUSTION", true)
-    GF.ApplySpellCatalogueCategory(gcfg.spellList, "MISC", true)
-end
+-- (All logic lives in MSUF_GF_AuraFilter.lua — nothing to define here)
 
 ------------------------------------------------------------------------
 -- Scan + render one aura group
@@ -608,7 +513,7 @@ end
 ------------------------------------------------------------------------
 -- Main render: one aura group
 ------------------------------------------------------------------------
-local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, dedupIDs, scale, excludePlayer)
+local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, dedupIDs, scale)
     if not gcfg or gcfg.enabled == false then
         HidePool(f[POOL_KEYS[groupKey]], 1)
         return 0, nil
@@ -629,20 +534,53 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local isCentered = gv.centered
     local container = EnsureContainer(f, groupKey)
 
-    -- Diff-gate container position: only re-anchor when config changes
+    -- ── Behind-Bar Mode ─────────────────────────────────────────────
+    -- Icons sit BETWEEN barGroup bg and health StatusBar foreground.
+    -- Where HP is present → health bar covers icons.
+    -- Where HP is missing → icons visible through healthBg tint (alpha ~0.85).
+    --
+    -- Z-Order:  barGroup bg (N, BG) → icons (N) → healthBg (N+1, BG) → HP fill (N+1, ART)
+    -- Icons at barGroup level: above barGroup bg, below healthBg+health fill.
+    -- ─────────────────────────────────────────────────────────────────
+    local behindBar = gcfg.behindBar and f.health
+    local wantParent, wantLvl
+    if behindBar then
+        wantParent = f.barGroup or f
+        wantLvl = wantParent:GetFrameLevel()
+    else
+        wantParent = parent
+        wantLvl = parent:GetFrameLevel() + (gcfg.layer or 5)
+    end
+
+    -- Re-parent container if mode changed (diff-gated)
+    if container:GetParent() ~= wantParent then
+        container:SetParent(wantParent)
+        container._msufAnchor = nil
+        -- Force pool rebuild (icon parents + frame levels need updating)
+        local pool = f[POOL_KEYS[groupKey]]
+        if pool then pool._msufPoolOK = nil end
+    end
+
+    -- Behind-bar alpha (percentage in DB: 30-100 → 0.30-1.00)
+    local wantAlpha = behindBar and ((gcfg.behindBarAlpha or 85) / 100) or 1
+    if container._msufCachedAlpha ~= wantAlpha then
+        container._msufCachedAlpha = wantAlpha
+        container:SetAlpha(wantAlpha)
+    end
+
+    -- Diff-gate container position
     local cx = gcfg.x or 0
     local cy = gcfg.y or 0
-    -- Centered growth anchors container at CENTER (override user anchor)
     local effAnchor = isCentered and "CENTER" or anchor
-    local wantLvl = parent:GetFrameLevel() + (gcfg.layer or 5)
+    local anchorTarget = behindBar and (f.health or wantParent) or wantParent
     if container._msufAnchor ~= effAnchor or container._msufAnchorX ~= cx
-       or container._msufAnchorY ~= cy or container._msufAnchorParent ~= parent then
+       or container._msufAnchorY ~= cy or container._msufAnchorParent ~= anchorTarget then
         container._msufAnchor = effAnchor
         container._msufAnchorX = cx
         container._msufAnchorY = cy
-        container._msufAnchorParent = parent
+        container._msufAnchorParent = anchorTarget
         container:ClearAllPoints()
-        container:SetPoint(effAnchor, parent, effAnchor, cx, cy)
+        container:SetPoint(effAnchor, anchorTarget, effAnchor, cx, cy)
         container:SetSize(1, 1)
     end
     if container._msufCachedLvl ~= wantLvl then
@@ -652,6 +590,21 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     container:Show()
 
     local pool = EnsurePool(f, groupKey, maxIcons, iconSize, container)
+
+    -- ── Behind-bar icon level fix ────────────────────────────────────
+    -- EnsurePool sets icons to container+2 (normal mode: above status icons).
+    -- Behind-bar: icons MUST stay at container level (= barGroup level)
+    -- so health StatusBar (barGroup+1) renders ON TOP of them.
+    -- ─────────────────────────────────────────────────────────────────
+    if behindBar then
+        for pi = 1, maxIcons do
+            local ic = pool[pi]
+            if ic and ic._msufCachedFLvl ~= wantLvl then
+                ic._msufCachedFLvl = wantLvl
+                ic:SetFrameLevel(wantLvl)
+            end
+        end
+    end
     -- Harmful: scan extra slots for merged dispel detection (dispellables sort first)
     local queryLimit = isHarmful and math_max(maxIcons + 1, 12) or (maxIcons + 1)
     local slots, slotCount = QuerySlots(unit, filter, queryLimit)
@@ -663,12 +616,9 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local step = iconSize + spacing
     local topDispel = nil
 
-    -- Pre-resolve spell filter (0=none, 1=blacklist, 2=whitelist)
-    local spellFilter = 0
-    local spellList
-    local sf = gcfg.spellFilter
-    if sf == "BLACKLIST" or sf == 1 then spellFilter = 1; spellList = gcfg.spellList
-    elseif sf == "WHITELIST" or sf == 2 then spellFilter = 2; spellList = gcfg.spellList end
+    -- Pre-resolve Tier 2 blacklist hash (zero-alloc cached)
+    local af = AF()
+    local blHash = af and af.BuildBlacklistHash(gcfg) or nil
 
     for i = 2, slotCount do
         if shown >= maxIcons and (not isHarmful or topDispel) then break end
@@ -692,16 +642,13 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                     end
                 end
 
-                -- Spell filter + NOT_PLAYER post-filter (skip AFTER dispel check)
+                -- Tier 2: Declassified spell blacklist (skip AFTER dispel check)
                 local _skip = false
-                if excludePlayer then
-                    local fromP = aura.isFromPlayerOrPlayerPet
-                    if not (issecretvalue and issecretvalue(fromP)) and fromP then
+                if blHash and af then
+                    local sid = af.DecodeSpellId(aura)
+                    if af.IsBlacklisted(sid, blHash) then
                         _skip = true
                     end
-                end
-                if not _skip and spellFilter ~= 0 and _IsSpellFiltered(aura, spellFilter, spellList) then
-                    _skip = true
                 end
 
                 if _skip then
@@ -849,7 +796,9 @@ function GF.UpdateFrameAuras(f, unit)
     local extCfg = auras.externals
     if extCfg and extCfg.enabled then
         for k in pairs(_externalsIDs) do _externalsIDs[k] = nil end
-        local n = RenderGroup(f, unit, "externals", extCfg, FILTERS.BIG_DEFENSIVE, false, parent, nil, scale)
+        local afr = AF()
+        local extFilter = afr and afr.EXTERNALS_TOKEN or "HELPFUL|BIG_DEFENSIVE"
+        local n = RenderGroup(f, unit, "externals", extCfg, extFilter, false, parent, nil, scale)
         if n > 0 then anyShown = true end
     elseif not f._msufGFExtHidden then
         f._msufGFExtHidden = true
@@ -864,8 +813,9 @@ function GF.UpdateFrameAuras(f, unit)
     local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false
 
     if debOn then
-        local debFilter, debExcludePlayer = ResolveDebuffFilter(debCfg.filterMode)
-        local n, md = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale, debExcludePlayer)
+        local afr = AF()
+        local debFilter = afr and afr.ResolveDebuffFilter(debCfg.filterToken) or "HARMFUL"
+        local n, md = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale)
         mergedDispel = md
         if n > 0 then anyShown = true end
         f._msufGFDebHidden = nil
@@ -876,7 +826,7 @@ function GF.UpdateFrameAuras(f, unit)
         end
         -- Lightweight dispel scan ONLY when class can dispel AND dispel enabled
         if dispelNeeded then
-            local slots, sc = QuerySlots(unit, FILTERS.HARMFUL, 12)
+            local slots, sc = QuerySlots(unit, "HARMFUL", 12)
             for i = 2, sc do
                 local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
                 if aura then
@@ -897,7 +847,8 @@ function GF.UpdateFrameAuras(f, unit)
     -- 3) Buffs
     local buffCfg = auras.buff
     if buffCfg and buffCfg.enabled ~= false then
-        local buffFilter = ResolveBuffFilter(buffCfg.filterMode)
+        local afr = AF()
+        local buffFilter = afr and afr.ResolveBuffFilter(buffCfg.filterToken) or "HELPFUL|RAID"
         local n = RenderGroup(f, unit, "buff", buffCfg, buffFilter, false, parent, f._msufSIDedupIDs, scale)
         if n > 0 then anyShown = true end
         f._msufGFBufHidden = nil
@@ -964,6 +915,32 @@ do
     local MOCK_EXTERNALS = { 135936, 572025 }         -- Pain Supp, Ironbark
     local MOCK_DISPELS = { nil, "Magic", "Curse" }
 
+    -- Apply behind-bar or normal parent/level to a container (shared by preview + live)
+    local function ApplyContainerMode(container, f, gcfg, normalParent)
+        local behindBar = gcfg.behindBar and f.health
+        local wantParent = behindBar and (f.barGroup or f) or normalParent
+        if container:GetParent() ~= wantParent then
+            container:SetParent(wantParent)
+        end
+        local wantLvl
+        if behindBar then
+            wantLvl = (f.barGroup or f):GetFrameLevel()
+        else
+            wantLvl = normalParent:GetFrameLevel() + (gcfg.layer or 5)
+        end
+        if container._msufCachedLvl ~= wantLvl then
+            container._msufCachedLvl = wantLvl
+            container:SetFrameLevel(wantLvl)
+        end
+        local wantAlpha = behindBar and ((gcfg.behindBarAlpha or 85) / 100) or 1
+        if container._msufCachedAlpha ~= wantAlpha then
+            container._msufCachedAlpha = wantAlpha
+            container:SetAlpha(wantAlpha)
+        end
+        -- Behind-bar anchors to health area
+        return behindBar and (f.health or wantParent) or normalParent
+    end
+
     function GF.PreviewFrameAuras(f, kind, index)
         if not f then return end
         local conf = GF.GetConf(kind)
@@ -992,12 +969,10 @@ do
             local maxShow = math_min(#MOCK_BUFFS, buffCfg.max or 6)
             local gv = GetGrowthVectors(growth)
             local container = EnsureContainer(f, "buff")
+            local anchorTarget = ApplyContainerMode(container, f, buffCfg, parent)
             container:ClearAllPoints()
-            container:SetPoint(anchor, parent, anchor, buffCfg.x or 0, buffCfg.y or 0)
+            container:SetPoint(anchor, anchorTarget, anchor, buffCfg.x or 0, buffCfg.y or 0)
             container:SetSize(1, 1)
-            do local wl = parent:GetFrameLevel() + (buffCfg.layer or 5)
-                if container._msufCachedLvl ~= wl then container._msufCachedLvl = wl; container:SetFrameLevel(wl) end
-            end
             container:Show()
             local pool = EnsurePool(f, "buff", maxShow, size, container)
             for i = 1, maxShow do
@@ -1030,12 +1005,10 @@ do
             local maxShow = math_min(#MOCK_DEBUFFS, debCfg.max or 6)
             local gv = GetGrowthVectors(growth)
             local container = EnsureContainer(f, "debuff")
+            local anchorTarget = ApplyContainerMode(container, f, debCfg, parent)
             container:ClearAllPoints()
-            container:SetPoint(anchor, parent, anchor, debCfg.x or 0, debCfg.y or 0)
+            container:SetPoint(anchor, anchorTarget, anchor, debCfg.x or 0, debCfg.y or 0)
             container:SetSize(1, 1)
-            do local wl = parent:GetFrameLevel() + (debCfg.layer or 6)
-                if container._msufCachedLvl ~= wl then container._msufCachedLvl = wl; container:SetFrameLevel(wl) end
-            end
             container:Show()
             local pool = EnsurePool(f, "debuff", maxShow, size, container)
             for i = 1, maxShow do
@@ -1076,12 +1049,10 @@ do
             local maxShow = math_min(#MOCK_EXTERNALS, extCfg.max or 2)
             local gv = GetGrowthVectors(growth)
             local container = EnsureContainer(f, "externals")
+            local anchorTarget = ApplyContainerMode(container, f, extCfg, parent)
             container:ClearAllPoints()
-            container:SetPoint(anchor, parent, anchor, extCfg.x or 0, extCfg.y or 0)
+            container:SetPoint(anchor, anchorTarget, anchor, extCfg.x or 0, extCfg.y or 0)
             container:SetSize(1, 1)
-            do local wl = parent:GetFrameLevel() + (extCfg.layer or 7)
-                if container._msufCachedLvl ~= wl then container._msufCachedLvl = wl; container:SetFrameLevel(wl) end
-            end
             container:Show()
             local pool = EnsurePool(f, "externals", maxShow, size, container)
             for i = 1, maxShow do

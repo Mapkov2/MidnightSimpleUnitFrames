@@ -95,7 +95,7 @@ local _npcTypeInstanceActive = false
 local _smoothPowerBar    = true
 local _realtimePowerText = true
 
-
+-- Phase 7: File-scope cached bar mode + colors (set in RefreshSettingsCache).
 -- Eliminates cache table lookups in RefreshHealthBarColorFast hot path.
 local _ufcBarMode   = "dark"  -- "dark" | "class" | "unified"
 local _ufcDarkR, _ufcDarkG, _ufcDarkB       = 0, 0, 0
@@ -2020,6 +2020,7 @@ end
 local _HealthFullFast = Elements.Health and Elements.Health.Update
 
 ------------------------------------------------------------------------
+-- PHASE 3: oUF-style lean sub-paths for overlay events.
 -- Each event updates ONLY the bar that changed, not the full chain.
 -- Calculator must be refreshed (1 C-call) but only the relevant getter
 -- is read + SetValue'd. Saves ~15μs vs full chain per event.

@@ -227,6 +227,8 @@ end
 
 ------------------------------------------------------------------------
 -- Apply: bar background tint (missing-health / missing-power background)
+-- hpBgAlpha: separate alpha for healthBg (behind-bar icons show through)
+-- Falls back to bgA when hpBgAlpha is not set.
 ------------------------------------------------------------------------
 local function ApplyBackgroundTint(f, kind)
     local conf = GF.GetConf(kind)
@@ -234,11 +236,13 @@ local function ApplyBackgroundTint(f, kind)
     local g = conf.bgG or 0.1
     local b = conf.bgB or 0.1
     local a = conf.bgA or 0.85
+    -- Health background: separate alpha for behind-bar icon visibility
+    local hpBgA = conf.hpBgAlpha or a
 
     if f.healthBg then
-        if f._msufGFCachedHBgR ~= r or f._msufGFCachedHBgG ~= g or f._msufGFCachedHBgB ~= b or f._msufGFCachedHBgA ~= a then
-            f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = r, g, b, a
-            f.healthBg:SetVertexColor(r, g, b, a)
+        if f._msufGFCachedHBgR ~= r or f._msufGFCachedHBgG ~= g or f._msufGFCachedHBgB ~= b or f._msufGFCachedHBgA ~= hpBgA then
+            f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = r, g, b, hpBgA
+            f.healthBg:SetVertexColor(r, g, b, hpBgA)
         end
     end
     if f.powerBg then
@@ -483,6 +487,20 @@ local function ApplyHealthColor(f, kind, unit)
         conf.healthCustomR or 0.2,
         conf.healthCustomG or 0.8,
         conf.healthCustomB or 0.2, 1)
+end
+
+------------------------------------------------------------------------
+-- Apply: health bar foreground alpha (for behind-bar icon visibility)
+-- Separate from color — called after ApplyHealthColor in render dispatch.
+------------------------------------------------------------------------
+local function ApplyHealthBarAlpha(f, kind)
+    if not f.health then return end
+    local conf = GF.GetConf(kind)
+    local fgA = conf.hpBarAlpha or 1
+    if f._msufCachedHpBarAlpha ~= fgA then
+        f._msufCachedHpBarAlpha = fgA
+        f.health:SetAlpha(fgA)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -738,11 +756,13 @@ local function ApplyVisuals(f, bits)
     end
     if band(bits, DIRTY_COLOR) ~= 0 then
         ApplyHealthColor(f, kind, f.unit)
+        ApplyHealthBarAlpha(f, kind)
         ApplyOverlayColors(f)
     end
     if band(bits, DIRTY_BORDER) ~= 0 then
         ApplyFrameBorder(f, kind)
         ApplyBackgroundTint(f, kind)
+        ApplyHealthBarAlpha(f, kind)
         ApplyEffectBorderStyles(f, kind)
     end
     if band(bits, DIRTY_LAYOUT) ~= 0 then
