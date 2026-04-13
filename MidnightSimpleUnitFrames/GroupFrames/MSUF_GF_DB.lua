@@ -239,6 +239,11 @@ local PARTY_DEFAULTS = {
     cutawayColorG         = 0.10,
     cutawayColorB         = 0.10,
     cutawayColorA         = 0.75,
+    -- Dispel overlay (color wash on health bar when dispellable debuff active)
+    dispelOverlayEnabled  = false,
+    dispelOverlayStyle    = "FULL",   -- FULL / BOTTOM / TOP / LEFT / RIGHT
+    dispelOverlayOnHealth = true,     -- true = clip to current health fill
+    dispelOverlayAlpha    = 0.35,
     -- Health fade (dim frames above HP threshold — healer focus)
     healthFadeEnabled     = false,
     healthFadeThreshold   = 95,    -- % HP above which frame is dimmed

@@ -337,7 +337,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
                    "showPower", "powerTextCenter", "powerFontSize", "powerOffsetX", "powerOffsetY",
                    "powerTextLayer", "cutawayEnabled", "cutawayColorR", "cutawayColorG",
                    "cutawayColorB", "cutawayColorA", "cutawayDuration", "cutawayFadeTime",
-                   "healPredEnabled", "healPredAlpha", "absorbEnabled", "absorbAlpha" } },
+                   "healPredEnabled", "healPredAlpha", "absorbEnabled", "absorbAlpha",
+                   "dispelOverlayEnabled", "dispelOverlayStyle", "dispelOverlayOnHealth", "dispelOverlayAlpha" } },
         { key = "text",       label = "Text & Name",
           keys = { "showName", "nameFontSize", "nameAnchor", "nameOffsetX", "nameOffsetY",
                    "nameColorMode", "nameColorR", "nameColorG", "nameColorB",
@@ -2923,7 +2924,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section: Effects (Heal Prediction + Cutaway Health)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(280, "Effects", false, "effects")
+        local box, body = AddSection(470, "Effects", false, "effects")
 
         -- ── Heal Prediction ──
         local hpSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -2990,6 +2991,76 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 c.cutawayColorR = r; c.cutawayColorG = g; c.cutawayColorB = b
                 GF.RefreshVisuals()
             end)
+
+        -- ── Dispel Overlay ──
+        local doSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        doSep:SetPoint("TOPLEFT", fadeSl, "BOTTOMLEFT", 0, -52)
+        doSep:SetText(TR("Dispel Overlay")); doSep:SetTextColor(1, 0.82, 0)
+
+        local doChk = SCheck({
+            name = "MSUF_GF_DispelOverlayCheck", parent = body,
+            anchor = doSep, x = 0, y = -4,
+            label = TR("Enable Dispel Overlay"),
+            get = function(k) return GF.Val(k, "dispelOverlayEnabled") end,
+            set = function(k, v)
+                GF.GetConf(k).dispelOverlayEnabled = v
+                GF.RefreshVisuals()
+                local fn = _G.MSUF_GF_RefreshDispelOverlay
+                if type(fn) == "function" then fn() end
+            end,
+        })
+
+        local doHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        doHint:SetPoint("TOPLEFT", doChk, "BOTTOMLEFT", 0, -4)
+        doHint:SetWidth(550)
+        doHint:SetJustifyH("LEFT")
+        doHint:SetText(TR("Tints the health bar when a dispellable debuff is active. Works alongside the highlight border.\nColors are shared with |cffffd200Global Style > Colors|r > |cffffd200Dispel|r."))
+        doHint:SetTextColor(0.55, 0.60, 0.70)
+
+        local doStyleDd = SDropdown({
+            name = "MSUF_GF_DispelOverlayStyleDropdown", parent = body,
+            anchor = doHint, anchorPoint = "TOPLEFT", x = -4, y = -10, width = 200,
+            items = {
+                { key = "FULL",   label = TR("Full Frame") },
+                { key = "BOTTOM", label = TR("Bottom Edge") },
+                { key = "TOP",    label = TR("Top Edge") },
+                { key = "LEFT",   label = TR("Left Edge") },
+                { key = "RIGHT",  label = TR("Right Edge") },
+            },
+            get = function(k) return GF.Val(k, "dispelOverlayStyle") end,
+            set = function(k, v)
+                GF.GetConf(k).dispelOverlayStyle = v
+                GF.RefreshVisuals()
+                local fn = _G.MSUF_GF_RefreshDispelOverlay
+                if type(fn) == "function" then fn() end
+            end,
+        })
+
+        local doOnHPChk = SCheck({
+            name = "MSUF_GF_DispelOverlayOnHPCheck", parent = body,
+            anchor = doStyleDd, x = 0, y = -6,
+            label = TR("Show On Current Health Only"),
+            get = function(k) return GF.Val(k, "dispelOverlayOnHealth") end,
+            set = function(k, v)
+                GF.GetConf(k).dispelOverlayOnHealth = v
+                GF.RefreshVisuals()
+                local fn = _G.MSUF_GF_RefreshDispelOverlay
+                if type(fn) == "function" then fn() end
+            end,
+        })
+
+        SSlider({
+            name = "MSUF_GF_DispelOverlayAlphaSlider", parent = body, compact = true,
+            anchor = doOnHPChk, x = 0, y = -10,
+            min = 0.05, max = 1, step = 0.05, width = 270, default = 0.35,
+            get = function(k) return GF.Val(k, "dispelOverlayAlpha") end,
+            set = function(k, v)
+                GF.GetConf(k).dispelOverlayAlpha = v
+                local fn = _G.MSUF_GF_RefreshDispelOverlay
+                if type(fn) == "function" then fn() end
+            end,
+            formatText = function(v) return string.format("Overlay Opacity: %.0f%%", v * 100) end,
+        })
     end
 
     ----------------------------------------------------------------

@@ -231,6 +231,17 @@ local function BuildFrameHierarchy(f, kind)
     healAbsorbBar:Hide()
     f.healAbsorbBar = healAbsorbBar
 
+    -- Dispel overlay (color wash on health bar — above absorb, below text)
+    local dispelOv = CreateFrame("StatusBar", nil, barGroup)
+    dispelOv:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+    dispelOv:SetMinMaxValues(0, 1)
+    dispelOv:SetValue(1)
+    dispelOv:SetAllPoints(health)
+    dispelOv:SetFrameLevel(hLvl + 4)
+    dispelOv:SetStatusBarColor(0, 0, 0, 0)
+    dispelOv:Hide()
+    f._msufGFDispelOverlay = dispelOv
+
     -- Health text layer (above all overlays)
     local healthTextLayer = CreateFrame("Frame", nil, health)
     healthTextLayer:SetAllPoints(health)

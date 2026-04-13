@@ -1088,6 +1088,12 @@ function GF.BuildFrameCache(f)
     c.hfAlpha  = conf.healthFadeAlpha or 0.45
     c.hfThresh = conf.healthFadeThreshold or 95
 
+    -- Dispel overlay (color wash on health bar)
+    c.doEn    = conf.dispelOverlayEnabled == true
+    c.doStyle = conf.dispelOverlayStyle or "FULL"
+    c.doOnHP  = conf.dispelOverlayOnHealth ~= false
+    c.doAlpha = conf.dispelOverlayAlpha or 0.35
+
     -- Highlight border (pre-resolve HLVal)
     c.aggroEn   = HLVal(kind, "hlAggroEnabled") ~= false
     c.aggroMode = HLVal(kind, "hlAggroMode") or "ALL"
@@ -1243,7 +1249,79 @@ local function _GF_QuickBorderUpdate(f)
     if border:IsShown() then border:Hide() end
 end
 
+------------------------------------------------------------------------
+-- Dispel overlay (color wash on health bar)
+-- StatusBar-based: mirrors health value for "current health only" clip.
+-- Gradient via SetGradient on fill texture (cold-path only).
+-- Secret-safe: SetValue/SetMinMaxValues accept secrets natively.
+------------------------------------------------------------------------
+local _doCC = _G.CreateColor   -- WoW 10.0+ CreateColor (nil pre-10.0)
+local function _GF_ApplyDispelOverlay(f)
+    local dov = f._msufGFDispelOverlay
+    if not dov then return end
+    local c = f._c
+    if not c then return end
+
+    local dispelType = f._msufGFDispelType
+    if not c.doEn or not dispelType then
+        if dov:IsShown() then dov:Hide() end
+        dov._msufDOSyncHP = nil
+        return
+    end
+
+    -- Resolve color from shared dispel color system
+    local r, g, b = ResolveDispelColor(dispelType, f)
+    if not r then r, g, b = 0.25, 0.75, 1.00 end
+    local a = c.doAlpha
+
+    -- "Current health only" — mirror health StatusBar value
+    local unit = f.unit
+    if c.doOnHP and unit then
+        local hm = f._msufGFCachedHpMax or UnitHealthMax(unit)
+        dov:SetMinMaxValues(0, hm)
+        dov:SetValue(UnitHealth(unit))
+        dov._msufDOSyncHP = true
+    else
+        dov:SetMinMaxValues(0, 1)
+        dov:SetValue(1)
+        dov._msufDOSyncHP = nil
+    end
+
+    -- Apply gradient based on style
+    local style = c.doStyle
+    local tex = dov:GetStatusBarTexture()
+    if tex and _doCC then
+        if style == "BOTTOM" then
+            tex:SetGradient("VERTICAL", _doCC(r, g, b, a), _doCC(r, g, b, 0))
+        elseif style == "TOP" then
+            tex:SetGradient("VERTICAL", _doCC(r, g, b, 0), _doCC(r, g, b, a))
+        elseif style == "LEFT" then
+            tex:SetGradient("HORIZONTAL", _doCC(r, g, b, a), _doCC(r, g, b, 0))
+        elseif style == "RIGHT" then
+            tex:SetGradient("HORIZONTAL", _doCC(r, g, b, 0), _doCC(r, g, b, a))
+        else
+            -- FULL: uniform color (clear gradient by setting both ends identical)
+            tex:SetGradient("HORIZONTAL", _doCC(r, g, b, a), _doCC(r, g, b, a))
+        end
+    else
+        -- Fallback: no CreateColor (pre-10.0) — flat color only
+        dov:SetStatusBarColor(r, g, b, a)
+    end
+
+    -- Reverse fill sync (match health bar direction)
+    if dov.SetReverseFill then
+        local kind = f._msufGFKind or "party"
+        local conf = GF.GetConf(kind)
+        dov:SetReverseFill(conf.reverseFill and true or false)
+    end
+
+    if not dov:IsShown() then dov:Show() end
+end
+
 _GF_RefreshBorder = function(f, unit)
+    -- Dispel overlay (independent from border — always sync on border refresh)
+    _GF_ApplyDispelOverlay(f)
+
     local border = f._msufGFHighlightBorder
     if not border then return end
     local kind = f._msufGFKind or "party"
@@ -2194,6 +2272,10 @@ local function dispatchHealthLean(f, unit)
         bar:SetValue(hp)
     end
 
+    -- Dispel overlay health sync ("current health only" — secret-safe SetValue)
+    local dov = f._msufGFDispelOverlay
+    if dov and dov._msufDOSyncHP then dov:SetValue(hp) end
+
     -- Compiled fast text: pre-resolved closures call C-side directly.
     -- ~0.3μs/slot (vs 7.5μs with FormatHealthText). Zero mode dispatch,
     -- zero issecretvalue, zero string compare dedup.
@@ -2264,6 +2346,13 @@ local function dispatchHealthFull(f, unit)
     f.health:SetMinMaxValues(0, hpMax)
     if c.smooth then f.health:SetValue(hp, c.smooth) else f.health:SetValue(hp) end
     f._msufGFCachedHpMax = hpMax
+
+    -- Dispel overlay health sync ("current health only" — secret-safe)
+    local dov = f._msufGFDispelOverlay
+    if dov and dov._msufDOSyncHP then
+        dov:SetMinMaxValues(0, hpMax)
+        dov:SetValue(hp)
+    end
 
     -- Cutaway
     local cw = f._msufCutaway
@@ -3242,6 +3331,17 @@ _G.MSUF_GF_UpdateStatus   = UpdateStatusText
 _G.MSUF_GF_UpdateGroupNum = UpdateGroupNumber
 GF.GetDispelColor     = GetDispelColor
 GF.ResolveDispelColor = ResolveDispelColor
+
+-- Dispel overlay: refresh all frames (called from Options when settings change)
+_G.MSUF_GF_RefreshDispelOverlay = function()
+    if not GF.frames then return end
+    for f in pairs(GF.frames) do
+        if f._msufIsGroupFrame then
+            GF.BuildFrameCache(f)
+            _GF_ApplyDispelOverlay(f)
+        end
+    end
+end
 
 -- Exports for Perfy profiling (target-click spike diagnosis)
 _G.MSUF_GF_QuickBorderUpdate   = _GF_QuickBorderUpdate
