@@ -159,6 +159,49 @@ local function _AlphaClamp01(a)
     return a
 end
 
+local function _AlphaNearlyEqual(a, b)
+    if type(a) ~= "number" or type(b) ~= "number" then return false end
+    local d = a - b
+    if d < 0 then d = -d end
+    return d <= 0.001
+end
+
+local function _GetBarTexture(sb)
+    if not sb or not sb.GetStatusBarTexture then return nil end
+    return sb:GetStatusBarTexture()
+end
+
+local function _AlphaObjectMatches(obj, target)
+    if not obj then return true end
+    if not obj.GetAlpha then return false end
+    return _AlphaNearlyEqual(obj:GetAlpha() or 1, target)
+end
+
+local function _AlphaLayeredStateMatches(frame, fg, bg)
+    if not frame then return false end
+
+    local hpTex = _GetBarTexture(frame.hpBar)
+    if frame.hpBar and not hpTex then return false end
+
+    local powerBar = frame.targetPowerBar or frame.powerBar
+    local powerTex = _GetBarTexture(powerBar)
+    if powerBar and not powerTex then return false end
+
+    local absorbTex = _GetBarTexture(frame.absorbBar)
+    if frame.absorbBar and not absorbTex then return false end
+
+    local healAbsorbTex = _GetBarTexture(frame.healAbsorbBar)
+    if frame.healAbsorbBar and not healAbsorbTex then return false end
+
+    return _AlphaObjectMatches(hpTex, fg)
+        and _AlphaObjectMatches(powerTex, fg)
+        and _AlphaObjectMatches(absorbTex, fg)
+        and _AlphaObjectMatches(healAbsorbTex, fg)
+        and _AlphaObjectMatches(frame.hpBarBG, bg)
+        and _AlphaObjectMatches(frame.powerBarBG, bg)
+        and _AlphaObjectMatches(frame.bg, bg)
+end
+
 local function MSUF_Alpha_UseLiteRuntime()
     local db = MSUF_DB
     local general = db and db.general
@@ -266,7 +309,7 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
         local lastBG = frame._msufAlphaLastBG or 1
         local dfg = lastFG - fg; if dfg < 0 then dfg = -dfg end
         local dbg = lastBG - bg; if dbg < 0 then dbg = -dbg end
-        if dfg <= 0.001 and dbg <= 0.001 then
+        if dfg <= 0.001 and dbg <= 0.001 and _AlphaLayeredStateMatches(frame, fg, bg) then
             return
         end
     end
@@ -666,16 +709,46 @@ do
 end
 
 if not _G.MSUF_AlphaEventFrame then
+    local function _MSUF_AlphaPostWorldRefresh()
+        local fn = _G.MSUF_RequestAlphaRefresh
+        if type(fn) == "function" then
+            fn(false)
+        end
+    end
+
+    local function _MSUF_AlphaPostWorldRefreshLate()
+        local fn = _G.MSUF_RequestAlphaRefresh
+        if type(fn) == "function" then
+            fn(false)
+        end
+    end
+
     _G.MSUF_AlphaEventFrame = CreateFrame("Frame")
     _G.MSUF_AlphaEventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
     _G.MSUF_AlphaEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    _G.MSUF_AlphaEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     _G.MSUF_AlphaEventFrame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" then
             _G.MSUF_InCombat = true
+            _G.MSUF_RequestAlphaRefresh(true)
+            return
         elseif event == "PLAYER_REGEN_ENABLED" then
             _G.MSUF_InCombat = false
+            _G.MSUF_RequestAlphaRefresh(true)
+            return
         end
-        _G.MSUF_RequestAlphaRefresh(true)
+
+        local inCombat = _G.MSUF_InCombat
+        if inCombat == nil then
+            inCombat = (F.InCombatLockdown and F.InCombatLockdown()) or false
+            _G.MSUF_InCombat = inCombat and true or false
+        end
+
+        _G.MSUF_RequestAlphaRefresh(false)
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, _MSUF_AlphaPostWorldRefresh)
+            C_Timer.After(0.10, _MSUF_AlphaPostWorldRefreshLate)
+        end
      end)
 end
 

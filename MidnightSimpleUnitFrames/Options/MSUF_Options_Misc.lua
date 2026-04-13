@@ -425,7 +425,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     -- =====================================================================
     -- Section 5: Range Fade
     -- =====================================================================
-    local s5Box, s5Body = MakeCollapsibleSection(scrollChild, 150, "Range Fade", false)
+    local s5Box, s5Body = MakeCollapsibleSection(scrollChild, 240, "Range Fade", false)
     s5Box:SetPoint("TOPLEFT", s4Box, "BOTTOMLEFT", 0, -6)
 
     local rfTarget = UI.Check({
@@ -457,7 +457,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end,
     })
 
-    UI.Check({
+    local rfBoss = UI.Check({
         name = "MSUF_BossRangeFadeCheck", parent = s5Body,
         anchor = rfFocus, x = 0, y = -8,
         label = TR("Enable Boss Range Fade"),
@@ -470,6 +470,28 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
                 if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
                 if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
             end
+        end,
+    })
+
+    local rfBossCB = UI.Check({
+        name = "MSUF_BossRFCastbarCheck", parent = s5Body,
+        anchor = rfBoss, x = 38, y = -6,
+        label = TR("Also Fade Castbar"),
+        get = function() return B().rangeFadeCastbar == true end,
+        set = function(v)
+            B().rangeFadeCastbar = v
+            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+        end,
+    })
+
+    UI.Check({
+        name = "MSUF_BossRFAurasCheck", parent = s5Body,
+        anchor = rfBossCB, x = 0, y = -6,
+        label = TR("Also Fade Auras"),
+        get = function() return B().rangeFadeAuras == true end,
+        set = function(v)
+            B().rangeFadeAuras = v
+            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
         end,
     })
 
