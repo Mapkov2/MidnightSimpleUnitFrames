@@ -342,14 +342,18 @@ end
 local function ClassifyPlayer(unit, aid, isHelpful)
     if not _isFiltered then return false end
     local filter = isHelpful and HELPFUL_PLAYER or HARMFUL_PLAYER
-    return (_isFiltered(unit, aid, filter) == false)
+    local r = _isFiltered(unit, aid, filter)
+    if issecretvalue and issecretvalue(r) then return false end
+    return (r == false)
 end
 
 -- Helpful/harmful classification (secret-safe)
 -- data.isHarmful is SECRET in 12.0 — use filter membership
 local function ClassifyHelpful(unit, aid)
     if not _isFiltered then return true end
-    return (_isFiltered(unit, aid, HELPFUL) == false)
+    local r = _isFiltered(unit, aid, HELPFUL)
+    if issecretvalue and issecretvalue(r) then return true end
+    return (r == false)
 end
 
 -- Boss flag (secret-safe, cached on data table)
@@ -529,7 +533,14 @@ end
 -- Invalidate / Query
 function Cache.Invalidate(unit)
     local s = _units[unit]
-    if s then s.changed = true; s.epoch = s.epoch + 1; s.structureChanged = true end
+    if s then
+        s.changed = true
+        s.epoch = s.epoch + 1
+        s.structureChanged = true
+        s._lastFilterGen = nil
+        s._lastNB = nil
+        s._lastND = nil
+    end
 end
 
 function Cache.InvalidateAll()
@@ -537,6 +548,12 @@ function Cache.InvalidateAll()
         s.changed = true
         s.epoch = s.epoch + 1
         s.structureChanged = true
+        -- Clear fast-path filter cache: options changes (Important, OnlyMine,
+        -- Caps, IgnoreList, etc.) must force a full re-filter on next
+        -- FilterAndSort, even when no aura add/remove occurred.
+        s._lastFilterGen = nil
+        s._lastNB = nil
+        s._lastND = nil
     end
 end
 

@@ -316,9 +316,16 @@ local function ShouldScheduleLiveRender(unit)
         return true
     end
 
-    -- Inlined FindUnitFrame (was a function call doing table lookup)
+    -- 4.0b1 safety fix:
+    -- keep the fast _G.MSUF_UnitFrames lookup, but fall back to the classic
+    -- named unitframes for player/target/focus/boss so Auras2 does not skip
+    -- live renders during load-order or registration edge cases.
     local uf = _G.MSUF_UnitFrames
     local frame = uf and uf[unit]
+    if not frame then
+        local name = _UNIT_FRAME_NAMES[unit]
+        frame = name and _G[name] or nil
+    end
     if not frame then return false end
     if frame.IsShown and not frame:IsShown() then return false end
 

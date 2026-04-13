@@ -268,7 +268,7 @@ local _FRAME_FALLBACK = {
 
 local function FindUnitFrame(unit)
     local uf = _G.MSUF_UnitFrames
-    if uf and uf[unit] then return uf[unit] end
+    if type(uf) == "table" and uf[unit] then return uf[unit] end
     local key = _FRAME_FALLBACK[unit]
     return key and _G[key] or nil
 end

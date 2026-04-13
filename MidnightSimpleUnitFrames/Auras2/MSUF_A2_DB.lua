@@ -571,6 +571,17 @@ local function _DoApply()
         API.Init()
     end
 
+    -- 4.0b1 fix:
+    -- Auras2 now has a cached "update-only" fast path that reuses the previous
+    -- filtered result when the aura structure did not change. Options edits
+    -- (Important/Only Mine/Only Boss/ignore list/caps/layout, etc.) can therefore
+    -- look stale unless we explicitly bump the config generation and wipe cached
+    -- filter results before asking for a refresh.
+    local invalidate = API.InvalidateDB
+    if type(invalidate) == "function" then
+        invalidate()
+    end
+
     local r = API.RefreshAll
     if type(r) == "function" then
         r()
