@@ -572,37 +572,56 @@ function GF.RefreshPreviewBox()
         end
     end
 
-    -- Health color (same resolve chain as GF_Render)
+    -- Health color (mirror GF_Render ApplyHealthColor: gfBarMode → global fallback)
     do
         local cls = PREVIEW_CLASSES[_classIdx] or "WARRIOR"
-        local getCache = _G.MSUF_UFCore_GetSettingsCache
-        local cache = type(getCache) == "function" and getCache() or nil
-        local gm = cache and cache.barMode
-        if gm == "dark" then
-            m._health:SetStatusBarColor(
-                cache.darkBarR or 0, cache.darkBarG or 0, cache.darkBarB or 0, 1)
-        elseif gm == "unified" then
-            m._health:SetStatusBarColor(
-                cache.unifiedBarR or 0.10, cache.unifiedBarG or 0.60,
-                cache.unifiedBarB or 0.90, 1)
+        local gfMode = conf.gfBarMode
+
+        -- Resolve effective mode (same chain as ApplyHealthColor)
+        local mode
+        if gfMode and gfMode ~= "GLOBAL" then
+            mode = gfMode
         else
-            local mode = conf.healthColorMode or "CLASS"
-            if mode == "CLASS" then
-                local fastC = _G.MSUF_UFCore_GetClassBarColorFast
-                local r, g, b
-                if type(fastC) == "function" then r, g, b = fastC(nil, cls) end
-                if not r then
-                    local cc = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[cls]
-                    if cc then r, g, b = cc.r, cc.g, cc.b end
-                end
-                m._health:SetStatusBarColor(r or 0.2, g or 0.8, b or 0.2, 1)
-            elseif mode == "GRADIENT" then
-                m._health:SetStatusBarColor(0.65, 0.90, 0.15, 1) -- preview at 72%
+            local getCache = _G.MSUF_UFCore_GetSettingsCache
+            local cache = type(getCache) == "function" and getCache() or nil
+            local globalMode = cache and cache.barMode
+            if globalMode == "dark" or globalMode == "unified" then
+                mode = globalMode
             else
-                m._health:SetStatusBarColor(
-                    conf.healthCustomR or 0.2, conf.healthCustomG or 0.8,
-                    conf.healthCustomB or 0.2, 1)
+                mode = conf.healthColorMode or "CLASS"
             end
+        end
+
+        if mode == "dark" then
+            local getCache = _G.MSUF_UFCore_GetSettingsCache
+            local cache = type(getCache) == "function" and getCache() or nil
+            local r = conf.gfDarkR or (cache and cache.darkBarR) or 0
+            local g = conf.gfDarkG or (cache and cache.darkBarG) or 0
+            local b = conf.gfDarkB or (cache and cache.darkBarB) or 0
+            m._health:SetStatusBarColor(r, g, b, 1)
+        elseif mode == "unified" then
+            local getCache = _G.MSUF_UFCore_GetSettingsCache
+            local cache = type(getCache) == "function" and getCache() or nil
+            local r = conf.gfUnifiedR or (cache and cache.unifiedBarR) or 0.10
+            local g = conf.gfUnifiedG or (cache and cache.unifiedBarG) or 0.60
+            local b = conf.gfUnifiedB or (cache and cache.unifiedBarB) or 0.90
+            m._health:SetStatusBarColor(r, g, b, 1)
+        elseif mode == "CLASS" then
+            local fastC = _G.MSUF_UFCore_GetClassBarColorFast
+            local r, g, b
+            if type(fastC) == "function" then r, g, b = fastC(cls) end
+            if not r then
+                local cc = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[cls]
+                if cc then r, g, b = cc.r, cc.g, cc.b end
+            end
+            m._health:SetStatusBarColor(r or 0.2, g or 0.8, b or 0.2, 1)
+        elseif mode == "GRADIENT" then
+            m._health:SetStatusBarColor(0.65, 0.90, 0.15, 1) -- preview at ~72%
+        else
+            -- CUSTOM or fallback
+            m._health:SetStatusBarColor(
+                conf.healthCustomR or 0.2, conf.healthCustomG or 0.8,
+                conf.healthCustomB or 0.2, 1)
         end
     end
 
