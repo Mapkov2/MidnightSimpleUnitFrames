@@ -485,7 +485,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     barsGFHint:SetTextColor(0.50, 0.60, 0.75)
 
     -- BOX 1: Textures & Gradient (default open)
-    local box1, box1Body = MakeCollapsibleBox(barGroup, scopeBar, 200, "Textures & Gradient", true)
+    local box1, box1Body = MakeCollapsibleBox(barGroup, barsGFHint, 200, "Textures & Gradient", true)
 
     -- Left col: Bar textures
     local texColLabel = MakeSectionLabel(box1Body, box1Body, "Bar textures (SharedMedia)", -6)
@@ -862,11 +862,11 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if db.hlPurgeEnabled == nil then db.hlPurgeEnabled = (gen.purgeOutlineMode == 1) end
     end
 
-    local box3, box3Body = MakeCollapsibleBox(barGroup, box2, 740, "Outline & Highlight Border", true)
+    local box3a, box3aBody = MakeCollapsibleBox(barGroup, box2, 80, "Frame Outline", false)
 
     -- Left col: thickness sliders
-    local barOutlineThicknessSlider = CreateLabeledSlider("MSUF_BarOutlineThicknessSlider", "Outline thickness", box3Body, 0, 6, 1, 16, -350)
-    barOutlineThicknessSlider:ClearAllPoints(); barOutlineThicknessSlider:SetPoint("TOPLEFT", box3Body, "TOPLEFT", 14, -10)
+    local barOutlineThicknessSlider = CreateLabeledSlider("MSUF_BarOutlineThicknessSlider", "Outline thickness", box3aBody, 0, 6, 1, 16, -350)
+    barOutlineThicknessSlider:ClearAllPoints(); barOutlineThicknessSlider:SetPoint("TOPLEFT", box3aBody, "TOPLEFT", 14, -10)
     barOutlineThicknessSlider:SetWidth(280)
     do local n = barOutlineThicknessSlider:GetName(); local t = _G[n .. "Text"]; if t then t:SetText(""); t:Hide() end end
     barOutlineThicknessSlider.onValueChanged = function(_, v)
@@ -881,8 +881,11 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
     end
 
-    local highlightBorderThicknessSlider = CreateLabeledSlider("MSUF_HighlightBorderThicknessSlider", "Highlight border thickness", box3Body, 1, 30, 1, 16, -420)
-    highlightBorderThicknessSlider:ClearAllPoints(); highlightBorderThicknessSlider:SetPoint("TOPLEFT", barOutlineThicknessSlider, "BOTTOMLEFT", 0, -60)
+
+    local box3b, box3bBody = MakeCollapsibleBox(barGroup, box3a, 560, "Highlight Borders", true)
+
+    local highlightBorderThicknessSlider = CreateLabeledSlider("MSUF_HighlightBorderThicknessSlider", "Highlight border thickness", box3bBody, 1, 30, 1, 16, -420)
+    highlightBorderThicknessSlider:ClearAllPoints(); highlightBorderThicknessSlider:SetPoint("TOPLEFT", box3bBody, "TOPLEFT", 14, -10)
     highlightBorderThicknessSlider:SetWidth(280)
     highlightBorderThicknessSlider.onValueChanged = function(_, v)
         v = floor(v + 0.5); if v < 1 then v = 1 elseif v > 30 then v = 30 end
@@ -919,7 +922,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     local function MakeOutlineRow(name, dbKey, hlKey, labelOn, labelOff, anchor, oX, oY, w, applyFn)
         local dd = UI.Dropdown({
-            name = name, parent = box3Body,
+            name = name, parent = box3bBody,
             anchor = anchor, anchorPoint = "TOPLEFT", x = oX, y = oY, width = w or 170,
             items = { { key = 0, label = TR(labelOff) }, { key = 1, label = TR(labelOn) } },
             get = function()
@@ -939,7 +942,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                 end
             end,
         })
-        local cb = CreateFrame("CheckButton", name:gsub("Dropdown$", "") .. "TestCheck", box3Body, "ChatConfigCheckButtonTemplate")
+        local cb = CreateFrame("CheckButton", name:gsub("Dropdown$", "") .. "TestCheck", box3bBody, "ChatConfigCheckButtonTemplate")
         cb:SetPoint("LEFT", dd, "RIGHT", 6, 0)
         cb.Text:SetText(TR("Test"))
         cb:HookScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetText(self.tooltipText or "", 1, 1, 1, 1, true); GameTooltip:Show() end)
@@ -968,11 +971,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         HlApplyGF()
     end
 
-    local hlSectionLabel = box3Body:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    hlSectionLabel:SetPoint("TOPLEFT", box3Body, "TOPLEFT", 340, -2)
-    hlSectionLabel:SetText(TR("Highlight borders"))
-
-    local aggroOutlineDrop, aggroTestCheck = MakeOutlineRow("MSUF_AggroOutlineDropdown", "aggroOutlineMode", "hlAggroEnabled", "Aggro border on", "Aggro border off", hlSectionLabel, -14, -14, 170, AggroApply)
+    local aggroOutlineDrop, aggroTestCheck = MakeOutlineRow("MSUF_AggroOutlineDropdown", "aggroOutlineMode", "hlAggroEnabled", "Aggro border on", "Aggro border off", highlightBorderThicknessSlider, 0, -70, 170, AggroApply)
     aggroTestCheck.tooltipText = TR("Aggro border: Target, Focus, Boss, Party, Raid frames")
     aggroTestCheck:SetScript("OnClick", function(self)
         local scope = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
@@ -989,7 +988,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- Per-type test dropdown (visible next to Test checkbox)
     _G.MSUF_DispelBorderTestType = _G.MSUF_DispelBorderTestType or "Magic"
     local dispelTestTypeDrop = UI.Dropdown({
-        name = "MSUF_DispelTestTypeDropdown", parent = box3Body,
+        name = "MSUF_DispelTestTypeDropdown", parent = box3bBody,
         anchor = dispelTestCheck, anchorPoint = "RIGHT", x = 30, y = 10, width = 90,
         items = {
             { key = "Magic",   label = TR("Magic") },
@@ -1012,7 +1011,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     -- Dispel color mode: Single Color vs Per Debuff Type
     local dispelColorModeDrop = UI.Dropdown({
-        name = "MSUF_DispelColorModeDropdown", parent = box3Body,
+        name = "MSUF_DispelColorModeDropdown", parent = box3bBody,
         anchor = dispelOutlineDrop, anchorPoint = "TOPLEFT", x = 0, y = -28, width = 170,
         items = {
             { key = "SINGLE", label = TR("Single color") },
@@ -1054,23 +1053,22 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
 
     -- Dispel glow toggle
-    local dispelGlowCheck = CreateFrame("CheckButton", "MSUF_DispelGlowCheck", box3Body, "ChatConfigCheckButtonTemplate")
+    local dispelGlowCheck = CreateFrame("CheckButton", "MSUF_DispelGlowCheck", box3bBody, "ChatConfigCheckButtonTemplate")
     dispelGlowCheck:SetPoint("TOPLEFT", dispelColorModeDrop, "BOTTOMLEFT", 14, -8)
     dispelGlowCheck.Text:SetText(TR("Dispel glow effect"))
     dispelGlowCheck:SetChecked(HlGet("hlDispelGlowEnabled", false) and true or false)
-    dispelGlowCheck:SetScript("OnClick", function(self)
-        local v = self:GetChecked() and true or false
-        HlDB().hlDispelGlowEnabled = v
-        G().hlDispelGlowEnabled = v
-        GlowApply()
-    end)
     UI.AttachTooltip(dispelGlowCheck, TR("Dispel glow"),
         TR("Adds an animated glow overlay to the dispel border highlight.\nUses LibCustomGlow. Color follows the dispel border color."))
 
+    -- Glow settings container (shown only when glow enabled)
+    local glowContainer = CreateFrame("Frame", nil, box3bBody)
+    glowContainer:SetSize(250, 1)
+    glowContainer:SetPoint("TOPLEFT", dispelGlowCheck, "BOTTOMLEFT", -14, -4)
+
     -- Glow style dropdown
     local dispelGlowStyleDrop = UI.Dropdown({
-        name = "MSUF_DispelGlowStyleDropdown", parent = box3Body,
-        anchor = dispelGlowCheck, anchorPoint = "BOTTOMLEFT", x = -14, y = -6, width = 170,
+        name = "MSUF_DispelGlowStyleDropdown", parent = glowContainer,
+        anchor = glowContainer, anchorPoint = "TOPLEFT", x = 0, y = 0, width = 170,
         items = {
             { key = "PIXEL",    label = "Pixel" },
             { key = "AUTOCAST", label = "AutoCast" },
@@ -1087,7 +1085,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         TR("Pixel: animated dots around the border.\nAutoCast: spinning sparkle particles.\nProc: spell activation overlay."))
 
     -- Glow lines slider
-    local dispelGlowLinesSlider = CreateLabeledSlider("MSUF_DispelGlowLinesSlider", "Glow lines / particles", box3Body, 2, 16, 1, 16, -350)
+    local dispelGlowLinesSlider = CreateLabeledSlider("MSUF_DispelGlowLinesSlider", "Glow lines / particles", glowContainer, 2, 16, 1, 16, -350)
     dispelGlowLinesSlider:ClearAllPoints(); dispelGlowLinesSlider:SetPoint("TOPLEFT", dispelGlowStyleDrop, "BOTTOMLEFT", 0, -8)
     if dispelGlowLinesSlider.SetWidth then dispelGlowLinesSlider:SetWidth(170) end
     dispelGlowLinesSlider.onValueChanged = function(_, v)
@@ -1097,8 +1095,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
 
     -- Glow frequency slider
-    local dispelGlowFreqSlider = CreateLabeledSlider("MSUF_DispelGlowFreqSlider", "Glow speed", box3Body, 0.05, 1.0, 0.05, 16, -350)
-    dispelGlowFreqSlider:ClearAllPoints(); dispelGlowFreqSlider:SetPoint("TOPLEFT", dispelGlowLinesSlider, "TOPLEFT", 0, -70)
+    local dispelGlowFreqSlider = CreateLabeledSlider("MSUF_DispelGlowFreqSlider", "Glow speed", glowContainer, 0.05, 1.0, 0.05, 16, -350)
+    dispelGlowFreqSlider:ClearAllPoints(); dispelGlowFreqSlider:SetPoint("TOPLEFT", dispelGlowLinesSlider, "TOPLEFT", 0, -60)
     if dispelGlowFreqSlider.SetWidth then dispelGlowFreqSlider:SetWidth(170) end
     dispelGlowFreqSlider.onValueChanged = function(_, v)
         HlDB().hlDispelGlowFrequency = v
@@ -1107,8 +1105,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
 
     -- Glow thickness slider (Pixel only)
-    local dispelGlowThickSlider = CreateLabeledSlider("MSUF_DispelGlowThickSlider", "Glow thickness (Pixel)", box3Body, 1, 5, 1, 16, -350)
-    dispelGlowThickSlider:ClearAllPoints(); dispelGlowThickSlider:SetPoint("TOPLEFT", dispelGlowFreqSlider, "TOPLEFT", 0, -70)
+    local dispelGlowThickSlider = CreateLabeledSlider("MSUF_DispelGlowThickSlider", "Glow thickness (Pixel)", glowContainer, 1, 5, 1, 16, -350)
+    dispelGlowThickSlider:ClearAllPoints(); dispelGlowThickSlider:SetPoint("TOPLEFT", dispelGlowFreqSlider, "TOPLEFT", 0, -60)
     if dispelGlowThickSlider.SetWidth then dispelGlowThickSlider:SetWidth(170) end
     dispelGlowThickSlider.onValueChanged = function(_, v)
         HlDB().hlDispelGlowThickness = v
@@ -1116,7 +1114,38 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         GlowApply()
     end
 
-    local purgeOutlineDrop, purgeTestCheck = MakeOutlineRow("MSUF_PurgeOutlineDropdown", "purgeOutlineMode", "hlPurgeEnabled", "Purge border on", "Purge border off", dispelGlowThickSlider, 0, -70, 170, DispelPurgeApply)
+    -- Toggle glow container + re-anchor purge
+    local function RefreshGlowVisibility()
+        local on = dispelGlowCheck:GetChecked() and true or false
+        glowContainer:SetShown(on)
+    end
+    RefreshGlowVisibility()
+
+    dispelGlowCheck:SetScript("OnClick", function(self)
+        local v = self:GetChecked() and true or false
+        HlDB().hlDispelGlowEnabled = v
+        G().hlDispelGlowEnabled = v
+        RefreshGlowVisibility()
+        GlowApply()
+        MSUF_BarsMenu_QueueScrollUpdate()
+    end)
+
+    -- Purge/Boss anchor dynamically: below glow container or checkbox
+    local purgeAnchor = CreateFrame("Frame", nil, box3bBody)
+    purgeAnchor:SetSize(1, 1)
+    local function RepositionPurgeAnchor()
+        purgeAnchor:ClearAllPoints()
+        if glowContainer:IsShown() then
+            purgeAnchor:SetPoint("TOPLEFT", dispelGlowThickSlider, "TOPLEFT", 0, 0)
+        else
+            purgeAnchor:SetPoint("TOPLEFT", dispelGlowCheck, "BOTTOMLEFT", -14, 6)
+        end
+    end
+    RepositionPurgeAnchor()
+    glowContainer:HookScript("OnShow", RepositionPurgeAnchor)
+    glowContainer:HookScript("OnHide", RepositionPurgeAnchor)
+
+    local purgeOutlineDrop, purgeTestCheck = MakeOutlineRow("MSUF_PurgeOutlineDropdown", "purgeOutlineMode", "hlPurgeEnabled", "Purge border on", "Purge border off", purgeAnchor, 0, -60, 170, DispelPurgeApply)
     purgeTestCheck.tooltipText = TR("Purge border: Target, Focus, Target of Target, Boss")
     purgeTestCheck:SetScript("OnClick", function(self) if _G.MSUF_SetPurgeBorderTestMode then _G.MSUF_SetPurgeBorderTestMode(self:GetChecked() and true or false) end end)
 
@@ -1153,6 +1182,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
     end)
 
+
+    local box3c, box3cBody = MakeCollapsibleBox(barGroup, box3b, 280, "Highlight Priority", false)
+
     -- Priority drag-and-drop (dynamic: 3 rows for SINGLE, 6 for TYPE)
     local _PRIO_LABELS = {
         dispel = "Dispel", aggro = "Aggro", purge = "Purge", bossTarget = "Boss Target",
@@ -1174,12 +1206,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local _prioRows = {}
     local _prioCount = 3
 
-    local prioCheck = CreateFrame("CheckButton", "MSUF_HighlightPrioCheck", box3Body, "ChatConfigCheckButtonTemplate")
-    prioCheck:SetPoint("TOPLEFT", bossTargetOutlineDrop, "BOTTOMLEFT", 14, -16)
+    local prioCheck = CreateFrame("CheckButton", "MSUF_HighlightPrioCheck", box3cBody, "ChatConfigCheckButtonTemplate")
+    prioCheck:SetPoint("TOPLEFT", box3cBody, "TOPLEFT", 14, -8)
     prioCheck.Text:SetText(TR("Custom highlight priority"))
     UI.AttachTooltip(prioCheck, TR("Custom highlight priority"), TR("Drag to reorder which highlight border takes priority when multiple are active."))
 
-    local prioContainer = CreateFrame("Frame", "MSUF_HighlightPrioContainer", box3Body)
+    local prioContainer = CreateFrame("Frame", "MSUF_HighlightPrioContainer", box3cBody)
     prioContainer:SetSize(200, _PRIO_MAX * (_PRIO_ROW_H + _PRIO_ROW_GAP))
     prioContainer:SetPoint("TOPLEFT", prioCheck, "BOTTOMLEFT", -2, -4)
 
@@ -1303,7 +1335,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     do local on = HlGet("hlPrioEnabled", false); prioCheck:SetChecked(on); _Prio_SetEnabled(on) end
 
     -- BOX 5: HP / Power Text (default open)
-    local box5, box5Body = MakeCollapsibleBox(barGroup, box3, 240, "HP / Power Text", true)
+    local box5, box5Body = MakeCollapsibleBox(barGroup, box3c, 240, "HP / Power Text", true)
 
     local hpModeOptions = {
         { key = "PERCENT",        label = "Percent"                  },
@@ -1596,7 +1628,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     -- GF hint (shown when Party/Raid scope, replaces Box 5/6)
     local gfTextHint = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    gfTextHint:SetPoint("TOPLEFT", box3, "BOTTOMLEFT", 14, -12)
+    gfTextHint:SetPoint("TOPLEFT", box3c, "BOTTOMLEFT", 14, -12)
     gfTextHint:SetWidth(600); gfTextHint:SetJustifyH("LEFT")
     gfTextHint:SetText(TR("HP / Power Text and Text Spacers for Group Frames are configured in\nGroup Frames > Health & Text."))
     gfTextHint:SetTextColor(0.6, 0.75, 1.0)
@@ -1647,7 +1679,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         hpReverseCheck = hpReverseCheck,
         hpPowerOverrideCheck = hpPowerOverrideCheck,
         scopeOverrideInfo = scopeOverrideInfo, scopeResetBtn = scopeResetBtn,
-        box1 = box1, box2 = box2, box3 = box3,
+        box1 = box1, box2 = box2, box3a = box3a, box3b = box3b, box3c = box3c,
         box5 = box5, box6 = box6, box7 = box7, gfTextHint = gfTextHint,
     }
 
@@ -1712,7 +1744,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if _C.box7 then
             _C.box7:ClearAllPoints()
             if isGF then
-                _C.box7:SetPoint("TOPLEFT", _C.gfTextHint or _C.box3, "BOTTOMLEFT", 0, -12)
+                _C.box7:SetPoint("TOPLEFT", _C.gfTextHint or _C.box3c, "BOTTOMLEFT", 0, -12)
             else
                 _C.box7:SetPoint("TOPLEFT", _C.box6, "BOTTOMLEFT", 0, -4)
             end
@@ -1839,7 +1871,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if not box or not box._msufTitle then return end
             if hlControlsActive then box._msufTitle:SetTextColor(1, 1, 1) else DimLabel(box._msufTitle) end
         end
-        TitleDim(_C.box1); TitleDim(_C.box2); TitleDim(_C.box3)
+        TitleDim(_C.box1); TitleDim(_C.box2); TitleDim(_C.box3a); TitleDim(_C.box3b); TitleDim(_C.box3c)
 
         -- Re-trigger active test modes with current scope (prevents scope bleed)
         if _G.MSUF_DispelBorderTestMode and _G.MSUF_SetDispelBorderTestMode then
