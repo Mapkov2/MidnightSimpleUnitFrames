@@ -646,16 +646,24 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         local function BuildSpellPanel(auraName, specKey, parentTile)
             if spellPanels[auraName] then return spellPanels[auraName] end
 
-            local panel = CreateFrame("Frame", nil, body, "BackdropTemplate")
+            local panel = CreateFrame("Frame", nil, body)
             panel:SetSize(580, 300)
-            panel:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Buttons\\WHITE8x8",
-                edgeSize = 1,
-            })
-            panel:SetBackdropColor(0.08, 0.10, 0.14, 0.95)
-            panel:SetBackdropBorderColor(0.2, 0.35, 0.5, 0.6)
             panel:EnableMouse(true)
+
+            -- Subtle top divider instead of floating box
+            local panelDiv = panel:CreateTexture(nil, "ARTWORK")
+            panelDiv:SetHeight(1)
+            panelDiv:SetColorTexture(0.25, 0.40, 0.55, 0.5)
+            panelDiv:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
+            panelDiv:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, 0)
+
+            -- Trigger section re-measure on show/hide
+            panel:HookScript("OnShow", function()
+                if box._msufRemeasure then box._msufRemeasure() end
+            end)
+            panel:HookScript("OnHide", function()
+                if box._msufRemeasure then box._msufRemeasure() end
+            end)
 
             local function SC()
                 local siCfg = SIC()
@@ -1289,7 +1297,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                                 local panel = BuildSpellPanel(auraName, specKey, self)
                                 panel:ClearAllPoints()
                                 local totalRows = math_ceil(specTileCount / TILES_PER_ROW)
-                                local gridH = yOffset + totalRows * (TILE_SIZE + TILE_GAP) + 8
+                                local gridH = yOffset + totalRows * (TILE_SIZE + TILE_GAP) - TILE_GAP + 2
                                 panel:SetPoint("TOPLEFT", tileContainer, "TOPLEFT", 0, -gridH)
                                 panel:Show()
                             end
@@ -1374,9 +1382,9 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             return conf.raidDebuffs
         end
 
-        local box, body = AddSection(405, L["Raid Debuffs"] or "Raid Debuffs", false, "rdebuffs")
+        local box, body = AddSection(420, L["Raid Debuffs"] or "Raid Debuffs", false, "rdebuffs")
 
-        SCheck({
+        local rdEnChk = SCheck({
             name = "MSUF_GF_RDEnable", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
             label = L["Enable Raid Debuffs"] or "Enable Raid Debuffs",
@@ -1385,15 +1393,15 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         })
 
         local rdHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        rdHint:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -34)
-        rdHint:SetWidth(600)
+        rdHint:SetPoint("TOPLEFT", rdEnChk, "BOTTOMLEFT", 0, -4)
+        rdHint:SetWidth(550)
         rdHint:SetJustifyH("LEFT")
         rdHint:SetText("Shows a single large icon for the highest-priority harmful debuff.\nPriority: Raid-flagged > Dispellable > Boss source > Short duration.")
         rdHint:SetTextColor(0.55, 0.60, 0.70)
 
         local rdSizeSl = SSlider({
             name = "MSUF_GF_RDSize", parent = body, compact = true,
-            anchor = rdHint, x = 0, y = -12,
+            anchor = rdHint, anchorPoint = "BOTTOMLEFT", x = 0, y = -22,
             min = 12, max = 60, step = 1, width = 200, default = 28,
             get = function(k) return RD().size or 28 end,
             set = function(k, v) RD().size = v; GF.RefreshVisuals() end,
@@ -1402,7 +1410,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local rdAnchorDd = SDropdown({
             name = "MSUF_GF_RDAnchor", parent = body,
-            anchor = rdSizeSl, x = -16, y = -10, width = 160,
+            anchor = rdSizeSl, anchorPoint = "BOTTOMLEFT", x = 0, y = -8, width = 160,
             items = ANCHOR9,
             get = function(k) return RD().anchor or "CENTER" end,
             set = function(k, v) RD().anchor = v; GF.RefreshVisuals() end,
@@ -1410,7 +1418,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local rdXSl = SSlider({
             name = "MSUF_GF_RDX", parent = body, compact = true,
-            anchor = rdAnchorDd, x = 16, y = -10,
+            anchor = rdAnchorDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -8,
             min = -100, max = 100, step = 1, width = 200, default = 0,
             get = function(k) return RD().x or 0 end,
             set = function(k, v) RD().x = v; GF.RefreshVisuals() end,
@@ -1419,7 +1427,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local rdYSl = SSlider({
             name = "MSUF_GF_RDY", parent = body, compact = true,
-            anchor = rdXSl, x = 0, y = -32,
+            anchor = rdXSl, x = 0, y = -28,
             min = -100, max = 100, step = 1, width = 200, default = 0,
             get = function(k) return RD().y or 0 end,
             set = function(k, v) RD().y = v; GF.RefreshVisuals() end,
@@ -1428,16 +1436,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local rdLayerSl = SSlider({
             name = "MSUF_GF_RDLayer", parent = body, compact = true,
-            anchor = rdYSl, x = 0, y = -32,
+            anchor = rdYSl, x = 0, y = -28,
             min = 1, max = 20, step = 1, width = 200, default = 12,
             get = function(k) return RD().layer or 12 end,
             set = function(k, v) RD().layer = v; GF.RefreshVisuals() end,
             formatText = function(v) return string.format("Layer (Z-Order): %d", v) end,
         })
 
-        SCheck({
+        local rdShowTimerChk = SCheck({
             name = "MSUF_GF_RDShowTimer", parent = body,
-            anchor = rdLayerSl, x = -16, y = -10,
+            anchor = rdLayerSl, x = 0, y = -12,
             label = L["Show Timer Text"] or "Show Timer Text",
             get = function(k) return RD().showTimer ~= false end,
             set = function(k, v) RD().showTimer = v; GF.RefreshVisuals() end,
@@ -1445,16 +1453,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local rdTimerSzSl = SSlider({
             name = "MSUF_GF_RDTimerSize", parent = body, compact = true,
-            anchor = rdLayerSl, x = 0, y = -44,
+            anchor = rdShowTimerChk, x = 0, y = -4,
             min = 6, max = 24, step = 1, width = 200, default = 10,
             get = function(k) return RD().timerSize or 10 end,
             set = function(k, v) RD().timerSize = v; GF.RefreshVisuals() end,
             formatText = function(v) return string.format("Timer Font Size: %d", v) end,
         })
 
-        SCheck({
+        local rdOnlyDispChk = SCheck({
             name = "MSUF_GF_RDOnlyDispellable", parent = body,
-            anchor = rdTimerSzSl, x = -16, y = -10,
+            anchor = rdTimerSzSl, x = 0, y = -10,
             label = L["Only Dispellable"] or "Only Dispellable",
             get = function(k) return RD().onlyDispellable == true end,
             set = function(k, v) RD().onlyDispellable = v; GF.RefreshVisuals() end,
@@ -1462,7 +1470,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         SCheck({
             name = "MSUF_GF_RDColorByType", parent = body,
-            anchor = rdTimerSzSl, x = -16, y = -32,
+            anchor = rdOnlyDispChk, x = 0, y = -4,
             label = L["Color Border by Dispel Type"] or "Color Border by Dispel Type",
             get = function(k) return RD().colorBorderByType ~= false end,
             set = function(k, v) RD().colorBorderByType = v; GF.RefreshVisuals() end,

@@ -224,6 +224,38 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
+    -- Auto-height: measure bottommost descendant of a body frame
+    ----------------------------------------------------------------
+    local function _MeasureContentHeight(body)
+        local top = body:GetTop()
+        if not top then return nil end
+        local minBot = top
+        -- Recursive scan: find the bottommost visible element in the tree
+        local function Scan(frame)
+            local children = { frame:GetChildren() }
+            for i = 1, #children do
+                local c = children[i]
+                if c:IsShown() then
+                    local b = c:GetBottom()
+                    if b and b < minBot then minBot = b end
+                    Scan(c)
+                end
+            end
+            local regions = { frame:GetRegions() }
+            for i = 1, #regions do
+                local r = regions[i]
+                if r:IsShown() then
+                    local b = r:GetBottom()
+                    if b and b < minBot then minBot = b end
+                end
+            end
+        end
+        Scan(body)
+        local h = top - minBot
+        return h > 0 and h or nil
+    end
+
+    ----------------------------------------------------------------
     -- Collapsible section helper
     ----------------------------------------------------------------
     local function MakeCollapsibleSection(parent, expandedH, titleText, defaultOpen)
@@ -302,6 +334,24 @@ function _G.MSUF_EnsureGFPanelBuilt()
             hl:SetAllPoints()
             hl:SetColorTexture(1, 1, 1, 0.03)
         end
+
+        -- Auto-height: measure content on every expand, update box height
+        local function _DoRemeasure()
+            C_Timer.After(0, function()
+                if not body:IsShown() then return end
+                local h = _MeasureContentHeight(body)
+                if h and h > 10 then
+                    local newH = h + 44 -- 30 header + 14 bottom pad
+                    box._msufExpandedH = newH
+                    if not box._msufCollapsed then
+                        box:SetHeight(newH)
+                        if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
+                    end
+                end
+            end)
+        end
+        body:HookScript("OnShow", function() _DoRemeasure() end)
+        box._msufRemeasure = _DoRemeasure
 
         box._msufApplyCollapseState = ApplyState
         return box, body
@@ -655,7 +705,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
     local _TAB_DEFS = {
         { key = "frame",      keys = { "general", "layout", "sorting", "scaling", "border", "anchor", "tooltip" } },
-        { key = "health",     keys = { "hcolor", "bars", "power", "text", "effects", "range" } },
+        { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "cutaway", "dispel", "range" } },
         { key = "auras",      keys = { "buffs", "debuffs", "ext", "rdebuffs", "priv", "masque", "autil" } },
         { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
     }
@@ -882,7 +932,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             end
             -- Compact sliders: add inline EditBox for direct number input
             if spec.compact and not sl.editBox then
-                local eb = CreateFrame("EditBox", nil, sl:GetParent(), "InputBoxTemplate")
+                local eb = CreateFrame("EditBox", nil, sl, "InputBoxTemplate")
                 eb:SetSize(42, 18)
                 eb:SetPoint("LEFT", sl, "RIGHT", 6, 0)
                 eb:SetAutoFocus(false)
@@ -982,7 +1032,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 1: General (default open)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(420, "General", false, "general")
+        local box, body = AddSection(430, "General", false, "general")
 
         -- ── Role Preset selector ──
         local presetLabel = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1123,7 +1173,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         SSlider({
             name = "MSUF_GF_HideOfflineSlider", parent = body, compact = true,
-            anchor = hideClientChk, x = 0, y = -4,
+            anchor = hideClientChk, x = 0, y = -14,
             min = 0, max = 120, step = 1, width = 270, default = 0,
             get = function(k) return GF.Val(k, "hideOfflineDelay") or 0 end,
             set = function(k, v) GF.GetConf(k).hideOfflineDelay = v; GF.RefreshVisuals() end,
@@ -1137,18 +1187,22 @@ function _G.MSUF_EnsureGFPanelBuilt()
     do
         local box, body = AddSection(680, "Layout", false, "layout")
 
-        -- ── Raid Layout Situation ──
+        -- ── Raid Layout Situation (raid scope only) ──
+        local _raidLayoutContainer = CreateFrame("Frame", nil, body)
+        _raidLayoutContainer:SetSize(SECTION_W - 24, 110)
+        _raidLayoutContainer:SetPoint("TOPLEFT", body, "TOPLEFT", 0, 0)
+
         local _raidLayoutItems = {}
         for _, sit in ipairs(GF.RAID_LAYOUT_SITUATIONS or {}) do
             _raidLayoutItems[#_raidLayoutItems + 1] = { key = sit.key, label = TR(sit.label) }
         end
 
-        local raidLayoutLbl = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        raidLayoutLbl:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -8)
+        local raidLayoutLbl = _raidLayoutContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        raidLayoutLbl:SetPoint("TOPLEFT", _raidLayoutContainer, "TOPLEFT", 12, -8)
         raidLayoutLbl:SetText(TR("Raid Layout Situation")); raidLayoutLbl:SetTextColor(1, 0.82, 0)
 
         local raidLayoutAutoChk = SCheck({
-            name = "MSUF_GF_RaidLayoutAuto", parent = body,
+            name = "MSUF_GF_RaidLayoutAuto", parent = _raidLayoutContainer,
             anchor = raidLayoutLbl, anchorPoint = "TOPLEFT", x = 0, y = -14,
             label = TR("Auto-switch on zone change"),
             get = function(k)
@@ -1169,7 +1223,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local raidLayoutDd
         if #_raidLayoutItems > 0 then
             raidLayoutDd = SDropdown({
-                name = "MSUF_GF_RaidLayoutDropdown", parent = body,
+                name = "MSUF_GF_RaidLayoutDropdown", parent = _raidLayoutContainer,
                 anchor = raidLayoutAutoChk, x = 0, y = -4, width = 220,
                 items = _raidLayoutItems,
                 get = function(k)
@@ -1182,7 +1236,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             })
         end
 
-        local raidLayoutHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        local raidLayoutHint = _raidLayoutContainer:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         raidLayoutHint:SetPoint("TOPLEFT", raidLayoutDd or raidLayoutAutoChk, "BOTTOMLEFT", 4, -4)
         raidLayoutHint:SetText(TR("Width, Height, Spacing, Columns, Growth saved per situation.\nSwitch to edit each layout. Auto detects Mythic/Normal/World."))
         raidLayoutHint:SetTextColor(0.5, 0.5, 0.6)
@@ -1191,7 +1245,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local widthSl = SSlider({
             name = "MSUF_GF_WidthSlider", parent = body, compact = true,
-            anchor = raidLayoutHint, x = 0, y = -10,
+            anchor = _raidLayoutContainer, anchorPoint = "BOTTOMLEFT", x = 12, y = -10,
             min = 40, max = 300, step = 1, width = 270, default = 120,
             get = function(k) return GF.Val(k, "width") end,
             set = function(k, v) GF.GetConf(k).width = v; GF.RebuildAll() end,
@@ -1520,6 +1574,20 @@ function _G.MSUF_EnsureGFPanelBuilt()
             UpdateVisual(btn)
             _gfChecks[gi] = btn
         end
+        -- Sync raid layout container: hide for party, re-anchor width slider
+        local function SyncRaidLayout()
+            local isRaid = (K() == "raid")
+            _raidLayoutContainer:SetShown(isRaid)
+            widthSl:ClearAllPoints()
+            if isRaid then
+                widthSl:SetPoint("TOPLEFT", _raidLayoutContainer, "BOTTOMLEFT", 12, -10)
+            else
+                widthSl:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -12)
+            end
+        end
+        _allRefreshFns[#_allRefreshFns + 1] = SyncRaidLayout
+        SyncRaidLayout()
+
         -- Sync group filter toggles on scope change
         local function SyncGroupFilter()
             local k = K()
@@ -2108,6 +2176,28 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         _allRefreshFns[#_allRefreshFns + 1] = RefreshColorControls
         RefreshColorControls()
+
+        -- Background color (quick access — full controls in Layout > Background)
+        local bgSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        bgSep:SetPoint("TOPLEFT", gfModeDd, "BOTTOMLEFT", 16, -42)
+        bgSep:SetText(TR("Background")); bgSep:SetTextColor(1, 0.82, 0)
+
+        local bgLbl2 = MakeColorSwatch(body, bgSep, "BOTTOMLEFT", 0, -8,
+            "Background Color",
+            function() return V("bgR"), V("bgG"), V("bgB") end,
+            function(r, g, b)
+                local c = C(); c.bgR = r; c.bgG = g; c.bgB = b
+                GF.MarkAllDirty(GF.DIRTY_BORDER)
+            end)
+
+        SSlider({
+            name = "MSUF_GF_HColor_BgAlpha", parent = body, compact = true,
+            anchor = bgLbl2, x = 0, y = -20,
+            min = 0, max = 1, step = 0.05, width = 270, default = 0.85,
+            get = function(k) return GF.Val(k, "bgA") end,
+            set = function(k, v) GF.GetConf(k).bgA = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
+            formatText = function(v) return string.format("Background Alpha: %.0f%%", v * 100) end,
+        })
     end
 
     ----------------------------------------------------------------
@@ -2175,7 +2265,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 4: Text
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(620, "Text", false, "text")
+        local box, body = AddSection(660, "Text", false, "text")
 
         local COL_W = 310
 
@@ -2395,7 +2485,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local statXSl = SSlider({
             name = "MSUF_GF_StatusOffsetXSlider", parent = colR, compact = true,
-            anchor = tOffSep, x = 0, y = -8,
+            anchor = tOffSep, x = 0, y = -16,
             min = -100, max = 100, step = 1, width = 180, default = 0,
             get = function(k) return GF.Val(k, "statusOffsetX") end,
             set = function(k, v) GF.GetConf(k).statusOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
@@ -2643,7 +2733,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local gnAnchorDd = SDropdown({
             name = "MSUF_GF_GroupNumberAnchorDropdown", parent = body,
-            anchor = gnSizeSl, x = -16, y = -10, width = 160,
+            anchor = gnSizeSl, anchorPoint = "BOTTOMLEFT", x = 0, y = -8, width = 160,
             items = {
                 { key = "TOPLEFT",     label = "Top Left"     },
                 { key = "TOPRIGHT",    label = "Top Right"    },
@@ -2657,7 +2747,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local gnXSl = SSlider({
             name = "MSUF_GF_GroupNumberXSlider", parent = body, compact = true,
-            anchor = gnAnchorDd, x = 16, y = -10,
+            anchor = gnAnchorDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -8,
             min = -100, max = 100, step = 1, width = 200, default = -2,
             get = function(k) return GF.Val(k, "groupNumberX") end,
             set = function(k, v) GF.GetConf(k).groupNumberX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
@@ -2666,14 +2756,14 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local gnYSl = SSlider({
             name = "MSUF_GF_GroupNumberYSlider", parent = body, compact = true,
-            anchor = gnXSl, x = 0, y = -32,
+            anchor = gnXSl, x = 0, y = -28,
             min = -100, max = 100, step = 1, width = 200, default = 2,
             get = function(k) return GF.Val(k, "groupNumberY") end,
             set = function(k, v) GF.GetConf(k).groupNumberY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
             formatText = function(v) return string.format("Y Offset: %d", v) end,
         })
 
-        -- Hover Highlight sub-group (enable + color from global Colors menu)
+        -- Hover Highlight sub-group
         local hoverSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         hoverSep:SetPoint("TOPLEFT", gnYSl, "BOTTOMLEFT", 0, -16)
         hoverSep:SetText(TR("Hover Highlight"))
@@ -2684,9 +2774,9 @@ function _G.MSUF_EnsureGFPanelBuilt()
         hoverHint:SetText(TR("Enable + color: |cffffd200Global Style > Colors|r > Mouseover Highlight"))
         hoverHint:SetTextColor(0.5, 0.55, 0.65)
 
-        SSlider({
+        local hoverSizeSl = SSlider({
             name = "MSUF_GF_HoverHighlightSizeSlider", parent = body, compact = true,
-            anchor = hoverHint, x = 0, y = -8,
+            anchor = hoverHint, anchorPoint = "BOTTOMLEFT", x = 0, y = -24,
             min = 1, max = 6, step = 1, width = 200, default = 1,
             get = function(k) return tonumber(GF.GetHighlightVal(k, "hlHoverSize")) or 1 end,
             set = function(k, v)
@@ -2696,9 +2786,9 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return string.format("Border Thickness: %d", v) end,
         })
 
-        -- Focus Highlight sub-group
+        -- Focus Highlight sub-group (anchored to hover SLIDER, not hint)
         local focusSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        focusSep:SetPoint("TOPLEFT", hoverHint, "BOTTOMLEFT", 0, -56)
+        focusSep:SetPoint("TOPLEFT", hoverSizeSl, "BOTTOMLEFT", 0, -16)
         focusSep:SetText(TR("Focus Highlight"))
         focusSep:SetTextColor(1, 0.82, 0)
 
@@ -2719,7 +2809,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local focusSzSl = SSlider({
             name = "MSUF_GF_FocusHighlightSizeSlider", parent = body, compact = true,
-            anchor = focusHint, x = 0, y = -8,
+            anchor = focusHint, anchorPoint = "BOTTOMLEFT", x = 0, y = -24,
             min = 1, max = 6, step = 1, width = 200, default = 2,
             get = function(k) return GF.Val(k, "hlFocusSize") end,
             set = function(k, v) GF.GetConf(k).hlFocusSize = v; GF.RefreshVisuals() end,
@@ -2921,19 +3011,14 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Section: Effects (Heal Prediction + Cutaway Health)
+    -- Section: Heal Prediction
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(470, "Effects", false, "effects")
-
-        -- ── Heal Prediction ──
-        local hpSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        hpSep:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -6)
-        hpSep:SetText(TR("Heal Prediction")); hpSep:SetTextColor(1, 0.82, 0)
+        local box, body = AddSection(120, "Heal Prediction", false, "healpred")
 
         local healPredChk = SCheck({
             name = "MSUF_GF_HealPredEnableCheck", parent = body,
-            anchor = hpSep, x = 0, y = -4,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
             label = TR("Heal Prediction Overlay"),
             get = function(k) return GF.Val(k, "healPredEnabled") end,
             set = function(k, v)
@@ -2949,17 +3034,19 @@ function _G.MSUF_EnsureGFPanelBuilt()
         hpHint:SetPoint("TOPLEFT", healPredChk, "BOTTOMLEFT", 0, -6)
         hpHint:SetWidth(600)
         hpHint:SetJustifyH("LEFT")
-        hpHint:SetText(TR("Group Frames Heal Prediction — shows incoming heals as a lighter overlay on each member's health bar.\nAbsorb overlays and their colors/textures are shared with |cffffd200Global Style > Bars|r and |cffffd200Colors|r."))
+        hpHint:SetText(TR("Shows incoming heals as a lighter overlay on each member's health bar.\nAbsorb overlays and their colors/textures are shared with |cffffd200Global Style > Bars|r and |cffffd200Colors|r."))
         hpHint:SetTextColor(0.55, 0.60, 0.70)
+    end
 
-        -- ── Cutaway Health ──
-        local cwSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        cwSep:SetPoint("TOPLEFT", hpHint, "BOTTOMLEFT", 0, -14)
-        cwSep:SetText(TR("Cutaway Health")); cwSep:SetTextColor(1, 0.82, 0)
+    ----------------------------------------------------------------
+    -- Section: Cutaway Health
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(200, "Cutaway Health", false, "cutaway")
 
         local enChk = SCheck({
             name = "MSUF_GF_CutawayEnableCheck", parent = body,
-            anchor = cwSep, x = 0, y = -4,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
             label = TR("Enable Cutaway Health"),
             get = function(k) return GF.Val(k, "cutawayEnabled") end,
             set = function(k, v) GF.GetConf(k).cutawayEnabled = v; GF.RefreshVisuals() end,
@@ -2991,15 +3078,17 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 c.cutawayColorR = r; c.cutawayColorG = g; c.cutawayColorB = b
                 GF.RefreshVisuals()
             end)
+    end
 
-        -- ── Dispel Overlay ──
-        local doSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        doSep:SetPoint("TOPLEFT", fadeSl, "BOTTOMLEFT", 0, -52)
-        doSep:SetText(TR("Dispel Overlay")); doSep:SetTextColor(1, 0.82, 0)
+    ----------------------------------------------------------------
+    -- Section: Dispel Overlay
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(330, "Dispel Overlay", false, "dispel")
 
         local doChk = SCheck({
             name = "MSUF_GF_DispelOverlayCheck", parent = body,
-            anchor = doSep, x = 0, y = -4,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
             label = TR("Enable Dispel Overlay"),
             get = function(k) return GF.Val(k, "dispelOverlayEnabled") end,
             set = function(k, v)
@@ -3019,7 +3108,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local doStyleDd = SDropdown({
             name = "MSUF_GF_DispelOverlayStyleDropdown", parent = body,
-            anchor = doHint, anchorPoint = "TOPLEFT", x = -4, y = -10, width = 200,
+            anchor = doHint, anchorPoint = "BOTTOMLEFT", x = -4, y = -10, width = 200,
             items = {
                 { key = "FULL",   label = TR("Full Frame") },
                 { key = "BOTTOM", label = TR("Bottom Edge") },
@@ -3038,7 +3127,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local doOnHPChk = SCheck({
             name = "MSUF_GF_DispelOverlayOnHPCheck", parent = body,
-            anchor = doStyleDd, x = 0, y = -6,
+            anchor = doStyleDd, x = 0, y = -8,
             label = TR("Show On Current Health Only"),
             get = function(k) return GF.Val(k, "dispelOverlayOnHealth") end,
             set = function(k, v)
@@ -3051,7 +3140,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         SSlider({
             name = "MSUF_GF_DispelOverlayAlphaSlider", parent = body, compact = true,
-            anchor = doOnHPChk, x = 0, y = -10,
+            anchor = doOnHPChk, x = 0, y = -12,
             min = 0.05, max = 1, step = 0.05, width = 270, default = 0.35,
             get = function(k) return GF.Val(k, "dispelOverlayAlpha") end,
             set = function(k, v)
@@ -3117,7 +3206,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         -- Desired order within each tab
         local ORDER = {
             { key = "frame",      keys = { "general", "layout", "sorting", "scaling", "border", "anchor", "tooltip" } },
-            { key = "health",     keys = { "hcolor", "bars", "power", "text", "effects", "range" } },
+            { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "cutaway", "dispel", "range" } },
             { key = "auras",      keys = { "buffs", "debuffs", "ext", "rdebuffs", "priv", "masque", "autil" } },
             { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
         }
