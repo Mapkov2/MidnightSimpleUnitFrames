@@ -1269,6 +1269,16 @@ local function _GF_ApplyDispelOverlay(f)
         return
     end
 
+    -- Safety: anchor overlay to correct region based on style + doOnHP
+    if f.health then
+        local anchorTo = f.health
+        if c.doStyle == "FULL" and not c.doOnHP and f.barGroup then
+            anchorTo = f.barGroup
+        end
+        dov:ClearAllPoints()
+        dov:SetAllPoints(anchorTo)
+    end
+
     -- Resolve color from shared dispel color system
     local r, g, b = ResolveDispelColor(dispelType, f)
     if not r then r, g, b = 0.25, 0.75, 1.00 end
@@ -1287,25 +1297,28 @@ local function _GF_ApplyDispelOverlay(f)
         dov._msufDOSyncHP = nil
     end
 
-    -- Apply gradient based on style
+    -- Apply color/gradient based on style
     local style = c.doStyle
     local tex = dov:GetStatusBarTexture()
-    if tex and _doCC then
-        if style == "BOTTOM" then
-            tex:SetGradient("VERTICAL", _doCC(r, g, b, a), _doCC(r, g, b, 0))
-        elseif style == "TOP" then
-            tex:SetGradient("VERTICAL", _doCC(r, g, b, 0), _doCC(r, g, b, a))
-        elseif style == "LEFT" then
-            tex:SetGradient("HORIZONTAL", _doCC(r, g, b, a), _doCC(r, g, b, 0))
-        elseif style == "RIGHT" then
-            tex:SetGradient("HORIZONTAL", _doCC(r, g, b, 0), _doCC(r, g, b, a))
-        else
-            -- FULL: uniform color (clear gradient by setting both ends identical)
+    if style == "FULL" or not _doCC or not tex then
+        -- FULL or fallback: uniform flat color (most reliable)
+        dov:SetStatusBarColor(r, g, b, a)
+        -- Clear any stale gradient from previous style
+        if tex and _doCC then
             tex:SetGradient("HORIZONTAL", _doCC(r, g, b, a), _doCC(r, g, b, a))
         end
-    else
-        -- Fallback: no CreateColor (pre-10.0) — flat color only
-        dov:SetStatusBarColor(r, g, b, a)
+    elseif style == "BOTTOM" then
+        dov:SetStatusBarColor(r, g, b, 1)
+        tex:SetGradient("VERTICAL", _doCC(r, g, b, a), _doCC(r, g, b, 0))
+    elseif style == "TOP" then
+        dov:SetStatusBarColor(r, g, b, 1)
+        tex:SetGradient("VERTICAL", _doCC(r, g, b, 0), _doCC(r, g, b, a))
+    elseif style == "LEFT" then
+        dov:SetStatusBarColor(r, g, b, 1)
+        tex:SetGradient("HORIZONTAL", _doCC(r, g, b, a), _doCC(r, g, b, 0))
+    elseif style == "RIGHT" then
+        dov:SetStatusBarColor(r, g, b, 1)
+        tex:SetGradient("HORIZONTAL", _doCC(r, g, b, 0), _doCC(r, g, b, a))
     end
 
     -- Reverse fill sync (match health bar direction)

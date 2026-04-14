@@ -984,6 +984,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                     SyncEB()
                 end
                 hooksecurefunc(sl, "SetValue", function() SyncEB() end)
+                sl:HookScript("OnShow", function() SyncEB() end)
                 SyncEB()
             end
         end
